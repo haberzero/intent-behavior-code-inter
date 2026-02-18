@@ -177,7 +177,7 @@ class Call(Expr):
 @dataclass
 class Constant(Expr):
     value: Any
-    kind: Optional[str] = None
+
 
 @dataclass
 class Attribute(Expr):
@@ -218,7 +218,7 @@ class CastExpr(Expr):
 class arg(ASTNode):
     arg: str
     annotation: Optional[Expr] = None
-    type_comment: Optional[str] = None
+
 
 @dataclass
 class keyword(ASTNode):

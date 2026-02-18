@@ -1,6 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Optional, Any
+from typing import Optional, Any, TYPE_CHECKING
 from enum import Enum, auto
+
+if TYPE_CHECKING:
+    from typedef.lexer_types import Token
+    from typedef.parser_types import ASTNode
 
 class Severity(Enum):
     ERROR = auto()
@@ -48,7 +52,7 @@ class LexerError(IBCBaseException):
         )
 
 class ParserError(IBCBaseException):
-    def __init__(self, message: str, token: Any = None):
+    def __init__(self, message: str, token: Optional['Token'] = None):
         loc = None
         if token:
             # Assuming token has line, column, end_line, end_column attributes
@@ -68,7 +72,7 @@ class ParserError(IBCBaseException):
         self.token = token
 
 class InterpreterError(IBCBaseException):
-    def __init__(self, message: str, node: Any = None):
+    def __init__(self, message: str, node: Optional['ASTNode'] = None):
         loc = None
         if node:
             loc = Location(
@@ -87,7 +91,7 @@ class InterpreterError(IBCBaseException):
         self.node = node
 
 class SemanticError(IBCBaseException):
-    def __init__(self, message: str, node: Any = None):
+    def __init__(self, message: str, node: Optional['ASTNode'] = None):
         loc = None
         if node:
             loc = Location(

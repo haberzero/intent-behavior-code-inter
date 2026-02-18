@@ -5,8 +5,8 @@ from typedef.exception_types import LexerError
 
 class Lexer:
     """
-    IBC-Inter 词法分析器 (Lexer )
-    改进版：移除硬编码的容器类型，使其能被识别为标识符，从而支持更灵活的类型系统。
+    IBC-Inter 词法分析器 (Lexer)
+    负责将源代码转换为 Token 流，处理缩进、行延续及 LLM 块边界。
     """
     def __init__(self, source_code: str):
         self.scanner = Scanner(source_code)
@@ -35,9 +35,6 @@ class Lexer:
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
         
-        #  Change: Removed 'list', 'dict' from TYPES. 
-        # They will be tokenized as IDENTIFIER, allowing the Parser to handle them as types or variables.
-        # Added 'bool', 'void', 'Any' for completeness.
         self.TYPES = {'int', 'float', 'str', 'bool', 'void', 'Any', 'None'}
         self.is_new_line = True
 
@@ -227,7 +224,7 @@ class Lexer:
             self.sub_state = SubState.IN_STRING
             self.quote_char = quote
             self.current_string_val = ""
-            self.is_raw_string = True  # New flag for raw strings
+            self.is_raw_string = True
             return
 
         # 5. 字符串字面量

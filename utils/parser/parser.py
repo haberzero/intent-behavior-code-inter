@@ -8,10 +8,9 @@ T = TypeVar("T", bound=ast.ASTNode)
 
 class Parser:
     """
-    IBC-Inter 语法分析器 (Parser )
-    改进版：
-    1. 修复错误吞没问题，主动报告解析错误。
-    2. 支持基于 Lookahead 的通用变量声明 (支持 'Type name' 形式，不依赖 Lexer 的硬编码类型)。
+    IBC-Inter 语法分析器 (Parser)
+    负责将 Token 流解析为抽象语法树 (AST)。
+    支持错误恢复与同步机制。
     """
     def __init__(self, tokens: List[Token], warning_callback: Optional[Callable[[str], None]] = None):
         self.tokens = tokens
@@ -183,7 +182,6 @@ class Parser:
                 if decl:
                     statements.append(decl)
             except ParserError as e:
-                #  Fix: Don't just swallow errors. They are already appended to self.errors.
                 # Synchronize to continue parsing next statement.
                 self.synchronize()
         
@@ -415,7 +413,7 @@ class Parser:
             else:
                 raise self.error(self.peek(), "Unexpected token in LLM section content.")
         
-        return self._loc(ast.Constant(value="".join(content_parts), kind='s'), start_token)
+        return self._loc(ast.Constant(value="".join(content_parts)), start_token)
 
     def statement(self) -> ast.Stmt:
         if self.match(TokenType.RETURN):
@@ -548,7 +546,7 @@ class Parser:
         if self.match(TokenType.ASSIGN):
             value = self.expression()
             self.consume_end_of_statement("Expect newline after assignment.")
-            return self._loc(ast.Assign(targets=[expr], value=value), self.previous()) # Loc approximation
+            return self._loc(ast.Assign(targets=[expr], value=value), self.previous())
         
         # Compound assignments
         compound_ops = {
@@ -564,7 +562,7 @@ class Parser:
                 return self._loc(ast.AugAssign(target=expr, op=op_str, value=value), self.previous())
             
         self.consume_end_of_statement("Expect newline after expression.")
-        return self._loc(ast.ExprStmt(value=expr), self.previous()) # Loc approximation
+        return self._loc(ast.ExprStmt(value=expr), self.previous())
 
     def expression(self) -> ast.Expr:
         return self.parse_precedence(Precedence.LOWEST)
@@ -580,13 +578,13 @@ class Parser:
             num = float(value)
         else:
             num = int(value)
-        return self._loc(ast.Constant(value=num, kind=None), self.previous())
+        return self._loc(ast.Constant(value=num), self.previous())
 
     def string(self) -> ast.Expr:
-        return self._loc(ast.Constant(value=self.previous().value, kind='s'), self.previous())
+        return self._loc(ast.Constant(value=self.previous().value), self.previous())
 
     def boolean(self) -> ast.Expr:
-        return self._loc(ast.Constant(value=self.previous().value == 'True', kind=None), self.previous())
+        return self._loc(ast.Constant(value=self.previous().value == 'True'), self.previous())
 
     def grouping(self) -> ast.Expr:
         # Check for Cast Expression: (Type) Expr
@@ -657,7 +655,7 @@ class Parser:
                 left.ops.append(op_str)
                 left.comparators.append(right)
                 return left
-            return self._loc(ast.Compare(left=left, ops=[op_str], comparators=[right]), op_token) # Loc approximation
+            return self._loc(ast.Compare(left=left, ops=[op_str], comparators=[right]), op_token)
         
         return self._loc(ast.BinOp(left=left, op=op_str, right=right), op_token)
 
@@ -721,7 +719,7 @@ class Parser:
                 variables.append(var_name)
                 content_parts.append(var_name)
             else:
-                 self.advance() # Skip unknown
+                self.advance() # Skip unknown
         
         self.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~~'.")
         
