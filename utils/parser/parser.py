@@ -121,7 +121,7 @@ class Parser:
         
         # 分组与集合
         self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
-        self.register(TokenType.LBRACKET, self.list_display, None, Precedence.LOWEST)
+        self.register(TokenType.LBRACKET, self.list_display, self.subscript, Precedence.CALL)
         self.register(TokenType.LBRACE, self.dict_display, None, Precedence.LOWEST)
         
         # 一元运算
@@ -499,7 +499,12 @@ class Parser:
         return self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
 
     def number(self) -> ast.Expr:
-        return self._loc(ast.Constant(value=float(self.previous().value), kind=None), self.previous())
+        value = self.previous().value
+        if '.' in value or 'e' in value or 'E' in value:
+            num = float(value)
+        else:
+            num = int(value)
+        return self._loc(ast.Constant(value=num, kind=None), self.previous())
 
     def string(self) -> ast.Expr:
         return self._loc(ast.Constant(value=self.previous().value, kind='s'), self.previous())
@@ -616,6 +621,12 @@ class Parser:
         op_token = self.previous()
         name = self.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
         return self._loc(ast.Attribute(value=left, attr=name.value, ctx='Load'), op_token)
+
+    def subscript(self, left: ast.Expr) -> ast.Subscript:
+        start_token = self.previous() # LBRACKET
+        slice_expr = self.expression()
+        self.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
+        return self._loc(ast.Subscript(value=left, slice=slice_expr, ctx='Load'), start_token)
 
     def behavior_expression(self) -> ast.BehaviorExpr:
         start_token = self.previous()

@@ -66,3 +66,22 @@ class ParserError(IBCBaseException):
             context_info={'token': token} if token else None
         )
         self.token = token
+
+class InterpreterError(IBCBaseException):
+    def __init__(self, message: str, node: Any = None):
+        loc = None
+        if node:
+            loc = Location(
+                line=getattr(node, 'lineno', 0),
+                column=getattr(node, 'col_offset', 0),
+                end_line=getattr(node, 'end_lineno', None),
+                end_column=getattr(node, 'end_col_offset', None)
+            )
+        super().__init__(
+            message,
+            loc,
+            severity=Severity.ERROR,
+            error_code="RUNTIME_ERROR",
+            context_info={'node': node} if node else None
+        )
+        self.node = node
