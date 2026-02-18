@@ -170,3 +170,177 @@ func process(Dict[str, List[int]] data) -> None:
 
 - **Lexer 调试**：检查 `tokens` 列表，特别是 `INDENT`/`DEDENT` 是否配对，以及 `LLM_BLOCK` 模式是否正确进入和退出。
 - **Parser 调试**：利用 `parser.errors` 查看解析失败的具体位置。对于复杂的表达式优先级问题，检查 AST 树的嵌套层级是否符合预期。
+
+## 8. 典型解析场景与边界情况详解
+
+本章节补充了一些典型的代码场景及其对应的 Token 流或 AST 结构，旨在帮助开发者直观理解 Lexer 和 Parser 的行为，特别是边界情况。
+
+### 8.1 意图注释 (`@`) 的作用域与绑定
+
+**场景**：嵌套函数调用时的意图绑定。
+
+**代码**：
+
+```ibc-inter
+@ 优先处理
+x = outer(inner())
+```
+
+**解析逻辑**：
+
+1. Parser 遇到 `@ 优先处理` -> 存储 `pending_intent = "优先处理"`.
+2. Parser 解析赋值语句 `x = ...`.
+3. 解析右值表达式：
+   - 首先进入 `outer` 的 `Call` 解析节点。
+   - `Call` 解析规则（`parser.call`）在开始时立即检查并消耗 `pending_intent`。
+   - 因此，**`outer`** 函数调用获得了 `intent="优先处理"`。
+   - 随后解析参数 `inner()`，此时 `pending_intent` 已为空，**`inner`** 调用无意图。
+
+**AST 结构概览**：
+
+```text
+Assign
+  targets: [Name(id="x")]
+  value: Call(func=Name(id="outer"), intent="优先处理")
+    args: [
+      Call(func=Name(id="inner"), intent=None)
+    ]
+```
+
+### 8.2 行为描述 (`~~`) 中的转义与变量
+
+**场景**：需要在行为描述中使用 `~` 和 `$` 符号。
+
+**代码**：
+
+```ibc-inter
+str cmd = ~~查找包含 \$100 和 \~~波浪号\~~ 的文本~~
+```
+
+**Token 流**：
+
+1. `TYPE_NAME` (`str`)
+2. `IDENTIFIER` (`cmd`)
+3. `ASSIGN` (`=`)
+4. `BEHAVIOR_MARKER` (`~~`)
+5. `RAW_TEXT` (`查找包含 $100 和 ~~波浪号~~ 的文本`)
+   - 注意：`\$` 被 Lexer 转义为 `$`，`\~~` 被转义为 `~~`，且合并到了 `RAW_TEXT` 中。
+6. `BEHAVIOR_MARKER` (`~~`)
+
+**解析结果 (AST)**：
+
+```text
+Assign
+  value: BehaviorExpr
+    content: "查找包含 $100 和 ~~波浪号~~ 的文本"
+    variables: [] (因为 $ 被转义了，没有识别为变量引用)
+```
+
+**对比**：
+
+如果代码是 `~~查找 $price~~`：
+
+- Token 流包含 `VAR_REF` (`$price`)。
+- AST 中 `variables` 列表包含 `["price"]`。
+
+### 8.3 LLM 函数块的 Token 流
+
+**场景**：LLM 函数体内部无缩进 Token 生成。
+
+**代码**：
+
+```ibc-inter
+llm ask():
+    __sys__
+    Content
+    llmend
+```
+
+**Token 流序列**：
+
+1. `LLM_DEF` (`llm`)
+2. `IDENTIFIER` (`ask`) ... `COLON` (`:`)
+   - *Lexer 切换到 `LLM_BLOCK` 模式*
+3. `NEWLINE` (`\n`)
+   - *注意：此处不会生成 `INDENT` Token，即使源码中有缩进*
+4. `LLM_SYS` (`__sys__`) (Lexer 忽略行首空格匹配关键字)
+5. `NEWLINE` (`\n`)
+6. `RAW_TEXT` (`    Content`) (保留了原有的缩进空格作为文本的一部分)
+7. `NEWLINE` (`\n`)
+8. `LLM_END` (`llmend`)
+   - *Lexer 切换回 `NORMAL` 模式*
+9. `NEWLINE` (`\n`)
+
+**关键点**：在 LLM 块内，开发者无需担心缩进层级导致的 `INDENT`/`DEDENT` 错误，但关键字最好保持清晰的对齐风格以避免混淆。Lexer 会对缩进的关键字发出警告。
+
+### 8.4 泛型嵌套的解析结构
+
+**场景**：复杂类型注解 `List[Dict[str, int]]`。
+
+**代码**：
+
+```ibc-inter
+func process(List[Dict[str, int]] data) -> None:
+    pass
+```
+
+**AST 结构**：
+Parser 复用了 `Subscript` (下标) 表达式来表示泛型。
+
+```text
+Subscript (对应 List[...])
+  value: Name(id="List")
+  slice: Subscript (对应 Dict[...])
+    value: Name(id="Dict")
+    slice: ListExpr (对应 str, int)
+      elts: [
+        Name(id="str"),
+        Name(id="int")
+      ]
+```
+
+*注意：当下标内有逗号分隔的多个元素时，Parser 会将其解析为 `ListExpr` (或 Tuple)，这与 Python 的 `ExtSlice` 或 `Index` 略有不同，是 IBC-Inter 的简化处理。*
+
+### 8.5 比较运算符链
+
+**场景**：`a < b <= c`。
+
+**解析逻辑**：
+Parser 在处理比较运算时，会进行特殊“扁平化”处理。
+
+1. 解析 `a < b` -> `Compare(left=a, ops=['<'], comparators=[b])`
+2. 发现后续还有 `<=` `c`。
+3. 递归或循环中检测到左侧已是 `Compare` 节点。
+4. 将新的运算符 `<=` 和操作数 `c` 追加到现有的 `ops` 和 `comparators` 列表中。
+
+**AST 结构**：
+
+```text
+Compare
+  left: Name(id="a")
+  ops: ["<", "<="]
+  comparators: [Name(id="b"), Name(id="c")]
+```
+
+这意味着后端解释器需要能够处理这种链式比较结构。
+
+### 8.6 类型转换 vs 函数调用
+
+**场景区分**：
+
+1. `(int) x` -> **CastExpr**
+2. `int(x)` -> **当前不支持 (Parse Error)**
+
+**解析差异**：
+
+- **CastExpr (`(Type)`)**：
+  - 优先级极高（类比 UNARY）。
+  - Parser 在遇到 `(` 时，会**向前看 (Lookahead)** 两个 Token。如果发现是 `(TypeName)` 结构，则直接按 Cast 解析。
+  
+- **Call (`Func()`)**：
+  - 虽然设计上允许 `int(x)` 作为构造函数调用，但由于 `int` 是保留的 `TYPE_NAME` 关键字，且当前 Parser 未定义 `TYPE_NAME` 作为表达式前缀的规则，因此 `int(x)` 会抛出 "Expect expression" 错误。
+  - **解决方案**：请统一使用 `(int) x` 语法。
+
+**AST 结构对比**：
+
+- `(int) x` -> `CastExpr(type_name="int", value=Name(id="x"))`
