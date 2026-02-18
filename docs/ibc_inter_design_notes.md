@@ -258,18 +258,18 @@ llm ask():
 
 **Token 流序列**：
 
-1. `LLM_DEF` (`llm`)
-2. `IDENTIFIER` (`ask`) ... `COLON` (`:`)
+1. `LLM_DEF` ("llm")
+2. `IDENTIFIER` ("ask") ... `COLON` "`:")
    - *Lexer 切换到 `LLM_BLOCK` 模式*
-3. `NEWLINE` (`\n`)
+3. `NEWLINE` ("\n")
    - *注意：此处不会生成 `INDENT` Token，即使源码中有缩进*
-4. `LLM_SYS` (`__sys__`) (Lexer 忽略行首空格匹配关键字)
-5. `NEWLINE` (`\n`)
-6. `RAW_TEXT` (`    Content`) (保留了原有的缩进空格作为文本的一部分)
-7. `NEWLINE` (`\n`)
-8. `LLM_END` (`llmend`)
+4. `LLM_SYS` (Lexer 忽略行首空格匹配关键字)
+5. `NEWLINE` ("\n")
+6. `RAW_TEXT` ("    Content") (保留了原有的缩进空格作为文本的一部分)
+7. `NEWLINE` ("\n")
+8. `LLM_END` ("llmend")
    - *Lexer 切换回 `NORMAL` 模式*
-9. `NEWLINE` (`\n`)
+9. `NEWLINE` ("\n")
 
 **关键点**：在 LLM 块内，开发者无需担心缩进层级导致的 `INDENT`/`DEDENT` 错误，但关键字最好保持清晰的对齐风格以避免混淆。Lexer 会对缩进的关键字发出警告。
 
