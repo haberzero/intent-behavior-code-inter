@@ -6,7 +6,13 @@ from typedef.parser_types import Precedence, ParseRule
 
 T = TypeVar("T", bound=ast.ASTNode)
 
-class Parser:
+class ParserV2:
+    """
+    IBC-Inter 语法分析器 (Parser V2)
+    改进版：
+    1. 修复错误吞没问题，主动报告解析错误。
+    2. 支持基于 Lookahead 的通用变量声明 (支持 'Type name' 形式，不依赖 Lexer 的硬编码类型)。
+    """
     def __init__(self, tokens: List[Token], warning_callback: Optional[Callable[[str], None]] = None):
         self.tokens = tokens
         self.current = 0
@@ -20,15 +26,14 @@ class Parser:
         if self.warning_callback:
             self.warning_callback(message)
         else:
-            # Default behavior: do not print to stdout directly.
-            # In a production environment, this should probably log to a logger or be ignored if no callback is provided.
             pass
-            # print(f"Warning: {message}")
 
     # --- Helpers ---
 
-    def peek(self) -> Token:
-        return self.tokens[self.current]
+    def peek(self, offset: int = 0) -> Token:
+        if self.current + offset >= len(self.tokens):
+            return self.tokens[-1] # EOF
+        return self.tokens[self.current + offset]
 
     def previous(self) -> Token:
         return self.tokens[self.current - 1]
@@ -123,6 +128,7 @@ class Parser:
         self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
         self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
+        self.register(TokenType.TYPE_NAME, self.variable, None, Precedence.LOWEST) # Allow types to be used as identifiers in expressions (e.g. for casting or checking)
         
         # 分组与集合
         self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
@@ -176,7 +182,9 @@ class Parser:
                 decl = self.declaration()
                 if decl:
                     statements.append(decl)
-            except ParserError:
+            except ParserError as e:
+                # V2 Fix: Don't just swallow errors. They are already appended to self.errors.
+                # Synchronize to continue parsing next statement.
                 self.synchronize()
         
         return ast.Module(body=statements)
@@ -197,8 +205,12 @@ class Parser:
             stmt = self.function_declaration()
         elif self.match(TokenType.LLM_DEF):
             stmt = self.llm_function_declaration()
-        elif self.check(TokenType.TYPE_NAME) or self.check(TokenType.VAR):
-            stmt = self.variable_declaration()
+        elif self.match(TokenType.VAR):
+            # Explicit 'var' declaration
+            stmt = self.variable_declaration(explicit_var=True)
+        elif self.check_declaration_lookahead():
+            # Implicit type declaration: Type name = ...
+            stmt = self.variable_declaration(explicit_var=False)
         else:
             stmt = self.statement()
         
@@ -208,10 +220,69 @@ class Parser:
             
         return stmt
 
-    def variable_declaration(self) -> ast.Assign:
-        type_token = self.advance() 
-        type_annotation = self._loc(ast.Name(id=type_token.value, ctx='Load'), type_token)
+    def check_declaration_lookahead(self) -> bool:
+        """
+        Check if the current tokens form a variable declaration:
+        1. TypeName Identifier ...
+        2. Identifier Identifier ... (User defined type)
+        3. GenericType[Args] Identifier ...
+        """
+        # Case 1: Standard Type Name (int, float, etc.)
+        if self.check(TokenType.TYPE_NAME):
+            return True
+            
+        # Case 2: Identifier starting a declaration
+        if self.check(TokenType.IDENTIFIER):
+            # Check next token
+            next_token = self.peek(1)
+            
+            # Identifier Identifier (e.g. MyType varName)
+            if next_token.type == TokenType.IDENTIFIER:
+                return True
+                
+            # Generic Type: Identifier [ ... ] Identifier
+            if next_token.type == TokenType.LBRACKET:
+                # We need to scan past the matching bracket to see if an identifier follows
+                # This is a simple bracket matching
+                offset = 1
+                bracket_depth = 0
+                while self.current + offset < len(self.tokens):
+                    t = self.peek(offset)
+                    if t.type == TokenType.LBRACKET:
+                        bracket_depth += 1
+                    elif t.type == TokenType.RBRACKET:
+                        bracket_depth -= 1
+                        if bracket_depth == 0:
+                            # Found closing bracket. Check what's next.
+                            after_bracket = self.peek(offset + 1)
+                            if after_bracket.type == TokenType.IDENTIFIER:
+                                return True
+                            else:
+                                return False # Likely a subscript assignment: list[0] = 1
+                    elif t.type == TokenType.NEWLINE or t.type == TokenType.EOF:
+                        return False # Incomplete
+                        
+                    offset += 1
+                return False
+                
+        return False
+
+    def variable_declaration(self, explicit_var: bool = False) -> ast.Assign:
+        type_token = None
+        type_annotation = None
         
+        if explicit_var:
+            # 'var' keyword already consumed
+            type_token = self.previous()
+            type_annotation = self._loc(ast.Name(id='var', ctx='Load'), type_token)
+        else:
+            # Parse type annotation (including generics)
+            # Since check_declaration_lookahead confirmed it's a declaration, 
+            # we can safely parse the type.
+            start_token = self.peek()
+            type_annotation = self.parse_type_annotation()
+            type_token = start_token
+
         name_token = self.consume(TokenType.IDENTIFIER, "Expect variable name.")
         target = self._loc(ast.Name(id=name_token.value, ctx='Store'), name_token)
         
@@ -650,10 +721,6 @@ class Parser:
                 variables.append(var_name)
                 content_parts.append(var_name)
             else:
-                 # This branch might be reached if lexer produces other tokens inside behavior mode?
-                 # But lexer should only produce RAW_TEXT or VAR_REF inside IN_BEHAVIOR.
-                 # Unless we are not in IN_BEHAVIOR mode? 
-                 # The lexer handles mode switching.
                  self.advance() # Skip unknown
         
         self.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~~'.")
