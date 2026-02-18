@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
+from typedef.lexer_types import TokenType
 from typedef import parser_types as ast
 
 class TestParserComplex(unittest.TestCase):
@@ -220,6 +221,16 @@ if ~~ user input is malicious ~~:
         self.assertEqual(expr.op, "+")
         self.assertIsInstance(expr.left, ast.CastExpr)
 
+        # Scenario 8.6: int(x) should fail (as it's interpreted as a Call but 'int' is a TYPE_NAME)
+        code_fail = "res = int(x)"
+        lexer = Lexer(code_fail + "\n")
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        parser.parse()
+        # Verify that an error was recorded
+        self.assertTrue(len(parser.errors) > 0)
+        self.assertIn("Expect expression", parser.errors[0].message)
+
     def test_behavior_precedence(self):
         """Test precedence of behavior expressions in logic."""
         # Behavior expressions must be on separate lines or end of line to close properly.
@@ -389,6 +400,46 @@ x = outer(inner())
         assert isinstance(inner_call, ast.Call)
         self.assertIsNone(inner_call.intent)
 
+    def test_behavior_escapes_complex(self):
+        """Test escape sequences in behavior description (\\~\\~, \\$, \\~)."""
+        # Scenario 8.2 from Design Notes
+        code = r"str cmd = ~~查找包含 \$100 和 \~~波浪号\~~ 的文本~~"
+        mod = self.parse(code)
+        assign = mod.body[0]
+        assert isinstance(assign, ast.Assign)
+        behavior = assign.value
+        
+        expected_content = "查找包含 $100 和 ~~波浪号~~ 的文本"
+        assert isinstance(behavior, ast.BehaviorExpr)
+        self.assertEqual(behavior.content, expected_content)
+        self.assertEqual(behavior.variables, [])
+
+    def test_llm_block_tokens_no_indent(self):
+        """
+        Scenario 8.3: LLM Block Token Stream
+        Ensure NO INDENT tokens are generated inside LLM block even if indented.
+        """
+        code = """
+llm ask():
+    __sys__
+    Content
+    llmend
+"""
+        lexer = Lexer(code.strip() + "\n")
+        tokens = lexer.tokenize()
+        
+        # Filter out EOF
+        tokens = [t for t in tokens if t.type != TokenType.EOF]
+        
+        colon_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.COLON)
+        block_tokens = tokens[colon_idx+1:]
+        token_types = [t.type for t in block_tokens]
+        
+        self.assertNotIn(TokenType.INDENT, token_types, "LLM Block should not contain INDENT tokens")
+        
+        raw_text_token = next(t for t in block_tokens if t.type == TokenType.RAW_TEXT)
+        self.assertEqual(raw_text_token.value, "    Content")
+
     def test_intent_scope_multiple_statements(self):
         """
         Test that intent is consumed by the immediate next statement and does not bleed.
@@ -445,8 +496,10 @@ return my_func()
         ret = mod.body[0]
         assert isinstance(ret, ast.Return)
         assert isinstance(ret.value, ast.Call)
-        self.assertIsNotNone(ret.value.intent)
-        self.assertEqual(ret.value.intent.strip(), "intent for return")
+        
+        intent = ret.value.intent
+        assert intent is not None
+        self.assertEqual(intent.strip(), "intent for return")
 
 if __name__ == '__main__':
     unittest.main()
