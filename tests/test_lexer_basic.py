@@ -11,9 +11,6 @@ from typedef.lexer_types import TokenType
 class TestLexerBasic(unittest.TestCase):
     """
     Basic functionality tests for Lexer.
-    Covers:
-    1. Basic Structure (func, var, loops)
-    2. Simple Tokens (identifiers, numbers, operators)
     """
 
     def test_basic_structure(self):
@@ -75,6 +72,23 @@ x = (
             TokenType.RPAREN, TokenType.EOF
         ]
         self.assertEqual([t.type for t in tokens], expected_types)
+
+    def test_container_types_as_identifiers(self):
+        """Test that list and dict are now IDENTIFIERs, not TYPE_NAMEs ( specific)."""
+        code = "list l = []"
+        lexer = Lexer(code)
+        tokens = lexer.tokenize()
+        
+        # list -> IDENTIFIER
+        # l -> IDENTIFIER
+        # = -> ASSIGN
+        # [ -> LBRACKET
+        # ] -> RBRACKET
+        expected_types = [
+            TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.LBRACKET, TokenType.RBRACKET, TokenType.EOF
+        ]
+        self.assertEqual([t.type for t in tokens], expected_types)
+        self.assertEqual(tokens[0].value, "list")
 
 if __name__ == '__main__':
     unittest.main()

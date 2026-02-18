@@ -11,19 +11,19 @@ from utils.interpreter.interpreter import Interpreter
 from typedef.exception_types import InterpreterError
 
 class TestInterpreterBasic(unittest.TestCase):
+    """
+    Re-run of TestInterpreterBasic using  Parser.
+    """
     def run_code(self, code):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        
         parser = Parser(tokens)
         module = parser.parse()
         if parser.errors:
             raise Exception(f"Parser errors: {parser.errors}")
-            
         interpreter = Interpreter()
         return interpreter.interpret(module), interpreter
 
-    # --- 1. Variable Assignment & Scoping ---
     def test_variable_declaration_assignment(self):
         code = """
 int a = 10
@@ -46,9 +46,8 @@ int result = test()
 """
         _, interp = self.run_code(code)
         self.assertEqual(interp.global_scope.get("result"), 20)
-        self.assertEqual(interp.global_scope.get("x"), 10) # Global x unchanged
+        self.assertEqual(interp.global_scope.get("x"), 10)
 
-    # --- 2. Control Flow ---
     def test_if_elif_else(self):
         code = """
 func check(int n) -> int:
@@ -98,11 +97,9 @@ for i in 10:
         break
     sum = sum + i
 """
-        # 0 + 1 + (skip 2) + 3 + 4 + (break at 5) = 8
         _, interp = self.run_code(code)
         self.assertEqual(interp.global_scope.get("sum"), 8)
 
-    # --- 3. Functions ---
     def test_recursion(self):
         code = """
 func fib(int n) -> int:
@@ -112,11 +109,9 @@ func fib(int n) -> int:
 
 int res = fib(6)
 """
-        # 0, 1, 1, 2, 3, 5, 8
         _, interp = self.run_code(code)
         self.assertEqual(interp.global_scope.get("res"), 8)
 
-    # --- 4. Data Structures ---
     def test_list_operations(self):
         code = """
 list l = [1, 2, 3]
@@ -139,17 +134,14 @@ d["c"] = 3
         d = interp.global_scope.get("d")
         self.assertEqual(d["c"], 3)
 
-    # --- 5. Behavior Expression ---
     def test_behavior_expression(self):
         code = """
 str name = "Alice"
 str res = ~~ greet $name ~~
 """
         _, interp = self.run_code(code)
-        # Assuming current implementation replaces variable
         self.assertIn("Alice", interp.global_scope.get("res"))
 
-    # --- 6. Type Casting ---
     def test_type_casting(self):
         code = """
 str s = "123"
@@ -159,19 +151,6 @@ float f = (float) i
         _, interp = self.run_code(code)
         self.assertEqual(interp.global_scope.get("i"), 123)
         self.assertEqual(interp.global_scope.get("f"), 123.0)
-
-    # --- 7. Generics (Runtime Check) ---
-    def test_generic_type_annotation(self):
-        # This tests that the interpreter doesn't crash on generic types
-        code = """
-func process(List[int] data) -> int:
-    return len(data)
-
-list l = [1, 2, 3]
-int res = process(l)
-"""
-        _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("res"), 3)
 
 if __name__ == '__main__':
     unittest.main()

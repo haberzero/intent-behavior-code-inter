@@ -10,7 +10,7 @@ from typedef.lexer_types import TokenType
 
 class TestLexerComplex(unittest.TestCase):
     """
-    Complex functionality tests for Lexer.
+    Complex functionality tests for Lexer .
     Covers:
     1. Behavior Descriptions (~~...~~)
     2. LLM Blocks (llm, __sys__, __user__)
@@ -131,6 +131,8 @@ llm 生成(str msg):
 
     def test_complex_real_world_code(self):
         """Test a complex real-world code scenario mixing multiple features."""
+        # Note: In , list and dict are IDENTIFIERs, not TYPE_NAMEs. 
+        # But this test mostly checks LLM and strings, which are unaffected.
         code = r"""
 import utils
 from models import User

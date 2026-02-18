@@ -5,8 +5,8 @@ from typedef.exception_types import LexerError
 
 class Lexer:
     """
-    IBC-Inter 词法分析器 (Lexer)
-    负责将源代码转换为 Token 流，处理缩进、行延续及 LLM 块边界。
+    IBC-Inter 词法分析器 (Lexer )
+    改进版：移除硬编码的容器类型，使其能被识别为标识符，从而支持更灵活的类型系统。
     """
     def __init__(self, source_code: str):
         self.scanner = Scanner(source_code)
@@ -35,7 +35,10 @@ class Lexer:
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
         
-        self.TYPES = {'int', 'float', 'str', 'list', 'dict', 'None'}
+        #  Change: Removed 'list', 'dict' from TYPES. 
+        # They will be tokenized as IDENTIFIER, allowing the Parser to handle them as types or variables.
+        # Added 'bool', 'void', 'Any' for completeness.
+        self.TYPES = {'int', 'float', 'str', 'bool', 'void', 'Any', 'None'}
         self.is_new_line = True
 
     def tokenize(self) -> List[Token]:
@@ -152,10 +155,6 @@ class Lexer:
                 should_return = self._handle_newline()
                 if should_return:
                     return
-                # 如果 _handle_newline 返回 False，表示换行符已被消耗
-                # （例如在允许延续行的字符串/行为描述中），
-                # 此时应继续循环。
-                # 对于代码模式，_handle_newline 通常返回 True 以标识行结束。
                 continue
 
             # 2. 基于子状态分发
@@ -359,9 +358,6 @@ class Lexer:
             self._scan_number(char)
             return
             
-        # 此处为未知字符
-        # 抛出错误以保证严谨性。
-        # 注意 advance 已消耗该字符。
         raise LexerError(f"Unexpected character '{char}'", self.scanner.line, self.scanner.col)
 
     def _scan_string_char(self):
@@ -466,8 +462,6 @@ class Lexer:
             if peek_char == '~' and self.scanner.peek(1) == '~':
                 break
             if peek_char == '\\':
-                # Stop to handle escapes in next iteration if it is a special escape
-                # Check if it is \~ or \$
                 next_c = self.scanner.peek(1)
                 if next_c == '~' or next_c == '$':
                     break
@@ -542,10 +536,7 @@ class Lexer:
         for keyword, token_type in llm_keywords:
             if self._match_llm_keyword(offset, keyword):
                 if offset > 0:
-                    # TODO: Use a proper warning mechanism instead of print
                     pass
-                    # print(f"Warning: Indentation found before LLM keyword '{keyword}' at line {self.scanner.line}. LLM blocks should not use indentation for keywords.")
-
                 self._consume_llm_keyword(offset, keyword, token_type)
                 
                 if token_type == TokenType.LLM_END:

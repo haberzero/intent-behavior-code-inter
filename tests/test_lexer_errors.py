@@ -6,12 +6,11 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
-from typedef.lexer_types import TokenType
 from typedef.exception_types import LexerError
 
 class TestLexerErrors(unittest.TestCase):
     """
-    Error handling tests for Lexer.
+    Error handling tests for Lexer .
     Covers:
     1. EOF errors (strings, behaviors)
     2. Invalid escape sequences

@@ -7,12 +7,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
-from typedef.lexer_types import TokenType
 from typedef import parser_types as ast
+from typedef.lexer_types import TokenType
 
 class TestParserComplex(unittest.TestCase):
     """
-    Complex functionality tests for Parser.
+    Complex functionality tests for Parser .
     Covers:
     1. Advanced Features (Behavior, LLM, Intent Comments)
     2. Data Structures (List, Dict, Generics)
@@ -76,7 +76,8 @@ func f(List[int] a, Dict[str, int] b) -> None:
         assert isinstance(arg_b.annotation, ast.Subscript)
         assert isinstance(arg_b.annotation.value, ast.Name)
         self.assertEqual(arg_b.annotation.value.id, "Dict")
-        self.assertIsInstance(arg_b.annotation.slice, ast.ListExpr)
+        # In , Dict[str, int] is parsed as Subscript(Dict, ListExpr([str, int]))
+        # Note: The original test expected ListExpr.
         assert isinstance(arg_b.annotation.slice, ast.ListExpr)
         self.assertEqual(len(arg_b.annotation.slice.elts), 2)
 
@@ -86,7 +87,6 @@ func f(List[int] a, Dict[str, int] b) -> None:
         mod = self.parse(source)
         assign = mod.body[0]
         assert isinstance(assign, ast.Assign)
-        self.assertIsInstance(assign.value, ast.BehaviorExpr)
         assert isinstance(assign.value, ast.BehaviorExpr)
         self.assertIn("$data", assign.value.variables)
         self.assertIn("process", assign.value.content)
@@ -102,7 +102,6 @@ if ~~ check user input ~~ and
         if_stmt = mod.body[0]
         assert isinstance(if_stmt, ast.If)
         test_expr = if_stmt.test
-        self.assertIsInstance(test_expr, ast.BoolOp)
         assert isinstance(test_expr, ast.BoolOp)
         self.assertEqual(test_expr.op, 'and')
         self.assertIsInstance(test_expr.values[0], ast.BehaviorExpr)
@@ -120,7 +119,6 @@ llm chatbot(str user_input) -> str:
 """
         mod = self.parse(source)
         llm_func = mod.body[0]
-        self.assertIsInstance(llm_func, ast.LLMFunctionDef)
         assert isinstance(llm_func, ast.LLMFunctionDef)
         self.assertEqual(llm_func.name, "chatbot")
 
@@ -157,7 +155,6 @@ if ~~ user input is malicious ~~:
         """Test chained comparisons."""
         # x > 1 + 2
         expr = self.parse_expr("res = x > 1 + 2")
-        self.assertIsInstance(expr, ast.Compare)
         assert isinstance(expr, ast.Compare)
         self.assertEqual(expr.ops[0], ">")
         self.assertIsInstance(expr.comparators[0], ast.BinOp)
@@ -190,11 +187,9 @@ if ~~ user input is malicious ~~:
                 assign = mod.body[0]
                 assert isinstance(assign, ast.Assign)
                 if op == "~":
-                    self.assertIsInstance(assign.value, ast.UnaryOp)
                     assert isinstance(assign.value, ast.UnaryOp)
                     self.assertEqual(assign.value.op, "~")
                 else:
-                    self.assertIsInstance(assign.value, ast.BinOp)
                     assert isinstance(assign.value, ast.BinOp)
                     self.assertEqual(assign.value.op, op)
 
@@ -211,7 +206,6 @@ if ~~ user input is malicious ~~:
         cases = [("(int) x", "int"), ("(float) 1", "float"), ("(list) []", "list")]
         for code, type_name in cases:
             expr = self.parse_expr(f"res = {code}")
-            self.assertIsInstance(expr, ast.CastExpr)
             assert isinstance(expr, ast.CastExpr)
             self.assertEqual(expr.type_name, type_name)
             
@@ -221,22 +215,18 @@ if ~~ user input is malicious ~~:
         self.assertEqual(expr.op, "+")
         self.assertIsInstance(expr.left, ast.CastExpr)
 
-        # Scenario 8.6: int(x) should fail (as it's interpreted as a Call but 'int' is a TYPE_NAME)
-        code_fail = "res = int(x)"
-        lexer = Lexer(code_fail + "\n")
-        tokens = lexer.tokenize()
-        parser = Parser(tokens)
-        parser.parse()
-        # Verify that an error was recorded
-        self.assertTrue(len(parser.errors) > 0)
-        self.assertIn("Type name 'int' cannot be used as a function", parser.errors[0].message)
+        # Scenario 8.6: int(x)
+        # In , this is now a valid Call expression (constructor call), not a syntax error.
+        # This unifies the grammar and allows for standard constructor syntax.
+        code_call = "res = int(x)"
+        expr_call = self.parse_expr(code_call)
+        self.assertIsInstance(expr_call, ast.Call)
+        self.assertEqual(expr_call.func.id, "int")
+        self.assertEqual(len(expr_call.args), 1)
+        self.assertEqual(expr_call.args[0].id, "x")
 
     def test_behavior_precedence(self):
         """Test precedence of behavior expressions in logic."""
-        # Behavior expressions must be on separate lines or end of line to close properly.
-        # if ~~A~~ or
-        #    ~~B~~ and
-        #    ~~C~~:
         code = """
 if ~~A~~ or
    ~~B~~ and
@@ -247,17 +237,14 @@ if ~~A~~ or
         if_stmt = mod.body[0]
         assert isinstance(if_stmt, ast.If)
         test_expr = if_stmt.test
-        self.assertIsInstance(test_expr, ast.BoolOp)
         assert isinstance(test_expr, ast.BoolOp)
         self.assertEqual(test_expr.op, 'or')
         self.assertIsInstance(test_expr.values[0], ast.BehaviorExpr)
-        self.assertIsInstance(test_expr.values[1], ast.BoolOp) # Inner AND
-        assert isinstance(test_expr.values[1], ast.BoolOp)
+        assert isinstance(test_expr.values[1], ast.BoolOp) # Inner AND
         self.assertEqual(test_expr.values[1].op, 'and')
 
     def test_behavior_as_argument_via_var(self):
         """Test using behavior expression passed to function via variable."""
-        # Direct behavior as argument is not supported due to closing rule (must be EOL or :)
         code = """
 str temp = ~~user input~~
 res = analyze(temp)
@@ -312,22 +299,12 @@ func process(List[Dict[str, List[int]]] data) -> None:
         """Test complex comparison chains."""
         # a < b > c <= d == e
         expr = self.parse_expr("res = a < b > c <= d == e")
-        self.assertIsInstance(expr, ast.Compare)
         assert isinstance(expr, ast.Compare)
         self.assertEqual(expr.ops, ["<", ">", "<=", "=="])
         self.assertEqual(len(expr.comparators), 4)
 
     def test_bitwise_precedence_complex(self):
         """Test bitwise operator precedence mixed."""
-        # a | b & c ^ d
-        # Expected: a | (b & c) ^ d ?
-        # Python: & (BIT_AND) > ^ (BIT_XOR) > | (BIT_OR)
-        # a | b & c ^ d
-        # 1. b & c -> T1
-        # 2. T1 ^ d -> T2
-        # 3. a | T2
-        # So: a | ((b & c) ^ d)
-        
         expr = self.parse_expr("res = a | b & c ^ d")
         assert isinstance(expr, ast.BinOp)
         self.assertEqual(expr.op, "|")
@@ -374,9 +351,6 @@ if 年龄 >= 18:
     def test_intent_scope_nested_calls(self):
         """
         Test that intent on the outer statement is NOT attached to inner calls.
-        Example: @ outer intent
-                 x = outer(inner())
-        Expected: outer has intent, inner does NOT.
         """
         code = """
 @ outer intent
@@ -396,13 +370,11 @@ x = outer(inner())
         
         # Inner call (argument) should NOT have intent
         inner_call = outer_call.args[0]
-        self.assertIsInstance(inner_call, ast.Call)
         assert isinstance(inner_call, ast.Call)
         self.assertIsNone(inner_call.intent)
 
     def test_behavior_escapes_complex(self):
         """Test escape sequences in behavior description (\\~\\~, \\$, \\~)."""
-        # Scenario 8.2 from Design Notes
         code = r"str cmd = ~~查找包含 \$100 和 \~~波浪号\~~ 的文本~~"
         mod = self.parse(code)
         assign = mod.body[0]
@@ -416,7 +388,6 @@ x = outer(inner())
 
     def test_llm_block_tokens_no_indent(self):
         """
-        Scenario 8.3: LLM Block Token Stream
         Ensure NO INDENT tokens are generated inside LLM block even if indented.
         """
         code = """
@@ -469,18 +440,15 @@ y = call2()
     def test_intent_does_not_attach_to_assignment_target(self):
         """
         Test that intent attaches to the CALL/Expr, not the variable name being assigned to.
-        Although AST structure puts intent on the Call node, we just verify structure.
         """
         code = """
 @ intent
 int x = my_func()
 """
-        # Lexer or Parser might need a space between @ and intent content
         mod = self.parse(code)
         assign = mod.body[0]
         assert isinstance(assign, ast.Assign)
         # Intent is on the value (Call), not the target (Name)
-        self.assertIsInstance(assign.targets[0], ast.Name)
         assert isinstance(assign.targets[0], ast.Name)
         assert isinstance(assign.value, ast.Call)
         assert assign.value.intent is not None

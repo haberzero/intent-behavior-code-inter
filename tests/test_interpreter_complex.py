@@ -5,14 +5,14 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer_v2 import LexerV2
-from utils.parser.parser_v2 import ParserV2
+from utils.lexer.lexer import Lexer
+from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
 from typedef.exception_types import InterpreterError
 
-class TestInterpreterComplexV2(unittest.TestCase):
+class TestInterpreterComplex(unittest.TestCase):
     """
-    Re-run of TestInterpreterBoundary and TestInterpreterBuiltins using V2 Parser.
+    Re-run of TestInterpreterBoundary and TestInterpreterBuiltins using  Parser.
     """
     def setUp(self):
         self.output_buffer = []
@@ -21,9 +21,9 @@ class TestInterpreterComplexV2(unittest.TestCase):
         self.output_buffer.append(message)
 
     def run_code(self, code):
-        lexer = LexerV2(code.strip() + "\n")
+        lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = ParserV2(tokens)
+        parser = Parser(tokens)
         module = parser.parse()
         if parser.errors:
             # Re-raise parser errors for test visibility
@@ -87,9 +87,9 @@ func f(int n) -> int:
 
 f(1)
 """
-        lexer = LexerV2(code.strip() + "\n")
+        lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = ParserV2(tokens)
+        parser = Parser(tokens)
         module = parser.parse()
         
         interp = Interpreter(output_callback=self.capture_output)
