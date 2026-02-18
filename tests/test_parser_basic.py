@@ -40,7 +40,7 @@ class TestParserBasic(unittest.TestCase):
         if isinstance(stmt, ast.Assign) and stmt.value is not None:
             return stmt.value
         elif isinstance(stmt, ast.ExprStmt):
-             return stmt.value
+            return stmt.value
         return stmt
 
     def test_basic_assignment(self):
@@ -91,7 +91,9 @@ class TestParserBasic(unittest.TestCase):
         module = self.parse(code)
         stmt = module.body[0]
         assert isinstance(stmt, ast.Assign)
+        assert isinstance(stmt.targets[0], ast.Name)
         self.assertEqual(stmt.targets[0].id, "x")
+        assert isinstance(stmt.type_annotation, ast.Name)
         self.assertEqual(stmt.type_annotation.id, "UserType")
 
     def test_generic_type_declaration(self):
@@ -101,9 +103,12 @@ class TestParserBasic(unittest.TestCase):
         module = self.parse(code)
         stmt = module.body[0]
         assert isinstance(stmt, ast.Assign)
+        assert isinstance(stmt.targets[0], ast.Name)
         self.assertEqual(stmt.targets[0].id, "x")
         assert isinstance(stmt.type_annotation, ast.Subscript)
+        assert isinstance(stmt.type_annotation.value, ast.Name)
         self.assertEqual(stmt.type_annotation.value.id, "List")
+        assert isinstance(stmt.type_annotation.slice, ast.Name)
         self.assertEqual(stmt.type_annotation.slice.id, "int")
 
     def test_error_reporting(self):

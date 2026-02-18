@@ -220,9 +220,11 @@ if ~~ user input is malicious ~~:
         # This unifies the grammar and allows for standard constructor syntax.
         code_call = "res = int(x)"
         expr_call = self.parse_expr(code_call)
-        self.assertIsInstance(expr_call, ast.Call)
+        assert isinstance(expr_call, ast.Call)
+        assert isinstance(expr_call.func, ast.Name)
         self.assertEqual(expr_call.func.id, "int")
         self.assertEqual(len(expr_call.args), 1)
+        assert isinstance(expr_call.args[0], ast.Name)
         self.assertEqual(expr_call.args[0].id, "x")
 
     def test_behavior_precedence(self):
