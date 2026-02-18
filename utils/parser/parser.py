@@ -20,7 +20,10 @@ class Parser:
         if self.warning_callback:
             self.warning_callback(message)
         else:
-            print(f"Warning: {message}")
+            # Default behavior: do not print to stdout directly.
+            # In a production environment, this should probably log to a logger or be ignored if no callback is provided.
+            pass
+            # print(f"Warning: {message}")
 
     # --- Helpers ---
 
@@ -91,6 +94,8 @@ class Parser:
         token = self.advance()
         prefix = self.get_rule(token.type).prefix
         if prefix is None:
+            if token.type == TokenType.TYPE_NAME:
+                raise self.error(token, f"Type name '{token.value}' cannot be used as a function. Did you mean to cast? Use '({token.value}) expression'.")
             raise self.error(token, "Expect expression.")
         
         left = prefix()

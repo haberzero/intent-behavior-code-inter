@@ -542,7 +542,9 @@ class Lexer:
         for keyword, token_type in llm_keywords:
             if self._match_llm_keyword(offset, keyword):
                 if offset > 0:
-                    print(f"Warning: Indentation found before LLM keyword '{keyword}' at line {self.scanner.line}. LLM blocks should not use indentation for keywords.")
+                    # TODO: Use a proper warning mechanism instead of print
+                    pass
+                    # print(f"Warning: Indentation found before LLM keyword '{keyword}' at line {self.scanner.line}. LLM blocks should not use indentation for keywords.")
 
                 self._consume_llm_keyword(offset, keyword, token_type)
                 

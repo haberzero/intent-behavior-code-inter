@@ -21,7 +21,7 @@ class TestLexerBasic(unittest.TestCase):
         code = """
 func 计算(int a) -> int:
     int x = 10
-    for i in range(a):
+    for i in a:
         x = x + i
     return x
 """
@@ -32,7 +32,7 @@ func 计算(int a) -> int:
             TokenType.FUNC, TokenType.IDENTIFIER, TokenType.LPAREN, TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.RPAREN, TokenType.ARROW, TokenType.TYPE_NAME, TokenType.COLON, TokenType.NEWLINE,
             TokenType.INDENT,
             TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.NUMBER, TokenType.NEWLINE,
-            TokenType.FOR, TokenType.IDENTIFIER, TokenType.IN, TokenType.IDENTIFIER, TokenType.LPAREN, TokenType.IDENTIFIER, TokenType.RPAREN, TokenType.COLON, TokenType.NEWLINE,
+            TokenType.FOR, TokenType.IDENTIFIER, TokenType.IN, TokenType.IDENTIFIER, TokenType.COLON, TokenType.NEWLINE,
             TokenType.INDENT,
             TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.IDENTIFIER, TokenType.PLUS, TokenType.IDENTIFIER, TokenType.NEWLINE,
             TokenType.DEDENT,

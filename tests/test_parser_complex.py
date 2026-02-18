@@ -229,7 +229,7 @@ if ~~ user input is malicious ~~:
         parser.parse()
         # Verify that an error was recorded
         self.assertTrue(len(parser.errors) > 0)
-        self.assertIn("Expect expression", parser.errors[0].message)
+        self.assertIn("Type name 'int' cannot be used as a function", parser.errors[0].message)
 
     def test_behavior_precedence(self):
         """Test precedence of behavior expressions in logic."""

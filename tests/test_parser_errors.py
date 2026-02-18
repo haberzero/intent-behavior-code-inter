@@ -81,11 +81,17 @@ class TestParserErrors(unittest.TestCase):
 @ unused intent
 x = 1
 """
-        f = io.StringIO()
-        with redirect_stdout(f):
-            self.parse(code)
-        output = f.getvalue()
-        self.assertIn("Warning: Intent comment", output)
+        warnings = []
+        def warn_cb(msg):
+            warnings.append(msg)
+            
+        lexer = Lexer(code.strip() + "\n")
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, warning_callback=warn_cb)
+        parser.parse()
+        
+        self.assertTrue(len(warnings) > 0)
+        self.assertIn("Intent comment", warnings[0])
 
     def test_missing_newline_before_block(self):
         """Test missing newline before block (e.g. for 10: pass on one line)."""
