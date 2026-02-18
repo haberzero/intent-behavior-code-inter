@@ -344,3 +344,80 @@ Compare
 **AST 结构对比**：
 
 - `(int) x` -> `CastExpr(type_name="int", value=Name(id="x"))`
+
+### 8.7 数值类型与 AST 常量表示
+
+**场景**：数值字面量的解析规则。
+
+**行为规范**：
+Parser 根据 Token 的字符串内容区分整数和浮点数：
+
+- 包含 `.` 或指数符号 (`e/E`) 的，解析为 `float`。
+- 其他情况解析为 `int`。
+
+**AST 表现**：
+
+- `1` -> `Constant(value=1)` (int)
+- `1.0` -> `Constant(value=1.0)` (float)
+
+**注意**：此行为对列表索引等位置有直接影响，解释器在处理 `Subscript` 时可能依赖于此类型区分。
+
+### 8.8 下标与切片 (Subscript)
+
+**场景**：`my_list[0]`, `my_dict["key"]` 或泛型 `List[int]`。
+
+**解析规则**：
+
+- `[` (LBRACKET) 被注册为中缀运算符，优先级为 `Precedence.CALL`。
+- 左侧表达式作为 `value`，方括号内的表达式作为 `slice`。
+
+**AST 结构**：
+
+- `Subscript(value=..., slice=..., ctx='Load')`
+
+**语义**：
+该节点在不同上下文中具有不同含义：
+
+1. **类型注解**：表示泛型参数（如 `List[int]`）。
+2. **表达式**：表示容器访问（如 `data[0]`）。
+解释器或静态分析工具需根据上下文判断具体行为。
+
+## 9. API 参考与交互契约
+
+本章节定义了核心组件的公共接口与数据规范，作为模块间交互的契约。
+
+### 9.1 Lexer API
+
+```python
+class Lexer:
+    def __init__(self, source_code: str): ...
+    
+    def tokenize(self) -> List[Token]:
+        """
+        扫描源代码并返回 Token 列表。
+        自动处理 EOF 和尾部 DEDENT。
+        """
+```
+
+**Token 数据规范**：
+
+- `TokenType.NUMBER`: `value` 属性始终为**原始字符串**（如 `"123"`, `"3.14"`）。Lexer **不执行** 数值类型转换，该责任由 Parser 承担。
+- `TokenType.RAW_TEXT`: `value` 包含未处理的文本内容，可能包含换行符。
+
+### 9.2 Parser API
+
+```python
+class Parser:
+    def __init__(self, tokens: List[Token], warning_callback: Optional[Callable[[str], None]] = None): ...
+    
+    def parse(self) -> ast.Module:
+        """
+        解析 Token 流并返回 AST 根节点 (Module)。
+        如果解析失败，将抛出 ParserError 或在 self.errors 中积累错误。
+        """
+```
+
+**AST 节点语义契约**：
+
+- **`Subscript`**: 是多态节点。在 `Load` 上下文中，既可以表示泛型类型（如 `List[int]`），也可以表示列表/字典访问（如 `data[0]`）。后端消费者（解释器/编译器）需根据运行时对象的类型来动态分发行为。
+- **`Constant`**: `value` 属性存储已转换好的 Python 原生类型 (`int`, `float`, `str`, `bool`)。消费者无需再次解析字符串。
