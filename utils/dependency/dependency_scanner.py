@@ -114,6 +114,17 @@ class DependencyScanner:
         Scans a single file for imports using ImportScanner.
         """
         abs_path = os.path.abspath(file_path)
+        
+        # Security Check: Ensure file is within root_dir
+        try:
+            abs_root = os.path.abspath(self.root_dir)
+            if os.path.commonpath([abs_root, abs_path]) != abs_root:
+                self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file outside root: {file_path}")
+                return None
+        except ValueError:
+             self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file on different drive: {file_path}")
+             return None
+
         if abs_path in self.modules:
             return self.modules[abs_path]
             

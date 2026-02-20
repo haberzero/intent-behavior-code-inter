@@ -20,6 +20,24 @@ class ModuleResolver:
         # Extensions to probe, in order of preference
         self.extensions = ['.ibci', '.py', '']
 
+    def _check_path_security(self, path: str):
+        """
+        Ensure the path is within the project root directory.
+        Prevents Path Traversal attacks.
+        """
+        abs_path = os.path.abspath(path)
+        abs_root = os.path.abspath(self.root_dir)
+        
+        # Use commonpath to correctly handle path separators and subdirectories
+        try:
+            common = os.path.commonpath([abs_root, abs_path])
+        except ValueError:
+            # Can happen on Windows if paths are on different drives
+            raise ModuleResolveError(f"Path '{path}' is on a different drive than root '{self.root_dir}'")
+            
+        if common != abs_root:
+            raise ModuleResolveError(f"Security Error: Path '{path}' attempts to access outside project root '{self.root_dir}'")
+
     def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
         """Helper to calculate candidate path without probing."""
         is_relative = module_name.startswith('.')
@@ -61,6 +79,9 @@ class ModuleResolver:
             # Absolute import (from root)
             rel_path = module_name.replace('.', os.sep)
             candidate_path = os.path.join(self.root_dir, rel_path)
+            
+        # Security Check
+        self._check_path_security(candidate_path)
             
         return candidate_path
 
