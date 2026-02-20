@@ -659,9 +659,14 @@ class Parser:
                          raise self.error(start_token, "Attempted relative import beyond top-level package")
                     
                     # Resolve parent package
-                    # level 1: current package
-                    # level 2: parent
-                    parent_parts = parts[:len(parts) - (level - 1)]
+                    # self.package_name is the full module name (e.g. pkg.subpkg.calc)
+                    # level 1 (.): sibling of calc -> pkg.subpkg
+                    # level 2 (..): parent of pkg.subpkg -> pkg
+                    
+                    # parts has length N.
+                    # level 1: take N-1 parts.
+                    # level 2: take N-2 parts.
+                    parent_parts = parts[:len(parts) - level]
                     parent_package = ".".join(parent_parts)
                     
                     if module_name:
@@ -696,8 +701,7 @@ class Parser:
                 sym = self.scope_manager.define(asname, sym_type)
                 sym.exported_scope = exported_scope
                 
-                # [FIX]: Store reference to origin!
-                # IMPORTANT: origin_sym might be None if module_scope is None or name not found.
+                # Store reference to origin for lazy type resolution in semantic analysis
                 sym.origin_symbol = origin_sym 
                 
                 if origin_sym:

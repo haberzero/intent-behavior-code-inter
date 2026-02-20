@@ -62,11 +62,9 @@ class Scheduler:
                 last_mtime = self.build_cache.get(file_path, 0.0)
                 if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                     # Recompile
-                    # print(f"Compiling {file_path}...")
                     self._compile_file(file_path)
                     self.build_cache[file_path] = mod_info.mtime
                 else:
-                    # print(f"Skipping {file_path} (up to date)")
                     pass
             
         if self.issue_tracker.has_errors():
@@ -88,8 +86,6 @@ class Scheduler:
         # Remove extension and replace separators
         base_name = os.path.splitext(rel_path)[0]
         module_name = base_name.replace(os.sep, '.')
-        
-        # print(f"DEBUG: Compiling {file_path} as module '{module_name}'")
         
         # Read source
         source = module_info.content
@@ -122,14 +118,5 @@ class Scheduler:
         analyzer.analyze(ast_node)
         
         # Register the module's scope for other modules to use
-        # NOTE: We register AFTER analysis so types are populated.
-        # But wait, if we have A -> B, and we compile B first.
-        # Parse(B) -> Analyze(B) -> Register(B).
-        # Parse(A) -> Imports B -> Copies symbols from B (with types).
-        # Should work.
-        
-        # Debugging: Print scope keys
-        # print(f"DEBUG: Registered scope for {module_name}")
-        
         if ast_node.scope:
             self.scope_cache[module_name] = ast_node.scope

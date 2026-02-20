@@ -243,7 +243,7 @@ class SemanticAnalyzer:
                         # [FIX]: Type Inference for 'var' (AnyType)
                         # If declared type is Any, try to infer from value.
                         if isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
-                             symbol.type_info = val_type
+                            symbol.type_info = val_type
                         elif not val_type.is_assignable_to(declared_type):
                             self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
             else:
@@ -345,13 +345,9 @@ class SemanticAnalyzer:
             # we should try to fetch the type from the origin scope NOW.
             
             if symbol.type_info is None and symbol.origin_symbol:
-                  # Check if origin has type info now (it might have been analyzed after import)
-                  print(f"DEBUG: Lazy resolving {node.id} from origin {symbol.origin_symbol.name} which has type {symbol.origin_symbol.type_info}")
-                  if symbol.origin_symbol.type_info:
-                      symbol.type_info = symbol.origin_symbol.type_info
-            
-            # if symbol.type_info is None:
-            #     print(f"DEBUG: Symbol {node.id} resolved to None type_info. Origin: {symbol.origin_symbol}")
+                 # Check if origin has type info now (it might have been analyzed after import)
+                 if symbol.origin_symbol.type_info:
+                     symbol.type_info = symbol.origin_symbol.type_info
             
             return symbol.type_info or ANY_TYPE
         return ANY_TYPE
@@ -383,7 +379,6 @@ class SemanticAnalyzer:
                  
              # [FIX]: Lazy resolution for attributes too!
              if attr_sym.type_info is None and attr_sym.origin_symbol:
-                   print(f"DEBUG: Lazy resolving attribute {node.attr} from origin {attr_sym.origin_symbol.name} type {attr_sym.origin_symbol.type_info}")
                    if attr_sym.origin_symbol.type_info:
                        attr_sym.type_info = attr_sym.origin_symbol.type_info
                        

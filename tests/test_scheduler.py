@@ -88,71 +88,6 @@ class TestScheduler(unittest.TestCase):
         with self.assertRaises(CompilerError):
             scheduler.compile_project(entry_file)
 
-    def test_relative_import_debug(self):
-        """
-        Deep debug test for relative import type_info issue.
-        """
-        test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_data', 'relative_project'))
-        entry_file = os.path.join(test_dir, 'main.ibci')
-        
-        scheduler = Scheduler(test_dir)
-        try:
-            ast_map = scheduler.compile_project(entry_file)
-        except Exception:
-            # We don't care about success here, just inspecting state
-            pass
-            
-        # Inspect 'pkg.math'
-        # 1. Check if it was compiled
-        math_file = os.path.join(test_dir, 'pkg', 'math.ibci')
-        if math_file not in scheduler.ast_cache:
-            # print(f"DEBUG: math.ibci not in ast_cache. Keys: {list(scheduler.ast_cache.keys())}")
-            return
-
-        math_ast = scheduler.ast_cache[math_file]
-        math_scope = math_ast.scope
-        
-        # 2. Check 'add' symbol in math scope
-        add_origin = math_scope.resolve('add')
-        # print(f"DEBUG: Origin 'add' symbol in pkg.math: {add_origin}")
-        
-        # 3. Check 'pkg.subpkg.calc'
-        calc_file = os.path.join(test_dir, 'pkg', 'subpkg', 'calc.ibci')
-        if calc_file not in scheduler.ast_cache:
-             # print("DEBUG: calc.ibci not in ast_cache")
-             return
-             
-        calc_ast = scheduler.ast_cache[calc_file]
-        calc_scope = calc_ast.scope
-        
-        # 4. Check 'add' symbol in calc scope (imported)
-        add_imported = calc_scope.resolve('add')
-        # print(f"DEBUG: Imported 'add' symbol in pkg.subpkg.calc: {add_imported}")
-        
-        # 5. Check if type_info is correctly resolved now
-        if add_origin and add_imported:
-             # Manually trigger SemanticAnalyzer check?
-             # No, compile_project already ran it.
-             
-             # Let's inspect if origin_symbol is actually set on add_imported
-             # print(f"DEBUG: add_imported.origin_symbol = {add_imported.origin_symbol}")
-             
-             # If it is None, then Parser didn't set it.
-             # Or maybe ScopeManager.define() returns a new Symbol instance?
-             # ScopeManager.define() creates a Symbol and returns it.
-             
-             # Wait, in test_relative_import_debug, we are checking 'calc.ibci'.
-             # Does 'calc.ibci' use 'from ..math import add'?
-             # Let's check the content of calc.ibci.
-             pass
-             
-             # self.assertIsNotNone(add_imported.type_info, "Imported symbol should have resolved type info")
-             # self.assertEqual(add_imported.type_info.name, 'function')
-            
-            # Verify origin link
-            # self.assertIsNotNone(add_imported.origin_symbol)
-            # self.assertEqual(add_imported.origin_symbol, add_origin)
-
     def test_relative_import(self):
         # Create relative project
         # main.ibci imports pkg.subpkg.calc
@@ -180,25 +115,12 @@ class TestScheduler(unittest.TestCase):
         # Verify 'add' symbol is imported
         add_sym = calc_ast.scope.resolve('add')
         self.assertIsNotNone(add_sym)
-        self.assertEqual(add_sym.type.name, 'VARIABLE') # Imported functions are variables in current scope
+        # It should now be FUNCTION type because we resolve origin
+        self.assertEqual(add_sym.type.name, 'FUNCTION') 
         
         # Verify it has correct type info
-        if add_sym.type_info is None:
-             print(f"\nDEBUG: add_sym found but type_info is None. Symbol: {add_sym}")
-             # Check if we can find 'pkg.math' module in cache
-             # The test runs scheduler which populates cache.
-             
-        # In parser.py:648: sym.type_info = origin_sym.type_info
-        # If type_info is missing, it might be because 'add' in 'pkg.math' was not fully typed?
-        # But 'add' is a function.
-        
-        # Let's check if 'pkg.math' was parsed and analyzed.
-        # Check scope_cache in scheduler
-        # Accessing scheduler instance from test?
-        # Re-verify logic in parser.py import_statement
-        
-        # self.assertIsNotNone(add_sym.type_info)
-        # self.assertEqual(add_sym.type_info.name, 'function')
+        self.assertIsNotNone(add_sym.type_info, "Imported symbol 'add' should have type info")
+        self.assertEqual(add_sym.type_info.name, 'function')
 
     def test_error_recovery(self):
         # Create a file with syntax error in the middle
