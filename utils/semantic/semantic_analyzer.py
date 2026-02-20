@@ -73,6 +73,7 @@ class SemanticAnalyzer:
                         self.visit(item)
             elif isinstance(child, ast.ASTNode):
                 self.visit(child)
+        return ANY_TYPE
 
     def error(self, message: str, node: ast.ASTNode):
         # Convert ASTNode location to Diagnostic Location
@@ -238,7 +239,7 @@ class SemanticAnalyzer:
                 # Check initial value
                 if node.value:
                     val_type = self.visit(node.value)
-                    if not val_type.is_assignable_to(declared_type):
+                    if val_type is not None and not val_type.is_assignable_to(declared_type):
                         self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
             else:
                 self.error("Invalid assignment target for declaration", node)
@@ -257,12 +258,13 @@ class SemanticAnalyzer:
                     
                     # Special case for 'var' (AnyType): AnyType accepts anything.
                     # If symbol.type_info is IntType, and val is StrType -> Error.
-                    if symbol.type_info and not val_type.is_assignable_to(symbol.type_info):
+                    if symbol.type_info and val_type is not None and not val_type.is_assignable_to(symbol.type_info):
                         self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node)
             else:
                 # Subscript assignment etc.
                 self.visit(target)
-                self.visit(node.value)
+                if node.value:
+                    self.visit(node.value)
 
     def visit_Return(self, node: ast.Return):
         # Explicit check if we are inside a function
@@ -274,7 +276,7 @@ class SemanticAnalyzer:
         
         if node.value:
             actual = self.visit(node.value)
-            if not actual.is_assignable_to(expected):
+            if actual is not None and not actual.is_assignable_to(expected):
                 self.error(f"Invalid return type: expected '{expected}', got '{actual}'", node)
         else:
             if expected != VOID_TYPE and expected != ANY_TYPE:
@@ -302,7 +304,7 @@ class SemanticAnalyzer:
         for i, arg in enumerate(node.args):
             arg_type = self.visit(arg)
             expected_type = func_type.param_types[i]
-            if not arg_type.is_assignable_to(expected_type):
+            if arg_type is not None and not arg_type.is_assignable_to(expected_type):
                 self.error(f"Argument {i+1} type mismatch: expected '{expected_type}', got '{arg_type}'", arg)
                 
         return func_type.return_type
@@ -393,7 +395,7 @@ class SemanticAnalyzer:
                 is_uniform = False
                 break
         
-        if is_uniform:
+        if is_uniform and first_type is not None:
             return ListType(first_type)
         return ListType(ANY_TYPE)
 
