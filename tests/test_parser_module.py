@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
-from utils.semantic.analyzer import SemanticAnalyzer
+from utils.semantic.semantic_analyzer import SemanticAnalyzer
 from utils.parser.symbol_table import ScopeManager, SymbolType
 from utils.semantic.types import FunctionType, INT_TYPE, VOID_TYPE, ANY_TYPE
 from typedef.diagnostic_types import CompilerError
