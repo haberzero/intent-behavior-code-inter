@@ -47,7 +47,8 @@ class TestParserModule(unittest.TestCase):
         # Parser logic: sym = define(asname or module_name)
         # So it defines 'utils.math'.
         
-        self.assertIsNotNone(sym)
+        assert sym is not None
+        if sym is None: self.fail()
         self.assertEqual(sym.type, SymbolType.MODULE)
         self.assertEqual(sym.name, 'utils.math')
 
@@ -59,7 +60,8 @@ class TestParserModule(unittest.TestCase):
         mod, parser = self.parse_code(code)
         
         sym = parser.scope_manager.resolve('m')
-        self.assertIsNotNone(sym)
+        assert sym is not None
+        if sym is None: self.fail()
         self.assertEqual(sym.type, SymbolType.MODULE)
         
         # Original name should NOT be defined
@@ -75,7 +77,8 @@ class TestParserModule(unittest.TestCase):
         mod, parser = self.parse_code(code)
         
         sym = parser.scope_manager.resolve('sqrt')
-        self.assertIsNotNone(sym)
+        assert sym is not None
+        if sym is None: self.fail()
         self.assertEqual(sym.type, SymbolType.VARIABLE)
 
     def test_cross_module_resolution(self):
@@ -97,7 +100,8 @@ class TestParserModule(unittest.TestCase):
         
         # Check if 'math' symbol is linked
         math_sym = parser.scope_manager.resolve('math')
-        self.assertIsNotNone(math_sym)
+        assert math_sym is not None
+        if math_sym is None: self.fail()
         self.assertEqual(math_sym.exported_scope, math_scope)
         
         # 3. Analyze
@@ -125,10 +129,11 @@ class TestParserModule(unittest.TestCase):
         
         # Check symbol in current scope
         sym = parser.scope_manager.resolve('VERSION')
-        self.assertIsNotNone(sym)
+        assert sym is not None
+        if sym is None: self.fail()
         
         # Verify type info was copied from the cached module scope
-        self.assertIsNotNone(sym.type_info)
+        assert sym.type_info is not None
         if sym.type_info is None: self.fail()
         self.assertEqual(sym.type_info.name, 'int')
 

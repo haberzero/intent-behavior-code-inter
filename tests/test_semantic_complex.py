@@ -137,6 +137,9 @@ class TestSemanticComplex(unittest.TestCase):
         """
         self.analyze_code(code)
         sym = self.analyzer.scope_manager.resolve('z')
+        assert sym is not None
+        if sym is None: self.fail()
+        assert sym.type_info is not None
         self.assertEqual(sym.type_info.name, 'int')
 
 if __name__ == '__main__':
