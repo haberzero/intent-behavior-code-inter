@@ -74,18 +74,18 @@ x = (
         self.assertEqual([t.type for t in tokens], expected_types)
 
     def test_container_types_as_identifiers(self):
-        """Test that list and dict are now IDENTIFIERs, not TYPE_NAMEs ( specific)."""
+        """Test that list and dict are now TYPE_NAMEs (Updated for reserved keywords)."""
         code = "list l = []"
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         
-        # list -> IDENTIFIER
+        # list -> TYPE_NAME
         # l -> IDENTIFIER
         # = -> ASSIGN
         # [ -> LBRACKET
         # ] -> RBRACKET
         expected_types = [
-            TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.LBRACKET, TokenType.RBRACKET, TokenType.EOF
+            TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.LBRACKET, TokenType.RBRACKET, TokenType.EOF
         ]
         self.assertEqual([t.type for t in tokens], expected_types)
         self.assertEqual(tokens[0].value, "list")

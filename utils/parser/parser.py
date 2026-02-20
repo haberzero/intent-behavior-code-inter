@@ -225,9 +225,20 @@ class Parser:
         2. Identifier Identifier ... (User defined type)
         3. GenericType[Args] Identifier ...
         """
-        # Case 1: Standard Type Name (int, float, etc.)
+        # Case 1: Standard Type Name (int, float, list, dict, etc.)
         if self.check(TokenType.TYPE_NAME):
-            return True
+            # Check if followed by an identifier (variable name)
+            # This distinguishes 'int x' (declaration) from 'int(1)' (call expression)
+            next_token = self.peek(1)
+            
+            if next_token.type == TokenType.IDENTIFIER:
+                return True
+            
+            # Special case: Generic type declaration like list[int] x
+            if next_token.type == TokenType.LBRACKET:
+                 return self._check_generic_lookahead(1)
+                 
+            return False
             
         # Case 2: Identifier starting a declaration
         if self.check(TokenType.IDENTIFIER):
@@ -240,29 +251,31 @@ class Parser:
                 
             # Generic Type: Identifier [ ... ] Identifier
             if next_token.type == TokenType.LBRACKET:
-                # We need to scan past the matching bracket to see if an identifier follows
-                # This is a simple bracket matching
-                offset = 1
-                bracket_depth = 0
-                while self.current + offset < len(self.tokens):
-                    t = self.peek(offset)
-                    if t.type == TokenType.LBRACKET:
-                        bracket_depth += 1
-                    elif t.type == TokenType.RBRACKET:
-                        bracket_depth -= 1
-                        if bracket_depth == 0:
-                            # Found closing bracket. Check what's next.
-                            after_bracket = self.peek(offset + 1)
-                            if after_bracket.type == TokenType.IDENTIFIER:
-                                return True
-                            else:
-                                return False # Likely a subscript assignment: list[0] = 1
-                    elif t.type == TokenType.NEWLINE or t.type == TokenType.EOF:
-                        return False # Incomplete
-                        
-                    offset += 1
-                return False
+                return self._check_generic_lookahead(1)
                 
+        return False
+
+    def _check_generic_lookahead(self, offset: int) -> bool:
+        # We need to scan past the matching bracket to see if an identifier follows
+        # This is a simple bracket matching
+        bracket_depth = 0
+        while self.current + offset < len(self.tokens):
+            t = self.peek(offset)
+            if t.type == TokenType.LBRACKET:
+                bracket_depth += 1
+            elif t.type == TokenType.RBRACKET:
+                bracket_depth -= 1
+                if bracket_depth == 0:
+                    # Found closing bracket. Check what's next.
+                    after_bracket = self.peek(offset + 1)
+                    if after_bracket.type == TokenType.IDENTIFIER:
+                        return True
+                    else:
+                        return False # Likely a subscript assignment: list[0] = 1
+            elif t.type == TokenType.NEWLINE or t.type == TokenType.EOF:
+                return False # Incomplete
+                
+            offset += 1
         return False
 
     def variable_declaration(self, explicit_var: bool = False) -> ast.Assign:

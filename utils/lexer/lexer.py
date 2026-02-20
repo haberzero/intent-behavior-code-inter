@@ -35,7 +35,7 @@ class Lexer:
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
         
-        self.TYPES = {'int', 'float', 'str', 'bool', 'void', 'Any', 'None'}
+        self.TYPES = {'int', 'float', 'str', 'bool', 'void', 'Any', 'None', 'list', 'dict'}
         self.is_new_line = True
 
     def tokenize(self) -> List[Token]:
