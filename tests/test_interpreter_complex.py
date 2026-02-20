@@ -53,14 +53,13 @@ print(y)
         self.assertIn("10", self.output_buffer)
 
         # 3. Test float auto-promotion
-        # Note: Interpreter allows int assigned to float
         code_float = """
 float f = 10
 print(f)
 """
         self.run_code(code_float)
-        # Current interpreter might print "10" or "10.0" depending on implementation
-        # But as long as it runs without error, it's compatible.
+        # Interpreter handles promotion without error.
+
 
     def test_division_by_zero(self):
         code = "int x = 10 / 0"
@@ -75,13 +74,7 @@ print(f)
         self.assertIn("Type error in binary operation", str(cm.exception))
 
     def test_recursion_limit(self):
-        # We need to set limit on the instance used
-        # Since run_code creates a new interpreter each time, 
-        # we can't easily set limit before run.
-        # But we can subclass or modify run_code.
-        # Or just test that deep recursion eventually fails (Python's limit or Interpreter's limit)
-        
-        # Let's manually run this one to set limit
+        # Manually run to set recursion limit on the interpreter instance
         code = """
 func f(int n) -> int:
     return f(n)

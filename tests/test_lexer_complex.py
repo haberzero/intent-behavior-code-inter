@@ -10,7 +10,7 @@ from typedef.lexer_types import TokenType
 
 class TestLexerComplex(unittest.TestCase):
     """
-    Complex functionality tests for Lexer .
+    Complex functionality tests for Lexer.
     Covers:
     1. Behavior Descriptions (~~...~~)
     2. LLM Blocks (llm, __sys__, __user__)
@@ -131,8 +131,8 @@ llm 生成(str msg):
 
     def test_complex_real_world_code(self):
         """Test a complex real-world code scenario mixing multiple features."""
-        # Note: In , list and dict are IDENTIFIERs, not TYPE_NAMEs. 
-        # But this test mostly checks LLM and strings, which are unaffected.
+        # Note: 'list' and 'dict' are parsed as IDENTIFIERs, not TYPE_NAMEs.
+        # This test focuses on LLM and strings, so this distinction is not critical here.
         code = r"""
 import utils
 from models import User
@@ -288,8 +288,8 @@ llm inline_test(int a):
         
         # Find LLM_USER and check if "User prompt $__a__" follows
         user_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_USER)
-        # It might be split into RAW_TEXT, PARAM, etc.
-        # But we expect at least some RAW_TEXT starting with "User prompt"
+        # The content might be split into multiple tokens (RAW_TEXT, PARAM, etc.).
+        # Verify that the first token is RAW_TEXT starting with "User prompt".
         self.assertEqual(tokens[user_idx+1].type, TokenType.RAW_TEXT)
         self.assertIn("User prompt", tokens[user_idx+1].value)
 

@@ -154,7 +154,7 @@ func test():
         pass
 
     def test_error_reporting(self):
-        """Test that errors are reported and not swallowed ( feature)."""
+        """Test that errors are reported and not swallowed."""
         # Invalid syntax
         code = "if x:" 
         # Missing indent/block

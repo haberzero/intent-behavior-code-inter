@@ -15,7 +15,7 @@ from typedef.symbol_types import SymbolType
 
 class TestParserComplex(unittest.TestCase):
     """
-    Complex functionality tests for Parser .
+    Complex functionality tests for Parser.
     Covers:
     1. Advanced Features (Behavior, LLM, Intent Comments)
     2. Data Structures (List, Dict, Generics)
@@ -311,7 +311,7 @@ if ~~ user input is malicious ~~:
         self.assertIsInstance(expr.left, ast.CastExpr)
 
         # Scenario 8.6: int(x)
-        # In , this is now a valid Call expression (constructor call), not a syntax error.
+        # This is a valid Call expression (constructor call), not a syntax error.
         # This unifies the grammar and allows for standard constructor syntax.
         code_call = "res = int(x)"
         expr_call = self.parse_expr(code_call)

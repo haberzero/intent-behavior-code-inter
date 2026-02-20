@@ -87,7 +87,7 @@ class TestSemanticBasic(unittest.TestCase):
         self.analyze_code(code)
 
     def test_unknown_type(self):
-        """Test the historical issue: UnknownType should be a SemanticError, not ParserError."""
+        """Test that unknown types are reported as SemanticErrors."""
         code = """
         UnknownType x = 10
         """
@@ -108,11 +108,10 @@ class TestSemanticBasic(unittest.TestCase):
         """
         self.analyze_code(code)
         # 'a' should not be in global scope
-        # Note: SemanticAnalyzer rebuilds scope, so we check its scope_manager
-        # After analysis, scope_manager should be back to global scope
+        # The SemanticAnalyzer rebuilds scope, so we check its scope_manager.
+        # After analysis, scope_manager should be back to the global scope.
         
-        # We can't easily check 'resolve_local' on ScopeManager as it tracks current scope.
-        # But we can verify that 'a' is NOT resolvable in the current (global) scope.
+        # Verify that 'a' is NOT resolvable in the current (global) scope.
         sym_a = self.analyzer.scope_manager.resolve('a')
         self.assertIsNone(sym_a)
         

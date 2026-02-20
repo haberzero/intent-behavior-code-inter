@@ -123,9 +123,7 @@ class TestSemanticErrors(unittest.TestCase):
         x = "s" 
         """
         # We expect "Unknown type" error.
-        # Whether we get "x is not defined" depends on implementation details.
-        # Currently, if declaration fails, symbol might not be registered.
-        # So second line might say "Variable 'x' is not defined".
+        # If declaration fails, the symbol might not be registered, leading to "Variable 'x' is not defined".
         self.assertSemanticErrors(code, ["Unknown type"])
 
 if __name__ == '__main__':

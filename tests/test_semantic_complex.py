@@ -49,36 +49,15 @@ class TestSemanticComplex(unittest.TestCase):
 
     def test_var_propagation_and_usage(self):
         """Test that 'var' type allows operations and passes through functions."""
-        # Use 'Any' or similar if 'var' keyword is not allowed in type annotation.
-        # Assuming 'var' is a valid type name or using 'Any' for now.
-        # If parser doesn't support 'var' as type, we use 'int' for simplicity but pass var?
-        # Let's try to use 'var' in variable declaration, but 'int' in function signature if needed.
-        # But wait, the test is about var propagation.
-        # Let's try implicit Any via no annotation? No, arguments need types.
-        # Let's assume 'var' is a valid type alias for AnyType in our system.
-        # If parser fails, we might need to fix parser to allow 'var' keyword as type.
-        code = """
-        func process(var data) -> var:
-            return data + 1
-
-        var x = 10
-        var y = process(x)
-        y = "now a string"
-        """
-        # If parser fails on 'var' keyword, we might need to use 'int' but check dynamic behavior?
-        # Actually, let's fix the test to use standard types if 'var' as type is not supported yet.
-        # But wait, 'var' IS the dynamic type.
-        # Let's see if we can use 'Any'.
+        # Use 'int' for the function parameter as 'var' might not be allowed in signatures.
         code = """
         func process(int data) -> int:
             return data + 1
 
         var x = 10
-        # var x is Any, so passing it to int should be allowed (optimistic)
+        # 'var x' is Any, so passing it to 'int' parameter is allowed (optimistic).
         var y = process(x)
-        # y is inferred as int (return type of process)
-        # But we assign it to var y? No, 'var y = ...'
-        # 'var y' means y is Any.
+        # 'var y' means y is Any, even though process returns int.
         y = "now a string"
         """
         self.analyze_code(code)
@@ -94,11 +73,6 @@ class TestSemanticComplex(unittest.TestCase):
         self.assertIsNotNone(sym)
         if sym is None: self.fail()
         # Expected: list[list[int]]
-        # Note: Current implementation might infer list[Any] for inner list if not strict
-        # But let's check what we get. 
-        # Actually, our ListType.is_assignable_to logic is:
-        # [[1,2]] -> List[int]
-        # list[list[int]] is assignable from List[List[int]]
         self.assertTrue(str(sym.type_info).startswith("list[list[int]]"))
 
     def test_llm_function_call_types(self):
@@ -126,8 +100,6 @@ class TestSemanticComplex(unittest.TestCase):
         self.assertIsNotNone(sym)
         if sym is None: self.fail()
         # 'var' declaration sets type to AnyType.
-        # So sym.type_info is AnyType, NOT ListType(AnyType).
-        # We should assert it is AnyType.
         self.assertIsInstance(sym.type_info, AnyType)
 
     def test_shadowing_variables(self):
