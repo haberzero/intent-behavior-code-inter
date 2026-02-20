@@ -12,6 +12,8 @@ from utils.parser.pre_scanner import PreScanner
 from typedef import parser_types as ast
 from typedef.lexer_types import TokenType
 
+from typedef.diagnostic_types import CompilerError
+
 class TestParserBasic(unittest.TestCase):
     """
     Basic functionality tests for Parser.
@@ -22,10 +24,10 @@ class TestParserBasic(unittest.TestCase):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
         parser = Parser(tokens)
-        mod = parser.parse()
-        #  specific: Check parser.errors manually if we expect success
-        if parser.errors:
-            self.fail(f"Parser errors: {parser.errors}")
+        try:
+            mod = parser.parse()
+        except CompilerError as e:
+            self.fail(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
         return mod
 
     def parse_with_errors(self, code):
@@ -33,8 +35,12 @@ class TestParserBasic(unittest.TestCase):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
         parser = Parser(tokens)
-        mod = parser.parse()
-        return mod, parser.errors
+        mod = None
+        try:
+            mod = parser.parse()
+        except CompilerError:
+            pass
+        return mod, parser.diagnostic_manager.diagnostics
 
     def parse_expr(self, code):
         """Helper to parse a single expression."""

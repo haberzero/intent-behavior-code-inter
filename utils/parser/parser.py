@@ -1,11 +1,17 @@
 from typing import List, Optional, Callable, Dict, TypeVar
 from typedef.lexer_types import Token, TokenType
 from typedef import parser_types as ast
-from typedef.exception_types import ParserError
 from typedef.parser_types import Precedence, ParseRule
 
 from utils.parser.symbol_table import ScopeManager, ScopeType, SymbolType
 from utils.parser.pre_scanner import PreScanner
+from utils.diagnostics.manager import DiagnosticManager
+from utils.diagnostics.codes import *
+from typedef.diagnostic_types import Severity, CompilerError
+
+class ParseControlFlowError(Exception):
+    """Internal exception for parser synchronization control flow."""
+    pass
 
 T = TypeVar("T", bound=ast.ASTNode)
 
@@ -14,13 +20,12 @@ class Parser:
     IBC-Inter 语法分析器 (Parser)
     采用交错式预构建 (Interleaved Pre-Pass) 和持久化符号表树架构。
     """
-    def __init__(self, tokens: List[Token], warning_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self, tokens: List[Token], diagnostic_manager: Optional[DiagnosticManager] = None):
         self.tokens = tokens
         self.current = 0
-        self.errors: List[ParserError] = []
+        self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
         self.rules: Dict[TokenType, ParseRule] = {}
         self.pending_intent: Optional[str] = None
-        self.warning_callback = warning_callback
         
         # Scope Management
         self.scope_manager = ScopeManager()
@@ -31,10 +36,7 @@ class Parser:
         self.register_rules()
 
     def _warn(self, message: str):
-        if self.warning_callback:
-            self.warning_callback(message)
-        else:
-            pass
+        self.diagnostic_manager.report(Severity.WARNING, "PAR_WARN", message, self.peek())
 
     def _run_pre_scanner(self):
         """Run the PreScanner on the current scope."""
@@ -84,10 +86,9 @@ class Parser:
                 return True
         return False
 
-    def error(self, token: Token, message: str) -> ParserError:
-        err = ParserError(message, token)
-        self.errors.append(err)
-        return err
+    def error(self, token: Token, message: str) -> Exception:
+        self.diagnostic_manager.report(Severity.ERROR, PAR_EXPECTED_TOKEN, message, token)
+        return ParseControlFlowError()
 
     def synchronize(self):
         self.advance()
@@ -194,9 +195,12 @@ class Parser:
                 decl = self.declaration()
                 if decl:
                     statements.append(decl)
-            except ParserError as e:
+            except ParseControlFlowError:
                 # Synchronize to continue parsing next statement.
                 self.synchronize()
+        
+        # Check for errors at the end
+        self.diagnostic_manager.check_errors()
         
         return ast.Module(body=statements)
 

@@ -9,6 +9,7 @@ from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.parser.symbol_table import ScopeManager
 from typedef import parser_types as ast
+from typedef.diagnostic_types import CompilerError
 from typedef.lexer_types import TokenType
 
 class TestParserComplex(unittest.TestCase):
@@ -25,9 +26,10 @@ class TestParserComplex(unittest.TestCase):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
         parser = Parser(tokens)
-        mod = parser.parse()
-        if parser.errors:
-            self.fail(f"Parser errors: {parser.errors}")
+        try:
+            mod = parser.parse()
+        except CompilerError as e:
+            self.fail(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
         return mod
 
     def parse_expr(self, code):

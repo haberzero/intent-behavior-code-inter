@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
-from typedef.exception_types import InterpreterError
+from typedef.diagnostic_types import CompilerError
 
 class TestInterpreterBasic(unittest.TestCase):
     """
@@ -18,9 +18,10 @@ class TestInterpreterBasic(unittest.TestCase):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
         parser = Parser(tokens)
-        module = parser.parse()
-        if parser.errors:
-            raise Exception(f"Parser errors: {parser.errors}")
+        try:
+            module = parser.parse()
+        except CompilerError as e:
+            self.fail(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
         interpreter = Interpreter()
         return interpreter.interpret(module), interpreter
 

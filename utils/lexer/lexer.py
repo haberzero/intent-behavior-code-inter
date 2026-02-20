@@ -1,16 +1,19 @@
 from typing import List, Optional
 from typedef.lexer_types import TokenType, Token, LexerMode, SubState
 from .scanner import Scanner
-from typedef.exception_types import LexerError
+from utils.diagnostics.manager import DiagnosticManager
+from utils.diagnostics.codes import *
+from typedef.diagnostic_types import Severity
 
 class Lexer:
     """
     IBC-Inter 词法分析器 (Lexer)
     负责将源代码转换为 Token 流，处理缩进、行延续及 LLM 块边界。
     """
-    def __init__(self, source_code: str):
+    def __init__(self, source_code: str, diagnostic_manager: Optional[DiagnosticManager] = None):
         self.scanner = Scanner(source_code)
         self.tokens: List[Token] = []
+        self.diagnostic_manager = diagnostic_manager or DiagnosticManager(source_code)
         
         # 状态管理
         self.mode_stack: List[LexerMode] = [LexerMode.NORMAL]
@@ -38,22 +41,35 @@ class Lexer:
         self.is_new_line = True
 
     def tokenize(self) -> List[Token]:
-        while not self.scanner.is_at_end():
-            self._process_line()
+        try:
+            while not self.scanner.is_at_end():
+                self._process_line()
+                
+            # 检查残留状态（防御性检查）
+            if self.sub_state == SubState.IN_STRING:
+                self.diagnostic_manager.report(Severity.ERROR, LEX_UNTERMINATED_STRING, "Unexpected EOF while scanning string literal", self.scanner)
+            if self.sub_state == SubState.IN_BEHAVIOR:
+                self.diagnostic_manager.report(Severity.ERROR, LEX_UNTERMINATED_BEHAVIOR, "Unexpected EOF while scanning behavior description", self.scanner)
             
-        # 检查残留状态（防御性检查）
-        if self.sub_state == SubState.IN_STRING:
-            raise LexerError("Unexpected EOF while scanning string literal", self.scanner.line, self.scanner.col)
-        if self.sub_state == SubState.IN_BEHAVIOR:
-            raise LexerError("Unexpected EOF while scanning behavior description", self.scanner.line, self.scanner.col)
-        
-        # 处理文件末尾的剩余缩进
-        while len(self.indent_stack) > 1:
-            self.indent_stack.pop()
-            self.tokens.append(Token(TokenType.DEDENT, "", self.scanner.line, 0))
+            # 处理文件末尾的剩余缩进
+            while len(self.indent_stack) > 1:
+                self.indent_stack.pop()
+                self.tokens.append(Token(TokenType.DEDENT, "", self.scanner.line, 0))
+                
+            self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
             
-        self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
-        return self.tokens
+            # 统一抛出异常如果存在错误
+            self.diagnostic_manager.check_errors()
+            
+            return self.tokens
+        except Exception as e:
+            # 确保非 Diagnostic 异常也被捕获（如果是 fatal）
+            # 如果是 CompilerError，直接抛出
+            raise e
+
+    def _report_error(self, code: str, message: str):
+        """Helper to report lexical errors."""
+        self.diagnostic_manager.report(Severity.ERROR, code, message, self.scanner)
 
     # ==========================
     # 行处理器
@@ -121,7 +137,7 @@ class Lexer:
                 self.tokens.append(Token(TokenType.DEDENT, "", self.scanner.line, start_col))
             
             if current_indent != self.indent_stack[-1]:
-                raise LexerError("Unindent does not match any outer indentation level", self.scanner.line, start_col)
+                self._report_error(PAR_INDENTATION_ERROR, "Unindent does not match any outer indentation level")
         
         self.is_new_line = True
         return current_indent
@@ -206,7 +222,8 @@ class Lexer:
                 self.continuation_mode = True
                 return
             else:
-                raise LexerError(f"Unexpected character '\\' or invalid escape sequence", self.scanner.line, self.scanner.col)
+                self._report_error(LEX_INVALID_ESCAPE, f"Unexpected character '\\' or invalid escape sequence")
+                return
 
         # 2. 空白字符
         if char in ' \t':
@@ -354,13 +371,14 @@ class Lexer:
             self._scan_number(char)
             return
             
-        raise LexerError(f"Unexpected character '{char}'", self.scanner.line, self.scanner.col)
+        self._report_error(LEX_INVALID_CHAR, f"Unexpected character '{char}'")
 
     def _scan_string_char(self):
         char = self.scanner.advance()
         
         if char == '\n':
-            raise LexerError("EOL while scanning string literal", self.scanner.line, self.scanner.col)
+            self._report_error(LEX_UNTERMINATED_STRING, "EOL while scanning string literal")
+            return
 
         if char == '\\':
             if self.scanner.peek() == '\n':
@@ -555,7 +573,11 @@ class Lexer:
             # 但 _scan_var_ref 是在 code/behavior 模式下通用的吗？
             # 在 behavior 模式下，_scan_behavior_char 已经处理了 \$ 转义。
             # 在 normal 模式下，$ 应该只作为变量引用。
-            pass
+            
+            # 使用 DiagnosticManager 报告警告，而不是默默忽略
+            self.diagnostic_manager.report(Severity.WARNING, "LEX_EMPTY_VAR_REF", "Empty variable reference '$'. Did you mean '\$'?", self.scanner)
+            # Fallback: treat as raw '$' if possible, or just empty var name
+            # For now, let it continue, name will be empty string.
 
         while not self.scanner.is_at_end():
             peek = self.scanner.peek()

@@ -9,6 +9,7 @@ from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
 from typedef.exception_types import InterpreterError
+from typedef.diagnostic_types import CompilerError
 
 class TestInterpreterComplex(unittest.TestCase):
     """
@@ -24,10 +25,10 @@ class TestInterpreterComplex(unittest.TestCase):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
         parser = Parser(tokens)
-        module = parser.parse()
-        if parser.errors:
-            # Re-raise parser errors for test visibility
-            raise Exception(f"Parser errors: {parser.errors}")
+        try:
+            module = parser.parse()
+        except CompilerError as e:
+            raise Exception(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
             
         interpreter = Interpreter(output_callback=self.capture_output)
         # Hack to access interpreter instance if return value is ignored in some tests
