@@ -7,15 +7,15 @@ from typedef.diagnostic_types import Severity
 
 class Lexer:
     """
-    IBC-Inter 词法分析器 (Lexer)
-    负责将源代码转换为 Token 流，处理缩进、行延续及 LLM 块边界。
+    IBC-Inter Lexer.
+    Responsible for converting source code into Token stream, handling indentation, line continuation, and LLM block boundaries.
     """
     def __init__(self, source_code: str, issue_tracker: Optional[IssueTracker] = None):
         self.scanner = Scanner(source_code)
         self.tokens: List[Token] = []
         self.issue_tracker = issue_tracker or IssueTracker(source_code)
         
-        # 状态管理
+        # State Management
         self.mode_stack: List[LexerMode] = [LexerMode.NORMAL]
         self.indent_stack: List[int] = [0]
         self.sub_state = SubState.NORMAL
@@ -23,7 +23,7 @@ class Lexer:
         self.continuation_mode = False
         self.current_line_has_llm_def = False
         
-        # 关键字映射
+        # Keyword Mapping
         self.KEYWORDS = {
             'import': TokenType.IMPORT, 'from': TokenType.FROM,
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
@@ -45,26 +45,26 @@ class Lexer:
             while not self.scanner.is_at_end():
                 self._process_line()
                 
-            # 检查残留状态（防御性检查）
+            # Check residual state (defensive check)
             if self.sub_state == SubState.IN_STRING:
                 self.issue_tracker.report(Severity.ERROR, LEX_UNTERMINATED_STRING, "Unexpected EOF while scanning string literal", self.scanner)
             if self.sub_state == SubState.IN_BEHAVIOR:
                 self.issue_tracker.report(Severity.ERROR, LEX_UNTERMINATED_BEHAVIOR, "Unexpected EOF while scanning behavior description", self.scanner)
             
-            # 处理文件末尾的剩余缩进
+            # Handle remaining indentation at EOF
             while len(self.indent_stack) > 1:
                 self.indent_stack.pop()
                 self.tokens.append(Token(TokenType.DEDENT, "", self.scanner.line, 0))
                 
             self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
             
-            # 统一抛出异常如果存在错误
+            # Throw exception if errors exist
             self.issue_tracker.check_errors()
             
             return self.tokens
         except Exception as e:
-            # 确保非 Diagnostic 异常也被捕获（如果是 fatal）
-            # 如果是 CompilerError，直接抛出
+            # Ensure non-Diagnostic exceptions are propagated
+            # If it's CompilerError, raise directly
             raise e
 
     def _report_error(self, code: str, message: str):
@@ -72,15 +72,15 @@ class Lexer:
         self.issue_tracker.report(Severity.ERROR, code, message, self.scanner)
 
     # ==========================
-    # 行处理器
+    # Line Processor
     # ==========================
 
     def _process_line(self):
-        """处理单行内容，包括缩进和模式分发。"""
+        """Process single line, including indentation and mode dispatch."""
         self.current_line_has_llm_def = False
         current_mode = self.mode_stack[-1]
         
-        # 1. 处理缩进
+        # 1. Handle indentation
         should_handle_indent = (
             current_mode == LexerMode.NORMAL and 
             not self.continuation_mode and 
@@ -99,14 +99,14 @@ class Lexer:
                 if self.continuation_mode:
                     self.continuation_mode = False
 
-        # 2. 委托内容扫描
+        # 2. Delegate content scanning
         if current_mode == LexerMode.NORMAL:
             self._scan_code_chunk()
         elif current_mode == LexerMode.LLM_BLOCK:
             self._scan_llm_chunk()
 
     def _handle_indentation(self) -> Optional[int]:
-        """计算并生成 INDENT/DEDENT Token。空行或注释行返回 None。"""
+        """Calculate and generate INDENT/DEDENT tokens. Return None for empty or comment lines."""
         start_col = self.scanner.col
         spaces = 0
         
@@ -143,33 +143,33 @@ class Lexer:
         return current_indent
 
     def _skip_whitespace(self):
-        """跳过空格和制表符，但不包括换行符。"""
+        """Skip spaces and tabs, but not newlines."""
         while self.scanner.peek() in ' \t':
             self.scanner.advance()
 
     def _skip_comment(self):
-        """跳过注释直到行尾（不消耗换行符）。"""
+        """Skip comments until end of line (do not consume newline)."""
         while self.scanner.peek() != '\n' and not self.scanner.is_at_end():
             self.scanner.advance()
 
     # ==========================
-    # 第二层：Token 扫描器
+    # Layer 2: Token Scanner
     # ==========================
 
     def _scan_code_chunk(self):
-        """扫描代码内容直到行尾。"""
+        """Scan code content until end of line."""
         
         while not self.scanner.is_at_end():
             char = self.scanner.peek()
             
-            # 1. 处理换行符
+            # 1. Handle newlines
             if char == '\n':
                 should_return = self._handle_newline()
                 if should_return:
                     return
                 continue
 
-            # 2. 基于子状态分发
+            # 2. Dispatch based on sub-state
             if self.sub_state == SubState.NORMAL:
                 self._scan_normal_char()
             elif self.sub_state == SubState.IN_STRING:
@@ -179,33 +179,33 @@ class Lexer:
 
     def _handle_newline(self) -> bool:
         """
-        处理换行符。
-        :return: True 表示行处理结束，False 表示换行符已被消耗（如在字符串中）。
+        Handle newline character.
+        :return: True if line processing ended, False if newline was consumed (e.g., in string).
         """
-        # 情况 1：在字符串中
+        # Case 1: In string
         if self.sub_state == SubState.IN_STRING:
             self._scan_string_char()
             return False
         
-        # 情况 2：在行为描述中
+        # Case 2: In behavior description
         elif self.sub_state == SubState.IN_BEHAVIOR:
-            # 允许跨行，将换行符作为 RAW_TEXT
+            # Allow multi-line, treat newline as RAW_TEXT
             self.tokens.append(Token(TokenType.RAW_TEXT, "\n", self.scanner.line, self.scanner.col))
             self.scanner.advance()
             return False
 
-        # 情况 3：隐式延续（括号内）
+        # Case 3: Implicit continuation (inside parentheses)
         elif self.paren_level > 0:
             self.scanner.advance()
             self.continuation_mode = True
             return True
 
-        # 情况 4：显式延续（反斜杠）
+        # Case 4: Explicit continuation (backslash)
         elif self.continuation_mode:
             self.scanner.advance()
             return True
 
-        # 情况 5：实际行结束
+        # Case 5: Actual line end
         else:
             self.scanner.advance()
             self.tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line - 1, self.scanner.col))
@@ -216,7 +216,7 @@ class Lexer:
         self.scanner.start_token()
         char = self.scanner.advance()
         
-        # 1. 显式行延续
+        # 1. Explicit line continuation
         if char == '\\':
             if self.scanner.peek() == '\n':
                 self.continuation_mode = True
@@ -225,11 +225,11 @@ class Lexer:
                 self._report_error(LEX_INVALID_ESCAPE, f"Unexpected character '\\' or invalid escape sequence")
                 return
 
-        # 2. 空白字符
+        # 2. Whitespace
         if char in ' \t':
             return
 
-        # 3. 注释
+        # 3. Comments
         if char == '#':
             self._skip_comment() 
             return
@@ -243,7 +243,7 @@ class Lexer:
             self.is_raw_string = True
             return
 
-        # 5. 字符串字面量
+        # 5. String Literals
         if char == '"' or char == "'":
             self.sub_state = SubState.IN_STRING
             self.quote_char = char
@@ -251,7 +251,7 @@ class Lexer:
             self.is_raw_string = False
             return
 
-        # 6. 意图注释
+        # 6. Intent Comments
         if char == '@':
             content = ""
             while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
@@ -259,20 +259,20 @@ class Lexer:
             self.tokens.append(self.scanner.create_token(TokenType.INTENT, content))
             return
 
-        # 7. 行为描述与位运算符
+        # 7. Behavior Description and Bitwise Operators
         if char == '~':
-            # 检查是否为双波浪号 ~~
+            # Check for double tilde ~~
             if self.scanner.peek() == '~':
                 self.scanner.advance()
                 self.sub_state = SubState.IN_BEHAVIOR
                 self.tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "~~"))
                 return
             else:
-                # 单波浪号 -> 位非运算符
+                # Single tilde -> Bitwise NOT
                 self.tokens.append(self.scanner.create_token(TokenType.BIT_NOT, "~"))
                 return
 
-        # 8. 符号
+        # 8. Symbols
         if char == '(': 
             self.paren_level += 1
             self.tokens.append(self.scanner.create_token(TokenType.LPAREN))
@@ -363,7 +363,7 @@ class Lexer:
             self.tokens.append(self.scanner.create_token(TokenType.BIT_XOR, "^"))
             return
 
-        # 9. 标识符 / 数字
+        # 9. Identifiers / Numbers
         if char.isalpha() or char == '_' or '\u4e00' <= char <= '\u9fff':
             self._scan_identifier(char)
             return
@@ -382,14 +382,14 @@ class Lexer:
 
         if char == '\\':
             if self.scanner.peek() == '\n':
-                # 字符串内的显式延续
+                # Explicit continuation inside string
                 self.continuation_mode = True
-                self.scanner.advance() # 消耗换行符
+                self.scanner.advance() # Consume newline
                 return
             else:
-                # 转义序列处理
+                # Escape sequence handling
                 if self.is_raw_string:
-                    # Raw string: 保留反斜杠，但允许转义引号
+                    # Raw string: Keep backslash, but allow escaping quote
                     next_char = self.scanner.peek()
                     if next_char == self.quote_char:
                         self.scanner.advance() # Consume quote
@@ -402,7 +402,7 @@ class Lexer:
                         self.current_string_val += "\\" # Just keep backslash
                     return
                 else:
-                    # 标准转义序列
+                    # Standard escape sequences
                     next_char = self.scanner.advance()
                     ESCAPE_SEQUENCES = {
                         'n': '\n', 't': '\t', 'r': '\r', 
@@ -424,7 +424,7 @@ class Lexer:
     def _scan_behavior_char(self):
         char = self.scanner.peek()
         
-        # 1. 检查结束标记 ~~
+        # 1. Check for closing marker ~~
         if char == '~' and self.scanner.peek(1) == '~':
             self.scanner.advance() # ~
             self.scanner.advance() # ~
@@ -432,7 +432,7 @@ class Lexer:
             self.sub_state = SubState.NORMAL
             return
 
-        # 2. 处理转义: \~~, \$, \~
+        # 2. Handle escapes: \~~, \$, \~
         if char == '\\':
             next_char = self.scanner.peek(1)
             if next_char == '~':
@@ -456,15 +456,15 @@ class Lexer:
                 self.tokens.append(Token(TokenType.RAW_TEXT, "$", self.scanner.line, self.scanner.col))
                 return
             
-            # 其他反斜杠保持原样，作为 Raw Text 的一部分
+            # Other backslashes remain as is, part of Raw Text
             # Fall through to raw text handling
 
-        # 3. 变量引用
+        # 3. Variable Reference
         if char == '$':
             self._scan_var_ref()
             return
             
-        # 4. 原始文本
+        # 4. Raw Text
         text = ""
         while not self.scanner.is_at_end():
             peek_char = self.scanner.peek()
@@ -498,7 +498,7 @@ class Lexer:
                 self.current_line_has_llm_def = True
                 
             elif type == TokenType.AND or type == TokenType.OR:
-                # 逻辑运算符在行末隐式延续
+                # Logical operators implicitly continue at EOL
                 offset = 0
                 while self.scanner.peek(offset) in ' \t':
                     offset += 1
@@ -562,7 +562,7 @@ class Lexer:
         self.scanner.advance() # $
         name = ""
         
-        # 允许首字符是字母、下划线
+        # Allow letter or underscore as first char
         if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
             name += self.scanner.advance()
         else:
@@ -586,12 +586,12 @@ class Lexer:
         self.tokens.append(self.scanner.create_token(TokenType.VAR_REF, "$" + name))
 
     def _scan_llm_chunk(self):
-        # 检查行首关键字
+        # Check line-start keywords
         offset = 0
         while self.scanner.peek(offset) in ' \t':
             offset += 1
         
-        # 定义需要检查的关键字及其对应的 Token 类型
+        # Define keywords to check and their Token types
         llm_keywords = [
             ('llmend', TokenType.LLM_END),
             ('__sys__', TokenType.LLM_SYS),
@@ -610,7 +610,7 @@ class Lexer:
                 # For SYS/USER, we continue to scan the rest of the line as text
                 break
 
-        # 常规提示文本
+        # Regular prompt text
         text = ""
         start_line = self.scanner.line
         start_col = self.scanner.col

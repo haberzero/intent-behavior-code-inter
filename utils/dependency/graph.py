@@ -26,16 +26,14 @@ class DependencyGraph:
         visited = set()
         recursion_stack = set()
         
-        # We need to track the path for error reporting
-        # But for cycle detection, we only need to know if a node is in recursion_stack
+        # Track path for error reporting
         
         def dfs(node: str, current_path: List[str]):
             visited.add(node)
             recursion_stack.add(node)
             current_path.append(node)
             
-            # Use self.modules to get imports, not just adj_list which might be partial
-            # Wait, _build_graph populates adj_list fully.
+            # Use self.modules to get imports
             
             if node in self.adj_list:
                 for neighbor in self.adj_list[node]:
@@ -83,10 +81,5 @@ class DependencyGraph:
                 dfs(node)
                 
         # The dfs order adds a node AFTER its children are visited.
-        # So [Leaf, ..., Root].
-        # If we want compilation order (compile Leaf first), this is correct.
-        # Wait, if A imports B, B must be compiled before A?
-        # Yes, usually. So B (child) should be in 'order' before A (parent).
-        # Our DFS appends node AFTER visiting children. So B is appended, then A.
-        # So 'order' is [B, A]. Correct.
+        # This results in a topological sort where dependencies come first.
         return order

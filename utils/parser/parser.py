@@ -17,8 +17,8 @@ T = TypeVar("T", bound=ast.ASTNode)
 
 class Parser:
     """
-    IBC-Inter 语法分析器 (Parser)
-    采用交错式预构建 (Interleaved Pre-Pass) 和持久化符号表树架构。
+    IBC-Inter Parser.
+    Uses Interleaved Pre-Pass and persistent symbol table architecture.
     """
     def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None):
         self.tokens = tokens
@@ -129,7 +129,7 @@ class Parser:
         return left
         
     def _loc(self, node: T, token: Token) -> T:
-        """注入位置信息。"""
+        """Inject location information."""
         node.lineno = token.line
         node.col_offset = token.column
         node.end_lineno = token.end_line
@@ -137,36 +137,36 @@ class Parser:
         return node
 
     def register_rules(self):
-        # 字面量与标识符
+        # Literals and Identifiers
         self.register(TokenType.IDENTIFIER, self.variable, None, Precedence.LOWEST)
         self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
         self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
         
-        # 分组与集合
+        # Grouping and Collections
         self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
         self.register(TokenType.LBRACKET, self.list_display, self.subscript, Precedence.CALL)
         self.register(TokenType.LBRACE, self.dict_display, None, Precedence.LOWEST)
         
-        # 一元运算
+        # Unary Operations
         self.register(TokenType.MINUS, self.unary, self.binary, Precedence.TERM)
         self.register(TokenType.PLUS, None, self.binary, Precedence.TERM)
         self.register(TokenType.NOT, self.unary, None, Precedence.UNARY)
         self.register(TokenType.BIT_NOT, self.unary, None, Precedence.UNARY)
         
-        # 二元运算
+        # Binary Operations
         self.register(TokenType.STAR, None, self.binary, Precedence.FACTOR)
         self.register(TokenType.SLASH, None, self.binary, Precedence.FACTOR)
         self.register(TokenType.PERCENT, None, self.binary, Precedence.FACTOR)
         
-        # 位运算
+        # Bitwise Operations
         self.register(TokenType.BIT_AND, None, self.binary, Precedence.BIT_AND)
         self.register(TokenType.BIT_OR, None, self.binary, Precedence.BIT_OR)
         self.register(TokenType.BIT_XOR, None, self.binary, Precedence.BIT_XOR)
         self.register(TokenType.LSHIFT, None, self.binary, Precedence.SHIFT)
         self.register(TokenType.RSHIFT, None, self.binary, Precedence.SHIFT)
         
-        # 比较运算
+        # Comparisons
         self.register(TokenType.GT, None, self.binary, Precedence.COMPARISON)
         self.register(TokenType.GE, None, self.binary, Precedence.COMPARISON)
         self.register(TokenType.LT, None, self.binary, Precedence.COMPARISON)
@@ -174,14 +174,14 @@ class Parser:
         self.register(TokenType.EQ, None, self.binary, Precedence.EQUALITY)
         self.register(TokenType.NE, None, self.binary, Precedence.EQUALITY)
         
-        # 逻辑运算
+        # Logical Operations
         self.register(TokenType.AND, None, self.logical, Precedence.AND)
         self.register(TokenType.OR, None, self.logical, Precedence.OR)
         
-        # 调用与属性
+        # Calls and Attributes
         self.register(TokenType.DOT, None, self.dot, Precedence.CALL)
         
-        # 行为描述
+        # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, Precedence.LOWEST)
 
     # --- Core Parsing Logic ---
@@ -208,7 +208,7 @@ class Parser:
         return module_node
 
     def declaration(self) -> Optional[ast.Stmt]:
-        # 处理 Intent (@)
+        # Handle Intent (@)
         if self.match(TokenType.INTENT):
             if self.pending_intent is not None:
                 raise self.error(self.previous(), "Multiple intent comments are not allowed for a single statement.")
@@ -261,7 +261,7 @@ class Parser:
             return False
             
         # Case 2: Identifier starting a declaration (Maybe a type we missed or future extension)
-        # Fallback: Identifier Identifier -> Declaration
+        # Case 2: Identifier Identifier -> Declaration (User defined types or future extensions)
         if self.check(TokenType.IDENTIFIER):
             # Check next token
             next_token = self.peek(1)

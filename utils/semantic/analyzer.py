@@ -18,9 +18,7 @@ class SemanticAnalyzer:
     """
     def _init_builtins(self):
         """Register builtin functions."""
-        # Use define() to register symbol, but note that scope_manager might already have types registered (int, str)
-        # We need to make sure we don't overwrite them or cause conflict if they are already there.
-        # But functions like 'print' are not types.
+        # Use define() to register symbol, ensuring no conflicts with existing types.
         
         # Helper to safely define
         def register_builtin(name, func_type):
@@ -51,8 +49,7 @@ class SemanticAnalyzer:
             self.scope_manager.current_scope = node.scope
             self.scope_manager.global_scope = node.scope
             
-            # Re-register builtins into this scope because it's new to us
-            # (Parser scope has types, but maybe not functions)
+            # Re-register builtins into this scope
             self._init_builtins()
         else:
             # Fallback: Use our own scope manager
@@ -61,8 +58,6 @@ class SemanticAnalyzer:
         self.visit(node)
         
         if self.errors:
-            # Sort errors by location?
-            # For now, just raise them all.
             raise CompilerError(self.errors)
 
     def visit(self, node: ast.ASTNode):
@@ -107,13 +102,7 @@ class SemanticAnalyzer:
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        # 1. Register function in current scope (already handled by Parser/PreScanner?)
-        # SemanticAnalyzer is traversing, so it needs to ensure symbols are visible.
-        # But wait, we are now reusing the scope tree built by Parser.
-        # So we just need to FILL types.
-        
-        # However, the outer scope (where function name lives) is 'current_scope'.
-        # The function body lives in 'node.scope'.
+        # 1. Register function in current scope (already handled by Parser/PreScanner, just fill types)
         
         # Resolve return type
         ret_type = VOID_TYPE
@@ -151,8 +140,6 @@ class SemanticAnalyzer:
             param_types.append(arg_type)
             
         # Update function symbol with type info (FunctionType)
-        # We need to go back to outer scope to find function symbol?
-        # Yes.
         if node.scope and node.scope.parent:
             outer_func_symbol = node.scope.parent.resolve(node.name)
             if outer_func_symbol:
@@ -161,7 +148,7 @@ class SemanticAnalyzer:
             func_symbol.type_info = FunctionType(param_types, ret_type)
         
         # 4. Visit body
-        # We need to track return type for return checking
+        # Track return type for return checking
         previous_ret_type = self.current_return_type
         self.current_return_type = ret_type
         
@@ -225,8 +212,6 @@ class SemanticAnalyzer:
     
     def visit_Assign(self, node: ast.Assign):
         # Handle declarations vs assignments
-        # In AST, Assign has targets (list) and value.
-        # Declarations have type_annotation.
         
         target = node.targets[0] # IBC-Inter only supports single target assignment
         
@@ -270,8 +255,7 @@ class SemanticAnalyzer:
                 if node.value:
                     val_type = self.visit(node.value)
                     
-                    # Special case for 'var' (AnyType): Update inferred type? 
-                    # For now, we stick to the plan: AnyType accepts anything.
+                    # Special case for 'var' (AnyType): AnyType accepts anything.
                     # If symbol.type_info is IntType, and val is StrType -> Error.
                     if symbol.type_info and not val_type.is_assignable_to(symbol.type_info):
                         self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node)
@@ -345,10 +329,6 @@ class SemanticAnalyzer:
     def visit_Attribute(self, node: ast.Attribute) -> Type:
         # Check if value is a module or object
         # First visit the value (left side)
-        # Note: visit() usually returns Type.
-        # But for MODULE symbol, we need access to the symbol itself or its scope.
-        # Our Type system doesn't have ModuleType yet.
-        # Let's inspect the symbol directly if node.value is a Name.
         
         if isinstance(node.value, ast.Name):
             # Resolve the name
@@ -360,8 +340,6 @@ class SemanticAnalyzer:
             if sym.type == SymbolType.MODULE:
                 if not sym.exported_scope:
                     # Module loaded but scope not available (maybe circular or not parsed)
-                    # Or simple import without cache
-                    # For now, return Any
                     return ANY_TYPE
                     
                 # Look up attribute in exported scope
@@ -377,7 +355,7 @@ class SemanticAnalyzer:
         if isinstance(value_type, AnyType):
             return ANY_TYPE
             
-        # TODO: Check class attributes if we have classes
+        # TODO: Check class attributes when classes are implemented
         return ANY_TYPE
 
     def visit_BinOp(self, node: ast.BinOp) -> Type:
