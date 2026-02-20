@@ -19,7 +19,7 @@ class Scheduler:
     Orchestrates DependencyScanner, Parser, and SemanticAnalyzer.
     """
     def __init__(self, root_dir: str):
-        self.root_dir = os.path.abspath(root_dir)
+        self.root_dir = os.path.realpath(root_dir)
         self.issue_tracker = IssueTracker()
         self.source_manager = SourceManager()
         self.resolver = ModuleResolver(self.root_dir)

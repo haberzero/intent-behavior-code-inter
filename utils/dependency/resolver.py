@@ -16,7 +16,7 @@ class ModuleResolver:
     Acts as the Single Source of Truth for path resolution.
     """
     def __init__(self, root_dir: str):
-        self.root_dir = os.path.abspath(root_dir)
+        self.root_dir = os.path.realpath(root_dir)
         # Extensions to probe, in order of preference
         self.extensions = ['.ibci', '.py', '']
 
@@ -25,8 +25,9 @@ class ModuleResolver:
         Ensure the path is within the project root directory.
         Prevents Path Traversal attacks.
         """
-        abs_path = os.path.abspath(path)
-        abs_root = os.path.abspath(self.root_dir)
+        # Resolve symlinks to ensure we are checking the real location
+        abs_path = os.path.realpath(path)
+        abs_root = self.root_dir # Already realpath
         
         # Use commonpath to correctly handle path separators and subdirectories
         try:
@@ -36,7 +37,7 @@ class ModuleResolver:
             raise ModuleResolveError(f"Path '{path}' is on a different drive than root '{self.root_dir}'")
             
         if common != abs_root:
-            raise ModuleResolveError(f"Security Error: Path '{path}' attempts to access outside project root '{self.root_dir}'")
+            raise ModuleResolveError(f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")
 
     def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
         """Helper to calculate candidate path without probing."""

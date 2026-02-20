@@ -12,7 +12,7 @@ from typedef.scope_types import ScopeNode
 
 class TestScheduler(unittest.TestCase):
     def setUp(self):
-        self.test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_data', 'multi_file_project'))
+        self.test_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'test_data', 'multi_file_project'))
         self.entry_file = os.path.join(self.test_dir, 'main.ibci')
         
     def test_compile_project(self):
@@ -50,7 +50,7 @@ class TestScheduler(unittest.TestCase):
     def test_circular_dependency(self):
         # Create circular project dynamically or use test_data
         # We already created tests/test_data/circular_project
-        test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_data', 'circular_project'))
+        test_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'test_data', 'circular_project'))
         entry_file = os.path.join(test_dir, 'a.ibci')
         
         scheduler = Scheduler(test_dir)
@@ -93,7 +93,7 @@ class TestScheduler(unittest.TestCase):
         # main.ibci imports pkg.subpkg.calc
         # pkg/subpkg/calc.ibci imports ..math (pkg.math)
         
-        test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_data', 'relative_project'))
+        test_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'test_data', 'relative_project'))
         entry_file = os.path.join(test_dir, 'main.ibci')
         
         scheduler = Scheduler(test_dir)
@@ -124,7 +124,7 @@ class TestScheduler(unittest.TestCase):
 
     def test_error_recovery(self):
         # Create a file with syntax error in the middle
-        test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_data', 'recovery_project'))
+        test_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'test_data', 'recovery_project'))
         if not os.path.exists(test_dir):
             os.makedirs(test_dir)
             

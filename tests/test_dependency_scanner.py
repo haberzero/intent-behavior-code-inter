@@ -9,7 +9,7 @@ from typedef.dependency_types import CircularDependencyError, ModuleNotFoundErro
 
 class TestDependencyScanner(unittest.TestCase):
     def setUp(self):
-        self.test_dir = tempfile.mkdtemp()
+        self.test_dir = os.path.realpath(tempfile.mkdtemp())
         self.scanner = DependencyScanner(self.test_dir)
 
     def tearDown(self):
@@ -125,7 +125,7 @@ class TestDependencyScanner(unittest.TestCase):
         self.assertTrue(any("Import statements must be at the top" in d.message for d in self.scanner.issue_tracker.diagnostics))
         
         # The first import should still be valid
-        mod_a = self.scanner.modules[os.path.abspath(path_a)]
+        mod_a = self.scanner.modules[os.path.realpath(path_a)]
         self.assertEqual(len(mod_a.imports), 1)
 
 if __name__ == '__main__':

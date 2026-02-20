@@ -104,7 +104,7 @@ class DependencyScanner:
     """
     
     def __init__(self, root_dir: str, issue_tracker: Optional[IssueTracker] = None):
-        self.root_dir = os.path.abspath(root_dir)
+        self.root_dir = os.path.realpath(root_dir)
         self.issue_tracker = issue_tracker or IssueTracker()
         self.modules: Dict[str, ModuleInfo] = {} # Key: Absolute file path
         self.resolver = ModuleResolver(self.root_dir)
@@ -113,13 +113,14 @@ class DependencyScanner:
         """
         Scans a single file for imports using ImportScanner.
         """
-        abs_path = os.path.abspath(file_path)
+        # Resolve symlinks
+        abs_path = os.path.realpath(file_path)
         
         # Security Check: Ensure file is within root_dir
         try:
-            abs_root = os.path.abspath(self.root_dir)
+            abs_root = self.root_dir # Already realpath
             if os.path.commonpath([abs_root, abs_path]) != abs_root:
-                self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file outside root: {file_path}")
+                self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file outside root: {file_path} (resolves to {abs_path})")
                 return None
         except ValueError:
              self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file on different drive: {file_path}")
