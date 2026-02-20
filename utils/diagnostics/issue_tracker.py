@@ -5,12 +5,10 @@ class IssueTracker:
     """
     Centralized manager for collecting and reporting compiler diagnostics.
     """
-    def __init__(self, source_code: str = "", file_path: str = "<unknown>"):
-        self.source_code = source_code
+    def __init__(self, file_path: str = "<unknown>"):
         self.file_path = file_path
         self.diagnostics: List[Diagnostic] = []
         self._error_count = 0
-        self._lines = source_code.splitlines()
 
     def report(self, severity: Severity, code: str, message: str, 
                 location: Optional[Union[Locatable, Location]] = None, 
@@ -20,8 +18,7 @@ class IssueTracker:
         Location can be a Token, a Scanner, a Location object, or None.
         It must satisfy Locatable protocol (have line/column or line/col).
         """
-        loc = self._resolve_location(location)
-        diag = Diagnostic(severity, code, message, loc, hint)
+        diag = Diagnostic(severity, code, message, self._resolve_location(location), hint)
         self.diagnostics.append(diag)
         
         if severity.value >= Severity.ERROR.value:
@@ -40,13 +37,39 @@ class IssueTracker:
     def check_errors(self):
         """Raise CompilerError if any errors have been reported."""
         if self.has_errors():
+            # If we raise here, we should pass diagnostics?
+            # CompilerError usually takes message or list of diagnostics.
+            # In other parts of code: raise CompilerError(self.diagnostics)
+            # Or raise CompilerError("Compilation failed")
+            # Let's check typedef/diagnostic_types.py
+            # But here we just raise.
             raise CompilerError(self.diagnostics)
+
+    def merge(self, other: 'IssueTracker'):
+        """Merge diagnostics from another tracker."""
+        self.diagnostics.extend(other.diagnostics)
+        self._error_count += other._error_count
 
     def _resolve_location(self, loc: Optional[Union[Locatable, Location]]) -> Optional[Location]:
         if loc is None:
             return None
         
         if isinstance(loc, Location):
+            # If the location already has a file path, keep it.
+            # If it doesn't (or is unknown), use ours?
+            # Usually Lexer produces tokens with line/col but no file path.
+            # Parser produces AST nodes with line/col but no file path.
+            # So when we report using a Token/ASTNode, we need to inject self.file_path.
+            # But if loc is already a Location object (e.g. from DependencyScanner), it has file_path.
+            if not loc.file_path or loc.file_path == "<unknown>":
+                # Create copy with our file path
+                return Location(
+                    file_path=self.file_path,
+                    line=loc.line,
+                    column=loc.column,
+                    length=loc.length,
+                    context_line=loc.context_line
+                )
             return loc
             
         # Try to extract line and column
@@ -70,8 +93,6 @@ class IssueTracker:
         
         # Extract context line
         context = None
-        if 0 <= line - 1 < len(self._lines):
-            context = self._lines[line - 1]
             
         return Location(
             file_path=self.file_path,

@@ -1,4 +1,3 @@
-
 import os
 from typing import Dict, List, Optional, Any
 from typedef.dependency_types import ModuleInfo, ImportInfo
@@ -10,6 +9,8 @@ from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.semantic.semantic_analyzer import SemanticAnalyzer
 from utils.diagnostics.issue_tracker import IssueTracker
+from utils.source.source_manager import SourceManager
+from utils.dependency.resolver import ModuleResolver
 from typedef.diagnostic_types import Severity, CompilerError
 
 class Scheduler:
@@ -20,12 +21,14 @@ class Scheduler:
     def __init__(self, root_dir: str):
         self.root_dir = os.path.abspath(root_dir)
         self.issue_tracker = IssueTracker()
+        self.source_manager = SourceManager()
+        self.resolver = ModuleResolver(self.root_dir)
         self.dependency_scanner = DependencyScanner(self.root_dir, self.issue_tracker)
         
         # Caches
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
         self.ast_cache: Dict[str, Module] = {}   # Path -> AST
-        self.scope_cache: Dict[str, ScopeNode] = {} # Module Name -> Scope (for Parser)
+        self.scope_cache: Dict[str, ScopeNode] = {} # Path AND Name -> Scope (for Parser)
         
         # Build Cache
         # Map: file_path -> mtime
@@ -44,6 +47,9 @@ class Scheduler:
             raise e
             
         if self.issue_tracker.has_errors():
+            # We don't have source code for dependency errors yet (unless scanned)
+            # But dependency scanner reports location.
+            # We might want to register content for files that had dependency errors if possible.
             raise CompilerError("Dependency scanning failed.")
 
         # 2. Build Dependency Graph and Get Order
@@ -62,7 +68,13 @@ class Scheduler:
                 last_mtime = self.build_cache.get(file_path, 0.0)
                 if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                     # Recompile
-                    self._compile_file(file_path)
+                    try:
+                        self._compile_file(file_path)
+                    except CompilerError:
+                        # Continue to see if we can compile others? 
+                        # Usually not safe if dependent.
+                        # But we collect errors.
+                        pass
                     self.build_cache[file_path] = mod_info.mtime
                 else:
                     pass
@@ -89,34 +101,43 @@ class Scheduler:
         
         # Read source
         source = module_info.content
+        self.source_manager.add_source(file_path, source)
         
-        # Lexing
-        lexer = Lexer(source, self.issue_tracker)
-        tokens = lexer.tokenize()
+        # Create per-file tracker
+        file_tracker = IssueTracker(file_path)
         
-        # Parsing
-        # Pass the scope_cache (Module Name -> Scope) to Parser
-        parser = Parser(tokens, self.issue_tracker, self.scope_cache, package_name=module_name)
         try:
+            # Lexing
+            lexer = Lexer(source, file_tracker)
+            tokens = lexer.tokenize()
+            
+            # Parsing
+            parser = Parser(tokens, file_tracker, self.scope_cache, package_name=module_name, module_resolver=self.resolver)
             ast_node = parser.parse()
-        except CompilerError as e:
-            # Parser caught errors and raised
-            print(f"Parser failed for {file_path}: {e}")
-            # Do not traceback for expected errors
-            raise e
+            
+            self.ast_cache[file_path] = ast_node
+            
+            # Semantic Analysis
+            analyzer = SemanticAnalyzer(file_tracker)
+            analyzer.analyze(ast_node)
+            
+            # Register the module's scope for other modules to use
+            if ast_node.scope:
+                self.scope_cache[file_path] = ast_node.scope
+                self.scope_cache[module_name] = ast_node.scope
+                
+        except CompilerError:
+            # Errors already in file_tracker
+            pass
         except Exception as e:
             # Unexpected error
-            print(f"Parser crashed for {file_path}: {e}")
             import traceback
             traceback.print_exc()
-            raise e
-
-        self.ast_cache[file_path] = ast_node
-        
-        # Semantic Analysis
-        analyzer = SemanticAnalyzer(self.issue_tracker)
-        analyzer.analyze(ast_node)
-        
-        # Register the module's scope for other modules to use
-        if ast_node.scope:
-            self.scope_cache[module_name] = ast_node.scope
+            file_tracker.report(Severity.FATAL, "INTERNAL_ERROR", str(e))
+            
+        finally:
+            # Merge diagnostics to global tracker
+            self.issue_tracker.merge(file_tracker)
+            
+        if file_tracker.has_errors():
+            raise CompilerError("File compilation failed.")

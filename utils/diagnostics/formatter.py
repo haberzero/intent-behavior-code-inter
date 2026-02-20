@@ -1,5 +1,8 @@
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 from typedef.diagnostic_types import Diagnostic, Severity, Location
+
+if TYPE_CHECKING:
+    from utils.source.source_manager import SourceManager
 
 class DiagnosticFormatter:
     """
@@ -17,7 +20,7 @@ class DiagnosticFormatter:
     }
 
     @staticmethod
-    def format(diagnostic: Diagnostic, use_color: bool = True) -> str:
+    def format(diagnostic: Diagnostic, use_color: bool = True, source_manager: Optional['SourceManager'] = None) -> str:
         severity_label = diagnostic.severity.name
         color_start = DiagnosticFormatter.COLORS.get(diagnostic.severity, "") if use_color else ""
         color_reset = DiagnosticFormatter.COLORS["RESET"] if use_color else ""
@@ -34,9 +37,14 @@ class DiagnosticFormatter:
             loc = diagnostic.location
             loc_str = f"\n  --> {loc.file_path}:{loc.line}:{loc.column}"
             
-            if loc.context_line:
+            # Try to get context line from Location first, then SourceManager
+            context_line = loc.context_line
+            if not context_line and source_manager:
+                context_line = source_manager.get_line(loc.file_path, loc.line)
+            
+            if context_line:
                 line_num_str = str(loc.line).rjust(4)
-                context_str = f"\n{line_num_str} | {loc.context_line}\n     | {' ' * (loc.column - 1)}{'^' * loc.length}"
+                context_str = f"\n{line_num_str} | {context_line}\n     | {' ' * (loc.column - 1)}{'^' * loc.length}"
         
         hint_str = ""
         if diagnostic.hint:
@@ -45,5 +53,5 @@ class DiagnosticFormatter:
         return f"{header}{loc_str}{context_str}{hint_str}"
 
     @staticmethod
-    def format_all(diagnostics: List[Diagnostic], use_color: bool = True) -> str:
-        return "\n\n".join([DiagnosticFormatter.format(d, use_color) for d in diagnostics])
+    def format_all(diagnostics: List[Diagnostic], use_color: bool = True, source_manager: Optional['SourceManager'] = None) -> str:
+        return "\n\n".join([DiagnosticFormatter.format(d, use_color, source_manager) for d in diagnostics])

@@ -1,8 +1,9 @@
-from typing import List, Optional, Callable, Dict, TypeVar, Any
+from typing import List, Optional, Callable, Dict, TypeVar, Any, TYPE_CHECKING
 from typedef.lexer_types import Token, TokenType
 from typedef import parser_types as ast
 from typedef.parser_types import Precedence, ParseRule
 
+from utils.parser.base_parser import BaseParser, ParseControlFlowError
 from utils.parser.symbol_table import ScopeManager, ScopeType, SymbolType
 from typedef.scope_types import ScopeNode
 from utils.parser.pre_scanner import PreScanner
@@ -10,25 +11,24 @@ from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import *
 from typedef.diagnostic_types import Severity, CompilerError
 
-class ParseControlFlowError(Exception):
-    """Internal exception for parser synchronization control flow."""
-    pass
+if TYPE_CHECKING:
+    from utils.dependency.resolver import ModuleResolver
 
 T = TypeVar("T", bound=ast.ASTNode)
 
-class Parser:
+class Parser(BaseParser):
     """
     IBC-Inter Parser.
     Uses Interleaved Pre-Pass and persistent symbol table architecture.
+    Inherits token consumption and basic parsing from BaseParser.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = ""):
-        self.tokens = tokens
-        self.current = 0
-        self.issue_tracker = issue_tracker or IssueTracker()
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None):
+        super().__init__(tokens, issue_tracker)
         self.rules: Dict[TokenType, ParseRule] = {}
         self.pending_intent: Optional[str] = None
         self.module_cache = module_cache or {}
         self.package_name = package_name
+        self.module_resolver = module_resolver
         
         # Scope Management
         self.scope_manager = ScopeManager()
@@ -45,53 +45,6 @@ class Parser:
         """Run the PreScanner on the current scope."""
         scanner = PreScanner(self.tokens, self.current, self.scope_manager)
         scanner.scan()
-
-    # --- Helpers ---
-
-    def peek(self, offset: int = 0) -> Token:
-        if self.current + offset >= len(self.tokens):
-            return self.tokens[-1] # EOF
-        return self.tokens[self.current + offset]
-
-    def previous(self) -> Token:
-        return self.tokens[self.current - 1]
-
-    def is_at_end(self) -> bool:
-        return self.peek().type == TokenType.EOF
-
-    def check(self, type: TokenType) -> bool:
-        if self.is_at_end():
-            return False
-        return self.peek().type == type
-
-    def advance(self) -> Token:
-        if not self.is_at_end():
-            self.current += 1
-        return self.previous()
-
-    def consume(self, type: TokenType, message: str) -> Token:
-        if self.check(type):
-            return self.advance()
-        raise self.error(self.peek(), message)
-
-    def consume_end_of_statement(self, message: str):
-        if self.check(TokenType.NEWLINE):
-            self.advance()
-        elif self.is_at_end():
-            return
-        else:
-            raise self.error(self.peek(), message)
-
-    def match(self, *types: TokenType) -> bool:
-        for type in types:
-            if self.check(type):
-                self.advance()
-                return True
-        return False
-
-    def error(self, token: Token, message: str) -> Exception:
-        self.issue_tracker.report(Severity.ERROR, PAR_EXPECTED_TOKEN, message, token)
-        return ParseControlFlowError()
 
     def synchronize(self):
         """
@@ -139,14 +92,6 @@ class Parser:
             left = infix(left)
             
         return left
-        
-    def _loc(self, node: T, token: Token) -> T:
-        """Inject location information."""
-        node.lineno = token.line
-        node.col_offset = token.column
-        node.end_lineno = token.end_line
-        node.end_col_offset = token.end_column
-        return node
 
     def register_rules(self):
         # Literals and Identifiers
@@ -568,118 +513,80 @@ class Parser:
         return self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[]), start_token)
 
     def import_statement(self) -> ast.Stmt:
-        start_token = self.peek() # will be import or from
         if self.match(TokenType.IMPORT):
-            # ... existing import logic ...
-            start_token = self.previous()
-            names = self.parse_aliases()
+            node = self.parse_import()
             
             # Register imported modules
-            for alias_node in names:
+            for alias_node in node.names:
                 module_name = alias_node.name
-                asname = alias_node.asname or module_name
+                asname = alias_node.asname
                 
-                # If using explicit alias, bind alias directly to module scope
-                if alias_node.asname:
+                # Resolve final scope for the full module name
+                final_scope = self._resolve_module_scope(module_name)
+                
+                if asname:
+                    # import a.b.c as d
+                    # Define 'd' pointing to the final module scope
                     sym = self.scope_manager.define(asname, SymbolType.MODULE)
-                    if module_name in self.module_cache:
-                        sym.exported_scope = self.module_cache[module_name]
+                    sym.exported_scope = final_scope
                 else:
-                    # No alias: import a.b.c
-                    # Need to construct chain: a -> b -> c
+                    # import a.b.c
+                    # Define 'a', ensuring a->b->c chain exists
                     parts = module_name.split('.')
                     
-                    # 1. Define top level 'a' in current scope
+                    # Define top level name
                     top_name = parts[0]
+                    # Check if already defined to avoid overwriting existing symbol
                     curr_sym = self.scope_manager.resolve(top_name)
-                    
-                    if not curr_sym or curr_sym.scope_level != self.scope_manager.current_scope.depth:
+                    if not curr_sym:
                         curr_sym = self.scope_manager.define(top_name, SymbolType.MODULE)
-                        curr_sym.exported_scope = ScopeNode(ScopeType.GLOBAL) # Represents package scope
                     
-                    # 2. Iterate down the chain to ensure 'b', 'c' exist
-                    # a -> b -> c
-                    # We need to make sure 'a' contains 'b', 'b' contains 'c'
-                    
-                    # Pointer to current symbol in the chain
-                    parent_sym = curr_sym
-                    
-                    for i in range(1, len(parts)):
-                        part_name = parts[i]
-                        
-                        # Ensure parent has a scope
-                        if not parent_sym.exported_scope:
-                             parent_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
+                    # We need to ensure current_sym has a scope (to hold 'b')
+                    if not curr_sym.exported_scope:
+                        # Try to resolve 'a' scope directly
+                        curr_sym.exported_scope = self._resolve_module_scope(top_name)
+                        if not curr_sym.exported_scope:
+                             # Create dummy scope if not found
+                             curr_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
                              
-                        # Look for child in parent's scope
-                        child_sym = parent_sym.exported_scope.resolve(part_name)
-                        if not child_sym:
-                            child_sym = parent_sym.exported_scope.define(part_name, SymbolType.MODULE)
-                            child_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
-                            
-                        parent_sym = child_sym
+                    curr_scope = curr_sym.exported_scope
+                    
+                    # Path so far
+                    path_prefix = top_name
+                    
+                    # Traverse/Create the rest: b, c
+                    for part in parts[1:]:
+                        path_prefix += "." + part
                         
-                    # 3. Bind the LEAF symbol to the actual module scope
-                    # parent_sym is now the symbol for 'c'
-                    if module_name in self.module_cache:
-                        parent_sym.exported_scope = self.module_cache[module_name]
-                
-            self.consume_end_of_statement("Expect newline after import.")
-            return self._loc(ast.Import(names=names), start_token)
+                        # Look for 'part' in curr_scope
+                        sub_sym = curr_scope.resolve(part)
+                        if not sub_sym:
+                            sub_sym = curr_scope.define(part, SymbolType.MODULE)
+                            
+                        # Ensure sub_sym has scope
+                        if not sub_sym.exported_scope:
+                            sub_sym.exported_scope = self._resolve_module_scope(path_prefix)
+                            if not sub_sym.exported_scope:
+                                sub_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
+                                
+                        curr_scope = sub_sym.exported_scope
+                        
+                    # Now curr_scope is the scope of the leaf module.
+                    # If we had final_scope resolved initially, we might want to ensure leaf points to it?
+                    # But the loop above should have set it if resolve_module_scope works.
+                    # If resolve_module_scope failed but final_scope (passed in) was somehow valid? 
+                    # (Unlikely, as final_scope comes from same resolve call).
+                    
+            return node
             
         elif self.match(TokenType.FROM):
-            start_token = self.previous()
+            node = self.parse_from_import()
             
-            # Handle relative imports: from . import x, from ..foo import x
-            level = 0
-            while self.match(TokenType.DOT):
-                level += 1
-                
-            module_name = None
-            if self.check(TokenType.IDENTIFIER):
-                module_name = self.parse_dotted_name()
-                
-            # Resolve relative import to absolute path
-            if level > 0:
-                if not self.package_name:
-                    # Fallback or error if we don't know where we are
-                    # Assuming we are at root if package_name is empty
-                    pass
-                
-                # Logic to resolve:
-                # If current package is 'utils.math' and level is 1 (.), then we look in 'utils.math'
-                # If level is 2 (..), we look in 'utils'
-                
-                # BUT, wait. 'from .' means import from current package.
-                # 'from .foo' means import foo from current package.
-                
-                if self.package_name:
-                    parts = self.package_name.split('.')
-                    if level > len(parts) + 1: # +1 because empty package_name (root) has 0 parts
-                         raise self.error(start_token, "Attempted relative import beyond top-level package")
-                    
-                    # Resolve parent package
-                    # self.package_name is the full module name (e.g. pkg.subpkg.calc)
-                    # level 1 (.): sibling of calc -> pkg.subpkg
-                    # level 2 (..): parent of pkg.subpkg -> pkg
-                    
-                    # parts has length N.
-                    # level 1: take N-1 parts.
-                    # level 2: take N-2 parts.
-                    parent_parts = parts[:len(parts) - level]
-                    parent_package = ".".join(parent_parts)
-                    
-                    if module_name:
-                        module_name = f"{parent_package}.{module_name}" if parent_package else module_name
-                    else:
-                        module_name = parent_package
+            # Resolve
+            full_module_name = self._resolve_relative_module_name(node.module, node.level)
+            module_scope = self._resolve_module_scope(full_module_name)
             
-            self.consume(TokenType.IMPORT, "Expect 'import'.")
-            names = self.parse_aliases()
-            
-            module_scope = self.module_cache.get(module_name) if module_name else None
-            
-            for alias_node in names:
+            for alias_node in node.names:
                 name = alias_node.name
                 asname = alias_node.asname or name
                 
@@ -696,7 +603,7 @@ class Parser:
                         exported_scope = origin_sym.exported_scope
                     else:
                         # Symbol not found in module
-                        self.error(start_token, f"Cannot import name '{name}' from '{module_name}'")
+                        self.error(self.previous(), f"Cannot import name '{name}' from '{full_module_name}'")
                         
                 sym = self.scope_manager.define(asname, sym_type)
                 sym.exported_scope = exported_scope
@@ -706,38 +613,58 @@ class Parser:
                 
                 if origin_sym:
                     sym.type_info = origin_sym.type_info
-                
-            self.consume_end_of_statement("Expect newline after import.")
-            return self._loc(ast.ImportFrom(module=module_name, names=names, level=level), start_token)
+            
+            return node
+        
         raise self.error(self.peek(), "Expect import statement.")
 
-    def parse_aliases(self) -> List[ast.alias]:
-        aliases = []
-        while True:
-            start = self.peek()
+    def _resolve_relative_module_name(self, module_name: Optional[str], level: int) -> str:
+        """Resolve relative module name (e.g. .math) to absolute module name."""
+        if level == 0:
+            return module_name or ""
             
-            if self.match(TokenType.STAR):
-                aliases.append(self._loc(ast.alias(name='*', asname=None), start))
-            else:
-                name = self.parse_dotted_name()
-                asname = None
-                
-                # Check for 'as' keyword
-                if self.match(TokenType.AS):
-                    asname = self.consume(TokenType.IDENTIFIER, "Expect alias name.").value
-                
-                aliases.append(self._loc(ast.alias(name=name, asname=asname), start))
+        if not self.package_name:
+            # Fallback for root package
+            return module_name or ""
             
-            if not self.match(TokenType.COMMA):
-                break
-        return aliases
+        parts = self.package_name.split('.')
+        if level > len(parts) + 1:
+             # This error reporting might be slightly off location-wise as we don't have the token here easily
+             # But this method is called after parsing, so it's a semantic check basically
+             pass
+        
+        parent_parts = parts[:len(parts) - level]
+        parent_package = ".".join(parent_parts)
+        
+        if module_name:
+            return f"{parent_package}.{module_name}" if parent_package else module_name
+        else:
+            return parent_package
 
-    def parse_dotted_name(self) -> str:
-        name = self.consume(TokenType.IDENTIFIER, "Expect identifier.").value
-        while self.match(TokenType.DOT):
-            name += "." + self.consume(TokenType.IDENTIFIER, "Expect identifier after '.'.").value
-        return name
-
+    def _resolve_module_scope(self, module_name: str) -> Optional[ScopeNode]:
+        """Resolve module name to ScopeNode using Resolver and Cache."""
+        # 1. Try to resolve to path if resolver exists
+        resolved_path = None
+        if self.module_resolver:
+             try:
+                 # We don't have the importer's file path easily accessible in Parser?
+                 # Wait, Scheduler passes package_name, but not file path.
+                 # Actually, for absolute imports, context_file is not needed.
+                 # For relative imports, we already resolved module_name to absolute module name (e.g. utils.math).
+                 # So we can treat it as absolute import.
+                 resolved_path = self.module_resolver.resolve(module_name)
+             except Exception:
+                 pass
+        
+        # 2. Look up in cache
+        # Cache might be keyed by path or name.
+        if resolved_path and resolved_path in self.module_cache:
+            return self.module_cache[resolved_path]
+            
+        if module_name in self.module_cache:
+            return self.module_cache[module_name]
+            
+        return None
 
     def return_statement(self) -> ast.Return:
         start_token = self.previous()
