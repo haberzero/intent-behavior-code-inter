@@ -142,7 +142,6 @@ class Parser:
         self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
         self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
-        # TokenType.TYPE_NAME has been removed. Types are now IDENTIFIERs.
         
         # 分组与集合
         self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
@@ -246,8 +245,7 @@ class Parser:
         2. Identifier Identifier ... (User defined type)
         3. GenericType[Args] Identifier ...
         """
-        # Case 1: Standard Type Name (int, float, list, dict, etc.)
-        # Note: Lexer no longer emits TYPE_NAME, but we check if it's a known type in symbol table
+        # Case 1: Standard Type Name or Known Type in Symbol Table
         if self.check(TokenType.IDENTIFIER) and self.scope_manager.is_type(self.peek().value):
             # Check if followed by an identifier (variable name)
             # This distinguishes 'int x' (declaration) from 'int(1)' (call expression)
@@ -263,9 +261,7 @@ class Parser:
             return False
             
         # Case 2: Identifier starting a declaration (Maybe a type we missed or future extension)
-        # With symbol table, we rely on is_type above mostly.
-        # But if we want to be robust or support implicit types (if language allowed), we'd check here.
-        # Current logic: Identifier Identifier -> Declaration
+        # Fallback: Identifier Identifier -> Declaration
         if self.check(TokenType.IDENTIFIER):
             # Check next token
             next_token = self.peek(1)
@@ -408,19 +404,8 @@ class Parser:
                 annotation = self.parse_type_annotation()
                 name_token = self.consume(TokenType.IDENTIFIER, "Expect parameter name.")
                 
-                # Define param in current scope (which is still parent scope until we enter function body?)
-                # Wait, standard practice: params are part of function scope.
-                # But we parse params BEFORE entering function scope in function_declaration().
-                # Solution: We should enter scope earlier OR define them later?
-                # Actually, in parser, we just build AST. Symbol definition happens in PreScanner.
-                # But PreScanner scans the BODY. It doesn't scan params unless we tell it to.
-                # Or PreScanner assumes params are scanned by parser logic?
-                # Let's simple define them here manually to be safe for current scope logic if we were inside function.
-                # BUT, we are currently in PARENT scope (Global or Outer Func).
-                # Params should belong to the NEW function scope.
-                # Refactor: enter_scope should happen before parsing parameters?
-                # If we do that, we need to be careful about parameter type annotations (which use OUTER scope types).
-                # Usually: Types are resolved in Outer Scope. Names are defined in Inner Scope.
+                # Parameters are defined in the function scope (handled by function_declaration).
+                # Here we just parse them.
                 
                 params.append(self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token))
                 if not self.match(TokenType.COMMA):
@@ -438,7 +423,6 @@ class Parser:
                 base_type = self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
             else:
                 # Fallback: Assume it's a type (e.g. forward reference or user type not yet fully registered)
-                # Or should we be strict? For now, if it looks like a type usage, allow it.
                 self.advance()
                 base_type = self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
         else:
@@ -583,12 +567,6 @@ class Parser:
                 asname = alias_node.asname or module_name
                 
                 # Check module cache for scope
-                # Note: module_name might be dotted 'utils.math'
-                # module_cache keys should match resolved paths or module names?
-                # For now, let's assume keys are module names as imported?
-                # Ideally, dependency scanner resolves this.
-                # Here we just try to find it.
-                
                 # Register symbol
                 sym = self.scope_manager.define(asname, SymbolType.MODULE)
                 if module_name in self.module_cache:
@@ -603,10 +581,6 @@ class Parser:
             self.consume(TokenType.IMPORT, "Expect 'import'.")
             names = self.parse_aliases()
             
-            # For 'from mod import a, b', we register a and b as variables/functions?
-            # Or as aliases to the original symbol?
-            # If we have the scope of 'mod', we can look them up.
-            
             module_scope = self.module_cache.get(module_name)
             
             for alias_node in names:
@@ -614,7 +588,6 @@ class Parser:
                 asname = alias_node.asname or name
                 
                 # Define in current scope
-                # What type? If we can resolve it, use its type. Else VARIABLE (fallback)
                 sym_type = SymbolType.VARIABLE
                 exported_scope = None
                 

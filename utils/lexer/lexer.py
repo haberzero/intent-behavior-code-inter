@@ -598,15 +598,17 @@ class Lexer:
             ('__user__', TokenType.LLM_USER)
         ]
         
+        keyword_found = False
         for keyword, token_type in llm_keywords:
             if self._match_llm_keyword(offset, keyword):
-                if offset > 0:
-                    pass
                 self._consume_llm_keyword(offset, keyword, token_type)
+                keyword_found = True
                 
                 if token_type == TokenType.LLM_END:
                     self.mode_stack.pop()
-                return
+                    return
+                # For SYS/USER, we continue to scan the rest of the line as text
+                break
 
         # 常规提示文本
         text = ""
@@ -628,8 +630,15 @@ class Lexer:
             self.tokens.append(Token(TokenType.RAW_TEXT, text, start_line, start_col))
             
         if self.scanner.peek() == '\n':
-            self.scanner.advance()
-            self.tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line, self.scanner.col))
+            # If line contains a keyword (and not LLM_END) and no text followed,
+            # skip the newline to avoid including it in the prompt content.
+            # e.g. "__sys__\n" -> skip newline
+            #      "__sys__ content\n" -> emit newline
+            if keyword_found and not text:
+                self.scanner.advance()
+            else:
+                self.scanner.advance()
+                self.tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line, self.scanner.col))
 
     def _scan_param_placeholder(self):
         self.scanner.start_token()
@@ -659,8 +668,3 @@ class Lexer:
         self.scanner.start_token()
         for _ in range(len(keyword)): self.scanner.advance()
         self.tokens.append(self.scanner.create_token(token_type))
-        # 消耗行剩余部分
-        while self.scanner.peek() != '\n' and not self.scanner.is_at_end():
-            self.scanner.advance()
-        if self.scanner.peek() == '\n':
-            self.scanner.advance()

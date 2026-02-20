@@ -270,5 +270,29 @@ func process_user_data(list users) -> dict:
         combined = "".join(raw_texts)
         self.assertEqual(combined, " content ~~ ")
 
+    def test_llm_block_inline_content(self):
+        """Test LLM block with inline content after keywords."""
+        code = """
+llm inline_test(int a):
+    __sys__ System prompt
+    __user__ User prompt $__a__
+    llmend
+"""
+        lexer = Lexer(code.strip())
+        tokens = lexer.tokenize()
+        
+        # Find LLM_SYS and check if "System prompt" follows immediately
+        sys_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_SYS)
+        self.assertEqual(tokens[sys_idx+1].type, TokenType.RAW_TEXT)
+        self.assertEqual(tokens[sys_idx+1].value.strip(), "System prompt")
+        
+        # Find LLM_USER and check if "User prompt $__a__" follows
+        user_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_USER)
+        # It might be split into RAW_TEXT, PARAM, etc.
+        # But we expect at least some RAW_TEXT starting with "User prompt"
+        self.assertEqual(tokens[user_idx+1].type, TokenType.RAW_TEXT)
+        self.assertIn("User prompt", tokens[user_idx+1].value)
+
+
 if __name__ == '__main__':
     unittest.main()

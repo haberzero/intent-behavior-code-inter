@@ -17,41 +17,20 @@ class PreScanner:
     def scan(self):
         """
         Execute the pre-scan for the current block.
-        Stops when DEDENT matches the initial indentation level (conceptually), 
+        Stops when DEDENT matches the initial indentation level, 
         or simply scans until the end of the current block structure.
         
-        For simplicity in this interleaved approach, we assume the Parser calls this 
-        when entering a block (after INDENT), and we scan until we hit a DEDENT 
-        that closes this block.
+        This scanner is called by the Parser when entering a block. It scans until 
+        it hits a DEDENT that closes this block.
         
-        However, handling nested blocks (if/while) inside a function requires careful logic.
-        We only want to register 'func' and 'class' and 'var' that are visible in the CURRENT scope.
-        
-        But wait, in Python/IBC-Inter (assuming Python-like scoping for vars), 
-        variables in if/for blocks ARE visible in the function scope.
-        So we should scan EVERYTHING inside this function body, regardless of nesting depth?
-        
-        YES. For a function scope, we want to find all local variables and nested functions.
-        BUT, nested functions create their OWN scope. We should register the nested function NAME,
-        but NOT dive into its body to register its local variables (that's for when we parse that function).
-        
-        So the rule is:
-        - Scan until end of current block (DEDENT back to start level).
-        - If we encounter 'func' or 'class' or 'llm', register the name, skip the body.
-        - If we encounter 'var' or implicit declaration, register the name.
+        The goal is to register all symbols (functions, LLM functions, variables)
+        visible in the CURRENT scope, including those nested in if/for/while blocks,
+        but skipping the bodies of nested functions (as they create their own scopes).
         """
         
-        # We assume we are just after INDENT or at the start of a global file
-        # We need to track indentation balance to know when to skip bodies.
-        
-        # Actually, since we are interleaved, we might be called at 'func main():\n INDENT'
-        # We want to scan until the corresponding DEDENT.
-        
         initial_balance = 0 
-        # We don't track exact indent level from tokens, but we rely on INDENT/DEDENT tokens.
-        # When we start, we are inside a block. 
-        # If we see INDENT, depth++. If DEDENT, depth--.
-        # If depth < 0, we exited our block.
+        # Track indent level relative to start of scan.
+        # Start is inside a block (after INDENT).
         
         while not self.is_at_end():
             token = self.peek()
@@ -69,25 +48,18 @@ class PreScanner:
                 self.advance()
                 continue
             
-            # If we are at depth 0 (current scope level) OR inside if/for blocks (which share scope),
-            # we should register variables.
-            # BUT, if we are inside a nested 'func' or 'class' body (which we skipped via INDENT/DEDENT tracking?),
-            # wait.
-            # If we see 'func', we register the name, then we need to SKIP its body.
-            # How do we skip its body?
-            # The body starts with COLON NEWLINE INDENT ... DEDENT.
+            # Register symbols in current scope.
+            # We skip bodies of nested functions/LLM blocks because they have their own scopes.
             
             if token.type == TokenType.FUNC:
                 self._register_func()
-                # _register_func consumes 'func' 'name' 'params' ... ':'
-                # Then we need to skip the body.
                 self._skip_block()
                 
             elif token.type == TokenType.LLM_DEF:
                 self._register_llm()
-                self._skip_llm_block() # LLM blocks are special, no INDENT tokens usually
+                self._skip_llm_block() 
                 
-            # elif token.type == TokenType.CLASS: # Future
+            # elif token.type == TokenType.CLASS: # Future support
             #     self._register_class()
             #     self._skip_block()
                 
@@ -96,18 +68,12 @@ class PreScanner:
                 self.advance() # var
                 if self.check(TokenType.IDENTIFIER):
                     name = self.advance().value
-                    # Only register if we are not deep inside a nested function (which we skipped)
-                    # But wait, if we skipped nested functions, we wouldn't be here.
-                    # So if we are here, we are in the current function's scope (or if/for block).
                     self.scope_manager.define(name, SymbolType.VARIABLE)
                     
-            # Implicit declarations? "int x = 1" or "MyType x = 1"
-            # This is harder to detect without full parsing.
-            # Strategy: Look for "ID ID" pattern or "ID [ ... ] ID" pattern.
+            # Implicit declarations: "Type Name" or "Generic[Type] Name"
             elif self.check(TokenType.IDENTIFIER):
-                # Check for Type Identifier pattern
                 if self._check_declaration_pattern():
-                    # The pattern checker will advance and extract the name
+                    # The pattern checker advanced and registered the name
                     pass
                 else:
                     self.advance()
@@ -140,7 +106,7 @@ class PreScanner:
         self.advance() # class
         if self.check(TokenType.IDENTIFIER):
             name = self.advance().value
-            self.scope_manager.define(name, SymbolType.USER_TYPE) # It's a type!
+            self.scope_manager.define(name, SymbolType.USER_TYPE)
         # Skip inheritance until COLON
         while not self.is_at_end() and not self.check(TokenType.COLON):
             self.advance()
@@ -168,8 +134,6 @@ class PreScanner:
     def _skip_llm_block(self):
         """
         Skip LLM block until 'llmend'.
-        LLM blocks don't respect INDENT/DEDENT in the same way, or rather Lexer handles them specially.
-        Lexer emits LLM_END token.
         """
         if self.check(TokenType.NEWLINE):
             self.advance()
@@ -186,21 +150,10 @@ class PreScanner:
         If found, register 'Name' and return True.
         Current token is the potential Type.
         """
-        # Lookahead 1: Identifier?
+        # Lookahead 1: Identifier? "Type Name"
         if self.peek(1).type == TokenType.IDENTIFIER:
-            # Check if current token is a known type?
-            # Wait, in PreScan we might not know user types yet if they are defined later in the file.
-            # But wait, PreScan is interleaved.
-            # If we are scanning a function, and we see "MyType x", 
-            # MyType might be defined in the Global scope (already scanned) 
-            # or in the current function (but later?).
-            # Actually, "MyType x" is a declaration pattern regardless of whether MyType is known.
-            # The syntax "ID ID" is strongly indicative of a declaration in this language.
-            
-            # HOWEVER, "x = y" is "ID ASSIGN ID".
-            # "call(x)" is "ID LPAREN".
-            # "x.y" is "ID DOT".
-            # So "ID ID" is pretty unique to declarations.
+            # "ID ID" is strongly indicative of a declaration in this language.
+            # e.g. "int x", "MyType y"
             
             var_name = self.peek(1).value
             self.scope_manager.define(var_name, SymbolType.VARIABLE)

@@ -96,13 +96,6 @@ class TestParserBasic(unittest.TestCase):
         """Test user defined type declaration (New feature)."""
         # UserType is IDENTIFIER, x is IDENTIFIER. 
         # Parser should recognize this as declaration via lookahead.
-        # Note: In our new design, 'UserType' needs to be known in symbol table?
-        # Or we rely on lookahead "ID ID" pattern for declarations?
-        # The parser implementation of check_declaration_lookahead:
-        # Case 2: Identifier Identifier -> Declaration
-        # So "UserType x = 1" should still be parsed as declaration even if UserType is not in symbol table yet?
-        # Wait, pre-parser only scans functions/classes. It doesn't know about typedefs yet (future).
-        # But check_declaration_lookahead has a fallback "if ID ID" logic.
         code = "UserType x = 1"
         module = self.parse(code)
         stmt = module.body[0]
@@ -157,9 +150,6 @@ func test():
     int x = 20
 """
         # Parser should accept this because x is registered in pre-scan.
-        # Although "x = 10" looks like assignment to unknown var if not defined.
-        # But pre-scan registers 'x' as VARIABLE.
-        # So "x = 10" is parsed as Assignment to known variable.
         mod = self.parse(code)
         pass
 
