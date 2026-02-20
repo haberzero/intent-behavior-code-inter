@@ -546,16 +546,16 @@ class Lexer:
         
         # 允许首字符是字母、下划线
         if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
-             name += self.scanner.advance()
+            name += self.scanner.advance()
         else:
-             # 如果 $ 后面没有合法的变量名起始符，可能是一个单独的 $ 或者是错误的
-             # 这里我们选择把它作为一个空的变量引用或者直接报错？
-             # 根据 _scan_behavior_char 里的逻辑，那里处理了转义 \$。
-             # 如果代码里直接写 $ 后面跟空格，应该视为 RAW_TEXT 的一部分？
-             # 但 _scan_var_ref 是在 code/behavior 模式下通用的吗？
-             # 在 behavior 模式下，_scan_behavior_char 已经处理了 \$ 转义。
-             # 在 normal 模式下，$ 应该只作为变量引用。
-             pass
+            # 如果 $ 后面没有合法的变量名起始符，可能是一个单独的 $ 或者是错误的
+            # 这里我们选择把它作为一个空的变量引用或者直接报错？
+            # 根据 _scan_behavior_char 里的逻辑，那里处理了转义 \$。
+            # 如果代码里直接写 $ 后面跟空格，应该视为 RAW_TEXT 的一部分？
+            # 但 _scan_var_ref 是在 code/behavior 模式下通用的吗？
+            # 在 behavior 模式下，_scan_behavior_char 已经处理了 \$ 转义。
+            # 在 normal 模式下，$ 应该只作为变量引用。
+            pass
 
         while not self.scanner.is_at_end():
             peek = self.scanner.peek()

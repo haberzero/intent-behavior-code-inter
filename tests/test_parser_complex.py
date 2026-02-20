@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
+from utils.parser.symbol_table import ScopeManager
 from typedef import parser_types as ast
 from typedef.lexer_types import TokenType
 
@@ -76,7 +77,7 @@ func f(List[int] a, Dict[str, int] b) -> None:
         assert isinstance(arg_b.annotation, ast.Subscript)
         assert isinstance(arg_b.annotation.value, ast.Name)
         self.assertEqual(arg_b.annotation.value.id, "Dict")
-        # In , Dict[str, int] is parsed as Subscript(Dict, ListExpr([str, int]))
+        # In Parser, Dict[str, int] is parsed as Subscript(Dict, ListExpr([str, int]))
         # Note: The original test expected ListExpr.
         assert isinstance(arg_b.annotation.slice, ast.ListExpr)
         self.assertEqual(len(arg_b.annotation.slice.elts), 2)

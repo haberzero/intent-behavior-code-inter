@@ -7,7 +7,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
+from utils.parser.symbol_table import ScopeManager
+from utils.parser.pre_scanner import PreScanner
 from typedef import parser_types as ast
+from typedef.lexer_types import TokenType
 
 class TestParserBasic(unittest.TestCase):
     """
@@ -61,7 +64,7 @@ class TestParserBasic(unittest.TestCase):
             ("int x = 1", "int", "x", 1.0),
             ("var y = \"hello\"", "var", "y", "hello"),
             ("float z = 3.14", "float", "z", 3.14),
-            ("list l = [1, 2]", "list", "l", None), # list is IDENTIFIER in 
+            ("list l = [1, 2]", "list", "l", None), # list is IDENTIFIER in Lexer, BUILTIN_TYPE in SymbolTable
             ("int uninit", "int", "uninit", None)
         ]
         
@@ -84,9 +87,16 @@ class TestParserBasic(unittest.TestCase):
                     self.assertIsInstance(stmt.value, ast.ListExpr)
 
     def test_custom_type_declaration(self):
-        """Test user defined type declaration ( feature)."""
+        """Test user defined type declaration (New feature)."""
         # UserType is IDENTIFIER, x is IDENTIFIER. 
-        # Parser  should recognize this as declaration via lookahead.
+        # Parser should recognize this as declaration via lookahead.
+        # Note: In our new design, 'UserType' needs to be known in symbol table?
+        # Or we rely on lookahead "ID ID" pattern for declarations?
+        # The parser implementation of check_declaration_lookahead:
+        # Case 2: Identifier Identifier -> Declaration
+        # So "UserType x = 1" should still be parsed as declaration even if UserType is not in symbol table yet?
+        # Wait, pre-parser only scans functions/classes. It doesn't know about typedefs yet (future).
+        # But check_declaration_lookahead has a fallback "if ID ID" logic.
         code = "UserType x = 1"
         module = self.parse(code)
         stmt = module.body[0]
@@ -110,6 +120,42 @@ class TestParserBasic(unittest.TestCase):
         self.assertEqual(stmt.type_annotation.value.id, "List")
         assert isinstance(stmt.type_annotation.slice, ast.Name)
         self.assertEqual(stmt.type_annotation.slice.id, "int")
+
+    def test_closure_simulation(self):
+        """Test basic closure structure (nested function + scope)."""
+        code = """
+func outer():
+    int x = 10
+    func inner():
+        return x
+"""
+        mod = self.parse(code)
+        outer_func = mod.body[0]
+        assert isinstance(outer_func, ast.FunctionDef)
+        # Inner function should be in the body
+        inner_func = outer_func.body[1] # 0 is var x
+        assert isinstance(inner_func, ast.FunctionDef)
+        self.assertEqual(inner_func.name, "inner")
+        
+        # Verify x is used in inner
+        ret = inner_func.body[0]
+        assert isinstance(ret, ast.Return)
+        assert isinstance(ret.value, ast.Name)
+        self.assertEqual(ret.value.id, "x")
+
+    def test_forward_reference_in_function(self):
+        """Test forward reference of local variable (supported by pre-scanner)."""
+        code = """
+func test():
+    x = 10
+    int x = 20
+"""
+        # Parser should accept this because x is registered in pre-scan.
+        # Although "x = 10" looks like assignment to unknown var if not defined.
+        # But pre-scan registers 'x' as VARIABLE.
+        # So "x = 10" is parsed as Assignment to known variable.
+        mod = self.parse(code)
+        pass
 
     def test_error_reporting(self):
         """Test that errors are reported and not swallowed ( feature)."""

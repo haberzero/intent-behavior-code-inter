@@ -4,13 +4,15 @@ from typedef import parser_types as ast
 from typedef.exception_types import ParserError
 from typedef.parser_types import Precedence, ParseRule
 
+from utils.parser.symbol_table import ScopeManager, ScopeType, SymbolType
+from utils.parser.pre_scanner import PreScanner
+
 T = TypeVar("T", bound=ast.ASTNode)
 
 class Parser:
     """
     IBC-Inter 语法分析器 (Parser)
-    负责将 Token 流解析为抽象语法树 (AST)。
-    支持错误恢复与同步机制。
+    采用交错式预构建 (Interleaved Pre-Pass) 和持久化符号表树架构。
     """
     def __init__(self, tokens: List[Token], warning_callback: Optional[Callable[[str], None]] = None):
         self.tokens = tokens
@@ -19,6 +21,13 @@ class Parser:
         self.rules: Dict[TokenType, ParseRule] = {}
         self.pending_intent: Optional[str] = None
         self.warning_callback = warning_callback
+        
+        # Scope Management
+        self.scope_manager = ScopeManager()
+        
+        # Initial Global Scan
+        self._run_pre_scanner()
+        
         self.register_rules()
 
     def _warn(self, message: str):
@@ -26,6 +35,11 @@ class Parser:
             self.warning_callback(message)
         else:
             pass
+
+    def _run_pre_scanner(self):
+        """Run the PreScanner on the current scope."""
+        scanner = PreScanner(self.tokens, self.current, self.scope_manager)
+        scanner.scan()
 
     # --- Helpers ---
 
@@ -96,11 +110,10 @@ class Parser:
 
     def parse_precedence(self, precedence: Precedence) -> ast.Expr:
         token = self.advance()
-        prefix = self.get_rule(token.type).prefix
+        rule = self.get_rule(token.type)
+        prefix = rule.prefix
         if prefix is None:
-            if token.type == TokenType.TYPE_NAME:
-                raise self.error(token, f"Type name '{token.value}' cannot be used as a function. Did you mean to cast? Use '({token.value}) expression'.")
-            raise self.error(token, "Expect expression.")
+            raise self.error(token, f"Expect expression. Got {token.type}")
         
         left = prefix()
         
@@ -127,7 +140,7 @@ class Parser:
         self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
         self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
-        self.register(TokenType.TYPE_NAME, self.variable, None, Precedence.LOWEST) # Allow types to be used as identifiers in expressions (e.g. for casting or checking)
+        # TokenType.TYPE_NAME has been removed. Types are now IDENTIFIERs.
         
         # 分组与集合
         self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
@@ -226,7 +239,8 @@ class Parser:
         3. GenericType[Args] Identifier ...
         """
         # Case 1: Standard Type Name (int, float, list, dict, etc.)
-        if self.check(TokenType.TYPE_NAME):
+        # Note: Lexer no longer emits TYPE_NAME, but we check if it's a known type in symbol table
+        if self.check(TokenType.IDENTIFIER) and self.scope_manager.is_type(self.peek().value):
             # Check if followed by an identifier (variable name)
             # This distinguishes 'int x' (declaration) from 'int(1)' (call expression)
             next_token = self.peek(1)
@@ -240,7 +254,10 @@ class Parser:
                  
             return False
             
-        # Case 2: Identifier starting a declaration
+        # Case 2: Identifier starting a declaration (Maybe a type we missed or future extension)
+        # With symbol table, we rely on is_type above mostly.
+        # But if we want to be robust or support implicit types (if language allowed), we'd check here.
+        # Current logic: Identifier Identifier -> Declaration
         if self.check(TokenType.IDENTIFIER):
             # Check next token
             next_token = self.peek(1)
@@ -317,7 +334,17 @@ class Parser:
             returns = self.parse_type_annotation()
             
         self.consume(TokenType.COLON, "Expect ':' before function body.")
+        
+        # Enter Function Scope
+        self.scope_manager.enter_scope(ScopeType.FUNCTION)
+        # Pre-scan local variables/functions
+        self._run_pre_scanner()
+        
         body = self.block()
+        
+        # Exit Function Scope
+        self.scope_manager.exit_scope()
+        
         return self._loc(ast.FunctionDef(name=name, args=args, body=body, returns=returns), start_token)
 
     def llm_function_declaration(self) -> ast.LLMFunctionDef:
@@ -333,7 +360,14 @@ class Parser:
             
         self.consume(TokenType.COLON, "Expect ':' before function body.")
         
+        # LLM functions also have a scope (for params)
+        self.scope_manager.enter_scope(ScopeType.FUNCTION)
+        self._run_pre_scanner() # Though LLM bodies are special, parameters are in scope
+        
         sys_prompt, user_prompt = self.llm_body()
+        
+        self.scope_manager.exit_scope()
+        
         return self._loc(ast.LLMFunctionDef(name=name, args=args, sys_prompt=sys_prompt, user_prompt=user_prompt, returns=returns), start_token)
 
     def parameters(self) -> List[ast.arg]:
@@ -342,6 +376,21 @@ class Parser:
             while True:
                 annotation = self.parse_type_annotation()
                 name_token = self.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                
+                # Define param in current scope (which is still parent scope until we enter function body?)
+                # Wait, standard practice: params are part of function scope.
+                # But we parse params BEFORE entering function scope in function_declaration().
+                # Solution: We should enter scope earlier OR define them later?
+                # Actually, in parser, we just build AST. Symbol definition happens in PreScanner.
+                # But PreScanner scans the BODY. It doesn't scan params unless we tell it to.
+                # Or PreScanner assumes params are scanned by parser logic?
+                # Let's simple define them here manually to be safe for current scope logic if we were inside function.
+                # BUT, we are currently in PARENT scope (Global or Outer Func).
+                # Params should belong to the NEW function scope.
+                # Refactor: enter_scope should happen before parsing parameters?
+                # If we do that, we need to be careful about parameter type annotations (which use OUTER scope types).
+                # Usually: Types are resolved in Outer Scope. Names are defined in Inner Scope.
+                
                 params.append(self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token))
                 if not self.match(TokenType.COMMA):
                     break
@@ -351,10 +400,16 @@ class Parser:
         start_token = self.peek()
         # 1. Base Type
         base_type = None
-        if self.match(TokenType.TYPE_NAME):
-            base_type = self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
-        elif self.match(TokenType.IDENTIFIER):
-            base_type = self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
+        if self.check(TokenType.IDENTIFIER):
+            # Check if it's a valid type in symbol table
+            if self.scope_manager.is_type(self.peek().value):
+                self.advance()
+                base_type = self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
+            else:
+                # Fallback: Assume it's a type (e.g. forward reference or user type not yet fully registered)
+                # Or should we be strict? For now, if it looks like a type usage, allow it.
+                self.advance()
+                base_type = self._loc(ast.Name(id=self.previous().value, ctx='Load'), self.previous())
         else:
             raise self.error(self.peek(), "Expect type name.")
 
@@ -602,13 +657,17 @@ class Parser:
     def grouping(self) -> ast.Expr:
         # Check for Cast Expression: (Type) Expr
         # Look ahead to see if it's a type name followed by RPAREN
-        if (self.check(TokenType.TYPE_NAME) or self.check(TokenType.IDENTIFIER)) and self.tokens[self.current + 1].type == TokenType.RPAREN:
-            type_token = self.advance()
-            self.consume(TokenType.RPAREN, "Expect ')' after cast type.")
-            
-            # Cast has very high precedence (UNARY or even higher)
-            value = self.parse_precedence(Precedence.UNARY)
-            return self._loc(ast.CastExpr(type_name=type_token.value, value=value), type_token)
+        # Lexer produces IDENTIFIER for types now.
+        if self.check(TokenType.IDENTIFIER) and self.tokens[self.current + 1].type == TokenType.RPAREN:
+             # Check if identifier is a type in symbol table
+            possible_type = self.peek()
+            if self.scope_manager.is_type(possible_type.value):
+                type_token = self.advance()
+                self.consume(TokenType.RPAREN, "Expect ')' after cast type.")
+                
+                # Cast has very high precedence (UNARY or even higher)
+                value = self.parse_precedence(Precedence.UNARY)
+                return self._loc(ast.CastExpr(type_name=type_token.value, value=value), type_token)
         
         expr = self.expression()
         self.consume(TokenType.RPAREN, "Expect ')' after expression.")
