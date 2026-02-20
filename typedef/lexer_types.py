@@ -35,9 +35,6 @@ class TokenType(Enum):
     LLM_SYS = auto()    # __sys__
     LLM_USER = auto()   # __user__
 
-    # 类型
-    TYPE_NAME = auto()
-
     # 标识符与字面量
     IDENTIFIER = auto()
     NUMBER = auto()

@@ -26,9 +26,9 @@ func 计算(int a) -> int:
         tokens = lexer.tokenize()
         
         expected_types = [
-            TokenType.FUNC, TokenType.IDENTIFIER, TokenType.LPAREN, TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.RPAREN, TokenType.ARROW, TokenType.TYPE_NAME, TokenType.COLON, TokenType.NEWLINE,
+            TokenType.FUNC, TokenType.IDENTIFIER, TokenType.LPAREN, TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.RPAREN, TokenType.ARROW, TokenType.IDENTIFIER, TokenType.COLON, TokenType.NEWLINE,
             TokenType.INDENT,
-            TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.NUMBER, TokenType.NEWLINE,
+            TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.NUMBER, TokenType.NEWLINE,
             TokenType.FOR, TokenType.IDENTIFIER, TokenType.IN, TokenType.IDENTIFIER, TokenType.COLON, TokenType.NEWLINE,
             TokenType.INDENT,
             TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.IDENTIFIER, TokenType.PLUS, TokenType.IDENTIFIER, TokenType.NEWLINE,
@@ -74,18 +74,18 @@ x = (
         self.assertEqual([t.type for t in tokens], expected_types)
 
     def test_container_types_as_identifiers(self):
-        """Test that list and dict are now TYPE_NAMEs (Updated for reserved keywords)."""
+        """Test that list and dict are now IDENTIFIERs."""
         code = "list l = []"
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         
-        # list -> TYPE_NAME
+        # list -> IDENTIFIER
         # l -> IDENTIFIER
         # = -> ASSIGN
         # [ -> LBRACKET
         # ] -> RBRACKET
         expected_types = [
-            TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.LBRACKET, TokenType.RBRACKET, TokenType.EOF
+            TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.LBRACKET, TokenType.RBRACKET, TokenType.EOF
         ]
         self.assertEqual([t.type for t in tokens], expected_types)
         self.assertEqual(tokens[0].value, "list")

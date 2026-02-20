@@ -35,7 +35,6 @@ class Lexer:
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
         
-        self.TYPES = {'int', 'float', 'str', 'bool', 'void', 'Any', 'None', 'list', 'dict'}
         self.is_new_line = True
 
     def tokenize(self) -> List[Token]:
@@ -490,8 +489,6 @@ class Lexer:
                 if char == '\n' or char == '#':
                     self.continuation_mode = True
 
-        elif value in self.TYPES:
-            self.tokens.append(self.scanner.create_token(TokenType.TYPE_NAME, value, self.is_new_line))
         else:
             self.tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, value, self.is_new_line))
             
@@ -499,12 +496,45 @@ class Lexer:
 
     def _scan_number(self, first_char):
         value = first_char
+        
+        # 1. Hexadecimal (0x...)
+        if first_char == '0' and (self.scanner.peek() == 'x' or self.scanner.peek() == 'X'):
+            value += self.scanner.advance()
+            while not self.scanner.is_at_end() and (self.scanner.peek().isdigit() or self.scanner.peek() in 'abcdefABCDEF'):
+                value += self.scanner.advance()
+            self.tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
+            self.is_new_line = False
+            return
+
+        # 2. Binary (0b...)
+        if first_char == '0' and (self.scanner.peek() == 'b' or self.scanner.peek() == 'B'):
+            value += self.scanner.advance()
+            while not self.scanner.is_at_end() and self.scanner.peek() in '01':
+                value += self.scanner.advance()
+            self.tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
+            self.is_new_line = False
+            return
+
+        # 3. Decimal / Float
         while self.scanner.peek().isdigit():
             value += self.scanner.advance()
+            
+        # Fraction part
         if self.scanner.peek() == '.' and self.scanner.peek(1).isdigit():
             value += self.scanner.advance()
             while self.scanner.peek().isdigit():
                 value += self.scanner.advance()
+                
+        # Scientific notation
+        if self.scanner.peek() in 'eE':
+            # Check if next char is valid (+, -, or digit)
+            next_char = self.scanner.peek(1)
+            if next_char.isdigit() or next_char in '+-':
+                value += self.scanner.advance() # 'e' or 'E'
+                if self.scanner.peek() in '+-':
+                    value += self.scanner.advance()
+                while self.scanner.peek().isdigit():
+                    value += self.scanner.advance()
         
         self.tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
         self.is_new_line = False
@@ -513,8 +543,34 @@ class Lexer:
         self.scanner.start_token()
         self.scanner.advance() # $
         name = ""
-        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
-            name += self.scanner.advance()
+        
+        # 允许首字符是字母、下划线
+        if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+             name += self.scanner.advance()
+        else:
+             # 如果 $ 后面没有合法的变量名起始符，可能是一个单独的 $ 或者是错误的
+             # 这里我们选择把它作为一个空的变量引用或者直接报错？
+             # 根据 _scan_behavior_char 里的逻辑，那里处理了转义 \$。
+             # 如果代码里直接写 $ 后面跟空格，应该视为 RAW_TEXT 的一部分？
+             # 但 _scan_var_ref 是在 code/behavior 模式下通用的吗？
+             # 在 behavior 模式下，_scan_behavior_char 已经处理了 \$ 转义。
+             # 在 normal 模式下，$ 应该只作为变量引用。
+             pass
+
+        while not self.scanner.is_at_end():
+            peek = self.scanner.peek()
+            if peek.isalnum() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
+                name += self.scanner.advance()
+            elif peek == '.':
+                # Check if dot is followed by a valid identifier start char
+                next_char = self.scanner.peek(1)
+                if next_char.isalnum() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+                    name += self.scanner.advance() # .
+                else:
+                    break
+            else:
+                break
+                
         self.tokens.append(self.scanner.create_token(TokenType.VAR_REF, "$" + name))
 
     def _scan_llm_chunk(self):

@@ -54,7 +54,7 @@ if ~~判断 $val~~:
         tokens = lexer.tokenize()
         
         # Verify first line: str res = ~~分析 $content~~
-        self.assertEqual(tokens[0].type, TokenType.TYPE_NAME)
+        self.assertEqual(tokens[0].type, TokenType.IDENTIFIER)
         self.assertEqual(tokens[1].type, TokenType.IDENTIFIER)
         self.assertEqual(tokens[2].type, TokenType.ASSIGN)
         self.assertEqual(tokens[3].type, TokenType.BEHAVIOR_MARKER) # ~~
@@ -80,7 +80,7 @@ str cmd = ~~分析 ~ 符号~~
         tokens = lexer.tokenize()
         
         expected_types = [
-            TokenType.TYPE_NAME, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.BEHAVIOR_MARKER,
+            TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.BEHAVIOR_MARKER,
             TokenType.RAW_TEXT, 
             TokenType.BEHAVIOR_MARKER, TokenType.EOF
         ]
@@ -220,6 +220,42 @@ func process_user_data(list users) -> dict:
                 lexer = Lexer(source)
                 tokens = lexer.tokenize()
                 self.assertEqual(tokens[0].type, TokenType.STRING)
+                self.assertEqual(tokens[0].value, expected)
+
+    def test_var_ref_with_dots(self):
+        """Test variable references with dot notation ($user.name.first)."""
+        code = "str x = ~~hello $user.name.first world~~"
+        lexer = Lexer(code)
+        tokens = lexer.tokenize()
+        
+        # Structure: ... RAW_TEXT("hello ") VAR_REF("$user.name.first") RAW_TEXT(" world") ...
+        var_ref = next(t for t in tokens if t.type == TokenType.VAR_REF)
+        self.assertEqual(var_ref.value, "$user.name.first")
+        
+        # Ensure surrounding text is correct
+        raw_texts = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
+        self.assertEqual(raw_texts[0], "hello ")
+        self.assertEqual(raw_texts[1], " world")
+
+    def test_number_literals(self):
+        """Test enhanced number literals (hex, binary, scientific)."""
+        cases = [
+            ("0xFF", "0xFF"),
+            ("0X1a", "0X1a"),
+            ("0b101", "0b101"),
+            ("0B0", "0B0"),
+            ("1.23", "1.23"),
+            ("1e10", "1e10"),
+            ("1.5E-2", "1.5E-2"),
+            ("1e+5", "1e+5")
+        ]
+        
+        for source, expected in cases:
+            with self.subTest(source=source):
+                lexer = Lexer(source)
+                tokens = lexer.tokenize()
+                # Should be NUMBER token
+                self.assertEqual(tokens[0].type, TokenType.NUMBER)
                 self.assertEqual(tokens[0].value, expected)
 
     def test_behavior_escape_at_end(self):
