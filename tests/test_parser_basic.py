@@ -40,7 +40,7 @@ class TestParserBasic(unittest.TestCase):
             mod = parser.parse()
         except CompilerError:
             pass
-        return mod, parser.diagnostic_manager.diagnostics
+        return mod, parser.issue_tracker.diagnostics
 
     def parse_expr(self, code):
         """Helper to parse a single expression."""

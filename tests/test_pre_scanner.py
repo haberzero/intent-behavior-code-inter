@@ -28,11 +28,11 @@ llm my_llm_func(str s):
         
         # Check if functions are defined
         sym_func = manager.resolve("my_func")
-        self.assertIsNotNone(sym_func)
+        assert sym_func is not None
         self.assertEqual(sym_func.type, SymbolType.FUNCTION)
         
         sym_llm = manager.resolve("my_llm_func")
-        self.assertIsNotNone(sym_llm)
+        assert sym_llm is not None
         self.assertEqual(sym_llm.type, SymbolType.FUNCTION)
 
     def test_variable_registration(self):
@@ -48,11 +48,13 @@ int y = 20
         pre_scanner = PreScanner(tokens, 0, manager)
         pre_scanner.scan()
         
-        self.assertIsNotNone(manager.resolve("x"))
-        self.assertEqual(manager.resolve("x").type, SymbolType.VARIABLE)
+        sym_x = manager.resolve("x")
+        assert sym_x is not None
+        self.assertEqual(sym_x.type, SymbolType.VARIABLE)
         
-        self.assertIsNotNone(manager.resolve("y"))
-        self.assertEqual(manager.resolve("y").type, SymbolType.VARIABLE)
+        sym_y = manager.resolve("y")
+        assert sym_y is not None
+        self.assertEqual(sym_y.type, SymbolType.VARIABLE)
 
     def test_skip_nested_blocks(self):
         """Test that PreScanner skips nested function bodies but registers top-level items."""
@@ -87,8 +89,9 @@ func outer():
         pre_scanner = PreScanner(tokens, 0, manager)
         pre_scanner.scan()
         
-        self.assertIsNotNone(manager.resolve("numbers"))
-        self.assertEqual(manager.resolve("numbers").type, SymbolType.VARIABLE)
+        sym_numbers = manager.resolve("numbers")
+        assert sym_numbers is not None
+        self.assertEqual(sym_numbers.type, SymbolType.VARIABLE)
 
 if __name__ == '__main__':
     unittest.main()

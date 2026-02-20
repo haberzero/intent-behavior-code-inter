@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Protocol, runtime_checkable
 
 class Severity(Enum):
     HINT = auto()    # 优化建议，如 "Unused variable"
@@ -17,6 +17,15 @@ class Location:
     length: int = 1
     context_line: Optional[str] = None # 缓存出错行的源码
 
+@runtime_checkable
+class Locatable(Protocol):
+    """Protocol for objects that have location information."""
+    @property
+    def line(self) -> int: ...
+    # Support both column (Token) and col (Scanner)
+    # We can't define OR in Protocol properties easily, 
+    # so we just define a marker protocol that we check dynamically or use Union.
+    
 @dataclass
 class Diagnostic:
     severity: Severity

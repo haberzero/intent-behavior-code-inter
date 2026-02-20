@@ -1,7 +1,7 @@
 from typing import List, Optional
 from typedef.lexer_types import TokenType, Token, LexerMode, SubState
 from .scanner import Scanner
-from utils.diagnostics.manager import DiagnosticManager
+from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import *
 from typedef.diagnostic_types import Severity
 
@@ -10,10 +10,10 @@ class Lexer:
     IBC-Inter 词法分析器 (Lexer)
     负责将源代码转换为 Token 流，处理缩进、行延续及 LLM 块边界。
     """
-    def __init__(self, source_code: str, diagnostic_manager: Optional[DiagnosticManager] = None):
+    def __init__(self, source_code: str, issue_tracker: Optional[IssueTracker] = None):
         self.scanner = Scanner(source_code)
         self.tokens: List[Token] = []
-        self.diagnostic_manager = diagnostic_manager or DiagnosticManager(source_code)
+        self.issue_tracker = issue_tracker or IssueTracker(source_code)
         
         # 状态管理
         self.mode_stack: List[LexerMode] = [LexerMode.NORMAL]
@@ -47,9 +47,9 @@ class Lexer:
                 
             # 检查残留状态（防御性检查）
             if self.sub_state == SubState.IN_STRING:
-                self.diagnostic_manager.report(Severity.ERROR, LEX_UNTERMINATED_STRING, "Unexpected EOF while scanning string literal", self.scanner)
+                self.issue_tracker.report(Severity.ERROR, LEX_UNTERMINATED_STRING, "Unexpected EOF while scanning string literal", self.scanner)
             if self.sub_state == SubState.IN_BEHAVIOR:
-                self.diagnostic_manager.report(Severity.ERROR, LEX_UNTERMINATED_BEHAVIOR, "Unexpected EOF while scanning behavior description", self.scanner)
+                self.issue_tracker.report(Severity.ERROR, LEX_UNTERMINATED_BEHAVIOR, "Unexpected EOF while scanning behavior description", self.scanner)
             
             # 处理文件末尾的剩余缩进
             while len(self.indent_stack) > 1:
@@ -59,7 +59,7 @@ class Lexer:
             self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
             
             # 统一抛出异常如果存在错误
-            self.diagnostic_manager.check_errors()
+            self.issue_tracker.check_errors()
             
             return self.tokens
         except Exception as e:
@@ -69,7 +69,7 @@ class Lexer:
 
     def _report_error(self, code: str, message: str):
         """Helper to report lexical errors."""
-        self.diagnostic_manager.report(Severity.ERROR, code, message, self.scanner)
+        self.issue_tracker.report(Severity.ERROR, code, message, self.scanner)
 
     # ==========================
     # 行处理器
@@ -566,18 +566,8 @@ class Lexer:
         if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
             name += self.scanner.advance()
         else:
-            # 如果 $ 后面没有合法的变量名起始符，可能是一个单独的 $ 或者是错误的
-            # 这里我们选择把它作为一个空的变量引用或者直接报错？
-            # 根据 _scan_behavior_char 里的逻辑，那里处理了转义 \$。
-            # 如果代码里直接写 $ 后面跟空格，应该视为 RAW_TEXT 的一部分？
-            # 但 _scan_var_ref 是在 code/behavior 模式下通用的吗？
-            # 在 behavior 模式下，_scan_behavior_char 已经处理了 \$ 转义。
-            # 在 normal 模式下，$ 应该只作为变量引用。
-            
-            # 使用 DiagnosticManager 报告警告，而不是默默忽略
-            self.diagnostic_manager.report(Severity.WARNING, "LEX_EMPTY_VAR_REF", "Empty variable reference '$'. Did you mean '\$'?", self.scanner)
-            # Fallback: treat as raw '$' if possible, or just empty var name
-            # For now, let it continue, name will be empty string.
+            self.issue_tracker.report(Severity.WARNING, "LEX_EMPTY_VAR_REF", r"Empty variable reference '$'. Did you mean '\$'?", self.scanner)
+
 
         while not self.scanner.is_at_end():
             peek = self.scanner.peek()

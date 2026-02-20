@@ -5,6 +5,7 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from typing import Optional
 from utils.lexer.lexer import Lexer
 from typedef.diagnostic_types import CompilerError, Severity
 from utils.diagnostics.codes import *
@@ -18,7 +19,7 @@ class TestLexerErrors(unittest.TestCase):
     3. Invalid tokens
     """
 
-    def check_error(self, code: str, expected_code: str = None, expected_msg: str = None):
+    def check_error(self, code: str, expected_code: Optional[str] = None, expected_msg: Optional[str] = None):
         lexer = Lexer(code)
         with self.assertRaises(CompilerError) as cm:
             lexer.tokenize()

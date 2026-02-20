@@ -5,7 +5,7 @@ from typedef.parser_types import Precedence, ParseRule
 
 from utils.parser.symbol_table import ScopeManager, ScopeType, SymbolType
 from utils.parser.pre_scanner import PreScanner
-from utils.diagnostics.manager import DiagnosticManager
+from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import *
 from typedef.diagnostic_types import Severity, CompilerError
 
@@ -20,10 +20,10 @@ class Parser:
     IBC-Inter 语法分析器 (Parser)
     采用交错式预构建 (Interleaved Pre-Pass) 和持久化符号表树架构。
     """
-    def __init__(self, tokens: List[Token], diagnostic_manager: Optional[DiagnosticManager] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None):
         self.tokens = tokens
         self.current = 0
-        self.diagnostic_manager = diagnostic_manager or DiagnosticManager()
+        self.issue_tracker = issue_tracker or IssueTracker()
         self.rules: Dict[TokenType, ParseRule] = {}
         self.pending_intent: Optional[str] = None
         
@@ -36,7 +36,7 @@ class Parser:
         self.register_rules()
 
     def _warn(self, message: str):
-        self.diagnostic_manager.report(Severity.WARNING, "PAR_WARN", message, self.peek())
+        self.issue_tracker.report(Severity.WARNING, "PAR_WARN", message, self.peek())
 
     def _run_pre_scanner(self):
         """Run the PreScanner on the current scope."""
@@ -87,7 +87,7 @@ class Parser:
         return False
 
     def error(self, token: Token, message: str) -> Exception:
-        self.diagnostic_manager.report(Severity.ERROR, PAR_EXPECTED_TOKEN, message, token)
+        self.issue_tracker.report(Severity.ERROR, PAR_EXPECTED_TOKEN, message, token)
         return ParseControlFlowError()
 
     def synchronize(self):
@@ -200,7 +200,7 @@ class Parser:
                 self.synchronize()
         
         # Check for errors at the end
-        self.diagnostic_manager.check_errors()
+        self.issue_tracker.check_errors()
         
         return ast.Module(body=statements)
 

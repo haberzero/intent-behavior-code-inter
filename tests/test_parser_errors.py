@@ -31,7 +31,7 @@ class TestParserErrors(unittest.TestCase):
             # Expected in error tests.
             # We return None for module, but the manager is available for inspection.
             mod = None
-        return mod, parser.diagnostic_manager
+        return mod, parser.issue_tracker
 
     def test_deep_recursion(self):
         """Test parser resilience against deep recursion."""
