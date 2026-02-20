@@ -55,12 +55,15 @@ class TestSemanticComplex(unittest.TestCase):
             return data + 1
 
         var x = 10
-        # 'var x' is Any, so passing it to 'int' parameter is allowed (optimistic).
+        # 'var x' is inferred as int, so passing it to 'int' parameter is valid.
         var y = process(x)
-        # 'var y' means y is Any, even though process returns int.
-        y = "now a string"
+        # 'var y' is inferred as int (return type of process).
         """
         self.analyze_code(code)
+        
+        sym_y = self.analyzer.scope_manager.resolve('y')
+        self.assertIsNotNone(sym_y)
+        self.assertEqual(sym_y.type_info.name, 'int')
 
     def test_list_of_lists_inference(self):
         """Test inference for nested lists."""
@@ -99,8 +102,9 @@ class TestSemanticComplex(unittest.TestCase):
         sym = self.analyzer.scope_manager.resolve('l')
         self.assertIsNotNone(sym)
         if sym is None: self.fail()
-        # 'var' declaration sets type to AnyType.
-        self.assertIsInstance(sym.type_info, AnyType)
+        # 'var' declaration sets type to ListType(Any).
+        self.assertIsInstance(sym.type_info, ListType)
+        self.assertIsInstance(sym.type_info.element_type, AnyType)
 
     def test_shadowing_variables(self):
         """Test variable shadowing in nested scopes."""

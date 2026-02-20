@@ -15,14 +15,23 @@ class Type:
             return True
         if isinstance(self, AnyType):
             return True
-        return self.name == other.name
+        # For simple types, name equality is enough if classes match
+        return type(self) == type(other) and self.name == other.name
         
     def __str__(self):
         return self.name
+        
+    def __eq__(self, other):
+        if not isinstance(other, Type):
+            return False
+        return type(self) == type(other) and self.name == other.name
 
 @dataclass
 class PrimitiveType(Type):
     pass
+    
+    def __eq__(self, other):
+        return isinstance(other, PrimitiveType) and self.name == other.name
 
 @dataclass
 class AnyType(Type):
@@ -47,6 +56,9 @@ class ListType(ContainerType):
         if not isinstance(other, ListType): return False
         # Invariant for now: list[int] is NOT list[float]
         return self.element_type.is_assignable_to(other.element_type)
+        
+    def __eq__(self, other):
+        return isinstance(other, ListType) and self.element_type == other.element_type
 
 @dataclass
 class DictType(ContainerType):
@@ -63,6 +75,9 @@ class DictType(ContainerType):
         if not isinstance(other, DictType): return False
         return (self.key_type.is_assignable_to(other.key_type) and 
                 self.value_type.is_assignable_to(other.value_type))
+                
+    def __eq__(self, other):
+        return isinstance(other, DictType) and self.key_type == other.key_type and self.value_type == other.value_type
 
 @dataclass
 class FunctionType(Type):
@@ -73,6 +88,17 @@ class FunctionType(Type):
         super().__init__("function")
         self.param_types = param_types
         self.return_type = return_type
+        
+    def __eq__(self, other):
+        if not isinstance(other, FunctionType): return False
+        if len(self.param_types) != len(other.param_types): return False
+        if self.return_type != other.return_type: return False
+        for t1, t2 in zip(self.param_types, other.param_types):
+            if t1 != t2: return False
+        return True
+        
+    def __repr__(self):
+        return f"Function({self.param_types} -> {self.return_type})"
 
 @dataclass
 class ModuleType(Type):

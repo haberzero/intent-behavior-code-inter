@@ -1,0 +1,3 @@
+
+from math_pkg import add as sum_func
+var result = sum_func(1, 2)

@@ -14,6 +14,8 @@ from utils.semantic.types import (
     get_builtin_type
 )
 
+from utils.semantic.prelude import Prelude
+
 class SemanticAnalyzer:
     """
     Performs semantic analysis and type checking on the AST.
@@ -22,22 +24,13 @@ class SemanticAnalyzer:
         """Register builtin functions."""
         # Use define() to register symbol, ensuring no conflicts with existing types.
         
-        # Helper to safely define
-        def register_builtin(name, func_type):
-            # Check if exists in global scope (it shouldn't if we are fresh)
+        prelude = Prelude()
+        for name, func_type in prelude.get_builtins().items():
+             # Check if exists in global scope (it shouldn't if we are fresh)
             sym = self.scope_manager.global_scope.resolve(name)
             if not sym:
                 sym = self.scope_manager.define(name, SymbolType.FUNCTION)
             sym.type_info = func_type
-
-        # print(...) -> void
-        register_builtin("print", FunctionType([ANY_TYPE], VOID_TYPE))
-        
-        # len(list/str) -> int
-        register_builtin("len", FunctionType([ANY_TYPE], INT_TYPE))
-        
-        # range(int) -> list[int]
-        register_builtin("range", FunctionType([INT_TYPE], ListType(INT_TYPE)))
 
     def __init__(self, issue_tracker: Optional[IssueTracker] = None):
         self.scope_manager = ScopeManager() 
@@ -246,8 +239,13 @@ class SemanticAnalyzer:
                 # Check initial value
                 if node.value:
                     val_type = self.visit(node.value)
-                    if val_type is not None and not val_type.is_assignable_to(declared_type):
-                        self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
+                    if val_type is not None:
+                        # [FIX]: Type Inference for 'var' (AnyType)
+                        # If declared type is Any, try to infer from value.
+                        if isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
+                             symbol.type_info = val_type
+                        elif not val_type.is_assignable_to(declared_type):
+                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
             else:
                 self.error("Invalid assignment target for declaration", node)
         else:
@@ -263,10 +261,14 @@ class SemanticAnalyzer:
                 if node.value:
                     val_type = self.visit(node.value)
                     
-                    # Special case for 'var' (AnyType): AnyType accepts anything.
-                    # If symbol.type_info is IntType, and val is StrType -> Error.
-                    if symbol.type_info and val_type is not None and not val_type.is_assignable_to(symbol.type_info):
-                        self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node)
+                    if symbol.type_info:
+                        # If 'var' was previously inferred as Any (no init), now we can infer?
+                        # Or if it was declared as 'var' and initialized, it has a type now.
+                        # If it is STILL AnyType, we can update it?
+                        if isinstance(symbol.type_info, AnyType) and val_type != VOID_TYPE:
+                             symbol.type_info = val_type
+                        elif val_type is not None and not val_type.is_assignable_to(symbol.type_info):
+                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node)
             else:
                 # Subscript assignment etc.
                 self.visit(target)
@@ -338,6 +340,19 @@ class SemanticAnalyzer:
                      return ModuleType(symbol.exported_scope)
                  return ANY_TYPE # Module without scope?
 
+            # [FIXED]: Lazy Type Resolution for Imported Symbols
+            # If symbol.type_info is missing, but it's an imported symbol (has origin),
+            # we should try to fetch the type from the origin scope NOW.
+            
+            if symbol.type_info is None and symbol.origin_symbol:
+                  # Check if origin has type info now (it might have been analyzed after import)
+                  print(f"DEBUG: Lazy resolving {node.id} from origin {symbol.origin_symbol.name} which has type {symbol.origin_symbol.type_info}")
+                  if symbol.origin_symbol.type_info:
+                      symbol.type_info = symbol.origin_symbol.type_info
+            
+            # if symbol.type_info is None:
+            #     print(f"DEBUG: Symbol {node.id} resolved to None type_info. Origin: {symbol.origin_symbol}")
+            
             return symbol.type_info or ANY_TYPE
         return ANY_TYPE
 
@@ -353,6 +368,11 @@ class SemanticAnalyzer:
              attr_sym = module_scope.resolve(node.attr)
              
              if not attr_sym:
+                 # Try to resolve in exported scope for nested modules?
+                 # If value_type.scope is a package scope, it might have exported modules.
+                 pass
+                 
+             if not attr_sym:
                  self.error(f"Module/Package has no attribute '{node.attr}'", node)
                  return ANY_TYPE
                  
@@ -361,6 +381,12 @@ class SemanticAnalyzer:
                      return ModuleType(attr_sym.exported_scope)
                  return ANY_TYPE
                  
+             # [FIX]: Lazy resolution for attributes too!
+             if attr_sym.type_info is None and attr_sym.origin_symbol:
+                   print(f"DEBUG: Lazy resolving attribute {node.attr} from origin {attr_sym.origin_symbol.name} type {attr_sym.origin_symbol.type_info}")
+                   if attr_sym.origin_symbol.type_info:
+                       attr_sym.type_info = attr_sym.origin_symbol.type_info
+                       
              return attr_sym.type_info or ANY_TYPE
         
         # Fallback for object attributes (not implemented fully)

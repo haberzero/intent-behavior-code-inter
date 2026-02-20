@@ -21,13 +21,14 @@ class Parser:
     IBC-Inter Parser.
     Uses Interleaved Pre-Pass and persistent symbol table architecture.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = ""):
         self.tokens = tokens
         self.current = 0
         self.issue_tracker = issue_tracker or IssueTracker()
         self.rules: Dict[TokenType, ParseRule] = {}
         self.pending_intent: Optional[str] = None
         self.module_cache = module_cache or {}
+        self.package_name = package_name
         
         # Scope Management
         self.scope_manager = ScopeManager()
@@ -93,14 +94,24 @@ class Parser:
         return ParseControlFlowError()
 
     def synchronize(self):
+        """
+        Discard tokens until we find a statement boundary to recover from error.
+        Enhanced to be more robust.
+        """
         self.advance()
         while not self.is_at_end():
             if self.previous().type == TokenType.NEWLINE:
                 return
-
+            
+            # Check keywords that start statements
             if self.peek().type in (TokenType.FUNC, TokenType.VAR, TokenType.FOR,
                                     TokenType.IF, TokenType.WHILE, TokenType.RETURN,
-                                    TokenType.LLM_DEF):
+                                    TokenType.LLM_DEF, TokenType.IMPORT, TokenType.FROM,
+                                    TokenType.BREAK, TokenType.CONTINUE):
+                return
+                
+            # Also sync on DEDENT (end of block)
+            if self.peek().type == TokenType.DEDENT:
                 return
 
             self.advance()
@@ -559,6 +570,7 @@ class Parser:
     def import_statement(self) -> ast.Stmt:
         start_token = self.peek() # will be import or from
         if self.match(TokenType.IMPORT):
+            # ... existing import logic ...
             start_token = self.previous()
             names = self.parse_aliases()
             
@@ -617,11 +629,50 @@ class Parser:
             
         elif self.match(TokenType.FROM):
             start_token = self.previous()
-            module_name = self.parse_dotted_name()
+            
+            # Handle relative imports: from . import x, from ..foo import x
+            level = 0
+            while self.match(TokenType.DOT):
+                level += 1
+                
+            module_name = None
+            if self.check(TokenType.IDENTIFIER):
+                module_name = self.parse_dotted_name()
+                
+            # Resolve relative import to absolute path
+            if level > 0:
+                if not self.package_name:
+                    # Fallback or error if we don't know where we are
+                    # Assuming we are at root if package_name is empty
+                    pass
+                
+                # Logic to resolve:
+                # If current package is 'utils.math' and level is 1 (.), then we look in 'utils.math'
+                # If level is 2 (..), we look in 'utils'
+                
+                # BUT, wait. 'from .' means import from current package.
+                # 'from .foo' means import foo from current package.
+                
+                if self.package_name:
+                    parts = self.package_name.split('.')
+                    if level > len(parts) + 1: # +1 because empty package_name (root) has 0 parts
+                         raise self.error(start_token, "Attempted relative import beyond top-level package")
+                    
+                    # Resolve parent package
+                    # level 1: current package
+                    # level 2: parent
+                    parent_parts = parts[:len(parts) - (level - 1)]
+                    parent_package = ".".join(parent_parts)
+                    
+                    if module_name:
+                        module_name = f"{parent_package}.{module_name}" if parent_package else module_name
+                    else:
+                        module_name = parent_package
+            
             self.consume(TokenType.IMPORT, "Expect 'import'.")
             names = self.parse_aliases()
             
-            module_scope = self.module_cache.get(module_name)
+            module_scope = self.module_cache.get(module_name) if module_name else None
             
             for alias_node in names:
                 name = alias_node.name
@@ -630,25 +681,30 @@ class Parser:
                 # Define in current scope
                 sym_type = SymbolType.VARIABLE
                 exported_scope = None
+                origin_sym = None
                 
                 if module_scope:
                     # Look up in module scope
                     origin_sym = module_scope.resolve(name)
                     if origin_sym:
                         sym_type = origin_sym.type
-                        exported_scope = origin_sym.exported_scope # If importing a submodule/class
-                
+                        exported_scope = origin_sym.exported_scope
+                    else:
+                        # Symbol not found in module
+                        self.error(start_token, f"Cannot import name '{name}' from '{module_name}'")
+                        
                 sym = self.scope_manager.define(asname, sym_type)
                 sym.exported_scope = exported_scope
                 
-                # Copy type_info if available (for PreScanner/Analyzer benefit)
-                if module_scope:
-                    origin_sym = module_scope.resolve(name)
-                    if origin_sym:
-                        sym.type_info = origin_sym.type_info
+                # [FIX]: Store reference to origin!
+                # IMPORTANT: origin_sym might be None if module_scope is None or name not found.
+                sym.origin_symbol = origin_sym 
+                
+                if origin_sym:
+                    sym.type_info = origin_sym.type_info
                 
             self.consume_end_of_statement("Expect newline after import.")
-            return self._loc(ast.ImportFrom(module=module_name, names=names, level=0), start_token)
+            return self._loc(ast.ImportFrom(module=module_name, names=names, level=level), start_token)
         raise self.error(self.peek(), "Expect import statement.")
 
     def parse_aliases(self) -> List[ast.alias]:

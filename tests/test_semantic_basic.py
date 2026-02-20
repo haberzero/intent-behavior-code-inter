@@ -78,13 +78,13 @@ class TestSemanticBasic(unittest.TestCase):
         self.assertSemanticError(code, "Type mismatch")
 
     def test_var_reassignment(self):
-        """Test that 'var' allows type changes (optimistic)."""
+        """Test that 'var' uses type inference and disallows incompatible reassignment."""
         code = """
         var x = 10
         x = "string"
         """
-        # Should NOT raise error
-        self.analyze_code(code)
+        # Should raise error because x is inferred as int
+        self.assertSemanticError(code, "Type mismatch")
 
     def test_unknown_type(self):
         """Test that unknown types are reported as SemanticErrors."""

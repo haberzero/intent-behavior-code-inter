@@ -40,17 +40,17 @@ class TestParserModule(unittest.TestCase):
         """
         mod, parser = self.parse_code(code)
         
-        # Check global scope
-        sym = parser.scope_manager.resolve('utils.math') 
-        # Actually parser registers alias. Default alias for 'import a.b' is 'utils.math'?
-        # In parse_aliases, asname is None.
-        # Parser logic: sym = define(asname or module_name)
-        # So it defines 'utils.math'.
+        # New parser logic: import utils.math creates:
+        # 1. 'utils' (MODULE) in global scope
+        # 2. 'math' (MODULE) in utils.exported_scope
         
-        assert sym is not None
-        if sym is None: self.fail()
-        self.assertEqual(sym.type, SymbolType.MODULE)
-        self.assertEqual(sym.name, 'utils.math')
+        utils_sym = parser.scope_manager.resolve('utils')
+        self.assertIsNotNone(utils_sym)
+        self.assertEqual(utils_sym.type, SymbolType.MODULE)
+        
+        math_sym = utils_sym.exported_scope.resolve('math')
+        self.assertIsNotNone(math_sym)
+        self.assertEqual(math_sym.type, SymbolType.MODULE)
 
     def test_import_as_registers_alias(self):
         """Test 'import m as alias'."""
@@ -100,8 +100,7 @@ class TestParserModule(unittest.TestCase):
         
         # Check if 'math' symbol is linked
         math_sym = parser.scope_manager.resolve('math')
-        assert math_sym is not None
-        if math_sym is None: self.fail()
+        self.assertIsNotNone(math_sym)
         self.assertEqual(math_sym.exported_scope, math_scope)
         
         # 3. Analyze
@@ -125,16 +124,15 @@ class TestParserModule(unittest.TestCase):
         from config import VERSION
         int v = VERSION
         """
+        # Note: we need to pass module_cache to parser
         mod, parser = self.parse_code(code, module_cache=self.module_cache)
         
         # Check symbol in current scope
         sym = parser.scope_manager.resolve('VERSION')
-        assert sym is not None
-        if sym is None: self.fail()
+        self.assertIsNotNone(sym)
         
         # Verify type info was copied from the cached module scope
-        assert sym.type_info is not None
-        if sym.type_info is None: self.fail()
+        self.assertIsNotNone(sym.type_info)
         self.assertEqual(sym.type_info.name, 'int')
 
 if __name__ == '__main__':

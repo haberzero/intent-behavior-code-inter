@@ -1,0 +1,5 @@
+
+from ..math import add
+
+func sub_add(int a, int b) -> int:
+    return add(a, b)

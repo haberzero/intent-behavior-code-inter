@@ -27,6 +27,10 @@ class Scheduler:
         self.ast_cache: Dict[str, Module] = {}   # Path -> AST
         self.scope_cache: Dict[str, ScopeNode] = {} # Module Name -> Scope (for Parser)
         
+        # Build Cache
+        # Map: file_path -> mtime
+        self.build_cache: Dict[str, float] = {}
+
     def compile_project(self, entry_file: str) -> Dict[str, Module]:
         """
         Compiles the project starting from entry_file.
@@ -52,7 +56,18 @@ class Scheduler:
 
         # 3. Compile in Topological Order
         for file_path in compilation_order:
-            self._compile_file(file_path)
+            # Check mtime
+            mod_info = self.modules.get(file_path)
+            if mod_info:
+                last_mtime = self.build_cache.get(file_path, 0.0)
+                if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
+                    # Recompile
+                    # print(f"Compiling {file_path}...")
+                    self._compile_file(file_path)
+                    self.build_cache[file_path] = mod_info.mtime
+                else:
+                    # print(f"Skipping {file_path} (up to date)")
+                    pass
             
         if self.issue_tracker.has_errors():
             raise CompilerError("Compilation failed.")
@@ -74,6 +89,8 @@ class Scheduler:
         base_name = os.path.splitext(rel_path)[0]
         module_name = base_name.replace(os.sep, '.')
         
+        # print(f"DEBUG: Compiling {file_path} as module '{module_name}'")
+        
         # Read source
         source = module_info.content
         
@@ -83,16 +100,20 @@ class Scheduler:
         
         # Parsing
         # Pass the scope_cache (Module Name -> Scope) to Parser
-        parser = Parser(tokens, self.issue_tracker, self.scope_cache)
+        parser = Parser(tokens, self.issue_tracker, self.scope_cache, package_name=module_name)
         try:
             ast_node = parser.parse()
-        except Exception as e:
-            # Parser usually handles its own error reporting to tracker,
-            # but if it raises a control flow error that escaped, catch it.
+        except CompilerError as e:
+            # Parser caught errors and raised
             print(f"Parser failed for {file_path}: {e}")
+            # Do not traceback for expected errors
+            raise e
+        except Exception as e:
+            # Unexpected error
+            print(f"Parser crashed for {file_path}: {e}")
             import traceback
             traceback.print_exc()
-            return
+            raise e
 
         self.ast_cache[file_path] = ast_node
         
@@ -101,8 +122,14 @@ class Scheduler:
         analyzer.analyze(ast_node)
         
         # Register the module's scope for other modules to use
+        # NOTE: We register AFTER analysis so types are populated.
+        # But wait, if we have A -> B, and we compile B first.
+        # Parse(B) -> Analyze(B) -> Register(B).
+        # Parse(A) -> Imports B -> Copies symbols from B (with types).
+        # Should work.
+        
+        # Debugging: Print scope keys
+        # print(f"DEBUG: Registered scope for {module_name}")
+        
         if ast_node.scope:
             self.scope_cache[module_name] = ast_node.scope
-            
-            # Also register under short name if it's top level?
-            # For now, we stick to full dotted name as the canonical key.

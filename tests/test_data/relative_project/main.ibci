@@ -1,0 +1,5 @@
+
+import pkg.subpkg.calc
+
+func main() -> void:
+    pkg.subpkg.calc.sub_add(1, 2)

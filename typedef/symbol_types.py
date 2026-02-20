@@ -16,3 +16,7 @@ class Symbol:
     scope_level: int = 0
     type_info: Optional[Any] = None # Will hold utils.semantic.types.Type instance
     exported_scope: Optional[Any] = None # For MODULE symbols: points to the module's Global ScopeNode
+    
+    # [FIX]: Add reference to origin symbol for imported aliases
+    # This allows SemanticAnalyzer to lazy-resolve type_info if it was missing during import.
+    origin_symbol: Optional['Symbol'] = None 

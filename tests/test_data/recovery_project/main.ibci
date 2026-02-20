@@ -1,0 +1,10 @@
+
+func valid_func() -> void:
+    print("start")
+
+func broken_func() -> void:
+    var x = 
+    print("broken")
+
+func another_valid_func() -> void:
+    print("end")

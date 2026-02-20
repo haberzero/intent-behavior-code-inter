@@ -21,6 +21,7 @@ class ModuleInfo:
     file_path: str
     imports: List[ImportInfo] = field(default_factory=list)
     content: Optional[str] = None # Source code content (cached)
+    mtime: float = 0.0 # Modification time
 
 class DependencyError(Exception):
     """Base class for dependency resolution errors."""

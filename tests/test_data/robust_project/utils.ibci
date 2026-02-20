@@ -1,0 +1,3 @@
+
+func helper() -> str:
+    return "help"
