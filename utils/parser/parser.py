@@ -1,4 +1,4 @@
-from typing import List, Optional, Callable, Dict, TypeVar
+from typing import List, Optional, Callable, Dict, TypeVar, Any
 from typedef.lexer_types import Token, TokenType
 from typedef import parser_types as ast
 from typedef.parser_types import Precedence, ParseRule
@@ -20,12 +20,13 @@ class Parser:
     IBC-Inter 语法分析器 (Parser)
     采用交错式预构建 (Interleaved Pre-Pass) 和持久化符号表树架构。
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None):
         self.tokens = tokens
         self.current = 0
         self.issue_tracker = issue_tracker or IssueTracker()
         self.rules: Dict[TokenType, ParseRule] = {}
         self.pending_intent: Optional[str] = None
+        self.module_cache = module_cache or {}
         
         # Scope Management
         self.scope_manager = ScopeManager()
@@ -257,8 +258,8 @@ class Parser:
             
             # Special case: Generic type declaration like list[int] x
             if next_token.type == TokenType.LBRACKET:
-                 return self._check_generic_lookahead(1)
-                 
+                return self._check_generic_lookahead(1)
+                
             return False
             
         # Case 2: Identifier starting a declaration (Maybe a type we missed or future extension)
@@ -575,15 +576,66 @@ class Parser:
         if self.match(TokenType.IMPORT):
             start_token = self.previous()
             names = self.parse_aliases()
+            
+            # Register imported modules
+            for alias_node in names:
+                module_name = alias_node.name
+                asname = alias_node.asname or module_name
+                
+                # Check module cache for scope
+                # Note: module_name might be dotted 'utils.math'
+                # module_cache keys should match resolved paths or module names?
+                # For now, let's assume keys are module names as imported?
+                # Ideally, dependency scanner resolves this.
+                # Here we just try to find it.
+                
+                # Register symbol
+                sym = self.scope_manager.define(asname, SymbolType.MODULE)
+                if module_name in self.module_cache:
+                    sym.exported_scope = self.module_cache[module_name]
+                
             self.consume_end_of_statement("Expect newline after import.")
             return self._loc(ast.Import(names=names), start_token)
+            
         elif self.match(TokenType.FROM):
             start_token = self.previous()
-            module = self.parse_dotted_name()
+            module_name = self.parse_dotted_name()
             self.consume(TokenType.IMPORT, "Expect 'import'.")
             names = self.parse_aliases()
+            
+            # For 'from mod import a, b', we register a and b as variables/functions?
+            # Or as aliases to the original symbol?
+            # If we have the scope of 'mod', we can look them up.
+            
+            module_scope = self.module_cache.get(module_name)
+            
+            for alias_node in names:
+                name = alias_node.name
+                asname = alias_node.asname or name
+                
+                # Define in current scope
+                # What type? If we can resolve it, use its type. Else VARIABLE (fallback)
+                sym_type = SymbolType.VARIABLE
+                exported_scope = None
+                
+                if module_scope:
+                    # Look up in module scope
+                    origin_sym = module_scope.resolve(name)
+                    if origin_sym:
+                        sym_type = origin_sym.type
+                        exported_scope = origin_sym.exported_scope # If importing a submodule/class
+                
+                sym = self.scope_manager.define(asname, sym_type)
+                sym.exported_scope = exported_scope
+                
+                # Copy type_info if available (for PreScanner/Analyzer benefit)
+                if module_scope:
+                    origin_sym = module_scope.resolve(name)
+                    if origin_sym:
+                        sym.type_info = origin_sym.type_info
+                
             self.consume_end_of_statement("Expect newline after import.")
-            return self._loc(ast.ImportFrom(module=module, names=names, level=0), start_token)
+            return self._loc(ast.ImportFrom(module=module_name, names=names, level=0), start_token)
         raise self.error(self.peek(), "Expect import statement.")
 
     def parse_aliases(self) -> List[ast.alias]:
@@ -689,7 +741,7 @@ class Parser:
         # Look ahead to see if it's a type name followed by RPAREN
         # Lexer produces IDENTIFIER for types now.
         if self.check(TokenType.IDENTIFIER) and self.tokens[self.current + 1].type == TokenType.RPAREN:
-             # Check if identifier is a type in symbol table
+            # Check if identifier is a type in symbol table
             possible_type = self.peek()
             if self.scope_manager.is_type(possible_type.value):
                 type_token = self.advance()

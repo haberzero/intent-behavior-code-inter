@@ -48,16 +48,16 @@ class SemanticAnalyzer:
         
         # Use the global scope attached to Module if available
         if isinstance(node, ast.Module) and node.scope:
-             self.scope_manager.current_scope = node.scope
-             self.scope_manager.global_scope = node.scope
-             
-             # Re-register builtins into this scope because it's new to us
-             # (Parser scope has types, but maybe not functions)
-             self._init_builtins()
+            self.scope_manager.current_scope = node.scope
+            self.scope_manager.global_scope = node.scope
+            
+            # Re-register builtins into this scope because it's new to us
+            # (Parser scope has types, but maybe not functions)
+            self._init_builtins()
         else:
-             # Fallback: Use our own scope manager
-             self._init_builtins()
-             
+            # Fallback: Use our own scope manager
+            self._init_builtins()
+            
         self.visit(node)
         
         if self.errors:
@@ -125,8 +125,8 @@ class SemanticAnalyzer:
         # We need to look up the function symbol in the current scope to update its type
         func_symbol = self.scope_manager.resolve(node.name)
         if not func_symbol:
-             # Define it if missing (e.g. nested functions or global issues)
-             func_symbol = self.scope_manager.define(node.name, SymbolType.FUNCTION)
+            # Define it if missing (e.g. nested functions or global issues)
+            func_symbol = self.scope_manager.define(node.name, SymbolType.FUNCTION)
             
         # 2. Enter function scope (Use the one attached to node)
         if node.scope:
@@ -144,8 +144,8 @@ class SemanticAnalyzer:
             # Update symbol in current scope
             param_symbol = self.scope_manager.resolve(arg.arg)
             if not param_symbol:
-                 # Should exist, but define if not
-                 param_symbol = self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
+                # Should exist, but define if not
+                param_symbol = self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
             
             param_symbol.type_info = arg_type
             param_types.append(arg_type)
@@ -154,11 +154,11 @@ class SemanticAnalyzer:
         # We need to go back to outer scope to find function symbol?
         # Yes.
         if node.scope and node.scope.parent:
-             outer_func_symbol = node.scope.parent.resolve(node.name)
-             if outer_func_symbol:
-                 outer_func_symbol.type_info = FunctionType(param_types, ret_type)
+            outer_func_symbol = node.scope.parent.resolve(node.name)
+            if outer_func_symbol:
+                outer_func_symbol.type_info = FunctionType(param_types, ret_type)
         elif func_symbol: # Global or current scope fallback
-             func_symbol.type_info = FunctionType(param_types, ret_type)
+            func_symbol.type_info = FunctionType(param_types, ret_type)
         
         # 4. Visit body
         # We need to track return type for return checking
@@ -179,14 +179,14 @@ class SemanticAnalyzer:
     def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
         ret_type = STR_TYPE
         if node.returns:
-             ret_type = self._resolve_type(node.returns)
-             
+            ret_type = self._resolve_type(node.returns)
+            
         param_types = []
         
         # Look up function symbol in current scope (before entering new scope)
         func_symbol = self.scope_manager.resolve(node.name)
         if not func_symbol:
-             func_symbol = self.scope_manager.define(node.name, SymbolType.FUNCTION)
+            func_symbol = self.scope_manager.define(node.name, SymbolType.FUNCTION)
         
         # LLM functions also have a scope (for params)
         if node.scope:
@@ -202,17 +202,17 @@ class SemanticAnalyzer:
             
             param_symbol = self.scope_manager.resolve(arg.arg)
             if not param_symbol:
-                 param_symbol = self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
+                param_symbol = self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
             
             param_symbol.type_info = arg_type
             param_types.append(arg_type)
             
         if node.scope and node.scope.parent:
-             outer_func_symbol = node.scope.parent.resolve(node.name)
-             if outer_func_symbol:
-                 outer_func_symbol.type_info = FunctionType(param_types, ret_type)
+            outer_func_symbol = node.scope.parent.resolve(node.name)
+            if outer_func_symbol:
+                outer_func_symbol.type_info = FunctionType(param_types, ret_type)
         elif func_symbol:
-             func_symbol.type_info = FunctionType(param_types, ret_type)
+            func_symbol.type_info = FunctionType(param_types, ret_type)
         
         # LLM body is text, but we should check variable interpolations if possible.
         
@@ -241,7 +241,7 @@ class SemanticAnalyzer:
                 
                 # FALLBACK: If not found, and we are in global scope, define it.
                 if not symbol and self.scope_manager.current_scope.depth == 0:
-                     symbol = self.scope_manager.define(var_name, SymbolType.VARIABLE)
+                    symbol = self.scope_manager.define(var_name, SymbolType.VARIABLE)
                 
                 if not symbol:
                     # Should not happen if Parser is correct and not global
@@ -254,7 +254,7 @@ class SemanticAnalyzer:
                 if node.value:
                     val_type = self.visit(node.value)
                     if not val_type.is_assignable_to(declared_type):
-                         self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
+                        self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
             else:
                 self.error("Invalid assignment target for declaration", node)
         else:
@@ -340,6 +340,44 @@ class SemanticAnalyzer:
                 self.error(f"Variable '{node.id}' is not defined", node)
                 return ANY_TYPE
             return symbol.type_info or ANY_TYPE
+        return ANY_TYPE
+
+    def visit_Attribute(self, node: ast.Attribute) -> Type:
+        # Check if value is a module or object
+        # First visit the value (left side)
+        # Note: visit() usually returns Type.
+        # But for MODULE symbol, we need access to the symbol itself or its scope.
+        # Our Type system doesn't have ModuleType yet.
+        # Let's inspect the symbol directly if node.value is a Name.
+        
+        if isinstance(node.value, ast.Name):
+            # Resolve the name
+            sym = self.scope_manager.resolve(node.value.id)
+            if not sym:
+                self.error(f"Name '{node.value.id}' is not defined", node)
+                return ANY_TYPE
+                
+            if sym.type == SymbolType.MODULE:
+                if not sym.exported_scope:
+                    # Module loaded but scope not available (maybe circular or not parsed)
+                    # Or simple import without cache
+                    # For now, return Any
+                    return ANY_TYPE
+                    
+                # Look up attribute in exported scope
+                attr_sym = sym.exported_scope.resolve(node.attr)
+                if not attr_sym:
+                    self.error(f"Module '{node.value.id}' has no attribute '{node.attr}'", node)
+                    return ANY_TYPE
+                    
+                return attr_sym.type_info or ANY_TYPE
+        
+        # Fallback for object attributes (not implemented fully)
+        value_type = self.visit(node.value)
+        if isinstance(value_type, AnyType):
+            return ANY_TYPE
+            
+        # TODO: Check class attributes if we have classes
         return ANY_TYPE
 
     def visit_BinOp(self, node: ast.BinOp) -> Type:
