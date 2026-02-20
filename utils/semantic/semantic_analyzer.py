@@ -1,11 +1,13 @@
 
 from typing import Dict, Optional, List, Any
+import re
 from typedef import parser_types as ast
 from typedef.symbol_types import Symbol, SymbolType
 from typedef.exception_types import SemanticError
 from typedef.diagnostic_types import Diagnostic, Severity, CompilerError, Location
 from typedef.scope_types import ScopeType, ScopeNode
 from utils.parser.symbol_table import ScopeManager
+from utils.diagnostics.issue_tracker import IssueTracker
 from utils.semantic.types import (
     Type, PrimitiveType, AnyType, ListType, DictType, FunctionType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE,
@@ -37,13 +39,11 @@ class SemanticAnalyzer:
         # range(int) -> list[int]
         register_builtin("range", FunctionType([INT_TYPE], ListType(INT_TYPE)))
 
-    def __init__(self):
+    def __init__(self, issue_tracker: Optional[IssueTracker] = None):
         self.scope_manager = ScopeManager() 
-        self.errors: List[Diagnostic] = []
+        self.issue_tracker = issue_tracker or IssueTracker()
         
     def analyze(self, node: ast.ASTNode):
-        self.errors = [] # Reset errors
-        
         # Use the global scope attached to Module if available
         if isinstance(node, ast.Module) and node.scope:
             self.scope_manager.current_scope = node.scope
@@ -57,8 +57,7 @@ class SemanticAnalyzer:
             
         self.visit(node)
         
-        if self.errors:
-            raise CompilerError(self.errors)
+        self.issue_tracker.check_errors()
 
     def visit(self, node: ast.ASTNode):
         method_name = f'visit_{node.__class__.__name__}'
@@ -83,14 +82,7 @@ class SemanticAnalyzer:
             column=node.col_offset,
             length=1 # Rough estimate
         )
-        diag = Diagnostic(
-            severity=Severity.ERROR,
-            code="SEMANTIC_ERROR",
-            message=message,
-            location=loc
-        )
-        self.errors.append(diag)
-        # We don't raise exception here anymore!
+        self.issue_tracker.report(Severity.ERROR, "SEMANTIC_ERROR", message, location=loc)
 
 
     # --- Scope Management ---
@@ -203,6 +195,21 @@ class SemanticAnalyzer:
             func_symbol.type_info = FunctionType(param_types, ret_type)
         
         # LLM body is text, but we should check variable interpolations if possible.
+        
+        # Check placeholders in sys_prompt and user_prompt
+        param_names = {arg.arg for arg in node.args}
+        
+        # Regex to find $__param__ pattern
+        # Lexer already validated $__param__ format, so we can use simple regex
+        # The value is $__name__
+        placeholder_regex = re.compile(r'\$__(\w+)__')
+        
+        for prompt_node in [node.sys_prompt, node.user_prompt]:
+            if prompt_node and isinstance(prompt_node.value, str):
+                for match in placeholder_regex.finditer(prompt_node.value):
+                    var_name = match.group(1)
+                    if var_name not in param_names:
+                        self.error(f"Parameter '{var_name}' used in LLM prompt is not defined in function arguments", node)
         
         if node.scope and node.scope.parent:
             self.scope_manager.current_scope = node.scope.parent
@@ -398,6 +405,21 @@ class SemanticAnalyzer:
         if is_uniform and first_type is not None:
             return ListType(first_type)
         return ListType(ANY_TYPE)
+
+    def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> Type:
+        # Check if variables referenced in the behavior expression exist in current scope
+        for var_name in node.variables:
+            # var_name comes with $, e.g. "$name"
+            if var_name.startswith('$'):
+                clean_name = var_name[1:]
+            else:
+                clean_name = var_name
+                
+            symbol = self.scope_manager.resolve(clean_name)
+            if not symbol:
+                self.error(f"Variable '{clean_name}' used in behavior expression is not defined", node)
+        
+        return STR_TYPE # Behavior expressions return string content
 
     # --- Helpers ---
 

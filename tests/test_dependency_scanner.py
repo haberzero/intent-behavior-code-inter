@@ -71,10 +71,10 @@ class TestDependencyScanner(unittest.TestCase):
     def test_missing_module(self):
         path_a = self.create_file('A.ibci', 'import Missing')
         
-        with self.assertRaises(ModuleNotFoundError) as cm:
-            self.scanner.scan_dependencies(path_a)
-            
-        self.assertIn("Module 'Missing' not found", str(cm.exception))
+        self.scanner.scan_dependencies(path_a)
+        
+        self.assertTrue(self.scanner.issue_tracker.has_errors())
+        self.assertTrue(any("Module 'Missing' not found" in d.message for d in self.scanner.issue_tracker.diagnostics))
 
     def test_complex_import_patterns(self):
         # Test 'from ... import ...' and comments
@@ -104,6 +104,29 @@ class TestDependencyScanner(unittest.TestCase):
         
         with self.assertRaises(CircularDependencyError):
             graph.get_compilation_order()
+
+    def test_invalid_import_position(self):
+        """Test that imports after non-import statements are flagged."""
+        path_b = self.create_file('B.ibci', '# Module B')
+        path_a = self.create_file('A.ibci', """
+        import B
+        
+        # Some comment
+        func foo() -> void:
+            pass
+            
+        import B # Invalid import here
+        """)
+        
+        self.scanner.scan_dependencies(path_a)
+        
+        self.assertTrue(self.scanner.issue_tracker.has_errors())
+        # Should contain invalid position error
+        self.assertTrue(any("Import statements must be at the top" in d.message for d in self.scanner.issue_tracker.diagnostics))
+        
+        # The first import should still be valid
+        mod_a = self.scanner.modules[os.path.abspath(path_a)]
+        self.assertEqual(len(mod_a.imports), 1)
 
 if __name__ == '__main__':
     unittest.main()

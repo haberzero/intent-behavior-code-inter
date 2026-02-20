@@ -126,5 +126,41 @@ class TestSemanticErrors(unittest.TestCase):
         # If declaration fails, the symbol might not be registered, leading to "Variable 'x' is not defined".
         self.assertSemanticErrors(code, ["Unknown type"])
 
+    def test_behavior_expr_variable_check(self):
+        """Test undefined variable in behavior expression."""
+        code = """
+        str result = ~~analyze $x~~
+        """
+        self.assertSemanticErrors(code, ["Variable 'x' used in behavior expression is not defined"])
+
+    def test_behavior_expr_variable_check_ok(self):
+        """Test defined variable in behavior expression."""
+        code = """
+        int x = 1
+        str result = ~~analyze $x~~
+        """
+        # Should not raise error
+        self.analyze_code(code)
+
+    def test_llm_function_param_check(self):
+        """Test undefined parameter in LLM prompt."""
+        code = """
+        llm analyze(str text):
+        __user__
+        analyze $__undefined__
+        llmend
+        """
+        self.assertSemanticErrors(code, ["Parameter 'undefined' used in LLM prompt is not defined"])
+
+    def test_llm_function_param_check_ok(self):
+        """Test defined parameter in LLM prompt."""
+        code = """
+        llm analyze(str text):
+        __user__
+        analyze $__text__
+        llmend
+        """
+        self.analyze_code(code)
+
 if __name__ == '__main__':
     unittest.main()
