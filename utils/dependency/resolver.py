@@ -20,20 +20,8 @@ class ModuleResolver:
         # Extensions to probe, in order of preference
         self.extensions = ['.ibci', '.py', '']
 
-    def resolve(self, module_name: str, context_file: Optional[str] = None) -> str:
-        """
-        Resolve a module name to an absolute file path.
-        
-        Args:
-            module_name: The module name (e.g., 'pkg.mod' or '..mod').
-            context_file: The absolute path of the file importing the module (required for relative imports).
-            
-        Returns:
-            The absolute path to the resolved file.
-            
-        Raises:
-            ModuleResolveError: If the module cannot be found.
-        """
+    def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
+        """Helper to calculate candidate path without probing."""
         is_relative = module_name.startswith('.')
         
         candidate_path: str
@@ -73,6 +61,24 @@ class ModuleResolver:
             # Absolute import (from root)
             rel_path = module_name.replace('.', os.sep)
             candidate_path = os.path.join(self.root_dir, rel_path)
+            
+        return candidate_path
+
+    def resolve(self, module_name: str, context_file: Optional[str] = None) -> str:
+        """
+        Resolve a module name to an absolute file path.
+        
+        Args:
+            module_name: The module name (e.g., 'pkg.mod' or '..mod').
+            context_file: The absolute path of the file importing the module (required for relative imports).
+            
+        Returns:
+            The absolute path to the resolved file.
+            
+        Raises:
+            ModuleResolveError: If the module cannot be found.
+        """
+        candidate_path = self._get_candidate_path(module_name, context_file)
         
         # Check for file existence
         resolved = self._probe_file(candidate_path)
@@ -80,6 +86,14 @@ class ModuleResolver:
             return resolved
             
         raise ModuleResolveError(module_name, context_file)
+
+    def is_package_dir(self, module_name: str, context_file: Optional[str] = None) -> bool:
+        """Check if the module name resolves to an existing directory (namespace package)."""
+        try:
+            candidate_path = self._get_candidate_path(module_name, context_file)
+            return os.path.isdir(candidate_path)
+        except Exception:
+            return False
 
     def _probe_file(self, base_path: str) -> Optional[str]:
         """Check for file existence with various extensions and package inits."""

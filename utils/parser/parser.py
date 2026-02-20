@@ -217,8 +217,7 @@ class Parser(BaseParser):
                 
             return False
             
-        # Case 2: Identifier starting a declaration (Maybe a type we missed or future extension)
-        # Case 2: Identifier Identifier -> Declaration (User defined types or future extensions)
+        # Case 2: Identifier starting a declaration (User defined types or future extensions)
         if self.check(TokenType.IDENTIFIER):
             # Check next token
             next_token = self.peek(1)
@@ -522,7 +521,7 @@ class Parser(BaseParser):
                 asname = alias_node.asname
                 
                 # Resolve final scope for the full module name
-                final_scope = self._resolve_module_scope(module_name)
+                final_scope = self._resolve_module_scope(module_name, node)
                 
                 if asname:
                     # import a.b.c as d
@@ -544,7 +543,7 @@ class Parser(BaseParser):
                     # We need to ensure current_sym has a scope (to hold 'b')
                     if not curr_sym.exported_scope:
                         # Try to resolve 'a' scope directly
-                        curr_sym.exported_scope = self._resolve_module_scope(top_name)
+                        curr_sym.exported_scope = self._resolve_module_scope(top_name, node)
                         if not curr_sym.exported_scope:
                              # Create dummy scope if not found
                              curr_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
@@ -565,7 +564,7 @@ class Parser(BaseParser):
                             
                         # Ensure sub_sym has scope
                         if not sub_sym.exported_scope:
-                            sub_sym.exported_scope = self._resolve_module_scope(path_prefix)
+                            sub_sym.exported_scope = self._resolve_module_scope(path_prefix, node)
                             if not sub_sym.exported_scope:
                                 sub_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
                                 
@@ -583,8 +582,8 @@ class Parser(BaseParser):
             node = self.parse_from_import()
             
             # Resolve
-            full_module_name = self._resolve_relative_module_name(node.module, node.level)
-            module_scope = self._resolve_module_scope(full_module_name)
+            full_module_name = self._resolve_relative_module_name(node.module, node.level, node)
+            module_scope = self._resolve_module_scope(full_module_name, node)
             
             for alias_node in node.names:
                 name = alias_node.name
@@ -618,7 +617,7 @@ class Parser(BaseParser):
         
         raise self.error(self.peek(), "Expect import statement.")
 
-    def _resolve_relative_module_name(self, module_name: Optional[str], level: int) -> str:
+    def _resolve_relative_module_name(self, module_name: Optional[str], level: int, context_node: Optional[ast.ASTNode] = None) -> str:
         """Resolve relative module name (e.g. .math) to absolute module name."""
         if level == 0:
             return module_name or ""
@@ -629,9 +628,14 @@ class Parser(BaseParser):
             
         parts = self.package_name.split('.')
         if level > len(parts) + 1:
-             # This error reporting might be slightly off location-wise as we don't have the token here easily
-             # But this method is called after parsing, so it's a semantic check basically
-             pass
+             # Error: Attempted relative import beyond top-level package
+             self.issue_tracker.report(
+                 Severity.ERROR, 
+                 DEP_INVALID_IMPORT_POSITION, 
+                 f"Relative import level ({level}) exceeds package depth", 
+                 context_node
+             )
+             return ""
         
         parent_parts = parts[:len(parts) - level]
         parent_package = ".".join(parent_parts)
@@ -641,20 +645,28 @@ class Parser(BaseParser):
         else:
             return parent_package
 
-    def _resolve_module_scope(self, module_name: str) -> Optional[ScopeNode]:
+    def _resolve_module_scope(self, module_name: str, context_node: Optional[ast.ASTNode] = None) -> Optional[ScopeNode]:
         """Resolve module name to ScopeNode using Resolver and Cache."""
         # 1. Try to resolve to path if resolver exists
         resolved_path = None
         if self.module_resolver:
              try:
-                 # We don't have the importer's file path easily accessible in Parser?
-                 # Wait, Scheduler passes package_name, but not file path.
-                 # Actually, for absolute imports, context_file is not needed.
-                 # For relative imports, we already resolved module_name to absolute module name (e.g. utils.math).
-                 # So we can treat it as absolute import.
                  resolved_path = self.module_resolver.resolve(module_name)
-             except Exception:
-                 pass
+             except Exception as e:
+                 # Check if it is a namespace package (directory without init file)
+                 if self.module_resolver.is_package_dir(module_name):
+                     # It's a valid directory, so we treat it as a namespace package.
+                     # We return None here, and the caller (import_statement) will create a dummy scope.
+                     return None
+
+                 # Report error if module resolution fails
+                 self.issue_tracker.report(
+                     Severity.ERROR,
+                     DEP_MODULE_NOT_FOUND,
+                     f"Failed to resolve module '{module_name}': {str(e)}",
+                     context_node
+                 )
+                 return None
         
         # 2. Look up in cache
         # Cache might be keyed by path or name.

@@ -101,17 +101,6 @@ class PreScanner:
             self.advance()
         if self.check(TokenType.COLON):
             self.advance()
-            
-    def _register_class(self):
-        self.advance() # class
-        if self.check(TokenType.IDENTIFIER):
-            name = self.advance().value
-            self.scope_manager.define(name, SymbolType.USER_TYPE)
-        # Skip inheritance until COLON
-        while not self.is_at_end() and not self.check(TokenType.COLON):
-            self.advance()
-        if self.check(TokenType.COLON):
-            self.advance()
 
     def _skip_block(self):
         """
