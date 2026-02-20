@@ -86,9 +86,12 @@ class Scheduler:
         parser = Parser(tokens, self.issue_tracker, self.scope_cache)
         try:
             ast_node = parser.parse()
-        except Exception:
+        except Exception as e:
             # Parser usually handles its own error reporting to tracker,
             # but if it raises a control flow error that escaped, catch it.
+            print(f"Parser failed for {file_path}: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         self.ast_cache[file_path] = ast_node

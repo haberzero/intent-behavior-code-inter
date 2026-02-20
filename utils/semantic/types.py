@@ -74,6 +74,22 @@ class FunctionType(Type):
         self.param_types = param_types
         self.return_type = return_type
 
+@dataclass
+class ModuleType(Type):
+    """
+    Internal type to represent a module/package scope during semantic analysis.
+    Not a user-visible type.
+    """
+    scope: Any # Should be ScopeNode, but avoid circular import
+    
+    def __init__(self, scope: Any):
+        super().__init__("module")
+        self.scope = scope
+    
+    def is_assignable_to(self, other: 'Type') -> bool:
+        # Modules are not first-class values (yet)
+        return False
+
 # Predefined Types instances
 INT_TYPE = PrimitiveType("int")
 FLOAT_TYPE = PrimitiveType("float")

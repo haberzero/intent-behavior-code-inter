@@ -9,7 +9,7 @@ from typedef.scope_types import ScopeType, ScopeNode
 from utils.parser.symbol_table import ScopeManager
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.semantic.types import (
-    Type, PrimitiveType, AnyType, ListType, DictType, FunctionType,
+    Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE,
     get_builtin_type
 )
@@ -332,6 +332,12 @@ class SemanticAnalyzer:
             if not symbol:
                 self.error(f"Variable '{node.id}' is not defined", node)
                 return ANY_TYPE
+            
+            if symbol.type == SymbolType.MODULE:
+                 if symbol.exported_scope:
+                     return ModuleType(symbol.exported_scope)
+                 return ANY_TYPE # Module without scope?
+
             return symbol.type_info or ANY_TYPE
         return ANY_TYPE
 
@@ -339,28 +345,25 @@ class SemanticAnalyzer:
         # Check if value is a module or object
         # First visit the value (left side)
         
-        if isinstance(node.value, ast.Name):
-            # Resolve the name
-            sym = self.scope_manager.resolve(node.value.id)
-            if not sym:
-                self.error(f"Name '{node.value.id}' is not defined", node)
-                return ANY_TYPE
-                
-            if sym.type == SymbolType.MODULE:
-                if not sym.exported_scope:
-                    # Module loaded but scope not available (maybe circular or not parsed)
-                    return ANY_TYPE
-                    
-                # Look up attribute in exported scope
-                attr_sym = sym.exported_scope.resolve(node.attr)
-                if not attr_sym:
-                    self.error(f"Module '{node.value.id}' has no attribute '{node.attr}'", node)
-                    return ANY_TYPE
-                    
-                return attr_sym.type_info or ANY_TYPE
+        value_type = self.visit(node.value)
+        
+        if isinstance(value_type, ModuleType):
+             # It is a module/package
+             module_scope = value_type.scope
+             attr_sym = module_scope.resolve(node.attr)
+             
+             if not attr_sym:
+                 self.error(f"Module/Package has no attribute '{node.attr}'", node)
+                 return ANY_TYPE
+                 
+             if attr_sym.type == SymbolType.MODULE:
+                 if attr_sym.exported_scope:
+                     return ModuleType(attr_sym.exported_scope)
+                 return ANY_TYPE
+                 
+             return attr_sym.type_info or ANY_TYPE
         
         # Fallback for object attributes (not implemented fully)
-        value_type = self.visit(node.value)
         if isinstance(value_type, AnyType):
             return ANY_TYPE
             

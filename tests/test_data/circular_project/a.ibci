@@ -1,0 +1,5 @@
+
+import b
+
+func foo() -> void:
+    b.bar()

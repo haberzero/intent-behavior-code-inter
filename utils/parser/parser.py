@@ -4,6 +4,7 @@ from typedef import parser_types as ast
 from typedef.parser_types import Precedence, ParseRule
 
 from utils.parser.symbol_table import ScopeManager, ScopeType, SymbolType
+from typedef.scope_types import ScopeNode
 from utils.parser.pre_scanner import PreScanner
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import *
@@ -566,11 +567,50 @@ class Parser:
                 module_name = alias_node.name
                 asname = alias_node.asname or module_name
                 
-                # Check module cache for scope
-                # Register symbol
-                sym = self.scope_manager.define(asname, SymbolType.MODULE)
-                if module_name in self.module_cache:
-                    sym.exported_scope = self.module_cache[module_name]
+                # If using explicit alias, bind alias directly to module scope
+                if alias_node.asname:
+                    sym = self.scope_manager.define(asname, SymbolType.MODULE)
+                    if module_name in self.module_cache:
+                        sym.exported_scope = self.module_cache[module_name]
+                else:
+                    # No alias: import a.b.c
+                    # Need to construct chain: a -> b -> c
+                    parts = module_name.split('.')
+                    
+                    # 1. Define top level 'a' in current scope
+                    top_name = parts[0]
+                    curr_sym = self.scope_manager.resolve(top_name)
+                    
+                    if not curr_sym or curr_sym.scope_level != self.scope_manager.current_scope.depth:
+                        curr_sym = self.scope_manager.define(top_name, SymbolType.MODULE)
+                        curr_sym.exported_scope = ScopeNode(ScopeType.GLOBAL) # Represents package scope
+                    
+                    # 2. Iterate down the chain to ensure 'b', 'c' exist
+                    # a -> b -> c
+                    # We need to make sure 'a' contains 'b', 'b' contains 'c'
+                    
+                    # Pointer to current symbol in the chain
+                    parent_sym = curr_sym
+                    
+                    for i in range(1, len(parts)):
+                        part_name = parts[i]
+                        
+                        # Ensure parent has a scope
+                        if not parent_sym.exported_scope:
+                             parent_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
+                             
+                        # Look for child in parent's scope
+                        child_sym = parent_sym.exported_scope.resolve(part_name)
+                        if not child_sym:
+                            child_sym = parent_sym.exported_scope.define(part_name, SymbolType.MODULE)
+                            child_sym.exported_scope = ScopeNode(ScopeType.GLOBAL)
+                            
+                        parent_sym = child_sym
+                        
+                    # 3. Bind the LEAF symbol to the actual module scope
+                    # parent_sym is now the symbol for 'c'
+                    if module_name in self.module_cache:
+                        parent_sym.exported_scope = self.module_cache[module_name]
                 
             self.consume_end_of_statement("Expect newline after import.")
             return self._loc(ast.Import(names=names), start_token)
