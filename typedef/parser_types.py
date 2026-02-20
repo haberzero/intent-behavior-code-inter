@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, Any
 from enum import IntEnum
+from typedef.scope_types import ScopeNode
 
 # --- Precedence & ParseRule ---
 
@@ -37,6 +38,7 @@ class ASTNode:
     end_lineno: int = 0
     end_col_offset: int = 0
     uid: str = field(default_factory=lambda: "")
+    scope: Optional[ScopeNode] = None # Attached ScopeNode from symbol table
 
 @dataclass
 class Stmt(ASTNode):

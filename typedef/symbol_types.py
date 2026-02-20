@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any
 
 class SymbolType(Enum):
     BUILTIN_TYPE = auto()  # int, str, list...
@@ -13,4 +13,4 @@ class Symbol:
     name: str
     type: SymbolType
     scope_level: int = 0
-    # Future: type_info, declaration_node, etc.
+    type_info: Optional[Any] = None # Will hold utils.semantic.types.Type instance

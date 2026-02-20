@@ -11,6 +11,7 @@ from utils.parser.symbol_table import ScopeManager
 from typedef import parser_types as ast
 from typedef.diagnostic_types import CompilerError
 from typedef.lexer_types import TokenType
+from typedef.symbol_types import SymbolType
 
 class TestParserComplex(unittest.TestCase):
     """
@@ -19,11 +20,12 @@ class TestParserComplex(unittest.TestCase):
     1. Advanced Features (Behavior, LLM, Intent Comments)
     2. Data Structures (List, Dict, Generics)
     3. Complex Expressions (Bitwise, Comparison Chains, Casts)
+    4. Scope Management (Parameters, Nested Scopes)
     """
 
     def parse(self, code):
         """Helper to parse code into a module."""
-        lexer = Lexer(code.strip() + "\n")
+        lexer = Lexer(code.strip() + "\n\n") # Add extra newlines for safety
         tokens = lexer.tokenize()
         parser = Parser(tokens)
         try:
@@ -41,6 +43,96 @@ class TestParserComplex(unittest.TestCase):
         elif isinstance(stmt, ast.ExprStmt):
              return stmt.value
         return stmt
+
+    # --- Scope Tests (Merged from test_parser_scope) ---
+
+    def test_function_param_scope_attached(self):
+        """Test that function parameters are registered in the attached function scope."""
+        code = """
+func my_func(int a, int b) -> int:
+    return a + b
+"""
+        mod = self.parse(code)
+        func_def = mod.body[0]
+        assert isinstance(func_def, ast.FunctionDef)
+        
+        # Verify scope is attached
+        self.assertIsNotNone(func_def.scope)
+        scope = func_def.scope
+        if scope is None:
+            self.fail("Scope should not be None")
+        
+        # Verify parameters are in scope
+        self.assertIn('a', scope.symbols)
+        self.assertIn('b', scope.symbols)
+        self.assertEqual(scope.symbols['a'].type, SymbolType.VARIABLE)
+        self.assertEqual(scope.symbols['b'].type, SymbolType.VARIABLE)
+
+    def test_llm_function_param_scope_attached(self):
+        """Test that LLM function parameters are registered in attached scope."""
+        code = """
+llm my_llm(str user_input):
+__sys__
+System
+__user__
+User $__user_input__
+llmend
+"""
+        mod = self.parse(code)
+        llm_def = mod.body[0]
+        assert isinstance(llm_def, ast.LLMFunctionDef)
+        
+        # Verify scope is attached
+        self.assertIsNotNone(llm_def.scope)
+        scope = llm_def.scope
+        if scope is None:
+            self.fail("Scope should not be None")
+        
+        # Verify parameters are in scope
+        self.assertIn('user_input', scope.symbols)
+        self.assertEqual(scope.symbols['user_input'].type, SymbolType.VARIABLE)
+
+    def test_nested_scope_structure(self):
+        """Test nested function scope structure and visibility."""
+        code = """
+func outer():
+    int x = 10
+    func inner(int y):
+        return x + y
+"""
+        mod = self.parse(code)
+        outer_func = mod.body[0]
+        assert isinstance(outer_func, ast.FunctionDef)
+        
+        # Check outer scope
+        outer_scope = outer_func.scope
+        self.assertIsNotNone(outer_scope)
+        if outer_scope is None:
+            self.fail("Outer scope should not be None")
+            
+        self.assertIn('x', outer_scope.symbols)
+        self.assertIn('inner', outer_scope.symbols) # inner function name in outer scope
+        
+        # Check inner scope
+        inner_func = outer_func.body[1] # 0 is assign x
+        assert isinstance(inner_func, ast.FunctionDef)
+        inner_scope = inner_func.scope
+        self.assertIsNotNone(inner_scope)
+        if inner_scope is None:
+            self.fail("Inner scope should not be None")
+        
+        # Verify hierarchy
+        self.assertEqual(inner_scope.parent, outer_scope)
+        
+        # Verify inner symbols
+        self.assertIn('y', inner_scope.symbols)
+        
+        # Verify 'x' is NOT in inner scope directly (it's in parent)
+        self.assertNotIn('x', inner_scope.symbols)
+        # But should be resolvable via parent
+        self.assertEqual(inner_scope.resolve('x'), outer_scope.symbols['x'])
+
+    # --- Existing Complex Tests ---
 
     def test_list_dict_literals(self):
         """Test list and dict literal parsing."""

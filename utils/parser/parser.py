@@ -202,7 +202,10 @@ class Parser:
         # Check for errors at the end
         self.issue_tracker.check_errors()
         
-        return ast.Module(body=statements)
+        module_node = ast.Module(body=statements)
+        # Attach global scope to module
+        module_node.scope = self.scope_manager.global_scope
+        return module_node
 
     def declaration(self) -> Optional[ast.Stmt]:
         # 处理 Intent (@)
@@ -339,8 +342,18 @@ class Parser:
             
         self.consume(TokenType.COLON, "Expect ':' before function body.")
         
+        func_node = self._loc(ast.FunctionDef(name=name, args=args, body=[], returns=returns), start_token)
+        
         # Enter Function Scope
         self.scope_manager.enter_scope(ScopeType.FUNCTION)
+        
+        # Attach scope to function node
+        func_node.scope = self.scope_manager.current_scope
+        
+        # Register parameters in the new scope
+        for arg in args:
+            self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
+            
         # Pre-scan local variables/functions
         self._run_pre_scanner()
         
@@ -349,7 +362,8 @@ class Parser:
         # Exit Function Scope
         self.scope_manager.exit_scope()
         
-        return self._loc(ast.FunctionDef(name=name, args=args, body=body, returns=returns), start_token)
+        func_node.body = body
+        return func_node
 
     def llm_function_declaration(self) -> ast.LLMFunctionDef:
         start_token = self.previous()
@@ -364,15 +378,27 @@ class Parser:
             
         self.consume(TokenType.COLON, "Expect ':' before function body.")
         
+        llm_node = self._loc(ast.LLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, returns=returns), start_token)
+        
         # LLM functions also have a scope (for params)
         self.scope_manager.enter_scope(ScopeType.FUNCTION)
+        
+        # Attach scope to function node
+        llm_node.scope = self.scope_manager.current_scope
+        
+        # Register parameters in the new scope
+        for arg in args:
+            self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
+            
         self._run_pre_scanner() # Though LLM bodies are special, parameters are in scope
         
         sys_prompt, user_prompt = self.llm_body()
+        llm_node.sys_prompt = sys_prompt
+        llm_node.user_prompt = user_prompt
         
         self.scope_manager.exit_scope()
         
-        return self._loc(ast.LLMFunctionDef(name=name, args=args, sys_prompt=sys_prompt, user_prompt=user_prompt, returns=returns), start_token)
+        return llm_node
 
     def parameters(self) -> List[ast.arg]:
         params = []
