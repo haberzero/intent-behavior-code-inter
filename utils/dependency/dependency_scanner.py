@@ -92,7 +92,7 @@ class DependencyScanner:
         Resolves a module name (e.g., 'utils.math') to an absolute file path.
         Rules:
         1. Relative imports (future): currently assumes absolute from root.
-        2. Tries appending '.ibc' (or whatever extension, let's assume no extension in import).
+        2. Tries appending '.ibci' (or whatever extension, let's assume no extension in import).
         3. Checks file existence.
         """
         # Convert dots to slashes
@@ -101,9 +101,9 @@ class DependencyScanner:
         # Strategy 1: Look in project root
         candidate = os.path.join(self.root_dir, rel_path)
         
-        # Check for file (e.g. utils/math.ibc or utils/math.py if we support that)
-        # Assuming our source extension is .ibc (or empty for now, based on tests)
-        # Let's assume .ibc for now, or check exact match if provided
+        # Check for file (e.g. utils/math.ibci or utils/math.py if we support that)
+        # Assuming our source extension is .ibci (or empty for now, based on tests)
+        # Let's assume .ibci for now, or check exact match if provided
         
         # Priority:
         # 1. exact match (if has extension)
