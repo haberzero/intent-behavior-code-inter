@@ -3,7 +3,7 @@ import unittest
 import os
 import tempfile
 import shutil
-from utils.dependency.scanner import DependencyScanner
+from utils.dependency.dependency_scanner import DependencyScanner
 from utils.dependency.graph import DependencyGraph
 from typedef.dependency_types import CircularDependencyError, ModuleNotFoundError
 
