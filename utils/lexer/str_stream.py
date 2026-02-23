@@ -1,7 +1,7 @@
 from typing import List, Optional
 from typedef.lexer_types import TokenType, Token
 
-class Scanner:
+class StrStream:
     """提供字符流操作，包括位置维护、前瞻和匹配。"""
     def __init__(self, source_code: str):
         self.source = source_code

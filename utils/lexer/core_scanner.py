@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional
 from typedef.lexer_types import Token, TokenType, SubState
-from utils.lexer.scanner import Scanner
+from utils.lexer.str_stream import StrStream
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import *
 from typedef.diagnostic_types import Severity
@@ -10,7 +10,7 @@ class CoreTokenScanner:
     Handles scanning of standard code tokens (identifiers, keywords, symbols, strings, behavior blocks).
     Maintains state for string parsing, parenthesis levels, and line continuation.
     """
-    def __init__(self, scanner: Scanner, issue_tracker: IssueTracker):
+    def __init__(self, scanner: StrStream, issue_tracker: IssueTracker):
         self.scanner = scanner
         self.issue_tracker = issue_tracker
         

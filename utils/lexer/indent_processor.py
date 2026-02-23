@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple
 from typedef.lexer_types import Token, TokenType
-from utils.lexer.scanner import Scanner
+from utils.lexer.str_stream import StrStream
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import PAR_INDENTATION_ERROR
 from typedef.diagnostic_types import Severity
@@ -10,7 +10,7 @@ class IndentProcessor:
     Handles indentation processing for IBC-Inter Lexer.
     Maintains the indentation stack and generates INDENT/DEDENT tokens.
     """
-    def __init__(self, scanner: Scanner, issue_tracker: IssueTracker):
+    def __init__(self, scanner: StrStream, issue_tracker: IssueTracker):
         self.scanner = scanner
         self.issue_tracker = issue_tracker
         self.indent_stack: List[int] = [0]

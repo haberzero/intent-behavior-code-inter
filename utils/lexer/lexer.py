@@ -1,6 +1,6 @@
 from typing import List, Optional
 from typedef.lexer_types import TokenType, Token, LexerMode, SubState
-from .scanner import Scanner
+from .str_stream import StrStream
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.diagnostics.codes import *
 from typedef.diagnostic_types import Severity
@@ -21,7 +21,7 @@ class Lexer:
     - LLMScanner: Handles LLM block tokenization.
     """
     def __init__(self, source_code: str, issue_tracker: Optional[IssueTracker] = None):
-        self.scanner = Scanner(source_code)
+        self.scanner = StrStream(source_code)
         self.tokens: List[Token] = []
         self.issue_tracker = issue_tracker or IssueTracker(source_code)
         

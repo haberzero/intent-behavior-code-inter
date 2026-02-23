@@ -1,13 +1,13 @@
 from typing import List, Tuple
 from typedef.lexer_types import Token, TokenType
-from utils.lexer.scanner import Scanner
+from utils.lexer.str_stream import StrStream
 
 class LLMScanner:
     """
     Handles token scanning within an LLM block (between 'llm ...:' and 'llmend').
     Parses prompt keywords (__sys__, __user__), raw text, and parameter placeholders.
     """
-    def __init__(self, scanner: Scanner):
+    def __init__(self, scanner: StrStream):
         self.scanner = scanner
 
     def scan_chunk(self) -> Tuple[List[Token], bool]:
