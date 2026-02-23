@@ -1,132 +1,110 @@
-
 import unittest
-import os
-import tempfile
-import shutil
+from typing import List
+from typedef.dependency_types import ImportInfo, ImportType
+from typedef.lexer_types import Token, TokenType
 from utils.dependency.dependency_scanner import DependencyScanner
-from utils.dependency.graph import DependencyGraph
-from typedef.dependency_types import CircularDependencyError, ModuleNotFoundError
+from utils.diagnostics.issue_tracker import IssueTracker
 
 class TestDependencyScanner(unittest.TestCase):
+
     def setUp(self):
-        self.test_dir = os.path.realpath(tempfile.mkdtemp())
-        self.scanner = DependencyScanner(self.test_dir)
+        self.issue_tracker = IssueTracker()
+        # DependencyScanner is now instantiated per tokens
+        pass
 
-    def tearDown(self):
-        shutil.rmtree(self.test_dir)
+    def _create_token(self, type: TokenType, value: str = "") -> Token:
+        return Token(type, value, 1, 1)
 
-    def create_file(self, rel_path, content):
-        # Normalize path separators for current OS
-        rel_path = rel_path.replace('/', os.sep)
-        path = os.path.join(self.test_dir, rel_path)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return path
+    def _scan(self, tokens: List[Token]) -> List[ImportInfo]:
+        scanner = DependencyScanner(tokens, self.issue_tracker)
+        return scanner.scan()
 
     def test_simple_import(self):
-        # A imports B
-        path_b = self.create_file('B.ibci', '# Module B')
-        path_a = self.create_file('A.ibci', 'import B')
+        # import math
+        tokens = [
+            self._create_token(TokenType.IMPORT, "import"),
+            self._create_token(TokenType.IDENTIFIER, "math"),
+            self._create_token(TokenType.NEWLINE, "\n"),
+            self._create_token(TokenType.EOF)
+        ]
         
-        modules = self.scanner.scan_dependencies(path_a)
+        imports = self._scan(tokens)
         
-        self.assertIn(path_a, modules)
-        self.assertIn(path_b, modules)
-        
-        mod_a = modules[path_a]
-        self.assertEqual(len(mod_a.imports), 1)
-        self.assertEqual(mod_a.imports[0].module_name, 'B')
-        self.assertEqual(mod_a.imports[0].file_path, path_b)
+        self.assertEqual(len(imports), 1)
+        self.assertEqual(imports[0].module_name, "math")
+        self.assertEqual(imports[0].import_type, ImportType.IMPORT)
 
-    def test_circular_dependency(self):
-        # A imports B, B imports A
-        path_a = self.create_file('A.ibci', 'import B')
-        path_b = self.create_file('B.ibci', 'import A')
+    def test_multiple_imports(self):
+        # import os, sys
+        tokens = [
+            self._create_token(TokenType.IMPORT, "import"),
+            self._create_token(TokenType.IDENTIFIER, "os"),
+            self._create_token(TokenType.COMMA, ","),
+            self._create_token(TokenType.IDENTIFIER, "sys"),
+            self._create_token(TokenType.NEWLINE, "\n"),
+            self._create_token(TokenType.EOF)
+        ]
         
-        modules = self.scanner.scan_dependencies(path_a)
-        graph = DependencyGraph(modules)
+        imports = self._scan(tokens)
         
-        with self.assertRaises(CircularDependencyError) as cm:
-            graph.get_compilation_order()
-            
-        self.assertTrue("Circular dependency detected" in str(cm.exception))
-        # Cycle should be A -> B -> A or similar
-        self.assertTrue("A.ibci" in str(cm.exception))
-        self.assertTrue("B.ibci" in str(cm.exception))
+        self.assertEqual(len(imports), 2)
+        self.assertEqual(imports[0].module_name, "os")
+        self.assertEqual(imports[1].module_name, "sys")
 
-    def test_transitive_dependency(self):
-        # A -> B -> C
-        path_c = self.create_file('C.ibci', '# Module C')
-        path_b = self.create_file('B.ibci', 'import C')
-        path_a = self.create_file('A.ibci', 'import B')
+    def test_from_import(self):
+        # from utils import math
+        tokens = [
+            self._create_token(TokenType.FROM, "from"),
+            self._create_token(TokenType.IDENTIFIER, "utils"),
+            self._create_token(TokenType.IMPORT, "import"),
+            self._create_token(TokenType.IDENTIFIER, "math"),
+            self._create_token(TokenType.NEWLINE, "\n"),
+            self._create_token(TokenType.EOF)
+        ]
         
-        modules = self.scanner.scan_dependencies(path_a)
-        graph = DependencyGraph(modules)
-        order = graph.get_compilation_order()
+        imports = self._scan(tokens)
         
-        # Order should be [C, B, A]
-        self.assertEqual(order, [path_c, path_b, path_a])
+        self.assertEqual(len(imports), 1)
+        self.assertEqual(imports[0].module_name, "utils")
+        self.assertEqual(imports[0].import_type, ImportType.FROM_IMPORT)
 
-    def test_missing_module(self):
-        path_a = self.create_file('A.ibci', 'import Missing')
+    def test_relative_import(self):
+        # from .utils import math
+        tokens = [
+            self._create_token(TokenType.FROM, "from"),
+            self._create_token(TokenType.DOT, "."),
+            self._create_token(TokenType.IDENTIFIER, "utils"),
+            self._create_token(TokenType.IMPORT, "import"),
+            self._create_token(TokenType.IDENTIFIER, "math"),
+            self._create_token(TokenType.NEWLINE, "\n"),
+            self._create_token(TokenType.EOF)
+        ]
         
-        self.scanner.scan_dependencies(path_a)
+        imports = self._scan(tokens)
         
-        self.assertTrue(self.scanner.issue_tracker.has_errors())
-        self.assertTrue(any("Module 'Missing' not found" in d.message for d in self.scanner.issue_tracker.diagnostics))
+        self.assertEqual(len(imports), 1)
+        self.assertEqual(imports[0].module_name, ".utils")
+        self.assertEqual(imports[0].import_type, ImportType.FROM_IMPORT)
 
-    def test_complex_import_patterns(self):
-        # Test 'from ... import ...' and comments
-        path_utils = self.create_file('utils/math.ibci', '# Math utils')
-        path_main = self.create_file('main.ibci', """
-        # This is a comment
-        import utils.math
-        from utils.math import sqrt
-        """)
+    def test_ignore_non_imports(self):
+        # x = 1
+        # import math
         
-        modules = self.scanner.scan_dependencies(path_main)
-        mod_main = modules[path_main]
+        tokens = [
+            self._create_token(TokenType.IDENTIFIER, "x"),
+            self._create_token(TokenType.ASSIGN, "="),
+            self._create_token(TokenType.NUMBER, "1"),
+            self._create_token(TokenType.NEWLINE, "\n"),
+            self._create_token(TokenType.IMPORT, "import"), # Should be skipped/flagged as error
+            self._create_token(TokenType.IDENTIFIER, "math"),
+            self._create_token(TokenType.NEWLINE, "\n"),
+            self._create_token(TokenType.EOF)
+        ]
         
-        self.assertEqual(len(mod_main.imports), 2)
-        self.assertEqual(mod_main.imports[0].module_name, 'utils.math')
-        self.assertEqual(mod_main.imports[1].module_name, 'utils.math')
+        imports = self._scan(tokens)
         
-        # Check resolution
-        self.assertEqual(mod_main.imports[0].file_path, path_utils)
-
-    def test_self_import_cycle(self):
-        # A imports A
-        path_a = self.create_file('A.ibci', 'import A')
-        
-        modules = self.scanner.scan_dependencies(path_a)
-        graph = DependencyGraph(modules)
-        
-        with self.assertRaises(CircularDependencyError):
-            graph.get_compilation_order()
-
-    def test_invalid_import_position(self):
-        """Test that imports after non-import statements are flagged."""
-        path_b = self.create_file('B.ibci', '# Module B')
-        path_a = self.create_file('A.ibci', """
-        import B
-        
-        # Some comment
-        func foo() -> void:
-            pass
-            
-        import B # Invalid import here
-        """)
-        
-        self.scanner.scan_dependencies(path_a)
-        
-        self.assertTrue(self.scanner.issue_tracker.has_errors())
-        # Should contain invalid position error
-        self.assertTrue(any("Import statements must be at the top" in d.message for d in self.scanner.issue_tracker.diagnostics))
-        
-        # The first import should still be valid
-        mod_a = self.scanner.modules[os.path.realpath(path_a)]
-        self.assertEqual(len(mod_a.imports), 1)
+        self.assertEqual(len(imports), 0)
+        self.assertTrue(self.issue_tracker.has_errors()) # DEP_INVALID_IMPORT_POSITION
 
 if __name__ == '__main__':
     unittest.main()

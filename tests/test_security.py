@@ -2,14 +2,14 @@
 import unittest
 import os
 import sys
-from unittest.mock import MagicMock
 
 # Add project root to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.dependency.resolver import ModuleResolver, ModuleResolveError
-from utils.dependency.dependency_scanner import DependencyScanner
+from utils.scheduler import Scheduler
 from utils.diagnostics.issue_tracker import IssueTracker
+from typedef.diagnostic_types import Severity
 
 class TestSecurity(unittest.TestCase):
     def setUp(self):
@@ -19,42 +19,39 @@ class TestSecurity(unittest.TestCase):
             os.makedirs(self.root_dir)
             
         self.resolver = ModuleResolver(self.root_dir)
-        self.scanner = DependencyScanner(self.root_dir, IssueTracker())
+        self.scheduler = Scheduler(self.root_dir)
 
     def test_path_traversal_absolute(self):
         """Test preventing path traversal using absolute import simulation."""
-        # Try to resolve a module that would map to outside root
-        # e.g. "..\outside" -> invalid in module name usually, but if resolver allows ".."
-        # Our resolver splits by ".", so ".." becomes empty string if not careful?
-        # ModuleResolver handles leading dots for relative.
+        # This tests ModuleResolver directly
         
-        # Test 1: Relative import attempting to go up too far
         context_file = os.path.join(self.root_dir, 'main.ibci')
         
-        # module_name = "..outside" (level 2)
-        # base_dir = parent of main.ibci (root_dir) -> parent of root_dir
-        # Should raise ModuleResolveError
+        # module_name = "..outside" (level 2 relative import)
+        # Attempt to go up past root
         
         with self.assertRaises(ModuleResolveError) as cm:
             self.resolver.resolve('..outside', context_file)
         
         self.assertIn("Security Error", str(cm.exception))
 
-    def test_path_traversal_scanner(self):
-        """Test DependencyScanner rejects files outside root."""
-        # Create a dummy file outside root
+    def test_path_traversal_scheduler(self):
+        """Test Scheduler rejects files outside root."""
+        # Create a dummy file path outside root (doesn't need to exist)
         outside_dir = os.path.abspath(os.path.join(self.root_dir, '..'))
         outside_file = os.path.join(outside_dir, 'secret.ibci')
         
-        # We don't actually need the file to exist for the security check to fail first
-        # But scan_file checks security before existence
+        # Calling compile_project with outside file should fail
+        # It raises CompilerError if dependency scanning fails
         
-        result = self.scanner.scan_file(outside_file)
-        self.assertIsNone(result)
-        
+        try:
+            self.scheduler.compile_project(outside_file)
+        except Exception:
+            pass # Expected to fail
+            
         # Check diagnostics
-        errors = [d for d in self.scanner.issue_tracker.diagnostics if "Security Error" in d.message]
-        self.assertTrue(len(errors) > 0)
+        errors = [d for d in self.scheduler.issue_tracker.diagnostics if "Security Error" in d.message]
+        self.assertTrue(len(errors) > 0, "Expected Security Error in diagnostics")
 
     def test_valid_nested_file(self):
         """Test valid nested file access is allowed."""
@@ -63,13 +60,19 @@ class TestSecurity(unittest.TestCase):
             os.makedirs(nested_dir)
         nested_file = os.path.join(nested_dir, 'mod.ibci')
         
-        # Create file so scan_file succeeds reading
+        # Create file so it can be read
         with open(nested_file, 'w') as f:
             f.write("var x = 1")
             
-        result = self.scanner.scan_file(nested_file)
-        self.assertIsNotNone(result)
-        self.assertEqual(result.file_path, nested_file)
+        # Should succeed without security error
+        try:
+            self.scheduler.compile_project(nested_file)
+        except Exception:
+            # Might fail due to other reasons (parsing etc), but not security
+            pass
+            
+        security_errors = [d for d in self.scheduler.issue_tracker.diagnostics if "Security Error" in d.message]
+        self.assertEqual(len(security_errors), 0, f"Unexpected security errors: {security_errors}")
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,21 +1,25 @@
 import os
 from typing import Dict, List, Optional
 from typedef.dependency_types import (
-    ImportInfo, ModuleInfo, ImportType, ModuleNotFoundError
+    ImportInfo, ModuleInfo, ImportType
 )
 from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.diagnostic_types import Severity, Location
-from utils.diagnostics.codes import DEP_FILE_NOT_FOUND, DEP_MODULE_NOT_FOUND, DEP_INVALID_IMPORT_POSITION
-from utils.lexer.lexer import Lexer
+from utils.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
 from typedef.lexer_types import TokenType, Token
 from utils.parser.base_parser import BaseParser, ParseControlFlowError
-from utils.dependency.resolver import ModuleResolver, ModuleResolveError
 
-class ImportScanner(BaseParser):
+class DependencyScanner(BaseParser):
     """
-    Helper class to scan tokens for import statements using shared parsing logic.
+    Stateless scanner that extracts imports from a token stream.
+    Inherits from BaseParser to reuse parsing logic.
+    Intended to be instantiated per-file.
     """
-    def scan(self, file_path: str) -> List[ImportInfo]:
+    
+    def __init__(self, tokens: List[Token], issue_tracker: IssueTracker):
+        super().__init__(tokens, issue_tracker)
+        
+    def scan(self, file_path: str = "<unknown>") -> List[ImportInfo]:
         imports = []
         imports_allowed = True
         
@@ -38,8 +42,6 @@ class ImportScanner(BaseParser):
                     continue
                     
                 try:
-                    # BaseParser.parse_import assumes 'import' was consumed (previous token)
-                    # We consumed it with match(IMPORT)
                     node = self.parse_import()
                     
                     for alias in node.names:
@@ -97,108 +99,3 @@ class ImportScanner(BaseParser):
             "Import statements must be at the top of the file", 
             loc
         )
-
-class DependencyScanner:
-    """
-    Scans source files for import statements and resolves file paths.
-    """
-    
-    def __init__(self, root_dir: str, issue_tracker: Optional[IssueTracker] = None):
-        self.root_dir = os.path.realpath(root_dir)
-        self.issue_tracker = issue_tracker or IssueTracker()
-        self.modules: Dict[str, ModuleInfo] = {} # Key: Absolute file path
-        self.resolver = ModuleResolver(self.root_dir)
-        
-    def scan_file(self, file_path: str) -> Optional[ModuleInfo]:
-        """
-        Scans a single file for imports using ImportScanner.
-        """
-        # Resolve symlinks
-        abs_path = os.path.realpath(file_path)
-        
-        # Security Check: Ensure file is within root_dir
-        try:
-            abs_root = self.root_dir # Already realpath
-            if os.path.commonpath([abs_root, abs_path]) != abs_root:
-                self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file outside root: {file_path} (resolves to {abs_path})")
-                return None
-        except ValueError:
-             self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"Security Error: Access denied for file on different drive: {file_path}")
-             return None
-
-        if abs_path in self.modules:
-            return self.modules[abs_path]
-            
-        try:
-            with open(abs_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except FileNotFoundError:
-            self.issue_tracker.report(Severity.ERROR, DEP_FILE_NOT_FOUND, f"File not found: {file_path}")
-            return None
-            
-        # Get mtime
-        try:
-            mtime = os.path.getmtime(abs_path)
-        except OSError:
-            mtime = 0.0
-            
-        # Lexing
-        # We use a temporary IssueTracker for Lexing to avoid polluting the global one with syntax errors
-        # unless we want to report them? 
-        # Usually Dependency Scan should be tolerant or report errors.
-        # But here we pass self.issue_tracker to ImportScanner, so syntax errors in imports are reported.
-        # For Lexer, if it fails, it might be better to report.
-        
-        lexer_tracker = self.issue_tracker # Use same tracker? Or a temp one?
-        # If we use global tracker, lexer errors (like unterminated string) will block compilation.
-        # This is correct.
-        
-        lexer = Lexer(content, lexer_tracker)
-        try:
-            tokens = lexer.tokenize()
-        except Exception:
-            # Lexer might raise CompilerError if issue_tracker has errors
-            # Or we can catch it.
-            return None
-        
-        # Scanning
-        scanner = ImportScanner(tokens, self.issue_tracker)
-        imports = scanner.scan(abs_path)
-        
-        mod_info = ModuleInfo(file_path=abs_path, imports=imports, content=content, mtime=mtime)
-        self.modules[abs_path] = mod_info
-        return mod_info
-
-    def scan_dependencies(self, entry_file: str) -> Dict[str, ModuleInfo]:
-        """
-        Recursively scans all dependencies starting from entry_file.
-        Returns a map of all scanned modules.
-        """
-        entry_file = os.path.abspath(entry_file)
-        visited = set()
-        queue = [entry_file]
-        
-        while queue:
-            current_path = queue.pop(0)
-            if current_path in visited:
-                continue
-            
-            visited.add(current_path)
-            
-            mod_info = self.scan_file(current_path)
-            if mod_info is None:
-                continue
-                
-            for imp in mod_info.imports:
-                try:
-                    resolved_path = self.resolver.resolve(imp.module_name, current_path)
-                    imp.file_path = resolved_path
-                    if resolved_path not in visited and resolved_path not in queue:
-                        queue.append(resolved_path)
-                except ModuleResolveError:
-                    # Map ResolveError to existing ModuleNotFoundError
-                    # Or report directly
-                    loc = Location(file_path=current_path, line=imp.lineno, column=0)
-                    self.issue_tracker.report(Severity.ERROR, DEP_MODULE_NOT_FOUND, f"Module '{imp.module_name}' not found", loc)
-                    
-        return self.modules
