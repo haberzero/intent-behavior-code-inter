@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Any
 from typedef.dependency_types import ModuleInfo, ImportInfo
 from typedef.parser_types import Module
 from typedef.scope_types import ScopeNode
-from utils.dependency.dependency_scanner import DependencyScanner
+from utils.parser.scanners.import_scanner import ImportScanner
 from utils.dependency.graph import DependencyGraph
 from utils.lexer.lexer import Lexer
 from typedef.lexer_types import Token
@@ -11,7 +11,7 @@ from utils.parser.parser import Parser
 from utils.semantic.semantic_analyzer import SemanticAnalyzer
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.source.source_manager import SourceManager
-from utils.dependency.resolver import ModuleResolver
+from utils.parser.resolver.resolver import ModuleResolver
 from typedef.diagnostic_types import Severity, CompilerError
 
 class Scheduler:
@@ -130,10 +130,8 @@ class Scheduler:
                 # Lexer error reported to issue_tracker
                 continue
                 
-            # 2. Scan Imports using DependencyScanner (Token based)
-            # DependencyScanner is now stateless, but instantiated per file
-            # because it inherits BaseParser which is stateful.
-            scanner = DependencyScanner(tokens, self.issue_tracker)
+            # 2. Scan Imports using ImportScanner (Token based)
+            scanner = ImportScanner(tokens, self.issue_tracker)
             imports = scanner.scan(current_path)
             
             # Create ModuleInfo

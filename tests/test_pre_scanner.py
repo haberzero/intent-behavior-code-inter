@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
-from utils.parser.pre_scanner import PreScanner
+from utils.parser.scanners.pre_scanner import PreScanner
 from utils.parser.symbol_table import ScopeManager, SymbolType
 
 class TestPreScanner(unittest.TestCase):

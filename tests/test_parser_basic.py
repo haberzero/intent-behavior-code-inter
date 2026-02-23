@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.parser.symbol_table import ScopeManager
-from utils.parser.pre_scanner import PreScanner
+from utils.parser.scanners.pre_scanner import PreScanner
 from typedef import parser_types as ast
 from typedef.lexer_types import TokenType
 
