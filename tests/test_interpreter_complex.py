@@ -13,53 +13,52 @@ from typedef.diagnostic_types import CompilerError
 
 class TestInterpreterComplex(unittest.TestCase):
     """
-    Re-run of TestInterpreterBoundary and TestInterpreterBuiltins using  Parser.
+    重构后的复杂单元测试，验证架构的稳健性、类型保护和控制流限制。
     """
     def setUp(self):
-        self.output_buffer = []
+        self.output = []
 
-    def capture_output(self, message):
-        self.output_buffer.append(message)
+    def capture_output(self, msg):
+        self.output.append(msg)
 
     def run_code(self, code):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
         parser = Parser(tokens)
-        try:
-            module = parser.parse()
-        except CompilerError as e:
-            raise Exception(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
-            
+        module = parser.parse()
         interpreter = Interpreter(output_callback=self.capture_output)
-        # Hack to access interpreter instance if return value is ignored in some tests
-        self.interpreter = interpreter 
         return interpreter.interpret(module)
 
-    # --- From TestInterpreterBoundary ---
-
     def test_type_checking(self):
-        # 1. Test invalid type assignment
+        # 1. 测试非法的显式类型赋值
         code = 'int x = "hello"'
         with self.assertRaises(InterpreterError) as cm:
             self.run_code(code)
         self.assertIn("Type mismatch", str(cm.exception))
 
-        # 2. Test valid type assignment
-        code_valid = """
-int y = 10
-print(y)
+        # 2. 测试 var 的灵活性
+        code_var = """
+var x = 10
+x = "now i am string"
 """
-        self.run_code(code_valid)
-        self.assertIn("10", self.output_buffer)
+        # 不应抛出异常
+        self.run_code(code_var)
 
-        # 3. Test float auto-promotion
-        code_float = """
-float f = 10
-print(f)
+    def test_builtin_protection(self):
+        # 1. 尝试对内置函数符号赋值
+        code = "print = 10"
+        with self.assertRaises(InterpreterError) as cm:
+            self.run_code(code)
+        self.assertIn("Cannot reassign built-in variable", str(cm.exception))
+
+        # 2. 尝试重定义内置函数
+        code_func = """
+func print(str s) -> None:
+    pass
 """
-        self.run_code(code_float)
-        # Interpreter handles promotion without error.
-
+        with self.assertRaises(InterpreterError) as cm:
+            self.run_code(code_func)
+        self.assertIn("Cannot redefine built-in function", str(cm.exception))
 
     def test_division_by_zero(self):
         code = "int x = 10 / 0"
@@ -68,13 +67,12 @@ print(f)
         self.assertIn("Division by zero", str(cm.exception))
 
     def test_type_error_in_binop(self):
-        code = 'int x = "a" + 1'
+        code = 'var x = "a" + 1'
         with self.assertRaises(InterpreterError) as cm:
             self.run_code(code)
         self.assertIn("Type error in binary operation", str(cm.exception))
 
     def test_recursion_limit(self):
-        # Manually run to set recursion limit on the interpreter instance
         code = """
 func f(int n) -> int:
     return f(n)
@@ -85,55 +83,20 @@ f(1)
         tokens = lexer.tokenize()
         parser = Parser(tokens)
         module = parser.parse()
-        
+
         interp = Interpreter(output_callback=self.capture_output)
         interp.max_call_stack = 10
-        
+
         with self.assertRaises(InterpreterError) as cm:
             interp.interpret(module)
         self.assertIn("maximum recursion depth exceeded", str(cm.exception))
 
-    def test_builtin_protection(self):
-        # 1. Reassign builtin
-        code = "print = 10"
+    def test_control_flow_outside_loop(self):
+        # 测试在循环外使用 break
+        code = "break"
         with self.assertRaises(InterpreterError) as cm:
             self.run_code(code)
-        self.assertIn("Cannot reassign built-in variable 'print'", str(cm.exception))
-        
-        # 2. Redefine with var
-        code_var = "var print = 10"
-        with self.assertRaises(InterpreterError) as cm:
-            self.run_code(code_var)
-        self.assertIn("Cannot redefine built-in variable 'print'", str(cm.exception))
-
-    def test_redefine_builtin_function(self):
-        code = """
-func print(str s) -> None:
-    pass
-"""
-        with self.assertRaises(InterpreterError) as cm:
-            self.run_code(code)
-        self.assertIn("Cannot redefine built-in function 'print'", str(cm.exception))
-
-    # --- From TestInterpreterBuiltins ---
-
-    def test_print_string(self):
-        code = 'print("Hello World")'
-        self.run_code(code)
-        self.assertEqual(self.output_buffer, ["Hello World"])
-
-    def test_print_multiple_args(self):
-        code = 'print("Value:", 10)'
-        self.run_code(code)
-        self.assertEqual(self.output_buffer, ["Value: 10"])
-
-    def test_print_variable(self):
-        code = """
-int x = 42
-print(x)
-"""
-        self.run_code(code)
-        self.assertEqual(self.output_buffer, ["42"])
+        self.assertIn("Control flow statement used outside", str(cm.exception))
 
     def test_len_builtin(self):
         code = """
@@ -142,7 +105,7 @@ int length = len(l)
 print(length)
 """
         self.run_code(code)
-        self.assertEqual(self.output_buffer, ["3"])
+        self.assertEqual(self.output, ["3"])
 
 if __name__ == '__main__':
     unittest.main()

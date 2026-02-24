@@ -35,6 +35,18 @@ class Scheduler:
         # Map: file_path -> mtime
         self.build_cache: Dict[str, float] = {}
 
+    def get_module_ast(self, module_name: str) -> Optional[Module]:
+        """
+        通过模块名获取已编译的 AST。供 Interpreter/ModuleManager 联动使用。
+        """
+        # 1. 尝试直接通过模块名在缓存中查找
+        if module_name in self.scope_cache:
+            # 找到对应的文件路径
+            for path, scope in self.scope_cache.items():
+                if scope == self.scope_cache[module_name] and path != module_name:
+                    return self.ast_cache.get(path)
+        return None
+
     def compile_project(self, entry_file: str) -> Dict[str, Module]:
         """
         Compiles the project starting from entry_file.

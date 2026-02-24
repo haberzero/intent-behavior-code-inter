@@ -12,7 +12,7 @@ from typedef.diagnostic_types import CompilerError
 
 class TestInterpreterBasic(unittest.TestCase):
     """
-    Re-run of TestInterpreterBasic using  Parser.
+    重构后的基础单元测试，适配 RuntimeContext 架构。
     """
     def run_code(self, code):
         lexer = Lexer(code.strip() + "\n")
@@ -32,9 +32,10 @@ int b = a + 5
 var c = b
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("a"), 10)
-        self.assertEqual(interp.global_scope.get("b"), 15)
-        self.assertEqual(interp.global_scope.get("c"), 15)
+        # 通过 context 获取变量，不再通过 global_scope 属性
+        self.assertEqual(interp.context.get_variable("a"), 10)
+        self.assertEqual(interp.context.get_variable("b"), 15)
+        self.assertEqual(interp.context.get_variable("c"), 15)
 
     def test_scope_shadowing(self):
         code = """
@@ -46,8 +47,8 @@ func test() -> int:
 int result = test()
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("result"), 20)
-        self.assertEqual(interp.global_scope.get("x"), 10)
+        self.assertEqual(interp.context.get_variable("result"), 20)
+        self.assertEqual(interp.context.get_variable("x"), 10)
 
     def test_if_elif_else(self):
         code = """
@@ -64,9 +65,9 @@ int res2 = check(10)
 int res3 = check(5)
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("res1"), 1)
-        self.assertEqual(interp.global_scope.get("res2"), 0)
-        self.assertEqual(interp.global_scope.get("res3"), -1)
+        self.assertEqual(interp.context.get_variable("res1"), 1)
+        self.assertEqual(interp.context.get_variable("res2"), 0)
+        self.assertEqual(interp.context.get_variable("res3"), -1)
 
     def test_while_loop(self):
         code = """
@@ -77,7 +78,7 @@ while i < 5:
     i = i + 1
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("sum"), 10)
+        self.assertEqual(interp.context.get_variable("sum"), 10)
 
     def test_for_range(self):
         code = """
@@ -86,7 +87,7 @@ for i in 5:
     sum = sum + i
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("sum"), 10)
+        self.assertEqual(interp.context.get_variable("sum"), 10)
 
     def test_break_continue(self):
         code = """
@@ -99,7 +100,7 @@ for i in 10:
     sum = sum + i
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("sum"), 8)
+        self.assertEqual(interp.context.get_variable("sum"), 8)
 
     def test_recursion(self):
         code = """
@@ -111,7 +112,7 @@ func fib(int n) -> int:
 int res = fib(6)
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("res"), 8)
+        self.assertEqual(interp.context.get_variable("res"), 8)
 
     def test_list_operations(self):
         code = """
@@ -121,8 +122,8 @@ int val = l[0]
 list l2 = l + [4]
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("val"), 10)
-        self.assertEqual(interp.global_scope.get("l2"), [10, 2, 3, 4])
+        self.assertEqual(interp.context.get_variable("val"), 10)
+        self.assertEqual(interp.context.get_variable("l2"), [10, 2, 3, 4])
 
     def test_dict_operations(self):
         code = """
@@ -131,8 +132,8 @@ int val = d["a"]
 d["c"] = 3
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("val"), 1)
-        d = interp.global_scope.get("d")
+        self.assertEqual(interp.context.get_variable("val"), 1)
+        d = interp.context.get_variable("d")
         self.assertEqual(d["c"], 3)
 
     def test_behavior_expression(self):
@@ -141,7 +142,7 @@ str name = "Alice"
 str res = ~~ greet $name ~~
 """
         _, interp = self.run_code(code)
-        self.assertIn("Alice", interp.global_scope.get("res"))
+        self.assertIn("Alice", interp.context.get_variable("res"))
 
     def test_type_casting(self):
         code = """
@@ -150,8 +151,8 @@ int i = (int) s
 float f = (float) i
 """
         _, interp = self.run_code(code)
-        self.assertEqual(interp.global_scope.get("i"), 123)
-        self.assertEqual(interp.global_scope.get("f"), 123.0)
+        self.assertEqual(interp.context.get_variable("i"), 123)
+        self.assertEqual(interp.context.get_variable("f"), 123.0)
 
 if __name__ == '__main__':
     unittest.main()

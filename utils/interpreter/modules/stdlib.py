@@ -1,85 +1,58 @@
-from typing import Any, List, Optional, Callable, Dict, Protocol
-from ..interfaces import IBCModule, InterpreterContext, OperatorHandler
-from typedef.exception_types import InterpreterError
-import operator
+import json
 import math
+import time
+import os
+from typing import Any
+from ..interfaces import InterOp
 
-class StdLibModule(IBCModule):
+def register_stdlib(interop: InterOp):
     """
-    提供标准库功能：基础类型、IO操作、数学函数等。
+    注册 ibc-inter 的第一方标准库组件。
+    这些组件是利用 Python 原生能力实现的。
     """
-    def register(self, context: InterpreterContext):
-        # 注册基础类型
-        context.register_type("int", int)
-        context.register_type("float", float)
-        context.register_type("str", str)
-        context.register_type("bool", bool)
-        context.register_type("list", list)
-        context.register_type("dict", dict)
+    
+    # 1. json 组件
+    class JSONLib:
+        @staticmethod
+        def parse(s: str):
+            return json.loads(s)
         
-        # 注册内置函数
-        def _print_impl(*args):
-            message = " ".join(str(arg) for arg in args)
-            context.print_output(message)
+        @staticmethod
+        def stringify(obj: Any):
+            return json.dumps(obj, ensure_ascii=False)
             
-        context.register_function("print", _print_impl)
-        context.register_function("len", len)
-        context.register_function("int", int)
-        context.register_function("float", float)
-        context.register_function("str", str)
-        context.register_function("list", list)
-        context.register_function("dict", dict)
-        context.register_function("input", input) # 简单的 input 实现
+    interop.register_package("json", JSONLib)
 
-        # 注册数学函数
-        context.register_function("abs", abs)
-        context.register_function("max", max)
-        context.register_function("min", min)
-        context.register_function("round", round)
+    # 2. math 组件
+    # 直接注册 math 模块即可，InterOp 会处理映射
+    interop.register_package("math", math)
 
+    # 3. time 组件
+    class TimeLib:
+        @staticmethod
+        def sleep(seconds: float):
+            time.sleep(seconds)
+            
+        @staticmethod
+        def now() -> float:
+            return time.time()
+            
+    interop.register_package("time", TimeLib)
 
+    # 4. file 组件 (基本的文件交互)
+    class FileLib:
+        @staticmethod
+        def read(path: str) -> str:
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+                
+        @staticmethod
+        def write(path: str, content: str):
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
+                
+        @staticmethod
+        def exists(path: str) -> bool:
+            return os.path.exists(path)
 
-class BasicOperatorHandler(OperatorHandler):
-    """
-    处理基本的算术运算、比较运算和逻辑运算。
-    """
-    def apply_binop(self, op: str, left: Any, right: Any) -> Any:
-        try:
-            if op == '+': return left + right
-            if op == '-': return left - right
-            if op == '*': return left * right
-            if op == '/': return left / right
-            if op == '%': return left % right
-            if op == '&': return left & right
-            if op == '|': return left | right
-            if op == '^': return left ^ right
-            if op == '<<': return left << right
-            if op == '>>': return left >> right
-            if op == '==': return left == right
-            if op == '!=': return left != right
-            if op == '<': return left < right
-            if op == '<=': return left <= right
-            if op == '>': return left > right
-            if op == '>=': return left >= right
-            if op == 'and': return left and right
-            if op == 'or': return left or right
-            if op == 'in': return left in right
-            if op == 'not in': return left not in right
-        except ZeroDivisionError:
-             raise InterpreterError("Division by zero")
-        except TypeError as e:
-             raise InterpreterError(f"Type error in binary operation '{op}': {e}")
-        except Exception as e:
-            return NotImplemented # 无法处理时返回 NotImplemented，允许其他 Handler 尝试
-        
-        return NotImplemented
-
-    def apply_unary(self, op: str, operand: Any) -> Any:
-        try:
-            if op == '-': return -operand
-            if op == '+': return +operand
-            if op == 'not': return not operand
-            if op == '~': return ~operand
-        except Exception:
-            return NotImplemented
-        return NotImplemented
+    interop.register_package("file", FileLib)
