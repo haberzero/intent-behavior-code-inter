@@ -6,7 +6,7 @@ import sys
 # Add project root to sys.path so we can import modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.scheduler import Scheduler
+from utils.scheduler import Scheduler, DependencyGraph
 from typedef.parser_types import Module
 from typedef.scope_types import ScopeNode
 
