@@ -1,7 +1,0 @@
-{
-    "default_model":{
-        "base_url": "http://127.0.0.1:12234/v1",
-        "api_key": "LOCAL",
-        "model": "qwen3-30b-a3b-instruct-2507"
-    }
-}
