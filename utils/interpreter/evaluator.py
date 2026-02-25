@@ -13,61 +13,73 @@ class EvaluatorImpl:
         # 显式路由表：(op, type_operand) -> handler
         self._unary_handlers: Dict[Tuple[str, type], Callable] = {}
         
+        # 注册标准运算符
+        self._register_standard_operators()
         # 注册特定的处理逻辑（如果需要特殊处理，不使用 Python 默认行为）
         self._register_special_handlers()
+
+    def _register_standard_operators(self):
+        import operator
+        # 二元运算符映射
+        bin_ops = {
+            '+': operator.add, '-': operator.sub, '*': operator.mul, '/': operator.truediv,
+            '%': operator.mod, '==': operator.eq, '!=': operator.ne,
+            '<': operator.lt, '<=': operator.le, '>': operator.gt, '>=': operator.ge,
+            'and': lambda l, r: l and r, 'or': lambda l, r: l or r,
+            'in': lambda l, r: l in r, 'not in': lambda l, r: l not in r
+        }
+        
+        # 基础类型池，用于预注册常见路径
+        primitives = [int, float, str, bool, list, dict, type(None)]
+        
+        for op_str, handler in bin_ops.items():
+            for t1 in primitives:
+                for t2 in primitives:
+                    # 预先填充路由表。注意：具体的类型合法性仍由执行时的 handler (operator) 负责抛错
+                    self._bin_handlers[(op_str, t1, t2)] = handler
+
+        # 一元运算符映射
+        unary_ops = {
+            '-': operator.neg, '+': operator.pos, 'not': operator.not_, '~': operator.inv
+        }
+        for op_str, handler in unary_ops.items():
+            for t in primitives:
+                self._unary_handlers[(op_str, t)] = handler
 
     def evaluate_binop(self, op: str, left: Any, right: Any) -> Any:
         """
         处理二元运算。
         """
-        # 1. 查找特殊注册的 Handler (精确匹配)
+        # 查找注册的 Handler
         handler = self._bin_handlers.get((op, type(left), type(right)))
-        if handler:
-            return handler(left, right)
-            
-        # 2. 兜底：使用 Python 原生运算符逻辑
-        # 这涵盖了大部分数值运算和字符串连接等常见场景
+        
+        if not handler:
+            raise InterpreterError(f"Binary operator '{op}' not supported for types {type(left).__name__} and {type(right).__name__}")
+
         try:
-            if op == '+': return left + right
-            if op == '-': return left - right
-            if op == '*': return left * right
-            if op == '/': return left / right
-            if op == '%': return left % right
-            if op == '==': return left == right
-            if op == '!=': return left != right
-            if op == '<': return left < right
-            if op == '<=': return left <= right
-            if op == '>': return left > right
-            if op == '>=': return left >= right
-            if op == 'and': return left and right
-            if op == 'or': return left or right
-            if op == 'in': return left in right
-            if op == 'not in': return left not in right
+            return handler(left, right)
         except TypeError as e:
-            # 这里的报错会被解释器捕获并报告
             raise InterpreterError(f"Type error in binary operation '{op}': {str(e)}")
         except ZeroDivisionError:
             raise InterpreterError("Division by zero")
         except Exception as e:
             raise InterpreterError(f"Error in binary operation '{op}': {str(e)}")
-            
-        raise InterpreterError(f"Binary operator '{op}' not supported for types {type(left)} and {type(right)}")
 
     def evaluate_unary(self, op: str, operand: Any) -> Any:
         """
         处理一元运算。
         """
+        handler = self._unary_handlers.get((op, type(operand)))
+        
+        if not handler:
+            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand).__name__}")
+
         try:
-            if op == '-': return -operand
-            if op == '+': return +operand
-            if op == 'not': return not operand
-            if op == '~': return ~operand
+            return handler(operand)
         except TypeError as e:
-            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand)}: {str(e)}")
+            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand).__name__}: {str(e)}")
         except Exception as e:
             raise InterpreterError(f"Error in unary operation '{op}': {str(e)}")
-            
-        raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand)}")
 
     def _register_special_handlers(self):
         """

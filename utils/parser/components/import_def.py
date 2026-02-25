@@ -12,6 +12,10 @@ class ImportComponent(BaseComponent):
     Component for parsing import statements and registering them in the scope.
     """
 
+    def __init__(self, context, skip_registration=False):
+        super().__init__(context)
+        self.skip_registration = skip_registration
+
     def parse_import(self) -> ast.Import:
         """Parses 'import a.b, c as d'."""
         start_token = self.stream.previous() 
@@ -21,6 +25,9 @@ class ImportComponent(BaseComponent):
         
         node = self._loc(ast.Import(names=names), start_token)
         
+        if self.skip_registration:
+            return node
+
         # Registration Logic
         for alias_node in node.names:
             module_name = alias_node.name
@@ -97,6 +104,9 @@ class ImportComponent(BaseComponent):
         self.stream.consume_end_of_statement("Expect newline after import.")
         node = self._loc(ast.ImportFrom(module=module_name, names=names, level=level), start_token)
         
+        if self.skip_registration:
+            return node
+
         # Registration Logic
         full_module_name = self._resolve_relative_module_name(node.module, node.level, node)
         module_scope = self._resolve_module_scope(full_module_name, node)

@@ -10,6 +10,7 @@ from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
 from utils.scheduler import Scheduler
+from typedef.diagnostic_types import CompilerError
 
 class TestInterpreterIntegration(unittest.TestCase):
     """
@@ -98,6 +99,32 @@ print(t2 > t1)
         interpreter.interpret(ast_cache[main_path])
         
         self.assertIn("imported", self.output)
+
+    def test_cross_file_import_from(self):
+        """验证 from ... import ... 的运行时逻辑"""
+        self.create_file("math_lib.ibci", """
+func add(int a, int b) -> int:
+    return a + b
+
+int constant = 42
+""")
+        main_path = self.create_file("main.ibci", """
+from math_lib import add, constant
+from math_lib import *
+
+int res = add(10, constant)
+print(res)
+int res2 = add(1, 2)
+print(res2)
+""")
+        
+        scheduler = Scheduler(self.test_dir)
+        ast_cache = scheduler.compile_project(main_path)
+        
+        interpreter = Interpreter(output_callback=self.capture_output, scheduler=scheduler)
+        interpreter.interpret(ast_cache[main_path])
+        
+        self.assertEqual(self.output, ["52", "3"])
 
 if __name__ == '__main__':
     unittest.main()

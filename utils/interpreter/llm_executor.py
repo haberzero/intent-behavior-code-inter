@@ -50,19 +50,21 @@ class LLMExecutorImpl:
         """
         处理双波浪号包裹的 ~~行为描述行~~ (即时、匿名的 LLM 调用)。
         """
-        content = node.content
+        content_parts = []
         
-        # 1. 处理文本插值 $var
-        for var_ref in node.variables:
-            clean_name = var_ref[1:] if var_ref.startswith('$') else var_ref
-            try:
-                val = context.get_variable(clean_name)
-                # 全局替换插值占位符
-                content = content.replace(var_ref, str(val))
-            except (KeyError, NameError):
-                # 运行时找不到变量，由于 ibc-inter 的动态特性，抛出 InterpreterError
-                raise InterpreterError(f"Variable '{clean_name}' in behavior expression is not defined.", node)
-                
+        # 1. 处理段式插值
+        for segment in node.segments:
+            if isinstance(segment, str):
+                content_parts.append(segment)
+            elif isinstance(segment, ast.Name):
+                try:
+                    val = context.get_variable(segment.id)
+                    content_parts.append(str(val))
+                except (KeyError, NameError):
+                    raise InterpreterError(f"Variable '{segment.id}' in behavior expression is not defined.", segment)
+        
+        content = "".join(content_parts)
+        
         # 2. 收集意图：包括节点自带意图 (Parser 注入) 和 全局活动意图栈
         all_intents = context.get_active_intents()
         if node.intent:

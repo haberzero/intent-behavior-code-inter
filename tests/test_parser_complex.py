@@ -183,8 +183,13 @@ func f(List[int] a, Dict[str, int] b) -> None:
         assign = mod.body[0]
         assert isinstance(assign, ast.Assign)
         assert isinstance(assign.value, ast.BehaviorExpr)
-        self.assertIn("$data", assign.value.variables)
-        self.assertIn("process", assign.value.content)
+        
+        segments = assign.value.segments
+        self.assertEqual(len(segments), 3)
+        self.assertEqual(segments[0], "process ")
+        self.assertIsInstance(segments[1], ast.Name)
+        self.assertEqual(segments[1].id, "data")
+        self.assertEqual(segments[2], " with prompt")
 
     def test_behavior_logic(self):
         """Test logical operations with behavior descriptions."""
@@ -480,8 +485,8 @@ x = outer(inner())
         
         expected_content = "查找包含 $100 和 ~~波浪号~~ 的文本"
         assert isinstance(behavior, ast.BehaviorExpr)
-        self.assertEqual(behavior.content, expected_content)
-        self.assertEqual(behavior.variables, [])
+        actual_content = "".join([s if isinstance(s, str) else f"${s.id}" for s in behavior.segments])
+        self.assertEqual(actual_content, expected_content)
 
     def test_llm_block_tokens_no_indent(self):
         """

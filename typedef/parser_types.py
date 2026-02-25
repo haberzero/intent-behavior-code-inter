@@ -40,6 +40,14 @@ class ASTNode:
     uid: str = field(default_factory=lambda: "")
     scope: Optional[ScopeNode] = None # Attached ScopeNode from symbol table
 
+    @property
+    def line(self) -> int:
+        return self.lineno
+
+    @property
+    def column(self) -> int:
+        return self.col_offset
+
 @dataclass
 class Stmt(ASTNode):
     """语句节点基类"""
@@ -205,8 +213,7 @@ class ListExpr(Expr):
 
 @dataclass
 class BehaviorExpr(Expr):
-    content: str
-    variables: List[str]
+    segments: List[Union[str, 'Name']]
     intent: Optional[str] = None
 
 @dataclass

@@ -17,7 +17,7 @@ class ImportScanner:
     def __init__(self, tokens: List[Token], issue_tracker: IssueTracker):
         self.stream = TokenStream(tokens, issue_tracker)
         self.context = ParserContext(self.stream, issue_tracker)
-        self.import_component = ImportComponent(self.context)
+        self.import_component = ImportComponent(self.context, skip_registration=True)
         
     def scan(self, file_path: str = "<unknown>") -> List[ImportInfo]:
         imports = []

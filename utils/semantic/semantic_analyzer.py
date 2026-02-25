@@ -68,14 +68,7 @@ class SemanticAnalyzer:
         return ANY_TYPE
 
     def error(self, message: str, node: ast.ASTNode):
-        # Convert ASTNode location to Diagnostic Location
-        loc = Location(
-            file_path="<unknown>", # AST doesn't carry file path yet
-            line=node.lineno,
-            column=node.col_offset,
-            length=1 # Rough estimate
-        )
-        self.issue_tracker.report(Severity.ERROR, "SEMANTIC_ERROR", message, location=loc)
+        self.issue_tracker.report(Severity.ERROR, "SEMANTIC_ERROR", message, location=node)
 
 
     # --- Scope Management ---
@@ -432,16 +425,11 @@ class SemanticAnalyzer:
 
     def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> Type:
         # Check if variables referenced in the behavior expression exist in current scope
-        for var_name in node.variables:
-            # var_name comes with $, e.g. "$name"
-            if var_name.startswith('$'):
-                clean_name = var_name[1:]
-            else:
-                clean_name = var_name
-                
-            symbol = self.scope_manager.resolve(clean_name)
-            if not symbol:
-                self.error(f"Variable '{clean_name}' used in behavior expression is not defined", node)
+        for segment in node.segments:
+            if isinstance(segment, ast.Name):
+                symbol = self.scope_manager.resolve(segment.id)
+                if not symbol:
+                    self.error(f"Variable '{segment.id}' used in behavior expression is not defined", segment)
         
         return STR_TYPE # Behavior expressions return string content
 

@@ -33,11 +33,16 @@ class Interpreter:
                  max_call_stack: int = 100,
                  scheduler: Optional[Any] = None):
         self.output_callback = output_callback
+        self.scheduler = scheduler
         
         # 初始化子组件
         self.context: RuntimeContext = RuntimeContextImpl()
         self.interop: InterOp = InterOpImpl()
-        self.module_manager: ModuleManager = ModuleManagerImpl(self.interop, scheduler=scheduler)
+        self.module_manager: ModuleManager = ModuleManagerImpl(
+            self.interop, 
+            scheduler=scheduler, 
+            interpreter_factory=self._create_sub_interpreter
+        )
         self.llm_executor: LLMExecutor = LLMExecutorImpl()
         self.evaluator: Evaluator = EvaluatorImpl()
         
@@ -52,6 +57,15 @@ class Interpreter:
         self.instruction_count = 0
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
+
+    def _create_sub_interpreter(self):
+        """用于加载模块的子解释器工厂"""
+        return Interpreter(
+            output_callback=self.output_callback,
+            max_instructions=self.max_instructions,
+            max_call_stack=self.max_call_stack,
+            scheduler=self.scheduler
+        )
 
     def _register_intrinsics(self):
         """

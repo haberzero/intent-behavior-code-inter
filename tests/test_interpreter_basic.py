@@ -138,6 +138,8 @@ d["c"] = 3
 
     def test_behavior_expression(self):
         code = """
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 str name = "Alice"
 str res = ~~ greet $name ~~
 """

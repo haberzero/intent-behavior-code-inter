@@ -220,19 +220,18 @@ class ExpressionComponent(BaseComponent):
 
     def behavior_expression(self) -> ast.BehaviorExpr:
         start_token = self.stream.previous()
-        content_parts = []
-        variables = []
+        segments = []
         
         while not self.stream.check(TokenType.BEHAVIOR_MARKER):
             if self.stream.is_at_end():
                 raise self.stream.error(self.stream.peek(), "Unterminated behavior expression.")
                 
             if self.stream.match(TokenType.RAW_TEXT):
-                content_parts.append(self.stream.previous().value)
+                segments.append(self.stream.previous().value)
             elif self.stream.match(TokenType.VAR_REF):
-                var_name = self.stream.previous().value
-                variables.append(var_name)
-                content_parts.append(var_name)
+                var_token = self.stream.previous()
+                var_name = var_token.value[1:] # Strip $
+                segments.append(self._loc(ast.Name(id=var_name, ctx='Load'), var_token))
             else:
                 self.stream.advance()
         
@@ -242,4 +241,4 @@ class ExpressionComponent(BaseComponent):
         if intent:
             self.context.pending_intent = None
             
-        return self._loc(ast.BehaviorExpr(content="".join(content_parts), variables=variables, intent=intent), start_token)
+        return self._loc(ast.BehaviorExpr(segments=segments, intent=intent), start_token)

@@ -1,14 +1,29 @@
 import os
-from typing import List, Dict, Any, Optional
-from .interfaces import ModuleManager, RuntimeContext, InterOp
+from typing import List, Dict, Any, Optional, Callable
+from .interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
 from typedef.exception_types import InterpreterError
 
+class ModuleInstanceImpl:
+    def __init__(self, name: str, scope: Scope):
+        self.name = name
+        self.scope = scope
+        
+    def get_variable(self, name: str) -> Any:
+        try:
+            return self.scope.get(name)
+        except (KeyError, AttributeError):
+            raise InterpreterError(f"Module '{self.name}' has no attribute '{name}'")
+
+    def __getattr__(self, name: str) -> Any:
+        return self.get_variable(name)
+
 class ModuleManagerImpl:
-    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = "."):
+    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = ".", interpreter_factory: Optional[Callable] = None):
         self.interop = interop
         self.scheduler = scheduler
         self.root_dir = root_dir
-        self._loaded_modules: Dict[str, Any] = {}
+        self.interpreter_factory = interpreter_factory
+        self._loaded_modules: Dict[str, ModuleInstance] = {}
 
     def import_module(self, module_name: str, context: RuntimeContext) -> None:
         """
@@ -22,28 +37,27 @@ class ModuleManagerImpl:
             context.define_variable(module_name, package, is_const=True)
             return
 
-        # 2. 联动 Scheduler 处理文件系统中的 IBC 模块导入
+        # 2. 检查是否已经加载过该模块
+        if module_name in self._loaded_modules:
+            context.define_variable(module_name, self._loaded_modules[module_name], is_const=True)
+            return
+
+        # 3. 联动 Scheduler 处理文件系统中的 IBC 模块导入
         if self.scheduler:
             ast_module = self.scheduler.get_module_ast(module_name)
             if ast_module:
-                # 在 IBC 模块导入中，我们需要执行该模块并将它的顶级作用域作为一个 Namespace 对象暴露
-                # 暂时简化处理：直接执行模块内容（由于 Scheduler 已经编译并做了语义分析，这里通常只需执行）
-                # 这里我们假设模块已经被执行过，或者我们需要在这里创建一个临时的 Namespace
+                if not self.interpreter_factory:
+                    raise InterpreterError("Interpreter factory not provided for module loading.")
                 
-                # 为了原型机稳定性，我们暂时将模块的所有顶级定义导入到一个 Namespace 对象中
-                # 这个 Namespace 对象可以用一个 Dict 或者一个简单的类实例来模拟
-                namespace = type('Namespace', (), {})()
+                # 创建新的解释器实例以执行被导入模块
+                sub_interpreter = self.interpreter_factory()
+                sub_interpreter.interpret(ast_module)
                 
-                # 从 Scheduler 的 scope_cache 中获取该模块的符号
-                module_scope = self.scheduler.scope_cache.get(module_name)
-                if module_scope:
-                    # 遍历作用域中的所有符号，并将其绑定到 namespace 对象上
-                    # 注意：这里需要获取符号的值，可能需要通过一个临时的 Interpreter 来运行该模块
-                    # 或者从全局符号表中获取（如果 IBC 模块是全局单例的）
-                    pass
+                # 获取该模块的全局作用域作为 Namespace
+                module_instance = ModuleInstanceImpl(module_name, sub_interpreter.context.global_scope)
+                self._loaded_modules[module_name] = module_instance
                 
-                # 为简单起见，目前 IBC 跨文件导入仅支持符号声明的可见性，不涉及复杂的运行时状态隔离
-                context.define_variable(module_name, ast_module, is_const=True)
+                context.define_variable(module_name, module_instance, is_const=True)
                 return
 
         raise InterpreterError(f"Module '{module_name}' not found or not registered.")
@@ -72,5 +86,33 @@ class ModuleManagerImpl:
                         raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
             return
 
-        # 2. TODO: 处理 IBC 文件模块的 import from 逻辑
+        # 2. 处理 IBC 文件模块的 import from 逻辑
+        if self.scheduler:
+            # 确保模块已加载
+            if module_name not in self._loaded_modules:
+                self.import_module(module_name, context)
+                # import_module 会把模块名定义在 context 中，我们其实不需要它定义在当前 context，
+                # 但目前为了复用逻辑先这样。后续可以优化。
+            
+            module_instance = self._loaded_modules.get(module_name)
+            if module_instance:
+                if '*' in names:
+                    # 导入模块全局作用域中的所有非内置符号
+                    # 注意：ScopeImpl 目前没有直接导出所有符号的方法，需要访问私有属性或扩展接口
+                    # 暂时访问私有属性 _symbols
+                    symbols = getattr(module_instance.scope, '_symbols', {})
+                    for sym_name, sym_obj in symbols.items():
+                        if not sym_obj.is_const: # 排除 print, int 等内置符号
+                            context.define_variable(sym_name, sym_obj.value, declared_type=sym_obj.declared_type)
+                else:
+                    for name in names:
+                        try:
+                            val = module_instance.get_variable(name)
+                            # 获取符号元数据（如果可能）
+                            symbol = module_instance.scope.get_symbol(name)
+                            context.define_variable(name, val, declared_type=symbol.declared_type if symbol else None)
+                        except InterpreterError:
+                            raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
+                return
+
         raise InterpreterError(f"Module '{module_name}' not found or not registered.")

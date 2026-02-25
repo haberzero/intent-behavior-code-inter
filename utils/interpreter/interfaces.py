@@ -64,6 +64,12 @@ class Evaluator(Protocol):
     def evaluate_binop(self, op: str, left: Any, right: Any) -> Any: ...
     def evaluate_unary(self, op: str, operand: Any) -> Any: ...
 
+class ModuleInstance(Protocol):
+    """IBC-Inter 模块实例，表示一个已执行模块的运行时状态"""
+    name: str
+    scope: Scope
+    def get_variable(self, name: str) -> Any: ...
+
 # --- Main Interpreter ---
 
 class Interpreter(Protocol):
