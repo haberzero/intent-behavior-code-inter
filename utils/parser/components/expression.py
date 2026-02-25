@@ -231,7 +231,17 @@ class ExpressionComponent(BaseComponent):
             elif self.stream.match(TokenType.VAR_REF):
                 var_token = self.stream.previous()
                 var_name = var_token.value[1:] # Strip $
-                segments.append(self._loc(ast.Name(id=var_name, ctx='Load'), var_token))
+                
+                # Create initial Name node
+                node = self._loc(ast.Name(id=var_name, ctx='Load'), var_token)
+                
+                # Support member access within behavior expression: $obj.attr.subattr
+                while self.stream.match(TokenType.DOT):
+                    dot_token = self.stream.previous()
+                    attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
+                    node = self._loc(ast.Attribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
+                
+                segments.append(node)
             else:
                 self.stream.advance()
         

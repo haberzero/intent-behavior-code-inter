@@ -373,6 +373,23 @@ class CoreTokenScanner:
         # 3. Variable Reference
         if char == '$':
             self._scan_var_ref(tokens)
+            
+            # Support member access within behavior expression ($obj.attr)
+            while self.scanner.peek() == '.':
+                next_char = self.scanner.peek(1)
+                if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+                    self.scanner.start_token()
+                    self.scanner.advance() # .
+                    tokens.append(self.scanner.create_token(TokenType.DOT, "."))
+                    
+                    # Scan the identifier following the dot
+                    self.scanner.start_token()
+                    id_val = ""
+                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                        id_val += self.scanner.advance()
+                    tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
+                else:
+                    break
             return
             
         # 4. Raw Text
@@ -481,12 +498,6 @@ class CoreTokenScanner:
             peek = self.scanner.peek()
             if peek.isalnum() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
                 name += self.scanner.advance()
-            elif peek == '.':
-                next_char = self.scanner.peek(1)
-                if next_char.isalnum() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
-                    name += self.scanner.advance() # .
-                else:
-                    break
             else:
                 break
                 

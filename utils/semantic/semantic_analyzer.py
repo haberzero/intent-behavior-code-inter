@@ -21,16 +21,23 @@ class SemanticAnalyzer:
     Performs semantic analysis and type checking on the AST.
     """
     def _init_builtins(self):
-        """Register builtin functions."""
-        # Use define() to register symbol, ensuring no conflicts with existing types.
-        
+        """Register builtin functions and modules."""
         prelude = Prelude()
+        
+        # 1. Functions
         for name, func_type in prelude.get_builtins().items():
-             # Check if exists in global scope (it shouldn't if we are fresh)
             sym = self.scope_manager.global_scope.resolve(name)
             if not sym:
                 sym = self.scope_manager.define(name, SymbolType.FUNCTION)
             sym.type_info = func_type
+
+        # 2. Modules
+        for name, mod_type in prelude.get_builtin_modules().items():
+            sym = self.scope_manager.global_scope.resolve(name)
+            if not sym:
+                sym = self.scope_manager.define(name, SymbolType.MODULE)
+            sym.type_info = mod_type
+            sym.exported_scope = mod_type.scope
 
     def __init__(self, issue_tracker: Optional[IssueTracker] = None):
         self.scope_manager = ScopeManager() 
@@ -388,22 +395,27 @@ class SemanticAnalyzer:
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
         
-        # Relaxed check for AnyType
-        if isinstance(left_type, AnyType) or isinstance(right_type, AnyType):
+        from utils.semantic.types import get_promoted_type
+        result_type = get_promoted_type(node.op, left_type, right_type)
+        
+        if result_type is None:
+            self.error(f"Binary operator '{node.op}' not supported for types '{left_type}' and '{right_type}'", node)
             return ANY_TYPE
             
-        # Strict check for primitives
-        if node.op in ['+', '-', '*', '/', '%']:
-            if left_type == INT_TYPE and right_type == INT_TYPE: return INT_TYPE
-            if left_type == FLOAT_TYPE and right_type == FLOAT_TYPE: return FLOAT_TYPE
-            if left_type == INT_TYPE and right_type == FLOAT_TYPE: return FLOAT_TYPE
-            if left_type == FLOAT_TYPE and right_type == INT_TYPE: return FLOAT_TYPE
+        return result_type
+
+    def visit_Compare(self, node: ast.Compare) -> Type:
+        left_type = self.visit(node.left)
+        from utils.semantic.types import get_promoted_type
+        
+        for op, comparator in zip(node.ops, node.comparators):
+            right_type = self.visit(comparator)
+            res = get_promoted_type(op, left_type, right_type)
+            if res is None:
+                 self.error(f"Comparison operator '{op}' not supported for types '{left_type}' and '{right_type}'", node)
+            left_type = right_type
             
-            if node.op == '+' and left_type == STR_TYPE and right_type == STR_TYPE: return STR_TYPE
-            
-            self.error(f"Binary operator '{node.op}' not supported for types '{left_type}' and '{right_type}'", node)
-            
-        return ANY_TYPE
+        return BOOL_TYPE
 
     def visit_ListExpr(self, node: ast.ListExpr) -> Type:
         # Infer element type

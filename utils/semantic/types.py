@@ -113,3 +113,49 @@ def get_builtin_type(name: str) -> Optional[Type]:
         "var": ANY_TYPE
     }
     return mapping.get(name)
+
+def get_promoted_type(op: str, t1: Type, t2: Type) -> Optional[Type]:
+    """
+    Strict type promotion logic for IBC-Inter.
+    Only allows numerical promotion for int and float.
+    """
+    # Any type bypasses strict checks (runtime will handle)
+    if isinstance(t1, AnyType) or isinstance(t2, AnyType):
+        return ANY_TYPE
+
+    # Arithmetic operators
+    if op in ('+', '-', '*', '/', '%'):
+        # Both are int -> int
+        if t1 == INT_TYPE and t2 == INT_TYPE:
+            return INT_TYPE
+        
+        # Numeric promotion (int and float)
+        is_t1_num = t1 in (INT_TYPE, FLOAT_TYPE)
+        is_t2_num = t2 in (INT_TYPE, FLOAT_TYPE)
+        
+        if is_t1_num and is_t2_num:
+            return FLOAT_TYPE
+            
+        # String concatenation (Only +)
+        if op == '+' and t1 == STR_TYPE and t2 == STR_TYPE:
+            return STR_TYPE
+
+        # List concatenation (Only +)
+        if op == '+' and isinstance(t1, ListType) and isinstance(t2, ListType):
+            if t1.element_type == t2.element_type:
+                return t1
+            return ListType(ANY_TYPE)
+            
+    # Comparison operators
+    elif op in ('>', '>=', '<', '<=', '==', '!='):
+        # Allow numerical comparison
+        is_t1_num = t1 in (INT_TYPE, FLOAT_TYPE)
+        is_t2_num = t2 in (INT_TYPE, FLOAT_TYPE)
+        if is_t1_num and is_t2_num:
+            return BOOL_TYPE
+            
+        # Allow same-type comparison
+        if t1 == t2:
+            return BOOL_TYPE
+            
+    return None

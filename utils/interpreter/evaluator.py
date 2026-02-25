@@ -20,31 +20,49 @@ class EvaluatorImpl:
 
     def _register_standard_operators(self):
         import operator
-        # 二元运算符映射
-        bin_ops = {
-            '+': operator.add, '-': operator.sub, '*': operator.mul, '/': operator.truediv,
-            '%': operator.mod, '==': operator.eq, '!=': operator.ne,
+        
+        # 1. 数值运算 (int, float)
+        num_ops = {
+            '+': operator.add, '-': operator.sub, '*': operator.mul, 
+            '/': operator.truediv, '%': operator.mod,
+            '==': operator.eq, '!=': operator.ne,
             '<': operator.lt, '<=': operator.le, '>': operator.gt, '>=': operator.ge,
-            'and': lambda l, r: l and r, 'or': lambda l, r: l or r,
-            'in': lambda l, r: l in r, 'not in': lambda l, r: l not in r
         }
-        
-        # 基础类型池，用于预注册常见路径
-        primitives = [int, float, str, bool, list, dict, type(None)]
-        
-        for op_str, handler in bin_ops.items():
-            for t1 in primitives:
-                for t2 in primitives:
-                    # 预先填充路由表。注意：具体的类型合法性仍由执行时的 handler (operator) 负责抛错
-                    self._bin_handlers[(op_str, t1, t2)] = handler
+        for op, handler in num_ops.items():
+            for t1 in (int, float):
+                for t2 in (int, float):
+                    self._bin_handlers[(op, t1, t2)] = handler
 
-        # 一元运算符映射
+        # 2. 字符串运算
+        self._bin_handlers[('+', str, str)] = operator.add
+        self._bin_handlers[('==', str, str)] = operator.eq
+        self._bin_handlers[('!=', str, str)] = operator.ne
+
+        # 3. 布尔运算
+        self._bin_handlers[('and', bool, bool)] = lambda l, r: l and r
+        self._bin_handlers[('or', bool, bool)] = lambda l, r: l or r
+        self._bin_handlers[('==', bool, bool)] = operator.eq
+        self._bin_handlers[('!=', bool, bool)] = operator.ne
+
+        # 4. 容器运算 (简单支持)
+        self._bin_handlers[('+', list, list)] = operator.add
+        self._bin_handlers[('in', Any, list)] = lambda l, r: l in r
+        self._bin_handlers[('in', Any, dict)] = lambda l, r: l in r
+        
+        # 5. None 比较
+        self._bin_handlers[('==', type(None), type(None))] = operator.eq
+        self._bin_handlers[('!=', type(None), type(None))] = operator.ne
+
+        # 一元运算符
         unary_ops = {
             '-': operator.neg, '+': operator.pos, 'not': operator.not_, '~': operator.inv
         }
-        for op_str, handler in unary_ops.items():
-            for t in primitives:
-                self._unary_handlers[(op_str, t)] = handler
+        for op, handler in unary_ops.items():
+            for t in (int, float):
+                self._unary_handlers[(op, t)] = handler
+            if op == 'not':
+                self._unary_handlers[(op, bool)] = handler
+                self._unary_handlers[(op, type(None))] = handler
 
     def evaluate_binop(self, op: str, left: Any, right: Any) -> Any:
         """

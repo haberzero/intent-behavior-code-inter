@@ -56,12 +56,16 @@ class LLMExecutorImpl:
         for segment in node.segments:
             if isinstance(segment, str):
                 content_parts.append(segment)
-            elif isinstance(segment, ast.Name):
-                try:
-                    val = context.get_variable(segment.id)
-                    content_parts.append(str(val))
-                except (KeyError, NameError):
-                    raise InterpreterError(f"Variable '{segment.id}' in behavior expression is not defined.", segment)
+            elif isinstance(segment, (ast.Name, ast.Attribute, ast.Subscript)):
+                # 我们需要一种方式来评估这些表达式。
+                # 目前由于 LLMExecutor 独立于 Interpreter 访问者，
+                # 我们通过一个简单的逻辑处理 Name/Attribute/Subscript。
+                # 未来可以考虑传入一个 evaluator 函数。
+                val = self._evaluate_simple_expr(segment, context)
+                content_parts.append(str(val))
+            else:
+                # 其他复杂的表达式暂不支持或需要解析
+                content_parts.append(str(segment))
         
         content = "".join(content_parts)
         
@@ -79,3 +83,27 @@ class LLMExecutorImpl:
             return self.llm_callback(sys_prompt, content)
             
         return f"[MOCK BEHAVIOR] {content}\n(INTENTS: {len(all_intents)})"
+
+    def _evaluate_simple_expr(self, node: ast.ASTNode, context: RuntimeContext) -> Any:
+        if isinstance(node, ast.Name):
+            try:
+                return context.get_variable(node.id)
+            except (KeyError, NameError):
+                raise InterpreterError(f"Variable '{node.id}' in behavior expression is not defined.", node)
+        
+        elif isinstance(node, ast.Attribute):
+            obj = self._evaluate_simple_expr(node.value, context)
+            try:
+                return getattr(obj, node.attr)
+            except AttributeError:
+                if isinstance(obj, dict): return obj.get(node.attr)
+                raise InterpreterError(f"Attribute '{node.attr}' not found on {type(obj).__name__}", node)
+        
+        elif isinstance(node, ast.Subscript):
+            container = self._evaluate_simple_expr(node.value, context)
+            # 简化处理：假设索引是常量或简单变量
+            # 注意：这里可能需要更复杂的逻辑，但在 behavior 表达式中通常较简单
+            # 如果需要完整支持，应该让 Interpreter 预先求值
+            raise InterpreterError("Subscript in behavior expression is not fully supported yet.", node)
+            
+        return None

@@ -191,6 +191,33 @@ func f(List[int] a, Dict[str, int] b) -> None:
         self.assertEqual(segments[1].id, "data")
         self.assertEqual(segments[2], " with prompt")
 
+    def test_behavior_expression_with_dots(self):
+        """Test behavior expression with member access ($obj.attr.sub)."""
+        source = "res = ~~process $user.name.first with prompt~~"
+        mod = self.parse(source)
+        assign = mod.body[0]
+        assert isinstance(assign, ast.Assign)
+        assert isinstance(assign.value, ast.BehaviorExpr)
+        
+        segments = assign.value.segments
+        # Expected: "process ", Attribute(Attribute(Name(user), name), first), " with prompt"
+        self.assertEqual(len(segments), 3)
+        self.assertEqual(segments[0], "process ")
+        
+        attr_first = segments[1]
+        self.assertIsInstance(attr_first, ast.Attribute)
+        self.assertEqual(attr_first.attr, "first")
+        
+        attr_name = attr_first.value
+        self.assertIsInstance(attr_name, ast.Attribute)
+        self.assertEqual(attr_name.attr, "name")
+        
+        name_user = attr_name.value
+        self.assertIsInstance(name_user, ast.Name)
+        self.assertEqual(name_user.id, "user")
+        
+        self.assertEqual(segments[2], " with prompt")
+
     def test_behavior_logic(self):
         """Test logical operations with behavior descriptions."""
         code = """

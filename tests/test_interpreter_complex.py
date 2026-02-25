@@ -67,10 +67,14 @@ func print(str s) -> None:
         self.assertIn("Division by zero", str(cm.exception))
 
     def test_type_error_in_binop(self):
-        code = 'var x = "a" + 1'
+        code = """
+str s = "hello"
+int i = 10
+var res = s + i
+"""
         with self.assertRaises(InterpreterError) as cm:
             self.run_code(code)
-        self.assertIn("Type error in binary operation", str(cm.exception))
+        self.assertIn("not supported for types", str(cm.exception))
 
     def test_recursion_limit(self):
         code = """

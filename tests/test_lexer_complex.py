@@ -223,14 +223,36 @@ func process_user_data(list users) -> dict:
                 self.assertEqual(tokens[0].value, expected)
 
     def test_var_ref_with_dots(self):
-        """Test variable references with dot notation ($user.name.first)."""
+        """Test variable references with dot notation ($user.name.first) are now atomic tokens."""
         code = "str x = ~~hello $user.name.first world~~"
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         
-        # Structure: ... RAW_TEXT("hello ") VAR_REF("$user.name.first") RAW_TEXT(" world") ...
-        var_ref = next(t for t in tokens if t.type == TokenType.VAR_REF)
-        self.assertEqual(var_ref.value, "$user.name.first")
+        # Expected sequence: ... RAW_TEXT("hello ") VAR_REF("$user") DOT(".") IDENTIFIER("name") DOT(".") IDENTIFIER("first") RAW_TEXT(" world") ...
+        # Structure: 
+        # 0: IDENTIFIER(str)
+        # 1: IDENTIFIER(x)
+        # 2: ASSIGN(=)
+        # 3: BEHAVIOR_MARKER(~~)
+        # 4: RAW_TEXT(hello )
+        # 5: VAR_REF($user)
+        # 6: DOT(.)
+        # 7: IDENTIFIER(name)
+        # 8: DOT(.)
+        # 9: IDENTIFIER(first)
+        # 10: RAW_TEXT( world)
+        # 11: BEHAVIOR_MARKER(~~)
+        # 12: NEWLINE(\n)
+        # 13: EOF()
+
+        self.assertEqual(tokens[5].type, TokenType.VAR_REF)
+        self.assertEqual(tokens[5].value, "$user")
+        self.assertEqual(tokens[6].type, TokenType.DOT)
+        self.assertEqual(tokens[7].type, TokenType.IDENTIFIER)
+        self.assertEqual(tokens[7].value, "name")
+        self.assertEqual(tokens[8].type, TokenType.DOT)
+        self.assertEqual(tokens[9].type, TokenType.IDENTIFIER)
+        self.assertEqual(tokens[9].value, "first")
         
         # Ensure surrounding text is correct
         raw_texts = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
