@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 from .interfaces import RuntimeSymbol, Scope, RuntimeContext
+from typedef.exception_types import InterpreterError
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
@@ -21,13 +22,11 @@ class ScopeImpl:
         if name in self._symbols:
             symbol = self._symbols[name]
             if symbol.is_const:
-                from typedef.exception_types import InterpreterError
                 raise InterpreterError(f"Cannot reassign constant '{name}'")
             
             # 运行时类型检查逻辑
             if symbol.declared_type and symbol.declared_type != 'var':
                 # TODO: 接入更完善的类型检查逻辑
-                # 目前简单通过 isinstance 检查，或者延迟到具体的 Type 系统实现
                 pass
                 
             symbol.value = value
@@ -50,6 +49,10 @@ class ScopeImpl:
             return self._parent.get_symbol(name)
         return None
 
+    def get_all_symbols(self) -> Dict[str, RuntimeSymbol]:
+        """返回当前作用域的所有符号（不包含父作用域）"""
+        return dict(self._symbols)
+
     @property
     def parent(self) -> Optional['Scope']:
         return self._parent
@@ -68,21 +71,22 @@ class RuntimeContextImpl:
             self._current_scope = self._current_scope.parent
 
     def get_variable(self, name: str) -> Any:
-        return self._current_scope.get(name)
+        try:
+            return self._current_scope.get(name)
+        except KeyError:
+            raise InterpreterError(f"Variable '{name}' is not defined")
 
     def get_symbol(self, name: str) -> Optional[RuntimeSymbol]:
         return self._current_scope.get_symbol(name)
 
     def set_variable(self, name: str, value: Any) -> None:
         if not self._current_scope.assign(name, value):
-            from typedef.exception_types import InterpreterError
             raise InterpreterError(f"Variable '{name}' is not defined")
 
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False) -> None:
         # 检查是否试图重定义常量（包括全局内置常量）
         existing = self.get_symbol(name)
         if existing and existing.is_const:
-            from typedef.exception_types import InterpreterError
             raise InterpreterError(f"Cannot reassign constant '{name}'")
 
         self._current_scope.define(name, value, declared_type, is_const)

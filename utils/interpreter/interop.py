@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, Optional
 from .interfaces import InterOp
+from typedef.exception_types import InterpreterError
 
 class InterOpImpl:
     def __init__(self):
@@ -22,6 +23,5 @@ class InterOpImpl:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                from typedef.exception_types import InterpreterError
                 raise InterpreterError(f"Error in external function: {str(e)}")
         return wrapped

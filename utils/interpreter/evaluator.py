@@ -1,13 +1,16 @@
-from typing import Any, Dict, List, Callable, Tuple
-from .interfaces import Evaluator
+from typing import Any, Dict, List, Callable, Tuple, Optional
+import operator
+from .interfaces import Evaluator, RuntimeContext, ServiceContext
 from typedef.exception_types import InterpreterError
+from typedef import parser_types as ast
 
 class EvaluatorImpl:
     """
-    运算调度器：负责处理所有表达式运算符。
+    运算调度器：负责处理所有表达式运算符和表达式求值。
     采用“类型路由”机制，未来可以方便地针对特定类型（如自定义类）重载运算符。
     """
-    def __init__(self):
+    def __init__(self, service_context: Optional[ServiceContext] = None):
+        self.service_context = service_context
         # 显式路由表：(op, type_left, type_right) -> handler
         self._bin_handlers: Dict[Tuple[str, type, type], Callable] = {}
         # 显式路由表：(op, type_operand) -> handler
@@ -15,12 +18,10 @@ class EvaluatorImpl:
         
         # 注册标准运算符
         self._register_standard_operators()
-        # 注册特定的处理逻辑（如果需要特殊处理，不使用 Python 默认行为）
+        # 注册特定的处理逻辑
         self._register_special_handlers()
 
     def _register_standard_operators(self):
-        import operator
-        
         # 1. 数值运算 (int, float)
         num_ops = {
             '+': operator.add, '-': operator.sub, '*': operator.mul, 
@@ -63,6 +64,71 @@ class EvaluatorImpl:
             if op == 'not':
                 self._unary_handlers[(op, bool)] = handler
                 self._unary_handlers[(op, type(None))] = handler
+
+    def evaluate_expr(self, node: ast.ASTNode, context: RuntimeContext) -> Any:
+        """
+        统一的表达式求值入口。
+        """
+        if isinstance(node, ast.Constant):
+            return node.value
+        
+        elif isinstance(node, ast.Name):
+            if node.ctx == 'Load':
+                return context.get_variable(node.id)
+            return node.id
+        
+        elif isinstance(node, ast.BinOp):
+            left = self.evaluate_expr(node.left, context)
+            right = self.evaluate_expr(node.right, context)
+            return self.evaluate_binop(node.op, left, right)
+        
+        elif isinstance(node, ast.UnaryOp):
+            operand = self.evaluate_expr(node.operand, context)
+            return self.evaluate_unary(node.op, operand)
+        
+        elif isinstance(node, ast.Compare):
+            left = self.evaluate_expr(node.left, context)
+            for op, comparator in zip(node.ops, node.comparators):
+                right = self.evaluate_expr(comparator, context)
+                if not self.evaluate_binop(op, left, right):
+                    return False
+                left = right
+            return True
+        
+        elif isinstance(node, ast.ListExpr):
+            return [self.evaluate_expr(elt, context) for elt in node.elts]
+        
+        elif isinstance(node, ast.Dict):
+            return {self.evaluate_expr(k, context): self.evaluate_expr(v, context) for k, v in zip(node.keys, node.values)}
+        
+        elif isinstance(node, ast.Attribute):
+            obj = self.evaluate_expr(node.value, context)
+            try:
+                return getattr(obj, node.attr)
+            except AttributeError:
+                if isinstance(obj, dict): return obj.get(node.attr)
+                raise InterpreterError(f"Attribute '{node.attr}' not found on {type(obj).__name__}", node)
+        
+        elif isinstance(node, ast.Subscript):
+            container = self.evaluate_expr(node.value, context)
+            index = self.evaluate_expr(node.slice, context)
+            try:
+                return container[index]
+            except Exception as e:
+                raise InterpreterError(f"Subscript access error: {str(e)}", node)
+        
+        elif isinstance(node, ast.CastExpr):
+            val = self.evaluate_expr(node.value, context)
+            type_func = context.get_variable(node.type_name)
+            if callable(type_func):
+                return type_func(val)
+            raise InterpreterError(f"Type '{node.type_name}' is not callable for casting", node)
+            
+        # 委托给 Interpreter 处理复杂的控制流节点（如 Call, BehaviorExpr）
+        if self.service_context and self.service_context.interpreter:
+            return self.service_context.interpreter.visit(node)
+
+        raise InterpreterError(f"No evaluation logic implemented for {node.__class__.__name__}", node)
 
     def evaluate_binop(self, op: str, left: Any, right: Any) -> Any:
         """

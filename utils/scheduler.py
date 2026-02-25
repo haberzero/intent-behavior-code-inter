@@ -30,6 +30,7 @@ class Scheduler:
         self.ast_cache: Dict[str, Module] = {}   # Path -> AST
         self.scope_cache: Dict[str, ScopeNode] = {} # Path AND Name -> Scope (for Parser)
         self.token_cache: Dict[str, List[Token]] = {} # Path -> Tokens (Cached from initial scan)
+        self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
         
         # Build Cache
         # Map: file_path -> mtime
@@ -37,11 +38,15 @@ class Scheduler:
 
     def get_module_ast(self, module_name: str) -> Optional[Module]:
         """
-        通过模块名获取已编译的 AST。供 Interpreter/ModuleManager 联动使用。
+        通过模块名获取已编译的 AST。
         """
-        # 1. 尝试直接通过模块名在缓存中查找
+        # 1. 尝试通过快速索引查找文件路径
+        path = self.module_name_to_path.get(module_name)
+        if path:
+            return self.ast_cache.get(path)
+            
+        # 2. 回退：尝试直接在缓存中查找 (兼容逻辑)
         if module_name in self.scope_cache:
-            # 找到对应的文件路径
             for path, scope in self.scope_cache.items():
                 if scope == self.scope_cache[module_name] and path != module_name:
                     return self.ast_cache.get(path)
@@ -183,6 +188,7 @@ class Scheduler:
         rel_path = os.path.relpath(file_path, self.root_dir)
         base_name = os.path.splitext(rel_path)[0]
         module_name = base_name.replace(os.sep, '.')
+        self.module_name_to_path[module_name] = file_path
         
         # Get content
         source = module_info.content

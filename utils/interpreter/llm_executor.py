@@ -1,6 +1,6 @@
 import re
 from typing import Any, List, Optional, Dict
-from .interfaces import LLMExecutor, RuntimeContext
+from .interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from typedef import parser_types as ast
 from typedef.exception_types import InterpreterError
 
@@ -8,10 +8,12 @@ class LLMExecutorImpl:
     """
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
     """
-    def __init__(self, llm_callback: Optional[Any] = None):
+    def __init__(self, service_context: Optional[ServiceContext] = None, llm_callback: Optional[Any] = None):
         """
+        service_context: 注入容器
         llm_callback: 实际的 LLM 调用接口 (底层)。
         """
+        self.service_context = service_context
         self.llm_callback = llm_callback
 
     def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> str:
@@ -41,10 +43,7 @@ class LLMExecutorImpl:
         user_prompt = placeholder_pattern.sub(replace_placeholder, user_prompt)
         
         # 4. 调用底层模型
-        if self.llm_callback:
-            return self.llm_callback(sys_prompt, user_prompt)
-            
-        return f"[MOCK LLM] {node.name}\nSYS: {sys_prompt}\nUSER: {user_prompt}"
+        return self._call_llm(sys_prompt, user_prompt, node)
 
     def execute_behavior_expression(self, node: ast.BehaviorExpr, context: RuntimeContext) -> str:
         """
@@ -57,19 +56,19 @@ class LLMExecutorImpl:
             if isinstance(segment, str):
                 content_parts.append(segment)
             elif isinstance(segment, (ast.Name, ast.Attribute, ast.Subscript)):
-                # 我们需要一种方式来评估这些表达式。
-                # 目前由于 LLMExecutor 独立于 Interpreter 访问者，
-                # 我们通过一个简单的逻辑处理 Name/Attribute/Subscript。
-                # 未来可以考虑传入一个 evaluator 函数。
-                val = self._evaluate_simple_expr(segment, context)
+                # 使用统一的 Evaluator 进行求值
+                if self.service_context and self.service_context.evaluator:
+                    val = self.service_context.evaluator.evaluate_expr(segment, context)
+                else:
+                    # 回退逻辑 (主要用于单元测试或未完全注入的情况)
+                    val = self._evaluate_simple_expr_fallback(segment, context)
                 content_parts.append(str(val))
             else:
-                # 其他复杂的表达式暂不支持或需要解析
                 content_parts.append(str(segment))
         
         content = "".join(content_parts)
         
-        # 2. 收集意图：包括节点自带意图 (Parser 注入) 和 全局活动意图栈
+        # 2. 收集意图
         all_intents = context.get_active_intents()
         if node.intent:
             all_intents.append(node.intent)
@@ -79,31 +78,24 @@ class LLMExecutorImpl:
             sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
             
         # 3. 执行
-        if self.llm_callback:
-            return self.llm_callback(sys_prompt, content)
-            
-        return f"[MOCK BEHAVIOR] {content}\n(INTENTS: {len(all_intents)})"
+        return self._call_llm(sys_prompt, content, node)
 
-    def _evaluate_simple_expr(self, node: ast.ASTNode, context: RuntimeContext) -> Any:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode) -> str:
+        if self.llm_callback:
+            return self.llm_callback(sys_prompt, user_prompt)
+        
+        # 如果没有回调，说明配置缺失，抛出错误
+        raise InterpreterError(
+            "LLM 运行配置缺失：未配置有效的 LLM 调用接口。\n"
+            "请确保已导入 'ai' 模块并正确调用了 'ai.set_config'。",
+            node
+        )
+
+    def _evaluate_simple_expr_fallback(self, node: ast.ASTNode, context: RuntimeContext) -> Any:
+        """仅用于未注入 Evaluator 时的极简回退"""
         if isinstance(node, ast.Name):
-            try:
-                return context.get_variable(node.id)
-            except (KeyError, NameError):
-                raise InterpreterError(f"Variable '{node.id}' in behavior expression is not defined.", node)
-        
+            return context.get_variable(node.id)
         elif isinstance(node, ast.Attribute):
-            obj = self._evaluate_simple_expr(node.value, context)
-            try:
-                return getattr(obj, node.attr)
-            except AttributeError:
-                if isinstance(obj, dict): return obj.get(node.attr)
-                raise InterpreterError(f"Attribute '{node.attr}' not found on {type(obj).__name__}", node)
-        
-        elif isinstance(node, ast.Subscript):
-            container = self._evaluate_simple_expr(node.value, context)
-            # 简化处理：假设索引是常量或简单变量
-            # 注意：这里可能需要更复杂的逻辑，但在 behavior 表达式中通常较简单
-            # 如果需要完整支持，应该让 Interpreter 预先求值
-            raise InterpreterError("Subscript in behavior expression is not fully supported yet.", node)
-            
-        return None
+            obj = self._evaluate_simple_expr_fallback(node.value, context)
+            return getattr(obj, node.attr)
+        return str(node)

@@ -80,24 +80,30 @@ def register_stdlib(interop: InterOp, llm_executor: LLMExecutor):
             作为 LLMExecutor 的回调执行真实/虚拟调用
             """
             # 1. 检查配置完备性
-            if not self.config["key"] or not self.config["url"] or not self.config["model"]:
-                from typedef.exception_types import InterpreterError
-                raise InterpreterError(
-                    "LLM 运行配置缺失：在执行 AI 行为前，必须先配置 LLM 访问参数。\n"
-                    "建议修复方案：\n"
-                    "1. 在 IBCI 代码顶部增加 'import ai'\n"
-                    "2. 调用 'ai.set_config(url, key, model)' 设置正确的 API 信息\n"
-                    "   例如：ai.set_config(\"https://api.openai.com\", \"your-key\", \"gpt-4\")\n"
-                    "   或者在测试环境中使用 \"TESTONLY\" 作为魔法值。"
-                )
+            is_test_mode = (
+                self.config["url"] == "TESTONLY" and 
+                self.config["key"] == "TESTONLY" and 
+                self.config["model"] == "TESTONLY"
+            )
+
+            if not is_test_mode:
+                if not self.config["key"] or not self.config["url"] or not self.config["model"]:
+                    from typedef.exception_types import InterpreterError
+                    raise InterpreterError(
+                        "LLM 运行配置缺失：在执行 AI 行为前，必须先配置 LLM 访问参数。\n"
+                        "建议修复方案：\n"
+                        "1. 在 IBCI 代码顶部增加 'import ai'\n"
+                        "2. 调用 'ai.set_config(url, key, model)' 设置正确的 API 信息\n"
+                        "   例如：ai.set_config(\"https://api.openai.com\", \"your-key\", \"gpt-4\")\n"
+                        "   或者在测试环境中使用 \"TESTONLY\" 作为魔法值。"
+                    )
 
             # 2. 检查 TESTONLY 魔法触发器
-            if (self.config["url"] == "TESTONLY" and 
-                self.config["key"] == "TESTONLY" and 
-                self.config["model"] == "TESTONLY"):
+            if is_test_mode:
                 return f"[TESTONLY MODE] {user_prompt} (INTENTS: {sys_prompt})"
             
-            # 3. 正常执行路径 (原型机阶段返回 Mock)
+            # 3. 正常执行路径
+            # TODO: 实现真实的 LLM API 调用
             return f"[AI Response using {self.config['model']}] Received: {user_prompt}"
 
     interop.register_package("ai", LLMHandler(llm_executor))

@@ -1,7 +1,10 @@
 import os
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
 from .interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
 from typedef.exception_types import InterpreterError
+
+if TYPE_CHECKING:
+    from .interfaces import Interpreter
 
 class ModuleInstanceImpl:
     def __init__(self, name: str, scope: Scope):
@@ -18,7 +21,7 @@ class ModuleInstanceImpl:
         return self.get_variable(name)
 
 class ModuleManagerImpl:
-    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = ".", interpreter_factory: Optional[Callable] = None):
+    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = ".", interpreter_factory: Optional[Callable[[], 'Interpreter']] = None):
         self.interop = interop
         self.scheduler = scheduler
         self.root_dir = root_dir
@@ -28,7 +31,7 @@ class ModuleManagerImpl:
     def import_module(self, module_name: str, context: RuntimeContext) -> None:
         """
         处理 import module_name
-        优先从 InterOp 注册包中加载（命名空间隔离的第三方/第一方库）。
+        优先从 InterOp 注册包中加载。
         其次尝试从已编译的 IBC 模块中加载。
         """
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
@@ -91,27 +94,22 @@ class ModuleManagerImpl:
             # 确保模块已加载
             if module_name not in self._loaded_modules:
                 self.import_module(module_name, context)
-                # import_module 会把模块名定义在 context 中，我们其实不需要它定义在当前 context，
-                # 但目前为了复用逻辑先这样。后续可以优化。
             
             module_instance = self._loaded_modules.get(module_name)
             if module_instance:
                 if '*' in names:
-                    # 导入模块全局作用域中的所有非内置符号
-                    # 注意：ScopeImpl 目前没有直接导出所有符号的方法，需要访问私有属性或扩展接口
-                    # 暂时访问私有属性 _symbols
-                    symbols = getattr(module_instance.scope, '_symbols', {})
-                    for sym_name, sym_obj in symbols.items():
-                        if not sym_obj.is_const: # 排除 print, int 等内置符号
-                            context.define_variable(sym_name, sym_obj.value, declared_type=sym_obj.declared_type)
+                    # 使用接口公开方法获取符号
+                    symbols = module_instance.scope.get_all_symbols()
+                    for sym_name, sym in symbols.items():
+                        if not sym.is_const: # 排除 print, int 等内置符号
+                            context.define_variable(sym_name, sym.value, declared_type=sym.declared_type)
                 else:
                     for name in names:
                         try:
                             val = module_instance.get_variable(name)
-                            # 获取符号元数据（如果可能）
                             symbol = module_instance.scope.get_symbol(name)
                             context.define_variable(name, val, declared_type=symbol.declared_type if symbol else None)
-                        except InterpreterError:
+                        except (InterpreterError, KeyError):
                             raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
                 return
 
