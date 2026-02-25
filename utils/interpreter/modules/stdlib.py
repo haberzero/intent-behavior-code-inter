@@ -87,6 +87,15 @@ def register_stdlib(context: ServiceContext):
                 self.executor.llm_callback = self
 
         def _init_client(self):
+            # 如果是测试模式，跳过昂贵的 OpenAI 库加载
+            is_test_mode = (
+                self.config["url"] == "TESTONLY" or 
+                os.environ.get("IBC_TEST_MODE") == "1"
+            )
+            if is_test_mode:
+                self.client = "MOCK_CLIENT"
+                return
+
             if self.config["url"] and self.config["key"]:
                 try:
                     from openai import OpenAI

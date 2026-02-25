@@ -17,6 +17,7 @@ from .module_manager import ModuleManagerImpl
 from .evaluator import EvaluatorImpl
 from .permissions import PermissionManager as PermissionManagerImpl
 from .modules.stdlib import register_stdlib
+from utils.host_interface import HostInterface
 
 # --- Runtime Exceptions for Flow Control ---
 class ReturnException(Exception):
@@ -70,13 +71,15 @@ class Interpreter:
                  output_callback: Optional[Callable[[str], None]] = None, 
                  max_instructions: int = 10000, 
                  max_call_stack: int = 100,
-                 scheduler: Optional[Any] = None):
+                 scheduler: Optional[Any] = None,
+                 host_interface: Optional[HostInterface] = None):
         self.output_callback = output_callback
         self.scheduler = scheduler
+        self.host_interface = host_interface or HostInterface()
         
         # 1. 初始化基础组件
         runtime_context = RuntimeContextImpl()
-        interop = InterOpImpl()
+        interop = InterOpImpl(host_interface=self.host_interface)
         evaluator = EvaluatorImpl()
         
         # 权限管理
@@ -145,7 +148,8 @@ class Interpreter:
             max_instructions=self.max_instructions,
             max_call_stack=self.max_call_stack,
             scheduler=self.scheduler,
-            issue_tracker=self.service_context.issue_tracker
+            issue_tracker=self.service_context.issue_tracker,
+            host_interface=self.host_interface
         )
 
     def _register_intrinsics(self):
@@ -240,7 +244,8 @@ class Interpreter:
                 self.context.define_variable(alias.asname, module_obj)
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
-        names = [alias.name for alias in node.names]
+        # Pass list of (name, asname) tuples
+        names = [(alias.name, alias.asname) for alias in node.names]
         self.module_manager.import_from(node.module, names, self.context)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
