@@ -1,0 +1,26 @@
+import ai
+import json
+import file
+
+# 情况 2：在 ibci 代码文件中显式读取一个 json 并配置
+#
+# 这种方式不依赖 main.py 的自动注入，更加显式。
+
+print("--- [02_file_config.ibci] ---")
+
+# 注意：相对路径是相对于项目根目录（默认是脚本所在目录）
+str config_path = "api_config.json"
+
+if file.exists(config_path):
+    str raw_content = file.read(config_path)
+    dict cfg = json.parse(raw_content)
+    
+    # 利用内置 ai 组件进行配置
+    ai.set_config(cfg["url"], cfg["key"], cfg["model"])
+    print("成功从文件 " + config_path + " 加载配置")
+else:
+    print("错误：配置文件不存在: " + config_path)
+    ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+str res = ~~显式文件配置测试~~
+print("AI 回复: " + res)

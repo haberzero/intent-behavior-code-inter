@@ -1,0 +1,49 @@
+import ai
+
+# 情况 4：全面展示 Mock 功能
+# 
+# IBC-Inter 提供了强大的 Mock 机制，允许在没有真实 API Key 的情况下
+# 模拟各种复杂的 AI 行为，包括成功、失败、判断不确定及自我修复。
+
+print("--- [04_mock_advanced.ibci] ---")
+
+# 1. 开启高级模拟模式
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_retry(3) # 设置最大重试次数
+
+print("\n1. 模拟常规文本生成：")
+str res = ~~你好，请自我介绍~~
+print("Mock 回复: " + res)
+
+print("\n2. 模拟精确的分支控制：")
+# 使用 MOCK:TRUE 或 MOCK:FALSE 前缀可以强制控制逻辑走向
+if ~~MOCK:TRUE 这是一个会被判定为真的描述~~:
+    print("分支判定：真 (预期内)")
+else:
+    print("分支判定：假")
+
+print("\n3. 模拟 LLM 判定模糊与 llmexcept 捕获：")
+# 使用 MOCK:FAIL 会强制让 LLM 返回一个无法解析为 1/0 的模糊结果
+try:
+    if ~~MOCK:FAIL 执行一个注定失败的判断~~:
+        print("执行成功（不应出现）")
+    llmexcept:
+        print("成功捕获到 AI 判定模糊！")
+except str as e:
+    print("捕获到运行时异常: " + e)
+
+print("\n4. 模拟“失败 -> 修复 -> 重试”的完整闭环：")
+# 使用 MOCK:REPAIR 配合 ai.set_retry_hint 和 retry 指令
+int attempts = 0
+if ~~MOCK:REPAIR 这是一个需要修复才能通过的任务~~:
+    print("验证成功：任务在第 " + (str)attempts + " 次重试后修复并通过")
+llmexcept:
+    attempts = attempts + 1
+    print("第 " + (str)attempts + " 次尝试失败，正在注入修复提示词并重试...")
+    
+    # 模拟调试：注入一个提示词，Mock 引擎检测到 hint 后会允许 MOCK:REPAIR 通过
+    ai.set_retry_hint("修复指令：请将状态视为满足条件")
+    
+    retry
+
+print("\n--- Mock 验证完成 ---")

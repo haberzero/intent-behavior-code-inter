@@ -1,0 +1,23 @@
+import ai
+
+# 情况 1：直接利用 main.py 提供的 --config 对外接口
+# 
+# 运行方式：
+# python main.py run examples/05_llm_config/01_cli_config.ibci --config examples/05_llm_config/api_config.json
+#
+# main.py 会自动解析 json 中的 url, key, model 字段并注入为全局变量。
+
+print("--- [01_cli_config.ibci] ---")
+
+# 检查变量是否已由 main.py 注入
+# 注意：在 check 模式下，这些变量可能未定义，建议在脚本中做简单兼容
+try:
+    ai.set_config(url, key, model)
+    print("成功使用 CLI 注入的配置初始化 AI")
+except str as e:
+    print("警告：未检测到 CLI 注入的配置变量，请确保使用了 --config 参数")
+    # 回退到模拟模式以便演示
+    ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+str res = ~~请说一句测试台词~~
+print("AI 回复: " + res)

@@ -1,0 +1,18 @@
+import ai
+
+# 情况 3：直接用内置组件进行硬编码配置（不推荐）
+#
+# 仅用于快速临时测试，不建议在生产或版本管理中使用。
+
+print("--- [03_hardcoded_config.ibci] ---")
+
+# 直接硬编码参数
+# ai.set_config("https://api.openai.com/v1", "sk-xxx", "gpt-4")
+
+# 为了示例安全，这里依然使用 TESTONLY，但演示了硬编码的语法
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("已完成硬编码配置（示例中使用 TESTONLY 代替）")
+
+str res = ~~硬编码测试~~
+print("AI 回复: " + res)

@@ -79,7 +79,16 @@ llmexcept:
     retry
 ```
 
-### 3. 插件化扩展 (Plugin-Ready)
+### 3. 意图驱动循环 (Intent-Driven Loop)
+支持根据语义状态持续进行任务迭代。
+```ibc-inter
+for ~~判定当前内容是否足够热情？如果不够请返回 1 继续优化~~:
+    current_content = ~~优化这段文字：$current_content~~
+    if ~~判断内容是否已包含笑脸表情~~:
+        break
+```
+
+### 4. 插件化扩展 (Plugin-Ready)
 零配置的 Python 插件自动嗅探机制：
 1. 在项目根目录下创建 `plugins/` 文件夹。
 2. 将 Python 脚本（如 `tools.py`）放入其中。

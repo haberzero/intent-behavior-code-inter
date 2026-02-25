@@ -1,0 +1,38 @@
+import ai
+
+# 开启 TESTONLY 模式
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("--- [intent_driven_loop.ibci] ---")
+
+# 1. 基础意图驱动循环
+# LLM 将在每次迭代前重新评估条件。
+# MOCK 模式下，它会根据字符串内容判定，如果包含 "MOCK:TRUE" 或 "MOCK:1" 则继续。
+int count = 0
+str status = "MOCK:1"
+
+print("开始意图驱动循环...")
+for ~~任务状态是否为 $status ? 如果是请返回 1 继续，否则返回 0 停止。~~:
+    count = count + 1
+    print("执行中... 当前次数: " + (str)count)
+    if count >= 3:
+        status = "MOCK:0"
+        print("已达到目标，修改状态为停止。")
+
+print("循环结束，总计次数: " + (str)count)
+
+# 2. 带容错的意图驱动循环
+# 如果 LLM 判断模糊，会触发 llmexcept 块。
+print("\n测试带容错的意图循环...")
+int b_count = 0
+for ~~MOCK:REPAIR 判定是否需要继续执行？~~:
+    b_count = b_count + 1
+    print("执行中... b_count = " + (str)b_count)
+    if b_count >= 2:
+        break
+llmexcept:
+    print("AI 判断模糊，正在重试...")
+    ai.set_retry_hint("请严格返回 1 或 0")
+    retry
+
+print("测试完成。")
