@@ -3,6 +3,10 @@ import operator
 from .interfaces import Evaluator, RuntimeContext, ServiceContext
 from typedef.exception_types import InterpreterError
 from typedef import parser_types as ast
+from utils.diagnostics.codes import (
+    RUN_TYPE_MISMATCH, RUN_DIVISION_BY_ZERO, RUN_ATTRIBUTE_ERROR, 
+    RUN_INDEX_ERROR, RUN_CALL_ERROR, RUN_GENERIC_ERROR
+)
 
 class EvaluatorImpl:
     """
@@ -95,11 +99,11 @@ class EvaluatorImpl:
         elif isinstance(node, ast.BinOp):
             left = self.evaluate_expr(node.left, context)
             right = self.evaluate_expr(node.right, context)
-            return self.evaluate_binop(node.op, left, right)
+            return self.evaluate_binop(node.op, left, right, node=node)
         
         elif isinstance(node, ast.UnaryOp):
             operand = self.evaluate_expr(node.operand, context)
-            return self.evaluate_unary(node.op, operand)
+            return self.evaluate_unary(node.op, operand, node=node)
         
         elif isinstance(node, ast.Compare):
             left = self.evaluate_expr(node.left, context)
@@ -122,7 +126,7 @@ class EvaluatorImpl:
                 return getattr(obj, node.attr)
             except AttributeError:
                 if isinstance(obj, dict): return obj.get(node.attr)
-                raise InterpreterError(f"Attribute '{node.attr}' not found on {type(obj).__name__}", node)
+                raise InterpreterError(f"Attribute '{node.attr}' not found on {type(obj).__name__}", node, error_code=RUN_ATTRIBUTE_ERROR)
         
         elif isinstance(node, ast.Subscript):
             container = self.evaluate_expr(node.value, context)
@@ -130,7 +134,7 @@ class EvaluatorImpl:
             try:
                 return container[index]
             except Exception as e:
-                raise InterpreterError(f"Subscript access error: {str(e)}", node)
+                raise InterpreterError(f"Subscript access error: {str(e)}", node, error_code=RUN_INDEX_ERROR)
         
         elif isinstance(node, ast.CastExpr):
             val = self.evaluate_expr(node.value, context)
@@ -145,7 +149,7 @@ class EvaluatorImpl:
 
         raise InterpreterError(f"No evaluation logic implemented for {node.__class__.__name__}", node)
 
-    def evaluate_binop(self, op: str, left: Any, right: Any) -> Any:
+    def evaluate_binop(self, op: str, left: Any, right: Any, node: Optional[ast.ASTNode] = None) -> Any:
         """
         处理二元运算。
         """
@@ -153,32 +157,54 @@ class EvaluatorImpl:
         handler = self._bin_handlers.get((op, type(left), type(right)))
         
         if not handler:
-            raise InterpreterError(f"Binary operator '{op}' not supported for types {type(left).__name__} and {type(right).__name__}")
+            raise InterpreterError(f"Binary operator '{op}' not supported for types {type(left).__name__} and {type(right).__name__}", node, error_code=RUN_TYPE_MISMATCH)
 
         try:
             return handler(left, right)
         except TypeError as e:
-            raise InterpreterError(f"Type error in binary operation '{op}': {str(e)}")
+            raise InterpreterError(f"Type error in binary operation '{op}': {str(e)}", node, error_code=RUN_TYPE_MISMATCH)
         except ZeroDivisionError:
-            raise InterpreterError("Division by zero")
+            raise InterpreterError("Division by zero", node, error_code=RUN_DIVISION_BY_ZERO)
         except Exception as e:
-            raise InterpreterError(f"Error in binary operation '{op}': {str(e)}")
+            raise InterpreterError(f"Error in binary operation '{op}': {str(e)}", node, error_code=RUN_GENERIC_ERROR)
 
-    def evaluate_unary(self, op: str, operand: Any) -> Any:
+    def evaluate_unary(self, op: str, operand: Any, node: Optional[ast.ASTNode] = None) -> Any:
         """
         处理一元运算。
         """
         handler = self._unary_handlers.get((op, type(operand)))
         
         if not handler:
-            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand).__name__}")
+            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand).__name__}", node, error_code=RUN_TYPE_MISMATCH)
 
         try:
             return handler(operand)
         except TypeError as e:
-            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand).__name__}: {str(e)}")
+            raise InterpreterError(f"Unary operator '{op}' not supported for type {type(operand).__name__}: {str(e)}", node, error_code=RUN_TYPE_MISMATCH)
         except Exception as e:
-            raise InterpreterError(f"Error in unary operation '{op}': {str(e)}")
+            raise InterpreterError(f"Error in unary operation '{op}': {str(e)}", node, error_code=RUN_GENERIC_ERROR)
+
+    def evaluate_assign(self, target: ast.ASTNode, value: Any, context: RuntimeContext) -> None:
+        """
+        处理赋值左值。支持 Name, Subscript, Attribute。
+        """
+        if isinstance(target, ast.Name):
+            context.set_variable(target.id, value)
+        elif isinstance(target, ast.Subscript):
+            container = self.evaluate_expr(target.value, context)
+            index = self.evaluate_expr(target.slice, context)
+            try:
+                container[index] = value
+            except Exception as e:
+                raise InterpreterError(f"Subscript assignment error: {str(e)}", target, error_code=RUN_INDEX_ERROR)
+        elif isinstance(target, ast.Attribute):
+            obj = self.evaluate_expr(target.value, context)
+            try:
+                setattr(obj, target.attr, value)
+            except Exception as e:
+                raise InterpreterError(f"Attribute assignment error: {str(e)}", target, error_code=RUN_ATTRIBUTE_ERROR)
+        else:
+            raise InterpreterError(f"Invalid assignment target: {target.__class__.__name__}", target, error_code=RUN_GENERIC_ERROR)
 
     def _register_special_handlers(self):
         """

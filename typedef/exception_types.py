@@ -1,23 +1,10 @@
 from dataclasses import dataclass, field
 from typing import Optional, Any, TYPE_CHECKING
-from enum import Enum, auto
+from typedef.diagnostic_types import Severity, Location
 
 if TYPE_CHECKING:
     from typedef.lexer_types import Token
     from typedef.parser_types import ASTNode
-
-class Severity(Enum):
-    ERROR = auto()
-    WARNING = auto()
-    INFO = auto()
-
-@dataclass
-class Location:
-    line: int
-    column: int
-    end_line: Optional[int] = None
-    end_column: Optional[int] = None
-    file_path: Optional[str] = None
 
 class IBCBaseException(Exception):
     """Base exception for all IBC-Inter related exceptions."""
@@ -72,10 +59,11 @@ class ParserError(IBCBaseException):
         self.token = token
 
 class InterpreterError(IBCBaseException):
-    def __init__(self, message: str, node: Optional['ASTNode'] = None):
+    def __init__(self, message: str, node: Optional['ASTNode'] = None, error_code: Optional[str] = None):
         loc = None
         if node:
             loc = Location(
+                file_path=getattr(node, 'file_path', None),
                 line=getattr(node, 'lineno', 0),
                 column=getattr(node, 'col_offset', 0),
                 end_line=getattr(node, 'end_lineno', None),
@@ -85,7 +73,7 @@ class InterpreterError(IBCBaseException):
             message,
             loc,
             severity=Severity.ERROR,
-            error_code="RUNTIME_ERROR",
+            error_code=error_code or "RUNTIME_ERROR",
             context_info={'node': node} if node else None
         )
         self.node = node
@@ -112,6 +100,5 @@ class SemanticError(IBCBaseException):
 class LLMUncertaintyError(InterpreterError):
     """Raised when LLM returns an unparsable or ambiguous value in strict scenes."""
     def __init__(self, message: str, node: Optional['ASTNode'] = None, raw_response: str = ""):
-        super().__init__(message, node)
+        super().__init__(message, node, error_code="RUN_009") # RUN_LLM_ERROR
         self.raw_response = raw_response
-        self.error_code = "LLM_UNCERTAINTY"

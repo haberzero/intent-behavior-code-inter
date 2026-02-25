@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from .interfaces import RuntimeSymbol, Scope, RuntimeContext
 from typedef.exception_types import InterpreterError
+from utils.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
@@ -22,7 +23,7 @@ class ScopeImpl:
         if name in self._symbols:
             symbol = self._symbols[name]
             if symbol.is_const:
-                raise InterpreterError(f"Cannot reassign constant '{name}'")
+                raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
             
             # 运行时类型检查逻辑
             if symbol.declared_type and symbol.declared_type != 'var':
@@ -74,20 +75,20 @@ class RuntimeContextImpl:
         try:
             return self._current_scope.get(name)
         except KeyError:
-            raise InterpreterError(f"Variable '{name}' is not defined")
+            raise InterpreterError(f"Variable '{name}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
     def get_symbol(self, name: str) -> Optional[RuntimeSymbol]:
         return self._current_scope.get_symbol(name)
 
     def set_variable(self, name: str, value: Any) -> None:
         if not self._current_scope.assign(name, value):
-            raise InterpreterError(f"Variable '{name}' is not defined")
+            raise InterpreterError(f"Variable '{name}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False) -> None:
         # 检查是否试图重定义常量（包括全局内置常量）
         existing = self.get_symbol(name)
         if existing and existing.is_const:
-            raise InterpreterError(f"Cannot reassign constant '{name}'")
+            raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
 
         self._current_scope.define(name, value, declared_type, is_const)
 

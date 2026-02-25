@@ -1,6 +1,10 @@
 from typing import Any, Dict, List, Optional, Callable
 from typedef import parser_types as ast
 from typedef.exception_types import InterpreterError, LLMUncertaintyError
+from utils.diagnostics.codes import (
+    RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
+    RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR
+)
 from .interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, Evaluator, ServiceContext, IssueTracker,
@@ -177,22 +181,37 @@ class Interpreter:
             for stmt in module.body:
                 result = self.visit(stmt)
             return result
-        except InterpreterError:
+        except InterpreterError as e:
+            # 只有用户层面的错误才汇报给 IssueTracker
+            # 内部错误或某些控制流异常不适合在这里直接汇报
+            if self.service_context.issue_tracker:
+                from typedef.diagnostic_types import Severity
+                self.service_context.issue_tracker.report(
+                    Severity.ERROR,
+                    e.error_code or RUN_GENERIC_ERROR,
+                    e.message,
+                    location=e.node
+                )
             raise
         except (ReturnException, BreakException, ContinueException):
-            raise InterpreterError("Control flow statement used outside of function or loop.")
+            raise InterpreterError("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         except Exception as e:
-            raise InterpreterError(f"Runtime error: {str(e)}")
+            # 将非预期的 Python 异常包装为解释器错误并汇报
+            msg = f"Runtime error: {str(e)}"
+            if self.service_context.issue_tracker:
+                from typedef.diagnostic_types import Severity
+                self.service_context.issue_tracker.report(Severity.FATAL, RUN_GENERIC_ERROR, msg)
+            raise InterpreterError(msg, error_code=RUN_GENERIC_ERROR)
 
     def visit(self, node: ast.ASTNode) -> Any:
         """核心 Visitor 分发方法"""
         self.instruction_count += 1
         if self.instruction_count > self.max_instructions:
-            raise InterpreterError("Execution limit exceeded (infinite loop protection)", node)
+            raise InterpreterError("Execution limit exceeded (infinite loop protection)", node, error_code=RUN_LIMIT_EXCEEDED)
 
         # 增加递归深度保护，防止过深的 AST 导致 Python 栈溢出
         if self.call_stack_depth >= self.max_call_stack:
-             raise InterpreterError(f"RecursionError: Maximum recursion depth ({self.max_call_stack}) exceeded during AST traversal.", node)
+             raise InterpreterError(f"RecursionError: Maximum recursion depth ({self.max_call_stack}) exceeded during AST traversal.", node, error_code=RUN_LIMIT_EXCEEDED)
         
         self.call_stack_depth += 1
         try:
@@ -203,7 +222,7 @@ class Interpreter:
             self.call_stack_depth -= 1
 
     def generic_visit(self, node: ast.ASTNode):
-        raise InterpreterError(f"No visit method implemented for {node.__class__.__name__}", node)
+        raise InterpreterError(f"No visit method implemented for {node.__class__.__name__}", node, error_code=RUN_GENERIC_ERROR)
 
     # --- AST 访问方法实现 ---
 
@@ -226,12 +245,12 @@ class Interpreter:
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if self._is_builtin(node.name):
-            raise InterpreterError(f"Cannot redefine built-in function '{node.name}'", node)
+            raise InterpreterError(f"Cannot redefine built-in function '{node.name}'", node, error_code=RUN_TYPE_MISMATCH)
         self.context.define_variable(node.name, node)
 
     def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
         if self._is_builtin(node.name):
-            raise InterpreterError(f"Cannot redefine built-in function '{node.name}'", node)
+            raise InterpreterError(f"Cannot redefine built-in function '{node.name}'", node, error_code=RUN_TYPE_MISMATCH)
         self.context.define_variable(node.name, node)
 
     def _is_builtin(self, name: str) -> bool:
@@ -259,7 +278,7 @@ class Interpreter:
             if not isinstance(value, expected_type):
                 if expected_type is float and isinstance(value, int):
                     return
-                raise InterpreterError(f"Type mismatch: Variable '{var_name}' expects {type_name}, but got {type(value).__name__}", node)
+                raise InterpreterError(f"Type mismatch: Variable '{var_name}' expects {type_name}, but got {type(value).__name__}", node, error_code=RUN_TYPE_MISMATCH)
 
     def visit_ExprStmt(self, node: ast.ExprStmt):
         return self.visit(node.value)
@@ -275,7 +294,7 @@ class Interpreter:
                     self.context.define_variable(target.id, value, declared_type=type_name)
                 else:
                     if self._is_builtin(target.id):
-                         raise InterpreterError(f"Cannot reassign built-in variable '{target.id}'", node)
+                         raise InterpreterError(f"Cannot reassign built-in variable '{target.id}'", node, error_code=RUN_TYPE_MISMATCH)
                     
                     symbol = self.context.current_scope.get_symbol(target.id)
                     if symbol and symbol.declared_type and symbol.declared_type != 'var':
@@ -283,20 +302,12 @@ class Interpreter:
 
                     self.context.set_variable(target.id, value)
             elif isinstance(target, (ast.Subscript, ast.Attribute)):
-                # 这里我们保持原样，因为 Assign 的左值处理较为特殊
-                # 或者我们可以让 Evaluator 支持写操作
-                if isinstance(target, ast.Subscript):
-                    container = self.visit(target.value)
-                    index = self.visit(target.slice)
-                    container[index] = value
-                else: # Attribute
-                    obj = self.visit(target.value)
-                    setattr(obj, target.attr, value)
+                self.evaluator.evaluate_assign(target, value, self.context)
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target_val = self.visit(node.target)
         value = self.visit(node.value)
-        new_val = self.evaluator.evaluate_binop(node.op, target_val, value)
+        new_val = self.evaluator.evaluate_binop(node.op, target_val, value, node=node)
         
         if isinstance(node.target, ast.Name):
             self.context.set_variable(node.target.id, new_val)
@@ -381,8 +392,8 @@ class Interpreter:
             exc_val = self.visit(node.exc)
             if isinstance(exc_val, Exception):
                 raise exc_val
-            raise InterpreterError(str(exc_val), node)
-        raise InterpreterError("Re-raise not supported in this version", node)
+            raise InterpreterError(str(exc_val), node, error_code=RUN_GENERIC_ERROR)
+        raise InterpreterError("Re-raise not supported in this version", node, error_code=RUN_GENERIC_ERROR)
 
     def visit_While(self, node: ast.While):
         def while_logic():
@@ -432,14 +443,14 @@ class Interpreter:
             elif callable(func):
                 return func(*args)
             else:
-                raise InterpreterError(f"Object {func} is not callable", node)
+                raise InterpreterError(f"Object {func} is not callable", node, error_code=RUN_CALL_ERROR)
         finally:
             if node.intent:
                 self.context.pop_intent()
 
     def call_user_function(self, func_def: ast.FunctionDef, args: List[Any]):
         if self.call_stack_depth >= self.max_call_stack:
-            raise InterpreterError("RecursionError: maximum recursion depth exceeded", func_def)
+            raise InterpreterError("RecursionError: maximum recursion depth exceeded", func_def, error_code=RUN_LIMIT_EXCEEDED)
             
         self.call_stack_depth += 1
         self.context.enter_scope()

@@ -3,6 +3,7 @@ from typing import Any, List, Optional, Dict
 from .interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from typedef import parser_types as ast
 from typedef.exception_types import InterpreterError, LLMUncertaintyError
+from utils.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 
 class LLMExecutorImpl:
     """
@@ -56,14 +57,13 @@ class LLMExecutorImpl:
         for segment in node.segments:
             if isinstance(segment, str):
                 content_parts.append(segment)
-            elif isinstance(segment, (ast.Name, ast.Attribute, ast.Subscript)):
+            elif isinstance(segment, (ast.Name, ast.Attribute, ast.Subscript, ast.Expr)):
                 # 使用统一的 Evaluator 进行求值
                 if self.service_context and self.service_context.evaluator:
                     val = self.service_context.evaluator.evaluate_expr(segment, context)
+                    content_parts.append(str(val))
                 else:
-                    # 回退逻辑 (主要用于单元测试或未完全注入的情况)
-                    val = self._evaluate_simple_expr_fallback(segment, context)
-                content_parts.append(str(val))
+                    raise InterpreterError("Evaluator not initialized in LLMExecutor", node, error_code=RUN_GENERIC_ERROR)
             else:
                 content_parts.append(str(segment))
         
@@ -131,14 +131,6 @@ class LLMExecutorImpl:
         raise InterpreterError(
             "LLM 运行配置缺失：未配置有效的 LLM 调用接口。\n"
             "请确保已导入 'ai' 模块并正确调用了 'ai.set_config'。",
-            node
+            node,
+            error_code=RUN_LLM_ERROR
         )
-
-    def _evaluate_simple_expr_fallback(self, node: ast.ASTNode, context: RuntimeContext) -> Any:
-        """仅用于未注入 Evaluator 时的极简回退"""
-        if isinstance(node, ast.Name):
-            return context.get_variable(node.id)
-        elif isinstance(node, ast.Attribute):
-            obj = self._evaluate_simple_expr_fallback(node.value, context)
-            return getattr(obj, node.attr)
-        return str(node)

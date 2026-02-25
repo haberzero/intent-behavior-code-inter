@@ -8,6 +8,10 @@ from typedef.diagnostic_types import Diagnostic, Severity, CompilerError, Locati
 from typedef.scope_types import ScopeType, ScopeNode
 from utils.parser.symbol_table import ScopeManager
 from utils.diagnostics.issue_tracker import IssueTracker
+from utils.diagnostics.codes import (
+    SEM_UNDEFINED_SYMBOL, SEM_REDEFINITION, SEM_TYPE_MISMATCH
+)
+
 from utils.semantic.types import (
     Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE,
@@ -74,8 +78,8 @@ class SemanticAnalyzer:
                 self.visit(child)
         return ANY_TYPE
 
-    def error(self, message: str, node: ast.ASTNode):
-        self.issue_tracker.report(Severity.ERROR, "SEMANTIC_ERROR", message, location=node)
+    def error(self, message: str, node: ast.ASTNode, code: str = "SEMANTIC_ERROR"):
+        self.issue_tracker.report(Severity.ERROR, code, message, location=node)
 
 
     # --- Scope Management ---
@@ -245,7 +249,7 @@ class SemanticAnalyzer:
                         if isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
                             symbol.type_info = val_type
                         elif not val_type.is_assignable_to(declared_type):
-                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node)
+                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node, code=SEM_TYPE_MISMATCH)
             else:
                 self.error("Invalid assignment target for declaration", node)
         else:
@@ -254,7 +258,7 @@ class SemanticAnalyzer:
                 var_name = target.id
                 symbol = self.scope_manager.resolve(var_name)
                 if not symbol:
-                    self.error(f"Variable '{var_name}' is not defined", node)
+                    self.error(f"Variable '{var_name}' is not defined", node, code=SEM_UNDEFINED_SYMBOL)
                     return
                 
                 # Check type compatibility
@@ -268,7 +272,7 @@ class SemanticAnalyzer:
                         if isinstance(symbol.type_info, AnyType) and val_type != VOID_TYPE:
                              symbol.type_info = val_type
                         elif val_type is not None and not val_type.is_assignable_to(symbol.type_info):
-                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node)
+                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node, code=SEM_TYPE_MISMATCH)
             else:
                 # Subscript assignment etc.
                 self.visit(target)
@@ -367,7 +371,7 @@ class SemanticAnalyzer:
             # Resolve starting from current scope
             symbol = self.scope_manager.resolve(node.id)
             if not symbol:
-                self.error(f"Variable '{node.id}' is not defined", node)
+                self.error(f"Variable '{node.id}' is not defined", node, code=SEM_UNDEFINED_SYMBOL)
                 return ANY_TYPE
             
             if symbol.type == SymbolType.MODULE:

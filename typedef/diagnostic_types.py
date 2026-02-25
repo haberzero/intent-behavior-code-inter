@@ -15,6 +15,8 @@ class Location:
     line: int
     column: int
     length: int = 1
+    end_line: Optional[int] = None
+    end_column: Optional[int] = None
     context_line: Optional[str] = None # 缓存出错行的源码
 
 @runtime_checkable
