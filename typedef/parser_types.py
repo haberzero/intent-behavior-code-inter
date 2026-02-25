@@ -1,7 +1,14 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, Any
-from enum import IntEnum
+from enum import IntEnum, Enum, auto
 from typedef.scope_types import ScopeNode
+
+# --- Scene ---
+
+class Scene(Enum):
+    GENERAL = auto()
+    BRANCH = auto()
+    LOOP = auto()
 
 # --- Precedence & ParseRule ---
 
@@ -48,15 +55,15 @@ class ASTNode:
     def column(self) -> int:
         return self.col_offset
 
-@dataclass
+@dataclass(kw_only=True)
 class Stmt(ASTNode):
     """语句节点基类"""
     pass
 
-@dataclass
+@dataclass(kw_only=True)
 class Expr(ASTNode):
     """表达式节点基类"""
-    pass
+    scene_tag: Scene = field(default=Scene.GENERAL)
 
 # --- Module ---
 
@@ -103,18 +110,21 @@ class For(Stmt):
     iter: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
+    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class While(Stmt):
     test: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
+    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class If(Stmt):
     test: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
+    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class Try(Stmt):
@@ -158,6 +168,10 @@ class Break(Stmt):
 
 @dataclass
 class Continue(Stmt):
+    pass
+
+@dataclass
+class Retry(Stmt):
     pass
 
 # --- Expressions ---

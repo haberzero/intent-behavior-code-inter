@@ -108,3 +108,10 @@ class SemanticError(IBCBaseException):
             context_info={'node': node} if node else None
         )
         self.node = node
+
+class LLMUncertaintyError(InterpreterError):
+    """Raised when LLM returns an unparsable or ambiguous value in strict scenes."""
+    def __init__(self, message: str, node: Optional['ASTNode'] = None, raw_response: str = ""):
+        super().__init__(message, node)
+        self.raw_response = raw_response
+        self.error_code = "LLM_UNCERTAINTY"

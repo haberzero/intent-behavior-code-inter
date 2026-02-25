@@ -38,6 +38,8 @@ class TokenType(Enum):
     LLM_END = auto()    # llmend
     LLM_SYS = auto()    # __sys__
     LLM_USER = auto()   # __user__
+    LLM_EXCEPT = auto() # llmexcept
+    RETRY = auto()      # retry
 
     # 标识符与字面量
     IDENTIFIER = auto()

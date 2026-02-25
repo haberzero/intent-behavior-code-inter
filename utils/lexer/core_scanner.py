@@ -39,6 +39,7 @@ class CoreTokenScanner:
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,
+            'llmexcept': TokenType.LLM_EXCEPT, 'retry': TokenType.RETRY,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
