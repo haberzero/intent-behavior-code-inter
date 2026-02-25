@@ -43,12 +43,14 @@ def main():
     run_parser.add_argument("--root", help="Project root directory (default: current dir)", default=None)
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--var", action="append", help="Inject variables in key=value format")
+    run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
     check_parser.add_argument("file", help="Path to the .ibci entry file")
     check_parser.add_argument("--root", help="Project root directory", default=None)
     check_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
+    check_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
 
     args = parser.parse_args()
 
@@ -56,7 +58,9 @@ def main():
         parser.print_help()
         return
 
-    engine = IBCIEngine(root_dir=args.root)
+    # 初始化引擎，决定是否自动嗅探
+    auto_sniff = not args.no_sniff
+    engine = IBCIEngine(root_dir=args.root, auto_sniff=auto_sniff)
 
     # 1. 加载插件
     if args.plugin:

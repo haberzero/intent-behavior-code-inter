@@ -25,14 +25,26 @@ class HostInterface:
             # 至少让静态分析知道这些属性存在（虽然类型是 Any）
             scope = ScopeNode(ScopeType.GLOBAL)
             if implementation:
-                # 遍历实现对象的公共属性
-                for attr in dir(implementation):
-                    if attr.startswith('_'): continue
-                    val = getattr(implementation, attr)
-                    if callable(val):
-                        scope.define(attr, SymbolType.FUNCTION).type_info = ANY_TYPE
-                    else:
-                        scope.define(attr, SymbolType.VARIABLE).type_info = ANY_TYPE
+                if isinstance(implementation, dict):
+                    # 处理字典形式的插件
+                    for attr, val in implementation.items():
+                        if not isinstance(attr, str) or attr.startswith('_'): continue
+                        if callable(val):
+                            scope.define(attr, SymbolType.FUNCTION).type_info = ANY_TYPE
+                        else:
+                            scope.define(attr, SymbolType.VARIABLE).type_info = ANY_TYPE
+                else:
+                    # 遍历实现对象的公共属性 (类、模块、实例)
+                    for attr in dir(implementation):
+                        if attr.startswith('_'): continue
+                        try:
+                            val = getattr(implementation, attr)
+                            if callable(val):
+                                scope.define(attr, SymbolType.FUNCTION).type_info = ANY_TYPE
+                            else:
+                                scope.define(attr, SymbolType.VARIABLE).type_info = ANY_TYPE
+                        except:
+                            continue
             
             self._module_types[name] = ModuleType(scope)
 

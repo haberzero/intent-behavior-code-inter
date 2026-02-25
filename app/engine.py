@@ -1,4 +1,5 @@
 import os
+import importlib.util
 from typing import Optional, Dict, Any
 
 from utils.scheduler import Scheduler
@@ -14,7 +15,7 @@ class IBCIEngine:
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
-    def __init__(self, root_dir: Optional[str] = None):
+    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True):
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.issue_tracker = IssueTracker()
         
@@ -23,6 +24,43 @@ class IBCIEngine:
         
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface)
         self.interpreter: Optional[Interpreter] = None
+
+        # 自动嗅探本地插件
+        if auto_sniff:
+            self._sniff_plugins()
+
+    def _sniff_plugins(self):
+        """
+        自动探测项目目录下的 plugins/ 文件夹并加载插件。
+        协议：
+        1. 寻找 root_dir/plugins/*.py
+        2. 如果模块有 setup(engine) 函数，调用它完成深度注册
+        3. 否则，将模块整体注册为同名插件
+        """
+        plugins_dir = os.path.join(self.root_dir, "plugins")
+        if not os.path.isdir(plugins_dir):
+            return
+
+        for filename in os.listdir(plugins_dir):
+            if not filename.endswith(".py") or filename == "__init__.py":
+                continue
+            
+            plugin_path = os.path.join(plugins_dir, filename)
+            module_name = os.path.splitext(filename)[0]
+
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, plugin_path)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+
+                # 优先寻找 setup(engine) 钩子
+                if hasattr(mod, "setup") and callable(mod.setup):
+                    mod.setup(self)
+                else:
+                    # 默认自动注册整个模块
+                    self.register_plugin(module_name, mod)
+            except Exception as e:
+                print(f"Warning: Failed to auto-sniff plugin {filename}: {e}")
 
     def _prepare_interpreter(self, output_callback=None):
         """初始化解释器并注册标准库实现"""
