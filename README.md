@@ -10,53 +10,68 @@ IBC-Inter 是一种实验性的**意图驱动型混合编程语言**。它旨在
 - **🧩 插件化扩展 (Plugin-Ready)**: 零配置的 Python 插件自动嗅探机制，轻松扩展语言能力。
 - **🔒 安全沙箱**: 内置文件访问控制与权限管理，确保 AI 行为在受控范围内。
 
-## 📦 快速开始
+## 📦 快速开始 (初学者友好指南)
 
-### 1. 准备环境
-确保已安装 `openai` (用于连接 LLM) 和其他 Python 基础依赖：
+### 第一步：获取代码
+你可以通过以下任一方式获取本项目：
+- **方式 A (推荐)**: 如果你安装了 Git，直接克隆：
+  ```bash
+  git clone https://github.com/your-repo/ibc-inter.git
+  cd ibc-inter
+  ```
+- **方式 B**: 在 GitHub 页面点击绿色的 **"Code"** 按钮，选择 **"Download ZIP"**。下载后解压并进入文件夹。
+
+### 第二步：安装 Python 与运行依赖
+确保你的电脑安装了 **Python 3.10** 或更高版本。然后在终端（Windows 是 PowerShell 或 CMD，Mac 是 Terminal）运行：
 ```bash
+# 安装连接 AI 所需的官方库
 pip install openai
 ```
 
-### 2. 配置 LLM 服务
-IBC-Inter 需要一个 API 配置文件来连接 LLM。你可以参考根目录下的 `api_config.json`：
-```json
-{
-    "default_model": {
-        "base_url": "http://你的API地址/v1",
-        "api_key": "你的API密钥",
-        "model": "模型名称"
-    }
-}
-```
+### 第三步：获取你的 AI API Key (以阿里云百炼为例)
+1. 访问 [阿里云百炼平台](https://bailian.console.aliyun.com/)。
+2. 登录后，点击左侧菜单的 **“模型广场”**，选择一个模型（如 `qwen-plus` 或 `qwen-turbo`）。
+3. 点击 **“API-KEY”** 菜单，创建一个新的 API-KEY 并复制。
+4. **记住你的地址**: 阿里云百炼的默认地址（base_url）通常是 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
 
-### 3. 编写并运行你的第一个 IBCI 程序
-创建一个名为 `hello.ibci` 的文件：
-```ibc-inter
-import ai
-# 自动使用 --config 注入的 url, key, model 变量进行初始化
-ai.set_config(url, key, model)
+### 第四步：配置并运行
+最简单的方法是直接修改根目录下的 `api_config.json`：
+1. 打开 `api_config.json`，把你的信息填进去：
+   ```json
+   {
+       "default_model": {
+           "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+           "api_key": "这里填你刚才复制的 API-KEY",
+           "model": "qwen-plus"
+       }
+   }
+   ```
+2. **运行示例代码**:
+   ```bash
+   python main.py run examples/01_basics/basic_ai.ibci --config api_config.json
+   ```
 
-@ 你是一个幽默的助手
-str greeting = ~~请向我打个招呼~~
-print(greeting)
+---
 
-if ~~判断 $greeting 是否包含笑话~~:
-    print("AI 表现得很幽默！")
-else:
-    print("AI 似乎比较严肃。")
-```
+### 🌈 没 Key 也能玩？(模拟模式)
+如果你暂时没有 API Key，可以使用 IBC-Inter 强大的 **Mock 模式**。
+1. 创建一个 `test.ibci` 文件，粘贴以下内容：
+   ```ibc-inter
+   import ai
+   # 开启模拟模式，不需要真实的 Key
+   ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-运行程序：
-```bash
-python main.py run hello.ibci --config api_config.json
-```
+   print("正在测试模拟模式...")
+   str res = ~~向我打个招呼~~
+   print("AI 回复: " + res)
 
-### 4. 核心功能验证
-你可以直接运行内置的验证脚本来确认环境是否就绪：
-```bash
-python main.py run verify.ibci --config api_config.json
-```
+   if ~~MOCK:TRUE 这是一个必中的判断~~:
+       print("逻辑分支验证成功！")
+   ```
+2. 运行它：
+   ```bash
+   python main.py run test.ibci
+   ```
 
 ## 💡 代码特性示例
 
