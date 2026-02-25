@@ -32,3 +32,26 @@ class BaseComponent:
         node.end_lineno = token.end_line
         node.end_col_offset = token.end_column
         return node
+
+    def _set_scene_recursive(self, node: ast.ASTNode, scene: ast.Scene):
+        """Recursively set the scene tag for behavior expressions and operations."""
+        if isinstance(node, ast.Expr):
+            node.scene_tag = scene
+            
+        # Specific handling for common expression containers
+        if isinstance(node, ast.BoolOp):
+            for val in node.values:
+                self._set_scene_recursive(val, scene)
+        elif isinstance(node, ast.UnaryOp):
+            self._set_scene_recursive(node.operand, scene)
+        elif isinstance(node, ast.BinOp):
+            self._set_scene_recursive(node.left, scene)
+            self._set_scene_recursive(node.right, scene)
+        elif isinstance(node, ast.Compare):
+            self._set_scene_recursive(node.left, scene)
+            for comparator in node.comparators:
+                self._set_scene_recursive(comparator, scene)
+        elif isinstance(node, ast.Call):
+            for arg in node.args:
+                self._set_scene_recursive(arg, scene)
+        # Add more if needed, but these cover most logic in if/while conditions

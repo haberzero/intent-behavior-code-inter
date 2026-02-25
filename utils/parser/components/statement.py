@@ -44,6 +44,10 @@ class StatementComponent(BaseComponent):
             start = self.stream.previous()
             self.stream.consume_end_of_statement("Expect newline after continue.")
             return self._loc(ast.Continue(), start)
+        if self.stream.match(TokenType.RETRY):
+            start = self.stream.previous()
+            self.stream.consume_end_of_statement("Expect newline after retry.")
+            return self._loc(ast.Retry(), start)
         
         # We assume imports are handled by ImportComponent and dispatched by MainParser
         # But if statement() is called inside a block, we might encounter import?
@@ -63,30 +67,75 @@ class StatementComponent(BaseComponent):
 
     def if_statement(self) -> ast.If:
         start_token = self.stream.previous()
+        
+        # 1. Parse initial IF
         test = self.expression.parse_expression()
+        self._set_scene_recursive(test, ast.Scene.BRANCH)
         self.stream.consume(TokenType.COLON, "Expect ':' after if condition.")
         body = self.block()
-        orelse: List[ast.Stmt] = []
         
-        if self.stream.match(TokenType.ELIF):
-            orelse.append(self.if_statement()) # Recursive for elif
-        elif self.stream.match(TokenType.ELSE):
-            self.stream.consume(TokenType.COLON, "Expect ':' after else.")
-            orelse = self.block()
+        llm_fallback = None
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+            llm_fallback = self.block()
             
-        return self._loc(ast.If(test=test, body=body, orelse=orelse), start_token)
+        root_if = self._loc(ast.If(test=test, body=body, orelse=[], llm_fallback=llm_fallback), start_token)
+        last_node = root_if
+        
+        # 2. Parse ELIF chain
+        while self.stream.match(TokenType.ELIF):
+            elif_start = self.stream.previous()
+            elif_test = self.expression.parse_expression()
+            self._set_scene_recursive(elif_test, ast.Scene.BRANCH)
+            self.stream.consume(TokenType.COLON, "Expect ':' after elif condition.")
+            elif_body = self.block()
+            
+            elif_fallback = None
+            if self.stream.match(TokenType.LLM_EXCEPT):
+                self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+                elif_fallback = self.block()
+                
+            new_if = self._loc(ast.If(test=elif_test, body=elif_body, orelse=[], llm_fallback=elif_fallback), elif_start)
+            last_node.orelse = [new_if]
+            last_node = new_if
+            
+        # 3. Parse ELSE
+        if self.stream.match(TokenType.ELSE):
+            self.stream.consume(TokenType.COLON, "Expect ':' after else.")
+            last_node.orelse = self.block()
+            
+        # 4. Final LLM_EXCEPT for the whole chain (if root doesn't have one)
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+            final_fallback = self.block()
+            if root_if.llm_fallback is None:
+                root_if.llm_fallback = final_fallback
+            elif last_node != root_if and last_node.llm_fallback is None:
+                # If root has one, but last node (elif) doesn't, attach to last node
+                last_node.llm_fallback = final_fallback
+            # else: root already has one, this might be a double llmexcept which is usually okay or ignored
+            
+        return root_if
 
     def while_statement(self) -> ast.While:
         start_token = self.stream.previous()
         test = self.expression.parse_expression()
+        self._set_scene_recursive(test, ast.Scene.LOOP)
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
         body = self.block()
-        return self._loc(ast.While(test=test, body=body, orelse=[]), start_token)
+        
+        llm_fallback: Optional[List[ast.Stmt]] = None
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+            llm_fallback = self.block()
+            
+        return self._loc(ast.While(test=test, body=body, orelse=[], llm_fallback=llm_fallback), start_token)
 
     def for_statement(self) -> ast.For:
         start_token = self.stream.previous()
         
         expr1 = self.expression.parse_expression()
+        self._set_scene_recursive(expr1, ast.Scene.LOOP)
         
         target = None
         iter_expr = None
@@ -95,6 +144,7 @@ class StatementComponent(BaseComponent):
             # Case: for i in list
             target = expr1
             iter_expr = self.expression.parse_expression()
+            self._set_scene_recursive(iter_expr, ast.Scene.LOOP)
         elif self.stream.check(TokenType.COLON):
             # Case: for 10:  or  for ~behavior~:
             target = None
@@ -104,7 +154,13 @@ class StatementComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' after for loop iterator.")
         body = self.block()
-        return self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[]), start_token)
+        
+        llm_fallback: Optional[List[ast.Stmt]] = None
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+            llm_fallback = self.block()
+            
+        return self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[], llm_fallback=llm_fallback), start_token)
 
     def expression_statement(self) -> ast.Stmt:
         expr = self.expression.parse_expression()
