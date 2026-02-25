@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
+from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.diagnostic_types import CompilerError
 
 class TestInterpreterBasic(unittest.TestCase):
@@ -17,12 +18,13 @@ class TestInterpreterBasic(unittest.TestCase):
     def run_code(self, code):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         try:
             module = parser.parse()
         except CompilerError as e:
             self.fail(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
-        interpreter = Interpreter()
+        interpreter = Interpreter(issue_tracker)
         return interpreter.interpret(module), interpreter
 
     def test_variable_declaration_assignment(self):

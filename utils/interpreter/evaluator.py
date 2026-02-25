@@ -69,6 +69,21 @@ class EvaluatorImpl:
         """
         统一的表达式求值入口。
         """
+        # 递归深度保护：委托给 Interpreter 进行统一计数和校验
+        if self.service_context and self.service_context.interpreter:
+            interp = self.service_context.interpreter
+            if interp.call_stack_depth >= interp.max_call_stack:
+                raise InterpreterError(f"RecursionError: Maximum recursion depth ({interp.max_call_stack}) exceeded during expression evaluation.", node)
+            
+            interp.call_stack_depth += 1
+            try:
+                return self._do_evaluate(node, context)
+            finally:
+                interp.call_stack_depth -= 1
+        else:
+            return self._do_evaluate(node, context)
+
+    def _do_evaluate(self, node: ast.ASTNode, context: RuntimeContext) -> Any:
         if isinstance(node, ast.Constant):
             return node.value
         

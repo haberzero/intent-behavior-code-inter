@@ -3,13 +3,16 @@ import math
 import time
 import os
 from typing import Any
-from ..interfaces import InterOp, LLMExecutor
+from ..interfaces import InterOp, LLMExecutor, ServiceContext
 
-def register_stdlib(interop: InterOp, llm_executor: LLMExecutor):
+def register_stdlib(context: ServiceContext):
     """
     注册 ibc-inter 的第一方标准库组件。
     这些组件是利用 Python 原生能力实现的。
     """
+    interop = context.interop
+    llm_executor = context.llm_executor
+    permission_manager = context.permission_manager
     
     # 1. json 组件
     class JSONLib:
@@ -43,16 +46,21 @@ def register_stdlib(interop: InterOp, llm_executor: LLMExecutor):
     class FileLib:
         @staticmethod
         def read(path: str) -> str:
+            permission_manager.validate_path(path, "read")
             with open(path, 'r', encoding='utf-8') as f:
                 return f.read()
                 
         @staticmethod
         def write(path: str, content: str):
+            permission_manager.validate_path(path, "write")
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(content)
                 
         @staticmethod
         def exists(path: str) -> bool:
+            # exists check usually doesn't require strict sandbox? 
+            # But let's be safe and validate if we want to prevent info leaking.
+            permission_manager.validate_path(path, "check existence")
             return os.path.exists(path)
 
     interop.register_package("file", FileLib)
@@ -107,3 +115,19 @@ def register_stdlib(interop: InterOp, llm_executor: LLMExecutor):
             return f"[AI Response using {self.config['model']}] Received: {user_prompt}"
 
     interop.register_package("ai", LLMHandler(llm_executor))
+
+    # 6. sys 组件 (系统控制与权限)
+    class SysLib:
+        @staticmethod
+        def request_external_access():
+            """
+            请求开启跨工作目录的文件访问权限。
+            在原型阶段，直接开启。未来可能增加交互确认。
+            """
+            permission_manager.enable_external_access()
+            
+        @staticmethod
+        def is_sandboxed() -> bool:
+            return not permission_manager.is_external_access_enabled()
+
+    interop.register_package("sys", SysLib)

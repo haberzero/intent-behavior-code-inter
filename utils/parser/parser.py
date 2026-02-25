@@ -58,7 +58,11 @@ class Parser:
 
     def _run_pre_scanner(self):
         """Run the PreScanner on the current scope."""
-        scanner = PreScanner(self.stream.tokens, self.stream.current, self.context.scope_manager)
+        # Create a lookahead stream to avoid moving the main parser stream
+        lookahead_stream = TokenStream(self.stream.tokens, self.context.issue_tracker)
+        lookahead_stream.current = self.stream.current
+        
+        scanner = PreScanner(lookahead_stream, self.context.scope_manager)
         scanner.scan()
 
     def parse(self) -> ast.Module:

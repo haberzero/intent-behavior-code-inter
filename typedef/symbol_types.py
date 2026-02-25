@@ -20,3 +20,6 @@ class Symbol:
     # Add reference to origin symbol for imported aliases.
     # This allows SemanticAnalyzer to lazy-resolve type_info if it was missing during import.
     origin_symbol: Optional['Symbol'] = None 
+    
+    # Store the AST node of the type annotation for lazy resolution in SemanticAnalyzer.
+    declared_type_node: Optional[Any] = None

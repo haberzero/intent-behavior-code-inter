@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
+from utils.diagnostics.issue_tracker import IssueTracker
 from utils.scheduler import Scheduler
 from typedef.diagnostic_types import CompilerError
 
@@ -49,10 +50,11 @@ print(root)
 """
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         module = parser.parse()
         
-        interpreter = Interpreter(output_callback=self.capture_output)
+        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
         interpreter.interpret(module)
         
         self.assertEqual(self.output, ["value", "4.0"])
@@ -75,10 +77,11 @@ print(t2 > t1)
 """
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         module = parser.parse()
         
-        interpreter = Interpreter(output_callback=self.capture_output)
+        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
         interpreter.interpret(module)
         
         self.assertEqual(self.output[0], "hello from ibci")
@@ -95,7 +98,7 @@ print(t2 > t1)
         ast_cache = scheduler.compile_project(main_path)
         
         # 使用 Interpreter 执行 main
-        interpreter = Interpreter(output_callback=self.capture_output, scheduler=scheduler)
+        interpreter = Interpreter(scheduler.issue_tracker, output_callback=self.capture_output, scheduler=scheduler)
         interpreter.interpret(ast_cache[main_path])
         
         self.assertIn("imported", self.output)
@@ -121,7 +124,7 @@ print(res2)
         scheduler = Scheduler(self.test_dir)
         ast_cache = scheduler.compile_project(main_path)
         
-        interpreter = Interpreter(output_callback=self.capture_output, scheduler=scheduler)
+        interpreter = Interpreter(scheduler.issue_tracker, output_callback=self.capture_output, scheduler=scheduler)
         interpreter.interpret(ast_cache[main_path])
         
         self.assertEqual(self.output, ["52", "3"])

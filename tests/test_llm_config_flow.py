@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
+from utils.diagnostics.issue_tracker import IssueTracker
 
 class TestLLMConfigFlow(unittest.TestCase):
     """
@@ -60,7 +61,8 @@ print(ai_res)
         # 3. 执行
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         try:
             module = parser.parse()
         except Exception as e:
@@ -73,7 +75,7 @@ print(ai_res)
                 raise e
         
         # 传入 output_callback 以捕获 print 输出
-        interpreter = Interpreter(output_callback=self.capture_output)
+        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
         interpreter.interpret(module)
         
         # 4. 验证结果
@@ -93,10 +95,11 @@ import ai
 """
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         module = parser.parse()
         
-        interpreter = Interpreter(output_callback=self.capture_output)
+        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
         
         from typedef.exception_types import InterpreterError
         with self.assertRaises(InterpreterError) as cm:

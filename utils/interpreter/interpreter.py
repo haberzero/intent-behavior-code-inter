@@ -3,13 +3,15 @@ from typedef import parser_types as ast
 from typedef.exception_types import InterpreterError
 from .interfaces import (
     Interpreter as InterpreterInterface, 
-    RuntimeContext, LLMExecutor, InterOp, ModuleManager, Evaluator, ServiceContext, IssueTracker
+    RuntimeContext, LLMExecutor, InterOp, ModuleManager, Evaluator, ServiceContext, IssueTracker,
+    PermissionManager
 )
 from .runtime_context import RuntimeContextImpl
 from .llm_executor import LLMExecutorImpl
 from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
 from .evaluator import EvaluatorImpl
+from .permissions import PermissionManager as PermissionManagerImpl
 from .modules.stdlib import register_stdlib
 
 # --- Runtime Exceptions for Flow Control ---
@@ -26,6 +28,7 @@ class ServiceContextImpl:
                  llm_executor: LLMExecutor,
                  module_manager: ModuleManager,
                  interop: InterOp,
+                 permission_manager: PermissionManager,
                  interpreter: InterpreterInterface):
         self._issue_tracker = issue_tracker
         self._runtime_context = runtime_context
@@ -33,6 +36,7 @@ class ServiceContextImpl:
         self._llm_executor = llm_executor
         self._module_manager = module_manager
         self._interop = interop
+        self._permission_manager = permission_manager
         self._interpreter = interpreter
 
     @property
@@ -49,17 +53,19 @@ class ServiceContextImpl:
     def module_manager(self) -> ModuleManager: return self._module_manager
     @property
     def interop(self) -> InterOp: return self._interop
+    @property
+    def permission_manager(self) -> PermissionManager: return self._permission_manager
 
 class Interpreter:
     """
     IBC-Inter 模块化解释器主类。
     采用 Visitor 模式遍历 AST，并将具体逻辑委托给子组件。
     """
-    def __init__(self, output_callback: Optional[Callable[[str], None]] = None, 
+    def __init__(self, issue_tracker: IssueTracker,
+                 output_callback: Optional[Callable[[str], None]] = None, 
                  max_instructions: int = 10000, 
                  max_call_stack: int = 100,
-                 scheduler: Optional[Any] = None,
-                 issue_tracker: Optional[IssueTracker] = None):
+                 scheduler: Optional[Any] = None):
         self.output_callback = output_callback
         self.scheduler = scheduler
         
@@ -67,6 +73,10 @@ class Interpreter:
         runtime_context = RuntimeContextImpl()
         interop = InterOpImpl()
         evaluator = EvaluatorImpl()
+        
+        # 权限管理
+        root_dir = scheduler.root_dir if scheduler else "."
+        permission_manager = PermissionManagerImpl(root_dir)
         
         # 2. 初始化需要互相引用的组件 (通过 ServiceContext 注入)
         # 注意：这里我们先创建实例，再在 ServiceContext 中关联
@@ -78,20 +88,16 @@ class Interpreter:
         )
         
         # 3. 创建 ServiceContext
-        # 如果没有传入 issue_tracker，我们需要一个临时的 (虽然通常 Scheduler 会传入)
-        # 这里为了演示和解耦，我们假设 issue_tracker 已经由外部提供或在此创建
-        from utils.diagnostics.issue_tracker import IssueTracker as IssueTrackerImpl
-        effective_issue_tracker = issue_tracker or IssueTrackerImpl()
-        
         llm_executor = LLMExecutorImpl() # 稍后注入 context
         
         self.service_context = ServiceContextImpl(
-            issue_tracker=effective_issue_tracker,
+            issue_tracker=issue_tracker,
             runtime_context=runtime_context,
             evaluator=evaluator,
             llm_executor=llm_executor,
             module_manager=module_manager,
             interop=interop,
+            permission_manager=permission_manager,
             interpreter=self
         )
         
@@ -100,7 +106,7 @@ class Interpreter:
         llm_executor.service_context = self.service_context
         
         # 5. 注册标准库
-        register_stdlib(interop, llm_executor)
+        register_stdlib(self.service_context)
         
         # 6. 注册全局内置函数
         self._register_intrinsics()
@@ -183,9 +189,17 @@ class Interpreter:
         if self.instruction_count > self.max_instructions:
             raise InterpreterError("Execution limit exceeded (infinite loop protection)", node)
 
-        method_name = f'visit_{node.__class__.__name__}'
-        visitor = getattr(self, method_name, self.generic_visit)
-        return visitor(node)
+        # 增加递归深度保护，防止过深的 AST 导致 Python 栈溢出
+        if self.call_stack_depth >= self.max_call_stack:
+             raise InterpreterError(f"RecursionError: Maximum recursion depth ({self.max_call_stack}) exceeded during AST traversal.", node)
+        
+        self.call_stack_depth += 1
+        try:
+            method_name = f'visit_{node.__class__.__name__}'
+            visitor = getattr(self, method_name, self.generic_visit)
+            return visitor(node)
+        finally:
+            self.call_stack_depth -= 1
 
     def generic_visit(self, node: ast.ASTNode):
         raise InterpreterError(f"No visit method implemented for {node.__class__.__name__}", node)

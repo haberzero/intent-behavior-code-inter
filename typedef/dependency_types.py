@@ -7,6 +7,11 @@ class ImportType(Enum):
     IMPORT = auto()      # import module
     FROM_IMPORT = auto() # from module import name
 
+class ModuleStatus(Enum):
+    PENDING = auto()
+    SUCCESS = auto()
+    FAILED = auto()
+
 @dataclass
 class ImportInfo:
     """Represents a single import statement."""
@@ -22,6 +27,7 @@ class ModuleInfo:
     imports: List[ImportInfo] = field(default_factory=list)
     content: Optional[str] = None # Source code content (cached)
     mtime: float = 0.0 # Modification time
+    status: ModuleStatus = ModuleStatus.PENDING
 
 class DependencyError(Exception):
     """Base class for dependency resolution errors."""

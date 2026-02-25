@@ -11,7 +11,7 @@ from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.semantic.semantic_analyzer import SemanticAnalyzer
 from utils.semantic.types import PrimitiveType, AnyType
-from typedef.diagnostic_types import CompilerError
+from typedef.diagnostic_types import CompilerError, Severity
 
 class TestSemanticBasic(unittest.TestCase):
     def setUp(self):
@@ -155,6 +155,40 @@ class TestSemanticBasic(unittest.TestCase):
         """
         self.analyze_code(code)
         # Should pass without error
+
+    def test_forward_reference_lazy_resolution(self):
+        """Test forward reference with lazy type resolution."""
+        code = """
+        int x = y
+        int y = 10
+        """
+        # Previously this might have failed or y might have been ANY_TYPE.
+        # Now it should work because y is registered by PreScanner with its type node.
+        self.analyze_code(code)
+        
+        sym_x = self.analyzer.scope_manager.resolve('x')
+        sym_y = self.analyzer.scope_manager.resolve('y')
+        
+        self.assertEqual(str(sym_x.type_info), "int")
+        self.assertEqual(str(sym_y.type_info), "int")
+
+    def test_prototype_limit_hint(self):
+        """Test that nested generics trigger a prototype limit hint."""
+        code = """
+        list[list[int]] nested = [[1]]
+        """
+        # This should still "work" (analyze without ERROR) but produce a HINT
+        lexer = Lexer(textwrap.dedent(code).strip() + "\n")
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        module = parser.parse()
+        
+        self.analyzer.analyze(module)
+        
+        # Check for hints in issue_tracker
+        has_hint = any(d.severity == Severity.HINT and d.code == "PROTO_LIMIT" 
+                       for d in self.analyzer.issue_tracker.diagnostics)
+        self.assertTrue(has_hint, "Expected PROTO_LIMIT hint for nested generics")
 
 if __name__ == '__main__':
     unittest.main()

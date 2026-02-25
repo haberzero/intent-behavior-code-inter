@@ -5,7 +5,8 @@ from typedef.symbol_types import SymbolType
 from typedef.scope_types import ScopeType
 from typedef.diagnostic_types import Severity
 from utils.parser.core.component import BaseComponent
-from utils.parser.scanners.pre_scanner import PreScanner
+from utils.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
+from utils.parser.core.token_stream import TokenStream, ParseControlFlowError
 from utils.parser.components.expression import ExpressionComponent
 from utils.parser.components.statement import StatementComponent
 from utils.parser.components.type_def import TypeComponent
@@ -21,8 +22,10 @@ class DeclarationComponent(BaseComponent):
         self.statement.set_decl_parser(self)
 
     def parse_declaration(self) -> Optional[ast.Stmt]:
-        # Handle Intent (@)
-        if self.stream.match(TokenType.INTENT):
+        role = SyntaxRecognizer.get_role(self.stream, self.scope_manager)
+        
+        if role == SyntaxRole.INTENT_MARKER:
+            self.stream.advance()
             if self.context.pending_intent is not None:
                 raise self.stream.error(self.stream.previous(), "Multiple intent comments are not allowed for a single statement.")
             
@@ -32,95 +35,40 @@ class DeclarationComponent(BaseComponent):
             return self.parse_declaration()
         
         stmt = None
-        if self.stream.match(TokenType.FUNC):
+        if role == SyntaxRole.FUNCTION_DEFINITION:
+            self.stream.advance() # func
             stmt = self.function_declaration()
-        elif self.stream.match(TokenType.LLM_DEF):
+        elif role == SyntaxRole.LLM_DEFINITION:
+            self.stream.advance() # llm
             stmt = self.llm_function_declaration()
-        elif self.stream.match(TokenType.VAR):
-            # Explicit 'var' declaration
-            stmt = self.variable_declaration(explicit_var=True)
-        elif self.check_declaration_lookahead():
-            # Implicit type declaration: Type name = ...
-            stmt = self.variable_declaration(explicit_var=False)
+        elif role == SyntaxRole.VARIABLE_DECLARATION:
+            explicit_var = self.stream.match(TokenType.VAR)
+            stmt = self.variable_declaration(explicit_var=explicit_var)
         else:
             stmt = self.statement.parse_statement()
         
         if self.context.pending_intent is not None and stmt is not None:
-            # Check if stmt consumed it (Call or BehaviorExpr might have, but if it was a Stmt like Return, it might not)
-            # Actually, statements like If/While/For don't usually consume intent in this language spec?
-            # Or maybe they do?
-            # If stmt is ExprStmt, and Expr consumed it, fine.
-            # If stmt is Return, maybe not.
-            # Let's warn if still pending.
-            # But wait, ExpressionComponent consumes it if it's a Call/Behavior.
-            # If it was consumed, pending_intent is None.
-            
-            # TODO: Add warning logic if needed.
-            # For now, we clear it to avoid leaking to next statement.
+            # If the statement is not one that naturally consumes an intent (like Call or BehaviorExpr),
+            # we report a warning to the user.
             self.issue_tracker.report(
                 Severity.WARNING, "PAR_WARN", 
                 f"Intent comment '{self.context.pending_intent}' was not used by the following statement.", 
-                self.stream.peek() # Approximation
+                self.stream.peek()
             )
             self.context.pending_intent = None
             
         return stmt
 
-    def check_declaration_lookahead(self) -> bool:
-        """
-        Check if the current tokens form a variable declaration.
-        """
-        # Case 1: Standard Type Name or Known Type in Symbol Table
-        if self.stream.check(TokenType.IDENTIFIER) and self.scope_manager.is_type(self.stream.peek().value):
-            next_token = self.stream.peek(1)
-            
-            if next_token.type == TokenType.IDENTIFIER:
-                return True
-            
-            # Special case: Generic type declaration like list[int] x
-            if next_token.type == TokenType.LBRACKET:
-                return self._check_generic_lookahead(1)
-                
-            return False
-            
-        # Case 2: Identifier starting a declaration
-        if self.stream.check(TokenType.IDENTIFIER):
-            next_token = self.stream.peek(1)
-            
-            if next_token.type == TokenType.IDENTIFIER:
-                return True
-                
-            if next_token.type == TokenType.LBRACKET:
-                return self._check_generic_lookahead(1)
-                
-        return False
-
-    def _check_generic_lookahead(self, offset: int) -> bool:
-        bracket_depth = 0
-        current_offset = offset
-        # We need to access tokens directly from stream to scan ahead efficiently
-        # But stream only provides peek(offset).
+    def _run_pre_scanner(self):
+        """Run the PreScanner on the current scope."""
+        from utils.parser.scanners.pre_scanner import PreScanner
         
-        # Limit lookahead to avoid performance issues?
-        # Typically declarations aren't huge.
+        # Create a lookahead stream to avoid moving the main parser stream
+        lookahead_stream = TokenStream(self.stream.tokens, self.context.issue_tracker)
+        lookahead_stream.current = self.stream.current
         
-        while self.stream.current + current_offset < len(self.stream.tokens):
-            t = self.stream.peek(current_offset)
-            if t.type == TokenType.LBRACKET:
-                bracket_depth += 1
-            elif t.type == TokenType.RBRACKET:
-                bracket_depth -= 1
-                if bracket_depth == 0:
-                    after_bracket = self.stream.peek(current_offset + 1)
-                    if after_bracket.type == TokenType.IDENTIFIER:
-                        return True
-                    else:
-                        return False
-            elif t.type == TokenType.NEWLINE or t.type == TokenType.EOF:
-                return False
-                
-            current_offset += 1
-        return False
+        scanner = PreScanner(lookahead_stream, self.scope_manager)
+        scanner.scan()
 
     def variable_declaration(self, explicit_var: bool = False) -> ast.Assign:
         type_token = None
@@ -138,6 +86,11 @@ class DeclarationComponent(BaseComponent):
 
         name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
         target = self._loc(ast.Name(id=name_token.value, ctx='Store'), name_token)
+        
+        # Link type annotation node to symbol for SemanticAnalyzer
+        sym = self.scope_manager.resolve(name_token.value)
+        if sym:
+            sym.declared_type_node = type_annotation
         
         value = None
         if self.stream.match(TokenType.ASSIGN):
@@ -161,6 +114,11 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
         
         func_node = self._loc(ast.FunctionDef(name=name, args=args, body=[], returns=returns), start_token)
+        
+        # Link function symbol
+        func_sym = self.scope_manager.resolve(name)
+        if func_sym:
+            func_sym.declared_type_node = returns
         
         # Enter Function Scope
         self.scope_manager.enter_scope(ScopeType.FUNCTION)
@@ -196,6 +154,11 @@ class DeclarationComponent(BaseComponent):
         
         llm_node = self._loc(ast.LLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, returns=returns), start_token)
         
+        # Link function symbol
+        func_sym = self.scope_manager.resolve(name)
+        if func_sym:
+            func_sym.declared_type_node = returns
+            
         # LLM functions also have a scope
         self.scope_manager.enter_scope(ScopeType.FUNCTION)
         llm_node.scope = self.scope_manager.current_scope
@@ -221,7 +184,14 @@ class DeclarationComponent(BaseComponent):
                 annotation = self.type_def.parse_type_annotation()
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
                 
-                params.append(self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token))
+                param_node = self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token)
+                params.append(param_node)
+                
+                # Link type annotation to parameter symbol
+                sym = self.scope_manager.resolve(name_token.value)
+                if sym:
+                    sym.declared_type_node = annotation
+                    
                 if not self.stream.match(TokenType.COMMA):
                     break
         return params
@@ -262,8 +232,3 @@ class DeclarationComponent(BaseComponent):
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.")
         
         return self._loc(ast.Constant(value="".join(content_parts)), start_token)
-
-    def _run_pre_scanner(self):
-        """Run the PreScanner on the current scope."""
-        scanner = PreScanner(self.stream.tokens, self.stream.current, self.scope_manager)
-        scanner.scan()

@@ -9,6 +9,7 @@ from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.semantic.semantic_analyzer import SemanticAnalyzer
 from utils.interpreter.interpreter import Interpreter
+from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import InterpreterError, SemanticError
 from typedef.diagnostic_types import CompilerError
 
@@ -16,13 +17,14 @@ class TestTypePromotion(unittest.TestCase):
     def run_code(self, code):
         lexer = Lexer(code)
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         module = parser.parse()
         
-        analyzer = SemanticAnalyzer()
+        analyzer = SemanticAnalyzer(issue_tracker)
         analyzer.analyze(module)
         
-        interpreter = Interpreter()
+        interpreter = Interpreter(issue_tracker)
         return interpreter.interpret(module), interpreter
 
     def test_valid_numeric_promotion(self):

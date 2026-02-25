@@ -344,10 +344,11 @@ class SemanticAnalyzer:
             # If symbol.type_info is missing, but it's an imported symbol (has origin),
             # we should try to fetch the type from the origin scope NOW.
             
-            if symbol.type_info is None and symbol.origin_symbol:
-                 # Check if origin has type info now (it might have been analyzed after import)
-                 if symbol.origin_symbol.type_info:
+            if symbol.type_info is None:
+                 if symbol.origin_symbol and symbol.origin_symbol.type_info:
                      symbol.type_info = symbol.origin_symbol.type_info
+                 elif symbol.declared_type_node:
+                     symbol.type_info = self._resolve_type(symbol.declared_type_node)
             
             return symbol.type_info or ANY_TYPE
         return ANY_TYPE
@@ -378,9 +379,11 @@ class SemanticAnalyzer:
                  return ANY_TYPE
                  
              # [FIX]: Lazy resolution for attributes too!
-             if attr_sym.type_info is None and attr_sym.origin_symbol:
-                   if attr_sym.origin_symbol.type_info:
-                       attr_sym.type_info = attr_sym.origin_symbol.type_info
+             if attr_sym.type_info is None:
+                  if attr_sym.origin_symbol and attr_sym.origin_symbol.type_info:
+                      attr_sym.type_info = attr_sym.origin_symbol.type_info
+                  elif attr_sym.declared_type_node:
+                      attr_sym.type_info = self._resolve_type(attr_sym.declared_type_node)
                        
              return attr_sym.type_info or ANY_TYPE
         
@@ -447,19 +450,54 @@ class SemanticAnalyzer:
 
     # --- Helpers ---
 
-    def _resolve_type(self, node: ast.ASTNode) -> Type:
+    def _resolve_type_from_tokens(self, tokens: List[Any]) -> Type:
+        if not tokens:
+            return ANY_TYPE
+            
+        from utils.parser.core.token_stream import TokenStream
+        from utils.parser.core.context import ParserContext
+        from utils.parser.components.type_def import TypeComponent
+        
+        # Create a temporary parser context to parse the type annotation
+        temp_stream = TokenStream(tokens, self.issue_tracker)
+        temp_context = ParserContext(temp_stream, self.issue_tracker)
+        type_comp = TypeComponent(temp_context)
+        
+        try:
+            type_node = type_comp.parse_type_annotation()
+            return self._resolve_type(type_node)
+        except Exception:
+            return ANY_TYPE
+
+    def _resolve_type(self, node: Any) -> Type:
         """
-        Convert AST type annotation to Type object.
+        Convert AST type annotation or Token list to Type object.
         """
+        if isinstance(node, list):
+            # It's a list of tokens from PreScanner
+            return self._resolve_type_from_tokens(node)
+            
         if isinstance(node, ast.Name):
             t = get_builtin_type(node.id)
             if t: return t
-            # Check if it's a user defined type (future)
-            # For now, if unknown, it's an error
+            
+            # Check for prototype limitation: complex types
+            # (Though Name is usually simple, we keep it for consistency)
+            
             self.error(f"Unknown type '{node.id}'", node)
             
         elif isinstance(node, ast.Subscript):
             # Generic type: List[int]
+            
+            # PROTOTYPE HINT: Check for nested generics
+            if isinstance(node.slice, ast.Subscript) or \
+               (isinstance(node.slice, ast.ListExpr) and any(isinstance(e, ast.Subscript) for e in node.slice.elts)):
+                self.issue_tracker.report(
+                    Severity.HINT, "PROTO_LIMIT",
+                    "IBC-Inter is in prototype stage. Nested generics (e.g., list[list[int]]) are not fully supported for type checking yet.",
+                    node
+                )
+            
             base = self._resolve_type(node.value)
             
             # Extract args

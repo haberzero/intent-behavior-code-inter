@@ -1,6 +1,7 @@
 import os
 from typing import Dict, List, Optional, Any, Set
-from typedef.dependency_types import ModuleInfo, ImportInfo, CircularDependencyError
+from collections import OrderedDict
+from typedef.dependency_types import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
 from typedef.parser_types import Module
 from typedef.scope_types import ScopeNode
 from utils.parser.scanners.import_scanner import ImportScanner
@@ -18,6 +19,8 @@ class Scheduler:
     Top-level scheduler for multi-file compilation.
     Orchestrates DependencyScanner, Parser, and SemanticAnalyzer.
     """
+    MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
+
     def __init__(self, root_dir: str):
         self.root_dir = os.path.realpath(root_dir)
         self.issue_tracker = IssueTracker()
@@ -25,11 +28,11 @@ class Scheduler:
         self.resolver = ModuleResolver(self.root_dir)
         # DependencyScanner is now instantiated per file
         
-        # Caches
+        # Caches (Using OrderedDict for LRU behavior)
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
-        self.ast_cache: Dict[str, Module] = {}   # Path -> AST
+        self.ast_cache: OrderedDict[str, Module] = OrderedDict()   # Path -> AST
         self.scope_cache: Dict[str, ScopeNode] = {} # Path AND Name -> Scope (for Parser)
-        self.token_cache: Dict[str, List[Token]] = {} # Path -> Tokens (Cached from initial scan)
+        self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
         
         # Build Cache
@@ -43,13 +46,20 @@ class Scheduler:
         # 1. 尝试通过快速索引查找文件路径
         path = self.module_name_to_path.get(module_name)
         if path:
-            return self.ast_cache.get(path)
+            ast = self.ast_cache.get(path)
+            if ast:
+                # Move to end (MRU)
+                self.ast_cache.move_to_end(path)
+                return ast
             
         # 2. 回退：尝试直接在缓存中查找 (兼容逻辑)
         if module_name in self.scope_cache:
             for path, scope in self.scope_cache.items():
                 if scope == self.scope_cache[module_name] and path != module_name:
-                    return self.ast_cache.get(path)
+                    ast = self.ast_cache.get(path)
+                    if ast:
+                        self.ast_cache.move_to_end(path)
+                        return ast
         return None
 
     def compile_project(self, entry_file: str) -> Dict[str, Module]:
@@ -75,24 +85,53 @@ class Scheduler:
 
         # 3. Compile in Topological Order
         for file_path in compilation_order:
-            # Check mtime
             mod_info = self.modules.get(file_path)
-            if mod_info:
-                last_mtime = self.build_cache.get(file_path, 0.0)
-                if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
-                    # Recompile
-                    try:
-                        self._compile_file(file_path)
-                    except CompilerError:
-                        pass
-                    self.build_cache[file_path] = mod_info.mtime
-                else:
-                    pass
+            if not mod_info:
+                continue
+
+            # Check if dependencies failed
+            failed_deps = []
+            for imp in mod_info.imports:
+                if imp.file_path:
+                    dep_info = self.modules.get(imp.file_path)
+                    if dep_info and dep_info.status == ModuleStatus.FAILED:
+                        failed_deps.append(imp.module_name)
+            
+            if failed_deps:
+                self.issue_tracker.report(Severity.ERROR, "DEP_FAILED", 
+                    f"Module '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
+                mod_info.status = ModuleStatus.FAILED
+                continue
+
+            # Check mtime or cache
+            last_mtime = self.build_cache.get(file_path, 0.0)
+            if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
+                # Recompile
+                try:
+                    self._compile_file(file_path)
+                    mod_info.status = ModuleStatus.SUCCESS
+                except CompilerError:
+                    mod_info.status = ModuleStatus.FAILED
+                self.build_cache[file_path] = mod_info.mtime
+            else:
+                mod_info.status = ModuleStatus.SUCCESS
             
         if self.issue_tracker.has_errors():
             raise CompilerError("Compilation failed.")
             
         return self.ast_cache
+
+    def _prune_cache(self):
+        """
+        Maintains the LRU cache by removing oldest items if capacity exceeded.
+        """
+        while len(self.ast_cache) > self.MAX_CACHE_SIZE:
+            oldest_path, _ = self.ast_cache.popitem(last=False)
+            # Optionally remove from other caches if they are tightly coupled
+            if oldest_path in self.token_cache:
+                self.token_cache.pop(oldest_path)
+            # Note: scope_cache is harder to prune because it's used for cross-file analysis.
+            # For now, we keep scopes as they are relatively small.
 
     def _scan_and_cache(self, entry_file: str):
         """
@@ -211,7 +250,13 @@ class Scheduler:
             parser = Parser(tokens, file_tracker, self.scope_cache, package_name=module_name, module_resolver=self.resolver)
             ast_node = parser.parse()
             
+            # Cache AST and Tokens (Move to end for LRU)
             self.ast_cache[file_path] = ast_node
+            self.ast_cache.move_to_end(file_path)
+            if file_path in self.token_cache:
+                self.token_cache.move_to_end(file_path)
+            
+            self._prune_cache()
             
             # 3. Semantic Analysis
             analyzer = SemanticAnalyzer(file_tracker)
@@ -223,11 +268,10 @@ class Scheduler:
                 self.scope_cache[module_name] = ast_node.scope
                 
         except CompilerError:
-            pass
+            raise
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            file_tracker.report(Severity.FATAL, "INTERNAL_ERROR", str(e))
+            file_tracker.report(Severity.FATAL, "INTERNAL_ERROR", f"Internal compiler error: {str(e)}")
+            raise CompilerError("Internal error during compilation") from e
             
         finally:
             self.issue_tracker.merge(file_tracker)

@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.lexer.lexer import Lexer
 from utils.parser.parser import Parser
 from utils.interpreter.interpreter import Interpreter
+from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import InterpreterError
 from typedef.diagnostic_types import CompilerError
 
@@ -24,9 +25,10 @@ class TestInterpreterComplex(unittest.TestCase):
     def run_code(self, code):
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         module = parser.parse()
-        interpreter = Interpreter(output_callback=self.capture_output)
+        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
         return interpreter.interpret(module)
 
     def test_type_checking(self):
@@ -85,15 +87,16 @@ f(1)
 """
         lexer = Lexer(code.strip() + "\n")
         tokens = lexer.tokenize()
-        parser = Parser(tokens)
+        issue_tracker = IssueTracker()
+        parser = Parser(tokens, issue_tracker)
         module = parser.parse()
 
-        interp = Interpreter(output_callback=self.capture_output)
+        interp = Interpreter(issue_tracker, output_callback=self.capture_output)
         interp.max_call_stack = 10
 
         with self.assertRaises(InterpreterError) as cm:
             interp.interpret(module)
-        self.assertIn("maximum recursion depth exceeded", str(cm.exception))
+        self.assertIn("RecursionError: Maximum recursion depth", str(cm.exception))
 
     def test_control_flow_outside_loop(self):
         # 测试在循环外使用 break

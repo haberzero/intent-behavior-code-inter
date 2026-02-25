@@ -6,8 +6,10 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.lexer.lexer import Lexer
+from utils.parser.core.token_stream import TokenStream
 from utils.parser.scanners.pre_scanner import PreScanner
 from utils.parser.symbol_table import ScopeManager, SymbolType
+from utils.diagnostics.issue_tracker import IssueTracker
 
 class TestPreScanner(unittest.TestCase):
     def test_function_registration(self):
@@ -23,7 +25,8 @@ llm my_llm_func(str s):
         tokens = lexer.tokenize()
         
         manager = ScopeManager()
-        pre_scanner = PreScanner(tokens, 0, manager)
+        stream = TokenStream(tokens, IssueTracker())
+        pre_scanner = PreScanner(stream, manager)
         pre_scanner.scan()
         
         # Check if functions are defined
@@ -45,7 +48,8 @@ int y = 20
         tokens = lexer.tokenize()
         
         manager = ScopeManager()
-        pre_scanner = PreScanner(tokens, 0, manager)
+        stream = TokenStream(tokens, IssueTracker())
+        pre_scanner = PreScanner(stream, manager)
         pre_scanner.scan()
         
         sym_x = manager.resolve("x")
@@ -68,7 +72,8 @@ func outer():
         tokens = lexer.tokenize()
         
         manager = ScopeManager()
-        pre_scanner = PreScanner(tokens, 0, manager)
+        stream = TokenStream(tokens, IssueTracker())
+        pre_scanner = PreScanner(stream, manager)
         pre_scanner.scan()
         
         # 'outer' should be registered
@@ -86,7 +91,8 @@ func outer():
         tokens = lexer.tokenize()
         
         manager = ScopeManager()
-        pre_scanner = PreScanner(tokens, 0, manager)
+        stream = TokenStream(tokens, IssueTracker())
+        pre_scanner = PreScanner(stream, manager)
         pre_scanner.scan()
         
         sym_numbers = manager.resolve("numbers")
