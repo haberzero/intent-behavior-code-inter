@@ -82,7 +82,7 @@ print(ai_res)
         # 验证是否成功触发了 LLMHandler 内部的 TESTONLY 虚拟块
         self.assertTrue(len(self.output) > 0)
         final_res = self.output[0]
-        self.assertIn("[TESTONLY MODE]", final_res)
+        self.assertIn("[MOCK]", final_res)
         self.assertIn("hello ibci", final_res)
         self.assertIn("请执行一次模拟调用", final_res)
 

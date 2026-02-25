@@ -76,6 +76,11 @@ def register_stdlib(context: ServiceContext):
                 "retry": 0,
                 "timeout": 30.0
             }
+            self.scene_prompts = {
+                "general": "你是一个助人为乐的助手。",
+                "branch": "你是一个逻辑判断专家。请分析用户提供的意图和内容，如果符合要求请仅返回数字 1，否则返回 0。禁止输出任何其他解释文字。",
+                "loop": "你是一个循环控制专家。请分析内容，如果循环应当继续请返回 1，应当停止请返回 0。"
+            }
             # 建立跨模块联动：将自己设为执行器的回调
             if hasattr(self.executor, 'llm_callback'):
                 self.executor.llm_callback = self
@@ -91,15 +96,43 @@ def register_stdlib(context: ServiceContext):
         def set_timeout(self, seconds: float):
             self.config["timeout"] = seconds
 
-        def __call__(self, sys_prompt: str, user_prompt: str) -> str:
+        def set_general_prompt(self, prompt: str):
+            self.scene_prompts["general"] = prompt
+
+        def set_branch_prompt(self, prompt: str):
+            self.scene_prompts["branch"] = prompt
+
+        def set_loop_prompt(self, prompt: str):
+            self.scene_prompts["loop"] = prompt
+
+        def set_scene_config(self, scene: str, config: dict):
+            if "prompt" in config:
+                self.scene_prompts[scene] = config["prompt"]
+            # 可以在这里扩展更多配置，如针对特定场景的模型
+
+        def get_scene_prompt(self, scene: str) -> str:
+            return self.scene_prompts.get(scene, self.scene_prompts["general"])
+
+        def set_retry_hint(self, hint: str):
+            if hasattr(self.executor, 'retry_hint'):
+                self.executor.retry_hint = hint
+
+        def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
             """
-            作为 LLMExecutor 的回调执行真实/虚拟调用
+            作为 LLMExecutor 的回调执行真实/虚拟调用。
+            
+            [TESTONLY 模拟指令规范]:
+            在 TESTONLY 模式下，可以通过在行为描述行 (~~...~~) 中包含以下指令来精确操控模拟块：
+            1. "MOCK:FAIL" -> 模拟 LLM 返回无法解析的内容，触发 llmexcept。
+            2. "MOCK:TRUE" / "MOCK:1" -> 在逻辑场景下强制返回 1。
+            3. "MOCK:FALSE" / "MOCK:0" -> 在逻辑场景下强制返回 0。
+            4. "MOCK:REPAIR" -> 模拟需要“维修”的逻辑。第一次调用返回 MOCK:FAIL，
+                             如果 detect 到 retry_hint 已设置，则第二次返回 MOCK:TRUE。
             """
             # 1. 检查配置完备性
             is_test_mode = (
-                self.config["url"] == "TESTONLY" and 
-                self.config["key"] == "TESTONLY" and 
-                self.config["model"] == "TESTONLY"
+                self.config["url"] == "TESTONLY" or 
+                os.environ.get("IBC_TEST_MODE") == "1"
             )
 
             if not is_test_mode:
@@ -114,9 +147,36 @@ def register_stdlib(context: ServiceContext):
                         "   或者在测试环境中使用 \"TESTONLY\" 作为魔法值。"
                     )
 
-            # 2. 检查 TESTONLY 魔法触发器
+            # 2. 检查 TESTONLY 模拟逻辑
             if is_test_mode:
-                return f"[TESTONLY MODE] {user_prompt} (INTENTS: {sys_prompt})"
+                # 预处理用户提示词以识别模拟指令
+                u_upper = user_prompt.upper()
+                
+                # 场景 A: 模拟维修/重试闭环 (MOCK:REPAIR)
+                if "MOCK:REPAIR" in u_upper:
+                    has_hint = hasattr(self.executor, 'retry_hint') and self.executor.retry_hint is not None
+                    if not has_hint:
+                        # 第一次调用，没有维修提示，模拟失败
+                        return "MOCK_UNCERTAIN_RESPONSE"
+                    else:
+                        # 第二次调用，已有维修提示，模拟成功
+                        return "1" if scene in ("branch", "loop") else f"[MOCK] Repaired using hint: {self.executor.retry_hint}"
+
+                # 场景 B: 强制失败指令
+                if "MOCK:FAIL" in u_upper:
+                    return "MOCK_UNCERTAIN_RESPONSE_TRIGGERING_EXCEPT"
+
+                # 场景 C: 强制布尔结果
+                if scene in ("branch", "loop"):
+                    if "MOCK:FALSE" in u_upper or "MOCK:0" in u_upper:
+                        return "0"
+                    if "MOCK:TRUE" in u_upper or "MOCK:1" in u_upper:
+                        return "1"
+                    # 默认逻辑场景返回 1
+                    return "1"
+
+                # 场景 D: 常规文本模拟
+                return f"[MOCK] Simulated response for: {user_prompt} (INTENTS: {sys_prompt})"
             
             # 3. 正常执行路径 (带重试逻辑)
             retry_count = self.config.get("retry", 0)
@@ -124,13 +184,11 @@ def register_stdlib(context: ServiceContext):
             
             for attempt in range(retry_count + 1):
                 try:
-                    # TODO: 实现真实的 LLM API 调用，并使用 self.config["timeout"]
-                    # 目前仅作为占位符
+                    # TODO: 实现真实的 LLM API 调用
                     return f"[AI Response using {self.config['model']}] Received: {user_prompt}"
                 except Exception as e:
                     last_error = e
                     if attempt < retry_count:
-                        # 指数退避或简单等待可以加在这里
                         continue
             
             raise last_error or Exception("LLM call failed after retries")
