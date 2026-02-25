@@ -143,6 +143,21 @@ class EvaluatorImpl:
                 return type_func(val)
             raise InterpreterError(f"Type '{node.type_name}' is not callable for casting", node)
             
+        elif isinstance(node, ast.BoolOp):
+            if node.op == 'and':
+                for val in node.values:
+                    res = self.evaluate_expr(val, context)
+                    if not self.service_context.interpreter.is_truthy(res):
+                        return False
+                return True
+            elif node.op == 'or':
+                for val in node.values:
+                    res = self.evaluate_expr(val, context)
+                    if self.service_context.interpreter.is_truthy(res):
+                        return True
+                return False
+            return False
+        
         # 委托给 Interpreter 处理复杂的控制流节点（如 Call, BehaviorExpr）
         if self.service_context and self.service_context.interpreter:
             return self.service_context.interpreter.visit(node)

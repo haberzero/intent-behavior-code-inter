@@ -401,30 +401,93 @@ class Interpreter:
         raise InterpreterError("Re-raise not supported in this version", node, error_code=RUN_GENERIC_ERROR)
 
     def visit_While(self, node: ast.While):
-        def while_logic():
-            while self.is_truthy(self.visit(node.test)):
-                try:
-                    for stmt in node.body: self.visit(stmt)
-                except BreakException: break
-                except ContinueException: continue
-        
-        self._execute_with_retry(node, while_logic)
+        while True:
+            try:
+                condition = self.visit(node.test)
+            except LLMUncertaintyError as e:
+                if node.llm_fallback:
+                    try:
+                        for stmt in node.llm_fallback:
+                            self.visit(stmt)
+                        # 执行完 fallback 且没有触发 retry，我们无法确定条件，
+                        # 默认选择终止循环以确保安全。
+                        break
+                    except RetryException:
+                        # 触发 retry，重新评估条件
+                        continue
+                else:
+                    raise e
+            
+            if not self.is_truthy(condition):
+                break
+                
+            try:
+                for stmt in node.body:
+                    self.visit(stmt)
+            except BreakException:
+                break
+            except ContinueException:
+                continue
 
     def visit_For(self, node: ast.For):
-        def for_logic():
-            iterable = self.visit(node.iter)
-            if isinstance(iterable, (int, float)):
-                iterable = range(int(iterable))
-                
-            for item in iterable:
-                if isinstance(node.target, ast.Name):
-                    self.context.define_variable(node.target.id, item)
+        # 1. 无目标变量循环模式 (while-like): for ~~行为描述~~: 或 for 1 > 0:
+        if node.target is None:
+            # 特殊情况：如果是 BehaviorExpr，我们已经支持了。
+            # 但如果它是 Constant (如 for 10:)，我们保持原有的“固定次数”逻辑。
+            if isinstance(node.iter, ast.Constant) and isinstance(node.iter.value, (int, float)):
+                count = int(node.iter.value)
+                for _ in range(count):
+                    try:
+                        for stmt in node.body:
+                            self.visit(stmt)
+                    except BreakException:
+                        break
+                    except ContinueException:
+                        continue
+                return
+
+            # 其他情况（BehaviorExpr, BoolOp, Compare 等），作为 While 逻辑运行
+            while True:
                 try:
-                    for stmt in node.body: self.visit(stmt)
-                except BreakException: break
-                except ContinueException: continue
-        
-        self._execute_with_retry(node, for_logic)
+                    condition = self.visit(node.iter)
+                except LLMUncertaintyError as e:
+                    if node.llm_fallback:
+                        try:
+                            for stmt in node.llm_fallback:
+                                self.visit(stmt)
+                            break
+                        except RetryException:
+                            continue
+                    else:
+                        raise e
+                
+                if not self.is_truthy(condition):
+                    break
+                    
+                try:
+                    for stmt in node.body:
+                        self.visit(stmt)
+                except BreakException:
+                    break
+                except ContinueException:
+                    continue
+            return
+
+        # 2. 标准迭代模式: for i in list/range:
+        iterable = self.visit(node.iter)
+        if isinstance(iterable, (int, float)):
+            iterable = range(int(iterable))
+            
+        for item in iterable:
+            if isinstance(node.target, ast.Name):
+                self.context.define_variable(node.target.id, item)
+            try:
+                for stmt in node.body:
+                    self.visit(stmt)
+            except BreakException:
+                break
+            except ContinueException:
+                continue
 
     def visit_Retry(self, node: ast.Retry):
         raise RetryException()
@@ -507,6 +570,9 @@ class Interpreter:
         return self.evaluator.evaluate_expr(node, self.context)
 
     def visit_Attribute(self, node: ast.Attribute):
+        return self.evaluator.evaluate_expr(node, self.context)
+
+    def visit_BoolOp(self, node: ast.BoolOp):
         return self.evaluator.evaluate_expr(node, self.context)
 
     def visit_Pass(self, node: ast.Pass): pass
