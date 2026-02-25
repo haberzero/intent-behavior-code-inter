@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Callable
 from typedef import parser_types as ast
-from typedef.exception_types import InterpreterError
+from typedef.exception_types import InterpreterError, LLMUncertaintyError
 from .interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, Evaluator, ServiceContext, IssueTracker,
@@ -19,6 +19,7 @@ class ReturnException(Exception):
     def __init__(self, value: Any): self.value = value
 class BreakException(Exception): pass
 class ContinueException(Exception): pass
+class RetryException(Exception): pass
 
 class ServiceContextImpl:
     """注入容器实现类"""
@@ -300,11 +301,36 @@ class Interpreter:
         if isinstance(node.target, ast.Name):
             self.context.set_variable(node.target.id, new_val)
 
+    def _execute_with_retry(self, node: ast.ASTNode, main_logic: Callable[[], Any]):
+        """通用重试执行逻辑，处理 LLMUncertaintyError 和 retry 指令"""
+        retry_limit = 5
+        attempts = 0
+        while True:
+            try:
+                return main_logic()
+            except LLMUncertaintyError as e:
+                if hasattr(node, 'llm_fallback') and node.llm_fallback:
+                    try:
+                        for stmt in node.llm_fallback:
+                            self.visit(stmt)
+                        break # 执行完 fallback 且没有触发 retry，结束执行
+                    except RetryException:
+                        attempts += 1
+                        if attempts >= retry_limit:
+                            raise InterpreterError(f"Maximum retry limit ({retry_limit}) exceeded in {node.__class__.__name__}.", node)
+                        continue # 触发 retry，回到 loop 开头
+                else:
+                    raise e
+
     def visit_If(self, node: ast.If):
-        if self.is_truthy(self.visit(node.test)):
-            for stmt in node.body: self.visit(stmt)
-        elif node.orelse:
-            for stmt in node.orelse: self.visit(stmt)
+        def if_logic():
+            condition = self.visit(node.test)
+            if self.is_truthy(condition):
+                for stmt in node.body: self.visit(stmt)
+            elif node.orelse:
+                for stmt in node.orelse: self.visit(stmt)
+        
+        self._execute_with_retry(node, if_logic)
 
     def visit_Try(self, node: ast.Try):
         try:
@@ -359,24 +385,33 @@ class Interpreter:
         raise InterpreterError("Re-raise not supported in this version", node)
 
     def visit_While(self, node: ast.While):
-        while self.is_truthy(self.visit(node.test)):
-            try:
-                for stmt in node.body: self.visit(stmt)
-            except BreakException: break
-            except ContinueException: continue
+        def while_logic():
+            while self.is_truthy(self.visit(node.test)):
+                try:
+                    for stmt in node.body: self.visit(stmt)
+                except BreakException: break
+                except ContinueException: continue
+        
+        self._execute_with_retry(node, while_logic)
 
     def visit_For(self, node: ast.For):
-        iterable = self.visit(node.iter)
-        if isinstance(iterable, (int, float)):
-            iterable = range(int(iterable))
-            
-        for item in iterable:
-            if isinstance(node.target, ast.Name):
-                self.context.define_variable(node.target.id, item)
-            try:
-                for stmt in node.body: self.visit(stmt)
-            except BreakException: break
-            except ContinueException: continue
+        def for_logic():
+            iterable = self.visit(node.iter)
+            if isinstance(iterable, (int, float)):
+                iterable = range(int(iterable))
+                
+            for item in iterable:
+                if isinstance(node.target, ast.Name):
+                    self.context.define_variable(node.target.id, item)
+                try:
+                    for stmt in node.body: self.visit(stmt)
+                except BreakException: break
+                except ContinueException: continue
+        
+        self._execute_with_retry(node, for_logic)
+
+    def visit_Retry(self, node: ast.Retry):
+        raise RetryException()
 
     def visit_Return(self, node: ast.Return):
         value = self.visit(node.value) if node.value else None
@@ -466,5 +501,9 @@ class Interpreter:
         if value is None: return False
         if isinstance(value, bool): return value
         if isinstance(value, (int, float)): return value != 0
-        if isinstance(value, (str, list, dict)): return len(value) > 0
+        if isinstance(value, str):
+            if value == "1": return True
+            if value == "0": return False
+            return len(value) > 0
+        if isinstance(value, (list, dict)): return len(value) > 0
         return True

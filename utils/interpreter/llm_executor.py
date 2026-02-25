@@ -2,7 +2,7 @@ import re
 from typing import Any, List, Optional, Dict
 from .interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from typedef import parser_types as ast
-from typedef.exception_types import InterpreterError
+from typedef.exception_types import InterpreterError, LLMUncertaintyError
 
 class LLMExecutorImpl:
     """
@@ -15,6 +15,7 @@ class LLMExecutorImpl:
         """
         self.service_context = service_context
         self.llm_callback = llm_callback
+        self.retry_hint: Optional[str] = None
 
     def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> str:
         """
@@ -73,12 +74,54 @@ class LLMExecutorImpl:
         if node.intent:
             all_intents.append(node.intent)
             
+        # 3. 确定场景与提示词
+        scene = node.scene_tag
         sys_prompt = "你是一个意图行为代码执行器。"
+        
+        # 获取场景特定的系统提示词 (通过 ai 组件配置)
+        ai_module = None
+        if self.service_context and self.service_context.interop:
+            ai_module = self.service_context.interop.get_package("ai")
+            
+        if ai_module and hasattr(ai_module, "get_scene_prompt"):
+            scene_prompt = ai_module.get_scene_prompt(scene.name.lower())
+            if scene_prompt:
+                sys_prompt = scene_prompt
+
         if all_intents:
             sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
             
-        # 3. 执行
-        return self._call_llm(sys_prompt, content, node)
+        # 注入 retry_hint (如果有)
+        if self.retry_hint:
+            sys_prompt += f"\n\n注意：这是重试请求。之前的回答不符合要求，请参考此修正提示：{self.retry_hint}"
+            
+        # 4. 执行
+        # Try to pass scene if the callback supports it, otherwise fallback to old signature
+        try:
+            response = self.llm_callback(sys_prompt, content, scene=scene.name.lower())
+        except TypeError:
+            response = self.llm_callback(sys_prompt, content)
+            
+        # 成功执行后清除 retry_hint (或者在 retry 逻辑中控制)
+        # 注意：如果是 LLMUncertaintyError，可能会再次进入 retry 流程设置新的 hint
+        self.retry_hint = None
+        
+        # 5. 严格场景校验
+        if scene in (ast.Scene.BRANCH, ast.Scene.LOOP):
+            clean_res = response.strip().lower()
+            if clean_res in ("1", "0"):
+                return clean_res
+            # 尝试宽松匹配
+            if "1" in clean_res and "0" not in clean_res: return "1"
+            if "0" in clean_res and "1" not in clean_res: return "0"
+            
+            raise LLMUncertaintyError(
+                f"LLM 返回值在 {scene.name} 场景下不明确，期望 0 或 1，实际收到: {response}",
+                node,
+                raw_response=response
+            )
+            
+        return response
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode) -> str:
         if self.llm_callback:
