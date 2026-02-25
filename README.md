@@ -35,7 +35,7 @@ pip install openai
 4. **记住你的地址**: 阿里云百炼的默认地址（base_url）通常是 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
 
 ### 第四步：配置并运行
-最简单的方法是直接修改根目录下的 `api_config.json`：
+最简单的方法是直接创建一个 `api_config.json`：
 1. 打开 `api_config.json`，把你的信息填进去：
    ```json
    {
