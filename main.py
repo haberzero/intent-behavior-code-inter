@@ -58,9 +58,16 @@ def main():
         parser.print_help()
         return
 
+    # 确定项目根目录 (root_dir)
+    # 逻辑：如果显式指定了 --root，则使用它；
+    # 否则，默认将目标 .ibci 文件所在的目录作为根目录。
+    root_dir = args.root
+    if not root_dir and hasattr(args, 'file'):
+        root_dir = os.path.dirname(os.path.abspath(args.file))
+
     # 初始化引擎，决定是否自动嗅探
     auto_sniff = not args.no_sniff
-    engine = IBCIEngine(root_dir=args.root, auto_sniff=auto_sniff)
+    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff)
 
     # 1. 加载插件
     if args.plugin:
