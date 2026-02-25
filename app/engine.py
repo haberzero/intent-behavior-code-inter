@@ -6,6 +6,7 @@ from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
 from utils.interpreter.modules.stdlib import register_stdlib
 from utils.host_interface import HostInterface
+from utils.semantic.types import ModuleType
 from app.services.stdlib_provider import get_stdlib_metadata
 from typedef.diagnostic_types import CompilerError
 
@@ -33,6 +34,19 @@ class IBCIEngine:
         )
         # 注册运行时实现（覆盖 metadata 中的 None 值）
         register_stdlib(self.interpreter.service_context)
+
+    def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleType] = None):
+        """
+        供第三方开发者注册自定义 Python 插件模块。
+        
+        Args:
+            name: 插件名称，在 .ibci 中通过 'import <name>' 使用
+            implementation: 插件的 Python 实现对象
+            type_metadata: 可选的静态类型定义。如果不提供，将通过反射自动推断成员。
+        """
+        self.host_interface.register_module(name, implementation, type_metadata)
+        # 重新同步调度器的预定义符号（如果有变动）
+        self.scheduler.host_interface = self.host_interface
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
         """

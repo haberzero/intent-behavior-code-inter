@@ -16,18 +16,24 @@ class HostInterface:
     def register_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleType] = None):
         """
         注册一个外部模块。
-        
-        Args:
-            name: 模块名称 (如 'ai')
-            implementation: Python 实现对象 (如类或模块)
-            type_metadata: 静态类型信息。如果不提供，将通过反射或默认 Any 映射。
         """
         self._modules[name] = implementation
         if type_metadata:
             self._module_types[name] = type_metadata
         else:
-            # 默认创建一个全为 Any 的影子作用域
+            # 易用性改进：如果未提供元数据，尝试通过反射推断基础结构
+            # 至少让静态分析知道这些属性存在（虽然类型是 Any）
             scope = ScopeNode(ScopeType.GLOBAL)
+            if implementation:
+                # 遍历实现对象的公共属性
+                for attr in dir(implementation):
+                    if attr.startswith('_'): continue
+                    val = getattr(implementation, attr)
+                    if callable(val):
+                        scope.define(attr, SymbolType.FUNCTION).type_info = ANY_TYPE
+                    else:
+                        scope.define(attr, SymbolType.VARIABLE).type_info = ANY_TYPE
+            
             self._module_types[name] = ModuleType(scope)
 
     def register_global_function(self, name: str, implementation: Any, func_type: FunctionType):
