@@ -1,0 +1,36 @@
+import json
+import math
+import file
+import sys
+import time
+
+print("--- [04_stdlib_usage.ibci] ---")
+
+# 1. JSON 解析
+str data = '{"key": "value", "count": 42}'
+dict d = json.parse(data)
+print("JSON Key: " + (str)d["key"])
+print("JSON Count: " + (str)d["count"])
+
+# 2. Math 工具
+float root = math.sqrt(16.0)
+print("Sqrt of 16.0: " + (str)root)
+float pi = math.pi
+print("Value of PI: " + (str)pi)
+
+# 3. 文件读写 (受沙箱保护)
+str file_path = "temp_output.txt"
+file.write(file_path, "Hello from IBC-Inter stdlib!")
+if file.exists(file_path):
+    str content = file.read(file_path)
+    print("File Content: " + content)
+
+# 4. 系统权限
+if sys.is_sandboxed():
+    print("当前处于沙箱保护模式。")
+
+# 5. 时间函数
+float t1 = time.now()
+time.sleep(0.5)
+float t2 = time.now()
+print("Execution time: " + (str)(t2 - t1) + " seconds")

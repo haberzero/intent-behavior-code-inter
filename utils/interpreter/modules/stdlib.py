@@ -45,23 +45,31 @@ def register_stdlib(context: ServiceContext):
     # 4. file 组件 (基本的文件交互)
     class FileLib:
         @staticmethod
-        def read(path: str) -> str:
-            permission_manager.validate_path(path, "read")
-            with open(path, 'r', encoding='utf-8') as f:
+        def _resolve_path(path: str) -> str:
+            if os.path.isabs(path):
+                return path
+            # 相对路径应相对于项目根目录解析，以确保沙箱一致性
+            return os.path.join(permission_manager.root_dir, path)
+
+        @classmethod
+        def read(cls, path: str) -> str:
+            full_path = cls._resolve_path(path)
+            permission_manager.validate_path(full_path, "read")
+            with open(full_path, 'r', encoding='utf-8') as f:
                 return f.read()
                 
-        @staticmethod
-        def write(path: str, content: str):
-            permission_manager.validate_path(path, "write")
-            with open(path, 'w', encoding='utf-8') as f:
+        @classmethod
+        def write(cls, path: str, content: str):
+            full_path = cls._resolve_path(path)
+            permission_manager.validate_path(full_path, "write")
+            with open(full_path, 'w', encoding='utf-8') as f:
                 f.write(content)
                 
-        @staticmethod
-        def exists(path: str) -> bool:
-            # exists check usually doesn't require strict sandbox? 
-            # But let's be safe and validate if we want to prevent info leaking.
-            permission_manager.validate_path(path, "check existence")
-            return os.path.exists(path)
+        @classmethod
+        def exists(cls, path: str) -> bool:
+            full_path = cls._resolve_path(path)
+            permission_manager.validate_path(full_path, "check existence")
+            return os.path.exists(full_path)
 
     interop.register_package("file", FileLib)
 

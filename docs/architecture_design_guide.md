@@ -23,30 +23,31 @@ IBC-Inter 的执行过程是一个标准的流水线模型，数据在不同阶�
 5.  **Semantic Analyzer (语义分析)**:
     - 遍历 AST，填充 `SymbolTable`。
     - 执行静态类型检查，并为 AST 节点绑定作用域信息 (`ScopeNode`)。
+    - **HostInterface 集成**: 静态分析阶段会通过 `HostInterface` 自动发现外部注册的模块元数据。
 6.  **Interpreter (解释器)**:
     - 接收经过校验的 AST，使用 **Visitor 模式** 递归执行。
     - 结果：程序执行输出或运行时错误。
 
 ---
 
-## 2. 核心数据结构 (Core Typedefs)
+## 2. 宿主接口与扩展架构 (Host Interface & Plugins)
 
-理解以下数据结构是理解系统的关键，它们定义在 `typedef/` 目录下：
+这是 IBC-Inter 实现零硬编码和高度可扩展性的核心。
 
-### 2.1 ASTNode (parser_types.py)
-所有语法实体的基类。包含 `lineno`, `col_offset` 以及关联的 `scope`。
-- **Stmt (语句)**: 如 `If`, `For`, `Try`, `Assign`, `FunctionDef`。
-- **Expr (表达式)**: 如 `BinOp`, `Call`, `BehaviorExpr`, `Attribute`。
-- **BehaviorExpr**: 特有的表达式，包含文本段和插值表达式列表。
+### 2.1 HostInterface (宿主接口)
+`HostInterface` 是连接 Python 宿主环境与 IBCI 虚拟环境的桥梁。它统一管理：
+- **静态元数据**: 模块的类型定义（ModuleType），供静态分析器使用。
+- **运行时实现**: 模块的具体 Python 实现对象，供解释器调用。
 
-### 2.2 Symbol & ScopeNode (symbol_types.py / scope_types.py)
-- **Symbol**: 存储变量/函数的元数据，包括 `type_info` (语义类型) 和 `declared_type_node` (原始定义)。
-- **ScopeNode**: 树状结构，维护父子作用域关系，支持符号解析 (`resolve`)。
+### 2.2 自动推断与反射 (Reflection)
+为了降低扩展门槛，`HostInterface` 支持自动推断：
+- 当注册一个 Python 对象但未提供元数据时，系统通过 `dir()` 反射扫描其公共属性。
+- 自动识别函数、类、变量，并将其影子映射到 IBCI 环境中。
 
-### 2.3 Type System (utils/semantic/types.py)
-- 采用 **PrimitiveType** (int, float, str) 和 **ContainerType** (list, dict)。
-- **AnyType**: 对应 `var` 关键字，表示动态类型。
-- **FunctionType**: 存储参数类型列表及返回值类型。
+### 2.3 插件系统与嗅探机制
+- **IBCIEngine**: 封装了调度、编译、解释的完整生命周期。
+- **自动嗅探**: 引擎启动时会自动扫描项目根目录下的 `plugins/` 文件夹。
+- **setup() 钩子**: 允许插件开发者通过定义 `setup(engine)` 函数进行深度集成（如自定义注册名称、预注入变量等）。
 
 ---
 
@@ -57,7 +58,7 @@ IBC-Inter 的执行过程是一个标准的流水线模型，数据在不同阶�
 ### 3.1 ServiceContext 依赖注入
 为了避免循环依赖并实现组件间协作，系统使用 `ServiceContext` 容器。
 - `Interpreter` 持有 `ServiceContext`。
-- 子组件（Evaluator, LLMExecutor, ModuleManager）通过 `ServiceContext` 访问彼此，例如：`Evaluator` 在遇到复杂调用时会通过 context 回调 `Interpreter.visit()`。
+- 子组件（Evaluator, LLMExecutor, ModuleManager）通过 `ServiceContext` 访问彼此。
 
 ### 3.2 Evaluator 与类型路由 (Type Routing)
 `EvaluatorImpl` 负责所有算术和逻辑运算。
@@ -71,43 +72,28 @@ IBC-Inter 的执行过程是一个标准的流水线模型，数据在不同阶�
 - **场景化执行 (Scene-aware)**: 
     - 识别 AST 节点的 `scene_tag`。在 `BRANCH` 或 `LOOP` 场景下，执行器会切换至“确定性解析模式”，强制要求 LLM 返回 0 或 1。
     - **确定性校验**: 若 LLM 返回模糊结果，执行器会抛出 `LLMUncertaintyError`，这是触发 `llmexcept` 逻辑的开关。
-- **维修提示 (Retry Hint)**: 支持 `ai.set_retry_hint()` 注入。当 `llmexcept` 中调用 `retry` 时，执行器会自动将该 Hint 加入系统提示词，引导 LLM 修正之前的错误。
-- **占位符插值**: 使用正则表达式 `\$__(\w+)__` 在 `llm` 函数体中寻找并替换参数。
-
-### 3.4 ModuleManager 与递归编译
-- **加载逻辑**: 当遇到 `import` 时，`ModuleManager` 会调用 `Scheduler` 获取目标模块的 AST。
-- **解释器工厂**: 它持有一个 `interpreter_factory`，用于为新模块创建独立的子解释器实例，执行完毕后将其全局作用域封装为 `ModuleInstance`。
+- **维修提示 (Retry Hint)**: 支持 `ai.set_retry_hint()` 注入。当 `llmexcept` 中调用 `retry` 时，执行器会自动将该 Hint 加入系统提示词。
 
 ---
 
 ## 4. 关键设计细节与逻辑妥协
 
-1.  **双重类型检查**: 
-    - 语义分析阶段执行严格的静态检查。
-    - 解释器执行阶段执行运行时兼容性检查（`_check_type_compatibility`）。
-    - **妥协原因**: 原型机需要同时支持强类型声明和 `var` 动态类型，双重检查能确保在 `var` 类型发生突变时仍能保持安全。
+1.  **双重类型检查**: 语义分析执行严格静态检查，解释器执行运行时兼容性检查。
 2.  **错误捕获与 AI 容错**:
-    - 使用 Python 原生异常 `ReturnException`, `BreakException` 处理控制流跳转。
-    - **llmexcept 冒泡机制**: 当 `LLMUncertaintyError` 发生时，解释器会寻找当前控制流节点关联的 `llm_fallback` 块。如果不存在，则向上冒泡至父级控制流节点的 `llmexcept`。
-    - **retry 机制**: 在 `llm_fallback` 块中通过抛出 `RetryException` 触发。解释器捕获该异常后，会重新启动当前控制流节点的 `visit` 流程，从而实现闭环修复。
-    - 用户级 `try-except` 捕获 `InterpreterError`。捕获后，异常消息会被提取为 `str` 供 IBCI 代码处理。
-3.  **指令计数器**:
-    - 解释器内置 `instruction_count` 和 `call_stack_depth` 限制，防止死循环和栈溢出。
+    - **llmexcept 冒泡机制**: 当 `LLMUncertaintyError` 发生时，解释器会向上寻找最近的 `llm_fallback` 块。
+    - **retry 机制**: 通过 `RetryException` 实现闭环修复。
+3.  **零硬编码标准库**:
+    - 所有内置模块（ai, math, json）均通过 `stdlib_provider.py` 以插件形式注入，编译器核心不感知具体模块名称。
 
 ---
 
 ## 5. 对后续开发的指导建议
 
-### 5.1 如何扩展语法功能？
-1.  在 `typedef/parser_types.py` 增加节点。
-2.  在 `utils/lexer/core_scanner.py` 增加关键字。
-3.  在 `utils/parser/components/` 对应的组件中增加 `parse_xxx` 逻辑。
-4.  在 `Interpreter` 中增加 `visit_xxx` 方法。
+### 5.1 如何扩展功能？
+- **极简扩展**: 在 `plugins/` 放入 `.py` 文件。
+- **深度集成**: 实现 `setup(engine)` 钩子，调用 `engine.register_plugin()`。
+- **语法扩展**: 需修改 `Lexer`, `Parser` 和 `Interpreter` 的对应组件。
 
-### 5.2 如何增加新的内置库？
-只需在 `utils/interpreter/modules/stdlib.py` 中编写一个 Python 类，定义静态方法，然后调用 `interop.register_package`。解释器会自动通过 `Attribute` 访问将其暴露给用户。
-
-### 5.3 注意事项
-- **黑盒边界**: 除非需要改变语言的基础解析逻辑，否则请保持 `Lexer` 和 `Parser` 目录不动。
-- **类型安全**: 任何新的内置函数都应在 `utils/semantic/prelude.py` 中注册其 `FunctionType`，否则静态分析阶段会报错。
-- **意图敏感**: 任何可能触发 AI 行为的新节点，都应确保在执行前正确合并了 `context.get_active_intents()`。
+### 5.2 注意事项
+- **根目录依赖**: 引擎通过 `root_dir` 决定搜索路径，务必确保入口文件位置正确。
+- **Mock 性能**: 在 `stdlib.py` 中已针对 `TESTONLY` 模式优化了 `OpenAI` 的延迟加载，新增插件时也应注意避免在全局作用域执行耗时操作。

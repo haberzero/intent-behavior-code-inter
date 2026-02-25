@@ -1,0 +1,21 @@
+# main.ibci
+
+# 自动从项目根目录的 plugins/ 目录导入 calc
+import calc
+import plugin_info
+
+print("--- [03_plugins/main.ibci] ---")
+
+# 1. 调用通过 setup() 钩子注册的函数
+int result1 = calc.add(10, 20)
+print("10 + 20 = " + (str)result1)
+
+# 2. 调用乘法
+int result2 = calc.mul(5, 5)
+print("5 * 5 = " + (str)result2)
+
+# 3. 访问通过反射推断出来的类属性
+str version = plugin_info.version
+str author = plugin_info.author
+print("Plugin Version: " + version)
+print("Plugin Author: " + author)

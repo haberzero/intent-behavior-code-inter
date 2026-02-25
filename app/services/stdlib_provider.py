@@ -29,6 +29,7 @@ def get_stdlib_metadata() -> HostInterface:
     # 2. math 模块
     math_scope = ScopeNode(ScopeType.GLOBAL)
     math_scope.define("sqrt", SymbolType.FUNCTION).type_info = FunctionType([FLOAT_TYPE], FLOAT_TYPE)
+    math_scope.define("pi", SymbolType.VARIABLE).type_info = FLOAT_TYPE
     math_scope.define("pow", SymbolType.FUNCTION).type_info = FunctionType([FLOAT_TYPE, FLOAT_TYPE], FLOAT_TYPE)
     math_scope.define("sin", SymbolType.FUNCTION).type_info = FunctionType([FLOAT_TYPE], FLOAT_TYPE)
     math_scope.define("cos", SymbolType.FUNCTION).type_info = FunctionType([FLOAT_TYPE], FLOAT_TYPE)

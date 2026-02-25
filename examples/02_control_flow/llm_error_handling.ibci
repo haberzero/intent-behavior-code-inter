@@ -1,0 +1,37 @@
+import ai
+
+# 开启 TESTONLY 模式
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("--- [02_llm_error_handling.ibci] ---")
+
+# 1. 使用 llmexcept 处理 LLM 判断不明确的情况
+# 模拟 MOCK:REPAIR 指令：第一次会失败并进入 llmexcept，重试后会成功
+if ~~MOCK:REPAIR 检查天气是否适合野餐~~:
+    print("天气非常适合！")
+else:
+    print("天气不适合，建议待在室内。")
+llmexcept:
+    print("AI 返回判断模糊，正在启动重试机制...")
+    # 注入重试提示词，引导 AI 给出确定性回答
+    ai.set_retry_hint("请务必只返回 1 或 0，不要包含解释文字")
+    # 重新发起 LLM 请求
+    retry
+
+# 2. 循环中的 AI 判断
+int count = 0
+while ~~MOCK:REPAIR 任务是否还需要继续？~~:
+    count = count + 1
+    print("正在执行第 " + (str)count + " 次任务")
+    if count >= 3:
+        break
+llmexcept:
+    print("循环判断模糊，任务强制中止。")
+
+# 3. 混合 try-except 捕获普通运行时错误
+try:
+    int x = 10 / 0
+except str as e:
+    print("捕获到算术错误: " + e)
+finally:
+    print("清理工作已完成。")
