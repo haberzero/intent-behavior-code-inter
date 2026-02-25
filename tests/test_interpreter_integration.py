@@ -103,5 +103,29 @@ print(res2)
         self.assertTrue(success)
         self.assertEqual(self.output, ["52", "3"])
 
+    def test_engine_register_plugin(self):
+        """验证 IBCIEngine 的插件注册与运行时调用流程"""
+        class MyPlugin:
+            def hello(self, name):
+                return f"Hello, {name}!"
+            def get_val(self):
+                return 123
+        
+        # 注册插件
+        self.engine.register_plugin("ext", MyPlugin())
+        
+        # 运行代码使用插件
+        path = self.create_file("plugin_test.ibci", """
+import ext
+str msg = ext.hello("World")
+print(msg)
+int val = ext.get_val()
+print(val)
+""")
+        self.output = []
+        success = self.engine.run(path, output_callback=self.capture_output)
+        self.assertTrue(success)
+        self.assertEqual(self.output, ["Hello, World!", "123"])
+
 if __name__ == '__main__':
     unittest.main()
