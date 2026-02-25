@@ -12,6 +12,8 @@ from utils.parser.components.declaration import DeclarationComponent
 from utils.parser.components.type_def import TypeComponent
 from utils.parser.components.import_def import ImportComponent
 
+from utils.host_interface import HostInterface
+
 if TYPE_CHECKING:
     from utils.parser.resolver.resolver import ModuleResolver
 
@@ -20,7 +22,7 @@ class Parser:
     IBC-Inter Parser.
     Uses Component-based architecture.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None):
         
         # 1. Initialize Context
         self.stream = TokenStream(tokens, issue_tracker)
@@ -30,6 +32,7 @@ class Parser:
             scope_manager=ScopeManager(),
             module_resolver=module_resolver,
             module_cache=module_cache,
+            host_interface=host_interface,
             package_name=package_name
         )
         
