@@ -12,19 +12,23 @@ from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import InterpreterError, SemanticError
 from typedef.diagnostic_types import CompilerError
+from app.services.stdlib_provider import get_stdlib_metadata
 
 class TestTypePromotion(unittest.TestCase):
+    def setUp(self):
+        self.host_interface = get_stdlib_metadata()
+
     def run_code(self, code):
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
+        parser = Parser(tokens, issue_tracker, host_interface=self.host_interface)
         module = parser.parse()
         
-        analyzer = SemanticAnalyzer(issue_tracker)
+        analyzer = SemanticAnalyzer(issue_tracker, host_interface=self.host_interface)
         analyzer.analyze(module)
         
-        interpreter = Interpreter(issue_tracker)
+        interpreter = Interpreter(issue_tracker, host_interface=self.host_interface)
         return interpreter.interpret(module), interpreter
 
     def test_valid_numeric_promotion(self):

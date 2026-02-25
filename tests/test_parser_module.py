@@ -83,23 +83,23 @@ class TestParserModule(unittest.TestCase):
 
     def test_cross_module_resolution(self):
         """Test resolving symbols from imported module via cache."""
-        # 1. Create a dummy scope for module 'math'
+        # 1. Create a dummy scope for module 'mock_math'
         math_scope = ScopeManager().global_scope
         sqrt_sym = math_scope.define('sqrt', SymbolType.FUNCTION)
         sqrt_sym.type_info = FunctionType([INT_TYPE], INT_TYPE)
         
-        self.module_cache['math'] = math_scope
+        self.module_cache['mock_math'] = math_scope
         
-        # 2. Parse code that imports math
+        # 2. Parse code that imports mock_math
         code = """
-        import math
-        int x = math.sqrt(16)
+        import mock_math
+        int x = mock_math.sqrt(16)
         """
         # We need SemanticAnalyzer to verify type check
         mod, parser = self.parse_code(code, module_cache=self.module_cache)
         
-        # Check if 'math' symbol is linked
-        math_sym = parser.scope_manager.resolve('math')
+        # Check if 'mock_math' symbol is linked
+        math_sym = parser.scope_manager.resolve('mock_math')
         self.assertIsNotNone(math_sym)
         self.assertEqual(math_sym.exported_scope, math_scope)
         
