@@ -19,6 +19,7 @@ from utils.semantic.types import (
 )
 
 from utils.semantic.prelude import Prelude
+from utils.host_interface import HostInterface
 
 class SemanticAnalyzer:
     """
@@ -26,7 +27,7 @@ class SemanticAnalyzer:
     """
     def _init_builtins(self):
         """Register builtin functions and modules."""
-        prelude = Prelude()
+        prelude = Prelude(self.host_interface)
         
         # 1. Functions
         for name, func_type in prelude.get_builtins().items():
@@ -43,9 +44,10 @@ class SemanticAnalyzer:
             sym.type_info = mod_type
             sym.exported_scope = mod_type.scope
 
-    def __init__(self, issue_tracker: Optional[IssueTracker] = None):
+    def __init__(self, issue_tracker: Optional[IssueTracker] = None, host_interface: Optional[HostInterface] = None):
         self.scope_manager = ScopeManager() 
         self.issue_tracker = issue_tracker or IssueTracker()
+        self.host_interface = host_interface
         
     def analyze(self, node: ast.ASTNode):
         # Use the global scope attached to Module if available
@@ -304,6 +306,42 @@ class SemanticAnalyzer:
             self.visit(stmt)
         for stmt in node.orelse:
             self.visit(stmt)
+        if node.llm_fallback:
+            for stmt in node.llm_fallback:
+                self.visit(stmt)
+
+    def visit_While(self, node: ast.While):
+        self.visit(node.test)
+        for stmt in node.body:
+            self.visit(stmt)
+        if node.llm_fallback:
+            for stmt in node.llm_fallback:
+                self.visit(stmt)
+
+    def visit_For(self, node: ast.For):
+        # Visit iterator
+        self.visit(node.iter)
+        
+        # Enter loop scope
+        self.scope_manager.enter_scope(ScopeType.BLOCK)
+        
+        if node.target:
+            if isinstance(node.target, ast.Name):
+                # Define loop variable
+                if not self.scope_manager.current_scope.resolve(node.target.id):
+                    sym = self.scope_manager.define(node.target.id, SymbolType.VARIABLE)
+                    sym.type_info = ANY_TYPE
+            else:
+                self.visit(node.target)
+                
+        for stmt in node.body:
+            self.visit(stmt)
+            
+        if node.llm_fallback:
+            for stmt in node.llm_fallback:
+                self.visit(stmt)
+                
+        self.scope_manager.exit_scope()
 
     def visit_Try(self, node: ast.Try):
         for stmt in node.body:

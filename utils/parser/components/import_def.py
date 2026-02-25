@@ -201,6 +201,15 @@ class ImportComponent(BaseComponent):
 
     def _resolve_module_scope(self, module_name: str, context_node: Optional[ast.ASTNode] = None) -> Optional[ScopeNode]:
         """Resolve module name to ScopeNode using Resolver and Cache."""
+        # 0. Check for builtin/external modules from HostInterface
+        if self.context.host_interface and self.context.host_interface.is_external_module(module_name):
+            # If it's in cache (e.g. during tests), return it
+            if module_name in self.context.module_cache:
+                return self.context.module_cache[module_name]
+            # External modules don't have source files, but their symbols are injected later.
+            # We return None here; SemanticAnalyzer will handle the builtin scope injection.
+            return None
+
         # 1. Try to resolve to path if resolver exists
         resolved_path = None
         if self.context.module_resolver:

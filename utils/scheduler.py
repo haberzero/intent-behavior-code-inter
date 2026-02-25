@@ -13,6 +13,7 @@ from utils.diagnostics.issue_tracker import IssueTracker
 from utils.source.source_manager import SourceManager
 from utils.parser.resolver.resolver import ModuleResolver
 from typedef.diagnostic_types import Severity, CompilerError
+from utils.host_interface import HostInterface
 
 class Scheduler:
     """
@@ -21,12 +22,16 @@ class Scheduler:
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None):
         self.root_dir = os.path.realpath(root_dir)
         self.issue_tracker = IssueTracker()
         self.source_manager = SourceManager()
         self.resolver = ModuleResolver(self.root_dir)
+        self.host_interface = host_interface or HostInterface()
         # DependencyScanner is now instantiated per file
+        
+        # Initial symbols to pre-populate in every module's global scope
+        self.predefined_symbols: Dict[str, Any] = {}
         
         # Caches (Using OrderedDict for LRU behavior)
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
@@ -200,6 +205,10 @@ class Scheduler:
 
             # 3. Resolve and Enqueue Imports
             for imp in imports:
+                # Skip external modules - they don't have source files
+                if self.host_interface.is_external_module(imp.module_name):
+                    continue
+                    
                 try:
                     resolved_path = self.resolver.resolve(imp.module_name, current_path)
                     imp.file_path = resolved_path
@@ -247,7 +256,14 @@ class Scheduler:
                 tokens = lexer.tokenize()
             
             # 2. Parse
-            parser = Parser(tokens, file_tracker, self.scope_cache, package_name=module_name, module_resolver=self.resolver)
+            parser = Parser(
+                tokens, 
+                file_tracker, 
+                self.scope_cache, 
+                package_name=module_name, 
+                module_resolver=self.resolver,
+                host_interface=self.host_interface
+            )
             ast_node = parser.parse()
             
             # Cache AST and Tokens (Move to end for LRU)
@@ -259,7 +275,17 @@ class Scheduler:
             self._prune_cache()
             
             # 3. Semantic Analysis
-            analyzer = SemanticAnalyzer(file_tracker)
+            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface)
+            
+            # Pre-populate global scope with predefined symbols
+            if ast_node.scope:
+                from typedef.symbol_types import SymbolType
+                from utils.semantic.types import ANY_TYPE
+                for name in self.predefined_symbols:
+                    if not ast_node.scope.resolve(name):
+                        sym = ast_node.scope.define(name, SymbolType.VARIABLE)
+                        sym.type_info = ANY_TYPE
+            
             analyzer.analyze(ast_node)
             
             # Register Scope

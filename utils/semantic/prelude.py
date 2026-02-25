@@ -1,55 +1,42 @@
 
-from typing import Dict
+from typing import Dict, Optional
 from utils.semantic.types import (
     Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE
 )
 from typedef.scope_types import ScopeNode, ScopeType
 from typedef.symbol_types import SymbolType
+from utils.host_interface import HostInterface
 
 class Prelude:
     """
     Manages builtin types and functions for the IBC-Inter language.
     """
-    def __init__(self):
+    def __init__(self, host_interface: Optional[HostInterface] = None):
         self.builtin_functions: Dict[str, FunctionType] = {}
         self.builtin_modules: Dict[str, ModuleType] = {}
+        self.host_interface = host_interface
         self._init_defaults()
         
     def _init_defaults(self):
-        # print(...) -> void
+        # 1. 注册核心内置函数
         self.register("print", FunctionType([ANY_TYPE], VOID_TYPE))
-        
-        # len(list/str) -> int
         self.register("len", FunctionType([ANY_TYPE], INT_TYPE))
-        
-        # range(int) -> list[int]
         self.register("range", FunctionType([INT_TYPE], ListType(INT_TYPE)))
-        
-        # str(any) -> str
         self.register("str", FunctionType([ANY_TYPE], STR_TYPE))
-        
-        # int(any) -> int
         self.register("int", FunctionType([ANY_TYPE], INT_TYPE))
 
-        # -- Builtin Modules --
-        # ai module
-        ai_scope = ScopeNode(ScopeType.GLOBAL)
-        ai_scope.define("set_config", SymbolType.FUNCTION).type_info = FunctionType([STR_TYPE, STR_TYPE, STR_TYPE], VOID_TYPE)
-        self.builtin_modules["ai"] = ModuleType(ai_scope)
-
-        # json module
-        json_scope = ScopeNode(ScopeType.GLOBAL)
-        json_scope.define("parse", SymbolType.FUNCTION).type_info = FunctionType([STR_TYPE], ANY_TYPE)
-        json_scope.define("stringify", SymbolType.FUNCTION).type_info = FunctionType([ANY_TYPE], STR_TYPE)
-        self.builtin_modules["json"] = ModuleType(json_scope)
-
-        # file module
-        file_scope = ScopeNode(ScopeType.GLOBAL)
-        file_scope.define("read", SymbolType.FUNCTION).type_info = FunctionType([STR_TYPE], STR_TYPE)
-        file_scope.define("write", SymbolType.FUNCTION).type_info = FunctionType([STR_TYPE, STR_TYPE], VOID_TYPE)
-        file_scope.define("exists", SymbolType.FUNCTION).type_info = FunctionType([STR_TYPE], BOOL_TYPE)
-        self.builtin_modules["file"] = ModuleType(file_scope)
+        # 2. 从 HostInterface 动态加载模块和函数
+        if self.host_interface:
+            # 模块
+            for mod_name in self.host_interface.get_all_module_names():
+                mod_type = self.host_interface.get_module_type(mod_name)
+                if mod_type:
+                    self.builtin_modules[mod_name] = mod_type
+            
+            # 全局函数
+            for func_name, func_type in self.host_interface.get_global_functions().items():
+                self.builtin_functions[func_name] = func_type
         
     def register(self, name: str, func_type: FunctionType):
         self.builtin_functions[name] = func_type
