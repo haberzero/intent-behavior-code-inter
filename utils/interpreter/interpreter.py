@@ -42,7 +42,7 @@ class Interpreter:
         self.evaluator: Evaluator = EvaluatorImpl()
         
         # 注册标准库
-        register_stdlib(self.interop)
+        register_stdlib(self.interop, self.llm_executor)
         
         # 注册全局内置函数 (Intrinsic Built-ins)
         self._register_intrinsics()
