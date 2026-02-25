@@ -69,6 +69,7 @@ def register_stdlib(context: ServiceContext):
     class LLMHandler:
         def __init__(self, executor: LLMExecutor):
             self.executor = executor
+            self.client = None
             self.config = {
                 "url": None,
                 "key": None,
@@ -85,16 +86,30 @@ def register_stdlib(context: ServiceContext):
             if hasattr(self.executor, 'llm_callback'):
                 self.executor.llm_callback = self
 
+        def _init_client(self):
+            if self.config["url"] and self.config["key"]:
+                try:
+                    from openai import OpenAI
+                    self.client = OpenAI(
+                        base_url=self.config["url"],
+                        api_key=self.config["key"],
+                        timeout=self.config["timeout"]
+                    )
+                except ImportError:
+                    pass # Handled in __call__ if client is missing
+
         def set_config(self, url: str, key: str, model: str):
             self.config["url"] = url
             self.config["key"] = key
             self.config["model"] = model
+            self._init_client()
             
         def set_retry(self, count: int):
             self.config["retry"] = count
             
         def set_timeout(self, seconds: float):
             self.config["timeout"] = seconds
+            self._init_client() # Re-init with new timeout
 
         def set_general_prompt(self, prompt: str):
             self.scene_prompts["general"] = prompt
@@ -120,14 +135,6 @@ def register_stdlib(context: ServiceContext):
         def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
             """
             作为 LLMExecutor 的回调执行真实/虚拟调用。
-            
-            [TESTONLY 模拟指令规范]:
-            在 TESTONLY 模式下，可以通过在行为描述行 (~~...~~) 中包含以下指令来精确操控模拟块：
-            1. "MOCK:FAIL" -> 模拟 LLM 返回无法解析的内容，触发 llmexcept。
-            2. "MOCK:TRUE" / "MOCK:1" -> 在逻辑场景下强制返回 1。
-            3. "MOCK:FALSE" / "MOCK:0" -> 在逻辑场景下强制返回 0。
-            4. "MOCK:REPAIR" -> 模拟需要“维修”的逻辑。第一次调用返回 MOCK:FAIL，
-                             如果 detect 到 retry_hint 已设置，则第二次返回 MOCK:TRUE。
             """
             # 1. 检查配置完备性
             is_test_mode = (
@@ -149,33 +156,22 @@ def register_stdlib(context: ServiceContext):
 
             # 2. 检查 TESTONLY 模拟逻辑
             if is_test_mode:
-                # 预处理用户提示词以识别模拟指令
+                # ... (keep existing test logic)
                 u_upper = user_prompt.upper()
-                
-                # 场景 A: 模拟维修/重试闭环 (MOCK:REPAIR)
                 if "MOCK:REPAIR" in u_upper:
                     has_hint = hasattr(self.executor, 'retry_hint') and self.executor.retry_hint is not None
                     if not has_hint:
-                        # 第一次调用，没有维修提示，模拟失败
                         return "MOCK_UNCERTAIN_RESPONSE"
                     else:
-                        # 第二次调用，已有维修提示，模拟成功
                         return "1" if scene in ("branch", "loop") else f"[MOCK] Repaired using hint: {self.executor.retry_hint}"
-
-                # 场景 B: 强制失败指令
                 if "MOCK:FAIL" in u_upper:
                     return "MOCK_UNCERTAIN_RESPONSE_TRIGGERING_EXCEPT"
-
-                # 场景 C: 强制布尔结果
                 if scene in ("branch", "loop"):
                     if "MOCK:FALSE" in u_upper or "MOCK:0" in u_upper:
                         return "0"
                     if "MOCK:TRUE" in u_upper or "MOCK:1" in u_upper:
                         return "1"
-                    # 默认逻辑场景返回 1
                     return "1"
-
-                # 场景 D: 常规文本模拟
                 return f"[MOCK] Simulated response for: {user_prompt} (INTENTS: {sys_prompt})"
             
             # 3. 正常执行路径 (带重试逻辑)
@@ -184,14 +180,33 @@ def register_stdlib(context: ServiceContext):
             
             for attempt in range(retry_count + 1):
                 try:
-                    # TODO: 实现真实的 LLM API 调用
-                    return f"[AI Response using {self.config['model']}] Received: {user_prompt}"
+                    if not self.client:
+                        self._init_client()
+                    
+                    if not self.client:
+                        raise Exception("Failed to initialize OpenAI client. Please check your configuration.")
+
+                    messages = [
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                    
+                    response = self.client.chat.completions.create(
+                        model=self.config["model"],
+                        messages=messages,
+                        temperature=0.1 if scene in ("branch", "loop") else 0.7
+                    )
+                    
+                    return response.choices[0].message.content
                 except Exception as e:
                     last_error = e
                     if attempt < retry_count:
+                        time.sleep(1) # Wait before retry
                         continue
             
-            raise last_error or Exception("LLM call failed after retries")
+            from typedef.exception_types import InterpreterError
+            raise InterpreterError(f"LLM call failed after {retry_count + 1} attempts: {str(last_error)}")
+
 
     interop.register_package("ai", LLMHandler(llm_executor))
 
