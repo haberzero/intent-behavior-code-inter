@@ -316,5 +316,15 @@ llm inline_test(int a):
         self.assertIn("User prompt", tokens[user_idx+1].value)
 
 
+    def test_exception_keywords(self):
+        """测试新增的异常处理关键字"""
+        code = "try except finally raise as"
+        lexer = Lexer(code)
+        tokens = [t.type for t in lexer.tokenize() if t.type != TokenType.EOF]
+        self.assertEqual(tokens, [
+            TokenType.TRY, TokenType.EXCEPT, TokenType.FINALLY, 
+            TokenType.RAISE, TokenType.AS
+        ])
+
 if __name__ == '__main__':
     unittest.main()

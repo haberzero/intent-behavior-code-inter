@@ -34,6 +34,8 @@ class CoreTokenScanner:
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
             'var': TokenType.VAR, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
+            'try': TokenType.TRY, 'except': TokenType.EXCEPT,
+            'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,

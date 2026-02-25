@@ -598,5 +598,26 @@ return my_func()
         assert intent is not None
         self.assertEqual(intent.strip(), "intent for return")
 
+    def test_try_parser(self):
+        """测试 try-except-finally 语法的解析"""
+        code = """
+try:
+    pass
+except str as e:
+    pass
+finally:
+    pass
+"""
+        lexer = Lexer(code)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        module = parser.parse()
+        
+        try_node = module.body[0]
+        self.assertIsInstance(try_node, ast.Try)
+        self.assertEqual(len(try_node.handlers), 1)
+        self.assertEqual(try_node.handlers[0].name, "e")
+        self.assertIsInstance(try_node.finalbody[0], ast.Pass)
+
 if __name__ == '__main__':
     unittest.main()

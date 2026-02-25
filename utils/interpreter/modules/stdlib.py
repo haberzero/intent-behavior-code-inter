@@ -72,7 +72,9 @@ def register_stdlib(context: ServiceContext):
             self.config = {
                 "url": None,
                 "key": None,
-                "model": None
+                "model": None,
+                "retry": 0,
+                "timeout": 30.0
             }
             # 建立跨模块联动：将自己设为执行器的回调
             if hasattr(self.executor, 'llm_callback'):
@@ -83,6 +85,12 @@ def register_stdlib(context: ServiceContext):
             self.config["key"] = key
             self.config["model"] = model
             
+        def set_retry(self, count: int):
+            self.config["retry"] = count
+            
+        def set_timeout(self, seconds: float):
+            self.config["timeout"] = seconds
+
         def __call__(self, sys_prompt: str, user_prompt: str) -> str:
             """
             作为 LLMExecutor 的回调执行真实/虚拟调用
@@ -110,9 +118,22 @@ def register_stdlib(context: ServiceContext):
             if is_test_mode:
                 return f"[TESTONLY MODE] {user_prompt} (INTENTS: {sys_prompt})"
             
-            # 3. 正常执行路径
-            # TODO: 实现真实的 LLM API 调用
-            return f"[AI Response using {self.config['model']}] Received: {user_prompt}"
+            # 3. 正常执行路径 (带重试逻辑)
+            retry_count = self.config.get("retry", 0)
+            last_error = None
+            
+            for attempt in range(retry_count + 1):
+                try:
+                    # TODO: 实现真实的 LLM API 调用，并使用 self.config["timeout"]
+                    # 目前仅作为占位符
+                    return f"[AI Response using {self.config['model']}] Received: {user_prompt}"
+                except Exception as e:
+                    last_error = e
+                    if attempt < retry_count:
+                        # 指数退避或简单等待可以加在这里
+                        continue
+            
+            raise last_error or Exception("LLM call failed after retries")
 
     interop.register_package("ai", LLMHandler(llm_executor))
 

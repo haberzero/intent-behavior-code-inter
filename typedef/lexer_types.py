@@ -28,6 +28,10 @@ class TokenType(Enum):
     OR = auto()
     NOT = auto()
     IS = auto()
+    TRY = auto()
+    EXCEPT = auto()
+    FINALLY = auto()
+    RAISE = auto()
     
     # LLM 关键字
     LLM_DEF = auto()    # llm

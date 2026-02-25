@@ -294,6 +294,41 @@ class SemanticAnalyzer:
     def visit_ExprStmt(self, node: ast.ExprStmt):
         self.visit(node.value)
 
+    def visit_If(self, node: ast.If):
+        self.visit(node.test)
+        for stmt in node.body:
+            self.visit(stmt)
+        for stmt in node.orelse:
+            self.visit(stmt)
+
+    def visit_Try(self, node: ast.Try):
+        for stmt in node.body:
+            self.visit(stmt)
+        for handler in node.handlers:
+            self.visit(handler)
+        for stmt in node.orelse:
+            self.visit(stmt)
+        for stmt in node.finalbody:
+            self.visit(stmt)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler):
+        if node.type:
+            self.visit(node.type)
+        
+        if node.name:
+            self.scope_manager.enter_scope(ScopeType.BLOCK)
+            self.scope_manager.define(node.name, SymbolType.VARIABLE)
+            for stmt in node.body:
+                self.visit(stmt)
+            self.scope_manager.exit_scope()
+        else:
+            for stmt in node.body:
+                self.visit(stmt)
+
+    def visit_Raise(self, node: ast.Raise):
+        if node.exc:
+            self.visit(node.exc)
+
     def visit_Call(self, node: ast.Call) -> Type:
         # Resolve function type
         func_type = self.visit(node.func)

@@ -28,6 +28,10 @@ class StatementComponent(BaseComponent):
             return self.while_statement()
         if self.stream.match(TokenType.FOR):
             return self.for_statement()
+        if self.stream.match(TokenType.TRY):
+            return self.try_statement()
+        if self.stream.match(TokenType.RAISE):
+            return self.raise_statement()
         if self.stream.match(TokenType.PASS):
             start = self.stream.previous()
             self.stream.consume_end_of_statement("Expect newline after pass.")
@@ -146,3 +150,47 @@ class StatementComponent(BaseComponent):
 
         self.stream.consume(TokenType.DEDENT, "Expect dedent after block.")
         return stmts
+
+    def try_statement(self) -> ast.Try:
+        start_token = self.stream.previous()
+        self.stream.consume(TokenType.COLON, "Expect ':' after try.")
+        body = self.block()
+        
+        handlers = []
+        while self.stream.match(TokenType.EXCEPT):
+            handler_start = self.stream.previous()
+            type_expr = None
+            name = None
+            
+            if not self.stream.check(TokenType.COLON):
+                type_expr = self.expression.parse_expression()
+                if self.stream.match(TokenType.AS):
+                    name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect exception name after 'as'.")
+                    name = name_token.value
+            
+            self.stream.consume(TokenType.COLON, "Expect ':' after except.")
+            handler_body = self.block()
+            handlers.append(self._loc(ast.ExceptHandler(type=type_expr, name=name, body=handler_body), handler_start))
+        
+        orelse = []
+        if self.stream.match(TokenType.ELSE):
+            self.stream.consume(TokenType.COLON, "Expect ':' after else.")
+            orelse = self.block()
+            
+        finalbody = []
+        if self.stream.match(TokenType.FINALLY):
+            self.stream.consume(TokenType.COLON, "Expect ':' after finally.")
+            finalbody = self.block()
+            
+        if not handlers and not finalbody:
+             raise self.stream.error(start_token, "Expect 'except' or 'finally' after 'try'.")
+             
+        return self._loc(ast.Try(body=body, handlers=handlers, orelse=orelse, finalbody=finalbody), start_token)
+
+    def raise_statement(self) -> ast.Raise:
+        start_token = self.stream.previous()
+        exc = None
+        if not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
+            exc = self.expression.parse_expression()
+        self.stream.consume_end_of_statement("Expect newline after raise.")
+        return self._loc(ast.Raise(exc=exc), start_token)

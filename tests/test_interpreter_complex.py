@@ -114,5 +114,81 @@ print(length)
         self.run_code(code)
         self.assertEqual(self.output, ["3"])
 
+    def test_container_ext(self):
+        """测试容器原生方法的扩展支持 (list.append, dict.keys 等)"""
+        code = """
+list l = [1, 2]
+l.append(3)
+l.sort()
+dict d = {"a": 1, "b": 2}
+list keys = (list)d.keys()
+keys.sort()
+print(len(l))
+print(keys)
+"""
+        self.run_code(code)
+        self.assertEqual(self.output[0], "3")
+        self.assertIn("'a'", self.output[1])
+        self.assertIn("'b'", self.output[1])
+
+    def test_exception_handling(self):
+        """测试基础错误捕获机制 (try-except-finally-raise)"""
+        # 1. 基础 try-except-finally
+        code1 = """
+int x = 0
+try:
+    x = 1 / 0
+except:
+    x = 2
+finally:
+    x = x + 10
+print(x)
+"""
+        self.output = []
+        self.run_code(code1)
+        self.assertEqual(self.output, ["12"])
+
+        # 2. 具名异常捕获
+        code2 = """
+try:
+    raise "Custom Error"
+except str as e:
+    print(e)
+"""
+        self.output = []
+        self.run_code(code2)
+        self.assertEqual(self.output, ["Custom Error"])
+
+        # 3. try-else-finally 全流程
+        code3 = """
+str status = ""
+try:
+    status = "running"
+except:
+    status = "error"
+else:
+    status = "ok"
+finally:
+    status = status + "_done"
+print(status)
+"""
+        self.output = []
+        self.run_code(code3)
+        self.assertEqual(self.output, ["ok_done"])
+
+    def test_ai_module_ext(self):
+        """测试 ai 模块的新增配置功能 (retry/timeout)"""
+        code = """
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_retry(2)
+ai.set_timeout(10.5)
+str res = ~~hello~~
+print("done")
+"""
+        self.output = []
+        self.run_code(code)
+        self.assertEqual(self.output, ["done"])
+
 if __name__ == '__main__':
     unittest.main()

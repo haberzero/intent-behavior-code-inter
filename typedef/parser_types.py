@@ -117,6 +117,24 @@ class If(Stmt):
     orelse: List[Stmt] = field(default_factory=list)
 
 @dataclass
+class Try(Stmt):
+    body: List[Stmt]
+    handlers: List['ExceptHandler']
+    orelse: List[Stmt] = field(default_factory=list)
+    finalbody: List[Stmt] = field(default_factory=list)
+
+@dataclass
+class ExceptHandler(ASTNode):
+    type: Optional[Expr]
+    name: Optional[str]
+    body: List[Stmt]
+
+@dataclass
+class Raise(Stmt):
+    exc: Optional[Expr]
+    cause: Optional[Expr] = None
+
+@dataclass
 class Import(Stmt):
     names: List['alias']
 

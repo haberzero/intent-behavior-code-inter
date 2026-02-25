@@ -306,6 +306,58 @@ class Interpreter:
         elif node.orelse:
             for stmt in node.orelse: self.visit(stmt)
 
+    def visit_Try(self, node: ast.Try):
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        except (ReturnException, BreakException, ContinueException):
+            raise
+        except Exception as e:
+            handled = False
+            for handler in node.handlers:
+                if handler.type is None:
+                    handled = True
+                else:
+                    exc_type = self.visit(handler.type)
+                    if isinstance(exc_type, type):
+                        if isinstance(e, exc_type):
+                            handled = True
+                        elif exc_type == str and isinstance(e, InterpreterError):
+                            handled = True
+                    elif isinstance(exc_type, str):
+                        if type(e).__name__ == exc_type or "InterpreterError" == exc_type:
+                            handled = True
+                    elif exc_type == Exception:
+                        handled = True
+
+                if handled:
+                    self.context.enter_scope()
+                    try:
+                        if handler.name:
+                            val = e.message if isinstance(e, InterpreterError) else str(e)
+                            self.context.define_variable(handler.name, val)
+                        for stmt in handler.body:
+                            self.visit(stmt)
+                    finally:
+                        self.context.exit_scope()
+                    break
+            if not handled:
+                raise
+        else:
+            for stmt in node.orelse:
+                self.visit(stmt)
+        finally:
+            for stmt in node.finalbody:
+                self.visit(stmt)
+
+    def visit_Raise(self, node: ast.Raise):
+        if node.exc:
+            exc_val = self.visit(node.exc)
+            if isinstance(exc_val, Exception):
+                raise exc_val
+            raise InterpreterError(str(exc_val), node)
+        raise InterpreterError("Re-raise not supported in this version", node)
+
     def visit_While(self, node: ast.While):
         while self.is_truthy(self.visit(node.test)):
             try:
