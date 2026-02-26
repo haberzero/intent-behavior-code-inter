@@ -16,7 +16,6 @@ from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
 from .evaluator import EvaluatorImpl
 from .permissions import PermissionManager as PermissionManagerImpl
-from .modules.stdlib import register_stdlib
 from utils.host_interface import HostInterface
 
 # --- Runtime Exceptions for Flow Control ---
@@ -113,10 +112,7 @@ class Interpreter:
         evaluator.service_context = self.service_context
         llm_executor.service_context = self.service_context
         
-        # 5. 注册标准库
-        register_stdlib(self.service_context)
-        
-        # 6. 注册全局内置函数
+        # 5. 注册全局内置函数
         self._register_intrinsics()
         
         # 运行限制
