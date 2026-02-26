@@ -1,7 +1,7 @@
 import os
 import time
 from typing import Any, Optional, Dict
-from utils.interpreter.interfaces import LLMExecutor
+from core.runtime.interpreter.interfaces import LLMExecutor
 
 class AILib:
     def __init__(self):
@@ -86,7 +86,7 @@ class AILib:
 
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                from typedef.exception_types import InterpreterError
+                from core.types.exception_types import InterpreterError
                 raise InterpreterError(
                     "LLM 运行配置缺失：在执行 AI 行为前，必须先配置 LLM 访问参数。\n"
                     "建议修复方案：\n"
@@ -143,7 +143,7 @@ class AILib:
                     time.sleep(1)
                     continue
         
-        from typedef.exception_types import InterpreterError
+        from core.types.exception_types import InterpreterError
         raise InterpreterError(f"LLM call failed after {retry_count + 1} attempts: {str(last_error)}")
 
 def create_implementation():

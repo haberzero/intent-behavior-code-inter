@@ -112,11 +112,11 @@ for ~~判定当前内容是否足够热情？如果不够请返回 1 继续优�
 ## 🛠️ 架构概览
 
 IBC-Inter 采用高度解耦的编译器架构：
-- **Scheduler ([scheduler.py](file:///c:/myself/proj/intent-behavior-code-inter/utils/scheduler.py))**: 负责多文件编译调度、依赖图构建及缓存管理。
-- **Interpreter ([interpreter.py](file:///c:/myself/proj/intent-behavior-code-inter/utils/interpreter/interpreter.py))**: 核心执行引擎，采用 Visitor 模式遍历 AST，并支持意图栈管理。
-- **LLM Executor ([llm_executor.py](file:///c:/myself/proj/intent-behavior-code-inter/utils/interpreter/llm_executor.py))**: 处理提示词构建、参数插值和结果的严格校验（BRANCH/LOOP 场景）。
-- **Evaluator ([evaluator.py](file:///c:/myself/proj/intent-behavior-code-inter/utils/interpreter/evaluator.py))**: 处理所有算术、逻辑及类型转换运算。
-- **HostInterface ([host_interface.py](file:///c:/myself/proj/intent-behavior-code-inter/utils/host_interface.py))**: 统一的宿主互操作层，支持 Python 插件与标准库元数据管理。
+- **Scheduler ([scheduler.py](file:///c:/myself/proj/intent-behavior-code-inter/core/scheduler.py))**: 负责多文件编译调度、依赖图构建及缓存管理。
+- **Interpreter ([interpreter.py](file:///c:/myself/proj/intent-behavior-code-inter/core/interpreter/interpreter.py))**: 核心执行引擎，采用 Visitor 模式遍历 AST，并支持意图栈管理。
+- **LLM Executor ([llm_executor.py](file:///c:/myself/proj/intent-behavior-code-inter/core/interpreter/llm_executor.py))**: 处理提示词构建、参数插值和结果的严格校验（BRANCH/LOOP 场景）。
+- **Evaluator ([evaluator.py](file:///c:/myself/proj/intent-behavior-code-inter/core/interpreter/evaluator.py))**: 处理所有算术、逻辑及类型转换运算。
+- **HostInterface ([host_interface.py](file:///c:/myself/proj/intent-behavior-code-inter/core/host_interface.py))**: 统一的宿主互操作层，支持 Python 插件与标准库元数据管理。
 
 更多详情请参阅：
 - [使用指南](docs/prototype_usage_guide.md)

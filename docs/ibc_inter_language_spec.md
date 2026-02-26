@@ -20,7 +20,7 @@ from module_name import *
 
 ```ibc-inter
 import json
-from utils.logger import Logger
+from core.logger import Logger
 from config.settings import load_config as load_cfg
 import requests as http
 from math import *

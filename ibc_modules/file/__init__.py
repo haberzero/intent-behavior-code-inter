@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from utils.interpreter.interfaces import PermissionManager
+from core.runtime.interpreter.interfaces import PermissionManager
 
 class FileLib:
     def __init__(self):
