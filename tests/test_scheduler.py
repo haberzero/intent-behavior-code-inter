@@ -6,9 +6,9 @@ import sys
 # Add project root to sys.path so we can import modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.scheduler import Scheduler, DependencyGraph
-from typedef.parser_types import Module
-from typedef.scope_types import ScopeNode
+from core.scheduler import Scheduler, DependencyGraph
+from core.types.parser_types import Module
+from core.types.scope_types import ScopeNode
 
 class TestScheduler(unittest.TestCase):
     def setUp(self):
@@ -62,7 +62,7 @@ class TestScheduler(unittest.TestCase):
         #     self.issue_tracker.report(Severity.ERROR, "DEP_CYCLE", str(e))
         #     raise e
         
-        from typedef.dependency_types import CircularDependencyError
+        from core.types.dependency_types import CircularDependencyError
         
         with self.assertRaises(CircularDependencyError):
             scheduler.compile_project(entry_file)
@@ -83,7 +83,7 @@ class TestScheduler(unittest.TestCase):
         # Scheduler calls scan_dependencies.
         # If scan_dependencies finishes with errors in issue_tracker, Scheduler raises CompilerError.
         
-        from typedef.diagnostic_types import CompilerError
+        from core.types.diagnostic_types import CompilerError
         
         with self.assertRaises(CompilerError):
             scheduler.compile_project(entry_file)

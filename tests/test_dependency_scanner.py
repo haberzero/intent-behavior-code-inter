@@ -1,9 +1,9 @@
 import unittest
 from typing import List
-from typedef.dependency_types import ImportInfo, ImportType
-from utils.parser.scanners.import_scanner import ImportScanner
-from utils.diagnostics.issue_tracker import IssueTracker
-from utils.lexer.lexer import Lexer
+from core.types.dependency_types import ImportInfo, ImportType
+from core.compiler.parser.scanners.import_scanner import ImportScanner
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.compiler.lexer.lexer import Lexer
 
 class TestDependencyScanner(unittest.TestCase):
 

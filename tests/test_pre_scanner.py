@@ -5,11 +5,11 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.core.token_stream import TokenStream
-from utils.parser.scanners.pre_scanner import PreScanner
-from utils.parser.symbol_table import ScopeManager, SymbolType
-from utils.diagnostics.issue_tracker import IssueTracker
+from core.compiler.lexer.lexer import Lexer
+from core.compiler.parser.core.token_stream import TokenStream
+from core.compiler.parser.scanners.pre_scanner import PreScanner
+from core.compiler.parser.symbol_table import ScopeManager, SymbolType
+from core.support.diagnostics.issue_tracker import IssueTracker
 
 class TestPreScanner(unittest.TestCase):
     def test_function_registration(self):

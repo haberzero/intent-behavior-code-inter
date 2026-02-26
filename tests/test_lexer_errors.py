@@ -6,9 +6,9 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import Optional
-from utils.lexer.lexer import Lexer
-from typedef.diagnostic_types import CompilerError, Severity
-from utils.diagnostics.codes import *
+from core.compiler.lexer.lexer import Lexer
+from core.types.diagnostic_types import CompilerError, Severity
+from core.support.diagnostics.codes import *
 
 class TestLexerErrors(unittest.TestCase):
     """

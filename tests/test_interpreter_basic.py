@@ -5,9 +5,9 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.diagnostics.issue_tracker import IssueTracker
-from typedef.diagnostic_types import CompilerError
-from app.engine import IBCIEngine
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.types.diagnostic_types import CompilerError
+from core.engine import IBCIEngine
 
 class TestInterpreterBasic(unittest.TestCase):
     """

@@ -1,8 +1,8 @@
 import unittest
 import os
 import shutil
-from typedef.exception_types import InterpreterError
-from app.engine import IBCIEngine
+from core.types.exception_types import InterpreterError
+from core.engine import IBCIEngine
 
 class TestSecuritySandbox(unittest.TestCase):
     def setUp(self):

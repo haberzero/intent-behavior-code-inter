@@ -5,8 +5,8 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.lexer.lexer import Lexer
-from typedef.lexer_types import TokenType
+from core.compiler.lexer.lexer import Lexer
+from core.types.lexer_types import TokenType
 
 class TestLexerComplex(unittest.TestCase):
     """

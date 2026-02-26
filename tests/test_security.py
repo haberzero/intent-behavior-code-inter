@@ -6,10 +6,10 @@ import sys
 # Add project root to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.parser.resolver.resolver import ModuleResolver, ModuleResolveError
-from utils.scheduler import Scheduler
-from utils.diagnostics.issue_tracker import IssueTracker
-from typedef.diagnostic_types import Severity
+from core.compiler.parser.resolver.resolver import ModuleResolver, ModuleResolveError
+from core.scheduler import Scheduler
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.types.diagnostic_types import Severity
 
 class TestSecurity(unittest.TestCase):
     def setUp(self):

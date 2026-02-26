@@ -7,7 +7,7 @@ import shutil
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.engine import IBCIEngine
+from core.engine import IBCIEngine
 
 class TestInterpreterIntegration(unittest.TestCase):
     """

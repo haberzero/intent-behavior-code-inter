@@ -5,10 +5,10 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.diagnostics.issue_tracker import IssueTracker
-from typedef.exception_types import InterpreterError, SemanticError
-from typedef.diagnostic_types import CompilerError
-from app.engine import IBCIEngine
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.types.exception_types import InterpreterError, SemanticError
+from core.types.diagnostic_types import CompilerError
+from core.engine import IBCIEngine
 
 class TestTypePromotion(unittest.TestCase):
     def setUp(self):

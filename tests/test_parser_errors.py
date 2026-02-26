@@ -5,10 +5,10 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from typedef.diagnostic_types import Severity, CompilerError
-from utils.diagnostics.codes import *
+from core.compiler.lexer.lexer import Lexer
+from core.compiler.parser.parser import Parser
+from core.types.diagnostic_types import Severity, CompilerError
+from core.support.diagnostics.codes import *
 
 class TestParserErrors(unittest.TestCase):
     """

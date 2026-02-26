@@ -6,8 +6,8 @@ import json
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.diagnostics.issue_tracker import IssueTracker
-from app.engine import IBCIEngine
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.engine import IBCIEngine
 
 class TestLLMConfigFlow(unittest.TestCase):
     """
@@ -84,7 +84,7 @@ import ai
             f.write(code.strip())
             
         # 这里预期运行失败，且抛出特定的 InterpreterError
-        from typedef.exception_types import InterpreterError
+        from core.types.exception_types import InterpreterError
         # 由于 engine.run 内部捕获了异常并打印，我们需要验证其返回值或直接测试 interpreter
         # 为了精确测试报错内容，我们手动准备解释器
         self.engine._prepare_interpreter(output_callback=self.capture_output)

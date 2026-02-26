@@ -1,9 +1,9 @@
 import unittest
 import os
 import shutil
-from app.engine import IBCIEngine
-from utils.module_system.discovery import ModuleDiscoveryService
-from utils.module_system.loader import ModuleLoader
+from core.engine import IBCIEngine
+from core.runtime.module_system.discovery import ModuleDiscoveryService
+from core.runtime.module_system.loader import ModuleLoader
 
 class TestModuleSystem(unittest.TestCase):
     def setUp(self):
@@ -25,7 +25,7 @@ class TestModuleSystem(unittest.TestCase):
         # 编写 spec.py
         with open(os.path.join(plugin_dir, "spec.py"), "w", encoding="utf-8") as f:
             f.write("""
-from utils.module_spec_builder import SpecBuilder
+from core.support.module_spec_builder import SpecBuilder
 spec = (SpecBuilder("hello_plugin")
     .func("greet", params=["str"], returns="str")
     .build())
@@ -75,7 +75,7 @@ print(msg)
         
         with open(os.path.join(plugin_dir, "spec.py"), "w", encoding="utf-8") as f:
             f.write("""
-from utils.module_spec_builder import SpecBuilder
+from core.support.module_spec_builder import SpecBuilder
 spec = (SpecBuilder("math").func("fake_func").build())
 """)
             

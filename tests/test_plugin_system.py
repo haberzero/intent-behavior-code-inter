@@ -5,9 +5,9 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.host_interface import HostInterface
-from utils.semantic.types import ModuleType, ANY_TYPE
-from typedef.symbol_types import SymbolType
+from core.support.host_interface import HostInterface
+from core.compiler.semantic.types import ModuleType, ANY_TYPE
+from core.types.symbol_types import SymbolType
 
 class MockPlugin:
     def __init__(self):
@@ -55,8 +55,8 @@ class TestPluginSystem(unittest.TestCase):
 
     def test_host_interface_manual_metadata(self):
         """验证手动提供元数据时应优先使用"""
-        from typedef.scope_types import ScopeNode, ScopeType
-        from utils.semantic.types import FunctionType, INT_TYPE
+        from core.types.scope_types import ScopeNode, ScopeType
+        from core.compiler.semantic.types import FunctionType, INT_TYPE
         
         host = HostInterface()
         

@@ -6,9 +6,9 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.diagnostics.issue_tracker import IssueTracker
-from typedef.exception_types import LLMUncertaintyError
-from app.engine import IBCIEngine
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.types.exception_types import LLMUncertaintyError
+from core.engine import IBCIEngine
 
 class TestLLMControlFlow(unittest.TestCase):
     def run_code(self, code, llm_responses=None):

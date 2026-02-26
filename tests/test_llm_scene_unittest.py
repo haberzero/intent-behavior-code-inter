@@ -6,9 +6,9 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from typedef import parser_types as ast
-from typedef.diagnostic_types import CompilerError
-from app.engine import IBCIEngine
+from core.types import parser_types as ast
+from core.types.diagnostic_types import CompilerError
+from core.engine import IBCIEngine
 
 class TestLLMScenePropagation(unittest.TestCase):
     def test_complex_condition_propagation(self):

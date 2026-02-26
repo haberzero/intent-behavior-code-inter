@@ -5,14 +5,14 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.parser.symbol_table import ScopeManager
-from utils.parser.scanners.pre_scanner import PreScanner
-from typedef import parser_types as ast
-from typedef.lexer_types import TokenType
+from core.compiler.lexer.lexer import Lexer
+from core.compiler.parser.parser import Parser
+from core.compiler.parser.symbol_table import ScopeManager
+from core.compiler.parser.scanners.pre_scanner import PreScanner
+from core.types import parser_types as ast
+from core.types.lexer_types import TokenType
 
-from typedef.diagnostic_types import CompilerError
+from core.types.diagnostic_types import CompilerError
 
 class TestParserBasic(unittest.TestCase):
     """

@@ -7,11 +7,11 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.semantic.semantic_analyzer import SemanticAnalyzer
-from utils.semantic.types import PrimitiveType, AnyType, ListType, DictType
-from typedef.diagnostic_types import CompilerError
+from core.compiler.lexer.lexer import Lexer
+from core.compiler.parser.parser import Parser
+from core.compiler.semantic.semantic_analyzer import SemanticAnalyzer
+from core.compiler.semantic.types import PrimitiveType, AnyType, ListType, DictType
+from core.types.diagnostic_types import CompilerError
 
 class TestSemanticComplex(unittest.TestCase):
     """

@@ -8,7 +8,7 @@ from typing import Dict, Any
 # 确保项目根目录在路径中
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.engine import IBCIEngine
+from core.engine import IBCIEngine
 
 def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
     """从本地 Python 文件动态加载插件"""

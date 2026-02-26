@@ -7,12 +7,12 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.semantic.semantic_analyzer import SemanticAnalyzer
-from utils.parser.symbol_table import ScopeManager, SymbolType
-from utils.semantic.types import FunctionType, INT_TYPE, VOID_TYPE, ANY_TYPE
-from typedef.diagnostic_types import CompilerError
+from core.compiler.lexer.lexer import Lexer
+from core.compiler.parser.parser import Parser
+from core.compiler.semantic.semantic_analyzer import SemanticAnalyzer
+from core.compiler.parser.symbol_table import ScopeManager, SymbolType
+from core.compiler.semantic.types import FunctionType, INT_TYPE, VOID_TYPE, ANY_TYPE
+from core.types.diagnostic_types import CompilerError
 
 class TestParserModule(unittest.TestCase):
     """
@@ -36,26 +36,26 @@ class TestParserModule(unittest.TestCase):
     def test_import_registers_module_symbol(self):
         """Test that 'import m' registers 'm' as a MODULE symbol."""
         code = """
-        import utils.math
+        import pkg.math
         """
         mod, parser = self.parse_code(code)
         
-        # New parser logic: import utils.math creates:
-        # 1. 'utils' (MODULE) in global scope
-        # 2. 'math' (MODULE) in utils.exported_scope
+        # New parser logic: import pkg.math creates:
+        # 1. 'pkg' (MODULE) in global scope
+        # 2. 'math' (MODULE) in pkg.exported_scope
         
-        utils_sym = parser.scope_manager.resolve('utils')
-        self.assertIsNotNone(utils_sym)
-        self.assertEqual(utils_sym.type, SymbolType.MODULE)
+        pkg_sym = parser.scope_manager.resolve('pkg')
+        self.assertIsNotNone(pkg_sym)
+        self.assertEqual(pkg_sym.type, SymbolType.MODULE)
         
-        math_sym = utils_sym.exported_scope.resolve('math')
+        math_sym = pkg_sym.exported_scope.resolve('math')
         self.assertIsNotNone(math_sym)
         self.assertEqual(math_sym.type, SymbolType.MODULE)
 
     def test_import_as_registers_alias(self):
         """Test 'import m as alias'."""
         code = """
-        import utils.math as m
+        import pkg.math as m
         """
         mod, parser = self.parse_code(code)
         
@@ -65,7 +65,7 @@ class TestParserModule(unittest.TestCase):
         self.assertEqual(sym.type, SymbolType.MODULE)
         
         # Original name should NOT be defined
-        self.assertIsNone(parser.scope_manager.resolve('utils.math'))
+        self.assertIsNone(parser.scope_manager.resolve('pkg.math'))
 
     def test_from_import_registers_symbols(self):
         """Test 'from m import a' registers 'a'."""

@@ -6,8 +6,8 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.diagnostics.issue_tracker import IssueTracker
-from app.engine import IBCIEngine
+from core.support.diagnostics.issue_tracker import IssueTracker
+from core.engine import IBCIEngine
 
 class TestMockDirectives(unittest.TestCase):
     def setUp(self):
