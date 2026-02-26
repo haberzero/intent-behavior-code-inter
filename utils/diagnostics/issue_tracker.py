@@ -34,6 +34,11 @@ class IssueTracker:
     def has_errors(self) -> bool:
         return self._error_count > 0
 
+    def clear(self):
+        """Clear all diagnostics."""
+        self.diagnostics = []
+        self._error_count = 0
+
     def check_errors(self):
         """Raise CompilerError if any errors have been reported."""
         if self.has_errors():

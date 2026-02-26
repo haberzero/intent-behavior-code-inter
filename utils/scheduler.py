@@ -72,6 +72,14 @@ class Scheduler:
         Compiles the project starting from entry_file.
         Returns a map of file_path -> AST.
         """
+        # 0. Clear previous state
+        self.issue_tracker.clear()
+        self.modules.clear()
+        self.module_name_to_path.clear()
+        # ast_cache and scope_cache are kept for incremental compilation (LRU)
+        # but for a fresh project compilation, we might want to clear them?
+        # Actually, if we want to ensure isolation, we should clear them or handle them carefully.
+        
         # 1. Scan Dependencies (Recursive)
         # We manually drive the scanning process here to control token caching
         entry_file = os.path.abspath(entry_file)
