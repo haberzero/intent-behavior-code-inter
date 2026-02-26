@@ -6,10 +6,8 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
+from app.engine import IBCIEngine
 
 class TestMockDirectives(unittest.TestCase):
     def setUp(self):
@@ -17,21 +15,26 @@ class TestMockDirectives(unittest.TestCase):
         self.outputs = []
 
     def run_code(self, code):
-        lexer = Lexer(textwrap.dedent(code).strip() + "\n")
-        tokens = lexer.tokenize()
-        parser = Parser(tokens, self.issue_tracker)
-        module = parser.parse()
-        
+        engine = IBCIEngine()
+        test_file = os.path.abspath("tmp_mock_directives.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent(code).strip() + "\n")
+            
         def output_callback(msg):
             self.outputs.append(msg)
             
-        interpreter = Interpreter(self.issue_tracker, output_callback=output_callback)
-        # Ensure TESTONLY mode
-        ai = interpreter.service_context.interop.get_package("ai")
-        ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-        
-        interpreter.interpret(module)
-        return interpreter
+        try:
+            engine._prepare_interpreter(output_callback=output_callback)
+            # Ensure TESTONLY mode
+            ai = engine.interpreter.service_context.interop.get_package("ai")
+            ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+            
+            ast_cache = engine.scheduler.compile_project(test_file)
+            engine.interpreter.interpret(ast_cache[test_file])
+            return engine.interpreter
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_mock_fail_directive(self):
         """验证 MOCK:FAIL 指令能触发 llmexcept"""

@@ -5,12 +5,13 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import InterpreterError
 from typedef.diagnostic_types import CompilerError
+from app.engine import IBCIEngine
+from utils.lexer.lexer import Lexer
+from utils.parser.parser import Parser
+from utils.interpreter.interpreter import Interpreter
 
 class TestInterpreterComplex(unittest.TestCase):
     """
@@ -18,18 +19,26 @@ class TestInterpreterComplex(unittest.TestCase):
     """
     def setUp(self):
         self.output = []
+        self.engine = IBCIEngine()
 
     def capture_output(self, msg):
         self.output.append(msg)
 
     def run_code(self, code):
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
-        module = parser.parse()
-        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
-        return interpreter.interpret(module)
+        test_file = os.path.abspath("tmp_complex_test.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code.strip() + "\n")
+        
+        try:
+            success = self.engine.run(test_file, output_callback=self.capture_output)
+            if not success:
+                self.engine._prepare_interpreter(output_callback=self.capture_output)
+                ast_cache = self.engine.scheduler.compile_project(test_file)
+                self.engine.interpreter.interpret(ast_cache[test_file])
+            return None
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_type_checking(self):
         # 1. 测试非法的显式类型赋值

@@ -6,13 +6,9 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
-from utils.diagnostics.issue_tracker import IssueTracker
 from typedef import parser_types as ast
-
 from typedef.diagnostic_types import CompilerError
+from app.engine import IBCIEngine
 
 class TestLLMScenePropagation(unittest.TestCase):
     def test_complex_condition_propagation(self):
@@ -20,39 +16,41 @@ class TestLLMScenePropagation(unittest.TestCase):
         if ~~a~~ and (~~b~~ or ~~c~~):
             print("success")
         """).strip()
-        issue_tracker = IssueTracker()
-        lexer = Lexer(code + "\n")
-        tokens = lexer.tokenize()
-        parser = Parser(tokens, issue_tracker)
+        
+        engine = IBCIEngine()
+        test_file = os.path.abspath("tmp_propagation_test.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code + "\n")
+            
         try:
-            module = parser.parse()
-        except CompilerError as e:
-            for d in e.diagnostics:
-                print(f"ERROR: {d.message} at {d.location}")
-            raise e
-        
-        if_stmt = module.body[0]
-        self.assertIsInstance(if_stmt, ast.If)
-        
-        # Helper to find all behavior exprs
-        behavior_exprs = []
-        def collect(node):
-            if isinstance(node, ast.BehaviorExpr):
-                behavior_exprs.append(node)
-            for field_name, value in node.__dict__.items():
-                if isinstance(value, ast.ASTNode):
-                    collect(value)
-                elif isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, ast.ASTNode):
-                            collect(item)
-                            
-        collect(if_stmt.test)
-        
-        self.assertEqual(len(behavior_exprs), 3)
-        for expr in behavior_exprs:
-            self.assertEqual(expr.scene_tag, ast.Scene.BRANCH, 
-                             f"Behavior expression '{expr.segments}' should have BRANCH scene tag")
+            ast_cache = engine.scheduler.compile_project(test_file)
+            module = ast_cache[test_file]
+            
+            if_stmt = module.body[0]
+            self.assertIsInstance(if_stmt, ast.If)
+            
+            # Helper to find all behavior exprs
+            behavior_exprs = []
+            def collect(node):
+                if isinstance(node, ast.BehaviorExpr):
+                    behavior_exprs.append(node)
+                for field_name, value in node.__dict__.items():
+                    if isinstance(value, ast.ASTNode):
+                        collect(value)
+                    elif isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, ast.ASTNode):
+                                collect(item)
+                                
+            collect(if_stmt.test)
+            
+            self.assertEqual(len(behavior_exprs), 3)
+            for expr in behavior_exprs:
+                self.assertEqual(expr.scene_tag, ast.Scene.BRANCH, 
+                                 f"Behavior expression '{expr.segments}' should have BRANCH scene tag")
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_testonly_branch_logic(self):
         code = textwrap.dedent("""
@@ -63,26 +61,25 @@ class TestLLMScenePropagation(unittest.TestCase):
         else:
             print("NO")
         """).strip()
-        issue_tracker = IssueTracker()
-        lexer = Lexer(code + "\n")
-        tokens = lexer.tokenize()
-        parser = Parser(tokens, issue_tracker)
-        try:
-            module = parser.parse()
-        except CompilerError as e:
-            for d in e.diagnostics:
-                print(f"ERROR: {d.message} at {d.location}")
-            raise e
         
-        outputs = []
-        def output_callback(msg):
-            outputs.append(msg)
+        engine = IBCIEngine()
+        test_file = os.path.abspath("tmp_branch_logic.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code + "\n")
             
-        interpreter = Interpreter(issue_tracker, output_callback=output_callback)
-        interpreter.interpret(module)
-        
-        # In TESTONLY mode, BRANCH scene should return "1", triggering the YES branch
-        self.assertEqual(outputs, ["YES"])
+        try:
+            outputs = []
+            def output_callback(msg):
+                outputs.append(msg)
+                
+            success = engine.run(test_file, output_callback=output_callback)
+            self.assertTrue(success)
+            
+            # In TESTONLY mode, BRANCH scene should return "1", triggering the YES branch
+            self.assertEqual(outputs, ["YES"])
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
 if __name__ == '__main__':
     unittest.main()

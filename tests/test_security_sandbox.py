@@ -1,11 +1,8 @@
 import unittest
 import os
 import shutil
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
-from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import InterpreterError
+from app.engine import IBCIEngine
 
 class TestSecuritySandbox(unittest.TestCase):
     def setUp(self):
@@ -25,22 +22,24 @@ class TestSecuritySandbox(unittest.TestCase):
         if root_dir is None:
             root_dir = self.workspace
             
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
-        module = parser.parse()
-        
-        # We need a scheduler or just pass root_dir to Interpreter if we want to customize it
-        # Actually our current Interpreter derives root_dir from scheduler or defaults to "."
-        # For testing, let's create a mock scheduler or just rely on the default and change CWD?
-        # Better to update Interpreter to accept root_dir or pass a mock scheduler.
-        
-        class MockScheduler:
-            def __init__(self, rd): self.root_dir = rd
+        engine = IBCIEngine(root_dir=root_dir)
+        test_file = os.path.join(root_dir, "test_security.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code.strip() + "\n")
             
-        interpreter = Interpreter(issue_tracker, scheduler=MockScheduler(root_dir))
-        return interpreter.interpret(module)
+        # 为了捕获输出或异常，我们手动准备解释器
+        output = []
+        def output_callback(msg):
+            output.append(msg)
+            
+        try:
+            engine._prepare_interpreter(output_callback=output_callback)
+            ast_cache = engine.scheduler.compile_project(test_file)
+            engine.interpreter.interpret(ast_cache[test_file])
+            return output
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_path_traversal_denied(self):
         code = f"""
@@ -62,21 +61,7 @@ str path = '{self.outside_file.replace('\\', '/')}'
 str content = file.read(path)
 print(content)
 """
-        # We need to capture output to verify
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
-        module = parser.parse()
-        
-        output = []
-        class MockScheduler:
-            def __init__(self, rd): self.root_dir = rd
-            
-        interpreter = Interpreter(issue_tracker, scheduler=MockScheduler(self.workspace), 
-                                  output_callback=lambda m: output.append(m))
-        interpreter.interpret(module)
-        
+        output = self.run_code(code)
         self.assertEqual(output, ["sensitive data"])
 
     def test_internal_access_allowed(self):
@@ -90,19 +75,7 @@ str path = '{internal_file.replace('\\', '/')}'
 str content = file.read(path)
 print(content)
 """
-        output = []
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
-        module = parser.parse()
-        
-        class MockScheduler:
-            def __init__(self, rd): self.root_dir = rd
-            
-        interpreter = Interpreter(issue_tracker, scheduler=MockScheduler(self.workspace), 
-                                  output_callback=lambda m: output.append(m))
-        interpreter.interpret(module)
+        output = self.run_code(code)
         self.assertEqual(output, ["safe data"])
 
 if __name__ == '__main__':

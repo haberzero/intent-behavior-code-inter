@@ -5,27 +5,31 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.diagnostic_types import CompilerError
+from app.engine import IBCIEngine
 
 class TestInterpreterBasic(unittest.TestCase):
     """
     重构后的基础单元测试，适配 RuntimeContext 架构。
     """
     def run_code(self, code):
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
+        engine = IBCIEngine()
+        # 创建临时文件
+        test_file = "tmp_basic_test.ibci"
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code.strip() + "\n")
+        
         try:
-            module = parser.parse()
-        except CompilerError as e:
-            self.fail(f"Parser failed with errors: {[d.message for d in e.diagnostics]}")
-        interpreter = Interpreter(issue_tracker)
-        return interpreter.interpret(module), interpreter
+            success = engine.run(test_file)
+            if not success:
+                if engine.scheduler.issue_tracker.has_errors:
+                     self.fail(f"Execution failed with errors: {[d.message for d in engine.scheduler.issue_tracker.diagnostics]}")
+                self.fail("Execution failed")
+            return None, engine.interpreter
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_variable_declaration_assignment(self):
         code = """

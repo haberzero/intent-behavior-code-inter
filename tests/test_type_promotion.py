@@ -5,31 +5,33 @@ import os
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.semantic.semantic_analyzer import SemanticAnalyzer
-from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import InterpreterError, SemanticError
 from typedef.diagnostic_types import CompilerError
-from app.services.stdlib_provider import get_stdlib_metadata
+from app.engine import IBCIEngine
 
 class TestTypePromotion(unittest.TestCase):
     def setUp(self):
-        self.host_interface = get_stdlib_metadata()
+        # 使用标准的引擎初始化，它会自动发现内置模块
+        self.engine = IBCIEngine(auto_sniff=True)
 
     def run_code(self, code):
-        lexer = Lexer(code)
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker, host_interface=self.host_interface)
-        module = parser.parse()
+        # 创建一个临时文件来模拟运行
+        test_file = "tmp_type_test.ibci"
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code)
         
-        analyzer = SemanticAnalyzer(issue_tracker, host_interface=self.host_interface)
-        analyzer.analyze(module)
-        
-        interpreter = Interpreter(issue_tracker, host_interface=self.host_interface)
-        return interpreter.interpret(module), interpreter
+        try:
+            success = self.engine.run(test_file)
+            if not success:
+                # 检查是否有静态错误
+                if self.engine.scheduler.issue_tracker.has_errors:
+                    raise CompilerError(self.engine.scheduler.issue_tracker.diagnostics)
+                raise InterpreterError("Execution failed")
+            return None, self.engine.interpreter
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_valid_numeric_promotion(self):
         # int + float -> float

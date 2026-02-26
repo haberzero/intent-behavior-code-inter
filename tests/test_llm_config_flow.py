@@ -6,19 +6,18 @@ import json
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
+from app.engine import IBCIEngine
 
 class TestLLMConfigFlow(unittest.TestCase):
     """
     测试全链路联动：JSON 配置读取 -> 解析 -> LLM 状态注入 -> AI 行为执行。
     """
     def setUp(self):
-        self.test_dir = os.path.join(os.path.dirname(__file__), "tmp_llm_test")
+        self.test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "tmp_llm_test"))
         os.makedirs(self.test_dir, exist_ok=True)
         self.output = []
+        self.engine = IBCIEngine(root_dir=self.test_dir)
 
     def tearDown(self):
         import shutil
@@ -59,27 +58,14 @@ str ai_res = ~~ hello ibci ~~
 print(ai_res)
 """
         # 3. 执行
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
-        try:
-            module = parser.parse()
-        except Exception as e:
-                if hasattr(e, 'diagnostics'):
-                    for d in e.diagnostics:
-                        if d.location:
-                            print(f"[{d.severity.name}] {d.code}: {d.message} at {d.location.line}:{d.location.column}")
-                        else:
-                            print(f"[{d.severity.name}] {d.code}: {d.message}")
-                raise e
-        
-        # 传入 output_callback 以捕获 print 输出
-        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
-        interpreter.interpret(module)
+        test_file = os.path.join(self.test_dir, "test.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code.strip())
+            
+        success = self.engine.run(test_file, output_callback=self.capture_output)
+        self.assertTrue(success)
         
         # 4. 验证结果
-        # 验证是否成功触发了 LLMHandler 内部的 TESTONLY 虚拟块
         self.assertTrue(len(self.output) > 0)
         final_res = self.output[0]
         self.assertIn("[MOCK]", final_res)
@@ -93,17 +79,21 @@ import ai
 # 故意不调用 ai.set_config
 ~~ 请帮我做些事情 ~~
 """
-        lexer = Lexer(code.strip() + "\n")
-        tokens = lexer.tokenize()
-        issue_tracker = IssueTracker()
-        parser = Parser(tokens, issue_tracker)
-        module = parser.parse()
-        
-        interpreter = Interpreter(issue_tracker, output_callback=self.capture_output)
-        
+        test_file = os.path.join(self.test_dir, "error_test.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code.strip())
+            
+        # 这里预期运行失败，且抛出特定的 InterpreterError
         from typedef.exception_types import InterpreterError
+        # 由于 engine.run 内部捕获了异常并打印，我们需要验证其返回值或直接测试 interpreter
+        # 为了精确测试报错内容，我们手动准备解释器
+        self.engine._prepare_interpreter(output_callback=self.capture_output)
+        
+        ast_cache = self.engine.scheduler.compile_project(test_file)
+        entry_ast = ast_cache[test_file]
+        
         with self.assertRaises(InterpreterError) as cm:
-            interpreter.interpret(module)
+            self.engine.interpreter.interpret(entry_ast)
         
         # 验证报错信息中包含引导性修复建议
         error_msg = str(cm.exception)

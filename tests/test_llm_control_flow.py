@@ -6,21 +6,13 @@ import textwrap
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.lexer.lexer import Lexer
-from utils.parser.parser import Parser
-from utils.interpreter.interpreter import Interpreter
 from utils.diagnostics.issue_tracker import IssueTracker
 from typedef.exception_types import LLMUncertaintyError
+from app.engine import IBCIEngine
 
 class TestLLMControlFlow(unittest.TestCase):
     def run_code(self, code, llm_responses=None):
-        issue_tracker = IssueTracker()
-        lexer = Lexer(textwrap.dedent(code).strip() + "\n", issue_tracker)
-        tokens = lexer.tokenize()
-        
-        parser = Parser(tokens, issue_tracker)
-        ast_node = parser.parse()
-        
+        engine = IBCIEngine()
         # Mock LLM
         llm_call_count = 0
         def mock_llm(sys_prompt, user_prompt, scene="general"):
@@ -35,14 +27,25 @@ class TestLLMControlFlow(unittest.TestCase):
         def output_callback(msg):
             outputs.append(msg)
 
-        interpreter = Interpreter(issue_tracker, output_callback=output_callback)
-        # Configure ai module to use our mock
-        ai = interpreter.service_context.interop.get_package("ai")
-        ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-        interpreter.llm_executor.llm_callback = mock_llm
-        
-        result = interpreter.interpret(ast_node)
-        return outputs, result, interpreter
+        # 创建临时文件
+        test_file = os.path.abspath("tmp_llm_flow.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent(code).strip() + "\n")
+            
+        try:
+            # 准备解释器但手动设置回调
+            engine._prepare_interpreter(output_callback=output_callback)
+            # 配置 ai 模块
+            ai = engine.interpreter.service_context.interop.get_package("ai")
+            ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+            engine.interpreter.llm_executor.llm_callback = mock_llm
+            
+            ast_cache = engine.scheduler.compile_project(test_file)
+            result = engine.interpreter.interpret(ast_cache[test_file])
+            return outputs, result, engine.interpreter
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_llm_except_bubble_up(self):
         code = """
@@ -86,14 +89,21 @@ class TestLLMControlFlow(unittest.TestCase):
         if ~~condition~~:
             pass
         """).strip() + "\n"
-        issue_tracker = IssueTracker()
-        lexer = Lexer(code, issue_tracker)
-        tokens = lexer.tokenize()
-        parser = Parser(tokens, issue_tracker)
-        ast_node = parser.parse()
         
-        if_stmt = ast_node.body[0]
-        self.assertEqual(if_stmt.test.scene_tag.name, "BRANCH")
+        engine = IBCIEngine()
+        test_file = os.path.abspath("tmp_scene_test.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(code)
+        
+        try:
+            ast_cache = engine.scheduler.compile_project(test_file)
+            ast_node = ast_cache[test_file]
+            
+            if_stmt = ast_node.body[0]
+            self.assertEqual(if_stmt.test.scene_tag.name, "BRANCH")
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
     def test_nested_llm_except(self):
         code = """
