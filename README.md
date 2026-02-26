@@ -53,8 +53,10 @@ pip install openai
 
 ---
 
-### 🌈 没 Key 也能玩？(模拟模式)
-如果你暂时没有 API Key，可以使用 IBC-Inter 强大的 **Mock 模式**。
+### 调试组件 Mock模式(模拟模式)
+
+如果你暂时没有 API Key，可以使用 IBC-Inter 解释器中内置的Mock块，对代码流进行调试
+
 1. 创建一个 `test.ibci` 文件，粘贴以下内容：
    ```ibc-inter
    import ai
