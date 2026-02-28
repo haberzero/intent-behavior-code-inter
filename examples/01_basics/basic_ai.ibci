@@ -7,13 +7,13 @@ print("--- [01_basic_ai.ibci] ---")
 
 # 1. 意图驱动
 @ 你现在是一个维多利亚时代的绅士
-str res1 = ~~请描述一下现在的天气~~
+str res1 = @~请描述一下现在的天气~
 print("绅士回答: " + res1)
 
 # 2. 行为描述行中的变量插值
 str name = "IBCI"
 @ 请以幽默风格回答
-str res2 = ~~向 $name 打个招呼~~
+str res2 = @~向 $name 打个招呼~
 print("幽默回答: " + res2)
 
 # 3. LLM 函数定义

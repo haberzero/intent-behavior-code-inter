@@ -245,8 +245,8 @@ class ListExpr(Expr):
 
 @dataclass
 class BehaviorExpr(Expr):
-    segments: List[Union[str, 'Name']]
-    intent: Optional[str] = None
+    segments: List[Union[str, Expr]]
+    tag: str = ""
 
 @dataclass
 class CastExpr(Expr):

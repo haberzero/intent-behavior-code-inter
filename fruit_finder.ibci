@@ -15,13 +15,13 @@ print("待处理列表: " + (str)items)
 
 # 利用 count 计数，在行为描述行中判断 Loop 是否继续
 # 意图驱动循环：只要还有元素没处理完，就继续循环
-for ~~当前处理进度：已完成 $count / $total_len。如果 $count 小于 $total_len，请返回 1 继续，否则返回 0 结束。~~:
+for @~当前处理进度：已完成 $count / $total_len。如果 $count 小于 $total_len，请返回 1 继续，否则返回 0 结束。~:
     # 获取当前项目
     # 注意：由于行为描述行插值目前仅支持 $var.attr，不支持 $var[index]，故先提取到中间变量
     str current_item = items[count]
     
     # 行为描述行：判断当前项目是否为水果
-    if ~~判断文本 "$current_item" 是否描述了一个水果（常见的可食用果实）。如果是水果请返回 1，否则返回 0。~~:
+    if @~判断文本 "$current_item" 是否描述了一个水果（常见的可食用果实）。如果是水果请返回 1，否则返回 0。~:
         # 如果是水果，记录其索引
         fruit_indices = fruit_indices + [count]
         print("[发现] 索引 " + (str)count + ": " + current_item + " 是水果")

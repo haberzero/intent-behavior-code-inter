@@ -220,6 +220,11 @@ class ExpressionComponent(BaseComponent):
 
     def behavior_expression(self) -> ast.BehaviorExpr:
         start_token = self.stream.previous()
+        # Extract tag from @tag~
+        tag = ""
+        if start_token.value.startswith("@") and start_token.value.endswith("~"):
+            tag = start_token.value[1:-1]
+            
         segments = []
         
         while not self.stream.check(TokenType.BEHAVIOR_MARKER):
@@ -245,10 +250,6 @@ class ExpressionComponent(BaseComponent):
             else:
                 self.stream.advance()
         
-        self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~~'.")
+        self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~'.")
         
-        intent = self.context.pending_intent
-        if intent:
-            self.context.pending_intent = None
-            
-        return self._loc(ast.BehaviorExpr(segments=segments, intent=intent), start_token)
+        return self._loc(ast.BehaviorExpr(segments=segments, tag=tag), start_token)

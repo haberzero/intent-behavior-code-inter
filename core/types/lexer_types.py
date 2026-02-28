@@ -91,7 +91,7 @@ class TokenType(Enum):
     LE = auto()             # <=
 
     # 行为与提示词
-    BEHAVIOR_MARKER = auto()    # ~~
+    BEHAVIOR_MARKER = auto()    # @~ or @tag~ or ~
     INTENT = auto()             # @ intent
     RAW_TEXT = auto()           # 提示词或行为描述文本
     VAR_REF = auto()            # $var

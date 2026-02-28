@@ -75,7 +75,7 @@ class TestParserErrors(unittest.TestCase):
         # Invalid continuation (e.g. extra tokens on line)
         # Lexer now tokenizes successfully, so Parser should catch the extra tokens.
         # We use '123' after behavior because 'and' is a valid operator that would extend the expression.
-        mod, manager = self.parse("x = ~~ behavior ~~ 123")
+        mod, manager = self.parse("x = @~ behavior ~ 123")
         self.assertTrue(manager.has_errors())
         diags = manager.diagnostics
         # Should be "Expect newline"

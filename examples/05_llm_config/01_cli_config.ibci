@@ -19,5 +19,5 @@ except str as e:
     # 回退到模拟模式以便演示
     ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-str res = ~~请说一句测试台词~~
+str res = @~请说一句测试台词~
 print("AI 回复: " + res)

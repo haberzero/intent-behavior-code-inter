@@ -48,7 +48,7 @@ class DeclarationComponent(BaseComponent):
             stmt = self.statement.parse_statement()
         
         if self.context.pending_intent is not None and stmt is not None:
-            # If the statement is not one that naturally consumes an intent (like Call or BehaviorExpr),
+            # If the statement is not one that naturally consumes an intent (like Call),
             # we report a warning to the user.
             self.issue_tracker.report(
                 Severity.WARNING, "PAR_WARN", 

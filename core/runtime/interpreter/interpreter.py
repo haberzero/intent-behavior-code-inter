@@ -426,7 +426,7 @@ class Interpreter:
                 continue
 
     def visit_For(self, node: ast.For):
-        # 1. 无目标变量循环模式 (while-like): for ~~行为描述~~: 或 for 1 > 0:
+        # 1. 无目标变量循环模式 (while-like): for @~行为描述~: 或 for 1 > 0:
         if node.target is None:
             # 特殊情况：如果是 BehaviorExpr，我们已经支持了。
             # 但如果它是 Constant (如 for 10:)，我们保持原有的“固定次数”逻辑。

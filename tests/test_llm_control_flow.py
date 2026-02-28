@@ -49,7 +49,7 @@ class TestLLMControlFlow(unittest.TestCase):
 
     def test_llm_except_bubble_up(self):
         code = """
-        if ~~is it raining?~~:
+        if @~is it raining?~:
             print("rain")
         llmexcept:
             print("uncertain")
@@ -66,7 +66,7 @@ class TestLLMControlFlow(unittest.TestCase):
         code = """
         import ai
         int count = 0
-        if ~~check something~~:
+        if @~check something~:
             print("success")
         llmexcept:
             count = count + 1
@@ -86,7 +86,7 @@ class TestLLMControlFlow(unittest.TestCase):
 
     def test_scene_tagging(self):
         code = textwrap.dedent("""
-        if ~~condition~~:
+        if @~condition~:
             pass
         """).strip() + "\n"
         
@@ -107,8 +107,8 @@ class TestLLMControlFlow(unittest.TestCase):
 
     def test_nested_llm_except(self):
         code = """
-        if ~~outer~~:
-            if ~~inner~~:
+        if @~outer~:
+            if @~inner~:
                 print("inner success")
             llmexcept:
                 print("inner failed")
@@ -125,7 +125,7 @@ class TestLLMControlFlow(unittest.TestCase):
 
     def test_loop_llm_except(self):
         code = """
-        for ~~should I continue?~~:
+        for @~should I continue?~:
             print("looping")
         llmexcept:
             print("loop error")
@@ -137,7 +137,7 @@ class TestLLMControlFlow(unittest.TestCase):
     def test_while_llm_except(self):
         code = """
         int count = 0
-        while ~~should I continue?~~:
+        while @~should I continue?~:
             print("looping")
             count = count + 1
             if count > 0:

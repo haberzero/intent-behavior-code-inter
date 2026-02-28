@@ -7,7 +7,7 @@ print("--- [02_llm_error_handling.ibci] ---")
 
 # 1. 使用 llmexcept 处理 LLM 判断不明确的情况
 # 模拟 MOCK:REPAIR 指令：第一次会失败并进入 llmexcept，重试后会成功
-if ~~MOCK:REPAIR 检查天气是否适合野餐~~:
+if @~MOCK:REPAIR 检查天气是否适合野餐~:
     print("天气非常适合！")
 else:
     print("天气不适合，建议待在室内。")
@@ -20,7 +20,7 @@ llmexcept:
 
 # 2. 循环中的 AI 判断
 int count = 0
-while ~~MOCK:REPAIR 任务是否还需要继续？~~:
+while @~MOCK:REPAIR 任务是否还需要继续？~:
     count = count + 1
     print("正在执行第 " + (str)count + " 次任务")
     if count >= 3:

@@ -12,7 +12,7 @@ int count = 0
 str status = "MOCK:1"
 
 print("开始意图驱动循环...")
-for ~~任务状态是否为 $status ? 如果是请返回 1 继续，否则返回 0 停止。~~:
+for @~任务状态是否为 $status ? 如果是请返回 1 继续，否则返回 0 停止。~:
     count = count + 1
     print("执行中... 当前次数: " + (str)count)
     if count >= 3:
@@ -25,7 +25,7 @@ print("循环结束，总计次数: " + (str)count)
 # 如果 LLM 判断模糊，会触发 llmexcept 块。
 print("\n测试带容错的意图循环...")
 int b_count = 0
-for ~~MOCK:REPAIR 判定是否需要继续执行？~~:
+for @~MOCK:REPAIR 判定是否需要继续执行？~:
     b_count = b_count + 1
     print("执行中... b_count = " + (str)b_count)
     if b_count >= 2:

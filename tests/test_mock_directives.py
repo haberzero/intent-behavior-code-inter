@@ -39,7 +39,7 @@ class TestMockDirectives(unittest.TestCase):
     def test_mock_fail_directive(self):
         """验证 MOCK:FAIL 指令能触发 llmexcept"""
         code = """
-        if ~~MOCK:FAIL~~:
+        if @~MOCK:FAIL~:
             print("SUCCESS")
         llmexcept:
             print("CAUGHT_MOCK_FAIL")
@@ -50,12 +50,12 @@ class TestMockDirectives(unittest.TestCase):
     def test_mock_boolean_directives(self):
         """验证 MOCK:TRUE/FALSE 指令能精确控制分支"""
         code = """
-        if ~~MOCK:FALSE~~:
+        if @~MOCK:FALSE~:
             print("TRUE_BRANCH")
         else:
             print("FALSE_BRANCH")
             
-        if ~~MOCK:TRUE~~:
+        if @~MOCK:TRUE~:
             print("TRUE_BRANCH_2")
         """
         self.run_code(code)
@@ -68,7 +68,7 @@ class TestMockDirectives(unittest.TestCase):
         code = """
         import ai
         int attempts = 0
-        if ~~MOCK:REPAIR~~:
+        if @~MOCK:REPAIR~:
             print("REPAIRED_SUCCESS")
         llmexcept:
             attempts = attempts + 1
@@ -78,16 +78,16 @@ class TestMockDirectives(unittest.TestCase):
         """
         self.run_code(code)
         # 流程应该是：
-        # 1. 第一次判断 ~~MOCK:REPAIR~~ -> 返回 MOCK_UNCERTAIN_RESPONSE -> 触发 llmexcept
+        # 1. 第一次判断 @~MOCK:REPAIR~ -> 返回 MOCK_UNCERTAIN_RESPONSE -> 触发 llmexcept
         # 2. llmexcept 执行 -> 打印 ATTEMPT_1 -> 设置 retry_hint -> 执行 retry
-        # 3. 第二次判断 ~~MOCK:REPAIR~~ -> 检测到 retry_hint -> 返回 "1" -> 进入 if 块
+        # 3. 第二次判断 @~MOCK:REPAIR~ -> 检测到 retry_hint -> 返回 "1" -> 进入 if 块
         # 4. 打印 REPAIRED_SUCCESS
         self.assertEqual(self.outputs, ["REPAIRING_ATTEMPT_1", "REPAIRED_SUCCESS"])
 
     def test_mock_text_marker(self):
         """验证常规模拟输出带有 [MOCK] 标记"""
         code = """
-        str res = ~~hello world~~
+        str res = @~hello world~
         print(res)
         """
         self.run_code(code)

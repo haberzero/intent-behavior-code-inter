@@ -1,4 +1,5 @@
 import re
+import json
 from typing import Any, List, Optional, Dict
 from .interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from core.types import parser_types as ast
@@ -18,7 +19,7 @@ class LLMExecutorImpl:
         self.llm_callback = llm_callback
         self.retry_hint: Optional[str] = None
 
-    def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> str:
+    def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> Any:
         """
         执行命名的 llm 函数定义块。
         """
@@ -32,7 +33,18 @@ class LLMExecutorImpl:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in active_intents)
             sys_prompt += intent_block
             
-        # 3. 处理参数占位符 $__param__ 的替换
+        # 3. 处理返回类型提示注入
+        type_name = self._resolve_type_name(node.returns)
+        ai_module = None
+        if self.service_context and self.service_context.interop:
+            ai_module = self.service_context.interop.get_package("ai")
+            
+        if ai_module and hasattr(ai_module, "get_return_type_prompt"):
+            type_prompt = ai_module.get_return_type_prompt(type_name)
+            if type_prompt:
+                sys_prompt += f"\n\n{type_prompt}"
+
+        # 4. 处理参数占位符 $__param__ 的替换
         arg_map = {arg_def.arg: str(args[i]) for i, arg_def in enumerate(node.args) if i < len(args)}
         
         def replace_placeholder(match):
@@ -44,12 +56,65 @@ class LLMExecutorImpl:
         sys_prompt = placeholder_pattern.sub(replace_placeholder, sys_prompt)
         user_prompt = placeholder_pattern.sub(replace_placeholder, user_prompt)
         
-        # 4. 调用底层模型
-        return self._call_llm(sys_prompt, user_prompt, node)
+        # 5. 调用底层模型
+        raw_res = self._call_llm(sys_prompt, user_prompt, node)
+        
+        # 6. 解析结果为目标类型
+        return self._parse_result(raw_res, type_name, node)
+
+    def _resolve_type_name(self, type_node: Optional[ast.ASTNode]) -> str:
+        if type_node is None:
+            return "str"
+        if isinstance(type_node, ast.Name):
+            return type_node.id
+        if isinstance(type_node, ast.Subscript):
+            # 简单处理泛型如 list[int] -> list
+            return self._resolve_type_name(type_node.value)
+        return "str"
+
+    def _parse_result(self, raw_res: str, type_name: str, node: ast.ASTNode) -> Any:
+        clean_res = raw_res.strip()
+        
+        if type_name == "str":
+            return raw_res
+        
+        try:
+            if type_name == "int":
+                # 处理可能带小数点的 int
+                return int(float(clean_res))
+            elif type_name == "float":
+                return float(clean_res)
+            elif type_name == "list":
+                # 尝试剥离可能存在的 markdown 代码块
+                if clean_res.startswith("```"):
+                    clean_res = re.sub(r'^```(json)?\n?|\n?```$', '', clean_res, flags=re.MULTILINE).strip()
+                data = json.loads(clean_res)
+                if not isinstance(data, list):
+                    raise ValueError("Expected list")
+                return data
+            elif type_name == "dict":
+                if clean_res.startswith("```"):
+                    clean_res = re.sub(r'^```(json)?\n?|\n?```$', '', clean_res, flags=re.MULTILINE).strip()
+                data = json.loads(clean_res)
+                if not isinstance(data, dict):
+                    raise ValueError("Expected dict")
+                return data
+            elif type_name == "bool":
+                if clean_res.lower() in ("true", "1", "yes"): return True
+                if clean_res.lower() in ("false", "0", "no"): return False
+                return bool(clean_res)
+            
+            return raw_res
+        except Exception as e:
+            raise InterpreterError(
+                f"LLM 返回值类型转换失败：期望 {type_name}，但原始返回为: {raw_res}\n错误: {str(e)}",
+                node,
+                error_code=RUN_LLM_ERROR
+            )
 
     def execute_behavior_expression(self, node: ast.BehaviorExpr, context: RuntimeContext) -> str:
         """
-        处理双波浪号包裹的 ~~行为描述行~~ (即时、匿名的 LLM 调用)。
+        处理行为描述行 (即时、匿名的 LLM 调用)。
         """
         content_parts = []
         
@@ -71,8 +136,8 @@ class LLMExecutorImpl:
         
         # 2. 收集意图
         all_intents = context.get_active_intents()
-        if node.intent:
-            all_intents.append(node.intent)
+        # NOTE: 行为描述行不再支持附加意图注入 (@ intent)
+        # 但我们保留未来通过 tag (node.tag) 扩展逻辑的可能性
             
         # 3. 确定场景与提示词
         scene = node.scene_tag

@@ -52,9 +52,16 @@ dict cfg = json.parse(raw)
 # 动态注入 LLM 配置
 ai.set_config(cfg["url"], cfg["key"], cfg["model"])
 
-# 执行带意图的行为描述
+# 执行带意图的 LLM 函数
+llm mock_call():
+__sys__
+你是一个模拟器
+__user__
+hello ibci
+llmend
+
 @ 请执行一次模拟调用
-str ai_res = ~~ hello ibci ~~
+str ai_res = mock_call()
 print(ai_res)
 """
         # 3. 执行
@@ -77,7 +84,7 @@ print(ai_res)
         code = """
 import ai
 # 故意不调用 ai.set_config
-~~ 请帮我做些事情 ~~
+@~ 请帮我做些事情 ~
 """
         test_file = os.path.join(self.test_dir, "error_test.ibci")
         with open(test_file, "w", encoding="utf-8") as f:

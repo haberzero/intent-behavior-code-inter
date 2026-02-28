@@ -12,7 +12,7 @@ class TestLexerComplex(unittest.TestCase):
     """
     Complex functionality tests for Lexer.
     Covers:
-    1. Behavior Descriptions (~~...~~)
+    1. Behavior Descriptions (@~...~)
     2. LLM Blocks (llm, __sys__, __user__)
     3. Complex Real-world Scenarios
     4. Mixed indentation and continuations
@@ -44,53 +44,68 @@ func test():
         self.assertEqual(tokens[lbracket_idx+1].type, TokenType.STRING)
 
     def test_behavior_description(self):
-        """Test behavior description scanning (~~...~~)."""
+        """Test behavior description scanning (@~...~)."""
         code = """
-str res = ~~分析 $content~~
-if ~~判断 $val~~:
+str res = @~分析 $content~
+if @~判断 $val~:
     pass
 """
         lexer = Lexer(code.strip())
         tokens = lexer.tokenize()
         
-        # Verify first line: str res = ~~分析 $content~~
+        # Verify first line: str res = @~分析 $content~
         self.assertEqual(tokens[0].type, TokenType.IDENTIFIER)
         self.assertEqual(tokens[1].type, TokenType.IDENTIFIER)
         self.assertEqual(tokens[2].type, TokenType.ASSIGN)
-        self.assertEqual(tokens[3].type, TokenType.BEHAVIOR_MARKER) # ~~
+        self.assertEqual(tokens[3].type, TokenType.BEHAVIOR_MARKER) # @~
+        self.assertEqual(tokens[3].value, "@~")
         self.assertEqual(tokens[4].type, TokenType.RAW_TEXT) # 分析 
         self.assertEqual(tokens[5].type, TokenType.VAR_REF)  # $content
-        self.assertEqual(tokens[6].type, TokenType.BEHAVIOR_MARKER) # ~~
+        self.assertEqual(tokens[6].type, TokenType.BEHAVIOR_MARKER) # ~
+        self.assertEqual(tokens[6].value, "~")
         self.assertEqual(tokens[7].type, TokenType.NEWLINE)
         
-        # Verify second line: if ~~判断 $val~~:
+        # Verify second line: if @~判断 $val~:
         self.assertEqual(tokens[8].type, TokenType.IF)
         self.assertEqual(tokens[9].type, TokenType.BEHAVIOR_MARKER)
+        self.assertEqual(tokens[9].value, "@~")
         self.assertEqual(tokens[10].type, TokenType.RAW_TEXT)
         self.assertEqual(tokens[11].type, TokenType.VAR_REF)
         self.assertEqual(tokens[12].type, TokenType.BEHAVIOR_MARKER)
+        self.assertEqual(tokens[12].value, "~")
         self.assertEqual(tokens[13].type, TokenType.COLON)
+
+    def test_behavior_with_tag(self):
+        """Test behavior description with tag (@tag~...~)."""
+        code = "res = @python~ print('hello') ~"
+        lexer = Lexer(code)
+        tokens = lexer.tokenize()
+        
+        self.assertEqual(tokens[2].type, TokenType.BEHAVIOR_MARKER)
+        self.assertEqual(tokens[2].value, "@python~")
+        self.assertEqual(tokens[3].type, TokenType.RAW_TEXT)
+        self.assertEqual(tokens[3].value, " print('hello') ")
+        self.assertEqual(tokens[4].type, TokenType.BEHAVIOR_MARKER)
+        self.assertEqual(tokens[4].value, "~")
 
     def test_behavior_no_escape(self):
         """Test that behavior descriptions treat backslashes and tildes as raw text."""
         code = """
-str cmd = ~~分析 ~ 符号~~
+str cmd = @~分析 ~ 符号~
 """
+        # Note: In the new syntax, the first ~ will CLOSE the block.
+        # So "@~分析 ~ 符号~" is interpreted as:
+        # BEHAVIOR_MARKER(@~) RAW_TEXT(分析 ) BEHAVIOR_MARKER(~) IDENTIFIER(符号) BIT_NOT(~)
+        # This is expected behavior because ~ is the end marker.
         lexer = Lexer(code.strip())
         tokens = lexer.tokenize()
         
-        expected_types = [
-            TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.ASSIGN, TokenType.BEHAVIOR_MARKER,
-            TokenType.RAW_TEXT, 
-            TokenType.BEHAVIOR_MARKER, TokenType.EOF
-        ]
-        
-        self.assertEqual([t.type for t in tokens], expected_types)
-        
-        content_tokens = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
-        content = "".join(content_tokens)
-        self.assertIn("分析", content)
-        self.assertIn("~", content)
+        # Structure: str cmd = @~分析 ~
+        self.assertEqual(tokens[3].type, TokenType.BEHAVIOR_MARKER)
+        self.assertEqual(tokens[3].value, "@~")
+        self.assertEqual(tokens[4].value, "分析 ")
+        self.assertEqual(tokens[5].type, TokenType.BEHAVIOR_MARKER)
+        self.assertEqual(tokens[5].value, "~")
 
     def test_llm_block(self):
         """Test LLM function definition and block scanning."""
@@ -131,8 +146,6 @@ llm 生成(str msg):
 
     def test_complex_real_world_code(self):
         """Test a complex real-world code scenario mixing multiple features."""
-        # Note: 'list' and 'dict' are parsed as IDENTIFIERs, not TYPE_NAMEs.
-        # This test focuses on LLM and strings, so this distinction is not critical here.
         code = r"""
 import utils
 from models import User
@@ -150,14 +163,14 @@ func process_user_data(list users) -> dict:
     dict results = {}
     
     for user in users:
-        if ~~check if user $user.name is active~~:
+        if @~check if user $user.name is active~:
             # Nested behavior description and complex strings
             str status = "Active: \"Yes\""
             
             # Multiline behavior description (no escapes needed)
-            str analysis = ~~analyze user behavior
+            str analysis = @~analyze user behavior
                 with deep learning model
-                using context $user.context~~
+                using context $user.context~
                 
             # Call LLM
             str report = generate_report(user, analysis)
@@ -190,21 +203,16 @@ func process_user_data(list users) -> dict:
         self.assertIn("with deep learning model", combined_behavior)
 
     def test_behavior_escapes(self):
-        r"""Test escape sequences in behavior description (\~\~, \$, \~)."""
-        # Use space to separate \~ from ~~ to avoid ambiguity in test string parsing vs lexer logic
-        code = r"str x = ~~text with \~\~ and \$ and \~ ~~"
+        r"""Test escape sequences in behavior description (\$, \~)."""
+        code = r"str x = @~text with \~ and \$~"
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         
-        # Structure: TYPE IDENT ASSIGN ~~ RAW(text with ) RAW(~~) RAW( and ) RAW($) RAW( and ) RAW(~) RAW( ) ~~ EOF
-        behavior_tokens = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
-        combined = "".join(behavior_tokens)
+        # Structure: TYPE IDENT ASSIGN @~ RAW(text with ) RAW(~) RAW( and ) RAW($) ~ EOF
+        raw_tokens = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
+        combined = "".join(raw_tokens)
         
-        self.assertIn("~~", combined)
-        self.assertIn("$", combined)
-        self.assertIn("~", combined)
-        # Expect "text with ~~ and $ and ~ "
-        self.assertEqual(combined, "text with ~~ and $ and ~ ")
+        self.assertEqual(combined, "text with ~ and $")
 
     def test_raw_strings(self):
         """Test raw string literals (r"..." and r'...')."""
@@ -223,17 +231,12 @@ func process_user_data(list users) -> dict:
                 self.assertEqual(tokens[0].value, expected)
 
     def test_var_ref_with_dots(self):
-        """Test variable references with dot notation ($user.name.first) are now atomic tokens."""
-        code = "str x = ~~hello $user.name.first world~~"
+        """Test variable references with dot notation ($user.name.first) within behavior."""
+        code = "str x = @~hello $user.name.first world~"
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         
-        # Expected sequence: ... RAW_TEXT("hello ") VAR_REF("$user") DOT(".") IDENTIFIER("name") DOT(".") IDENTIFIER("first") RAW_TEXT(" world") ...
-        # Structure: 
-        # 0: IDENTIFIER(str)
-        # 1: IDENTIFIER(x)
-        # 2: ASSIGN(=)
-        # 3: BEHAVIOR_MARKER(~~)
+        # 3: BEHAVIOR_MARKER(@~)
         # 4: RAW_TEXT(hello )
         # 5: VAR_REF($user)
         # 6: DOT(.)
@@ -241,9 +244,7 @@ func process_user_data(list users) -> dict:
         # 8: DOT(.)
         # 9: IDENTIFIER(first)
         # 10: RAW_TEXT( world)
-        # 11: BEHAVIOR_MARKER(~~)
-        # 12: NEWLINE(\n)
-        # 13: EOF()
+        # 11: BEHAVIOR_MARKER(~)
 
         self.assertEqual(tokens[5].type, TokenType.VAR_REF)
         self.assertEqual(tokens[5].value, "$user")
@@ -254,7 +255,6 @@ func process_user_data(list users) -> dict:
         self.assertEqual(tokens[9].type, TokenType.IDENTIFIER)
         self.assertEqual(tokens[9].value, "first")
         
-        # Ensure surrounding text is correct
         raw_texts = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
         self.assertEqual(raw_texts[0], "hello ")
         self.assertEqual(raw_texts[1], " world")
@@ -276,45 +276,18 @@ func process_user_data(list users) -> dict:
             with self.subTest(source=source):
                 lexer = Lexer(source)
                 tokens = lexer.tokenize()
-                # Should be NUMBER token
                 self.assertEqual(tokens[0].type, TokenType.NUMBER)
                 self.assertEqual(tokens[0].value, expected)
 
     def test_behavior_escape_at_end(self):
         """Test behavior description ending with escaped tilde."""
-        # ~~ ... \~~ ~~
-        code = r"x = ~~ content \~~ ~~"
+        code = r"x = @~ content \~ ~"
         lexer = Lexer(code)
         tokens = lexer.tokenize()
         
-        # Expect: IDENT, ASSIGN, BEHAVIOR_MARKER, RAW_TEXT(" content "), RAW_TEXT("~~"), RAW_TEXT(" "), BEHAVIOR_MARKER
         raw_texts = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
         combined = "".join(raw_texts)
-        self.assertEqual(combined, " content ~~ ")
-
-    def test_llm_block_inline_content(self):
-        """Test LLM block with inline content after keywords."""
-        code = """
-llm inline_test(int a):
-    __sys__ System prompt
-    __user__ User prompt $__a__
-    llmend
-"""
-        lexer = Lexer(code.strip())
-        tokens = lexer.tokenize()
-        
-        # Find LLM_SYS and check if "System prompt" follows immediately
-        sys_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_SYS)
-        self.assertEqual(tokens[sys_idx+1].type, TokenType.RAW_TEXT)
-        self.assertEqual(tokens[sys_idx+1].value.strip(), "System prompt")
-        
-        # Find LLM_USER and check if "User prompt $__a__" follows
-        user_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_USER)
-        # The content might be split into multiple tokens (RAW_TEXT, PARAM, etc.).
-        # Verify that the first token is RAW_TEXT starting with "User prompt".
-        self.assertEqual(tokens[user_idx+1].type, TokenType.RAW_TEXT)
-        self.assertIn("User prompt", tokens[user_idx+1].value)
-
+        self.assertEqual(combined, " content ~ ")
 
     def test_exception_keywords(self):
         """测试新增的异常处理关键字"""

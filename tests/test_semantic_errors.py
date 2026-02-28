@@ -129,7 +129,7 @@ class TestSemanticErrors(unittest.TestCase):
     def test_behavior_expr_variable_check(self):
         """Test undefined variable in behavior expression."""
         code = """
-        str result = ~~analyze $x~~
+        str result = @~analyze $x~
         """
         self.assertSemanticErrors(code, ["Variable 'x' used in behavior expression is not defined"])
 
@@ -137,7 +137,7 @@ class TestSemanticErrors(unittest.TestCase):
         """Test defined variable in behavior expression."""
         code = """
         int x = 1
-        str result = ~~analyze $x~~
+        str result = @~analyze $x~
         """
         # Should not raise error
         self.analyze_code(code)

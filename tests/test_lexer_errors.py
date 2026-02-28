@@ -54,7 +54,7 @@ class TestLexerErrors(unittest.TestCase):
 
     def test_eof_in_behavior(self):
         """Test EOF while scanning behavior description."""
-        code = 'str res = ~~analyze this' # Missing closing ~~
+        code = 'str res = @~analyze this' # Missing closing ~
         self.check_error(code, LEX_UNTERMINATED_BEHAVIOR, "Unexpected EOF while scanning behavior description")
 
     def test_invalid_escape_in_code(self):
@@ -71,7 +71,7 @@ class TestLexerErrors(unittest.TestCase):
         """Test various inline code examples known to be invalid."""
         invalid_examples = {
             "invalid_behavior_multiline_unclosed": ("""
-str x = ~~行为描述
+str x = @~行为描述
     没有结束标记
 """, LEX_UNTERMINATED_BEHAVIOR),
             

@@ -14,5 +14,5 @@ ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
 print("已完成硬编码配置（示例中使用 TESTONLY 代替）")
 
-str res = ~~硬编码测试~~
+str res = @~硬编码测试~
 print("AI 回复: " + res)

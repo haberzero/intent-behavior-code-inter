@@ -192,7 +192,7 @@ import ai
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 ai.set_retry(2)
 ai.set_timeout(10.5)
-str res = ~~hello~~
+str res = @~hello~
 print("done")
 """
         self.output = []

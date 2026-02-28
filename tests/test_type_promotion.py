@@ -113,7 +113,7 @@ var c = a + b
 import ai
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 dict user = {"name": "Alice"}
-str res = ~~Hello $user.name~~
+str res = @~Hello $user.name~
 """
         _, interp = self.run_code(code)
         self.assertIn("Alice", interp.context.get_variable("res"))

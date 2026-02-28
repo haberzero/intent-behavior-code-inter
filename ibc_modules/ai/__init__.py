@@ -19,6 +19,12 @@ class AILib:
             "branch": "你是一个逻辑判断专家。请分析用户提供的意图和内容，判断当前条件是否满足。如果条件满足请返回 1，否则请返回 0。禁止输出任何其他解释文字。",
             "loop": "你是一个循环控制专家。请分析用户提供的意图和内容，判断当前循环条件是否满足。如果条件满足应当继续循环请返回 1，否则（已达到停止条件或不再需要继续）请返回 0。禁止输出任何其他解释文字。"
         }
+        self._return_type_prompts = {
+            "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
+            "float": "请仅返回一个浮点数作为回答，禁止包含任何其他解释文字。",
+            "list": "请仅返回一个合法的 JSON 数组（List）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。",
+            "dict": "请仅返回一个合法的 JSON 对象（Dict）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。"
+        }
 
     def setup(self, executor: LLMExecutor):
         self._executor = executor
@@ -74,6 +80,12 @@ class AILib:
     def get_scene_prompt(self, scene: str) -> str:
         return self._scene_prompts.get(scene, self._scene_prompts["general"])
 
+    def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
+        self._return_type_prompts[type_name] = prompt
+
+    def get_return_type_prompt(self, type_name: str) -> Optional[str]:
+        return self._return_type_prompts.get(type_name)
+
     def set_retry_hint(self, hint: str) -> None:
         if hasattr(self._executor, 'retry_hint'):
             self._executor.retry_hint = hint
@@ -98,6 +110,11 @@ class AILib:
 
         if is_test_mode:
             u_upper = user_prompt.upper()
+            if "MOCK:RESPONSE:" in u_upper:
+                # 允许测试通过提示词直接指定返回内容
+                # 例如: "MOCK:RESPONSE:{\"a\": 1}"
+                return user_prompt.split("MOCK:RESPONSE:")[1].strip()
+
             if "MOCK:REPAIR" in u_upper:
                 has_hint = hasattr(self._executor, 'retry_hint') and self._executor.retry_hint is not None
                 if not has_hint:

@@ -147,7 +147,7 @@ d["c"] = 3
 import ai
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 str name = "Alice"
-str res = ~~ greet $name ~~
+str res = @~ greet $name ~
 """
         _, interp = self.run_code(code)
         self.assertIn("Alice", interp.context.get_variable("res"))

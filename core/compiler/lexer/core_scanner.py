@@ -167,24 +167,34 @@ class CoreTokenScanner:
             self.is_raw_string = False
             return False
 
-        # 6. Intent Comments
+        # 6. Behavior Description and Intent Comments
         if char == '@':
-            content = ""
-            while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
-                content += self.scanner.advance()
-            tokens.append(self.scanner.create_token(TokenType.INTENT, content))
-            return False
-
-        # 7. Behavior Description and Bitwise Operators
-        if char == '~':
-            if self.scanner.peek() == '~':
-                self.scanner.advance()
+            # Check for behavior marker: @~ or @tag~
+            offset = 0
+            while self.scanner.peek(offset).isalpha():
+                offset += 1
+            
+            if self.scanner.peek(offset) == '~':
+                # Behavior marker found!
+                tag = ""
+                for _ in range(offset):
+                    tag += self.scanner.advance()
+                self.scanner.advance() # Consume '~'
                 self.sub_state = SubState.IN_BEHAVIOR
-                tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "~~"))
+                tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "@" + tag + "~"))
                 return False
             else:
-                tokens.append(self.scanner.create_token(TokenType.BIT_NOT, "~"))
+                # Regular Intent Comment
+                content = ""
+                while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
+                    content += self.scanner.advance()
+                tokens.append(self.scanner.create_token(TokenType.INTENT, content))
                 return False
+
+        # 7. Bitwise Not
+        if char == '~':
+            tokens.append(self.scanner.create_token(TokenType.BIT_NOT, "~"))
+            return False
 
         # 8. Symbols
         if char == '(': 
@@ -339,31 +349,22 @@ class CoreTokenScanner:
     def _scan_behavior_char(self, tokens: List[Token]):
         char = self.scanner.peek()
         
-        # 1. Check for closing marker ~~
-        if char == '~' and self.scanner.peek(1) == '~':
+        # 1. Check for closing marker ~
+        if char == '~':
             self.scanner.advance() # ~
-            self.scanner.advance() # ~
-            tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "~~"))
+            tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "~"))
             self.sub_state = SubState.NORMAL
             return
 
-        # 2. Handle escapes: \~~, \$, \~
+        # 2. Handle escapes: \$, \~
         if char == '\\':
             next_char = self.scanner.peek(1)
             if next_char == '~':
-                # Check for \~~ (double tilde)
-                if self.scanner.peek(2) == '~':
-                    self.scanner.advance() # \
-                    self.scanner.advance() # ~
-                    self.scanner.advance() # ~
-                    tokens.append(Token(TokenType.RAW_TEXT, "~~", self.scanner.line, self.scanner.col))
-                    return
-                else:
-                    # \~ (single tilde)
-                    self.scanner.advance() # \
-                    self.scanner.advance() # ~
-                    tokens.append(Token(TokenType.RAW_TEXT, "~", self.scanner.line, self.scanner.col))
-                    return
+                # \~ (single tilde)
+                self.scanner.advance() # \
+                self.scanner.advance() # ~
+                tokens.append(Token(TokenType.RAW_TEXT, "~", self.scanner.line, self.scanner.col))
+                return
             elif next_char == '$':
                 # \$ (dollar sign)
                 self.scanner.advance() # \
@@ -404,7 +405,7 @@ class CoreTokenScanner:
                 break
             if peek_char == '\n':
                 break
-            if peek_char == '~' and self.scanner.peek(1) == '~':
+            if peek_char == '~':
                 break
             if peek_char == '\\':
                 next_c = self.scanner.peek(1)

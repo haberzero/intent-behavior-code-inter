@@ -13,7 +13,7 @@ from core.engine import IBCIEngine
 class TestLLMScenePropagation(unittest.TestCase):
     def test_complex_condition_propagation(self):
         code = textwrap.dedent("""
-        if ~~a~~ and (~~b~~ or ~~c~~):
+        if @~a~ and (@~b~ or @~c~):
             print("success")
         """).strip()
         
@@ -56,7 +56,7 @@ class TestLLMScenePropagation(unittest.TestCase):
         code = textwrap.dedent("""
         import ai
         ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-        if ~~is this true?~~:
+        if @~is this true?~:
             print("YES")
         else:
             print("NO")

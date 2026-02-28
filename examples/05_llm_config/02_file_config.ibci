@@ -22,5 +22,5 @@ else:
     print("错误：配置文件不存在: " + config_path)
     ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-str res = ~~显式文件配置测试~~
+str res = @~显式文件配置测试~
 print("AI 回复: " + res)

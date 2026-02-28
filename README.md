@@ -4,8 +4,8 @@ IBC-Inter 是一种实验性的**意图驱动型混合编程语言**。它旨在
 
 ## 🚀 核心特性
 
-- **🧠 意图驱动 (Intent-Driven)**: 使用 `@` 意图注释动态增强上下文，让 AI 真正“读懂”代码意图。
-- **🎭 混合执行 (Hybrid Execution)**: 原生支持行为描述行 (`~~...~~`) 和 LLM 函数，像调用普通函数一样驱动 AI。
+- **🎭 混合执行 (Hybrid Execution)**: 原生支持行为描述行 (`@~...~`) 和 LLM 函数，像调用普通函数一样驱动 AI。
+- **🏗️ 意图导向 (Intent-Oriented)**: 独创运行时意图注入机制（`@ 意图内容`），将高层目标动态注入执行链。
 - **🛡️ AI 容错控制流 (LLM-Except)**: 专为解决 AI 逻辑判断模糊性设计的 `llmexcept` 与 `retry` 机制，实现逻辑的自我修复。
 - **🧩 插件化扩展 (Plugin-Ready)**: 零配置的 Python 插件自动嗅探机制，轻松扩展语言能力。
 - **🔒 安全沙箱**: 内置文件访问控制与权限管理，确保 AI 行为在受控范围内。
@@ -63,12 +63,12 @@ pip install openai
    # 开启模拟模式，不需要真实的 Key
    ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-   print("正在测试模拟模式...")
-   str res = ~~向我打个招呼~~
-   print("AI 回复: " + res)
-
-   if ~~MOCK:TRUE 这是一个必中的判断~~:
-       print("逻辑分支验证成功！")
+   # 像写注释一样编写自然语言行为，它将被 LLM 动态执行
+   str res = @~向我打个招呼~
+   
+   # 在 if 分支中使用意图判断
+   if @~MOCK:TRUE 这是一个必中的判断~:
+       print(res)
    ```
 2. 运行它：
    ```bash
@@ -81,14 +81,14 @@ pip install openai
 使用 `@` 意图注释动态增强上下文，让 AI 真正“读懂”代码意图。
 ```ibc-inter
 @ 你现在是一个冷酷的逻辑专家
-str greeting = ~~请向我打个招呼~~
+str greeting = @~请向我打个招呼~
 print(greeting) # 此时输出的招呼语会受到“冷酷”意图的约束
 ```
 
 ### 2. AI 容错控制流 (LLM-Except)
 专为解决 AI 逻辑判断模糊性设计的 `llmexcept` 与 `retry` 机制。
 ```ibc-inter
-if ~~检查 $greeting 是否包含情感词汇~~:
+if @~检查 $greeting 是否包含情感词汇~:
     print("AI 违背了设定")
 llmexcept:
     print("判断模糊，正在重试...")
@@ -99,9 +99,9 @@ llmexcept:
 ### 3. 意图驱动循环 (Intent-Driven Loop)
 支持根据语义状态持续进行任务迭代。
 ```ibc-inter
-for ~~判定当前内容是否足够热情？如果不够请返回 1 继续优化~~:
-    current_content = ~~优化这段文字：$current_content~~
-    if ~~判断内容是否已包含笑脸表情~~:
+for @~判定当前内容是否足够热情？如果不够请返回 1 继续优化~:
+    current_content = @~优化这段文字：$current_content~
+    if @~判断内容是否已包含笑脸表情~:
         break
 ```
 
