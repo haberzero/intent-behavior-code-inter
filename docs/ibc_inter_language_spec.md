@@ -166,7 +166,7 @@ str regex = r"\d+\s+\w+"
 
 ### 7. 控制流语法
 
-#### if语句
+#### if 语句
 
 ```ibc-inter
 if 条件:
@@ -177,7 +177,28 @@ else:
     默认执行语句
 ```
 
-#### for循环
+**意图驱动分支 (llmexcept)：**
+当 `if` 或 `elif` 的条件包含行为描述（`~~...~~`）时，若 LLM 返回结果不明确，可使用 `llmexcept` 进行捕获处理。
+
+```ibc-inter
+if ~~用户输入 $input 是否包含负面情绪~~:
+    print("处理负面情绪")
+llmexcept:
+    # 修复逻辑，例如提供更具体的提示或重试
+    ai.set_retry_hint("请忽略语气词，只看核心诉求")
+    retry
+```
+
+#### while 循环
+
+```ibc-inter
+while 条件:
+    循环体
+```
+
+同样支持 `llmexcept` 用于处理意图判定的不确定性。
+
+#### for 循环
 
 ```ibc-inter
 # 1. 固定次数循环 (直接指定 int)
@@ -187,6 +208,9 @@ for 数字:
 # 2. 意图驱动循环 (使用行为描述，每次迭代前重新评估)
 for ~~行为描述表达~~:
     循环体
+llmexcept:
+    # 处理判定异常
+    retry
 
 # 3. 标准迭代模式 (遍历 list 或 range)
 for i in 数字:
@@ -198,11 +222,16 @@ for i in list:
 
 **意图驱动循环模式：**
 当 `for` 关键字后直接跟 `~~...~~` 时，解释器进入“意图驱动”模式。该模式下：
+
 - 每次迭代开始前，均会重新发起 LLM 调用并进行参数插值。
 - LLM 返回值被严格解析为布尔值（1 表示继续，0 表示停止）。
 - 支持 `llmexcept` 进行不确定性修复，支持 `retry` 重试当前判定的 LLM 请求。
 
-### 7. 变量声明与类型
+#### 循环控制
+
+支持 `break`（跳出循环）和 `continue`（跳过当前迭代）。
+
+### 8. 变量声明与类型
 
 IBC-Inter 使用显式类型关键字声明变量，同时提供 var 作为灵活性变量。可选使用显式类型并初始化，或先声明后赋值：
 
@@ -216,7 +245,7 @@ int 未赋值
 var 临时值 = 0
 ```
 
-### 8. 数据类型系统
+### 9. 数据类型系统
 
 IBC-Inter 仅支持以下类型：
 
@@ -258,7 +287,7 @@ str 空值变量
 - list 和 dict 强烈不建议嵌套容器，容器嵌套机制的实现尚不完善
 - dict 的 key 只允许 int 或 str
 
-### 9. 运算符系统
+### 10. 运算符系统
 
 仅保留常用示例，完整说明见单独文件：docs/ibc_inter_type_operator_details.md
 
@@ -286,6 +315,42 @@ if a == b:
     执行语句
 if not (a > b):
     执行语句
+```
+
+### 11. 异常处理
+
+IBC-Inter 支持标准异常处理机制，用于捕获运行时错误或主动抛出异常。
+
+#### try...except 语句
+
+```ibc-inter
+try:
+    # 可能产生错误的代码
+    int 结果 = 10 / 0
+except Exception as e:
+    # 捕获所有异常
+    print("发生错误: " + e)
+finally:
+    # 无论是否发生错误都会执行
+    print("清理工作")
+```
+
+支持捕获特定类型的异常：
+
+```ibc-inter
+try:
+    import non_existent_module
+except "InterpreterError" as e:
+    print("解释器错误: " + e)
+```
+
+#### raise 语句
+
+使用 `raise` 主动抛出异常：
+
+```ibc-inter
+if 用户年龄 < 0:
+    raise "年龄不能为负数"
 ```
 
 ## 独立示例
