@@ -145,6 +145,11 @@ def get_promoted_type(op: str, t1: Type, t2: Type) -> Optional[Type]:
             if t1.element_type == t2.element_type:
                 return t1
             return ListType(ANY_TYPE)
+
+    # Bitwise operators (int only)
+    elif op in ('&', '|', '^', '<<', '>>'):
+        if t1 == INT_TYPE and t2 == INT_TYPE:
+            return INT_TYPE
             
     # Comparison operators
     elif op in ('>', '>=', '<', '<=', '==', '!='):

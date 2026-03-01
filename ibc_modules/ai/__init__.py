@@ -1,11 +1,13 @@
 import os
 import time
 from typing import Any, Optional, Dict
-from core.runtime.interpreter.interfaces import LLMExecutor
+from core.runtime.ext.capabilities import ExtensionCapabilities, ILLMProvider
 
-class AILib:
+class AILib(ILLMProvider):
     def __init__(self):
-        self._executor: Optional[LLMExecutor] = None
+        self._capabilities: Optional[ExtensionCapabilities] = None
+        self._retry_hint: Optional[str] = None
+        self._last_call_info: Dict[str, Any] = {}
         self._client = None
         self._config = {
             "url": None,
@@ -26,10 +28,14 @@ class AILib:
             "dict": "请仅返回一个合法的 JSON 对象（Dict）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。"
         }
 
-    def setup(self, executor: LLMExecutor):
-        self._executor = executor
-        if hasattr(self._executor, 'llm_callback'):
-            self._executor.llm_callback = self
+    def setup(self, capabilities: ExtensionCapabilities):
+        self._capabilities = capabilities
+        # 核心：将自己注册为内核的 LLM Provider
+        if self._capabilities.llm_provider is None:
+             self._capabilities.llm_provider = self
+        
+        # 为了向后兼容，如果内核还持有旧的 executor 引用，也可以尝试设置其回调
+        # 但在新的 IES 架构中，loader 会负责同步 capabilities 到内核组件
 
     def _init_client(self):
         is_test_mode = (
@@ -87,8 +93,10 @@ class AILib:
         return self._return_type_prompts.get(type_name)
 
     def set_retry_hint(self, hint: str) -> None:
-        if hasattr(self._executor, 'retry_hint'):
-            self._executor.retry_hint = hint
+        self._retry_hint = hint
+
+    def get_last_call_info(self) -> Dict[str, Any]:
+        return self._last_call_info
 
     def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
         is_test_mode = (
@@ -111,25 +119,35 @@ class AILib:
         if is_test_mode:
             u_upper = user_prompt.upper()
             if "MOCK:RESPONSE:" in u_upper:
-                # 允许测试通过提示词直接指定返回内容
-                # 例如: "MOCK:RESPONSE:{\"a\": 1}"
-                return user_prompt.split("MOCK:RESPONSE:")[1].strip()
+                res = user_prompt.split("MOCK:RESPONSE:")[1].strip()
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+                return res
 
             if "MOCK:REPAIR" in u_upper:
-                has_hint = hasattr(self._executor, 'retry_hint') and self._executor.retry_hint is not None
+                has_hint = self._retry_hint is not None
                 if not has_hint:
-                    return "MOCK_UNCERTAIN_RESPONSE"
+                    res = "MOCK_UNCERTAIN_RESPONSE"
                 else:
-                    return "1" if scene in ("branch", "loop") else f"[MOCK] Repaired using hint: {self._executor.retry_hint}"
+                    res = "1" if scene in ("branch", "loop") else f"[MOCK] Repaired using hint: {self._retry_hint}"
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+                return res
+            
             if "MOCK:FAIL" in u_upper:
-                return "MOCK_UNCERTAIN_RESPONSE_TRIGGERING_EXCEPT"
+                res = "MOCK_UNCERTAIN_RESPONSE_TRIGGERING_EXCEPT"
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+                return res
+
+            res = "1"
             if scene in ("branch", "loop"):
                 if "MOCK:FALSE" in u_upper or "MOCK:0" in u_upper:
-                    return "0"
-                if "MOCK:TRUE" in u_upper or "MOCK:1" in u_upper:
-                    return "1"
-                return "1"
-            return f"[MOCK] Simulated response for: {user_prompt} (INTENTS: {sys_prompt})"
+                    res = "0"
+                elif "MOCK:TRUE" in u_upper or "MOCK:1" in u_upper:
+                    res = "1"
+            else:
+                res = f"[MOCK] Simulated response for: {user_prompt} (INTENTS: {sys_prompt})"
+            
+            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+            return res
         
         retry_count = self._config.get("retry", 0)
         last_error = None

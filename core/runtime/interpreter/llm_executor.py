@@ -5,19 +5,23 @@ from .interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from core.types import parser_types as ast
 from core.types.exception_types import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
+from core.runtime.ext.capabilities import ILLMProvider
 
 class LLMExecutorImpl:
     """
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
     """
-    def __init__(self, service_context: Optional[ServiceContext] = None, llm_callback: Optional[Any] = None):
+    def __init__(self, service_context: Optional[ServiceContext] = None, llm_callback: Optional[ILLMProvider] = None):
         """
         service_context: 注入容器
-        llm_callback: 实际的 LLM 调用接口 (底层)。
+        llm_callback: 实际的 LLM 调用接口 (满足 ILLMProvider 协议)。
         """
         self.service_context = service_context
         self.llm_callback = llm_callback
+        # retry_hint 现状保存在 LLMExecutorImpl 中，为了兼容，
+        # 我们会在调用 Provider 时同步同步它
         self.retry_hint: Optional[str] = None
+        self.last_call_info: Dict[str, Any] = {} # 记录最后一次 LLM 调用信息
 
     def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> Any:
         """
@@ -53,6 +57,15 @@ class LLMExecutorImpl:
 
             # 4. 调用底层模型
             raw_res = self._call_llm(sys_prompt, user_prompt, node)
+            
+            # 记录最后一次调用信息
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": user_prompt,
+                "response": raw_res,
+                "type": "function",
+                "name": node.name
+            }
             
             # 5. 解析结果为目标类型
             return self._parse_result(raw_res, type_name, node)
@@ -162,11 +175,16 @@ class LLMExecutorImpl:
             sys_prompt += f"\n\n注意：这是重试请求。之前的回答不符合要求，请参考此修正提示：{self.retry_hint}"
             
         # 4. 执行
-        # Try to pass scene if the callback supports it, otherwise fallback to old signature
-        try:
-            response = self.llm_callback(sys_prompt, content, scene=scene.name.lower())
-        except TypeError:
-            response = self.llm_callback(sys_prompt, content)
+        response = self._call_llm(sys_prompt, content, node, scene=scene.name.lower())
+            
+        # 记录最后一次调用信息
+        self.last_call_info = {
+            "sys_prompt": sys_prompt,
+            "user_prompt": content,
+            "response": response,
+            "type": "behavior",
+            "scene": scene.name.lower()
+        }
             
         # 成功执行后清除 retry_hint (或者在 retry 逻辑中控制)
         # 注意：如果是 LLMUncertaintyError，可能会再次进入 retry 流程设置新的 hint
@@ -177,9 +195,6 @@ class LLMExecutorImpl:
             clean_res = response.strip().lower()
             if clean_res in ("1", "0"):
                 return clean_res
-            # 尝试宽松匹配
-            if "1" in clean_res and "0" not in clean_res: return "1"
-            if "0" in clean_res and "1" not in clean_res: return "0"
             
             raise LLMUncertaintyError(
                 f"LLM 返回值在 {scene.name} 场景下不明确，期望 0 或 1，实际收到: {response}",
@@ -189,9 +204,14 @@ class LLMExecutorImpl:
             
         return response
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode) -> str:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode, scene: str = "general") -> str:
         if self.llm_callback:
-            return self.llm_callback(sys_prompt, user_prompt)
+            # 同步同步重试提示词
+            if self.retry_hint:
+                self.llm_callback.set_retry_hint(self.retry_hint)
+            
+            # 调用 Provider
+            return self.llm_callback(sys_prompt, user_prompt, scene=scene)
         
         # 如果没有回调，说明配置缺失，抛出错误
         raise InterpreterError(

@@ -1,0 +1,35 @@
+import ai
+import idbg
+
+# 配置 AI (使用 mock 模式避免网络请求)
+# ai.set_config(url, key, model) 
+# 注意：在测试环境中如果无法连接 LLM，idbg 仍然可以工作
+
+int a = 10
+str name = "ibc-inter"
+list fruits = ["apple", "banana"]
+
+# 查看当前变量
+dict current_vars = idbg.vars()
+print("--- Current Variables ---")
+print((str)current_vars)
+
+# 触发一个行为描述行
+if @~判断 $name 是否是一个编程语言项目。如果是请返回 1，否则返回 0。~:
+    print("\n[AI 判定] 这是一个项目")
+else:
+    print("\n[AI 判定] 这不是一个项目")
+
+# 查看最后一次 LLM 调用细节
+dict last_llm = idbg.last_llm()
+print("\n--- Last LLM Call Details ---")
+print("Sys Prompt: " + (str)last_llm.sys_prompt)
+print("User Prompt: " + (str)last_llm.user_prompt)
+print("Response: " + (str)last_llm.response)
+
+# 查看环境信息
+dict env_info = idbg.env()
+print("\n--- Environment Info ---")
+print((str)env_info)
+
+# 如果因为 LLM 失败而无法执行到这里，说明调试很有必要

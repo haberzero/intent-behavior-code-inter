@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from .interfaces import RuntimeSymbol, Scope, RuntimeContext
 from core.types.exception_types import InterpreterError
 from core.support.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
+from core.runtime.ext.capabilities import IStateReader
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
@@ -58,11 +59,36 @@ class ScopeImpl:
     def parent(self) -> Optional['Scope']:
         return self._parent
 
-class RuntimeContextImpl:
+class RuntimeContextImpl(IStateReader):
     def __init__(self):
         self._global_scope = ScopeImpl()
         self._current_scope = self._global_scope
         self._intent_stack: List[str] = []
+
+    def get_vars_snapshot(self) -> Dict[str, Any]:
+        """实现 IStateReader 接口：获取当前可见的所有变量快照"""
+        all_symbols = {}
+        scope = self._current_scope
+        while scope:
+            current_symbols = scope.get_all_symbols()
+            for name, sym in current_symbols.items():
+                if name not in all_symbols:
+                    all_symbols[name] = sym
+            scope = getattr(scope, "parent", None)
+        
+        result = {}
+        for name, sym in all_symbols.items():
+            val = sym.value
+            # 基础过滤：仅导出基础数据类型和容器，防止泄露内核对象
+            if not isinstance(val, (int, float, str, bool, list, dict)) and val is not None:
+                continue
+            
+            result[name] = {
+                "value": val,
+                "type": str(sym.declared_type) if sym.declared_type else type(val).__name__,
+                "is_const": sym.is_const
+            }
+        return result
 
     def enter_scope(self) -> None:
         self._current_scope = ScopeImpl(parent=self._current_scope)

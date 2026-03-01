@@ -2,6 +2,7 @@ import os
 import importlib.util
 from typing import List
 from ..interpreter.interfaces import ServiceContext
+from core.runtime.ext.capabilities import ExtensionCapabilities, IStateReader, IStackInspector, ILLMProvider
 
 class ModuleLoader:
     """
@@ -18,6 +19,14 @@ class ModuleLoader:
         interop = context.interop
         permission_manager = context.permission_manager
         llm_executor = context.llm_executor
+        
+        # 准备扩展能力集合 (IES 架构核心)
+        capabilities = ExtensionCapabilities()
+        if isinstance(context.runtime_context, IStateReader):
+            capabilities.state_reader = context.runtime_context
+        if isinstance(context.interpreter, IStackInspector):
+            capabilities.stack_inspector = context.interpreter
+        # 注意：llm_provider 初始为 None，可能由模块（如 ai）在 setup 时填充
         
         loaded_modules = set()
         
@@ -64,9 +73,17 @@ class ModuleLoader:
                             params['permission_manager'] = permission_manager
                         if 'executor' in sig.parameters:
                             params['executor'] = llm_executor
+                        if 'service_context' in sig.parameters:
+                            params['service_context'] = context
+                        if 'capabilities' in sig.parameters:
+                            params['capabilities'] = capabilities
                         
                         if params:
                             implementation.setup(**params)
+                    
+                    # 核心能力同步：如果模块提供了 LLMProvider，同步到内核执行器
+                    if capabilities.llm_provider and hasattr(llm_executor, 'llm_callback'):
+                        llm_executor.llm_callback = capabilities.llm_provider
                     
                     # 绑定到运行时宿主
                     interop.register_package(entry, implementation)

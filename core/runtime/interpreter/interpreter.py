@@ -17,6 +17,7 @@ from .module_manager import ModuleManagerImpl
 from .evaluator import EvaluatorImpl
 from .permissions import PermissionManager as PermissionManagerImpl
 from core.support.host_interface import HostInterface
+from core.runtime.ext.capabilities import IStackInspector
 
 # --- Runtime Exceptions for Flow Control ---
 class ReturnException(Exception):
@@ -61,11 +62,20 @@ class ServiceContextImpl:
     @property
     def permission_manager(self) -> PermissionManager: return self._permission_manager
 
-class Interpreter:
+class Interpreter(IStackInspector):
     """
     IBC-Inter 模块化解释器主类。
     采用 Visitor 模式遍历 AST，并将具体逻辑委托给子组件。
     """
+    def get_call_stack_depth(self) -> int:
+        return self.call_stack_depth
+
+    def get_active_intents(self) -> List[str]:
+        return self.context.get_active_intents()
+
+    def get_instruction_count(self) -> int:
+        return self.instruction_count
+
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None, 
                  max_instructions: int = 10000, 

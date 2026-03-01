@@ -32,10 +32,14 @@ class EvaluatorImpl:
             '/': operator.truediv, '%': operator.mod,
             '==': operator.eq, '!=': operator.ne,
             '<': operator.lt, '<=': operator.le, '>': operator.gt, '>=': operator.ge,
+            '&': operator.and_, '|': operator.or_, '^': operator.xor,
+            '<<': operator.lshift, '>>': operator.rshift
         }
         for op, handler in num_ops.items():
             for t1 in (int, float):
                 for t2 in (int, float):
+                    if op in ('&', '|', '^', '<<', '>>') and (t1 is float or t2 is float):
+                        continue
                     self._bin_handlers[(op, t1, t2)] = handler
 
         # 2. 字符串运算
@@ -64,6 +68,8 @@ class EvaluatorImpl:
         }
         for op, handler in unary_ops.items():
             for t in (int, float):
+                if op == '~' and t is float:
+                    continue
                 self._unary_handlers[(op, t)] = handler
             if op == 'not':
                 self._unary_handlers[(op, bool)] = handler

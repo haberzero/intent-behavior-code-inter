@@ -200,6 +200,12 @@ class SemanticAnalyzer:
             if prompt_segments:
                 for segment in prompt_segments:
                     if isinstance(segment, ast.Expr):
+                        # Special check for Name to provide better error message for tests
+                        if isinstance(segment, ast.Name):
+                             symbol = self.scope_manager.resolve(segment.id)
+                             if not symbol:
+                                 self.error(f"Parameter '{segment.id}' used in LLM prompt is not defined", node)
+                                 continue
                         self.visit(segment)
         
         if node.scope and node.scope.parent:
@@ -476,6 +482,29 @@ class SemanticAnalyzer:
             
         return result_type
 
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> Type:
+        operand_type = self.visit(node.operand)
+        
+        if isinstance(operand_type, AnyType):
+            return ANY_TYPE
+            
+        if node.op == 'not':
+            return BOOL_TYPE
+        
+        if node.op == '~':
+            if operand_type == INT_TYPE:
+                return INT_TYPE
+            self.error(f"Unary operator '~' not supported for type '{operand_type}'", node)
+            return ANY_TYPE
+            
+        if node.op in ('+', '-'):
+            if operand_type in (INT_TYPE, FLOAT_TYPE):
+                return operand_type
+            self.error(f"Unary operator '{node.op}' not supported for type '{operand_type}'", node)
+            return ANY_TYPE
+            
+        return ANY_TYPE
+
     def visit_Compare(self, node: ast.Compare) -> Type:
         left_type = self.visit(node.left)
         from core.compiler.semantic.types import get_promoted_type
@@ -511,6 +540,12 @@ class SemanticAnalyzer:
         # Check expressions referenced in the behavior expression
         for segment in node.segments:
             if isinstance(segment, ast.Expr):
+                # Special check for Name to provide better error message for tests
+                if isinstance(segment, ast.Name):
+                    symbol = self.scope_manager.resolve(segment.id)
+                    if not symbol:
+                        self.error(f"Variable '{segment.id}' used in behavior expression is not defined", segment)
+                        continue
                 self.visit(segment)
         
         return STR_TYPE # Behavior expressions return string content
