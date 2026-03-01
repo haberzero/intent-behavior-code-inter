@@ -1,0 +1,29 @@
+import ai
+
+# 开启 TESTONLY 模式以便脱机测试
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("--- [class_protocol.ibci] ---")
+
+# 1. 对象-自然语言映射协议 (__to_prompt__)
+class User:
+    str name = "Alice"
+    int score = 95
+    
+    # 该方法决定了对象在 LLM Prompt 中的插值表现形式
+    func __to_prompt__(self) -> str:
+        return "用户(姓名: " + self.name + ")"
+
+var u = User()
+# AI 看到的是 "分析 用户(姓名: Alice) 的状态"，而不是包含 score 的快照。
+# 这有助于精简 Prompt 并保护隐私。
+str res = @~ 分析 $u 的状态 ~
+print("AI 分析结果: " + res)
+
+# 2. 匿名 LLM 函数 (Lambda 化行为描述行)
+@ 你现在是一个文学评论家
+callable analyze = @~ 评论一下这段文字: $text ~
+
+str text = "白日依山尽，黄河入海流。"
+# 定义时的意图（文学评论家）会被捕获并在此处调用时生效。
+print(analyze())

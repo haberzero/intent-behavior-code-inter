@@ -129,7 +129,7 @@ res = generate_text("prompt")
         stmt = mod.body[0]
         call = stmt.value
         self.assertIsInstance(call, ast.Call)
-        self.assertEqual(call.intent.strip(), "optimize for speed")
+        self.assertEqual(call.intent.content.strip(), "optimize for speed")
 
     def test_comparison_chains(self):
         """Test chained comparisons."""

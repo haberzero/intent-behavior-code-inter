@@ -217,11 +217,22 @@ class Compare(Expr):
     comparators: List[Expr]
 
 @dataclass
+class IntentInfo:
+    mode: str # "", "+", "!", "-"
+    content: str
+
+@dataclass
+class IntentStmt(Stmt):
+    intent: IntentInfo
+    body: List[Stmt]
+    is_exclusive: bool = False # intent ! { ... }
+
+@dataclass
 class Call(Expr):
     func: Expr
     args: List[Expr]
     keywords: List['keyword']
-    intent: Optional[str] = None
+    intent: Optional[IntentInfo] = None
 
 @dataclass
 class Constant(Expr):
@@ -254,7 +265,7 @@ class ListExpr(Expr):
 class BehaviorExpr(Expr):
     segments: List[Union[str, Expr]]
     tag: str = ""
-    intent: Optional[str] = None
+    intent: Optional[IntentInfo] = None
 
 @dataclass
 class CastExpr(Expr):

@@ -365,6 +365,11 @@ class SemanticAnalyzer:
             if expected != VOID_TYPE and expected != ANY_TYPE:
                 self.error(f"Missing return value: expected '{expected}'", node)
 
+    def visit_IntentStmt(self, node: ast.IntentStmt):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing intent block")
+        for stmt in node.body:
+            self.visit(stmt)
+
     def visit_ExprStmt(self, node: ast.ExprStmt):
         self.visit(node.value)
 

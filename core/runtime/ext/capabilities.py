@@ -27,9 +27,18 @@ class ILLMProvider(Protocol):
     def set_retry_hint(self, hint: str) -> None:
         ...
 
+@runtime_checkable
+class IIntentManager(Protocol):
+    """提供对意图（Global, Block）的管理能力"""
+    def set_global_intent(self, intent: str) -> None: ...
+    def clear_global_intents(self) -> None: ...
+    def remove_global_intent(self, intent: str) -> None: ...
+    def get_global_intents(self) -> List[str]: ...
+
 class ExtensionCapabilities:
     """扩展模块持有的能力集合容器"""
     def __init__(self):
         self.state_reader: Optional[IStateReader] = None
         self.stack_inspector: Optional[IStackInspector] = None
         self.llm_provider: Optional[ILLMProvider] = None
+        self.intent_manager: Optional[IIntentManager] = None

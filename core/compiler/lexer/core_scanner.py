@@ -43,6 +43,7 @@ class CoreTokenScanner:
             'None': TokenType.NONE,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,
             'llmexcept': TokenType.LLM_EXCEPT, 'retry': TokenType.RETRY,
+            'intent': TokenType.INTENT_STMT,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
@@ -172,12 +173,17 @@ class CoreTokenScanner:
 
         # 6. Behavior Description and Intent Comments
         if char == '@':
+            # Check for modifiers: @+, @!, @-
+            mode = ""
+            if self.scanner.peek() in '+!-':
+                mode = self.scanner.advance()
+            
             # Check for behavior marker: @~ or @tag~
             offset = 0
             while self.scanner.peek(offset).isalpha():
                 offset += 1
             
-            if self.scanner.peek(offset) == '~':
+            if self.scanner.peek(offset) == '~' and mode == "":
                 # Behavior marker found!
                 tag = ""
                 for _ in range(offset):
@@ -187,11 +193,14 @@ class CoreTokenScanner:
                 tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "@" + tag + "~"))
                 return False
             else:
-                # Regular Intent Comment
+                # Regular Intent Comment or Modified Intent
                 content = ""
                 while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
                     content += self.scanner.advance()
-                tokens.append(self.scanner.create_token(TokenType.INTENT, content))
+                
+                # We include the mode in the token value for the parser to handle
+                # e.g. "@+ My Intent" -> value: "+My Intent"
+                tokens.append(self.scanner.create_token(TokenType.INTENT, mode + content.strip()))
                 return False
 
         # 7. Bitwise Not
@@ -277,6 +286,7 @@ class CoreTokenScanner:
             return False
         if char == '!':
             if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.NE, "!="))
+            else: tokens.append(self.scanner.create_token(TokenType.NOT, "!"))
             return False
         
         # Bitwise operators

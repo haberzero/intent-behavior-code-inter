@@ -100,9 +100,16 @@ def create_implementation():
 **用途**：获取解释器的性能和位置信息。
 -   **`get_instruction_count() -> int`**: 获取已执行的 AST 节点总数。
 -   **`get_call_stack_depth() -> int`**: 获取当前递归嵌套深度。
--   **`get_active_intents() -> List[str]`**: 获取当前生效的所有意图装饰器内容。
+-   **`get_active_intents() -> List[str]`**: 获取当前生效的所有意图（不含全局意图）。
 
-### 4.3 ILLMProvider (接管 LLM 流量)
+### 4.3 IIntentManager (意图管理)
+**用途**：像 `ai` 模块一样管理全局意图。
+-   **`set_global_intent(str)`**: 设定全局意图。
+-   **`clear_global_intents()`**: 清空。
+-   **`remove_global_intent(str)`**: 移除特定。
+-   **`get_global_intents() -> List[str]`**: 获取列表。
+
+### 4.4 ILLMProvider (接管 LLM 流量)
 **用途**：像 `ai` 模块一样，让自己成为语言的 LLM 引擎。
 -   **注册方式**: 在 `setup` 中执行 `capabilities.llm_provider = self`。
 -   **必须实现的方法**:

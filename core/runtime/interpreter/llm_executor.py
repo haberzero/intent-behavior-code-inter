@@ -55,12 +55,12 @@ class LLMExecutorImpl:
             if self.service_context and self.service_context.debugger:
                 self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Evaluated segments for LLM function '{node.name}'")
             
-            # 2. 注入意图增强 (来自当前解释器的意图栈)
-            active_intents = context.get_active_intents()
-            if active_intents:
+            # 2. 注入意图增强 (三层架构合并)
+            merged_intents = self._merge_intents(None, context)
+            if merged_intents:
                 if self.service_context and self.service_context.debugger:
-                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting {len(active_intents)} active intents into sys_prompt")
-                intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in active_intents)
+                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting merged intents into sys_prompt")
+                intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
                 sys_prompt += intent_block
                 
             # 3. 处理返回类型提示注入
@@ -97,11 +97,55 @@ class LLMExecutorImpl:
             context.exit_scope()
 
 
+    def _merge_intents(self, call_intent: Optional[ast.IntentInfo], context: RuntimeContext) -> List[str]:
+        """
+        合并 Global, Block, Call 三层意图。
+        支持 @+, @!, @- 等修饰符逻辑。
+        """
+        # 1. 基础收集
+        global_intents = [] if context.is_intent_exclusive() else context.get_global_intents()
+        block_intents = [i.content for i in context.get_active_intents()]
+        
+        # 2. 处理 Call 层级
+        if call_intent:
+            mode = call_intent.mode
+            content = call_intent.content
+            
+            if mode == "!":
+                # 强制唯一意图，忽略所有上层
+                return [content]
+            elif mode == "-":
+                # 局部排除：从合并结果中移除特定内容
+                merged = self._unique_merge(global_intents, block_intents)
+                if content in merged:
+                    merged.remove(content)
+                return merged
+            elif mode == "+":
+                # 显式附加 (默认也是附加)
+                return self._unique_merge(global_intents, block_intents, [content])
+            else:
+                # 默认叠加
+                return self._unique_merge(global_intents, block_intents, [content])
+        
+        # 3. 无 Call 意图时的默认合并
+        return self._unique_merge(global_intents, block_intents)
+
+    def _unique_merge(self, *lists: List[str]) -> List[str]:
+        result = []
+        seen = set()
+        for l in lists:
+            for item in l:
+                if item and item not in seen:
+                    result.append(item)
+                    seen.add(item)
+        return result
+
     def _evaluate_segments(self, segments: Optional[List[Union[str, ast.Expr]]], context: RuntimeContext) -> str:
         """评估结构化提示词片段"""
         if not segments:
             return ""
         
+        from .runtime_types import ClassInstance
         content_parts = []
         for segment in segments:
             if isinstance(segment, str):
@@ -109,7 +153,14 @@ class LLMExecutorImpl:
             elif isinstance(segment, ast.Expr):
                 if self.service_context and self.service_context.evaluator:
                     val = self.service_context.evaluator.evaluate_expr(segment, context)
-                    content_parts.append(str(val))
+                    
+                    # --- __to_prompt__ Protocol ---
+                    if isinstance(val, ClassInstance) and val.has_method("__to_prompt__"):
+                        if self.service_context and self.service_context.debugger:
+                            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Applying __to_prompt__ protocol for instance of {val.class_def.name}")
+                        content_parts.append(str(val.call_method("__to_prompt__")))
+                    else:
+                        content_parts.append(str(val))
                 else:
                     raise InterpreterError("Evaluator not initialized in LLMExecutor", segment, error_code=RUN_GENERIC_ERROR)
             else:
@@ -212,17 +263,17 @@ class LLMExecutorImpl:
         # 1. 评估段式插值
         content = self._evaluate_segments(node.segments, context)
         
-        # 2. 收集意图
+        # 2. 收集与合并意图
         all_intents = []
         auto_intent = True
         if ai_module and hasattr(ai_module, "_config"):
             auto_intent = ai_module._config.get("auto_intent_injection", True)
         
         if auto_intent:
-            all_intents = context.get_active_intents()
-        
-        if node.intent:
-            all_intents.append(node.intent)
+            all_intents = self._merge_intents(node.intent, context)
+        elif node.intent:
+            # 如果禁用了自动注入，但有显式意图，则仅使用显式意图
+            all_intents = [node.intent.content]
             
         # 3. 确定场景与提示词
         scene = node.scene_tag

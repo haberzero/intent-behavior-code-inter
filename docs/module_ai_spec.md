@@ -47,13 +47,19 @@ ai.set_config(url, key, model,
 ```
 
 ### 3.2 提示词合成流水线
-当特性开启时，最终的 System Prompt 按以下顺序合成：
-$$Prompt_{final} = Prompt_{scene} + Intent_{active} + Hint_{retry} + Prompt_{type\_constraint}$$
+开发者可以通过 `ai.set_config` 显式控制内核的自动注入行为。当特性开启时，最终的 System Prompt 采用**层级化意图合并**策略：
 
-1. **场景基础 (`Prompt_{scene}`)**: 通过 `ai.set_xxx_prompt` 配置。
-2. **意图增强 (`Intent_{active}`)**: 来自 `@ 意图` 注释，由内核自动追加。
-3. **动态修复 (`Hint_{retry}`)**: 来自 `ai.set_retry_hint`，仅在 `retry` 时出现。
-4. **类型约束 (`Prompt_{type_constraint}`)**: 来自变量类型声明，由内核自动追加。
+$$Prompt_{final} = Prompt_{scene} + Merge(Intent_{global}, Intent_{block}, Intent_{call}) + Hint_{retry} + Prompt_{type\_constraint}$$
+
+**意图合并优先级：**
+1.  **Global (全局)**: 通过 `ai.set_global_intent()` 设定，长期生效。
+2.  **Block (块级)**: 通过 `intent` 关键字定义，作用于代码块。
+3.  **Call (调用级)**: 通过 `@` 注释定义，单次生效。
+
+**修饰符合并逻辑：**
+-   `@+` (叠加): `Global + Block + Call`
+-   `@!` (唯一): 仅 `Call` (忽略 Global 和 Block)
+-   `@-` (排除): `(Global + Block) - Call`
 
 ---
 
@@ -64,6 +70,21 @@ $$Prompt_{final} = Prompt_{scene} + Intent_{active} + Hint_{retry} + Prompt_{typ
 - `url`, `key`, `model`: 基础访问配置。
 - `auto_type_constraint`: (bool) 是否允许内核根据变量类型自动追加格式约束。
 - `auto_intent_injection`: (bool) 是否允许内核自动注入 `@` 注释。
+
+### `ai.set_global_intent(str intent)`
+设定全局意图，后续所有 LLM 调用均会携带。
+
+### `ai.clear_global_intents()`
+清空所有全局意图。
+
+### `ai.remove_global_intent(str intent)`
+移除特定的全局意图。
+
+### `ai.get_global_intents() -> list`
+获取当前生效的所有全局意图列表。
+
+### `ai.get_current_intent_stack() -> list`
+获取当前层级合并后的完整意图列表（包含全局和当前作用域的块级意图）。
 
 ### `ai.set_decision_map(dict map)`
 自定义布尔判定词映射表。

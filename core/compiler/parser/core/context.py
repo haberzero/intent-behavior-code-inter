@@ -6,6 +6,8 @@ from core.compiler.parser.symbol_table import ScopeManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.support.host_interface import HostInterface
 
+from core.types import parser_types as ast
+
 @dataclass
 class ParserContext:
     """
@@ -18,7 +20,7 @@ class ParserContext:
     module_cache: Optional[Dict[str, Any]] = None
     host_interface: Optional[HostInterface] = None
     package_name: str = ""
-    pending_intent: Optional[str] = None
+    pending_intent: Optional[ast.IntentInfo] = None
     
     def __post_init__(self):
         if self.scope_manager is None:

@@ -24,6 +24,18 @@ class ClassInstance:
                 return BoundMethod(self, method)
         return None
 
+    def has_method(self, name: str) -> bool:
+        for method in self.class_def.methods:
+            if method.name == name:
+                return True
+        return False
+
+    def call_method(self, name: str, *args) -> Any:
+        method = self.get_method(name)
+        if method:
+            return method(*args)
+        raise AttributeError(f"Instance of {self.class_def.name} has no method {name}")
+
     def __repr__(self):
         return f"<Instance of {self.class_def.name}>"
 

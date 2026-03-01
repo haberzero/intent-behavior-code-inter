@@ -117,6 +117,41 @@ class AILib(ILLMProvider):
     def get_decision_map(self) -> Dict[str, str]:
         return self._config.get("decision_map", {})
 
+    # --- Global Intent Management (Proxy to Kernel) ---
+    def set_global_intent(self, intent: str) -> None:
+        if self._capabilities and self._capabilities.intent_manager:
+            self._capabilities.intent_manager.set_global_intent(intent)
+
+    def clear_global_intents(self) -> None:
+        if self._capabilities and self._capabilities.intent_manager:
+            self._capabilities.intent_manager.clear_global_intents()
+
+    def remove_global_intent(self, intent: str) -> None:
+        if self._capabilities and self._capabilities.intent_manager:
+            self._capabilities.intent_manager.remove_global_intent(intent)
+
+    def get_global_intents(self) -> list[str]:
+        if self._capabilities and self._capabilities.intent_manager:
+            return self._capabilities.intent_manager.get_global_intents()
+        return []
+
+    def get_current_intent_stack(self) -> list[str]:
+        """获取当前层级合并后的所有意图"""
+        if self._capabilities and self._capabilities.intent_manager:
+            # 这里我们通过 merge 逻辑或者直接返回 active 
+            global_ints = self._capabilities.intent_manager.get_global_intents()
+            active_infos = self._capabilities.intent_manager.get_active_intents()
+            active_ints = [i.content for i in active_infos]
+            # 简单去重合并
+            res = []
+            seen = set()
+            for i in global_ints + active_ints:
+                if i not in seen:
+                    res.append(i)
+                    seen.add(i)
+            return res
+        return []
+
     def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
         is_test_mode = (
             self._config["url"] == "TESTONLY" or 

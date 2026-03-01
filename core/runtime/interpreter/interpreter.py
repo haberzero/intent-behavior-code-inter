@@ -77,7 +77,7 @@ class Interpreter(IStackInspector):
         return self.call_stack_depth
 
     def get_active_intents(self) -> List[str]:
-        return self.context.get_active_intents()
+        return [i.content for i in self.context.get_active_intents()]
 
     def get_instruction_count(self) -> int:
         return self.instruction_count
@@ -638,6 +638,20 @@ class Interpreter(IStackInspector):
             self.context.exit_scope()
             self.call_stack_depth -= 1
         return None
+
+    def visit_IntentStmt(self, node: ast.IntentStmt):
+        # 如果是强制独占模式，屏蔽全局意图
+        if node.is_exclusive:
+            self.context.enter_intent_exclusive_scope()
+            
+        self.context.push_intent(node.intent)
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self.context.pop_intent()
+            if node.is_exclusive:
+                self.context.exit_intent_exclusive_scope()
 
     # --- 表达式委托给 Evaluator ---
 

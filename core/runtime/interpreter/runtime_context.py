@@ -4,6 +4,7 @@ from core.types.exception_types import InterpreterError
 from core.support.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.runtime.ext.capabilities import IStateReader
 from .runtime_types import ClassInstance
+from core.types import parser_types as ast
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
@@ -65,6 +66,31 @@ class RuntimeContextImpl(IStateReader):
         self._global_scope = ScopeImpl()
         self._current_scope = self._global_scope
         self._intent_stack: List[str] = []
+        self._global_intents: List[str] = []
+        self._intent_exclusive_depth = 0
+
+    def enter_intent_exclusive_scope(self) -> None:
+        self._intent_exclusive_depth += 1
+
+    def exit_intent_exclusive_scope(self) -> None:
+        self._intent_exclusive_depth = max(0, self._intent_exclusive_depth - 1)
+
+    def is_intent_exclusive(self) -> bool:
+        return self._intent_exclusive_depth > 0
+
+    def set_global_intent(self, intent: str) -> None:
+        if intent not in self._global_intents:
+            self._global_intents.append(intent)
+
+    def clear_global_intents(self) -> None:
+        self._global_intents = []
+
+    def remove_global_intent(self, intent: str) -> None:
+        if intent in self._global_intents:
+            self._global_intents.remove(intent)
+
+    def get_global_intents(self) -> List[str]:
+        return list(self._global_intents)
 
     def get_vars_snapshot(self) -> Dict[str, Any]:
         """实现 IStateReader 接口：获取当前可见的所有变量快照"""
@@ -125,15 +151,15 @@ class RuntimeContextImpl(IStateReader):
 
         self._current_scope.define(name, value, declared_type, is_const)
 
-    def push_intent(self, intent: str) -> None:
+    def push_intent(self, intent: ast.IntentInfo) -> None:
         self._intent_stack.append(intent)
 
-    def pop_intent(self) -> Optional[str]:
+    def pop_intent(self) -> Optional[ast.IntentInfo]:
         if self._intent_stack:
             return self._intent_stack.pop()
         return None
 
-    def get_active_intents(self) -> List[str]:
+    def get_active_intents(self) -> List[ast.IntentInfo]:
         return list(self._intent_stack)
 
     @property

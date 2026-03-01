@@ -26,13 +26,26 @@ class DeclarationComponent(BaseComponent):
         
         if role == SyntaxRole.INTENT_MARKER:
             self.stream.advance()
+            token = self.stream.previous()
             if self.context.pending_intent is not None:
-                raise self.stream.error(self.stream.previous(), "Multiple intent comments are not allowed for a single statement.")
+                raise self.stream.error(token, "Multiple intent comments are not allowed for a single statement.")
             
-            self.context.pending_intent = self.stream.previous().value
+            # Parse IntentInfo from token value (which contains mode + content)
+            val = token.value
+            mode = ""
+            content = val
+            if val and val[0] in '+!-':
+                mode = val[0]
+                content = val[1:].strip()
+            
+            self.context.pending_intent = ast.IntentInfo(mode=mode, content=content)
             if self.stream.check(TokenType.NEWLINE):
                 self.stream.advance()
             return self.parse_declaration()
+        
+        if role == SyntaxRole.INTENT_DEFINITION:
+            self.stream.advance() # intent
+            return self.intent_declaration()
         
         stmt = None
         if role == SyntaxRole.FUNCTION_DEFINITION:
@@ -70,18 +83,46 @@ class DeclarationComponent(BaseComponent):
                         stmt.value.intent = self.context.pending_intent
                         intent_consumed = True
             
+            # 3. 返回语句 (Return) 中的调用
+            elif isinstance(stmt, ast.Return):
+                if isinstance(stmt.value, ast.Call):
+                    if stmt.value.intent is None:
+                        stmt.value.intent = self.context.pending_intent
+                        intent_consumed = True
+                elif isinstance(stmt.value, ast.BehaviorExpr):
+                    stmt.value.intent = self.context.pending_intent
+                    intent_consumed = True
+            
             if intent_consumed:
                 self.context.pending_intent = None
             else:
                 # 若语句无法自然消费意图，则报告警告
                 self.issue_tracker.report(
                     Severity.WARNING, "PAR_WARN", 
-                    f"Intent comment '{self.context.pending_intent}' was not used by the following statement.", 
+                    f"Intent comment '{self.context.pending_intent.content}' was not used by the following statement.", 
                     self.stream.peek()
                 )
                 self.context.pending_intent = None
             
         return stmt
+
+    def intent_declaration(self) -> ast.IntentStmt:
+        start_token = self.stream.previous() # intent
+        
+        is_exclusive = False
+        if self.stream.match(TokenType.NOT): # !
+            is_exclusive = True
+            
+        intent_token = self.stream.consume(TokenType.STRING, "Expect intent string.")
+        intent_val = intent_token.value
+        
+        self.stream.consume(TokenType.COLON, "Expect ':' before intent body.")
+        
+        body = self.statement.block()
+        
+        # 将字符串意图封装为 IntentInfo
+        info = ast.IntentInfo(mode="", content=intent_val)
+        return self._loc(ast.IntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token)
 
     def _run_pre_scanner(self):
         """Run the PreScanner on the current scope."""

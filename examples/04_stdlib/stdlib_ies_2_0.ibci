@@ -1,0 +1,31 @@
+import ai
+import net
+import schema
+
+print("--- [stdlib_ies_2_0.ibci] ---")
+
+# 1. 网络请求 (IES 2.0 新增)
+print("正在发起网络请求...")
+str html = net.get("https://www.example.com", {})
+print("获取到的 HTML 长度: " + (str)@~ 数一下 $html 的长度 ~)
+
+# 2. 结构化校验 (IES 2.0 新增)
+dict user_data = {"id": 101, "name": "Alice"}
+dict rules = {
+    "required": ["id", "name"],
+    "properties": {
+        "id": {"type": "integer"}
+    }
+}
+
+if schema.validate(user_data, rules):
+    print("用户数据校验通过")
+
+# 3. 层级化意图 (IES 2.0 新增)
+ai.set_global_intent("请使用幽默风趣的语言回答")
+
+intent "关于科学话题":
+    @~ 解释一下什么是黑洞 ~
+    
+@! 请使用严谨的学术风格
+print(@~ 解释一下什么是 IBCI ~)

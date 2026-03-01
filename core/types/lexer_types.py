@@ -44,6 +44,7 @@ class TokenType(Enum):
     LLM_USER = auto()   # __user__
     LLM_EXCEPT = auto() # llmexcept
     RETRY = auto()      # retry
+    INTENT_STMT = auto() # intent
 
     # 标识符与字面量
     IDENTIFIER = auto()
