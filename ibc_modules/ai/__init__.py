@@ -118,6 +118,8 @@ class AILib(ILLMProvider):
 
         if is_test_mode:
             u_upper = user_prompt.upper()
+            
+            # --- 原有 Mock 逻辑 ---
             if "MOCK:RESPONSE:" in u_upper:
                 res = user_prompt.split("MOCK:RESPONSE:")[1].strip()
                 self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
@@ -137,6 +139,28 @@ class AILib(ILLMProvider):
                 self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
                 return res
 
+            # --- 新增：模拟噪声输出 (Noisy Response) ---
+            if "MOCK:NOISY:" in u_upper:
+                content = user_prompt.split("MOCK:NOISY:")[1].strip()
+                res = f"Certainly! According to your request, the result is: {content}. I hope this helps you with your task!"
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+                return res
+
+            # --- 新增：模拟 Markdown 代码块包裹 ---
+            if "MOCK:MARKDOWN:" in u_upper:
+                content = user_prompt.split("MOCK:MARKDOWN:")[1].strip()
+                lang = "json" if scene == "general" else ""
+                res = f"Here is the result:\n```{lang}\n{content}\n```"
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+                return res
+
+            # --- 新增：模拟模糊/不明确回答 (用于触发 llmexcept) ---
+            if "MOCK:AMBIGUOUS" in u_upper:
+                res = "Well, it's hard to say. Maybe it's true, maybe not. I need more information."
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+                return res
+            
+            # --- 基础判断逻辑 ---
             res = "1"
             if scene in ("branch", "loop"):
                 if "MOCK:FALSE" in u_upper or "MOCK:0" in u_upper:

@@ -36,6 +36,7 @@ class CoreTokenScanner:
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,
+            'class': TokenType.CLASS, 'self': TokenType.SELF,
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,

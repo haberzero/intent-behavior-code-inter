@@ -43,6 +43,13 @@ class Scheduler:
         # Build Cache
         # Map: file_path -> mtime
         self.build_cache: Dict[str, float] = {}
+        
+        # Explicitly allowed files outside root (e.g. for run_string)
+        self.allowed_files: Set[str] = set()
+
+    def allow_file(self, file_path: str):
+        """Explicitly allow a file outside root_dir."""
+        self.allowed_files.add(os.path.realpath(file_path))
 
     def get_module_ast(self, module_name: str) -> Optional[Module]:
         """
@@ -166,11 +173,11 @@ class Scheduler:
             visited.add(current_path)
             processed_in_this_scan.add(current_path)
             
-            # Security Check: Ensure file is within root_dir
+            # Security Check: Ensure file is within root_dir or explicitly allowed
             try:
                 abs_root = self.root_dir
                 abs_path = os.path.realpath(current_path)
-                if os.path.commonpath([abs_root, abs_path]) != abs_root:
+                if abs_path not in self.allowed_files and os.path.commonpath([abs_root, abs_path]) != abs_root:
                     self.issue_tracker.report(Severity.ERROR, "DEP_FILE_NOT_FOUND", f"Security Error: Access denied for file outside root: {current_path}")
                     continue
             except ValueError:

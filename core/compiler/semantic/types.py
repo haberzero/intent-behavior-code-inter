@@ -93,6 +93,22 @@ class ModuleType(Type):
         # Modules are not first-class values (yet)
         return False
 
+@dataclass
+class UserDefinedType(Type):
+    """Represents a class type."""
+    class_name: str
+    scope: Any # Class scope
+    
+    def __init__(self, class_name: str, scope: Any):
+        super().__init__(class_name)
+        self.class_name = class_name
+        self.scope = scope
+
+    def is_assignable_to(self, other: 'Type') -> bool:
+        if isinstance(other, AnyType): return True
+        if not isinstance(other, UserDefinedType): return False
+        return self.class_name == other.class_name
+
 # Predefined Types instances
 INT_TYPE = PrimitiveType("int")
 FLOAT_TYPE = PrimitiveType("float")

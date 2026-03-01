@@ -32,6 +32,8 @@ class TokenType(Enum):
     EXCEPT = auto()
     FINALLY = auto()
     RAISE = auto()
+    CLASS = auto()
+    SELF = auto()
     
     # LLM 关键字
     LLM_DEF = auto()    # llm

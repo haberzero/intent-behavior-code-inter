@@ -43,6 +43,9 @@ class PreScanner:
             elif role == SyntaxRole.LLM_DEFINITION:
                 self._register_llm()
                 self._skip_llm_block()
+            elif role == SyntaxRole.CLASS_DEFINITION:
+                self._register_class()
+                self._skip_block()
             elif role == SyntaxRole.VARIABLE_DECLARATION:
                 self._register_variable()
             elif role == SyntaxRole.IMPORT_STATEMENT:
@@ -68,6 +71,17 @@ class PreScanner:
         if self.stream.check(TokenType.IDENTIFIER):
             name = self.stream.advance().value
             self.scope_manager.define(name, SymbolType.FUNCTION)
+        # Skip until COLON
+        while not self.stream.is_at_end() and not self.stream.check(TokenType.COLON):
+            self.stream.advance()
+        if self.stream.check(TokenType.COLON):
+            self.stream.advance()
+
+    def _register_class(self):
+        self.stream.advance() # class
+        if self.stream.check(TokenType.IDENTIFIER):
+            name = self.stream.advance().value
+            self.scope_manager.define(name, SymbolType.USER_TYPE)
         # Skip until COLON
         while not self.stream.is_at_end() and not self.stream.check(TokenType.COLON):
             self.stream.advance()

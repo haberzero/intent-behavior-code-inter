@@ -81,6 +81,13 @@ class FunctionDef(Stmt):
     returns: Optional[Expr] = None
 
 @dataclass
+class ClassDef(Stmt):
+    name: str
+    body: List[Stmt] # Includes methods and class variables
+    methods: List[Union['FunctionDef', 'LLMFunctionDef']] = field(default_factory=list)
+    fields: List['Assign'] = field(default_factory=list)
+
+@dataclass
 class LLMFunctionDef(Stmt):
     name: str
     args: List['arg']

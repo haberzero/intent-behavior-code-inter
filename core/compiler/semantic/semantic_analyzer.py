@@ -14,6 +14,7 @@ from core.support.diagnostics.codes import (
 
 from core.compiler.semantic.types import (
     Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
+    UserDefinedType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE,
     get_builtin_type
 )
@@ -92,6 +93,32 @@ class SemanticAnalyzer:
         # Global scope is already active in init
         for stmt in node.body:
             self.visit(stmt)
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        # 1. Register class in current scope
+        class_symbol = self.scope_manager.resolve(node.name)
+        if not class_symbol:
+            class_symbol = self.scope_manager.define(node.name, SymbolType.USER_TYPE)
+        
+        # Attach type info to the symbol
+        from core.compiler.semantic.types import UserDefinedType
+        class_symbol.type_info = UserDefinedType(node.name, node.scope)
+        
+        # 2. Enter Class Scope
+        if node.scope:
+            self.scope_manager.current_scope = node.scope
+        else:
+            self.scope_manager.enter_scope(ScopeType.CLASS)
+            
+        # 3. Visit class body
+        for stmt in node.body:
+            self.visit(stmt)
+            
+        # 4. Exit Class Scope
+        if node.scope and node.scope.parent:
+            self.scope_manager.current_scope = node.scope.parent
+        else:
+            self.scope_manager.exit_scope()
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         # 1. Register function in current scope (already handled by Parser/PreScanner, just fill types)
@@ -273,6 +300,13 @@ class SemanticAnalyzer:
                              symbol.type_info = val_type
                         elif val_type is not None and not val_type.is_assignable_to(symbol.type_info):
                             self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node, code=SEM_TYPE_MISMATCH)
+            elif isinstance(target, ast.Attribute):
+                # Attribute assignment: obj.attr = val
+                attr_type = self.visit(target)
+                if node.value:
+                    val_type = self.visit(node.value)
+                    if attr_type and val_type and not val_type.is_assignable_to(attr_type):
+                        self.error(f"Type mismatch: Cannot assign '{val_type}' to attribute of type '{attr_type}'", node, code=SEM_TYPE_MISMATCH)
             else:
                 # Subscript assignment etc.
                 self.visit(target)
@@ -370,24 +404,39 @@ class SemanticAnalyzer:
             self.visit(node.exc)
 
     def visit_Call(self, node: ast.Call) -> Type:
-        # Resolve function type
         func_type = self.visit(node.func)
         
         if isinstance(func_type, AnyType):
             return ANY_TYPE
+            
+        from core.compiler.semantic.types import UserDefinedType
+        if isinstance(func_type, UserDefinedType):
+            # Class instantiation: e.g. Person("Alice")
+            # Returns an instance of that class
+            return func_type
             
         if not isinstance(func_type, FunctionType):
             self.error(f"Expression of type '{func_type}' is not callable", node)
             return ANY_TYPE # Fallback
             
         # Check arguments
-        if len(node.args) != len(func_type.param_types):
-            self.error(f"Argument count mismatch: expected {len(func_type.param_types)}, got {len(node.args)}", node)
+        param_types = func_type.param_types
+        
+        # [NEW]: If it's a method call, skip the 'self' parameter check
+        if isinstance(node.func, ast.Attribute):
+            obj_type = self.visit(node.func.value)
+            if isinstance(obj_type, UserDefinedType):
+                # It is a method call on a class instance
+                if len(param_types) > 0:
+                    param_types = param_types[1:]
+        
+        if len(node.args) != len(param_types):
+            self.error(f"Argument count mismatch: expected {len(param_types)}, got {len(node.args)}", node)
             return ANY_TYPE # Stop checking args
             
         for i, arg in enumerate(node.args):
             arg_type = self.visit(arg)
-            expected_type = func_type.param_types[i]
+            expected_type = param_types[i]
             if arg_type is not None and not arg_type.is_assignable_to(expected_type):
                 self.error(f"Argument {i+1} type mismatch: expected '{expected_type}', got '{arg_type}'", arg)
                 
@@ -434,6 +483,25 @@ class SemanticAnalyzer:
         
         value_type = self.visit(node.value)
         
+        if isinstance(value_type, UserDefinedType):
+            # It is a class instance access
+            if value_type.scope:
+                attr_sym = value_type.scope.resolve(node.attr)
+                if attr_sym:
+                    # Found in class scope
+                    if attr_sym.type_info is None and attr_sym.declared_type_node:
+                         # Handle both node and token list for lazy resolution
+                         if isinstance(attr_sym.declared_type_node, list):
+                             attr_sym.type_info = self._resolve_type_from_tokens(attr_sym.declared_type_node)
+                         else:
+                             attr_sym.type_info = self._resolve_type(attr_sym.declared_type_node)
+                    return attr_sym.type_info or ANY_TYPE
+            
+            # If not found in scope, it might be a dynamic property or error
+            if value_type.scope:
+                self.error(f"Class '{value_type.class_name}' has no attribute '{node.attr}'", node)
+            return ANY_TYPE
+
         if isinstance(value_type, ModuleType):
              # It is a module/package
              module_scope = value_type.scope
@@ -562,7 +630,8 @@ class SemanticAnalyzer:
         
         # Create a temporary parser context to parse the type annotation
         temp_stream = TokenStream(tokens, self.issue_tracker)
-        temp_context = ParserContext(temp_stream, self.issue_tracker)
+        # Pass the current scope_manager to ensure user-defined types are resolvable
+        temp_context = ParserContext(temp_stream, self.issue_tracker, scope_manager=self.scope_manager)
         type_comp = TypeComponent(temp_context)
         
         try:
@@ -583,8 +652,10 @@ class SemanticAnalyzer:
             t = get_builtin_type(node.id)
             if t: return t
             
-            # Check for prototype limitation: complex types
-            # (Though Name is usually simple, we keep it for consistency)
+            # [NEW]: Check for user-defined types in symbol table
+            symbol = self.scope_manager.resolve(node.id)
+            if symbol and symbol.type == SymbolType.USER_TYPE:
+                return UserDefinedType(node.id, symbol.exported_scope)
             
             self.error(f"Unknown type '{node.id}'", node)
             

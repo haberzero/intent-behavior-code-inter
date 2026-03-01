@@ -40,6 +40,7 @@ class ExpressionComponent(BaseComponent):
     def register_rules(self):
         # Literals and Identifiers
         self.register(TokenType.IDENTIFIER, self.variable, None, Precedence.LOWEST)
+        self.register(TokenType.SELF, self.self_expr, None, Precedence.LOWEST)
         self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
         self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
@@ -89,6 +90,9 @@ class ExpressionComponent(BaseComponent):
 
     def variable(self) -> ast.Expr:
         return self._loc(ast.Name(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
+
+    def self_expr(self) -> ast.Expr:
+        return self._loc(ast.Name(id='self', ctx='Load'), self.stream.previous())
 
     def number(self) -> ast.Expr:
         value = self.stream.previous().value

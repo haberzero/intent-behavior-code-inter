@@ -109,34 +109,46 @@ class LLMExecutorImpl:
         
         try:
             if type_name == "int":
-                # 处理可能带小数点的 int
-                return int(float(clean_res))
+                # 提取第一个数字序列
+                match = re.search(r'-?\d+', clean_res)
+                if match:
+                    return int(match.group())
+                raise ValueError("No integer found in response")
             elif type_name == "float":
-                return float(clean_res)
+                # 提取第一个浮点数序列
+                match = re.search(r'-?\d+(\.\d+)?', clean_res)
+                if match:
+                    return float(match.group())
+                raise ValueError("No float found in response")
             elif type_name == "list":
-                # 尝试剥离可能存在的 markdown 代码块
-                if clean_res.startswith("```"):
-                    clean_res = re.sub(r'^```(json)?\n?|\n?```$', '', clean_res, flags=re.MULTILINE).strip()
-                data = json.loads(clean_res)
-                if not isinstance(data, list):
-                    raise ValueError("Expected list")
-                return data
+                # 尝试提取 JSON 数组部分
+                match = re.search(r'\[[\s\S]*\]', clean_res)
+                if match:
+                    json_str = match.group()
+                    # 处理可能存在的嵌套 markdown (如果 regex 匹配到了代码块标记)
+                    if json_str.startswith("```"):
+                        json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
+                    return json.loads(json_str)
+                raise ValueError("No JSON list found in response")
             elif type_name == "dict":
-                if clean_res.startswith("```"):
-                    clean_res = re.sub(r'^```(json)?\n?|\n?```$', '', clean_res, flags=re.MULTILINE).strip()
-                data = json.loads(clean_res)
-                if not isinstance(data, dict):
-                    raise ValueError("Expected dict")
-                return data
+                # 尝试提取 JSON 对象部分
+                match = re.search(r'\{[\s\S]*\}', clean_res)
+                if match:
+                    json_str = match.group()
+                    if json_str.startswith("```"):
+                        json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
+                    return json.loads(json_str)
+                raise ValueError("No JSON dictionary found in response")
             elif type_name == "bool":
-                if clean_res.lower() in ("true", "1", "yes"): return True
-                if clean_res.lower() in ("false", "0", "no"): return False
+                lower_res = clean_res.lower()
+                if re.search(r'\b(true|1|yes)\b', lower_res): return True
+                if re.search(r'\b(false|0|no)\b', lower_res): return False
                 return bool(clean_res)
             
             return raw_res
         except Exception as e:
             raise InterpreterError(
-                f"LLM 返回值类型转换失败：期望 {type_name}，但原始返回为: {raw_res}\n错误: {str(e)}",
+                f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
                 node,
                 error_code=RUN_LLM_ERROR
             )

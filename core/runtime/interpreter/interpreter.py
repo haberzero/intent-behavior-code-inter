@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Union
 from core.types import parser_types as ast
 from core.types.exception_types import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import (
@@ -16,6 +16,7 @@ from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
 from .evaluator import EvaluatorImpl
 from .permissions import PermissionManager as PermissionManagerImpl
+from .runtime_types import ClassInstance, BoundMethod
 from core.support.host_interface import HostInterface
 from core.runtime.ext.capabilities import IStackInspector
 
@@ -254,6 +255,11 @@ class Interpreter(IStackInspector):
         names = [(alias.name, alias.asname) for alias in node.names]
         self.module_manager.import_from(node.module, names, self.context)
 
+    def visit_ClassDef(self, node: ast.ClassDef):
+        if self._is_builtin(node.name):
+            raise InterpreterError(f"Cannot redefine built-in class '{node.name}'", node, error_code=RUN_TYPE_MISMATCH)
+        self.context.define_variable(node.name, node)
+
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if self._is_builtin(node.name):
             raise InterpreterError(f"Cannot redefine built-in function '{node.name}'", node, error_code=RUN_TYPE_MISMATCH)
@@ -322,6 +328,8 @@ class Interpreter(IStackInspector):
         
         if isinstance(node.target, ast.Name):
             self.context.set_variable(node.target.id, new_val)
+        elif isinstance(node.target, (ast.Subscript, ast.Attribute)):
+            self.evaluator.evaluate_assign(node.target, new_val, self.context)
 
     def _execute_with_retry(self, node: ast.ASTNode, main_logic: Callable[[], Any]):
         """通用重试执行逻辑，处理 LLMUncertaintyError 和 retry 指令"""
@@ -514,6 +522,16 @@ class Interpreter(IStackInspector):
                 return self.call_user_function(func, args)
             elif isinstance(func, ast.LLMFunctionDef):
                 return self.llm_executor.execute_llm_function(func, args, self.context)
+            elif isinstance(func, ast.ClassDef):
+                # Instantiation
+                instance = ClassInstance(func, self)
+                # Check for __init__
+                init_method = instance.get_method("__init__")
+                if init_method:
+                    init_method(*args)
+                return instance
+            elif isinstance(func, BoundMethod):
+                return func(*args)
             elif callable(func):
                 return func(*args)
             else:
@@ -521,6 +539,16 @@ class Interpreter(IStackInspector):
         finally:
             if node.intent:
                 self.context.pop_intent()
+
+    def call_method(self, instance: ClassInstance, method_def: Union[ast.FunctionDef, ast.LLMFunctionDef], args: List[Any]):
+        """Special call for methods to inject 'self'"""
+        all_args = [instance] + args
+        if isinstance(method_def, ast.FunctionDef):
+            return self.call_user_function(method_def, all_args)
+        elif isinstance(method_def, ast.LLMFunctionDef):
+            return self.llm_executor.execute_llm_function(method_def, all_args, self.context)
+        else:
+            raise InterpreterError("Invalid method definition type", method_def)
 
     def call_user_function(self, func_def: ast.FunctionDef, args: List[Any]):
         if self.call_stack_depth >= self.max_call_stack:

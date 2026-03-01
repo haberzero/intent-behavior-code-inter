@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Callable, Tuple, Optional
 import operator
 from .interfaces import Evaluator, RuntimeContext, ServiceContext
+from .runtime_types import ClassInstance
 from core.types.exception_types import InterpreterError
 from core.types import parser_types as ast
 from core.support.diagnostics.codes import (
@@ -128,6 +129,18 @@ class EvaluatorImpl:
         
         elif isinstance(node, ast.Attribute):
             obj = self.evaluate_expr(node.value, context)
+            
+            # 1. Check if it's a ClassInstance
+            if isinstance(obj, ClassInstance):
+                if node.attr in obj.fields:
+                    return obj.fields[node.attr]
+                # 2. Check for methods
+                method = obj.get_method(node.attr)
+                if method:
+                    return method
+                raise InterpreterError(f"Attribute '{node.attr}' not found on instance of {obj.class_def.name}", node, error_code=RUN_ATTRIBUTE_ERROR)
+                
+            # 3. Native attribute access
             try:
                 return getattr(obj, node.attr)
             except AttributeError:
@@ -220,10 +233,13 @@ class EvaluatorImpl:
                 raise InterpreterError(f"Subscript assignment error: {str(e)}", target, error_code=RUN_INDEX_ERROR)
         elif isinstance(target, ast.Attribute):
             obj = self.evaluate_expr(target.value, context)
-            try:
-                setattr(obj, target.attr, value)
-            except Exception as e:
-                raise InterpreterError(f"Attribute assignment error: {str(e)}", target, error_code=RUN_ATTRIBUTE_ERROR)
+            if isinstance(obj, ClassInstance):
+                obj.fields[target.attr] = value
+            else:
+                try:
+                    setattr(obj, target.attr, value)
+                except Exception as e:
+                    raise InterpreterError(f"Attribute assignment error: {str(e)}", target, error_code=RUN_ATTRIBUTE_ERROR)
         else:
             raise InterpreterError(f"Invalid assignment target: {target.__class__.__name__}", target, error_code=RUN_GENERIC_ERROR)
 

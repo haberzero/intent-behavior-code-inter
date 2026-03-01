@@ -41,6 +41,9 @@ class DeclarationComponent(BaseComponent):
         elif role == SyntaxRole.LLM_DEFINITION:
             self.stream.advance() # llm
             stmt = self.llm_function_declaration()
+        elif role == SyntaxRole.CLASS_DEFINITION:
+            self.stream.advance() # class
+            stmt = self.class_declaration()
         elif role == SyntaxRole.VARIABLE_DECLARATION:
             explicit_var = self.stream.match(TokenType.VAR)
             stmt = self.variable_declaration(explicit_var=explicit_var)
@@ -177,20 +180,60 @@ class DeclarationComponent(BaseComponent):
         
         return llm_node
 
+    def class_declaration(self) -> ast.ClassDef:
+        start_token = self.stream.previous()
+        name = self.stream.consume(TokenType.IDENTIFIER, "Expect class name.").value
+        self.stream.consume(TokenType.COLON, "Expect ':' before class body.")
+        
+        class_node = self._loc(ast.ClassDef(name=name, body=[], methods=[], fields=[]), start_token)
+        
+        # Enter Class Scope
+        self.scope_manager.enter_scope(ScopeType.CLASS)
+        class_node.scope = self.scope_manager.current_scope
+        
+        # Pre-scan class members
+        self._run_pre_scanner()
+        
+        body = self.statement.block()
+        
+        # Categorize body elements
+        for stmt in body:
+            if isinstance(stmt, (ast.FunctionDef, ast.LLMFunctionDef)):
+                class_node.methods.append(stmt)
+            elif isinstance(stmt, ast.Assign):
+                class_node.fields.append(stmt)
+            else:
+                # Other statements in class body (e.g. print) are allowed but not common
+                pass
+        
+        # Exit Class Scope
+        self.scope_manager.exit_scope()
+        
+        class_node.body = body
+        return class_node
+
     def parameters(self) -> List[ast.arg]:
         params = []
         if not self.stream.check(TokenType.RPAREN):
             while True:
-                annotation = self.type_def.parse_type_annotation()
-                name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
-                
-                param_node = self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token)
-                params.append(param_node)
-                
-                # Link type annotation to parameter symbol
-                sym = self.scope_manager.resolve(name_token.value)
-                if sym:
-                    sym.declared_type_node = annotation
+                # 1. Handle special 'self' parameter
+                if self.stream.match(TokenType.SELF):
+                    name_token = self.stream.previous()
+                    # 'self' has no explicit type annotation in ibci, it's implicit
+                    param_node = self._loc(ast.arg(arg="self", annotation=None), name_token)
+                    params.append(param_node)
+                else:
+                    # 2. Standard typed parameter: Type Name
+                    annotation = self.type_def.parse_type_annotation()
+                    name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                    
+                    param_node = self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token)
+                    params.append(param_node)
+                    
+                    # Link type annotation to parameter symbol
+                    sym = self.scope_manager.resolve(name_token.value)
+                    if sym:
+                        sym.declared_type_node = annotation
                     
                 if not self.stream.match(TokenType.COMMA):
                     break

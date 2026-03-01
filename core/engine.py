@@ -50,6 +50,24 @@ class IBCIEngine:
         self.host_interface.register_module(name, implementation, type_metadata)
         self.scheduler.host_interface = self.host_interface
 
+    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
+        """
+        运行一段 IBCI 代码字符串。
+        """
+        import tempfile
+        # Use system temp directory but explicitly allow this file in scheduler
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ibci', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        
+        try:
+            # Register this specific temp file as allowed even if outside root
+            self.scheduler.allow_file(temp_path)
+            return self.run(temp_path, variables, output_callback)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
         """
         运行一个 IBCI 项目或文件。
