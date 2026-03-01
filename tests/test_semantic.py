@@ -21,8 +21,8 @@ class TestSemantic(IBCTestCase):
 
     def setUp(self):
         super().setUp()
-        # Use host_interface from engine if available, or default
-        self.analyzer = SemanticAnalyzer(host_interface=self.engine.host_interface)
+        # Use host_interface and debugger from engine
+        self.analyzer = SemanticAnalyzer(host_interface=self.engine.host_interface, debugger=self.engine.debugger)
 
     def analyze_code(self, code):
         dedented_code = textwrap.dedent(code).strip() + "\n"

@@ -86,27 +86,30 @@ class Scheduler:
         self.issue_tracker.clear()
         self.modules.clear()
         self.module_name_to_path.clear()
-        # ast_cache and scope_cache are kept for incremental compilation (LRU)
-        # but for a fresh project compilation, we might want to clear them?
-        # Actually, if we want to ensure isolation, we should clear them or handle them carefully.
         
         # 1. Scan Dependencies (Recursive)
         # We manually drive the scanning process here to control token caching
         entry_file = os.path.abspath(entry_file)
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 1: Scanning dependencies starting from {entry_file}")
         self._scan_and_cache(entry_file)
             
         if self.issue_tracker.has_errors():
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Dependency scanning failed with errors.")
             raise CompilerError("Dependency scanning failed.")
 
         # 2. Build Dependency Graph and Get Order
-        graph = DependencyGraph(self.modules)
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, "Phase 2: Building dependency graph and determining compilation order.")
+        graph = DependencyGraph(self.modules, debugger=self.debugger)
         try:
             compilation_order = graph.get_compilation_order()
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
         except Exception as e:
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Circular dependency or graph error: {str(e)}")
             self.issue_tracker.report(Severity.ERROR, "DEP_CYCLE", str(e))
             raise e
 
         # 3. Compile in Topological Order
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 3: Compiling {len(compilation_order)} files in topological order.")
         for file_path in compilation_order:
             mod_info = self.modules.get(file_path)
             if not mod_info:
@@ -121,6 +124,7 @@ class Scheduler:
                         failed_deps.append(imp.module_name)
             
             if failed_deps:
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Skipping {file_path} because dependencies failed: {failed_deps}")
                 self.issue_tracker.report(Severity.ERROR, "DEP_FAILED", 
                     f"Module '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
                 mod_info.status = ModuleStatus.FAILED
@@ -130,18 +134,23 @@ class Scheduler:
             last_mtime = self.build_cache.get(file_path, 0.0)
             if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                 # Recompile
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Compiling file: {file_path} (Cache miss/Outdated)")
                 try:
                     self._compile_file(file_path)
                     mod_info.status = ModuleStatus.SUCCESS
                 except CompilerError:
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to compile: {file_path}")
                     mod_info.status = ModuleStatus.FAILED
                 self.build_cache[file_path] = mod_info.mtime
             else:
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Using cached AST for: {file_path}")
                 mod_info.status = ModuleStatus.SUCCESS
             
         if self.issue_tracker.has_errors():
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation failed with errors.")
             raise CompilerError("Compilation failed.")
             
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation successful.")
         return self.ast_cache
 
     def _prune_cache(self):
@@ -150,6 +159,7 @@ class Scheduler:
         """
         while len(self.ast_cache) > self.MAX_CACHE_SIZE:
             oldest_path, _ = self.ast_cache.popitem(last=False)
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Pruning cache for {oldest_path}")
             # Optionally remove from other caches if they are tightly coupled
             if oldest_path in self.token_cache:
                 self.token_cache.pop(oldest_path)
@@ -175,12 +185,14 @@ class Scheduler:
             
             visited.add(current_path)
             processed_in_this_scan.add(current_path)
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Scanning: {current_path}")
             
             # Security Check: Ensure file is within root_dir or explicitly allowed
             try:
                 abs_root = self.root_dir
                 abs_path = os.path.realpath(current_path)
                 if abs_path not in self.allowed_files and os.path.commonpath([abs_root, abs_path]) != abs_root:
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Security violation: Access denied for {current_path}")
                     self.issue_tracker.report(Severity.ERROR, "DEP_FILE_NOT_FOUND", f"Security Error: Access denied for file outside root: {current_path}")
                     continue
             except ValueError:
@@ -196,10 +208,12 @@ class Scheduler:
                     content = f.read()
                     mtime = os.path.getmtime(current_path)
             except (FileNotFoundError, OSError):
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"File not found: {current_path}")
                 self.issue_tracker.report(Severity.ERROR, "DEP_FILE_NOT_FOUND", f"File not found: {current_path}")
                 continue
             
             # Lexing
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Lexing for dependencies: {current_path}")
             lexer = Lexer(content, self.issue_tracker, debugger=self.debugger)
             try:
                 tokens = lexer.tokenize()
@@ -211,6 +225,7 @@ class Scheduler:
             # 2. Scan Imports using ImportScanner (Token based)
             scanner = ImportScanner(tokens, self.issue_tracker)
             imports = scanner.scan(current_path)
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Found imports in {current_path}:", data=[i.module_name for i in imports])
             
             # Create ModuleInfo
             mod_info = ModuleInfo(
@@ -225,17 +240,20 @@ class Scheduler:
             for imp in imports:
                 # Skip external modules - they don't have source files
                 if self.host_interface.is_external_module(imp.module_name):
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {imp.module_name}")
                     continue
                     
                 try:
                     resolved_path = self.resolver.resolve(imp.module_name, current_path)
                     imp.file_path = resolved_path
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Resolved import '{imp.module_name}' to {resolved_path}")
                     
                     # Cycle Prevention: Only add to queue if not visited
                     if resolved_path not in visited and resolved_path not in queue:
                         queue.append(resolved_path)
                         
-                except Exception:
+                except Exception as e:
+                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to resolve '{imp.module_name}': {str(e)}")
                      # Resolver errors are already reported by resolver or we should ensure they are.
                      # The resolver raises ModuleResolveError, let's catch it to report if not reported.
                      # Actually ModuleResolveError carries info.
@@ -270,10 +288,12 @@ class Scheduler:
                 # Should not happen if _scan_and_cache ran successfully
                 # But if it failed, we might be here?
                 # Re-lex
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Token cache miss for {file_path}, re-lexing.")
                 lexer = Lexer(source, file_tracker, debugger=self.debugger)
                 tokens = lexer.tokenize()
             
             # 2. Parse
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Parsing: {file_path} (Module: {module_name})")
             parser = Parser(
                 tokens, 
                 file_tracker, 
@@ -294,6 +314,7 @@ class Scheduler:
             self._prune_cache()
             
             # 3. Semantic Analysis
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger)
             
             # Pre-populate global scope with predefined symbols
@@ -311,6 +332,7 @@ class Scheduler:
             if ast_node.scope:
                 self.scope_cache[file_path] = ast_node.scope
                 self.scope_cache[module_name] = ast_node.scope
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Registered scope for module: {module_name}")
                 
         except CompilerError:
             raise
@@ -328,10 +350,12 @@ class DependencyGraph:
     """
     Analyzes dependency graph for cycles and compilation order.
     """
-    def __init__(self, modules: Dict[str, ModuleInfo]):
+    def __init__(self, modules: Dict[str, ModuleInfo], debugger: Optional[Any] = None):
         self.modules = modules
         self.adj_list: Dict[str, List[str]] = {}
+        self.debugger = debugger or core_debugger
         self._build_graph()
+
         
     def _build_graph(self):
         for path, info in self.modules.items():

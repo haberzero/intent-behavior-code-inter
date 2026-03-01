@@ -100,6 +100,7 @@ class SemanticAnalyzer:
             self.visit(stmt)
 
     def visit_ClassDef(self, node: ast.ClassDef):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing class definition: {node.name}")
         # 1. Register class in current scope
         class_symbol = self.scope_manager.resolve(node.name)
         if not class_symbol:
@@ -111,8 +112,10 @@ class SemanticAnalyzer:
         
         # 2. Enter Class Scope
         if node.scope:
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Entering existing class scope for {node.name}")
             self.scope_manager.current_scope = node.scope
         else:
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Creating new class scope for {node.name}")
             self.scope_manager.enter_scope(ScopeType.CLASS)
             
         # 3. Visit class body
@@ -124,14 +127,17 @@ class SemanticAnalyzer:
             self.scope_manager.current_scope = node.scope.parent
         else:
             self.scope_manager.exit_scope()
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Exited class scope for {node.name}")
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing function definition: {node.name}")
         # 1. Register function in current scope (already handled by Parser/PreScanner, just fill types)
         
         # Resolve return type
         ret_type = VOID_TYPE
         if node.returns:
             ret_type = self._resolve_type(node.returns)
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Resolved return type for {node.name}: {ret_type}")
             
         param_types = []
         
@@ -143,6 +149,7 @@ class SemanticAnalyzer:
             
         # 2. Enter function scope (Use the one attached to node)
         if node.scope:
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Entering function scope for {node.name}")
             self.scope_manager.current_scope = node.scope
         else:
             # Fallback if scope missing (shouldn't happen)
@@ -162,15 +169,19 @@ class SemanticAnalyzer:
             
             param_symbol.type_info = arg_type
             param_types.append(arg_type)
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Registered parameter {arg.arg} with type {arg_type}")
             
         # Update function symbol with type info (FunctionType)
+        func_type = FunctionType(param_types, ret_type)
         if node.scope and node.scope.parent:
             outer_func_symbol = node.scope.parent.resolve(node.name)
             if outer_func_symbol:
-                outer_func_symbol.type_info = FunctionType(param_types, ret_type)
+                outer_func_symbol.type_info = func_type
         elif func_symbol: # Global or current scope fallback
-            func_symbol.type_info = FunctionType(param_types, ret_type)
+            func_symbol.type_info = func_type
         
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DATA, f"Function type info for {node.name}:", data={"params": [str(t) for t in param_types], "returns": str(ret_type)})
+
         # 4. Visit body
         # Track return type for return checking
         previous_ret_type = self.current_return_type
@@ -186,11 +197,14 @@ class SemanticAnalyzer:
             self.scope_manager.current_scope = node.scope.parent
         else:
             self.scope_manager.exit_scope()
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Exited function scope for {node.name}")
 
     def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing LLM function definition: {node.name}")
         ret_type = STR_TYPE
         if node.returns:
             ret_type = self._resolve_type(node.returns)
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Resolved return type for LLM {node.name}: {ret_type}")
             
         param_types = []
         
@@ -201,6 +215,7 @@ class SemanticAnalyzer:
         
         # LLM functions also have a scope (for params)
         if node.scope:
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Entering LLM function scope for {node.name}")
             self.scope_manager.current_scope = node.scope
         else:
             self.scope_manager.enter_scope(ScopeType.FUNCTION)
@@ -217,14 +232,18 @@ class SemanticAnalyzer:
             
             param_symbol.type_info = arg_type
             param_types.append(arg_type)
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Registered LLM parameter {arg.arg} with type {arg_type}")
             
+        func_type = FunctionType(param_types, ret_type)
         if node.scope and node.scope.parent:
             outer_func_symbol = node.scope.parent.resolve(node.name)
             if outer_func_symbol:
-                outer_func_symbol.type_info = FunctionType(param_types, ret_type)
+                outer_func_symbol.type_info = func_type
         elif func_symbol:
-            func_symbol.type_info = FunctionType(param_types, ret_type)
+            func_symbol.type_info = func_type
         
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DATA, f"LLM Function type info for {node.name}:", data={"params": [str(t) for t in param_types], "returns": str(ret_type)})
+
         # LLM body is text, but we should check variable interpolations if possible.
         
         # Check expressions in sys_prompt and user_prompt
@@ -244,6 +263,8 @@ class SemanticAnalyzer:
             self.scope_manager.current_scope = node.scope.parent
         else:
             self.scope_manager.exit_scope()
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Exited LLM function scope for {node.name}")
+
 
     # --- Statements ---
     
@@ -255,6 +276,7 @@ class SemanticAnalyzer:
         if node.type_annotation:
             # Declaration: Type x = val
             declared_type = self._resolve_type(node.type_annotation)
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing variable declaration with type: {declared_type}")
             
             if isinstance(target, ast.Name):
                 var_name = target.id
@@ -271,6 +293,7 @@ class SemanticAnalyzer:
                     return
 
                 symbol.type_info = declared_type
+                self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Assigned type {declared_type} to symbol {var_name}")
                 
                 # Check initial value
                 if node.value:
@@ -279,10 +302,11 @@ class SemanticAnalyzer:
                         # [SPECIAL CASE] Allow BehaviorExpr to be assigned to 'callable'
                         if isinstance(declared_type, CallableType) and isinstance(node.value, ast.BehaviorExpr):
                             # This will be handled as a Lambda in the Interpreter
-                            pass
+                            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"BehaviorExpr assigned to callable '{var_name}'")
                         # [FIX]: Type Inference for 'var' (AnyType)
                         elif isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
                             symbol.type_info = val_type
+                            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Inferred type {val_type} for 'var' variable '{var_name}'")
                         elif not val_type.is_assignable_to(declared_type):
                             self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node, code=SEM_TYPE_MISMATCH)
             else:
@@ -292,6 +316,7 @@ class SemanticAnalyzer:
             if isinstance(target, ast.Name):
                 var_name = target.id
                 symbol = self.scope_manager.resolve(var_name)
+                self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing reassignment to '{var_name}'")
                 if not symbol:
                     self.error(f"Variable '{var_name}' is not defined", node, code=SEM_UNDEFINED_SYMBOL)
                     return
@@ -306,11 +331,13 @@ class SemanticAnalyzer:
                         # If it is STILL AnyType, we can update it?
                         if isinstance(symbol.type_info, AnyType) and val_type != VOID_TYPE:
                              symbol.type_info = val_type
+                             self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Late inferred type {val_type} for '{var_name}'")
                         elif val_type is not None and not val_type.is_assignable_to(symbol.type_info):
                             self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node, code=SEM_TYPE_MISMATCH)
             elif isinstance(target, ast.Attribute):
                 # Attribute assignment: obj.attr = val
                 attr_type = self.visit(target)
+                self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing attribute assignment")
                 if node.value:
                     val_type = self.visit(node.value)
                     if attr_type and val_type and not val_type.is_assignable_to(attr_type):
@@ -328,6 +355,7 @@ class SemanticAnalyzer:
             return
 
         expected = self.current_return_type
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing return statement. Expected type: {expected}")
         
         if node.value:
             actual = self.visit(node.value)
@@ -341,6 +369,7 @@ class SemanticAnalyzer:
         self.visit(node.value)
 
     def visit_If(self, node: ast.If):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'if' statement")
         self.visit(node.test)
         for stmt in node.body:
             self.visit(stmt)
@@ -351,6 +380,7 @@ class SemanticAnalyzer:
                 self.visit(stmt)
 
     def visit_While(self, node: ast.While):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'while' statement")
         self.visit(node.test)
         for stmt in node.body:
             self.visit(stmt)
@@ -359,6 +389,7 @@ class SemanticAnalyzer:
                 self.visit(stmt)
 
     def visit_For(self, node: ast.For):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'for' statement")
         # Visit iterator
         self.visit(node.iter)
         
@@ -371,6 +402,7 @@ class SemanticAnalyzer:
                 if not self.scope_manager.current_scope.resolve(node.target.id):
                     sym = self.scope_manager.define(node.target.id, SymbolType.VARIABLE)
                     sym.type_info = ANY_TYPE
+                    self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Defined loop variable '{node.target.id}'")
             else:
                 self.visit(node.target)
                 
@@ -384,6 +416,7 @@ class SemanticAnalyzer:
         self.scope_manager.exit_scope()
 
     def visit_Try(self, node: ast.Try):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'try' statement")
         for stmt in node.body:
             self.visit(stmt)
         for handler in node.handlers:
@@ -394,6 +427,7 @@ class SemanticAnalyzer:
             self.visit(stmt)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'except' handler")
         if node.type:
             self.visit(node.type)
         
@@ -408,10 +442,12 @@ class SemanticAnalyzer:
                 self.visit(stmt)
 
     def visit_Raise(self, node: ast.Raise):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'raise' statement")
         if node.exc:
             self.visit(node.exc)
 
     def visit_Call(self, node: ast.Call) -> Type:
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing function call")
         func_type = self.visit(node.func)
         
         if isinstance(func_type, AnyType):
@@ -446,6 +482,8 @@ class SemanticAnalyzer:
                 if len(param_types) > 0:
                     param_types = param_types[1:]
         
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Checking arguments for call. Expected: {len(param_types)}, Actual: {len(node.args)}")
+        
         if len(node.args) != len(param_types):
             self.error(f"Argument count mismatch: expected {len(param_types)}, got {len(node.args)}", node)
             return ANY_TYPE # Stop checking args
@@ -475,6 +513,8 @@ class SemanticAnalyzer:
                 self.error(f"Variable '{node.id}' is not defined", node, code=SEM_UNDEFINED_SYMBOL)
                 return ANY_TYPE
             
+            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Resolved name '{node.id}' as {symbol.type.name}")
+
             if symbol.type == SymbolType.MODULE:
                  if symbol.exported_scope:
                      return ModuleType(symbol.exported_scope)
@@ -487,8 +527,10 @@ class SemanticAnalyzer:
             if symbol.type_info is None:
                  if symbol.origin_symbol and symbol.origin_symbol.type_info:
                      symbol.type_info = symbol.origin_symbol.type_info
+                     self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Lazy resolved type for '{node.id}' from origin: {symbol.type_info}")
                  elif symbol.declared_type_node:
                      symbol.type_info = self._resolve_type(symbol.declared_type_node)
+                     self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Lazy resolved type for '{node.id}' from declaration: {symbol.type_info}")
             
             return symbol.type_info or ANY_TYPE
         return ANY_TYPE
@@ -498,6 +540,7 @@ class SemanticAnalyzer:
         # First visit the value (left side)
         
         value_type = self.visit(node.value)
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing attribute access '{node.attr}' on type '{value_type}'")
         
         if isinstance(value_type, UserDefinedType):
             # It is a class instance access
@@ -511,6 +554,7 @@ class SemanticAnalyzer:
                              attr_sym.type_info = self._resolve_type_from_tokens(attr_sym.declared_type_node)
                          else:
                              attr_sym.type_info = self._resolve_type(attr_sym.declared_type_node)
+                    self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Found attribute '{node.attr}' in class '{value_type.class_name}' scope")
                     return attr_sym.type_info or ANY_TYPE
             
             # If not found in scope, it might be a dynamic property or error
@@ -544,6 +588,7 @@ class SemanticAnalyzer:
                   elif attr_sym.declared_type_node:
                       attr_sym.type_info = self._resolve_type(attr_sym.declared_type_node)
                        
+             self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Found attribute '{node.attr}' in module scope")
              return attr_sym.type_info or ANY_TYPE
         
         # Fallback for object attributes (not implemented fully)
@@ -552,6 +597,7 @@ class SemanticAnalyzer:
             
         # TODO: Check class attributes when classes are implemented
         return ANY_TYPE
+
 
     def visit_BinOp(self, node: ast.BinOp) -> Type:
         left_type = self.visit(node.left)

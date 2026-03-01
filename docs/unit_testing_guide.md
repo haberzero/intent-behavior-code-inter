@@ -112,7 +112,7 @@ def test_division_by_zero(self):
 | 调试场景 | 推荐配置 |
 | :--- | :--- |
 | **语法报错定位** | `{"LEXER": "BASIC", "PARSER": "DETAIL"}` |
-| **类型检查异常** | `{"SEMANTIC": "DETAIL"}` |
+| **类型检查/符号解析异常** | `{"SEMANTIC": "DETAIL"}` |
 | **逻辑执行流异常** | `{"INTERPRETER": "DETAIL"}` |
-| **AI 返回结果不符合预期** | `{"LLM": "DATA"}` |
-| **多文件导入失败** | `{"SCHEDULER": "BASIC"}` |
+| **AI 返回结果/Prompt 调试** | `{"LLM": "DETAIL"}` (解析过程) 或 `{"LLM": "DATA"}` (原文) |
+| **多文件导入/循环依赖定位** | `{"SCHEDULER": "DETAIL"}` |

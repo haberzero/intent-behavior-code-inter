@@ -39,9 +39,14 @@ class LLMExecutorImpl:
         # 0. 绑定参数到临时作用域，以便 evaluator 可以解析
         context.enter_scope()
         try:
+            if self.service_context and self.service_context.debugger:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{node.name}' with {len(args)} args")
+
             for i, arg_def in enumerate(node.args):
                 if i < len(args):
                     context.define_variable(arg_def.arg, args[i])
+                    if self.service_context and self.service_context.debugger:
+                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Bound arg '{arg_def.arg}' = {args[i]}")
 
             # 1. 提取并评估结构化 Prompt
             sys_prompt = self._evaluate_segments(node.sys_prompt, context)
@@ -53,6 +58,8 @@ class LLMExecutorImpl:
             # 2. 注入意图增强 (来自当前解释器的意图栈)
             active_intents = context.get_active_intents()
             if active_intents:
+                if self.service_context and self.service_context.debugger:
+                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting {len(active_intents)} active intents into sys_prompt")
                 intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in active_intents)
                 sys_prompt += intent_block
                 
@@ -65,6 +72,8 @@ class LLMExecutorImpl:
             if ai_module and hasattr(ai_module, "get_return_type_prompt"):
                 type_prompt = ai_module.get_return_type_prompt(type_name)
                 if type_prompt:
+                    if self.service_context and self.service_context.debugger:
+                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting return type prompt for '{type_name}'")
                     sys_prompt += f"\n\n{type_prompt}"
 
             # 4. 调用底层模型
@@ -80,9 +89,13 @@ class LLMExecutorImpl:
             }
             
             # 5. 解析结果为目标类型
-            return self._parse_result(raw_res, type_name, node)
+            result = self._parse_result(raw_res, type_name, node)
+            if self.service_context and self.service_context.debugger:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"LLM function '{node.name}' execution finished. Result type: {type(result).__name__}")
+            return result
         finally:
             context.exit_scope()
+
 
     def _evaluate_segments(self, segments: Optional[List[Union[str, ast.Expr]]], context: RuntimeContext) -> str:
         """评估结构化提示词片段"""
@@ -119,18 +132,27 @@ class LLMExecutorImpl:
         if type_name == "str":
             return raw_res
         
+        if self.service_context and self.service_context.debugger:
+            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Parsing LLM response to type '{type_name}'")
+
         try:
             if type_name == "int":
                 # 提取第一个数字序列
                 match = re.search(r'-?\d+', clean_res)
                 if match:
-                    return int(match.group())
+                    val = int(match.group())
+                    if self.service_context and self.service_context.debugger:
+                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted int: {val}")
+                    return val
                 raise ValueError("No integer found in response")
             elif type_name == "float":
                 # 提取第一个浮点数序列
                 match = re.search(r'-?\d+(\.\d+)?', clean_res)
                 if match:
-                    return float(match.group())
+                    val = float(match.group())
+                    if self.service_context and self.service_context.debugger:
+                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted float: {val}")
+                    return val
                 raise ValueError("No float found in response")
             elif type_name == "list":
                 # 尝试提取 JSON 数组部分
@@ -140,7 +162,10 @@ class LLMExecutorImpl:
                     # 处理可能存在的嵌套 markdown (如果 regex 匹配到了代码块标记)
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
-                    return json.loads(json_str)
+                    val = json.loads(json_str)
+                    if self.service_context and self.service_context.debugger:
+                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted list with {len(val)} elements")
+                    return val
                 raise ValueError("No JSON list found in response")
             elif type_name == "dict":
                 # 尝试提取 JSON 对象部分
@@ -149,16 +174,26 @@ class LLMExecutorImpl:
                     json_str = match.group()
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
-                    return json.loads(json_str)
+                    val = json.loads(json_str)
+                    if self.service_context and self.service_context.debugger:
+                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted dict with {len(val)} keys")
+                    return val
                 raise ValueError("No JSON dictionary found in response")
             elif type_name == "bool":
                 lower_res = clean_res.lower()
-                if re.search(r'\b(true|1|yes)\b', lower_res): return True
-                if re.search(r'\b(false|0|no)\b', lower_res): return False
-                return bool(clean_res)
+                val = None
+                if re.search(r'\b(true|1|yes|ok)\b', lower_res): val = True
+                elif re.search(r'\b(false|0|no|fail)\b', lower_res): val = False
+                else: val = bool(clean_res)
+                
+                if self.service_context and self.service_context.debugger:
+                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted bool: {val}")
+                return val
             
             return raw_res
         except Exception as e:
+            if self.service_context and self.service_context.debugger:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response: {str(e)}")
             raise InterpreterError(
                 f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
                 node,
@@ -217,6 +252,7 @@ class LLMExecutorImpl:
                 sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
         
         if self.service_context and self.service_context.debugger:
+            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Synthesizing prompt for behavior (Scene: {scene.name})")
             if node.intent:
                 self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected local intent: {node.intent}")
             if injected_type:
@@ -267,6 +303,9 @@ class LLMExecutorImpl:
                     )
                 return mapped_val
             
+            if self.service_context and self.service_context.debugger:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Ambiguous response in {scene.name} scene: {response}")
+
             raise LLMUncertaintyError(
                 f"LLM 返回值在 {scene.name} 场景下不明确，期望 0 或 1，实际收到: {response}",
                 node,
@@ -274,6 +313,7 @@ class LLMExecutorImpl:
             )
             
         return response
+
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode, scene: str = "general") -> str:
         if self.service_context and self.service_context.debugger:

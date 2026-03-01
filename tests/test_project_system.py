@@ -125,7 +125,7 @@ class TestProjectSystem(IBCTestCase):
         project_dir = os.path.join(self.test_data_dir, 'multi_file_project')
         entry_file = os.path.join(project_dir, 'main.ibci')
         
-        scheduler = Scheduler(project_dir)
+        scheduler = Scheduler(project_dir, debugger=self.engine.debugger)
         ast_map = scheduler.compile_project(entry_file)
         
         self.assertIn(entry_file, ast_map)
@@ -141,19 +141,19 @@ class TestProjectSystem(IBCTestCase):
         """测试循环依赖和缺失文件处理"""
         # Circular
         circular_dir = os.path.join(self.test_data_dir, 'circular_project')
-        scheduler = Scheduler(circular_dir)
+        scheduler = Scheduler(circular_dir, debugger=self.engine.debugger)
         with self.assertRaises(CircularDependencyError):
             scheduler.compile_project(os.path.join(circular_dir, 'a.ibci'))
             
         # Missing
-        scheduler = Scheduler(self.test_root)
+        scheduler = Scheduler(self.test_root, debugger=self.engine.debugger)
         with self.assertRaises(CompilerError):
             scheduler.compile_project(os.path.join(self.test_root, 'ghost.ibci'))
 
     def test_relative_import_resolution(self):
         """测试相对导入路径解析"""
         project_dir = os.path.join(self.test_data_dir, 'relative_project')
-        scheduler = Scheduler(project_dir)
+        scheduler = Scheduler(project_dir, debugger=self.engine.debugger)
         ast_map = scheduler.compile_project(os.path.join(project_dir, 'main.ibci'))
         
         calc_file = os.path.join(project_dir, 'pkg', 'subpkg', 'calc.ibci')
@@ -173,7 +173,7 @@ class TestProjectSystem(IBCTestCase):
             var res = f()
         """)
         
-        scheduler = Scheduler(self.test_root)
+        scheduler = Scheduler(self.test_root, debugger=self.engine.debugger)
         ast_map = scheduler.compile_project(os.path.join(self.test_root, 'mod3.ibci'))
         
         mod3_ast = ast_map[os.path.join(self.test_root, 'mod3.ibci')]
