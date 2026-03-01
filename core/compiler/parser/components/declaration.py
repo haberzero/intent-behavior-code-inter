@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from core.types.lexer_types import TokenType
 from core.types import parser_types as ast
 from core.types.symbol_types import SymbolType
@@ -196,7 +196,7 @@ class DeclarationComponent(BaseComponent):
                     break
         return params
 
-    def llm_body(self) -> tuple[Optional[ast.Constant], Optional[ast.Constant]]:
+    def llm_body(self) -> tuple[Optional[List[Union[str, ast.Expr]]], Optional[List[Union[str, ast.Expr]]]]:
         self.stream.consume(TokenType.NEWLINE, "Expect newline before LLM block.")
         
         sys_prompt = None
@@ -215,20 +215,44 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
         return sys_prompt, user_prompt
 
-    def parse_llm_section_content(self) -> ast.Constant:
-        start_token = self.stream.previous()
-        content_parts = []
+    def parse_llm_section_content(self) -> List[Union[str, ast.Expr]]:
+        segments = []
         while not self.stream.is_at_end():
             if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_END):
                 break
             
             if self.stream.match(TokenType.RAW_TEXT):
-                content_parts.append(self.stream.previous().value)
+                segments.append(self.stream.previous().value)
             elif self.stream.match(TokenType.NEWLINE):
-                content_parts.append("\n")
+                segments.append("\n")
             elif self.stream.match(TokenType.PARAM_PLACEHOLDER):
-                content_parts.append(self.stream.previous().value)
+                placeholder_token = self.stream.previous()
+                # Extract expression string from $__expr__
+                full_name = placeholder_token.value
+                expr_str = full_name[3:-2] # Strip $__ and __
+                
+                # Use a temporary token stream to parse the internal expression
+                from core.compiler.lexer.lexer import Lexer
+                from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStream
+                
+                sub_lexer = Lexer(expr_str)
+                sub_tokens = sub_lexer.tokenize()
+                if sub_tokens and sub_tokens[-1].type == TokenType.EOF:
+                    sub_tokens.pop()
+                
+                if sub_tokens:
+                    old_stream = self.stream
+                    # Temporarily replace the stream in context
+                    self.context.stream = ParserTokenStream(sub_tokens, self.issue_tracker)
+                    try:
+                        node = self.expression.parse_expression()
+                        segments.append(node)
+                    finally:
+                        self.context.stream = old_stream
+                else:
+                    # Fallback for empty placeholders if they somehow occur
+                    segments.append("")
             else:
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.")
         
-        return self._loc(ast.Constant(value="".join(content_parts)), start_token)
+        return segments

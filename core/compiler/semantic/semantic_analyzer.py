@@ -195,20 +195,12 @@ class SemanticAnalyzer:
         
         # LLM body is text, but we should check variable interpolations if possible.
         
-        # Check placeholders in sys_prompt and user_prompt
-        param_names = {arg.arg for arg in node.args}
-        
-        # Regex to find $__param__ pattern
-        # Lexer already validated $__param__ format, so we can use simple regex
-        # The value is $__name__
-        placeholder_regex = re.compile(r'\$__(\w+)__')
-        
-        for prompt_node in [node.sys_prompt, node.user_prompt]:
-            if prompt_node and isinstance(prompt_node.value, str):
-                for match in placeholder_regex.finditer(prompt_node.value):
-                    var_name = match.group(1)
-                    if var_name not in param_names:
-                        self.error(f"Parameter '{var_name}' used in LLM prompt is not defined in function arguments", node)
+        # Check expressions in sys_prompt and user_prompt
+        for prompt_segments in [node.sys_prompt, node.user_prompt]:
+            if prompt_segments:
+                for segment in prompt_segments:
+                    if isinstance(segment, ast.Expr):
+                        self.visit(segment)
         
         if node.scope and node.scope.parent:
             self.scope_manager.current_scope = node.scope.parent
@@ -516,12 +508,10 @@ class SemanticAnalyzer:
         return ListType(ANY_TYPE)
 
     def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> Type:
-        # Check if variables referenced in the behavior expression exist in current scope
+        # Check expressions referenced in the behavior expression
         for segment in node.segments:
-            if isinstance(segment, ast.Name):
-                symbol = self.scope_manager.resolve(segment.id)
-                if not symbol:
-                    self.error(f"Variable '{segment.id}' used in behavior expression is not defined", segment)
+            if isinstance(segment, ast.Expr):
+                self.visit(segment)
         
         return STR_TYPE # Behavior expressions return string content
 

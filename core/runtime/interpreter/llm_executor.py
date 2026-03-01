@@ -1,6 +1,6 @@
 import re
 import json
-from typing import Any, List, Optional, Dict
+from typing import Any, List, Optional, Dict, Union
 from .interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from core.types import parser_types as ast
 from core.types.exception_types import InterpreterError, LLMUncertaintyError
@@ -23,44 +23,60 @@ class LLMExecutorImpl:
         """
         执行命名的 llm 函数定义块。
         """
-        # 1. 提取基础 Prompt
-        sys_prompt = node.sys_prompt.value if node.sys_prompt else ""
-        user_prompt = node.user_prompt.value if node.user_prompt else ""
-        
-        # 2. 注入意图增强 (来自当前解释器的意图栈)
-        active_intents = context.get_active_intents()
-        if active_intents:
-            intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in active_intents)
-            sys_prompt += intent_block
-            
-        # 3. 处理返回类型提示注入
-        type_name = self._resolve_type_name(node.returns)
-        ai_module = None
-        if self.service_context and self.service_context.interop:
-            ai_module = self.service_context.interop.get_package("ai")
-            
-        if ai_module and hasattr(ai_module, "get_return_type_prompt"):
-            type_prompt = ai_module.get_return_type_prompt(type_name)
-            if type_prompt:
-                sys_prompt += f"\n\n{type_prompt}"
+        # 0. 绑定参数到临时作用域，以便 evaluator 可以解析
+        context.enter_scope()
+        try:
+            for i, arg_def in enumerate(node.args):
+                if i < len(args):
+                    context.define_variable(arg_def.arg, args[i])
 
-        # 4. 处理参数占位符 $__param__ 的替换
-        arg_map = {arg_def.arg: str(args[i]) for i, arg_def in enumerate(node.args) if i < len(args)}
-        
-        def replace_placeholder(match):
-            param_name = match.group(1)
-            return arg_map.get(param_name, match.group(0))
+            # 1. 提取并评估结构化 Prompt
+            sys_prompt = self._evaluate_segments(node.sys_prompt, context)
+            user_prompt = self._evaluate_segments(node.user_prompt, context)
+            
+            # 2. 注入意图增强 (来自当前解释器的意图栈)
+            active_intents = context.get_active_intents()
+            if active_intents:
+                intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in active_intents)
+                sys_prompt += intent_block
+                
+            # 3. 处理返回类型提示注入
+            type_name = self._resolve_type_name(node.returns)
+            ai_module = None
+            if self.service_context and self.service_context.interop:
+                ai_module = self.service_context.interop.get_package("ai")
+                
+            if ai_module and hasattr(ai_module, "get_return_type_prompt"):
+                type_prompt = ai_module.get_return_type_prompt(type_name)
+                if type_prompt:
+                    sys_prompt += f"\n\n{type_prompt}"
 
-        # 使用正则替换 $__name__
-        placeholder_pattern = re.compile(r'\$__(\w+)__')
-        sys_prompt = placeholder_pattern.sub(replace_placeholder, sys_prompt)
-        user_prompt = placeholder_pattern.sub(replace_placeholder, user_prompt)
+            # 4. 调用底层模型
+            raw_res = self._call_llm(sys_prompt, user_prompt, node)
+            
+            # 5. 解析结果为目标类型
+            return self._parse_result(raw_res, type_name, node)
+        finally:
+            context.exit_scope()
+
+    def _evaluate_segments(self, segments: Optional[List[Union[str, ast.Expr]]], context: RuntimeContext) -> str:
+        """评估结构化提示词片段"""
+        if not segments:
+            return ""
         
-        # 5. 调用底层模型
-        raw_res = self._call_llm(sys_prompt, user_prompt, node)
-        
-        # 6. 解析结果为目标类型
-        return self._parse_result(raw_res, type_name, node)
+        content_parts = []
+        for segment in segments:
+            if isinstance(segment, str):
+                content_parts.append(segment)
+            elif isinstance(segment, ast.Expr):
+                if self.service_context and self.service_context.evaluator:
+                    val = self.service_context.evaluator.evaluate_expr(segment, context)
+                    content_parts.append(str(val))
+                else:
+                    raise InterpreterError("Evaluator not initialized in LLMExecutor", segment, error_code=RUN_GENERIC_ERROR)
+            else:
+                content_parts.append(str(segment))
+        return "".join(content_parts)
 
     def _resolve_type_name(self, type_node: Optional[ast.ASTNode]) -> str:
         if type_node is None:
@@ -116,23 +132,8 @@ class LLMExecutorImpl:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
-        content_parts = []
-        
-        # 1. 处理段式插值
-        for segment in node.segments:
-            if isinstance(segment, str):
-                content_parts.append(segment)
-            elif isinstance(segment, (ast.Name, ast.Attribute, ast.Subscript, ast.Expr)):
-                # 使用统一的 Evaluator 进行求值
-                if self.service_context and self.service_context.evaluator:
-                    val = self.service_context.evaluator.evaluate_expr(segment, context)
-                    content_parts.append(str(val))
-                else:
-                    raise InterpreterError("Evaluator not initialized in LLMExecutor", node, error_code=RUN_GENERIC_ERROR)
-            else:
-                content_parts.append(str(segment))
-        
-        content = "".join(content_parts)
+        # 1. 评估段式插值
+        content = self._evaluate_segments(node.segments, context)
         
         # 2. 收集意图
         all_intents = context.get_active_intents()

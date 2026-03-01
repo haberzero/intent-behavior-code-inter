@@ -378,20 +378,48 @@ class CoreTokenScanner:
         if char == '$':
             self._scan_var_ref(tokens)
             
-            # Support member access within behavior expression ($obj.attr)
-            while self.scanner.peek() == '.':
-                next_char = self.scanner.peek(1)
-                if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+            # Support complex access within behavior expression ($obj.attr[0])
+            while not self.scanner.is_at_end():
+                peek = self.scanner.peek()
+                if peek == '.':
+                    next_char = self.scanner.peek(1)
+                    if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+                        self.scanner.start_token()
+                        self.scanner.advance() # .
+                        tokens.append(self.scanner.create_token(TokenType.DOT, "."))
+                        
+                        # Scan the identifier following the dot
+                        self.scanner.start_token()
+                        id_val = ""
+                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                            id_val += self.scanner.advance()
+                        tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
+                    else:
+                        break
+                elif peek == '[':
                     self.scanner.start_token()
-                    self.scanner.advance() # .
-                    tokens.append(self.scanner.create_token(TokenType.DOT, "."))
-                    
-                    # Scan the identifier following the dot
+                    self.scanner.advance() # [
+                    tokens.append(self.scanner.create_token(TokenType.LBRACKET, "["))
+                elif peek == ']':
                     self.scanner.start_token()
-                    id_val = ""
-                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
-                        id_val += self.scanner.advance()
-                    tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
+                    self.scanner.advance() # ]
+                    tokens.append(self.scanner.create_token(TokenType.RBRACKET, "]"))
+                elif peek.isdigit():
+                    self.scanner.start_token()
+                    num_val = ""
+                    while self.scanner.peek().isdigit():
+                        num_val += self.scanner.advance()
+                    tokens.append(self.scanner.create_token(TokenType.NUMBER, num_val))
+                elif peek == '"' or peek == "'":
+                    # Support string literals in subscripts
+                    quote = self.scanner.advance()
+                    self.scanner.start_token()
+                    s_val = ""
+                    while not self.scanner.is_at_end() and self.scanner.peek() != quote:
+                        s_val += self.scanner.advance()
+                    if not self.scanner.is_at_end():
+                        self.scanner.advance() # closing quote
+                    tokens.append(self.scanner.create_token(TokenType.STRING, s_val))
                 else:
                     break
             return

@@ -57,6 +57,7 @@ class LLMScanner:
                     tokens.append(Token(TokenType.RAW_TEXT, text, start_line, start_col))
                     text = ""
                 self._scan_param_placeholder(tokens)
+                
                 start_line = self.scanner.line
                 start_col = self.scanner.col
             else:
@@ -81,12 +82,18 @@ class LLMScanner:
         self.scanner.advance() # $
         self.scanner.advance() # _
         self.scanner.advance() # _
-        while not self.scanner.is_at_end() and not (self.scanner.peek() == '_' and self.scanner.peek(1) == '_'):
+        
+        # Consume everything until '__'
+        while not self.scanner.is_at_end():
+            if self.scanner.peek() == '_' and self.scanner.peek(1) == '_':
+                self.scanner.advance()
+                self.scanner.advance()
+                break
             self.scanner.advance()
-        if not self.scanner.is_at_end():
-            self.scanner.advance()
-            self.scanner.advance()
-        tokens.append(self.scanner.create_token(TokenType.PARAM_PLACEHOLDER))
+        
+        # Get the full placeholder text including $__ and __
+        placeholder_text = self.scanner.source[self.scanner.current_token_start_pos:self.scanner.pos]
+        tokens.append(self.scanner.create_token(TokenType.PARAM_PLACEHOLDER, placeholder_text))
 
     def _match_llm_keyword(self, offset: int, keyword: str) -> bool:
         length = len(keyword)

@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Union
 from core.types.lexer_types import TokenType
 from core.types import parser_types as ast
 from core.types.parser_types import Precedence, ParseRule
@@ -240,11 +240,20 @@ class ExpressionComponent(BaseComponent):
                 # Create initial Name node
                 node = self._loc(ast.Name(id=var_name, ctx='Load'), var_token)
                 
-                # Support member access within behavior expression: $obj.attr.subattr
-                while self.stream.match(TokenType.DOT):
-                    dot_token = self.stream.previous()
-                    attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-                    node = self._loc(ast.Attribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
+                # Support complex access within behavior expression: $obj.attr, $obj[index]
+                while True:
+                    if self.stream.match(TokenType.DOT):
+                        dot_token = self.stream.previous()
+                        attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
+                        node = self._loc(ast.Attribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
+                    elif self.stream.match(TokenType.LBRACKET):
+                        lbracket_token = self.stream.previous()
+                        # Now we can use the standard expression parser for the index!
+                        slice_expr = self.parse_expression()
+                        self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
+                        node = self._loc(ast.Subscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
+                    else:
+                        break
                 
                 segments.append(node)
             else:

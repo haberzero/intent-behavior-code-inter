@@ -84,8 +84,8 @@ class FunctionDef(Stmt):
 class LLMFunctionDef(Stmt):
     name: str
     args: List['arg']
-    sys_prompt: Optional['Constant']
-    user_prompt: Optional['Constant']
+    sys_prompt: Optional[List[Union[str, Expr]]]
+    user_prompt: Optional[List[Union[str, Expr]]]
     returns: Optional[Expr] = None
 
 @dataclass
