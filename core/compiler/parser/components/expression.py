@@ -244,25 +244,7 @@ class ExpressionComponent(BaseComponent):
             elif self.stream.match(TokenType.VAR_REF):
                 var_token = self.stream.previous()
                 var_name = var_token.value[1:] # Strip $
-                
-                # Create initial Name node
-                node = self._loc(ast.Name(id=var_name, ctx='Load'), var_token)
-                
-                # Support complex access within behavior expression: $obj.attr, $obj[index]
-                while True:
-                    if self.stream.match(TokenType.DOT):
-                        dot_token = self.stream.previous()
-                        attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-                        node = self._loc(ast.Attribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
-                    elif self.stream.match(TokenType.LBRACKET):
-                        lbracket_token = self.stream.previous()
-                        # Now we can use the standard expression parser for the index!
-                        slice_expr = self.parse_expression()
-                        self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-                        node = self._loc(ast.Subscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
-                    else:
-                        break
-                
+                node = self._parse_complex_access(var_name, var_token)
                 segments.append(node)
             else:
                 self.stream.advance()
@@ -270,3 +252,24 @@ class ExpressionComponent(BaseComponent):
         self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~'.")
         
         return self._loc(ast.BehaviorExpr(segments=segments, tag=tag), start_token)
+
+    def _parse_complex_access(self, var_name: str, var_token) -> ast.Expr:
+        """Helper to parse complex access like $obj.attr[0] after a $var_ref."""
+        # Create initial Name node
+        node = self._loc(ast.Name(id=var_name, ctx='Load'), var_token)
+        
+        # Support complex access: $obj.attr, $obj[index]
+        while True:
+            if self.stream.match(TokenType.DOT):
+                dot_token = self.stream.previous()
+                attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
+                node = self._loc(ast.Attribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
+            elif self.stream.match(TokenType.LBRACKET):
+                lbracket_token = self.stream.previous()
+                # Now we can use the standard expression parser for the index!
+                slice_expr = self.parse_expression()
+                self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
+                node = self._loc(ast.Subscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
+            else:
+                break
+        return node

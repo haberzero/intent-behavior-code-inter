@@ -142,6 +142,12 @@ class IBCIEngine:
                 raise e
             return False
 
+    def get_variable(self, name: str) -> Any:
+        """获取解释器上下文中的变量"""
+        if self.interpreter and self.interpreter.context:
+            return self.interpreter.context.get_variable(name)
+        raise RuntimeError("Interpreter not initialized")
+
     def check(self, entry_file: str) -> bool:
         """
         仅对项目进行静态检查（编译和语义分析）。

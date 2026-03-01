@@ -516,7 +516,8 @@ class Interpreter(IStackInspector):
             # 但如果它是 Constant (如 for 10:)，我们保持原有的“固定次数”逻辑。
             if isinstance(node.iter, ast.Constant) and isinstance(node.iter.value, (int, float)):
                 count = int(node.iter.value)
-                for _ in range(count):
+                for i in range(count):
+                    self.context.push_loop_context(i, count)
                     try:
                         for stmt in node.body:
                             self.visit(stmt)
@@ -524,6 +525,8 @@ class Interpreter(IStackInspector):
                         break
                     except ContinueException:
                         continue
+                    finally:
+                        self.context.pop_loop_context()
                 return
 
             # 其他情况（BehaviorExpr, BoolOp, Compare 等），作为 While 逻辑运行
@@ -553,23 +556,64 @@ class Interpreter(IStackInspector):
                     continue
             return
 
-        # 2. 标准迭代模式: for i in list/range:
+        # 2. 有目标变量循环模式 (foreach-like): for x in list:
         iterable = self.visit(node.iter)
         if isinstance(iterable, (int, float)):
             iterable = range(int(iterable))
-            
-        for item in iterable:
-            if isinstance(node.target, ast.Name):
-                self.context.define_variable(node.target.id, item)
+        
+        if not hasattr(iterable, '__iter__'):
+            raise InterpreterError(f"Object {iterable} is not iterable", node.iter, error_code=RUN_TYPE_MISMATCH)
+        
+        items = list(iterable)
+        total = len(items)
+        
+        for i, item in enumerate(items):
+            self.context.push_loop_context(i, total)
             try:
-                for stmt in node.body:
-                    self.visit(stmt)
-            except BreakException:
-                break
-            except ContinueException:
-                continue
+                if isinstance(node.target, ast.Name):
+                    self.context.define_variable(node.target.id, item)
+                else:
+                    self.evaluator.evaluate_assign(node.target, item, self.context)
+                
+                # Handle Semantic Filter Condition
+                if hasattr(node, 'filter_condition') and node.filter_condition:
+                    while True:
+                        try:
+                            condition = self.visit(node.filter_condition)
+                            break
+                        except LLMUncertaintyError as e:
+                            if node.llm_fallback:
+                                try:
+                                    for stmt in node.llm_fallback:
+                                        self.visit(stmt)
+                                    # If fallback finishes without retry, we skip this item
+                                    condition = False
+                                    break
+                                except RetryException:
+                                    continue
+                            else:
+                                raise e
+                    
+                    if not self.is_truthy(condition):
+                        continue
+
+                try:
+                    for stmt in node.body:
+                        self.visit(stmt)
+                except BreakException:
+                    break
+                except ContinueException:
+                    continue
+            finally:
+                self.context.pop_loop_context()
 
     def visit_Retry(self, node: ast.Retry):
+        if hasattr(node, 'hint') and node.hint:
+            hint_val = self.visit(node.hint)
+            # Proxy to ai module if possible, or just use context to communicate
+            ai_mod = self.context.get_variable("ai")
+            if hasattr(ai_mod, 'set_retry_hint'):
+                ai_mod.set_retry_hint(str(hint_val))
         raise RetryException()
 
     def visit_Return(self, node: ast.Return):
@@ -578,14 +622,13 @@ class Interpreter(IStackInspector):
 
     def visit_Call(self, node: ast.Call):
         func = self.visit(node.func)
-        args = [self.visit(arg) for arg in node.args]
-        
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Executing Call: {func}", data={"args": args})
-        
-        if node.intent:
-            self.context.push_intent(node.intent)
-            
         try:
+            if node.intent:
+                self.context.push_intent(node.intent)
+            
+            args = [self.visit(arg) for arg in node.args]
+            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Executing Call: {func}", data={"args": args})
+            
             if isinstance(func, ast.FunctionDef):
                 return self.call_user_function(func, args)
             elif isinstance(func, ast.LLMFunctionDef):

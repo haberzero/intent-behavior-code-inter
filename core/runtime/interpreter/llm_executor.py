@@ -104,12 +104,21 @@ class LLMExecutorImpl:
         """
         # 1. 基础收集
         global_intents = [] if context.is_intent_exclusive() else context.get_global_intents()
-        block_intents = [i.content for i in context.get_active_intents()]
+        block_intents = [self._resolve_intent_content(i, context) for i in context.get_active_intents()]
+        
+        # 1.1 注入隐式循环上下文 (Implicit Loop Context Awareness)
+        loop_context = context.get_loop_context()
+        if loop_context:
+            index = loop_context["index"]
+            total = loop_context["total"]
+            # 注入进度感知意图，帮助 AI 了解当前在列表中的位置
+            progress_intent = f"[循环进度感知: 当前正在处理第 {index + 1} 个元素，总计 {total} 个]"
+            block_intents.append(progress_intent)
         
         # 2. 处理 Call 层级
         if call_intent:
             mode = call_intent.mode
-            content = call_intent.content
+            content = self._resolve_intent_content(call_intent, context)
             
             if mode == "!":
                 # 强制唯一意图，忽略所有上层
@@ -129,6 +138,12 @@ class LLMExecutorImpl:
         
         # 3. 无 Call 意图时的默认合并
         return self._unique_merge(global_intents, block_intents)
+
+    def _resolve_intent_content(self, intent: ast.IntentInfo, context: RuntimeContext) -> str:
+        """Resolve dynamic variables in intent content."""
+        if hasattr(intent, 'segments') and intent.segments:
+            return self._evaluate_segments(intent.segments, context).strip()
+        return intent.content.strip()
 
     def _unique_merge(self, *lists: List[str]) -> List[str]:
         result = []

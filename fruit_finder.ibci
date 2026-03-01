@@ -1,36 +1,19 @@
 import ai
-
-# 初始化 AI 配置
-# main.py 会自动将 api_config.json 中的内容注入为全局变量 url, key, model
 ai.set_config(url, key, model)
 
-# 定义待检测的列表，包含水果、蔬菜和书籍
 list items = ["apple", "carrot", "banana", "Python Programming Book", "orange", "potato", "History of Rome", "strawberry"]
 list fruit_indices = []
 int count = 0
 int total_len = len(items)
 
-print("--- IBC-Inter 水果识别示例 ---")
-print("待处理列表: " + (str)items)
+print("--- IBC-Inter Fruit Finder ---")
 
-# 利用 count 计数，在行为描述行中判断 Loop 是否继续
-# 意图驱动循环：只要还有元素没处理完，就继续循环
-for @~当前处理进度：已完成 $count / $total_len。如果 $count 小于 $total_len，请返回 1 继续，否则返回 0 结束。~:
-    # 获取当前项目
-    # 注意：由于行为描述行插值目前仅支持 $var.attr，不支持 $var[index]，故先提取到中间变量
+for @~Progress: $count / $total_len. Continue if count is less than total_len.~:
     str current_item = items[count]
-    
-    # 行为描述行：判断当前项目是否为水果
-    if @~判断文本 "$current_item" 是否描述了一个水果（常见的可食用果实）。如果是水果请返回 1，否则返回 0。~:
-        # 如果是水果，记录其索引
+    if @~Is $current_item a fruit?~:
         fruit_indices = fruit_indices + [count]
-        print("[发现] 索引 " + (str)count + ": " + current_item + " 是水果")
-    else:
-        print("[跳过] 索引 " + (str)count + ": " + current_item + " 不是水果")
-    
-    # 更新计数器
+        print("[Found] " + current_item)
     count = count + 1
 
-# 输出最终结果
-print("\n--- 识别完成 ---")
-print("所有水果的索引列表: " + (str)fruit_indices)
+print("--- Result ---")
+print(fruit_indices)

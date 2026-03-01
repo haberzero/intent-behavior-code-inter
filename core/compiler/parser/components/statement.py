@@ -46,8 +46,11 @@ class StatementComponent(BaseComponent):
             return self._loc(ast.Continue(), start)
         if self.stream.match(TokenType.RETRY):
             start = self.stream.previous()
+            hint = None
+            if self.stream.check(TokenType.STRING):
+                hint = self.expression.parse_expression()
             self.stream.consume_end_of_statement("Expect newline after retry.")
-            return self._loc(ast.Retry(), start)
+            return self._loc(ast.Retry(hint=hint), start)
         
         # We assume imports are handled by ImportComponent and dispatched by MainParser
         # But if statement() is called inside a block, we might encounter import?
@@ -74,10 +77,7 @@ class StatementComponent(BaseComponent):
         self.stream.consume(TokenType.COLON, "Expect ':' after if condition.")
         body = self.block()
         
-        llm_fallback = None
-        if self.stream.match(TokenType.LLM_EXCEPT):
-            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-            llm_fallback = self.block()
+        llm_fallback = self._parse_llm_fallback()
             
         root_if = self._loc(ast.If(test=test, body=body, orelse=[], llm_fallback=llm_fallback), start_token)
         last_node = root_if
@@ -90,10 +90,7 @@ class StatementComponent(BaseComponent):
             self.stream.consume(TokenType.COLON, "Expect ':' after elif condition.")
             elif_body = self.block()
             
-            elif_fallback = None
-            if self.stream.match(TokenType.LLM_EXCEPT):
-                self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-                elif_fallback = self.block()
+            elif_fallback = self._parse_llm_fallback()
                 
             new_if = self._loc(ast.If(test=elif_test, body=elif_body, orelse=[], llm_fallback=elif_fallback), elif_start)
             last_node.orelse = [new_if]
@@ -105,15 +102,13 @@ class StatementComponent(BaseComponent):
             last_node.orelse = self.block()
             
         # 4. Final LLM_EXCEPT for the whole chain (if root doesn't have one)
-        if self.stream.match(TokenType.LLM_EXCEPT):
-            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-            final_fallback = self.block()
+        final_fallback = self._parse_llm_fallback()
+        if final_fallback:
             if root_if.llm_fallback is None:
                 root_if.llm_fallback = final_fallback
             elif last_node != root_if and last_node.llm_fallback is None:
                 # If root has one, but last node (elif) doesn't, attach to last node
                 last_node.llm_fallback = final_fallback
-            # else: root already has one, this might be a double llmexcept which is usually okay or ignored
             
         return root_if
 
@@ -124,10 +119,7 @@ class StatementComponent(BaseComponent):
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
         body = self.block()
         
-        llm_fallback: Optional[List[ast.Stmt]] = None
-        if self.stream.match(TokenType.LLM_EXCEPT):
-            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-            llm_fallback = self.block()
+        llm_fallback = self._parse_llm_fallback()
             
         return self._loc(ast.While(test=test, body=body, orelse=[], llm_fallback=llm_fallback), start_token)
 
@@ -152,15 +144,17 @@ class StatementComponent(BaseComponent):
         else:
             raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.")
             
+        filter_condition = None
+        if self.stream.match(TokenType.IF):
+            filter_condition = self.expression.parse_expression()
+            self._set_scene_recursive(filter_condition, ast.Scene.BRANCH)
+            
         self.stream.consume(TokenType.COLON, "Expect ':' after for loop iterator.")
         body = self.block()
         
-        llm_fallback: Optional[List[ast.Stmt]] = None
-        if self.stream.match(TokenType.LLM_EXCEPT):
-            self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-            llm_fallback = self.block()
+        llm_fallback = self._parse_llm_fallback()
             
-        return self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[], llm_fallback=llm_fallback), start_token)
+        return self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[], llm_fallback=llm_fallback, filter_condition=filter_condition), start_token)
 
     def expression_statement(self) -> ast.Stmt:
         expr = self.expression.parse_expression()
@@ -201,11 +195,31 @@ class StatementComponent(BaseComponent):
                 if stmt:
                     stmts.append(stmt)
             else:
-                # Fallback if not linked?
-                raise Exception("Declaration parser not linked to StatementComponent")
-
+                stmts.append(self.parse_statement())
+                
         self.stream.consume(TokenType.DEDENT, "Expect dedent after block.")
         return stmts
+
+    def _parse_llm_fallback(self) -> Optional[List[ast.Stmt]]:
+        """Helper to parse llmexcept block or declarative retry."""
+        # Skip optional newlines before llmexcept
+        while self.stream.check(TokenType.NEWLINE):
+            self.stream.advance()
+            
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            # Check for declarative retry: llmexcept retry "hint"
+            if self.stream.match(TokenType.RETRY):
+                hint = None
+                if self.stream.check(TokenType.STRING):
+                    hint = self.expression.parse_expression()
+                
+                retry_stmt = self._loc(ast.Retry(hint=hint), self.stream.previous())
+                self.stream.consume_end_of_statement("Expect newline after declarative retry.")
+                return [retry_stmt]
+            else:
+                self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+                return self.block()
+        return None
 
     def try_statement(self) -> ast.Try:
         start_token = self.stream.previous()

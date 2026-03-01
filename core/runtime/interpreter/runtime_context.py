@@ -65,9 +65,22 @@ class RuntimeContextImpl(IStateReader):
     def __init__(self):
         self._global_scope = ScopeImpl()
         self._current_scope = self._global_scope
-        self._intent_stack: List[str] = []
+        self._intent_stack: List[ast.IntentInfo] = []
         self._global_intents: List[str] = []
         self._intent_exclusive_depth = 0
+        self._loop_stack: List[Dict[str, int]] = []
+
+    def push_loop_context(self, index: int, total: int) -> None:
+        self._loop_stack.append({"index": index, "total": total})
+
+    def pop_loop_context(self) -> None:
+        if self._loop_stack:
+            self._loop_stack.pop()
+
+    def get_loop_context(self) -> Optional[Dict[str, int]]:
+        if self._loop_stack:
+            return self._loop_stack[-1]
+        return None
 
     def enter_intent_exclusive_scope(self) -> None:
         self._intent_exclusive_depth += 1

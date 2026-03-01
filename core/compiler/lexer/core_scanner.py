@@ -83,6 +83,8 @@ class CoreTokenScanner:
                 self._scan_string_char(tokens)
             elif self.sub_state == SubState.IN_BEHAVIOR:
                 self._scan_behavior_char(tokens)
+            elif self.sub_state == SubState.IN_INTENT:
+                self._scan_intent_char(tokens)
                 
         return tokens, False, enter_llm_mode
 
@@ -108,6 +110,13 @@ class CoreTokenScanner:
             tokens.append(Token(TokenType.RAW_TEXT, "\n", self.scanner.line, self.scanner.col))
             self.scanner.advance()
             return False
+        
+        # Case 2.1: In intent description
+        elif self.sub_state == SubState.IN_INTENT:
+            self.sub_state = SubState.NORMAL
+            self.scanner.advance()
+            tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line - 1, self.scanner.col))
+            return True
 
         # Case 3: Implicit continuation (inside parentheses)
         elif self.paren_level > 0:
@@ -194,13 +203,9 @@ class CoreTokenScanner:
                 return False
             else:
                 # Regular Intent Comment or Modified Intent
-                content = ""
-                while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
-                    content += self.scanner.advance()
-                
-                # We include the mode in the token value for the parser to handle
-                # e.g. "@+ My Intent" -> value: "+My Intent"
-                tokens.append(self.scanner.create_token(TokenType.INTENT, mode + content.strip()))
+                self.sub_state = SubState.IN_INTENT
+                # Include @ in the value so parser knows it's an intent marker
+                tokens.append(self.scanner.create_token(TokenType.INTENT, "@" + mode))
                 return False
 
         # 7. Bitwise Not
@@ -390,51 +395,7 @@ class CoreTokenScanner:
         # 3. Variable Reference
         if char == '$':
             self._scan_var_ref(tokens)
-            
-            # Support complex access within behavior expression ($obj.attr[0])
-            while not self.scanner.is_at_end():
-                peek = self.scanner.peek()
-                if peek == '.':
-                    next_char = self.scanner.peek(1)
-                    if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
-                        self.scanner.start_token()
-                        self.scanner.advance() # .
-                        tokens.append(self.scanner.create_token(TokenType.DOT, "."))
-                        
-                        # Scan the identifier following the dot
-                        self.scanner.start_token()
-                        id_val = ""
-                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
-                            id_val += self.scanner.advance()
-                        tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
-                    else:
-                        break
-                elif peek == '[':
-                    self.scanner.start_token()
-                    self.scanner.advance() # [
-                    tokens.append(self.scanner.create_token(TokenType.LBRACKET, "["))
-                elif peek == ']':
-                    self.scanner.start_token()
-                    self.scanner.advance() # ]
-                    tokens.append(self.scanner.create_token(TokenType.RBRACKET, "]"))
-                elif peek.isdigit():
-                    self.scanner.start_token()
-                    num_val = ""
-                    while self.scanner.peek().isdigit():
-                        num_val += self.scanner.advance()
-                    tokens.append(self.scanner.create_token(TokenType.NUMBER, num_val))
-                elif peek == '"' or peek == "'":
-                    # Support string literals in subscripts
-                    quote = self.scanner.advance()
-                    self.scanner.start_token()
-                    s_val = ""
-                    while not self.scanner.is_at_end() and self.scanner.peek() != quote:
-                        s_val += self.scanner.advance()
-                    if not self.scanner.is_at_end():
-                        self.scanner.advance() # closing quote
-                    tokens.append(self.scanner.create_token(TokenType.STRING, s_val))
-                else:
-                    break
+            self._scan_complex_access(tokens)
             return
             
         # 4. Raw Text
@@ -457,6 +418,113 @@ class CoreTokenScanner:
         
         if text:
             tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+
+    def _scan_intent_char(self, tokens: List[Token]):
+        char = self.scanner.peek()
+        
+        # 1. Stop at newline (handled by _handle_newline)
+        if char == '\n':
+            return
+            
+        # 2. Variable Reference
+        if char == '$':
+            self._scan_var_ref(tokens)
+            self._scan_complex_access(tokens)
+            return
+
+        # 3. Raw Text
+        text = ""
+        while not self.scanner.is_at_end():
+            peek_char = self.scanner.peek()
+            if peek_char == '$' or peek_char == '\n':
+                break
+            text += self.scanner.advance()
+        
+        if text:
+            tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+
+    def _scan_complex_access(self, tokens: List[Token]):
+        subscript_depth = 0
+        while not self.scanner.is_at_end():
+            peek = self.scanner.peek()
+            
+            if subscript_depth == 0:
+                # Top-level: only allow .attr or [
+                if peek == '.':
+                    next_char = self.scanner.peek(1)
+                    if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+                        self.scanner.start_token()
+                        self.scanner.advance() # .
+                        tokens.append(self.scanner.create_token(TokenType.DOT, "."))
+                        
+                        # Scan identifier
+                        self.scanner.start_token()
+                        id_val = ""
+                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                            id_val += self.scanner.advance()
+                        tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
+                    else:
+                        break # Literal dot after variable
+                elif peek == '[':
+                    self.scanner.start_token()
+                    self.scanner.advance() # [
+                    tokens.append(self.scanner.create_token(TokenType.LBRACKET, "["))
+                    subscript_depth += 1
+                else:
+                    break # End of complex access chain
+            else:
+                # Inside subscript: allow digits, strings, identifiers, nested [. and ]
+                if peek == ']':
+                    self.scanner.start_token()
+                    self.scanner.advance() # ]
+                    tokens.append(self.scanner.create_token(TokenType.RBRACKET, "]"))
+                    subscript_depth -= 1
+                elif peek == '[':
+                    self.scanner.start_token()
+                    self.scanner.advance() # [
+                    tokens.append(self.scanner.create_token(TokenType.LBRACKET, "["))
+                    subscript_depth += 1
+                elif peek == '.':
+                    self.scanner.start_token()
+                    self.scanner.advance() # .
+                    tokens.append(self.scanner.create_token(TokenType.DOT, "."))
+                elif peek.isdigit():
+                    self.scanner.start_token()
+                    num_val = ""
+                    while self.scanner.peek().isdigit():
+                        num_val += self.scanner.advance()
+                    tokens.append(self.scanner.create_token(TokenType.NUMBER, num_val))
+                elif peek == '"' or peek == "'":
+                    quote = self.scanner.advance()
+                    self.scanner.start_token()
+                    s_val = ""
+                    while not self.scanner.is_at_end() and self.scanner.peek() != quote:
+                        s_val += self.scanner.advance()
+                    if not self.scanner.is_at_end():
+                        self.scanner.advance() # closing quote
+                        tokens.append(self.scanner.create_token(TokenType.STRING, s_val))
+                    else:
+                        # This is a real unclosed string error
+                        self.issue_tracker.report(Severity.ERROR, LEX_UNTERMINATED_STRING, "Unclosed string literal in behavior subscript", self.scanner)
+                        break
+                elif peek.isalpha() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
+                    self.scanner.start_token()
+                    id_val = ""
+                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                        id_val += self.scanner.advance()
+                    tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
+                elif peek in ' \t':
+                    # Allow spaces inside subscripts
+                    self.scanner.advance()
+                elif peek == '\n' or peek == '~':
+                    # Behavior block ends before subscript closed!
+                    break
+                else:
+                    # Unexpected character in subscript. Break and let parser handle it.
+                    break
+        
+        if subscript_depth > 0:
+            self.issue_tracker.report(Severity.ERROR, LEX_UNTERMINATED_BEHAVIOR, f"Unclosed subscript '[' in behavior expression (depth: {subscript_depth})", self.scanner)
 
     def _scan_identifier(self, first_char: str, tokens: List[Token]):
         value = first_char

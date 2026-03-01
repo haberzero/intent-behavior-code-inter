@@ -30,17 +30,32 @@ class DeclarationComponent(BaseComponent):
             if self.context.pending_intent is not None:
                 raise self.stream.error(token, "Multiple intent comments are not allowed for a single statement.")
             
-            # Parse IntentInfo from token value (which contains mode + content)
-            val = token.value
+            # Extract mode from @+ mode
+            val = token.value # e.g. "@+", "@!", "@-", "@"
             mode = ""
-            content = val
-            if val and val[0] in '+!-':
-                mode = val[0]
-                content = val[1:].strip()
+            if len(val) > 1:
+                mode = val[1]
             
-            self.context.pending_intent = ast.IntentInfo(mode=mode, content=content)
-            if self.stream.check(TokenType.NEWLINE):
-                self.stream.advance()
+            segments = []
+            raw_content = ""
+            
+            # Consume tokens until NEWLINE
+            while not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
+                if self.stream.match(TokenType.RAW_TEXT):
+                    t = self.stream.previous()
+                    segments.append(t.value)
+                    raw_content += t.value
+                elif self.stream.match(TokenType.VAR_REF):
+                    var_token = self.stream.previous()
+                    var_name = var_token.value[1:] # Strip $
+                    node = self.expression._parse_complex_access(var_name, var_token)
+                    segments.append(node)
+                    raw_content += var_token.value # (Simplified representation)
+                else:
+                    self.stream.advance()
+            
+            self.context.pending_intent = ast.IntentInfo(mode=mode, content=raw_content.strip(), segments=segments)
+            self.stream.match(TokenType.NEWLINE) # Optional newline after intent comment
             return self.parse_declaration()
         
         if role == SyntaxRole.INTENT_DEFINITION:

@@ -110,6 +110,7 @@ class SubState(Enum):
     NORMAL = auto()
     IN_STRING = auto()
     IN_BEHAVIOR = auto()
+    IN_INTENT = auto()
 
 @dataclass
 class Token:

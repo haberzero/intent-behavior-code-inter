@@ -118,6 +118,7 @@ class For(Stmt):
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
     llm_fallback: Optional[List[Stmt]] = None
+    filter_condition: Optional[Expr] = None  # for x in list if @~...~
 
 @dataclass
 class While(Stmt):
@@ -179,7 +180,7 @@ class Continue(Stmt):
 
 @dataclass
 class Retry(Stmt):
-    pass
+    hint: Optional[Expr] = None  # retry "hint"
 
 # --- Expressions ---
 
@@ -219,7 +220,8 @@ class Compare(Expr):
 @dataclass
 class IntentInfo:
     mode: str # "", "+", "!", "-"
-    content: str
+    content: str # Raw content
+    segments: Optional[List[Union[str, Expr]]] = None # Interpolated segments
 
 @dataclass
 class IntentStmt(Stmt):
