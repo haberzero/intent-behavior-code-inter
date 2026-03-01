@@ -1,78 +1,117 @@
-
 import unittest
 import os
+import shutil
 import sys
+import textwrap
 
 # Add project root to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from core.engine import IBCIEngine
+from core.types.exception_types import InterpreterError
 from core.compiler.parser.resolver.resolver import ModuleResolver, ModuleResolveError
 from core.scheduler import Scheduler
 from core.support.diagnostics.issue_tracker import IssueTracker
-from core.types.diagnostic_types import Severity
 
 class TestSecurity(unittest.TestCase):
-    def setUp(self):
-        # Use a temporary directory structure for testing
-        self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test_data', 'security_project'))
-        if not os.path.exists(self.root_dir):
-            os.makedirs(self.root_dir)
-            
-        self.resolver = ModuleResolver(self.root_dir)
-        self.scheduler = Scheduler(self.root_dir)
+    """
+    Consolidated tests for Security and Sandboxing.
+    Covers path traversal prevention, workspace isolation, and restricted access.
+    """
 
-    def test_path_traversal_absolute(self):
-        """Test preventing path traversal using absolute import simulation."""
-        # This tests ModuleResolver directly
+    def setUp(self):
+        self.workspace = os.path.abspath("tmp_security_workspace")
+        os.makedirs(self.workspace, exist_ok=True)
         
-        context_file = os.path.join(self.root_dir, 'main.ibci')
+        self.outside_file = os.path.abspath("outside_workspace.txt")
+        with open(self.outside_file, 'w') as f:
+            f.write("sensitive data")
+            
+        self.engine = IBCIEngine(root_dir=self.workspace)
+
+    def tearDown(self):
+        if os.path.exists(self.workspace):
+            shutil.rmtree(self.workspace)
+        if os.path.exists(self.outside_file):
+            os.remove(self.outside_file)
+
+    def run_code(self, code):
+        test_file = os.path.join(self.workspace, "test.ibci")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent(code).strip() + "\n")
+            
+        output = []
+        def output_callback(msg):
+            output.append(msg)
+            
+        self.engine._prepare_interpreter(output_callback=output_callback)
+        ast_cache = self.engine.scheduler.compile_project(test_file)
+        self.engine.interpreter.interpret(ast_cache[test_file])
+        return output
+
+    # --- Static Analysis Security (Resolver/Scheduler) ---
+
+    def test_resolver_path_traversal(self):
+        """测试 ModuleResolver 拒绝向上越级访问根目录以外的路径"""
+        resolver = ModuleResolver(self.workspace)
+        context_file = os.path.join(self.workspace, 'main.ibci')
         
-        # module_name = "..outside" (level 2 relative import)
-        # Attempt to go up past root
-        
+        # Attempt to go up past root via relative import
         with self.assertRaises(ModuleResolveError) as cm:
-            self.resolver.resolve('..outside', context_file)
-        
+            resolver.resolve('..outside', context_file)
         self.assertIn("Security Error", str(cm.exception))
 
-    def test_path_traversal_scheduler(self):
-        """Test Scheduler rejects files outside root."""
-        # Create a dummy file path outside root (doesn't need to exist)
-        outside_dir = os.path.abspath(os.path.join(self.root_dir, '..'))
-        outside_file = os.path.join(outside_dir, 'secret.ibci')
+    def test_scheduler_root_enforcement(self):
+        """测试 Scheduler 拒绝编译根目录以外的文件"""
+        scheduler = Scheduler(self.workspace)
+        outside_file = os.path.join(os.path.dirname(self.workspace), 'secret.ibci')
         
-        # Calling compile_project with outside file should fail
-        # It raises CompilerError if dependency scanning fails
-        
-        try:
-            self.scheduler.compile_project(outside_file)
-        except Exception:
-            pass # Expected to fail
+        with self.assertRaises(Exception):
+            scheduler.compile_project(outside_file)
             
-        # Check diagnostics
-        errors = [d for d in self.scheduler.issue_tracker.diagnostics if "Security Error" in d.message]
-        self.assertTrue(len(errors) > 0, "Expected Security Error in diagnostics")
+        errors = [d for d in scheduler.issue_tracker.diagnostics if "Security Error" in d.message]
+        self.assertTrue(len(errors) > 0)
 
-    def test_valid_nested_file(self):
-        """Test valid nested file access is allowed."""
-        nested_dir = os.path.join(self.root_dir, 'pkg')
-        if not os.path.exists(nested_dir):
-            os.makedirs(nested_dir)
-        nested_file = os.path.join(nested_dir, 'mod.ibci')
-        
-        # Create file so it can be read
-        with open(nested_file, 'w') as f:
-            f.write("var x = 1")
+    # --- Runtime Sandbox Security ---
+
+    def test_runtime_file_access_denied(self):
+        """测试运行时文件模块拒绝访问工作区以外的文件"""
+        code = f"""
+        import file
+        str path = '{self.outside_file.replace('\\', '/')}'
+        str content = file.read(path)
+        """
+        with self.assertRaises(InterpreterError) as cm:
+            self.run_code(code)
+        self.assertIn("Security Error", str(cm.exception))
+        self.assertIn("outside workspace", str(cm.exception))
+
+    def test_runtime_request_external_access(self):
+        """测试通过显式请求获取外部访问权限"""
+        code = f"""
+        import file
+        import sys
+        sys.request_external_access()
+        str path = '{self.outside_file.replace('\\', '/')}'
+        str content = file.read(path)
+        print(content)
+        """
+        output = self.run_code(code)
+        self.assertEqual(output, ["sensitive data"])
+
+    def test_internal_access_allowed(self):
+        """测试工作区内部文件的正常访问"""
+        internal_path = os.path.join(self.workspace, "safe.txt")
+        with open(internal_path, 'w') as f:
+            f.write("safe data")
             
-        # Should succeed without security error
-        try:
-            self.scheduler.compile_project(nested_file)
-        except Exception:
-            # Might fail due to other reasons (parsing etc), but not security
-            pass
-            
-        security_errors = [d for d in self.scheduler.issue_tracker.diagnostics if "Security Error" in d.message]
-        self.assertEqual(len(security_errors), 0, f"Unexpected security errors: {security_errors}")
+        code = f"""
+        import file
+        str path = '{internal_path.replace('\\', '/')}'
+        print(file.read(path))
+        """
+        output = self.run_code(code)
+        self.assertEqual(output, ["safe data"])
 
 if __name__ == '__main__':
     unittest.main()
