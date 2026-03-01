@@ -15,6 +15,11 @@ class Type:
             return True
         if isinstance(self, AnyType):
             return True
+        
+        # None (represented by VOID_TYPE in current system) is assignable to any type
+        if self == VOID_TYPE:
+            return True
+
         # Default strict equality check
         return self == other
         
@@ -65,6 +70,16 @@ class DictType(ContainerType):
                 self.value_type.is_assignable_to(other.value_type))
 
 @dataclass
+class CallableType(Type):
+    """Represents the 'callable' keyword type, a generic callable object."""
+    def __init__(self):
+        super().__init__("callable")
+    
+    def is_assignable_to(self, other: 'Type') -> bool:
+        if isinstance(other, AnyType): return True
+        return isinstance(other, CallableType)
+
+@dataclass
 class FunctionType(Type):
     param_types: List[Type]
     return_type: Type
@@ -76,6 +91,14 @@ class FunctionType(Type):
         
     def __repr__(self):
         return f"Function({self.param_types} -> {self.return_type})"
+
+    def is_assignable_to(self, other: 'Type') -> bool:
+        if isinstance(other, AnyType): return True
+        if isinstance(other, CallableType): return True
+        if not isinstance(other, FunctionType): return False
+        # Simplified: Check return type and param count
+        return (len(self.param_types) == len(other.param_types) and 
+                self.return_type.is_assignable_to(other.return_type))
 
 @dataclass
 class ModuleType(Type):
@@ -126,7 +149,8 @@ def get_builtin_type(name: str) -> Optional[Type]:
         "void": VOID_TYPE,
         "list": ListType(ANY_TYPE), # Default raw list is list[Any]
         "dict": DictType(ANY_TYPE, ANY_TYPE), # Default raw dict is dict[Any, Any]
-        "var": ANY_TYPE
+        "var": ANY_TYPE,
+        "callable": CallableType()
     }
     return mapping.get(name)
 
@@ -177,6 +201,10 @@ def get_promoted_type(op: str, t1: Type, t2: Type) -> Optional[Type]:
             
         # Allow same-type comparison
         if t1 == t2:
+            return BOOL_TYPE
+            
+        # Allow comparison with None (VOID_TYPE)
+        if (op in ('==', '!=')) and (t1 == VOID_TYPE or t2 == VOID_TYPE):
             return BOOL_TYPE
             
     return None

@@ -35,3 +35,16 @@ class BoundMethod:
     def __call__(self, *args):
         # When called, inject instance as 'self'
         return self.instance.interpreter.call_method(self.instance, self.method_def, list(args))
+
+class AnonymousLLMFunction:
+    def __init__(self, node: ast.BehaviorExpr, interpreter: 'Interpreter', closure_context: Any):
+        self.node = node
+        self.interpreter = interpreter
+        self.closure_context = closure_context
+
+    def __call__(self, *args):
+        # Execute behavior expression in the captured context
+        return self.interpreter.llm_executor.execute_behavior_expression(self.node, self.closure_context)
+    
+    def __repr__(self):
+        return f"<AnonymousLLMFunction at {hex(id(self))}>"

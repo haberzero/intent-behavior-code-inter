@@ -44,6 +44,7 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
         self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
+        self.register(TokenType.NONE, self.none_expr, None, Precedence.LOWEST)
         
         # Grouping and Collections
         self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
@@ -107,6 +108,9 @@ class ExpressionComponent(BaseComponent):
 
     def boolean(self) -> ast.Expr:
         return self._loc(ast.Constant(value=self.stream.previous().value == 'True'), self.stream.previous())
+
+    def none_expr(self) -> ast.Expr:
+        return self._loc(ast.Constant(value=None), self.stream.previous())
 
     def grouping(self) -> ast.Expr:
         # Check for Cast Expression: (Type) Expr

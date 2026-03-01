@@ -14,7 +14,13 @@ class AILib(ILLMProvider):
             "key": None,
             "model": None,
             "retry": 0,
-            "timeout": 30.0
+            "timeout": 30.0,
+            "auto_type_constraint": True,  # 默认开启内核自动注入类型约束
+            "auto_intent_injection": True,   # 默认开启内核自动注入活跃意图
+            "decision_map": {
+                "1": "1", "true": "1", "yes": "1", "ok": "1",
+                "0": "0", "false": "0", "no": "0", "fail": "0"
+            }
         }
         self._scene_prompts = {
             "general": "你是一个助人为乐的助手。",
@@ -57,10 +63,17 @@ class AILib(ILLMProvider):
             except ImportError:
                 pass
 
-    def set_config(self, url: str, key: str, model: str) -> None:
+    def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
         self._config["key"] = key
         self._config["model"] = model
+        
+        # 支持额外的特性配置
+        if "auto_type_constraint" in kwargs:
+            self._config["auto_type_constraint"] = bool(kwargs["auto_type_constraint"])
+        if "auto_intent_injection" in kwargs:
+            self._config["auto_intent_injection"] = bool(kwargs["auto_intent_injection"])
+            
         self._init_client()
         
     def set_retry(self, count: int) -> None:
@@ -97,6 +110,12 @@ class AILib(ILLMProvider):
 
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info
+
+    def set_decision_map(self, decision_map: Dict[str, str]) -> None:
+        self._config["decision_map"] = decision_map
+
+    def get_decision_map(self) -> Dict[str, str]:
+        return self._config.get("decision_map", {})
 
     def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
         is_test_mode = (

@@ -23,6 +23,14 @@ class LLMExecutorImpl:
         # 我们会在调用 Provider 时同步同步它
         self.retry_hint: Optional[str] = None
         self.last_call_info: Dict[str, Any] = {} # 记录最后一次 LLM 调用信息
+        self._expected_type_stack: List[str] = []
+
+    def push_expected_type(self, type_name: str):
+        self._expected_type_stack.append(type_name)
+    
+    def pop_expected_type(self):
+        if self._expected_type_stack:
+            self._expected_type_stack.pop()
 
     def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> Any:
         """
@@ -161,31 +169,60 @@ class LLMExecutorImpl:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
+        # 0. 准备环境
+        ai_module = None
+        if self.service_context and self.service_context.interop:
+            ai_module = self.service_context.interop.get_package("ai")
+
         # 1. 评估段式插值
         content = self._evaluate_segments(node.segments, context)
         
         # 2. 收集意图
-        all_intents = context.get_active_intents()
-        # NOTE: 行为描述行不再支持附加意图注入 (@ intent)
-        # 但我们保留未来通过 tag (node.tag) 扩展逻辑的可能性
+        all_intents = []
+        auto_intent = True
+        if ai_module and hasattr(ai_module, "_config"):
+            auto_intent = ai_module._config.get("auto_intent_injection", True)
+        
+        if auto_intent:
+            all_intents = context.get_active_intents()
+        
+        if node.intent:
+            all_intents.append(node.intent)
             
         # 3. 确定场景与提示词
         scene = node.scene_tag
         sys_prompt = "你是一个意图行为代码执行器。"
         
         # 获取场景特定的系统提示词 (通过 ai 组件配置)
-        ai_module = None
         current_retry_hint = self.retry_hint
-        if self.service_context and self.service_context.interop:
-            ai_module = self.service_context.interop.get_package("ai")
+        if ai_module:
             # 如果内核没有 hint 但 ai 模块有 (用户手动设置)，则同步过来
-            if not current_retry_hint and ai_module and hasattr(ai_module, "_retry_hint"):
+            if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
                 current_retry_hint = ai_module._retry_hint
             
         if ai_module and hasattr(ai_module, "get_scene_prompt"):
             scene_prompt = ai_module.get_scene_prompt(scene.name.lower())
             if scene_prompt:
                 sys_prompt = scene_prompt
+
+        # 注入预期类型约束 (如果当前是在赋值上下文中执行)
+        injected_type = None
+        auto_type = True
+        if ai_module and hasattr(ai_module, "_config"):
+            auto_type = ai_module._config.get("auto_type_constraint", True)
+
+        if auto_type and self._expected_type_stack:
+            injected_type = self._expected_type_stack[-1]
+            if injected_type != "var" and injected_type != "callable":
+                sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
+        
+        if self.service_context and self.service_context.debugger:
+            if node.intent:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected local intent: {node.intent}")
+            if injected_type:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected expected type constraint: {injected_type}")
+            if not auto_intent and context.get_active_intents():
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, "Skipped active intents injection due to configuration.")
 
         if all_intents:
             sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
@@ -213,8 +250,22 @@ class LLMExecutorImpl:
         # 5. 严格场景校验
         if scene in (ast.Scene.BRANCH, ast.Scene.LOOP):
             clean_res = response.strip().lower()
-            if clean_res in ("1", "0"):
-                return clean_res
+            
+            # 获取决策映射表 (优先从 ai 模块获取)
+            decision_map = {
+                "1": "1", "0": "0", "true": "1", "false": "0", "yes": "1", "no": "0"
+            }
+            if ai_module and hasattr(ai_module, "get_decision_map"):
+                decision_map = ai_module.get_decision_map()
+            
+            if clean_res in decision_map:
+                mapped_val = decision_map[clean_res]
+                if self.service_context and self.service_context.debugger:
+                    self.service_context.debugger.trace(
+                        CoreModule.LLM, DebugLevel.DETAIL, 
+                        f"Decision mapping applied: '{clean_res}' -> '{mapped_val}'"
+                    )
+                return mapped_val
             
             raise LLMUncertaintyError(
                 f"LLM 返回值在 {scene.name} 场景下不明确，期望 0 或 1，实际收到: {response}",

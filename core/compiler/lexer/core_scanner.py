@@ -30,6 +30,7 @@ class CoreTokenScanner:
         self.KEYWORDS = {
             'import': TokenType.IMPORT, 'from': TokenType.FROM,
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
+            'callable': TokenType.CALLABLE,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
             'var': TokenType.VAR, 'pass': TokenType.PASS,
@@ -39,6 +40,7 @@ class CoreTokenScanner:
             'class': TokenType.CLASS, 'self': TokenType.SELF,
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
+            'None': TokenType.NONE,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,
             'llmexcept': TokenType.LLM_EXCEPT, 'retry': TokenType.RETRY,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,

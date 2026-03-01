@@ -254,6 +254,7 @@ class ListExpr(Expr):
 class BehaviorExpr(Expr):
     segments: List[Union[str, Expr]]
     tag: str = ""
+    intent: Optional[str] = None
 
 @dataclass
 class CastExpr(Expr):

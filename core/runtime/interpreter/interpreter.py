@@ -16,7 +16,7 @@ from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
 from .evaluator import EvaluatorImpl
 from .permissions import PermissionManager as PermissionManagerImpl
-from .runtime_types import ClassInstance, BoundMethod
+from .runtime_types import ClassInstance, BoundMethod, AnonymousLLMFunction
 from core.support.host_interface import HostInterface
 from core.runtime.ext.capabilities import IStackInspector
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
@@ -294,6 +294,37 @@ class Interpreter(IStackInspector):
             return self._resolve_type_name(type_node.value)
         return "var"
 
+    def _attempt_behavior_result_conversion(self, value: Any, type_name: str) -> Any:
+        """
+        尝试将 LLM 返回的字符串转换为预期的静态类型。
+        """
+        if not isinstance(value, str) or type_name in ("str", "var", "callable", None):
+            return value
+        
+        clean_val = value.strip()
+        try:
+            converted = None
+            if type_name == "int":
+                converted = int(clean_val)
+            elif type_name == "float":
+                converted = float(clean_val)
+            elif type_name == "bool":
+                converted = clean_val.lower() in ("1", "true", "yes", "ok")
+            elif type_name in ("list", "dict"):
+                import json
+                converted = json.loads(clean_val)
+            
+            if converted is not None:
+                self.debugger.trace(
+                    CoreModule.INTERPRETER, DebugLevel.DETAIL, 
+                    f"Automatic type conversion: str('{clean_val}') -> {type(converted).__name__}({converted})"
+                )
+                return converted
+        except (ValueError, Exception):
+            # 转换失败时保留原始字符串，由后续的 _check_type_compatibility 进行报错
+            pass
+        return value
+
     def _check_type_compatibility(self, var_name: str, type_name: str, value: Any, node: ast.ASTNode):
         if type_name == "var" or value is None:
             return
@@ -314,7 +345,27 @@ class Interpreter(IStackInspector):
         return self.visit(node.value)
 
     def visit_Assign(self, node: ast.Assign):
-        value = self.visit(node.value) if node.value else None
+        # 识别是否是针对 BehaviorExpr 的 callable 赋值，若是则推迟执行（Lambda 化）
+        is_behavior_lambda = False
+        type_name = None
+        if node.type_annotation:
+            type_name = self._resolve_type_name(node.type_annotation)
+            if type_name == "callable" and isinstance(node.value, ast.BehaviorExpr):
+                is_behavior_lambda = True
+        
+        if is_behavior_lambda:
+            value = AnonymousLLMFunction(node.value, self, self.context)
+        else:
+            # 在执行行为描述行前，注入目标类型约束信息到 LLMExecutor
+            if isinstance(node.value, ast.BehaviorExpr) and type_name:
+                self.llm_executor.push_expected_type(type_name)
+                try:
+                    raw_value = self.visit(node.value)
+                    value = self._attempt_behavior_result_conversion(raw_value, type_name)
+                finally:
+                    self.llm_executor.pop_expected_type()
+            else:
+                value = self.visit(node.value) if node.value else None
         
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Assigning value to targets:", data={"value": value, "targets": [t.__class__.__name__ for t in node.targets]})
         

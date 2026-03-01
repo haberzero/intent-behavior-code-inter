@@ -15,7 +15,7 @@ from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_
 
 from core.compiler.semantic.types import (
     Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
-    UserDefinedType,
+    UserDefinedType, CallableType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE,
     get_builtin_type
 )
@@ -276,9 +276,12 @@ class SemanticAnalyzer:
                 if node.value:
                     val_type = self.visit(node.value)
                     if val_type is not None:
+                        # [SPECIAL CASE] Allow BehaviorExpr to be assigned to 'callable'
+                        if isinstance(declared_type, CallableType) and isinstance(node.value, ast.BehaviorExpr):
+                            # This will be handled as a Lambda in the Interpreter
+                            pass
                         # [FIX]: Type Inference for 'var' (AnyType)
-                        # If declared type is Any, try to infer from value.
-                        if isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
+                        elif isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
                             symbol.type_info = val_type
                         elif not val_type.is_assignable_to(declared_type):
                             self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node, code=SEM_TYPE_MISMATCH)
@@ -420,10 +423,18 @@ class SemanticAnalyzer:
             # Returns an instance of that class
             return func_type
             
-        if not isinstance(func_type, FunctionType):
+        # Determine if it's a normal function or a generic callable
+        if not isinstance(func_type, (FunctionType, CallableType)):
             self.error(f"Expression of type '{func_type}' is not callable", node)
             return ANY_TYPE # Fallback
             
+        if isinstance(func_type, CallableType):
+            # Generic callable, we don't know the exact signature or return type at compile time.
+            # Assume it's Any for now.
+            for arg in node.args:
+                self.visit(arg)
+            return ANY_TYPE
+
         # Check arguments
         param_types = func_type.param_types
         
@@ -610,10 +621,9 @@ class SemanticAnalyzer:
         return ListType(ANY_TYPE)
 
     def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> Type:
-        # Check expressions referenced in the behavior expression
         for segment in node.segments:
             if isinstance(segment, ast.Expr):
-                # Special check for Name to provide better error message for tests
+                # 为了保持测试兼容性，对未定义变量提供特定的错误信息
                 if isinstance(segment, ast.Name):
                     symbol = self.scope_manager.resolve(segment.id)
                     if not symbol:
@@ -621,7 +631,9 @@ class SemanticAnalyzer:
                         continue
                 self.visit(segment)
         
-        return STR_TYPE # Behavior expressions return string content
+        # 行为描述行本质上是动态 LLM 调用，其返回类型在运行时确定。
+        # 为了支持 int x = @~...~ 这种语法，我们在语义分析阶段将其视为 ANY_TYPE。
+        return ANY_TYPE
 
     # --- Helpers ---
 

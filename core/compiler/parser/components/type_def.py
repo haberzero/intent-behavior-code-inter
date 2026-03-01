@@ -16,6 +16,8 @@ class TypeComponent(BaseComponent):
                 # Fallback: Assume it's a type (e.g. forward reference or user type not yet fully registered)
                 self.stream.advance()
                 base_type = self._loc(ast.Name(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
+        elif self.stream.match(TokenType.CALLABLE):
+            base_type = self._loc(ast.Name(id='callable', ctx='Load'), self.stream.previous())
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.")
 

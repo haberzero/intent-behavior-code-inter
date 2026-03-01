@@ -50,7 +50,7 @@ class SyntaxRecognizer:
         if token.type == TokenType.RETURN:
             return SyntaxRole.RETURN_STATEMENT
         
-        if token.type == TokenType.VAR:
+        if token.type in (TokenType.VAR, TokenType.CALLABLE):
             return SyntaxRole.VARIABLE_DECLARATION
         
         # Check for implicit declaration: Type Name

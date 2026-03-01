@@ -51,14 +51,35 @@ class DeclarationComponent(BaseComponent):
             stmt = self.statement.parse_statement()
         
         if self.context.pending_intent is not None and stmt is not None:
-            # If the statement is not one that naturally consumes an intent (like Call),
-            # we report a warning to the user.
-            self.issue_tracker.report(
-                Severity.WARNING, "PAR_WARN", 
-                f"Intent comment '{self.context.pending_intent}' was not used by the following statement.", 
-                self.stream.peek()
-            )
-            self.context.pending_intent = None
+            # 尝试将待处理意图注释注入到后续语句中
+            intent_consumed = False
+            
+            # 1. 直接赋值给行为描述行 (BehaviorExpr)
+            if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.BehaviorExpr):
+                stmt.value.intent = self.context.pending_intent
+                intent_consumed = True
+            
+            # 2. 表达式语句（如独立调用或独立行为描述行）
+            elif isinstance(stmt, ast.ExprStmt):
+                if isinstance(stmt.value, ast.BehaviorExpr):
+                    stmt.value.intent = self.context.pending_intent
+                    intent_consumed = True
+                elif isinstance(stmt.value, ast.Call):
+                    # Call 节点本身支持 intent 字段
+                    if stmt.value.intent is None:
+                        stmt.value.intent = self.context.pending_intent
+                        intent_consumed = True
+            
+            if intent_consumed:
+                self.context.pending_intent = None
+            else:
+                # 若语句无法自然消费意图，则报告警告
+                self.issue_tracker.report(
+                    Severity.WARNING, "PAR_WARN", 
+                    f"Intent comment '{self.context.pending_intent}' was not used by the following statement.", 
+                    self.stream.peek()
+                )
+                self.context.pending_intent = None
             
         return stmt
 

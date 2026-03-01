@@ -333,5 +333,75 @@ class TestLLMIntegration(IBCTestCase):
         self.assertIn("95", user_prompt)
         self.assertIn("vip", user_prompt)
 
+    # --- New Features Verification ---
+
+    def test_behavior_lambda_and_intent_capture(self):
+        """验证行为描述行被赋值给 callable 时被 Lambda 化，并能捕获定义时的意图。"""
+        code = """
+        import ai
+        import idbg
+        ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+        
+        @ 我是一个捕获的意图
+        callable f = @~ 行为 ~
+        
+        # 此时不应有任何 LLM 调用
+        # 调用时才会执行
+        print("calling...")
+        f()
+        
+        dict last = idbg.last_llm()
+        print(last["sys_prompt"])
+        """
+        self.run_code(code, ["MOCK_RESPONSE"])
+        # 验证输出中包含了意图
+        self.assertIn("我是一个捕获的意图", self.output[-1])
+        # 确保 "calling..." 在日志之前
+        self.assertTrue(self.output.index("calling...") < self.output.index(self.output[-1]))
+
+    def test_type_aware_injection_and_conversion(self):
+        """验证内核会自动注入类型约束，并尝试自动转换 LLM 的响应。"""
+        code = """
+        import ai
+        import idbg
+        ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+        
+        # 内核应注入 "预期返回类型：int"
+        int count = @~ MOCK:RESPONSE:123 ~
+        print(count)
+        
+        dict last = idbg.last_llm()
+        print(last["sys_prompt"])
+        """
+        self.run_code(code)
+        # 验证自动转换结果
+        self.assertIn("123", self.output)
+        # 验证注入的类型约束
+        self.assertIn("预期返回类型：int", self.output[-1])
+
+    def test_decision_mapping_flexibility(self):
+        """验证 ai.set_decision_map 对 branch 场景的影响。"""
+        code = """
+        import ai
+        ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+        ai.set_decision_map({"ok": "1", "reject": "0"})
+        
+        if @~ MOCK:RESPONSE:ok ~:
+            print("is_ok")
+            
+        if @~ MOCK:RESPONSE:reject ~:
+            print("is_rejected")
+        else:
+            print("not_ok")
+        """
+        self.run_code(code)
+        if "is_ok" not in self.output:
+            print(f"DEBUG: output={self.output}")
+            # Check if any errors occurred
+            for diag in self.engine.scheduler.issue_tracker.diagnostics:
+                print(f"DEBUG: diagnostic={diag}")
+        self.assertIn("is_ok", self.output)
+        self.assertIn("not_ok", self.output)
+
 if __name__ == '__main__':
     unittest.main()

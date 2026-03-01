@@ -9,5 +9,6 @@ BUILTIN_TYPES = {
     'Any', 
     'None', 
     'list', 
-    'dict'
+    'dict',
+    'callable'
 }

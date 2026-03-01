@@ -187,6 +187,12 @@ class EvaluatorImpl:
         """
         处理二元运算。
         """
+        # 特殊处理 None 比较
+        if op in ('==', '!='):
+            if left is None or right is None:
+                if op == '==': return left is right
+                if op == '!=': return left is not right
+
         # 查找注册的 Handler
         handler = self._bin_handlers.get((op, type(left), type(right)))
         

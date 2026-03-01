@@ -93,5 +93,35 @@ class TestTypesAndOps(unittest.TestCase):
         with self.assertRaises(CompilerError):
             self.run_code('float f = 1.5; int x = f & 1')
 
+    # --- None & Callable ---
+
+    def test_none_comparisons(self):
+        """Test None comparisons with various types."""
+        code = """
+        var a = None
+        bool r1 = (a == None)    # True
+        bool r2 = (a != None)    # False
+        bool r3 = (10 == None)   # False
+        bool r4 = ("s" != None)  # True
+        bool r5 = (None == 0)    # False
+        """
+        interp = self.run_code(code)
+        self.assertTrue(interp.context.get_variable("r1"))
+        self.assertFalse(interp.context.get_variable("r2"))
+        self.assertFalse(interp.context.get_variable("r3"))
+        self.assertTrue(interp.context.get_variable("r4"))
+        self.assertFalse(interp.context.get_variable("r5"))
+
+    def test_callable_type_assignment(self):
+        """Test callable type declaration and assignment."""
+        code = """
+        func my_func(int x) -> int:
+            return x + 1
+        callable f = my_func
+        int res = f(10)
+        """
+        interp = self.run_code(code)
+        self.assertEqual(interp.context.get_variable("res"), 11)
+
 if __name__ == '__main__':
     unittest.main()
