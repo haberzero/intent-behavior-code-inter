@@ -44,7 +44,7 @@ def main():
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--var", action="append", help="Inject variables in key=value format")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
-    run_parser.add_argument("--core-debug", help="Enable core debugging. Pass a JSON string (e.g. '{\\"INTERPRETER\\": \\"DATA\\"}') or a file path.")
+    run_parser.add_argument("--core-debug", help='Enable core debugging. Pass a JSON string (e.g. \'{"INTERPRETER": "DATA"}\') or a file path.')
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")

@@ -90,7 +90,7 @@ class MyTest(IBCTestCase):
 
 为了防止测试用例之间的日志污染，`IBCTestCase` 会在每个测试用例的 `setUp` 和 `tearDown` 阶段自动通过 `IBCIEngine` 实例重置调试器配置。
 
-由于 `CoreDebugger` 现在是非单例模式，每个 `IBCIEngine` 实例都拥有其独立的调试器对象。这从根源上解决了测试用例之间的状态污染问题。
+由于 `CoreDebugger` 现在支持多实例模式，每个 `IBCIEngine` 实例都拥有其独立的调试器对象。这解决了不同引擎实例之间的状态污染问题。但请注意，底层组件在未显式接收调试器实例时，仍会回退到全局 `core_debugger` 单例，因此建议始终通过引擎入口启动程序。
 
 ---
 
