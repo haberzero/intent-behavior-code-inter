@@ -159,8 +159,12 @@ class LLMExecutorImpl:
         
         # 获取场景特定的系统提示词 (通过 ai 组件配置)
         ai_module = None
+        current_retry_hint = self.retry_hint
         if self.service_context and self.service_context.interop:
             ai_module = self.service_context.interop.get_package("ai")
+            # 如果内核没有 hint 但 ai 模块有 (用户手动设置)，则同步过来
+            if not current_retry_hint and ai_module and hasattr(ai_module, "_retry_hint"):
+                current_retry_hint = ai_module._retry_hint
             
         if ai_module and hasattr(ai_module, "get_scene_prompt"):
             scene_prompt = ai_module.get_scene_prompt(scene.name.lower())
@@ -171,8 +175,8 @@ class LLMExecutorImpl:
             sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
             
         # 注入 retry_hint (如果有)
-        if self.retry_hint:
-            sys_prompt += f"\n\n注意：这是重试请求。之前的回答不符合要求，请参考此修正提示：{self.retry_hint}"
+        if current_retry_hint:
+            sys_prompt += f"\n\n注意：这是重试请求。之前的回答不符合要求，请参考此修正提示：{current_retry_hint}"
             
         # 4. 执行
         response = self._call_llm(sys_prompt, content, node, scene=scene.name.lower())
