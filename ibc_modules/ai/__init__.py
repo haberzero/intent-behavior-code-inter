@@ -122,6 +122,7 @@ class AILib(ILLMProvider):
             # --- 原有 Mock 逻辑 ---
             if "MOCK:RESPONSE:" in u_upper:
                 res = user_prompt.split("MOCK:RESPONSE:")[1].strip()
+                self._retry_hint = None
                 self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
                 return res
 
@@ -131,6 +132,7 @@ class AILib(ILLMProvider):
                     res = "MOCK_UNCERTAIN_RESPONSE"
                 else:
                     res = "1" if scene in ("branch", "loop") else f"[MOCK] Repaired using hint: {self._retry_hint}"
+                    self._retry_hint = None
                 self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
                 return res
             
@@ -143,6 +145,7 @@ class AILib(ILLMProvider):
             if "MOCK:NOISY:" in u_upper:
                 content = user_prompt.split("MOCK:NOISY:")[1].strip()
                 res = f"Certainly! According to your request, the result is: {content}. I hope this helps you with your task!"
+                self._retry_hint = None
                 self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
                 return res
 
@@ -151,6 +154,7 @@ class AILib(ILLMProvider):
                 content = user_prompt.split("MOCK:MARKDOWN:")[1].strip()
                 lang = "json" if scene == "general" else ""
                 res = f"Here is the result:\n```{lang}\n{content}\n```"
+                self._retry_hint = None
                 self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
                 return res
 
@@ -169,6 +173,9 @@ class AILib(ILLMProvider):
                     res = "1"
             else:
                 res = f"[MOCK] Simulated response for: {user_prompt} (INTENTS: {sys_prompt})"
+            
+            # 成功执行后清除重试提示词，防止状态污染后续请求
+            self._retry_hint = None
             
             self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
             return res
@@ -194,6 +201,9 @@ class AILib(ILLMProvider):
                     messages=messages,
                     temperature=0.1 if scene in ("branch", "loop") else 0.7
                 )
+                
+                # 成功调用后清除重试提示词，防止状态污染后续请求
+                self._retry_hint = None
                 
                 return response.choices[0].message.content
             except Exception as e:

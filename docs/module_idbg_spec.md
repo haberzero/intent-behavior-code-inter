@@ -17,15 +17,16 @@
 
 ## 2. 核心算法：作用域深度回溯 (Scope Traversal)
 
-`idbg.vars()` 不仅仅返回当前作用域的变量，它实现了一套模拟解释器变量解析顺序的回溯算法。
+`idbg.vars()` 不仅仅返回当前作用域的变量，它依赖于解释器内核实现的变量快照机制。该算法已下沉至内核的 `IStateReader` 接口实现中。
 
 ### 2.1 遍历过程 (Traversal Pipeline)
 1. **初始化**: 创建一个空的 `all_symbols` 汇总字典。
 2. **栈顶开始**: 从 `RuntimeContext.current_scope` 开始向下（向外）遍历父作用域链。
 3. **名称冲突处理 (Shadowing)**: 
-   - 对于每个作用域，调用 `get_all_symbols()` 获取当前层级的所有变量。
+   - 对于每个作用域，获取当前层级的所有变量。
    - 只有当变量名在汇总字典中**不存在**时，才将其加入。这保证了内层变量（遮蔽者）会优先于外层变量（被遮蔽者）呈现。
 4. **终点**: 到达 `global_scope` 后停止回溯。
+5. **数据导出**: 按照类型导出矩阵对 Python 对象进行过滤和映射。
 
 ---
 
@@ -43,6 +44,7 @@
 | `list` | `list` | 允许（递归保留） |
 | `dict` | `dict` | 允许（递归保留） |
 | `None` | `None` | 允许 |
+| `ClassInstance` | `ClassInstance` | **允许** (支持属性内省) |
 | `FunctionDef`, `LLMFunctionDef` | N/A | **过滤** (防止执行流混乱) |
 | `Module`, `IDbgLib` | N/A | **过滤** (防止循环内省) |
 | `Callable` | N/A | **过滤** (防止非法调用) |
@@ -66,3 +68,17 @@
 - **`instruction_count`**: 每一个 AST 节点的 `visit` 都会触发该计数自增，能够反映真实的逻辑复杂度。
 - **`call_stack_depth`**: 当前函数调用的嵌套深度。
 - **`active_intents`**: 这是从 `RuntimeContext` 的意图栈中实时提取的，反映了当前 LLM 调用在这一时刻所受到的所有上下文约束。
+
+---
+
+## 6. 对象内省 (Object Introspection)
+
+针对 IBC-Inter 新增的类系统，`idbg` 提供了专用的内省接口。
+
+### 6.1 `idbg.fields(obj)`
+
+该函数允许开发者穿透类实例的封装，直接获取其内部存储的字段。
+
+- **输入**: 任意 `ClassInstance`。
+- **返回**: 包含所有属性名称与当前值的 `dict`。
+- **用途**: 调试 `__init__` 初始化逻辑或类方法对状态的修改。

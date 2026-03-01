@@ -19,6 +19,7 @@ from .permissions import PermissionManager as PermissionManagerImpl
 from .runtime_types import ClassInstance, BoundMethod
 from core.support.host_interface import HostInterface
 from core.runtime.ext.capabilities import IStackInspector
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 # --- Runtime Exceptions for Flow Control ---
 class ReturnException(Exception):
@@ -36,7 +37,8 @@ class ServiceContextImpl:
                  module_manager: ModuleManager,
                  interop: InterOp,
                  permission_manager: PermissionManager,
-                 interpreter: InterpreterInterface):
+                 interpreter: InterpreterInterface,
+                 debugger: Any = None):
         self._issue_tracker = issue_tracker
         self._runtime_context = runtime_context
         self._evaluator = evaluator
@@ -45,7 +47,10 @@ class ServiceContextImpl:
         self._interop = interop
         self._permission_manager = permission_manager
         self._interpreter = interpreter
+        self._debugger = debugger
 
+    @property
+    def debugger(self) -> Any: return self._debugger
     @property
     def interpreter(self) -> InterpreterInterface: return self._interpreter
     @property
@@ -82,10 +87,12 @@ class Interpreter(IStackInspector):
                  max_instructions: int = 10000, 
                  max_call_stack: int = 100,
                  scheduler: Optional[Any] = None,
-                 host_interface: Optional[HostInterface] = None):
+                 host_interface: Optional[HostInterface] = None,
+                 debugger: Optional[Any] = None):
         self.output_callback = output_callback
         self.scheduler = scheduler
         self.host_interface = host_interface or HostInterface()
+        self.debugger = debugger or core_debugger
         
         # 1. 初始化基础组件
         runtime_context = RuntimeContextImpl()
@@ -116,7 +123,8 @@ class Interpreter(IStackInspector):
             module_manager=module_manager,
             interop=interop,
             permission_manager=permission_manager,
-            interpreter=self
+            interpreter=self,
+            debugger=self.debugger
         )
         
         # 4. 完成子组件的注入
@@ -156,7 +164,8 @@ class Interpreter(IStackInspector):
             max_call_stack=self.max_call_stack,
             scheduler=self.scheduler,
             issue_tracker=self.service_context.issue_tracker,
-            host_interface=self.host_interface
+            host_interface=self.host_interface,
+            debugger=self.debugger
         )
 
     def _register_intrinsics(self):
@@ -186,11 +195,13 @@ class Interpreter(IStackInspector):
             print(message)
 
     def interpret(self, module: ast.Module) -> Any:
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Starting execution...")
         self.instruction_count = 0
         result = None
         try:
             for stmt in module.body:
                 result = self.visit(stmt)
+            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError as e:
             # 只有用户层面的错误才汇报给 IssueTracker
@@ -217,6 +228,8 @@ class Interpreter(IStackInspector):
     def visit(self, node: ast.ASTNode) -> Any:
         """核心 Visitor 分发方法"""
         self.instruction_count += 1
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Visiting {node.__class__.__name__} (Instr: {self.instruction_count})")
+        
         if self.instruction_count > self.max_instructions:
             raise InterpreterError("Execution limit exceeded (infinite loop protection)", node, error_code=RUN_LIMIT_EXCEEDED)
 
@@ -302,6 +315,8 @@ class Interpreter(IStackInspector):
 
     def visit_Assign(self, node: ast.Assign):
         value = self.visit(node.value) if node.value else None
+        
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Assigning value to targets:", data={"value": value, "targets": [t.__class__.__name__ for t in node.targets]})
         
         for target in node.targets:
             if isinstance(target, ast.Name):
@@ -513,6 +528,8 @@ class Interpreter(IStackInspector):
     def visit_Call(self, node: ast.Call):
         func = self.visit(node.func)
         args = [self.visit(arg) for arg in node.args]
+        
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Executing Call: {func}", data={"args": args})
         
         if node.intent:
             self.context.push_intent(node.intent)

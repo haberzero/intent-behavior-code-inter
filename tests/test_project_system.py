@@ -17,17 +17,22 @@ from core.compiler.parser.symbol_table import ScopeManager, SymbolType
 from core.support.diagnostics.issue_tracker import IssueTracker
 from core.types.dependency_types import ImportType, CircularDependencyError
 from core.types.diagnostic_types import CompilerError
+from tests.ibc_test_case import IBCTestCase
 
-class TestProjectSystem(unittest.TestCase):
+class TestProjectSystem(IBCTestCase):
     """
     Consolidated tests for Project System, Module Loading, and Compilation Scheduling.
     Covers dependency scanning, pre-scanning, cross-module resolution, and plugin discovery.
     """
 
     def setUp(self):
+        super().setUp()
         self.test_root = os.path.abspath("tmp_project_system_test")
         os.makedirs(self.test_root, exist_ok=True)
         self.test_data_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'test_data'))
+        # engine is already created by super().setUp()
+        # Re-create engine with test_root if needed
+        self.engine = self.create_engine(root_dir=self.test_root)
 
     def tearDown(self):
         if os.path.exists(self.test_root):

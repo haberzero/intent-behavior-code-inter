@@ -14,6 +14,7 @@ from core.compiler.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.types.diagnostic_types import Severity, CompilerError
 from core.support.host_interface import HostInterface
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 class Scheduler:
     """
@@ -22,12 +23,13 @@ class Scheduler:
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
         self.root_dir = os.path.realpath(root_dir)
         self.issue_tracker = IssueTracker()
         self.source_manager = SourceManager()
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
+        self.debugger = debugger or core_debugger
         # DependencyScanner is now instantiated per file
         
         # Initial symbols to pre-populate in every module's global scope
@@ -79,6 +81,7 @@ class Scheduler:
         Compiles the project starting from entry_file.
         Returns a map of file_path -> AST.
         """
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Starting project compilation: {entry_file}")
         # 0. Clear previous state
         self.issue_tracker.clear()
         self.modules.clear()
@@ -197,7 +200,7 @@ class Scheduler:
                 continue
             
             # Lexing
-            lexer = Lexer(content, self.issue_tracker)
+            lexer = Lexer(content, self.issue_tracker, debugger=self.debugger)
             try:
                 tokens = lexer.tokenize()
                 self.token_cache[current_path] = tokens
@@ -267,7 +270,7 @@ class Scheduler:
                 # Should not happen if _scan_and_cache ran successfully
                 # But if it failed, we might be here?
                 # Re-lex
-                lexer = Lexer(source, file_tracker)
+                lexer = Lexer(source, file_tracker, debugger=self.debugger)
                 tokens = lexer.tokenize()
             
             # 2. Parse
@@ -277,7 +280,8 @@ class Scheduler:
                 self.scope_cache, 
                 package_name=module_name, 
                 module_resolver=self.resolver,
-                host_interface=self.host_interface
+                host_interface=self.host_interface,
+                debugger=self.debugger
             )
             ast_node = parser.parse()
             
@@ -290,7 +294,7 @@ class Scheduler:
             self._prune_cache()
             
             # 3. Semantic Analysis
-            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface)
+            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger)
             
             # Pre-populate global scope with predefined symbols
             if ast_node.scope:

@@ -44,6 +44,7 @@ def main():
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--var", action="append", help="Inject variables in key=value format")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
+    run_parser.add_argument("--core-debug", help="Enable core debugging. Pass a JSON string (e.g. '{\\"INTERPRETER\\": \\"DATA\\"}') or a file path.")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -67,7 +68,23 @@ def main():
 
     # 初始化引擎，决定是否自动嗅探
     auto_sniff = not args.no_sniff
-    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff)
+    
+    # 处理内核调试配置
+    core_debug_config = None
+    if hasattr(args, 'core_debug') and args.core_debug:
+        if os.path.exists(args.core_debug):
+            try:
+                with open(args.core_debug, 'r', encoding='utf-8') as f:
+                    core_debug_config = json.load(f)
+            except Exception as e:
+                print(f"Warning: Failed to load core debug config file: {e}")
+        else:
+            try:
+                core_debug_config = json.loads(args.core_debug)
+            except Exception as e:
+                print(f"Warning: Failed to parse core debug JSON string: {e}")
+
+    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff, core_debug_config=core_debug_config)
 
     # 1. 加载插件
     if args.plugin:

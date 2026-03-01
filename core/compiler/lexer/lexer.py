@@ -1,9 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from core.types.lexer_types import TokenType, Token, LexerMode, SubState
 from .str_stream import StrStream
 from core.support.diagnostics.issue_tracker import IssueTracker
 from core.support.diagnostics.codes import *
 from core.types.diagnostic_types import Severity
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 # Components
 from .indent_processor import IndentProcessor
@@ -20,10 +21,11 @@ class Lexer:
     - CoreTokenScanner: Handles standard code tokenization.
     - LLMScanner: Handles LLM block tokenization.
     """
-    def __init__(self, source_code: str, issue_tracker: Optional[IssueTracker] = None):
+    def __init__(self, source_code: str, issue_tracker: Optional[IssueTracker] = None, debugger: Optional[Any] = None):
         self.scanner = StrStream(source_code)
         self.tokens: List[Token] = []
         self.issue_tracker = issue_tracker or IssueTracker(source_code)
+        self.debugger = debugger or core_debugger
         
         # State Management
         self.mode_stack: List[LexerMode] = [LexerMode.NORMAL]
@@ -35,6 +37,7 @@ class Lexer:
         self.llm_scanner = LLMScanner(self.scanner)
 
     def tokenize(self) -> List[Token]:
+        self.debugger.trace(CoreModule.LEXER, DebugLevel.BASIC, "Starting tokenization...")
         try:
             while not self.scanner.is_at_end():
                 self._process_line()
@@ -47,6 +50,9 @@ class Lexer:
             self.tokens.extend(dedents)
                 
             self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
+            
+            self.debugger.trace(CoreModule.LEXER, DebugLevel.BASIC, f"Tokenization complete. Total tokens: {len(self.tokens)}")
+            self.debugger.trace(CoreModule.LEXER, DebugLevel.DATA, "Token stream:", data=self.tokens)
             
             # Throw exception if errors exist
             self.issue_tracker.check_errors()

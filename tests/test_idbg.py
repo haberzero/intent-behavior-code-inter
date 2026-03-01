@@ -10,16 +10,21 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.engine import IBCIEngine
 from core.runtime.ext.capabilities import ExtensionCapabilities
 from ibc_modules.idbg import create_implementation
+from tests.ibc_test_case import IBCTestCase
 
-class TestIDbg(unittest.TestCase):
+class TestIDbg(IBCTestCase):
     """
     Consolidated tests for IDbg module.
     Covers core functionality, integration with IBCI code, and safety/robustness.
     """
 
     def setUp(self):
+        super().setUp()
         self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.engine = IBCIEngine(root_dir=self.root_dir)
+        # self.engine is already created by IBCTestCase.setUp()
+        # but here we need to ensure it's pointing to the correct root_dir if needed
+        # Actually self.engine = self.create_engine(root_dir=self.root_dir) is safer
+        self.engine = self.create_engine(root_dir=self.root_dir)
         self.engine._prepare_interpreter(output_callback=None)
         self.idbg = create_implementation()
         

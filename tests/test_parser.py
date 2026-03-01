@@ -14,8 +14,9 @@ from core.compiler.semantic.types import FunctionType, INT_TYPE
 from core.types import parser_types as ast
 from core.types.diagnostic_types import CompilerError, Severity
 from core.support.diagnostics.codes import *
+from tests.ibc_test_case import IBCTestCase
 
-class TestParser(unittest.TestCase):
+class TestParser(IBCTestCase):
     """
     Consolidated tests for Parser.
     Covers basic, complex, module-level, and error scenarios.

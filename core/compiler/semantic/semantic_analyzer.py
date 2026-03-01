@@ -11,6 +11,7 @@ from core.support.diagnostics.issue_tracker import IssueTracker
 from core.support.diagnostics.codes import (
     SEM_UNDEFINED_SYMBOL, SEM_REDEFINITION, SEM_TYPE_MISMATCH
 )
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 from core.compiler.semantic.types import (
     Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
@@ -45,12 +46,14 @@ class SemanticAnalyzer:
             sym.type_info = mod_type
             sym.exported_scope = mod_type.scope
 
-    def __init__(self, issue_tracker: Optional[IssueTracker] = None, host_interface: Optional[HostInterface] = None):
+    def __init__(self, issue_tracker: Optional[IssueTracker] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
         self.scope_manager = ScopeManager() 
         self.issue_tracker = issue_tracker or IssueTracker()
         self.host_interface = host_interface
+        self.debugger = debugger or core_debugger
         
     def analyze(self, node: ast.ASTNode):
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Starting semantic analysis...")
         # Use the global scope attached to Module if available
         if isinstance(node, ast.Module) and node.scope:
             self.scope_manager.current_scope = node.scope
@@ -63,6 +66,8 @@ class SemanticAnalyzer:
             self._init_builtins()
             
         self.visit(node)
+        
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Semantic analysis complete.")
         
         self.issue_tracker.check_errors()
 

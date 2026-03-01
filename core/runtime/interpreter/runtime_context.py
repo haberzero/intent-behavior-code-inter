@@ -3,6 +3,7 @@ from .interfaces import RuntimeSymbol, Scope, RuntimeContext
 from core.types.exception_types import InterpreterError
 from core.support.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.runtime.ext.capabilities import IStateReader
+from .runtime_types import ClassInstance
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
@@ -79,13 +80,19 @@ class RuntimeContextImpl(IStateReader):
         result = {}
         for name, sym in all_symbols.items():
             val = sym.value
-            # 基础过滤：仅导出基础数据类型和容器，防止泄露内核对象
-            if not isinstance(val, (int, float, str, bool, list, dict)) and val is not None:
+            # 基础过滤：导出基础数据类型、容器以及 ClassInstance
+            if not isinstance(val, (int, float, str, bool, list, dict, ClassInstance)) and val is not None:
                 continue
+            
+            # 如果是 ClassInstance，提供一个可读的 type
+            if isinstance(val, ClassInstance):
+                type_name = val.class_def.name
+            else:
+                type_name = str(sym.declared_type) if sym.declared_type else type(val).__name__
             
             result[name] = {
                 "value": val,
-                "type": str(sym.declared_type) if sym.declared_type else type(val).__name__,
+                "type": type_name,
                 "is_const": sym.is_const
             }
         return result

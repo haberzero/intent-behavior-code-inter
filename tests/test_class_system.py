@@ -1,10 +1,12 @@
 import unittest
 import textwrap
 from core.engine import IBCIEngine
+from tests.ibc_test_case import IBCTestCase
 
-class TestClassSystem(unittest.TestCase):
+class TestClassSystem(IBCTestCase):
     def setUp(self):
-        self.engine = IBCIEngine()
+        super().setUp()
+        # self.engine is already initialized by super().setUp()
 
     # --- Basic Tests ---
 
@@ -221,6 +223,31 @@ class TestClassSystem(unittest.TestCase):
         # We expect run_string to return False due to Compilation Error
         success = self.engine.run_string(code)
         self.assertFalse(success)
+
+    def test_idbg_integration_with_classes(self):
+        code = textwrap.dedent("""
+            import idbg
+            class User:
+                str name = "Guest"
+                int id = 0
+                
+            var u = User()
+            u.name = "Alice"
+            
+            dict v = idbg.vars()
+            var u_val = v["u"]["value"]
+            
+            # Check if fields are accessible
+            dict f = idbg.fields(u_val)
+            if f["name"] != "Alice" or f["id"] != 0:
+                raise "Error: idbg.fields failed"
+                
+            # Direct attribute access from idbg.vars() result
+            if u_val.name != "Alice":
+                raise "Error: direct attribute access failed"
+        """)
+        success = self.engine.run_string(code)
+        self.assertTrue(success)
 
 if __name__ == "__main__":
     unittest.main()

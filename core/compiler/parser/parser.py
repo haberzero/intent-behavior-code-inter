@@ -13,6 +13,7 @@ from core.compiler.parser.components.type_def import TypeComponent
 from core.compiler.parser.components.import_def import ImportComponent
 
 from core.support.host_interface import HostInterface
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 if TYPE_CHECKING:
     from core.compiler.parser.resolver.resolver import ModuleResolver
@@ -22,10 +23,11 @@ class Parser:
     IBC-Inter Parser.
     Uses Component-based architecture.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
         
         # 1. Initialize Context
         self.stream = TokenStream(tokens, issue_tracker)
+        self.debugger = debugger or core_debugger
         self.context = ParserContext(
             stream=self.stream,
             issue_tracker=self.stream.issue_tracker,
@@ -69,6 +71,7 @@ class Parser:
         scanner.scan()
 
     def parse(self) -> ast.Module:
+        self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, "Starting parsing...")
         statements = []
         while not self.stream.is_at_end():
             try:
@@ -78,6 +81,7 @@ class Parser:
                 # Top level declarations or statements
                 stmt = self.declaration()
                 if stmt:
+                    self.debugger.trace(CoreModule.PARSER, DebugLevel.DETAIL, f"Parsed top-level statement: {stmt.__class__.__name__}")
                     statements.append(stmt)
             except ParseControlFlowError:
                 self.synchronize()
@@ -87,6 +91,10 @@ class Parser:
         
         module_node = ast.Module(body=statements)
         module_node.scope = self.context.scope_manager.global_scope
+        
+        self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, f"Parsing complete. Total statements: {len(statements)}")
+        self.debugger.trace(CoreModule.PARSER, DebugLevel.DATA, "AST Module body:", data=statements)
+        
         return module_node
 
     def declaration(self) -> Optional[ast.Stmt]:

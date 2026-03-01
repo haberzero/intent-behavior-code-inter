@@ -11,15 +11,18 @@ from core.compiler.parser.parser import Parser
 from core.compiler.semantic.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic.types import PrimitiveType, AnyType, ListType
 from core.types.diagnostic_types import CompilerError, Severity
+from tests.ibc_test_case import IBCTestCase
 
-class TestSemantic(unittest.TestCase):
+class TestSemantic(IBCTestCase):
     """
     Consolidated tests for Semantic Analyzer.
     Covers basic, complex, and error scenarios.
     """
 
     def setUp(self):
-        self.analyzer = SemanticAnalyzer()
+        super().setUp()
+        # Use host_interface from engine if available, or default
+        self.analyzer = SemanticAnalyzer(host_interface=self.engine.host_interface)
 
     def analyze_code(self, code):
         dedented_code = textwrap.dedent(code).strip() + "\n"

@@ -35,5 +35,12 @@ class IDbgLib:
             "active_intents": inspector.get_active_intents()
         }
 
+    def fields(self, obj: Any) -> Dict[str, Any]:
+        """返回 ClassInstance 的所有字段名与值"""
+        from core.runtime.interpreter.runtime_types import ClassInstance
+        if isinstance(obj, ClassInstance):
+            return dict(obj.fields)
+        return {}
+
 def create_implementation():
     return IDbgLib()

@@ -10,18 +10,21 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from core.engine import IBCIEngine
 from core.types.exception_types import InterpreterError
 from core.types.diagnostic_types import CompilerError
+from tests.ibc_test_case import IBCTestCase
 
-class TestInterpreter(unittest.TestCase):
+class TestInterpreter(IBCTestCase):
     """
     Consolidated tests for Interpreter.
     Covers basic execution, complex error handling, and system integration.
     """
 
     def setUp(self):
+        super().setUp()
         self.output = []
         self.test_dir = os.path.join(os.path.dirname(__file__), "tmp_test_project")
         os.makedirs(self.test_dir, exist_ok=True)
-        self.engine = IBCIEngine(root_dir=self.test_dir)
+        # Use inherited create_engine to support core_debug
+        self.engine = self.create_engine(root_dir=self.test_dir)
 
     def tearDown(self):
         if os.path.exists(self.test_dir):
@@ -31,17 +34,20 @@ class TestInterpreter(unittest.TestCase):
         self.output.append(msg)
 
     def run_code(self, code):
+        """
+        运行代码并返回成功状态及解释器实例。
+        如果发生错误，将根据调用者的意愿决定是否捕获异常。
+        """
         test_file = os.path.join(self.test_dir, "test.ibci")
         with open(test_file, "w", encoding="utf-8") as f:
             f.write(textwrap.dedent(code).strip() + "\n")
-        
-        success = self.engine.run(test_file, output_callback=self.capture_output)
-        if not success:
-            # Re-run manually to raise exceptions for tests that expect them
-            self.engine._prepare_interpreter(output_callback=self.capture_output)
-            ast_cache = self.engine.scheduler.compile_project(test_file)
-            self.engine.interpreter.interpret(ast_cache[test_file])
-            
+
+        # 直接使用 engine 的 run，保持 silent=True 以抑制输出
+        success = self.engine.run(
+            test_file, 
+            output_callback=self.capture_output, 
+            silent=True
+        )
         return success, self.engine.interpreter
 
     def create_file(self, name, content):
@@ -92,6 +98,17 @@ class TestInterpreter(unittest.TestCase):
         self.assertEqual(interp.context.get_variable("sum"), 10)
         self.assertEqual(interp.context.get_variable("count"), 3)
         self.assertEqual(interp.context.get_variable("res"), 1)
+
+    def test_generalized_for_loop(self):
+        """验证 for 循环支持布尔表达式作为条件驱动循环。"""
+        code = """
+        int i = 0
+        for i < 3:
+            print(i)
+            i = i + 1
+        """
+        self.run_code(code)
+        self.assertEqual(self.output, ["0", "1", "2"])
 
     def test_recursion(self):
         """Test recursive function calls."""

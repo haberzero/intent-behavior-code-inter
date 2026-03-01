@@ -6,6 +6,7 @@ from core.types import parser_types as ast
 from core.types.exception_types import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.runtime.ext.capabilities import ILLMProvider
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel
 
 class LLMExecutorImpl:
     """
@@ -37,6 +38,9 @@ class LLMExecutorImpl:
             # 1. 提取并评估结构化 Prompt
             sys_prompt = self._evaluate_segments(node.sys_prompt, context)
             user_prompt = self._evaluate_segments(node.user_prompt, context)
+            
+            if self.service_context and self.service_context.debugger:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Evaluated segments for LLM function '{node.name}'")
             
             # 2. 注入意图增强 (来自当前解释器的意图栈)
             active_intents = context.get_active_intents()
@@ -221,13 +225,24 @@ class LLMExecutorImpl:
         return response
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode, scene: str = "general") -> str:
+        if self.service_context and self.service_context.debugger:
+            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")
+            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
+            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
+        
         if self.llm_callback:
             # 同步同步重试提示词
             if self.retry_hint:
+                if self.service_context and self.service_context.debugger:
+                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {self.retry_hint}")
                 self.llm_callback.set_retry_hint(self.retry_hint)
             
             # 调用 Provider
-            return self.llm_callback(sys_prompt, user_prompt, scene=scene)
+            response = self.llm_callback(sys_prompt, user_prompt, scene=scene)
+            if self.service_context and self.service_context.debugger:
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
+                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
+            return response
         
         # 如果没有回调，说明配置缺失，抛出错误
         raise InterpreterError(

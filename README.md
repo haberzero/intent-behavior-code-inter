@@ -9,6 +9,8 @@ IBC-Inter 是一种实验性的**意图驱动型混合编程语言**。它旨在
 - **🛡️ AI 容错控制流 (LLM-Except)**: 专为解决 AI 逻辑判断模糊性设计的 `llmexcept` 与 `retry` 机制，实现逻辑的自我修复。
 - **🧩 插件化扩展 (Plugin-Ready)**: 零配置的 Python 插件自动嗅探机制，轻松扩展语言能力。
 - **🔒 安全沙箱**: 内置文件访问控制与权限管理，确保 AI 行为在受控范围内。
+- **🏛️ 类系统 (Class System)**: 原生支持面向对象编程，允许在类方法中无缝集成 LLM 能力。
+- **🔍 内核调试器 (Core Debugger)**: 分模块、分级别的内核追踪机制，支持编译器与解释器全链路观测。
 
 ## 📦 快速开始 (初学者友好指南)
 
@@ -121,8 +123,10 @@ IBC-Inter 采用高度解耦的编译器架构：
 - **HostInterface ([host_interface.py](file:///c:/myself/proj/intent-behavior-code-inter/core/host_interface.py))**: 统一的宿主互操作层，支持 Python 插件与标准库元数据管理。
 
 更多详情请参阅：
-- [使用指南](docs/prototype_usage_guide.md)
-- [语言规范](docs/ibc_inter_language_spec.md)
+- [语言规范](docs/ibc_inter_language_spec.md) (包含 Class 系统说明)
+- [idbg 模块规范](docs/module_idbg_spec.md) (包含对象内省接口)
+- [内核调试器指南](docs/core_debugger_guide.md) (配置与使用说明)
+- [单元测试指南](docs/unit_testing_guide.md) (包含基于内核调试的测试技巧)
 - [架构设计指南](docs/architecture_design_guide.md)
 
 ## 📄 开源协议

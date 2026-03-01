@@ -11,6 +11,7 @@ from core.support.host_interface import HostInterface
 from core.compiler.semantic.types import ModuleType, ANY_TYPE, INT_TYPE, FunctionType
 from core.types.symbol_types import SymbolType
 from core.types.scope_types import ScopeNode, ScopeType
+from tests.ibc_test_case import IBCTestCase
 
 class MockPlugin:
     def __init__(self):
@@ -18,17 +19,19 @@ class MockPlugin:
     def add(self, a, b): return a + b
     def _internal(self): return "hidden"
 
-class TestExtensions(unittest.TestCase):
+class TestExtensions(IBCTestCase):
     """
     Consolidated tests for Plugin System and Mock Directives.
     Covers host interface reflection, manual metadata, and special test directives.
     """
 
     def setUp(self):
+        super().setUp()
         self.outputs = []
 
     def run_code(self, code):
-        engine = IBCIEngine()
+        # Use inherited create_engine to support core_debug
+        engine = self.create_engine()
         test_file = os.path.abspath("tmp_extensions_test.ibci")
         with open(test_file, "w", encoding="utf-8") as f:
             f.write(textwrap.dedent(code).strip() + "\n")

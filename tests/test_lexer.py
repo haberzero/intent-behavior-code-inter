@@ -10,8 +10,9 @@ from core.compiler.lexer.lexer import Lexer
 from core.types.lexer_types import TokenType
 from core.types.diagnostic_types import CompilerError, Severity
 from core.support.diagnostics.codes import *
+from tests.ibc_test_case import IBCTestCase
 
-class TestLexer(unittest.TestCase):
+class TestLexer(IBCTestCase):
     """
     Consolidated tests for Lexer.
     Covers basic, complex, and error scenarios.
@@ -199,6 +200,27 @@ llm 生成(str msg):
         # llmend
         end_token = next(t for t in tokens if t.type == TokenType.LLM_END)
         self.assertIsNotNone(end_token)
+
+    def test_llm_keywords_same_line(self):
+        """验证 __sys__ 和 __user__ 允许在同行书写文本。"""
+        code = """
+llm test():
+    __sys__ You are a robot.
+    __user__ Say hello.
+    llmend
+"""
+        lexer = Lexer(code.strip())
+        tokens = lexer.tokenize()
+        
+        # 验证 __sys__ 同行的文本
+        sys_token_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_SYS)
+        self.assertEqual(tokens[sys_token_idx+1].type, TokenType.RAW_TEXT)
+        self.assertIn("You are a robot.", tokens[sys_token_idx+1].value)
+        
+        # 验证 __user__ 同行的文本
+        user_token_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_USER)
+        self.assertEqual(tokens[user_token_idx+1].type, TokenType.RAW_TEXT)
+        self.assertIn("Say hello.", tokens[user_token_idx+1].value)
 
     def test_raw_strings(self):
         """Test raw string literals (r"..." and r'...')."""

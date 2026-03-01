@@ -45,8 +45,10 @@ $$Prompt_{final} = Prompt_{scene} + Intent_{active} + Hint_{retry} + Prompt_{typ
 
 ## 4. 状态管理与重试逻辑 (State & Retry)
 
-`ai` 模块维护了一个临时的“故障上下文”：
-- **Retry Hint**: 当程序捕获 `llmexcept` 并设置提示词后，该状态会保存在模块内，直到下一次 LLM 调用成功后被清除。
+`ai` 模块与解释器协同维护了一套重试逻辑：
+
+- **Retry Hint 生命周期**: 当程序捕获 `llmexcept` 并设置提示词后，该状态会保存在模块内。为了防止状态污染，**该提示词仅在下一次 LLM 调用时生效，并在调用成功后自动清除**。
+- **内核重试限制**: 为了防止无限循环，IBC-Inter 解释器内核对单个 `llmexcept` 块内的 `retry` 指令设有 **5 次** 的硬性上限。超过此上限将抛出 `InterpreterError`。
 - **温度自适应**: 
   - 对于 `branch` 和 `loop` 场景，`temperature` 固定为 `0.1` 以确保判定的确定性。
   - 对于 `general` 场景，`temperature` 默认为 `0.7` 以保持回复的灵活性。
