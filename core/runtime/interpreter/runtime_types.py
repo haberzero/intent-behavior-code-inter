@@ -53,10 +53,18 @@ class AnonymousLLMFunction:
         self.node = node
         self.interpreter = interpreter
         self.closure_context = closure_context
+        # 捕获定义时的意图快照
+        self.captured_intents = []
+        if hasattr(closure_context, "get_active_intents"):
+            self.captured_intents = list(closure_context.get_active_intents())
 
     def __call__(self, *args):
-        # Execute behavior expression in the captured context
-        return self.interpreter.llm_executor.execute_behavior_expression(self.node, self.closure_context)
+        # Execute behavior expression in the captured context, with captured intents
+        return self.interpreter.llm_executor.execute_behavior_expression(
+            self.node, 
+            self.closure_context, 
+            captured_intents=self.captured_intents
+        )
     
     def __repr__(self):
         return f"<AnonymousLLMFunction at {hex(id(self))}>"

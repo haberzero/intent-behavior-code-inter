@@ -36,10 +36,20 @@ class IDbgLib:
         }
 
     def fields(self, obj: Any) -> Dict[str, Any]:
-        """返回 ClassInstance 的所有字段名与值"""
-        from core.runtime.interpreter.runtime_types import ClassInstance
+        """返回对象（ClassInstance 或 Lambda）的内部细节"""
+        from core.runtime.interpreter.runtime_types import ClassInstance, AnonymousLLMFunction
         if isinstance(obj, ClassInstance):
             return dict(obj.fields)
+        
+        if isinstance(obj, AnonymousLLMFunction):
+            res = {
+                "__type__": "lambda",
+                "tag": obj.node.scene_tag.name if hasattr(obj.node, "scene_tag") else ""
+            }
+            if self._capabilities and self._capabilities.stack_inspector:
+                res["captured_intents"] = self._capabilities.stack_inspector.get_captured_intents(obj)
+            return res
+            
         return {}
 
 def create_implementation():

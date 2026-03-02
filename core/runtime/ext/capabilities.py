@@ -16,6 +16,9 @@ class IStackInspector(Protocol):
         ...
     def get_instruction_count(self) -> int:
         ...
+    def get_captured_intents(self, obj: Any) -> List[str]:
+        """获取指定对象（如 Lambda）捕获的意图栈"""
+        ...
 
 @runtime_checkable
 class ILLMProvider(Protocol):
