@@ -367,8 +367,30 @@ class SemanticAnalyzer:
 
     def visit_IntentStmt(self, node: ast.IntentStmt):
         self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing intent block")
+        
+        # 检查动态意图表达式是否包含 AI 调用
+        if node.intent.expr:
+            self._check_no_ai_calls(node.intent.expr, "Intent expression")
+            self.visit(node.intent.expr)
+            
         for stmt in node.body:
             self.visit(stmt)
+
+    def _check_no_ai_calls(self, node: ast.ASTNode, context_name: str):
+        """递归检查 AST 节点中是否包含 AI 调用（BehaviorExpr 或 LLM 函数调用）"""
+        if isinstance(node, ast.BehaviorExpr):
+            self.error(f"{context_name} cannot contain AI behavior expressions (@~...~)", node)
+            return
+
+        # 检查子节点
+        for attr in vars(node):
+            val = getattr(node, attr)
+            if isinstance(val, ast.ASTNode):
+                self._check_no_ai_calls(val, context_name)
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, ast.ASTNode):
+                        self._check_no_ai_calls(item, context_name)
 
     def visit_ExprStmt(self, node: ast.ExprStmt):
         self.visit(node.value)
