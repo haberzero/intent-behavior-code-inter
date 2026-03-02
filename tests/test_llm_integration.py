@@ -403,5 +403,60 @@ class TestLLMIntegration(IBCTestCase):
         self.assertIn("is_ok", self.output)
         self.assertIn("not_ok", self.output)
 
+    # --- New: llmexcept on Assignment and Expression ---
+
+    def test_assign_llmexcept_retry(self):
+        """测试赋值语句的 llmexcept 自动捕获与重试"""
+        code = textwrap.dedent("""
+            import ai
+            ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+            
+            str x = @~ MOCK:REPAIR 任务 ~
+            llmexcept:
+                ai.set_retry_hint("请修复")
+                retry
+            
+            print("Result: " + x)
+        """).strip() + "\n"
+        success = self.engine.run_string(code, output_callback=self.capture_output)
+        self.assertTrue(success)
+        found = "".join(self.output)
+        self.assertIn("Repaired using hint: 请修复", found)
+
+    def test_expr_stmt_llmexcept(self):
+        """测试纯表达式语句（行为描述行）的 llmexcept 捕获"""
+        code = textwrap.dedent("""
+            import ai
+            ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+            
+            @~ MOCK:REPAIR 执行 ~
+            llmexcept:
+                print("Caught Uncertainty")
+        """).strip() + "\n"
+        success = self.engine.run_string(code, output_callback=self.capture_output)
+        self.assertTrue(success)
+        self.assertIn("Caught Uncertainty", self.output)
+
+    def test_lambda_call_llmexcept(self):
+        """测试 Lambda 调用触发异常被外层 llmexcept 捕获"""
+        code = textwrap.dedent("""
+            import ai
+            ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+            
+            callable f = @~ MOCK:REPAIR 任务 ~
+            
+            str res = ""
+            res = f()
+            llmexcept:
+                ai.set_retry_hint("Lambda 修复")
+                retry
+                
+            print("Final: " + res)
+        """).strip() + "\n"
+        success = self.engine.run_string(code, output_callback=self.capture_output)
+        self.assertTrue(success)
+        found = "".join(self.output)
+        self.assertIn("Repaired using hint: Lambda 修复", found)
+
 if __name__ == '__main__':
     unittest.main()

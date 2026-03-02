@@ -1,4 +1,5 @@
 import unittest
+import textwrap
 from core.engine import IBCIEngine
 from core.types.exception_types import InterpreterError
 import os
@@ -77,6 +78,44 @@ intent ! "Exclusive Block":
         last_info = self.engine.interpreter.service_context.llm_executor.last_call_info
         self.assertIn("Exclusive Block", last_info["sys_prompt"])
         self.assertNotIn("Global Style", last_info["sys_prompt"])
+
+    # --- New: Dynamic Intent and Lambda Capture ---
+
+    def test_dynamic_intent_block(self):
+        """测试使用表达式定义动态意图块"""
+        code = textwrap.dedent("""
+            var task = "计算面积"
+            intent "任务: " + task:
+                @~ MOCK:RESPONSE:OK ~
+        """).strip() + "\n"
+        self.engine.run_string(code, prepare_interpreter=False)
+        last_info = self.engine.interpreter.service_context.llm_executor.last_call_info
+        self.assertIn("任务: 计算面积", last_info["sys_prompt"])
+
+    def test_invalid_nested_ai_in_intent(self):
+        """测试意图表达式中禁止嵌套 AI 行为描述行"""
+        from core.types.diagnostic_types import CompilerError
+        code = textwrap.dedent("""
+            intent (@~ 获取动态意图 ~):
+                print("hello")
+        """).strip() + "\n"
+        with self.assertRaises(CompilerError):
+            self.engine.run_string(code, silent=True)
+
+    def test_lambda_intent_capture(self):
+        """测试 Lambda (AnonymousLLMFunction) 在定义时捕获意图快照"""
+        code = textwrap.dedent("""
+            intent "捕获意图 A":
+                intent "捕获意图 B":
+                    callable f = @~ 任务 ~
+            
+            # 在意图块外调用，应携带捕获的 A 和 B
+            str res = f()
+        """).strip() + "\n"
+        self.engine.run_string(code, prepare_interpreter=False)
+        last_info = self.engine.interpreter.service_context.llm_executor.last_call_info
+        self.assertIn("捕获意图 A", last_info["sys_prompt"])
+        self.assertIn("捕获意图 B", last_info["sys_prompt"])
 
 if __name__ == "__main__":
     unittest.main()

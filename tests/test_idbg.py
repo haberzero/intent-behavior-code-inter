@@ -91,6 +91,27 @@ class TestIDbg(IBCTestCase):
         self.assertEqual(env["call_stack_depth"], 5)
         self.assertIn("active_intents", env)
 
+    def test_lambda_inspection(self):
+        """测试对 Lambda (AnonymousLLMFunction) 的内省支持"""
+        code = textwrap.dedent("""
+            import ai
+            import idbg
+            ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+            
+            intent "A":
+                intent "B":
+                    callable f = @~ 任务 ~
+            
+            dict details = idbg.fields(f)
+            # Verify captured intents
+            list intents = details["captured_intents"]
+        """).strip()
+        self.engine.run_string(code, prepare_interpreter=False)
+        f_obj = self.engine.get_variable("f")
+        details = self.idbg.fields(f_obj)
+        self.assertIn("A", details["captured_intents"])
+        self.assertIn("B", details["captured_intents"])
+
     def test_vars_nested_scopes(self):
         """测试嵌套作用域下的变量导出与遮蔽"""
         ctx = self.engine.interpreter.context
