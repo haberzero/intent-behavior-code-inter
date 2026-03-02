@@ -82,6 +82,11 @@ class Interpreter(IStackInspector):
     def get_instruction_count(self) -> int:
         return self.instruction_count
 
+    def get_captured_intents(self, obj: Any) -> List[str]:
+        if isinstance(obj, AnonymousLLMFunction):
+            return [i.content for i in obj.captured_intents]
+        return []
+
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None, 
                  max_instructions: int = 10000, 
@@ -342,50 +347,55 @@ class Interpreter(IStackInspector):
                 raise InterpreterError(f"Type mismatch: Variable '{var_name}' expects {type_name}, but got {type(value).__name__}", node, error_code=RUN_TYPE_MISMATCH)
 
     def visit_ExprStmt(self, node: ast.ExprStmt):
-        return self.visit(node.value)
+        def expr_logic():
+            return self.visit(node.value)
+        return self._execute_with_retry(node, expr_logic)
 
     def visit_Assign(self, node: ast.Assign):
-        # 识别是否是针对 BehaviorExpr 的 callable 赋值，若是则推迟执行（Lambda 化）
-        is_behavior_lambda = False
-        type_name = None
-        if node.type_annotation:
-            type_name = self._resolve_type_name(node.type_annotation)
-            if type_name == "callable" and isinstance(node.value, ast.BehaviorExpr):
-                is_behavior_lambda = True
-        
-        if is_behavior_lambda:
-            value = AnonymousLLMFunction(node.value, self, self.context)
-        else:
-            # 在执行行为描述行前，注入目标类型约束信息到 LLMExecutor
-            if isinstance(node.value, ast.BehaviorExpr) and type_name:
-                self.llm_executor.push_expected_type(type_name)
-                try:
-                    raw_value = self.visit(node.value)
-                    value = self._attempt_behavior_result_conversion(raw_value, type_name)
-                finally:
-                    self.llm_executor.pop_expected_type()
+        def assign_logic():
+            # 识别是否是针对 BehaviorExpr 的 callable 赋值，若是则推迟执行（Lambda 化）
+            is_behavior_lambda = False
+            type_name = None
+            if node.type_annotation:
+                type_name = self._resolve_type_name(node.type_annotation)
+                if type_name == "callable" and isinstance(node.value, ast.BehaviorExpr):
+                    is_behavior_lambda = True
+            
+            if is_behavior_lambda:
+                value = AnonymousLLMFunction(node.value, self, self.context)
             else:
-                value = self.visit(node.value) if node.value else None
-        
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Assigning value to targets:", data={"value": value, "targets": [t.__class__.__name__ for t in node.targets]})
-        
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                if node.type_annotation:
-                    type_name = self._resolve_type_name(node.type_annotation)
-                    self._check_type_compatibility(target.id, type_name, value, node)
-                    self.context.define_variable(target.id, value, declared_type=type_name)
+                # 在执行行为描述行前，注入目标类型约束信息到 LLMExecutor
+                if isinstance(node.value, ast.BehaviorExpr) and type_name:
+                    self.llm_executor.push_expected_type(type_name)
+                    try:
+                        raw_value = self.visit(node.value)
+                        value = self._attempt_behavior_result_conversion(raw_value, type_name)
+                    finally:
+                        self.llm_executor.pop_expected_type()
                 else:
-                    if self._is_builtin(target.id):
-                         raise InterpreterError(f"Cannot reassign built-in variable '{target.id}'", node, error_code=RUN_TYPE_MISMATCH)
-                    
-                    symbol = self.context.current_scope.get_symbol(target.id)
-                    if symbol and symbol.declared_type and symbol.declared_type != 'var':
-                        self._check_type_compatibility(target.id, symbol.declared_type, value, node)
+                    value = self.visit(node.value) if node.value else None
+            
+            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"Assigning value to targets:", data={"value": value, "targets": [t.__class__.__name__ for t in node.targets]})
+            
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    if node.type_annotation:
+                        t_name = self._resolve_type_name(node.type_annotation)
+                        self._check_type_compatibility(target.id, t_name, value, node)
+                        self.context.define_variable(target.id, value, declared_type=t_name)
+                    else:
+                        if self._is_builtin(target.id):
+                             raise InterpreterError(f"Cannot reassign built-in variable '{target.id}'", node, error_code=RUN_TYPE_MISMATCH)
+                        
+                        symbol = self.context.current_scope.get_symbol(target.id)
+                        if symbol and symbol.declared_type and symbol.declared_type != 'var':
+                            self._check_type_compatibility(target.id, symbol.declared_type, value, node)
 
-                    self.context.set_variable(target.id, value)
-            elif isinstance(target, (ast.Subscript, ast.Attribute)):
-                self.evaluator.evaluate_assign(target, value, self.context)
+                        self.context.set_variable(target.id, value)
+                elif isinstance(target, (ast.Subscript, ast.Attribute)):
+                    self.evaluator.evaluate_assign(target, value, self.context)
+        
+        self._execute_with_retry(node, assign_logic)
 
     def visit_AugAssign(self, node: ast.AugAssign):
         target_val = self.visit(node.target)
@@ -687,7 +697,16 @@ class Interpreter(IStackInspector):
         if node.is_exclusive:
             self.context.enter_intent_exclusive_scope()
             
-        self.context.push_intent(node.intent)
+        # 处理动态意图表达式
+        intent_info = node.intent
+        if intent_info.expr:
+            evaluated_content = self.evaluator.evaluate_expr(intent_info.expr, self.context)
+            if not isinstance(evaluated_content, str):
+                evaluated_content = str(evaluated_content)
+            # 创建一个新的 IntentInfo 以免污染 AST (或者直接在当前 context 推送字符串)
+            intent_info = ast.IntentInfo(mode=intent_info.mode, content=evaluated_content, segments=intent_info.segments)
+
+        self.context.push_intent(intent_info)
         try:
             for stmt in node.body:
                 self.visit(stmt)

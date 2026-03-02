@@ -104,6 +104,7 @@ class Assign(Stmt):
     targets: List[Expr]
     value: Optional[Expr]
     type_annotation: Optional[Expr] = None
+    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class AugAssign(Stmt):
@@ -165,6 +166,7 @@ class ImportFrom(Stmt):
 @dataclass
 class ExprStmt(Stmt):
     value: Expr
+    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class Pass(Stmt):
@@ -220,8 +222,9 @@ class Compare(Expr):
 @dataclass
 class IntentInfo:
     mode: str # "", "+", "!", "-"
-    content: str # Raw content
-    segments: Optional[List[Union[str, Expr]]] = None # Interpolated segments
+    content: str # Raw content or constant string
+    segments: Optional[List[Union[str, Expr]]] = None # Interpolated segments for comments like @ "..."
+    expr: Optional[Expr] = None # Dynamic expression for 'intent expr:'
 
 @dataclass
 class IntentStmt(Stmt):

@@ -97,14 +97,22 @@ class LLMExecutorImpl:
             context.exit_scope()
 
 
-    def _merge_intents(self, call_intent: Optional[ast.IntentInfo], context: RuntimeContext) -> List[str]:
+    def _merge_intents(self, call_intent: Optional[ast.IntentInfo], context: RuntimeContext, captured_intents: Optional[List[ast.IntentInfo]] = None) -> List[str]:
         """
         合并 Global, Block, Call 三层意图。
         支持 @+, @!, @- 等修饰符逻辑。
         """
         # 1. 基础收集
         global_intents = [] if context.is_intent_exclusive() else context.get_global_intents()
-        block_intents = [self._resolve_intent_content(i, context) for i in context.get_active_intents()]
+        
+        # 合并活跃意图和捕获的意图（快照）
+        active_intents = context.get_active_intents()
+        if captured_intents:
+            # 捕获的意图通常比活跃意图具有更早的上下文关联，我们将其合并并去重
+            # 注意：此处合并逻辑可以根据需求调整优先级，目前采用叠加
+            active_intents = self._unique_merge_nodes(captured_intents, active_intents)
+            
+        block_intents = [self._resolve_intent_content(i, context) for i in active_intents]
         
         # 1.1 注入隐式循环上下文 (Implicit Loop Context Awareness)
         loop_context = context.get_loop_context()
@@ -153,6 +161,18 @@ class LLMExecutorImpl:
                 if item and item not in seen:
                     result.append(item)
                     seen.add(item)
+        return result
+
+    def _unique_merge_nodes(self, *lists: List[ast.IntentInfo]) -> List[ast.IntentInfo]:
+        result = []
+        seen = set()
+        for l in lists:
+            for item in l:
+                # 使用内容作为去重键（简化处理）
+                key = (item.mode, item.content)
+                if key not in seen:
+                    result.append(item)
+                    seen.add(key)
         return result
 
     def _evaluate_segments(self, segments: Optional[List[Union[str, ast.Expr]]], context: RuntimeContext) -> str:
@@ -266,7 +286,7 @@ class LLMExecutorImpl:
                 error_code=RUN_LLM_ERROR
             )
 
-    def execute_behavior_expression(self, node: ast.BehaviorExpr, context: RuntimeContext) -> str:
+    def execute_behavior_expression(self, node: ast.BehaviorExpr, context: RuntimeContext, captured_intents: Optional[List[ast.IntentInfo]] = None) -> str:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
@@ -285,10 +305,10 @@ class LLMExecutorImpl:
             auto_intent = ai_module._config.get("auto_intent_injection", True)
         
         if auto_intent:
-            all_intents = self._merge_intents(node.intent, context)
+            all_intents = self._merge_intents(node.intent, context, captured_intents=captured_intents)
         elif node.intent:
             # 如果禁用了自动注入，但有显式意图，则仅使用显式意图
-            all_intents = [node.intent.content]
+            all_intents = [self._resolve_intent_content(node.intent, context)]
             
         # 3. 确定场景与提示词
         scene = node.scene_tag
@@ -345,10 +365,14 @@ class LLMExecutorImpl:
             "scene": scene.name.lower()
         }
             
-        # 成功执行后清除 retry_hint (或者在 retry 逻辑中控制)
-        # 注意：如果是 LLMUncertaintyError，可能会再次进入 retry 流程设置新的 hint
-        self.retry_hint = None
-        
+        # 检查不确定性响应 (不论场景，如果响应明确表示不确定，则抛出异常以触发 llmexcept)
+        if "MOCK_UNCERTAIN_RESPONSE" in response:
+            raise LLMUncertaintyError(
+                f"LLM 返回了明确的不确定性信号：{response}",
+                node,
+                raw_response=response
+             )
+ 
         # 5. 严格场景校验
         if scene in (ast.Scene.BRANCH, ast.Scene.LOOP):
             clean_res = response.strip().lower()
@@ -367,6 +391,9 @@ class LLMExecutorImpl:
                         CoreModule.LLM, DebugLevel.DETAIL, 
                         f"Decision mapping applied: '{clean_res}' -> '{mapped_val}'"
                     )
+                
+                # 成功执行后清除 retry_hint
+                self.retry_hint = None
                 return mapped_val
             
             if self.service_context and self.service_context.debugger:
@@ -378,6 +405,8 @@ class LLMExecutorImpl:
                 raw_response=response
             )
             
+        # 成功执行后清除 retry_hint
+        self.retry_hint = None
         return response
 
 

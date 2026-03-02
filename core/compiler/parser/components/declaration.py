@@ -128,15 +128,21 @@ class DeclarationComponent(BaseComponent):
         if self.stream.match(TokenType.NOT): # !
             is_exclusive = True
             
-        intent_token = self.stream.consume(TokenType.STRING, "Expect intent string.")
-        intent_val = intent_token.value
+        # 允许表达式而非仅字符串
+        intent_expr = self.expression.parse_expression()
         
         self.stream.consume(TokenType.COLON, "Expect ':' before intent body.")
         
         body = self.statement.block()
         
-        # 将字符串意图封装为 IntentInfo
-        info = ast.IntentInfo(mode="", content=intent_val)
+        # 将表达式封装为 IntentInfo
+        # 如果是 Constant 且为 string，则填充 content
+        content = ""
+        if isinstance(intent_expr, ast.Constant) and isinstance(intent_expr.value, str):
+            content = intent_expr.value
+            intent_expr = None
+            
+        info = ast.IntentInfo(mode="", content=content, expr=intent_expr)
         return self._loc(ast.IntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token)
 
     def _run_pre_scanner(self):
@@ -178,7 +184,10 @@ class DeclarationComponent(BaseComponent):
         
         self.stream.consume_end_of_statement("Expect newline after variable declaration.")
         
-        return self._loc(ast.Assign(targets=[target], value=value, type_annotation=type_annotation), type_token)
+        # 解析可选的 llmexcept 块
+        llm_fallback = self.statement._parse_llm_fallback()
+        
+        return self._loc(ast.Assign(targets=[target], value=value, type_annotation=type_annotation, llm_fallback=llm_fallback), type_token)
 
     def function_declaration(self) -> ast.FunctionDef:
         start_token = self.stream.previous()

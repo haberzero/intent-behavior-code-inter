@@ -163,7 +163,8 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.ASSIGN):
             value = self.expression.parse_expression()
             self.stream.consume_end_of_statement("Expect newline after assignment.")
-            return self._loc(ast.Assign(targets=[expr], value=value), self.stream.previous())
+            llm_fallback = self._parse_llm_fallback()
+            return self._loc(ast.Assign(targets=[expr], value=value, llm_fallback=llm_fallback), self.stream.previous())
         
         # Compound assignments
         compound_ops = {
@@ -176,10 +177,12 @@ class StatementComponent(BaseComponent):
             if self.stream.match(token_type):
                 value = self.expression.parse_expression()
                 self.stream.consume_end_of_statement("Expect newline after compound assignment.")
+                llm_fallback = self._parse_llm_fallback()
                 return self._loc(ast.AugAssign(target=expr, op=op_str, value=value), self.stream.previous())
             
         self.stream.consume_end_of_statement("Expect newline after expression.")
-        return self._loc(ast.ExprStmt(value=expr), self.stream.previous())
+        llm_fallback = self._parse_llm_fallback()
+        return self._loc(ast.ExprStmt(value=expr, llm_fallback=llm_fallback), self.stream.previous())
 
     def block(self) -> List[ast.Stmt]:
         self.stream.consume(TokenType.NEWLINE, "Expect newline before block.")
