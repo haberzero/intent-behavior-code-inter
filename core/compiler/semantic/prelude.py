@@ -1,7 +1,7 @@
 
 from typing import Dict, Optional
 from core.compiler.semantic.types import (
-    Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
+    Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType, UserDefinedType,
     INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE
 )
 from core.types.scope_types import ScopeNode, ScopeType
@@ -26,7 +26,12 @@ class Prelude:
         self.register("str", FunctionType([ANY_TYPE], STR_TYPE))
         self.register("int", FunctionType([ANY_TYPE], INT_TYPE))
 
-        # 2. 从 HostInterface 动态加载模块和函数
+        # 3. 注册内置类
+        self.builtin_types: Dict[str, Type] = {
+            "Exception": UserDefinedType("Exception", None)
+        }
+
+        # 4. 从 HostInterface 动态加载模块和函数
         if self.host_interface:
             # 模块
             for mod_name in self.host_interface.get_all_module_names():
@@ -43,6 +48,9 @@ class Prelude:
         
     def get_builtins(self) -> Dict[str, FunctionType]:
         return self.builtin_functions.copy()
+
+    def get_builtin_types(self) -> Dict[str, Type]:
+        return self.builtin_types.copy()
 
     def get_builtin_modules(self) -> Dict[str, ModuleType]:
         return self.builtin_modules.copy()

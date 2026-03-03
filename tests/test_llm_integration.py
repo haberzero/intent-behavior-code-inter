@@ -138,15 +138,17 @@ class TestLLMIntegration(IBCTestCase):
         last_prompt = self.output[-1]
         self.assertNotIn("FIX_ME", last_prompt)
 
-    def test_llm_keywords_same_line(self):
-        """验证 __sys__ 和 __user__ 允许在同行书写文本。"""
+    def test_llm_keywords_split_line(self):
+        """验证 __sys__ 和 __user__ 必须独占一行。"""
         code = """
         import ai
         import idbg
         
         llm test_func(str name):
-        __sys__ You are a robot.
-        __user__ Say hello to $__name__.
+        __sys__
+        You are a robot.
+        __user__
+        Say hello to $__name__.
         llmend
         
         test_func("Alice")

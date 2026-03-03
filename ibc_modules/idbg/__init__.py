@@ -18,10 +18,15 @@ class IDbgLib:
 
     def last_llm(self) -> Dict[str, Any]:
         """返回最后一次 LLM 调用信息"""
-        if not self._capabilities or not self._capabilities.llm_provider:
-            return {}
+        # 优先从内核 LLM 执行器获取（包含合并后的 Prompts）
+        if self._capabilities and self._capabilities.llm_executor:
+            return self._capabilities.llm_executor.get_last_call_info()
+            
+        # 回退到从 Provider 获取
+        if self._capabilities and self._capabilities.llm_provider:
+            return self._capabilities.llm_provider.get_last_call_info()
         
-        return self._capabilities.llm_provider.get_last_call_info()
+        return {}
 
     def env(self) -> Dict[str, Any]:
         """返回解释器环境信息"""

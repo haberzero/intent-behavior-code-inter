@@ -31,6 +31,8 @@ class LLMExecutorImpl:
     def pop_expected_type(self):
         if self._expected_type_stack:
             self._expected_type_stack.pop()
+    def get_last_call_info(self) -> Dict[str, Any]:
+        return self.last_call_info
 
     def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> Any:
         """

@@ -84,6 +84,7 @@ class FunctionDef(Stmt):
 class ClassDef(Stmt):
     name: str
     body: List[Stmt] # Includes methods and class variables
+    parent: Optional[str] = None # Parent class name
     methods: List[Union['FunctionDef', 'LLMFunctionDef']] = field(default_factory=list)
     fields: List['Assign'] = field(default_factory=list)
 

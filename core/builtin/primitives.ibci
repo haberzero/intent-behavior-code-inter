@@ -1,0 +1,18 @@
+# core/builtin/primitives.ibci
+# 核心内置类定义
+
+class Object:
+    func __init__(self):
+        pass
+
+    func __to_prompt__(self) -> str:
+        return "[Object Instance]"
+
+class Exception(Object):
+    str message
+    
+    func __init__(self, str msg):
+        self.message = msg
+        
+    func __to_prompt__(self) -> str:
+        return "Exception: " + self.message

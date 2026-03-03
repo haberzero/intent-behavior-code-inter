@@ -168,26 +168,26 @@ if @~判断 $val~:
         """Test LLM function definition and block scanning."""
         code = """
 llm 生成(str msg):
-    __sys__
-    系统提示
-    __user__
-    用户内容 $__msg__
-    llmend
+__sys__
+系统提示
+__user__
+用户内容 $__msg__
+llmend
 """
         lexer = Lexer(code.strip())
         tokens = lexer.tokenize()
         
         # Verify LLM definition
         self.assertEqual(tokens[0].type, TokenType.LLM_DEF)
-        colon_index = next(i for i, t in enumerate(tokens) if t.type == TokenType.COLON)
         
         # Verify LLM block internals
-        sys_index = colon_index + 2 
-        self.assertEqual(tokens[sys_index].type, TokenType.LLM_SYS)
+        sys_token = next(t for t in tokens if t.type == TokenType.LLM_SYS)
+        self.assertIsNotNone(sys_token)
         
         # System prompt content
-        self.assertEqual(tokens[sys_index+1].type, TokenType.RAW_TEXT)
-        self.assertEqual(tokens[sys_index+1].value.strip(), "系统提示")
+        sys_idx = tokens.index(sys_token)
+        self.assertEqual(tokens[sys_idx+1].type, TokenType.RAW_TEXT)
+        self.assertEqual(tokens[sys_idx+1].value.strip(), "系统提示")
         
         # __user__ section
         user_token = next(t for t in tokens if t.type == TokenType.LLM_USER)
@@ -201,26 +201,30 @@ llm 生成(str msg):
         end_token = next(t for t in tokens if t.type == TokenType.LLM_END)
         self.assertIsNotNone(end_token)
 
-    def test_llm_keywords_same_line(self):
-        """验证 __sys__ 和 __user__ 允许在同行书写文本。"""
+    def test_llm_keywords_same_line_rejected(self):
+        """验证 __sys__ 和 __user__ 不再允许在同行书写文本（作为普通文本处理）。"""
         code = """
 llm test():
-    __sys__ You are a robot.
-    __user__ Say hello.
-    llmend
+__sys__ You are a robot.
+__user__ Say hello.
+llmend
 """
         lexer = Lexer(code.strip())
         tokens = lexer.tokenize()
         
-        # 验证 __sys__ 同行的文本
-        sys_token_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_SYS)
-        self.assertEqual(tokens[sys_token_idx+1].type, TokenType.RAW_TEXT)
-        self.assertIn("You are a robot.", tokens[sys_token_idx+1].value)
+        # 因为不再允许同行书写，__sys__ 和 __user__ 不会被识别为关键字（因为后面有文本）
+        # 除非它们独占一行。
+        # 在这个测试用例中，由于后面有文本，它们应该被视为 RAW_TEXT 的一部分
+        # 或者 llm_body 会报错。
+        # 实际上在 Lexer 层面，它们会被识别为 RAW_TEXT。
         
-        # 验证 __user__ 同行的文本
-        user_token_idx = next(i for i, t in enumerate(tokens) if t.type == TokenType.LLM_USER)
-        self.assertEqual(tokens[user_token_idx+1].type, TokenType.RAW_TEXT)
-        self.assertIn("Say hello.", tokens[user_token_idx+1].value)
+        # 检查是否没有 LLM_SYS 和 LLM_USER 标记
+        sys_tokens = [t for t in tokens if t.type == TokenType.LLM_SYS]
+        self.assertEqual(len(sys_tokens), 0)
+        
+        # 检查 RAW_TEXT 中是否包含了这些内容
+        raw_texts = [t.value for t in tokens if t.type == TokenType.RAW_TEXT]
+        self.assertTrue(any("__sys__ You are a robot." in t for t in raw_texts))
 
     def test_raw_strings(self):
         """Test raw string literals (r"..." and r'...')."""

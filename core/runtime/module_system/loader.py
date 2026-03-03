@@ -2,7 +2,7 @@ import os
 import importlib.util
 from typing import List
 from ..interpreter.interfaces import ServiceContext
-from core.runtime.ext.capabilities import ExtensionCapabilities, IStateReader, IStackInspector, ILLMProvider, IIntentManager
+from core.runtime.ext.capabilities import ExtensionCapabilities, IStateReader, IStackInspector, ILLMProvider, IIntentManager, ILLMExecutor
 
 class ModuleLoader:
     """
@@ -28,6 +28,8 @@ class ModuleLoader:
             capabilities.stack_inspector = context.interpreter
         if isinstance(context.runtime_context, IIntentManager):
             capabilities.intent_manager = context.runtime_context
+        if isinstance(context.llm_executor, ILLMExecutor):
+            capabilities.llm_executor = context.llm_executor
         # 注意：llm_provider 初始为 None，可能由模块（如 ai）在 setup 时填充
         
         loaded_modules = set()

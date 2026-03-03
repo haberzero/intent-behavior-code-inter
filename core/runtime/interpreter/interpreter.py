@@ -28,6 +28,11 @@ class BreakException(Exception): pass
 class ContinueException(Exception): pass
 class RetryException(Exception): pass
 
+class ThrownException(Exception):
+    """包装用户主动抛出的非 Python 异常对象（如 ClassInstance 或字符串）"""
+    def __init__(self, value: Any):
+        self.value = value
+
 class ServiceContextImpl:
     """注入容器实现类"""
     def __init__(self, issue_tracker: IssueTracker, 
@@ -144,6 +149,19 @@ class Interpreter(IStackInspector):
         self.instruction_count = 0
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
+
+    def is_subclass_of(self, class_def: ast.ClassDef, target_class_name: str) -> bool:
+        """检查类是否继承自指定的类（基于名称）"""
+        if class_def.name == target_class_name:
+            return True
+        if class_def.parent:
+            try:
+                parent_class_def = self.context.get_variable(class_def.parent)
+                if isinstance(parent_class_def, ast.ClassDef):
+                    return self.is_subclass_of(parent_class_def, target_class_name)
+            except Exception:
+                pass
+        return False
 
     @property
     def context(self) -> RuntimeContext:
@@ -444,30 +462,44 @@ class Interpreter(IStackInspector):
                 self.visit(stmt)
         except (ReturnException, BreakException, ContinueException):
             raise
-        except Exception as e:
+        except (Exception, ThrownException) as e:
             handled = False
+            
+            # 提取真实的异常对象
+            real_exc = e.value if isinstance(e, ThrownException) else e
+            
+            # 获取异常的类型名和消息
+            exc_msg = real_exc.message if isinstance(real_exc, InterpreterError) else str(real_exc)
+            
             for handler in node.handlers:
                 if handler.type is None:
                     handled = True
                 else:
-                    exc_type = self.visit(handler.type)
-                    if isinstance(exc_type, type):
-                        if isinstance(e, exc_type):
+                    exc_type_val = self.visit(handler.type)
+                    
+                    # [REFINEMENT] 基于类继承链的匹配
+                    if isinstance(real_exc, ClassInstance):
+                        if isinstance(exc_type_val, ast.ClassDef):
+                            if self.is_subclass_of(real_exc.class_def, exc_type_val.name):
+                                handled = True
+                    
+                    # 支持字符串名称匹配 (保持兼容性)
+                    if not handled and isinstance(exc_type_val, str):
+                        if type(real_exc).__name__ == exc_type_val or "InterpreterError" == exc_type_val:
                             handled = True
-                        elif exc_type == str and isinstance(e, InterpreterError):
+                        elif isinstance(real_exc, ClassInstance) and self.is_subclass_of(real_exc.class_def, exc_type_val):
                             handled = True
-                    elif isinstance(exc_type, str):
-                        if type(e).__name__ == exc_type or "InterpreterError" == exc_type:
-                            handled = True
-                    elif exc_type == Exception:
+                    
+                    # 3. [REFINEMENT] 如果捕获类型是内置 Exception 类，则捕获所有非控制流异常
+                    if not handled and isinstance(exc_type_val, ast.ClassDef) and exc_type_val.name == "Exception":
                         handled = True
 
                 if handled:
                     self.context.enter_scope()
                     try:
                         if handler.name:
-                            val = e.message if isinstance(e, InterpreterError) else str(e)
-                            self.context.define_variable(handler.name, val)
+                            # 将捕获的异常对象（或其消息）注入作用域
+                            self.context.define_variable(handler.name, real_exc if isinstance(real_exc, ClassInstance) else exc_msg)
                         for stmt in handler.body:
                             self.visit(stmt)
                     finally:
@@ -485,9 +517,8 @@ class Interpreter(IStackInspector):
     def visit_Raise(self, node: ast.Raise):
         if node.exc:
             exc_val = self.visit(node.exc)
-            if isinstance(exc_val, Exception):
-                raise exc_val
-            raise InterpreterError(str(exc_val), node, error_code=RUN_GENERIC_ERROR)
+            # 统一使用 ThrownException 包装，以支持 ClassInstance 等非 Python 异常对象的抛出
+            raise ThrownException(exc_val)
         raise InterpreterError("Re-raise not supported in this version", node, error_code=RUN_GENERIC_ERROR)
 
     def visit_While(self, node: ast.While):

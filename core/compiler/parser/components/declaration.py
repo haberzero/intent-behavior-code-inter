@@ -269,9 +269,15 @@ class DeclarationComponent(BaseComponent):
     def class_declaration(self) -> ast.ClassDef:
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect class name.").value
+        
+        parent = None
+        if self.stream.match(TokenType.LPAREN):
+            parent = self.stream.consume(TokenType.IDENTIFIER, "Expect parent class name.").value
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after parent class name.")
+            
         self.stream.consume(TokenType.COLON, "Expect ':' before class body.")
         
-        class_node = self._loc(ast.ClassDef(name=name, body=[], methods=[], fields=[]), start_token)
+        class_node = self._loc(ast.ClassDef(name=name, parent=parent, body=[], methods=[], fields=[]), start_token)
         
         # Enter Class Scope
         self.scope_manager.enter_scope(ScopeType.CLASS)

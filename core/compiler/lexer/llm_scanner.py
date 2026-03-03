@@ -9,6 +9,7 @@ class LLMScanner:
     """
     def __init__(self, scanner: StrStream):
         self.scanner = scanner
+        self.section_just_started = False # Track if we just matched __sys__ or __user__
 
     def scan_chunk(self) -> Tuple[List[Token], bool]:
         """
@@ -36,20 +37,67 @@ class LLMScanner:
         keyword_found = False
         for keyword, token_type in llm_keywords:
             if self._match_llm_keyword(offset, keyword):
+                # [REFINEMENT] Keyword must be the ONLY thing on this line
+                check_offset = offset + len(keyword)
+                while self.scanner.peek(check_offset) in ' \t':
+                    check_offset += 1
+                
+                if self.scanner.peek(check_offset) not in ['\n', '\0', '']:
+                    # Not a standalone keyword line, treat as regular text
+                    break
+                
                 self._consume_llm_keyword(offset, keyword, token_type, tokens)
                 keyword_found = True
                 
                 if token_type == TokenType.LLM_END:
+                    self.section_just_started = False
                     should_exit_mode = True
+                    # Consume the rest of the line (should only be whitespace/newline)
+                    while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
+                        self.scanner.advance()
+                    if self.scanner.peek() == '\n':
+                        self.scanner.advance()
                     return tokens, should_exit_mode
-                # For SYS/USER, we continue to scan the rest of the line as text
-                break
+                
+                # For SYS/USER, we set the flag to ignore the next newline
+                self.section_just_started = True
+                
+                # Consume the rest of the line (newline)
+                while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
+                    self.scanner.advance()
+                if self.scanner.peek() == '\n':
+                    self.scanner.advance()
+                
+                return tokens, should_exit_mode
 
         # Regular prompt text
         text = ""
         start_line = self.scanner.line
         start_col = self.scanner.col
         
+        # [REFINEMENT] If section just started, we check if this line is empty
+        # to decide if we should skip it.
+        if self.section_just_started:
+            is_empty_line = True
+            check_offset = 0
+            while self.scanner.peek(check_offset) != '\n' and self.scanner.peek(check_offset) != '':
+                if self.scanner.peek(check_offset) not in ' \t':
+                    is_empty_line = False
+                    break
+                check_offset += 1
+            
+            if is_empty_line:
+                # Skip this first empty line after keyword
+                while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
+                    self.scanner.advance()
+                if self.scanner.peek() == '\n':
+                    self.scanner.advance()
+                self.section_just_started = False
+                return [], False
+            else:
+                # First line has content, so we don't skip it and stop skipping
+                self.section_just_started = False
+
         while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
             # Check for parameter placeholder $__param__
             if self.scanner.peek() == '$' and self.scanner.peek(1) == '_' and self.scanner.peek(2) == '_':
@@ -61,19 +109,15 @@ class LLMScanner:
                 start_line = self.scanner.line
                 start_col = self.scanner.col
             else:
-                text += self.scanner.advance()
+                char = self.scanner.advance()
+                text += char
         
         if text:
             tokens.append(Token(TokenType.RAW_TEXT, text, start_line, start_col))
             
         if self.scanner.peek() == '\n':
-            # If line contains a keyword (and not LLM_END) and no text followed,
-            # skip the newline to avoid including it in the prompt content.
-            if keyword_found and not text:
-                self.scanner.advance()
-            else:
-                self.scanner.advance()
-                tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line, self.scanner.col))
+            self.scanner.advance()
+            tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line, self.scanner.col))
                 
         return tokens, should_exit_mode
 

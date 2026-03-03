@@ -49,6 +49,36 @@ class Scheduler:
         # Explicitly allowed files outside root (e.g. for run_string)
         self.allowed_files: Set[str] = set()
 
+    def bootstrap_builtins(self, builtin_file: str):
+        """
+        加载核心内置库 (primitives.ibci) 并将其符号注入全局预置符号表。
+        这确保了后续编译的所有模块都能正确识别 Object, Exception 等。
+        """
+        if not os.path.exists(builtin_file):
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Builtin file not found for bootstrapping: {builtin_file}")
+            return
+
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Bootstrapping scheduler with: {builtin_file}")
+        
+        # 临时允许并编译内置文件
+        self.allow_file(builtin_file)
+        try:
+            # 使用 compile_project 但由于是内部调用，我们不希望清理状态
+            # 所以我们手动执行编译逻辑
+            self._scan_and_cache(builtin_file)
+            self._compile_file(builtin_file)
+            
+            builtin_ast = self.ast_cache.get(builtin_file)
+            if builtin_ast and builtin_ast.scope:
+                # 将内置库的导出符号同步到预置符号表
+                for name, sym in builtin_ast.scope.symbols.items():
+                    self.predefined_symbols[name] = sym
+                    
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Bootstrap successful. Symbols registered: {list(self.predefined_symbols.keys())}")
+        except Exception as e:
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Bootstrap failed: {str(e)}")
+            # 允许失败，因为这可能是初次运行或环境问题
+
     def allow_file(self, file_path: str):
         """Explicitly allow a file outside root_dir."""
         self.allowed_files.add(os.path.realpath(file_path))
@@ -319,12 +349,18 @@ class Scheduler:
             
             # Pre-populate global scope with predefined symbols
             if ast_node.scope:
-                from core.types.symbol_types import SymbolType
+                from core.types.symbol_types import Symbol, SymbolType
                 from core.compiler.semantic.types import ANY_TYPE
-                for name in self.predefined_symbols:
+                for name, builtin_val in self.predefined_symbols.items():
                     if not ast_node.scope.resolve(name):
-                        sym = ast_node.scope.define(name, SymbolType.VARIABLE)
-                        sym.type_info = ANY_TYPE
+                        if isinstance(builtin_val, Symbol):
+                            # [REFINEMENT] Inject actual Symbol (for bootstrapped classes/funcs)
+                            new_sym = ast_node.scope.define(name, builtin_val.type)
+                            new_sym.type_info = builtin_val.type_info
+                        else:
+                            # Fallback for simple values injected via run()
+                            new_sym = ast_node.scope.define(name, SymbolType.VARIABLE)
+                            new_sym.type_info = ANY_TYPE
             
             analyzer.analyze(ast_node)
             

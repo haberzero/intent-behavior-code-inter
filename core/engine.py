@@ -37,6 +37,11 @@ class IBCIEngine:
         self.host_interface = self.discovery_service.discover_all()
         
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger)
+        
+        # [NEW] 为调度器启动自举，确保静态分析能识别内置类
+        builtin_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "builtin", "primitives.ibci")
+        self.scheduler.bootstrap_builtins(builtin_file)
+
         self.interpreter: Optional[Interpreter] = None
 
     def _prepare_interpreter(self, output_callback=None):
@@ -50,6 +55,37 @@ class IBCIEngine:
         )
         # 统一由 ModuleLoader 驱动实现层的加载与注入
         self.module_loader.load_and_register_all(self.interpreter.service_context)
+        
+        # [NEW] 启动自举程序，加载核心内置类
+        self._bootstrap_builtins()
+
+    def _bootstrap_builtins(self):
+        """加载核心内置库 (primitives.ibci) 并同步符号"""
+        builtin_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "builtin", "primitives.ibci")
+        if not os.path.exists(builtin_file):
+            self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Builtin file not found: {builtin_file}")
+            return
+
+        self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Bootstrapping builtins from: {builtin_file}")
+        
+        # 1. 静态编译内置库
+        # 注意：这里我们直接使用 scheduler 的底层编译能力，避免递归调用 run
+        try:
+            # 我们需要确保 scheduler 允许加载内置路径的文件
+            self.scheduler.allow_file(builtin_file)
+            ast_cache = self.scheduler.compile_project(builtin_file)
+            builtin_ast = ast_cache.get(builtin_file)
+            
+            if not builtin_ast:
+                raise RuntimeError(f"Failed to compile builtin library: {builtin_file}")
+                
+            # 2. 执行内置库（在解释器的全局作用域中定义 Object, Exception 等）
+            # 此时 self.interpreter 已经初始化完毕，可以安全调用
+            self.interpreter.interpret(builtin_ast)
+            
+        except Exception as e:
+            self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Bootstrap failed: {str(e)}")
+            raise RuntimeError(f"IBC-Inter Bootstrap Failure: {str(e)}") from e
 
     def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleType] = None):
         """

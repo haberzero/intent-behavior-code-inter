@@ -46,6 +46,13 @@ class SemanticAnalyzer:
             sym.type_info = mod_type
             sym.exported_scope = mod_type.scope
 
+        # 3. Types
+        for name, type_info in prelude.get_builtin_types().items():
+            sym = self.scope_manager.global_scope.resolve(name)
+            if not sym:
+                sym = self.scope_manager.define(name, SymbolType.USER_TYPE)
+            sym.type_info = type_info
+
     def __init__(self, issue_tracker: Optional[IssueTracker] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
         self.scope_manager = ScopeManager() 
         self.issue_tracker = issue_tracker or IssueTracker()
