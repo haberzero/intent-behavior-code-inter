@@ -21,18 +21,24 @@ class ModuleInstanceImpl:
         return self.get_variable(name)
 
 class ModuleManagerImpl:
-    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = ".", interpreter_factory: Optional[Callable[[], 'Interpreter']] = None):
+    """
+    模块管理器实现。
+    负责模块的加载、缓存和导入处理。
+    """
+    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = ".", interpreter: Optional['Interpreter'] = None):
         self.interop = interop
         self.scheduler = scheduler
         self.root_dir = root_dir
-        self.interpreter_factory = interpreter_factory
+        self.interpreter = interpreter  # 现在持有主 Interpreter 引用，而非 factory
         self._loaded_modules: Dict[str, ModuleInstance] = {}
+
+    def set_interpreter(self, interpreter: 'Interpreter'):
+        """允许延迟注入 Interpreter"""
+        self.interpreter = interpreter
 
     def import_module(self, module_name: str, context: RuntimeContext) -> None:
         """
         处理 import module_name
-        优先从 InterOp 注册包中加载。
-        其次尝试从已编译的 IBC 模块中加载。
         """
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
         package = self.interop.get_package(module_name)
@@ -49,15 +55,19 @@ class ModuleManagerImpl:
         if self.scheduler:
             ast_module = self.scheduler.get_module_ast(module_name)
             if ast_module:
-                if not self.interpreter_factory:
-                    raise InterpreterError("Interpreter factory not provided for module loading.")
+                if not self.interpreter:
+                    raise InterpreterError("Interpreter not available for module loading.")
                 
-                # 创建新的解释器实例以执行被导入模块
-                sub_interpreter = self.interpreter_factory()
-                sub_interpreter.interpret(ast_module)
+                # 创建该模块的 Global Scope
+                from .runtime_context import ScopeImpl
+                module_scope = ScopeImpl()
                 
-                # 获取该模块的全局作用域作为 Namespace
-                module_instance = ModuleInstanceImpl(module_name, sub_interpreter.context.global_scope)
+                # 在新 Scope 下复用 Interpreter 执行
+                # 注意：execute_module 会临时切换 context scope
+                self.interpreter.execute_module(ast_module, scope=module_scope)
+                
+                # 创建模块实例并缓存
+                module_instance = ModuleInstanceImpl(module_name, module_scope)
                 self._loaded_modules[module_name] = module_instance
                 
                 context.define_variable(module_name, module_instance, is_const=True)

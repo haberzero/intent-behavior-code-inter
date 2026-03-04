@@ -1,17 +1,44 @@
 from typing import Any, Dict, Optional, Union, List, TYPE_CHECKING
 from core.types import parser_types as ast
+from core.compiler.semantic.types import UserDefinedType, Type, ANY_TYPE
 
 if TYPE_CHECKING:
     from .interfaces import Interpreter
 
 class ClassInstance:
-    def __init__(self, class_def: ast.ClassDef, interpreter: 'Interpreter'):
+    def __init__(self, class_def: ast.ClassDef, interpreter: 'Interpreter', runtime_type: Optional[UserDefinedType] = None):
         self.class_def = class_def
         self.fields: Dict[str, Any] = {}
         self.interpreter = interpreter
         
+        # [NEW] Runtime Type Bridge
+        # 如果未提供 runtime_type，尝试从 class_def 名称推断（不完美，但兼容旧代码）
+        if runtime_type is None:
+             # Reconstruct type hierarchy for correct inheritance checks
+             parent_type = None
+             if class_def.parent:
+                 parent_type = self._build_type_hierarchy(class_def.parent)
+                 
+             self.runtime_type = UserDefinedType(class_def.name, None, parent=parent_type)
+        else:
+            self.runtime_type = runtime_type
+        
         # [REFINEMENT] Initialize fields with default values, including parent fields
         self._init_fields(class_def)
+
+    def _build_type_hierarchy(self, class_name: str) -> Optional[UserDefinedType]:
+        try:
+            class_def = self.interpreter.runtime_context.get_variable(class_name)
+            if not isinstance(class_def, ast.ClassDef):
+                return None
+            
+            parent_type = None
+            if class_def.parent:
+                parent_type = self._build_type_hierarchy(class_def.parent)
+                
+            return UserDefinedType(class_name, None, parent=parent_type)
+        except Exception:
+            return None
 
     def _init_fields(self, class_def: ast.ClassDef):
         # 1. Initialize parent fields first (inheritance order)

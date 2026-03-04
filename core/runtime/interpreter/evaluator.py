@@ -177,9 +177,11 @@ class EvaluatorImpl:
                 return False
             return False
         
-        # 委托给 Interpreter 处理复杂的控制流节点（如 Call, BehaviorExpr）
-        if self.service_context and self.service_context.interpreter:
-            return self.service_context.interpreter.visit(node)
+        # Explicit delegation for control-flow/side-effect nodes
+        elif isinstance(node, (ast.Call, ast.BehaviorExpr)):
+            if self.service_context and self.service_context.interpreter:
+                return self.service_context.interpreter.visit(node)
+            raise InterpreterError(f"Interpreter service not available to evaluate {node.__class__.__name__}", node, error_code=RUN_GENERIC_ERROR)
 
         raise InterpreterError(f"No evaluation logic implemented for {node.__class__.__name__}", node)
 

@@ -181,7 +181,33 @@ class ImportComponent(BaseComponent):
             return module_name or ""
             
         parts = self.context.package_name.split('.')
-        if level > len(parts) + 1:
+        # Fix logic: level 1 means current package. level 2 means parent.
+        # But if package_name is 'pkg.sub', split is ['pkg', 'sub']. len is 2.
+        # level 1 -> parent_parts = parts[:2] -> 'pkg.sub' (Wait, .pkg means relative to current package)
+        # Typically:
+        # from . import a  (level=1) -> current package
+        # from .. import a (level=2) -> parent package
+        
+        # If current module is pkg.mod (inside pkg/mod.ibci), package_name is pkg.mod? 
+        # No, package_name usually refers to the module's full name.
+        # If file is pkg/mod.ibci, module_name is pkg.mod.
+        # Relative import is relative to the package containing the module.
+        # So if I am in pkg.mod, and I do from . import a, it means from pkg import a.
+        
+        # Actually in Python:
+        # if module is 'pkg.sub.mod', package is 'pkg.sub'.
+        # Parser receives package_name which is the module name being compiled.
+        
+        # Let's assume self.context.package_name IS the module name.
+        # Then the package containing it is parent of that.
+        
+        # But wait, logic in ImportComponent previously was:
+        # parent_parts = parts[:len(parts) - level]
+        # if package_name is 'pkg.sub.mod' (3 parts)
+        # level 1 (.): parts[:2] -> 'pkg.sub'. Correct.
+        # level 2 (..): parts[:1] -> 'pkg'. Correct.
+        
+        if level > len(parts):
              # Error: Attempted relative import beyond top-level package
              self.issue_tracker.report(
                  Severity.ERROR, 
@@ -204,7 +230,7 @@ class ImportComponent(BaseComponent):
         # 0. Check for builtin/external modules from HostInterface
         if self.context.host_interface and self.context.host_interface.is_external_module(module_name):
             # If it's in cache (e.g. during tests), return it
-            if module_name in self.context.module_cache:
+            if self.context.module_cache and module_name in self.context.module_cache:
                 return self.context.module_cache[module_name]
             # External modules don't have source files, but their symbols are injected later.
             # We return None here; SemanticAnalyzer will handle the builtin scope injection.
@@ -217,12 +243,26 @@ class ImportComponent(BaseComponent):
                  resolved_path = self.context.module_resolver.resolve(module_name)
              except Exception as e:
                  # Check if it is a namespace package (directory without init file)
-                 if self.context.module_resolver.is_package_dir(module_name):
+                 if hasattr(self.context.module_resolver, 'is_package_dir') and self.context.module_resolver.is_package_dir(module_name):
                      # It's a valid directory, so we treat it as a namespace package.
                      # We return None here, and the caller will create a dummy scope.
                      return None
 
                  # Report error if module resolution fails
+                 # But wait, if we are in "parse_imports_only" mode (skip_registration=True),
+                 # we might not want to report errors yet? 
+                 # Actually, ImportComponent is initialized with skip_registration in parse_imports_only?
+                 # No, Parser initializes it with default skip_registration=False.
+                 # But Parser.parse_imports_only calls parse_import.
+                 # Wait, parse_imports_only calls self.import_component.parse_import().
+                 # And ImportComponent.parse_import checks skip_registration.
+                 
+                 # The Parser instance in Scheduler._scan_and_cache creates a normal Parser.
+                 # Normal Parser creates ImportComponent with skip_registration=False.
+                 # BUT, we want skip_registration=True during scanning!
+                 
+                 # We need to fix Parser to allow configuring this, or Scheduler to configure it.
+                 
                  self.issue_tracker.report(
                      Severity.ERROR,
                      DEP_MODULE_NOT_FOUND,
@@ -233,10 +273,11 @@ class ImportComponent(BaseComponent):
         
         # 2. Look up in cache
         # Cache might be keyed by path or name.
-        if resolved_path and resolved_path in self.context.module_cache:
-            return self.context.module_cache[resolved_path]
+        if self.context.module_cache:
+            if resolved_path and resolved_path in self.context.module_cache:
+                return self.context.module_cache[resolved_path]
             
-        if module_name in self.context.module_cache:
-            return self.context.module_cache[module_name]
+            if module_name in self.context.module_cache:
+                return self.context.module_cache[module_name]
             
         return None

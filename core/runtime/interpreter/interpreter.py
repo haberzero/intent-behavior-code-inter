@@ -8,7 +8,7 @@ from core.support.diagnostics.codes import (
 from .interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, Evaluator, ServiceContext, IssueTracker,
-    PermissionManager
+    PermissionManager, Scope
 )
 from .runtime_context import RuntimeContextImpl
 from .llm_executor import LLMExecutorImpl
@@ -20,6 +20,7 @@ from .runtime_types import ClassInstance, BoundMethod, AnonymousLLMFunction
 from core.support.host_interface import HostInterface
 from core.runtime.ext.capabilities import IStackInspector
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.compiler.semantic.types import UserDefinedType
 
 # --- Runtime Exceptions for Flow Control ---
 class ReturnException(Exception):
@@ -115,11 +116,12 @@ class Interpreter(IStackInspector):
         
         # 2. 初始化需要互相引用的组件 (通过 ServiceContext 注入)
         # 注意：这里我们先创建实例，再在 ServiceContext 中关联
-        # ModuleManager 需要 factory 来创建子解释器
+        # ModuleManagerImpl 构造函数签名已修改，不再接受 interpreter_factory
+        # 它现在接受 interpreter 实例，但由于 self 尚未完成初始化，我们先传递 None，稍后设置
         module_manager = ModuleManagerImpl(
             interop, 
             scheduler=scheduler, 
-            interpreter_factory=self._create_sub_interpreter
+            interpreter=None  # 将在稍后通过 set_interpreter 注入
         )
         
         # 3. 创建 ServiceContext
@@ -140,7 +142,13 @@ class Interpreter(IStackInspector):
         # 4. 完成子组件的注入
         evaluator.service_context = self.service_context
         llm_executor.service_context = self.service_context
+        # 关键修复：将 self 注入到 ModuleManager
+        module_manager.set_interpreter(self)
         
+        # 临时状态：当前正在执行的 Context
+        # 在 execute_module 时会切换此引用
+        self._current_context = runtime_context
+
         # 5. 注册全局内置函数
         self._register_intrinsics()
         
@@ -165,7 +173,7 @@ class Interpreter(IStackInspector):
 
     @property
     def context(self) -> RuntimeContext:
-        return self.service_context.runtime_context
+        return self._current_context
 
     @property
     def evaluator(self) -> Evaluator:
@@ -179,33 +187,28 @@ class Interpreter(IStackInspector):
     def module_manager(self) -> ModuleManager:
         return self.service_context.module_manager
 
-    def _create_sub_interpreter(self):
-        """用于加载模块的子解释器工厂"""
-        return Interpreter(
-            output_callback=self.output_callback,
-            max_instructions=self.max_instructions,
-            max_call_stack=self.max_call_stack,
-            scheduler=self.scheduler,
-            issue_tracker=self.service_context.issue_tracker,
-            host_interface=self.host_interface,
-            debugger=self.debugger
-        )
+    # Removed _create_sub_interpreter as it is no longer needed
 
     def _register_intrinsics(self):
         """
         注册始终全局可见的内置函数和类型。
         """
         ctx = self.context
-        ctx.define_variable("print", self._print_impl, is_const=True)
-        ctx.define_variable("len", len, is_const=True)
-        ctx.define_variable("input", input, is_const=True)
         
-        ctx.define_variable("int", int, is_const=True)
-        ctx.define_variable("float", float, is_const=True)
-        ctx.define_variable("str", str, is_const=True)
-        ctx.define_variable("list", list, is_const=True)
-        ctx.define_variable("dict", dict, is_const=True)
-        ctx.define_variable("bool", bool, is_const=True)
+        def _safe_define(name, value):
+            if not ctx.get_symbol(name):
+                ctx.define_variable(name, value, is_const=True)
+                
+        _safe_define("print", self._print_impl)
+        _safe_define("len", len)
+        _safe_define("input", input)
+        
+        _safe_define("int", int)
+        _safe_define("float", float)
+        _safe_define("str", str)
+        _safe_define("list", list)
+        _safe_define("dict", dict)
+        _safe_define("bool", bool)
 
     def _print_impl(self, *args):
         message = " ".join(str(arg) for arg in args)
@@ -218,7 +221,32 @@ class Interpreter(IStackInspector):
             print(message)
 
     def interpret(self, module: ast.Module) -> Any:
+        return self.execute_module(module)
+
+    def execute_module(self, module: ast.Module, scope: Optional[Scope] = None) -> Any:
+        """
+        执行模块 AST，支持指定作用域。
+        如果指定了 scope，将临时切换 RuntimeContext 的作用域。
+        """
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Starting execution...")
+        
+        old_context = self._current_context
+        if scope:
+             # 创建一个新的 Context，使用传入的 Scope 作为 Global Scope
+             # 但 RuntimeContextImpl 构造函数不仅创建 Scope，还初始化其他栈。
+             # 我们需要一种方式复用其他服务但切换 Scope。
+             
+             # 实际上，ModuleManager 应该负责创建 ModuleContext。
+             # 这里我们简单地 new 一个 Context，并将 global_scope 替换为传入的 scope。
+             new_ctx = RuntimeContextImpl()
+             # Hack: replace internal global scope
+             new_ctx._global_scope = scope
+             new_ctx._current_scope = scope
+             self._current_context = new_ctx
+             
+             # 重新注册内置函数到新 Scope (或者假设 Scope 已经包含它们)
+             self._register_intrinsics() 
+
         self.instruction_count = 0
         result = None
         try:
@@ -227,8 +255,6 @@ class Interpreter(IStackInspector):
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError as e:
-            # 只有用户层面的错误才汇报给 IssueTracker
-            # 内部错误或某些控制流异常不适合在这里直接汇报
             if self.service_context.issue_tracker:
                 from core.types.diagnostic_types import Severity
                 self.service_context.issue_tracker.report(
@@ -241,12 +267,13 @@ class Interpreter(IStackInspector):
         except (ReturnException, BreakException, ContinueException):
             raise InterpreterError("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         except Exception as e:
-            # 将非预期的 Python 异常包装为解释器错误并汇报
             msg = f"Runtime error: {str(e)}"
             if self.service_context.issue_tracker:
                 from core.types.diagnostic_types import Severity
                 self.service_context.issue_tracker.report(Severity.FATAL, RUN_GENERIC_ERROR, msg)
             raise InterpreterError(msg, error_code=RUN_GENERIC_ERROR)
+        finally:
+            self._current_context = old_context
 
     def visit(self, node: ast.ASTNode) -> Any:
         """核心 Visitor 分发方法"""
@@ -265,6 +292,17 @@ class Interpreter(IStackInspector):
             method_name = f'visit_{node.__class__.__name__}'
             visitor = getattr(self, method_name, self.generic_visit)
             return visitor(node)
+        except InterpreterError:
+            # Already an InterpreterError, let it bubble up (it has node info presumably)
+            # If it doesn't have node info, we could attach it here?
+            # But usually it's raised with node.
+            raise
+        except (ReturnException, BreakException, ContinueException, RetryException):
+            # Flow control exceptions
+            raise
+        except Exception as e:
+            # Wrap generic Python exceptions into InterpreterError with location info
+            raise InterpreterError(f"{type(e).__name__}: {str(e)}", node, error_code=RUN_GENERIC_ERROR) from e
         finally:
             self.call_stack_depth -= 1
 
@@ -363,6 +401,21 @@ class Interpreter(IStackInspector):
                 if expected_type is float and isinstance(value, int):
                     return
                 raise InterpreterError(f"Type mismatch: Variable '{var_name}' expects {type_name}, but got {type(value).__name__}", node, error_code=RUN_TYPE_MISMATCH)
+        else:
+            # Check if it is a user defined class
+             type_def = None
+             try:
+                 type_def = self.context.get_variable(type_name)
+             except InterpreterError:
+                 # Not a variable or class in scope, maybe just a string annotation or alias
+                 pass
+            
+             if isinstance(type_def, ast.ClassDef):
+                 if isinstance(value, ClassInstance):
+                     if not self.is_subclass_of(value.class_def, type_name):
+                         raise InterpreterError(f"Type mismatch: Variable '{var_name}' expects class '{type_name}', but got instance of '{value.class_def.name}'", node, error_code=RUN_TYPE_MISMATCH)
+                 else:
+                     raise InterpreterError(f"Type mismatch: Variable '{var_name}' expects class '{type_name}', but got {type(value).__name__}", node, error_code=RUN_TYPE_MISMATCH)
 
     def visit_ExprStmt(self, node: ast.ExprStmt):
         def expr_logic():
@@ -406,10 +459,13 @@ class Interpreter(IStackInspector):
                              raise InterpreterError(f"Cannot reassign built-in variable '{target.id}'", node, error_code=RUN_TYPE_MISMATCH)
                         
                         symbol = self.context.current_scope.get_symbol(target.id)
-                        if symbol and symbol.declared_type and symbol.declared_type != 'var':
-                            self._check_type_compatibility(target.id, symbol.declared_type, value, node)
-
-                        self.context.set_variable(target.id, value)
+                        if symbol:
+                            if symbol.declared_type and symbol.declared_type != 'var':
+                                self._check_type_compatibility(target.id, symbol.declared_type, value, node)
+                            self.context.set_variable(target.id, value)
+                        else:
+                            # 变量不存在，隐式定义为 'var' 类型
+                            self.context.define_variable(target.id, value, declared_type='var')
                 elif isinstance(target, (ast.Subscript, ast.Attribute)):
                     self.evaluator.evaluate_assign(target, value, self.context)
         
@@ -676,7 +732,9 @@ class Interpreter(IStackInspector):
                 return self.llm_executor.execute_llm_function(func, args, self.context)
             elif isinstance(func, ast.ClassDef):
                 # Instantiation
-                instance = ClassInstance(func, self)
+                # Use UserDefinedType with scope from AST
+                runtime_type = UserDefinedType(func.name, func.scope)
+                instance = ClassInstance(func, self, runtime_type=runtime_type)
                 # Check for __init__
                 init_method = instance.get_method("__init__")
                 if init_method:

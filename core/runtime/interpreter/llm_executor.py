@@ -6,7 +6,7 @@ from core.types import parser_types as ast
 from core.types.exception_types import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.runtime.ext.capabilities import ILLMProvider
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel
+from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 class LLMExecutorImpl:
     """
@@ -25,13 +25,19 @@ class LLMExecutorImpl:
         self.last_call_info: Dict[str, Any] = {} # 记录最后一次 LLM 调用信息
         self._expected_type_stack: List[str] = []
 
+    @property
+    def debugger(self):
+        if self.service_context and self.service_context.debugger:
+            return self.service_context.debugger
+        return core_debugger
+
     def push_expected_type(self, type_name: str):
         self._expected_type_stack.append(type_name)
     
     def pop_expected_type(self):
         if self._expected_type_stack:
             self._expected_type_stack.pop()
-    def get_last_call_info(self) -> Dict[str, Any]:
+    def get_last_call_info(self) -> Dict[str, Any]:
         return self.last_call_info
 
     def execute_llm_function(self, node: ast.LLMFunctionDef, args: List[Any], context: RuntimeContext) -> Any:
@@ -41,27 +47,23 @@ class LLMExecutorImpl:
         # 0. 绑定参数到临时作用域，以便 evaluator 可以解析
         context.enter_scope()
         try:
-            if self.service_context and self.service_context.debugger:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{node.name}' with {len(args)} args")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{node.name}' with {len(args)} args")
 
             for i, arg_def in enumerate(node.args):
                 if i < len(args):
                     context.define_variable(arg_def.arg, args[i])
-                    if self.service_context and self.service_context.debugger:
-                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Bound arg '{arg_def.arg}' = {args[i]}")
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Bound arg '{arg_def.arg}' = {args[i]}")
 
             # 1. 提取并评估结构化 Prompt
             sys_prompt = self._evaluate_segments(node.sys_prompt, context)
             user_prompt = self._evaluate_segments(node.user_prompt, context)
             
-            if self.service_context and self.service_context.debugger:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Evaluated segments for LLM function '{node.name}'")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Evaluated segments for LLM function '{node.name}'")
             
             # 2. 注入意图增强 (三层架构合并)
             merged_intents = self._merge_intents(None, context)
             if merged_intents:
-                if self.service_context and self.service_context.debugger:
-                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting merged intents into sys_prompt")
+                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting merged intents into sys_prompt")
                 intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
                 sys_prompt += intent_block
                 
@@ -74,8 +76,7 @@ class LLMExecutorImpl:
             if ai_module and hasattr(ai_module, "get_return_type_prompt"):
                 type_prompt = ai_module.get_return_type_prompt(type_name)
                 if type_prompt:
-                    if self.service_context and self.service_context.debugger:
-                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting return type prompt for '{type_name}'")
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting return type prompt for '{type_name}'")
                     sys_prompt += f"\n\n{type_prompt}"
 
             # 4. 调用底层模型
@@ -92,8 +93,7 @@ class LLMExecutorImpl:
             
             # 5. 解析结果为目标类型
             result = self._parse_result(raw_res, type_name, node)
-            if self.service_context and self.service_context.debugger:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"LLM function '{node.name}' execution finished. Result type: {type(result).__name__}")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"LLM function '{node.name}' execution finished. Result type: {type(result).__name__}")
             return result
         finally:
             context.exit_scope()
@@ -193,8 +193,7 @@ class LLMExecutorImpl:
                     
                     # --- __to_prompt__ Protocol ---
                     if isinstance(val, ClassInstance) and val.has_method("__to_prompt__"):
-                        if self.service_context and self.service_context.debugger:
-                            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Applying __to_prompt__ protocol for instance of {val.class_def.name}")
+                        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Applying __to_prompt__ protocol for instance of {val.class_def.name}")
                         content_parts.append(str(val.call_method("__to_prompt__")))
                     else:
                         content_parts.append(str(val))
@@ -220,8 +219,7 @@ class LLMExecutorImpl:
         if type_name == "str":
             return raw_res
         
-        if self.service_context and self.service_context.debugger:
-            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Parsing LLM response to type '{type_name}'")
+        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Parsing LLM response to type '{type_name}'")
 
         try:
             if type_name == "int":
@@ -229,8 +227,7 @@ class LLMExecutorImpl:
                 match = re.search(r'-?\d+', clean_res)
                 if match:
                     val = int(match.group())
-                    if self.service_context and self.service_context.debugger:
-                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted int: {val}")
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted int: {val}")
                     return val
                 raise ValueError("No integer found in response")
             elif type_name == "float":
@@ -238,8 +235,7 @@ class LLMExecutorImpl:
                 match = re.search(r'-?\d+(\.\d+)?', clean_res)
                 if match:
                     val = float(match.group())
-                    if self.service_context and self.service_context.debugger:
-                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted float: {val}")
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted float: {val}")
                     return val
                 raise ValueError("No float found in response")
             elif type_name == "list":
@@ -251,8 +247,7 @@ class LLMExecutorImpl:
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
                     val = json.loads(json_str)
-                    if self.service_context and self.service_context.debugger:
-                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted list with {len(val)} elements")
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted list with {len(val)} elements")
                     return val
                 raise ValueError("No JSON list found in response")
             elif type_name == "dict":
@@ -263,8 +258,7 @@ class LLMExecutorImpl:
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
                     val = json.loads(json_str)
-                    if self.service_context and self.service_context.debugger:
-                        self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted dict with {len(val)} keys")
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted dict with {len(val)} keys")
                     return val
                 raise ValueError("No JSON dictionary found in response")
             elif type_name == "bool":
@@ -274,14 +268,12 @@ class LLMExecutorImpl:
                 elif re.search(r'\b(false|0|no|fail)\b', lower_res): val = False
                 else: val = bool(clean_res)
                 
-                if self.service_context and self.service_context.debugger:
-                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted bool: {val}")
+                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Extracted bool: {val}")
                 return val
             
             return raw_res
         except Exception as e:
-            if self.service_context and self.service_context.debugger:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response: {str(e)}")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response: {str(e)}")
             raise InterpreterError(
                 f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
                 node,
@@ -339,14 +331,13 @@ class LLMExecutorImpl:
             if injected_type != "var" and injected_type != "callable":
                 sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
         
-        if self.service_context and self.service_context.debugger:
-            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Synthesizing prompt for behavior (Scene: {scene.name})")
-            if node.intent:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected local intent: {node.intent}")
-            if injected_type:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected expected type constraint: {injected_type}")
-            if not auto_intent and context.get_active_intents():
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, "Skipped active intents injection due to configuration.")
+        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Synthesizing prompt for behavior (Scene: {scene.name})")
+        if node.intent:
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected local intent: {node.intent}")
+        if injected_type:
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injected expected type constraint: {injected_type}")
+        if not auto_intent and context.get_active_intents():
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, "Skipped active intents injection due to configuration.")
 
         if all_intents:
             sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
@@ -388,18 +379,16 @@ class LLMExecutorImpl:
             
             if clean_res in decision_map:
                 mapped_val = decision_map[clean_res]
-                if self.service_context and self.service_context.debugger:
-                    self.service_context.debugger.trace(
-                        CoreModule.LLM, DebugLevel.DETAIL, 
-                        f"Decision mapping applied: '{clean_res}' -> '{mapped_val}'"
-                    )
+                self.debugger.trace(
+                    CoreModule.LLM, DebugLevel.DETAIL, 
+                    f"Decision mapping applied: '{clean_res}' -> '{mapped_val}'"
+                )
                 
                 # 成功执行后清除 retry_hint
                 self.retry_hint = None
                 return mapped_val
             
-            if self.service_context and self.service_context.debugger:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Ambiguous response in {scene.name} scene: {response}")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Ambiguous response in {scene.name} scene: {response}")
 
             raise LLMUncertaintyError(
                 f"LLM 返回值在 {scene.name} 场景下不明确，期望 0 或 1，实际收到: {response}",
@@ -413,23 +402,20 @@ class LLMExecutorImpl:
 
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode, scene: str = "general") -> str:
-        if self.service_context and self.service_context.debugger:
-            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")
-            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
-            self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
+        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")
+        self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
+        self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
         
         if self.llm_callback:
             # 同步同步重试提示词
             if self.retry_hint:
-                if self.service_context and self.service_context.debugger:
-                    self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {self.retry_hint}")
+                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {self.retry_hint}")
                 self.llm_callback.set_retry_hint(self.retry_hint)
             
             # 调用 Provider
             response = self.llm_callback(sys_prompt, user_prompt, scene=scene)
-            if self.service_context and self.service_context.debugger:
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
-                self.service_context.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
+            self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
             return response
         
         # 如果没有回调，说明配置缺失，抛出错误

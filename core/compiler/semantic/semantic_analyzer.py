@@ -113,9 +113,22 @@ class SemanticAnalyzer:
         if not class_symbol:
             class_symbol = self.scope_manager.define(node.name, SymbolType.USER_TYPE)
         
+        # Resolve Parent Type
+        parent_type = None
+        if node.parent:
+            parent_sym = self.scope_manager.resolve(node.parent)
+            if not parent_sym:
+                 self.error(f"Base class '{node.parent}' is not defined", node)
+            elif not isinstance(parent_sym.type_info, UserDefinedType):
+                 # It might be that the parent is defined but type_info is not set yet (forward ref or order issue)
+                 # Enforce definition before use for inheritance
+                 self.error(f"Base class '{node.parent}' must be a defined class", node)
+            else:
+                  parent_type = parent_sym.type_info
+
         # Attach type info to the symbol
-        from core.compiler.semantic.types import UserDefinedType
-        class_symbol.type_info = UserDefinedType(node.name, node.scope)
+        # UserDefinedType is already imported at module level
+        class_symbol.type_info = UserDefinedType(node.name, node.scope, parent=parent_type)
         
         # 2. Enter Class Scope
         if node.scope:

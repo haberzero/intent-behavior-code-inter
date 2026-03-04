@@ -4,7 +4,6 @@ from collections import OrderedDict
 from core.types.dependency_types import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
 from core.types.parser_types import Module
 from core.types.scope_types import ScopeNode
-from core.compiler.parser.scanners.import_scanner import ImportScanner
 from core.compiler.lexer.lexer import Lexer
 from core.types.lexer_types import Token
 from core.compiler.parser.parser import Parser
@@ -19,7 +18,7 @@ from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_
 class Scheduler:
     """
     Top-level scheduler for multi-file compilation.
-    Orchestrates DependencyScanner, Parser, and SemanticAnalyzer.
+    Orchestrates Lexer, Parser, and SemanticAnalyzer.
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
@@ -30,7 +29,6 @@ class Scheduler:
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
-        # DependencyScanner is now instantiated per file
         
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}
@@ -230,9 +228,6 @@ class Scheduler:
                  continue
 
             # 1. Read Content & Lex (if not cached or outdated)
-            # Check build_cache or just always read? 
-            # For now, we assume we need to scan to find dependencies.
-            
             try:
                 with open(current_path, 'r', encoding='utf-8') as f:
                     content = f.read()
@@ -252,9 +247,15 @@ class Scheduler:
                 # Lexer error reported to issue_tracker
                 continue
                 
-            # 2. Scan Imports using ImportScanner (Token based)
-            scanner = ImportScanner(tokens, self.issue_tracker)
-            imports = scanner.scan(current_path)
+            # 2. Scan Imports using Main Parser (parse_imports_only)
+            # Replaced ImportScanner with Parser.parse_imports_only
+            parser = Parser(
+                tokens, 
+                self.issue_tracker, 
+                debugger=self.debugger
+            )
+            imports = parser.parse_imports_only()
+            
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Found imports in {current_path}:", data=[i.module_name for i in imports])
             
             # Create ModuleInfo

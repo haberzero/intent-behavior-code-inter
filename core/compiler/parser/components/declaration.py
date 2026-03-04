@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TYPE_CHECKING
 from core.types.lexer_types import TokenType
 from core.types import parser_types as ast
 from core.types.symbol_types import SymbolType
@@ -7,19 +7,32 @@ from core.types.diagnostic_types import Severity
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
-from core.compiler.parser.components.expression import ExpressionComponent
-from core.compiler.parser.components.statement import StatementComponent
-from core.compiler.parser.components.type_def import TypeComponent
+
+if TYPE_CHECKING:
+    from core.compiler.parser.components.expression import ExpressionComponent
+    from core.compiler.parser.components.statement import StatementComponent
+    from core.compiler.parser.components.type_def import TypeComponent
 
 class DeclarationComponent(BaseComponent):
-    def __init__(self, context, expr_component: ExpressionComponent, stmt_component: StatementComponent, type_component: TypeComponent):
+    def __init__(self, context):
         super().__init__(context)
-        self.expression = expr_component
-        self.statement = stmt_component
-        self.type_def = type_component
+        # self.expression = expr_component <-- Removed, use context
+        # self.statement = stmt_component <-- Removed, use context
+        # self.type_def = type_component <-- Removed, use context
         
-        # Link statement component back to this declaration component
-        self.statement.set_decl_parser(self)
+        # Link statement component back to this declaration component <-- Removed, handled by Mediator
+
+    @property
+    def expression(self) -> 'ExpressionComponent':
+        return self.context.expression_parser
+
+    @property
+    def statement(self) -> 'StatementComponent':
+        return self.context.statement_parser
+
+    @property
+    def type_def(self) -> 'TypeComponent':
+        return self.context.type_parser
 
     def parse_declaration(self) -> Optional[ast.Stmt]:
         role = SyntaxRecognizer.get_role(self.stream, self.scope_manager)

@@ -1,23 +1,26 @@
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from core.types.lexer_types import TokenType
 from core.types import parser_types as ast
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.components.expression import ExpressionComponent
+
+if TYPE_CHECKING:
+    from core.compiler.parser.components.expression import ExpressionComponent
 
 class StatementComponent(BaseComponent):
-    def __init__(self, context, expression_component: ExpressionComponent):
+    def __init__(self, context):
         super().__init__(context)
-        self.expression = expression_component
-        # We need access to declaration component for block parsing?
-        # Yes, blocks contain declarations.
-        # But this creates a circular dependency if StatementComponent imports DeclarationComponent
-        # and DeclarationComponent imports StatementComponent.
-        # We can pass declaration_component or use a callback/facade for parsing declarations.
-        # For now, let's assume MainParser handles the dispatch or we pass a callback.
-        self.decl_parser = None # Set later
+        # self.expression = expression_component  <-- Removed, use context
+        # self.decl_parser = None <-- Removed, use context
 
-    def set_decl_parser(self, decl_parser):
-        self.decl_parser = decl_parser
+    @property
+    def expression(self) -> 'ExpressionComponent':
+        return self.context.expression_parser
+
+    @property
+    def decl_parser(self):
+        return self.context.declaration_parser
+
+    # Removed set_decl_parser method
 
     def parse_statement(self) -> ast.Stmt:
         if self.stream.match(TokenType.RETURN):

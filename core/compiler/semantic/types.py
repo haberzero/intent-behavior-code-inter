@@ -121,16 +121,30 @@ class UserDefinedType(Type):
     """Represents a class type."""
     class_name: str
     scope: Any # Class scope
+    parent: Optional['UserDefinedType'] = None
     
-    def __init__(self, class_name: str, scope: Any):
+    def __init__(self, class_name: str, scope: Any, parent: Optional['UserDefinedType'] = None):
         super().__init__(class_name)
         self.class_name = class_name
         self.scope = scope
+        self.parent = parent
 
     def is_assignable_to(self, other: 'Type') -> bool:
         if isinstance(other, AnyType): return True
         if not isinstance(other, UserDefinedType): return False
-        return self.class_name == other.class_name
+        
+        # Check for exact match
+        if self.class_name == other.class_name:
+            return True
+            
+        # Check inheritance chain
+        current = self.parent
+        while current:
+            if current.class_name == other.class_name:
+                return True
+            current = current.parent
+            
+        return False
 
 # Predefined Types instances
 INT_TYPE = PrimitiveType("int")
