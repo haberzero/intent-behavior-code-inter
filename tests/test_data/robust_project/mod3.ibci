@@ -1,3 +1,0 @@
-
-from mod2 import foo
-var check = foo()

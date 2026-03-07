@@ -1,3 +1,0 @@
-
-import b
-var res = b.get_c_val()

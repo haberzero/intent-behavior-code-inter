@@ -1,8 +1,8 @@
 import os
 import importlib.util
 from typing import List
-from ..interpreter.interfaces import ServiceContext
-from core.runtime.ext.capabilities import ExtensionCapabilities, IStateReader, IStackInspector, ILLMProvider, IIntentManager, ILLMExecutor
+from core.foundation.interfaces import ServiceContext
+from core.foundation.capabilities import ExtensionCapabilities, IStateReader, IStackInspector, ILLMProvider, IIntentManager, ILLMExecutor
 
 class ModuleLoader:
     """

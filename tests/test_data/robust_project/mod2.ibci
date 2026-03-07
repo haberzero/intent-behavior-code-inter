@@ -1,3 +1,0 @@
-
-from mod1 import foo
-# foo is now in mod2's scope

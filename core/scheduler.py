@@ -3,17 +3,20 @@ from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
 from core.types.dependency_types import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
 from core.types.parser_types import Module
-from core.types.scope_types import ScopeNode
 from core.compiler.lexer.lexer import Lexer
 from core.types.lexer_types import Token
 from core.compiler.parser.parser import Parser
 from core.compiler.semantic.semantic_analyzer import SemanticAnalyzer
+from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.support.issue_adapter import wrap_tracker
 from core.support.diagnostics.issue_tracker import IssueTracker
 from core.compiler.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.types.diagnostic_types import Severity, CompilerError
 from core.support.host_interface import HostInterface
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.compiler.artifact import CompilationArtifact
+from core.compiler.semantic.result import CompilationResult
 
 class Scheduler:
     """
@@ -22,9 +25,9 @@ class Scheduler:
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None):
         self.root_dir = os.path.realpath(root_dir)
-        self.issue_tracker = IssueTracker()
+        self.issue_tracker = wrap_tracker(issue_tracker)
         self.source_manager = SourceManager()
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
@@ -36,9 +39,12 @@ class Scheduler:
         # Caches (Using OrderedDict for LRU behavior)
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
         self.ast_cache: OrderedDict[str, Module] = OrderedDict()   # Path -> AST
-        self.scope_cache: Dict[str, ScopeNode] = {} # Path AND Name -> Scope (for Parser)
+        self.symbol_table_cache: OrderedDict[str, Any] = OrderedDict() # Path -> SymbolTable
         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
+        
+        # [NEW] 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
+        self.plugin_type_cache: Dict[str, Any] = {}
         
         # Build Cache
         # Map: file_path -> mtime
@@ -47,73 +53,24 @@ class Scheduler:
         # Explicitly allowed files outside root (e.g. for run_string)
         self.allowed_files: Set[str] = set()
 
-    def bootstrap_builtins(self, builtin_file: str):
-        """
-        加载核心内置库 (primitives.ibci) 并将其符号注入全局预置符号表。
-        这确保了后续编译的所有模块都能正确识别 Object, Exception 等。
-        """
-        if not os.path.exists(builtin_file):
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Builtin file not found for bootstrapping: {builtin_file}")
-            return
-
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Bootstrapping scheduler with: {builtin_file}")
-        
-        # 临时允许并编译内置文件
-        self.allow_file(builtin_file)
-        try:
-            # 使用 compile_project 但由于是内部调用，我们不希望清理状态
-            # 所以我们手动执行编译逻辑
-            self._scan_and_cache(builtin_file)
-            self._compile_file(builtin_file)
-            
-            builtin_ast = self.ast_cache.get(builtin_file)
-            if builtin_ast and builtin_ast.scope:
-                # 将内置库的导出符号同步到预置符号表
-                for name, sym in builtin_ast.scope.symbols.items():
-                    self.predefined_symbols[name] = sym
-                    
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Bootstrap successful. Symbols registered: {list(self.predefined_symbols.keys())}")
-        except Exception as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Bootstrap failed: {str(e)}")
-            # 允许失败，因为这可能是初次运行或环境问题
-
     def allow_file(self, file_path: str):
         """Explicitly allow a file outside root_dir."""
-        self.allowed_files.add(os.path.realpath(file_path))
+        abs_path = os.path.realpath(file_path)
+        self.allowed_files.add(abs_path)
+        self.resolver.allow_file(abs_path)
 
-    def get_module_ast(self, module_name: str) -> Optional[Module]:
-        """
-        通过模块名获取已编译的 AST。
-        """
-        # 1. 尝试通过快速索引查找文件路径
-        path = self.module_name_to_path.get(module_name)
-        if path:
-            ast = self.ast_cache.get(path)
-            if ast:
-                # Move to end (MRU)
-                self.ast_cache.move_to_end(path)
-                return ast
-            
-        # 2. 回退：尝试直接在缓存中查找 (兼容逻辑)
-        if module_name in self.scope_cache:
-            for path, scope in self.scope_cache.items():
-                if scope == self.scope_cache[module_name] and path != module_name:
-                    ast = self.ast_cache.get(path)
-                    if ast:
-                        self.ast_cache.move_to_end(path)
-                        return ast
-        return None
-
-    def compile_project(self, entry_file: str) -> Dict[str, Module]:
+    def compile_project(self, entry_file: str) -> CompilationArtifact:
         """
         Compiles the project starting from entry_file.
-        Returns a map of file_path -> AST.
+        Returns a CompilationArtifact (Blueprint) for the interpreter.
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Starting project compilation: {entry_file}")
         # 0. Clear previous state
         self.issue_tracker.clear()
         self.modules.clear()
         self.module_name_to_path.clear()
+        
+        artifact = CompilationArtifact()
         
         # 1. Scan Dependencies (Recursive)
         # We manually drive the scanning process here to control token caching
@@ -158,13 +115,19 @@ class Scheduler:
                 mod_info.status = ModuleStatus.FAILED
                 continue
 
+            # Determine module name
+            rel_path = os.path.relpath(file_path, self.root_dir)
+            base_name = os.path.splitext(rel_path)[0]
+            module_name = base_name.replace(os.sep, '.')
+
             # Check mtime or cache
             last_mtime = self.build_cache.get(file_path, 0.0)
             if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                 # Recompile
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Compiling file: {file_path} (Cache miss/Outdated)")
                 try:
-                    self._compile_file(file_path)
+                    res = self._compile_file(file_path, artifact)
+                    artifact.add_module(module_name, res)
                     mod_info.status = ModuleStatus.SUCCESS
                 except CompilerError:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to compile: {file_path}")
@@ -172,6 +135,12 @@ class Scheduler:
                 self.build_cache[file_path] = mod_info.mtime
             else:
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Using cached AST for: {file_path}")
+                # Reconstruct result from cache
+                res = CompilationResult(
+                    module_ast=self.ast_cache[file_path], 
+                    symbol_table=self.symbol_table_cache.get(file_path)
+                )
+                artifact.add_module(module_name, res)
                 mod_info.status = ModuleStatus.SUCCESS
             
         if self.issue_tracker.has_errors():
@@ -179,7 +148,13 @@ class Scheduler:
             raise CompilerError("Compilation failed.")
             
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation successful.")
-        return self.ast_cache
+        
+        # Set entry point
+        entry_rel = os.path.relpath(entry_file, self.root_dir)
+        artifact.entry_module = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
+        artifact.global_symbols = self.predefined_symbols
+
+        return artifact
 
     def _prune_cache(self):
         """
@@ -290,7 +265,7 @@ class Scheduler:
                      # Actually ModuleResolveError carries info.
                      pass
                          
-    def _compile_file(self, file_path: str):
+    def _compile_file(self, file_path: str, artifact: CompilationArtifact):
         """
         Compiles a single file: Lex (reuse) -> Parse -> Semantic.
         Populates caches.
@@ -310,7 +285,7 @@ class Scheduler:
         self.source_manager.add_source(file_path, source)
         
         # Create per-file tracker
-        file_tracker = IssueTracker(file_path)
+        file_tracker = wrap_tracker(IssueTracker(file_path))
         
         try:
             # 1. Reuse Tokens
@@ -328,7 +303,6 @@ class Scheduler:
             parser = Parser(
                 tokens, 
                 file_tracker, 
-                self.scope_cache, 
                 package_name=module_name, 
                 module_resolver=self.resolver,
                 host_interface=self.host_interface,
@@ -336,41 +310,121 @@ class Scheduler:
             )
             ast_node = parser.parse()
             
-            # Cache AST and Tokens (Move to end for LRU)
+            # 3. Semantic Analysis
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
+            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger)
+            
+            # Inject predefined symbols
+            from core.compiler.semantic.symbols import Symbol, VariableSymbol, SymbolKind
+            for name, val in self.predefined_symbols.items():
+                if isinstance(val, Symbol):
+                    analyzer.symbol_table.define(val)
+                else:
+                    # Log a warning for non-Symbol predefined symbols (should not happen now)
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Warning: Predefined symbol '{name}' is not a Symbol object, skipping.")
+            
+            # Inject imported modules
+            from core.compiler.semantic.bridge import TypeBridge
+            from core.compiler.semantic.symbols import ModuleType, SymbolTable, SymbolKind, VariableSymbol
+            for imp in module_info.imports:
+                # Handle dotted names: import a.b.c
+                parts = imp.module_name.split('.')
+                
+                # The root module name (e.g., 'pkg' from 'pkg.utils')
+                root_name = parts[0]
+                
+                if imp.file_path:
+                    # Determine the module name of the imported file
+                    rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
+                    imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
+                    
+                    # Find the compiled result
+                    imp_res = artifact.get_module(imp_mod_name)
+                    if imp_res:
+                        # 贯彻“一切皆对象”：创建一个 ModuleType 实例并将其作为符号注入
+                        # 如果是多段导入 (pkg.utils)，我们需要构造嵌套的模块符号
+                        if len(parts) > 1:
+                            # 查找或创建根模块
+                            root_sym = analyzer.symbol_table.resolve(root_name)
+                            if not root_sym or not isinstance(root_sym.type_info, ModuleType):
+                                root_mod_type = ModuleType(root_name, SymbolTable())
+                                root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, var_type=root_mod_type)
+                                analyzer.symbol_table.define(root_sym)
+                            
+                            # 逐级注入子模块
+                            curr_mod = root_sym.type_info
+                            for i in range(1, len(parts)):
+                                part_name = parts[i]
+                                is_last = (i == len(parts) - 1)
+                                
+                                if is_last:
+                                    # 最后一级注入真实的已编译模块符号表
+                                    target_mod_type = ModuleType(part_name, imp_res.symbol_table)
+                                    target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=target_mod_type)
+                                    curr_mod.exported_scope.define(target_sym)
+                                else:
+                                    # 中间层级创建占位符模块
+                                    next_mod_sym = curr_mod.exported_scope.resolve(part_name)
+                                    if not next_mod_sym or not isinstance(next_mod_sym.type_info, ModuleType):
+                                        next_mod_type = ModuleType(part_name, SymbolTable())
+                                        next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=next_mod_type)
+                                        curr_mod.exported_scope.define(next_mod_sym)
+                                    curr_mod = next_mod_sym.type_info
+                        else:
+                            # 单段导入 (import utils)
+                            mod_type = ModuleType(imp.module_name, imp_res.symbol_table)
+                            mod_sym = VariableSymbol(name=imp.module_name, kind=SymbolKind.MODULE, var_type=mod_type)
+                            analyzer.symbol_table.define(mod_sym)
+                elif self.host_interface.is_external_module(imp.module_name):
+                    # 宿主环境中的外部模块 (Plugins)
+                    if imp.module_name in self.plugin_type_cache:
+                        s_mod_type = self.plugin_type_cache[imp.module_name]
+                    else:
+                        uts_metadata = self.host_interface.get_module_type(imp.module_name)
+                        if uts_metadata:
+                            # [FIX] 稳固性修复：提供外部解析器以支持跨插件继承
+                            def external_resolver(mod_name: str) -> Optional[Any]:
+                                # 如果是当前正在请求的模块（防止死循环，虽然 Bridge 有 cache）
+                                if mod_name == imp.module_name: return None
+                                
+                                # 1. 查缓存
+                                if mod_name in self.plugin_type_cache:
+                                    return self.plugin_type_cache[mod_name]
+                                
+                                # 2. 尝试转换新插件
+                                other_metadata = self.host_interface.get_module_type(mod_name)
+                                if other_metadata:
+                                    # 递归调用 uts_to_semantic_type (Bridge 处理循环引用)
+                                    other_mod_type = TypeBridge.uts_to_semantic_type(other_metadata, external_resolver=external_resolver)
+                                    self.plugin_type_cache[mod_name] = other_mod_type
+                                    return other_mod_type
+                                return None
+
+                            s_mod_type = TypeBridge.uts_to_semantic_type(uts_metadata, external_resolver=external_resolver)
+                            self.plugin_type_cache[imp.module_name] = s_mod_type
+                        else:
+                            s_mod_type = None
+                            
+                    if s_mod_type:
+                        mod_sym = VariableSymbol(name=imp.module_name, kind=SymbolKind.MODULE, var_type=s_mod_type)
+                        analyzer.symbol_table.define(mod_sym)
+            
+            result = analyzer.analyze(ast_node)
+            
+            # Cache AST, Tokens, and SymbolTable
             self.ast_cache[file_path] = ast_node
+            self.symbol_table_cache[file_path] = result.symbol_table
+            
             self.ast_cache.move_to_end(file_path)
+            self.symbol_table_cache.move_to_end(file_path)
             if file_path in self.token_cache:
                 self.token_cache.move_to_end(file_path)
             
             self._prune_cache()
             
-            # 3. Semantic Analysis
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
-            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger)
+            module_info.status = ModuleStatus.COMPILED
+            return result
             
-            # Pre-populate global scope with predefined symbols
-            if ast_node.scope:
-                from core.types.symbol_types import Symbol, SymbolType
-                from core.compiler.semantic.types import ANY_TYPE
-                for name, builtin_val in self.predefined_symbols.items():
-                    if not ast_node.scope.resolve(name):
-                        if isinstance(builtin_val, Symbol):
-                            # [REFINEMENT] Inject actual Symbol (for bootstrapped classes/funcs)
-                            new_sym = ast_node.scope.define(name, builtin_val.type)
-                            new_sym.type_info = builtin_val.type_info
-                        else:
-                            # Fallback for simple values injected via run()
-                            new_sym = ast_node.scope.define(name, SymbolType.VARIABLE)
-                            new_sym.type_info = ANY_TYPE
-            
-            analyzer.analyze(ast_node)
-            
-            # Register Scope
-            if ast_node.scope:
-                self.scope_cache[file_path] = ast_node.scope
-                self.scope_cache[module_name] = ast_node.scope
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Registered scope for module: {module_name}")
-                
         except CompilerError:
             raise
         except Exception as e:

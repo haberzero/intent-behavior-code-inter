@@ -1,25 +1,14 @@
+from core.compiler.semantic.symbols import Symbol, SymbolKind, StaticType
+
+# 为了向后兼容，保留 SymbolType 枚举并映射到 SymbolKind
 from enum import Enum, auto
-from dataclasses import dataclass
-from typing import Optional, Any
 
 class SymbolType(Enum):
-    BUILTIN_TYPE = auto()  # int, str, list...
-    USER_TYPE = auto()     # class MyClass (future)
-    FUNCTION = auto()      # func my_func
-    VARIABLE = auto()      # var x
-    MODULE = auto()        # import utils
+    BUILTIN_TYPE = SymbolKind.BUILTIN_TYPE
+    USER_TYPE = SymbolKind.CLASS
+    FUNCTION = SymbolKind.FUNCTION
+    VARIABLE = SymbolKind.VARIABLE
+    MODULE = SymbolKind.MODULE
+    INTENT = SymbolKind.INTENT
 
-@dataclass
-class Symbol:
-    name: str
-    type: SymbolType
-    scope_level: int = 0
-    type_info: Optional[Any] = None # Will hold utils.semantic.types.Type instance
-    exported_scope: Optional[Any] = None # For MODULE symbols: points to the module's Global ScopeNode
-    
-    # Add reference to origin symbol for imported aliases.
-    # This allows SemanticAnalyzer to lazy-resolve type_info if it was missing during import.
-    origin_symbol: Optional['Symbol'] = None 
-    
-    # Store the AST node of the type annotation for lazy resolution in SemanticAnalyzer.
-    declared_type_node: Optional[Any] = None
+# 这里的 Symbol 实际上就是 core.compiler.semantic.symbols.Symbol

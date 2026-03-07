@@ -10,6 +10,7 @@ class ImportType(Enum):
 class ModuleStatus(Enum):
     PENDING = auto()
     SUCCESS = auto()
+    COMPILED = auto()
     FAILED = auto()
 
 @dataclass

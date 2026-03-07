@@ -24,7 +24,7 @@ class SyntaxRecognizer:
     """
     
     @staticmethod
-    def get_role(stream: TokenStream, scope_manager=None) -> SyntaxRole:
+    def get_role(stream: TokenStream) -> SyntaxRole:
         token = stream.peek()
         
         if token.type == TokenType.INTENT:
@@ -57,36 +57,38 @@ class SyntaxRecognizer:
         if token.type in (TokenType.VAR, TokenType.CALLABLE):
             return SyntaxRole.VARIABLE_DECLARATION
         
-        # Check for implicit declaration: Type Name
+        # Check for implicit declaration: Type Name (e.g., int x, MyClass c)
         if token.type == TokenType.IDENTIFIER:
-            if SyntaxRecognizer._is_declaration_lookahead(stream, scope_manager):
+            if SyntaxRecognizer._is_declaration_lookahead(stream):
                 return SyntaxRole.VARIABLE_DECLARATION
             
         return SyntaxRole.EXPRESSION_STATEMENT
 
     @staticmethod
-    def _is_declaration_lookahead(stream: TokenStream, scope_manager) -> bool:
+    def _is_declaration_lookahead(stream: TokenStream) -> bool:
         """
-        Deep lookahead to distinguish between 'Type Name' and 'Name = Expr'.
-        Handles generics like 'list[int] x'.
+        Pure token-based lookahead to distinguish between 'Type Name' and 'Name = Expr'.
+        Handles generics like 'list[int] x' and dotted types 'a.b x'.
         """
-        # 1. Check if the current identifier is a known type (if scope_manager provided)
-        if scope_manager and scope_manager.is_type(stream.peek().value):
-            # Known type, check what follows
-            next_token = stream.peek(1)
-            if next_token.type == TokenType.IDENTIFIER:
-                return True
-            if next_token.type == TokenType.LBRACKET:
-                return SyntaxRecognizer._check_generic_lookahead(stream, 1)
+        current_offset = 0
         
-        # 2. Heuristic check: 'ID ID' is almost always a declaration in IBC-Inter
-        # e.g., 'int x', 'MyType y'
-        if stream.peek(1).type == TokenType.IDENTIFIER:
+        # 1. Skip dotted names: a.b.c
+        while stream.peek(current_offset).type == TokenType.IDENTIFIER:
+            if stream.peek(current_offset + 1).type == TokenType.DOT:
+                current_offset += 2
+            else:
+                break
+        
+        # Now we are at the end of the base type name
+        next_t = stream.peek(current_offset + 1)
+        
+        # 2. Heuristic check: '... ID ID' (e.g., 'int x', 'a.b y')
+        if next_t.type == TokenType.IDENTIFIER:
             return True
             
-        # 3. Heuristic check: 'ID [ ... ] ID'
-        if stream.peek(1).type == TokenType.LBRACKET:
-            return SyntaxRecognizer._check_generic_lookahead(stream, 1)
+        # 3. Heuristic check: '... ID [ ... ] ID' (e.g., 'list[int] x', 'a.b[int] y')
+        if next_t.type == TokenType.LBRACKET:
+            return SyntaxRecognizer._check_generic_lookahead(stream, current_offset + 1)
             
         return False
 

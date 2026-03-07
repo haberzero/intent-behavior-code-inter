@@ -1,0 +1,22 @@
+# IBCI OOP Violation Scenarios
+class Animal:
+    pass
+
+class Dog(Animal):
+    pass
+
+Dog d = Animal() # Invalid assignment: Parent to Child
+
+class Point:
+    int x
+Point p = Point()
+int val = p.z # Non-existent member access
+
+class SelfRef(SelfRef):
+    pass # Circular inheritance: Self
+
+class CycleA(CycleB):
+    pass
+
+class CycleB(CycleA):
+    pass # Circular inheritance: Cycle

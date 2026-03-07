@@ -1,469 +1,367 @@
-
 from typing import Dict, Optional, List, Any
-import re
 from core.types import parser_types as ast
-from core.types.symbol_types import Symbol, SymbolType
-from core.types.exception_types import SemanticError
-from core.types.diagnostic_types import Diagnostic, Severity, CompilerError, Location
-from core.types.scope_types import ScopeType, ScopeNode
-from core.compiler.parser.symbol_table import ScopeManager
+from core.compiler.support.diagnostics import DiagnosticReporter, DiagnosticSeverity
+from core.compiler.support.issue_adapter import IssueTrackerAdapter
 from core.support.diagnostics.issue_tracker import IssueTracker
-from core.support.diagnostics.codes import (
-    SEM_UNDEFINED_SYMBOL, SEM_REDEFINITION, SEM_TYPE_MISMATCH
-)
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-
-from core.compiler.semantic.types import (
-    Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType,
-    UserDefinedType, CallableType,
-    INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE,
-    get_builtin_type
-)
-
-from core.compiler.semantic.prelude import Prelude
 from core.support.host_interface import HostInterface
+
+from . import symbols
+from .symbols import (
+    SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol, 
+    StaticType, FunctionType, ClassType, ModuleType,
+    STATIC_ANY, STATIC_VOID, STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL
+)
+from .types import get_builtin_type
+from .prelude import Prelude
+from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
+from .resolver import TypeResolver
+from .result import CompilationResult
 
 class SemanticAnalyzer:
     """
-    Performs semantic analysis and type checking on the AST.
+    语义分析器：执行静态分析和类型检查。
+    贯彻“一切皆对象”思想：Analyzer 仅作为调度者，核心逻辑由 Type 对象自决议。
     """
-    def _init_builtins(self):
-        """Register builtin functions and modules."""
-        prelude = Prelude(self.host_interface)
-        
-        # 1. Functions
-        for name, func_type in prelude.get_builtins().items():
-            sym = self.scope_manager.global_scope.resolve(name)
-            if not sym:
-                sym = self.scope_manager.define(name, SymbolType.FUNCTION)
-            sym.type_info = func_type
-
-        # 2. Modules
-        for name, mod_type in prelude.get_builtin_modules().items():
-            sym = self.scope_manager.global_scope.resolve(name)
-            if not sym:
-                sym = self.scope_manager.define(name, SymbolType.MODULE)
-            sym.type_info = mod_type
-            sym.exported_scope = mod_type.scope
-
-        # 3. Types
-        for name, type_info in prelude.get_builtin_types().items():
-            sym = self.scope_manager.global_scope.resolve(name)
-            if not sym:
-                sym = self.scope_manager.define(name, SymbolType.USER_TYPE)
-            sym.type_info = type_info
-
-    def __init__(self, issue_tracker: Optional[IssueTracker] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
-        self.scope_manager = ScopeManager() 
-        self.issue_tracker = issue_tracker or IssueTracker()
+    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
+        self.symbol_table = SymbolTable() # 全局静态符号表
+        # [AUDIT] 诊断抽象：使用传入的 reporter 或创建适配器
+        self.issue_tracker = issue_tracker or IssueTrackerAdapter(IssueTracker())
         self.host_interface = host_interface
         self.debugger = debugger or core_debugger
+        self.current_return_type: Optional[StaticType] = None
+        self.current_class: Optional[ClassType] = None
+        self.in_behavior_expr = False
+        self.scene_stack = [ast.Scene.GENERAL] # 场景上下文栈
+        self.node_scenes: Dict[str, ast.Scene] = {} # 侧表：节点 UID -> 场景
+
+    def _init_builtins(self):
+        """注册内置静态符号"""
+        prelude = Prelude(self.host_interface)
         
-    def analyze(self, node: ast.ASTNode):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Starting semantic analysis...")
-        # Use the global scope attached to Module if available
-        if isinstance(node, ast.Module) and node.scope:
-            self.scope_manager.current_scope = node.scope
-            self.scope_manager.global_scope = node.scope
+        # 1. 注册内置函数
+        for name, func_type in prelude.get_builtins().items():
+            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, type_signature=func_type, metadata={"is_builtin": True})
+            self.symbol_table.define(sym)
+
+        # 2. 注册内置类型
+        for name, type_info in prelude.get_builtin_types().items():
+            sym = TypeSymbol(name=name, kind=SymbolKind.BUILTIN_TYPE, static_type=type_info)
+            self.symbol_table.define(sym)
+
+    def analyze(self, node: ast.ASTNode) -> CompilationResult:
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Starting static semantic analysis...")
+        
+        # 初始化内置符号
+        self._init_builtins()
             
-            # Re-register builtins into this scope
-            self._init_builtins()
-        else:
-            # Fallback: Use our own scope manager
-            self._init_builtins()
-            
+        # --- 多轮分析 (Multi-Pass) ---
+        
+        # Pass 1: 收集符号 (Classes, Functions)
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Pass 1: Collecting static symbols...")
+        collector = SymbolCollector(self.symbol_table, self.issue_tracker)
+        collector.collect(node)
+        
+        # Pass 2: 类型决议 (Inheritance, Signatures)
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Pass 2: Resolving static types...")
+        resolver = TypeResolver(self.symbol_table, self)
+        resolver.resolve(node)
+        
+        # Pass 3: 深度语义检查 (Body, Expressions, Type Checking)
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Pass 3: Deep checking...")
         self.visit(node)
         
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Semantic analysis complete.")
-        
+        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Static analysis complete.")
         self.issue_tracker.check_errors()
 
-    def visit(self, node: ast.ASTNode):
+        return CompilationResult(
+            module_ast=node if isinstance(node, ast.Module) else None,
+            symbol_table=self.symbol_table
+        )
+
+    def visit(self, node: ast.ASTNode) -> StaticType:
+        # [NEW] 记录表达式场景上下文
+        if isinstance(node, ast.Expr):
+            self.node_scenes[node.uid] = self.scene_stack[-1]
+
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
 
-    def generic_visit(self, node: ast.ASTNode):
-        for child in node.__dict__.values():
-            if isinstance(child, list):
-                for item in child:
-                    if isinstance(item, ast.ASTNode):
-                        self.visit(item)
-            elif isinstance(child, ast.ASTNode):
-                self.visit(child)
-        return ANY_TYPE
+    def generic_visit(self, node: ast.ASTNode) -> StaticType:
+        """
+        [AUDIT] 严格访问模式：对于未明确处理的节点，不再静默返回 Any。
+        """
+        # 允许某些辅助节点（如 arg, alias）被跳过
+        if isinstance(node, (ast.arg, ast.alias)):
+            return STATIC_ANY
+            
+        self.error(f"Internal compiler error: Unhandled AST node type '{node.__class__.__name__}'", node, code="INTERNAL_ERROR")
+        return STATIC_ANY
 
     def error(self, message: str, node: ast.ASTNode, code: str = "SEMANTIC_ERROR"):
-        self.issue_tracker.report(Severity.ERROR, code, message, location=node)
+        self.issue_tracker.error(message, node)
 
+    def _visit_llmexcept(self, fallback: Optional[List[ast.Stmt]]):
+        """访问 llmexcept (llm_fallback) 块"""
+        if fallback:
+            # [Pass 2.5] 使用独立的 LocalSymbolCollector 进行预扫描
+            LocalSymbolCollector(self.symbol_table, self).collect(fallback)
+            for stmt in fallback:
+                self.visit(stmt)
 
-    # --- Scope Management ---
-    
+    # --- 访问者实现 ---
+
     def visit_Module(self, node: ast.Module):
-        # Initialize current_return_type
-        self.current_return_type = None
-        # Global scope is already active in init
+        # [Pass 2.5] 预扫描模块作用域
+        LocalSymbolCollector(self.symbol_table, self).collect(node.body)
         for stmt in node.body:
             self.visit(stmt)
+
+    def visit_GlobalStmt(self, node: ast.GlobalStmt):
+        # 1. 检查是否在全局作用域使用 global
+        if self.symbol_table.parent is None:
+            self.error("Global declaration is not allowed in global scope", node)
+            return
+
+        global_scope = self.symbol_table.get_global_scope()
+        for name in node.names:
+            # 2. 检查变量是否在全局定义
+            sym = global_scope.symbols.get(name)
+            if not sym:
+                self.error(f"Global variable '{name}' is not defined in global scope", node)
+                continue
+            
+            # 3. 记录到当前作用域的 global_refs
+            self.symbol_table.global_refs.add(name)
 
     def visit_ClassDef(self, node: ast.ClassDef):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing class definition: {node.name}")
-        # 1. Register class in current scope
-        class_symbol = self.scope_manager.resolve(node.name)
-        if not class_symbol:
-            class_symbol = self.scope_manager.define(node.name, SymbolType.USER_TYPE)
-        
-        # Resolve Parent Type
-        parent_type = None
-        if node.parent:
-            parent_sym = self.scope_manager.resolve(node.parent)
-            if not parent_sym:
-                 self.error(f"Base class '{node.parent}' is not defined", node)
-            elif not isinstance(parent_sym.type_info, UserDefinedType):
-                 # It might be that the parent is defined but type_info is not set yet (forward ref or order issue)
-                 # Enforce definition before use for inheritance
-                 self.error(f"Base class '{node.parent}' must be a defined class", node)
-            else:
-                  parent_type = parent_sym.type_info
+        sym = self.symbol_table.resolve(node.name)
+        if not sym or not isinstance(sym, symbols.TypeSymbol):
+            return
+            
+        old_table = self.symbol_table
+        if sym.owned_scope:
+            self.symbol_table = sym.owned_scope
+            
+        old_class = self.current_class
+        self.current_class = sym.static_type
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self.current_class = old_class
+            self.symbol_table = old_table
 
-        # Attach type info to the symbol
-        # UserDefinedType is already imported at module level
-        class_symbol.type_info = UserDefinedType(node.name, node.scope, parent=parent_type)
-        
-        # 2. Enter Class Scope
-        if node.scope:
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Entering existing class scope for {node.name}")
-            self.scope_manager.current_scope = node.scope
-        else:
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Creating new class scope for {node.name}")
-            self.scope_manager.enter_scope(ScopeType.CLASS)
-            
-        # 3. Visit class body
-        for stmt in node.body:
-            self.visit(stmt)
-            
-        # 4. Exit Class Scope
-        if node.scope and node.scope.parent:
-            self.scope_manager.current_scope = node.scope.parent
-        else:
-            self.scope_manager.exit_scope()
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Exited class scope for {node.name}")
+    def _define_var(self, name: str, var_type: StaticType, node: ast.ASTNode, allow_overwrite: bool = False):
+        try:
+            sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, var_type=var_type, node_uid=node.uid)
+            self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
+            return sym
+        except ValueError as e:
+            self.error(str(e), node)
+            return None
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing function definition: {node.name}")
-        # 1. Register function in current scope (already handled by Parser/PreScanner, just fill types)
+        sym = self.symbol_table.resolve(node.name)
+        ret_type = sym.return_type if isinstance(sym, symbols.FunctionSymbol) else STATIC_VOID
         
-        # Resolve return type
-        ret_type = VOID_TYPE
-        if node.returns:
-            ret_type = self._resolve_type(node.returns)
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Resolved return type for {node.name}: {ret_type}")
-            
-        param_types = []
+        # 进入局部作用域
+        old_table = self.symbol_table
+        self.symbol_table = SymbolTable(parent=old_table)
         
-        # We need to look up the function symbol in the current scope to update its type
-        func_symbol = self.scope_manager.resolve(node.name)
-        if not func_symbol:
-            # Define it if missing (e.g. nested functions or global issues)
-            func_symbol = self.scope_manager.define(node.name, SymbolType.FUNCTION)
-            
-        # 2. Enter function scope (Use the one attached to node)
-        if node.scope:
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Entering function scope for {node.name}")
-            self.scope_manager.current_scope = node.scope
-        else:
-            # Fallback if scope missing (shouldn't happen)
-            self.scope_manager.enter_scope(ScopeType.FUNCTION)
-        
-        # 3. Register parameters types
-        for arg in node.args:
-            arg_type = ANY_TYPE
-            if arg.annotation:
-                arg_type = self._resolve_type(arg.annotation)
-            
-            # Update symbol in current scope
-            param_symbol = self.scope_manager.resolve(arg.arg)
-            if not param_symbol:
-                # Should exist, but define if not
-                param_symbol = self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
-            
-            param_symbol.type_info = arg_type
-            param_types.append(arg_type)
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Registered parameter {arg.arg} with type {arg_type}")
-            
-        # Update function symbol with type info (FunctionType)
-        func_type = FunctionType(param_types, ret_type)
-        if node.scope and node.scope.parent:
-            outer_func_symbol = node.scope.parent.resolve(node.name)
-            if outer_func_symbol:
-                outer_func_symbol.type_info = func_type
-        elif func_symbol: # Global or current scope fallback
-            func_symbol.type_info = func_type
-        
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DATA, f"Function type info for {node.name}:", data={"params": [str(t) for t in param_types], "returns": str(ret_type)})
+        # [NEW] 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
+        if self.current_class:
+            self._define_var("self", self.current_class, node)
 
-        # 4. Visit body
-        # Track return type for return checking
-        previous_ret_type = self.current_return_type
+        # 注册参数
+        for i, arg in enumerate(node.args):
+            # 索引偏移：类方法的签名中包含隐含的 self
+            sig_idx = i + 1 if self.current_class else i
+            arg_type = sym.param_types[sig_idx] if (isinstance(sym, symbols.FunctionSymbol) and sig_idx < len(sym.param_types)) else STATIC_ANY
+            self._define_var(arg.arg, arg_type, arg)
+            
+        # [Pass 2.5] 预扫描局部作用域
+        LocalSymbolCollector(self.symbol_table, self).collect(node.body)
+
+        old_ret = self.current_return_type
         self.current_return_type = ret_type
-        
-        for stmt in node.body:
-            self.visit(stmt)
-            
-        self.current_return_type = previous_ret_type
-            
-        # Exit scope
-        if node.scope and node.scope.parent:
-            self.scope_manager.current_scope = node.scope.parent
-        else:
-            self.scope_manager.exit_scope()
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Exited function scope for {node.name}")
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self.current_return_type = old_ret
+            self.symbol_table = old_table
 
     def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing LLM function definition: {node.name}")
-        ret_type = STR_TYPE
-        if node.returns:
-            ret_type = self._resolve_type(node.returns)
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Resolved return type for LLM {node.name}: {ret_type}")
+        sym = self.symbol_table.resolve(node.name)
+        
+        # 进入局部作用域以校验提示词中的占位符
+        old_table = self.symbol_table
+        self.symbol_table = SymbolTable(parent=old_table)
+        
+        if self.current_class:
+            self._define_var("self", self.current_class, node)
             
-        param_types = []
-        
-        # Look up function symbol in current scope (before entering new scope)
-        func_symbol = self.scope_manager.resolve(node.name)
-        if not func_symbol:
-            func_symbol = self.scope_manager.define(node.name, SymbolType.FUNCTION)
-        
-        # LLM functions also have a scope (for params)
-        if node.scope:
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Entering LLM function scope for {node.name}")
-            self.scope_manager.current_scope = node.scope
-        else:
-            self.scope_manager.enter_scope(ScopeType.FUNCTION)
-        
-        # Register parameters in the new scope
-        for arg in node.args:
-            arg_type = ANY_TYPE
-            if arg.annotation:
-                arg_type = self._resolve_type(arg.annotation)
+        for i, arg in enumerate(node.args):
+            sig_idx = i + 1 if self.current_class else i
+            arg_type = sym.param_types[sig_idx] if (isinstance(sym, symbols.FunctionSymbol) and sig_idx < len(sym.param_types)) else STATIC_ANY
+            self._define_var(arg.arg, arg_type, arg)
             
-            param_symbol = self.scope_manager.resolve(arg.arg)
-            if not param_symbol:
-                param_symbol = self.scope_manager.define(arg.arg, SymbolType.VARIABLE)
-            
-            param_symbol.type_info = arg_type
-            param_types.append(arg_type)
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Registered LLM parameter {arg.arg} with type {arg_type}")
-            
-        func_type = FunctionType(param_types, ret_type)
-        if node.scope and node.scope.parent:
-            outer_func_symbol = node.scope.parent.resolve(node.name)
-            if outer_func_symbol:
-                outer_func_symbol.type_info = func_type
-        elif func_symbol:
-            func_symbol.type_info = func_type
+        # [Pass 2.5] 预扫描局部作用域（LLM 函数虽然没有标准 body，但其 prompt 中可能涉及变量引用）
+        # 这里的预扫描主要是为了兼容未来可能在 LLM 函数中增加的局部定义
+        # 注意：LLM 函数没有常规 body，这里暂不执行 collect，除非未来规范支持
         
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DATA, f"LLM Function type info for {node.name}:", data={"params": [str(t) for t in param_types], "returns": str(ret_type)})
-
-        # LLM body is text, but we should check variable interpolations if possible.
-        
-        # Check expressions in sys_prompt and user_prompt
-        for prompt_segments in [node.sys_prompt, node.user_prompt]:
-            if prompt_segments:
-                for segment in prompt_segments:
-                    if isinstance(segment, ast.Expr):
-                        # Special check for Name to provide better error message for tests
-                        if isinstance(segment, ast.Name):
-                             symbol = self.scope_manager.resolve(segment.id)
-                             if not symbol:
-                                 self.error(f"Parameter '{segment.id}' used in LLM prompt is not defined", node)
-                                 continue
+        try:
+            # 校验提示词段落中的表达式
+            if node.sys_prompt:
+                for segment in node.sys_prompt:
+                    if isinstance(segment, ast.ASTNode):
                         self.visit(segment)
-        
-        if node.scope and node.scope.parent:
-            self.scope_manager.current_scope = node.scope.parent
-        else:
-            self.scope_manager.exit_scope()
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Exited LLM function scope for {node.name}")
-
-
-    # --- Statements ---
-    
-    def visit_Assign(self, node: ast.Assign):
-        # Handle declarations vs assignments
-        
-        target = node.targets[0] # IBC-Inter only supports single target assignment
-        
-        if node.type_annotation:
-            # Declaration: Type x = val
-            declared_type = self._resolve_type(node.type_annotation)
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing variable declaration with type: {declared_type}")
-            
-            if isinstance(target, ast.Name):
-                var_name = target.id
-                # Symbol is ALREADY defined by Parser/PreScanner. We just need to FILL type info.
-                symbol = self.scope_manager.resolve(var_name)
-                
-                # FALLBACK: If not found, and we are in global scope, define it.
-                if not symbol and self.scope_manager.current_scope.depth == 0:
-                    symbol = self.scope_manager.define(var_name, SymbolType.VARIABLE)
-                
-                if not symbol:
-                    # Should not happen if Parser is correct and not global
-                    self.error(f"Internal Error: Variable '{var_name}' not found in scope during declaration", node)
-                    return
-
-                symbol.type_info = declared_type
-                self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Assigned type {declared_type} to symbol {var_name}")
-                
-                # Check initial value
-                if node.value:
-                    val_type = self.visit(node.value)
-                    if val_type is not None:
-                        # [SPECIAL CASE] Allow BehaviorExpr to be assigned to 'callable'
-                        if isinstance(declared_type, CallableType) and isinstance(node.value, ast.BehaviorExpr):
-                            # This will be handled as a Lambda in the Interpreter
-                            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"BehaviorExpr assigned to callable '{var_name}'")
-                        # [FIX]: Type Inference for 'var' (AnyType)
-                        elif isinstance(declared_type, AnyType) and val_type != VOID_TYPE:
-                            symbol.type_info = val_type
-                            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Inferred type {val_type} for 'var' variable '{var_name}'")
-                        elif not val_type.is_assignable_to(declared_type):
-                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{declared_type}'", node, code=SEM_TYPE_MISMATCH)
-            else:
-                self.error("Invalid assignment target for declaration", node)
-        else:
-            # Reassignment: x = val
-            if isinstance(target, ast.Name):
-                var_name = target.id
-                symbol = self.scope_manager.resolve(var_name)
-                self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing reassignment to '{var_name}'")
-                if not symbol:
-                    self.error(f"Variable '{var_name}' is not defined", node, code=SEM_UNDEFINED_SYMBOL)
-                    return
-                
-                # Check type compatibility
-                if node.value:
-                    val_type = self.visit(node.value)
-                    
-                    if symbol.type_info:
-                        # If 'var' was previously inferred as Any (no init), now we can infer?
-                        # Or if it was declared as 'var' and initialized, it has a type now.
-                        # If it is STILL AnyType, we can update it?
-                        if isinstance(symbol.type_info, AnyType) and val_type != VOID_TYPE:
-                             symbol.type_info = val_type
-                             self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Late inferred type {val_type} for '{var_name}'")
-                        elif val_type is not None and not val_type.is_assignable_to(symbol.type_info):
-                            self.error(f"Type mismatch: Cannot assign '{val_type}' to '{symbol.type_info}'", node, code=SEM_TYPE_MISMATCH)
-            elif isinstance(target, ast.Attribute):
-                # Attribute assignment: obj.attr = val
-                attr_type = self.visit(target)
-                self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing attribute assignment")
-                if node.value:
-                    val_type = self.visit(node.value)
-                    if attr_type and val_type and not val_type.is_assignable_to(attr_type):
-                        self.error(f"Type mismatch: Cannot assign '{val_type}' to attribute of type '{attr_type}'", node, code=SEM_TYPE_MISMATCH)
-            else:
-                # Subscript assignment etc.
-                self.visit(target)
-                if node.value:
-                    self.visit(node.value)
+            if node.user_prompt:
+                for segment in node.user_prompt:
+                    if isinstance(segment, ast.ASTNode):
+                        self.visit(segment)
+        finally:
+            self.symbol_table = old_table
 
     def visit_Return(self, node: ast.Return):
-        # Explicit check if we are inside a function
-        if self.current_return_type is None:
-            self.error("Return statement outside of function", node)
-            return
-
-        expected = self.current_return_type
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing return statement. Expected type: {expected}")
-        
         if node.value:
-            actual = self.visit(node.value)
-            if actual is not None and not actual.is_assignable_to(expected):
-                self.error(f"Invalid return type: expected '{expected}', got '{actual}'", node)
+            ret_type = self.visit(node.value)
+            if self.current_return_type and not ret_type.is_assignable_to(self.current_return_type):
+                self.error(f"Invalid return type: expected '{self.current_return_type.name}', got '{ret_type.name}'", node)
         else:
-            if expected != VOID_TYPE and expected != ANY_TYPE:
-                self.error(f"Missing return value: expected '{expected}'", node)
+            if self.current_return_type and self.current_return_type != STATIC_VOID:
+                self.error(f"Invalid return type: expected '{self.current_return_type.name}', got 'void'", node)
 
-    def visit_IntentStmt(self, node: ast.IntentStmt):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing intent block")
-        
-        # 检查动态意图表达式是否包含 AI 调用
-        if node.intent.expr:
-            self._check_no_ai_calls(node.intent.expr, "Intent expression")
-            self.visit(node.intent.expr)
+    def visit_Assign(self, node: ast.Assign):
+        if node.type_annotation:
+            declared_type = self._resolve_type(node.type_annotation)
+            for var_name, target in SymbolExtractor.get_assigned_names(node):
+                # [NEW] 局部优先原则：带有类型标注的赋值总是定义新变量
+                if var_name in self.symbol_table.global_refs:
+                    self.error(f"Cannot redeclare global variable '{var_name}' with type annotation", node)
+                
+                # 检查是否已在 Pass 2.5 预扫描中定义
+                sym = self.symbol_table.symbols.get(var_name)
+                # [LIFECYCLE] 如果预扫描阶段未定义，或者定义为 Any/var 占位符，则在此处建立正式定义
+                if not sym or sym.type_info.name in ("Any", "var"):
+                    if declared_type.name == "var" or declared_type.name == "Any":
+                        val_type = self.visit(node.value) if node.value else STATIC_ANY
+                        sym = symbols.VariableSymbol(name=var_name, kind=symbols.SymbolKind.VARIABLE, var_type=val_type, node_uid=node.uid)
+                    else:
+                        sym = symbols.VariableSymbol(name=var_name, kind=symbols.SymbolKind.VARIABLE, var_type=declared_type, node_uid=node.uid)
+                    
+                    try:
+                        # 允许覆盖 Pass 1/2.5 的占位符
+                        self.symbol_table.define(sym, allow_overwrite=True)
+                    except ValueError as e:
+                        self.error(str(e), node)
+                
+                if sym:
+                    target.symbol_uid = sym.uid # [FIX] 同步 UID
+                
+                # 类型检查
+                if node.value:
+                    val_type = self.visit(node.value)
+                    if not val_type.is_assignable_to(sym.type_info):
+                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node)
+        else:
+            for var_name, target in SymbolExtractor.get_assigned_names(node):
+                # [NEW] 局部优先语义逻辑：
+                # 1. 检查是否显式声明为 global
+                if var_name in self.symbol_table.global_refs:
+                    # 查找全局符号
+                    global_scope = self.symbol_table.get_global_scope()
+                    sym = global_scope.resolve(var_name)
+                    # (由于 GlobalStmt 已校验存在性，这里 sym 理论上一定存在)
+                    if node.value:
+                        val_type = self.visit(node.value)
+                        if not val_type.is_assignable_to(sym.type_info):
+                            self.error(f"Type mismatch: Cannot assign '{val_type.name}' to global '{var_name}' of type '{sym.type_info.name}'", node)
+                else:
+                    # 2. 局部优先：仅在当前作用域查找（不再向上递归 resolve）
+                    sym = self.symbol_table.symbols.get(var_name)
+                    
+                    # [LIFECYCLE] 如果符号尚未定义，或者是之前收集到的 Any/var 占位符，则执行隐式定义
+                    if not sym or sym.type_info.name in ("Any", "var"):
+                        # 隐式局部声明
+                        val_type = self.visit(node.value) if node.value else STATIC_ANY
+                        # 如果是占位符，允许覆盖
+                        sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
+                        if sym:
+                            target.symbol_uid = sym.uid # [FIX] 同步 UID
+                    else:
+                        if node.value:
+                            val_type = self.visit(node.value)
+                            if not val_type.is_assignable_to(sym.type_info):
+                                self.error(f"Type mismatch: Cannot assign '{val_type.name}' to local '{var_name}' of type '{sym.type_info.name}'", node)
             
-        for stmt in node.body:
-            self.visit(stmt)
-
-    def _check_no_ai_calls(self, node: ast.ASTNode, context_name: str):
-        """递归检查 AST 节点中是否包含 AI 调用（BehaviorExpr 或 LLM 函数调用）"""
-        if isinstance(node, ast.BehaviorExpr):
-            self.error(f"{context_name} cannot contain AI behavior expressions (@~...~)", node)
-            return
-
-        # 检查子节点
-        for attr in vars(node):
-            val = getattr(node, attr)
-            if isinstance(val, ast.ASTNode):
-                self._check_no_ai_calls(val, context_name)
-            elif isinstance(val, list):
-                for item in val:
-                    if isinstance(item, ast.ASTNode):
-                        self._check_no_ai_calls(item, context_name)
-
-    def visit_ExprStmt(self, node: ast.ExprStmt):
-        self.visit(node.value)
+            # 处理属性赋值 (e.g., db.port = 8080)
+            if isinstance(node.targets[0], ast.Attribute):
+                target = node.targets[0]
+                target_type = self.visit(target)
+                val_type = self.visit(node.value)
+                if not val_type.is_assignable_to(target_type):
+                    self.error(f"Type mismatch: Cannot assign '{val_type.name}' to attribute of type '{target_type.name}'", node)
 
     def visit_If(self, node: ast.If):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'if' statement")
         self.visit(node.test)
-        for stmt in node.body:
-            self.visit(stmt)
-        for stmt in node.orelse:
-            self.visit(stmt)
-        if node.llm_fallback:
-            for stmt in node.llm_fallback:
+        
+        self.scene_stack.append(ast.Scene.BRANCH)
+        try:
+            for stmt in node.body:
                 self.visit(stmt)
+            for stmt in node.orelse:
+                self.visit(stmt)
+        finally:
+            self.scene_stack.pop()
 
     def visit_While(self, node: ast.While):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'while' statement")
         self.visit(node.test)
-        for stmt in node.body:
-            self.visit(stmt)
-        if node.llm_fallback:
-            for stmt in node.llm_fallback:
+        
+        self.scene_stack.append(ast.Scene.LOOP)
+        try:
+            for stmt in node.body:
                 self.visit(stmt)
+            for stmt in node.orelse:
+                self.visit(stmt)
+        finally:
+            self.scene_stack.pop()
 
     def visit_For(self, node: ast.For):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'for' statement")
-        # Visit iterator
-        self.visit(node.iter)
+        iter_type = self.visit(node.iter)
+        # 获取迭代元素的类型
+        element_type = iter_type.element_type
         
-        # Enter loop scope
-        self.scope_manager.enter_scope(ScopeType.BLOCK)
-        
-        if node.target:
-            if isinstance(node.target, ast.Name):
-                # Define loop variable
-                if not self.scope_manager.current_scope.resolve(node.target.id):
-                    sym = self.scope_manager.define(node.target.id, SymbolType.VARIABLE)
-                    sym.type_info = ANY_TYPE
-                    self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Defined loop variable '{node.target.id}'")
+        for var_name, target in SymbolExtractor.get_assigned_names(node):
+            # 检查是否已在 Pass 2.5 预扫描中定义
+            sym = self.symbol_table.symbols.get(var_name)
+            # 如果未定义，或者定义为 Any/var 占位符，则更新其类型
+            if not sym or sym.type_info.name in ("Any", "var"):
+                sym = self._define_var(var_name, element_type, node, allow_overwrite=(sym is not None))
             else:
-                self.visit(node.target)
-                
-        for stmt in node.body:
-            self.visit(stmt)
+                # 显式定义的变量（如带有类型标注），则执行类型更新
+                sym.var_type = element_type
             
-        if node.llm_fallback:
-            for stmt in node.llm_fallback:
+            if sym:
+                target.symbol_uid = sym.uid # [FIX] 同步 UID
+        
+        self.scene_stack.append(ast.Scene.LOOP)
+        try:
+            for stmt in node.body:
                 self.visit(stmt)
-                
-        self.scope_manager.exit_scope()
+        finally:
+            self.scene_stack.pop()
+
+    def visit_ExprStmt(self, node: ast.ExprStmt):
+        return self.visit(node.value)
+
+    def visit_AugAssign(self, node: ast.AugAssign):
+        self.visit(node.target)
+        self.visit(node.value)
 
     def visit_Try(self, node: ast.Try):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'try' statement")
         for stmt in node.body:
             self.visit(stmt)
         for handler in node.handlers:
@@ -474,327 +372,260 @@ class SemanticAnalyzer:
             self.visit(stmt)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'except' handler")
         if node.type:
             self.visit(node.type)
+        for var_name, target in SymbolExtractor.get_assigned_names(node):
+            # 检查是否已在 Pass 2.5 预扫描中定义
+            sym = self.symbol_table.symbols.get(var_name)
+            if not sym or sym.type_info.name in ("Any", "var"):
+                sym = self._define_var(var_name, STATIC_ANY, node, allow_overwrite=(sym is not None))
+            
+            if sym:
+                target.symbol_uid = sym.uid # [AUDIT] 补全异常变量的 UID 绑定
+            # 简单起见，暂时将异常变量视为 Any
         
-        if node.name:
-            self.scope_manager.enter_scope(ScopeType.BLOCK)
-            self.scope_manager.define(node.name, SymbolType.VARIABLE)
-            for stmt in node.body:
-                self.visit(stmt)
-            self.scope_manager.exit_scope()
-        else:
-            for stmt in node.body:
-                self.visit(stmt)
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_Pass(self, node: ast.Pass):
+        return STATIC_VOID
+
+    def visit_Break(self, node: ast.Break):
+        return STATIC_VOID
+
+    def visit_Continue(self, node: ast.Continue):
+        return STATIC_VOID
+
+    def visit_Import(self, node: ast.Import):
+        # 语义阶段仅校验，不执行导入逻辑（由 Scheduler 处理）
+        return STATIC_VOID
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        return STATIC_VOID
+
+    def visit_IntentStmt(self, node: ast.IntentStmt):
+        # 访问意图块内部
+        for stmt in node.body:
+            self.visit(stmt)
+        return STATIC_VOID
+
+    def visit_AnnotatedStmt(self, node: ast.AnnotatedStmt):
+        """处理带意图注释的语句包装节点"""
+        # TODO: 在此处实现意图与行为的一致性检查逻辑
+        return self.visit(node.stmt)
+
+    def visit_AnnotatedExpr(self, node: ast.AnnotatedExpr):
+        """处理带意图注释的表达式包装节点"""
+        return self.visit(node.expr)
+
+    def visit_LLMExceptionalStmt(self, node: ast.LLMExceptionalStmt):
+        """统一处理 LLM 回退逻辑包装节点"""
+        # 1. 访问主语句
+        self.visit(node.primary)
+        # 2. 访问回退块
+        self._visit_llmexcept(node.fallback)
+        return STATIC_VOID
 
     def visit_Raise(self, node: ast.Raise):
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Analyzing 'raise' statement")
         if node.exc:
             self.visit(node.exc)
+        return STATIC_VOID
 
-    def visit_Call(self, node: ast.Call) -> Type:
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing function call")
-        func_type = self.visit(node.func)
+    def visit_Retry(self, node: ast.Retry):
+        if node.hint:
+            self.visit(node.hint)
+        return STATIC_VOID
+
+    def visit_Compare(self, node: ast.Compare) -> StaticType:
+        left_type = self.visit(node.left)
+        for op, comparator in zip(node.ops, node.comparators):
+            right_type = self.visit(comparator)
+            res = left_type.get_operator_result(op, right_type)
+            if not res:
+                self.error(f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'", node)
+            # 链式比较中，前一轮的右操作数成为下一轮的左操作数
+            left_type = right_type
         
-        if isinstance(func_type, AnyType):
-            return ANY_TYPE
-            
-        from core.compiler.semantic.types import UserDefinedType
-        if isinstance(func_type, UserDefinedType):
-            # Class instantiation: e.g. Person("Alice")
-            # Returns an instance of that class
-            return func_type
-            
-        # Determine if it's a normal function or a generic callable
-        if not isinstance(func_type, (FunctionType, CallableType)):
-            self.error(f"Expression of type '{func_type}' is not callable", node)
-            return ANY_TYPE # Fallback
-            
-        if isinstance(func_type, CallableType):
-            # Generic callable, we don't know the exact signature or return type at compile time.
-            # Assume it's Any for now.
-            for arg in node.args:
-                self.visit(arg)
-            return ANY_TYPE
+        node.inferred_type = STATIC_BOOL
+        return STATIC_BOOL
 
-        # Check arguments
-        param_types = func_type.param_types
+    def visit_BoolOp(self, node: ast.BoolOp) -> StaticType:
+        for val in node.values:
+            self.visit(val)
+        node.inferred_type = STATIC_BOOL
+        return STATIC_BOOL
+
+    def visit_ListExpr(self, node: ast.ListExpr) -> StaticType:
+        from .symbols import ListType
+        element_type = STATIC_ANY
+        if node.elts:
+            element_type = self.visit(node.elts[0])
+            for elt in node.elts[1:]:
+                self.visit(elt)
         
-        # [NEW]: If it's a method call, skip the 'self' parameter check
-        if isinstance(node.func, ast.Attribute):
-            obj_type = self.visit(node.func.value)
-            if isinstance(obj_type, UserDefinedType):
-                # It is a method call on a class instance
-                if len(param_types) > 0:
-                    param_types = param_types[1:]
-        
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Checking arguments for call. Expected: {len(param_types)}, Actual: {len(node.args)}")
-        
-        if len(node.args) != len(param_types):
-            self.error(f"Argument count mismatch: expected {len(param_types)}, got {len(node.args)}", node)
-            return ANY_TYPE # Stop checking args
-            
-        for i, arg in enumerate(node.args):
-            arg_type = self.visit(arg)
-            expected_type = param_types[i]
-            if arg_type is not None and not arg_type.is_assignable_to(expected_type):
-                self.error(f"Argument {i+1} type mismatch: expected '{expected_type}', got '{arg_type}'", arg)
-                
-        return func_type.return_type
+        res = ListType(element_type)
+        node.inferred_type = res
+        return res
 
-    def visit_Constant(self, node: ast.Constant) -> Type:
-        val = node.value
-        if isinstance(val, bool): return BOOL_TYPE
-        if isinstance(val, int): return INT_TYPE
-        if isinstance(val, float): return FLOAT_TYPE
-        if isinstance(val, str): return STR_TYPE
-        if val is None: return VOID_TYPE # Or NoneType
-        return ANY_TYPE
+    def visit_Dict(self, node: ast.Dict) -> StaticType:
+        for key in node.keys:
+            self.visit(key)
+        for val in node.values:
+            self.visit(val)
+        node.inferred_type = STATIC_ANY # TODO: Implement DictType
+        return STATIC_ANY
 
-    def visit_Name(self, node: ast.Name) -> Type:
-        if node.ctx == 'Load':
-            # Resolve starting from current scope
-            symbol = self.scope_manager.resolve(node.id)
-            if not symbol:
-                self.error(f"Variable '{node.id}' is not defined", node, code=SEM_UNDEFINED_SYMBOL)
-                return ANY_TYPE
-            
-            self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Resolved name '{node.id}' as {symbol.type.name}")
-
-            if symbol.type == SymbolType.MODULE:
-                 if symbol.exported_scope:
-                     return ModuleType(symbol.exported_scope)
-                 return ANY_TYPE # Module without scope?
-
-            # [FIXED]: Lazy Type Resolution for Imported Symbols
-            # If symbol.type_info is missing, but it's an imported symbol (has origin),
-            # we should try to fetch the type from the origin scope NOW.
-            
-            if symbol.type_info is None:
-                 if symbol.origin_symbol and symbol.origin_symbol.type_info:
-                     symbol.type_info = symbol.origin_symbol.type_info
-                     self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Lazy resolved type for '{node.id}' from origin: {symbol.type_info}")
-                 elif symbol.declared_type_node:
-                     symbol.type_info = self._resolve_type(symbol.declared_type_node)
-                     self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Lazy resolved type for '{node.id}' from declaration: {symbol.type_info}")
-            
-            return symbol.type_info or ANY_TYPE
-        return ANY_TYPE
-
-    def visit_Attribute(self, node: ast.Attribute) -> Type:
-        # Check if value is a module or object
-        # First visit the value (left side)
-        
+    def visit_Subscript(self, node: ast.Subscript) -> StaticType:
         value_type = self.visit(node.value)
-        self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Analyzing attribute access '{node.attr}' on type '{value_type}'")
-        
-        if isinstance(value_type, UserDefinedType):
-            # It is a class instance access
-            if value_type.scope:
-                attr_sym = value_type.scope.resolve(node.attr)
-                if attr_sym:
-                    # Found in class scope
-                    if attr_sym.type_info is None and attr_sym.declared_type_node:
-                         # Handle both node and token list for lazy resolution
-                         if isinstance(attr_sym.declared_type_node, list):
-                             attr_sym.type_info = self._resolve_type_from_tokens(attr_sym.declared_type_node)
-                         else:
-                             attr_sym.type_info = self._resolve_type(attr_sym.declared_type_node)
-                    self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Found attribute '{node.attr}' in class '{value_type.class_name}' scope")
-                    return attr_sym.type_info or ANY_TYPE
-            
-            # If not found in scope, it might be a dynamic property or error
-            if value_type.scope:
-                self.error(f"Class '{value_type.class_name}' has no attribute '{node.attr}'", node)
-            return ANY_TYPE
+        self.visit(node.slice)
+        res = value_type.element_type
+        node.inferred_type = res
+        return res
 
-        if isinstance(value_type, ModuleType):
-             # It is a module/package
-             module_scope = value_type.scope
-             attr_sym = module_scope.resolve(node.attr)
-             
-             if not attr_sym:
-                 # Try to resolve in exported scope for nested modules?
-                 # If value_type.scope is a package scope, it might have exported modules.
-                 pass
-                 
-             if not attr_sym:
-                 self.error(f"Module/Package has no attribute '{node.attr}'", node)
-                 return ANY_TYPE
-                 
-             if attr_sym.type == SymbolType.MODULE:
-                 if attr_sym.exported_scope:
-                     return ModuleType(attr_sym.exported_scope)
-                 return ANY_TYPE
-                 
-             # [FIX]: Lazy resolution for attributes too!
-             if attr_sym.type_info is None:
-                  if attr_sym.origin_symbol and attr_sym.origin_symbol.type_info:
-                      attr_sym.type_info = attr_sym.origin_symbol.type_info
-                  elif attr_sym.declared_type_node:
-                      attr_sym.type_info = self._resolve_type(attr_sym.declared_type_node)
-                       
-             self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, f"Found attribute '{node.attr}' in module scope")
-             return attr_sym.type_info or ANY_TYPE
-        
-        # Fallback for object attributes (not implemented fully)
-        if isinstance(value_type, AnyType):
-            return ANY_TYPE
-            
-        # TODO: Check class attributes when classes are implemented
-        return ANY_TYPE
-
-
-    def visit_BinOp(self, node: ast.BinOp) -> Type:
+    def visit_BinOp(self, node: ast.BinOp) -> StaticType:
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
         
-        from core.compiler.semantic.types import get_promoted_type
-        result_type = get_promoted_type(node.op, left_type, right_type)
-        
-        if result_type is None:
-            self.error(f"Binary operator '{node.op}' not supported for types '{left_type}' and '{right_type}'", node)
-            return ANY_TYPE
-            
-        return result_type
+        # 贯彻“一切皆对象”：调用左操作数的自决议方法
+        res = left_type.get_operator_result(node.op, right_type)
+        if not res:
+            self.error(f"Binary operator '{node.op}' not supported for types '{left_type.name}' and '{right_type.name}'", node)
+            return STATIC_ANY
+        node.inferred_type = res
+        return res
 
-    def visit_UnaryOp(self, node: ast.UnaryOp) -> Type:
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> StaticType:
         operand_type = self.visit(node.operand)
         
-        if isinstance(operand_type, AnyType):
-            return ANY_TYPE
-            
-        if node.op == 'not':
-            return BOOL_TYPE
-        
-        if node.op == '~':
-            if operand_type == INT_TYPE:
-                return INT_TYPE
-            self.error(f"Unary operator '~' not supported for type '{operand_type}'", node)
-            return ANY_TYPE
-            
-        if node.op in ('+', '-'):
-            if operand_type in (INT_TYPE, FLOAT_TYPE):
-                return operand_type
-            self.error(f"Unary operator '{node.op}' not supported for type '{operand_type}'", node)
-            return ANY_TYPE
-            
-        return ANY_TYPE
+        # 贯彻“一切皆对象”：调用操作数的自决议方法 (other=None 表示一元运算)
+        res = operand_type.get_operator_result(node.op, None)
+        if not res:
+            self.error(f"Unary operator '{node.op}' not supported for type '{operand_type.name}'", node)
+            return STATIC_ANY
+        node.inferred_type = res
+        return res
 
-    def visit_Compare(self, node: ast.Compare) -> Type:
-        left_type = self.visit(node.left)
-        from core.compiler.semantic.types import get_promoted_type
+    def visit_Constant(self, node: ast.Constant) -> StaticType:
+        val = node.value
+        res = STATIC_ANY
+        if isinstance(val, bool): res = STATIC_BOOL
+        elif isinstance(val, int): res = STATIC_INT
+        elif isinstance(val, float): res = STATIC_FLOAT
+        elif isinstance(val, str): res = STATIC_STR
+        elif val is None: res = STATIC_VOID
+        node.inferred_type = res
+        return res
+
+    def visit_Name(self, node: ast.Name) -> StaticType:
+        # 1. 解析符号
+        sym = self.symbol_table.resolve(node.id)
         
-        for op, comparator in zip(node.ops, node.comparators):
-            right_type = self.visit(comparator)
-            res = get_promoted_type(op, left_type, right_type)
-            if res is None:
-                 self.error(f"Comparison operator '{op}' not supported for types '{left_type}' and '{right_type}'", node)
-            left_type = right_type
+        if not sym:
+            msg = f"Variable '{node.id}' is not defined"
+            if self.in_behavior_expr:
+                msg = f"Variable '{node.id}' used in behavior expression is not defined"
+            self.error(msg, node)
+            return STATIC_ANY
+
+        # 2. [AUDIT] 强制显式全局声明规则：
+        # 如果符号定义在顶层全局作用域，且当前处于局部作用域，则必须显式声明 global
+        if self.symbol_table.parent is not None:
+            global_scope = self.symbol_table.get_global_scope()
+            # 检查解析出的符号是否来自全局作用域
+            if node.id in global_scope.symbols and sym == global_scope.symbols[node.id]:
+                is_builtin = sym.kind == symbols.SymbolKind.BUILTIN_TYPE or sym.metadata.get("is_builtin")
+                if not is_builtin and node.id not in self.symbol_table.global_refs:
+                    self.error(f"Global variable '{node.id}' must be declared with 'global' before use in local scope", node)
+                    return STATIC_ANY
+
+        node.symbol_uid = sym.uid # 使用 UID 引用
+        
+        # 统一获取类型信息，不再需要 isinstance 判断
+        res = sym.type_info
             
-        return BOOL_TYPE
+        node.inferred_type = res
+        return res
 
-    def visit_ListExpr(self, node: ast.ListExpr) -> Type:
-        # Infer element type
-        if not node.elts:
-            return ListType(ANY_TYPE)
+    def visit_Attribute(self, node: ast.Attribute) -> StaticType:
+        base_type = self.visit(node.value)
+        
+        # 贯彻“一切皆对象”：询问类型对象如何解析其成员
+        member_sym = base_type.resolve_member(node.attr)
+        if member_sym:
+            node.symbol_uid = member_sym.uid # 使用 UID 引用
+            res = member_sym.type_info
+            node.inferred_type = res
+            return res
             
-        first_type = self.visit(node.elts[0])
-        is_uniform = True
-        for elt in node.elts[1:]:
-            t = self.visit(elt)
-            # Use stricter equality check for inference
-            if t != first_type: 
-                is_uniform = False
-                break
+        self.error(f"Type '{base_type.name}' has no member '{node.attr}'", node)
+        return STATIC_ANY
+
+    def visit_Call(self, node: ast.Call) -> StaticType:
+        func_type = self.visit(node.func)
+        arg_types = [self.visit(arg) for arg in node.args]
         
-        if is_uniform and first_type is not None:
-            return ListType(first_type)
-        return ListType(ANY_TYPE)
-
-    def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> Type:
-        for segment in node.segments:
-            if isinstance(segment, ast.Expr):
-                # 为了保持测试兼容性，对未定义变量提供特定的错误信息
-                if isinstance(segment, ast.Name):
-                    symbol = self.scope_manager.resolve(segment.id)
-                    if not symbol:
-                        self.error(f"Variable '{segment.id}' used in behavior expression is not defined", segment)
-                        continue
-                self.visit(segment)
-        
-        # 行为描述行本质上是动态 LLM 调用，其返回类型在运行时确定。
-        # 为了支持 int x = @~...~ 这种语法，我们在语义分析阶段将其视为 ANY_TYPE。
-        return ANY_TYPE
-
-    # --- Helpers ---
-
-    def _resolve_type_from_tokens(self, tokens: List[Any]) -> Type:
-        if not tokens:
-            return ANY_TYPE
+        # 1. 检查是否可调用 (使用接口属性)
+        if not func_type.is_callable:
+            self.error(f"Type '{func_type.name}' is not callable", node)
+            return STATIC_ANY
             
-        from core.compiler.parser.core.token_stream import TokenStream
-        from core.compiler.parser.core.context import ParserContext
-        from core.compiler.parser.components.type_def import TypeComponent
-        
-        # Create a temporary parser context to parse the type annotation
-        temp_stream = TokenStream(tokens, self.issue_tracker)
-        # Pass the current scope_manager to ensure user-defined types are resolvable
-        temp_context = ParserContext(temp_stream, self.issue_tracker, scope_manager=self.scope_manager)
-        type_comp = TypeComponent(temp_context)
-        
+        # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
+        res = func_type.get_call_return(arg_types)
+        if not res:
+            # 如果是函数类型，提供更详细的错误
+            if func_type.name == "function":
+                # 尝试获取更具体的参数不匹配信息
+                # 注意：这里我们依然保留了一些对 FunctionType 的具体属性访问，
+                # 但不再依赖 isinstance 进行逻辑分支
+                param_types = getattr(func_type, 'param_types', [])
+                if len(arg_types) != len(param_types):
+                    self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node)
+                else:
+                    for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
+                        if not actual.is_assignable_to(expected):
+                            self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node)
+            else:
+                self.error(f"Invalid call to '{func_type.name}'", node)
+            return STATIC_ANY
+            
+        node.inferred_type = res
+        return res
+
+    def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> StaticType:
+        self.in_behavior_expr = True
         try:
-            type_node = type_comp.parse_type_annotation()
-            return self._resolve_type(type_node)
-        except Exception:
-            return ANY_TYPE
+            for seg in node.segments:
+                if isinstance(seg, ast.ASTNode):
+                    self.visit(seg)
+        finally:
+            self.in_behavior_expr = False
+        node.inferred_type = STATIC_STR
+        return STATIC_STR
 
-    def _resolve_type(self, node: Any) -> Type:
-        """
-        Convert AST type annotation or Token list to Type object.
-        """
-        if isinstance(node, list):
-            # It's a list of tokens from PreScanner
-            return self._resolve_type_from_tokens(node)
-            
+    def _resolve_type(self, node: Any, safe: bool = False) -> StaticType:
         if isinstance(node, ast.Name):
             t = get_builtin_type(node.id)
             if t: return t
-            
-            # [NEW]: Check for user-defined types in symbol table
-            symbol = self.scope_manager.resolve(node.id)
-            if symbol and symbol.type == SymbolType.USER_TYPE:
-                return UserDefinedType(node.id, symbol.exported_scope)
-            
+            sym = self.symbol_table.resolve(node.id)
+            if isinstance(sym, symbols.TypeSymbol) and sym.static_type:
+                return sym.static_type
             self.error(f"Unknown type '{node.id}'", node)
-            
-        elif isinstance(node, ast.Subscript):
-            # Generic type: List[int]
-            
-            # PROTOTYPE HINT: Check for nested generics
-            if isinstance(node.slice, ast.Subscript) or \
-               (isinstance(node.slice, ast.ListExpr) and any(isinstance(e, ast.Subscript) for e in node.slice.elts)):
-                self.issue_tracker.report(
-                    Severity.HINT, "PROTO_LIMIT",
-                    "IBC-Inter is in prototype stage. Nested generics (e.g., list[list[int]]) are not fully supported for type checking yet.",
-                    node
-                )
-            
-            base = self._resolve_type(node.value)
-            
-            # Extract args
-            args = []
-            if isinstance(node.slice, ast.ListExpr): # Multiple args
-                for elt in node.slice.elts:
-                    args.append(self._resolve_type(elt))
-            else:
-                args.append(self._resolve_type(node.slice))
+        elif isinstance(node, ast.Attribute):
+            # 处理 a.b 形式的类型 (如插件中的类)
+            # [AUDIT] 在 safe 模式下（如预扫描阶段），禁止触发 visit()
+            if safe:
+                # 降级处理：仅支持简单的名称解析，不支持复杂的表达式类型
+                if isinstance(node.value, ast.Name):
+                    base_sym = self.symbol_table.resolve(node.value.id)
+                    if base_sym and base_sym.type_info:
+                        member_sym = base_sym.type_info.resolve_member(node.attr)
+                        if member_sym and isinstance(member_sym, symbols.TypeSymbol):
+                            return member_sym.static_type
+                return STATIC_ANY
                 
-            if isinstance(base, ListType): # Base is list[Any]
-                return ListType(args[0])
-            elif isinstance(base, DictType):
-                if len(args) == 2:
-                    return DictType(args[0], args[1])
-                    
-        return ANY_TYPE
+            base_type = self.visit(node.value)
+            member_sym = base_type.resolve_member(node.attr)
+            if member_sym and isinstance(member_sym, symbols.TypeSymbol) and member_sym.static_type:
+                return member_sym.static_type
+            self.error(f"Unknown type '{node.attr}' in '{base_type.name}'", node)
+        return STATIC_ANY

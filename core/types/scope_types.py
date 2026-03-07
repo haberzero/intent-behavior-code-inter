@@ -26,7 +26,7 @@ class ScopeNode:
             self.depth = parent.depth + 1
 
     def define(self, name: str, type: SymbolType) -> Symbol:
-        symbol = Symbol(name, type, scope_level=self.depth)
+        symbol = Symbol(name, type.value)
         self.symbols[name] = symbol
         return symbol
 
@@ -36,7 +36,14 @@ class ScopeNode:
         if self.parent:
             return self.parent.resolve(name)
         return None
+
+    def resolve_local(self, name: str) -> Optional[Symbol]:
+        """Resolve a symbol ONLY in this specific scope (no parent lookup)."""
+        return self.symbols.get(name)
         
     def is_type(self, name: str) -> bool:
         sym = self.resolve(name)
-        return sym is not None and (sym.type == SymbolType.BUILTIN_TYPE or sym.type == SymbolType.USER_TYPE)
+        if sym is None: return False
+        # 兼容旧的 SymbolType 枚举值检查
+        from core.compiler.semantic.symbols import SymbolKind
+        return sym.kind in (SymbolKind.BUILTIN_TYPE, SymbolKind.CLASS)

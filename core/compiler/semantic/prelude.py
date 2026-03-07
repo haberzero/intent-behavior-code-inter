@@ -1,56 +1,46 @@
-
-from typing import Dict, Optional
-from core.compiler.semantic.types import (
-    Type, PrimitiveType, AnyType, ListType, DictType, FunctionType, ModuleType, UserDefinedType,
-    INT_TYPE, FLOAT_TYPE, STR_TYPE, BOOL_TYPE, VOID_TYPE, ANY_TYPE
+from typing import Dict, Optional, List
+from .symbols import (
+    StaticType, BuiltinType, ListType, FunctionType, ClassType,
+    STATIC_ANY, STATIC_INT, STATIC_FLOAT, STATIC_STR, STATIC_BOOL, STATIC_VOID
 )
-from core.types.scope_types import ScopeNode, ScopeType
-from core.types.symbol_types import SymbolType
-from core.support.host_interface import HostInterface
 
 class Prelude:
     """
-    Manages builtin types and functions for the IBC-Inter language.
+    静态预设：管理编译器前端使用的内置静态符号和类型。
     """
-    def __init__(self, host_interface: Optional[HostInterface] = None):
+    def __init__(self, host_interface: Optional[any] = None):
         self.builtin_functions: Dict[str, FunctionType] = {}
-        self.builtin_modules: Dict[str, ModuleType] = {}
-        self.host_interface = host_interface
+        self.builtin_modules: Dict[str, StaticType] = {} # 模块目前简单视为一种类型
+        self.builtin_types: Dict[str, StaticType] = {}
         self._init_defaults()
         
     def _init_defaults(self):
-        # 1. 注册核心内置函数
-        self.register("print", FunctionType([ANY_TYPE], VOID_TYPE))
-        self.register("len", FunctionType([ANY_TYPE], INT_TYPE))
-        self.register("range", FunctionType([INT_TYPE], ListType(INT_TYPE)))
-        self.register("str", FunctionType([ANY_TYPE], STR_TYPE))
-        self.register("int", FunctionType([ANY_TYPE], INT_TYPE))
+        # 核心内置函数
+        self.register_func("print", [STATIC_ANY], STATIC_VOID)
+        self.register_func("len", [STATIC_ANY], STATIC_INT)
+        self.register_func("range", [STATIC_INT], ListType(STATIC_INT))
 
-        # 3. 注册内置类
-        self.builtin_types: Dict[str, Type] = {
-            "Exception": UserDefinedType("Exception", None)
-        }
-
-        # 4. 从 HostInterface 动态加载模块和函数
-        if self.host_interface:
-            # 模块
-            for mod_name in self.host_interface.get_all_module_names():
-                mod_type = self.host_interface.get_module_type(mod_name)
-                if mod_type:
-                    self.builtin_modules[mod_name] = mod_type
-            
-            # 全局函数
-            for func_name, func_type in self.host_interface.get_global_functions().items():
-                self.builtin_functions[func_name] = func_type
+        # 核心内置类 (静态描述)
+        self.builtin_types["Exception"] = ClassType("Exception")
+        self.builtin_types["int"] = STATIC_INT
+        self.builtin_types["str"] = STATIC_STR
+        self.builtin_types["float"] = STATIC_FLOAT
+        self.builtin_types["bool"] = STATIC_BOOL
+        self.builtin_types["void"] = STATIC_VOID
+        self.builtin_types["none"] = STATIC_VOID # 映射到 STATIC_VOID
+        self.builtin_types["Any"] = STATIC_ANY
+        self.builtin_types["var"] = STATIC_ANY
+        self.builtin_types["list"] = ListType(STATIC_ANY)
+        self.builtin_types["dict"] = BuiltinType("dict")
         
-    def register(self, name: str, func_type: FunctionType):
-        self.builtin_functions[name] = func_type
+    def register_func(self, name: str, param_types: List[StaticType], return_type: StaticType):
+        self.builtin_functions[name] = FunctionType(name=name, param_types=param_types, return_type=return_type)
         
     def get_builtins(self) -> Dict[str, FunctionType]:
         return self.builtin_functions.copy()
 
-    def get_builtin_types(self) -> Dict[str, Type]:
+    def get_builtin_types(self) -> Dict[str, StaticType]:
         return self.builtin_types.copy()
 
-    def get_builtin_modules(self) -> Dict[str, ModuleType]:
+    def get_builtin_modules(self) -> Dict[str, StaticType]:
         return self.builtin_modules.copy()

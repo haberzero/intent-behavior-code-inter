@@ -3,9 +3,7 @@ from core.types.lexer_types import Token, TokenType
 from core.types import parser_types as ast
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 from core.compiler.parser.core.context import ParserContext
-from core.compiler.parser.symbol_table import ScopeManager
-from core.compiler.parser.scanners.pre_scanner import PreScanner
-from core.support.diagnostics.issue_tracker import IssueTracker
+from core.compiler.support.diagnostics import DiagnosticReporter
 from core.compiler.parser.components.expression import ExpressionComponent
 from core.compiler.parser.components.statement import StatementComponent
 from core.compiler.parser.components.declaration import DeclarationComponent
@@ -26,15 +24,20 @@ class Parser:
     IBC-Inter Parser.
     Uses Component-based architecture.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
         
         # 1. Initialize Context
+        # [AUDIT] 诊断抽象：使用传入的 reporter 或创建适配器
+        if issue_tracker is None:
+            from core.support.diagnostics.issue_tracker import IssueTracker
+            from core.compiler.support.issue_adapter import IssueTrackerAdapter
+            issue_tracker = IssueTrackerAdapter(IssueTracker())
+            
         self.stream = TokenStream(tokens, issue_tracker)
         self.debugger = debugger or core_debugger
         self.context = ParserContext(
             stream=self.stream,
             issue_tracker=self.stream.issue_tracker,
-            scope_manager=ScopeManager(),
             module_resolver=module_resolver,
             module_cache=module_cache,
             host_interface=host_interface,
@@ -48,33 +51,17 @@ class Parser:
         self.type_component = TypeComponent(self.context)
         self.decl_component = DeclarationComponent(self.context)
         self.import_component = ImportComponent(self.context)
-        
+
         # 3. Register components to Context (Mediator Pattern)
         self.context.expression_parser = self.expr_component
         self.context.statement_parser = self.stmt_component
         self.context.type_parser = self.type_component
         self.context.declaration_parser = self.decl_component
         self.context.import_parser = self.import_component
-        
-        # 4. Initial Global Scan
-        self._run_pre_scanner()
 
     @property
     def issue_tracker(self):
         return self.context.issue_tracker
-
-    @property
-    def scope_manager(self):
-        return self.context.scope_manager
-
-    def _run_pre_scanner(self):
-        """Run the PreScanner on the current scope."""
-        # Create a lookahead stream to avoid moving the main parser stream
-        lookahead_stream = TokenStream(self.stream.tokens, self.context.issue_tracker)
-        lookahead_stream.current = self.stream.current
-        
-        scanner = PreScanner(lookahead_stream, self.context.scope_manager)
-        scanner.scan()
 
     def parse(self) -> ast.Module:
         self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, "Starting parsing...")
@@ -96,7 +83,6 @@ class Parser:
         self.context.issue_tracker.check_errors()
         
         module_node = ast.Module(body=statements)
-        module_node.scope = self.context.scope_manager.global_scope
         
         self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, f"Parsing complete. Total statements: {len(statements)}")
         self.debugger.trace(CoreModule.PARSER, DebugLevel.DATA, "AST Module body:", data=statements)
@@ -111,10 +97,6 @@ class Parser:
         """
         imports = []
         imports_allowed = True
-        
-        # Temporarily enable skip_registration on ImportComponent
-        old_skip = self.import_component.skip_registration
-        self.import_component.skip_registration = True
         
         try:
             while not self.stream.is_at_end():
@@ -148,10 +130,10 @@ class Parser:
                             imports.append(info)
                     except ParseControlFlowError:
                         self._skip_to_next_statement()
-                        
+                
+                # Check for From-Import
                 elif self.stream.match(TokenType.FROM):
                     if not imports_allowed:
-                        # REPORT ERROR for misplaced import
                         self._report_invalid_import_pos(self.stream.previous())
                         self._skip_to_next_statement()
                         continue
@@ -159,49 +141,28 @@ class Parser:
                     try:
                         node = self.import_component.parse_from_import()
                         
-                        # Reconstruct module name representation
-                        mod_name = node.module or ""
-                        if node.level > 0:
-                            mod_name = "." * node.level + mod_name
-                            
                         info = ImportInfo(
-                            module_name=mod_name,
+                            module_name=node.module or "",
                             lineno=node.lineno,
-                            import_type=ImportType.FROM_IMPORT
+                            import_type=ImportType.FROM_IMPORT,
+                            level=node.level
                         )
                         imports.append(info)
                     except ParseControlFlowError:
                         self._skip_to_next_statement()
-                        
+                
                 else:
-                    # Non-import token found (and not newline/indent)
-                    # This marks the end of the allowed import section
-                    imports_allowed = False
-                    
-                    # Instead of breaking, we continue to scan but mark as not allowed
-                    # We just skip the token/statement
-                    self._skip_to_next_statement()
-                    # But wait, _skip_to_next_statement only skips until newline.
-                    # We need to make sure we advance at least once if we didn't match import
-                    if not self.stream.is_at_end():
-                        # If we are here, we peeked a token that is not IMPORT/FROM/WHITESPACE
-                        # And we called _skip_to_next_statement which skips until NEWLINE.
-                        # If the current token is not NEWLINE, it will be skipped.
-                        pass
+                    # Non-import token: stop scanning imports
+                    break
         finally:
-             # Restore state
-             self.import_component.skip_registration = old_skip
-             
+            pass
+            
         return imports
 
     def _report_invalid_import_pos(self, token: Token):
-        # file_path might be unknown if not set in tracker, but we try our best
-        loc = Location(file_path="<unknown>", line=token.line, column=token.column)
-        self.context.issue_tracker.report(
-            Severity.ERROR, 
-            DEP_INVALID_IMPORT_POSITION, 
+        self.context.issue_tracker.error(
             "Import statements must be at the top of the file", 
-            loc
+            token
         )
 
     def _skip_to_next_statement(self):

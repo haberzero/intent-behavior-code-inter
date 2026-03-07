@@ -19,6 +19,12 @@ class ModuleResolver:
         self.root_dir = os.path.realpath(root_dir)
         # Extensions to probe, in order of preference
         self.extensions = ['.ibci', '.py', '']
+        # Explicitly allowed files outside root (e.g. for run_string)
+        self.allowed_files: set[str] = set()
+
+    def allow_file(self, file_path: str):
+        """Explicitly allow a file outside root_dir."""
+        self.allowed_files.add(os.path.realpath(file_path))
 
     def _check_path_security(self, path: str):
         """
@@ -27,6 +33,12 @@ class ModuleResolver:
         """
         # Resolve symlinks to ensure we are checking the real location
         abs_path = os.path.realpath(path)
+        
+        # 1. Check if explicitly allowed
+        if abs_path in self.allowed_files:
+            return
+            
+        # 2. Check if within root
         abs_root = self.root_dir # Already realpath
         
         # Use commonpath to correctly handle path separators and subdirectories
@@ -34,7 +46,7 @@ class ModuleResolver:
             common = os.path.commonpath([abs_root, abs_path])
         except ValueError:
             # Can happen on Windows if paths are on different drives
-            raise ModuleResolveError(f"Path '{path}' is on a different drive than root '{self.root_dir}'")
+            raise ModuleResolveError(f"Security Error: Path '{path}' is on a different drive than root '{self.root_dir}'")
             
         if common != abs_root:
             raise ModuleResolveError(f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")

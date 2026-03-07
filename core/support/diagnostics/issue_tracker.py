@@ -23,6 +23,7 @@ class IssueTracker:
         
         if severity.value >= Severity.ERROR.value:
             self._error_count += 1
+            print(f"[COMPILER ERROR] {message} at {diag.location}")
             
         if severity == Severity.FATAL:
             raise FatalCompilerError(diag)

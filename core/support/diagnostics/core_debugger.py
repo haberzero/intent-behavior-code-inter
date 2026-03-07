@@ -25,6 +25,7 @@ class CoreDebugger:
     """
     def __init__(self):
         self._init_config()
+        self.output_callback = None
 
     def _init_config(self):
         self.config: Dict[CoreModule, DebugLevel] = {m: DebugLevel.NONE for m in CoreModule}
@@ -83,7 +84,10 @@ class CoreDebugger:
                 except:
                     output += f" (Data: {str(data)})"
             
-            print(output)
+            if self.output_callback:
+                self.output_callback(output)
+            else:
+                print(output)
 
 # Singleton instance
 core_debugger = CoreDebugger()

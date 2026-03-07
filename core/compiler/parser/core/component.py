@@ -1,4 +1,4 @@
-from typing import TypeVar, Optional
+from typing import Any, Optional, TypeVar
 from core.types import parser_types as ast
 from core.types.lexer_types import Token
 from core.compiler.parser.core.context import ParserContext
@@ -21,37 +21,12 @@ class BaseComponent:
     def issue_tracker(self):
         return self.context.issue_tracker
 
-    @property
-    def scope_manager(self):
-        return self.context.scope_manager
-
-    def _loc(self, node: T, token: Token) -> T:
-        """Inject location information."""
-        node.lineno = token.line
-        node.col_offset = token.column
-        node.end_lineno = token.end_line
-        node.end_col_offset = token.end_column
+    def _loc(self, node: T, start_obj: Any) -> T:
+        """Helper to attach location info to a node from a token or other object with lineno/col_offset."""
+        if hasattr(start_obj, 'line'):
+            node.lineno = start_obj.line
+            node.col_offset = start_obj.column
+        else:
+            node.lineno = getattr(start_obj, 'lineno', 0)
+            node.col_offset = getattr(start_obj, 'col_offset', 0)
         return node
-
-    def _set_scene_recursive(self, node: ast.ASTNode, scene: ast.Scene):
-        """Recursively set the scene tag for behavior expressions and operations."""
-        if isinstance(node, ast.Expr):
-            node.scene_tag = scene
-            
-        # Specific handling for common expression containers
-        if isinstance(node, ast.BoolOp):
-            for val in node.values:
-                self._set_scene_recursive(val, scene)
-        elif isinstance(node, ast.UnaryOp):
-            self._set_scene_recursive(node.operand, scene)
-        elif isinstance(node, ast.BinOp):
-            self._set_scene_recursive(node.left, scene)
-            self._set_scene_recursive(node.right, scene)
-        elif isinstance(node, ast.Compare):
-            self._set_scene_recursive(node.left, scene)
-            for comparator in node.comparators:
-                self._set_scene_recursive(comparator, scene)
-        elif isinstance(node, ast.Call):
-            for arg in node.args:
-                self._set_scene_recursive(arg, scene)
-        # Add more if needed, but these cover most logic in if/while conditions

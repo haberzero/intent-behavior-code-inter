@@ -1,74 +1,86 @@
 from typing import Dict, Any, Optional, List
-from core.compiler.semantic.types import ModuleType, FunctionType, ANY_TYPE, VOID_TYPE, get_builtin_type
-from core.types.scope_types import ScopeNode, ScopeType
-from core.types.symbol_types import SymbolType
+from core.foundation.types import (
+    TypeDescriptor, INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
+    BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, 
+    ModuleMetadata, FunctionMetadata
+)
+
+class MetadataRegistry:
+    """
+    只负责管理 TypeDescriptor 的注册表。
+    供编译器（Compiler）使用，完全脱离运行时实现。
+    """
+    def __init__(self):
+        self._module_metadata: Dict[str, ModuleMetadata] = {}
+        self._global_functions: Dict[str, FunctionMetadata] = {}
+
+    def register_module(self, name: str, metadata: ModuleMetadata):
+        self._module_metadata[name] = metadata
+
+    def register_global_function(self, name: str, metadata: FunctionMetadata):
+        self._global_functions[name] = metadata
+
+    def get_module_metadata(self, name: str) -> Optional[ModuleMetadata]:
+        return self._module_metadata.get(name)
+
+    def get_global_functions(self) -> Dict[str, FunctionMetadata]:
+        return self._global_functions.copy()
+
+    def is_external_module(self, name: str) -> bool:
+        return name in self._module_metadata
+
+class RuntimeRegistry:
+    """
+    负责管理真实的运行时实现。
+    供解释器（Interpreter）使用。
+    """
+    def __init__(self):
+        self._implementations: Dict[str, Any] = {}
+
+    def register(self, name: str, implementation: Any):
+        self._implementations[name] = implementation
+
+    def get(self, name: str) -> Optional[Any]:
+        return self._implementations.get(name)
 
 class HostInterface:
     """
     统一的宿主环境接口注册器。
-    它不仅持有运行时的 Python 实现，还持有静态分析所需的类型信息。
+    协调元数据注册和运行时实现注册。
     """
     def __init__(self):
-        self._modules: Dict[str, Any] = {}
-        self._module_types: Dict[str, ModuleType] = {}
-        self._global_functions: Dict[str, FunctionType] = {}
+        self.metadata = MetadataRegistry()
+        self.runtime = RuntimeRegistry()
 
-    def register_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleType] = None):
+    def register_module(self, name: str, implementation: Any, metadata: Optional[ModuleMetadata] = None):
         """
-        注册一个外部模块。
+        同时注册元数据和实现。
+        如果 metadata 为 None，则不再进行暴力反射推断（在编译器路径下应显式提供元数据）。
         """
-        self._modules[name] = implementation
-        if type_metadata:
-            self._module_types[name] = type_metadata
+        self.runtime.register(name, implementation)
+        if metadata:
+            self.metadata.register_module(name, metadata)
         else:
-            # 易用性改进：如果未提供元数据，尝试通过反射推断基础结构
-            # 至少让静态分析知道这些属性存在（虽然类型是 Any）
-            scope = ScopeNode(ScopeType.GLOBAL)
-            if implementation:
-                if isinstance(implementation, dict):
-                    # 处理字典形式的插件
-                    for attr, val in implementation.items():
-                        if not isinstance(attr, str) or attr.startswith('_'): continue
-                        if callable(val):
-                            scope.define(attr, SymbolType.FUNCTION).type_info = ANY_TYPE
-                        else:
-                            scope.define(attr, SymbolType.VARIABLE).type_info = ANY_TYPE
-                else:
-                    # 遍历实现对象的公共属性 (类、模块、实例)
-                    for attr in dir(implementation):
-                        if attr.startswith('_'): continue
-                        try:
-                            val = getattr(implementation, attr)
-                            if callable(val):
-                                scope.define(attr, SymbolType.FUNCTION).type_info = ANY_TYPE
-                            else:
-                                scope.define(attr, SymbolType.VARIABLE).type_info = ANY_TYPE
-                        except:
-                            continue
-            
-            self._module_types[name] = ModuleType(scope)
+            # 警告：缺少显式元数据。在彻底脱离解释器的目标下，编译器不应依赖此处的逻辑。
+            # 这里可以保留一个极简的占位符元数据，但不建议使用。
+            self.metadata.register_module(name, ModuleMetadata(name=name))
 
-    def register_global_function(self, name: str, implementation: Any, func_type: FunctionType):
-        """注册全局可见的内置函数"""
-        self._modules[name] = implementation
-        self._global_functions[name] = func_type
+    def register_global_function(self, name: str, implementation: Any, metadata: FunctionMetadata):
+        self.runtime.register(name, implementation)
+        self.metadata.register_global_function(name, metadata)
 
+    # --- 兼容性接口 ---
     def is_external_module(self, name: str) -> bool:
-        """检查是否为外部注册的模块"""
-        return name in self._modules and name in self._module_types
+        return self.metadata.is_external_module(name)
 
-    def get_module_type(self, name: str) -> Optional[ModuleType]:
-        """获取模块的静态类型信息"""
-        return self._module_types.get(name)
+    def get_module_type(self, name: str) -> Optional[ModuleMetadata]:
+        return self.metadata.get_module_metadata(name)
 
     def get_module_implementation(self, name: str) -> Optional[Any]:
-        """获取模块的运行时实现"""
-        return self._modules.get(name)
+        return self.runtime.get(name)
 
     def get_all_module_names(self) -> List[str]:
-        """获取所有已注册的外部模块名称"""
-        return list(self._module_types.keys())
+        return list(self.metadata._module_metadata.keys())
 
-    def get_global_functions(self) -> Dict[str, FunctionType]:
-        """获取所有已注册的全局函数类型"""
-        return self._global_functions.copy()
+    def get_global_functions(self) -> Dict[str, FunctionMetadata]:
+        return self.metadata.get_global_functions()

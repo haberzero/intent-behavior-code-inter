@@ -102,3 +102,15 @@ class LLMUncertaintyError(InterpreterError):
     def __init__(self, message: str, node: Optional['ASTNode'] = None, raw_response: str = ""):
         super().__init__(message, node, error_code="RUN_009") # RUN_LLM_ERROR
         self.raw_response = raw_response
+
+# --- Runtime Exceptions for Flow Control ---
+class ReturnException(Exception):
+    def __init__(self, value: Any): self.value = value
+class BreakException(Exception): pass
+class ContinueException(Exception): pass
+class RetryException(Exception): pass
+
+class ThrownException(Exception):
+    """包装用户主动抛出的 IbObject 异常"""
+    def __init__(self, value: Any): # value 应该是 IbObject
+        self.value = value

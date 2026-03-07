@@ -3,25 +3,30 @@ from core.types import parser_types as ast
 from core.compiler.parser.core.component import BaseComponent
 
 class TypeComponent(BaseComponent):
+    """
+    Component for parsing type annotations (e.g., int, list[str], callable).
+    Now purely token-based, leaving type validation to semantic analysis.
+    """
     def parse_type_annotation(self) -> ast.Expr:
         start_token = self.stream.peek()
-        # 1. Base Type
+        # 1. Base Type (Identifier or 'callable')
         base_type = None
-        if self.stream.check(TokenType.IDENTIFIER):
-            # Check if it's a valid type in symbol table
-            if self.scope_manager.is_type(self.stream.peek().value):
-                self.stream.advance()
-                base_type = self._loc(ast.Name(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
-            else:
-                # Fallback: Assume it's a type (e.g. forward reference or user type not yet fully registered)
-                self.stream.advance()
-                base_type = self._loc(ast.Name(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
+        if self.stream.match(TokenType.IDENTIFIER):
+            name_token = self.stream.previous()
+            base_type = self._loc(ast.Name(id=name_token.value, ctx='Load'), name_token)
+            
+            # 1.1 Support dotted names for types: db_plugin.Database
+            while self.stream.match(TokenType.DOT):
+                dot_token = self.stream.previous()
+                member_token = self.stream.consume(TokenType.IDENTIFIER, "Expect member name after '.' in type annotation.")
+                base_type = self._loc(ast.Attribute(value=base_type, attr=member_token.value, ctx='Load'), dot_token)
+                
         elif self.stream.match(TokenType.CALLABLE):
             base_type = self._loc(ast.Name(id='callable', ctx='Load'), self.stream.previous())
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.")
 
-        # 2. Generics
+        # 2. Generics: list[int], dict[str, Any]
         if self.stream.match(TokenType.LBRACKET):
             elts = []
             while True:

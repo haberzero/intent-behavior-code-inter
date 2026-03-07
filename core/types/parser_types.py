@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Union, Any
+from typing import List, Optional, Union, Any, TYPE_CHECKING
 from enum import IntEnum, Enum, auto
-from core.types.scope_types import ScopeNode
+
+if TYPE_CHECKING:
+    from core.compiler.semantic.symbols import Symbol, StaticType
 
 # --- Scene ---
 
@@ -9,6 +11,19 @@ class Scene(Enum):
     GENERAL = auto()
     BRANCH = auto()
     LOOP = auto()
+
+# --- Intent Info ---
+
+@dataclass
+class IntentInfo:
+    mode: str # "", "+", "!", "-"
+    content: str # Raw content or constant string
+    segments: Optional[List[Union[str, 'Expr']]] = None # Interpolated segments for comments like @ "..."
+    expr: Optional['Expr'] = None # Dynamic expression for 'intent expr:'
+    
+    # Position info
+    lineno: int = 0
+    col_offset: int = 0
 
 # --- Precedence & ParseRule ---
 
@@ -37,6 +52,8 @@ class ParseRule:
 
 # --- AST Nodes ---
 
+import uuid
+
 @dataclass(kw_only=True)
 class ASTNode:
     """AST 节点基类"""
@@ -44,9 +61,9 @@ class ASTNode:
     col_offset: int = 0
     end_lineno: int = 0
     end_col_offset: int = 0
-    uid: str = field(default_factory=lambda: "")
-    scope: Optional[ScopeNode] = None # Attached ScopeNode from symbol table
-
+    uid: str = field(default_factory=lambda: f"node_{uuid.uuid4().hex[:8]}")
+    symbol_uid: Optional[str] = None # 改为 ID 引用，避免循环引用
+    
     @property
     def line(self) -> int:
         return self.lineno
@@ -54,6 +71,11 @@ class ASTNode:
     @property
     def column(self) -> int:
         return self.col_offset
+
+    @property
+    def creates_scope(self) -> bool:
+        """Indicates if this node establishes a new symbol scope."""
+        return False
 
 @dataclass(kw_only=True)
 class Stmt(ASTNode):
@@ -63,15 +85,32 @@ class Stmt(ASTNode):
 @dataclass(kw_only=True)
 class Expr(ASTNode):
     """表达式节点基类"""
-    scene_tag: Scene = field(default=Scene.GENERAL)
+    inferred_type: Optional['StaticType'] = None # 语义分析阶段推导出的静态类型
 
 # --- Module ---
 
 @dataclass
 class Module(ASTNode):
     body: List[Stmt] = field(default_factory=list)
+    file_path: Optional[str] = None
+
+    @property
+    def creates_scope(self) -> bool:
+        return True
 
 # --- Statements ---
+
+@dataclass
+class AnnotatedStmt(Stmt):
+    """持有意图注释的包装语句节点"""
+    intent: IntentInfo
+    stmt: Stmt
+
+@dataclass
+class AnnotatedExpr(Expr):
+    """持有意图注释的包装表达式节点"""
+    intent: IntentInfo
+    expr: Expr
 
 @dataclass
 class FunctionDef(Stmt):
@@ -79,6 +118,10 @@ class FunctionDef(Stmt):
     args: List['arg']
     body: List[Stmt]
     returns: Optional[Expr] = None
+    
+    @property
+    def creates_scope(self) -> bool:
+        return True
 
 @dataclass
 class ClassDef(Stmt):
@@ -87,6 +130,10 @@ class ClassDef(Stmt):
     parent: Optional[str] = None # Parent class name
     methods: List[Union['FunctionDef', 'LLMFunctionDef']] = field(default_factory=list)
     fields: List['Assign'] = field(default_factory=list)
+    
+    @property
+    def creates_scope(self) -> bool:
+        return True
 
 @dataclass
 class LLMFunctionDef(Stmt):
@@ -95,6 +142,14 @@ class LLMFunctionDef(Stmt):
     sys_prompt: Optional[List[Union[str, Expr]]]
     user_prompt: Optional[List[Union[str, Expr]]]
     returns: Optional[Expr] = None
+    
+    @property
+    def creates_scope(self) -> bool:
+        return True
+
+@dataclass
+class GlobalStmt(Stmt):
+    names: List[str]
 
 @dataclass
 class Return(Stmt):
@@ -105,7 +160,6 @@ class Assign(Stmt):
     targets: List[Expr]
     value: Optional[Expr]
     type_annotation: Optional[Expr] = None
-    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class AugAssign(Stmt):
@@ -119,7 +173,6 @@ class For(Stmt):
     iter: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
-    llm_fallback: Optional[List[Stmt]] = None
     filter_condition: Optional[Expr] = None  # for x in list if @~...~
 
 @dataclass
@@ -127,14 +180,12 @@ class While(Stmt):
     test: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
-    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class If(Stmt):
     test: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
-    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class Try(Stmt):
@@ -167,7 +218,6 @@ class ImportFrom(Stmt):
 @dataclass
 class ExprStmt(Stmt):
     value: Expr
-    llm_fallback: Optional[List[Stmt]] = None
 
 @dataclass
 class Pass(Stmt):
@@ -184,6 +234,11 @@ class Continue(Stmt):
 @dataclass
 class Retry(Stmt):
     hint: Optional[Expr] = None  # retry "hint"
+
+@dataclass
+class LLMExceptionalStmt(Stmt):
+    primary: Stmt
+    fallback: List[Stmt]
 
 # --- Expressions ---
 
@@ -221,13 +276,6 @@ class Compare(Expr):
     comparators: List[Expr]
 
 @dataclass
-class IntentInfo:
-    mode: str # "", "+", "!", "-"
-    content: str # Raw content or constant string
-    segments: Optional[List[Union[str, Expr]]] = None # Interpolated segments for comments like @ "..."
-    expr: Optional[Expr] = None # Dynamic expression for 'intent expr:'
-
-@dataclass
 class IntentStmt(Stmt):
     intent: IntentInfo
     body: List[Stmt]
@@ -238,7 +286,6 @@ class Call(Expr):
     func: Expr
     args: List[Expr]
     keywords: List['keyword']
-    intent: Optional[IntentInfo] = None
 
 @dataclass
 class Constant(Expr):
@@ -271,7 +318,6 @@ class ListExpr(Expr):
 class BehaviorExpr(Expr):
     segments: List[Union[str, Expr]]
     tag: str = ""
-    intent: Optional[IntentInfo] = None
 
 @dataclass
 class CastExpr(Expr):

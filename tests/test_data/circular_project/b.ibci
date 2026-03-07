@@ -1,5 +1,0 @@
-
-import a
-
-func bar() -> void:
-    a.foo()

@@ -1,0 +1,28 @@
+# IBCI OOP Fixture
+# Responsibility: Class definitions, inheritance, methods, and member access.
+
+class Animal:
+    str name
+    int age
+    
+    func __init__(str n, int a):
+        self.name = n
+        self.age = a
+    
+    func speak() -> str:
+        return "Generic Sound"
+
+class Dog(Animal):
+    str breed
+    
+    func __init__(str n, int a, str b):
+        self.name = n
+        self.age = a
+        self.breed = b
+        
+    func speak() -> str:
+        return "Woof!"
+
+Animal my_pet = Dog("Buddy", 3, "Golden Retriever")
+str pet_sound = my_pet.speak()
+str name = my_pet.name

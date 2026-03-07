@@ -1,4 +1,0 @@
-
-import c
-func get_c_val() -> int:
-    return c.C_VAL

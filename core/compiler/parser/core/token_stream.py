@@ -1,9 +1,7 @@
 from typing import List, Optional
 from core.types.lexer_types import Token, TokenType
 from core.types import parser_types as ast
-from core.support.diagnostics.issue_tracker import IssueTracker
-from core.support.diagnostics.codes import PAR_EXPECTED_TOKEN
-from core.types.diagnostic_types import Severity
+from core.compiler.support.diagnostics import DiagnosticReporter
 
 class ParseControlFlowError(Exception):
     """Internal exception for parser synchronization control flow."""
@@ -14,10 +12,12 @@ class TokenStream:
     Manages the stream of tokens for parsing.
     Provides primitives for peeking, consuming, and matching tokens.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[IssueTracker] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None):
         self.tokens = tokens
         self.current = 0
-        self.issue_tracker = issue_tracker or IssueTracker()
+        from core.support.diagnostics.issue_tracker import IssueTracker
+        from core.compiler.support.issue_adapter import IssueTrackerAdapter
+        self.issue_tracker = issue_tracker or IssueTrackerAdapter(IssueTracker())
 
     def peek(self, offset: int = 0) -> Token:
         if self.current + offset >= len(self.tokens):
@@ -63,5 +63,5 @@ class TokenStream:
         return False
 
     def error(self, token: Token, message: str) -> Exception:
-        self.issue_tracker.report(Severity.ERROR, PAR_EXPECTED_TOKEN, message, token)
+        self.issue_tracker.error(message, token)
         return ParseControlFlowError()

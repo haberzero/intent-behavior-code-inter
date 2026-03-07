@@ -1,0 +1,29 @@
+# IBC-Inter 2.0 Prelude
+# 这是一个自举标准库，定义了基础对象的扩展方法。
+
+class Object:
+    func toString() -> str:
+        return @~返回对象的字符串表示~
+    
+    func __to_prompt__() -> str:
+        return self.toString()
+
+class List:
+    func map(callback: callable) -> list:
+        var result = []
+        for item in self:
+            result.append(callback(item))
+        return result
+
+    func filter(callback: callable) -> list:
+        var result = []
+        for item in self:
+            if callback(item):
+                result.append(item)
+        return result
+
+class Integer:
+    func abs() -> int:
+        if self < 0:
+            return -self
+        return self

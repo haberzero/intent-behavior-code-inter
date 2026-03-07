@@ -114,13 +114,14 @@ class ExpressionComponent(BaseComponent):
 
     def grouping(self) -> ast.Expr:
         # Check for Cast Expression: (Type) Expr
+        # Heuristic: (ID) followed by something that is not an operator
         if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.RPAREN:
-            # Check if identifier is a type in symbol table
-            possible_type = self.stream.peek()
-            if self.scope_manager.is_type(possible_type.value):
-                type_token = self.stream.advance()
+            # Look ahead to see if it's followed by a unary expression start
+            # This is a bit tricky without a full recognizer here, but (ID) ID is a strong signal
+            next_after_rparen = self.stream.peek(2)
+            if next_after_rparen.type in (TokenType.IDENTIFIER, TokenType.NUMBER, TokenType.STRING, TokenType.LPAREN, TokenType.LBRACKET, TokenType.BEHAVIOR_MARKER):
+                type_token = self.stream.advance() # ID
                 self.stream.consume(TokenType.RPAREN, "Expect ')' after cast type.")
-                
                 value = self.parse_precedence(Precedence.UNARY)
                 return self._loc(ast.CastExpr(type_name=type_token.value, value=value), type_token)
         
@@ -199,10 +200,6 @@ class ExpressionComponent(BaseComponent):
     def call(self, left: ast.Expr) -> ast.Call:
         start_token = self.stream.previous()
         
-        intent = self.context.pending_intent
-        if intent:
-             self.context.pending_intent = None
-            
         arguments = []
         if not self.stream.check(TokenType.RPAREN):
             while True:
@@ -213,7 +210,8 @@ class ExpressionComponent(BaseComponent):
                     break
         self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
         
-        return self._loc(ast.Call(func=left, args=arguments, keywords=[], intent=intent), start_token)
+        # [NEW] 意图节点化：不再向 Call 注入 intent 属性
+        return self._loc(ast.Call(func=left, args=arguments, keywords=[]), start_token)
 
     def dot(self, left: ast.Expr) -> ast.Expr:
         op_token = self.stream.previous()

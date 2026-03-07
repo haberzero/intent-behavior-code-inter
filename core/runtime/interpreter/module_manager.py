@@ -1,10 +1,14 @@
+from core.foundation.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
 import os
-from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
-from .interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
+from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
+from core.types import parser_types as ast
+from core.foundation.kernel import ModuleType
 from core.types.exception_types import InterpreterError
+from core.support.diagnostics.codes import DEP_MODULE_NOT_FOUND
 
 if TYPE_CHECKING:
-    from .interfaces import Interpreter
+    from core.foundation.interfaces import Interpreter
+    from core.compiler.artifact import CompilationArtifact
 
 class ModuleInstanceImpl:
     def __init__(self, name: str, scope: Scope):
@@ -25,9 +29,9 @@ class ModuleManagerImpl:
     模块管理器实现。
     负责模块的加载、缓存和导入处理。
     """
-    def __init__(self, interop: InterOp, scheduler: Optional[Any] = None, root_dir: str = ".", interpreter: Optional['Interpreter'] = None):
+    def __init__(self, interop: InterOp, artifact: Optional['CompilationArtifact'] = None, root_dir: str = ".", interpreter: Optional['Interpreter'] = None):
         self.interop = interop
-        self.scheduler = scheduler
+        self.artifact = artifact
         self.root_dir = root_dir
         self.interpreter = interpreter  # 现在持有主 Interpreter 引用，而非 factory
         self._loaded_modules: Dict[str, ModuleInstance] = {}
@@ -51,10 +55,11 @@ class ModuleManagerImpl:
             context.define_variable(module_name, self._loaded_modules[module_name], is_const=True)
             return
 
-        # 3. 联动 Scheduler 处理文件系统中的 IBC 模块导入
-        if self.scheduler:
-            ast_module = self.scheduler.get_module_ast(module_name)
-            if ast_module:
+        # 3. 联动 Artifact (编译蓝图) 处理模块导入
+        if self.artifact:
+            comp_result = self.artifact.get_module(module_name)
+            if comp_result:
+                ast_module = comp_result.module_ast
                 if not self.interpreter:
                     raise InterpreterError("Interpreter not available for module loading.")
                 
@@ -63,17 +68,17 @@ class ModuleManagerImpl:
                 module_scope = ScopeImpl()
                 
                 # 在新 Scope 下复用 Interpreter 执行
-                # 注意：execute_module 会临时切换 context scope
                 self.interpreter.execute_module(ast_module, scope=module_scope)
                 
                 # 创建模块实例并缓存
-                module_instance = ModuleInstanceImpl(module_name, module_scope)
+                from core.foundation.kernel import IbModule
+                module_instance = IbModule(module_name, module_scope)
                 self._loaded_modules[module_name] = module_instance
                 
                 context.define_variable(module_name, module_instance, is_const=True)
                 return
 
-        raise InterpreterError(f"Module '{module_name}' not found or not registered.")
+        raise InterpreterError(f"Module '{module_name}' not found or not registered in artifact.", error_code=DEP_MODULE_NOT_FOUND)
 
     def import_from(self, module_name: str, names: List[tuple], context: RuntimeContext) -> None:
         """
@@ -103,7 +108,7 @@ class ModuleManagerImpl:
             return
 
         # 2. 处理 IBC 文件模块的 import from 逻辑
-        if self.scheduler:
+        if self.artifact:
             # 确保模块已加载
             if module_name not in self._loaded_modules:
                 self.import_module(module_name, context)

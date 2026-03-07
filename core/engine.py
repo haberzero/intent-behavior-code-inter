@@ -4,11 +4,11 @@ from typing import Optional, Dict, Any
 
 from core.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
-from core.support.diagnostics.issue_tracker import IssueTracker
+from core.compiler.support.issue_adapter import wrap_tracker
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.support.host_interface import HostInterface
-from core.compiler.semantic.types import ModuleType
+from core.foundation.types import ModuleMetadata
 from core.types.diagnostic_types import CompilerError
 from core.support.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
 
@@ -17,15 +17,22 @@ class IBCIEngine:
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
     def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
+        from core.foundation.builtins import initialize_builtin_classes
+        initialize_builtin_classes()
+        
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
-        self.issue_tracker = IssueTracker()
+        from core.support.diagnostics.issue_tracker import IssueTracker
+        self.issue_tracker = wrap_tracker(IssueTracker())
         self.debugger = CoreDebugger()
         
         # 0. 配置内核调试器
         if core_debug_config:
             self.debugger.configure(core_debug_config)
             self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Core Debugger initialized with config: {core_debug_config}")
-        
+            
+        # [NEW] 同步输出回调到调试器，确保内核追踪能被捕获
+        self.debugger.output_callback = None # 默认
+
         # 1. 初始化模块发现服务 (内置路径 + 插件路径)
         builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibc_modules")
         plugins_path = os.path.join(self.root_dir, "plugins")
@@ -38,56 +45,22 @@ class IBCIEngine:
         
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger)
         
-        # [NEW] 为调度器启动自举，确保静态分析能识别内置类
-        builtin_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "builtin", "primitives.ibci")
-        self.scheduler.bootstrap_builtins(builtin_file)
-
         self.interpreter: Optional[Interpreter] = None
 
-    def _prepare_interpreter(self, output_callback=None):
+    def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
         self.interpreter = Interpreter(
             self.issue_tracker, 
-            scheduler=self.scheduler, 
+            artifact=artifact, 
             output_callback=output_callback,
             host_interface=self.host_interface,
-            debugger=self.debugger
+            debugger=self.debugger,
+            root_dir=self.root_dir
         )
         # 统一由 ModuleLoader 驱动实现层的加载与注入
         self.module_loader.load_and_register_all(self.interpreter.service_context)
-        
-        # [NEW] 启动自举程序，加载核心内置类
-        self._bootstrap_builtins()
 
-    def _bootstrap_builtins(self):
-        """加载核心内置库 (primitives.ibci) 并同步符号"""
-        builtin_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "builtin", "primitives.ibci")
-        if not os.path.exists(builtin_file):
-            self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Builtin file not found: {builtin_file}")
-            return
-
-        self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Bootstrapping builtins from: {builtin_file}")
-        
-        # 1. 静态编译内置库
-        # 注意：这里我们直接使用 scheduler 的底层编译能力，避免递归调用 run
-        try:
-            # 我们需要确保 scheduler 允许加载内置路径的文件
-            self.scheduler.allow_file(builtin_file)
-            ast_cache = self.scheduler.compile_project(builtin_file)
-            builtin_ast = ast_cache.get(builtin_file)
-            
-            if not builtin_ast:
-                raise RuntimeError(f"Failed to compile builtin library: {builtin_file}")
-                
-            # 2. 执行内置库（在解释器的全局作用域中定义 Object, Exception 等）
-            # 此时 self.interpreter 已经初始化完毕，可以安全调用
-            self.interpreter.interpret(builtin_ast)
-            
-        except Exception as e:
-            self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Bootstrap failed: {str(e)}")
-            raise RuntimeError(f"IBC-Inter Bootstrap Failure: {str(e)}") from e
-
-    def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleType] = None):
+    def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
         """
         手动注册插件（兼容旧模式，但建议使用 plugins/ 目录下的双文件协议）。
         """
@@ -113,50 +86,24 @@ class IBCIEngine:
                 os.remove(temp_path)
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
-        """
-        运行一个 IBCI 项目或文件。
-        
-        Args:
-            entry_file: 入口文件路径（绝对或相对 root_dir）
-            variables: 注入的全局变量（如 API 配置）
-            output_callback: 自定义输出回调
-            silent: 如果为 True，则不向 stdout 打印编译或运行时错误，而是直接由调用者处理异常。
-            prepare_interpreter: 是否重新初始化解释器。如果为 False，则使用当前已有的解释器。
-            
-        Returns:
-            bool: 执行是否成功
-        """
         abs_entry = os.path.abspath(entry_file)
+        # 同步调试器输出回调
+        if output_callback:
+            self.debugger.output_callback = output_callback
+        
         if not os.path.exists(abs_entry):
             if not silent:
                 print(f"Error: Entry file not found: {abs_entry}")
             return False
 
         try:
-            # 0. 预置符号到调度器（用于静态检查）
-            if variables:
-                self.scheduler.predefined_symbols.update(variables)
-
-            # 1. 静态编译与依赖解析
-            ast_cache = self.scheduler.compile_project(abs_entry)
-            entry_ast = ast_cache.get(abs_entry)
+            # 1. 静态编译阶段
+            artifact = self.compile(abs_entry, variables)
             
-            if not entry_ast:
-                if not silent:
-                    print(f"Error: Failed to get AST for {abs_entry}")
-                return False
-
-            # 2. 准备执行环境
-            if prepare_interpreter or not self.interpreter:
-                self._prepare_interpreter(output_callback)
+            # 2. 执行阶段 (可选)
+            if prepare_interpreter:
+                return self.execute(artifact, variables, output_callback)
             
-            # 3. 注入外部变量
-            if variables:
-                for name, val in variables.items():
-                    self.interpreter.context.define_variable(name, val)
-
-            # 4. 执行
-            self.interpreter.interpret(entry_ast)
             return True
 
         except CompilerError as e:
@@ -165,7 +112,6 @@ class IBCIEngine:
                 for diag in self.scheduler.issue_tracker.diagnostics:
                     print(f"[{diag.severity.name}] {diag.code}: {diag.message} (Line {diag.location.line if diag.location else '?'})")
             else:
-                # 在静默模式下，让调用者自己决定如何处理异常
                 raise e
             return False
         except Exception as e:
@@ -174,14 +120,64 @@ class IBCIEngine:
                 import traceback
                 traceback.print_exc()
             else:
-                # 在静默模式下，让调用者自己决定如何处理异常
                 raise e
             return False
+
+    def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None) -> Any:
+        """
+        [NEW] 核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
+        """
+        abs_entry = os.path.abspath(entry_file)
+        
+        # 0. 预置符号到调度器
+        if variables:
+            from core.compiler.semantic.symbols import STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL, STATIC_ANY, VariableSymbol, SymbolKind
+            static_vars = {}
+            for name, val in variables.items():
+                stype = STATIC_ANY
+                if isinstance(val, bool): stype = STATIC_BOOL
+                elif isinstance(val, int): stype = STATIC_INT
+                elif isinstance(val, float): stype = STATIC_FLOAT
+                elif isinstance(val, str): stype = STATIC_STR
+                
+                static_vars[name] = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=stype)
+            
+            self.scheduler.predefined_symbols.update(static_vars)
+
+        # 1. 调用调度器进行项目级编译
+        self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Compiling project: {abs_entry}")
+        return self.scheduler.compile_project(abs_entry)
+
+    def execute(self, artifact: Any, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
+        """
+        [NEW] 核心解耦：执行已编译的 CompilationArtifact。
+        """
+        entry_res = artifact.get_module(artifact.entry_module)
+        if not entry_res:
+            raise RuntimeError(f"Entry module '{artifact.entry_module}' not found in artifact")
+
+        # 1. 准备/获取解释器
+        if not self.interpreter:
+            self._prepare_interpreter(artifact, output_callback)
+        
+        # 2. 注入实时运行变量
+        if variables:
+            for name, val in variables.items():
+                self.interpreter.context.define_variable(name, val)
+
+        # 3. 执行入口模块 AST
+        self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Executing entry module: {artifact.entry_module}")
+        self.interpreter.interpret(entry_res.module_ast)
+        return True
 
     def get_variable(self, name: str) -> Any:
         """获取解释器上下文中的变量"""
         if self.interpreter and self.interpreter.context:
-            return self.interpreter.context.get_variable(name)
+            val = self.interpreter.context.get_variable(name)
+            # 自动进行 to_native 转换，以便外部调用者（如测试用例）直接使用 Python 原生值
+            if hasattr(val, 'to_native'):
+                return val.to_native()
+            return val
         raise RuntimeError("Interpreter not initialized")
 
     def check(self, entry_file: str) -> bool:

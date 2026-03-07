@@ -1,9 +1,9 @@
 from typing import List, Optional, Any
 from core.types.lexer_types import TokenType, Token, LexerMode, SubState
+from core.compiler.support.diagnostics import DiagnosticReporter, DiagnosticSeverity
 from .str_stream import StrStream
 from core.support.diagnostics.issue_tracker import IssueTracker
-from core.support.diagnostics.codes import *
-from core.types.diagnostic_types import Severity
+from core.compiler.support.issue_adapter import IssueTrackerAdapter
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 # Components
@@ -21,10 +21,11 @@ class Lexer:
     - CoreTokenScanner: Handles standard code tokenization.
     - LLMScanner: Handles LLM block tokenization.
     """
-    def __init__(self, source_code: str, issue_tracker: Optional[IssueTracker] = None, debugger: Optional[Any] = None):
+    def __init__(self, source_code: str, issue_tracker: Optional[DiagnosticReporter] = None, debugger: Optional[Any] = None):
         self.scanner = StrStream(source_code)
         self.tokens: List[Token] = []
-        self.issue_tracker = issue_tracker or IssueTracker(source_code)
+        # [AUDIT] 诊断抽象：使用传入的 reporter，若无则创建一个适配旧 IssueTracker 的默认 reporter
+        self.issue_tracker = issue_tracker or IssueTrackerAdapter(IssueTracker())
         self.debugger = debugger or core_debugger
         
         # State Management

@@ -1,16 +1,14 @@
 from typing import List, Optional, Tuple
 from core.types.lexer_types import Token, TokenType
 from core.compiler.lexer.str_stream import StrStream
-from core.support.diagnostics.issue_tracker import IssueTracker
-from core.support.diagnostics.codes import PAR_INDENTATION_ERROR
-from core.types.diagnostic_types import Severity
+from core.compiler.support.diagnostics import DiagnosticReporter
 
 class IndentProcessor:
     """
     Handles indentation processing for IBC-Inter Lexer.
     Maintains the indentation stack and generates INDENT/DEDENT tokens.
     """
-    def __init__(self, scanner: StrStream, issue_tracker: IssueTracker):
+    def __init__(self, scanner: StrStream, issue_tracker: DiagnosticReporter):
         self.scanner = scanner
         self.issue_tracker = issue_tracker
         self.indent_stack: List[int] = [0]
@@ -57,9 +55,7 @@ class IndentProcessor:
                 tokens.append(Token(TokenType.DEDENT, "", self.scanner.line, start_col))
             
             if current_indent != self.indent_stack[-1]:
-                self.issue_tracker.report(
-                    Severity.ERROR, 
-                    PAR_INDENTATION_ERROR, 
+                self.issue_tracker.error(
                     "Unindent does not match any outer indentation level",
                     self.scanner
                 )

@@ -1,0 +1,9 @@
+# IBCI Scope & Global Violation Scenarios
+int x = 10
+func test_redef():
+    str x = "hello" # Shadowing is OK
+    int x = 20 # Error: Redefinition in same local scope
+
+int global_val = 100
+func access_global_fail():
+    global_val = 200 # Error: Missing 'global' declaration before use

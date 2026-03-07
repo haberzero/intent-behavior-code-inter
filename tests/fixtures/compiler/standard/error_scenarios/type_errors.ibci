@@ -1,0 +1,12 @@
+# IBCI Type Mismatch Scenarios
+int a = "hello"
+
+func add(int x, int y) -> int:
+    return x + y
+add(1) # Wrong arg count
+add(1, "two") # Wrong arg type
+
+for i in range(10):
+    str s = i # Wrong loop inference
+
+str s = ~"hello" # Unary mismatch

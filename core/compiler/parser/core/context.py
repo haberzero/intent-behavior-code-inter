@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.parser.core.token_stream import TokenStream
-from core.support.diagnostics.issue_tracker import IssueTracker
-from core.compiler.parser.symbol_table import ScopeManager
+from core.compiler.support.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.support.host_interface import HostInterface
 
@@ -22,8 +21,7 @@ class ParserContext:
     Now acts as a Mediator for component communication to avoid circular dependencies.
     """
     stream: TokenStream
-    issue_tracker: IssueTracker
-    scope_manager: Optional[ScopeManager] = None
+    issue_tracker: DiagnosticReporter
     module_resolver: Optional[ModuleResolver] = None
     module_cache: Optional[Dict[str, Any]] = None
     host_interface: Optional[HostInterface] = None
@@ -37,9 +35,21 @@ class ParserContext:
     type_parser: Optional['TypeComponent'] = None
     import_parser: Optional['ImportComponent'] = None
     
+    def push_intent(self, intent: ast.IntentInfo):
+        """Set a pending intent comment for the next statement."""
+        if self.pending_intent:
+             # Already handled by reporting a warning in DeclarationComponent,
+             # but we could also do it here if we want to be strict.
+             pass
+        self.pending_intent = intent
+        
+    def consume_intent(self) -> Optional[ast.IntentInfo]:
+        """Consume the pending intent and clear it."""
+        intent = self.pending_intent
+        self.pending_intent = None
+        return intent
+
     def __post_init__(self):
-        if self.scope_manager is None:
-            self.scope_manager = ScopeManager()
         if self.module_cache is None:
             self.module_cache = {}
         if self.host_interface is None:
