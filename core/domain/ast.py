@@ -1,20 +1,21 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, Any, TYPE_CHECKING
 from enum import IntEnum, Enum, auto
+from .atomic import Location
 
 if TYPE_CHECKING:
     from core.domain.symbols import Symbol, StaticType
 
 # --- Scene ---
 
-class Scene(Enum):
+class IbScene(Enum):
     GENERAL = auto()
     BRANCH = auto()
     LOOP = auto()
 
 # --- Precedence & ParseRule ---
 
-class Precedence(IntEnum):
+class IbPrecedence(IntEnum):
     LOWEST = 0
     ASSIGNMENT = 1  # =
     OR = 2          # or
@@ -31,7 +32,7 @@ class Precedence(IntEnum):
     CALL = 12       # . ()
     PRIMARY = 13
 
-class ParseRule:
+class IbParseRule:
     def __init__(self, prefix, infix, precedence):
         self.prefix = prefix
         self.infix = infix
@@ -39,17 +40,23 @@ class ParseRule:
 
 # --- AST Nodes ---
 
-import uuid
-
-@dataclass(kw_only=True)
-class ASTNode:
-    """AST 节点基类"""
+@dataclass(eq=False, unsafe_hash=True)
+class IbASTNode:
+    """所有 AST 节点的基类"""
     lineno: int = 0
     col_offset: int = 0
-    end_lineno: int = 0
-    end_col_offset: int = 0
-    uid: str = field(default_factory=lambda: f"node_{uuid.uuid4().hex[:8]}")
-    
+    end_lineno: Optional[int] = None
+    end_col_offset: Optional[int] = None
+
+    def get_location(self) -> Location:
+        """获取节点的物理位置对象 (Domain 层对齐)"""
+        return Location(
+            line=self.lineno,
+            column=self.col_offset,
+            end_line=self.end_lineno,
+            end_column=self.end_col_offset
+        )
+
     @property
     def line(self) -> int:
         return self.lineno
@@ -63,280 +70,290 @@ class ASTNode:
         """Indicates if this node establishes a new symbol scope."""
         return False
 
-@dataclass(kw_only=True)
-class Stmt(ASTNode):
+@dataclass(kw_only=True, eq=False)
+class IbStmt(IbASTNode):
     """语句节点基类"""
     pass
 
-@dataclass(kw_only=True)
-class Expr(ASTNode):
+@dataclass(kw_only=True, eq=False)
+class IbExpr(IbASTNode):
     """表达式节点基类"""
     pass
 
 # --- Intent Info ---
 
-@dataclass(kw_only=True)
-class IntentInfo(ASTNode):
+@dataclass(kw_only=True, eq=False)
+class IbIntentInfo(IbASTNode):
     mode: str # "", "+", "!", "-"
     content: str # Raw content or constant string
-    segments: Optional[List[Union[str, 'Expr']]] = None # Interpolated segments for comments like @ "..."
-    expr: Optional['Expr'] = None # Dynamic expression for 'intent expr:'
+    segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
+    expr: Optional['IbExpr'] = None # Dynamic expression for 'intent expr:'
 
 # --- Module ---
 
-@dataclass
-class Module(ASTNode):
-    body: List[Stmt] = field(default_factory=list)
+@dataclass(kw_only=True, eq=False)
+class IbModule(IbASTNode):
+    body: List[IbStmt] = field(default_factory=list)
     file_path: Optional[str] = None
 
     @property
     def creates_scope(self) -> bool:
         return True
 
+    def get_location(self) -> Location:
+        loc = super().get_location()
+        loc.file_path = self.file_path
+        return loc
+
 # --- Statements ---
 
-@dataclass
-class AnnotatedStmt(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbAnnotatedStmt(IbStmt):
     """持有意图注释的包装语句节点"""
-    intent: IntentInfo
-    stmt: Stmt
+    intent: IbIntentInfo
+    stmt: IbStmt
 
-@dataclass
-class AnnotatedExpr(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbAnnotatedExpr(IbExpr):
     """持有意图注释的包装表达式节点"""
-    intent: IntentInfo
-    expr: Expr
+    intent: IbIntentInfo
+    expr: IbExpr
 
-@dataclass
-class FunctionDef(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbFunctionDef(IbStmt):
     name: str
-    args: List['arg']
-    body: List[Stmt]
-    returns: Optional[Expr] = None
+    args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
+    body: List[IbStmt]
+    returns: Optional[IbExpr] = None
     
     @property
     def creates_scope(self) -> bool:
         return True
 
-@dataclass
-class ClassDef(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbClassDef(IbStmt):
     name: str
-    body: List[Stmt] # Includes methods and class variables
+    body: List[IbStmt] # Includes methods and class variables
     parent: Optional[str] = None # Parent class name
-    methods: List[Union['FunctionDef', 'LLMFunctionDef']] = field(default_factory=list)
-    fields: List['Assign'] = field(default_factory=list)
+    methods: List[Union['IbFunctionDef', 'IbLLMFunctionDef']] = field(default_factory=list)
+    fields: List['IbAssign'] = field(default_factory=list)
     
     @property
     def creates_scope(self) -> bool:
         return True
 
-@dataclass
-class LLMFunctionDef(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbLLMFunctionDef(IbStmt):
     name: str
-    args: List['arg']
-    sys_prompt: Optional[List[Union[str, Expr]]]
-    user_prompt: Optional[List[Union[str, Expr]]]
-    returns: Optional[Expr] = None
+    args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
+    sys_prompt: Optional[List[Union[str, IbExpr]]]
+    user_prompt: Optional[List[Union[str, IbExpr]]]
+    returns: Optional[IbExpr] = None
     
     @property
     def creates_scope(self) -> bool:
         return True
 
-@dataclass
-class GlobalStmt(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbGlobalStmt(IbStmt):
     names: List[str]
 
-@dataclass
-class Return(Stmt):
-    value: Optional[Expr] = None
+@dataclass(kw_only=True, eq=False)
+class IbReturn(IbStmt):
+    value: Optional[IbExpr] = None
 
-@dataclass
-class Assign(Stmt):
-    targets: List[Expr]
-    value: Optional[Expr]
+@dataclass(kw_only=True, eq=False)
+class IbAssign(IbStmt):
+    targets: List[IbExpr]
+    value: Optional[IbExpr]
 
-@dataclass
-class AugAssign(Stmt):
-    target: Expr
+@dataclass(kw_only=True, eq=False)
+class IbAugAssign(IbStmt):
+    target: IbExpr
     op: str
-    value: Expr
+    value: IbExpr
 
-@dataclass
-class For(Stmt):
-    target: Optional[Expr]
-    iter: Expr
-    body: List[Stmt]
-    orelse: List[Stmt] = field(default_factory=list)
+@dataclass(kw_only=True, eq=False)
+class IbFor(IbStmt):
+    target: Optional[IbExpr]
+    iter: IbExpr
+    body: List[IbStmt]
+    orelse: List[IbStmt] = field(default_factory=list)
 
-@dataclass
-class While(Stmt):
-    test: Expr
-    body: List[Stmt]
-    orelse: List[Stmt] = field(default_factory=list)
+@dataclass(kw_only=True, eq=False)
+class IbWhile(IbStmt):
+    test: IbExpr
+    body: List[IbStmt]
+    orelse: List[IbStmt] = field(default_factory=list)
 
-@dataclass
-class If(Stmt):
-    test: Expr
-    body: List[Stmt]
-    orelse: List[Stmt] = field(default_factory=list)
+@dataclass(kw_only=True, eq=False)
+class IbIf(IbStmt):
+    test: IbExpr
+    body: List[IbStmt]
+    orelse: List[IbStmt] = field(default_factory=list)
 
-@dataclass
-class Try(Stmt):
-    body: List[Stmt]
-    handlers: List['ExceptHandler']
-    orelse: List[Stmt] = field(default_factory=list)
-    finalbody: List[Stmt] = field(default_factory=list)
+@dataclass(kw_only=True, eq=False)
+class IbTry(IbStmt):
+    body: List[IbStmt]
+    handlers: List['IbExceptHandler']
+    orelse: List[IbStmt] = field(default_factory=list)
+    finalbody: List[IbStmt] = field(default_factory=list)
 
-@dataclass
-class ExceptHandler(ASTNode):
-    type: Optional[Expr]
+@dataclass(kw_only=True, eq=False)
+class IbExceptHandler(IbASTNode):
+    type: Optional[IbExpr]
     name: Optional[str]
-    body: List[Stmt]
+    body: List[IbStmt]
 
-@dataclass
-class Raise(Stmt):
-    exc: Optional[Expr]
-    cause: Optional[Expr] = None
+@dataclass(kw_only=True, eq=False)
+class IbRaise(IbStmt):
+    exc: Optional[IbExpr]
+    cause: Optional[IbExpr] = None
 
-@dataclass
-class Import(Stmt):
-    names: List['alias']
+@dataclass(kw_only=True, eq=False)
+class IbImport(IbStmt):
+    names: List['IbAlias']
 
-@dataclass
-class ImportFrom(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbImportFrom(IbStmt):
     module: Optional[str]
-    names: List['alias']
+    names: List['IbAlias']
     level: int = 0
 
-@dataclass
-class ExprStmt(Stmt):
-    value: Expr
+@dataclass(kw_only=True, eq=False)
+class IbExprStmt(IbStmt):
+    value: IbExpr
 
-@dataclass
-class Pass(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbPass(IbStmt):
     pass
 
-@dataclass
-class Break(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbBreak(IbStmt):
     pass
 
-@dataclass
-class Continue(Stmt):
+@dataclass(kw_only=True, eq=False)
+class IbContinue(IbStmt):
     pass
 
-@dataclass
-class Retry(Stmt):
-    hint: Optional[Expr] = None  # retry "hint"
+@dataclass(kw_only=True, eq=False)
+class IbRetry(IbStmt):
+    hint: Optional[IbExpr] = None  # retry "hint"
 
-@dataclass
-class LLMExceptionalStmt(Stmt):
-    primary: Stmt
-    fallback: List[Stmt]
+@dataclass(kw_only=True, eq=False)
+class IbLLMExceptionalStmt(IbStmt):
+    primary: IbStmt
+    fallback: List[IbStmt]
 
 # --- Expressions ---
 
-@dataclass
-class BoolOp(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbBoolOp(IbExpr):
     op: str
-    values: List[Expr]
+    values: List[IbExpr]
 
-@dataclass
-class BinOp(Expr):
-    left: Expr
+@dataclass(kw_only=True, eq=False)
+class IbBinOp(IbExpr):
+    left: IbExpr
     op: str
-    right: Expr
+    right: IbExpr
 
-@dataclass
-class UnaryOp(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbUnaryOp(IbExpr):
     op: str
-    operand: Expr
+    operand: IbExpr
 
-@dataclass
-class IfExp(Expr):
-    test: Expr
-    body: Expr
-    orelse: Expr
+@dataclass(kw_only=True, eq=False)
+class IbIfExp(IbExpr):
+    test: IbExpr
+    body: IbExpr
+    orelse: IbExpr
 
-@dataclass
-class Dict(Expr):
-    keys: List[Optional[Expr]]
-    values: List[Expr]
+@dataclass(kw_only=True, eq=False)
+class IbCastExpr(IbExpr):
+    """类型转换表达式包装节点 (e.g., (int) expr)"""
+    type_name: str
+    value: IbExpr
 
-@dataclass
-class Compare(Expr):
-    left: Expr
+@dataclass(kw_only=True, eq=False)
+class IbDict(IbExpr):
+    keys: List[Optional[IbExpr]]
+    values: List[IbExpr]
+
+@dataclass(kw_only=True, eq=False)
+class IbCompare(IbExpr):
+    left: IbExpr
     ops: List[str]
-    comparators: List[Expr]
+    comparators: List[IbExpr]
 
-@dataclass
-class IntentStmt(Stmt):
-    intent: IntentInfo
-    body: List[Stmt]
+@dataclass(kw_only=True, eq=False)
+class IbIntentStmt(IbStmt):
+    intent: IbIntentInfo
+    body: List[IbStmt]
     is_exclusive: bool = False # intent ! { ... }
 
-@dataclass
-class Call(Expr):
-    func: Expr
-    args: List[Expr]
-    keywords: List['keyword']
+@dataclass(kw_only=True, eq=False)
+class IbCall(IbExpr):
+    func: IbExpr
+    args: List[IbExpr]
+    keywords: List['IbKeyword']
 
-@dataclass
-class Constant(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbConstant(IbExpr):
     value: Any
 
-
-@dataclass
-class Attribute(Expr):
-    value: Expr
+@dataclass(kw_only=True, eq=False)
+class IbAttribute(IbExpr):
+    value: IbExpr
     attr: str
     ctx: str
 
-@dataclass
-class Subscript(Expr):
-    value: Expr
-    slice: Expr
+@dataclass(kw_only=True, eq=False)
+class IbSubscript(IbExpr):
+    value: IbExpr
+    slice: IbExpr
     ctx: str
 
-@dataclass
-class Name(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbName(IbExpr):
     id: str
     ctx: str
 
-@dataclass
-class ListExpr(Expr):
-    elts: List[Expr]
+@dataclass(kw_only=True, eq=False)
+class IbListExpr(IbExpr):
+    elts: List[IbExpr]
     ctx: str
 
-@dataclass
-class TypeAnnotatedExpr(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbTypeAnnotatedExpr(IbExpr):
     """持有类型标注的表达式包装节点"""
-    target: ASTNode # 可以是 Name (变量赋值) 或 arg (函数参数)
-    annotation: Expr
+    target: IbASTNode # 可以是 IbName (变量赋值) 或 IbArg (函数参数)
+    annotation: IbExpr
 
-@dataclass
-class FilteredExpr(Expr):
+@dataclass(kw_only=True, eq=False)
+class IbFilteredExpr(IbExpr):
     """带过滤条件的表达式包装节点 (e.g., expr if filter)"""
-    expr: Expr
-    filter: Expr
+    expr: IbExpr
+    filter: IbExpr
 
-@dataclass
-class BehaviorExpr(Expr):
-    segments: List[Union[str, Expr]]
+@dataclass(kw_only=True, eq=False)
+class IbBehaviorExpr(IbExpr):
+    segments: List[Union[str, IbExpr]]
     tag: str = ""
 
 # --- Helpers ---
 
-@dataclass
-class arg(ASTNode):
+@dataclass(kw_only=True, eq=False)
+class IbArg(IbASTNode):
     arg: str
 
 
-@dataclass
-class keyword(ASTNode):
+@dataclass(kw_only=True, eq=False)
+class IbKeyword(IbASTNode):
     arg: Optional[str]
-    value: Expr
+    value: IbExpr
 
-@dataclass
-class alias(ASTNode):
+@dataclass(kw_only=True, eq=False)
+class IbAlias(IbASTNode):
     name: str
     asname: Optional[str] = None

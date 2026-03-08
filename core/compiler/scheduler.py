@@ -2,7 +2,7 @@ import os
 from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
 from core.domain.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
-from core.domain.ast import Module
+from core.domain.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.domain.tokens import Token
 from core.compiler.parser.parser import Parser
@@ -12,11 +12,10 @@ from core.compiler.support.issue_adapter import wrap_tracker
 from core.support.diagnostics.issue_tracker import IssueTracker
 from core.compiler.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
-from core.domain.diagnostics import Severity, CompilerError
+from core.domain.issue import Severity, CompilerError
 from core.support.host_interface import HostInterface
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.domain.artifact import CompilationArtifact
-from core.compiler.semantic.result import CompilationResult
+from core.domain.blueprint import CompilationArtifact, CompilationResult
 
 class Scheduler:
     """
@@ -38,7 +37,7 @@ class Scheduler:
         
         # Caches (Using OrderedDict for LRU behavior)
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
-        self.ast_cache: OrderedDict[str, Module] = OrderedDict()   # Path -> AST
+        self.ast_cache: OrderedDict[str, IbModule] = OrderedDict()   # Path -> AST
         self.symbol_table_cache: OrderedDict[str, Any] = OrderedDict() # Path -> SymbolTable
         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
@@ -110,7 +109,7 @@ class Scheduler:
             
             if failed_deps:
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Skipping {file_path} because dependencies failed: {failed_deps}")
-                self.issue_tracker.error(f"Module '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
+                self.issue_tracker.error(f"IbModule '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
                 mod_info.status = ModuleStatus.FAILED
                 continue
 
@@ -298,7 +297,7 @@ class Scheduler:
                 tokens = lexer.tokenize()
             
             # 2. Parse
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Parsing: {file_path} (Module: {module_name})")
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Parsing: {file_path} (IbModule: {module_name})")
             parser = Parser(
                 tokens, 
                 file_tracker, 
@@ -497,10 +496,16 @@ class DependencyGraph:
 
     def get_compilation_order(self) -> List[str]:
         """
-        Returns a topologically sorted list of file paths.
-        Dependency-free modules come first.
+        Returns a list of file paths to compile.
+        If there are no cycles, this is a topological sort (dependencies first).
+        If there are cycles, it returns a best-effort order.
         """
-        self.check_cycles() # Ensure no cycles first
+        # [MOD] 允许循环引用，不再强制报错。
+        # 运行时由 ModuleManager 的缓存机制处理循环加载。
+        try:
+            self.check_cycles()
+        except CircularDependencyError as e:
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Note: Circular dependency detected (allowed): {e}")
         
         visited = set()
         order = []
@@ -511,11 +516,9 @@ class DependencyGraph:
                 if neighbor not in visited:
                     dfs(neighbor)
             order.append(node)
-            
+        
         for node in self.adj_list:
             if node not in visited:
                 dfs(node)
                 
-        # The dfs order adds a node AFTER its children are visited.
-        # This results in a topological sort where dependencies come first.
         return order

@@ -16,7 +16,7 @@ class NetLib:
         except ImportError:
             return f"[MOCK GET] {url}"
         except Exception as e:
-            from core.domain.exceptions import InterpreterError
+            from core.domain.issue import InterpreterError
             raise InterpreterError(f"Network GET failed: {str(e)}")
 
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -28,7 +28,7 @@ class NetLib:
         except ImportError:
             return {"mock": "post", "url": url}
         except Exception as e:
-            from core.domain.exceptions import InterpreterError
+            from core.domain.issue import InterpreterError
             raise InterpreterError(f"Network POST failed: {str(e)}")
 
 def create_implementation():

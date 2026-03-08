@@ -5,7 +5,7 @@ from core.domain.symbols import (
     SymbolTable, TypeSymbol, FunctionSymbol, StaticType, ClassType, FunctionType,
     STATIC_VOID, STATIC_STR, STATIC_ANY
 )
-from core.domain.static_types import get_builtin_type
+from core.domain.symbols import get_builtin_type
 
 class TypeResolver:
     """
@@ -18,40 +18,40 @@ class TypeResolver:
         self.analyzer = semantic_analyzer
         self.current_class_type: Optional[ClassType] = None
 
-    def resolve(self, node: ast.ASTNode):
+    def resolve(self, node: ast.IbASTNode):
         self.visit(node)
 
-    def visit(self, node: ast.ASTNode):
+    def visit(self, node: ast.IbASTNode):
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
         res_type = visitor(node)
         
         # [NEW Phase 5] 记录类型推导侧表
-        if isinstance(node, ast.Expr) and res_type:
-            self.analyzer.node_to_type[node.uid] = res_type.name
-        elif isinstance(node, ast.ClassDef) and hasattr(self, "current_class_type") and self.current_class_type:
+        if isinstance(node, ast.IbExpr) and res_type:
+            self.analyzer.node_to_type[node] = res_type.name
+        elif isinstance(node, ast.IbClassDef) and hasattr(self, "current_class_type") and self.current_class_type:
              # 对于类定义，我们记录它定义的类型
-             self.analyzer.node_to_type[node.uid] = node.name
+             self.analyzer.node_to_type[node] = node.name
              
         return res_type
 
-    def generic_visit(self, node: ast.ASTNode):
+    def generic_visit(self, node: ast.IbASTNode):
         # 仅访问声明类节点和赋值节点（以推导全局变量类型）
         for attr in vars(node):
             child = getattr(node, attr)
             if isinstance(child, list):
                 for item in child:
-                    if isinstance(item, (ast.ClassDef, ast.FunctionDef, ast.LLMFunctionDef, ast.Assign)):
+                    if isinstance(item, (ast.IbClassDef, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):
                         self.visit(item)
-            elif isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.LLMFunctionDef, ast.Assign)):
+            elif isinstance(child, (ast.IbClassDef, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):
                 self.visit(child)
 
-    def visit_Module(self, node: ast.Module):
+    def visit_IbModule(self, node: ast.IbModule):
         for stmt in node.body:
-            if isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.LLMFunctionDef, ast.Assign)):
+            if isinstance(stmt, (ast.IbClassDef, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):
                 self.visit(stmt)
 
-    def visit_ClassDef(self, node: ast.ClassDef):
+    def visit_IbClassDef(self, node: ast.IbClassDef):
         sym = self.symbol_table.resolve(node.name)
         if not isinstance(sym, TypeSymbol):
             return
@@ -94,13 +94,13 @@ class TypeResolver:
         self.current_class_type = class_type
         try:
             for stmt in node.body:
-                if isinstance(stmt, (ast.FunctionDef, ast.LLMFunctionDef, ast.Assign)):
+                if isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):
                     self.visit(stmt)
         finally:
             self.current_class_type = old_class
             self.symbol_table = old_table
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
+    def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         # 解析返回类型
         ret_type = STATIC_VOID
         if node.returns:
@@ -115,7 +115,7 @@ class TypeResolver:
             
         for arg_node in node.args:
             arg_type = STATIC_ANY
-            if isinstance(arg_node, ast.TypeAnnotatedExpr):
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
@@ -124,7 +124,7 @@ class TypeResolver:
         if isinstance(sym, FunctionSymbol):
             sym.type_signature = FunctionType(name=node.name, param_types=param_types, return_type=ret_type)
 
-    def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
+    def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         # LLM 函数默认返回 string
         ret_type = STATIC_STR
         if node.returns:
@@ -138,7 +138,7 @@ class TypeResolver:
             
         for arg_node in node.args:
             arg_type = STATIC_ANY
-            if isinstance(arg_node, ast.TypeAnnotatedExpr):
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
@@ -146,12 +146,12 @@ class TypeResolver:
         if isinstance(sym, FunctionSymbol):
             sym.type_signature = FunctionType(name=node.name, param_types=param_types, return_type=ret_type)
 
-    def visit_Assign(self, node: ast.Assign):
+    def visit_IbAssign(self, node: ast.IbAssign):
         # 处理类字段声明
         for target in node.targets:
-            if isinstance(target, ast.TypeAnnotatedExpr):
+            if isinstance(target, ast.IbTypeAnnotatedExpr):
                 declared_type = self.analyzer._resolve_type(target.annotation)
-                if isinstance(target.target, ast.Name):
+                if isinstance(target.target, ast.IbName):
                     sym = self.symbol_table.resolve(target.target.id)
                     if isinstance(sym, symbols.VariableSymbol):
                         sym.var_type = declared_type

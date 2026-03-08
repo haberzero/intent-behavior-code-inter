@@ -1,6 +1,6 @@
 from typing import Any, Optional, Dict, List, Callable, Union
 from core.domain import symbols
-from core.foundation import types as uts
+from core.domain import types as uts
 
 class TypeBridge:
     """

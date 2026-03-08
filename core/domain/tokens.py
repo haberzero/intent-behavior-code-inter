@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from dataclasses import dataclass
+from .atomic import Location
 
 class TokenType(Enum):
     # 结构控制
@@ -122,3 +123,13 @@ class Token:
     end_line: int = 0
     end_column: int = 0
     is_at_line_start: bool = False
+
+    def get_location(self) -> Location:
+        """实现标准的定位协议"""
+        return Location(
+            line=self.line,
+            column=self.column,
+            end_line=self.end_line,
+            end_column=self.end_column,
+            length=len(self.value) if self.value else 1
+        )

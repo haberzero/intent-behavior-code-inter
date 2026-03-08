@@ -11,7 +11,8 @@ from core.compiler.parser.components.type_def import TypeComponent
 from core.compiler.parser.components.import_def import ImportComponent
 from core.domain.dependencies import ImportInfo, ImportType
 from core.support.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
-from core.domain.diagnostics import Severity, Location
+from core.domain.issue import Severity
+from core.domain.atomic import Location
 
 from core.support.host_interface import HostInterface
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
@@ -63,7 +64,7 @@ class Parser:
     def issue_tracker(self):
         return self.context.issue_tracker
 
-    def parse(self) -> ast.Module:
+    def parse(self) -> ast.IbModule:
         self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, "Starting parsing...")
         statements = []
         while not self.stream.is_at_end():
@@ -82,7 +83,7 @@ class Parser:
         # Check for errors at the end
         self.context.issue_tracker.check_errors()
         
-        module_node = ast.Module(body=statements)
+        module_node = ast.IbModule(body=statements)
         
         self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, f"Parsing complete. Total statements: {len(statements)}")
         self.debugger.trace(CoreModule.PARSER, DebugLevel.DATA, "AST Module body:", data=statements)
@@ -175,7 +176,7 @@ class Parser:
         if self.stream.match(TokenType.NEWLINE):
             pass
 
-    def declaration(self) -> Optional[ast.Stmt]:
+    def declaration(self) -> Optional[ast.IbStmt]:
         # Delegate to DeclarationComponent or ImportComponent
         
         if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):

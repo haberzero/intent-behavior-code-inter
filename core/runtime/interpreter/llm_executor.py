@@ -1,12 +1,14 @@
 import re
 import json
+from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable
 from core.foundation.interfaces import LLMExecutor, RuntimeContext, ServiceContext
-from core.domain.exceptions import InterpreterError, LLMUncertaintyError
+from core.domain.issue import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.capabilities import ILLMProvider
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.foundation.kernel import IbObject
+from core.foundation.registry import Registry
 
 class LLMExecutorImpl:
     """
@@ -78,7 +80,7 @@ class LLMExecutorImpl:
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = interpreter.node_pool.get(returns_uid)
-            if returns_data and returns_data["_type"] == "Name":
+            if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
         ai_module = self.service_context.interop.get_package("ai")
@@ -206,7 +208,6 @@ class LLMExecutorImpl:
 
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
         clean_res = raw_res.strip()
-        from core.foundation.registry import Registry
         
         if type_name == "str":
             return Registry.box(raw_res)
@@ -359,7 +360,6 @@ class intent_scoped:
         
         # 使用原始字典作为意图信息
         # 为了兼容 .mode 的访问，我们将其包装在一个简单的 namespace 对象中
-        from types import SimpleNamespace
         intent_info = SimpleNamespace(
             content=intent_data.get('content', ''),
             mode=intent_data.get('mode', 'append'),

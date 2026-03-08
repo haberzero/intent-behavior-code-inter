@@ -1,7 +1,7 @@
 from typing import List, Optional, Union, TYPE_CHECKING
 from core.domain.tokens import TokenType
 from core.domain import ast as ast
-from core.domain.diagnostics import Severity
+from core.domain.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
@@ -32,7 +32,7 @@ class DeclarationComponent(BaseComponent):
     def type_def(self) -> 'TypeComponent':
         return self.context.type_parser
 
-    def parse_declaration(self) -> Optional[ast.Stmt]:
+    def parse_declaration(self) -> Optional[ast.IbStmt]:
         role = SyntaxRecognizer.get_role(self.stream)
         
         if role == SyntaxRole.INTENT_MARKER:
@@ -65,7 +65,7 @@ class DeclarationComponent(BaseComponent):
                 else:
                     self.stream.advance()
             
-            self.context.push_intent(ast.IntentInfo(
+            self.context.push_intent(ast.IbIntentInfo(
                 mode=mode, 
                 content=raw_content.strip(), 
                 segments=segments,
@@ -100,11 +100,11 @@ class DeclarationComponent(BaseComponent):
         
         if pending_intent is not None and stmt is not None:
             # [NEW] 意图节点化：将意图包装在 AnnotatedStmt 中，而非注入属性
-            return self._loc(ast.AnnotatedStmt(intent=pending_intent, stmt=stmt), pending_intent)
+            return self._loc(ast.IbAnnotatedStmt(intent=pending_intent, stmt=stmt), pending_intent)
             
         return stmt
 
-    def intent_declaration(self) -> ast.IntentStmt:
+    def intent_declaration(self) -> ast.IbIntentStmt:
         start_token = self.stream.previous() # intent
         
         is_exclusive = False
@@ -121,20 +121,20 @@ class DeclarationComponent(BaseComponent):
         # 将表达式封装为 IntentInfo
         # 如果是 Constant 且为 string，则填充 content
         content = ""
-        if isinstance(intent_expr, ast.Constant) and isinstance(intent_expr.value, str):
+        if isinstance(intent_expr, ast.IbConstant) and isinstance(intent_expr.value, str):
             content = intent_expr.value
             intent_expr = None
             
-        info = ast.IntentInfo(
+        info = ast.IbIntentInfo(
             mode="", 
             content=content, 
             expr=intent_expr,
             lineno=start_token.line,
             col_offset=start_token.column
         )
-        return self._loc(ast.IntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token)
+        return self._loc(ast.IbIntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token)
 
-    def variable_declaration(self, explicit_var: bool = False) -> ast.Assign:
+    def variable_declaration(self, explicit_var: bool = False) -> ast.IbAssign:
         type_token = None
         type_annotation = None
         
@@ -142,7 +142,7 @@ class DeclarationComponent(BaseComponent):
             # 'var' keyword already consumed
             type_token = self.stream.previous()
             # Default type is 'var' (Any)
-            type_annotation = self._loc(ast.Name(id='var', ctx='Load'), type_token)
+            type_annotation = self._loc(ast.IbName(id='var', ctx='Load'), type_token)
             
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
             
@@ -156,9 +156,9 @@ class DeclarationComponent(BaseComponent):
             type_token = start_token
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
 
-        target = self._loc(ast.Name(id=name_token.value, ctx='Store'), name_token)
+        target = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
         if type_annotation:
-            target = self._loc(ast.TypeAnnotatedExpr(target=target, annotation=type_annotation), type_token)
+            target = self._loc(ast.IbTypeAnnotatedExpr(target=target, annotation=type_annotation), type_token)
         
         value = None
         if self.stream.match(TokenType.ASSIGN):
@@ -168,12 +168,12 @@ class DeclarationComponent(BaseComponent):
         
         # 解析可选的 llmexcept 块
         llm_fallback = self.statement._parse_llm_fallback()
-        stmt = self._loc(ast.Assign(targets=[target], value=value), type_token)
+        stmt = self._loc(ast.IbAssign(targets=[target], value=value), type_token)
         if llm_fallback:
-            return self._loc(ast.LLMExceptionalStmt(primary=stmt, fallback=llm_fallback), type_token)
+            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), type_token)
         return stmt
 
-    def function_declaration(self) -> ast.FunctionDef:
+    def function_declaration(self) -> ast.IbFunctionDef:
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect function name.").value
         self.stream.consume(TokenType.LPAREN, "Expect '(' after function name.")
@@ -186,13 +186,13 @@ class DeclarationComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
         
-        func_node = self._loc(ast.FunctionDef(name=name, args=args, body=[], returns=returns), start_token)
+        func_node = self._loc(ast.IbFunctionDef(name=name, args=args, body=[], returns=returns), start_token)
         
         body = self.statement.block()
         func_node.body = body
         return func_node
 
-    def llm_function_declaration(self) -> ast.LLMFunctionDef:
+    def llm_function_declaration(self) -> ast.IbLLMFunctionDef:
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect LLM function name.").value
         self.stream.consume(TokenType.LPAREN, "Expect '(' after function name.")
@@ -205,7 +205,7 @@ class DeclarationComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
         
-        llm_node = self._loc(ast.LLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, returns=returns), start_token)
+        llm_node = self._loc(ast.IbLLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, returns=returns), start_token)
         
         sys_prompt, user_prompt = self.llm_body()
         llm_node.sys_prompt = sys_prompt
@@ -213,7 +213,7 @@ class DeclarationComponent(BaseComponent):
         
         return llm_node
 
-    def class_declaration(self) -> ast.ClassDef:
+    def class_declaration(self) -> ast.IbClassDef:
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect class name.").value
         
@@ -224,15 +224,15 @@ class DeclarationComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' before class body.")
         
-        class_node = self._loc(ast.ClassDef(name=name, parent=parent, body=[], methods=[], fields=[]), start_token)
+        class_node = self._loc(ast.IbClassDef(name=name, parent=parent, body=[], methods=[], fields=[]), start_token)
         
         body = self.statement.block()
         
         # Categorize body elements
         for stmt in body:
-            if isinstance(stmt, (ast.FunctionDef, ast.LLMFunctionDef)):
+            if isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef)):
                 class_node.methods.append(stmt)
-            elif isinstance(stmt, ast.Assign):
+            elif isinstance(stmt, ast.IbAssign):
                 class_node.fields.append(stmt)
             else:
                 # Other statements in class body (e.g. print) are allowed but not common
@@ -241,7 +241,7 @@ class DeclarationComponent(BaseComponent):
         class_node.body = body
         return class_node
 
-    def parameters(self) -> List[ast.arg]:
+    def parameters(self) -> List[ast.IbArg]:
         params = []
         if not self.stream.check(TokenType.RPAREN):
             while True:
@@ -251,16 +251,16 @@ class DeclarationComponent(BaseComponent):
                 annotation = self.type_def.parse_type_annotation()
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
                 
-                param_node = self._loc(ast.arg(arg=name_token.value), name_token)
+                param_node = self._loc(ast.IbArg(arg=name_token.value), name_token)
                 if annotation:
-                    param_node = self._loc(ast.TypeAnnotatedExpr(target=param_node, annotation=annotation), name_token)
+                    param_node = self._loc(ast.IbTypeAnnotatedExpr(target=param_node, annotation=annotation), name_token)
                 params.append(param_node)
                     
                 if not self.stream.match(TokenType.COMMA):
                     break
         return params
 
-    def llm_body(self) -> tuple[Optional[List[Union[str, ast.Expr]]], Optional[List[Union[str, ast.Expr]]]]:
+    def llm_body(self) -> tuple[Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]]]:
         self.stream.consume(TokenType.NEWLINE, "Expect newline before LLM block.")
         
         sys_prompt = None
@@ -279,7 +279,7 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
         return sys_prompt, user_prompt
 
-    def parse_llm_section_content(self) -> List[Union[str, ast.Expr]]:
+    def parse_llm_section_content(self) -> List[Union[str, ast.IbExpr]]:
         segments = []
         while not self.stream.is_at_end():
             if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_END):

@@ -16,8 +16,9 @@ class TestSerialization(BaseCompilerTest):
         artifact = self.assert_compile_success("standard/basics.ibci")
         result = self.get_main_result(artifact)
         
-        # 执行序列化
-        data = result.to_dict()
+        # 执行序列化 (通过 Serializer 而非 Result 对象)
+        serializer = FlatSerializer()
+        data = serializer.serialize_result(result)
         
         # 1. 检查根节点引用
         self.assertIn("root_node_uid", data)
@@ -48,11 +49,11 @@ llmexcept:
             
         artifact = self.engine.compile(os.path.abspath("test_llm.ibci"))
         result = self.get_main_result(artifact)
-        data = result.to_dict()
+        data = FlatSerializer().serialize_result(result)
         nodes = data["pools"]["nodes"]
         
         # 查找 LLMExceptionalStmt 类型的节点
-        llm_nodes = [n for n in nodes.values() if n["_type"] == "LLMExceptionalStmt"]
+        llm_nodes = [n for n in nodes.values() if n["_type"] == "IbLLMExceptionalStmt"]
         self.assertTrue(len(llm_nodes) >= 1, "Should contain LLMExceptionalStmt node in pool")
         
         node = llm_nodes[0]
@@ -75,11 +76,11 @@ func add(int a, int b) -> int:
             
         artifact = self.engine.compile(os.path.abspath("test_intent.ibci"))
         result = self.get_main_result(artifact)
-        data = result.to_dict()
+        data = FlatSerializer().serialize_result(result)
         nodes = data["pools"]["nodes"]
         
         # 查找 AnnotatedStmt 类型的节点
-        annotated_nodes = [n for n in nodes.values() if n["_type"] == "AnnotatedStmt"]
+        annotated_nodes = [n for n in nodes.values() if n["_type"] == "IbAnnotatedStmt"]
         self.assertTrue(len(annotated_nodes) >= 1, "Should contain AnnotatedStmt node in pool")
         
         node = annotated_nodes[0]
@@ -105,7 +106,7 @@ while False:
             
         artifact = self.engine.compile(os.path.abspath("test_scene.ibci"))
         result = self.get_main_result(artifact)
-        data = result.to_dict()
+        data = FlatSerializer().serialize_result(result)
         
         node_scenes = data["side_tables"]["node_scenes"]
         nodes = data["pools"]["nodes"]
@@ -136,11 +137,11 @@ var x: int = 1
             
         artifact = self.engine.compile(os.path.abspath("test_type.ibci"))
         result = self.get_main_result(artifact)
-        data = result.to_dict()
+        data = FlatSerializer().serialize_result(result)
         nodes = data["pools"]["nodes"]
         
         # 查找 TypeAnnotatedExpr 类型的节点
-        type_nodes = [n for n in nodes.values() if n["_type"] == "TypeAnnotatedExpr"]
+        type_nodes = [n for n in nodes.values() if n["_type"] == "IbTypeAnnotatedExpr"]
         self.assertTrue(len(type_nodes) >= 1, "Should contain TypeAnnotatedExpr node in pool")
         
         node = type_nodes[0]
@@ -153,7 +154,7 @@ var x: int = 1
         
         # 验证目标节点是 Name 类型
         target_node = nodes[node["target"]]
-        self.assertEqual(target_node["_type"], "Name")
+        self.assertEqual(target_node["_type"], "IbName")
         self.assertEqual(target_node["id"], "x")
 
     def test_filtered_expr_serialization(self):
@@ -170,11 +171,11 @@ while True if is_ready():
             
         artifact = self.engine.compile(os.path.abspath("test_filter.ibci"))
         result = self.get_main_result(artifact)
-        data = result.to_dict()
+        data = FlatSerializer().serialize_result(result)
         nodes = data["pools"]["nodes"]
         
         # 查找 FilteredExpr 类型的节点
-        filter_nodes = [n for n in nodes.values() if n["_type"] == "FilteredExpr"]
+        filter_nodes = [n for n in nodes.values() if n["_type"] == "IbFilteredExpr"]
         self.assertTrue(len(filter_nodes) >= 1, "Should contain FilteredExpr node in pool")
         
         node = filter_nodes[0]
@@ -187,7 +188,7 @@ while True if is_ready():
         
         # 验证 expr 节点是 Constant(True)
         expr_node = nodes[node["expr"]]
-        self.assertEqual(expr_node["_type"], "Constant")
+        self.assertEqual(expr_node["_type"], "IbConstant")
         self.assertEqual(expr_node["value"], True)
 
     def test_complex_nested_wrappers_serialization(self):
@@ -206,11 +207,11 @@ llmexcept:
             f.write(source)
             
         artifact = self.engine.compile(os.path.abspath("test_complex.ibci"))
-        data = self.get_main_result(artifact).to_dict()
+        data = FlatSerializer().serialize_result(self.get_main_result(artifact))
         nodes = data["pools"]["nodes"]
         
         # 层级 1: AnnotatedStmt (最外层，因为它包装了整个语句)
-        annotated_nodes = [n for n in nodes.values() if n["_type"] == "AnnotatedStmt"]
+        annotated_nodes = [n for n in nodes.values() if n["_type"] == "IbAnnotatedStmt"]
         self.assertTrue(len(annotated_nodes) >= 1)
         root_annotated = annotated_nodes[0]
         
@@ -221,27 +222,27 @@ llmexcept:
         # 层级 2: LLMExceptionalStmt (被意图包装在内)
         llm_uid = root_annotated["stmt"]
         llm_node = nodes[llm_uid]
-        self.assertEqual(llm_node["_type"], "LLMExceptionalStmt")
+        self.assertEqual(llm_node["_type"], "IbLLMExceptionalStmt")
         
         # 层级 3: While (核心控制流)
         while_uid = llm_node["primary"]
         while_node = nodes[while_uid]
-        self.assertEqual(while_node["_type"], "While")
+        self.assertEqual(while_node["_type"], "IbWhile")
         
         # 层级 4: FilteredExpr (过滤条件)
         filter_uid = while_node["test"]
         filter_node = nodes[filter_uid]
-        self.assertEqual(filter_node["_type"], "FilteredExpr")
+        self.assertEqual(filter_node["_type"], "IbFilteredExpr")
         
         # 层级 5: Assign (循环体内的赋值)
         assign_uid = while_node["body"][0]
         assign_node = nodes[assign_uid]
-        self.assertEqual(assign_node["_type"], "Assign")
+        self.assertEqual(assign_node["_type"], "IbAssign")
         
         # 层级 6: TypeAnnotatedExpr (类型标注)
         type_annotated_uid = assign_node["targets"][0]
         type_annotated_node = nodes[type_annotated_uid]
-        self.assertEqual(type_annotated_node["_type"], "TypeAnnotatedExpr")
+        self.assertEqual(type_annotated_node["_type"], "IbTypeAnnotatedExpr")
         
         # 验证叶子节点
         target_name_uid = type_annotated_node["target"]
@@ -257,19 +258,19 @@ print(score)
             f.write(source)
             
         artifact = self.engine.compile(os.path.abspath("test_sym_table.ibci"))
-        data = self.get_main_result(artifact).to_dict()
+        data = FlatSerializer().serialize_result(self.get_main_result(artifact))
         
         node_to_symbol = data["side_tables"]["node_to_symbol"]
         nodes = data["pools"]["nodes"]
         symbols = data["pools"]["symbols"]
         
         # 1. 找到 print(score) 中的 score (Name 节点)
-        call_nodes = [n for n in nodes.values() if n["_type"] == "Call"]
+        call_nodes = [n for n in nodes.values() if n["_type"] == "IbCall"]
         self.assertTrue(len(call_nodes) >= 1)
         
         arg_uid = call_nodes[0]["args"][0]
         arg_node = nodes[arg_uid]
-        self.assertEqual(arg_node["_type"], "Name")
+        self.assertEqual(arg_node["_type"], "IbName")
         self.assertEqual(arg_node["id"], "score")
         
         # 2. 验证该节点在侧表中有关联符号
@@ -292,14 +293,14 @@ print(x)
             f.write(source)
             
         artifact = self.engine.compile(os.path.abspath("test_shadow.ibci"))
-        data = self.get_main_result(artifact).to_dict()
+        data = FlatSerializer().serialize_result(self.get_main_result(artifact))
         
         node_to_symbol = data["side_tables"]["node_to_symbol"]
         nodes = data["pools"]["nodes"]
         symbols = data["pools"]["symbols"]
         
         # 1. 找到所有的 Name 节点，其 ID 为 'x'
-        x_nodes = [uid for uid, n in nodes.items() if n["_type"] == "Name" and n.get("id") == "x"]
+        x_nodes = [uid for uid, n in nodes.items() if n["_type"] == "IbName" and n.get("id") == "x"]
         # 排除掉赋值目标节点 (ctx='Store')，只看引用节点 (ctx='Load')
         x_refs = [uid for uid in x_nodes if nodes[uid].get("ctx") == "Load"]
         self.assertEqual(len(x_refs), 2, "Should have two references to 'x'")
@@ -330,13 +331,13 @@ print(x)
             f.write(source)
             
         artifact = self.engine.compile(os.path.abspath("test_type_inf.ibci"))
-        data = self.get_main_result(artifact).to_dict()
+        data = FlatSerializer().serialize_result(self.get_main_result(artifact))
         
         node_to_type = data["side_tables"]["node_to_type"]
         nodes = data["pools"]["nodes"]
         
         # 找到 BinOp 节点 (1 + 2.5)
-        binop_nodes = [uid for uid, n in nodes.items() if n["_type"] == "BinOp"]
+        binop_nodes = [uid for uid, n in nodes.items() if n["_type"] == "IbBinOp"]
         self.assertTrue(len(binop_nodes) >= 1)
         
         binop_uid = binop_nodes[0]
@@ -359,24 +360,22 @@ print(x)
         
         # 获取主模块数据
         main_res = artifact.get_module("main")
-        data = main_res.to_dict()
+        serializer = FlatSerializer()
+        data = serializer.serialize_result(main_res)
         node_to_symbol = data["side_tables"]["node_to_symbol"]
+        
+        # 查找访问 lib.shared_val 的 IbAttribute 节点
         nodes = data["pools"]["nodes"]
+        attr_uid = [uid for uid, n in nodes.items() if n["_type"] == "IbAttribute" and n.get("attr") == "shared_val"][0]
         
-        # 找到 lib.shared_val (Attribute 节点)
-        attr_nodes = [uid for uid, n in nodes.items() if n["_type"] == "Attribute" and n.get("attr") == "shared_val"]
-        self.assertTrue(len(attr_nodes) >= 1)
-        
-        attr_uid = attr_nodes[0]
+        # 验证该属性访问节点是否在侧表中绑定了符号
         self.assertIn(attr_uid, node_to_symbol, "Cross-module attribute access should be in side table")
-        
-        # 验证符号 UID 是否存在于全局符号表中 (或者是被引用模块的符号表中)
-        # 在 CompilationArtifact 中，符号是分模块存储的
         sym_uid = node_to_symbol[attr_uid]
         
         # 检查该符号是否在 lib 模块的符号池中
         lib_res = artifact.get_module("lib")
-        lib_symbols = lib_res.to_dict()["pools"]["symbols"]
+        # 注意：必须使用同一个序列化器实例以保持 UID 一致性
+        lib_symbols = serializer.serialize_result(lib_res)["pools"]["symbols"]
         self.assertIn(sym_uid, lib_symbols, "Symbol UID must exist in the defining module's symbol pool")
         self.assertEqual(lib_symbols[sym_uid]["name"], "shared_val")
 
@@ -387,14 +386,14 @@ print(x)
             f.write(source)
             
         artifact = self.engine.compile(os.path.abspath("test_dict.ibci"))
-        data = self.get_main_result(artifact).to_dict()
+        data = FlatSerializer().serialize_result(self.get_main_result(artifact))
         
         node_to_type = data["side_tables"]["node_to_type"]
         nodes = data["pools"]["nodes"]
         types = data["pools"]["types"]
         
         # 1. 找到 Dict 节点
-        dict_nodes = [uid for uid, n in nodes.items() if n["_type"] == "Dict"]
+        dict_nodes = [uid for uid, n in nodes.items() if n["_type"] == "IbDict"]
         self.assertTrue(len(dict_nodes) >= 1)
         dict_uid = dict_nodes[0]
         

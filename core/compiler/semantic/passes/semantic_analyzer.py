@@ -9,14 +9,14 @@ from core.support.host_interface import HostInterface
 from core.domain import symbols
 from core.domain.symbols import (
     SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol, 
-    StaticType, FunctionType, ClassType, ModuleType,
+    StaticType, FunctionType, ClassType, ModuleType, ListType, DictType,
     STATIC_ANY, STATIC_VOID, STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL, STATIC_BEHAVIOR
 )
-from core.domain.static_types import get_builtin_type
+from core.domain.symbols import get_builtin_type
 from .prelude import Prelude
 from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
 from .resolver import TypeResolver
-from ..result import CompilationResult
+from core.domain.blueprint import CompilationResult
 
 class SemanticAnalyzer:
     """
@@ -32,11 +32,11 @@ class SemanticAnalyzer:
         self.current_return_type: Optional[StaticType] = None
         self.current_class: Optional[ClassType] = None
         self.in_behavior_expr = False
-        self.scene_stack = [ast.Scene.GENERAL] # 场景上下文栈
-        self.node_scenes: Dict[str, ast.Scene] = {} # 侧表：节点 UID -> 场景
-        self.node_to_symbol: Dict[str, str] = {} # 侧表：节点 UID -> 符号 UID
-        self.node_to_type: Dict[str, str] = {} # 侧表：节点 UID -> 类型名称
-        self.node_is_deferred: Dict[str, bool] = {} # 侧表：行为描述行是否延迟执行 (Lambda)
+        self.scene_stack = [ast.IbScene.GENERAL] # 场景上下文栈
+        self.node_scenes: Dict[ast.IbASTNode, ast.IbScene] = {} # 侧表：节点 ID -> 场景
+        self.node_to_symbol: Dict[ast.IbASTNode, symbols.Symbol] = {} # 侧表：节点 -> 符号
+        self.node_to_type: Dict[ast.IbASTNode, str] = {} # 侧表：节点 ID -> 类型名称
+        self.node_is_deferred: Dict[ast.IbASTNode, bool] = {} # 侧表：行为描述行是否延迟执行 (Lambda)
 
     def _init_builtins(self):
         """注册内置静态符号"""
@@ -52,7 +52,7 @@ class SemanticAnalyzer:
             sym = TypeSymbol(name=name, kind=SymbolKind.BUILTIN_TYPE, static_type=type_info)
             self.symbol_table.define(sym)
 
-    def analyze(self, node: ast.ASTNode) -> CompilationResult:
+    def analyze(self, node: ast.IbASTNode) -> CompilationResult:
         self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Starting static semantic analysis...")
         
         # 初始化内置符号
@@ -83,7 +83,7 @@ class SemanticAnalyzer:
         self.issue_tracker.check_errors()
 
         return CompilationResult(
-            module_ast=node if isinstance(node, ast.Module) else None,
+            module_ast=node if isinstance(node, ast.IbModule) else None,
             symbol_table=self.symbol_table,
             node_scenes=self.node_scenes,
             node_to_symbol=self.node_to_symbol,
@@ -91,36 +91,36 @@ class SemanticAnalyzer:
             node_is_deferred=self.node_is_deferred
         )
 
-    def visit(self, node: ast.ASTNode) -> StaticType:
+    def visit(self, node: ast.IbASTNode) -> StaticType:
         # [NEW] 记录场景上下文侧表
-        if isinstance(node, ast.Expr):
-            self.node_scenes[node.uid] = self.scene_stack[-1]
+        if isinstance(node, ast.IbExpr):
+            self.node_scenes[node] = self.scene_stack[-1]
 
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
         res_type = visitor(node)
         
         # [NEW Phase 5] 记录类型推导侧表
-        if isinstance(node, ast.Expr) and res_type:
-            self.node_to_type[node.uid] = res_type.name
+        if isinstance(node, ast.IbExpr) and res_type:
+            self.node_to_type[node] = res_type.name
             
         return res_type
 
-    def generic_visit(self, node: ast.ASTNode) -> StaticType:
+    def generic_visit(self, node: ast.IbASTNode) -> StaticType:
         """
         [AUDIT] 严格访问模式：对于未明确处理的节点，不再静默返回 Any。
         """
         # 允许某些辅助节点（如 arg, alias）被跳过
-        if isinstance(node, (ast.arg, ast.alias)):
+        if isinstance(node, (ast.IbArg, ast.IbAlias)):
             return STATIC_ANY
             
         self.error(f"Internal compiler error: Unhandled AST node type '{node.__class__.__name__}'", node, code="INTERNAL_ERROR")
         return STATIC_ANY
 
-    def error(self, message: str, node: ast.ASTNode, code: str = "SEMANTIC_ERROR"):
+    def error(self, message: str, node: ast.IbASTNode, code: str = "SEMANTIC_ERROR"):
         self.issue_tracker.error(message, node)
 
-    def _visit_llmexcept(self, fallback: Optional[List[ast.Stmt]]):
+    def _visit_llmexcept(self, fallback: Optional[List[ast.IbStmt]]):
         """访问 llmexcept (llm_fallback) 块"""
         if fallback:
             # [Pass 2.5] 使用独立的 LocalSymbolCollector 进行预扫描
@@ -130,13 +130,13 @@ class SemanticAnalyzer:
 
     # --- 访问者实现 ---
 
-    def visit_Module(self, node: ast.Module):
+    def visit_IbModule(self, node: ast.IbModule):
         # [Pass 2.5] 预扫描模块作用域
         LocalSymbolCollector(self.symbol_table, self).collect(node.body)
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_GlobalStmt(self, node: ast.GlobalStmt):
+    def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt):
         # 1. 检查是否在全局作用域使用 global
         if self.symbol_table.parent is None:
             self.error("Global declaration is not allowed in global scope", node)
@@ -153,12 +153,12 @@ class SemanticAnalyzer:
             # 3. 记录到当前作用域的 global_refs
             self.symbol_table.global_refs.add(name)
 
-    def visit_ClassDef(self, node: ast.ClassDef):
+    def visit_IbClassDef(self, node: ast.IbClassDef):
         sym = self.symbol_table.resolve(node.name)
         if not sym or not isinstance(sym, symbols.TypeSymbol):
             return
             
-        self.node_to_symbol[node.uid] = sym.uid
+        self.node_to_symbol[node] = sym
         
         old_table = self.symbol_table
         if sym.owned_scope:
@@ -173,21 +173,37 @@ class SemanticAnalyzer:
             self.current_class = old_class
             self.symbol_table = old_table
 
-    def _define_var(self, name: str, var_type: StaticType, node: ast.ASTNode, allow_overwrite: bool = False):
+    def _define_var(self, name: str, var_type: StaticType, node: ast.IbASTNode, allow_overwrite: bool = False):
         try:
-            sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, var_type=var_type, node_uid=node.uid)
+            # [NEW] 如果符号已由 Scheduler 注入（如模块导入），则不再重新定义，仅绑定 UID
+            existing = self.symbol_table.resolve(name)
+            if existing:
+                # 检查是否已在当前作用域定义
+                if name in self.symbol_table.symbols:
+                    if not allow_overwrite:
+                        self.node_to_symbol[node] = existing
+                        return existing
+                else:
+                    # 如果是全局变量在局部同名定义，这是 shadowing，允许
+                    if existing.kind == SymbolKind.VARIABLE and any(existing is s for s in self.symbol_table.get_global_scope().symbols.values()):
+                        pass # Shadowing is allowed
+                    elif not allow_overwrite:
+                        self.node_to_symbol[node] = existing
+                        return existing
+
+            sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, var_type=var_type, def_node=node)
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
             # [NEW Phase 5] 记录侧表映射
-            self.node_to_symbol[node.uid] = sym.uid
+            self.node_to_symbol[node] = sym
             return sym
         except ValueError as e:
             self.error(str(e), node)
             return None
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
+    def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         sym = self.symbol_table.resolve(node.name)
         if sym:
-            self.node_to_symbol[node.uid] = sym.uid
+            self.node_to_symbol[node] = sym
             
         ret_type = sym.return_type if isinstance(sym, symbols.FunctionSymbol) else STATIC_VOID
         
@@ -212,12 +228,12 @@ class SemanticAnalyzer:
             
             # 获取参数名节点
             name_node = arg_node
-            if isinstance(arg_node, ast.TypeAnnotatedExpr):
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 name_node = arg_node.target
             
-            if isinstance(name_node, ast.arg):
+            if isinstance(name_node, ast.IbArg):
                 self._define_var(name_node.arg, arg_type, name_node)
-            elif isinstance(name_node, ast.Name):
+            elif isinstance(name_node, ast.IbName):
                 self._define_var(name_node.id, arg_type, name_node)
             
         # [Pass 2.5] 预扫描局部作用域
@@ -232,10 +248,10 @@ class SemanticAnalyzer:
             self.current_return_type = old_ret
             self.symbol_table = old_table
 
-    def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
+    def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         sym = self.symbol_table.resolve(node.name)
         if sym:
-            self.node_to_symbol[node.uid] = sym.uid
+            self.node_to_symbol[node] = sym
             
         # 进入局部作用域以校验提示词中的占位符
         old_table = self.symbol_table
@@ -255,12 +271,12 @@ class SemanticAnalyzer:
             
             # 获取参数名节点
             name_node = arg_node
-            if isinstance(arg_node, ast.TypeAnnotatedExpr):
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 name_node = arg_node.target
             
-            if isinstance(name_node, ast.arg):
+            if isinstance(name_node, ast.IbArg):
                 self._define_var(name_node.arg, arg_type, name_node)
-            elif isinstance(name_node, ast.Name):
+            elif isinstance(name_node, ast.IbName):
                 self._define_var(name_node.id, arg_type, name_node)
             
         # [Pass 2.5] 预扫描局部作用域（LLM 函数虽然没有标准 body，但其 prompt 中可能涉及变量引用）
@@ -271,16 +287,16 @@ class SemanticAnalyzer:
             # 校验提示词段落中的表达式
             if node.sys_prompt:
                 for segment in node.sys_prompt:
-                    if isinstance(segment, ast.ASTNode):
+                    if isinstance(segment, ast.IbASTNode):
                         self.visit(segment)
             if node.user_prompt:
                 for segment in node.user_prompt:
-                    if isinstance(segment, ast.ASTNode):
+                    if isinstance(segment, ast.IbASTNode):
                         self.visit(segment)
         finally:
             self.symbol_table = old_table
 
-    def visit_Return(self, node: ast.Return):
+    def visit_IbReturn(self, node: ast.IbReturn):
         if node.value:
             ret_type = self.visit(node.value)
             if self.current_return_type and not ret_type.is_assignable_to(self.current_return_type):
@@ -289,95 +305,74 @@ class SemanticAnalyzer:
             if self.current_return_type and self.current_return_type != STATIC_VOID:
                 self.error(f"Invalid return type: expected '{self.current_return_type.name}', got 'void'", node)
 
-    def visit_Assign(self, node: ast.Assign):
-        # 1. 提取所有赋值目标中的变量名 (处理 Name 和 TypeAnnotatedExpr)
+    def visit_IbAssign(self, node: ast.IbAssign):
+        # 1. 预先计算右值类型，避免在循环中重复 visit
+        val_type = self.visit(node.value) if node.value else STATIC_ANY
+        
+        # 2. 提取所有赋值目标中的变量名
         assigned_names = SymbolExtractor.get_assigned_names(node)
         
-        # 2. 遍历所有 target 节点进行语义检查
+        # 3. 遍历所有 target 节点进行语义检查
         for target_node in node.targets:
-            # 获取该 target 对应的变量名（如果有）
             var_name = None
             declared_type = None
-            sym = None # [FIX] 初始化，避免跨迭代污染
+            sym = None
             actual_target = target_node
             
-            if isinstance(target_node, ast.TypeAnnotatedExpr):
+            if isinstance(target_node, ast.IbTypeAnnotatedExpr):
                 declared_type = self._resolve_type(target_node.annotation)
-                if isinstance(target_node.target, ast.Name):
+                if isinstance(target_node.target, ast.IbName):
                     var_name = target_node.target.id
-            elif isinstance(target_node, ast.Name):
+            elif isinstance(target_node, ast.IbName):
                 var_name = target_node.id
             
             if var_name:
                 # 处理变量赋值/声明
                 if declared_type:
-                    # 显式类型标注：局部优先原则
+                    # 显式类型标注：检查是否冲突
                     if var_name in self.symbol_table.global_refs:
                         self.error(f"Cannot redeclare global variable '{var_name}' with type annotation", node)
                     
                     sym = self.symbol_table.symbols.get(var_name)
                     if not sym or sym.type_info.name in ("Any", "var"):
-                        val_type = self.visit(node.value) if node.value else STATIC_ANY
-                        if declared_type.name in ("var", "Any"):
-                            sym = symbols.VariableSymbol(name=var_name, kind=symbols.SymbolKind.VARIABLE, var_type=val_type, node_uid=node.uid)
-                        else:
-                            sym = symbols.VariableSymbol(name=var_name, kind=symbols.SymbolKind.VARIABLE, var_type=declared_type, node_uid=node.uid)
-                        
+                        target_type = declared_type if declared_type.name not in ("var", "Any") else val_type
+                        sym = symbols.VariableSymbol(name=var_name, kind=symbols.SymbolKind.VARIABLE, var_type=target_type, def_node=node)
                         try:
                             self.symbol_table.define(sym, allow_overwrite=True)
-                            self.node_to_symbol[actual_target.uid] = sym.uid
                         except ValueError as e:
                             self.error(str(e), node)
                 
-                if sym:
-                    # 如果 target_node 是 TypeAnnotatedExpr，我们也给内部 Name 绑上 UID
-                    if isinstance(target_node, ast.TypeAnnotatedExpr) and isinstance(target_node.target, ast.Name):
-                        self.node_to_symbol[target_node.target.uid] = sym.uid
-                    else:
-                        self.node_to_symbol[actual_target.uid] = sym.uid
-                    
-                    if node.value:
-                        val_type = self.visit(node.value)
-                        
-                        # [NEW] 行为描述行 Lambda 化判断：如果目标类型是 callable
-                        if isinstance(node.value, ast.BehaviorExpr) and sym.type_info.name == "callable":
-                            self.node_is_deferred[node.value.uid] = True
-                        
-                        if not val_type.is_assignable_to(sym.type_info):
-                            self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node)
-                else:
-                    # 无标注赋值
+                if not sym:
+                    # 无标注赋值或已存在符号
                     if var_name in self.symbol_table.global_refs:
                         global_scope = self.symbol_table.get_global_scope()
                         sym = global_scope.resolve(var_name)
-                        if node.value:
-                            val_type = self.visit(node.value)
-                            if not val_type.is_assignable_to(sym.type_info):
-                                self.error(f"Type mismatch: Cannot assign '{val_type.name}' to global '{var_name}' of type '{sym.type_info.name}'", node)
                     else:
                         sym = self.symbol_table.symbols.get(var_name)
                         if not sym or sym.type_info.name in ("Any", "var"):
-                            val_type = self.visit(node.value) if node.value else STATIC_ANY
                             sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
-                        
-                        if sym:
-                            self.node_to_symbol[actual_target.uid] = sym.uid
-                            if node.value:
-                                val_type = self.visit(node.value)
-                                if not val_type.is_assignable_to(sym.type_info):
-                                    self.error(f"Type mismatch: Cannot assign '{val_type.name}' to local '{var_name}' of type '{sym.type_info.name}'", node)
+
+                if sym:
+                    self.node_to_symbol[actual_target] = sym
+                    if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
+                        self.node_to_symbol[target_node.target] = sym
+                    
+                    # [NEW] 行为描述行 Lambda 化判断
+                    if isinstance(node.value, ast.IbBehaviorExpr) and sym.type_info.is_callable:
+                        self.node_is_deferred[node.value] = True
+                    
+                    if not val_type.is_assignable_to(sym.type_info):
+                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node)
             else:
                 # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
-                if node.value:
-                    val_type = self.visit(node.value)
-                    if not val_type.is_assignable_to(target_type):
-                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node)
+                if not val_type.is_assignable_to(target_type):
+                    self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node)
 
-    def visit_If(self, node: ast.If):
+    def visit_IbIf(self, node: ast.IbIf):
         self.visit(node.test)
         
-        self.scene_stack.append(ast.Scene.BRANCH)
+        self.scene_stack.append(ast.IbScene.BRANCH)
         try:
             for stmt in node.body:
                 self.visit(stmt)
@@ -386,10 +381,10 @@ class SemanticAnalyzer:
         finally:
             self.scene_stack.pop()
 
-    def visit_While(self, node: ast.While):
+    def visit_IbWhile(self, node: ast.IbWhile):
         self.visit(node.test)
         
-        self.scene_stack.append(ast.Scene.LOOP)
+        self.scene_stack.append(ast.IbScene.LOOP)
         try:
             for stmt in node.body:
                 self.visit(stmt)
@@ -398,10 +393,10 @@ class SemanticAnalyzer:
         finally:
             self.scene_stack.pop()
 
-    def visit_For(self, node: ast.For):
+    def visit_IbFor(self, node: ast.IbFor):
         iter_type = self.visit(node.iter)
-        # 获取迭代元素的类型
-        element_type = iter_type.element_type
+        # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
+        element_type = iter_type.get_iterator_type()
         
         for var_name, target in SymbolExtractor.get_assigned_names(node):
             # 检查是否已在 Pass 2.5 预扫描中定义
@@ -414,23 +409,23 @@ class SemanticAnalyzer:
                 sym.var_type = element_type
             
             if sym:
-                self.node_to_symbol[target.uid] = sym.uid # [FIX] 同步 UID
+                self.node_to_symbol[target] = sym # [FIX] 同步 UID
         
-        self.scene_stack.append(ast.Scene.LOOP)
+        self.scene_stack.append(ast.IbScene.LOOP)
         try:
             for stmt in node.body:
                 self.visit(stmt)
         finally:
             self.scene_stack.pop()
 
-    def visit_ExprStmt(self, node: ast.ExprStmt):
+    def visit_IbExprStmt(self, node: ast.IbExprStmt):
         return self.visit(node.value)
 
-    def visit_AugAssign(self, node: ast.AugAssign):
+    def visit_IbAugAssign(self, node: ast.IbAugAssign):
         self.visit(node.target)
         self.visit(node.value)
 
-    def visit_Try(self, node: ast.Try):
+    def visit_IbTry(self, node: ast.IbTry):
         for stmt in node.body:
             self.visit(stmt)
         for handler in node.handlers:
@@ -440,7 +435,7 @@ class SemanticAnalyzer:
         for stmt in node.finalbody:
             self.visit(stmt)
 
-    def visit_ExceptHandler(self, node: ast.ExceptHandler):
+    def visit_IbExceptHandler(self, node: ast.IbExceptHandler):
         if node.type:
             self.visit(node.type)
         for var_name, target in SymbolExtractor.get_assigned_names(node):
@@ -450,29 +445,43 @@ class SemanticAnalyzer:
                 sym = self._define_var(var_name, STATIC_ANY, node, allow_overwrite=(sym is not None))
             
             if sym:
-                self.node_to_symbol[target.uid] = sym.uid # [AUDIT] 补全异常变量的 UID 绑定
+                self.node_to_symbol[target] = sym # [AUDIT] 补全异常变量的 UID 绑定
             # 简单起见，暂时将异常变量视为 Any
         
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_Pass(self, node: ast.Pass):
+    def visit_IbPass(self, node: ast.IbPass):
         return STATIC_VOID
 
-    def visit_Break(self, node: ast.Break):
+    def visit_IbBreak(self, node: ast.IbBreak):
         return STATIC_VOID
 
-    def visit_Continue(self, node: ast.Continue):
+    def visit_IbContinue(self, node: ast.IbContinue):
         return STATIC_VOID
 
-    def visit_Import(self, node: ast.Import):
-        # 语义阶段仅校验，不执行导入逻辑（由 Scheduler 处理）
+    def visit_IbImport(self, node: ast.IbImport):
+        # 在符号表中定义导入的名称
+        for alias in node.names:
+            name = alias.asname or alias.name
+            # 定义为变量，类型为 Any (暂时不支持跨模块成员类型推导)
+            sym = self._define_var(name, STATIC_ANY, node)
+            if sym:
+                sym.metadata["is_builtin"] = True
         return STATIC_VOID
 
-    def visit_ImportFrom(self, node: ast.ImportFrom):
+    def visit_IbImportFrom(self, node: ast.IbImportFrom):
+        for alias in node.names:
+            if alias.name == '*':
+                # import * 逻辑在静态分析阶段暂时跳过
+                continue
+            name = alias.asname or alias.name
+            sym = self._define_var(name, STATIC_ANY, node)
+            if sym:
+                sym.metadata["is_builtin"] = True
         return STATIC_VOID
 
-    def visit_IntentStmt(self, node: ast.IntentStmt):
+    def visit_IbIntentStmt(self, node: ast.IbIntentStmt):
         # 访问意图元数据
         self.visit(node.intent)
         # 访问意图块内部
@@ -480,30 +489,30 @@ class SemanticAnalyzer:
             self.visit(stmt)
         return STATIC_VOID
 
-    def visit_AnnotatedStmt(self, node: ast.AnnotatedStmt):
+    def visit_IbAnnotatedStmt(self, node: ast.IbAnnotatedStmt):
         """处理带意图注释的语句包装节点"""
         # [NEW] 显式访问意图节点，确保其进入序列化池
         self.visit(node.intent)
         return self.visit(node.stmt)
 
-    def visit_AnnotatedExpr(self, node: ast.AnnotatedExpr):
+    def visit_IbAnnotatedExpr(self, node: ast.IbAnnotatedExpr):
         """处理带意图注释的表达式包装节点"""
         # [NEW] 显式访问意图节点
         self.visit(node.intent)
         return self.visit(node.expr)
 
-    def visit_IntentInfo(self, node: ast.IntentInfo):
+    def visit_IbIntentInfo(self, node: ast.IbIntentInfo):
         """访问意图元数据节点"""
         # 如果意图中有动态表达式，需要访问
         if node.expr:
             self.visit(node.expr)
         if node.segments:
             for seg in node.segments:
-                if isinstance(seg, ast.ASTNode):
+                if isinstance(seg, ast.IbASTNode):
                     self.visit(seg)
         return STATIC_VOID
 
-    def visit_TypeAnnotatedExpr(self, node: ast.TypeAnnotatedExpr):
+    def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """处理带类型标注的表达式包装节点 (例如 Casts 或声明)"""
         # 1. 解析标注的类型
         annotated_type = self._resolve_type(node.annotation)
@@ -520,7 +529,7 @@ class SemanticAnalyzer:
             
         return annotated_type
 
-    def visit_FilteredExpr(self, node: ast.FilteredExpr):
+    def visit_IbFilteredExpr(self, node: ast.IbFilteredExpr):
         """处理带过滤条件的表达式包装节点 (e.g., expr if filter)"""
         # 1. 访问被包装的表达式 (例如 While 的 test 或 For 的 iter)
         inner_type = self.visit(node.expr)
@@ -531,7 +540,7 @@ class SemanticAnalyzer:
         # 3. 过滤后，表达式的类型保持不变
         return inner_type
 
-    def visit_LLMExceptionalStmt(self, node: ast.LLMExceptionalStmt):
+    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
         """统一处理 LLM 回退逻辑包装节点"""
         # 1. 访问主语句
         self.visit(node.primary)
@@ -539,17 +548,17 @@ class SemanticAnalyzer:
         self._visit_llmexcept(node.fallback)
         return STATIC_VOID
 
-    def visit_Raise(self, node: ast.Raise):
+    def visit_IbRaise(self, node: ast.IbRaise):
         if node.exc:
             self.visit(node.exc)
         return STATIC_VOID
 
-    def visit_Retry(self, node: ast.Retry):
+    def visit_IbRetry(self, node: ast.IbRetry):
         if node.hint:
             self.visit(node.hint)
         return STATIC_VOID
 
-    def visit_Compare(self, node: ast.Compare) -> StaticType:
+    def visit_IbCompare(self, node: ast.IbCompare) -> StaticType:
         left_type = self.visit(node.left)
         for op, comparator in zip(node.ops, node.comparators):
             right_type = self.visit(comparator)
@@ -561,13 +570,12 @@ class SemanticAnalyzer:
         
         return STATIC_BOOL
 
-    def visit_BoolOp(self, node: ast.BoolOp) -> StaticType:
+    def visit_IbBoolOp(self, node: ast.IbBoolOp) -> StaticType:
         for val in node.values:
             self.visit(val)
         return STATIC_BOOL
 
-    def visit_ListExpr(self, node: ast.ListExpr) -> StaticType:
-        from core.domain.symbols import ListType
+    def visit_IbListExpr(self, node: ast.IbListExpr) -> StaticType:
         element_type = STATIC_ANY
         if node.elts:
             element_type = self.visit(node.elts[0])
@@ -577,8 +585,7 @@ class SemanticAnalyzer:
         res = ListType(element_type)
         return res
 
-    def visit_Dict(self, node: ast.Dict) -> StaticType:
-        from core.domain.symbols import DictType
+    def visit_IbDict(self, node: ast.IbDict) -> StaticType:
         key_type = STATIC_ANY
         val_type = STATIC_ANY
         
@@ -594,13 +601,19 @@ class SemanticAnalyzer:
                 
         return DictType(key_type, val_type)
 
-    def visit_Subscript(self, node: ast.Subscript) -> StaticType:
+    def visit_IbSubscript(self, node: ast.IbSubscript) -> StaticType:
         value_type = self.visit(node.value)
-        self.visit(node.slice)
-        res = value_type.element_type
+        key_type = self.visit(node.slice)
+        
+        # 贯彻“一切皆对象”协议：询问类型如何处理下标
+        if not value_type.is_subscriptable:
+            self.error(f"Type '{value_type.name}' is not subscriptable", node)
+            return STATIC_ANY
+            
+        res = value_type.get_subscript_type(key_type)
         return res
 
-    def visit_BinOp(self, node: ast.BinOp) -> StaticType:
+    def visit_IbBinOp(self, node: ast.IbBinOp) -> StaticType:
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
         
@@ -611,7 +624,7 @@ class SemanticAnalyzer:
             return STATIC_ANY
         return res
 
-    def visit_UnaryOp(self, node: ast.UnaryOp) -> StaticType:
+    def visit_IbUnaryOp(self, node: ast.IbUnaryOp) -> StaticType:
         operand_type = self.visit(node.operand)
         
         # 贯彻“一切皆对象”：调用操作数的自决议方法 (other=None 表示一元运算)
@@ -621,7 +634,7 @@ class SemanticAnalyzer:
             return STATIC_ANY
         return res
 
-    def visit_Constant(self, node: ast.Constant) -> StaticType:
+    def visit_IbConstant(self, node: ast.IbConstant) -> StaticType:
         val = node.value
         res = STATIC_ANY
         if isinstance(val, bool): res = STATIC_BOOL
@@ -631,7 +644,7 @@ class SemanticAnalyzer:
         elif val is None: res = STATIC_VOID
         return res
 
-    def visit_Name(self, node: ast.Name) -> StaticType:
+    def visit_IbName(self, node: ast.IbName) -> StaticType:
         # 1. 解析符号
         sym = self.symbol_table.resolve(node.id)
         
@@ -642,38 +655,43 @@ class SemanticAnalyzer:
             self.error(msg, node)
             return STATIC_ANY
 
-        # 2. [AUDIT] 强制显式全局声明规则：
-        # 如果符号定义在顶层全局作用域，且当前处于局部作用域，则必须显式声明 global
+        # 2. [AUDIT] 显式全局声明规则优化：
+        # - 内置类型、模块、全局函数、全局类允许直接访问（只读/调用）
+        # - 全局变量在局部作用域修改或作为普通 Name 访问时，若非上述类型，则需声明 global
         if self.symbol_table.parent is not None:
             global_scope = self.symbol_table.get_global_scope()
-            # 检查解析出的符号是否来自全局作用域
-            if node.id in global_scope.symbols and sym == global_scope.symbols[node.id]:
-                is_builtin = sym.kind == symbols.SymbolKind.BUILTIN_TYPE or sym.metadata.get("is_builtin")
-                if not is_builtin and node.id not in self.symbol_table.global_refs:
-                    self.error(f"Global variable '{node.id}' must be declared with 'global' before use in local scope", node)
-                    return STATIC_ANY
+            if node.id in global_scope.symbols:
+                global_sym = global_scope.symbols[node.id]
+                if sym == global_sym:
+                    is_safe = (
+                        sym.kind in (SymbolKind.BUILTIN_TYPE, SymbolKind.MODULE, SymbolKind.FUNCTION, SymbolKind.CLASS) or
+                        sym.metadata.get("is_builtin")
+                    )
+                    if not is_safe and node.id not in self.symbol_table.global_refs:
+                        self.error(f"Global variable '{node.id}' must be declared with 'global' before use in local scope", node)
+                        return STATIC_ANY
 
-        self.node_to_symbol[node.uid] = sym.uid # 使用 UID 引用
+        self.node_to_symbol[node] = sym # 使用 UID 引用
         
         # 统一获取类型信息，不再需要 isinstance 判断
         res = sym.type_info
             
         return res
 
-    def visit_Attribute(self, node: ast.Attribute) -> StaticType:
+    def visit_IbAttribute(self, node: ast.IbAttribute) -> StaticType:
         base_type = self.visit(node.value)
         
         # 贯彻“一切皆对象”：询问类型对象如何解析其成员
         member_sym = base_type.resolve_member(node.attr)
         if member_sym:
-            self.node_to_symbol[node.uid] = member_sym.uid # 使用 UID 引用
+            self.node_to_symbol[node] = member_sym # 使用 UID 引用
             res = member_sym.type_info
             return res
             
         self.error(f"Type '{base_type.name}' has no member '{node.attr}'", node)
         return STATIC_ANY
 
-    def visit_Call(self, node: ast.Call) -> StaticType:
+    def visit_IbCall(self, node: ast.IbCall) -> StaticType:
         func_type = self.visit(node.func)
         arg_types = [self.visit(arg) for arg in node.args]
         
@@ -703,38 +721,38 @@ class SemanticAnalyzer:
             
         return res
 
-    def visit_BehaviorExpr(self, node: ast.BehaviorExpr) -> StaticType:
+    def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> StaticType:
         self.in_behavior_expr = True
         try:
             for seg in node.segments:
-                if isinstance(seg, ast.ASTNode):
+                if isinstance(seg, ast.IbASTNode):
                     self.visit(seg)
         finally:
             self.in_behavior_expr = False
         return STATIC_BEHAVIOR
 
     def _resolve_type(self, node: Any, safe: bool = False) -> StaticType:
-        if isinstance(node, ast.Name):
+        if isinstance(node, ast.IbName):
             t = get_builtin_type(node.id)
             if t: return t
             sym = self.symbol_table.resolve(node.id)
             if isinstance(sym, symbols.TypeSymbol) and sym.static_type:
                 # [NEW Phase 5] 记录类型引用的符号绑定
-                self.node_to_symbol[node.uid] = sym.uid
+                self.node_to_symbol[node] = sym
                 return sym.static_type
             self.error(f"Unknown type '{node.id}'", node)
-        elif isinstance(node, ast.Attribute):
+        elif isinstance(node, ast.IbAttribute):
             # 处理 a.b 形式的类型 (如插件中的类)
             # [AUDIT] 在 safe 模式下（如预扫描阶段），禁止触发 visit()
             if safe:
                 # 降级处理：仅支持简单的名称解析，不支持复杂的表达式类型
-                if isinstance(node.value, ast.Name):
+                if isinstance(node.value, ast.IbName):
                     base_sym = self.symbol_table.resolve(node.value.id)
                     if base_sym and base_sym.type_info:
                         member_sym = base_sym.type_info.resolve_member(node.attr)
                         if member_sym and isinstance(member_sym, symbols.TypeSymbol):
                             # [NEW Phase 5] 记录类型引用的符号绑定
-                            self.node_to_symbol[node.uid] = member_sym.uid
+                            self.node_to_symbol[node] = member_sym
                             return member_sym.static_type
                 return STATIC_ANY
                 
@@ -742,40 +760,40 @@ class SemanticAnalyzer:
             member_sym = base_type.resolve_member(node.attr)
             if member_sym and isinstance(member_sym, symbols.TypeSymbol) and member_sym.static_type:
                 # [NEW Phase 5] 记录类型引用的符号绑定
-                self.node_to_symbol[node.uid] = member_sym.uid
+                self.node_to_symbol[node] = member_sym
                 return member_sym.static_type
             self.error(f"Unknown type '{node.attr}' in '{base_type.name}'", node)
         return STATIC_ANY
 
-    def _validate_integrity(self, root: ast.ASTNode):
+    def _validate_integrity(self, root: ast.IbASTNode):
         """[Phase 5] 语义完整性自检：确保所有引用节点都已绑定到侧表"""
         self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Performing semantic integrity self-check...")
         
         missing_bindings = []
         
         # 定义需要校验的节点集合
-        BINDING_REQUIRED = (ast.Name, ast.Attribute, ast.FunctionDef, ast.ClassDef, ast.LLMFunctionDef, ast.arg)
+        BINDING_REQUIRED = (ast.IbName, ast.IbAttribute, ast.IbFunctionDef, ast.IbClassDef, ast.IbLLMFunctionDef, ast.IbArg)
         
         def check(node: Any):
-            if not isinstance(node, ast.ASTNode):
+            if not isinstance(node, ast.IbASTNode):
                 return
             
             # 1. 检查符号绑定侧表
             if isinstance(node, BINDING_REQUIRED):
                 # 排除内置类型 Name 节点，它们由解析器动态创建，通常不参与符号绑定
-                if isinstance(node, ast.Name) and node.id in ("int", "str", "float", "bool", "Any", "var", "none", "None"):
+                if isinstance(node, ast.IbName) and node.id in ("int", "str", "float", "bool", "Any", "var", "none", "None"):
                     pass
-                elif node.uid not in self.node_to_symbol:
+                elif node not in self.node_to_symbol:
                     # 获取更具体的节点标识名
                     node_name = getattr(node, 'id', getattr(node, 'name', getattr(node, 'attr', 'unnamed')))
-                    missing_bindings.append(f"{node.__class__.__name__} '{node_name}' (UID: {node.uid})")
+                    missing_bindings.append(f"{node.__class__.__name__} '{node_name}' (ID: {node})")
             
             # 2. 递归遍历子节点
             for attr in vars(node):
                 val = getattr(node, attr)
                 if isinstance(val, list):
                     for item in val: check(item)
-                elif isinstance(val, ast.ASTNode):
+                elif isinstance(val, ast.IbASTNode):
                     check(val)
 
         check(root)

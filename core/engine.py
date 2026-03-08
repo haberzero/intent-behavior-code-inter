@@ -8,9 +8,10 @@ from core.compiler.support.issue_adapter import wrap_tracker
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.support.host_interface import HostInterface
-from core.foundation.types import ModuleMetadata
-from core.domain.diagnostics import CompilerError
-from core.domain.exceptions import InterpreterError
+from core.domain.types import ModuleMetadata
+from core.domain.blueprint import CompilationArtifact
+from core.domain.issue import CompilerError
+from core.domain.issue import InterpreterError, LexerError, ParserError, SemanticError
 from core.support.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
 
 class IBCIEngine:
@@ -149,9 +150,14 @@ class IBCIEngine:
         self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Compiling project: {abs_entry}")
         return self.scheduler.compile_project(abs_entry)
 
-    def execute(self, artifact: Any, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
+    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
         """执行编译后的蓝图"""
-        self._prepare_interpreter(artifact, output_callback)
+        # 1. 序列化蓝图为字典池 (这是解释器要求的格式)
+        from core.compiler.serialization.serializer import FlatSerializer
+        serializer = FlatSerializer()
+        artifact_dict = serializer.serialize_artifact(artifact)
+        
+        self._prepare_interpreter(artifact_dict, output_callback)
         
         # 1. 注入初始变量
         if variables:

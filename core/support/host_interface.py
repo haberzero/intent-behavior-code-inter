@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-from core.foundation.types import (
+from core.domain.types import (
     TypeDescriptor, INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
     BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, 
     ModuleMetadata, FunctionMetadata

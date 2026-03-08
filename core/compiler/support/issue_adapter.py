@@ -1,7 +1,7 @@
 from typing import Optional, Any, Union, List
 from .diagnostics import DiagnosticReporter, DiagnosticSeverity
 from core.support.diagnostics.issue_tracker import IssueTracker
-from core.domain.diagnostics import Severity
+from core.domain.issue import Severity
 
 class IssueTrackerAdapter(DiagnosticReporter):
     """

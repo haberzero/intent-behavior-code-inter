@@ -1,25 +1,25 @@
 from typing import Dict, Optional, List, Union
 from core.domain.tokens import TokenType
 from core.domain import ast as ast
-from core.domain.ast import Precedence, ParseRule
+from core.domain.ast import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
 
 class ExpressionComponent(BaseComponent):
     def __init__(self, context):
         super().__init__(context)
-        self.rules: Dict[TokenType, ParseRule] = {}
+        self.rules: Dict[TokenType, IbParseRule] = {}
         self.register_rules()
 
     def register(self, type: TokenType, prefix, infix, precedence):
-        self.rules[type] = ParseRule(prefix, infix, precedence)
+        self.rules[type] = IbParseRule(prefix, infix, precedence)
 
-    def get_rule(self, type: TokenType) -> ParseRule:
-        return self.rules.get(type, ParseRule(None, None, Precedence.LOWEST))
+    def get_rule(self, type: TokenType) -> IbParseRule:
+        return self.rules.get(type, IbParseRule(None, None, IbPrecedence.LOWEST))
 
-    def parse_expression(self, precedence: Precedence = Precedence.LOWEST) -> ast.Expr:
+    def parse_expression(self, precedence: IbPrecedence = IbPrecedence.LOWEST) -> ast.IbExpr:
         return self.parse_precedence(precedence)
 
-    def parse_precedence(self, precedence: Precedence) -> ast.Expr:
+    def parse_precedence(self, precedence: IbPrecedence) -> ast.IbExpr:
         token = self.stream.advance()
         rule = self.get_rule(token.type)
         prefix = rule.prefix
@@ -39,80 +39,80 @@ class ExpressionComponent(BaseComponent):
 
     def register_rules(self):
         # Literals and Identifiers
-        self.register(TokenType.IDENTIFIER, self.variable, None, Precedence.LOWEST)
-        self.register(TokenType.SELF, self.self_expr, None, Precedence.LOWEST)
-        self.register(TokenType.NUMBER, self.number, None, Precedence.LOWEST)
-        self.register(TokenType.STRING, self.string, None, Precedence.LOWEST)
-        self.register(TokenType.BOOL, self.boolean, None, Precedence.LOWEST)
-        self.register(TokenType.NONE, self.none_expr, None, Precedence.LOWEST)
+        self.register(TokenType.IDENTIFIER, self.variable, None, IbPrecedence.LOWEST)
+        self.register(TokenType.SELF, self.self_expr, None, IbPrecedence.LOWEST)
+        self.register(TokenType.NUMBER, self.number, None, IbPrecedence.LOWEST)
+        self.register(TokenType.STRING, self.string, None, IbPrecedence.LOWEST)
+        self.register(TokenType.BOOL, self.boolean, None, IbPrecedence.LOWEST)
+        self.register(TokenType.NONE, self.none_expr, None, IbPrecedence.LOWEST)
         
         # Grouping and Collections
-        self.register(TokenType.LPAREN, self.grouping, self.call, Precedence.CALL)
-        self.register(TokenType.LBRACKET, self.list_display, self.subscript, Precedence.CALL)
-        self.register(TokenType.LBRACE, self.dict_display, None, Precedence.LOWEST)
+        self.register(TokenType.LPAREN, self.grouping, self.call, IbPrecedence.CALL)
+        self.register(TokenType.LBRACKET, self.list_display, self.subscript, IbPrecedence.CALL)
+        self.register(TokenType.LBRACE, self.dict_display, None, IbPrecedence.LOWEST)
         
         # Unary Operations
-        self.register(TokenType.MINUS, self.unary, self.binary, Precedence.TERM)
-        self.register(TokenType.PLUS, None, self.binary, Precedence.TERM)
-        self.register(TokenType.NOT, self.unary, None, Precedence.UNARY)
-        self.register(TokenType.BIT_NOT, self.unary, None, Precedence.UNARY)
+        self.register(TokenType.MINUS, self.unary, self.binary, IbPrecedence.TERM)
+        self.register(TokenType.PLUS, None, self.binary, IbPrecedence.TERM)
+        self.register(TokenType.NOT, self.unary, None, IbPrecedence.UNARY)
+        self.register(TokenType.BIT_NOT, self.unary, None, IbPrecedence.UNARY)
         
         # Binary Operations
-        self.register(TokenType.STAR, None, self.binary, Precedence.FACTOR)
-        self.register(TokenType.SLASH, None, self.binary, Precedence.FACTOR)
-        self.register(TokenType.PERCENT, None, self.binary, Precedence.FACTOR)
+        self.register(TokenType.STAR, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.SLASH, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.PERCENT, None, self.binary, IbPrecedence.FACTOR)
         
         # Bitwise Operations
-        self.register(TokenType.BIT_AND, None, self.binary, Precedence.BIT_AND)
-        self.register(TokenType.BIT_OR, None, self.binary, Precedence.BIT_OR)
-        self.register(TokenType.BIT_XOR, None, self.binary, Precedence.BIT_XOR)
-        self.register(TokenType.LSHIFT, None, self.binary, Precedence.SHIFT)
-        self.register(TokenType.RSHIFT, None, self.binary, Precedence.SHIFT)
+        self.register(TokenType.BIT_AND, None, self.binary, IbPrecedence.BIT_AND)
+        self.register(TokenType.BIT_OR, None, self.binary, IbPrecedence.BIT_OR)
+        self.register(TokenType.BIT_XOR, None, self.binary, IbPrecedence.BIT_XOR)
+        self.register(TokenType.LSHIFT, None, self.binary, IbPrecedence.SHIFT)
+        self.register(TokenType.RSHIFT, None, self.binary, IbPrecedence.SHIFT)
         
         # Comparisons
-        self.register(TokenType.GT, None, self.binary, Precedence.COMPARISON)
-        self.register(TokenType.GE, None, self.binary, Precedence.COMPARISON)
-        self.register(TokenType.LT, None, self.binary, Precedence.COMPARISON)
-        self.register(TokenType.LE, None, self.binary, Precedence.COMPARISON)
-        self.register(TokenType.EQ, None, self.binary, Precedence.EQUALITY)
-        self.register(TokenType.NE, None, self.binary, Precedence.EQUALITY)
+        self.register(TokenType.GT, None, self.binary, IbPrecedence.COMPARISON)
+        self.register(TokenType.GE, None, self.binary, IbPrecedence.COMPARISON)
+        self.register(TokenType.LT, None, self.binary, IbPrecedence.COMPARISON)
+        self.register(TokenType.LE, None, self.binary, IbPrecedence.COMPARISON)
+        self.register(TokenType.EQ, None, self.binary, IbPrecedence.EQUALITY)
+        self.register(TokenType.NE, None, self.binary, IbPrecedence.EQUALITY)
         
         # Logical Operations
-        self.register(TokenType.AND, None, self.logical, Precedence.AND)
-        self.register(TokenType.OR, None, self.logical, Precedence.OR)
+        self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
+        self.register(TokenType.OR, None, self.logical, IbPrecedence.OR)
         
         # Calls and Attributes
-        self.register(TokenType.DOT, None, self.dot, Precedence.CALL)
+        self.register(TokenType.DOT, None, self.dot, IbPrecedence.CALL)
         
         # Behavior
-        self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, Precedence.LOWEST)
+        self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
 
-    def variable(self) -> ast.Expr:
-        return self._loc(ast.Name(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
+    def variable(self) -> ast.IbExpr:
+        return self._loc(ast.IbName(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
 
-    def self_expr(self) -> ast.Expr:
-        return self._loc(ast.Name(id='self', ctx='Load'), self.stream.previous())
+    def self_expr(self) -> ast.IbExpr:
+        return self._loc(ast.IbName(id='self', ctx='Load'), self.stream.previous())
 
-    def number(self) -> ast.Expr:
+    def number(self) -> ast.IbExpr:
         value = self.stream.previous().value
         if '.' in value or 'e' in value or 'E' in value:
             num = float(value)
         else:
             num = int(value)
-        return self._loc(ast.Constant(value=num), self.stream.previous())
+        return self._loc(ast.IbConstant(value=num), self.stream.previous())
 
-    def string(self) -> ast.Expr:
-        return self._loc(ast.Constant(value=self.stream.previous().value), self.stream.previous())
+    def string(self) -> ast.IbExpr:
+        return self._loc(ast.IbConstant(value=self.stream.previous().value), self.stream.previous())
 
-    def boolean(self) -> ast.Expr:
-        return self._loc(ast.Constant(value=self.stream.previous().value == 'True'), self.stream.previous())
+    def boolean(self) -> ast.IbExpr:
+        return self._loc(ast.IbConstant(value=self.stream.previous().value == 'True'), self.stream.previous())
 
-    def none_expr(self) -> ast.Expr:
-        return self._loc(ast.Constant(value=None), self.stream.previous())
+    def none_expr(self) -> ast.IbExpr:
+        return self._loc(ast.IbConstant(value=None), self.stream.previous())
 
-    def grouping(self) -> ast.Expr:
+    def grouping(self) -> ast.IbExpr:
         # Check for Cast Expression: (Type) Expr
         # Heuristic: (ID) followed by something that is not an operator
         if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.RPAREN:
@@ -122,14 +122,14 @@ class ExpressionComponent(BaseComponent):
             if next_after_rparen.type in (TokenType.IDENTIFIER, TokenType.NUMBER, TokenType.STRING, TokenType.LPAREN, TokenType.LBRACKET, TokenType.BEHAVIOR_MARKER):
                 type_token = self.stream.advance() # ID
                 self.stream.consume(TokenType.RPAREN, "Expect ')' after cast type.")
-                value = self.parse_precedence(Precedence.UNARY)
-                return self._loc(ast.CastExpr(type_name=type_token.value, value=value), type_token)
+                value = self.parse_precedence(IbPrecedence.UNARY)
+                return self._loc(ast.IbCastExpr(type_name=type_token.value, value=value), type_token)
         
         expr = self.parse_expression()
         self.stream.consume(TokenType.RPAREN, "Expect ')' after expression.")
         return expr
     
-    def list_display(self) -> ast.Expr:
+    def list_display(self) -> ast.IbExpr:
         start_token = self.stream.previous()
         elts = []
         if not self.stream.check(TokenType.RBRACKET):
@@ -138,9 +138,9 @@ class ExpressionComponent(BaseComponent):
                 if not self.stream.match(TokenType.COMMA):
                     break
         self.stream.consume(TokenType.RBRACKET, "Expect ']' after list elements.")
-        return self._loc(ast.ListExpr(elts=elts, ctx='Load'), start_token)
+        return self._loc(ast.IbListExpr(elts=elts, ctx='Load'), start_token)
 
-    def dict_display(self) -> ast.Expr:
+    def dict_display(self) -> ast.IbExpr:
         start_token = self.stream.previous()
         keys = []
         values = []
@@ -152,16 +152,16 @@ class ExpressionComponent(BaseComponent):
                 if not self.stream.match(TokenType.COMMA):
                     break
         self.stream.consume(TokenType.RBRACE, "Expect '}' after dict entries.")
-        return self._loc(ast.Dict(keys=keys, values=values), start_token)
+        return self._loc(ast.IbDict(keys=keys, values=values), start_token)
 
-    def unary(self) -> ast.Expr:
+    def unary(self) -> ast.IbExpr:
         op_token = self.stream.previous()
         op = op_token.type.name
-        operand = self.parse_precedence(Precedence.UNARY)
+        operand = self.parse_precedence(IbPrecedence.UNARY)
         op_map = {"MINUS": "-", "PLUS": "+", "NOT": "not", "BIT_NOT": "~"}
-        return self._loc(ast.UnaryOp(op=op_map.get(op, op), operand=operand), op_token)
+        return self._loc(ast.IbUnaryOp(op=op_map.get(op, op), operand=operand), op_token)
 
-    def binary(self, left: ast.Expr) -> ast.Expr:
+    def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
         op = op_token.type.name
         rule = self.get_rule(op_token.type)
@@ -177,27 +177,27 @@ class ExpressionComponent(BaseComponent):
         comparison_ops = ("GT", "GE", "LT", "LE", "EQ", "NE")
         
         if op in comparison_ops:
-            if isinstance(left, ast.Compare):
+            if isinstance(left, ast.IbCompare):
                 left.ops.append(op_str)
                 left.comparators.append(right)
                 return left
-            return self._loc(ast.Compare(left=left, ops=[op_str], comparators=[right]), op_token)
+            return self._loc(ast.IbCompare(left=left, ops=[op_str], comparators=[right]), op_token)
         
-        return self._loc(ast.BinOp(left=left, op=op_str, right=right), op_token)
+        return self._loc(ast.IbBinOp(left=left, op=op_str, right=right), op_token)
 
-    def logical(self, left: ast.Expr) -> ast.Expr:
+    def logical(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
         op = "and" if op_token.type == TokenType.AND else "or"
         rule = self.get_rule(op_token.type)
         right = self.parse_precedence(rule.precedence)
         
-        if isinstance(left, ast.BoolOp) and left.op == op:
+        if isinstance(left, ast.IbBoolOp) and left.op == op:
             left.values.append(right)
             return left
             
-        return self._loc(ast.BoolOp(op=op, values=[left, right]), op_token)
+        return self._loc(ast.IbBoolOp(op=op, values=[left, right]), op_token)
 
-    def call(self, left: ast.Expr) -> ast.Call:
+    def call(self, left: ast.IbExpr) -> ast.IbCall:
         start_token = self.stream.previous()
         
         arguments = []
@@ -211,20 +211,20 @@ class ExpressionComponent(BaseComponent):
         self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
         
         # [NEW] 意图节点化：不再向 Call 注入 intent 属性
-        return self._loc(ast.Call(func=left, args=arguments, keywords=[]), start_token)
+        return self._loc(ast.IbCall(func=left, args=arguments, keywords=[]), start_token)
 
-    def dot(self, left: ast.Expr) -> ast.Expr:
+    def dot(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-        return self._loc(ast.Attribute(value=left, attr=name.value, ctx='Load'), op_token)
+        return self._loc(ast.IbAttribute(value=left, attr=name.value, ctx='Load'), op_token)
 
-    def subscript(self, left: ast.Expr) -> ast.Subscript:
+    def subscript(self, left: ast.IbExpr) -> ast.IbSubscript:
         start_token = self.stream.previous()
         slice_expr = self.parse_expression()
         self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-        return self._loc(ast.Subscript(value=left, slice=slice_expr, ctx='Load'), start_token)
+        return self._loc(ast.IbSubscript(value=left, slice=slice_expr, ctx='Load'), start_token)
 
-    def behavior_expression(self) -> ast.BehaviorExpr:
+    def behavior_expression(self) -> ast.IbBehaviorExpr:
         start_token = self.stream.previous()
         # Extract tag from @tag~
         tag = ""
@@ -249,25 +249,25 @@ class ExpressionComponent(BaseComponent):
         
         self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~'.")
         
-        return self._loc(ast.BehaviorExpr(segments=segments, tag=tag), start_token)
+        return self._loc(ast.IbBehaviorExpr(segments=segments, tag=tag), start_token)
 
-    def _parse_complex_access(self, var_name: str, var_token) -> ast.Expr:
+    def _parse_complex_access(self, var_name: str, var_token) -> ast.IbExpr:
         """Helper to parse complex access like $obj.attr[0] after a $var_ref."""
         # Create initial Name node
-        node = self._loc(ast.Name(id=var_name, ctx='Load'), var_token)
+        node = self._loc(ast.IbName(id=var_name, ctx='Load'), var_token)
         
         # Support complex access: $obj.attr, $obj[index]
         while True:
             if self.stream.match(TokenType.DOT):
                 dot_token = self.stream.previous()
                 attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-                node = self._loc(ast.Attribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
+                node = self._loc(ast.IbAttribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
             elif self.stream.match(TokenType.LBRACKET):
                 lbracket_token = self.stream.previous()
                 # Now we can use the standard expression parser for the index!
                 slice_expr = self.parse_expression()
                 self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-                node = self._loc(ast.Subscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
+                node = self._loc(ast.IbSubscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
             else:
                 break
         return node

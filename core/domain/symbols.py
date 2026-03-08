@@ -2,6 +2,11 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Union, Set
 from enum import Enum, auto
 
+from . import types as uts
+
+import uuid
+
+
 # --- 符号系统 (Symbol System) ---
 
 class SymbolKind(Enum):
@@ -13,15 +18,12 @@ class SymbolKind(Enum):
     INTENT = auto()
     MODULE = auto()
 
-import uuid
-
-@dataclass
+@dataclass(eq=False)
 class Symbol:
     """静态符号基类，不依赖运行时对象"""
     name: str
     kind: SymbolKind
-    uid: str = field(default_factory=lambda: f"sym_{uuid.uuid4().hex[:8]}") # 自动分配 ID
-    node_uid: Optional[str] = None # 指向定义它的 AST 节点的 ID
+    def_node: Optional[Any] = None # 直接引用定义它的 AST 节点对象
     owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -30,7 +32,6 @@ class Symbol:
         """统一获取符号的类型信息"""
         return STATIC_ANY
 
-from core.foundation import types as uts
 
 # --- 静态类型系统 (Static Type System) ---
 
@@ -38,7 +39,7 @@ from core.foundation import types as uts
 class StaticType:
     """
     编译器前端使用的静态类型基类。
-    贯彻“一切皆对象”思想：类型对象持有其自身的语义行为。
+    贯彻“一切皆对象”思想：类型对象持有其自身的语义行为协议。
     """
     name: str
     descriptor: Optional[uts.TypeDescriptor] = None
@@ -55,12 +56,18 @@ class StaticType:
             
         return self.name == other.name
 
+    # --- 行为协议 (Behavioral Protocols) ---
+
     def resolve_member(self, name: str) -> Optional['Symbol']:
         """解析成员访问 (e.g. obj.member)"""
-        # [NEW] 贯彻“一切皆对象”：Any 类型允许访问任何成员
         if self.name in ("Any", "var"):
             return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY)
         return None
+
+    def get_attribute_type(self, name: str) -> 'StaticType':
+        """获取属性访问的结果类型"""
+        sym = self.resolve_member(name)
+        return sym.type_info if sym else STATIC_ANY
 
     @property
     def is_callable(self) -> bool:
@@ -74,10 +81,48 @@ class StaticType:
         return None
 
     def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
-        """解析运算符行为 (e.g. a + b)"""
+        """解析运算符行为 (委托给描述符)"""
+        # 基础类型运算逻辑协议化：由 symbols 决定最终类型，由描述符决定逻辑。
+        # 这里保留简单的内置快捷路径，复杂的逻辑未来由 UTS 描述符统一。
         if self.name in ("Any", "var"):
             return STATIC_ANY
+            
+        n1 = self.name
+        if not other:
+            if op == '~' and n1 == "int": return STATIC_INT
+            return None
+            
+        n2 = other.name
+        if n1 == "int" and n2 == "int":
+            if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'): return STATIC_INT
+            if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
+            
+        if (n1 in ("int", "float")) and (n2 in ("int", "float")):
+            if op in ('+', '-', '*', '/'): return STATIC_FLOAT
+            if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
+            
+        if n1 == "str" and n2 == "str" and op == '+':
+            return STATIC_STR
+            
         return None
+
+    @property
+    def is_iterable(self) -> bool:
+        """是否支持迭代 (e.g. for x in obj)"""
+        return self.name in ("Any", "var")
+
+    def get_iterator_type(self) -> 'StaticType':
+        """获取迭代产生的元素类型"""
+        return STATIC_ANY
+
+    @property
+    def is_subscriptable(self) -> bool:
+        """是否支持下标访问 (e.g. obj[key])"""
+        return self.name in ("Any", "var")
+
+    def get_subscript_type(self, key_type: 'StaticType') -> 'StaticType':
+        """获取下标访问的结果类型"""
+        return STATIC_ANY
 
     @property
     def is_class(self) -> bool:
@@ -108,8 +153,6 @@ class BehaviorType(StaticType):
         # 调用后返回字符串结果
         return STATIC_STR
 
-STATIC_BEHAVIOR = BehaviorType()
-
 class BuiltinType(StaticType):
     """内置原子类型 (int, str, bool, float)"""
     @property
@@ -122,7 +165,7 @@ class BuiltinType(StaticType):
         return self
 
     def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
-        # 基础类型运算逻辑从过程式的 Analyzer 转移到此处
+        # 基础类型运算逻辑协议化
         n1 = self.name
         if not other: # 一元运算
             if op == '~' and n1 == "int": return STATIC_INT
@@ -142,13 +185,14 @@ class BuiltinType(StaticType):
             
         return super().get_operator_result(op, other)
 
-# --- 常量类型实例 (预定义) ---
+# --- 常量类型实例 ---
 STATIC_ANY = BuiltinType("Any", descriptor=uts.ANY_DESCRIPTOR)
 STATIC_VOID = BuiltinType("void", descriptor=uts.VOID_DESCRIPTOR)
 STATIC_INT = BuiltinType("int", descriptor=uts.INT_DESCRIPTOR)
 STATIC_STR = BuiltinType("str", descriptor=uts.STR_DESCRIPTOR)
 STATIC_FLOAT = BuiltinType("float", descriptor=uts.FLOAT_DESCRIPTOR)
 STATIC_BOOL = BuiltinType("bool", descriptor=uts.BOOL_DESCRIPTOR)
+STATIC_BEHAVIOR = BehaviorType()
 
 class ListType(BuiltinType):
     """内置列表类型，支持元素类型推导"""
@@ -157,7 +201,19 @@ class ListType(BuiltinType):
         self._element_type = element_type
         
     @property
-    def element_type(self) -> StaticType:
+    def is_iterable(self) -> bool:
+        return True
+
+    def get_iterator_type(self) -> StaticType:
+        """实现迭代协议以获取元素类型"""
+        return self._element_type
+
+    @property
+    def is_subscriptable(self) -> bool:
+        return True
+
+    def get_subscript_type(self, key_type: StaticType) -> StaticType:
+        # 目前简化：列表下标访问返回元素类型
         return self._element_type
 
 class DictType(BuiltinType):
@@ -173,6 +229,21 @@ class DictType(BuiltinType):
         
     @property
     def value_type(self) -> StaticType:
+        return self._value_type
+
+    @property
+    def is_iterable(self) -> bool:
+        # 字典迭代产生键
+        return True
+
+    def get_iterator_type(self) -> StaticType:
+        return self._key_type
+
+    @property
+    def is_subscriptable(self) -> bool:
+        return True
+
+    def get_subscript_type(self, key_type: StaticType) -> StaticType:
         return self._value_type
 
 class ClassType(StaticType):
@@ -331,9 +402,7 @@ class SymbolTable:
     用于语义分析阶段。
     """
     def __init__(self, parent: Optional['SymbolTable'] = None):
-        self.uid = "" # ID 由平铺化序列化器统一分配
         self.parent = parent
-        self.parent_uid: Optional[str] = None # 用于序列化的父级 ID
         self.symbols: Dict[str, Symbol] = {}
         self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
 
@@ -356,3 +425,17 @@ class SymbolTable:
         while curr.parent:
             curr = curr.parent
         return curr
+
+def get_builtin_type(name: str) -> Optional[StaticType]:
+    """[Factory] 获取静态内置类型的单例"""
+    mapping = {
+        "var": STATIC_ANY,
+        "Any": STATIC_ANY,
+        "int": STATIC_INT,
+        "float": STATIC_FLOAT,
+        "str": STATIC_STR,
+        "bool": STATIC_BOOL,
+        "void": STATIC_VOID,
+        "none": STATIC_VOID
+    }
+    return mapping.get(name)

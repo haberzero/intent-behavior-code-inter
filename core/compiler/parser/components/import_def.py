@@ -12,16 +12,16 @@ class ImportComponent(BaseComponent):
     def __init__(self, context):
         super().__init__(context)
 
-    def parse_import(self) -> ast.Import:
+    def parse_import(self) -> ast.IbImport:
         """Parses 'import a.b, c as d'."""
         start_token = self.stream.previous() 
         
         names = self.parse_aliases()
         self.stream.consume_end_of_statement("Expect newline after import.")
         
-        return self._loc(ast.Import(names=names), start_token)
+        return self._loc(ast.IbImport(names=names), start_token)
 
-    def parse_from_import(self) -> ast.ImportFrom:
+    def parse_from_import(self) -> ast.IbImportFrom:
         """Parses 'from .a import b'."""
         start_token = self.stream.previous() # 'from' already consumed
         
@@ -38,18 +38,23 @@ class ImportComponent(BaseComponent):
         names = self.parse_aliases()
         
         self.stream.consume_end_of_statement("Expect newline after import.")
-        return self._loc(ast.ImportFrom(module=module_name, names=names, level=level), start_token)
+        return self._loc(ast.IbImportFrom(module=module_name, names=names, level=level), start_token)
 
-    def parse_aliases(self) -> List[ast.alias]:
+    def parse_aliases(self) -> List[ast.IbAlias]:
         aliases = []
         while True:
             start = self.stream.peek()
-            name = self.parse_dotted_name()
-            asname = None
-            if self.stream.match(TokenType.AS):
-                asname = self.stream.consume(TokenType.IDENTIFIER, "Expect alias name after 'as'.").value
             
-            aliases.append(self._loc(ast.alias(name=name, asname=asname), start))
+            # Handle '*' for from ... import *
+            if self.stream.match(TokenType.STAR):
+                aliases.append(self._loc(ast.IbAlias(name="*", asname=None), start))
+            else:
+                name = self.parse_dotted_name()
+                asname = None
+                if self.stream.match(TokenType.AS):
+                    asname = self.stream.consume(TokenType.IDENTIFIER, "Expect alias name after 'as'.").value
+                
+                aliases.append(self._loc(ast.IbAlias(name=name, asname=asname), start))
             
             if not self.stream.match(TokenType.COMMA):
                 break

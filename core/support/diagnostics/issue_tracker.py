@@ -1,5 +1,6 @@
 from typing import List, Optional, Union, Any
-from core.domain.diagnostics import Diagnostic, Severity, Location, CompilerError, FatalCompilerError, Locatable
+from core.domain.issue import Diagnostic, Severity, CompilerError, FatalCompilerError, Locatable
+from core.domain.atomic import Location
 
 class IssueTracker:
     """

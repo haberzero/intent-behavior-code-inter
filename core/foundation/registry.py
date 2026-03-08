@@ -9,6 +9,16 @@ class Registry:
     _none_instance: Any = None
     _box_func: Any = None
     _create_subclass_func: Any = None
+    _boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
+
+    @classmethod
+    def register_boxer(cls, py_type: type, boxer_func: Any):
+        """让内置类型主动向注册表报告自己的装箱逻辑"""
+        cls._boxers[py_type] = boxer_func
+
+    @classmethod
+    def get_boxer(cls, py_type: type) -> Any:
+        return cls._boxers.get(py_type)
 
     @classmethod
     def register_class(cls, name: str, ib_class: Any):
@@ -45,7 +55,7 @@ class Registry:
         return None
 
     @classmethod
-    def box(cls, value: Any) -> Any:
+    def box(cls, value: Any, memo: Optional[Dict[int, Any]] = None) -> Any:
         if cls._box_func:
-            return cls._box_func(value)
+            return cls._box_func(value, memo)
         return value

@@ -26,7 +26,7 @@ class ParserContext:
     module_cache: Optional[Dict[str, Any]] = None
     host_interface: Optional[HostInterface] = None
     package_name: str = ""
-    pending_intent: Optional[ast.IntentInfo] = None
+    pending_intent: Optional[ast.IbIntentInfo] = None
     
     # Component references (injected after initialization)
     expression_parser: Optional['ExpressionComponent'] = None
@@ -35,7 +35,7 @@ class ParserContext:
     type_parser: Optional['TypeComponent'] = None
     import_parser: Optional['ImportComponent'] = None
     
-    def push_intent(self, intent: ast.IntentInfo):
+    def push_intent(self, intent: ast.IbIntentInfo):
         """Set a pending intent comment for the next statement."""
         if self.pending_intent:
              # Already handled by reporting a warning in DeclarationComponent,
@@ -43,7 +43,7 @@ class ParserContext:
              pass
         self.pending_intent = intent
         
-    def consume_intent(self) -> Optional[ast.IntentInfo]:
+    def consume_intent(self) -> Optional[ast.IbIntentInfo]:
         """Consume the pending intent and clear it."""
         intent = self.pending_intent
         self.pending_intent = None

@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Any
-from .kernel import IbClass, IbObject, IbNativeFunction, IbNone
+from .kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone
 from .registry import Registry
 
 class Bootstrapper:
@@ -24,6 +24,9 @@ class Bootstrapper:
         """
         if cls.TypeClass: return # 避免重复初始化
 
+        # 延迟导入以打破核心引导循环
+        from .kernel import IbClass, IbNativeFunction, IbNone
+
         # 注册 Registry 辅助函数
         Registry.register_box_func(cls.box)
         Registry.register_create_subclass_func(cls.create_subclass)
@@ -32,7 +35,7 @@ class Bootstrapper:
         cls.TypeClass = IbClass("Type")
         cls.ObjectClass = IbClass("Object")
         cls.CallableClass = IbClass("callable")
-        cls.ModuleClass = IbClass("Module")
+        cls.ModuleClass = IbClass("IbModule")
         
         # Step 2: Wire Relationships (打破循环)
         cls.TypeClass.ib_class = cls.TypeClass
@@ -130,46 +133,29 @@ class Bootstrapper:
 
     @classmethod
     def box(cls, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:
-        """UTS: 统一装箱逻辑，将原生对象转为 IbObject"""
+        """
+        UTS: 统一装箱逻辑。
+        现在它完全解耦：不了解任何具体内置类，全部通过 Registry 路由。
+        """
         if isinstance(val, IbObject): return val
         if val is None:
-            from .builtins import IbNone
-            return IbNone()
+            return Registry.get_none()
         
-        # 处理循环引用
+        # 处理循环引用 (主要针对列表/字典等容器)
         if memo is None: memo = {}
         if id(val) in memo: return memo[id(val)]
         
-        # 延迟导入以解决循环依赖
-        from .builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbNone
-        
-        if isinstance(val, bool): return IbInteger.from_native(1 if val else 0)
-        if isinstance(val, int): return IbInteger.from_native(val)
-        if isinstance(val, float): return IbFloat(val)
-        if isinstance(val, str): return IbString(val)
-        
-        if isinstance(val, list):
-            # 创建空列表并缓存，防止循环引用
-            res = IbList([])
-            memo[id(val)] = res
-            res.elements = [cls.box(i, memo) for i in val]
-            return res
-            
-        if isinstance(val, dict):
-            # 创建空字典并缓存，防止循环引用
-            res = IbDict({})
-            memo[id(val)] = res
-            res.fields = {k: cls.box(v, memo) for k, v in val.items()}
-            return res
-        
-        # 处理 callable
+        # 1. 尝试从 Registry 获取预注册的工厂函数 (消除对 Builtins 的所有引用)
+        boxer_func = Registry.get_boxer(type(val))
+        if boxer_func:
+            return boxer_func(val, memo)
+
+        # 2. Callable 与 Native 对象兜底 (通过 Registry 注册)
         if callable(val):
-            from .kernel import IbNativeFunction
             res = IbNativeFunction(val, unbox_args=True)
             memo[id(val)] = res
             return res
 
-        from .kernel import IbNativeObject
         res = IbNativeObject(val)
         memo[id(val)] = res
         return res

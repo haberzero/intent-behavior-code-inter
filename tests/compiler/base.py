@@ -3,7 +3,7 @@ import os
 import shutil
 from typing import Any
 from core.engine import IBCIEngine
-from core.domain.diagnostics import CompilerError
+from core.domain.issue import CompilerError
 from core.domain.dependencies import CircularDependencyError
 
 class BaseCompilerTest(unittest.TestCase):

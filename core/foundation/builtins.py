@@ -131,7 +131,7 @@ class IbDict(IbObject):
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {
-            "type": "Dict",
+            "type": "IbDict",
             "value": {k: v.serialize_for_debug() if isinstance(v, IbObject) else v for k, v in self.fields.items()}
         }
 
@@ -334,3 +334,25 @@ def initialize_builtin_classes():
     _reg_native(dict_class, 'get', lambda self, key: self.fields.get(key, None))
     _reg_native(dict_class, '__getitem__', lambda self, key: self.fields[key])
     _reg_native(dict_class, '__setitem__', lambda self, key, val: self.fields.update({key: val}), unbox=False)
+
+    # 4. 注册到 Registry 的装箱表 (消除 Bootstrapper 对 Builtins 的所有直接局部引用)
+    Registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v))
+    Registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0))
+    Registry.register_boxer(float, lambda v, memo=None: IbFloat(v))
+    Registry.register_boxer(str, lambda v, memo=None: IbString(v))
+    
+    # 对于容器，通过 Registry.box 递归处理并传递 memo
+    def _box_list(val, memo):
+        res = IbList([])
+        memo[id(val)] = res
+        res.elements = [Registry.box(i, memo) for i in val]
+        return res
+        
+    def _box_dict(val, memo):
+        res = IbDict({})
+        memo[id(val)] = res
+        res.fields = {k: Registry.box(v, memo) for k, v in val.items()}
+        return res
+        
+    Registry.register_boxer(list, _box_list)
+    Registry.register_boxer(dict, _box_dict)

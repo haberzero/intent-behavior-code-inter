@@ -3,7 +3,7 @@ from core.domain import ast as ast
 from core.domain.tokens import Token
 from core.compiler.parser.core.context import ParserContext
 
-T = TypeVar("T", bound=ast.ASTNode)
+T = TypeVar("T", bound=ast.IbASTNode)
 
 class BaseComponent:
     """

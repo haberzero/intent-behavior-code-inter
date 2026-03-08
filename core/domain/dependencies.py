@@ -20,6 +20,7 @@ class ImportInfo:
     file_path: Optional[str] = None # Resolved absolute file path
     lineno: int = 0
     import_type: ImportType = ImportType.IMPORT
+    level: int = 0 # Level for relative imports (0 = absolute)
 
 @dataclass
 class ModuleInfo:

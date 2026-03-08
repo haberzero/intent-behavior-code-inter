@@ -1,5 +1,6 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from .registry import Registry
+from core.domain.issue import InterpreterError, ReturnException
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from dataclasses import dataclass
 
@@ -240,19 +241,18 @@ class IbModule(IbObject):
     持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
     """
     def __init__(self, name: str, scope: Any):
-        super().__init__(Registry.get_class("Module") or Registry.ObjectClass)
+        super().__init__(Registry.get_class("IbModule") or Registry.ObjectClass)
         self.name = name
         self.scope = scope
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         if message == '__getattr__':
-            from core.foundation.builtins import IbNone
             name = args[0].to_native()
             try:
                 # 从模块作用域中查找变量
                 return self.scope.get(name)
             except (KeyError, AttributeError):
-                return IbNone()
+                return Registry.get_none()
         
         return super().receive(message, args)
 
@@ -404,8 +404,10 @@ class IbNativeFunction(IbFunction):
             # 统一通过 Registry.box 装箱返回结果
             return Registry.box(res)
         except Exception as e:
-            # 包装原生异常为 InterpreterError
-            from core.domain.exceptions import InterpreterError
+            # 如果已经是 InterpreterError，直接向上抛，保留位置信息
+            if isinstance(e, InterpreterError):
+                raise
+            # 包装原生异常
             raise InterpreterError(f"Native function '{self._name}' failed: {e}")
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
@@ -473,10 +475,6 @@ class IbUserFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
-        from .builtins import IbNone
-        from .kernel import IbObject
-        from core.domain.exceptions import ReturnException
-        
         node_data = self.interpreter.node_pool.get(self.node_uid, {})
         # args 字段直接就是一个 arg 节点 UID 列表
         params_uids = node_data.get("args", [])
@@ -486,7 +484,8 @@ class IbUserFunction(IbFunction):
         
         try:
             # [NEW] 如果存在 receiver，则绑定为 self
-            if receiver and not isinstance(receiver, IbNone):
+            ib_none = Registry.get_none()
+            if receiver and receiver is not ib_none:
                 context.define_variable("self", receiver)
                 
             # 绑定参数
@@ -496,11 +495,11 @@ class IbUserFunction(IbFunction):
                 # 处理类型标注包装的情况 (TypeAnnotatedExpr)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
-                if arg_data.get("_type") == "TypeAnnotatedExpr":
+                if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
                     actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
                 
-                arg_name = actual_arg_data.get("arg")
+                arg_name = actual_arg_data.get("IbArg")
                 if i < len(args):
                     # 获取参数符号 UID (对于参数，我们总是查看原始 arg 节点)
                     sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
@@ -511,7 +510,7 @@ class IbUserFunction(IbFunction):
             for stmt_uid in body:
                 self.interpreter.visit(stmt_uid)
                 
-            return IbNone()
+            return ib_none
         except ReturnException as e:
             return e.value
         finally:
@@ -551,11 +550,11 @@ class IbLLMFunction(IbFunction):
                 arg_data = self.interpreter.node_pool.get(arg_uid, {})
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
-                if arg_data.get("_type") == "TypeAnnotatedExpr":
+                if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
                     actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
                 
-                arg_name = actual_arg_data.get("arg")
+                arg_name = actual_arg_data.get("IbArg")
                 if i < len(args):
                     sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
                     context.define_variable(arg_name, args[i], uid=sym_uid)

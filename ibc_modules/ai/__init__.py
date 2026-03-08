@@ -160,7 +160,7 @@ class AILib(ILLMProvider):
 
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                from core.domain.exceptions import InterpreterError
+                from core.domain.issue import InterpreterError
                 raise InterpreterError(
                     "LLM 运行配置缺失：在执行 AI 行为前，必须先配置 LLM 访问参数。\n"
                     "建议修复方案：\n"
@@ -266,7 +266,7 @@ class AILib(ILLMProvider):
                     time.sleep(1)
                     continue
         
-        from core.domain.exceptions import InterpreterError
+        from core.domain.issue import InterpreterError
         raise InterpreterError(f"LLM call failed after {retry_count + 1} attempts: {str(last_error)}")
 
 def create_implementation():
