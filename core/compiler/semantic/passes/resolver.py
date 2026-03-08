@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List, Optional, Any, TYPE_CHECKING
 from core.domain import ast as ast
 from core.domain import symbols
 from core.domain.symbols import (
@@ -7,13 +7,16 @@ from core.domain.symbols import (
 )
 from core.domain.symbols import get_builtin_type
 
+if TYPE_CHECKING:
+    from .semantic_analyzer import SemanticAnalyzer
+
 class TypeResolver:
     """
     第二阶段：类型决议 (Pass 2)
     解析继承关系、函数签名以及成员类型。
     填充 Pass 1 中收集的静态符号的类型信息。
     """
-    def __init__(self, symbol_table: SymbolTable, semantic_analyzer: Any):
+    def __init__(self, symbol_table: SymbolTable, semantic_analyzer: 'SemanticAnalyzer'):
         self.symbol_table = symbol_table
         self.analyzer = semantic_analyzer
         self.current_class_type: Optional[ClassType] = None

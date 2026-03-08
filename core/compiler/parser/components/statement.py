@@ -5,6 +5,7 @@ from core.compiler.parser.core.component import BaseComponent
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
+    from core.compiler.parser.components.declaration import DeclarationComponent
 
 class StatementComponent(BaseComponent):
     def __init__(self, context):
@@ -17,7 +18,7 @@ class StatementComponent(BaseComponent):
         return self.context.expression_parser
 
     @property
-    def decl_parser(self):
+    def decl_parser(self) -> 'DeclarationComponent':
         return self.context.declaration_parser
 
     # Removed set_decl_parser method

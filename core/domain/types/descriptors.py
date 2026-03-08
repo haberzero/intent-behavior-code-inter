@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict, List, TYPE_CHECKING
+from typing import Optional, Any, Dict, List
 
 @dataclass
 class TypeDescriptor:

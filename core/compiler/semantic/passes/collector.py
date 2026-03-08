@@ -1,7 +1,10 @@
-from typing import Optional, Any, List, Tuple
+from typing import Optional, Any, List, Tuple, TYPE_CHECKING
 from core.compiler.support.diagnostics import DiagnosticReporter
 from core.domain import ast as ast
 from core.domain.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind, STATIC_ANY
+
+if TYPE_CHECKING:
+    from .semantic_analyzer import SemanticAnalyzer
 
 class SymbolExtractor:
     """
@@ -31,7 +34,7 @@ class SymbolCollector:
     第一阶段：符号收集 (Pass 1)
     仅收集顶层符号（类、函数、LLM 函数），不进行类型解析。
     """
-    def __init__(self, symbol_table: SymbolTable, analyzer: Any = None, issue_tracker: Optional[DiagnosticReporter] = None):
+    def __init__(self, symbol_table: SymbolTable, analyzer: Optional['SemanticAnalyzer'] = None, issue_tracker: Optional[DiagnosticReporter] = None):
         self.symbol_table = symbol_table
         self.analyzer = analyzer
         self.issue_tracker = issue_tracker
@@ -146,7 +149,7 @@ class LocalSymbolCollector:
     第二点五阶段：局部符号收集 (Pass 2.5)
     在进入具体作用域分析前，预先扫描该作用域及其嵌套块中的显式定义和全局引用。
     """
-    def __init__(self, symbol_table: SymbolTable, analyzer: Any):
+    def __init__(self, symbol_table: SymbolTable, analyzer: 'SemanticAnalyzer'):
         self.symbol_table = symbol_table
         self.analyzer = analyzer # 期望是 SemanticAnalyzer 实例
 

@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Union, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, Union
 import uuid
 import json
 from enum import Enum

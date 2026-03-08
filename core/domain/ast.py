@@ -1,10 +1,8 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Union, Any, TYPE_CHECKING
+from typing import List, Optional, Union, Any
 from enum import IntEnum, Enum, auto
 from .atomic import Location
 
-if TYPE_CHECKING:
-    from core.domain.symbols import Symbol, StaticType
 
 # --- Scene ---
 
