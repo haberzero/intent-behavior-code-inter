@@ -1,6 +1,6 @@
 from typing import Any, List, Dict, Optional, Callable
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
-from .bootstrapper import Bootstrapper
+from .registry import Registry
 
 class IbInteger(IbObject):
     """
@@ -13,7 +13,7 @@ class IbInteger(IbObject):
     _cache: Dict[int, 'IbInteger'] = {}
 
     def __init__(self, value: int, ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Bootstrapper.get_class("int"))
+        super().__init__(ib_class or Registry.get_class("int"))
         self.value = value
 
     @classmethod
@@ -51,7 +51,7 @@ class IbFloat(IbObject):
     __slots__ = ('value',)
 
     def __init__(self, value: float, ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Bootstrapper.get_class("float"))
+        super().__init__(ib_class or Registry.get_class("float"))
         self.value = value
 
     def to_native(self, memo=None) -> float:
@@ -70,7 +70,7 @@ class IbString(IbObject):
     __slots__ = ('value',)
 
     def __init__(self, value: str, ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Bootstrapper.get_class("str"))
+        super().__init__(ib_class or Registry.get_class("str"))
         self.value = value
 
     def to_native(self, memo=None) -> str:
@@ -89,7 +89,7 @@ class IbList(IbObject):
     __slots__ = ('elements',)
 
     def __init__(self, elements: List[IbObject], ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Bootstrapper.get_class("list"))
+        super().__init__(ib_class or Registry.get_class("list"))
         self.elements = elements
 
     def to_native(self, memo=None) -> List[Any]:
@@ -116,7 +116,7 @@ class IbDict(IbObject):
     包装 Python 原生 dict 的 IBC 对象。
     """
     def __init__(self, data: Dict[str, IbObject], ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Bootstrapper.get_class("dict"))
+        super().__init__(ib_class or Registry.get_class("dict"))
         self.fields = data
 
     def to_native(self, memo=None) -> Dict[str, Any]:
@@ -154,9 +154,9 @@ class IbBehavior(IbObject):
     """
     延迟执行的行为对象 (~...~)。
     """
-    def __init__(self, node: 'ast.BehaviorExpr', interpreter: Any, captured_intents: List['ast.IntentInfo'], expected_type: Optional[str] = None):
-        super().__init__(Bootstrapper.get_class("behavior"))
-        self.node = node
+    def __init__(self, node_uid: str, interpreter: Any, captured_intents: List[Any], expected_type: Optional[str] = None):
+        super().__init__(Registry.get_class("behavior"))
+        self.node = node_uid
         self.interpreter = interpreter
         self.captured_intents = captured_intents
         self.expected_type = expected_type
@@ -179,7 +179,7 @@ class IbBehavior(IbObject):
             res = self.interpreter.service_context.llm_executor.execute_behavior_expression(
                 self.node, self.interpreter.context, captured_intents=self.captured_intents
             )
-            self._cache = Bootstrapper.box(res)
+            self._cache = Registry.box(res)
             return self._cache
         finally:
             self.interpreter.context.intent_stack = old_intents
@@ -220,24 +220,57 @@ class IbBehavior(IbObject):
         # 其他消息（如 __add__）转发给执行后的结果
         return self._execute().receive(message, args)
 
+# --- 辅助方法 (实现逻辑) ---
+
+def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = True):
+    """统一注册原生方法的辅助函数"""
+    ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}"))
+
+def _numeric_op(self: IbObject, other: Any, op_func: Callable) -> Any:
+    """处理数值运算并支持 promotion"""
+    # 注意：此时 other 已经是 Python 原生对象 (因为 unbox_args=True)
+    a = self.to_native()
+    return op_func(a, other)
+
+def _compare_op(self: IbObject, other: Any, op_func: Callable) -> int:
+    """处理比较运算"""
+    a = self.to_native()
+    try:
+        return 1 if op_func(a, other) else 0
+    except:
+        # 如果比较失败 (例如类型不兼容)，则根据 op_func 返回 0 或 1
+        # 简单探测：如果是 eq 则返回 0，如果是 ne 则返回 1
+        return 0 
+
+def _cast_string_to(ib_str: IbString, target_class: IbClass) -> Any:
+    """实现 Spec 中的自动类型转换策略"""
+    val = ib_str.to_native().strip()
+    if target_class.name == "int":
+        return int(val)
+    if target_class.name == "float":
+        return float(val)
+    if target_class.name == "bool":
+        return val.lower() in ("true", "1", "yes")
+    return val
+
 # 初始化内置类 (由 Bootstrapper 调用)
 def initialize_builtin_classes():
+    from .bootstrapper import Bootstrapper
     Bootstrapper.initialize()
     
-    # 1. 创建核心内置类 (对齐 Spec 中的类型名称)
-    # 这些类将自动被 Bootstrapper 缓存并提供给 get_class
-    integer_class = Bootstrapper.create_subclass("int")
-    float_class = Bootstrapper.create_subclass("float")
-    string_class = Bootstrapper.create_subclass("str")
-    list_class = Bootstrapper.create_subclass("list")
-    dict_class = Bootstrapper.create_subclass("dict")
-    none_class = Bootstrapper.create_subclass("None")
-    behavior_class = Bootstrapper.create_subclass("behavior")
-    bool_class = Bootstrapper.create_subclass("bool")
-    callable_class = Bootstrapper.create_subclass("callable")
-    var_class = Bootstrapper.create_subclass("var")
+    # 1. 创建核心内置类
+    integer_class = Registry.create_subclass("int")
+    float_class = Registry.create_subclass("float")
+    string_class = Registry.create_subclass("str")
+    list_class = Registry.create_subclass("list")
+    dict_class = Registry.create_subclass("dict")
+    none_class = Registry.create_subclass("None")
+    behavior_class = Registry.create_subclass("behavior")
+    bool_class = Registry.create_subclass("bool")
+    callable_class = Registry.create_subclass("callable")
+    var_class = Registry.create_subclass("var")
     
-    # 2. 同步 UTS 类型到 kernel 常量，确保编译器与运行时共享同一套真理
+    # 2. 同步 UTS 类型到 kernel 常量
     import core.foundation.kernel as kernel
     kernel.INT_TYPE = integer_class
     kernel.FLOAT_TYPE = float_class
@@ -245,172 +278,59 @@ def initialize_builtin_classes():
     kernel.BOOL_TYPE = bool_class
     kernel.VOID_TYPE = none_class
     kernel.VAR_TYPE = var_class
-    # ANY_TYPE 保持其特殊地位，但 var_class 在分配时与 ANY_TYPE 兼容
     
-    # 3. 注册原生方法代理 (原语层)
+    # 3. 注册原生方法代理
     
-    # Integer 运算
-    integer_class.register_method('__to_prompt__', IbNativeFunction(lambda self: str(self.to_native()), is_method=True))
-    integer_class.register_method('to_bool', IbNativeFunction(lambda self: 1 if self.to_native() != 0 else 0, is_method=True))
-    integer_class.register_method('to_list', IbNativeFunction(
-        lambda self: IbList([IbInteger.from_native(i) for i in range(self.to_native())]), is_method=True
-    ))
-    integer_class.register_method('__add__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a + b), is_method=True
-    ))
-    integer_class.register_method('__sub__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a - b), is_method=True
-    ))
-    integer_class.register_method('__mul__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a * b), is_method=True
-    ))
-    integer_class.register_method('__div__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a // b if isinstance(a, int) and isinstance(b, int) else a / b), is_method=True
-    ))
-    integer_class.register_method('__mod__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a % b), is_method=True
-    ))
-    integer_class.register_method('__and__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(self.to_native() & other.to_native()), is_method=True
-    ))
-    integer_class.register_method('__or__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(self.to_native() | other.to_native()), is_method=True
-    ))
-    integer_class.register_method('__xor__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(self.to_native() ^ other.to_native()), is_method=True
-    ))
-    integer_class.register_method('__lshift__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(self.to_native() << other.to_native()), is_method=True
-    ))
-    integer_class.register_method('__rshift__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(self.to_native() >> other.to_native()), is_method=True
-    ))
-    integer_class.register_method('__invert__', IbNativeFunction(
-        lambda self: IbInteger.from_native(~self.to_native()), is_method=True
-    ))
-    integer_class.register_method('__lt__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() < other.to_native() else 0), is_method=True
-    ))
-    integer_class.register_method('__le__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() <= other.to_native() else 0), is_method=True
-    ))
-    integer_class.register_method('__gt__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() > other.to_native() else 0), is_method=True
-    ))
-    integer_class.register_method('__ge__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() >= other.to_native() else 0), is_method=True
-    ))
-    integer_class.register_method('__eq__', IbNativeFunction(
-        lambda self, other: _compare_op(self, other, lambda a, b: a == b), is_method=True
-    ))
-    integer_class.register_method('__ne__', IbNativeFunction(
-        lambda self, other: _compare_op(self, other, lambda a, b: a != b), is_method=True
-    ))
+    # --- Integer ---
+    _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
+    _reg_native(integer_class, 'to_bool', lambda self: 1 if self.to_native() != 0 else 0)
+    _reg_native(integer_class, 'to_list', lambda self: list(range(self.to_native())))
     
-    float_class.register_method('__to_prompt__', IbNativeFunction(lambda self: str(self.to_native()), is_method=True))
-    float_class.register_method('__add__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a + b), is_method=True
-    ))
-    float_class.register_method('__sub__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a - b), is_method=True
-    ))
-    float_class.register_method('__mul__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a * b), is_method=True
-    ))
-    float_class.register_method('__div__', IbNativeFunction(
-        lambda self, other: _numeric_op(self, other, lambda a, b: a / b), is_method=True
-    ))
-    float_class.register_method('__lt__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() < other.to_native() else 0), is_method=True
-    ))
-    float_class.register_method('__le__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() <= other.to_native() else 0), is_method=True
-    ))
-    float_class.register_method('__gt__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() > other.to_native() else 0), is_method=True
-    ))
-    float_class.register_method('__ge__', IbNativeFunction(
-        lambda self, other: IbInteger.from_native(1 if self.to_native() >= other.to_native() else 0), is_method=True
-    ))
-    float_class.register_method('__eq__', IbNativeFunction(
-        lambda self, other: _compare_op(self, other, lambda a, b: a == b), is_method=True
-    ))
-    float_class.register_method('__ne__', IbNativeFunction(
-        lambda self, other: _compare_op(self, other, lambda a, b: a != b), is_method=True
-    ))
+    _reg_native(integer_class, '__add__', lambda self, other: _numeric_op(self, other, lambda a, b: a + b))
+    _reg_native(integer_class, '__sub__', lambda self, other: _numeric_op(self, other, lambda a, b: a - b))
+    _reg_native(integer_class, '__mul__', lambda self, other: _numeric_op(self, other, lambda a, b: a * b))
+    _reg_native(integer_class, '__div__', lambda self, other: _numeric_op(self, other, lambda a, b: a // b if isinstance(a, int) and isinstance(b, int) else a / b))
+    _reg_native(integer_class, '__mod__', lambda self, other: _numeric_op(self, other, lambda a, b: a % b))
+    
+    _reg_native(integer_class, '__and__', lambda self, other: self.to_native() & other)
+    _reg_native(integer_class, '__or__', lambda self, other: self.to_native() | other)
+    _reg_native(integer_class, '__xor__', lambda self, other: self.to_native() ^ other)
+    _reg_native(integer_class, '__lshift__', lambda self, other: self.to_native() << other)
+    _reg_native(integer_class, '__rshift__', lambda self, other: self.to_native() >> other)
+    _reg_native(integer_class, '__invert__', lambda self: ~self.to_native())
+    
+    _reg_native(integer_class, '__lt__', lambda self, other: _compare_op(self, other, lambda a, b: a < b))
+    _reg_native(integer_class, '__le__', lambda self, other: _compare_op(self, other, lambda a, b: a <= b))
+    _reg_native(integer_class, '__gt__', lambda self, other: _compare_op(self, other, lambda a, b: a > b))
+    _reg_native(integer_class, '__ge__', lambda self, other: _compare_op(self, other, lambda a, b: a >= b))
+    _reg_native(integer_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
+    _reg_native(integer_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
+    
+    # --- Float ---
+    _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
+    _reg_native(float_class, '__add__', lambda self, other: _numeric_op(self, other, lambda a, b: a + b))
+    _reg_native(float_class, '__sub__', lambda self, other: _numeric_op(self, other, lambda a, b: a - b))
+    _reg_native(float_class, '__mul__', lambda self, other: _numeric_op(self, other, lambda a, b: a * b))
+    _reg_native(float_class, '__div__', lambda self, other: _numeric_op(self, other, lambda a, b: a / b))
+    _reg_native(float_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
+    _reg_native(float_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
 
-    # String 运算
-    string_class.register_method('__to_prompt__', IbNativeFunction(lambda self: self.to_native(), is_method=True))
-    string_class.register_method('__add__', IbNativeFunction(
-        lambda self, other: IbString(str(self.to_native()) + (other.to_native() if not isinstance(other, IbObject) else str(other.receive("__to_prompt__", []).to_native()))), is_method=True
-    ))
-    string_class.register_method('cast_to', IbNativeFunction(
-        lambda self, target_class: _cast_string_to(self, target_class), is_method=True
-    ))
+    # --- String ---
+    _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
+    _reg_native(string_class, '__add__', lambda self, other: str(self.to_native()) + (other if not isinstance(other, IbObject) else str(other.receive("__to_prompt__", []).to_native())))
+    _reg_native(string_class, 'cast_to', lambda self, target_class: _cast_string_to(self, target_class), unbox=False)
 
-    # List 运算
-    list_class.register_method('__to_prompt__', IbNativeFunction(
-        lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]", 
-        is_method=True
-    ))
-    list_class.register_method('to_list', IbNativeFunction(lambda self: self, is_method=True))
-    list_class.register_method('append', IbNativeFunction(
-        lambda self, item: self.elements.append(item) or IbNone(), is_method=True
-    ))
-    list_class.register_method('len', IbNativeFunction(
-        lambda self: IbInteger.from_native(len(self.elements)), is_method=True
-    ))
-    list_class.register_method('sort', IbNativeFunction(
-        lambda self: self.elements.sort(key=lambda x: x.to_native()) or IbNone(), is_method=True
-    ))
-    list_class.register_method('__getitem__', IbNativeFunction(
-        lambda self, key: self.elements[key.to_native()], is_method=True
-    ))
-    list_class.register_method('__setitem__', IbNativeFunction(
-        lambda self, key, val: self.elements.__setitem__(key.to_native(), val) or IbNone(), is_method=True
-    ))
+    # --- List ---
+    _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")
+    _reg_native(list_class, 'to_list', lambda self: self.elements)
+    _reg_native(list_class, 'append', lambda self, item: self.elements.append(item), unbox=False)
+    _reg_native(list_class, 'len', lambda self: len(self.elements))
+    _reg_native(list_class, 'sort', lambda self: self.elements.sort(key=lambda x: x.to_native()))
+    _reg_native(list_class, '__getitem__', lambda self, key: self.elements[key])
+    _reg_native(list_class, '__setitem__', lambda self, key, val: self.elements.__setitem__(key, val), unbox=False)
 
-    # Dict 运算
-    dict_class.register_method('__to_prompt__', IbNativeFunction(
-        lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}",
-        is_method=True
-    ))
-    dict_class.register_method('get', IbNativeFunction(
-        lambda self, key: self.fields.get(key.to_native(), IbNone()), is_method=True
-    ))
-    dict_class.register_method('__getitem__', IbNativeFunction(
-        lambda self, key: self.fields[key.to_native()], is_method=True
-    ))
-    dict_class.register_method('__setitem__', IbNativeFunction(
-        lambda self, key, val: self.fields.update({key.to_native(): val}) or IbNone(), is_method=True
-    ))
-
-def _numeric_op(self: IbObject, other: IbObject, op_func: Callable) -> IbObject:
-    """处理数值运算并支持 promotion"""
-    a = self.to_native()
-    b = other.to_native()
-    res = op_func(a, b)
-    if isinstance(res, int): return IbInteger.from_native(res)
-    if isinstance(res, float): return IbFloat(res)
-    return IbObject(Bootstrapper.get_class("Object")) # Fallback
-
-def _compare_op(self: IbObject, other: IbObject, op_func: Callable) -> IbObject:
-    """处理比较运算"""
-    a = self.to_native()
-    b = other.to_native()
-    try:
-        res = op_func(a, b)
-        return IbInteger.from_native(1 if res else 0)
-    except:
-        # 如果比较失败 (例如类型不兼容)，则 __eq__ 返回 False, __ne__ 返回 True
-        # 这是一个简化的处理逻辑
-        is_eq = (op_func(1, 1) == True) # 探测是 eq 还是 ne
-        return IbInteger.from_native(0 if is_eq else 1)
-
-def _cast_string_to(ib_str: IbString, target_class: IbClass) -> IbObject:
-    """实现 Spec 中的自动类型转换策略，桥接 AI 模块逻辑"""
-    val = ib_str.to_native().strip()
-    if target_class.name == "int":
-        return IbInteger.from_native(int(val))
-    # ... 其他转换逻辑
-    return ib_str # Fallback
+    # --- Dict ---
+    _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
+    _reg_native(dict_class, 'get', lambda self, key: self.fields.get(key, None))
+    _reg_native(dict_class, '__getitem__', lambda self, key: self.fields[key])
+    _reg_native(dict_class, '__setitem__', lambda self, key, val: self.fields.update({key: val}), unbox=False)

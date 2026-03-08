@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
+from .registry import Registry
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from dataclasses import dataclass
 
@@ -157,47 +158,20 @@ class IbObject:
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
-        消息分发核心 (模拟 jalr 指令)。
-        集成 CoreDebugger 以记录全链路消息流。
+        统一消息传递接口。
+        所有属性访问和方法调用都通过此入口分发。
         """
-        core_debugger.trace(
-            CoreModule.INTERPRETER, 
-            DebugLevel.DATA, 
-            f"[MSG] {self} received '{message}' with {args}"
-        )
-
+        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
+        
         method = self.ib_class.lookup_method(message)
         if method:
             return method.call(self, args)
         
-        # 特殊内置协议：如果 message 是 __getattr__ 或 __setattr__ 且没有显式重写
-        if message == '__getattr__':
-            from core.foundation.builtins import IbNone, IbString # 假设已存在
-            name = args[0].to_native()
-            
-            # 1. 优先查字段
-            if name in self.fields:
-                return self.fields[name]
-                
-            # 2. 其次查方法并返回绑定方法 (Bound Method)
-            method = self.ib_class.lookup_method(name)
-            if method:
-                return IbBoundMethod(self, method)
-                
-            return IbNone()
-
-        if message == '__setattr__':
-            from core.foundation.builtins import IbNone
-            name = args[0].to_native()
-            self.fields[name] = args[1]
-            return IbNone()
-
         # 消息未找到，尝试调用 method_missing 协议 (Spec 扩展支持)
         method_missing = self.ib_class.lookup_method('method_missing')
         if method_missing:
             # 包装原始消息名作为第一个参数
-            from core.foundation.builtins import IbString # 假设已存在
-            return method_missing.call(self, [IbString(message)] + args)
+            return method_missing.call(self, [Registry.box(message)] + args)
 
         raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
 
@@ -238,25 +212,19 @@ class IbNativeObject(IbObject):
     包装 Python 原生对象的 IBC 对象。
     用于桥接 Python 扩展和标准库。
     """
-    def __init__(self, py_obj: Any):
-        from core.foundation.bootstrapper import Bootstrapper
-        super().__init__(Bootstrapper.get_class("Object"))
+    def __init__(self, py_obj: Any, ib_class: Optional['IbClass'] = None):
+        super().__init__(ib_class or Registry.get_class("Object"))
         self.py_obj = py_obj
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        from core.foundation.bootstrapper import Bootstrapper
-        from core.foundation.builtins import IbNone
-        
-        if message == '__getattr__':
-            name = args[0].to_native()
-            if hasattr(self.py_obj, name):
-                return Bootstrapper.box(getattr(self.py_obj, name))
-            return IbNone()
-            
-        if message == '__call__':
-            if callable(self.py_obj):
-                native_args = [arg.to_native() for arg in args]
-                return Bootstrapper.box(self.py_obj(*native_args))
+        """代理调用原生对象的属性或方法"""
+        if hasattr(self.py_obj, message):
+            attr = getattr(self.py_obj, message)
+            if callable(attr):
+                # 包装为原生函数
+                native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
+                return Registry.box(attr(*native_args))
+            return Registry.box(attr)
         
         return super().receive(message, args)
 
@@ -272,9 +240,7 @@ class IbModule(IbObject):
     持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
     """
     def __init__(self, name: str, scope: Any):
-        from core.foundation.bootstrapper import Bootstrapper
-        # 模块类在引导阶段由 Bootstrapper 绑定
-        super().__init__(Bootstrapper.get_class("Module") or Bootstrapper.ObjectClass)
+        super().__init__(Registry.get_class("Module") or Registry.ObjectClass)
         self.name = name
         self.scope = scope
 
@@ -356,12 +322,24 @@ class IbClass(IbObject, Type):
         return False
 
     def lookup_method(self, name: str) -> Optional['IbFunction']:
-        """沿继承链查找方法 (模拟虚表查找逻辑)"""
+        """方法查找协议：支持继承查找"""
         if name in self.methods:
             return self.methods[name]
         if self.parent:
             return self.parent.lookup_method(name)
         return None
+
+    def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
+        """调用类：执行构造逻辑 (创建实例 + 调用 init)"""
+        # 1. 创建新实例
+        instance = IbObject(self)
+        
+        # 2. 查找并执行构造函数
+        init_method = self.lookup_method('init')
+        if init_method:
+            init_method.call(instance, args)
+            
+        return instance
 
     def can_assign_to(self, other: 'IbClass') -> bool:
         """向后兼容接口，内部调用 UTS 协议"""
@@ -392,8 +370,7 @@ class IbFunction(IbObject):
     可调用对象的基类 (语言层表现为 callable)。
     """
     def __init__(self, ib_class: Optional['IbClass'] = None):
-        from core.foundation.bootstrapper import Bootstrapper
-        super().__init__(ib_class or Bootstrapper.get_class("callable"))
+        super().__init__(ib_class or Registry.get_class("callable"))
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         raise NotImplementedError()
@@ -403,13 +380,13 @@ class IbNativeFunction(IbFunction):
     包装 Python 原生函数的 IBC 函数。
     用于引导阶段注入基础运算（如 int.__add__）。
     """
-    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None):
-        # 默认使用 Function 类，由 Bootstrapper 绑定
-        from core.foundation.bootstrapper import Bootstrapper
-        super().__init__(ib_class or Bootstrapper.get_class("Function"))
+    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None):
+        # 默认使用 callable 类，由 Registry 获取
+        super().__init__(ib_class or Registry.get_class("callable"))
         self.py_func = py_func
         self.unbox_args = unbox_args
         self.is_method = is_method
+        self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         # 处理参数解包
@@ -418,22 +395,25 @@ class IbNativeFunction(IbFunction):
             final_args = [arg.to_native() if hasattr(arg, 'to_native') else arg for arg in args]
 
         # 如果是方法，总是注入 receiver 作为 self
-        from core.foundation.bootstrapper import Bootstrapper
-        if self.is_method:
-             res = self.py_func(receiver, *final_args)
-        else:
-             res = self.py_func(*final_args)
-             
-        # 统一装箱返回结果
-        return Bootstrapper.box(res)
+        try:
+            if self.is_method:
+                res = self.py_func(receiver, *final_args)
+            else:
+                res = self.py_func(*final_args)
+            
+            # 统一通过 Registry.box 装箱返回结果
+            return Registry.box(res)
+        except Exception as e:
+            # 包装原生异常为 InterpreterError
+            from core.domain.exceptions import InterpreterError
+            raise InterpreterError(f"Native function '{self._name}' failed: {e}")
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         # 允许访问底层 Python 对象的属性 (支持模块/扩展能力的混合调用)
         if message == '__getattr__':
             name = args[0].to_native()
             if hasattr(self.py_func, name):
-                from core.foundation.bootstrapper import Bootstrapper
-                return Bootstrapper.box(getattr(self.py_func, name))
+                return Registry.box(getattr(self.py_func, name))
 
         return super().receive(message, args)
 
@@ -444,8 +424,7 @@ class IbNativeFunction(IbFunction):
 class IbBoundMethod(IbFunction):
     """绑定了接收者的函数 (模拟 C++ 虚表调用的 this 绑定)"""
     def __init__(self, receiver: IbObject, method: IbFunction):
-        from core.foundation.bootstrapper import Bootstrapper
-        super().__init__(Bootstrapper.get_class("Function"))
+        super().__init__(Registry.get_class("callable"))
         self.receiver = receiver
         self.method = method
 
@@ -466,8 +445,7 @@ class IbNone(IbObject):
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(IbNone, cls).__new__(cls)
-            from core.foundation.bootstrapper import Bootstrapper
-            cls._instance.ib_class = Bootstrapper.get_class("None")
+            cls._instance.ib_class = Registry.get_class("None")
             cls._instance.fields = {}
         return cls._instance
 
@@ -489,8 +467,7 @@ class IbUserFunction(IbFunction):
     用户定义的 IBC 函数。
     """
     def __init__(self, node_uid: str, interpreter: Any):
-        from core.foundation.bootstrapper import Bootstrapper
-        super().__init__(Bootstrapper.get_class("Function"))
+        super().__init__(Registry.get_class("Function"))
         self.node_uid = node_uid
         self.interpreter = interpreter
 
@@ -508,6 +485,10 @@ class IbUserFunction(IbFunction):
         context.enter_scope()
         
         try:
+            # [NEW] 如果存在 receiver，则绑定为 self
+            if receiver and not isinstance(receiver, IbNone):
+                context.define_variable("self", receiver)
+                
             # 绑定参数
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.interpreter.node_pool.get(arg_uid, {})
@@ -546,15 +527,48 @@ class IbLLMFunction(IbFunction):
     用户定义的 LLM 函数。
     """
     def __init__(self, node_uid: str, llm_executor: Any, interpreter: Any):
-        from core.foundation.bootstrapper import Bootstrapper
-        super().__init__(Bootstrapper.get_class("Function"))
+        super().__init__(Registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.interpreter = interpreter
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """执行 LLM 函数"""
-        return self.llm_executor.execute_llm_function(self.node_uid, receiver, args, self.interpreter.context)
+        """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
+        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        context = self.interpreter.context
+        
+        context.enter_scope()
+        try:
+            # 1. 绑定 self
+            ib_none = Registry.get_none()
+            if receiver and receiver is not ib_none:
+                context.define_variable("self", receiver)
+                context.define_variable("__self", receiver)
+                
+            # 2. 绑定参数 (逻辑与 IbUserFunction 保持一致)
+            params_uids = node_data.get("args", [])
+            for i, arg_uid in enumerate(params_uids):
+                arg_data = self.interpreter.node_pool.get(arg_uid, {})
+                actual_arg_uid = arg_uid
+                actual_arg_data = arg_data
+                if arg_data.get("_type") == "TypeAnnotatedExpr":
+                    actual_arg_uid = arg_data.get("target")
+                    actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
+                
+                arg_name = actual_arg_data.get("arg")
+                if i < len(args):
+                    sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
+                    context.define_variable(arg_name, args[i], uid=sym_uid)
+                    
+                    # 兼容性映射
+                    if arg_name == 'text':
+                        context.define_variable('__text', args[i])
+
+            # 3. 仅将推理职责交给 llm_executor
+            return self.llm_executor.execute_llm_function(self.node_uid, context)
+            
+        finally:
+            context.exit_scope()
 
     def __repr__(self):
         node_data = self.interpreter.node_pool.get(self.node_uid, {})

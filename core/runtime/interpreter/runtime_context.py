@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 from core.foundation.interfaces import RuntimeSymbol, Scope, RuntimeContext
 from core.domain.exceptions import InterpreterError
 from core.support.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
+from core.foundation.registry import Registry
 from core.foundation.capabilities import IStateReader
 
 class RuntimeSymbolImpl:
@@ -19,8 +20,7 @@ class ScopeImpl:
         self._parent = parent
 
     def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
-        from core.foundation.bootstrapper import Bootstrapper
-        boxed_value = Bootstrapper.box(value)
+        boxed_value = Registry.box(value)
         sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
         if name:
             self._symbols[name] = sym
@@ -28,8 +28,7 @@ class ScopeImpl:
             self._uid_to_symbol[uid] = sym
 
     def assign(self, name: str, value: Any) -> bool:
-        from core.foundation.bootstrapper import Bootstrapper
-        boxed_value = Bootstrapper.box(value)
+        boxed_value = Registry.box(value)
         if name in self._symbols:
             symbol = self._symbols[name]
             if symbol.is_const:
@@ -43,8 +42,7 @@ class ScopeImpl:
 
     def assign_by_uid(self, uid: str, value: Any) -> bool:
         """基于 UID 的赋值"""
-        from core.foundation.bootstrapper import Bootstrapper
-        boxed_value = Bootstrapper.box(value)
+        boxed_value = Registry.box(value)
         if uid in self._uid_to_symbol:
             symbol = self._uid_to_symbol[uid]
             if symbol.is_const:

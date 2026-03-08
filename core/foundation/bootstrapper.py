@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Any
 from .kernel import IbClass, IbObject, IbNativeFunction, IbNone
+from .registry import Registry
 
 class Bootstrapper:
     """
@@ -17,22 +18,15 @@ class Bootstrapper:
     ModuleClass: Optional[IbClass] = None
 
     @classmethod
-    def reset(cls):
-        """
-        重置引导状态 (主要用于单元测试)。
-        """
-        cls._class_registry.clear()
-        cls.TypeClass = None
-        cls.ObjectClass = None
-        cls.CallableClass = None
-        cls.ModuleClass = None
-
-    @classmethod
     def initialize(cls):
         """
         核心引导流程：先分配内存，后绑定关系。
         """
         if cls.TypeClass: return # 避免重复初始化
+
+        # 注册 Registry 辅助函数
+        Registry.register_box_func(cls.box)
+        Registry.register_create_subclass_func(cls.create_subclass)
 
         # Step 1: Create Type Shells (分配内存，此时 ib_class 暂未绑定)
         cls.TypeClass = IbClass("Type")
@@ -59,26 +53,47 @@ class Bootstrapper:
         cls.register_class(cls.CallableClass)
         cls.register_class(cls.ModuleClass)
         
+        # 注册 None 单例
+        Registry.register_none(IbNone())
+        
         # Step 3: Register Core Protocols (元方法注入)
         cls.ObjectClass.register_method('toString', IbNativeFunction(lambda self: self.__repr__(), is_method=True))
         cls.ObjectClass.register_method('__to_prompt__', IbNativeFunction(lambda self: f"<Instance of {self.ib_class.name}>", is_method=True))
         cls.ObjectClass.register_method('to_bool', IbNativeFunction(lambda self: 1, is_method=True))
         
+        # 属性访问协议
+        def _default_getattr(self, name_obj):
+            name = name_obj.to_native()
+            # 1. 优先查字段
+            if name in self.fields:
+                return self.fields[name]
+            # 2. 其次查方法并返回绑定方法 (Bound Method)
+            method = self.ib_class.lookup_method(name)
+            if method:
+                from .kernel import IbBoundMethod
+                return IbBoundMethod(self, method)
+            return Registry.get_none()
+
+        def _default_setattr(self, name_obj, val):
+            self.fields[name_obj.to_native()] = val
+            return Registry.get_none()
+
+        cls.ObjectClass.register_method('__getattr__', IbNativeFunction(_default_getattr, is_method=True))
+        cls.ObjectClass.register_method('__setattr__', IbNativeFunction(_default_setattr, is_method=True))
+
         # 基础比较逻辑：默认比较 ID (引用一致性)
         # 注意：子类 (如 Integer) 会重写 these 方法
         def _default_eq(self, other):
-            from .builtins import IbInteger
-            return IbInteger.from_native(1 if self == other else 0)
+            return Registry.box(1 if self == other else 0)
             
         def _default_ne(self, other):
-            from .builtins import IbInteger
-            return IbInteger.from_native(1 if self != other else 0)
+            return Registry.box(1 if self != other else 0)
 
         cls.ObjectClass.register_method('__eq__', IbNativeFunction(_default_eq, is_method=True))
         cls.ObjectClass.register_method('__ne__', IbNativeFunction(_default_ne, is_method=True))
 
         # 为 callable 注册 __call__ 消息实现 (调用 call 方法)
-        cls.CallableClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(IbNone(), list(args)), is_method=True))
+        cls.CallableClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(Registry.get_none(), list(args)), is_method=True))
 
         # 为 Type 注册 __call__ 消息实现 (实例化类)
         cls.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True))
@@ -89,6 +104,7 @@ class Bootstrapper:
         if cls.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = cls.TypeClass
         cls._class_registry[ib_class.name] = ib_class
+        Registry.register_class(ib_class.name, ib_class)
 
     @classmethod
     def get_class(cls, name: str) -> Optional[IbClass]:

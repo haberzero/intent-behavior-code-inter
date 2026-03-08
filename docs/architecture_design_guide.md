@@ -66,3 +66,4 @@ Currently, `DictType` accepts any `StaticType` for keys, but the language spec l
 - **Standard Library (Prelude)**: Expand the builtin modules in `core/compiler/semantic/passes/prelude.py`.
 - **Control Flow Graph (CFG)**: Introduce a dedicated CFG analysis phase for more advanced reachability and dead code checks.
 - **Explicit Serialization Schema**: Replace `vars(node)` with an explicit field mapping in `serializer.py` for stricter contract enforcement.
+- **Dynamic Host (Plugin Proposal)**: Explore a push-down stack approach for dynamic code execution (Hot Swapping) without UID collisions. See [future_proposals_dynamic_host.md](file:///c:/myself/proj/intent-behavior-code-inter/docs/future_proposals_dynamic_host.md) for details.

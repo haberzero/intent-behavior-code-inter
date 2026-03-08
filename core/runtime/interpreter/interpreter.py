@@ -21,7 +21,7 @@ from .permissions import PermissionManager as PermissionManagerImpl
 from core.foundation.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction
 from core.foundation.kernel import Type, ListType, DictType, ANY_TYPE
 from core.foundation.builtins import IbInteger, IbString, IbList, IbNone, initialize_builtin_classes
-from core.foundation.bootstrapper import Bootstrapper
+from core.foundation.registry import Registry
 from core.support.host_interface import HostInterface
 from core.foundation.capabilities import IStackInspector
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
@@ -112,17 +112,20 @@ class Interpreter(IStackInspector):
 
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None, 
+                 input_callback: Optional[Callable[[str], str]] = None, 
                  max_instructions: int = 10000, 
                  max_call_stack: int = 100,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
                  debugger: Optional[Any] = None,
-                 root_dir: str = "."):
+                 root_dir: str = ".",
+                 strict_mode: bool = False):
         
         # 0. 启动内核引导
         initialize_builtin_classes()
         
         self.output_callback = output_callback
+        self.input_callback = input_callback
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
         
@@ -184,6 +187,7 @@ class Interpreter(IStackInspector):
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
         self.current_module_name: Optional[str] = None
+        self.strict_mode = strict_mode
 
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
         """获取当前模块下的侧表信息"""
@@ -192,25 +196,70 @@ class Interpreter(IStackInspector):
         module_data = self.artifact_dict.get("modules", {}).get(self.current_module_name, {})
         return module_data.get("side_tables", {}).get(table_name, {}).get(node_uid)
 
+    def save_state(self) -> Dict[str, Any]:
+        """导出当前解释器的运行状态快照 (用于调试或热替换)"""
+        return {
+            "artifact": self.artifact_dict,
+            "instruction_count": self.instruction_count,
+            "call_stack_depth": self.call_stack_depth,
+            "current_module_name": self.current_module_name,
+            # 注意：Context 状态通常由外部单独管理，此处仅记录引用
+        }
+
+    def restore_state(self, state: Dict[str, Any]):
+        """从快照恢复解释器运行状态"""
+        self.artifact_dict = state["artifact"]
+        # 重新绑定池
+        pools = self.artifact_dict.get("pools", {})
+        self.node_pool = pools.get("nodes", {})
+        self.symbol_pool = pools.get("symbols", {})
+        self.scope_pool = pools.get("scopes", {})
+        self.type_pool = pools.get("types", {})
+        
+        self.instruction_count = state["instruction_count"]
+        self.call_stack_depth = state["call_stack_depth"]
+        self.current_module_name = state["current_module_name"]
+
+    def hot_reload_pools(self, artifact_dict: Dict[str, Any]):
+        """热替换底层数据池，不改变当前的变量现场"""
+        self.artifact_dict = artifact_dict
+        pools = self.artifact_dict.get("pools", {})
+        self.node_pool = pools.get("nodes", {})
+        self.symbol_pool = pools.get("symbols", {})
+        self.scope_pool = pools.get("scopes", {})
+        self.type_pool = pools.get("types", {})
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Interpreter pools hot-reloaded.")
+
     def _setup_context(self, context: RuntimeContext):
         """为 Context 注入基础内置变量"""
         # 使用私有属性访问以仅检查当前作用域，避免与后续 bootstrap 冲突
         global_symbols = context.global_scope.get_all_symbols()
         
+        # 注入内置全局函数 (Prelude)
         if 'print' not in global_symbols:
             context.define_variable('print', IbNativeFunction(self._builtin_print, is_method=False), is_const=True)
+        if 'len' not in global_symbols:
+            context.define_variable('len', IbNativeFunction(self._builtin_len, is_method=False), is_const=True)
+        if 'range' not in global_symbols:
+            context.define_variable('range', IbNativeFunction(self._builtin_range, is_method=False), is_const=True)
+        if 'input' not in global_symbols:
+            context.define_variable('input', IbNativeFunction(self._builtin_input, is_method=False), is_const=True)
+        if 'str' not in global_symbols:
+            # 桥接：str(x) 会调用 x.__to_prompt__()
+            context.define_variable('str', IbNativeFunction(self._builtin_str, is_method=False), is_const=True)
+        if 'int' not in global_symbols:
+            # 桥接：int(x) 会调用 x.cast_to(int)
+            context.define_variable('int', IbNativeFunction(self._builtin_int, is_method=False), is_const=True)
+        if 'float' not in global_symbols:
+            # 桥接：float(x) 会调用 x.cast_to(float)
+            context.define_variable('float', IbNativeFunction(self._builtin_float, is_method=False), is_const=True)
         
         # 注入内置类 (int, str, float, list, dict 等)
-        for name, ib_class in Bootstrapper.get_all_classes().items():
+        # 注意：上面的 int, str 会覆盖这里的类符号，这在作为函数使用时是合理的。
+        # 如果需要作为类型使用，目前编译器会通过 side_table 直接映射到 IbClass。
+        for name, ib_class in Registry.get_all_classes().items():
             if name not in global_symbols:
                 context.define_variable(name, ib_class, is_const=True)
-
-        # [NEW] 注入来自编译蓝图的全局符号
-        if self.artifact_dict and "global_symbols" in self.artifact_dict:
-            for name, val in self.artifact_dict["global_symbols"].items():
-                if name not in global_symbols:
-                    # 如果是运行时对象（非静态符号），则注入
-                    context.define_variable(name, val)
 
     @property
     def context(self) -> RuntimeContext:
@@ -232,7 +281,7 @@ class Interpreter(IStackInspector):
         
         module_data = self.node_pool.get(module_uid)
         if not module_data:
-            raise InterpreterError(f"Module UID {module_uid} not found.")
+            raise self._report_error(f"Module UID {module_uid} not found.")
 
         old_context = self._current_context
         if scope:
@@ -250,20 +299,38 @@ class Interpreter(IStackInspector):
                 result = self.visit(stmt_uid)
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
-        except InterpreterError as e:
-            # TODO: 适配新的错误报告，使用 UID 关联源码
+        except InterpreterError:
             raise
         except (ReturnException, BreakException, ContinueException):
-            raise InterpreterError("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
+            raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         except Exception as e:
             msg = f"Runtime error: {str(e)}"
             if self.service_context.issue_tracker:
                 from core.domain.diagnostics import Severity
                 self.service_context.issue_tracker.report(Severity.FATAL, RUN_GENERIC_ERROR, msg)
-            raise InterpreterError(msg, error_code=RUN_GENERIC_ERROR)
+            raise self._report_error(msg, error_code=RUN_GENERIC_ERROR)
         finally:
             self._current_context = old_context
             self.current_module_name = old_module
+
+    def _report_error(self, message: str, node_uid: Optional[str] = None, error_code: Optional[str] = None) -> InterpreterError:
+        """从 side_tables 中恢复位置信息并构造 InterpreterError"""
+        loc_data = self.get_side_table("node_to_loc", node_uid) if node_uid else None
+        
+        from core.domain.diagnostics import Location
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0),
+                end_line=loc_data.get("end_line"),
+                end_column=loc_data.get("end_column")
+            )
+        
+        err = InterpreterError(message, error_code=error_code)
+        err.location = loc
+        return err
 
     def visit(self, node_uid: Union[str, Any]) -> IbObject:
         """核心 Pool-Walking 分发方法"""
@@ -281,16 +348,16 @@ class Interpreter(IStackInspector):
         if not node_data:
             # 可能是基础类型或已解箱对象
             if isinstance(node_uid, (int, float, str, bool)):
-                return Bootstrapper.box(node_uid)
+                return Registry.box(node_uid)
             return IbNone()
 
         self.instruction_count += 1
         
         if self.instruction_count > self.max_instructions:
-            raise InterpreterError("Execution limit exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
+            raise self._report_error("Execution limit exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
 
         if self.call_stack_depth >= self.max_call_stack:
-             raise InterpreterError("Recursion depth exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
+             raise self._report_error("Recursion depth exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
         
         self.call_stack_depth += 1
         try:
@@ -302,12 +369,12 @@ class Interpreter(IStackInspector):
         except InterpreterError:
             raise
         except Exception as e:
-            raise InterpreterError(f"{type(e).__name__}: {str(e)}", node_uid, error_code=RUN_GENERIC_ERROR) from e
+            raise self._report_error(f"{type(e).__name__}: {str(e)}", node_uid, error_code=RUN_GENERIC_ERROR) from e
         finally:
             self.call_stack_depth -= 1
 
     def generic_visit(self, node_uid: str, node_data: Dict[str, Any]):
-        raise InterpreterError(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)
+        raise self._report_error(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)
 
     # --- 访问方法实现 ---
 
@@ -359,34 +426,43 @@ class Interpreter(IStackInspector):
 
     def visit_Constant(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """UTS: 统一常量装箱"""
-        return Bootstrapper.box(node_data.get("value"))
+        return Registry.box(node_data.get("value"))
 
     def visit_BinOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """二元运算分发"""
         left = self.visit(node_data.get("left"))
         right = self.visit(node_data.get("right"))
-        method = OP_MAPPING.get(node_data.get("op"))
-        if not method: raise InterpreterError(f"Unsupported op: {node_data.get('op')}", node_uid)
+        
+        op = node_data.get("op")
+        method = {
+            'Add': '__add__', 'Sub': '__sub__', 'Mult': '__mul__',
+            'Div': '__div__', 'Mod': '__mod__', 'And': '__and__', 
+            'Or': '__or__', 'BitAnd': '__and__', 'BitOr': '__or__',
+            'BitXor': '__xor__', 'LShift': '__lshift__', 'RShift': '__rshift__'
+        }.get(op)
+        
+        if not method: raise self._report_error(f"Unsupported op: {op}", node_uid)
         return left.receive(method, [right])
 
     def visit_Compare(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
-        """处理比较运算 -> 消息发送"""
+        """比较运算实现"""
         left = self.visit(node_data.get("left"))
-        ops = node_data.get("ops", [])
-        comparators = node_data.get("comparators", [])
-        if not ops: return left
+        # 简化：仅取第一个比较操作
+        op = node_data.get("ops", ["Eq"])[0]
+        right = self.visit(node_data.get("comparators", [None])[0])
         
-        # 简化处理：只取第一个比较操作符
-        op = ops[0]
-        right = self.visit(comparators[0])
+        method = {
+            'Eq': '__eq__', 'NotEq': '__ne__', 'Lt': '__lt__', 
+            'LtE': '__le__', 'Gt': '__gt__', 'GtE': '__ge__'
+        }.get(op)
         
-        method = OP_MAPPING.get(op)
-        if not method: raise InterpreterError(f"Unsupported comparison: {op}", node_uid)
+        if not method: raise self._report_error(f"Unsupported comparison: {op}", node_uid)
         return left.receive(method, [right])
 
     def visit_ListExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
         elts = [self.visit(e) for e in node_data.get("elts", [])]
-        return Bootstrapper.box(elts)
+        return Registry.box(elts)
 
     def visit_Dict(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """字典字面量 -> 统一装箱"""
@@ -398,7 +474,7 @@ class Interpreter(IStackInspector):
             val_obj = self.visit(v_uid)
             native_key = key_obj.to_native() if hasattr(key_obj, 'to_native') else key_obj
             data[native_key] = val_obj
-        return Bootstrapper.box(data)
+        return Registry.box(data)
 
     def visit_Subscript(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """下标访问 -> __getitem__"""
@@ -407,12 +483,14 @@ class Interpreter(IStackInspector):
         return value.receive('__getitem__', [slice_obj])
 
     def visit_UnaryOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
-        """一元运算 -> 消息发送"""
+        """一元运算实现"""
         operand = self.visit(node_data.get("operand"))
-        # 注意：UNARY_OP_MAPPING 尚未定义，补全它
-        UNARY_OP_MAPPING = {'UAdd': '__pos__', 'USub': '__neg__', 'Not': '__not__', 'Invert': '__invert__'}
-        method = UNARY_OP_MAPPING.get(node_data.get("op"))
-        if not method: raise InterpreterError(f"Unsupported unary op: {node_data.get('op')}", node_uid)
+        op = node_data.get("op")
+        method = {
+            'UAdd': '__pos__', 'USub': '__neg__', 'Not': '__not__', 'Invert': '__invert__'
+        }.get(op)
+        
+        if not method: raise self._report_error(f"Unsupported unary op: {op}", node_uid)
         return operand.receive(method, [])
 
     def visit_Name(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
@@ -422,15 +500,16 @@ class Interpreter(IStackInspector):
             try:
                 return self.context.get_variable_by_uid(sym_uid)
             except InterpreterError:
-                # 可能是尚未初始化的局部变量
-                pass
-        
-        # 备选方案：按名称查找（针对内置函数、插件或动态注入）
+                # 如果是严格模式，UID 查找失败即报错
+                if self.strict_mode: raise
+
+        # 兼容性/动态代码回退：名称查找
         name = node_data.get("id")
-        val = self.context.get_variable(name)
-        if not isinstance(val, IbObject):
-            return Bootstrapper.box(val)
-        return val
+        if self.strict_mode and not sym_uid:
+            raise self._report_error(f"Strict mode: Symbol UID missing for variable '{name}'.", node_uid)
+            
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Symbol UID lookup failed for {name}, falling back to name lookup.")
+        return self.context.get_variable(name)
 
     def visit_Assign(self, node_uid: str, node_data: Dict[str, Any]):
         """赋值语句实现"""
@@ -454,8 +533,11 @@ class Interpreter(IStackInspector):
                         self.context.set_variable_by_uid(sym_uid, value)
                     else:
                         self.context.define_variable(name, value, uid=sym_uid)
-                else:
+                elif not self.strict_mode:
+                    # 回退到名称查找
                     self.context.set_variable(name, value)
+                else:
+                    raise self._report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
             
             # 2. 类型标注表达式 (TypeAnnotatedExpr)
             elif target_data["_type"] == "TypeAnnotatedExpr":
@@ -471,7 +553,7 @@ class Interpreter(IStackInspector):
             elif target_data["_type"] == "Attribute":
                 obj = self.visit(target_data.get("value"))
                 attr = target_data.get("attr")
-                obj.receive('__setattr__', [Bootstrapper.box(attr), value])
+                obj.receive('__setattr__', [Registry.box(attr), value])
                 
         return IbNone()
 
@@ -494,25 +576,36 @@ class Interpreter(IStackInspector):
         return IbNone()
 
     def visit_AugAssign(self, node_uid: str, node_data: Dict[str, Any]):
-        """增量赋值 a += 1"""
+        """复合赋值实现 (a += 1)"""
         target_uid = node_data.get("target")
-        value_uid = node_data.get("value")
-        op = node_data.get("op")
-        
-        old_val = self.visit(target_uid)
-        delta = self.visit(value_uid)
-        
-        method = OP_MAPPING.get(op)
-        if not method: raise InterpreterError(f"Unsupported aug op: {op}", node_uid)
-        
-        new_val = old_val.receive(method, [delta])
-        
-        # 写回目标
         target_data = self.node_pool.get(target_uid)
-        if target_data and target_data["_type"] == "Name":
-            sym_uid = self.get_side_table("node_to_symbol", target_uid)
-            self.context.set_variable_by_uid(sym_uid, new_val)
         
+        value = self.visit(node_data.get("value"))
+        op = node_data.get("op")
+        method = {
+            'Add': '__add__', 'Sub': '__sub__', 'Mult': '__mul__', 'Div': '__div__'
+        }.get(op)
+        
+        if not method: raise self._report_error(f"Unsupported aug op: {op}", node_uid)
+        
+        # 1. 读取旧值
+        old_val = self.visit(target_uid)
+        
+        # 2. 计算新值
+        new_val = old_val.receive(method, [value])
+        
+        # 3. 写回
+        if target_data["_type"] == "Name":
+            sym_uid = self.get_side_table("node_to_symbol", target_uid)
+            if sym_uid:
+                self.context.set_variable_by_uid(sym_uid, new_val)
+            else:
+                self.context.set_variable(target_data.get("id"), new_val)
+        elif target_data["_type"] == "Attribute":
+            obj = self.visit(target_data.get("value"))
+            attr = target_data.get("attr")
+            obj.receive('__setattr__', [Registry.box(attr), new_val])
+            
         return IbNone()
 
     def visit_BoolOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
@@ -542,7 +635,7 @@ class Interpreter(IStackInspector):
         """读取属性 -> __getattr__"""
         value = self.visit(node_data.get("value"))
         attr = node_data.get("attr")
-        return value.receive('__getattr__', [Bootstrapper.box(attr)])
+        return value.receive('__getattr__', [Registry.box(attr)])
 
     def visit_If(self, node_uid: str, node_data: Dict[str, Any]):
         def action():
@@ -582,7 +675,7 @@ class Interpreter(IStackInspector):
             elements_obj = iterable_obj.receive('to_list', [])
             from core.foundation.builtins import IbList
             if not isinstance(elements_obj, IbList):
-                raise InterpreterError(f"Object is not iterable", node_uid)
+                raise self._report_error(f"Object is not iterable", node_uid)
             
             elements = elements_obj.elements
             total = len(elements)
@@ -672,7 +765,7 @@ class Interpreter(IStackInspector):
                 raise
             except (ThrownException, Exception) as e:
                 # 包装 Python 原生异常
-                error_obj = e.value if isinstance(e, ThrownException) else Bootstrapper.box(str(e))
+                error_obj = e.value if isinstance(e, ThrownException) else Registry.box(str(e))
                 
                 # 查找匹配的 except 块
                 handled = False
@@ -707,7 +800,7 @@ class Interpreter(IStackInspector):
         """动态创建类对象"""
         name = node_data.get("name")
         parent_name = node_data.get("parent") or "Object"
-        new_class = Bootstrapper.create_subclass(name, parent_name)
+        new_class = Registry.create_subclass(name, parent_name)
         
         # 1. 注册方法与字段
         body = node_data.get("body", [])
@@ -766,10 +859,42 @@ class Interpreter(IStackInspector):
         return res.to_native() != 0
 
     def _builtin_print(self, *args: IbObject):
-        texts = [str(arg.to_native()) if hasattr(arg, 'to_native') else str(arg) for arg in args]
+        texts = [str(arg.receive('__to_prompt__', []).to_native()) if hasattr(arg, 'receive') else str(arg) for arg in args]
         msg = " ".join(texts)
         if self.output_callback:
             self.output_callback(msg)
         else:
             print(msg)
         return IbNone()
+
+    def _builtin_len(self, obj: IbObject) -> IbObject:
+        """全局 len() 函数"""
+        if hasattr(obj, 'elements'):
+            return Registry.box(len(obj.elements))
+        if hasattr(obj, 'fields'):
+            return Registry.box(len(obj.fields))
+        # 尝试消息发送
+        return obj.receive('len', [])
+
+    def _builtin_range(self, *args: IbObject) -> IbObject:
+        """全局 range() 函数"""
+        native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
+        return Registry.box(list(range(*native_args)))
+
+    def _builtin_input(self, prompt: Optional[IbObject] = None) -> IbObject:
+        """全局 input() 函数"""
+        p = prompt.to_native() if prompt else ""
+        res = input(p)
+        return Registry.box(res)
+
+    def _builtin_str(self, obj: IbObject) -> IbObject:
+        """全局 str() 函数"""
+        return obj.receive('__to_prompt__', [])
+
+    def _builtin_int(self, obj: IbObject) -> IbObject:
+        """全局 int() 函数"""
+        return obj.receive('cast_to', [Registry.get_class("int")])
+
+    def _builtin_float(self, obj: IbObject) -> IbObject:
+        """全局 float() 函数"""
+        return obj.receive('cast_to', [Registry.get_class("float")])
