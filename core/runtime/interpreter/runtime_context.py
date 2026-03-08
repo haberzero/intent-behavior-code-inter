@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 from core.foundation.interfaces import RuntimeSymbol, Scope, RuntimeContext
-from core.types import parser_types as ast
-from core.types.exception_types import InterpreterError
+from core.domain import ast as ast
+from core.domain.exceptions import InterpreterError
 from core.support.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.capabilities import IStateReader
 

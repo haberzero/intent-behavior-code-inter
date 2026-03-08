@@ -136,6 +136,21 @@ class ListType(BuiltinType):
     def element_type(self) -> StaticType:
         return self._element_type
 
+class DictType(BuiltinType):
+    """内置字典类型，支持键值类型推导"""
+    def __init__(self, key_type: StaticType = STATIC_ANY, value_type: StaticType = STATIC_ANY):
+        super().__init__("dict")
+        self._key_type = key_type
+        self._value_type = value_type
+        
+    @property
+    def key_type(self) -> StaticType:
+        return self._key_type
+        
+    @property
+    def value_type(self) -> StaticType:
+        return self._value_type
+
 class ClassType(StaticType):
     """用户定义的类类型"""
     def __init__(self, name: str, parent: Optional['ClassType'] = None, scope: Optional['SymbolTable'] = None):

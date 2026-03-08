@@ -3,7 +3,7 @@ import os
 import tempfile
 import shutil
 from core.engine import IBCIEngine
-from core.types.diagnostic_types import CompilerError
+from core.domain.diagnostics import CompilerError
 
 class TestPathSecurity(unittest.TestCase):
     def setUp(self):

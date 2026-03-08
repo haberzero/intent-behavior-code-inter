@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Callable, Union
-from core.types import parser_types as ast
-from core.types.exception_types import (
+from core.domain import ast as ast
+from core.domain.exceptions import (
     InterpreterError, ReturnException, BreakException, ContinueException, ThrownException,
     LLMUncertaintyError, RetryException
 )
@@ -184,7 +184,7 @@ class Interpreter(IStackInspector):
 
         # [NEW] 注入来自编译蓝图的全局符号
         if self.artifact and self.artifact.global_symbols:
-            from core.compiler.semantic.symbols import Symbol
+            from core.domain.symbols import Symbol
             for name, val in self.artifact.global_symbols.items():
                 if name not in global_symbols and not isinstance(val, Symbol):
                     # 如果是运行时对象（非静态符号），则注入
@@ -220,7 +220,7 @@ class Interpreter(IStackInspector):
             return result
         except InterpreterError as e:
             if self.service_context.issue_tracker:
-                from core.types.diagnostic_types import Severity
+                from core.domain.diagnostics import Severity
                 self.service_context.issue_tracker.report(
                     Severity.ERROR,
                     e.error_code or RUN_GENERIC_ERROR,
@@ -233,7 +233,7 @@ class Interpreter(IStackInspector):
         except Exception as e:
             msg = f"Runtime error: {str(e)}"
             if self.service_context.issue_tracker:
-                from core.types.diagnostic_types import Severity
+                from core.domain.diagnostics import Severity
                 self.service_context.issue_tracker.report(Severity.FATAL, RUN_GENERIC_ERROR, msg)
             raise InterpreterError(msg, error_code=RUN_GENERIC_ERROR)
         finally:
@@ -324,18 +324,6 @@ class Interpreter(IStackInspector):
             data[native_key] = val_obj
         return Bootstrapper.box(data)
 
-    def visit_CastExpr(self, node: ast.CastExpr) -> IbObject:
-        """类型强转 (Type) Expr"""
-        from core.foundation.bootstrapper import Bootstrapper
-        target_class = Bootstrapper.get_class(node.type_name)
-        value = self.visit(node.value)
-        
-        if not target_class:
-            raise InterpreterError(f"Unknown type: {node.type_name}", node)
-            
-        # 如果是 IbBehavior，执行它并强转
-        return value.receive('cast_to', [target_class])
-
     def visit_Subscript(self, node: ast.Subscript) -> IbObject:
         """下标访问 -> __getitem__"""
         value = self.visit(node.value)
@@ -366,7 +354,7 @@ class Interpreter(IStackInspector):
             # 注入预期返回类型 (用于 LLM Executor 优化提示词)
             type_pushed = False
             target_type = ANY_TYPE
-            if node.type_annotation:
+            if hasattr(node, 'type_annotation') and node.type_annotation:
                 target_type = self._resolve_type(node.type_annotation)
                 self.service_context.llm_executor.push_expected_type(target_type.name)
                 type_pushed = True
@@ -378,9 +366,9 @@ class Interpreter(IStackInspector):
                 from core.foundation.builtins import IbBehavior
                 if isinstance(value, IbBehavior):
                     force_eager = False
-                    if node.llm_fallback:
+                    if hasattr(node, 'llm_fallback') and node.llm_fallback:
                         force_eager = True
-                    elif node.type_annotation:
+                    elif hasattr(node, 'type_annotation') and node.type_annotation:
                         if target_type.name not in ("callable", "var", "Any"):
                             force_eager = True
                     
@@ -390,7 +378,7 @@ class Interpreter(IStackInspector):
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         # UTS: 使用统一的类型兼容性检查协议
-                        if node.type_annotation:
+                        if hasattr(node, 'type_annotation') and node.type_annotation:
                             if not value.ib_class.is_assignable_to(target_type):
                                 try:
                                     # 尝试自动转换协议 (如 str -> int)
@@ -719,7 +707,7 @@ class Interpreter(IStackInspector):
         if hasattr(intent, 'segments') and intent.segments:
             content = self.service_context.llm_executor._evaluate_segments(intent.segments, self.context)
             # 这里的 intent 是 AST 节点，为了不破坏 AST，我们创建一个临时的 IntentInfo 对象
-            from core.types.parser_types import IntentInfo
+            from core.domain.ast import IntentInfo
             intent = IntentInfo(content=content, mode=intent.mode)
             
         self.context.push_intent(intent)

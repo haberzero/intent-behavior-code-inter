@@ -1,5 +1,5 @@
 from typing import Any, Protocol, List, Dict, Callable, Optional, Type, Union, runtime_checkable
-from core.types import parser_types as ast
+from core.domain import ast as ast
 
 # --- Diagnostics ---
 

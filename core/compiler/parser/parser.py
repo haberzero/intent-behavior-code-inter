@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
-from core.types.lexer_types import Token, TokenType
-from core.types import parser_types as ast
+from core.domain.tokens import Token, TokenType
+from core.domain import ast as ast
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 from core.compiler.parser.core.context import ParserContext
 from core.compiler.support.diagnostics import DiagnosticReporter
@@ -9,9 +9,9 @@ from core.compiler.parser.components.statement import StatementComponent
 from core.compiler.parser.components.declaration import DeclarationComponent
 from core.compiler.parser.components.type_def import TypeComponent
 from core.compiler.parser.components.import_def import ImportComponent
-from core.types.dependency_types import ImportInfo, ImportType
+from core.domain.dependencies import ImportInfo, ImportType
 from core.support.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
-from core.types.diagnostic_types import Severity, Location
+from core.domain.diagnostics import Severity, Location
 
 from core.support.host_interface import HostInterface
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger

@@ -1,5 +1,5 @@
-from core.types.lexer_types import TokenType
-from core.types import parser_types as ast
+from core.domain.tokens import TokenType
+from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
 class TypeComponent(BaseComponent):

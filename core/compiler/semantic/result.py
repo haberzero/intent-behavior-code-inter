@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
-from core.types import parser_types as ast
-from .symbols import SymbolTable
+from core.domain import ast as ast
+from core.domain.symbols import SymbolTable
 
 @dataclass
 class CompilationResult:
@@ -11,6 +11,9 @@ class CompilationResult:
     """
     module_ast: ast.Module
     symbol_table: SymbolTable
+    node_scenes: Dict[str, Any] = field(default_factory=dict) # Node UID -> Scene name
+    node_to_symbol: Dict[str, str] = field(default_factory=dict) # Node UID -> Symbol UID
+    node_to_type: Dict[str, Any] = field(default_factory=dict) # Node UID -> Type UID
     
     @property
     def has_errors(self) -> bool:
@@ -19,6 +22,6 @@ class CompilationResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """使用平铺化序列化器将结果序列化为字典"""
-        from .serializer import FlatSerializer
+        from core.compiler.serialization.serializer import FlatSerializer
         serializer = FlatSerializer()
         return serializer.serialize_result(self)

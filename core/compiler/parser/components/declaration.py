@@ -1,7 +1,7 @@
 from typing import List, Optional, Union, TYPE_CHECKING
-from core.types.lexer_types import TokenType
-from core.types import parser_types as ast
-from core.types.diagnostic_types import Severity
+from core.domain.tokens import TokenType
+from core.domain import ast as ast
+from core.domain.diagnostics import Severity
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
@@ -141,15 +141,24 @@ class DeclarationComponent(BaseComponent):
         if explicit_var:
             # 'var' keyword already consumed
             type_token = self.stream.previous()
+            # Default type is 'var' (Any)
             type_annotation = self._loc(ast.Name(id='var', ctx='Load'), type_token)
+            
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
+            
+            # Optional type override: var x: int = 1
+            if self.stream.match(TokenType.COLON):
+                type_annotation = self.type_def.parse_type_annotation()
         else:
-            # Parse type annotation
+            # Parse type annotation: int x = 1
             start_token = self.stream.peek()
             type_annotation = self.type_def.parse_type_annotation()
             type_token = start_token
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
 
-        name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
         target = self._loc(ast.Name(id=name_token.value, ctx='Store'), name_token)
+        if type_annotation:
+            target = self._loc(ast.TypeAnnotatedExpr(target=target, annotation=type_annotation), type_token)
         
         value = None
         if self.stream.match(TokenType.ASSIGN):
@@ -159,7 +168,7 @@ class DeclarationComponent(BaseComponent):
         
         # 解析可选的 llmexcept 块
         llm_fallback = self.statement._parse_llm_fallback()
-        stmt = self._loc(ast.Assign(targets=[target], value=value, type_annotation=type_annotation), type_token)
+        stmt = self._loc(ast.Assign(targets=[target], value=value), type_token)
         if llm_fallback:
             return self._loc(ast.LLMExceptionalStmt(primary=stmt, fallback=llm_fallback), type_token)
         return stmt
@@ -242,7 +251,9 @@ class DeclarationComponent(BaseComponent):
                 annotation = self.type_def.parse_type_annotation()
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
                 
-                param_node = self._loc(ast.arg(arg=name_token.value, annotation=annotation), name_token)
+                param_node = self._loc(ast.arg(arg=name_token.value), name_token)
+                if annotation:
+                    param_node = self._loc(ast.TypeAnnotatedExpr(target=param_node, annotation=annotation), name_token)
                 params.append(param_node)
                     
                 if not self.stream.match(TokenType.COMMA):

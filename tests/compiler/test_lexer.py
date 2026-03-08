@@ -1,7 +1,7 @@
 import unittest
 from tests.compiler.base import BaseCompilerTest
 from core.compiler.lexer.lexer import Lexer
-from core.types.lexer_types import TokenType
+from core.domain.tokens import TokenType
 
 class TestLexer(BaseCompilerTest):
     """

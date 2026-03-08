@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from core.types.lexer_types import Token, TokenType, SubState
+from core.domain.tokens import Token, TokenType, SubState
 from core.compiler.lexer.str_stream import StrStream
 from core.compiler.support.diagnostics import DiagnosticReporter
 

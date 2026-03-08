@@ -1,21 +1,21 @@
 import os
 from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
-from core.types.dependency_types import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
-from core.types.parser_types import Module
+from core.domain.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
+from core.domain.ast import Module
 from core.compiler.lexer.lexer import Lexer
-from core.types.lexer_types import Token
+from core.domain.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic.semantic_analyzer import SemanticAnalyzer
+from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.support.diagnostics import DiagnosticReporter
 from core.compiler.support.issue_adapter import wrap_tracker
 from core.support.diagnostics.issue_tracker import IssueTracker
 from core.compiler.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
-from core.types.diagnostic_types import Severity, CompilerError
+from core.domain.diagnostics import Severity, CompilerError
 from core.support.host_interface import HostInterface
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.compiler.artifact import CompilationArtifact
+from core.domain.artifact import CompilationArtifact
 from core.compiler.semantic.result import CompilationResult
 
 class Scheduler:
@@ -90,7 +90,7 @@ class Scheduler:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
         except Exception as e:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Circular dependency or graph error: {str(e)}")
-            self.issue_tracker.report(Severity.ERROR, "DEP_CYCLE", str(e))
+            self.issue_tracker.error(str(e))
             raise e
 
         # 3. Compile in Topological Order
@@ -110,8 +110,7 @@ class Scheduler:
             
             if failed_deps:
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Skipping {file_path} because dependencies failed: {failed_deps}")
-                self.issue_tracker.report(Severity.ERROR, "DEP_FAILED", 
-                    f"Module '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
+                self.issue_tracker.error(f"Module '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
                 mod_info.status = ModuleStatus.FAILED
                 continue
 
@@ -196,10 +195,10 @@ class Scheduler:
                 abs_path = os.path.realpath(current_path)
                 if abs_path not in self.allowed_files and os.path.commonpath([abs_root, abs_path]) != abs_root:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Security violation: Access denied for {current_path}")
-                    self.issue_tracker.report(Severity.ERROR, "DEP_FILE_NOT_FOUND", f"Security Error: Access denied for file outside root: {current_path}")
+                    self.issue_tracker.error(f"Security Error: Access denied for file outside root: {current_path}")
                     continue
             except ValueError:
-                 self.issue_tracker.report(Severity.ERROR, "DEP_FILE_NOT_FOUND", f"Security Error: Access denied (drive mismatch): {current_path}")
+                 self.issue_tracker.error(f"Security Error: Access denied (drive mismatch): {current_path}")
                  continue
 
             # 1. Read Content & Lex (if not cached or outdated)
@@ -209,7 +208,7 @@ class Scheduler:
                     mtime = os.path.getmtime(current_path)
             except (FileNotFoundError, OSError):
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"File not found: {current_path}")
-                self.issue_tracker.report(Severity.ERROR, "DEP_FILE_NOT_FOUND", f"File not found: {current_path}")
+                self.issue_tracker.error(f"File not found: {current_path}")
                 continue
             
             # Lexing
@@ -315,7 +314,7 @@ class Scheduler:
             analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger)
             
             # Inject predefined symbols
-            from core.compiler.semantic.symbols import Symbol, VariableSymbol, SymbolKind
+            from core.domain.symbols import Symbol, VariableSymbol, SymbolKind
             for name, val in self.predefined_symbols.items():
                 if isinstance(val, Symbol):
                     analyzer.symbol_table.define(val)
@@ -325,7 +324,7 @@ class Scheduler:
             
             # Inject imported modules
             from core.compiler.semantic.bridge import TypeBridge
-            from core.compiler.semantic.symbols import ModuleType, SymbolTable, SymbolKind, VariableSymbol
+            from core.domain.symbols import ModuleType, SymbolTable, SymbolKind, VariableSymbol
             for imp in module_info.imports:
                 # Handle dotted names: import a.b.c
                 parts = imp.module_name.split('.')
@@ -428,7 +427,7 @@ class Scheduler:
         except CompilerError:
             raise
         except Exception as e:
-            file_tracker.report(Severity.FATAL, "INTERNAL_ERROR", f"Internal compiler error: {str(e)}")
+            file_tracker.error(f"Internal compiler error: {str(e)}")
             raise CompilerError("Internal error during compilation") from e
             
         finally:

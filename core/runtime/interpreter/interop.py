@@ -1,6 +1,6 @@
 from typing import Any, Callable, Dict, Optional
 from core.foundation.interfaces import InterOp
-from core.types.exception_types import InterpreterError
+from core.domain.exceptions import InterpreterError
 from core.support.host_interface import HostInterface
 
 class InterOpImpl:

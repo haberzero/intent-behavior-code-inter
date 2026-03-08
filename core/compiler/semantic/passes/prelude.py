@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-from .symbols import (
+from core.domain.symbols import (
     StaticType, BuiltinType, ListType, FunctionType, ClassType,
     STATIC_ANY, STATIC_INT, STATIC_FLOAT, STATIC_STR, STATIC_BOOL, STATIC_VOID
 )

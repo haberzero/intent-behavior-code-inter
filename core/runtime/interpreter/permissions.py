@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from core.types.exception_types import InterpreterError
+from core.domain.exceptions import InterpreterError
 
 class PermissionManager:
     """

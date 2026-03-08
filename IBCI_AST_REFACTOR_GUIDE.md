@@ -22,50 +22,15 @@ Previously, `llmexcept` logic was implemented as an optional `llm_fallback: List
 
 ---
 
-## 3. Issue 2: `IntentInfo` (Intent Metadata)
+## 3. Issue 2: `IntentInfo` (Intent Metadata) - [COMPLETED]
 ### 3.1 Description
 Intent comments (e.g., `@~...~`) are currently parsed as `IntentInfo` and attached to nodes. The Parser uses a stateful "pending intent" system to inject these into the next parsed node.
 
-### 3.2 Current Implementation Locations
-- **File**: [parser_types.py](file:///c:/myself/proj/intent-behavior-code-inter/core/types/parser_types.py)
-    - `IntentInfo` class definition (L17-22)
-    - `FunctionDef.intent` (L106)
-    - `ClassDef.intent` (L119)
-    - `LLMFunctionDef.intent` (L132)
-    - `Call.intent` (L279)
-    - `BehaviorExpr.intent` (L312)
-- **File**: [declaration.py](file:///c:/myself/proj/intent-behavior-code-inter/core/compiler/parser/components/declaration.py)
-    - `pending_intent = self.context.consume_intent()` logic (L76-142).
-
-### 3.3 Proposed Architectural Change
-Introduce **Annotated Wrapper Nodes** or a unified **Metadata Container**.
-```python
-@dataclass
-class AnnotatedStmt(Stmt):
-    intent: IntentInfo
-    stmt: Stmt
-
-@dataclass
-class AnnotatedExpr(Expr):
-    intent: IntentInfo
-    expr: Expr
-```
-
-### 3.4 Implementation Checklist
-1. [ ] **AST Modification**:
-    - Add `AnnotatedStmt` and `AnnotatedExpr` to `parser_types.py`.
-    - Remove `intent` attribute from `FunctionDef`, `ClassDef`, etc.
-2. [ ] **Parser Refactoring**:
-    - Modify `declaration.py` and `statement.py`.
-    - Instead of "injecting" intent into a node's property, wrap the resulting node in an `AnnotatedNode`.
-3. [ ] **Semantic Analysis Refactoring**:
-    - Implement `visit_AnnotatedStmt` and `visit_AnnotatedExpr`.
-    - These methods should process the intent (e.g., for LLM-related checks) and then delegate to `self.visit(node.stmt/expr)`.
-4. [ ] **SymbolTable Sync**: Ensure the `AnnotatedNode` correctly delegates or shares the `uid` if needed, or update the symbol mapping logic.
-
-### 3.5 Impact Analysis
-- **Risk**: Medium. Significantly changes the AST hierarchy.
-- **Benefit**: Very High. Makes intent parsing stateless and deterministic.
+### 3.2 Refactored Implementation
+- **Nodes**: `AnnotatedStmt` and `AnnotatedExpr` in [parser_types.py](file:///c:/myself/proj/intent-behavior-code-inter/core/types/parser_types.py).
+- **Parser**: `declaration.py` now wraps statements in `AnnotatedStmt` when a pending intent is present, instead of property injection.
+- **Semantic**: `SemanticAnalyzer` and `Collector` visit `AnnotatedStmt/Expr`, allowing unified intent processing.
+- **Impact**: Parser state is now safely consumed at the statement level, ensuring no "ghost intents" linger across blocks.
 
 ---
 
@@ -188,29 +153,15 @@ Remove these fields from the AST nodes. In `SemanticAnalyzer`, maintain:
 - **Serialization**: The binary format of `CompilationArtifact` will change.
 - **Visitor Methods**: All `visit_*` methods must be reviewed for the new node types.
 
-## 8. Issue 7: Global Diagnostic Coupling (`IssueTracker`)
+## 8. Issue 7: Global Diagnostic Coupling (`IssueTracker`) - [COMPLETED]
 ### 8.1 Description
 The compiler currently depends on the `foundation` layer's `IssueTracker`. This creates an architectural leak where the compiler must know about system-level logging and issue management.
 
-### 8.2 Proposed Architectural Change
-**Compiler Diagnostic Interface (`DiagnosticReporter`)**.
-Introduce a local interface within the compiler to abstract away the error reporting mechanism.
-
-### 8.3 Implementation Checklist
-1. [ ] **Define Interface**:
-    - Create `core/compiler/support/diagnostics.py`.
-    - Define `class DiagnosticReporter(Protocol)`.
-2. [ ] **Implement Adapter**:
-    - Create `core/compiler/support/issue_tracker_adapter.py`.
-    - This class implements `DiagnosticReporter` by wrapping the existing `IssueTracker`.
-3. [ ] **Refactor Compiler Components**:
-    - Update `Lexer`, `Parser`, and `SemanticAnalyzer` to accept a `DiagnosticReporter` instead of a raw `IssueTracker`.
-4. [ ] **Decouple Foundation**:
-    - Ensure `core/compiler/` no longer imports from `core/foundation/interfaces.py` for diagnostic purposes.
-
-### 8.4 Impact Analysis
-- **Risk**: Low. Purely an interface refactor.
-- **Benefit**: High. Allows the compiler to run in standalone environments and clarifies the boundary between static analysis and runtime infrastructure.
+### 8.2 Refactored Implementation
+- **Interface**: `DiagnosticReporter` protocol in [diagnostics.py](file:///c:/myself/proj/intent-behavior-code-inter/core/compiler/support/diagnostics.py).
+- **Adapter**: `IssueTrackerAdapter` in [issue_adapter.py](file:///c:/myself/proj/intent-behavior-code-inter/core/compiler/support/issue_adapter.py) wraps the old `IssueTracker`.
+- **Refactoring**: All compiler components (Lexer, Parser, Analyzer) now use the `DiagnosticReporter` interface.
+- **Impact**: The compiler is now theoretically standalone and decoupled from the `foundation` layer's concrete error reporting logic.
 
 ---
 ## 9. Conclusion: The "Pool-Walking" Vision

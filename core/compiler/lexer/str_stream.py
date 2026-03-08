@@ -1,5 +1,5 @@
 from typing import List, Optional
-from core.types.lexer_types import TokenType, Token
+from core.domain.tokens import TokenType, Token
 
 class StrStream:
     """提供字符流操作，包括位置维护、前瞻和匹配。"""

@@ -2,14 +2,14 @@ import os
 import importlib.util
 from typing import Optional, Dict, Any
 
-from core.scheduler import Scheduler
+from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
 from core.compiler.support.issue_adapter import wrap_tracker
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.support.host_interface import HostInterface
 from core.foundation.types import ModuleMetadata
-from core.types.diagnostic_types import CompilerError
+from core.domain.diagnostics import CompilerError
 from core.support.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
 
 class IBCIEngine:
@@ -131,7 +131,7 @@ class IBCIEngine:
         
         # 0. 预置符号到调度器
         if variables:
-            from core.compiler.semantic.symbols import STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL, STATIC_ANY, VariableSymbol, SymbolKind
+            from core.domain.symbols import STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL, STATIC_ANY, VariableSymbol, SymbolKind
             static_vars = {}
             for name, val in variables.items():
                 stype = STATIC_ANY

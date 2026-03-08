@@ -1,7 +1,7 @@
 from typing import Optional, Any, List, Tuple
 from core.compiler.support.diagnostics import DiagnosticReporter
-from core.types import parser_types as ast
-from .symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind, STATIC_ANY
+from core.domain import ast as ast
+from core.domain.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind, STATIC_ANY
 
 class SymbolExtractor:
     """
@@ -16,6 +16,8 @@ class SymbolExtractor:
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     results.append((target.id, target))
+                elif isinstance(target, ast.TypeAnnotatedExpr) and isinstance(target.target, ast.Name):
+                    results.append((target.target.id, target.target))
         elif isinstance(node, ast.For):
             if isinstance(node.target, ast.Name):
                 results.append((node.target.id, node.target))
@@ -29,8 +31,9 @@ class SymbolCollector:
     第一阶段：符号收集 (Pass 1)
     仅收集顶层符号（类、函数、LLM 函数），不进行类型解析。
     """
-    def __init__(self, symbol_table: SymbolTable, issue_tracker: Optional[DiagnosticReporter] = None):
+    def __init__(self, symbol_table: SymbolTable, analyzer: Any = None, issue_tracker: Optional[DiagnosticReporter] = None):
         self.symbol_table = symbol_table
+        self.analyzer = analyzer
         self.issue_tracker = issue_tracker
 
     def collect(self, node: ast.ASTNode):
@@ -58,6 +61,9 @@ class SymbolCollector:
     def _define(self, sym: Symbol, node: ast.ASTNode):
         try:
             self.symbol_table.define(sym)
+            # [NEW Phase 5] 记录侧表映射
+            if self.analyzer and hasattr(self.analyzer, "node_to_symbol"):
+                self.analyzer.node_to_symbol[node.uid] = sym.uid
         except ValueError as e:
             if self.issue_tracker:
                 self.issue_tracker.error(str(e), node)
@@ -71,7 +77,6 @@ class SymbolCollector:
         # 1. 注册类符号
         sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, node_uid=node.uid)
         self._define(sym, node)
-        node.symbol_uid = sym.uid # 绑定 AST 节点
         
         # 2. 进入类作用域收集成员
         old_table = self.symbol_table
@@ -89,7 +94,6 @@ class SymbolCollector:
     def visit_FunctionDef(self, node: ast.FunctionDef):
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, node_uid=node.uid)
         self._define(sym, node)
-        node.symbol_uid = sym.uid
         
         # 函数内部参数和局部变量暂时不作为全局符号收集，留给分析阶段
         pass
@@ -97,7 +101,6 @@ class SymbolCollector:
     def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, is_llm=True, node_uid=node.uid)
         self._define(sym, node)
-        node.symbol_uid = sym.uid
 
     def visit_Assign(self, node: ast.Assign):
         """
@@ -107,8 +110,7 @@ class SymbolCollector:
             # 避免在 Pass 1 重复定义
             if name not in self.symbol_table.symbols:
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, node_uid=node.uid)
-                self._define(sym, node)
-                target.symbol_uid = sym.uid
+                self._define(sym, target) # 绑定 target 节点
 
     def visit_AnnotatedStmt(self, node: ast.AnnotatedStmt):
         """递归收集包装语句内的符号"""
@@ -125,6 +127,15 @@ class SymbolCollector:
     def visit_AnnotatedExpr(self, node: ast.AnnotatedExpr):
         """预扫描包装表达式内的符号"""
         self.visit(node.expr)
+
+    def visit_TypeAnnotatedExpr(self, node: ast.TypeAnnotatedExpr):
+        """预扫描带类型标注的表达式"""
+        self.visit(node.target)
+
+    def visit_FilteredExpr(self, node: ast.FilteredExpr):
+        """预扫描带过滤条件的表达式"""
+        self.visit(node.expr)
+        self.visit(node.filter)
 
     def visit_LLMExceptionalStmt(self, node: ast.LLMExceptionalStmt):
         """递归收集包装节点内的符号"""
@@ -165,15 +176,16 @@ class LocalSymbolCollector:
 
     def _define(self, sym: VariableSymbol, node: ast.ASTNode):
         try:
-            # [LIFECYCLE] 符号生命周期管理：
-            # 在 Pass 2.5 预扫描阶段，允许覆盖来自顶层 Pass 1 的 Any/var 占位符，
-            # 从而将更具体的类型信息注入到符号表中。
+            # [LIFECYCLE] 符号生命周期管理
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
             if existing and existing.type_info.name in ("Any", "var"):
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
+            # [NEW Phase 5] 记录侧表映射
+            if hasattr(self.analyzer, "node_to_symbol"):
+                self.analyzer.node_to_symbol[node.uid] = sym.uid
         except ValueError as e:
             self.analyzer.error(str(e), node)
 
@@ -189,25 +201,31 @@ class LocalSymbolCollector:
 
     def visit_Assign(self, node: ast.Assign):
         # 仅收集带有类型标注的显式定义
-        if node.type_annotation:
-            for name, target in SymbolExtractor.get_assigned_names(node):
+        for name, target in SymbolExtractor.get_assigned_names(node):
+            # 检查该 target 是否被 TypeAnnotatedExpr 包装
+            is_explicit = False
+            declared_type = STATIC_ANY
+            
+            for t in node.targets:
+                if isinstance(t, ast.TypeAnnotatedExpr) and isinstance(t.target, ast.Name) and t.target.id == name:
+                    is_explicit = True
+                    declared_type = self.analyzer._resolve_type(t.annotation, safe=True)
+                    break
+            
+            if is_explicit:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
                 if existing and existing.type_info.name not in ("Any", "var"):
                     continue
 
-                declared_type = self.analyzer._resolve_type(node.type_annotation, safe=True) if node.type_annotation else STATIC_ANY
-                
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=declared_type, node_uid=node.uid)
-                self._define(sym, node)
-                target.symbol_uid = sym.uid
+                self._define(sym, target) # 绑定 target 节点
 
     def visit_For(self, node: ast.For):
         # 预扫描 For 循环的迭代变量
         for name, target in SymbolExtractor.get_assigned_names(node):
             sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY, node_uid=node.uid)
-            self._define(sym, node)
-            target.symbol_uid = sym.uid
+            self._define(sym, target) # 绑定 target 节点
         self.generic_visit(node)
 
     def visit_Try(self, node: ast.Try):
@@ -215,7 +233,6 @@ class LocalSymbolCollector:
         for handler in node.handlers:
             for name, target in SymbolExtractor.get_assigned_names(handler):
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY, node_uid=handler.uid)
-                self._define(sym, handler)
-                target.symbol_uid = sym.uid
+                self._define(sym, target) # 绑定 target 节点
             self.visit(handler)
         self.generic_visit(node)

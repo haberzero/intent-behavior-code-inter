@@ -5,7 +5,7 @@ from core.compiler.support.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.support.host_interface import HostInterface
 
-from core.types import parser_types as ast
+from core.domain import ast as ast
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent

@@ -2,8 +2,8 @@ import re
 import json
 from typing import Any, List, Optional, Dict, Union
 from core.foundation.interfaces import LLMExecutor, RuntimeContext, ServiceContext
-from core.types import parser_types as ast
-from core.types.exception_types import InterpreterError, LLMUncertaintyError
+from core.domain import ast as ast
+from core.domain.exceptions import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.capabilities import ILLMProvider
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger

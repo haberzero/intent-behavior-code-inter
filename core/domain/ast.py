@@ -3,7 +3,7 @@ from typing import List, Optional, Union, Any, TYPE_CHECKING
 from enum import IntEnum, Enum, auto
 
 if TYPE_CHECKING:
-    from core.compiler.semantic.symbols import Symbol, StaticType
+    from core.domain.symbols import Symbol, StaticType
 
 # --- Scene ---
 
@@ -62,7 +62,6 @@ class ASTNode:
     end_lineno: int = 0
     end_col_offset: int = 0
     uid: str = field(default_factory=lambda: f"node_{uuid.uuid4().hex[:8]}")
-    symbol_uid: Optional[str] = None # 改为 ID 引用，避免循环引用
     
     @property
     def line(self) -> int:
@@ -85,7 +84,7 @@ class Stmt(ASTNode):
 @dataclass(kw_only=True)
 class Expr(ASTNode):
     """表达式节点基类"""
-    inferred_type: Optional['StaticType'] = None # 语义分析阶段推导出的静态类型
+    pass
 
 # --- Module ---
 
@@ -159,7 +158,6 @@ class Return(Stmt):
 class Assign(Stmt):
     targets: List[Expr]
     value: Optional[Expr]
-    type_annotation: Optional[Expr] = None
 
 @dataclass
 class AugAssign(Stmt):
@@ -173,7 +171,6 @@ class For(Stmt):
     iter: Expr
     body: List[Stmt]
     orelse: List[Stmt] = field(default_factory=list)
-    filter_condition: Optional[Expr] = None  # for x in list if @~...~
 
 @dataclass
 class While(Stmt):
@@ -315,21 +312,27 @@ class ListExpr(Expr):
     ctx: str
 
 @dataclass
+class TypeAnnotatedExpr(Expr):
+    """持有类型标注的表达式包装节点"""
+    target: ASTNode # 可以是 Name (变量赋值) 或 arg (函数参数)
+    annotation: Expr
+
+@dataclass
+class FilteredExpr(Expr):
+    """带过滤条件的表达式包装节点 (e.g., expr if filter)"""
+    expr: Expr
+    filter: Expr
+
+@dataclass
 class BehaviorExpr(Expr):
     segments: List[Union[str, Expr]]
     tag: str = ""
-
-@dataclass
-class CastExpr(Expr):
-    type_name: str
-    value: Expr
 
 # --- Helpers ---
 
 @dataclass
 class arg(ASTNode):
     arg: str
-    annotation: Optional[Expr] = None
 
 
 @dataclass

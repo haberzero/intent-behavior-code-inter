@@ -1,6 +1,6 @@
 from typing import List, Optional
-from core.types.lexer_types import Token, TokenType
-from core.types import parser_types as ast
+from core.domain.tokens import Token, TokenType
+from core.domain import ast as ast
 from core.compiler.support.diagnostics import DiagnosticReporter
 
 class ParseControlFlowError(Exception):

@@ -1,5 +1,5 @@
 from typing import Any, Optional, Dict, List, Callable, Union
-from core.compiler.semantic import symbols
+from core.domain import symbols
 from core.foundation import types as uts
 
 class TypeBridge:

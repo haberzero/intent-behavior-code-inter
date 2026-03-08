@@ -1,5 +1,5 @@
 from typing import List, Optional, Union, Any
-from core.types.diagnostic_types import Diagnostic, Severity, Location, CompilerError, FatalCompilerError, Locatable
+from core.domain.diagnostics import Diagnostic, Severity, Location, CompilerError, FatalCompilerError, Locatable
 
 class IssueTracker:
     """

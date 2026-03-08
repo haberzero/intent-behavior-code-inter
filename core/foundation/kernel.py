@@ -3,7 +3,7 @@ from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
-    from core.types import parser_types as ast
+    from core.domain import ast as ast
 
 @dataclass
 class Type:

@@ -1,6 +1,6 @@
 import unittest
 from tests.compiler.base import BaseCompilerTest
-from core.compiler.semantic.serializer import FlatSerializer
+from core.compiler.serialization.serializer import FlatSerializer
 
 class TestCompilerRobustness(BaseCompilerTest):
     """

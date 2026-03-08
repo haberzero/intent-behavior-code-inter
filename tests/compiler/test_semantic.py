@@ -1,6 +1,6 @@
 import unittest
 from tests.compiler.base import BaseCompilerTest
-from core.compiler.semantic.symbols import (
+from core.domain.symbols import (
     STATIC_INT, STATIC_STR, STATIC_BOOL, STATIC_FLOAT
 )
 

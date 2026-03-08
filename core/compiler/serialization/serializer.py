@@ -2,8 +2,8 @@ import uuid
 from enum import Enum
 from dataclasses import asdict, is_dataclass
 from typing import Dict, List, Any, Optional, Set
-from core.types import parser_types as ast
-from .symbols import Symbol, SymbolTable, StaticType
+from core.domain import ast as ast
+from core.domain.symbols import Symbol, SymbolTable, StaticType
 
 class FlatSerializer:
     """
@@ -28,6 +28,12 @@ class FlatSerializer:
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
+            "side_tables": {
+                "node_scenes": {uid: scene.name if hasattr(scene, 'name') else str(scene) 
+                               for uid, scene in result.node_scenes.items()},
+                "node_to_symbol": result.node_to_symbol,
+                "node_to_type": result.node_to_type
+            },
             "pools": {
                 "nodes": self.node_pool,
                 "symbols": self.symbol_pool,
@@ -72,16 +78,10 @@ class FlatSerializer:
         node_data = {"_type": node.__class__.__name__}
         
         for field_name, value in vars(node).items():
-            # 排除掉特殊的元数据
-            if field_name in ('uid', 'symbol_uid'):
-                node_data[field_name] = value
+            # 排除掉 UID (已在外部处理)
+            if field_name == 'uid':
                 continue
             
-            # 特殊处理推导出的类型 (池化)
-            if field_name == 'inferred_type' and isinstance(value, StaticType):
-                node_data['inferred_type_uid'] = self._collect_type(value)
-                continue
-                
             node_data[field_name] = self._process_value(value)
 
         self.node_pool[node.uid] = node_data
@@ -166,6 +166,11 @@ class FlatSerializer:
         # 1. 处理容器类型
         if hasattr(t, '_element_type') and t._element_type:
             res["element_type_uid"] = self._collect_type(t._element_type)
+        
+        if hasattr(t, '_key_type') and t._key_type:
+            res["key_type_uid"] = self._collect_type(t._key_type)
+        if hasattr(t, '_value_type') and t._value_type:
+            res["value_type_uid"] = self._collect_type(t._value_type)
         
         # 2. 处理类类型 (避免递归 scope，只记录 ID)
         if hasattr(t, 'scope') and t.scope:

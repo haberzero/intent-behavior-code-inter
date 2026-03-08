@@ -1,6 +1,6 @@
 from typing import List, Optional, TYPE_CHECKING
-from core.types.lexer_types import TokenType
-from core.types import parser_types as ast
+from core.domain.tokens import TokenType
+from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
 if TYPE_CHECKING:
@@ -204,6 +204,12 @@ class StatementComponent(BaseComponent):
     def while_statement(self) -> ast.Stmt:
         start_token = self.stream.previous()
         test = self.expression.parse_expression()
+        
+        # Parse optional filter: while x > 0 if is_ready():
+        if self.stream.match(TokenType.IF):
+            filter_expr = self.expression.parse_expression()
+            test = self._loc(ast.FilteredExpr(expr=test, filter=filter_expr), start_token)
+            
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
         body = self.block()
         
@@ -233,15 +239,15 @@ class StatementComponent(BaseComponent):
         else:
             raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.")
             
-        filter_condition = None
         if self.stream.match(TokenType.IF):
-            filter_condition = self.expression.parse_expression()
+            filter_expr = self.expression.parse_expression()
+            iter_expr = self._loc(ast.FilteredExpr(expr=iter_expr, filter=filter_expr), self.stream.previous())
             
         self.stream.consume(TokenType.COLON, "Expect ':' after for loop iterator.")
         body = self.block()
         
         llm_fallback = self._parse_llm_fallback()
-        stmt = self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[], filter_condition=filter_condition), start_token)
+        stmt = self._loc(ast.For(target=target, iter=iter_expr, body=body, orelse=[]), start_token)
         
         if llm_fallback:
             return self._loc(ast.LLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token)

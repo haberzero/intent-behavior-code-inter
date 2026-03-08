@@ -32,7 +32,7 @@ class SchemaLib:
 
     def _assert(self, data: Dict[str, Any], rules: Dict[str, Any]):
         if not self.validate(data, rules):
-            from core.types.exception_types import InterpreterError
+            from core.domain.exceptions import InterpreterError
             raise InterpreterError(f"Schema validation failed. Data: {data}, Rules: {rules}")
 
     def setup(self, capabilities):

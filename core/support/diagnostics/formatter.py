@@ -1,5 +1,5 @@
 from typing import List, Optional, TYPE_CHECKING
-from core.types.diagnostic_types import Diagnostic, Severity, Location
+from core.domain.diagnostics import Diagnostic, Severity, Location
 
 if TYPE_CHECKING:
     from core.compiler.source.source_manager import SourceManager

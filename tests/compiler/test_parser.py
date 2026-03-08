@@ -2,7 +2,7 @@ import unittest
 from tests.compiler.base import BaseCompilerTest
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.parser.parser import Parser
-from core.types import parser_types as ast
+from core.domain import ast as ast
 
 class TestParser(BaseCompilerTest):
     """

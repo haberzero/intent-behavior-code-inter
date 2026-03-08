@@ -1,11 +1,11 @@
 from typing import List, Optional, Any
-from core.types import parser_types as ast
-from . import symbols
-from .symbols import (
+from core.domain import ast as ast
+from core.domain import symbols
+from core.domain.symbols import (
     SymbolTable, TypeSymbol, FunctionSymbol, StaticType, ClassType, FunctionType,
     STATIC_VOID, STATIC_STR, STATIC_ANY
 )
-from .types import get_builtin_type
+from core.domain.static_types import get_builtin_type
 
 class TypeResolver:
     """
@@ -24,7 +24,16 @@ class TypeResolver:
     def visit(self, node: ast.ASTNode):
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
-        return visitor(node)
+        res_type = visitor(node)
+        
+        # [NEW Phase 5] 记录类型推导侧表
+        if isinstance(node, ast.Expr) and res_type:
+            self.analyzer.node_to_type[node.uid] = res_type.name
+        elif isinstance(node, ast.ClassDef) and hasattr(self, "current_class_type") and self.current_class_type:
+             # 对于类定义，我们记录它定义的类型
+             self.analyzer.node_to_type[node.uid] = node.name
+             
+        return res_type
 
     def generic_visit(self, node: ast.ASTNode):
         # 仅访问声明类节点和赋值节点（以推导全局变量类型）
@@ -75,8 +84,7 @@ class TypeResolver:
         class_scope = sym.owned_scope
         class_type = ClassType(name=node.name, parent=parent_type, scope=class_scope)
         sym.static_type = class_type
-        node.inferred_type = class_type
-
+        
         # 3. 解析成员（方法/字段）
         old_table = self.symbol_table
         if sym.owned_scope:
@@ -105,10 +113,10 @@ class TypeResolver:
         if self.current_class_type:
             param_types.append(self.current_class_type)
             
-        for arg in node.args:
+        for arg_node in node.args:
             arg_type = STATIC_ANY
-            if arg.annotation:
-                arg_type = self.analyzer._resolve_type(arg.annotation)
+            if isinstance(arg_node, ast.TypeAnnotatedExpr):
+                arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
         # 绑定到符号
@@ -128,10 +136,10 @@ class TypeResolver:
         if self.current_class_type:
             param_types.append(self.current_class_type)
             
-        for arg in node.args:
+        for arg_node in node.args:
             arg_type = STATIC_ANY
-            if arg.annotation:
-                arg_type = self.analyzer._resolve_type(arg.annotation)
+            if isinstance(arg_node, ast.TypeAnnotatedExpr):
+                arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
         sym = self.symbol_table.resolve(node.name)
@@ -140,10 +148,10 @@ class TypeResolver:
 
     def visit_Assign(self, node: ast.Assign):
         # 处理类字段声明
-        if node.type_annotation:
-            declared_type = self.analyzer._resolve_type(node.type_annotation)
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    sym = self.symbol_table.resolve(target.id)
+        for target in node.targets:
+            if isinstance(target, ast.TypeAnnotatedExpr):
+                declared_type = self.analyzer._resolve_type(target.annotation)
+                if isinstance(target.target, ast.Name):
+                    sym = self.symbol_table.resolve(target.target.id)
                     if isinstance(sym, symbols.VariableSymbol):
                         sym.var_type = declared_type

@@ -39,6 +39,6 @@ class CompilationArtifact:
 
     def to_dict(self) -> Dict[str, Any]:
         """使用统一的平铺化序列化器将整个项目序列化为字典"""
-        from core.compiler.semantic.serializer import FlatSerializer
+        from core.compiler.serialization.serializer import FlatSerializer
         serializer = FlatSerializer()
         return serializer.serialize_artifact(self)

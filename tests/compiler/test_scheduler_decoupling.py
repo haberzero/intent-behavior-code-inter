@@ -2,7 +2,7 @@ import unittest
 import os
 import shutil
 from tests.compiler.base import BaseCompilerTest
-from core.compiler.semantic.symbols import VariableSymbol, STATIC_INT, STATIC_STR
+from core.domain.symbols import VariableSymbol, STATIC_INT, STATIC_STR
 from core.support.module_spec_builder import SpecBuilder
 
 class TestSchedulerDecoupling(BaseCompilerTest):

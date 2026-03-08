@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 from typing import Optional, Any, TYPE_CHECKING
-from core.types.diagnostic_types import Severity, Location
+from core.domain.diagnostics import Severity, Location
 
 if TYPE_CHECKING:
-    from core.types.lexer_types import Token
-    from core.types.parser_types import ASTNode
+    from core.domain.tokens import Token
+    from core.domain.ast import ASTNode
 
 class IBCBaseException(Exception):
     """Base exception for all IBC-Inter related exceptions."""

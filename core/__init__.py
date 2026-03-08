@@ -1,4 +1,4 @@
 from .engine import IBCIEngine
-from .scheduler import Scheduler
+from .compiler.scheduler import Scheduler
 
 __all__ = ['IBCIEngine', 'Scheduler']
