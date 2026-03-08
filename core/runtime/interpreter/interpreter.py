@@ -7,7 +7,7 @@ from core.domain.issue import (
     InterpreterError, ReturnException, BreakException, ContinueException, ThrownException,
     LLMUncertaintyError, RetryException, Severity
 )
-from core.domain.atomic import Location
+from core.domain.issue_atomic import Location
 from core.support.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
     RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR
@@ -405,7 +405,7 @@ class Interpreter(IStackInspector):
             if not e.location:
                 loc_data = self.get_side_table("node_to_loc", node_uid)
                 if loc_data:
-                    from core.domain.atomic import Location
+                    from core.domain.issue_atomic import Location
                     e.location = Location(
                         file_path=loc_data.get("file_path"),
                         line=loc_data.get("line", 0),

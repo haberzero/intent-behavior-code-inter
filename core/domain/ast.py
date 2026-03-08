@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, Any
 from enum import IntEnum, Enum, auto
-from .atomic import Location
+from .issue_atomic import Location
 
 
 # --- Scene ---

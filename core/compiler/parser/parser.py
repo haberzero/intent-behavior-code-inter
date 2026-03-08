@@ -12,7 +12,7 @@ from core.compiler.parser.components.import_def import ImportComponent
 from core.domain.dependencies import ImportInfo, ImportType
 from core.support.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
 from core.domain.issue import Severity
-from core.domain.atomic import Location
+from core.domain.issue_atomic import Location
 
 from core.support.host_interface import HostInterface
 from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger

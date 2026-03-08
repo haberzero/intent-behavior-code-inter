@@ -2,7 +2,7 @@ from enum import Enum, auto
 from dataclasses import dataclass
 from typing import Optional
 
-# --- 基础严重程度 (Domain Atomic) ---
+# --- 基础严重程度 (Domain issue_atomic) ---
 
 class Severity(Enum):
     HINT = auto()    # 优化建议
@@ -11,7 +11,7 @@ class Severity(Enum):
     ERROR = auto()   # 语法/语义错误
     FATAL = auto()   # 内部错误
 
-# --- 物理位置信息 (Domain Atomic) ---
+# --- 物理位置信息 (Domain issue_atomic) ---
 
 @dataclass
 class Location:
