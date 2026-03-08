@@ -8,8 +8,12 @@ class IssueTracker:
     """
     def __init__(self, file_path: str = "<unknown>"):
         self.file_path = file_path
-        self.diagnostics: List[Diagnostic] = []
+        self._diagnostics: List[Diagnostic] = []
         self._error_count = 0
+
+    @property
+    def diagnostics(self) -> List[Diagnostic]:
+        return self._diagnostics
 
     def report(self, severity: Severity, code: str, message: str, 
                 location: Optional[Union[Locatable, Location]] = None, 
@@ -17,20 +21,32 @@ class IssueTracker:
         """
         Report a diagnostic.
         Location can be a Token, a Scanner, a Location object, or None.
-        It must satisfy Locatable protocol (have line/column or line/col).
+        It must satisfy Locatable protocol (have line/column).
         """
         diag = Diagnostic(severity, code, message, self._resolve_location(location), hint)
-        self.diagnostics.append(diag)
+        self._diagnostics.append(diag)
         
-        if severity.value >= Severity.ERROR.value:
-            self._error_count += 1
-            print(f"[COMPILER ERROR] {message} at {diag.location}")
+        if severity.value >= Severity.WARNING.value:
+            self._error_count += 1 if severity.value >= Severity.ERROR.value else 0
+            
+            # Formatted Output
+            loc_str = f" at {diag.location}" if diag.location else ""
+            hint_str = f"\n  Hint: {diag.hint}" if diag.hint else ""
+            print(f"[{severity.name}][{code}]{loc_str}: {message}{hint_str}")
             
         if severity == Severity.FATAL:
             raise FatalCompilerError(diag)
 
-    def panic(self, code: str, message: str, location: Optional[Union[Locatable, Location]] = None):
-        """Report a FATAL error and stop immediately."""
+    def error(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_ERROR", hint: Optional[str] = None):
+        self.report(Severity.ERROR, code, message, location, hint)
+
+    def warning(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_WARNING", hint: Optional[str] = None):
+        self.report(Severity.WARNING, code, message, location, hint)
+
+    def hint(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_HINT"):
+        self.report(Severity.HINT, code, message, location)
+
+    def panic(self, message: str, location: Optional[Any] = None, code: str = "FATAL_ERROR"):
         self.report(Severity.FATAL, code, message, location)
 
     def has_errors(self) -> bool:
@@ -38,23 +54,17 @@ class IssueTracker:
 
     def clear(self):
         """Clear all diagnostics."""
-        self.diagnostics = []
+        self._diagnostics = []
         self._error_count = 0
 
     def check_errors(self):
         """Raise CompilerError if any errors have been reported."""
         if self.has_errors():
-            # If we raise here, we should pass diagnostics?
-            # CompilerError usually takes message or list of diagnostics.
-            # In other parts of code: raise CompilerError(self.diagnostics)
-            # Or raise CompilerError("Compilation failed")
-            # Let's check typedef/diagnostic_types.py
-            # But here we just raise.
-            raise CompilerError(self.diagnostics)
+            raise CompilerError(self._diagnostics)
 
     def merge(self, other: 'IssueTracker'):
         """Merge diagnostics from another tracker."""
-        self.diagnostics.extend(other.diagnostics)
+        self._diagnostics.extend(other.diagnostics)
         self._error_count += other._error_count
 
     def _resolve_location(self, loc: Optional[Union[Locatable, Location]]) -> Optional[Location]:
@@ -62,12 +72,6 @@ class IssueTracker:
             return None
         
         if isinstance(loc, Location):
-            # If the location already has a file path, keep it.
-            # If it doesn't (or is unknown), use ours?
-            # Usually Lexer produces tokens with line/col but no file path.
-            # Parser produces AST nodes with line/col but no file path.
-            # So when we report using a Token/ASTNode, we need to inject self.file_path.
-            # But if loc is already a Location object (e.g. from DependencyScanner), it has file_path.
             if not loc.file_path or loc.file_path == "<unknown>":
                 # Create copy with our file path
                 return Location(
@@ -75,36 +79,22 @@ class IssueTracker:
                     line=loc.line,
                     column=loc.column,
                     length=loc.length,
+                    end_line=loc.end_line,
+                    end_column=loc.end_column,
                     context_line=loc.context_line
                 )
             return loc
             
-        # Try to extract line and column
-        line = getattr(loc, 'line', None)
-        if line is None:
-            return None # Can't locate
+        # Use standard Locatable protocol
+        if isinstance(loc, Locatable):
+            return Location(
+                file_path=self.file_path,
+                line=loc.line,
+                column=loc.column,
+                # Try to get extra info if available
+                length=getattr(loc, 'length', 1),
+                end_line=getattr(loc, 'end_line', None),
+                end_column=getattr(loc, 'end_column', None)
+            )
             
-        column = getattr(loc, 'column', None)
-        if column is None:
-            column = getattr(loc, 'col', None) # Support Scanner
-        
-        if column is None:
-            column = 0 # Default if only line known?
-            
-        length = 1
-        value = getattr(loc, 'value', None)
-        if isinstance(value, str):
-            length = len(value)
-        else:
-            length = getattr(loc, 'length', 1)
-        
-        # Extract context line
-        context = None
-            
-        return Location(
-            file_path=self.file_path,
-            line=line,
-            column=column,
-            length=length,
-            context_line=context
-        )
+        return None

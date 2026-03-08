@@ -1,24 +1,26 @@
 from typing import Protocol, Optional, Any, runtime_checkable, List
-from enum import Enum, auto
-
-class DiagnosticSeverity(Enum):
-    ERROR = auto()
-    WARNING = auto()
-    INFO = auto()
+from core.domain.issue_atomic import Severity
 
 @runtime_checkable
 class DiagnosticReporter(Protocol):
     """
     Compiler-specific diagnostic reporting interface.
     Abstracts away the foundation's IssueTracker.
+    Now directly uses Domain Severity and supports Error Codes.
     """
-    def report(self, message: str, node: Optional[Any] = None, severity: DiagnosticSeverity = DiagnosticSeverity.ERROR):
+    def report(self, severity: Severity, code: str, message: str, node: Optional[Any] = None, hint: Optional[str] = None):
         ...
     
-    def error(self, message: str, node: Optional[Any] = None):
+    def error(self, message: str, node: Optional[Any] = None, code: str = "COMPILER_ERROR", hint: Optional[str] = None):
         ...
     
-    def warning(self, message: str, node: Optional[Any] = None):
+    def warning(self, message: str, node: Optional[Any] = None, code: str = "COMPILER_WARNING", hint: Optional[str] = None):
+        ...
+
+    def hint(self, message: str, node: Optional[Any] = None, code: str = "COMPILER_HINT"):
+        ...
+
+    def panic(self, message: str, node: Optional[Any] = None, code: str = "FATAL_ERROR"):
         ...
     
     def check_errors(self):

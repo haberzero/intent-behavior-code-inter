@@ -22,11 +22,11 @@ class BaseComponent:
         return self.context.issue_tracker
 
     def _loc(self, node: T, start_obj: Any) -> T:
-        """Helper to attach location info to a node from a token or other object with lineno/col_offset."""
+        """Helper to attach location info to a node from a token or other object with line/column."""
         if hasattr(start_obj, 'line'):
             node.lineno = start_obj.line
             node.col_offset = start_obj.column
-        else:
-            node.lineno = getattr(start_obj, 'lineno', 0)
-            node.col_offset = getattr(start_obj, 'col_offset', 0)
+        elif hasattr(start_obj, 'lineno'):
+            node.lineno = start_obj.lineno
+            node.col_offset = start_obj.col_offset
         return node

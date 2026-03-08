@@ -28,11 +28,10 @@ class Parser:
     def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
         
         # 1. Initialize Context
-        # [AUDIT] 诊断抽象：使用传入的 reporter 或创建适配器
+        # 直接使用 IssueTracker，它现在满足 DiagnosticReporter 协议
         if issue_tracker is None:
             from core.support.diagnostics.issue_tracker import IssueTracker
-            from core.compiler.support.issue_adapter import IssueTrackerAdapter
-            issue_tracker = IssueTrackerAdapter(IssueTracker())
+            issue_tracker = IssueTracker()
             
         self.stream = TokenStream(tokens, issue_tracker)
         self.debugger = debugger or core_debugger
@@ -163,7 +162,8 @@ class Parser:
     def _report_invalid_import_pos(self, token: Token):
         self.context.issue_tracker.error(
             "Import statements must be at the top of the file", 
-            token
+            token,
+            code="PAR_004"
         )
 
     def _skip_to_next_statement(self):

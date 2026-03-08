@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any
 
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
-from core.compiler.support.issue_adapter import wrap_tracker
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.support.host_interface import HostInterface
@@ -24,7 +23,7 @@ class IBCIEngine:
         
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         from core.support.diagnostics.issue_tracker import IssueTracker
-        self.issue_tracker = wrap_tracker(IssueTracker())
+        self.issue_tracker = IssueTracker()
         self.debugger = CoreDebugger()
         
         # 0. 配置内核调试器
@@ -111,8 +110,8 @@ class IBCIEngine:
         except CompilerError as e:
             if not silent:
                 print("\n--- Compilation Errors ---")
-                for diag in self.scheduler.issue_tracker.diagnostics:
-                    print(f"[{diag.severity.name}] {diag.code}: {diag.message} (Line {diag.location.line if diag.location else '?'})")
+                # IssueTracker 已经在 report 时打印了格式化信息，这里可以额外显示汇总
+                print(f"Total errors found: {len(e.diagnostics)}")
             else:
                 raise e
             return False

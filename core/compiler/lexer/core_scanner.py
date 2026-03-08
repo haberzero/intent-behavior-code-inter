@@ -89,9 +89,9 @@ class CoreTokenScanner:
     def check_eof_state(self):
         """Check for unclosed states at EOF."""
         if self.sub_state == SubState.IN_STRING:
-            self.issue_tracker.error("Unexpected EOF while scanning string literal", self.scanner)
+            self.issue_tracker.error("Unexpected EOF while scanning string literal", self.scanner, code="LEX_001")
         if self.sub_state == SubState.IN_BEHAVIOR:
-            self.issue_tracker.error("Unexpected EOF while scanning behavior description", self.scanner)
+            self.issue_tracker.error("Unexpected EOF while scanning behavior description", self.scanner, code="LEX_001")
 
     def _handle_newline(self, tokens: List[Token]) -> bool:
         """
@@ -149,7 +149,7 @@ class CoreTokenScanner:
                 self.continuation_mode = True
                 return False
             else:
-                self.issue_tracker.error(f"Unexpected character '\\' or invalid escape sequence", self.scanner)
+                self.issue_tracker.error(f"Unexpected character '\\' or invalid escape sequence", self.scanner, code="LEX_002")
                 return False
 
         # 2. Whitespace
@@ -311,14 +311,14 @@ class CoreTokenScanner:
             self._scan_number(char, tokens)
             return False
             
-        self.issue_tracker.error(f"Unexpected character '{char}'", self.scanner)
+        self.issue_tracker.error(f"Unexpected character '{char}'", self.scanner, code="LEX_002")
         return False
 
     def _scan_string_char(self, tokens: List[Token]):
         char = self.scanner.advance()
         
         if char == '\n':
-            self.issue_tracker.error("EOL while scanning string literal", self.scanner)
+            self.issue_tracker.error("EOL while scanning string literal", self.scanner, code="LEX_003")
             return
 
         if char == '\\':
@@ -503,7 +503,7 @@ class CoreTokenScanner:
                         tokens.append(self.scanner.create_token(TokenType.STRING, s_val))
                     else:
                         # This is a real unclosed string error
-                        self.issue_tracker.error("Unclosed string literal in behavior subscript", self.scanner)
+                        self.issue_tracker.error("Unclosed string literal in behavior subscript", self.scanner, code="LEX_003")
                         break
                 elif peek.isalpha() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
                     self.scanner.start_token()
@@ -522,7 +522,7 @@ class CoreTokenScanner:
                     break
         
         if subscript_depth > 0:
-            self.issue_tracker.error(f"Unclosed subscript '[' in behavior expression (depth: {subscript_depth})", self.scanner)
+            self.issue_tracker.error(f"Unclosed subscript '[' in behavior expression (depth: {subscript_depth})", self.scanner, code="LEX_004")
 
     def _scan_identifier(self, first_char: str, tokens: List[Token]):
         value = first_char
@@ -603,7 +603,7 @@ class CoreTokenScanner:
         if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
             name += self.scanner.advance()
         else:
-            self.issue_tracker.warning(r"Empty variable reference '$'. Did you mean '\$'?", self.scanner)
+            self.issue_tracker.warning(r"Empty variable reference '$'. Did you mean '\$'?", self.scanner, code="LEX_006")
 
         while not self.scanner.is_at_end():
             peek = self.scanner.peek()

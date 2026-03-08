@@ -57,7 +57,8 @@ class IndentProcessor:
             if current_indent != self.indent_stack[-1]:
                 self.issue_tracker.error(
                     "Unindent does not match any outer indentation level",
-                    self.scanner
+                    self.scanner,
+                    code="LEX_005"
                 )
         
         return current_indent, tokens

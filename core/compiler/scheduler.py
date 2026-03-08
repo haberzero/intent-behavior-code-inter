@@ -8,7 +8,6 @@ from core.domain.tokens import Token
 from core.compiler.parser.parser import Parser
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.support.diagnostics import DiagnosticReporter
-from core.compiler.support.issue_adapter import wrap_tracker
 from core.support.diagnostics.issue_tracker import IssueTracker
 from core.compiler.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
@@ -26,7 +25,7 @@ class Scheduler:
 
     def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None):
         self.root_dir = os.path.realpath(root_dir)
-        self.issue_tracker = wrap_tracker(issue_tracker)
+        self.issue_tracker = issue_tracker or IssueTracker()
         self.source_manager = SourceManager()
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
@@ -79,7 +78,7 @@ class Scheduler:
             
         if self.issue_tracker.has_errors():
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Dependency scanning failed with errors.")
-            raise CompilerError("Dependency scanning failed.")
+            raise CompilerError(self.issue_tracker.diagnostics)
 
         # 2. Build Dependency Graph and Get Order
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, "Phase 2: Building dependency graph and determining compilation order.")
@@ -89,7 +88,7 @@ class Scheduler:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
         except Exception as e:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Circular dependency or graph error: {str(e)}")
-            self.issue_tracker.error(str(e))
+            self.issue_tracker.error(str(e), code="DEP_GRAPH_ERROR")
             raise e
 
         # 3. Compile in Topological Order
@@ -143,7 +142,7 @@ class Scheduler:
             
         if self.issue_tracker.has_errors():
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation failed with errors.")
-            raise CompilerError("Compilation failed.")
+            raise CompilerError(self.issue_tracker.diagnostics)
             
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation successful.")
         
@@ -283,7 +282,7 @@ class Scheduler:
         self.source_manager.add_source(file_path, source)
         
         # Create per-file tracker
-        file_tracker = wrap_tracker(IssueTracker(file_path))
+        file_tracker = IssueTracker(file_path)
         
         try:
             # 1. Reuse Tokens
@@ -426,14 +425,13 @@ class Scheduler:
         except CompilerError:
             raise
         except Exception as e:
-            file_tracker.error(f"Internal compiler error: {str(e)}")
-            raise CompilerError("Internal error during compilation") from e
-            
+            file_tracker.error(f"Internal compiler error: {str(e)}", code="INTERNAL_ERROR")
+            raise CompilerError(file_tracker.diagnostics) from e
         finally:
             self.issue_tracker.merge(file_tracker)
             
         if file_tracker.has_errors():
-            raise CompilerError("File compilation failed.")
+            raise CompilerError(file_tracker.diagnostics)
 
 class DependencyGraph:
     """

@@ -16,8 +16,7 @@ class TokenStream:
         self.tokens = tokens
         self.current = 0
         from core.support.diagnostics.issue_tracker import IssueTracker
-        from core.compiler.support.issue_adapter import IssueTrackerAdapter
-        self.issue_tracker = issue_tracker or IssueTrackerAdapter(IssueTracker())
+        self.issue_tracker = issue_tracker or IssueTracker()
 
     def peek(self, offset: int = 0) -> Token:
         if self.current + offset >= len(self.tokens):
@@ -62,6 +61,6 @@ class TokenStream:
                 return True
         return False
 
-    def error(self, token: Token, message: str) -> Exception:
-        self.issue_tracker.error(message, token)
+    def error(self, token: Token, message: str, code: str = "PAR_001") -> Exception:
+        self.issue_tracker.error(message, token, code=code)
         return ParseControlFlowError()

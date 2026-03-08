@@ -17,7 +17,6 @@ class Severity(Enum):
 class Location:
     """
     IBC-Inter 物理位置信息。
-    作为整个 Domain 宇宙的最底层原子，禁止引用任何其他模块。
     """
     file_path: Optional[str] = None
     line: int = 0
