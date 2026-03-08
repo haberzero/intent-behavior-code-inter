@@ -58,11 +58,7 @@ Bridging the gap between Static Analysis (Semantic) and Dynamic Execution (Runti
 
 ## 4. Known Technical Debt
 
-### 4.1. Intent-Behavior Consistency Check
-In `SemanticAnalyzer.visit_AnnotatedStmt`, there is a TODO to implement consistency checks between the declared intent and the actual behavior code.
-**Plan**: Implement a semantic pass that uses LLM or static heuristics to verify if the code block matches the `@ intent` description.
-
-### 4.2. DictType Key Enforcement
+### 4.1. DictType Key Enforcement
 Currently, `DictType` accepts any `StaticType` for keys, but the language spec limits keys to `int` or `str`.
 **Plan**: Add validation in `SemanticAnalyzer.visit_Dict` to enforce key type restrictions.
 

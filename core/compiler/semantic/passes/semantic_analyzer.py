@@ -484,7 +484,6 @@ class SemanticAnalyzer:
         """处理带意图注释的语句包装节点"""
         # [NEW] 显式访问意图节点，确保其进入序列化池
         self.visit(node.intent)
-        # TODO: 在此处实现意图与行为的一致性检查逻辑
         return self.visit(node.stmt)
 
     def visit_AnnotatedExpr(self, node: ast.AnnotatedExpr):
