@@ -13,7 +13,7 @@ class Bootstrapper:
     
     TypeClass: Optional[IbClass] = None
     ObjectClass: Optional[IbClass] = None
-    FunctionClass: Optional[IbClass] = None
+    CallableClass: Optional[IbClass] = None
     ModuleClass: Optional[IbClass] = None
 
     @classmethod
@@ -24,7 +24,7 @@ class Bootstrapper:
         cls._class_registry.clear()
         cls.TypeClass = None
         cls.ObjectClass = None
-        cls.FunctionClass = None
+        cls.CallableClass = None
         cls.ModuleClass = None
 
     @classmethod
@@ -37,26 +37,26 @@ class Bootstrapper:
         # Step 1: Create Type Shells (分配内存，此时 ib_class 暂未绑定)
         cls.TypeClass = IbClass("Type")
         cls.ObjectClass = IbClass("Object")
-        cls.FunctionClass = IbClass("Function")
+        cls.CallableClass = IbClass("callable")
         cls.ModuleClass = IbClass("Module")
         
         # Step 2: Wire Relationships (打破循环)
         cls.TypeClass.ib_class = cls.TypeClass
         cls.ObjectClass.ib_class = cls.TypeClass
-        cls.FunctionClass.ib_class = cls.TypeClass
+        cls.CallableClass.ib_class = cls.TypeClass
         cls.ModuleClass.ib_class = cls.TypeClass
         
         # Object 没有父类
         cls.ObjectClass.parent = None
-        # Type, Function, Module 的父类是 Object
+        # Type, callable, Module 的父类是 Object
         cls.TypeClass.parent = cls.ObjectClass
-        cls.FunctionClass.parent = cls.ObjectClass
+        cls.CallableClass.parent = cls.ObjectClass
         cls.ModuleClass.parent = cls.ObjectClass
         
         # 注册到全局表
         cls.register_class(cls.TypeClass)
         cls.register_class(cls.ObjectClass)
-        cls.register_class(cls.FunctionClass)
+        cls.register_class(cls.CallableClass)
         cls.register_class(cls.ModuleClass)
         
         # Step 3: Register Core Protocols (元方法注入)
@@ -77,8 +77,8 @@ class Bootstrapper:
         cls.ObjectClass.register_method('__eq__', IbNativeFunction(_default_eq, is_method=True))
         cls.ObjectClass.register_method('__ne__', IbNativeFunction(_default_ne, is_method=True))
 
-        # 为 Function 注册 __call__ 消息实现 (调用 call 方法)
-        cls.FunctionClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(IbNone(), list(args)), is_method=True))
+        # 为 callable 注册 __call__ 消息实现 (调用 call 方法)
+        cls.CallableClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(IbNone(), list(args)), is_method=True))
 
         # 为 Type 注册 __call__ 消息实现 (实例化类)
         cls.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True))

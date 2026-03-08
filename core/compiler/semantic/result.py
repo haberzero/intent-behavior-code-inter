@@ -14,6 +14,7 @@ class CompilationResult:
     node_scenes: Dict[str, Any] = field(default_factory=dict) # Node UID -> Scene name
     node_to_symbol: Dict[str, str] = field(default_factory=dict) # Node UID -> Symbol UID
     node_to_type: Dict[str, Any] = field(default_factory=dict) # Node UID -> Type UID
+    node_is_deferred: Dict[str, bool] = field(default_factory=dict) # Node UID -> bool
     
     @property
     def has_errors(self) -> bool:

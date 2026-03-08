@@ -12,19 +12,6 @@ class Scene(Enum):
     BRANCH = auto()
     LOOP = auto()
 
-# --- Intent Info ---
-
-@dataclass
-class IntentInfo:
-    mode: str # "", "+", "!", "-"
-    content: str # Raw content or constant string
-    segments: Optional[List[Union[str, 'Expr']]] = None # Interpolated segments for comments like @ "..."
-    expr: Optional['Expr'] = None # Dynamic expression for 'intent expr:'
-    
-    # Position info
-    lineno: int = 0
-    col_offset: int = 0
-
 # --- Precedence & ParseRule ---
 
 class Precedence(IntEnum):
@@ -85,6 +72,15 @@ class Stmt(ASTNode):
 class Expr(ASTNode):
     """表达式节点基类"""
     pass
+
+# --- Intent Info ---
+
+@dataclass(kw_only=True)
+class IntentInfo(ASTNode):
+    mode: str # "", "+", "!", "-"
+    content: str # Raw content or constant string
+    segments: Optional[List[Union[str, 'Expr']]] = None # Interpolated segments for comments like @ "..."
+    expr: Optional['Expr'] = None # Dynamic expression for 'intent expr:'
 
 # --- Module ---
 

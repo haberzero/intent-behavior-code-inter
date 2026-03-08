@@ -1,6 +1,6 @@
 # IBC-Inter 编译器架构重构指南：内置运算行为的元数据化
 
-**状态**：已规划 (Planned) - 待在解释器联调后期实施。
+**状态**：进行中 (In Progress) - 核心逻辑已转移至 [symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py)，待完全 UTS 化。
 **当前位置**：[symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py)
 
 ## 1. 背景与现状 (Context)

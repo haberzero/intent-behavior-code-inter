@@ -59,38 +59,30 @@ python main.py run app.ibci
 
 ---
 
-## 3. 单元测试集成 (IBCTestCase)
+## 3. 单元测试集成
 
-IBC-Inter 的测试套件已原生支持内核调试。
+IBC-Inter 的测试套件原生支持内核调试。
 
 ### 3.1 动态调试测试
 
-你可以通过 `IBC_TEST_CORE_DEBUG` 环境变量为任何现有的单元测试开启调试输出：
+你可以通过 `IBC_CORE_DEBUG` 环境变量为任何现有的单元测试开启调试输出：
 
 ```bash
-# 调试特定测试类中的 LLM 逻辑
-export IBC_TEST_CORE_DEBUG='LLM:DATA'
-python -m unittest tests/test_llm_integration.py
+# 调试特定测试中的语义分析逻辑
+export IBC_CORE_DEBUG='SEMANTIC:DETAIL'
+python -m unittest tests.compiler.test_semantic
 ```
 
 ### 3.2 静态调试配置
 
-在测试类中显式声明默认配置：
+对于基于 `BaseCompilerTest` 的测试，可以通过引擎实例手动配置调试器：
 
 ```python
-class MyTest(IBCTestCase):
-    core_debug_config = {"INTERPRETER": "DETAIL"}
-    
-    def test_logic(self):
-        # 此测试运行期间将自动开启解释器详情追踪
-        pass
+def test_complex_logic(self):
+    # 启用调度器详细追踪
+    self.engine.debugger.configure({"SCHEDULER": "DETAIL"})
+    artifact = self.engine.compile("app.ibci")
 ```
-
-### 3.3 测试隔离与重置
-
-为了防止测试用例之间的日志污染，`IBCTestCase` 会在每个测试用例的 `setUp` 和 `tearDown` 阶段自动通过 `IBCIEngine` 实例重置调试器配置。
-
-由于 `CoreDebugger` 现在支持多实例模式，每个 `IBCIEngine` 实例都拥有其独立的调试器对象。这解决了不同引擎实例之间的状态污染问题。但请注意，底层组件在未显式接收调试器实例时，仍会回退到全局 `core_debugger` 单例，因此建议始终通过引擎入口启动程序。
 
 ---
 

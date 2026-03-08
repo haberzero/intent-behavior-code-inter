@@ -10,7 +10,7 @@ from core.domain import symbols
 from core.domain.symbols import (
     SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol, 
     StaticType, FunctionType, ClassType, ModuleType,
-    STATIC_ANY, STATIC_VOID, STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL
+    STATIC_ANY, STATIC_VOID, STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL, STATIC_BEHAVIOR
 )
 from core.domain.static_types import get_builtin_type
 from .prelude import Prelude
@@ -36,6 +36,7 @@ class SemanticAnalyzer:
         self.node_scenes: Dict[str, ast.Scene] = {} # 侧表：节点 UID -> 场景
         self.node_to_symbol: Dict[str, str] = {} # 侧表：节点 UID -> 符号 UID
         self.node_to_type: Dict[str, str] = {} # 侧表：节点 UID -> 类型名称
+        self.node_is_deferred: Dict[str, bool] = {} # 侧表：行为描述行是否延迟执行 (Lambda)
 
     def _init_builtins(self):
         """注册内置静态符号"""
@@ -74,7 +75,9 @@ class SemanticAnalyzer:
         self.visit(node)
         
         # [NEW Phase 5] 自检校验：确保侧表完整性
-        self._validate_integrity(node)
+        # 仅在没有收集到错误的情况下执行完整性检查，因为解析失败的节点本身就无法绑定
+        if not self.issue_tracker.has_errors():
+            self._validate_integrity(node)
         
         self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Static analysis complete.")
         self.issue_tracker.check_errors()
@@ -84,7 +87,8 @@ class SemanticAnalyzer:
             symbol_table=self.symbol_table,
             node_scenes=self.node_scenes,
             node_to_symbol=self.node_to_symbol,
-            node_to_type=self.node_to_type
+            node_to_type=self.node_to_type,
+            node_is_deferred=self.node_is_deferred
         )
 
     def visit(self, node: ast.ASTNode) -> StaticType:
@@ -334,6 +338,11 @@ class SemanticAnalyzer:
                     
                     if node.value:
                         val_type = self.visit(node.value)
+                        
+                        # [NEW] 行为描述行 Lambda 化判断：如果目标类型是 callable
+                        if isinstance(node.value, ast.BehaviorExpr) and sym.type_info.name == "callable":
+                            self.node_is_deferred[node.value.uid] = True
+                        
                         if not val_type.is_assignable_to(sym.type_info):
                             self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node)
                 else:
@@ -464,6 +473,8 @@ class SemanticAnalyzer:
         return STATIC_VOID
 
     def visit_IntentStmt(self, node: ast.IntentStmt):
+        # 访问意图元数据
+        self.visit(node.intent)
         # 访问意图块内部
         for stmt in node.body:
             self.visit(stmt)
@@ -471,12 +482,27 @@ class SemanticAnalyzer:
 
     def visit_AnnotatedStmt(self, node: ast.AnnotatedStmt):
         """处理带意图注释的语句包装节点"""
+        # [NEW] 显式访问意图节点，确保其进入序列化池
+        self.visit(node.intent)
         # TODO: 在此处实现意图与行为的一致性检查逻辑
         return self.visit(node.stmt)
 
     def visit_AnnotatedExpr(self, node: ast.AnnotatedExpr):
         """处理带意图注释的表达式包装节点"""
+        # [NEW] 显式访问意图节点
+        self.visit(node.intent)
         return self.visit(node.expr)
+
+    def visit_IntentInfo(self, node: ast.IntentInfo):
+        """访问意图元数据节点"""
+        # 如果意图中有动态表达式，需要访问
+        if node.expr:
+            self.visit(node.expr)
+        if node.segments:
+            for seg in node.segments:
+                if isinstance(seg, ast.ASTNode):
+                    self.visit(seg)
+        return STATIC_VOID
 
     def visit_TypeAnnotatedExpr(self, node: ast.TypeAnnotatedExpr):
         """处理带类型标注的表达式包装节点 (例如 Casts 或声明)"""
@@ -660,8 +686,8 @@ class SemanticAnalyzer:
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
         res = func_type.get_call_return(arg_types)
         if not res:
-            # 如果是函数类型，提供更详细的错误
-            if func_type.name == "function":
+            # 如果是可调用类型，提供更详细的错误
+            if func_type.name == "callable":
                 # 尝试获取更具体的参数不匹配信息
                 # 注意：这里我们依然保留了一些对 FunctionType 的具体属性访问，
                 # 但不再依赖 isinstance 进行逻辑分支
@@ -686,7 +712,7 @@ class SemanticAnalyzer:
                     self.visit(seg)
         finally:
             self.in_behavior_expr = False
-        return STATIC_STR
+        return STATIC_BEHAVIOR
 
     def _resolve_type(self, node: Any, safe: bool = False) -> StaticType:
         if isinstance(node, ast.Name):
@@ -729,7 +755,7 @@ class SemanticAnalyzer:
         missing_bindings = []
         
         # 定义需要校验的节点集合
-        BINDING_REQUIRED = (ast.Name, ast.Attribute, ast.FunctionDef, ast.ClassDef, ast.LLMFunctionDef)
+        BINDING_REQUIRED = (ast.Name, ast.Attribute, ast.FunctionDef, ast.ClassDef, ast.LLMFunctionDef, ast.arg)
         
         def check(node: Any):
             if not isinstance(node, ast.ASTNode):

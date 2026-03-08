@@ -173,7 +173,7 @@ smart_log.info("开始校验库存")
 -   **None 处理**: `ibci` 中的 `None` 对应 Python 的 `None`。
 
 ### 6.2 错误处理
-在扩展中抛出 `core.types.exception_types.InterpreterError` 可以让错误带有行号信息并被 `ibci` 的 `try...except` 捕获。
+在扩展中抛出 `core.domain.exceptions.InterpreterError` 可以让错误带有行号信息并被 `ibci` 的 `try...except` 捕获。
 
 ### 6.3 单元测试
 建议为你的扩展编写专门的测试文件，参考 `tests/test_idbg_core.py`，手动模拟 `ExtensionCapabilities` 注入。

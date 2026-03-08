@@ -1,6 +1,5 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from core.foundation.interfaces import RuntimeSymbol, Scope, RuntimeContext
-from core.domain import ast as ast
 from core.domain.exceptions import InterpreterError
 from core.support.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.capabilities import IStateReader
@@ -16,12 +15,17 @@ class RuntimeSymbolImpl:
 class ScopeImpl:
     def __init__(self, parent: Optional['Scope'] = None):
         self._symbols: Dict[str, RuntimeSymbol] = {}
+        self._uid_to_symbol: Dict[str, RuntimeSymbol] = {} # 基于 Symbol UID 的直接映射
         self._parent = parent
 
-    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False) -> None:
+    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
         from core.foundation.bootstrapper import Bootstrapper
         boxed_value = Bootstrapper.box(value)
-        self._symbols[name] = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
+        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
+        if name:
+            self._symbols[name] = sym
+        if uid:
+            self._uid_to_symbol[uid] = sym
 
     def assign(self, name: str, value: Any) -> bool:
         from core.foundation.bootstrapper import Bootstrapper
@@ -30,17 +34,26 @@ class ScopeImpl:
             symbol = self._symbols[name]
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
-            
-            # 运行时类型检查逻辑
-            if symbol.declared_type and symbol.declared_type != 'var':
-                # TODO: 接入更完善的类型检查逻辑
-                pass
-                
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
             return True
         if self._parent:
             return self._parent.assign(name, value)
+        return False
+
+    def assign_by_uid(self, uid: str, value: Any) -> bool:
+        """基于 UID 的赋值"""
+        from core.foundation.bootstrapper import Bootstrapper
+        boxed_value = Bootstrapper.box(value)
+        if uid in self._uid_to_symbol:
+            symbol = self._uid_to_symbol[uid]
+            if symbol.is_const:
+                raise InterpreterError(f"Cannot reassign constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
+            symbol.value = boxed_value
+            symbol.current_type = type(boxed_value)
+            return True
+        if self._parent and hasattr(self._parent, 'assign_by_uid'):
+            return self._parent.assign_by_uid(uid, value)
         return False
 
     def get(self, name: str) -> Any:
@@ -49,11 +62,26 @@ class ScopeImpl:
             return symbol.value
         raise KeyError(name)
 
+    def get_by_uid(self, uid: str) -> Any:
+        """基于 UID 的获取"""
+        symbol = self.get_symbol_by_uid(uid)
+        if symbol:
+            return symbol.value
+        raise KeyError(uid)
+
     def get_symbol(self, name: str) -> Optional[RuntimeSymbol]:
         if name in self._symbols:
             return self._symbols[name]
         if self._parent:
             return self._parent.get_symbol(name)
+        return None
+
+    def get_symbol_by_uid(self, uid: str) -> Optional[RuntimeSymbol]:
+        """向上查找 UID 符号"""
+        if uid in self._uid_to_symbol:
+            return self._uid_to_symbol[uid]
+        if self._parent and hasattr(self._parent, 'get_symbol_by_uid'):
+            return self._parent.get_symbol_by_uid(uid)
         return None
 
     @property
@@ -64,15 +92,11 @@ class ScopeImpl:
         """返回当前作用域的所有符号（不包含父作用域）"""
         return dict(self._symbols)
 
-    @property
-    def parent(self) -> Optional['Scope']:
-        return self._parent
-
 class RuntimeContextImpl(RuntimeContext, IStateReader):
     def __init__(self, initial_scope: Optional[Scope] = None):
         self._global_scope = initial_scope or ScopeImpl()
         self._current_scope = self._global_scope
-        self._intent_stack: List[ast.IntentInfo] = []
+        self._intent_stack: List[Any] = []
         self._global_intents: List[str] = []
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
@@ -128,10 +152,8 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
                         type_name = str(symbol.declared_type)
                         
                     # IDBG 过滤策略：目前为了对齐旧测试，过滤掉非基础类型和下划线变量
-                    # 在 UTS 架构下，Object 类型通常代表包装的 Native 对象或通用实例
                     if type_name == "Object" or type_name == "Function" or name.startswith("_"):
                         continue
-                    # 同时也过滤掉类对象 (首字母大写且 type_name 为 Type)
                     if type_name == "Type" and name[0].isupper():
                         continue
 
@@ -141,7 +163,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
                         "metadata": val.serialize_for_debug() if hasattr(val, 'serialize_for_debug') else {},
                         "is_const": symbol.is_const
                     }
-            scope = scope.parent # 使用新添加的 parent 属性
+            scope = scope.parent
         return res
 
     def enter_scope(self) -> None:
@@ -157,41 +179,56 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         except KeyError:
             raise InterpreterError(f"Variable '{name}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
+    def get_variable_by_uid(self, uid: str) -> Any:
+        """基于 UID 获取变量值"""
+        try:
+            return self._current_scope.get_by_uid(uid)
+        except KeyError:
+            raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
+
     def get_symbol(self, name: str) -> Optional[RuntimeSymbol]:
         return self._current_scope.get_symbol(name)
+
+    def get_symbol_by_uid(self, uid: str) -> Optional[RuntimeSymbol]:
+        """基于 UID 获取符号"""
+        return self._current_scope.get_symbol_by_uid(uid)
 
     def set_variable(self, name: str, value: Any) -> None:
         if not self._current_scope.assign(name, value):
             raise InterpreterError(f"Variable '{name}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False) -> None:
-        # 检查是否试图重定义常量（包括全局内置常量）
-        existing = self.get_symbol(name)
+    def set_variable_by_uid(self, uid: str, value: Any) -> None:
+        """基于 UID 赋值"""
+        if not self._current_scope.assign_by_uid(uid, value):
+            raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
+
+    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
+        # 检查是否试图重定义常量
+        existing = self.get_symbol_by_uid(uid) if uid else self.get_symbol(name)
         if existing and existing.is_const:
-            # 允许重复定义相同的值 (例如 bootstrap 阶段)
             if existing.value is value:
                 return
-            raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
+            raise InterpreterError(f"Cannot reassign constant '{name or uid}'", error_code=RUN_TYPE_MISMATCH)
 
-        self._current_scope.define(name, value, declared_type, is_const)
+        self._current_scope.define(name, value, declared_type, is_const, uid=uid)
 
-    def push_intent(self, intent: ast.IntentInfo) -> None:
+    def push_intent(self, intent: Any) -> None:
         self._intent_stack.append(intent)
 
-    def pop_intent(self) -> Optional[ast.IntentInfo]:
+    def pop_intent(self) -> Optional[Any]:
         if self._intent_stack:
             return self._intent_stack.pop()
         return None
 
-    def get_active_intents(self) -> List[ast.IntentInfo]:
+    def get_active_intents(self) -> List[Any]:
         return list(self._intent_stack)
 
     @property
-    def intent_stack(self) -> List[ast.IntentInfo]:
+    def intent_stack(self) -> List[Any]:
         return self._intent_stack
         
     @intent_stack.setter
-    def intent_stack(self, value: List[ast.IntentInfo]):
+    def intent_stack(self, value: List[Any]):
         self._intent_stack = value
 
     @property

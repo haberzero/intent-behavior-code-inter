@@ -86,8 +86,9 @@ func add(int a, int b) -> int:
         self.assertIn("intent", node)
         self.assertIn("stmt", node)
         
-        # 意图内容应被保留
-        self.assertEqual(node["intent"]["content"], "计算总和")
+        # 意图内容应被保留 (需要从池中解引用 UID)
+        intent_node = nodes[node["intent"]]
+        self.assertEqual(intent_node["content"], "计算总和")
         # 包装的语句应在池中
         self.assertIn(node["stmt"], nodes)
 
@@ -212,7 +213,10 @@ llmexcept:
         annotated_nodes = [n for n in nodes.values() if n["_type"] == "AnnotatedStmt"]
         self.assertTrue(len(annotated_nodes) >= 1)
         root_annotated = annotated_nodes[0]
-        self.assertEqual(root_annotated["intent"]["content"], "核心处理逻辑")
+        
+        # 意图内容应从池中获取
+        root_intent = nodes[root_annotated["intent"]]
+        self.assertEqual(root_intent["content"], "核心处理逻辑")
         
         # 层级 2: LLMExceptionalStmt (被意图包装在内)
         llm_uid = root_annotated["stmt"]

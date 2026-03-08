@@ -54,7 +54,7 @@ class FunctionMetadata(TypeDescriptor):
 
     def __post_init__(self):
         if self.name == "TypeDescriptor": # Default if not set
-            self.name = "function"
+            self.name = "callable"
 
 @dataclass
 class ClassMetadata(TypeDescriptor):

@@ -33,6 +33,9 @@ class Prelude:
         self.builtin_types["list"] = ListType(STATIC_ANY)
         self.builtin_types["dict"] = BuiltinType("dict")
         
+        # 可调用对象类型 (Lambda 化的行为描述行)
+        self.builtin_types["callable"] = FunctionType([], STATIC_ANY, name="callable")
+        
     def register_func(self, name: str, param_types: List[StaticType], return_type: StaticType):
         self.builtin_functions[name] = FunctionType(name=name, param_types=param_types, return_type=return_type)
         

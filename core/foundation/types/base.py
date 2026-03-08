@@ -29,7 +29,7 @@ class TypeDescriptor:
         
         # 模拟 callable 兼容性
         if other.name == "callable":
-             if self.name in ("function", "NativeFunction", "AnonymousLLMFunction", "behavior", "Module"):
+             if self.name in ("callable", "NativeFunction", "AnonymousLLMFunction", "behavior", "Module"):
                  return True
 
         return False

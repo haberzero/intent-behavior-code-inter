@@ -58,14 +58,15 @@ Bridging the gap between Static Analysis (Semantic) and Dynamic Execution (Runti
 
 ## 4. Known Technical Debt
 
-### 4.1. Scope Switching Hack
-In `Interpreter.execute_module`, the `RuntimeContext`'s global scope is swapped by directly accessing the private member `_global_scope`.
-**Plan**: Implement a `fork_with_scope()` method in `RuntimeContext`.
+### 4.1. Intent-Behavior Consistency Check
+In `SemanticAnalyzer.visit_AnnotatedStmt`, there is a TODO to implement consistency checks between the declared intent and the actual behavior code.
+**Plan**: Implement a semantic pass that uses LLM or static heuristics to verify if the code block matches the `@ intent` description.
 
-### 4.2. Incomplete Semantic Checks
-`SemanticAnalyzer` validates class inheritance but lacks deep validation for class attribute access.
-**Plan**: Implement attribute resolution in `visit_Attribute`.
+### 4.2. DictType Key Enforcement
+Currently, `DictType` accepts any `StaticType` for keys, but the language spec limits keys to `int` or `str`.
+**Plan**: Add validation in `SemanticAnalyzer.visit_Dict` to enforce key type restrictions.
 
 ## 5. Future Directions
-- **Standard Library**: Implement `Prelude` with `math`, `io`, `json` modules.
-- **Optimization**: Bytecode compilation (optional).
+- **Standard Library (Prelude)**: Expand the builtin modules in `core/compiler/semantic/passes/prelude.py`.
+- **Control Flow Graph (CFG)**: Introduce a dedicated CFG analysis phase for more advanced reachability and dead code checks.
+- **Explicit Serialization Schema**: Replace `vars(node)` with an explicit field mapping in `serializer.py` for stricter contract enforcement.

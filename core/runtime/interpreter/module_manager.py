@@ -57,9 +57,9 @@ class ModuleManagerImpl:
 
         # 3. 联动 Artifact (编译蓝图) 处理模块导入
         if self.artifact:
-            comp_result = self.artifact.get_module(module_name)
-            if comp_result:
-                ast_module = comp_result.module_ast
+            module_data = self.artifact.get("modules", {}).get(module_name)
+            if module_data:
+                root_node_uid = module_data.get("root_node_uid")
                 if not self.interpreter:
                     raise InterpreterError("Interpreter not available for module loading.")
                 
@@ -68,7 +68,7 @@ class ModuleManagerImpl:
                 module_scope = ScopeImpl()
                 
                 # 在新 Scope 下复用 Interpreter 执行
-                self.interpreter.execute_module(ast_module, scope=module_scope)
+                self.interpreter.execute_module(root_node_uid, module_name=module_name, scope=module_scope)
                 
                 # 创建模块实例并缓存
                 from core.foundation.kernel import IbModule

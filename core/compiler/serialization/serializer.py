@@ -32,7 +32,8 @@ class FlatSerializer:
                 "node_scenes": {uid: scene.name if hasattr(scene, 'name') else str(scene) 
                                for uid, scene in result.node_scenes.items()},
                 "node_to_symbol": result.node_to_symbol,
-                "node_to_type": result.node_to_type
+                "node_to_type": result.node_to_type,
+                "node_is_deferred": result.node_is_deferred
             },
             "pools": {
                 "nodes": self.node_pool,

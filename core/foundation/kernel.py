@@ -388,9 +388,12 @@ class IbClass(IbObject, Type):
         return f"<Class '{self.name}'>"
 
 class IbFunction(IbObject):
-    """可调用对象基类"""
-    def __init__(self, ib_class: 'IbClass'):
-        super().__init__(ib_class)
+    """
+    可调用对象的基类 (语言层表现为 callable)。
+    """
+    def __init__(self, ib_class: Optional['IbClass'] = None):
+        from core.foundation.bootstrapper import Bootstrapper
+        super().__init__(ib_class or Bootstrapper.get_class("callable"))
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         raise NotImplementedError()
@@ -485,66 +488,75 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node: 'ast.FunctionDef', interpreter: Any):
+    def __init__(self, node_uid: str, interpreter: Any):
         from core.foundation.bootstrapper import Bootstrapper
         super().__init__(Bootstrapper.get_class("Function"))
-        self.node = node
+        self.node_uid = node_uid
         self.interpreter = interpreter
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
         from .builtins import IbNone
         from .kernel import IbObject
+        from core.domain.exceptions import ReturnException
+        
+        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        # args 字段直接就是一个 arg 节点 UID 列表
+        params_uids = node_data.get("args", [])
         
         context = self.interpreter.context
         context.enter_scope()
+        
         try:
-            # 1. 绑定 self (如果是方法调用)
-            if not isinstance(receiver, IbNone):
-                context.define_variable("self", receiver)
-            
-            # 2. 绑定参数
-            formal_params = self.node.args
-            # 如果第一个形参是 explicit 'self'，跳过它，因为上面已经绑定了 receiver
-            if formal_params and formal_params[0].arg == "self":
-                formal_params = formal_params[1:]
-            
-            for i, arg_def in enumerate(formal_params):
-                if i < len(args):
-                    context.define_variable(arg_def.arg, args[i])
-            
-            # 3. 执行主体
-            result = IbNone()
-            from core.runtime.interpreter.interpreter import ReturnException
-            try:
-                for stmt in self.node.body:
-                    result = self.interpreter.visit(stmt)
-            except ReturnException as e:
-                return e.value
+            # 绑定参数
+            for i, arg_uid in enumerate(params_uids):
+                arg_data = self.interpreter.node_pool.get(arg_uid, {})
                 
-            return result
+                # 处理类型标注包装的情况 (TypeAnnotatedExpr)
+                actual_arg_uid = arg_uid
+                actual_arg_data = arg_data
+                if arg_data.get("_type") == "TypeAnnotatedExpr":
+                    actual_arg_uid = arg_data.get("target")
+                    actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
+                
+                arg_name = actual_arg_data.get("arg")
+                if i < len(args):
+                    # 获取参数符号 UID (对于参数，我们总是查看原始 arg 节点)
+                    sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
+                    context.define_variable(arg_name, args[i], uid=sym_uid)
+            
+            # 执行主体
+            body = node_data.get("body", [])
+            for stmt_uid in body:
+                self.interpreter.visit(stmt_uid)
+                
+            return IbNone()
+        except ReturnException as e:
+            return e.value
         finally:
             context.exit_scope()
 
     def __repr__(self):
-        return f"<Function '{self.node.name}'>"
+        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        name = node_data.get("name", "unknown")
+        return f"<Function '{name}'>"
 
 class IbLLMFunction(IbFunction):
     """
-    LLM 驱动的函数。
-    其执行逻辑委托给 LLMExecutor。
+    用户定义的 LLM 函数。
     """
-    def __init__(self, node: 'ast.LLMFunctionDef', executor: Any, interpreter: Any):
+    def __init__(self, node_uid: str, llm_executor: Any, interpreter: Any):
         from core.foundation.bootstrapper import Bootstrapper
         super().__init__(Bootstrapper.get_class("Function"))
-        self.node = node
-        self.executor = executor
+        self.node_uid = node_uid
+        self.llm_executor = llm_executor
         self.interpreter = interpreter
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        res = self.executor.execute_llm_function(self.node, receiver, args, self.interpreter.context)
-        from core.foundation.bootstrapper import Bootstrapper
-        return Bootstrapper.box(res)
+        """执行 LLM 函数"""
+        return self.llm_executor.execute_llm_function(self.node_uid, receiver, args, self.interpreter.context)
 
     def __repr__(self):
-        return f"<LLMFunction '{self.node.name}'>"
+        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        name = node_data.get("name", "unknown")
+        return f"<LLMFunction '{name}'>"

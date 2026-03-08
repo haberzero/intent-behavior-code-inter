@@ -7,6 +7,7 @@
 - int
 - float
 - str
+- bool
 - None
 - callable：通用可调用对象（函数、LLM 函数、行为 Lambda）
 
@@ -38,6 +39,14 @@ str 名字 = "张三"
 str 问候 = "你好，" + 名字
 ```
 
+### bool
+
+```ibc-inter
+bool 已完成 = True
+if 已完成:
+    print("任务结束")
+```
+
 ### None
 
 ```ibc-inter
@@ -54,7 +63,7 @@ callable 分析 = @~ 分析 $text 的主要意图 ~
 
 # 承接普通函数
 func add(int a, int b) -> int:
-    返回 a + b
+    return a + b
 callable 运算 = add
 ```
 
@@ -129,7 +138,7 @@ int 右移 = a >> 1
 
 ```ibc-inter
 str 结果 = @~分析数据 $data.id~
-for @~等待条件满足 $__count > 10__~:
+for @~等待条件满足 $count > 10~:
     pass
 ```
 
@@ -162,7 +171,9 @@ x %= 2
 str 连接 = "Hello" + " " + "World"
 ```
 
-## 类型转换
+## 类型转换 (Casting)
+
+IBC-Inter 支持显式类型转换语法 `(Type) Expression`。
 
 ```ibc-inter
 str 数字字符串 = "123"

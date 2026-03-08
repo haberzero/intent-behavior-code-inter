@@ -62,12 +62,10 @@ class StaticType:
             return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY)
         return None
 
-    def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
-        """解析运算符行为 (e.g. a + b, ~a)"""
-        # 默认实现：Any 参与的所有运算结果仍为 Any
-        if self.name in ("Any", "var") or (other and other.name in ("Any", "var")):
-            return STATIC_ANY
-        return None
+    @property
+    def is_callable(self) -> bool:
+        """是否支持调用行为 (e.g. func())"""
+        return self.name in ("Any", "var")
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
         """解析调用行为 (e.g. func(a, b))"""
@@ -75,15 +73,11 @@ class StaticType:
             return STATIC_ANY
         return None
 
-    @property
-    def element_type(self) -> 'StaticType':
-        """对于容器类型，返回其元素类型"""
-        return STATIC_ANY
-
-    @property
-    def is_callable(self) -> bool:
-        """是否支持调用行为 (e.g. func())"""
-        return self.name in ("Any", "var")
+    def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
+        """解析运算符行为 (e.g. a + b)"""
+        if self.name in ("Any", "var"):
+            return STATIC_ANY
+        return None
 
     @property
     def is_class(self) -> bool:
@@ -95,8 +89,38 @@ class StaticType:
         """是否为模块"""
         return False
 
+class BehaviorType(StaticType):
+    """行为描述行类型：在语义上它可以被视为 str，也可以被视为 function (Lambda)"""
+    def __init__(self):
+        super().__init__("behavior")
+
+    def is_assignable_to(self, other: 'StaticType') -> bool:
+        if super().is_assignable_to(other):
+            return True
+        # 行为描述行兼容 字符串 和 可调用类型
+        return other.name in ("str", "callable", "Any", "var")
+
+    @property
+    def is_callable(self) -> bool:
+        return True
+
+    def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
+        # 调用后返回字符串结果
+        return STATIC_STR
+
+STATIC_BEHAVIOR = BehaviorType()
+
 class BuiltinType(StaticType):
     """内置原子类型 (int, str, bool, float)"""
+    @property
+    def is_callable(self) -> bool:
+        # 内置类型（如 int, str）允许调用，表示类型转换/构造
+        return True
+
+    def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
+        # 内置类型调用返回其自身类型
+        return self
+
     def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
         # 基础类型运算逻辑从过程式的 Analyzer 转移到此处
         n1 = self.name
@@ -208,9 +232,9 @@ class ClassType(StaticType):
         return self
 
 class FunctionType(StaticType):
-    """函数或方法的类型签名"""
-    def __init__(self, param_types: List[StaticType], return_type: StaticType, name: str = "function"):
-        super().__init__("function")
+    """函数或方法的类型签名 (语言层表现为 callable)"""
+    def __init__(self, param_types: List[StaticType], return_type: StaticType, name: str = "callable"):
+        super().__init__("callable")
         self.param_types = param_types
         self.return_type = return_type
 

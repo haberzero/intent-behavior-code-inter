@@ -123,26 +123,41 @@ class Interpreter(IStackInspector):
         initialize_builtin_classes()
         
         self.output_callback = output_callback
-        self.artifact = artifact
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
         
-        # 1. 初始化基础组件
+        # 1. 核心解耦：处理平铺化池结构
+        self.artifact_dict: Dict[str, Any] = {}
+        if artifact:
+            # 如果是对象，则转换为扁平化池字典
+            if hasattr(artifact, 'to_dict'):
+                self.artifact_dict = artifact.to_dict()
+            else:
+                self.artifact_dict = artifact
+        
+        # 加载全局池 (Pools)
+        pools = self.artifact_dict.get("pools", {})
+        self.node_pool: Dict[str, Dict[str, Any]] = pools.get("nodes", {})
+        self.symbol_pool: Dict[str, Dict[str, Any]] = pools.get("symbols", {})
+        self.scope_pool: Dict[str, Dict[str, Any]] = pools.get("scopes", {})
+        self.type_pool: Dict[str, Dict[str, Any]] = pools.get("types", {})
+        
+        # 2. 初始化基础组件
         runtime_context = RuntimeContextImpl()
         interop = InterOpImpl(host_interface=self.host_interface)
         
         # 权限管理
         permission_manager = PermissionManagerImpl(root_dir)
         
-        # 2. 初始化 ModuleManager
+        # 3. 初始化 ModuleManager
         module_manager = ModuleManagerImpl(
             interop, 
-            artifact=artifact, 
+            artifact=self.artifact_dict, # 传入字典
             interpreter=None,
             root_dir=root_dir
         )
         
-        # 3. 创建 ServiceContext
+        # 4. 创建 ServiceContext
         llm_executor = LLMExecutorImpl()
         
         self.service_context = ServiceContextImpl(
@@ -156,7 +171,7 @@ class Interpreter(IStackInspector):
             debugger=self.debugger
         )
         
-        # 4. 完成子组件的注入
+        # 5. 完成子组件的注入
         llm_executor.service_context = self.service_context
         module_manager.set_interpreter(self)
         
@@ -168,6 +183,14 @@ class Interpreter(IStackInspector):
         self.instruction_count = 0
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
+        self.current_module_name: Optional[str] = None
+
+    def get_side_table(self, table_name: str, node_uid: str) -> Any:
+        """获取当前模块下的侧表信息"""
+        if not self.current_module_name:
+            return None
+        module_data = self.artifact_dict.get("modules", {}).get(self.current_module_name, {})
+        return module_data.get("side_tables", {}).get(table_name, {}).get(node_uid)
 
     def _setup_context(self, context: RuntimeContext):
         """为 Context 注入基础内置变量"""
@@ -183,10 +206,9 @@ class Interpreter(IStackInspector):
                 context.define_variable(name, ib_class, is_const=True)
 
         # [NEW] 注入来自编译蓝图的全局符号
-        if self.artifact and self.artifact.global_symbols:
-            from core.domain.symbols import Symbol
-            for name, val in self.artifact.global_symbols.items():
-                if name not in global_symbols and not isinstance(val, Symbol):
+        if self.artifact_dict and "global_symbols" in self.artifact_dict:
+            for name, val in self.artifact_dict["global_symbols"].items():
+                if name not in global_symbols:
                     # 如果是运行时对象（非静态符号），则注入
                     context.define_variable(name, val)
 
@@ -198,12 +220,20 @@ class Interpreter(IStackInspector):
     def context(self, value: RuntimeContext):
         self._current_context = value
 
-    def interpret(self, module: ast.Module) -> IbObject:
-        return self.execute_module(module)
+    def interpret(self, module_uid: str) -> IbObject:
+        """从模块 UID 开始执行"""
+        return self.execute_module(module_uid)
 
-    def execute_module(self, module: ast.Module, scope: Optional[Scope] = None) -> IbObject:
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Starting execution...")
+    def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
         
+        old_module = self.current_module_name
+        self.current_module_name = module_name
+        
+        module_data = self.node_pool.get(module_uid)
+        if not module_data:
+            raise InterpreterError(f"Module UID {module_uid} not found.")
+
         old_context = self._current_context
         if scope:
              # 创建新 Context 并绑定 Scope
@@ -214,19 +244,14 @@ class Interpreter(IStackInspector):
         self.instruction_count = 0
         result = IbNone()
         try:
-            for stmt in module.body:
-                result = self.visit(stmt)
+            # 模块主体是语句 UID 列表
+            body = module_data.get("body", [])
+            for stmt_uid in body:
+                result = self.visit(stmt_uid)
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError as e:
-            if self.service_context.issue_tracker:
-                from core.domain.diagnostics import Severity
-                self.service_context.issue_tracker.report(
-                    Severity.ERROR,
-                    e.error_code or RUN_GENERIC_ERROR,
-                    e.message,
-                    location=e.node
-                )
+            # TODO: 适配新的错误报告，使用 UID 关联源码
             raise
         except (ReturnException, BreakException, ContinueException):
             raise InterpreterError("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
@@ -238,376 +263,502 @@ class Interpreter(IStackInspector):
             raise InterpreterError(msg, error_code=RUN_GENERIC_ERROR)
         finally:
             self._current_context = old_context
+            self.current_module_name = old_module
 
-    def visit(self, node: ast.ASTNode) -> IbObject:
-        """核心 Visitor 分发方法"""
+    def visit(self, node_uid: Union[str, Any]) -> IbObject:
+        """核心 Pool-Walking 分发方法"""
+        if node_uid is None:
+            return IbNone()
+        
+        # 兼容性处理：如果传入的是对象（可能来自某些未重构的组件），尝试获取其 UID
+        if not isinstance(node_uid, str):
+            if hasattr(node_uid, 'uid'):
+                node_uid = node_uid.uid
+            else:
+                return IbNone()
+
+        node_data = self.node_pool.get(node_uid)
+        if not node_data:
+            # 可能是基础类型或已解箱对象
+            if isinstance(node_uid, (int, float, str, bool)):
+                return Bootstrapper.box(node_uid)
+            return IbNone()
+
         self.instruction_count += 1
         
         if self.instruction_count > self.max_instructions:
-            raise InterpreterError("Execution limit exceeded", node, error_code=RUN_LIMIT_EXCEEDED)
+            raise InterpreterError("Execution limit exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
 
         if self.call_stack_depth >= self.max_call_stack:
-             raise InterpreterError("Recursion depth exceeded", node, error_code=RUN_LIMIT_EXCEEDED)
+             raise InterpreterError("Recursion depth exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
         
         self.call_stack_depth += 1
         try:
-            method_name = f'visit_{node.__class__.__name__}'
+            method_name = f'visit_{node_data["_type"]}'
             visitor = getattr(self, method_name, self.generic_visit)
-            return visitor(node)
+            return visitor(node_uid, node_data)
         except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
             raise
         except InterpreterError:
             raise
         except Exception as e:
-            raise InterpreterError(f"{type(e).__name__}: {str(e)}", node, error_code=RUN_GENERIC_ERROR) from e
+            raise InterpreterError(f"{type(e).__name__}: {str(e)}", node_uid, error_code=RUN_GENERIC_ERROR) from e
         finally:
             self.call_stack_depth -= 1
 
-    def generic_visit(self, node: ast.ASTNode):
-        raise InterpreterError(f"No visit method implemented for {node.__class__.__name__}", node, error_code=RUN_GENERIC_ERROR)
+    def generic_visit(self, node_uid: str, node_data: Dict[str, Any]):
+        raise InterpreterError(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)
 
     # --- 访问方法实现 ---
 
-    def visit_Module(self, node: ast.Module):
+    def visit_AnnotatedStmt(self, node_uid: str, node_data: Dict[str, Any]):
+        """意图语句：intent '...' { ... }"""
+        intent_uid = node_data.get("intent")
+        stmt_uid = node_data.get("stmt")
+        
+        # 意图作用域管理
+        from .llm_executor import intent_scoped
+        def action():
+            return self.visit(stmt_uid)
+            
+        return intent_scoped(self.service_context, intent_uid)(action)
+
+    def visit_AnnotatedExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """意图表达式：intent '...' expr"""
+        intent_uid = node_data.get("intent")
+        expr_uid = node_data.get("expr")
+        
+        from .llm_executor import intent_scoped
+        def action():
+            return self.visit(expr_uid)
+            
+        return intent_scoped(self.service_context, intent_uid)(action)
+
+    def visit_BehaviorExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """行为描述行：█ ... █"""
+        is_deferred = self.get_side_table("node_is_deferred", node_uid)
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"BehaviorExpr {node_uid} is_deferred={is_deferred}")
+        
+        if is_deferred:
+            # 返回延迟执行的行为对象 (Lambda)
+            from core.foundation.builtins import IbBehavior
+            # 捕获当前的意图栈
+            captured_intents = list(self.context.intent_stack)
+            # 获取推导出的预期类型 (如果有)
+            expected_type = self.get_side_table("node_to_type", node_uid)
+            return IbBehavior(node_uid, self, captured_intents, expected_type=expected_type)
+        
+        # 立即执行
+        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.context)
+
+    def visit_Module(self, node_uid: str, node_data: Dict[str, Any]):
         result = IbNone()
-        for stmt in node.body:
-            result = self.visit(stmt)
+        for stmt_uid in node_data.get("body", []):
+            result = self.visit(stmt_uid)
         return result
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
-        """定义普通函数"""
-        func = IbUserFunction(node, self)
-        self.context.define_variable(node.name, func)
-        return IbNone()
-
-    def visit_LLMFunctionDef(self, node: ast.LLMFunctionDef):
-        """定义 LLM 函数"""
-        from core.foundation.kernel import IbLLMFunction
-        func = IbLLMFunction(node, self.service_context.llm_executor, self)
-        self.context.define_variable(node.name, func)
-        return IbNone()
-
-    def visit_Constant(self, node: ast.Constant) -> IbObject:
+    def visit_Constant(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """UTS: 统一常量装箱"""
-        return Bootstrapper.box(node.value)
+        return Bootstrapper.box(node_data.get("value"))
 
-    def visit_BinOp(self, node: ast.BinOp) -> IbObject:
-        left = self.visit(node.left)
-        right = self.visit(node.right)
-        method = OP_MAPPING.get(node.op)
-        if not method: raise InterpreterError(f"Unsupported op: {node.op}", node)
+    def visit_BinOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        left = self.visit(node_data.get("left"))
+        right = self.visit(node_data.get("right"))
+        method = OP_MAPPING.get(node_data.get("op"))
+        if not method: raise InterpreterError(f"Unsupported op: {node_data.get('op')}", node_uid)
         return left.receive(method, [right])
 
-    def visit_Compare(self, node: ast.Compare) -> IbObject:
+    def visit_Compare(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """处理比较运算 -> 消息发送"""
-        left = self.visit(node.left)
+        left = self.visit(node_data.get("left"))
+        ops = node_data.get("ops", [])
+        comparators = node_data.get("comparators", [])
+        if not ops: return left
+        
         # 简化处理：只取第一个比较操作符
-        op = node.ops[0]
-        right = self.visit(node.comparators[0])
+        op = ops[0]
+        right = self.visit(comparators[0])
         
         method = OP_MAPPING.get(op)
-        if not method: raise InterpreterError(f"Unsupported comparison: {op}", node)
+        if not method: raise InterpreterError(f"Unsupported comparison: {op}", node_uid)
         return left.receive(method, [right])
 
-    def visit_ListExpr(self, node: ast.ListExpr) -> IbObject:
+    def visit_ListExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
-        elts = [self.visit(e) for e in node.elts]
+        elts = [self.visit(e) for e in node_data.get("elts", [])]
         return Bootstrapper.box(elts)
 
-    def visit_Dict(self, node: ast.Dict) -> IbObject:
+    def visit_Dict(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """字典字面量 -> 统一装箱"""
         data = {}
-        for k, v in zip(node.keys, node.values):
-            key_obj = self.visit(k) if k else IbNone()
-            val_obj = self.visit(v)
+        keys = node_data.get("keys", [])
+        values = node_data.get("values", [])
+        for k_uid, v_uid in zip(keys, values):
+            key_obj = self.visit(k_uid) if k_uid else IbNone()
+            val_obj = self.visit(v_uid)
             native_key = key_obj.to_native() if hasattr(key_obj, 'to_native') else key_obj
             data[native_key] = val_obj
         return Bootstrapper.box(data)
 
-    def visit_Subscript(self, node: ast.Subscript) -> IbObject:
+    def visit_Subscript(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """下标访问 -> __getitem__"""
-        value = self.visit(node.value)
-        slice_obj = self.visit(node.slice)
+        value = self.visit(node_data.get("value"))
+        slice_obj = self.visit(node_data.get("slice"))
         return value.receive('__getitem__', [slice_obj])
 
-    def visit_UnaryOp(self, node: ast.UnaryOp) -> IbObject:
+    def visit_UnaryOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """一元运算 -> 消息发送"""
-        operand = self.visit(node.operand)
-        method = UNARY_OP_MAPPING.get(node.op)
-        if not method: raise InterpreterError(f"Unsupported unary op: {node.op}", node)
+        operand = self.visit(node_data.get("operand"))
+        # 注意：UNARY_OP_MAPPING 尚未定义，补全它
+        UNARY_OP_MAPPING = {'UAdd': '__pos__', 'USub': '__neg__', 'Not': '__not__', 'Invert': '__invert__'}
+        method = UNARY_OP_MAPPING.get(node_data.get("op"))
+        if not method: raise InterpreterError(f"Unsupported unary op: {node_data.get('op')}", node_uid)
         return operand.receive(method, [])
 
-    def visit_Name(self, node: ast.Name) -> IbObject:
-        val = self.context.get_variable(node.id)
+    def visit_Name(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """变量读取：优先通过 Symbol UID 查找"""
+        sym_uid = self.get_side_table("node_to_symbol", node_uid)
+        if sym_uid:
+            try:
+                return self.context.get_variable_by_uid(sym_uid)
+            except InterpreterError:
+                # 可能是尚未初始化的局部变量
+                pass
+        
+        # 备选方案：按名称查找（针对内置函数、插件或动态注入）
+        name = node_data.get("id")
+        val = self.context.get_variable(name)
         if not isinstance(val, IbObject):
-            # 自动装箱以兼容外部注入或旧代码
-            return self._box_native(val)
+            return Bootstrapper.box(val)
         return val
 
-    def _box_native(self, val: Any) -> IbObject:
-        """UTS: 转发至统一装箱逻辑"""
-        return Bootstrapper.box(val)
-
-    def visit_Assign(self, node: ast.Assign):
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment to {len(node.targets)} targets")
-        def action():
-            # 注入预期返回类型 (用于 LLM Executor 优化提示词)
-            type_pushed = False
-            target_type = ANY_TYPE
-            if hasattr(node, 'type_annotation') and node.type_annotation:
-                target_type = self._resolve_type(node.type_annotation)
-                self.service_context.llm_executor.push_expected_type(target_type.name)
-                type_pushed = True
-            
-            try:
-                value = self.visit(node.value)
-                
-                # 关键：如果存在 llmexcept (fallback) 块，或者目标不是 callable/var 类型，则强制立即执行行为
-                from core.foundation.builtins import IbBehavior
-                if isinstance(value, IbBehavior):
-                    force_eager = False
-                    if hasattr(node, 'llm_fallback') and node.llm_fallback:
-                        force_eager = True
-                    elif hasattr(node, 'type_annotation') and node.type_annotation:
-                        if target_type.name not in ("callable", "var", "Any"):
-                            force_eager = True
-                    
-                    if force_eager:
-                        value = value._execute()
-                
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        # UTS: 使用统一的类型兼容性检查协议
-                        if hasattr(node, 'type_annotation') and node.type_annotation:
-                            if not value.ib_class.is_assignable_to(target_type):
-                                try:
-                                    # 尝试自动转换协议 (如 str -> int)
-                                    value = value.receive('cast_to', [target_type])
-                                except (AttributeError, Exception):
-                                    raise InterpreterError(f"Type mismatch: Cannot assign '{value.ib_class.name}' to '{target_type.name}'", node)
-                        
-                        self.context.define_variable(target.id, value)
-                    elif isinstance(target, ast.Attribute):
-                        obj = self.visit(target.value)
-                        from core.foundation.builtins import IbString
-                        obj.receive('__setattr__', [IbString(target.attr), value])
-                    elif isinstance(target, ast.Subscript):
-                        obj = self.visit(target.value)
-                        slice_val = self.visit(target.slice)
-                        obj.receive('__setitem__', [slice_val, value])
-                return IbNone()
-            finally:
-                if type_pushed:
-                    self.service_context.llm_executor.pop_expected_type()
-            
-        return self._with_llm_fallback(node, action)
-
-    def visit_AugAssign(self, node: ast.AugAssign):
-        """处理 +=, -= 等 -> 消息发送"""
-        def action():
-            target = node.target
-            value = self.visit(node.value)
-            method = OP_MAPPING.get(node.op)
-            if not method: raise InterpreterError(f"Unsupported aug op: {node.op}", node)
-            
-            # 获取当前值
-            if isinstance(target, ast.Name):
-                current = self.context.get_variable(target.id)
-                new_val = current.receive(method, [value])
-                self.context.set_variable(target.id, new_val)
-            elif isinstance(target, ast.Attribute):
-                obj = self.visit(target.value)
-                from core.foundation.builtins import IbString
-                attr_name = IbString(target.attr)
-                current = obj.receive('__getattr__', [attr_name])
-                new_val = current.receive(method, [value])
-                obj.receive('__setattr__', [attr_name, new_val])
-            else:
-                raise InterpreterError("Unsupported aug assign target", node)
-            return IbNone()
-            
-        return self._with_llm_fallback(node, action)
-
-    def visit_BoolOp(self, node: ast.BoolOp) -> IbObject:
-        """处理 and/or 逻辑运算 (短路求值)"""
-        from core.foundation.builtins import IbInteger
-        is_or = node.op == 'or'
+    def visit_Assign(self, node_uid: str, node_data: Dict[str, Any]):
+        """赋值语句实现"""
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
         
-        last_val = None
-        for expr in node.values:
-            val = self.visit(expr)
+        value_uid = node_data.get("value")
+        value = self.visit(value_uid)
+        
+        # 处理多重赋值目标 (var a, b = 1)
+        for target_uid in node_data.get("targets", []):
+            target_data = self.node_pool.get(target_uid)
+            if not target_data: continue
+            
+            # 1. 普通变量赋值 (Name)
+            if target_data["_type"] == "Name":
+                sym_uid = self.get_side_table("node_to_symbol", target_uid)
+                name = target_data.get("id")
+                if sym_uid:
+                    # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
+                    if self.context.get_symbol_by_uid(sym_uid):
+                        self.context.set_variable_by_uid(sym_uid, value)
+                    else:
+                        self.context.define_variable(name, value, uid=sym_uid)
+                else:
+                    self.context.set_variable(name, value)
+            
+            # 2. 类型标注表达式 (TypeAnnotatedExpr)
+            elif target_data["_type"] == "TypeAnnotatedExpr":
+                inner_target_uid = target_data.get("target")
+                inner_target_data = self.node_pool.get(inner_target_uid)
+                if inner_target_data and inner_target_data["_type"] == "Name":
+                    sym_uid = self.get_side_table("node_to_symbol", inner_target_uid)
+                    name = inner_target_data.get("id")
+                    # 总是定义新变量
+                    self.context.define_variable(name, value, uid=sym_uid)
+            
+            # 3. 属性赋值 (Attribute)
+            elif target_data["_type"] == "Attribute":
+                obj = self.visit(target_data.get("value"))
+                attr = target_data.get("attr")
+                obj.receive('__setattr__', [Bootstrapper.box(attr), value])
+                
+        return IbNone()
+
+    def visit_FunctionDef(self, node_uid: str, node_data: Dict[str, Any]):
+        """定义用户函数"""
+        from core.foundation.kernel import IbUserFunction
+        func = IbUserFunction(node_uid, self)
+        name = node_data.get("name")
+        sym_uid = self.get_side_table("node_to_symbol", node_uid)
+        self.context.define_variable(name, func, uid=sym_uid)
+        return IbNone()
+
+    def visit_LLMFunctionDef(self, node_uid: str, node_data: Dict[str, Any]):
+        """定义 LLM 函数"""
+        from core.foundation.kernel import IbLLMFunction
+        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self)
+        name = node_data.get("name")
+        sym_uid = self.get_side_table("node_to_symbol", node_uid)
+        self.context.define_variable(name, func, uid=sym_uid)
+        return IbNone()
+
+    def visit_AugAssign(self, node_uid: str, node_data: Dict[str, Any]):
+        """增量赋值 a += 1"""
+        target_uid = node_data.get("target")
+        value_uid = node_data.get("value")
+        op = node_data.get("op")
+        
+        old_val = self.visit(target_uid)
+        delta = self.visit(value_uid)
+        
+        method = OP_MAPPING.get(op)
+        if not method: raise InterpreterError(f"Unsupported aug op: {op}", node_uid)
+        
+        new_val = old_val.receive(method, [delta])
+        
+        # 写回目标
+        target_data = self.node_pool.get(target_uid)
+        if target_data and target_data["_type"] == "Name":
+            sym_uid = self.get_side_table("node_to_symbol", target_uid)
+            self.context.set_variable_by_uid(sym_uid, new_val)
+        
+        return IbNone()
+
+    def visit_BoolOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """逻辑运算 (and/or)"""
+        is_or = node_data.get("op") == 'or'
+        last_val = IbNone()
+        for val_uid in node_data.get("values", []):
+            val = self.visit(val_uid)
             last_val = val
-            truthy = self.is_truthy(val)
-            if is_or and truthy: return val
-            if not is_or and not truthy: return val
-            
-        return last_val or IbNone()
+            if is_or and self.is_truthy(val): return val
+            if not is_or and not self.is_truthy(val): return val
+        return last_val
 
-    def visit_IfExp(self, node: ast.IfExp) -> IbObject:
-        """处理三元表达式"""
-        if self.is_truthy(self.visit(node.test)):
-            return self.visit(node.body)
-        return self.visit(node.orelse)
+    def visit_IfExp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """三元表达式"""
+        if self.is_truthy(self.visit(node_data.get("test"))):
+            return self.visit(node_data.get("body"))
+        return self.visit(node_data.get("orelse"))
 
-    def visit_Call(self, node: ast.Call) -> IbObject:
-        func = self.visit(node.func)
-        args = [self.visit(arg) for arg in node.args]
-        
-        # UTS: 使用 __call__ 协议统一处理调用
-        # func 可能是 IbFunction, IbBoundMethod 或 IbClass (构造函数)
-        try:
-            if node.intent:
-                self.context.push_intent(node.intent)
-            
-            # 统一通过消息传递
-            return func.receive('__call__', args)
-        finally:
-            if node.intent:
-                self.context.pop_intent()
+    def visit_Call(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """函数调用"""
+        func = self.visit(node_data.get("func"))
+        args = [self.visit(arg_uid) for arg_uid in node_data.get("args", [])]
+        return func.call(IbNone(), args)
 
+    def visit_Attribute(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+        """读取属性 -> __getattr__"""
+        value = self.visit(node_data.get("value"))
+        attr = node_data.get("attr")
+        return value.receive('__getattr__', [Bootstrapper.box(attr)])
 
-    def visit_Attribute(self, node: ast.Attribute) -> IbObject:
-        """属性访问 -> __getattr__"""
-        obj = self.visit(node.value)
-        from core.foundation.builtins import IbString
-        return obj.receive('__getattr__', [IbString(node.attr)])
-
-    def visit_If(self, node: ast.If):
+    def visit_If(self, node_uid: str, node_data: Dict[str, Any]):
         def action():
-            condition = self.visit(node.test)
+            condition = self.visit(node_data.get("test"))
             if self.is_truthy(condition):
-                for stmt in node.body: self.visit(stmt)
-            elif node.orelse:
-                for stmt in node.orelse: self.visit(stmt)
+                for stmt_uid in node_data.get("body", []):
+                    self.visit(stmt_uid)
+            else:
+                for stmt_uid in node_data.get("orelse", []):
+                    self.visit(stmt_uid)
             return IbNone()
             
-        return self._with_llm_fallback(node, action)
+        return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_While(self, node: ast.While):
+    def visit_While(self, node_uid: str, node_data: Dict[str, Any]):
         def action():
-            while self.is_truthy(self.visit(node.test)):
+            while self.is_truthy(self.visit(node_data.get("test"))):
                 try:
-                    for stmt in node.body: self.visit(stmt)
+                    for stmt_uid in node_data.get("body", []):
+                        self.visit(stmt_uid)
                 except BreakException: break
                 except ContinueException: continue
             return IbNone()
             
-        return self._with_llm_fallback(node, action)
+        return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_For(self, node: ast.For):
+    def visit_For(self, node_uid: str, node_data: Dict[str, Any]):
         def action():
-            # 1. 广义 For 循环 (Condition-based)
-            if node.target is None:
-                while self.is_truthy(self.visit(node.iter)):
-                    try:
-                        for stmt in node.body: self.visit(stmt)
-                    except BreakException: break
-                    except ContinueException: continue
-                return IbNone()
-
-            # 2. 标准 Foreach 循环
-            iterable_obj = self.visit(node.iter)
+            target_uid = node_data.get("target")
+            iter_uid = node_data.get("iter")
+            body = node_data.get("body", [])
+            
+            # 标准 Foreach 循环
+            iterable_obj = self.visit(iter_uid)
             
             # UTS: 使用消息传递获取迭代列表 (to_list 协议)
             elements_obj = iterable_obj.receive('to_list', [])
             from core.foundation.builtins import IbList
             if not isinstance(elements_obj, IbList):
-                raise InterpreterError(f"Object of type '{iterable_obj.ib_class.name}' is not iterable (to_list failed)", node)
+                raise InterpreterError(f"Object is not iterable", node_uid)
             
             elements = elements_obj.elements
             total = len(elements)
             for i, item in enumerate(elements):
-                # 注入循环上下文 (用于隐式意图感知)
+                # 注入循环上下文
                 self.context.push_loop_context(i, total)
                 
-                if isinstance(node.target, ast.Name):
-                    self.context.define_variable(node.target.id, item)
+                # 绑定循环变量
+                target_data = self.node_pool.get(target_uid)
+                if target_data and target_data["_type"] == "Name":
+                    name = target_data.get("id")
+                    sym_uid = self.get_side_table("node_to_symbol", target_uid)
+                    self.context.define_variable(name, item, uid=sym_uid)
                 
-                # 支持过滤条件
                 try:
-                    if node.filter_condition and not self.is_truthy(self.visit(node.filter_condition)):
-                        continue
-    
-                    try:
-                        for stmt in node.body: self.visit(stmt)
-                    except BreakException: return IbNone()
-                    except ContinueException: break
+                    for stmt_uid in body:
+                        self.visit(stmt_uid)
+                except BreakException: 
+                    self.context.pop_loop_context()
+                    return IbNone()
+                except ContinueException: 
+                    self.context.pop_loop_context()
+                    continue
                 finally:
                     self.context.pop_loop_context()
             return IbNone()
             
-        return self._with_llm_fallback(node, action)
+        return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_ExprStmt(self, node: ast.ExprStmt):
-        def action():
-            res = self.visit(node.value)
-            # 如果是行为描述行，则立即执行（作为语句时）
-            from core.foundation.builtins import IbBehavior
-            if isinstance(res, IbBehavior):
-                return res._execute()
-            return res
-        return self._with_llm_fallback(node, action)
+    def visit_Return(self, node_uid: str, node_data: Dict[str, Any]):
+        value_uid = node_data.get("value")
+        value = self.visit(value_uid) if value_uid else IbNone()
+        raise ReturnException(value)
 
-    def visit_Retry(self, node: ast.Retry):
+    def visit_Break(self, node_uid: str, node_data: Dict[str, Any]):
+        raise BreakException()
+
+    def visit_Continue(self, node_uid: str, node_data: Dict[str, Any]):
+        raise ContinueException()
+
+    def visit_ExprStmt(self, node_uid: str, node_data: Dict[str, Any]):
+        """表达式语句"""
+        res = self.visit(node_data.get("value"))
+        # 如果是行为描述行，则立即执行（作为语句时）
+        from core.foundation.builtins import IbBehavior
+        if isinstance(res, IbBehavior):
+            return res.receive('__call__', [])
+        return res
+
+    def visit_Retry(self, node_uid: str, node_data: Dict[str, Any]):
         """处理 retry 语句"""
-        if node.hint:
-            hint_val = self.visit(node.hint)
+        hint_uid = node_data.get("hint")
+        if hint_uid:
+            hint_val = self.visit(hint_uid)
             # 将 hint 注入到 ai 模块（如果可用）
             try:
                 ai_mod = self.service_context.module_manager.import_module("ai", self.context)
                 if hasattr(ai_mod, "set_retry_hint"):
                     ai_mod.set_retry_hint(hint_val.to_native())
             except:
-                pass # 忽略注入失败
+                pass 
         raise RetryException()
 
-    def _with_llm_fallback(self, node: ast.Stmt, action: Callable):
+    def _with_llm_fallback(self, node_uid: str, node_data: Dict[str, Any], action: Callable):
         """LLM 容错机制的核心封装"""
         while True:
             try:
                 return action()
-            except Exception as e:
-                if isinstance(e, LLMUncertaintyError):
-                    if hasattr(node, 'llm_fallback') and node.llm_fallback:
-                        try:
-                            for stmt in node.llm_fallback:
-                                self.visit(stmt)
-                            return IbNone()
-                        except RetryException:
-                            continue
+            except LLMUncertaintyError:
+                fallback_body = node_data.get("llm_fallback", [])
+                if fallback_body:
+                    try:
+                        for stmt_uid in fallback_body:
+                            self.visit(stmt_uid)
+                        return IbNone()
+                    except RetryException:
+                        continue
                 raise
 
-    def visit_Try(self, node: ast.Try):
+    def visit_Try(self, node_uid: str, node_data: Dict[str, Any]):
         """实现异常处理块"""
         def action():
             try:
-                for stmt in node.body: self.visit(stmt)
+                for stmt_uid in node_data.get("body", []):
+                    self.visit(stmt_uid)
             except (ReturnException, BreakException, ContinueException, RetryException):
                 raise
             except (ThrownException, Exception) as e:
                 # 包装 Python 原生异常
-                error_obj = e.value if isinstance(e, ThrownException) else self._box_native(str(e))
+                error_obj = e.value if isinstance(e, ThrownException) else Bootstrapper.box(str(e))
                 
                 # 查找匹配的 except 块
                 handled = False
-                for handler in node.handlers:
-                    # TODO: 类型匹配检查 (handler.type)
-                    if handler.name:
-                        self.context.define_variable(handler.name, error_obj)
-                    for stmt in handler.body: self.visit(stmt)
+                for handler_data in node_data.get("handlers", []):
+                    # TODO: 类型匹配检查
+                    name = handler_data.get("name")
+                    if name:
+                        self.context.define_variable(name, error_obj)
+                    for stmt_uid in handler_data.get("body", []):
+                        self.visit(stmt_uid)
                     handled = True
                     break
                 if not handled: raise
             finally:
-                if node.finalbody:
-                    for stmt in node.finalbody: self.visit(stmt)
+                for stmt_uid in node_data.get("finalbody", []):
+                    self.visit(stmt_uid)
             return IbNone()
             
-        return self._with_llm_fallback(node, action)
+        return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_Return(self, node: ast.Return):
-        val = self.visit(node.value) if node.value else IbNone()
-        raise ReturnException(val)
+    def visit_Import(self, node_uid: str, node_data: Dict[str, Any]):
+        for alias_data in node_data.get("names", []):
+            self.service_context.module_manager.import_module(alias_data.get("name"), self.context)
+        return IbNone()
+
+    def visit_ImportFrom(self, node_uid: str, node_data: Dict[str, Any]):
+        names = [(a.get("name"), a.get("asname")) for a in node_data.get("names", [])]
+        self.service_context.module_manager.import_from(node_data.get("module"), names, self.context)
+        return IbNone()
+
+    def visit_ClassDef(self, node_uid: str, node_data: Dict[str, Any]):
+        """动态创建类对象"""
+        name = node_data.get("name")
+        parent_name = node_data.get("parent") or "Object"
+        new_class = Bootstrapper.create_subclass(name, parent_name)
+        
+        # 1. 注册方法与字段
+        body = node_data.get("body", [])
+        for stmt_uid in body:
+            stmt_data = self.node_pool.get(stmt_uid)
+            if not stmt_data: continue
+            
+            if stmt_data["_type"] == "FunctionDef":
+                new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self))
+            elif stmt_data["_type"] == "LLMFunctionDef":
+                new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self))
+            elif stmt_data["_type"] == "Assign":
+                val = self.visit(stmt_data.get("value")) if stmt_data.get("value") else IbNone()
+                for target_uid in stmt_data.get("targets", []):
+                    target_data = self.node_pool.get(target_uid)
+                    if target_data and target_data["_type"] == "Name":
+                        new_class.default_fields[target_data.get("id")] = val
+        
+        # 绑定到当前作用域
+        sym_uid = self.get_side_table("node_to_symbol", node_uid)
+        self.context.define_variable(name, new_class, uid=sym_uid)
+        return IbNone()
+
+    def visit_Raise(self, node_uid: str, node_data: Dict[str, Any]):
+        """抛出异常"""
+        exc_uid = node_data.get("exc")
+        exc_val = self.visit(exc_uid) if exc_uid else IbNone()
+        raise ThrownException(exc_val)
+
+    def visit_IntentStmt(self, node_uid: str, node_data: Dict[str, Any]):
+        """处理意图块"""
+        intent_uid = node_data.get("intent")
+        intent_data = self.node_pool.get(intent_uid)
+        
+        from types import SimpleNamespace
+        intent = SimpleNamespace(
+            content=intent_data.get('content', '') if intent_data else '',
+            mode=intent_data.get('mode', 'append') if intent_data else 'append',
+            segments=intent_data.get('segments', []) if intent_data else []
+        )
+            
+        self.context.push_intent(intent)
+        try:
+            for stmt_uid in node_data.get("body", []):
+                self.visit(stmt_uid)
+        finally:
+            self.context.pop_intent()
+        return IbNone()
+
+    def visit_Pass(self, node_uid: str, node_data: Dict[str, Any]):
+        return IbNone()
 
     def is_truthy(self, value: IbObject) -> bool:
         """UTS: 使用 to_bool 协议判断真值"""
@@ -615,110 +766,10 @@ class Interpreter(IStackInspector):
         return res.to_native() != 0
 
     def _builtin_print(self, *args: IbObject):
-        texts = [str(arg.value) if hasattr(arg, 'value') else str(arg) for arg in args]
+        texts = [str(arg.to_native()) if hasattr(arg, 'to_native') else str(arg) for arg in args]
         msg = " ".join(texts)
         if self.output_callback:
             self.output_callback(msg)
         else:
             print(msg)
         return IbNone()
-
-    def _resolve_type(self, type_node: ast.ASTNode) -> Type:
-        """UTS: 在运行时解析类型节点为 Type 对象"""
-        if isinstance(type_node, ast.Name):
-            target = Bootstrapper.get_class(type_node.id)
-            if target: return target
-            return Type(type_node.id)  # UTS: Fallback to base Type placeholder
-        # 扩展支持复合类型 (如 list[int])
-        if isinstance(type_node, ast.Subscript):
-            base = self._resolve_type(type_node.value)
-            if base.name == "list":
-                elt = self._resolve_type(type_node.slice)
-                return ListType(elt)
-            if base.name == "dict":
-                # 简单处理：只取第一个参数
-                return DictType(ANY_TYPE, ANY_TYPE)
-        return ANY_TYPE
-
-    # --- 保持 Import 逻辑 ---
-    def visit_Import(self, node: ast.Import):
-        for alias in node.names:
-            self.service_context.module_manager.import_module(alias.name, self.context)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom):
-        names = [(alias.name, alias.asname) for alias in node.names]
-        self.service_context.module_manager.import_from(node.module, names, self.context)
-
-    def visit_ClassDef(self, node: ast.ClassDef):
-        # 动态创建类对象
-        new_class = Bootstrapper.create_subclass(node.name, node.parent or "Object")
-        
-        # 1. 注册方法与字段：从 node.methods/fields 或 node.body 中识别
-        all_methods = list(node.methods)
-        all_fields = list(node.fields)
-        for stmt in node.body:
-            if isinstance(stmt, (ast.FunctionDef, ast.LLMFunctionDef)):
-                all_methods.append(stmt)
-            elif isinstance(stmt, ast.Assign):
-                all_fields.append(stmt)
-        
-        for m in all_methods:
-            if isinstance(m, ast.LLMFunctionDef):
-                from core.foundation.kernel import IbLLMFunction
-                new_class.register_method(m.name, IbLLMFunction(m, self.service_context.llm_executor, self))
-            else:
-                new_class.register_method(m.name, IbUserFunction(m, self))
-        
-        # 2. 收集默认字段值
-        for f in all_fields:
-            if isinstance(f, ast.Assign):
-                val = self.visit(f.value) if f.value else IbNone()
-                for target in f.targets:
-                    if isinstance(target, ast.Name):
-                        new_class.default_fields[target.id] = val
-            
-        self.context.define_variable(node.name, new_class)
-
-    def visit_Raise(self, node: ast.Raise):
-        """抛出异常"""
-        exc_val = self.visit(node.exc) if node.exc else IbNone()
-        raise ThrownException(exc_val)
-
-    def visit_BehaviorExpr(self, node: ast.BehaviorExpr):
-        """
-        处理行为描述行 @~...~
-        如果它在赋值语句的右侧，或者作为参数传递，它应该被 Lambda 化（延迟执行）。
-        """
-        from core.foundation.builtins import IbBehavior
-        # 获取当前意图栈的快照，用于后续 Lambda 调用时的闭包
-        captured_intents = list(self.context.intent_stack)
-        
-        # 获取当前预期的类型
-        expected_type = None
-        if self.service_context.llm_executor._expected_type_stack:
-            expected_type = self.service_context.llm_executor._expected_type_stack[-1]
-            
-        return IbBehavior(node, self, captured_intents, expected_type=expected_type)
-
-    def visit_IntentStmt(self, node: ast.IntentStmt):
-        """处理意图块"""
-        # 如果是动态意图（带有 segments），先评估内容
-        intent = node.intent
-        if hasattr(intent, 'segments') and intent.segments:
-            content = self.service_context.llm_executor._evaluate_segments(intent.segments, self.context)
-            # 这里的 intent 是 AST 节点，为了不破坏 AST，我们创建一个临时的 IntentInfo 对象
-            from core.domain.ast import IntentInfo
-            intent = IntentInfo(content=content, mode=intent.mode)
-            
-        self.context.push_intent(intent)
-        try:
-            for stmt in node.body:
-                self.visit(stmt)
-        finally:
-            self.context.pop_intent()
-        from core.foundation.builtins import IbNone
-        return IbNone()
-
-    def visit_Pass(self, node: ast.Pass): pass
-    def visit_Break(self, node: ast.Break): raise BreakException()
-    def visit_Continue(self, node: ast.Continue): raise ContinueException()

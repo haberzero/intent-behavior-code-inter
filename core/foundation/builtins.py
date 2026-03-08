@@ -179,7 +179,7 @@ class IbBehavior(IbObject):
             res = self.interpreter.service_context.llm_executor.execute_behavior_expression(
                 self.node, self.interpreter.context, captured_intents=self.captured_intents
             )
-            self._cache = self.interpreter._box_native(res)
+            self._cache = Bootstrapper.box(res)
             return self._cache
         finally:
             self.interpreter.context.intent_stack = old_intents
@@ -208,6 +208,10 @@ class IbBehavior(IbObject):
             "captured_intents": [str(i) for i in self.captured_intents],
             "expected_type": self.expected_type
         }
+
+    def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
+        """支持函数调用协议 ()"""
+        return self._execute()
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         # 如果是调用消息，执行行为

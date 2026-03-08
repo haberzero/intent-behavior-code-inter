@@ -1,8 +1,7 @@
 import re
 import json
-from typing import Any, List, Optional, Dict, Union
+from typing import Any, List, Optional, Dict, Union, Callable
 from core.foundation.interfaces import LLMExecutor, RuntimeContext, ServiceContext
-from core.domain import ast as ast
 from core.domain.exceptions import InterpreterError, LLMUncertaintyError
 from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.capabilities import ILLMProvider
@@ -50,95 +49,101 @@ class LLMExecutorImpl:
             
         return {}
 
-    def execute_llm_function(self, node: ast.LLMFunctionDef, receiver: IbObject, args: List[IbObject], context: RuntimeContext) -> IbObject:
+    def execute_llm_function(self, node_uid: str, receiver: IbObject, args: List[IbObject], context: RuntimeContext) -> IbObject:
         """
         处理 llm 声明式函数定义 (LLMFunctionDef)。
         """
         from core.foundation.builtins import IbNone
+        from core.foundation.bootstrapper import Bootstrapper
+        
+        interpreter = self.service_context.interpreter
+        node_data = interpreter.node_pool.get(node_uid, {})
+        
         context.enter_scope()
         try:
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{node.name}' with {len(args)} args")
+            name = node_data.get("name", "unknown")
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{name}' with {len(args)} args")
 
-            # 绑定 self (如果是方法调用)
-            if not isinstance(receiver, IbNone):
-                context.define_variable("self", receiver)
-            
             # 绑定参数
-            formal_params = node.args
-            # 如果第一个形参是 explicit 'self'，跳过它，因为上面已经绑定了 receiver
-            if formal_params and formal_params[0].arg == "self":
-                formal_params = formal_params[1:]
-
-            for i, arg_def in enumerate(formal_params):
+            params = node_data.get("args", [])
+            for i, arg_uid in enumerate(params):
+                arg_data = interpreter.node_pool.get(arg_uid, {})
+                
+                # 处理类型标注包装的情况 (TypeAnnotatedExpr)
+                actual_arg_uid = arg_uid
+                actual_arg_data = arg_data
+                if arg_data.get("_type") == "TypeAnnotatedExpr":
+                    actual_arg_uid = arg_data.get("target")
+                    actual_arg_data = interpreter.node_pool.get(actual_arg_uid, {})
+                
+                arg_name = actual_arg_data.get("arg")
                 if i < len(args):
-                    context.define_variable(arg_def.arg, args[i])
+                    sym_uid = interpreter.get_side_table("node_to_symbol", actual_arg_uid)
+                    context.define_variable(arg_name, args[i], uid=sym_uid)
+                    
                     # 兼容性：如果参数名为 self 或 text，自动映射到 __self / __text
-                    if arg_def.arg == 'self':
+                    if arg_name == 'self':
                         context.define_variable('__self', args[i])
-                    elif arg_def.arg == 'text':
+                    elif arg_name == 'text':
                         context.define_variable('__text', args[i])
-                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Bound arg '{arg_def.arg}' = {args[i]}")
 
             # 1. 提取并评估结构化 Prompt
-            sys_prompt = self._evaluate_segments(node.sys_prompt, context)
-            user_prompt = self._evaluate_segments(node.user_prompt, context)
-            
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Evaluated segments for LLM function '{node.name}'")
+            sys_prompt = self._evaluate_segments(node_data.get("sys_prompt"), context)
+            user_prompt = self._evaluate_segments(node_data.get("user_prompt"), context)
             
             # 2. 注入意图增强 (三层架构合并)
             merged_intents = self._merge_intents(None, context)
             if merged_intents:
-                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting merged intents into sys_prompt")
                 intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
                 sys_prompt += intent_block
                 
             # 3. 处理返回类型提示注入
-            type_name = self._resolve_type_name(node.returns)
-            ai_module = None
-            if self.service_context and self.service_context.interop:
-                ai_module = self.service_context.interop.get_package("ai")
-                
+            # TODO: 适配新的类型节点解析
+            type_name = "str"
+            returns_uid = node_data.get("returns")
+            if returns_uid:
+                returns_data = interpreter.node_pool.get(returns_uid)
+                if returns_data and returns_data["_type"] == "Name":
+                    type_name = returns_data.get("id", "str")
+
+            ai_module = self.service_context.interop.get_package("ai")
             if ai_module and hasattr(ai_module, "get_return_type_prompt"):
                 type_prompt = ai_module.get_return_type_prompt(type_name)
                 if type_prompt:
-                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting return type prompt for '{type_name}'")
                     sys_prompt += f"\n\n{type_prompt}"
 
             # 4. 调用底层模型
-            raw_res = self._call_llm(sys_prompt, user_prompt, node)
+            raw_res = self._call_llm(sys_prompt, user_prompt, node_uid)
             
             # 记录最后一次调用信息
             self.last_call_info = {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
                 "response": raw_res,
-                "type": "function",
-                "name": node.name
+                "type": "callable",
+                "name": name
             }
             
             # 5. 结果解析
-            return self._parse_result(raw_res, type_name, node)
+            return self._parse_result(raw_res, type_name, node_uid)
             
         finally:
             context.exit_scope()
 
 
-    def _merge_intents(self, call_intent: Optional[ast.IntentInfo], context: RuntimeContext, captured_intents: Optional[List[ast.IntentInfo]] = None) -> List[str]:
+    def _merge_intents(self, call_intent_uid: Optional[str], context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> List[str]:
         """
         合并 Global, Block, Call 三层意图。
-        支持 @+, @!, @- 等修饰符逻辑。
         """
         # 1. 基础收集
         global_intents = context.get_global_intents()
         active_intents = context.get_active_intents()
-        if captured_intents:
-            active_intents = self._unique_merge_nodes(captured_intents, active_intents)
-            
-        # 2. 处理模式 (Mode) 逻辑：Block 层级的 Exclusive (!)
+        
+        # 2. 处理模式 (Mode) 逻辑
         resolved_block_intents = []
         is_exclusive = False
         for i in reversed(active_intents):
-            content = self._resolve_intent_content(i, context)
+            content = self._resolve_intent_content_obj(i, context)
             if i.mode == "override":
                 resolved_block_intents.insert(0, content)
                 is_exclusive = True
@@ -151,9 +156,11 @@ class LLMExecutorImpl:
         final_list.extend(resolved_block_intents)
         
         # 3. 处理 Call 层级
-        if call_intent:
-            mode = call_intent.mode
-            content = self._resolve_intent_content(call_intent, context)
+        if call_intent_uid:
+            interpreter = self.service_context.interpreter
+            call_intent_data = interpreter.node_pool.get(call_intent_uid, {})
+            mode = call_intent_data.get("mode", "append")
+            content = self._resolve_intent_content(call_intent_uid, context)
             if mode == "override":
                 return [content]
             elif mode == "remove":
@@ -169,8 +176,23 @@ class LLMExecutorImpl:
             
         return self._unique_merge(final_list)
 
-    def _resolve_intent_content(self, intent: ast.IntentInfo, context: RuntimeContext) -> str:
-        """Resolve dynamic variables in intent content."""
+    def _resolve_intent_content(self, intent_uid: str, context: RuntimeContext) -> str:
+        """从 UID 解析意图内容"""
+        interpreter = self.service_context.interpreter
+        intent_data = interpreter.node_pool.get(intent_uid, {})
+        segments = intent_data.get("segments")
+        if segments:
+            return self._evaluate_segments(segments, context).strip()
+        return intent_data.get("content", "").strip()
+
+    def _resolve_intent_content_obj(self, intent: Any, context: RuntimeContext) -> str:
+        """从 IntentInfo 对象或字典解析"""
+        if isinstance(intent, dict):
+            segments = intent.get('segments')
+            if segments:
+                return self._evaluate_segments(segments, context).strip()
+            return intent.get('content', '').strip()
+            
         if hasattr(intent, 'segments') and intent.segments:
             return self._evaluate_segments(intent.segments, context).strip()
         return intent.content.strip()
@@ -185,19 +207,7 @@ class LLMExecutorImpl:
                     seen.add(item)
         return result
 
-    def _unique_merge_nodes(self, *lists: List[ast.IntentInfo]) -> List[ast.IntentInfo]:
-        result = []
-        seen = set()
-        for l in lists:
-            for item in l:
-                # 使用内容作为去重键（简化处理）
-                key = (item.mode, item.content)
-                if key not in seen:
-                    result.append(item)
-                    seen.add(key)
-        return result
-
-    def _evaluate_segments(self, segments: Optional[List[Union[str, ast.Expr]]], context: RuntimeContext) -> str:
+    def _evaluate_segments(self, segments: Optional[List[Any]], context: RuntimeContext) -> str:
         """评估结构化提示词片段"""
         if not segments:
             return ""
@@ -206,39 +216,26 @@ class LLMExecutorImpl:
         content_parts = []
         for segment in segments:
             if isinstance(segment, str):
-                content_parts.append(segment)
-            elif isinstance(segment, ast.Expr):
-                if self.service_context and self.service_context.interpreter:
-                    val = self.service_context.interpreter.visit(segment)
-                    
-                    # --- __to_prompt__ Protocol ---
-                    if isinstance(val, IbObject):
-                        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Applying __to_prompt__ protocol for {val}")
-                        # 优先尝试通过 Ib 消息发送调用 __to_prompt__
-                        # 但为了性能和简单，直接调用 Python 层的 __to_prompt__ 
-                        # 因为 IbObject.__to_prompt__ 默认逻辑已经包含了多态支持
-                        content_parts.append(val.__to_prompt__())
-                    else:
-                        content_parts.append(str(val))
+                if segment.startswith("node_"):
+                    # 这是一个节点 UID
+                    if self.service_context and self.service_context.interpreter:
+                        val = self.service_context.interpreter.visit(segment)
+                        if hasattr(val, '__to_prompt__'):
+                            content_parts.append(val.__to_prompt__())
+                        elif hasattr(val, 'to_native'):
+                            content_parts.append(str(val.to_native()))
+                        else:
+                            content_parts.append(str(val))
                 else:
-                    raise InterpreterError("Interpreter not initialized in LLMExecutor", segment, error_code=RUN_GENERIC_ERROR)
+                    content_parts.append(segment)
             else:
                 content_parts.append(str(segment))
         return "".join(content_parts)
 
-    def _resolve_type_name(self, type_node: Optional[ast.ASTNode]) -> str:
-        if type_node is None:
-            return "str"
-        if isinstance(type_node, ast.Name):
-            return type_node.id
-        if isinstance(type_node, ast.Subscript):
-            # 简单处理泛型如 list[int] -> list
-            return self._resolve_type_name(type_node.value)
-        return "str"
-
-    def _parse_result(self, raw_res: str, type_name: str, node: ast.ASTNode) -> IbObject:
+    def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
         clean_res = raw_res.strip()
         from core.foundation.builtins import IbInteger, IbString, IbList
+        from core.foundation.bootstrapper import Bootstrapper
         
         if type_name == "str":
             return IbString(raw_res)
@@ -259,8 +256,7 @@ class LLMExecutorImpl:
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
                     val = json.loads(json_str)
-                    interpreter = self.service_context.interpreter
-                    return IbList([interpreter._box_native(i) for i in val])
+                    return Bootstrapper.box(val)
                 raise ValueError(f"No JSON list found in response: {clean_res}")
             elif type_name == "dict":
                 match = re.search(r'\{[\s\S]*\}', clean_res)
@@ -269,31 +265,31 @@ class LLMExecutorImpl:
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
                     val = json.loads(json_str)
-                    interpreter = self.service_context.interpreter
-                    return interpreter._box_native(val)
+                    return Bootstrapper.box(val)
                 raise ValueError(f"No JSON dict found in response: {clean_res}")
             
             return IbString(raw_res)
 
         except Exception as e:
             self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response: {str(e)}")
-            raise InterpreterError(
+            raise LLMUncertaintyError(
                 f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
-                node,
-                error_code=RUN_LLM_ERROR
+                node_uid,
+                raw_response=raw_res
             )
 
-    def execute_behavior_expression(self, node: ast.BehaviorExpr, context: RuntimeContext, captured_intents: Optional[List[ast.IntentInfo]] = None) -> IbObject:
+    def execute_behavior_expression(self, node_uid: str, context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> IbObject:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
+        interpreter = self.service_context.interpreter
+        node_data = interpreter.node_pool.get(node_uid, {})
+        
         # 0. 准备环境
-        ai_module = None
-        if self.service_context and self.service_context.interop:
-            ai_module = self.service_context.interop.get_package("ai")
+        ai_module = self.service_context.interop.get_package("ai")
 
         # 1. 评估段式插值
-        content = self._evaluate_segments(node.segments, context)
+        content = self._evaluate_segments(node_data.get("segments"), context)
         
         # 2. 收集与合并意图
         all_intents = []
@@ -301,13 +297,15 @@ class LLMExecutorImpl:
         if ai_module and hasattr(ai_module, "_config"):
             auto_intent = ai_module._config.get("auto_intent_injection", True)
         
+        intent_uid = node_data.get("intent")
         if auto_intent:
-            all_intents = self._merge_intents(node.intent, context, captured_intents=captured_intents)
-        elif node.intent:
-            all_intents = [self._resolve_intent_content(node.intent, context)]
+            all_intents = self._merge_intents(intent_uid, context, captured_intents=captured_intents)
+        elif intent_uid:
+            all_intents = [self._resolve_intent_content(intent_uid, context)]
             
         # 3. 确定场景与提示词
-        scene = node.scene_tag
+        # 核心：使用 side_tables 中的 node_scenes
+        scene_name = interpreter.get_side_table("node_scenes", node_uid) or "general"
         sys_prompt = "你是一个意图行为代码执行器。"
         
         current_retry_hint = self.retry_hint
@@ -316,19 +314,14 @@ class LLMExecutorImpl:
                 current_retry_hint = ai_module._retry_hint
             
         if ai_module and hasattr(ai_module, "get_scene_prompt"):
-            scene_prompt = ai_module.get_scene_prompt(scene.name.lower())
+            scene_prompt = ai_module.get_scene_prompt(scene_name.lower())
             if scene_prompt:
                 sys_prompt = scene_prompt
 
         # 注入预期类型约束
-        injected_type = None
-        auto_type = True
-        if ai_module and hasattr(ai_module, "_config"):
-            auto_type = ai_module._config.get("auto_type_constraint", True)
-
-        if auto_type and self._expected_type_stack:
+        if self._expected_type_stack:
             injected_type = self._expected_type_stack[-1]
-            if injected_type != "var" and injected_type != "callable":
+            if injected_type not in ("var", "callable", "Any"):
                 sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
         
         if all_intents:
@@ -338,67 +331,24 @@ class LLMExecutorImpl:
             sys_prompt += f"\n\n注意：这是重试请求。之前的回答不符合要求，请参考此修正提示：{current_retry_hint}"
             
         # 4. 执行
-        response = self._call_llm(sys_prompt, content, node, scene=scene.name.lower())
+        response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name.lower())
             
-        # 记录最后一次调用信息
-        self.last_call_info = {
-            "sys_prompt": sys_prompt,
-            "user_prompt": content,
-            "response": response,
-            "type": "behavior",
-            "scene": scene.name.lower()
-        }
-            
-        if "MOCK_UNCERTAIN_RESPONSE" in response:
-            raise LLMUncertaintyError(
-                f"LLM 返回了明确的不确定性信号：{response}",
-                node,
-                raw_response=response
-             )
- 
-        # 5. 严格场景校验
-        from core.foundation.builtins import IbString, IbInteger
-        if scene in (ast.Scene.BRANCH, ast.Scene.LOOP):
+        # 5. 严格场景校验 (BRANCH/LOOP)
+        from core.foundation.builtins import IbInteger, IbString
+        if scene_name.upper() in ("BRANCH", "LOOP"):
             clean_res = response.strip().lower()
-            
-            decision_map = {
-                "1": "1", "0": "0", "true": "1", "false": "0", "yes": "1", "no": "0"
-            }
-            if ai_module and hasattr(ai_module, "get_decision_map"):
-                # 合并默认决策图与用户自定义图
-                custom_map = ai_module.get_decision_map()
-                if custom_map:
-                    decision_map.update(custom_map)
-            
+            decision_map = {"1": 1, "0": 0, "true": 1, "false": 0, "yes": 1, "no": 0}
             if clean_res in decision_map:
                 self.retry_hint = None
-                return IbInteger.from_native(int(decision_map[clean_res]))
+                return IbInteger.from_native(decision_map[clean_res])
             
-            # 如果是循环/分支场景但没能匹配到决策结果，则认为是输出格式有问题，抛出不确定异常触发 fallback/retry
-            raise LLMUncertaintyError(
-                f"LLM 决策响应格式非法：期望 0/1 (或 mapped 决策值)，但返回了: {response}",
-                node,
-                raw_response=response
-            )
-
-        # 6. 普通场景结果转换 (对齐 LLM 函数解析逻辑)
-        if injected_type:
-            try:
-                result = self._parse_result(response, injected_type, node)
-                self.retry_hint = None
-                return result
-            except InterpreterError:
-                # 如果是强转失败，且有 fallback 逻辑，则由外层捕获
-                raise
-            except Exception as e:
-                # 包装为不确定异常，允许 fallback 处理
-                raise LLMUncertaintyError(str(e), node, raw_response=response)
+            raise LLMUncertaintyError(f"LLM decision format error: {response}", node_uid, raw_response=response)
 
         self.retry_hint = None
         return IbString(response)
 
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node: ast.ASTNode, scene: str = "general") -> str:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general") -> str:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
@@ -419,6 +369,34 @@ class LLMExecutorImpl:
         raise InterpreterError(
             "LLM 运行配置缺失：未配置有效的 LLM 调用接口。\n"
             "请确保已导入 'ai' 模块并正确调用了 'ai.set_config'。",
-            node,
+            node_uid,
             error_code=RUN_LLM_ERROR
         )
+
+class intent_scoped:
+    """管理意图作用域的上下文管理器装饰器"""
+    def __init__(self, service_context: ServiceContext, intent_uid: Optional[str]):
+        self.service_context = service_context
+        self.intent_uid = intent_uid
+
+    def __call__(self, action: Callable):
+        if not self.intent_uid:
+            return action()
+            
+        interpreter = self.service_context.interpreter
+        intent_data = interpreter.node_pool.get(self.intent_uid, {})
+        
+        # 使用原始字典作为意图信息
+        # 为了兼容 .mode 的访问，我们将其包装在一个简单的 namespace 对象中
+        from types import SimpleNamespace
+        intent_info = SimpleNamespace(
+            content=intent_data.get('content', ''),
+            mode=intent_data.get('mode', 'append'),
+            segments=intent_data.get('segments', [])
+        )
+        
+        self.service_context.runtime_context.push_intent(intent_info)
+        try:
+            return action()
+        finally:
+            self.service_context.runtime_context.pop_intent()

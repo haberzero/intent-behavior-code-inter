@@ -10,6 +10,7 @@ from core.runtime.module_system.loader import ModuleLoader
 from core.support.host_interface import HostInterface
 from core.foundation.types import ModuleMetadata
 from core.domain.diagnostics import CompilerError
+from core.domain.exceptions import InterpreterError
 from core.support.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
 
 class IBCIEngine:
@@ -149,26 +150,35 @@ class IBCIEngine:
         return self.scheduler.compile_project(abs_entry)
 
     def execute(self, artifact: Any, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
-        """
-        [NEW] 核心解耦：执行已编译的 CompilationArtifact。
-        """
-        entry_res = artifact.get_module(artifact.entry_module)
-        if not entry_res:
-            raise RuntimeError(f"Entry module '{artifact.entry_module}' not found in artifact")
-
-        # 1. 准备/获取解释器
-        if not self.interpreter:
-            self._prepare_interpreter(artifact, output_callback)
+        """执行编译后的蓝图"""
+        self._prepare_interpreter(artifact, output_callback)
         
-        # 2. 注入实时运行变量
+        # 1. 注入初始变量
         if variables:
             for name, val in variables.items():
                 self.interpreter.context.define_variable(name, val)
-
-        # 3. 执行入口模块 AST
-        self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Executing entry module: {artifact.entry_module}")
-        self.interpreter.interpret(entry_res.module_ast)
-        return True
+        
+        # 2. 从入口模块开始执行
+        try:
+            entry_module = self.interpreter.artifact_dict.get("entry_module")
+            if not entry_module:
+                return True
+                
+            module_data = self.interpreter.artifact_dict.get("modules", {}).get(entry_module)
+            if not module_data:
+                return True
+                
+            self.interpreter.execute_module(module_data["root_node_uid"], module_name=entry_module)
+            return True
+        except Exception as e:
+            # 运行时异常已由解释器内部报告
+            if not isinstance(e, InterpreterError):
+                print(f"Internal engine error: {e}")
+                import traceback
+                traceback.print_exc()
+            else:
+                print(f"Runtime error: {e}")
+            return False
 
     def get_variable(self, name: str) -> Any:
         """获取解释器上下文中的变量"""
