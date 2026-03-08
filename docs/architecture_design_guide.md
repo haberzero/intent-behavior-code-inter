@@ -5,34 +5,34 @@ This document outlines the architectural principles, patterns, and component int
 
 ## 2. Core Architecture
 
-IBC-Inter follows a modular, component-based architecture with a clear separation between compilation (static analysis) and execution (runtime).
+IBC-Inter follows a 3-layer data-driven architecture, ensuring total decoupling between logic and data.
 
-### 2.1. Dependency Injection (DI)
-The system uses a manual Dependency Injection pattern via `ServiceContext`.
-- **Purpose**: To manage the lifecycle of singleton services (`Interpreter`, `ModuleManager`, `Evaluator`, `LLMExecutor`) and resolve circular dependencies.
-- **Key Component**: `core/runtime/interpreter/interfaces.py` (ServiceContext Protocol).
-- **Implementation**: `core/runtime/interpreter/interpreter.py` (ServiceContextImpl).
-- **Initialization**:
-  1. Instantiate independent services (`RuntimeContext`, `Evaluator`).
-  2. Instantiate dependent services with placeholders (`ModuleManager(interpreter=None)`).
-  3. Construct `ServiceContext`.
-  4. Perform Setter Injection to resolve cycles (e.g., `module_manager.set_interpreter(interpreter)`).
+### 2.1. Layer 1: Domain Model Layer (`core/domain/`)
+The "Source of Truth". Contains 100% pure, read-only data structures.
+- **AST**: Definitive structure of the IBCI language.
+- **Symbols & StaticTypes**: The semantic backbone.
+- **Artifact**: The serializable communication contract.
 
-### 2.2. Compiler Architecture (Mediator Pattern)
-The Parser uses the Mediator Pattern to coordinate complex parsing logic.
+### 2.2. Layer 2: Production Layer (`core/compiler/`)
+The "Factory". Transforms source code into data pools.
+- **Side-Tabling**: Analysis results (symbol bindings, inferred types) are stored in mapping tables, keeping the AST immutable.
+- **Flat Pooling (Black Magic)**: The `FlatSerializer` resolves complex memory object graphs into a flattened, UID-based JSON dictionary. This eliminates Python memory address dependencies and allows the interpreter to run in total isolation.
+
+### 2.3. Layer 3: Execution Layer (`core/runtime/`)
+The "Consumer". Executes the data pools produced by Layer 2.
+- **Interpreter**: Directly walks the flattened data pool ("Pool-Walking"). It no longer needs to import compiler logic.
+- **Intent Stack**: Manages hierarchical LLM intents (Global -> Block -> Call).
+
+## 3. Interaction Patterns
+
+### 3.1. Mediator Pattern (Parser)
+The Parser coordinates complex parsing logic via `ParserContext`.
 - **Problem**: `StatementComponent` needs to parse declarations, and `DeclarationComponent` needs to parse statements, creating a cycle.
 - **Solution**: `ParserContext` acts as the Mediator.
-- **Flow**:
-  - Components (`ExpressionComponent`, `StatementComponent`, etc.) hold a reference to `ParserContext`.
-  - Components access each other *only* through `ParserContext` (e.g., `self.context.statement_parser`).
-  - `Parser` initializes all components and registers them with the context.
 
-### 2.3. Runtime Architecture (Single Interpreter)
-The runtime uses a "Single Interpreter, Multiple Scopes" model.
-- **Old Model**: A new `Interpreter` instance was created for every imported module. Heavy and state-isolated.
-- **New Model**: A single `Interpreter` instance is reused.
-- **Mechanism**: `execute_module(module, scope=...)`. The interpreter temporarily switches its active `RuntimeContext` to the target module's scope, executes code, and then switches back.
-- **Benefit**: Massive performance improvement and correct sharing of global state (intrinsics).
+### 3.2. Service Context (Runtime)
+The runtime uses a manual Dependency Injection pattern via `ServiceContext`.
+- **Purpose**: To manage the lifecycle of singleton services (`Interpreter`, `ModuleManager`, `Evaluator`, `LLMExecutor`) and resolve circular dependencies.
 
 ## 3. Subsystems
 

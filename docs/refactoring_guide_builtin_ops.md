@@ -1,7 +1,10 @@
 # IBC-Inter 编译器架构重构指南：内置运算行为的元数据化
 
+**状态**：已规划 (Planned) - 待在解释器联调后期实施。
+**当前位置**：[symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py)
+
 ## 1. 背景与现状 (Context)
-在目前的 IBC-Inter 编译器实现中，[symbols.py](file:///core/compiler/semantic/symbols.py) 的 `BuiltinType.get_operator_result` 方法中包含了一部分硬编码的运算规则（如 `int + int = int`）。
+在目前的 IBC-Inter 编译器实现中，[symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py) 的 `BuiltinType.get_operator_result` 方法中包含了一部分硬编码的运算规则（如 `int + int = int`）。
 
 虽然这部分代码已被封装在语义对象内部，实现了物理隔离，但它在逻辑上依然属于“影子解释器”行为——编译器在代码层面模拟了解释器的运行逻辑。为了实现极致的架构正义和跨平台一致性，这部分硬编码逻辑应被重构为**元数据驱动 (Metadata-driven)**。
 
