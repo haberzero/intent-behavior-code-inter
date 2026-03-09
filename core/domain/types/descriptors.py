@@ -358,6 +358,11 @@ class ModuleMetadata(TypeDescriptor):
         if not self.name or self.name == "TypeDescriptor":
             self.name = "module"
 
+    @property
+    def exports(self) -> Dict[str, 'TypeDescriptor']:
+        """兼容性属性：映射到 members"""
+        return self.members
+
 # --- 常量与注册表 ---
 
 class MetadataRegistry:

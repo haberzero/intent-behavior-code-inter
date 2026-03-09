@@ -78,6 +78,13 @@ class IbNativeObject(IbObject):
         if hasattr(self.py_obj, message):
             attr = getattr(self.py_obj, message)
             if callable(attr):
+                # [IES 2.0] 支持 SDK 绑定协议
+                binding = getattr(attr, '_ibci_binding', None)
+                if binding and getattr(binding, 'raw', False):
+                    # 原始模式：直接传递 IbObject
+                    return self.ib_class.registry.box(attr(*args))
+                
+                # 默认模式：自动解箱
                 native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
                 return self.ib_class.registry.box(attr(*native_args))
             return self.ib_class.registry.box(attr)

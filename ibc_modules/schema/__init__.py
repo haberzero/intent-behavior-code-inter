@@ -1,6 +1,8 @@
 from typing import Dict, Any, List
+from core.extension import sdk as ibci
 
 class SchemaLib:
+    @ibci.method("validate")
     def validate(self, data: Dict[str, Any], rules: Dict[str, Any]) -> bool:
         """
         简单实现 JSON Schema 校验逻辑。
@@ -30,6 +32,7 @@ class SchemaLib:
                 
         return True
 
+    @ibci.method("assert")
     def _assert(self, data: Dict[str, Any], rules: Dict[str, Any]):
         if not self.validate(data, rules):
             from core.domain.issue import InterpreterError

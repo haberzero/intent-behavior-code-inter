@@ -232,12 +232,24 @@ class ListType(BuiltinType):
         super().__init__("list", descriptor=descriptor)
         self._element_type = element_type or STATIC_ANY
 
+    @property
+    def element_type(self) -> StaticType:
+        return self._element_type
+
 class DictType(BuiltinType):
     """内置字典类型，支持键值类型推导"""
     def __init__(self, key_type: Optional[StaticType] = None, value_type: Optional[StaticType] = None, descriptor: Optional[uts.TypeDescriptor] = None):
         super().__init__("dict", descriptor=descriptor)
         self._key_type = key_type or STATIC_ANY
         self._value_type = value_type or STATIC_ANY
+
+    @property
+    def key_type(self) -> StaticType:
+        return self._key_type
+
+    @property
+    def value_type(self) -> StaticType:
+        return self._value_type
 
 # --- 常量类型实例 (作为原型) ---
 STATIC_ANY = BuiltinType("Any", descriptor=uts.ANY_DESCRIPTOR)

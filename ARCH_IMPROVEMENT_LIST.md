@@ -52,15 +52,19 @@
 2.  **职责剥离**：`builtin_initializer.py` 现在仅负责“根据 Schema 注入 Python 实现逻辑”，而具体的 Schema 定义已完全下沉到 `core/domain/builtin_schema.py`。
 3.  **IES 2.0 插件协议准备**：Registry 已支持扩展令牌注册类与元数据，为插件系统的平滑接入打下了基础。
 
-### 阶段五：验证、合龙与清理 (Finalization) [IN_PROGRESS]
+### 阶段五：验证、合龙与清理 (Finalization) [COMPLETED]
 **核心目标**：解除屏蔽，全量跑通，优化结构。
 
-| 维度 | 评估结果 | 风险点/代价备注 |
-| :--- | :--- | :--- |
-| **涉及文件数** | **15+ 个** | 几乎触及所有核心模块，尤其是跨层引用部分 |
-| **架构风险** | **极高 (Critical)** | 初始化顺序敏感：若 `int` 等基础描述符未就绪，编译器会发生不可调试的崩溃 |
-| **循环依赖风险** | **高 (High)** | UTS 与 Symbol 之间的引用需要通过接口或基类解耦 |
-| **改造代价** | **高 (High)** | 需要分 5 个阶段进行，每个阶段均需全量回测 24 个基础测试项 |
+1.  **全量测试跑通**：已解除所有 `unittest.skip`，24 项基础测试全部 Passed。
+2.  **运行时查找优化**：已在 [interpreter.py](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/interpreter/interpreter.py) 实现 IbName 查找失败时向 Registry 类对象的回退，解决了 `int(x)` 等内置构造行为。
+3.  **命名空间冲突修复**：清除了 `conversion.py` 中的全局冗余函数，统一了内置类与全局转换函数的语义。
+
+### 阶段六：IES 2.0 插件系统 (Developer Experience & Contract Alignment) [IN_PROGRESS]
+**核心目标**：建立“契约对齐”的插件开发协议，解决 `spec.py` 与实现层脱节的问题。
+
+1.  **建立 `ibci-sdk`**：引入 [@ibci.method](file:///c:/myself/proj/intent-behavior-code-inter/core/extension/sdk.py) 装饰器，显式绑定实现函数与 UTS 契约符号。
+2.  **启动时签名校验**：在 [loader.py](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/module_system/loader.py) 加载插件时，强制对比 Spec 与 Python 函数签名，确保“定义即实现”。
+3.  **自动化数据转换 (Marshaling)**：基于 UTS 描述符实现入参自动解箱（Unboxing）与出参自动装箱（Boxing），降低插件开发心智负担。
 
 ---
 

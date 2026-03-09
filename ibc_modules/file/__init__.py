@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 from core.runtime.interfaces import PermissionManager
+from core.extension import sdk as ibci
 
 class FileLib:
     def __init__(self):
@@ -14,18 +15,21 @@ class FileLib:
             return path
         return os.path.join(self._permission_manager.root_dir, path)
 
+    @ibci.method("read")
     def read(self, path: str) -> str:
         full_path = self._resolve_path(path)
         self._permission_manager.validate_path(full_path, "read")
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
             
+    @ibci.method("write")
     def write(self, path: str, content: str) -> None:
         full_path = self._resolve_path(path)
         self._permission_manager.validate_path(full_path, "write")
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
             
+    @ibci.method("exists")
     def exists(self, path: str) -> bool:
         full_path = self._resolve_path(path)
         self._permission_manager.validate_path(full_path, "check existence")

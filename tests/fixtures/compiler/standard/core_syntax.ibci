@@ -48,13 +48,15 @@ Animal my_pet = Dog("Buddy", 3, "Golden Retriever")
 str pet_sound = my_pet.speak()
 
 # 5. Loops and Inference
-for i in range(10):
-    int x = i
+for i in 10.to_list():
+    var x = i
     if i % 2 == 0:
-        print("Even")
+        # print("Even")
+        pass
 
 # 6. Error Handling (Try-Except)
 try:
     int result = 10 / 0
 except Exception as e:
-    print("Caught error")
+    # print("Caught error")
+    pass

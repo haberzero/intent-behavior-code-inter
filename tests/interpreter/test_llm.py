@@ -62,21 +62,18 @@ class TestLLM(BaseInterpreterTest):
         self.assertIn("You are a helpful assistant.", self.mock_ai.last_sys)
         self.assertIn("The question is: What is the answer?", self.mock_ai.last_user)
 
-    @unittest.skip("暂时屏蔽：意图注入协议重构中")
     def test_intent_injection(self):
         """测试意图注入逻辑"""
         code = """
         intent "Always be concise.":
-            pass
-        
-        llm simple_ask() -> str:
-            __sys__
-                System prompt
-            __user__
-                User prompt
-            llmend
+            llm simple_ask() -> str:
+                __sys__
+                    System prompt
+                __user__
+                    User prompt
+                llmend
             
-        simple_ask()
+            simple_ask()
         """
         self.run_code(code)
         

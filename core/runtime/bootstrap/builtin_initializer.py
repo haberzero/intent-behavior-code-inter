@@ -130,6 +130,12 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(integer_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
     _reg_native(integer_class, 'cast_to', lambda self, target_class: _cast_numeric_to(self, target_class), unbox=False)
     
+    # [NEW] int(x) 构造函数/转换逻辑
+    def _int_call(self, *args):
+        if not args: return self.registry.box(0)
+        return args[0].receive('cast_to', [self])
+    _reg_native(integer_class, '__call__', _int_call, unbox=False)
+    
     # Float
     _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
     _reg_native(float_class, '__add__', lambda self, other: _numeric_op(self, other, lambda a, b: a + b))
@@ -141,6 +147,12 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(float_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
     _reg_native(float_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
     _reg_native(float_class, 'cast_to', lambda self, target_class: _cast_numeric_to(self, target_class), unbox=False)
+
+    # [NEW] float(x) 构造函数/转换逻辑
+    def _float_call(self, *args):
+        if not args: return self.registry.box(0.0)
+        return args[0].receive('cast_to', [self])
+    _reg_native(float_class, '__call__', _float_call, unbox=False)
 
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
@@ -155,6 +167,12 @@ def initialize_builtin_classes(registry: Registry):
         
     _reg_native(string_class, '__add__', _string_add, unbox=False)
     _reg_native(string_class, 'cast_to', lambda self, target_class: _cast_string_to(self, target_class), unbox=False)
+
+    # [NEW] str(x) 构造函数/转换逻辑
+    def _str_call(self, *args):
+        if not args: return self.registry.box("")
+        return args[0].receive('__to_prompt__', [])
+    _reg_native(string_class, '__call__', _str_call, unbox=False)
 
     # List
     _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")

@@ -3,20 +3,9 @@ from core.runtime.objects.kernel import IbObject
 from core.foundation.registry import Registry
 
 def register_conversion(manager, interpreter):
-    """注册类型转换相关内置函数"""
-    
-    def _str(obj: IbObject):
-        """全局 str() 函数 -> __to_prompt__ 协议"""
-        return obj.receive('__to_prompt__', [])
-
-    def _int(obj: IbObject):
-        """全局 int() 函数 -> cast_to 协议"""
-        return obj.receive('cast_to', [manager.registry.get_class("int")])
-
-    def _float(obj: IbObject):
-        """全局 float() 函数 -> cast_to 协议"""
-        return obj.receive('cast_to', [manager.registry.get_class("float")])
-
-    manager.register('str', _str, unbox=False)
-    manager.register('int', _int, unbox=False)
-    manager.register('float', _float, unbox=False)
+    """
+    注册类型转换相关内置函数。
+    注意：在 IBCI 2.0 中，int, str, float 等已成为 Registry 中的类对象，
+    它们本身通过 __call__ 协议支持类型转换，因此这里不再注册同名全局函数。
+    """
+    pass

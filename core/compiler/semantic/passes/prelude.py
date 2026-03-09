@@ -29,9 +29,9 @@ class Prelude:
         st_any = _get_type("Any", STATIC_ANY)
         st_void = _get_type("void", STATIC_VOID)
         st_int = _get_type("int", STATIC_INT)
-        st_float = _get_type("float", STATIC_INT) # 暂时映射
-        st_str = _get_type("str", STATIC_ANY)
-        st_bool = _get_type("bool", STATIC_ANY)
+        st_float = _get_type("float", STATIC_FLOAT)
+        st_str = _get_type("str", STATIC_STR)
+        st_bool = _get_type("bool", STATIC_BOOL)
 
         # 核心内置函数
         self.register_func("print", [st_any], st_void)

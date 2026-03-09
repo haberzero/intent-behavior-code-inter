@@ -555,11 +555,18 @@ class Interpreter(IStackInspector):
 
         # 兼容性/动态代码回退：名称查找
         name = node_data.get("id")
-        if self.strict_mode and not sym_uid:
-            raise self._report_error(f"Strict mode: Symbol UID missing for variable '{name}'.", node_uid)
+        
+        try:
+            return self.context.get_variable(name)
+        except InterpreterError:
+            # 2. 尝试从 Registry 获取类 (支持内置类型名称如 int, str)
+            cls = self.registry.get_class(name)
+            if cls: return cls
             
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Symbol UID lookup failed for {name}, falling back to name lookup.")
-        return self.context.get_variable(name)
+            if self.strict_mode and not sym_uid:
+                raise self._report_error(f"Strict mode: Symbol UID missing for variable '{name}'.", node_uid)
+            
+            raise
 
     def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]):
         """赋值语句实现"""

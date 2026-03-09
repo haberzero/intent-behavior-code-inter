@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional
+from core.extension import sdk as ibci
 
 class NetLib:
     def __init__(self):
@@ -7,6 +8,7 @@ class NetLib:
     def setup(self, capabilities):
         self._capabilities = capabilities
 
+    @ibci.method("get")
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
         try:
             import requests
@@ -19,6 +21,7 @@ class NetLib:
             from core.domain.issue import InterpreterError
             raise InterpreterError(f"Network GET failed: {str(e)}")
 
+    @ibci.method("post")
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         try:
             import requests

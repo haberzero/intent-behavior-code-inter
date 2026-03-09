@@ -2,6 +2,7 @@ import os
 import time
 from typing import Any, Optional, Dict
 from core.foundation.interfaces import ExtensionCapabilities, ILLMProvider
+from core.extension import sdk as ibci
 
 class AILib(ILLMProvider):
     def __init__(self):
@@ -63,6 +64,7 @@ class AILib(ILLMProvider):
             except ImportError:
                 pass
 
+    @ibci.method("set_config")
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
         self._config["key"] = key
@@ -76,65 +78,83 @@ class AILib(ILLMProvider):
             
         self._init_client()
         
+    @ibci.method("set_retry")
     def set_retry(self, count: int) -> None:
         self._config["retry"] = count
         
+    @ibci.method("set_timeout")
     def set_timeout(self, seconds: float) -> None:
         self._config["timeout"] = seconds
         self._init_client()
 
+    @ibci.method("set_general_prompt")
     def set_general_prompt(self, prompt: str) -> None:
         self._scene_prompts["general"] = prompt
 
+    @ibci.method("set_branch_prompt")
     def set_branch_prompt(self, prompt: str) -> None:
         self._scene_prompts["branch"] = prompt
 
+    @ibci.method("set_loop_prompt")
     def set_loop_prompt(self, prompt: str) -> None:
         self._scene_prompts["loop"] = prompt
 
+    @ibci.method("set_scene_config")
     def set_scene_config(self, scene: str, config: Dict[str, Any]) -> None:
         if "prompt" in config:
             self._scene_prompts[scene] = config["prompt"]
 
+    @ibci.method("get_scene_prompt")
     def get_scene_prompt(self, scene: str) -> str:
         return self._scene_prompts.get(scene, self._scene_prompts["general"])
 
+    @ibci.method("set_return_type_prompt")
     def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
         self._return_type_prompts[type_name] = prompt
 
+    @ibci.method("get_return_type_prompt")
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
         return self._return_type_prompts.get(type_name)
 
+    @ibci.method("set_retry_hint")
     def set_retry_hint(self, hint: str) -> None:
         self._retry_hint = hint
 
+    @ibci.method("get_last_call_info")
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info
 
+    @ibci.method("set_decision_map")
     def set_decision_map(self, decision_map: Dict[str, str]) -> None:
         self._config["decision_map"] = decision_map
 
+    @ibci.method("get_decision_map")
     def get_decision_map(self) -> Dict[str, str]:
         return self._config.get("decision_map", {})
 
     # --- Global Intent Management (Proxy to Kernel) ---
+    @ibci.method("set_global_intent")
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.set_global_intent(intent)
 
+    @ibci.method("clear_global_intents")
     def clear_global_intents(self) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.clear_global_intents()
 
+    @ibci.method("remove_global_intent")
     def remove_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.remove_global_intent(intent)
 
+    @ibci.method("get_global_intents")
     def get_global_intents(self) -> list[str]:
         if self._capabilities and self._capabilities.intent_manager:
             return self._capabilities.intent_manager.get_global_intents()
         return []
 
+    @ibci.method("get_current_intent_stack")
     def get_current_intent_stack(self) -> list[str]:
         """获取当前层级合并后的所有意图"""
         if self._capabilities and self._capabilities.intent_manager:

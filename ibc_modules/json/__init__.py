@@ -1,13 +1,14 @@
 import json
 from typing import Any
+from core.extension import sdk as ibci
 
 class JSONLib:
-    @staticmethod
-    def parse(s: str) -> Any:
+    @ibci.method("parse")
+    def parse(self, s: str) -> Any:
         return json.loads(s)
     
-    @staticmethod
-    def stringify(obj: Any) -> str:
+    @ibci.method("stringify")
+    def stringify(self, obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False)
 
 # Export the implementation

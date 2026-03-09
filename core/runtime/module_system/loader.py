@@ -1,11 +1,13 @@
 import os
 import importlib.util
-from typing import List
+import inspect
+from typing import List, Any, Optional
 from core.runtime.interfaces import ServiceContext
 from core.foundation.interfaces import (
     ExtensionCapabilities, IStateReader, IStackInspector, 
     ILLMProvider, IIntentManager, ILLMExecutor
 )
+from core.domain.issue import InterpreterError
 
 class ModuleLoader:
     """
@@ -15,11 +17,44 @@ class ModuleLoader:
     def __init__(self, search_paths: List[str]):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
+    def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext):
+        """[IES 2.0] 校验实现是否符合契约并应用绑定"""
+        host_interface = context.interop.host_interface
+        # 使用 HostInterface 专有的元数据获取接口
+        metadata = host_interface.get_module_type(module_name)
+        if not metadata: return
+
+        # 扫描带装饰器的方法
+        for attr_name in dir(implementation):
+            attr = getattr(implementation, attr_name)
+            binding = getattr(attr, '_ibci_binding', None)
+            if not binding: continue
+
+            # 1. 契约存在性校验
+            spec_name = binding.spec_name
+            if spec_name not in metadata.members:
+                raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation '{attr_name}' binds to non-existent spec '{spec_name}'")
+
+            # 2. 签名一致性校验
+            spec_func = metadata.members[spec_name]
+            from core.domain.types.descriptors import FunctionMetadata
+            if not isinstance(spec_func, FunctionMetadata):
+                continue
+
+            sig = inspect.signature(attr)
+            # 排除 self
+            params = [p for p in sig.parameters.values() if p.name != 'self']
+            
+            # [IES 2.0] 过滤掉可变参数 (**kwargs)，它们不计入固定签名校验
+            fixed_params = [p for p in params if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
+            
+            if len(fixed_params) != len(spec_func.param_types):
+                raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. Spec expects {len(spec_func.param_types)} params, but Python implementation has {len(fixed_params)}.")
+
     def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
         """IES 2.0 自动依赖注入协议"""
         if not hasattr(implementation, 'setup'): return
         
-        import inspect
         sig = inspect.signature(implementation.setup)
         params = {}
         if 'permission_manager' in sig.parameters:
@@ -65,6 +100,9 @@ class ModuleLoader:
             implementation = host_interface.get_module_implementation(entry)
             if not implementation: continue
             
+            # [IES 2.0] 校验与绑定
+            self._validate_and_bind(entry, implementation, context)
+            
             self._setup_implementation(implementation, context, capabilities)
             loaded_modules.add(entry)
             # 即使已存在，我们也尝试同步 LLM Provider (以防手动注册的是 AI 模块)
@@ -104,6 +142,9 @@ class ModuleLoader:
                     else:
                         # 兼容直接导出的类或函数（如有必要可扩展）
                         continue
+                    
+                    # [IES 2.0] 校验与绑定
+                    self._validate_and_bind(entry, implementation, context)
                     
                     # 自动依赖注入 (基于 setup 方法签名)
                     self._setup_implementation(implementation, context, capabilities)

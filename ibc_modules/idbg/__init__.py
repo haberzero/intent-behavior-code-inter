@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional
 from core.foundation.interfaces import ExtensionCapabilities, IIbObject
+from core.extension import sdk as ibci
 
 class IDbgLib:
     def __init__(self):
@@ -8,12 +9,14 @@ class IDbgLib:
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
 
+    @ibci.method("vars")
     def vars(self) -> Any:
         """返回当前作用域变量的详细信息（原生 dict 格式）"""
         if not self._capabilities or not self._capabilities.state_reader:
             return {}
         return self._capabilities.state_reader.get_vars_snapshot()
 
+    @ibci.method("last_llm")
     def last_llm(self) -> Dict[str, Any]:
         """返回最后一次 LLM 调用信息"""
         if not self._capabilities:
@@ -29,6 +32,7 @@ class IDbgLib:
         
         return {}
 
+    @ibci.method("env")
     def env(self) -> Dict[str, Any]:
         """返回解释器环境信息"""
         if not self._capabilities or not self._capabilities.stack_inspector:
@@ -41,8 +45,10 @@ class IDbgLib:
             "active_intents": inspector.get_active_intents()
         }
 
+    @ibci.method("fields", raw=True)
     def fields(self, obj: Any) -> Dict[str, Any]:
         """返回对象（IbObject）的内部细节。测试用例期望原生值。"""
+        # 由于使用了 raw=True，obj 将是 IbObject 实例
         if isinstance(obj, IIbObject):
             # 优先使用专门的调试序列化方法
             if hasattr(obj, 'serialize_for_debug'):

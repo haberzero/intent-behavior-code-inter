@@ -28,7 +28,6 @@ class TestIsolation(BaseInterpreterTest):
         error_msg = " ".join([d.message for d in cm.exception.diagnostics])
         self.assertIn("secret", error_msg)
 
-    @unittest.skip("暂时屏蔽：Registry 隔离下的类元数据同步问题待梳理")
     def test_registry_instance_isolation(self):
         """测试 Registry 多实例隔离：不同引擎的类定义和状态互不干涉"""
         import textwrap

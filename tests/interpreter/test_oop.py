@@ -5,7 +5,6 @@ class TestOOP(BaseInterpreterTest):
     """
     测试解释器的面向对象支持。
     """
-    @unittest.skip("暂时屏蔽：var 默认初始化逻辑待对齐")
     def test_basic_class_and_instantiation(self):
         """测试基础类定义和实例化"""
         code = """
@@ -46,7 +45,6 @@ class TestOOP(BaseInterpreterTest):
         self.run_code(code)
         self.assert_outputs(["silent", "woof"])
 
-    @unittest.skip("暂时屏蔽：绑定方法接收者解析异常")
     def test_bound_method(self):
         """测试绑定方法 (Bound Method)"""
         code = """
