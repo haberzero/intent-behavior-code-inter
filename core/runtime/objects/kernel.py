@@ -280,12 +280,14 @@ class IbNativeFunction(IbFunction):
 
 class IbBoundMethod(IbFunction):
     """绑定了接收者的函数 (模拟 C++ 虚表调用的 this 绑定)"""
-    def __init__(self, receiver: IbObject, method: IbFunction):
+    def __init__(self, receiver: Optional[IbObject], method: IbFunction):
         super().__init__(method.ib_class.registry.get_class("callable"))
         self.receiver = receiver
         self.method = method
 
     def call(self, _receiver: IbObject, args: List[IbObject]) -> IbObject:
+        if self.receiver is None:
+            raise InterpreterError("BoundMethod has no receiver (initialization failed or corrupt snapshot)")
         return self.method.call(self.receiver, args)
 
     def __repr__(self):

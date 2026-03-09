@@ -200,7 +200,8 @@ class IbBehavior(IbObject):
             return self._cache
             
         # 恢复捕获的意图栈和预期类型
-        old_intents = list(self.interpreter.context.intent_stack)
+        # [IES 2.0 Optimization] 支持 IntentNode 结构共享恢复
+        old_intents = self.interpreter.context.intent_stack
         self.interpreter.context.intent_stack = self.captured_intents
         
         type_pushed = False

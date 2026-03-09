@@ -106,7 +106,8 @@ class HostService(IHostService):
             
             # 4. 状态继承逻辑
             if policy.get("inherit_intents", False):
-                sub_interpreter.context.intent_stack = list(self.context.runtime_context.intent_stack)
+                # [IES 2.1 FIX] 适配 IntentNode 结构共享，直接传递引用
+                sub_interpreter.context.intent_stack = self.context.runtime_context.intent_stack
             
             # 5. 执行
             return sub_interpreter.run()

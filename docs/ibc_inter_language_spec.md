@@ -89,3 +89,13 @@ User u = User()
 - `node_to_symbol`: 节点到符号池 UID 的映射。
 - `node_to_type`: 表达式的推导类型名。
 - `node_scenes`: 节点的执行场景（BRANCH, LOOP）。
+
+### 2.3 运行时物理限制 (Runtime Constraints)
+由于 IBC-Inter 目前运行在 Python 之上，且采用递归访问者模式（Recursive Visitor），因此受到宿主环境物理调用栈的限制：
+
+1.  **递归深度安全阈值**：
+    - 每一层 IBCI 调用（如嵌套的 `if` 块、意图包装或函数调用）大约消耗 **4 层 Python 栈帧**。
+    - **防御补丁**：解释器在初始化时会自动校验 `max_call_stack`。公式为：`max_call_stack * 4 < sys.getrecursionlimit() - 100`。
+    - **自动修正**：如果用户设置的 `max_call_stack` 过大，解释器会将其向下修正为安全值，并在调试日志中记录警告。
+2.  **指令数限制**：
+    - `max_instructions` 默认为 10,000 条。超过此限制将触发 `Execution limit exceeded` 异常，防止 AI 生成死循环逻辑。

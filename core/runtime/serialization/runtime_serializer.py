@@ -17,23 +17,32 @@ class RuntimeSerializer(FlatSerializer):
         self.runtime_scope_pool: Dict[str, Any] = {}
         self.memo: Dict[int, str] = {} # 记录已处理对象的 Python ID
 
-    def serialize_context(self, context: RuntimeContextImpl) -> Dict[str, Any]:
+    def serialize_context(self, context: RuntimeContextImpl, include_static: bool = True) -> Dict[str, Any]:
         """序列化完整的运行时上下文"""
         # 1. 递归序列化作用域链 (从当前作用域向上)
         root_scope_uid = self._collect_runtime_scope(context.current_scope)
         
-        # 2. 序列化意图栈和全局设置
+        pools = {
+            "instances": self.instance_pool,
+            "runtime_scopes": self.runtime_scope_pool,
+            "types": self.type_pool # 复用基类的类型池
+        }
+        
+        # [IES 2.1] 如果需要，包含静态池以实现全量快照
+        if include_static and hasattr(context, '_interpreter') and context._interpreter:
+            itp = context._interpreter
+            pools["nodes"] = itp.node_pool
+            pools["symbols"] = itp.symbol_pool
+            pools["scopes"] = itp.scope_pool
+            
+        # 2. 序列意图栈和全局设置
         return {
             "version": "2.0",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": [self._process_value(i) for i in context.intent_stack],
+            "intent_stack": [self._process_value(i) for i in context.get_active_intents()],
             "intent_exclusive_depth": context._intent_exclusive_depth,
-            "pools": {
-                "instances": self.instance_pool,
-                "runtime_scopes": self.runtime_scope_pool,
-                "types": self.type_pool # 复用基类的类型池
-            }
+            "pools": pools
         }
 
     def _collect_runtime_scope(self, scope: Any) -> Optional[str]:
@@ -44,7 +53,7 @@ class RuntimeSerializer(FlatSerializer):
         if scope_id in self.memo:
             return self.memo[scope_id]
             
-        uid = f"rt_scope_{uuid.uuid4().hex[:8]}"
+        uid = f"rt_scope_{uuid.uuid4().hex[:16]}"
         self.memo[scope_id] = uid
         
         # 序列化当前作用域的所有符号
@@ -86,7 +95,7 @@ class RuntimeSerializer(FlatSerializer):
         if obj_id in self.memo:
             return self.memo[obj_id]
             
-        uid = f"inst_{uuid.uuid4().hex[:8]}"
+        uid = f"inst_{uuid.uuid4().hex[:16]}"
         self.memo[obj_id] = uid
         
         data = {
@@ -281,12 +290,11 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
 
         elif _type == "bound_method":
-            # 先缓存占位符，因为 receiver 或 method 可能会循环引用回来
-            # 但 BoundMethod 构造函数需要参数，所以我们这里需要一点技巧
-            receiver = self._get_instance(data["receiver_uid"])
+            # [FIX] 解决循环引用：先解析 method，创建 IbBoundMethod 占位，再解析 receiver (可能参与循环)
             method = self._get_instance(data["method_uid"])
-            obj = IbBoundMethod(receiver, method)
+            obj = IbBoundMethod(None, method)
             self.instance_cache[uid] = obj
+            obj.receiver = self._get_instance(data["receiver_uid"])
             
         elif _type == "native_func":
             # 原生函数重建：记录逻辑标识以供后续重绑定

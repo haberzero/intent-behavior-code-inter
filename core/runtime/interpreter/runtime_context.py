@@ -124,6 +124,28 @@ class SymbolViewImpl(SymbolView):
         except:
             return False
 
+class IntentNode:
+    """[IES 2.0] 不可变意图节点，支持结构共享以优化内存"""
+    def __init__(self, intent: Any, parent: Optional['IntentNode'] = None):
+        self.intent = intent
+        self.parent = parent
+        self._cached_list: Optional[List[Any]] = None
+
+    def to_list(self) -> List[Any]:
+        """展平为列表（带缓存）"""
+        if self._cached_list is not None:
+            return self._cached_list
+        
+        res = []
+        curr = self
+        while curr:
+            res.append(curr.intent)
+            curr = curr.parent
+        # 由于是向上链接，展平后需要反转以保持从底到顶的顺序
+        res.reverse()
+        self._cached_list = res
+        return res
+
 class RuntimeContextImpl(RuntimeContext, IStateReader):
     def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):
         if not registry:
@@ -131,7 +153,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         self._registry = registry
         self._global_scope = initial_scope or ScopeImpl(registry=self._registry)
         self._current_scope = self._global_scope
-        self._intent_stack: List[Any] = []
+        self._intent_top: Optional[IntentNode] = None # 意图栈顶节点
         self._global_intents: List[str] = []
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
@@ -241,23 +263,36 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
 
     def push_intent(self, intent: Any) -> None:
-        self._intent_stack.append(intent)
+        self._intent_top = IntentNode(intent, self._intent_top)
 
     def pop_intent(self) -> Optional[Any]:
-        if self._intent_stack:
-            return self._intent_stack.pop()
+        if self._intent_top:
+            content = self._intent_top.intent
+            self._intent_top = self._intent_top.parent
+            return content
         return None
 
     def get_active_intents(self) -> List[Any]:
-        return list(self._intent_stack)
+        if not self._intent_top:
+            return []
+        return self._intent_top.to_list()
 
     @property
-    def intent_stack(self) -> List[Any]:
-        return self._intent_stack
+    def intent_stack(self) -> Union[Optional[IntentNode], List[Any]]:
+        # [IES 2.0] 为了 IbBehavior 优化，直接返回栈顶节点
+        return self._intent_top
         
     @intent_stack.setter
-    def intent_stack(self, value: List[Any]):
-        self._intent_stack = value
+    def intent_stack(self, value: Union[Optional[IntentNode], List[Any]]):
+        if isinstance(value, list):
+            # 兼容模式：从列表重建链表
+            self._intent_top = None
+            for i in value:
+                self.push_intent(i)
+        elif value is None or isinstance(value, IntentNode):
+            self._intent_top = value
+        else:
+            raise TypeError(f"Invalid intent stack type: {type(value)}")
 
     @property
     def current_scope(self) -> Scope:

@@ -89,7 +89,7 @@ class FlatSerializer:
         if node_id in self.type_map:
             return self.type_map[node_id]
             
-        uid = f"node_{uuid.uuid4().hex[:8]}"
+        uid = f"node_{uuid.uuid4().hex[:16]}"
         self.type_map[node_id] = uid
         
         node_data = {"_type": node.__class__.__name__}
@@ -105,7 +105,7 @@ class FlatSerializer:
         if sym_id in self.type_map:
             return self.type_map[sym_id]
             
-        uid = f"sym_{uuid.uuid4().hex[:8]}"
+        uid = f"sym_{uuid.uuid4().hex[:16]}"
         self.type_map[sym_id] = uid
         
         sym_data = {
@@ -126,7 +126,7 @@ class FlatSerializer:
         if t_id in self.type_map:
             return self.type_map[t_id]
             
-        uid = f"type_{uuid.uuid4().hex[:8]}"
+        uid = f"type_{uuid.uuid4().hex[:16]}"
         self.type_map[t_id] = uid
         
         type_data = {
@@ -150,7 +150,7 @@ class FlatSerializer:
         if scope_id in self.type_map:
             return self.type_map[scope_id]
             
-        uid = f"scope_{uuid.uuid4().hex[:8]}"
+        uid = f"scope_{uuid.uuid4().hex[:16]}"
         self.type_map[scope_id] = uid
         
         scope_data = {

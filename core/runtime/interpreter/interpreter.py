@@ -1,5 +1,6 @@
 import re
 import json
+import sys
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 from core.domain import ast as ast
@@ -221,6 +222,18 @@ class Interpreter(IStackInspector):
         # 运行限制
         self.max_instructions = max_instructions
         self.instruction_count = 0
+        
+        # [IES 2.1 Defensive Patch] 递归深度安全校验
+        # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
+        # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
+        python_limit = sys.getrecursionlimit()
+        safe_limit = (python_limit - 100) // 4 # 留出 100 帧给宿主系统
+        if max_call_stack > safe_limit:
+            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.ESSENTIAL, 
+                f"Warning: max_call_stack {max_call_stack} is unsafe for Python limit {python_limit}. "
+                f"Auto-adjusting to safe limit {safe_limit}")
+            max_call_stack = safe_limit
+            
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
         self.current_module_name: Optional[str] = None
@@ -310,6 +323,11 @@ class Interpreter(IStackInspector):
 
     def _setup_context(self, context: RuntimeContext):
         self.setup_context(context)
+        # [IES 2.1] 绑定解释器引用到上下文，以便序列化时能访问静态池
+        if hasattr(context, '_interpreter'):
+            context._interpreter = self
+        elif hasattr(context, '__dict__'):
+            context._interpreter = self
 
     @property
     def context(self) -> RuntimeContext:
@@ -521,8 +539,8 @@ class Interpreter(IStackInspector):
         
         if is_deferred:
             # 返回延迟执行的行为对象 (Lambda)
-            # 捕获当前的意图栈
-            captured_intents = list(self.context.intent_stack)
+            # [IES 2.0 Optimization] 直接引用意图栈顶节点，实现结构共享
+            captured_intents = self.context.intent_stack
             # 获取推导出的预期类型 (如果有)
             expected_type = self.get_side_table("node_to_type", node_uid)
             return IbBehavior(node_uid, self, captured_intents, expected_type=expected_type)

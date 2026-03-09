@@ -210,34 +210,42 @@ class LLMExecutorImpl:
         if type_name == "str":
             return self.service_context.registry.box(raw_res)
         
+        # 1. [IES 2.1 Optimization] 预处理：剥离 Markdown 代码块
+        code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', clean_res)
+        if code_block_match:
+            clean_res = code_block_match.group(1).strip()
+        
         self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Parsing LLM response to type '{type_name}'")
 
         try:
             if type_name == "int":
+                # 寻找第一个数字
                 match = re.search(r'-?\d+', clean_res)
                 if match:
-                    val = int(match.group())
-                    return self.service_context.registry.box(val)
+                    return self.service_context.registry.box(int(match.group()))
                 raise ValueError(f"No integer found in response: {clean_res}")
+                
             elif type_name == "list":
-                match = re.search(r'\[[\s\S]*\]', clean_res)
-                if match:
-                    json_str = match.group()
-                    if json_str.startswith("```"):
-                        json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
+                # 寻找最外层的 [ ] 以增强对干扰文字的容错性
+                start = clean_res.find('[')
+                end = clean_res.rfind(']')
+                if start != -1 and end != -1:
+                    json_str = clean_res[start:end+1]
                     val = json.loads(json_str)
                     return self.service_context.registry.box(val)
                 raise ValueError(f"No JSON list found in response: {clean_res}")
+                
             elif type_name == "dict":
-                match = re.search(r'\{[\s\S]*\}', clean_res)
-                if match:
-                    json_str = match.group()
-                    if json_str.startswith("```"):
-                        json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
+                # 寻找最外层的 { } 以增强对干扰文字的容错性
+                start = clean_res.find('{')
+                end = clean_res.rfind('}')
+                if start != -1 and end != -1:
+                    json_str = clean_res[start:end+1]
                     val = json.loads(json_str)
                     return self.service_context.registry.box(val)
                 raise ValueError(f"No JSON dict found in response: {clean_res}")
             
+            # Fallback to box raw result
             return self.service_context.registry.box(raw_res)
 
         except Exception as e:

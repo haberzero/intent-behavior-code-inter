@@ -46,7 +46,11 @@ class Prelude:
         if "void" in self.builtin_types:
             self.builtin_types["none"] = self.builtin_types["void"]
             
-        # 3. 兜底 Exception (如果 Registry 没注册)
+        # 3. 补全 behavior 类型映射 (针对 IES 2.0 behavior 描述对象)
+        if "behavior" not in self.builtin_types and "callable" in self.builtin_types:
+            self.builtin_types["behavior"] = self.builtin_types["callable"]
+            
+        # 4. 兜底 Exception (如果 Registry 没注册)
         if "Exception" not in self.builtin_types:
             self.builtin_types["Exception"] = ClassType("Exception")
         
