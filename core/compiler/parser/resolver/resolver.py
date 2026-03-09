@@ -2,13 +2,18 @@ import os
 from typing import Optional
 
 class ModuleResolveError(Exception):
-    def __init__(self, module_name: str, importer_path: Optional[str] = None):
-        msg = f"Cannot resolve module '{module_name}'"
-        if importer_path:
-            msg += f" from '{importer_path}'"
-        super().__init__(msg)
+    def __init__(self, module_name: str, importer_path: Optional[str] = None, message: Optional[str] = None):
         self.module_name = module_name
         self.importer_path = importer_path
+        self.message = message
+        
+        if message:
+            msg = message
+        else:
+            msg = f"Cannot resolve module '{module_name}'"
+            if importer_path:
+                msg += f" from '{importer_path}'"
+        super().__init__(msg)
 
 class ModuleResolver:
     """
@@ -46,10 +51,10 @@ class ModuleResolver:
             common = os.path.commonpath([abs_root, abs_path])
         except ValueError:
             # Can happen on Windows if paths are on different drives
-            raise ModuleResolveError(f"Security Error: Path '{path}' is on a different drive than root '{self.root_dir}'")
+            raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' is on a different drive than root '{self.root_dir}'")
             
         if common != abs_root:
-            raise ModuleResolveError(f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")
+            raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")
 
     def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
         """Helper to calculate candidate path without probing."""

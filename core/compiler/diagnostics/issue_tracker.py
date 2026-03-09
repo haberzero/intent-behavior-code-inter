@@ -15,6 +15,18 @@ class IssueTracker:
     def diagnostics(self) -> List[Diagnostic]:
         return self._diagnostics
 
+    @property
+    def error_count(self) -> int:
+        return self._error_count
+
+    @property
+    def warning_count(self) -> int:
+        return sum(1 for d in self._diagnostics if d.severity == Severity.WARNING)
+
+    @property
+    def total_count(self) -> int:
+        return len(self._diagnostics)
+
     def report(self, severity: Severity, code: str, message: str, 
                 location: Optional[Union[Locatable, Location]] = None, 
                 hint: Optional[str] = None):

@@ -14,6 +14,9 @@ from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.domain.issue import Severity, CompilerError
 from core.foundation.host_interface import HostInterface
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.diagnostics.codes import (
+    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR
+)
 from core.domain.blueprint import CompilationArtifact, CompilationResult
 
 class Scheduler:
@@ -88,7 +91,7 @@ class Scheduler:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
         except Exception as e:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Circular dependency or graph error: {str(e)}")
-            self.issue_tracker.error(str(e), code="DEP_GRAPH_ERROR")
+            self.issue_tracker.error(str(e), code=DEP_GRAPH_ERROR)
             raise e
 
         # 3. Compile in Topological Order
@@ -108,7 +111,7 @@ class Scheduler:
             
             if failed_deps:
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Skipping {file_path} because dependencies failed: {failed_deps}")
-                self.issue_tracker.error(f"IbModule '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}")
+                self.issue_tracker.error(f"IbModule '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}", code=DEP_FAILED_DEPENDENCY)
                 mod_info.status = ModuleStatus.FAILED
                 continue
 
@@ -193,10 +196,10 @@ class Scheduler:
                 abs_path = os.path.realpath(current_path)
                 if abs_path not in self.allowed_files and os.path.commonpath([abs_root, abs_path]) != abs_root:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Security violation: Access denied for {current_path}")
-                    self.issue_tracker.error(f"Security Error: Access denied for file outside root: {current_path}")
+                    self.issue_tracker.error(f"Security Error: Access denied for file outside root: {current_path}", code=DEP_SECURITY_ERROR)
                     continue
             except ValueError:
-                 self.issue_tracker.error(f"Security Error: Access denied (drive mismatch): {current_path}")
+                 self.issue_tracker.error(f"Security Error: Access denied (drive mismatch): {current_path}", code=DEP_SECURITY_ERROR)
                  continue
 
             # 1. Read Content & Lex (if not cached or outdated)
@@ -206,7 +209,7 @@ class Scheduler:
                     mtime = os.path.getmtime(current_path)
             except (FileNotFoundError, OSError):
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"File not found: {current_path}")
-                self.issue_tracker.error(f"File not found: {current_path}")
+                self.issue_tracker.error(f"File not found: {current_path}", code=DEP_FILE_NOT_FOUND)
                 continue
             
             # Lexing
@@ -257,10 +260,17 @@ class Scheduler:
                         
                 except Exception as e:
                      self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to resolve '{imp.module_name}': {str(e)}")
-                     # Resolver errors are already reported by resolver or we should ensure they are.
-                     # The resolver raises ModuleResolveError, let's catch it to report if not reported.
-                     # Actually ModuleResolveError carries info.
-                     pass
+                     # Use appropriate error code based on message
+                     code = DEP_MODULE_NOT_FOUND
+                     if "Security Error" in str(e):
+                         code = DEP_SECURITY_ERROR
+                     
+                     self.issue_tracker.report(
+                         Severity.ERROR, 
+                         code=code, 
+                         message=str(e),
+                         location=Location(file_path=current_path, line=imp.lineno, column=1)
+                     )
                          
     def _compile_file(self, file_path: str, artifact: CompilationArtifact):
         """
@@ -425,7 +435,7 @@ class Scheduler:
         except CompilerError:
             raise
         except Exception as e:
-            file_tracker.error(f"Internal compiler error: {str(e)}", code="INTERNAL_ERROR")
+            file_tracker.error(f"Internal compiler error: {str(e)}", code=INTERNAL_ERROR)
             raise CompilerError(file_tracker.diagnostics) from e
         finally:
             self.issue_tracker.merge(file_tracker)

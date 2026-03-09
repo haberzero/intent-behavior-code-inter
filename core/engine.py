@@ -112,7 +112,10 @@ class IBCIEngine:
                 from core.compiler.diagnostics.formatter import DiagnosticFormatter
                 print("\n--- Compilation Errors ---")
                 print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
-                print(f"\nTotal errors found: {len(e.diagnostics)}")
+                
+                # Use tracker counts if available
+                tracker = self.scheduler.issue_tracker
+                print(f"\nCompilation failed: {tracker.error_count} errors, {tracker.warning_count} warnings.")
             else:
                 raise e
             return False
