@@ -7,9 +7,6 @@ from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFa
 from core.foundation.host_interface import HostInterface
 from core.runtime.module_system.loader import ModuleLoader
 
-if TYPE_CHECKING:
-    from core.runtime.interpreter.interpreter import Interpreter
-
 class HostService(IHostService):
     """
     IBCI 2.0 内核级宿主服务子系统。
