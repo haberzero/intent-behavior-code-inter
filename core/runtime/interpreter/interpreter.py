@@ -604,6 +604,12 @@ class Interpreter(IStackInspector):
                 obj = self.visit(target_data.get("value"))
                 attr = target_data.get("attr")
                 obj.receive('__setattr__', [self.registry.box(attr), value])
+            
+            # 4. 下标赋值 (Subscript)
+            elif target_data["_type"] == "IbSubscript":
+                obj = self.visit(target_data.get("value"))
+                slice_val = self.visit(target_data.get("slice"))
+                obj.receive('__setitem__', [slice_val, value])
                 
         return self.registry.get_none()
 
@@ -878,6 +884,16 @@ class Interpreter(IStackInspector):
         self.service_context.module_manager.import_from(node_data.get("module"), names, self.context)
         return self.registry.get_none()
 
+    def _extract_name_id(self, node_uid: str) -> Optional[str]:
+        """从表达式节点中提取变量名（处理类型标注等情况）"""
+        node_data = self.get_node_data(node_uid)
+        if not node_data: return None
+        if node_data["_type"] == "IbName":
+            return node_data.get("id")
+        if node_data["_type"] == "IbTypeAnnotatedExpr":
+            return self._extract_name_id(node_data.get("target"))
+        return None
+
     def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]):
         """动态创建类对象"""
         name = node_data.get("name")
@@ -895,11 +911,20 @@ class Interpreter(IStackInspector):
             elif stmt_data["_type"] == "IbLLMFunctionDef":
                 new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self))
             elif stmt_data["_type"] == "IbAssign":
-                val = self.visit(stmt_data.get("value")) if stmt_data.get("value") else self.registry.get_none()
+                val_uid = stmt_data.get("value")
+                if val_uid:
+                    val = self.visit(val_uid)
+                else:
+                    # [FIX] 兼容旧 Spec：类字段 var 定义默认初始化为 0
+                    val = self.registry.box(0)
+                
+                # 确保 val 永远不为 Python None
+                if val is None: val = self.registry.get_none()
+                
                 for target_uid in stmt_data.get("targets", []):
-                    target_data = self.get_node_data(target_uid)
-                    if target_data and target_data["_type"] == "IbName":
-                        new_class.default_fields[target_data.get("id")] = val
+                    target_name = self._extract_name_id(target_uid)
+                    if target_name:
+                        new_class.default_fields[target_name] = val
         
         # 绑定到当前作用域
         sym_uid = self.get_side_table("node_to_symbol", node_uid)

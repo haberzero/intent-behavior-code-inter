@@ -22,15 +22,33 @@ def _compare_op(self: IbObject, other: Any, op_func: Callable) -> int:
     except:
         return 0 
 
-def _cast_string_to(ib_str: IbString, target_class: IbClass) -> Any:
+def _cast_string_to(ib_str: IbString, target_class: Any) -> Any:
     """实现 Spec 中的自动类型转换策略"""
     val = ib_str.to_native().strip()
-    if target_class.name == "int":
+    # [FIX] 兼容性处理：target_class 可能是 IbClass 也可能是转换函数 (由于名称冲突)
+    target_name = target_class.name if hasattr(target_class, 'name') else str(target_class)
+    
+    if "int" in target_name:
         return int(val)
-    if target_class.name == "float":
+    if "float" in target_name:
         return float(val)
-    if target_class.name == "bool":
+    if "bool" in target_name:
         return val.lower() in ("true", "1", "yes")
+    return val
+
+def _cast_numeric_to(ib_num: IbObject, target_class: Any) -> Any:
+    """数值类型到其他类型的转换"""
+    val = ib_num.to_native()
+    target_name = target_class.name if hasattr(target_class, 'name') else str(target_class)
+    
+    if "str" in target_name:
+        return str(val)
+    if "int" in target_name:
+        return int(val)
+    if "float" in target_name:
+        return float(val)
+    if "bool" in target_name:
+        return 1 if val else 0
     return val
 
 def initialize_builtin_classes(registry: Registry):
@@ -71,6 +89,8 @@ def initialize_builtin_classes(registry: Registry):
     
     # 3. 注册 None 单例 (Per-registry)
     registry.register_none(IbNone(none_class), token)
+    _reg_native(none_class, '__to_prompt__', lambda self: "None")
+    _reg_native(none_class, 'to_bool', lambda self: 0)
     
     # 4. 注册原生方法代理 (Integer)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
@@ -89,6 +109,8 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(integer_class, '__lshift__', lambda self, other: self.to_native() << other)
     _reg_native(integer_class, '__rshift__', lambda self, other: self.to_native() >> other)
     _reg_native(integer_class, '__invert__', lambda self: ~self.to_native())
+    _reg_native(integer_class, '__neg__', lambda self: -self.to_native())
+    _reg_native(integer_class, '__pos__', lambda self: +self.to_native())
     
     _reg_native(integer_class, '__lt__', lambda self, other: _compare_op(self, other, lambda a, b: a < b))
     _reg_native(integer_class, '__le__', lambda self, other: _compare_op(self, other, lambda a, b: a <= b))
@@ -96,6 +118,7 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(integer_class, '__ge__', lambda self, other: _compare_op(self, other, lambda a, b: a >= b))
     _reg_native(integer_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
     _reg_native(integer_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
+    _reg_native(integer_class, 'cast_to', lambda self, target_class: _cast_numeric_to(self, target_class), unbox=False)
     
     # Float
     _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
@@ -103,12 +126,24 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(float_class, '__sub__', lambda self, other: _numeric_op(self, other, lambda a, b: a - b))
     _reg_native(float_class, '__mul__', lambda self, other: _numeric_op(self, other, lambda a, b: a * b))
     _reg_native(float_class, '__div__', lambda self, other: _numeric_op(self, other, lambda a, b: a / b))
+    _reg_native(float_class, '__neg__', lambda self: -self.to_native())
+    _reg_native(float_class, '__pos__', lambda self: +self.to_native())
     _reg_native(float_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
     _reg_native(float_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
+    _reg_native(float_class, 'cast_to', lambda self, target_class: _cast_numeric_to(self, target_class), unbox=False)
 
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
-    _reg_native(string_class, '__add__', lambda self, other: str(self.to_native()) + (other if not isinstance(other, IbObject) else str(other.receive("__to_prompt__", []).to_native())))
+    
+    def _string_add(self, other):
+        if not isinstance(other, IbObject):
+            return str(self.to_native()) + str(other)
+        if other.ib_class.name != "str":
+            from core.domain.issue import InterpreterError
+            raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'. Use cast_to(str) first.")
+        return str(self.to_native()) + str(other.to_native())
+        
+    _reg_native(string_class, '__add__', _string_add, unbox=False)
     _reg_native(string_class, 'cast_to', lambda self, target_class: _cast_string_to(self, target_class), unbox=False)
 
     # List
@@ -122,9 +157,23 @@ def initialize_builtin_classes(registry: Registry):
 
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
-    _reg_native(dict_class, 'get', lambda self, key: self.fields.get(key, None))
-    _reg_native(dict_class, '__getitem__', lambda self, key: self.fields[key])
-    _reg_native(dict_class, '__setitem__', lambda self, key, val: self.fields.update({key: val}), unbox=False)
+    
+    def _dict_get(self, key, default=None):
+        native_key = key.to_native() if hasattr(key, 'to_native') else key
+        return self.fields.get(native_key, default)
+        
+    def _dict_getitem(self, key):
+        native_key = key.to_native() if hasattr(key, 'to_native') else key
+        return self.fields[native_key]
+        
+    def _dict_setitem(self, key, val):
+        native_key = key.to_native() if hasattr(key, 'to_native') else key
+        self.fields[native_key] = val
+        return self.ib_class.registry.get_none()
+
+    _reg_native(dict_class, 'get', _dict_get, unbox=False)
+    _reg_native(dict_class, '__getitem__', _dict_getitem, unbox=False)
+    _reg_native(dict_class, '__setitem__', _dict_setitem, unbox=False)
 
     # 5. 注册装箱逻辑
     registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class), token)

@@ -15,6 +15,25 @@ class ModuleLoader:
     def __init__(self, search_paths: List[str]):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
+    def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
+        """IES 2.0 自动依赖注入协议"""
+        if not hasattr(implementation, 'setup'): return
+        
+        import inspect
+        sig = inspect.signature(implementation.setup)
+        params = {}
+        if 'permission_manager' in sig.parameters:
+            params['permission_manager'] = context.permission_manager
+        if 'executor' in sig.parameters:
+            params['executor'] = context.llm_executor
+        if 'service_context' in sig.parameters:
+            params['service_context'] = context
+        if 'capabilities' in sig.parameters:
+            params['capabilities'] = capabilities
+        
+        if params:
+            implementation.setup(**params)
+
     def load_and_register_all(self, context: ServiceContext):
         """
         扫描搜索路径，加载所有模块实现并绑定到 InterOp。
@@ -36,10 +55,22 @@ class ModuleLoader:
         
         # [Active Defense] 注入只读符号视图
         capabilities.symbol_view = context.symbol_view
-        # 注意：llm_provider 初始为 None，可能由模块（如 ai）在 setup 时填充
         
         loaded_modules = set()
         
+        # [IES Enhancement] 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
+        # 这确保了手动注册的 Mock 对象能被正确初始化并同步到 capabilities
+        host_interface = interop.host_interface
+        for entry in host_interface.get_all_module_names():
+            implementation = host_interface.get_module_implementation(entry)
+            if not implementation: continue
+            
+            self._setup_implementation(implementation, context, capabilities)
+            loaded_modules.add(entry)
+            # 即使已存在，我们也尝试同步 LLM Provider (以防手动注册的是 AI 模块)
+            if capabilities.llm_provider and hasattr(llm_executor, 'llm_callback'):
+                llm_executor.llm_callback = capabilities.llm_provider
+
         for path in self.search_paths:
             if not os.path.isdir(path):
                 continue
@@ -75,21 +106,7 @@ class ModuleLoader:
                         continue
                     
                     # 自动依赖注入 (基于 setup 方法签名)
-                    if hasattr(implementation, 'setup'):
-                        import inspect
-                        sig = inspect.signature(implementation.setup)
-                        params = {}
-                        if 'permission_manager' in sig.parameters:
-                            params['permission_manager'] = permission_manager
-                        if 'executor' in sig.parameters:
-                            params['executor'] = llm_executor
-                        if 'service_context' in sig.parameters:
-                            params['service_context'] = context
-                        if 'capabilities' in sig.parameters:
-                            params['capabilities'] = capabilities
-                        
-                        if params:
-                            implementation.setup(**params)
+                    self._setup_implementation(implementation, context, capabilities)
                     
                     # 核心能力同步：如果模块提供了 LLMProvider，同步到内核执行器
                     if capabilities.llm_provider and hasattr(llm_executor, 'llm_callback'):

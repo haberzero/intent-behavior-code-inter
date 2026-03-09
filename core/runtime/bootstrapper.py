@@ -63,6 +63,13 @@ class Bootstrapper:
         self.ObjectClass.register_method('__to_prompt__', IbNativeFunction(lambda self: f"<Instance of {self.ib_class.name}>", is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('to_bool', IbNativeFunction(lambda self: 1, is_method=True, ib_class=self.ObjectClass))
         
+        # 逻辑非协议 (Active Defense)
+        def _default_not(self):
+            bool_val = self.receive('to_bool', []).to_native()
+            return self.ib_class.registry.box(0 if bool_val else 1)
+            
+        self.ObjectClass.register_method('__not__', IbNativeFunction(_default_not, is_method=True, ib_class=self.ObjectClass))
+
         # 属性访问协议
         def _default_getattr(self, name_obj):
             name = name_obj.to_native()

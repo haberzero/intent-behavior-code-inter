@@ -85,9 +85,13 @@ class StaticType:
         if self.name in ("Any", "var"):
             return STATIC_ANY
             
+        if other and other.name in ("Any", "var"):
+            return STATIC_ANY
+
         n1 = self.name
-        if not other:
+        if not other: # 一元运算
             if op == '~' and n1 == "int": return STATIC_INT
+            if op == 'not': return STATIC_BOOL # 所有内置类型都支持 not (真值测试)
             return None
             
         n2 = other.name
@@ -99,8 +103,13 @@ class StaticType:
             if op in ('+', '-', '*', '/'): return STATIC_FLOAT
             if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
             
-        if n1 == "str" and n2 == "str" and op == '+':
-            return STATIC_STR
+        if n1 == "str" and op == '+':
+            # [FIX] 允许 str + Any -> Any，解决 cast_to 返回 Any 导致的拼接报错
+            if not other or other.name in ("Any", "var"):
+                return STATIC_ANY
+            if other.name == "str":
+                return STATIC_STR
+            return None
             
         return None
 
@@ -153,6 +162,11 @@ class BehaviorType(StaticType):
 
 class BuiltinType(StaticType):
     """内置原子类型 (int, str, bool, float)"""
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        # [IES Enhancement] 为内置类型注入核心方法元数据，满足编译器语义检查
+        # 默认实现：回退到 StaticType 的基础解析
+        return super().resolve_member(name)
+
     @property
     def is_callable(self) -> bool:
         # 内置类型（如 int, str）允许调用，表示类型转换/构造
@@ -162,41 +176,65 @@ class BuiltinType(StaticType):
         # 内置类型调用返回其自身类型
         return self
 
-    def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
-        # 基础类型运算逻辑协议化
-        n1 = self.name
-        if not other: # 一元运算
-            if op == '~' and n1 == "int": return STATIC_INT
-            return None
-            
-        n2 = other.name
-        if n1 == "int" and n2 == "int":
-            if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'): return STATIC_INT
-            if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
-            
-        if (n1 in ("int", "float")) and (n2 in ("int", "float")):
-            if op in ('+', '-', '*', '/'): return STATIC_FLOAT
-            if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
-            
-        if n1 == "str" and n2 == "str" and op == '+':
-            return STATIC_STR
-            
-        return super().get_operator_result(op, other)
+class IntType(BuiltinType):
+    """整数类型"""
+    def __init__(self):
+        super().__init__("int", descriptor=uts.INT_DESCRIPTOR)
+    
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        if name == "to_bool":
+            return FunctionSymbol(name="to_bool", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_BOOL))
+        if name == "to_list":
+            return FunctionSymbol(name="to_list", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], ListType(STATIC_INT)))
+        if name == "cast_to":
+            return FunctionSymbol(name="cast_to", kind=SymbolKind.FUNCTION, type_signature=FunctionType([STATIC_ANY], STATIC_ANY))
+        return super().resolve_member(name)
 
-# --- 常量类型实例 ---
-STATIC_ANY = BuiltinType("Any", descriptor=uts.ANY_DESCRIPTOR)
-STATIC_VOID = BuiltinType("void", descriptor=uts.VOID_DESCRIPTOR)
-STATIC_INT = BuiltinType("int", descriptor=uts.INT_DESCRIPTOR)
-STATIC_STR = BuiltinType("str", descriptor=uts.STR_DESCRIPTOR)
-STATIC_FLOAT = BuiltinType("float", descriptor=uts.FLOAT_DESCRIPTOR)
-STATIC_BOOL = BuiltinType("bool", descriptor=uts.BOOL_DESCRIPTOR)
-STATIC_BEHAVIOR = BehaviorType()
+class FloatType(BuiltinType):
+    """浮点数类型"""
+    def __init__(self):
+        super().__init__("float", descriptor=uts.FLOAT_DESCRIPTOR)
+    
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        if name == "to_bool":
+            return FunctionSymbol(name="to_bool", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_BOOL))
+        if name == "cast_to":
+            return FunctionSymbol(name="cast_to", kind=SymbolKind.FUNCTION, type_signature=FunctionType([STATIC_ANY], STATIC_ANY))
+        return super().resolve_member(name)
+
+class StringType(BuiltinType):
+    """字符串类型"""
+    def __init__(self):
+        super().__init__("str", descriptor=uts.STR_DESCRIPTOR)
+    
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        if name == "cast_to":
+            # cast_to(target_type) -> Any
+            return FunctionSymbol(name="cast_to", kind=SymbolKind.FUNCTION, type_signature=FunctionType([STATIC_ANY], STATIC_ANY))
+        if name == "to_bool":
+            return FunctionSymbol(name="to_bool", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_BOOL))
+        if name == "len":
+            return FunctionSymbol(name="len", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_INT))
+        return super().resolve_member(name)
 
 class ListType(BuiltinType):
     """内置列表类型，支持元素类型推导"""
-    def __init__(self, element_type: StaticType = STATIC_ANY):
+    def __init__(self, element_type: Optional[StaticType] = None):
         super().__init__("list")
-        self._element_type = element_type
+        self._element_type = element_type or STATIC_ANY
+    
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        if name == "append":
+            return FunctionSymbol(name="append", kind=SymbolKind.FUNCTION, type_signature=FunctionType([self._element_type], STATIC_VOID))
+        if name == "pop":
+            return FunctionSymbol(name="pop", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], self._element_type))
+        if name == "len":
+            return FunctionSymbol(name="len", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_INT))
+        if name == "sort":
+            return FunctionSymbol(name="sort", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_VOID))
+        if name == "clear":
+            return FunctionSymbol(name="clear", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_VOID))
+        return super().resolve_member(name)
         
     @property
     def is_iterable(self) -> bool:
@@ -216,10 +254,10 @@ class ListType(BuiltinType):
 
 class DictType(BuiltinType):
     """内置字典类型，支持键值类型推导"""
-    def __init__(self, key_type: StaticType = STATIC_ANY, value_type: StaticType = STATIC_ANY):
+    def __init__(self, key_type: Optional[StaticType] = None, value_type: Optional[StaticType] = None):
         super().__init__("dict")
-        self._key_type = key_type
-        self._value_type = value_type
+        self._key_type = key_type or STATIC_ANY
+        self._value_type = value_type or STATIC_ANY
         
     @property
     def key_type(self) -> StaticType:
@@ -243,6 +281,28 @@ class DictType(BuiltinType):
 
     def get_subscript_type(self, key_type: StaticType) -> StaticType:
         return self._value_type
+
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        if name == "get":
+            return FunctionSymbol(name="get", kind=SymbolKind.FUNCTION, type_signature=FunctionType([self._key_type], self._value_type))
+        if name == "keys":
+            return FunctionSymbol(name="keys", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], ListType(self._key_type)))
+        if name == "values":
+            return FunctionSymbol(name="values", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], ListType(self._value_type)))
+        if name == "len":
+            return FunctionSymbol(name="len", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_INT))
+        return super().resolve_member(name)
+
+# --- 常量类型实例 ---
+STATIC_ANY = BuiltinType("Any", descriptor=uts.ANY_DESCRIPTOR)
+STATIC_VOID = BuiltinType("void", descriptor=uts.VOID_DESCRIPTOR)
+STATIC_INT = IntType()
+STATIC_STR = StringType()
+STATIC_FLOAT = FloatType()
+STATIC_BOOL = BuiltinType("bool", descriptor=uts.BOOL_DESCRIPTOR)
+STATIC_LIST = ListType(STATIC_ANY)
+STATIC_DICT = DictType(STATIC_ANY, STATIC_ANY)
+STATIC_BEHAVIOR = BehaviorType()
 
 class ClassType(StaticType):
     """用户定义的类类型"""
@@ -438,6 +498,8 @@ def get_builtin_type(name: str) -> Optional[StaticType]:
         "float": STATIC_FLOAT,
         "str": STATIC_STR,
         "bool": STATIC_BOOL,
+        "list": STATIC_LIST,
+        "dict": STATIC_DICT,
         "void": STATIC_VOID,
         "none": STATIC_VOID
     }

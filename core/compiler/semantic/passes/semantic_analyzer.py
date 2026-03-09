@@ -600,7 +600,7 @@ class SemanticAnalyzer:
         key_type = self.visit(node.slice)
         
         # 贯彻“一切皆对象”协议：询问类型如何处理下标
-        if not value_type.is_subscriptable():
+        if not value_type.is_subscriptable:
             self.error(f"Type '{value_type.name}' is not subscriptable", node, code="SEM_003")
             return STATIC_ANY
             
@@ -657,13 +657,13 @@ class SemanticAnalyzer:
             if node.id in global_scope.symbols:
                 global_sym = global_scope.symbols[node.id]
                 if sym == global_sym:
-                    is_safe = (
-                        sym.kind in (SymbolKind.BUILTIN_TYPE, SymbolKind.MODULE, SymbolKind.FUNCTION, SymbolKind.CLASS) or
-                        sym.metadata.get("is_builtin")
-                    )
-                    if not is_safe and node.id not in self.symbol_table.global_refs:
-                        self.error(f"Global variable '{node.id}' must be declared with 'global' before use in local scope", node, code="SEM_004")
-                        return STATIC_ANY
+                    # [FIX] 显式全局声明规则放松：
+                    # - 仅在“修改”（赋值）时强制要求 global 声明
+                    # - 读取（Name 访问）时允许隐式引用全局变量（符合 Python/IBCI 2.0 习惯）
+                    # if not is_safe and node.id not in self.symbol_table.global_refs:
+                    #     self.error(f"Global variable '{node.id}' must be declared with 'global' before use in local scope", node, code="SEM_004")
+                    #     return STATIC_ANY
+                    pass
 
         self.node_to_symbol[node] = sym # 使用 UID 引用
         
