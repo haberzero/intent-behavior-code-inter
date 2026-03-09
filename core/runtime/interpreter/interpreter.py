@@ -27,7 +27,7 @@ from .permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction
 from core.domain.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
-from core.runtime.objects.initialization import initialize_builtin_classes
+from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.foundation.registry import Registry
 from core.foundation.host_interface import HostInterface
 from core.foundation.interfaces import IStackInspector

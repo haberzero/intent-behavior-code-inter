@@ -8,7 +8,7 @@ from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.foundation.host_interface import HostInterface
-from core.runtime.objects.initialization import initialize_builtin_classes
+from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.domain.types import ModuleMetadata
 from core.domain.blueprint import CompilationArtifact

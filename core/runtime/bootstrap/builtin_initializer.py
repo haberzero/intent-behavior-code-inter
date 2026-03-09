@@ -1,6 +1,6 @@
 from typing import Any, List, Dict, Optional, Callable
-from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
-from .builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
+from ..objects.kernel import IbObject, IbClass, IbNativeFunction, IbNone
+from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 from core.foundation.registry import Registry
 from core.domain.types import descriptors as uts
 from ..bootstrapper import Bootstrapper

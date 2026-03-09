@@ -31,36 +31,29 @@
 3.  **建立 `builtin_schema.py`**：已创建 [builtin_schema.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/builtin_schema.py)，作为内置类型的“单源真理”。
 4.  **符号系统重构**：[symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py) 已完成“去硬编码”改造，所有类型行为均代理至对应的描述符。
 
-### 阶段二：注册表服务化 (Foundation 层重构) [IN_PROGRESS]
-**核心目标**：将 `Registry` 转型为“类型系统服务”。
+### 阶段二：注册表服务化与隔离加固 (Foundation 层重构) [COMPLETED]
+**核心目标**：将 `Registry` 转型为“类型系统服务”，并实现多引擎实例的物理隔离与权限审计。
 
-1.  **`Registry` 接口扩展**：
-    - 修改 [registry.py](file:///c:/myself/proj/intent-behavior-code-inter/core/foundation/registry.py)，要求 `register_class` 时必须强制关联 `TypeDescriptor`。
-    - 增加 `export_manifest()` 接口，生成用于编译器的类型快照。
-2.  **权限与安全加固**：
-    - 完善令牌机制，区分“内核级注册”与“扩展级注册”，防止插件篡改核心行为。
+1.  **多引擎实例隔离**：已在 [descriptors.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/types/descriptors.py) 中通过原型深拷贝机制实现描述符的物理隔离。
+2.  **权限审计机制**：已在 [registry.py](file:///c:/myself/proj/intent-behavior-code-inter/core/foundation/registry.py) 实现 `PrivilegeLevel` 与令牌双轨制（KERNEL/EXTENSION），保护内核工厂函数不被篡改。
+3.  **编译器上下文对齐**：编译器前端（Prelude/Analyzer）已改为从引擎 `Registry` 实例动态获取类型符号，确保静态检查与运行时环境完全同步。
 
-### 阶段三：编译器“去逻辑化” (Domain 层重构)
-**核心目标**：剥离 [symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py) 中的硬编码模拟。
+### 阶段三：编译器“去逻辑化” (Domain 层重构) [COMPLETED]
+**核心目标**：剥离 [symbols.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/symbols.py) 中的硬编码模拟，将行为协议彻底委托给描述符。
 
-1.  **重构 `StaticType` 基类**：
-    - 彻底废弃具体的 `IntType`, `StringType` 等子类。
-    - 引入通用 `DescriptorType`，其行为完全代理至关联的 `TypeDescriptor`。
-2.  **统一运算符决议**：
-    - 将所有运算符（+、-、not 等）的决议逻辑从符号表移交给描述符系统，实现“行为随对象走”。
+1.  **重构 `StaticType` 基类**：已完成。`is_callable`、`is_iterable`、`is_subscriptable` 等行为协议已彻底代理至 UTS 描述符。
+2.  **统一运算符决议**：已将数值、字符串、列表等运算符决议逻辑收拢至 [descriptors.py](file:///c:/myself/proj/intent-behavior-code-inter/core/domain/types/descriptors.py) 的 `get_operator_result` 中。
+3.  **简化符号层级**：废弃了冗余的 `IntType`、`StringType` 子类，实现了符号层对元数据的“中立包装”。
 
-### 阶段四：引导程序与文件位置重组织 (Runtime 层合龙)
+### 阶段四：引导程序与文件位置重组织 (Runtime 层合龙) [COMPLETED]
 **核心目标**：理顺文件职责，实现“定义与实现”的分离。
 
-1.  **文件位置迁移**：
-    - 将 `initialization.py` 迁移至 `core/runtime/bootstrap/`，更名为 `builtin_initializer.py`。
-    - 剥离其中的 Schema 定义代码，使其仅负责“根据 Schema 注入 Python 实现逻辑”。
-2.  **IES 2.0 插件协议**：
-    - 插件的 `setup()` 必须提交 `ModuleMetadata`，由引擎在编译前自动同步至 `Registry`。
+1.  **文件位置迁移**：已将 `initialization.py` 迁移至 `core/runtime/bootstrap/builtin_initializer.py`。
+2.  **职责剥离**：`builtin_initializer.py` 现在仅负责“根据 Schema 注入 Python 实现逻辑”，而具体的 Schema 定义已完全下沉到 `core/domain/builtin_schema.py`。
+3.  **IES 2.0 插件协议准备**：Registry 已支持扩展令牌注册类与元数据，为插件系统的平滑接入打下了基础。
 
----
-
-## 3. 改造风险与代价评估
+### 阶段五：验证、合龙与清理 (Finalization) [IN_PROGRESS]
+**核心目标**：解除屏蔽，全量跑通，优化结构。
 
 | 维度 | 评估结果 | 风险点/代价备注 |
 | :--- | :--- | :--- |

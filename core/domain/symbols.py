@@ -117,20 +117,36 @@ class StaticType:
     @property
     def is_iterable(self) -> bool:
         """是否支持迭代 (e.g. for x in obj)"""
-        return self.name in ("Any", "var")
+        if self.name in ("Any", "var"):
+            return True
+        return self.descriptor.is_iterable if self.descriptor else False
 
     def get_iterator_type(self) -> 'StaticType':
         """获取迭代产生的元素类型"""
-        return STATIC_ANY
+        if self.name in ("Any", "var"):
+            return STATIC_ANY
+        if not self.descriptor:
+            return STATIC_ANY
+        
+        ret_desc = self.descriptor.get_iterator_element_type()
+        return StaticTypeFactory.create_from_descriptor(ret_desc) if ret_desc else STATIC_ANY
 
     @property
     def is_subscriptable(self) -> bool:
         """是否支持下标访问 (e.g. obj[key])"""
-        return self.name in ("Any", "var")
+        if self.name in ("Any", "var"):
+            return True
+        return self.descriptor.is_subscriptable if self.descriptor else False
 
     def get_subscript_type(self, key_type: 'StaticType') -> 'StaticType':
         """获取下标访问的结果类型"""
-        return STATIC_ANY
+        if self.name in ("Any", "var"):
+            return STATIC_ANY
+        if not self.descriptor:
+            return STATIC_ANY
+            
+        ret_desc = self.descriptor.get_subscript_result_type(key_type.descriptor) if key_type.descriptor else None
+        return StaticTypeFactory.create_from_descriptor(ret_desc) if ret_desc else STATIC_ANY
 
     @property
     def is_class(self) -> bool:
@@ -215,20 +231,6 @@ class ListType(BuiltinType):
     def __init__(self, element_type: Optional[StaticType] = None, descriptor: Optional[uts.TypeDescriptor] = None):
         super().__init__("list", descriptor=descriptor)
         self._element_type = element_type or STATIC_ANY
-    
-    @property
-    def is_iterable(self) -> bool:
-        return True
-
-    def get_iterator_type(self) -> StaticType:
-        return self._element_type
-
-    @property
-    def is_subscriptable(self) -> bool:
-        return True
-
-    def get_subscript_type(self, key_type: StaticType) -> StaticType:
-        return self._element_type
 
 class DictType(BuiltinType):
     """内置字典类型，支持键值类型推导"""
@@ -236,20 +238,6 @@ class DictType(BuiltinType):
         super().__init__("dict", descriptor=descriptor)
         self._key_type = key_type or STATIC_ANY
         self._value_type = value_type or STATIC_ANY
-        
-    @property
-    def is_iterable(self) -> bool:
-        return True
-
-    def get_iterator_type(self) -> StaticType:
-        return self._key_type
-
-    @property
-    def is_subscriptable(self) -> bool:
-        return True
-
-    def get_subscript_type(self, key_type: StaticType) -> StaticType:
-        return self._value_type
 
 # --- 常量类型实例 (作为原型) ---
 STATIC_ANY = BuiltinType("Any", descriptor=uts.ANY_DESCRIPTOR)
@@ -273,21 +261,26 @@ class ClassType(StaticType):
         return True
 
     def resolve_member(self, name: str) -> Optional['Symbol']:
-        # 1. 优先通过描述符解析 (符合单源真理)
-        if self.descriptor:
-            metadata = self.descriptor.resolve_member(name)
-            if metadata:
-                sym = SymbolFactory.create_from_descriptor(name, metadata)
-                # 绑定方法逻辑
-                if isinstance(metadata, uts.FunctionMetadata):
-                    return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=BoundMethodType(self, StaticTypeFactory.create_from_descriptor(metadata)))
-                return sym
-        
-        # 2. 回退到父类解析
-        if self.parent:
-            return self.parent.resolve_member(name)
+        # 1. 彻底委托给描述符决议 (描述符内部已处理继承链)
+        if not self.descriptor:
+            return None
             
-        return None
+        metadata = self.descriptor.resolve_member(name)
+        if not metadata:
+            return None
+            
+        # 2. 包装为符号
+        sym = SymbolFactory.create_from_descriptor(name, metadata)
+        
+        # 3. 绑定方法逻辑：如果是函数元数据，在符号层包装为 BoundMethodType
+        if isinstance(metadata, uts.FunctionMetadata):
+            return VariableSymbol(
+                name=name, 
+                kind=SymbolKind.VARIABLE, 
+                var_type=BoundMethodType(self, StaticTypeFactory.create_from_descriptor(metadata))
+            )
+            
+        return sym
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
         # 类调用返回其实例类型（即自身）

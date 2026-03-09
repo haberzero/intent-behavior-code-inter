@@ -58,6 +58,24 @@ class TypeDescriptor:
         """是否支持调用行为"""
         return False
 
+    @property
+    def is_iterable(self) -> bool:
+        """是否支持迭代行为"""
+        return False
+
+    @property
+    def is_subscriptable(self) -> bool:
+        """是否支持下标访问行为"""
+        return False
+
+    def get_iterator_element_type(self) -> Optional['TypeDescriptor']:
+        """解析迭代元素类型"""
+        return None
+
+    def get_subscript_result_type(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
+        """解析下标访问结果类型"""
+        return None
+
     def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
         """解析调用返回类型"""
         return None
@@ -108,6 +126,20 @@ class LazyDescriptor(TypeDescriptor):
     def resolve_member(self, name: str) -> Optional[TypeDescriptor]:
         return self.unwrap().resolve_member(name)
 
+    @property
+    def is_iterable(self) -> bool:
+        return self.unwrap().is_iterable
+
+    @property
+    def is_subscriptable(self) -> bool:
+        return self.unwrap().is_subscriptable
+
+    def get_iterator_element_type(self) -> Optional[TypeDescriptor]:
+        return self.unwrap().get_iterator_element_type()
+
+    def get_subscript_result_type(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+        return self.unwrap().get_subscript_result_type(key)
+
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         return self.unwrap().is_assignable_to(other)
 
@@ -121,6 +153,22 @@ class PrimitiveDescriptor(TypeDescriptor):
         # 内置类型（如 int, str）允许调用，表示类型转换/构造
         return self.name in ("int", "str", "float", "bool", "list", "dict")
 
+    @property
+    def is_iterable(self) -> bool:
+        return self.name in ("Any", "var", "list", "dict")
+
+    @property
+    def is_subscriptable(self) -> bool:
+        return self.name in ("Any", "var", "list", "dict")
+
+    def get_iterator_element_type(self) -> Optional['TypeDescriptor']:
+        if self.name in ("Any", "var"): return ANY_DESCRIPTOR
+        return None
+
+    def get_subscript_result_type(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
+        if self.name in ("Any", "var"): return ANY_DESCRIPTOR
+        return None
+
     def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
         # 内置类型调用返回其自身
         return self
@@ -129,21 +177,35 @@ class PrimitiveDescriptor(TypeDescriptor):
         n1 = self.name
         if not other: # 一元运算
             if op == '~' and n1 == "int": return INT_DESCRIPTOR
+            if op == '-' and n1 in ("int", "float"): return self
             if op == 'not': return BOOL_DESCRIPTOR
             return None
             
         n2 = other.name
+        # 1. 逻辑运算 (and/or)
+        if op in ('and', 'or'):
+            # IBCI 2.0 中逻辑运算返回 BOOL
+            return BOOL_DESCRIPTOR
+
+        # 2. 比较运算 (始终返回 bool)
+        if op in ('>', '>=', '<', '<=', '==', '!='):
+            return BOOL_DESCRIPTOR
+
+        # 3. 数值运算
         if n1 == "int" and n2 == "int":
             if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'): return INT_DESCRIPTOR
-            if op in ('>', '>=', '<', '<=', '==', '!='): return BOOL_DESCRIPTOR
             
         if (n1 in ("int", "float")) and (n2 in ("int", "float")):
             if op in ('+', '-', '*', '/'): return FLOAT_DESCRIPTOR
-            if op in ('>', '>=', '<', '<=', '==', '!='): return BOOL_DESCRIPTOR
             
+        # 4. 字符串运算
         if n1 == "str" and op == '+':
             if n2 == "str": return STR_DESCRIPTOR
             if n2 in ("Any", "var"): return ANY_DESCRIPTOR
+            
+        # 5. 列表运算
+        if n1 == "list" and op == '+':
+            if n2 == "list": return self
             
         return None
 
@@ -151,6 +213,23 @@ class PrimitiveDescriptor(TypeDescriptor):
 class ListMetadata(TypeDescriptor):
     """列表类型元数据"""
     element_type: Optional[TypeDescriptor] = None
+
+    @property
+    def is_iterable(self) -> bool:
+        return True
+
+    @property
+    def is_subscriptable(self) -> bool:
+        return True
+
+    def get_iterator_element_type(self) -> Optional[TypeDescriptor]:
+        return self.element_type or ANY_DESCRIPTOR
+
+    def get_subscript_result_type(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+        # 列表下标暂时只支持 int
+        if key.name == "int":
+            return self.element_type or ANY_DESCRIPTOR
+        return None
 
     def __post_init__(self):
         super().__post_init__()
@@ -168,6 +247,24 @@ class DictMetadata(TypeDescriptor):
     """字典类型元数据"""
     key_type: Optional[TypeDescriptor] = None
     value_type: Optional[TypeDescriptor] = None
+
+    @property
+    def is_iterable(self) -> bool:
+        return True
+
+    @property
+    def is_subscriptable(self) -> bool:
+        return True
+
+    def get_iterator_element_type(self) -> Optional[TypeDescriptor]:
+        # 字典迭代产生键
+        return self.key_type or ANY_DESCRIPTOR
+
+    def get_subscript_result_type(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+        if self.key_type:
+            if key.is_assignable_to(self.key_type):
+                return self.value_type or ANY_DESCRIPTOR
+        return self.value_type or ANY_DESCRIPTOR
 
     def __post_init__(self):
         super().__post_init__()

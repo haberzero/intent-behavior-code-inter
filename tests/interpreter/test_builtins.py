@@ -32,7 +32,6 @@ class TestBuiltins(BaseInterpreterTest):
         self.run_code(code)
         self.assert_outputs(["1", "2", "3"])
 
-    @unittest.skip("暂时屏蔽：cast_to 逻辑与 symbols 系统合龙中")
     def test_string_ops(self):
         """测试字符串操作"""
         code = """
