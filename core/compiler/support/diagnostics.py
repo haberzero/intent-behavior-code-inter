@@ -8,19 +8,19 @@ class DiagnosticReporter(Protocol):
     Abstracts away the foundation's IssueTracker.
     Now directly uses Domain Severity and supports Error Codes.
     """
-    def report(self, severity: Severity, code: str, message: str, node: Optional[Any] = None, hint: Optional[str] = None):
+    def report(self, severity: Severity, code: str, message: str, location: Optional[Any] = None, hint: Optional[str] = None):
         ...
     
-    def error(self, message: str, node: Optional[Any] = None, code: str = "COMPILER_ERROR", hint: Optional[str] = None):
+    def error(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_ERROR", hint: Optional[str] = None):
         ...
     
-    def warning(self, message: str, node: Optional[Any] = None, code: str = "COMPILER_WARNING", hint: Optional[str] = None):
+    def warning(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_WARNING", hint: Optional[str] = None):
         ...
 
-    def hint(self, message: str, node: Optional[Any] = None, code: str = "COMPILER_HINT"):
+    def hint(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_HINT"):
         ...
 
-    def panic(self, message: str, node: Optional[Any] = None, code: str = "FATAL_ERROR"):
+    def panic(self, message: str, location: Optional[Any] = None, code: str = "FATAL_ERROR"):
         ...
     
     def check_errors(self):

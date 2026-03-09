@@ -4,9 +4,9 @@ from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable
 from core.foundation.interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from core.domain.issue import InterpreterError, LLMUncertaintyError
-from core.support.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
+from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.capabilities import ILLMProvider
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.foundation.kernel import IbObject
 from core.foundation.registry import Registry
 

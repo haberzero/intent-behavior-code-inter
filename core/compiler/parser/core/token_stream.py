@@ -15,7 +15,7 @@ class TokenStream:
     def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None):
         self.tokens = tokens
         self.current = 0
-        from core.support.diagnostics.issue_tracker import IssueTracker
+        from core.compiler.diagnostics.issue_tracker import IssueTracker
         self.issue_tracker = issue_tracker or IssueTracker()
 
     def peek(self, offset: int = 0) -> Token:

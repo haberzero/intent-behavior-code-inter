@@ -69,9 +69,9 @@ class SymbolCollector:
                 self.analyzer.node_to_symbol[node] = sym
         except ValueError as e:
             if self.issue_tracker:
-                self.issue_tracker.error(str(e), node)
+                self.issue_tracker.error(str(e), node, code="SEM_002")
             elif hasattr(self, "analyzer") and self.analyzer:
-                self.analyzer.error(str(e), node)
+                self.analyzer.error(str(e), node, code="SEM_002")
             else:
                 # 在 Pass 1 阶段没有 analyzer 或 reporter 时，直接抛出
                 raise
@@ -188,7 +188,7 @@ class LocalSymbolCollector:
             if hasattr(self.analyzer, "node_to_symbol"):
                 self.analyzer.node_to_symbol[node] = sym
         except ValueError as e:
-            self.analyzer.error(str(e), node)
+            self.analyzer.error(str(e), node, code="SEM_002")
 
     def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt):
         # 处理 global 声明

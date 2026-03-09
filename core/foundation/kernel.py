@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from .registry import Registry
 from core.domain.issue import InterpreterError, ReturnException
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from dataclasses import dataclass
 
 if TYPE_CHECKING:

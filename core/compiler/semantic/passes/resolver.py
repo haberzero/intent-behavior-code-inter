@@ -63,7 +63,7 @@ class TypeResolver:
         parent_type = None
         if node.parent:
             if node.parent == node.name:
-                self.analyzer.error(f"Class '{node.name}' cannot inherit from itself", node)
+                self.analyzer.error(f"Class '{node.name}' cannot inherit from itself", node, code="SEM_003")
             else:
                 parent_sym = self.symbol_table.resolve(node.parent)
                 if parent_sym and parent_sym.type_info.is_class:
@@ -77,11 +77,11 @@ class TypeResolver:
                         curr_parent = curr_parent.parent
                     
                     if is_cycle:
-                        self.analyzer.error(f"Circular inheritance detected: '{node.name}' inherits from '{node.parent}'", node)
+                        self.analyzer.error(f"Circular inheritance detected: '{node.name}' inherits from '{node.parent}'", node, code="SEM_003")
                     else:
                         parent_type = parent_sym.type_info
                 else:
-                    self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node)
+                    self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
         # 2. 创建 ClassType 并绑定到符号
         class_scope = sym.owned_scope

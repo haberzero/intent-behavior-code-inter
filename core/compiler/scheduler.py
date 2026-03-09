@@ -8,12 +8,12 @@ from core.domain.tokens import Token
 from core.compiler.parser.parser import Parser
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.support.diagnostics import DiagnosticReporter
-from core.support.diagnostics.issue_tracker import IssueTracker
-from core.compiler.source.source_manager import SourceManager
+from core.compiler.diagnostics.issue_tracker import IssueTracker
+from core.foundation.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.domain.issue import Severity, CompilerError
-from core.support.host_interface import HostInterface
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.host_interface import HostInterface
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.domain.blueprint import CompilationArtifact, CompilationResult
 
 class Scheduler:

@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.parser.core.token_stream import TokenStream
 from core.compiler.support.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
-from core.support.host_interface import HostInterface
+from core.foundation.host_interface import HostInterface
 
 from core.domain import ast as ast
 

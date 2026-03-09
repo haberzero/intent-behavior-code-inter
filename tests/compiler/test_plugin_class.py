@@ -1,7 +1,7 @@
 import unittest
 import os
 from tests.compiler.base import BaseCompilerTest
-from core.support.module_spec_builder import SpecBuilder
+from core.foundation.module_spec_builder import SpecBuilder
 
 class TestPluginClass(BaseCompilerTest):
     """

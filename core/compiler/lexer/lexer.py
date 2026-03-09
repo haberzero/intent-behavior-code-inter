@@ -2,8 +2,8 @@ from typing import List, Optional, Any
 from core.domain.tokens import TokenType, Token, LexerMode, SubState
 from core.compiler.support.diagnostics import DiagnosticReporter
 from .str_stream import StrStream
-from core.support.diagnostics.issue_tracker import IssueTracker
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.compiler.diagnostics.issue_tracker import IssueTracker
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 # Components
 from .indent_processor import IndentProcessor

@@ -23,7 +23,7 @@ ibc_modules/
 
 ### 2.1 使用 `SpecBuilder`
 ```python
-from core.support.module_spec_builder import SpecBuilder
+from core.foundation.module_spec_builder import SpecBuilder
 
 spec = (SpecBuilder("my_module")
     # 定义一个带参数和返回值的函数
@@ -125,7 +125,7 @@ def create_implementation():
 
 ### 第一步：编写 `ibc_modules/smart_log/spec.py`
 ```python
-from core.support.module_spec_builder import SpecBuilder
+from core.foundation.module_spec_builder import SpecBuilder
 
 spec = (SpecBuilder("smart_log")
     .func("info", params=["str"])

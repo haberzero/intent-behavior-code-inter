@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, Optional
 from core.foundation.interfaces import InterOp
 from core.domain.issue import InterpreterError
-from core.support.host_interface import HostInterface
+from core.foundation.host_interface import HostInterface
 
 class InterOpImpl:
     def __init__(self, host_interface: Optional[HostInterface] = None):

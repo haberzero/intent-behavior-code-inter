@@ -6,12 +6,12 @@ from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
-from core.support.host_interface import HostInterface
+from core.foundation.host_interface import HostInterface
 from core.domain.types import ModuleMetadata
 from core.domain.blueprint import CompilationArtifact
 from core.domain.issue import CompilerError
 from core.domain.issue import InterpreterError, LexerError, ParserError, SemanticError
-from core.support.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
+from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
 
 class IBCIEngine:
     """
@@ -22,7 +22,7 @@ class IBCIEngine:
         initialize_builtin_classes()
         
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
-        from core.support.diagnostics.issue_tracker import IssueTracker
+        from core.compiler.diagnostics.issue_tracker import IssueTracker
         self.issue_tracker = IssueTracker()
         self.debugger = CoreDebugger()
         
@@ -109,9 +109,10 @@ class IBCIEngine:
 
         except CompilerError as e:
             if not silent:
+                from core.compiler.diagnostics.formatter import DiagnosticFormatter
                 print("\n--- Compilation Errors ---")
-                # IssueTracker 已经在 report 时打印了格式化信息，这里可以额外显示汇总
-                print(f"Total errors found: {len(e.diagnostics)}")
+                print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
+                print(f"\nTotal errors found: {len(e.diagnostics)}")
             else:
                 raise e
             return False

@@ -10,12 +10,12 @@ from core.compiler.parser.components.declaration import DeclarationComponent
 from core.compiler.parser.components.type_def import TypeComponent
 from core.compiler.parser.components.import_def import ImportComponent
 from core.domain.dependencies import ImportInfo, ImportType
-from core.support.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
+from core.foundation.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
 from core.domain.issue import Severity
 from core.domain.issue_atomic import Location
 
-from core.support.host_interface import HostInterface
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.host_interface import HostInterface
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 
 if TYPE_CHECKING:
     from core.compiler.parser.resolver.resolver import ModuleResolver
@@ -30,7 +30,7 @@ class Parser:
         # 1. Initialize Context
         # 直接使用 IssueTracker，它现在满足 DiagnosticReporter 协议
         if issue_tracker is None:
-            from core.support.diagnostics.issue_tracker import IssueTracker
+            from core.compiler.diagnostics.issue_tracker import IssueTracker
             issue_tracker = IssueTracker()
             
         self.stream = TokenStream(tokens, issue_tracker)

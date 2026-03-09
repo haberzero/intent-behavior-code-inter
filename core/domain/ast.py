@@ -64,6 +64,20 @@ class IbASTNode:
         return self.col_offset
 
     @property
+    def end_line(self) -> Optional[int]:
+        return self.end_lineno
+
+    @property
+    def end_column(self) -> Optional[int]:
+        return self.end_col_offset
+
+    @property
+    def length(self) -> int:
+        if self.end_col_offset is not None and self.end_lineno == self.lineno:
+            return max(1, self.end_col_offset - self.col_offset)
+        return 1
+
+    @property
     def creates_scope(self) -> bool:
         """Indicates if this node establishes a new symbol scope."""
         return False

@@ -8,7 +8,7 @@ from core.domain.issue import (
     LLMUncertaintyError, RetryException, Severity
 )
 from core.domain.issue_atomic import Location
-from core.support.diagnostics.codes import (
+from core.foundation.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
     RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR
 )
@@ -26,9 +26,9 @@ from core.foundation.kernel import IbObject, IbClass, IbUserFunction, IbFunction
 from core.foundation.kernel import Type, ListType, DictType, ANY_TYPE
 from core.foundation.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior, initialize_builtin_classes
 from core.foundation.registry import Registry
-from core.support.host_interface import HostInterface
+from core.foundation.host_interface import HostInterface
 from core.foundation.capabilities import IStackInspector
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from .llm_executor import intent_scoped
 
 

@@ -137,8 +137,8 @@ class ExpressionComponent(BaseComponent):
                 elts.append(self.parse_expression())
                 if not self.stream.match(TokenType.COMMA):
                     break
-        self.stream.consume(TokenType.RBRACKET, "Expect ']' after list elements.")
-        return self._loc(ast.IbListExpr(elts=elts, ctx='Load'), start_token)
+        end_token = self.stream.consume(TokenType.RBRACKET, "Expect ']' after list elements.")
+        return self._loc(ast.IbListExpr(elts=elts, ctx='Load'), start_token, end_token)
 
     def dict_display(self) -> ast.IbExpr:
         start_token = self.stream.previous()
@@ -151,15 +151,15 @@ class ExpressionComponent(BaseComponent):
                 values.append(self.parse_expression())
                 if not self.stream.match(TokenType.COMMA):
                     break
-        self.stream.consume(TokenType.RBRACE, "Expect '}' after dict entries.")
-        return self._loc(ast.IbDict(keys=keys, values=values), start_token)
+        end_token = self.stream.consume(TokenType.RBRACE, "Expect '}' after dict entries.")
+        return self._loc(ast.IbDict(keys=keys, values=values), start_token, end_token)
 
     def unary(self) -> ast.IbExpr:
         op_token = self.stream.previous()
         op = op_token.type.name
         operand = self.parse_precedence(IbPrecedence.UNARY)
         op_map = {"MINUS": "-", "PLUS": "+", "NOT": "not", "BIT_NOT": "~"}
-        return self._loc(ast.IbUnaryOp(op=op_map.get(op, op), operand=operand), op_token)
+        return self._loc(ast.IbUnaryOp(op=op_map.get(op, op), operand=operand), op_token, operand)
 
     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
@@ -180,10 +180,10 @@ class ExpressionComponent(BaseComponent):
             if isinstance(left, ast.IbCompare):
                 left.ops.append(op_str)
                 left.comparators.append(right)
-                return left
-            return self._loc(ast.IbCompare(left=left, ops=[op_str], comparators=[right]), op_token)
+                return self._extend_loc(left, right)
+            return self._loc(ast.IbCompare(left=left, ops=[op_str], comparators=[right]), left, right)
         
-        return self._loc(ast.IbBinOp(left=left, op=op_str, right=right), op_token)
+        return self._loc(ast.IbBinOp(left=left, op=op_str, right=right), left, right)
 
     def logical(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
@@ -193,13 +193,11 @@ class ExpressionComponent(BaseComponent):
         
         if isinstance(left, ast.IbBoolOp) and left.op == op:
             left.values.append(right)
-            return left
+            return self._extend_loc(left, right)
             
-        return self._loc(ast.IbBoolOp(op=op, values=[left, right]), op_token)
+        return self._loc(ast.IbBoolOp(op=op, values=[left, right]), left, right)
 
     def call(self, left: ast.IbExpr) -> ast.IbCall:
-        start_token = self.stream.previous()
-        
         arguments = []
         if not self.stream.check(TokenType.RPAREN):
             while True:
@@ -208,21 +206,19 @@ class ExpressionComponent(BaseComponent):
                 arguments.append(self.parse_expression())
                 if not self.stream.match(TokenType.COMMA):
                     break
-        self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
+        end_token = self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
         
         # [NEW] 意图节点化：不再向 Call 注入 intent 属性
-        return self._loc(ast.IbCall(func=left, args=arguments, keywords=[]), start_token)
+        return self._loc(ast.IbCall(func=left, args=arguments, keywords=[]), left, end_token)
 
     def dot(self, left: ast.IbExpr) -> ast.IbExpr:
-        op_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-        return self._loc(ast.IbAttribute(value=left, attr=name.value, ctx='Load'), op_token)
+        return self._loc(ast.IbAttribute(value=left, attr=name.value, ctx='Load'), left, name)
 
     def subscript(self, left: ast.IbExpr) -> ast.IbSubscript:
-        start_token = self.stream.previous()
         slice_expr = self.parse_expression()
-        self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-        return self._loc(ast.IbSubscript(value=left, slice=slice_expr, ctx='Load'), start_token)
+        end_token = self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
+        return self._loc(ast.IbSubscript(value=left, slice=slice_expr, ctx='Load'), left, end_token)
 
     def behavior_expression(self) -> ast.IbBehaviorExpr:
         start_token = self.stream.previous()

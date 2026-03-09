@@ -169,10 +169,13 @@ class StatementComponent(BaseComponent):
         test = self.expression.parse_expression()
         self.stream.consume(TokenType.COLON, "Expect ':' after if condition.")
         body = self.block()
+        end_token = self.stream.previous() # DEDENT
         
         llm_fallback = self._parse_llm_fallback()
+        if llm_fallback:
+            end_token = self.stream.previous() # end of fallback
             
-        root_if = self._loc(ast.IbIf(test=test, body=body, orelse=[]), start_token)
+        root_if = self._loc(ast.IbIf(test=test, body=body, orelse=[]), start_token, end_token)
         last_node = root_if
         
         # 2. Parse ELIF chain
@@ -181,25 +184,33 @@ class StatementComponent(BaseComponent):
             elif_test = self.expression.parse_expression()
             self.stream.consume(TokenType.COLON, "Expect ':' after elif condition.")
             elif_body = self.block()
+            elif_end = self.stream.previous() # DEDENT
             
-            new_if = self._loc(ast.IbIf(test=elif_test, body=elif_body, orelse=[]), elif_start)
+            new_if = self._loc(ast.IbIf(test=elif_test, body=elif_body, orelse=[]), elif_start, elif_end)
             last_node.orelse = [new_if]
             last_node = new_if
+            # Extend root if range to cover elif
+            self._extend_loc(root_if, elif_end)
             
         # 3. Parse ELSE
         if self.stream.match(TokenType.ELSE):
             self.stream.consume(TokenType.COLON, "Expect ':' after else.")
             last_node.orelse = self.block()
+            else_end = self.stream.previous() # DEDENT
+            # Extend root if range to cover else
+            self._extend_loc(root_if, else_end)
             
         # 4. Final LLM_EXCEPT for the whole chain
         final_fallback = self._parse_llm_fallback()
+        if final_fallback:
+             self._extend_loc(root_if, self.stream.previous())
         
         # 优先使用 root 的 fallback，如果没有则使用最后的 final_fallback
         effective_fallback = llm_fallback or final_fallback
         
         if effective_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=root_if, fallback=effective_fallback), start_token)
-            
+            return self._loc(ast.IbLLMExceptionalStmt(primary=root_if, fallback=effective_fallback), root_if, self.stream.previous())
+        
         return root_if
 
     def while_statement(self) -> ast.IbStmt:
@@ -213,12 +224,13 @@ class StatementComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
         body = self.block()
+        end_token = self.stream.previous() # DEDENT
+        
+        stmt = self._loc(ast.IbWhile(test=test, body=body, orelse=[]), start_token, end_token)
         
         llm_fallback = self._parse_llm_fallback()
-        stmt = self._loc(ast.IbWhile(test=test, body=body, orelse=[]), start_token)
-        
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token)
+            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token, self.stream.previous())
         return stmt
 
     def for_statement(self) -> ast.IbStmt:
@@ -246,12 +258,13 @@ class StatementComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' after for loop iterator.")
         body = self.block()
+        end_token = self.stream.previous() # DEDENT
+        
+        stmt = self._loc(ast.IbFor(target=target, iter=iter_expr, body=body, orelse=[]), start_token, end_token)
         
         llm_fallback = self._parse_llm_fallback()
-        stmt = self._loc(ast.IbFor(target=target, iter=iter_expr, body=body, orelse=[]), start_token)
-        
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token)
+            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token, self.stream.previous())
         return stmt
 
     def expression_statement(self) -> ast.IbStmt:
@@ -260,11 +273,11 @@ class StatementComponent(BaseComponent):
         # Check if it's an assignment or compound assignment
         if self.stream.match(TokenType.ASSIGN):
             value = self.expression.parse_expression()
-            self.stream.consume_end_of_statement("Expect newline after assignment.")
+            end_token = self.stream.consume_end_of_statement("Expect newline after assignment.")
             llm_fallback = self._parse_llm_fallback()
-            stmt = self._loc(ast.IbAssign(targets=[expr], value=value), self.stream.previous())
+            stmt = self._loc(ast.IbAssign(targets=[expr], value=value), expr, end_token)
             if llm_fallback:
-                return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), self.stream.previous())
+                return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), expr, self.stream.previous())
             return stmt
         
         # Compound assignments
@@ -277,11 +290,11 @@ class StatementComponent(BaseComponent):
         for token_type, op_str in compound_ops.items():
             if self.stream.match(token_type):
                 value = self.expression.parse_expression()
-                self.stream.consume_end_of_statement("Expect newline after compound assignment.")
+                end_token = self.stream.consume_end_of_statement("Expect newline after compound assignment.")
                 llm_fallback = self._parse_llm_fallback()
-                stmt = self._loc(ast.IbAugAssign(target=expr, op=op_str, value=value), self.stream.previous())
+                stmt = self._loc(ast.IbAugAssign(target=expr, op=op_str, value=value), expr, end_token)
                 if llm_fallback:
-                    return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), self.stream.previous())
+                    return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), expr, self.stream.previous())
                 return stmt
             
         self.stream.consume_end_of_statement("Expect newline after expression.")

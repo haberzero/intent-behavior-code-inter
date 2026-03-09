@@ -1,9 +1,9 @@
 from typing import Dict, Optional, List, Any
 from core.domain import ast as ast
 from core.compiler.support.diagnostics import DiagnosticReporter
-from core.support.diagnostics.issue_tracker import IssueTracker
-from core.support.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.support.host_interface import HostInterface
+from core.compiler.diagnostics.issue_tracker import IssueTracker
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.foundation.host_interface import HostInterface
 
 from core.domain import symbols
 from core.domain.symbols import (
@@ -646,7 +646,7 @@ class SemanticAnalyzer:
             msg = f"Variable '{node.id}' is not defined"
             if self.in_behavior_expr:
                 msg = f"Variable '{node.id}' used in behavior expression is not defined"
-            self.error(msg, node)
+            self.error(msg, node, code="SEM_001")
             return STATIC_ANY
 
         # 2. [AUDIT] 显式全局声明规则优化：

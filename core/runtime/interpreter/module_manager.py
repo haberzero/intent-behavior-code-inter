@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.domain import ast as ast
 from core.foundation.kernel import ModuleType
 from core.domain.issue import InterpreterError
-from core.support.diagnostics.codes import DEP_MODULE_NOT_FOUND
+from core.foundation.diagnostics.codes import DEP_MODULE_NOT_FOUND
 
 if TYPE_CHECKING:
     from core.foundation.interfaces import Interpreter

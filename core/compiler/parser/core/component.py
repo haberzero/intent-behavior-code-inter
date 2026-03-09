@@ -21,12 +21,35 @@ class BaseComponent:
     def issue_tracker(self):
         return self.context.issue_tracker
 
-    def _loc(self, node: T, start_obj: Any) -> T:
+    def _loc(self, node: T, start_obj: Any, end_obj: Optional[Any] = None) -> T:
         """Helper to attach location info to a node from a token or other object with line/column."""
         if hasattr(start_obj, 'line'):
             node.lineno = start_obj.line
             node.col_offset = start_obj.column
+            if hasattr(start_obj, 'end_line'):
+                node.end_lineno = start_obj.end_line
+                node.end_col_offset = start_obj.end_column
         elif hasattr(start_obj, 'lineno'):
             node.lineno = start_obj.lineno
             node.col_offset = start_obj.col_offset
+            node.end_lineno = getattr(start_obj, 'end_lineno', None)
+            node.end_col_offset = getattr(start_obj, 'end_col_offset', None)
+
+        if end_obj:
+            if hasattr(end_obj, 'end_line'):
+                node.end_lineno = end_obj.end_line
+                node.end_col_offset = end_obj.end_column
+            elif hasattr(end_obj, 'end_lineno'):
+                node.end_lineno = end_obj.end_lineno
+                node.end_col_offset = end_obj.end_col_offset
+        return node
+
+    def _extend_loc(self, node: T, end_obj: Any) -> T:
+        """Extends the end location of a node using another object's end position."""
+        if hasattr(end_obj, 'end_line'):
+            node.end_lineno = end_obj.end_line
+            node.end_col_offset = end_obj.end_column
+        elif hasattr(end_obj, 'end_lineno'):
+            node.end_lineno = end_obj.end_lineno
+            node.end_col_offset = end_obj.end_col_offset
         return node

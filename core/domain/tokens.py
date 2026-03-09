@@ -124,6 +124,10 @@ class Token:
     end_column: int = 0
     is_at_line_start: bool = False
 
+    @property
+    def length(self) -> int:
+        return len(self.value) if self.value else 1
+
     def get_location(self) -> Location:
         """实现标准的定位协议"""
         return Location(

@@ -3,7 +3,7 @@ from core.domain.issue import Diagnostic, Severity
 from core.domain.issue_atomic import Location
 
 if TYPE_CHECKING:
-    from core.compiler.source.source_manager import SourceManager
+    from core.foundation.source.source_manager import SourceManager
 
 class DiagnosticFormatter:
     """
@@ -27,7 +27,7 @@ class DiagnosticFormatter:
         color_reset = DiagnosticFormatter.COLORS["RESET"] if use_color else ""
         bold = DiagnosticFormatter.COLORS["BOLD"] if use_color else ""
         
-        # Header: [ERROR] E1001: Invalid character
+        # Header: [ERROR] SEM_001: Variable 'x' is not defined
         header = f"{color_start}[{severity_label}] {diagnostic.code}: {diagnostic.message}{color_reset}"
         
         # Location info
@@ -45,7 +45,13 @@ class DiagnosticFormatter:
             
             if context_line:
                 line_num_str = str(loc.line).rjust(4)
-                context_str = f"\n{line_num_str} | {context_line}\n     | {' ' * (loc.column - 1)}{'^' * loc.length}"
+                
+                # Determine highlight length
+                highlight_len = loc.length
+                if loc.end_line == loc.line and loc.end_column is not None:
+                    highlight_len = max(1, loc.end_column - loc.column)
+                
+                context_str = f"\n{line_num_str} | {context_line}\n     | {' ' * (loc.column - 1)}{'^' * highlight_len}"
         
         hint_str = ""
         if diagnostic.hint:

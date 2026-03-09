@@ -26,13 +26,8 @@ class IssueTracker:
         diag = Diagnostic(severity, code, message, self._resolve_location(location), hint)
         self._diagnostics.append(diag)
         
-        if severity.value >= Severity.WARNING.value:
-            self._error_count += 1 if severity.value >= Severity.ERROR.value else 0
-            
-            # Formatted Output
-            loc_str = f" at {diag.location}" if diag.location else ""
-            hint_str = f"\n  Hint: {diag.hint}" if diag.hint else ""
-            print(f"[{severity.name}][{code}]{loc_str}: {message}{hint_str}")
+        if severity.value >= Severity.ERROR.value:
+            self._error_count += 1
             
         if severity == Severity.FATAL:
             raise FatalCompilerError(diag)
@@ -91,10 +86,9 @@ class IssueTracker:
                 file_path=self.file_path,
                 line=loc.line,
                 column=loc.column,
-                # Try to get extra info if available
-                length=getattr(loc, 'length', 1),
-                end_line=getattr(loc, 'end_line', None),
-                end_column=getattr(loc, 'end_column', None)
+                length=loc.length,
+                end_line=loc.end_line,
+                end_column=loc.end_column
             )
             
         return None

@@ -1,7 +1,7 @@
 import os
 import importlib.util
 from typing import Dict, List, Optional
-from core.support.host_interface import HostInterface
+from core.foundation.host_interface import HostInterface
 from core.foundation.kernel import ModuleType
 
 class ModuleDiscoveryService:

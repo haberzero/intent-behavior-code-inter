@@ -1,4 +1,4 @@
-from core.support.module_spec_builder import SpecBuilder
+from core.foundation.module_spec_builder import SpecBuilder
 
 spec = (SpecBuilder("json")
     .func("parse", params=["str"], returns="any")

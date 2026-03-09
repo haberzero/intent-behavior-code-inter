@@ -117,6 +117,7 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume(TokenType.COLON, "Expect ':' before intent body.")
         
         body = self.statement.block()
+        end_token = self.stream.previous() # DEDENT
         
         # 将表达式封装为 IntentInfo
         # 如果是 Constant 且为 string，则填充 content
@@ -132,7 +133,7 @@ class DeclarationComponent(BaseComponent):
             lineno=start_token.line,
             col_offset=start_token.column
         )
-        return self._loc(ast.IbIntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token)
+        return self._loc(ast.IbIntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token, end_token)
 
     def variable_declaration(self, explicit_var: bool = False) -> ast.IbAssign:
         type_token = None
@@ -165,12 +166,16 @@ class DeclarationComponent(BaseComponent):
             value = self.expression.parse_expression()
         
         self.stream.consume_end_of_statement("Expect newline after variable declaration.")
+        end_token = self.stream.previous()
         
         # 解析可选的 llmexcept 块
         llm_fallback = self.statement._parse_llm_fallback()
-        stmt = self._loc(ast.IbAssign(targets=[target], value=value), type_token)
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), type_token)
+             end_token = self.stream.previous()
+             
+        stmt = self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
+        if llm_fallback:
+            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), type_token, end_token)
         return stmt
 
     def function_declaration(self) -> ast.IbFunctionDef:
@@ -190,7 +195,7 @@ class DeclarationComponent(BaseComponent):
         
         body = self.statement.block()
         func_node.body = body
-        return func_node
+        return self._extend_loc(func_node, self.stream.previous())
 
     def llm_function_declaration(self) -> ast.IbLLMFunctionDef:
         start_token = self.stream.previous()
@@ -211,7 +216,7 @@ class DeclarationComponent(BaseComponent):
         llm_node.sys_prompt = sys_prompt
         llm_node.user_prompt = user_prompt
         
-        return llm_node
+        return self._extend_loc(llm_node, self.stream.previous())
 
     def class_declaration(self) -> ast.IbClassDef:
         start_token = self.stream.previous()
@@ -239,7 +244,7 @@ class DeclarationComponent(BaseComponent):
                 pass
         
         class_node.body = body
-        return class_node
+        return self._extend_loc(class_node, self.stream.previous())
 
     def parameters(self) -> List[ast.IbArg]:
         params = []
