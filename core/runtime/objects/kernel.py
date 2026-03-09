@@ -121,63 +121,40 @@ class IbModule(IbObject):
     def __repr__(self):
         return f"<Module '{self.name}'>"
 
-class IbClass(IbObject, TypeDescriptor):
+class IbClass(IbObject):
     """
     IBC-Inter 类对象 (元对象)。
-    同时继承自 IbObject (一切皆对象) 和 TypeDescriptor (统一类型元数据)。
-    模拟虚表 (vtable)：存储方法名到 IbFunction 的映射。
+    贯彻“一切皆对象”思想：类本身也是一个对象。
+    它持有该类的元数据 (TypeDescriptor) 和运行时方法表 (vtable)。
     """
-    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry')
+    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', 'descriptor')
 
     def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[Registry] = None):
         if not registry:
             raise ValueError("Registry is required for IbClass creation")
         self.registry = registry
         IbObject.__init__(self, self) # IbClass 的类是它自己
-        TypeDescriptor.__init__(self, name)
+        self.name = name
         self.methods: Dict[str, 'IbFunction'] = {}
         self.parent = parent
         self.default_fields: Mapping[str, Any] = {}
-        self.member_types: Dict[str, Type] = {}
-
-    def resolve_member(self, name: str) -> Optional[Any]:
-        if name in self.member_types:
-            return self.member_types[name]
-        if self.parent:
-            res = self.parent.resolve_member(name)
-            if res: return res
-        return self.lookup_method(name)
-
-    def define_member(self, name: str, member_type: TypeDescriptor):
-        self.member_types[name] = member_type
-
-    def is_assignable_to(self, other: TypeDescriptor) -> bool:
-        if super().is_assignable_to(other):
-            return True
-        if self.parent and self.parent.is_assignable_to(other):
-            return True
-        if self.name == "int" and other.name == "bool":
-            return True
-        if self.name in ("Function", "NativeFunction", "AnonymousLLMFunction", "behavior") and other.name == "callable":
-            return True
-        return False
+        self.member_types: Dict[str, Any] = {}
+        self.descriptor: Optional[TypeDescriptor] = None
 
     def lookup_method(self, name: str) -> Optional['IbFunction']:
+        """在虚表中查找方法 (支持继承)"""
         if name in self.methods:
             return self.methods[name]
         if self.parent:
             return self.parent.lookup_method(name)
         return None
 
-    def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        instance = IbObject(self)
-        init_method = self.lookup_method('init')
-        if init_method:
-            init_method.call(instance, args)
-        return instance
-
-    def can_assign_to(self, other: 'IbClass') -> bool:
-        return self.is_assignable_to(other)
+    def is_assignable_to(self, other: 'IbClass') -> bool:
+        """运行时类型兼容性检查"""
+        if self is other: return True
+        if self.parent:
+            return self.parent.is_assignable_to(other)
+        return False
 
     def register_method(self, name: str, method: 'IbFunction'):
         self.methods[name] = method
@@ -189,6 +166,16 @@ class IbClass(IbObject, TypeDescriptor):
         if init_method:
             init_method.call(instance, args)
         return instance
+
+    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        """
+        类对象的特殊消息处理：
+        1. __call__ -> 实例化 (Instantiate)
+        2. 其他 -> 正常消息处理 (查找静态方法等)
+        """
+        if message == "__call__":
+            return self.instantiate(args)
+        return super().receive(message, args)
 
     def __repr__(self):
         return f"<Class '{self.name}'>"

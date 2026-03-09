@@ -63,6 +63,12 @@ def initialize_builtin_classes(registry: Registry):
     bootstrapper.initialize()
     token = bootstrapper.token
     
+    # 0. 准备 UTS 元数据注册表 (隔离引擎实例)
+    from core.domain.builtin_schema import init_builtin_schema
+    metadata_registry = uts.create_default_registry()
+    init_builtin_schema(metadata_registry) # 初始化内置类型的 Schema
+    registry.register_metadata_registry(metadata_registry, token)
+
     # 1. 创建核心内置类 (注入到 registry)
     integer_class = registry.create_subclass("int")
     float_class = registry.create_subclass("float")
@@ -75,17 +81,21 @@ def initialize_builtin_classes(registry: Registry):
     callable_class = registry.create_subclass("callable")
     var_class = registry.create_subclass("var")
     
+    # 2. 绑定 UTS 描述符并注册到 Registry
+    registry.register_class("int", integer_class, token, descriptor=metadata_registry.resolve("int"))
+    registry.register_class("float", float_class, token, descriptor=metadata_registry.resolve("float"))
+    registry.register_class("str", string_class, token, descriptor=metadata_registry.resolve("str"))
+    registry.register_class("list", list_class, token, descriptor=metadata_registry.resolve("list"))
+    registry.register_class("dict", dict_class, token, descriptor=metadata_registry.resolve("dict"))
+    registry.register_class("None", none_class, token, descriptor=metadata_registry.resolve("void"))
+    registry.register_class("behavior", behavior_class, token, descriptor=metadata_registry.resolve("callable"))
+    registry.register_class("bool", bool_class, token, descriptor=metadata_registry.resolve("bool"))
+    registry.register_class("callable", callable_class, token, descriptor=metadata_registry.resolve("callable"))
+    registry.register_class("var", var_class, token, descriptor=metadata_registry.resolve("Any"))
+    
     # 特殊：IbModule 类
     module_class = registry.create_subclass("IbModule")
-    registry.register_class("IbModule", module_class, token)
-    
-    # 2. UTS 注册
-    uts.MetadataRegistry.register(integer_class)
-    uts.MetadataRegistry.register(float_class)
-    uts.MetadataRegistry.register(string_class)
-    uts.MetadataRegistry.register(bool_class)
-    uts.MetadataRegistry.register(none_class)
-    uts.MetadataRegistry.register(var_class)
+    registry.register_class("IbModule", module_class, token, descriptor=metadata_registry.resolve("module"))
     
     # 3. 注册 None 单例 (Per-registry)
     registry.register_none(IbNone(none_class), token)

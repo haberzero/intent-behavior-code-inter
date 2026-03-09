@@ -323,7 +323,7 @@ class Scheduler:
             
             # 3. Semantic Analysis
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
-            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger)
+            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry)
             
             # Inject predefined symbols
             from core.domain.symbols import Symbol, VariableSymbol, SymbolKind

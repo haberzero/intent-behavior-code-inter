@@ -105,4 +105,4 @@ class SpecBuilder:
 
     def build(self) -> ModuleMetadata:
         """构建并返回 ModuleMetadata"""
-        return ModuleMetadata(name=self.name, exports=self.exports)
+        return ModuleMetadata(name=self.name, members=self.exports)

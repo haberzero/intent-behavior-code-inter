@@ -44,11 +44,9 @@ class StaticType:
     
     def is_assignable_to(self, other: 'StaticType') -> bool:
         """检查当前类型是否可以赋值给目标类型"""
-        # [NEW] None (void) 允许赋值给任何非 void 变量 (或 Any)
         if self.name == "void" or self.name in ("Any", "var") or other.name in ("Any", "var"): 
             return True
         
-        # 优先委托给 UTS 描述符进行逻辑判定
         if self.descriptor and other.descriptor:
             return self.descriptor.is_assignable_to(other.descriptor)
             
@@ -60,7 +58,15 @@ class StaticType:
         """解析成员访问 (e.g. obj.member)"""
         if self.name in ("Any", "var"):
             return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY)
-        return None
+        
+        if not self.descriptor:
+            return None
+            
+        metadata = self.descriptor.resolve_member(name)
+        if not metadata:
+            return None
+            
+        return SymbolFactory.create_from_descriptor(name, metadata)
 
     def get_attribute_type(self, name: str) -> 'StaticType':
         """获取属性访问的结果类型"""
@@ -69,49 +75,44 @@ class StaticType:
 
     @property
     def is_callable(self) -> bool:
-        """是否支持调用行为 (e.g. func())"""
-        return self.name in ("Any", "var")
+        """是否支持调用行为"""
+        if self.name in ("Any", "var"):
+            return True
+        return self.descriptor.is_callable if self.descriptor else False
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
-        """解析调用行为 (e.g. func(a, b))"""
+        """解析调用行为"""
         if self.name in ("Any", "var"):
             return STATIC_ANY
-        return None
+            
+        if not self.descriptor:
+            return None
+            
+        # 将静态参数转换为描述符进行校验
+        arg_descriptors = [a.descriptor for a in args if a.descriptor]
+        if len(arg_descriptors) != len(args):
+            return STATIC_ANY # 降级处理
+            
+        ret_descriptor = self.descriptor.get_call_return_type(arg_descriptors)
+        if not ret_descriptor:
+            return None
+            
+        return StaticTypeFactory.create_from_descriptor(ret_descriptor)
 
     def get_operator_result(self, op: str, other: Optional['StaticType'] = None) -> Optional['StaticType']:
         """解析运算符行为 (委托给描述符)"""
-        # 基础类型运算逻辑协议化：由 symbols 决定最终类型，由描述符决定逻辑。
-        # 这里保留简单的内置快捷路径，复杂的逻辑未来由 UTS 描述符统一。
-        if self.name in ("Any", "var"):
-            return STATIC_ANY
-            
-        if other and other.name in ("Any", "var"):
+        if self.name in ("Any", "var") or (other and other.name in ("Any", "var")):
             return STATIC_ANY
 
-        n1 = self.name
-        if not other: # 一元运算
-            if op == '~' and n1 == "int": return STATIC_INT
-            if op == 'not': return STATIC_BOOL # 所有内置类型都支持 not (真值测试)
+        if not self.descriptor:
             return None
             
-        n2 = other.name
-        if n1 == "int" and n2 == "int":
-            if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'): return STATIC_INT
-            if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
-            
-        if (n1 in ("int", "float")) and (n2 in ("int", "float")):
-            if op in ('+', '-', '*', '/'): return STATIC_FLOAT
-            if op in ('>', '>=', '<', '<=', '==', '!='): return STATIC_BOOL
-            
-        if n1 == "str" and op == '+':
-            # [FIX] 允许 str + Any -> Any，解决 cast_to 返回 Any 导致的拼接报错
-            if not other or other.name in ("Any", "var"):
-                return STATIC_ANY
-            if other.name == "str":
-                return STATIC_STR
+        other_descriptor = other.descriptor if other else None
+        ret_descriptor = self.descriptor.get_operator_result(op, other_descriptor)
+        if not ret_descriptor:
             return None
             
-        return None
+        return StaticTypeFactory.create_from_descriptor(ret_descriptor)
 
     @property
     def is_iterable(self) -> bool:
@@ -141,6 +142,50 @@ class StaticType:
         """是否为模块"""
         return False
 
+class StaticTypeFactory:
+    """负责从描述符创建静态类型对象，解决循环引用"""
+    @staticmethod
+    def create_from_descriptor(descriptor: uts.TypeDescriptor) -> 'StaticType':
+        if not descriptor: return STATIC_ANY
+        
+        # 1. 如果描述符已经关联了静态类型，直接返回
+        if hasattr(descriptor, '_static_type') and descriptor._static_type:
+            return descriptor._static_type
+            
+        # 2. 根据描述符种类创建对应的静态类型
+        if isinstance(descriptor, uts.PrimitiveDescriptor):
+            st = BuiltinType(descriptor.name, descriptor=descriptor)
+        elif isinstance(descriptor, uts.ListMetadata):
+            element_type = StaticTypeFactory.create_from_descriptor(descriptor.element_type) if descriptor.element_type else STATIC_ANY
+            st = ListType(element_type, descriptor=descriptor)
+        elif isinstance(descriptor, uts.DictMetadata):
+            key_type = StaticTypeFactory.create_from_descriptor(descriptor.key_type) if descriptor.key_type else STATIC_ANY
+            val_type = StaticTypeFactory.create_from_descriptor(descriptor.value_type) if descriptor.value_type else STATIC_ANY
+            st = DictType(key_type, val_type, descriptor=descriptor)
+        elif isinstance(descriptor, uts.FunctionMetadata):
+            params = [StaticTypeFactory.create_from_descriptor(p) for p in descriptor.param_types]
+            ret = StaticTypeFactory.create_from_descriptor(descriptor.return_type) if descriptor.return_type else STATIC_VOID
+            st = FunctionType(params, ret, descriptor=descriptor)
+        elif isinstance(descriptor, uts.ClassMetadata):
+            st = ClassType(descriptor.name, descriptor=descriptor)
+        else:
+            st = StaticType(descriptor.name, descriptor=descriptor)
+            
+        # 缓存关联
+        descriptor._static_type = st
+        return st
+
+class SymbolFactory:
+    """负责将元数据转换为符号对象"""
+    @staticmethod
+    def create_from_descriptor(name: str, descriptor: uts.TypeDescriptor) -> 'Symbol':
+        type_info = StaticTypeFactory.create_from_descriptor(descriptor)
+        
+        if isinstance(descriptor, uts.FunctionMetadata):
+            return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, type_signature=type_info)
+        else:
+            return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=type_info)
+
 class BehaviorType(StaticType):
     """行为描述行类型：在语义上它可以被视为 str，也可以被视为 function (Lambda)"""
     def __init__(self):
@@ -162,86 +207,20 @@ class BehaviorType(StaticType):
 
 class BuiltinType(StaticType):
     """内置原子类型 (int, str, bool, float)"""
-    def resolve_member(self, name: str) -> Optional['Symbol']:
-        # [IES Enhancement] 为内置类型注入核心方法元数据，满足编译器语义检查
-        # 默认实现：回退到 StaticType 的基础解析
-        return super().resolve_member(name)
-
-    @property
-    def is_callable(self) -> bool:
-        # 内置类型（如 int, str）允许调用，表示类型转换/构造
-        return True
-
-    def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
-        # 内置类型调用返回其自身类型
-        return self
-
-class IntType(BuiltinType):
-    """整数类型"""
-    def __init__(self):
-        super().__init__("int", descriptor=uts.INT_DESCRIPTOR)
-    
-    def resolve_member(self, name: str) -> Optional['Symbol']:
-        if name == "to_bool":
-            return FunctionSymbol(name="to_bool", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_BOOL))
-        if name == "to_list":
-            return FunctionSymbol(name="to_list", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], ListType(STATIC_INT)))
-        if name == "cast_to":
-            return FunctionSymbol(name="cast_to", kind=SymbolKind.FUNCTION, type_signature=FunctionType([STATIC_ANY], STATIC_ANY))
-        return super().resolve_member(name)
-
-class FloatType(BuiltinType):
-    """浮点数类型"""
-    def __init__(self):
-        super().__init__("float", descriptor=uts.FLOAT_DESCRIPTOR)
-    
-    def resolve_member(self, name: str) -> Optional['Symbol']:
-        if name == "to_bool":
-            return FunctionSymbol(name="to_bool", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_BOOL))
-        if name == "cast_to":
-            return FunctionSymbol(name="cast_to", kind=SymbolKind.FUNCTION, type_signature=FunctionType([STATIC_ANY], STATIC_ANY))
-        return super().resolve_member(name)
-
-class StringType(BuiltinType):
-    """字符串类型"""
-    def __init__(self):
-        super().__init__("str", descriptor=uts.STR_DESCRIPTOR)
-    
-    def resolve_member(self, name: str) -> Optional['Symbol']:
-        if name == "cast_to":
-            # cast_to(target_type) -> Any
-            return FunctionSymbol(name="cast_to", kind=SymbolKind.FUNCTION, type_signature=FunctionType([STATIC_ANY], STATIC_ANY))
-        if name == "to_bool":
-            return FunctionSymbol(name="to_bool", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_BOOL))
-        if name == "len":
-            return FunctionSymbol(name="len", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_INT))
-        return super().resolve_member(name)
+    def __init__(self, name: str, descriptor: Optional[uts.TypeDescriptor] = None):
+        super().__init__(name, descriptor=descriptor)
 
 class ListType(BuiltinType):
     """内置列表类型，支持元素类型推导"""
-    def __init__(self, element_type: Optional[StaticType] = None):
-        super().__init__("list")
+    def __init__(self, element_type: Optional[StaticType] = None, descriptor: Optional[uts.TypeDescriptor] = None):
+        super().__init__("list", descriptor=descriptor)
         self._element_type = element_type or STATIC_ANY
     
-    def resolve_member(self, name: str) -> Optional['Symbol']:
-        if name == "append":
-            return FunctionSymbol(name="append", kind=SymbolKind.FUNCTION, type_signature=FunctionType([self._element_type], STATIC_VOID))
-        if name == "pop":
-            return FunctionSymbol(name="pop", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], self._element_type))
-        if name == "len":
-            return FunctionSymbol(name="len", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_INT))
-        if name == "sort":
-            return FunctionSymbol(name="sort", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_VOID))
-        if name == "clear":
-            return FunctionSymbol(name="clear", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_VOID))
-        return super().resolve_member(name)
-        
     @property
     def is_iterable(self) -> bool:
         return True
 
     def get_iterator_type(self) -> StaticType:
-        """实现迭代协议以获取元素类型"""
         return self._element_type
 
     @property
@@ -249,27 +228,17 @@ class ListType(BuiltinType):
         return True
 
     def get_subscript_type(self, key_type: StaticType) -> StaticType:
-        # 目前简化：列表下标访问返回元素类型
         return self._element_type
 
 class DictType(BuiltinType):
     """内置字典类型，支持键值类型推导"""
-    def __init__(self, key_type: Optional[StaticType] = None, value_type: Optional[StaticType] = None):
-        super().__init__("dict")
+    def __init__(self, key_type: Optional[StaticType] = None, value_type: Optional[StaticType] = None, descriptor: Optional[uts.TypeDescriptor] = None):
+        super().__init__("dict", descriptor=descriptor)
         self._key_type = key_type or STATIC_ANY
         self._value_type = value_type or STATIC_ANY
         
     @property
-    def key_type(self) -> StaticType:
-        return self._key_type
-        
-    @property
-    def value_type(self) -> StaticType:
-        return self._value_type
-
-    @property
     def is_iterable(self) -> bool:
-        # 字典迭代产生键
         return True
 
     def get_iterator_type(self) -> StaticType:
@@ -282,88 +251,60 @@ class DictType(BuiltinType):
     def get_subscript_type(self, key_type: StaticType) -> StaticType:
         return self._value_type
 
-    def resolve_member(self, name: str) -> Optional['Symbol']:
-        if name == "get":
-            return FunctionSymbol(name="get", kind=SymbolKind.FUNCTION, type_signature=FunctionType([self._key_type], self._value_type))
-        if name == "keys":
-            return FunctionSymbol(name="keys", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], ListType(self._key_type)))
-        if name == "values":
-            return FunctionSymbol(name="values", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], ListType(self._value_type)))
-        if name == "len":
-            return FunctionSymbol(name="len", kind=SymbolKind.FUNCTION, type_signature=FunctionType([], STATIC_INT))
-        return super().resolve_member(name)
-
-# --- 常量类型实例 ---
+# --- 常量类型实例 (作为原型) ---
 STATIC_ANY = BuiltinType("Any", descriptor=uts.ANY_DESCRIPTOR)
 STATIC_VOID = BuiltinType("void", descriptor=uts.VOID_DESCRIPTOR)
-STATIC_INT = IntType()
-STATIC_STR = StringType()
-STATIC_FLOAT = FloatType()
+STATIC_INT = BuiltinType("int", descriptor=uts.INT_DESCRIPTOR)
+STATIC_STR = BuiltinType("str", descriptor=uts.STR_DESCRIPTOR)
+STATIC_FLOAT = BuiltinType("float", descriptor=uts.FLOAT_DESCRIPTOR)
 STATIC_BOOL = BuiltinType("bool", descriptor=uts.BOOL_DESCRIPTOR)
-STATIC_LIST = ListType(STATIC_ANY)
-STATIC_DICT = DictType(STATIC_ANY, STATIC_ANY)
+STATIC_LIST = ListType(STATIC_ANY, descriptor=uts.LIST_DESCRIPTOR)
+STATIC_DICT = DictType(STATIC_ANY, STATIC_ANY, descriptor=uts.DICT_DESCRIPTOR)
 STATIC_BEHAVIOR = BehaviorType()
 
 class ClassType(StaticType):
     """用户定义的类类型"""
-    def __init__(self, name: str, parent: Optional['ClassType'] = None, scope: Optional['SymbolTable'] = None):
-        super().__init__(name)
+    def __init__(self, name: str, parent: Optional['ClassType'] = None, descriptor: Optional[uts.ClassMetadata] = None):
+        super().__init__(name, descriptor=descriptor)
         self.parent = parent
-        self.scope = scope # 类的成员作用域
 
     @property
     def is_class(self) -> bool:
         return True
 
-    @property
-    def is_callable(self) -> bool:
-        return True
-
-    def is_assignable_to(self, other: 'StaticType') -> bool:
-        if super().is_assignable_to(other):
-            return True
-        if isinstance(other, ClassType):
-            # 检查继承链
-            curr = self.parent
-            while curr:
-                if curr.name == other.name:
-                    return True
-                curr = curr.parent
-        return False
-
     def resolve_member(self, name: str) -> Optional['Symbol']:
-        sym = None
-        if self.scope:
-            sym = self.scope.resolve(name)
+        # 1. 优先通过描述符解析 (符合单源真理)
+        if self.descriptor:
+            metadata = self.descriptor.resolve_member(name)
+            if metadata:
+                sym = SymbolFactory.create_from_descriptor(name, metadata)
+                # 绑定方法逻辑
+                if isinstance(metadata, uts.FunctionMetadata):
+                    return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=BoundMethodType(self, StaticTypeFactory.create_from_descriptor(metadata)))
+                return sym
         
-        if not sym and self.parent:
-            sym = self.parent.resolve_member(name)
+        # 2. 回退到父类解析
+        if self.parent:
+            return self.parent.resolve_member(name)
             
-        # [NEW] 绑定方法逻辑：如果成员是函数/方法，返回其绑定后的版本
-        if sym and sym.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION):
-            sig = sym.type_info
-            if isinstance(sig, FunctionType):
-                # 返回包装了 BoundMethodType 的符号
-                return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=BoundMethodType(self, sig))
-                
-        return sym
+        return None
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
         # 类调用返回其实例类型（即自身）
-        # [NEW] 增加构造函数参数校验
+        # 增加构造函数参数校验
         init_sym = self.resolve_member("__init__")
-        if init_sym and init_sym.kind == SymbolKind.FUNCTION:
+        if init_sym:
             init_type = init_sym.type_info
-            if isinstance(init_type, FunctionType):
-                # 校验时需加上隐含的 self 参数
-                if not init_type.get_call_return([self] + args):
+            if isinstance(init_type, (FunctionType, BoundMethodType)):
+                # 校验参数 (BoundMethodType 已经处理了 self)
+                if not init_type.get_call_return(args):
                     return None
         return self
 
 class FunctionType(StaticType):
     """函数或方法的类型签名 (语言层表现为 callable)"""
-    def __init__(self, param_types: List[StaticType], return_type: StaticType, name: str = "callable"):
-        super().__init__("callable")
+    def __init__(self, param_types: List[StaticType], return_type: StaticType, name: str = "callable", descriptor: Optional[uts.FunctionMetadata] = None):
+        super().__init__(name, descriptor=descriptor)
         self.param_types = param_types
         self.return_type = return_type
 
@@ -372,6 +313,14 @@ class FunctionType(StaticType):
         return True
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
+        if self.descriptor:
+            arg_descriptors = [a.descriptor for a in args if a.descriptor]
+            if len(arg_descriptors) == len(args):
+                ret_descriptor = self.descriptor.get_call_return_type(arg_descriptors)
+                if ret_descriptor:
+                    return StaticTypeFactory.create_from_descriptor(ret_descriptor)
+        
+        # 回退逻辑
         if len(args) != len(self.param_types):
             return None
         for i, (expected, actual) in enumerate(zip(self.param_types, args)):

@@ -22,12 +22,12 @@ class SemanticAnalyzer:
     语义分析器：执行静态分析和类型检查。
     贯彻“一切皆对象”思想：Analyzer 仅作为调度者，核心逻辑由 Type 对象自决议。
     """
-    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
+    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None):
         self.symbol_table = SymbolTable() # 全局静态符号表
-        # [AUDIT] 诊断抽象：使用传入的 reporter 或创建适配器
         self.issue_tracker = issue_tracker or IssueTrackerAdapter(IssueTracker())
         self.host_interface = host_interface
         self.debugger = debugger or core_debugger
+        self.registry = registry # [NEW] 注册表上下文
         self.current_return_type: Optional[StaticType] = None
         self.current_class: Optional[ClassType] = None
         self.in_behavior_expr = False
@@ -39,7 +39,7 @@ class SemanticAnalyzer:
 
     def _init_builtins(self):
         """注册内置静态符号"""
-        prelude = Prelude(self.host_interface)
+        prelude = Prelude(self.host_interface, registry=self.registry)
         
         # 1. 注册内置函数
         for name, func_type in prelude.get_builtins().items():

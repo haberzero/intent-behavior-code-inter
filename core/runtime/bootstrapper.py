@@ -12,7 +12,7 @@ class Bootstrapper:
     
     def __init__(self, registry: Registry):
         self.registry = registry
-        self._token = registry.get_privileged_token() # 获取特权令牌
+        self._token = registry.get_kernel_token() # 获取内核特权令牌
         self._class_registry: Dict[str, IbClass] = {}
         self.TypeClass: Optional[IbClass] = None
         self.ObjectClass: Optional[IbClass] = None
