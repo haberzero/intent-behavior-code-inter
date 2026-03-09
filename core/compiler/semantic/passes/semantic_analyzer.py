@@ -294,10 +294,10 @@ class SemanticAnalyzer:
         if node.value:
             ret_type = self.visit(node.value)
             if self.current_return_type and not ret_type.is_assignable_to(self.current_return_type):
-                self.error(f"Invalid return type: expected '{self.current_return_type.name}', got '{ret_type.name}'", node, code="SEM_002")
+                self.error(f"Invalid return type: expected '{self.current_return_type.name}', got '{ret_type.name}'", node, code="SEM_003")
         else:
             if self.current_return_type and self.current_return_type != STATIC_VOID:
-                self.error(f"Invalid return type: expected '{self.current_return_type.name}', got 'void'", node, code="SEM_002")
+                self.error(f"Invalid return type: expected '{self.current_return_type.name}', got 'void'", node, code="SEM_003")
 
     def visit_IbAssign(self, node: ast.IbAssign):
         # 1. 预先计算右值类型，避免在循环中重复 visit
@@ -325,7 +325,7 @@ class SemanticAnalyzer:
                 if declared_type:
                     # 显式类型标注：检查是否冲突
                     if var_name in self.symbol_table.global_refs:
-                        self.error(f"Cannot redeclare global variable '{var_name}' with type annotation", node, code="SEM_003")
+                        self.error(f"Cannot redeclare global variable '{var_name}' with type annotation", node, code="SEM_002")
                     
                     sym = self.symbol_table.symbols.get(var_name)
                     if not sym or sym.type_info.name in ("Any", "var"):
@@ -334,7 +334,7 @@ class SemanticAnalyzer:
                         try:
                             self.symbol_table.define(sym, allow_overwrite=True)
                         except ValueError as e:
-                            self.error(str(e), node, code="SEM_003")
+                            self.error(str(e), node, code="SEM_002")
                 
                 if not sym:
                     # 无标注赋值或已存在符号
@@ -356,12 +356,12 @@ class SemanticAnalyzer:
                         self.node_is_deferred[node.value] = True
                     
                     if not val_type.is_assignable_to(sym.type_info):
-                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node, code="SEM_002")
+                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node, code="SEM_003")
             else:
                 # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
                 if target_type and not val_type.is_assignable_to(target_type):
-                    self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_002")
+                    self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003")
 
     def visit_IbIf(self, node: ast.IbIf):
         self.visit(node.test)
@@ -558,7 +558,7 @@ class SemanticAnalyzer:
             right_type = self.visit(comparator)
             res = left_type.get_operator_result(op, right_type)
             if not res:
-                self.error(f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_002")
+                self.error(f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_003")
             # 链式比较中，前一轮的右操作数成为下一轮的左操作数
             left_type = right_type
         
@@ -601,7 +601,7 @@ class SemanticAnalyzer:
         
         # 贯彻“一切皆对象”协议：询问类型如何处理下标
         if not value_type.is_subscriptable():
-            self.error(f"Type '{value_type.name}' is not subscriptable", node, code="SEM_002")
+            self.error(f"Type '{value_type.name}' is not subscriptable", node, code="SEM_003")
             return STATIC_ANY
             
         res = value_type.get_subscript_type(key_type)
@@ -614,7 +614,7 @@ class SemanticAnalyzer:
         # 贯彻“一切皆对象”：调用左操作数的自决议方法
         res = left_type.get_operator_result(node.op, right_type)
         if not res:
-            self.error(f"Binary operator '{node.op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_002")
+            self.error(f"Binary operator '{node.op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_003")
             return STATIC_ANY
         return res
 
@@ -624,7 +624,7 @@ class SemanticAnalyzer:
         # 贯彻“一切皆对象”：调用操作数的自决议方法 (other=None 表示一元运算)
         res = operand_type.get_operator_result(node.op, None)
         if not res:
-            self.error(f"Unary operator '{node.op}' not supported for type '{operand_type.name}'", node, code="SEM_002")
+            self.error(f"Unary operator '{node.op}' not supported for type '{operand_type.name}'", node, code="SEM_003")
             return STATIC_ANY
         return res
 
@@ -690,7 +690,7 @@ class SemanticAnalyzer:
         
         # 1. 检查是否可调用 (使用接口属性)
         if not func_type.is_callable:
-            self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_002")
+            self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             return STATIC_ANY
             
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
@@ -707,9 +707,9 @@ class SemanticAnalyzer:
                 else:
                     for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
                         if not actual.is_assignable_to(expected):
-                            self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_002")
+                            self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_003")
             else:
-                self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_002")
+                self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
             return STATIC_ANY
             
         return res

@@ -3,6 +3,13 @@ from typing import Any, Protocol, Optional, List, Dict, runtime_checkable
 # --- Diagnostics ---
 
 @runtime_checkable
+class ISourceProvider(Protocol):
+    """
+    源码提供者接口。支持“无盘化”诊断，从内存缓冲区获取代码片段。
+    """
+    def get_line(self, file_path: str, lineno: int) -> Optional[str]: ...
+
+@runtime_checkable
 class IssueTracker(Protocol):
     """诊断管理器接口"""
     def report(self, severity: Any, code: str, message: str, 
@@ -74,6 +81,7 @@ class IIntentManager(Protocol):
     def clear_global_intents(self) -> None: ...
     def remove_global_intent(self, intent: str) -> None: ...
     def get_global_intents(self) -> List[str]: ...
+    def get_active_intents(self) -> List[Any]: ...
 
 class ExtensionCapabilities:
     """扩展模块持有的能力集合容器"""

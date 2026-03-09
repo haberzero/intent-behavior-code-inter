@@ -1,13 +1,15 @@
 from typing import List, Optional, Union, Any
 from core.domain.issue import Diagnostic, Severity, CompilerError, FatalCompilerError, Locatable
 from core.domain.issue_atomic import Location
+from core.foundation.interfaces import ISourceProvider
 
 class IssueTracker:
     """
     Centralized manager for collecting and reporting compiler diagnostics.
     """
-    def __init__(self, file_path: str = "<unknown>"):
+    def __init__(self, file_path: str = "<unknown>", source_provider: Optional[ISourceProvider] = None):
         self.file_path = file_path
+        self.source_provider = source_provider
         self._diagnostics: List[Diagnostic] = []
         self._error_count = 0
 
@@ -78,10 +80,11 @@ class IssueTracker:
         if loc is None:
             return None
         
+        resolved_loc = None
         if isinstance(loc, Location):
             if not loc.file_path or loc.file_path == "<unknown>":
                 # Create copy with our file path
-                return Location(
+                resolved_loc = Location(
                     file_path=self.file_path,
                     line=loc.line,
                     column=loc.column,
@@ -90,11 +93,12 @@ class IssueTracker:
                     end_column=loc.end_column,
                     context_line=loc.context_line
                 )
-            return loc
+            else:
+                resolved_loc = loc
             
-        # Use standard Locatable protocol
-        if isinstance(loc, Locatable):
-            return Location(
+        elif isinstance(loc, Locatable):
+            # Use standard Locatable protocol
+            resolved_loc = Location(
                 file_path=self.file_path,
                 line=loc.line,
                 column=loc.column,
@@ -102,5 +106,9 @@ class IssueTracker:
                 end_line=loc.end_line,
                 end_column=loc.end_column
             )
+        
+        # [Active Defense] 自动注入源码片段实现“无盘化”诊断
+        if resolved_loc and not resolved_loc.context_line and self.source_provider:
+            resolved_loc.context_line = self.source_provider.get_line(resolved_loc.file_path, resolved_loc.line)
             
-        return None
+        return resolved_loc

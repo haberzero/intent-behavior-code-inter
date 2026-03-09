@@ -882,7 +882,7 @@ class Interpreter(IStackInspector):
         """动态创建类对象"""
         name = node_data.get("name")
         parent_name = node_data.get("parent") or "Object"
-        new_class = Registry.create_subclass(name, parent_name)
+        new_class = self.registry.create_subclass(name, parent_name)
         
         # 1. 注册方法与字段
         body = node_data.get("body", [])

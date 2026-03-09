@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Any
-from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone
+from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.foundation.registry import Registry
 
 class Bootstrapper:
@@ -12,11 +12,16 @@ class Bootstrapper:
     
     def __init__(self, registry: Registry):
         self.registry = registry
+        self._token = registry.get_privileged_token() # 获取特权令牌
         self._class_registry: Dict[str, IbClass] = {}
         self.TypeClass: Optional[IbClass] = None
         self.ObjectClass: Optional[IbClass] = None
         self.CallableClass: Optional[IbClass] = None
         self.ModuleClass: Optional[IbClass] = None
+
+    @property
+    def token(self) -> Any:
+        return self._token
 
     def initialize(self):
         """
@@ -24,12 +29,9 @@ class Bootstrapper:
         """
         if self.TypeClass: return # 避免重复初始化
 
-        # 延迟导入以打破核心引导循环
-        from .objects.kernel import IbClass, IbNativeFunction, IbNone
-
         # 注册 Registry 辅助函数 (将实例方法绑定到 registry 实例)
-        self.registry.register_box_func(self.box)
-        self.registry.register_create_subclass_func(self.create_subclass)
+        self.registry.register_box_func(self.box, self._token)
+        self.registry.register_create_subclass_func(self.create_subclass, self._token)
 
         # Step 1: Create Type Shells (分配内存，此时 ib_class 暂未绑定)
         self.TypeClass = IbClass("Type", registry=self.registry)
@@ -70,7 +72,6 @@ class Bootstrapper:
             # 2. 其次查方法并返回绑定方法 (Bound Method)
             method = self.ib_class.lookup_method(name)
             if method:
-                from .objects.kernel import IbBoundMethod
                 return IbBoundMethod(self, method)
             return self.ib_class.registry.get_none()
 
@@ -102,7 +103,7 @@ class Bootstrapper:
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass
         self._class_registry[ib_class.name] = ib_class
-        self.registry.register_class(ib_class.name, ib_class)
+        self.registry.register_class(ib_class.name, ib_class, self._token)
 
     def get_class(self, name: str) -> Optional[IbClass]:
         return self._class_registry.get(name)

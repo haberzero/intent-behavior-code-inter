@@ -28,8 +28,8 @@ class Scheduler:
 
     def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
         self.root_dir = os.path.realpath(root_dir)
-        self.issue_tracker = issue_tracker or IssueTracker()
         self.source_manager = SourceManager()
+        self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
@@ -213,6 +213,9 @@ class Scheduler:
                 self.issue_tracker.error(f"File not found: {current_path}", code=DEP_FILE_NOT_FOUND)
                 continue
             
+            # Register source before lexing to enable context in errors
+            self.source_manager.add_source(current_path, content)
+            
             # Lexing
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Lexing for dependencies: {current_path}")
             lexer = Lexer(content, self.issue_tracker, debugger=self.debugger)
@@ -293,7 +296,7 @@ class Scheduler:
         self.source_manager.add_source(file_path, source)
         
         # Create per-file tracker
-        file_tracker = IssueTracker(file_path)
+        file_tracker = IssueTracker(file_path, source_provider=self.source_manager)
         
         try:
             # 1. Reuse Tokens

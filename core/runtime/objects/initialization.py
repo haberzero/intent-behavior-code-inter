@@ -3,6 +3,7 @@ from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from .builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 from core.foundation.registry import Registry
 from core.domain.types import descriptors as uts
+from ..bootstrapper import Bootstrapper
 
 def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = True):
     """统一注册原生方法的辅助函数"""
@@ -37,9 +38,12 @@ def initialize_builtin_classes(registry: Registry):
     初始化 IBCI 核心内置类及其 UTS 契约。
     支持多引擎实例隔离。
     """
-    from ..bootstrapper import Bootstrapper
+    if registry.is_initialized:
+        return # 已初始化
+        
     bootstrapper = Bootstrapper(registry)
     bootstrapper.initialize()
+    token = bootstrapper.token
     
     # 1. 创建核心内置类 (注入到 registry)
     integer_class = registry.create_subclass("int")
@@ -55,7 +59,7 @@ def initialize_builtin_classes(registry: Registry):
     
     # 特殊：IbModule 类
     module_class = registry.create_subclass("IbModule")
-    registry.register_class("IbModule", module_class)
+    registry.register_class("IbModule", module_class, token)
     
     # 2. UTS 注册
     uts.MetadataRegistry.register(integer_class)
@@ -66,7 +70,7 @@ def initialize_builtin_classes(registry: Registry):
     uts.MetadataRegistry.register(var_class)
     
     # 3. 注册 None 单例 (Per-registry)
-    registry.register_none(IbNone(none_class))
+    registry.register_none(IbNone(none_class), token)
     
     # 4. 注册原生方法代理 (Integer)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
@@ -123,10 +127,10 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(dict_class, '__setitem__', lambda self, key, val: self.fields.update({key: val}), unbox=False)
 
     # 5. 注册装箱逻辑
-    registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class))
-    registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0, integer_class))
-    registry.register_boxer(float, lambda v, memo=None: IbFloat(v, float_class))
-    registry.register_boxer(str, lambda v, memo=None: IbString(v, string_class))
+    registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class), token)
+    registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0, integer_class), token)
+    registry.register_boxer(float, lambda v, memo=None: IbFloat(v, float_class), token)
+    registry.register_boxer(str, lambda v, memo=None: IbString(v, string_class), token)
     
     def _box_list(val, memo):
         res = IbList([], list_class)
@@ -140,5 +144,8 @@ def initialize_builtin_classes(registry: Registry):
         res.fields = {k: registry.box(v, memo) for k, v in val.items()}
         return res
         
-    registry.register_boxer(list, _box_list)
-    registry.register_boxer(dict, _box_dict)
+    registry.register_boxer(list, _box_list, token)
+    registry.register_boxer(dict, _box_dict, token)
+    
+    # 6. 封印注册表结构 (Active Defense)
+    registry.seal_structure(token)

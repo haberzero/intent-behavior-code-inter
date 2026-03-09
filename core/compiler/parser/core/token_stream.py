@@ -41,18 +41,18 @@ class TokenStream:
             self.current += 1
         return self.previous()
 
-    def consume(self, type: TokenType, message: str) -> Token:
+    def consume(self, type: TokenType, message: str, code: str = "PAR_001") -> Token:
         if self.check(type):
             return self.advance()
-        raise self.error(self.peek(), message)
+        raise self.error(self.peek(), message, code=code)
 
-    def consume_end_of_statement(self, message: str):
+    def consume_end_of_statement(self, message: str, code: str = "PAR_001"):
         if self.check(TokenType.NEWLINE):
             self.advance()
         elif self.is_at_end():
             return
         else:
-            raise self.error(self.peek(), message)
+            raise self.error(self.peek(), message, code=code)
 
     def match(self, *types: TokenType) -> bool:
         for type in types:

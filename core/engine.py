@@ -8,6 +8,8 @@ from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.foundation.host_interface import HostInterface
+from core.runtime.objects.initialization import initialize_builtin_classes
+from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.domain.types import ModuleMetadata
 from core.domain.blueprint import CompilationArtifact
 from core.domain.issue import CompilerError
@@ -19,12 +21,10 @@ class IBCIEngine:
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
     def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
-        from core.runtime.objects.initialization import initialize_builtin_classes
         self.registry = Registry()
         initialize_builtin_classes(self.registry)
         
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
-        from core.compiler.diagnostics.issue_tracker import IssueTracker
         self.issue_tracker = IssueTracker()
         self.debugger = CoreDebugger()
         
