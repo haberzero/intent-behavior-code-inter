@@ -16,6 +16,7 @@ class FlatSerializer:
         self.symbol_pool: Dict[str, Any] = {}
         self.scope_pool: Dict[str, Any] = {}
         self.type_pool: Dict[str, Any] = {}
+        self.external_assets: Dict[str, str] = {} # [IES 2.2] 存储外部文本资产: uid -> content
         self.type_map: Dict[int, str] = {} # 映射内存 ID 到稳定 UID
 
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
@@ -32,7 +33,8 @@ class FlatSerializer:
                 "nodes": self.node_pool,
                 "symbols": self.symbol_pool,
                 "scopes": self.scope_pool,
-                "types": self.type_pool
+                "types": self.type_pool,
+                "assets": self.external_assets # [IES 2.2]
             }
         }
 
@@ -77,7 +79,8 @@ class FlatSerializer:
                 "nodes": self.node_pool,
                 "symbols": self.symbol_pool,
                 "scopes": self.scope_pool,
-                "types": self.type_pool
+                "types": self.type_pool,
+                "assets": self.external_assets # [IES 2.2]
             }
         }
 
@@ -162,6 +165,18 @@ class FlatSerializer:
         self.scope_pool[uid] = scope_data
         return uid
 
+    def _process_text_asset(self, text: str) -> Any:
+        """[IES 2.2 Security Update] 文本资产化处理：大文本或特殊文本外置"""
+        if not isinstance(text, str):
+            return text
+            
+        # 安全阈值：超过 128 字符，或包含可能引起 JSON 冲突的字符 (目前只要是 str 且较长就外置)
+        if len(text) > 128 or '\n' in text or '\"' in text:
+            uid = f"asset_{uuid.uuid4().hex[:16]}"
+            self.external_assets[uid] = text
+            return {"_type": "ext_ref", "uid": uid}
+        return text
+
     def _process_value(self, value: Any) -> Any:
         if isinstance(value, ast.IbASTNode):
             return self._collect_node(value)
@@ -171,4 +186,8 @@ class FlatSerializer:
             return {k: self._process_value(v) for k, v in value.items()}
         elif isinstance(value, Enum):
             return value.name
+        elif isinstance(value, str):
+            return self._process_text_asset(value)
+        elif hasattr(value, "__dict__"): # [IES 2.2] 支持 SimpleNamespace 或其他自定义对象
+            return {k: self._process_value(v) for k, v in vars(value).items()}
         return value

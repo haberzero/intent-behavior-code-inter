@@ -25,7 +25,8 @@ class RuntimeSerializer(FlatSerializer):
         pools = {
             "instances": self.instance_pool,
             "runtime_scopes": self.runtime_scope_pool,
-            "types": self.type_pool # 复用基类的类型池
+            "types": self.type_pool, # 复用基类的类型池
+            "assets": self.external_assets # [IES 2.2]
         }
         
         # [IES 2.1] 如果需要，包含静态池以实现全量快照
@@ -34,6 +35,9 @@ class RuntimeSerializer(FlatSerializer):
             pools["nodes"] = itp.node_pool
             pools["symbols"] = itp.symbol_pool
             pools["scopes"] = itp.scope_pool
+            # [IES 2.2] 合并现有的资产池，确保编译器产生的资产也被包含在内
+            if hasattr(itp, 'asset_pool'):
+                self.external_assets.update(itp.asset_pool)
             
         # 2. 序列意图栈和全局设置
         return {
@@ -127,7 +131,7 @@ class RuntimeSerializer(FlatSerializer):
                 
         elif isinstance(obj, (IbInteger, IbFloat, IbString)):
             data["_type"] = "primitive"
-            data["value"] = obj.to_native()
+            data["value"] = self._process_value(obj.to_native())
             
         elif isinstance(obj, IbList):
             data["_type"] = "list"
@@ -169,6 +173,7 @@ class RuntimeDeserializer:
         self.registry = registry
         self.instance_cache: Dict[str, IbObject] = {}
         self.scope_cache: Dict[str, ScopeImpl] = {}
+        self.asset_pool: Dict[str, str] = {} # [IES 2.2]
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContextImpl:
         """从字典数据重建运行时上下文 (已修复方法覆盖 BUG)"""
@@ -180,6 +185,7 @@ class RuntimeDeserializer:
         self.type_pool = pools.get("types", {})
         self.instance_pool = pools.get("instances", {})
         self.runtime_scope_pool = pools.get("runtime_scopes", {})
+        self.asset_pool = pools.get("assets", {}) # [IES 2.2]
 
         # 2. 从当前/根作用域开始重建作用域链
         root_scope_uid = data["root_scope_uid"]
@@ -246,6 +252,15 @@ class RuntimeDeserializer:
         # 如果是 UID 引用，则从池中重建对象
         if isinstance(val, str) and val.startswith("inst_"):
             return self._get_instance(val)
+            
+        # [IES 2.2 Security Update] 处理外部资产引用
+        if isinstance(val, dict) and val.get("_type") == "ext_ref":
+            uid = val.get("uid")
+            if uid in self.asset_pool:
+                return self.asset_pool[uid]
+            # 如果没在 pool 里（可能是 HostService 外置了文件），则返回占位，稍后由 HostService 注入内容
+            return f"__EXT_ASSET_MISSING_{uid}__"
+            
         return val
 
     def _get_instance(self, uid: str) -> IbObject:
@@ -264,7 +279,7 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
 
         elif _type == "primitive":
-            obj = self.registry.box(data["value"])
+            obj = self.registry.box(self._deserialize_value(data["value"]))
             self.instance_cache[uid] = obj
             
         elif _type == "list":

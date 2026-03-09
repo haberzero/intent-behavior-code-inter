@@ -173,6 +173,7 @@ class Interpreter(IStackInspector):
         self.symbol_pool: Dict[str, Mapping[str, Any]] = pools.get("symbols", {})
         self.scope_pool: Dict[str, Mapping[str, Any]] = pools.get("scopes", {})
         self.type_pool: Dict[str, Mapping[str, Any]] = pools.get("types", {})
+        self.asset_pool: Dict[str, str] = pools.get("assets", {}) # [IES 2.2]
         
         # 2. 初始化基础组件
         runtime_context = RuntimeContextImpl(registry=self.registry)
@@ -442,6 +443,17 @@ class Interpreter(IStackInspector):
         err.location = loc
         return err
 
+    def _resolve_value(self, val: Any) -> Any:
+        """[IES 2.2 Security Update] 处理外部资产引用的解析"""
+        # 支持 dict 和 ReadOnlyNodePool (Mapping)
+        if hasattr(val, "get") and val.get("_type") == "ext_ref":
+            uid = val.get("uid")
+            if uid in self.asset_pool:
+                return self.asset_pool[uid]
+            # 如果资产池中没有，可能是编译器外置但还没注入
+            return f"__EXT_ASSET_MISSING_{uid}__"
+        return val
+
     def visit(self, node_uid: Union[str, Any]) -> IbObject:
         """核心 Pool-Walking 分发方法"""
         if node_uid is None:
@@ -453,14 +465,14 @@ class Interpreter(IStackInspector):
                 node_uid = node_uid.uid
             else:
                 # 基础类型直接装箱
-                if isinstance(node_uid, (int, float, bool)):
-                    return self.registry.box(node_uid)
+                if isinstance(node_uid, (int, float, bool, dict)):
+                    return self.registry.box(self._resolve_value(node_uid))
                 return self.registry.get_none()
 
         # [DEBUG] 检查 node_uid 是否在 pool 中
         if node_uid not in self.node_pool:
             # 如果不在 pool 中，可能是字符串字面量
-            return self.registry.box(node_uid)
+            return self.registry.box(self._resolve_value(node_uid))
 
         node_data = self.get_node_data(node_uid)
         if not isinstance(node_data, Mapping):
@@ -468,8 +480,8 @@ class Interpreter(IStackInspector):
              raise self._report_error(f"Pool corruption: node_pool[{node_uid}] is {type(node_data)}: {node_data}", node_uid)
         if not node_data:
             # 可能是基础类型或已解箱对象
-            if isinstance(node_uid, (int, float, str, bool)):
-                return self.registry.box(node_uid)
+            if isinstance(node_uid, (int, float, str, bool, dict)):
+                return self.registry.box(self._resolve_value(node_uid))
             return self.registry.get_none()
 
         self.instruction_count += 1
@@ -556,7 +568,7 @@ class Interpreter(IStackInspector):
 
     def visit_IbConstant(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """UTS: 统一常量装箱"""
-        return self.registry.box(node_data.get("value"))
+        return self.registry.box(self._resolve_value(node_data.get("value")))
 
     def visit_IbBinOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """二元运算实现"""

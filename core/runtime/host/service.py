@@ -31,7 +31,22 @@ class HostService(IHostService):
         data = serializer.serialize_context(self.context.runtime_context)
         
         abs_path = os.path.abspath(path)
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        base_dir = os.path.dirname(abs_path)
+        os.makedirs(base_dir, exist_ok=True)
+        
+        # [IES 2.2 Security Update] 文本资产外部化持久化
+        assets = data["pools"].get("assets", {})
+        if assets:
+            asset_dir = abs_path + ".assets"
+            os.makedirs(asset_dir, exist_ok=True)
+            for uid, content in assets.items():
+                asset_path = os.path.join(asset_dir, f"{uid}.txt")
+                with open(asset_path, "w", encoding="utf-8") as af:
+                    af.write(content)
+            # 安全性提升：JSON 中仅保留引用，不保留大文本原始值以规避转义冲突
+            # 我们在 JSON 中保留空的 assets 字典，或者清空它，因为内容已入文件
+            data["pools"]["assets"] = {uid: f"__EXTERNAL_FILE_REF__" for uid in assets}
+
         with open(abs_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -44,6 +59,16 @@ class HostService(IHostService):
         with open(abs_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             
+        # [IES 2.2 Security Update] 恢复外部文本资产
+        asset_dir = abs_path + ".assets"
+        if os.path.exists(asset_dir):
+            assets = data["pools"].get("assets", {})
+            for uid in assets:
+                asset_path = os.path.join(asset_dir, f"{uid}.txt")
+                if os.path.exists(asset_path):
+                    with open(asset_path, "r", encoding="utf-8") as af:
+                        assets[uid] = af.read()
+                        
         deserializer = RuntimeDeserializer(self.context.registry)
         # [IES 2.0] 使用特权恢复模式重建上下文
         new_ctx = deserializer.deserialize_context(data)

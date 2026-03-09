@@ -155,19 +155,36 @@ class LLMExecutorImpl:
         segments = intent_data.get("segments")
         if segments:
             return self._evaluate_segments(segments, context).strip()
-        return intent_data.get("content", "").strip()
+        
+        # [IES 2.2 Security Update] 解析外部资产
+        content = intent_data.get("content", "")
+        if interpreter and hasattr(interpreter, "_resolve_value"):
+            content = interpreter._resolve_value(content)
+        return str(content).strip()
 
     def _resolve_intent_content_obj(self, intent: Any, context: RuntimeContext) -> str:
         """从 IntentInfo 对象或字典解析"""
+        interpreter = self.service_context.interpreter
+        
         if isinstance(intent, Mapping):
             segments = intent.get('segments')
             if segments:
                 return self._evaluate_segments(segments, context).strip()
-            return intent.get('content', '').strip()
+            
+            # [IES 2.2 Security Update]
+            content = intent.get('content', '')
+            if interpreter and hasattr(interpreter, "_resolve_value"):
+                content = interpreter._resolve_value(content)
+            return str(content).strip()
             
         if hasattr(intent, 'segments') and intent.segments:
             return self._evaluate_segments(intent.segments, context).strip()
-        return intent.content.strip()
+        
+        # [IES 2.2 Security Update]
+        content = intent.content
+        if interpreter and hasattr(interpreter, "_resolve_value"):
+            content = interpreter._resolve_value(content)
+        return str(content).strip()
 
     def _unique_merge(self, *lists: List[str]) -> List[str]:
         result = []
@@ -187,6 +204,12 @@ class LLMExecutorImpl:
         from core.runtime.objects.kernel import IbObject
         content_parts = []
         for segment in segments:
+            # [IES 2.2 Security Update] 处理外部资产引用
+            if isinstance(segment, dict) and segment.get("_type") == "ext_ref":
+                interpreter = self.service_context.interpreter
+                if interpreter and hasattr(interpreter, "_resolve_value"):
+                    segment = interpreter._resolve_value(segment)
+
             if isinstance(segment, str):
                 if segment.startswith("node_"):
                     # 这是一个节点 UID
