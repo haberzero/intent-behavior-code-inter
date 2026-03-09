@@ -53,12 +53,15 @@ class IBCIEngine(IInterpreterFactory):
         self.interpreter: Optional[Interpreter] = None
 
     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any) -> Interpreter:
-        """[IInterpreterFactory] 物理实例化解释器，实现真正物理隔离"""
+        """[IInterpreterFactory] 实现工厂方法产生子解释器"""
+        # [IES 2.0] 彻底透传副作用回调
         sub_interpreter = Interpreter(
             issue_tracker=self.issue_tracker,
             artifact=artifact, 
             registry=registry,
             host_interface=host_interface,
+            output_callback=self.interpreter.output_callback if self.interpreter else None,
+            input_callback=getattr(self.interpreter, 'input_callback', None) if self.interpreter else None,
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
             root_dir=root_dir,

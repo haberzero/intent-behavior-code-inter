@@ -33,15 +33,42 @@ class TestBuiltins(BaseInterpreterTest):
         self.assert_outputs(["1", "2", "3"])
 
     def test_string_ops(self):
-        """测试字符串操作"""
+        """测试字符串操作及内联优化"""
         code = """
         str s = "hello"
         print(s + " world")
         print(s + 123.cast_to(str))
         print("123".cast_to(int))
+        
+        # 边界：空字符串拼接
+        str empty = ""
+        print(empty + "append")
+        
+        # 边界：长度计算 (内联优化)
+        print("abc".len())
+        print("".len())
         """
         self.run_code(code)
-        self.assert_outputs(["hello world", "hello123", "123"])
+        self.assert_outputs(["hello world", "hello123", "123", "append", "3", "0"])
+
+    def test_type_cast_edge_cases(self):
+        """测试类型强转的边界情况"""
+        code = """
+        # int -> float
+        int x = 42
+        float f = x.cast_to(float)
+        print(f)
+        
+        # str -> bool
+        print("true".cast_to(bool))
+        print("false".cast_to(bool))
+        print("".cast_to(bool))
+        
+        # 链式转换
+        print(100.cast_to(str).cast_to(int))
+        """
+        self.run_code(code)
+        self.assert_outputs(["42.0", "1", "0", "0", "100"])
 
     def test_int_ops(self):
         """测试整数辅助方法"""

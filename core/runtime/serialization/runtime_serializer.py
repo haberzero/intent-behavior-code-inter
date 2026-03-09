@@ -1,10 +1,10 @@
 import json
 import uuid
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Callable
 from core.compiler.serialization.serializer import FlatSerializer
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl, ScopeImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
-from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict
+from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 
 class RuntimeSerializer(FlatSerializer):
     """
@@ -98,6 +98,14 @@ class RuntimeSerializer(FlatSerializer):
         if isinstance(obj, IbNone):
             data["_type"] = "none"
 
+        elif isinstance(obj, IbNativeFunction):
+            data["_type"] = "native_func"
+            data["name"] = obj._name
+            data["unbox"] = obj.unbox_args
+            data["is_method"] = obj.is_method
+            if hasattr(obj, 'logic_id') and obj.logic_id:
+                data["logic_id"] = obj.logic_id
+                
         elif isinstance(obj, IbNativeObject):
             data["_type"] = "native"
             # 尝试记录原生值，如果不可序列化则记录为 Repr
@@ -130,12 +138,11 @@ class RuntimeSerializer(FlatSerializer):
             data["receiver_uid"] = self._collect_instance(obj.receiver)
             data["method_uid"] = self._collect_instance(obj.method)
 
-        elif isinstance(obj, IbNativeFunction):
-            data["_type"] = "native_func"
-            data["name"] = obj._name
-            data["unbox"] = obj.unbox_args
-            data["is_method"] = obj.is_method
-            # 注意：原生函数本身不持久化代码，假设恢复环境中有同名注册
+        elif isinstance(obj, IbBehavior):
+            data["_type"] = "behavior"
+            data["node_uid"] = obj.node
+            data["captured_intents"] = [self._process_value(i) for i in obj.captured_intents]
+            data["expected_type"] = obj.expected_type
             
         else:
             # 普通用户定义对象
@@ -155,29 +162,46 @@ class RuntimeDeserializer:
         self.scope_cache: Dict[str, ScopeImpl] = {}
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContextImpl:
-        """从字典数据重建运行时上下文"""
+        """从字典数据重建运行时上下文 (已修复方法覆盖 BUG)"""
+        # 1. 首先恢复所有平铺池 (包括编译器池和运行时池)
         pools = data.get("pools", {})
+        self.node_pool = pools.get("nodes", {})
+        self.symbol_pool = pools.get("symbols", {})
+        self.scope_pool = pools.get("scopes", {})
+        self.type_pool = pools.get("types", {})
         self.instance_pool = pools.get("instances", {})
         self.runtime_scope_pool = pools.get("runtime_scopes", {})
-        
-        # 1. 重建作用域链
+
+        # 2. 从当前/根作用域开始重建作用域链
         root_scope_uid = data["root_scope_uid"]
         current_scope = self._get_scope(root_scope_uid)
         
-        # 2. 确定全局作用域 (最顶层)
+        # 3. 向上回溯确定全局作用域
         global_scope = current_scope
         while global_scope.parent:
             global_scope = global_scope.parent
             
+        # 4. 创建 Context 实例
+        from core.runtime.interpreter.runtime_context import RuntimeContextImpl
         context = RuntimeContextImpl(initial_scope=global_scope, registry=self.registry)
         context._current_scope = current_scope
         
-        # 3. 恢复状态
+        # 5. 恢复意图栈、全局意图及排他深度
         context._global_intents = data.get("global_intents", [])
         context.intent_stack = [self._deserialize_value(i) for i in data.get("intent_stack", [])]
         context._intent_exclusive_depth = data.get("intent_exclusive_depth", 0)
         
         return context
+
+    def on_rebind(self, logic_id_map: Dict[str, Any]):
+        """
+        [IES 2.0] 全局重绑定协议。
+        扫描已实例化的对象池，将带有 logic_id 的占位对象链接到当前环境的真实实现。
+        """
+        for obj in self.instance_cache.values():
+            if isinstance(obj, IbNativeFunction) and obj.logic_id:
+                if obj.logic_id in logic_id_map:
+                    obj.py_func = logic_id_map[obj.logic_id]
 
     def _get_scope(self, uid: str) -> ScopeImpl:
         if uid in self.scope_cache:
@@ -265,12 +289,24 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "native_func":
-            # 原生函数重建：假设它已经在 Registry 中了
-            # 这里我们通过名称查找，或者如果找不到，尝试保持占位符
-            # 实际上，这应该由具体环境（如 Builtins）在反序列化后重新绑定
-            # 暂时通过 Registry.get_class("Function") 创建一个空壳
-            obj = IbNativeFunction(lambda *a: None, ib_class=ib_class, name=data["name"])
+            # 原生函数重建：记录逻辑标识以供后续重绑定
+            logic_id = data.get("logic_id")
+            # 创建一个占位函数
+            obj = IbNativeFunction(
+                lambda *a: None, 
+                ib_class=ib_class, 
+                name=data.get("name", "anonymous"),
+                logic_id=logic_id,
+                unbox_args=data.get("unbox", False),
+                is_method=data.get("is_method", False)
+            )
             self.instance_cache[uid] = obj
+            
+        elif _type == "behavior":
+            # [IES 2.0] 行为对象重建：先创建空壳，后续由 Interpreter 补齐引用
+            obj = IbBehavior(data["node_uid"], None, [], data.get("expected_type"))
+            self.instance_cache[uid] = obj
+            obj.captured_intents = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
             
         else:
             # 普通对象

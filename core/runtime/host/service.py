@@ -49,17 +49,17 @@ class HostService(IHostService):
         new_ctx = deserializer.deserialize_context(data)
         
         # 重新绑定环境能力 (Intrinsics & Plugins)
-        self._rebind_environment(new_ctx)
+        self._rebind_environment(new_ctx, deserializer)
         
         # 强制同步到当前解释器实例
         self.context.interpreter.context = new_ctx
 
-    def _rebind_environment(self, context: Any):
+    def _rebind_environment(self, context: Any, deserializer: Optional[Any] = None):
         """
         环境重绑定：将快照中的“空壳”重新链接到当前物理环境的功能实现。
         """
         # 1. 重新注入内置函数 (Intrinsics) - 使用特权覆盖
-        self.context.interpreter.setup_context(context, force=True)
+        self.context.interpreter.setup_context(context, force=True, deserializer=deserializer)
         
         # 2. 重新注入原生插件 (Native Plugins)
         from core.runtime.objects.kernel import IbObject, IbNativeObject

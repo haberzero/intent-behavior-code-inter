@@ -226,6 +226,12 @@ class Interpreter(IStackInspector):
         self.current_module_name: Optional[str] = None
         self.strict_mode = strict_mode
 
+        # [IES 2.0 Optimization] 预先映射访问方法，消除运行时的字符串拼接和反射开销
+        self._visitor_cache: Dict[str, Callable] = {}
+        for attr in dir(self):
+            if attr.startswith("visit_"):
+                self._visitor_cache[attr[6:]] = getattr(self, attr)
+
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
         """获取当前模块下的侧表信息"""
         if not self.current_module_name:
@@ -287,20 +293,14 @@ class Interpreter(IStackInspector):
         self.type_pool = pools.get("types", {})
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Interpreter pools hot-reloaded.")
 
-    def setup_context(self, context: RuntimeContext, force: bool = False):
+    def setup_context(self, context: RuntimeContext, force: bool = False, deserializer: Optional[Any] = None):
         """为 Context 注入基础内置变量 (Public API)"""
         # 使用私有属性访问以仅检查当前作用域，避免与后续 bootstrap 冲突
         global_symbols = context.global_scope.get_all_symbols()
         defined_names = set(global_symbols.keys())
         
-        # 注入内置全局函数 (Prelude)
-        def define_builtin(name, val):
-            # [IES 2.0] 如果 force=True，允许覆盖已有的内置函数 (解决序列化后的壳对象问题)
-            context.define_variable(name, val, is_const=True, force=force)
-
-        # [NEW] 从 IntrinsicManager 注入插件化的内置函数
-        for name, func in self.intrinsic_manager.get_all().items():
-            define_builtin(name, func)
+        # [IES 2.0] 内置功能插件化重绑定
+        self.intrinsic_manager.rebind(self, context, deserializer=deserializer)
         
         # 注入内置类 (int, str, float, list, dict 等)
         for name, ib_class in self.registry.get_all_classes().items():
@@ -464,10 +464,8 @@ class Interpreter(IStackInspector):
         
         self.call_stack_depth += 1
         try:
-            if not isinstance(node_data, Mapping):
-                raise TypeError(f"node_data for {node_uid} is {type(node_data)}: {node_data}")
-            method_name = f'visit_{node_data["_type"]}'
-            visitor = getattr(self, method_name, self.generic_visit)
+            node_type = node_data["_type"]
+            visitor = self._visitor_cache.get(node_type, self.generic_visit)
             return visitor(node_uid, node_data)
         except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
             raise
@@ -921,11 +919,27 @@ class Interpreter(IStackInspector):
                 
                 # 查找匹配的 except 块
                 handled = False
-                for handler_data in node_data.get("handlers", []):
-                    # TODO: 类型匹配检查
+                for handler_uid in node_data.get("handlers", []):
+                    handler_data = self.get_node_data(handler_uid)
+                    
+                    # 1. 类型匹配检查
+                    type_uid = handler_data.get("type")
+                    if type_uid:
+                        expected_type_obj = self.visit(type_uid)
+                        # 如果捕获的是类对象，进行子类判定
+                        if isinstance(expected_type_obj, IbClass):
+                            if not error_obj.ib_class.is_assignable_to(expected_type_obj):
+                                continue
+                        # 如果捕获的是其他对象（如字符串），进行值判定（用于 LLM 异常简化匹配）
+                        elif expected_type_obj != error_obj:
+                            continue
+
+                    # 2. 绑定异常变量
                     name = handler_data.get("name")
                     if name:
                         self.context.define_variable(name, error_obj)
+                    
+                    # 3. 执行处理体
                     for stmt_uid in handler_data.get("body", []):
                         self.visit(stmt_uid)
                     handled = True

@@ -11,9 +11,6 @@ def register_collection(manager, interpreter):
             return manager.registry.box(len(getattr(obj, 'value')))
         if hasattr(obj, 'elements'):
             return manager.registry.box(len(obj.elements))
-        # 避免 IbObject 默认的 fields 导致误判
-        if hasattr(obj, 'fields') and obj.fields:
-             return manager.registry.box(len(obj.fields))
         # 尝试消息发送 (UTS 协议)
         return obj.receive('len', [])
 

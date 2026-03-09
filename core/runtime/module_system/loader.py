@@ -124,6 +124,11 @@ class ModuleLoader:
             for entry in os.listdir(path):
                 if entry in loaded_modules:
                     continue
+                
+                # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
+                # 这防止了隔离环境下的子脚本通过扫描路径加载未授权的敏感插件
+                if not host_interface.is_external_module(entry):
+                    continue
                     
                 module_dir = os.path.join(path, entry)
                 if not os.path.isdir(module_dir):

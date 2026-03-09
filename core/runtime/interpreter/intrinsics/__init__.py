@@ -15,7 +15,32 @@ class IntrinsicManager:
         """注册一个内置函数"""
         # 获取 callable 类
         callable_class = self.registry.get_class("callable")
-        self._intrinsics[name] = IbNativeFunction(py_func, unbox_args=unbox, is_method=False, name=f"builtin.{name}", ib_class=callable_class)
+        logic_id = f"intrinsic:{name}"
+        self._intrinsics[name] = IbNativeFunction(
+            py_func, 
+            unbox_args=unbox, 
+            is_method=False, 
+            name=f"builtin.{name}", 
+            ib_class=callable_class,
+            logic_id=logic_id
+        )
+
+    def rebind(self, interpreter: Any, context: Any, deserializer: Optional[Any] = None):
+        """
+        环境重绑定协议：将逻辑上的内置函数符号链接到当前物理环境的实现。
+        """
+        # 1. 强制重新注入当前的物理实现到全局作用域
+        for name, func in self._intrinsics.items():
+            context.define_variable(name, func, is_const=True, force=True)
+        
+        # 2. 扫描池中已加载的对象 (用于处理那些被赋值给其他变量的函数)
+        if deserializer:
+            logic_id_map = {f.logic_id: f.py_func for f in self._intrinsics.values() if f.logic_id}
+            deserializer.on_rebind(logic_id_map)
+        
+        # [IES 2.0 Meta-API] 特权：为每个内置函数显式设置逻辑标识
+        for name, func in self._intrinsics.items():
+            func.logic_id = f"intrinsic:{name}"
 
     def get_all(self) -> Dict[str, IbNativeFunction]:
         return self._intrinsics

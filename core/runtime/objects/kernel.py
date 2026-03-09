@@ -39,7 +39,6 @@ class IbObject:
             method = self.ib_class.lookup_method(attr_name)
             if method:
                 # [FIX] 如果是方法，我们需要返回一个 BoundMethod 以便后续调用能正确传入 receiver
-                from .kernel import IbBoundMethod
                 return IbBoundMethod(self, method)
 
         # 2. 正常消息路由：查找类方法
@@ -87,17 +86,18 @@ class IbNativeObject(IbObject):
     包装 Python 原生对象的 IBC 对象。
     用于桥接 Python 扩展和标准库。
     """
-    def __init__(self, py_obj: Any, ib_class: 'IbClass'):
+    def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None):
         super().__init__(ib_class)
         self.py_obj = py_obj
+        # [IES 2.0] 显式持有虚表，消除对 py_obj 的动态属性依赖
+        self.vtable = vtable if vtable is not None else getattr(py_obj, '_ibci_vtable', {})
+        # [SECURITY] 属性访问白名单
+        self.whitelist = whitelist if whitelist is not None else getattr(py_obj, '_ibci_whitelist', [])
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        # [IES 2.0 Native VTable] 优先从静态虚函数表中查找，避免运行时反射扫描
-        vtable = getattr(self.py_obj, '_ibci_vtable', {})
-        
-        # 1. 直接处理契约方法调用
-        if message in vtable:
-            attr = vtable[message]
+        # [IES 2.0 Native VTable] 优先从绑定的虚函数表中查找
+        if message in self.vtable:
+            attr = self.vtable[message]
             binding = getattr(attr, '_ibci_binding', None)
             if not binding and hasattr(attr, '__func__'):
                 binding = getattr(attr.__func__, '_ibci_binding', None)
@@ -112,13 +112,17 @@ class IbNativeObject(IbObject):
         # 2. 处理 __getattr__ 协议 (属性访问)
         if message == '__getattr__' and len(args) > 0:
             target_name = args[0].to_native()
-            # 如果属性本身就在 VTable 中 (例如将方法作为属性获取)，直接返回装箱后的函数
-            if target_name in vtable:
-                return self.ib_class.registry.box(vtable[target_name])
+            # 优先从 VTable 中查找 (例如将方法作为属性获取)
+            if target_name in self.vtable:
+                return self.ib_class.registry.box(self.vtable[target_name])
             
-            # 否则尝试从原生对象获取属性
-            if hasattr(self.py_obj, target_name):
-                return self.ib_class.registry.box(getattr(self.py_obj, target_name))
+            # [SECURITY] 仅允许访问白名单中的属性，封死对 Python 私有属性的访问
+            if target_name in self.whitelist:
+                if hasattr(self.py_obj, target_name):
+                    return self.ib_class.registry.box(getattr(self.py_obj, target_name))
+            
+            # [SECURITY] 如果是 __getattr__ 且白名单未通过，则明确拒绝访问
+            raise AttributeError(f"NativeObject attribute '{target_name}' is not in whitelist or not found")
 
         return super().receive(message, args)
 
@@ -208,10 +212,16 @@ class IbClass(IbObject):
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         类对象的特殊消息处理：
-        1. __call__ -> 实例化 (Instantiate)
+        1. __call__ -> 实例化 (Instantiate) 或 类级别的 __call__
         2. 其他 -> 正常消息处理 (查找静态方法等)
         """
         if message == "__call__":
+            # [IES 2.0 Meta-Model] 优先从自身的 methods 字典中查找 __call__
+            # 注意：类作为对象时，其方法存在 self.methods 中
+            if "__call__" in self.methods:
+                method = self.methods["__call__"]
+                # 绑定到类自身进行调用 (如果是 NativeFunction 会自动根据 is_method 注入 receiver)
+                return IbBoundMethod(self, method).receive("__call__", args)
             return self.instantiate(args)
         return super().receive(message, args)
 
@@ -233,13 +243,14 @@ class IbNativeFunction(IbFunction):
     包装 Python 原生函数的 IBC 函数。
     用于引导阶段注入基础运算（如 int.__add__）。
     """
-    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None):
+    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None):
         if not ib_class:
             raise ValueError("ib_class is required for IbNativeFunction")
         super().__init__(ib_class)
         self.py_func = py_func
         self.unbox_args = unbox_args
         self.is_method = is_method
+        self.logic_id = logic_id
         self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
@@ -260,9 +271,8 @@ class IbNativeFunction(IbFunction):
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         if message == '__getattr__':
-            name = args[0].to_native()
-            if hasattr(self.py_func, name):
-                return self.ib_class.registry.box(getattr(self.py_func, name))
+            # [SECURITY] 原生函数禁止泄露底层 Python 函数属性 (如 __class__, __subclasses__)
+            pass
         return super().receive(message, args)
 
     def __getattr__(self, name):

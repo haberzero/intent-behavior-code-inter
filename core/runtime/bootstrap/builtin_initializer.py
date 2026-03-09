@@ -211,6 +211,7 @@ def initialize_builtin_classes(registry: Registry):
         return str(self.to_native()) + str(other.to_native())
         
     _reg_native(string_class, '__add__', _string_add, unbox=False)
+    _reg_native(string_class, 'len', lambda self: len(self.to_native()))
     _reg_native(string_class, 'cast_to', lambda self, target_class: _cast_string_to(self, target_class), unbox=False)
 
     # [NEW] str(x) 构造函数/转换逻辑
