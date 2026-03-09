@@ -3,6 +3,8 @@ from core.domain.symbols import (
     StaticType, BuiltinType, ListType, FunctionType, ClassType,
     STATIC_ANY, STATIC_INT, STATIC_FLOAT, STATIC_STR, STATIC_BOOL, STATIC_VOID
 )
+from core.domain import types as uts
+from core.compiler.semantic.bridge import TypeBridge # 引入语义网关
 
 class Prelude:
     """
@@ -16,52 +18,37 @@ class Prelude:
         self._init_defaults()
         
     def _init_defaults(self):
-        # 0. 准备类型上下文 (优先从引擎注册表中获取隔离的静态类型)
-        from core.domain.symbols import StaticTypeFactory, STATIC_ANY, STATIC_VOID, STATIC_INT
-        
-        def _get_type(name: str, fallback: Any) -> Any:
-            if self.registry and self.registry._metadata_registry:
-                desc = self.registry._metadata_registry.resolve(name)
-                if desc:
-                    return StaticTypeFactory.create_from_descriptor(desc)
-            return fallback
+        # 0. 准备类型上下文 (完全通过语义网关动态拉取)
+        if not self.registry or not self.registry._metadata_registry:
+            # 降级处理：如果没有注册表上下文，则只使用最基础的硬编码原型
+            from core.domain.symbols import get_builtin_type
+            for name in ["int", "str", "float", "bool", "void", "Any", "var"]:
+                self.builtin_types[name] = get_builtin_type(name)
+            return
 
-        st_any = _get_type("Any", STATIC_ANY)
-        st_void = _get_type("void", STATIC_VOID)
-        st_int = _get_type("int", STATIC_INT)
-        st_float = _get_type("float", STATIC_FLOAT)
-        st_str = _get_type("str", STATIC_STR)
-        st_bool = _get_type("bool", STATIC_BOOL)
-
-        # 核心内置函数
-        self.register_func("print", [st_any], st_void)
-        self.register_func("len", [st_any], st_int)
-        self.register_func("range", [st_int], ListType(st_int))
-
-        # 核心内置类 (静态描述)
-        self.builtin_types["Exception"] = ClassType("Exception")
-        self.builtin_types["int"] = st_int
-        self.builtin_types["str"] = st_str
-        self.builtin_types["float"] = st_float
-        self.builtin_types["bool"] = st_bool
-        self.builtin_types["void"] = st_void
-        self.builtin_types["none"] = st_void
-        self.builtin_types["Any"] = st_any
-        self.builtin_types["var"] = st_any
+        # 1. 委托 TypeBridge 进行批量语义同步
+        # [IES 2.0 ARCH] Prelude 职责降级为：将网关同步来的符号分类存入对应表
+        all_symbols = TypeBridge.import_all_from_registry(self.registry)
         
-        if self.registry and self.registry._metadata_registry:
-            list_desc = self.registry._metadata_registry.resolve("list")
-            if list_desc:
-                self.builtin_types["list"] = StaticTypeFactory.create_from_descriptor(list_desc)
-            dict_desc = self.registry._metadata_registry.resolve("dict")
-            if dict_desc:
-                self.builtin_types["dict"] = StaticTypeFactory.create_from_descriptor(dict_desc)
-        else:
-            self.builtin_types["list"] = ListType(st_any)
-            self.builtin_types["dict"] = BuiltinType("dict")
+        from core.domain.symbols import ModuleType # 局部导入以避免循环依赖
         
-        # 可调用对象类型 (Lambda 化的行为描述行)
-        self.builtin_types["callable"] = FunctionType([], STATIC_ANY, name="callable")
+        for name, sm_type in all_symbols.items():
+            if isinstance(sm_type, FunctionType):
+                self.builtin_functions[name] = sm_type
+            elif isinstance(sm_type, ModuleType):
+                self.builtin_modules[name] = sm_type
+            else:
+                self.builtin_types[name] = sm_type
+                
+        # 2. 补全特殊映射
+        if "Any" in self.builtin_types:
+            self.builtin_types["var"] = self.builtin_types["Any"]
+        if "void" in self.builtin_types:
+            self.builtin_types["none"] = self.builtin_types["void"]
+            
+        # 3. 兜底 Exception (如果 Registry 没注册)
+        if "Exception" not in self.builtin_types:
+            self.builtin_types["Exception"] = ClassType("Exception")
         
     def register_func(self, name: str, param_types: List[StaticType], return_type: StaticType):
         self.builtin_functions[name] = FunctionType(name=name, param_types=param_types, return_type=return_type)

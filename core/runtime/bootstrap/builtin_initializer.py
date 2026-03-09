@@ -97,7 +97,20 @@ def initialize_builtin_classes(registry: Registry):
     module_class = registry.create_subclass("IbModule")
     registry.register_class("IbModule", module_class, token, descriptor=metadata_registry.resolve("module"))
     
-    # 3. 注册 None 单例 (Per-registry)
+    # 3. 注册内置全局函数元数据 (供编译器发现)
+    registry.register_function("print", uts.FunctionMetadata(
+        name="print", 
+        param_types=[metadata_registry.resolve("Any")], 
+        return_type=metadata_registry.resolve("void")
+    ), token)
+    
+    registry.register_function("len", uts.FunctionMetadata(
+        name="len", 
+        param_types=[metadata_registry.resolve("Any")], 
+        return_type=metadata_registry.resolve("int")
+    ), token)
+
+    # 4. 注册 None 单例 (Per-registry)
     registry.register_none(IbNone(none_class), token)
     _reg_native(none_class, '__to_prompt__', lambda self: "None")
     _reg_native(none_class, 'to_bool', lambda self: 0)

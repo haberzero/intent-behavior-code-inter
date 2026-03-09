@@ -319,13 +319,14 @@ class FunctionType(StaticType):
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
         if self.descriptor:
+            # [FIX] 优先通过描述符进行调用决议
             arg_descriptors = [a.descriptor for a in args if a.descriptor]
             if len(arg_descriptors) == len(args):
                 ret_descriptor = self.descriptor.get_call_return_type(arg_descriptors)
                 if ret_descriptor:
                     return StaticTypeFactory.create_from_descriptor(ret_descriptor)
         
-        # 回退逻辑
+        # 回退逻辑 (当描述符不可用或未覆盖时)
         if len(args) != len(self.param_types):
             return None
         for i, (expected, actual) in enumerate(zip(self.param_types, args)):

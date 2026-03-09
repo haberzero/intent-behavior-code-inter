@@ -78,6 +78,10 @@ class TypeResolver:
         )
         if parent_desc:
              descriptor.parent_name = parent_desc.name
+        
+        # [NEW Phase 5] 注册到元数据注册表，以便后续继承解析能找到它
+        if self.analyzer.registry and self.analyzer.registry._metadata_registry:
+            self.analyzer.registry._metadata_registry.register(descriptor)
              
         class_type = symbols.StaticTypeFactory.create_from_descriptor(descriptor)
         class_type.parent = parent_type # 维持符号层面的父子关系

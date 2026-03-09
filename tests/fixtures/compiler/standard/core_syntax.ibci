@@ -51,12 +51,10 @@ str pet_sound = my_pet.speak()
 for i in 10.to_list():
     var x = i
     if i % 2 == 0:
-        # print("Even")
-        pass
+        print("Even")
 
 # 6. Error Handling (Try-Except)
 try:
     int result = 10 / 0
 except Exception as e:
-    # print("Caught error")
-    pass
+    print("Caught error")

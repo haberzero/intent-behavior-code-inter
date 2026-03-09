@@ -116,6 +116,12 @@ class Registry:
             if self._metadata_registry:
                 self._metadata_registry.register(descriptor)
 
+    def register_function(self, name: str, descriptor: Any, token: Any):
+        """注册全局函数元数据 (仅用于编译器发现)"""
+        self._verify_class_registration(token)
+        if self._metadata_registry:
+            self._metadata_registry.register(descriptor)
+
     def export_manifest(self) -> Dict[str, Any]:
         """导出当前 Registry 的类型清单快照 (供编译器使用)"""
         return dict(self._classes)

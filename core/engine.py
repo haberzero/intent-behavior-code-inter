@@ -46,7 +46,7 @@ class IBCIEngine:
         # 2. 加载元数据以支持静态分析
         self.host_interface = self.discovery_service.discover_all()
         
-        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry)
+        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry)
         
         self.interpreter: Optional[Interpreter] = None
 

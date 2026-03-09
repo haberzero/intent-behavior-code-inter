@@ -51,6 +51,11 @@ class SemanticAnalyzer:
             sym = TypeSymbol(name=name, kind=SymbolKind.BUILTIN_TYPE, static_type=type_info, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
+        # 3. 注册内置模块 (如果 Registry 中存在)
+        for name, mod_type in prelude.get_builtin_modules().items():
+            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, var_type=mod_type, metadata={"is_builtin": True})
+            self.symbol_table.define(sym)
+
     def analyze(self, node: ast.IbASTNode) -> CompilationResult:
         self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.BASIC, "Starting static semantic analysis...")
         

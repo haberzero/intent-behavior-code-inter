@@ -10,7 +10,7 @@ else:
     local_var = val - 5
 
 # Loops and Inference
-for i in range(10):
+for i in 10.to_list():
     int x = i
     if i % 2 == 0:
         print("Even")

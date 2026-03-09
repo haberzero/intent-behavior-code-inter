@@ -1,69 +1,37 @@
-# IBC-Inter Architecture Design Guide
+# IBCI 2.0 架构设计指南
 
-## 1. Introduction
-This document outlines the architectural principles, patterns, and component interactions of the IBC-Inter compiler and runtime. It serves as a guide for understanding the system's design choices, particularly those made during the major refactoring phases.
+## 1. 核心哲学
+IBCI 2.0 采用 **数据驱动 (Data-Driven)** 和 **侧表化 (Side-Tabling)** 的架构。核心目标是实现编译器分析逻辑与 AST 结构的完全解耦，并支持解释器在无内存依赖的环境下运行。
 
-## 2. Core Architecture
+## 2. 三层解耦模型
 
-IBC-Inter follows a 3-layer data-driven architecture, ensuring total decoupling between logic and data.
+### 2.1 蓝图层 (Domain Model - `core/domain/`)
+作为“真理来源 (Source of Truth)”，蓝图层定义了 IBCI 语言的所有基本构成单元：
+- **AST (`ast.py`)**：纯粹的数据结构，100% 只读。
+- **Symbols (`symbols.py`)**：描述作用域和符号的语义。
+- **Types (`static_types.py`)**：静态类型系统。
+- **Artifact (`blueprint.py`)**：模块化的编译产出物契约。
 
-### 2.1. Layer 1: Domain Model Layer (`core/domain/`)
-The "Source of Truth". Contains 100% pure, read-only data structures.
-- **AST**: Definitive structure of the IBCI language.
-- **Symbols & StaticTypes**: The semantic backbone.
-- **Artifact**: The serializable communication contract.
+### 2.2 生产层 (Compiler - `core/compiler/`)
+负责将源码转换为蓝图。
+- **Parser**: 采用中介者模式 (`ParserContext`) 处理复杂的组件依赖。
+- **Semantic Analyzer**: 采用 **Multi-Pass** 机制：
+  - **Pass 1 (Collector)**: 收集全局/局部符号。
+  - **Pass 2 (Resolver)**: 决议继承链和类型引用。
+  - **Pass 3 (Analyzer)**: 执行类型检查。
+- **Side-Tabling**: 分析结果不写入 AST，而是存入 `node_to_symbol` 和 `node_to_type` 等映射表中。
 
-### 2.2. Layer 2: Production Layer (`core/compiler/`)
-The "Factory". Transforms source code into data pools.
-- **Side-Tabling**: Analysis results (symbol bindings, inferred types) are stored in mapping tables, keeping the AST immutable.
-- **Flat Pooling (Black Magic)**: The `FlatSerializer` resolves complex memory object graphs into a flattened, UID-based JSON dictionary. This eliminates Python memory address dependencies and allows the interpreter to run in total isolation.
+### 2.3 消费层 (Runtime - `core/runtime/`)
+执行编译器产出的扁平化蓝图。
+- **Flat Pooling**: 解释器通过 `FlatSerializer` 获取扁平化的 JSON 字典池。
+- **UID-Based Walking**: 解释器通过 UID 在池中游走，不再持有 Python 内存指针，实现了物理隔离。
 
-### 2.3. Layer 3: Execution Layer (`core/runtime/`)
-The "Consumer". Executes the data pools produced by Layer 2.
-- **Interpreter**: Directly walks the flattened data pool ("Pool-Walking"). It no longer needs to import compiler logic.
-- **Intent Stack**: Manages hierarchical LLM intents (Global -> Block -> Call).
+## 3. 关键机制：语义网关 (TypeBridge)
 
-## 3. Interaction Patterns
+IBCI 2.0 引入了 **TypeBridge** 作为编译器与运行时元数据之间的语义网关：
+- **单源真理**：编译器不再硬编码内置类型，而是通过 `TypeBridge` 从引擎注册表 (`Registry`) 中动态同步元数据。
+- **自动对齐**：当解释器注册新插件时，编译器通过网关自动识别插件定义的类和方法。
 
-### 3.1. Mediator Pattern (Parser)
-The Parser coordinates complex parsing logic via `ParserContext`.
-- **Problem**: `StatementComponent` needs to parse declarations, and `DeclarationComponent` needs to parse statements, creating a cycle.
-- **Solution**: `ParserContext` acts as the Mediator.
-
-### 3.2. Service Context (Runtime)
-The runtime uses a manual Dependency Injection pattern via `ServiceContext`.
-- **Purpose**: To manage the lifecycle of singleton services (`Interpreter`, `ModuleManager`, `Evaluator`, `LLMExecutor`) and resolve circular dependencies.
-
-## 3. Subsystems
-
-### 3.1. Type System Bridge
-Bridging the gap between Static Analysis (Semantic) and Dynamic Execution (Runtime).
-- **Semantic Type**: `UserDefinedType` (stores class name, scope, parent ref).
-- **Runtime Object**: `ClassInstance` (stores fields, methods, interpreter ref).
-- **The Bridge**: `ClassInstance` holds a `runtime_type` field pointing to its `UserDefinedType`.
-- **Polymorphism**: `Interpreter.is_subclass_of` checks inheritance by traversing the `UserDefinedType.parent` chain. If runtime types are missing (dynamic execution), `ClassInstance` reconstructs the hierarchy on-the-fly.
-
-### 3.2. Error Handling
-- **Philosophy**: Catch early, report precisely.
-- **Mechanism**:
-  - Internal components raise `InterpreterError` (with `node` info).
-  - `Interpreter.visit` (the main loop) wraps execution in a generic `try-except`.
-  - Native Python exceptions (e.g., `ValueError`) are caught and wrapped into `InterpreterError`, attaching the current AST node to provide source location (line/col).
-  - Errors are reported to `IssueTracker`.
-
-### 3.3. Evaluator vs. Interpreter
-- **Evaluator**: Pure expression evaluation (`1 + 1`, `a.b`). No side effects, no control flow.
-- **Interpreter**: Statement execution, Control flow (`if`, `while`, `Call`), Side effects (`print`, `BehaviorExpr`).
-- **Interaction**: The `Evaluator` delegates complex nodes (`Call`, `BehaviorExpr`) back to the `Interpreter` via `ServiceContext`.
-
-## 4. Known Technical Debt
-
-### 4.1. DictType Key Enforcement
-Currently, `DictType` accepts any `StaticType` for keys, but the language spec limits keys to `int` or `str`.
-**Plan**: Add validation in `SemanticAnalyzer.visit_Dict` to enforce key type restrictions.
-
-## 5. Future Directions
-- **Standard Library (Prelude)**: Expand the builtin modules in `core/compiler/semantic/passes/prelude.py`.
-- **Control Flow Graph (CFG)**: Introduce a dedicated CFG analysis phase for more advanced reachability and dead code checks.
-- **Explicit Serialization Schema**: Replace `vars(node)` with an explicit field mapping in `serializer.py` for stricter contract enforcement.
-- **Dynamic Host (Plugin Proposal)**: Explore a push-down stack approach for dynamic code execution (Hot Swapping) without UID collisions. See [future_proposals_dynamic_host.md](file:///c:/myself/proj/intent-behavior-code-inter/docs/future_proposals_dynamic_host.md) for details.
+## 4. 意图系统与执行上下文
+- **Intent Stack**: 管理层级化意图 (Global -> Block -> Call)。
+- **Scene Labels**: 编译器标记节点的执行场景 (BRANCH/LOOP)，解释器据此动态调整 Prompt 策略。

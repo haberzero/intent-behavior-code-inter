@@ -8,6 +8,28 @@ class TypeBridge:
     This ensures the compiler only depends on metadata descriptors, not runtime objects.
     """
     @staticmethod
+    def import_all_from_registry(registry: Any, external_resolver: Optional[Callable[[str], Optional[symbols.StaticType]]] = None) -> Dict[str, symbols.StaticType]:
+        """
+        [IES 2.0 ARCH] 统一的语义网关：从元数据注册表中批量导入所有顶层符号（类型和全局函数）。
+        """
+        if not registry or not hasattr(registry, "_metadata_registry"):
+            return {}
+            
+        metadata_reg = registry._metadata_registry
+        cache = {}
+        results = {}
+        
+        for name, desc in metadata_reg.all_descriptors.items():
+            # 仅导入顶层符号（不带点号的）
+            if "." in name:
+                continue
+                
+            sm_type = TypeBridge.uts_to_semantic_type(desc, cache, external_resolver)
+            results[name] = sm_type
+            
+        return results
+
+    @staticmethod
     def uts_to_semantic_type(
         descriptor: uts.TypeDescriptor, 
         cache: Optional[Dict[int, symbols.StaticType]] = None,
@@ -54,7 +76,7 @@ class TypeBridge:
             mt = symbols.ModuleType(descriptor.name, st)
             cache[desc_id] = mt # 先入缓存，防止循环引用
             
-            for name, exp_desc in descriptor.exports.items():
+            for name, exp_desc in descriptor.members.items():
                 stype = TypeBridge.uts_to_semantic_type(exp_desc, cache, external_resolver)
                 if isinstance(exp_desc, uts.FunctionMetadata):
                     st.define(symbols.FunctionSymbol(name=name, kind=symbols.SymbolKind.FUNCTION, type_signature=stype))
@@ -85,17 +107,11 @@ class TypeBridge:
                             parent_type = cached_t
                             break
             
-            cls_scope = symbols.SymbolTable()
-            cls_type = symbols.ClassType(descriptor.name, parent_type, cls_scope)
+            # [IES 2.0 FIX] ClassType 构造函数现在接收 descriptor 而非 cls_scope
+            cls_type = symbols.ClassType(descriptor.name, parent_type, descriptor=descriptor)
             cache[desc_id] = cls_type # 先入缓存，防止循环引用
             
-            for name, m_desc in descriptor.members.items():
-                sm_type = TypeBridge.uts_to_semantic_type(m_desc, cache, external_resolver)
-                kind = symbols.SymbolKind.VARIABLE
-                if isinstance(m_desc, uts.FunctionMetadata):
-                    kind = symbols.SymbolKind.FUNCTION
-                
-                cls_scope.define(symbols.VariableSymbol(name=name, kind=kind, var_type=sm_type))
+            # 注意：不再需要手动填充 cls_scope，因为 ClassType 会代理给 descriptor.resolve_member
             
             return cls_type
             

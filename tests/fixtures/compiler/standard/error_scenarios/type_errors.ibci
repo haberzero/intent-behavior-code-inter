@@ -6,7 +6,7 @@ func add(int x, int y) -> int:
 add(1) # Wrong arg count
 add(1, "two") # Wrong arg type
 
-for i in range(10):
+for i in 10.to_list():
     str s = i # Wrong loop inference
 
 str s = ~"hello" # Unary mismatch

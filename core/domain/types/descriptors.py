@@ -358,11 +358,6 @@ class ModuleMetadata(TypeDescriptor):
         if not self.name or self.name == "TypeDescriptor":
             self.name = "module"
 
-    @property
-    def exports(self) -> Dict[str, 'TypeDescriptor']:
-        """兼容性属性：映射到 members"""
-        return self.members
-
 # --- 常量与注册表 ---
 
 class MetadataRegistry:
@@ -382,6 +377,11 @@ class MetadataRegistry:
     def resolve(self, name: str, module_path: Optional[str] = None) -> Optional[TypeDescriptor]:
         key = f"{module_path}.{name}" if module_path else name
         return self._descriptors.get(key)
+
+    @property
+    def all_descriptors(self) -> Dict[str, TypeDescriptor]:
+        """获取所有已注册的描述符快照"""
+        return dict(self._descriptors)
 
 # 预定义常量描述符 (作为原型存在)
 INT_DESCRIPTOR = PrimitiveDescriptor(name="int", is_nullable=False)
