@@ -1,9 +1,9 @@
 from typing import Any, Dict, List, Optional, Union
-from core.foundation.interfaces import RuntimeSymbol, Scope, RuntimeContext
+from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.registry import Registry
-from core.foundation.capabilities import IStateReader
+from core.foundation.interfaces import IStateReader
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):

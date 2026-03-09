@@ -1,7 +1,7 @@
 import os
 import time
 from typing import Any, Optional, Dict
-from core.foundation.capabilities import ExtensionCapabilities, ILLMProvider
+from core.foundation.interfaces import ExtensionCapabilities, ILLMProvider
 
 class AILib(ILLMProvider):
     def __init__(self):

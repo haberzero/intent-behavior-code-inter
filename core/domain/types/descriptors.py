@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.domain.symbols import Symbol
 
 @dataclass
 class TypeDescriptor:
@@ -16,19 +19,35 @@ class TypeDescriptor:
         self.kind = self.__class__.__name__
 
     def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
-        """基于协议的逻辑比较。"""
-        if self.name in ("Any", "var") or other.name in ("Any", "var"):
+        """
+        Check if this type can be assigned to 'other' type.
+        Implements the core type compatibility logic.
+        """
+        # UTS 核心逻辑：
+        # 1. 引用相等
+        if self is other:
             return True
+            
+        # 2. 名字匹配 (兼容占位符与正式描述符)
         if self.name == other.name and self.module_path == other.module_path:
             return True
-        
-        # 内置类型的特殊兼容性规则
+
+        # 3. 动态类型兼容性
+        if other.name in ("Any", "var") or self.name in ("Any", "var"):
+            return True
+            
+        # 4. 内置类型的特殊兼容性规则
         if self.name == "int" and other.name == "bool":
             return True
         if other.name == "callable":
-             if self.name in ("callable", "NativeFunction", "AnonymousLLMFunction", "behavior", "IbModule"):
+             if self.name in ("callable", "function", "NativeFunction", "AnonymousLLMFunction", "behavior", "IbModule"):
                  return True
+                 
         return False
+        
+    def resolve_member(self, name: str) -> Optional[Any]:
+        """Resolve a member (attribute/method) by name."""
+        return None
 
     def __str__(self):
         if self.module_path:
@@ -88,7 +107,24 @@ class FunctionMetadata(TypeDescriptor):
     def __post_init__(self):
         super().__post_init__()
         if not self.name or self.name == "TypeDescriptor":
-            self.name = "callable"
+            self.name = "function"
+
+    def is_assignable_to(self, other: TypeDescriptor) -> bool:
+        if super().is_assignable_to(other):
+            return True
+        if other.name == "callable":
+            return True
+        if isinstance(other, FunctionMetadata):
+            if self.return_type and other.return_type:
+                if not self.return_type.is_assignable_to(other.return_type):
+                    return False
+            if len(self.param_types) != len(other.param_types):
+                return False
+            for p1, p2 in zip(self.param_types, other.param_types):
+                if not p2.is_assignable_to(p1): 
+                    return False
+            return True
+        return False
 
 @dataclass
 class ClassMetadata(TypeDescriptor):
@@ -106,6 +142,14 @@ class ClassMetadata(TypeDescriptor):
         parent = self.resolve_parent()
         return parent.is_assignable_to(other) if parent else False
 
+    def resolve_member(self, name: str) -> Optional[TypeDescriptor]:
+        if name in self.members:
+            return self.members[name]
+        parent = self.resolve_parent()
+        if parent:
+            return parent.resolve_member(name)
+        return None
+
 @dataclass
 class ModuleMetadata(TypeDescriptor):
     """模块元数据描述"""
@@ -115,6 +159,9 @@ class ModuleMetadata(TypeDescriptor):
         super().__post_init__()
         if not self.name or self.name == "TypeDescriptor":
             self.name = "module"
+
+    def resolve_member(self, name: str) -> Optional[TypeDescriptor]:
+        return self.exports.get(name)
 
 # --- 常量与注册表 ---
 
@@ -139,7 +186,8 @@ BOOL_DESCRIPTOR = PrimitiveDescriptor(name="bool", is_nullable=False)
 VOID_DESCRIPTOR = PrimitiveDescriptor(name="void", is_nullable=False)
 ANY_DESCRIPTOR = PrimitiveDescriptor(name="Any", is_nullable=True)
 VAR_DESCRIPTOR = PrimitiveDescriptor(name="var", is_nullable=True)
+CALLABLE_DESCRIPTOR = PrimitiveDescriptor(name="callable", is_nullable=True)
 
 for d in (INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
-          BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, VAR_DESCRIPTOR):
+          BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, VAR_DESCRIPTOR, CALLABLE_DESCRIPTOR):
     MetadataRegistry.register(d)

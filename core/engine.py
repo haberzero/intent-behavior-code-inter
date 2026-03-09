@@ -18,7 +18,7 @@ class IBCIEngine:
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
     def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
-        from core.foundation.builtins import initialize_builtin_classes
+        from core.runtime.objects.initialization import initialize_builtin_classes
         initialize_builtin_classes()
         
         self.root_dir = os.path.abspath(root_dir or os.getcwd())

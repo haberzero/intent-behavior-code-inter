@@ -1,5 +1,5 @@
 from typing import Optional
-from core.foundation.interfaces import PermissionManager
+from core.runtime.interfaces import PermissionManager
 
 class SysLib:
     def __init__(self):

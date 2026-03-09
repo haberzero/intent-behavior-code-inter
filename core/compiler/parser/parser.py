@@ -125,7 +125,8 @@ class Parser:
                             info = ImportInfo(
                                 module_name=alias.name,
                                 lineno=node.lineno,
-                                import_type=ImportType.IMPORT
+                                import_type=ImportType.IMPORT,
+                                names=[alias]
                             )
                             imports.append(info)
                     except ParseControlFlowError:
@@ -145,7 +146,8 @@ class Parser:
                             module_name=node.module or "",
                             lineno=node.lineno,
                             import_type=ImportType.FROM_IMPORT,
-                            level=node.level
+                            level=node.level,
+                            names=node.names
                         )
                         imports.append(info)
                     except ParseControlFlowError:

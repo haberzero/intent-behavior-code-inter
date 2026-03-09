@@ -4,8 +4,6 @@ from enum import Enum, auto
 
 from . import types as uts
 
-import uuid
-
 
 # --- 符号系统 (Symbol System) ---
 
@@ -409,6 +407,11 @@ class SymbolTable:
     def define(self, sym: Symbol, allow_overwrite: bool = False):
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
         if not allow_overwrite and sym.name in self.symbols:
+            existing = self.symbols[sym.name]
+            # [FIX] 如果是内置符号且类型/属性相同，允许静默跳过或覆盖
+            if existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"):
+                self.symbols[sym.name] = sym
+                return
             raise ValueError(f"Symbol '{sym.name}' is already defined in this scope")
         self.symbols[sym.name] = sym
 

@@ -333,88 +333,109 @@ class Scheduler:
             # Inject imported modules
             from core.compiler.semantic.bridge import TypeBridge
             from core.domain.symbols import ModuleType, SymbolTable, SymbolKind, VariableSymbol
+            from core.domain.dependencies import ImportType
             for imp in module_info.imports:
-                # Handle dotted names: import a.b.c
-                parts = imp.module_name.split('.')
-                
-                # The root module name (e.g., 'pkg' from 'pkg.utils')
-                root_name = parts[0]
+                # 查找已编译的结果或外部元数据
+                s_mod_type = None
+                imp_res = None
                 
                 if imp.file_path:
-                    # Determine the module name of the imported file
                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
-                    
-                    # Find the compiled result
                     imp_res = artifact.get_module(imp_mod_name)
                     if imp_res:
-                        # 贯彻“一切皆对象”：创建一个 ModuleType 实例并将其作为符号注入
-                        # 如果是多段导入 (pkg.utils)，我们需要构造嵌套的模块符号
-                        if len(parts) > 1:
-                            # 查找或创建根模块
-                            root_sym = analyzer.symbol_table.resolve(root_name)
-                            if not root_sym or not isinstance(root_sym.type_info, ModuleType):
-                                root_mod_type = ModuleType(root_name, SymbolTable())
-                                root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, var_type=root_mod_type)
-                                analyzer.symbol_table.define(root_sym)
-                            
-                            # 逐级注入子模块
-                            curr_mod = root_sym.type_info
-                            for i in range(1, len(parts)):
-                                part_name = parts[i]
-                                is_last = (i == len(parts) - 1)
-                                
-                                if is_last:
-                                    # 最后一级注入真实的已编译模块符号表
-                                    target_mod_type = ModuleType(part_name, imp_res.symbol_table)
-                                    target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=target_mod_type)
-                                    curr_mod.exported_scope.define(target_sym)
-                                else:
-                                    # 中间层级创建占位符模块
-                                    next_mod_sym = curr_mod.exported_scope.resolve(part_name)
-                                    if not next_mod_sym or not isinstance(next_mod_sym.type_info, ModuleType):
-                                        next_mod_type = ModuleType(part_name, SymbolTable())
-                                        next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=next_mod_type)
-                                        curr_mod.exported_scope.define(next_mod_sym)
-                                    curr_mod = next_mod_sym.type_info
-                        else:
-                            # 单段导入 (import utils)
-                            mod_type = ModuleType(imp.module_name, imp_res.symbol_table)
-                            mod_sym = VariableSymbol(name=imp.module_name, kind=SymbolKind.MODULE, var_type=mod_type)
-                            analyzer.symbol_table.define(mod_sym)
+                        s_mod_type = ModuleType(imp_mod_name, imp_res.symbol_table)
                 elif self.host_interface.is_external_module(imp.module_name):
-                    # 宿主环境中的外部模块 (Plugins)
                     if imp.module_name in self.plugin_type_cache:
                         s_mod_type = self.plugin_type_cache[imp.module_name]
                     else:
                         uts_metadata = self.host_interface.get_module_type(imp.module_name)
                         if uts_metadata:
-                            # [FIX] 稳固性修复：提供外部解析器以支持跨插件继承
                             def external_resolver(mod_name: str) -> Optional[Any]:
-                                # 如果是当前正在请求的模块（防止死循环，虽然 Bridge 有 cache）
                                 if mod_name == imp.module_name: return None
-                                
-                                # 1. 查缓存
-                                if mod_name in self.plugin_type_cache:
-                                    return self.plugin_type_cache[mod_name]
-                                
-                                # 2. 尝试转换新插件
+                                if mod_name in self.plugin_type_cache: return self.plugin_type_cache[mod_name]
                                 other_metadata = self.host_interface.get_module_type(mod_name)
                                 if other_metadata:
-                                    # 递归调用 uts_to_semantic_type (Bridge 处理循环引用)
                                     other_mod_type = TypeBridge.uts_to_semantic_type(other_metadata, external_resolver=external_resolver)
                                     self.plugin_type_cache[mod_name] = other_mod_type
                                     return other_mod_type
                                 return None
-
                             s_mod_type = TypeBridge.uts_to_semantic_type(uts_metadata, external_resolver=external_resolver)
                             self.plugin_type_cache[imp.module_name] = s_mod_type
-                        else:
-                            s_mod_type = None
-                            
-                    if s_mod_type:
-                        mod_sym = VariableSymbol(name=imp.module_name, kind=SymbolKind.MODULE, var_type=s_mod_type)
+                
+                if not s_mod_type:
+                    continue
+                    
+                # 根据 import_type 进行符号注入
+                if imp.import_type == ImportType.IMPORT:
+                    # 1. 处理 import a.b as c
+                    # 目前 parse_imports_only 为每个 alias 创建一个 ImportInfo
+                    alias = imp.names[0] if imp.names else None
+                    local_name = alias.asname if alias and alias.asname else imp.module_name
+                    
+                    # 如果是多段导入 (import a.b) 且没有 asname，则注入 a
+                    parts = imp.module_name.split('.')
+                    if not (alias and alias.asname) and len(parts) > 1:
+                        root_name = parts[0]
+                        # 构造嵌套模块结构
+                        root_sym = analyzer.symbol_table.resolve(root_name)
+                        if not root_sym or not isinstance(root_sym.type_info, ModuleType):
+                            root_mod_type = ModuleType(root_name, SymbolTable())
+                            root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, var_type=root_mod_type)
+                            analyzer.symbol_table.define(root_sym)
+                        
+                        curr_mod = root_sym.type_info
+                        for i in range(1, len(parts)):
+                            part_name = parts[i]
+                            is_last = (i == len(parts) - 1)
+                            if is_last:
+                                target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=s_mod_type)
+                                curr_mod.exported_scope.define(target_sym)
+                            else:
+                                next_mod_sym = curr_mod.exported_scope.resolve(part_name)
+                                if not next_mod_sym or not isinstance(next_mod_sym.type_info, ModuleType):
+                                    next_mod_type = ModuleType(part_name, SymbolTable())
+                                    next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=next_mod_type)
+                                    curr_mod.exported_scope.define(next_mod_sym)
+                                curr_mod = next_mod_sym.type_info
+                    else:
+                        # 普通导入或带别名导入
+                        mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, var_type=s_mod_type)
                         analyzer.symbol_table.define(mod_sym)
+                        
+                elif imp.import_type == ImportType.FROM_IMPORT:
+                    # 2. 处理 from mod import a, b as c, *
+                    for alias in imp.names:
+                        if alias.name == '*':
+                            # 注入所有导出的符号
+                            for name, sym in s_mod_type.exported_scope.symbols.items():
+                                analyzer.symbol_table.define(sym)
+                        else:
+                            # 注入特定符号
+                            target_sym = s_mod_type.exported_scope.resolve(alias.name)
+                            if target_sym:
+                                local_name = alias.asname if alias.asname else alias.name
+                                # 创建一个指向原符号的克隆/别名符号
+                                # 这里我们简单地重新定义一个相同属性的符号
+                                if target_sym.kind == SymbolKind.VARIABLE:
+                                    new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, var_type=target_sym.type_info, def_node=target_sym.def_node)
+                                elif target_sym.kind == SymbolKind.FUNCTION:
+                                    from core.domain.symbols import FunctionSymbol
+                                    new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, type_signature=target_sym.type_signature, def_node=target_sym.def_node)
+                                else:
+                                    from core.domain.symbols import TypeSymbol
+                                    new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, static_type=target_sym.static_type, def_node=target_sym.def_node)
+                                
+                                analyzer.symbol_table.define(new_sym)
+                            else:
+                                # 符号未找到报错
+                                from core.domain.issue import Severity
+                                from core.domain.issue_atomic import Location
+                                analyzer.issue_tracker.report(
+                                    Severity.ERROR, "SEM_001", 
+                                    f"Symbol '{alias.name}' not found in module '{imp.module_name}'",
+                                    location=Location(file_path=file_path, line=imp.lineno, column=1)
+                                )
             
             result = analyzer.analyze(ast_node)
             

@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Any
-from .kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone
-from .registry import Registry
+from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone
+from core.foundation.registry import Registry
 
 class Bootstrapper:
     """
@@ -25,7 +25,7 @@ class Bootstrapper:
         if cls.TypeClass: return # 避免重复初始化
 
         # 延迟导入以打破核心引导循环
-        from .kernel import IbClass, IbNativeFunction, IbNone
+        from .objects.kernel import IbClass, IbNativeFunction, IbNone
 
         # 注册 Registry 辅助函数
         Registry.register_box_func(cls.box)
@@ -73,7 +73,7 @@ class Bootstrapper:
             # 2. 其次查方法并返回绑定方法 (Bound Method)
             method = self.ib_class.lookup_method(name)
             if method:
-                from .kernel import IbBoundMethod
+                from .objects.kernel import IbBoundMethod
                 return IbBoundMethod(self, method)
             return Registry.get_none()
 

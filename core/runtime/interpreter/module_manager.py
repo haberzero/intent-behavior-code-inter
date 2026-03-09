@@ -1,13 +1,13 @@
-from core.foundation.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
+from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.domain import ast as ast
-from core.foundation.kernel import ModuleType
+from core.domain.types.descriptors import ModuleMetadata as ModuleType
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import DEP_MODULE_NOT_FOUND
 
 if TYPE_CHECKING:
-    from core.foundation.interfaces import Interpreter
+    from core.runtime.interfaces import Interpreter
     from core.domain.blueprint import CompilationArtifact
 
 class ModuleInstanceImpl:
@@ -40,20 +40,18 @@ class ModuleManagerImpl:
         """允许延迟注入 Interpreter"""
         self.interpreter = interpreter
 
-    def import_module(self, module_name: str, context: RuntimeContext) -> None:
+    def import_module(self, module_name: str, context: RuntimeContext) -> Any:
         """
-        处理 import module_name
+        处理 import module_name，返回模块实例
         """
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
         package = self.interop.get_package(module_name)
         if package:
-            context.define_variable(module_name, package, is_const=True)
-            return
+            return package
 
         # 2. 检查是否已经加载过该模块
         if module_name in self._loaded_modules:
-            context.define_variable(module_name, self._loaded_modules[module_name], is_const=True)
-            return
+            return self._loaded_modules[module_name]
 
         # 3. 联动 Artifact (编译蓝图) 处理模块导入
         if self.artifact:
@@ -67,16 +65,21 @@ class ModuleManagerImpl:
                 from .runtime_context import ScopeImpl
                 module_scope = ScopeImpl()
                 
-                # 在新 Scope 下复用 Interpreter 执行
-                self.interpreter.execute_module(root_node_uid, module_name=module_name, scope=module_scope)
-                
-                # 创建模块实例并缓存
-                from core.foundation.kernel import IbModule
+                # [FIX] 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
+                from core.runtime.objects.kernel import IbModule
                 module_instance = IbModule(module_name, module_scope)
                 self._loaded_modules[module_name] = module_instance
                 
-                context.define_variable(module_name, module_instance, is_const=True)
-                return
+                # 在新 Scope 下复用 Interpreter 执行
+                try:
+                    self.interpreter.execute_module(root_node_uid, module_name=module_name, scope=module_scope)
+                except Exception:
+                    # 如果执行失败，清除缓存以允许后续重试（或防止污染）
+                    if module_name in self._loaded_modules:
+                        del self._loaded_modules[module_name]
+                    raise
+                
+                return module_instance
 
         raise InterpreterError(f"Module '{module_name}' not found or not registered in artifact.", error_code=DEP_MODULE_NOT_FOUND)
 

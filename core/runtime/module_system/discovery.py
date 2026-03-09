@@ -2,7 +2,7 @@ import os
 import importlib.util
 from typing import Dict, List, Optional
 from core.foundation.host_interface import HostInterface
-from core.foundation.kernel import ModuleType
+from core.domain.types.descriptors import ModuleMetadata as ModuleType
 
 class ModuleDiscoveryService:
     """

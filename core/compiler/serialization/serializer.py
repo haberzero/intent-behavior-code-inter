@@ -27,7 +27,13 @@ class FlatSerializer:
         return {
             "entry_module": artifact.entry_module,
             "modules": modules_data,
-            "global_symbols": artifact.global_symbols
+            "global_symbols": artifact.global_symbols,
+            "pools": {
+                "nodes": self.node_pool,
+                "symbols": self.symbol_pool,
+                "scopes": self.scope_pool,
+                "types": self.type_pool
+            }
         }
 
     def serialize_result(self, result: CompilationResult) -> Dict[str, Any]:

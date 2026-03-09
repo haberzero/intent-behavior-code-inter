@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from core.foundation.capabilities import ExtensionCapabilities
+from core.foundation.interfaces import ExtensionCapabilities, IIbObject
 
 class IDbgLib:
     def __init__(self):
@@ -43,8 +43,7 @@ class IDbgLib:
 
     def fields(self, obj: Any) -> Dict[str, Any]:
         """返回对象（IbObject）的内部细节。测试用例期望原生值。"""
-        from core.foundation.kernel import IbObject
-        if isinstance(obj, IbObject):
+        if isinstance(obj, IIbObject):
             # 优先使用专门的调试序列化方法
             if hasattr(obj, 'serialize_for_debug'):
                 data = obj.serialize_for_debug()

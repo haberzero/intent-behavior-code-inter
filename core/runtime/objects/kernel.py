@@ -1,150 +1,11 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
-from .registry import Registry
+from core.foundation.registry import Registry
 from core.domain.issue import InterpreterError, ReturnException
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from dataclasses import dataclass
+from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
 
 if TYPE_CHECKING:
     from core.domain import ast as ast
-
-@dataclass
-class Type:
-    """
-    Unified Type Metadata.
-    Base class for both compile-time type descriptions and runtime IbClass.
-    """
-    name: str
-
-    def is_assignable_to(self, other: 'Type') -> bool:
-        """
-        Check if this type can be assigned to 'other' type.
-        Implements the core type compatibility logic.
-        """
-        # UTS 核心逻辑：
-        # 1. 引用相等
-        if self is other:
-            return True
-            
-        # 2. 名字匹配 (兼容占位符与正式 IbClass)
-        if self.name == other.name:
-            return True
-
-        # 3. 动态类型兼容性
-        if other.name in ("Any", "var"):
-            return True
-            
-        # 4. 模块兼容性 (Any 可以赋值给 Module)
-        if self.name == "Any" or self.name == "var":
-            return True
-            
-        return False
-        
-    def resolve_member(self, name: str) -> Optional[Any]:
-        """Resolve a member (attribute/method) by name."""
-        return None
-
-    def __str__(self):
-        return self.name
-
-@dataclass
-class CallableType(Type):
-    """Any callable object."""
-    def __init__(self, name: str = "callable"):
-        super().__init__(name)
-
-    def is_assignable_to(self, other: 'Type') -> bool:
-        if super().is_assignable_to(other):
-            return True
-        return other.name == "callable"
-
-@dataclass
-class ListType(Type):
-    """Generic list type: list[T]"""
-    element_type: Type
-    def __init__(self, element_type: Type):
-        # 注意：这里我们故意不使用 IbClass，因为 list[T] 是复合类型
-        super().__init__(f"list[{element_type}]")
-        self.element_type = element_type
-
-    def is_assignable_to(self, other: Type) -> bool:
-        if super().is_assignable_to(other):
-            return True
-        if other.name == "list": # 协变：list[int] 可以赋值给 list
-             return True
-        if isinstance(other, ListType):
-            return self.element_type.is_assignable_to(other.element_type)
-        return False
-
-@dataclass
-class DictType(Type):
-    """Generic dict type: dict[K, V]"""
-    key_type: Type
-    value_type: Type
-    def __init__(self, key_type: Type, value_type: Type):
-        super().__init__(f"dict[{key_type}, {value_type}]")
-        self.key_type = key_type
-        self.value_type = value_type
-
-    def is_assignable_to(self, other: Type) -> bool:
-        if super().is_assignable_to(other):
-            return True
-        if other.name == "dict":
-             return True
-        if isinstance(other, DictType):
-            return self.key_type.is_assignable_to(other.key_type) and \
-                   self.value_type.is_assignable_to(other.value_type)
-        return False
-
-@dataclass
-class FunctionType(Type):
-    """A specific function signature."""
-    param_types: List[Type]
-    return_type: Type
-    def __init__(self, param_types: List[Type], return_type: Type):
-        super().__init__("function")
-        self.param_types = param_types
-        self.return_type = return_type
-
-    def is_assignable_to(self, other: Type) -> bool:
-        if super().is_assignable_to(other):
-            return True
-        if other.name == "callable":
-            return True
-        if isinstance(other, FunctionType):
-            if not self.return_type.is_assignable_to(other.return_type):
-                return False
-            if len(self.param_types) != len(other.param_types):
-                return False
-            for p1, p2 in zip(self.param_types, other.param_types):
-                if not p2.is_assignable_to(p1): 
-                    return False
-            return True
-        return False
-
-@dataclass
-class ModuleType(Type):
-    """A compiled IBCI module/package."""
-    scope: Any 
-    def __init__(self, scope: Any):
-        super().__init__("module")
-        self.scope = scope
-
-    def resolve_member(self, name: str) -> Optional[Type]:
-        if self.scope:
-            symbol = self.scope.resolve(name)
-            if symbol and symbol.type_info:
-                return symbol.type_info
-        return None
-
-# UTS Singleton Instances / Type Placeholders
-# 引导程序 initialize_builtin_classes 会用真正的 IbClass 覆盖这些
-ANY_TYPE = Type("Any")
-VOID_TYPE = Type("void")
-INT_TYPE = Type("int")
-FLOAT_TYPE = Type("float")
-STR_TYPE = Type("str")
-BOOL_TYPE = Type("bool")
-VAR_TYPE = Type("var")
 
 class IbObject:
     """
@@ -180,13 +41,10 @@ class IbObject:
         """
         响应 Spec 协议：定义对象在 LLM 视角下的表现形式。
         """
-        # 1. 优先尝试调用 IBC 层面定义的 __to_prompt__
-        # 我们使用 receive 消息传递，这本身就是 OO 的体现
         try:
             res = self.receive('__to_prompt__', [])
             return str(res.value) if hasattr(res, 'value') else str(res)
         except:
-            # 2. 默认实现 (对齐 Spec)
             return f"<Instance of {self.ib_class.name}>"
 
     def serialize_for_debug(self) -> Dict[str, Any]:
@@ -196,13 +54,11 @@ class IbObject:
         """
         res = {k: (v.serialize_for_debug() if isinstance(v, IbObject) else v) 
                    for k, v in self.fields.items()}
-        # 附加元数据 (以 __ 开头以免与字段冲突)
         res["__type__"] = self.ib_class.name
         res["__repr__"] = self.__repr__()
         return res
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
-        """UTS 协议：将对象转为 Python 原生对象。默认返回自身。"""
         return self
 
     def __repr__(self):
@@ -218,11 +74,9 @@ class IbNativeObject(IbObject):
         self.py_obj = py_obj
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        """代理调用原生对象的属性或方法"""
         if hasattr(self.py_obj, message):
             attr = getattr(self.py_obj, message)
             if callable(attr):
-                # 包装为原生函数
                 native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
                 return Registry.box(attr(*native_args))
             return Registry.box(attr)
@@ -246,83 +100,65 @@ class IbModule(IbObject):
         self.scope = scope
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        # 1. 优先从模块作用域获取变量 (成员访问)
+        try:
+            return self.scope.get(message)
+        except (KeyError, AttributeError):
+            pass
+            
+        # 2. 特殊协议处理
         if message == '__getattr__':
             name = args[0].to_native()
             try:
-                # 从模块作用域中查找变量
                 return self.scope.get(name)
             except (KeyError, AttributeError):
                 return Registry.get_none()
         
+        # 3. 后备：查 IbModule 类方法 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def __repr__(self):
         return f"<Module '{self.name}'>"
 
-class IbClass(IbObject, Type):
+class IbClass(IbObject, TypeDescriptor):
     """
     IBC-Inter 类对象 (元对象)。
-    同时继承自 IbObject (一切皆对象) 和 Type (统一类型元数据)。
+    同时继承自 IbObject (一切皆对象) 和 TypeDescriptor (统一类型元数据)。
     模拟虚表 (vtable)：存储方法名到 IbFunction 的映射。
     """
     __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types')
 
     def __init__(self, name: str, parent: Optional['IbClass'] = None):
-        # 类的元类在引导阶段由 Bootstrapper 绑定 (TypeClass)
-        # 这里暂时初始化为 None，由引导程序修正
         IbObject.__init__(self, None) 
-        Type.__init__(self, name)
+        TypeDescriptor.__init__(self, name)
         self.methods: Dict[str, 'IbFunction'] = {}
         self.parent = parent
         self.default_fields: Dict[str, Any] = {}
-        # UTS: 存储成员的类型信息 (用于编译期检查)
         self.member_types: Dict[str, Type] = {}
 
     def resolve_member(self, name: str) -> Optional[Any]:
-        """
-        UTS 协议：统一成员解析。
-        1. 优先查找成员类型信息 (编译期路径)。
-        2. 如果没有，查找实际方法 (运行期路径)。
-        """
-        # 编译期：查找类型定义
         if name in self.member_types:
             return self.member_types[name]
-            
-        # 向上查找
         if self.parent:
             res = self.parent.resolve_member(name)
             if res: return res
-            
-        # 运行期兜底：返回 IbFunction
         return self.lookup_method(name)
 
-    def define_member(self, name: str, member_type: Type):
-        """UTS: 定义类成员的类型元数据"""
+    def define_member(self, name: str, member_type: TypeDescriptor):
         self.member_types[name] = member_type
 
-    def is_assignable_to(self, other: Type) -> bool:
-        """
-        UTS 协议实现：检查当前类是否可以赋值给目标类型。
-        取代了旧的 can_assign_to。
-        """
-        # 1. 基础规则 (引用相等、名字相等、Any 兼容性)
+    def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other):
             return True
-            
-        # 2. 继承关系检查
         if self.parent and self.parent.is_assignable_to(other):
             return True
-            
-        # 3. [SPECIAL] 增加内置类型的兼容性规则
         if self.name == "int" and other.name == "bool":
             return True
         if self.name in ("Function", "NativeFunction", "AnonymousLLMFunction", "behavior") and other.name == "callable":
             return True
-            
         return False
 
     def lookup_method(self, name: str) -> Optional['IbFunction']:
-        """方法查找协议：支持继承查找"""
         if name in self.methods:
             return self.methods[name]
         if self.parent:
@@ -330,36 +166,24 @@ class IbClass(IbObject, Type):
         return None
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """调用类：执行构造逻辑 (创建实例 + 调用 init)"""
-        # 1. 创建新实例
         instance = IbObject(self)
-        
-        # 2. 查找并执行构造函数
         init_method = self.lookup_method('init')
         if init_method:
             init_method.call(instance, args)
-            
         return instance
 
     def can_assign_to(self, other: 'IbClass') -> bool:
-        """向后兼容接口，内部调用 UTS 协议"""
         return self.is_assignable_to(other)
 
     def register_method(self, name: str, method: 'IbFunction'):
-        """向虚表中注册方法"""
         self.methods[name] = method
 
     def instantiate(self, args: List[IbObject]) -> IbObject:
-        """实例化类对象"""
         instance = IbObject(self)
-        # 初始化默认字段
         instance.fields = self.default_fields.copy()
-        
-        # 调用构造函数 (如果存在)
         init_method = self.lookup_method('__init__')
         if init_method:
             init_method.call(instance, args)
-            
         return instance
 
     def __repr__(self):
@@ -381,7 +205,6 @@ class IbNativeFunction(IbFunction):
     用于引导阶段注入基础运算（如 int.__add__）。
     """
     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None):
-        # 默认使用 callable 类，由 Registry 获取
         super().__init__(ib_class or Registry.get_class("callable"))
         self.py_func = py_func
         self.unbox_args = unbox_args
@@ -389,38 +212,29 @@ class IbNativeFunction(IbFunction):
         self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        # 处理参数解包
         final_args = args
         if self.unbox_args:
             final_args = [arg.to_native() if hasattr(arg, 'to_native') else arg for arg in args]
 
-        # 如果是方法，总是注入 receiver 作为 self
         try:
             if self.is_method:
                 res = self.py_func(receiver, *final_args)
             else:
                 res = self.py_func(*final_args)
-            
-            # 统一通过 Registry.box 装箱返回结果
             return Registry.box(res)
         except Exception as e:
-            # 如果已经是 InterpreterError，直接向上抛，保留位置信息
             if isinstance(e, InterpreterError):
                 raise
-            # 包装原生异常
             raise InterpreterError(f"Native function '{self._name}' failed: {e}")
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        # 允许访问底层 Python 对象的属性 (支持模块/扩展能力的混合调用)
         if message == '__getattr__':
             name = args[0].to_native()
             if hasattr(self.py_func, name):
                 return Registry.box(getattr(self.py_func, name))
-
         return super().receive(message, args)
 
     def __getattr__(self, name):
-        """允许访问底层 Python 对象的属性 (支持模块/扩展能力的混合调用)"""
         return getattr(self.py_func, name)
 
 class IbBoundMethod(IbFunction):
@@ -431,7 +245,6 @@ class IbBoundMethod(IbFunction):
         self.method = method
 
     def call(self, _receiver: IbObject, args: List[IbObject]) -> IbObject:
-        # 忽略传入的 _receiver，使用绑定的 receiver
         return self.method.call(self.receiver, args)
 
     def __repr__(self):
@@ -452,7 +265,6 @@ class IbNone(IbObject):
         return cls._instance
 
     def __init__(self):
-        # 已经在 __new__ 中初始化
         pass
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
@@ -476,36 +288,29 @@ class IbUserFunction(IbFunction):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
         node_data = self.interpreter.node_pool.get(self.node_uid, {})
-        # args 字段直接就是一个 arg 节点 UID 列表
         params_uids = node_data.get("args", [])
         
         context = self.interpreter.context
         context.enter_scope()
         
         try:
-            # [NEW] 如果存在 receiver，则绑定为 self
             ib_none = Registry.get_none()
             if receiver and receiver is not ib_none:
                 context.define_variable("self", receiver)
                 
-            # 绑定参数
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.interpreter.node_pool.get(arg_uid, {})
-                
-                # 处理类型标注包装的情况 (TypeAnnotatedExpr)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
                     actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
                 
-                arg_name = actual_arg_data.get("IbArg")
+                arg_name = actual_arg_data.get("arg")
                 if i < len(args):
-                    # 获取参数符号 UID (对于参数，我们总是查看原始 arg 节点)
                     sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
                     context.define_variable(arg_name, args[i], uid=sym_uid)
             
-            # 执行主体
             body = node_data.get("body", [])
             for stmt_uid in body:
                 self.interpreter.visit(stmt_uid)
@@ -538,13 +343,11 @@ class IbLLMFunction(IbFunction):
         
         context.enter_scope()
         try:
-            # 1. 绑定 self
             ib_none = Registry.get_none()
             if receiver and receiver is not ib_none:
                 context.define_variable("self", receiver)
                 context.define_variable("__self", receiver)
                 
-            # 2. 绑定参数 (逻辑与 IbUserFunction 保持一致)
             params_uids = node_data.get("args", [])
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.interpreter.node_pool.get(arg_uid, {})
@@ -554,16 +357,13 @@ class IbLLMFunction(IbFunction):
                     actual_arg_uid = arg_data.get("target")
                     actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
                 
-                arg_name = actual_arg_data.get("IbArg")
+                arg_name = actual_arg_data.get("arg")
                 if i < len(args):
                     sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
                     context.define_variable(arg_name, args[i], uid=sym_uid)
-                    
-                    # 兼容性映射
                     if arg_name == 'text':
                         context.define_variable('__text', args[i])
 
-            # 3. 仅将推理职责交给 llm_executor
             return self.llm_executor.execute_llm_function(self.node_uid, context)
             
         finally:

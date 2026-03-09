@@ -1,6 +1,6 @@
 
 from dataclasses import dataclass, field
-from typing import List, Set, Optional, Dict
+from typing import List, Set, Optional, Dict, Any
 from enum import Enum, auto
 
 class ImportType(Enum):
@@ -21,6 +21,7 @@ class ImportInfo:
     lineno: int = 0
     import_type: ImportType = ImportType.IMPORT
     level: int = 0 # Level for relative imports (0 = absolute)
+    names: List[Any] = field(default_factory=list) # List of IbAlias nodes
 
 @dataclass
 class ModuleInfo:

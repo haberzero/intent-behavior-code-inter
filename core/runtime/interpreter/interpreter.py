@@ -12,7 +12,7 @@ from core.foundation.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
     RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR
 )
-from core.foundation.interfaces import (
+from core.runtime.interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
     PermissionManager, Scope
@@ -22,14 +22,16 @@ from .llm_executor import LLMExecutorImpl
 from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
 from .permissions import PermissionManager as PermissionManagerImpl
-from core.foundation.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction
-from core.foundation.kernel import Type, ListType, DictType, ANY_TYPE
-from core.foundation.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior, initialize_builtin_classes
+from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction
+from core.domain.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
+from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
+from core.runtime.objects.initialization import initialize_builtin_classes
 from core.foundation.registry import Registry
 from core.foundation.host_interface import HostInterface
-from core.foundation.capabilities import IStackInspector
+from core.foundation.interfaces import IStackInspector
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from .llm_executor import intent_scoped
+from .intrinsics import IntrinsicManager
 
 
 
@@ -87,7 +89,9 @@ class ServiceContextImpl:
     @property
     def issue_tracker(self) -> IssueTracker: return self._issue_tracker
     @property
-    def runtime_context(self) -> RuntimeContext: return self._runtime_context
+    def runtime_context(self) -> RuntimeContext: 
+        # [FIX] 动态获取解释器当前活跃的 Context，解决跨模块加载时的作用域滞后问题
+        return self._interpreter.context
     @property
     def llm_executor(self) -> LLMExecutor: return self._llm_executor
     @property
@@ -128,6 +132,8 @@ class Interpreter(IStackInspector):
         
         # 0. 启动内核引导
         initialize_builtin_classes()
+        # [NEW] 加载内置函数插件 (Intrinsics)
+        IntrinsicManager.load_defaults(self)
         
         self.output_callback = output_callback
         self.input_callback = input_callback
@@ -259,13 +265,9 @@ class Interpreter(IStackInspector):
                 context.define_variable(name, val, is_const=True)
                 defined_names.add(name)
 
-        define_builtin('print', IbNativeFunction(self._builtin_print, is_method=False))
-        define_builtin('len', IbNativeFunction(self._builtin_len, is_method=False))
-        define_builtin('range', IbNativeFunction(self._builtin_range, is_method=False))
-        define_builtin('input', IbNativeFunction(self._builtin_input, is_method=False))
-        define_builtin('str', IbNativeFunction(self._builtin_str, is_method=False))
-        define_builtin('int', IbNativeFunction(self._builtin_int, is_method=False))
-        define_builtin('float', IbNativeFunction(self._builtin_float, is_method=False))
+        # [NEW] 从 IntrinsicManager 注入插件化的内置函数
+        for name, func in IntrinsicManager.get_all().items():
+            define_builtin(name, func)
         
         # 注入内置类 (int, str, float, list, dict 等)
         # 注意：上面的 int, str 会覆盖这里的类符号，这在作为函数使用时是合理的。
@@ -472,17 +474,12 @@ class Interpreter(IStackInspector):
         return Registry.box(node_data.get("value"))
 
     def visit_IbBinOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
-        """二元运算分发"""
+        """二元运算实现"""
         left = self.visit(node_data.get("left"))
         right = self.visit(node_data.get("right"))
         
         op = node_data.get("op")
-        method = {
-            'Add': '__add__', 'Sub': '__sub__', 'Mult': '__mul__',
-            'Div': '__div__', 'Mod': '__mod__', 'And': '__and__', 
-            'Or': '__or__', 'BitAnd': '__and__', 'BitOr': '__or__',
-            'BitXor': '__xor__', 'LShift': '__lshift__', 'RShift': '__rshift__'
-        }.get(op)
+        method = OP_MAPPING.get(op)
         
         if not method: raise self._report_error(f"Unsupported op: {op}", node_uid)
         return left.receive(method, [right])
@@ -491,13 +488,10 @@ class Interpreter(IStackInspector):
         """比较运算实现"""
         left = self.visit(node_data.get("left"))
         # 简化：仅取第一个比较操作
-        op = node_data.get("ops", ["Eq"])[0]
+        op = node_data.get("ops", ["=="])[0]
         right = self.visit(node_data.get("comparators", [None])[0])
         
-        method = {
-            'Eq': '__eq__', 'NotEq': '__ne__', 'Lt': '__lt__', 
-            'LtE': '__le__', 'Gt': '__gt__', 'GtE': '__ge__'
-        }.get(op)
+        method = OP_MAPPING.get(op)
         
         if not method: raise self._report_error(f"Unsupported comparison: {op}", node_uid)
         return left.receive(method, [right])
@@ -845,12 +839,27 @@ class Interpreter(IStackInspector):
         return self._with_llm_fallback(node_uid, node_data, action)
 
     def visit_IbImport(self, node_uid: str, node_data: Dict[str, Any]):
-        for alias_data in node_data.get("names", []):
-            self.service_context.module_manager.import_module(alias_data.get("name"), self.context)
+        for alias_uid in node_data.get("names", []):
+            alias_data = self.node_pool.get(alias_uid)
+            if alias_data:
+                name = alias_data.get("name")
+                asname = alias_data.get("asname")
+                mod_inst = self.service_context.module_manager.import_module(name, self.context)
+                
+                # 绑定到当前作用域：优先使用别名，否则使用原始模块名
+                target_name = asname if asname else name
+                
+                # [FIX] 必须获取符号 UID 并绑定，否则 visit_IbName 无法通过 UID 查找到该模块
+                sym_uid = self.get_side_table("node_to_symbol", alias_uid)
+                self.context.define_variable(target_name, mod_inst, is_const=True, uid=sym_uid)
         return IbNone()
 
     def visit_IbImportFrom(self, node_uid: str, node_data: Dict[str, Any]):
-        names = [(a.get("name"), a.get("asname")) for a in node_data.get("names", [])]
+        names = []
+        for alias_uid in node_data.get("names", []):
+            alias_data = self.node_pool.get(alias_uid)
+            if alias_data:
+                names.append((alias_data.get("name"), alias_data.get("asname")))
         self.service_context.module_manager.import_from(node_data.get("module"), names, self.context)
         return IbNone()
 
@@ -914,44 +923,3 @@ class Interpreter(IStackInspector):
         """UTS: 使用 to_bool 协议判断真值"""
         res = value.receive('to_bool', [])
         return res.to_native() != 0
-
-    def _builtin_print(self, *args: IbObject):
-        texts = [str(arg.receive('__to_prompt__', []).to_native()) if hasattr(arg, 'receive') else str(arg) for arg in args]
-        msg = " ".join(texts)
-        if self.output_callback:
-            self.output_callback(msg)
-        else:
-            print(msg)
-        return IbNone()
-
-    def _builtin_len(self, obj: IbObject) -> IbObject:
-        """全局 len() 函数"""
-        if hasattr(obj, 'elements'):
-            return Registry.box(len(obj.elements))
-        if hasattr(obj, 'fields'):
-            return Registry.box(len(obj.fields))
-        # 尝试消息发送
-        return obj.receive('len', [])
-
-    def _builtin_range(self, *args: IbObject) -> IbObject:
-        """全局 range() 函数"""
-        native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
-        return Registry.box(list(range(*native_args)))
-
-    def _builtin_input(self, prompt: Optional[IbObject] = None) -> IbObject:
-        """全局 input() 函数"""
-        p = prompt.to_native() if prompt else ""
-        res = input(p)
-        return Registry.box(res)
-
-    def _builtin_str(self, obj: IbObject) -> IbObject:
-        """全局 str() 函数"""
-        return obj.receive('__to_prompt__', [])
-
-    def _builtin_int(self, obj: IbObject) -> IbObject:
-        """全局 int() 函数"""
-        return obj.receive('cast_to', [Registry.get_class("int")])
-
-    def _builtin_float(self, obj: IbObject) -> IbObject:
-        """全局 float() 函数"""
-        return obj.receive('cast_to', [Registry.get_class("float")])

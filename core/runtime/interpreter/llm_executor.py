@@ -2,12 +2,12 @@ import re
 import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable
-from core.foundation.interfaces import LLMExecutor, RuntimeContext, ServiceContext
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from core.domain.issue import InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
-from core.foundation.capabilities import ILLMProvider
+from core.foundation.interfaces import ILLMProvider
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.foundation.kernel import IbObject
+from core.runtime.objects.kernel import IbObject
 from core.foundation.registry import Registry
 
 class LLMExecutorImpl:
@@ -186,7 +186,7 @@ class LLMExecutorImpl:
         if not segments:
             return ""
         
-        from core.foundation.kernel import IbObject
+        from core.runtime.objects.kernel import IbObject
         content_parts = []
         for segment in segments:
             if isinstance(segment, str):
@@ -306,7 +306,7 @@ class LLMExecutorImpl:
         response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name.lower())
             
         # 5. 严格场景校验 (BRANCH/LOOP)
-        from core.foundation.builtins import IbInteger, IbString
+        from core.runtime.objects.builtins import IbInteger, IbString
         if scene_name.upper() in ("BRANCH", "LOOP"):
             clean_res = response.strip().lower()
             decision_map = {"1": 1, "0": 0, "true": 1, "false": 0, "yes": 1, "no": 0}

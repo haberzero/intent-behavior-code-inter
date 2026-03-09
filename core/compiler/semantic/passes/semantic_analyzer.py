@@ -48,7 +48,7 @@ class SemanticAnalyzer:
 
         # 2. 注册内置类型
         for name, type_info in prelude.get_builtin_types().items():
-            sym = TypeSymbol(name=name, kind=SymbolKind.BUILTIN_TYPE, static_type=type_info)
+            sym = TypeSymbol(name=name, kind=SymbolKind.BUILTIN_TYPE, static_type=type_info, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
     def analyze(self, node: ast.IbASTNode) -> CompilationResult:

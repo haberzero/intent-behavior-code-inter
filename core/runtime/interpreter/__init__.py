@@ -1,4 +1,4 @@
 from .interpreter import Interpreter
-from core.foundation.interfaces import (
+from core.runtime.interfaces import (
     RuntimeContext, LLMExecutor, InterOp, ModuleManager
 )

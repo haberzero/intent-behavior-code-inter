@@ -50,9 +50,19 @@ print(b.get_a_val())
 import mod_b
 print(mod_b.check())
 """
-        with self.assertRaises(InterpreterError) as cm:
-            self.engine.run_string(main_code)
-        self.assertIn("Variable 'secret' is not defined", str(cm.exception))
+        # 在新架构中，这种未定义变量的访问会在编译阶段被拦截 (Semantic Analysis)
+        # 我们通过 silent=True 让 Engine 抛出原始异常
+        from core.domain.issue import CompilerError, InterpreterError
+        with self.assertRaises((InterpreterError, CompilerError)) as cm:
+            self.engine.run_string(main_code, silent=True)
+        
+        if isinstance(cm.exception, InterpreterError):
+            error_msg = str(cm.exception)
+        else:
+            # CompilerError: 检查所有诊断信息
+            error_msg = " ".join([d.message for d in cm.exception.diagnostics])
+        
+        self.assertIn("secret", error_msg)
 
     def test_import_as_alias(self):
         """测试 import as 别名"""
