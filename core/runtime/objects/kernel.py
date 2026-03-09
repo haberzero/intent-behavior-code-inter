@@ -1,5 +1,5 @@
-from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
-from core.foundation.registry import Registry, get_default_registry
+from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
+from core.foundation.registry import Registry
 from core.domain.issue import InterpreterError
 from core.runtime.exceptions import ReturnException
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
@@ -17,7 +17,7 @@ class IbObject:
 
     def __init__(self, ib_class: 'IbClass'):
         self.ib_class = ib_class
-        self.fields: Dict[str, Any] = {}
+        self.fields: Mapping[str, Any] = {}
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
@@ -48,7 +48,7 @@ class IbObject:
         except:
             return f"<Instance of {self.ib_class.name}>"
 
-    def serialize_for_debug(self) -> Dict[str, Any]:
+    def serialize_for_debug(self) -> Mapping[str, Any]:
         """
         为 IDBG 等调试组件提供的序列化方法。
         将 IbObject 转换为 Python 原生字典。
@@ -70,9 +70,8 @@ class IbNativeObject(IbObject):
     包装 Python 原生对象的 IBC 对象。
     用于桥接 Python 扩展和标准库。
     """
-    def __init__(self, py_obj: Any, ib_class: Optional['IbClass'] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("Object"))
+    def __init__(self, py_obj: Any, ib_class: 'IbClass'):
+        super().__init__(ib_class)
         self.py_obj = py_obj
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
@@ -96,9 +95,8 @@ class IbModule(IbObject):
     IBC-Inter 模块对象。
     持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
     """
-    def __init__(self, name: str, scope: Any, registry: Optional[Registry] = None):
-        reg = registry or get_default_registry()
-        super().__init__(reg.get_class("IbModule") or reg.ObjectClass)
+    def __init__(self, name: str, scope: Any, registry: Registry):
+        super().__init__(registry.get_class("IbModule") or registry.get_class("Object"))
         self.name = name
         self.scope = scope
 
@@ -132,12 +130,14 @@ class IbClass(IbObject, TypeDescriptor):
     __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry')
 
     def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[Registry] = None):
-        self.registry = registry or get_default_registry()
+        if not registry:
+            raise ValueError("Registry is required for IbClass creation")
+        self.registry = registry
         IbObject.__init__(self, self) # IbClass 的类是它自己
         TypeDescriptor.__init__(self, name)
         self.methods: Dict[str, 'IbFunction'] = {}
         self.parent = parent
-        self.default_fields: Dict[str, Any] = {}
+        self.default_fields: Mapping[str, Any] = {}
         self.member_types: Dict[str, Type] = {}
 
     def resolve_member(self, name: str) -> Optional[Any]:
@@ -197,9 +197,8 @@ class IbFunction(IbObject):
     """
     可调用对象的基类 (语言层表现为 callable)。
     """
-    def __init__(self, ib_class: Optional['IbClass'] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("callable"))
+    def __init__(self, ib_class: 'IbClass'):
+        super().__init__(ib_class)
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         raise NotImplementedError()
@@ -210,8 +209,9 @@ class IbNativeFunction(IbFunction):
     用于引导阶段注入基础运算（如 int.__add__）。
     """
     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("callable"))
+        if not ib_class:
+            raise ValueError("ib_class is required for IbNativeFunction")
+        super().__init__(ib_class)
         self.py_func = py_func
         self.unbox_args = unbox_args
         self.is_method = is_method
@@ -246,8 +246,7 @@ class IbNativeFunction(IbFunction):
 class IbBoundMethod(IbFunction):
     """绑定了接收者的函数 (模拟 C++ 虚表调用的 this 绑定)"""
     def __init__(self, receiver: IbObject, method: IbFunction):
-        reg = method.ib_class.registry if method and method.ib_class else get_default_registry()
-        super().__init__(reg.get_class("callable"))
+        super().__init__(method.ib_class.registry.get_class("callable"))
         self.receiver = receiver
         self.method = method
 
@@ -279,14 +278,13 @@ class IbUserFunction(IbFunction):
     用户定义的 IBC 函数。
     """
     def __init__(self, node_uid: str, interpreter: 'Interpreter', ib_class: Optional['IbClass'] = None):
-        reg = interpreter.registry if interpreter else get_default_registry()
-        super().__init__(ib_class or reg.get_class("callable"))
+        super().__init__(ib_class or interpreter.registry.get_class("callable"))
         self.node_uid = node_uid
         self.interpreter = interpreter
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
-        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        node_data = self.interpreter.get_node_data(self.node_uid)
         params_uids = node_data.get("args", [])
         
         context = self.interpreter.context
@@ -298,12 +296,12 @@ class IbUserFunction(IbFunction):
                 context.define_variable("self", receiver)
                 
             for i, arg_uid in enumerate(params_uids):
-                arg_data = self.interpreter.node_pool.get(arg_uid, {})
+                arg_data = self.interpreter.get_node_data(arg_uid)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
+                    actual_arg_data = self.interpreter.get_node_data(actual_arg_uid)
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
@@ -321,7 +319,7 @@ class IbUserFunction(IbFunction):
             context.exit_scope()
 
     def __repr__(self):
-        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        node_data = self.interpreter.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")
         return f"<Function '{name}'>"
 
@@ -329,16 +327,15 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, interpreter: Any):
-        reg = interpreter.registry if interpreter else get_default_registry()
-        super().__init__(reg.get_class("callable"))
+    def __init__(self, node_uid: str, llm_executor: Any, interpreter: 'Interpreter'):
+        super().__init__(interpreter.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.interpreter = interpreter
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
-        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        node_data = self.interpreter.get_node_data(self.node_uid)
         context = self.interpreter.context
         
         context.enter_scope()
@@ -350,12 +347,12 @@ class IbLLMFunction(IbFunction):
                 
             params_uids = node_data.get("args", [])
             for i, arg_uid in enumerate(params_uids):
-                arg_data = self.interpreter.node_pool.get(arg_uid, {})
+                arg_data = self.interpreter.get_node_data(arg_uid)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self.interpreter.node_pool.get(actual_arg_uid, {})
+                    actual_arg_data = self.interpreter.get_node_data(actual_arg_uid)
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
@@ -370,6 +367,6 @@ class IbLLMFunction(IbFunction):
             context.exit_scope()
 
     def __repr__(self):
-        node_data = self.interpreter.node_pool.get(self.node_uid, {})
+        node_data = self.interpreter.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")
         return f"<LLMFunction '{name}'>"

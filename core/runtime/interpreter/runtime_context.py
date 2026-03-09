@@ -1,8 +1,8 @@
 from typing import Any, Dict, List, Optional, Union
-from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext
+from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
-from core.foundation.registry import Registry, get_default_registry
+from core.foundation.registry import Registry
 from core.foundation.interfaces import IStateReader
 
 class RuntimeSymbolImpl:
@@ -18,13 +18,13 @@ class ScopeImpl:
         self._symbols: Dict[str, RuntimeSymbol] = {}
         self._uid_to_symbol: Dict[str, RuntimeSymbol] = {} # 基于 Symbol UID 的直接映射
         self._parent = parent
-        # 如果没有传入 registry，则继承父作用域的，或者使用默认的
+        # 如果没有传入 registry，则从父作用域继承
         if registry:
             self._registry = registry
         elif parent and hasattr(parent, '_registry'):
             self._registry = parent._registry
         else:
-            self._registry = get_default_registry()
+            raise ValueError("Registry is required for Scope creation (no parent provided)")
 
     def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
         boxed_value = self._registry.box(value)
@@ -97,9 +97,29 @@ class ScopeImpl:
         """返回当前作用域的所有符号（不包含父作用域）"""
         return dict(self._symbols)
 
+class SymbolViewImpl(SymbolView):
+    """[Active Defense] 只读符号表视图实现"""
+    def __init__(self, context: RuntimeContext):
+        self._context = context
+
+    def get(self, name: str) -> Any:
+        return self._context.get_variable(name)
+
+    def get_symbol(self, name: str) -> Optional[RuntimeSymbol]:
+        return self._context.get_symbol(name)
+
+    def has(self, name: str) -> bool:
+        try:
+            self._context.get_symbol(name)
+            return True
+        except:
+            return False
+
 class RuntimeContextImpl(RuntimeContext, IStateReader):
     def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):
-        self._registry = registry or get_default_registry()
+        if not registry:
+            raise ValueError("Registry is required for RuntimeContext creation")
+        self._registry = registry
         self._global_scope = initial_scope or ScopeImpl(registry=self._registry)
         self._current_scope = self._global_scope
         self._intent_stack: List[Any] = []
@@ -244,3 +264,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     @property
     def global_scope(self) -> Scope:
         return self._global_scope
+
+    def get_symbol_view(self) -> SymbolView:
+        return SymbolViewImpl(self)

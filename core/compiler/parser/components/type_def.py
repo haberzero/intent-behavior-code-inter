@@ -24,7 +24,7 @@ class TypeComponent(BaseComponent):
         elif self.stream.match(TokenType.CALLABLE):
             base_type = self._loc(ast.IbName(id='callable', ctx='Load'), self.stream.previous())
         else:
-            raise self.stream.error(self.stream.peek(), "Expect type name.")
+            raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
 
         # 2. Generics: list[int], dict[str, Any]
         if self.stream.match(TokenType.LBRACKET):

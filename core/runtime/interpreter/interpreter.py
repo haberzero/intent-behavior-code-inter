@@ -1,7 +1,7 @@
 import re
 import json
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 from core.domain import ast as ast
 from core.domain.issue import (
     InterpreterError, LLMUncertaintyError, Severity
@@ -12,12 +12,12 @@ from core.runtime.exceptions import (
 from core.domain.issue_atomic import Location
 from core.foundation.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
-    RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR
+    RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR, RUN_ATTRIBUTE_ERROR
 )
 from core.runtime.interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
-    PermissionManager, Scope
+    PermissionManager, Scope, SymbolView
 )
 from .runtime_context import RuntimeContextImpl
 from .llm_executor import LLMExecutorImpl
@@ -34,36 +34,11 @@ from core.foundation.interfaces import IStackInspector
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from .llm_executor import intent_scoped
 from .intrinsics import IntrinsicManager
+from .ast_view import ReadOnlyNodePool
 
 
 
-# 运算符映射 (模拟汇编操作码)
-OP_MAPPING = {
-    '+': '__add__',
-    '-': '__sub__',
-    '*': '__mul__',
-    '/': '__div__',
-    '//': '__div__',
-    '%': '__mod__',
-    '&': '__and__',
-    '|': '__or__',
-    '^': '__xor__',
-    '<<': '__lshift__',
-    '>>': '__rshift__',
-    '==': '__eq__',
-    '!=': '__ne__',
-    '<': '__lt__',
-    '<=': '__le__',
-    '>': '__gt__',
-    '>=': '__ge__',
-}
-
-UNARY_OP_MAPPING = {
-    '-': '__neg__',
-    '+': '__pos__',
-    'not': '__not__',
-    '~': '__invert__',
-}
+from .constants import OP_MAPPING, UNARY_OP_MAPPING
 
 class ServiceContextImpl:
     """注入容器实现类 (已移除 Evaluator)"""
@@ -98,6 +73,10 @@ class ServiceContextImpl:
     def runtime_context(self) -> RuntimeContext: 
         # [FIX] 动态获取解释器当前活跃的 Context，解决跨模块加载时的作用域滞后问题
         return self._interpreter.context
+
+    @property
+    def symbol_view(self) -> SymbolView:
+        return self.runtime_context.get_symbol_view()
     @property
     def llm_executor(self) -> LLMExecutor: return self._llm_executor
     @property
@@ -144,13 +123,14 @@ class Interpreter(IStackInspector):
         self.intrinsic_manager = IntrinsicManager(self.registry)
         self.intrinsic_manager.load_defaults(self)
         
+        self.issue_tracker = issue_tracker
         self.output_callback = output_callback
         self.input_callback = input_callback
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
         
         # 1. 核心解耦：处理平铺化池结构
-        self.artifact_dict: Dict[str, Any] = {}
+        self.artifact_dict: Mapping[str, Any] = {}
         if artifact:
             # 如果是对象，则转换为扁平化池字典
             if hasattr(artifact, 'to_dict'):
@@ -160,10 +140,10 @@ class Interpreter(IStackInspector):
         
         # 加载全局池 (Pools)
         pools = self.artifact_dict.get("pools", {})
-        self.node_pool: Dict[str, Dict[str, Any]] = pools.get("nodes", {})
-        self.symbol_pool: Dict[str, Dict[str, Any]] = pools.get("symbols", {})
-        self.scope_pool: Dict[str, Dict[str, Any]] = pools.get("scopes", {})
-        self.type_pool: Dict[str, Dict[str, Any]] = pools.get("types", {})
+        self.node_pool: Dict[str, Mapping[str, Any]] = pools.get("nodes", {})
+        self.symbol_pool: Dict[str, Mapping[str, Any]] = pools.get("symbols", {})
+        self.scope_pool: Dict[str, Mapping[str, Any]] = pools.get("scopes", {})
+        self.type_pool: Dict[str, Mapping[str, Any]] = pools.get("types", {})
         
         # 2. 初始化基础组件
         runtime_context = RuntimeContextImpl(registry=self.registry)
@@ -216,14 +196,22 @@ class Interpreter(IStackInspector):
             return None
         
         module_data = self.artifact_dict.get("modules", {}).get(self.current_module_name, {})
-        if not isinstance(module_data, dict):
+        if not isinstance(module_data, Mapping):
             # print(f"DEBUG: module_data for {self.current_module_name} is NOT a dict! it is {type(module_data)}")
             return None
             
         table = module_data.get("side_tables", {}).get(table_name, {})
         return table.get(node_uid)
 
-    def save_state(self) -> Dict[str, Any]:
+    def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
+        """[Standardized] 获取 AST 节点数据的唯一入口，返回只读视图"""
+        node_data = self.node_pool.get(node_uid)
+        if node_data is None:
+            # 这是一个防御性检查，通常由编译器保证正确
+            raise self._report_error(f"Internal Error: Node pool lookup failed for {node_uid}")
+        return ReadOnlyNodePool(node_data)
+
+    def save_state(self) -> Mapping[str, Any]:
         """导出当前解释器的运行状态快照 (用于调试或热替换)"""
         return {
             "artifact": self.artifact_dict,
@@ -233,7 +221,7 @@ class Interpreter(IStackInspector):
             # 注意：Context 状态通常由外部单独管理，此处仅记录引用
         }
 
-    def restore_state(self, state: Dict[str, Any]):
+    def restore_state(self, state: Mapping[str, Any]):
         """从快照恢复解释器运行状态"""
         self.artifact_dict = state["artifact"]
         # 重新绑定池
@@ -247,16 +235,16 @@ class Interpreter(IStackInspector):
         self.call_stack_depth = state["call_stack_depth"]
         self.current_module_name = state["current_module_name"]
 
-    def hot_reload_pools(self, artifact_dict: Dict[str, Any]):
+    def hot_reload_pools(self, artifact_dict: Mapping[str, Any]):
         """热替换底层数据池，不改变当前的变量现场"""
         self.artifact_dict = artifact_dict
         
         pools = artifact_dict.get("pools", {})
-        if not isinstance(pools, dict):
+        if not isinstance(pools, Mapping):
              raise ValueError(f"Artifact pools must be a dict, got {type(pools)}")
              
         self.node_pool = pools.get("nodes", {})
-        if not isinstance(self.node_pool, dict):
+        if not isinstance(self.node_pool, Mapping):
              raise ValueError(f"Node pool must be a dict, got {type(self.node_pool)}")
         self.symbol_pool = pools.get("symbols", {})
         self.scope_pool = pools.get("scopes", {})
@@ -302,25 +290,25 @@ class Interpreter(IStackInspector):
         
         # DEBUG
         # print(f"DEBUG: execute_module {module_name} uid={module_uid}")
-        # if not isinstance(self.node_pool, dict):
+        # if not isinstance(self.node_pool, Mapping):
         #     print(f"DEBUG: node_pool is NOT a dict! it is {type(self.node_pool)}")
         
         old_module = self.current_module_name
         self.current_module_name = module_name
         
-        module_data = self.node_pool.get(module_uid)
+        module_data = self.get_node_data(module_uid)
         if not module_data:
             # print(f"DEBUG: module_data not found for {module_uid} in pool keys: {list(self.node_pool.keys())[:10]}")
             raise self._report_error(f"Module UID {module_uid} not found.")
         
-        if not isinstance(module_data, dict):
-            # print(f"DEBUG: module_data is NOT a dict! it is {type(module_data)} -> {module_data}")
+        if not isinstance(module_data, Mapping):
+            # print(f"DEBUG: module_data is NOT a mapping! it is {type(module_data)} -> {module_data}")
             raise self._report_error(f"Module data for {module_uid} is not a dict: {type(module_data)} -> {module_data}")
 
         old_context = self._current_context
         if scope:
              # 创建新 Context 并绑定 Scope
-             new_ctx = RuntimeContextImpl(initial_scope=scope)
+             new_ctx = RuntimeContextImpl(initial_scope=scope, registry=self.registry)
              self._current_context = new_ctx
              self._setup_context(self._current_context)
 
@@ -368,13 +356,13 @@ class Interpreter(IStackInspector):
         # 1. 构造标准诊断信息并上报
         self.issue_tracker.report(
             severity=Severity.ERROR,
-            code=error_code or "RUNTIME_ERROR",
+            code=error_code or RUN_GENERIC_ERROR,
             message=message,
             location=loc
         )
         
         # 2. 构造异常并返回（供 visit 方法 raise）
-        err = InterpreterError(message, error_code=error_code)
+        err = InterpreterError(message, error_code=error_code or RUN_GENERIC_ERROR)
         err.location = loc
         return err
 
@@ -398,8 +386,8 @@ class Interpreter(IStackInspector):
             # 如果不在 pool 中，可能是字符串字面量
             return self.registry.box(node_uid)
 
-        node_data = self.node_pool.get(node_uid)
-        if not isinstance(node_data, dict):
+        node_data = self.get_node_data(node_uid)
+        if not isinstance(node_data, Mapping):
              # 这说明 pool 里存的不是 node data 字典，而是别的东西（比如另一个 UID 字符串）
              raise self._report_error(f"Pool corruption: node_pool[{node_uid}] is {type(node_data)}: {node_data}", node_uid)
         if not node_data:
@@ -418,7 +406,7 @@ class Interpreter(IStackInspector):
         
         self.call_stack_depth += 1
         try:
-            if not isinstance(node_data, dict):
+            if not isinstance(node_data, Mapping):
                 raise TypeError(f"node_data for {node_uid} is {type(node_data)}: {node_data}")
             method_name = f'visit_{node_data["_type"]}'
             visitor = getattr(self, method_name, self.generic_visit)
@@ -444,12 +432,12 @@ class Interpreter(IStackInspector):
         finally:
             self.call_stack_depth -= 1
 
-    def generic_visit(self, node_uid: str, node_data: Dict[str, Any]):
+    def generic_visit(self, node_uid: str, node_data: Mapping[str, Any]):
         raise self._report_error(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)
 
     # --- 访问方法实现 ---
 
-    def visit_IbAnnotatedStmt(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbAnnotatedStmt(self, node_uid: str, node_data: Mapping[str, Any]):
         """意图语句：intent '...' { ... }"""
         intent_uid = node_data.get("intent")
         stmt_uid = node_data.get("stmt")
@@ -460,7 +448,7 @@ class Interpreter(IStackInspector):
             
         return intent_scoped(self.service_context, intent_uid)(action)
 
-    def visit_IbAnnotatedExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbAnnotatedExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """意图表达式：intent '...' expr"""
         intent_uid = node_data.get("intent")
         expr_uid = node_data.get("expr")
@@ -470,7 +458,7 @@ class Interpreter(IStackInspector):
             
         return intent_scoped(self.service_context, intent_uid)(action)
 
-    def visit_IbBehaviorExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """行为描述行：█ ... █"""
         is_deferred = self.get_side_table("node_is_deferred", node_uid)
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"BehaviorExpr {node_uid} is_deferred={is_deferred}")
@@ -486,17 +474,17 @@ class Interpreter(IStackInspector):
         # 立即执行
         return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.context)
 
-    def visit_IbModule(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbModule(self, node_uid: str, node_data: Mapping[str, Any]):
         result = self.registry.get_none()
         for stmt_uid in node_data.get("body", []):
             result = self.visit(stmt_uid)
         return result
 
-    def visit_IbConstant(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbConstant(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """UTS: 统一常量装箱"""
         return self.registry.box(node_data.get("value"))
 
-    def visit_IbBinOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbBinOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """二元运算实现"""
         left = self.visit(node_data.get("left"))
         right = self.visit(node_data.get("right"))
@@ -507,7 +495,7 @@ class Interpreter(IStackInspector):
         if not method: raise self._report_error(f"Unsupported op: {op}", node_uid)
         return left.receive(method, [right])
 
-    def visit_IbCompare(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbCompare(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """比较运算实现"""
         left = self.visit(node_data.get("left"))
         # 简化：仅取第一个比较操作
@@ -519,12 +507,12 @@ class Interpreter(IStackInspector):
         if not method: raise self._report_error(f"Unsupported comparison: {op}", node_uid)
         return left.receive(method, [right])
 
-    def visit_IbListExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbListExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
         elts = [self.visit(e) for e in node_data.get("elts", [])]
         return self.registry.box(elts)
 
-    def visit_IbDict(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbDict(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """字典字面量 -> 统一装箱"""
         data = {}
         keys = node_data.get("keys", [])
@@ -536,24 +524,26 @@ class Interpreter(IStackInspector):
             data[native_key] = val_obj
         return self.registry.box(data)
 
-    def visit_IbSubscript(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbSubscript(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """下标访问 -> __getitem__"""
         value = self.visit(node_data.get("value"))
         slice_obj = self.visit(node_data.get("slice"))
         return value.receive('__getitem__', [slice_obj])
 
-    def visit_IbUnaryOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbUnaryOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """一元运算实现"""
         operand = self.visit(node_data.get("operand"))
-        op = node_data.get("op")
-        method = {
-            'UAdd': '__pos__', 'USub': '__neg__', 'Not': '__not__', 'Invert': '__invert__'
-        }.get(op)
+        op_symbol = node_data.get("op")
+        # 兼容性处理
+        op_map = {'UAdd': '+', 'USub': '-', 'Not': 'not', 'Invert': '~'}
+        op = op_map.get(op_symbol, op_symbol)
         
-        if not method: raise self._report_error(f"Unsupported unary op: {op}", node_uid)
+        method = UNARY_OP_MAPPING.get(op)
+        
+        if not method: raise self._report_error(f"Unsupported unary op: {op_symbol}", node_uid)
         return operand.receive(method, [])
 
-    def visit_IbName(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbName(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """变量读取：优先通过 Symbol UID 查找"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         if sym_uid:
@@ -571,7 +561,7 @@ class Interpreter(IStackInspector):
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Symbol UID lookup failed for {name}, falling back to name lookup.")
         return self.context.get_variable(name)
 
-    def visit_IbAssign(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]):
         """赋值语句实现"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
         
@@ -580,7 +570,7 @@ class Interpreter(IStackInspector):
         
         # 处理多重赋值目标 (var a, b = 1)
         for target_uid in node_data.get("targets", []):
-            target_data = self.node_pool.get(target_uid)
+            target_data = self.get_node_data(target_uid)
             if not target_data: continue
             
             # 1. 普通变量赋值 (Name)
@@ -602,7 +592,7 @@ class Interpreter(IStackInspector):
             # 2. 类型标注表达式 (TypeAnnotatedExpr)
             elif target_data["_type"] == "IbTypeAnnotatedExpr":
                 inner_target_uid = target_data.get("target")
-                inner_target_data = self.node_pool.get(inner_target_uid)
+                inner_target_data = self.get_node_data(inner_target_uid)
                 if inner_target_data and inner_target_data["_type"] == "IbName":
                     sym_uid = self.get_side_table("node_to_symbol", inner_target_uid)
                     name = inner_target_data.get("id")
@@ -617,7 +607,7 @@ class Interpreter(IStackInspector):
                 
         return self.registry.get_none()
 
-    def visit_IbFunctionDef(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]):
         """普通函数定义"""
         func = IbUserFunction(node_uid, self)
         name = node_data.get("name")
@@ -625,7 +615,7 @@ class Interpreter(IStackInspector):
         self.context.define_variable(name, func, uid=sym_uid)
         return self.registry.get_none()
 
-    def visit_IbLLMFunctionDef(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbLLMFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]):
         """LLM 函数定义"""
         func = IbLLMFunction(node_uid, self.service_context.llm_executor, self)
         name = node_data.get("name")
@@ -633,18 +623,20 @@ class Interpreter(IStackInspector):
         self.context.define_variable(name, func, uid=sym_uid)
         return self.registry.get_none()
 
-    def visit_IbAugAssign(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbAugAssign(self, node_uid: str, node_data: Mapping[str, Any]):
         """复合赋值实现 (a += 1)"""
         target_uid = node_data.get("target")
-        target_data = self.node_pool.get(target_uid)
+        target_data = self.get_node_data(target_uid)
         
         value = self.visit(node_data.get("value"))
-        op = node_data.get("op")
-        method = {
-            'Add': '__add__', 'Sub': '__sub__', 'Mult': '__mul__', 'Div': '__div__'
-        }.get(op)
+        op_symbol = node_data.get("op")
+        # 兼容性处理：如果是 Add -> +
+        op_map = {'Add': '+', 'Sub': '-', 'Mult': '*', 'Div': '/'}
+        op = op_map.get(op_symbol, op_symbol)
         
-        if not method: raise self._report_error(f"Unsupported aug op: {op}", node_uid)
+        method = OP_MAPPING.get(op)
+        
+        if not method: raise self._report_error(f"Unsupported aug op: {op_symbol}", node_uid)
         
         # 1. 读取旧值
         old_val = self.visit(target_uid)
@@ -666,7 +658,7 @@ class Interpreter(IStackInspector):
             
         return self.registry.get_none()
 
-    def visit_IbBoolOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbBoolOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """逻辑运算 (and/or)"""
         is_or = node_data.get("op") == 'or'
         last_val = self.registry.get_none()
@@ -677,13 +669,13 @@ class Interpreter(IStackInspector):
             if not is_or and not self.is_truthy(val): return val
         return last_val
 
-    def visit_IfExp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IfExp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """三元表达式"""
         if self.is_truthy(self.visit(node_data.get("test"))):
             return self.visit(node_data.get("body"))
         return self.visit(node_data.get("orelse"))
 
-    def visit_IbCall(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbCall(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """UTS: 函数调用逻辑"""
         func = self.visit(node_data.get("func"))
         args = [self.visit(a) for a in node_data.get("args", [])]
@@ -701,13 +693,13 @@ class Interpreter(IStackInspector):
         except Exception as e:
             raise self._report_error(f"Call failed: {str(e)}", node_uid)
 
-    def visit_IbAttribute(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
+    def visit_IbAttribute(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """读取属性 -> __getattr__"""
         value = self.visit(node_data.get("value"))
         attr = node_data.get("attr")
         return value.receive('__getattr__', [self.registry.box(attr)])
 
-    def visit_IbIf(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]):
         def action():
             condition = self.visit(node_data.get("test"))
             if self.is_truthy(condition):
@@ -720,7 +712,7 @@ class Interpreter(IStackInspector):
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_IbWhile(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]):
         def action():
             while self.is_truthy(self.visit(node_data.get("test"))):
                 try:
@@ -732,7 +724,7 @@ class Interpreter(IStackInspector):
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_IbFor(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]):
         def action():
             target_uid = node_data.get("target")
             iter_uid = node_data.get("iter")
@@ -760,7 +752,7 @@ class Interpreter(IStackInspector):
                 self.context.push_loop_context(i, total)
                 
                 # 绑定循环变量
-                target_data = self.node_pool.get(target_uid)
+                target_data = self.get_node_data(target_uid)
                 if target_data and target_data["_type"] == "IbName":
                     name = target_data.get("id")
                     sym_uid = self.get_side_table("node_to_symbol", target_uid)
@@ -781,18 +773,18 @@ class Interpreter(IStackInspector):
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_IbReturn(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbReturn(self, node_uid: str, node_data: Mapping[str, Any]):
         value_uid = node_data.get("value")
         value = self.visit(value_uid) if value_uid else self.registry.get_none()
         raise ReturnException(value)
 
-    def visit_IbBreak(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbBreak(self, node_uid: str, node_data: Mapping[str, Any]):
         raise BreakException()
 
-    def visit_IbContinue(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbContinue(self, node_uid: str, node_data: Mapping[str, Any]):
         raise ContinueException()
 
-    def visit_IbExprStmt(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]):
         """表达式语句"""
         res = self.visit(node_data.get("value"))
         # 如果是行为描述行，则立即执行（作为语句时）
@@ -800,7 +792,7 @@ class Interpreter(IStackInspector):
             return res.receive('__call__', [])
         return res
 
-    def visit_IbRetry(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbRetry(self, node_uid: str, node_data: Mapping[str, Any]):
         """处理 retry 语句"""
         hint_uid = node_data.get("hint")
         if hint_uid:
@@ -814,7 +806,7 @@ class Interpreter(IStackInspector):
                 pass 
         raise RetryException()
 
-    def _with_llm_fallback(self, node_uid: str, node_data: Dict[str, Any], action: Callable):
+    def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
         """LLM 容错机制的核心封装"""
         while True:
             try:
@@ -830,7 +822,7 @@ class Interpreter(IStackInspector):
                         continue
                 raise
 
-    def visit_IbTry(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbTry(self, node_uid: str, node_data: Mapping[str, Any]):
         """实现异常处理块"""
         def action():
             try:
@@ -861,9 +853,9 @@ class Interpreter(IStackInspector):
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
-    def visit_IbImport(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbImport(self, node_uid: str, node_data: Mapping[str, Any]):
         for alias_uid in node_data.get("names", []):
-            alias_data = self.node_pool.get(alias_uid)
+            alias_data = self.get_node_data(alias_uid)
             if alias_data:
                 name = alias_data.get("name")
                 asname = alias_data.get("asname")
@@ -877,16 +869,16 @@ class Interpreter(IStackInspector):
                 self.context.define_variable(target_name, mod_inst, is_const=True, uid=sym_uid)
         return self.registry.get_none()
 
-    def visit_IbImportFrom(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbImportFrom(self, node_uid: str, node_data: Mapping[str, Any]):
         names = []
         for alias_uid in node_data.get("names", []):
-            alias_data = self.node_pool.get(alias_uid)
+            alias_data = self.get_node_data(alias_uid)
             if alias_data:
                 names.append((alias_data.get("name"), alias_data.get("asname")))
         self.service_context.module_manager.import_from(node_data.get("module"), names, self.context)
         return self.registry.get_none()
 
-    def visit_IbClassDef(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]):
         """动态创建类对象"""
         name = node_data.get("name")
         parent_name = node_data.get("parent") or "Object"
@@ -895,7 +887,7 @@ class Interpreter(IStackInspector):
         # 1. 注册方法与字段
         body = node_data.get("body", [])
         for stmt_uid in body:
-            stmt_data = self.node_pool.get(stmt_uid)
+            stmt_data = self.get_node_data(stmt_uid)
             if not stmt_data: continue
             
             if stmt_data["_type"] == "IbFunctionDef":
@@ -905,7 +897,7 @@ class Interpreter(IStackInspector):
             elif stmt_data["_type"] == "IbAssign":
                 val = self.visit(stmt_data.get("value")) if stmt_data.get("value") else self.registry.get_none()
                 for target_uid in stmt_data.get("targets", []):
-                    target_data = self.node_pool.get(target_uid)
+                    target_data = self.get_node_data(target_uid)
                     if target_data and target_data["_type"] == "IbName":
                         new_class.default_fields[target_data.get("id")] = val
         
@@ -914,16 +906,16 @@ class Interpreter(IStackInspector):
         self.context.define_variable(name, new_class, uid=sym_uid)
         return self.registry.get_none()
 
-    def visit_IbRaise(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbRaise(self, node_uid: str, node_data: Mapping[str, Any]):
         """抛出异常"""
         exc_uid = node_data.get("exc")
         exc_val = self.visit(exc_uid) if exc_uid else self.registry.get_none()
         raise ThrownException(exc_val)
 
-    def visit_IbIntentStmt(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbIntentStmt(self, node_uid: str, node_data: Mapping[str, Any]):
         """处理意图块"""
         intent_uid = node_data.get("intent")
-        intent_data = self.node_pool.get(intent_uid)
+        intent_data = self.get_node_data(intent_uid)
         
         intent = SimpleNamespace(
             content=intent_data.get('content', '') if intent_data else '',
@@ -939,7 +931,7 @@ class Interpreter(IStackInspector):
             self.context.pop_intent()
         return self.registry.get_none()
 
-    def visit_IbPass(self, node_uid: str, node_data: Dict[str, Any]):
+    def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]):
         return self.registry.get_none()
 
     def is_truthy(self, value: IbObject) -> bool:

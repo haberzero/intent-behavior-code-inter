@@ -1,7 +1,7 @@
 import re
 import json
 from types import SimpleNamespace
-from typing import Any, List, Optional, Dict, Union, Callable
+from typing import Any, List, Optional, Dict, Union, Callable, Mapping
 from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext
 from core.domain.issue import InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
@@ -24,7 +24,7 @@ class LLMExecutorImpl:
         # retry_hint 现状保存在 LLMExecutorImpl 中，为了兼容，
         # 我们会在调用 Provider 时同步同步它
         self.retry_hint: Optional[str] = None
-        self.last_call_info: Dict[str, Any] = {} # 记录最后一次 LLM 调用信息
+        self.last_call_info: Mapping[str, Any] = {} # 记录最后一次 LLM 调用信息
         self._expected_type_stack: List[str] = []
 
     @property
@@ -39,7 +39,7 @@ class LLMExecutorImpl:
     def pop_expected_type(self):
         if self._expected_type_stack:
             self._expected_type_stack.pop()
-    def get_last_call_info(self) -> Dict[str, Any]:
+    def get_last_call_info(self) -> Mapping[str, Any]:
         """获取最后一次 LLM 调用信息"""
         # 优先返回 executor 自身记录的信息（包含合并后的 Prompt）
         if self.last_call_info:
@@ -56,10 +56,8 @@ class LLMExecutorImpl:
         [职责解耦] 仅处理 LLM 推理过程。
         作用域管理和参数绑定已由 IbLLMFunction.call 完成。
         """
-        from core.foundation.registry import Registry
-        
         interpreter = self.service_context.interpreter
-        node_data = interpreter.node_pool.get(node_uid, {})
+        node_data = interpreter.get_node_data(node_uid)
         
         # 此时 context 已经是进入过函数作用域的状态
         name = node_data.get("name", "unknown")
@@ -79,7 +77,7 @@ class LLMExecutorImpl:
         type_name = "str"
         returns_uid = node_data.get("returns")
         if returns_uid:
-            returns_data = interpreter.node_pool.get(returns_uid)
+            returns_data = interpreter.get_node_data(returns_uid)
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
@@ -132,7 +130,7 @@ class LLMExecutorImpl:
         # 3. 处理 Call 层级
         if call_intent_uid:
             interpreter = self.service_context.interpreter
-            call_intent_data = interpreter.node_pool.get(call_intent_uid, {})
+            call_intent_data = interpreter.get_node_data(call_intent_uid)
             mode = call_intent_data.get("mode", "append")
             content = self._resolve_intent_content(call_intent_uid, context)
             if mode == "override":
@@ -153,7 +151,7 @@ class LLMExecutorImpl:
     def _resolve_intent_content(self, intent_uid: str, context: RuntimeContext) -> str:
         """从 UID 解析意图内容"""
         interpreter = self.service_context.interpreter
-        intent_data = interpreter.node_pool.get(intent_uid, {})
+        intent_data = interpreter.get_node_data(intent_uid)
         segments = intent_data.get("segments")
         if segments:
             return self._evaluate_segments(segments, context).strip()
@@ -161,7 +159,7 @@ class LLMExecutorImpl:
 
     def _resolve_intent_content_obj(self, intent: Any, context: RuntimeContext) -> str:
         """从 IntentInfo 对象或字典解析"""
-        if isinstance(intent, dict):
+        if isinstance(intent, Mapping):
             segments = intent.get('segments')
             if segments:
                 return self._evaluate_segments(segments, context).strip()
@@ -255,7 +253,7 @@ class LLMExecutorImpl:
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
         interpreter = self.service_context.interpreter
-        node_data = interpreter.node_pool.get(node_uid, {})
+        node_data = interpreter.get_node_data(node_uid)
         
         # 0. 准备环境
         ai_module = self.service_context.interop.get_package("ai")
@@ -356,17 +354,17 @@ class intent_scoped:
             return action()
             
         interpreter = self.service_context.interpreter
-        intent_data = interpreter.node_pool.get(self.intent_uid, {})
+        intent_data = interpreter.get_node_data(self.intent_uid)
         
         # 使用原始字典作为意图信息
         # 为了兼容 .mode 的访问，我们将其包装在一个简单的 namespace 对象中
-        intent_info = SimpleNamespace(
-            content=intent_data.get('content', ''),
-            mode=intent_data.get('mode', 'append'),
-            segments=intent_data.get('segments', [])
+        intent = SimpleNamespace(
+            content=intent_data.get('content', '') if intent_data else '',
+            mode=intent_data.get('mode', 'append') if intent_data else 'append',
+            segments=intent_data.get('segments', []) if intent_data else []
         )
         
-        self.service_context.runtime_context.push_intent(intent_info)
+        self.service_context.runtime_context.push_intent(intent)
         try:
             return action()
         finally:

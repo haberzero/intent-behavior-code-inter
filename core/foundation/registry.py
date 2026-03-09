@@ -12,6 +12,7 @@ class Registry:
         self._box_func: Any = None
         self._create_subclass_func: Any = None
         self._boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
+        self._int_cache: Dict[int, Any] = {} # 小整数驻留缓存 (引擎实例隔离)
 
     def register_boxer(self, py_type: type, boxer_func: Any):
         """让内置类型主动向注册表报告自己的装箱逻辑"""
@@ -28,6 +29,9 @@ class Registry:
 
     def get_all_classes(self) -> Dict[str, Any]:
         return dict(self._classes)
+
+    def get_int_cache(self) -> Dict[int, Any]:
+        return self._int_cache
 
     def register_none(self, instance: Any):
         self._none_instance = instance
@@ -50,10 +54,3 @@ class Registry:
         if self._box_func:
             return self._box_func(self, value, memo)
         return value
-
-# --- 兼容性层 (Transition Compatibility) ---
-# 提供一个默认单例，直到所有调用方完成实例化迁移
-_default_registry = Registry()
-
-def get_default_registry() -> Registry:
-    return _default_registry

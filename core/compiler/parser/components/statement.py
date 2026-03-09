@@ -250,7 +250,7 @@ class StatementComponent(BaseComponent):
             target = None
             iter_expr = expr1
         else:
-            raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.")
+            raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.", code="PAR_001")
             
         if self.stream.match(TokenType.IF):
             filter_expr = self.expression.parse_expression()
@@ -376,7 +376,7 @@ class StatementComponent(BaseComponent):
             finalbody = self.block()
             
         if not handlers and not finalbody:
-             raise self.stream.error(start_token, "Expect 'except' or 'finally' after 'try'.")
+             raise self.stream.error(start_token, "Expect 'except' or 'finally' after 'try'.", code="PAR_001")
              
         llm_fallback = self._parse_llm_fallback()
         stmt = self._loc(ast.IbTry(body=body, handlers=handlers, orelse=orelse, finalbody=finalbody), start_token)

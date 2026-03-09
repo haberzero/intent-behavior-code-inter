@@ -39,7 +39,7 @@ class DeclarationComponent(BaseComponent):
             self.stream.advance()
             token = self.stream.previous()
             if self.context.pending_intent is not None:
-                raise self.stream.error(token, "Multiple intent comments are not allowed for a single statement.")
+                raise self.stream.error(token, "Multiple intent comments are not allowed for a single statement.", code="PAR_006")
             
             # Extract mode from @+ mode
             val = token.value # e.g. "@+", "@!", "@-", "@"
@@ -279,7 +279,7 @@ class DeclarationComponent(BaseComponent):
             elif self.stream.match(TokenType.NEWLINE):
                 continue
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', or 'llmend'.")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', or 'llmend'.", code="PAR_002")
 
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
         return sys_prompt, user_prompt
@@ -322,6 +322,6 @@ class DeclarationComponent(BaseComponent):
                     # Fallback for empty placeholders if they somehow occur
                     segments.append("")
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
         
         return segments

@@ -24,7 +24,7 @@ class ExpressionComponent(BaseComponent):
         rule = self.get_rule(token.type)
         prefix = rule.prefix
         if prefix is None:
-            raise self.stream.error(token, f"Expect expression. Got {token.type}")
+            raise self.stream.error(token, f"Expect expression. Got {token.type}", code="PAR_002")
         
         left = prefix()
         
@@ -202,7 +202,7 @@ class ExpressionComponent(BaseComponent):
         if not self.stream.check(TokenType.RPAREN):
             while True:
                 if self.stream.is_at_end():
-                    raise self.stream.error(self.stream.peek(), "Unterminated argument list.")
+                    raise self.stream.error(self.stream.peek(), "Unterminated argument list.", code="PAR_004")
                 arguments.append(self.parse_expression())
                 if not self.stream.match(TokenType.COMMA):
                     break
@@ -231,7 +231,7 @@ class ExpressionComponent(BaseComponent):
         
         while not self.stream.check(TokenType.BEHAVIOR_MARKER):
             if self.stream.is_at_end():
-                raise self.stream.error(self.stream.peek(), "Unterminated behavior expression.")
+                raise self.stream.error(self.stream.peek(), "Unterminated behavior expression.", code="PAR_004")
                 
             if self.stream.match(TokenType.RAW_TEXT):
                 segments.append(self.stream.previous().value)

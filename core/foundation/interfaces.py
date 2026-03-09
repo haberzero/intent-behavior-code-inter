@@ -33,6 +33,13 @@ class IStateReader(Protocol):
         ...
 
 @runtime_checkable
+class ISymbolView(Protocol):
+    """只读符号视图接口"""
+    def get(self, name: str) -> Any: ...
+    def get_symbol(self, name: str) -> Optional[Any]: ...
+    def has(self, name: str) -> bool: ...
+
+@runtime_checkable
 class IStackInspector(Protocol):
     """提供对调用栈和意图栈的内省能力"""
     def get_call_stack_depth(self) -> int:
@@ -76,3 +83,4 @@ class ExtensionCapabilities:
         self.llm_executor: Optional[ILLMExecutor] = None
         self.intent_manager: Optional[IIntentManager] = None
         self.state_reader: Optional[IStateReader] = None
+        self.symbol_view: Optional[ISymbolView] = None

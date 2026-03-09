@@ -33,6 +33,9 @@ class ModuleLoader:
             capabilities.intent_manager = context.runtime_context
         if isinstance(context.llm_executor, ILLMExecutor):
             capabilities.llm_executor = context.llm_executor
+        
+        # [Active Defense] 注入只读符号视图
+        capabilities.symbol_view = context.symbol_view
         # 注意：llm_provider 初始为 None，可能由模块（如 ai）在 setup 时填充
         
         loaded_modules = set()

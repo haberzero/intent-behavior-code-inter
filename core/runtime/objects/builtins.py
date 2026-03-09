@@ -1,30 +1,30 @@
 from typing import Any, List, Dict, Optional, Callable
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.foundation.registry import Registry
+
 from core.domain.types import descriptors as uts
 
 class IbInteger(IbObject):
     """
     包装 Python 原生 int 的 IBC 对象。
     实现小整数驻留 (Interning) 以优化性能。
+    现在驻留缓存已移动到 Registry 实例中，实现引擎隔离。
     """
     __slots__ = ('value',)
     
-    # 小整数缓存 (-5 到 256)
-    _cache: Dict[int, 'IbInteger'] = {}
-
-    def __init__(self, value: int, ib_class: Optional[IbClass] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("int"))
+    def __init__(self, value: int, ib_class: IbClass):
+        super().__init__(ib_class)
         self.value = value
 
     @classmethod
-    def from_native(cls, value: int, ib_class: Optional[IbClass] = None) -> 'IbInteger':
-        """小整数驻留工厂方法 (注意：目前 cache 仍是全局的，未来可考虑移动到 Registry)"""
+    def from_native(cls, value: int, ib_class: IbClass) -> 'IbInteger':
+        """小整数驻留工厂方法"""
+        cache = ib_class.registry.get_int_cache()
+        
         if -5 <= value <= 256:
-            if value not in cls._cache:
-                cls._cache[value] = cls(value, ib_class=ib_class)
-            return cls._cache[value]
+            if value not in cache:
+                cache[value] = cls(value, ib_class=ib_class)
+            return cache[value]
         return cls(value, ib_class=ib_class)
 
     def to_native(self, memo=None) -> int:
@@ -52,9 +52,8 @@ class IbFloat(IbObject):
     """
     __slots__ = ('value',)
 
-    def __init__(self, value: float, ib_class: Optional[IbClass] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("float"))
+    def __init__(self, value: float, ib_class: IbClass):
+        super().__init__(ib_class)
         self.value = value
 
     def to_native(self, memo=None) -> float:
@@ -72,9 +71,8 @@ class IbString(IbObject):
     """
     __slots__ = ('value',)
 
-    def __init__(self, value: str, ib_class: Optional[IbClass] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("str"))
+    def __init__(self, value: str, ib_class: IbClass):
+        super().__init__(ib_class)
         self.value = value
 
     def to_native(self, memo=None) -> str:
@@ -92,9 +90,8 @@ class IbList(IbObject):
     """
     __slots__ = ('elements',)
 
-    def __init__(self, elements: List[IbObject], ib_class: Optional[IbClass] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("list"))
+    def __init__(self, elements: List[IbObject], ib_class: IbClass):
+        super().__init__(ib_class)
         self.elements = elements
 
     def to_native(self, memo=None) -> List[Any]:
@@ -120,9 +117,8 @@ class IbDict(IbObject):
     """
     包装 Python 原生 dict 的 IBC 对象。
     """
-    def __init__(self, fields: Dict[str, IbObject], ib_class: Optional[IbClass] = None):
-        reg = ib_class.registry if ib_class else get_default_registry()
-        super().__init__(ib_class or reg.get_class("dict"))
+    def __init__(self, fields: Dict[str, IbObject], ib_class: IbClass):
+        super().__init__(ib_class)
         self.fields = fields
 
     def to_native(self, memo=None) -> Dict[str, Any]:
