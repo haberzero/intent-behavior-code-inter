@@ -170,10 +170,12 @@ smart_log.info("开始校验库存")
 
 ### 6.1 跨语言边界的数据安全
 -   **过滤**: 始终在导出数据前检查类型。不要尝试将 Python 的 `Class`、`Module` 或 `Lambda` 直接作为 `dict` 的值返回给 `ibci`。
+-   **文本外部化 (IES 2.2)**: 插件返回的长字符串（>128 字符）在 `host.save_state` 时会自动被内核提取到 `.assets/` 目录。插件开发者无需手动处理。
 -   **None 处理**: `ibci` 中的 `None` 对应 Python 的 `None`。
 
-### 6.2 错误处理
-在扩展中抛出 `core.domain.exceptions.InterpreterError` 可以让错误带有行号信息并被 `ibci` 的 `try...except` 捕获。
+### 6.2 错误处理与鲁棒性
+-   **抛出异常**: 在扩展中抛出 `core.domain.exceptions.InterpreterError` 可以让错误带有行号信息并被 `ibci` 的 `try...except` 捕获。
+-   **LLM 容错**: 内核已增强了对 LLM 响应的解析，支持自动剥离 Markdown 代码块和非 JSON 干扰文字。插件在接收 LLM 结果时应尽量保持原始，由内核统一清洗。
 
 ### 6.3 单元测试
 建议为你的扩展编写专门的测试文件，参考 `tests/test_idbg_core.py`，手动模拟 `ExtensionCapabilities` 注入。

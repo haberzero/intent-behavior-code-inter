@@ -79,7 +79,7 @@ User u = User()
 
 ### 2.1 平铺池化架构
 编译器产出物不再是嵌套的内存对象，而是扁平化的 UID 引用池。
-- **Nodes Pool**: AST 节点。
+- **Nodes Pool**: AST 节点。使用 **16 位 Hex UID** (e.g. `node_a1b2c3d4e5f60718`) 以确保大型项目中的全局唯一性。
 - **Symbols Pool**: 语义符号。
 - **Scopes Pool**: 作用域层级。
 - **Types Pool**: 静态类型元数据。
@@ -99,3 +99,9 @@ User u = User()
     - **自动修正**：如果用户设置的 `max_call_stack` 过大，解释器会将其向下修正为安全值，并在调试日志中记录警告。
 2.  **指令数限制**：
     - `max_instructions` 默认为 10,000 条。超过此限制将触发 `Execution limit exceeded` 异常，防止 AI 生成死循环逻辑。
+
+### 2.4 持久化与安全性 (Persistence & Security)
+IBC-Inter 2.2 引入了 **“文本资产外部化 (Text Asset Externalization)”** 机制，以确保长文本在序列化过程中的安全性：
+-   **长文本隔离**：当字符串超过 128 字符，或包含复杂换行/引号时，系统会将其存入 `.assets/` 目录下的独立 `.txt` 文件。
+-   **JSON 完整性**：主 JSON 仅存储 `ext_ref` 引用，彻底规避了 LLM 返回脏数据导致 JSON 解析失败的问题。
+-   **意图栈结构共享**：意图栈采用持久化链表实现。行为对象（Lambda）仅持有指向栈顶节点的引用，实现了 **O(1) 捕获** 且无内存膨胀。
