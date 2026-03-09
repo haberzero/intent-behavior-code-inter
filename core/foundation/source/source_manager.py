@@ -32,6 +32,14 @@ class SourceManager:
             
         return None
 
+    def get_full_source(self, file_path: str) -> Optional[str]:
+        """Get the full source content of a file."""
+        abs_path = os.path.abspath(file_path)
+        lines = self._sources.get(abs_path)
+        if lines is None:
+            return None
+        return "\n".join(lines)
+
     def get_context(self, file_path: str, lineno: int, context_lines: int = 0) -> List[str]:
         """
         Get lines around the target line.

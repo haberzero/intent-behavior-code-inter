@@ -1,0 +1,13 @@
+
+import sys
+
+print("--- Inside Sub-Script ---")
+# 隔离测试：不应能访问父作用域的变量 (除非继承策略允许)
+# 继承测试：应能访问 sys 插件 (因为 policy 中包含了)
+# [FIX] 修正 print 参数个数和 sys 访问方式
+print("Current Python version (via sys plugin):")
+# 假设 sys 模块有 get_version() 或类似方法，或者我们直接打印 sys 对象
+print(sys)
+
+# 子脚本可以独立运行
+1

@@ -105,4 +105,8 @@ class SpecBuilder:
 
     def build(self) -> ModuleMetadata:
         """构建并返回 ModuleMetadata"""
-        return ModuleMetadata(name=self.name, members=self.exports)
+        m = ModuleMetadata(name=self.name)
+        for name, desc in self.exports.items():
+            m.members[name] = desc
+        # print(f"DEBUG: SpecBuilder built {m.name} with members: {list(m.members.keys())}")
+        return m

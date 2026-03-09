@@ -612,6 +612,15 @@ class SemanticAnalyzer:
         res = value_type.get_subscript_type(key_type)
         return res
 
+    def visit_IbCastExpr(self, node: ast.IbCastExpr) -> StaticType:
+        """类型强转语义分析"""
+        self.visit(node.value)
+        # 决议目标类型
+        target_type = self.symbol_table.resolve(node.type_name)
+        if target_type and isinstance(target_type, symbols.TypeSymbol):
+            return target_type.static_type
+        return STATIC_ANY
+
     def visit_IbBinOp(self, node: ast.IbBinOp) -> StaticType:
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)

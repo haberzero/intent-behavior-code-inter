@@ -25,7 +25,9 @@ class IntrinsicManager:
         from .io import register_io
         from .collection import register_collection
         from .conversion import register_conversion
+        from .meta import register_meta
         
         register_io(self, interpreter)
         register_collection(self, interpreter)
         register_conversion(self, interpreter)
+        register_meta(self, interpreter)

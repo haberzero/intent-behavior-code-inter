@@ -110,6 +110,38 @@ def initialize_builtin_classes(registry: Registry):
         return_type=metadata_registry.resolve("int")
     ), token)
 
+    registry.register_function("get_self_source", uts.FunctionMetadata(
+        name="get_self_source",
+        param_types=[],
+        return_type=metadata_registry.resolve("str")
+    ), token)
+
+    # --- Dynamic Host Meta APIs ---
+    registry.register_function("host_save_state", uts.FunctionMetadata(
+        name="host_save_state",
+        param_types=[metadata_registry.resolve("str")],
+        return_type=metadata_registry.resolve("void")
+    ), token)
+    
+    registry.register_function("host_load_state", uts.FunctionMetadata(
+        name="host_load_state",
+        param_types=[metadata_registry.resolve("str")],
+        return_type=metadata_registry.resolve("void")
+    ), token)
+    
+    registry.register_function("host_run", uts.FunctionMetadata(
+        name="host_run",
+        param_types=[metadata_registry.resolve("str")],
+        return_type=metadata_registry.resolve("bool")
+    ), token)
+    
+    registry.register_function("host_get_source", uts.FunctionMetadata(
+        name="host_get_source",
+        param_types=[],
+        return_type=metadata_registry.resolve("str")
+    ), token)
+    # ------------------------------
+
     # 4. 注册 None 单例 (Per-registry)
     registry.register_none(IbNone(none_class), token)
     _reg_native(none_class, '__to_prompt__', lambda self: "None")

@@ -16,6 +16,22 @@ class IbInteger(IbObject):
         super().__init__(ib_class)
         self.value = value
 
+    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        # [IES 2.0] 针对核心类型的内联优化
+        if message == 'cast_to':
+            target_cls = args[0]
+            if target_cls.name == 'str':
+                return self.ib_class.registry.box(str(self.value))
+            if target_cls.name == 'float':
+                return self.ib_class.registry.box(float(self.value))
+        
+        # 运算
+        if message == '__add__':
+            right = args[0].to_native()
+            return self.ib_class.registry.box(self.value + right)
+            
+        return super().receive(message, args)
+
     @classmethod
     def from_native(cls, value: int, ib_class: IbClass) -> 'IbInteger':
         """小整数驻留工厂方法"""
@@ -74,6 +90,21 @@ class IbString(IbObject):
     def __init__(self, value: str, ib_class: IbClass):
         super().__init__(ib_class)
         self.value = value
+
+    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        # [IES 2.0] 针对核心类型的内联优化
+        if message == 'len':
+            # print(f"DEBUG: IbString.receive('len') value='{self.value[:10]}...' len={len(self.value)}")
+            return self.ib_class.registry.box(len(self.value))
+        if message == '__add__':
+            right = args[0].to_native()
+            return self.ib_class.registry.box(self.value + str(right))
+        if message == 'length': # 某些脚本可能使用 .length()
+            return self.ib_class.registry.box(len(self.value))
+        if message == '__to_prompt__':
+            return self.ib_class.registry.box(self.value)
+            
+        return super().receive(message, args)
 
     def to_native(self, memo=None) -> str:
         return self.value

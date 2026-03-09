@@ -17,7 +17,7 @@ from core.foundation.diagnostics.codes import (
 from core.runtime.interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
-    PermissionManager, Scope, SymbolView
+    PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService
 )
 from .runtime_context import RuntimeContextImpl
 from .llm_executor import LLMExecutorImpl
@@ -35,10 +35,9 @@ from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, co
 from .llm_executor import intent_scoped
 from .intrinsics import IntrinsicManager
 from .ast_view import ReadOnlyNodePool
-
-
-
+from core.runtime.host.service import HostService
 from .constants import OP_MAPPING, UNARY_OP_MAPPING
+
 
 class ServiceContextImpl:
     """注入容器实现类 (已移除 Evaluator)"""
@@ -50,6 +49,9 @@ class ServiceContextImpl:
                  permission_manager: PermissionManager,
                  interpreter: InterpreterInterface,
                  registry: Registry,
+                 host_service: Optional[Any] = None,
+                 source_provider: Optional[ISourceProvider] = None,
+                 compiler: Optional[ICompilerService] = None,
                  debugger: Any = None):
         self._issue_tracker = issue_tracker
         self._runtime_context = runtime_context
@@ -59,6 +61,9 @@ class ServiceContextImpl:
         self._permission_manager = permission_manager
         self._interpreter = interpreter
         self._registry = registry
+        self._host_service = host_service
+        self._source_provider = source_provider
+        self._compiler = compiler
         self._debugger = debugger
 
     @property
@@ -85,6 +90,12 @@ class ServiceContextImpl:
     def interop(self) -> InterOp: return self._interop
     @property
     def permission_manager(self) -> PermissionManager: return self._permission_manager
+    @property
+    def host_service(self) -> Any: return self._host_service
+    @property
+    def source_provider(self) -> ISourceProvider: return self._source_provider
+    @property
+    def compiler(self) -> ICompilerService: return self._compiler
 
 class Interpreter(IStackInspector):
     """
@@ -114,7 +125,10 @@ class Interpreter(IStackInspector):
                  debugger: Optional[Any] = None,
                  root_dir: str = ".",
                  strict_mode: bool = False,
-                 registry: Optional[Registry] = None):
+                 registry: Optional[Registry] = None,
+                 source_provider: Optional[ISourceProvider] = None,
+                 compiler: Optional[ICompilerService] = None,
+                 factory: Optional[Any] = None):
         
         # 0. 启动内核引导
         self.registry = registry or Registry()
@@ -128,6 +142,9 @@ class Interpreter(IStackInspector):
         self.input_callback = input_callback
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
+        self.source_provider = source_provider
+        self.compiler = compiler
+        self.factory = factory
         
         # 1. 核心解耦：处理平铺化池结构
         self.artifact_dict: Mapping[str, Any] = {}
@@ -135,12 +152,23 @@ class Interpreter(IStackInspector):
             # 如果是对象，则转换为扁平化池字典
             if hasattr(artifact, 'to_dict'):
                 self.artifact_dict = artifact.to_dict()
-            else:
+            elif hasattr(artifact, 'modules'): # 识别为 CompilationArtifact
+                from core.compiler.serialization.serializer import FlatSerializer
+                serializer = FlatSerializer()
+                self.artifact_dict = serializer.serialize_artifact(artifact)
+            elif isinstance(artifact, dict):
                 self.artifact_dict = artifact
+            else:
+                # 警告：未知类型的 artifact，尝试保持原样（可能是 UID 字符串，但不应赋值给 artifact_dict）
+                self.artifact_dict = {}
         
         # 加载全局池 (Pools)
         pools = self.artifact_dict.get("pools", {})
+        if isinstance(pools, str):
+            print(f"DEBUG: pools is a string! artifact_dict keys: {list(self.artifact_dict.keys())}")
         self.node_pool: Dict[str, Mapping[str, Any]] = pools.get("nodes", {})
+        if isinstance(self.node_pool, str):
+            print(f"DEBUG: node_pool is a string! pools type: {type(pools)}")
         self.symbol_pool: Dict[str, Mapping[str, Any]] = pools.get("symbols", {})
         self.scope_pool: Dict[str, Mapping[str, Any]] = pools.get("scopes", {})
         self.type_pool: Dict[str, Mapping[str, Any]] = pools.get("types", {})
@@ -172,10 +200,18 @@ class Interpreter(IStackInspector):
             permission_manager=permission_manager,
             interpreter=self,
             registry=self.registry,
+            host_service=None, # 占位符，稍后注入
+            source_provider=self.source_provider,
+            compiler=self.compiler,
             debugger=self.debugger
         )
         
-        # 5. 完成子组件的注入
+        # 5. 初始化内置宿主服务 (HostService)
+        # 注意：这里注入 self.factory (Orchestrator) 彻底消除物理循环依赖
+        self.host_service = HostService(self.service_context, self.factory)
+        self.service_context._host_service = self.host_service
+
+        # 6. 完成子组件的注入
         llm_executor.service_context = self.service_context
         module_manager.set_interpreter(self)
         
@@ -251,27 +287,29 @@ class Interpreter(IStackInspector):
         self.type_pool = pools.get("types", {})
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Interpreter pools hot-reloaded.")
 
-    def _setup_context(self, context: RuntimeContext):
-        """为 Context 注入基础内置变量"""
+    def setup_context(self, context: RuntimeContext, force: bool = False):
+        """为 Context 注入基础内置变量 (Public API)"""
         # 使用私有属性访问以仅检查当前作用域，避免与后续 bootstrap 冲突
         global_symbols = context.global_scope.get_all_symbols()
         defined_names = set(global_symbols.keys())
         
         # 注入内置全局函数 (Prelude)
         def define_builtin(name, val):
-            if name not in defined_names:
-                context.define_variable(name, val, is_const=True)
-                defined_names.add(name)
+            # [IES 2.0] 如果 force=True，允许覆盖已有的内置函数 (解决序列化后的壳对象问题)
+            context.define_variable(name, val, is_const=True, force=force)
 
         # [NEW] 从 IntrinsicManager 注入插件化的内置函数
         for name, func in self.intrinsic_manager.get_all().items():
             define_builtin(name, func)
         
         # 注入内置类 (int, str, float, list, dict 等)
-        # 注意：上面的 int, str 会覆盖这里的类符号，这在作为函数使用时是合理的。
-        # 如果需要作为类型使用，目前编译器会通过 side_table 直接映射到 IbClass。
         for name, ib_class in self.registry.get_all_classes().items():
-            define_builtin(name, ib_class)
+            if name not in defined_names or force:
+                context.define_variable(name, ib_class, is_const=True, force=force)
+                defined_names.add(name)
+
+    def _setup_context(self, context: RuntimeContext):
+        self.setup_context(context)
 
     @property
     def context(self) -> RuntimeContext:
@@ -284,6 +322,26 @@ class Interpreter(IStackInspector):
     def interpret(self, module_uid: str) -> IbObject:
         """从模块 UID 开始执行"""
         return self.execute_module(module_uid)
+
+    def run(self) -> bool:
+        """从入口模块开始执行完整的项目"""
+        try:
+            entry_module = self.artifact_dict.get("entry_module")
+            if not entry_module:
+                return True
+                
+            module_data = self.artifact_dict.get("modules", {}).get(entry_module)
+            if not module_data:
+                return True
+                
+            self.execute_module(module_data["root_node_uid"], module_name=entry_module)
+            return True
+        except Exception as e:
+            # 运行时异常已由解释器内部报告
+            if not isinstance(e, InterpreterError):
+                import traceback
+                traceback.print_exc()
+            raise e
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
@@ -530,6 +588,18 @@ class Interpreter(IStackInspector):
         slice_obj = self.visit(node_data.get("slice"))
         return value.receive('__getitem__', [slice_obj])
 
+    def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """类型强转运行时实现"""
+        value = self.visit(node_data.get("value"))
+        target_type_name = node_data.get("type_name")
+        
+        # [IES 2.0] 调用目标类的 cast_to 协议
+        target_class = self.registry.get_class(target_type_name)
+        if not target_class:
+            return value # 如果类型未定义，回退为 no-op
+            
+        return value.receive('cast_to', [target_class])
+
     def visit_IbUnaryOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """一元运算实现"""
         operand = self.visit(node_data.get("operand"))
@@ -704,6 +774,8 @@ class Interpreter(IStackInspector):
         except InterpreterError:
             raise
         except Exception as e:
+            import traceback
+            print(f"DEBUG: Call failed traceback:\n{traceback.format_exc()}")
             raise self._report_error(f"Call failed: {str(e)}", node_uid)
 
     def visit_IbAttribute(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:

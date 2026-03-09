@@ -152,10 +152,12 @@ class Bootstrapper:
         if callable(val):
             # 获取 None 类或 Object 类
             callable_class = self.get_class("callable") or self.get_class("Object")
+            print(f"DEBUG: Using callable_class={callable_class.name if callable_class else 'None'}")
             res = IbNativeFunction(val, unbox_args=True, ib_class=callable_class)
             memo[id(val)] = res
             return res
 
+        print(f"DEBUG: Boxing native object {val}")
         obj_class = self.get_class("Object")
         res = IbNativeObject(val, ib_class=obj_class)
         memo[id(val)] = res

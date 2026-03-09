@@ -55,6 +55,7 @@ class ModuleDiscoveryService:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         
-        if hasattr(mod, 'spec') and isinstance(mod.spec, ModuleType):
+        # [IES 2.0 FIX] 更加鲁棒的元数据获取逻辑，避免由于多重导入导致的 isinstance 失效
+        if hasattr(mod, 'spec'):
             return mod.spec
         return None

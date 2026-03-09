@@ -26,8 +26,17 @@ class ScopeImpl:
         else:
             raise ValueError("Registry is required for Scope creation (no parent provided)")
 
-    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
+    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
+        """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
+        
+        # [IES 2.0 Privileged] 检查冲突
+        if not force:
+            if name in self._symbols and self._symbols[name].is_const:
+                raise InterpreterError(f"Cannot redefine constant '{name}'", error_code=RUN_TYPE_MISMATCH)
+            if uid in self._uid_to_symbol and self._uid_to_symbol[uid].is_const:
+                raise InterpreterError(f"Cannot redefine constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
+
         sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
         if name:
             self._symbols[name] = sym
@@ -228,15 +237,8 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         if not self._current_scope.assign_by_uid(uid, value):
             raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
-        # 检查是否试图重定义常量
-        existing = self.get_symbol_by_uid(uid) if uid else self.get_symbol(name)
-        if existing and existing.is_const:
-            if existing.value is value:
-                return
-            raise InterpreterError(f"Cannot reassign constant '{name or uid}'", error_code=RUN_TYPE_MISMATCH)
-
-        self._current_scope.define(name, value, declared_type, is_const, uid=uid)
+    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
+        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
 
     def push_intent(self, intent: Any) -> None:
         self._intent_stack.append(intent)

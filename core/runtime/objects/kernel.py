@@ -26,6 +26,23 @@ class IbObject:
         """
         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
         
+        # [IES 2.0] 内置系统消息拦截
+        if message == '__call__' and hasattr(self, 'call'):
+            return self.call(self.ib_class.registry.get_none(), args)
+            
+        if message == '__getattr__' and len(args) > 0:
+            attr_name = args[0].to_native()
+            # 优先查找实例字段
+            if attr_name in self.fields:
+                return self.fields[attr_name]
+            # 降级查找类方法
+            method = self.ib_class.lookup_method(attr_name)
+            if method:
+                # [FIX] 如果是方法，我们需要返回一个 BoundMethod 以便后续调用能正确传入 receiver
+                from .kernel import IbBoundMethod
+                return IbBoundMethod(self, method)
+
+        # 2. 正常消息路由：查找类方法
         method = self.ib_class.lookup_method(message)
         if method:
             return method.call(self, args)
@@ -75,20 +92,34 @@ class IbNativeObject(IbObject):
         self.py_obj = py_obj
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        if hasattr(self.py_obj, message):
-            attr = getattr(self.py_obj, message)
-            if callable(attr):
-                # [IES 2.0] 支持 SDK 绑定协议
-                binding = getattr(attr, '_ibci_binding', None)
-                if binding and getattr(binding, 'raw', False):
-                    # 原始模式：直接传递 IbObject
-                    return self.ib_class.registry.box(attr(*args))
-                
-                # 默认模式：自动解箱
-                native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
-                return self.ib_class.registry.box(attr(*native_args))
-            return self.ib_class.registry.box(attr)
+        # [IES 2.0 Native VTable] 优先从静态虚函数表中查找，避免运行时反射扫描
+        vtable = getattr(self.py_obj, '_ibci_vtable', {})
         
+        # 1. 直接处理契约方法调用
+        if message in vtable:
+            attr = vtable[message]
+            binding = getattr(attr, '_ibci_binding', None)
+            if not binding and hasattr(attr, '__func__'):
+                binding = getattr(attr.__func__, '_ibci_binding', None)
+            
+            # 执行调用
+            if binding and getattr(binding, 'raw', False):
+                return self.ib_class.registry.box(attr(*args))
+            
+            native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
+            return self.ib_class.registry.box(attr(*native_args))
+
+        # 2. 处理 __getattr__ 协议 (属性访问)
+        if message == '__getattr__' and len(args) > 0:
+            target_name = args[0].to_native()
+            # 如果属性本身就在 VTable 中 (例如将方法作为属性获取)，直接返回装箱后的函数
+            if target_name in vtable:
+                return self.ib_class.registry.box(vtable[target_name])
+            
+            # 否则尝试从原生对象获取属性
+            if hasattr(self.py_obj, target_name):
+                return self.ib_class.registry.box(getattr(self.py_obj, target_name))
+
         return super().receive(message, args)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:

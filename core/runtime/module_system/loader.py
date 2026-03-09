@@ -18,16 +18,21 @@ class ModuleLoader:
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext):
-        """[IES 2.0] 校验实现是否符合契约并应用绑定"""
+        """[IES 2.0] 校验实现是否符合契约，并构建静态原生虚函数表 (Native VTable)"""
         host_interface = context.interop.host_interface
-        # 使用 HostInterface 专有的元数据获取接口
         metadata = host_interface.get_module_type(module_name)
         if not metadata: return
 
-        # 扫描带装饰器的方法
+        # 构建 VTable 映射：契约方法名 -> 绑定的 Python 函数/方法
+        vtable = {}
         for attr_name in dir(implementation):
             attr = getattr(implementation, attr_name)
+            
+            # [FIX] 处理 bound method，获取其原始函数上的元数据
             binding = getattr(attr, '_ibci_binding', None)
+            if not binding and hasattr(attr, '__func__'):
+                binding = getattr(attr.__func__, '_ibci_binding', None)
+            
             if not binding: continue
 
             # 1. 契约存在性校验
@@ -42,14 +47,17 @@ class ModuleLoader:
                 continue
 
             sig = inspect.signature(attr)
-            # 排除 self
             params = [p for p in sig.parameters.values() if p.name != 'self']
-            
-            # [IES 2.0] 过滤掉可变参数 (**kwargs)，它们不计入固定签名校验
             fixed_params = [p for p in params if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
             
             if len(fixed_params) != len(spec_func.param_types):
                 raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. Spec expects {len(spec_func.param_types)} params, but Python implementation has {len(fixed_params)}.")
+
+            # 3. 注册到 VTable
+            vtable[spec_name] = attr
+
+        # 将 VTable 附加到实现对象上，供 IbNativeObject 使用
+        implementation._ibci_vtable = vtable
 
     def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
         """IES 2.0 自动依赖注入协议"""

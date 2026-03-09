@@ -106,10 +106,32 @@ class Registry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
+    def create_instance(self, class_name: str, *args, **kwargs) -> Any:
+        """
+        [IES 2.0 Factory] 统一对象实例化入口。
+        确保每个实例都绑定到当前的 Registry，并根据真相源获取类定义。
+        """
+        ib_class = self.get_class(class_name)
+        if not ib_class:
+            raise ValueError(f"Registry: Class '{class_name}' not found.")
+        
+        # 优先调用类对象的 instantiate 方法
+        if hasattr(ib_class, 'instantiate'):
+            # 这里的 args 应该是 IbObject 列表
+            return ib_class.instantiate(list(args))
+        
+        # Fallback: 如果是普通 Python 类 (例如在引导阶段)
+        return ib_class(*args, **kwargs)
+
     def register_class(self, name: str, ib_class: Any, token: Any, descriptor: Optional[Any] = None):
         """注册类（内置或用户定义），并关联其 UTS 描述符"""
         self._verify_class_registration(token)
         self._classes[name] = ib_class
+        
+        # [IES 2.0] 绑定注册表引用，确保对象能通过 ib_class.registry 访问内核功能
+        if hasattr(ib_class, 'registry'):
+            ib_class.registry = self
+            
         if descriptor:
             if hasattr(ib_class, 'descriptor'):
                 ib_class.descriptor = descriptor

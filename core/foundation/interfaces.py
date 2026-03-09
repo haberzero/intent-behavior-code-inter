@@ -8,6 +8,16 @@ class ISourceProvider(Protocol):
     源码提供者接口。支持“无盘化”诊断，从内存缓冲区获取代码片段。
     """
     def get_line(self, file_path: str, lineno: int) -> Optional[str]: ...
+    def get_full_source(self, file_path: str) -> Optional[str]: ...
+
+@runtime_checkable
+class ICompilerService(Protocol):
+    """
+    编译器服务接口。允许运行时动态编译代码或查询模块信息。
+    """
+    def compile_file(self, file_path: str) -> Any: ...
+    def resolve_module_path(self, module_name: str) -> Optional[str]: ...
+    def get_module_source(self, module_name: str) -> Optional[str]: ...
 
 @runtime_checkable
 class IssueTracker(Protocol):

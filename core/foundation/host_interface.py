@@ -51,6 +51,7 @@ class HostInterface:
     def __init__(self):
         self.metadata = MetadataRegistry()
         self.runtime = RuntimeRegistry()
+        self._module_metadata_map: Dict[str, ModuleMetadata] = {}
 
     def register_module(self, name: str, implementation: Any, metadata: Optional[ModuleMetadata] = None):
         """
@@ -59,6 +60,7 @@ class HostInterface:
         """
         self.runtime.register(name, implementation)
         if metadata:
+            self._module_metadata_map[name] = metadata
             self.metadata.register_module(name, metadata)
         else:
             # 警告：缺少显式元数据。在彻底脱离解释器的目标下，编译器不应依赖此处的逻辑。
@@ -74,7 +76,7 @@ class HostInterface:
         return self.metadata.is_external_module(name)
 
     def get_module_type(self, name: str) -> Optional[ModuleMetadata]:
-        return self.metadata.get_module_metadata(name)
+        return self._module_metadata_map.get(name) or self.metadata.get_module_metadata(name)
 
     def get_module_implementation(self, name: str) -> Optional[Any]:
         return self.runtime.get(name)

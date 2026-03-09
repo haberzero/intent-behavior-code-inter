@@ -47,6 +47,10 @@ class ModuleManagerImpl:
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
         package = self.interop.get_package(module_name)
         if package:
+            # [IES 2.0 FIX] 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
+            from core.runtime.objects.kernel import IbObject, IbNativeObject
+            if not isinstance(package, IbObject):
+                return IbNativeObject(package, self.interpreter.registry.get_class("Object"))
             return package
 
         # 2. 检查是否已经加载过该模块

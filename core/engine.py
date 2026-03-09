@@ -15,8 +15,10 @@ from core.domain.blueprint import CompilationArtifact
 from core.domain.issue import CompilerError
 from core.domain.issue import InterpreterError, LexerError, ParserError, SemanticError
 from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
+from core.runtime.interfaces import IInterpreterFactory
 
-class IBCIEngine:
+
+class IBCIEngine(IInterpreterFactory):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
@@ -50,6 +52,22 @@ class IBCIEngine:
         
         self.interpreter: Optional[Interpreter] = None
 
+    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any) -> Interpreter:
+        """[IInterpreterFactory] 物理实例化解释器，实现真正物理隔离"""
+        sub_interpreter = Interpreter(
+            issue_tracker=self.issue_tracker,
+            artifact=artifact, 
+            registry=registry,
+            host_interface=host_interface,
+            source_provider=self.scheduler.source_manager,
+            compiler=self.scheduler,
+            root_dir=root_dir,
+            factory=self # 注入自己作为工厂
+        )
+        # 加载插件
+        self.module_loader.load_and_register_all(sub_interpreter.service_context)
+        return sub_interpreter
+
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
         self.interpreter = Interpreter(
@@ -59,7 +77,10 @@ class IBCIEngine:
             host_interface=self.host_interface,
             debugger=self.debugger,
             root_dir=self.root_dir,
-            registry=self.registry
+            registry=self.registry,
+            source_provider=self.scheduler.source_manager,
+            compiler=self.scheduler,
+            factory=self # 注入自己作为工厂
         )
         # 统一由 ModuleLoader 驱动实现层的加载与注入
         self.module_loader.load_and_register_all(self.interpreter.service_context)
@@ -170,27 +191,8 @@ class IBCIEngine:
             for name, val in variables.items():
                 self.interpreter.context.define_variable(name, val)
         
-        # 2. 从入口模块开始执行
-        try:
-            entry_module = self.interpreter.artifact_dict.get("entry_module")
-            if not entry_module:
-                return True
-                
-            module_data = self.interpreter.artifact_dict.get("modules", {}).get(entry_module)
-            if not module_data:
-                return True
-                
-            self.interpreter.execute_module(module_data["root_node_uid"], module_name=entry_module)
-            return True
-        except Exception as e:
-            # 运行时异常已由解释器内部报告
-            if not isinstance(e, InterpreterError):
-                print(f"Internal engine error: {e}")
-                import traceback
-                traceback.print_exc()
-            else:
-                print(f"Runtime error: {e}")
-            return False
+        # 2. 启动执行
+        return self.interpreter.run()
 
     def get_variable(self, name: str) -> Any:
         """获取解释器上下文中的变量"""
@@ -211,6 +213,9 @@ class IBCIEngine:
             self.scheduler.compile_project(abs_entry)
             print(f"Check successful: {entry_file}")
             return True
-        except CompilerError:
+        except CompilerError as e:
+            from core.compiler.diagnostics.formatter import DiagnosticFormatter
+            print("\n--- Compilation Errors ---")
+            print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
             print(f"Check failed: {entry_file}")
             return False

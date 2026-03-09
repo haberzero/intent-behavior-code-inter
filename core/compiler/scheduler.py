@@ -19,7 +19,11 @@ from core.foundation.diagnostics.codes import (
 )
 from core.domain.blueprint import CompilationArtifact, CompilationResult
 
-class Scheduler:
+from core.foundation.interfaces import (
+    ISourceProvider, ICompilerService
+)
+
+class Scheduler(ICompilerService):
     """
     Top-level scheduler for multi-file compilation.
     Orchestrates Lexer, Parser, and SemanticAnalyzer.
@@ -60,6 +64,33 @@ class Scheduler:
         abs_path = os.path.realpath(file_path)
         self.allowed_files.add(abs_path)
         self.resolver.allow_file(abs_path)
+
+    # --- ICompilerService Implementation ---
+
+    def compile_file(self, file_path: str) -> CompilationArtifact:
+        """ICompilerService: Compiles a file and its dependencies."""
+        return self.compile_project(file_path)
+
+    def resolve_module_path(self, module_name: str) -> Optional[str]:
+        """ICompilerService: Resolves a module name to its absolute file path."""
+        # Check cache first
+        if module_name in self.module_name_to_path:
+            return self.module_name_to_path[module_name]
+        
+        # Try resolving relative to root_dir
+        try:
+            return self.resolver.resolve(module_name, os.path.join(self.root_dir, "__init__.ibci"))
+        except:
+            return None
+
+    def get_module_source(self, module_name: str) -> Optional[str]:
+        """ICompilerService: Returns the source content of a module."""
+        path = self.resolve_module_path(module_name)
+        if not path:
+            return None
+        return self.source_manager.get_full_source(path)
+
+    # ---------------------------------------
 
     def compile_project(self, entry_file: str) -> CompilationArtifact:
         """
@@ -120,6 +151,7 @@ class Scheduler:
             rel_path = os.path.relpath(file_path, self.root_dir)
             base_name = os.path.splitext(rel_path)[0]
             module_name = base_name.replace(os.sep, '.')
+            self.module_name_to_path[module_name] = file_path
 
             # Check mtime or cache
             last_mtime = self.build_cache.get(file_path, 0.0)

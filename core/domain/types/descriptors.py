@@ -353,6 +353,8 @@ class ClassMetadata(TypeDescriptor):
 @dataclass
 class ModuleMetadata(TypeDescriptor):
     """模块元数据描述"""
+    members: Dict[str, 'TypeDescriptor'] = field(default_factory=dict)
+    
     def __post_init__(self):
         super().__post_init__()
         if not self.name or self.name == "TypeDescriptor":
@@ -369,7 +371,7 @@ class MetadataRegistry:
         self._descriptors: Dict[str, TypeDescriptor] = {}
 
     def register(self, descriptor: TypeDescriptor):
-        key = str(descriptor)
+        key = f"{descriptor.module_path}.{descriptor.name}" if descriptor.module_path else descriptor.name
         self._descriptors[key] = descriptor
         # [Isolation] 将注册表上下文绑定到描述符上
         descriptor._registry = self
