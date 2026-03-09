@@ -14,17 +14,18 @@ class IbInteger(IbObject):
     _cache: Dict[int, 'IbInteger'] = {}
 
     def __init__(self, value: int, ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Registry.get_class("int"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("int"))
         self.value = value
 
     @classmethod
-    def from_native(cls, value: int) -> 'IbInteger':
-        """小整数驻留工厂方法"""
+    def from_native(cls, value: int, ib_class: Optional[IbClass] = None) -> 'IbInteger':
+        """小整数驻留工厂方法 (注意：目前 cache 仍是全局的，未来可考虑移动到 Registry)"""
         if -5 <= value <= 256:
             if value not in cls._cache:
-                cls._cache[value] = cls(value)
+                cls._cache[value] = cls(value, ib_class=ib_class)
             return cls._cache[value]
-        return cls(value)
+        return cls(value, ib_class=ib_class)
 
     def to_native(self, memo=None) -> int:
         return self.value
@@ -52,7 +53,8 @@ class IbFloat(IbObject):
     __slots__ = ('value',)
 
     def __init__(self, value: float, ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Registry.get_class("float"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("float"))
         self.value = value
 
     def to_native(self, memo=None) -> float:
@@ -71,7 +73,8 @@ class IbString(IbObject):
     __slots__ = ('value',)
 
     def __init__(self, value: str, ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Registry.get_class("str"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("str"))
         self.value = value
 
     def to_native(self, memo=None) -> str:
@@ -90,7 +93,8 @@ class IbList(IbObject):
     __slots__ = ('elements',)
 
     def __init__(self, elements: List[IbObject], ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Registry.get_class("list"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("list"))
         self.elements = elements
 
     def to_native(self, memo=None) -> List[Any]:
@@ -116,9 +120,10 @@ class IbDict(IbObject):
     """
     包装 Python 原生 dict 的 IBC 对象。
     """
-    def __init__(self, data: Dict[str, IbObject], ib_class: Optional[IbClass] = None):
-        super().__init__(ib_class or Registry.get_class("dict"))
-        self.fields = data
+    def __init__(self, fields: Dict[str, IbObject], ib_class: Optional[IbClass] = None):
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("dict"))
+        self.fields = fields
 
     def to_native(self, memo=None) -> Dict[str, Any]:
         if memo is None: memo = {}
@@ -156,7 +161,7 @@ class IbBehavior(IbObject):
     延迟执行的行为对象 (~...~)。
     """
     def __init__(self, node_uid: str, interpreter: Any, captured_intents: List[Any], expected_type: Optional[str] = None):
-        super().__init__(Registry.get_class("behavior"))
+        super().__init__(interpreter.registry.get_class("behavior"))
         self.node = node_uid
         self.interpreter = interpreter
         self.captured_intents = captured_intents
@@ -180,7 +185,7 @@ class IbBehavior(IbObject):
             res = self.interpreter.service_context.llm_executor.execute_behavior_expression(
                 self.node, self.interpreter.context, captured_intents=self.captured_intents
             )
-            self._cache = Registry.box(res)
+            self._cache = self.ib_class.registry.box(res)
             return self._cache
         finally:
             self.interpreter.context.intent_stack = old_intents

@@ -14,12 +14,12 @@ def register_io(manager, interpreter):
             interpreter.output_callback(msg)
         else:
             print(msg)
-        return IbNone()
+        return manager.registry.get_none()
 
     def _input(prompt: Optional[IbObject] = None):
         p = prompt.to_native() if prompt else ""
         res = input(p)
-        return Registry.box(res)
+        return manager.registry.box(res)
 
     manager.register('print', _print, unbox=False) # print 需要处理 IbObject 列表
     manager.register('input', _input, unbox=False)

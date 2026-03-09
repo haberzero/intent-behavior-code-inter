@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
-from core.foundation.registry import Registry
+from core.foundation.registry import Registry, get_default_registry
 from core.foundation.interfaces import IStateReader
 
 class RuntimeSymbolImpl:
@@ -14,13 +14,20 @@ class RuntimeSymbolImpl:
         self.is_const = is_const
 
 class ScopeImpl:
-    def __init__(self, parent: Optional['Scope'] = None):
+    def __init__(self, parent: Optional['Scope'] = None, registry: Optional[Registry] = None):
         self._symbols: Dict[str, RuntimeSymbol] = {}
         self._uid_to_symbol: Dict[str, RuntimeSymbol] = {} # 基于 Symbol UID 的直接映射
         self._parent = parent
+        # 如果没有传入 registry，则继承父作用域的，或者使用默认的
+        if registry:
+            self._registry = registry
+        elif parent and hasattr(parent, '_registry'):
+            self._registry = parent._registry
+        else:
+            self._registry = get_default_registry()
 
     def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
-        boxed_value = Registry.box(value)
+        boxed_value = self._registry.box(value)
         sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
         if name:
             self._symbols[name] = sym
@@ -28,7 +35,7 @@ class ScopeImpl:
             self._uid_to_symbol[uid] = sym
 
     def assign(self, name: str, value: Any) -> bool:
-        boxed_value = Registry.box(value)
+        boxed_value = self._registry.box(value)
         if name in self._symbols:
             symbol = self._symbols[name]
             if symbol.is_const:
@@ -42,7 +49,7 @@ class ScopeImpl:
 
     def assign_by_uid(self, uid: str, value: Any) -> bool:
         """基于 UID 的赋值"""
-        boxed_value = Registry.box(value)
+        boxed_value = self._registry.box(value)
         if uid in self._uid_to_symbol:
             symbol = self._uid_to_symbol[uid]
             if symbol.is_const:
@@ -91,8 +98,9 @@ class ScopeImpl:
         return dict(self._symbols)
 
 class RuntimeContextImpl(RuntimeContext, IStateReader):
-    def __init__(self, initial_scope: Optional[Scope] = None):
-        self._global_scope = initial_scope or ScopeImpl()
+    def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):
+        self._registry = registry or get_default_registry()
+        self._global_scope = initial_scope or ScopeImpl(registry=self._registry)
         self._current_scope = self._global_scope
         self._intent_stack: List[Any] = []
         self._global_intents: List[str] = []

@@ -4,8 +4,10 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union
 from core.domain import ast as ast
 from core.domain.issue import (
-    InterpreterError, ReturnException, BreakException, ContinueException, ThrownException,
-    LLMUncertaintyError, RetryException, Severity
+    InterpreterError, LLMUncertaintyError, Severity
+)
+from core.runtime.exceptions import (
+    ReturnException, BreakException, ContinueException, ThrownException, RetryException
 )
 from core.domain.issue_atomic import Location
 from core.foundation.diagnostics.codes import (
@@ -72,6 +74,7 @@ class ServiceContextImpl:
                  interop: InterOp,
                  permission_manager: PermissionManager,
                  interpreter: InterpreterInterface,
+                 registry: Registry,
                  debugger: Any = None):
         self._issue_tracker = issue_tracker
         self._runtime_context = runtime_context
@@ -80,12 +83,15 @@ class ServiceContextImpl:
         self._interop = interop
         self._permission_manager = permission_manager
         self._interpreter = interpreter
+        self._registry = registry
         self._debugger = debugger
 
     @property
     def debugger(self) -> Any: return self._debugger
     @property
     def interpreter(self) -> InterpreterInterface: return self._interpreter
+    @property
+    def registry(self) -> Registry: return self._registry
     @property
     def issue_tracker(self) -> IssueTracker: return self._issue_tracker
     @property
@@ -128,12 +134,15 @@ class Interpreter(IStackInspector):
                  host_interface: Optional[HostInterface] = None,
                  debugger: Optional[Any] = None,
                  root_dir: str = ".",
-                 strict_mode: bool = False):
+                 strict_mode: bool = False,
+                 registry: Optional[Registry] = None):
         
         # 0. 启动内核引导
-        initialize_builtin_classes()
+        self.registry = registry or Registry()
+        initialize_builtin_classes(self.registry)
         # [NEW] 加载内置函数插件 (Intrinsics)
-        IntrinsicManager.load_defaults(self)
+        self.intrinsic_manager = IntrinsicManager(self.registry)
+        self.intrinsic_manager.load_defaults(self)
         
         self.output_callback = output_callback
         self.input_callback = input_callback
@@ -157,7 +166,7 @@ class Interpreter(IStackInspector):
         self.type_pool: Dict[str, Dict[str, Any]] = pools.get("types", {})
         
         # 2. 初始化基础组件
-        runtime_context = RuntimeContextImpl()
+        runtime_context = RuntimeContextImpl(registry=self.registry)
         interop = InterOpImpl(host_interface=self.host_interface)
         
         # 权限管理
@@ -182,6 +191,7 @@ class Interpreter(IStackInspector):
             interop=interop,
             permission_manager=permission_manager,
             interpreter=self,
+            registry=self.registry,
             debugger=self.debugger
         )
         
@@ -266,13 +276,13 @@ class Interpreter(IStackInspector):
                 defined_names.add(name)
 
         # [NEW] 从 IntrinsicManager 注入插件化的内置函数
-        for name, func in IntrinsicManager.get_all().items():
+        for name, func in self.intrinsic_manager.get_all().items():
             define_builtin(name, func)
         
         # 注入内置类 (int, str, float, list, dict 等)
         # 注意：上面的 int, str 会覆盖这里的类符号，这在作为函数使用时是合理的。
         # 如果需要作为类型使用，目前编译器会通过 side_table 直接映射到 IbClass。
-        for name, ib_class in Registry.get_all_classes().items():
+        for name, ib_class in self.registry.get_all_classes().items():
             define_builtin(name, ib_class)
 
     @property
@@ -315,7 +325,7 @@ class Interpreter(IStackInspector):
              self._setup_context(self._current_context)
 
         self.instruction_count = 0
-        result = IbNone()
+        result = self.registry.get_none()
         try:
             # 模块主体是语句 UID 列表
             body = module_data.get("body", [])
@@ -338,7 +348,11 @@ class Interpreter(IStackInspector):
             self.current_module_name = old_module
 
     def _report_error(self, message: str, node_uid: Optional[str] = None, error_code: Optional[str] = None) -> InterpreterError:
-        """从 side_tables 中恢复位置信息并构造 InterpreterError"""
+        """
+        [Standardized] 从 side_tables 中恢复位置信息并向 IssueTracker 报告。
+        实现了编译器与解释器在错误报告协议上的对齐。
+        """
+        from core.domain.issue import Diagnostic, Severity
         loc_data = self.get_side_table("node_to_loc", node_uid) if node_uid else None
         
         loc = None
@@ -351,6 +365,15 @@ class Interpreter(IStackInspector):
                 end_column=loc_data.get("end_column")
             )
         
+        # 1. 构造标准诊断信息并上报
+        self.issue_tracker.report(
+            severity=Severity.ERROR,
+            code=error_code or "RUNTIME_ERROR",
+            message=message,
+            location=loc
+        )
+        
+        # 2. 构造异常并返回（供 visit 方法 raise）
         err = InterpreterError(message, error_code=error_code)
         err.location = loc
         return err
@@ -358,7 +381,7 @@ class Interpreter(IStackInspector):
     def visit(self, node_uid: Union[str, Any]) -> IbObject:
         """核心 Pool-Walking 分发方法"""
         if node_uid is None:
-            return IbNone()
+            return self.registry.get_none()
         
         # 如果不是字符串，则可能是基础类型（如 int, bool）或已解箱对象
         if not isinstance(node_uid, str):
@@ -367,13 +390,13 @@ class Interpreter(IStackInspector):
             else:
                 # 基础类型直接装箱
                 if isinstance(node_uid, (int, float, bool)):
-                    return Registry.box(node_uid)
-                return IbNone()
+                    return self.registry.box(node_uid)
+                return self.registry.get_none()
 
         # [DEBUG] 检查 node_uid 是否在 pool 中
         if node_uid not in self.node_pool:
             # 如果不在 pool 中，可能是字符串字面量
-            return Registry.box(node_uid)
+            return self.registry.box(node_uid)
 
         node_data = self.node_pool.get(node_uid)
         if not isinstance(node_data, dict):
@@ -382,8 +405,8 @@ class Interpreter(IStackInspector):
         if not node_data:
             # 可能是基础类型或已解箱对象
             if isinstance(node_uid, (int, float, str, bool)):
-                return Registry.box(node_uid)
-            return IbNone()
+                return self.registry.box(node_uid)
+            return self.registry.get_none()
 
         self.instruction_count += 1
         
@@ -464,14 +487,14 @@ class Interpreter(IStackInspector):
         return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.context)
 
     def visit_IbModule(self, node_uid: str, node_data: Dict[str, Any]):
-        result = IbNone()
+        result = self.registry.get_none()
         for stmt_uid in node_data.get("body", []):
             result = self.visit(stmt_uid)
         return result
 
     def visit_IbConstant(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """UTS: 统一常量装箱"""
-        return Registry.box(node_data.get("value"))
+        return self.registry.box(node_data.get("value"))
 
     def visit_IbBinOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """二元运算实现"""
@@ -499,7 +522,7 @@ class Interpreter(IStackInspector):
     def visit_IbListExpr(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
         elts = [self.visit(e) for e in node_data.get("elts", [])]
-        return Registry.box(elts)
+        return self.registry.box(elts)
 
     def visit_IbDict(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """字典字面量 -> 统一装箱"""
@@ -507,11 +530,11 @@ class Interpreter(IStackInspector):
         keys = node_data.get("keys", [])
         values = node_data.get("values", [])
         for k_uid, v_uid in zip(keys, values):
-            key_obj = self.visit(k_uid) if k_uid else IbNone()
+            key_obj = self.visit(k_uid) if k_uid else self.registry.get_none()
             val_obj = self.visit(v_uid)
             native_key = key_obj.to_native() if hasattr(key_obj, 'to_native') else key_obj
             data[native_key] = val_obj
-        return Registry.box(data)
+        return self.registry.box(data)
 
     def visit_IbSubscript(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """下标访问 -> __getitem__"""
@@ -590,9 +613,9 @@ class Interpreter(IStackInspector):
             elif target_data["_type"] == "IbAttribute":
                 obj = self.visit(target_data.get("value"))
                 attr = target_data.get("attr")
-                obj.receive('__setattr__', [Registry.box(attr), value])
+                obj.receive('__setattr__', [self.registry.box(attr), value])
                 
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbFunctionDef(self, node_uid: str, node_data: Dict[str, Any]):
         """普通函数定义"""
@@ -600,7 +623,7 @@ class Interpreter(IStackInspector):
         name = node_data.get("name")
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         self.context.define_variable(name, func, uid=sym_uid)
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbLLMFunctionDef(self, node_uid: str, node_data: Dict[str, Any]):
         """LLM 函数定义"""
@@ -608,7 +631,7 @@ class Interpreter(IStackInspector):
         name = node_data.get("name")
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         self.context.define_variable(name, func, uid=sym_uid)
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbAugAssign(self, node_uid: str, node_data: Dict[str, Any]):
         """复合赋值实现 (a += 1)"""
@@ -639,14 +662,14 @@ class Interpreter(IStackInspector):
         elif target_data["_type"] == "IbAttribute":
             obj = self.visit(target_data.get("value"))
             attr = target_data.get("attr")
-            obj.receive('__setattr__', [Registry.box(attr), new_val])
+            obj.receive('__setattr__', [self.registry.box(attr), new_val])
             
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbBoolOp(self, node_uid: str, node_data: Dict[str, Any]) -> IbObject:
         """逻辑运算 (and/or)"""
         is_or = node_data.get("op") == 'or'
-        last_val = IbNone()
+        last_val = self.registry.get_none()
         for val_uid in node_data.get("values", []):
             val = self.visit(val_uid)
             last_val = val
@@ -669,7 +692,7 @@ class Interpreter(IStackInspector):
             # 如果是 BoundMethod 或 IbFunction，其 call 内部会处理作用域
             # 如果是 IbObject，则发送 __call__ 消息
             if hasattr(func, 'call'):
-                return func.call(Registry.get_none(), args)
+                return func.call(self.registry.get_none(), args)
             return func.receive('__call__', args)
         except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
             raise
@@ -682,7 +705,7 @@ class Interpreter(IStackInspector):
         """读取属性 -> __getattr__"""
         value = self.visit(node_data.get("value"))
         attr = node_data.get("attr")
-        return value.receive('__getattr__', [Registry.box(attr)])
+        return value.receive('__getattr__', [self.registry.box(attr)])
 
     def visit_IbIf(self, node_uid: str, node_data: Dict[str, Any]):
         def action():
@@ -693,7 +716,7 @@ class Interpreter(IStackInspector):
             else:
                 for stmt_uid in node_data.get("orelse", []):
                     self.visit(stmt_uid)
-            return IbNone()
+            return self.registry.get_none()
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
@@ -705,7 +728,7 @@ class Interpreter(IStackInspector):
                         self.visit(stmt_uid)
                 except BreakException: break
                 except ContinueException: continue
-            return IbNone()
+            return self.registry.get_none()
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
@@ -748,19 +771,19 @@ class Interpreter(IStackInspector):
                         self.visit(stmt_uid)
                 except BreakException: 
                     self.context.pop_loop_context()
-                    return IbNone()
+                    return self.registry.get_none()
                 except ContinueException: 
                     self.context.pop_loop_context()
                     continue
                 finally:
                     self.context.pop_loop_context()
-            return IbNone()
+            return self.registry.get_none()
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
     def visit_IbReturn(self, node_uid: str, node_data: Dict[str, Any]):
         value_uid = node_data.get("value")
-        value = self.visit(value_uid) if value_uid else IbNone()
+        value = self.visit(value_uid) if value_uid else self.registry.get_none()
         raise ReturnException(value)
 
     def visit_IbBreak(self, node_uid: str, node_data: Dict[str, Any]):
@@ -802,7 +825,7 @@ class Interpreter(IStackInspector):
                     try:
                         for stmt_uid in fallback_body:
                             self.visit(stmt_uid)
-                        return IbNone()
+                        return self.registry.get_none()
                     except RetryException:
                         continue
                 raise
@@ -817,7 +840,7 @@ class Interpreter(IStackInspector):
                 raise
             except (ThrownException, Exception) as e:
                 # 包装 Python 原生异常
-                error_obj = e.value if isinstance(e, ThrownException) else Registry.box(str(e))
+                error_obj = e.value if isinstance(e, ThrownException) else self.registry.box(str(e))
                 
                 # 查找匹配的 except 块
                 handled = False
@@ -834,7 +857,7 @@ class Interpreter(IStackInspector):
             finally:
                 for stmt_uid in node_data.get("finalbody", []):
                     self.visit(stmt_uid)
-            return IbNone()
+            return self.registry.get_none()
             
         return self._with_llm_fallback(node_uid, node_data, action)
 
@@ -852,7 +875,7 @@ class Interpreter(IStackInspector):
                 # [FIX] 必须获取符号 UID 并绑定，否则 visit_IbName 无法通过 UID 查找到该模块
                 sym_uid = self.get_side_table("node_to_symbol", alias_uid)
                 self.context.define_variable(target_name, mod_inst, is_const=True, uid=sym_uid)
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbImportFrom(self, node_uid: str, node_data: Dict[str, Any]):
         names = []
@@ -861,7 +884,7 @@ class Interpreter(IStackInspector):
             if alias_data:
                 names.append((alias_data.get("name"), alias_data.get("asname")))
         self.service_context.module_manager.import_from(node_data.get("module"), names, self.context)
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbClassDef(self, node_uid: str, node_data: Dict[str, Any]):
         """动态创建类对象"""
@@ -880,7 +903,7 @@ class Interpreter(IStackInspector):
             elif stmt_data["_type"] == "IbLLMFunctionDef":
                 new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self))
             elif stmt_data["_type"] == "IbAssign":
-                val = self.visit(stmt_data.get("value")) if stmt_data.get("value") else IbNone()
+                val = self.visit(stmt_data.get("value")) if stmt_data.get("value") else self.registry.get_none()
                 for target_uid in stmt_data.get("targets", []):
                     target_data = self.node_pool.get(target_uid)
                     if target_data and target_data["_type"] == "IbName":
@@ -889,12 +912,12 @@ class Interpreter(IStackInspector):
         # 绑定到当前作用域
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         self.context.define_variable(name, new_class, uid=sym_uid)
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbRaise(self, node_uid: str, node_data: Dict[str, Any]):
         """抛出异常"""
         exc_uid = node_data.get("exc")
-        exc_val = self.visit(exc_uid) if exc_uid else IbNone()
+        exc_val = self.visit(exc_uid) if exc_uid else self.registry.get_none()
         raise ThrownException(exc_val)
 
     def visit_IbIntentStmt(self, node_uid: str, node_data: Dict[str, Any]):
@@ -914,10 +937,10 @@ class Interpreter(IStackInspector):
                 self.visit(stmt_uid)
         finally:
             self.context.pop_intent()
-        return IbNone()
+        return self.registry.get_none()
 
     def visit_IbPass(self, node_uid: str, node_data: Dict[str, Any]):
-        return IbNone()
+        return self.registry.get_none()
 
     def is_truthy(self, value: IbObject) -> bool:
         """UTS: 使用 to_bool 协议判断真值"""

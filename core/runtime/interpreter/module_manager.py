@@ -63,11 +63,11 @@ class ModuleManagerImpl:
                 
                 # 创建该模块的 Global Scope
                 from .runtime_context import ScopeImpl
-                module_scope = ScopeImpl()
+                module_scope = ScopeImpl(registry=self.interpreter.registry)
                 
                 # [FIX] 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
                 from core.runtime.objects.kernel import IbModule
-                module_instance = IbModule(module_name, module_scope)
+                module_instance = IbModule(module_name, module_scope, registry=self.interpreter.registry)
                 self._loaded_modules[module_name] = module_instance
                 
                 # 在新 Scope 下复用 Interpreter 执行

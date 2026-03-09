@@ -11,11 +11,11 @@ def register_conversion(manager, interpreter):
 
     def _int(obj: IbObject):
         """全局 int() 函数 -> cast_to 协议"""
-        return obj.receive('cast_to', [Registry.get_class("int")])
+        return obj.receive('cast_to', [manager.registry.get_class("int")])
 
     def _float(obj: IbObject):
         """全局 float() 函数 -> cast_to 协议"""
-        return obj.receive('cast_to', [Registry.get_class("float")])
+        return obj.receive('cast_to', [manager.registry.get_class("float")])
 
     manager.register('str', _str, unbox=False)
     manager.register('int', _int, unbox=False)

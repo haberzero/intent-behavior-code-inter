@@ -2,6 +2,7 @@ import os
 import importlib.util
 from typing import Optional, Dict, Any
 
+from core.foundation.registry import Registry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.module_system.discovery import ModuleDiscoveryService
@@ -19,7 +20,8 @@ class IBCIEngine:
     """
     def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
         from core.runtime.objects.initialization import initialize_builtin_classes
-        initialize_builtin_classes()
+        self.registry = Registry()
+        initialize_builtin_classes(self.registry)
         
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         from core.compiler.diagnostics.issue_tracker import IssueTracker
@@ -44,7 +46,7 @@ class IBCIEngine:
         # 2. 加载元数据以支持静态分析
         self.host_interface = self.discovery_service.discover_all()
         
-        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger)
+        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry)
         
         self.interpreter: Optional[Interpreter] = None
 
@@ -56,7 +58,8 @@ class IBCIEngine:
             output_callback=output_callback,
             host_interface=self.host_interface,
             debugger=self.debugger,
-            root_dir=self.root_dir
+            root_dir=self.root_dir,
+            registry=self.registry
         )
         # 统一由 ModuleLoader 驱动实现层的加载与注入
         self.module_loader.load_and_register_all(self.interpreter.service_context)

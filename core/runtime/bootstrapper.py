@@ -7,62 +7,59 @@ class Bootstrapper:
     IBC-Inter 内核引导程序。
     负责解决 Type (元类) 与 Object (基类) 的循环依赖。
     并初始化全局类型系统。
+    现在支持基于实例的 Registry 以实现多引擎隔离。
     """
     
-    # 全局类注册表 (模拟 .rodata 段中的虚表映射)
-    _class_registry: Dict[str, IbClass] = {}
-    
-    TypeClass: Optional[IbClass] = None
-    ObjectClass: Optional[IbClass] = None
-    CallableClass: Optional[IbClass] = None
-    ModuleClass: Optional[IbClass] = None
+    def __init__(self, registry: Registry):
+        self.registry = registry
+        self._class_registry: Dict[str, IbClass] = {}
+        self.TypeClass: Optional[IbClass] = None
+        self.ObjectClass: Optional[IbClass] = None
+        self.CallableClass: Optional[IbClass] = None
+        self.ModuleClass: Optional[IbClass] = None
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """
         核心引导流程：先分配内存，后绑定关系。
         """
-        if cls.TypeClass: return # 避免重复初始化
+        if self.TypeClass: return # 避免重复初始化
 
         # 延迟导入以打破核心引导循环
         from .objects.kernel import IbClass, IbNativeFunction, IbNone
 
-        # 注册 Registry 辅助函数
-        Registry.register_box_func(cls.box)
-        Registry.register_create_subclass_func(cls.create_subclass)
+        # 注册 Registry 辅助函数 (将实例方法绑定到 registry 实例)
+        self.registry.register_box_func(self.box)
+        self.registry.register_create_subclass_func(self.create_subclass)
 
         # Step 1: Create Type Shells (分配内存，此时 ib_class 暂未绑定)
-        cls.TypeClass = IbClass("Type")
-        cls.ObjectClass = IbClass("Object")
-        cls.CallableClass = IbClass("callable")
-        cls.ModuleClass = IbClass("IbModule")
+        self.TypeClass = IbClass("Type", registry=self.registry)
+        self.ObjectClass = IbClass("Object", registry=self.registry)
+        self.CallableClass = IbClass("callable", registry=self.registry)
+        self.ModuleClass = IbClass("IbModule", registry=self.registry)
         
         # Step 2: Wire Relationships (打破循环)
-        cls.TypeClass.ib_class = cls.TypeClass
-        cls.ObjectClass.ib_class = cls.TypeClass
-        cls.CallableClass.ib_class = cls.TypeClass
-        cls.ModuleClass.ib_class = cls.TypeClass
+        self.TypeClass.ib_class = self.TypeClass
+        self.ObjectClass.ib_class = self.TypeClass
+        self.CallableClass.ib_class = self.TypeClass
+        self.ModuleClass.ib_class = self.TypeClass
         
         # Object 没有父类
-        cls.ObjectClass.parent = None
+        self.ObjectClass.parent = None
         # Type, callable, Module 的父类是 Object
-        cls.TypeClass.parent = cls.ObjectClass
-        cls.CallableClass.parent = cls.ObjectClass
-        cls.ModuleClass.parent = cls.ObjectClass
+        self.TypeClass.parent = self.ObjectClass
+        self.CallableClass.parent = self.ObjectClass
+        self.ModuleClass.parent = self.ObjectClass
         
-        # 注册到全局表
-        cls.register_class(cls.TypeClass)
-        cls.register_class(cls.ObjectClass)
-        cls.register_class(cls.CallableClass)
-        cls.register_class(cls.ModuleClass)
-        
-        # 注册 None 单例
-        Registry.register_none(IbNone())
+        # 注册到本实例表
+        self.register_class(self.TypeClass)
+        self.register_class(self.ObjectClass)
+        self.register_class(self.CallableClass)
+        self.register_class(self.ModuleClass)
         
         # Step 3: Register Core Protocols (元方法注入)
-        cls.ObjectClass.register_method('toString', IbNativeFunction(lambda self: self.__repr__(), is_method=True))
-        cls.ObjectClass.register_method('__to_prompt__', IbNativeFunction(lambda self: f"<Instance of {self.ib_class.name}>", is_method=True))
-        cls.ObjectClass.register_method('to_bool', IbNativeFunction(lambda self: 1, is_method=True))
+        self.ObjectClass.register_method('toString', IbNativeFunction(lambda self: self.__repr__(), is_method=True, ib_class=self.ObjectClass))
+        self.ObjectClass.register_method('__to_prompt__', IbNativeFunction(lambda self: f"<Instance of {self.ib_class.name}>", is_method=True, ib_class=self.ObjectClass))
+        self.ObjectClass.register_method('to_bool', IbNativeFunction(lambda self: 1, is_method=True, ib_class=self.ObjectClass))
         
         # 属性访问协议
         def _default_getattr(self, name_obj):
@@ -75,87 +72,83 @@ class Bootstrapper:
             if method:
                 from .objects.kernel import IbBoundMethod
                 return IbBoundMethod(self, method)
-            return Registry.get_none()
+            return self.ib_class.registry.get_none()
 
         def _default_setattr(self, name_obj, val):
             self.fields[name_obj.to_native()] = val
-            return Registry.get_none()
+            return self.ib_class.registry.get_none()
 
-        cls.ObjectClass.register_method('__getattr__', IbNativeFunction(_default_getattr, is_method=True))
-        cls.ObjectClass.register_method('__setattr__', IbNativeFunction(_default_setattr, is_method=True))
+        self.ObjectClass.register_method('__getattr__', IbNativeFunction(_default_getattr, is_method=True, ib_class=self.ObjectClass))
+        self.ObjectClass.register_method('__setattr__', IbNativeFunction(_default_setattr, is_method=True, ib_class=self.ObjectClass))
 
         # 基础比较逻辑：默认比较 ID (引用一致性)
-        # 注意：子类 (如 Integer) 会重写 these 方法
         def _default_eq(self, other):
-            return Registry.box(1 if self == other else 0)
+            return self.ib_class.registry.box(1 if self == other else 0)
             
         def _default_ne(self, other):
-            return Registry.box(1 if self != other else 0)
+            return self.ib_class.registry.box(1 if self != other else 0)
 
-        cls.ObjectClass.register_method('__eq__', IbNativeFunction(_default_eq, is_method=True))
-        cls.ObjectClass.register_method('__ne__', IbNativeFunction(_default_ne, is_method=True))
+        self.ObjectClass.register_method('__eq__', IbNativeFunction(_default_eq, is_method=True, ib_class=self.ObjectClass))
+        self.ObjectClass.register_method('__ne__', IbNativeFunction(_default_ne, is_method=True, ib_class=self.ObjectClass))
 
         # 为 callable 注册 __call__ 消息实现 (调用 call 方法)
-        cls.CallableClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(Registry.get_none(), list(args)), is_method=True))
+        self.CallableClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(self.ib_class.registry.get_none(), list(args)), is_method=True, ib_class=self.CallableClass))
 
         # 为 Type 注册 __call__ 消息实现 (实例化类)
-        cls.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True))
+        self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 
-    @classmethod
-    def register_class(cls, ib_class: IbClass):
-        """向全局表注册类，并确保其 ib_class 指向 TypeClass"""
-        if cls.TypeClass and not ib_class.ib_class:
-            ib_class.ib_class = cls.TypeClass
-        cls._class_registry[ib_class.name] = ib_class
-        Registry.register_class(ib_class.name, ib_class)
+    def register_class(self, ib_class: IbClass):
+        """向实例表注册类，并确保其 ib_class 指向 TypeClass"""
+        if self.TypeClass and not ib_class.ib_class:
+            ib_class.ib_class = self.TypeClass
+        self._class_registry[ib_class.name] = ib_class
+        self.registry.register_class(ib_class.name, ib_class)
 
-    @classmethod
-    def get_class(cls, name: str) -> Optional[IbClass]:
-        return cls._class_registry.get(name)
+    def get_class(self, name: str) -> Optional[IbClass]:
+        return self._class_registry.get(name)
 
-    @classmethod
-    def get_all_classes(cls) -> Dict[str, IbClass]:
-        return dict(cls._class_registry)
+    def get_all_classes(self) -> Dict[str, IbClass]:
+        return dict(self._class_registry)
 
-    @classmethod
-    def create_subclass(cls, name: str, parent_name: str = "Object") -> IbClass:
+    def create_subclass(self, registry: Registry, name: str, parent_name: str = "Object") -> IbClass:
         """快速创建子类的便捷方法。如果类已存在，则返回现有实例。"""
-        if name in cls._class_registry:
-            return cls._class_registry[name]
+        if name in self._class_registry:
+            return self._class_registry[name]
             
-        parent = cls.get_class(parent_name)
+        parent = self.get_class(parent_name)
         if not parent and name != "Object": # Object has no parent
             raise ValueError(f"Parent class '{parent_name}' not found")
         
-        new_class = IbClass(name, parent=parent)
-        cls.register_class(new_class)
+        new_class = IbClass(name, parent=parent, registry=registry)
+        self.register_class(new_class)
         return new_class
 
-    @classmethod
-    def box(cls, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:
+    def box(self, registry: Registry, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:
         """
         UTS: 统一装箱逻辑。
-        现在它完全解耦：不了解任何具体内置类，全部通过 Registry 路由。
         """
         if isinstance(val, IbObject): return val
         if val is None:
-            return Registry.get_none()
+            return registry.get_none()
         
         # 处理循环引用 (主要针对列表/字典等容器)
         if memo is None: memo = {}
         if id(val) in memo: return memo[id(val)]
         
-        # 1. 尝试从 Registry 获取预注册的工厂函数 (消除对 Builtins 的所有引用)
-        boxer_func = Registry.get_boxer(type(val))
+        # 1. 尝试从 Registry 获取预注册的工厂函数
+        boxer_func = registry.get_boxer(type(val))
         if boxer_func:
             return boxer_func(val, memo)
 
-        # 2. Callable 与 Native 对象兜底 (通过 Registry 注册)
+        # 2. Callable 与 Native 对象兜底
         if callable(val):
-            res = IbNativeFunction(val, unbox_args=True)
+            # 获取 None 类或 Object 类
+            callable_class = self.get_class("callable") or self.get_class("Object")
+            res = IbNativeFunction(val, unbox_args=True, ib_class=callable_class)
             memo[id(val)] = res
             return res
 
-        res = IbNativeObject(val)
+        obj_class = self.get_class("Object")
+        res = IbNativeObject(val, ib_class=obj_class)
         memo[id(val)] = res
         return res

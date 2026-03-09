@@ -26,13 +26,14 @@ class Scheduler:
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
         self.root_dir = os.path.realpath(root_dir)
         self.issue_tracker = issue_tracker or IssueTracker()
         self.source_manager = SourceManager()
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
+        self.registry = registry # [NEW] 注册表实例，用于类型同步
         
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}

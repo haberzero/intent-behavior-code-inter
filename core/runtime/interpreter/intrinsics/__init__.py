@@ -7,24 +7,25 @@ class IntrinsicManager:
     内置函数 (Intrinsics) 管理器。
     采用“特权插件”模式，解耦解释器内核与标准库逻辑。
     """
-    _intrinsics: Dict[str, IbNativeFunction] = {}
+    def __init__(self, registry: Registry):
+        self.registry = registry
+        self._intrinsics: Dict[str, IbNativeFunction] = {}
 
-    @classmethod
-    def register(cls, name: str, py_func: Callable, unbox: bool = True):
+    def register(self, name: str, py_func: Callable, unbox: bool = True):
         """注册一个内置函数"""
-        cls._intrinsics[name] = IbNativeFunction(py_func, unbox_args=unbox, is_method=False, name=f"builtin.{name}")
+        # 获取 callable 类
+        callable_class = self.registry.get_class("callable")
+        self._intrinsics[name] = IbNativeFunction(py_func, unbox_args=unbox, is_method=False, name=f"builtin.{name}", ib_class=callable_class)
 
-    @classmethod
-    def get_all(cls) -> Dict[str, IbNativeFunction]:
-        return cls._intrinsics
+    def get_all(self) -> Dict[str, IbNativeFunction]:
+        return self._intrinsics
 
-    @classmethod
-    def load_defaults(cls, interpreter: Any):
+    def load_defaults(self, interpreter: Any):
         """加载标准内置函数"""
         from .io import register_io
         from .collection import register_collection
         from .conversion import register_conversion
         
-        register_io(cls, interpreter)
-        register_collection(cls, interpreter)
-        register_conversion(cls, interpreter)
+        register_io(self, interpreter)
+        register_collection(self, interpreter)
+        register_conversion(self, interpreter)

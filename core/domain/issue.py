@@ -88,15 +88,5 @@ class LLMUncertaintyError(InterpreterError):
         super().__init__(message, location, error_code="RUN_009")
         self.raw_response = raw_response
 
-# --- 运行时流控异常 (Runtime Concerns) ---
-# TODO: 这些异常属于解释器实现细节，待解释器修改禁令解除后，应迁移至 core/runtime/exceptions.py
-class ReturnException(Exception):
-    def __init__(self, value: Any): self.value = value
-class BreakException(Exception): pass
-class ContinueException(Exception): pass
-class RetryException(Exception): pass
-
-class ThrownException(Exception):
-    """包装用户代码主动抛出的 IbObject 异常"""
-    def __init__(self, value: Any):
-        self.value = value
+# --- 运行时流控异常 (已迁移) ---
+# 已迁移至 core/runtime/exceptions.py，请勿在此处添加

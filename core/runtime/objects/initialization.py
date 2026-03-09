@@ -6,7 +6,7 @@ from core.domain.types import descriptors as uts
 
 def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = True):
     """统一注册原生方法的辅助函数"""
-    ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}"))
+    ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
 
 def _numeric_op(self: IbObject, other: Any, op_func: Callable) -> Any:
     """处理数值运算并支持 promotion"""
@@ -32,24 +32,30 @@ def _cast_string_to(ib_str: IbString, target_class: IbClass) -> Any:
         return val.lower() in ("true", "1", "yes")
     return val
 
-def initialize_builtin_classes():
+def initialize_builtin_classes(registry: Registry):
     """
     初始化 IBCI 核心内置类及其 UTS 契约。
+    支持多引擎实例隔离。
     """
     from ..bootstrapper import Bootstrapper
-    Bootstrapper.initialize()
+    bootstrapper = Bootstrapper(registry)
+    bootstrapper.initialize()
     
-    # 1. 创建核心内置类
-    integer_class = Registry.create_subclass("int")
-    float_class = Registry.create_subclass("float")
-    string_class = Registry.create_subclass("str")
-    list_class = Registry.create_subclass("list")
-    dict_class = Registry.create_subclass("dict")
-    none_class = Registry.create_subclass("None")
-    behavior_class = Registry.create_subclass("behavior")
-    bool_class = Registry.create_subclass("bool")
-    callable_class = Registry.create_subclass("callable")
-    var_class = Registry.create_subclass("var")
+    # 1. 创建核心内置类 (注入到 registry)
+    integer_class = registry.create_subclass("int")
+    float_class = registry.create_subclass("float")
+    string_class = registry.create_subclass("str")
+    list_class = registry.create_subclass("list")
+    dict_class = registry.create_subclass("dict")
+    none_class = registry.create_subclass("None")
+    behavior_class = registry.create_subclass("behavior")
+    bool_class = registry.create_subclass("bool")
+    callable_class = registry.create_subclass("callable")
+    var_class = registry.create_subclass("var")
+    
+    # 特殊：IbModule 类
+    module_class = registry.create_subclass("IbModule")
+    registry.register_class("IbModule", module_class)
     
     # 2. UTS 注册
     uts.MetadataRegistry.register(integer_class)
@@ -59,7 +65,10 @@ def initialize_builtin_classes():
     uts.MetadataRegistry.register(none_class)
     uts.MetadataRegistry.register(var_class)
     
-    # 3. 注册原生方法代理 (Integer)
+    # 3. 注册 None 单例 (Per-registry)
+    registry.register_none(IbNone(none_class))
+    
+    # 4. 注册原生方法代理 (Integer)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
     _reg_native(integer_class, 'to_bool', lambda self: 1 if self.to_native() != 0 else 0)
     _reg_native(integer_class, 'to_list', lambda self: list(range(self.to_native())))
@@ -113,23 +122,23 @@ def initialize_builtin_classes():
     _reg_native(dict_class, '__getitem__', lambda self, key: self.fields[key])
     _reg_native(dict_class, '__setitem__', lambda self, key, val: self.fields.update({key: val}), unbox=False)
 
-    # 4. 注册装箱逻辑
-    Registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v))
-    Registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0))
-    Registry.register_boxer(float, lambda v, memo=None: IbFloat(v))
-    Registry.register_boxer(str, lambda v, memo=None: IbString(v))
+    # 5. 注册装箱逻辑
+    registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class))
+    registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0, integer_class))
+    registry.register_boxer(float, lambda v, memo=None: IbFloat(v, float_class))
+    registry.register_boxer(str, lambda v, memo=None: IbString(v, string_class))
     
     def _box_list(val, memo):
-        res = IbList([])
+        res = IbList([], list_class)
         memo[id(val)] = res
-        res.elements = [Registry.box(i, memo) for i in val]
+        res.elements = [registry.box(i, memo) for i in val]
         return res
         
     def _box_dict(val, memo):
-        res = IbDict({})
+        res = IbDict({}, dict_class)
         memo[id(val)] = res
-        res.fields = {k: Registry.box(v, memo) for k, v in val.items()}
+        res.fields = {k: registry.box(v, memo) for k, v in val.items()}
         return res
         
-    Registry.register_boxer(list, _box_list)
-    Registry.register_boxer(dict, _box_dict)
+    registry.register_boxer(list, _box_list)
+    registry.register_boxer(dict, _box_dict)

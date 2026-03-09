@@ -210,7 +210,7 @@ class LLMExecutorImpl:
         clean_res = raw_res.strip()
         
         if type_name == "str":
-            return Registry.box(raw_res)
+            return self.service_context.registry.box(raw_res)
         
         self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Parsing LLM response to type '{type_name}'")
 
@@ -219,7 +219,7 @@ class LLMExecutorImpl:
                 match = re.search(r'-?\d+', clean_res)
                 if match:
                     val = int(match.group())
-                    return Registry.box(val)
+                    return self.service_context.registry.box(val)
                 raise ValueError(f"No integer found in response: {clean_res}")
             elif type_name == "list":
                 match = re.search(r'\[[\s\S]*\]', clean_res)
@@ -228,7 +228,7 @@ class LLMExecutorImpl:
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
                     val = json.loads(json_str)
-                    return Registry.box(val)
+                    return self.service_context.registry.box(val)
                 raise ValueError(f"No JSON list found in response: {clean_res}")
             elif type_name == "dict":
                 match = re.search(r'\{[\s\S]*\}', clean_res)
@@ -237,10 +237,10 @@ class LLMExecutorImpl:
                     if json_str.startswith("```"):
                         json_str = re.sub(r'^```(json)?\n?|\n?```$', '', json_str, flags=re.MULTILINE).strip()
                     val = json.loads(json_str)
-                    return Registry.box(val)
+                    return self.service_context.registry.box(val)
                 raise ValueError(f"No JSON dict found in response: {clean_res}")
             
-            return Registry.box(raw_res)
+            return self.service_context.registry.box(raw_res)
 
         except Exception as e:
             self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response: {str(e)}")

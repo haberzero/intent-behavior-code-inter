@@ -1,6 +1,7 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
-from core.foundation.registry import Registry
-from core.domain.issue import InterpreterError, ReturnException
+from core.foundation.registry import Registry, get_default_registry
+from core.domain.issue import InterpreterError
+from core.runtime.exceptions import ReturnException
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
 
@@ -33,7 +34,7 @@ class IbObject:
         method_missing = self.ib_class.lookup_method('method_missing')
         if method_missing:
             # 包装原始消息名作为第一个参数
-            return method_missing.call(self, [Registry.box(message)] + args)
+            return method_missing.call(self, [self.ib_class.registry.box(message)] + args)
 
         raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
 
@@ -70,7 +71,8 @@ class IbNativeObject(IbObject):
     用于桥接 Python 扩展和标准库。
     """
     def __init__(self, py_obj: Any, ib_class: Optional['IbClass'] = None):
-        super().__init__(ib_class or Registry.get_class("Object"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("Object"))
         self.py_obj = py_obj
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
@@ -78,8 +80,8 @@ class IbNativeObject(IbObject):
             attr = getattr(self.py_obj, message)
             if callable(attr):
                 native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
-                return Registry.box(attr(*native_args))
-            return Registry.box(attr)
+                return self.ib_class.registry.box(attr(*native_args))
+            return self.ib_class.registry.box(attr)
         
         return super().receive(message, args)
 
@@ -94,8 +96,9 @@ class IbModule(IbObject):
     IBC-Inter 模块对象。
     持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
     """
-    def __init__(self, name: str, scope: Any):
-        super().__init__(Registry.get_class("IbModule") or Registry.ObjectClass)
+    def __init__(self, name: str, scope: Any, registry: Optional[Registry] = None):
+        reg = registry or get_default_registry()
+        super().__init__(reg.get_class("IbModule") or reg.ObjectClass)
         self.name = name
         self.scope = scope
 
@@ -112,7 +115,7 @@ class IbModule(IbObject):
             try:
                 return self.scope.get(name)
             except (KeyError, AttributeError):
-                return Registry.get_none()
+                return self.ib_class.registry.get_none()
         
         # 3. 后备：查 IbModule 类方法 (如 __to_prompt__ 等)
         return super().receive(message, args)
@@ -126,10 +129,11 @@ class IbClass(IbObject, TypeDescriptor):
     同时继承自 IbObject (一切皆对象) 和 TypeDescriptor (统一类型元数据)。
     模拟虚表 (vtable)：存储方法名到 IbFunction 的映射。
     """
-    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types')
+    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry')
 
-    def __init__(self, name: str, parent: Optional['IbClass'] = None):
-        IbObject.__init__(self, None) 
+    def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[Registry] = None):
+        self.registry = registry or get_default_registry()
+        IbObject.__init__(self, self) # IbClass 的类是它自己
         TypeDescriptor.__init__(self, name)
         self.methods: Dict[str, 'IbFunction'] = {}
         self.parent = parent
@@ -194,7 +198,8 @@ class IbFunction(IbObject):
     可调用对象的基类 (语言层表现为 callable)。
     """
     def __init__(self, ib_class: Optional['IbClass'] = None):
-        super().__init__(ib_class or Registry.get_class("callable"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("callable"))
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         raise NotImplementedError()
@@ -205,7 +210,8 @@ class IbNativeFunction(IbFunction):
     用于引导阶段注入基础运算（如 int.__add__）。
     """
     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None):
-        super().__init__(ib_class or Registry.get_class("callable"))
+        reg = ib_class.registry if ib_class else get_default_registry()
+        super().__init__(ib_class or reg.get_class("callable"))
         self.py_func = py_func
         self.unbox_args = unbox_args
         self.is_method = is_method
@@ -221,7 +227,7 @@ class IbNativeFunction(IbFunction):
                 res = self.py_func(receiver, *final_args)
             else:
                 res = self.py_func(*final_args)
-            return Registry.box(res)
+            return self.ib_class.registry.box(res)
         except Exception as e:
             if isinstance(e, InterpreterError):
                 raise
@@ -231,7 +237,7 @@ class IbNativeFunction(IbFunction):
         if message == '__getattr__':
             name = args[0].to_native()
             if hasattr(self.py_func, name):
-                return Registry.box(getattr(self.py_func, name))
+                return self.ib_class.registry.box(getattr(self.py_func, name))
         return super().receive(message, args)
 
     def __getattr__(self, name):
@@ -240,7 +246,8 @@ class IbNativeFunction(IbFunction):
 class IbBoundMethod(IbFunction):
     """绑定了接收者的函数 (模拟 C++ 虚表调用的 this 绑定)"""
     def __init__(self, receiver: IbObject, method: IbFunction):
-        super().__init__(Registry.get_class("callable"))
+        reg = method.ib_class.registry if method and method.ib_class else get_default_registry()
+        super().__init__(reg.get_class("callable"))
         self.receiver = receiver
         self.method = method
 
@@ -253,19 +260,10 @@ class IbBoundMethod(IbFunction):
 class IbNone(IbObject):
     """
     IBC-Inter 的空对象 (None)。
-    单例模式。
+    现在通过 Registry 获取单例。
     """
-    _instance: Optional['IbNone'] = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(IbNone, cls).__new__(cls)
-            cls._instance.ib_class = Registry.get_class("None")
-            cls._instance.fields = {}
-        return cls._instance
-
-    def __init__(self):
-        pass
+    def __init__(self, ib_class: 'IbClass'):
+        super().__init__(ib_class)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return None
@@ -280,8 +278,9 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, interpreter: Any):
-        super().__init__(Registry.get_class("Function"))
+    def __init__(self, node_uid: str, interpreter: 'Interpreter', ib_class: Optional['IbClass'] = None):
+        reg = interpreter.registry if interpreter else get_default_registry()
+        super().__init__(ib_class or reg.get_class("callable"))
         self.node_uid = node_uid
         self.interpreter = interpreter
 
@@ -294,7 +293,7 @@ class IbUserFunction(IbFunction):
         context.enter_scope()
         
         try:
-            ib_none = Registry.get_none()
+            ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
                 context.define_variable("self", receiver)
                 
@@ -331,7 +330,8 @@ class IbLLMFunction(IbFunction):
     用户定义的 LLM 函数。
     """
     def __init__(self, node_uid: str, llm_executor: Any, interpreter: Any):
-        super().__init__(Registry.get_class("callable"))
+        reg = interpreter.registry if interpreter else get_default_registry()
+        super().__init__(reg.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.interpreter = interpreter
@@ -343,7 +343,7 @@ class IbLLMFunction(IbFunction):
         
         context.enter_scope()
         try:
-            ib_none = Registry.get_none()
+            ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
                 context.define_variable("self", receiver)
                 context.define_variable("__self", receiver)
