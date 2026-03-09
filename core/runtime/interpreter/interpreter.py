@@ -229,7 +229,7 @@ class Interpreter(IStackInspector):
         python_limit = sys.getrecursionlimit()
         safe_limit = (python_limit - 100) // 4 # 留出 100 帧给宿主系统
         if max_call_stack > safe_limit:
-            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.ESSENTIAL, 
+            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
                 f"Warning: max_call_stack {max_call_stack} is unsafe for Python limit {python_limit}. "
                 f"Auto-adjusting to safe limit {safe_limit}")
             max_call_stack = safe_limit
