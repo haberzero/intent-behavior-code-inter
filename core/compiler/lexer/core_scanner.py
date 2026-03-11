@@ -430,12 +430,50 @@ class CoreTokenScanner:
             self._scan_complex_access(tokens)
             return
 
-        # 3. Raw Text
+        # 3. String Literals (Quoted)
+        # [Fix] 如果在 intent 模式下遇到引号，暂时切回 STRING 模式进行解析
+        if char == '"' or char == "'":
+            # 记录当前模式以便恢复（虽然 _scan_string_char 会切回 NORMAL，我们需要小心）
+            # 实际上，_scan_string_char 完成后会将 sub_state 设为 NORMAL
+            # 但我们在意图解析中，应该保持 IN_INTENT 吗？
+            # 不，通常意图描述是一行的，如果是引号括起来的字符串，它就是一个 Token。
+            # 解析完字符串后，我们应该回到 IN_INTENT 吗？
+            # 让我们看 _scan_string_char 的实现：它会设置 self.sub_state = SubState.NORMAL
+            # 这会导致后续字符被当作普通代码解析。
+            # 对于 intent 简写（@ "..."），这正是我们想要的！
+            # 因为 @ "..." 后面的内容（如果有）通常是新的一行。
+            # 如果是 @ "..." + "..." 这种复杂表达式，回到 NORMAL 也是对的。
+            # 唯独如果是 @ text "quoted" text 这种混合模式，回到 NORMAL 可能会有问题。
+            # 但目前的语法定义，@ 后面的内容要么是纯文本，要么是表达式。
+            # 如果是纯文本中包含引号，用户应该转义或者不使用简写。
+            # 让我们尝试直接调用 _scan_string_char
+            
+            # 为了安全，我们手动设置状态
+            self.sub_state = SubState.IN_STRING
+            self.quote_char = self.scanner.advance() # consume quote
+            self.current_string_val = ""
+            self.is_raw_string = False
+            self._scan_string_char(tokens)
+            # _scan_string_char 结束后 sub_state 会变成 NORMAL
+            # 如果我们还在这一行，且希望继续作为 intent 解析（例如 @ text "str" text），
+            # 那么这行剩下的部分会被 _scan_normal_char 处理。
+            # 但 _scan_normal_char 会把未引用的文本视为标识符或非法字符。
+            # 对于 @ 简写，通常只支持单行。
+            # 如果是 @- "Global Intent"，解析出 STRING token 后，回到 NORMAL，
+            # 剩下的就是换行符，会被 scan_line 的主循环处理。
+            # 所以这里直接切换去处理字符串是正确的。
+            return
+
+        # 4. Raw Text
         text = ""
         while not self.scanner.is_at_end():
             peek_char = self.scanner.peek()
             if peek_char == '$' or peek_char == '\n':
                 break
+            # [Fix] 遇到引号也要停止，交由下一次循环的 Case 3 处理
+            if peek_char == '"' or peek_char == "'":
+                break
+                
             text += self.scanner.advance()
         
         if text:
