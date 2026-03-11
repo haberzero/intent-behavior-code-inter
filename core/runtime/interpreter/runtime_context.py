@@ -4,6 +4,7 @@ from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.registry import Registry
 from core.foundation.interfaces import IStateReader
+from core.runtime.objects.intent import IbIntent
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
@@ -126,12 +127,12 @@ class SymbolViewImpl(SymbolView):
 
 class IntentNode:
     """[IES 2.0] 不可变意图节点，支持结构共享以优化内存"""
-    def __init__(self, intent: Any, parent: Optional['IntentNode'] = None):
+    def __init__(self, intent: Union[IbIntent, Any], parent: Optional['IntentNode'] = None):
         self.intent = intent
         self.parent = parent
-        self._cached_list: Optional[List[Any]] = None
+        self._cached_list: Optional[List[IbIntent]] = None
 
-    def to_list(self) -> List[Any]:
+    def to_list(self) -> List[IbIntent]:
         """展平为列表（带缓存）"""
         if self._cached_list is not None:
             return self._cached_list
@@ -262,17 +263,17 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
         self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
 
-    def push_intent(self, intent: Any) -> None:
+    def push_intent(self, intent: Union[IbIntent, Any]) -> None:
         self._intent_top = IntentNode(intent, self._intent_top)
 
-    def pop_intent(self) -> Optional[Any]:
+    def pop_intent(self) -> Optional[Union[IbIntent, Any]]:
         if self._intent_top:
             content = self._intent_top.intent
             self._intent_top = self._intent_top.parent
             return content
         return None
 
-    def get_active_intents(self) -> List[Any]:
+    def get_active_intents(self) -> List[Union[IbIntent, Any]]:
         if not self._intent_top:
             return []
         return self._intent_top.to_list()

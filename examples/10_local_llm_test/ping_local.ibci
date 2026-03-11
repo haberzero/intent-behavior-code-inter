@@ -1,0 +1,10 @@
+import ai
+
+# 使用注入的变量配置 AI
+# 这些变量由 main.py 从 api_config.json 自动注入
+ai.set_config(url, key, model)
+
+print("--- 正在测试本地 LLM 连接 (" + model + ") ---")
+
+str res = @~ 你好，请告诉我你现在的名字。 ~
+print("AI 响应: " + res)

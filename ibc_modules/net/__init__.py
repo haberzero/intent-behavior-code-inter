@@ -12,7 +12,8 @@ class NetLib:
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
         try:
             import requests
-            resp = requests.get(url, headers=headers, timeout=10)
+            # [ENV FIX] 禁用 SSL 校验以兼容某些受限的本地网络环境
+            resp = requests.get(url, headers=headers, timeout=10, verify=False)
             resp.raise_for_status()
             return resp.text
         except ImportError:
@@ -25,7 +26,8 @@ class NetLib:
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         try:
             import requests
-            resp = requests.post(url, json=body, headers=headers, timeout=10)
+            # [ENV FIX] 禁用 SSL 校验
+            resp = requests.post(url, json=body, headers=headers, timeout=10, verify=False)
             resp.raise_for_status()
             return resp.json()
         except ImportError:

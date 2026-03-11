@@ -2,7 +2,9 @@ import math
 from core.extension import sdk as ibci
 
 class MathLib:
-    pi = math.pi
+    def __init__(self):
+        self.pi = math.pi
+        self._ibci_whitelist = ["pi"]
     
     @ibci.method("sqrt")
     def sqrt(self, x: float) -> float:

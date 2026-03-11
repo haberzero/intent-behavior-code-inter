@@ -34,6 +34,7 @@ from core.foundation.host_interface import HostInterface
 from core.foundation.interfaces import IStackInspector
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from .llm_executor import intent_scoped
+from core.runtime.objects.intent import IbIntent
 from .intrinsics import IntrinsicManager
 from .ast_view import ReadOnlyNodePool
 from core.runtime.host.service import HostService
@@ -843,7 +844,20 @@ class Interpreter(IStackInspector):
             iter_uid = node_data.get("iter")
             body = node_data.get("body", [])
             
-            # 标准 Foreach 循环
+            # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
+            if target_uid is None:
+                # 这种情况不需要 to_list 协议，而是直接根据条件的真值决定是否继续
+                while self.is_truthy(self.visit(iter_uid)):
+                    try:
+                        for stmt_uid in body:
+                            self.visit(stmt_uid)
+                    except BreakException: 
+                        return self.registry.get_none()
+                    except ContinueException: 
+                        continue
+                return self.registry.get_none()
+
+            # 标准 Foreach 循环 (for item in list)
             iterable_obj = self.visit(iter_uid)
             
             # UTS: 使用消息传递获取迭代列表 (to_list 协议)
@@ -859,6 +873,7 @@ class Interpreter(IStackInspector):
                 raise
             except Exception as e:
                 raise self._report_error(f"Iteration failed: {str(e)}", node_uid)
+            
             total = len(elements)
             for i, item in enumerate(elements):
                 # 注入循环上下文
@@ -906,17 +921,14 @@ class Interpreter(IStackInspector):
         return res
 
     def visit_IbRetry(self, node_uid: str, node_data: Mapping[str, Any]):
-        """处理 retry 语句"""
         hint_uid = node_data.get("hint")
+        hint_val = None
         if hint_uid:
-            hint_val = self.visit(hint_uid)
-            # 将 hint 注入到 ai 模块（如果可用）
-            try:
-                ai_mod = self.service_context.module_manager.import_module("ai", self.context)
-                if hasattr(ai_mod, "set_retry_hint"):
-                    ai_mod.set_retry_hint(hint_val.to_native())
-            except:
-                pass 
+            hint_obj = self.visit(hint_uid)
+            hint_val = hint_obj.to_native() if hasattr(hint_obj, 'to_native') else str(hint_obj)
+        
+        # 将 hint 设置到 LLM 执行器中
+        self.service_context.llm_executor.retry_hint = hint_val
         raise RetryException()
 
     def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
@@ -1065,10 +1077,13 @@ class Interpreter(IStackInspector):
         intent_uid = node_data.get("intent")
         intent_data = self.get_node_data(intent_uid)
         
-        intent = SimpleNamespace(
+        intent = IbIntent(
+            ib_class=self.registry.get_class("Intent"),
             content=intent_data.get('content', '') if intent_data else '',
             mode=intent_data.get('mode', 'append') if intent_data else 'append',
-            segments=intent_data.get('segments', []) if intent_data else []
+            segments=intent_data.get('segments', []) if intent_data else [],
+            intent_type="block",
+            source_uid=intent_uid
         )
             
         self.context.push_intent(intent)
@@ -1078,6 +1093,18 @@ class Interpreter(IStackInspector):
         finally:
             self.context.pop_intent()
         return self.registry.get_none()
+
+    def visit_IbLLMExceptionalStmt(self, node_uid: str, node_data: Mapping[str, Any]):
+        """处理带有 llmexcept 的语句包装节点"""
+        primary_uid = node_data.get("primary")
+        fallback_body = node_data.get("fallback", [])
+        
+        def action():
+            return self.visit(primary_uid)
+            
+        # 构造模拟数据以复用 _with_llm_fallback 逻辑
+        mock_data = {"llm_fallback": fallback_body}
+        return self._with_llm_fallback(node_uid, mock_data, action)
 
     def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]):
         return self.registry.get_none()

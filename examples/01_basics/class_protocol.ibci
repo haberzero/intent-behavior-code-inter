@@ -1,17 +1,23 @@
 import ai
 
-# 开启 TESTONLY 模式以便脱机测试
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+# 1. 生产环境配置：使用自动注入的变量
+ai.set_config(url, key, model)
+
+# 2. 模拟测试配置 (TESTONLY)：如果无法连接真实 LLM，请取消注释以下行
+# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
 print("--- [class_protocol.ibci] ---")
 
 # 1. 对象-自然语言映射协议 (__to_prompt__)
+# 在 IBC-Inter 2.0 中，方法参数中的 self 是隐式的，不需要也不允许在参数列表中声明。
 class User:
     str name = "Alice"
     int score = 95
     
     # 该方法决定了对象在 LLM Prompt 中的插值表现形式
-    func __to_prompt__(self) -> str:
+    # 语法：func 方法名(参数列表) -> 返回类型:
+    func __to_prompt__() -> str:
+        # 内部仍然通过 self 访问成员
         return "用户(姓名: " + self.name + ")"
 
 var u = User()
@@ -21,9 +27,10 @@ str res = @~ 分析 $u 的状态 ~
 print("AI 分析结果: " + res)
 
 # 2. 匿名 LLM 函数 (Lambda 化行为描述行)
+# 行为描述行赋值给变量时，会捕获当前的意图上下文。
 @ 你现在是一个文学评论家
 callable analyze = @~ 评论一下这段文字: $text ~
 
 str text = "白日依山尽，黄河入海流。"
-# 定义时的意图（文学评论家）会被捕获并在此处调用时生效。
-print(analyze())
+# 调用时，之前捕获的意图（文学评论家）会自动生效。
+print("文学评论: " + analyze())

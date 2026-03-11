@@ -1,12 +1,15 @@
 # main.ibci
 
-# 自动从项目根目录的 plugins/ 目录导入 calc
+# IES 2.0 插件系统演示
+# 插件位于项目根目录下的 plugins/ 目录中，每个插件是一个包含 spec.py 和 __init__.py 的文件夹。
+# 编译器通过 spec.py 获取类型信息，解释器通过 __init__.py 获取实现。
+
 import calc
 import plugin_info
 
 print("--- [03_plugins/main.ibci] ---")
 
-# 1. 调用通过 setup() 钩子注册的函数
+# 1. 调用通过 @sdk.method 注册的函数
 int result1 = calc.add(10, 20)
 print("10 + 20 = " + (str)result1)
 
@@ -14,7 +17,7 @@ print("10 + 20 = " + (str)result1)
 int result2 = calc.mul(5, 5)
 print("5 * 5 = " + (str)result2)
 
-# 3. 访问通过反射推断出来的类属性
+# 3. 访问导出变量
 str version = plugin_info.version
 str author = plugin_info.author
 print("Plugin Version: " + version)

@@ -106,7 +106,7 @@ class SemanticAnalyzer:
         
         # [NEW Phase 5] 记录类型推导侧表
         if isinstance(node, ast.IbExpr) and res_type:
-            self.node_to_type[node] = res_type.name
+            self.node_to_type[node] = res_type.prompt_name
             
         return res_type
 
@@ -369,10 +369,9 @@ class SemanticAnalyzer:
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003")
 
     def visit_IbIf(self, node: ast.IbIf):
-        self.visit(node.test)
-        
         self.scene_stack.append(ast.IbScene.BRANCH)
         try:
+            self.visit(node.test)
             for stmt in node.body:
                 self.visit(stmt)
             for stmt in node.orelse:
@@ -381,10 +380,9 @@ class SemanticAnalyzer:
             self.scene_stack.pop()
 
     def visit_IbWhile(self, node: ast.IbWhile):
-        self.visit(node.test)
-        
         self.scene_stack.append(ast.IbScene.LOOP)
         try:
+            self.visit(node.test)
             for stmt in node.body:
                 self.visit(stmt)
             for stmt in node.orelse:
@@ -393,25 +391,25 @@ class SemanticAnalyzer:
             self.scene_stack.pop()
 
     def visit_IbFor(self, node: ast.IbFor):
-        iter_type = self.visit(node.iter)
-        # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
-        element_type = iter_type.get_iterator_type()
-        
-        for var_name, target in SymbolExtractor.get_assigned_names(node):
-            # 检查是否已在 Pass 2.5 预扫描中定义
-            sym = self.symbol_table.symbols.get(var_name)
-            # 如果未定义，或者定义为 Any/var 占位符，则更新其类型
-            if not sym or sym.type_info.name in ("Any", "var"):
-                sym = self._define_var(var_name, element_type, node, allow_overwrite=(sym is not None))
-            else:
-                # 显式定义的变量（如带有类型标注），则执行类型更新
-                sym.var_type = element_type
-            
-            if sym:
-                self.node_to_symbol[target] = sym # [FIX] 同步 UID
-        
         self.scene_stack.append(ast.IbScene.LOOP)
         try:
+            iter_type = self.visit(node.iter)
+            # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
+            element_type = iter_type.get_iterator_type()
+            
+            for var_name, target in SymbolExtractor.get_assigned_names(node):
+                # 检查是否已在 Pass 2.5 预扫描中定义
+                sym = self.symbol_table.symbols.get(var_name)
+                # 如果未定义，或者定义为 Any/var 占位符，则更新其类型
+                if not sym or sym.type_info.name in ("Any", "var"):
+                    sym = self._define_var(var_name, element_type, node, allow_overwrite=(sym is not None))
+                else:
+                    # 显式定义的变量（如带有类型标注），则执行类型更新
+                    sym.var_type = element_type
+                
+                if sym:
+                    self.node_to_symbol[target] = sym # [FIX] 同步 UID
+            
             for stmt in node.body:
                 self.visit(stmt)
         finally:

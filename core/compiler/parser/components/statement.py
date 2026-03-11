@@ -120,8 +120,11 @@ class StatementComponent(BaseComponent):
 
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
         """Helper to parse the content part of an intent (@ or intent keyword)"""
+        import sys
         mode = "normal"
         token_val = start_token.value
+        sys.stderr.write(f"DEBUG: _parse_intent_info start_token={start_token}, next={self.stream.peek()}\n")
+        
         if token_val.startswith("@"):
             mode_char = token_val[1:]
             if mode_char == "+": mode = "append"
@@ -131,6 +134,7 @@ class StatementComponent(BaseComponent):
             # Handle 'intent ! "content":'
             if self.stream.match(TokenType.NOT):
                 mode = "override"
+                sys.stderr.write("DEBUG: Matched NOT, mode=override\n")
             elif self.stream.match(TokenType.PLUS):
                 mode = "append"
             elif self.stream.match(TokenType.MINUS):

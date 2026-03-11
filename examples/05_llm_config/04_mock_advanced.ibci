@@ -7,8 +7,12 @@ import ai
 
 print("--- [04_mock_advanced.ibci] ---")
 
-# 1. 开启高级模拟模式
+# 1. 开启高级模拟模式 (默认)
+# 在模拟模式下，AI 将识别 MOCK:TRUE/FALSE/FAIL/REPAIR 等指令
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+# 2. 如果要切换到生产环境测试，请注释上面一行并取消注释下面一行：
+# ai.set_config(url, key, model)
 ai.set_retry(3) # 设置最大重试次数
 
 print("\n1. 模拟常规文本生成：")

@@ -42,6 +42,11 @@ class StaticType:
     name: str
     descriptor: Optional[uts.TypeDescriptor] = None
     
+    @property
+    def prompt_name(self) -> str:
+        """返回用于 LLM 提示词的类型名称"""
+        return self.name
+
     def is_assignable_to(self, other: 'StaticType') -> bool:
         """检查当前类型是否可以赋值给目标类型"""
         if self.name == "void" or self.name in ("Any", "var") or other.name in ("Any", "var"): 
@@ -206,6 +211,10 @@ class BehaviorType(StaticType):
     """行为描述行类型：在语义上它可以被视为 str，也可以被视为 function (Lambda)"""
     def __init__(self):
         super().__init__("behavior")
+
+    @property
+    def prompt_name(self) -> str:
+        return "str"
 
     def is_assignable_to(self, other: 'StaticType') -> bool:
         if super().is_assignable_to(other):

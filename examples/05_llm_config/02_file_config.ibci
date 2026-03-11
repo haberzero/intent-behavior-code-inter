@@ -15,11 +15,12 @@ if file.exists(config_path):
     str raw_content = file.read(config_path)
     dict cfg = json.parse(raw_content)
     
-    # 利用内置 ai 组件进行配置
+    # 生产环境配置：使用从文件加载的配置
     ai.set_config(cfg["url"], cfg["key"], cfg["model"])
     print("成功从文件 " + config_path + " 加载配置")
 else:
     print("错误：配置文件不存在: " + config_path)
+    # 模拟测试配置 (TESTONLY)
     ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
 str res = @~显式文件配置测试~

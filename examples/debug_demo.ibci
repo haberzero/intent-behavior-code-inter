@@ -1,9 +1,11 @@
 import ai
 import idbg
 
-# 配置 AI (使用 mock 模式避免网络请求)
-# ai.set_config(url, key, model) 
-# 注意：在测试环境中如果无法连接 LLM，idbg 仍然可以工作
+# 配置 AI (生产模式)
+ai.set_config(url, key, model)
+
+# 模拟模式 (可选)
+# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
 int a = 10
 str name = "ibc-inter"

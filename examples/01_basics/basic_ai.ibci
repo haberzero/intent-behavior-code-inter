@@ -1,7 +1,18 @@
 import ai
+import json
+import file
 
-# 开启 TESTONLY 模式以便脱机测试
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+# 1. 加载配置
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = config["default_model"]
+str url = default_model["base_url"]
+str key = default_model["api_key"]
+str model = default_model["model"]
+
+ai.set_config(url, key, model)
+
+# 2. 模拟测试配置 (TESTONLY)：如果无法连接真实 LLM，请取消注释以下行
+# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
 print("--- [01_basic_ai.ibci] ---")
 

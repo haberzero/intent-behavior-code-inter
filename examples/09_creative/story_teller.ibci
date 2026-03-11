@@ -1,0 +1,59 @@
+import ai
+import file
+import idbg
+
+# 1. 生产环境配置
+ai.set_config(url, key, model)
+
+# 2. 模拟测试配置 (TESTONLY)
+# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+# 1. 定义结构化故事生成器
+llm 生成章节(str 背景, str 角色, int 章节号) -> dict:
+    __sys__
+    你是一个富有想象力的奇幻小说作家。
+    请根据提供的背景和角色，创作一个引人入胜的故事章节。
+    
+    __user__
+    背景: $__背景__
+    角色: $__角色__
+    章节: 第 $__章节号__ 章
+    
+    输出要求:
+    - title: 本章标题 (str)
+    - content: 章节内容 (str)
+    - atmosphere: 氛围关键词 (list)
+llmend
+
+# 2. 准备故事起点
+str premise_file = "premise.txt"
+file.write(premise_file, "在遥远的机械之城，所有的心跳都是齿轮啮合的声音。")
+
+print("--- [09_creative/story_teller.ibci] ---")
+
+# 3. 开启创作意图
+intent "风格：蒸汽朋克 + 忧郁":
+    str background = file.read(premise_file)
+    str protagonist = "阿尔法，一个会流泪的机器人"
+    
+    print("正在构思第一章...")
+    dict chapter1 = 生成章节(background, protagonist, 1)
+    
+    print("\n[第一章: " + chapter1["title"] + "]")
+    print("内容预览: " + chapter1["content"])
+    print("氛围: " + str(chapter1["atmosphere"]))
+    
+    # 4. 使用 idbg 观察“创作现场”
+    dict env = idbg.env()
+    print("\n[内核观测] 创作现场活跃意图数量: " + str(len(env["active_intents"])))
+
+# 5. 意图排他性创作：转向喜剧风格
+print("\n风格突变！切换到排他性意图模式...")
+@! 风格：荒诞喜剧
+if @~ 下一章是否应该出现一个会说话的烤面包机？请回答 1 或 0。 ~:
+    print("\n[AI 决策] 荒诞逻辑确认：加入烤面包机！")
+llmexcept:
+    print("\n[AI 纠结中...] 正在引导 AI 走向更荒诞的方向...")
+    retry "请务必让故事变得不可思议，直接回答 1 或 0"
+
+print("\n--- 故事创作会话结束 ---")

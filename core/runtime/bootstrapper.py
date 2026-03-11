@@ -18,6 +18,7 @@ class Bootstrapper:
         self.ObjectClass: Optional[IbClass] = None
         self.CallableClass: Optional[IbClass] = None
         self.ModuleClass: Optional[IbClass] = None
+        self.IntentClass: Optional[IbClass] = None
 
     @property
     def token(self) -> Any:
@@ -38,12 +39,14 @@ class Bootstrapper:
         self.ObjectClass = IbClass("Object", registry=self.registry)
         self.CallableClass = IbClass("callable", registry=self.registry)
         self.ModuleClass = IbClass("IbModule", registry=self.registry)
+        self.IntentClass = IbClass("Intent", registry=self.registry)
         
         # Step 2: Wire Relationships (打破循环)
         self.TypeClass.ib_class = self.TypeClass
         self.ObjectClass.ib_class = self.TypeClass
         self.CallableClass.ib_class = self.TypeClass
         self.ModuleClass.ib_class = self.TypeClass
+        self.IntentClass.ib_class = self.TypeClass
         
         # Object 没有父类
         self.ObjectClass.parent = None
@@ -51,12 +54,14 @@ class Bootstrapper:
         self.TypeClass.parent = self.ObjectClass
         self.CallableClass.parent = self.ObjectClass
         self.ModuleClass.parent = self.ObjectClass
+        self.IntentClass.parent = self.ObjectClass
         
         # 注册到本实例表
         self.register_class(self.TypeClass)
         self.register_class(self.ObjectClass)
         self.register_class(self.CallableClass)
         self.register_class(self.ModuleClass)
+        self.register_class(self.IntentClass)
         
         # Step 3: Register Core Protocols (元方法注入)
         self.ObjectClass.register_method('toString', IbNativeFunction(lambda self: self.__repr__(), is_method=True, ib_class=self.ObjectClass))

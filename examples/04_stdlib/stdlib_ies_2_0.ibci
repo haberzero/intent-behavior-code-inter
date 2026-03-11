@@ -1,4 +1,7 @@
 import ai
+# 生产环境配置
+ai.set_config(url, key, model)
+
 import net
 import schema
 

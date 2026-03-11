@@ -8,6 +8,7 @@ from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.interfaces import ILLMProvider
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.intent import IbIntent
 from core.foundation.registry import Registry
 
 class LLMExecutorImpl:
@@ -109,33 +110,63 @@ class LLMExecutorImpl:
         """
         # 1. 基础收集
         global_intents = context.get_global_intents()
-        active_intents = context.get_active_intents()
+        # [IES 2.0] 优先使用捕获的意图栈（针对延迟执行的 Behavior）
+        raw_active = captured_intents if captured_intents is not None else context.get_active_intents()
+        
+        # 确保转换为列表以便反转遍历
+        active_intents = raw_active
+        if hasattr(raw_active, 'to_list'):
+            active_intents = raw_active.to_list()
         
         # 2. 处理模式 (Mode) 逻辑
         resolved_block_intents = []
         is_exclusive = False
+        blacklist = set()
+        
         for i in reversed(active_intents):
-            content = self._resolve_intent_content_obj(i, context)
-            if i.mode == "override":
-                resolved_block_intents.insert(0, content)
+            # [Refactor Phase 3] 已移除兼容性代码，假定意图栈中均为 IbIntent 对象
+            content = i.resolve_content(context, self)
+            # print(f"DEBUG: Intent content='{content}', mode='{i.mode}', is_override={i.is_override}, is_remove={i.is_remove}")
+            
+            if i.is_remove:
+                blacklist.add(content)
+                continue
+                
+            if i.is_override:
+                if content not in blacklist:
+                    resolved_block_intents.insert(0, content)
                 is_exclusive = True
                 break
-            resolved_block_intents.insert(0, content)
+            
+            if content not in blacklist:
+                resolved_block_intents.insert(0, content)
             
         final_list = []
         if not is_exclusive:
-            final_list.extend(global_intents)
+            # Global Intents 也要受 blacklist 影响
+            for content in global_intents:
+                if content not in blacklist:
+                    final_list.append(content)
         final_list.extend(resolved_block_intents)
         
         # 3. 处理 Call 层级
         if call_intent_uid:
             interpreter = self.service_context.interpreter
             call_intent_data = interpreter.get_node_data(call_intent_uid)
-            mode = call_intent_data.get("mode", "append")
-            content = self._resolve_intent_content(call_intent_uid, context)
-            if mode == "override":
+            # 构造临时的 IbIntent 以统一逻辑
+            call_intent = IbIntent(
+                ib_class=self.service_context.registry.get_class("Intent"),
+                content=call_intent_data.get("content", ""),
+                mode=call_intent_data.get("mode", "append"),
+                segments=call_intent_data.get("segments", []),
+                intent_type="call",
+                source_uid=call_intent_uid
+            )
+            content = call_intent.resolve_content(context, self)
+            
+            if call_intent.is_override:
                 return [content]
-            elif mode == "remove":
+            elif call_intent.is_remove:
                 if content in final_list: final_list.remove(content)
             else:
                 if content not in final_list: final_list.append(content)
@@ -149,42 +180,24 @@ class LLMExecutorImpl:
         return self._unique_merge(final_list)
 
     def _resolve_intent_content(self, intent_uid: str, context: RuntimeContext) -> str:
-        """从 UID 解析意图内容"""
+        """从 UID 解析意图内容 (Helper)"""
+        # 复用 IbIntent 逻辑
         interpreter = self.service_context.interpreter
         intent_data = interpreter.get_node_data(intent_uid)
-        segments = intent_data.get("segments")
-        if segments:
-            return self._evaluate_segments(segments, context).strip()
-        
-        # [IES 2.2 Security Update] 解析外部资产
-        content = intent_data.get("content", "")
-        if interpreter and hasattr(interpreter, "_resolve_value"):
-            content = interpreter._resolve_value(content)
-        return str(content).strip()
+        intent = IbIntent(
+            ib_class=self.service_context.registry.get_class("Intent"),
+            content=intent_data.get("content", ""),
+            mode=intent_data.get("mode", "append"),
+            segments=intent_data.get("segments", [])
+        )
+        return intent.resolve_content(context, self)
 
     def _resolve_intent_content_obj(self, intent: Any, context: RuntimeContext) -> str:
-        """从 IntentInfo 对象或字典解析"""
-        interpreter = self.service_context.interpreter
-        
-        if isinstance(intent, Mapping):
-            segments = intent.get('segments')
-            if segments:
-                return self._evaluate_segments(segments, context).strip()
-            
-            # [IES 2.2 Security Update]
-            content = intent.get('content', '')
-            if interpreter and hasattr(interpreter, "_resolve_value"):
-                content = interpreter._resolve_value(content)
-            return str(content).strip()
-            
-        if hasattr(intent, 'segments') and intent.segments:
-            return self._evaluate_segments(intent.segments, context).strip()
-        
-        # [IES 2.2 Security Update]
-        content = intent.content
-        if interpreter and hasattr(interpreter, "_resolve_value"):
-            content = interpreter._resolve_value(content)
-        return str(content).strip()
+        """已废弃：直接使用 IbIntent.resolve_content"""
+        if isinstance(intent, IbIntent):
+            return intent.resolve_content(context, self)
+        # Fallback for old types
+        return self._evaluate_segments(getattr(intent, 'segments', []), context).strip()
 
     def _unique_merge(self, *lists: List[str]) -> List[str]:
         result = []
@@ -205,7 +218,7 @@ class LLMExecutorImpl:
         content_parts = []
         for segment in segments:
             # [IES 2.2 Security Update] 处理外部资产引用
-            if isinstance(segment, dict) and segment.get("_type") == "ext_ref":
+            if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
                 interpreter = self.service_context.interpreter
                 if interpreter and hasattr(interpreter, "_resolve_value"):
                     segment = interpreter._resolve_value(segment)
@@ -322,8 +335,18 @@ class LLMExecutorImpl:
         # 注入预期类型约束
         if self._expected_type_stack:
             injected_type = self._expected_type_stack[-1]
+            # [Refactor Phase 3] 移除 behavior 过滤，因 BehaviorType.prompt_name 已修正为 'str'
             if injected_type not in ("var", "callable", "Any"):
-                sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
+                # 优先使用 ai 模块定义的针对特定类型的 Prompt
+                type_prompt = None
+                if ai_module and hasattr(ai_module, "get_return_type_prompt"):
+                    type_prompt = ai_module.get_return_type_prompt(injected_type)
+                
+                if type_prompt:
+                    sys_prompt += f"\n\n{type_prompt}"
+                else:
+                    # 回退到通用的类型声明
+                    sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
         
         if all_intents:
             sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
@@ -333,20 +356,27 @@ class LLMExecutorImpl:
             
         # 4. 执行
         response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name.lower())
+        
+        # 记录最后一次调用信息
+        self.last_call_info = {
+            "sys_prompt": sys_prompt,
+            "user_prompt": content,
+            "response": response,
+            "scene": scene_name.lower()
+        }
             
         # 5. 严格场景校验 (BRANCH/LOOP)
-        from core.runtime.objects.builtins import IbInteger, IbString
         if scene_name.upper() in ("BRANCH", "LOOP"):
             clean_res = response.strip().lower()
             decision_map = {"1": 1, "0": 0, "true": 1, "false": 0, "yes": 1, "no": 0}
             if clean_res in decision_map:
                 self.retry_hint = None
-                return IbInteger.from_native(decision_map[clean_res])
+                return self.service_context.registry.box(decision_map[clean_res])
             
             raise LLMUncertaintyError(f"LLM decision format error: {response}", node_uid, raw_response=response)
 
         self.retry_hint = None
-        return IbString(response)
+        return self.service_context.registry.box(response)
 
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general") -> str:
@@ -387,12 +417,14 @@ class intent_scoped:
         interpreter = self.service_context.interpreter
         intent_data = interpreter.get_node_data(self.intent_uid)
         
-        # 使用原始字典作为意图信息
-        # 为了兼容 .mode 的访问，我们将其包装在一个简单的 namespace 对象中
-        intent = SimpleNamespace(
+        # 使用 IbIntent 替代 SimpleNamespace
+        intent = IbIntent(
+            ib_class=self.service_context.registry.get_class("Intent"),
             content=intent_data.get('content', '') if intent_data else '',
             mode=intent_data.get('mode', 'append') if intent_data else 'append',
-            segments=intent_data.get('segments', []) if intent_data else []
+            segments=intent_data.get('segments', []) if intent_data else [],
+            intent_type="block",
+            source_uid=self.intent_uid
         )
         
         self.service_context.runtime_context.push_intent(intent)
