@@ -59,45 +59,41 @@ def initialize_builtin_classes(registry: Registry):
     if registry.is_initialized:
         return # 已初始化
         
-    bootstrapper = Bootstrapper(registry)
-    bootstrapper.initialize()
-    token = bootstrapper.token
-    
-    # 0. 准备 UTS 元数据注册表 (隔离引擎实例)
+    # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
+    # [Active Defense] 贯彻“元数据先行”原则
     from core.domain.builtin_schema import init_builtin_schema
     metadata_registry = uts.create_default_registry()
     init_builtin_schema(metadata_registry) # 初始化内置类型的 Schema
+    
+    # 2. 引导核心类 (Type, Object, callable, IbModule, Intent)
+    bootstrapper = Bootstrapper(registry)
+    bootstrapper.initialize(metadata_registry)
+    token = bootstrapper.token
+    
+    # 注册元数据注册表到 Registry
     registry.register_metadata_registry(metadata_registry, token)
 
-    # 1. 创建核心内置类 (注入到 registry)
-    integer_class = registry.create_subclass("int")
-    float_class = registry.create_subclass("float")
-    string_class = registry.create_subclass("str")
-    list_class = registry.create_subclass("list")
-    dict_class = registry.create_subclass("dict")
-    none_class = registry.create_subclass("None")
-    behavior_class = registry.create_subclass("behavior")
-    bool_class = registry.create_subclass("bool")
-    callable_class = registry.create_subclass("callable")
-    var_class = registry.create_subclass("var")
+    # 3. 创建核心内置类 (通过元数据强绑定)
+    integer_class = registry.create_subclass("int", metadata_registry.resolve("int"))
+    float_class = registry.create_subclass("float", metadata_registry.resolve("float"))
+    string_class = registry.create_subclass("str", metadata_registry.resolve("str"))
+    list_class = registry.create_subclass("list", metadata_registry.resolve("list"))
+    dict_class = registry.create_subclass("dict", metadata_registry.resolve("dict"))
+    none_class = registry.create_subclass("None", metadata_registry.resolve("void"))
+    behavior_class = registry.create_subclass("behavior", metadata_registry.resolve("callable"))
+    bool_class = registry.create_subclass("bool", metadata_registry.resolve("bool"))
+    callable_class = registry.create_subclass("callable", metadata_registry.resolve("callable"))
     
-    # 2. 绑定 UTS 描述符并注册到 Registry
-    registry.register_class("int", integer_class, token, descriptor=metadata_registry.resolve("int"))
-    registry.register_class("float", float_class, token, descriptor=metadata_registry.resolve("float"))
-    registry.register_class("str", string_class, token, descriptor=metadata_registry.resolve("str"))
-    registry.register_class("list", list_class, token, descriptor=metadata_registry.resolve("list"))
-    registry.register_class("dict", dict_class, token, descriptor=metadata_registry.resolve("dict"))
-    registry.register_class("None", none_class, token, descriptor=metadata_registry.resolve("void"))
-    registry.register_class("behavior", behavior_class, token, descriptor=metadata_registry.resolve("callable"))
-    registry.register_class("bool", bool_class, token, descriptor=metadata_registry.resolve("bool"))
-    registry.register_class("callable", callable_class, token, descriptor=metadata_registry.resolve("callable"))
-    registry.register_class("var", var_class, token, descriptor=metadata_registry.resolve("Any"))
+    # 为 bound_method 创建专门的合成描述符 (通过工厂驻留)
+    bound_method_desc = metadata_registry.factory.create_primitive("bound_method", is_nullable=True)
+    bound_method_class = registry.create_subclass("bound_method", bound_method_desc, parent_name="callable")
     
-    # 特殊：IbModule 类
-    module_class = registry.create_subclass("IbModule")
-    registry.register_class("IbModule", module_class, token, descriptor=metadata_registry.resolve("module"))
+    var_class = registry.create_subclass("var", metadata_registry.resolve("Any"))
     
-    # 3. 注册内置全局函数元数据 (供编译器发现)
+    # 特殊：IbModule 类 (Bootstrapper 已经创建过一次，此处仅获取或重复确认)
+    module_class = registry.create_subclass("IbModule", metadata_registry.resolve("module"))
+    
+    # 4. 注册内置全局函数元数据 (供编译器发现)
     registry.register_function("print", uts.FunctionMetadata(
         name="print", 
         param_types=[metadata_registry.resolve("Any")], 

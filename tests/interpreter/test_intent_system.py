@@ -98,7 +98,7 @@ class TestIntentSystem(BaseInterpreterTest):
         intent "Global Intent":
             intent "Block Intent":
                 # 删除特定的意图 (使用 shorthand 语法)
-                @- "Global Intent"
+                @- Global Intent
                 str res = @~ Task ~
                 print(res)
         """

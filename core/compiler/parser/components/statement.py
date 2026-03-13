@@ -213,7 +213,7 @@ class StatementComponent(BaseComponent):
         effective_fallback = llm_fallback or final_fallback
         
         if effective_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=root_if, fallback=effective_fallback), root_if, self.stream.previous())
+            root_if.llm_fallback = effective_fallback
         
         return root_if
 
@@ -234,7 +234,7 @@ class StatementComponent(BaseComponent):
         
         llm_fallback = self._parse_llm_fallback()
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token, self.stream.previous())
+            stmt.llm_fallback = llm_fallback
         return stmt
 
     def for_statement(self) -> ast.IbStmt:
@@ -268,7 +268,7 @@ class StatementComponent(BaseComponent):
         
         llm_fallback = self._parse_llm_fallback()
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token, self.stream.previous())
+            stmt.llm_fallback = llm_fallback
         return stmt
 
     def expression_statement(self) -> ast.IbStmt:
@@ -281,7 +281,7 @@ class StatementComponent(BaseComponent):
             llm_fallback = self._parse_llm_fallback()
             stmt = self._loc(ast.IbAssign(targets=[expr], value=value), expr, end_token)
             if llm_fallback:
-                return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), expr, self.stream.previous())
+                stmt.llm_fallback = llm_fallback
             return stmt
         
         # Compound assignments
@@ -298,14 +298,14 @@ class StatementComponent(BaseComponent):
                 llm_fallback = self._parse_llm_fallback()
                 stmt = self._loc(ast.IbAugAssign(target=expr, op=op_str, value=value), expr, end_token)
                 if llm_fallback:
-                    return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), expr, self.stream.previous())
+                    stmt.llm_fallback = llm_fallback
                 return stmt
             
         self.stream.consume_end_of_statement("Expect newline after expression.")
         llm_fallback = self._parse_llm_fallback()
         stmt = self._loc(ast.IbExprStmt(value=expr), self.stream.previous())
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), self.stream.previous())
+            stmt.llm_fallback = llm_fallback
         return stmt
 
     def block(self) -> List[ast.IbStmt]:
@@ -386,7 +386,7 @@ class StatementComponent(BaseComponent):
         stmt = self._loc(ast.IbTry(body=body, handlers=handlers, orelse=orelse, finalbody=finalbody), start_token)
         
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), start_token)
+            stmt.llm_fallback = llm_fallback
         return stmt
 
     def raise_statement(self) -> ast.IbRaise:

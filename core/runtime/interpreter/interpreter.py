@@ -34,9 +34,10 @@ from core.foundation.host_interface import HostInterface
 from core.foundation.interfaces import IStackInspector
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from .llm_executor import intent_scoped
-from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from .intrinsics import IntrinsicManager
 from .ast_view import ReadOnlyNodePool
+from .artifact_loader import ArtifactLoader
 from core.runtime.host.service import HostService
 from .constants import OP_MAPPING, UNARY_OP_MAPPING
 
@@ -148,33 +149,18 @@ class Interpreter(IStackInspector):
         self.compiler = compiler
         self.factory = factory
         
-        # 1. 核心解耦：处理平铺化池结构
-        self.artifact_dict: Mapping[str, Any] = {}
-        if artifact:
-            # 如果是对象，则转换为扁平化池字典
-            if hasattr(artifact, 'to_dict'):
-                self.artifact_dict = artifact.to_dict()
-            elif hasattr(artifact, 'modules'): # 识别为 CompilationArtifact
-                from core.compiler.serialization.serializer import FlatSerializer
-                serializer = FlatSerializer()
-                self.artifact_dict = serializer.serialize_artifact(artifact)
-            elif isinstance(artifact, dict):
-                self.artifact_dict = artifact
-            else:
-                # 警告：未知类型的 artifact，尝试保持原样（可能是 UID 字符串，但不应赋值给 artifact_dict）
-                self.artifact_dict = {}
+        # 1. 核心解耦：通过 ArtifactLoader 加载并水化产物
+        loader = ArtifactLoader(self.registry)
+        loaded = loader.load(artifact)
         
-        # 加载全局池 (Pools)
-        pools = self.artifact_dict.get("pools", {})
-        if isinstance(pools, str):
-            print(f"DEBUG: pools is a string! artifact_dict keys: {list(self.artifact_dict.keys())}")
-        self.node_pool: Dict[str, Mapping[str, Any]] = pools.get("nodes", {})
-        if isinstance(self.node_pool, str):
-            print(f"DEBUG: node_pool is a string! pools type: {type(pools)}")
-        self.symbol_pool: Dict[str, Mapping[str, Any]] = pools.get("symbols", {})
-        self.scope_pool: Dict[str, Mapping[str, Any]] = pools.get("scopes", {})
-        self.type_pool: Dict[str, Mapping[str, Any]] = pools.get("types", {})
-        self.asset_pool: Dict[str, str] = pools.get("assets", {}) # [IES 2.2]
+        self.node_pool = loaded.node_pool
+        self.symbol_pool = loaded.symbol_pool
+        self.scope_pool = loaded.scope_pool
+        self.type_pool = loaded.type_pool
+        self.asset_pool = loaded.asset_pool
+        self.entry_module = loaded.entry_module
+        self.type_hydrator = loaded.type_hydrator
+        self.artifact_dict = loaded.artifact_dict
         
         # 2. 初始化基础组件
         runtime_context = RuntimeContextImpl(registry=self.registry)
@@ -346,15 +332,14 @@ class Interpreter(IStackInspector):
     def run(self) -> bool:
         """从入口模块开始执行完整的项目"""
         try:
-            entry_module = self.artifact_dict.get("entry_module")
-            if not entry_module:
+            if not self.entry_module:
                 return True
                 
-            module_data = self.artifact_dict.get("modules", {}).get(entry_module)
+            module_data = self.artifact_dict.get("modules", {}).get(self.entry_module)
             if not module_data:
                 return True
                 
-            self.execute_module(module_data["root_node_uid"], module_name=entry_module)
+            self.execute_module(module_data["root_node_uid"], module_name=self.entry_module)
             return True
         except Exception as e:
             # 运行时异常已由解释器内部报告
@@ -418,7 +403,6 @@ class Interpreter(IStackInspector):
         [Standardized] 从 side_tables 中恢复位置信息并向 IssueTracker 报告。
         实现了编译器与解释器在错误报告协议上的对齐。
         """
-        from core.domain.issue import Diagnostic, Severity
         loc_data = self.get_side_table("node_to_loc", node_uid) if node_uid else None
         
         loc = None
@@ -494,6 +478,26 @@ class Interpreter(IStackInspector):
              raise self._report_error("Recursion depth exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
         
         self.call_stack_depth += 1
+        
+        # [NEW] 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化
+        pushed_count = 0
+        intent_uids = self.get_side_table("node_intents", node_uid)
+        if intent_uids:
+            for i_uid in intent_uids:
+                i_data = self.node_pool.get(i_uid)
+                if i_data:
+                    intent = IbIntent(
+                        ib_class=self.registry.get_class("Intent"),
+                        content=i_data.get('content', ''),
+                        mode=IntentMode.from_str(i_data.get('mode', '+')),
+                        tag=i_data.get('tag'),
+                        segments=i_data.get('segments', []),
+                        role=IntentRole.SMEAR,
+                        source_uid=i_uid
+                    )
+                    self.context.push_intent(intent)
+                    pushed_count += 1
+
         try:
             node_type = node_data["_type"]
             visitor = self._visitor_cache.get(node_type, self.generic_visit)
@@ -518,32 +522,14 @@ class Interpreter(IStackInspector):
             raise self._report_error(f"{type(e).__name__}: {str(e)}", node_uid, error_code=RUN_GENERIC_ERROR) from e
         finally:
             self.call_stack_depth -= 1
+            # [NEW] 自动出栈，确保意图作用域正确恢复
+            for _ in range(pushed_count):
+                self.context.pop_intent()
 
     def generic_visit(self, node_uid: str, node_data: Mapping[str, Any]):
         raise self._report_error(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)
 
     # --- 访问方法实现 ---
-
-    def visit_IbAnnotatedStmt(self, node_uid: str, node_data: Mapping[str, Any]):
-        """意图语句：intent '...' { ... }"""
-        intent_uid = node_data.get("intent")
-        stmt_uid = node_data.get("stmt")
-        
-        # 意图作用域管理
-        def action():
-            return self.visit(stmt_uid)
-            
-        return intent_scoped(self.service_context, intent_uid)(action)
-
-    def visit_IbAnnotatedExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """意图表达式：intent '...' expr"""
-        intent_uid = node_data.get("intent")
-        expr_uid = node_data.get("expr")
-        
-        def action():
-            return self.visit(expr_uid)
-            
-        return intent_scoped(self.service_context, intent_uid)(action)
 
     def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """行为描述行：█ ... █"""
@@ -671,104 +657,114 @@ class Interpreter(IStackInspector):
         """赋值语句实现"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
         
-        value_uid = node_data.get("value")
-        value = self.visit(value_uid)
-        
-        # 处理多重赋值目标 (var a, b = 1)
-        for target_uid in node_data.get("targets", []):
-            target_data = self.get_node_data(target_uid)
-            if not target_data: continue
+        def action():
+            value_uid = node_data.get("value")
+            value = self.visit(value_uid)
             
-            # 1. 普通变量赋值 (Name)
-            if target_data["_type"] == "IbName":
-                sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                name = target_data.get("id")
-                if sym_uid:
-                    # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
-                    if self.context.get_symbol_by_uid(sym_uid):
-                        self.context.set_variable_by_uid(sym_uid, value)
-                    else:
-                        self.context.define_variable(name, value, uid=sym_uid)
-                elif not self.strict_mode:
-                    # 回退到名称查找
-                    self.context.set_variable(name, value)
-                else:
-                    raise self._report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
-            
-            # 2. 类型标注表达式 (TypeAnnotatedExpr)
-            elif target_data["_type"] == "IbTypeAnnotatedExpr":
-                inner_target_uid = target_data.get("target")
-                inner_target_data = self.get_node_data(inner_target_uid)
-                if inner_target_data and inner_target_data["_type"] == "IbName":
-                    sym_uid = self.get_side_table("node_to_symbol", inner_target_uid)
-                    name = inner_target_data.get("id")
-                    # 总是定义新变量
-                    self.context.define_variable(name, value, uid=sym_uid)
-            
-            # 3. 属性赋值 (Attribute)
-            elif target_data["_type"] == "IbAttribute":
-                obj = self.visit(target_data.get("value"))
-                attr = target_data.get("attr")
-                obj.receive('__setattr__', [self.registry.box(attr), value])
-            
-            # 4. 下标赋值 (Subscript)
-            elif target_data["_type"] == "IbSubscript":
-                obj = self.visit(target_data.get("value"))
-                slice_val = self.visit(target_data.get("slice"))
-                obj.receive('__setitem__', [slice_val, value])
+            # 处理多重赋值目标 (var a, b = 1)
+            for target_uid in node_data.get("targets", []):
+                target_data = self.get_node_data(target_uid)
+                if not target_data: continue
                 
-        return self.registry.get_none()
+                # 1. 普通变量赋值 (Name)
+                if target_data["_type"] == "IbName":
+                    sym_uid = self.get_side_table("node_to_symbol", target_uid)
+                    name = target_data.get("id")
+                    if sym_uid:
+                        # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
+                        if self.context.get_symbol_by_uid(sym_uid):
+                            self.context.set_variable_by_uid(sym_uid, value)
+                        else:
+                            declared_type = self._resolve_type_from_symbol(sym_uid)
+                            self.context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                    elif not self.strict_mode:
+                        # 回退到名称查找
+                        self.context.set_variable(name, value)
+                    else:
+                        raise self._report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
+                
+                # 2. 类型标注表达式 (TypeAnnotatedExpr)
+                elif target_data["_type"] == "IbTypeAnnotatedExpr":
+                    inner_target_uid = target_data.get("target")
+                    inner_target_data = self.get_node_data(inner_target_uid)
+                    if inner_target_data and inner_target_data["_type"] == "IbName":
+                        sym_uid = self.get_side_table("node_to_symbol", inner_target_uid)
+                        name = inner_target_data.get("id")
+                        # 总是定义新变量
+                        declared_type = self._resolve_type_from_symbol(sym_uid)
+                        self.context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                
+                # 3. 属性赋值 (Attribute)
+                elif target_data["_type"] == "IbAttribute":
+                    obj = self.visit(target_data.get("value"))
+                    attr = target_data.get("attr")
+                    obj.receive('__setattr__', [self.registry.box(attr), value])
+                
+                # 4. 下标赋值 (Subscript)
+                elif target_data["_type"] == "IbSubscript":
+                    obj = self.visit(target_data.get("value"))
+                    slice_val = self.visit(target_data.get("slice"))
+                    obj.receive('__setitem__', [slice_val, value])
+                    
+            return self.registry.get_none()
+            
+        return self._with_llm_fallback(node_uid, node_data, action)
 
     def visit_IbFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]):
         """普通函数定义"""
-        func = IbUserFunction(node_uid, self)
-        name = node_data.get("name")
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        self.context.define_variable(name, func, uid=sym_uid)
+        declared_type = self._resolve_type_from_symbol(sym_uid)
+        func = IbUserFunction(node_uid, self, descriptor=declared_type)
+        name = node_data.get("name")
+        self.context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
 
     def visit_IbLLMFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]):
         """LLM 函数定义"""
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self)
-        name = node_data.get("name")
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        self.context.define_variable(name, func, uid=sym_uid)
+        declared_type = self._resolve_type_from_symbol(sym_uid)
+        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self, descriptor=declared_type)
+        name = node_data.get("name")
+        self.context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
 
     def visit_IbAugAssign(self, node_uid: str, node_data: Mapping[str, Any]):
         """复合赋值实现 (a += 1)"""
-        target_uid = node_data.get("target")
-        target_data = self.get_node_data(target_uid)
-        
-        value = self.visit(node_data.get("value"))
-        op_symbol = node_data.get("op")
-        # 兼容性处理：如果是 Add -> +
-        op_map = {'Add': '+', 'Sub': '-', 'Mult': '*', 'Div': '/'}
-        op = op_map.get(op_symbol, op_symbol)
-        
-        method = OP_MAPPING.get(op)
-        
-        if not method: raise self._report_error(f"Unsupported aug op: {op_symbol}", node_uid)
-        
-        # 1. 读取旧值
-        old_val = self.visit(target_uid)
-        
-        # 2. 计算新值
-        new_val = old_val.receive(method, [value])
-        
-        # 3. 写回
-        if target_data["_type"] == "IbName":
-            sym_uid = self.get_side_table("node_to_symbol", target_uid)
-            if sym_uid:
-                self.context.set_variable_by_uid(sym_uid, new_val)
-            else:
-                self.context.set_variable(target_data.get("id"), new_val)
-        elif target_data["_type"] == "IbAttribute":
-            obj = self.visit(target_data.get("value"))
-            attr = target_data.get("attr")
-            obj.receive('__setattr__', [self.registry.box(attr), new_val])
+        def action():
+            target_uid = node_data.get("target")
+            target_data = self.get_node_data(target_uid)
             
-        return self.registry.get_none()
+            value = self.visit(node_data.get("value"))
+            op_symbol = node_data.get("op")
+            # 兼容性处理：如果是 Add -> +
+            op_map = {'Add': '+', 'Sub': '-', 'Mult': '*', 'Div': '/'}
+            op = op_map.get(op_symbol, op_symbol)
+            
+            method = OP_MAPPING.get(op)
+            
+            if not method: raise self._report_error(f"Unsupported aug op: {op_symbol}", node_uid)
+            
+            # 1. 读取旧值
+            old_val = self.visit(target_uid)
+            
+            # 2. 计算新值
+            new_val = old_val.receive(method, [value])
+            
+            # 3. 写回
+            if target_data["_type"] == "IbName":
+                sym_uid = self.get_side_table("node_to_symbol", target_uid)
+                if sym_uid:
+                    self.context.set_variable_by_uid(sym_uid, new_val)
+                else:
+                    self.context.set_variable(target_data.get("id"), new_val)
+            elif target_data["_type"] == "IbAttribute":
+                obj = self.visit(target_data.get("value"))
+                attr = target_data.get("attr")
+                obj.receive('__setattr__', [self.registry.box(attr), new_val])
+                
+            return self.registry.get_none()
+            
+        return self._with_llm_fallback(node_uid, node_data, action)
 
     def visit_IbBoolOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """逻辑运算 (and/or)"""
@@ -884,7 +880,8 @@ class Interpreter(IStackInspector):
                 if target_data and target_data["_type"] == "IbName":
                     name = target_data.get("id")
                     sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                    self.context.define_variable(name, item, uid=sym_uid)
+                    declared_type = self._resolve_type_from_symbol(sym_uid)
+                    self.context.define_variable(name, item, declared_type=declared_type, uid=sym_uid)
                 
                 try:
                     for stmt_uid in body:
@@ -914,11 +911,14 @@ class Interpreter(IStackInspector):
 
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]):
         """表达式语句"""
-        res = self.visit(node_data.get("value"))
-        # 如果是行为描述行，则立即执行（作为语句时）
-        if isinstance(res, IbBehavior):
-            return res.receive('__call__', [])
-        return res
+        def action():
+            res = self.visit(node_data.get("value"))
+            # 如果是行为描述行，则立即执行（作为语句时）
+            if isinstance(res, IbBehavior):
+                return res.receive('__call__', [])
+            return res
+            
+        return self._with_llm_fallback(node_uid, node_data, action)
 
     def visit_IbRetry(self, node_uid: str, node_data: Mapping[str, Any]):
         hint_uid = node_data.get("hint")
@@ -1033,7 +1033,15 @@ class Interpreter(IStackInspector):
         """动态创建类对象"""
         name = node_data.get("name")
         parent_name = node_data.get("parent") or "Object"
-        new_class = self.registry.create_subclass(name, parent_name)
+        
+        # [Phase 1.1] 强元数据对齐：动态创建类描述符
+        sym_uid = self.get_side_table("node_to_symbol", node_uid)
+        descriptor = self._resolve_type_from_symbol(sym_uid)
+        if not descriptor:
+            # 如果符号表中没有预定义的描述符（如动态注入代码），则现场创建一个
+            descriptor = self.registry.get_metadata_registry().factory.create_class(name, parent=parent_name)
+            
+        new_class = self.registry.create_subclass(name, descriptor, parent_name)
         
         # 1. 注册方法与字段
         body = node_data.get("body", [])
@@ -1042,9 +1050,13 @@ class Interpreter(IStackInspector):
             if not stmt_data: continue
             
             if stmt_data["_type"] == "IbFunctionDef":
-                new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self))
+                sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+                declared_type = self._resolve_type_from_symbol(sym_uid)
+                new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self, descriptor=declared_type))
             elif stmt_data["_type"] == "IbLLMFunctionDef":
-                new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self))
+                sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+                declared_type = self._resolve_type_from_symbol(sym_uid)
+                new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self, descriptor=declared_type))
             elif stmt_data["_type"] == "IbAssign":
                 val_uid = stmt_data.get("value")
                 if val_uid:
@@ -1066,6 +1078,17 @@ class Interpreter(IStackInspector):
         self.context.define_variable(name, new_class, uid=sym_uid)
         return self.registry.get_none()
 
+    def _resolve_type_from_symbol(self, sym_uid: str) -> Optional[Type]:
+        """从符号池中解析声明的类型描述符"""
+        if not sym_uid or sym_uid not in self.symbol_pool:
+            return None
+        sym_data = self.symbol_pool[sym_uid]
+        type_uid = sym_data.get("type_uid")
+        if not type_uid:
+            return None
+        # 通过 hydrator 获取或重建描述符
+        return self.type_hydrator.hydrate(type_uid)
+
     def visit_IbRaise(self, node_uid: str, node_data: Mapping[str, Any]):
         """抛出异常"""
         exc_uid = node_data.get("exc")
@@ -1073,16 +1096,26 @@ class Interpreter(IStackInspector):
         raise ThrownException(exc_val)
 
     def visit_IbIntentStmt(self, node_uid: str, node_data: Mapping[str, Any]):
-        """处理意图块"""
+        """处理意图块 (IES 2.0 强契约)"""
         intent_uid = node_data.get("intent")
         intent_data = self.get_node_data(intent_uid)
         
+        # [Active Defense] 仅接受结构化意图对象，不再支持原始字符串
+        if not intent_data:
+            raise self._report_error("Invalid intent metadata: Intent must be a structured IbIntentInfo node.")
+            
+        content = intent_data.get('content', '')
+        mode = IntentMode.from_str(intent_data.get('mode', '+'))
+        tag = intent_data.get('tag')
+        segments = intent_data.get('segments', [])
+        
         intent = IbIntent(
             ib_class=self.registry.get_class("Intent"),
-            content=intent_data.get('content', '') if intent_data else '',
-            mode=intent_data.get('mode', 'append') if intent_data else 'append',
-            segments=intent_data.get('segments', []) if intent_data else [],
-            intent_type="block",
+            content=content,
+            mode=mode,
+            tag=tag,
+            segments=segments,
+            role=IntentRole.BLOCK,
             source_uid=intent_uid
         )
             
@@ -1093,18 +1126,6 @@ class Interpreter(IStackInspector):
         finally:
             self.context.pop_intent()
         return self.registry.get_none()
-
-    def visit_IbLLMExceptionalStmt(self, node_uid: str, node_data: Mapping[str, Any]):
-        """处理带有 llmexcept 的语句包装节点"""
-        primary_uid = node_data.get("primary")
-        fallback_body = node_data.get("fallback", [])
-        
-        def action():
-            return self.visit(primary_uid)
-            
-        # 构造模拟数据以复用 _with_llm_fallback 逻辑
-        mock_data = {"llm_fallback": fallback_body}
-        return self._with_llm_fallback(node_uid, mock_data, action)
 
     def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]):
         return self.registry.get_none()

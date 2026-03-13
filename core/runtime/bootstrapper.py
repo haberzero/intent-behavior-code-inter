@@ -24,9 +24,10 @@ class Bootstrapper:
     def token(self) -> Any:
         return self._token
 
-    def initialize(self):
+    def initialize(self, metadata_registry: Any):
         """
-        核心引导流程：先分配内存，后绑定关系。
+        核心引导流程：先声明元数据，再注入内存，最后绑定关系。
+        [Active Defense] 贯彻“元数据先行”原则，内核类不再是例外。
         """
         if self.TypeClass: return # 避免重复初始化
 
@@ -34,20 +35,35 @@ class Bootstrapper:
         self.registry.register_box_func(self.box, self._token)
         self.registry.register_create_subclass_func(self.create_subclass, self._token)
 
-        # Step 1: Create Type Shells (分配内存，此时 ib_class 暂未绑定)
+        # Step 0: Create Core Descriptors (元数据声明)
+        factory = metadata_registry.factory
+        type_desc = factory.create_class("Type", is_nullable=False)
+        obj_desc = factory.create_class("Object", is_nullable=True)
+        callable_desc = factory.create_class("callable", is_nullable=True)
+        module_desc = factory.create_class("IbModule", is_nullable=True)
+        intent_desc = factory.create_class("Intent", is_nullable=True)
+
+        # Step 1: Create Type Shells (注入内存)
         self.TypeClass = IbClass("Type", registry=self.registry)
         self.ObjectClass = IbClass("Object", registry=self.registry)
         self.CallableClass = IbClass("callable", registry=self.registry)
         self.ModuleClass = IbClass("IbModule", registry=self.registry)
         self.IntentClass = IbClass("Intent", registry=self.registry)
         
-        # Step 2: Wire Relationships (打破循环)
+        # Step 2: Wire Relationships (打破循环并绑定描述符)
         self.TypeClass.ib_class = self.TypeClass
         self.ObjectClass.ib_class = self.TypeClass
         self.CallableClass.ib_class = self.TypeClass
         self.ModuleClass.ib_class = self.TypeClass
         self.IntentClass.ib_class = self.TypeClass
         
+        # 强制绑定描述符
+        self.TypeClass.descriptor = type_desc
+        self.ObjectClass.descriptor = obj_desc
+        self.CallableClass.descriptor = callable_desc
+        self.ModuleClass.descriptor = module_desc
+        self.IntentClass.descriptor = intent_desc
+
         # Object 没有父类
         self.ObjectClass.parent = None
         # Type, callable, Module 的父类是 Object
@@ -56,14 +72,15 @@ class Bootstrapper:
         self.ModuleClass.parent = self.ObjectClass
         self.IntentClass.parent = self.ObjectClass
         
-        # 注册到本实例表
-        self.register_class(self.TypeClass)
-        self.register_class(self.ObjectClass)
-        self.register_class(self.CallableClass)
-        self.register_class(self.ModuleClass)
-        self.register_class(self.IntentClass)
+        # 注册到本实例表并同步到元数据注册表
+        self.register_class(self.TypeClass, type_desc)
+        self.register_class(self.ObjectClass, obj_desc)
+        self.register_class(self.CallableClass, callable_desc)
+        self.register_class(self.ModuleClass, module_desc)
+        self.register_class(self.IntentClass, intent_desc)
         
         # Step 3: Register Core Protocols (元方法注入)
+        # (后续逻辑保持不变，用于补全成员元数据)
         self.ObjectClass.register_method('toString', IbNativeFunction(lambda self: self.__repr__(), is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('__to_prompt__', IbNativeFunction(lambda self: f"<Instance of {self.ib_class.name}>", is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('to_bool', IbNativeFunction(lambda self: 1, is_method=True, ib_class=self.ObjectClass))
@@ -110,12 +127,12 @@ class Bootstrapper:
         # 为 Type 注册 __call__ 消息实现 (实例化类)
         self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 
-    def register_class(self, ib_class: IbClass):
-        """向实例表注册类，并确保其 ib_class 指向 TypeClass"""
+    def register_class(self, ib_class: IbClass, descriptor: Any):
+        """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定描述符。"""
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass
         self._class_registry[ib_class.name] = ib_class
-        self.registry.register_class(ib_class.name, ib_class, self._token)
+        self.registry.register_class(ib_class.name, ib_class, self._token, descriptor=descriptor)
 
     def get_class(self, name: str) -> Optional[IbClass]:
         return self._class_registry.get(name)
@@ -123,8 +140,8 @@ class Bootstrapper:
     def get_all_classes(self) -> Dict[str, IbClass]:
         return dict(self._class_registry)
 
-    def create_subclass(self, registry: Registry, name: str, parent_name: str = "Object") -> IbClass:
-        """快速创建子类的便捷方法。如果类已存在，则返回现有实例。"""
+    def create_subclass(self, registry: Registry, name: str, descriptor: Any, parent_name: str = "Object") -> IbClass:
+        """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定描述符。"""
         if name in self._class_registry:
             return self._class_registry[name]
             
@@ -133,7 +150,7 @@ class Bootstrapper:
             raise ValueError(f"Parent class '{parent_name}' not found")
         
         new_class = IbClass(name, parent=parent, registry=registry)
-        self.register_class(new_class)
+        self.register_class(new_class, descriptor)
         return new_class
 
     def box(self, registry: Registry, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:

@@ -1,13 +1,15 @@
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.registry import Registry
 from core.foundation.interfaces import IStateReader
-from core.runtime.objects.intent import IbIntent
+from core.domain.types.descriptors import TypeDescriptor
+from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 
 class RuntimeSymbolImpl:
-    def __init__(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False):
+    def __init__(self, name: str, value: Any, declared_type: TypeDescriptor | None = None, is_const: bool = False):
         self.name = name
         self.value = value
         self.declared_type = declared_type
@@ -27,10 +29,48 @@ class ScopeImpl:
         else:
             raise ValueError("Registry is required for Scope creation (no parent provided)")
 
+    def _check_type(self, value: Any, declared_type: Optional[Any], name: str):
+        """运行时类型检查"""
+        if declared_type is None:
+            return
+            
+        # [Phase 3.3] 强契约：唯一使用描述符进行校验
+        if not hasattr(value, 'descriptor'):
+            value = self._registry.box(value)
+            
+        val_desc = value.descriptor
+        
+        # 如果 declared_type 是 TypeDescriptor
+        if isinstance(declared_type, TypeDescriptor):
+            if val_desc:
+                if not val_desc.is_assignable_to(declared_type):
+                    raise InterpreterError(
+                        f"Type mismatch: Cannot assign '{val_desc.name}' to '{declared_type.name}' for variable '{name}'",
+                        error_code=RUN_TYPE_MISMATCH
+                    )
+            else:
+                # 理论上所有运行时对象必须具备描述符 (由 Phase 1.1/1.3 保证)
+                raise InterpreterError(
+                    f"System Error: Runtime object of class '{value.ib_class.name}' missing UTS descriptor.",
+                    error_code=RUN_TYPE_MISMATCH
+                )
+        elif hasattr(declared_type, 'is_assignable_to'):
+            # 支持其他具备兼容性检查接口的对象
+            # 注意：此处回退到 val_class 校验，仅作为非 UTS 描述符的补充
+            val_class = value.ib_class
+            if not val_class.is_assignable_to(declared_type):
+                 raise InterpreterError(
+                    f"Type mismatch: '{val_class.name}' is not assignable to declared type for variable '{name}'",
+                    error_code=RUN_TYPE_MISMATCH
+                )
+
     def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
         
+        # [NEW] 运行时类型校验
+        self._check_type(boxed_value, declared_type, name or uid or "unknown")
+
         # [IES 2.0 Privileged] 检查冲突
         if not force:
             if name in self._symbols and self._symbols[name].is_const:
@@ -50,6 +90,10 @@ class ScopeImpl:
             symbol = self._symbols[name]
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
+            
+            # [NEW] 运行时类型校验
+            self._check_type(boxed_value, symbol.declared_type, name)
+            
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
             return True
@@ -64,6 +108,10 @@ class ScopeImpl:
             symbol = self._uid_to_symbol[uid]
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
+            
+            # [NEW] 运行时类型校验
+            self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
+            
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
             return True
@@ -155,7 +203,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         self._global_scope = initial_scope or ScopeImpl(registry=self._registry)
         self._current_scope = self._global_scope
         self._intent_top: Optional[IntentNode] = None # 意图栈顶节点
-        self._global_intents: List[str] = []
+        self._global_intents: List[IbIntent] = []
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
 
@@ -180,18 +228,29 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     def is_intent_exclusive(self) -> bool:
         return self._intent_exclusive_depth > 0
 
-    def set_global_intent(self, intent: str) -> None:
+    def set_global_intent(self, intent: Union[str, IbIntent]) -> None:
+        if isinstance(intent, str):
+            intent = IbIntent(
+                ib_class=self._registry.get_class("Intent"),
+                content=intent,
+                mode=IntentMode.APPEND,
+                role=IntentRole.GLOBAL
+            )
         if intent not in self._global_intents:
             self._global_intents.append(intent)
 
     def clear_global_intents(self) -> None:
         self._global_intents = []
 
-    def remove_global_intent(self, intent: str) -> None:
-        if intent in self._global_intents:
-            self._global_intents.remove(intent)
+    def remove_global_intent(self, intent: Union[str, IbIntent]) -> None:
+        if isinstance(intent, str):
+            # 匹配内容的移除
+            self._global_intents = [i for i in self._global_intents if i.content != intent]
+        else:
+            if intent in self._global_intents:
+                self._global_intents.remove(intent)
 
-    def get_global_intents(self) -> List[str]:
+    def get_global_intents(self) -> List[IbIntent]:
         return list(self._global_intents)
 
     def get_vars_snapshot(self) -> Dict[str, Any]:
@@ -263,7 +322,18 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
         self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
 
-    def push_intent(self, intent: Union[IbIntent, Any]) -> None:
+    def push_intent(self, intent: Union[str, IbIntent], mode: str = "+", tag: Optional[str] = None) -> None:
+        if isinstance(intent, str):
+            intent = IbIntent(
+                ib_class=self._registry.get_class("Intent"),
+                content=intent,
+                mode=IntentMode.from_str(mode),
+                tag=tag,
+                role=IntentRole.DYNAMIC
+            )
+        # [IES 2.0] 模式逻辑：
+        # 1. 我们不再物理切断链条，以保证 pop_intent 能够正确恢复之前的栈状态。
+        # 2. 逻辑上的切断（排他性/移除）由 LLMExecutor 在合并时根据 IntentMode 处理。
         self._intent_top = IntentNode(intent, self._intent_top)
 
     def pop_intent(self) -> Optional[Union[IbIntent, Any]]:

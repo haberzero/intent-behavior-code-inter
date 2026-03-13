@@ -38,7 +38,7 @@ class TestSerialization(BaseCompilerTest):
         self.assertIn("node_to_type", side_tables)
 
     def test_llm_except_serialization(self):
-        """验证 Phase 1 的 LLMExceptionalStmt 是否被正确序列化"""
+        """验证 LLM Fallback (llmexcept) 是否被正确序列化"""
         source = """
 x = 1
 llmexcept:
@@ -52,20 +52,18 @@ llmexcept:
         data = FlatSerializer().serialize_result(result)
         nodes = data["pools"]["nodes"]
         
-        # 查找 LLMExceptionalStmt 类型的节点
-        llm_nodes = [n for n in nodes.values() if n["_type"] == "IbLLMExceptionalStmt"]
-        self.assertTrue(len(llm_nodes) >= 1, "Should contain LLMExceptionalStmt node in pool")
+        # 查找带有 llm_fallback 的赋值节点
+        assign_nodes = [n for n in nodes.values() if n["_type"] == "IbAssign" and n.get("llm_fallback")]
+        self.assertTrue(len(assign_nodes) >= 1, "Should contain assignment node with fallback in pool")
         
-        node = llm_nodes[0]
-        self.assertIn("primary", node)
-        self.assertIn("fallback", node)
+        node = assign_nodes[0]
+        self.assertIn("llm_fallback", node)
         
-        # 验证引用的节点也在池中
-        self.assertIn(node["primary"], nodes)
-        self.assertIn(node["fallback"][0], nodes)
+        # 验证引用的回退节点也在池中
+        self.assertIn(node["llm_fallback"][0], nodes)
 
-    def test_annotated_intent_serialization(self):
-        """验证 Phase 2 的 AnnotatedStmt (意图注释) 是否被正确序列化"""
+    def test_node_intents_side_table(self):
+        """验证 Phase 2 意图涂抹逻辑产生的 node_intents 侧表是否被正确序列化"""
         source = """
 @ 计算总和
 func add(int a, int b) -> int:
@@ -77,21 +75,24 @@ func add(int a, int b) -> int:
         artifact = self.engine.compile(os.path.abspath("test_intent.ibci"))
         result = self.get_main_result(artifact)
         data = FlatSerializer().serialize_result(result)
+        
+        node_intents = data["side_tables"]["node_intents"]
         nodes = data["pools"]["nodes"]
         
-        # 查找 AnnotatedStmt 类型的节点
-        annotated_nodes = [n for n in nodes.values() if n["_type"] == "IbAnnotatedStmt"]
-        self.assertTrue(len(annotated_nodes) >= 1, "Should contain AnnotatedStmt node in pool")
+        # 1. 找到函数定义节点
+        func_uids = [uid for uid, n in nodes.items() if n["_type"] == "IbFunctionDef" and n.get("name") == "add"]
+        self.assertTrue(len(func_uids) >= 1)
+        func_uid = func_uids[0]
         
-        node = annotated_nodes[0]
-        self.assertIn("intent", node)
-        self.assertIn("stmt", node)
+        # 2. 验证侧表中有关联意图
+        self.assertIn(func_uid, node_intents)
+        intent_uids = node_intents[func_uid]
+        self.assertEqual(len(intent_uids), 1)
         
-        # 意图内容应被保留 (需要从池中解引用 UID)
-        intent_node = nodes[node["intent"]]
+        # 3. 验证意图内容
+        intent_node = nodes[intent_uids[0]]
+        self.assertEqual(intent_node["_type"], "IbIntentInfo")
         self.assertEqual(intent_node["content"], "计算总和")
-        # 包装的语句应在池中
-        self.assertIn(node["stmt"], nodes)
 
     def test_side_table_content_integrity(self):
         """验证侧表中的场景信息 (Scene) 是否被正确记录并序列化"""
@@ -207,29 +208,23 @@ llmexcept:
             f.write(source)
             
         artifact = self.engine.compile(os.path.abspath("test_complex.ibci"))
-        data = FlatSerializer().serialize_result(self.get_main_result(artifact))
+        result = self.get_main_result(artifact)
+        data = FlatSerializer().serialize_result(result)
         nodes = data["pools"]["nodes"]
+        node_intents = data["side_tables"]["node_intents"]
         
-        # 层级 1: AnnotatedStmt (最外层，因为它包装了整个语句)
-        annotated_nodes = [n for n in nodes.values() if n["_type"] == "IbAnnotatedStmt"]
-        self.assertTrue(len(annotated_nodes) >= 1)
-        root_annotated = annotated_nodes[0]
-        
-        # 意图内容应从池中获取
-        root_intent = nodes[root_annotated["intent"]]
-        self.assertEqual(root_intent["content"], "核心处理逻辑")
-        
-        # 层级 2: LLMExceptionalStmt (被意图包装在内)
-        llm_uid = root_annotated["stmt"]
-        llm_node = nodes[llm_uid]
-        self.assertEqual(llm_node["_type"], "IbLLMExceptionalStmt")
-        
-        # 层级 3: While (核心控制流)
-        while_uid = llm_node["primary"]
+        # 层级 1: While (不再被包装，且持有 llm_fallback)
+        while_nodes = [uid for uid, n in nodes.items() if n["_type"] == "IbWhile" and n.get("llm_fallback")]
+        self.assertTrue(len(while_nodes) >= 1)
+        while_uid = while_nodes[0]
         while_node = nodes[while_uid]
-        self.assertEqual(while_node["_type"], "IbWhile")
         
-        # 层级 4: FilteredExpr (过滤条件)
+        # 验证侧表关联的意图
+        self.assertIn(while_uid, node_intents)
+        intent_uid = node_intents[while_uid][0]
+        self.assertEqual(nodes[intent_uid]["content"], "核心处理逻辑")
+        
+        # 层级 2: FilteredExpr (过滤条件)
         filter_uid = while_node["test"]
         filter_node = nodes[filter_uid]
         self.assertEqual(filter_node["_type"], "IbFilteredExpr")
@@ -342,7 +337,8 @@ print(x)
         
         binop_uid = binop_nodes[0]
         self.assertIn(binop_uid, node_to_type, "Expression node should have inferred type in side table")
-        self.assertEqual(node_to_type[binop_uid], "float")
+        type_uid = node_to_type[binop_uid]
+        self.assertEqual(data["pools"]["types"][type_uid]["name"], "float")
 
     def test_cross_module_symbol_binding(self):
         """[Phase 5 进阶] 验证跨模块引用时的侧表绑定"""
@@ -398,7 +394,8 @@ print(x)
         dict_uid = dict_nodes[0]
         
         # 2. 验证推导类型名
-        self.assertEqual(node_to_type[dict_uid], "dict")
+        type_uid = node_to_type[dict_uid]
+        self.assertEqual(data["pools"]["types"][type_uid]["name"], "dict")
         
         # 3. 验证符号池中的 DictType 细节
         # 找到 config 变量符号

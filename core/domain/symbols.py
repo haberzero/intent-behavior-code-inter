@@ -186,7 +186,8 @@ class StaticTypeFactory:
         elif isinstance(descriptor, uts.FunctionMetadata):
             params = [StaticTypeFactory.create_from_descriptor(p) for p in descriptor.param_types]
             ret = StaticTypeFactory.create_from_descriptor(descriptor.return_type) if descriptor.return_type else STATIC_VOID
-            st = FunctionType(params, ret, descriptor=descriptor)
+            # [FIX] 显式传递描述符中的名称，避免默认降级为 "callable"
+            st = FunctionType(params, ret, name=descriptor.name or "callable", descriptor=descriptor)
         elif isinstance(descriptor, uts.ClassMetadata):
             st = ClassType(descriptor.name, descriptor=descriptor)
         else:
@@ -269,6 +270,7 @@ STATIC_FLOAT = BuiltinType("float", descriptor=uts.FLOAT_DESCRIPTOR)
 STATIC_BOOL = BuiltinType("bool", descriptor=uts.BOOL_DESCRIPTOR)
 STATIC_LIST = ListType(STATIC_ANY, descriptor=uts.LIST_DESCRIPTOR)
 STATIC_DICT = DictType(STATIC_ANY, STATIC_ANY, descriptor=uts.DICT_DESCRIPTOR)
+STATIC_CALLABLE = BuiltinType("callable", descriptor=uts.CALLABLE_DESCRIPTOR)
 STATIC_BEHAVIOR = BehaviorType()
 
 class ClassType(StaticType):
@@ -346,7 +348,15 @@ class FunctionType(StaticType):
 class BoundMethodType(StaticType):
     """绑定方法类型：包装了实例（或其实例类型）的函数签名"""
     def __init__(self, instance_type: StaticType, method_type: 'FunctionType'):
-        super().__init__(f"bound_method<{method_type.name}>")
+        # [Phase 1.4] 结构化合成描述符
+        descriptor = None
+        if instance_type.descriptor and isinstance(method_type.descriptor, uts.FunctionMetadata):
+             descriptor = uts.BoundMethodMetadata(
+                 receiver_type=instance_type.descriptor,
+                 function_type=method_type.descriptor
+             )
+        
+        super().__init__("bound_method", descriptor=descriptor)
         self.instance_type = instance_type
         self.method_type = method_type
 
@@ -464,6 +474,7 @@ def get_builtin_type(name: str) -> Optional[StaticType]:
         "bool": STATIC_BOOL,
         "list": STATIC_LIST,
         "dict": STATIC_DICT,
+        "callable": STATIC_CALLABLE,
         "void": STATIC_VOID,
         "none": STATIC_VOID
     }

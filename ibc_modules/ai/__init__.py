@@ -148,6 +148,13 @@ class AILib(ILLMProvider):
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.remove_global_intent(intent)
 
+    @ibci.method("mask")
+    def mask(self, tag_pattern: str) -> None:
+        """屏蔽特定标签的意图 (编程式控制)"""
+        if self._capabilities and self._capabilities.intent_manager:
+            # 向栈中推入一个 REMOVE 模式的意图，匹配特定标签
+            self._capabilities.intent_manager.push_intent("", mode="-", tag=tag_pattern)
+
     @ibci.method("get_global_intents")
     def get_global_intents(self) -> list[str]:
         if self._capabilities and self._capabilities.intent_manager:

@@ -34,8 +34,9 @@ class SemanticAnalyzer:
         self.scene_stack = [ast.IbScene.GENERAL] # 场景上下文栈
         self.node_scenes: Dict[ast.IbASTNode, ast.IbScene] = {} # 侧表：节点 ID -> 场景
         self.node_to_symbol: Dict[ast.IbASTNode, symbols.Symbol] = {} # 侧表：节点 -> 符号
-        self.node_to_type: Dict[ast.IbASTNode, str] = {} # 侧表：节点 ID -> 类型名称
+        self.node_to_type: Dict[ast.IbASTNode, symbols.StaticType] = {} # 侧表：节点 -> 类型对象
         self.node_is_deferred: Dict[ast.IbASTNode, bool] = {} # 侧表：行为描述行是否延迟执行 (Lambda)
+        self.node_intents: Dict[ast.IbASTNode, List[ast.IbIntentInfo]] = {} # 侧表：节点 -> 意图列表
 
     def _init_builtins(self):
         """注册内置静态符号"""
@@ -92,10 +93,15 @@ class SemanticAnalyzer:
             node_scenes=self.node_scenes,
             node_to_symbol=self.node_to_symbol,
             node_to_type=self.node_to_type,
-            node_is_deferred=self.node_is_deferred
+            node_is_deferred=self.node_is_deferred,
+            node_intents=self.node_intents
         )
 
     def visit(self, node: ast.IbASTNode) -> StaticType:
+        # [NEW] 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
+        if hasattr(node, "_pending_intents"):
+            self.node_intents[node] = getattr(node, "_pending_intents")
+
         # [NEW] 记录场景上下文侧表
         if isinstance(node, ast.IbExpr):
             self.node_scenes[node] = self.scene_stack[-1]
@@ -106,7 +112,7 @@ class SemanticAnalyzer:
         
         # [NEW Phase 5] 记录类型推导侧表
         if isinstance(node, ast.IbExpr) and res_type:
-            self.node_to_type[node] = res_type.prompt_name
+            self.node_to_type[node] = res_type
             
         return res_type
 
@@ -357,7 +363,10 @@ class SemanticAnalyzer:
                         self.node_to_symbol[target_node.target] = sym
                     
                     # [NEW] 行为描述行 Lambda 化判断
-                    if isinstance(node.value, ast.IbBehaviorExpr) and sym.type_info.is_callable:
+                    # 只有当目标类型明确要求是 callable，或者是 Any/var 这种模糊类型时，才进行延迟推断
+                    is_explicit_callable = sym.type_info.name in ("callable", "Any", "var") or isinstance(sym.type_info, symbols.FunctionType)
+                    
+                    if isinstance(node.value, ast.IbBehaviorExpr) and is_explicit_callable:
                         self.node_is_deferred[node.value] = True
                     
                     if not val_type.is_assignable_to(sym.type_info):
@@ -367,30 +376,49 @@ class SemanticAnalyzer:
                 target_type = self.visit(target_node)
                 if target_type and not val_type.is_assignable_to(target_type):
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003")
+        
+        # 4. 处理回退块
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
 
     def visit_IbIf(self, node: ast.IbIf):
+        # 1. 条件测试属于 BRANCH 场景
         self.scene_stack.append(ast.IbScene.BRANCH)
         try:
             self.visit(node.test)
-            for stmt in node.body:
-                self.visit(stmt)
-            for stmt in node.orelse:
-                self.visit(stmt)
         finally:
             self.scene_stack.pop()
+            
+        # 2. Body 和 Orelse 恢复父级场景
+        for stmt in node.body:
+            self.visit(stmt)
+        for stmt in node.orelse:
+            self.visit(stmt)
+            
+        # 3. 回退块
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
 
     def visit_IbWhile(self, node: ast.IbWhile):
+        # 1. 循环条件属于 LOOP 场景
         self.scene_stack.append(ast.IbScene.LOOP)
         try:
             self.visit(node.test)
-            for stmt in node.body:
-                self.visit(stmt)
-            for stmt in node.orelse:
-                self.visit(stmt)
         finally:
             self.scene_stack.pop()
+            
+        # 2. 循环体
+        for stmt in node.body:
+            self.visit(stmt)
+        for stmt in node.orelse:
+            self.visit(stmt)
+            
+        # 3. 回退块
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
 
     def visit_IbFor(self, node: ast.IbFor):
+        # 1. 迭代头部属于 LOOP 场景
         self.scene_stack.append(ast.IbScene.LOOP)
         try:
             iter_type = self.visit(node.iter)
@@ -409,18 +437,28 @@ class SemanticAnalyzer:
                 
                 if sym:
                     self.node_to_symbol[target] = sym # [FIX] 同步 UID
-            
-            for stmt in node.body:
-                self.visit(stmt)
         finally:
             self.scene_stack.pop()
+            
+        # 2. 循环体
+        for stmt in node.body:
+            self.visit(stmt)
+            
+        # 3. 回退块
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt):
-        return self.visit(node.value)
+        res = self.visit(node.value)
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
+        return res
 
     def visit_IbAugAssign(self, node: ast.IbAugAssign):
         self.visit(node.target)
         self.visit(node.value)
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
 
     def visit_IbTry(self, node: ast.IbTry):
         for stmt in node.body:
@@ -431,6 +469,8 @@ class SemanticAnalyzer:
             self.visit(stmt)
         for stmt in node.finalbody:
             self.visit(stmt)
+        if node.llm_fallback:
+            self._visit_llmexcept(node.llm_fallback)
 
     def visit_IbExceptHandler(self, node: ast.IbExceptHandler):
         if node.type:
@@ -486,18 +526,6 @@ class SemanticAnalyzer:
             self.visit(stmt)
         return STATIC_VOID
 
-    def visit_IbAnnotatedStmt(self, node: ast.IbAnnotatedStmt):
-        """处理带意图注释的语句包装节点"""
-        # [NEW] 显式访问意图节点，确保其进入序列化池
-        self.visit(node.intent)
-        return self.visit(node.stmt)
-
-    def visit_IbAnnotatedExpr(self, node: ast.IbAnnotatedExpr):
-        """处理带意图注释的表达式包装节点"""
-        # [NEW] 显式访问意图节点
-        self.visit(node.intent)
-        return self.visit(node.expr)
-
     def visit_IbIntentInfo(self, node: ast.IbIntentInfo):
         """访问意图元数据节点"""
         # 如果意图中有动态表达式，需要访问
@@ -536,14 +564,6 @@ class SemanticAnalyzer:
         
         # 3. 过滤后，表达式的类型保持不变
         return inner_type
-
-    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
-        """统一处理 LLM 回退逻辑包装节点"""
-        # 1. 访问主语句
-        self.visit(node.primary)
-        # 2. 访问回退块
-        self._visit_llmexcept(node.fallback)
-        return STATIC_VOID
 
     def visit_IbRaise(self, node: ast.IbRaise):
         if node.exc:
@@ -708,12 +728,10 @@ class SemanticAnalyzer:
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
         res = func_type.get_call_return(arg_types)
         if not res:
-            # 如果是可调用类型，提供更详细的错误
-            if func_type.name == "callable":
+            # 如果是具体的函数签名类型，提供更详细的错误
+            if hasattr(func_type, 'param_types'):
                 # 尝试获取更具体的参数不匹配信息
-                # 注意：这里我们依然保留了一些对 FunctionType 的具体属性访问，
-                # 但不再依赖 isinstance 进行逻辑分支
-                param_types = getattr(func_type, 'param_types', [])
+                param_types = func_type.param_types
                 if len(arg_types) != len(param_types):
                     self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")
                 else:

@@ -49,17 +49,17 @@ class TestParser(BaseCompilerTest):
         self.assertEqual(llm_funcs[0].name, "translate")
         
         # 2. Behavior Expression with Intent
-        # Now wrapped in AnnotatedStmt
-        annotated_stmts = [s for s in module.body if isinstance(s, ast.IbAnnotatedStmt)]
-        behavior_stmts = [s for s in annotated_stmts if isinstance(s.stmt, ast.IbAssign) and isinstance(s.stmt.value, ast.IbBehaviorExpr)]
+        # Now uses smearing (side-table association), but in Parser it's temporarily on the node
+        behavior_stmts = [s for s in module.body if hasattr(s, "_pending_intents")]
         self.assertTrue(len(behavior_stmts) >= 1)
-        self.assertIsNotNone(behavior_stmts[0].intent)
+        self.assertTrue(isinstance(behavior_stmts[0], ast.IbAssign))
+        self.assertIsNotNone(getattr(behavior_stmts[0], "_pending_intents"))
         
         # 3. LLM Except Fallback
-        fallback_stmts = [s for s in module.body if isinstance(s, ast.IbLLMExceptionalStmt)]
+        # Check for Assignment with fallback
+        fallback_stmts = [s for s in module.body if isinstance(s, ast.IbAssign) and s.llm_fallback]
         self.assertTrue(len(fallback_stmts) >= 1)
-        self.assertTrue(isinstance(fallback_stmts[0].primary, ast.IbAssign))
-        self.assertTrue(len(fallback_stmts[0].fallback) >= 1)
+        self.assertTrue(len(fallback_stmts[0].llm_fallback) >= 1)
 
 if __name__ == "__main__":
     unittest.main()

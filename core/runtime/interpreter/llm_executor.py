@@ -8,7 +8,7 @@ from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.interfaces import ILLMProvider
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
-from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.foundation.registry import Registry
 
 class LLMExecutorImpl:
@@ -121,32 +121,38 @@ class LLMExecutorImpl:
         # 2. 处理模式 (Mode) 逻辑
         resolved_block_intents = []
         is_exclusive = False
-        blacklist = set()
+        blacklist = set() # 存储内容字符串或 "tag:xxx" 格式的标签
         
         for i in reversed(active_intents):
             # [Refactor Phase 3] 已移除兼容性代码，假定意图栈中均为 IbIntent 对象
             content = i.resolve_content(context, self)
-            # print(f"DEBUG: Intent content='{content}', mode='{i.mode}', is_override={i.is_override}, is_remove={i.is_remove}")
             
             if i.is_remove:
-                blacklist.add(content)
+                if i.tag:
+                    blacklist.add(f"tag:{i.tag}")
+                if content: # 同时也支持按内容移除
+                    blacklist.add(content)
                 continue
                 
+            # 检查是否被黑名单（内容或标签）屏蔽
+            if content in blacklist: continue
+            if i.tag and f"tag:{i.tag}" in blacklist: continue
+
             if i.is_override:
-                if content not in blacklist:
-                    resolved_block_intents.insert(0, content)
+                resolved_block_intents.insert(0, content)
                 is_exclusive = True
                 break
             
-            if content not in blacklist:
-                resolved_block_intents.insert(0, content)
+            resolved_block_intents.insert(0, content)
             
         final_list = []
         if not is_exclusive:
             # Global Intents 也要受 blacklist 影响
-            for content in global_intents:
-                if content not in blacklist:
-                    final_list.append(content)
+            for i in global_intents:
+                content = i.resolve_content(context, self)
+                if content in blacklist: continue
+                if i.tag and f"tag:{i.tag}" in blacklist: continue
+                final_list.append(content)
         final_list.extend(resolved_block_intents)
         
         # 3. 处理 Call 层级
@@ -157,9 +163,10 @@ class LLMExecutorImpl:
             call_intent = IbIntent(
                 ib_class=self.service_context.registry.get_class("Intent"),
                 content=call_intent_data.get("content", ""),
-                mode=call_intent_data.get("mode", "append"),
+                mode=IntentMode.from_str(call_intent_data.get("mode", "+")),
+                tag=call_intent_data.get("tag"),
                 segments=call_intent_data.get("segments", []),
-                intent_type="call",
+                role=IntentRole.CALL,
                 source_uid=call_intent_uid
             )
             content = call_intent.resolve_content(context, self)
@@ -187,8 +194,10 @@ class LLMExecutorImpl:
         intent = IbIntent(
             ib_class=self.service_context.registry.get_class("Intent"),
             content=intent_data.get("content", ""),
-            mode=intent_data.get("mode", "append"),
-            segments=intent_data.get("segments", [])
+            mode=IntentMode.from_str(intent_data.get("mode", "+")),
+            tag=intent_data.get("tag"),
+            segments=intent_data.get("segments", []),
+            role=IntentRole.BLOCK
         )
         return intent.resolve_content(context, self)
 
@@ -421,9 +430,10 @@ class intent_scoped:
         intent = IbIntent(
             ib_class=self.service_context.registry.get_class("Intent"),
             content=intent_data.get('content', '') if intent_data else '',
-            mode=intent_data.get('mode', 'append') if intent_data else 'append',
+            mode=IntentMode.from_str(intent_data.get('mode', '+')) if intent_data else IntentMode.APPEND,
+            tag=intent_data.get('tag') if intent_data else None,
             segments=intent_data.get('segments', []) if intent_data else [],
-            intent_type="block",
+            role=IntentRole.BLOCK,
             source_uid=self.intent_uid
         )
         

@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from core.compiler.parser.core.token_stream import TokenStream
 from core.compiler.support.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
@@ -26,7 +26,7 @@ class ParserContext:
     module_cache: Optional[Dict[str, Any]] = None
     host_interface: Optional[HostInterface] = None
     package_name: str = ""
-    pending_intent: Optional[ast.IbIntentInfo] = None
+    pending_intents: List[ast.IbIntentInfo] = field(default_factory=list)
     
     # Component references (injected after initialization)
     expression_parser: Optional['ExpressionComponent'] = None
@@ -36,18 +36,14 @@ class ParserContext:
     import_parser: Optional['ImportComponent'] = None
     
     def push_intent(self, intent: ast.IbIntentInfo):
-        """Set a pending intent comment for the next statement."""
-        if self.pending_intent:
-             # Already handled by reporting a warning in DeclarationComponent,
-             # but we could also do it here if we want to be strict.
-             pass
-        self.pending_intent = intent
+        """Add a pending intent comment for the next statement."""
+        self.pending_intents.append(intent)
         
-    def consume_intent(self) -> Optional[ast.IbIntentInfo]:
-        """Consume the pending intent and clear it."""
-        intent = self.pending_intent
-        self.pending_intent = None
-        return intent
+    def consume_intents(self) -> List[ast.IbIntentInfo]:
+        """Consume all pending intents and clear the list."""
+        intents = self.pending_intents
+        self.pending_intents = []
+        return intents
 
     def __post_init__(self):
         if self.module_cache is None:

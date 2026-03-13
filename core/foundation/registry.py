@@ -85,6 +85,10 @@ class Registry:
 
     # --- 注册接口 (需校验令牌) ---
 
+    def get_metadata_registry(self) -> Any:
+        """获取元数据注册表实例。"""
+        return self._metadata_registry
+
     def register_boxer(self, py_type: type, boxer_func: Any, token: Any):
         self._verify_structure(token)
         self._boxers[py_type] = boxer_func
@@ -123,20 +127,29 @@ class Registry:
         # Fallback: 如果是普通 Python 类 (例如在引导阶段)
         return ib_class(*args, **kwargs)
 
-    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: Optional[Any] = None):
-        """注册类（内置或用户定义），并关联其 UTS 描述符"""
+    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: Any):
+        """
+        注册类（内置或用户定义），并强制关联其 UTS 描述符。
+        [Active Defense] 拒绝任何无元数据描述的裸类注入。
+        """
         self._verify_class_registration(token)
+        
+        if not descriptor:
+            raise ValueError(f"Registry: Cannot register class '{name}' without a UTS descriptor.")
+
         self._classes[name] = ib_class
         
-        # [IES 2.0] 绑定注册表引用，确保对象能通过 ib_class.registry 访问内核功能
+        # [IES 2.0] 绑定注册表引用
         if hasattr(ib_class, 'registry'):
             ib_class.registry = self
             
-        if descriptor:
-            if hasattr(ib_class, 'descriptor'):
-                ib_class.descriptor = descriptor
-            if self._metadata_registry:
-                self._metadata_registry.register(descriptor)
+        # 强制绑定描述符到类对象上
+        if hasattr(ib_class, 'descriptor'):
+            ib_class.descriptor = descriptor
+            
+        # 自动同步到元数据注册表
+        if self._metadata_registry:
+            self._metadata_registry.register(descriptor)
 
     def register_function(self, name: str, descriptor: Any, token: Any):
         """注册全局函数元数据 (仅用于编译器发现)"""
@@ -165,10 +178,10 @@ class Registry:
     def get_none(self) -> Any:
         return self._none_instance
 
-    def create_subclass(self, name: str, parent_name: str = "Object") -> Any:
-        """[Authorized] 通过内核绑定的工厂方法创建类，支持动态继承链。"""
+    def create_subclass(self, name: str, descriptor: Any, parent_name: str = "Object") -> Any:
+        """[Authorized] 通过内核绑定的工厂方法创建类，支持动态继承链。强制绑定描述符。"""
         if self._create_subclass_func:
-            return self._create_subclass_func(self, name, parent_name)
+            return self._create_subclass_func(self, name, descriptor, parent_name)
         return None
 
     def box(self, value: Any, memo: Optional[Dict[int, Any]] = None) -> Any:

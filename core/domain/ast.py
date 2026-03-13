@@ -97,6 +97,7 @@ class IbExpr(IbASTNode):
 @dataclass(kw_only=True, eq=False)
 class IbIntentInfo(IbASTNode):
     mode: str # "", "+", "!", "-"
+    tag: Optional[str] = None # Optional tag for precise removal/masking
     content: str # Raw content or constant string
     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
     expr: Optional['IbExpr'] = None # Dynamic expression for 'intent expr:'
@@ -178,12 +179,14 @@ class IbReturn(IbStmt):
 class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):
     target: IbExpr
     op: str
     value: IbExpr
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbFor(IbStmt):
@@ -191,18 +194,21 @@ class IbFor(IbStmt):
     iter: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbWhile(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbIf(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbTry(IbStmt):
@@ -210,6 +216,7 @@ class IbTry(IbStmt):
     handlers: List['IbExceptHandler']
     orelse: List[IbStmt] = field(default_factory=list)
     finalbody: List[IbStmt] = field(default_factory=list)
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbExceptHandler(IbASTNode):
@@ -235,6 +242,7 @@ class IbImportFrom(IbStmt):
 @dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
+    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbPass(IbStmt):
@@ -252,10 +260,7 @@ class IbContinue(IbStmt):
 class IbRetry(IbStmt):
     hint: Optional[IbExpr] = None  # retry "hint"
 
-@dataclass(kw_only=True, eq=False)
-class IbLLMExceptionalStmt(IbStmt):
-    primary: IbStmt
-    fallback: List[IbStmt]
+# IbLLMExceptionalStmt removed
 
 # --- Expressions ---
 

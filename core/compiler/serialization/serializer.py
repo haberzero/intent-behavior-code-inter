@@ -57,14 +57,20 @@ class FlatSerializer:
             remaped_node_to_symbol[node_uid] = sym_uid
 
         remaped_node_to_type = {}
-        for node, type_name in result.node_to_type.items():
+        for node, type_obj in result.node_to_type.items():
             node_uid = self._collect_node(node)
-            remaped_node_to_type[node_uid] = type_name
+            type_uid = self._collect_type(type_obj)
+            remaped_node_to_type[node_uid] = type_uid
 
         remaped_node_is_deferred = {}
         for node, val in result.node_is_deferred.items():
             node_uid = self._collect_node(node)
             remaped_node_is_deferred[node_uid] = val
+
+        remaped_node_intents = {}
+        for node, intents in result.node_intents.items():
+            node_uid = self._collect_node(node)
+            remaped_node_intents[node_uid] = [self._collect_node(i) for i in intents]
 
         return {
             "root_node_uid": root_node_uid,
@@ -73,7 +79,8 @@ class FlatSerializer:
                 "node_scenes": remaped_scenes,
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,
-                "node_is_deferred": remaped_node_is_deferred
+                "node_is_deferred": remaped_node_is_deferred,
+                "node_intents": remaped_node_intents
             },
             "pools": {
                 "nodes": self.node_pool,
@@ -135,15 +142,29 @@ class FlatSerializer:
         type_data = {
             "uid": uid,
             "name": t.name,
-            "descriptor": t.descriptor.name if t.descriptor else None
+            "descriptor": t.descriptor.name if t.descriptor else None,
+            "kind": t.__class__.__name__
         }
-        # 如果是复合类型（如 ListType, DictType），递归收集
-        if hasattr(t, 'element_type'):
+        
+        # 递归收集复合类型属性
+        if hasattr(t, 'element_type') and t.element_type:
             type_data["element_type_uid"] = self._collect_type(t.element_type)
-        if hasattr(t, 'key_type'):
+        if hasattr(t, 'key_type') and t.key_type:
             type_data["key_type_uid"] = self._collect_type(t.key_type)
-        if hasattr(t, 'value_type'):
+        if hasattr(t, 'value_type') and t.value_type:
             type_data["value_type_uid"] = self._collect_type(t.value_type)
+        
+        # 处理函数类型 (FunctionType)
+        if hasattr(t, 'param_types') and t.param_types:
+            type_data["param_types_uids"] = [self._collect_type(p) for p in t.param_types]
+        if hasattr(t, 'return_type') and t.return_type:
+            type_data["return_type_uid"] = self._collect_type(t.return_type)
+            
+        # 处理绑定方法 (BoundMethodType)
+        if hasattr(t, 'instance_type') and t.instance_type:
+            type_data["instance_type_uid"] = self._collect_type(t.instance_type)
+        if hasattr(t, 'method_type') and t.method_type:
+            type_data["method_type_uid"] = self._collect_type(t.method_type)
             
         self.type_pool[uid] = type_data
         return uid

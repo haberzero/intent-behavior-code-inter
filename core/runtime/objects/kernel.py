@@ -19,6 +19,11 @@ class IbObject:
         self.ib_class = ib_class
         self.fields: Mapping[str, Any] = {}
 
+    @property
+    def descriptor(self) -> TypeDescriptor:
+        """获取对象的运行时类型描述符"""
+        return self.ib_class.descriptor
+
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         统一消息传递接口。
@@ -192,10 +197,14 @@ class IbClass(IbObject):
         return None
 
     def is_assignable_to(self, other: 'IbClass') -> bool:
-        """运行时类型兼容性检查"""
+        """运行时类型兼容性检查 (UTS 协议)"""
         if self is other: return True
-        if self.parent:
-            return self.parent.is_assignable_to(other)
+        
+        # [Active Defense] 强契约：唯一使用 UTS 描述符进行校验
+        if self.descriptor and other.descriptor:
+            return self.descriptor.is_assignable_to(other.descriptor)
+            
+        # 绝不回退到 Python 继承链，确保 UTS 语义的一致性
         return False
 
     def register_method(self, name: str, method: 'IbFunction'):
@@ -243,7 +252,7 @@ class IbNativeFunction(IbFunction):
     包装 Python 原生函数的 IBC 函数。
     用于引导阶段注入基础运算（如 int.__add__）。
     """
-    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None):
+    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[TypeDescriptor] = None):
         if not ib_class:
             raise ValueError("ib_class is required for IbNativeFunction")
         super().__init__(ib_class)
@@ -252,6 +261,11 @@ class IbNativeFunction(IbFunction):
         self.is_method = is_method
         self.logic_id = logic_id
         self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
+        self._descriptor = descriptor
+
+    @property
+    def descriptor(self) -> TypeDescriptor:
+        return self._descriptor or super().descriptor
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         final_args = args
@@ -281,9 +295,24 @@ class IbNativeFunction(IbFunction):
 class IbBoundMethod(IbFunction):
     """绑定了接收者的函数 (模拟 C++ 虚表调用的 this 绑定)"""
     def __init__(self, receiver: Optional[IbObject], method: IbFunction):
-        super().__init__(method.ib_class.registry.get_class("callable"))
+        # 优先查找 bound_method 类，如果没注册（如引导期）则回退到 callable
+        cls = method.ib_class.registry.get_class("bound_method") or method.ib_class.registry.get_class("callable")
+        super().__init__(cls)
         self.receiver = receiver
         self.method = method
+
+    @property
+    def descriptor(self) -> TypeDescriptor:
+        """合成绑定方法的描述符"""
+        reg = self.ib_class.registry
+        m_reg = reg.get_metadata_registry()
+        # 如果有元数据注册表，则动态合成结构化描述符
+        if m_reg:
+            r_desc = self.receiver.descriptor if self.receiver else None
+            m_desc = self.method.descriptor
+            if m_desc and hasattr(m_desc, 'is_callable') and m_desc.is_callable:
+                return m_reg.factory.create_bound_method(r_desc, m_desc)
+        return super().descriptor
 
     def call(self, _receiver: IbObject, args: List[IbObject]) -> IbObject:
         if self.receiver is None:
@@ -314,10 +343,15 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, interpreter: 'Interpreter', ib_class: Optional['IbClass'] = None):
+    def __init__(self, node_uid: str, interpreter: 'Interpreter', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None):
         super().__init__(ib_class or interpreter.registry.get_class("callable"))
         self.node_uid = node_uid
         self.interpreter = interpreter
+        self._descriptor = descriptor
+
+    @property
+    def descriptor(self) -> TypeDescriptor:
+        return self._descriptor or super().descriptor
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
@@ -364,11 +398,16 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, interpreter: 'Interpreter'):
+    def __init__(self, node_uid: str, llm_executor: Any, interpreter: 'Interpreter', descriptor: Optional[TypeDescriptor] = None):
         super().__init__(interpreter.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.interpreter = interpreter
+        self._descriptor = descriptor
+
+    @property
+    def descriptor(self) -> TypeDescriptor:
+        return self._descriptor or super().descriptor
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""

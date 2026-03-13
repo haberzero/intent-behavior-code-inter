@@ -38,8 +38,6 @@ class DeclarationComponent(BaseComponent):
         if role == SyntaxRole.INTENT_MARKER:
             self.stream.advance()
             token = self.stream.previous()
-            if self.context.pending_intent is not None:
-                raise self.stream.error(token, "Multiple intent comments are not allowed for a single statement.", code="PAR_006")
             
             # Extract mode from @+ mode
             val = token.value # e.g. "@+", "@!", "@-", "@"
@@ -49,38 +47,48 @@ class DeclarationComponent(BaseComponent):
             
             segments = []
             raw_content = ""
+            tag = None
             
             # Consume tokens until NEWLINE
             while not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
                 if self.stream.match(TokenType.RAW_TEXT):
                     t = self.stream.previous()
-                    segments.append(t.value)
-                    raw_content += t.value
+                    text = t.value
+                    # 支持标签语法: @#tag Content
+                    if not segments and text.startswith("#"):
+                        parts = text.split(maxsplit=1)
+                        tag = parts[0][1:] # 移除 #
+                        text = parts[1] if len(parts) > 1 else ""
+                    
+                    if text:
+                        segments.append(text)
+                        raw_content += text
                 elif self.stream.match(TokenType.VAR_REF):
                     var_token = self.stream.previous()
                     var_name = var_token.value[1:] # Strip $
                     node = self.expression._parse_complex_access(var_name, var_token)
                     segments.append(node)
-                    raw_content += var_token.value # (Simplified representation)
+                    raw_content += var_token.value 
                 else:
                     self.stream.advance()
             
             self.context.push_intent(ast.IbIntentInfo(
                 mode=mode, 
+                tag=tag,
                 content=raw_content.strip(), 
                 segments=segments,
                 lineno=token.line,
                 col_offset=token.column
             ))
-            self.stream.match(TokenType.NEWLINE) # Optional newline after intent comment
+            self.stream.match(TokenType.NEWLINE) 
             return self.parse_declaration()
         
         if role == SyntaxRole.INTENT_DEFINITION:
             self.stream.advance() # intent
             return self.intent_declaration()
         
-        # [NEW] 提前消费待处理意图注释，避免在解析嵌套块（如函数体）时发生冲突
-        pending_intent = self.context.consume_intent()
+        # [NEW] 提前消费待处理意图注释，准备进行侧表涂抹关联
+        pending_intents = self.context.consume_intents()
 
         stmt = None
         if role == SyntaxRole.FUNCTION_DEFINITION:
@@ -98,9 +106,9 @@ class DeclarationComponent(BaseComponent):
         else:
             stmt = self.statement.parse_statement()
         
-        if pending_intent is not None and stmt is not None:
-            # [NEW] 意图节点化：将意图包装在 AnnotatedStmt 中，而非注入属性
-            return self._loc(ast.IbAnnotatedStmt(intent=pending_intent, stmt=stmt), pending_intent)
+        if pending_intents and stmt is not None:
+            # [NEW] 涂抹式关联：暂存在节点对象上，由 SemanticAnalyzer 转入侧表，实现 AST 扁平化
+            setattr(stmt, "_pending_intents", pending_intents)
             
         return stmt
 
@@ -127,7 +135,7 @@ class DeclarationComponent(BaseComponent):
             intent_expr = None
             
         info = ast.IbIntentInfo(
-            mode="", 
+            mode="!" if is_exclusive else "", 
             content=content, 
             expr=intent_expr,
             lineno=start_token.line,
@@ -174,8 +182,9 @@ class DeclarationComponent(BaseComponent):
              end_token = self.stream.previous()
              
         stmt = self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
+        
         if llm_fallback:
-            return self._loc(ast.IbLLMExceptionalStmt(primary=stmt, fallback=llm_fallback), type_token, end_token)
+            stmt.llm_fallback = llm_fallback
         return stmt
 
     def function_declaration(self) -> ast.IbFunctionDef:

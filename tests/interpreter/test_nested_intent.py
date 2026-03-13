@@ -14,7 +14,6 @@ class MockAI:
     def __call__(self, sys, user, scene="general"):
         self.last_sys = sys
         self.last_user = user
-        print(f"DEBUG: MockAI called with sys='{sys}'")
         return self.response
 
     def get_return_type_prompt(self, type_name):
@@ -34,7 +33,6 @@ class TestNestedIntent(BaseInterpreterTest):
         )
 
     def test_nested_intent(self):
-        print("\n--- Running test_nested_intent ---")
         code = """
         print("Start")
         intent "Level 1":
@@ -47,8 +45,6 @@ class TestNestedIntent(BaseInterpreterTest):
         print("End")
         """
         self.run_code(code)
-        
-        print(f"Outputs: {self.outputs}")
         
         self.assertIn("Level 1", self.mock_ai.last_sys)
         self.assertIn("Level 2", self.mock_ai.last_sys)

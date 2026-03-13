@@ -32,11 +32,11 @@ class TypeDescriptor:
         s_unwrapped = self.unwrap() if hasattr(self, 'unwrap') else self
         o_unwrapped = other.unwrap() if hasattr(other, 'unwrap') else other
 
-        # 2. 引用相等
+        # 2. 引用相等 (Interning 后的极速校验)
         if s_unwrapped is o_unwrapped:
             return True
             
-        # 3. 名字匹配
+        # 3. 名字匹配 (移除 startswith Hack，改为严格名称匹配)
         if s_unwrapped.name == o_unwrapped.name and s_unwrapped.module_path == o_unwrapped.module_path:
             return True
 
@@ -48,8 +48,8 @@ class TypeDescriptor:
         if s_unwrapped.name == "int" and o_unwrapped.name in ("bool", "float"):
             return True
         if o_unwrapped.name == "callable":
-             if s_unwrapped.name in ("callable", "function", "NativeFunction", "AnonymousLLMFunction", "behavior", "IbModule"):
-                 return True
+            if s_unwrapped.is_callable:
+                return True
                  
         return False
         
@@ -237,8 +237,11 @@ class ListMetadata(TypeDescriptor):
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
-        if other.name == "list": return True
-        if isinstance(other, ListMetadata) and self.element_type and other.element_type:
+        # 允许原始 list 与泛型 list 互转 (逻辑宽松处理)
+        if other.name == "list" or other.name == "list[Any]": return True
+        if isinstance(other, ListMetadata):
+            if not self.element_type or not other.element_type:
+                return True
             return self.element_type.is_assignable_to(other.element_type)
         return False
 
@@ -275,8 +278,12 @@ class DictMetadata(TypeDescriptor):
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
-        if other.name == "dict": return True
-        if isinstance(other, DictMetadata) and self.key_type and other.key_type and self.value_type and other.value_type:
+        # 允许原始 dict 与泛型 dict 互转
+        if other.name == "dict" or other.name == "dict[Any, Any]": return True
+        if isinstance(other, DictMetadata):
+            # 如果其中一个没有具体类型，认为兼容
+            if not self.key_type or not other.key_type or not self.value_type or not other.value_type:
+                return True
             return self.key_type.is_assignable_to(other.key_type) and \
                    self.value_type.is_assignable_to(other.value_type)
         return False
@@ -351,6 +358,40 @@ class ClassMetadata(TypeDescriptor):
         return None
 
 @dataclass
+class BoundMethodMetadata(TypeDescriptor):
+    """绑定方法类型元数据 (合成类型)"""
+    receiver_type: Optional[TypeDescriptor] = None
+    function_type: Optional['FunctionMetadata'] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        # [NEW] 统一绑定方法的名称标识，通过结构化校验实现强类型
+        self.name = "bound_method"
+
+    @property
+    def is_callable(self) -> bool:
+        return True
+
+    def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        if self.function_type:
+            return self.function_type.get_call_return_type(args)
+        return None
+
+    def is_assignable_to(self, other: TypeDescriptor) -> bool:
+        if super().is_assignable_to(other):
+            return True
+        if other.name == "callable":
+            return True
+        if isinstance(other, BoundMethodMetadata):
+            # 结构化语义校验：接收者与函数签名都必须兼容
+            if self.receiver_type and other.receiver_type:
+                if not self.receiver_type.is_assignable_to(other.receiver_type):
+                    return False
+            if self.function_type and other.function_type:
+                return self.function_type.is_assignable_to(other.function_type)
+        return False
+
+@dataclass
 class ModuleMetadata(TypeDescriptor):
     """模块元数据描述"""
     members: Dict[str, 'TypeDescriptor'] = field(default_factory=dict)
@@ -360,7 +401,59 @@ class ModuleMetadata(TypeDescriptor):
         if not self.name or self.name == "TypeDescriptor":
             self.name = "module"
 
-# --- 常量与注册表 ---
+# --- 驻留工厂与注册表 ---
+
+class TypeFactory:
+    """
+    描述符驻留工厂。
+    基于结构哈希确保同构描述符在内存中仅存一份。
+    """
+    def __init__(self):
+        self._memo: Dict[str, TypeDescriptor] = {}
+
+    def _get_intern_key(self, kind: str, name: str, module: Optional[str], **kwargs) -> str:
+        # 构建结构化哈希键
+        # 对于复合类型，kwargs 应包含其子类型的 ID 或 UID
+        sorted_items = sorted(kwargs.items())
+        return f"{kind}:{module or ''}:{name}:{str(sorted_items)}"
+
+    def create_primitive(self, name: str, is_nullable: bool = True) -> PrimitiveDescriptor:
+        key = self._get_intern_key("Primitive", name, None, nullable=is_nullable)
+        if key not in self._memo:
+            self._memo[key] = PrimitiveDescriptor(name=name, is_nullable=is_nullable)
+        return self._memo[key]
+
+    def create_list(self, element_type: TypeDescriptor) -> ListMetadata:
+        key = self._get_intern_key("List", "", None, element=id(element_type))
+        if key not in self._memo:
+            self._memo[key] = ListMetadata(element_type=element_type)
+        return self._memo[key]
+
+    def create_dict(self, key_type: TypeDescriptor, value_type: TypeDescriptor) -> DictMetadata:
+        key = self._get_intern_key("Dict", "", None, k=id(key_type), v=id(value_type))
+        if key not in self._memo:
+            self._memo[key] = DictMetadata(key_type=key_type, value_type=value_type)
+        return self._memo[key]
+
+    def create_function(self, params: List[TypeDescriptor], ret: Optional[TypeDescriptor]) -> FunctionMetadata:
+        p_ids = [id(p) for p in params]
+        r_id = id(ret) if ret else 0
+        key = self._get_intern_key("Func", "", None, p=p_ids, r=r_id)
+        if key not in self._memo:
+            self._memo[key] = FunctionMetadata(param_types=params, return_type=ret)
+        return self._memo[key]
+
+    def create_bound_method(self, receiver: TypeDescriptor, func: FunctionMetadata) -> BoundMethodMetadata:
+        key = self._get_intern_key("BoundMethod", "", None, r=id(receiver), f=id(func))
+        if key not in self._memo:
+            self._memo[key] = BoundMethodMetadata(receiver_type=receiver, function_type=func)
+        return self._memo[key]
+
+    def create_class(self, name: str, module: Optional[str] = None, parent: Optional[str] = None, is_nullable: bool = True) -> ClassMetadata:
+        key = self._get_intern_key("Class", name, module, p=parent, n=is_nullable)
+        if key not in self._memo:
+            self._memo[key] = ClassMetadata(name=name, module_path=module, parent_name=parent, is_nullable=is_nullable)
+        return self._memo[key]
 
 class MetadataRegistry:
     """
@@ -369,6 +462,7 @@ class MetadataRegistry:
     """
     def __init__(self):
         self._descriptors: Dict[str, TypeDescriptor] = {}
+        self.factory = TypeFactory() # [NEW] 每个引擎拥有独立的驻留工厂
 
     def register(self, descriptor: TypeDescriptor):
         key = f"{descriptor.module_path}.{descriptor.name}" if descriptor.module_path else descriptor.name

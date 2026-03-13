@@ -112,22 +112,9 @@ class SymbolCollector:
             if name not in self.symbol_table.symbols:
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, def_node=node)
                 self._define(sym, target) # 绑定 target 节点
-
-    def visit_IbAnnotatedStmt(self, node: ast.IbAnnotatedStmt):
-        """递归收集包装语句内的符号"""
-        self.visit(node.stmt)
-
-    def visit_IbAnnotatedExpr(self, node: ast.IbAnnotatedExpr):
-        """递归收集包装表达式内的符号"""
-        self.visit(node.expr)
-
-    def visit_IbAnnotatedStmt(self, node: ast.IbAnnotatedStmt):
-        """预扫描包装语句内的符号"""
-        self.visit(node.stmt)
-
-    def visit_IbAnnotatedExpr(self, node: ast.IbAnnotatedExpr):
-        """预扫描包装表达式内的符号"""
-        self.visit(node.expr)
+        
+        # 递归扫描回退块中的符号 (虽然赋值回退块通常不含类/函数定义)
+        self.generic_visit(node)
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """预扫描带类型标注的表达式"""
@@ -137,12 +124,6 @@ class SymbolCollector:
         """预扫描带过滤条件的表达式"""
         self.visit(node.expr)
         self.visit(node.filter)
-
-    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
-        """递归收集包装节点内的符号"""
-        self.visit(node.primary)
-        for stmt in node.fallback:
-            self.visit(stmt)
 
 class LocalSymbolCollector:
     """
@@ -168,7 +149,7 @@ class LocalSymbolCollector:
             return
 
         # 递归遍历所有可能包含代码块的属性
-        for attr in ("body", "orelse", "finalbody"):
+        for attr in ("body", "orelse", "finalbody", "llm_fallback"):
             child = getattr(node, attr, None)
             if isinstance(child, list):
                 for item in child:
@@ -194,12 +175,6 @@ class LocalSymbolCollector:
         # 处理 global 声明
         self.analyzer.visit_IbGlobalStmt(node)
 
-    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
-        """预扫描包装节点内的符号"""
-        self.visit(node.primary)
-        for stmt in node.fallback:
-            self.visit(stmt)
-
     def visit_IbAssign(self, node: ast.IbAssign):
         # 仅收集带有类型标注的显式定义
         for name, target in SymbolExtractor.get_assigned_names(node):
@@ -221,6 +196,9 @@ class LocalSymbolCollector:
 
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=declared_type, def_node=node)
                 self._define(sym, target) # 绑定 target 节点
+        
+        # 递归扫描回退块中的局部定义 (Pass 2.5)
+        self.generic_visit(node)
 
     def visit_IbFor(self, node: ast.IbFor):
         # 预扫描 For 循环的迭代变量
