@@ -1,5 +1,22 @@
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict, List, Union
+from typing import Optional, Any, Dict, List, Union, Protocol, runtime_checkable
+
+# --- Trait Definitions ---
+
+@runtime_checkable
+class CallTrait(Protocol):
+    """调用能力契约"""
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']: ...
+
+@runtime_checkable
+class IterTrait(Protocol):
+    """迭代能力契约"""
+    def get_element_type(self) -> 'TypeDescriptor': ...
+
+@runtime_checkable
+class SubscriptTrait(Protocol):
+    """下标访问契约"""
+    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']: ...
 
 @dataclass
 class TypeDescriptor:
@@ -22,6 +39,20 @@ class TypeDescriptor:
     def unwrap(self) -> 'TypeDescriptor':
         """解包描述符 (默认为自身，子类如 LazyDescriptor 可覆盖)"""
         return self
+
+    # --- Capability Trait Accessors ---
+    
+    def get_call_trait(self) -> Optional[CallTrait]:
+        """获取调用能力。默认不具备。"""
+        return None
+
+    def get_iter_trait(self) -> Optional[IterTrait]:
+        """获取迭代能力。默认不具备。"""
+        return None
+
+    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
+        """获取下标访问能力。默认不具备。"""
+        return None
 
     def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
         """
@@ -48,38 +79,11 @@ class TypeDescriptor:
         if s_unwrapped.name == "int" and o_unwrapped.name in ("bool", "float"):
             return True
         if o_unwrapped.name == "callable":
-            if s_unwrapped.is_callable:
+            if s_unwrapped.get_call_trait():
                 return True
                  
         return False
         
-    @property
-    def is_callable(self) -> bool:
-        """是否支持调用行为"""
-        return False
-
-    @property
-    def is_iterable(self) -> bool:
-        """是否支持迭代行为"""
-        return False
-
-    @property
-    def is_subscriptable(self) -> bool:
-        """是否支持下标访问行为"""
-        return False
-
-    def get_iterator_element_type(self) -> Optional['TypeDescriptor']:
-        """解析迭代元素类型"""
-        return None
-
-    def get_subscript_result_type(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        """解析下标访问结果类型"""
-        return None
-
-    def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
-        """解析调用返回类型"""
-        return None
-
     def resolve_member(self, name: str) -> Optional['TypeDescriptor']:
         """Resolve a member (attribute/method) by name."""
         return self.members.get(name)
@@ -126,19 +130,14 @@ class LazyDescriptor(TypeDescriptor):
     def resolve_member(self, name: str) -> Optional[TypeDescriptor]:
         return self.unwrap().resolve_member(name)
 
-    @property
-    def is_iterable(self) -> bool:
-        return self.unwrap().is_iterable
+    def get_call_trait(self) -> Optional[CallTrait]:
+        return self.unwrap().get_call_trait()
 
-    @property
-    def is_subscriptable(self) -> bool:
-        return self.unwrap().is_subscriptable
+    def get_iter_trait(self) -> Optional[IterTrait]:
+        return self.unwrap().get_iter_trait()
 
-    def get_iterator_element_type(self) -> Optional[TypeDescriptor]:
-        return self.unwrap().get_iterator_element_type()
-
-    def get_subscript_result_type(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
-        return self.unwrap().get_subscript_result_type(key)
+    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
+        return self.unwrap().get_subscript_trait()
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         return self.unwrap().is_assignable_to(other)
@@ -146,32 +145,37 @@ class LazyDescriptor(TypeDescriptor):
 # --- 具体描述符实现 ---
 
 @dataclass
-class PrimitiveDescriptor(TypeDescriptor):
+class PrimitiveDescriptor(TypeDescriptor, CallTrait, IterTrait, SubscriptTrait):
     """内置原子类型描述符"""
-    @property
-    def is_callable(self) -> bool:
-        # 内置类型（如 int, str）允许调用，表示类型转换/构造
-        return self.name in ("int", "str", "float", "bool", "list", "dict")
+    
+    # --- Trait Implementations ---
 
-    @property
-    def is_iterable(self) -> bool:
-        return self.name in ("Any", "var", "list", "dict")
-
-    @property
-    def is_subscriptable(self) -> bool:
-        return self.name in ("Any", "var", "list", "dict")
-
-    def get_iterator_element_type(self) -> Optional['TypeDescriptor']:
-        if self.name in ("Any", "var"): return ANY_DESCRIPTOR
+    def get_call_trait(self) -> Optional[CallTrait]:
+        if self.name in ("int", "str", "float", "bool", "list", "dict"):
+            return self
         return None
 
-    def get_subscript_result_type(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        if self.name in ("Any", "var"): return ANY_DESCRIPTOR
+    def get_iter_trait(self) -> Optional[IterTrait]:
+        if self.name in ("Any", "var", "list", "dict"):
+            return self
         return None
 
-    def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
-        # 内置类型调用返回其自身
+    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
+        if self.name in ("Any", "var", "list", "dict"):
+            return self
+        return None
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        # 内置类型（如 int, str）调用返回其自身（类型转换/构造）
         return self
+
+    def get_element_type(self) -> 'TypeDescriptor':
+        # 原子类型默认没有具体元素类型，返回 Any
+        return ANY_DESCRIPTOR
+
+    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
+        # 原子类型的下标访问（如 Any[k]）返回 Any
+        return ANY_DESCRIPTOR
 
     def get_operator_result(self, op: str, other: Optional['TypeDescriptor'] = None) -> Optional['TypeDescriptor']:
         n1 = self.name
@@ -210,22 +214,22 @@ class PrimitiveDescriptor(TypeDescriptor):
         return None
 
 @dataclass
-class ListMetadata(TypeDescriptor):
+class ListMetadata(TypeDescriptor, IterTrait, SubscriptTrait):
     """列表类型元数据"""
     element_type: Optional[TypeDescriptor] = None
 
-    @property
-    def is_iterable(self) -> bool:
-        return True
+    # --- Trait Implementations ---
 
-    @property
-    def is_subscriptable(self) -> bool:
-        return True
+    def get_iter_trait(self) -> Optional[IterTrait]:
+        return self
 
-    def get_iterator_element_type(self) -> Optional[TypeDescriptor]:
+    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
+        return self
+
+    def get_element_type(self) -> 'TypeDescriptor':
         return self.element_type or ANY_DESCRIPTOR
 
-    def get_subscript_result_type(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         # 列表下标暂时只支持 int
         if key.name == "int":
             return self.element_type or ANY_DESCRIPTOR
@@ -246,24 +250,24 @@ class ListMetadata(TypeDescriptor):
         return False
 
 @dataclass
-class DictMetadata(TypeDescriptor):
+class DictMetadata(TypeDescriptor, IterTrait, SubscriptTrait):
     """字典类型元数据"""
     key_type: Optional[TypeDescriptor] = None
     value_type: Optional[TypeDescriptor] = None
 
-    @property
-    def is_iterable(self) -> bool:
-        return True
+    # --- Trait Implementations ---
 
-    @property
-    def is_subscriptable(self) -> bool:
-        return True
+    def get_iter_trait(self) -> Optional[IterTrait]:
+        return self
 
-    def get_iterator_element_type(self) -> Optional[TypeDescriptor]:
+    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
+        return self
+
+    def get_element_type(self) -> 'TypeDescriptor':
         # 字典迭代产生键
         return self.key_type or ANY_DESCRIPTOR
 
-    def get_subscript_result_type(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         if self.key_type:
             if key.is_assignable_to(self.key_type):
                 return self.value_type or ANY_DESCRIPTOR
@@ -289,16 +293,17 @@ class DictMetadata(TypeDescriptor):
         return False
 
 @dataclass
-class FunctionMetadata(TypeDescriptor):
+class FunctionMetadata(TypeDescriptor, CallTrait):
     """函数/方法签名元数据"""
     param_types: List[TypeDescriptor] = field(default_factory=list)
     return_type: Optional[TypeDescriptor] = None
 
-    @property
-    def is_callable(self) -> bool:
-        return True
+    # --- Trait Implementations ---
 
-    def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+    def get_call_trait(self) -> Optional[CallTrait]:
+        return self
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
         if len(args) != len(self.param_types):
             return None
         for i, (expected, actual) in enumerate(zip(self.param_types, args)):
@@ -324,17 +329,18 @@ class FunctionMetadata(TypeDescriptor):
         return False
 
 @dataclass
-class ClassMetadata(TypeDescriptor):
+class ClassMetadata(TypeDescriptor, CallTrait):
     """类元数据描述"""
     parent_name: Optional[str] = None
     parent_module: Optional[str] = None
     
-    @property
-    def is_callable(self) -> bool:
-        """类是可调用的（用于实例化）"""
-        return True
+    # --- Trait Implementations ---
 
-    def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+    def get_call_trait(self) -> Optional[CallTrait]:
+        """类是可调用的（用于实例化）"""
+        return self
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
         # 类实例化返回其实例类型（即自身）
         # [TODO] 增加对 __init__ 方法签名的校验
         return self
@@ -358,24 +364,28 @@ class ClassMetadata(TypeDescriptor):
         return None
 
 @dataclass
-class BoundMethodMetadata(TypeDescriptor):
+class BoundMethodMetadata(TypeDescriptor, CallTrait):
     """绑定方法类型元数据 (合成类型)"""
     receiver_type: Optional[TypeDescriptor] = None
     function_type: Optional['FunctionMetadata'] = None
+
+    # --- Trait Implementations ---
+
+    def get_call_trait(self) -> Optional[CallTrait]:
+        return self
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        if self.function_type:
+            # 委托给底层的函数签名进行决议
+            call_trait = self.function_type.get_call_trait()
+            if call_trait:
+                return call_trait.resolve_return(args)
+        return None
 
     def __post_init__(self):
         super().__post_init__()
         # [NEW] 统一绑定方法的名称标识，通过结构化校验实现强类型
         self.name = "bound_method"
-
-    @property
-    def is_callable(self) -> bool:
-        return True
-
-    def get_call_return_type(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
-        if self.function_type:
-            return self.function_type.get_call_return_type(args)
-        return None
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other):

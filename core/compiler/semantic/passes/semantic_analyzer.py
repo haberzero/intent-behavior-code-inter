@@ -720,7 +720,7 @@ class SemanticAnalyzer:
         func_type = self.visit(node.func)
         arg_types = [self.visit(arg) for arg in node.args]
         
-        # 1. 检查是否可调用 (使用接口属性)
+        # 1. 检查是否可调用 (使用 Trait 契约)
         if not func_type.is_callable:
             self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             return STATIC_ANY
@@ -728,9 +728,9 @@ class SemanticAnalyzer:
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
         res = func_type.get_call_return(arg_types)
         if not res:
-            # 如果是具体的函数签名类型，提供更详细的错误
+            # 尝试获取更具体的错误信息
+            # 如果是具体的函数签名类型，提供更详细的参数匹配错误
             if hasattr(func_type, 'param_types'):
-                # 尝试获取更具体的参数不匹配信息
                 param_types = func_type.param_types
                 if len(arg_types) != len(param_types):
                     self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")

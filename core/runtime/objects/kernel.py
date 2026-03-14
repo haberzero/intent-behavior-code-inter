@@ -310,7 +310,7 @@ class IbBoundMethod(IbFunction):
         if m_reg:
             r_desc = self.receiver.descriptor if self.receiver else None
             m_desc = self.method.descriptor
-            if m_desc and hasattr(m_desc, 'is_callable') and m_desc.is_callable:
+            if m_desc and m_desc.get_call_trait():
                 return m_reg.factory.create_bound_method(r_desc, m_desc)
         return super().descriptor
 

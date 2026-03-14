@@ -83,7 +83,7 @@ class StaticType:
         """是否支持调用行为"""
         if self.name in ("Any", "var"):
             return True
-        return self.descriptor.is_callable if self.descriptor else False
+        return self.descriptor.get_call_trait() is not None if self.descriptor else False
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
         """解析调用行为"""
@@ -93,12 +93,16 @@ class StaticType:
         if not self.descriptor:
             return None
             
+        call_trait = self.descriptor.get_call_trait()
+        if not call_trait:
+            return None
+            
         # 将静态参数转换为描述符进行校验
         arg_descriptors = [a.descriptor for a in args if a.descriptor]
         if len(arg_descriptors) != len(args):
             return STATIC_ANY # 降级处理
             
-        ret_descriptor = self.descriptor.get_call_return_type(arg_descriptors)
+        ret_descriptor = call_trait.resolve_return(arg_descriptors)
         if not ret_descriptor:
             return None
             
@@ -124,7 +128,7 @@ class StaticType:
         """是否支持迭代 (e.g. for x in obj)"""
         if self.name in ("Any", "var"):
             return True
-        return self.descriptor.is_iterable if self.descriptor else False
+        return self.descriptor.get_iter_trait() is not None if self.descriptor else False
 
     def get_iterator_type(self) -> 'StaticType':
         """获取迭代产生的元素类型"""
@@ -133,7 +137,11 @@ class StaticType:
         if not self.descriptor:
             return STATIC_ANY
         
-        ret_desc = self.descriptor.get_iterator_element_type()
+        iter_trait = self.descriptor.get_iter_trait()
+        if not iter_trait:
+            return STATIC_ANY
+            
+        ret_desc = iter_trait.get_element_type()
         return StaticTypeFactory.create_from_descriptor(ret_desc) if ret_desc else STATIC_ANY
 
     @property
@@ -141,7 +149,7 @@ class StaticType:
         """是否支持下标访问 (e.g. obj[key])"""
         if self.name in ("Any", "var"):
             return True
-        return self.descriptor.is_subscriptable if self.descriptor else False
+        return self.descriptor.get_subscript_trait() is not None if self.descriptor else False
 
     def get_subscript_type(self, key_type: 'StaticType') -> 'StaticType':
         """获取下标访问的结果类型"""
@@ -150,7 +158,11 @@ class StaticType:
         if not self.descriptor:
             return STATIC_ANY
             
-        ret_desc = self.descriptor.get_subscript_result_type(key_type.descriptor) if key_type.descriptor else None
+        sub_trait = self.descriptor.get_subscript_trait()
+        if not sub_trait:
+            return STATIC_ANY
+            
+        ret_desc = sub_trait.resolve_item(key_type.descriptor) if key_type.descriptor else None
         return StaticTypeFactory.create_from_descriptor(ret_desc) if ret_desc else STATIC_ANY
 
     @property
@@ -330,12 +342,14 @@ class FunctionType(StaticType):
 
     def get_call_return(self, args: List['StaticType']) -> Optional['StaticType']:
         if self.descriptor:
-            # [FIX] 优先通过描述符进行调用决议
-            arg_descriptors = [a.descriptor for a in args if a.descriptor]
-            if len(arg_descriptors) == len(args):
-                ret_descriptor = self.descriptor.get_call_return_type(arg_descriptors)
-                if ret_descriptor:
-                    return StaticTypeFactory.create_from_descriptor(ret_descriptor)
+            # [FIX] 优先通过描述符进行调用决议 (使用 Trait 模式)
+            call_trait = self.descriptor.get_call_trait()
+            if call_trait:
+                arg_descriptors = [a.descriptor for a in args if a.descriptor]
+                if len(arg_descriptors) == len(args):
+                    ret_descriptor = call_trait.resolve_return(arg_descriptors)
+                    if ret_descriptor:
+                        return StaticTypeFactory.create_from_descriptor(ret_descriptor)
         
         # 回退逻辑 (当描述符不可用或未覆盖时)
         if len(args) != len(self.param_types):
