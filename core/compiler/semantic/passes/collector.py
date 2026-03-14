@@ -1,7 +1,8 @@
 from typing import Optional, Any, List, Tuple, TYPE_CHECKING
 from core.compiler.support.diagnostics import DiagnosticReporter
 from core.domain import ast as ast
-from core.domain.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind, STATIC_ANY
+from core.domain.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
+from core.domain.types.descriptors import TypeDescriptor
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -67,6 +68,12 @@ class SymbolCollector:
             # [NEW Phase 5] 记录侧表映射
             if self.analyzer and hasattr(self.analyzer, "node_to_symbol"):
                 self.analyzer.node_to_symbol[node] = sym
+            
+            # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
+            # 如果当前在类作用域内，且定义的不是类本身
+            if self.analyzer and self.analyzer.current_class:
+                self.analyzer.current_class.members[sym.name] = sym
+                
         except ValueError as e:
             if self.issue_tracker:
                 self.issue_tracker.error(str(e), node, code="SEM_002")
@@ -77,30 +84,47 @@ class SymbolCollector:
                 raise
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
-        # 1. 注册类符号
-        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node)
+        # 1. 创建类元数据并注册
+        cls_meta = self.analyzer.registry.factory.create_class(name=node.name, parent=node.parent)
+        self.analyzer.registry.register(cls_meta)
+        
+        # 2. 注册类符号
+        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, descriptor=cls_meta)
         self._define(sym, node)
         
-        # 2. 进入类作用域收集成员
+        # 3. 进入类作用域收集成员
         old_table = self.symbol_table
         self.symbol_table = SymbolTable(parent=old_table)
+        
+        # [NEW] 设置当前类上下文，以便 _define 能正确同步成员
+        old_class = self.analyzer.current_class
+        self.analyzer.current_class = cls_meta
+        
         try:
             for stmt in node.body:
                 self.visit(stmt)
             # 记录类作用域
             sym.owned_scope = self.symbol_table
         finally:
+            self.analyzer.current_class = old_class
             self.symbol_table = old_table
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
-        sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node)
-        self._define(sym, node)
+        # 1. 创建函数元数据 (暂定为 Any -> Any)
+        func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
+        self.analyzer.registry.register(func_meta)
         
-        # 函数内部参数和局部变量暂时不作为全局符号收集，留给分析阶段
-        pass
+        sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, descriptor=func_meta)
+        self._define(sym, node)
+        # 局部作用域由 SemanticAnalyzer.visit_IbFunctionDef 处理
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
-        sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, is_llm=True, def_node=node)
+        # 1. 创建函数元数据
+        func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
+        self.analyzer.registry.register(func_meta)
+        
+        sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, def_node=node, descriptor=func_meta)
+        sym.metadata["is_llm"] = True
         self._define(sym, node)
 
     def visit_IbAssign(self, node: ast.IbAssign):
@@ -110,7 +134,7 @@ class SymbolCollector:
         for name, target in SymbolExtractor.get_assigned_names(node):
             # 避免在 Pass 1 重复定义
             if name not in self.symbol_table.symbols:
-                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, def_node=node)
+                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, def_node=node, descriptor=self.analyzer._any_desc if self.analyzer else None)
                 self._define(sym, target) # 绑定 target 节点
         
         # 递归扫描回退块中的符号 (虽然赋值回退块通常不含类/函数定义)
@@ -161,7 +185,8 @@ class LocalSymbolCollector:
             # [LIFECYCLE] 符号生命周期管理
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
-            if existing and existing.type_info.name in ("Any", "var"):
+            # 如果现有符号是 Any/var 占位符，允许覆盖
+            if existing and (not existing.descriptor or existing.descriptor.name in ("Any", "var")):
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
@@ -180,21 +205,22 @@ class LocalSymbolCollector:
         for name, target in SymbolExtractor.get_assigned_names(node):
             # 检查该 target 是否被 TypeAnnotatedExpr 包装
             is_explicit = False
-            declared_type = STATIC_ANY
+            declared_type = self.analyzer._any_desc
             
             for t in node.targets:
                 if isinstance(t, ast.IbTypeAnnotatedExpr) and isinstance(t.target, ast.IbName) and t.target.id == name:
                     is_explicit = True
+                    # analyzer._resolve_type now returns TypeDescriptor
                     declared_type = self.analyzer._resolve_type(t.annotation, safe=True)
                     break
             
             if is_explicit:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
-                if existing and existing.type_info.name not in ("Any", "var"):
+                if existing and existing.descriptor and existing.descriptor.name not in ("Any", "var"):
                     continue
 
-                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=declared_type, def_node=node)
+                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=declared_type, def_node=node)
                 self._define(sym, target) # 绑定 target 节点
         
         # 递归扫描回退块中的局部定义 (Pass 2.5)
@@ -203,7 +229,7 @@ class LocalSymbolCollector:
     def visit_IbFor(self, node: ast.IbFor):
         # 预扫描 For 循环的迭代变量
         for name, target in SymbolExtractor.get_assigned_names(node):
-            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY, def_node=node)
+            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=self.analyzer._any_desc, def_node=node)
             self._define(sym, target) # 绑定 target 节点
         self.generic_visit(node)
 
@@ -211,7 +237,7 @@ class LocalSymbolCollector:
         # 预扫描异常处理器中的变量
         for handler in node.handlers:
             for name, target in SymbolExtractor.get_assigned_names(handler):
-                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=STATIC_ANY, def_node=handler)
+                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=self.analyzer._any_desc, def_node=handler)
                 self._define(sym, target) # 绑定 target 节点
             self.visit(handler)
         self.generic_visit(node)

@@ -37,7 +37,7 @@ from .llm_executor import intent_scoped
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from .intrinsics import IntrinsicManager
 from .ast_view import ReadOnlyNodePool
-from .artifact_loader import ArtifactLoader
+from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
 from .constants import OP_MAPPING, UNARY_OP_MAPPING
 

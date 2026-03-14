@@ -1,6 +1,10 @@
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, TYPE_CHECKING
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.foundation.registry import Registry
+from core.domain.factory import create_default_registry
+
+if TYPE_CHECKING:
+    from core.domain.types.descriptors import TypeDescriptor
 
 class Bootstrapper:
     """
@@ -127,7 +131,7 @@ class Bootstrapper:
         # 为 Type 注册 __call__ 消息实现 (实例化类)
         self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 
-    def register_class(self, ib_class: IbClass, descriptor: Any):
+    def register_class(self, ib_class: IbClass, descriptor: 'TypeDescriptor'):
         """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定描述符。"""
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass
@@ -140,7 +144,7 @@ class Bootstrapper:
     def get_all_classes(self) -> Dict[str, IbClass]:
         return dict(self._class_registry)
 
-    def create_subclass(self, registry: Registry, name: str, descriptor: Any, parent_name: str = "Object") -> IbClass:
+    def create_subclass(self, registry: Registry, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> IbClass:
         """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定描述符。"""
         if name in self._class_registry:
             return self._class_registry[name]

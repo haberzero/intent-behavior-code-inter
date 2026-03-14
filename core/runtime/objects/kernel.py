@@ -143,7 +143,7 @@ class IbModule(IbObject):
     持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
     """
     def __init__(self, name: str, scope: Any, registry: Registry):
-        super().__init__(registry.get_class("IbModule") or registry.get_class("Object"))
+        super().__init__(registry.get_class("module") or registry.get_class("Object"))
         self.name = name
         self.scope = scope
 

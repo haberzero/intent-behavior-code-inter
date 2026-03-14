@@ -1,5 +1,5 @@
 from typing import List, Optional
-from core.domain.tokens import Token, TokenType
+from core.compiler.lexer.tokens import Token, TokenType
 from core.domain import ast as ast
 from core.compiler.support.diagnostics import DiagnosticReporter
 

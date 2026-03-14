@@ -3,21 +3,21 @@ import uuid
 import json
 from enum import Enum
 from core.domain import ast as ast
-from core.domain.symbols import Symbol, SymbolTable, StaticType
+from core.domain.symbols import Symbol, SymbolTable
+from core.domain.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata, BoundMethodMetadata, ListMetadata, DictMetadata
 from core.domain.blueprint import CompilationArtifact, CompilationResult
+from core.foundation.serialization import BaseFlatSerializer
 
-class FlatSerializer:
+class FlatSerializer(BaseFlatSerializer):
     """
     平铺化序列化器：将嵌套的 AST 和 符号表 结构
     序列化为扁平的、基于 UID 引用的字典格式。
     """
     def __init__(self):
+        super().__init__()
         self.node_pool: Dict[str, Any] = {}
         self.symbol_pool: Dict[str, Any] = {}
         self.scope_pool: Dict[str, Any] = {}
-        self.type_pool: Dict[str, Any] = {}
-        self.external_assets: Dict[str, str] = {} # [IES 2.2] 存储外部文本资产: uid -> content
-        self.type_map: Dict[int, str] = {} # 映射内存 ID 到稳定 UID
 
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
         """序列化整个蓝图产物"""
@@ -130,7 +130,7 @@ class FlatSerializer:
         self.symbol_pool[uid] = sym_data
         return uid
 
-    def _collect_type(self, t: StaticType) -> str:
+    def _collect_type(self, t: TypeDescriptor) -> str:
         """收集类型对象"""
         t_id = id(t)
         if t_id in self.type_map:
@@ -142,29 +142,40 @@ class FlatSerializer:
         type_data = {
             "uid": uid,
             "name": t.name,
-            "descriptor": t.descriptor.name if t.descriptor else None,
+            "module_path": t.module_path,
             "kind": t.__class__.__name__
         }
         
         # 递归收集复合类型属性
-        if hasattr(t, 'element_type') and t.element_type:
+        if isinstance(t, ListMetadata) and t.element_type:
             type_data["element_type_uid"] = self._collect_type(t.element_type)
-        if hasattr(t, 'key_type') and t.key_type:
-            type_data["key_type_uid"] = self._collect_type(t.key_type)
-        if hasattr(t, 'value_type') and t.value_type:
-            type_data["value_type_uid"] = self._collect_type(t.value_type)
+        if isinstance(t, DictMetadata):
+            if t.key_type:
+                type_data["key_type_uid"] = self._collect_type(t.key_type)
+            if t.value_type:
+                type_data["value_type_uid"] = self._collect_type(t.value_type)
         
-        # 处理函数类型 (FunctionType)
-        if hasattr(t, 'param_types') and t.param_types:
-            type_data["param_types_uids"] = [self._collect_type(p) for p in t.param_types]
-        if hasattr(t, 'return_type') and t.return_type:
-            type_data["return_type_uid"] = self._collect_type(t.return_type)
+        if isinstance(t, FunctionMetadata):
+            if t.param_types:
+                type_data["param_types_uids"] = [self._collect_type(p) for p in t.param_types]
+            if t.return_type:
+                type_data["return_type_uid"] = self._collect_type(t.return_type)
             
-        # 处理绑定方法 (BoundMethodType)
-        if hasattr(t, 'instance_type') and t.instance_type:
-            type_data["instance_type_uid"] = self._collect_type(t.instance_type)
-        if hasattr(t, 'method_type') and t.method_type:
-            type_data["method_type_uid"] = self._collect_type(t.method_type)
+        if isinstance(t, BoundMethodMetadata):
+            if t.receiver_type:
+                type_data["receiver_type_uid"] = self._collect_type(t.receiver_type)
+            if t.function_type:
+                type_data["function_type_uid"] = self._collect_type(t.function_type)
+        
+        if isinstance(t, ClassMetadata):
+            type_data["parent_name"] = t.parent_name
+            
+        # [NEW] 收集成员表 (实现元数据与符号系统的闭环)
+        # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
+        if t.members:
+            type_data["members_uids"] = {
+                name: self._collect_symbol(sym) for name, sym in t.members.items()
+            }
             
         self.type_pool[uid] = type_data
         return uid
@@ -186,29 +197,7 @@ class FlatSerializer:
         self.scope_pool[uid] = scope_data
         return uid
 
-    def _process_text_asset(self, text: str) -> Any:
-        """[IES 2.2 Security Update] 文本资产化处理：大文本或特殊文本外置"""
-        if not isinstance(text, str):
-            return text
-            
-        # 安全阈值：超过 128 字符，或包含可能引起 JSON 冲突的字符 (目前只要是 str 且较长就外置)
-        if len(text) > 128 or '\n' in text or '\"' in text:
-            uid = f"asset_{uuid.uuid4().hex[:16]}"
-            self.external_assets[uid] = text
-            return {"_type": "ext_ref", "uid": uid}
-        return text
-
     def _process_value(self, value: Any) -> Any:
         if isinstance(value, ast.IbASTNode):
             return self._collect_node(value)
-        elif isinstance(value, list):
-            return [self._process_value(v) for v in value]
-        elif isinstance(value, dict):
-            return {k: self._process_value(v) for k, v in value.items()}
-        elif isinstance(value, Enum):
-            return value.name
-        elif isinstance(value, str):
-            return self._process_text_asset(value)
-        elif hasattr(value, "__dict__"): # [IES 2.2] 支持 SimpleNamespace 或其他自定义对象
-            return {k: self._process_value(v) for k, v in vars(value).items()}
-        return value
+        return super()._process_value(value)

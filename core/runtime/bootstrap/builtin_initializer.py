@@ -3,6 +3,12 @@ from ..objects.kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 from core.foundation.registry import Registry
 from core.domain.types import descriptors as uts
+from core.domain.types.descriptors import (
+    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
+    BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR
+)
+from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
+from core.domain.factory import create_default_registry
 from ..bootstrapper import Bootstrapper
 
 def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = True):
@@ -23,33 +29,14 @@ def _compare_op(self: IbObject, other: Any, op_func: Callable) -> int:
         return 0 
 
 def _cast_string_to(ib_str: IbString, target_class: Any) -> Any:
-    """实现 Spec 中的自动类型转换策略"""
-    val = ib_str.to_native().strip()
-    # [FIX] 兼容性处理：target_class 可能是 IbClass 也可能是转换函数 (由于名称冲突)
-    target_name = target_class.name if hasattr(target_class, 'name') else str(target_class)
-    
-    if "int" in target_name:
-        return int(val)
-    if "float" in target_name:
-        return float(val)
-    if "bool" in target_name:
-        return val.lower() in ("true", "1", "yes")
-    return val
+    """实现 Spec 中的自动类型转换策略 (Descriptor Identity 版)"""
+    target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+    return _cast_string_to_native(ib_str.to_native(), target_desc)
 
 def _cast_numeric_to(ib_num: IbObject, target_class: Any) -> Any:
-    """数值类型到其他类型的转换"""
-    val = ib_num.to_native()
-    target_name = target_class.name if hasattr(target_class, 'name') else str(target_class)
-    
-    if "str" in target_name:
-        return str(val)
-    if "int" in target_name:
-        return int(val)
-    if "float" in target_name:
-        return float(val)
-    if "bool" in target_name:
-        return 1 if val else 0
-    return val
+    """数值类型到其他类型的转换 (Descriptor Identity 版)"""
+    target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+    return _cast_numeric_to_native(ib_num.to_native(), target_desc)
 
 def initialize_builtin_classes(registry: Registry):
     """
@@ -61,9 +48,8 @@ def initialize_builtin_classes(registry: Registry):
         
     # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
     # [Active Defense] 贯彻“元数据先行”原则
-    from core.domain.builtin_schema import init_builtin_schema
-    metadata_registry = uts.create_default_registry()
-    init_builtin_schema(metadata_registry) # 初始化内置类型的 Schema
+    metadata_registry = create_default_registry()
+    # [Axiom-Driven] Schema 已由 create_default_registry() -> Axiom.get_methods() 自动注入
     
     # 2. 引导核心类 (Type, Object, callable, IbModule, Intent)
     bootstrapper = Bootstrapper(registry)
@@ -73,25 +59,80 @@ def initialize_builtin_classes(registry: Registry):
     # 注册元数据注册表到 Registry
     registry.register_metadata_registry(metadata_registry, token)
 
-    # 3. 创建核心内置类 (通过元数据强绑定)
-    integer_class = registry.create_subclass("int", metadata_registry.resolve("int"))
-    float_class = registry.create_subclass("float", metadata_registry.resolve("float"))
-    string_class = registry.create_subclass("str", metadata_registry.resolve("str"))
-    list_class = registry.create_subclass("list", metadata_registry.resolve("list"))
-    dict_class = registry.create_subclass("dict", metadata_registry.resolve("dict"))
-    none_class = registry.create_subclass("None", metadata_registry.resolve("void"))
-    behavior_class = registry.create_subclass("behavior", metadata_registry.resolve("callable"))
-    bool_class = registry.create_subclass("bool", metadata_registry.resolve("bool"))
-    callable_class = registry.create_subclass("callable", metadata_registry.resolve("callable"))
+    # 3. 创建核心内置类 (Axiom-Driven Automation)
+    # [NEW] 遍历 AxiomRegistry 自动初始化所有注册的原子类型
     
-    # 为 bound_method 创建专门的合成描述符 (通过工厂驻留)
-    bound_method_desc = metadata_registry.factory.create_primitive("bound_method", is_nullable=True)
-    bound_method_class = registry.create_subclass("bound_method", bound_method_desc, parent_name="callable")
+    # 基础类型映射表 (用于绑定具体的 IbClass 实现)
+    # TODO: 未来应将此映射下沉到 Axiom 或 Factory 中
+    IB_CLASS_MAP = {
+        "int": IbInteger,
+        "float": IbFloat, 
+        "str": IbString,
+        "list": IbList,
+        "dict": IbDict,
+        "bool": IbInteger, # bool 底层复用 IbInteger
+        "var": IbObject, # var 是泛型容器
+        "callable": IbObject, # callable 是协议
+        "behavior": IbBehavior,
+        "Any": IbObject,
+        "void": IbObject,
+        "module": IbObject, # 占位
+        "bound_method": IbObject, # 占位
+        "None": IbObject # NoneType
+    }
+
+    # 自动创建类并注册
+    # 注意：我们必须保证顺序，或者允许多次查找
+    # 依赖于 pritmives.py 中的注册顺序 (int before bool)
     
-    var_class = registry.create_subclass("var", metadata_registry.resolve("Any"))
+    core_axioms = []
+    axiom_registry = metadata_registry.get_axiom_registry()
+    if axiom_registry:
+        core_axioms = axiom_registry.get_all_names()
+    else:
+        # Fallback (Safety net)
+        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "var", "Any", "void"]
     
-    # 特殊：IbModule 类 (Bootstrapper 已经创建过一次，此处仅获取或重复确认)
-    module_class = registry.create_subclass("IbModule", metadata_registry.resolve("module"))
+    # 自动创建类并注册
+    ib_classes = {}
+    for name in core_axioms:
+        # 获取描述符 (Bootstrapper 初始化时已经注入了 MetadataRegistry)
+        desc = metadata_registry.resolve(name)
+        if not desc: continue
+            
+        # 创建类
+        parent = "Object"
+        if name == "bool": parent = "int" # 特殊继承关系
+        if name == "bound_method": parent = "callable"
+        
+        ib_cls = registry.create_subclass(name, desc, parent_name=parent)
+        ib_classes[name] = ib_cls
+        
+        # [Axiom-Driven Automation] 能力注入
+        # 遍历公理中定义的所有方法，并从 IbObject 实现类中自动查找并绑定同名方法
+        axiom = desc._axiom
+        if axiom:
+            methods = axiom.get_methods()
+            py_impl_cls = IB_CLASS_MAP.get(name)
+            if py_impl_cls:
+                for method_name in methods:
+                    if hasattr(py_impl_cls, method_name):
+                        # 获取 Python 实现的方法
+                        py_method = getattr(py_impl_cls, method_name)
+                        # 绑定为原生方法 (默认不解包，由实现类自行处理或通过 metadata 识别)
+                        _reg_native(ib_cls, method_name, py_method, unbox=False)
+
+    # 获取引用以便后续绑定 (保持兼容性)
+    integer_class = ib_classes.get("int")
+    float_class = ib_classes.get("float")
+    string_class = ib_classes.get("str")
+    list_class = ib_classes.get("list")
+    dict_class = ib_classes.get("dict")
+    none_class = ib_classes.get("None")
+    bool_class = ib_classes.get("bool")
+    
+    # 特殊：module 类 (Bootstrapper 已经创建过一次)
+    module_class = registry.create_subclass("module", metadata_registry.resolve("module"))
     
     # 4. 注册内置全局函数元数据 (供编译器发现)
     registry.register_function("print", uts.FunctionMetadata(
@@ -145,8 +186,6 @@ def initialize_builtin_classes(registry: Registry):
     
     # 4. 注册原生方法代理 (Integer)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
-    _reg_native(integer_class, 'to_bool', lambda self: 1 if self.to_native() != 0 else 0)
-    _reg_native(integer_class, 'to_list', lambda self: list(range(self.to_native())))
     
     _reg_native(integer_class, '__add__', lambda self, other: _numeric_op(self, other, lambda a, b: a + b))
     _reg_native(integer_class, '__sub__', lambda self, other: _numeric_op(self, other, lambda a, b: a - b))
@@ -169,7 +208,6 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(integer_class, '__ge__', lambda self, other: _compare_op(self, other, lambda a, b: a >= b))
     _reg_native(integer_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
     _reg_native(integer_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
-    _reg_native(integer_class, 'cast_to', lambda self, target_class: _cast_numeric_to(self, target_class), unbox=False)
     
     # [NEW] int(x) 构造函数/转换逻辑
     def _int_call(self, *args):
@@ -187,7 +225,6 @@ def initialize_builtin_classes(registry: Registry):
     _reg_native(float_class, '__pos__', lambda self: +self.to_native())
     _reg_native(float_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
     _reg_native(float_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
-    _reg_native(float_class, 'cast_to', lambda self, target_class: _cast_numeric_to(self, target_class), unbox=False)
 
     # [NEW] float(x) 构造函数/转换逻辑
     def _float_call(self, *args):
@@ -201,14 +238,12 @@ def initialize_builtin_classes(registry: Registry):
     def _string_add(self, other):
         if not isinstance(other, IbObject):
             return str(self.to_native()) + str(other)
-        if other.ib_class.name != "str":
+        if other.descriptor is not STR_DESCRIPTOR:
             from core.domain.issue import InterpreterError
             raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'. Use cast_to(str) first.")
         return str(self.to_native()) + str(other.to_native())
         
     _reg_native(string_class, '__add__', _string_add, unbox=False)
-    _reg_native(string_class, 'len', lambda self: len(self.to_native()))
-    _reg_native(string_class, 'cast_to', lambda self, target_class: _cast_string_to(self, target_class), unbox=False)
 
     # [NEW] str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
@@ -219,32 +254,10 @@ def initialize_builtin_classes(registry: Registry):
     # List
     _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")
     _reg_native(list_class, 'to_list', lambda self: self.elements)
-    _reg_native(list_class, 'append', lambda self, item: self.elements.append(item), unbox=False)
-    _reg_native(list_class, 'len', lambda self: len(self.elements))
-    _reg_native(list_class, 'sort', lambda self: self.elements.sort(key=lambda x: x.to_native()))
-    _reg_native(list_class, '__getitem__', lambda self, key: self.elements[key])
-    _reg_native(list_class, '__setitem__', lambda self, key, val: self.elements.__setitem__(key, val), unbox=False)
 
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
     
-    def _dict_get(self, key, default=None):
-        native_key = key.to_native() if hasattr(key, 'to_native') else key
-        return self.fields.get(native_key, default)
-        
-    def _dict_getitem(self, key):
-        native_key = key.to_native() if hasattr(key, 'to_native') else key
-        return self.fields[native_key]
-        
-    def _dict_setitem(self, key, val):
-        native_key = key.to_native() if hasattr(key, 'to_native') else key
-        self.fields[native_key] = val
-        return self.ib_class.registry.get_none()
-
-    _reg_native(dict_class, 'get', _dict_get, unbox=False)
-    _reg_native(dict_class, '__getitem__', _dict_getitem, unbox=False)
-    _reg_native(dict_class, '__setitem__', _dict_setitem, unbox=False)
-
     # 5. 注册装箱逻辑
     registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class), token)
     registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0, integer_class), token)

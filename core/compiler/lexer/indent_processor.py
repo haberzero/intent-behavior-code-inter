@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-from core.domain.tokens import Token, TokenType
+from .tokens import Token, TokenType
 from core.compiler.lexer.str_stream import StrStream
 from core.compiler.support.diagnostics import DiagnosticReporter
 

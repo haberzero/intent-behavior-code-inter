@@ -1,7 +1,8 @@
 from typing import List, Optional
-from core.domain.tokens import TokenType
+from core.compiler.lexer.tokens import TokenType
 from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
+from core.compiler.dependencies import ImportInfo, ImportType
 
 class ImportComponent(BaseComponent):
     """

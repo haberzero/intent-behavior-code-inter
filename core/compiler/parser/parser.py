@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
-from core.domain.tokens import Token, TokenType
+from core.compiler.lexer.tokens import Token, TokenType
 from core.domain import ast as ast
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 from core.compiler.parser.core.context import ParserContext
@@ -9,7 +9,7 @@ from core.compiler.parser.components.statement import StatementComponent
 from core.compiler.parser.components.declaration import DeclarationComponent
 from core.compiler.parser.components.type_def import TypeComponent
 from core.compiler.parser.components.import_def import ImportComponent
-from core.domain.dependencies import ImportInfo, ImportType
+from core.compiler.dependencies import ImportInfo, ImportType
 from core.foundation.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
 from core.domain.issue import Severity
 from core.domain.issue_atomic import Location
@@ -64,30 +64,33 @@ class Parser:
         return self.context.issue_tracker
 
     def parse(self) -> ast.IbModule:
-        self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, "Starting parsing...")
+        self.debugger.enter_scope(CoreModule.PARSER, "Starting parsing...")
         statements = []
-        while not self.stream.is_at_end():
-            try:
-                if self.stream.match(TokenType.NEWLINE):
-                    continue
-                
-                # Top level declarations or statements
-                stmt = self.declaration()
-                if stmt:
-                    self.debugger.trace(CoreModule.PARSER, DebugLevel.DETAIL, f"Parsed top-level statement: {stmt.__class__.__name__}")
-                    statements.append(stmt)
-            except ParseControlFlowError:
-                self.synchronize()
-        
-        # Check for errors at the end
-        self.context.issue_tracker.check_errors()
-        
-        module_node = ast.IbModule(body=statements)
-        
-        self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, f"Parsing complete. Total statements: {len(statements)}")
-        self.debugger.trace(CoreModule.PARSER, DebugLevel.DATA, "AST Module body:", data=statements)
-        
-        return module_node
+        try:
+            while not self.stream.is_at_end():
+                try:
+                    if self.stream.match(TokenType.NEWLINE):
+                        continue
+                    
+                    # Top level declarations or statements
+                    stmt = self.declaration()
+                    if stmt:
+                        self.debugger.trace(CoreModule.PARSER, DebugLevel.DETAIL, f"Parsed top-level statement: {stmt.__class__.__name__}")
+                        statements.append(stmt)
+                except ParseControlFlowError:
+                    self.synchronize()
+            
+            # Check for errors at the end
+            self.context.issue_tracker.check_errors()
+            
+            module_node = ast.IbModule(body=statements)
+            
+            self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, f"Parsing complete. Total statements: {len(statements)}")
+            self.debugger.trace(CoreModule.PARSER, DebugLevel.DATA, "AST Module body:", data=statements)
+            
+            return module_node
+        finally:
+            self.debugger.exit_scope(CoreModule.PARSER)
         
     def parse_imports_only(self) -> List[ImportInfo]:
         """

@@ -1,4 +1,0 @@
-import pkg.utils
-
-int result = pkg.utils.add(5, 10)
-str msg = pkg.utils.format_result(result)

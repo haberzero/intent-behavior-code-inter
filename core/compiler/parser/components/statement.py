@@ -1,5 +1,5 @@
 from typing import List, Optional, TYPE_CHECKING
-from core.domain.tokens import TokenType
+from core.compiler.lexer.tokens import TokenType
 from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
@@ -103,27 +103,27 @@ class StatementComponent(BaseComponent):
         
         return self._loc(ast.IbIntentStmt(intent=intent_info, body=body), start_token)
 
-    def at_intent_shorthand(self) -> ast.IbIntentStmt:
+    def at_intent_shorthand(self) -> ast.IbStmt:
         """Parse '@ "content" \n statement'"""
         start_token = self.stream.previous()
         
         # 1. Parse content
         intent_info = self._parse_intent_info(start_token)
         
-        # 2. Parse next statement as body
-        self.stream.consume(TokenType.NEWLINE, "Expect newline after @ shorthand.")
+        # 2. 压入 Pending Intents，下一个被解析的语句将自动关联它
+        self.context.push_intent(intent_info)
         
-        # We need to call parse_statement again.
-        # Use the context to avoid circular dependency.
-        next_stmt = self.context.statement_parser.parse_statement()
-        return self._loc(ast.IbIntentStmt(intent=intent_info, body=[next_stmt]), start_token)
+        # 3. 解析下一个语句作为主体
+        # 使用 consume_end_of_statement 处理换行或 EOF
+        self.stream.consume_end_of_statement("Expect newline after @ shorthand.")
+        
+        # 重要：使用 declaration() 而非 parse_statement()，以支持 @ 下面的 var/func 定义
+        return self.context.declaration_parser.parse_declaration()
 
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
         """Helper to parse the content part of an intent (@ or intent keyword)"""
-        import sys
         mode = "normal"
         token_val = start_token.value
-        sys.stderr.write(f"DEBUG: _parse_intent_info start_token={start_token}, next={self.stream.peek()}\n")
         
         if token_val.startswith("@"):
             mode_char = token_val[1:]
@@ -134,7 +134,6 @@ class StatementComponent(BaseComponent):
             # Handle 'intent ! "content":'
             if self.stream.match(TokenType.NOT):
                 mode = "override"
-                sys.stderr.write("DEBUG: Matched NOT, mode=override\n")
             elif self.stream.match(TokenType.PLUS):
                 mode = "append"
             elif self.stream.match(TokenType.MINUS):
@@ -150,9 +149,9 @@ class StatementComponent(BaseComponent):
                 if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
                     val = val[1:-1]
                 segments.append(val)
-
-            elif self.stream.match(TokenType.VAR_REF):
+            elif self.stream.check(TokenType.VAR_REF):
                 # Variable reference $var or $(expr)
+                # [Fix] Use check instead of match, so parse_expression can consume the token
                 segments.append(self.expression.parse_expression())
             else:
                 # Try parsing as an expression if it's not a special token
@@ -162,7 +161,7 @@ class StatementComponent(BaseComponent):
                     break
                 
         # If single segment and it's a string, we can flatten it
-        content = "".join([s if isinstance(s, str) else str(s) for s in segments])
+        content = "".join([s if isinstance(s, str) else str(s) for s in segments]).strip()
         return ast.IbIntentInfo(mode=mode, content=content, segments=segments)
 
 

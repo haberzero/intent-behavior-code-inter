@@ -1,6 +1,6 @@
 from typing import Any, Optional, TypeVar
 from core.domain import ast as ast
-from core.domain.tokens import Token
+from core.compiler.lexer.tokens import Token
 from core.compiler.parser.core.context import ParserContext
 
 T = TypeVar("T", bound=ast.IbASTNode)
@@ -42,6 +42,16 @@ class BaseComponent:
             elif hasattr(end_obj, 'end_lineno'):
                 node.end_lineno = end_obj.end_lineno
                 node.end_col_offset = end_obj.end_col_offset
+        
+        # [Intent Smearing] 暂存 Parser 发现的意图
+        # [Fix] 仅将意图附加到语句或特定的表达式（如 BehaviorExpr）上，防止 sub-nodes (如 IbName) 过早夺取意图
+        if isinstance(node, (ast.IbStmt, ast.IbBehaviorExpr, ast.IbTypeAnnotatedExpr)):
+            intents = self.context.consume_intents()
+            if intents:
+                # 如果节点已经有了意图（可能来自多重标注），则追加
+                existing = getattr(node, "_pending_intents", [])
+                setattr(node, "_pending_intents", existing + intents)
+            
         return node
 
     def _extend_loc(self, node: T, end_obj: Any) -> T:

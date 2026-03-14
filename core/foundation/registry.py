@@ -1,4 +1,7 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.domain.types.descriptors import TypeDescriptor
 
 from enum import Enum, auto
 
@@ -127,15 +130,18 @@ class Registry:
         # Fallback: 如果是普通 Python 类 (例如在引导阶段)
         return ib_class(*args, **kwargs)
 
-    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: Any):
+    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: 'TypeDescriptor'):
         """
         注册类（内置或用户定义），并强制关联其 UTS 描述符。
-        [Active Defense] 拒绝任何无元数据描述的裸类注入。
+        [Active Defense] 拒绝任何无元数据描述或名称不匹配的裸类注入。
         """
         self._verify_class_registration(token)
         
         if not descriptor:
             raise ValueError(f"Registry: Cannot register class '{name}' without a UTS descriptor.")
+            
+        if descriptor.name != name:
+             raise ValueError(f"Registry: Descriptor name '{descriptor.name}' does not match registered name '{name}'.")
 
         self._classes[name] = ib_class
         
@@ -144,16 +150,18 @@ class Registry:
             ib_class.registry = self
             
         # 强制绑定描述符到类对象上
-        if hasattr(ib_class, 'descriptor'):
-            ib_class.descriptor = descriptor
+        ib_class.descriptor = descriptor
             
         # 自动同步到元数据注册表
         if self._metadata_registry:
             self._metadata_registry.register(descriptor)
 
-    def register_function(self, name: str, descriptor: Any, token: Any):
+    def register_function(self, name: str, descriptor: 'TypeDescriptor', token: Any):
         """注册全局函数元数据 (仅用于编译器发现)"""
         self._verify_class_registration(token)
+        if descriptor.name != name:
+             raise ValueError(f"Registry: Function descriptor name '{descriptor.name}' does not match registered name '{name}'.")
+             
         if self._metadata_registry:
             self._metadata_registry.register(descriptor)
 
@@ -178,8 +186,13 @@ class Registry:
     def get_none(self) -> Any:
         return self._none_instance
 
-    def create_subclass(self, name: str, descriptor: Any, parent_name: str = "Object") -> Any:
-        """[Authorized] 通过内核绑定的工厂方法创建类，支持动态继承链。强制绑定描述符。"""
+    def create_subclass(self, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> Any:
+        """[Authorized] 通过内核绑定的工厂方法创建类，支持动态继承链。强制绑定并校验描述符。"""
+        if not descriptor:
+            raise ValueError(f"Registry: Cannot create subclass '{name}' without a UTS descriptor.")
+        if descriptor.name != name:
+            raise ValueError(f"Registry: Subclass descriptor name '{descriptor.name}' does not match '{name}'.")
+            
         if self._create_subclass_func:
             return self._create_subclass_func(self, name, descriptor, parent_name)
         return None

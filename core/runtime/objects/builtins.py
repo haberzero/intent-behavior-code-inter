@@ -1,6 +1,8 @@
 from typing import Any, List, Dict, Optional, Callable
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.foundation.registry import Registry
+from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
+from core.domain.issue import InterpreterError
 
 from core.domain.types import descriptors as uts
 
@@ -16,22 +18,6 @@ class IbInteger(IbObject):
         super().__init__(ib_class)
         self.value = value
 
-    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        # [IES 2.0] 针对核心类型的内联优化
-        if message == 'cast_to':
-            target_cls = args[0]
-            if target_cls.name == 'str':
-                return self.ib_class.registry.box(str(self.value))
-            if target_cls.name == 'float':
-                return self.ib_class.registry.box(float(self.value))
-        
-        # 运算
-        if message == '__add__':
-            right = args[0].to_native()
-            return self.ib_class.registry.box(self.value + right)
-            
-        return super().receive(message, args)
-
     @classmethod
     def from_native(cls, value: int, ib_class: IbClass) -> 'IbInteger':
         """小整数驻留工厂方法"""
@@ -45,6 +31,17 @@ class IbInteger(IbObject):
 
     def to_native(self, memo=None) -> int:
         return self.value
+
+    def to_bool(self) -> IbObject:
+        return self.ib_class.registry.box(1 if self.value != 0 else 0)
+
+    def to_list(self) -> IbObject:
+        return self.ib_class.registry.box(list(range(self.value)))
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        res_val = _cast_numeric_to_native(self.value, target_desc)
+        return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {"type": "Integer", "value": self.value}
@@ -75,6 +72,14 @@ class IbFloat(IbObject):
     def to_native(self, memo=None) -> float:
         return self.value
 
+    def to_bool(self) -> IbObject:
+        return self.ib_class.registry.box(1 if self.value != 0.0 else 0)
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        res_val = _cast_numeric_to_native(self.value, target_desc)
+        return self.ib_class.registry.box(res_val)
+
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {"type": "Float", "value": self.value}
 
@@ -91,23 +96,19 @@ class IbString(IbObject):
         super().__init__(ib_class)
         self.value = value
 
-    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        # [IES 2.0] 针对核心类型的内联优化
-        if message == 'len':
-            # print(f"DEBUG: IbString.receive('len') value='{self.value[:10]}...' len={len(self.value)}")
-            return self.ib_class.registry.box(len(self.value))
-        if message == '__add__':
-            right = args[0].to_native()
-            return self.ib_class.registry.box(self.value + str(right))
-        if message == 'length': # 某些脚本可能使用 .length()
-            return self.ib_class.registry.box(len(self.value))
-        if message == '__to_prompt__':
-            return self.ib_class.registry.box(self.value)
-            
-        return super().receive(message, args)
-
     def to_native(self, memo=None) -> str:
         return self.value
+
+    def len(self) -> IbObject:
+        return self.ib_class.registry.box(len(self.value))
+
+    def to_bool(self) -> IbObject:
+        return self.ib_class.registry.box(1 if self.value.strip() else 0)
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        res_val = _cast_string_to_native(self.value, target_desc)
+        return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {"type": "String", "value": self.value}
@@ -144,6 +145,34 @@ class IbList(IbObject):
     def __repr__(self):
         return f"List({self.elements})"
 
+    def pop(self) -> IbObject:
+        if not self.elements:
+            raise InterpreterError("IndexError: pop from empty list")
+        return self.elements.pop()
+
+    def clear(self) -> IbObject:
+        self.elements.clear()
+        return self.ib_class.registry.get_none()
+
+    def append(self, item: IbObject) -> IbObject:
+        self.elements.append(item)
+        return self.ib_class.registry.get_none()
+
+    def len(self) -> IbObject:
+        return self.ib_class.registry.box(len(self.elements))
+
+    def __getitem__(self, key: Any) -> IbObject:
+        idx = key.to_native() if hasattr(key, 'to_native') else key
+        return self.elements[idx]
+
+    def __setitem__(self, key: Any, val: IbObject) -> None:
+        idx = key.to_native() if hasattr(key, 'to_native') else key
+        self.elements[idx] = val
+
+    def sort(self) -> IbObject:
+        self.elements.sort(key=lambda x: x.to_native())
+        return self.ib_class.registry.get_none()
+
 class IbDict(IbObject):
     """
     包装 Python 原生 dict 的 IBC 对象。
@@ -170,6 +199,34 @@ class IbDict(IbObject):
 
     def __repr__(self):
         return f"Dict({self.fields})"
+
+    def keys(self) -> IbObject:
+        # 返回 IbList 包装的原生 key 列表
+        # 注意：这里的 key 已经是原生类型（通常是 str）
+        # 我们需要将其装箱
+        native_keys = list(self.fields.keys())
+        return self.ib_class.registry.box(native_keys)
+
+    def values(self) -> IbObject:
+        # 返回 IbList 包装的值列表
+        return self.ib_class.registry.box(list(self.fields.values()))
+
+    def len(self) -> IbObject:
+        return self.ib_class.registry.box(len(self.fields))
+
+    def __getitem__(self, key: Any) -> IbObject:
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        return self.fields[k]
+
+    def __setitem__(self, key: Any, val: IbObject) -> None:
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        self.fields[k] = val
+
+    def get(self, key: Any, default: Optional[IbObject] = None) -> IbObject:
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        if k in self.fields:
+            return self.fields[k]
+        return default or self.ib_class.registry.get_none()
 
     def __iter__(self):
         return iter(self.fields)

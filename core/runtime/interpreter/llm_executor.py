@@ -8,7 +8,9 @@ from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.interfaces import ILLMProvider
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
-from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.runtime.objects.intent import IbIntent
+from core.domain.intent_logic import IntentMode, IntentRole
+from core.domain.intent_resolver import IntentResolver
 from core.foundation.registry import Registry
 
 class LLMExecutorImpl:
@@ -69,7 +71,7 @@ class LLMExecutorImpl:
         user_prompt = self._evaluate_segments(node_data.get("user_prompt"), context)
         
         # 2. 注入意图增强 (三层架构合并)
-        merged_intents = self._merge_intents(None, context)
+        merged_intents = self._merge_intents(node_uid, context)
         if merged_intents:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
             sys_prompt += intent_block
@@ -104,87 +106,74 @@ class LLMExecutorImpl:
         return self._parse_result(raw_res, type_name, node_uid)
 
 
-    def _merge_intents(self, call_intent_uid: Optional[str], context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> List[str]:
+    def _merge_intents(self, node_uid: Optional[str], context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> List[str]:
         """
-        合并 Global, Block, Call 三层意图。
+        合并 Global, Block, Smear, Call 三层意图。
+        node_uid: 当前正在执行的节点 UID，用于查找侧表中的涂抹意图。
         """
-        # 1. 基础收集
+        interpreter = self.service_context.interpreter
+        
+        # 1. 基础收集：执行栈意图
         global_intents = context.get_global_intents()
-        # [IES 2.0] 优先使用捕获的意图栈（针对延迟执行的 Behavior）
         raw_active = captured_intents if captured_intents is not None else context.get_active_intents()
         
-        # 确保转换为列表以便反转遍历
-        active_intents = raw_active
-        if hasattr(raw_active, 'to_list'):
-            active_intents = raw_active.to_list()
-        
-        # 2. 处理模式 (Mode) 逻辑
-        resolved_block_intents = []
-        is_exclusive = False
-        blacklist = set() # 存储内容字符串或 "tag:xxx" 格式的标签
-        
-        for i in reversed(active_intents):
-            # [Refactor Phase 3] 已移除兼容性代码，假定意图栈中均为 IbIntent 对象
-            content = i.resolve_content(context, self)
+        active_intents = list(raw_active) if not hasattr(raw_active, 'to_list') else raw_active.to_list()
             
-            if i.is_remove:
-                if i.tag:
-                    blacklist.add(f"tag:{i.tag}")
-                if content: # 同时也支持按内容移除
-                    blacklist.add(content)
-                continue
-                
-            # 检查是否被黑名单（内容或标签）屏蔽
-            if content in blacklist: continue
-            if i.tag and f"tag:{i.tag}" in blacklist: continue
+        # 2. 收集侧表涂抹意图 (Smearing Intents)
+        # 按照 IES 2.0 协议，侧表意图比栈意图更具体（内层）
+        if node_uid:
+            smear_uids = interpreter.get_side_table("node_intents", node_uid)
+            if smear_uids:
+                if isinstance(smear_uids, str): smear_uids = [smear_uids]
+                for uid in smear_uids:
+                    intent = self._create_intent_from_uid(uid)
+                    if intent:
+                        active_intents.append(intent)
 
-            if i.is_override:
-                resolved_block_intents.insert(0, content)
-                is_exclusive = True
-                break
-            
-            resolved_block_intents.insert(0, content)
-            
-        final_list = []
-        if not is_exclusive:
-            # Global Intents 也要受 blacklist 影响
-            for i in global_intents:
-                content = i.resolve_content(context, self)
-                if content in blacklist: continue
-                if i.tag and f"tag:{i.tag}" in blacklist: continue
-                final_list.append(content)
-        final_list.extend(resolved_block_intents)
-        
-        # 3. 处理 Call 层级
+        # 3. 处理 Call 层级意图 (最高优先级)
+        # 注意：这里的 node_uid 如果是 IbBehaviorExpr，它本身可能持有一个直接的 intent 关联
+        call_intent = None
+        node_data = interpreter.get_node_data(node_uid) if node_uid else {}
+        call_intent_uid = node_data.get("intent")
         if call_intent_uid:
-            interpreter = self.service_context.interpreter
-            call_intent_data = interpreter.get_node_data(call_intent_uid)
-            # 构造临时的 IbIntent 以统一逻辑
-            call_intent = IbIntent(
-                ib_class=self.service_context.registry.get_class("Intent"),
-                content=call_intent_data.get("content", ""),
-                mode=IntentMode.from_str(call_intent_data.get("mode", "+")),
-                tag=call_intent_data.get("tag"),
-                segments=call_intent_data.get("segments", []),
-                role=IntentRole.CALL,
-                source_uid=call_intent_uid
-            )
-            content = call_intent.resolve_content(context, self)
+            call_intent = self._create_intent_from_uid(call_intent_uid, role=IntentRole.CALL)
             
-            if call_intent.is_override:
-                return [content]
-            elif call_intent.is_remove:
-                if content in final_list: final_list.remove(content)
-            else:
-                if content not in final_list: final_list.append(content)
+        # 4. 调用统一的 Resolver
+        final_list = IntentResolver.resolve(
+            active_intents=active_intents,
+            global_intents=global_intents,
+            call_intent=call_intent,
+            context=context,
+            evaluator=self
+        )
         
-        # 4. 注入循环上下文
+        # 5. 注入循环上下文
         loop_context = context.get_loop_context()
         if loop_context:
             index, total = loop_context["index"], loop_context["total"]
             final_list.append(f"[循环进度感知: 当前正在处理第 {index + 1} 个元素，总计 {total} 个]")
             
-        return self._unique_merge(final_list)
+        return final_list
+
+    def _create_intent_from_uid(self, intent_uid: str, role: Any = None) -> Optional[IbIntent]:
+        """从 UID 创建 IbIntent 对象"""
+        interpreter = self.service_context.interpreter
+        try:
+            intent_data = interpreter.get_node_data(intent_uid)
+        except:
+            return None
+            
+        if not intent_data: return None
+        
+        return IbIntent(
+            ib_class=self.service_context.registry.get_class("Intent"),
+            content=intent_data.get('content', ''),
+            mode=IntentMode.from_str(intent_data.get('mode', '+')),
+            tag=intent_data.get('tag'),
+            segments=intent_data.get('segments', []),
+            role=role or IntentRole.SMEAR,
+            source_uid=intent_uid
+        )
 
     def _resolve_intent_content(self, intent_uid: str, context: RuntimeContext) -> str:
         """从 UID 解析意图内容 (Helper)"""
@@ -250,56 +239,38 @@ class LLMExecutorImpl:
         return "".join(content_parts)
 
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
-        clean_res = raw_res.strip()
-        
-        if type_name == "str":
-            return self.service_context.registry.box(raw_res)
-        
-        # 1. [IES 2.1 Optimization] 预处理：剥离 Markdown 代码块
-        code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', clean_res)
-        if code_block_match:
-            clean_res = code_block_match.group(1).strip()
-        
-        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Parsing LLM response to type '{type_name}'")
+        # [Axiom-Driven] 使用公理系统进行解析 (Instance-based)
+        axiom = None
+        if self.service_context and self.service_context.registry:
+            meta_reg = self.service_context.registry.get_metadata_registry()
+            if meta_reg:
+                axiom_reg = meta_reg.get_axiom_registry()
+                if axiom_reg:
+                    axiom = axiom_reg.get_axiom(type_name)
+                    
+                    if not axiom:
+                         # 处理泛型 (降级到基础类型公理)
+                        if type_name.startswith("list"):
+                            axiom = axiom_reg.get_axiom("list")
+                        elif type_name.startswith("dict"):
+                            axiom = axiom_reg.get_axiom("dict")
 
-        try:
-            if type_name == "int":
-                # 寻找第一个数字
-                match = re.search(r'-?\d+', clean_res)
-                if match:
-                    return self.service_context.registry.box(int(match.group()))
-                raise ValueError(f"No integer found in response: {clean_res}")
-                
-            elif type_name == "list":
-                # 寻找最外层的 [ ] 以增强对干扰文字的容错性
-                start = clean_res.find('[')
-                end = clean_res.rfind(']')
-                if start != -1 and end != -1:
-                    json_str = clean_res[start:end+1]
-                    val = json.loads(json_str)
+        if axiom:
+            parser = axiom.get_parser_capability()
+            if parser:
+                try:
+                    val = parser.parse_value(raw_res)
                     return self.service_context.registry.box(val)
-                raise ValueError(f"No JSON list found in response: {clean_res}")
-                
-            elif type_name == "dict":
-                # 寻找最外层的 { } 以增强对干扰文字的容错性
-                start = clean_res.find('{')
-                end = clean_res.rfind('}')
-                if start != -1 and end != -1:
-                    json_str = clean_res[start:end+1]
-                    val = json.loads(json_str)
-                    return self.service_context.registry.box(val)
-                raise ValueError(f"No JSON dict found in response: {clean_res}")
-            
-            # Fallback to box raw result
-            return self.service_context.registry.box(raw_res)
+                except Exception as e:
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response via Axiom '{type_name}': {str(e)}")
+                    raise LLMUncertaintyError(
+                        f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
+                        node_uid,
+                        raw_response=raw_res
+                    )
 
-        except Exception as e:
-            self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response: {str(e)}")
-            raise LLMUncertaintyError(
-                f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
-                node_uid,
-                raw_response=raw_res
-            )
+        # Fallback (Default to string boxing if no axiom or no parser capability)
+        return self.service_context.registry.box(raw_res)
 
     def execute_behavior_expression(self, node_uid: str, context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> IbObject:
         """
@@ -320,11 +291,10 @@ class LLMExecutorImpl:
         if ai_module and hasattr(ai_module, "_config"):
             auto_intent = ai_module._config.get("auto_intent_injection", True)
         
-        intent_uid = node_data.get("intent")
         if auto_intent:
-            all_intents = self._merge_intents(intent_uid, context, captured_intents=captured_intents)
-        elif intent_uid:
-            all_intents = [self._resolve_intent_content(intent_uid, context)]
+            all_intents = self._merge_intents(node_uid, context, captured_intents=captured_intents)
+        elif node_data.get("intent"):
+            all_intents = [self._resolve_intent_content(node_data.get("intent"), context)]
             
         # 3. 确定场景与提示词
         # 核心：使用 side_tables 中的 node_scenes

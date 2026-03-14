@@ -16,19 +16,20 @@ class IbScene(Enum):
 class IbPrecedence(IntEnum):
     LOWEST = 0
     ASSIGNMENT = 1  # =
-    OR = 2          # or
-    AND = 3         # and
-    BIT_OR = 4      # |
-    BIT_XOR = 5     # ^
-    BIT_AND = 6     # &
-    EQUALITY = 7    # == !=
-    COMPARISON = 7  # < > <= >= Same precedence as EQUALITY
-    SHIFT = 8       # << >>
-    TERM = 9        # + -
-    FACTOR = 10     # * / %
-    UNARY = 11      # ! - +
-    CALL = 12       # . ()
-    PRIMARY = 13
+    TUPLE = 2       # ,
+    OR = 3          # or
+    AND = 4         # and
+    BIT_OR = 5      # |
+    BIT_XOR = 6     # ^
+    BIT_AND = 7     # &
+    EQUALITY = 8    # == !=
+    COMPARISON = 8  # < > <= >= Same precedence as EQUALITY
+    SHIFT = 9       # << >>
+    TERM = 10        # + -
+    FACTOR = 11     # * / %
+    UNARY = 12      # ! - +
+    CALL = 13       # . ()
+    PRIMARY = 14
 
 class IbParseRule:
     def __init__(self, prefix, infix, precedence):
@@ -96,11 +97,26 @@ class IbExpr(IbASTNode):
 
 @dataclass(kw_only=True, eq=False)
 class IbIntentInfo(IbASTNode):
+    """意图元数据信息"""
     mode: str # "", "+", "!", "-"
     tag: Optional[str] = None # Optional tag for precise removal/masking
     content: str # Raw content or constant string
     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
     expr: Optional['IbExpr'] = None # Dynamic expression for 'intent expr:'
+
+    @property
+    def is_override(self) -> bool:
+        return self.mode == "!"
+
+    @property
+    def is_remove(self) -> bool:
+        return self.mode == "-"
+
+    def resolve_content(self, context: Any, evaluator: Any = None) -> str:
+        """
+        编译器阶段的意图解析：尽可能返回静态内容。
+        """
+        return str(self.content).strip()
 
 # --- Module ---
 
@@ -119,18 +135,6 @@ class IbModule(IbASTNode):
         return loc
 
 # --- Statements ---
-
-@dataclass(kw_only=True, eq=False)
-class IbAnnotatedStmt(IbStmt):
-    """持有意图注释的包装语句节点"""
-    intent: IbIntentInfo
-    stmt: IbStmt
-
-@dataclass(kw_only=True, eq=False)
-class IbAnnotatedExpr(IbExpr):
-    """持有意图注释的包装表达式节点"""
-    intent: IbIntentInfo
-    expr: IbExpr
 
 @dataclass(kw_only=True, eq=False)
 class IbFunctionDef(IbStmt):
@@ -334,6 +338,11 @@ class IbSubscript(IbExpr):
 @dataclass(kw_only=True, eq=False)
 class IbName(IbExpr):
     id: str
+    ctx: str
+
+@dataclass(kw_only=True, eq=False)
+class IbTuple(IbExpr):
+    elts: List[IbExpr]
     ctx: str
 
 @dataclass(kw_only=True, eq=False)

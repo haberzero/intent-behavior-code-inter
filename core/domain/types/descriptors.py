@@ -1,95 +1,164 @@
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict, List, Union, Protocol, runtime_checkable
+from typing import Optional, Any, Dict, List, Union, Protocol, runtime_checkable, TYPE_CHECKING
+import copy
 
-# --- Trait Definitions ---
-
-@runtime_checkable
-class CallTrait(Protocol):
-    """调用能力契约"""
-    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']: ...
-
-@runtime_checkable
-class IterTrait(Protocol):
-    """迭代能力契约"""
-    def get_element_type(self) -> 'TypeDescriptor': ...
-
-@runtime_checkable
-class SubscriptTrait(Protocol):
-    """下标访问契约"""
-    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']: ...
+# [Axiom Layer Integration]
+if TYPE_CHECKING:
+    from core.domain.axioms.protocols import TypeAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability
+    from .registry import MetadataRegistry
+    from core.domain.symbols import Symbol
 
 @dataclass
 class TypeDescriptor:
     """
     UTS (Unified Type System) 基础描述符。
-    仅包含类型的静态元数据，不包含任何执行逻辑。
+    作为 [Axiom Container]，它不再包含硬编码逻辑，而是代理到底层的公理系统。
     """
     name: str = ""
     module_path: Optional[str] = None
     is_nullable: bool = True
     kind: str = field(init=False)
-    members: Dict[str, 'TypeDescriptor'] = field(default_factory=dict)
+    # 成员字典：名称 -> 符号 (不再是 TypeDescriptor)
+    # 这样我们可以同时追踪成员的类型和定义源
+    members: Dict[str, 'Symbol'] = field(default_factory=dict)
     
-    # 运行时绑定的注册表上下文 (用于支持多引擎隔离)
+    # 运行时绑定的注册表上下文
     _registry: Optional['MetadataRegistry'] = field(default=None, init=False, repr=False)
+    
+    # [New] 公理绑定
+    _axiom: Optional['TypeAxiom'] = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         self.kind = self.__class__.__name__
 
     def unwrap(self) -> 'TypeDescriptor':
-        """解包描述符 (默认为自身，子类如 LazyDescriptor 可覆盖)"""
         return self
 
-    # --- Capability Trait Accessors ---
+    # --- Capability Accessors (Delegated to Axiom) ---
     
-    def get_call_trait(self) -> Optional[CallTrait]:
-        """获取调用能力。默认不具备。"""
+    def get_call_trait(self) -> Optional['CallCapability']:
+        return self._axiom.get_call_capability() if self._axiom else None
+
+    def _resolve_type_ref(self, res: Optional[Union['TypeDescriptor', str]]) -> Optional['TypeDescriptor']:
+        """[Helper] 将公理返回的类型引用（可能是字符串名称）转换为当前实例的描述符对象"""
+        if res is None: return None
+        if isinstance(res, str):
+            resolved = self._registry.resolve(res) if self._registry else None
+            return resolved
+        return res
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        if self._axiom:
+            trait = self._axiom.get_call_capability()
+            if trait:
+                return self._resolve_type_ref(trait.resolve_return(args))
         return None
 
-    def get_iter_trait(self) -> Optional[IterTrait]:
-        """获取迭代能力。默认不具备。"""
+    def get_element_type(self) -> Optional['TypeDescriptor']:
+        if self._axiom:
+            trait = self._axiom.get_iter_capability()
+            if trait:
+                return self._resolve_type_ref(trait.get_element_type())
         return None
 
-    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
-        """获取下标访问能力。默认不具备。"""
+    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
+        if self._axiom:
+            trait = self._axiom.get_subscript_capability()
+            if trait:
+                return self._resolve_type_ref(trait.resolve_item(key))
         return None
+
+    def get_operator_result(self, op: str, other: Optional['TypeDescriptor'] = None) -> Optional['TypeDescriptor']:
+        """运算符决议 (Delegated to Axiom)"""
+        if other:
+            other = other.unwrap()
+        
+        if self._axiom:
+            op_cap = self._axiom.get_operator_capability()
+            if op_cap:
+                return self._resolve_type_ref(op_cap.resolve_operation(op, other))
+        return None
+
+    def get_iter_trait(self) -> Optional['IterCapability']:
+        return self._axiom.get_iter_capability() if self._axiom else None
+
+    def get_subscript_trait(self) -> Optional['SubscriptCapability']:
+        return self._axiom.get_subscript_capability() if self._axiom else None
+
+    def get_parser_trait(self) -> Optional['ParserCapability']:
+        return self._axiom.get_parser_capability() if self._axiom else None
+
+    def is_dynamic(self) -> bool:
+        """
+        判断是否为动态/Any类型。
+        完全委托给公理系统判断。如果未绑定公理，默认视为非动态（安全回退）。
+        """
+        if self._axiom:
+            return self._axiom.is_dynamic()
+        return False
 
     def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
         """
-        Check if this type can be assigned to 'other' type.
-        Implements the core type compatibility logic.
+        类型兼容性校验 (Axiom-Driven)
         """
-        # 1. 自动解包延迟加载描述符
-        s_unwrapped = self.unwrap() if hasattr(self, 'unwrap') else self
-        o_unwrapped = other.unwrap() if hasattr(other, 'unwrap') else other
+        s = self.unwrap()
+        o = other.unwrap()
 
-        # 2. 引用相等 (Interning 后的极速校验)
-        if s_unwrapped is o_unwrapped:
-            return True
+        # 1. 引用相等 (Interning)
+        if s is o: return True
             
-        # 3. 名字匹配 (移除 startswith Hack，改为严格名称匹配)
-        if s_unwrapped.name == o_unwrapped.name and s_unwrapped.module_path == o_unwrapped.module_path:
+        # 2. 公理级兼容性检查 (处理 Any/var/primitive 转换)
+        if s._axiom and s._axiom.is_compatible(o):
+            return True
+        if o._axiom and o._axiom.is_compatible(s):
             return True
 
-        # 4. 动态类型兼容性
-        if o_unwrapped.name in ("Any", "var") or s_unwrapped.name in ("Any", "var"):
-            return True
-            
-        # 5. 内置类型的特殊兼容性规则
-        if s_unwrapped.name == "int" and o_unwrapped.name in ("bool", "float"):
-            return True
-        if o_unwrapped.name == "callable":
-            if s_unwrapped.get_call_trait():
-                return True
-                 
-        return False
+        # 3. 严格结构匹配 (由子类实现或默认名称匹配)
+        return s._is_structurally_compatible(o)
+
+    def get_diff_hint(self, other: 'TypeDescriptor') -> str:
+        """
+        [UTS Diagnostic] 生成类型不匹配的友好提示。
+        """
+        s = self.unwrap()
+        o = other.unwrap()
         
-    def resolve_member(self, name: str) -> Optional['TypeDescriptor']:
-        """Resolve a member (attribute/method) by name."""
-        return self.members.get(name)
+        # 1. 极简匹配 (基础名不匹配)
+        if s.name != o.name:
+            # 特殊情况提示
+            if s.name.startswith("list") and o.name == "str":
+                return "Did you forget to join the list into a string?"
+            if s.name == "str" and o.name == "int":
+                return "Use .cast_to(int) or int(s) to convert string to integer."
+            return f"Expected '{o.name}', but got '{s.name}'."
 
-    def get_operator_result(self, op: str, other: Optional['TypeDescriptor'] = None) -> Optional['TypeDescriptor']:
-        """解析运算符返回类型 (UTS 级决议)"""
+        # 2. 泛型参数匹配 (如果子类支持)
+        if hasattr(s, 'element_type') and hasattr(o, 'element_type'):
+            if not s.element_type.is_assignable_to(o.element_type):
+                return f"Element type mismatch: {s.element_type.get_diff_hint(o.element_type)}"
+        
+        if hasattr(s, 'key_type') and hasattr(o, 'key_type'):
+            if not s.key_type.is_assignable_to(o.key_type):
+                return f"Key type mismatch: {s.key_type.get_diff_hint(o.key_type)}"
+        
+        if hasattr(s, 'value_type') and hasattr(o, 'value_type'):
+            if not s.value_type.is_assignable_to(o.value_type):
+                return f"Value type mismatch: {s.value_type.get_diff_hint(o.value_type)}"
+
+        return f"Type '{s.name}' is not compatible with '{o.name}'."
+
+    def _is_structurally_compatible(self, other: 'TypeDescriptor') -> bool:
+        """子类可重写的结构化兼容性逻辑"""
+        return self.name == other.name and self.module_path == other.module_path
+
+    def resolve_member(self, name: str) -> Optional['Symbol']:
+        """
+        解析已存在的成员符号。
+        [Architecture Policy] 此处不再负责动态创建符号，以保持底层纯净。
+        """
+        if name in self.members:
+            return self.members[name]
+            
         return None
 
     def __str__(self):
@@ -127,151 +196,72 @@ class LazyDescriptor(TypeDescriptor):
             
         return self._resolved
 
-    def resolve_member(self, name: str) -> Optional[TypeDescriptor]:
+    def resolve_member(self, name: str) -> Optional['Symbol']:
         return self.unwrap().resolve_member(name)
 
-    def get_call_trait(self) -> Optional[CallTrait]:
+    def get_call_trait(self) -> Optional['CallCapability']:
         return self.unwrap().get_call_trait()
 
-    def get_iter_trait(self) -> Optional[IterTrait]:
+    def get_iter_trait(self) -> Optional['IterCapability']:
         return self.unwrap().get_iter_trait()
 
-    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
+    def get_subscript_trait(self) -> Optional['SubscriptCapability']:
         return self.unwrap().get_subscript_trait()
 
-    def is_assignable_to(self, other: TypeDescriptor) -> bool:
+    def get_parser_trait(self) -> Optional['ParserCapability']:
+        return self.unwrap().get_parser_trait()
+
+    def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
         return self.unwrap().is_assignable_to(other)
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        return self.unwrap().resolve_return(args)
+
+    def get_element_type(self) -> Optional['TypeDescriptor']:
+        return self.unwrap().get_element_type()
+
+    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
+        return self.unwrap().resolve_item(key)
 
 # --- 具体描述符实现 ---
 
 @dataclass
-class PrimitiveDescriptor(TypeDescriptor, CallTrait, IterTrait, SubscriptTrait):
-    """内置原子类型描述符"""
-    
-    # --- Trait Implementations ---
-
-    def get_call_trait(self) -> Optional[CallTrait]:
-        if self.name in ("int", "str", "float", "bool", "list", "dict"):
-            return self
-        return None
-
-    def get_iter_trait(self) -> Optional[IterTrait]:
-        if self.name in ("Any", "var", "list", "dict"):
-            return self
-        return None
-
-    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
-        if self.name in ("Any", "var", "list", "dict"):
-            return self
-        return None
-
-    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
-        # 内置类型（如 int, str）调用返回其自身（类型转换/构造）
-        return self
-
-    def get_element_type(self) -> 'TypeDescriptor':
-        # 原子类型默认没有具体元素类型，返回 Any
-        return ANY_DESCRIPTOR
-
-    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        # 原子类型的下标访问（如 Any[k]）返回 Any
-        return ANY_DESCRIPTOR
-
-    def get_operator_result(self, op: str, other: Optional['TypeDescriptor'] = None) -> Optional['TypeDescriptor']:
-        n1 = self.name
-        if not other: # 一元运算
-            if op == '~' and n1 == "int": return INT_DESCRIPTOR
-            if op == '-' and n1 in ("int", "float"): return self
-            if op == 'not': return BOOL_DESCRIPTOR
-            return None
-            
-        n2 = other.name
-        # 1. 逻辑运算 (and/or)
-        if op in ('and', 'or'):
-            # IBCI 2.0 中逻辑运算返回 BOOL
-            return BOOL_DESCRIPTOR
-
-        # 2. 比较运算 (始终返回 bool)
-        if op in ('>', '>=', '<', '<=', '==', '!='):
-            return BOOL_DESCRIPTOR
-
-        # 3. 数值运算
-        if n1 == "int" and n2 == "int":
-            if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'): return INT_DESCRIPTOR
-            
-        if (n1 in ("int", "float")) and (n2 in ("int", "float")):
-            if op in ('+', '-', '*', '/'): return FLOAT_DESCRIPTOR
-            
-        # 4. 字符串运算
-        if n1 == "str" and op == '+':
-            if n2 == "str": return STR_DESCRIPTOR
-            if n2 in ("Any", "var"): return ANY_DESCRIPTOR
-            
-        # 5. 列表运算
-        if n1 == "list" and op == '+':
-            if n2 == "list": return self
-            
-        return None
-
-@dataclass
-class ListMetadata(TypeDescriptor, IterTrait, SubscriptTrait):
+class ListMetadata(TypeDescriptor):
     """列表类型元数据"""
     element_type: Optional[TypeDescriptor] = None
-
-    # --- Trait Implementations ---
-
-    def get_iter_trait(self) -> Optional[IterTrait]:
-        return self
-
-    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
-        return self
-
-    def get_element_type(self) -> 'TypeDescriptor':
-        return self.element_type or ANY_DESCRIPTOR
-
-    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        # 列表下标暂时只支持 int
-        if key.name == "int":
-            return self.element_type or ANY_DESCRIPTOR
-        return None
 
     def __post_init__(self):
         super().__post_init__()
         self.name = f"list[{self.element_type.name}]" if self.element_type else "list"
 
+    def get_subscript_trait(self) -> Optional['SubscriptCapability']:
+        return self
+
+    def resolve_item(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+        # 优先使用 Axiom (如果有)
+        res = super().resolve_item(key)
+        if res: return res
+        # 回退到 element_type
+        return self.element_type
+
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
         # 允许原始 list 与泛型 list 互转 (逻辑宽松处理)
-        if other.name == "list" or other.name == "list[Any]": return True
-        if isinstance(other, ListMetadata):
-            if not self.element_type or not other.element_type:
+        # 使用 unwrap() 确保 LazyDescriptor 能正确对比
+        o = other.unwrap()
+        if o is LIST_DESCRIPTOR or (isinstance(o, ListMetadata) and o.element_type is ANY_DESCRIPTOR):
+             return True
+        if isinstance(o, ListMetadata):
+            if not self.element_type or not o.element_type:
                 return True
-            return self.element_type.is_assignable_to(other.element_type)
+            return self.element_type.is_assignable_to(o.element_type)
         return False
 
 @dataclass
-class DictMetadata(TypeDescriptor, IterTrait, SubscriptTrait):
+class DictMetadata(TypeDescriptor):
     """字典类型元数据"""
     key_type: Optional[TypeDescriptor] = None
     value_type: Optional[TypeDescriptor] = None
-
-    # --- Trait Implementations ---
-
-    def get_iter_trait(self) -> Optional[IterTrait]:
-        return self
-
-    def get_subscript_trait(self) -> Optional[SubscriptTrait]:
-        return self
-
-    def get_element_type(self) -> 'TypeDescriptor':
-        # 字典迭代产生键
-        return self.key_type or ANY_DESCRIPTOR
-
-    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        if self.key_type:
-            if key.is_assignable_to(self.key_type):
-                return self.value_type or ANY_DESCRIPTOR
-        return self.value_type or ANY_DESCRIPTOR
 
     def __post_init__(self):
         super().__post_init__()
@@ -280,30 +270,45 @@ class DictMetadata(TypeDescriptor, IterTrait, SubscriptTrait):
         else:
             self.name = "dict"
 
+    def get_subscript_trait(self) -> Optional['SubscriptCapability']:
+        return self
+
+    def resolve_item(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
+        res = super().resolve_item(key)
+        if res: return res
+        return self.value_type
+
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
         # 允许原始 dict 与泛型 dict 互转
-        if other.name == "dict" or other.name == "dict[Any, Any]": return True
-        if isinstance(other, DictMetadata):
+        o = other.unwrap()
+        if o is DICT_DESCRIPTOR or (isinstance(o, DictMetadata) and o.key_type is ANY_DESCRIPTOR and o.value_type is ANY_DESCRIPTOR):
+            return True
+        if isinstance(o, DictMetadata):
             # 如果其中一个没有具体类型，认为兼容
-            if not self.key_type or not other.key_type or not self.value_type or not other.value_type:
+            if not self.key_type or not o.key_type or not self.value_type or not o.value_type:
                 return True
-            return self.key_type.is_assignable_to(other.key_type) and \
-                   self.value_type.is_assignable_to(other.value_type)
+            return self.key_type.is_assignable_to(o.key_type) and \
+                   self.value_type.is_assignable_to(o.value_type)
         return False
 
 @dataclass
-class FunctionMetadata(TypeDescriptor, CallTrait):
+class FunctionMetadata(TypeDescriptor):
     """函数/方法签名元数据"""
     param_types: List[TypeDescriptor] = field(default_factory=list)
     return_type: Optional[TypeDescriptor] = None
 
     # --- Trait Implementations ---
 
-    def get_call_trait(self) -> Optional[CallTrait]:
+    def get_call_trait(self) -> Optional['CallCapability']:
         return self
 
     def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        # 优先使用 Axiom (如果有)
+        res = super().resolve_return(args)
+        if res: return res
+        
+        # 回退到静态推导
         if len(args) != len(self.param_types):
             return None
         for i, (expected, actual) in enumerate(zip(self.param_types, args)):
@@ -314,35 +319,35 @@ class FunctionMetadata(TypeDescriptor, CallTrait):
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other):
             return True
-        if other.name == "callable":
+        o = other.unwrap()
+        if o is CALLABLE_DESCRIPTOR:
             return True
-        if isinstance(other, FunctionMetadata):
-            if self.return_type and other.return_type:
-                if not self.return_type.is_assignable_to(other.return_type):
+        if isinstance(o, FunctionMetadata):
+            if self.return_type and o.return_type:
+                if not self.return_type.is_assignable_to(o.return_type):
                     return False
-            if len(self.param_types) != len(other.param_types):
+            if len(self.param_types) != len(o.param_types):
                 return False
-            for p1, p2 in zip(self.param_types, other.param_types):
+            for p1, p2 in zip(self.param_types, o.param_types):
                 if not p2.is_assignable_to(p1): 
                     return False
             return True
         return False
 
 @dataclass
-class ClassMetadata(TypeDescriptor, CallTrait):
+class ClassMetadata(TypeDescriptor):
     """类元数据描述"""
     parent_name: Optional[str] = None
     parent_module: Optional[str] = None
     
     # --- Trait Implementations ---
 
-    def get_call_trait(self) -> Optional[CallTrait]:
+    def get_call_trait(self) -> Optional['CallCapability']:
         """类是可调用的（用于实例化）"""
         return self
 
     def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
         # 类实例化返回其实例类型（即自身）
-        # [TODO] 增加对 __init__ 方法签名的校验
         return self
 
     def resolve_parent(self) -> Optional[TypeDescriptor]:
@@ -355,7 +360,7 @@ class ClassMetadata(TypeDescriptor, CallTrait):
         parent = self.resolve_parent()
         return parent.is_assignable_to(other) if parent else False
 
-    def resolve_member(self, name: str) -> Optional[TypeDescriptor]:
+    def resolve_member(self, name: str) -> Optional['Symbol']:
         if name in self.members:
             return self.members[name]
         parent = self.resolve_parent()
@@ -364,22 +369,26 @@ class ClassMetadata(TypeDescriptor, CallTrait):
         return None
 
 @dataclass
-class BoundMethodMetadata(TypeDescriptor, CallTrait):
+class BoundMethodMetadata(TypeDescriptor):
     """绑定方法类型元数据 (合成类型)"""
     receiver_type: Optional[TypeDescriptor] = None
-    function_type: Optional['FunctionMetadata'] = None
+    function_type: Optional[TypeDescriptor] = None
 
     # --- Trait Implementations ---
 
-    def get_call_trait(self) -> Optional[CallTrait]:
+    def get_call_trait(self) -> Optional['CallCapability']:
         return self
 
     def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
         if self.function_type:
-            # 委托给底层的函数签名进行决议
-            call_trait = self.function_type.get_call_trait()
-            if call_trait:
-                return call_trait.resolve_return(args)
+            # 1. 尝试直接决议 (适用于内置方法，它们在公理中通常不显式声明 self)
+            res = self.function_type.resolve_return(args)
+            if res: return res
+            
+            # 2. 如果失败，尝试注入 receiver 后决议 (适用于用户定义的类方法，它们在推导中显式包含了 self 参数)
+            if self.receiver_type:
+                full_args = [self.receiver_type] + args
+                return self.function_type.resolve_return(full_args)
         return None
 
     def __post_init__(self):
@@ -390,129 +399,44 @@ class BoundMethodMetadata(TypeDescriptor, CallTrait):
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other):
             return True
-        if other.name == "callable":
+        o = other.unwrap()
+        if o is CALLABLE_DESCRIPTOR:
             return True
-        if isinstance(other, BoundMethodMetadata):
+        if isinstance(o, BoundMethodMetadata):
             # 结构化语义校验：接收者与函数签名都必须兼容
-            if self.receiver_type and other.receiver_type:
-                if not self.receiver_type.is_assignable_to(other.receiver_type):
+            if self.receiver_type and o.receiver_type:
+                if not self.receiver_type.is_assignable_to(o.receiver_type):
                     return False
-            if self.function_type and other.function_type:
-                return self.function_type.is_assignable_to(other.function_type)
+            if self.function_type and o.function_type:
+                return self.function_type.is_assignable_to(o.function_type)
         return False
 
 @dataclass
 class ModuleMetadata(TypeDescriptor):
     """模块元数据描述"""
-    members: Dict[str, 'TypeDescriptor'] = field(default_factory=dict)
     
     def __post_init__(self):
         super().__post_init__()
         if not self.name or self.name == "TypeDescriptor":
             self.name = "module"
 
-# --- 驻留工厂与注册表 ---
-
-class TypeFactory:
-    """
-    描述符驻留工厂。
-    基于结构哈希确保同构描述符在内存中仅存一份。
-    """
-    def __init__(self):
-        self._memo: Dict[str, TypeDescriptor] = {}
-
-    def _get_intern_key(self, kind: str, name: str, module: Optional[str], **kwargs) -> str:
-        # 构建结构化哈希键
-        # 对于复合类型，kwargs 应包含其子类型的 ID 或 UID
-        sorted_items = sorted(kwargs.items())
-        return f"{kind}:{module or ''}:{name}:{str(sorted_items)}"
-
-    def create_primitive(self, name: str, is_nullable: bool = True) -> PrimitiveDescriptor:
-        key = self._get_intern_key("Primitive", name, None, nullable=is_nullable)
-        if key not in self._memo:
-            self._memo[key] = PrimitiveDescriptor(name=name, is_nullable=is_nullable)
-        return self._memo[key]
-
-    def create_list(self, element_type: TypeDescriptor) -> ListMetadata:
-        key = self._get_intern_key("List", "", None, element=id(element_type))
-        if key not in self._memo:
-            self._memo[key] = ListMetadata(element_type=element_type)
-        return self._memo[key]
-
-    def create_dict(self, key_type: TypeDescriptor, value_type: TypeDescriptor) -> DictMetadata:
-        key = self._get_intern_key("Dict", "", None, k=id(key_type), v=id(value_type))
-        if key not in self._memo:
-            self._memo[key] = DictMetadata(key_type=key_type, value_type=value_type)
-        return self._memo[key]
-
-    def create_function(self, params: List[TypeDescriptor], ret: Optional[TypeDescriptor]) -> FunctionMetadata:
-        p_ids = [id(p) for p in params]
-        r_id = id(ret) if ret else 0
-        key = self._get_intern_key("Func", "", None, p=p_ids, r=r_id)
-        if key not in self._memo:
-            self._memo[key] = FunctionMetadata(param_types=params, return_type=ret)
-        return self._memo[key]
-
-    def create_bound_method(self, receiver: TypeDescriptor, func: FunctionMetadata) -> BoundMethodMetadata:
-        key = self._get_intern_key("BoundMethod", "", None, r=id(receiver), f=id(func))
-        if key not in self._memo:
-            self._memo[key] = BoundMethodMetadata(receiver_type=receiver, function_type=func)
-        return self._memo[key]
-
-    def create_class(self, name: str, module: Optional[str] = None, parent: Optional[str] = None, is_nullable: bool = True) -> ClassMetadata:
-        key = self._get_intern_key("Class", name, module, p=parent, n=is_nullable)
-        if key not in self._memo:
-            self._memo[key] = ClassMetadata(name=name, module_path=module, parent_name=parent, is_nullable=is_nullable)
-        return self._memo[key]
-
-class MetadataRegistry:
-    """
-    UTS 元数据注册表。
-    不再使用类级别单例，改为实例管理以支持多引擎隔离。
-    """
-    def __init__(self):
-        self._descriptors: Dict[str, TypeDescriptor] = {}
-        self.factory = TypeFactory() # [NEW] 每个引擎拥有独立的驻留工厂
-
-    def register(self, descriptor: TypeDescriptor):
-        key = f"{descriptor.module_path}.{descriptor.name}" if descriptor.module_path else descriptor.name
-        self._descriptors[key] = descriptor
-        # [Isolation] 将注册表上下文绑定到描述符上
-        descriptor._registry = self
-
-    def resolve(self, name: str, module_path: Optional[str] = None) -> Optional[TypeDescriptor]:
-        key = f"{module_path}.{name}" if module_path else name
-        return self._descriptors.get(key)
-
-    @property
-    def all_descriptors(self) -> Dict[str, TypeDescriptor]:
-        """获取所有已注册的描述符快照"""
-        return dict(self._descriptors)
-
 # 预定义常量描述符 (作为原型存在)
-INT_DESCRIPTOR = PrimitiveDescriptor(name="int", is_nullable=False)
-STR_DESCRIPTOR = PrimitiveDescriptor(name="str", is_nullable=False)
-FLOAT_DESCRIPTOR = PrimitiveDescriptor(name="float", is_nullable=False)
-BOOL_DESCRIPTOR = PrimitiveDescriptor(name="bool", is_nullable=False)
-VOID_DESCRIPTOR = PrimitiveDescriptor(name="void", is_nullable=False)
-ANY_DESCRIPTOR = PrimitiveDescriptor(name="Any", is_nullable=True)
-VAR_DESCRIPTOR = PrimitiveDescriptor(name="var", is_nullable=True)
-CALLABLE_DESCRIPTOR = PrimitiveDescriptor(name="callable", is_nullable=True)
+INT_DESCRIPTOR = TypeDescriptor(name="int", is_nullable=False)
+STR_DESCRIPTOR = TypeDescriptor(name="str", is_nullable=False)
+FLOAT_DESCRIPTOR = TypeDescriptor(name="float", is_nullable=False)
+BOOL_DESCRIPTOR = TypeDescriptor(name="bool", is_nullable=False)
+VOID_DESCRIPTOR = TypeDescriptor(name="void", is_nullable=False)
+ANY_DESCRIPTOR = TypeDescriptor(name="Any", is_nullable=True)
+VAR_DESCRIPTOR = TypeDescriptor(name="var", is_nullable=True)
+CALLABLE_DESCRIPTOR = TypeDescriptor(name="callable", is_nullable=True)
+EXCEPTION_DESCRIPTOR = TypeDescriptor(name="Exception", is_nullable=True)
+
+# [New] Missing Descriptors
+NONE_DESCRIPTOR = TypeDescriptor(name="None", is_nullable=True)
+BEHAVIOR_DESCRIPTOR = TypeDescriptor(name="behavior", is_nullable=True)
+BOUND_METHOD_DESCRIPTOR = BoundMethodMetadata() # name will be "bound_method"
 
 # 集合类型占位描述符 (用于基础元数据注册)
 LIST_DESCRIPTOR = ListMetadata(name="list", is_nullable=True)
 DICT_DESCRIPTOR = DictMetadata(name="dict", is_nullable=True)
-
-import copy
-
-# ... (omitted)
-
-def create_default_registry() -> MetadataRegistry:
-    """创建并预填充基础类型的注册表实例 (通过克隆原型实现物理隔离)"""
-    reg = MetadataRegistry()
-    # 使用深拷贝确保不同引擎实例之间的描述符物理隔离，防止 members 污染
-    for d in (INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
-              BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, 
-              VAR_DESCRIPTOR, CALLABLE_DESCRIPTOR, LIST_DESCRIPTOR, DICT_DESCRIPTOR):
-        reg.register(copy.deepcopy(d))
-    return reg
+MODULE_DESCRIPTOR = ModuleMetadata(name="module", is_nullable=False)

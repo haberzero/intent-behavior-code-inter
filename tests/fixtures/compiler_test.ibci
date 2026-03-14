@@ -1,0 +1,15 @@
+class User:
+    str name
+    int age
+    
+    func say_hello() -> str:
+        return "Hello, " + self.name
+
+func create_user(str n, int a) -> User:
+    User u = User()
+    u.name = n
+    u.age = a
+    return u
+
+var u = create_user("Alice", 25)
+print(u.say_hello())

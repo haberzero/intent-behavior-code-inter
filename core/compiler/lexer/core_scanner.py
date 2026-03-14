@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from core.domain.tokens import Token, TokenType, SubState
+from .tokens import Token, TokenType, SubState
 from core.compiler.lexer.str_stream import StrStream
 from core.compiler.support.diagnostics import DiagnosticReporter
 
@@ -13,7 +13,7 @@ class CoreTokenScanner:
         self.issue_tracker = issue_tracker
         
         # Internal State
-        self.sub_state = SubState.NORMAL
+        self.state_stack: List[SubState] = [SubState.NORMAL]
         self.paren_level = 0
         self.continuation_mode = False
         self.current_line_has_llm_def = False
@@ -45,6 +45,65 @@ class CoreTokenScanner:
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
             'True': TokenType.BOOL, 'False': TokenType.BOOL
         }
+
+    @property
+    def sub_state(self) -> SubState:
+        """获取当前子状态（栈顶）"""
+        return self.state_stack[-1] if self.state_stack else SubState.NORMAL
+
+    def push_state(self, new_state: SubState):
+        """推入新状态"""
+        self.state_stack.append(new_state)
+
+    def pop_state(self) -> SubState:
+        """弹出当前状态并返回"""
+        if len(self.state_stack) > 1:
+            return self.state_stack.pop()
+        return SubState.NORMAL
+
+    def get_snapshot(self) -> tuple:
+        """获取当前扫描器完整逻辑快照"""
+        return (
+            self.scanner.get_snapshot(),
+            list(self.state_stack),
+            self.paren_level,
+            self.is_raw_string,
+            self.quote_char,
+            self.current_string_val
+        )
+
+    def restore_snapshot(self, snapshot: tuple, tokens: List[Token], original_token_count: int):
+        """恢复扫描器逻辑快照并回滚 Token 列表"""
+        stream_snap, stack_snap, paren, raw, quote, s_val = snapshot
+        self.scanner.restore_snapshot(stream_snap)
+        self.state_stack = list(stack_snap)
+        self.paren_level = paren
+        self.is_raw_string = raw
+        self.quote_char = quote
+        self.current_string_val = s_val
+        
+        # 回滚 Token 列表
+        if len(tokens) > original_token_count:
+            del tokens[original_token_count:]
+
+    def try_scan(self, tokens: List[Token], scan_func, *args) -> bool:
+        """
+        [IES 2.0 Speculative Engine]
+        尝试执行特定的扫描函数。如果失败（抛出异常或返回 False），则回滚所有状态。
+        """
+        original_token_count = len(tokens)
+        snapshot = self.get_snapshot()
+        
+        try:
+            result = scan_func(tokens, *args)
+            if result is False:
+                self.restore_snapshot(snapshot, tokens, original_token_count)
+                return False
+            return True
+        except Exception:
+            self.restore_snapshot(snapshot, tokens, original_token_count)
+            return False
+
 
     def scan_line(self) -> Tuple[List[Token], bool, bool]:
         """
@@ -98,20 +157,23 @@ class CoreTokenScanner:
         Handle newline character.
         Returns True if line processing ended, False if newline was consumed (e.g., in string).
         """
+        current_state = self.sub_state
+        
         # Case 1: In string
-        if self.sub_state == SubState.IN_STRING:
+        if current_state == SubState.IN_STRING:
             self._scan_string_char(tokens)
             return False
         
         # Case 2: In behavior description
-        elif self.sub_state == SubState.IN_BEHAVIOR:
+        elif current_state == SubState.IN_BEHAVIOR:
             tokens.append(Token(TokenType.RAW_TEXT, "\n", self.scanner.line, self.scanner.col))
             self.scanner.advance()
             return False
         
         # Case 2.1: In intent description
-        elif self.sub_state == SubState.IN_INTENT:
-            self.sub_state = SubState.NORMAL
+        elif current_state == SubState.IN_INTENT:
+            # 意图在一行结束时自动退栈回到 NORMAL
+            self.pop_state()
             self.scanner.advance()
             tokens.append(Token(TokenType.NEWLINE, "\n", self.scanner.line - 1, self.scanner.col))
             return True
@@ -141,9 +203,18 @@ class CoreTokenScanner:
         Returns True if LLM mode should be entered.
         """
         self.scanner.start_token()
+        char = self.scanner.peek()
+
+        # [NEW] 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
+        # 使用尝试性扫描，避免物理回退
+        if char == '$':
+            self.try_scan(tokens, self._scan_var_ref)
+            return False
+
+        # 正常消费一个字符
         char = self.scanner.advance()
         
-        # 1. Explicit line continuation
+        # 2. Explicit line continuation
         if char == '\\':
             if self.scanner.peek() == '\n':
                 self.continuation_mode = True
@@ -152,33 +223,33 @@ class CoreTokenScanner:
                 self.issue_tracker.error(f"Unexpected character '\\' or invalid escape sequence", self.scanner, code="LEX_005")
                 return False
 
-        # 2. Whitespace
+        # 3. Whitespace
         if char in ' \t':
             return False
 
-        # 3. Comments
+        # 4. Comments
         if char == '#':
             self._skip_comment() 
             return False
 
-        # 4. Raw String Prefix
+        # 5. Raw String Prefix
         if char == 'r' and (self.scanner.peek() == '"' or self.scanner.peek() == "'"):
             quote = self.scanner.advance()
-            self.sub_state = SubState.IN_STRING
+            self.push_state(SubState.IN_STRING)
             self.quote_char = quote
             self.current_string_val = ""
             self.is_raw_string = True
             return False
 
-        # 5. String Literals
+        # 6. String Literals
         if char == '"' or char == "'":
-            self.sub_state = SubState.IN_STRING
+            self.push_state(SubState.IN_STRING)
             self.quote_char = char
             self.current_string_val = ""
             self.is_raw_string = False
             return False
 
-        # 6. Behavior Description and Intent Comments
+        # 7. Behavior Description and Intent Comments
         if char == '@':
             # Check for modifiers: @+, @!, @-
             mode = ""
@@ -196,17 +267,17 @@ class CoreTokenScanner:
                 for _ in range(offset):
                     tag += self.scanner.advance()
                 self.scanner.advance() # Consume '~'
-                self.sub_state = SubState.IN_BEHAVIOR
+                self.push_state(SubState.IN_BEHAVIOR)
                 tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "@" + tag + "~"))
                 return False
             else:
                 # Regular Intent Comment or Modified Intent
-                self.sub_state = SubState.IN_INTENT
+                self.push_state(SubState.IN_INTENT)
                 # Include @ in the value so parser knows it's an intent marker
                 tokens.append(self.scanner.create_token(TokenType.INTENT, "@" + mode))
                 return False
 
-        # 7. Bitwise Not
+        # 8. Bitwise Not
         if char == '~':
             tokens.append(self.scanner.create_token(TokenType.BIT_NOT, "~"))
             return False
@@ -358,7 +429,8 @@ class CoreTokenScanner:
 
         if char == self.quote_char:
             tokens.append(self.scanner.create_token(TokenType.STRING, self.current_string_val))
-            self.sub_state = SubState.NORMAL
+            # 恢复之前状态 (回到意图或 NORMAL 模式)
+            self.pop_state()
         else:
             self.current_string_val += char
 
@@ -369,7 +441,7 @@ class CoreTokenScanner:
         if char == '~':
             self.scanner.advance() # ~
             tokens.append(self.scanner.create_token(TokenType.BEHAVIOR_MARKER, "~"))
-            self.sub_state = SubState.NORMAL
+            self.pop_state() # 退回到之前的模式
             return
 
         # 2. Handle escapes: \$, \~
@@ -387,10 +459,9 @@ class CoreTokenScanner:
                 self.scanner.advance() # $
                 tokens.append(Token(TokenType.RAW_TEXT, "$", self.scanner.line, self.scanner.col))
                 return
-            
-            # Other backslashes remain as is, part of Raw Text
 
         # 3. Variable Reference
+        # 行为块内部的变量引用目前被视为强制性的
         if char == '$':
             self._scan_var_ref(tokens)
             self._scan_complex_access(tokens)
@@ -424,44 +495,23 @@ class CoreTokenScanner:
         if char == '\n':
             return
             
-        # 2. Variable Reference
+        # 2. Variable Reference (使用尝试性扫描)
+        # 意图模式下的 $ 可能是自然语言，也可能是插值变量
         if char == '$':
-            self._scan_var_ref(tokens)
-            self._scan_complex_access(tokens)
+            if self.try_scan(tokens, self._scan_var_ref_with_access):
+                return
+            # 尝试失败则作为普通文本
+            char = self.scanner.advance()
+            tokens.append(Token(TokenType.RAW_TEXT, char, self.scanner.line, self.scanner.col))
             return
 
         # 3. String Literals (Quoted)
-        # [Fix] 如果在 intent 模式下遇到引号，暂时切回 STRING 模式进行解析
         if char == '"' or char == "'":
-            # 记录当前模式以便恢复（虽然 _scan_string_char 会切回 NORMAL，我们需要小心）
-            # 实际上，_scan_string_char 完成后会将 sub_state 设为 NORMAL
-            # 但我们在意图解析中，应该保持 IN_INTENT 吗？
-            # 不，通常意图描述是一行的，如果是引号括起来的字符串，它就是一个 Token。
-            # 解析完字符串后，我们应该回到 IN_INTENT 吗？
-            # 让我们看 _scan_string_char 的实现：它会设置 self.sub_state = SubState.NORMAL
-            # 这会导致后续字符被当作普通代码解析。
-            # 对于 intent 简写（@ "..."），这正是我们想要的！
-            # 因为 @ "..." 后面的内容（如果有）通常是新的一行。
-            # 如果是 @ "..." + "..." 这种复杂表达式，回到 NORMAL 也是对的。
-            # 唯独如果是 @ text "quoted" text 这种混合模式，回到 NORMAL 可能会有问题。
-            # 但目前的语法定义，@ 后面的内容要么是纯文本，要么是表达式。
-            # 如果是纯文本中包含引号，用户应该转义或者不使用简写。
-            # 让我们尝试直接调用 _scan_string_char
-            
-            # 为了安全，我们手动设置状态
-            self.sub_state = SubState.IN_STRING
+            # 进入字符串子模式
+            self.push_state(SubState.IN_STRING)
             self.quote_char = self.scanner.advance() # consume quote
             self.current_string_val = ""
             self.is_raw_string = False
-            self._scan_string_char(tokens)
-            # _scan_string_char 结束后 sub_state 会变成 NORMAL
-            # 如果我们还在这一行，且希望继续作为 intent 解析（例如 @ text "str" text），
-            # 那么这行剩下的部分会被 _scan_normal_char 处理。
-            # 但 _scan_normal_char 会把未引用的文本视为标识符或非法字符。
-            # 对于 @ 简写，通常只支持单行。
-            # 如果是 @- "Global Intent"，解析出 STRING token 后，回到 NORMAL，
-            # 剩下的就是换行符，会被 scan_line 的主循环处理。
-            # 所以这里直接切换去处理字符串是正确的。
             return
 
         # 4. Raw Text
@@ -470,7 +520,6 @@ class CoreTokenScanner:
             peek_char = self.scanner.peek()
             if peek_char == '$' or peek_char == '\n':
                 break
-            # [Fix] 遇到引号也要停止，交由下一次循环的 Case 3 处理
             if peek_char == '"' or peek_char == "'":
                 break
                 
@@ -478,6 +527,11 @@ class CoreTokenScanner:
         
         if text:
             tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+
+    def _scan_var_ref_with_access(self, tokens: List[Token]):
+        """辅助方法：同时扫描变量引用和可能的复杂路径访问"""
+        self._scan_var_ref(tokens)
+        self._scan_complex_access(tokens)
 
     def _scan_complex_access(self, tokens: List[Token]):
         subscript_depth = 0

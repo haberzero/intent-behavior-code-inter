@@ -1,36 +1,12 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING
-from enum import Enum, auto
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
+from core.domain.intent_logic import IntentMode, IntentRole, IntentProtocol
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
-class IntentMode(Enum):
-    """意图合并模式"""
-    APPEND = "+"    # 叠加 (默认)
-    OVERRIDE = "!"  # 排他 (覆盖之前的所有意图)
-    REMOVE = "-"    # 移除 (从栈中移除匹配的意图)
-
-    @classmethod
-    def from_str(cls, mode_str: str) -> 'IntentMode':
-        """从字符串映射模式，支持多种别名"""
-        if not mode_str: return cls.APPEND
-        m = mode_str.lower()
-        if m in ("+", "append", "add"): return cls.APPEND
-        if m in ("!", "override", "exclusive"): return cls.OVERRIDE
-        if m in ("-", "remove", "delete"): return cls.REMOVE
-        return cls.APPEND # 默认叠加
-
-class IntentRole(Enum):
-    """意图来源角色"""
-    BLOCK = "block"      # 意图块 (intent "..." { ... })
-    SMEAR = "smear"      # 涂抹式注释 (@ ...)
-    CALL = "call"        # 函数调用时携带的意图 (func(...) @ ...)
-    GLOBAL = "global"    # 全局意图 (context.set_global_intent)
-    DYNAMIC = "dynamic"  # 编程式动态推入 (context.push_intent)
-
-class IbIntent(IbObject):
+class IbIntent(IbObject, IntentProtocol):
     """
     表示运行时的意图对象。
     封装了意图的内容、模式以及来源信息。

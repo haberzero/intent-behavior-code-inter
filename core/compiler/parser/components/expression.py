@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List, Union
-from core.domain.tokens import TokenType
+from core.compiler.lexer.tokens import TokenType
 from core.domain import ast as ast
 from core.domain.ast import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
@@ -50,6 +50,7 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.LPAREN, self.grouping, self.call, IbPrecedence.CALL)
         self.register(TokenType.LBRACKET, self.list_display, self.subscript, IbPrecedence.CALL)
         self.register(TokenType.LBRACE, self.dict_display, None, IbPrecedence.LOWEST)
+        self.register(TokenType.COMMA, None, self.tuple_expr, IbPrecedence.TUPLE)
         
         # Unary Operations
         self.register(TokenType.MINUS, self.unary, self.binary, IbPrecedence.TERM)
@@ -86,11 +87,23 @@ class ExpressionComponent(BaseComponent):
         
         # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
+        
+        # [NEW] Variable Reference
+        self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
 
     def variable(self) -> ast.IbExpr:
         return self._loc(ast.IbName(id=self.stream.previous().value, ctx='Load'), self.stream.previous())
+
+    def var_ref_expr(self) -> ast.IbExpr:
+        token = self.stream.previous()
+        # $name -> IbName(id=name)
+        # $(expr) -> expr (Not implemented yet, but we could)
+        name = token.value[1:]
+        if not name:
+            raise self.stream.error(token, "Variable reference cannot be empty.", code="PAR_002")
+        return self._loc(ast.IbName(id=name, ctx='Load'), token)
 
     def self_expr(self) -> ast.IbExpr:
         return self._loc(ast.IbName(id='self', ctx='Load'), self.stream.previous())
@@ -134,7 +147,7 @@ class ExpressionComponent(BaseComponent):
         elts = []
         if not self.stream.check(TokenType.RBRACKET):
             while True:
-                elts.append(self.parse_expression())
+                elts.append(self.parse_expression(IbPrecedence.TUPLE))
                 if not self.stream.match(TokenType.COMMA):
                     break
         end_token = self.stream.consume(TokenType.RBRACKET, "Expect ']' after list elements.")
@@ -146,9 +159,9 @@ class ExpressionComponent(BaseComponent):
         values = []
         if not self.stream.check(TokenType.RBRACE):
             while True:
-                keys.append(self.parse_expression())
+                keys.append(self.parse_expression(IbPrecedence.TUPLE))
                 self.stream.consume(TokenType.COLON, "Expect ':' after dict key.")
-                values.append(self.parse_expression())
+                values.append(self.parse_expression(IbPrecedence.TUPLE))
                 if not self.stream.match(TokenType.COMMA):
                     break
         end_token = self.stream.consume(TokenType.RBRACE, "Expect '}' after dict entries.")
@@ -203,7 +216,7 @@ class ExpressionComponent(BaseComponent):
             while True:
                 if self.stream.is_at_end():
                     raise self.stream.error(self.stream.peek(), "Unterminated argument list.", code="PAR_004")
-                arguments.append(self.parse_expression())
+                arguments.append(self.parse_expression(IbPrecedence.TUPLE))
                 if not self.stream.match(TokenType.COMMA):
                     break
         end_token = self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
@@ -214,6 +227,14 @@ class ExpressionComponent(BaseComponent):
     def dot(self, left: ast.IbExpr) -> ast.IbExpr:
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
         return self._loc(ast.IbAttribute(value=left, attr=name.value, ctx='Load'), left, name)
+
+    def tuple_expr(self, left: ast.IbExpr) -> ast.IbExpr:
+        elts = [left]
+        while self.stream.match(TokenType.COMMA):
+            if self.stream.check(TokenType.RPAREN) or self.stream.check(TokenType.RBRACKET) or self.stream.check(TokenType.RBRACE):
+                break
+            elts.append(self.parse_precedence(IbPrecedence.TUPLE))
+        return self._loc(ast.IbTuple(elts=elts, ctx='Load'), left, elts[-1])
 
     def subscript(self, left: ast.IbExpr) -> ast.IbSubscript:
         slice_expr = self.parse_expression()

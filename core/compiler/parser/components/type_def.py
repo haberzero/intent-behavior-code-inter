@@ -1,4 +1,4 @@
-from core.domain.tokens import TokenType
+from core.compiler.lexer.tokens import TokenType
 from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
@@ -7,7 +7,7 @@ class TypeComponent(BaseComponent):
     Component for parsing type annotations (e.g., int, list[str], callable).
     Now purely token-based, leaving type validation to semantic analysis.
     """
-    def parse_type_annotation(self) -> ast.IbExpr:
+    def parse_type_annotation(self, precedence: int = 0) -> ast.IbExpr:
         start_token = self.stream.peek()
         # 1. Base Type (Identifier or 'callable')
         base_type = None
@@ -39,7 +39,7 @@ class TypeComponent(BaseComponent):
             if len(elts) == 1:
                 slice_expr = elts[0]
             else:
-                slice_expr = self._loc(ast.IbListExpr(elts=elts, ctx='Load'), start_token)
+                slice_expr = self._loc(ast.IbTuple(elts=elts, ctx='Load'), start_token)
             
             return self._loc(ast.IbSubscript(value=base_type, slice=slice_expr, ctx='Load'), start_token)
             

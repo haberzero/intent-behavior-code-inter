@@ -1,5 +1,5 @@
 from typing import List, Optional, Union, TYPE_CHECKING
-from core.domain.tokens import TokenType
+from core.compiler.lexer.tokens import TokenType
 from core.domain import ast as ast
 from core.domain.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
@@ -35,63 +35,15 @@ class DeclarationComponent(BaseComponent):
     def parse_declaration(self) -> Optional[ast.IbStmt]:
         role = SyntaxRecognizer.get_role(self.stream)
         
-        if role == SyntaxRole.INTENT_MARKER:
-            self.stream.advance()
-            token = self.stream.previous()
-            
-            # Extract mode from @+ mode
-            val = token.value # e.g. "@+", "@!", "@-", "@"
-            mode = ""
-            if len(val) > 1:
-                mode = val[1]
-            
-            segments = []
-            raw_content = ""
-            tag = None
-            
-            # Consume tokens until NEWLINE
-            while not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
-                if self.stream.match(TokenType.RAW_TEXT):
-                    t = self.stream.previous()
-                    text = t.value
-                    # 支持标签语法: @#tag Content
-                    if not segments and text.startswith("#"):
-                        parts = text.split(maxsplit=1)
-                        tag = parts[0][1:] # 移除 #
-                        text = parts[1] if len(parts) > 1 else ""
-                    
-                    if text:
-                        segments.append(text)
-                        raw_content += text
-                elif self.stream.match(TokenType.VAR_REF):
-                    var_token = self.stream.previous()
-                    var_name = var_token.value[1:] # Strip $
-                    node = self.expression._parse_complex_access(var_name, var_token)
-                    segments.append(node)
-                    raw_content += var_token.value 
-                else:
-                    self.stream.advance()
-            
-            self.context.push_intent(ast.IbIntentInfo(
-                mode=mode, 
-                tag=tag,
-                content=raw_content.strip(), 
-                segments=segments,
-                lineno=token.line,
-                col_offset=token.column
-            ))
-            self.stream.match(TokenType.NEWLINE) 
-            return self.parse_declaration()
-        
-        if role == SyntaxRole.INTENT_DEFINITION:
-            self.stream.advance() # intent
-            return self.intent_declaration()
-        
         # [NEW] 提前消费待处理意图注释，准备进行侧表涂抹关联
+        # 无论是什么类型的语句，都应该在这里消费意图，防止遗留到子节点
         pending_intents = self.context.consume_intents()
 
         stmt = None
-        if role == SyntaxRole.FUNCTION_DEFINITION:
+        if role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
+            # [IES 2.0] 统一交由 StatementComponent 处理意图标记与语句
+            stmt = self.statement.parse_statement()
+        elif role == SyntaxRole.FUNCTION_DEFINITION:
             self.stream.advance() # func
             stmt = self.function_declaration()
         elif role == SyntaxRole.LLM_DEFINITION:
@@ -262,7 +214,7 @@ class DeclarationComponent(BaseComponent):
                 # [REMOVED] 特殊的 self 处理逻辑已被移除，改为隐式注入
                 
                 # Standard typed parameter: Type Name
-                annotation = self.type_def.parse_type_annotation()
+                annotation = self.type_def.parse_type_annotation(ast.IbPrecedence.TUPLE)
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
                 
                 param_node = self._loc(ast.IbArg(arg=name_token.value), name_token)

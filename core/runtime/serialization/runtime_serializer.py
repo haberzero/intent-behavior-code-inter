@@ -1,14 +1,14 @@
 import json
 import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
-from core.compiler.serialization.serializer import FlatSerializer
+from core.foundation.serialization import BaseFlatSerializer
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl, ScopeImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
 from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 
-class RuntimeSerializer(FlatSerializer):
+class RuntimeSerializer(BaseFlatSerializer):
     """
-    深度运行时序列化器：扩展 FlatSerializer，支持对运行时对象图和执行上下文的持久化。
+    深度运行时序列化器：继承 BaseFlatSerializer，支持对运行时对象图和执行上下文的持久化。
     """
     def __init__(self, registry):
         super().__init__()
@@ -25,8 +25,8 @@ class RuntimeSerializer(FlatSerializer):
         pools = {
             "instances": self.instance_pool,
             "runtime_scopes": self.runtime_scope_pool,
-            "types": self.type_pool, # 复用基类的类型池
-            "assets": self.external_assets # [IES 2.2]
+            "types": self.type_pool,
+            "assets": self.external_assets 
         }
         
         # [IES 2.1] 如果需要，包含静态池以实现全量快照
@@ -35,11 +35,10 @@ class RuntimeSerializer(FlatSerializer):
             pools["nodes"] = itp.node_pool
             pools["symbols"] = itp.symbol_pool
             pools["scopes"] = itp.scope_pool
-            # [IES 2.2] 合并现有的资产池，确保编译器产生的资产也被包含在内
+            # [IES 2.2] 合并现有的资产池
             if hasattr(itp, 'asset_pool'):
                 self.external_assets.update(itp.asset_pool)
             
-        # 2. 序列意图栈和全局设置
         return {
             "version": "2.0",
             "root_scope_uid": root_scope_uid,
@@ -121,7 +120,7 @@ class RuntimeSerializer(FlatSerializer):
                 
         elif isinstance(obj, IbNativeObject):
             data["_type"] = "native"
-            # 尝试记录原生值，如果不可序列化则记录为 Repr
+            # 尝试记录原生值
             val = obj.to_native()
             try:
                 json.dumps(val)
@@ -173,11 +172,10 @@ class RuntimeDeserializer:
         self.registry = registry
         self.instance_cache: Dict[str, IbObject] = {}
         self.scope_cache: Dict[str, ScopeImpl] = {}
-        self.asset_pool: Dict[str, str] = {} # [IES 2.2]
+        self.asset_pool: Dict[str, str] = {} 
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContextImpl:
-        """从字典数据重建运行时上下文 (已修复方法覆盖 BUG)"""
-        # 1. 首先恢复所有平铺池 (包括编译器池和运行时池)
+        """从字典数据重建运行时上下文"""
         pools = data.get("pools", {})
         self.node_pool = pools.get("nodes", {})
         self.symbol_pool = pools.get("symbols", {})
@@ -185,23 +183,18 @@ class RuntimeDeserializer:
         self.type_pool = pools.get("types", {})
         self.instance_pool = pools.get("instances", {})
         self.runtime_scope_pool = pools.get("runtime_scopes", {})
-        self.asset_pool = pools.get("assets", {}) # [IES 2.2]
+        self.asset_pool = pools.get("assets", {}) 
 
-        # 2. 从当前/根作用域开始重建作用域链
         root_scope_uid = data["root_scope_uid"]
         current_scope = self._get_scope(root_scope_uid)
         
-        # 3. 向上回溯确定全局作用域
         global_scope = current_scope
         while global_scope.parent:
             global_scope = global_scope.parent
             
-        # 4. 创建 Context 实例
-        from core.runtime.interpreter.runtime_context import RuntimeContextImpl
         context = RuntimeContextImpl(initial_scope=global_scope, registry=self.registry)
         context._current_scope = current_scope
         
-        # 5. 恢复意图栈、全局意图及排他深度
         context._global_intents = data.get("global_intents", [])
         context.intent_stack = [self._deserialize_value(i) for i in data.get("intent_stack", [])]
         context._intent_exclusive_depth = data.get("intent_exclusive_depth", 0)
@@ -209,10 +202,7 @@ class RuntimeDeserializer:
         return context
 
     def on_rebind(self, logic_id_map: Dict[str, Any]):
-        """
-        [IES 2.0] 全局重绑定协议。
-        扫描已实例化的对象池，将带有 logic_id 的占位对象链接到当前环境的真实实现。
-        """
+        """全局重绑定协议"""
         for obj in self.instance_cache.values():
             if isinstance(obj, IbNativeFunction) and obj.logic_id:
                 if obj.logic_id in logic_id_map:
@@ -226,15 +216,12 @@ class RuntimeDeserializer:
         parent_uid = data.get("parent_uid")
         parent = self._get_scope(parent_uid) if parent_uid else None
         
-        # [FIX] 先创建对象并入缓存，然后再填充符号，防止递归死循环
         scope = ScopeImpl(parent=parent, registry=self.registry)
         self.scope_cache[uid] = scope
         
-        # 恢复普通符号
         for name, sym_data in data.get("symbols", {}).items():
             scope._symbols[name] = self._deserialize_symbol(sym_data)
             
-        # 恢复编译器绑定的 UID 符号
         for suid, sym_data in data.get("uid_to_symbol", {}).items():
             scope._uid_to_symbol[suid] = self._deserialize_symbol(sym_data)
             
@@ -249,16 +236,13 @@ class RuntimeDeserializer:
         )
 
     def _deserialize_value(self, val: Any) -> Any:
-        # 如果是 UID 引用，则从池中重建对象
         if isinstance(val, str) and val.startswith("inst_"):
             return self._get_instance(val)
             
-        # [IES 2.2 Security Update] 处理外部资产引用
         if isinstance(val, dict) and val.get("_type") == "ext_ref":
             uid = val.get("uid")
             if uid in self.asset_pool:
                 return self.asset_pool[uid]
-            # 如果没在 pool 里（可能是 HostService 外置了文件），则返回占位，稍后由 HostService 注入内容
             return f"__EXT_ASSET_MISSING_{uid}__"
             
         return val
@@ -284,7 +268,7 @@ class RuntimeDeserializer:
             
         elif _type == "list":
             obj = IbList([], ib_class)
-            self.instance_cache[uid] = obj # 先入缓存防止递归
+            self.instance_cache[uid] = obj 
             obj.elements = [self._deserialize_value(e) for e in data.get("elements", [])]
             
         elif _type == "dict":
@@ -293,28 +277,23 @@ class RuntimeDeserializer:
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
             
         elif _type == "module":
-            # 模块对象需要特殊处理其内部作用域
             scope = self._get_scope(data["scope_uid"])
             obj = IbModule(data["name"], scope, registry=self.registry)
             self.instance_cache[uid] = obj
             
         elif _type == "native":
-            # 原生对象重建 (目前仅支持基本类型，否则保持 Repr 字符串)
             py_val = data.get("py_value")
             obj = self.registry.box(py_val)
             self.instance_cache[uid] = obj
 
         elif _type == "bound_method":
-            # [FIX] 解决循环引用：先解析 method，创建 IbBoundMethod 占位，再解析 receiver (可能参与循环)
             method = self._get_instance(data["method_uid"])
             obj = IbBoundMethod(None, method)
             self.instance_cache[uid] = obj
             obj.receiver = self._get_instance(data["receiver_uid"])
             
         elif _type == "native_func":
-            # 原生函数重建：记录逻辑标识以供后续重绑定
             logic_id = data.get("logic_id")
-            # 创建一个占位函数
             obj = IbNativeFunction(
                 lambda *a: None, 
                 ib_class=ib_class, 
@@ -326,13 +305,11 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "behavior":
-            # [IES 2.0] 行为对象重建：先创建空壳，后续由 Interpreter 补齐引用
             obj = IbBehavior(data["node_uid"], None, [], data.get("expected_type"))
             self.instance_cache[uid] = obj
             obj.captured_intents = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
             
         else:
-            # 普通对象
             obj = IbObject(ib_class)
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}

@@ -1,5 +1,7 @@
 import os
 import importlib.util
+import tempfile
+import traceback
 from typing import Optional, Dict, Any
 
 from core.foundation.registry import Registry
@@ -10,10 +12,18 @@ from core.runtime.module_system.loader import ModuleLoader
 from core.foundation.host_interface import HostInterface
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.compiler.diagnostics.issue_tracker import IssueTracker
+from core.compiler.diagnostics.formatter import DiagnosticFormatter
+from core.compiler.serialization.serializer import FlatSerializer
+from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.domain.types import ModuleMetadata
 from core.domain.blueprint import CompilationArtifact
 from core.domain.issue import CompilerError
 from core.domain.issue import InterpreterError, LexerError, ParserError, SemanticError
+from core.domain.symbols import VariableSymbol, SymbolKind
+from core.domain.types.descriptors import (
+    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
+    BOOL_DESCRIPTOR, ANY_DESCRIPTOR
+)
 from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory
 
@@ -48,7 +58,8 @@ class IBCIEngine(IInterpreterFactory):
         # 2. 加载元数据以支持静态分析
         self.host_interface = self.discovery_service.discover_all()
         
-        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry)
+        # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
+        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
         
         self.interpreter: Optional[Interpreter] = None
 
@@ -95,23 +106,36 @@ class IBCIEngine(IInterpreterFactory):
         self.host_interface.register_module(name, implementation, type_metadata)
         self.scheduler.host_interface = self.host_interface
 
-    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
+    def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> CompilationArtifact:
         """
-        运行一段 IBCI 代码字符串。
+        [NEW] 编译一段 IBCI 代码字符串，返回蓝图。
         """
-        import tempfile
         # Use system temp directory but explicitly allow this file in scheduler
         with tempfile.NamedTemporaryFile(mode='w', suffix='.ibci', delete=False, encoding='utf-8') as f:
             f.write(code)
             temp_path = f.name
         
         try:
-            # Register this specific temp file as allowed even if outside root
             self.scheduler.allow_file(temp_path)
-            return self.run(temp_path, variables, output_callback, silent=silent, prepare_interpreter=prepare_interpreter)
+            return self.compile(temp_path, variables, silent=silent)
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
+        """
+        运行一段 IBCI 代码字符串。
+        """
+        try:
+            artifact = self.compile_string(code, variables, silent=silent)
+            if prepare_interpreter:
+                return self.execute(artifact, variables, output_callback)
+            return True
+        except CompilerError as e:
+            if not silent:
+                print("\n--- Compilation Errors ---")
+                print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
+            raise e # 统一向上抛出，由调用者决定是否处理
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
         abs_entry = os.path.abspath(entry_file)
@@ -126,7 +150,7 @@ class IBCIEngine(IInterpreterFactory):
 
         try:
             # 1. 静态编译阶段
-            artifact = self.compile(abs_entry, variables)
+            artifact = self.compile(abs_entry, variables, silent=silent)
             
             # 2. 执行阶段 (可选)
             if prepare_interpreter:
@@ -136,54 +160,49 @@ class IBCIEngine(IInterpreterFactory):
 
         except CompilerError as e:
             if not silent:
-                from core.compiler.diagnostics.formatter import DiagnosticFormatter
                 print("\n--- Compilation Errors ---")
                 print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
                 
                 # Use tracker counts if available
                 tracker = self.scheduler.issue_tracker
                 print(f"\nCompilation failed: {tracker.error_count} errors, {tracker.warning_count} warnings.")
-            else:
-                raise e
-            return False
+            raise e
         except Exception as e:
             if not silent:
                 print(f"\nRuntime Error: {str(e)}")
-                import traceback
-                traceback.print_exc()
-            else:
-                raise e
-            return False
+            raise e
 
-    def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None) -> Any:
+    def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> Any:
         """
         [NEW] 核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
         """
         abs_entry = os.path.abspath(entry_file)
         
+        # 同步静默状态到调试器
+        self.debugger.silent = silent
+        
         # 0. 预置符号到调度器
         if variables:
-            from core.domain.symbols import STATIC_INT, STATIC_STR, STATIC_FLOAT, STATIC_BOOL, STATIC_ANY, VariableSymbol, SymbolKind
             static_vars = {}
             for name, val in variables.items():
-                stype = STATIC_ANY
-                if isinstance(val, bool): stype = STATIC_BOOL
-                elif isinstance(val, int): stype = STATIC_INT
-                elif isinstance(val, float): stype = STATIC_FLOAT
-                elif isinstance(val, str): stype = STATIC_STR
+                stype = ANY_DESCRIPTOR
+                if isinstance(val, bool): stype = BOOL_DESCRIPTOR
+                elif isinstance(val, int): stype = INT_DESCRIPTOR
+                elif isinstance(val, float): stype = FLOAT_DESCRIPTOR
+                elif isinstance(val, str): stype = STR_DESCRIPTOR
                 
-                static_vars[name] = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, var_type=stype)
+                static_vars[name] = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=stype)
             
             self.scheduler.predefined_symbols.update(static_vars)
 
         # 1. 调用调度器进行项目级编译
         self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Compiling project: {abs_entry}")
+        
         return self.scheduler.compile_project(abs_entry)
 
     def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
         """执行编译后的蓝图"""
         # 1. 序列化蓝图为字典池 (这是解释器要求的格式)
-        from core.compiler.serialization.serializer import FlatSerializer
         serializer = FlatSerializer()
         artifact_dict = serializer.serialize_artifact(artifact)
         
@@ -217,8 +236,26 @@ class IBCIEngine(IInterpreterFactory):
             print(f"Check successful: {entry_file}")
             return True
         except CompilerError as e:
-            from core.compiler.diagnostics.formatter import DiagnosticFormatter
             print("\n--- Compilation Errors ---")
             print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
             print(f"Check failed: {entry_file}")
             return False
+
+    def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):
+        """
+        [NEW] 暴露分段语义分析接口，允许观察中间产物。
+        按顺序运行 Pass 1 (Collector), Pass 2 (Resolver), Pass 3 (Analyzer)。
+        """
+        if analyzer is None:
+            # 构造分析器
+            analyzer = SemanticAnalyzer(
+                issue_tracker=self.issue_tracker, 
+                registry=self.registry.get_metadata_registry(),
+                debugger=self.debugger,
+                host_interface=self.host_interface
+            )
+        
+        # 内部执行完整的 3-Pass 分析流
+        analyzer.analyze(module, raise_on_error=raise_on_error)
+        
+        return analyzer

@@ -1,6 +1,0 @@
-func add(int x, int y) -> int:
-    return x + y
-
-func format_result(int res) -> str:
-    # Assuming string concatenation with int is not supported yet (which is correct for strict OOP)
-    return "Result calculated"

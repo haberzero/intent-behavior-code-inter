@@ -1,10 +1,10 @@
 import os
 from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
-from core.domain.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus
+from core.compiler.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus, ImportType, DependencyGraph
 from core.domain.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
-from core.domain.tokens import Token
+from core.compiler.lexer.tokens import Token
 from core.compiler.parser.parser import Parser
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.support.diagnostics import DiagnosticReporter
@@ -12,16 +12,23 @@ from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.foundation.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.domain.issue import Severity, CompilerError
+from core.domain.issue_atomic import Location
 from core.foundation.host_interface import HostInterface
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.foundation.diagnostics.codes import (
-    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR
+    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
+    DEP_MODULE_NOT_FOUND
 )
 from core.domain.blueprint import CompilationArtifact, CompilationResult
 
 from core.foundation.interfaces import (
     ISourceProvider, ICompilerService
 )
+from core.domain.symbols import (
+    Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
+)
+from core.domain.types.descriptors import ModuleMetadata
+# from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
     """
@@ -358,7 +365,6 @@ class Scheduler(ICompilerService):
             analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry)
             
             # Inject predefined symbols
-            from core.domain.symbols import Symbol, VariableSymbol, SymbolKind
             for name, val in self.predefined_symbols.items():
                 if isinstance(val, Symbol):
                     analyzer.symbol_table.define(val)
@@ -367,9 +373,9 @@ class Scheduler(ICompilerService):
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Warning: Predefined symbol '{name}' is not a Symbol object, skipping.")
             
             # Inject imported modules
-            from core.compiler.semantic.bridge import TypeBridge
-            from core.domain.symbols import ModuleType, SymbolTable, SymbolKind, VariableSymbol
-            from core.domain.dependencies import ImportType
+            # [CLEANUP] Local imports removed and consolidated at top
+            # TypeBridge import removed as file does not exist
+            
             for imp in module_info.imports:
                 # 查找已编译的结果或外部元数据
                 s_mod_type = None
@@ -380,23 +386,13 @@ class Scheduler(ICompilerService):
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
                     imp_res = artifact.get_module(imp_mod_name)
                     if imp_res:
-                        s_mod_type = ModuleType(imp_mod_name, imp_res.symbol_table)
+                        s_mod_type = ModuleMetadata(name=imp_mod_name, exported_scope=imp_res.symbol_table)
                 elif self.host_interface.is_external_module(imp.module_name):
                     if imp.module_name in self.plugin_type_cache:
                         s_mod_type = self.plugin_type_cache[imp.module_name]
                     else:
-                        uts_metadata = self.host_interface.get_module_type(imp.module_name)
-                        if uts_metadata:
-                            def external_resolver(mod_name: str) -> Optional[Any]:
-                                if mod_name == imp.module_name: return None
-                                if mod_name in self.plugin_type_cache: return self.plugin_type_cache[mod_name]
-                                other_metadata = self.host_interface.get_module_type(mod_name)
-                                if other_metadata:
-                                    other_mod_type = TypeBridge.uts_to_semantic_type(other_metadata, external_resolver=external_resolver)
-                                    self.plugin_type_cache[mod_name] = other_mod_type
-                                    return other_mod_type
-                                return None
-                            s_mod_type = TypeBridge.uts_to_semantic_type(uts_metadata, external_resolver=external_resolver)
+                        s_mod_type = self.host_interface.get_module_type(imp.module_name)
+                        if s_mod_type:
                             self.plugin_type_cache[imp.module_name] = s_mod_type
                 
                 if not s_mod_type:
@@ -415,28 +411,28 @@ class Scheduler(ICompilerService):
                         root_name = parts[0]
                         # 构造嵌套模块结构
                         root_sym = analyzer.symbol_table.resolve(root_name)
-                        if not root_sym or not isinstance(root_sym.type_info, ModuleType):
-                            root_mod_type = ModuleType(root_name, SymbolTable())
-                            root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, var_type=root_mod_type)
+                        if not root_sym or not isinstance(root_sym.descriptor, ModuleMetadata):
+                            root_mod_type = ModuleMetadata(name=root_name, exported_scope=SymbolTable())
+                            root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, descriptor=root_mod_type)
                             analyzer.symbol_table.define(root_sym)
                         
-                        curr_mod = root_sym.type_info
+                        curr_mod = root_sym.descriptor
                         for i in range(1, len(parts)):
                             part_name = parts[i]
                             is_last = (i == len(parts) - 1)
                             if is_last:
-                                target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=s_mod_type)
+                                target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, descriptor=s_mod_type)
                                 curr_mod.exported_scope.define(target_sym)
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
-                                if not next_mod_sym or not isinstance(next_mod_sym.type_info, ModuleType):
-                                    next_mod_type = ModuleType(part_name, SymbolTable())
-                                    next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, var_type=next_mod_type)
+                                if not next_mod_sym or not isinstance(next_mod_sym.descriptor, ModuleMetadata):
+                                    next_mod_type = ModuleMetadata(name=part_name, exported_scope=SymbolTable())
+                                    next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, descriptor=next_mod_type)
                                     curr_mod.exported_scope.define(next_mod_sym)
-                                curr_mod = next_mod_sym.type_info
+                                curr_mod = next_mod_sym.descriptor
                     else:
                         # 普通导入或带别名导入
-                        mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, var_type=s_mod_type)
+                        mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, descriptor=s_mod_type)
                         analyzer.symbol_table.define(mod_sym)
                         
                 elif imp.import_type == ImportType.FROM_IMPORT:
@@ -452,21 +448,17 @@ class Scheduler(ICompilerService):
                             if target_sym:
                                 local_name = alias.asname if alias.asname else alias.name
                                 # 创建一个指向原符号的克隆/别名符号
-                                # 这里我们简单地重新定义一个相同属性的符号
+                                # [Refactor] 使用 descriptor 参数，而不是 var_type/type_signature
                                 if target_sym.kind == SymbolKind.VARIABLE:
-                                    new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, var_type=target_sym.type_info, def_node=target_sym.def_node)
+                                    new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, descriptor=target_sym.descriptor, def_node=target_sym.def_node)
                                 elif target_sym.kind == SymbolKind.FUNCTION:
-                                    from core.domain.symbols import FunctionSymbol
-                                    new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, type_signature=target_sym.type_signature, def_node=target_sym.def_node)
+                                    new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, descriptor=target_sym.descriptor, def_node=target_sym.def_node)
                                 else:
-                                    from core.domain.symbols import TypeSymbol
-                                    new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, static_type=target_sym.static_type, def_node=target_sym.def_node)
+                                    new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, descriptor=target_sym.descriptor, def_node=target_sym.def_node)
                                 
                                 analyzer.symbol_table.define(new_sym)
                             else:
                                 # 符号未找到报错
-                                from core.domain.issue import Severity
-                                from core.domain.issue_atomic import Location
                                 analyzer.issue_tracker.report(
                                     Severity.ERROR, "SEM_001", 
                                     f"Symbol '{alias.name}' not found in module '{imp.module_name}'",
@@ -500,90 +492,5 @@ class Scheduler(ICompilerService):
         if file_tracker.has_errors():
             raise CompilerError(file_tracker.diagnostics)
 
-class DependencyGraph:
-    """
-    Analyzes dependency graph for cycles and compilation order.
-    """
-    def __init__(self, modules: Dict[str, ModuleInfo], debugger: Optional[Any] = None):
-        self.modules = modules
-        self.adj_list: Dict[str, List[str]] = {}
-        self.debugger = debugger or core_debugger
-        self._build_graph()
-
-        
-    def _build_graph(self):
-        for path, info in self.modules.items():
-            self.adj_list[path] = []
-            for imp in info.imports:
-                if imp.file_path and imp.file_path in self.modules:
-                    self.adj_list[path].append(imp.file_path)
-                    
-    def check_cycles(self):
-        """
-        Detects circular dependencies using DFS.
-        Raises CircularDependencyError if cycle found.
-        """
-        visited = set()
-        recursion_stack = set()
-        
-        # Track path for error reporting
-        
-        def dfs(node: str, current_path: List[str]):
-            visited.add(node)
-            recursion_stack.add(node)
-            current_path.append(node)
-            
-            # Use self.modules to get imports
-            
-            if node in self.adj_list:
-                for neighbor in self.adj_list[node]:
-                    if neighbor not in visited:
-                        dfs(neighbor, current_path)
-                    elif neighbor in recursion_stack:
-                        # Cycle detected!
-                        # Extract the cycle part from current_path
-                        # neighbor is the start of the cycle
-                        try:
-                            idx = current_path.index(neighbor)
-                            cycle = current_path[idx:] + [neighbor]
-                        except ValueError:
-                            cycle = [neighbor, node, neighbor]
-                            
-                        raise CircularDependencyError(cycle)
-                        
-            recursion_stack.remove(node)
-            current_path.pop()
-            
-        # We must iterate over all nodes because the graph might be disconnected
-        for node in list(self.adj_list.keys()):
-            if node not in visited:
-                dfs(node, [])
-
-    def get_compilation_order(self) -> List[str]:
-        """
-        Returns a list of file paths to compile.
-        If there are no cycles, this is a topological sort (dependencies first).
-        If there are cycles, it returns a best-effort order.
-        """
-        # [MOD] 允许循环引用，不再强制报错。
-        # 运行时由 ModuleManager 的缓存机制处理循环加载。
-        try:
-            self.check_cycles()
-        except CircularDependencyError as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Note: Circular dependency detected (allowed): {e}")
-        
-        visited = set()
-        order = []
-        
-        def dfs(node: str):
-            visited.add(node)
-            for neighbor in self.adj_list.get(node, []):
-                if neighbor not in visited:
-                    dfs(neighbor)
-            order.append(node)
-        
-        for node in self.adj_list:
-            if node not in visited:
-                dfs(node)
-                
-        return order
+# DependencyGraph logic moved to core.compiler.dependencies
+# This file imports DependencyGraph from there.

@@ -1,5 +1,5 @@
 from typing import List, Optional
-from core.domain.tokens import TokenType, Token
+from .tokens import TokenType, Token
 
 class StrStream:
     """提供字符流操作，包括位置维护、前瞻和匹配。"""
@@ -34,6 +34,14 @@ class StrStream:
             self.col += 1
             
         return char
+
+    def get_snapshot(self) -> tuple:
+        """获取当前流状态的快照。"""
+        return (self.pos, self.line, self.col)
+
+    def restore_snapshot(self, snapshot: tuple):
+        """从快照恢复流状态。"""
+        self.pos, self.line, self.col = snapshot
 
     def match(self, expected: str) -> bool:
         """消耗并匹配预期字符。"""

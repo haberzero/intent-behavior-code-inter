@@ -1,2 +1,2 @@
 # IBC-Inter Domain Layer
-from . import builtin_schema
+# builtin_schema removed (Axiom-driven)
