@@ -1,11 +1,61 @@
 import unittest
 import os
 import textwrap
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 from core.engine import IBCIEngine
 from core.domain.issue import CompilerError, InterpreterError
 from core.domain.blueprint import CompilationArtifact
+from core.domain.types import ModuleMetadata
+
+class MockAI:
+    """通用的 AI 服务 Mock"""
+    def __init__(self):
+        self.last_sys = ""
+        self.last_user = ""
+        self.response = "42"
+        self.calls = []
+
+    def setup(self, capabilities):
+        # 核心：将自己注册为内核的 LLM Provider
+        capabilities.llm_provider = self
+
+    def __call__(self, sys, user, scene="general"):
+        self.last_sys = sys
+        self.last_user = user
+        self.calls.append({"sys": sys, "user": user, "scene": scene})
+        return self.response
+
+    def get_return_type_prompt(self, type_name):
+        return f"Return type should be {type_name}"
+
+    def set_retry_hint(self, hint):
+        pass
+    
+    def get_last_call_info(self):
+        return {"sys": self.last_sys, "user": self.last_user, "response": self.response}
+
+class MockHostService:
+    """通用的宿主服务 Mock"""
+    def __init__(self):
+        self.saved_states = {}
+        self.calls = []
+
+    def save_state(self, path: str, data: Any):
+        self.saved_states[path] = data
+        self.calls.append(("save_state", path, data))
+
+    def load_state(self, path: str) -> Any:
+        self.calls.append(("load_state", path))
+        return self.saved_states.get(path)
+
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
+        self.calls.append(("run_isolated", path, policy))
+        return True
+
+    def get_source(self) -> str:
+        self.calls.append(("get_source",))
+        return "mock source"
 
 class IBCTestEngine(IBCIEngine):
     """
@@ -37,7 +87,22 @@ class BaseIBCTest(unittest.TestCase):
         self.engine = IBCTestEngine(root_dir=os.getcwd())
         self.outputs = []
         self.silent = False
-        
+        self.mock_ai: Optional[MockAI] = None
+        self.mock_host: Optional[MockHostService] = None
+
+    def setup_mock_ai(self):
+        """快捷设置 Mock AI 服务"""
+        self.mock_ai = MockAI()
+        # 注册插件，以便编译器能识别 'ai' 模块
+        self.engine.register_plugin("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+        return self.mock_ai
+
+    def setup_mock_host(self):
+        """快捷设置 Mock 宿主服务"""
+        self.mock_host = MockHostService()
+        self.engine.register_plugin("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
+        return self.mock_host
+
     @contextmanager
     def silent_mode(self):
         """静默模式上下文管理器"""
@@ -55,6 +120,19 @@ class BaseIBCTest(unittest.TestCase):
         if not os.path.exists(path):
             raise FileNotFoundError(f"Fixture not found: {path}")
         return path
+
+    def write_file(self, rel_path: str, content: str) -> str:
+        """在测试根目录下创建文件"""
+        full_path = os.path.join(self.engine.root_dir, rel_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        # 自动去除缩进
+        dedented_content = textwrap.dedent(content).strip()
+        # 确保以换行符结尾
+        if not dedented_content.endswith("\n"):
+            dedented_content += "\n"
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(dedented_content)
+        return full_path
 
     def compile_code(self, code: str, variables=None, silent: Optional[bool] = None):
         """编译代码字符串并返回蓝图"""
@@ -83,6 +161,17 @@ class BaseIBCTest(unittest.TestCase):
             if not is_silent:
                 print(f"\nINTERPRETER ERROR: {e}")
             raise e
+
+    def assert_output(self, expected: str):
+        """断言输出列表中包含预期字符串"""
+        self.assertIn(expected, self.outputs, f"Expected output '{expected}' not found in {self.outputs}")
+
+    def assert_outputs(self, expected_list: List[str]):
+        """按顺序断言输出列表"""
+        # 确保输出列表至少和预期列表一样长
+        self.assertGreaterEqual(len(self.outputs), len(expected_list), f"Expected at least {len(expected_list)} outputs, but got {len(self.outputs)}: {self.outputs}")
+        for i, expected in enumerate(expected_list):
+            self.assertEqual(self.outputs[i], expected, f"Output mismatch at index {i}. Outputs: {self.outputs}")
 
     def _print_diagnostics(self, e: CompilerError):
         """格式化打印编译器错误"""

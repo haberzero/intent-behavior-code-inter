@@ -1,27 +1,7 @@
 import unittest
-from tests.base import BaseIBCTest
+from tests.base import BaseIBCTest, MockAI
 from core.domain.types import ModuleMetadata
 from core.domain.issue import CompilerError, InterpreterError
-
-class MockAI:
-    def __init__(self):
-        self.last_sys = ""
-        self.last_user = ""
-        self.response = "42"
-
-    def setup(self, capabilities):
-        capabilities.llm_provider = self
-
-    def __call__(self, sys, user, scene="general"):
-        self.last_sys = sys
-        self.last_user = user
-        return self.response
-
-    def get_return_type_prompt(self, type_name):
-        return f"Return type should be {type_name}"
-
-    def set_retry_hint(self, hint):
-        pass
 
 class TestComprehensiveInterpreter(BaseIBCTest):
     """
@@ -30,8 +10,7 @@ class TestComprehensiveInterpreter(BaseIBCTest):
 
     def setUp(self):
         super().setUp()
-        self.mock_ai = MockAI()
-        self.engine.register_plugin("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+        self.setup_mock_ai()
 
     def test_intent_stacking(self):
         code = """
@@ -105,7 +84,7 @@ class TestComprehensiveInterpreter(BaseIBCTest):
         # "123".cast_to(int) + 1 -> 124
         # 10.to_bool() -> 1
         # 3.to_list().len() -> 3
-        self.assertEqual(self.outputs, ["4", "1", "1", "1", "5", "124", "1", "3"])
+        self.assert_outputs(["4", "1", "1", "1", "5", "124", "1", "3"])
 
     def test_oop_inheritance_and_bound_methods(self):
         """验证 OOP 继承、重写与绑定方法"""
@@ -127,7 +106,7 @@ class TestComprehensiveInterpreter(BaseIBCTest):
         print(f())
         """
         self.run_code(code)
-        self.assertEqual(self.outputs, ["base", "derived", "derived"])
+        self.assert_outputs(["base", "derived", "derived"])
 
     def test_circular_reference_serialization(self):
         """验证循环引用的运行时序列化与恢复"""
