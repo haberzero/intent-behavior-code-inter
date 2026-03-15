@@ -77,6 +77,13 @@ class IIbObject(Protocol):
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any: ...
     def serialize_for_debug(self) -> Dict[str, Any]: ...
 
+@runtime_checkable
+class IIbBehavior(IIbObject, Protocol):
+    """延迟执行的行为对象协议 (~...~)"""
+    node: str
+    captured_intents: List[Any]
+    expected_type: Optional[str]
+
 # --- Extension Capabilities & Introspection ---
 
 @runtime_checkable

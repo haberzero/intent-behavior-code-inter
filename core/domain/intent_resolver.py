@@ -12,7 +12,7 @@ class IntentResolver:
         global_intents: List[IntentProtocol] = None,
         call_intent: Optional[IntentProtocol] = None,
         context: Any = None,
-        evaluator: Any = None
+        execution_context: Any = None
     ) -> List[str]:
         """
         合并并解析意图列表，返回最终的 Prompt 字符串列表。
@@ -28,8 +28,8 @@ class IntentResolver:
             if is_exclusive:
                 break
                 
-            # 解析内容 (可能是动态表达式)
-            content = i.resolve_content(context, evaluator)
+            # 解析内容 (基于执行上下文进行动态评估)
+            content = i.resolve_content(context, execution_context)
             
             # 处理移除模式
             if i.is_remove:
@@ -52,7 +52,7 @@ class IntentResolver:
         final_list = []
         if not is_exclusive and global_intents:
             for i in global_intents:
-                content = i.resolve_content(context, evaluator)
+                content = i.resolve_content(context, execution_context)
                 if (i.tag and i.tag in removed_tags) or (content and content in removed_contents):
                     continue
                 final_list.append(content)
@@ -61,7 +61,7 @@ class IntentResolver:
         
         # 3. 处理 Call 级意图 (最高优先级，可覆盖一切)
         if call_intent:
-            content = call_intent.resolve_content(context, evaluator)
+            content = call_intent.resolve_content(context, execution_context)
             if call_intent.is_override:
                 return [content]
             elif call_intent.is_remove:

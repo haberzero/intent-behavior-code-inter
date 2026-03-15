@@ -25,15 +25,26 @@ class IbIntent(IbObject, IntentProtocol):
         self.source_uid = source_uid
         self.role = role
 
-    def resolve_content(self, context: RuntimeContext, evaluator: Any = None) -> str:
+    def resolve_content(self, context: RuntimeContext, execution_context: Any = None) -> str:
         """
-        解析意图内容。如果存在 segments，则进行动态评估。
-        evaluator: 通常是 LLMExecutor 实例，用于调用 _evaluate_segments
+        [IES 2.1 Regularization] 解析意图内容。
+        不再反向回调 LLMExecutor，而是直接利用 IExecutionContext 的 visit 能力进行自评估。
         """
-        if self.segments and evaluator:
-            # 这里我们需要回调 evaluator 的 _evaluate_segments 方法
-            if hasattr(evaluator, '_evaluate_segments'):
-                return evaluator._evaluate_segments(self.segments, context).strip()
+        if self.segments and execution_context:
+            content_parts = []
+            for segment in self.segments:
+                if isinstance(segment, str) and segment.startswith("node_"):
+                    # 动态节点插值：通过执行上下文网关进行求值
+                    val = execution_context.visit(segment)
+                    if hasattr(val, '__to_prompt__'):
+                        content_parts.append(val.__to_prompt__())
+                    elif hasattr(val, 'to_native'):
+                        content_parts.append(str(val.to_native()))
+                    else:
+                        content_parts.append(str(val))
+                else:
+                    content_parts.append(str(segment))
+            return "".join(content_parts).strip()
         
         return str(self.content).strip()
 

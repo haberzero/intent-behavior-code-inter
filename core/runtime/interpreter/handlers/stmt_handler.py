@@ -1,6 +1,7 @@
 from typing import Any, Mapping, List, Optional, Callable
 from .base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
+from core.foundation.interfaces import IIbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException, RetryException
 )
@@ -27,12 +28,11 @@ class StmtHandler(BaseHandler):
 
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """表达式语句"""
-        from core.runtime.objects.builtins import IbBehavior
         def action():
             res = self.visit(node_data.get("value"))
             # 如果是行为描述行，则立即执行（作为语句时）
-            if isinstance(res, IbBehavior):
-                return self.service_context.llm_executor.execute_behavior_object(res, self.execution_context)
+            if isinstance(res, IIbBehavior):
+                return self._execute_behavior(res)
             return res
             
         return self.interpreter._with_llm_fallback(node_uid, node_data, action)

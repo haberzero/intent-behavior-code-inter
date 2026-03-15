@@ -174,5 +174,32 @@ IBCI 2.0 正处于从 **IES 1.0 (动态注入)** 向 **IES 2.0 (契约先行/物
 3. [x] 重构 `LLMExecutor`、`ModuleManager` 和 `HostService`，实现基于“数据结构”的最小特权注入。
 4. [x] 修复意图消解算法回归 Bug，确保冲突消解逻辑的正确性。
 
+### **阶段 4.7: 意图管理职责深度解耦 (Completed)**
+1. [x] 重构 `RuntimeContext`，提供 `get_resolved_prompt_intents` 接口，实现消解逻辑下沉。
+2. [x] 重构 `IbIntent`，使其基于 `IExecutionContext` 自评估内容，移除对 `LLMExecutor` 的回调。
+3. [x] 清理 `LLMExecutorImpl`，移除手动栈管理逻辑，实现真正的“无状态推理”。
+4. [x] 在 `BaseHandler` 层实现 `_execute_behavior` 统一入口，收拢环境管理职责。
+
 ---
-*版本：v1.0 (2026-03-15) - 终极整合版*
+
+## 7. 意图管理正规化：从“状态操纵”转向“现场消费” (Intent Management Regularization)
+
+### **7.1 职责错位深度审计 (Responsibility Misplacement Audit)**
+在对 `LLMExecutor` 的最新审查中，识别出其在意图管理上的严重职责僭越：
+1. **[Critical] 栈生命周期僭越**: `LLMExecutorImpl.execute_behavior_object` 内部通过手动备份/恢复 `context.intent_stack` 来实现“意图上下文切换”。这属于**运行环境管理逻辑**，不应出现在负责推理的 Executor 中。
+2. **[High] 状态穿透读写**: Executor 直接操作 `RuntimeContext` 的私有属性（或高权限 Setter），破坏了状态管理的一致性，使得意图栈的流转变得碎片化且难以追踪。
+3. **[Medium] 解析逻辑耦合**: 现有的 `_merge_intents` 迫使 Executor 感知意图栈的内部结构及全局意图的过滤逻辑。
+
+### **7.2 意图流转架构规格 (Proposed Intent Architecture)**
+为了实现真正的“无状态推理”，必须重新定义意图的流转路径：
+- **[Source of Truth] RuntimeContext**: 作为意图栈的唯一物理持有者，应负责封装所有的合并与冲突消解逻辑。
+- **[Consumer] LLMExecutor**: 彻底转变为**被动消费者**。它不应询问“栈里有什么”，而应调用 `context.get_resolved_prompt_intents()` 获取一组已处理好的、可直接放入 Prompt 的字符串列表。
+- **[Orchestrator] Interpreter**: 负责在执行 `IbBehavior` 或 `IbIntentStmt` 时，根据作用域规则准备好意图现场。
+
+### **7.3 治理准则 (Governance Principles)**
+- **禁止服务操纵栈**: 严禁任何 Service (LLM, Module, etc.) 手动调用 `push_intent` 或直接修改 `intent_stack`。
+- **解析逻辑下沉**: 移除 `EvaluatorShim`。意图内容的动态评估逻辑应下沉至 `RuntimeContext` 或基座协议层，确保意图对象在脱离 Executor 的情况下依然可解析。
+
+---
+
+*版本：v1.1 (2026-03-15) - 架构深度治理版*

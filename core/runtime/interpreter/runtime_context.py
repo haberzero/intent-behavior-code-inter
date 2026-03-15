@@ -374,6 +374,24 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
             return []
         return self._intent_top.to_list()
 
+    def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IbIntent] = None) -> List[str]:
+        """
+        [IES 2.1 Regularization] 获取消解后的意图字符串列表。
+        将消解逻辑下沉至 Context，实现 Executor 的无状态消费。
+        """
+        from core.domain.intent_resolver import IntentResolver
+        
+        active_intents = self.get_active_intents()
+        global_intents = self.get_global_intents()
+        
+        return IntentResolver.resolve(
+            active_intents=active_intents,
+            global_intents=global_intents,
+            call_intent=call_intent,
+            context=self,
+            execution_context=execution_context
+        )
+
     @property
     def intent_stack(self) -> Union[Optional[IntentNode], List[Any]]:
         # [IES 2.0] 为了 IbBehavior 优化，直接返回栈顶节点

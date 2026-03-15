@@ -1,4 +1,5 @@
 from typing import Any, List, Dict, Optional, Callable
+from core.foundation.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.foundation.registry import Registry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
@@ -240,7 +241,7 @@ class IbDict(IbObject):
         native_key = key.to_native() if isinstance(key, IbObject) else key
         return self.fields[native_key]
 
-class IbBehavior(IbObject):
+class IbBehavior(IbObject, IIbBehavior):
     """
     延迟执行的行为对象 (~...~)。
     """

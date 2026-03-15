@@ -1,11 +1,11 @@
 from typing import Any, Mapping, List, Optional, Union
 from .base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject
-from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
+from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
+from core.foundation.interfaces import IIbBehavior
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel
 from core.domain.issue import InterpreterError
-from core.runtime.objects.builtins import IbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, RetryException, ThrownException
 )
@@ -121,8 +121,8 @@ class ExprHandler(BaseHandler):
         
         try:
             # [IES 2.0 Architectural Update] 识别被动行为对象并分发给执行器
-            if isinstance(func, IbBehavior):
-                return self.service_context.llm_executor.execute_behavior_object(func, self.execution_context)
+            if isinstance(func, IIbBehavior):
+                return self._execute_behavior(func)
 
             # 如果是 BoundMethod 或 IbFunction，其 call 内部会处理作用域
             if hasattr(func, 'call'):
@@ -164,25 +164,23 @@ class ExprHandler(BaseHandler):
         return self.registry.box(data)
 
     def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """行为描述行：█ ... █"""
+        """[IES 2.0 Architectural Update] 行为描述行不再立即执行，而是包装为被动行为对象。"""
+        # 1. 检查是否显式标记为延迟
         is_deferred = self.get_side_table("node_is_deferred", node_uid)
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"BehaviorExpr {node_uid} is_deferred={is_deferred}")
         
         if is_deferred:
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
             captured_intents = list(self.runtime_context.get_active_intents())
-            expected_type = self.get_side_table("node_to_type", node_uid)
-            
-            # [IES 2.0] 直接在初始化时绑定 ib_class，消除外部补丁
-            return IbBehavior(
+            return self.service_context.object_factory.create_behavior(
                 node_uid, 
                 captured_intents, 
-                ib_class=self.registry.get_class("behavior"),
-                expected_type=expected_type
+                expected_type=self.get_side_table("node_to_type", node_uid)
             )
         
-        # 立即执行
-        # [IES 2.1 Regularization] 传递执行上下文网关
+        # [Fallback] 如果是非延迟模式，直接执行
+        # 注意：此处传入 node_uid 而非对象，符合 _execute_behavior 的原始语义
+        # 但 _execute_behavior 期望的是 IbObject。
+        # 如果不是延迟执行，说明我们需要立即执行该节点的内容。
         return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context)
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:

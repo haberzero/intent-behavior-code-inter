@@ -20,7 +20,13 @@
 - [x] **[Arch] 穿透路径清理**：彻底删除 `ServiceContext` 对 `Interpreter` 实例的持有，改为纯服务协议持有。
 - [x] **[Arch] 职责单一化**：从 `ServiceContext` 中移除 `runtime_context` 代理，确保“服务”与“状态”路径不重叠。
 - [x] **[Injection] 最小特权注入**：重构 `LLMExecutor`、`ModuleManager` 等组件，改为注入特定的数据结构（如 `Registry`）而非全量上下文。
-- [x] **[Audit] 穿透禁令审计**：全量 Grep 检查，严禁出现 `context.interpreter` 或 `context.runtime_context.registry` 等违规链条。
+- [ ] **[Audit] 穿透禁令审计**：全量 Grep 检查，严禁出现 `context.interpreter` 或 `context.runtime_context.registry` 等违规链条。
+
+## 4. 意图管理解耦 (Intent Management Decoupling)
+
+- [x] **[Arch] 栈管理职责收拢**：将 `execute_behavior_object` 中的意图栈切换逻辑从 `LLMExecutor` 移至 `BaseHandler._execute_behavior`。
+- [x] **[Clean] 意图消解逻辑下沉**：重构 `RuntimeContext`，封装 `IntentResolver` 的调用，使得 `LLMExecutor` 仅需消费最终结果。
+- [x] **[Decouple] 意图解析去回调化**：移除 `EvaluatorShim` 及其对应的回调机制。意图解析现通过 `IExecutionContext` 完成。
 
 ## 3. 逻辑完备性与时序 (High)
 
