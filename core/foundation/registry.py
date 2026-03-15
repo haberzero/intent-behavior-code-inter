@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, TYPE_CHECKING
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
-from core.foundation.enums import RegistrationState, PrivilegeLevel
+from core.foundation.enums import PrivilegeLevel
 
 if TYPE_CHECKING:
     from core.domain.types.descriptors import TypeDescriptor
@@ -19,8 +19,11 @@ class Registry:
         self._boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
         self._int_cache: Dict[int, Any] = {} # 小整数驻留缓存 (引擎实例隔离)
         
-        # [IES 2.0] 注册状态机
-        self._state = RegistrationState.STAGE_1_BOOTSTRAP
+        # [IES 2.1 Audit] 绑定解释器引用，支持实例化时的复杂字段求值
+        self._interpreter: Optional[Any] = None
+        
+        # [IES 2.0 Mechanism] 注册状态机级别。默认为 1。
+        self._state_level = 1
         
         # [Isolation] 元数据注册表 (UTS 驱动)
         self._metadata_registry: Any = None
@@ -35,27 +38,27 @@ class Registry:
         self._is_classes_sealed = False
 
     @property
-    def state(self) -> RegistrationState:
-        return self._state
+    def state_level(self) -> int:
+        return self._state_level
 
-    def set_state(self, new_state: RegistrationState, token: Any):
-        """[IES 2.0] 跃迁注册状态。必须持有内核令牌且符合单向增长规则。"""
+    def set_state_level(self, new_level: int, token: Any):
+        """[Mechanism] 跃迁注册状态级别。必须持有内核令牌且符合单向增长规则。"""
         self._verify_kernel(token)
-        if new_state.value <= self._state.value:
-            raise PermissionError(f"Registry: Invalid state transition from {self._state} to {new_state}. States must progress forward.")
+        if new_level <= self._state_level:
+            raise PermissionError(f"Registry: Invalid level transition from {self._state_level} to {new_level}. Levels must progress forward.")
         
-        core_trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Registry state transition: {self._state} -> {new_state}")
-        self._state = new_state
+        core_trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Registry level transition: {self._state_level} -> {new_level}")
+        self._state_level = new_level
 
-    def verify_state(self, required_state: RegistrationState):
-        """[IES 2.0] 校验当前状态是否完全匹配。用于写操作或严格阶段检查。"""
-        if self._state != required_state:
-            raise PermissionError(f"Registry: Operation requires state {required_state}, but current state is {self._state}")
+    def verify_level(self, required_level: int):
+        """[Mechanism] 校验当前级别是否完全匹配。"""
+        if self._state_level != required_level:
+            raise PermissionError(f"Registry: Operation requires level {required_level}, but current level is {self._state_level}")
 
-    def verify_state_at_least(self, minimum_state: RegistrationState):
-        """[IES 2.0] 校验当前状态是否达到最小要求。用于只读数据消费。"""
-        if self._state.value < minimum_state.value:
-            raise PermissionError(f"Registry: Operation requires at least state {minimum_state}, but current state is {self._state}")
+    def verify_level_at_least(self, minimum_level: int):
+        """[Mechanism] 校验当前级别是否达到最小要求。"""
+        if self._state_level < minimum_level:
+            raise PermissionError(f"Registry: Operation requires at least level {minimum_level}, but current level is {self._state_level}")
 
     @property
     def is_initialized(self) -> bool:
@@ -102,6 +105,10 @@ class Registry:
         self._verify_structure(token)
         self._is_structure_sealed = True
 
+    @property
+    def is_sealed(self) -> bool:
+        return self._is_classes_sealed
+
     def seal_classes(self, token: Any):
         """封印类注册表。封印后禁止注册任何新类。"""
         self._verify_kernel(token)
@@ -134,6 +141,11 @@ class Registry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
+    def set_interpreter(self, interpreter: Any, token: Any):
+        """[IES 2.1] 注册解释器引用，仅内核可调。用于支持实例化时求值。"""
+        self._verify_kernel(token)
+        self._interpreter = interpreter
+
     def create_instance(self, class_name: str, *args, **kwargs) -> Any:
         """
         [IES 2.0 Factory] 统一对象实例化入口。
@@ -164,18 +176,20 @@ class Registry:
         if descriptor.name != name:
              raise ValueError(f"Registry: Descriptor name '{descriptor.name}' does not match registered name '{name}'.")
 
+        if name in self._classes:
+             raise ValueError(f"Registry: Class '{name}' is already registered. Duplicate registration is forbidden in strict mode.")
+
+        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
+        if self._metadata_registry:
+            descriptor = self._metadata_registry.register(descriptor)
+            
+        # 强制绑定描述符到类对象上 (此时 descriptor 已经是注册表返回的隔离副本)
+        ib_class.descriptor = descriptor
         self._classes[name] = ib_class
         
         # [IES 2.0] 绑定注册表引用
         if hasattr(ib_class, 'registry'):
             ib_class.registry = self
-            
-        # 强制绑定描述符到类对象上
-        ib_class.descriptor = descriptor
-            
-        # 自动同步到元数据注册表
-        if self._metadata_registry:
-            self._metadata_registry.register(descriptor)
 
     def register_function(self, name: str, descriptor: 'TypeDescriptor', token: Any):
         """注册全局函数元数据 (仅用于编译器发现)"""

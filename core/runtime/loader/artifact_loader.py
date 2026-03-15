@@ -2,6 +2,8 @@ from typing import Dict, Any, Mapping, Optional
 from .type_hydrator import TypeHydrator
 from core.foundation.registry import Registry
 
+from core.runtime.exceptions import RegistryIsolationError
+
 class LoadedArtifact:
     """已加载并水化的产物容器"""
     def __init__(self, 
@@ -12,7 +14,8 @@ class LoadedArtifact:
                  asset_pool: Dict[str, str],
                  entry_module: str,
                  type_hydrator: TypeHydrator,
-                 artifact_dict: Dict[str, Any]):
+                 artifact_dict: Dict[str, Any],
+                 class_to_node: Dict[str, str]):
         self.node_pool = node_pool
         self.symbol_pool = symbol_pool
         self.scope_pool = scope_pool
@@ -21,6 +24,7 @@ class LoadedArtifact:
         self.entry_module = entry_module
         self.type_hydrator = type_hydrator
         self.artifact_dict = artifact_dict
+        self.class_to_node = class_to_node
 
 class ArtifactLoader:
     """
@@ -46,7 +50,48 @@ class ArtifactLoader:
 
         # 执行重水化 (UTS 闭环)
         hydrator = TypeHydrator(type_pool, self.registry.get_metadata_registry())
-        hydrator.hydrate_all(self.registry)
+        user_classes = hydrator.hydrate_all(self.registry)
+
+        # [IES 2.0] STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
+        class_to_node = {}
+        # 1. 扫描所有模块寻找类定义节点
+        for module_name, module_data in artifact_dict.get("modules", {}).items():
+            if not isinstance(module_data, dict): continue
+            root_node_uid = module_data.get("root_node_uid")
+            root_node = node_pool.get(root_node_uid)
+            if not root_node: continue
+            
+            for stmt_uid in root_node.get("body", []):
+                stmt_data = node_pool.get(stmt_uid)
+                if stmt_data and stmt_data.get("_type") == "IbClassDef":
+                    class_to_node[stmt_data.get("name")] = (stmt_uid, module_name)
+
+        # 2. 预注册用户定义的类 (支持继承依赖)
+        remaining = [c for c in user_classes if c.is_user_defined]
+        last_count = -1
+        
+        while remaining and len(remaining) != last_count:
+            last_count = len(remaining)
+            still_remaining = []
+            for cls_desc in remaining:
+                parent_name = cls_desc.parent_name or "Object"
+                try:
+                    self.registry.create_subclass(
+                        cls_desc.name, 
+                        cls_desc, 
+                        parent_name
+                    )
+                except ValueError:
+                    # 可能是父类尚未注册，等待下一轮
+                    still_remaining.append(cls_desc)
+            remaining = still_remaining
+            
+        if remaining:
+            # [IES 2.0 FIX] 继承链断裂属于致命错误 (Item 2.2 Audit)
+            # 必须在加载阶段拦截，严禁进入运行时。
+            missing = [f"{c.name} (extends {c.parent_name or 'Object'})" for c in remaining]
+            raise RegistryIsolationError(f"Linker Error: Broken inheritance chain for classes: {', '.join(missing)}. "
+                                       f"Ensure all parent classes are defined and no circular inheritance exists.")
 
         return LoadedArtifact(
             node_pool=node_pool,
@@ -56,5 +101,6 @@ class ArtifactLoader:
             asset_pool=asset_pool,
             entry_module=entry_module,
             type_hydrator=hydrator,
-            artifact_dict=artifact_dict
+            artifact_dict=artifact_dict,
+            class_to_node=class_to_node
         )

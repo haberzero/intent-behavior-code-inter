@@ -41,6 +41,10 @@ from .ast_view import ReadOnlyNodePool
 from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
 from .constants import OP_MAPPING, UNARY_OP_MAPPING
+from .call_stack import LogicalCallStack, StackFrame
+from .handlers.stmt_handler import StmtHandler
+from .handlers.expr_handler import ExprHandler
+from .handlers.import_handler import ImportHandler
 
 
 class ServiceContextImpl:
@@ -72,6 +76,11 @@ class ServiceContextImpl:
         self._compiler = compiler
         self._debugger = debugger
 
+        # [IES 2.0] 显式双向绑定，不再使用 hasattr 探测
+        # 核心服务组件必须遵循标准化接口
+        self._llm_executor.service_context = self
+        self._module_manager.interpreter = self._interpreter
+
     @property
     def debugger(self) -> Any: return self._debugger
     @property
@@ -82,10 +91,8 @@ class ServiceContextImpl:
     def issue_tracker(self) -> IssueTracker: return self._issue_tracker
     @property
     def runtime_context(self) -> RuntimeContext: 
-        # [FIX] 动态获取解释器当前活跃的 Context，解决跨模块加载时的作用域滞后问题
-        if self._interpreter:
-            return self._interpreter.context
-        return self._runtime_context
+        # [IES 2.0] 统一从解释器获取当前活跃的作用域，确保符号查找的一致性
+        return self._interpreter.context
 
     @property
     def symbol_view(self) -> SymbolView:
@@ -140,11 +147,25 @@ class Interpreter(IStackInspector):
                  compiler: Optional[ICompilerService] = None,
                  factory: Optional[Any] = None,
                  interop: Optional[InterOp] = None,
-                 runtime_context: Optional[RuntimeContext] = None):
+                 runtime_context: Optional[RuntimeContext] = None,
+                 service_context: Optional[ServiceContext] = None,
+                 llm_executor: Optional[LLMExecutor] = None,
+                 module_manager: Optional[ModuleManager] = None,
+                 permission_manager: Optional[PermissionManager] = None,
+                 object_factory: Optional[IObjectFactory] = None,
+                 plugin_loader: Optional[Callable[[ServiceContext], None]] = None):
         
         # 0. 启动内核引导
         self.registry = registry or Registry()
-        initialize_builtin_classes(self.registry)
+        # [IES 2.1 Audit] 注册解释器引用到 Registry 以支持类实例化时的字段求值
+        self._kernel_token = self.registry.get_kernel_token()
+        if self._kernel_token:
+             self.registry.set_interpreter(self, self._kernel_token)
+        
+        # [IES 2.0] 仅在注册表未初始化时执行引导
+        if not self.registry.is_initialized:
+            initialize_builtin_classes(self.registry)
+            
         # [NEW] 加载内置函数插件 (Intrinsics)
         self.intrinsic_manager = IntrinsicManager(self.registry)
         self.intrinsic_manager.load_defaults(self)
@@ -157,10 +178,52 @@ class Interpreter(IStackInspector):
         self.source_provider = source_provider
         self.compiler = compiler
         self.factory = factory
+        self.artifact_dict = artifact
         
-        # 1. 核心解耦：通过 ArtifactLoader 加载并水化产物
+        # 1. [IES 2.0] 依赖图谱闭合：构造期完成 ServiceContext 组装
+        if service_context:
+            # 外部注入模式
+            self.service_context = service_context
+            self._current_context = service_context.runtime_context
+        else:
+            # 内部组装模式：确保所有依赖在构造期闭合
+            self._current_context = runtime_context or RuntimeContextImpl(registry=self.registry)
+            interop = interop or InterOpImpl(host_interface=self.host_interface)
+            object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
+            permission_manager = permission_manager or PermissionManagerImpl(root_dir)
+            llm_executor = llm_executor or LLMExecutorImpl()
+            module_manager = module_manager or ModuleManagerImpl(
+                interop, 
+                artifact=self.artifact_dict,
+                interpreter=self,
+                root_dir=root_dir,
+                object_factory=object_factory
+            )
+            
+            self.service_context = ServiceContextImpl(
+                issue_tracker=issue_tracker,
+                runtime_context=self._current_context,
+                llm_executor=llm_executor,
+                module_manager=module_manager,
+                interop=interop,
+                permission_manager=permission_manager,
+                interpreter=self,
+                registry=self.registry,
+                object_factory=object_factory,
+                host_service=None,
+                source_provider=self.source_provider,
+                compiler=self.compiler,
+                debugger=self.debugger
+            )
+            self.host_service = HostService(self.service_context, self.factory)
+            
+        # 2. [STAGE 4] 插件加载钩子
+        if plugin_loader:
+            plugin_loader(self.service_context)
+        
+        # 3. [STAGE 5] 核心解耦：通过 ArtifactLoader 加载并水化产物
         loader = ArtifactLoader(self.registry)
-        loaded = loader.load(artifact)
+        loaded = loader.load(self.artifact_dict)
         
         self.node_pool = loaded.node_pool
         self.symbol_pool = loaded.symbol_pool
@@ -169,56 +232,16 @@ class Interpreter(IStackInspector):
         self.asset_pool = loaded.asset_pool
         self.entry_module = loaded.entry_module
         self.type_hydrator = loaded.type_hydrator
-        self.artifact_dict = loaded.artifact_dict
         
-        # 2. 初始化基础组件
-        runtime_context = runtime_context or RuntimeContextImpl(registry=self.registry)
-        interop = interop or InterOpImpl(host_interface=self.host_interface)
-        
-        # [IES 2.0] 初始化运行时对象工厂
-        object_factory = RuntimeObjectFactory(registry=self.registry)
-        
-        # 权限管理
-        permission_manager = PermissionManagerImpl(root_dir)
-        
-        # 3. 初始化 ModuleManager
-        module_manager = ModuleManagerImpl(
-            interop, 
-            artifact=self.artifact_dict, # 传入字典
-            interpreter=None,
-            root_dir=root_dir,
-            object_factory=object_factory
-        )
-        
-        # 4. 创建 ServiceContext
-        llm_executor = LLMExecutorImpl()
-        
-        self.service_context = ServiceContextImpl(
-            issue_tracker=issue_tracker,
-            runtime_context=runtime_context,
-            llm_executor=llm_executor,
-            module_manager=module_manager,
-            interop=interop,
-            permission_manager=permission_manager,
-            interpreter=self,
-            registry=self.registry,
-            object_factory=object_factory,
-            host_service=None, # 占位符，稍后注入
-            source_provider=self.source_provider,
-            compiler=self.compiler,
-            debugger=self.debugger
-        )
-        
-        # 5. 初始化内置宿主服务 (HostService)
-        # 注意：这里注入 self.factory (Orchestrator) 彻底消除物理循环依赖
-        self.host_service = HostService(self.service_context, self.factory)
-        self.service_context._host_service = self.host_service
+        # 4. 完成用户类的深度水化 (填充方法与字段)
+        # 此时 Interpreter 已经初始化完毕，可以安全地创建函数对象
+        self.current_module_name = None
 
-        # 6. 完成子组件的注入
-        llm_executor.service_context = self.service_context
-        module_manager.set_interpreter(self)
-        
-        self._current_context = runtime_context
+        # 4. 完成用户类的深度水化 (填充方法与字段)
+        # 此时 Interpreter 已经初始化完毕，可以安全地创建函数对象
+        self._hydrate_user_classes(loaded.class_to_node)
+
+        # 4. 设置上下文
         self._setup_context(self._current_context)
 
         # 运行限制
@@ -238,23 +261,33 @@ class Interpreter(IStackInspector):
             
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
+        self.logical_stack = LogicalCallStack(max_depth=max_call_stack)
         self.current_module_name: Optional[str] = None
         self.strict_mode = strict_mode
 
-        # [IES 2.0 Optimization] 预先映射访问方法，消除运行时的字符串拼接和反射开销
+        # [IES 4.3] 初始化分片 Handlers
+        self.stmt_handler = StmtHandler(self)
+        self.expr_handler = ExprHandler(self)
+        self.import_handler = ImportHandler(self)
+
+        # [IES 2.0 Optimization] 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
-        for attr in dir(self):
-            if attr.startswith("visit_"):
-                self._visitor_cache[attr[6:]] = getattr(self, attr)
+        self._register_handlers([self, self.stmt_handler, self.expr_handler, self.import_handler])
+
+    def _register_handlers(self, handlers: List[Any]):
+        """从所有 Handler 中搜集 visit_ 方法并缓存"""
+        for handler in handlers:
+            for attr in dir(handler):
+                if attr.startswith("visit_"):
+                    self._visitor_cache[attr[6:]] = getattr(handler, attr)
 
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
-        """获取当前模块下的侧表信息"""
+        """从侧表中获取信息，支持多模块架构"""
         if not self.current_module_name:
             return None
         
         module_data = self.artifact_dict.get("modules", {}).get(self.current_module_name, {})
         if not isinstance(module_data, Mapping):
-            # print(f"DEBUG: module_data for {self.current_module_name} is NOT a dict! it is {type(module_data)}")
             return None
             
         table = module_data.get("side_tables", {}).get(table_name, {})
@@ -318,10 +351,12 @@ class Interpreter(IStackInspector):
         self.intrinsic_manager.rebind(self, context, deserializer=deserializer)
         
         # 注入内置类 (int, str, float, list, dict 等)
+        # [IES 2.0] 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
-                context.define_variable(name, ib_class, is_const=True, force=force)
-                defined_names.add(name)
+                if not getattr(ib_class.descriptor, 'is_user_defined', True):
+                    context.define_variable(name, ib_class, is_const=True, force=force)
+                    defined_names.add(name)
 
     def _setup_context(self, context: RuntimeContext):
         self.setup_context(context)
@@ -391,6 +426,15 @@ class Interpreter(IStackInspector):
 
         self.instruction_count = 0
         result = self.registry.get_none()
+        
+        # [NEW] Logical CallStack 追踪 (Module 层级)
+        self.logical_stack.push(
+            name=f"module:{module_name}",
+            local_vars={},
+            location=Location(file_path=module_name, line=1, column=0),
+            intent_stack=[i.content for i in self.context.get_active_intents()]
+        )
+        
         try:
             # 模块主体是语句 UID 列表
             body = module_data.get("body", [])
@@ -402,13 +446,8 @@ class Interpreter(IStackInspector):
             raise
         except (ReturnException, BreakException, ContinueException):
             raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
-        # except Exception as e:
-        #    msg = f"Runtime error: {str(e)}"
-        #    if self.service_context.issue_tracker:
-        #        from core.domain.issue import Severity
-        #        self.service_context.issue_tracker.report(Severity.FATAL, RUN_GENERIC_ERROR, msg)
-        #    raise self._report_error(msg, error_code=RUN_GENERIC_ERROR)
         finally:
+            self.logical_stack.pop()
             self._current_context = old_context
             self.current_module_name = old_module
 
@@ -453,6 +492,89 @@ class Interpreter(IStackInspector):
             return f"__EXT_ASSET_MISSING_{uid}__"
         return val
 
+    def _hydrate_user_classes(self, class_to_node: Dict[str, Any]):
+        """[IES 2.0] STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
+        old_module = self.current_module_name
+        for name, info in class_to_node.items():
+            node_uid, module_name = info if isinstance(info, tuple) else (info, "main")
+            self.current_module_name = module_name
+            
+            ib_class = self.registry.get_class(name)
+            if not ib_class or not getattr(ib_class.descriptor, 'is_user_defined', False):
+                continue
+            
+            node_data = self.get_node_data(node_uid)
+            if not node_data: continue
+            
+            body = node_data.get("body", [])
+            for stmt_uid in body:
+                stmt_data = self.get_node_data(stmt_uid)
+                if not stmt_data: continue
+                
+                if stmt_data["_type"] == "IbFunctionDef":
+                    sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+                    declared_type = self._resolve_type_from_symbol(sym_uid)
+                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self, descriptor=declared_type))
+                elif stmt_data["_type"] == "IbLLMFunctionDef":
+                    sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+                    declared_type = self._resolve_type_from_symbol(sym_uid)
+                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self, descriptor=declared_type))
+                elif stmt_data["_type"] == "IbAssign":
+                    # [IES 2.0] 记录初始化节点 UID，延后至执行期或预评估期执行
+                    # 这解决了 Context 未闭合导致无法处理复杂表达式的问题
+                    val_uid = stmt_data.get("value")
+                    for target_uid in stmt_data.get("targets", []):
+                        target_name = self._extract_name_id(target_uid)
+                        if target_name:
+                            # 存储为 (value_node_uid, static_val) 元组
+                            # 如果是简单常量，直接装箱作为快照
+                            val_data = self.get_node_data(val_uid) if val_uid else None
+                            if val_data and val_data["_type"] == "IbConstant":
+                                static_val = self.registry.box(self._resolve_value(val_data.get("value")))
+                            else:
+                                static_val = None
+                            
+                            ib_class.default_fields[target_name] = (val_uid, static_val)
+        
+        self.current_module_name = old_module
+
+    def _resolve_type_from_symbol(self, sym_uid: str) -> Optional[Any]:
+        """从符号池中解析声明的类型描述符"""
+        if not sym_uid or sym_uid not in self.symbol_pool:
+            return None
+        sym_data = self.symbol_pool[sym_uid]
+        type_uid = sym_data.get("type_uid")
+        if not type_uid:
+            return None
+        # 通过 hydrator 获取或重建描述符
+        return self.type_hydrator.hydrate(type_uid)
+
+    def _extract_name_id(self, node_uid: str) -> Optional[str]:
+        """从表达式节点中提取变量名（处理类型标注等情况）"""
+        node_data = self.get_node_data(node_uid)
+        if not node_data: return None
+        if node_data["_type"] == "IbName":
+            return node_data.get("id")
+        if node_data["_type"] == "IbTypeAnnotatedExpr":
+            return self._extract_name_id(node_data.get("target"))
+        return None
+
+    def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
+        """LLM 容错机制的核心封装"""
+        while True:
+            try:
+                return action()
+            except LLMUncertaintyError:
+                fallback_body = node_data.get("llm_fallback", [])
+                if fallback_body:
+                    try:
+                        for stmt_uid in fallback_body:
+                            self.visit(stmt_uid)
+                        return self.registry.get_none()
+                    except RetryException:
+                        continue
+                raise
+
     def visit(self, node_uid: Union[str, Any]) -> IbObject:
         """核心 Pool-Walking 分发方法"""
         if node_uid is None:
@@ -493,6 +615,28 @@ class Interpreter(IStackInspector):
         
         self.call_stack_depth += 1
         
+        # [NEW] Logical CallStack 追踪 (Phase 4.3.3)
+        loc_data = self.get_side_table("node_to_loc", node_uid)
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0)
+            )
+
+        # 仅对具有独立作用域或重要执行单元的节点压栈
+        pushed_frame = False
+        node_type = node_data.get("_type")
+        if node_type in ("IbModule", "IbFunctionDef", "IbLLMFunctionDef", "IbClassDef", "IbIntentStmt"):
+            self.logical_stack.push(
+                name=f"{node_type}:{node_uid}",
+                local_vars={}, # 暂时不快照变量，性能考虑
+                location=loc,
+                intent_stack=[i.content for i in self.context.get_active_intents()]
+            )
+            pushed_frame = True
+
         # [NEW] 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化
         pushed_count = 0
         intent_uids = self.get_side_table("node_intents", node_uid)
@@ -513,7 +657,6 @@ class Interpreter(IStackInspector):
                     pushed_count += 1
 
         try:
-            node_type = node_data["_type"]
             visitor = self._visitor_cache.get(node_type, self.generic_visit)
             return visitor(node_uid, node_data)
         except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
@@ -521,19 +664,13 @@ class Interpreter(IStackInspector):
         except InterpreterError as e:
             # 如果异常还没有位置信息，则尝试补全
             if not e.location:
-                loc_data = self.get_side_table("node_to_loc", node_uid)
-                if loc_data:
-                    e.location = Location(
-                        file_path=loc_data.get("file_path"),
-                        line=loc_data.get("line", 0),
-                        column=loc_data.get("column", 0),
-                        end_line=loc_data.get("end_line"),
-                        end_column=loc_data.get("end_column")
-                    )
+                e.location = loc
             raise
         except Exception as e:
             raise self._report_error(f"{type(e).__name__}: {str(e)}", node_uid, error_code=RUN_GENERIC_ERROR) from e
         finally:
+            if pushed_frame:
+                self.logical_stack.pop()
             self.call_stack_depth -= 1
             # [NEW] 自动出栈，确保意图作用域正确恢复
             for _ in range(pushed_count):
@@ -543,605 +680,6 @@ class Interpreter(IStackInspector):
         raise self._report_error(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)
 
     # --- 访问方法实现 ---
-
-    def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """行为描述行：█ ... █"""
-        is_deferred = self.get_side_table("node_is_deferred", node_uid)
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"BehaviorExpr {node_uid} is_deferred={is_deferred}")
-        
-        if is_deferred:
-            # 返回延迟执行的行为对象 (Lambda)
-            # [IES 2.0 Optimization] 直接引用意图栈顶节点，实现结构共享
-            captured_intents = self.context.intent_stack
-            # 获取推导出的预期类型 (如果有)
-            expected_type = self.get_side_table("node_to_type", node_uid)
-            return IbBehavior(node_uid, self, captured_intents, expected_type=expected_type)
-        
-        # 立即执行
-        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.context)
-
-    def visit_IbModule(self, node_uid: str, node_data: Mapping[str, Any]):
-        result = self.registry.get_none()
-        for stmt_uid in node_data.get("body", []):
-            result = self.visit(stmt_uid)
-        return result
-
-    def visit_IbConstant(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """UTS: 统一常量装箱"""
-        return self.registry.box(self._resolve_value(node_data.get("value")))
-
-    def visit_IbBinOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """二元运算实现"""
-        left = self.visit(node_data.get("left"))
-        right = self.visit(node_data.get("right"))
-        
-        op = node_data.get("op")
-        method = OP_MAPPING.get(op)
-        
-        if not method: raise self._report_error(f"Unsupported op: {op}", node_uid)
-        return left.receive(method, [right])
-
-    def visit_IbCompare(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """比较运算实现"""
-        left = self.visit(node_data.get("left"))
-        # 简化：仅取第一个比较操作
-        op = node_data.get("ops", ["=="])[0]
-        right = self.visit(node_data.get("comparators", [None])[0])
-        
-        method = OP_MAPPING.get(op)
-        
-        if not method: raise self._report_error(f"Unsupported comparison: {op}", node_uid)
-        return left.receive(method, [right])
-
-    def visit_IbListExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """列表字面量 -> 统一装箱"""
-        elts = [self.visit(e) for e in node_data.get("elts", [])]
-        return self.registry.box(elts)
-
-    def visit_IbDict(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """字典字面量 -> 统一装箱"""
-        data = {}
-        keys = node_data.get("keys", [])
-        values = node_data.get("values", [])
-        for k_uid, v_uid in zip(keys, values):
-            key_obj = self.visit(k_uid) if k_uid else self.registry.get_none()
-            val_obj = self.visit(v_uid)
-            native_key = key_obj.to_native() if hasattr(key_obj, 'to_native') else key_obj
-            data[native_key] = val_obj
-        return self.registry.box(data)
-
-    def visit_IbSubscript(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """下标访问 -> __getitem__"""
-        value = self.visit(node_data.get("value"))
-        slice_obj = self.visit(node_data.get("slice"))
-        return value.receive('__getitem__', [slice_obj])
-
-    def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """类型强转运行时实现"""
-        value = self.visit(node_data.get("value"))
-        target_type_name = node_data.get("type_name")
-        
-        # [IES 2.0] 调用目标类的 cast_to 协议
-        target_class = self.registry.get_class(target_type_name)
-        if not target_class:
-            return value # 如果类型未定义，回退为 no-op
-            
-        return value.receive('cast_to', [target_class])
-
-    def visit_IbUnaryOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """一元运算实现"""
-        operand = self.visit(node_data.get("operand"))
-        op_symbol = node_data.get("op")
-        # 兼容性处理
-        op_map = {'UAdd': '+', 'USub': '-', 'Not': 'not', 'Invert': '~'}
-        op = op_map.get(op_symbol, op_symbol)
-        
-        method = UNARY_OP_MAPPING.get(op)
-        
-        if not method: raise self._report_error(f"Unsupported unary op: {op_symbol}", node_uid)
-        return operand.receive(method, [])
-
-    def visit_IbName(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """变量读取：优先通过 Symbol UID 查找"""
-        sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        if sym_uid:
-            try:
-                return self.context.get_variable_by_uid(sym_uid)
-            except InterpreterError:
-                # 如果是严格模式，UID 查找失败即报错
-                if self.strict_mode: raise
-
-        # 兼容性/动态代码回退：名称查找
-        name = node_data.get("id")
-        
-        try:
-            return self.context.get_variable(name)
-        except InterpreterError:
-            # 2. 尝试从 Registry 获取类 (支持内置类型名称如 int, str)
-            cls = self.registry.get_class(name)
-            if cls: return cls
-            
-            if self.strict_mode and not sym_uid:
-                raise self._report_error(f"Strict mode: Symbol UID missing for variable '{name}'.", node_uid)
-            
-            raise
-
-    def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]):
-        """赋值语句实现"""
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
-        
-        def action():
-            value_uid = node_data.get("value")
-            value = self.visit(value_uid)
-            
-            # 处理多重赋值目标 (var a, b = 1)
-            for target_uid in node_data.get("targets", []):
-                target_data = self.get_node_data(target_uid)
-                if not target_data: continue
-                
-                # 1. 普通变量赋值 (Name)
-                if target_data["_type"] == "IbName":
-                    sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                    name = target_data.get("id")
-                    if sym_uid:
-                        # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
-                        if self.context.get_symbol_by_uid(sym_uid):
-                            self.context.set_variable_by_uid(sym_uid, value)
-                        else:
-                            declared_type = self._resolve_type_from_symbol(sym_uid)
-                            self.context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
-                    elif not self.strict_mode:
-                        # 回退到名称查找
-                        self.context.set_variable(name, value)
-                    else:
-                        raise self._report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
-                
-                # 2. 类型标注表达式 (TypeAnnotatedExpr)
-                elif target_data["_type"] == "IbTypeAnnotatedExpr":
-                    inner_target_uid = target_data.get("target")
-                    inner_target_data = self.get_node_data(inner_target_uid)
-                    if inner_target_data and inner_target_data["_type"] == "IbName":
-                        sym_uid = self.get_side_table("node_to_symbol", inner_target_uid)
-                        name = inner_target_data.get("id")
-                        # 总是定义新变量
-                        declared_type = self._resolve_type_from_symbol(sym_uid)
-                        self.context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
-                
-                # 3. 属性赋值 (Attribute)
-                elif target_data["_type"] == "IbAttribute":
-                    obj = self.visit(target_data.get("value"))
-                    attr = target_data.get("attr")
-                    obj.receive('__setattr__', [self.registry.box(attr), value])
-                
-                # 4. 下标赋值 (Subscript)
-                elif target_data["_type"] == "IbSubscript":
-                    obj = self.visit(target_data.get("value"))
-                    slice_val = self.visit(target_data.get("slice"))
-                    obj.receive('__setitem__', [slice_val, value])
-                    
-            return self.registry.get_none()
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]):
-        """普通函数定义"""
-        sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        declared_type = self._resolve_type_from_symbol(sym_uid)
-        func = IbUserFunction(node_uid, self, descriptor=declared_type)
-        name = node_data.get("name")
-        self.context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
-        return self.registry.get_none()
-
-    def visit_IbLLMFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]):
-        """LLM 函数定义"""
-        sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        declared_type = self._resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self, descriptor=declared_type)
-        name = node_data.get("name")
-        self.context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
-        return self.registry.get_none()
-
-    def visit_IbAugAssign(self, node_uid: str, node_data: Mapping[str, Any]):
-        """复合赋值实现 (a += 1)"""
-        def action():
-            target_uid = node_data.get("target")
-            target_data = self.get_node_data(target_uid)
-            
-            value = self.visit(node_data.get("value"))
-            op_symbol = node_data.get("op")
-            # 兼容性处理：如果是 Add -> +
-            op_map = {'Add': '+', 'Sub': '-', 'Mult': '*', 'Div': '/'}
-            op = op_map.get(op_symbol, op_symbol)
-            
-            method = OP_MAPPING.get(op)
-            
-            if not method: raise self._report_error(f"Unsupported aug op: {op_symbol}", node_uid)
-            
-            # 1. 读取旧值
-            old_val = self.visit(target_uid)
-            
-            # 2. 计算新值
-            new_val = old_val.receive(method, [value])
-            
-            # 3. 写回
-            if target_data["_type"] == "IbName":
-                sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                if sym_uid:
-                    self.context.set_variable_by_uid(sym_uid, new_val)
-                else:
-                    self.context.set_variable(target_data.get("id"), new_val)
-            elif target_data["_type"] == "IbAttribute":
-                obj = self.visit(target_data.get("value"))
-                attr = target_data.get("attr")
-                obj.receive('__setattr__', [self.registry.box(attr), new_val])
-                
-            return self.registry.get_none()
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbBoolOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """逻辑运算 (and/or)"""
-        is_or = node_data.get("op") == 'or'
-        last_val = self.registry.get_none()
-        for val_uid in node_data.get("values", []):
-            val = self.visit(val_uid)
-            last_val = val
-            if is_or and self.is_truthy(val): return val
-            if not is_or and not self.is_truthy(val): return val
-        return last_val
-
-    def visit_IfExp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """三元表达式"""
-        if self.is_truthy(self.visit(node_data.get("test"))):
-            return self.visit(node_data.get("body"))
-        return self.visit(node_data.get("orelse"))
-
-    def visit_IbCall(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """UTS: 函数调用逻辑"""
-        func = self.visit(node_data.get("func"))
-        args = [self.visit(a) for a in node_data.get("args", [])]
-        
-        try:
-            # 如果是 BoundMethod 或 IbFunction，其 call 内部会处理作用域
-            # 如果是 IbObject，则发送 __call__ 消息
-            if hasattr(func, 'call'):
-                return func.call(self.registry.get_none(), args)
-            return func.receive('__call__', args)
-        except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
-            raise
-        except InterpreterError:
-            raise
-        except Exception as e:
-            import traceback
-            print(f"DEBUG: Call failed traceback:\n{traceback.format_exc()}")
-            raise self._report_error(f"Call failed: {str(e)}", node_uid)
-
-    def visit_IbAttribute(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """读取属性 -> __getattr__"""
-        value = self.visit(node_data.get("value"))
-        attr = node_data.get("attr")
-        return value.receive('__getattr__', [self.registry.box(attr)])
-
-    def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]):
-        def action():
-            condition = self.visit(node_data.get("test"))
-            if self.is_truthy(condition):
-                for stmt_uid in node_data.get("body", []):
-                    self.visit(stmt_uid)
-            else:
-                for stmt_uid in node_data.get("orelse", []):
-                    self.visit(stmt_uid)
-            return self.registry.get_none()
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]):
-        def action():
-            while self.is_truthy(self.visit(node_data.get("test"))):
-                try:
-                    for stmt_uid in node_data.get("body", []):
-                        self.visit(stmt_uid)
-                except BreakException: break
-                except ContinueException: continue
-            return self.registry.get_none()
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]):
-        def action():
-            target_uid = node_data.get("target")
-            iter_uid = node_data.get("iter")
-            body = node_data.get("body", [])
-            
-            # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
-            if target_uid is None:
-                # 这种情况不需要 to_list 协议，而是直接根据条件的真值决定是否继续
-                while self.is_truthy(self.visit(iter_uid)):
-                    try:
-                        for stmt_uid in body:
-                            self.visit(stmt_uid)
-                    except BreakException: 
-                        return self.registry.get_none()
-                    except ContinueException: 
-                        continue
-                return self.registry.get_none()
-
-            # 标准 Foreach 循环 (for item in list)
-            iterable_obj = self.visit(iter_uid)
-            
-            # UTS: 使用消息传递获取迭代列表 (to_list 协议)
-            try:
-                elements_obj = iterable_obj.receive('to_list', [])
-                if not isinstance(elements_obj, IbList):
-                    raise self._report_error(f"Object is not iterable", node_uid)
-                
-                elements = elements_obj.elements
-            except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
-                raise
-            except InterpreterError:
-                raise
-            except Exception as e:
-                raise self._report_error(f"Iteration failed: {str(e)}", node_uid)
-            
-            total = len(elements)
-            for i, item in enumerate(elements):
-                # 注入循环上下文
-                self.context.push_loop_context(i, total)
-                
-                # 绑定循环变量
-                target_data = self.get_node_data(target_uid)
-                if target_data and target_data["_type"] == "IbName":
-                    name = target_data.get("id")
-                    sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                    declared_type = self._resolve_type_from_symbol(sym_uid)
-                    self.context.define_variable(name, item, declared_type=declared_type, uid=sym_uid)
-                
-                try:
-                    for stmt_uid in body:
-                        self.visit(stmt_uid)
-                except BreakException: 
-                    self.context.pop_loop_context()
-                    return self.registry.get_none()
-                except ContinueException: 
-                    self.context.pop_loop_context()
-                    continue
-                finally:
-                    self.context.pop_loop_context()
-            return self.registry.get_none()
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbReturn(self, node_uid: str, node_data: Mapping[str, Any]):
-        value_uid = node_data.get("value")
-        value = self.visit(value_uid) if value_uid else self.registry.get_none()
-        raise ReturnException(value)
-
-    def visit_IbBreak(self, node_uid: str, node_data: Mapping[str, Any]):
-        raise BreakException()
-
-    def visit_IbContinue(self, node_uid: str, node_data: Mapping[str, Any]):
-        raise ContinueException()
-
-    def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]):
-        """表达式语句"""
-        def action():
-            res = self.visit(node_data.get("value"))
-            # 如果是行为描述行，则立即执行（作为语句时）
-            if isinstance(res, IbBehavior):
-                return res.receive('__call__', [])
-            return res
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbRetry(self, node_uid: str, node_data: Mapping[str, Any]):
-        hint_uid = node_data.get("hint")
-        hint_val = None
-        if hint_uid:
-            hint_obj = self.visit(hint_uid)
-            hint_val = hint_obj.to_native() if hasattr(hint_obj, 'to_native') else str(hint_obj)
-        
-        # 将 hint 设置到 LLM 执行器中
-        self.service_context.llm_executor.retry_hint = hint_val
-        raise RetryException()
-
-    def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
-        """LLM 容错机制的核心封装"""
-        while True:
-            try:
-                return action()
-            except LLMUncertaintyError:
-                fallback_body = node_data.get("llm_fallback", [])
-                if fallback_body:
-                    try:
-                        for stmt_uid in fallback_body:
-                            self.visit(stmt_uid)
-                        return self.registry.get_none()
-                    except RetryException:
-                        continue
-                raise
-
-    def visit_IbTry(self, node_uid: str, node_data: Mapping[str, Any]):
-        """实现异常处理块"""
-        def action():
-            try:
-                for stmt_uid in node_data.get("body", []):
-                    self.visit(stmt_uid)
-            except (ReturnException, BreakException, ContinueException, RetryException):
-                raise
-            except (ThrownException, Exception) as e:
-                # 包装 Python 原生异常
-                error_obj = e.value if isinstance(e, ThrownException) else self.registry.box(str(e))
-                
-                # 查找匹配的 except 块
-                handled = False
-                for handler_uid in node_data.get("handlers", []):
-                    handler_data = self.get_node_data(handler_uid)
-                    
-                    # 1. 类型匹配检查
-                    type_uid = handler_data.get("type")
-                    if type_uid:
-                        expected_type_obj = self.visit(type_uid)
-                        # 如果捕获的是类对象，进行子类判定
-                        if isinstance(expected_type_obj, IbClass):
-                            if not error_obj.ib_class.is_assignable_to(expected_type_obj):
-                                continue
-                        # 如果捕获的是其他对象（如字符串），进行值判定（用于 LLM 异常简化匹配）
-                        elif expected_type_obj != error_obj:
-                            continue
-
-                    # 2. 绑定异常变量
-                    name = handler_data.get("name")
-                    if name:
-                        self.context.define_variable(name, error_obj)
-                    
-                    # 3. 执行处理体
-                    for stmt_uid in handler_data.get("body", []):
-                        self.visit(stmt_uid)
-                    handled = True
-                    break
-                if not handled: raise
-            finally:
-                for stmt_uid in node_data.get("finalbody", []):
-                    self.visit(stmt_uid)
-            return self.registry.get_none()
-            
-        return self._with_llm_fallback(node_uid, node_data, action)
-
-    def visit_IbImport(self, node_uid: str, node_data: Mapping[str, Any]):
-        for alias_uid in node_data.get("names", []):
-            alias_data = self.get_node_data(alias_uid)
-            if alias_data:
-                name = alias_data.get("name")
-                asname = alias_data.get("asname")
-                mod_inst = self.service_context.module_manager.import_module(name, self.context)
-                
-                # 绑定到当前作用域：优先使用别名，否则使用原始模块名
-                target_name = asname if asname else name
-                
-                # [FIX] 必须获取符号 UID 并绑定，否则 visit_IbName 无法通过 UID 查找到该模块
-                sym_uid = self.get_side_table("node_to_symbol", alias_uid)
-                self.context.define_variable(target_name, mod_inst, is_const=True, uid=sym_uid)
-        return self.registry.get_none()
-
-    def visit_IbImportFrom(self, node_uid: str, node_data: Mapping[str, Any]):
-        names = []
-        for alias_uid in node_data.get("names", []):
-            alias_data = self.get_node_data(alias_uid)
-            if alias_data:
-                names.append((alias_data.get("name"), alias_data.get("asname")))
-        self.service_context.module_manager.import_from(node_data.get("module"), names, self.context)
-        return self.registry.get_none()
-
-    def _extract_name_id(self, node_uid: str) -> Optional[str]:
-        """从表达式节点中提取变量名（处理类型标注等情况）"""
-        node_data = self.get_node_data(node_uid)
-        if not node_data: return None
-        if node_data["_type"] == "IbName":
-            return node_data.get("id")
-        if node_data["_type"] == "IbTypeAnnotatedExpr":
-            return self._extract_name_id(node_data.get("target"))
-        return None
-
-    def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]):
-        """动态创建类对象"""
-        name = node_data.get("name")
-        parent_name = node_data.get("parent") or "Object"
-        
-        # [Phase 1.1] 强元数据对齐：动态创建类描述符
-        sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        descriptor = self._resolve_type_from_symbol(sym_uid)
-        if not descriptor:
-            # 如果符号表中没有预定义的描述符（如动态注入代码），则现场创建一个
-            descriptor = self.registry.get_metadata_registry().factory.create_class(name, parent=parent_name)
-            
-        new_class = self.registry.create_subclass(name, descriptor, parent_name)
-        
-        # 1. 注册方法与字段
-        body = node_data.get("body", [])
-        for stmt_uid in body:
-            stmt_data = self.get_node_data(stmt_uid)
-            if not stmt_data: continue
-            
-            if stmt_data["_type"] == "IbFunctionDef":
-                sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-                declared_type = self._resolve_type_from_symbol(sym_uid)
-                new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self, descriptor=declared_type))
-            elif stmt_data["_type"] == "IbLLMFunctionDef":
-                sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-                declared_type = self._resolve_type_from_symbol(sym_uid)
-                new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self, descriptor=declared_type))
-            elif stmt_data["_type"] == "IbAssign":
-                val_uid = stmt_data.get("value")
-                if val_uid:
-                    val = self.visit(val_uid)
-                else:
-                    # [FIX] 兼容旧 Spec：类字段 var 定义默认初始化为 0
-                    val = self.registry.box(0)
-                
-                # 确保 val 永远不为 Python None
-                if val is None: val = self.registry.get_none()
-                
-                for target_uid in stmt_data.get("targets", []):
-                    target_name = self._extract_name_id(target_uid)
-                    if target_name:
-                        new_class.default_fields[target_name] = val
-        
-        # 绑定到当前作用域
-        sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        self.context.define_variable(name, new_class, uid=sym_uid)
-        return self.registry.get_none()
-
-    def _resolve_type_from_symbol(self, sym_uid: str) -> Optional[Type]:
-        """从符号池中解析声明的类型描述符"""
-        if not sym_uid or sym_uid not in self.symbol_pool:
-            return None
-        sym_data = self.symbol_pool[sym_uid]
-        type_uid = sym_data.get("type_uid")
-        if not type_uid:
-            return None
-        # 通过 hydrator 获取或重建描述符
-        return self.type_hydrator.hydrate(type_uid)
-
-    def visit_IbRaise(self, node_uid: str, node_data: Mapping[str, Any]):
-        """抛出异常"""
-        exc_uid = node_data.get("exc")
-        exc_val = self.visit(exc_uid) if exc_uid else self.registry.get_none()
-        raise ThrownException(exc_val)
-
-    def visit_IbIntentStmt(self, node_uid: str, node_data: Mapping[str, Any]):
-        """处理意图块 (IES 2.0 强契约)"""
-        intent_uid = node_data.get("intent")
-        intent_data = self.get_node_data(intent_uid)
-        
-        # [Active Defense] 仅接受结构化意图对象，不再支持原始字符串
-        if not intent_data:
-            raise self._report_error("Invalid intent metadata: Intent must be a structured IbIntentInfo node.")
-            
-        content = intent_data.get('content', '')
-        mode = IntentMode.from_str(intent_data.get('mode', '+'))
-        tag = intent_data.get('tag')
-        segments = intent_data.get('segments', [])
-        
-        intent = IbIntent(
-            ib_class=self.registry.get_class("Intent"),
-            content=content,
-            mode=mode,
-            tag=tag,
-            segments=segments,
-            role=IntentRole.BLOCK,
-            source_uid=intent_uid
-        )
-            
-        self.context.push_intent(intent)
-        try:
-            for stmt_uid in node_data.get("body", []):
-                self.visit(stmt_uid)
-        finally:
-            self.context.pop_intent()
-        return self.registry.get_none()
-
-    def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]):
-        return self.registry.get_none()
 
     def is_truthy(self, value: IbObject) -> bool:
         """UTS: 使用 to_bool 协议判断真值"""

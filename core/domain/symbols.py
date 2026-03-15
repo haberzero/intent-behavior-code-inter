@@ -29,10 +29,33 @@ class Symbol:
     # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中间层
     descriptor: Optional[TypeDescriptor] = None
 
+    def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'Symbol':
+        """
+        [IES 2.0 Isolation] 克隆符号对象。
+        注意：递归克隆关联的描述符以确保物理隔离。
+        """
+        if memo is None: memo = {}
+        if id(self) in memo:
+            return memo[id(self)]
+            
+        import copy
+        new_sym = copy.copy(self)
+        memo[id(self)] = new_sym
+        
+        if self.descriptor:
+            new_sym.descriptor = self.descriptor.clone(memo)
+        return new_sym
+
     @property
     def type_info(self) -> 'TypeDescriptor':
-        """统一获取符号的类型信息"""
-        return self.descriptor or uts.ANY_DESCRIPTOR
+        """[Refactor] 统一获取符号的类型描述符。支持向后兼容。"""
+        if self.descriptor:
+            return self.descriptor
+        # 回退模式：如果直接被注入了 metadata (Legacy)
+        if hasattr(self, 'metadata') and isinstance(self.metadata, dict):
+            desc = self.metadata.get("type_descriptor")
+            if desc: return desc
+        return uts.ANY_DESCRIPTOR
 
 @dataclass
 class TypeSymbol(Symbol):

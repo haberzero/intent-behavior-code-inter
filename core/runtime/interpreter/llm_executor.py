@@ -8,6 +8,7 @@ from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.interfaces import ILLMProvider
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.builtins import IbBehavior
 from core.runtime.objects.intent import IbIntent
 from core.domain.intent_logic import IntentMode, IntentRole
 from core.domain.intent_resolver import IntentResolver
@@ -357,6 +358,39 @@ class LLMExecutorImpl:
         self.retry_hint = None
         return self.service_context.registry.box(response)
 
+
+    def execute_behavior_object(self, behavior: IbObject, context: RuntimeContext) -> IbObject:
+        """
+        [IES 2.0 Architectural Update] 执行一个被动行为对象。
+        """
+        if not isinstance(behavior, IbBehavior):
+             return behavior
+
+        if behavior._cache is not None:
+            return behavior._cache
+
+        # 1. 恢复捕获的意图栈
+        old_intents = context.intent_stack
+        context.intent_stack = list(behavior.captured_intents)
+
+        # 2. 处理预期类型注入
+        type_pushed = False
+        if behavior.expected_type:
+            self.push_expected_type(behavior.expected_type)
+            type_pushed = True
+
+        try:
+            # 3. 递归调用 execute_behavior_expression
+            res = self.execute_behavior_expression(
+                behavior.node, context, captured_intents=behavior.captured_intents
+            )
+            behavior._cache = res
+            return res
+        finally:
+            # 4. 环境恢复
+            context.intent_stack = old_intents
+            if type_pushed:
+                self.pop_expected_type()
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general") -> str:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")

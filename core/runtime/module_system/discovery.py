@@ -3,7 +3,7 @@ import importlib.util
 from typing import Dict, List, Optional, Any
 from core.foundation.host_interface import HostInterface
 from core.domain.types.descriptors import ModuleMetadata as ModuleType
-from core.foundation.enums import RegistrationState
+from core.runtime.enums import RegistrationState
 
 class ModuleDiscoveryService:
     """
@@ -18,7 +18,7 @@ class ModuleDiscoveryService:
         扫描所有搜索路径，加载所有发现的模块 spec。
         """
         if registry:
-            registry.verify_state(RegistrationState.STAGE_3_PLUGIN_METADATA)
+            registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
             
         host = HostInterface()
         discovered_modules = set()
@@ -46,11 +46,8 @@ class ModuleDiscoveryService:
                             host.register_module(entry, None, spec_metadata)
                             discovered_modules.add(entry)
                     except Exception as e:
+                        # [IES 2.0] 契约加载失败应记录并跳过，生产环境建议抛出异常
                         print(f"Warning: Failed to load spec for module '{entry}': {e}")
-                else:
-                    # 如果没有 spec.py，尝试使用反射发现（兼容模式）
-                    # 注意：这需要加载 __init__.py，通常在 check 阶段应尽量避免
-                    pass
         
         return host
 

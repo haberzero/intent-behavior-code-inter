@@ -159,5 +159,20 @@ class TestComprehensiveInterpreter(BaseIBCTest):
             with self.silent_mode():
                 self.run_code(code)
 
+    def test_chained_comparison(self):
+        """验证链式比较 a < b < c"""
+        code = """
+        print(1 < 2 < 3)
+        print(1 < 2 < 0)
+        print(1 < 2 == 2)
+        print(5 > 3 > 1)
+        """
+        self.run_code(code)
+        # 1 < 2 < 3 -> True
+        # 1 < 2 < 0 -> False
+        # 1 < 2 == 2 -> True
+        # 5 > 3 > 1 -> True
+        self.assert_outputs(["1", "0", "1", "1"])
+
 if __name__ == "__main__":
     unittest.main()

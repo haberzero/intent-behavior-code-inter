@@ -1,7 +1,8 @@
 from typing import Any, List, Dict, Optional, Callable
 from ..objects.kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
-from core.foundation.registry import Registry, RegistrationState
+from core.foundation.registry import Registry
+from core.runtime.enums import RegistrationState
 from core.domain.issue import InterpreterError
 from core.domain.types import descriptors as uts
 from core.domain.types.descriptors import (
@@ -48,7 +49,7 @@ def initialize_builtin_classes(registry: Registry) -> Any:
         return None # 已初始化
         
     # [IES 2.0] 确保处于 STAGE_1_BOOTSTRAP 状态
-    registry.verify_state(RegistrationState.STAGE_1_BOOTSTRAP)
+    registry.verify_level(RegistrationState.STAGE_1_BOOTSTRAP.value)
     
     # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
     # [Active Defense] 贯彻“元数据先行”原则
@@ -60,7 +61,7 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     token = bootstrapper.token
     
     # [IES 2.0 Transition] 跃迁到 STAGE_2_CORE_TYPES
-    registry.set_state(RegistrationState.STAGE_2_CORE_TYPES, token)
+    registry.set_state_level(RegistrationState.STAGE_2_CORE_TYPES.value, token)
     
     # 注册元数据注册表到 Registry
     registry.register_metadata_registry(metadata_registry, token)
@@ -96,7 +97,7 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     if axiom_registry:
         core_axioms = axiom_registry.get_all_names()
     else:
-        # Fallback (Safety net)
+        # Fallback (Safety net) - 仅在极端的 UTS 注册表未对齐时使用
         core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "var", "Any", "void"]
     
     # 自动创建类并注册
@@ -287,5 +288,9 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
+
+    # [IES 2.0 Transition] 跃迁到 STAGE_3_PLUGIN_METADATA
+    registry.set_state_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value, token)
     
+    # [IES 2.1 Audit] 清理遗留 Legacy 术语与残留注释
     return token

@@ -34,7 +34,7 @@ from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, 
 from core.runtime.interfaces import IInterpreterFactory
 
 
-from core.foundation.registry import Registry, RegistrationState
+from core.runtime.enums import RegistrationState
 
 class IBCIEngine(IInterpreterFactory):
     """
@@ -63,9 +63,6 @@ class IBCIEngine(IInterpreterFactory):
         
         self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
         self.module_loader = ModuleLoader([builtin_path, plugins_path])
-        
-        # [IES 2.0 Transition] STAGE 3: 发现并加载元数据
-        self.registry.set_state(RegistrationState.STAGE_3_PLUGIN_METADATA, self._kernel_token)
         
         # 2. 加载元数据以支持静态分析
         self.host_interface = self.discovery_service.discover_all(self.registry)
@@ -96,44 +93,7 @@ class IBCIEngine(IInterpreterFactory):
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
-        # [IES 2.0 Transition] STAGE 4: 加载插件实现层
-        self.registry.set_state(RegistrationState.STAGE_4_PLUGIN_IMPL, self._kernel_token)
-        
-        # 1. 预先初始化 ServiceContext 需要的部分组件（如 InterOp）以供插件加载
-        # 这里我们需要先创建一个简易的 ServiceContext，或者重构 ModuleLoader 使其不强依赖 Interpreter 实例
-        # 考虑到 load_and_register_all 需要 ServiceContext，我们先创建一个空的解释器外壳或者提前准备好 context
-        
-        # [IES 2.0] 创建一个临时 context 用于插件初始化
-        # 插件在初始化阶段可能需要 registry 和 host_interface
-        interop = InterOpImpl(host_interface=self.host_interface)
-        
-        # [IES 2.0] 创建统一的 RuntimeContext 以供插件和解释器共享
-        runtime_context = RuntimeContextImpl(registry=self.registry)
-        
-        # [IES 2.0] 初始化运行时对象工厂
-        object_factory = RuntimeObjectFactory(registry=self.registry)
-        
-        service_context = ServiceContextImpl(
-            self.issue_tracker,
-            runtime_context,
-            LLMExecutorImpl(),
-            ModuleManagerImpl(interop, artifact=artifact, root_dir=self.root_dir, object_factory=object_factory),
-            interop,
-            PermissionManagerImpl(self.root_dir),
-            None, # interpreter
-            self.registry,
-            object_factory,
-            source_provider=self.scheduler.source_manager,
-            compiler=self.scheduler,
-            debugger=self.debugger
-        )
-        
-        # 统一由 ModuleLoader 驱动实现层的加载与注入
-        self.module_loader.load_and_register_all(service_context)
-        
-        # [IES 2.0 Transition] STAGE 5: 执行用户产物重水合
-        self.registry.set_state(RegistrationState.STAGE_5_HYDRATION, self._kernel_token)
-
+        # [IES 2.0] 彻底消除后期注入，构造期完成依赖图谱闭合
         self.interpreter = Interpreter(
             self.issue_tracker, 
             output_callback=output_callback,
@@ -144,15 +104,25 @@ class IBCIEngine(IInterpreterFactory):
             registry=self.registry,
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
-            factory=self, # 注入自己作为工厂
-            interop=interop,
-            runtime_context=runtime_context # 传入共享的 context
+            factory=self,
+            plugin_loader=self._load_plugins # 注入生命周期钩子
         )
         
         # [IES 2.0 Transition] STAGE 6: 准备就绪
-        self.registry.set_state(RegistrationState.STAGE_6_READY, self._kernel_token)
+        self.registry.set_state_level(RegistrationState.STAGE_6_READY.value, self._kernel_token)
         # 封印类注册表
         self.registry.seal_classes(self._kernel_token)
+
+    def _load_plugins(self, service_context: ServiceContextImpl):
+        """[IES 2.0] 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)"""
+        # 1. 进入插件加载阶段
+        self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
+        
+        # 2. 统一由 ModuleLoader 驱动实现层的加载与注入
+        self.module_loader.load_and_register_all(service_context)
+        
+        # 3. 插件加载完成，进入水合阶段
+        self.registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, self._kernel_token)
 
     def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
         """
@@ -256,12 +226,20 @@ class IBCIEngine(IInterpreterFactory):
         return self.scheduler.compile_project(abs_entry)
 
     def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
-        """执行编译后的蓝图"""
-        # 1. 序列化蓝图为字典池 (这是解释器要求的格式)
+        """
+        [IES 2.0] 调度入口。执行编译产物。
+        注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
+        """
         serializer = FlatSerializer()
         artifact_dict = serializer.serialize_artifact(artifact)
         
-        self._prepare_interpreter(artifact_dict, output_callback)
+        # 强制重置或重新准备解释器
+        # 理由：Registry 封印后，无法再次加载不同的 Artifact
+        if self.registry.is_sealed:
+             raise PermissionError("Engine: Cannot execute new artifact on a sealed registry. Create a new Engine instance.")
+
+        if not self.interpreter:
+            self._prepare_interpreter(artifact_dict, output_callback=output_callback)
         
         # 1. 注入初始变量
         if variables:

@@ -1,5 +1,4 @@
 from typing import Any, Protocol, Optional, List, Dict, Union, runtime_checkable
-from core.foundation.enums import RegistrationState
 
 @runtime_checkable
 class ServiceContext(Protocol):
@@ -129,7 +128,7 @@ class ExtensionCapabilities:
         """
         if self._registry:
             # [IES 2.0 Strict] 仅在 STAGE_4 (加载插件实现) 之后允许装箱
-            self._registry.verify_state_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL)
+            self._registry.verify_level_at_least(4) # STAGE_4_PLUGIN_IMPL
             return self._registry.box(value)
         return value
 
@@ -139,7 +138,7 @@ class ExtensionCapabilities:
         """
         if self._registry:
             # [IES 2.0 Strict] 仅允许在 STAGE_4 阶段注册新类型
-            self._registry.verify_state(RegistrationState.STAGE_4_PLUGIN_IMPL)
+            self._registry.verify_level(4) # STAGE_4_PLUGIN_IMPL
             
             token = self._registry.get_extension_token()
             self._registry.register_boxer(py_class, lambda r, v, m: r.create_instance("Object", v, descriptor=descriptor), token=token)

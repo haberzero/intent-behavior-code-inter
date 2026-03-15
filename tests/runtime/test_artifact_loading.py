@@ -28,6 +28,14 @@ class TestArtifactLoading(unittest.TestCase):
         token = self.rt_foundation_registry.get_kernel_token()
         self.rt_foundation_registry.register_metadata_registry(meta_reg, token)
         
+        # [IES 2.0] 模拟状态机跳转到 HYDRATION 阶段，以允许加载器执行
+        from core.runtime.enums import RegistrationState
+        self.rt_foundation_registry.set_state_level(RegistrationState.STAGE_2_CORE_TYPES.value, token)
+        self.rt_foundation_registry.set_state_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value, token)
+        self.rt_foundation_registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, token)
+        self.rt_foundation_registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, token)
+        self._kernel_token = token
+        
         self.loader = ArtifactLoader(self.rt_foundation_registry)
 
     def compile_and_load(self, code: str):

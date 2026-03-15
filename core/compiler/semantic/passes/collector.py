@@ -86,6 +86,7 @@ class SymbolCollector:
     def visit_IbClassDef(self, node: ast.IbClassDef):
         # 1. 创建类元数据并注册
         cls_meta = self.analyzer.registry.factory.create_class(name=node.name, parent=node.parent)
+        cls_meta.is_user_defined = True # [NEW] 标识为脚本定义
         self.analyzer.registry.register(cls_meta)
         
         # 2. 注册类符号
@@ -112,6 +113,7 @@ class SymbolCollector:
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         # 1. 创建函数元数据 (暂定为 Any -> Any)
         func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
+        func_meta.is_user_defined = True # [NEW] 标识为脚本定义
         self.analyzer.registry.register(func_meta)
         
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, descriptor=func_meta)
@@ -121,6 +123,7 @@ class SymbolCollector:
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         # 1. 创建函数元数据
         func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
+        func_meta.is_user_defined = True # [NEW] 标识为脚本定义
         self.analyzer.registry.register(func_meta)
         
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, def_node=node, descriptor=func_meta)

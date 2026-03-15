@@ -21,6 +21,15 @@ OP_MAPPING = {
     '>=': '__ge__',
 }
 
+# [IES 2.0] AST 节点符号到标准运算符的映射 (归一化转换)
+AST_OP_MAP = {
+    # 二元/复合赋值
+    'Add': '+', 'Sub': '-', 'Mult': '*', 'Div': '/', 'FloorDiv': '//', 'Mod': '%',
+    'LShift': '<<', 'RShift': '>>', 'BitAnd': '&', 'BitOr': '|', 'BitXor': '^',
+    # 一元
+    'UAdd': '+', 'USub': '-', 'Not': 'not', 'Invert': '~',
+}
+
 # 一元运算符映射
 UNARY_OP_MAPPING = {
     '-': '__neg__',

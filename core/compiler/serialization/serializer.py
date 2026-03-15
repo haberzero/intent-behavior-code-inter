@@ -110,7 +110,7 @@ class FlatSerializer(BaseFlatSerializer):
         self.node_pool[uid] = node_data
         return uid
 
-    def _collect_symbol(self, sym: Symbol) -> str:
+    def _collect_symbol(self, sym: Any) -> str:
         sym_id = id(sym)
         if sym_id in self.type_map:
             return self.type_map[sym_id]
@@ -118,15 +118,27 @@ class FlatSerializer(BaseFlatSerializer):
         uid = f"sym_{uuid.uuid4().hex[:16]}"
         self.type_map[sym_id] = uid
         
-        sym_data = {
-            "uid": uid,
-            "name": sym.name,
-            "kind": sym.kind.name,
-            "type_uid": self._collect_type(sym.type_info) if hasattr(sym, 'type_info') and sym.type_info else None,
-            "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
-            "owned_scope_uid": self._collect_scope(sym.owned_scope) if sym.owned_scope else None,
-            "metadata": sym.metadata
-        }
+        # [Robustness] 兼容直接在 members 中存储 TypeDescriptor 的情况
+        if isinstance(sym, TypeDescriptor):
+            sym_data = {
+                "uid": uid,
+                "name": sym.name,
+                "kind": "VARIABLE", # 默认视为变量符号
+                "type_uid": self._collect_type(sym),
+                "node_uid": None,
+                "owned_scope_uid": None,
+                "metadata": {"is_synthetic": True}
+            }
+        else:
+            sym_data = {
+                "uid": uid,
+                "name": sym.name,
+                "kind": sym.kind.name if hasattr(sym.kind, 'name') else str(sym.kind),
+                "type_uid": self._collect_type(sym.type_info) if hasattr(sym, 'type_info') and sym.type_info else None,
+                "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
+                "owned_scope_uid": self._collect_scope(sym.owned_scope) if hasattr(sym, 'owned_scope') and sym.owned_scope else None,
+                "metadata": sym.metadata
+            }
         self.symbol_pool[uid] = sym_data
         return uid
 
@@ -141,9 +153,11 @@ class FlatSerializer(BaseFlatSerializer):
         
         type_data = {
             "uid": uid,
+            "kind": t.__class__.__name__,
             "name": t.name,
             "module_path": t.module_path,
-            "kind": t.__class__.__name__
+            "is_nullable": t.is_nullable,
+            "is_user_defined": t.is_user_defined, # [NEW]
         }
         
         # 递归收集复合类型属性

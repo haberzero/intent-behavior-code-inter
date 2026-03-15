@@ -1,7 +1,7 @@
 import unittest
 import os
 import textwrap
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from contextlib import contextmanager
 from core.engine import IBCIEngine
 from core.domain.issue import CompilerError, InterpreterError
@@ -189,14 +189,49 @@ class BaseIBCTest(unittest.TestCase):
                 self._print_diagnostics(e)
             raise e
 
-    def run_code(self, code: str, variables=None, silent: Optional[bool] = None):
-        """运行代码字符串并捕获输出"""
+    def run_code(self, code: str, variables=None, silent: Optional[bool] = None, pre_run_hook: Optional[Callable[[IBCIEngine], None]] = None):
+        """
+        运行代码字符串并捕获输出。
+        [IES 2.0] 标准化全链路测试工具。
+        """
         is_silent = silent if silent is not None else self.silent
         code = textwrap.dedent(code).strip() + "\n"
         self.outputs = []
+        
+        # 1. 重置引擎实例以确保生命周期清洁
+        old_root = self.engine.root_dir
+        self.engine = IBCTestEngine(root_dir=old_root)
+        
+        # 2. 恢复 Mock 环境
+        if self.mock_ai:
+            self.engine.register_plugin("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+        if self.mock_host:
+            self.engine.register_plugin("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
+
         try:
+            # 3. 静态编译阶段
             artifact = self.engine.compile_string(code, variables, silent=is_silent)
-            return self.engine.execute(artifact, variables, output_callback=lambda m: self.outputs.append(m))
+            
+            # 4. 执行准备阶段
+            from core.compiler.serialization.serializer import FlatSerializer
+            serializer = FlatSerializer()
+            artifact_dict = serializer.serialize_artifact(artifact)
+            
+            # 内部触发 _prepare_interpreter 但不立即运行
+            self.engine._prepare_interpreter(artifact_dict, output_callback=lambda m: self.outputs.append(m))
+            
+            # 5. 执行钩子 (允许测试用例在运行前注入拦截器)
+            if pre_run_hook:
+                pre_run_hook(self.engine)
+                
+            # 6. 注入初始变量
+            if variables:
+                for name, val in variables.items():
+                    self.engine.interpreter.context.define_variable(name, val)
+            
+            # 7. 启动执行
+            return self.engine.interpreter.run()
+            
         except CompilerError as e:
             if not is_silent:
                 self._print_diagnostics(e)
@@ -205,6 +240,19 @@ class BaseIBCTest(unittest.TestCase):
             if not is_silent:
                 print(f"\nINTERPRETER ERROR: {e}")
             raise e
+
+    @contextmanager
+    def capture_llm(self):
+        """捕获 LLM 调用的上下文管理器"""
+        captured = []
+        def mock_llm_call(sys_prompt, user_prompt, node_uid, **kwargs):
+            captured.append({"sys": sys_prompt, "user": user_prompt, "node": node_uid})
+            return "42" # 默认 Mock 返回值
+            
+        def hook(engine):
+            engine.interpreter.service_context.llm_executor._call_llm = mock_llm_call
+            
+        yield captured, hook
 
     def assert_output(self, expected: str):
         """断言输出列表中包含预期字符串"""

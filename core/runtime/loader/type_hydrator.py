@@ -8,6 +8,9 @@ from core.domain.types.descriptors import (
     LIST_DESCRIPTOR, DICT_DESCRIPTOR
 )
 
+# [IES 2.0] 统一内置原始类型列表，确保水化阶段一致性
+BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "Any", "var", "callable", "list", "dict", "behavior"]
+
 class TypeHydrator:
     """
     类型重水化器：将序列化后的 type_pool 还原为运行时的 TypeDescriptor 对象树。
@@ -22,7 +25,7 @@ class TypeHydrator:
 
     def _init_builtins(self):
         """同步注册表中的内置描述符到 memo"""
-        for name in ["int", "str", "float", "bool", "void", "Any", "var", "callable", "list", "dict"]:
+        for name in BUILTIN_TYPES:
             desc = self.registry.resolve(name)
             if desc:
                 # 寻找池中对应的内置类型（如果存在）并关联
@@ -31,19 +34,27 @@ class TypeHydrator:
                         self.memo[uid] = desc
                         break
 
-    def hydrate_all(self, registry: Optional[Any] = None):
-        """水化池中所有类型。采用两阶段加载：先创建所有 Shell，再填充详细信息。"""
+    def hydrate_all(self, registry: Optional[Any] = None) -> List[ClassMetadata]:
+        """
+        水化池中所有类型。采用两阶段加载：先创建所有 Shell，再填充详细信息。
+        返回所有被成功水化的 ClassMetadata。
+        """
         if registry:
-            from core.foundation.registry import RegistrationState
-            registry.verify_state(RegistrationState.STAGE_5_HYDRATION)
+             from core.runtime.enums import RegistrationState
+             registry.verify_level(RegistrationState.STAGE_5_HYDRATION.value)
             
         # Phase 1: Create all shells
         for uid in self.type_pool:
             self._create_shell(uid)
             
         # Phase 2: Fill all fields
+        classes = []
         for uid in self.type_pool:
-            self._fill_descriptor(uid)
+            desc = self._fill_descriptor(uid)
+            if desc and desc.__class__.__name__ == "ClassMetadata":
+                classes.append(desc)
+        
+        return classes
 
     def hydrate(self, uid: str) -> Optional[TypeDescriptor]:
         """按需水化单个类型（支持递归调用）"""
@@ -69,9 +80,10 @@ class TypeHydrator:
         
         factory = self.registry.factory
         descriptor: Optional[TypeDescriptor] = None
+        is_user_defined = data.get("is_user_defined", False)
         
         # 使用工厂驻留机制创建外壳
-        if name in ["int", "str", "float", "bool", "void", "Any", "var", "callable", "list", "dict", "behavior"]:
+        if name in BUILTIN_TYPES:
             descriptor = self.registry.resolve(name)
             if not descriptor:
                 descriptor = factory.create_primitive(name)
@@ -91,15 +103,18 @@ class TypeHydrator:
         else:
             descriptor = TypeDescriptor(name=name)
             
+        if descriptor:
+            descriptor.is_user_defined = is_user_defined
+            descriptor = self.registry.register(descriptor)
+            
         self.memo[uid] = descriptor
-        self.registry.register(descriptor)
         return descriptor
 
-    def _fill_descriptor(self, uid: str):
+    def _fill_descriptor(self, uid: str) -> Optional[TypeDescriptor]:
         """填充描述符的详细字段 (Phase 2)"""
         descriptor = self.memo.get(uid)
         if not descriptor:
-            return
+            return None
             
         data = self.type_pool[uid]
         
@@ -115,3 +130,5 @@ class TypeHydrator:
         elif isinstance(descriptor, ClassMetadata):
             # ClassMetadata 的 members 通常在运行时动态填充，或通过 symbol_pool 水化
             pass
+            
+        return descriptor

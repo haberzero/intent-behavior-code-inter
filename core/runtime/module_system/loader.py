@@ -4,7 +4,7 @@ import inspect
 import sys
 from typing import List, Dict, Any, Optional, Set
 from core.runtime.exceptions import RegistryIsolationError
-from core.foundation.registry import RegistrationState
+from core.runtime.enums import RegistrationState
 
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
 from core.foundation.interfaces import (
@@ -110,7 +110,7 @@ class ModuleLoader(IModuleLoader):
         """
         registry = context.interpreter.registry if context.interpreter else context.runtime_context.registry
         if registry:
-            registry.verify_state(RegistrationState.STAGE_4_PLUGIN_IMPL)
+            registry.verify_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
             
         interop = context.interop
         permission_manager = context.permission_manager

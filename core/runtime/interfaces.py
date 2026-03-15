@@ -145,6 +145,7 @@ class IObjectFactory(Protocol):
 
 class ServiceContext(Protocol):
     """注入容器，聚合所有运行时服务"""
+    def set_interpreter(self, interpreter: 'Interpreter') -> None: ...
     @property
     def interpreter(self) -> 'Interpreter': ...
     @property

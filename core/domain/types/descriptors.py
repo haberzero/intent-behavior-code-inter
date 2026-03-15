@@ -17,6 +17,7 @@ class TypeDescriptor:
     name: str = ""
     module_path: Optional[str] = None
     is_nullable: bool = True
+    is_user_defined: bool = True # [CHANGE] 默认设为 True，仅内核类手动设为 False
     kind: str = field(init=False)
     # 成员字典：名称 -> 符号 (不再是 TypeDescriptor)
     # 这样我们可以同时追踪成员的类型和定义源
@@ -28,8 +29,52 @@ class TypeDescriptor:
     # [New] 公理绑定
     _axiom: Optional['TypeAxiom'] = field(default=None, init=False, repr=False)
 
+    def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'TypeDescriptor':
+        """
+        [IES 2.0 Isolation] 深度克隆描述符，确保引擎实例间的物理隔离。
+        使用 memo 字典防止循环引用导致的无限递归。
+        """
+        if memo is None: memo = {}
+        if id(self) in memo:
+            return memo[id(self)]
+            
+        # 1. 基础浅拷贝处理标量字段
+        new_desc = copy.copy(self)
+        memo[id(self)] = new_desc
+        
+        # 2. 重置运行时绑定状态
+        new_desc._registry = None
+        new_desc._axiom = None
+        
+        # 3. 递归克隆成员符号
+        if self.members:
+            # 注意：此处必须使用 dict comprehension 确保 Symbol.clone 也能使用同一个 memo
+            # 同时 Symbol.clone 会递归调用 TypeDescriptor.clone(memo)
+            new_desc.members = {name: sym.clone(memo) for name, sym in self.members.items()}
+            
+        # 4. 处理子类特有的描述符引用 (这些引用可能不在 members 中)
+        if isinstance(self, ListMetadata) and self.element_type:
+            new_desc.element_type = self.element_type.clone(memo)
+        elif isinstance(self, DictMetadata):
+            if self.key_type: new_desc.key_type = self.key_type.clone(memo)
+            if self.value_type: new_desc.value_type = self.value_type.clone(memo)
+        elif isinstance(self, FunctionMetadata):
+            # 修正：FunctionMetadata.param_types 存储的是 TypeDescriptor 列表，不是 Symbol 列表
+            new_desc.param_types = [p.clone(memo) for p in self.param_types]
+            if self.return_type: new_desc.return_type = self.return_type.clone(memo)
+        elif isinstance(self, BoundMethodMetadata):
+            if self.receiver_type: new_desc.receiver_type = self.receiver_type.clone(memo)
+            if self.function_type: new_desc.function_type = self.function_type.clone(memo)
+            
+        return new_desc
+
     def __post_init__(self):
         self.kind = self.__class__.__name__
+
+    @property
+    def type_info(self) -> 'TypeDescriptor':
+        """[Refactor] 为了向后兼容符号系统，提供 type_info 属性代理自身"""
+        return self
 
     def unwrap(self) -> 'TypeDescriptor':
         return self
@@ -134,16 +179,26 @@ class TypeDescriptor:
 
         # 2. 泛型参数匹配 (如果子类支持)
         if hasattr(s, 'element_type') and hasattr(o, 'element_type'):
-            if not s.element_type.is_assignable_to(o.element_type):
+            if s.element_type and o.element_type and not s.element_type.is_assignable_to(o.element_type):
                 return f"Element type mismatch: {s.element_type.get_diff_hint(o.element_type)}"
         
         if hasattr(s, 'key_type') and hasattr(o, 'key_type'):
-            if not s.key_type.is_assignable_to(o.key_type):
+            if s.key_type and o.key_type and not s.key_type.is_assignable_to(o.key_type):
                 return f"Key type mismatch: {s.key_type.get_diff_hint(o.key_type)}"
         
         if hasattr(s, 'value_type') and hasattr(o, 'value_type'):
-            if not s.value_type.is_assignable_to(o.value_type):
+            if s.value_type and o.value_type and not s.value_type.is_assignable_to(o.value_type):
                 return f"Value type mismatch: {s.value_type.get_diff_hint(o.value_type)}"
+
+        # 3. 函数签名匹配
+        if isinstance(s, (FunctionMetadata, BoundMethodMetadata)) and isinstance(o, (FunctionMetadata, BoundMethodMetadata)):
+            if len(s.param_types) != len(o.param_types):
+                return f"Parameter count mismatch: expected {len(o.param_types)}, but got {len(s.param_types)}"
+            for i, (p1, p2) in enumerate(zip(s.param_types, o.param_types)):
+                if not p1.is_assignable_to(p2):
+                    return f"Parameter {i+1} mismatch: {p1.get_diff_hint(p2)}"
+            if s.return_type and o.return_type and not s.return_type.is_assignable_to(o.return_type):
+                return f"Return type mismatch: {s.return_type.get_diff_hint(o.return_type)}"
 
         return f"Type '{s.name}' is not compatible with '{o.name}'."
 
@@ -373,6 +428,23 @@ class BoundMethodMetadata(TypeDescriptor):
     """绑定方法类型元数据 (合成类型)"""
     receiver_type: Optional[TypeDescriptor] = None
     function_type: Optional[TypeDescriptor] = None
+
+    @property
+    def param_types(self) -> List[TypeDescriptor]:
+        """[IES 2.1] 代理函数签名的参数列表，并移除第一个 self 参数"""
+        if isinstance(self.function_type, FunctionMetadata):
+            # 如果是类方法，第一个参数通常是 self，在绑定后应被移除
+            if len(self.function_type.param_types) > 0:
+                return self.function_type.param_types[1:]
+            return self.function_type.param_types
+        return []
+
+    @property
+    def return_type(self) -> Optional[TypeDescriptor]:
+        """代理函数签名的返回类型"""
+        if isinstance(self.function_type, FunctionMetadata):
+            return self.function_type.return_type
+        return None
 
     # --- Trait Implementations ---
 

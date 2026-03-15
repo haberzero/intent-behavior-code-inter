@@ -1,7 +1,8 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
 from core.foundation.registry import Registry
-from core.foundation.enums import RegistrationState
+from core.runtime.enums import RegistrationState
 from core.domain.issue import InterpreterError
+from core.domain.issue_atomic import Location
 from core.runtime.exceptions import ReturnException, RegistryIsolationError
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
@@ -128,12 +129,12 @@ class IbNativeObject(IbObject):
             if target_name in self.vtable:
                 reg = self.ib_class.registry
                 # [IES 2.0] 强制通过 Gatekeeper 获取协议类
-                reg.verify_state_at_least(RegistrationState.STAGE_2_CORE_TYPES)
+                reg.verify_level_at_least(RegistrationState.STAGE_2_CORE_TYPES.value)
                 
                 callable_cls = reg.get_class("callable")
                 if not callable_cls:
                     # 如果进入了插件加载阶段（STAGE 4+），callable 缺失属于严重初始化错误
-                    reg.verify_state_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL)
+                    reg.verify_level_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
                     raise InterpreterError("Core Error: 'callable' class not found in registry. Builtins initialization failed? [IES 2.0 Fatal Assertion]")
                     
                 return IbNativeFunction(
@@ -244,9 +245,30 @@ class IbClass(IbObject):
     def register_method(self, name: str, method: 'IbFunction'):
         self.methods[name] = method
 
-    def instantiate(self, args: List[IbObject]) -> IbObject:
+    def instantiate(self, args: List[IbObject], interpreter: Optional['Interpreter'] = None) -> IbObject:
         instance = IbObject(self)
-        instance.fields = self.default_fields.copy()
+        
+        # [IES 2.0] 延迟执行字段初始化 (Item 2.1 Audit)
+        # 如果字段是复杂表达式（存储为 (uid, static_val) 元组），在实例化时求值
+        for name, val_info in self.default_fields.items():
+            if isinstance(val_info, tuple) and len(val_info) == 2:
+                val_uid, static_val = val_info
+                if static_val is not None:
+                    # 简单常量快照直接复用
+                    instance.fields[name] = static_val
+                elif val_uid and interpreter:
+                    # 复杂表达式通过解释器即时求值
+                    try:
+                        instance.fields[name] = interpreter.visit(val_uid)
+                    except Exception:
+                        # 如果求值失败，回退到 None
+                        instance.fields[name] = self.registry.get_none()
+                else:
+                    instance.fields[name] = self.registry.get_none()
+            else:
+                # 兼容旧逻辑或已求值的对象
+                instance.fields[name] = val_info
+        
         init_method = self.lookup_method('__init__')
         if init_method:
             init_method.call(instance, args)
@@ -265,7 +287,14 @@ class IbClass(IbObject):
                 method = self.methods["__call__"]
                 # 绑定到类自身进行调用 (如果是 NativeFunction 会自动根据 is_method 注入 receiver)
                 return IbBoundMethod(self, method).receive("__call__", args)
-            return self.instantiate(args)
+            
+            # [IES 2.1 Audit] 实例化时传入解释器上下文以支持复杂字段初始化
+            # 这里涉及对解释器的反射访问（如果有的话）
+            interpreter = None
+            if hasattr(self.registry, '_interpreter'):
+                interpreter = self.registry._interpreter
+            
+            return self.instantiate(args, interpreter=interpreter)
         return super().receive(message, args)
 
     def __repr__(self):
@@ -292,7 +321,6 @@ class IbNativeFunction(IbFunction):
         target_class = ib_class
         
         if not target_class and reg:
-            from core.foundation.registry import RegistrationState
             # 在核心类型注入后 (STAGE 2+)，callable 应该是存在的
             if reg.state.value >= RegistrationState.STAGE_2_CORE_TYPES.value:
                 target_class = reg.get_class("callable")
@@ -409,6 +437,24 @@ class IbUserFunction(IbFunction):
         context = self.interpreter.context
         context.enter_scope()
         
+        # [NEW] Logical CallStack 追踪
+        loc_data = self.interpreter.get_side_table("node_to_loc", self.node_uid)
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0)
+            )
+        
+        self.interpreter.logical_stack.push(
+            name=node_data.get("name", "anonymous"),
+            local_vars={}, # 暂时不快照变量，性能考虑
+            location=loc,
+            intent_stack=[i.content for i in self.interpreter.context.get_active_intents()],
+            is_user_function=True
+        )
+        
         try:
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
@@ -435,6 +481,7 @@ class IbUserFunction(IbFunction):
         except ReturnException as e:
             return e.value
         finally:
+            self.interpreter.logical_stack.pop()
             context.exit_scope()
 
     def __repr__(self):
@@ -463,6 +510,25 @@ class IbLLMFunction(IbFunction):
         context = self.interpreter.context
         
         context.enter_scope()
+        
+        # [NEW] Logical CallStack 追踪
+        loc_data = self.interpreter.get_side_table("node_to_loc", self.node_uid)
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0)
+            )
+        
+        self.interpreter.logical_stack.push(
+            name=f"llm:{node_data.get('name', 'anonymous')}",
+            local_vars={}, # 暂时不快照变量，性能考虑
+            location=loc,
+            intent_stack=[i.content for i in self.interpreter.context.get_active_intents()],
+            is_user_function=True
+        )
+        
         try:
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
@@ -488,6 +554,7 @@ class IbLLMFunction(IbFunction):
             return self.llm_executor.execute_llm_function(self.node_uid, context)
             
         finally:
+            self.interpreter.logical_stack.pop()
             context.exit_scope()
 
     def __repr__(self):

@@ -244,69 +244,48 @@ class IbBehavior(IbObject):
     """
     延迟执行的行为对象 (~...~)。
     """
-    def __init__(self, node_uid: str, interpreter: Any, captured_intents: List[Any], expected_type: Optional[str] = None):
-        super().__init__(interpreter.registry.get_class("behavior"))
+    def __init__(self, node_uid: str, captured_intents: List[Any], ib_class: IbClass, expected_type: Optional[str] = None):
+        """
+        [IES 2.0 Architectural Update] IbBehavior 现在是纯粹的数据描述符。
+        不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
+        """
+        super().__init__(ib_class)
         self.node = node_uid
-        self.interpreter = interpreter
         self.captured_intents = captured_intents
         self.expected_type = expected_type
         self._cache: Optional[IbObject] = None
 
-    def _execute(self) -> IbObject:
-        if self._cache is not None:
-            return self._cache
-            
-        # 恢复捕获的意图栈和预期类型
-        # [IES 2.0 Optimization] 支持 IntentNode 结构共享恢复
-        old_intents = self.interpreter.context.intent_stack
-        self.interpreter.context.intent_stack = self.captured_intents
-        
-        type_pushed = False
-        if self.expected_type:
-            self.interpreter.service_context.llm_executor.push_expected_type(self.expected_type)
-            type_pushed = True
-            
-        try:
-            res = self.interpreter.service_context.llm_executor.execute_behavior_expression(
-                self.node, self.interpreter.context, captured_intents=self.captured_intents
-            )
-            self._cache = self.ib_class.registry.box(res)
-            return self._cache
-        finally:
-            self.interpreter.context.intent_stack = old_intents
-            if type_pushed:
-                self.interpreter.service_context.llm_executor.pop_expected_type()
-
-    @property
     def value(self):
-        res = self._execute()
-        return res.to_native()
+        # 此时必须由外部调用 LLMExecutor.execute_behavior_object 才能获取真实值
+        # 这是一个被动描述符，不再支持主动 value 访问（除非已缓存）
+        if self._cache: return self._cache.to_native()
+        raise RuntimeError("Behavior is not executed. Please use LLMExecutor to run it.")
 
     def to_native(self) -> Any:
-        return self._execute().to_native()
+        if self._cache: return self._cache.to_native()
+        return self
 
     def __to_prompt__(self) -> str:
-        return self._execute().__to_prompt__()
+        # 如果已执行则返回结果，否则返回节点描述
+        if self._cache: return self._cache.__to_prompt__()
+        return f"<Behavior {self.node}>"
 
     def __repr__(self):
-        desc = "".join([str(s) for s in self.node.segments])
-        return f"<Behavior @~{desc[:20]}...~>"
+        return f"<Behavior {self.node}>"
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {
             "__type__": "Behavior",
-            "__repr__": str(self),
+            "node_uid": self.node,
             "captured_intents": [str(i) for i in self.captured_intents],
             "expected_type": self.expected_type
         }
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """支持函数调用协议 ()"""
-        return self._execute()
+        """不再支持主动调用，必须由引擎调度"""
+        raise RuntimeError("Behavior cannot execute itself. Use LLMExecutor.execute_behavior_object.")
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
-        # 如果是调用消息，执行行为
-        if message == "__call__":
-            return self._execute()
-        # 其他消息（如 __add__）转发给执行后的结果
-        return self._execute().receive(message, args)
+        """不再支持消息转发执行"""
+        if self._cache: return self._cache.receive(message, args)
+        raise RuntimeError("Behavior is not executed.")
