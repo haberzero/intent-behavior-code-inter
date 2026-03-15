@@ -48,9 +48,6 @@ class TestArtifactLoading(unittest.TestCase):
             module = parser.parse()
             result = self.analyzer.analyze(module)
         except Exception as e:
-            if self.analyzer.issue_tracker.has_errors():
-                for d in self.analyzer.issue_tracker.diagnostics:
-                    print(f"COMPILER ERROR: [{d.code}] {d.message}")
             raise e
         
         # 2. 序列化

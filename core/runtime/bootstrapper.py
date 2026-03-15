@@ -186,7 +186,6 @@ class Bootstrapper:
             memo[id(val)] = res
             return res
 
-        print(f"DEBUG: Boxing native object {val}")
         obj_class = self.get_class("Object")
         res = IbNativeObject(val, ib_class=obj_class)
         memo[id(val)] = res

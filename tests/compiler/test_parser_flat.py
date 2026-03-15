@@ -16,9 +16,6 @@ class TestParserFlattening(unittest.TestCase):
         try:
             return parser.parse()
         except Exception as e:
-            if hasattr(parser.context.issue_tracker, "_diagnostics"):
-                for d in parser.context.issue_tracker._diagnostics:
-                    print(f"COMPILER ERROR: {d.message} at {d.location.line}:{d.location.column}")
             raise e
 
     def test_intent_shorthand_flattening(self):

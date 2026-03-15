@@ -411,21 +411,14 @@ class Interpreter:
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
         
-        # DEBUG
-        # print(f"DEBUG: execute_module {module_name} uid={module_uid}")
-        # if not isinstance(self.node_pool, Mapping):
-        #     print(f"DEBUG: node_pool is NOT a dict! it is {type(self.node_pool)}")
-        
         old_module = self.current_module_name
         self.current_module_name = module_name
         
         module_data = self.get_node_data(module_uid)
         if not module_data:
-            # print(f"DEBUG: module_data not found for {module_uid} in pool keys: {list(self.node_pool.keys())[:10]}")
             raise self._report_error(f"Module UID {module_uid} not found.")
         
         if not isinstance(module_data, Mapping):
-            # print(f"DEBUG: module_data is NOT a mapping! it is {type(module_data)} -> {module_data}")
             raise self._report_error(f"Module data for {module_uid} is not a dict: {type(module_data)} -> {module_data}")
 
         old_context = self.runtime_context

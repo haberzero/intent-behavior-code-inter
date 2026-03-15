@@ -31,8 +31,8 @@ dummy_artifact = {
     }
 }
 
-def verify_isolation():
-    print("Checking physical isolation of Interpreter...")
+def verify_isolation(silent=False):
+    if not silent: print("Checking physical isolation of Interpreter...")
     
     # 1. 确保核心编译器模块未加载
     forbidden = ["core.compiler.lexer", "core.compiler.parser", "core.compiler.semantic"]
@@ -50,7 +50,7 @@ def verify_isolation():
     # 使用简单的运行时诊断器代替 Compiler 下的实现
     class SimpleIssueTracker:
         def report(self, severity, code, message, location=None, hint=None):
-            print(f"[{severity}] {code}: {message}")
+            if not silent: print(f"[{severity}] {code}: {message}")
         def has_errors(self): return False
     
     # 3. 运行解释器
@@ -60,11 +60,11 @@ def verify_isolation():
     issue_tracker = SimpleIssueTracker()
     
     # [Plan A] 解释器会内部创建 Loader 并加载 artifact
-    print("Running interpreter with dummy artifact...")
+    if not silent: print("Running interpreter with dummy artifact...")
     interpreter = Interpreter(issue_tracker, registry=registry, artifact=dummy_artifact)
     
     result = interpreter.interpret("node_1")
-    print(f"Result: {result.to_native()}")
+    if not silent: print(f"Result: {result.to_native()}")
     
     # 4. 再次核查
     failed = False
@@ -82,19 +82,14 @@ def verify_isolation():
         # Check core.runtime.interpreter.interpreter
         import core.runtime.interpreter.interpreter as itp
         print(f"core.runtime.interpreter.interpreter file: {itp.__file__}")
-
-        # Search for any module that might have imported it
-        for name, module in list(sys.modules.items()):
-            if name.startswith("core.") and name not in forbidden:
-                # This is a bit complex to find exactly who imported what
-                pass
         return False
             
-    print("SUCCESS: Interpreter is physically isolated from Compiler.")
+    if not silent: print("SUCCESS: Interpreter is physically isolated from Compiler.")
     return True
 
 if __name__ == "__main__":
-    if verify_isolation():
+    silent = "--silent" in sys.argv
+    if verify_isolation(silent=silent):
         sys.exit(0)
     else:
         sys.exit(1)

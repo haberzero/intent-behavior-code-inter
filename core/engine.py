@@ -266,19 +266,21 @@ class IBCIEngine(IInterpreterFactory):
             return val
         return None
 
-    def check(self, entry_file: str) -> bool:
+    def check(self, entry_file: str, silent: bool = False) -> bool:
         """
         仅对项目进行静态检查（编译和语义分析）。
         """
         abs_entry = os.path.abspath(entry_file)
         try:
             self.scheduler.compile_project(abs_entry)
-            print(f"Check successful: {entry_file}")
+            if not silent:
+                print(f"Check successful: {entry_file}")
             return True
         except CompilerError as e:
-            print("\n--- Compilation Errors ---")
-            print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
-            print(f"Check failed: {entry_file}")
+            if not silent:
+                print("\n--- Compilation Errors ---")
+                print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
+                print(f"Check failed: {entry_file}")
             return False
 
     def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):

@@ -114,8 +114,6 @@ class IbNativeObject(IbObject):
             if self.py_obj._ibci_registry_id != id(self.ib_class.registry):
                 raise RegistryIsolationError(f"Security Violation: Native object from another engine instance detected. [IES 2.0 Isolation Rule]")
 
-        print(f"DEBUG: NativeObject receive '{message}' vtable keys: {list(self.vtable.keys())}")
-        
         # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:
             attr = self.vtable[message]

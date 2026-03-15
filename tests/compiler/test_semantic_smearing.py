@@ -30,9 +30,6 @@ class TestSemanticSmearing(unittest.TestCase):
             
             return module
         except Exception as e:
-            if hasattr(parser.context.issue_tracker, "_diagnostics"):
-                for d in parser.context.issue_tracker._diagnostics:
-                    print(f"COMPILER ERROR: {d.message} at {d.location.line}:{d.location.column}")
             raise e
 
     def test_intent_smearing_side_table(self):
@@ -52,9 +49,7 @@ class TestSemanticSmearing(unittest.TestCase):
         
         # 应该只包含直接关联的 "deep intent"
         contents = [i.content for i in intents]
-        if len(contents) != 1:
-            print(f"DEBUG: contents={contents}")
-        self.assertEqual(len(contents), 1)
+        self.assertEqual(len(contents), 1, f"Expected 1 intent, but got: {contents}")
         self.assertIn("deep intent", contents)
 
     def test_side_table_type_purity(self):

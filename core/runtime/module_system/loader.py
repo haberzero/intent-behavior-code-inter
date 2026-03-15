@@ -90,7 +90,6 @@ class ModuleLoader(IModuleLoader):
 
         # 封印虚表到实现对象上
         implementation._ibci_vtable = proxy_vtable
-        print(f"DEBUG: ModuleLoader bound vtable to {module_name}, keys: {list(proxy_vtable.keys())}")
 
     def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
         """IES 2.0 强制依赖注入协议：必须且仅接受 capabilities 参数"""
