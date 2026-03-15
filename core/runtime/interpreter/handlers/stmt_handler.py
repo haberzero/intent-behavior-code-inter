@@ -307,43 +307,50 @@ class StmtHandler(BaseHandler):
         # [IES 2.0] IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
         # 此处仅负责契约验证与作用域定义。
         name = node_data.get("name")
-        is_sealed = self.registry.state_level == RegistrationState.STAGE_6_READY.value
+        is_ready = self.registry.state_level >= RegistrationState.STAGE_6_READY.value
         
-        if is_sealed:
-            # [IES 2.0] STAGE 6 封印原则：不再允许创建和注册新类，仅执行契约校验
+        # 获取或创建符号 UID
+        sym_uid = self.get_side_table("node_to_symbol", node_uid)
+        
+        if is_ready:
+            # [IES 2.0] 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
             existing_class = self.registry.get_class(name)
             if not existing_class:
-                raise self.report_error(f"Sealed Registry: Class '{name}' must be pre-hydrated in STAGE 5.", node_uid)
+                raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. [IES 2.0 Contract Violation]", node_uid)
             
             # 绑定到当前作用域 (作为常量类)
-            sym_uid = self.get_side_table("node_to_symbol", node_uid)
             self.context.define_variable(name, existing_class, uid=sym_uid)
             
             # TODO: 深度契约校验（验证方法是否存在、参数是否一致）
             return self.registry.get_none()
 
-        # --- 以下为 STAGE 5 之前的回退逻辑 (用于动态代码加载场景) ---
+        # --- 以下逻辑仅用于非 READY 状态 (如 STAGE 5 水合或极少数动态调试场景) ---
         parent_name = node_data.get("parent") or "Object"
-        sym_uid = self.get_side_table("node_to_symbol", node_uid)
         descriptor = self.interpreter._resolve_type_from_symbol(sym_uid)
+        
         if not descriptor:
+            # [IES 2.0 Strict] 除非是动态代码，否则描述符必须在符号表中存在
+            if is_ready:
+                raise self.report_error(f"Metadata Error: Descriptor missing for class '{name}'.", node_uid)
+            
+            # 动态回退逻辑 (仅用于极少数非标准加载场景)
             descriptor = self.registry.get_metadata_registry().factory.create_class(name, parent=parent_name)
             
         new_class = self.registry.create_subclass(name, descriptor, parent_name)
         
-        # 注册方法与字段 (时序重构：字段仅记录 UID，见 Interpreter._hydrate_user_classes)
+        # 注册方法与字段 (时序重构：字段仅记录 UID)
         body = node_data.get("body", [])
         for stmt_uid in body:
             stmt_data = self.get_node_data(stmt_uid)
             if not stmt_data: continue
             
             if stmt_data["_type"] == "IbFunctionDef":
-                sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-                declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
+                m_sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+                declared_type = self.interpreter._resolve_type_from_symbol(m_sym_uid)
                 new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self.interpreter, descriptor=declared_type))
             elif stmt_data["_type"] == "IbLLMFunctionDef":
-                sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-                declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
+                m_sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+                declared_type = self.interpreter._resolve_type_from_symbol(m_sym_uid)
                 new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self.interpreter, descriptor=declared_type))
             elif stmt_data["_type"] == "IbAssign":
                 val_uid = stmt_data.get("value")

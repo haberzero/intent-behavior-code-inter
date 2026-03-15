@@ -109,8 +109,12 @@ class SymbolTable:
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            # [FIX] 如果是内置符号且类型/属性相同，允许静默跳过或覆盖
+            # [IES 2.1 Audit] 如果是内置符号且类型兼容，允许静默跳过或覆盖
             if existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"):
+                if existing.type_info and sym.type_info:
+                    # 确保重定义不会导致语义冲突 (类型必须完全一致或兼容)
+                    if existing.type_info.name != sym.type_info.name:
+                         raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible type '{sym.type_info.name}' (existing: '{existing.type_info.name}')")
                 self.symbols[sym.name] = sym
                 return
             raise ValueError(f"Symbol '{sym.name}' is already defined in this scope")

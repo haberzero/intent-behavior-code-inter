@@ -78,15 +78,15 @@ IBCI 2.0 正处于从 **IES 1.0 (动态注入)** 向 **IES 2.0 (契约先行/物
 
 ## 5. 后续行动路线图 (Action Roadmap)
 
-### **阶段 4.4: 审计修复与物理隔离加固 (Ongoing)**
-1. [ ] **Fix Item 4**: 修正 `artifact_loader.py` 的导入 Bug。
-2. [ ] **Item 12 Enforcement**: 在 `MetadataRegistry.register` 中强制执行克隆策略。
-3. [ ] **Linker Enforcement**: 将 `ArtifactLoader` 的警告升级为抛出致命错误。
-4. [ ] **Security Cleanup**: 移除 `visit_IbClassDef` 中的动态回退逻辑 (Item 15/16)。
+### **阶段 4.4: 审计修复与物理隔离加固 (Completed)**
+1. [x] **Fix Item 4**: 修正 `artifact_loader.py` 的导入 Bug。
+2. [x] **Item 12 Enforcement**: 在 `MetadataRegistry.register` 中强制执行克隆策略。
+3. [x] **Linker Enforcement**: 将 `ArtifactLoader` 的警告升级为抛出致命错误。
+4. [x] **Security Cleanup**: 移除 `visit_IbClassDef` 中的动态回退逻辑 (Item 15/16)。
 
-### **阶段 4.5: 架构深度解耦 (Planned)**
-1. [ ] 设计并实现 `ExecutionContext` 纯数据包。
-2. [ ] 重构 `Registry` 与 `IbObject`，彻底移除对 `Interpreter` 实例的直接持有。
+### **阶段 4.5: 架构深度解耦 (Completed)**
+1. [x] 设计并实现 `IExecutionContext` 纯数据协议。
+2. [x] 重构 `Registry` 与 `IbObject`, `IbUserFunction`, `IbLLMFunction`，彻底移除对 `Interpreter` 实例的直接持有。
 3. [ ] 将 `builtin_initializer.py` 中的硬编码逻辑迁移至 Axiom 公理层。
 
 ---

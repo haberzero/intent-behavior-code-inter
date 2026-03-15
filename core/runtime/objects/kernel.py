@@ -9,6 +9,8 @@ from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_
 
 if TYPE_CHECKING:
     from core.domain import ast as ast
+    from core.foundation.interfaces import IExecutionContext
+    from core.runtime.interpreter.interpreter import Interpreter
 
 class IbObject:
     """
@@ -174,30 +176,24 @@ class IbModule(IbObject):
         """
         [IES 2.0] 模块级消息传递核心。
         """
-        # 1. 如果消息本身就是模块成员 (函数调用)，直接转发
-        # 这里的 self.scope 是 IbNativeObject
+        # 1. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
         if hasattr(self.scope, 'receive'):
             try:
-                # 尝试通过 IbNativeObject 的虚表直接执行
+                if message == '__getattr__':
+                    # 转发获取属性的消息
+                    return self.scope.receive('__getattr__', args)
                 return self.scope.receive(message, args)
             except AttributeError:
                 pass
 
-        # 2. 如果是属性获取 (__getattr__)，转发给 scope 以获取 IbNativeFunction
-        if message == '__getattr__':
-            if hasattr(self.scope, 'receive'):
-                try:
-                    return self.scope.receive('__getattr__', args)
-                except AttributeError:
-                    pass
-
-        # 3. 备选：查找模块级定义的变量/函数 (Scope 模式，用于兼容非 Native 模块)
-        try:
-            return self.scope.get(message)
-        except (KeyError, AttributeError):
-            pass
+        # 2. 查找模块级定义的变量/函数 (Scope 模式)
+        if hasattr(self.scope, 'get'):
+            try:
+                return self.scope.get(message)
+            except (KeyError, AttributeError):
+                pass
             
-        # 4. 后备：降级到基类公理 (如 __to_prompt__ 等)
+        # 3. 后备：降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def __repr__(self):
@@ -245,7 +241,7 @@ class IbClass(IbObject):
     def register_method(self, name: str, method: 'IbFunction'):
         self.methods[name] = method
 
-    def instantiate(self, args: List[IbObject], interpreter: Optional['Interpreter'] = None) -> IbObject:
+    def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
         
         # [IES 2.0] 延迟执行字段初始化 (Item 2.1 Audit)
@@ -256,10 +252,10 @@ class IbClass(IbObject):
                 if static_val is not None:
                     # 简单常量快照直接复用
                     instance.fields[name] = static_val
-                elif val_uid and interpreter:
-                    # 复杂表达式通过解释器即时求值
+                elif val_uid and context:
+                    # 复杂表达式通过执行上下文即时求值
                     try:
-                        instance.fields[name] = interpreter.visit(val_uid)
+                        instance.fields[name] = context.visit(val_uid)
                     except Exception:
                         # 如果求值失败，回退到 None
                         instance.fields[name] = self.registry.get_none()
@@ -288,13 +284,12 @@ class IbClass(IbObject):
                 # 绑定到类自身进行调用 (如果是 NativeFunction 会自动根据 is_method 注入 receiver)
                 return IbBoundMethod(self, method).receive("__call__", args)
             
-            # [IES 2.1 Audit] 实例化时传入解释器上下文以支持复杂字段初始化
-            # 这里涉及对解释器的反射访问（如果有的话）
-            interpreter = None
-            if hasattr(self.registry, '_interpreter'):
-                interpreter = self.registry._interpreter
+            # [IES 2.1 Decoupling] 实例化时传入执行上下文以支持复杂字段初始化
+            context = None
+            if hasattr(self.registry, '_execution_context'):
+                context = self.registry._execution_context
             
-            return self.instantiate(args, interpreter=interpreter)
+            return self.instantiate(args, context=context)
         return super().receive(message, args)
 
     def __repr__(self):
@@ -419,10 +414,10 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, interpreter: 'Interpreter', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None):
-        super().__init__(ib_class or interpreter.registry.get_class("callable"))
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None):
+        super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
-        self.interpreter = interpreter
+        self.context = context
         self._descriptor = descriptor
 
     @property
@@ -431,14 +426,14 @@ class IbUserFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
-        node_data = self.interpreter.get_node_data(self.node_uid)
+        node_data = self.context.get_node_data(self.node_uid)
         params_uids = node_data.get("args", [])
         
-        context = self.interpreter.context
-        context.enter_scope()
+        rt_context = self.context.context
+        rt_context.enter_scope()
         
         # [NEW] Logical CallStack 追踪
-        loc_data = self.interpreter.get_side_table("node_to_loc", self.node_uid)
+        loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
         loc = None
         if loc_data:
             loc = Location(
@@ -447,45 +442,43 @@ class IbUserFunction(IbFunction):
                 column=loc_data.get("column", 0)
             )
         
-        self.interpreter.logical_stack.push(
+        self.context.push_stack(
             name=node_data.get("name", "anonymous"),
-            local_vars={}, # 暂时不快照变量，性能考虑
             location=loc,
-            intent_stack=[i.content for i in self.interpreter.context.get_active_intents()],
             is_user_function=True
         )
         
         try:
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
-                context.define_variable("self", receiver)
+                rt_context.define_variable("self", receiver)
                 
             for i, arg_uid in enumerate(params_uids):
-                arg_data = self.interpreter.get_node_data(arg_uid)
+                arg_data = self.context.get_node_data(arg_uid)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self.interpreter.get_node_data(actual_arg_uid)
+                    actual_arg_data = self.context.get_node_data(actual_arg_uid)
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
-                    sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
-                    context.define_variable(arg_name, args[i], uid=sym_uid)
+                    sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
+                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
             for stmt_uid in body:
-                self.interpreter.visit(stmt_uid)
+                self.context.visit(stmt_uid)
                 
             return ib_none
         except ReturnException as e:
             return e.value
         finally:
-            self.interpreter.logical_stack.pop()
-            context.exit_scope()
+            self.context.pop_stack()
+            rt_context.exit_scope()
 
     def __repr__(self):
-        node_data = self.interpreter.get_node_data(self.node_uid)
+        node_data = self.context.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")
         return f"<Function '{name}'>"
 
@@ -493,11 +486,11 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, interpreter: 'Interpreter', descriptor: Optional[TypeDescriptor] = None):
-        super().__init__(interpreter.registry.get_class("callable"))
+    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[TypeDescriptor] = None):
+        super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
-        self.interpreter = interpreter
+        self.context = context
         self._descriptor = descriptor
 
     @property
@@ -506,13 +499,13 @@ class IbLLMFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
-        node_data = self.interpreter.get_node_data(self.node_uid)
-        context = self.interpreter.context
+        node_data = self.context.get_node_data(self.node_uid)
+        rt_context = self.context.context
         
-        context.enter_scope()
+        rt_context.enter_scope()
         
         # [NEW] Logical CallStack 追踪
-        loc_data = self.interpreter.get_side_table("node_to_loc", self.node_uid)
+        loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
         loc = None
         if loc_data:
             loc = Location(
@@ -521,43 +514,37 @@ class IbLLMFunction(IbFunction):
                 column=loc_data.get("column", 0)
             )
         
-        self.interpreter.logical_stack.push(
-            name=f"llm:{node_data.get('name', 'anonymous')}",
-            local_vars={}, # 暂时不快照变量，性能考虑
+        self.context.push_stack(
+            name=node_data.get("name", "llm_anonymous"),
             location=loc,
-            intent_stack=[i.content for i in self.interpreter.context.get_active_intents()],
             is_user_function=True
         )
         
         try:
-            ib_none = self.ib_class.registry.get_none()
-            if receiver and receiver is not ib_none:
-                context.define_variable("self", receiver)
-                context.define_variable("__self", receiver)
-                
+            # 绑定参数
             params_uids = node_data.get("args", [])
             for i, arg_uid in enumerate(params_uids):
-                arg_data = self.interpreter.get_node_data(arg_uid)
+                arg_data = self.context.get_node_data(arg_uid)
+                # 处理类型标注包装
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self.interpreter.get_node_data(actual_arg_uid)
+                    actual_arg_data = self.context.get_node_data(actual_arg_uid)
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
-                    sym_uid = self.interpreter.get_side_table("node_to_symbol", actual_arg_uid)
-                    context.define_variable(arg_name, args[i], uid=sym_uid)
-                    if arg_name == 'text':
-                        context.define_variable('__text', args[i])
-
-            return self.llm_executor.execute_llm_function(self.node_uid, context)
+                    sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
+                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
+            # 分发给 LLM 执行器
+            # 注意：LLMExecutor 需要 RuntimeContext 来获取当前的意图和变量
+            return self.llm_executor.execute_llm_function(self.node_uid, rt_context)
         finally:
-            self.interpreter.logical_stack.pop()
-            context.exit_scope()
+            self.context.pop_stack()
+            rt_context.exit_scope()
 
     def __repr__(self):
-        node_data = self.interpreter.get_node_data(self.node_uid)
+        node_data = self.context.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")
         return f"<LLMFunction '{name}'>"

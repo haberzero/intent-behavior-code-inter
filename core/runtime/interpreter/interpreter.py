@@ -32,7 +32,7 @@ from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, I
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.foundation.registry import Registry
 from core.foundation.host_interface import HostInterface
-from core.foundation.interfaces import IStackInspector
+from core.foundation.interfaces import IStackInspector, IExecutionContext
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from .llm_executor import intent_scoped
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
@@ -114,7 +114,7 @@ class ServiceContextImpl:
     @property
     def compiler(self) -> ICompilerService: return self._compiler
 
-class Interpreter(IStackInspector):
+class Interpreter(IStackInspector, IExecutionContext):
     """
     IBC-Inter 2.0 消息传递解释器。
     彻底转向基于 IbObject 的统一对象模型。
@@ -156,11 +156,11 @@ class Interpreter(IStackInspector):
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None):
         
         # 0. 启动内核引导
-        self.registry = registry or Registry()
-        # [IES 2.1 Audit] 注册解释器引用到 Registry 以支持类实例化时的字段求值
-        self._kernel_token = self.registry.get_kernel_token()
+        self._registry = registry or Registry()
+        # [IES 2.1 Decoupling] 注册执行上下文引用到 Registry 以支持类实例化时的字段求值
+        self._kernel_token = self._registry.get_kernel_token()
         if self._kernel_token:
-             self.registry.set_interpreter(self, self._kernel_token)
+             self._registry.set_execution_context(self, self._kernel_token)
         
         # [IES 2.0] 仅在注册表未初始化时执行引导
         if not self.registry.is_initialized:
@@ -179,6 +179,9 @@ class Interpreter(IStackInspector):
         self.compiler = compiler
         self.factory = factory
         self.artifact_dict = artifact
+        self._node_pool: Mapping[str, Any] = {}
+        if artifact:
+            self.node_pool = artifact.get("pools", {}).get("nodes", {})
         
         # 1. [IES 2.0] 依赖图谱闭合：构造期完成 ServiceContext 组装
         if service_context:
@@ -281,6 +284,26 @@ class Interpreter(IStackInspector):
                 if attr.startswith("visit_"):
                     self._visitor_cache[attr[6:]] = getattr(handler, attr)
 
+    @property
+    def registry(self) -> Registry:
+        return self._registry
+
+    @property
+    def context(self) -> RuntimeContext:
+        return self._current_context
+
+    @property
+    def node_pool(self) -> Mapping[str, Any]:
+        return self._node_pool
+
+    @node_pool.setter
+    def node_pool(self, value: Mapping[str, Any]):
+        self._node_pool = value
+
+    @property
+    def stack_inspector(self) -> IStackInspector:
+        return self.logical_stack
+
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
         """从侧表中获取信息，支持多模块架构"""
         if not self.current_module_name:
@@ -292,6 +315,21 @@ class Interpreter(IStackInspector):
             
         table = module_data.get("side_tables", {}).get(table_name, {})
         return table.get(node_uid)
+
+    def push_stack(self, name: str, location: Optional[Location] = None, is_user_function: bool = False, **kwargs):
+        """[IES 2.1 Decoupling] 向逻辑调用栈压入一帧"""
+        self.logical_stack.push(
+            name=name,
+            local_vars={}, # 暂时不快照变量，性能考虑
+            location=location,
+            intent_stack=[i.content for i in self.context.get_active_intents()],
+            is_user_function=is_user_function,
+            **kwargs
+        )
+
+    def pop_stack(self):
+        """[IES 2.1 Decoupling] 从逻辑调用栈弹出最后一帧"""
+        self.logical_stack.pop()
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         """[Standardized] 获取 AST 节点数据的唯一入口，返回只读视图"""
@@ -575,66 +613,54 @@ class Interpreter(IStackInspector):
                         continue
                 raise
 
+    def _get_location(self, node_uid: str) -> Optional[Location]:
+        """从 side_tables 获取节点的位置信息"""
+        loc_data = self.get_side_table("node_to_loc", node_uid)
+        if not loc_data:
+            return None
+        return Location(
+            file_path=loc_data.get("file_path"),
+            line=loc_data.get("line", 0),
+            column=loc_data.get("column", 0)
+        )
+
     def visit(self, node_uid: Union[str, Any]) -> IbObject:
-        """核心 Pool-Walking 分发方法"""
+        """核心评估逻辑：分发 AST 节点到相应的 Handler 处理"""
         if node_uid is None:
             return self.registry.get_none()
-        
-        # 如果不是字符串，则可能是基础类型（如 int, bool）或已解箱对象
+
+        # [IES 2.0 Evaluation] 处理字面量或裸 UID
         if not isinstance(node_uid, str):
             if hasattr(node_uid, 'uid'):
                 node_uid = node_uid.uid
             else:
-                # 基础类型直接装箱
                 if isinstance(node_uid, (int, float, bool, dict)):
                     return self.registry.box(self._resolve_value(node_uid))
                 return self.registry.get_none()
 
-        # [DEBUG] 检查 node_uid 是否在 pool 中
         if node_uid not in self.node_pool:
-            # 如果不在 pool 中，可能是字符串字面量
             return self.registry.box(self._resolve_value(node_uid))
 
         node_data = self.get_node_data(node_uid)
-        if not isinstance(node_data, Mapping):
-             # 这说明 pool 里存的不是 node data 字典，而是别的东西（比如另一个 UID 字符串）
-             raise self._report_error(f"Pool corruption: node_pool[{node_uid}] is {type(node_data)}: {node_data}", node_uid)
         if not node_data:
-            # 可能是基础类型或已解箱对象
-            if isinstance(node_uid, (int, float, str, bool, dict)):
-                return self.registry.box(self._resolve_value(node_uid))
             return self.registry.get_none()
 
         self.instruction_count += 1
-        
         if self.instruction_count > self.max_instructions:
             raise self._report_error("Execution limit exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
 
         if self.call_stack_depth >= self.max_call_stack:
              raise self._report_error("Recursion depth exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
-        
-        self.call_stack_depth += 1
-        
-        # [NEW] Logical CallStack 追踪 (Phase 4.3.3)
-        loc_data = self.get_side_table("node_to_loc", node_uid)
-        loc = None
-        if loc_data:
-            loc = Location(
-                file_path=loc_data.get("file_path"),
-                line=loc_data.get("line", 0),
-                column=loc_data.get("column", 0)
-            )
 
-        # 仅对具有独立作用域或重要执行单元的节点压栈
+        self.call_stack_depth += 1
+        loc = self._get_location(node_uid)
+
+        # [IES 2.1 Refactor] 识别具有独立作用域的节点
         pushed_frame = False
         node_type = node_data.get("_type")
+
         if node_type in ("IbModule", "IbFunctionDef", "IbLLMFunctionDef", "IbClassDef", "IbIntentStmt"):
-            self.logical_stack.push(
-                name=f"{node_type}:{node_uid}",
-                local_vars={}, # 暂时不快照变量，性能考虑
-                location=loc,
-                intent_stack=[i.content for i in self.context.get_active_intents()]
-            )
+            self.push_stack(name=f"{node_type}:{node_uid}", location=loc)
             pushed_frame = True
 
         # [NEW] 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化

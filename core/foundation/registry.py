@@ -1,9 +1,13 @@
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Callable, Union, TYPE_CHECKING
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
+from core.runtime.enums import RegistrationState
 from core.foundation.enums import PrivilegeLevel
 
 if TYPE_CHECKING:
     from core.domain.types.descriptors import TypeDescriptor
+    from core.domain.axioms.protocols import TypeAxiom
+    from core.domain.axioms.registry import AxiomRegistry
+    from core.foundation.interfaces import IExecutionContext
 
 class Registry:
     """
@@ -19,8 +23,8 @@ class Registry:
         self._boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
         self._int_cache: Dict[int, Any] = {} # 小整数驻留缓存 (引擎实例隔离)
         
-        # [IES 2.1 Audit] 绑定解释器引用，支持实例化时的复杂字段求值
-        self._interpreter: Optional[Any] = None
+        # [IES 2.1 Decoupling] 绑定执行上下文数据，不再持有整个解释器实例
+        self._execution_context: Optional[Any] = None
         
         # [IES 2.0 Mechanism] 注册状态机级别。默认为 1。
         self._state_level = 1
@@ -141,10 +145,10 @@ class Registry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
-    def set_interpreter(self, interpreter: Any, token: Any):
-        """[IES 2.1] 注册解释器引用，仅内核可调。用于支持实例化时求值。"""
+    def set_execution_context(self, context: 'IExecutionContext', token: Any):
+        """[IES 2.1 Decoupling] 注册执行上下文引用，仅内核可调。用于支持实例化时求值。"""
         self._verify_kernel(token)
-        self._interpreter = interpreter
+        self._execution_context = context
 
     def create_instance(self, class_name: str, *args, **kwargs) -> Any:
         """
@@ -197,8 +201,9 @@ class Registry:
         if descriptor.name != name:
              raise ValueError(f"Registry: Function descriptor name '{descriptor.name}' does not match registered name '{name}'.")
              
+        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
-            self._metadata_registry.register(descriptor)
+            descriptor = self._metadata_registry.register(descriptor)
 
     def export_manifest(self) -> Dict[str, Any]:
         """导出当前 Registry 的类型清单快照 (供编译器使用)"""

@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Optional, List, Dict, Union, runtime_checkable
+from typing import Any, Protocol, Optional, List, Dict, Union, Mapping, runtime_checkable
 
 @runtime_checkable
 class ServiceContext(Protocol):
@@ -40,6 +40,43 @@ class IssueTracker(Protocol):
     def report(self, severity: Any, code: str, message: str, 
                location: Optional[Any] = None, hint: Optional[str] = None) -> None: ...
     def has_errors(self) -> bool: ...
+
+# --- Execution Context ---
+
+@runtime_checkable
+class IExecutionContext(Protocol):
+    """
+    [IES 2.1 Decoupling] 运行时执行上下文数据协议。
+    作为 Interpreter 与底层组件（Kernel/Foundation）解耦的桥梁。
+    它仅包含执行所需的只读数据池、栈内省能力以及求值入口。
+    """
+    @property
+    def node_pool(self) -> Mapping[str, Any]: ...
+    
+    @property
+    def stack_inspector(self) -> 'IStackInspector': ...
+    
+    @property
+    def registry(self) -> Any: ...
+    
+    @property
+    def context(self) -> Any: ...
+    
+    def visit(self, node_uid: str) -> Any:
+        """评估 AST 节点并返回 IbObject"""
+        ...
+
+    def get_node_data(self, node_uid: str) -> Mapping[str, Any]: ...
+    
+    def get_side_table(self, table_name: str, key: str) -> Any: ...
+
+    def push_stack(self, name: str, location: Optional[Any] = None, is_user_function: bool = False, **kwargs) -> None:
+        """向逻辑调用栈压入一帧"""
+        ...
+
+    def pop_stack(self) -> None:
+        """从逻辑调用栈弹出最后一帧"""
+        ...
 
 # --- IBCI Core Object Protocol ---
 

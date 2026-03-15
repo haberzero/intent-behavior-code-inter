@@ -4,16 +4,16 @@
 
 ## 1. 物理隔离与安全性 (Critical)
 
-- [ ] **[Item 12] 跨引擎描述符污染**：在 `MetadataRegistry.register` 中强制执行 `clone()`，严禁物理单例共享。
-- [ ] **[Bug] 导入路径错误**：修正 `artifact_loader.py` 中的 `RegistryIsolationError` 导入路径。
-- [ ] **[Security] 封印后门清理**：移除 `stmt_handler.py` 中 `visit_IbClassDef` 的动态回退逻辑（L324-333），严禁在 STAGE 6 之后创建新描述符。
-- [ ] **[Security] 异常等级升级**：将 `ArtifactLoader` 的 Linker 警告升级为致命错误，防止 broken inheritance 进入运行时。
+- [x] **[Item 12] 跨引擎描述符污染**：在 `MetadataRegistry.register` 中强制执行 `clone()`，严禁物理单例共享。
+- [x] **[Bug] 导入路径错误**：修正 `artifact_loader.py` 中的 `RegistryIsolationError` 导入路径。
+- [x] **[Security] 封印后门清理**：移除 `stmt_handler.py` 中 `visit_IbClassDef` 的动态回退逻辑（L324-333），严禁在 STAGE 6 之后创建新描述符。
+- [x] **[Security] 异常等级升级**：将 `ArtifactLoader` 的 Linker 警告升级为致命错误，防止 broken inheritance 进入运行时。
 
 ## 2. 架构解耦 (God Object Remediation)
 
-- [ ] **[Arch] 解释器持有脱离 (Foundation)**：从 `Registry` 中移除对 `Interpreter` 实例的直接持有（L143-148）。
-- [ ] **[Arch] 解释器持有脱离 (Kernel)**：从 `IbClass`, `IbUserFunction`, `IbLLMFunction` 中移除对 `Interpreter` 实例的持有。
-- [ ] **[Data] ExecutionContext 设计**：定义纯数据结构的上下文包，作为 Kernel 获取运行时状态的唯一合法途径。
+- [x] **[Arch] 解释器持有脱离 (Foundation)**：从 `Registry` 中移除对 `Interpreter` 实例的直接持有（L143-148）。
+- [x] **[Arch] 解释器持有脱离 (Kernel)**：从 `IbClass`, `IbUserFunction`, `IbLLMFunction` 中移除对 `Interpreter` 实例的持有。
+- [x] **[Data] ExecutionContext 设计**：定义纯数据结构的上下文包，作为 Kernel 获取运行时状态的唯一合法途径。
 
 ## 3. 逻辑完备性与时序 (High)
 

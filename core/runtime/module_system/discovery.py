@@ -46,8 +46,8 @@ class ModuleDiscoveryService:
                             host.register_module(entry, None, spec_metadata)
                             discovered_modules.add(entry)
                     except Exception as e:
-                        # [IES 2.0] 契约加载失败应记录并跳过，生产环境建议抛出异常
-                        print(f"Warning: Failed to load spec for module '{entry}': {e}")
+                        # [IES 2.0 Fail-fast] 契约加载失败属于致命错误
+                        raise RuntimeError(f"Fatal Error: Failed to load spec for module '{entry}': {e}") from e
         
         return host
 
