@@ -16,8 +16,12 @@ class BaseHandler:
         return self.interpreter.registry
 
     @property
-    def context(self):
-        return self.interpreter.context
+    def runtime_context(self):
+        return self.interpreter.runtime_context
+
+    @property
+    def execution_context(self):
+        return self.interpreter.execution_context
 
     @property
     def service_context(self):

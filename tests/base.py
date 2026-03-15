@@ -227,7 +227,9 @@ class BaseIBCTest(unittest.TestCase):
             # 6. 注入初始变量
             if variables:
                 for name, val in variables.items():
-                    self.engine.interpreter.context.define_variable(name, val)
+                    if not hasattr(val, 'ib_class'):
+                        val = self.engine.interpreter.registry.box(val)
+                    self.engine.interpreter.runtime_context.define_variable(name, val)
             
             # 7. 启动执行
             return self.engine.interpreter.run()

@@ -1,20 +1,5 @@
 from typing import Any, Protocol, Optional, List, Dict, Union, Mapping, runtime_checkable
 
-@runtime_checkable
-class ServiceContext(Protocol):
-    """运行时核心服务上下文 (ServiceContext)"""
-    interpreter: Any
-    runtime_context: Any
-    llm_executor: Any
-    permission_manager: Any
-    symbol_view: Any
-    interop: Any
-
-@runtime_checkable
-class IModuleLoader(Protocol):
-    """模块加载器接口 (ModuleLoader)"""
-    def load_and_register_all(self, context: ServiceContext) -> None: ...
-
 # --- Diagnostics ---
 
 @runtime_checkable
@@ -60,7 +45,7 @@ class IExecutionContext(Protocol):
     def registry(self) -> Any: ...
     
     @property
-    def context(self) -> Any: ...
+    def runtime_context(self) -> Any: ...
     
     def visit(self, node_uid: str) -> Any:
         """评估 AST 节点并返回 IbObject"""

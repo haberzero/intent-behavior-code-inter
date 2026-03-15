@@ -429,7 +429,7 @@ class IbUserFunction(IbFunction):
         node_data = self.context.get_node_data(self.node_uid)
         params_uids = node_data.get("args", [])
         
-        rt_context = self.context.context
+        rt_context = self.context.runtime_context
         rt_context.enter_scope()
         
         # [NEW] Logical CallStack 追踪
@@ -500,7 +500,7 @@ class IbLLMFunction(IbFunction):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
         node_data = self.context.get_node_data(self.node_uid)
-        rt_context = self.context.context
+        rt_context = self.context.runtime_context
         
         rt_context.enter_scope()
         
@@ -538,8 +538,8 @@ class IbLLMFunction(IbFunction):
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             # 分发给 LLM 执行器
-            # 注意：LLMExecutor 需要 RuntimeContext 来获取当前的意图和变量
-            return self.llm_executor.execute_llm_function(self.node_uid, rt_context)
+            # [IES 2.1 Regularization] 传递执行上下文网关，而非裸的运行时上下文
+            return self.llm_executor.execute_llm_function(self.node_uid, self.context)
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()

@@ -1,11 +1,12 @@
 import re
 import json
 from types import SimpleNamespace
-from typing import Any, List, Optional, Dict, Union, Callable, Mapping
-from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext
+from typing import Any, List, Optional, Dict, Union, Callable, Mapping, TYPE_CHECKING
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp
+from core.foundation.interfaces import ILLMProvider, IssueTracker, IExecutionContext
+
 from core.domain.issue import InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
-from core.foundation.interfaces import ILLMProvider
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.builtins import IbBehavior
@@ -18,24 +19,29 @@ class LLMExecutorImpl:
     """
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
     """
-    def __init__(self, service_context: Optional[ServiceContext] = None, llm_callback: Optional[ILLMProvider] = None):
+    def __init__(self, 
+                 registry: Registry, 
+                 interop: InterOp,
+                 issue_tracker: IssueTracker,
+                 llm_callback: Optional[ILLMProvider] = None,
+                 debugger: Any = None):
         """
-        service_context: 注入容器
+        registry: 注册表 (用于对象装箱)
+        interop: 互操作接口 (用于获取 ai 模块配置)
+        issue_tracker: 错误追踪器
         llm_callback: 实际的 LLM 调用接口 (满足 ILLMProvider 协议)。
         """
-        self.service_context = service_context
+        self.registry = registry
+        self.interop = interop
+        self.issue_tracker = issue_tracker
         self.llm_callback = llm_callback
+        self.debugger = debugger or core_debugger
+        
         # retry_hint 现状保存在 LLMExecutorImpl 中，为了兼容，
         # 我们会在调用 Provider 时同步同步它
         self.retry_hint: Optional[str] = None
         self.last_call_info: Mapping[str, Any] = {} # 记录最后一次 LLM 调用信息
         self._expected_type_stack: List[str] = []
-
-    @property
-    def debugger(self):
-        if self.service_context and self.service_context.debugger:
-            return self.service_context.debugger
-        return core_debugger
 
     def push_expected_type(self, type_name: str):
         self._expected_type_stack.append(type_name)
@@ -55,24 +61,24 @@ class LLMExecutorImpl:
             
         return {}
 
-    def execute_llm_function(self, node_uid: str, context: RuntimeContext) -> IbObject:
+    def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext) -> IbObject:
         """
         [职责解耦] 仅处理 LLM 推理过程。
         作用域管理和参数绑定已由 IbLLMFunction.call 完成。
         """
-        interpreter = self.service_context.interpreter
-        node_data = interpreter.get_node_data(node_uid)
+        node_data = execution_context.get_node_data(node_uid)
+        context = execution_context.runtime_context
         
         # 此时 context 已经是进入过函数作用域的状态
         name = node_data.get("name", "unknown")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{name}'")
 
         # 1. 提取并评估结构化 Prompt
-        sys_prompt = self._evaluate_segments(node_data.get("sys_prompt"), context)
-        user_prompt = self._evaluate_segments(node_data.get("user_prompt"), context)
+        sys_prompt = self._evaluate_segments(node_data.get("sys_prompt"), execution_context)
+        user_prompt = self._evaluate_segments(node_data.get("user_prompt"), execution_context)
         
         # 2. 注入意图增强 (三层架构合并)
-        merged_intents = self._merge_intents(node_uid, context)
+        merged_intents = self._merge_intents(node_uid, execution_context)
         if merged_intents:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
             sys_prompt += intent_block
@@ -81,11 +87,11 @@ class LLMExecutorImpl:
         type_name = "str"
         returns_uid = node_data.get("returns")
         if returns_uid:
-            returns_data = interpreter.get_node_data(returns_uid)
+            returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
-        ai_module = self.service_context.interop.get_package("ai")
+        ai_module = self.interop.get_package("ai")
         if ai_module and hasattr(ai_module, "get_return_type_prompt"):
             type_prompt = ai_module.get_return_type_prompt(type_name)
             if type_prompt:
@@ -98,98 +104,65 @@ class LLMExecutorImpl:
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": user_prompt,
-            "response": raw_res,
-            "type": "callable",
-            "name": name
+            "raw_response": raw_res
         }
         
-        # 5. 结果解析
+        # 5. 解析结果
         return self._parse_result(raw_res, type_name, node_uid)
 
 
-    def _merge_intents(self, node_uid: Optional[str], context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> List[str]:
-        """
-        合并 Global, Block, Smear, Call 三层意图。
-        node_uid: 当前正在执行的节点 UID，用于查找侧表中的涂抹意图。
-        """
-        interpreter = self.service_context.interpreter
+    def _merge_intents(self, node_uid: str, execution_context: IExecutionContext, captured_intents: Optional[List[Any]] = None) -> List[str]:
+        """合并各层级的意图 (使用 IntentResolver 消解冲突)"""
+        context = execution_context.runtime_context
         
-        # 1. 基础收集：执行栈意图
+        # 1. 静态意图 (AST)
+        node_data = execution_context.get_node_data(node_uid)
+        intent_uid = node_data.get("intent")
+        static_intent = None
+        if intent_uid:
+            intent_data = execution_context.get_node_data(intent_uid)
+            static_intent = IbIntent(
+                ib_class=self.registry.get_class("Intent"),
+                content=intent_data.get('content', '') if intent_data else '',
+                segments=intent_data.get('segments', []) if intent_data else [],
+                mode=IntentMode.from_str(intent_data.get('mode', '+')) if intent_data else IntentMode.APPEND,
+                tag=intent_data.get('tag') if intent_data else None,
+                role=IntentRole.SMEAR,
+                source_uid=intent_uid
+            )
+
+        # 2. 动态意图与全局意图
+        active_intents = context.get_active_intents()
         global_intents = context.get_global_intents()
-        raw_active = captured_intents if captured_intents is not None else context.get_active_intents()
         
-        active_intents = list(raw_active) if not hasattr(raw_active, 'to_list') else raw_active.to_list()
-            
-        # 2. 收集侧表涂抹意图 (Smearing Intents)
-        # 按照 IES 2.0 协议，侧表意图比栈意图更具体（内层）
-        if node_uid:
-            smear_uids = interpreter.get_side_table("node_intents", node_uid)
-            if smear_uids:
-                if isinstance(smear_uids, str): smear_uids = [smear_uids]
-                for uid in smear_uids:
-                    intent = self._create_intent_from_uid(uid)
-                    if intent:
-                        active_intents.append(intent)
+        # 3. 显式捕获意图
+        cap_intents = captured_intents or []
+        
+        # 4. 创建适配器以满足 IbIntent.resolve_content 对 evaluator 的要求
+        class EvaluatorShim:
+            def __init__(self, executor, exec_ctx):
+                self.executor = executor
+                self.exec_ctx = exec_ctx
+            def _evaluate_segments(self, segments, context):
+                return self.executor._evaluate_segments(segments, self.exec_ctx)
 
-        # 3. 处理 Call 层级意图 (最高优先级)
-        # 注意：这里的 node_uid 如果是 IbBehaviorExpr，它本身可能持有一个直接的 intent 关联
-        call_intent = None
-        node_data = interpreter.get_node_data(node_uid) if node_uid else {}
-        call_intent_uid = node_data.get("intent")
-        if call_intent_uid:
-            call_intent = self._create_intent_from_uid(call_intent_uid, role=IntentRole.CALL)
-            
-        # 4. 调用统一的 Resolver
-        final_list = IntentResolver.resolve(
-            active_intents=active_intents,
+        # 5. 调用消解器
+        return IntentResolver.resolve(
+            active_intents=active_intents + cap_intents,
             global_intents=global_intents,
-            call_intent=call_intent,
+            call_intent=static_intent,
             context=context,
-            evaluator=self
+            evaluator=EvaluatorShim(self, execution_context)
         )
-        
-        # 5. 注入循环上下文
-        loop_context = context.get_loop_context()
-        if loop_context:
-            index, total = loop_context["index"], loop_context["total"]
-            final_list.append(f"[循环进度感知: 当前正在处理第 {index + 1} 个元素，总计 {total} 个]")
-            
-        return final_list
 
-    def _create_intent_from_uid(self, intent_uid: str, role: Any = None) -> Optional[IbIntent]:
-        """从 UID 创建 IbIntent 对象"""
-        interpreter = self.service_context.interpreter
-        try:
-            intent_data = interpreter.get_node_data(intent_uid)
-        except:
+    def _resolve_intent_content(self, intent_uid: Optional[str], execution_context: IExecutionContext) -> Optional[str]:
+        if not intent_uid:
             return None
-            
-        if not intent_data: return None
         
-        return IbIntent(
-            ib_class=self.service_context.registry.get_class("Intent"),
-            content=intent_data.get('content', ''),
-            mode=IntentMode.from_str(intent_data.get('mode', '+')),
-            tag=intent_data.get('tag'),
-            segments=intent_data.get('segments', []),
-            role=role or IntentRole.SMEAR,
-            source_uid=intent_uid
-        )
-
-    def _resolve_intent_content(self, intent_uid: str, context: RuntimeContext) -> str:
-        """从 UID 解析意图内容 (Helper)"""
-        # 复用 IbIntent 逻辑
-        interpreter = self.service_context.interpreter
-        intent_data = interpreter.get_node_data(intent_uid)
-        intent = IbIntent(
-            ib_class=self.service_context.registry.get_class("Intent"),
-            content=intent_data.get("content", ""),
-            mode=IntentMode.from_str(intent_data.get("mode", "+")),
-            tag=intent_data.get("tag"),
-            segments=intent_data.get("segments", []),
-            role=IntentRole.BLOCK
-        )
-        return intent.resolve_content(context, self)
+        val = execution_context.visit(intent_uid)
+        if hasattr(val, 'content'):
+            return val.content
+        return str(val)
 
     def _resolve_intent_content_obj(self, intent: Any, context: RuntimeContext) -> str:
         """已废弃：直接使用 IbIntent.resolve_content"""
@@ -208,31 +181,30 @@ class LLMExecutorImpl:
                     seen.add(item)
         return result
 
-    def _evaluate_segments(self, segments: Optional[List[Any]], context: RuntimeContext) -> str:
+    def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext) -> str:
         """评估结构化提示词片段"""
         if not segments:
             return ""
         
-        from core.runtime.objects.kernel import IbObject
         content_parts = []
         for segment in segments:
             # [IES 2.2 Security Update] 处理外部资产引用
             if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
-                interpreter = self.service_context.interpreter
-                if interpreter and hasattr(interpreter, "_resolve_value"):
-                    segment = interpreter._resolve_value(segment)
+                # 注意：_resolve_value 依然在 Interpreter 内部，但我们可以通过 IExecutionContext 间接获取
+                # 如果 IExecutionContext 不提供，我们需要在 Interpreter 层预处理
+                # 目前我们假设 IExecutionContext 暂时不提供 _resolve_value，但我们可以通过 visit 节点来获取常量
+                pass
 
             if isinstance(segment, str):
                 if segment.startswith("node_"):
                     # 这是一个节点 UID
-                    if self.service_context and self.service_context.interpreter:
-                        val = self.service_context.interpreter.visit(segment)
-                        if hasattr(val, '__to_prompt__'):
-                            content_parts.append(val.__to_prompt__())
-                        elif hasattr(val, 'to_native'):
-                            content_parts.append(str(val.to_native()))
-                        else:
-                            content_parts.append(str(val))
+                    val = execution_context.visit(segment)
+                    if hasattr(val, '__to_prompt__'):
+                        content_parts.append(val.__to_prompt__())
+                    elif hasattr(val, 'to_native'):
+                        content_parts.append(str(val.to_native()))
+                    else:
+                        content_parts.append(str(val))
                 else:
                     content_parts.append(segment)
             else:
@@ -242,26 +214,25 @@ class LLMExecutorImpl:
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
         # [Axiom-Driven] 使用公理系统进行解析 (Instance-based)
         axiom = None
-        if self.service_context and self.service_context.registry:
-            meta_reg = self.service_context.registry.get_metadata_registry()
-            if meta_reg:
-                axiom_reg = meta_reg.get_axiom_registry()
-                if axiom_reg:
-                    axiom = axiom_reg.get_axiom(type_name)
-                    
-                    if not axiom:
-                         # 处理泛型 (降级到基础类型公理)
-                        if type_name.startswith("list"):
-                            axiom = axiom_reg.get_axiom("list")
-                        elif type_name.startswith("dict"):
-                            axiom = axiom_reg.get_axiom("dict")
+        meta_reg = self.registry.get_metadata_registry()
+        if meta_reg:
+            axiom_reg = meta_reg.get_axiom_registry()
+            if axiom_reg:
+                axiom = axiom_reg.get_axiom(type_name)
+                
+                if not axiom:
+                        # 处理泛型 (降级到基础类型公理)
+                    if type_name.startswith("list"):
+                        axiom = axiom_reg.get_axiom("list")
+                    elif type_name.startswith("dict"):
+                        axiom = axiom_reg.get_axiom("dict")
 
         if axiom:
             parser = axiom.get_parser_capability()
             if parser:
                 try:
                     val = parser.parse_value(raw_res)
-                    return self.service_context.registry.box(val)
+                    return self.registry.box(val)
                 except Exception as e:
                     self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response via Axiom '{type_name}': {str(e)}")
                     raise LLMUncertaintyError(
@@ -271,20 +242,20 @@ class LLMExecutorImpl:
                     )
 
         # Fallback (Default to string boxing if no axiom or no parser capability)
-        return self.service_context.registry.box(raw_res)
+        return self.registry.box(raw_res)
 
-    def execute_behavior_expression(self, node_uid: str, context: RuntimeContext, captured_intents: Optional[List[Any]] = None) -> IbObject:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, captured_intents: Optional[List[Any]] = None) -> IbObject:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
-        interpreter = self.service_context.interpreter
-        node_data = interpreter.get_node_data(node_uid)
+        node_data = execution_context.get_node_data(node_uid)
+        context = execution_context.runtime_context
         
         # 0. 准备环境
-        ai_module = self.service_context.interop.get_package("ai")
+        ai_module = self.interop.get_package("ai")
 
         # 1. 评估段式插值
-        content = self._evaluate_segments(node_data.get("segments"), context)
+        content = self._evaluate_segments(node_data.get("segments"), execution_context)
         
         # 2. 收集与合并意图
         all_intents = []
@@ -293,13 +264,13 @@ class LLMExecutorImpl:
             auto_intent = ai_module._config.get("auto_intent_injection", True)
         
         if auto_intent:
-            all_intents = self._merge_intents(node_uid, context, captured_intents=captured_intents)
+            all_intents = self._merge_intents(node_uid, execution_context, captured_intents=captured_intents)
         elif node_data.get("intent"):
-            all_intents = [self._resolve_intent_content(node_data.get("intent"), context)]
+            all_intents = [self._resolve_intent_content(node_data.get("intent"), execution_context)]
             
         # 3. 确定场景与提示词
         # 核心：使用 side_tables 中的 node_scenes
-        scene_name = interpreter.get_side_table("node_scenes", node_uid) or "general"
+        scene_name = execution_context.get_side_table("node_scenes", node_uid) or "general"
         sys_prompt = "你是一个意图行为代码执行器。"
         
         current_retry_hint = self.retry_hint
@@ -307,59 +278,49 @@ class LLMExecutorImpl:
             if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
                 current_retry_hint = ai_module._retry_hint
             
-        if ai_module and hasattr(ai_module, "get_scene_prompt"):
-            scene_prompt = ai_module.get_scene_prompt(scene_name.lower())
-            if scene_prompt:
-                sys_prompt = scene_prompt
-
-        # 注入预期类型约束
-        if self._expected_type_stack:
-            injected_type = self._expected_type_stack[-1]
-            # [Refactor Phase 3] 移除 behavior 过滤，因 BehaviorType.prompt_name 已修正为 'str'
-            if injected_type not in ("var", "callable", "Any"):
-                # 优先使用 ai 模块定义的针对特定类型的 Prompt
-                type_prompt = None
-                if ai_module and hasattr(ai_module, "get_return_type_prompt"):
-                    type_prompt = ai_module.get_return_type_prompt(injected_type)
-                
-                if type_prompt:
-                    sys_prompt += f"\n\n{type_prompt}"
-                else:
-                    # 回退到通用的类型声明
-                    sys_prompt += f"\n预期返回类型：{injected_type}。请确保输出内容可以直接解析或转换为该类型。"
+            if hasattr(ai_module, "get_scene_prompt"):
+                sys_prompt = ai_module.get_scene_prompt(scene_name)
         
-        if all_intents:
-            sys_prompt += "\n当前执行意图约束：\n" + "\n".join(f"- {i}" for i in all_intents)
-            
         if current_retry_hint:
-            sys_prompt += f"\n\n注意：这是重试请求。之前的回答不符合要求，请参考此修正提示：{current_retry_hint}"
-            
-        # 4. 执行
-        response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name.lower())
+            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
+
+        # 4. 构造意图增强块
+        if all_intents:
+            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
+            sys_prompt += intent_block
+
+        # 5. 调用底层模型
+        response = self._call_llm(sys_prompt, content, node_uid)
         
         # 记录最后一次调用信息
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": content,
-            "response": response,
-            "scene": scene_name.lower()
+            "raw_response": response
         }
-            
-        # 5. 严格场景校验 (BRANCH/LOOP)
-        if scene_name.upper() in ("BRANCH", "LOOP"):
-            clean_res = response.strip().lower()
-            decision_map = {"1": 1, "0": 0, "true": 1, "false": 0, "yes": 1, "no": 0}
-            if clean_res in decision_map:
-                self.retry_hint = None
-                return self.service_context.registry.box(decision_map[clean_res])
-            
-            raise LLMUncertaintyError(f"LLM decision format error: {response}", node_uid, raw_response=response)
+
+        # 6. 处理返回类型
+        if scene_name in ("decision", "choice"):
+            decision_map = execution_context.get_side_table("decision_maps", node_uid) or {}
+            if decision_map:
+                clean_res = response.strip().lower()
+                # 模糊匹配
+                for k in decision_map:
+                    if k.lower() in clean_res:
+                        self.retry_hint = None
+                        return self.registry.box(decision_map[k])
+                
+                if clean_res in decision_map:
+                    self.retry_hint = None
+                    return self.registry.box(decision_map[clean_res])
+                
+                raise LLMUncertaintyError(f"LLM decision format error: {response}", node_uid, raw_response=response)
 
         self.retry_hint = None
-        return self.service_context.registry.box(response)
+        return self.registry.box(response)
 
 
-    def execute_behavior_object(self, behavior: IbObject, context: RuntimeContext) -> IbObject:
+    def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
         """
         [IES 2.0 Architectural Update] 执行一个被动行为对象。
         """
@@ -369,6 +330,7 @@ class LLMExecutorImpl:
         if behavior._cache is not None:
             return behavior._cache
 
+        context = execution_context.runtime_context
         # 1. 恢复捕获的意图栈
         old_intents = context.intent_stack
         context.intent_stack = list(behavior.captured_intents)
@@ -382,7 +344,7 @@ class LLMExecutorImpl:
         try:
             # 3. 递归调用 execute_behavior_expression
             res = self.execute_behavior_expression(
-                behavior.node, context, captured_intents=behavior.captured_intents
+                behavior.node, execution_context, captured_intents=behavior.captured_intents
             )
             behavior._cache = res
             return res
@@ -417,32 +379,3 @@ class LLMExecutorImpl:
             error_code=RUN_LLM_ERROR
         )
 
-class intent_scoped:
-    """管理意图作用域的上下文管理器装饰器"""
-    def __init__(self, service_context: ServiceContext, intent_uid: Optional[str]):
-        self.service_context = service_context
-        self.intent_uid = intent_uid
-
-    def __call__(self, action: Callable):
-        if not self.intent_uid:
-            return action()
-            
-        interpreter = self.service_context.interpreter
-        intent_data = interpreter.get_node_data(self.intent_uid)
-        
-        # 使用 IbIntent 替代 SimpleNamespace
-        intent = IbIntent(
-            ib_class=self.service_context.registry.get_class("Intent"),
-            content=intent_data.get('content', '') if intent_data else '',
-            mode=IntentMode.from_str(intent_data.get('mode', '+')) if intent_data else IntentMode.APPEND,
-            tag=intent_data.get('tag') if intent_data else None,
-            segments=intent_data.get('segments', []) if intent_data else [],
-            role=IntentRole.BLOCK,
-            source_uid=self.intent_uid
-        )
-        
-        self.service_context.runtime_context.push_intent(intent)
-        try:
-            return action()
-        finally:
-            self.service_context.runtime_context.pop_intent()

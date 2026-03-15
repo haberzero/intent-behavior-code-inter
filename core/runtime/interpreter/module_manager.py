@@ -5,9 +5,10 @@ from core.domain import ast as ast
 from core.domain.types.descriptors import ModuleMetadata as ModuleType
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import DEP_MODULE_NOT_FOUND
+from core.foundation.interfaces import IExecutionContext
+from core.foundation.registry import Registry
 
 if TYPE_CHECKING:
-    from core.runtime.interfaces import Interpreter
     from core.domain.blueprint import CompilationArtifact
 
 class ModuleInstanceImpl:
@@ -29,38 +30,33 @@ class ModuleManagerImpl(ModuleManager):
     模块管理器实现。
     负责模块的加载、缓存和导入处理。
     """
-    def __init__(self, interop: InterOp, artifact: Optional['CompilationArtifact'] = None, root_dir: str = ".", interpreter: Optional['Interpreter'] = None, object_factory: Optional[IObjectFactory] = None):
+    def __init__(self, 
+                 interop: InterOp, 
+                 registry: Registry,
+                 object_factory: IObjectFactory,
+                 execute_module_callback: Callable,
+                 artifact: Optional['CompilationArtifact'] = None, 
+                 root_dir: str = "."):
         self.interop = interop
+        self.registry = registry
+        self.object_factory = object_factory
+        self.execute_module_callback = execute_module_callback
         self.artifact = artifact
         self.root_dir = root_dir
-        self.interpreter = interpreter  # 现在持有主 Interpreter 引用，而非 factory
-        self.object_factory = object_factory
         self._loaded_modules: Dict[str, ModuleInstance] = {}
 
-    def set_interpreter(self, interpreter: 'Interpreter'):
-        """允许延迟注入 Interpreter"""
-        self.interpreter = interpreter
-
-    def set_object_factory(self, factory: IObjectFactory):
-        """允许延迟注入 ObjectFactory"""
-        self.object_factory = factory
-
-    def import_module(self, module_name: str, context: RuntimeContext) -> Any:
+    def import_module(self, module_name: str, execution_context: IExecutionContext) -> Any:
         """
         处理 import module_name，返回模块实例
         """
-        if not self.object_factory:
-            raise InterpreterError("ObjectFactory not initialized in ModuleManager.")
-
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
         package = self.interop.get_package(module_name)
         if package:
             # [IES 2.0 FIX] 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
-            # 这里的 check 不需要导入 IbObject，因为我们可以通过接口/协议判断
-            if not hasattr(package, 'receive'): # 简单启发式判断是否为 IbObject
+            if not hasattr(package, 'receive'): 
                 # 尝试获取已绑定的 vtable
                 vtable = getattr(package, '_ibci_vtable', None)
-                native_obj = self.object_factory.create_native_object(package, self.interpreter.registry.get_class("Object"), vtable=vtable)
+                native_obj = self.object_factory.create_native_object(package, self.registry.get_class("Object"), vtable=vtable)
                 # 包装为 IbModule 
                 return self.object_factory.create_module(module_name, native_obj)
             return package
@@ -74,8 +70,6 @@ class ModuleManagerImpl(ModuleManager):
             module_data = self.artifact.get("modules", {}).get(module_name)
             if module_data:
                 root_node_uid = module_data.get("root_node_uid")
-                if not self.interpreter:
-                    raise InterpreterError("Interpreter not available for module loading.")
                 
                 # 创建该模块的 Global Scope
                 module_scope = self.object_factory.create_scope(parent=None)
@@ -84,11 +78,11 @@ class ModuleManagerImpl(ModuleManager):
                 module_instance = self.object_factory.create_module(module_name, module_scope)
                 self._loaded_modules[module_name] = module_instance
                 
-                # 在新 Scope 下复用 Interpreter 执行
+                # 在新 Scope 下复用 Interpreter 执行 (通过回调)
                 try:
-                    self.interpreter.execute_module(root_node_uid, module_name=module_name, scope=module_scope)
+                    self.execute_module_callback(root_node_uid, module_name=module_name, scope=module_scope)
                 except Exception:
-                    # 如果执行失败，清除缓存以允许后续重试（或防止污染）
+                    # 如果执行失败，清除缓存以允许后续重试
                     if module_name in self._loaded_modules:
                         del self._loaded_modules[module_name]
                     raise
@@ -97,11 +91,11 @@ class ModuleManagerImpl(ModuleManager):
 
         raise InterpreterError(f"Module '{module_name}' not found or not registered in artifact.", error_code=DEP_MODULE_NOT_FOUND)
 
-    def import_from(self, module_name: str, names: List[tuple], context: RuntimeContext) -> None:
+    def import_from(self, module_name: str, names: List[tuple], execution_context: IExecutionContext) -> None:
         """
-        处理 from module_name import x as y, z 或 from module_name import *
-        names 为 (name, asname) 的元组列表
+        处理 from module_name import names...
         """
+        context = execution_context.runtime_context
         # 1. 优先从 InterOp 注册包中查找
         package = self.interop.get_package(module_name)
         if package:
@@ -125,10 +119,9 @@ class ModuleManagerImpl(ModuleManager):
             return
 
         # 2. 处理 IBC 文件模块的 import from 逻辑
-        if self.artifact:
-            # 确保模块已加载
+        try:
             if module_name not in self._loaded_modules:
-                self.import_module(module_name, context)
+                self.import_module(module_name, execution_context)
             
             module_instance = self._loaded_modules.get(module_name)
             if module_instance:
@@ -149,4 +142,7 @@ class ModuleManagerImpl(ModuleManager):
                             raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
                 return
 
-        raise InterpreterError(f"Module '{module_name}' not found or not registered.")
+        except Exception as e:
+            if isinstance(e, InterpreterError):
+                raise
+            raise InterpreterError(f"Module '{module_name}' not found or not registered.")

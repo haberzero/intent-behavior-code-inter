@@ -32,7 +32,7 @@ class StmtHandler(BaseHandler):
             res = self.visit(node_data.get("value"))
             # 如果是行为描述行，则立即执行（作为语句时）
             if isinstance(res, IbBehavior):
-                return self.service_context.llm_executor.execute_behavior_object(res, self.context)
+                return self.service_context.llm_executor.execute_behavior_object(res, self.execution_context)
             return res
             
         return self.interpreter._with_llm_fallback(node_uid, node_data, action)
@@ -57,19 +57,19 @@ class StmtHandler(BaseHandler):
                     name = target_data.get("id")
                     if sym_uid:
                         # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
-                        if self.context.get_symbol_by_uid(sym_uid):
-                            self.context.set_variable_by_uid(sym_uid, value)
+                        if self.runtime_context.get_symbol_by_uid(sym_uid):
+                            self.runtime_context.set_variable_by_uid(sym_uid, value)
                         else:
                             declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
-                            self.context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                            self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
                     elif not self.interpreter.strict_mode:
                         # 回退到名称查找
                         # [IES 2.0] 动态回退：如果变量不存在则定义，存在则赋值
                         try:
-                            self.context.get_variable(name)
-                            self.context.set_variable(name, value)
+                            self.runtime_context.get_variable(name)
+                            self.runtime_context.set_variable(name, value)
                         except Exception:
-                            self.context.define_variable(name, value)
+                            self.runtime_context.define_variable(name, value)
                     else:
                         raise self.report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
                 
@@ -82,7 +82,7 @@ class StmtHandler(BaseHandler):
                         name = inner_target_data.get("id")
                         # 总是定义新变量
                         declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
-                        self.context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                        self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
                 
                 # 3. 属性赋值 (Attribute)
                 elif target_data["_type"] == "IbAttribute":
@@ -125,9 +125,9 @@ class StmtHandler(BaseHandler):
             if target_data["_type"] == "IbName":
                 sym_uid = self.get_side_table("node_to_symbol", target_uid)
                 if sym_uid:
-                    self.context.set_variable_by_uid(sym_uid, new_val)
+                    self.runtime_context.set_variable_by_uid(sym_uid, new_val)
                 else:
-                    self.context.set_variable(target_data.get("id"), new_val)
+                    self.runtime_context.set_variable(target_data.get("id"), new_val)
             elif target_data["_type"] == "IbAttribute":
                 obj = self.visit(target_data.get("value"))
                 attr = target_data.get("attr")
@@ -201,7 +201,7 @@ class StmtHandler(BaseHandler):
             total = len(elements)
             for i, item in enumerate(elements):
                 # 注入循环上下文
-                self.context.push_loop_context(i, total)
+                self.runtime_context.push_loop_context(i, total)
                 
                 # 绑定循环变量
                 target_data = self.get_node_data(target_uid)
@@ -209,19 +209,19 @@ class StmtHandler(BaseHandler):
                     name = target_data.get("id")
                     sym_uid = self.get_side_table("node_to_symbol", target_uid)
                     declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
-                    self.context.define_variable(name, item, declared_type=declared_type, uid=sym_uid)
+                    self.runtime_context.define_variable(name, item, declared_type=declared_type, uid=sym_uid)
                 
                 try:
                     for stmt_uid in body:
                         self.visit(stmt_uid)
                 except BreakException: 
-                    self.context.pop_loop_context()
+                    self.runtime_context.pop_loop_context()
                     return self.registry.get_none()
                 except ContinueException: 
-                    self.context.pop_loop_context()
+                    self.runtime_context.pop_loop_context()
                     continue
                 finally:
-                    self.context.pop_loop_context()
+                    self.runtime_context.pop_loop_context()
             return self.registry.get_none()
             
         return self.interpreter._with_llm_fallback(node_uid, node_data, action)
@@ -258,7 +258,7 @@ class StmtHandler(BaseHandler):
                     # 2. 绑定异常变量
                     name = handler_data.get("name")
                     if name:
-                        self.context.define_variable(name, error_obj)
+                        self.runtime_context.define_variable(name, error_obj)
                     
                     # 3. 执行处理体
                     for stmt_uid in handler_data.get("body", []):
@@ -288,18 +288,18 @@ class StmtHandler(BaseHandler):
         """普通函数定义"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
-        func = IbUserFunction(node_uid, self.interpreter, descriptor=declared_type)
+        func = IbUserFunction(node_uid, self.execution_context, descriptor=declared_type)
         name = node_data.get("name")
-        self.context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
+        self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
 
     def visit_IbLLMFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """LLM 函数 definition"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.interpreter._resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.interpreter, descriptor=declared_type)
+        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, descriptor=declared_type)
         name = node_data.get("name")
-        self.context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
+        self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
 
     def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -319,7 +319,7 @@ class StmtHandler(BaseHandler):
                 raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. [IES 2.0 Contract Violation]", node_uid)
             
             # 绑定到当前作用域 (作为常量类)
-            self.context.define_variable(name, existing_class, uid=sym_uid)
+            self.runtime_context.define_variable(name, existing_class, uid=sym_uid)
             
             # TODO: 深度契约校验（验证方法是否存在、参数是否一致）
             return self.registry.get_none()
@@ -347,11 +347,11 @@ class StmtHandler(BaseHandler):
             if stmt_data["_type"] == "IbFunctionDef":
                 m_sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                 declared_type = self.interpreter._resolve_type_from_symbol(m_sym_uid)
-                new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self.interpreter, descriptor=declared_type))
+                new_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self.execution_context, descriptor=declared_type))
             elif stmt_data["_type"] == "IbLLMFunctionDef":
                 m_sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                 declared_type = self.interpreter._resolve_type_from_symbol(m_sym_uid)
-                new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self.interpreter, descriptor=declared_type))
+                new_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self.execution_context, descriptor=declared_type))
             elif stmt_data["_type"] == "IbAssign":
                 val_uid = stmt_data.get("value")
                 for target_uid in stmt_data.get("targets", []):
@@ -365,7 +365,7 @@ class StmtHandler(BaseHandler):
                             static_val = None
                         new_class.default_fields[target_name] = (val_uid, static_val)
         
-        self.context.define_variable(name, new_class, uid=sym_uid)
+        self.runtime_context.define_variable(name, new_class, uid=sym_uid)
         return self.registry.get_none()
 
     def visit_IbReturn(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -408,10 +408,10 @@ class StmtHandler(BaseHandler):
             source_uid=intent_uid
         )
             
-        self.context.push_intent(intent)
+        self.runtime_context.push_intent(intent)
         try:
             for stmt_uid in node_data.get("body", []):
                 self.visit(stmt_uid)
         finally:
-            self.context.pop_intent()
+            self.runtime_context.pop_intent()
         return self.registry.get_none()

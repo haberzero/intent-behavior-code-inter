@@ -34,87 +34,21 @@ from core.foundation.registry import Registry
 from core.foundation.host_interface import HostInterface
 from core.foundation.interfaces import IStackInspector, IExecutionContext
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from .llm_executor import intent_scoped
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from .intrinsics import IntrinsicManager
 from .ast_view import ReadOnlyNodePool
 from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
 from .constants import OP_MAPPING, UNARY_OP_MAPPING
+from .service_context import ServiceContextImpl
+from .execution_context import ExecutionContextImpl
 from .call_stack import LogicalCallStack, StackFrame
 from .handlers.stmt_handler import StmtHandler
 from .handlers.expr_handler import ExprHandler
 from .handlers.import_handler import ImportHandler
 
 
-class ServiceContextImpl:
-    """注入容器实现类 (已移除 Evaluator)"""
-    def __init__(self, issue_tracker: IssueTracker, 
-                 runtime_context: RuntimeContext,
-                 llm_executor: LLMExecutor,
-                 module_manager: ModuleManager,
-                 interop: InterOp,
-                 permission_manager: PermissionManager,
-                 interpreter: InterpreterInterface,
-                 registry: Registry,
-                 object_factory: IObjectFactory,
-                 host_service: Optional[Any] = None,
-                 source_provider: Optional[ISourceProvider] = None,
-                 compiler: Optional[ICompilerService] = None,
-                 debugger: Any = None):
-        self._issue_tracker = issue_tracker
-        self._runtime_context = runtime_context
-        self._llm_executor = llm_executor
-        self._module_manager = module_manager
-        self._interop = interop
-        self._permission_manager = permission_manager
-        self._interpreter = interpreter
-        self._registry = registry
-        self._object_factory = object_factory
-        self._host_service = host_service
-        self._source_provider = source_provider
-        self._compiler = compiler
-        self._debugger = debugger
-
-        # [IES 2.0] 显式双向绑定，不再使用 hasattr 探测
-        # 核心服务组件必须遵循标准化接口
-        self._llm_executor.service_context = self
-        self._module_manager.interpreter = self._interpreter
-
-    @property
-    def debugger(self) -> Any: return self._debugger
-    @property
-    def interpreter(self) -> InterpreterInterface: return self._interpreter
-    @property
-    def registry(self) -> Registry: return self._registry
-    @property
-    def issue_tracker(self) -> IssueTracker: return self._issue_tracker
-    @property
-    def runtime_context(self) -> RuntimeContext: 
-        # [IES 2.0] 统一从解释器获取当前活跃的作用域，确保符号查找的一致性
-        return self._interpreter.context
-
-    @property
-    def symbol_view(self) -> SymbolView:
-        return self.runtime_context.get_symbol_view()
-    @property
-    def llm_executor(self) -> LLMExecutor: return self._llm_executor
-    @property
-    def module_manager(self) -> ModuleManager: return self._module_manager
-    @property
-    def object_factory(self) -> IObjectFactory: return self._object_factory
-    @property
-    def interop(self) -> InterOp: return self._interop
-    @property
-    def permission_manager(self) -> PermissionManager: return self._permission_manager
-    @property
-    def host_service(self) -> Any: return self._host_service
-    @property
-    def source_provider(self) -> ISourceProvider: return self._source_provider
-    @property
-    def compiler(self) -> ICompilerService: return self._compiler
-
-class Interpreter(IStackInspector, IExecutionContext):
+class Interpreter:
     """
     IBC-Inter 2.0 消息传递解释器。
     彻底转向基于 IbObject 的统一对象模型。
@@ -123,7 +57,7 @@ class Interpreter(IStackInspector, IExecutionContext):
         return self.call_stack_depth
 
     def get_active_intents(self) -> List[str]:
-        return [i.content for i in self.context.get_active_intents()]
+        return [i.content for i in self.runtime_context.get_active_intents()]
 
     def get_instruction_count(self) -> int:
         return self.instruction_count
@@ -157,10 +91,23 @@ class Interpreter(IStackInspector, IExecutionContext):
         
         # 0. 启动内核引导
         self._registry = registry or Registry()
-        # [IES 2.1 Decoupling] 注册执行上下文引用到 Registry 以支持类实例化时的字段求值
+        
+        # [IES 2.1 Decoupling] 创建执行上下文数据容器，剥离状态与逻辑 (组合代替继承)
+        self._execution_context = ExecutionContextImpl(
+            registry=self._registry,
+            visit_callback=self.visit,
+            get_node_data_callback=self.get_node_data,
+            get_side_table_callback=self.get_side_table,
+            push_stack_callback=self.push_stack,
+            pop_stack_callback=self.pop_stack,
+            get_instruction_count_callback=lambda: self.instruction_count,
+            get_captured_intents_callback=self.get_captured_intents
+        )
+
+        # [IES 2.1 Decoupling] 注册执行上下文引用到 Registry，底层仅持有该容器
         self._kernel_token = self._registry.get_kernel_token()
         if self._kernel_token:
-             self._registry.set_execution_context(self, self._kernel_token)
+             self._registry.set_execution_context(self._execution_context, self._kernel_token)
         
         # [IES 2.0] 仅在注册表未初始化时执行引导
         if not self.registry.is_initialized:
@@ -179,50 +126,68 @@ class Interpreter(IStackInspector, IExecutionContext):
         self.compiler = compiler
         self.factory = factory
         self.artifact_dict = artifact
-        self._node_pool: Mapping[str, Any] = {}
         if artifact:
             self.node_pool = artifact.get("pools", {}).get("nodes", {})
         
-        # 1. [IES 2.0] 依赖图谱闭合：构造期完成 ServiceContext 组装
+        # 1. [IES 2.1 Regularization] 依赖图谱闭合：构造期完成 ServiceContext 组装
+        # 核心：确保服务组件仅持有必要的数据结构，严禁穿透持有 Interpreter
+        self.runtime_context = runtime_context or RuntimeContextImpl(registry=self.registry)
+        
         if service_context:
             # 外部注入模式
             self.service_context = service_context
-            self._current_context = service_context.runtime_context
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
-            self._current_context = runtime_context or RuntimeContextImpl(registry=self.registry)
             interop = interop or InterOpImpl(host_interface=self.host_interface)
             object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
             permission_manager = permission_manager or PermissionManagerImpl(root_dir)
-            llm_executor = llm_executor or LLMExecutorImpl()
-            module_manager = module_manager or ModuleManagerImpl(
-                interop, 
-                artifact=self.artifact_dict,
-                interpreter=self,
-                root_dir=root_dir,
-                object_factory=object_factory
+            
+            # [IES 2.1] 初始化 LLMExecutor，注入最小数据依赖
+            llm_executor = llm_executor or LLMExecutorImpl(
+                registry=self.registry,
+                interop=interop,
+                issue_tracker=issue_tracker,
+                debugger=self.debugger
             )
             
+            # [IES 2.1] 初始化 ModuleManager，注入最小依赖与回调
+            module_manager = module_manager or ModuleManagerImpl(
+                interop=interop, 
+                registry=self.registry,
+                object_factory=object_factory,
+                execute_module_callback=self.execute_module,
+                artifact=self.artifact_dict,
+                root_dir=root_dir
+            )
+            
+            # [IES 2.1 Regularization] 初始化 HostService，注入特定回调而非 Interpreter 实例
+            self.host_service = HostService(
+                registry=self.registry,
+                execution_context=self._execution_context,
+                interop=interop,
+                compiler=self.compiler,
+                factory=self.factory,
+                setup_context_callback=self.setup_context,
+                get_current_module_callback=lambda: self.current_module_name
+            )
+
             self.service_context = ServiceContextImpl(
                 issue_tracker=issue_tracker,
-                runtime_context=self._current_context,
                 llm_executor=llm_executor,
                 module_manager=module_manager,
                 interop=interop,
                 permission_manager=permission_manager,
-                interpreter=self,
-                registry=self.registry,
                 object_factory=object_factory,
-                host_service=None,
+                registry=self.registry,
+                host_service=self.host_service,
                 source_provider=self.source_provider,
                 compiler=self.compiler,
                 debugger=self.debugger
             )
-            self.host_service = HostService(self.service_context, self.factory)
             
         # 2. [STAGE 4] 插件加载钩子
         if plugin_loader:
-            plugin_loader(self.service_context)
+            plugin_loader(self.service_context, self._execution_context, self.intrinsic_manager)
         
         # 3. [STAGE 5] 核心解耦：通过 ArtifactLoader 加载并水化产物
         loader = ArtifactLoader(self.registry)
@@ -245,7 +210,7 @@ class Interpreter(IStackInspector, IExecutionContext):
         self._hydrate_user_classes(loaded.class_to_node)
 
         # 4. 设置上下文
-        self._setup_context(self._current_context)
+        self._setup_context(self.runtime_context)
 
         # 运行限制
         self.max_instructions = max_instructions
@@ -264,7 +229,7 @@ class Interpreter(IStackInspector, IExecutionContext):
             
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
-        self.logical_stack = LogicalCallStack(max_depth=max_call_stack)
+        self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
         self.current_module_name: Optional[str] = None
         self.strict_mode = strict_mode
 
@@ -289,20 +254,36 @@ class Interpreter(IStackInspector, IExecutionContext):
         return self._registry
 
     @property
-    def context(self) -> RuntimeContext:
-        return self._current_context
+    def execution_context(self) -> IExecutionContext:
+        return self._execution_context
+
+    @property
+    def symbol_view(self) -> SymbolView:
+        return self.runtime_context.get_symbol_view()
+
+    @property
+    def runtime_context(self) -> RuntimeContext:
+        return self._execution_context.runtime_context
+
+    @runtime_context.setter
+    def runtime_context(self, value: RuntimeContext):
+        self._execution_context.runtime_context = value
 
     @property
     def node_pool(self) -> Mapping[str, Any]:
-        return self._node_pool
+        return self._execution_context.node_pool
 
     @node_pool.setter
     def node_pool(self, value: Mapping[str, Any]):
-        self._node_pool = value
+        self._execution_context.node_pool = value
+
+    @property
+    def logical_stack(self) -> LogicalCallStack:
+        return self._execution_context.logical_stack
 
     @property
     def stack_inspector(self) -> IStackInspector:
-        return self.logical_stack
+        return self._execution_context
 
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
         """从侧表中获取信息，支持多模块架构"""
@@ -322,7 +303,7 @@ class Interpreter(IStackInspector, IExecutionContext):
             name=name,
             local_vars={}, # 暂时不快照变量，性能考虑
             location=location,
-            intent_stack=[i.content for i in self.context.get_active_intents()],
+            intent_stack=[i.content for i in self.runtime_context.get_active_intents()],
             is_user_function=is_user_function,
             **kwargs
         )
@@ -404,14 +385,6 @@ class Interpreter(IStackInspector, IExecutionContext):
         elif hasattr(context, '__dict__'):
             context._interpreter = self
 
-    @property
-    def context(self) -> RuntimeContext:
-        return self._current_context
-
-    @context.setter
-    def context(self, value: RuntimeContext):
-        self._current_context = value
-
     def interpret(self, module_uid: str) -> IbObject:
         """从模块 UID 开始执行"""
         return self.execute_module(module_uid)
@@ -455,12 +428,12 @@ class Interpreter(IStackInspector, IExecutionContext):
             # print(f"DEBUG: module_data is NOT a mapping! it is {type(module_data)} -> {module_data}")
             raise self._report_error(f"Module data for {module_uid} is not a dict: {type(module_data)} -> {module_data}")
 
-        old_context = self._current_context
+        old_context = self.runtime_context
         if scope:
              # 创建新 Context 并绑定 Scope
              new_ctx = RuntimeContextImpl(initial_scope=scope, registry=self.registry)
-             self._current_context = new_ctx
-             self._setup_context(self._current_context)
+             self.runtime_context = new_ctx
+             self._setup_context(self.runtime_context)
 
         self.instruction_count = 0
         result = self.registry.get_none()
@@ -470,7 +443,7 @@ class Interpreter(IStackInspector, IExecutionContext):
             name=f"module:{module_name}",
             local_vars={},
             location=Location(file_path=module_name, line=1, column=0),
-            intent_stack=[i.content for i in self.context.get_active_intents()]
+            intent_stack=[i.content for i in self.runtime_context.get_active_intents()]
         )
         
         try:
@@ -486,7 +459,7 @@ class Interpreter(IStackInspector, IExecutionContext):
             raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         finally:
             self.logical_stack.pop()
-            self._current_context = old_context
+            self.runtime_context = old_context
             self.current_module_name = old_module
 
     def _report_error(self, message: str, node_uid: Optional[str] = None, error_code: Optional[str] = None) -> InterpreterError:
@@ -679,7 +652,7 @@ class Interpreter(IStackInspector, IExecutionContext):
                         role=IntentRole.SMEAR,
                         source_uid=i_uid
                     )
-                    self.context.push_intent(intent)
+                    self.runtime_context.push_intent(intent)
                     pushed_count += 1
 
         try:
@@ -700,7 +673,7 @@ class Interpreter(IStackInspector, IExecutionContext):
             self.call_stack_depth -= 1
             # [NEW] 自动出栈，确保意图作用域正确恢复
             for _ in range(pushed_count):
-                self.context.pop_intent()
+                self.runtime_context.pop_intent()
 
     def generic_visit(self, node_uid: str, node_data: Mapping[str, Any]):
         raise self._report_error(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)

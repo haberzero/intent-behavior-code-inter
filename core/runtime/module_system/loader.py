@@ -7,8 +7,11 @@ from core.runtime.exceptions import RegistryIsolationError
 from core.runtime.enums import RegistrationState
 
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
+from core.runtime.interfaces import (
+    IModuleLoader, ServiceContext
+)
 from core.foundation.interfaces import (
-    IModuleLoader, ServiceContext, ExtensionCapabilities, 
+    ExtensionCapabilities, IExecutionContext,
     IStackInspector, IStateReader, IIntentManager, ILLMExecutor, ILLMProvider, ISymbolView
 )
 from core.domain.issue import InterpreterError
@@ -104,11 +107,11 @@ class ModuleLoader(IModuleLoader):
         # 执行注入
         implementation.setup(capabilities=capabilities)
 
-    def load_and_register_all(self, context: ServiceContext):
+    def load_and_register_all(self, context: ServiceContext, execution_context: IExecutionContext):
         """
         扫描搜索路径，加载所有模块实现并绑定到 InterOp。
         """
-        registry = context.interpreter.registry if context.interpreter else context.runtime_context.registry
+        registry = execution_context.registry
         if registry:
             registry.verify_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
             
@@ -117,18 +120,23 @@ class ModuleLoader(IModuleLoader):
         llm_executor = context.llm_executor
         
         # 准备扩展能力集合 (IES 2.0 SDK)
-        capabilities = ExtensionCapabilities(registry=context.registry)
-        if isinstance(context.runtime_context, IStateReader):
-            capabilities.state_reader = context.runtime_context
-        if isinstance(context.interpreter, IStackInspector):
-            capabilities.stack_inspector = context.interpreter
-        if isinstance(context.runtime_context, IIntentManager):
-            capabilities.intent_manager = context.runtime_context
+        capabilities = ExtensionCapabilities(registry=registry)
+        
+        rt_context = execution_context.runtime_context
+        if rt_context:
+            if isinstance(rt_context, IStateReader):
+                capabilities.state_reader = rt_context
+            if isinstance(rt_context, IIntentManager):
+                capabilities.intent_manager = rt_context
+            
+            # [Active Defense] 注入只读符号视图 (通过 RuntimeContext 获取)
+            if hasattr(rt_context, 'get_symbol_view'):
+                capabilities.symbol_view = rt_context.get_symbol_view()
+                
+        capabilities.stack_inspector = execution_context.stack_inspector
+            
         if isinstance(context.llm_executor, ILLMExecutor):
             capabilities.llm_executor = context.llm_executor
-        
-        # [Active Defense] 注入只读符号视图
-        capabilities.symbol_view = context.symbol_view
         
         loaded_modules = set()
         

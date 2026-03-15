@@ -6,7 +6,8 @@ from typing import Optional, Dict, Any
 
 from core.foundation.registry import Registry
 from core.compiler.scheduler import Scheduler
-from core.runtime.interpreter.interpreter import Interpreter, ServiceContextImpl
+from core.runtime.interpreter.interpreter import Interpreter
+from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.interop import InterOpImpl
@@ -31,7 +32,8 @@ from core.domain.types.descriptors import (
     BOOL_DESCRIPTOR, ANY_DESCRIPTOR
 )
 from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
-from core.runtime.interfaces import IInterpreterFactory
+from core.runtime.interfaces import IInterpreterFactory, ServiceContext
+from core.foundation.interfaces import IExecutionContext
 
 
 from core.runtime.enums import RegistrationState
@@ -85,10 +87,10 @@ class IBCIEngine(IInterpreterFactory):
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
             root_dir=root_dir,
-            factory=self # 注入自己作为工厂
+            factory=self, # 注入自己作为工厂
+            plugin_loader=self._load_plugins # 注入生命周期钩子
         )
-        # 加载插件
-        self.module_loader.load_and_register_all(sub_interpreter.service_context)
+        # 加载插件已由 plugin_loader 完成
         return sub_interpreter
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
@@ -113,13 +115,13 @@ class IBCIEngine(IInterpreterFactory):
         # 封印类注册表
         self.registry.seal_classes(self._kernel_token)
 
-    def _load_plugins(self, service_context: ServiceContextImpl):
+    def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """[IES 2.0] 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)"""
         # 1. 进入插件加载阶段
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
         
         # 2. 统一由 ModuleLoader 驱动实现层的加载与注入
-        self.module_loader.load_and_register_all(service_context)
+        self.module_loader.load_and_register_all(service_context, execution_context)
         
         # 3. 插件加载完成，进入水合阶段
         self.registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, self._kernel_token)
@@ -244,20 +246,25 @@ class IBCIEngine(IInterpreterFactory):
         # 1. 注入初始变量
         if variables:
             for name, val in variables.items():
-                self.interpreter.context.define_variable(name, val)
+                self.interpreter.runtime_context.define_variable(name, val)
         
         # 2. 启动执行
         return self.interpreter.run()
 
+    def set_variable(self, name: str, val: Any):
+        """[Engine API] 向当前解释器环境注入变量"""
+        if self.interpreter:
+            if not hasattr(val, 'ib_class'):
+                val = self.interpreter.registry.box(val)
+            if self.interpreter.runtime_context:
+                self.interpreter.runtime_context.define_variable(name, val)
+
     def get_variable(self, name: str) -> Any:
-        """获取解释器上下文中的变量"""
-        if self.interpreter and self.interpreter.context:
-            val = self.interpreter.context.get_variable(name)
-            # 自动进行 to_native 转换，以便外部调用者（如测试用例）直接使用 Python 原生值
-            if hasattr(val, 'to_native'):
-                return val.to_native()
+        """[Engine API] 从当前解释器环境获取变量"""
+        if self.interpreter and self.interpreter.runtime_context:
+            val = self.interpreter.runtime_context.get_variable(name)
             return val
-        raise RuntimeError("Interpreter not initialized")
+        return None
 
     def check(self, entry_file: str) -> bool:
         """

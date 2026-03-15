@@ -17,6 +17,27 @@ IBCI 2.0 正处于从 **IES 1.0 (动态注入)** 向 **IES 2.0 (契约先行/物
 
 ---
 
+## 5. 上下文正规化专题：职责、层级与风险审计 (Context Regularization)
+
+### **5.1 三大上下文的职责定义 (Clear Responsibilities)**
+| 上下文类型 | 核心职责 | 物理层级 | 变动频率 |
+| :--- | :--- | :--- | :--- |
+| **`RuntimeContext`** | 存储变量、作用域、当前意图栈等**易变执行现场**。 | Runtime | 极高 (指令级) |
+| **`IExecutionContext`** | 提供节点池、求值入口、栈内省等**执行资源网关**。 | Foundation | 低 (引擎级) |
+| **`ServiceContext`** | 协调 LLM、模块管理、权限等**横向服务组件**。 | Runtime | 极低 (初始化级) |
+
+### **5.2 核心架构风险 (Risk Audit)**
+1. **[High] 层级定义错位 (Layer Violation)**: `ServiceContext` 协议目前定义在 `Foundation` 层，但其成员（如 `llm_executor`）属于高层 `Runtime` 逻辑。这导致了“下层知道上层”的架构污染。
+2. **[Medium] 入口弥散 (Entry Point Smearing)**: 开发者可以从 `interpreter.runtime_context`、`service_context.runtime_context` 以及 `execution_context.runtime_context` 三个入口访问同一份现场。这种冗余代理增加了认知负担并掩盖了职责边界。
+3. **[High] 间接上帝对象 (Indirect God Object)**: 许多 Manager 通过持有全量 `ServiceContext` 间接持有了 `Interpreter`。这种过度持有的传递链在物理上抵消了 `IExecutionContext` 所做的解耦努力。
+
+### **5.3 治理方案 (Proposed Remediation)**
+- **物理迁移**: 将 `ServiceContext` 协议定义下沉至 `core/runtime/interfaces.py`，从基座层剥离。
+- **职责精简**: 移除 `ServiceContext` 中所有的 `runtime_context` 代理。规定：**“找服务找 ServiceContext，读现场读 IExecutionContext”**。
+- **最小注入**: 重构 Manager 的构造函数，仅注入其所需的特定服务接口，而非全量上下文。
+
+---
+
 ## 2. 深度审计：核心缺陷总结 (Core Defect Analysis)
 
 ### **2.1 [Critical] Item 12: 跨引擎元数据单例污染**
@@ -63,16 +84,73 @@ IBCI 2.0 正处于从 **IES 1.0 (动态注入)** 向 **IES 2.0 (契约先行/物
 
 ## 4. 架构治理专题：解释器“上帝对象”解耦 (God Object Decoupling)
 
-### **4.1 核心矛盾：非法越级持有**
-目前的 `Interpreter` 实例同时承载了 **执行逻辑 (Visitor)** 与 **运行时数据 (State)**。
-- `Foundation (Registry)` 为了记录求值引用而持有它。
-- `Kernel (IbObject)` 为了调用 `.visit()` 进行求值而持有它。
+### **4.1 核心矛盾：非法越级持有与“假解耦”继承**
+目前的 `Interpreter` 实例同时承载了 **执行逻辑 (Visitor)** 与 **运行时数据 (State)**，且采取了“协议继承”的捷径。
+- `Interpreter` 继承了 `IStackInspector` 和 `IExecutionContext`。
+- **缺陷**：虽然底层组件看到的是协议，但物理上持有的依然是庞大的解释器实例。
+- **栈管理矛盾**：栈的推进（Push/Pop）是解释器的逻辑行为，而栈的内容是执行数据。目前的继承关系导致逻辑与数据在物理内存地址上完全重合，无法实现真正的数据隔离或状态快照。
 
-### **4.2 终极解决方案：状态分离 (ExecutionContext)**
-- **抽象**：定义 `ExecutionContext` 纯数据结构，包含 `node_pool`, `logical_stack`, `instruction_count` 等。
-- **下沉**：将 `ExecutionContext` 定义放置在 `Foundation` 或 `Common` 层。
-- **解耦**：`IbObject` 仅持有 `ExecutionContext`。解释器在执行时，将自身持有的数据包传递给对象系统。
-- **结论**：这是消除物理循环依赖、实现真正沙箱化运行的唯一路径。
+### **4.2 终极解决方案：状态分离 (ExecutionContext & Stack Isolation)**
+- **数据容器化**：定义 `ExecutionContextImpl` 和 `StackState` 纯数据类。
+- **组合代替继承**：
+    - `Interpreter` 内部持有这些数据实例。
+    - `Interpreter` 不再继承协议，而是作为逻辑驱动器，在初始化时将自身的方法（作为回调）注入到数据上下文中。
+- **收益**：底层组件持有的将是纯粹的、轻量级的状态包，解释器实例可以被随时销毁、热替换或序列化，而不会影响底层的对象引用。
+
+---
+
+## 6. 上下文正规化：深度规格说明书 (Context Regularization Specification)
+
+### **6.1 核心定义与职责分离 (The Three Contexts)**
+
+#### **I. `RuntimeContext` (易变执行现场)**
+- **职责定位**：负责管理单一执行流中的**易变状态**。它是解释器运行时的“记忆”。
+- **物理位置**：
+    - 协议：`core/runtime/interfaces.py`
+    - 实现：`core/runtime/interpreter/runtime_context.py`
+- **持有数据 (Bottom Data)**：
+    - `scopes`: `List[Scope]` - 变量解析栈。
+    - `intent_stack`: `List[Intent]` - 活跃意图栈。
+    - `registry`: `Registry` 实例 - 用于求值过程中的对象装箱 (Boxing)。
+- **禁止项**：严禁持有任何横向服务（如 LLM）或解释器逻辑引用。
+
+#### **II. `IExecutionContext` (资源与调度网关)**
+- **职责定位**：作为 Foundation/Kernel 与 Runtime 之间的**物理隔离带**。它为底层对象提供“窄求值能力”。
+- **物理位置**：
+    - 协议：`core/foundation/interfaces.py` (下沉至基座)
+    - 实现：`core/runtime/interpreter/execution_context.py`
+- **持有数据 (Bottom Data)**：
+    - `node_pool`: `Mapping[str, Any]` - AST 节点池的只读引用。
+    - `registry`: `Registry` 实例 - 类型与公理系统的唯一真理源。
+    - `runtime_context`: `RuntimeContext` 引用 - 当前执行现场。
+- **交互协议**：通过 **回调函数 (Callbacks)** 代理 `visit`, `push_stack` 等逻辑，严禁持有 `Interpreter` 实例。
+
+#### **III. `ServiceContext` (横向服务定位器)**
+- **职责定位**：负责 Runtime 内部各独立组件之间的**横向发现与协作**。
+- **物理位置**：
+    - 协议：`core/runtime/interfaces.py` (严禁定义在 Foundation)
+    - 实现：`core/runtime/interpreter/service_context.py` (独立文件)
+- **持有数据 (Bottom Data)**：
+    - 仅持有服务的协议接口：`ILLMExecutor`, `IModuleManager`, `IPermissionManager`, `IInterOp`, `IIssueTracker`。
+- **禁止项**：
+    - **严禁持有 `Interpreter` 实例**。
+    - **严禁持有 `RuntimeContext`**。服务若需访问状态，必须通过调用栈显式传递 `IStateReader` 接口。
+
+### **6.2 组件注入与传递规范 (Injection Policy)**
+
+| 组件名称 | 注入内容 (Min-Privilege) | 传递入口 |
+| :--- | :--- | :--- |
+| **LLMExecutor** | `Registry`, `IIntentManager` | 构造函数注入 |
+| **ModuleManager** | `InterOp`, `Registry`, `IObjectFactory` | 构造函数注入 |
+| **Handlers** | `ServiceContext`, `IExecutionContext` | 构造函数注入 |
+| **IbObject** | `IExecutionContext` | 实例化时注入 |
+
+### **6.3 交互拓扑图 (Interaction Topology)**
+
+1. **[Orchestrator] Interpreter**：作为逻辑中心，初始化所有组件。它创建 `ExecutionContextImpl` 并将自身的逻辑方法（如 `visit`）作为回调注入。
+2. **[Data Holder] ExecutionContextImpl**：被传递给 `Registry` 和 `IbObject`。它不认识解释器，只知道如何通过回调触发求值。
+3. **[Service Holder] ServiceContextImpl**：被传递给 `Handlers`。它不认识解释器，只知道如何找到 `LLMExecutor`。
+4. **[No-Penetration] 穿透禁令**：严禁出现 `context.interpreter.xxx` 或 `context.runtime_context.registry` 这种跨层级引用链。
 
 ---
 
@@ -85,9 +163,16 @@ IBCI 2.0 正处于从 **IES 1.0 (动态注入)** 向 **IES 2.0 (契约先行/物
 4. [x] **Security Cleanup**: 移除 `visit_IbClassDef` 中的动态回退逻辑 (Item 15/16)。
 
 ### **阶段 4.5: 架构深度解耦 (Completed)**
-1. [x] 设计并实现 `IExecutionContext` 纯数据协议。
-2. [x] 重构 `Registry` 与 `IbObject`, `IbUserFunction`, `IbLLMFunction`，彻底移除对 `Interpreter` 实例的直接持有。
-3. [ ] 将 `builtin_initializer.py` 中的硬编码逻辑迁移至 Axiom 公理层。
+1. [x] 设计并实现 `IExecutionContext` 纯数据协议与 `ExecutionContextImpl` 组合容器。
+2. [x] 重构 `Interpreter`，通过组合代替继承，彻底实现逻辑与数据的物理分离。
+3. [x] 重构 `Registry` 与 `IbObject`, `IbUserFunction`, `IbLLMFunction`，确保它们仅持有轻量级的上下文容器而非整个解释器。
+4. [ ] 将 `builtin_initializer.py` 中的硬编码逻辑迁移至 Axiom 公理层。
+
+### **阶段 4.6: 上下文正规化与无穿透架构 (Completed)**
+1. [x] 物理剥离 `ServiceContext` 定义至 Runtime 接口层。
+2. [x] 实现非穿透式 `ServiceContextImpl`，彻底切断对 `Interpreter` 实例的物理持有。
+3. [x] 重构 `LLMExecutor`、`ModuleManager` 和 `HostService`，实现基于“数据结构”的最小特权注入。
+4. [x] 修复意图消解算法回归 Bug，确保冲突消解逻辑的正确性。
 
 ---
 *版本：v1.0 (2026-03-15) - 终极整合版*

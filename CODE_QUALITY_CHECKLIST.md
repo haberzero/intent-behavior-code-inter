@@ -11,9 +11,16 @@
 
 ## 2. 架构解耦 (God Object Remediation)
 
-- [x] **[Arch] 解释器持有脱离 (Foundation)**：从 `Registry` 中移除对 `Interpreter` 实例的直接持有（L143-148）。
-- [x] **[Arch] 解释器持有脱离 (Kernel)**：从 `IbClass`, `IbUserFunction`, `IbLLMFunction` 中移除对 `Interpreter` 实例的持有。
-- [x] **[Data] ExecutionContext 设计**：定义纯数据结构的上下文包，作为 Kernel 获取运行时状态的唯一合法途径。
+- [x] **[Arch] 解释器组合解耦**：废弃 `Interpreter` 对 `IExecutionContext` 和 `IStackInspector` 的继承，改为持有 `ExecutionContextImpl` 实例。
+- [x] **[Data] StackState 提取**：逻辑调用栈的状态数据已从解释器逻辑中分离，通过组合容器管理。
+
+## 3. 上下文正规化 (Context Regularization)
+
+- [x] **[Arch] ServiceContext 物理剥离**：将 `ServiceContext` 定义从 Foundation 迁移至 Runtime，并创建独立的 `service_context.py` 实现文件。
+- [x] **[Arch] 穿透路径清理**：彻底删除 `ServiceContext` 对 `Interpreter` 实例的持有，改为纯服务协议持有。
+- [x] **[Arch] 职责单一化**：从 `ServiceContext` 中移除 `runtime_context` 代理，确保“服务”与“状态”路径不重叠。
+- [x] **[Injection] 最小特权注入**：重构 `LLMExecutor`、`ModuleManager` 等组件，改为注入特定的数据结构（如 `Registry`）而非全量上下文。
+- [x] **[Audit] 穿透禁令审计**：全量 Grep 检查，严禁出现 `context.interpreter` 或 `context.runtime_context.registry` 等违规链条。
 
 ## 3. 逻辑完备性与时序 (High)
 

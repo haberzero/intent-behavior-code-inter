@@ -39,7 +39,7 @@ class TestAutomationBinding(BaseIBCTest):
         self.run_code(code)
         
         # 从解释器上下文中获取变量 x
-        x_val = self.engine.interpreter.context.get_variable("x")
+        x_val = self.engine.interpreter.runtime_context.get_variable("x")
         
         # 验证变量 x 的值是一个 IbBehavior 对象
         self.assertIsInstance(x_val, IbBehavior)

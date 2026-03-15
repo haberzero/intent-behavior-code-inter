@@ -24,7 +24,7 @@ class ExprHandler(BaseHandler):
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         if sym_uid:
             try:
-                return self.context.get_variable_by_uid(sym_uid)
+                return self.runtime_context.get_variable_by_uid(sym_uid)
             except Exception:
                 # 如果是严格模式，UID 查找失败即报错
                 if self.interpreter.strict_mode: raise
@@ -33,7 +33,7 @@ class ExprHandler(BaseHandler):
         name = node_data.get("id")
         
         try:
-            return self.context.get_variable(name)
+            return self.runtime_context.get_variable(name)
         except Exception:
             # 2. 尝试从 Registry 获取类 (支持内置类型名称如 int, str)
             cls = self.registry.get_class(name)
@@ -122,7 +122,7 @@ class ExprHandler(BaseHandler):
         try:
             # [IES 2.0 Architectural Update] 识别被动行为对象并分发给执行器
             if isinstance(func, IbBehavior):
-                return self.service_context.llm_executor.execute_behavior_object(func, self.context)
+                return self.service_context.llm_executor.execute_behavior_object(func, self.execution_context)
 
             # 如果是 BoundMethod 或 IbFunction，其 call 内部会处理作用域
             if hasattr(func, 'call'):
@@ -170,7 +170,7 @@ class ExprHandler(BaseHandler):
         
         if is_deferred:
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
-            captured_intents = list(self.context.get_active_intents())
+            captured_intents = list(self.runtime_context.get_active_intents())
             expected_type = self.get_side_table("node_to_type", node_uid)
             
             # [IES 2.0] 直接在初始化时绑定 ib_class，消除外部补丁
@@ -182,7 +182,8 @@ class ExprHandler(BaseHandler):
             )
         
         # 立即执行
-        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.context)
+        # [IES 2.1 Regularization] 传递执行上下文网关
+        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context)
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""

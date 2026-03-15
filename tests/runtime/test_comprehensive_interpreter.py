@@ -120,7 +120,7 @@ class TestComprehensiveInterpreter(BaseIBCTest):
         """
         self.run_code(code)
         
-        ctx = self.engine.interpreter.context
+        ctx = self.engine.interpreter.runtime_context
         serializer = RuntimeSerializer(self.engine.registry)
         data = serializer.serialize_context(ctx)
         
