@@ -414,6 +414,7 @@ class BoundMethodMetadata(TypeDescriptor):
 @dataclass
 class ModuleMetadata(TypeDescriptor):
     """模块元数据描述"""
+    required_capabilities: List[str] = field(default_factory=list)
     
     def __post_init__(self):
         super().__post_init__()

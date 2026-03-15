@@ -117,12 +117,9 @@ class SymbolFactory:
         if isinstance(descriptor, uts.FunctionMetadata):
             return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=descriptor)
         elif isinstance(descriptor, uts.ClassMetadata):
-             # 类的符号，其类型就是该类本身 (ClassMetadata)
-             # 但注意：Symbol.descriptor 通常代表"这个符号持有的值的类型"
-             # 对于类定义 `class Foo`, 符号 Foo 的类型是 `type(Foo)` 还是 `Foo`?
-             # 在静态分析中，通常认为 Foo 是一个 TypeSymbol，其 descriptor 指向 ClassMetadata
-             return TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=descriptor)
+            # 类符号描述符指向 ClassMetadata，表示该符号代表类定义本身。
+            return TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=descriptor)
         elif isinstance(descriptor, uts.ModuleMetadata):
-             return VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=descriptor)
+            return VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=descriptor)
         else:
             return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=descriptor)

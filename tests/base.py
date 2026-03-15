@@ -9,16 +9,26 @@ from core.domain.blueprint import CompilationArtifact
 from core.domain.types import ModuleMetadata
 
 class MockAI:
-    """通用的 AI 服务 Mock"""
+    """通用的 AI 服务 Mock (IES 2.0 Standard)"""
     def __init__(self):
         self.last_sys = ""
         self.last_user = ""
         self.response = "42"
         self.calls = []
+        self._decision_map = {
+            "1": "1", "true": "1", "yes": "1", "ok": "1",
+            "0": "0", "false": "0", "no": "0", "fail": "0"
+        }
 
     def setup(self, capabilities):
         # 核心：将自己注册为内核的 LLM Provider
         capabilities.llm_provider = self
+
+    def set_config(self, url, key, model):
+        pass
+
+    def get_decision_map(self):
+        return self._decision_map
 
     def __call__(self, sys, user, scene="general"):
         self.last_sys = sys
@@ -35,11 +45,38 @@ class MockAI:
     def get_last_call_info(self):
         return {"sys": self.last_sys, "user": self.last_user, "response": self.response}
 
+    def get_vtable(self):
+        return {
+            "set_config": self.set_config,
+            "set_retry_hint": lambda x: None,
+            "set_retry": lambda x: None,
+            "set_timeout": lambda x: None,
+            "set_general_prompt": lambda x: None,
+            "set_branch_prompt": lambda x: None,
+            "set_loop_prompt": lambda x: None,
+            "set_return_type_prompt": lambda x, y: None,
+            "get_return_type_prompt": lambda x: "",
+            "set_decision_map": lambda x: None,
+            "get_decision_map": self.get_decision_map,
+            "get_last_call_info": self.get_last_call_info,
+            "get_scene_prompt": lambda x: "",
+            "set_scene_config": lambda x, y: None,
+            "set_global_intent": lambda x: None,
+            "clear_global_intents": lambda: None,
+            "remove_global_intent": lambda x: None,
+            "get_global_intents": lambda: [],
+            "get_current_intent_stack": lambda: [],
+            "mask": lambda x: None,
+        }
+
 class MockHostService:
-    """通用的宿主服务 Mock"""
+    """通用的宿主服务 Mock (IES 2.0 Standard)"""
     def __init__(self):
         self.saved_states = {}
         self.calls = []
+
+    def setup(self, capabilities):
+        pass
 
     def save_state(self, path: str, data: Any):
         self.saved_states[path] = data
@@ -57,6 +94,13 @@ class MockHostService:
         self.calls.append(("get_source",))
         return "mock source"
 
+    def get_vtable(self):
+        return {
+            "save_state": self.save_state,
+            "load_state": self.load_state,
+            "run_isolated": self.run_isolated,
+            "get_source": self.get_source
+        }
 class IBCTestEngine(IBCIEngine):
     """
     专为测试设计的引擎子类。

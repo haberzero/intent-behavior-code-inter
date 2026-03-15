@@ -18,9 +18,10 @@ from core.foundation.diagnostics.codes import (
 from core.runtime.interfaces import (
     Interpreter as InterpreterInterface, 
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
-    PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService
+    PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService, IObjectFactory
 )
 from .runtime_context import RuntimeContextImpl
+from .factory import RuntimeObjectFactory
 from .llm_executor import LLMExecutorImpl
 from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
@@ -52,6 +53,7 @@ class ServiceContextImpl:
                  permission_manager: PermissionManager,
                  interpreter: InterpreterInterface,
                  registry: Registry,
+                 object_factory: IObjectFactory,
                  host_service: Optional[Any] = None,
                  source_provider: Optional[ISourceProvider] = None,
                  compiler: Optional[ICompilerService] = None,
@@ -64,6 +66,7 @@ class ServiceContextImpl:
         self._permission_manager = permission_manager
         self._interpreter = interpreter
         self._registry = registry
+        self._object_factory = object_factory
         self._host_service = host_service
         self._source_provider = source_provider
         self._compiler = compiler
@@ -80,7 +83,9 @@ class ServiceContextImpl:
     @property
     def runtime_context(self) -> RuntimeContext: 
         # [FIX] 动态获取解释器当前活跃的 Context，解决跨模块加载时的作用域滞后问题
-        return self._interpreter.context
+        if self._interpreter:
+            return self._interpreter.context
+        return self._runtime_context
 
     @property
     def symbol_view(self) -> SymbolView:
@@ -89,6 +94,8 @@ class ServiceContextImpl:
     def llm_executor(self) -> LLMExecutor: return self._llm_executor
     @property
     def module_manager(self) -> ModuleManager: return self._module_manager
+    @property
+    def object_factory(self) -> IObjectFactory: return self._object_factory
     @property
     def interop(self) -> InterOp: return self._interop
     @property
@@ -131,7 +138,9 @@ class Interpreter(IStackInspector):
                  registry: Optional[Registry] = None,
                  source_provider: Optional[ISourceProvider] = None,
                  compiler: Optional[ICompilerService] = None,
-                 factory: Optional[Any] = None):
+                 factory: Optional[Any] = None,
+                 interop: Optional[InterOp] = None,
+                 runtime_context: Optional[RuntimeContext] = None):
         
         # 0. 启动内核引导
         self.registry = registry or Registry()
@@ -163,8 +172,11 @@ class Interpreter(IStackInspector):
         self.artifact_dict = loaded.artifact_dict
         
         # 2. 初始化基础组件
-        runtime_context = RuntimeContextImpl(registry=self.registry)
-        interop = InterOpImpl(host_interface=self.host_interface)
+        runtime_context = runtime_context or RuntimeContextImpl(registry=self.registry)
+        interop = interop or InterOpImpl(host_interface=self.host_interface)
+        
+        # [IES 2.0] 初始化运行时对象工厂
+        object_factory = RuntimeObjectFactory(registry=self.registry)
         
         # 权限管理
         permission_manager = PermissionManagerImpl(root_dir)
@@ -174,7 +186,8 @@ class Interpreter(IStackInspector):
             interop, 
             artifact=self.artifact_dict, # 传入字典
             interpreter=None,
-            root_dir=root_dir
+            root_dir=root_dir,
+            object_factory=object_factory
         )
         
         # 4. 创建 ServiceContext
@@ -189,6 +202,7 @@ class Interpreter(IStackInspector):
             permission_manager=permission_manager,
             interpreter=self,
             registry=self.registry,
+            object_factory=object_factory,
             host_service=None, # 占位符，稍后注入
             source_provider=self.source_provider,
             compiler=self.compiler,
@@ -509,7 +523,6 @@ class Interpreter(IStackInspector):
             if not e.location:
                 loc_data = self.get_side_table("node_to_loc", node_uid)
                 if loc_data:
-                    from core.domain.issue_atomic import Location
                     e.location = Location(
                         file_path=loc_data.get("file_path"),
                         line=loc_data.get("line", 0),

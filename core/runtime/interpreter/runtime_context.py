@@ -7,6 +7,7 @@ from core.foundation.registry import Registry
 from core.foundation.interfaces import IStateReader
 from core.domain.types.descriptors import TypeDescriptor
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.runtime.objects.kernel import IbClass, IbModule
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: TypeDescriptor | None = None, is_const: bool = False):
@@ -253,12 +254,37 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     def get_global_intents(self) -> List[IbIntent]:
         return list(self._global_intents)
 
+    def get_vars(self) -> Dict[str, Any]:
+        """[IES 2.0] 获取当前可见的所有真实变量对象 (IbObject)。"""
+        res = {}
+        scope = self._current_scope
+        while scope:
+            for name, symbol in scope.get_all_symbols().items():
+                if name not in res:
+                    val = symbol.value
+                    is_class = isinstance(val, IbClass)
+                    is_module = isinstance(val, IbModule)
+                    type_name = val.ib_class.name if hasattr(val, 'ib_class') and val.ib_class else "Object"
+                    
+                    # 过滤逻辑：过滤掉非基础类型、下划线变量、类定义、模块、以及内置全局函数
+                    if type_name == "Object" or type_name == "Function" or name.startswith("_"):
+                        continue
+                    if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
+                        continue
+                    # [IES 2.0] 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
+                    if symbol.is_const and name in ("len", "print", "range", "input", "get_self_source"):
+                        continue
+                    res[name] = val
+            scope = scope.parent
+        return res
+
     def get_vars_snapshot(self) -> Dict[str, Any]:
         """获取当前所有可见变量的快照（用于调试）"""
         res = {}
         scope = self._current_scope
         while scope:
-            for name, symbol in scope.get_all_symbols().items():
+            symbols = scope.get_all_symbols()
+            for name, symbol in symbols.items():
                 if name not in res:
                     val = symbol.value
                     # 获取运行时类型名称
@@ -372,6 +398,10 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     @property
     def global_scope(self) -> Scope:
         return self._global_scope
+
+    @property
+    def registry(self) -> Registry:
+        return self._registry
 
     def get_symbol_view(self) -> SymbolView:
         return SymbolViewImpl(self)

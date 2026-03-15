@@ -31,8 +31,12 @@ class TypeHydrator:
                         self.memo[uid] = desc
                         break
 
-    def hydrate_all(self):
+    def hydrate_all(self, registry: Optional[Any] = None):
         """水化池中所有类型。采用两阶段加载：先创建所有 Shell，再填充详细信息。"""
+        if registry:
+            from core.foundation.registry import RegistrationState
+            registry.verify_state(RegistrationState.STAGE_5_HYDRATION)
+            
         # Phase 1: Create all shells
         for uid in self.type_pool:
             self._create_shell(uid)

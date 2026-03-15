@@ -6,7 +6,13 @@ from typing import Optional, Dict, Any
 
 from core.foundation.registry import Registry
 from core.compiler.scheduler import Scheduler
-from core.runtime.interpreter.interpreter import Interpreter
+from core.runtime.interpreter.interpreter import Interpreter, ServiceContextImpl
+from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+from core.runtime.interpreter.module_manager import ModuleManagerImpl
+from core.runtime.interpreter.interop import InterOpImpl
+from core.runtime.interpreter.llm_executor import LLMExecutorImpl
+from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
+from core.runtime.interpreter.factory import RuntimeObjectFactory
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.foundation.host_interface import HostInterface
@@ -28,13 +34,16 @@ from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, 
 from core.runtime.interfaces import IInterpreterFactory
 
 
+from core.foundation.registry import Registry, RegistrationState
+
 class IBCIEngine(IInterpreterFactory):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
     def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
         self.registry = Registry()
-        initialize_builtin_classes(self.registry)
+        # STAGE 1 & 2 handled inside initialize_builtin_classes
+        self._kernel_token = initialize_builtin_classes(self.registry)
         
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.issue_tracker = IssueTracker()
@@ -55,8 +64,11 @@ class IBCIEngine(IInterpreterFactory):
         self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
         self.module_loader = ModuleLoader([builtin_path, plugins_path])
         
+        # [IES 2.0 Transition] STAGE 3: 发现并加载元数据
+        self.registry.set_state(RegistrationState.STAGE_3_PLUGIN_METADATA, self._kernel_token)
+        
         # 2. 加载元数据以支持静态分析
-        self.host_interface = self.discovery_service.discover_all()
+        self.host_interface = self.discovery_service.discover_all(self.registry)
         
         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
@@ -84,20 +96,63 @@ class IBCIEngine(IInterpreterFactory):
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
+        # [IES 2.0 Transition] STAGE 4: 加载插件实现层
+        self.registry.set_state(RegistrationState.STAGE_4_PLUGIN_IMPL, self._kernel_token)
+        
+        # 1. 预先初始化 ServiceContext 需要的部分组件（如 InterOp）以供插件加载
+        # 这里我们需要先创建一个简易的 ServiceContext，或者重构 ModuleLoader 使其不强依赖 Interpreter 实例
+        # 考虑到 load_and_register_all 需要 ServiceContext，我们先创建一个空的解释器外壳或者提前准备好 context
+        
+        # [IES 2.0] 创建一个临时 context 用于插件初始化
+        # 插件在初始化阶段可能需要 registry 和 host_interface
+        interop = InterOpImpl(host_interface=self.host_interface)
+        
+        # [IES 2.0] 创建统一的 RuntimeContext 以供插件和解释器共享
+        runtime_context = RuntimeContextImpl(registry=self.registry)
+        
+        # [IES 2.0] 初始化运行时对象工厂
+        object_factory = RuntimeObjectFactory(registry=self.registry)
+        
+        service_context = ServiceContextImpl(
+            self.issue_tracker,
+            runtime_context,
+            LLMExecutorImpl(),
+            ModuleManagerImpl(interop, artifact=artifact, root_dir=self.root_dir, object_factory=object_factory),
+            interop,
+            PermissionManagerImpl(self.root_dir),
+            None, # interpreter
+            self.registry,
+            object_factory,
+            source_provider=self.scheduler.source_manager,
+            compiler=self.scheduler,
+            debugger=self.debugger
+        )
+        
+        # 统一由 ModuleLoader 驱动实现层的加载与注入
+        self.module_loader.load_and_register_all(service_context)
+        
+        # [IES 2.0 Transition] STAGE 5: 执行用户产物重水合
+        self.registry.set_state(RegistrationState.STAGE_5_HYDRATION, self._kernel_token)
+
         self.interpreter = Interpreter(
             self.issue_tracker, 
-            artifact=artifact, 
             output_callback=output_callback,
+            artifact=artifact, 
             host_interface=self.host_interface,
             debugger=self.debugger,
             root_dir=self.root_dir,
             registry=self.registry,
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
-            factory=self # 注入自己作为工厂
+            factory=self, # 注入自己作为工厂
+            interop=interop,
+            runtime_context=runtime_context # 传入共享的 context
         )
-        # 统一由 ModuleLoader 驱动实现层的加载与注入
-        self.module_loader.load_and_register_all(self.interpreter.service_context)
+        
+        # [IES 2.0 Transition] STAGE 6: 准备就绪
+        self.registry.set_state(RegistrationState.STAGE_6_READY, self._kernel_token)
+        # 封印类注册表
+        self.registry.seal_classes(self._kernel_token)
 
     def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
         """

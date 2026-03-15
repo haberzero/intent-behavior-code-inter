@@ -10,8 +10,7 @@ from core.domain.types.descriptors import (
     BOUND_METHOD_DESCRIPTOR, EXCEPTION_DESCRIPTOR, MODULE_DESCRIPTOR
 )
 
-# [De-static] Runtime imports to avoid circular dependency with descriptors.py
-# These imports are now safe because this factory module is not imported by descriptors.py
+# [Architecture] 核心工厂模块不被 descriptors.py 导入，因此在此处进行顶层导入是安全的。
 from core.domain.axioms.registry import AxiomRegistry
 from core.domain.axioms.primitives import register_core_axioms
 
@@ -24,9 +23,8 @@ def create_default_registry() -> MetadataRegistry:
     # 注入到元数据注册表
     reg = MetadataRegistry(axiom_registry=axiom_reg)
     
-    # [Fix] 使用两阶段注册，确保在执行方法水化 (Hydration) 时，
-    # 所有的基础描述符 (int, bool, Any 等) 都已经可以在注册表中被解析。
-    # 否则 int.to_bool() 的返回类型 bool 可能会因为解析不到而变成没有公理的外壳。
+    # [IES 2.0 Bootstrapping] 采用两阶段注册协议，确保原子描述符（如 int, bool）在执行
+    # 方法水化（Hydration）前已完成物理占位，避免循环类型引用导致的解析失败。
     descriptors = []
     for d in (INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
               BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, 

@@ -1,7 +1,8 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
 from core.foundation.registry import Registry
+from core.foundation.enums import RegistrationState
 from core.domain.issue import InterpreterError
-from core.runtime.exceptions import ReturnException
+from core.runtime.exceptions import ReturnException, RegistryIsolationError
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
 
@@ -66,7 +67,8 @@ class IbObject:
         try:
             res = self.receive('__to_prompt__', [])
             return str(res.value) if hasattr(res, 'value') else str(res)
-        except:
+        except (AttributeError, InterpreterError):
+            # 仅在方法缺失或解释器主动报错时回退
             return f"<Instance of {self.ib_class.name}>"
 
     def serialize_for_debug(self) -> Mapping[str, Any]:
@@ -100,35 +102,55 @@ class IbNativeObject(IbObject):
         self.whitelist = whitelist if whitelist is not None else getattr(py_obj, '_ibci_whitelist', [])
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        # [IES 2.0 Native VTable] 优先从绑定的虚函数表中查找
+        """
+        [IES 2.0] Native 消息分发核心。
+        强制通过虚表映射，禁止任何非预期的 Python 属性穿透。
+        """
+        # [Registry Isolation] 校验对象所属 Registry 身份
+        if hasattr(self.py_obj, '_ibci_registry_id'):
+            if self.py_obj._ibci_registry_id != id(self.ib_class.registry):
+                raise RegistryIsolationError(f"Security Violation: Native object from another engine instance detected. [IES 2.0 Isolation Rule]")
+
+        print(f"DEBUG: NativeObject receive '{message}' vtable keys: {list(self.vtable.keys())}")
+        
+        # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:
             attr = self.vtable[message]
-            binding = getattr(attr, '_ibci_binding', None)
-            if not binding and hasattr(attr, '__func__'):
-                binding = getattr(attr.__func__, '_ibci_binding', None)
-            
-            # 执行调用
-            if binding and getattr(binding, 'raw', False):
-                return self.ib_class.registry.box(attr(*args))
-            
-            native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
-            return self.ib_class.registry.box(attr(*native_args))
+            # [IES 2.0 Proxy] 所有的 Proxy VTable 都已经由 ModuleLoader 完成了自动装箱转换
+            # 直接调用并返回 IbObject
+            return attr(*args)
 
-        # 2. 处理 __getattr__ 协议 (属性访问)
+        # 2. 处理 __getattr__ 协议 (属性/方法获取)
         if message == '__getattr__' and len(args) > 0:
             target_name = args[0].to_native()
-            # 优先从 VTable 中查找 (例如将方法作为属性获取)
-            if target_name in self.vtable:
-                return self.ib_class.registry.box(self.vtable[target_name])
             
-            # [SECURITY] 仅允许访问白名单中的属性，封死对 Python 私有属性的访问
+            # [IES 2.0 Proxy Binding] 如果是虚表方法，包装为 IbNativeFunction 导出
+            if target_name in self.vtable:
+                reg = self.ib_class.registry
+                # [IES 2.0] 强制通过 Gatekeeper 获取协议类
+                reg.verify_state_at_least(RegistrationState.STAGE_2_CORE_TYPES)
+                
+                callable_cls = reg.get_class("callable")
+                if not callable_cls:
+                    # 如果进入了插件加载阶段（STAGE 4+），callable 缺失属于严重初始化错误
+                    reg.verify_state_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL)
+                    raise InterpreterError("Core Error: 'callable' class not found in registry. Builtins initialization failed? [IES 2.0 Fatal Assertion]")
+                    
+                return IbNativeFunction(
+                    self.vtable[target_name], 
+                    ib_class=callable_cls, 
+                    name=target_name
+                )
+            
+            # [SECURITY] 仅允许访问白名单属性
             if target_name in self.whitelist:
                 if hasattr(self.py_obj, target_name):
                     return self.ib_class.registry.box(getattr(self.py_obj, target_name))
             
-            # [SECURITY] 如果是 __getattr__ 且白名单未通过，则明确拒绝访问
-            raise AttributeError(f"NativeObject attribute '{target_name}' is not in whitelist or not found")
+            # [IES 2.0 Strict] 未在契约或白名单声明的成员，坚决抛出异常
+            raise AttributeError(f"Plugin Error: '{target_name}' is not defined in module contract (_spec.py)")
 
+        # 3. 降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
@@ -148,21 +170,33 @@ class IbModule(IbObject):
         self.scope = scope
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        # 1. 优先从模块作用域获取变量 (成员访问)
+        """
+        [IES 2.0] 模块级消息传递核心。
+        """
+        # 1. 如果消息本身就是模块成员 (函数调用)，直接转发
+        # 这里的 self.scope 是 IbNativeObject
+        if hasattr(self.scope, 'receive'):
+            try:
+                # 尝试通过 IbNativeObject 的虚表直接执行
+                return self.scope.receive(message, args)
+            except AttributeError:
+                pass
+
+        # 2. 如果是属性获取 (__getattr__)，转发给 scope 以获取 IbNativeFunction
+        if message == '__getattr__':
+            if hasattr(self.scope, 'receive'):
+                try:
+                    return self.scope.receive('__getattr__', args)
+                except AttributeError:
+                    pass
+
+        # 3. 备选：查找模块级定义的变量/函数 (Scope 模式，用于兼容非 Native 模块)
         try:
             return self.scope.get(message)
         except (KeyError, AttributeError):
             pass
             
-        # 2. 特殊协议处理
-        if message == '__getattr__':
-            name = args[0].to_native()
-            try:
-                return self.scope.get(name)
-            except (KeyError, AttributeError):
-                return self.ib_class.registry.get_none()
-        
-        # 3. 后备：查 IbModule 类方法 (如 __to_prompt__ 等)
+        # 4. 后备：降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def __repr__(self):
@@ -253,9 +287,19 @@ class IbNativeFunction(IbFunction):
     用于引导阶段注入基础运算（如 int.__add__）。
     """
     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[TypeDescriptor] = None):
-        if not ib_class:
-            raise ValueError("ib_class is required for IbNativeFunction")
-        super().__init__(ib_class)
+        # [IES 2.0 FIX] 强制绑定到协议类，移除静默兜底
+        reg = ib_class.registry if ib_class else None
+        target_class = ib_class
+        
+        if not target_class and reg:
+            from core.foundation.registry import RegistrationState
+            # 在核心类型注入后 (STAGE 2+)，callable 应该是存在的
+            if reg.state.value >= RegistrationState.STAGE_2_CORE_TYPES.value:
+                target_class = reg.get_class("callable")
+                if not target_class and reg.state.value >= RegistrationState.STAGE_4_PLUGIN_IMPL.value:
+                    raise InterpreterError(f"Core Error: 'callable' class missing during STAGE {reg.state.name}. [IES 2.0 Fatal Assertion]")
+        
+        super().__init__(target_class)
         self.py_func = py_func
         self.unbox_args = unbox_args
         self.is_method = is_method
@@ -268,6 +312,10 @@ class IbNativeFunction(IbFunction):
         return self._descriptor or super().descriptor
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
+        # [IES 2.0 Proxy Support] 如果 py_func 本身就是 IbObject (例如是一个 Proxy)，直接转发消息
+        if isinstance(self.py_func, IbObject):
+            return self.py_func.receive('__call__', args)
+
         final_args = args
         if self.unbox_args:
             final_args = [arg.to_native() if hasattr(arg, 'to_native') else arg for arg in args]

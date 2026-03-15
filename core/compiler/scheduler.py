@@ -393,6 +393,8 @@ class Scheduler(ICompilerService):
                     else:
                         s_mod_type = self.host_interface.get_module_type(imp.module_name)
                         if s_mod_type:
+                            # [UTS 2.0 Hydration] 确保从 Host 加载的元数据被正确水合到当前编译注册表
+                            self.registry.register(s_mod_type)
                             self.plugin_type_cache[imp.module_name] = s_mod_type
                 
                 if not s_mod_type:

@@ -1,8 +1,9 @@
 import os
 import importlib.util
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from core.foundation.host_interface import HostInterface
 from core.domain.types.descriptors import ModuleMetadata as ModuleType
+from core.foundation.enums import RegistrationState
 
 class ModuleDiscoveryService:
     """
@@ -12,10 +13,13 @@ class ModuleDiscoveryService:
     def __init__(self, search_paths: List[str]):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
-    def discover_all(self) -> HostInterface:
+    def discover_all(self, registry: Optional[Any] = None) -> HostInterface:
         """
         扫描所有搜索路径，加载所有发现的模块 spec。
         """
+        if registry:
+            registry.verify_state(RegistrationState.STAGE_3_PLUGIN_METADATA)
+            
         host = HostInterface()
         discovered_modules = set()
         
@@ -32,7 +36,9 @@ class ModuleDiscoveryService:
                 if not os.path.isdir(module_dir):
                     continue
                     
-                spec_path = os.path.join(module_dir, "spec.py")
+                # [IES 2.0] 强制使用 _spec.py (静态契约)
+                spec_path = os.path.join(module_dir, "_spec.py")
+                
                 if os.path.exists(spec_path):
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
@@ -49,13 +55,15 @@ class ModuleDiscoveryService:
         return host
 
     def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleType]:
-        """动态加载 spec.py"""
+        """动态加载 spec.py 或 _spec.py"""
         internal_name = f"ibc_spec_{module_name}"
         spec = importlib.util.spec_from_file_location(internal_name, spec_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         
-        # [IES 2.0 FIX] 更加鲁棒的元数据获取逻辑，避免由于多重导入导致的 isinstance 失效
+        # [IES 2.0 FIX] 更加鲁棒的元数据获取逻辑
+        if hasattr(mod, 'metadata'):
+            return mod.metadata
         if hasattr(mod, 'spec'):
             return mod.spec
         return None

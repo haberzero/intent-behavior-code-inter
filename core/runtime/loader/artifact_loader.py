@@ -46,7 +46,7 @@ class ArtifactLoader:
 
         # 执行重水化 (UTS 闭环)
         hydrator = TypeHydrator(type_pool, self.registry.get_metadata_registry())
-        hydrator.hydrate_all()
+        hydrator.hydrate_all(self.registry)
 
         return LoadedArtifact(
             node_pool=node_pool,

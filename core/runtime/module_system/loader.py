@@ -1,15 +1,21 @@
 import os
 import importlib.util
 import inspect
-from typing import List, Any, Optional
-from core.runtime.interfaces import ServiceContext
+import sys
+from typing import List, Dict, Any, Optional, Set
+from core.runtime.exceptions import RegistryIsolationError
+from core.foundation.registry import RegistrationState
+
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
 from core.foundation.interfaces import (
-    ExtensionCapabilities, IStateReader, IStackInspector, 
-    ILLMProvider, IIntentManager, ILLMExecutor
+    IModuleLoader, ServiceContext, ExtensionCapabilities, 
+    IStackInspector, IStateReader, IIntentManager, ILLMExecutor, ILLMProvider, ISymbolView
 )
 from core.domain.issue import InterpreterError
+from core.domain.types.descriptors import FunctionMetadata
+from core.domain.symbols import FunctionSymbol
 
-class ModuleLoader:
+class ModuleLoader(IModuleLoader):
     """
     IBC-Inter 运行时模块加载器。
     负责在执行阶段动态加载模块实现，并注入所需的依赖。
@@ -17,76 +23,101 @@ class ModuleLoader:
     def __init__(self, search_paths: List[str]):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
-    def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext):
-        """[IES 2.0] 校验实现是否符合契约，并构建静态原生虚函数表 (Native VTable)"""
+    def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities):
+        """[IES 2.0] 强制执行显式契约绑定并构建自动装箱虚函数表 (Proxy VTable)"""
+        # [Registry Isolation] 虚表隔离检查：严禁跨引擎复用已关联虚表的插件对象
+        if hasattr(implementation, '_ibci_registry_id'):
+            if implementation._ibci_registry_id != id(context.registry):
+                raise RegistryIsolationError(f"Security Violation: Plugin '{module_name}' is already bound to another engine instance. [IES 2.0 Isolation Rule]")
+        
+        # 记录绑定身份
+        implementation._ibci_registry_id = id(context.registry)
+
         host_interface = context.interop.host_interface
         metadata = host_interface.get_module_type(module_name)
-        if not metadata: return
+        if not metadata:
+            raise InterpreterError(f"Plugin Error: Module '{module_name}' metadata not found. Discovery must happen before loading.")
 
-        # 构建 VTable 映射：契约方法名 -> 绑定的 Python 函数/方法
-        vtable = {}
-        for attr_name in dir(implementation):
-            attr = getattr(implementation, attr_name)
+        if not hasattr(implementation, 'get_vtable'):
+            raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing 'get_vtable()'. [IES 2.0 Standard Required]")
             
-            # [FIX] 处理 bound method，获取其原始函数上的元数据
-            binding = getattr(attr, '_ibci_binding', None)
-            if not binding and hasattr(attr, '__func__'):
-                binding = getattr(attr.__func__, '_ibci_binding', None)
+        raw_vtable = implementation.get_vtable()
+        if not isinstance(raw_vtable, dict):
+            raise InterpreterError(f"Plugin Error: Module '{module_name}' get_vtable() must return a dictionary.")
             
-            if not binding: continue
+        proxy_vtable = {}
 
-            # 1. 契约存在性校验
-            spec_name = binding.spec_name
-            if spec_name not in metadata.members:
-                raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation '{attr_name}' binds to non-existent spec '{spec_name}'")
-
-            # 2. 签名一致性校验
-            spec_func = metadata.members[spec_name]
-            from core.domain.types.descriptors import FunctionMetadata
-            if not isinstance(spec_func, FunctionMetadata):
-                continue
-
-            sig = inspect.signature(attr)
+        # 遍历元数据中声明的所有成员函数
+        for spec_name, spec_member in metadata.members.items():
+            # [IES 2.0] 成员可能已经被水合为 Symbol，需要检查其底层描述符
+            spec_desc = spec_member.descriptor if hasattr(spec_member, 'descriptor') else spec_member
+            if not isinstance(spec_desc, FunctionMetadata): continue
+                
+            if spec_name not in raw_vtable:
+                raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing required method '{spec_name}'")
+            
+            py_func = raw_vtable[spec_name]
+            if not callable(py_func):
+                raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' implementation is not callable.")
+            
+            # 校验参数签名
+            sig = inspect.signature(py_func)
+            # 忽略 self
             params = [p for p in sig.parameters.values() if p.name != 'self']
+            # 仅校验固定位置参数数量，忽略 *args 和 **kwargs
             fixed_params = [p for p in params if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
             
-            if len(fixed_params) != len(spec_func.param_types):
-                raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. Spec expects {len(spec_func.param_types)} params, but Python implementation has {len(fixed_params)}.")
+            if len(fixed_params) != len(spec_desc.param_types):
+                raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. Spec expects {len(spec_desc.param_types)} params, but Python implementation has {len(fixed_params)}.")
+            
+            # [IES 2.0 Proxy] 自动装箱代理：拦截 Python 返回值并应用 SDK.box()
+            def create_proxy(target_func):
+                def proxy_wrapper(*args, **kwargs):
+                    # 自动拆箱：将 IbObject 参数转换为 Python 原生类型
+                    native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
+                    native_kwargs = {k: (v.to_native() if hasattr(v, 'to_native') else v) for k, v in kwargs.items()}
+                    
+                    result = target_func(*native_args, **native_kwargs)
+                    
+                    # 自动平权包装：确保返回给解释器的永远是 IbObject
+                    return capabilities.box(result)
+                return proxy_wrapper
 
-            # 3. 注册到 VTable
-            vtable[spec_name] = attr
+            proxy_vtable[spec_name] = create_proxy(py_func)
 
-        # 将 VTable 附加到实现对象上，供 IbNativeObject 使用
-        implementation._ibci_vtable = vtable
+        # 封印虚表到实现对象上
+        implementation._ibci_vtable = proxy_vtable
+        print(f"DEBUG: ModuleLoader bound vtable to {module_name}, keys: {list(proxy_vtable.keys())}")
 
     def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
-        """IES 2.0 自动依赖注入协议"""
+        """IES 2.0 强制依赖注入协议：必须且仅接受 capabilities 参数"""
         if not hasattr(implementation, 'setup'): return
         
-        sig = inspect.signature(implementation.setup)
-        params = {}
-        if 'permission_manager' in sig.parameters:
-            params['permission_manager'] = context.permission_manager
-        if 'executor' in sig.parameters:
-            params['executor'] = context.llm_executor
-        if 'service_context' in sig.parameters:
-            params['service_context'] = context
-        if 'capabilities' in sig.parameters:
-            params['capabilities'] = capabilities
+        # 统一注入 ServiceContext 到容器中
+        capabilities.service_context = context
         
-        if params:
-            implementation.setup(**params)
+        sig = inspect.signature(implementation.setup)
+        # 强制要求 setup(capabilities) 或 setup(self, capabilities)
+        if 'capabilities' not in sig.parameters:
+            raise InterpreterError(f"Plugin Error: Module setup method must accept 'capabilities' parameter.")
+            
+        # 执行注入
+        implementation.setup(capabilities=capabilities)
 
     def load_and_register_all(self, context: ServiceContext):
         """
         扫描搜索路径，加载所有模块实现并绑定到 InterOp。
         """
+        registry = context.interpreter.registry if context.interpreter else context.runtime_context.registry
+        if registry:
+            registry.verify_state(RegistrationState.STAGE_4_PLUGIN_IMPL)
+            
         interop = context.interop
         permission_manager = context.permission_manager
         llm_executor = context.llm_executor
         
-        # 准备扩展能力集合 (IES 架构核心)
-        capabilities = ExtensionCapabilities()
+        # 准备扩展能力集合 (IES 2.0 SDK)
+        capabilities = ExtensionCapabilities(registry=context.registry)
         if isinstance(context.runtime_context, IStateReader):
             capabilities.state_reader = context.runtime_context
         if isinstance(context.interpreter, IStackInspector):
@@ -108,10 +139,14 @@ class ModuleLoader:
             implementation = host_interface.get_module_implementation(entry)
             if not implementation: continue
             
-            # [IES 2.0] 校验与绑定
-            self._validate_and_bind(entry, implementation, context)
+            # [IES 2.0] 校验与绑定 (传入 capabilities 以支持 Proxy VTable 包装)
+            self._validate_and_bind(entry, implementation, context, capabilities)
             
             self._setup_implementation(implementation, context, capabilities)
+            
+            # [IES 2.0 FIX] 必须显式注册到 InterOp，否则模块无法被 import
+            interop.register_package(entry, implementation)
+            
             loaded_modules.add(entry)
             # 即使已存在，我们也尝试同步 LLM Provider (以防手动注册的是 AI 模块)
             if capabilities.llm_provider and hasattr(llm_executor, 'llm_callback'):
@@ -141,10 +176,14 @@ class ModuleLoader:
                     
                 try:
                     # 动态加载实现
-                    internal_name = f"ibc_impl_{entry}"
-                    spec = importlib.util.spec_from_file_location(internal_name, impl_path)
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
+                    # [IES 2.0] 使用标准的包路径加载，以支持内部相对导入
+                    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                    if project_root not in sys.path:
+                        sys.path.insert(0, project_root)
+                    
+                    # 使用全路径加载 (例如 ibc_modules.idbg)
+                    full_pkg_name = f"ibc_modules.{entry}"
+                    mod = importlib.import_module(full_pkg_name)
                     
                     # 实例化：优先寻找 create_implementation 工厂
                     if hasattr(mod, 'create_implementation'):
@@ -156,11 +195,12 @@ class ModuleLoader:
                         # 兼容直接导出的类或函数（如有必要可扩展）
                         continue
                     
-                    # [IES 2.0] 校验与绑定
-                    self._validate_and_bind(entry, implementation, context)
-                    
-                    # 自动依赖注入 (基于 setup 方法签名)
+                    # [IES 2.0] 1. 自动依赖注入 (基于 setup 方法签名)
+                    # 必须在校验前注入，因为插件可能根据注入的能力动态决定其虚表 (vtable)
                     self._setup_implementation(implementation, context, capabilities)
+                    
+                    # [IES 2.0] 2. 校验与绑定 (Proxy VTable)
+                    self._validate_and_bind(entry, implementation, context, capabilities)
                     
                     # 核心能力同步：如果模块提供了 LLMProvider，同步到内核执行器
                     if capabilities.llm_provider and hasattr(llm_executor, 'llm_callback'):
@@ -171,4 +211,5 @@ class ModuleLoader:
                     loaded_modules.add(entry)
                     
                 except Exception as e:
-                    print(f"Warning: Failed to load implementation for module '{entry}': {e}")
+                    # [IES 2.0 Strict] 插件加载失败必须导致初始化中断，严禁静默失败
+                    raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}")

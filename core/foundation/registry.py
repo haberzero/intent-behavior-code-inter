@@ -1,14 +1,9 @@
 from typing import Any, Dict, Optional, TYPE_CHECKING
+from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
+from core.foundation.enums import RegistrationState, PrivilegeLevel
 
 if TYPE_CHECKING:
     from core.domain.types.descriptors import TypeDescriptor
-
-from enum import Enum, auto
-
-class PrivilegeLevel(Enum):
-    KERNEL = auto()    # 内核级：允许修改核心工厂、封印结构
-    EXTENSION = auto() # 扩展级：允许注册普通类、注入元数据
-    UNAUTHORIZED = auto()
 
 class Registry:
     """
@@ -24,6 +19,9 @@ class Registry:
         self._boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
         self._int_cache: Dict[int, Any] = {} # 小整数驻留缓存 (引擎实例隔离)
         
+        # [IES 2.0] 注册状态机
+        self._state = RegistrationState.STAGE_1_BOOTSTRAP
+        
         # [Isolation] 元数据注册表 (UTS 驱动)
         self._metadata_registry: Any = None
 
@@ -35,6 +33,29 @@ class Registry:
         
         self._is_structure_sealed = False
         self._is_classes_sealed = False
+
+    @property
+    def state(self) -> RegistrationState:
+        return self._state
+
+    def set_state(self, new_state: RegistrationState, token: Any):
+        """[IES 2.0] 跃迁注册状态。必须持有内核令牌且符合单向增长规则。"""
+        self._verify_kernel(token)
+        if new_state.value <= self._state.value:
+            raise PermissionError(f"Registry: Invalid state transition from {self._state} to {new_state}. States must progress forward.")
+        
+        core_trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Registry state transition: {self._state} -> {new_state}")
+        self._state = new_state
+
+    def verify_state(self, required_state: RegistrationState):
+        """[IES 2.0] 校验当前状态是否完全匹配。用于写操作或严格阶段检查。"""
+        if self._state != required_state:
+            raise PermissionError(f"Registry: Operation requires state {required_state}, but current state is {self._state}")
+
+    def verify_state_at_least(self, minimum_state: RegistrationState):
+        """[IES 2.0] 校验当前状态是否达到最小要求。用于只读数据消费。"""
+        if self._state.value < minimum_state.value:
+            raise PermissionError(f"Registry: Operation requires at least state {minimum_state}, but current state is {self._state}")
 
     @property
     def is_initialized(self) -> bool:

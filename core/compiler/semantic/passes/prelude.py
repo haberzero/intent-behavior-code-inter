@@ -13,11 +13,12 @@ class Prelude:
     """
     静态预设：管理编译器前端使用的内置静态符号和类型。
     """
-    def __init__(self, host_interface: Optional[any] = None, registry: Optional[Any] = None):
+    def __init__(self, host_interface: Optional[Any] = None, registry: Optional[Any] = None):
         self.builtin_functions: Dict[str, FunctionMetadata] = {}
         self.builtin_modules: Dict[str, TypeDescriptor] = {} # 模块也是一种 TypeDescriptor (ModuleMetadata)
         self.builtin_types: Dict[str, TypeDescriptor] = {}
         self.registry = registry
+        self.host_interface = host_interface
         self._init_defaults()
         
     def _init_defaults(self):
@@ -41,6 +42,15 @@ class Prelude:
                 self.builtin_modules[name] = desc
             else:
                 self.builtin_types[name] = desc
+
+        # 2. 从 HostInterface 导入外部发现的模块
+        # [NEW Policy] Prelude 不再自动加载所有 Host 模块。
+        # 只有那些显式标记为 "auto_import" 或特殊地位的模块才放入 builtin_modules。
+        # 目前 IBCI 要求大多数插件通过 import 显式引入。
+        if self.host_interface:
+            # 只有 'ai' 这种核心协议级别的模块才可能需要自动注入（如果用户这么设计的话）
+            # 但目前我们倾向于让用户显式 import，除了那些编译器强制要求的。
+            pass
 
         # 3. 补全特殊映射
         if "Any" in self.builtin_types and "var" not in self.builtin_types:

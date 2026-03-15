@@ -1,4 +1,4 @@
-from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope
+from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.domain import ast as ast
@@ -24,33 +24,45 @@ class ModuleInstanceImpl:
     def __getattr__(self, name: str) -> Any:
         return self.get_variable(name)
 
-class ModuleManagerImpl:
+class ModuleManagerImpl(ModuleManager):
     """
     模块管理器实现。
     负责模块的加载、缓存和导入处理。
     """
-    def __init__(self, interop: InterOp, artifact: Optional['CompilationArtifact'] = None, root_dir: str = ".", interpreter: Optional['Interpreter'] = None):
+    def __init__(self, interop: InterOp, artifact: Optional['CompilationArtifact'] = None, root_dir: str = ".", interpreter: Optional['Interpreter'] = None, object_factory: Optional[IObjectFactory] = None):
         self.interop = interop
         self.artifact = artifact
         self.root_dir = root_dir
         self.interpreter = interpreter  # 现在持有主 Interpreter 引用，而非 factory
+        self.object_factory = object_factory
         self._loaded_modules: Dict[str, ModuleInstance] = {}
 
     def set_interpreter(self, interpreter: 'Interpreter'):
         """允许延迟注入 Interpreter"""
         self.interpreter = interpreter
 
+    def set_object_factory(self, factory: IObjectFactory):
+        """允许延迟注入 ObjectFactory"""
+        self.object_factory = factory
+
     def import_module(self, module_name: str, context: RuntimeContext) -> Any:
         """
         处理 import module_name，返回模块实例
         """
+        if not self.object_factory:
+            raise InterpreterError("ObjectFactory not initialized in ModuleManager.")
+
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
         package = self.interop.get_package(module_name)
         if package:
             # [IES 2.0 FIX] 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
-            from core.runtime.objects.kernel import IbObject, IbNativeObject
-            if not isinstance(package, IbObject):
-                return IbNativeObject(package, self.interpreter.registry.get_class("Object"))
+            # 这里的 check 不需要导入 IbObject，因为我们可以通过接口/协议判断
+            if not hasattr(package, 'receive'): # 简单启发式判断是否为 IbObject
+                # 尝试获取已绑定的 vtable
+                vtable = getattr(package, '_ibci_vtable', None)
+                native_obj = self.object_factory.create_native_object(package, self.interpreter.registry.get_class("Object"), vtable=vtable)
+                # 包装为 IbModule 
+                return self.object_factory.create_module(module_name, native_obj)
             return package
 
         # 2. 检查是否已经加载过该模块
@@ -66,12 +78,10 @@ class ModuleManagerImpl:
                     raise InterpreterError("Interpreter not available for module loading.")
                 
                 # 创建该模块的 Global Scope
-                from .runtime_context import ScopeImpl
-                module_scope = ScopeImpl(registry=self.interpreter.registry)
+                module_scope = self.object_factory.create_scope(parent=None)
                 
                 # [FIX] 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
-                from core.runtime.objects.kernel import IbModule
-                module_instance = IbModule(module_name, module_scope, registry=self.interpreter.registry)
+                module_instance = self.object_factory.create_module(module_name, module_scope)
                 self._loaded_modules[module_name] = module_instance
                 
                 # 在新 Scope 下复用 Interpreter 执行

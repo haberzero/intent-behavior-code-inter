@@ -1,4 +1,20 @@
 from typing import Any, Protocol, Optional, List, Dict, Union, runtime_checkable
+from core.foundation.enums import RegistrationState
+
+@runtime_checkable
+class ServiceContext(Protocol):
+    """运行时核心服务上下文 (ServiceContext)"""
+    interpreter: Any
+    runtime_context: Any
+    llm_executor: Any
+    permission_manager: Any
+    symbol_view: Any
+    interop: Any
+
+@runtime_checkable
+class IModuleLoader(Protocol):
+    """模块加载器接口 (ModuleLoader)"""
+    def load_and_register_all(self, context: ServiceContext) -> None: ...
 
 # --- Diagnostics ---
 
@@ -95,11 +111,35 @@ class IIntentManager(Protocol):
     def push_intent(self, intent: Union[str, Any], mode: str = "+", tag: Optional[str] = None) -> None: ...
 
 class ExtensionCapabilities:
-    """扩展模块持有的能力集合容器"""
-    def __init__(self):
+    """扩展模块持有的能力集合容器 (IES 2.0 SDK)"""
+    def __init__(self, registry: Optional[Any] = None):
         self.stack_inspector: Optional[IStackInspector] = None
         self.llm_provider: Optional[ILLMProvider] = None
         self.llm_executor: Optional[ILLMExecutor] = None
         self.intent_manager: Optional[IIntentManager] = None
         self.state_reader: Optional[IStateReader] = None
         self.symbol_view: Optional[ISymbolView] = None
+        self.service_context: Optional[Any] = None 
+        self._registry = registry
+
+    def box(self, value: Any) -> Any:
+        """
+        [IES 2.0 SDK] 将 Python 原生对象转换为 IBCI 对象。
+        职责下放的核心接口：插件负责产生数据，SDK 负责平权包装。
+        """
+        if self._registry:
+            # [IES 2.0 Strict] 仅在 STAGE_4 (加载插件实现) 之后允许装箱
+            self._registry.verify_state_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL)
+            return self._registry.box(value)
+        return value
+
+    def register_type(self, py_class: type, descriptor: Any):
+        """
+        [IES 2.0 SDK] 注册自定义 Python 类与 UTS 描述符的映射。
+        """
+        if self._registry:
+            # [IES 2.0 Strict] 仅允许在 STAGE_4 阶段注册新类型
+            self._registry.verify_state(RegistrationState.STAGE_4_PLUGIN_IMPL)
+            
+            token = self._registry.get_extension_token()
+            self._registry.register_boxer(py_class, lambda r, v, m: r.create_instance("Object", v, descriptor=descriptor), token=token)

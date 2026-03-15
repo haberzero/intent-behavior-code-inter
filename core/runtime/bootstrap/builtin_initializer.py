@@ -1,7 +1,8 @@
 from typing import Any, List, Dict, Optional, Callable
 from ..objects.kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
-from core.foundation.registry import Registry
+from core.foundation.registry import Registry, RegistrationState
+from core.domain.issue import InterpreterError
 from core.domain.types import descriptors as uts
 from core.domain.types.descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
@@ -38,23 +39,28 @@ def _cast_numeric_to(ib_num: IbObject, target_class: Any) -> Any:
     target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
     return _cast_numeric_to_native(ib_num.to_native(), target_desc)
 
-def initialize_builtin_classes(registry: Registry):
+def initialize_builtin_classes(registry: Registry) -> Any:
     """
     初始化 IBCI 核心内置类及其 UTS 契约。
     支持多引擎实例隔离。
     """
     if registry.is_initialized:
-        return # 已初始化
+        return None # 已初始化
         
+    # [IES 2.0] 确保处于 STAGE_1_BOOTSTRAP 状态
+    registry.verify_state(RegistrationState.STAGE_1_BOOTSTRAP)
+    
     # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
     # [Active Defense] 贯彻“元数据先行”原则
     metadata_registry = create_default_registry()
-    # [Axiom-Driven] Schema 已由 create_default_registry() -> Axiom.get_methods() 自动注入
     
     # 2. 引导核心类 (Type, Object, callable, IbModule, Intent)
     bootstrapper = Bootstrapper(registry)
     bootstrapper.initialize(metadata_registry)
     token = bootstrapper.token
+    
+    # [IES 2.0 Transition] 跃迁到 STAGE_2_CORE_TYPES
+    registry.set_state(RegistrationState.STAGE_2_CORE_TYPES, token)
     
     # 注册元数据注册表到 Registry
     registry.register_metadata_registry(metadata_registry, token)
@@ -239,7 +245,6 @@ def initialize_builtin_classes(registry: Registry):
         if not isinstance(other, IbObject):
             return str(self.to_native()) + str(other)
         if other.descriptor is not STR_DESCRIPTOR:
-            from core.domain.issue import InterpreterError
             raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'. Use cast_to(str) first.")
         return str(self.to_native()) + str(other.to_native())
         
@@ -251,12 +256,13 @@ def initialize_builtin_classes(registry: Registry):
         return args[0].receive('__to_prompt__', [])
     _reg_native(string_class, '__call__', _str_call, unbox=False)
 
-    # List
     _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")
     _reg_native(list_class, 'to_list', lambda self: self.elements)
+    _reg_native(list_class, 'len', lambda self: self.len())
 
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
+    _reg_native(dict_class, 'len', lambda self: self.len())
     
     # 5. 注册装箱逻辑
     registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class), token)
@@ -281,3 +287,5 @@ def initialize_builtin_classes(registry: Registry):
     
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
+    
+    return token

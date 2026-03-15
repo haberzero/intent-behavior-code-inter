@@ -1,12 +1,13 @@
-from typing import Optional, Any, Dict, List, TYPE_CHECKING
+from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
 import sys
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
+from core.foundation.enums import RegistrationState
 
 from .descriptors import (
     TypeDescriptor, ListMetadata, DictMetadata, FunctionMetadata, 
     ClassMetadata, BoundMethodMetadata
 )
-from core.domain.symbols import SymbolKind, FunctionSymbol
+from .hydrator import TypeHydrator
 
 if TYPE_CHECKING:
     from core.domain.axioms.protocols import TypeAxiom
@@ -73,75 +74,33 @@ class MetadataRegistry:
         self._descriptors: Dict[str, TypeDescriptor] = {}
         self.factory = TypeFactory() 
         self._axiom_registry = axiom_registry
+        self._hydrator = TypeHydrator(self)
 
     def register(self, descriptor: TypeDescriptor):
         key = f"{descriptor.module_path}.{descriptor.name}" if descriptor.module_path else descriptor.name
         core_trace(CoreModule.UTS, DebugLevel.BASIC, f"Registering UTS descriptor: {key}")
-        self._descriptors[key] = descriptor
         
         # [Isolation] 将注册表上下文绑定到描述符上
         descriptor._registry = self
         
-        # [IoC] 如果存在公理注册表，尝试注入公理
-        if self._axiom_registry:
-            axiom_name = descriptor.name
-            if isinstance(descriptor, ListMetadata):
-                axiom_name = "list"
-            elif isinstance(descriptor, DictMetadata):
-                axiom_name = "dict"
-            
-            descriptor._axiom = self._axiom_registry.get_axiom(axiom_name)
-            
-            # [Axiom-Driven Schema] 从公理中注入方法签名
-            if descriptor._axiom:
-                try:
-                    method_descs = descriptor._axiom.get_methods()
-                    if method_descs:
-                        for m_name, m_desc in method_descs.items():
-                            # [Hydration] 确保从公理注入的方法元数据使用当前注册表的类型标识
-                            hydrated_m_desc = self._hydrate_metadata(m_desc)
-                            
-                            sym = FunctionSymbol(
-                                name=m_name, 
-                                kind=SymbolKind.FUNCTION, 
-                                descriptor=hydrated_m_desc, 
-                                metadata={"is_builtin": True, "axiom_provided": True}
-                            )
-                            descriptor.members[m_name] = sym
-                            
-                except Exception as e:
-                    # [Strict Error Handling] 核心注册失败不再静默
-                    print(f"Critical Error: Failed to inject methods from axiom '{axiom_name}' into descriptor: {e}", file=sys.stderr)
-                    raise RuntimeError(f"Axiom injection failed for '{axiom_name}': {e}") from e
+        # [IES 2.0 Hydration] 采用两阶段注册模式
+        # 第一阶段：占位 (Shelling)
+        self._descriptors[key] = descriptor
+        
+        # 第二阶段：填充 (Filling) - 如果描述符包含成员，进行深度水合
+        if descriptor.members:
+            self._hydrator.deep_hydrate(descriptor)
+        
+        # [IoC] 从公理注册表中获取并注入公理能力
+        self._hydrator.inject_axioms(descriptor)
 
-    def _hydrate_metadata(self, desc: TypeDescriptor) -> TypeDescriptor:
+    def _deep_hydrate(self, desc: TypeDescriptor):
+        """深度水合描述符的成员列表，确保每个成员都被正确包装为 Symbol 对象"""
+        return self._hydrator.deep_hydrate(desc)
+
+    def _hydrate_metadata(self, desc: Union[TypeDescriptor, str]) -> TypeDescriptor:
         """递归确保描述符及其引用的所有类型都来自当前注册表实例"""
-        if desc._registry is self: return desc
-        
-        # 如果是原子类型，尝试在当前注册表中查找
-        if desc.__class__ is TypeDescriptor:
-            resolved = self.resolve(desc.name, desc.module_path)
-            if resolved: return resolved
-            # 如果没找到，至少把 registry 绑上
-            desc._registry = self
-            return desc
-            
-        # 如果是复合类型，递归处理其成员
-        if isinstance(desc, FunctionMetadata):
-            desc.param_types = [self._hydrate_metadata(p) for p in desc.param_types]
-            if desc.return_type:
-                desc.return_type = self._hydrate_metadata(desc.return_type)
-        elif isinstance(desc, ListMetadata):
-            if desc.element_type:
-                desc.element_type = self._hydrate_metadata(desc.element_type)
-        elif isinstance(desc, DictMetadata):
-            if desc.key_type:
-                desc.key_type = self._hydrate_metadata(desc.key_type)
-            if desc.value_type:
-                desc.value_type = self._hydrate_metadata(desc.value_type)
-        
-        desc._registry = self
-        return desc
+        return self._hydrator.hydrate_metadata(desc)
 
     def resolve(self, name: str, module_path: Optional[str] = None) -> Optional[TypeDescriptor]:
         key = f"{module_path}.{name}" if module_path else name
