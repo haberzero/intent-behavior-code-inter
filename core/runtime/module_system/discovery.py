@@ -59,8 +59,25 @@ class ModuleDiscoveryService:
         spec.loader.exec_module(mod)
         
         # [IES 2.0 FIX] 更加鲁棒的元数据获取逻辑
+        metadata = None
         if hasattr(mod, 'metadata'):
-            return mod.metadata
-        if hasattr(mod, 'spec'):
-            return mod.spec
+            metadata = mod.metadata
+        elif hasattr(mod, 'spec'):
+            metadata = mod.spec
+            
+        if metadata:
+            # [IES 2.1 Regularization] 符号化正规化：将成员描述符转换为符号对象
+            # 确保 Metadata.members 存储的是 Symbol 而非原始 Descriptor
+            from core.domain.symbols import SymbolFactory
+            from core.domain.types.descriptors import TypeDescriptor
+            
+            new_members = {}
+            for name, member in metadata.members.items():
+                if isinstance(member, TypeDescriptor):
+                    new_members[name] = SymbolFactory.create_from_descriptor(name, member)
+                else:
+                    new_members[name] = member
+            metadata.members = new_members
+            return metadata
+            
         return None

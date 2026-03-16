@@ -80,26 +80,18 @@ class IExecutionContext(Protocol):
     def resolve_value(self, val: Any) -> Any: ...
     def is_truthy(self, value: Any) -> bool: ...
 
-# --- IBCI Core Object Protocol ---
+# --- IBCI Core Object Protocol (Deprecated in Foundation, use Runtime.interfaces) ---
 
 @runtime_checkable
 class IIbObject(Protocol):
     """
+    [DEPRECATED] 请使用 core.runtime.interfaces.IIbObject
     IBC-Inter 统一对象模型协议。
-    允许插件在不导入 runtime.objects 的情况下识别并操作 IBC 对象。
     """
     ib_class: Any
     fields: Dict[str, Any]
     def receive(self, message: str, args: List[Any]) -> Any: ...
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any: ...
-    def serialize_for_debug(self) -> Dict[str, Any]: ...
-
-@runtime_checkable
-class IIbBehavior(IIbObject, Protocol):
-    """延迟执行的行为对象协议 (~...~)"""
-    node: str
-    captured_intents: List[Any]
-    expected_type: Optional[str]
 
 # --- Extension Capabilities & Introspection ---
 

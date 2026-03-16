@@ -2,8 +2,8 @@ import re
 import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, TYPE_CHECKING
-from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp
-from core.foundation.interfaces import ILLMProvider, IssueTracker, IExecutionContext, IIbBehavior
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent
+from core.foundation.interfaces import ILLMProvider, IssueTracker, IExecutionContext
 
 from core.domain.issue import InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR

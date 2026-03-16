@@ -25,9 +25,18 @@
 - **[Arch] 解释器分片化 (Sharding)**
   - **完成情况**: 100%
   - **完成原因**: 庞大的 `interpreter.py` 已重构为轻量级的 `Dispatcher`。具体的节点处理逻辑已分片到 `StmtHandler`、`ExprHandler` 和 `ImportHandler` 中。
-- **[Arch] ServiceContext 物理隔离**
+- **[Arch] ServiceContext 物理隔离 (Phase 1.3)**
   - **完成情况**: 100%
-  - **完成原因**: `ServiceContext` 协议已定义在 `core/runtime/interfaces.py`，且其实现文件 `service_context.py` 不再持有 `Interpreter` 实例，仅持有特定服务的协议。
+  - **完成原因**: `ServiceContext` 协议已移至 `core/runtime/interfaces.py`，实现类 `ServiceContextImpl` 不持有 `Interpreter`。清理了 `Foundation` 层的冗余定义。
+- **[Arch] 插件符号化正规化 (Phase 1.4)**
+  - **完成情况**: 100%
+  - **完成原因**: 在 `discovery.py` 加载阶段实现了对 `ModuleMetadata` 成员的自动符号化转换。移除了 `SemanticAnalyzer` 中的临时过渡补丁。
+- **[Sealed] Registry 封印加固 (Phase 2.2)**
+  - **完成情况**: 100%
+  - **完成原因**: 在 `IbClass` 中实现了 `register_method` 和 `register_field` 的封印检查。在 `Registry` 中对 `create_subclass` 和 `set_execution_context` 实施了状态校验。
+- **[Arch] 内置类型实现映射下沉 (Phase 2.1)**
+  - **完成情况**: 100%
+  - **完成原因**: 引入了 `type_registry.py` 装饰器机制。内置类型的实现类（如 `IbInteger`）现在自注册，消除了 `builtin_initializer.py` 中的硬编码映射表。
 
 ## 3. 审计缺陷修复 (Audit Fixes)
 

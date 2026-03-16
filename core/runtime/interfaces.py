@@ -179,6 +179,13 @@ class IIbIntent(IIbObject, Protocol):
     def resolve_content(self, context: 'RuntimeContext', execution_context: 'IExecutionContext') -> str: ...
 
 @runtime_checkable
+class IIbBehavior(IIbObject, Protocol):
+    """延迟执行的行为对象协议 (~...~)"""
+    node: str
+    captured_intents: List[Any]
+    expected_type: Optional[str]
+
+@runtime_checkable
 class IIbModule(IIbObject, Protocol):
     """IBC-Inter 模块对象协议"""
     name: str

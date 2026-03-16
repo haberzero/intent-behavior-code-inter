@@ -146,8 +146,10 @@ class Registry:
         self._metadata_registry = metadata_registry
 
     def set_execution_context(self, context: 'IExecutionContext', token: Any):
-        """[IES 2.1 Decoupling] 注册执行上下文引用，仅内核可调。用于支持实例化时求值。"""
+        """[IES 2.1 Decoupling] 注册执行上下文引用，仅内核可调。"""
         self._verify_kernel(token)
+        if self._is_structure_sealed:
+            raise PermissionError("Registry: Cannot re-bind ExecutionContext after structure is sealed.")
         self._execution_context = context
 
     def create_instance(self, class_name: str, *args, **kwargs) -> Any:
@@ -227,7 +229,11 @@ class Registry:
         return self._none_instance
 
     def create_subclass(self, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> Any:
-        """[Authorized] 通过内核绑定的工厂方法创建类，支持动态继承链。强制绑定并校验描述符。"""
+        """[Authorized] 通过内核绑定的工厂方法创建类。强制校验封印状态。"""
+        # [IES 2.1 Security] 类注册封印后，禁止通过任何途径（包括工厂）创建新类
+        if self._is_classes_sealed:
+            raise PermissionError(f"Sealed Registry Violation: Cannot create subclass '{name}' after registry is sealed.")
+            
         if not descriptor:
             raise ValueError(f"Registry: Cannot create subclass '{name}' without a UTS descriptor.")
         if descriptor.name != name:

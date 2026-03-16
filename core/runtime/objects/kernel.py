@@ -13,6 +13,13 @@ if TYPE_CHECKING:
     from core.foundation.interfaces import IExecutionContext
     from core.runtime.interpreter.interpreter import Interpreter
 
+from .type_registry import register_ib_type
+
+@register_ib_type("Any")
+@register_ib_type("var")
+@register_ib_type("callable")
+@register_ib_type("void")
+@register_ib_type("bound_method")
 class IbObject:
     """
     IBC-Inter 对象基类 (一切皆对象)。
@@ -161,6 +168,7 @@ class IbNativeObject(IbObject):
     def __repr__(self):
         return f"<NativeObject {self.py_obj}>"
 
+@register_ib_type("module")
 class IbModule(IbObject):
     """
     IBC-Inter 模块对象。
@@ -237,8 +245,17 @@ class IbClass(IbObject):
         # 绝不回退到 Python 继承链，确保 UTS 语义的一致性
         return False
 
-    def register_method(self, name: str, method: 'IbFunction'):
+    def register_method(self, name: str, method: 'IIbFunction') -> None:
+        # [IES 2.1 Security] 封印校验：禁止在 Registry READY 状态下修改虚表
+        if self.registry.is_sealed:
+            raise PermissionError(f"Sealed Registry Violation: Cannot register method '{name}' to class '{self.name}' in READY state.")
         self.methods[name] = method
+
+    def register_field(self, name: str, default_value: 'IbObject') -> None:
+        # [IES 2.1 Security] 封印校验
+        if self.registry.is_sealed:
+            raise PermissionError(f"Sealed Registry Violation: Cannot register field '{name}' to class '{self.name}' in READY state.")
+        self.default_fields[name] = default_value
 
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
@@ -392,6 +409,7 @@ class IbBoundMethod(IbFunction):
     def __repr__(self):
         return f"<BoundMethod {self.method} bound to {self.receiver}>"
 
+@register_ib_type("None")
 class IbNone(IbObject):
     """
     IBC-Inter 的空对象 (None)。

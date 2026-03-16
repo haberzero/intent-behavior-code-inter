@@ -2,7 +2,8 @@ from typing import Any, Mapping, Optional, Union, List, Callable
 from core.runtime.interfaces import ServiceContext
 from core.domain import ast as ast
 from core.runtime.objects.kernel import IbObject
-from core.foundation.interfaces import IIbBehavior, IExecutionContext
+from core.runtime.interfaces import IIbBehavior
+from core.foundation.interfaces import IExecutionContext
 from core.domain.issue import Severity, InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_GENERIC_ERROR
 from core.domain.issue_atomic import Location

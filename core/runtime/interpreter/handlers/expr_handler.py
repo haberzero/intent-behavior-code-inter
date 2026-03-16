@@ -4,7 +4,7 @@ from core.runtime.interfaces import ServiceContext
 from core.foundation.interfaces import IExecutionContext
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
-from core.foundation.interfaces import IIbBehavior
+from core.runtime.interfaces import IIbBehavior
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel
 from core.domain.issue import InterpreterError

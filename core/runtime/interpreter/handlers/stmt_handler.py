@@ -1,8 +1,8 @@
 from typing import Any, Mapping, List, Optional, Callable
 from .base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
-from core.foundation.interfaces import IIbBehavior, IExecutionContext
-from core.runtime.interfaces import ServiceContext, IIbList
+from core.foundation.interfaces import IExecutionContext
+from core.runtime.interfaces import ServiceContext, IIbList, IIbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException, RetryException
 )

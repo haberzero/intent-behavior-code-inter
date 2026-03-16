@@ -1,5 +1,6 @@
-from typing import Any, List, Dict, Optional, Callable
-from ..objects.kernel import IbObject, IbClass, IbNativeFunction, IbNone
+from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
+from core.runtime.objects.type_registry import get_ib_implementation
+from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 from core.foundation.registry import Registry
 from core.runtime.enums import RegistrationState
@@ -17,12 +18,12 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
     """统一注册原生方法的辅助函数"""
     ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
 
-def _numeric_op(self: IbObject, other: Any, op_func: Callable) -> Any:
+def _numeric_op(self: 'IbObject', other: Any, op_func: Callable) -> Any:
     """处理数值运算并支持 promotion"""
     a = self.to_native()
     return op_func(a, other)
 
-def _compare_op(self: IbObject, other: Any, op_func: Callable) -> int:
+def _compare_op(self: 'IbObject', other: Any, op_func: Callable) -> int:
     """处理比较运算"""
     a = self.to_native()
     try:
@@ -30,12 +31,12 @@ def _compare_op(self: IbObject, other: Any, op_func: Callable) -> int:
     except:
         return 0 
 
-def _cast_string_to(ib_str: IbString, target_class: Any) -> Any:
+def _cast_string_to(ib_str: 'IbString', target_class: Any) -> Any:
     """实现 Spec 中的自动类型转换策略 (Descriptor Identity 版)"""
     target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
     return _cast_string_to_native(ib_str.to_native(), target_desc)
 
-def _cast_numeric_to(ib_num: IbObject, target_class: Any) -> Any:
+def _cast_numeric_to(ib_num: 'IbObject', target_class: Any) -> Any:
     """数值类型到其他类型的转换 (Descriptor Identity 版)"""
     target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
     return _cast_numeric_to_native(ib_num.to_native(), target_desc)
@@ -70,24 +71,7 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     # [NEW] 遍历 AxiomRegistry 自动初始化所有注册的原子类型
     
     # 基础类型映射表 (用于绑定具体的 IbClass 实现)
-    # TODO: 未来应将此映射下沉到 Axiom 或 Factory 中
-    IB_CLASS_MAP = {
-        "int": IbInteger,
-        "float": IbFloat, 
-        "str": IbString,
-        "list": IbList,
-        "dict": IbDict,
-        "bool": IbInteger, # bool 底层复用 IbInteger
-        "var": IbObject, # var 是泛型容器
-        "callable": IbObject, # callable 是协议
-        "behavior": IbBehavior,
-        "Any": IbObject,
-        "void": IbObject,
-        "module": IbObject, # 占位
-        "bound_method": IbObject, # 占位
-        "None": IbObject # NoneType
-    }
-
+    # [IES 2.1 Regularization] 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
     # 自动创建类并注册
     # 注意：我们必须保证顺序，或者允许多次查找
     # 依赖于 pritmives.py 中的注册顺序 (int before bool)
@@ -115,18 +99,21 @@ def initialize_builtin_classes(registry: Registry) -> Any:
         ib_cls = registry.create_subclass(name, desc, parent_name=parent)
         ib_classes[name] = ib_cls
         
-        # [Axiom-Driven Automation] 能力注入
-        # 遍历公理中定义的所有方法，并从 IbObject 实现类中自动查找并绑定同名方法
-        axiom = desc._axiom
+    # [Axiom-Driven Automation] 能力注入
+    # 遍历公理中定义的所有方法，并从 IbObject 实现类中自动查找并绑定同名方法
+    for name, ib_cls in ib_classes.items():
+        desc = ib_cls.descriptor
+        axiom = desc._axiom if desc else None
         if axiom:
             methods = axiom.get_methods()
-            py_impl_cls = IB_CLASS_MAP.get(name)
+            # [IES 2.1 Regularization] 从全局类型注册表获取实现类，消除硬编码映射
+            py_impl_cls = get_ib_implementation(name)
             if py_impl_cls:
                 for method_name in methods:
                     if hasattr(py_impl_cls, method_name):
                         # 获取 Python 实现的方法
                         py_method = getattr(py_impl_cls, method_name)
-                        # 绑定为原生方法 (默认不解包，由实现类自行处理或通过 metadata 识别)
+                        # 绑定为原生方法
                         _reg_native(ib_cls, method_name, py_method, unbox=False)
 
     # 获取引用以便后续绑定 (保持兼容性)

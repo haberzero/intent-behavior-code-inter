@@ -831,17 +831,6 @@ class SemanticAnalyzer:
         # 2. 处理内置方法注入
         member_sym = base_type.resolve_member(node.attr)
         
-        # [TEMP PATCH] IES 2.1 架构过渡补丁
-        # 问题：旧版插件 Spec (如 ai, idbg) 直接在 members 中存储 TypeDescriptor 而非 Symbol。
-        # 风险：直接访问 member_sym.descriptor 会因 TypeDescriptor 无此属性而崩溃。
-        # 修复：在此处进行动态包装。
-        # TODO: 未来应在插件加载阶段 (Loader) 统一进行符号化，届时移除此补丁。
-        if isinstance(member_sym, TypeDescriptor):
-            from core.domain.symbols import SymbolFactory
-            member_sym = SymbolFactory.create_from_descriptor(node.attr, member_sym)
-            # 记录在侧表中以维持引用一致性
-            self.node_to_symbol[node] = member_sym
-
         if member_sym:
             self.node_to_symbol[node] = member_sym
             

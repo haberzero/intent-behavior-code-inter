@@ -1,5 +1,5 @@
 from typing import Any, List, Dict, Optional, Callable
-from core.foundation.interfaces import IIbBehavior
+from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.foundation.registry import Registry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
@@ -7,6 +7,9 @@ from core.domain.issue import InterpreterError
 
 from core.domain.types import descriptors as uts
 
+from .type_registry import register_ib_type
+
+@register_ib_type("int")
 class IbInteger(IbObject):
     """
     包装 Python 原生 int 的 IBC 对象。
@@ -60,6 +63,7 @@ class IbInteger(IbObject):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+@register_ib_type("float")
 class IbFloat(IbObject):
     """
     包装 Python 原生 float 的 IBC 对象。
@@ -87,6 +91,7 @@ class IbFloat(IbObject):
     def __repr__(self):
         return f"Float({self.value})"
 
+@register_ib_type("str")
 class IbString(IbObject):
     """
     包装 Python 原生 str 的 IBC 对象。
@@ -117,6 +122,7 @@ class IbString(IbObject):
     def __repr__(self):
         return f"String('{self.value}')"
 
+@register_ib_type("list")
 class IbList(IbObject):
     """
     包装 Python 原生 list 的 IBC 对象。
@@ -174,6 +180,7 @@ class IbList(IbObject):
         self.elements.sort(key=lambda x: x.to_native())
         return self.ib_class.registry.get_none()
 
+@register_ib_type("dict")
 class IbDict(IbObject):
     """
     包装 Python 原生 dict 的 IBC 对象。
@@ -241,6 +248,7 @@ class IbDict(IbObject):
         native_key = key.to_native() if isinstance(key, IbObject) else key
         return self.fields[native_key]
 
+@register_ib_type("behavior")
 class IbBehavior(IbObject, IIbBehavior):
     """
     延迟执行的行为对象 (~...~)。
