@@ -12,17 +12,27 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     """
     def __init__(self, 
                  registry: Any,
+                 factory: Any,
                  visit_callback: Any,
                  get_node_data_callback: Any,
                  get_side_table_callback: Any,
                  push_stack_callback: Any,
                  pop_stack_callback: Any,
                  get_instruction_count_callback: Any,
-                 get_captured_intents_callback: Any):
+                 get_captured_intents_callback: Any,
+                 is_truthy_callback: Any,
+                 resolve_type_from_symbol_callback: Any,
+                 extract_name_id_callback: Any,
+                 resolve_value_callback: Any,
+                 strict_mode: bool = False):
         self._node_pool: Mapping[str, Any] = {}
+        self._symbol_pool: Mapping[str, Any] = {}
+        self._asset_pool: Mapping[str, str] = {}
         self._registry = registry
+        self._factory = factory
         self._runtime_context = None
         self._logical_stack = None # 由 Interpreter 初始化并注入
+        self._strict_mode = strict_mode
         
         # Logic Callbacks
         self._visit_callback = visit_callback
@@ -32,6 +42,10 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._pop_stack_callback = pop_stack_callback
         self._get_instruction_count_callback = get_instruction_count_callback
         self._get_captured_intents_callback = get_captured_intents_callback
+        self._is_truthy_callback = is_truthy_callback
+        self._resolve_type_from_symbol_callback = resolve_type_from_symbol_callback
+        self._extract_name_id_callback = extract_name_id_callback
+        self._resolve_value_callback = resolve_value_callback
 
     @property
     def logical_stack(self) -> Any:
@@ -50,6 +64,22 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._node_pool = value
 
     @property
+    def symbol_pool(self) -> Mapping[str, Any]:
+        return self._symbol_pool
+
+    @symbol_pool.setter
+    def symbol_pool(self, value: Mapping[str, Any]):
+        self._symbol_pool = value
+
+    @property
+    def asset_pool(self) -> Mapping[str, str]:
+        return self._asset_pool
+
+    @asset_pool.setter
+    def asset_pool(self, value: Mapping[str, str]):
+        self._asset_pool = value
+
+    @property
     def stack_inspector(self) -> IStackInspector:
         return self
 
@@ -58,12 +88,24 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         return self._registry
 
     @property
+    def factory(self) -> Any:
+        return self._factory
+
+    @property
     def runtime_context(self) -> Any:
         return self._runtime_context
 
     @runtime_context.setter
     def runtime_context(self, value: Any):
         self._runtime_context = value
+
+    @property
+    def strict_mode(self) -> bool:
+        return self._strict_mode
+
+    @strict_mode.setter
+    def strict_mode(self, value: bool):
+        self._strict_mode = value
 
     def visit(self, node_uid: str) -> 'IbObject':
         return self._visit_callback(node_uid)
@@ -79,6 +121,18 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
 
     def pop_stack(self) -> None:
         self._pop_stack_callback()
+
+    def is_truthy(self, value: Any) -> bool:
+        return self._is_truthy_callback(value)
+
+    def resolve_type_from_symbol(self, sym_uid: str) -> Optional[Any]:
+        return self._resolve_type_from_symbol_callback(sym_uid)
+
+    def extract_name_id(self, node_uid: str) -> Optional[str]:
+        return self._extract_name_id_callback(node_uid)
+
+    def resolve_value(self, val: Any) -> Any:
+        return self._resolve_value_callback(val)
 
     # IStackInspector Implementation (Delegated to Data or Callback)
     def get_call_stack_depth(self) -> int:

@@ -92,16 +92,25 @@ class Interpreter:
         # 0. 启动内核引导
         self._registry = registry or Registry()
         
+        # [IES 2.1 Decoupling] 引入对象工厂
+        object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
+
         # [IES 2.1 Decoupling] 创建执行上下文数据容器，剥离状态与逻辑 (组合代替继承)
         self._execution_context = ExecutionContextImpl(
             registry=self._registry,
+            factory=object_factory,
             visit_callback=self.visit,
             get_node_data_callback=self.get_node_data,
             get_side_table_callback=self.get_side_table,
             push_stack_callback=self.push_stack,
             pop_stack_callback=self.pop_stack,
             get_instruction_count_callback=lambda: self.instruction_count,
-            get_captured_intents_callback=self.get_captured_intents
+            get_captured_intents_callback=self.get_captured_intents,
+            is_truthy_callback=self.is_truthy,
+            resolve_type_from_symbol_callback=self._resolve_type_from_symbol,
+            extract_name_id_callback=self._extract_name_id,
+            resolve_value_callback=self._resolve_value,
+            strict_mode=strict_mode
         )
 
         # [IES 2.1 Decoupling] 注册执行上下文引用到 Registry，底层仅持有该容器
@@ -139,7 +148,7 @@ class Interpreter:
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
             interop = interop or InterOpImpl(host_interface=self.host_interface)
-            object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
+            # object_factory 已经在前面初始化
             permission_manager = permission_manager or PermissionManagerImpl(root_dir)
             
             # [IES 2.1] 初始化 LLMExecutor，注入最小数据依赖
@@ -201,6 +210,11 @@ class Interpreter:
         self.entry_module = loaded.entry_module
         self.type_hydrator = loaded.type_hydrator
         
+        # 同步池引用到 ExecutionContext 数据容器
+        self._execution_context.node_pool = self.node_pool
+        self._execution_context.symbol_pool = self.symbol_pool
+        self._execution_context.asset_pool = self.asset_pool
+        
         # 4. 完成用户类的深度水化 (填充方法与字段)
         # 此时 Interpreter 已经初始化完毕，可以安全地创建函数对象
         self.current_module_name = None
@@ -234,9 +248,9 @@ class Interpreter:
         self.strict_mode = strict_mode
 
         # [IES 4.3] 初始化分片 Handlers
-        self.stmt_handler = StmtHandler(self)
-        self.expr_handler = ExprHandler(self)
-        self.import_handler = ImportHandler(self)
+        self.stmt_handler = StmtHandler(self.service_context, self._execution_context)
+        self.expr_handler = ExprHandler(self.service_context, self._execution_context)
+        self.import_handler = ImportHandler(self.service_context, self._execution_context)
 
         # [IES 2.0 Optimization] 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
@@ -518,11 +532,11 @@ class Interpreter:
                 if stmt_data["_type"] == "IbFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self, descriptor=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, descriptor=declared_type))
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self, descriptor=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, descriptor=declared_type))
                 elif stmt_data["_type"] == "IbAssign":
                     # [IES 2.0] 记录初始化节点 UID，延后至执行期或预评估期执行
                     # 这解决了 Context 未闭合导致无法处理复杂表达式的问题
@@ -562,22 +576,6 @@ class Interpreter:
         if node_data["_type"] == "IbTypeAnnotatedExpr":
             return self._extract_name_id(node_data.get("target"))
         return None
-
-    def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
-        """LLM 容错机制的核心封装"""
-        while True:
-            try:
-                return action()
-            except LLMUncertaintyError:
-                fallback_body = node_data.get("llm_fallback", [])
-                if fallback_body:
-                    try:
-                        for stmt_uid in fallback_body:
-                            self.visit(stmt_uid)
-                        return self.registry.get_none()
-                    except RetryException:
-                        continue
-                raise
 
     def _get_location(self, node_uid: str) -> Optional[Location]:
         """从 side_tables 获取节点的位置信息"""
@@ -621,11 +619,11 @@ class Interpreter:
         self.call_stack_depth += 1
         loc = self._get_location(node_uid)
 
-        # [IES 2.1 Refactor] 识别具有独立作用域的节点
+        # [IES 2.1 Refactor] 识别具有独立作用域的节点 (基于元数据特性驱动)
         pushed_frame = False
         node_type = node_data.get("_type")
 
-        if node_type in ("IbModule", "IbFunctionDef", "IbLLMFunctionDef", "IbClassDef", "IbIntentStmt"):
+        if self._is_scope_defining(node_type, node_data):
             self.push_stack(name=f"{node_type}:{node_uid}", location=loc)
             pushed_frame = True
 
@@ -667,6 +665,15 @@ class Interpreter:
             # [NEW] 自动出栈，确保意图作用域正确恢复
             for _ in range(pushed_count):
                 self.runtime_context.pop_intent()
+
+    def _is_scope_defining(self, node_type: str, node_data: Optional[Mapping[str, Any]] = None) -> bool:
+        """[IES 2.1 Decoupling] 判断 AST 节点是否具有独立逻辑作用域。优先使用元数据标记。"""
+        # 1. 优先检查节点数据中是否带有分析器生成的标记
+        if node_data and node_data.get("_is_scope"):
+            return True
+            
+        # 2. 过渡策略：已知作用域定义类型列表
+        return node_type in ("IbModule", "IbFunctionDef", "IbLLMFunctionDef", "IbClassDef", "IbIntentStmt")
 
     def generic_visit(self, node_uid: str, node_data: Mapping[str, Any]):
         raise self._report_error(f"No visit method implemented for {node_data['_type']}", node_uid, error_code=RUN_GENERIC_ERROR)

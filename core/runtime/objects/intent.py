@@ -1,4 +1,4 @@
-from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING
+from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
 from core.domain.intent_logic import IntentMode, IntentRole, IntentProtocol
@@ -24,6 +24,21 @@ class IbIntent(IbObject, IntentProtocol):
         self.tag = tag
         self.source_uid = source_uid
         self.role = role
+
+    @staticmethod
+    def from_node_data(node_uid: str, node_data: Mapping[str, Any], ib_class: IbClass, role: IntentRole = IntentRole.BLOCK) -> 'IbIntent':
+        """
+        [IES 2.1 Factory] 从 AST 节点数据构造运行时意图对象。
+        """
+        return IbIntent(
+            ib_class=ib_class,
+            content=node_data.get('content', ''),
+            segments=node_data.get('segments', []),
+            mode=IntentMode.from_str(node_data.get('mode', '+')),
+            tag=node_data.get('tag'),
+            role=role,
+            source_uid=node_uid
+        )
 
     def resolve_content(self, context: RuntimeContext, execution_context: Any = None) -> str:
         """

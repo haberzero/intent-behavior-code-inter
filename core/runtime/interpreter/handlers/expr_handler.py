@@ -1,5 +1,7 @@
 from typing import Any, Mapping, List, Optional, Union
 from .base_handler import BaseHandler
+from core.runtime.interfaces import ServiceContext
+from core.foundation.interfaces import IExecutionContext
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
 from core.foundation.interfaces import IIbBehavior
@@ -17,7 +19,7 @@ class ExprHandler(BaseHandler):
     """
     def visit_IbConstant(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """UTS: 统一常量装箱"""
-        return self.registry.box(self.interpreter._resolve_value(node_data.get("value")))
+        return self.registry.box(self.execution_context.resolve_value(node_data.get("value")))
 
     def visit_IbName(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """变量读取：优先通过 Symbol UID 查找"""
@@ -27,7 +29,7 @@ class ExprHandler(BaseHandler):
                 return self.runtime_context.get_variable_by_uid(sym_uid)
             except Exception:
                 # 如果是严格模式，UID 查找失败即报错
-                if self.interpreter.strict_mode: raise
+                if self.execution_context.strict_mode: raise
 
         # 兼容性/动态代码回退：名称查找
         name = node_data.get("id")
@@ -39,7 +41,7 @@ class ExprHandler(BaseHandler):
             cls = self.registry.get_class(name)
             if cls: return cls
             
-            if self.interpreter.strict_mode and not sym_uid:
+            if self.execution_context.strict_mode and not sym_uid:
                 raise self.report_error(f"Strict mode: Symbol UID missing for variable '{name}'.", node_uid)
             
             raise
@@ -62,13 +64,13 @@ class ExprHandler(BaseHandler):
         for val_uid in node_data.get("values", []):
             val = self.visit(val_uid)
             last_val = val
-            if is_or and self.interpreter.is_truthy(val): return val
-            if not is_or and not self.interpreter.is_truthy(val): return val
+            if is_or and self.execution_context.is_truthy(val): return val
+            if not is_or and not self.execution_context.is_truthy(val): return val
         return last_val
 
     def visit_IfExp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """三元表达式"""
-        if self.interpreter.is_truthy(self.visit(node_data.get("test"))):
+        if self.execution_context.is_truthy(self.visit(node_data.get("test"))):
             return self.visit(node_data.get("body"))
         return self.visit(node_data.get("orelse"))
 
@@ -106,7 +108,7 @@ class ExprHandler(BaseHandler):
             cmp_res = current_left.receive(method, [right])
             
             # 短路：只要有一个比较不成立，立即返回 False
-            if not self.interpreter.is_truthy(cmp_res):
+            if not self.execution_context.is_truthy(cmp_res):
                 return cmp_res
             
             final_res = cmp_res
@@ -168,9 +170,24 @@ class ExprHandler(BaseHandler):
         # 1. 检查是否显式标记为延迟
         is_deferred = self.get_side_table("node_is_deferred", node_uid)
         
+        # [IES 2.1 Factory] 统一解析呼叫级意图
+        intent_uid = node_data.get("intent")
+        call_intent = None
+        if intent_uid:
+            intent_data = self.get_node_data(intent_uid)
+            call_intent = IbIntent.from_node_data(
+                intent_uid, 
+                intent_data, 
+                self.registry.get_class("Intent"),
+                role=IntentRole.SMEAR
+            )
+
         if is_deferred:
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
             captured_intents = list(self.runtime_context.get_active_intents())
+            # 如果是延迟执行，行为对象需要持有自己的 call_intent
+            # [FIX] 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
+            # 暂时保持现状，等待下一步重构 behavior 对象。
             return self.service_context.object_factory.create_behavior(
                 node_uid, 
                 captured_intents, 
@@ -178,10 +195,7 @@ class ExprHandler(BaseHandler):
             )
         
         # [Fallback] 如果是非延迟模式，直接执行
-        # 注意：此处传入 node_uid 而非对象，符合 _execute_behavior 的原始语义
-        # 但 _execute_behavior 期望的是 IbObject。
-        # 如果不是延迟执行，说明我们需要立即执行该节点的内容。
-        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context)
+        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context, call_intent=call_intent)
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""

@@ -64,8 +64,8 @@ class TypeResolver:
         parent_desc = None
         if node.parent:
             parent_sym = self.symbol_table.resolve(node.parent)
-            if parent_sym and isinstance(parent_sym.type_info, ClassMetadata):
-                parent_desc = parent_sym.type_info
+            if parent_sym and isinstance(parent_sym.descriptor, ClassMetadata):
+                parent_desc = parent_sym.descriptor
             else:
                 self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         

@@ -71,11 +71,6 @@ class TypeDescriptor:
     def __post_init__(self):
         self.kind = self.__class__.__name__
 
-    @property
-    def type_info(self) -> 'TypeDescriptor':
-        """[Refactor] 为了向后兼容符号系统，提供 type_info 属性代理自身"""
-        return self
-
     def unwrap(self) -> 'TypeDescriptor':
         return self
 

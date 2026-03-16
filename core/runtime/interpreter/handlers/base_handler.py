@@ -1,56 +1,98 @@
-from typing import Any, Mapping, Optional, Union, List
-from core.runtime.interfaces import Interpreter as InterpreterInterface
+from typing import Any, Mapping, Optional, Union, List, Callable
+from core.runtime.interfaces import ServiceContext
 from core.domain import ast as ast
 from core.runtime.objects.kernel import IbObject
-from core.foundation.interfaces import IIbBehavior
+from core.foundation.interfaces import IIbBehavior, IExecutionContext
+from core.domain.issue import Severity, InterpreterError, LLMUncertaintyError
+from core.foundation.diagnostics.codes import RUN_GENERIC_ERROR
+from core.domain.issue_atomic import Location
+from core.runtime.exceptions import RetryException
 
 class BaseHandler:
     """
     解释器分片 Handler 基类。
     Handler 仅负责具体的 AST 节点处理逻辑，调度由 Interpreter (Dispatcher) 完成。
     """
-    def __init__(self, interpreter: InterpreterInterface):
-        self.interpreter = interpreter
+    def __init__(self, service_context: ServiceContext, execution_context: IExecutionContext):
+        self._service_context = service_context
+        self._execution_context = execution_context
 
     @property
     def registry(self):
-        return self.interpreter.registry
+        return self._execution_context.registry
 
     @property
     def runtime_context(self):
-        return self.interpreter.runtime_context
+        return self._execution_context.runtime_context
 
     @property
     def execution_context(self):
-        return self.interpreter.execution_context
+        return self._execution_context
 
     @property
     def service_context(self):
-        return self.interpreter.service_context
+        return self._service_context
 
     @property
     def issue_tracker(self):
-        return self.interpreter.issue_tracker
+        return self._service_context.issue_tracker
 
     @property
     def debugger(self):
-        return self.interpreter.debugger
+        return self._service_context.debugger
 
     def visit(self, node_uid: Union[str, Any]) -> IbObject:
-        """分发逻辑委托回 Interpreter (Dispatcher)"""
-        return self.interpreter.visit(node_uid)
+        """分发逻辑委托回 ExecutionContext (Dispatcher 网关)"""
+        return self._execution_context.visit(node_uid)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
-        """从 Interpreter 获取 AST 节点数据"""
-        return self.interpreter.get_node_data(node_uid)
+        """从 ExecutionContext 获取 AST 节点数据"""
+        return self._execution_context.get_node_data(node_uid)
 
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
-        """从 Interpreter 获取侧表数据"""
-        return self.interpreter.get_side_table(table_name, node_uid)
+        """从 ExecutionContext 获取侧表数据"""
+        return self._execution_context.get_side_table(table_name, node_uid)
 
     def report_error(self, message: str, node_uid: Optional[str] = None, error_code: Optional[str] = None) -> Exception:
-        """通过 Interpreter 统一上报错误"""
-        return self.interpreter._report_error(message, node_uid, error_code)
+        """标准化的错误报告与诊断生成逻辑"""
+        loc_data = self.get_side_table("node_to_loc", node_uid) if node_uid else None
+        
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0),
+                end_line=loc_data.get("end_line"),
+                end_column=loc_data.get("end_column")
+            )
+        
+        self.issue_tracker.report(
+            severity=Severity.ERROR,
+            code=error_code or RUN_GENERIC_ERROR,
+            message=message,
+            location=loc
+        )
+        
+        err = InterpreterError(message, error_code=error_code or RUN_GENERIC_ERROR)
+        err.location = loc
+        return err
+
+    def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
+        """LLM 容错机制的核心封装 (从 Interpreter 迁移至此以减少穿透)"""
+        while True:
+            try:
+                return action()
+            except LLMUncertaintyError:
+                fallback_body = node_data.get("llm_fallback", [])
+                if fallback_body:
+                    try:
+                        for stmt_uid in fallback_body:
+                            self.visit(stmt_uid)
+                        return self.registry.get_none()
+                    except RetryException:
+                        continue
+                raise
 
     def _execute_behavior(self, behavior: IbObject) -> IbObject:
         """

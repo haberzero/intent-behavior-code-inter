@@ -5,6 +5,7 @@ from core.domain.issue import InterpreterError
 from core.domain.issue_atomic import Location
 from core.runtime.exceptions import ReturnException, RegistryIsolationError
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.domain.intent_logic import IntentRole
 from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
 
 if TYPE_CHECKING:
@@ -535,9 +536,21 @@ class IbLLMFunction(IbFunction):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
+            # [IES 2.1 Factory] 解析呼叫级意图 (函数头上的意图)
+            intent_uid = node_data.get("intent")
+            call_intent = None
+            if intent_uid:
+                intent_data = self.context.get_node_data(intent_uid)
+                # 使用工厂创建意图对象，避免局部 import
+                call_intent = self.context.factory.create_intent_from_node(
+                    intent_uid, 
+                    intent_data, 
+                    role=IntentRole.SMEAR
+                )
+            
             # 分发给 LLM 执行器
-            # [IES 2.1 Regularization] 传递执行上下文网关，而非裸的运行时上下文
-            return self.llm_executor.execute_llm_function(self.node_uid, self.context)
+            # [IES 2.1 Regularization] 传递执行上下文网关，并传递解析后的意图
+            return self.llm_executor.execute_llm_function(self.node_uid, self.context, call_intent=call_intent)
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()

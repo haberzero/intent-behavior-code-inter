@@ -60,7 +60,7 @@ class LLMExecutorImpl:
             
         return {}
 
-    def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext) -> IbObject:
+    def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
         """
         [职责解耦] 仅处理 LLM 推理过程。
         作用域管理和参数绑定已由 IbLLMFunction.call 完成。
@@ -77,10 +77,7 @@ class LLMExecutorImpl:
         user_prompt = self._evaluate_segments(node_data.get("user_prompt"), execution_context)
         
         # 2. 注入意图增强 (被动消费已消解的现场)
-        # 获取 Call 级意图 (如果定义在函数头上)
-        intent_uid = node_data.get("intent")
-        call_intent = self._create_call_intent(intent_uid, execution_context) if intent_uid else None
-        
+        # 呼叫级意图已由 Caller 通过参数传递
         merged_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
         if merged_intents:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
@@ -112,18 +109,6 @@ class LLMExecutorImpl:
         
         # 5. 解析结果
         return self._parse_result(raw_res, type_name, node_uid)
-
-    def _create_call_intent(self, intent_uid: str, execution_context: IExecutionContext) -> IbIntent:
-        intent_data = execution_context.get_node_data(intent_uid)
-        return IbIntent(
-            ib_class=self.registry.get_class("Intent"),
-            content=intent_data.get('content', '') if intent_data else '',
-            segments=intent_data.get('segments', []) if intent_data else [],
-            mode=IntentMode.from_str(intent_data.get('mode', '+')) if intent_data else IntentMode.APPEND,
-            tag=intent_data.get('tag') if intent_data else None,
-            role=IntentRole.SMEAR,
-            source_uid=intent_uid
-        )
 
 
     def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext) -> str:
@@ -187,7 +172,7 @@ class LLMExecutorImpl:
         # Fallback (Default to string boxing if no axiom or no parser capability)
         return self.registry.box(raw_res)
 
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext) -> IbObject:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
@@ -205,18 +190,13 @@ class LLMExecutorImpl:
         if ai_module and hasattr(ai_module, "_config"):
             auto_intent = ai_module._config.get("auto_intent_injection", True)
         
-        call_intent = None
         if not auto_intent:
             # 如果关闭了自动注入，仅保留当前节点的意图 (如果有)
-            intent_uid = node_data.get("intent")
-            if intent_uid:
-                call_intent = self._create_call_intent(intent_uid, execution_context)
+            if call_intent:
                 # 强制覆盖模式：仅返回该意图
                 return self.registry.box(call_intent.resolve_content(context, execution_context))
 
         # [IES 2.1] 获取消解后的最终列表
-        intent_uid = node_data.get("intent")
-        call_intent = self._create_call_intent(intent_uid, execution_context) if intent_uid else None
         all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
         # 核心：使用 side_tables 中的 node_scenes
         scene_name = execution_context.get_side_table("node_scenes", node_uid) or "general"

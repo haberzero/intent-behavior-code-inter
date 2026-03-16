@@ -46,17 +46,6 @@ class Symbol:
             new_sym.descriptor = self.descriptor.clone(memo)
         return new_sym
 
-    @property
-    def type_info(self) -> 'TypeDescriptor':
-        """[Refactor] 统一获取符号的类型描述符。支持向后兼容。"""
-        if self.descriptor:
-            return self.descriptor
-        # 回退模式：如果直接被注入了 metadata (Legacy)
-        if hasattr(self, 'metadata') and isinstance(self.metadata, dict):
-            desc = self.metadata.get("type_descriptor")
-            if desc: return desc
-        return uts.ANY_DESCRIPTOR
-
 @dataclass
 class TypeSymbol(Symbol):
     """表示一个类型定义 (类或内置类型)"""
@@ -111,10 +100,10 @@ class SymbolTable:
             existing = self.symbols[sym.name]
             # [IES 2.1 Audit] 如果是内置符号且类型兼容，允许静默跳过或覆盖
             if existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"):
-                if existing.type_info and sym.type_info:
+                if existing.descriptor and sym.descriptor:
                     # 确保重定义不会导致语义冲突 (类型必须完全一致或兼容)
-                    if existing.type_info.name != sym.type_info.name:
-                         raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible type '{sym.type_info.name}' (existing: '{existing.type_info.name}')")
+                    if existing.descriptor.name != sym.descriptor.name:
+                         raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible type '{sym.descriptor.name}' (existing: '{existing.descriptor.name}')")
                 self.symbols[sym.name] = sym
                 return
             raise ValueError(f"Symbol '{sym.name}' is already defined in this scope")

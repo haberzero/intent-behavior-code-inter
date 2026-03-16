@@ -134,7 +134,7 @@ class FlatSerializer(BaseFlatSerializer):
                 "uid": uid,
                 "name": sym.name,
                 "kind": sym.kind.name if hasattr(sym.kind, 'name') else str(sym.kind),
-                "type_uid": self._collect_type(sym.type_info) if hasattr(sym, 'type_info') and sym.type_info else None,
+                "type_uid": self._collect_type(sym.descriptor) if hasattr(sym, 'descriptor') and sym.descriptor else None,
                 "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
                 "owned_scope_uid": self._collect_scope(sym.owned_scope) if hasattr(sym, 'owned_scope') and sym.owned_scope else None,
                 "metadata": sym.metadata

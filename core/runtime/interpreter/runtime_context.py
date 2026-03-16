@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
-from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
+from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.registry import Registry
@@ -374,11 +374,13 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
             return []
         return self._intent_top.to_list()
 
-    def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IbIntent] = None) -> List[str]:
+    def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IIbIntent] = None) -> List[str]:
         """
-        [IES 2.1 Regularization] 获取消解后的意图字符串列表。
-        将消解逻辑下沉至 Context，实现 Executor 的无状态消费。
+        [IES 2.1 Decoupling] 获取最终消解后的 Prompt 字符串列表。
+        不再由 Executor 手动合并，而是由 Context 负责消解。
         """
+        # 使用工厂或直接从执行上下文获取消解器，避免局部 import
+        # [TODO] 未来可以将 IntentResolver 也协议化注入
         from core.domain.intent_resolver import IntentResolver
         
         active_intents = self.get_active_intents()

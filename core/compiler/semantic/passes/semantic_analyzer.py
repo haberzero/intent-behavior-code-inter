@@ -433,19 +433,19 @@ class SemanticAnalyzer:
                     sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
                 else:
                     # 2. 无标注：如果尚未定义，或者现有定义是动态的 (Any/var)，则进行推导
-                    if not sym or sym.type_info.is_dynamic():
+                    if not sym or sym.descriptor.is_dynamic():
                         sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
                 
                 if sym:
                     self.node_to_symbol[actual_target] = sym
-                    self.node_to_type[target_node] = sym.type_info
+                    self.node_to_type[target_node] = sym.descriptor
                     if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
                         self.node_to_symbol[target_node.target] = sym
-                        self.node_to_type[target_node.target] = sym.type_info
+                        self.node_to_type[target_node.target] = sym.descriptor
                     
                     # [NEW] 行为描述行 Lambda 化判断
                     # 只有当目标类型明确要求具备调用能力，或者是动态类型时，才进行延迟推断
-                    target_desc = sym.type_info
+                    target_desc = sym.descriptor
                     is_explicit_callable = False
                     
                     if target_desc:
@@ -458,9 +458,9 @@ class SemanticAnalyzer:
                     if isinstance(node.value, ast.IbBehaviorExpr) and is_explicit_callable:
                         self.node_is_deferred[node.value] = True
                     
-                    if not val_type.is_assignable_to(sym.type_info):
-                        hint = val_type.get_diff_hint(sym.type_info)
-                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.type_info.name}'", node, code="SEM_003", hint=hint)
+                    if not val_type.is_assignable_to(sym.descriptor):
+                        hint = val_type.get_diff_hint(sym.descriptor)
+                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.descriptor.name}'", node, code="SEM_003", hint=hint)
             else:
                 # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
@@ -527,9 +527,9 @@ class SemanticAnalyzer:
             for var_name, target in SymbolExtractor.get_assigned_names(node):
                 # 检查是否已在 Pass 2.5 预扫描中定义
                 sym = self.symbol_table.symbols.get(var_name)
-                # 如果未定义，或者定义为 Any/var 占位符，则更新其类型
-                if not sym or sym.type_info.is_dynamic():
-                    sym = self._define_var(var_name, element_type, node, allow_overwrite=(sym is not None))
+                # 如果未定义，或者定义为 Any/var 占位符，则进行推导
+                if not sym or sym.descriptor.is_dynamic():
+                    sym = self._define_var(var_name, element_type, target, allow_overwrite=(sym is not None))
                 else:
                     # 显式定义的变量（如带有类型标注），则执行类型更新
                     if isinstance(sym, VariableSymbol):
@@ -585,7 +585,7 @@ class SemanticAnalyzer:
         for var_name, target in SymbolExtractor.get_assigned_names(node):
             # 检查是否已在 Pass 2.5 预扫描中定义
             sym = self.symbol_table.symbols.get(var_name)
-            if not sym or sym.type_info.is_dynamic():
+            if not sym or sym.descriptor.is_dynamic():
                 # [Strict Exception] 异常变量默认为 Exception 类型，而非 Any
                 sym = self._define_var(var_name, exc_type, node, allow_overwrite=(sym is not None))
             
@@ -821,7 +821,7 @@ class SemanticAnalyzer:
         self.node_to_symbol[node] = sym # 使用 UID 引用
         
         # 统一获取类型信息
-        res = sym.type_info
+        res = sym.descriptor
             
         return res
 
@@ -830,6 +830,18 @@ class SemanticAnalyzer:
         
         # 2. 处理内置方法注入
         member_sym = base_type.resolve_member(node.attr)
+        
+        # [TEMP PATCH] IES 2.1 架构过渡补丁
+        # 问题：旧版插件 Spec (如 ai, idbg) 直接在 members 中存储 TypeDescriptor 而非 Symbol。
+        # 风险：直接访问 member_sym.descriptor 会因 TypeDescriptor 无此属性而崩溃。
+        # 修复：在此处进行动态包装。
+        # TODO: 未来应在插件加载阶段 (Loader) 统一进行符号化，届时移除此补丁。
+        if isinstance(member_sym, TypeDescriptor):
+            from core.domain.symbols import SymbolFactory
+            member_sym = SymbolFactory.create_from_descriptor(node.attr, member_sym)
+            # 记录在侧表中以维持引用一致性
+            self.node_to_symbol[node] = member_sym
+
         if member_sym:
             self.node_to_symbol[node] = member_sym
             
@@ -839,9 +851,9 @@ class SemanticAnalyzer:
                 # 如果是类方法且第一个参数名为 self，或者是内置方法且 param_types[0] 是 Receiver 类型
                 # 简单判断：如果 receiver 不是模块，则视为绑定调用
                 if not isinstance(base_type, ModuleMetadata):
-                    return BoundMethodMetadata(receiver_type=base_type, function_type=member_sym.type_info)
+                    return BoundMethodMetadata(receiver_type=base_type, function_type=member_sym.descriptor)
             
-            return member_sym.type_info
+            return member_sym.descriptor
             
         # 2. [Dynamic Resolution] 如果是动态类型（Any/var），允许访问任意属性并返回 Any
         if base_type.is_dynamic():
@@ -913,7 +925,7 @@ class SemanticAnalyzer:
                 # [FIX] 如果符号本身就是 TypeSymbol，直接返回其 descriptor
                 if isinstance(sym, symbols.TypeSymbol):
                     return sym.descriptor
-                return sym.type_info
+                return sym.descriptor
                 
             if not safe:
                 self.error(f"Unknown type '{node.id}'", node, code="SEM_001")
@@ -945,18 +957,18 @@ class SemanticAnalyzer:
             if safe:
                 if isinstance(node.value, ast.IbName):
                     base_sym = self.symbol_table.resolve(node.value.id)
-                    if base_sym and base_sym.type_info:
-                        member_sym = base_sym.type_info.resolve_member(node.attr)
+                    if base_sym and base_sym.descriptor:
+                        member_sym = base_sym.descriptor.resolve_member(node.attr)
                         if member_sym:
                             self.node_to_symbol[node] = member_sym
-                            return member_sym.type_info
+                            return member_sym.descriptor
                 return self._any_desc
                 
             base_type = self.visit(node.value)
             member_sym = base_type.resolve_member(node.attr)
             if member_sym:
                 self.node_to_symbol[node] = member_sym
-                return member_sym.type_info
+                return member_sym.descriptor
             self.error(f"Unknown type '{node.attr}' in '{base_type.name}'", node, code="SEM_001")
             
         return self._any_desc
