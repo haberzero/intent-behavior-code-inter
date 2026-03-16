@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, List
 from core.domain.types.registry import MetadataRegistry
+from core.runtime.enums import RegistrationState
 from core.domain.types.descriptors import (
     TypeDescriptor, 
     ListMetadata, DictMetadata, FunctionMetadata, ClassMetadata,
@@ -40,7 +41,6 @@ class TypeHydrator:
         返回所有被成功水化的 ClassMetadata。
         """
         if registry:
-             from core.runtime.enums import RegistrationState
              registry.verify_level(RegistrationState.STAGE_5_HYDRATION.value)
             
         # Phase 1: Create all shells
@@ -75,36 +75,32 @@ class TypeHydrator:
             return self.memo[uid]
             
         data = self.type_pool[uid]
-        kind = data.get("kind", "StaticType")
+        # [IES 2.1 Refactor] 使用 TypeDescriptor 作为通用回退标识
+        kind = data.get("kind", "TypeDescriptor")
         name = data.get("name", "")
-        
-        factory = self.registry.factory
-        descriptor: Optional[TypeDescriptor] = None
         is_user_defined = data.get("is_user_defined", False)
         
-        # 使用工厂驻留机制创建外壳
-        if name in BUILTIN_TYPES:
-            descriptor = self.registry.resolve(name)
-            if not descriptor:
-                descriptor = factory.create_primitive(name)
-        elif kind == "ListMetadata":
-            # 初始外壳不带泛型信息，避免名称过早变为 list[Any]
-            descriptor = ListMetadata(name="list")
-        elif kind == "DictMetadata":
-            descriptor = DictMetadata(name="dict")
-        elif kind == "FunctionMetadata":
-            descriptor = FunctionMetadata(name="callable")
-        elif kind == "ClassMetadata":
-            parent_name = data.get("parent_name")
-            descriptor = factory.create_class(name, parent=parent_name)
-        elif kind == "BoundMethodMetadata":
-            # 运行时会动态重新合成，但在池中我们记录一个占位符
-            descriptor = factory.create_primitive("bound_method")
+        factory = self.registry.factory
+        
+        # [IES 2.1 Refactor] 映射驱动的 Shell 创建，消除 if/elif kind 硬编码
+        shell_creators = {
+            "ListMetadata": lambda: ListMetadata(name="list"),
+            "DictMetadata": lambda: DictMetadata(name="dict"),
+            "FunctionMetadata": lambda: FunctionMetadata(name="callable"),
+            "ClassMetadata": lambda: factory.create_class(name, parent=data.get("parent_name")),
+            "BoundMethodMetadata": lambda: factory.create_primitive("bound_method"),
+            "ModuleMetadata": lambda: ModuleMetadata(name=name)
+        }
+        
+        if name in BUILTIN_TYPES and kind == "TypeDescriptor":
+            descriptor = self.registry.resolve(name) or factory.create_primitive(name)
         else:
-            descriptor = TypeDescriptor(name=name)
+            creator = shell_creators.get(kind, lambda: TypeDescriptor(name=name))
+            descriptor = creator()
             
         if descriptor:
             descriptor.is_user_defined = is_user_defined
+            # 注册以确保物理隔离（克隆）并绑定注册表上下文
             descriptor = self.registry.register(descriptor)
             
         self.memo[uid] = descriptor
@@ -118,17 +114,7 @@ class TypeHydrator:
             
         data = self.type_pool[uid]
         
-        if isinstance(descriptor, ListMetadata):
-            descriptor.element_type = self.hydrate(data.get("element_type_uid"))
-        elif isinstance(descriptor, DictMetadata):
-            descriptor.key_type = self.hydrate(data.get("key_type_uid"))
-            descriptor.value_type = self.hydrate(data.get("value_type_uid"))
-        elif isinstance(descriptor, FunctionMetadata):
-            param_uids = data.get("param_types_uids", [])
-            descriptor.param_types = [self.hydrate(p_uid) for p_uid in param_uids if p_uid]
-            descriptor.return_type = self.hydrate(data.get("return_type_uid"))
-        elif isinstance(descriptor, ClassMetadata):
-            # ClassMetadata 的 members 通常在运行时动态填充，或通过 symbol_pool 水化
-            pass
+        # [IES 2.1 Axiom-Driven] 使用重水化接口，消除硬编码 isinstance 检查
+        descriptor.rehydrate_fields(data, self)
             
         return descriptor

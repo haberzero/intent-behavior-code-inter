@@ -42,6 +42,12 @@ class IExecutionContext(Protocol):
     def symbol_pool(self) -> Mapping[str, Any]: ...
 
     @property
+    def scope_pool(self) -> Mapping[str, Any]: ...
+
+    @property
+    def type_pool(self) -> Mapping[str, Any]: ...
+
+    @property
     def asset_pool(self) -> Mapping[str, str]: ...
 
     @property
@@ -59,7 +65,7 @@ class IExecutionContext(Protocol):
     @property
     def strict_mode(self) -> bool: ...
 
-    def visit(self, node_uid: str) -> Any:
+    def visit(self, node_uid: str, module_name: Optional[str] = None) -> Any:
         """评估 AST 节点并返回 IbObject"""
         ...
 

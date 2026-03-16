@@ -2,6 +2,7 @@ from typing import List, Optional
 from core.compiler.lexer.tokens import Token, TokenType
 from core.domain import ast as ast
 from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.diagnostics.issue_tracker import IssueTracker
 
 class ParseControlFlowError(Exception):
     """Internal exception for parser synchronization control flow."""
@@ -15,7 +16,6 @@ class TokenStream:
     def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None):
         self.tokens = tokens
         self.current = 0
-        from core.compiler.diagnostics.issue_tracker import IssueTracker
         self.issue_tracker = issue_tracker or IssueTracker()
 
     def peek(self, offset: int = 0) -> Token:

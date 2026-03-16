@@ -2,7 +2,8 @@ import os
 import importlib.util
 from typing import Dict, List, Optional, Any
 from core.foundation.host_interface import HostInterface
-from core.domain.types.descriptors import ModuleMetadata as ModuleType
+from core.domain.types.descriptors import ModuleMetadata as ModuleType, TypeDescriptor
+from core.domain.symbols import SymbolFactory
 from core.runtime.enums import RegistrationState
 
 class ModuleDiscoveryService:
@@ -68,8 +69,6 @@ class ModuleDiscoveryService:
         if metadata:
             # [IES 2.1 Regularization] 符号化正规化：将成员描述符转换为符号对象
             # 确保 Metadata.members 存储的是 Symbol 而非原始 Descriptor
-            from core.domain.symbols import SymbolFactory
-            from core.domain.types.descriptors import TypeDescriptor
             
             new_members = {}
             for name, member in metadata.members.items():

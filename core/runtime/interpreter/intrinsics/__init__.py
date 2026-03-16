@@ -1,6 +1,10 @@
 from typing import Dict, Any, Callable, List, Optional
 from core.runtime.objects.kernel import IbNativeFunction, IbObject
 from core.foundation.registry import Registry
+from .io import register_io
+from .collection import register_collection
+from .conversion import register_conversion
+from .meta import register_meta
 
 class IntrinsicManager:
     """
@@ -47,10 +51,6 @@ class IntrinsicManager:
 
     def load_defaults(self, interpreter: Any):
         """加载标准内置函数"""
-        from .io import register_io
-        from .collection import register_collection
-        from .conversion import register_conversion
-        from .meta import register_meta
         
         register_io(self, interpreter)
         register_collection(self, interpreter)

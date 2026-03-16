@@ -2,6 +2,7 @@ import json
 import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.foundation.serialization import BaseFlatSerializer
+from core.foundation.interfaces import IExecutionContext
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl, ScopeImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
 from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
@@ -17,7 +18,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         self.runtime_scope_pool: Dict[str, Any] = {}
         self.memo: Dict[int, str] = {} # 记录已处理对象的 Python ID
 
-    def serialize_context(self, context: RuntimeContextImpl, include_static: bool = True) -> Dict[str, Any]:
+    def serialize_context(self, context: RuntimeContextImpl, include_static: bool = True, execution_context: Optional[IExecutionContext] = None) -> Dict[str, Any]:
         """序列化完整的运行时上下文"""
         # 1. 递归序列化作用域链 (从当前作用域向上)
         root_scope_uid = self._collect_runtime_scope(context.current_scope)
@@ -29,15 +30,15 @@ class RuntimeSerializer(BaseFlatSerializer):
             "assets": self.external_assets 
         }
         
-        # [IES 2.1] 如果需要，包含静态池以实现全量快照
-        if include_static and hasattr(context, '_interpreter') and context._interpreter:
-            itp = context._interpreter
-            pools["nodes"] = itp.node_pool
-            pools["symbols"] = itp.symbol_pool
-            pools["scopes"] = itp.scope_pool
+        # [IES 2.1] 如果提供，包含静态池以实现全量快照
+        if include_static and execution_context:
+            pools["nodes"] = execution_context.node_pool
+            pools["symbols"] = execution_context.symbol_pool
+            pools["scopes"] = execution_context.scope_pool
+            pools["types"] = execution_context.type_pool
             # [IES 2.2] 合并现有的资产池
-            if hasattr(itp, 'asset_pool'):
-                self.external_assets.update(itp.asset_pool)
+            if hasattr(execution_context, 'asset_pool'):
+                self.external_assets.update(execution_context.asset_pool)
             
         return {
             "version": "2.0",

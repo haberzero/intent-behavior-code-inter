@@ -13,6 +13,9 @@
 - **[Sealed] 预水合机制 (Pre-hydration)**
   - **完成情况**: 100%
   - **完成原因**: `ArtifactLoader` 已实现在 `STAGE 5` 阶段自动扫描产物池，并预先实例化用户定义的类实体，确保在执行前类型系统已闭合。
+- **[Axiom] 统一类型系统公理化 (Axiom-based UTS)**
+  - **完成情况**: 100%
+  - **完成原因**: `TypeDescriptor` 已全面接入公理系统。所有类型行为（如赋值、调用、运算符）均由 `_axiom` 接口驱动，实现了元数据与逻辑行为的解耦。
 
 ## 2. 架构解耦与安全性 (Architectural Decoupling)
 
@@ -34,9 +37,18 @@
 - **[Sealed] Registry 封印加固 (Phase 2.2)**
   - **完成情况**: 100%
   - **完成原因**: 在 `IbClass` 中实现了 `register_method` 和 `register_field` 的封印检查。在 `Registry` 中对 `create_subclass` 和 `set_execution_context` 实施了状态校验。
-- **[Arch] 内置类型实现映射下沉 (Phase 2.1)**
+- **[Arch] 作用域判定元数据化 (Phase 3.2)**
   - **完成情况**: 100%
-  - **完成原因**: 引入了 `type_registry.py` 装饰器机制。内置类型的实现类（如 `IbInteger`）现在自注册，消除了 `builtin_initializer.py` 中的硬编码映射表。
+  - **完成原因**: 实现了 `SemanticAnalyzer` 自动标记 `_is_scope`。解释器 `_is_scope_defining` 现完全依赖元数据，删除了硬编码节点列表。
+- **[Sealed] STAGE 6 深度契约校验 (Phase 3.1)**
+  - **完成情况**: 100%
+  - **完成原因**: 在 `IbClassDef` 访问器中启用了方法签名和参数一致性校验。
+- **[Arch] 类字段延迟评估与预求值 (Phase 3.4)**
+  - **完成情况**: 100%
+  - **完成原因**: 引入了 `STAGE 5.5: PRE_EVAL` 预评估阶段，修复了复杂表达式在加载期丢失值的问题，同时保留了实例化时的 JIT 求值能力。
+- **[Arch] 全量局部导入清理 (Phase 3.3)**
+  - **完成情况**: 100%
+  - **完成原因**: 清理了 `declaration.py`、`service.py` 和 `stmt_handler.py` 中的所有非法局部导入。
 
 ## 3. 审计缺陷修复 (Audit Fixes)
 

@@ -22,7 +22,15 @@ class TypeComponent(BaseComponent):
                 base_type = self._loc(ast.IbAttribute(value=base_type, attr=member_token.value, ctx='Load'), dot_token)
                 
         elif self.stream.match(TokenType.CALLABLE):
-            base_type = self._loc(ast.IbName(id='callable', ctx='Load'), self.stream.previous())
+            token = self.stream.previous()
+            # [IES 2.1 Axiom] 从元数据注册表解析 'callable' 标识符，消除硬编码
+            callable_name = "callable"
+            if self.context.metadata:
+                callable_desc = self.context.metadata.resolve("callable")
+                if callable_desc:
+                    callable_name = callable_desc.name
+            
+            base_type = self._loc(ast.IbName(id=callable_name, ctx='Load'), token)
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
 

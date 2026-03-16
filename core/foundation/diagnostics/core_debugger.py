@@ -1,5 +1,6 @@
 import os
 import json
+import pprint
 from enum import IntEnum
 from typing import Any, Dict, Optional, Set
 
@@ -130,7 +131,6 @@ class CoreDebugger:
             
             if data is not None and target_level >= DebugLevel.DATA:
                 try:
-                    import pprint
                     formatted_data = pprint.pformat(data, indent=2, width=120)
                     # 数据部分也跟随缩进
                     data_lines = formatted_data.splitlines()

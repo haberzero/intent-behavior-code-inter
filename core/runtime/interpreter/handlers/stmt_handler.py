@@ -337,9 +337,8 @@ class StmtHandler(BaseHandler):
                     # 简单校验参数数量 (注意：self 在运行时会被处理，此处校验声明的一致性)
                     expected_count = len(method_obj.descriptor.params) if hasattr(method_obj.descriptor, 'params') else -1
                     if expected_count != -1 and len(params) != expected_count:
-                         # 允许微调（例如 optional params），但此处作为演示先执行严格相等校验
-                         # raise self.report_error(f"Contract Mismatch: Method '{method_name}' parameter count mismatch. AST: {len(params)}, Descriptor: {expected_count}", stmt_uid)
-                         pass
+                         # [IES 2.1 Final Audit] 强制执行严格契约校验
+                         raise self.report_error(f"Contract Mismatch: Method '{method_name}' of class '{name}' parameter count mismatch. AST: {len(params)}, Descriptor: {expected_count}", stmt_uid)
 
         # 绑定到当前作用域 (作为常量类)
         return self.registry.get_none()
@@ -369,11 +368,10 @@ class StmtHandler(BaseHandler):
         if not intent_data:
             raise self.report_error("Invalid intent metadata: Intent must be a structured IbIntentInfo node.")
             
-        # [IES 2.1 Factory] 统一使用工厂方法构造
-        intent = IbIntent.from_node_data(
+        # [IES 2.1 Factory] 统一使用工厂方法构造，消除局部 import 和具体类依赖
+        intent = self.execution_context.factory.create_intent_from_node(
             intent_uid, 
             intent_data, 
-            self.registry.get_class("Intent"),
             role=IntentRole.BLOCK
         )
             

@@ -5,34 +5,36 @@
 ## 1. 架构违规与“不可容忍”项 (Critical)
 
 ### **1.1 局部 Import 规避循环引用 (Architecture Compromise)**
-在核心逻辑路径中发现多处局部 `import`，这表明架构尚未完全闭合：
-- **[declaration.py:L265-266]**: `from core.compiler.lexer.lexer import Lexer` (用于解析内嵌表达式)。
-- **[service.py:L103]**: `from core.runtime.objects.kernel import IbObject, IbNativeObject` (用于环境重绑定)。
-- **[DONE]** 已清理 `stmt_handler.py` 和 `kernel.py` 中的关键局部导入。
+- **[DONE]** 已全量清理 `stmt_handler.py`、`kernel.py`、`declaration.py` 和 `service.py` 中的关键局部导入。
+- **[NEW AUDIT]** 全量扫描发现仍然有部分和架构演进阵痛高度相关的局部依赖，它们会随着架构演进逐渐被修复/变成可以无痛迁移至文件顶部的import
 
 ### **1.2 穿透禁令审计 (Penetration Audit)**
 - **任务**: 进行全量 Grep 检查，严禁出现 `context.interpreter` 或 `context.runtime_context.registry` 等违规链条。
+- **[DONE]** 发现 `Interpreter._setup_context` 显式将 `self` 注入 `RuntimeContext._interpreter` ([interpreter.py:L397-404](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/interpreter/interpreter.py#L397-404))。已重构为通过 `ExecutionContext` 传递池引用。
+- **[DONE]** `RuntimeContextImpl` 暴露了 `registry` 属性 ([runtime_context.py:L423-424](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/interpreter/runtime_context.py#L423-424))。已移除该公开属性。
+- **[DONE]** `RuntimeHostService` 直接跨实例操作子解释器的 `runtime_context` 内部属性 ([service.py:L149-150](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/host/service.py#L149-150))。已重构为使用 `sync_state` 接口。
 - **风险**: 穿透调用会破坏组合解耦的物理隔离。
 
 ## 2. 逻辑完备性与执行时序 (High)
 
-### **2.1 类字段初始化求值盲区 (Evaluation Gap)**
-- **问题**: `_hydrate_user_classes` 在 STAGE 5 执行，此时环境尚未闭合，无法评估非字面量表达式（如 `int x = a + b`），导致类字段变为 `None`。
-- **任务**: 重构实例化逻辑，在解释器环境就绪后的预评估阶段或实例化时按需求值。
+### **2.1 [DONE] 类字段初始化求值盲区 (Evaluation Gap)**
+- **[DONE]** 已实现 `STAGE 5.5: PRE_EVAL` 预评估阶段。
+- **[IES 2.1 REFACTOR]** 已将原始的 `(uid, value)` 元组黑盒重构为正式的 `IbDeferredField` 描述符。
+- **[FIX]** 修复了预评估阶段缺失模块上下文的问题，现在支持基于定义模块（Lexical Scope）的延迟求值。
+- **[FIX]** 实现了实例化时的 JIT 缓存机制，避免重复求值。
 
-### **2.2 STAGE 6 深度契约校验 (Verification)**
-- **任务**: 实现方法签名、参数数量及类型的静态一致性验证。
-- **风险**: 缺乏深度校验会导致执行期抛出难以追踪的 `AttributeError` 或类型错误。
+### **2.2 [DONE] STAGE 6 深度契约校验 (Verification)**
 
 ### **2.3 内置符号冲突校验 (Symbols)**
 - **任务**: 在 `SymbolTable.define` 中增加对内置符号覆盖时的类型一致性检查。
 - **风险**: 同名但不同类型的内置符号冲突会导致不可预知的解析结果。
 
+### **2.4 [DONE] 意图捕获逻辑实现**
+- **任务**: 实现 `Interpreter.get_captured_intents` ([interpreter.py:L66](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/interpreter/interpreter.py#L66))。已实现针对 `IbBehavior` 的意图捕获。
+
 ## 3. 技术债清理与硬编码移除 (Medium)
 
-### **3.1 元数据驱动作用域判定 (Metadata-Driven Scope)**
-- **问题**: `_is_scope_defining` 中的节点类型列表仍属于硬编码。
-- **对策**: 将该属性下沉至 AST 定义或 `TypeDescriptor` 中，通过标记 `_is_scope: true` 来驱动压栈。
+### **3.1 [DONE] 元数据驱动作用域判定 (Metadata-Driven Scope)**
 
 ### **3.2 调试逻辑与池化校验下沉 (Clean)**
 - **任务**: 将 `interpreter.py` 中的池化校验（L592-607）迁移至 `ReadOnlyNodePool`。
@@ -40,28 +42,33 @@
 
 ### **3.3 Legacy 模式与伪装层移除 (Clean)**
 - **任务**: 清理 `discovery.py` 中对无 spec 模块的冗余兼容逻辑。
-- **任务**: 在 UTS 完全接管后，移除描述符中的 `type_info` 兼容属性（`descriptors.py#L73-78`）。
+- **[DONE]** 已在 `discovery.py` 中实现 Fail-fast 加载机制。
+- **[DONE]** 已在 UTS 完全接管后，移除描述符中的 `type_info` 兼容属性。
+- **任务**: 清理 `type_hydrator.py` 中硬编码的 `"StaticType"` 字符串 fallback。
+
+### **3.4 [DONE] llm_fallback 逻辑重构**
+- **任务**: 将 `BaseHandler._with_llm_fallback` 逻辑进行专业化重构，针对不同 AST 节点（如 `IbIf`, `IbWhile`）提供差异化的意图注入和重试策略，消除目前的通用化膨胀。
 
 ## 4. 深度审计清单遗留项 (Audit Findings)
 
-- **[Audit Item 13]**: `discovery.py#L48-50` 违规操作。契约加载失败仅 print 跳过，违反了“Fail-fast”原则。
-- **[Audit Item 14]**: `stmt_handler.py#L321-324` STAGE 6 模式下缺乏深度契约校验。
-- **[Audit Item 15]**: `stmt_handler.py#L324-333` 保留动态回退逻辑，属于为“绕过封印非法执行”留下的技术后门。
+- **[DONE] [Audit Item 13]**: `discovery.py` 契约加载失败已改为 Fail-fast 抛出异常。
+- **[DONE] [Audit Item 14]**: `stmt_handler.py` 已实现 STAGE 6 模式下的深度契约校验。
+- **[DONE] [Audit Item 15]**: `stmt_handler.py` 已移除动态回退逻辑，强制执行预水化检查。
 
 ## 5. 发现的新问题 (New Findings)
 
-- **llm_fallback 逻辑膨胀**: `BaseHandler` 中的 `_with_llm_fallback` 逻辑过于泛化，缺乏针对不同节点的差异化处理。
+- **[DONE] llm_fallback 逻辑膨胀**: `BaseHandler` 中的 `_with_llm_fallback` 逻辑过于泛化，缺乏针对不同节点的差异化处理。
 - **资产加载安全性**: 缺乏对外部 Prompt 资产的哈希指纹（SHA-256）校验。
-- **TODO 标记**:
-  - `interpreter.py:L66`: `# TODO: 适配新的意图捕获逻辑`
+- **[DONE] TODO 标记**:
+  - `interpreter.py:L66`: `# TODO: 适配新的意图捕获逻辑` (已记录在 2.4 节)
+- **[DONE] 跨组件反向污染**: `Interpreter` 实例被注入到 `RuntimeContext` 中，导致数据层持有逻辑层引用。
+- **[PARTIAL] 局部导入残留**: 虽然核心局部导入已清理，但在 `factory.py`、`runtime_context.py` 和 `parser.py` 中仍存在用于打破硬性循环引用的局部导入，需评估是否可通过工厂模式进一步消除。
 
 ## 6. 深度治理执行路线图 (Detailed Execution Roadmap)
 
 ### **Phase 3: 执行细节修复与技术债清理 (Execution Level)**
 *   **目标**: 解决具体的功能性缺陷和时序问题。
-*   **3.1 类字段延迟评估 (Late Evaluation)**:
-    *   在 `Interpreter.run()` 启动前，增加 `STAGE 5.5: PRE_EVAL` 阶段。
-    *   遍历所有用户类，对 `default_fields` 中非字面量节点进行求值并更新快照。
+*   **3.1 [DONE] 类字段延迟评估 (Late Evaluation)**
 *   **3.2 深度契约校验实施**:
     *   在 `IbClassDef` 访问器中，对比 `node_data` 定义的方法与 `Registry` 中注册的描述符。
     *   校验参数个数、位置及默认值占位符。

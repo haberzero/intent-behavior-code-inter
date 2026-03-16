@@ -14,7 +14,27 @@ if TYPE_CHECKING:
 
 # [Axiom Layer] 原子类型公理实现
 
-class IntAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapability):
+class BaseAxiom(TypeAxiom):
+    """公理基类，提供默认实现"""
+    def is_dynamic(self) -> bool: return False
+    def is_class(self) -> bool: return False
+    def is_module(self) -> bool: return False
+    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+        return other._axiom and type(other._axiom) is type(self)
+    
+    def get_parent_axiom_name(self) -> Optional[str]: return "Object" # 默认继承自 Object
+    
+    def get_writable_trait(self) -> Optional['WritableTrait']: return None
+    
+    def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
+        # 默认不支持特化，返回自身（原子类型）
+        return registry.resolve(self.name)
+
+    def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
+        # 默认没有特殊提示
+        return None
+
+class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
     """int 类型的行为公理"""
     
     @property
@@ -30,8 +50,6 @@ class IntAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapabil
             "to_list": FunctionMetadata(name="to_list", param_types=[], return_type=ListMetadata(element_type=INT_DESCRIPTOR)),
             "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
         }
-
-    def is_dynamic(self) -> bool: return False
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         # [Strict Axiom] 仅依赖公理定义
@@ -63,7 +81,7 @@ class IntAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapabil
         return other._axiom and isinstance(other._axiom, IntAxiom)
 
 
-class FloatAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapability):
+class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
     """float 类型的行为公理"""
     
     @property
@@ -78,8 +96,6 @@ class FloatAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapab
             "to_bool": FunctionMetadata(name="to_bool", param_types=[], return_type=BOOL_DESCRIPTOR),
             "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
         }
-
-    def is_dynamic(self) -> bool: return False
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('+', '-', '*', '/', '//', '%'):
@@ -105,11 +121,13 @@ class FloatAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapab
         return other._axiom and isinstance(other._axiom, FloatAxiom)
 
 
-class BoolAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapability):
+class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
     """bool 类型的行为公理"""
     
     @property
     def name(self) -> str: return "bool"
+    
+    def get_parent_axiom_name(self) -> Optional[str]: return "int"
     
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
@@ -117,8 +135,6 @@ class BoolAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapabi
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {} # No specific methods for bool yet
-
-    def is_dynamic(self) -> bool: return False
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('&', '|', '^', 'and', 'or'):
@@ -147,11 +163,16 @@ class BoolAxiom(TypeAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         return other._axiom and isinstance(other._axiom, BoolAxiom)
 
 
-class StrAxiom(TypeAxiom, OperatorCapability, IterCapability, SubscriptCapability, ParserCapability):
+class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapability, ParserCapability):
     """str 类型的行为公理"""
     
     @property
     def name(self) -> str: return "str"
+    
+    def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
+        if other.name == "int":
+            return "Use .cast_to(int) or int(s) to convert string to integer."
+        return None
     
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_iter_capability(self) -> Optional[IterCapability]: return self
@@ -164,8 +185,6 @@ class StrAxiom(TypeAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
             "to_bool": FunctionMetadata(name="to_bool", param_types=[], return_type=BOOL_DESCRIPTOR),
             "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
         }
-
-    def is_dynamic(self) -> bool: return False
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op == '+':
@@ -197,12 +216,17 @@ class StrAxiom(TypeAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         return other._axiom and isinstance(other._axiom, StrAxiom)
 
 
-class ListAxiom(TypeAxiom, IterCapability, SubscriptCapability, ParserCapability):
+class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability):
     """list 类型的行为公理"""
     
     @property
     def name(self) -> str: return "list"
-
+    
+    def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
+        if other.name == "str":
+            return "Did you forget to join the list into a string?"
+        return None
+    
     def get_iter_capability(self) -> Optional[IterCapability]: return self
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
@@ -218,12 +242,17 @@ class ListAxiom(TypeAxiom, IterCapability, SubscriptCapability, ParserCapability
             "__setitem__": FunctionMetadata(name="__setitem__", param_types=[INT_DESCRIPTOR, ANY_DESCRIPTOR], return_type=VOID_DESCRIPTOR)
         }
 
-    def is_dynamic(self) -> bool: return False
-
     def get_element_type(self) -> 'TypeDescriptor':
         # 泛型 List 的元素类型由 Descriptor 实例持有，Axiom 仅定义行为
         # 在这里返回 None 表示由 Descriptor 进一步处理，或者 Axiom 不知道具体类型
         return None 
+
+    def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
+        """[IES 2.1 Axiom-Driven] 实现列表泛型特化"""
+        element_type = args[0] if args else ANY_DESCRIPTOR
+        desc = registry.factory.create_list(element_type)
+        registry.register(desc)
+        return desc
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         if key._axiom and isinstance(key._axiom, IntAxiom):
@@ -248,7 +277,7 @@ class ListAxiom(TypeAxiom, IterCapability, SubscriptCapability, ParserCapability
         return other._axiom and isinstance(other._axiom, ListAxiom)
 
 
-class DictAxiom(TypeAxiom, IterCapability, SubscriptCapability, ParserCapability):
+class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability):
     """dict 类型的行为公理"""
     
     @property
@@ -268,10 +297,16 @@ class DictAxiom(TypeAxiom, IterCapability, SubscriptCapability, ParserCapability
             "__setitem__": FunctionMetadata(name="__setitem__", param_types=[ANY_DESCRIPTOR, ANY_DESCRIPTOR], return_type=VOID_DESCRIPTOR)
         }
 
-    def is_dynamic(self) -> bool: return False
-
     def get_element_type(self) -> 'TypeDescriptor':
         return None # Keys
+
+    def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
+        """[IES 2.1 Axiom-Driven] 实现字典泛型特化"""
+        key_type = args[0] if len(args) > 0 else ANY_DESCRIPTOR
+        val_type = args[1] if len(args) > 1 else ANY_DESCRIPTOR
+        desc = registry.factory.create_dict(key_type, val_type)
+        registry.register(desc)
+        return desc
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         return None # Values
@@ -294,7 +329,7 @@ class DictAxiom(TypeAxiom, IterCapability, SubscriptCapability, ParserCapability
         return other._axiom and isinstance(other._axiom, DictAxiom)
 
 
-class DynamicAxiom(TypeAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability):
+class DynamicAxiom(BaseAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability):
     """Any/var 类型的行为公理 (The Top Type)"""
     
     def __init__(self, name: str):
@@ -328,26 +363,32 @@ class DynamicAxiom(TypeAxiom, CallCapability, IterCapability, SubscriptCapabilit
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return True # 动态类型兼容一切
 
-class ExceptionAxiom(TypeAxiom):
+class ExceptionAxiom(BaseAxiom):
     """Exception 类型的行为公理"""
     
     @property
     def name(self) -> str: return "Exception"
     
-    # 异常通常不需要特殊的操作符或转换能力，但在 catch 块中需要作为类型存在
-    def get_call_capability(self) -> Optional[CallCapability]: return None
-    def get_iter_capability(self) -> Optional[IterCapability]: return None
-    def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return None
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return None
-    def get_parser_capability(self) -> Optional[ParserCapability]: return None
-
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
-            "__str__": FunctionMetadata(name="__str__", param_types=[], return_type=STR_DESCRIPTOR)
+            "message": FunctionMetadata(name="message", param_types=[], return_type=STR_DESCRIPTOR)
         }
 
-    def is_dynamic(self) -> bool: return False
+class BoundMethodAxiom(BaseAxiom, CallCapability):
+    """[IES 2.1] bound_method 类型的行为公理"""
+    
+    @property
+    def name(self) -> str: return "bound_method"
+    
+    def get_parent_axiom_name(self) -> Optional[str]: return "callable"
+    
+    def get_call_capability(self) -> Optional[CallCapability]: return self
+    
+    def get_methods(self) -> Dict[str, FunctionMetadata]:
+        return {} # Delegated to original function
+
+    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+        return ANY_DESCRIPTOR
 
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         # 异常兼容性：子类异常兼容父类 (这里简化处理，认为 Exception 兼容所有 Exception 及其子类)
@@ -363,11 +404,12 @@ def register_core_axioms(registry: 'AxiomRegistry'):
     registry.register(StrAxiom())
     registry.register(ListAxiom())
     registry.register(DictAxiom())
+    registry.register(ExceptionAxiom())
+    registry.register(BoundMethodAxiom())
+    
     registry.register(DynamicAxiom("Any"))
     registry.register(DynamicAxiom("var"))
     registry.register(DynamicAxiom("callable"))
     registry.register(DynamicAxiom("None"))
     registry.register(DynamicAxiom("void"))
     registry.register(DynamicAxiom("behavior"))
-    registry.register(DynamicAxiom("bound_method"))
-    registry.register(ExceptionAxiom())

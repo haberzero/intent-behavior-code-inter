@@ -1,5 +1,7 @@
 from typing import List, Optional, Union, TYPE_CHECKING
-from core.compiler.lexer.tokens import TokenType
+from core.compiler.lexer.tokens import TokenType, Token
+from core.compiler.lexer.lexer import Lexer
+from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStream
 from core.domain import ast as ast
 from core.domain.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
@@ -102,8 +104,15 @@ class DeclarationComponent(BaseComponent):
         if explicit_var:
             # 'var' keyword already consumed
             type_token = self.stream.previous()
-            # Default type is 'var' (Any)
-            type_annotation = self._loc(ast.IbName(id='var', ctx='Load'), type_token)
+            
+            # [IES 2.1 Axiom] 从元数据注册表解析 'var' 标识符，消除硬编码
+            var_name = "var"
+            if self.context.metadata:
+                var_desc = self.context.metadata.resolve("var")
+                if var_desc:
+                    var_name = var_desc.name
+            
+            type_annotation = self._loc(ast.IbName(id=var_name, ctx='Load'), type_token)
             
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
             
@@ -262,9 +271,6 @@ class DeclarationComponent(BaseComponent):
                 expr_str = full_name[3:-2] # Strip $__ and __
                 
                 # Use a temporary token stream to parse the internal expression
-                from core.compiler.lexer.lexer import Lexer
-                from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStream
-                
                 sub_lexer = Lexer(expr_str)
                 sub_tokens = sub_lexer.tokenize()
                 if sub_tokens and sub_tokens[-1].type == TokenType.EOF:

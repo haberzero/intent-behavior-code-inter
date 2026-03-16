@@ -122,7 +122,10 @@ class TestComprehensiveInterpreter(BaseIBCTest):
         
         ctx = self.engine.interpreter.runtime_context
         serializer = RuntimeSerializer(self.engine.registry)
-        data = serializer.serialize_context(ctx)
+        data = serializer.serialize_context(
+            ctx, 
+            execution_context=self.engine.interpreter.execution_context
+        )
         
         # 验证序列化数据中包含两个实例
         self.assertTrue(len(data["pools"]["instances"]) >= 2)

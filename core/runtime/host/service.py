@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, List, TYPE_CHECKING, Callable
 import os
 import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
-from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp
+from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject
 from core.foundation.host_interface import HostInterface
 from core.foundation.interfaces import IExecutionContext
 from core.foundation.registry import Registry
@@ -38,7 +38,10 @@ class HostService(IHostService):
         """深度序列化当前运行时上下文并保存到磁盘"""
         self.sync() # 必须先同步
         serializer = RuntimeSerializer(self.registry)
-        data = serializer.serialize_context(self.execution_context.runtime_context)
+        data = serializer.serialize_context(
+            self.execution_context.runtime_context, 
+            execution_context=self.execution_context
+        )
         
         abs_path = os.path.abspath(path)
         base_dir = os.path.dirname(abs_path)
@@ -89,7 +92,10 @@ class HostService(IHostService):
     def snapshot(self) -> Dict[str, Any]:
         """内存快照原语"""
         serializer = RuntimeSerializer(self.registry)
-        snapshot = serializer.serialize_context(self.execution_context.runtime_context)
+        snapshot = serializer.serialize_context(
+            self.execution_context.runtime_context, 
+            execution_context=self.execution_context
+        )
         return snapshot
 
     def _rebind_environment(self, context: Any, deserializer: Optional[Any] = None):
@@ -100,12 +106,15 @@ class HostService(IHostService):
         self.setup_context_callback(context, force=True, deserializer=deserializer)
         
         # 2. 重新注入原生插件 (Native Plugins)
-        from core.runtime.objects.kernel import IbObject, IbNativeObject
         for name in self.interop.host_interface.get_all_module_names():
             pkg = self.interop.get_package(name)
             if pkg:
-                if not isinstance(pkg, IbObject):
-                    pkg_obj = IbNativeObject(pkg, self.registry.get_class("Object"))
+                if not isinstance(pkg, IIbObject):
+                    # [IES 2.1 Factory] 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
+                    pkg_obj = self.execution_context.factory.create_native_object(
+                        pkg, 
+                        self.registry.get_class("Object")
+                    )
                 else:
                     pkg_obj = pkg
                 # [IES 2.0 Privileged] 强制覆盖常量符号
@@ -115,7 +124,10 @@ class HostService(IHostService):
         """通过协调器工厂开启隔离的解释器子运行环境"""
         # 1. 自动快照（用于 Snapshot-Try-Restore 事务模型）
         serializer = RuntimeSerializer(self.registry)
-        snapshot = serializer.serialize_context(self.execution_context.runtime_context)
+        snapshot = serializer.serialize_context(
+            self.execution_context.runtime_context, 
+            execution_context=self.execution_context
+        )
         
         try:
             abs_path = os.path.abspath(path)
@@ -142,9 +154,8 @@ class HostService(IHostService):
                 parent_context=self.execution_context.runtime_context
             )
             
-            # 4. 状态继承逻辑
-            if policy.get("inherit_intents", False):
-                sub_interpreter.runtime_context.intent_stack = self.execution_context.runtime_context.intent_stack
+            # 4. 状态继承逻辑 (使用正式的 sync_state 接口，严禁穿透操作 runtime_context)
+            sub_interpreter.sync_state(self.execution_context.runtime_context, policy)
             
             # 5. 执行
             return sub_interpreter.run()

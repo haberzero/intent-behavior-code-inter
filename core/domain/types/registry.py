@@ -122,6 +122,15 @@ class MetadataRegistry:
         key = f"{module_path}.{name}" if module_path else name
         return self._descriptors.get(key)
         
+    def resolve_from_value(self, value: Any) -> Optional[TypeDescriptor]:
+        """[IES 2.1] 根据 Python 原生值解析对应的 UTS 描述符"""
+        if isinstance(value, bool): return self.resolve("bool")
+        if isinstance(value, int): return self.resolve("int")
+        if isinstance(value, float): return self.resolve("float")
+        if isinstance(value, str): return self.resolve("str")
+        if value is None: return self.resolve("void")
+        return None
+
     def get_axiom_registry(self) -> Optional['AxiomRegistry']:
         return self._axiom_registry
 

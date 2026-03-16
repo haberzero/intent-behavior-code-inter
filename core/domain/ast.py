@@ -293,7 +293,7 @@ class IbIfExp(IbExpr):
 @dataclass(kw_only=True, eq=False)
 class IbCastExpr(IbExpr):
     """类型转换表达式包装节点 (e.g., (int) expr)"""
-    type_name: str
+    type_annotation: IbExpr  # IbName or IbSubscript (Generic)
     value: IbExpr
 
 @dataclass(kw_only=True, eq=False)

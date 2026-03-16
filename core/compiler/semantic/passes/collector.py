@@ -188,8 +188,8 @@ class LocalSymbolCollector:
             # [LIFECYCLE] 符号生命周期管理
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
-            # 如果现有符号是 Any/var 占位符，允许覆盖
-            if existing and (not existing.descriptor or existing.descriptor.name in ("Any", "var")):
+            # [IES 2.1 Axiom] 如果现有符号是 Any/var 占位符，允许覆盖，消除名称硬编码
+            if existing and (not existing.descriptor or existing.descriptor.is_dynamic()):
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
@@ -220,7 +220,8 @@ class LocalSymbolCollector:
             if is_explicit:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
-                if existing and existing.descriptor and existing.descriptor.name not in ("Any", "var"):
+                # [IES 2.1 Axiom] 使用 is_dynamic 判定，消除硬编码
+                if existing and existing.descriptor and not existing.descriptor.is_dynamic():
                     continue
 
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=declared_type, def_node=node)

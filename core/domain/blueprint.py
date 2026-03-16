@@ -16,6 +16,7 @@ class CompilationResult:
     node_to_type: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Type name
     node_is_deferred: Dict[ast_domain.IbASTNode, bool] = field(default_factory=dict) # Node object -> bool
     node_intents: Dict[ast_domain.IbASTNode, List[ast_domain.IbIntentInfo]] = field(default_factory=dict) # Node object -> List of IntentInfo
+    node_to_loc: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Location info
     
     @property
     def has_errors(self) -> bool:

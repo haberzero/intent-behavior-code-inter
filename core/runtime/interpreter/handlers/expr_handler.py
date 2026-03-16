@@ -200,11 +200,21 @@ class ExprHandler(BaseHandler):
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""
         value = self.visit(node_data.get("value"))
-        target_type_name = node_data.get("type_name")
         
-        # [IES 2.0] 调用目标类的 cast_to 协议
-        target_class = self.registry.get_class(target_type_name)
+        # [IES 2.1 Refactor] 优先从 side_tables 获取决议后的目标描述符，消除名称硬编码
+        target_descriptor = self.get_side_table("node_to_type", node_uid)
+        if not target_descriptor:
+            # 回退到名称查找 (兼容旧产物)
+            target_type_name = node_data.get("type_name")
+            if target_type_name:
+                target_descriptor = self.registry.get_metadata_registry().resolve(target_type_name)
+            
+        if not target_descriptor:
+            return value
+            
+        # 寻找对应的 IbClass (基于 UTS 唯一标识)
+        target_class = self.registry.get_class(target_descriptor.name)
         if not target_class:
-            return value # 如果类型未定义，回退为 no-op
+            return value
             
         return value.receive('cast_to', [target_class])

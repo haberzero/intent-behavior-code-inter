@@ -5,29 +5,7 @@ from core.domain.types import (
     ModuleMetadata, FunctionMetadata
 )
 
-class MetadataRegistry:
-    """
-    只负责管理 TypeDescriptor 的注册表。
-    供编译器（Compiler）使用，完全脱离运行时实现。
-    """
-    def __init__(self):
-        self._module_metadata: Dict[str, ModuleMetadata] = {}
-        self._global_functions: Dict[str, FunctionMetadata] = {}
-
-    def register_module(self, name: str, metadata: ModuleMetadata):
-        self._module_metadata[name] = metadata
-
-    def register_global_function(self, name: str, metadata: FunctionMetadata):
-        self._global_functions[name] = metadata
-
-    def get_module_metadata(self, name: str) -> Optional[ModuleMetadata]:
-        return self._module_metadata.get(name)
-
-    def get_global_functions(self) -> Dict[str, FunctionMetadata]:
-        return self._global_functions.copy()
-
-    def is_external_module(self, name: str) -> bool:
-        return name in self._module_metadata
+from core.domain.types.registry import MetadataRegistry
 
 class RuntimeRegistry:
     """
@@ -61,28 +39,36 @@ class HostInterface:
         self.runtime.register(name, implementation)
         if metadata:
             self._module_metadata_map[name] = metadata
-            self.metadata.register_module(name, metadata)
+            self.metadata.register(metadata)
         else:
             # 警告：缺少显式元数据。在彻底脱离解释器的目标下，编译器不应依赖此处的逻辑。
             # 这里可以保留一个极简的占位符元数据，但不建议使用。
-            self.metadata.register_module(name, ModuleMetadata(name=name))
+            self.metadata.register(ModuleMetadata(name=name))
 
     def register_global_function(self, name: str, implementation: Any, metadata: FunctionMetadata):
         self.runtime.register(name, implementation)
-        self.metadata.register_global_function(name, metadata)
+        self.metadata.register(metadata)
 
     # --- 兼容性接口 ---
     def is_external_module(self, name: str) -> bool:
-        return self.metadata.is_external_module(name)
+        # [IES 2.1 Refactor] 直接检查注册表是否存在该描述符
+        return self.metadata.resolve(name) is not None
 
     def get_module_type(self, name: str) -> Optional[ModuleMetadata]:
-        return self._module_metadata_map.get(name) or self.metadata.get_module_metadata(name)
+        # [IES 2.1 Refactor] 直接解析描述符并验证类型
+        if name in self._module_metadata_map:
+            return self._module_metadata_map[name]
+        
+        desc = self.metadata.resolve(name)
+        return desc if isinstance(desc, ModuleMetadata) else None
 
     def get_module_implementation(self, name: str) -> Optional[Any]:
         return self.runtime.get(name)
 
     def get_all_module_names(self) -> List[str]:
-        return list(self.metadata._module_metadata.keys())
+        # [IES 2.1 Refactor] 从注册表快照中提取模块名称
+        return [d.name for d in self.metadata.all_descriptors.values() if isinstance(d, ModuleMetadata)]
 
     def get_global_functions(self) -> Dict[str, FunctionMetadata]:
-        return self.metadata.get_global_functions()
+        # [IES 2.1 Refactor] 从注册表快照中提取全局函数
+        return {d.name: d for d in self.metadata.all_descriptors.values() if isinstance(d, FunctionMetadata)}

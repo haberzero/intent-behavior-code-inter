@@ -4,6 +4,7 @@ from core.domain import ast as ast
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 from core.compiler.parser.core.context import ParserContext
 from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.parser.components.expression import ExpressionComponent
 from core.compiler.parser.components.statement import StatementComponent
 from core.compiler.parser.components.declaration import DeclarationComponent
@@ -30,7 +31,6 @@ class Parser:
         # 1. Initialize Context
         # 直接使用 IssueTracker，它现在满足 DiagnosticReporter 协议
         if issue_tracker is None:
-            from core.compiler.diagnostics.issue_tracker import IssueTracker
             issue_tracker = IssueTracker()
             
         self.stream = TokenStream(tokens, issue_tracker)

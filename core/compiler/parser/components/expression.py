@@ -120,24 +120,31 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbConstant(value=self.stream.previous().value), self.stream.previous())
 
     def boolean(self) -> ast.IbExpr:
-        return self._loc(ast.IbConstant(value=self.stream.previous().value == 'True'), self.stream.previous())
+        token = self.stream.previous()
+        # [IES 2.1 Refactor] 使用 Token 类型判定内容
+        val = (token.value == "True")
+        return self._loc(ast.IbConstant(value=val), token)
 
     def none_expr(self) -> ast.IbExpr:
         return self._loc(ast.IbConstant(value=None), self.stream.previous())
 
     def grouping(self) -> ast.IbExpr:
-        # Check for Cast Expression: (Type) Expr
-        # Heuristic: (ID) followed by something that is not an operator
-        if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.RPAREN:
-            # Look ahead to see if it's followed by a unary expression start
-            # This is a bit tricky without a full recognizer here, but (ID) ID is a strong signal
-            next_after_rparen = self.stream.peek(2)
-            if next_after_rparen.type in (TokenType.IDENTIFIER, TokenType.NUMBER, TokenType.STRING, TokenType.LPAREN, TokenType.LBRACKET, TokenType.BEHAVIOR_MARKER):
-                type_token = self.stream.advance() # ID
-                self.stream.consume(TokenType.RPAREN, "Expect ')' after cast type.")
-                value = self.parse_precedence(IbPrecedence.UNARY)
-                return self._loc(ast.IbCastExpr(type_name=type_token.value, value=value), type_token)
-        
+        # [IES 2.1 Refactor] 增强 Cast 语法支持复杂类型 (如 (list[int]) x)
+        # 探测是否为类型转换：(Type) expr
+        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.VAR, TokenType.CALLABLE):
+            # 尝试推测性解析类型标注
+            checkpoint = self.stream.get_checkpoint()
+            try:
+                type_node = self.parser.type_parser.parse_type_annotation()
+                if self.stream.match(TokenType.RPAREN):
+                    # 确认为 Cast
+                    value = self.parse_precedence(IbPrecedence.UNARY)
+                    return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
+            except:
+                pass
+            # 失败则回滚，按普通表达式处理
+            self.stream.restore_checkpoint(checkpoint)
+
         expr = self.parse_expression()
         self.stream.consume(TokenType.RPAREN, "Expect ')' after expression.")
         return expr

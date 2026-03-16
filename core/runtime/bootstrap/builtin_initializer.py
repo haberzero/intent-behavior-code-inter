@@ -93,8 +93,10 @@ def initialize_builtin_classes(registry: Registry) -> Any:
             
         # 创建类
         parent = "Object"
-        if name == "bool": parent = "int" # 特殊继承关系
-        if name == "bound_method": parent = "callable"
+        axiom = desc._axiom if desc else None
+        if axiom:
+            # [IES 2.1 Axiom-Driven] 从公理中自动提取继承关系，消除硬编码判定
+            parent = axiom.get_parent_axiom_name() or "Object"
         
         ib_cls = registry.create_subclass(name, desc, parent_name=parent)
         ib_classes[name] = ib_cls

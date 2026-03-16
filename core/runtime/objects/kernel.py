@@ -206,6 +206,18 @@ class IbModule(IbObject):
     def __repr__(self):
         return f"<Module '{self.name}'>"
 
+class IbDeferredField:
+    """[IES 2.1 Stage 5.5] 延迟字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
+    def __init__(self, val_uid: str, static_val: Optional[IbObject] = None, module_name: Optional[str] = None):
+        self.val_uid = val_uid
+        self.static_val = static_val
+        self.module_name = module_name
+
+    def __repr__(self):
+        return f"<DeferredField {self.val_uid} (static={self.static_val})>"
+
+@register_ib_type("Type")
+@register_ib_type("Class")
 class IbClass(IbObject):
     """
     IBC-Inter 类对象 (元对象)。
@@ -260,25 +272,27 @@ class IbClass(IbObject):
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
         
-        # [IES 2.0] 延迟执行字段初始化 (Item 2.1 Audit)
-        # 如果字段是复杂表达式（存储为 (uid, static_val) 元组），在实例化时求值
+        # [IES 2.1 Refactor] 延迟执行字段初始化 (Item 2.1 Audit)
         for name, val_info in self.default_fields.items():
-            if isinstance(val_info, tuple) and len(val_info) == 2:
-                val_uid, static_val = val_info
-                if static_val is not None:
-                    # 简单常量快照直接复用
-                    instance.fields[name] = static_val
-                elif val_uid and context:
-                    # 复杂表达式通过执行上下文即时求值
+            if isinstance(val_info, IbDeferredField):
+                if val_info.static_val is not None:
+                    # 优先使用预评估好的快照
+                    instance.fields[name] = val_info.static_val
+                elif val_info.val_uid and context:
+                    # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
-                        instance.fields[name] = context.visit(val_uid)
+                        # [IES 2.1 Lexical Scope] 确保在定义该字段的模块上下文中进行求值
+                        evaluated = context.visit(val_info.val_uid, module_name=val_info.module_name)
+                        instance.fields[name] = evaluated
+                        # 如果是简单的纯函数或常量表达式，可以缓存到类描述符中
+                        # 这里我们激进一点，只要成功求值就缓存，除非用户显式要求 JIT
+                        val_info.static_val = evaluated
                     except Exception:
-                        # 如果求值失败，回退到 None
                         instance.fields[name] = self.registry.get_none()
                 else:
                     instance.fields[name] = self.registry.get_none()
             else:
-                # 兼容旧逻辑或已求值的对象
+                # 兼容旧逻辑或已装箱的对象
                 instance.fields[name] = val_info
         
         init_method = self.lookup_method('__init__')

@@ -80,20 +80,75 @@ class BaseHandler:
         return err
 
     def _with_llm_fallback(self, node_uid: str, node_data: Mapping[str, Any], action: Callable):
-        """LLM 容错机制的核心封装 (从 Interpreter 迁移至此以减少穿透)"""
-        while True:
-            try:
-                return action()
-            except LLMUncertaintyError:
-                fallback_body = node_data.get("llm_fallback", [])
-                if fallback_body:
-                    try:
-                        for stmt_uid in fallback_body:
-                            self.visit(stmt_uid)
-                        return self.registry.get_none()
-                    except RetryException:
+        """[IES 2.1 Specialized Refactor] 专业化 LLM 容错机制"""
+        node_type = node_data.get("_type")
+        retry_count = 0
+        pushed_intents = 0
+        
+        try:
+            while True:
+                try:
+                    return action()
+                except LLMUncertaintyError as e:
+                    retry_count += 1
+                    if retry_count > 3: # 防止无限重试
+                        raise e
+                    
+                    # 1. 优先执行 AST 中定义的显式 fallback 逻辑 (用户级容错)
+                    fallback_body = node_data.get("llm_fallback", [])
+                    if fallback_body:
+                        try:
+                            for stmt_uid in fallback_body:
+                                self.visit(stmt_uid)
+                            return self.registry.get_none()
+                        except RetryException:
+                            continue
+                    
+                    # 2. 专业化自动意图注入 (内核级容错)
+                    # 根据不同节点类型注入差异化的提示词，引导 LLM 消除歧义
+                    if self._apply_specialized_intent(node_type, node_data):
+                        pushed_intents += 1
+                        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
+                            f"LLM Uncertainty at {node_type}: Auto-injected specialized intent for retry #{retry_count}")
                         continue
-                raise
+                    
+                    # 如果没有 fallback 也没有专业化策略，则抛出原始错误
+                    raise e
+        finally:
+            # [IES 2.1 Security] 自动清理内核注入的意图栈，保持环境纯净
+            for _ in range(pushed_intents):
+                self.runtime_context.pop_intent()
+
+    def _apply_specialized_intent(self, node_type: str, node_data: Mapping[str, Any]) -> bool:
+        """针对特定节点的差异化意图策略"""
+        if node_type == "IbIf":
+            self.runtime_context.push_intent(
+                "此处的逻辑判断存在歧义。请严格基于事实，返回 1 (条件成立) 或 0 (条件不成立)。", 
+                tag="AUTO_RETRY"
+            )
+            return True
+        elif node_type == "IbWhile":
+            self.runtime_context.push_intent(
+                "循环条件判断模糊。请确认当前任务是否已完成：返回 0 表示完成（跳出循环），返回 1 表示继续。", 
+                tag="AUTO_RETRY"
+            )
+            return True
+        elif node_type == "IbExprStmt":
+            # 行为描述行执行失败，可能需要更清晰的指令
+            self.runtime_context.push_intent(
+                "当前行为描述执行失败或结果不明确。请尝试以更直接、更具确定性的方式重新执行。", 
+                tag="AUTO_RETRY"
+            )
+            return True
+        elif node_type == "IbAssign":
+            # 赋值时的语义解析失败
+            self.runtime_context.push_intent(
+                "目标值计算模糊。请确保返回的内容能被清晰地识别并赋值给变量。", 
+                tag="AUTO_RETRY"
+            )
+            return True
+            
+        return False
 
     def _execute_behavior(self, behavior: IbObject) -> IbObject:
         """

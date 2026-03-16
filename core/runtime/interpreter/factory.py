@@ -6,7 +6,7 @@ from core.foundation.registry import Registry
 from .runtime_context import ScopeImpl
 from core.runtime.objects.kernel import IbModule, IbNativeObject
 from core.runtime.objects.builtins import IbBehavior, IbList
-from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 
 class RuntimeObjectFactory(IObjectFactory):
     """
@@ -32,7 +32,6 @@ class RuntimeObjectFactory(IObjectFactory):
         return IbList(elements, ib_class=self._registry.get_class("list"))
 
     def create_intent(self, content: str = "", mode: Any = None, tag: Optional[str] = None, role: Any = None) -> IIbIntent:
-        from core.domain.intent_logic import IntentMode, IntentRole
         return IbIntent(
             ib_class=self._registry.get_class("Intent"),
             content=content,
@@ -42,7 +41,6 @@ class RuntimeObjectFactory(IObjectFactory):
         )
 
     def create_intent_from_node(self, node_uid: str, node_data: Mapping[str, Any], role: Any = None) -> IIbIntent:
-        from core.domain.intent_logic import IntentRole
         return IbIntent.from_node_data(
             node_uid,
             node_data,

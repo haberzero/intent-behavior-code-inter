@@ -21,12 +21,8 @@ class TypeHydrator:
         if not axiom_registry:
             return
             
-        axiom_name = descriptor.name
-        if isinstance(descriptor, ListMetadata):
-            axiom_name = "list"
-        elif isinstance(descriptor, DictMetadata):
-            axiom_name = "dict"
-        
+        # [IES 2.1 Axiom-Driven] 使用 get_base_axiom_name 自动发现公理名称，彻底消除 isinstance 硬编码
+        axiom_name = descriptor.get_base_axiom_name()
         descriptor._axiom = axiom_registry.get_axiom(axiom_name)
         
         # [Axiom-Driven Schema] 从公理中注入方法签名
@@ -97,19 +93,8 @@ class TypeHydrator:
                 desc._registry = self._registry
                 return desc
             
-        # 如果是复合类型，递归处理其成员
-        if isinstance(desc, FunctionMetadata):
-            desc.param_types = [self.hydrate_metadata(p) for p in desc.param_types]
-            if desc.return_type:
-                desc.return_type = self.hydrate_metadata(desc.return_type)
-        elif isinstance(desc, ListMetadata):
-            if desc.element_type:
-                desc.element_type = self.hydrate_metadata(desc.element_type)
-        elif isinstance(desc, DictMetadata):
-            if desc.key_type:
-                desc.key_type = self.hydrate_metadata(desc.key_type)
-            if desc.value_type:
-                desc.value_type = self.hydrate_metadata(desc.value_type)
+        # [IES 2.1 Refactor] 使用 walk_references 递归处理子类型，消除 isinstance 硬编码
+        desc.walk_references(self.hydrate_metadata)
         
         desc._registry = self._registry
         return desc

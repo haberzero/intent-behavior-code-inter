@@ -6,6 +6,7 @@ from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_M
 from core.foundation.registry import Registry
 from core.foundation.interfaces import IStateReader
 from core.domain.types.descriptors import TypeDescriptor
+from core.domain.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule
 
@@ -381,7 +382,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         """
         # 使用工厂或直接从执行上下文获取消解器，避免局部 import
         # [TODO] 未来可以将 IntentResolver 也协议化注入
-        from core.domain.intent_resolver import IntentResolver
         
         active_intents = self.get_active_intents()
         global_intents = self.get_global_intents()
@@ -418,10 +418,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
     @property
     def global_scope(self) -> Scope:
         return self._global_scope
-
-    @property
-    def registry(self) -> Registry:
-        return self._registry
 
     def get_symbol_view(self) -> SymbolView:
         return SymbolViewImpl(self)

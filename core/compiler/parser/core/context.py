@@ -25,6 +25,7 @@ class ParserContext:
     module_resolver: Optional[ModuleResolver] = None
     module_cache: Optional[Dict[str, Any]] = None
     host_interface: Optional[HostInterface] = None
+    metadata: Optional[Any] = None # MetadataRegistry
     package_name: str = ""
     pending_intents: List[ast.IbIntentInfo] = field(default_factory=list)
     
@@ -50,3 +51,7 @@ class ParserContext:
             self.module_cache = {}
         if self.host_interface is None:
             self.host_interface = HostInterface()
+            
+        # [IES 2.1 Axiom] 自动从宿主接口提取元数据注册表
+        if self.metadata is None and self.host_interface:
+            self.metadata = self.host_interface.metadata

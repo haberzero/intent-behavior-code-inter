@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
@@ -13,7 +14,6 @@ class SymbolKind(Enum):
     FUNCTION = auto()
     LLM_FUNCTION = auto()
     CLASS = auto()
-    BUILTIN_TYPE = auto()
     INTENT = auto()
     MODULE = auto()
 
@@ -29,6 +29,18 @@ class Symbol:
     # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中间层
     descriptor: Optional[TypeDescriptor] = None
 
+    @property
+    def is_type(self) -> bool:
+        return self.kind == SymbolKind.CLASS
+
+    @property
+    def is_function(self) -> bool:
+        return self.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION)
+
+    @property
+    def is_variable(self) -> bool:
+        return self.kind == SymbolKind.VARIABLE
+
     def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'Symbol':
         """
         [IES 2.0 Isolation] 克隆符号对象。
@@ -38,7 +50,6 @@ class Symbol:
         if id(self) in memo:
             return memo[id(self)]
             
-        import copy
         new_sym = copy.copy(self)
         memo[id(self)] = new_sym
         
@@ -49,7 +60,6 @@ class Symbol:
 @dataclass
 class TypeSymbol(Symbol):
     """表示一个类型定义 (类或内置类型)"""
-    # type_info 直接返回 descriptor (即该类型本身的元数据)
     pass
 
 @dataclass
@@ -98,12 +108,12 @@ class SymbolTable:
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            # [IES 2.1 Audit] 如果是内置符号且类型兼容，允许静默跳过或覆盖
+            # [IES 2.1 UTS Integration] 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
             if existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"):
                 if existing.descriptor and sym.descriptor:
-                    # 确保重定义不会导致语义冲突 (类型必须完全一致或兼容)
-                    if existing.descriptor.name != sym.descriptor.name:
-                         raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible type '{sym.descriptor.name}' (existing: '{existing.descriptor.name}')")
+                    # 在 UTS 体系下，Interning 确保了同类描述符在同一引擎下是唯一的
+                    if existing.descriptor is not sym.descriptor:
+                         raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible descriptor (existing: '{existing.descriptor.name}')")
                 self.symbols[sym.name] = sym
                 return
             raise ValueError(f"Symbol '{sym.name}' is already defined in this scope")

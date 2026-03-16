@@ -29,6 +29,20 @@ class TypeDescriptor:
     # [New] 公理绑定
     _axiom: Optional['TypeAxiom'] = field(default=None, init=False, repr=False)
 
+    def walk_references(self, callback: Any) -> None:
+        """
+        [IES 2.1] 遍历并应用回调到所有内部持有的类型引用。
+        用于多态地处理克隆、水合和绑定操作。
+        """
+        pass
+
+    def get_references(self) -> Dict[str, Any]:
+        """
+        [IES 2.1] 获取所有内部持有的类型引用。
+        用于序列化和结构分析，消除 isinstance 检查。
+        """
+        return {}
+
     def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'TypeDescriptor':
         """
         [IES 2.0 Isolation] 深度克隆描述符，确保引擎实例间的物理隔离。
@@ -52,27 +66,30 @@ class TypeDescriptor:
             # 同时 Symbol.clone 会递归调用 TypeDescriptor.clone(memo)
             new_desc.members = {name: sym.clone(memo) for name, sym in self.members.items()}
             
-        # 4. 处理子类特有的描述符引用 (这些引用可能不在 members 中)
-        if isinstance(self, ListMetadata) and self.element_type:
-            new_desc.element_type = self.element_type.clone(memo)
-        elif isinstance(self, DictMetadata):
-            if self.key_type: new_desc.key_type = self.key_type.clone(memo)
-            if self.value_type: new_desc.value_type = self.value_type.clone(memo)
-        elif isinstance(self, FunctionMetadata):
-            # 修正：FunctionMetadata.param_types 存储的是 TypeDescriptor 列表，不是 Symbol 列表
-            new_desc.param_types = [p.clone(memo) for p in self.param_types]
-            if self.return_type: new_desc.return_type = self.return_type.clone(memo)
-        elif isinstance(self, BoundMethodMetadata):
-            if self.receiver_type: new_desc.receiver_type = self.receiver_type.clone(memo)
-            if self.function_type: new_desc.function_type = self.function_type.clone(memo)
+        # 4. [IES 2.1 Refactor] 多态处理子类持有的结构化类型引用，消除 isinstance 硬编码
+        new_desc.walk_references(lambda d: d.clone(memo))
             
         return new_desc
 
     def __post_init__(self):
         self.kind = self.__class__.__name__
 
+    def __eq__(self, other: Any) -> bool:
+        if type(self) is not type(other):
+            return False
+        # [IES 2.1 Refactor] 基于名称与引用进行一致性判定，消除子类中的冗余 isinstance
+        return self.name == other.name and self.get_references() == other.get_references()
+
     def unwrap(self) -> 'TypeDescriptor':
         return self
+
+    def get_signature(self) -> Optional[tuple[List['TypeDescriptor'], Optional['TypeDescriptor']]]:
+        """[IES 2.1] 获取函数签名 (参数列表, 返回类型)。多态实现，消除 isinstance。"""
+        return None
+
+    def get_base_axiom_name(self) -> str:
+        """[IES 2.1] 获取该描述符对应的基础公理名称"""
+        return self.name
 
     # --- Capability Accessors (Delegated to Axiom) ---
     
@@ -101,12 +118,35 @@ class TypeDescriptor:
                 return self._resolve_type_ref(trait.get_element_type())
         return None
 
+    def get_key_type(self) -> Optional['TypeDescriptor']:
+        """获取键类型（针对字典类型）"""
+        return None
+
+    def get_value_type(self) -> Optional['TypeDescriptor']:
+        """获取值类型（针对字典类型）"""
+        return None
+
+    def get_receiver_type(self) -> Optional['TypeDescriptor']:
+        """获取接收者类型（针对绑定方法）"""
+        return None
+
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
+        """解析下标访问结果（委托给公理）"""
         if self._axiom:
             trait = self._axiom.get_subscript_capability()
             if trait:
                 return self._resolve_type_ref(trait.resolve_item(key))
         return None
+
+    def resolve_specialization(self, args: List['TypeDescriptor']) -> 'TypeDescriptor':
+        """[IES 2.1] 产生特化类型（委托给公理）"""
+        if self._axiom and self._registry:
+            return self._axiom.resolve_specialization(self._registry, args)
+        return self
+
+    def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+        """[IES 2.1] 重水化：根据扁平化数据恢复对象字段"""
+        pass
 
     def get_operator_result(self, op: str, other: Optional['TypeDescriptor'] = None) -> Optional['TypeDescriptor']:
         """运算符决议 (Delegated to Axiom)"""
@@ -126,7 +166,19 @@ class TypeDescriptor:
         return self._axiom.get_subscript_capability() if self._axiom else None
 
     def get_parser_trait(self) -> Optional['ParserCapability']:
-        return self._axiom.get_parser_capability() if self._axiom else None
+        """获取解析能力（委托给公理）"""
+        if self._axiom:
+            return self._axiom.get_parser_capability()
+        return None
+
+    def get_writable_trait(self) -> Optional['WritableTrait']:
+        """获取写能力（用于分析阶段更新元数据）"""
+        if self._axiom:
+            return self._axiom.get_writable_trait()
+        # 如果描述符本身实现了该能力，则直接返回
+        if isinstance(self, WritableTrait):
+            return self
+        return None
 
     def is_dynamic(self) -> bool:
         """
@@ -136,6 +188,20 @@ class TypeDescriptor:
         if self._axiom:
             return self._axiom.is_dynamic()
         return False
+
+    def is_class(self) -> bool:
+        """是否为类类型。"""
+        if self._axiom:
+            return self._axiom.is_class()
+        # [IES 2.1 Refactor] 默认通过 kind 判定，消除 isinstance
+        return self.kind == "ClassMetadata"
+
+    def is_module(self) -> bool:
+        """是否为模块类型。"""
+        if self._axiom:
+            return self._axiom.is_module()
+        # [IES 2.1 Refactor] 默认通过 kind 判定，消除 isinstance
+        return self.kind == "ModuleMetadata"
 
     def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
         """
@@ -165,11 +231,11 @@ class TypeDescriptor:
         
         # 1. 极简匹配 (基础名不匹配)
         if s.name != o.name:
-            # 特殊情况提示
-            if s.name.startswith("list") and o.name == "str":
-                return "Did you forget to join the list into a string?"
-            if s.name == "str" and o.name == "int":
-                return "Use .cast_to(int) or int(s) to convert string to integer."
+            # [IES 2.1 Axiom-Driven] 优先尝试公理提供的诊断提示，消除硬编码字符串比对
+            if s._axiom:
+                axiom_hint = s._axiom.get_diff_hint(o)
+                if axiom_hint: return axiom_hint
+            
             return f"Expected '{o.name}', but got '{s.name}'."
 
         # 2. 泛型参数匹配 (如果子类支持)
@@ -185,21 +251,27 @@ class TypeDescriptor:
             if s.value_type and o.value_type and not s.value_type.is_assignable_to(o.value_type):
                 return f"Value type mismatch: {s.value_type.get_diff_hint(o.value_type)}"
 
-        # 3. 函数签名匹配
-        if isinstance(s, (FunctionMetadata, BoundMethodMetadata)) and isinstance(o, (FunctionMetadata, BoundMethodMetadata)):
-            if len(s.param_types) != len(o.param_types):
-                return f"Parameter count mismatch: expected {len(o.param_types)}, but got {len(s.param_types)}"
-            for i, (p1, p2) in enumerate(zip(s.param_types, o.param_types)):
+        # 3. 函数签名匹配 (通过 Capability 访问签名，消除 isinstance)
+        s_sig = s.get_signature()
+        o_sig = o.get_signature()
+        if s_sig and o_sig:
+            s_params, s_ret = s_sig
+            o_params, o_ret = o_sig
+            if len(s_params) != len(o_params):
+                return f"Parameter count mismatch: expected {len(o_params)}, but got {len(s_params)}"
+            for i, (p1, p2) in enumerate(zip(s_params, o_params)):
                 if not p1.is_assignable_to(p2):
                     return f"Parameter {i+1} mismatch: {p1.get_diff_hint(p2)}"
-            if s.return_type and o.return_type and not s.return_type.is_assignable_to(o.return_type):
-                return f"Return type mismatch: {s.return_type.get_diff_hint(o.return_type)}"
+            if s_ret and o_ret and not s_ret.is_assignable_to(o_ret):
+                return f"Return type mismatch: {s_ret.get_diff_hint(o_ret)}"
 
         return f"Type '{s.name}' is not compatible with '{o.name}'."
 
     def _is_structurally_compatible(self, other: 'TypeDescriptor') -> bool:
-        """子类可重写的结构化兼容性逻辑"""
-        return self.name == other.name and self.module_path == other.module_path
+        """[IES 2.1 Refactor] 子类可重写的结构化兼容性逻辑，消除硬编码比对"""
+        if type(self) is not type(other):
+            return False
+        return self.name == other.name and self.get_references() == other.get_references()
 
     def resolve_member(self, name: str) -> Optional['Symbol']:
         """
@@ -280,6 +352,28 @@ class ListMetadata(TypeDescriptor):
     """列表类型元数据"""
     element_type: Optional[TypeDescriptor] = None
 
+    def walk_references(self, callback: Any) -> None:
+        if self.element_type:
+            self.element_type = callback(self.element_type)
+
+    def get_references(self) -> Dict[str, Any]:
+        return {"element_type": self.element_type}
+
+    def get_base_axiom_name(self) -> str:
+        return "list"
+
+    def get_iter_trait(self) -> Optional['IterCapability']:
+        return self
+
+    def get_element_type(self) -> Optional[TypeDescriptor]:
+        # 优先使用 Axiom (如果有)
+        res = super().get_element_type()
+        if res: return res
+        return self.element_type
+
+    def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+        self.element_type = hydrator.hydrate(data.get("element_type_uid"))
+
     def __post_init__(self):
         super().__post_init__()
         self.name = f"list[{self.element_type.name}]" if self.element_type else "list"
@@ -299,12 +393,16 @@ class ListMetadata(TypeDescriptor):
         # 允许原始 list 与泛型 list 互转 (逻辑宽松处理)
         # 使用 unwrap() 确保 LazyDescriptor 能正确对比
         o = other.unwrap()
-        if o is LIST_DESCRIPTOR or (isinstance(o, ListMetadata) and o.element_type is ANY_DESCRIPTOR):
-             return True
-        if isinstance(o, ListMetadata):
-            if not self.element_type or not o.element_type:
-                return True
-            return self.element_type.is_assignable_to(o.element_type)
+        
+        # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
+        o_iter = o.get_iter_trait()
+        if o_iter:
+            o_elem = o_iter.get_element_type()
+            if o is LIST_DESCRIPTOR or o_elem is ANY_DESCRIPTOR:
+                 return True
+            
+            if self.element_type:
+                return self.element_type.is_assignable_to(o_elem)
         return False
 
 @dataclass
@@ -313,15 +411,35 @@ class DictMetadata(TypeDescriptor):
     key_type: Optional[TypeDescriptor] = None
     value_type: Optional[TypeDescriptor] = None
 
+    def walk_references(self, callback: Any) -> None:
+        if self.key_type: self.key_type = callback(self.key_type)
+        if self.value_type: self.value_type = callback(self.value_type)
+
+    def get_references(self) -> Dict[str, Any]:
+        return {"key_type": self.key_type, "value_type": self.value_type}
+
+    def get_base_axiom_name(self) -> str:
+        return "dict"
+
+    def get_key_type(self) -> Optional[TypeDescriptor]:
+        return self.key_type
+
+    def get_value_type(self) -> Optional[TypeDescriptor]:
+        return self.value_type
+
+    def get_subscript_trait(self) -> Optional['SubscriptCapability']:
+        return self
+
+    def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+        self.key_type = hydrator.hydrate(data.get("key_type_uid"))
+        self.value_type = hydrator.hydrate(data.get("value_type_uid"))
+
     def __post_init__(self):
         super().__post_init__()
         if self.key_type and self.value_type:
             self.name = f"dict[{self.key_type.name}, {self.value_type.name}]"
         else:
             self.name = "dict"
-
-    def get_subscript_trait(self) -> Optional['SubscriptCapability']:
-        return self
 
     def resolve_item(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
         res = super().resolve_item(key)
@@ -332,23 +450,58 @@ class DictMetadata(TypeDescriptor):
         if super().is_assignable_to(other): return True
         # 允许原始 dict 与泛型 dict 互转
         o = other.unwrap()
-        if o is DICT_DESCRIPTOR or (isinstance(o, DictMetadata) and o.key_type is ANY_DESCRIPTOR and o.value_type is ANY_DESCRIPTOR):
-            return True
-        if isinstance(o, DictMetadata):
-            # 如果其中一个没有具体类型，认为兼容
-            if not self.key_type or not o.key_type or not self.value_type or not o.value_type:
+        
+        # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
+        o_key = o.get_key_type()
+        o_val = o.get_value_type()
+        
+        if o_key or o_val:
+            # 逻辑宽松处理：如果是原始 dict 或目标类型为 Any
+            if o is DICT_DESCRIPTOR or (o_key is ANY_DESCRIPTOR and o_val is ANY_DESCRIPTOR):
                 return True
-            return self.key_type.is_assignable_to(o.key_type) and \
-                   self.value_type.is_assignable_to(o.value_type)
+            
+            # 协变校验
+            k_comp = True
+            if self.key_type and o_key:
+                k_comp = self.key_type.is_assignable_to(o_key)
+            
+            v_comp = True
+            if self.value_type and o_val:
+                v_comp = self.value_type.is_assignable_to(o_val)
+                
+            return k_comp and v_comp
         return False
 
 @dataclass
-class FunctionMetadata(TypeDescriptor):
+class FunctionMetadata(TypeDescriptor, WritableTrait):
     """函数/方法签名元数据"""
     param_types: List[TypeDescriptor] = field(default_factory=list)
     return_type: Optional[TypeDescriptor] = None
 
+    def walk_references(self, callback: Any) -> None:
+        self.param_types = [callback(p) for p in self.param_types]
+        if self.return_type: self.return_type = callback(self.return_type)
+
+    def get_references(self) -> Dict[str, Any]:
+        return {"param_types": self.param_types, "return_type": self.return_type}
+
+    def get_base_axiom_name(self) -> str:
+        return "callable"
+
+    def get_signature(self) -> Optional[tuple[List['TypeDescriptor'], Optional['TypeDescriptor']]]:
+        return self.param_types, self.return_type
+
+    def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+        param_uids = data.get("param_types_uids", [])
+        self.param_types = [hydrator.hydrate(p_uid) for p_uid in param_uids if p_uid]
+        self.return_type = hydrator.hydrate(data.get("return_type_uid"))
+
     # --- Trait Implementations ---
+
+    def update_signature(self, param_types: List['TypeDescriptor'], return_type: Optional['TypeDescriptor']) -> None:
+        """[IES 2.1 WritableTrait] 安全更新函数签名"""
+        self.param_types = param_types
+        self.return_type = return_type
 
     def get_call_trait(self) -> Optional['CallCapability']:
         return self
@@ -372,13 +525,18 @@ class FunctionMetadata(TypeDescriptor):
         o = other.unwrap()
         if o is CALLABLE_DESCRIPTOR:
             return True
-        if isinstance(o, FunctionMetadata):
-            if self.return_type and o.return_type:
-                if not self.return_type.is_assignable_to(o.return_type):
+            
+        # [IES 2.1 Refactor] 使用能力探测 (get_signature) 代替 isinstance 检查
+        o_sig = o.get_signature()
+        if o_sig:
+            o_params, o_ret = o_sig
+            if self.return_type and o_ret:
+                if not self.return_type.is_assignable_to(o_ret):
                     return False
-            if len(self.param_types) != len(o.param_types):
+            if len(self.param_types) != len(o_params):
                 return False
-            for p1, p2 in zip(self.param_types, o.param_types):
+            for p1, p2 in zip(self.param_types, o_params):
+                # 参数逆变 (Contravariance)
                 if not p2.is_assignable_to(p1): 
                     return False
             return True
@@ -389,6 +547,9 @@ class ClassMetadata(TypeDescriptor):
     """类元数据描述"""
     parent_name: Optional[str] = None
     parent_module: Optional[str] = None
+
+    def get_base_axiom_name(self) -> str:
+        return "Type"
     
     # --- Trait Implementations ---
 
@@ -421,24 +582,44 @@ class ClassMetadata(TypeDescriptor):
 @dataclass
 class BoundMethodMetadata(TypeDescriptor):
     """绑定方法类型元数据 (合成类型)"""
-    receiver_type: Optional[TypeDescriptor] = None
-    function_type: Optional[TypeDescriptor] = None
+    receiver_type: Optional[TypeDescriptor] = field(default=None)
+    function_type: Optional[TypeDescriptor] = field(default=None)
+
+    def walk_references(self, callback: Any) -> None:
+        if self.receiver_type: self.receiver_type = callback(self.receiver_type)
+        if self.function_type: self.function_type = callback(self.function_type)
+
+    def get_references(self) -> Dict[str, Any]:
+        return {"receiver_type": self.receiver_type, "function_type": self.function_type}
+
+    def get_base_axiom_name(self) -> str:
+        return "bound_method"
+
+    def get_receiver_type(self) -> Optional[TypeDescriptor]:
+        return self.receiver_type
+
+    def get_signature(self) -> Optional[tuple[List['TypeDescriptor'], Optional['TypeDescriptor']]]:
+        return self.param_types, self.return_type
 
     @property
     def param_types(self) -> List[TypeDescriptor]:
         """[IES 2.1] 代理函数签名的参数列表，并移除第一个 self 参数"""
-        if isinstance(self.function_type, FunctionMetadata):
+        sig = self.function_type.get_signature() if self.function_type else None
+        if sig:
+            params, _ = sig
             # 如果是类方法，第一个参数通常是 self，在绑定后应被移除
-            if len(self.function_type.param_types) > 0:
-                return self.function_type.param_types[1:]
-            return self.function_type.param_types
+            if len(params) > 0:
+                return params[1:]
+            return params
         return []
 
     @property
     def return_type(self) -> Optional[TypeDescriptor]:
         """代理函数签名的返回类型"""
-        if isinstance(self.function_type, FunctionMetadata):
-            return self.function_type.return_type
+        sig = self.function_type.get_signature() if self.function_type else None
+        if sig:
+            _, ret = sig
+            return ret
         return None
 
     # --- Trait Implementations ---
@@ -469,13 +650,18 @@ class BoundMethodMetadata(TypeDescriptor):
         o = other.unwrap()
         if o is CALLABLE_DESCRIPTOR:
             return True
-        if isinstance(o, BoundMethodMetadata):
+            
+        # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
+        o_receiver = o.get_receiver_type()
+        if o_receiver:
             # 结构化语义校验：接收者与函数签名都必须兼容
-            if self.receiver_type and o.receiver_type:
-                if not self.receiver_type.is_assignable_to(o.receiver_type):
-                    return False
-            if self.function_type and o.function_type:
-                return self.function_type.is_assignable_to(o.function_type)
+            if self.receiver_type and not self.receiver_type.is_assignable_to(o_receiver):
+                return False
+            
+            # 这里的 function_type 比较可以继续下推给 FunctionMetadata.is_assignable_to
+            if self.function_type and hasattr(o, 'function_type'):
+                # 暂时允许访问 function_type 字段，或者引入 get_function_type()
+                return self.function_type.is_assignable_to(getattr(o, 'function_type'))
         return False
 
 @dataclass
@@ -483,6 +669,9 @@ class ModuleMetadata(TypeDescriptor):
     """模块元数据描述"""
     required_capabilities: List[str] = field(default_factory=list)
     
+    def get_base_axiom_name(self) -> str:
+        return "module"
+
     def __post_init__(self):
         super().__post_init__()
         if not self.name or self.name == "TypeDescriptor":

@@ -53,6 +53,7 @@ class SemanticAnalyzer:
         self.node_to_type: Dict[ast.IbASTNode, TypeDescriptor] = {} # 侧表：节点 -> 类型对象
         self.node_is_deferred: Dict[ast.IbASTNode, bool] = {} # 侧表：行为描述行是否延迟执行 (Lambda)
         self.node_intents: Dict[ast.IbASTNode, List[ast.IbIntentInfo]] = {} # 侧表：节点 -> 意图列表
+        self.node_to_loc: Dict[ast.IbASTNode, Any] = {}
         
         # 初始化 Prelude
         self.prelude = Prelude(self.host_interface, registry=self.registry)
@@ -67,7 +68,7 @@ class SemanticAnalyzer:
 
         # 2. 注册内置类型
         for name, type_desc in self.prelude.get_builtin_types().items():
-            sym = TypeSymbol(name=name, kind=SymbolKind.BUILTIN_TYPE, descriptor=type_desc, metadata={"is_builtin": True})
+            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=type_desc, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 3. 注册内置模块 (如果 Registry 中存在)
@@ -117,12 +118,24 @@ class SemanticAnalyzer:
                 node_to_symbol=self.node_to_symbol,
                 node_to_type=self.node_to_type,
                 node_is_deferred=self.node_is_deferred,
-                node_intents=self.node_intents
+                node_intents=self.node_intents,
+                node_to_loc=self.node_to_loc
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
 
     def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
+        # [NEW Phase 3] 标记作用域定义节点 (元数据驱动)
+        if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef, ast.IbIntentStmt)):
+            setattr(node, "_is_scope", True)
+
+        # [IES 2.1 Refactor] 记录节点位置侧表，确保序列化产物完备性
+        self.node_to_loc[node] = {
+            "file_path": self.issue_tracker.file_path,
+            "line": node.lineno,
+            "column": node.col_offset
+        }
+
         # [NEW] 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
         # [IES 2.0 Policy] 侧表仅记录“当前节点特有”的涂抹意图（即通过 @ 标注的意图）。
         # 块级意图（通过 intent 语句定义）由解释器在执行时通过 AST 结构动态维护在栈中。
@@ -193,7 +206,7 @@ class SemanticAnalyzer:
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
         sym = self.symbol_table.resolve(node.name)
-        if not sym or not isinstance(sym, symbols.TypeSymbol):
+        if not sym or not sym.is_type:
             return self._void_desc
             
         self.node_to_symbol[node] = sym
@@ -203,8 +216,9 @@ class SemanticAnalyzer:
             self.symbol_table = sym.owned_scope
             
         old_class = self.current_class
-        # sym.descriptor 应该是 ClassMetadata
-        if isinstance(sym.descriptor, ClassMetadata):
+        # [IES 2.1 Axiom] 使用 is_class() 判定，消除对 ClassMetadata 的直接依赖
+        if sym.descriptor.is_class():
+            # 内部仍需类型转换为 ClassMetadata 以支持 members 访问，但判定逻辑已公理化
             self.current_class = sym.descriptor
         else:
             self.current_class = None # Should not happen
@@ -250,7 +264,7 @@ class SemanticAnalyzer:
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         sym = self.symbol_table.resolve(node.name)
-        if not sym or not isinstance(sym, symbols.FunctionSymbol):
+        if not sym or not sym.is_function:
             return self._void_desc
             
         self.node_to_symbol[node] = sym
@@ -263,10 +277,13 @@ class SemanticAnalyzer:
             
         ret_type = self._resolve_type(node.returns)
         
-        # 更新已注册的元数据对象 (原地修改以保持引用一致性)
-        if isinstance(sym.descriptor, FunctionMetadata):
-            sym.descriptor.param_types = param_types
-            sym.descriptor.return_type = ret_type
+        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+        call_trait = sym.descriptor.get_call_trait()
+        writable = call_trait.get_writable_trait() if call_trait else None
+        
+        if writable:
+            # 安全回填分析得到的参数与返回类型
+            writable.update_signature(param_types, ret_type)
             
         # 进入局部作用域
         old_table = self.symbol_table
@@ -274,7 +291,7 @@ class SemanticAnalyzer:
         self.symbol_table = local_scope
         
         # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
-        if isinstance(sym, symbols.FunctionSymbol):
+        if sym.is_function:
             sym.owned_scope = local_scope
         
         # [NEW] 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
@@ -313,7 +330,7 @@ class SemanticAnalyzer:
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         sym = self.symbol_table.resolve(node.name)
-        if not sym or not isinstance(sym, symbols.FunctionSymbol):
+        if not sym or not sym.is_function:
             return self._void_desc
             
         self.node_to_symbol[node] = sym
@@ -325,9 +342,13 @@ class SemanticAnalyzer:
             
         ret_type = self._resolve_type(node.returns)
         
-        if isinstance(sym.descriptor, FunctionMetadata):
-            sym.descriptor.param_types = param_types
-            sym.descriptor.return_type = ret_type
+        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+        call_trait = sym.descriptor.get_call_trait()
+        writable = call_trait.get_writable_trait() if call_trait else None
+        
+        if writable:
+            # 安全回填分析得到的参数与返回类型
+            writable.update_signature(param_types, ret_type)
             
         # 进入局部作用域以校验提示词中的占位符
         old_table = self.symbol_table
@@ -335,7 +356,7 @@ class SemanticAnalyzer:
         self.symbol_table = local_scope
         
         # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
-        if isinstance(sym, symbols.FunctionSymbol):
+        if sym.is_function:
             sym.owned_scope = local_scope
         
         if self.current_class:
@@ -414,8 +435,8 @@ class SemanticAnalyzer:
                 sym = self.symbol_table.symbols.get(var_name)
                 
                 if declared_type:
-                    # 1. 有显式标注：优先尊重标注，除非标注是 'var' (需要推导)
-                    if declared_type.name == "var":
+                    # 1. 有显式标注：优先尊重标注，除非标注是动态的 (var/Any)
+                    if declared_type.is_dynamic():
                         target_type = val_type
                     else:
                         target_type = declared_type
@@ -532,7 +553,7 @@ class SemanticAnalyzer:
                     sym = self._define_var(var_name, element_type, target, allow_overwrite=(sym is not None))
                 else:
                     # 显式定义的变量（如带有类型标注），则执行类型更新
-                    if isinstance(sym, VariableSymbol):
+                    if sym.is_variable:
                         sym.descriptor = element_type
                 
                 if sym:
@@ -762,8 +783,8 @@ class SemanticAnalyzer:
     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> TypeDescriptor:
         """类型强转语义分析"""
         self.visit(node.value)
-        # 决议目标类型
-        target_type = self._resolve_type_by_name(node.type_name)
+        # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
+        target_type = self._resolve_type(node.type_annotation)
         if target_type:
             return target_type
         return self._any_desc
@@ -771,7 +792,7 @@ class SemanticAnalyzer:
     def _resolve_type_by_name(self, name: str) -> Optional[TypeDescriptor]:
         # Helper for CastExpr which uses string name
         sym = self.symbol_table.resolve(name)
-        if isinstance(sym, symbols.TypeSymbol):
+        if sym and sym.is_type:
             return sym.descriptor
         # Try builtins
         return self.prelude.get_builtin_types().get(name)
@@ -799,12 +820,10 @@ class SemanticAnalyzer:
 
     def visit_IbConstant(self, node: ast.IbConstant) -> TypeDescriptor:
         val = node.value
-        # [Strict Registry] 从注册表获取描述符，确保物理隔离下的标识一致性
-        if isinstance(val, bool): return self.registry.resolve("bool")
-        elif isinstance(val, int): return self.registry.resolve("int")
-        elif isinstance(val, float): return self.registry.resolve("float")
-        elif isinstance(val, str): return self.registry.resolve("str")
-        elif val is None: return self.registry.resolve("void")
+        # [IES 2.1 Refactor] 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
+        desc = self.registry.resolve_from_value(val)
+        if desc:
+            return desc
         return self.registry.resolve("Any")
 
     def visit_IbName(self, node: ast.IbName) -> TypeDescriptor:
@@ -836,10 +855,9 @@ class SemanticAnalyzer:
             
             # [Axiom Hook] 自动合成绑定方法 (Bound Method)
             # 如果是实例方法且不是静态方法，则合成 BoundMethodMetadata
-            if member_sym.kind == symbols.SymbolKind.FUNCTION and not member_sym.metadata.get("is_static"):
-                # 如果是类方法且第一个参数名为 self，或者是内置方法且 param_types[0] 是 Receiver 类型
-                # 简单判断：如果 receiver 不是模块，则视为绑定调用
-                if not isinstance(base_type, ModuleMetadata):
+            if member_sym.is_function and not member_sym.metadata.get("is_static"):
+                # [IES 2.1 Axiom] 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
+                if not base_type.is_module():
                     return BoundMethodMetadata(receiver_type=base_type, function_type=member_sym.descriptor)
             
             return member_sym.descriptor
@@ -872,9 +890,9 @@ class SemanticAnalyzer:
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
         res = func_type.resolve_return(arg_types)
         if not res:
-            # 尝试获取更具体的错误信息
-            if isinstance(func_type, FunctionMetadata):
-                param_types = func_type.param_types
+            # [IES 2.1 Axiom] 通过 Trait 提取签名信息进行诊断
+            if call_trait and hasattr(call_trait, 'param_types'):
+                param_types = call_trait.param_types
                 if len(arg_types) != len(param_types):
                     self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")
                 else:
@@ -912,7 +930,7 @@ class SemanticAnalyzer:
             if sym:
                 self.node_to_symbol[node] = sym
                 # [FIX] 如果符号本身就是 TypeSymbol，直接返回其 descriptor
-                if isinstance(sym, symbols.TypeSymbol):
+                if sym.is_type:
                     return sym.descriptor
                 return sym.descriptor
                 
@@ -930,17 +948,8 @@ class SemanticAnalyzer:
             else:
                 generic_args = [self._resolve_type(node.slice, safe=safe)]
                 
-            # [Axiom-Driven] 使用 Factory 创建特化类型
-            if base_type.name == "list" and len(generic_args) >= 1:
-                desc = self.registry.factory.create_list(generic_args[0])
-                self.registry.register(desc)
-                return desc
-            elif base_type.name == "dict" and len(generic_args) >= 2:
-                desc = self.registry.factory.create_dict(generic_args[0], generic_args[1])
-                self.registry.register(desc)
-                return desc
-            
-            return base_type
+            # [IES 2.1 Axiom] 使用 resolve_specialization 替代硬编码判断，实现真正的类型演算
+            return base_type.resolve_specialization(generic_args)
 
         elif isinstance(node, ast.IbAttribute):
             if safe:

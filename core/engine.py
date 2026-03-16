@@ -22,6 +22,7 @@ from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
+from core.compiler.semantic.passes.contract_validator import ContractValidator
 from core.domain.types import ModuleMetadata
 from core.domain.blueprint import CompilationArtifact
 from core.domain.issue import CompilerError
@@ -88,7 +89,8 @@ class IBCIEngine(IInterpreterFactory):
             compiler=self.scheduler,
             root_dir=root_dir,
             factory=self, # 注入自己作为工厂
-            plugin_loader=self._load_plugins # 注入生命周期钩子
+            plugin_loader=self._load_plugins, # 注入生命周期钩子
+            kernel_token=self._kernel_token # 透传内核令牌以驱动状态流转
         )
         # 加载插件已由 plugin_loader 完成
         return sub_interpreter
@@ -107,11 +109,23 @@ class IBCIEngine(IInterpreterFactory):
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
             factory=self,
-            plugin_loader=self._load_plugins # 注入生命周期钩子
+            plugin_loader=self._load_plugins, # 注入生命周期钩子
+            kernel_token=self._kernel_token # 注入内核令牌以驱动状态流转
         )
         
-        # [IES 2.0 Transition] STAGE 6: 准备就绪
-        self.registry.set_state_level(RegistrationState.STAGE_6_READY.value, self._kernel_token)
+        # [IES 2.1 Transition] STAGE 7: 深度契约校验与就绪
+        # [IES 2.1 Refactor] 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
+        if self.registry.state_level < RegistrationState.STAGE_6_PRE_EVAL.value:
+             self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
+
+        validator = ContractValidator(self.registry.get_metadata_registry(), self.issue_tracker, self.debugger)
+        validator.validate_all()
+        
+        # 如果校验过程中发现了严重契约冲突，则阻止系统进入 READY 状态
+        if self.issue_tracker.has_errors():
+             raise InterpreterError("System readiness failed: Global Contract Violation detected in STAGE 7.", None)
+
+        self.registry.set_state_level(RegistrationState.STAGE_7_READY.value, self._kernel_token)
         # 封印类注册表
         self.registry.seal_classes(self._kernel_token)
 

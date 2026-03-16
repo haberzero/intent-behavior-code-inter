@@ -57,7 +57,7 @@ class TypeResolver:
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
         sym = self.symbol_table.resolve(node.name)
-        if not isinstance(sym, symbols.TypeSymbol):
+        if not sym or not sym.is_type:
             return
 
         # 1. 解析继承
@@ -130,7 +130,7 @@ class TypeResolver:
             
         # 绑定到符号
         sym = self.symbol_table.resolve(node.name)
-        if isinstance(sym, symbols.FunctionSymbol):
+        if sym and sym.is_function:
             sym.descriptor = func_desc
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
@@ -167,7 +167,7 @@ class TypeResolver:
             )
 
         sym = self.symbol_table.resolve(node.name)
-        if isinstance(sym, symbols.FunctionSymbol):
+        if sym and sym.is_function:
             sym.descriptor = func_desc
             sym.metadata["is_llm"] = True
 
@@ -189,5 +189,5 @@ class TypeResolver:
                         )
                     
                     sym = self.symbol_table.resolve(name)
-                    if isinstance(sym, symbols.VariableSymbol):
+                    if sym and sym.is_variable:
                         sym.descriptor = declared_type

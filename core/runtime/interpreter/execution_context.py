@@ -27,6 +27,8 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
                  strict_mode: bool = False):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
+        self._scope_pool: Mapping[str, Any] = {}
+        self._type_pool: Mapping[str, Any] = {}
         self._asset_pool: Mapping[str, str] = {}
         self._registry = registry
         self._factory = factory
@@ -72,6 +74,22 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._symbol_pool = value
 
     @property
+    def scope_pool(self) -> Mapping[str, Any]:
+        return self._scope_pool
+
+    @scope_pool.setter
+    def scope_pool(self, value: Mapping[str, Any]):
+        self._scope_pool = value
+
+    @property
+    def type_pool(self) -> Mapping[str, Any]:
+        return self._type_pool
+
+    @type_pool.setter
+    def type_pool(self, value: Mapping[str, Any]):
+        self._type_pool = value
+
+    @property
     def asset_pool(self) -> Mapping[str, str]:
         return self._asset_pool
 
@@ -107,8 +125,8 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     def strict_mode(self, value: bool):
         self._strict_mode = value
 
-    def visit(self, node_uid: str) -> 'IbObject':
-        return self._visit_callback(node_uid)
+    def visit(self, node_uid: str, module_name: Optional[str] = None) -> 'IbObject':
+        return self._visit_callback(node_uid, module_name=module_name)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         return self._get_node_data_callback(node_uid)

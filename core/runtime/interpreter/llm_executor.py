@@ -140,36 +140,25 @@ class LLMExecutorImpl:
         return "".join(content_parts)
 
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
-        # [Axiom-Driven] 使用公理系统进行解析 (Instance-based)
-        axiom = None
+        # [IES 2.1 Axiom-Driven] 直接通过描述符获取公理能力，彻底消除名称硬编码与降级逻辑
         meta_reg = self.registry.get_metadata_registry()
         if meta_reg:
-            axiom_reg = meta_reg.get_axiom_registry()
-            if axiom_reg:
-                axiom = axiom_reg.get_axiom(type_name)
-                
-                if not axiom:
-                        # 处理泛型 (降级到基础类型公理)
-                    if type_name.startswith("list"):
-                        axiom = axiom_reg.get_axiom("list")
-                    elif type_name.startswith("dict"):
-                        axiom = axiom_reg.get_axiom("dict")
+            descriptor = meta_reg.resolve(type_name)
+            if descriptor and descriptor._axiom:
+                parser = descriptor._axiom.get_parser_capability()
+                if parser:
+                    try:
+                        val = parser.parse_value(raw_res)
+                        return self.registry.box(val)
+                    except Exception as e:
+                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response via Axiom for type '{type_name}': {str(e)}")
+                        raise LLMUncertaintyError(
+                            f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
+                            node_uid,
+                            raw_response=raw_res
+                        )
 
-        if axiom:
-            parser = axiom.get_parser_capability()
-            if parser:
-                try:
-                    val = parser.parse_value(raw_res)
-                    return self.registry.box(val)
-                except Exception as e:
-                    self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response via Axiom '{type_name}': {str(e)}")
-                    raise LLMUncertaintyError(
-                        f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
-                        node_uid,
-                        raw_response=raw_res
-                    )
-
-        # Fallback (Default to string boxing if no axiom or no parser capability)
+        # Fallback (Default to string boxing if no descriptor, axiom or no parser capability)
         return self.registry.box(raw_res)
 
     def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
