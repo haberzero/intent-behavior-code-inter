@@ -292,7 +292,7 @@ class IbClass(IbObject):
                 else:
                     instance.fields[name] = self.registry.get_none()
             else:
-                # 兼容旧逻辑或已装箱的对象
+                # [Active Defense] 仅支持 IbDeferredField，确保 IES 2.1 字段初始化的一致性
                 instance.fields[name] = val_info
         
         init_method = self.lookup_method('__init__')

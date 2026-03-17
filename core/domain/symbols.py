@@ -26,8 +26,15 @@ class Symbol:
     owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中间层
+    # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中称层
     descriptor: Optional[TypeDescriptor] = None
+
+    def walk_references(self, callback: Any) -> None:
+        """
+        [IES 2.1] 遍历符号持有的类型引用。
+        """
+        if self.descriptor:
+            self.descriptor = callback(self.descriptor)
 
     @property
     def is_type(self) -> bool:
@@ -68,14 +75,18 @@ class FunctionSymbol(Symbol):
     
     @property
     def return_type(self) -> TypeDescriptor:
-        if isinstance(self.descriptor, uts.FunctionMetadata):
-            return self.descriptor.return_type or uts.VOID_DESCRIPTOR
+        sig = self.descriptor.get_signature() if self.descriptor else None
+        if sig:
+            _, ret = sig
+            return ret or uts.VOID_DESCRIPTOR
         return uts.ANY_DESCRIPTOR
         
     @property
     def param_types(self) -> List[TypeDescriptor]:
-        if isinstance(self.descriptor, uts.FunctionMetadata):
-            return self.descriptor.param_types
+        sig = self.descriptor.get_signature() if self.descriptor else None
+        if sig:
+            params, _ = sig
+            return params
         return []
 
 @dataclass
@@ -140,12 +151,12 @@ class SymbolFactory:
     """负责将元数据转换为符号对象"""
     @staticmethod
     def create_from_descriptor(name: str, descriptor: TypeDescriptor) -> 'Symbol':
-        if isinstance(descriptor, uts.FunctionMetadata):
+        if descriptor.get_call_trait() and not descriptor.is_class():
             return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=descriptor)
-        elif isinstance(descriptor, uts.ClassMetadata):
+        elif descriptor.is_class():
             # 类符号描述符指向 ClassMetadata，表示该符号代表类定义本身。
             return TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=descriptor)
-        elif isinstance(descriptor, uts.ModuleMetadata):
+        elif descriptor.is_module():
             return VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=descriptor)
         else:
             return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=descriptor)

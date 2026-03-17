@@ -31,7 +31,6 @@ class TokenType(Enum):
     OR = auto()
     NOT = auto()
     IS = auto()
-    NONE = auto()
     TRY = auto()
     EXCEPT = auto()
     FINALLY = auto()
@@ -52,7 +51,9 @@ class TokenType(Enum):
     IDENTIFIER = auto()
     NUMBER = auto()
     STRING = auto()
-    BOOL = auto()
+    TRUE = auto()
+    FALSE = auto()
+    NONE = auto()
 
     # 运算符
     ASSIGN = auto()         # =

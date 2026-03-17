@@ -1,6 +1,7 @@
 from core.compiler.lexer.tokens import TokenType
 from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
+from core.compiler.parser.core.syntax import ID_CALLABLE
 
 class TypeComponent(BaseComponent):
     """
@@ -23,10 +24,10 @@ class TypeComponent(BaseComponent):
                 
         elif self.stream.match(TokenType.CALLABLE):
             token = self.stream.previous()
-            # [IES 2.1 Axiom] 从元数据注册表解析 'callable' 标识符，消除硬编码
-            callable_name = "callable"
+            # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
+            callable_name = ID_CALLABLE
             if self.context.metadata:
-                callable_desc = self.context.metadata.resolve("callable")
+                callable_desc = self.context.metadata.resolve(ID_CALLABLE)
                 if callable_desc:
                     callable_name = callable_desc.name
             

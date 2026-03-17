@@ -140,9 +140,9 @@ class IBCIEngine(IInterpreterFactory):
         # 3. 插件加载完成，进入水合阶段
         self.registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, self._kernel_token)
 
-    def register_plugin(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
+    def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
         """
-        手动注册插件（兼容旧模式，但建议使用 plugins/ 目录下的双文件协议）。
+        [IES 2.1] 显式注册一个原生 Python 模块实现及其元数据。
         """
         self.host_interface.register_module(name, implementation, type_metadata)
         self.scheduler.host_interface = self.host_interface

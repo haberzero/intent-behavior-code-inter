@@ -27,7 +27,7 @@ def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
             spec.loader.exec_module(mod)
             
             # 注册到引擎
-            engine.register_plugin(module_name, mod)
+            engine.register_native_module(module_name, mod)
             print(f"Loaded plugin: {module_name} from {path}")
         except Exception as e:
             print(f"Failed to load plugin {path}: {str(e)}")

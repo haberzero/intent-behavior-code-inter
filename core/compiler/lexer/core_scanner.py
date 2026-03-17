@@ -43,7 +43,7 @@ class CoreTokenScanner:
             'llmexcept': TokenType.LLM_EXCEPT, 'retry': TokenType.RETRY,
             'intent': TokenType.INTENT_STMT,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
-            'True': TokenType.BOOL, 'False': TokenType.BOOL
+            'True': TokenType.TRUE, 'False': TokenType.FALSE
         }
 
     @property

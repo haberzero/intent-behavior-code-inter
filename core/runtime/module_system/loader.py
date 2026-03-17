@@ -36,10 +36,10 @@ class ModuleLoader(IModuleLoader):
         # 记录绑定身份
         implementation._ibci_registry_id = id(context.registry)
 
-        host_interface = context.interop.host_interface
-        metadata = host_interface.get_module_type(module_name)
-        if not metadata:
-            raise InterpreterError(f"Plugin Error: Module '{module_name}' metadata not found. Discovery must happen before loading.")
+        # [IES 2.1 Refactor] 直接通过元数据注册表解析，消除 HostInterface 兼容性依赖
+        metadata = context.interop.host_interface.metadata.resolve(module_name)
+        if not metadata or not metadata.is_module():
+            raise InterpreterError(f"Plugin Error: Module '{module_name}' metadata not found or invalid. Discovery must happen before loading.")
 
         if not hasattr(implementation, 'get_vtable'):
             raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing 'get_vtable()'. [IES 2.0 Standard Required]")
@@ -141,8 +141,9 @@ class ModuleLoader(IModuleLoader):
         
         # [IES Enhancement] 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
         # 这确保了手动注册的 Mock 对象能被正确初始化并同步到 capabilities
+        # [IES 2.1 Refactor] 直接遍历元数据注册表，消除兼容性接口
         host_interface = interop.host_interface
-        for entry in host_interface.get_all_module_names():
+        for entry in host_interface.metadata.get_all_modules().keys():
             implementation = host_interface.get_module_implementation(entry)
             if not implementation: continue
             
@@ -169,7 +170,8 @@ class ModuleLoader(IModuleLoader):
                 
                 # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
                 # 这防止了隔离环境下的子脚本通过扫描路径加载未授权的敏感插件
-                if not host_interface.is_external_module(entry):
+                # [IES 2.1 Refactor] 直接解析元数据以进行安全检查
+                if not host_interface.metadata.resolve(entry):
                     continue
                     
                 module_dir = os.path.join(path, entry)

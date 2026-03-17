@@ -288,7 +288,8 @@ class Scheduler(ICompilerService):
             # 3. Resolve and Enqueue Imports
             for imp in imports:
                 # Skip external modules - they don't have source files
-                if self.host_interface.is_external_module(imp.module_name):
+                # [IES 2.1 Refactor] 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
+                if self.host_interface.metadata.resolve(imp.module_name) is not None:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {imp.module_name}")
                     continue
                     
@@ -387,11 +388,12 @@ class Scheduler(ICompilerService):
                     imp_res = artifact.get_module(imp_mod_name)
                     if imp_res:
                         s_mod_type = ModuleMetadata(name=imp_mod_name, exported_scope=imp_res.symbol_table)
-                elif self.host_interface.is_external_module(imp.module_name):
+                elif self.host_interface.metadata.resolve(imp.module_name) is not None:
                     if imp.module_name in self.plugin_type_cache:
                         s_mod_type = self.plugin_type_cache[imp.module_name]
                     else:
-                        s_mod_type = self.host_interface.get_module_type(imp.module_name)
+                        # [IES 2.1 Refactor] 直接从宿主接口的元数据注册表解析描述符
+                        s_mod_type = self.host_interface.metadata.resolve(imp.module_name)
                         if s_mod_type:
                             # [UTS 2.0 Hydration] 确保从 Host 加载的元数据被正确水合到当前编译注册表
                             self.registry.register(s_mod_type)
@@ -413,8 +415,11 @@ class Scheduler(ICompilerService):
                         root_name = parts[0]
                         # 构造嵌套模块结构
                         root_sym = analyzer.symbol_table.resolve(root_name)
-                        if not root_sym or not isinstance(root_sym.descriptor, ModuleMetadata):
-                            root_mod_type = ModuleMetadata(name=root_name, exported_scope=SymbolTable())
+                        # [IES 2.1 Refactor] 使用 is_module() 代替 isinstance
+                        if not root_sym or not root_sym.descriptor or not root_sym.descriptor.is_module():
+                            # [IES 2.1 Refactor] 使用工厂创建
+                            root_mod_type = self.registry.factory.create_primitive("module")
+                            root_mod_type.name = root_name
                             root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, descriptor=root_mod_type)
                             analyzer.symbol_table.define(root_sym)
                         
@@ -427,8 +432,10 @@ class Scheduler(ICompilerService):
                                 curr_mod.exported_scope.define(target_sym)
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
-                                if not next_mod_sym or not isinstance(next_mod_sym.descriptor, ModuleMetadata):
-                                    next_mod_type = ModuleMetadata(name=part_name, exported_scope=SymbolTable())
+                                # [IES 2.1 Refactor] 使用 is_module() 代替 isinstance
+                                if not next_mod_sym or not next_mod_sym.descriptor or not next_mod_sym.descriptor.is_module():
+                                    next_mod_type = self.registry.factory.create_primitive("module")
+                                    next_mod_type.name = part_name
                                     next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, descriptor=next_mod_type)
                                     curr_mod.exported_scope.define(next_mod_sym)
                                 curr_mod = next_mod_sym.descriptor

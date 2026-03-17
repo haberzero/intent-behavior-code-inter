@@ -64,16 +64,17 @@ class TypeResolver:
         parent_desc = None
         if node.parent:
             parent_sym = self.symbol_table.resolve(node.parent)
-            if parent_sym and isinstance(parent_sym.descriptor, ClassMetadata):
+            # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
+            if parent_sym and parent_sym.descriptor and parent_sym.descriptor.is_class():
                 parent_desc = parent_sym.descriptor
             else:
                 self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
         # 2. 创建 ClassMetadata 并绑定到符号
-        descriptor = uts.ClassMetadata(
+        # [IES 2.1 Refactor] 使用工厂创建以确保驻留
+        descriptor = self.analyzer.registry.factory.create_class(
             name=node.name, 
-            parent_name=node.parent,
-            parent_module=None # 暂时不支持跨模块
+            parent=node.parent
         )
         if parent_desc:
              descriptor.parent_name = parent_desc.name
@@ -111,11 +112,10 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 创建 FunctionMetadata 并注入到当前类的描述符中
-        func_desc = uts.FunctionMetadata(
-            name=node.name,
-            param_types=param_types,
-            return_type=ret_type
+        # [IES 2.1 Refactor] 使用工厂创建 FunctionMetadata 以确保驻留
+        func_desc = self.analyzer.registry.factory.create_function(
+            params=param_types,
+            ret=ret_type
         )
         
         if self.current_class_descriptor:
@@ -149,11 +149,10 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 创建 FunctionMetadata
-        func_desc = uts.FunctionMetadata(
-            name=node.name,
-            param_types=param_types,
-            return_type=ret_type
+        # [IES 2.1 Refactor] 使用工厂创建 FunctionMetadata 以确保驻留
+        func_desc = self.analyzer.registry.factory.create_function(
+            params=param_types,
+            ret=ret_type
         )
         
         if self.current_class_descriptor:

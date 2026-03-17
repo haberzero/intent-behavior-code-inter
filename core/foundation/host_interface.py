@@ -49,26 +49,5 @@ class HostInterface:
         self.runtime.register(name, implementation)
         self.metadata.register(metadata)
 
-    # --- 兼容性接口 ---
-    def is_external_module(self, name: str) -> bool:
-        # [IES 2.1 Refactor] 直接检查注册表是否存在该描述符
-        return self.metadata.resolve(name) is not None
-
-    def get_module_type(self, name: str) -> Optional[ModuleMetadata]:
-        # [IES 2.1 Refactor] 直接解析描述符并验证类型
-        if name in self._module_metadata_map:
-            return self._module_metadata_map[name]
-        
-        desc = self.metadata.resolve(name)
-        return desc if isinstance(desc, ModuleMetadata) else None
-
     def get_module_implementation(self, name: str) -> Optional[Any]:
         return self.runtime.get(name)
-
-    def get_all_module_names(self) -> List[str]:
-        # [IES 2.1 Refactor] 从注册表快照中提取模块名称
-        return [d.name for d in self.metadata.all_descriptors.values() if isinstance(d, ModuleMetadata)]
-
-    def get_global_functions(self) -> Dict[str, FunctionMetadata]:
-        # [IES 2.1 Refactor] 从注册表快照中提取全局函数
-        return {d.name: d for d in self.metadata.all_descriptors.values() if isinstance(d, FunctionMetadata)}

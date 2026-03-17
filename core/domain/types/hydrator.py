@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import sys
 from .descriptors import TypeDescriptor, FunctionMetadata, ListMetadata, DictMetadata
-from core.domain.symbols import FunctionSymbol, VariableSymbol, SymbolKind
+from core.domain.symbols import FunctionSymbol, VariableSymbol, SymbolKind, SymbolFactory
 
 if TYPE_CHECKING:
     from .registry import MetadataRegistry
@@ -54,47 +54,37 @@ class TypeHydrator:
             
         new_members = {}
         for name, member in desc.members.items():
-            # 如果成员是裸的 TypeDescriptor，将其包装为 Symbol
-            if isinstance(member, TypeDescriptor):
-                hydrated_desc = self.hydrate_metadata(member)
-                if hasattr(hydrated_desc, "param_types"): # 启发式判断是否为函数
-                    sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=hydrated_desc)
-                else:
-                    sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=hydrated_desc)
-                new_members[name] = sym
-            elif hasattr(member, 'descriptor'): # 已经是 Symbol
-                member.descriptor = self.hydrate_metadata(member.descriptor)
+            # [IES 2.1 Refactor] 统一通过 Symbol.walk_references 多态处理
+            # [Active Defense] 严禁使用裸描述符，必须通过 SymbolFactory 包装
+            if hasattr(member, 'walk_references'):
+                member.walk_references(self.hydrate_metadata)
                 new_members[name] = member
             else:
                 new_members[name] = member
         
         desc.members = new_members
 
-    def hydrate_metadata(self, desc: Union[TypeDescriptor, str]) -> TypeDescriptor:
-        """递归确保描述符及其引用的所有类型都来自当前注册表实例"""
-        if isinstance(desc, str):
-            resolved = self._registry.resolve(desc)
+    def hydrate_metadata(self, descriptor: Union[TypeDescriptor, str]) -> TypeDescriptor:
+        """递归填充描述符及其成员"""
+        if descriptor is None: return None
+        
+        # 0. 如果是字符串引用，尝试解析
+        if isinstance(descriptor, str):
+            resolved = self._registry.resolve(descriptor)
             if resolved: return resolved
-            
-            # [IES 2.0 Strict] 禁止类型猜测。所有外部发现的元数据必须在 spec.py 中显式定义。
-            raise RuntimeError(f"UTS Error: Type '{desc}' not found in registry. [IES 2.0 No-Guessing Rule Violation]")
+            raise RuntimeError(f"UTS Error: Type '{descriptor}' not found in registry. [IES 2.0 No-Guessing Rule Violation]")
 
-        if desc._registry is self._registry: return desc
-        
-        # 如果是原子类型，尝试在当前注册表中查找
-        if desc.__class__ is TypeDescriptor or isinstance(desc, (ListMetadata, DictMetadata)):
-            # 优先查找同名且同路径的已注册描述符
-            resolved = self._registry.resolve(desc.name, desc.module_path)
-            if resolved and resolved is not desc: 
-                return resolved
+        # 1. 物理隔离：确保描述符是从当前注册表克隆出来的 (Interning)
+        # 如果描述符已经绑定到当前注册表，直接返回
+        if descriptor._registry is self._registry:
+            return descriptor
             
-            # 如果没找到且是原子类型，注入注册表上下文
-            if desc.__class__ is TypeDescriptor:
-                desc._registry = self._registry
-                return desc
-            
-        # [IES 2.1 Refactor] 使用 walk_references 递归处理子类型，消除 isinstance 硬编码
-        desc.walk_references(self.hydrate_metadata)
+        # 2. [IES 2.1 Refactor] 多态水化：利用 walk_references 递归处理子描述符
+        descriptor.walk_references(self.hydrate_metadata)
         
-        desc._registry = self._registry
-        return desc
+        # 3. 注入公理能力
+        self.inject_axioms(descriptor)
+        
+        # 4. 绑定注册表并完成注册
+        descriptor._registry = self._registry
+        return self._registry.register(descriptor)

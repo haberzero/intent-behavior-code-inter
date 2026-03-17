@@ -138,13 +138,13 @@ class BaseIBCTest(unittest.TestCase):
         """快捷设置 Mock AI 服务"""
         self.mock_ai = MockAI()
         # 注册插件，以便编译器能识别 'ai' 模块
-        self.engine.register_plugin("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+        self.engine.register_native_module("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
         return self.mock_ai
 
     def setup_mock_host(self):
         """快捷设置 Mock 宿主服务"""
         self.mock_host = MockHostService()
-        self.engine.register_plugin("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
+        self.engine.register_native_module("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
         return self.mock_host
 
     @contextmanager
@@ -204,9 +204,9 @@ class BaseIBCTest(unittest.TestCase):
         
         # 2. 恢复 Mock 环境
         if self.mock_ai:
-            self.engine.register_plugin("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+            self.engine.register_native_module("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
         if self.mock_host:
-            self.engine.register_plugin("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
+            self.engine.register_native_module("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
 
         try:
             # 3. 静态编译阶段

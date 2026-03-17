@@ -131,6 +131,20 @@ class MetadataRegistry:
         if value is None: return self.resolve("void")
         return None
 
+    # --- 查询辅助方法 ---
+
+    def get_all_modules(self) -> Dict[str, ModuleMetadata]:
+        """获取所有已注册的模块元数据"""
+        return {name: d for name, d in self._descriptors.items() if d.is_module()}
+
+    def get_all_functions(self) -> Dict[str, FunctionMetadata]:
+        """获取所有已注册的全局函数元数据"""
+        return {name: d for name, d in self._descriptors.items() if d.get_call_trait() and not d.is_class()}
+
+    def get_all_classes(self) -> Dict[str, ClassMetadata]:
+        """获取所有已注册的类元数据"""
+        return {name: d for name, d in self._descriptors.items() if d.is_class()}
+
     def get_axiom_registry(self) -> Optional['AxiomRegistry']:
         return self._axiom_registry
 

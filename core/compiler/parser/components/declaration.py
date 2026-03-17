@@ -5,6 +5,7 @@ from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStr
 from core.domain import ast as ast
 from core.domain.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
+from core.compiler.parser.core.syntax import ID_VAR
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 
@@ -105,10 +106,10 @@ class DeclarationComponent(BaseComponent):
             # 'var' keyword already consumed
             type_token = self.stream.previous()
             
-            # [IES 2.1 Axiom] 从元数据注册表解析 'var' 标识符，消除硬编码
-            var_name = "var"
+            # [IES 2.1 Refactor] 使用语法常量，消除硬编码
+            var_name = ID_VAR
             if self.context.metadata:
-                var_desc = self.context.metadata.resolve("var")
+                var_desc = self.context.metadata.resolve(ID_VAR)
                 if var_desc:
                     var_name = var_desc.name
             

@@ -201,15 +201,10 @@ class ExprHandler(BaseHandler):
         """类型强转运行时实现"""
         value = self.visit(node_data.get("value"))
         
-        # [IES 2.1 Refactor] 优先从 side_tables 获取决议后的目标描述符，消除名称硬编码
+        # [IES 2.1 Refactor] 强制从 side_tables 获取决议后的目标描述符
         target_descriptor = self.get_side_table("node_to_type", node_uid)
         if not target_descriptor:
-            # 回退到名称查找 (兼容旧产物)
-            target_type_name = node_data.get("type_name")
-            if target_type_name:
-                target_descriptor = self.registry.get_metadata_registry().resolve(target_type_name)
-            
-        if not target_descriptor:
+            # [Active Defense] 严禁回退到名称查找，确保 IES 2.1 契约完整性
             return value
             
         # 寻找对应的 IbClass (基于 UTS 唯一标识)

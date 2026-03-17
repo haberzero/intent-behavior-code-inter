@@ -1,5 +1,6 @@
 from typing import List, Optional, TYPE_CHECKING
 from core.compiler.lexer.tokens import TokenType
+from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.domain import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
@@ -63,11 +64,13 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
-        # We assume imports are handled by ImportComponent and dispatched by MainParser
-        # But if statement() is called inside a block, we might encounter import?
-        # If imports are allowed in blocks (not recommended usually but maybe supported),
-        # MainParser should dispatch to ImportComponent.
-        # Here we only handle control flow and expressions.
+        # [IES 2.1 Enforcement] 
+        # 严禁在非顶层（如代码块、函数、类内部）使用 import。
+        # 这一限制保证了调度器（Scheduler）可以高效地进行“无副作用”的依赖扫描。
+        if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):
+            raise self.stream.error(self.stream.peek(), 
+                             "Import statements are only allowed at the top level of a module.", 
+                             code="PAR_002")
         
         return self.expression_statement()
 
@@ -154,11 +157,14 @@ class StatementComponent(BaseComponent):
                 # [Fix] Use check instead of match, so parse_expression can consume the token
                 segments.append(self.expression.parse_expression())
             else:
-                # Try parsing as an expression if it's not a special token
-                try:
-                    segments.append(self.expression.parse_expression())
-                except:
-                    break
+                # [IES 2.1 Speculative Parsing]
+                # 尝试解析表达式段。若解析失败则停止消费意图内容。
+                # 开启静默前瞻模式，防止解析失败污染诊断状态。
+                with self.stream.speculate():
+                    try:
+                        segments.append(self.expression.parse_expression())
+                    except ParseControlFlowError:
+                        break
                 
         # If single segment and it's a string, we can flatten it
         content = "".join([s if isinstance(s, str) else str(s) for s in segments]).strip()

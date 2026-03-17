@@ -858,7 +858,8 @@ class SemanticAnalyzer:
             if member_sym.is_function and not member_sym.metadata.get("is_static"):
                 # [IES 2.1 Axiom] 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
                 if not base_type.is_module():
-                    return BoundMethodMetadata(receiver_type=base_type, function_type=member_sym.descriptor)
+                    # [IES 2.1 Refactor] 使用工厂创建以确保驻留和能力注入
+                    return self.registry.factory.create_bound_method(base_type, member_sym.descriptor)
             
             return member_sym.descriptor
             

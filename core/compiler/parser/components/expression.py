@@ -1,8 +1,10 @@
 from typing import Dict, Optional, List, Union
 from core.compiler.lexer.tokens import TokenType
+from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.domain import ast as ast
 from core.domain.ast import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
+from core.compiler.parser.core.syntax import ID_SELF, OP_MAP
 
 class ExpressionComponent(BaseComponent):
     def __init__(self, context):
@@ -43,7 +45,8 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.SELF, self.self_expr, None, IbPrecedence.LOWEST)
         self.register(TokenType.NUMBER, self.number, None, IbPrecedence.LOWEST)
         self.register(TokenType.STRING, self.string, None, IbPrecedence.LOWEST)
-        self.register(TokenType.BOOL, self.boolean, None, IbPrecedence.LOWEST)
+        self.register(TokenType.TRUE, self.boolean, None, IbPrecedence.LOWEST)
+        self.register(TokenType.FALSE, self.boolean, None, IbPrecedence.LOWEST)
         self.register(TokenType.NONE, self.none_expr, None, IbPrecedence.LOWEST)
         
         # Grouping and Collections
@@ -106,7 +109,9 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbName(id=name, ctx='Load'), token)
 
     def self_expr(self) -> ast.IbExpr:
-        return self._loc(ast.IbName(id='self', ctx='Load'), self.stream.previous())
+        token = self.stream.previous()
+        # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
+        return self._loc(ast.IbName(id=ID_SELF, ctx='Load'), token)
 
     def number(self) -> ast.IbExpr:
         value = self.stream.previous().value
@@ -121,28 +126,40 @@ class ExpressionComponent(BaseComponent):
 
     def boolean(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用 Token 类型判定内容
-        val = (token.value == "True")
+        # [IES 2.1 Refactor] 基于 Token 类型判定，消除字符串硬编码
+        val = (token.type == TokenType.TRUE)
         return self._loc(ast.IbConstant(value=val), token)
 
     def none_expr(self) -> ast.IbExpr:
-        return self._loc(ast.IbConstant(value=None), self.stream.previous())
+        token = self.stream.previous()
+        # [IES 2.1 Refactor] 使用标准 NONE Token，消除 Python None 直接引用
+        return self._loc(ast.IbConstant(value=None), token)
 
     def grouping(self) -> ast.IbExpr:
-        # [IES 2.1 Refactor] 增强 Cast 语法支持复杂类型 (如 (list[int]) x)
-        # 探测是否为类型转换：(Type) expr
+        # [IES 2.1 Ambiguity Resolution] 
+        # 语法歧义解析：(Type) expr [Cast] vs (expr) [Grouping]
+        # 由于 Type 可以是复杂的标识符、属性或下标访问，LL(1) 无法区分。
+        # 我们采用推测性前瞻（Speculative Lookahead）模式进行判定。
+        
         if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.VAR, TokenType.CALLABLE):
-            # 尝试推测性解析类型标注
             checkpoint = self.stream.get_checkpoint()
-            try:
-                type_node = self.parser.type_parser.parse_type_annotation()
-                if self.stream.match(TokenType.RPAREN):
-                    # 确认为 Cast
-                    value = self.parse_precedence(IbPrecedence.UNARY)
-                    return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
-            except:
-                pass
-            # 失败则回滚，按普通表达式处理
+            # [IES 2.1 Speculative Analysis]
+            # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
+            with self.stream.speculate():
+                try:
+                    # 尝试以前瞻方式解析类型标注
+                    type_node = self.context.type_parser.parse_type_annotation()
+                    if self.stream.match(TokenType.RPAREN):
+                        # 确认为类型转换 (Cast) 语法路径
+                        value = self.parse_precedence(IbPrecedence.UNARY)
+                        return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
+                except ParseControlFlowError:
+                    # [IES 2.1 Resolution] 
+                    # 类型转换（Cast）语法解析失败，由于处于 speculate() 上下文中，
+                    # 产生的错误已被隔离。此处静默 pass 是为了允许流回退并尝试普通表达式分组解析。
+                    pass
+            
+            # 路径回退：若非 Cast，则回退到检查点按普通分组表达式解析
             self.stream.restore_checkpoint(checkpoint)
 
         expr = self.parse_expression()
@@ -176,33 +193,27 @@ class ExpressionComponent(BaseComponent):
 
     def unary(self) -> ast.IbExpr:
         op_token = self.stream.previous()
-        op = op_token.type.name
+        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+        op = OP_MAP.get(op_token.type, op_token.type.name)
         operand = self.parse_precedence(IbPrecedence.UNARY)
-        op_map = {"MINUS": "-", "PLUS": "+", "NOT": "not", "BIT_NOT": "~"}
-        return self._loc(ast.IbUnaryOp(op=op_map.get(op, op), operand=operand), op_token, operand)
+        return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
 
     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
-        op = op_token.type.name
+        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+        op_str = OP_MAP.get(op_token.type, op_token.type.name)
+        
         rule = self.get_rule(op_token.type)
         right = self.parse_precedence(rule.precedence)
         
-        op_map = {
-            "PLUS": "+", "MINUS": "-", "STAR": "*", "SLASH": "/", "PERCENT": "%",
-            "GT": ">", "GE": ">=", "LT": "<", "LE": "<=", "EQ": "==", "NE": "!=",
-            "BIT_AND": "&", "BIT_OR": "|", "BIT_XOR": "^", "LSHIFT": "<<", "RSHIFT": ">>"
-        }
-        op_str = op_map.get(op, op)
-        
-        comparison_ops = ("GT", "GE", "LT", "LE", "EQ", "NE")
-        
-        if op in comparison_ops:
+        # 处理链式比较 (Chained Comparison)
+        if op_token.type in (TokenType.GT, TokenType.GE, TokenType.LT, TokenType.LE, TokenType.EQ, TokenType.NE):
             if isinstance(left, ast.IbCompare):
                 left.ops.append(op_str)
                 left.comparators.append(right)
                 return self._extend_loc(left, right)
             return self._loc(ast.IbCompare(left=left, ops=[op_str], comparators=[right]), left, right)
-        
+            
         return self._loc(ast.IbBinOp(left=left, op=op_str, right=right), left, right)
 
     def logical(self, left: ast.IbExpr) -> ast.IbExpr:

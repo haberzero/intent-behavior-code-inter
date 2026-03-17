@@ -51,7 +51,8 @@ class TypeHydrator:
         classes = []
         for uid in self.type_pool:
             desc = self._fill_descriptor(uid)
-            if desc and desc.__class__.__name__ == "ClassMetadata":
+            # [IES 2.1 Refactor] 使用 is_class() 代替名称比对
+            if desc and desc.is_class():
                 classes.append(desc)
         
         return classes

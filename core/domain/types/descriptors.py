@@ -32,9 +32,12 @@ class TypeDescriptor:
     def walk_references(self, callback: Any) -> None:
         """
         [IES 2.1] 遍历并应用回调到所有内部持有的类型引用。
-        用于多态地处理克隆、水合和绑定操作。
+        包括成员符号所持有的描述符。
         """
-        pass
+        if self.members:
+            for sym in self.members.values():
+                # 注意：Symbol.walk_references 应该能够接受并应用回调
+                sym.walk_references(callback)
 
     def get_references(self) -> Dict[str, Any]:
         """
@@ -128,6 +131,10 @@ class TypeDescriptor:
 
     def get_receiver_type(self) -> Optional['TypeDescriptor']:
         """获取接收者类型（针对绑定方法）"""
+        return None
+
+    def get_function_type(self) -> Optional['TypeDescriptor']:
+        """获取内部函数类型（针对绑定方法）"""
         return None
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
@@ -303,6 +310,11 @@ class LazyDescriptor(TypeDescriptor):
         self.target_name = name
         self.target_module = module_path
 
+    def walk_references(self, callback: Any) -> None:
+        """[IES 2.1] 延迟加载描述符也需要参与多态遍历"""
+        if self._resolved:
+            self._resolved = callback(self._resolved)
+
     def unwrap(self) -> TypeDescriptor:
         if self._resolved:
             return self._resolved
@@ -353,6 +365,7 @@ class ListMetadata(TypeDescriptor):
     element_type: Optional[TypeDescriptor] = None
 
     def walk_references(self, callback: Any) -> None:
+        super().walk_references(callback)
         if self.element_type:
             self.element_type = callback(self.element_type)
 
@@ -412,6 +425,7 @@ class DictMetadata(TypeDescriptor):
     value_type: Optional[TypeDescriptor] = None
 
     def walk_references(self, callback: Any) -> None:
+        super().walk_references(callback)
         if self.key_type: self.key_type = callback(self.key_type)
         if self.value_type: self.value_type = callback(self.value_type)
 
@@ -479,6 +493,7 @@ class FunctionMetadata(TypeDescriptor, WritableTrait):
     return_type: Optional[TypeDescriptor] = None
 
     def walk_references(self, callback: Any) -> None:
+        super().walk_references(callback)
         self.param_types = [callback(p) for p in self.param_types]
         if self.return_type: self.return_type = callback(self.return_type)
 
@@ -495,6 +510,11 @@ class FunctionMetadata(TypeDescriptor, WritableTrait):
         param_uids = data.get("param_types_uids", [])
         self.param_types = [hydrator.hydrate(p_uid) for p_uid in param_uids if p_uid]
         self.return_type = hydrator.hydrate(data.get("return_type_uid"))
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not self.name or self.name == "TypeDescriptor":
+            self.name = "callable"
 
     # --- Trait Implementations ---
 
@@ -579,6 +599,13 @@ class ClassMetadata(TypeDescriptor):
             return parent.resolve_member(name)
         return None
 
+    def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+        self.parent_name = data.get("parent_name")
+        self.parent_module = data.get("parent_module")
+        # 成员表重水化在 Serializer 中已转换为 UID 映射，但运行时通常动态填充
+        # 这里保留占位
+        pass
+
 @dataclass
 class BoundMethodMetadata(TypeDescriptor):
     """绑定方法类型元数据 (合成类型)"""
@@ -586,6 +613,7 @@ class BoundMethodMetadata(TypeDescriptor):
     function_type: Optional[TypeDescriptor] = field(default=None)
 
     def walk_references(self, callback: Any) -> None:
+        super().walk_references(callback)
         if self.receiver_type: self.receiver_type = callback(self.receiver_type)
         if self.function_type: self.function_type = callback(self.function_type)
 
@@ -597,6 +625,9 @@ class BoundMethodMetadata(TypeDescriptor):
 
     def get_receiver_type(self) -> Optional[TypeDescriptor]:
         return self.receiver_type
+
+    def get_function_type(self) -> Optional[TypeDescriptor]:
+        return self.function_type
 
     def get_signature(self) -> Optional[tuple[List['TypeDescriptor'], Optional['TypeDescriptor']]]:
         return self.param_types, self.return_type
@@ -653,15 +684,15 @@ class BoundMethodMetadata(TypeDescriptor):
             
         # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
         o_receiver = o.get_receiver_type()
+        o_func = o.get_function_type()
+        
         if o_receiver:
             # 结构化语义校验：接收者与函数签名都必须兼容
             if self.receiver_type and not self.receiver_type.is_assignable_to(o_receiver):
                 return False
             
-            # 这里的 function_type 比较可以继续下推给 FunctionMetadata.is_assignable_to
-            if self.function_type and hasattr(o, 'function_type'):
-                # 暂时允许访问 function_type 字段，或者引入 get_function_type()
-                return self.function_type.is_assignable_to(getattr(o, 'function_type'))
+            if self.function_type and o_func:
+                return self.function_type.is_assignable_to(o_func)
         return False
 
 @dataclass
@@ -671,6 +702,9 @@ class ModuleMetadata(TypeDescriptor):
     
     def get_base_axiom_name(self) -> str:
         return "module"
+
+    def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+        self.required_capabilities = data.get("required_capabilities", [])
 
     def __post_init__(self):
         super().__post_init__()

@@ -185,8 +185,11 @@ class FlatSerializer(BaseFlatSerializer):
             else:
                 type_data[f"{key}_uid"] = self._collect_type(val)
         
-        if isinstance(t, ClassMetadata):
-            type_data["parent_name"] = t.parent_name
+        # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
+        if t.is_class():
+            # 这里的字段是字符串，直接存储
+            type_data["parent_name"] = getattr(t, "parent_name", None)
+            type_data["parent_module"] = getattr(t, "parent_module", None)
             
         # [NEW] 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
