@@ -30,4 +30,15 @@ OP_MAP = {
     TokenType.RSHIFT: ">>",
     TokenType.NOT: "not",
     TokenType.BIT_NOT: "~",
+    TokenType.AND: "and",
+    TokenType.OR: "or",
+}
+
+# 复合赋值运算符映射 (用于 IbAugAssign)
+COMPOUND_OP_MAP = {
+    TokenType.PLUS_ASSIGN: "+",
+    TokenType.MINUS_ASSIGN: "-",
+    TokenType.STAR_ASSIGN: "*",
+    TokenType.SLASH_ASSIGN: "/",
+    TokenType.PERCENT_ASSIGN: "%",
 }

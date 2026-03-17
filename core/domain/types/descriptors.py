@@ -581,6 +581,14 @@ class ClassMetadata(TypeDescriptor):
         # 类实例化返回其实例类型（即自身）
         return self
 
+    def get_references(self) -> Dict[str, Any]:
+        """[IES 2.1] 补全类元数据的引用获取，支持结构化比对"""
+        refs = super().get_references()
+        parent = self.resolve_parent()
+        if parent:
+            refs["parent"] = parent
+        return refs
+
     def resolve_parent(self) -> Optional[TypeDescriptor]:
         if not self.parent_name: return None
         if not self._registry: return None
@@ -702,6 +710,10 @@ class ModuleMetadata(TypeDescriptor):
     
     def get_base_axiom_name(self) -> str:
         return "module"
+
+    def get_references(self) -> Dict[str, Any]:
+        """[IES 2.1] 模块元数据的引用获取"""
+        return super().get_references()
 
     def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
         self.required_capabilities = data.get("required_capabilities", [])

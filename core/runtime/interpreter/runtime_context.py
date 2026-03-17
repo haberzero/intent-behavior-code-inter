@@ -208,6 +208,15 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         self._global_intents: List[IbIntent] = []
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
+        self._retry_hint: Optional[str] = None # [IES 2.1] 运行时重试提示词
+
+    @property
+    def retry_hint(self) -> Optional[str]:
+        return self._retry_hint
+
+    @retry_hint.setter
+    def retry_hint(self, value: Optional[str]):
+        self._retry_hint = value
 
     def push_loop_context(self, index: int, total: int) -> None:
         self._loop_stack.append({"index": index, "total": total})
@@ -400,16 +409,12 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         return self._intent_top
         
     @intent_stack.setter
-    def intent_stack(self, value: Union[Optional[IntentNode], List[Any]]):
-        if isinstance(value, list):
-            # 兼容模式：从列表重建链表
-            self._intent_top = None
-            for i in value:
-                self.push_intent(i)
-        elif value is None or isinstance(value, IntentNode):
+    def intent_stack(self, value: Optional[IntentNode]):
+        """[IES 2.1] 仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
+        if value is None or isinstance(value, IntentNode):
             self._intent_top = value
         else:
-            raise TypeError(f"Invalid intent stack type: {type(value)}")
+            raise TypeError(f"Invalid intent stack type: {type(value)}. Must be IntentNode or None.")
 
     @property
     def current_scope(self) -> Scope:

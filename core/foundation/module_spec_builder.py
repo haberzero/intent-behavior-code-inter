@@ -76,11 +76,12 @@ class SpecBuilder:
         """开始声明一个类"""
         parent_metadata = None
         if parent:
-            if isinstance(parent, ClassMetadata):
+            # [IES 2.1 Refactor] 使用能力探测替代 isinstance 检查
+            if hasattr(parent, "is_class") and parent.is_class():
                 parent_metadata = parent
             else:
                 p = self._resolve_type(parent)
-                if isinstance(p, ClassMetadata):
+                if p.is_class():
                     parent_metadata = p
         
         self._current_class_builder = ClassSpecBuilder(name, parent_metadata)

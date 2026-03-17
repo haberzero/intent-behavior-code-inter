@@ -170,7 +170,8 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
     def name(self) -> str: return "str"
     
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        if other.name == "int":
+        # [IES 2.1 Refactor] 使用公理类型判定替代名称比对
+        if other._axiom and isinstance(other._axiom, IntAxiom):
             return "Use .cast_to(int) or int(s) to convert string to integer."
         return None
     
@@ -223,7 +224,8 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
     def name(self) -> str: return "list"
     
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        if other.name == "str":
+        # [IES 2.1 Refactor] 使用公理类型判定替代名称比对
+        if other._axiom and isinstance(other._axiom, StrAxiom):
             return "Did you forget to join the list into a string?"
         return None
     

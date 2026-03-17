@@ -526,6 +526,52 @@ class Interpreter:
         err.location = loc
         return err
 
+    def _with_unified_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> IbObject:
+        """[IES 2.1 Unified Fallback] 统一的 LLM 容错执行逻辑"""
+        retry_count = 0
+        pushed_intents = 0
+        
+        try:
+            while True:
+                try:
+                    return action()
+                except LLMUncertaintyError as e:
+                    retry_count += 1
+                    if retry_count > 3: # 物理硬限制
+                        raise e
+                    
+                    # 1. 优先执行显式 llmexcept 块 (用户级)
+                    fallback_uids = node_data.get("llm_fallback", [])
+                    if fallback_uids:
+                        try:
+                            # 执行 fallback 逻辑
+                            for f_uid in fallback_uids:
+                                self.visit(f_uid)
+                            return self.registry.get_none()
+                        except RetryException:
+                            # 显式触发 retry
+                            continue
+                    
+                    # 2. 内核级自动意图注入 (能力探测)
+                    ai_module = self.interop.get_package("ai")
+                    retry_prompt = None
+                    if ai_module and hasattr(ai_module, "get_retry_prompt"):
+                        retry_prompt = ai_module.get_retry_prompt(node_type)
+                    
+                    if retry_prompt:
+                        self.runtime_context.push_intent(retry_prompt, tag="AUTO_RETRY")
+                        pushed_intents += 1
+                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, 
+                            f"LLM Uncertainty at {node_type}: Injected specialized retry prompt #{retry_count}")
+                        continue
+                    
+                    # 无策可施，向上抛出
+                    raise e
+        finally:
+            # 环境清理
+            for _ in range(pushed_intents):
+                self.runtime_context.pop_intent()
+
     def _resolve_value(self, val: Any) -> Any:
         """[IES 2.2 Security Update] 处理外部资产引用的解析"""
         # 支持 dict 和 ReadOnlyNodePool (Mapping)
@@ -704,7 +750,14 @@ class Interpreter:
                         pushed_count += 1
 
             try:
+                node_type = node_data.get("_type")
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
+                
+                # [IES 2.1 Unified Fallback] 统一语句级 LLM 容错分发
+                fallback_uids = node_data.get("llm_fallback", [])
+                if fallback_uids:
+                    return self._with_unified_fallback(node_uid, node_type, node_data, lambda: visitor(node_uid, node_data))
+                
                 return visitor(node_uid, node_data)
             except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
                 raise

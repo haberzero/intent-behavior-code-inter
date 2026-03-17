@@ -54,7 +54,9 @@ class ModuleLoader(IModuleLoader):
         for spec_name, spec_member in metadata.members.items():
             # [IES 2.0] 成员可能已经被水合为 Symbol，需要检查其底层描述符
             spec_desc = spec_member.descriptor if hasattr(spec_member, 'descriptor') else spec_member
-            if not isinstance(spec_desc, FunctionMetadata): continue
+            # [IES 2.1 Refactor] 使用能力探测替代 isinstance 检查
+            if not (spec_desc.get_call_trait() and not spec_desc.is_class()): 
+                continue
                 
             if spec_name not in raw_vtable:
                 raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing required method '{spec_name}'")

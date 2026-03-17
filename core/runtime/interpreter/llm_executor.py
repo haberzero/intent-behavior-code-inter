@@ -36,9 +36,6 @@ class LLMExecutorImpl:
         self.llm_callback = llm_callback
         self.debugger = debugger or core_debugger
         
-        # retry_hint 现状保存在 LLMExecutorImpl 中，为了兼容，
-        # 我们会在调用 Provider 时同步同步它
-        self.retry_hint: Optional[str] = None
         self.last_call_info: Mapping[str, Any] = {} # 记录最后一次 LLM 调用信息
         self._expected_type_stack: List[str] = []
 
@@ -98,7 +95,7 @@ class LLMExecutorImpl:
                 sys_prompt += f"\n\n{type_prompt}"
 
         # 4. 调用底层模型
-        raw_res = self._call_llm(sys_prompt, user_prompt, node_uid)
+        raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
         
         # 记录最后一次调用信息
         self.last_call_info = {
@@ -191,7 +188,7 @@ class LLMExecutorImpl:
         scene_name = execution_context.get_side_table("node_scenes", node_uid) or "general"
         sys_prompt = "你是一个意图行为代码执行器。"
         
-        current_retry_hint = self.retry_hint
+        current_retry_hint = context.retry_hint
         if ai_module:
             if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
                 current_retry_hint = ai_module._retry_hint
@@ -225,16 +222,16 @@ class LLMExecutorImpl:
                 # 模糊匹配
                 for k in decision_map:
                     if k.lower() in clean_res:
-                        self.retry_hint = None
+                        context.retry_hint = None
                         return self.registry.box(decision_map[k])
                 
                 if clean_res in decision_map:
-                    self.retry_hint = None
+                    context.retry_hint = None
                     return self.registry.box(decision_map[clean_res])
                 
                 raise LLMUncertaintyError(f"LLM decision format error: {response}", node_uid, raw_response=response)
 
-        self.retry_hint = None
+        context.retry_hint = None
         return self.registry.box(response)
 
 
@@ -265,16 +262,19 @@ class LLMExecutorImpl:
             if type_pushed:
                 self.pop_expected_type()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general") -> str:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general", execution_context: Optional[IExecutionContext] = None) -> str:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
         
+        context = execution_context.runtime_context if execution_context else None
+        retry_hint = context.retry_hint if context else None
+
         if self.llm_callback:
             # 同步同步重试提示词
-            if self.retry_hint:
-                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {self.retry_hint}")
-                self.llm_callback.set_retry_hint(self.retry_hint)
+            if retry_hint:
+                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {retry_hint}")
+                self.llm_callback.set_retry_hint(retry_hint)
             
             # 调用 Provider
             response = self.llm_callback(sys_prompt, user_prompt, scene=scene)

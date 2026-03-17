@@ -38,6 +38,12 @@ class AIPlugin(ILLMProvider):
             "list": "请仅返回一个合法的 JSON 数组（List）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。",
             "dict": "请仅返回一个合法的 JSON 对象（Dict）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。"
         }
+        self._retry_prompts = {
+            "IbIf": "此处的逻辑判断存在歧义。请严格基于事实，返回 1 (条件成立) 或 0 (条件不成立)。",
+            "IbWhile": "循环条件判断模糊。请确认当前任务是否已完成：返回 0 表示完成（跳出循环），返回 1 表示继续。",
+            "IbExprStmt": "当前行为描述执行失败或结果不明确。请尝试以更直接、更具确定性的方式重新执行。",
+            "IbAssign": "目标值计算模糊。请确保返回的内容能被清晰地识别并赋值给变量。"
+        }
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
@@ -99,6 +105,9 @@ class AIPlugin(ILLMProvider):
 
     def get_scene_prompt(self, scene: str) -> str:
         return self._scene_prompts.get(scene, self._scene_prompts["general"])
+
+    def get_retry_prompt(self, node_type: str) -> Optional[str]:
+        return self._retry_prompts.get(node_type)
 
     def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
         self._return_type_prompts[type_name] = prompt
@@ -195,6 +204,7 @@ class AIPlugin(ILLMProvider):
             "get_decision_map": self.get_decision_map,
             "get_last_call_info": self.get_last_call_info,
             "get_scene_prompt": self.get_scene_prompt,
+            "get_retry_prompt": self.get_retry_prompt,
             "set_scene_config": self.set_scene_config,
             "set_global_intent": self.set_global_intent,
             "clear_global_intents": self.clear_global_intents,

@@ -36,9 +36,10 @@ class Prelude:
         for name, desc in metadata_reg.all_descriptors.items():
             if "." in name: continue
             
-            if isinstance(desc, FunctionMetadata):
+            # [IES 2.1 Refactor] 使用能力探测替代 isinstance 检查
+            if desc.get_call_trait() and not desc.is_class():
                 self.builtin_functions[name] = desc
-            elif isinstance(desc, ModuleMetadata):
+            elif desc.is_module():
                 self.builtin_modules[name] = desc
             else:
                 self.builtin_types[name] = desc

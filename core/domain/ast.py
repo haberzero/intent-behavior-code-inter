@@ -86,7 +86,16 @@ class IbASTNode:
 @dataclass(kw_only=True, eq=False)
 class IbStmt(IbASTNode):
     """语句节点基类"""
-    pass
+    # [IES 2.1] 统一容错机制：所有语句均可附加 LLM 异常处理块
+    llm_fallback: List['IbStmt'] = field(default_factory=list)
+
+    @property
+    def supports_llm_fallback(self) -> bool:
+        """
+        [IES 2.1] 指示该语句是否支持附加 llm except 容错块。
+        默认支持，极简控制流语句（如 pass/break）需显式禁用。
+        """
+        return True
 
 @dataclass(kw_only=True, eq=False)
 class IbExpr(IbASTNode):
@@ -179,18 +188,19 @@ class IbGlobalStmt(IbStmt):
 class IbReturn(IbStmt):
     value: Optional[IbExpr] = None
 
+    @property
+    def supports_llm_fallback(self) -> bool: return False
+
 @dataclass(kw_only=True, eq=False)
 class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):
     target: IbExpr
     op: str
     value: IbExpr
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbFor(IbStmt):
@@ -198,21 +208,18 @@ class IbFor(IbStmt):
     iter: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbWhile(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbIf(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbTry(IbStmt):
@@ -220,7 +227,6 @@ class IbTry(IbStmt):
     handlers: List['IbExceptHandler']
     orelse: List[IbStmt] = field(default_factory=list)
     finalbody: List[IbStmt] = field(default_factory=list)
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbExceptHandler(IbASTNode):
@@ -233,9 +239,15 @@ class IbRaise(IbStmt):
     exc: Optional[IbExpr]
     cause: Optional[IbExpr] = None
 
+    @property
+    def supports_llm_fallback(self) -> bool: return False
+
 @dataclass(kw_only=True, eq=False)
 class IbImport(IbStmt):
     names: List['IbAlias']
+
+    @property
+    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbImportFrom(IbStmt):
@@ -243,26 +255,34 @@ class IbImportFrom(IbStmt):
     names: List['IbAlias']
     level: int = 0
 
+    @property
+    def supports_llm_fallback(self) -> bool: return False
+
 @dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
-    llm_fallback: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbPass(IbStmt):
-    pass
+    @property
+    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbBreak(IbStmt):
-    pass
+    @property
+    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbContinue(IbStmt):
-    pass
+    @property
+    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbRetry(IbStmt):
     hint: Optional[IbExpr] = None  # retry "hint"
+
+    @property
+    def supports_llm_fallback(self) -> bool: return False
 
 # IbLLMExceptionalStmt removed
 

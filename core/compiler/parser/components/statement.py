@@ -2,7 +2,9 @@ from typing import List, Optional, TYPE_CHECKING
 from core.compiler.lexer.tokens import TokenType
 from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.domain import ast as ast
+from core.domain.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
+from core.compiler.parser.core.syntax import ID_VAR, COMPOUND_OP_MAP
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -25,6 +27,22 @@ class StatementComponent(BaseComponent):
     # Removed set_decl_parser method
 
     def parse_statement(self) -> ast.IbStmt:
+        """[IES 2.1 Unified Entry] 所有语句的统一入口，处理公共装饰逻辑（如 llm except）"""
+        stmt = self._parse_statement_core()
+        
+        # 统一处理 llm except 块
+        # [IES 2.1 Refactor] 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
+        if stmt.supports_llm_fallback:
+            llm_fallback = self._parse_llm_fallback()
+            if llm_fallback:
+                stmt.llm_fallback = llm_fallback
+                # 扩展语句的物理位置以包含容错块
+                self._extend_loc(stmt, self.stream.previous())
+                
+        return stmt
+
+    def _parse_statement_core(self) -> ast.IbStmt:
+        """核心语句解析逻辑"""
         if self.stream.match(TokenType.RETURN):
             return self.return_statement()
         if self.stream.match(TokenType.GLOBAL):
@@ -124,23 +142,37 @@ class StatementComponent(BaseComponent):
         return self.context.declaration_parser.parse_declaration()
 
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
-        """Helper to parse the content part of an intent (@ or intent keyword)"""
-        mode = "normal"
+        """Parse 'mode "content"' or 'mode identifier'"""
+        # 1. Parse mode
+        mode = IntentMode.APPEND.value
         token_val = start_token.value
         
         if token_val.startswith("@"):
             mode_char = token_val[1:]
-            if mode_char == "+": mode = "append"
-            elif mode_char == "!": mode = "override"
-            elif mode_char == "-": mode = "remove"
+            if mode_char == "+": mode = IntentMode.APPEND.value
+            elif mode_char == "!": mode = IntentMode.OVERRIDE.value
+            elif mode_char == "-": mode = IntentMode.REMOVE.value
         else:
             # Handle 'intent ! "content":'
             if self.stream.match(TokenType.NOT):
-                mode = "override"
+                mode = IntentMode.OVERRIDE.value
             elif self.stream.match(TokenType.PLUS):
-                mode = "append"
+                mode = IntentMode.APPEND.value
             elif self.stream.match(TokenType.MINUS):
-                mode = "remove"
+                mode = IntentMode.REMOVE.value
+            
+            # [IES 2.1 Refactor] 支持模式别名，消除硬编码字符串
+            elif self.stream.check(TokenType.IDENTIFIER):
+                peek_val = self.stream.peek().value.lower()
+                if peek_val in ("append", "add"):
+                    self.stream.advance()
+                    mode = IntentMode.APPEND.value
+                elif peek_val in ("override", "exclusive"):
+                    self.stream.advance()
+                    mode = IntentMode.OVERRIDE.value
+                elif peek_val in ("remove", "delete"):
+                    self.stream.advance()
+                    mode = IntentMode.REMOVE.value
             
         segments = []
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
@@ -180,10 +212,6 @@ class StatementComponent(BaseComponent):
         body = self.block()
         end_token = self.stream.previous() # DEDENT
         
-        llm_fallback = self._parse_llm_fallback()
-        if llm_fallback:
-            end_token = self.stream.previous() # end of fallback
-            
         root_if = self._loc(ast.IbIf(test=test, body=body, orelse=[]), start_token, end_token)
         last_node = root_if
         
@@ -209,17 +237,6 @@ class StatementComponent(BaseComponent):
             # Extend root if range to cover else
             self._extend_loc(root_if, else_end)
             
-        # 4. Final LLM_EXCEPT for the whole chain
-        final_fallback = self._parse_llm_fallback()
-        if final_fallback:
-             self._extend_loc(root_if, self.stream.previous())
-        
-        # 优先使用 root 的 fallback，如果没有则使用最后的 final_fallback
-        effective_fallback = llm_fallback or final_fallback
-        
-        if effective_fallback:
-            root_if.llm_fallback = effective_fallback
-        
         return root_if
 
     def while_statement(self) -> ast.IbStmt:
@@ -235,12 +252,7 @@ class StatementComponent(BaseComponent):
         body = self.block()
         end_token = self.stream.previous() # DEDENT
         
-        stmt = self._loc(ast.IbWhile(test=test, body=body, orelse=[]), start_token, end_token)
-        
-        llm_fallback = self._parse_llm_fallback()
-        if llm_fallback:
-            stmt.llm_fallback = llm_fallback
-        return stmt
+        return self._loc(ast.IbWhile(test=test, body=body, orelse=[]), start_token, end_token)
 
     def for_statement(self) -> ast.IbStmt:
         start_token = self.stream.previous()
@@ -269,12 +281,7 @@ class StatementComponent(BaseComponent):
         body = self.block()
         end_token = self.stream.previous() # DEDENT
         
-        stmt = self._loc(ast.IbFor(target=target, iter=iter_expr, body=body, orelse=[]), start_token, end_token)
-        
-        llm_fallback = self._parse_llm_fallback()
-        if llm_fallback:
-            stmt.llm_fallback = llm_fallback
-        return stmt
+        return self._loc(ast.IbFor(target=target, iter=iter_expr, body=body, orelse=[]), start_token, end_token)
 
     def expression_statement(self) -> ast.IbStmt:
         expr = self.expression.parse_expression()
@@ -282,36 +289,20 @@ class StatementComponent(BaseComponent):
         # Check if it's an assignment or compound assignment
         if self.stream.match(TokenType.ASSIGN):
             value = self.expression.parse_expression()
-            end_token = self.stream.consume_end_of_statement("Expect newline after assignment.")
-            llm_fallback = self._parse_llm_fallback()
-            stmt = self._loc(ast.IbAssign(targets=[expr], value=value), expr, end_token)
-            if llm_fallback:
-                stmt.llm_fallback = llm_fallback
-            return stmt
+            self.stream.consume_end_of_statement("Expect newline after assignment.")
+            return self._loc(ast.IbAssign(targets=[expr], value=value), expr)
         
-        # Compound assignments
-        compound_ops = {
-            TokenType.PLUS_ASSIGN: '+', TokenType.MINUS_ASSIGN: '-',
-            TokenType.STAR_ASSIGN: '*', TokenType.SLASH_ASSIGN: '/',
-            TokenType.PERCENT_ASSIGN: '%'
-        }
-        
-        for token_type, op_str in compound_ops.items():
+        # 3. AugAssign (a += 1)
+        # [IES 2.1 Refactor] 使用 COMPOUND_OP_MAP 映射复合赋值运算符
+        for token_type, op_str in COMPOUND_OP_MAP.items():
             if self.stream.match(token_type):
                 value = self.expression.parse_expression()
-                end_token = self.stream.consume_end_of_statement("Expect newline after compound assignment.")
-                llm_fallback = self._parse_llm_fallback()
-                stmt = self._loc(ast.IbAugAssign(target=expr, op=op_str, value=value), expr, end_token)
-                if llm_fallback:
-                    stmt.llm_fallback = llm_fallback
-                return stmt
-            
+                self.stream.consume_end_of_statement("Expect newline after assignment.")
+                return self._loc(ast.IbAugAssign(target=expr, op=op_str, value=value), expr)
+        
+        # 4. Pure Expression Statement
         self.stream.consume_end_of_statement("Expect newline after expression.")
-        llm_fallback = self._parse_llm_fallback()
-        stmt = self._loc(ast.IbExprStmt(value=expr), self.stream.previous())
-        if llm_fallback:
-            stmt.llm_fallback = llm_fallback
-        return stmt
+        return self._loc(ast.IbExprStmt(value=expr), expr)
 
     def block(self) -> List[ast.IbStmt]:
         self.stream.consume(TokenType.NEWLINE, "Expect newline before block.")
@@ -387,12 +378,7 @@ class StatementComponent(BaseComponent):
         if not handlers and not finalbody:
              raise self.stream.error(start_token, "Expect 'except' or 'finally' after 'try'.", code="PAR_001")
              
-        llm_fallback = self._parse_llm_fallback()
-        stmt = self._loc(ast.IbTry(body=body, handlers=handlers, orelse=orelse, finalbody=finalbody), start_token)
-        
-        if llm_fallback:
-            stmt.llm_fallback = llm_fallback
-        return stmt
+        return self._loc(ast.IbTry(body=body, handlers=handlers, orelse=orelse, finalbody=finalbody), start_token)
 
     def raise_statement(self) -> ast.IbRaise:
         start_token = self.stream.previous()

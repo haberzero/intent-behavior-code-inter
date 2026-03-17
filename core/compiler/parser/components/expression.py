@@ -218,7 +218,8 @@ class ExpressionComponent(BaseComponent):
 
     def logical(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
-        op = "and" if op_token.type == TokenType.AND else "or"
+        # [IES 2.1 Refactor] 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
+        op = OP_MAP.get(op_token.type, op_token.type.name)
         rule = self.get_rule(op_token.type)
         right = self.parse_precedence(rule.precedence)
         
