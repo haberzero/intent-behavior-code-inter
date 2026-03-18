@@ -1,44 +1,27 @@
-from core.compiler.lexer.tokens import TokenType
+from enum import IntEnum
 
-"""
-[IES 2.1] 语法常量定义。
-统一管理 Parser 中使用的保留标识符名称和运算符映射。
-"""
+# --- Precedence & ParseRule (Parser Core Syntax) ---
 
-# 保留标识符 (用于 AST 节点的 ID 字段)
-ID_SELF = "self"
-ID_VAR = "var"
-ID_CALLABLE = "callable"
+class IbPrecedence(IntEnum):
+    LOWEST = 0
+    ASSIGNMENT = 1  # =
+    TUPLE = 2       # ,
+    OR = 3          # or
+    AND = 4         # and
+    BIT_OR = 5      # |
+    BIT_XOR = 6     # ^
+    BIT_AND = 7     # &
+    EQUALITY = 8    # == !=
+    COMPARISON = 8  # < > <= >= Same precedence as EQUALITY
+    SHIFT = 9       # << >>
+    TERM = 10        # + -
+    FACTOR = 11     # * / %
+    UNARY = 12      # ! - +
+    CALL = 13       # . ()
+    PRIMARY = 14
 
-# 运算符映射 (键已由字符串重构为 TokenType 枚举，彻底消除解析器中的字符串比对)
-OP_MAP = {
-    TokenType.PLUS: "+",
-    TokenType.MINUS: "-",
-    TokenType.STAR: "*",
-    TokenType.SLASH: "/",
-    TokenType.PERCENT: "%",
-    TokenType.EQ: "==",
-    TokenType.NE: "!=",
-    TokenType.GT: ">",
-    TokenType.LT: "<",
-    TokenType.GE: ">=",
-    TokenType.LE: "<=",
-    TokenType.BIT_AND: "&",
-    TokenType.BIT_OR: "|",
-    TokenType.BIT_XOR: "^",
-    TokenType.LSHIFT: "<<",
-    TokenType.RSHIFT: ">>",
-    TokenType.NOT: "not",
-    TokenType.BIT_NOT: "~",
-    TokenType.AND: "and",
-    TokenType.OR: "or",
-}
-
-# 复合赋值运算符映射 (用于 IbAugAssign)
-COMPOUND_OP_MAP = {
-    TokenType.PLUS_ASSIGN: "+",
-    TokenType.MINUS_ASSIGN: "-",
-    TokenType.STAR_ASSIGN: "*",
-    TokenType.SLASH_ASSIGN: "/",
-    TokenType.PERCENT_ASSIGN: "%",
-}
+class IbParseRule:
+    def __init__(self, prefix, infix, precedence):
+        self.prefix = prefix
+        self.infix = infix
+        self.precedence = precedence

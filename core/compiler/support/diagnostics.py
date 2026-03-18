@@ -1,5 +1,5 @@
 from typing import Protocol, Optional, Any, runtime_checkable, List
-from core.domain.issue_atomic import Severity
+from core.foundation.source_atomic import Location, Severity
 
 @runtime_checkable
 class DiagnosticReporter(Protocol):

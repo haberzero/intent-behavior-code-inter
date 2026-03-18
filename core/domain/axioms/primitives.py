@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 
 class BaseAxiom(TypeAxiom):
     """公理基类，提供默认实现"""
+    def get_methods(self) -> Dict[str, FunctionMetadata]: return {}
+    def get_operators(self) -> Dict[str, str]: return {} # 默认不支持运算符
+
     def is_dynamic(self) -> bool: return False
     def is_class(self) -> bool: return False
     def is_module(self) -> bool: return False
@@ -49,6 +52,14 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
             "to_bool": FunctionMetadata(name="to_bool", param_types=[], return_type=BOOL_DESCRIPTOR),
             "to_list": FunctionMetadata(name="to_list", param_types=[], return_type=ListMetadata(element_type=INT_DESCRIPTOR)),
             "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
+        }
+
+    def get_operators(self) -> Dict[str, str]:
+        return {
+            "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__", 
+            "//": "__floordiv__", "%": "__mod__", "**": "__pow__",
+            "&": "__and__", "|": "__or__", "^": "__xor__", "<<": "__lshift__", ">>": "__rshift__",
+            "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
@@ -98,6 +109,13 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
             "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
         }
 
+    def get_operators(self) -> Dict[str, str]:
+        return {
+            "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__", 
+            "//": "__floordiv__", "%": "__mod__", "**": "__pow__",
+            "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__"
+        }
+
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('+', '-', '*', '/', '//', '%'):
             if other and other.get_base_axiom_name() in ("int", "float"):
@@ -136,6 +154,12 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {} # No specific methods for bool yet
+
+    def get_operators(self) -> Dict[str, str]:
+        return {
+            "&": "__and__", "|": "__or__", "^": "__xor__", "and": "__and__", "or": "__or__",
+            "==": "__eq__", "!=": "__ne__"
+        }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('&', '|', '^', 'and', 'or'):
@@ -186,6 +210,11 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
             "len": FunctionMetadata(name="len", param_types=[], return_type=INT_DESCRIPTOR),
             "to_bool": FunctionMetadata(name="to_bool", param_types=[], return_type=BOOL_DESCRIPTOR),
             "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
+        }
+
+    def get_operators(self) -> Dict[str, str]:
+        return {
+            "+": "__add__", "==": "__eq__", "!=": "__ne__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:

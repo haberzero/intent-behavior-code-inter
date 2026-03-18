@@ -1,6 +1,6 @@
 from typing import Optional, List, Any, Protocol, runtime_checkable
 from dataclasses import dataclass
-from .issue_atomic import Severity, Location
+from core.foundation.source_atomic import Severity, Location
 
 # --- 诊断协议 (Protocols) ---
 

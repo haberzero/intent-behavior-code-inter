@@ -54,11 +54,37 @@ class IbInteger(IbObject):
     def __repr__(self):
         return f"Integer({self.value})"
 
+    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
+    def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
+    def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
+    def __truediv__(self, other: IbObject) -> Any: 
+        b = other.to_native()
+        return self.value // b if isinstance(b, int) else self.value / b
+    def __floordiv__(self, other: IbObject) -> Any: return self.value // other.to_native()
+    def __mod__(self, other: IbObject) -> Any: return self.value % other.to_native()
+    def __pow__(self, other: IbObject) -> Any: return self.value ** other.to_native()
+    def __and__(self, other: IbObject) -> Any: return self.value & other.to_native()
+    def __or__(self, other: IbObject) -> Any: return self.value | other.to_native()
+    def __xor__(self, other: IbObject) -> Any: return self.value ^ other.to_native()
+    def __lshift__(self, other: IbObject) -> Any: return self.value << other.to_native()
+    def __rshift__(self, other: IbObject) -> Any: return self.value >> other.to_native()
+    def __invert__(self) -> Any: return ~self.value
+    def __neg__(self) -> Any: return -self.value
+    def __pos__(self) -> Any: return +self.value
+
+    def __lt__(self, other: IbObject) -> bool: return self.value < other.to_native()
+    def __le__(self, other: IbObject) -> bool: return self.value <= other.to_native()
+    def __gt__(self, other: IbObject) -> bool: return self.value > other.to_native()
+    def __ge__(self, other: IbObject) -> bool: return self.value >= other.to_native()
+    
     def __eq__(self, other):
         if isinstance(other, IbInteger):
             return self.value == other.value
-        if isinstance(other, int):
-            return self.value == other
+        if isinstance(other, (int, bool)):
+            return self.value == int(other)
+        if isinstance(other, IbObject):
+            return self.value == other.to_native()
         return False
 
     def __ne__(self, other):
@@ -92,6 +118,24 @@ class IbFloat(IbObject):
     def __repr__(self):
         return f"Float({self.value})"
 
+    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
+    def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
+    def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
+    def __truediv__(self, other: IbObject) -> Any: return self.value / other.to_native()
+    def __floordiv__(self, other: IbObject) -> Any: return self.value // other.to_native()
+    def __mod__(self, other: IbObject) -> Any: return self.value % other.to_native()
+    def __pow__(self, other: IbObject) -> Any: return self.value ** other.to_native()
+    def __neg__(self) -> Any: return -self.value
+    def __pos__(self) -> Any: return +self.value
+
+    def __lt__(self, other: IbObject) -> bool: return self.value < other.to_native()
+    def __le__(self, other: IbObject) -> bool: return self.value <= other.to_native()
+    def __gt__(self, other: IbObject) -> bool: return self.value > other.to_native()
+    def __ge__(self, other: IbObject) -> bool: return self.value >= other.to_native()
+    def __eq__(self, other: IbObject) -> bool: return self.value == other.to_native()
+    def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
+
 @register_ib_type("str")
 class IbString(IbObject):
     """
@@ -122,6 +166,15 @@ class IbString(IbObject):
 
     def __repr__(self):
         return f"String('{self.value}')"
+
+    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    def __add__(self, other: IbObject) -> Any:
+        if other.ib_class.name != "str":
+             raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
+        return self.value + other.to_native()
+    
+    def __eq__(self, other: IbObject) -> bool: return self.value == other.to_native()
+    def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 
 @register_ib_type("list")
 class IbList(IbObject):
@@ -285,7 +338,7 @@ class IbBehavior(IbObject, IIbBehavior):
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {
-            "__type__": "Behavior",
+            "type": self.ib_class.name,
             "node_uid": self.node,
             "captured_intents": [str(i) for i in self.captured_intents],
             "expected_type": self.expected_type

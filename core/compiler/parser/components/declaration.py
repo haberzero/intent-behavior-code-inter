@@ -5,7 +5,7 @@ from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStr
 from core.domain import ast as ast
 from core.domain.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.core.syntax import ID_VAR
+from core.compiler.parser.core.syntax import ID_VAR, IbPrecedence
 from core.domain.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
@@ -225,7 +225,7 @@ class DeclarationComponent(BaseComponent):
                 # [REMOVED] 特殊的 self 处理逻辑已被移除，改为隐式注入
                 
                 # Standard typed parameter: Type Name
-                annotation = self.type_def.parse_type_annotation(ast.IbPrecedence.TUPLE)
+                annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
                 
                 param_node = self._loc(ast.IbArg(arg=name_token.value), name_token)

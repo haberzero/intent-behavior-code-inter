@@ -18,18 +18,19 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
     """统一注册原生方法的辅助函数"""
     ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
 
-def _numeric_op(self: 'IbObject', other: Any, op_func: Callable) -> Any:
-    """处理数值运算并支持 promotion"""
-    a = self.to_native()
-    return op_func(a, other)
-
-def _compare_op(self: 'IbObject', other: Any, op_func: Callable) -> int:
-    """处理比较运算"""
-    a = self.to_native()
-    try:
-        return 1 if op_func(a, other) else 0
-    except:
-        return 0 
+def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
+    """[IES 2.1] 基于公理声明自动化绑定二元运算符"""
+    axiom = ib_cls.descriptor._axiom
+    if not axiom: return
+    
+    operators = axiom.get_operators()
+    for op_symbol, magic_name in operators.items():
+        if hasattr(py_impl_cls, magic_name):
+            # 获取 Python 原生实现 (如 IbInteger.__add__)
+            py_method = getattr(py_impl_cls, magic_name)
+            # 绑定为原生方法，运算符通常处理 IbObject 所以 unbox=False
+            # 注意：一元运算符 (如 __neg__) 也是同样的逻辑
+            _reg_native(ib_cls, magic_name, py_method, unbox=False)
 
 def _cast_string_to(ib_str: 'IbString', target_class: Any) -> Any:
     """实现 Spec 中的自动类型转换策略 (Descriptor Identity 版)"""
@@ -117,6 +118,9 @@ def initialize_builtin_classes(registry: Registry) -> Any:
                         py_method = getattr(py_impl_cls, method_name)
                         # 绑定为原生方法
                         _reg_native(ib_cls, method_name, py_method, unbox=False)
+                
+                # [IES 2.1] 自动化运算符绑定
+                _auto_bind_operators(ib_cls, py_impl_cls)
 
     # 获取引用以便后续绑定 (保持兼容性)
     integer_class = ib_classes.get("int")
@@ -180,30 +184,8 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     _reg_native(none_class, '__to_prompt__', lambda self: "None")
     _reg_native(none_class, 'to_bool', lambda self: 0)
     
-    # 4. 注册原生方法代理 (Integer)
+    # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
-    
-    _reg_native(integer_class, '__add__', lambda self, other: _numeric_op(self, other, lambda a, b: a + b))
-    _reg_native(integer_class, '__sub__', lambda self, other: _numeric_op(self, other, lambda a, b: a - b))
-    _reg_native(integer_class, '__mul__', lambda self, other: _numeric_op(self, other, lambda a, b: a * b))
-    _reg_native(integer_class, '__div__', lambda self, other: _numeric_op(self, other, lambda a, b: a // b if isinstance(a, int) and isinstance(b, int) else a / b))
-    _reg_native(integer_class, '__mod__', lambda self, other: _numeric_op(self, other, lambda a, b: a % b))
-    
-    _reg_native(integer_class, '__and__', lambda self, other: self.to_native() & other)
-    _reg_native(integer_class, '__or__', lambda self, other: self.to_native() | other)
-    _reg_native(integer_class, '__xor__', lambda self, other: self.to_native() ^ other)
-    _reg_native(integer_class, '__lshift__', lambda self, other: self.to_native() << other)
-    _reg_native(integer_class, '__rshift__', lambda self, other: self.to_native() >> other)
-    _reg_native(integer_class, '__invert__', lambda self: ~self.to_native())
-    _reg_native(integer_class, '__neg__', lambda self: -self.to_native())
-    _reg_native(integer_class, '__pos__', lambda self: +self.to_native())
-    
-    _reg_native(integer_class, '__lt__', lambda self, other: _compare_op(self, other, lambda a, b: a < b))
-    _reg_native(integer_class, '__le__', lambda self, other: _compare_op(self, other, lambda a, b: a <= b))
-    _reg_native(integer_class, '__gt__', lambda self, other: _compare_op(self, other, lambda a, b: a > b))
-    _reg_native(integer_class, '__ge__', lambda self, other: _compare_op(self, other, lambda a, b: a >= b))
-    _reg_native(integer_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
-    _reg_native(integer_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
     
     # [NEW] int(x) 构造函数/转换逻辑
     def _int_call(self, *args):
@@ -213,14 +195,6 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     
     # Float
     _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
-    _reg_native(float_class, '__add__', lambda self, other: _numeric_op(self, other, lambda a, b: a + b))
-    _reg_native(float_class, '__sub__', lambda self, other: _numeric_op(self, other, lambda a, b: a - b))
-    _reg_native(float_class, '__mul__', lambda self, other: _numeric_op(self, other, lambda a, b: a * b))
-    _reg_native(float_class, '__div__', lambda self, other: _numeric_op(self, other, lambda a, b: a / b))
-    _reg_native(float_class, '__neg__', lambda self: -self.to_native())
-    _reg_native(float_class, '__pos__', lambda self: +self.to_native())
-    _reg_native(float_class, '__eq__', lambda self, other: _compare_op(self, other, lambda a, b: a == b))
-    _reg_native(float_class, '__ne__', lambda self, other: _compare_op(self, other, lambda a, b: a != b))
 
     # [NEW] float(x) 构造函数/转换逻辑
     def _float_call(self, *args):
@@ -231,15 +205,6 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
     
-    def _string_add(self, other):
-        if not isinstance(other, IbObject):
-            return str(self.to_native()) + str(other)
-        if other.descriptor is not STR_DESCRIPTOR:
-            raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'. Use cast_to(str) first.")
-        return str(self.to_native()) + str(other.to_native())
-        
-    _reg_native(string_class, '__add__', _string_add, unbox=False)
-
     # [NEW] str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
         if not args: return self.registry.box("")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from core.domain.issue_atomic import Location
+from core.foundation.source_atomic import Location
 
 @dataclass
 class StackFrame:

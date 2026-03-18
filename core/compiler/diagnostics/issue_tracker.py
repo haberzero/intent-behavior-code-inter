@@ -1,6 +1,6 @@
 from typing import List, Optional, Union, Any
-from core.domain.issue import Diagnostic, Severity, CompilerError, FatalCompilerError, Locatable
-from core.domain.issue_atomic import Location
+from core.domain.issue import Diagnostic, CompilerError, FatalCompilerError, Locatable
+from core.foundation.source_atomic import Location, Severity
 from core.foundation.interfaces import ISourceProvider
 
 class IssueTracker:

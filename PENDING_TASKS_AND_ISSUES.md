@@ -58,7 +58,7 @@
 ## 5. 发现的新问题 (New Findings)
 
 - **[DONE] llm_fallback 逻辑膨胀**: `BaseHandler` 中的 `_with_llm_fallback` 逻辑过于泛化，缺乏针对不同节点的差异化处理。
-- **资产加载安全性**: 缺乏对外部 Prompt 资产的哈希指纹（SHA-256）校验。
+- **[IGNORED] 资产加载安全性**: 缺乏对外部 Prompt 资产的哈希指纹（SHA-256）校验。此项在开源环境下目前非首要目标，暂时忽略。
 - **[DONE] TODO 标记**:
   - `interpreter.py:L66`: `# TODO: 适配新的意图捕获逻辑` (已记录在 2.4 节)
 - **[DONE] 跨组件反向污染**: `Interpreter` 实例被注入到 `RuntimeContext` 中，导致数据层持有逻辑层引用。

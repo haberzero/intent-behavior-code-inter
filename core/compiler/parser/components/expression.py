@@ -2,7 +2,7 @@ from typing import Dict, Optional, List, Union
 from core.compiler.lexer.tokens import TokenType
 from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.domain import ast as ast
-from core.domain.ast import IbPrecedence, IbParseRule
+from core.compiler.parser.core.syntax import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_SELF, OP_MAP
 

@@ -65,6 +65,24 @@ class Symbol:
             new_sym.descriptor = self.descriptor.clone(memo)
         return new_sym
 
+    def get_content_hash(self) -> str:
+        """
+        [IES 2.1 Deterministic] 获取符号的内容哈希，用于生成匿名 UID。
+        """
+        import hashlib
+        # 基础特征：名称 + 类型
+        parts = [self.name, self.kind.name]
+        # 类型特征：描述符全名 (如果存在)
+        if self.descriptor:
+            parts.append(f"type:{self.descriptor.module_path or 'root'}.{self.descriptor.name}")
+        # 元数据特征 (可选，但为了确定性，排除不可序列化的 id)
+        for k, v in sorted(self.metadata.items()):
+            if isinstance(v, (str, int, float, bool)):
+                parts.append(f"{k}:{v}")
+        
+        content = "|".join(parts)
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+
 @dataclass
 class TypeSymbol(Symbol):
     """表示一个类型定义 (类或内置类型)"""
@@ -111,18 +129,40 @@ class SymbolTable:
     静态符号表，支持作用域嵌套。
     用于语义分析阶段。
     """
-    def __init__(self, parent: Optional['SymbolTable'] = None):
+    def __init__(self, parent: Optional['SymbolTable'] = None, name: Optional[str] = None):
         self.parent = parent
+        self.name = name # [IES 2.1] 作用域名称 (如函数名、类名)
         self.depth = (parent.depth + 1) if parent else 0 # [IES 2.1] 作用域深度
         self.symbols: Dict[str, Symbol] = {}
         self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
+        self._uid = None
+        self._child_count = 0 # [IES 2.1] 用于生成确定性匿名 UID
+        
+        if parent:
+            parent._child_count += 1
+            self._anon_id = parent._child_count
+
+    @property
+    def uid(self) -> str:
+        """[IES 2.1] 生成确定性作用域 UID"""
+        if self._uid: return self._uid
+        if not self.parent:
+            # 模块/全局作用域：UID = scope_{name}
+            name = self.name or "global"
+            self._uid = f"scope_{name}"
+        else:
+            # 嵌套作用域：UID = parent_uid / name
+            prefix = self.parent.uid
+            # 优先使用名称，否则使用其在父作用域中的确定性序号
+            name = self.name or f"anon_{self._anon_id}"
+            self._uid = f"{prefix}/{name}"
+        return self._uid
 
     def define(self, sym: Symbol, allow_overwrite: bool = False):
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
-        # [IES 2.1 Shadowing] 为符号分配唯一的 UID (基于名称和作用域深度)
+        # [IES 2.1 Shadowing] 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
         if not sym.uid:
-            # 简单生成 UID，格式为 "name@depth"
-            sym.uid = f"{sym.name}@{self.depth}"
+            sym.uid = f"{self.uid}:{sym.name}"
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]

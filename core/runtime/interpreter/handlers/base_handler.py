@@ -6,7 +6,7 @@ from core.runtime.interfaces import IIbBehavior
 from core.foundation.interfaces import IExecutionContext
 from core.domain.issue import Severity, InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_GENERIC_ERROR
-from core.domain.issue_atomic import Location
+from core.foundation.source_atomic import Location
 from core.runtime.exceptions import RetryException
 
 class BaseHandler:

@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
 from core.foundation.registry import Registry
 from core.runtime.enums import RegistrationState
 from core.domain.issue import InterpreterError
-from core.domain.issue_atomic import Location
+from core.foundation.source_atomic import Location
 from core.runtime.exceptions import ReturnException, RegistryIsolationError
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.domain.intent_logic import IntentRole
@@ -300,7 +300,20 @@ class IbClass(IbObject):
         
         init_method = self.lookup_method('__init__')
         if init_method:
+            # [IES 2.1 Validation] 契约一致性校验：校验 __init__ 参数数量
+            # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
+            if init_method.descriptor:
+                sig = init_method.descriptor.get_signature()
+                if sig:
+                    expected_params, _ = sig
+                    if len(args) != len(expected_params):
+                        raise InterpreterError(f"TypeError: {self.name}.__init__() expected {len(expected_params)} arguments, but got {len(args)}")
+            
             init_method.call(instance, args)
+        elif args:
+            # 如果没有定义 __init__ 但传了参数，也是一种契约违背
+            raise InterpreterError(f"TypeError: {self.name}() takes no arguments, but {len(args)} were given")
+            
         return instance
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':

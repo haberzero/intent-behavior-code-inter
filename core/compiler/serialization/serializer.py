@@ -22,7 +22,9 @@ class FlatSerializer(BaseFlatSerializer):
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
         """序列化整个蓝图产物"""
         modules_data = {}
-        for name, res in artifact.modules.items():
+        # [IES 2.1 Deterministic] 排序模块名以确保输出稳定
+        for name in sorted(artifact.modules.keys()):
+            res = artifact.modules[name]
             modules_data[name] = self.serialize_result(res)
             
         # [IES 2.1 Fix] 确保全局符号也被正确池化，而非裸字典导出
@@ -115,14 +117,18 @@ class FlatSerializer(BaseFlatSerializer):
         if node_id in self.type_map:
             return self.type_map[node_id]
             
-        uid = f"node_{uuid.uuid4().hex[:16]}"
-        self.type_map[node_id] = uid
-        
+        # [IES 2.1 Deterministic]
+        # 先收集字段数据，再根据内容生成确定性哈希作为 UID。
         node_data = {"_type": node.__class__.__name__}
         
         for field_name, value in vars(node).items():
             node_data[field_name] = self._process_value(value)
 
+        # 序列化为稳定 JSON 字符串并生成哈希
+        content_str = json.dumps(node_data, sort_keys=True)
+        uid = self._generate_deterministic_uid("node", content_str)
+        
+        self.type_map[node_id] = uid
         self.node_pool[uid] = node_data
         return uid
 
@@ -131,7 +137,18 @@ class FlatSerializer(BaseFlatSerializer):
         if sym_id in self.type_map:
             return self.type_map[sym_id]
             
-        uid = f"sym_{uuid.uuid4().hex[:16]}"
+        # [IES 2.1 Deterministic] 使用符号自身的稳定 UID (name@depth)
+        uid = getattr(sym, 'uid', None)
+        if not uid:
+            # 对于没有 UID 的对象 (如直接存储的 TypeDescriptor)，生成基于属性的 UID
+            if isinstance(sym, TypeDescriptor):
+                uid = f"type_sym_{sym.module_path or 'root'}.{sym.name}"
+            elif hasattr(sym, 'get_content_hash'):
+                uid = f"sym_anon_{sym.get_content_hash()}"
+            else:
+                # 极端最后的兜底
+                uid = f"sym_anon_{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}"
+        
         self.type_map[sym_id] = uid
         
         # [Robustness] 兼容直接在 members 中存储 TypeDescriptor 的情况
@@ -164,7 +181,8 @@ class FlatSerializer(BaseFlatSerializer):
         if t_id in self.type_map:
             return self.type_map[t_id]
             
-        uid = f"type_{uuid.uuid4().hex[:16]}"
+        # [IES 2.1 Deterministic] 基于类型全名生成稳定 UID
+        uid = f"type_{t.module_path or 'root'}.{t.name}"
         self.type_map[t_id] = uid
         
         type_data = {
@@ -206,7 +224,8 @@ class FlatSerializer(BaseFlatSerializer):
         if scope_id in self.type_map:
             return self.type_map[scope_id]
             
-        uid = f"scope_{uuid.uuid4().hex[:16]}"
+        # [IES 2.1 Deterministic] 使用作用域自身的路径 UID
+        uid = scope.uid
         self.type_map[scope_id] = uid
         
         scope_data = {

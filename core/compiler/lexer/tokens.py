@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from dataclasses import dataclass
-from core.domain.issue_atomic import Location
+from core.foundation.source_atomic import Location
 
 class TokenType(Enum):
     # 结构控制

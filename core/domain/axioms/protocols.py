@@ -55,6 +55,10 @@ class TypeAxiom(Protocol):
         """获取该类型支持的内置方法签名 (Schema)"""
         ...
     
+    def get_operators(self) -> Dict[str, str]:
+        """[IES 2.1] 获取支持的二元运算符及其对应的魔术方法名 (如 {"+": "__add__"})"""
+        ...
+    
     def is_dynamic(self) -> bool:
         """是否为动态类型 (Any/var/etc.)"""
         ...

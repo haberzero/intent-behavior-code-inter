@@ -24,8 +24,8 @@ class SemanticAnalyzer:
     语义分析器：执行静态分析和类型检查。
     贯彻“一切皆对象”思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
     """
-    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None):
-        self.symbol_table = SymbolTable() # 全局静态符号表
+    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None, module_name: Optional[str] = None):
+        self.symbol_table = SymbolTable(name=module_name) # 全局静态符号表
         self.issue_tracker = issue_tracker or IssueTracker()
         self.host_interface = host_interface
         self.debugger = debugger or core_debugger
@@ -289,7 +289,7 @@ class SemanticAnalyzer:
             
         # 进入局部作用域
         old_table = self.symbol_table
-        local_scope = SymbolTable(parent=old_table)
+        local_scope = SymbolTable(parent=old_table, name=node.name)
         self.symbol_table = local_scope
         
         # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
@@ -354,7 +354,7 @@ class SemanticAnalyzer:
             
         # 进入局部作用域以校验提示词中的占位符
         old_table = self.symbol_table
-        local_scope = SymbolTable(parent=old_table)
+        local_scope = SymbolTable(parent=old_table, name=node.name)
         self.symbol_table = local_scope
         
         # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号

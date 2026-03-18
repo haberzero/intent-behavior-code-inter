@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.lexer.tokens import Token, TokenType
 from core.domain import ast as ast
+from core.compiler.parser.core.syntax import IbPrecedence
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 from core.compiler.parser.core.context import ParserContext
 from core.compiler.support.diagnostics import DiagnosticReporter
@@ -13,7 +14,7 @@ from core.compiler.parser.components.import_def import ImportComponent
 from core.compiler.dependencies import ImportInfo, ImportType
 from core.foundation.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
 from core.domain.issue import Severity
-from core.domain.issue_atomic import Location
+from core.foundation.source_atomic import Location
 
 from core.foundation.host_interface import HostInterface
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger

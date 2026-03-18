@@ -1,6 +1,6 @@
 from typing import List, Optional, TYPE_CHECKING
-from core.domain.issue import Diagnostic, Severity
-from core.domain.issue_atomic import Location
+from core.domain.issue import Diagnostic
+from core.foundation.source_atomic import Location, Severity
 
 if TYPE_CHECKING:
     from core.foundation.source.source_manager import SourceManager

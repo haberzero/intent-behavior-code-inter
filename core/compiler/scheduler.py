@@ -12,7 +12,7 @@ from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.foundation.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.domain.issue import Severity, CompilerError
-from core.domain.issue_atomic import Location
+from core.foundation.source_atomic import Location
 from core.foundation.host_interface import HostInterface
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.foundation.diagnostics.codes import (
@@ -363,7 +363,7 @@ class Scheduler(ICompilerService):
             
             # 3. Semantic Analysis
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
-            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry)
+            analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():

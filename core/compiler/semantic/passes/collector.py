@@ -95,7 +95,7 @@ class SymbolCollector:
         
         # 3. 进入类作用域收集成员
         old_table = self.symbol_table
-        self.symbol_table = SymbolTable(parent=old_table)
+        self.symbol_table = SymbolTable(parent=old_table, name=node.name)
         
         # [NEW] 设置当前类上下文，以便 _define 能正确同步成员
         old_class = self.analyzer.current_class
