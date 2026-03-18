@@ -25,7 +25,9 @@ class ServiceContextImpl(ServiceContext):
                  host_service: Optional['IHostService'] = None,
                  source_provider: Optional[ISourceProvider] = None,
                  compiler: Optional[ICompilerService] = None,
-                 debugger: Any = None):
+                 debugger: Any = None,
+                 output_callback: Optional[Callable[[str], None]] = None,
+                 input_callback: Optional[Callable[[str], str]] = None):
         self._issue_tracker = issue_tracker
         self._llm_executor = llm_executor
         self._module_manager = module_manager
@@ -37,6 +39,24 @@ class ServiceContextImpl(ServiceContext):
         self._source_provider = source_provider
         self._compiler = compiler
         self._debugger = debugger
+        self._output_callback = output_callback
+        self._input_callback = input_callback
+
+    @property
+    def output_callback(self) -> Optional[Callable[[str], None]]:
+        return self._output_callback
+
+    @output_callback.setter
+    def output_callback(self, value: Callable[[str], None]):
+        self._output_callback = value
+
+    @property
+    def input_callback(self) -> Optional[Callable[[str], str]]:
+        return self._input_callback
+
+    @input_callback.setter
+    def input_callback(self, value: Callable[[str], str]):
+        self._input_callback = value
 
     @property
     def registry(self) -> Any:

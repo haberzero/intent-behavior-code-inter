@@ -7,10 +7,14 @@ from core.engine import IBCIEngine
 from core.domain.issue import CompilerError, InterpreterError
 from core.domain.blueprint import CompilationArtifact
 from core.domain.types import ModuleMetadata
+from core.compiler.serialization.serializer import FlatSerializer
 
-class MockAI:
-    """通用的 AI 服务 Mock (IES 2.0 Standard)"""
+from core.extension import sdk as ibci
+
+class MockAI(ibci.IbPlugin):
+    """通用的 AI 服务 Mock (IES 2.1 Standard)"""
     def __init__(self):
+        super().__init__()
         self.last_sys = ""
         self.last_user = ""
         self.response = "42"
@@ -21,12 +25,15 @@ class MockAI:
         }
 
     def setup(self, capabilities):
+        super().setup(capabilities)
         # 核心：将自己注册为内核的 LLM Provider
         capabilities.llm_provider = self
 
+    @ibci.method("set_config")
     def set_config(self, url, key, model):
         pass
 
+    @ibci.method("get_decision_map")
     def get_decision_map(self):
         return self._decision_map
 
@@ -36,38 +43,17 @@ class MockAI:
         self.calls.append({"sys": sys, "user": user, "scene": scene})
         return self.response
 
+    @ibci.method("get_return_type_prompt")
     def get_return_type_prompt(self, type_name):
         return f"Return type should be {type_name}"
 
+    @ibci.method("set_retry_hint")
     def set_retry_hint(self, hint):
         pass
     
+    @ibci.method("get_last_call_info")
     def get_last_call_info(self):
         return {"sys": self.last_sys, "user": self.last_user, "response": self.response}
-
-    def get_vtable(self):
-        return {
-            "set_config": self.set_config,
-            "set_retry_hint": lambda x: None,
-            "set_retry": lambda x: None,
-            "set_timeout": lambda x: None,
-            "set_general_prompt": lambda x: None,
-            "set_branch_prompt": lambda x: None,
-            "set_loop_prompt": lambda x: None,
-            "set_return_type_prompt": lambda x, y: None,
-            "get_return_type_prompt": lambda x: "",
-            "set_decision_map": lambda x: None,
-            "get_decision_map": self.get_decision_map,
-            "get_last_call_info": self.get_last_call_info,
-            "get_scene_prompt": lambda x: "",
-            "set_scene_config": lambda x, y: None,
-            "set_global_intent": lambda x: None,
-            "clear_global_intents": lambda: None,
-            "remove_global_intent": lambda x: None,
-            "get_global_intents": lambda: [],
-            "get_current_intent_stack": lambda: [],
-            "mask": lambda x: None,
-        }
 
 class MockHostService:
     """通用的宿主服务 Mock (IES 2.0 Standard)"""
@@ -213,7 +199,6 @@ class BaseIBCTest(unittest.TestCase):
             artifact = self.engine.compile_string(code, variables, silent=is_silent)
             
             # 4. 执行准备阶段
-            from core.compiler.serialization.serializer import FlatSerializer
             serializer = FlatSerializer()
             artifact_dict = serializer.serialize_artifact(artifact)
             

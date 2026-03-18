@@ -233,20 +233,22 @@ class SemanticAnalyzer:
 
     def _define_var(self, name: str, var_type: TypeDescriptor, node: ast.IbASTNode, allow_overwrite: bool = False):
         try:
-            # [NEW] 如果符号已由 Scheduler 注入（如模块导入），则不再重新定义，仅绑定 UID
-            existing = self.symbol_table.resolve(name)
-            if existing:
-                # 检查是否已在当前作用域定义
-                if name in self.symbol_table.symbols:
-                    if not allow_overwrite:
-                        self.node_to_symbol[node] = existing
-                        return existing
-                else:
-                    # 如果是全局变量在局部同名定义，这是 shadowing，允许
-                    if not (existing.kind == SymbolKind.VARIABLE and any(existing is s for s in self.symbol_table.get_global_scope().symbols.values())):
-                        if not allow_overwrite:
-                            self.node_to_symbol[node] = existing
-                            return existing
+            # [IES 2.1 Shadowing Refactor] 
+            # 只有当变量已在 *当前* 作用域定义时，才考虑复用或覆盖。
+            # 如果变量在父级作用域，则直接定义新符号以实现遮蔽。
+            if name in self.symbol_table.symbols:
+                existing = self.symbol_table.symbols[name]
+                if not allow_overwrite:
+                    self.node_to_symbol[node] = existing
+                    return existing
+            
+            # [NEW] 检查是否由 Scheduler 注入的特殊符号（如模块）
+            # 这些符号通常在全局表中，不应被随意遮蔽，除非是局部变量
+            if name not in self.symbol_table.symbols:
+                existing_global = self.symbol_table.resolve(name)
+                if existing_global and existing_global.kind in (SymbolKind.MODULE, SymbolKind.CLASS):
+                    # 模块和类在语义上不建议被遮蔽，但如果是 var 定义则允许
+                    pass
 
             sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, descriptor=var_type, def_node=node)
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)

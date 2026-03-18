@@ -1,12 +1,12 @@
 from typing import Dict, Any, Optional
 from core.extension import sdk as ibci
 
-class NetLib:
+class NetLib(ibci.IbPlugin):
+    """
+    Net 2.1: 网络请求插件。
+    """
     def __init__(self):
-        self._capabilities = None
-
-    def setup(self, capabilities):
-        self._capabilities = capabilities
+        super().__init__()
 
     @ibci.method("get")
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
@@ -19,8 +19,8 @@ class NetLib:
         except ImportError:
             return f"[MOCK GET] {url}"
         except Exception as e:
-            from core.domain.issue import InterpreterError
-            raise InterpreterError(f"Network GET failed: {str(e)}")
+            # [IES 2.1 SDK Isolation] 使用 SDK 导出的 PluginError
+            raise ibci.PluginError(f"Network GET failed: {str(e)}")
 
     @ibci.method("post")
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -33,8 +33,8 @@ class NetLib:
         except ImportError:
             return {"mock": "post", "url": url}
         except Exception as e:
-            from core.domain.issue import InterpreterError
-            raise InterpreterError(f"Network POST failed: {str(e)}")
+            # [IES 2.1 SDK Isolation] 使用 SDK 导出的 PluginError
+            raise ibci.PluginError(f"Network POST failed: {str(e)}")
 
 def create_implementation():
     return NetLib()

@@ -145,11 +145,9 @@ class Interpreter:
             
         # [NEW] 加载内置函数插件 (Intrinsics)
         self.intrinsic_manager = IntrinsicManager(self.registry)
-        self.intrinsic_manager.load_defaults(self)
+        # load_defaults 将在 ServiceContext 准备好后调用
         
         self.issue_tracker = issue_tracker
-        self.output_callback = output_callback
-        self.input_callback = input_callback
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
         self.source_provider = source_provider
@@ -212,10 +210,15 @@ class Interpreter:
                 host_service=self.host_service,
                 source_provider=self.source_provider,
                 compiler=self.compiler,
-                debugger=self.debugger
+                debugger=self.debugger,
+                output_callback=output_callback,
+                input_callback=input_callback
             )
             
-        # 2. [STAGE 4] 插件加载钩子
+        # 2. [IES 2.1] 加载内置函数 (不再穿透持有 Interpreter)
+        self.intrinsic_manager.load_defaults(self._execution_context, self.service_context)
+
+        # 3. [STAGE 4] 插件加载钩子
         if plugin_loader:
             plugin_loader(self.service_context, self._execution_context, self.intrinsic_manager)
         
@@ -276,7 +279,6 @@ class Interpreter:
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
-        self.current_module_name: Optional[str] = None
         self.strict_mode = strict_mode
 
         # [IES 4.3] 初始化分片 Handlers
@@ -294,6 +296,14 @@ class Interpreter:
             for attr in dir(handler):
                 if attr.startswith("visit_"):
                     self._visitor_cache[attr[6:]] = getattr(handler, attr)
+
+    @property
+    def current_module_name(self) -> Optional[str]:
+        return self._execution_context.current_module_name
+
+    @current_module_name.setter
+    def current_module_name(self, value: Optional[str]):
+        self._execution_context.current_module_name = value
 
     @property
     def registry(self) -> Registry:

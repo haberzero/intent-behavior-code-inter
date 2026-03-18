@@ -8,10 +8,11 @@ class IntentMode(Enum):
     REMOVE = "-"    # 移除 (从栈中移除匹配的意图)
 
     @classmethod
-    def from_str(cls, mode_str: str) -> 'IntentMode':
-        """从字符串映射模式，支持多种别名"""
-        if not mode_str: return cls.APPEND
-        m = mode_str.lower()
+    def from_str(cls, mode_val: Union[str, 'IntentMode']) -> 'IntentMode':
+        """从字符串或枚举映射模式，支持多种别名"""
+        if isinstance(mode_val, cls): return mode_val
+        if not mode_val: return cls.APPEND
+        m = str(mode_val).lower()
         if m in ("+", "append", "add"): return cls.APPEND
         if m in ("!", "override", "exclusive"): return cls.OVERRIDE
         if m in ("-", "remove", "delete"): return cls.REMOVE

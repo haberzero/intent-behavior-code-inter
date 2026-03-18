@@ -15,22 +15,28 @@ def _cast_string_to_native(val: str, target_desc: Any) -> Any:
             try:
                 return parser.parse_value(val)
             except (ValueError, TypeError):
-                # 如果解析失败，回退到目标类型的默认原生值
-                if target_desc is INT_DESCRIPTOR: return 0
-                if target_desc is FLOAT_DESCRIPTOR: return 0.0
-                if target_desc is BOOL_DESCRIPTOR: return False
+                # [IES 2.1 Refactor] 使用公理名称判定替代 identity (is) 检查
+                axiom_name = target_desc.get_base_axiom_name()
+                if axiom_name == "int": return 0
+                if axiom_name == "float": return 0.0
+                if axiom_name == "bool": return False
     
     # Fallback: 默认返回原始字符串或基本转换
     return val
 
 def _cast_numeric_to_native(val: Any, target_desc: Any) -> Any:
     """将数值转换为目标类型的原生 Python 值"""
-    if target_desc is STR_DESCRIPTOR:
+    if not target_desc:
+        return val
+        
+    # [IES 2.1 Refactor] 使用公理名称判定，解决多引擎隔离下的 identity 失效问题
+    axiom_name = target_desc.get_base_axiom_name()
+    if axiom_name == "str":
         return str(val)
-    if target_desc is INT_DESCRIPTOR:
+    if axiom_name == "int":
         return int(val)
-    if target_desc is FLOAT_DESCRIPTOR:
+    if axiom_name == "float":
         return float(val)
-    if target_desc is BOOL_DESCRIPTOR:
+    if axiom_name == "bool":
         return 1 if val else 0
     return val

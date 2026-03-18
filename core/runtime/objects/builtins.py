@@ -48,7 +48,8 @@ class IbInteger(IbObject):
         return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
-        return {"type": "Integer", "value": self.value}
+        # [IES 2.1 Refactor] 强制从 ib_class.name 获取类型标签，消除硬编码
+        return {"type": self.ib_class.name, "value": self.value}
 
     def __repr__(self):
         return f"Integer({self.value})"
@@ -86,7 +87,7 @@ class IbFloat(IbObject):
         return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
-        return {"type": "Float", "value": self.value}
+        return {"type": self.ib_class.name, "value": self.value}
 
     def __repr__(self):
         return f"Float({self.value})"
@@ -117,7 +118,7 @@ class IbString(IbObject):
         return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
-        return {"type": "String", "value": self.value}
+        return {"type": self.ib_class.name, "value": self.value}
 
     def __repr__(self):
         return f"String('{self.value}')"
@@ -145,7 +146,7 @@ class IbList(IbObject):
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {
-            "type": "List", 
+            "type": self.ib_class.name, 
             "value": [e.serialize_for_debug() for e in self.elements]
         }
 
@@ -201,7 +202,7 @@ class IbDict(IbObject):
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {
-            "type": "IbDict",
+            "type": self.ib_class.name,
             "value": {k: v.serialize_for_debug() if isinstance(v, IbObject) else v for k, v in self.fields.items()}
         }
 
@@ -295,6 +296,14 @@ class IbBehavior(IbObject, IIbBehavior):
         raise RuntimeError("Behavior cannot execute itself. Use LLMExecutor.execute_behavior_object.")
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
-        """不再支持消息转发执行"""
+        """
+        [IES 2.1 Resilience] 行为对象的消息处理。
+        允许查询元数据，仅在尝试“执行行为本身”且无上下文时才抛出异常。
+        """
         if self._cache: return self._cache.receive(message, args)
-        raise RuntimeError("Behavior is not executed.")
+        
+        # 允许查询元数据或基本属性，防止调试器崩溃
+        if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
+            return self.ib_class.registry.box(str(self))
+            
+        raise RuntimeError(f"Behavior '{self.node}' is not executed. Cannot process message '{message}'.")

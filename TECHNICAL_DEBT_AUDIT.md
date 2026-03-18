@@ -86,16 +86,35 @@
 
 ---
 
-## 7. 架构终审：零兼容包袱与歧义解析规范 (Final Audit) - **[FIXED]**
-**核心问题：** 消除隐秘的“回滚”逻辑隐患，彻底清理所有运行时兼容性妥协。
+## 9. 核心特性重构：LLM Fallback 体系解耦与纯态化 (Final Refactor) - **[FIXED]**
+**核心问题：** 解决 `llm fallback` 导致的逻辑膨胀、代码冗余及状态耦合隐患。
 
-### 7.1 歧义解析规范化 - **[FIXED]**
-- **[DONE]** `expression.py` 中的“回滚”逻辑已重构为“推测性前瞻（Speculative Lookahead）”，明确了其作为 LL(k) 歧义解析（Cast vs Grouping）的语法必要性。
-- **[DONE]** 所有的 `try...except` 回退块已限定为仅捕获 `ParseControlFlowError`，防止掩盖真正的代码 Bug。
+### 9.1 AST 与解析链路纯化 - **[FIXED]**
+- **[DONE]** `llm_fallback` 属性已从所有语句子类中移除，统一上移至 `IbStmt` 基类，消除了 AST 层的结构冗余。
+- **[DONE]** `StatementComponent` 已重构。所有语句的 `llm except` 容错块现在通过 `parse_statement` 统一入口进行拦截解析。
+- **[DONE]** **去硬编码化**：引入了 `IbStmt.supports_llm_fallback` 属性，通过 AST 节点的能力探测替代了原有的 `isinstance` 类型硬编码判定。
 
-### 7.2 运行时“零妥协”清理 - **[FIXED]**
-- **[DONE]** `expr_handler.py` 彻底移除了对旧版产物 `type_name` 的回退查找逻辑。
-- **[DONE]** `hydrator.py` 和 `kernel.py` 移除了对“裸描述符”和“旧版逻辑”的兼容代码，实现了纯净的 IES 2.1 契约执行。
+### 9.2 调度与执行解耦 - **[FIXED]**
+- **[DONE]** 移除了 `BaseHandler` 中重复的 `_with_llm_fallback` 包装。
+- **[DONE]** 在 `Interpreter.visit` 中实现了**全局统一容错调度**。现在所有的语句级重试和 Fallback 逻辑均在分发层闭环，避免了处理器（Handlers）层面的逻辑膨胀。
+- **[DONE]** **指数级膨胀风险消除**：通过在分发层统一控制重试计数和上下文隔离，阻断了嵌套语句导致的冗余重试链条。
 
-### 7.3 语法常量体系内聚 - **[FIXED]**
-- **[DONE]** `syntax.py` 已迁移至 `parser/core` 目录下，且 `OP_MAP` 已重构为纯 `TokenType` 枚举驱动，彻底消除了解析器的字符串依赖。
+### 9.3 状态与提示词去中心化 - **[FIXED]**
+- **[DONE]** `LLMExecutorImpl` 现已实现完全**无状态化**。原本私有的 `retry_hint` 已迁移至 `RuntimeContext` 统一管理，确保了执行服务的纯净性。
+- **[DONE]** **提示词解耦**：所有针对特定语法节点（如 `if`, `while`）的专业化重试提示词已从内核代码中剥离，迁移至 `ai` 模块的 `get_retry_prompt` 接口中，实现了“内核逻辑”与“模型引导策略”的物理隔离。
+
+### 8.1 彻底去 `isinstance` 化 - **[FIXED]**
+- **[DONE]** `prelude.py` 已重构，使用 `get_call_trait()` 和 `is_module()` 替代对 `FunctionMetadata` 和 `ModuleMetadata` 的类身份判定。
+- **[DONE]** `loader.py` 和 `module_spec_builder.py` 补全了能力探测逻辑，不再依赖 `isinstance` 分类描述符。
+
+### 8.2 语法常量与枚举化 - **[FIXED]**
+- **[DONE]** 意图模式（Intent Mode）在 `statement.py` 中已全面切换为 `IntentMode` 枚举值（`+`, `!`, `-`），消除了 `"normal"`, `"append"` 等硬编码字符串。
+- **[DONE]** 公理层 `primitives.py` 的诊断提示已重构为基于 `_axiom` 类型的多态判定，消除了对 `.name == "int"` 的依赖。
+- **[DONE]** `Parser` 中的逻辑运算符和复合赋值运算符已全部通过 `OP_MAP` 和 `COMPOUND_OP_MAP` 统一管理。
+
+### 8.3 运行时补丁大清理 - **[FIXED]**
+- **[DONE]** `llm_executor.py` 移除了关于 `retry_hint` 存储位置的兼容性注释，将其确认为标准字段。
+- **[DONE]** `runtime_context.py` 彻底删除了“从列表重建链表”的兼容模式，强制要求基于 `IntentNode` 的原子化状态恢复。
+
+### 8.4 描述符完备性增强 - **[FIXED]**
+- **[DONE]** 为 `ClassMetadata` 和 `ModuleMetadata` 补全了 `get_references()` 实现，确保了结构化比对（`__eq__`）在复杂继承和模块场景下的客观性。

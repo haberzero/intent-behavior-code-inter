@@ -1,8 +1,12 @@
 import math
 from core.extension import sdk as ibci
 
-class MathLib:
+class MathLib(ibci.IbPlugin):
+    """
+    Math 2.1: 数学计算插件。
+    """
     def __init__(self):
+        super().__init__()
         self.pi = math.pi
         self._ibci_whitelist = ["pi"]
     
@@ -22,4 +26,5 @@ class MathLib:
     def cos(self, x: float) -> float:
         return math.cos(x)
 
-implementation = MathLib()
+def create_implementation():
+    return MathLib()

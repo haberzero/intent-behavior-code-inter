@@ -2,7 +2,7 @@ from typing import List, Any
 from core.runtime.objects.kernel import IbObject
 from core.foundation.registry import Registry
 
-def register_collection(manager, interpreter):
+def register_collection(manager: Any, execution_context: Any, service_context: Any):
     """注册集合相关内置函数"""
     
     def _len(obj: IbObject):

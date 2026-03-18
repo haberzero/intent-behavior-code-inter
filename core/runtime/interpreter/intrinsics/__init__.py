@@ -49,10 +49,10 @@ class IntrinsicManager:
     def get_all(self) -> Dict[str, IbNativeFunction]:
         return self._intrinsics
 
-    def load_defaults(self, interpreter: Any):
+    def load_defaults(self, execution_context: Any, service_context: Any):
         """加载标准内置函数"""
         
-        register_io(self, interpreter)
-        register_collection(self, interpreter)
-        register_conversion(self, interpreter)
-        register_meta(self, interpreter)
+        register_io(self, execution_context, service_context)
+        register_collection(self, execution_context, service_context)
+        register_conversion(self, execution_context, service_context)
+        register_meta(self, execution_context, service_context)

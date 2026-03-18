@@ -5,6 +5,7 @@ import sys
 from typing import List, Dict, Any, Optional, Set
 from core.runtime.exceptions import RegistryIsolationError
 from core.runtime.enums import RegistrationState
+from core.extension.sdk import IbPlugin
 
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import (
@@ -42,8 +43,9 @@ class ModuleLoader(IModuleLoader):
             raise InterpreterError(f"Plugin Error: Module '{module_name}' metadata not found or invalid. Discovery must happen before loading.")
 
         if not hasattr(implementation, 'get_vtable'):
-            raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing 'get_vtable()'. [IES 2.0 Standard Required]")
+            raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing 'get_vtable()'.")
             
+        # [IES 2.1 Refactor] 统一使用 IbPlugin 契约或显式 VTable
         raw_vtable = implementation.get_vtable()
         if not isinstance(raw_vtable, dict):
             raise InterpreterError(f"Plugin Error: Module '{module_name}' get_vtable() must return a dictionary.")

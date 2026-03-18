@@ -22,6 +22,7 @@ class Symbol:
     """静态符号基类"""
     name: str
     kind: SymbolKind
+    uid: Optional[str] = None # [IES 2.1] 唯一标识符，用于解决变量遮蔽 (Shadowing)
     def_node: Optional[Any] = None # 直接引用定义它的 AST 节点对象
     owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -112,11 +113,17 @@ class SymbolTable:
     """
     def __init__(self, parent: Optional['SymbolTable'] = None):
         self.parent = parent
+        self.depth = (parent.depth + 1) if parent else 0 # [IES 2.1] 作用域深度
         self.symbols: Dict[str, Symbol] = {}
         self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
 
     def define(self, sym: Symbol, allow_overwrite: bool = False):
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
+        # [IES 2.1 Shadowing] 为符号分配唯一的 UID (基于名称和作用域深度)
+        if not sym.uid:
+            # 简单生成 UID，格式为 "name@depth"
+            sym.uid = f"{sym.name}@{self.depth}"
+
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
             # [IES 2.1 UTS Integration] 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性

@@ -6,6 +6,7 @@ from core.domain import ast as ast
 from core.domain.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_VAR
+from core.domain.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 
@@ -90,7 +91,7 @@ class DeclarationComponent(BaseComponent):
             intent_expr = None
             
         info = ast.IbIntentInfo(
-            mode="!" if is_exclusive else "", 
+            mode=IntentMode.OVERRIDE if is_exclusive else IntentMode.APPEND, 
             content=content, 
             expr=intent_expr,
             lineno=start_token.line,

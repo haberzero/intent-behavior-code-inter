@@ -1,23 +1,23 @@
 from typing import Dict, Any, List
 from core.extension import sdk as ibci
 
-class SchemaLib:
+class SchemaLib(ibci.IbPlugin):
+    """
+    Schema 2.1: JSON Schema 校验插件。
+    """
+    def __init__(self):
+        super().__init__()
+
     @ibci.method("validate")
     def validate(self, data: Dict[str, Any], rules: Dict[str, Any]) -> bool:
-        """
-        简单实现 JSON Schema 校验逻辑。
-        支持: required, type
-        """
         if not isinstance(data, dict):
             return False
             
-        # 1. 校验必填项
         required = rules.get("required", [])
         for field in required:
             if field not in data:
                 return False
                 
-        # 2. 校验类型 (简单映射)
         properties = rules.get("properties", {})
         for field, rule in properties.items():
             if field in data:
@@ -35,15 +35,8 @@ class SchemaLib:
     @ibci.method("assert")
     def _assert(self, data: Dict[str, Any], rules: Dict[str, Any]):
         if not self.validate(data, rules):
-            from core.domain.issue import InterpreterError
-            raise InterpreterError(f"Schema validation failed. Data: {data}, Rules: {rules}")
-
-    def setup(self, capabilities):
-        # schema 模块目前不需要特殊能力
-        pass
+            # [IES 2.1 SDK Isolation] 使用 SDK 导出的 PluginError
+            raise ibci.PluginError(f"Schema validation failed. Data: {data}, Rules: {rules}")
 
 def create_implementation():
-    lib = SchemaLib()
-    # 映射 'assert' 关键字 (Python 中是关键字，所以我们内部叫 _assert)
-    setattr(lib, 'assert', lib._assert)
-    return lib
+    return SchemaLib()

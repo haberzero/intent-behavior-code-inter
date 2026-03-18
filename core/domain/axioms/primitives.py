@@ -54,17 +54,18 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         # [Strict Axiom] 仅依赖公理定义
         if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'):
-            if other and other._axiom:
-                if isinstance(other._axiom, IntAxiom):
+            if other:
+                axiom_name = other.get_base_axiom_name()
+                if axiom_name == "int":
                     return "int" # int + int -> int
-                if isinstance(other._axiom, FloatAxiom):
+                if axiom_name == "float":
                     return "float" # int + float -> float
         if op in ('>', '>=', '<', '<=', '==', '!='):
             return "bool"
         return None
 
     def can_convert_from(self, source: 'TypeDescriptor') -> bool:
-        return source._axiom and isinstance(source._axiom, (StrAxiom, FloatAxiom, BoolAxiom, IntAxiom))
+        return source.get_base_axiom_name() in ("str", "float", "bool", "int")
 
     def parse_value(self, raw_value: str) -> Any:
         # 从 LLM 结果中解析整数
@@ -78,7 +79,7 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
-        return other._axiom and isinstance(other._axiom, IntAxiom)
+        return other.get_base_axiom_name() == "int"
 
 
 class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
@@ -99,14 +100,14 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('+', '-', '*', '/', '//', '%'):
-            if other and other._axiom and isinstance(other._axiom, (IntAxiom, FloatAxiom)):
+            if other and other.get_base_axiom_name() in ("int", "float"):
                 return "float" # float wins
         if op in ('>', '>=', '<', '<=', '==', '!='):
             return "bool"
         return None
 
     def can_convert_from(self, source: 'TypeDescriptor') -> bool:
-        return source._axiom and isinstance(source._axiom, (StrAxiom, IntAxiom, BoolAxiom, FloatAxiom))
+        return source.get_base_axiom_name() in ("str", "int", "bool", "float")
 
     def parse_value(self, raw_value: str) -> Any:
         match = re.search(r'-?\d+(?:\.\d+)?', raw_value)
@@ -118,7 +119,7 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
-        return other._axiom and isinstance(other._axiom, FloatAxiom)
+        return other.get_base_axiom_name() == "float"
 
 
 class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
@@ -138,14 +139,14 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('&', '|', '^', 'and', 'or'):
-            if other and other._axiom and isinstance(other._axiom, BoolAxiom):
+            if other and other.get_base_axiom_name() == "bool":
                 return "bool"
         if op in ('==', '!='):
             return "bool"
         return None
 
     def can_convert_from(self, source: 'TypeDescriptor') -> bool:
-        return source._axiom and isinstance(source._axiom, (IntAxiom, StrAxiom, BoolAxiom))
+        return source.get_base_axiom_name() in ("int", "str", "bool")
 
     def parse_value(self, raw_value: str) -> Any:
         val = raw_value.strip().lower()
@@ -160,7 +161,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
-        return other._axiom and isinstance(other._axiom, BoolAxiom)
+        return other.get_base_axiom_name() == "bool"
 
 
 class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapability, ParserCapability):
@@ -170,8 +171,8 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
     def name(self) -> str: return "str"
     
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # [IES 2.1 Refactor] 使用公理类型判定替代名称比对
-        if other._axiom and isinstance(other._axiom, IntAxiom):
+        # [IES 2.1 Refactor] 使用公理名称判定替代 identity 判定
+        if other.get_base_axiom_name() == "int":
             return "Use .cast_to(int) or int(s) to convert string to integer."
         return None
     
@@ -189,7 +190,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op == '+':
-            if other and other._axiom and isinstance(other._axiom, StrAxiom):
+            if other and other.get_base_axiom_name() == "str":
                 return "str"
         if op in ('==', '!='):
             return "bool"
@@ -199,7 +200,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         return None # Should return STR_DESCRIPTOR (self)
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        if key._axiom and isinstance(key._axiom, IntAxiom):
+        if key.get_base_axiom_name() == "int":
             return None # Should return STR_DESCRIPTOR
         return None
 
@@ -214,7 +215,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_converter_capability(self) -> Optional[ConverterCapability]: return None
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
-        return other._axiom and isinstance(other._axiom, StrAxiom)
+        return other.get_base_axiom_name() == "str"
 
 
 class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability):
@@ -224,8 +225,8 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
     def name(self) -> str: return "list"
     
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # [IES 2.1 Refactor] 使用公理类型判定替代名称比对
-        if other._axiom and isinstance(other._axiom, StrAxiom):
+        # [IES 2.1 Refactor] 使用公理名称判定替代 identity 判定
+        if other.get_base_axiom_name() == "str":
             return "Did you forget to join the list into a string?"
         return None
     
@@ -257,7 +258,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return desc
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        if key._axiom and isinstance(key._axiom, IntAxiom):
+        if key.get_base_axiom_name() == "int":
             return None # Delegate to descriptor
         return None
 
@@ -276,7 +277,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
     def get_operator_capability(self) -> Optional[OperatorCapability]: return None
     def get_converter_capability(self) -> Optional[ConverterCapability]: return None
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
-        return other._axiom and isinstance(other._axiom, ListAxiom)
+        return other.get_base_axiom_name() == "list"
 
 
 class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability):
@@ -328,7 +329,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
     def get_operator_capability(self) -> Optional[OperatorCapability]: return None
     def get_converter_capability(self) -> Optional[ConverterCapability]: return None
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
-        return other._axiom and isinstance(other._axiom, DictAxiom)
+        return other.get_base_axiom_name() == "dict"
 
 
 class DynamicAxiom(BaseAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability):
@@ -395,7 +396,7 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         # 异常兼容性：子类异常兼容父类 (这里简化处理，认为 Exception 兼容所有 Exception 及其子类)
         # 实际需要继承树判断，但在公理层，只要是 ExceptionAxiom 及其变体即可
-        return other._axiom and isinstance(other._axiom, ExceptionAxiom)
+        return other.get_base_axiom_name() == "Exception"
 
 
 def register_core_axioms(registry: 'AxiomRegistry'):

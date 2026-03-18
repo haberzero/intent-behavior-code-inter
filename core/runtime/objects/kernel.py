@@ -43,9 +43,12 @@ class IbObject:
         """
         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
         
-        # [IES 2.0] 内置系统消息拦截
-        if message == '__call__' and hasattr(self, 'call'):
-            return self.call(self.ib_class.registry.get_none(), args)
+        # [IES 2.1 Refactor] 下沉至公理层能力探测
+        # 针对 __call__ 消息，检查类型公理是否声明了调用能力
+        if message == '__call__':
+            call_trait = self.descriptor.get_call_trait()
+            if call_trait and hasattr(self, 'call'):
+                return self.call(self.ib_class.registry.get_none(), args)
             
         if message == '__getattr__' and len(args) > 0:
             attr_name = args[0].to_native()

@@ -2,15 +2,16 @@ import os
 import time
 from typing import Any, Optional, Dict, List
 from core.foundation.interfaces import ExtensionCapabilities, ILLMProvider
+from core.extension.sdk import IbPlugin, method, PluginError
 
-class AIPlugin(ILLMProvider):
+class AIPlugin(IbPlugin, ILLMProvider):
     """
-    AI 2.0: LLM 供应者。
-    实现职责下放：通过 capabilities.box() 自行转换复杂对象。
+    AI 2.1: LLM 供应者。
+    继承 IbPlugin 以实现自动虚表生成和 SDK 隔离。
     """
     def __init__(self):
+        super().__init__()
         # [IES 2.0] 状态隔离：每个实例必须持有自己的能力引用
-        self._capabilities: Optional[ExtensionCapabilities] = None
         self._retry_hint: Optional[str] = None
         self._last_call_info: Dict[str, Any] = {}
         self._client = None
@@ -46,7 +47,7 @@ class AIPlugin(ILLMProvider):
         }
 
     def setup(self, capabilities: ExtensionCapabilities):
-        self._capabilities = capabilities
+        super().setup(capabilities)
         # 核心：将自己注册为内核的 LLM Provider
         if self._capabilities.llm_provider is None:
              self._capabilities.llm_provider = self
@@ -71,6 +72,7 @@ class AIPlugin(ILLMProvider):
             except ImportError:
                 pass
 
+    @method("set_config")
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
         self._config["key"] = key
@@ -83,72 +85,92 @@ class AIPlugin(ILLMProvider):
             
         self._init_client()
         
+    @method("set_retry")
     def set_retry(self, count: int) -> None:
         self._config["retry"] = count
         
+    @method("set_timeout")
     def set_timeout(self, seconds: float) -> None:
         self._config["timeout"] = seconds
         self._init_client()
 
+    @method("set_general_prompt")
     def set_general_prompt(self, prompt: str) -> None:
         self._scene_prompts["general"] = prompt
 
+    @method("set_branch_prompt")
     def set_branch_prompt(self, prompt: str) -> None:
         self._scene_prompts["branch"] = prompt
 
+    @method("set_loop_prompt")
     def set_loop_prompt(self, prompt: str) -> None:
         self._scene_prompts["loop"] = prompt
 
+    @method("set_scene_config")
     def set_scene_config(self, scene: str, config: Dict[str, Any]) -> None:
         if "prompt" in config:
             self._scene_prompts[scene] = config["prompt"]
 
+    @method("get_scene_prompt")
     def get_scene_prompt(self, scene: str) -> str:
         return self._scene_prompts.get(scene, self._scene_prompts["general"])
 
+    @method("get_retry_prompt")
     def get_retry_prompt(self, node_type: str) -> Optional[str]:
         return self._retry_prompts.get(node_type)
 
+    @method("set_return_type_prompt")
     def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
         self._return_type_prompts[type_name] = prompt
 
+    @method("get_return_type_prompt")
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
         return self._return_type_prompts.get(type_name)
 
+    @method("set_retry_hint")
     def set_retry_hint(self, hint: str) -> None:
         self._retry_hint = hint
 
+    @method("get_last_call_info")
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info
 
+    @method("set_decision_map")
     def set_decision_map(self, decision_map: Dict[str, str]) -> None:
         self._config["decision_map"] = decision_map
 
+    @method("get_decision_map")
     def get_decision_map(self) -> Dict[str, str]:
         return self._config.get("decision_map", {})
 
     # --- Global Intent Management ---
+    @method("set_global_intent")
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.set_global_intent(intent)
 
+    @method("clear_global_intents")
     def clear_global_intents(self) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.clear_global_intents()
 
+    @method("remove_global_intent")
     def remove_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.remove_global_intent(intent)
 
+    @method("mask")
     def mask(self, tag_pattern: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.push_intent("", mode="-", tag=tag_pattern)
 
+    @method("get_global_intents")
     def get_global_intents(self) -> List[str]:
         if self._capabilities and self._capabilities.intent_manager:
             return self._capabilities.intent_manager.get_global_intents()
         return []
 
+    @method("get_current_intent_stack")
     def get_current_intent_stack(self) -> List[str]:
         if self._capabilities and self._capabilities.intent_manager:
             global_ints = self._capabilities.intent_manager.get_global_intents()
@@ -172,8 +194,8 @@ class AIPlugin(ILLMProvider):
 
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                from core.domain.issue import InterpreterError
-                raise InterpreterError("LLM 运行配置缺失")
+                # [IES 2.1 SDK Isolation] 使用 SDK 导出的 PluginError，不再穿透内核。
+                raise PluginError("LLM 运行配置缺失")
 
         if is_test_mode:
             # Mock 逻辑简化
@@ -187,29 +209,3 @@ class AIPlugin(ILLMProvider):
         
         # 实际调用逻辑...
         return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
-
-    def get_vtable(self) -> Dict[str, Any]:
-        """[IES 2.0] 显式虚表映射"""
-        return {
-            "set_config": self.set_config,
-            "set_retry_hint": self.set_retry_hint,
-            "set_retry": self.set_retry,
-            "set_timeout": self.set_timeout,
-            "set_general_prompt": self.set_general_prompt,
-            "set_branch_prompt": self.set_branch_prompt,
-            "set_loop_prompt": self.set_loop_prompt,
-            "set_return_type_prompt": self.set_return_type_prompt,
-            "get_return_type_prompt": self.get_return_type_prompt,
-            "set_decision_map": self.set_decision_map,
-            "get_decision_map": self.get_decision_map,
-            "get_last_call_info": self.get_last_call_info,
-            "get_scene_prompt": self.get_scene_prompt,
-            "get_retry_prompt": self.get_retry_prompt,
-            "set_scene_config": self.set_scene_config,
-            "set_global_intent": self.set_global_intent,
-            "clear_global_intents": self.clear_global_intents,
-            "remove_global_intent": self.remove_global_intent,
-            "get_global_intents": self.get_global_intents,
-            "get_current_intent_stack": self.get_current_intent_stack,
-            "mask": self.mask,
-        }

@@ -1,5 +1,10 @@
 from typing import Any, Callable, Optional, List, Dict
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+# [IES 2.1 SDK Isolation]
+# 导出统一的插件异常，切断插件层对 core.domain.issue 的物理依赖。
+from core.domain.issue import InterpreterError as PluginError
 
 @dataclass
 class MethodBinding:
@@ -10,13 +15,8 @@ class MethodBinding:
 def method(spec_name: str, raw: bool = False):
     """
     [IES 2.0 SDK] 装饰器：将 Python 函数绑定到 IBCI 插件契约。
-    
-    Args:
-        spec_name: 契约中对应的函数名 (e.g. "fields")
-        raw: 是否禁用自动解箱逻辑。若为 True，函数将直接接收 IbObject 参数。
     """
     def decorator(func: Callable):
-        # 将绑定信息附加到函数对象上，供 Loader 扫描
         func._ibci_binding = MethodBinding(spec_name=spec_name, raw=raw)
         return func
     return decorator
@@ -24,9 +24,38 @@ def method(spec_name: str, raw: bool = False):
 def module(name: str):
     """
     [IES 2.0 SDK] 装饰器：标记一个类为 IBCI 模块实现。
-    目前主要用于增强代码可读性和潜在的自动注册。
     """
     def decorator(cls: type):
         cls._ibci_module_name = name
         return cls
     return decorator
+
+class IbPlugin(ABC):
+    """
+    [IES 2.1 SDK] 插件基类。
+    提供自动化的虚表（VTable）生成和依赖注入契约支持。
+    所有现代 IBCI 插件均应继承此类。
+    """
+    def __init__(self):
+        self._capabilities = None
+
+    def setup(self, capabilities: Any):
+        """
+        [IES 2.0 Contract] 插件初始化入口。
+        子类若需重写，请务必调用 super().setup(capabilities) 或确保持有 capabilities 引用。
+        """
+        self._capabilities = capabilities
+
+    def get_vtable(self) -> Dict[str, Callable]:
+        """
+        [IES 2.1 Automation] 自动化虚表生成。
+        扫描类中所有带有 @method 装饰器的成员，构建符合内核要求的虚表。
+        """
+        vtable = {}
+        # 扫描实例及父类的方法
+        for attr_name in dir(self):
+            attr = getattr(self, attr_name)
+            if hasattr(attr, '_ibci_binding'):
+                binding: MethodBinding = attr._ibci_binding
+                vtable[binding.spec_name] = attr
+        return vtable

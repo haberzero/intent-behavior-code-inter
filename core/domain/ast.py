@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union, Any
 from enum import IntEnum, Enum, auto
 from .issue_atomic import Location
+from .intent_logic import IntentMode
 
 
 # --- Scene ---
@@ -107,7 +108,7 @@ class IbExpr(IbASTNode):
 @dataclass(kw_only=True, eq=False)
 class IbIntentInfo(IbASTNode):
     """意图元数据信息"""
-    mode: str # "", "+", "!", "-"
+    mode: IntentMode # [IES 2.1] 切换为枚举
     tag: Optional[str] = None # Optional tag for precise removal/masking
     content: str # Raw content or constant string
     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
@@ -115,11 +116,11 @@ class IbIntentInfo(IbASTNode):
 
     @property
     def is_override(self) -> bool:
-        return self.mode == "!"
+        return self.mode == IntentMode.OVERRIDE
 
     @property
     def is_remove(self) -> bool:
-        return self.mode == "-"
+        return self.mode == IntentMode.REMOVE
 
     def resolve_content(self, context: Any, evaluator: Any = None) -> str:
         """

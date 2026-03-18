@@ -144,35 +144,35 @@ class StatementComponent(BaseComponent):
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
         """Parse 'mode "content"' or 'mode identifier'"""
         # 1. Parse mode
-        mode = IntentMode.APPEND.value
+        mode = IntentMode.APPEND
         token_val = start_token.value
         
         if token_val.startswith("@"):
             mode_char = token_val[1:]
-            if mode_char == "+": mode = IntentMode.APPEND.value
-            elif mode_char == "!": mode = IntentMode.OVERRIDE.value
-            elif mode_char == "-": mode = IntentMode.REMOVE.value
+            if mode_char == "+": mode = IntentMode.APPEND
+            elif mode_char == "!": mode = IntentMode.OVERRIDE
+            elif mode_char == "-": mode = IntentMode.REMOVE
         else:
             # Handle 'intent ! "content":'
             if self.stream.match(TokenType.NOT):
-                mode = IntentMode.OVERRIDE.value
+                mode = IntentMode.OVERRIDE
             elif self.stream.match(TokenType.PLUS):
-                mode = IntentMode.APPEND.value
+                mode = IntentMode.APPEND
             elif self.stream.match(TokenType.MINUS):
-                mode = IntentMode.REMOVE.value
+                mode = IntentMode.REMOVE
             
             # [IES 2.1 Refactor] 支持模式别名，消除硬编码字符串
             elif self.stream.check(TokenType.IDENTIFIER):
                 peek_val = self.stream.peek().value.lower()
                 if peek_val in ("append", "add"):
                     self.stream.advance()
-                    mode = IntentMode.APPEND.value
+                    mode = IntentMode.APPEND
                 elif peek_val in ("override", "exclusive"):
                     self.stream.advance()
-                    mode = IntentMode.OVERRIDE.value
+                    mode = IntentMode.OVERRIDE
                 elif peek_val in ("remove", "delete"):
                     self.stream.advance()
-                    mode = IntentMode.REMOVE.value
+                    mode = IntentMode.REMOVE
             
         segments = []
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
