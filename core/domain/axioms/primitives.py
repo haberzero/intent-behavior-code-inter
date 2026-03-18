@@ -59,7 +59,9 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
             "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__", 
             "//": "__floordiv__", "%": "__mod__", "**": "__pow__",
             "&": "__and__", "|": "__or__", "^": "__xor__", "<<": "__lshift__", ">>": "__rshift__",
-            "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__"
+            "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__",
+            # 一元运算符
+            "unary+": "__pos__", "unary-": "__neg__", "~": "__invert__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
@@ -113,7 +115,9 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
         return {
             "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__", 
             "//": "__floordiv__", "%": "__mod__", "**": "__pow__",
-            "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__"
+            "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__",
+            # 一元运算符
+            "unary+": "__pos__", "unary-": "__neg__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
@@ -158,7 +162,9 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
     def get_operators(self) -> Dict[str, str]:
         return {
             "&": "__and__", "|": "__or__", "^": "__xor__", "and": "__and__", "or": "__or__",
-            "==": "__eq__", "!=": "__ne__"
+            "==": "__eq__", "!=": "__ne__",
+            # 一元运算符
+            "not": "__not__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:

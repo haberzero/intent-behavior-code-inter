@@ -13,7 +13,10 @@ from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
-from core.runtime.interpreter.factory import RuntimeObjectFactory
+from core.runtime.factory import RuntimeObjectFactory
+from core.runtime.interpreter.handlers.stmt_handler import StmtHandler
+from core.runtime.interpreter.handlers.expr_handler import ExprHandler
+from core.runtime.interpreter.handlers.import_handler import ImportHandler
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.foundation.host_interface import HostInterface
@@ -67,6 +70,10 @@ class IBCIEngine(IInterpreterFactory):
         self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
         self.module_loader = ModuleLoader([builtin_path, plugins_path])
         
+        # [IES 2.1 IoC] 初始化并配置运行时对象工厂
+        self.object_factory = RuntimeObjectFactory(self.registry)
+        self._configure_factory(self.object_factory)
+
         # 2. 加载元数据以支持静态分析
         self.host_interface = self.discovery_service.discover_all(self.registry)
         
@@ -74,6 +81,16 @@ class IBCIEngine(IInterpreterFactory):
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
         
         self.interpreter: Optional[Interpreter] = None
+
+    def _configure_factory(self, factory: RuntimeObjectFactory):
+        """配置工厂的 IoC 注册表"""
+        # 1. 注册逻辑处理器 (Handlers)
+        factory.register_handler_factory(lambda sc, ec: StmtHandler(sc, ec))
+        factory.register_handler_factory(lambda sc, ec: ExprHandler(sc, ec))
+        factory.register_handler_factory(lambda sc, ec: ImportHandler(sc, ec))
+        
+        # 2. 注册 LLM 执行器
+        factory.register_llm_executor_factory(lambda sc, ec: LLMExecutorImpl(sc, ec))
 
     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
@@ -89,6 +106,7 @@ class IBCIEngine(IInterpreterFactory):
             compiler=self.scheduler,
             root_dir=root_dir,
             factory=self, # 注入自己作为工厂
+            object_factory=self.object_factory, # [IES 2.1 IoC]
             plugin_loader=self._load_plugins, # 注入生命周期钩子
             kernel_token=self._kernel_token # 透传内核令牌以驱动状态流转
         )
@@ -109,6 +127,7 @@ class IBCIEngine(IInterpreterFactory):
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
             factory=self,
+            object_factory=self.object_factory, # [IES 2.1 IoC]
             plugin_loader=self._load_plugins, # 注入生命周期钩子
             kernel_token=self._kernel_token # 注入内核令牌以驱动状态流转
         )

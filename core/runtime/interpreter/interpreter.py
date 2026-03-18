@@ -22,8 +22,7 @@ from core.runtime.interfaces import (
     IIbBehavior, IIbIntent
 )
 from .runtime_context import RuntimeContextImpl
-from .factory import RuntimeObjectFactory
-from .llm_executor import LLMExecutorImpl
+from core.runtime.factory import RuntimeObjectFactory
 from .interop import InterOpImpl
 from .module_manager import ModuleManagerImpl
 from .permissions import PermissionManager as PermissionManagerImpl
@@ -44,9 +43,6 @@ from .constants import OP_MAPPING, UNARY_OP_MAPPING
 from .service_context import ServiceContextImpl
 from .execution_context import ExecutionContextImpl
 from .call_stack import LogicalCallStack, StackFrame
-from .handlers.stmt_handler import StmtHandler
-from .handlers.expr_handler import ExprHandler
-from .handlers.import_handler import ImportHandler
 
 
 class Interpreter:
@@ -171,11 +167,9 @@ class Interpreter:
             permission_manager = permission_manager or PermissionManagerImpl(root_dir)
             
             # [IES 2.1] 初始化 LLMExecutor，注入最小数据依赖
-            llm_executor = llm_executor or LLMExecutorImpl(
-                registry=self.registry,
-                interop=interop,
-                issue_tracker=issue_tracker,
-                debugger=self.debugger
+            llm_executor = llm_executor or object_factory.create_llm_executor(
+                service_context=None, # 此时 ServiceContext 尚未完全就绪，将在后续水化
+                execution_context=self._execution_context
             )
             
             # [IES 2.1] 初始化 ModuleManager，注入最小依赖与回调
@@ -214,6 +208,10 @@ class Interpreter:
                 output_callback=output_callback,
                 input_callback=input_callback
             )
+            
+            # [IES 2.1] 完成延迟水化
+            if hasattr(llm_executor, 'hydrate'):
+                llm_executor.hydrate(self.service_context)
             
         # 2. [IES 2.1] 加载内置函数 (不再穿透持有 Interpreter)
         self.intrinsic_manager.load_defaults(self._execution_context, self.service_context)
@@ -281,14 +279,15 @@ class Interpreter:
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
         self.strict_mode = strict_mode
 
-        # [IES 4.3] 初始化分片 Handlers
-        self.stmt_handler = StmtHandler(self.service_context, self._execution_context)
-        self.expr_handler = ExprHandler(self.service_context, self._execution_context)
-        self.import_handler = ImportHandler(self.service_context, self._execution_context)
+        # [IES 4.3] 初始化分片 Handlers (通过工厂解耦)
+        handlers = object_factory.create_handlers(self.service_context, self._execution_context)
+        self.stmt_handler = handlers[0]
+        self.expr_handler = handlers[1]
+        self.import_handler = handlers[2]
 
         # [IES 2.0 Optimization] 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
-        self._register_handlers([self, self.stmt_handler, self.expr_handler, self.import_handler])
+        self._register_handlers([self] + handlers)
 
     def _register_handlers(self, handlers: List[Any]):
         """从所有 Handler 中搜集 visit_ 方法并缓存"""

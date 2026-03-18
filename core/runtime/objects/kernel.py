@@ -85,6 +85,13 @@ class IbObject:
             # 仅在方法缺失或解释器主动报错时回退
             return f"<Instance of {self.ib_class.name}>"
 
+    # --- [IES 2.1] 基础协议实现 ---
+    def __not__(self) -> 'IbObject':
+        """逻辑非运算协议"""
+        # 使用 to_bool 判定并取反
+        is_true = self.ib_class.registry.is_truthy(self)
+        return self.ib_class.registry.box(0 if is_true else 1)
+
     def serialize_for_debug(self) -> Mapping[str, Any]:
         """
         为 IDBG 等调试组件提供的序列化方法。

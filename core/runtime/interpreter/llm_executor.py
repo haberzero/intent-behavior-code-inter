@@ -17,27 +17,46 @@ from core.foundation.registry import Registry
 class LLMExecutorImpl:
     """
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
+    [IES 2.1 Refactor] 采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
     """
     def __init__(self, 
-                 registry: Registry, 
-                 interop: InterOp,
-                 issue_tracker: IssueTracker,
-                 llm_callback: Optional[ILLMProvider] = None,
-                 debugger: Any = None):
+                 service_context: Optional[ServiceContext] = None,
+                 execution_context: Optional[IExecutionContext] = None):
         """
-        registry: 注册表 (用于对象装箱)
-        interop: 互操作接口 (用于获取 ai 模块配置)
-        issue_tracker: 错误追踪器
-        llm_callback: 实际的 LLM 调用接口 (满足 ILLMProvider 协议)。
+        service_context: 运行时服务聚合容器 (可能在构造期为 None)
+        execution_context: 执行状态容器
         """
-        self.registry = registry
-        self.interop = interop
-        self.issue_tracker = issue_tracker
-        self.llm_callback = llm_callback
-        self.debugger = debugger or core_debugger
+        self._service_context = service_context
+        self._execution_context = execution_context
         
         self.last_call_info: Mapping[str, Any] = {} # 记录最后一次 LLM 调用信息
         self._expected_type_stack: List[str] = []
+
+    def hydrate(self, service_context: ServiceContext):
+        """[IES 2.1] 水化依赖，由解释器在服务准备就绪后调用"""
+        self._service_context = service_context
+
+    @property
+    def service_context(self) -> ServiceContext:
+        if not self._service_context:
+            raise RuntimeError("LLMExecutorImpl: ServiceContext not hydrated.")
+        return self._service_context
+
+    @property
+    def registry(self) -> Registry: return self.service_context.registry
+    @property
+    def interop(self) -> InterOp: return self.service_context.interop
+    @property
+    def issue_tracker(self) -> IssueTracker: return self.service_context.issue_tracker
+    @property
+    def debugger(self) -> Any: return self.service_context.debugger or core_debugger
+    @property
+    def llm_callback(self) -> Optional[ILLMProvider]:
+        # 动态从 ai 模块获取 Provider
+        ai_module = self.interop.get_package("ai")
+        if ai_module and hasattr(ai_module, "get_llm_provider"):
+            return ai_module.get_llm_provider()
+        return None
 
     def push_expected_type(self, type_name: str):
         self._expected_type_stack.append(type_name)

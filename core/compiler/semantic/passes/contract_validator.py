@@ -37,6 +37,14 @@ class ContractValidator:
 
         # 1. 检查方法重写的一致性 (Inheritance Contract)
         for name, member in cls_desc.members.items():
+            # [IES 2.1 Deep Audit] 校验成员水合完整性
+            if member.descriptor is None:
+                self.issue_tracker.report_error(
+                    f"Contract Violation: Member '{name}' in class '{cls_desc.name}' has unhydrated type descriptor.",
+                    file_path="<metadata>", line=0, column=0, code="SEM_002"
+                )
+                continue
+
             if not member.is_function:
                 continue
                 
@@ -79,6 +87,37 @@ class ContractValidator:
 
     def _check_method_compatibility(self, cls_desc: ClassMetadata, name: str, sub_sig: TypeDescriptor, super_sig: TypeDescriptor, source: str):
         """校验方法子类型化规则：参数逆变，返回值协变"""
+        # [IES 2.1 Deep Audit]
+        # 1. 校验参数数量一致性
+        sub_info = sub_sig.get_signature()
+        super_info = super_sig.get_signature()
+        
+        if sub_info and super_info:
+            sub_params, sub_ret = sub_info
+            super_params, super_ret = super_info
+            
+            if len(sub_params) != len(super_params):
+                 self.issue_tracker.report_error(
+                    f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
+                    f"but {source} defines {len(super_params)} parameters.",
+                    file_path="<metadata>", line=0, column=0, code="SEM_002"
+                )
+                 return
+
+            # 校验参数水合完整性
+            for i, p in enumerate(sub_params):
+                if p is None:
+                    self.issue_tracker.report_error(
+                        f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has unhydrated parameter type at index {i}.",
+                        file_path="<metadata>", line=0, column=0, code="SEM_002"
+                    )
+            if sub_ret is None:
+                self.issue_tracker.report_error(
+                    f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has unhydrated return type.",
+                    file_path="<metadata>", line=0, column=0, code="SEM_002"
+                )
+
+        # 2. 校验子类型化规则 (协变/逆变)
         if not sub_sig.is_assignable_to(super_sig):
             error_msg = f"Contract Violation: Method '{name}' in class '{cls_desc.name}' is incompatible with {source}."
             
