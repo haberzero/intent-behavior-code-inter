@@ -21,11 +21,11 @@ from core.runtime.interfaces import (
     PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService, IObjectFactory,
     IIbBehavior, IIbIntent
 )
-from .runtime_context import RuntimeContextImpl
+from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.factory import RuntimeObjectFactory
-from .interop import InterOpImpl
-from .module_manager import ModuleManagerImpl
-from .permissions import PermissionManager as PermissionManagerImpl
+from core.runtime.interpreter.interop import InterOpImpl
+from core.runtime.interpreter.module_manager import ModuleManagerImpl
+from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField
 from core.domain.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
@@ -35,14 +35,14 @@ from core.foundation.host_interface import HostInterface
 from core.foundation.interfaces import IStackInspector, IExecutionContext
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from .intrinsics import IntrinsicManager
-from .ast_view import ReadOnlyNodePool
+from core.runtime.interpreter.intrinsics import IntrinsicManager
+from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
-from .constants import OP_MAPPING, UNARY_OP_MAPPING
-from .service_context import ServiceContextImpl
-from .execution_context import ExecutionContextImpl
-from .call_stack import LogicalCallStack, StackFrame
+from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
+from core.runtime.interpreter.service_context import ServiceContextImpl
+from core.runtime.interpreter.execution_context import ExecutionContextImpl
+from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 
 
 class Interpreter:

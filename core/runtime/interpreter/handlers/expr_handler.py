@@ -1,5 +1,5 @@
 from typing import Any, Mapping, List, Optional, Union
-from .base_handler import BaseHandler
+from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.interfaces import ServiceContext
 from core.foundation.interfaces import IExecutionContext
 from core.runtime.objects.kernel import IbObject

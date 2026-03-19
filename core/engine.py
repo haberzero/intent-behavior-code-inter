@@ -195,7 +195,13 @@ class IBCIEngine(IInterpreterFactory):
             if not silent:
                 print("\n--- Compilation Errors ---")
                 print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
-            raise e # 统一向上抛出，由调用者决定是否处理
+                tracker = self.scheduler.issue_tracker
+                print(f"\nCompilation failed: {tracker.error_count} errors, {tracker.warning_count} warnings.")
+            raise e
+        except Exception as e:
+            if not silent:
+                print(f"\nRuntime Error: {str(e)}")
+            raise e
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
         abs_entry = os.path.abspath(entry_file)

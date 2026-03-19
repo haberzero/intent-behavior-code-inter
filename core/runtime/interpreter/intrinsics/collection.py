@@ -1,5 +1,5 @@
 from typing import List, Any
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.foundation.registry import Registry
 
 def register_collection(manager: Any, execution_context: Any, service_context: Any):

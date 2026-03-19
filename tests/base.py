@@ -1,15 +1,20 @@
 import unittest
 import os
 import textwrap
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List, Callable, TYPE_CHECKING
 from contextlib import contextmanager
 from core.engine import IBCIEngine
-from core.domain.issue import CompilerError, InterpreterError
-from core.domain.blueprint import CompilationArtifact
-from core.domain.types import ModuleMetadata
-from core.compiler.serialization.serializer import FlatSerializer
 
+# [SDK Isolation] 通过SDK层导入异常类型
 from core.extension import sdk as ibci
+from core.extension.sdk import CompilerError, InterpreterError
+
+# [TYPE_CHECKING guard] CompilationArtifact 仅用于类型注解
+if TYPE_CHECKING:
+    from core.domain.blueprint import CompilationArtifact
+
+# [SDK Export] FlatSerializer 需要保留，但标注为测试内部使用
+from core.compiler.serialization.serializer import FlatSerializer
 
 class MockAI(ibci.IbPlugin):
     """通用的 AI 服务 Mock (IES 2.1 Standard)"""
@@ -94,9 +99,9 @@ class IBCTestEngine(IBCIEngine):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.last_artifact: Optional[CompilationArtifact] = None
+        self.last_artifact: Optional['CompilationArtifact'] = None
 
-    def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> CompilationArtifact:
+    def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> 'CompilationArtifact':
         self.last_artifact = super().compile_string(code, variables, silent=silent)
         return self.last_artifact
 
@@ -124,13 +129,13 @@ class BaseIBCTest(unittest.TestCase):
         """快捷设置 Mock AI 服务"""
         self.mock_ai = MockAI()
         # 注册插件，以便编译器能识别 'ai' 模块
-        self.engine.register_native_module("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+        self.engine.register_native_module("ai", self.mock_ai, type_metadata=None)
         return self.mock_ai
 
     def setup_mock_host(self):
         """快捷设置 Mock 宿主服务"""
         self.mock_host = MockHostService()
-        self.engine.register_native_module("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
+        self.engine.register_native_module("host", self.mock_host, type_metadata=None)
         return self.mock_host
 
     @contextmanager
@@ -190,9 +195,9 @@ class BaseIBCTest(unittest.TestCase):
         
         # 2. 恢复 Mock 环境
         if self.mock_ai:
-            self.engine.register_native_module("ai", self.mock_ai, type_metadata=ModuleMetadata(name="ai"))
+            self.engine.register_native_module("ai", self.mock_ai, type_metadata=None)
         if self.mock_host:
-            self.engine.register_native_module("host", self.mock_host, type_metadata=ModuleMetadata(name="host"))
+            self.engine.register_native_module("host", self.mock_host, type_metadata=None)
 
         try:
             # 3. 静态编译阶段

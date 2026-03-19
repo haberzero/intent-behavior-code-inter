@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 from core.domain.issue import InterpreterError
+from core.runtime.objects.kernel import IbObject
 
 class PermissionManager:
     """

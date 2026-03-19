@@ -161,6 +161,8 @@ class SymbolTable:
     def define(self, sym: Symbol, allow_overwrite: bool = False):
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
         # [IES 2.1 Shadowing] 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
+        # 格式：scope_uid:symbol_name
+        # 这确保了即使是同名变量 (Shadowing)，在扁平池中也拥有不同的物理 UID
         if not sym.uid:
             sym.uid = f"{self.uid}:{sym.name}"
 

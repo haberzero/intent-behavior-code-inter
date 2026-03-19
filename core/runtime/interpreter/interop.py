@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, Optional
 from core.runtime.interfaces import InterOp
 from core.domain.issue import InterpreterError
+from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.foundation.host_interface import HostInterface
 
 class InterOpImpl:

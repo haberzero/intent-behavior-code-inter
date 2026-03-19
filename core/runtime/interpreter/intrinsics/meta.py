@@ -1,5 +1,5 @@
 from typing import Any, List
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.interfaces import ServiceContext
 
 def register_meta(manager: Any, execution_context: Any, service_context: Any):

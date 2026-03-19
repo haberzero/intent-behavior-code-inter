@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from core.foundation.source_atomic import Location
+from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.intent import IbIntent
 
 @dataclass
 class StackFrame:

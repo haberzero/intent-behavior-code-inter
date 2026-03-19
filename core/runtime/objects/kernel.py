@@ -338,9 +338,8 @@ class IbClass(IbObject):
                 return IbBoundMethod(self, method).receive("__call__", args)
             
             # [IES 2.1 Decoupling] 实例化时传入执行上下文以支持复杂字段初始化
-            context = None
-            if hasattr(self.registry, '_execution_context'):
-                context = self.registry._execution_context
+            # 通过 Registry 正式接口获取执行上下文
+            context = self.registry.get_execution_context()
             
             return self.instantiate(args, context=context)
         return super().receive(message, args)

@@ -1,10 +1,14 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Any, Dict, List, Union, Protocol, runtime_checkable, TYPE_CHECKING
 import copy
 
 # [Axiom Layer Integration]
 if TYPE_CHECKING:
-    from core.domain.axioms.protocols import TypeAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability
+    from core.domain.axioms.protocols import (
+        TypeAxiom, CallCapability, IterCapability, SubscriptCapability,
+        OperatorCapability, ParserCapability, WritableTrait
+    )
     from .registry import MetadataRegistry
     from core.domain.symbols import Symbol
 
@@ -182,8 +186,8 @@ class TypeDescriptor:
         """获取写能力（用于分析阶段更新元数据）"""
         if self._axiom:
             return self._axiom.get_writable_trait()
-        # 如果描述符本身实现了该能力，则直接返回
-        if isinstance(self, WritableTrait):
+        # [IES 2.1 Refactor] 使用能力探测替代 isinstance 检查
+        if hasattr(self, 'update_signature'):
             return self
         return None
 
@@ -357,6 +361,12 @@ class LazyDescriptor(TypeDescriptor):
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         return self.unwrap().resolve_item(key)
 
+    def get_references(self) -> Dict[str, Any]:
+        """[IES 2.1] 延迟加载描述符返回已解析描述符的引用"""
+        if self._resolved:
+            return {"_resolved": self._resolved}
+        return {}
+
 # --- 具体描述符实现 ---
 
 @dataclass
@@ -487,7 +497,7 @@ class DictMetadata(TypeDescriptor):
         return False
 
 @dataclass
-class FunctionMetadata(TypeDescriptor, WritableTrait):
+class FunctionMetadata(TypeDescriptor):
     """函数/方法签名元数据"""
     param_types: List[TypeDescriptor] = field(default_factory=list)
     return_type: Optional[TypeDescriptor] = None
@@ -713,7 +723,10 @@ class ModuleMetadata(TypeDescriptor):
 
     def get_references(self) -> Dict[str, Any]:
         """[IES 2.1] 模块元数据的引用获取"""
-        return super().get_references()
+        refs = super().get_references()
+        if hasattr(self, 'required_capabilities') and self.required_capabilities:
+            refs["required_capabilities"] = self.required_capabilities
+        return refs
 
     def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
         self.required_capabilities = data.get("required_capabilities", [])

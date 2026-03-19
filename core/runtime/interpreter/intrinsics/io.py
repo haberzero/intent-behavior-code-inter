@@ -1,5 +1,5 @@
 from typing import Optional, Any
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.objects.builtins import IbNone
 from core.foundation.registry import Registry
 

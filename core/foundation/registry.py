@@ -152,6 +152,17 @@ class Registry:
             raise PermissionError("Registry: Cannot re-bind ExecutionContext after structure is sealed.")
         self._execution_context = context
 
+    def get_execution_context(self) -> Optional['IExecutionContext']:
+        """[IES 2.1 Decoupling] 获取执行上下文引用。
+        
+        注意：此方法供内核内部使用（IbClass 实例化等）。
+        在 Registry 封印后返回已设置的上下文引用。
+        
+        Returns:
+            IExecutionContext 或 None（如果尚未设置）
+        """
+        return getattr(self, '_execution_context', None)
+
     def create_instance(self, class_name: str, *args, **kwargs) -> Any:
         """
         [IES 2.0 Factory] 统一对象实例化入口。

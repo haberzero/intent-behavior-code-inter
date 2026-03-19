@@ -788,6 +788,8 @@ class SemanticAnalyzer:
         # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
         target_type = self._resolve_type(node.type_annotation)
         if target_type:
+            # [FIX] 记录 node_to_type 以供后续阶段使用
+            self.node_to_type[node.uid] = target_type
             return target_type
         return self._any_desc
         

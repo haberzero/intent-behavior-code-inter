@@ -86,6 +86,27 @@
 
 ---
 
+## 8. 全量去硬编码与自动化初始化 (Subagent 5 深度审计报告) - **[FIXED]**
+**核心问题：** 基础类型初始化与运算符绑定存在大量 Lambda 硬编码。
+
+### 8.1 彻底去 `isinstance` 化 - **[FIXED]**
+- **[DONE]** `prelude.py` 已重构，使用 `get_call_trait()` 和 `is_module()` 替代对 `FunctionMetadata` 和 `ModuleMetadata` 的类身份判定。
+- **[DONE]** `loader.py` 和 `module_spec_builder.py` 补全了能力探测逻辑，不再依赖 `isinstance` 分类描述符。
+
+### 8.2 语法常量与枚举化 - **[FIXED]**
+- **[DONE]** 意图模式（Intent Mode）在 `statement.py` 中已全面切换为 `IntentMode` 枚举值（`+`, `!`, `-`），消除了 `"normal"`, `"append"` 等硬编码字符串。
+- **[DONE]** 公理层 `primitives.py` 的诊断提示已重构为基于 `_axiom` 类型的多态判定，消除了对 `.name == "int"` 的依赖。
+- **[DONE]** `Parser` 中的逻辑运算符和复合赋值运算符已全部通过 `OP_MAP` 和 `COMPOUND_OP_MAP` 统一管理。
+
+### 8.3 运行时补丁大清理 - **[FIXED]**
+- **[DONE]** `llm_executor.py` 移除了关于 `retry_hint` 存储位置的兼容性注释，将其确认为标准字段。
+- **[DONE]** `runtime_context.py` 彻底删除了“从列表重建链表”的兼容模式，强制要求基于 `IntentNode` 的原子化状态恢复。
+
+### 8.4 描述符完备性增强 - **[FIXED]**
+- **[DONE]** 为 `ClassMetadata` 和 `ModuleMetadata` 补全了 `get_references()` 实现，确保了结构化比对（`__eq__`）在复杂继承和模块场景下的客观性。
+
+---
+
 ## 9. 核心特性重构：LLM Fallback 体系解耦与纯态化 (Final Refactor) - **[FIXED]**
 **核心问题：** 解决 `llm fallback` 导致的逻辑膨胀、代码冗余及状态耦合隐患。
 
@@ -103,18 +124,17 @@
 - **[DONE]** `LLMExecutorImpl` 现已实现完全**无状态化**。原本私有的 `retry_hint` 已迁移至 `RuntimeContext` 统一管理，确保了执行服务的纯净性。
 - **[DONE]** **提示词解耦**：所有针对特定语法节点（如 `if`, `while`）的专业化重试提示词已从内核代码中剥离，迁移至 `ai` 模块的 `get_retry_prompt` 接口中，实现了“内核逻辑”与“模型引导策略”的物理隔离。
 
-### 8.1 彻底去 `isinstance` 化 - **[FIXED]**
-- **[DONE]** `prelude.py` 已重构，使用 `get_call_trait()` 和 `is_module()` 替代对 `FunctionMetadata` 和 `ModuleMetadata` 的类身份判定。
-- **[DONE]** `loader.py` 和 `module_spec_builder.py` 补全了能力探测逻辑，不再依赖 `isinstance` 分类描述符。
+---
 
-### 8.2 语法常量与枚举化 - **[FIXED]**
-- **[DONE]** 意图模式（Intent Mode）在 `statement.py` 中已全面切换为 `IntentMode` 枚举值（`+`, `!`, `-`），消除了 `"normal"`, `"append"` 等硬编码字符串。
-- **[DONE]** 公理层 `primitives.py` 的诊断提示已重构为基于 `_axiom` 类型的多态判定，消除了对 `.name == "int"` 的依赖。
-- **[DONE]** `Parser` 中的逻辑运算符和复合赋值运算符已全部通过 `OP_MAP` 和 `COMPOUND_OP_MAP` 统一管理。
+## 10. Phase 3 尾声：遗留架构风险与 SDK 封印 (Final Phase 3 Audit) - **[PENDING]**
+**核心问题：** 核心物理隔离层尚未完全闭合，存在局部耦合与非法回溯风险。
 
-### 8.3 运行时补丁大清理 - **[FIXED]**
-- **[DONE]** `llm_executor.py` 移除了关于 `retry_hint` 存储位置的兼容性注释，将其确认为标准字段。
-- **[DONE]** `runtime_context.py` 彻底删除了“从列表重建链表”的兼容模式，强制要求基于 `IntentNode` 的原子化状态恢复。
+### 10.1 局部导入清理与路径标准化
+- **[PENDING]** `core.runtime` 内部仍残留大量相对导入（`from . import`）。需全量替换为基于 `core.*` 的绝对路径，以提升系统的重构友好度与静态分析准确性。
 
-### 8.4 描述符完备性增强 - **[FIXED]**
-- **[DONE]** 为 `ClassMetadata` 和 `ModuleMetadata` 补全了 `get_references()` 实现，确保了结构化比对（`__eq__`）在复杂继承和模块场景下的客观性。
+### 10.2 SDK 隔离层封印与非法回溯
+- **[PENDING]** 完善 `core.extension.sdk` 的全量导出。
+- **[PENDING]** **架构穿刺风险**：强制禁止 `ibc_modules` 下的插件越过 SDK 直接引用 `core.*` 内部定义（特别是 `core.domain.issue` 和 `core.runtime.objects.kernel`），防止物理依赖反向污染。
+
+### 10.3 变量遮蔽 (Shadowing) 的确定性路径优化
+- **[PENDING]** 在扁平化的符号池（Symbol Pool）中，需进一步优化 UID 生成算法。目前的基于路径的 `scope/sub_scope:name` 机制需覆盖所有匿名和动态场景，确保内外层同名变量在物理池中绝对不冲突。

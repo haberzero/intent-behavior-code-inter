@@ -1,5 +1,5 @@
 from typing import Any, Mapping, List, Optional, Callable
-from .base_handler import BaseHandler
+from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
 from core.foundation.interfaces import IExecutionContext
 from core.runtime.interfaces import ServiceContext, IIbList, IIbBehavior
@@ -279,8 +279,8 @@ class StmtHandler(BaseHandler):
             hint_obj = self.visit(hint_uid)
             hint_val = hint_obj.to_native() if hasattr(hint_obj, 'to_native') else str(hint_obj)
         
-        # 将 hint 设置到 LLM 执行器中
-        self.service_context.llm_executor.retry_hint = hint_val
+        # 将 hint 设置到运行时上下文
+        self.runtime_context.retry_hint = hint_val
         raise RetryException()
 
     def visit_IbFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:

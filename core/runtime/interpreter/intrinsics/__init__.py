@@ -1,10 +1,10 @@
 from typing import Dict, Any, Callable, List, Optional
 from core.runtime.objects.kernel import IbNativeFunction, IbObject
 from core.foundation.registry import Registry
-from .io import register_io
-from .collection import register_collection
-from .conversion import register_conversion
-from .meta import register_meta
+from core.runtime.interpreter.intrinsics.io import register_io
+from core.runtime.interpreter.intrinsics.collection import register_collection
+from core.runtime.interpreter.intrinsics.conversion import register_conversion
+from core.runtime.interpreter.intrinsics.meta import register_meta
 
 class IntrinsicManager:
     """

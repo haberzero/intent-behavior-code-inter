@@ -1,5 +1,5 @@
 from typing import Any, Mapping, List, Optional
-from .base_handler import BaseHandler
+from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject
 
 class ImportHandler(BaseHandler):

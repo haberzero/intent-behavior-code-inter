@@ -1,4 +1,8 @@
-from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory
+from core.runtime.objects.kernel import IbModule
+from core.runtime.objects.intent import IbIntent
+from core.runtime.module_system.loader import ModuleLoader
+from core.runtime.module_system.discovery import ModuleDiscoveryService
+from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.domain import ast as ast

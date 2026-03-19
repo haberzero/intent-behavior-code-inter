@@ -10,6 +10,7 @@ from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent import IbIntent
+
 from core.domain.intent_logic import IntentMode, IntentRole
 from core.domain.intent_resolver import IntentResolver
 from core.foundation.registry import Registry

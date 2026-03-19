@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent
+from core.foundation.source_atomic import Location
+from core.runtime.exceptions import RetryException, BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
 from core.domain.issue import InterpreterError
 from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.foundation.registry import Registry
@@ -8,7 +10,7 @@ from core.foundation.interfaces import IStateReader
 from core.domain.types.descriptors import TypeDescriptor
 from core.domain.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.runtime.objects.kernel import IbClass, IbModule
+from core.runtime.objects.kernel import IbClass, IbModule, IbObject
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: TypeDescriptor | None = None, is_const: bool = False):

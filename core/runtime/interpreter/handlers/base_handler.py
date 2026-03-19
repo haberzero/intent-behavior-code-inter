@@ -8,6 +8,8 @@ from core.domain.issue import Severity, InterpreterError, LLMUncertaintyError
 from core.foundation.diagnostics.codes import RUN_GENERIC_ERROR
 from core.foundation.source_atomic import Location
 from core.runtime.exceptions import RetryException
+from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
 
 class BaseHandler:
     """

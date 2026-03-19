@@ -4,7 +4,7 @@ from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, co
 
 from .descriptors import (
     TypeDescriptor, ListMetadata, DictMetadata, FunctionMetadata, 
-    ClassMetadata, BoundMethodMetadata
+    ClassMetadata, BoundMethodMetadata, ModuleMetadata
 )
 from .hydrator import TypeHydrator
 
