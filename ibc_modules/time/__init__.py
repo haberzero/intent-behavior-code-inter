@@ -1,18 +1,18 @@
 import time
-from core.extension import sdk as ibci
+from core.extension import ibcext
 
-class TimeLib(ibci.IbPlugin):
+class TimeLib(ibcext.IbPlugin):
     """
     Time 2.1: 时间处理插件。
     """
     def __init__(self):
         super().__init__()
 
-    @ibci.method("sleep")
+    @ibcext.method("sleep")
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)
-        
-    @ibci.method("now")
+
+    @ibcext.method("now")
     def now(self) -> float:
         return time.time()
 

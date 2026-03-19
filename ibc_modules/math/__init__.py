@@ -1,7 +1,7 @@
 import math
-from core.extension import sdk as ibci
+from core.extension import ibcext
 
-class MathLib(ibci.IbPlugin):
+class MathLib(ibcext.IbPlugin):
     """
     Math 2.1: 数学计算插件。
     """
@@ -9,20 +9,20 @@ class MathLib(ibci.IbPlugin):
         super().__init__()
         self.pi = math.pi
         self._ibci_whitelist = ["pi"]
-    
-    @ibci.method("sqrt")
+
+    @ibcext.method("sqrt")
     def sqrt(self, x: float) -> float:
         return math.sqrt(x)
-        
-    @ibci.method("pow")
+
+    @ibcext.method("pow")
     def pow(self, x: float, y: float) -> float:
         return math.pow(x, y)
-        
-    @ibci.method("sin")
+
+    @ibcext.method("sin")
     def sin(self, x: float) -> float:
         return math.sin(x)
-        
-    @ibci.method("cos")
+
+    @ibcext.method("cos")
     def cos(self, x: float) -> float:
         return math.cos(x)
 

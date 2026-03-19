@@ -64,6 +64,21 @@ class InterpreterError(IBCBaseException):
     def __init__(self, message: str, location: Optional[Location] = None, error_code: Optional[str] = None):
         super().__init__(message, location, severity=Severity.ERROR, error_code=error_code or "RUNTIME_ERROR")
 
+class PluginError(IBCBaseException):
+    """
+    [IES 2.1 SDK] 插件系统专用异常。
+    当插件执行过程中发生错误时抛出，可被 issue_tracker 正确识别为插件相关错误。
+    """
+    def __init__(self, message: str, location: Optional[Location] = None, plugin_name: Optional[str] = None):
+        super().__init__(message, location, severity=Severity.ERROR, error_code="PLUGIN_ERROR")
+        self.plugin_name = plugin_name
+
+    def _format_message(self) -> str:
+        base = super()._format_message()
+        if self.plugin_name:
+            return base.replace("[PLUGIN_ERROR]", f"[PLUGIN_ERROR:{self.plugin_name}]")
+        return base
+
 class SemanticError(IBCBaseException):
     def __init__(self, message: str, location: Optional[Location] = None):
         super().__init__(message, location, severity=Severity.ERROR, error_code="SEMANTIC_ERROR")

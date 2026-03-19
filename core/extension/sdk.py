@@ -4,27 +4,12 @@ from abc import ABC, abstractmethod
 
 from core.runtime.objects.kernel import IbObject
 from core.foundation.source_atomic import Location, Severity
-from core.domain.issue import InterpreterError as PluginError, CompilerError, InterpreterError
-
-# [IES 2.1 SDK Isolation] 全量导出接口，插件不得直接 import core.* 内部细节
-__all__ = [
-    "IbPlugin",
-    "method",
-    "module",
-    "PluginError",
-    "CompilerError",
-    "InterpreterError",
-    "IbObject",
-    "Location",
-    "Severity",
-    "ExtensionCapabilities"
-]
+from core.domain.issue import PluginError, InterpreterError, CompilerError
 
 @dataclass
 class ExtensionCapabilities:
     """[IES 2.1 Security] 插件能力容器，仅暴露受限接口"""
-    # 动态注入，此处仅作为类型提示占位符
-    symbol_view: Any 
+    symbol_view: Any
     permission_manager: Any
     intent_manager: Any
 
@@ -32,7 +17,7 @@ class ExtensionCapabilities:
 class MethodBinding:
     """存储方法绑定元数据"""
     spec_name: str
-    raw: bool = False  # 如果为 True，跳过自动解箱，直接接收 IbObject
+    raw: bool = False
 
 def method(spec_name: str, raw: bool = False):
     """
@@ -74,7 +59,6 @@ class IbPlugin(ABC):
         扫描类中所有带有 @method 装饰器的成员，构建符合内核要求的虚表。
         """
         vtable = {}
-        # 扫描实例及父类的方法
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
             if hasattr(attr, '_ibci_binding'):

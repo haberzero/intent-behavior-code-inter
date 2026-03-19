@@ -1,8 +1,8 @@
 import os
 from typing import Optional
-from core.extension import sdk as ibci
+from core.extension import ibcext
 
-class FileLib(ibci.IbPlugin):
+class FileLib(ibcext.IbPlugin):
     """
     File 2.1: 文件操作插件。
     """
@@ -15,23 +15,23 @@ class FileLib(ibci.IbPlugin):
             return path
         return os.path.join(pm.root_dir, path) if pm else path
 
-    @ibci.method("read")
+    @ibcext.method("read")
     def read(self, path: str) -> str:
         pm = self._capabilities.permission_manager
         full_path = self._resolve_path(path)
         if pm: pm.validate_path(full_path, "read")
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
-            
-    @ibci.method("write")
+
+    @ibcext.method("write")
     def write(self, path: str, content: str) -> None:
         pm = self._capabilities.permission_manager
         full_path = self._resolve_path(path)
         if pm: pm.validate_path(full_path, "write")
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
-            
-    @ibci.method("exists")
+
+    @ibcext.method("exists")
     def exists(self, path: str) -> bool:
         pm = self._capabilities.permission_manager
         full_path = self._resolve_path(path)

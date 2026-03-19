@@ -1,23 +1,23 @@
 from typing import Dict, Any, List
-from core.extension import sdk as ibci
+from core.extension import ibcext
 
-class SchemaLib(ibci.IbPlugin):
+class SchemaLib(ibcext.IbPlugin):
     """
     Schema 2.1: JSON Schema 校验插件。
     """
     def __init__(self):
         super().__init__()
 
-    @ibci.method("validate")
+    @ibcext.method("validate")
     def validate(self, data: Dict[str, Any], rules: Dict[str, Any]) -> bool:
         if not isinstance(data, dict):
             return False
-            
+
         required = rules.get("required", [])
         for field in required:
             if field not in data:
                 return False
-                
+
         properties = rules.get("properties", {})
         for field, rule in properties.items():
             if field in data:
@@ -29,14 +29,13 @@ class SchemaLib(ibci.IbPlugin):
                 if expected_type == "boolean" and not isinstance(val, bool): return False
                 if expected_type == "array" and not isinstance(val, list): return False
                 if expected_type == "object" and not isinstance(val, dict): return False
-                
+
         return True
 
-    @ibci.method("assert")
+    @ibcext.method("assert")
     def _assert(self, data: Dict[str, Any], rules: Dict[str, Any]):
         if not self.validate(data, rules):
-            # [IES 2.1 SDK Isolation] 使用 SDK 导出的 PluginError
-            raise ibci.PluginError(f"Schema validation failed. Data: {data}, Rules: {rules}")
+            raise ibcext.PluginError(f"Schema validation failed. Data: {data}, Rules: {rules}")
 
 def create_implementation():
     return SchemaLib()

@@ -5,7 +5,7 @@ import sys
 from typing import List, Dict, Any, Optional, Set
 from core.runtime.exceptions import RegistryIsolationError
 from core.runtime.enums import RegistrationState
-from core.extension.sdk import IbPlugin
+from core.extension import ibcext
 
 from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import (

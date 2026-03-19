@@ -1,11 +1,11 @@
-from core.extension import sdk
+from core.extension import ibcext
 
 class Calculator:
-    @sdk.method("add")
+    @ibcext.method("add")
     def add_numbers(self, a: int, b: int):
         return a + b
 
-    @sdk.method("mul")
+    @ibcext.method("mul")
     def multiply_numbers(self, a: int, b: int):
         return a * b
 

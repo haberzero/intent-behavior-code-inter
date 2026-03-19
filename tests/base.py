@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from core.engine import IBCIEngine
 
 # [SDK Isolation] 通过SDK层导入异常类型
-from core.extension import sdk as ibci
-from core.extension.sdk import CompilerError, InterpreterError
+from core.extension import ibcext
+from ibcext import PluginError, InterpreterError
 
 # [TYPE_CHECKING guard] CompilationArtifact 仅用于类型注解
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 # [SDK Export] FlatSerializer 需要保留，但标注为测试内部使用
 from core.compiler.serialization.serializer import FlatSerializer
 
-class MockAI(ibci.IbPlugin):
+class MockAI(ibcext.IbPlugin):
     """通用的 AI 服务 Mock (IES 2.1 Standard)"""
     def __init__(self):
         super().__init__()
@@ -34,11 +34,11 @@ class MockAI(ibci.IbPlugin):
         # 核心：将自己注册为内核的 LLM Provider
         capabilities.llm_provider = self
 
-    @ibci.method("set_config")
+    @ibcext.method("set_config")
     def set_config(self, url, key, model):
         pass
 
-    @ibci.method("get_decision_map")
+    @ibcext.method("get_decision_map")
     def get_decision_map(self):
         return self._decision_map
 
@@ -48,15 +48,15 @@ class MockAI(ibci.IbPlugin):
         self.calls.append({"sys": sys, "user": user, "scene": scene})
         return self.response
 
-    @ibci.method("get_return_type_prompt")
+    @ibcext.method("get_return_type_prompt")
     def get_return_type_prompt(self, type_name):
         return f"Return type should be {type_name}"
 
-    @ibci.method("set_retry_hint")
+    @ibcext.method("set_retry_hint")
     def set_retry_hint(self, hint):
         pass
     
-    @ibci.method("get_last_call_info")
+    @ibcext.method("get_last_call_info")
     def get_last_call_info(self):
         return {"sys": self.last_sys, "user": self.last_user, "response": self.response}
 

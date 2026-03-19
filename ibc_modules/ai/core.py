@@ -2,9 +2,9 @@ import os
 import time
 from typing import Any, Optional, Dict, List
 from core.foundation.interfaces import ExtensionCapabilities, ILLMProvider
-from core.extension.sdk import IbPlugin, method, PluginError
+from core.extension import ibcext
 
-class AIPlugin(IbPlugin, ILLMProvider):
+class AIPlugin(ibcext.IbPlugin, ILLMProvider):
     """
     AI 2.1: LLM 供应者。
     继承 IbPlugin 以实现自动虚表生成和 SDK 隔离。
@@ -72,7 +72,7 @@ class AIPlugin(IbPlugin, ILLMProvider):
             except ImportError:
                 pass
 
-    @method("set_config")
+    @ibcext.method("set_config")
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
         self._config["key"] = key
@@ -85,92 +85,92 @@ class AIPlugin(IbPlugin, ILLMProvider):
             
         self._init_client()
         
-    @method("set_retry")
+    @ibcext.method("set_retry")
     def set_retry(self, count: int) -> None:
         self._config["retry"] = count
         
-    @method("set_timeout")
+    @ibcext.method("set_timeout")
     def set_timeout(self, seconds: float) -> None:
         self._config["timeout"] = seconds
         self._init_client()
 
-    @method("set_general_prompt")
+    @ibcext.method("set_general_prompt")
     def set_general_prompt(self, prompt: str) -> None:
         self._scene_prompts["general"] = prompt
 
-    @method("set_branch_prompt")
+    @ibcext.method("set_branch_prompt")
     def set_branch_prompt(self, prompt: str) -> None:
         self._scene_prompts["branch"] = prompt
 
-    @method("set_loop_prompt")
+    @ibcext.method("set_loop_prompt")
     def set_loop_prompt(self, prompt: str) -> None:
         self._scene_prompts["loop"] = prompt
 
-    @method("set_scene_config")
+    @ibcext.method("set_scene_config")
     def set_scene_config(self, scene: str, config: Dict[str, Any]) -> None:
         if "prompt" in config:
             self._scene_prompts[scene] = config["prompt"]
 
-    @method("get_scene_prompt")
+    @ibcext.method("get_scene_prompt")
     def get_scene_prompt(self, scene: str) -> str:
         return self._scene_prompts.get(scene, self._scene_prompts["general"])
 
-    @method("get_retry_prompt")
+    @ibcext.method("get_retry_prompt")
     def get_retry_prompt(self, node_type: str) -> Optional[str]:
         return self._retry_prompts.get(node_type)
 
-    @method("set_return_type_prompt")
+    @ibcext.method("set_return_type_prompt")
     def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
         self._return_type_prompts[type_name] = prompt
 
-    @method("get_return_type_prompt")
+    @ibcext.method("get_return_type_prompt")
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
         return self._return_type_prompts.get(type_name)
 
-    @method("set_retry_hint")
+    @ibcext.method("set_retry_hint")
     def set_retry_hint(self, hint: str) -> None:
         self._retry_hint = hint
 
-    @method("get_last_call_info")
+    @ibcext.method("get_last_call_info")
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info
 
-    @method("set_decision_map")
+    @ibcext.method("set_decision_map")
     def set_decision_map(self, decision_map: Dict[str, str]) -> None:
         self._config["decision_map"] = decision_map
 
-    @method("get_decision_map")
+    @ibcext.method("get_decision_map")
     def get_decision_map(self) -> Dict[str, str]:
         return self._config.get("decision_map", {})
 
     # --- Global Intent Management ---
-    @method("set_global_intent")
+    @ibcext.method("set_global_intent")
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.set_global_intent(intent)
 
-    @method("clear_global_intents")
+    @ibcext.method("clear_global_intents")
     def clear_global_intents(self) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.clear_global_intents()
 
-    @method("remove_global_intent")
+    @ibcext.method("remove_global_intent")
     def remove_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.remove_global_intent(intent)
 
-    @method("mask")
+    @ibcext.method("mask")
     def mask(self, tag_pattern: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.push_intent("", mode="-", tag=tag_pattern)
 
-    @method("get_global_intents")
+    @ibcext.method("get_global_intents")
     def get_global_intents(self) -> List[str]:
         if self._capabilities and self._capabilities.intent_manager:
             return self._capabilities.intent_manager.get_global_intents()
         return []
 
-    @method("get_current_intent_stack")
+    @ibcext.method("get_current_intent_stack")
     def get_current_intent_stack(self) -> List[str]:
         if self._capabilities and self._capabilities.intent_manager:
             global_ints = self._capabilities.intent_manager.get_global_intents()
@@ -195,7 +195,7 @@ class AIPlugin(IbPlugin, ILLMProvider):
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 # [IES 2.1 SDK Isolation] 使用 SDK 导出的 PluginError，不再穿透内核。
-                raise PluginError("LLM 运行配置缺失")
+                raise ibcext.PluginError("LLM 运行配置缺失")
 
         if is_test_mode:
             # Mock 逻辑简化

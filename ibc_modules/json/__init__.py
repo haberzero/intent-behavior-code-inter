@@ -1,19 +1,19 @@
 import json
 from typing import Any
-from core.extension import sdk as ibci
+from core.extension import ibcext
 
-class JSONLib(ibci.IbPlugin):
+class JSONLib(ibcext.IbPlugin):
     """
     JSON 2.1: JSON 处理插件。
     """
     def __init__(self):
         super().__init__()
 
-    @ibci.method("parse")
+    @ibcext.method("parse")
     def parse(self, s: str) -> Any:
         return json.loads(s)
-    
-    @ibci.method("stringify")
+
+    @ibcext.method("stringify")
     def stringify(self, obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False)
 
