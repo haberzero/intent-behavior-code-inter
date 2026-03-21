@@ -32,7 +32,7 @@ from core.kernel.types.descriptors import TypeDescriptor as Type, ListMetadata a
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.kernel.registry import KernelRegistry
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 from core.runtime.interfaces import IStackInspector, IExecutionContext
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole

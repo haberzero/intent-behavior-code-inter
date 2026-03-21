@@ -132,7 +132,6 @@ class ExpressionAnalyzer:
         return result
 
     def visit_IbConstant(self, node: Any) -> 'TypeDescriptor':
-        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbNone
         value = node.value
         if value is None:
             return self.registry.resolve("None")

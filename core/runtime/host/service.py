@@ -4,7 +4,7 @@ import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject, IExecutionContext
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
 from core.compiler.serialization.serializer import FlatSerializer

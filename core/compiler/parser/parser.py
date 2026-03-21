@@ -16,7 +16,7 @@ from core.base.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
 from core.kernel.issue import Severity
 from core.base.source_atomic import Location
 
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 if TYPE_CHECKING:

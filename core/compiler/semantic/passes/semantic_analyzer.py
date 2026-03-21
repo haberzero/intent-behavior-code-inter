@@ -3,7 +3,7 @@ from core.kernel import ast as ast
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 
 from core.kernel import symbols
 from core.kernel.symbols import (

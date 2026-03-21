@@ -20,7 +20,7 @@ from core.runtime.interpreter.handlers.expr_handler import ExprHandler
 from core.runtime.interpreter.handlers.import_handler import ImportHandler
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter

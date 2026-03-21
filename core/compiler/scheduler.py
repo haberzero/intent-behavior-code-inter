@@ -13,7 +13,7 @@ from core.base.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,

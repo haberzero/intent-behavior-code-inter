@@ -1,7 +1,7 @@
 import os
 import importlib.util
 from typing import Dict, List, Optional, Any
-from core.base.host_interface import HostInterface
+from core.runtime.host.host_interface import HostInterface
 from core.kernel.types.descriptors import ModuleMetadata as ModuleType, TypeDescriptor
 from core.kernel.symbols import SymbolFactory
 from core.base.enums import RegistrationState

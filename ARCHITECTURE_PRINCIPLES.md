@@ -4,7 +4,7 @@
 > 供未来参与 IBC-Inter 项目的智能体和开发者进行架构对齐使用。
 >
 > **生成日期**：2026-03-21
-> **版本**：V2.0
+> **版本**：V2.1
 
 ---
 
@@ -114,7 +114,25 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 | **IDBG** | 运行时信息输出 | 意图栈查看/内存分析/栈监控/运行时状态检查，**不影响主逻辑** |
 | **HOST** | 环境保存/恢复/跳转 | 断点保存/恢复/回溯，**不是GDB式断点** |
 
-### 3.4 DynamicHost "断点" ≠ GDB断点
+### 3.4 DynamicHost 架构定位
+
+DynamicHost 是**插件接口层**，不是解释器管理层。
+
+| 组件 | 职责 | 说明 |
+|------|------|------|
+| **DynamicHost** | 接口层 | 暴露 @method 给 IBCI 脚本，不持有解释器实例，纯委托 |
+| **HostService** | 服务实现层 | 协调子解释器创建，委托 Engine 执行 |
+| **Engine** | 解释器管理层 | 唯一持有 Interpreter 实例，负责 spawn_interpreter() |
+| **Interpreter** | 执行层 | 单个解释器的执行上下文 |
+
+**调用链**：
+```
+IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → Interpreter
+```
+
+**重要**：子解释器和主解释器**地位平等**，都是 Interpreter 实例，区别仅在于创建方式。
+
+### 3.5 DynamicHost "断点" ≠ GDB断点
 
 | 概念 | DynamicHost "断点" | GDB 断点 |
 |------|-------------------|----------|
@@ -122,7 +140,7 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 | **触发方式** | 主动保存或环境退出 | 运行到指定位置 |
 | **恢复能力** | 可恢复到之前保存的状态 | 仅能从当前位置继续 |
 
-### 3.5 DynamicHost 最小目标
+### 3.6 DynamicHost 最小目标
 
 1. **能够启动全隔离的运行环境**
 2. **能够继承所有来自主解释器的插件/UTS/公理体系**
@@ -175,7 +193,47 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 - AxiomHydrator.inject_axioms() 将公理的 get_methods() 注入到 descriptor.members
 - 能力访问器（get_call_trait, get_operator_result 等）全部委托给公理
 
-### 5.3 UTS（统一类型系统）
+### 5.3 Fallback 策略原则（重要）
+
+IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
+
+#### 允许的 Fallback：职责分离型
+
+**设计原则**：公理层声明"行为规范"，描述符层持有"具体类型信息"
+
+| 场景 | 说明 |
+|------|------|
+| **TypeDescriptor 基类能力访问器** | 返回 None 表示"未知"，子类有义务重写 |
+| **FunctionMetadata.resolve_return** | Axiom 优先，静态签名作为编译期后备（双轨制） |
+| **LazyDescriptor 正常情况** | 占位符模式，已解析时返回真实描述符 |
+
+#### 禁止的 Fallback：妥协性历史兼容
+
+**设计原则**：公理为唯一真源，任何妥协性 fallback 都是技术债务
+
+| 问题 | 说明 |
+|------|------|
+| **ListMetadata/DictMetadata fallback** | 描述符同时充当数据存储，违反公理唯一真源原则 |
+| **StrAxiom.resolve_item 返回 None** | 公理实现错误，注释明确标注 "Should return STR_DESCRIPTOR" |
+| **ExpressionAnalyzer `or self._any_desc`** | 静默掩盖类型错误，应给出精确错误提示 |
+| **AxiomHydrator 静默返回** | 配置错误被静默忽略，应抛出 RuntimeError |
+| **LazyDescriptor 异常情况** | `resolve()`失败或`_registry`不可用时返回self占位，应抛出错误 |
+
+**关于 LazyDescriptor 的详细说明**：
+
+LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
+- **正常情况**：`unwrap()` 成功解析后返回真实 TypeDescriptor
+- **异常情况**：如果 `_registry` 不可用或 `resolve()` 失败，返回 `self` 作为占位符
+
+"返回 self" 作为占位符虽然允许编译继续，但掩盖了**配置错误或解析失败**。理想情况下：
+- `_registry` 不可用应该抛出错误（系统配置问题）
+- `resolve()` 失败也应该抛出错误（类型未注册）
+
+**违反后果**：妥协性 fallback 会导致类型信息丢失、错误掩盖、难以调试等问题，必须在后续迭代中修复。
+
+---
+
+### 5.4 UTS（统一类型系统）
 
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
@@ -215,9 +273,175 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 
 ### 7.2 插件接口规范
 
-- `_spec.py`：定义插件导出的函数签名、类型信息及所需权限
-- `__init__.py`：具体的 Python 逻辑实现
-- 内置函数（print, input, len等）应通过 `_spec.py` + SpecBuilder 声明
+> **重要**：IES 2.0 插件结构已更新，逻辑实现与 `__init__.py` 分离。
+
+| 文件 | 职责 | 说明 |
+|------|------|------|
+| `_spec.py` | 元数据注入 | 通过 SpecBuilder 声明函数签名、类型信息 |
+| `core.py` | 具体逻辑实现 | 插件的具体 Python 类实现 |
+| `__init__.py` | 工厂模式入口 | 只负责导入和 `create_implementation()` 工厂函数 |
+
+**示例（AI 插件）**：
+- `ibc_modules/ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
+- `ibc_modules/ai/core.py` → `class AIPlugin(ibcext.IbPlugin, ILLMProvider): ...`
+- `ibc_modules/ai/_spec.py` → SpecBuilder 声明
+
+### 7.3 IES 2.2 插件架构愿景（零侵入自动嗅探）
+
+> **设计目标**：插件不再需要 import 任何核心代码，实现真正的零侵入自动注册。
+
+#### 7.3.1 核心设计
+
+| 特性 | 说明 |
+|------|------|
+| **零侵入** | 插件不继承任何核心代码（甚至不 import ibcext） |
+| **协议固定命名** | 插件必须实现固定命名方法（如 `__ibcext_vtable__()`） |
+| **全自动嗅探** | AutoDiscoveryService 自动扫描 _spec.py，发现并加载插件 |
+| **元数据自注册** | 通过固定命名函数完成元数据注册，无需运行时依赖 |
+| **二进制兼容** | 只要保留 Python 解释器，反射机制正常工作 |
+
+#### 7.3.2 固定命名方法约定
+
+| 方法名 | 职责 | 返回值 |
+|--------|------|--------|
+| `__ibcext_vtable__()` | 提供虚表（方法名映射） | Dict[str, Callable] |
+| `__ibcext_metadata__()` | 提供插件元数据 | Dict[str, Any] |
+| `create_factory()` | 工厂函数入口 | Callable |
+| `create_implementation()` | 实现创建函数 | IbPlugin 实例 |
+
+**示例（IES 2.2 插件）**：
+```python
+# ibc_modules/ai/_spec.py - 不再 import ibcext
+def __ibcext_metadata__():
+    return {
+        "name": "ai",
+        "version": "1.0.0",
+        "description": "LLM provider plugin",
+    }
+
+def __ibcext_vtable__():
+    return {
+        "complete": lambda self, prompt, context: self._llm.complete(prompt, context),
+        "embed": lambda self, text: self._llm.embed(text),
+    }
+
+def create_implementation():
+    return _AIPluginCore()  # 返回无基类依赖的实现类
+```
+
+#### 7.3.3 AutoDiscoveryService 嗅探机制
+
+```python
+class AutoDiscoveryService:
+    """[IES 2.2] 全自动插件发现服务"""
+    
+    def discover_plugins(self, plugin_dirs: List[str]) -> List[PluginSpec]:
+        discovered = []
+        for plugin_dir in plugin_dirs:
+            for spec_file in Path(plugin_dir).glob("*/_spec.py"):
+                spec = self._load_spec(spec_file)
+                if self._is_valid_ies22_plugin(spec):
+                    discovered.append(self._create_plugin_spec(spec))
+        return discovered
+    
+    def _load_spec(self, spec_path: Path) -> Dict[str, Any]:
+        """通过 importlib 加载 _spec.py 并调用固定命名方法"""
+        spec_module = importlib.import_module(spec_path.stem, spec_path.parent.name)
+        metadata = getattr(spec_module, '__ibcext_metadata__', lambda: {})()
+        vtable_func = getattr(spec_module, '__ibcext_vtable__', None)
+        return {"metadata": metadata, "vtable": vtable_func}
+```
+
+#### 7.3.4 函数名映射机制
+
+插件编写者可以在 `__ibcext_vtable__()` 内部自定义函数名映射：
+
+```python
+def __ibcext_vtable__():
+    return {
+        # IBCI脚本看到的名字 → 实际实现函数
+        "complete": _real_llm_complete,
+        "embed": _real_embedding,
+        # 自定义特殊映射，利用 Python 特性实现高级用法
+        "__custom_meta__": _register_special_metadata,
+    }
+```
+
+这允许插件编写者：
+- 使用与实现函数不同的对外名称
+- 利用 Python 特性实现特殊的元数据注册机制
+- 极大提高插件编写者的自由度
+
+#### 7.3.5 二进制打包兼容性
+
+| 打包场景 | 兼容性 | 说明 |
+|----------|--------|------|
+| **PyInstaller 打包** | ✅ 完全兼容 | Python 解释器完整保留 |
+| **Nuitka 打包** | ✅ 完全兼容 | 反射机制正常工作 |
+| **未来语法迁移** | ✅ 完全兼容 | Python 作为胶水层保留 |
+
+**核心保障**：只要保留完整的 Python 解释器，所有 `__attr__` 反射机制、`importlib`、`dir()` 等都能正常工作。
+
+#### 7.3.6 向后兼容策略
+
+| 场景 | 处理方式 |
+|------|----------|
+| **IES 2.0/2.1 插件** | 适配器模式，AutoDiscoveryService 检测旧格式并转换 |
+| **混合使用** | 同时支持 `@ibcext.method` 和 `__ibcext_vtable__()` |
+| **渐进迁移** | 逐步将内置插件迁移到 IES 2.2，不强制要求第三方迁移 |
+
+#### 7.3.7 IES 2.2 编译构建流程（静态类型检查保留）
+
+> **核心洞察**：编译器在 STAGE_3 (PLUGIN_METADATA) 之后进行静态类型检查。只要在编译前完成 `discover_all()` 并将元数据注册到 `MetadataRegistry`，静态类型检查完全保留。
+
+**当前架构流程**：
+```
+Engine.__init__()
+    ↓
+discovery_service.discover_all() → HostInterface.metadata
+    ↓
+compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
+```
+
+**IES 2.2 架构流程**：
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 构建阶段（ibcc 命令）                                                │
+│                                                                      │
+│ 1. AutoDiscoveryService.discover_all()                               │
+│    ↓                                                                │
+│ 2. 生成 .ibc_meta 文件（JSON格式的元数据快照）                       │
+│    ↓                                                                │
+│ 3. 编译器读取 .ibc_meta → MetadataRegistry                          │
+│    ↓                                                                │
+│ 4. 静态类型检查通过 → FlatSerializer 生成扁平JSON                   │
+├─────────────────────────────────────────────────────────────────────┤
+│ 运行时阶段（ibci 命令）                                              │
+│                                                                      │
+│ 1. AutoDiscoveryService.discover_all()                              │
+│    ↓                                                                │
+│ 2. 发现 __ibcext_vtable__() 和 create_implementation()              │
+│    ↓                                                                │
+│ 3. 运行时加载插件实现                                                │
+│    ↓                                                                │
+│ 4. 通过 setup() 注入 service_context（IssueTracker等）              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**IES 2.2 关键保证**：
+| 保证 | 说明 |
+|------|------|
+| **静态类型检查保留** | 编译器通过 .ibc_meta 文件获取完整的 TypeDescriptor 信息 |
+| **扁平流生成保留** | FlatSerializer 依赖 TypeDescriptor.get_references()，与发现机制无关 |
+| **运行时零侵入** | 插件不需要 import ibcext 就能被发现和加载 |
+| **二进制兼容** | 只要有 Python 解释器，运行时发现正常工作 |
+
+**需要的代码配合**：
+| 组件 | 修改 | 说明 |
+|------|------|------|
+| **ibcc 构建命令** | 新增 `--pre-scan-specs` 参数 | 扫描 _spec.py 并生成 .ibc_meta |
+| **AutoDiscoveryService** | 增加 `export_metadata()` 方法 | 将元数据序列化为 JSON |
+| **Scheduler** | 增加 `load_metadata_from_file()` | 编译前读取 .ibc_meta |
 
 ---
 
@@ -272,17 +496,85 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 
 | 文件 | 重要性 | 说明 |
 |------|--------|------|
+| core/engine.py | 高 | IBCIEngine，解释器管理层，spawn_interpreter() |
 | core/kernel/registry.py | 高 | KernelRegistry |
 | core/kernel/types/registry.py | 高 | MetadataRegistry，两阶段注册 |
 | core/kernel/symbols.py | 中 | 符号系统 |
 | core/runtime/interpreter/execution_context.py | 高 | ExecutionContextImpl |
 | core/runtime/host/service.py | 高 | HostService，run_isolated/save_state |
+| core/runtime/host/dynamic_host.py | 高 | DynamicHost，插件接口层 |
+| core/runtime/host/host_interface.py | 高 | HostInterface，宿主环境接口注册器 |
 | core/compiler/serialization/serializer.py | 高 | FlatSerializer |
 | core/base/diagnostics/debugger.py | 中 | CoreDebugger |
+| core/runtime/module_system/discovery.py | 高 | ModuleDiscoveryService，插件发现服务 |
 | ibc_modules/idbg/core.py | 中 | IDBG 插件实现 |
 | ibc_modules/ai/core.py | 中 | AI 插件实现 |
-| ibc_modules/host/__init__.py | 中 | HOST 插件实现 |
+| ibc_modules/host/__init__.py | 中 | HOST 插件实现（用户级） |
+
+---
+
+## 附录：已知架构问题（历史遗留）
+
+> 以下问题已在代码中发现，将在后续版本中修复。
+
+### A.1 MetadataRegistry 双轨问题
+
+**问题描述**：
+- `KernelRegistry.get_metadata_registry()` 在 builtin 初始化时创建（轨A）
+- `HostInterface.metadata` 在 discover_all 时创建（轨B）
+- 两轨使用同名 `MetadataRegistry` 类，但实例不同
+
+**根因**：架构演进中的设计妥协，builtin 类型系统和插件系统分别发展后未及时统一。
+
+**数据流**：
+```
+Engine.__init__()
+    │
+    ├── KernelRegistry() + initialize_builtin_classes()
+    │       └──→ MetadataRegistry (轨A) → 内置类型/函数
+    │
+    └── discover_all()
+            └──→ HostInterface() 
+                    └──→ MetadataRegistry (轨B) → 插件元数据
+```
+
+**修复方案（IES 2.2）**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
+
+### A.2 HOST 插件游离问题
+
+**问题描述**：
+- `ibc_modules/host/` 使用 `spec.py` 而非规范要求的 `_spec.py`
+- DynamicHost 和 ibc_modules/host/HostImplementation 功能重叠
+- `DynamicHost.run_isolated()` vs `HostImplementation.run()` 方法名不一致
+
+**根因**：DynamicHost 是核心接口层实现，HostImplementation 是用户级插件实现，演进过程中未统一。
+
+**当前架构**：
+```
+IBCI脚本 ──→ host_run() 内置函数 ──→ DynamicHost ──→ HostService
+                (builtin_initializer)    (@method暴露)    (实际执行)
+
+IBCI脚本 ──→ import host ──→ HostImplementation ──→ HostService
+               (ModuleDiscovery)     (@ibcext.method)
+```
+
+**修复方案**：
+1. 将 `ibc_modules/host/spec.py` 重命名为 `_spec.py`
+2. 统一方法名：`run` → `run_isolated`
+3. DynamicHost 作为内核级实现，HostImplementation 作为 IBC 模块实现，两者是同一接口的不同暴露方式
+
+### A.3 builtin_initializer 孤立 host_* 函数
+
+**问题描述**：
+- `builtin_initializer.py` 注册了 `host_save_state`、`host_load_state`、`host_run` 等函数元数据
+- 但没有实际的 Python 实现绑定
+- 这些函数元数据可能与 ibc_modules/host 的实际方法冲突
+
+**根因**：早期设计中希望将 HOST 能力作为内置函数，后改为插件实现，但遗留了元数据。
+
+**修复方案**：移除 builtin_initializer 中的孤立 host_* 函数元数据，统一通过 ibc_modules/host 插件提供。
 
 ---
 
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
+*最后更新：2026-03-21*
