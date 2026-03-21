@@ -5,33 +5,6 @@ from core.extension.exceptions import PluginError, InterpreterError, CompilerErr
 from core.extension.capabilities import PluginCapabilities, ExtensionCapabilities
 
 
-class MethodBinding:
-    """存储方法绑定元数据"""
-    def __init__(self, spec_name: str, raw: bool = False):
-        self.spec_name = spec_name
-        self.raw = raw
-
-
-def method(spec_name: str, raw: bool = False):
-    """
-    [IES 2.0 SDK] 装饰器：将 Python 函数绑定到 IBCI 插件契约。
-    """
-    def decorator(func: Callable):
-        func._ibci_binding = MethodBinding(spec_name=spec_name, raw=raw)
-        return func
-    return decorator
-
-
-def module(name: str):
-    """
-    [IES 2.0 SDK] 装饰器：标记一个类为 IBCI 模块实现。
-    """
-    def decorator(cls: type):
-        cls._ibci_module_name = name
-        return cls
-    return decorator
-
-
 class IbPlugin(ABC):
     """
     [IES 2.1 SDK] 插件基类。
@@ -61,24 +34,13 @@ class IbPlugin(ABC):
 
     def get_vtable(self) -> Dict[str, Callable]:
         """
-        [IES 2.1 Automation] 自动化虚表生成。
+        [IES 2.2] 虚表生成。
 
-        优先顺序：
-        1. 如果类上有 __ibcext_vtable__ 函数绑定，使用它
-        2. 否则扫描类中所有带有 @method 装饰器的成员
+        从模块级 __ibcext_vtable__ 函数获取方法映射表。
         """
-        # [IES 2.2] 检查是否绑定了模块级 __ibcext_vtable__ 函数
         if hasattr(self, '_ibcext_vtable_func') and callable(self._ibcext_vtable_func):
             return self._ibcext_vtable_func()
-
-        # [IES 2.0] 回退到装饰器 introspection
-        vtable = {}
-        for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if hasattr(attr, '_ibci_binding'):
-                binding: MethodBinding = attr._ibci_binding
-                vtable[binding.spec_name] = attr
-        return vtable
+        return {}
 
     def expose(
         self,

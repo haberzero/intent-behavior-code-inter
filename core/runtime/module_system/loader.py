@@ -27,21 +27,10 @@ class ModuleLoader(IModuleLoader):
         """
         [IES 2.2] 从模块获取 vtable。
 
-        优先顺序：
-        1. 如果实现类有 _ibcext_vtable_func 绑定，使用它
-        2. 如果实现类有 get_vtable() 方法且返回非空，使用它
-        3. 否则返回空字典（零侵入插件无 vtable）
+        直接从绑定的 _ibcext_vtable_func 获取方法映射表。
         """
-        # [IES 2.2] 检查是否绑定了模块级 __ibcext_vtable__ 函数
         if hasattr(implementation, '_ibcext_vtable_func') and callable(implementation._ibcext_vtable_func):
             return implementation._ibcext_vtable_func()
-
-        # [IES 2.1] 回退到 IbPlugin.get_vtable()
-        if hasattr(implementation, 'get_vtable'):
-            vtable = implementation.get_vtable()
-            if vtable:
-                return vtable
-
         return {}
 
     def _bind_vtable_from_spec(self, implementation: Any, module_name: str, base_path: str):
@@ -96,13 +85,10 @@ class ModuleLoader(IModuleLoader):
         if not metadata or not metadata.is_module():
             raise InterpreterError(f"Plugin Error: Module '{module_name}' metadata not found or invalid. Discovery must happen before loading.")
 
-        if not hasattr(implementation, 'get_vtable'):
-            raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing 'get_vtable()'.")
-            
-        # [IES 2.1 Refactor] 统一使用 IbPlugin 契约或显式 VTable
+        # [IES 2.2] 直接从模块级 vtable 函数获取
         raw_vtable = self._get_vtable_from_module(implementation, module_name)
         if not isinstance(raw_vtable, dict):
-            raise InterpreterError(f"Plugin Error: Module '{module_name}' get_vtable() must return a dictionary.")
+            raise InterpreterError(f"Plugin Error: Module '{module_name}' vtable must return a dictionary.")
             
         proxy_vtable = {}
 

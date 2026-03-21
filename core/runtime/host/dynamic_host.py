@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, List
 from dataclasses import dataclass, field
-from core.extension.ibcext import IbPlugin, method
+from core.extension.ibcext import IbPlugin
 from core.runtime.host.isolation_policy import IsolationPolicy
 
 
@@ -17,11 +17,27 @@ class IsolatedRunResult:
     return_value: Optional[Any] = None
 
 
+def _dynamic_host_vtable() -> Dict[str, Any]:
+    """[IES 2.2] DynamicHost 虚表"""
+    impl = DynamicHost()
+    return {
+        "save_state": impl.save_state,
+        "load_state": impl.load_state,
+        "run_isolated": impl.run_isolated,
+        "get_source": impl.get_source,
+        "generate_and_run": impl.generate_and_run,
+    }
+
+
 class DynamicHost(IbPlugin):
     """
     [IES 2.1] 动态宿主插件。
     实现运行时持久化、隔离执行、事务快照和元编程能力。
     """
+    def __init__(self):
+        super().__init__()
+        self._ibcext_vtable_func = _dynamic_host_vtable
+
     @property
     def plugin_id(self) -> str:
         return "core:dynamic_host"
@@ -29,9 +45,6 @@ class DynamicHost(IbPlugin):
     @property
     def plugin_name(self) -> str:
         return "DynamicHost"
-
-    def __init__(self):
-        super().__init__()
 
     def setup(self, capabilities: Any) -> None:
         super().setup(capabilities)
@@ -64,7 +77,6 @@ class DynamicHost(IbPlugin):
 
         return self.registry.get_none() if hasattr(self, 'registry') and self.registry else None
 
-    @method("save_state")
     def save_state(self, path: str) -> bool:
         """[Meta] 显式保存当前运行现场到文件"""
         sc = self._capabilities.service_context
@@ -76,7 +88,6 @@ class DynamicHost(IbPlugin):
                 return False
         return False
 
-    @method("load_state")
     def load_state(self, path: str) -> bool:
         """[Meta] 从文件加载并覆盖当前运行现场"""
         sc = self._capabilities.service_context
@@ -88,7 +99,6 @@ class DynamicHost(IbPlugin):
                 return False
         return False
 
-    @method("run_isolated")
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> 'IsolatedRunResult':
         """[Meta] 隔离运行另一个 ibci 文件"""
         sc = self._capabilities.service_context
@@ -114,7 +124,6 @@ class DynamicHost(IbPlugin):
                 )
         return IsolatedRunResult(success=False, diagnostics=[], exception_type=None, exception_message=None, return_value=None)
 
-    @method("get_source")
     def get_source(self) -> str:
         """[Meta] 获取当前模块的源代码"""
         sc = self._capabilities.service_context
@@ -122,7 +131,6 @@ class DynamicHost(IbPlugin):
             return sc.host_service.get_source()
         return ""
 
-    @method("generate_and_run")
     def generate_and_run(self, code: str, policy: Dict[str, Any]) -> 'IsolatedRunResult':
         """[IES 2.1] 动态生成 IBCI 代码并执行"""
         import tempfile
