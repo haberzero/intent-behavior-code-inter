@@ -19,7 +19,10 @@ class AxiomHydrator:
         """[IoC] 从公理注册表中获取并注入公理能力"""
         axiom_registry = self._registry.get_axiom_registry()
         if not axiom_registry:
-            return
+            raise RuntimeError(
+                f"Critical: AxiomRegistry not available for descriptor '{descriptor.name}'. "
+                f"Cannot hydrate descriptor without axiom binding."
+            )
 
         axiom_name = descriptor.get_base_axiom_name()
         descriptor._axiom = axiom_registry.get_axiom(axiom_name)

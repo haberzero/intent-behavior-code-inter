@@ -389,10 +389,8 @@ class ListMetadata(TypeDescriptor):
         return self
 
     def get_element_type(self) -> Optional[TypeDescriptor]:
-        # 优先使用 Axiom (如果有)
         res = super().get_element_type()
-        if res: return res
-        return self.element_type
+        return res
 
     def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
         self.element_type = hydrator.hydrate(data.get("element_type_uid"))
@@ -405,11 +403,8 @@ class ListMetadata(TypeDescriptor):
         return self
 
     def resolve_item(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
-        # 优先使用 Axiom (如果有)
         res = super().resolve_item(key)
-        if res: return res
-        # 回退到 element_type
-        return self.element_type
+        return res
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
@@ -467,8 +462,7 @@ class DictMetadata(TypeDescriptor):
 
     def resolve_item(self, key: TypeDescriptor) -> Optional[TypeDescriptor]:
         res = super().resolve_item(key)
-        if res: return res
-        return self.value_type
+        return res
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True

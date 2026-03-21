@@ -232,11 +232,11 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         return None
 
     def get_element_type(self) -> 'TypeDescriptor':
-        return None # Should return STR_DESCRIPTOR (self)
+        return STR_DESCRIPTOR
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         if key.get_base_axiom_name() == "int":
-            return None # Should return STR_DESCRIPTOR
+            return STR_DESCRIPTOR
         return None
 
     def parse_value(self, raw_value: str) -> Any:

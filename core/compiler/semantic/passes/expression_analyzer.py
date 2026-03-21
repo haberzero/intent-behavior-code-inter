@@ -90,7 +90,13 @@ class ExpressionAnalyzer:
             self.error(f"Type '{value_type.name}' is not subscriptable", node, code="SEM_003")
             return self._any_desc
         res = value_type.resolve_item(key_type)
-        return res or self._any_desc
+        if res is None:
+            self.error(
+                f"Type '{value_type.name}' does not support subscript access with key type '{key_type.name}'",
+                node, code="SEM_003"
+            )
+            return self._any_desc
+        return res
 
     def visit_IbCastExpr(self, node: Any) -> 'TypeDescriptor':
         self.visit(node.value)
@@ -177,7 +183,13 @@ class ExpressionAnalyzer:
             return self._any_desc
         arg_types = [self.visit(arg) for arg in node.args]
         result = func_type.resolve_return(arg_types) if hasattr(func_type, 'resolve_return') else self._any_desc
-        return result or self._any_desc
+        if result is None:
+            self.error(
+                f"Function '{func_type.name}' cannot be called with the provided arguments",
+                node, code="SEM_003"
+            )
+            return self._any_desc
+        return result
 
     def visit_IbBehaviorExpr(self, node: Any) -> 'TypeDescriptor':
         behavior_desc = self.registry.resolve("behavior")
