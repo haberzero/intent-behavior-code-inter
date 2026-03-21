@@ -1,12 +1,12 @@
 from typing import List, Optional, Union, TYPE_CHECKING
-from core.compiler.lexer.tokens import TokenType, Token
-from core.compiler.lexer.lexer import Lexer
+from core.compiler.common.tokens import TokenType, Token
+
 from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStream
-from core.domain import ast as ast
-from core.domain.issue import Severity
+from core.kernel import ast as ast
+from core.kernel.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_VAR, IbPrecedence
-from core.domain.intent_logic import IntentMode
+from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 
@@ -261,36 +261,16 @@ class DeclarationComponent(BaseComponent):
         while not self.stream.is_at_end():
             if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_END):
                 break
-            
+
             if self.stream.match(TokenType.RAW_TEXT):
                 segments.append(self.stream.previous().value)
             elif self.stream.match(TokenType.NEWLINE):
                 segments.append("\n")
-            elif self.stream.match(TokenType.PARAM_PLACEHOLDER):
-                placeholder_token = self.stream.previous()
-                # Extract expression string from $__expr__
-                full_name = placeholder_token.value
-                expr_str = full_name[3:-2] # Strip $__ and __
-                
-                # Use a temporary token stream to parse the internal expression
-                sub_lexer = Lexer(expr_str)
-                sub_tokens = sub_lexer.tokenize()
-                if sub_tokens and sub_tokens[-1].type == TokenType.EOF:
-                    sub_tokens.pop()
-                
-                if sub_tokens:
-                    old_stream = self.stream
-                    # Temporarily replace the stream in context
-                    self.context.stream = ParserTokenStream(sub_tokens, self.issue_tracker)
-                    try:
-                        node = self.expression.parse_expression()
-                        segments.append(node)
-                    finally:
-                        self.context.stream = old_stream
-                else:
-                    # Fallback for empty placeholders if they somehow occur
-                    segments.append("")
+            elif self.stream.match(TokenType.EMBEDDED_PARAM):
+                param_name = self.stream.previous().value
+                var_ref = ast.IbVarRef(name=param_name)
+                segments.append(var_ref)
             else:
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
-        
+
         return segments

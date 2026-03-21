@@ -1,7 +1,7 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
-from core.domain.intent_logic import IntentMode, IntentRole, IntentProtocol
+from core.kernel.intent_logic import IntentMode, IntentRole, IntentProtocol
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.llm_executor import LLMExecutorImpl

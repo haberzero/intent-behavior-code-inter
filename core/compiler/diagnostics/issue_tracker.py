@@ -1,7 +1,7 @@
 from typing import List, Optional, Union, Any
-from core.domain.issue import Diagnostic, CompilerError, FatalCompilerError, Locatable
-from core.foundation.source_atomic import Location, Severity
-from core.foundation.interfaces import ISourceProvider
+from core.kernel.issue import Diagnostic, CompilerError, FatalCompilerError, Locatable
+from core.base.source_atomic import Location, Severity
+from core.base.interfaces import ISourceProvider
 
 class IssueTracker:
     """

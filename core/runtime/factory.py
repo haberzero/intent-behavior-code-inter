@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, List, Mapping, Callable
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent
 )
-from core.foundation.registry import Registry
+from core.base.registry import Registry
 
 # 这些导入需要指向它们的新物理位置
 from core.runtime.interpreter.runtime_context import ScopeImpl

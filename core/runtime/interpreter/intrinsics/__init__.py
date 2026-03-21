@@ -1,6 +1,6 @@
 from typing import Dict, Any, Callable, List, Optional
 from core.runtime.objects.kernel import IbNativeFunction, IbObject
-from core.foundation.registry import Registry
+from core.base.registry import Registry
 from core.runtime.interpreter.intrinsics.io import register_io
 from core.runtime.interpreter.intrinsics.collection import register_collection
 from core.runtime.interpreter.intrinsics.conversion import register_conversion

@@ -4,7 +4,7 @@ import tempfile
 import traceback
 from typing import Optional, Dict, Any
 
-from core.foundation.registry import Registry
+from core.base.registry import Registry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.interpreter.service_context import ServiceContextImpl
@@ -19,28 +19,28 @@ from core.runtime.interpreter.handlers.expr_handler import ExprHandler
 from core.runtime.interpreter.handlers.import_handler import ImportHandler
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
-from core.foundation.host_interface import HostInterface
+from core.base.host_interface import HostInterface
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic.passes.contract_validator import ContractValidator
-from core.domain.types import ModuleMetadata
-from core.domain.blueprint import CompilationArtifact
-from core.domain.issue import CompilerError
-from core.domain.issue import InterpreterError, LexerError, ParserError, SemanticError
-from core.domain.symbols import VariableSymbol, SymbolKind
-from core.domain.types.descriptors import (
+from core.kernel.types import ModuleMetadata
+from core.kernel.blueprint import CompilationArtifact
+from core.kernel.issue import CompilerError
+from core.kernel.issue import InterpreterError, LexerError, ParserError, SemanticError
+from core.kernel.symbols import VariableSymbol, SymbolKind
+from core.kernel.types.descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
     BOOL_DESCRIPTOR, ANY_DESCRIPTOR
 )
-from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
+from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext
-from core.foundation.interfaces import IExecutionContext
+from core.runtime.interfaces import IExecutionContext
 
 
-from core.runtime.enums import RegistrationState
+from core.base.enums import RegistrationState
 
 class IBCIEngine(IInterpreterFactory):
     """
@@ -92,25 +92,28 @@ class IBCIEngine(IInterpreterFactory):
         # 2. 注册 LLM 执行器
         factory.register_llm_executor_factory(lambda sc, ec: LLMExecutorImpl(sc, ec))
 
-    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any) -> Interpreter:
+    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
-        # [IES 2.0] 彻底透传副作用回调
+        if isolated and registry is not None:
+            effective_registry = registry.clone()
+        else:
+            effective_registry = registry
+
         sub_interpreter = Interpreter(
             issue_tracker=self.issue_tracker,
-            artifact=artifact, 
-            registry=registry,
+            artifact=artifact,
+            registry=effective_registry,
             host_interface=host_interface,
             output_callback=self.interpreter.output_callback if self.interpreter else None,
             input_callback=getattr(self.interpreter, 'input_callback', None) if self.interpreter else None,
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
             root_dir=root_dir,
-            factory=self, # 注入自己作为工厂
-            object_factory=self.object_factory, # [IES 2.1 IoC]
-            plugin_loader=self._load_plugins, # 注入生命周期钩子
-            kernel_token=self._kernel_token # 透传内核令牌以驱动状态流转
+            factory=self,
+            object_factory=self.object_factory,
+            plugin_loader=self._load_plugins,
+            kernel_token=self._kernel_token
         )
-        # 加载插件已由 plugin_loader 完成
         return sub_interpreter
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):

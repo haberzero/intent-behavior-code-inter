@@ -1,8 +1,8 @@
 from typing import Dict, List, Optional, Any
-from core.domain.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata
-from core.domain.types.registry import MetadataRegistry
+from core.kernel.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata
+from core.kernel.types.registry import MetadataRegistry
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.foundation.diagnostics.core_debugger import CoreDebugger, CoreModule, DebugLevel
+from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
 class ContractValidator:
     """

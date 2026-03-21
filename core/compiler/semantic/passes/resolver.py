@@ -1,12 +1,12 @@
 from typing import List, Optional, Any, TYPE_CHECKING
-from core.domain import ast as ast
-from core.domain import symbols
-from core.domain.symbols import SymbolTable, TypeSymbol, FunctionSymbol
-from core.domain.types.descriptors import (
+from core.kernel import ast as ast
+from core.kernel import symbols
+from core.kernel.symbols import SymbolTable, TypeSymbol, FunctionSymbol
+from core.kernel.types.descriptors import (
     TypeDescriptor, ClassMetadata, FunctionMetadata,
     VOID_DESCRIPTOR, STR_DESCRIPTOR, ANY_DESCRIPTOR
 )
-from core.domain import types as uts
+from core.kernel import types as uts
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer

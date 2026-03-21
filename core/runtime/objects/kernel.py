@@ -1,16 +1,16 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
-from core.foundation.registry import Registry
-from core.runtime.enums import RegistrationState
-from core.domain.issue import InterpreterError
-from core.foundation.source_atomic import Location
+from core.base.registry import Registry
+from core.base.enums import RegistrationState
+from core.kernel.issue import InterpreterError
+from core.base.source_atomic import Location
 from core.runtime.exceptions import ReturnException, RegistryIsolationError
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.domain.intent_logic import IntentRole
-from core.domain.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.kernel.intent_logic import IntentRole
+from core.kernel.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
 
 if TYPE_CHECKING:
-    from core.domain import ast as ast
-    from core.foundation.interfaces import IExecutionContext
+    from core.kernel import ast as ast
+    from core.runtime.interfaces import IExecutionContext
     from core.runtime.interpreter.interpreter import Interpreter
 
 from .type_registry import register_ib_type
@@ -368,11 +368,10 @@ class IbNativeFunction(IbFunction):
         target_class = ib_class
         
         if not target_class and reg:
-            # 在核心类型注入后 (STAGE 2+)，callable 应该是存在的
-            if reg.state.value >= RegistrationState.STAGE_2_CORE_TYPES.value:
+            if reg.state_level >= RegistrationState.STAGE_2_CORE_TYPES.value:
                 target_class = reg.get_class("callable")
-                if not target_class and reg.state.value >= RegistrationState.STAGE_4_PLUGIN_IMPL.value:
-                    raise InterpreterError(f"Core Error: 'callable' class missing during STAGE {reg.state.name}. [IES 2.0 Fatal Assertion]")
+                if not target_class and reg.state_level >= RegistrationState.STAGE_4_PLUGIN_IMPL.value:
+                    raise InterpreterError(f"Core Error: 'callable' class missing during STAGE {RegistrationState(reg.state_level).name}. [IES 2.0 Fatal Assertion]")
         
         super().__init__(target_class)
         self.py_func = py_func

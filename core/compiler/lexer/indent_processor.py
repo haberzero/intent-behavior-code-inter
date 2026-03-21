@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
-from .tokens import Token, TokenType
+from core.compiler.common.tokens import Token, TokenType
 from core.compiler.lexer.str_stream import StrStream
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.diagnostics import DiagnosticReporter
 
 class IndentProcessor:
     """

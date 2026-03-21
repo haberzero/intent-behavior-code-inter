@@ -5,15 +5,15 @@ from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
-from core.domain import ast as ast
-from core.domain.types.descriptors import ModuleMetadata as ModuleType
-from core.domain.issue import InterpreterError
-from core.foundation.diagnostics.codes import DEP_MODULE_NOT_FOUND
-from core.foundation.interfaces import IExecutionContext
-from core.foundation.registry import Registry
+from core.kernel import ast as ast
+from core.kernel.types.descriptors import ModuleMetadata as ModuleType
+from core.kernel.issue import InterpreterError
+from core.base.diagnostics.codes import DEP_MODULE_NOT_FOUND
+from core.runtime.interfaces import IExecutionContext
+from core.base.registry import Registry
 
 if TYPE_CHECKING:
-    from core.domain.blueprint import CompilationArtifact
+    from core.kernel.blueprint import CompilationArtifact
 
 class ModuleInstanceImpl:
     def __init__(self, name: str, scope: Scope):

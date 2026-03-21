@@ -1,8 +1,9 @@
 import os
 import time
 from typing import Any, Optional, Dict, List
-from core.foundation.interfaces import ExtensionCapabilities, ILLMProvider
 from core.extension import ibcext
+from core.base.interfaces import ILLMProvider
+from core.extension.ibcext import ExtensionCapabilities
 
 class AIPlugin(ibcext.IbPlugin, ILLMProvider):
     """

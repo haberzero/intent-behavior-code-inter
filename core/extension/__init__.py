@@ -3,25 +3,30 @@
 
 推荐导入方式：
     from core.extension import ibcext
-    from ibcext import IbPlugin, method, module, PluginError
+    from core.extension import SpecBuilder
 
 或直接导入：
-    from core.extension.sdk import IbPlugin, method, PluginError
+    from core.extension.ibcext import IbPlugin, method, PluginError
+    from core.base.interfaces import ILLMProvider
+    from core.extension.spec_builder import SpecBuilder
 """
 
-from core.extension.sdk import (
+from core.extension.ibcext import (
     IbPlugin,
     method,
     module,
     PluginError,
     InterpreterError,
     CompilerError,
-    IbObject,
-    Location,
-    Severity,
     ExtensionCapabilities,
-    MethodBinding,
+    PluginCapabilities,
 )
+from core.extension.capabilities import (
+    PluginCapabilities,
+    ExtensionCapabilities,
+)
+from core.base.interfaces import ILLMProvider
+from core.extension.spec_builder import SpecBuilder, ClassSpecBuilder
 
 __all__ = [
     "IbPlugin",
@@ -30,9 +35,9 @@ __all__ = [
     "PluginError",
     "InterpreterError",
     "CompilerError",
-    "IbObject",
-    "Location",
-    "Severity",
     "ExtensionCapabilities",
-    "MethodBinding",
+    "PluginCapabilities",
+    "ILLMProvider",
+    "SpecBuilder",
+    "ClassSpecBuilder",
 ]

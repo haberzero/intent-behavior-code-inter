@@ -1,6 +1,6 @@
 from typing import Any, Optional, TypeVar
-from core.domain import ast as ast
-from core.compiler.lexer.tokens import Token
+from core.kernel import ast as ast
+from core.compiler.common.tokens import Token
 from core.compiler.parser.core.context import ParserContext
 
 T = TypeVar("T", bound=ast.IbASTNode)

@@ -2,16 +2,15 @@ from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.type_registry import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
-from core.foundation.registry import Registry
-from core.runtime.enums import RegistrationState
-from core.domain.issue import InterpreterError
-from core.domain.types import descriptors as uts
-from core.domain.types.descriptors import (
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
-    BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR
+from core.base.registry import Registry
+from core.base.enums import RegistrationState
+from core.kernel.issue import InterpreterError
+from core.kernel.types.descriptors import (
+    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
+    BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, FunctionMetadata
 )
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
-from core.domain.factory import create_default_registry
+from core.kernel.factory import create_default_registry
 from ..bootstrapper import Bootstrapper
 
 def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = True):
@@ -135,44 +134,43 @@ def initialize_builtin_classes(registry: Registry) -> Any:
     module_class = registry.create_subclass("module", metadata_registry.resolve("module"))
     
     # 4. 注册内置全局函数元数据 (供编译器发现)
-    registry.register_function("print", uts.FunctionMetadata(
-        name="print", 
-        param_types=[metadata_registry.resolve("Any")], 
+    registry.register_function("print", FunctionMetadata(
+        name="print",
+        param_types=[metadata_registry.resolve("Any")],
         return_type=metadata_registry.resolve("void")
     ), token)
-    
-    registry.register_function("len", uts.FunctionMetadata(
-        name="len", 
-        param_types=[metadata_registry.resolve("Any")], 
+
+    registry.register_function("len", FunctionMetadata(
+        name="len",
+        param_types=[metadata_registry.resolve("Any")],
         return_type=metadata_registry.resolve("int")
     ), token)
 
-    registry.register_function("get_self_source", uts.FunctionMetadata(
+    registry.register_function("get_self_source", FunctionMetadata(
         name="get_self_source",
         param_types=[],
         return_type=metadata_registry.resolve("str")
     ), token)
 
-    # --- Dynamic Host Meta APIs ---
-    registry.register_function("host_save_state", uts.FunctionMetadata(
+    registry.register_function("host_save_state", FunctionMetadata(
         name="host_save_state",
         param_types=[metadata_registry.resolve("str")],
         return_type=metadata_registry.resolve("void")
     ), token)
-    
-    registry.register_function("host_load_state", uts.FunctionMetadata(
+
+    registry.register_function("host_load_state", FunctionMetadata(
         name="host_load_state",
         param_types=[metadata_registry.resolve("str")],
         return_type=metadata_registry.resolve("void")
     ), token)
-    
-    registry.register_function("host_run", uts.FunctionMetadata(
+
+    registry.register_function("host_run", FunctionMetadata(
         name="host_run",
         param_types=[metadata_registry.resolve("str")],
         return_type=metadata_registry.resolve("bool")
     ), token)
-    
-    registry.register_function("host_get_source", uts.FunctionMetadata(
+
+    registry.register_function("host_get_source", FunctionMetadata(
         name="host_get_source",
         param_types=[],
         return_type=metadata_registry.resolve("str")

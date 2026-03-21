@@ -1,13 +1,12 @@
 from typing import Any, Mapping, List, Optional, Union
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
-from core.runtime.interfaces import ServiceContext
-from core.foundation.interfaces import IExecutionContext
+from core.runtime.interfaces import ServiceContext, IExecutionContext
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
 from core.runtime.interfaces import IIbBehavior
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel
-from core.domain.issue import InterpreterError
+from core.base.diagnostics.debugger import CoreModule, DebugLevel
+from core.kernel.issue import InterpreterError
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, RetryException, ThrownException
 )

@@ -1,6 +1,6 @@
 from typing import Any, Optional, TYPE_CHECKING
-from core.domain.types.descriptors import (
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
+from core.kernel.types.descriptors import (
+    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
     BOOL_DESCRIPTOR
 )
 

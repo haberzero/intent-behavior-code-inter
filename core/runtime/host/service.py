@@ -2,19 +2,19 @@ from typing import Any, Dict, Optional, List, TYPE_CHECKING, Callable
 import os
 import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
-from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject
-from core.foundation.host_interface import HostInterface
-from core.foundation.interfaces import IExecutionContext
-from core.foundation.registry import Registry
+from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject, IExecutionContext
+from core.base.host_interface import HostInterface
+from core.base.registry import Registry
+from core.runtime.host.sync_manager import SyncManager
 
 class HostService(IHostService):
     """
     IBCI 2.0 内核级宿主服务子系统。
     负责运行现场的持久化、隔离执行以及元编程能力。
     """
-    def __init__(self, 
-                 registry: Registry, 
-                 execution_context: IExecutionContext, 
+    def __init__(self,
+                 registry: Registry,
+                 execution_context: IExecutionContext,
                  interop: InterOp,
                  compiler: Any,
                  factory: IInterpreterFactory,
@@ -27,12 +27,14 @@ class HostService(IHostService):
         self.factory = factory
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
+        self._sync_manager = SyncManager()
 
-    def sync(self):
+    def sync(self) -> bool:
         """
-        安全点同步 (Safe Point Sync) 原语。
+        [IES 2.1] 安全点同步 (Safe Point Sync) 原语。
+        等待所有执行上下文达到一致状态后返回。
         """
-        pass
+        return self._sync_manager.sync()
 
     def save_state(self, path: str):
         """深度序列化当前运行时上下文并保存到磁盘"""
@@ -123,48 +125,41 @@ class HostService(IHostService):
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
         """通过协调器工厂开启隔离的解释器子运行环境"""
-        # 1. 自动快照（用于 Snapshot-Try-Restore 事务模型）
         serializer = RuntimeSerializer(self.registry)
         snapshot = serializer.serialize_context(
-            self.execution_context.runtime_context, 
+            self.execution_context.runtime_context,
             execution_context=self.execution_context
         )
-        
+
         try:
             abs_path = os.path.abspath(path)
             artifact = self.compiler.compile_file(abs_path)
-            
-            # 2. 根据 policy 决定能力继承
+
             sub_host_interface = HostInterface()
             inherit_plugins = policy.get("inherit_plugins", [])
             if inherit_plugins is True:
-                # [IES 2.1 Refactor] 使用 MetadataRegistry 官方查询接口
                 inherit_plugins = list(self.interop.host_interface.metadata.get_all_modules().keys())
-            
+
             for p_name in inherit_plugins:
                 impl = self.interop.host_interface.get_module_implementation(p_name)
-                # [IES 2.1 Refactor] 直接解析元数据
                 meta = self.interop.host_interface.metadata.resolve(p_name)
                 if impl:
                     sub_host_interface.register_module(p_name, impl, meta)
-            
-            # 3. 通过工厂创建隔离解释器
+
+            isolated = policy.get("isolated", True)
             sub_interpreter = self.factory.spawn_interpreter(
-                artifact=artifact, 
+                artifact=artifact,
                 registry=self.registry,
                 host_interface=sub_host_interface,
                 root_dir=os.path.dirname(abs_path),
-                parent_context=self.execution_context.runtime_context
+                parent_context=self.execution_context.runtime_context,
+                isolated=isolated
             )
-            
-            # 4. 状态继承逻辑 (使用正式的 sync_state 接口，严禁穿透操作 runtime_context)
+
             sub_interpreter.sync_state(self.execution_context.runtime_context, policy)
-            
-            # 5. 执行
             return sub_interpreter.run()
-            
+
         except Exception as e:
-            # 事务回滚
             deserializer = RuntimeDeserializer(self.registry)
             restored_ctx = deserializer.deserialize_context(snapshot)
             self._rebind_environment(restored_ctx)

@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from core.compiler.parser.core.token_stream import TokenStream
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
-from core.foundation.host_interface import HostInterface
+from core.base.host_interface import HostInterface
 
-from core.domain import ast as ast
+from core.kernel import ast as ast
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent

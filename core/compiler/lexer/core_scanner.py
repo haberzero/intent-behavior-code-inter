@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional
-from .tokens import Token, TokenType, SubState
+from core.compiler.common.tokens import Token, TokenType, SubState
 from core.compiler.lexer.str_stream import StrStream
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.diagnostics import DiagnosticReporter
 
 class CoreTokenScanner:
     """

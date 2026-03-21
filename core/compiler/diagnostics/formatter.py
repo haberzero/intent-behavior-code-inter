@@ -1,9 +1,9 @@
 from typing import List, Optional, TYPE_CHECKING
-from core.domain.issue import Diagnostic
-from core.foundation.source_atomic import Location, Severity
+from core.kernel.issue import Diagnostic
+from core.base.source_atomic import Location, Severity
 
 if TYPE_CHECKING:
-    from core.foundation.source.source_manager import SourceManager
+    from core.base.source.source_manager import SourceManager
 
 class DiagnosticFormatter:
     """

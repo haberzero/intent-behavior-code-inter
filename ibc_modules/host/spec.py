@@ -1,4 +1,4 @@
-from core.foundation.module_spec_builder import SpecBuilder
+from core.extension.spec_builder import SpecBuilder
 
 spec = (SpecBuilder("host")
     .func("save_state", params=["str"])

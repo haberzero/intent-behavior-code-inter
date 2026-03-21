@@ -1,11 +1,9 @@
 from typing import Any, List, Dict, Optional, Callable
 from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
-from core.foundation.registry import Registry
+from core.base.registry import Registry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
-from core.domain.issue import InterpreterError
-
-from core.domain.types import descriptors as uts
+from core.kernel.issue import InterpreterError
 
 from .type_registry import register_ib_type
 

@@ -1,10 +1,10 @@
 import os
 import importlib.util
 from typing import Dict, List, Optional, Any
-from core.foundation.host_interface import HostInterface
-from core.domain.types.descriptors import ModuleMetadata as ModuleType, TypeDescriptor
-from core.domain.symbols import SymbolFactory
-from core.runtime.enums import RegistrationState
+from core.base.host_interface import HostInterface
+from core.kernel.types.descriptors import ModuleMetadata as ModuleType, TypeDescriptor
+from core.kernel.symbols import SymbolFactory
+from core.base.enums import RegistrationState
 
 class ModuleDiscoveryService:
     """

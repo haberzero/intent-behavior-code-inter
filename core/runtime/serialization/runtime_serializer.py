@@ -1,8 +1,8 @@
 import json
 import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
-from core.foundation.serialization import BaseFlatSerializer
-from core.foundation.interfaces import IExecutionContext
+from core.base.serialization import BaseFlatSerializer
+from core.runtime.interfaces import IExecutionContext
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl, ScopeImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
 from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior

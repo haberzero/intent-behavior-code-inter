@@ -1,7 +1,7 @@
 from typing import Any, Optional, TYPE_CHECKING, Callable
 from core.runtime.objects.kernel import IbObject
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.foundation.interfaces import IssueTracker, ISourceProvider, ICompilerService
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.interfaces import IssueTracker, ISourceProvider, ICompilerService
 from core.runtime.interfaces import ServiceContext
 
 if TYPE_CHECKING:

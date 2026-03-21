@@ -1,6 +1,6 @@
 from enum import IntEnum
 from typing import Dict
-from core.compiler.lexer.tokens import TokenType
+from core.compiler.common.tokens import TokenType
 
 # --- Precedence & ParseRule (Parser Core Syntax) ---
 

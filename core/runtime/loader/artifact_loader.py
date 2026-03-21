@@ -1,6 +1,6 @@
 from typing import Dict, Any, Mapping, Optional
-from .type_hydrator import TypeHydrator
-from core.foundation.registry import Registry
+from .artifact_rehydrator import ArtifactRehydrator
+from core.base.registry import Registry
 
 from core.runtime.exceptions import RegistryIsolationError
 
@@ -13,7 +13,7 @@ class LoadedArtifact:
                  type_pool: Dict[str, Mapping[str, Any]], 
                  asset_pool: Dict[str, str],
                  entry_module: str,
-                 type_hydrator: TypeHydrator,
+                 artifact_rehydrator: ArtifactRehydrator,
                  artifact_dict: Dict[str, Any],
                  class_to_node: Dict[str, str]):
         self.node_pool = node_pool
@@ -22,7 +22,7 @@ class LoadedArtifact:
         self.type_pool = type_pool
         self.asset_pool = asset_pool
         self.entry_module = entry_module
-        self.type_hydrator = type_hydrator
+        self.artifact_rehydrator = artifact_rehydrator
         self.artifact_dict = artifact_dict
         self.class_to_node = class_to_node
 
@@ -49,7 +49,7 @@ class ArtifactLoader:
         entry_module = artifact_dict.get("entry_module") or artifact_dict.get("metadata", {}).get("entry_module", "main")
 
         # 执行重水化 (UTS 闭环)
-        hydrator = TypeHydrator(type_pool, self.registry.get_metadata_registry())
+        hydrator = ArtifactRehydrator(type_pool, self.registry.get_metadata_registry())
         user_classes = hydrator.hydrate_all(self.registry)
 
         # [IES 2.0] STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
@@ -100,7 +100,7 @@ class ArtifactLoader:
             type_pool=type_pool,
             asset_pool=asset_pool,
             entry_module=entry_module,
-            type_hydrator=hydrator,
+            artifact_rehydrator=hydrator,
             artifact_dict=artifact_dict,
             class_to_node=class_to_node
         )

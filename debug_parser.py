@@ -8,7 +8,7 @@ sys.path.append(os.getcwd())
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.parser.parser import Parser
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.diagnostics import DiagnosticReporter
 
 # 简单的 DiagnosticReporter 模拟实现，绕过 Protocol 实例化问题
 class SimpleReporter:

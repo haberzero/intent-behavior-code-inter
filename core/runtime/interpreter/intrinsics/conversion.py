@@ -1,6 +1,6 @@
 from typing import Any
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
-from core.foundation.registry import Registry
+from core.base.registry import Registry
 
 def register_conversion(manager: Any, execution_context: Any, service_context: Any):
     """

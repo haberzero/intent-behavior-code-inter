@@ -4,20 +4,19 @@ import inspect
 import sys
 from typing import List, Dict, Any, Optional, Set
 from core.runtime.exceptions import RegistryIsolationError
-from core.runtime.enums import RegistrationState
-from core.extension import ibcext
+from core.base.enums import RegistrationState
 
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_trace
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import (
     IModuleLoader, ServiceContext
 )
-from core.foundation.interfaces import (
+from core.base.interfaces import (
     ExtensionCapabilities, IExecutionContext,
     IStackInspector, IStateReader, IIntentManager, ILLMExecutor, ILLMProvider, ISymbolView
 )
-from core.domain.issue import InterpreterError
-from core.domain.types.descriptors import FunctionMetadata
-from core.domain.symbols import FunctionSymbol
+from core.kernel.issue import InterpreterError
+from core.kernel.types.descriptors import FunctionMetadata
+from core.kernel.symbols import FunctionSymbol
 
 class ModuleLoader(IModuleLoader):
     """
@@ -27,7 +26,7 @@ class ModuleLoader(IModuleLoader):
     def __init__(self, search_paths: List[str]):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
-    def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities):
+    def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
         """[IES 2.0] 强制执行显式契约绑定并构建自动装箱虚函数表 (Proxy VTable)"""
         # [Registry Isolation] 虚表隔离检查：严禁跨引擎复用已关联虚表的插件对象
         if hasattr(implementation, '_ibci_registry_id'):
@@ -78,19 +77,17 @@ class ModuleLoader(IModuleLoader):
                 raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. Spec expects {len(spec_desc.param_types)} params, but Python implementation has {len(fixed_params)}.")
             
             # [IES 2.0 Proxy] 自动装箱代理：拦截 Python 返回值并应用 SDK.box()
-            def create_proxy(target_func):
+            def create_proxy(target_func, reg):
                 def proxy_wrapper(*args, **kwargs):
-                    # 自动拆箱：将 IbObject 参数转换为 Python 原生类型
                     native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
                     native_kwargs = {k: (v.to_native() if hasattr(v, 'to_native') else v) for k, v in kwargs.items()}
-                    
+
                     result = target_func(*native_args, **native_kwargs)
-                    
-                    # 自动平权包装：确保返回给解释器的永远是 IbObject
-                    return capabilities.box(result)
+
+                    return reg.box(result)
                 return proxy_wrapper
 
-            proxy_vtable[spec_name] = create_proxy(py_func)
+            proxy_vtable[spec_name] = create_proxy(py_func, registry)
 
         # 封印虚表到实现对象上
         implementation._ibci_vtable = proxy_vtable
@@ -152,7 +149,7 @@ class ModuleLoader(IModuleLoader):
             if not implementation: continue
             
             # [IES 2.0] 校验与绑定 (传入 capabilities 以支持 Proxy VTable 包装)
-            self._validate_and_bind(entry, implementation, context, capabilities)
+            self._validate_and_bind(entry, implementation, context, capabilities, registry)
             
             self._setup_implementation(implementation, context, capabilities)
             
@@ -213,7 +210,7 @@ class ModuleLoader(IModuleLoader):
                     self._setup_implementation(implementation, context, capabilities)
                     
                     # [IES 2.0] 2. 校验与绑定 (Proxy VTable)
-                    self._validate_and_bind(entry, implementation, context, capabilities)
+                    self._validate_and_bind(entry, implementation, context, capabilities, registry)
                     
                     # 核心能力同步：如果模块提供了 LLMProvider，同步到内核执行器
                     if capabilities.llm_provider and hasattr(llm_executor, 'llm_callback'):

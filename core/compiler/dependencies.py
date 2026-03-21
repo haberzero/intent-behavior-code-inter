@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List, Set, Optional, Dict, Any
 from enum import Enum, auto
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 class ImportType(Enum):
     IMPORT = auto()      # import module

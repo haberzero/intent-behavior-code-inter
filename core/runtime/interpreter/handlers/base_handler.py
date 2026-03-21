@@ -1,12 +1,8 @@
 from typing import Any, Mapping, Optional, Union, List, Callable
-from core.runtime.interfaces import ServiceContext
-from core.domain import ast as ast
-from core.runtime.objects.kernel import IbObject
-from core.runtime.interfaces import IIbBehavior
-from core.foundation.interfaces import IExecutionContext
-from core.domain.issue import Severity, InterpreterError, LLMUncertaintyError
-from core.foundation.diagnostics.codes import RUN_GENERIC_ERROR
-from core.foundation.source_atomic import Location
+from core.runtime.interfaces import ServiceContext, IIbBehavior, IExecutionContext
+from core.kernel.issue import Severity, InterpreterError, LLMUncertaintyError
+from core.base.diagnostics.codes import RUN_GENERIC_ERROR
+from core.base.source_atomic import Location
 from core.runtime.exceptions import RetryException
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING

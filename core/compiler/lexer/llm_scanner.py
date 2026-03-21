@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from .tokens import Token, TokenType
+from core.compiler.common.tokens import Token, TokenType
 from core.compiler.lexer.str_stream import StrStream
 
 class LLMScanner:
@@ -123,21 +123,22 @@ class LLMScanner:
 
     def _scan_param_placeholder(self, tokens: List[Token]):
         self.scanner.start_token()
-        self.scanner.advance() # $
-        self.scanner.advance() # _
-        self.scanner.advance() # _
-        
-        # Consume everything until '__'
+        self.scanner.advance()
+        self.scanner.advance()
+        self.scanner.advance()
+
+        name_start = self.scanner.pos
         while not self.scanner.is_at_end():
             if self.scanner.peek() == '_' and self.scanner.peek(1) == '_':
-                self.scanner.advance()
-                self.scanner.advance()
                 break
             self.scanner.advance()
-        
-        # Get the full placeholder text including $__ and __
-        placeholder_text = self.scanner.source[self.scanner.current_token_start_pos:self.scanner.pos]
-        tokens.append(self.scanner.create_token(TokenType.PARAM_PLACEHOLDER, placeholder_text))
+
+        param_name = self.scanner.source[name_start:self.scanner.pos]
+
+        self.scanner.advance()
+        self.scanner.advance()
+
+        tokens.append(self.scanner.create_token(TokenType.EMBEDDED_PARAM, param_name))
 
     def _match_llm_keyword(self, offset: int, keyword: str) -> bool:
         length = len(keyword)

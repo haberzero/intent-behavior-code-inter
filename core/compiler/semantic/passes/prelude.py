@@ -1,13 +1,13 @@
 from typing import Dict, Optional, List, Any
-from core.domain import types as uts
-from core.domain.types.descriptors import (
+from core.kernel import types as uts
+from core.kernel.types.descriptors import (
     TypeDescriptor, FunctionMetadata, ModuleMetadata,
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
     BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR,
     VAR_DESCRIPTOR, LIST_DESCRIPTOR, DICT_DESCRIPTOR,
     CALLABLE_DESCRIPTOR, BEHAVIOR_DESCRIPTOR, EXCEPTION_DESCRIPTOR
 )
-from core.domain.factory import create_default_registry
+from core.kernel.factory import create_default_registry
 
 class Prelude:
     """

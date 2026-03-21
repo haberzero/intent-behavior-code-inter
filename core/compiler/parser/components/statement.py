@@ -1,8 +1,8 @@
 from typing import List, Optional, TYPE_CHECKING
-from core.compiler.lexer.tokens import TokenType
+from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.token_stream import ParseControlFlowError
-from core.domain import ast as ast
-from core.domain.intent_logic import IntentMode
+from core.kernel import ast as ast
+from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_VAR, COMPOUND_OP_MAP
 

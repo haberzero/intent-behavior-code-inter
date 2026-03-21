@@ -2,11 +2,11 @@ from typing import Dict, Any, List, Optional, Union
 import uuid
 import json
 from enum import Enum
-from core.domain import ast as ast
-from core.domain.symbols import Symbol, SymbolTable
-from core.domain.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata, BoundMethodMetadata, ListMetadata, DictMetadata
-from core.domain.blueprint import CompilationArtifact, CompilationResult
-from core.foundation.serialization import BaseFlatSerializer
+from core.kernel import ast as ast
+from core.kernel.symbols import Symbol, SymbolTable
+from core.kernel.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata, BoundMethodMetadata, ListMetadata, DictMetadata
+from core.kernel.blueprint import CompilationArtifact, CompilationResult
+from core.base.serialization import BaseFlatSerializer
 
 class FlatSerializer(BaseFlatSerializer):
     """

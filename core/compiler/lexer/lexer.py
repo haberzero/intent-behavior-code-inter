@@ -1,9 +1,9 @@
 from typing import List, Optional, Any
-from .tokens import TokenType, Token, LexerMode, SubState
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.tokens import TokenType, Token, LexerMode, SubState
+from core.compiler.common.diagnostics import DiagnosticReporter
 from .str_stream import StrStream
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 # Components
 from .indent_processor import IndentProcessor

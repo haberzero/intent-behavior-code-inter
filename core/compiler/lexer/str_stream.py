@@ -1,5 +1,5 @@
 from typing import List, Optional
-from .tokens import TokenType, Token
+from core.compiler.common.tokens import TokenType, Token
 
 class StrStream:
     """提供字符流操作，包括位置维护、前瞻和匹配。"""

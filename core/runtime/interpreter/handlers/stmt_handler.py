@@ -1,17 +1,17 @@
 from typing import Any, Mapping, List, Optional, Callable
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
-from core.foundation.interfaces import IExecutionContext
+from core.runtime.interfaces import IExecutionContext
 from core.runtime.interfaces import ServiceContext, IIbList, IIbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException, RetryException
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel
-from core.runtime.enums import RegistrationState
+from core.base.diagnostics.debugger import CoreModule, DebugLevel
+from core.base.enums import RegistrationState
 
-from core.domain.issue import LLMUncertaintyError, InterpreterError
-from core.foundation.diagnostics.codes import RUN_GENERIC_ERROR
+from core.kernel.issue import LLMUncertaintyError, InterpreterError
+from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from ..constants import OP_MAPPING, AST_OP_MAP
 
 class StmtHandler(BaseHandler):

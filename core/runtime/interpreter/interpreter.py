@@ -3,15 +3,16 @@ import json
 import sys
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
-from core.domain import ast as ast
-from core.domain.issue import (
+from core.kernel import ast as ast
+from core.kernel.issue import (
     InterpreterError, LLMUncertaintyError, Severity
 )
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException, RetryException
 )
-from core.foundation.source_atomic import Location
-from core.foundation.diagnostics.codes import (
+from core.runtime.host.isolation_policy import IsolationPolicy
+from core.base.source_atomic import Location
+from core.base.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
     RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR, RUN_ATTRIBUTE_ERROR
 )
@@ -27,13 +28,13 @@ from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField
-from core.domain.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
+from core.kernel.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
-from core.foundation.registry import Registry
-from core.foundation.host_interface import HostInterface
-from core.foundation.interfaces import IStackInspector, IExecutionContext
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.base.registry import Registry
+from core.base.host_interface import HostInterface
+from core.runtime.interfaces import IStackInspector, IExecutionContext
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.interpreter.intrinsics import IntrinsicManager
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
@@ -73,13 +74,33 @@ class Interpreter:
 
     def sync_state(self, parent_context: RuntimeContext, policy: Dict[str, Any]):
         """[IES 2.1 Regularization] 从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
-        if policy.get("inherit_intents", False):
-            # 这里的 intent_stack setter 会处理 IntentNode 的继承
+        isolation_policy = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
+
+        if isolation_policy.inherit_intents:
             self.runtime_context.intent_stack = parent_context.intent_stack
-        
-        # 未来可以根据 policy 扩展更多同步逻辑（如变量继承、权限继承等）
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
+            for intent in parent_context.get_global_intents():
+                self.runtime_context.set_global_intent(intent)
+
+        if isolation_policy.inherit_variables and isolation_policy.level == "FULL":
+            self._sync_variables_from(parent_context)
+
+        if isolation_policy.inherit_classes:
+            self._sync_classes_from(parent_context)
+
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
             f"Interpreter state synced from parent context with policy: {policy}")
+
+    def _sync_variables_from(self, parent_context: RuntimeContext):
+        """[IES 2.1 FULL Isolation] 从父上下文同步变量"""
+        parent_scope = parent_context.current_scope
+        current_scope = self.runtime_context.current_scope
+        for name, symbol in parent_scope._symbols.items():
+            if not name.startswith("__"):
+                current_scope.define(name, symbol.descriptor, is_const=symbol.is_const, force=True)
+
+    def _sync_classes_from(self, parent_context: RuntimeContext):
+        """[IES 2.1] 从父上下文同步类定义"""
+        pass
 
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None, 

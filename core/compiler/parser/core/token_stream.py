@@ -1,8 +1,8 @@
 from typing import List, Optional
 from contextlib import contextmanager
-from core.compiler.lexer.tokens import Token, TokenType
-from core.domain import ast as ast
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.tokens import Token, TokenType
+from core.kernel import ast as ast
+from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 
 class ParseControlFlowError(Exception):

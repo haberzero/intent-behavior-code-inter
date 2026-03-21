@@ -1,5 +1,5 @@
-from core.compiler.lexer.tokens import TokenType
-from core.domain import ast as ast
+from core.compiler.common.tokens import TokenType
+from core.kernel import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_CALLABLE
 

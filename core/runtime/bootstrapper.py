@@ -1,10 +1,10 @@
 from typing import Dict, Optional, Any, TYPE_CHECKING
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
-from core.foundation.registry import Registry
-from core.domain.factory import create_default_registry
+from core.base.registry import Registry
+from core.kernel.factory import create_default_registry
 
 if TYPE_CHECKING:
-    from core.domain.types.descriptors import TypeDescriptor
+    from core.kernel.types.descriptors import TypeDescriptor
 
 class Bootstrapper:
     """

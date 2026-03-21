@@ -1,5 +1,5 @@
 from typing import Any, Dict, Iterator, Mapping, Optional
-from core.foundation.source_atomic import Location
+from core.base.source_atomic import Location
 
 class ReadOnlyNodePool(Mapping[str, Any]):
     """

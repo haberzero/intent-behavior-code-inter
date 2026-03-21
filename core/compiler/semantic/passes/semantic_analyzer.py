@@ -1,15 +1,15 @@
 from typing import Dict, Optional, List, Any
-from core.domain import ast as ast
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.kernel import ast as ast
+from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.foundation.host_interface import HostInterface
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.host_interface import HostInterface
 
-from core.domain import symbols
-from core.domain.symbols import (
+from core.kernel import symbols
+from core.kernel.symbols import (
     SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol
 )
-from core.domain.types.descriptors import (
+from core.kernel.types.descriptors import (
     TypeDescriptor, ClassMetadata, FunctionMetadata, ListMetadata, DictMetadata,
     ModuleMetadata, BoundMethodMetadata
 )
@@ -17,26 +17,29 @@ from core.domain.types.descriptors import (
 from .prelude import Prelude
 from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
 from .resolver import TypeResolver
-from core.domain.blueprint import CompilationResult
+from .side_table import SideTableManager
+from .scope_manager import ScopeManager
+from core.kernel.blueprint import CompilationResult
 
 class SemanticAnalyzer:
     """
     语义分析器：执行静态分析和类型检查。
-    贯彻“一切皆对象”思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
+    贯彻"一切皆对象"思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
+
+    [IES 2.1 Refactor] 使用组件组合模式：
+    - SideTableManager: 管理语义分析侧表
+    - ScopeManager: 管理作用域和场景栈
     """
     def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None, module_name: Optional[str] = None):
-        self.symbol_table = SymbolTable(name=module_name) # 全局静态符号表
         self.issue_tracker = issue_tracker or IssueTracker()
         self.host_interface = host_interface
         self.debugger = debugger or core_debugger
-        
-        # [Strict Registry] 语义分析必须依赖有效的注册表上下文
         self.registry = registry
-             
+        self._module_name = module_name
+
         if self.registry is None:
             raise ValueError("SemanticAnalyzer requires a valid MetadataRegistry instance. 'None' is not allowed.")
-        
-        # [Strict Registry] 缓存常用描述符以提高性能并确保标识一致性
+
         self._any_desc = self.registry.resolve("Any")
         self._void_desc = self.registry.resolve("void")
         self._bool_desc = self.registry.resolve("bool")
@@ -47,16 +50,13 @@ class SemanticAnalyzer:
         self.current_return_type: Optional[TypeDescriptor] = None
         self.current_class: Optional[ClassMetadata] = None
         self.in_behavior_expr = False
-        self.scene_stack = [ast.IbScene.GENERAL] # 场景上下文栈
-        self.node_scenes: Dict[ast.IbASTNode, ast.IbScene] = {} # 侧表：节点 ID -> 场景
-        self.node_to_symbol: Dict[ast.IbASTNode, symbols.Symbol] = {} # 侧表：节点 -> 符号
-        self.node_to_type: Dict[ast.IbASTNode, TypeDescriptor] = {} # 侧表：节点 -> 类型对象
-        self.node_is_deferred: Dict[ast.IbASTNode, bool] = {} # 侧表：行为描述行是否延迟执行 (Lambda)
-        self.node_intents: Dict[ast.IbASTNode, List[ast.IbIntentInfo]] = {} # 侧表：节点 -> 意图列表
-        self.node_to_loc: Dict[ast.IbASTNode, Any] = {}
-        
-        # 初始化 Prelude
+
         self.prelude = Prelude(self.host_interface, registry=self.registry)
+
+        self.side_table = SideTableManager()
+        self.scope_manager = ScopeManager(module_name=module_name)
+
+        self.symbol_table = self.scope_manager.global_scope()
 
     def _init_builtins(self):
         """注册内置静态符号"""
@@ -114,12 +114,12 @@ class SemanticAnalyzer:
             return CompilationResult(
                 module_ast=node if isinstance(node, ast.IbModule) else None,
                 symbol_table=self.symbol_table,
-                node_scenes=self.node_scenes,
-                node_to_symbol=self.node_to_symbol,
-                node_to_type=self.node_to_type,
-                node_is_deferred=self.node_is_deferred,
-                node_intents=self.node_intents,
-                node_to_loc=self.node_to_loc
+                node_scenes=self.side_table.node_scenes,
+                node_to_symbol=self.side_table.node_to_symbol,
+                node_to_type=self.side_table.node_to_type,
+                node_is_deferred=self.side_table.node_is_deferred,
+                node_intents=self.side_table.node_intents,
+                node_to_loc=self.side_table.node_to_loc
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
@@ -129,12 +129,11 @@ class SemanticAnalyzer:
         if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef, ast.IbIntentStmt)):
             setattr(node, "_is_scope", True)
 
-        # [IES 2.1 Refactor] 记录节点位置侧表，确保序列化产物完备性
-        self.node_to_loc[node] = {
+        self.side_table.bind_location(node, {
             "file_path": self.issue_tracker.file_path,
             "line": node.lineno,
             "column": node.col_offset
-        }
+        })
 
         # [NEW] 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
         # [IES 2.0 Policy] 侧表仅记录“当前节点特有”的涂抹意图（即通过 @ 标注的意图）。
@@ -143,11 +142,11 @@ class SemanticAnalyzer:
         if hasattr(node, "_pending_intents"):
             intents = getattr(node, "_pending_intents")
             if intents:
-                self.node_intents[node] = intents
+                self.side_table.bind_intents(node, intents)
 
         # [NEW] 记录场景上下文侧表
         if isinstance(node, ast.IbExpr):
-            self.node_scenes[node] = self.scene_stack[-1]
+            self.side_table.bind_scene(node, self.scope_manager.current_scene())
 
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
@@ -155,7 +154,7 @@ class SemanticAnalyzer:
         
         # [NEW Phase 5] 记录类型推导侧表
         if isinstance(node, ast.IbExpr) and res_type:
-            self.node_to_type[node] = res_type
+            self.side_table.bind_type(node, res_type)
             
         return res_type
 
@@ -209,7 +208,7 @@ class SemanticAnalyzer:
         if not sym or not sym.is_type:
             return self._void_desc
             
-        self.node_to_symbol[node] = sym
+        self.side_table.bind_symbol(node, sym)
         
         old_table = self.symbol_table
         if sym.owned_scope:
@@ -239,7 +238,7 @@ class SemanticAnalyzer:
             if name in self.symbol_table.symbols:
                 existing = self.symbol_table.symbols[name]
                 if not allow_overwrite:
-                    self.node_to_symbol[node] = existing
+                    self.side_table.bind_symbol(node, existing)
                     return existing
             
             # [NEW] 检查是否由 Scheduler 注入的特殊符号（如模块）
@@ -258,7 +257,7 @@ class SemanticAnalyzer:
                 self.current_class.members[name] = sym
 
             # [NEW Phase 5] 记录侧表映射
-            self.node_to_symbol[node] = sym
+            self.side_table.bind_symbol(node, sym)
             return sym
         except ValueError as e:
             self.error(str(e), node, code="SEM_003")
@@ -269,8 +268,7 @@ class SemanticAnalyzer:
         if not sym or not sym.is_function:
             return self._void_desc
             
-        self.node_to_symbol[node] = sym
-        
+        self.side_table.bind_symbol(node, sym)
         # [NEW] 决议真实的函数签名并更新元数据
         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
         # 类方法第一个参数是 self
@@ -335,8 +333,7 @@ class SemanticAnalyzer:
         if not sym or not sym.is_function:
             return self._void_desc
             
-        self.node_to_symbol[node] = sym
-        
+        self.side_table.bind_symbol(node, sym)
         # [NEW] 决议真实的函数签名并更新元数据
         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
         if self.current_class:
@@ -395,7 +392,9 @@ class SemanticAnalyzer:
     def visit_IbReturn(self, node: ast.IbReturn):
         if node.value:
             ret_type = self.visit(node.value)
-            if self.current_return_type and not ret_type.is_assignable_to(self.current_return_type):
+            if ret_type is None:
+                self.error(f"Invalid return type: got None (void or unknown)", node, code="SEM_003")
+            elif self.current_return_type and not ret_type.is_assignable_to(self.current_return_type):
                 self.error(f"Invalid return type: expected '{self.current_return_type.name}', got '{ret_type.name}'", node, code="SEM_003")
         else:
             if self.current_return_type and self.current_return_type != self._void_desc:
@@ -460,11 +459,11 @@ class SemanticAnalyzer:
                         sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
                 
                 if sym:
-                    self.node_to_symbol[actual_target] = sym
-                    self.node_to_type[target_node] = sym.descriptor
+                    self.side_table.bind_symbol(actual_target, sym)
+                    self.side_table.bind_type(target_node, sym.descriptor)
                     if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
-                        self.node_to_symbol[target_node.target] = sym
-                        self.node_to_type[target_node.target] = sym.descriptor
+                        self.side_table.bind_symbol(target_node.target, sym)
+                        self.side_table.bind_type(target_node.target, sym.descriptor)
                     
                     # [NEW] 行为描述行 Lambda 化判断
                     # 只有当目标类型明确要求具备调用能力，或者是动态类型时，才进行延迟推断
@@ -479,7 +478,7 @@ class SemanticAnalyzer:
                         is_explicit_callable = (call_cap is not None) or is_dynamic
                     
                     if isinstance(node.value, ast.IbBehaviorExpr) and is_explicit_callable:
-                        self.node_is_deferred[node.value] = True
+                        self.side_table.set_deferred(node.value, True)
                     
                     if not val_type.is_assignable_to(sym.descriptor):
                         hint = val_type.get_diff_hint(sym.descriptor)
@@ -498,11 +497,11 @@ class SemanticAnalyzer:
 
     def visit_IbIf(self, node: ast.IbIf):
         # 1. 条件测试属于 BRANCH 场景
-        self.scene_stack.append(ast.IbScene.BRANCH)
+        self.scope_manager.push_scene(ast.IbScene.BRANCH)
         try:
             self.visit(node.test)
         finally:
-            self.scene_stack.pop()
+            self.scope_manager.pop_scene()
             
         # 2. Body 和 Orelse 恢复父级场景
         for stmt in node.body:
@@ -517,11 +516,11 @@ class SemanticAnalyzer:
 
     def visit_IbWhile(self, node: ast.IbWhile):
         # 1. 循环条件属于 LOOP 场景
-        self.scene_stack.append(ast.IbScene.LOOP)
+        self.scope_manager.push_scene(ast.IbScene.LOOP)
         try:
             self.visit(node.test)
         finally:
-            self.scene_stack.pop()
+            self.scope_manager.pop_scene()
             
         # 2. 循环体
         for stmt in node.body:
@@ -536,7 +535,7 @@ class SemanticAnalyzer:
 
     def visit_IbFor(self, node: ast.IbFor):
         # 1. 迭代头部属于 LOOP 场景
-        self.scene_stack.append(ast.IbScene.LOOP)
+        self.scope_manager.push_scene(ast.IbScene.LOOP)
         try:
             iter_type = self.visit(node.iter)
             # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
@@ -559,9 +558,9 @@ class SemanticAnalyzer:
                         sym.descriptor = element_type
                 
                 if sym:
-                    self.node_to_symbol[target] = sym # [FIX] 同步 UID
+                    self.side_table.bind_symbol(target, sym)
         finally:
-            self.scene_stack.pop()
+            self.scope_manager.pop_scene()
             
         # 2. 循环体
         for stmt in node.body:
@@ -613,8 +612,8 @@ class SemanticAnalyzer:
                 sym = self._define_var(var_name, exc_type, node, allow_overwrite=(sym is not None))
             
             if sym:
-                self.node_to_symbol[target] = sym # [AUDIT] 补全异常变量的 UID 绑定
-        
+                self.side_table.bind_symbol(target, sym)
+
         for stmt in node.body:
             self.visit(stmt)
         return self._void_desc
@@ -636,7 +635,7 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                self.node_to_symbol[node] = sym
+                self.side_table.bind_symbol(node, sym)
             else:
                 self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
                 # 仅作为错误恢复，定义为 Any
@@ -655,7 +654,7 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                self.node_to_symbol[node] = sym
+                self.side_table.bind_symbol(node, sym)
             else:
                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
                 self._define_var(name, self._any_desc, node)
@@ -788,8 +787,7 @@ class SemanticAnalyzer:
         # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
         target_type = self._resolve_type(node.type_annotation)
         if target_type:
-            # [FIX] 记录 node_to_type 以供后续阶段使用
-            self.node_to_type[node.uid] = target_type
+            self.side_table.bind_type(node.uid, target_type)
             return target_type
         return self._any_desc
         
@@ -841,7 +839,7 @@ class SemanticAnalyzer:
             self.error(msg, node, code="SEM_001")
             return self._any_desc
 
-        self.node_to_symbol[node] = sym # 使用 UID 引用
+        self.side_table.bind_symbol(node, sym)
         
         # 统一获取类型信息
         res = sym.descriptor
@@ -855,8 +853,7 @@ class SemanticAnalyzer:
         member_sym = base_type.resolve_member(node.attr)
         
         if member_sym:
-            self.node_to_symbol[node] = member_sym
-            
+            self.side_table.bind_symbol(node, member_sym)
             # [Axiom Hook] 自动合成绑定方法 (Bound Method)
             # 如果是实例方法且不是静态方法，则合成 BoundMethodMetadata
             if member_sym.is_function and not member_sym.metadata.get("is_static"):
@@ -876,7 +873,7 @@ class SemanticAnalyzer:
                 descriptor=self._any_desc, 
                 metadata={"is_dynamic_proxy": True}
             )
-            self.node_to_symbol[node] = virtual_sym
+            self.side_table.bind_symbol(node, virtual_sym)
             return self._any_desc
 
         self.error(f"Type '{base_type.name}' has no member '{node.attr}'", node, code="SEM_001")
@@ -933,7 +930,7 @@ class SemanticAnalyzer:
             # 2. 尝试符号表解析 (e.g., class name)
             sym = self.symbol_table.resolve(node.id)
             if sym:
-                self.node_to_symbol[node] = sym
+                self.side_table.bind_symbol(node, sym)
                 # [FIX] 如果符号本身就是 TypeSymbol，直接返回其 descriptor
                 if sym.is_type:
                     return sym.descriptor
@@ -963,14 +960,14 @@ class SemanticAnalyzer:
                     if base_sym and base_sym.descriptor:
                         member_sym = base_sym.descriptor.resolve_member(node.attr)
                         if member_sym:
-                            self.node_to_symbol[node] = member_sym
+                            self.side_table.bind_symbol(node, member_sym)
                             return member_sym.descriptor
                 return self._any_desc
                 
             base_type = self.visit(node.value)
             member_sym = base_type.resolve_member(node.attr)
             if member_sym:
-                self.node_to_symbol[node] = member_sym
+                self.side_table.bind_symbol(node, member_sym)
                 return member_sym.descriptor
             self.error(f"Unknown type '{node.attr}' in '{base_type.name}'", node, code="SEM_001")
             
@@ -991,7 +988,7 @@ class SemanticAnalyzer:
             
             # 1. 检查符号绑定侧表
             if isinstance(node, BINDING_REQUIRED):
-                if node not in self.node_to_symbol:
+                if not self.side_table.get_symbol(node):
                     node_name = getattr(node, 'id', getattr(node, 'name', getattr(node, 'attr', 'unnamed')))
                     missing_bindings.append(f"{node.__class__.__name__} '{node_name}' (ID: {node})")
             

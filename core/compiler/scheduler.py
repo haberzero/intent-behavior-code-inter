@@ -2,32 +2,32 @@ import os
 from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
 from core.compiler.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus, ImportType, DependencyGraph
-from core.domain.ast import IbModule
+from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
-from core.compiler.lexer.tokens import Token
+from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.foundation.source.source_manager import SourceManager
+from core.base.source.source_manager import SourceManager
 from core.compiler.parser.resolver.resolver import ModuleResolver
-from core.domain.issue import Severity, CompilerError
-from core.foundation.source_atomic import Location
-from core.foundation.host_interface import HostInterface
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
-from core.foundation.diagnostics.codes import (
+from core.kernel.issue import Severity, CompilerError
+from core.base.source_atomic import Location
+from core.base.host_interface import HostInterface
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
     DEP_MODULE_NOT_FOUND
 )
-from core.domain.blueprint import CompilationArtifact, CompilationResult
+from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
-from core.foundation.interfaces import (
+from core.base.interfaces import (
     ISourceProvider, ICompilerService
 )
-from core.domain.symbols import (
+from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.domain.types.descriptors import ModuleMetadata
+from core.kernel.types.descriptors import ModuleMetadata
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):

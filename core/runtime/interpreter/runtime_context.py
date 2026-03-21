@@ -1,14 +1,14 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent
-from core.foundation.source_atomic import Location
+from core.base.source_atomic import Location
 from core.runtime.exceptions import RetryException, BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
-from core.domain.issue import InterpreterError
-from core.foundation.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
-from core.foundation.registry import Registry
-from core.foundation.interfaces import IStateReader
-from core.domain.types.descriptors import TypeDescriptor
-from core.domain.intent_resolver import IntentResolver
+from core.kernel.issue import InterpreterError
+from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
+from core.base.registry import Registry
+from core.base.interfaces import IStateReader
+from core.kernel.types.descriptors import TypeDescriptor
+from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule, IbObject
 
@@ -72,10 +72,8 @@ class ScopeImpl:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
         
-        # [NEW] 运行时类型校验
         self._check_type(boxed_value, declared_type, name or uid or "unknown")
 
-        # [IES 2.0 Privileged] 检查冲突
         if not force:
             if name in self._symbols and self._symbols[name].is_const:
                 raise InterpreterError(f"Cannot redefine constant '{name}'", error_code=RUN_TYPE_MISMATCH)
@@ -87,6 +85,13 @@ class ScopeImpl:
             self._symbols[name] = sym
         if uid:
             self._uid_to_symbol[uid] = sym
+        else:
+            import hashlib
+            content_repr = f"{name}:{type(boxed_value).__name__}"
+            if hasattr(boxed_value, 'value'):
+                content_repr += f":{boxed_value.value!r}"
+            fallback_uid = f"rt_{hashlib.sha256(content_repr.encode()).hexdigest()[:12]}"
+            self._uid_to_symbol[fallback_uid] = sym
 
     def assign(self, name: str, value: Any) -> bool:
         boxed_value = self._registry.box(value)

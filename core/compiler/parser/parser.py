@@ -1,10 +1,10 @@
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
-from core.compiler.lexer.tokens import Token, TokenType
-from core.domain import ast as ast
+from core.compiler.common.tokens import Token, TokenType
+from core.kernel import ast as ast
 from core.compiler.parser.core.syntax import IbPrecedence
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
 from core.compiler.parser.core.context import ParserContext
-from core.compiler.support.diagnostics import DiagnosticReporter
+from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.parser.components.expression import ExpressionComponent
 from core.compiler.parser.components.statement import StatementComponent
@@ -12,12 +12,12 @@ from core.compiler.parser.components.declaration import DeclarationComponent
 from core.compiler.parser.components.type_def import TypeComponent
 from core.compiler.parser.components.import_def import ImportComponent
 from core.compiler.dependencies import ImportInfo, ImportType
-from core.foundation.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
-from core.domain.issue import Severity
-from core.foundation.source_atomic import Location
+from core.base.diagnostics.codes import DEP_INVALID_IMPORT_POSITION
+from core.kernel.issue import Severity
+from core.base.source_atomic import Location
 
-from core.foundation.host_interface import HostInterface
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.base.host_interface import HostInterface
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 if TYPE_CHECKING:
     from core.compiler.parser.resolver.resolver import ModuleResolver

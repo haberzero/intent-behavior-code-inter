@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from typing import Optional
-from core.compiler.lexer.tokens import TokenType
+from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.token_stream import TokenStream
 
 class SyntaxRole(Enum):

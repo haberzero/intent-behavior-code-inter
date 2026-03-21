@@ -1,5 +1,5 @@
 from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING
-from core.foundation.interfaces import IExecutionContext, IStackInspector
+from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 

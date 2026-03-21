@@ -3,17 +3,18 @@ import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, TYPE_CHECKING
 from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent
-from core.foundation.interfaces import ILLMProvider, IssueTracker, IExecutionContext
+from core.base.interfaces import ILLMProvider, IssueTracker
+from core.runtime.interfaces import IExecutionContext
 
-from core.domain.issue import InterpreterError, LLMUncertaintyError
-from core.foundation.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
-from core.foundation.diagnostics.core_debugger import CoreModule, DebugLevel, core_debugger
+from core.kernel.issue import InterpreterError, LLMUncertaintyError
+from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent import IbIntent
 
-from core.domain.intent_logic import IntentMode, IntentRole
-from core.domain.intent_resolver import IntentResolver
-from core.foundation.registry import Registry
+from core.kernel.intent_logic import IntentMode, IntentRole
+from core.kernel.intent_resolver import IntentResolver
+from core.base.registry import Registry
 
 class LLMExecutorImpl:
     """

@@ -1,5 +1,8 @@
-from typing import Dict, Any, Optional
-from core.foundation.interfaces import IIbObject
+from typing import Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.runtime.interfaces import IIbObject
+
 from core.extension import ibcext
 
 class IDbgPlugin(ibcext.IbPlugin):
@@ -48,7 +51,7 @@ class IDbgPlugin(ibcext.IbPlugin):
 
     @ibcext.method("fields")
     def inspect_fields(self, obj: Any) -> Dict[str, Any]:
-        if isinstance(obj, IIbObject):
+        if hasattr(obj, 'fields'):
             if hasattr(obj, 'serialize_for_debug'):
                 data = obj.serialize_for_debug()
             else:

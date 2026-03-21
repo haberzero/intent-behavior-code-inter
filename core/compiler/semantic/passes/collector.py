@@ -1,8 +1,8 @@
 from typing import Optional, Any, List, Tuple, TYPE_CHECKING
-from core.compiler.support.diagnostics import DiagnosticReporter
-from core.domain import ast as ast
-from core.domain.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
-from core.domain.types.descriptors import TypeDescriptor
+from core.compiler.common.diagnostics import DiagnosticReporter
+from core.kernel import ast as ast
+from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
+from core.kernel.types.descriptors import TypeDescriptor
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
