@@ -152,29 +152,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         return_type=metadata_registry.resolve("str")
     ), token)
 
-    registry.register_function("host_save_state", FunctionMetadata(
-        name="host_save_state",
-        param_types=[metadata_registry.resolve("str")],
-        return_type=metadata_registry.resolve("void")
-    ), token)
-
-    registry.register_function("host_load_state", FunctionMetadata(
-        name="host_load_state",
-        param_types=[metadata_registry.resolve("str")],
-        return_type=metadata_registry.resolve("void")
-    ), token)
-
-    registry.register_function("host_run", FunctionMetadata(
-        name="host_run",
-        param_types=[metadata_registry.resolve("str")],
-        return_type=metadata_registry.resolve("bool")
-    ), token)
-
-    registry.register_function("host_get_source", FunctionMetadata(
-        name="host_get_source",
-        param_types=[],
-        return_type=metadata_registry.resolve("str")
-    ), token)
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)

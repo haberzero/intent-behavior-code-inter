@@ -24,9 +24,9 @@ class HostInterface:
     统一的宿主环境接口注册器。
     协调元数据注册和运行时实现注册。
     """
-    def __init__(self):
+    def __init__(self, external_registry=None):
         from core.kernel.types.registry import MetadataRegistry
-        self.metadata: 'MetadataRegistry' = MetadataRegistry()
+        self.metadata: 'MetadataRegistry' = external_registry if external_registry else MetadataRegistry()
         self.runtime = HostModuleRegistry()
         self._module_metadata_map: Dict[str, 'ModuleMetadata'] = {}
 

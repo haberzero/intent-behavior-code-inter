@@ -20,7 +20,7 @@ class HostImplementation(ibcext.IbPlugin):
         if sc:
             sc.host_service.load_state(path)
 
-    @ibcext.method("run")
+    @ibcext.method("run_isolated")
     def ib_run(self, path: str, policy: Dict[str, Any]) -> bool:
         sc = self._capabilities.service_context
         if sc:
