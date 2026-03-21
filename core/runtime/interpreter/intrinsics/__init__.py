@@ -1,9 +1,8 @@
 from typing import Dict, Any, Callable, List, Optional
 from core.runtime.objects.kernel import IbNativeFunction, IbObject
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.runtime.interpreter.intrinsics.io import register_io
 from core.runtime.interpreter.intrinsics.collection import register_collection
-from core.runtime.interpreter.intrinsics.conversion import register_conversion
 from core.runtime.interpreter.intrinsics.meta import register_meta
 
 class IntrinsicManager:
@@ -11,7 +10,7 @@ class IntrinsicManager:
     内置函数 (Intrinsics) 管理器。
     采用“特权插件”模式，解耦解释器内核与标准库逻辑。
     """
-    def __init__(self, registry: Registry):
+    def __init__(self, registry: KernelRegistry):
         self.registry = registry
         self._intrinsics: Dict[str, IbNativeFunction] = {}
 
@@ -51,8 +50,7 @@ class IntrinsicManager:
 
     def load_defaults(self, execution_context: Any, service_context: Any):
         """加载标准内置函数"""
-        
+
         register_io(self, execution_context, service_context)
         register_collection(self, execution_context, service_context)
-        register_conversion(self, execution_context, service_context)
         register_meta(self, execution_context, service_context)

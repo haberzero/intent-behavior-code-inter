@@ -1,6 +1,6 @@
 from typing import List, Any
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 
 def register_collection(manager: Any, execution_context: Any, service_context: Any):
     """注册集合相关内置函数"""

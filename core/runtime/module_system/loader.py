@@ -7,13 +7,10 @@ from core.runtime.exceptions import RegistryIsolationError
 from core.base.enums import RegistrationState
 
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
-from core.runtime.interfaces import (
-    IModuleLoader, ServiceContext
-)
-from core.base.interfaces import (
-    ExtensionCapabilities, IExecutionContext,
-    IStackInspector, IStateReader, IIntentManager, ILLMExecutor, ILLMProvider, ISymbolView
-)
+from core.runtime.interfaces import IModuleLoader, ServiceContext
+from core.runtime.interfaces import IExecutionContext
+from core.base.interfaces import IStateReader, ILLMExecutor, ISymbolView
+from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.types.descriptors import FunctionMetadata
 from core.kernel.symbols import FunctionSymbol

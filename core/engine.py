@@ -2,9 +2,10 @@ import os
 import importlib.util
 import tempfile
 import traceback
+import copy
 from typing import Optional, Dict, Any
 
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.interpreter.service_context import ServiceContextImpl
@@ -38,6 +39,7 @@ from core.kernel.types.descriptors import (
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext
 from core.runtime.interfaces import IExecutionContext
+from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 
 
 from core.base.enums import RegistrationState
@@ -47,7 +49,7 @@ class IBCIEngine(IInterpreterFactory):
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
     def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
-        self.registry = Registry()
+        self.registry = KernelRegistry()
         # STAGE 1 & 2 handled inside initialize_builtin_classes
         self._kernel_token = initialize_builtin_classes(self.registry)
         
@@ -94,14 +96,22 @@ class IBCIEngine(IInterpreterFactory):
 
     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
-        if isolated and registry is not None:
-            effective_registry = registry.clone()
+        effective_registry = registry
+
+        # [P2-B] 对 artifact_dict 做深拷贝，防止子环境修改影响父环境
+        # 注意：此时 artifact 已经是 FlatSerializer 序列化后的 dict
+        if artifact is not None and isinstance(artifact, dict):
+            effective_artifact = copy.deepcopy(artifact)
         else:
-            effective_registry = registry
+            effective_artifact = artifact
+
+        # [P2-B.1] 为子环境创建独立的 IssueTracker 实例，实现实例级隔离
+        from core.compiler.diagnostics.issue_tracker import IssueTracker
+        sub_issue_tracker = IssueTracker()
 
         sub_interpreter = Interpreter(
-            issue_tracker=self.issue_tracker,
-            artifact=artifact,
+            issue_tracker=sub_issue_tracker,
+            artifact=effective_artifact,
             registry=effective_registry,
             host_interface=host_interface,
             output_callback=self.interpreter.output_callback if self.interpreter else None,
@@ -276,14 +286,17 @@ class IBCIEngine(IInterpreterFactory):
         """
         serializer = FlatSerializer()
         artifact_dict = serializer.serialize_artifact(artifact)
-        
+
+        # [P2-D] 包装为 ImmutableArtifact，防止解释器修改 artifact
+        immutable_artifact = ImmutableArtifact(artifact_dict)
+
         # 强制重置或重新准备解释器
         # 理由：Registry 封印后，无法再次加载不同的 Artifact
         if self.registry.is_sealed:
              raise PermissionError("Engine: Cannot execute new artifact on a sealed registry. Create a new Engine instance.")
 
         if not self.interpreter:
-            self._prepare_interpreter(artifact_dict, output_callback=output_callback)
+            self._prepare_interpreter(immutable_artifact, output_callback=output_callback)
         
         # 1. 注入初始变量
         if variables:

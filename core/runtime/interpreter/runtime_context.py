@@ -5,7 +5,7 @@ from core.base.source_atomic import Location
 from core.runtime.exceptions import RetryException, BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.base.interfaces import IStateReader
 from core.kernel.types.descriptors import TypeDescriptor
 from core.kernel.intent_resolver import IntentResolver

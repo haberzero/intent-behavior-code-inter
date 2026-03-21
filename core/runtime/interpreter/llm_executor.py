@@ -14,7 +14,7 @@ from core.runtime.objects.intent import IbIntent
 
 from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 
 class LLMExecutorImpl:
     """

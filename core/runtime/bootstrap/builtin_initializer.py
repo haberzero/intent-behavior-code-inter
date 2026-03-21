@@ -1,8 +1,8 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
-from core.runtime.objects.type_registry import get_ib_implementation
+from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.kernel.types.descriptors import (
@@ -41,7 +41,7 @@ def _cast_numeric_to(ib_num: 'IbObject', target_class: Any) -> Any:
     target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
     return _cast_numeric_to_native(ib_num.to_native(), target_desc)
 
-def initialize_builtin_classes(registry: Registry) -> Any:
+def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     """
     初始化 IBCI 核心内置类及其 UTS 契约。
     支持多引擎实例隔离。

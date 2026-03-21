@@ -1,6 +1,6 @@
 from typing import Dict, Any, Mapping, Optional
 from .artifact_rehydrator import ArtifactRehydrator
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 
 from core.runtime.exceptions import RegistryIsolationError
 
@@ -31,7 +31,7 @@ class ArtifactLoader:
     产物加载器：负责解析原始产物字典并执行类型重水化。
     [Plan A] 严格数据契约：仅接受 Dict 格式的产物数据，实现运行时与编译器的物理隔离。
     """
-    def __init__(self, registry: Registry):
+    def __init__(self, registry: KernelRegistry):
         self.registry = registry
 
     def load(self, artifact_dict: Dict[str, Any]) -> LoadedArtifact:

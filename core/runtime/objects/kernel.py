@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.base.source_atomic import Location
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from core.runtime.interfaces import IExecutionContext
     from core.runtime.interpreter.interpreter import Interpreter
 
-from .type_registry import register_ib_type
+from .ib_type_mapping import register_ib_type
 
 @register_ib_type("Any")
 @register_ib_type("var")
@@ -184,7 +184,7 @@ class IbModule(IbObject):
     IBC-Inter 模块对象。
     持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
     """
-    def __init__(self, name: str, scope: Any, registry: Registry):
+    def __init__(self, name: str, scope: Any, registry: KernelRegistry):
         super().__init__(registry.get_class("module") or registry.get_class("Object"))
         self.name = name
         self.scope = scope
@@ -236,7 +236,7 @@ class IbClass(IbObject):
     """
     __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', 'descriptor')
 
-    def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[Registry] = None):
+    def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[KernelRegistry] = None):
         if not registry:
             raise ValueError("Registry is required for IbClass creation")
         self.registry = registry

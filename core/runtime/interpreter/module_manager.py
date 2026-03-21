@@ -10,7 +10,7 @@ from core.kernel.types.descriptors import ModuleMetadata as ModuleType
 from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import DEP_MODULE_NOT_FOUND
 from core.runtime.interfaces import IExecutionContext
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 
 if TYPE_CHECKING:
     from core.kernel.blueprint import CompilationArtifact
@@ -36,7 +36,7 @@ class ModuleManagerImpl(ModuleManager):
     """
     def __init__(self, 
                  interop: InterOp, 
-                 registry: Registry,
+                 registry: KernelRegistry,
                  object_factory: IObjectFactory,
                  execute_module_callback: Callable,
                  artifact: Optional['CompilationArtifact'] = None, 

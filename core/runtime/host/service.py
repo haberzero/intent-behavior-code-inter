@@ -2,10 +2,12 @@ from typing import Any, Dict, Optional, List, TYPE_CHECKING, Callable
 import os
 import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
+from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject, IExecutionContext
 from core.base.host_interface import HostInterface
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
+from core.compiler.serialization.serializer import FlatSerializer
 
 class HostService(IHostService):
     """
@@ -13,7 +15,7 @@ class HostService(IHostService):
     负责运行现场的持久化、隔离执行以及元编程能力。
     """
     def __init__(self,
-                 registry: Registry,
+                 registry: KernelRegistry,
                  execution_context: IExecutionContext,
                  interop: InterOp,
                  compiler: Any,
@@ -135,6 +137,13 @@ class HostService(IHostService):
             abs_path = os.path.abspath(path)
             artifact = self.compiler.compile_file(abs_path)
 
+            # [P2-A] 将 CompilationArtifact 序列化为不可变 dict，消除对象引用穿透
+            flat_serializer = FlatSerializer()
+            artifact_dict = flat_serializer.serialize_artifact(artifact)
+
+            # [P2-D] 包装为 ImmutableArtifact，防止解释器修改 artifact
+            immutable_artifact = ImmutableArtifact(artifact_dict)
+
             sub_host_interface = HostInterface()
             inherit_plugins = policy.get("inherit_plugins", [])
             if inherit_plugins is True:
@@ -147,13 +156,17 @@ class HostService(IHostService):
                     sub_host_interface.register_module(p_name, impl, meta)
 
             isolated = policy.get("isolated", True)
+
+            # [P2-A.1] 由HostService负责registry克隆，隔离策略的决定权在调用者
+            effective_registry = self.registry.clone() if isolated else self.registry
+
             sub_interpreter = self.factory.spawn_interpreter(
-                artifact=artifact,
-                registry=self.registry,
+                artifact=immutable_artifact,
+                registry=effective_registry,
                 host_interface=sub_host_interface,
                 root_dir=os.path.dirname(abs_path),
                 parent_context=self.execution_context.runtime_context,
-                isolated=isolated
+                isolated=False  # 已在HostService层处理
             )
 
             sub_interpreter.sync_state(self.execution_context.runtime_context, policy)

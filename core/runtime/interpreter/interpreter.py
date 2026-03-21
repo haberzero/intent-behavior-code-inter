@@ -31,7 +31,7 @@ from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFun
 from core.kernel.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.base.host_interface import HostInterface
 from core.runtime.interfaces import IStackInspector, IExecutionContext
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
@@ -251,7 +251,7 @@ class Interpreter:
         self.type_pool = loaded.type_pool
         self.asset_pool = loaded.asset_pool
         self.entry_module = loaded.entry_module
-        self.type_hydrator = loaded.type_hydrator
+        self.type_hydrator = loaded.artifact_rehydrator
         
         # 同步池引用到 ExecutionContext 数据容器
         self._execution_context.node_pool = self.node_pool
@@ -419,22 +419,6 @@ class Interpreter:
         self.instruction_count = state["instruction_count"]
         self.call_stack_depth = state["call_stack_depth"]
         self.current_module_name = state["current_module_name"]
-
-    def hot_reload_pools(self, artifact_dict: Mapping[str, Any]):
-        """热替换底层数据池，不改变当前的变量现场"""
-        self.artifact_dict = artifact_dict
-        
-        pools = artifact_dict.get("pools", {})
-        if not isinstance(pools, Mapping):
-             raise ValueError(f"Artifact pools must be a dict, got {type(pools)}")
-             
-        self.node_pool = pools.get("nodes", {})
-        if not isinstance(self.node_pool, Mapping):
-             raise ValueError(f"Node pool must be a dict, got {type(self.node_pool)}")
-        self.symbol_pool = pools.get("symbols", {})
-        self.scope_pool = pools.get("scopes", {})
-        self.type_pool = pools.get("types", {})
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Interpreter pools hot-reloaded.")
 
     def setup_context(self, context: RuntimeContext, force: bool = False, deserializer: Optional[Any] = None):
         """为 Context 注入基础内置变量 (Public API)"""

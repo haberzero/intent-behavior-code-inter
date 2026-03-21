@@ -1,11 +1,11 @@
 from typing import Any, List, Dict, Optional, Callable
 from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.issue import InterpreterError
 
-from .type_registry import register_ib_type
+from .ib_type_mapping import register_ib_type
 
 @register_ib_type("int")
 class IbInteger(IbObject):

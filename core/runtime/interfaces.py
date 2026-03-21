@@ -7,6 +7,8 @@ from core.base.interfaces import (
     IssueTracker, ISourceProvider, ICompilerService
 )
 
+from core.kernel.interfaces import IExecutionContext
+
 @runtime_checkable
 class IStackInspector(Protocol):
     """提供对调用栈和意图栈的内省能力"""
@@ -14,64 +16,6 @@ class IStackInspector(Protocol):
     def get_active_intents(self) -> List[str]: ...
     def get_instruction_count(self) -> int: ...
     def get_captured_intents(self, obj: Any) -> List[str]: ...
-
-@runtime_checkable
-class IExecutionContext(Protocol):
-    """
-    [IES 2.1 Decoupling] 运行时执行上下文数据协议。
-    作为 Interpreter 与底层组件（Kernel/Foundation）解耦的桥梁。
-    它仅包含执行所需的只读数据池、栈内省能力以及求值入口。
-    """
-    @property
-    def node_pool(self) -> Mapping[str, Any]: ...
-
-    @property
-    def symbol_pool(self) -> Mapping[str, Any]: ...
-
-    @property
-    def scope_pool(self) -> Mapping[str, Any]: ...
-
-    @property
-    def type_pool(self) -> Mapping[str, Any]: ...
-
-    @property
-    def asset_pool(self) -> Mapping[str, str]: ...
-
-    @property
-    def stack_inspector(self) -> IStackInspector: ...
-
-    @property
-    def registry(self) -> Any: ...
-
-    @property
-    def factory(self) -> Any: ...
-
-    @property
-    def runtime_context(self) -> Any: ...
-
-    @property
-    def strict_mode(self) -> bool: ...
-
-    def visit(self, node_uid: str, module_name: Optional[str] = None) -> Any:
-        """评估 AST 节点并返回 IbObject"""
-        ...
-
-    def get_node_data(self, node_uid: str) -> Mapping[str, Any]: ...
-
-    def get_side_table(self, table_name: str, key: str) -> Any: ...
-
-    def push_stack(self, name: str, location: Optional[Any] = None, is_user_function: bool = False, **kwargs) -> None:
-        """向逻辑调用栈压入一帧"""
-        ...
-
-    def pop_stack(self) -> None:
-        """从逻辑调用栈弹出最后一帧"""
-        ...
-
-    def resolve_type_from_symbol(self, sym_uid: str) -> Optional[Any]: ...
-    def extract_name_id(self, node_uid: str) -> Optional[str]: ...
-    def resolve_value(self, val: Any) -> Any: ...
-    def is_truthy(self, value: Any) -> bool: ...
 
 @runtime_checkable
 class Registry(Protocol):
@@ -196,7 +140,8 @@ class IInterpreterFactory(Protocol):
                           registry: Any,
                           host_interface: Any,
                           root_dir: str,
-                          parent_context: RuntimeContext) -> 'Interpreter': ...
+                          parent_context: RuntimeContext,
+                          isolated: bool = False) -> 'Interpreter': ...
 
 @runtime_checkable
 class IIbObject(Protocol):

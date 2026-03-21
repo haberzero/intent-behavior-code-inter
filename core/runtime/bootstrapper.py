@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Any, TYPE_CHECKING
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
 
 if TYPE_CHECKING:
@@ -14,7 +14,7 @@ class Bootstrapper:
     现在支持基于实例的 Registry 以实现多引擎隔离。
     """
     
-    def __init__(self, registry: Registry):
+    def __init__(self, registry: KernelRegistry):
         self.registry = registry
         self._token = registry.get_kernel_token() # 获取内核特权令牌
         self._class_registry: Dict[str, IbClass] = {}
@@ -148,7 +148,7 @@ class Bootstrapper:
     def get_all_classes(self) -> Dict[str, IbClass]:
         return dict(self._class_registry)
 
-    def create_subclass(self, registry: Registry, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> IbClass:
+    def create_subclass(self, registry: KernelRegistry, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> IbClass:
         """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定描述符。"""
         if name in self._class_registry:
             return self._class_registry[name]
@@ -161,7 +161,7 @@ class Bootstrapper:
         self.register_class(new_class, descriptor)
         return new_class
 
-    def box(self, registry: Registry, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:
+    def box(self, registry: KernelRegistry, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:
         """
         UTS: 统一装箱逻辑。
         """

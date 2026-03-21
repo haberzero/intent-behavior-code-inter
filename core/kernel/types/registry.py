@@ -146,11 +146,17 @@ class MetadataRegistry:
 
     def clone(self) -> 'MetadataRegistry':
         """
-        [P0-F 临时桩] 创建 MetadataRegistry 的浅克隆。
-        注意：当前实现仅为临时桩，返回自身引用。
-        完整的深克隆实现将在 P1-F 中完成。
+        [P1-F] 创建 MetadataRegistry 的深克隆。
+        每个隔离引擎实例拥有独立的类型元数据注册表。
         """
-        return self
+        new_registry = MetadataRegistry(axiom_registry=self._axiom_registry)
+
+        memo: Dict[int, Any] = {}
+        for key, descriptor in self._descriptors.items():
+            cloned_desc = descriptor.clone(memo)
+            new_registry._descriptors[key] = cloned_desc
+
+        return new_registry
 
     @property
     def all_descriptors(self) -> Dict[str, TypeDescriptor]:

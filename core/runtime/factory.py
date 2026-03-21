@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, List, Mapping, Callable
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent
 )
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 
 # 这些导入需要指向它们的新物理位置
 from core.runtime.interpreter.runtime_context import ScopeImpl
@@ -17,7 +17,7 @@ class RuntimeObjectFactory(IObjectFactory):
     1. 物理归位：迁移至 core/runtime，作为公共基础设施。
     2. 控制反转：采用注册制，消除对逻辑组件（Handlers/Executor）的硬编码物理引用。
     """
-    def __init__(self, registry: Registry):
+    def __init__(self, registry: KernelRegistry):
         self._registry = registry
         self._handler_factories: List[Callable] = []
         self._llm_executor_factory: Optional[Callable] = None

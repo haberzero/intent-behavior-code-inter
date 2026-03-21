@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from core.kernel.types import ModuleMetadata, FunctionMetadata
     from core.kernel.types.registry import MetadataRegistry
 
-class RuntimeRegistry:
+class HostModuleRegistry:
     """
     负责管理真实的运行时实现。
     供解释器（Interpreter）使用。
@@ -27,7 +27,7 @@ class HostInterface:
     def __init__(self):
         from core.kernel.types.registry import MetadataRegistry
         self.metadata: 'MetadataRegistry' = MetadataRegistry()
-        self.runtime = RuntimeRegistry()
+        self.runtime = HostModuleRegistry()
         self._module_metadata_map: Dict[str, 'ModuleMetadata'] = {}
 
     def register_module(self, name: str, implementation: Any, metadata: Optional['ModuleMetadata'] = None):

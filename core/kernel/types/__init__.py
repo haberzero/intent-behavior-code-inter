@@ -1,5 +1,6 @@
 from .descriptors import TypeDescriptor
 from .registry import MetadataRegistry, TypeFactory
+from .axiom_hydrator import AxiomHydrator
 from .descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
     BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, VAR_DESCRIPTOR,
@@ -11,7 +12,7 @@ from .descriptors import (
 )
 
 __all__ = [
-    'TypeDescriptor', 'MetadataRegistry', 'TypeFactory',
+    'TypeDescriptor', 'MetadataRegistry', 'TypeFactory', 'AxiomHydrator',
     'INT_DESCRIPTOR', 'STR_DESCRIPTOR', 'FLOAT_DESCRIPTOR',
     'BOOL_DESCRIPTOR', 'VOID_DESCRIPTOR', 'ANY_DESCRIPTOR', 'VAR_DESCRIPTOR',
     'CALLABLE_DESCRIPTOR',

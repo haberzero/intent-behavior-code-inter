@@ -1,7 +1,7 @@
 from typing import Optional, Any
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.objects.builtins import IbNone
-from core.base.registry import Registry
+from core.kernel.registry import KernelRegistry
 
 def register_io(manager: Any, execution_context: Any, service_context: Any):
     """注册 I/O 相关内置函数"""

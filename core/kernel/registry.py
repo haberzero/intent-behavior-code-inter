@@ -7,9 +7,9 @@ if TYPE_CHECKING:
     from core.kernel.types.descriptors import TypeDescriptor
     from core.kernel.axioms.protocols import TypeAxiom
     from core.kernel.axioms.registry import AxiomRegistry
-    from core.runtime.interfaces import IExecutionContext
+    from core.kernel.interfaces import IExecutionContext
 
-class Registry:
+class KernelRegistry:
     """
     IBC-Inter 内核对象注册表。
     用于解耦 Kernel, Builtins 和 Bootstrapper 之间的循环引用。
@@ -276,19 +276,19 @@ class Registry:
             return bool(obj.value)
         return True
 
-    def clone(self) -> 'Registry':
+    def clone(self) -> 'KernelRegistry':
         """
-        [IES 2.1 Isolation] 创建 Registry 的浅克隆。
-        仅克隆注册表结构，类定义和函数通过引用共享。
+        [IES 2.1 Isolation] 创建 KernelRegistry 的浅克隆。
+        类定义和函数通过引用共享，但 MetadataRegistry 进行深克隆以确保类型隔离。
         用于 spawn_interpreter 创建隔离的解释器实例。
         """
-        new_registry = Registry()
+        new_registry = KernelRegistry()
         new_registry._classes = dict(self._classes)
         new_registry._none_instance = self._none_instance
         new_registry._box_func = self._box_func
         new_registry._create_subclass_func = self._create_subclass_func
         new_registry._boxers = dict(self._boxers)
-        new_registry._metadata_registry = self._metadata_registry.clone() if hasattr(self._metadata_registry, 'clone') else self._metadata_registry
+        new_registry._metadata_registry = self._metadata_registry.clone()
         new_registry._is_structure_sealed = self._is_structure_sealed
         new_registry._is_classes_sealed = self._is_classes_sealed
         new_registry._state_level = self._state_level
