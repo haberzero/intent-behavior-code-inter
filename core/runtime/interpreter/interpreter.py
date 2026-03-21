@@ -444,20 +444,19 @@ class Interpreter:
         """从模块 UID 开始执行"""
         return self.execute_module(module_uid)
 
-    def run(self) -> bool:
+    def run(self) -> IbObject:
         """从入口模块开始执行完整的项目"""
         try:
             if not self.entry_module:
-                return True
-                
+                return self.registry.get_none()
+
             module_data = self.artifact_dict.get("modules", {}).get(self.entry_module)
             if not module_data:
-                return True
-                
-            self.execute_module(module_data["root_node_uid"], module_name=self.entry_module)
-            return True
+                return self.registry.get_none()
+
+            result = self.execute_module(module_data["root_node_uid"], module_name=self.entry_module)
+            return result if result is not None else self.registry.get_none()
         except Exception as e:
-            # 运行时异常已由解释器内部报告
             if not isinstance(e, InterpreterError):
                 import traceback
                 traceback.print_exc()

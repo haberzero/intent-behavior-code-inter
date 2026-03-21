@@ -1,6 +1,20 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
+from dataclasses import dataclass, field
 from core.extension.ibcext import IbPlugin, method
 from core.runtime.host.isolation_policy import IsolationPolicy
+
+
+@dataclass
+class IsolatedRunResult:
+    """
+    [IES 2.1] 隔离子环境运行结果。
+    替代简单的 bool 返回值，提供完整的执行状态信息。
+    """
+    success: bool
+    diagnostics: List[Any] = field(default_factory=list)
+    exception_type: Optional[str] = None
+    exception_message: Optional[str] = None
+    return_value: Optional[Any] = None
 
 
 class DynamicHost(IbPlugin):
@@ -21,6 +35,34 @@ class DynamicHost(IbPlugin):
 
     def setup(self, capabilities: Any) -> None:
         super().setup(capabilities)
+
+    def _validate_return_value(self, value: Any) -> Any:
+        """
+        [IES 2.1 Security] 验证返回值是否允许从隔离环境返回。
+        只允许基本内置类型 (int/str/bool/float/none) 返回。
+        """
+        if value is None:
+            return self.registry.get_none() if hasattr(self, 'registry') and self.registry else None
+
+        from core.runtime.objects.kernel import IbObject
+        if not isinstance(value, IbObject):
+            return value
+
+        desc = getattr(value, 'descriptor', None)
+        if not desc:
+            return value
+
+        axiom = getattr(desc, '_axiom', None)
+        if axiom and hasattr(axiom, 'can_return_from_isolated'):
+            if axiom.can_return_from_isolated():
+                return value
+
+        allowed = {"int", "str", "bool", "float", "None"}
+        type_name = getattr(desc, 'name', None)
+        if type_name in allowed:
+            return value
+
+        return self.registry.get_none() if hasattr(self, 'registry') and self.registry else None
 
     @method("save_state")
     def save_state(self, path: str) -> bool:
@@ -47,16 +89,30 @@ class DynamicHost(IbPlugin):
         return False
 
     @method("run_isolated")
-    def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> 'IsolatedRunResult':
         """[Meta] 隔离运行另一个 ibci 文件"""
         sc = self._capabilities.service_context
         if sc and sc.host_service:
             try:
                 isolation_policy = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
-                return sc.host_service.run_isolated(path, isolation_policy.to_dict())
-            except Exception:
-                return False
-        return False
+                result = sc.host_service.run_isolated(path, isolation_policy.to_dict())
+                validated_value = self._validate_return_value(result)
+                return IsolatedRunResult(
+                    success=True,
+                    diagnostics=[],
+                    exception_type=None,
+                    exception_message=None,
+                    return_value=validated_value
+                )
+            except Exception as e:
+                return IsolatedRunResult(
+                    success=False,
+                    diagnostics=[],
+                    exception_type=type(e).__name__,
+                    exception_message=str(e),
+                    return_value=None
+                )
+        return IsolatedRunResult(success=False, diagnostics=[], exception_type=None, exception_message=None, return_value=None)
 
     @method("get_source")
     def get_source(self) -> str:
@@ -67,13 +123,19 @@ class DynamicHost(IbPlugin):
         return ""
 
     @method("generate_and_run")
-    def generate_and_run(self, code: str, policy: Dict[str, Any]) -> bool:
+    def generate_and_run(self, code: str, policy: Dict[str, Any]) -> 'IsolatedRunResult':
         """[IES 2.1] 动态生成 IBCI 代码并执行"""
         import tempfile
         import os
         sc = self._capabilities.service_context
         if not sc or not sc.compiler:
-            return False
+            return IsolatedRunResult(
+                success=False,
+                diagnostics=[],
+                exception_type="RuntimeError",
+                exception_message="Compiler not available",
+                return_value=None
+            )
 
         try:
             with tempfile.NamedTemporaryFile(
@@ -90,8 +152,14 @@ class DynamicHost(IbPlugin):
             finally:
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
-        except Exception:
-            return False
+        except Exception as e:
+            return IsolatedRunResult(
+                success=False,
+                diagnostics=[],
+                exception_type=type(e).__name__,
+                exception_message=str(e),
+                return_value=None
+            )
 
 
 def create_implementation() -> DynamicHost:

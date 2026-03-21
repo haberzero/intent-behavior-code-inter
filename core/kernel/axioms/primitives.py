@@ -34,8 +34,10 @@ class BaseAxiom(TypeAxiom):
         return registry.resolve(self.name)
 
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # 默认没有特殊提示
         return None
+
+    def can_return_from_isolated(self) -> bool:
+        return False
 
 class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
     """int 类型的行为公理"""
@@ -46,6 +48,8 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+
+    def can_return_from_isolated(self) -> bool: return True
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -91,6 +95,9 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
+
+    def can_return_from_isolated(self) -> bool: return True
+
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
         return other.get_base_axiom_name() == "int"
 
@@ -104,6 +111,8 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+
+    def can_return_from_isolated(self) -> bool: return True
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -140,6 +149,9 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
+
+    def can_return_from_isolated(self) -> bool: return True
+
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
         return other.get_base_axiom_name() == "float"
 
@@ -190,7 +202,10 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
-    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+
+    def can_return_from_isolated(self) -> bool: return True
+
+    def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "bool"
 
 

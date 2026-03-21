@@ -86,3 +86,7 @@ class TypeAxiom(Protocol):
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
         """[IES 2.1] 诊断增强：获取类型不匹配时的公理化提示"""
         ...
+
+    def can_return_from_isolated(self) -> bool:
+        """[IES 2.1 Security] 判断该类型的实例是否允许从隔离子环境返回"""
+        ...

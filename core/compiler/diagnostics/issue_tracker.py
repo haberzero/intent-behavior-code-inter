@@ -76,6 +76,33 @@ class IssueTracker:
         self._diagnostics.extend(other.diagnostics)
         self._error_count += other._error_count
 
+    def to_dict(self) -> dict:
+        """
+        [IES 2.1] 序列化 IssueTracker 为字典，支持状态保存和恢复。
+        """
+        return {
+            "file_path": self.file_path,
+            "diagnostics": [
+                {
+                    "severity": d.severity.name,
+                    "code": d.code,
+                    "message": d.message,
+                    "location": {
+                        "file_path": d.location.file_path if d.location else None,
+                        "line": d.location.line if d.location else None,
+                        "column": d.location.column if d.location else None,
+                        "length": d.location.length if d.location else None,
+                        "end_line": d.location.end_line if d.location else None,
+                        "end_column": d.location.end_column if d.location else None,
+                        "context_line": d.location.context_line if d.location else None,
+                    } if d.location else None,
+                    "hint": d.hint,
+                }
+                for d in self._diagnostics
+            ],
+            "error_count": self._error_count,
+        }
+
     def _resolve_location(self, loc: Optional[Union[Locatable, Location]]) -> Optional[Location]:
         if loc is None:
             return None

@@ -8,6 +8,7 @@ from core.runtime.host.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
 from core.compiler.serialization.serializer import FlatSerializer
+from core.runtime.objects.kernel import IbObject
 
 class HostService(IHostService):
     """
@@ -125,7 +126,7 @@ class HostService(IHostService):
                 # [IES 2.0 Privileged] 强制覆盖常量符号
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
 
-    def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
         """通过协调器工厂开启隔离的解释器子运行环境"""
         serializer = RuntimeSerializer(self.registry)
         snapshot = serializer.serialize_context(
