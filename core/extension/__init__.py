@@ -32,13 +32,6 @@ from core.extension.auto_discovery import (
     PluginSpec,
     create_auto_discovery_service,
 )
-from core.extension.plugin_adapter import (
-    LegacyPluginAdapter,
-    PluginSpecAdapter,
-    AdapterResult,
-    adapt_legacy_plugin,
-    is_legacy_plugin,
-)
 
 __all__ = [
     "IbPlugin",
@@ -55,9 +48,4 @@ __all__ = [
     "AutoDiscoveryService",
     "PluginSpec",
     "create_auto_discovery_service",
-    "LegacyPluginAdapter",
-    "PluginSpecAdapter",
-    "AdapterResult",
-    "adapt_legacy_plugin",
-    "is_legacy_plugin",
 ]
