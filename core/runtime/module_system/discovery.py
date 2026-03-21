@@ -22,8 +22,10 @@ class ModuleDiscoveryService:
         """
         if registry:
             registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
-
-        host = HostInterface(external_registry=registry) if registry else HostInterface()
+            metadata_registry = registry.get_metadata_registry()
+        else:
+            metadata_registry = None
+        host = HostInterface(external_registry=metadata_registry) if metadata_registry else HostInterface()
         discovered_modules = set()
 
         for path in self.search_paths:
