@@ -1,14 +1,16 @@
-from typing import Dict, Any, List
-from core.extension import ibcext
+"""
+[IES 2.2] Schema JSON Schema 校验插件
 
-class SchemaLib(ibcext.IbPlugin):
-    """
-    Schema 2.1: JSON Schema 校验插件。
-    """
-    def __init__(self):
-        super().__init__()
+纯 Python 实现，零侵入。
+"""
+from typing import Dict, Any
 
-    @ibcext.method("validate")
+
+class SchemaLib:
+    """
+    [IES 2.2] Schema 2.2: JSON Schema 校验插件。
+    不继承任何核心类，完全独立。
+    """
     def validate(self, data: Dict[str, Any], rules: Dict[str, Any]) -> bool:
         if not isinstance(data, dict):
             return False
@@ -32,10 +34,10 @@ class SchemaLib(ibcext.IbPlugin):
 
         return True
 
-    @ibcext.method("assert")
     def _assert(self, data: Dict[str, Any], rules: Dict[str, Any]):
         if not self.validate(data, rules):
-            raise ibcext.PluginError(f"Schema validation failed. Data: {data}, Rules: {rules}")
+            raise RuntimeError(f"Schema validation failed. Data: {data}, Rules: {rules}")
+
 
 def create_implementation():
     return SchemaLib()

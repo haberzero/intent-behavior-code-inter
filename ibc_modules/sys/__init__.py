@@ -1,23 +1,23 @@
-from typing import Optional
-from core.extension import ibcext
+"""
+[IES 2.2] Sys 系统能力插件
 
-class SysLib(ibcext.IbPlugin):
-    """
-    Sys 2.1: 系统能力插件。
-    """
-    def __init__(self):
-        super().__init__()
+纯 Python 实现，零侵入。
+最小版本暂时绕过沙箱权限管理。
+"""
 
-    @ibcext.method("request_external_access")
+
+class SysLib:
+    """
+    [IES 2.2] Sys 2.2: 系统能力插件。
+    不继承任何核心类，完全独立。
+    最小版本：暂时不提供沙箱控制。
+    """
     def request_external_access(self) -> None:
-        pm = self._capabilities.permission_manager
-        if pm:
-            pm.enable_external_access()
+        pass
 
-    @ibcext.method("is_sandboxed")
     def is_sandboxed(self) -> bool:
-        pm = self._capabilities.permission_manager
-        return not pm.is_external_access_enabled() if pm else True
+        return False
+
 
 def create_implementation():
     return SysLib()

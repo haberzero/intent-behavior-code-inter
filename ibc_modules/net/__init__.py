@@ -1,14 +1,16 @@
+"""
+[IES 2.2] Net 网络请求插件
+
+纯 Python 实现，零侵入。
+"""
 from typing import Dict, Any, Optional
-from core.extension import ibcext
 
-class NetLib(ibcext.IbPlugin):
-    """
-    Net 2.1: 网络请求插件。
-    """
-    def __init__(self):
-        super().__init__()
 
-    @ibcext.method("get")
+class NetLib:
+    """
+    [IES 2.2] Net 2.2: 网络请求插件。
+    不继承任何核心类，完全独立。
+    """
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
         try:
             import requests
@@ -18,9 +20,8 @@ class NetLib(ibcext.IbPlugin):
         except ImportError:
             return f"[MOCK GET] {url}"
         except Exception as e:
-            raise ibcext.PluginError(f"Network GET failed: {str(e)}")
+            raise RuntimeError(f"Network GET failed: {str(e)}")
 
-    @ibcext.method("post")
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         try:
             import requests
@@ -30,7 +31,8 @@ class NetLib(ibcext.IbPlugin):
         except ImportError:
             return {"mock": "post", "url": url}
         except Exception as e:
-            raise ibcext.PluginError(f"Network POST failed: {str(e)}")
+            raise RuntimeError(f"Network POST failed: {str(e)}")
+
 
 def create_implementation():
     return NetLib()

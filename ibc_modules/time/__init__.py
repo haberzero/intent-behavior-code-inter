@@ -1,20 +1,22 @@
+"""
+[IES 2.2] Time 时间处理插件
+
+纯 Python 实现，零侵入。
+"""
 import time
-from core.extension import ibcext
 
-class TimeLib(ibcext.IbPlugin):
-    """
-    Time 2.1: 时间处理插件。
-    """
-    def __init__(self):
-        super().__init__()
 
-    @ibcext.method("sleep")
+class TimeLib:
+    """
+    [IES 2.2] Time 2.2: 时间处理插件。
+    不继承任何核心类，完全独立。
+    """
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)
 
-    @ibcext.method("now")
     def now(self) -> float:
         return time.time()
+
 
 def create_implementation():
     return TimeLib()

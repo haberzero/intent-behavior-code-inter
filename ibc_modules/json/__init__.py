@@ -1,21 +1,23 @@
+"""
+[IES 2.2] JSON 处理插件
+
+纯 Python 实现，零侵入。
+"""
 import json
 from typing import Any
-from core.extension import ibcext
 
-class JSONLib(ibcext.IbPlugin):
-    """
-    JSON 2.1: JSON 处理插件。
-    """
-    def __init__(self):
-        super().__init__()
 
-    @ibcext.method("parse")
+class JSONLib:
+    """
+    [IES 2.2] JSON 2.2: JSON 处理插件。
+    不继承任何核心类，完全独立。
+    """
     def parse(self, s: str) -> Any:
         return json.loads(s)
 
-    @ibcext.method("stringify")
     def stringify(self, obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False)
+
 
 def create_implementation():
     return JSONLib()
