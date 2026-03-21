@@ -159,6 +159,26 @@ class IbString(IbObject):
         res_val = _cast_string_to_native(self.value, target_desc)
         return self.ib_class.registry.box(res_val)
 
+    def upper(self) -> IbObject:
+        return self.ib_class.registry.box(self.value.upper())
+
+    def lower(self) -> IbObject:
+        return self.ib_class.registry.box(self.value.lower())
+
+    def strip(self) -> IbObject:
+        return self.ib_class.registry.box(self.value.strip())
+
+    def split(self, sep: Optional[str] = None) -> IbObject:
+        if sep is None:
+            parts = self.value.split()
+        else:
+            parts = self.value.split(sep)
+        registry = self.ib_class.registry
+        return registry.box([registry.box(p) for p in parts])
+
+    def is_empty(self) -> IbObject:
+        return self.ib_class.registry.box(1 if len(self.value.strip()) == 0 else 0)
+
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {"type": self.ib_class.name, "value": self.value}
 

@@ -230,7 +230,12 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         return {
             "len": FunctionMetadata(name="len", param_types=[], return_type=INT_DESCRIPTOR),
             "to_bool": FunctionMetadata(name="to_bool", param_types=[], return_type=BOOL_DESCRIPTOR),
-            "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
+            "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR),
+            "upper": FunctionMetadata(name="upper", param_types=[], return_type=STR_DESCRIPTOR),
+            "lower": FunctionMetadata(name="lower", param_types=[], return_type=STR_DESCRIPTOR),
+            "strip": FunctionMetadata(name="strip", param_types=[], return_type=STR_DESCRIPTOR),
+            "split": FunctionMetadata(name="split", param_types=[STR_DESCRIPTOR], return_type=ListMetadata(element_type=STR_DESCRIPTOR)),
+            "is_empty": FunctionMetadata(name="is_empty", param_types=[], return_type=BOOL_DESCRIPTOR),
         }
 
     def get_operators(self) -> Dict[str, str]:
