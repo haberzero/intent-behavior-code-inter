@@ -158,6 +158,70 @@ class MetadataRegistry:
 
         return new_registry
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        [IES 2.2] 将 MetadataRegistry 序列化为字典，用于 .ibc_meta 文件生成。
+        实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
+        """
+        result = {
+            "version": "1.0",
+            "modules": {},
+            "classes": {},
+            "functions": {},
+        }
+
+        for key, desc in self._descriptors.items():
+            if desc.is_module():
+                result["modules"][key] = self._serialize_descriptor(desc)
+            elif desc.is_class():
+                result["classes"][key] = self._serialize_descriptor(desc)
+            elif desc.get_call_trait():
+                result["functions"][key] = self._serialize_descriptor(desc)
+
+        return result
+
+    def _serialize_descriptor(self, desc: TypeDescriptor) -> Dict[str, Any]:
+        """将 TypeDescriptor 序列化为字典"""
+        result = {
+            "name": desc.name,
+            "kind": desc.kind if hasattr(desc, 'kind') else type(desc).__name__,
+            "module_path": desc.module_path if hasattr(desc, 'module_path') else None,
+            "is_nullable": desc.is_nullable if hasattr(desc, 'is_nullable') else False,
+            "is_user_defined": desc.is_user_defined if hasattr(desc, 'is_user_defined') else False,
+        }
+
+        if hasattr(desc, 'members') and desc.members:
+            result["members"] = {
+                name: self._serialize_symbol(member)
+                for name, member in desc.members.items()
+            }
+
+        if hasattr(desc, 'element_type') and desc.element_type:
+            result["element_type"] = desc.element_type.name if hasattr(desc.element_type, 'name') else str(desc.element_type)
+
+        if hasattr(desc, 'key_type') and desc.key_type:
+            result["key_type"] = desc.key_type.name if hasattr(desc.key_type, 'name') else str(desc.key_type)
+
+        if hasattr(desc, 'value_type') and desc.value_type:
+            result["value_type"] = desc.value_type.name if hasattr(desc.value_type, 'name') else str(desc.value_type)
+
+        if hasattr(desc, 'param_types') and desc.param_types:
+            result["param_types"] = [
+                p.name if hasattr(p, 'name') else str(p)
+                for p in desc.param_types
+            ]
+
+        if hasattr(desc, 'return_type') and desc.return_type:
+            result["return_type"] = desc.return_type.name if hasattr(desc.return_type, 'name') else str(desc.return_type)
+
+        return result
+
+    def _serialize_symbol(self, symbol: Any) -> Dict[str, Any]:
+        """将符号对象序列化为字典"""
+        if hasattr(symbol, 'name'):
+            return {"name": symbol.name, "type": type(symbol).__name__}
+        return {"type": type(symbol).__name__}
+
     @property
     def all_descriptors(self) -> Dict[str, TypeDescriptor]:
         """获取所有已注册的描述符快照"""

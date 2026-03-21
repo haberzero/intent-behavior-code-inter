@@ -27,6 +27,18 @@ from core.extension.capabilities import (
 )
 from core.base.interfaces import ILLMProvider
 from core.extension.spec_builder import SpecBuilder, ClassSpecBuilder
+from core.extension.auto_discovery import (
+    AutoDiscoveryService,
+    PluginSpec,
+    create_auto_discovery_service,
+)
+from core.extension.plugin_adapter import (
+    LegacyPluginAdapter,
+    PluginSpecAdapter,
+    AdapterResult,
+    adapt_legacy_plugin,
+    is_legacy_plugin,
+)
 
 __all__ = [
     "IbPlugin",
@@ -40,4 +52,12 @@ __all__ = [
     "ILLMProvider",
     "SpecBuilder",
     "ClassSpecBuilder",
+    "AutoDiscoveryService",
+    "PluginSpec",
+    "create_auto_discovery_service",
+    "LegacyPluginAdapter",
+    "PluginSpecAdapter",
+    "AdapterResult",
+    "adapt_legacy_plugin",
+    "is_legacy_plugin",
 ]

@@ -1,10 +1,12 @@
 import os
+import json
 import importlib.util
 from typing import Dict, List, Optional, Any
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.types.descriptors import ModuleMetadata as ModuleType, TypeDescriptor
 from core.kernel.symbols import SymbolFactory
 from core.base.enums import RegistrationState
+
 
 class ModuleDiscoveryService:
     """
@@ -23,23 +25,21 @@ class ModuleDiscoveryService:
 
         host = HostInterface(external_registry=registry) if registry else HostInterface()
         discovered_modules = set()
-        
+
         for path in self.search_paths:
             if not os.path.isdir(path):
                 continue
-                
+
             for entry in os.listdir(path):
-                # 避免重复加载（比如 plugins 中覆盖了内置模块）
                 if entry in discovered_modules:
                     continue
-                    
+
                 module_dir = os.path.join(path, entry)
                 if not os.path.isdir(module_dir):
                     continue
-                    
-                # [IES 2.0] 强制使用 _spec.py (静态契约)
+
                 spec_path = os.path.join(module_dir, "_spec.py")
-                
+
                 if os.path.exists(spec_path):
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
@@ -47,10 +47,31 @@ class ModuleDiscoveryService:
                             host.register_module(entry, None, spec_metadata)
                             discovered_modules.add(entry)
                     except Exception as e:
-                        # [IES 2.0 Fail-fast] 契约加载失败属于致命错误
                         raise RuntimeError(f"Fatal Error: Failed to load spec for module '{entry}': {e}") from e
-        
+
         return host
+
+    def export_metadata(self, host: HostInterface, output_path: str) -> None:
+        """
+        [IES 2.2] 将发现的元数据导出为 .ibc_meta 文件
+
+        实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
+        """
+        metadata_snapshot = {
+            "version": "1.0",
+            "modules": {}
+        }
+
+        registry = host.metadata
+        if hasattr(registry, 'to_dict'):
+            snapshot = registry.to_dict()
+            metadata_snapshot["modules"] = snapshot.get("modules", {})
+            metadata_snapshot["classes"] = snapshot.get("classes", {})
+            metadata_snapshot["functions"] = snapshot.get("functions", {})
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata_snapshot, f, indent=2, ensure_ascii=False)
 
     def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleType]:
         """动态加载 spec.py 或 _spec.py"""
