@@ -16,7 +16,7 @@ class IsolationPolicy:
     """
     level: str = "PARTIAL"
     inherit_plugins: Optional[List[str]] = None
-    inherit_intents: bool = True
+    inherit_intents: bool = False
     inherit_variables: bool = False
     inherit_classes: bool = True
     max_call_stack: int = 100
@@ -83,7 +83,7 @@ class IsolationPolicy:
         return cls(
             level=data.get("level", "PARTIAL"),
             inherit_plugins=data.get("inherit_plugins"),
-            inherit_intents=data.get("inherit_intents", True),
+            inherit_intents=data.get("inherit_intents", False),
             inherit_variables=data.get("inherit_variables", False),
             inherit_classes=data.get("inherit_classes", True),
             max_call_stack=data.get("max_call_stack", 100),
