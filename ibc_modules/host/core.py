@@ -1,16 +1,21 @@
 """
 [IES 2.2] Host 宿主能力插件核心实现
 """
-from typing import Any, Dict
-from core.extension import ibcext
+from typing import Any, Dict, Optional
+from core.extension.ibcext import IbPlugin, ExtensionCapabilities
 
 
-class HostImplementation(ibcext.IbPlugin):
+class HostImplementation(IbPlugin):
     """
     [IES 2.2] Host 宿主能力插件。
+    核心级插件，必须继承 IbPlugin 以获取 ServiceContext 能力。
     """
     def __init__(self):
         super().__init__()
+        self._capabilities: Optional[ExtensionCapabilities] = None
+
+    def setup(self, capabilities: ExtensionCapabilities):
+        self._capabilities = capabilities
 
     @property
     def plugin_id(self) -> str:
@@ -20,30 +25,22 @@ class HostImplementation(ibcext.IbPlugin):
     def plugin_name(self) -> str:
         return "Host"
 
-    @ibcext.method("save_state")
     def ib_save_state(self, path: str):
-        sc = self._capabilities.service_context
-        if sc:
-            sc.host_service.save_state(path)
+        if self._capabilities and self._capabilities.service_context:
+            self._capabilities.service_context.host_service.save_state(path)
 
-    @ibcext.method("load_state")
     def ib_load_state(self, path: str):
-        sc = self._capabilities.service_context
-        if sc:
-            sc.host_service.load_state(path)
+        if self._capabilities and self._capabilities.service_context:
+            self._capabilities.service_context.host_service.load_state(path)
 
-    @ibcext.method("run_isolated")
     def ib_run(self, path: str, policy: Dict[str, Any]) -> bool:
-        sc = self._capabilities.service_context
-        if sc:
-            return sc.host_service.run_isolated(path, policy)
+        if self._capabilities and self._capabilities.service_context:
+            return self._capabilities.service_context.host_service.run_isolated(path, policy)
         return False
 
-    @ibcext.method("get_source")
     def ib_get_source(self) -> str:
-        sc = self._capabilities.service_context
-        if sc:
-            return sc.host_service.get_source()
+        if self._capabilities and self._capabilities.service_context:
+            return self._capabilities.service_context.host_service.get_source()
         return ""
 
 

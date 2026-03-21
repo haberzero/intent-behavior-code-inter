@@ -62,8 +62,16 @@ class IbPlugin(ABC):
     def get_vtable(self) -> Dict[str, Callable]:
         """
         [IES 2.1 Automation] 自动化虚表生成。
-        扫描类中所有带有 @method 装饰器的成员，构建符合内核要求的虚表。
+
+        优先顺序：
+        1. 如果类上有 __ibcext_vtable__ 函数绑定，使用它
+        2. 否则扫描类中所有带有 @method 装饰器的成员
         """
+        # [IES 2.2] 检查是否绑定了模块级 __ibcext_vtable__ 函数
+        if hasattr(self, '_ibcext_vtable_func') and callable(self._ibcext_vtable_func):
+            return self._ibcext_vtable_func()
+
+        # [IES 2.0] 回退到装饰器 introspection
         vtable = {}
         for attr_name in dir(self):
             attr = getattr(self, attr_name)

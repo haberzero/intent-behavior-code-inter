@@ -1,30 +1,30 @@
 from typing import Dict, Any, Optional, TYPE_CHECKING
+from core.extension.ibcext import IbPlugin, ExtensionCapabilities
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import IIbObject
 
-from core.extension import ibcext
 
-class IDbgPlugin(ibcext.IbPlugin):
+class IDbgPlugin(IbPlugin):
     """
-    IDbg 2.1: 内核观察者。
+    [IES 2.2] IDBG 内核观察者插件。
+    核心级插件，必须继承 IbPlugin 以获取 stack_inspector 和 state_reader 能力。
     """
     def __init__(self):
         super().__init__()
         self.stack_inspector = None
         self.state_reader = None
+        self._capabilities: Optional[ExtensionCapabilities] = None
 
-    def setup(self, capabilities):
-        super().setup(capabilities)
+    def setup(self, capabilities: ExtensionCapabilities):
+        self._capabilities = capabilities
         self.stack_inspector = capabilities.stack_inspector
         self.state_reader = capabilities.state_reader
 
-    @ibcext.method("vars")
     def get_vars(self):
         if not self.state_reader: return {}
         return self.state_reader.get_vars()
 
-    @ibcext.method("last_llm")
     def get_last_llm(self) -> Dict[str, Any]:
         if not self._capabilities:
             return {}
@@ -37,7 +37,6 @@ class IDbgPlugin(ibcext.IbPlugin):
 
         return {}
 
-    @ibcext.method("env")
     def get_env(self) -> Dict[str, Any]:
         if not self._capabilities or not self._capabilities.stack_inspector:
             return {}
@@ -49,7 +48,6 @@ class IDbgPlugin(ibcext.IbPlugin):
             "active_intents": inspector.get_active_intents()
         }
 
-    @ibcext.method("fields")
     def inspect_fields(self, obj: Any) -> Dict[str, Any]:
         if hasattr(obj, 'fields'):
             if hasattr(obj, 'serialize_for_debug'):
@@ -65,3 +63,7 @@ class IDbgPlugin(ibcext.IbPlugin):
 
             return {k: _to_native(v) for k, v in data.items()}
         return {}
+
+
+def create_implementation():
+    return IDbgPlugin()

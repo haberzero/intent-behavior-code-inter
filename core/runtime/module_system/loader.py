@@ -23,6 +23,64 @@ class ModuleLoader(IModuleLoader):
     def __init__(self, search_paths: List[str]):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
 
+    def _get_vtable_from_module(self, implementation: Any, module_name: str) -> Dict[str, Any]:
+        """
+        [IES 2.2] 从模块获取 vtable。
+
+        优先顺序：
+        1. 如果实现类有 _ibcext_vtable_func 绑定，使用它
+        2. 如果实现类有 get_vtable() 方法且返回非空，使用它
+        3. 否则返回空字典（零侵入插件无 vtable）
+        """
+        # [IES 2.2] 检查是否绑定了模块级 __ibcext_vtable__ 函数
+        if hasattr(implementation, '_ibcext_vtable_func') and callable(implementation._ibcext_vtable_func):
+            return implementation._ibcext_vtable_func()
+
+        # [IES 2.1] 回退到 IbPlugin.get_vtable()
+        if hasattr(implementation, 'get_vtable'):
+            vtable = implementation.get_vtable()
+            if vtable:
+                return vtable
+
+        return {}
+
+    def _bind_vtable_from_spec(self, implementation: Any, module_name: str, base_path: str):
+        """
+        [IES 2.2] 从 _spec.py 模块绑定 __ibcext_vtable__ 函数到 implementation。
+
+        这允许核心级插件通过模块级函数定义 vtable，而不是依赖 @method 装饰器。
+        """
+        spec_path = os.path.join(base_path, module_name, "_spec.py")
+        if not os.path.exists(spec_path):
+            return
+
+        try:
+            spec_loader = importlib.util.spec_from_file_location(
+                f"_spec_{module_name}", spec_path
+            )
+            if not spec_loader or not spec_loader.loader:
+                return
+
+            spec_mod = importlib.util.module_from_spec(spec_loader)
+            spec_loader.loader.exec_module(spec_mod)
+
+            if hasattr(spec_mod, '__ibcext_vtable__') and callable(spec_mod.__ibcext_vtable__):
+                implementation._ibcext_vtable_func = spec_mod.__ibcext_vtable__
+        except Exception:
+            pass
+
+    def _bind_vtable_from_spec_auto(self, implementation: Any, module_name: str, search_paths: list):
+        """
+        [IES 2.2] 自动搜索 _spec.py 并绑定 vtable。
+
+        尝试在所有搜索路径中找到模块的 _spec.py。
+        """
+        for base_path in search_paths:
+            spec_path = os.path.join(base_path, module_name, "_spec.py")
+            if os.path.exists(spec_path):
+                self._bind_vtable_from_spec(implementation, module_name, base_path)
+                break
+
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
         """[IES 2.0] 强制执行显式契约绑定并构建自动装箱虚函数表 (Proxy VTable)"""
         # [Registry Isolation] 虚表隔离检查：严禁跨引擎复用已关联虚表的插件对象
@@ -42,7 +100,7 @@ class ModuleLoader(IModuleLoader):
             raise InterpreterError(f"Plugin Error: Module '{module_name}' implementation is missing 'get_vtable()'.")
             
         # [IES 2.1 Refactor] 统一使用 IbPlugin 契约或显式 VTable
-        raw_vtable = implementation.get_vtable()
+        raw_vtable = self._get_vtable_from_module(implementation, module_name)
         if not isinstance(raw_vtable, dict):
             raise InterpreterError(f"Plugin Error: Module '{module_name}' get_vtable() must return a dictionary.")
             
@@ -144,7 +202,10 @@ class ModuleLoader(IModuleLoader):
         for entry in host_interface.metadata.get_all_modules().keys():
             implementation = host_interface.get_module_implementation(entry)
             if not implementation: continue
-            
+
+            # [IES 2.2] 尝试绑定模块级 vtable（对于 ibc_modules 下的模块）
+            self._bind_vtable_from_spec_auto(implementation, entry, self.search_paths)
+
             # [IES 2.0] 校验与绑定 (传入 capabilities 以支持 Proxy VTable 包装)
             self._validate_and_bind(entry, implementation, context, capabilities, registry)
             
@@ -201,7 +262,10 @@ class ModuleLoader(IModuleLoader):
                     else:
                         # 兼容直接导出的类或函数（如有必要可扩展）
                         continue
-                    
+
+                    # [IES 2.2] 绑定模块级 __ibcext_vtable__ 到 implementation
+                    self._bind_vtable_from_spec(implementation, entry, path)
+
                     # [IES 2.0] 1. 自动依赖注入 (基于 setup 方法签名)
                     # 必须在校验前注入，因为插件可能根据注入的能力动态决定其虚表 (vtable)
                     self._setup_implementation(implementation, context, capabilities)
