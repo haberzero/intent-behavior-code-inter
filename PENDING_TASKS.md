@@ -251,4 +251,43 @@ def __deepcopy__(self, memo):
 
 ---
 
+## 九、IES 2.2 插件系统扩展
+
+### 9.1 零侵入插件注册原生 IBC-Inter 类型
+
+**任务**：让零侵入插件能够注册原生 IBC-Inter 类型（如 float、int），而不需要继承任何核心类
+
+**搁置原因**：
+- 当前 vtable 只支持返回 `Callable`（方法）
+- 原生 IBC-Inter 类型（如 float）是通过 `Axiom` 定义的，不需要继承
+- 核心级插件（AI/IDBG/HOST）目前需要继承是合理的，但理论上有更优雅的方案
+
+**技术方案**：
+1. 扩展 `__ibcext_vtable__()` 返回值类型，支持返回 `TypeDescriptor`
+2. loader 识别 `TypeDescriptor` 并调用 `registry.register()`
+3. 类型行为由 `Axiom` 定义（像 float 一样）
+
+```python
+# 零侵入插件示例
+def __ibcext_vtable__():
+    return {
+        "my_type": my_type_descriptor,  # TypeDescriptor，不是 Callable
+    }
+```
+
+```python
+# loader.py 扩展
+def _register_types_from_vtable(vtable):
+    for name, item in vtable.items():
+        if isinstance(item, TypeDescriptor):
+            registry.register(name, item)
+```
+
+**意义**：
+- 统一内置类型和插件类型的注册方式
+- 进一步减少核心级插件的特殊性
+- 插件可以像 float 一样声明自己的"类型身份"
+
+---
+
 *本文档为 IBC-Inter 待实现任务清单，供未来智能体和开发者参考。*
