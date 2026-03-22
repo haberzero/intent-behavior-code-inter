@@ -222,17 +222,20 @@ class DeclarationComponent(BaseComponent):
         params = []
         if not self.stream.check(TokenType.RPAREN):
             while True:
-                # [REMOVED] 特殊的 self 处理逻辑已被移除，改为隐式注入
-                
-                # Standard typed parameter: Type Name
+                if self.stream.check(TokenType.SELF):
+                    self.stream.advance()
+                    if not self.stream.match(TokenType.COMMA):
+                        break
+                    continue
+
                 annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
-                
+
                 param_node = self._loc(ast.IbArg(arg=name_token.value), name_token)
                 if annotation:
                     param_node = self._loc(ast.IbTypeAnnotatedExpr(target=param_node, annotation=annotation), name_token)
                 params.append(param_node)
-                    
+
                 if not self.stream.match(TokenType.COMMA):
                     break
         return params

@@ -196,6 +196,10 @@ class TestSemanticAnalyzer(unittest.TestCase):
         result, tracker, analyzer, compilation = self._analyze("class User:\n    func __init__(str n, int a):\n        self.name = n\n")
         self.assertEqual(len(result.body), 1)
 
+    def test_analyze_class_multiple_methods(self):
+        result, tracker, analyzer, compilation = self._analyze("class Math:\n    func add(self, int a, int b) -> int:\n        return a\n    func sub(self, int a, int b) -> int:\n        return a\n")
+        self.assertEqual(len(result.body), 1)
+
     def test_analyze_nested_call(self):
         result, tracker, analyzer, compilation = self._analyze("func foo():\n    return 1\nfoo() + foo()\n")
         self.assertGreaterEqual(len(result.body), 2)
