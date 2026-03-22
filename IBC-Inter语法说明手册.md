@@ -248,7 +248,7 @@ str res = translate("Hello World", "中文")
 在 `llm` 函数内部：
 - __sys__ 块：定义 AI 的系统提示词（System Prompt）。
 - __user__ 块：定义用户的输入内容（User Prompt）。
-- 支持直接使用 `$变量名` 进行插值。
+- 支持使用 `$__变量名__` 进行插值（必须使用双下划线格式）。
 
 ### 6.2 匿名 Behavior 函数
 
