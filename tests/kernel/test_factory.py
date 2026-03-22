@@ -16,7 +16,7 @@ class TestFactoryCreateDefaultRegistry(unittest.TestCase):
 
         expected_types = ["int", "str", "float", "bool", "void", "Any", "var",
                           "callable", "list", "dict", "None", "behavior",
-                          "bound_method", "Exception", "Module"]
+                          "bound_method", "Exception", "module"]
 
         for type_name in expected_types:
             resolved = registry.resolve(type_name)

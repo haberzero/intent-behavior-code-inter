@@ -1,1 +1,0 @@
-# Kernel Types Tests

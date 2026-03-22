@@ -1,11 +1,10 @@
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import sys
 from .descriptors import TypeDescriptor, FunctionMetadata, ListMetadata, DictMetadata
-from core.kernel.symbols import SymbolFactory
 
 if TYPE_CHECKING:
     from .registry import MetadataRegistry
-    from core.kernel.symbols import Symbol, FunctionSymbol, SymbolKind
+    from core.kernel.symbols import Symbol
 
 class AxiomHydrator:
     """
@@ -14,6 +13,7 @@ class AxiomHydrator:
     """
     def __init__(self, registry: 'MetadataRegistry'):
         self._registry = registry
+        self._processing: set = set()
 
     def inject_axioms(self, descriptor: TypeDescriptor):
         """[IoC] 从公理注册表中获取并注入公理能力"""
@@ -31,9 +31,29 @@ class AxiomHydrator:
             try:
                 method_descs = descriptor._axiom.get_methods()
                 if method_descs:
+                    # [ARCHITECTURE NOTE]
+                    # 延迟导入 FunctionSymbol 和 SymbolKind 以避免循环依赖：
+                    #   axiom_hydrator.py → descriptors.py → types/__init__.py →
+                    #   registry.py → axiom_hydrator.py (顶层会形成循环)
+                    #
+                    # Symbol ↔ TypeDescriptor 的双向引用是设计的内在需求：
+                    #   - Symbol.descriptor: 符号需要知道自己的类型
+                    #   - TypeDescriptor.members: 类型需要知道自己的成员
+                    # 这反映了编译器中符号表与类型系统的固有耦合关系。
+                    #
+                    # 未来如需彻底解耦，可考虑：
+                    #   1. 引入 StaticType 中间接口层
+                    #   2. 将 SymbolKind 等枚举移至独立子模块
+                    #   3. 使用依赖注入容器管理初始化顺序
+                    from core.kernel.symbols import FunctionSymbol, SymbolKind
                     for m_name, m_desc in method_descs.items():
                         hydrated_m_desc = self.hydrate_metadata(m_desc)
-                        sym = SymbolFactory.create_builtin_method(m_name, hydrated_m_desc)
+                        sym = FunctionSymbol(
+                            name=m_name,
+                            kind=SymbolKind.FUNCTION,
+                            descriptor=hydrated_m_desc,
+                            metadata={"is_builtin": True, "axiom_provided": True}
+                        )
                         descriptor.members[m_name] = sym
 
             except Exception as e:
@@ -67,9 +87,21 @@ class AxiomHydrator:
         if descriptor._registry is self._registry:
             return descriptor
 
-        descriptor.walk_references(self.hydrate_metadata)
+        key = descriptor.name
+        if key in self._registry._descriptors:
+            cached = self._registry._descriptors[key]
+            if cached._registry is self._registry:
+                return cached
 
-        self.inject_axioms(descriptor)
+        obj_id = id(descriptor)
+        if obj_id in self._processing:
+            return descriptor
 
-        descriptor._registry = self._registry
-        return self._registry.register(descriptor)
+        self._processing.add(obj_id)
+        try:
+            descriptor._registry = self._registry
+            descriptor.walk_references(self.hydrate_metadata)
+            self.inject_axioms(descriptor)
+            return self._registry.register(descriptor)
+        finally:
+            self._processing.discard(obj_id)

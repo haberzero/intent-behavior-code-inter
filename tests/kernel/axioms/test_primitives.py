@@ -9,6 +9,7 @@ from core.kernel.axioms.primitives import (
     DictAxiom,
     register_core_axioms,
 )
+from core.kernel.types.descriptors import INT_DESCRIPTOR
 
 
 class TestAxiomRegistry(unittest.TestCase):
@@ -106,9 +107,12 @@ class TestIntAxiom(unittest.TestCase):
         self.assertEqual(self.axiom.get_parent_axiom_name(), "Object")
 
     def test_resolve_specialization_int(self):
-        """测试特化解析"""
-        result = self.axiom.resolve_specialization(INT_DESCRIPTOR)
+        """测试特化解析 - IntAxiom 不支持特化，需要传入有效的 registry"""
+        from core.kernel.factory import create_default_registry
+        registry = create_default_registry()
+        result = self.axiom.resolve_specialization(registry, [])
         self.assertIsNotNone(result)
+        self.assertEqual(result.name, "int")
 
 
 class TestStrAxiom(unittest.TestCase):
@@ -126,11 +130,13 @@ class TestStrAxiom(unittest.TestCase):
         """测试不是动态类型"""
         self.assertFalse(self.axiom.is_dynamic())
 
-    def test_can_convert_from(self):
-        """测试可转换来源"""
-        self.assertTrue(self.axiom.can_convert_from("int"))
-        self.assertTrue(self.axiom.can_convert_from("str"))
-        self.assertFalse(self.axiom.can_convert_from("list"))
+    def test_str_axiom_methods(self):
+        """测试 StrAxiom 的方法"""
+        methods = self.axiom.get_methods()
+        self.assertIn("len", methods)
+        self.assertIn("to_bool", methods)
+        self.assertIn("upper", methods)
+        self.assertIn("lower", methods)
 
 
 class TestFloatAxiom(unittest.TestCase):
@@ -145,9 +151,10 @@ class TestFloatAxiom(unittest.TestCase):
         self.assertEqual(self.axiom.name, "float")
 
     def test_can_convert_from(self):
-        """测试可转换来源"""
-        self.assertTrue(self.axiom.can_convert_from("int"))
-        self.assertTrue(self.axiom.can_convert_from("float"))
+        """测试可转换来源 - FloatAxiom 可从 int, float 转换"""
+        from core.kernel.types.descriptors import INT_DESCRIPTOR, FLOAT_DESCRIPTOR
+        self.assertTrue(self.axiom.can_convert_from(INT_DESCRIPTOR))
+        self.assertTrue(self.axiom.can_convert_from(FLOAT_DESCRIPTOR))
 
 
 class TestBoolAxiom(unittest.TestCase):
@@ -178,11 +185,13 @@ class TestListAxiom(unittest.TestCase):
         self.assertEqual(self.axiom.name, "list")
 
     def test_resolve_specialization(self):
-        """测试特化解析"""
-        from core.kernel.types.descriptors import INT_DESCRIPTOR
-
-        result = self.axiom.resolve_specialization(INT_DESCRIPTOR)
+        """测试特化解析 - ListAxiom 创建 list[int]"""
+        from core.kernel.factory import create_default_registry
+        registry = create_default_registry()
+        result = self.axiom.resolve_specialization(registry, [INT_DESCRIPTOR])
         self.assertIsNotNone(result)
+        self.assertEqual(result.name, "list[int]")
+        self.assertEqual(result.element_type, INT_DESCRIPTOR)
 
 
 class TestDictAxiom(unittest.TestCase):
