@@ -235,10 +235,10 @@ llm translate(str text, str target_lang):
 
 __sys__
 你是一个精通多国语言的专业翻译家。
-请将用户输入的内容翻译为 $target_lang。
+请将用户输入的内容翻译为 $__target_lang__。
 
 __user__
-内容：$text
+内容：$__text__
 
 llmend
 
