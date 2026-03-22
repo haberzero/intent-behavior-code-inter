@@ -5,11 +5,11 @@
 > 优先级低于 NEXT_STEPS_PLAN.md，可独立使用。
 >
 > **生成日期**：2026-03-21
-> **版本**：V2.0
+> **版本**：V3.0
 
 ---
 
-## 一、DynamicHost 相关任务
+## 一、动态宿主（DynamicHost）相关任务
 
 ### 1.1 Intent Stack 深拷贝实现
 
