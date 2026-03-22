@@ -419,7 +419,7 @@ class DynamicAxiom(BaseAxiom, CallCapability, IterCapability, SubscriptCapabilit
         return raw_value.strip()
 
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
-        return True # 动态类型兼容一切
+        return True
 
 class ExceptionAxiom(BaseAxiom):
     """Exception 类型的行为公理"""
@@ -449,9 +449,7 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
         return ANY_DESCRIPTOR
 
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
-        # 异常兼容性：子类异常兼容父类 (这里简化处理，认为 Exception 兼容所有 Exception 及其子类)
-        # 实际需要继承树判断，但在公理层，只要是 ExceptionAxiom 及其变体即可
-        return other.get_base_axiom_name() == "Exception"
+        return other.get_base_axiom_name() == "bound_method"
 
 
 def register_core_axioms(registry: 'AxiomRegistry'):

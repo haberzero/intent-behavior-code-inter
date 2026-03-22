@@ -198,7 +198,7 @@ class TypeDescriptor:
         """
         if self._axiom:
             return self._axiom.is_dynamic()
-        return False
+        return self.name in ("Any", "var")
 
     def is_class(self) -> bool:
         """是否为类类型。"""
@@ -218,19 +218,24 @@ class TypeDescriptor:
         """
         类型兼容性校验 (Axiom-Driven)
         """
+        if other is None:
+            return False
+
         s = self.unwrap()
         o = other.unwrap()
 
-        # 1. 引用相等 (Interning)
         if s is o: return True
-            
-        # 2. 公理级兼容性检查 (处理 Any/var/primitive 转换)
+
+        if o.is_dynamic():
+            return True
+        if s.is_dynamic():
+            return o.is_dynamic()
+
         if s._axiom and s._axiom.is_compatible(o):
             return True
         if o._axiom and o._axiom.is_compatible(s):
             return True
 
-        # 3. 严格结构匹配 (由子类实现或默认名称匹配)
         return s._is_structurally_compatible(o)
 
     def get_diff_hint(self, other: 'TypeDescriptor') -> str:
@@ -278,6 +283,7 @@ class TypeDescriptor:
 
         return f"Type '{s.name}' is not compatible with '{o.name}'."
 
+    # TODO: 疑问：是否存在问题？结构化兼容逻辑是不是有点宽松？
     def _is_structurally_compatible(self, other: 'TypeDescriptor') -> bool:
         """[IES 2.1 Refactor] 子类可重写的结构化兼容性逻辑，消除硬编码比对"""
         if type(self) is not type(other):
@@ -350,6 +356,14 @@ class LazyDescriptor(TypeDescriptor):
         return self.unwrap().get_parser_trait()
 
     def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
+        if other is None:
+            return False
+        resolved_self = self._resolved
+        if resolved_self:
+            return resolved_self.is_assignable_to(other)
+        if not self._registry:
+            o = other.unwrap()
+            return self.name == o.name and type(self) is type(o)
         return self.unwrap().is_assignable_to(other)
 
     def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
@@ -389,8 +403,7 @@ class ListMetadata(TypeDescriptor):
         return self
 
     def get_element_type(self) -> Optional[TypeDescriptor]:
-        res = super().get_element_type()
-        return res
+        return self.element_type
 
     def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
         self.element_type = hydrator.hydrate(data.get("element_type_uid"))
@@ -408,19 +421,18 @@ class ListMetadata(TypeDescriptor):
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
-        # 允许原始 list 与泛型 list 互转 (逻辑宽松处理)
-        # 使用 unwrap() 确保 LazyDescriptor 能正确对比
         o = other.unwrap()
-        
-        # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
+
         o_iter = o.get_iter_trait()
         if o_iter:
             o_elem = o_iter.get_element_type()
-            if o is LIST_DESCRIPTOR or o_elem is ANY_DESCRIPTOR:
-                 return True
-            
-            if self.element_type:
-                return self.element_type.is_assignable_to(o_elem)
+            if o is LIST_DESCRIPTOR or self.element_type is ANY_DESCRIPTOR or o_elem is ANY_DESCRIPTOR:
+             return True
+            if o_elem is None:
+                return self.element_type is None
+            if self.element_type is None:
+                return False
+            return self.element_type.is_assignable_to(o_elem)
         return False
 
 @dataclass
@@ -466,27 +478,23 @@ class DictMetadata(TypeDescriptor):
 
     def is_assignable_to(self, other: TypeDescriptor) -> bool:
         if super().is_assignable_to(other): return True
-        # 允许原始 dict 与泛型 dict 互转
         o = other.unwrap()
-        
-        # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
+
         o_key = o.get_key_type()
         o_val = o.get_value_type()
-        
-        if o_key or o_val:
-            # 逻辑宽松处理：如果是原始 dict 或目标类型为 Any
-            if o is DICT_DESCRIPTOR or (o_key is ANY_DESCRIPTOR and o_val is ANY_DESCRIPTOR):
+
+        if o_key is ANY_DESCRIPTOR and o_val is ANY_DESCRIPTOR:
+            return True
+
+        if o is DICT_DESCRIPTOR:
+            if o_key is None and o_val is None:
                 return True
-            
-            # 协变校验
             k_comp = True
             if self.key_type and o_key:
                 k_comp = self.key_type.is_assignable_to(o_key)
-            
             v_comp = True
             if self.value_type and o_val:
                 v_comp = self.value_type.is_assignable_to(o_val)
-                
             return k_comp and v_comp
         return False
 
@@ -699,12 +707,13 @@ class BoundMethodMetadata(TypeDescriptor):
         o_func = o.get_function_type()
         
         if o_receiver:
-            # 结构化语义校验：接收者与函数签名都必须兼容
-            if self.receiver_type and not self.receiver_type.is_assignable_to(o_receiver):
+            if not self.receiver_type:
                 return False
-            
+            if not self.receiver_type.is_assignable_to(o_receiver):
+                return False
             if self.function_type and o_func:
                 return self.function_type.is_assignable_to(o_func)
+            return True
         return False
 
 @dataclass
