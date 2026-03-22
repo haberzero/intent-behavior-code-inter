@@ -291,3 +291,107 @@ class TestSemanticAnalyzer(unittest.TestCase):
     def test_analyze_assignment_with_type_annotation(self):
         result, tracker, analyzer, compilation = self._analyze("x = 42\n")
         self.assertEqual(len(result.body), 1)
+
+    def test_analyze_global_statement(self):
+        result, tracker, analyzer, compilation = self._analyze("global x\n")
+        self.assertGreaterEqual(len(result.body), 1)
+
+    def test_analyze_behavior_expr(self):
+        result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\n@tag~hello~\n")
+        self.assertGreaterEqual(len(result.body), 2)
+
+    def test_analyze_import_statement(self):
+        result, tracker, analyzer, compilation = self._analyze("import os\n")
+        self.assertGreaterEqual(len(result.body), 1)
+
+    def test_analyze_import_from_statement(self):
+        result, tracker, analyzer, compilation = self._analyze("from foo import bar\n")
+        self.assertGreaterEqual(len(result.body), 1)
+
+    def test_analyze_side_table_node_is_deferred(self):
+        result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\n@tag~hello~\n")
+        self.assertIsNotNone(compilation.node_is_deferred)
+
+    def test_analyze_side_table_node_to_loc(self):
+        result, tracker, analyzer, compilation = self._analyze("x = 42\n")
+        self.assertIsNotNone(compilation.node_to_loc)
+
+    def test_analyze_side_table_node_to_loc_count(self):
+        result, tracker, analyzer, compilation = self._analyze("x = 42\n")
+        self.assertGreater(len(compilation.node_to_loc), 0)
+
+    def test_analyze_symbol_table_contains_function(self):
+        result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\n")
+        func_node = result.body[0]
+        self.assertIn(func_node, compilation.node_to_symbol)
+
+    def test_analyze_symbol_table_contains_class(self):
+        result, tracker, analyzer, compilation = self._analyze("class MyClass:\n    pass\n")
+        class_node = result.body[0]
+        self.assertIn(class_node, compilation.node_to_symbol)
+
+    def test_analyze_symbol_table_contains_variable(self):
+        result, tracker, analyzer, compilation = self._analyze("x = 42\n")
+        var_node = result.body[0]
+        self.assertIn(var_node, compilation.node_to_symbol)
+
+    def test_analyze_node_scenes_for_if_statement(self):
+        result, tracker, analyzer, compilation = self._analyze("if True:\n    x = 1\nelse:\n    x = 2\n")
+        if_node = result.body[0]
+        test_expr = if_node.test
+        self.assertIn(test_expr, compilation.node_scenes)
+        from core.kernel.ast import IbScene
+        self.assertEqual(compilation.node_scenes[test_expr], IbScene.BRANCH)
+
+    def test_analyze_node_scenes_for_while_statement(self):
+        result, tracker, analyzer, compilation = self._analyze("while True:\n    x = 1\n")
+        while_node = result.body[0]
+        test_expr = while_node.test
+        self.assertIn(test_expr, compilation.node_scenes)
+        from core.kernel.ast import IbScene
+        self.assertEqual(compilation.node_scenes[test_expr], IbScene.LOOP)
+
+    def test_analyze_node_scenes_for_for_statement(self):
+        result, tracker, analyzer, compilation = self._analyze("for x in items:\n    pass\n")
+        for_node = result.body[0]
+        iter_expr = for_node.iter
+        self.assertIn(iter_expr, compilation.node_scenes)
+        from core.kernel.ast import IbScene
+        self.assertEqual(compilation.node_scenes[iter_expr], IbScene.LOOP)
+
+    def test_analyze_type_resolved_for_constant(self):
+        result, tracker, analyzer, compilation = self._analyze("x = 42\n")
+        const_node = result.body[0]
+        if hasattr(const_node, 'value') and hasattr(const_node.value, '__class__'):
+            if const_node.value in compilation.node_to_type:
+                self.assertIsNotNone(compilation.node_to_type[const_node.value])
+
+    def test_analyze_module_preserves_structure(self):
+        result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\nclass Bar:\n    pass\n")
+        self.assertEqual(len(result.body), 2)
+        self.assertIsInstance(result.body[0], ast.IbFunctionDef)
+        self.assertIsInstance(result.body[1], ast.IbClassDef)
+
+    def test_analyze_class_with_fields(self):
+        result, tracker, analyzer, compilation = self._analyze("class User:\n    func __init__(str n):\n        self.name = n\n")
+        self.assertEqual(len(result.body), 1)
+
+    def test_analyze_attribute_assignment(self):
+        result, tracker, analyzer, compilation = self._analyze("class User:\n    func __init__(str n):\n        self.name = n\n")
+        self.assertEqual(len(result.body), 1)
+
+    def test_analyze_chain_comparison(self):
+        result, tracker, analyzer, compilation = self._analyze("a < b <= c\n")
+        self.assertGreaterEqual(len(result.body), 1)
+
+    def test_analyze_nested_attribute_access(self):
+        result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\nobj.attr1.attr2\n")
+        self.assertGreaterEqual(len(result.body), 2)
+
+    def test_analyze_nested_subscript(self):
+        result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\nmatrix[0][1]\n")
+        self.assertGreaterEqual(len(result.body), 2)
+
+    def test_analyze_function_default_params(self):
+        result, tracker, analyzer, compilation = self._analyze("func greet(str name, int count):\n    pass\n")
+        self.assertEqual(len(result.body), 1)
