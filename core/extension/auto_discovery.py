@@ -7,6 +7,10 @@ IES 2.2 固定命名方法协议（必须实现）：
 - __ibcext_metadata__() -> Dict[str, Any]  返回插件元数据（必需）
 - __ibcext_vtable__() -> Dict[str, Callable]  返回方法映射表（必需）
 - create_implementation() -> Any  工厂函数（可选）
+
+IES 2.2 扩展协议（可选）：
+- __ibcext_axiom__() -> Dict[str, 'TypeAxiom']  返回插件公理映射表（可选）
+  插件可通过此函数声明自定义公理，在封印前注册到 AxiomRegistry。
 """
 import os
 import importlib
@@ -30,10 +34,15 @@ class PluginSpec:
     vtable: Optional[Dict[str, Callable]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     factory: Optional[Callable] = None
+    axioms: Dict[str, Any] = field(default_factory=dict)
 
     def has_vtable(self) -> bool:
         """检查是否提供了虚表"""
         return self.vtable is not None and len(self.vtable) > 0
+
+    def has_axioms(self) -> bool:
+        """检查是否提供了公理"""
+        return self.axioms is not None and len(self.axioms) > 0
 
 
 class AutoDiscoveryService:
@@ -132,6 +141,12 @@ class AutoDiscoveryService:
 
         if hasattr(mod, 'create_implementation') and callable(mod.create_implementation):
             spec.factory = mod.create_implementation
+
+        if hasattr(mod, '__ibcext_axiom__') and callable(mod.__ibcext_axiom__):
+            try:
+                spec.axioms = mod.__ibcext_axiom__()
+            except Exception as e:
+                raise RuntimeError(f"Failed to get axioms from IES 2.2 plugin '{module_name}': {e}") from e
 
         return spec
 
