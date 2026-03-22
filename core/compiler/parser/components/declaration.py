@@ -171,6 +171,7 @@ class DeclarationComponent(BaseComponent):
 
     def llm_function_declaration(self) -> ast.IbLLMFunctionDef:
         start_token = self.stream.previous()
+        self.stream.advance()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect LLM function name.").value
         self.stream.consume(TokenType.LPAREN, "Expect '(' after function name.")
         args = self.parameters()

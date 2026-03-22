@@ -296,6 +296,10 @@ class TestSemanticAnalyzer(unittest.TestCase):
         result, tracker, analyzer, compilation = self._analyze("global x\n")
         self.assertGreaterEqual(len(result.body), 1)
 
+    def test_analyze_llm_function_def(self):
+        result, tracker, analyzer, compilation = self._analyze("llm func ask():\nllmend\n")
+        self.assertGreaterEqual(len(result.body), 1)
+
     def test_analyze_behavior_expr(self):
         result, tracker, analyzer, compilation = self._analyze("func foo():\n    pass\n@tag~hello~\n")
         self.assertGreaterEqual(len(result.body), 2)
