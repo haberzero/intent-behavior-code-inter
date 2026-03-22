@@ -6,6 +6,7 @@ from core.base.source_atomic import Location
 from core.runtime.exceptions import RetryException
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
+from core.runtime.objects.kernel import IbObject
 
 class BaseHandler:
     """

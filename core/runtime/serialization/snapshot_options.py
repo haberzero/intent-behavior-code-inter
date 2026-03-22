@@ -4,7 +4,7 @@
 为 HostService.snapshot() 和 save_state() 提供细粒度的快照控制能力。
 """
 from dataclasses import dataclass, field
-from typing import Optional, List, Set
+from typing import Any, Optional, List, Set
 
 
 @dataclass

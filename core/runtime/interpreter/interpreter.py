@@ -17,10 +17,10 @@ from core.base.diagnostics.codes import (
     RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR, RUN_ATTRIBUTE_ERROR
 )
 from core.runtime.interfaces import (
-    Interpreter as InterpreterInterface, 
+    Interpreter as InterpreterInterface,
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
     PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService, IObjectFactory,
-    IIbBehavior, IIbIntent
+    IIbBehavior, IIbIntent, Registry
 )
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.factory import RuntimeObjectFactory
@@ -127,7 +127,7 @@ class Interpreter:
                  kernel_token: Optional[Any] = None):
         
         # 0. 启动内核引导
-        self._registry = registry or Registry()
+        self._registry = registry or KernelRegistry()
         self._kernel_token = kernel_token
         
         # [IES 2.1 Decoupling] 引入对象工厂
