@@ -3,6 +3,8 @@ from typing import Dict, Any, Optional, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from core.kernel.types import ModuleMetadata, FunctionMetadata
     from core.kernel.types.registry import MetadataRegistry
+    from core.kernel.axioms.registry import AxiomRegistry
+
 
 class HostModuleRegistry:
     """
@@ -21,19 +23,31 @@ class HostModuleRegistry:
 
 class HostInterface:
     """
-    统一的宿主环境接口注册器。
+    [IES 2.2] 统一的宿主环境接口注册器。
+
     协调元数据注册和运行时实现注册。
+    所有 HostInterface 实例必须绑定到带有 AxiomRegistry 的 MetadataRegistry。
     """
-    def __init__(self, external_registry=None):
+    def __init__(self, external_registry: Optional['MetadataRegistry'] = None):
         from core.kernel.types.registry import MetadataRegistry
-        self.metadata: 'MetadataRegistry' = external_registry if external_registry else MetadataRegistry()
+        from core.kernel.axioms.registry import AxiomRegistry
+        from core.kernel.axioms.primitives import register_core_axioms
+
+        if external_registry is not None:
+            self.metadata: 'MetadataRegistry' = external_registry
+        else:
+            axiom_reg = AxiomRegistry()
+            register_core_axioms(axiom_reg)
+            self.metadata = MetadataRegistry(axiom_registry=axiom_reg)
+
         self.runtime = HostModuleRegistry()
         self._module_metadata_map: Dict[str, 'ModuleMetadata'] = {}
 
     def register_module(self, name: str, implementation: Any, metadata: Optional['ModuleMetadata'] = None):
         """
-        同时注册元数据和实现。
-        如果 metadata 为 None，则不再进行暴力反射推断（在编译器路径下应显式提供元数据）。
+        [IES 2.2] 同时注册元数据和实现。
+
+        如果 metadata 为 None，则创建一个仅含名称的 ModuleMetadata。
         """
         self.runtime.register(name, implementation)
         if metadata:
@@ -49,3 +63,7 @@ class HostInterface:
 
     def get_module_implementation(self, name: str) -> Optional[Any]:
         return self.runtime.get(name)
+
+    def get_axiom_registry(self) -> Optional['AxiomRegistry']:
+        """获取关联的 AxiomRegistry"""
+        return self.metadata.get_axiom_registry()

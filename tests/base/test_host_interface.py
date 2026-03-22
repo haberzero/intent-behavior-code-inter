@@ -1,5 +1,5 @@
 import unittest
-from core.base.host_interface import HostModuleRegistry, HostInterface
+from core.runtime.host.host_interface import HostModuleRegistry, HostInterface
 
 
 class TestHostModuleRegistry(unittest.TestCase):
