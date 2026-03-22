@@ -162,14 +162,31 @@ class IBCIEngine(IInterpreterFactory):
         self.registry.seal_classes(self._kernel_token)
 
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
-        """[IES 2.0] 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)"""
-        # 1. 进入插件加载阶段
+        """[IES 2.0] 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
+
+        [IES 2.2] 在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
+        这确保自定义公理能在封印前注册到 AxiomRegistry。
+        """
+        from core.extension.auto_discovery import AutoDiscoveryService
+
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
-        
-        # 2. 统一由 ModuleLoader 驱动实现层的加载与注入
+
+        builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibc_modules")
+        plugins_path = os.path.join(self.root_dir, "plugins")
+        discovery = AutoDiscoveryService([builtin_path, plugins_path])
+
+        axiom_registry = self.registry.get_metadata_registry().get_axiom_registry()
+        if axiom_registry:
+            for spec in discovery.discover_plugins().values():
+                if spec.has_axioms():
+                    for name, axiom in spec.axioms.items():
+                        try:
+                            axiom_registry.register(axiom)
+                        except Exception as e:
+                            pass
+
         self.module_loader.load_and_register_all(service_context, execution_context)
-        
-        # 3. 插件加载完成，进入水合阶段
+
         self.registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, self._kernel_token)
 
     def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
