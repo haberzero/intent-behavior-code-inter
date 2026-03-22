@@ -51,7 +51,6 @@ class DeclarationComponent(BaseComponent):
             self.stream.advance() # func
             stmt = self.function_declaration()
         elif role == SyntaxRole.LLM_DEFINITION:
-            self.stream.advance() # llm
             stmt = self.llm_function_declaration()
         elif role == SyntaxRole.CLASS_DEFINITION:
             self.stream.advance() # class
@@ -172,6 +171,8 @@ class DeclarationComponent(BaseComponent):
     def llm_function_declaration(self) -> ast.IbLLMFunctionDef:
         start_token = self.stream.previous()
         self.stream.advance()
+        if self.stream.check(TokenType.FUNC):
+            self.stream.advance()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect LLM function name.").value
         self.stream.consume(TokenType.LPAREN, "Expect '(' after function name.")
         args = self.parameters()
