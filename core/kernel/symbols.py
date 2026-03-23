@@ -172,11 +172,28 @@ class SymbolTable:
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
             # [IES 2.1 UTS Integration] 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
-            if existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"):
+            # [Temporary] 外部模块符号和内置符号之间的兼容性处理
+            # [Future] 严格遵循显式引入原则时，此逻辑将被移除
+            is_compatible_builtin = (
+                (existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin")) or
+                (existing.metadata.get("is_external_module") and sym.metadata.get("is_builtin")) or
+                (existing.metadata.get("is_builtin") and sym.metadata.get("is_external_module")) or
+                (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
+            )
+            if is_compatible_builtin:
                 if existing.descriptor and sym.descriptor:
                     # 在 UTS 体系下，Interning 确保了同类描述符在同一引擎下是唯一的
+                    # [Temporary] 对于外部模块符号，如果 name 相同则认为兼容
+                    # 因为 ModuleMetadata 会因为 clone 而产生不同对象，但语义相同
                     if existing.descriptor is not sym.descriptor:
-                         raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible descriptor (existing: '{existing.descriptor.name}')")
+                        # 检查是否是同名的外部模块（由于 clone 导致的）
+                        if (hasattr(existing.descriptor, 'name') and
+                            hasattr(sym.descriptor, 'name') and
+                            existing.descriptor.name == sym.descriptor.name):
+                            # 同名外部模块，语义兼容，跳过更新
+                            # [Future] 严格遵循显式引入原则时，此逻辑将被移除
+                            return
+                        raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible descriptor (existing: '{existing.descriptor.name}')")
                 self.symbols[sym.name] = sym
                 return
             raise ValueError(f"Symbol '{sym.name}' is already defined in this scope")

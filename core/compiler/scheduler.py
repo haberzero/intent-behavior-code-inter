@@ -289,10 +289,14 @@ class Scheduler(ICompilerService):
             for imp in imports:
                 # Skip external modules - they don't have source files
                 # [IES 2.1 Refactor] 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
-                if self.host_interface.metadata.resolve(imp.module_name) is not None:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {imp.module_name}")
+                module_name = imp.module_name
+                if self.host_interface.metadata.resolve(module_name) is not None:
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {module_name}")
                     continue
-                    
+                if module_name in self.host_interface._module_metadata_map:
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module via alias: {module_name}")
+                    continue
+
                 try:
                     resolved_path = self.resolver.resolve(imp.module_name, current_path)
                     imp.file_path = resolved_path
@@ -388,6 +392,8 @@ class Scheduler(ICompilerService):
                     imp_res = artifact.get_module(imp_mod_name)
                     if imp_res:
                         s_mod_type = ModuleMetadata(name=imp_mod_name, exported_scope=imp_res.symbol_table)
+                elif imp.module_name in self.host_interface._module_metadata_map:
+                    s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
                 elif self.host_interface.metadata.resolve(imp.module_name) is not None:
                     if imp.module_name in self.plugin_type_cache:
                         s_mod_type = self.plugin_type_cache[imp.module_name]
@@ -441,31 +447,57 @@ class Scheduler(ICompilerService):
                                 curr_mod = next_mod_sym.descriptor
                     else:
                         # 普通导入或带别名导入
-                        mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, descriptor=s_mod_type)
-                        analyzer.symbol_table.define(mod_sym)
+                        # [临时方案] 检查是否已存在同名符号
+                        # [Future] 严格遵循显式引入原则：外部模块符号不预注入
+                        existing = analyzer.symbol_table.resolve(local_name)
+                        if existing:
+                            # 情况1：已存在 MODULE 符号（可能是 Prelude 预注入的外部模块）
+                            if existing.kind == SymbolKind.MODULE:
+                                # 跳过重复注入
+                                # 这符合"显式引入"原则的临时妥协：允许未 import 时使用 ai.xxx
+                                pass
+                            else:
+                                # 情况2：已存在用户定义的符号（CLASS, FUNCTION 等）
+                                # 外部模块的 import 应该被忽略或给出警告
+                                # 因为用户可能意图使用自己定义的符号
+                                pass
+                        else:
+                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, descriptor=s_mod_type, metadata={"is_external_module": True})
+                            analyzer.symbol_table.define(mod_sym)
                         
                 elif imp.import_type == ImportType.FROM_IMPORT:
                     # 2. 处理 from mod import a, b as c, *
                     for alias in imp.names:
                         if alias.name == '*':
                             # 注入所有导出的符号
+                            # [临时方案] 检查是否已存在同名符号
                             for name, sym in s_mod_type.exported_scope.symbols.items():
-                                analyzer.symbol_table.define(sym)
+                                existing = analyzer.symbol_table.resolve(name)
+                                if existing:
+                                    pass  # 跳过重复注入
+                                else:
+                                    new_sym = SymbolFactory.create_from_descriptor(name, sym.descriptor) if sym.descriptor else sym
+                                    analyzer.symbol_table.define(new_sym)
                         else:
                             # 注入特定符号
                             target_sym = s_mod_type.exported_scope.resolve(alias.name)
                             if target_sym:
                                 local_name = alias.asname if alias.asname else alias.name
-                                # 创建一个指向原符号的克隆/别名符号
-                                # [Refactor] 使用 descriptor 参数，而不是 var_type/type_signature
-                                if target_sym.kind == SymbolKind.VARIABLE:
-                                    new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, descriptor=target_sym.descriptor, def_node=target_sym.def_node)
-                                elif target_sym.kind == SymbolKind.FUNCTION:
-                                    new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, descriptor=target_sym.descriptor, def_node=target_sym.def_node)
+                                # [临时方案] 检查是否已存在同名符号
+                                existing = analyzer.symbol_table.resolve(local_name)
+                                if existing:
+                                    pass  # 跳过重复注入
                                 else:
-                                    new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, descriptor=target_sym.descriptor, def_node=target_sym.def_node)
-                                
-                                analyzer.symbol_table.define(new_sym)
+                                    # 创建一个指向原符号的克隆/别名符号
+                                    # [Refactor] 使用 descriptor 参数，而不是 var_type/type_signature
+                                    if target_sym.kind == SymbolKind.VARIABLE:
+                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                    elif target_sym.kind == SymbolKind.FUNCTION:
+                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                    else:
+                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+
+                                    analyzer.symbol_table.define(new_sym)
                             else:
                                 # 符号未找到报错
                                 analyzer.issue_tracker.report(
