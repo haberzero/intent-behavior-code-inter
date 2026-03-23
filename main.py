@@ -53,6 +53,30 @@ def main():
     check_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     check_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
 
+    # Compile command
+    compile_parser = subparsers.add_parser("compile", help="Compile only (no interpret)")
+    compile_parser.add_argument("file", help="Path to the .ibci entry file")
+    compile_parser.add_argument("--root", help="Project root directory", default=None)
+    compile_parser.add_argument("--output", "-o", help="Output file for compiled artifact", default=None)
+    compile_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
+
+    # Lex command
+    lex_parser = subparsers.add_parser("lex", help="Lexer output only (tokens)")
+    lex_parser.add_argument("file", help="Path to the .ibci entry file")
+    lex_parser.add_argument("--root", help="Project root directory", default=None)
+
+    # Parse command
+    parse_parser = subparsers.add_parser("parse", help="Parser output only (AST)")
+    parse_parser.add_argument("file", help="Path to the .ibci entry file")
+    parse_parser.add_argument("--root", help="Project root directory", default=None)
+    parse_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
+
+    # Semantic command
+    semantic_parser = subparsers.add_parser("semantic", help="Semantic analysis output only")
+    semantic_parser.add_argument("file", help="Path to the .ibci entry file")
+    semantic_parser.add_argument("--root", help="Project root directory", default=None)
+    semantic_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -67,7 +91,7 @@ def main():
         root_dir = os.path.dirname(os.path.abspath(args.file))
 
     # 初始化引擎，决定是否自动嗅探
-    auto_sniff = not args.no_sniff
+    auto_sniff = not getattr(args, 'no_sniff', False)
     
     # 处理内核调试配置
     core_debug_config = None
@@ -87,15 +111,15 @@ def main():
     engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff, core_debug_config=core_debug_config)
 
     # 1. 加载插件
-    if args.plugin:
+    if getattr(args, 'plugin', None):
         load_external_plugins(engine, args.plugin)
 
     if args.command == "run":
         # 2. 处理变量
         variables = {}
-        
+
         # 从配置文件加载
-        if args.config and os.path.exists(args.config):
+        if getattr(args, 'config', None) and os.path.exists(args.config):
             try:
                 with open(args.config, 'r', encoding='utf-8') as f:
                     cfg_data = json.load(f)
@@ -113,7 +137,7 @@ def main():
                 print(f"Warning: Failed to load config: {e}")
         
         # 从命令行参数加载 (--var key=value)
-        if args.var:
+        if getattr(args, 'var', None):
             for v in args.var:
                 if "=" in v:
                     k, val = v.split("=", 1)
@@ -126,6 +150,77 @@ def main():
     elif args.command == "check":
         success = engine.check(args.file)
         sys.exit(0 if success else 1)
+
+    elif args.command == "compile":
+        import json
+        success = engine.compile(args.file)
+        if success:
+            from core.compiler.serialization.serializer import FlatSerializer
+            serializer = FlatSerializer()
+            artifact_dict = serializer.serialize_artifact(success)
+            output = json.dumps(artifact_dict, indent=2, ensure_ascii=False)
+            if getattr(args, 'output', None):
+                with open(args.output, 'w', encoding='utf-8') as f:
+                    f.write(output)
+                print(f"Compiled artifact saved to: {args.output}")
+            else:
+                print(output)
+            sys.exit(0)
+        sys.exit(1)
+
+    elif args.command == "lex":
+        from core.compiler.lexer.lexer import Lexer
+        with open(args.file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        lexer = Lexer(content, engine.issue_tracker, debugger=engine.debugger)
+        tokens = lexer.tokenize()
+        for tok in tokens:
+            print(tok)
+        sys.exit(0)
+
+    elif args.command == "parse":
+        import json
+        success = engine.compile(args.file)
+        if success:
+            entry_rel = os.path.relpath(os.path.abspath(args.file), engine.root_dir)
+            module_name = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
+            if module_name in success.modules:
+                mod_result = success.modules[module_name]
+                ast_node = mod_result.module_ast
+                ast_dict = {
+                    "type": type(ast_node).__name__,
+                    "repr": repr(ast_node)
+                }
+                if hasattr(ast_node, '__dict__'):
+                    ast_dict["fields"] = {k: repr(v) for k, v in ast_node.__dict__.items() if not k.startswith('_')}
+                output = json.dumps(ast_dict, indent=2, ensure_ascii=False)
+                print(output)
+            sys.exit(0)
+        sys.exit(1)
+
+    elif args.command == "semantic":
+        import json
+        success = engine.compile(args.file)
+        if success:
+            entry_rel = os.path.relpath(os.path.abspath(args.file), engine.root_dir)
+            module_name = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
+            if module_name in success.modules:
+                mod_result = success.modules[module_name]
+                sym_table = mod_result.symbol_table
+                result = {
+                    "module": module_name,
+                    "symbols": {}
+                }
+                if sym_table:
+                    for name, sym in sym_table.symbols.items():
+                        result["symbols"][name] = {
+                            "kind": str(sym.kind),
+                            "type": str(sym.descriptor) if sym.descriptor else "None"
+                        }
+                output = json.dumps(result, indent=2, ensure_ascii=False)
+                print(output)
+            sys.exit(0)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
