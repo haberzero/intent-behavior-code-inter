@@ -280,7 +280,7 @@ class SemanticAnalyzer:
         # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = sym.descriptor.get_call_trait()
         writable = call_trait.get_writable_trait() if call_trait else None
-        
+
         if writable:
             # 安全回填分析得到的参数与返回类型
             writable.update_signature(param_types, ret_type)
@@ -339,7 +339,13 @@ class SemanticAnalyzer:
         if self.current_class:
             param_types.insert(0, self.current_class)
             
-        ret_type = self._resolve_type(node.returns)
+        ret_type = self._resolve_type(node.returns) if node.returns else self._str_desc
+        # [P3 FIX] LLM 函数默认返回 str 而非 void
+        # 注意：这里的 "str" 语义是"文本接收"（LLM 生成的内容），而非纯字符串类型
+        # [Future Evolution] 未来演进方向：
+        #   1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
+        #   2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
+        #   3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
         
         # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = sym.descriptor.get_call_trait()
@@ -465,20 +471,32 @@ class SemanticAnalyzer:
                         self.side_table.bind_symbol(target_node.target, sym)
                         self.side_table.bind_type(target_node.target, sym.descriptor)
                     
-                    # [NEW] 行为描述行 Lambda 化判断
-                    # 只有当目标类型明确要求具备调用能力，或者是动态类型时，才进行延迟推断
+                    # [P2 FIX] 行为描述行 Lambda 化判断 + 即时上下文处理
+                    # [Future Evolution] 未来将演进为 ReceiveMode 枚举：
+                    #   - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
+                    #   - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
+                    #   - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
+                    # 相关演进：ParserCapability.get_llm_prompt_fragment() 用于注入系统提示词
                     target_desc = sym.descriptor
                     is_explicit_callable = False
-                    
+
                     if target_desc:
-                        # 使用公理系统检查能力
                         call_cap = target_desc.get_call_trait()
                         is_dynamic = target_desc.is_dynamic()
-                        
+
                         is_explicit_callable = (call_cap is not None) or is_dynamic
-                    
-                    if isinstance(node.value, ast.IbBehaviorExpr) and is_explicit_callable:
-                        self.side_table.set_deferred(node.value, True)
+
+                    if isinstance(node.value, ast.IbBehaviorExpr):
+                        if is_explicit_callable:
+                            # 延迟上下文：behavior 表达式被包装为 callable，延迟执行
+                            self.side_table.set_deferred(node.value, True)
+                            val_type = self._behavior_desc
+                        else:
+                            # [P2 FIX] 即时上下文：behavior 表达式立即执行，返回 str 类型（LLM 调用结果）
+                            # 注意：这里的 "str" 语义是"文本接收"，而非纯字符串类型
+                            # [Future] 未来可通过 ReceiveMode.IMMEDIATE 统一处理，并在解释器层面注入相关提示词
+                            self.side_table.set_deferred(node.value, False)
+                            val_type = self._str_desc
                     
                     if not val_type.is_assignable_to(sym.descriptor):
                         hint = val_type.get_diff_hint(sym.descriptor)

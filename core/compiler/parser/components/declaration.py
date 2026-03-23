@@ -273,7 +273,7 @@ class DeclarationComponent(BaseComponent):
                 segments.append("\n")
             elif self.stream.match(TokenType.EMBEDDED_PARAM):
                 param_name = self.stream.previous().value
-                var_ref = ast.IbVarRef(name=param_name)
+                var_ref = ast.IbName(id=param_name, ctx='Load')
                 segments.append(var_ref)
             else:
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
