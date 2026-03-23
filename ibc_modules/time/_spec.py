@@ -11,7 +11,7 @@ from typing import Dict, Any, Callable
 def __ibcext_metadata__() -> Dict[str, Any]:
     """[IES 2.2] 插件元数据"""
     return {
-        "name": "ibc:time",
+        "name": "time",
         "version": "2.2.0",
         "description": "Time processing plugin",
         "dependencies": [],
