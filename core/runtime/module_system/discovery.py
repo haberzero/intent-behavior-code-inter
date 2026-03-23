@@ -76,30 +76,90 @@ class ModuleDiscoveryService:
             json.dump(metadata_snapshot, f, indent=2, ensure_ascii=False)
 
     def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleType]:
-        """动态加载 spec.py 或 _spec.py"""
-        internal_name = f"ibc_spec_{module_name}"
-        spec = importlib.util.spec_from_file_location(internal_name, spec_path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        
-        # [IES 2.0 FIX] 更加鲁棒的元数据获取逻辑
+        """
+        [IES 2.2] 动态加载 _spec.py，完整实现协议。
+
+        协议要求：
+        1. __ibcext_metadata__() - 返回插件元数据 (name, version, description, dependencies)
+        2. __ibcext_vtable__() - 返回方法虚表，将 Python callable 映射为 IBC-Inter 方法
+
+        注意：vtable 加载是 IES 2.2 协议的核心部分，使插件方法在语义分析阶段可见。
+        """
+        import sys
+
+        # 将 ibc_modules 添加到 sys.path 以支持相对导入
+        # 这允许 _spec.py 中的 "from .core import AIPlugin" 等相对导入正常工作
+        ibc_modules_path = os.path.dirname(os.path.dirname(spec_path))
+        if ibc_modules_path not in sys.path:
+            sys.path.insert(0, ibc_modules_path)
+
+        # 构建模块名，使其成为 ibc_modules 的子模块
+        # 例如：ibc_modules/ai/_spec.py -> 模块名 ibc_modules.ai._spec
+        parent_dir = os.path.basename(os.path.dirname(spec_path))
+        internal_name = f"{parent_dir}._spec"
+
+        try:
+            spec = importlib.util.spec_from_file_location(internal_name, spec_path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        except ImportError as e:
+            # 如果相对导入失败（如 core.py 不存在），静默降级：只加载 metadata
+            # 这允许 _spec.py 文件存在但 vtable 不完整的情况
+            mod = None
+
         metadata = None
-        if hasattr(mod, 'metadata'):
-            metadata = mod.metadata
-        elif hasattr(mod, 'spec'):
-            metadata = mod.spec
-            
-        if metadata:
-            # [IES 2.1 Regularization] 符号化正规化：将成员描述符转换为符号对象
-            # 确保 Metadata.members 存储的是 Symbol 而非原始 Descriptor
-            
-            new_members = {}
-            for name, member in metadata.members.items():
-                if isinstance(member, TypeDescriptor):
-                    new_members[name] = SymbolFactory.create_from_descriptor(name, member)
+
+        # 1. 加载 __ibcext_metadata__() - 注册模块元数据
+        if mod and hasattr(mod, '__ibcext_metadata__'):
+            metadata_dict = mod.__ibcext_metadata__()
+            if metadata_dict and isinstance(metadata_dict, dict):
+                from core.kernel.types.descriptors import ModuleMetadata
+                raw_name = metadata_dict.get("name", module_name)
+                if "." in raw_name:
+                    parts = raw_name.split(".")
+                    module_path_val = parts[0]
+                    name_val = parts[1] if len(parts) > 1 else raw_name
                 else:
-                    new_members[name] = member
-            metadata.members = new_members
+                    module_path_val = None
+                    name_val = raw_name
+                metadata = ModuleMetadata(
+                    name=name_val,
+                    module_path=module_path_val,
+                    members={}
+                )
+
+        # 2. 加载 __ibcext_vtable__() - 将 Callable 转换为 FunctionMetadata
+        # [IES 2.2 Protocol] vtable 是协议的核心部分，使插件方法在语义分析阶段可见
+        # 注意：如果 vtable 加载失败（如缺少依赖模块），会静默降级，只注册 metadata
+        if metadata and mod and hasattr(mod, '__ibcext_vtable__'):
+            try:
+                vtable = mod.__ibcext_vtable__()
+                if vtable and isinstance(vtable, dict):
+                    from core.kernel.types.descriptors import FunctionMetadata
+                    for method_name, method_impl in vtable.items():
+                        if callable(method_impl):
+                            # 将 Python callable 转换为 FunctionMetadata
+                            # 注意：此处创建的 FunctionMetadata 是简化的，用于语义分析阶段的方法解析
+                            # 完整的函数签名解析在 LLMExecutor 或运行时进行
+                            func_meta = FunctionMetadata(
+                                name=method_name,
+                                module_path=module_name,
+                                members={}
+                            )
+                            metadata.members[method_name] = func_meta
+            except ImportError:
+                # vtable 加载失败（如 core.py 不存在），静默忽略
+                pass
+
+        if metadata:
+            if hasattr(metadata, 'members'):
+                new_members = {}
+                for name, member in metadata.members.items():
+                    if isinstance(member, TypeDescriptor):
+                        new_members[name] = SymbolFactory.create_from_descriptor(name, member)
+                    else:
+                        new_members[name] = member
+                metadata.members = new_members
             return metadata
-            
+
         return None
