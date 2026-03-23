@@ -93,6 +93,86 @@
 **当前状态**：
 - `DynamicAxiom("behavior")` 只是占位符
 
+**未来演进 - LLM 接收模式 (Receive Mode)**：
+
+**设计目标**：统一 LLM 函数和 behavior 表达式的结果消费语义，支持系统提示词注入。
+
+**三种接收上下文**：
+| 上下文 | 枚举值 | 语义 | 返回类型 |
+|--------|--------|------|---------|
+| 即时执行 | `IMMEDIATE` | behavior 表达式立即执行 LLM 调用 | `str` |
+| 延迟执行 | `DEFERRED` | behavior 表达式被包装为 callable | `behavior` |
+| 类转换 | `CLASS_CAST` | behavior 执行后进行类型转换 | 目标类型 |
+
+**架构设计**：
+```python
+# 1. ReceiveMode 枚举
+class ReceiveMode(Enum):
+    IMMEDIATE = "immediate"   # 即时执行上下文
+    DEFERRED = "deferred"     # 延迟执行上下文
+    CLASS_CAST = "class_cast" # 类型转换上下文
+
+# 2. SideTable 扩展
+class SideTableManager:
+    def get_receive_mode(self, node) -> ReceiveMode: ...
+    def set_receive_mode(self, node, mode: ReceiveMode) -> None: ...
+
+# 3. 公理扩展 - ParserCapability
+class ParserCapability(Protocol):
+    def parse_value(self, raw_value: str) -> Any: ...
+
+    # [Future] 获取 LLM 调用时需要的系统提示词片段
+    def get_llm_prompt_fragment(self) -> Optional[str]:
+        """返回类型相关的提示词，如 '请仅返回一个整数' 或 None"""
+        return None
+
+# 4. 公理扩展 - TypeAxiom
+class TypeAxiom:
+    # [Future] 获取该类型返回值需要的提示词片段
+    def get_return_type_hint(self) -> Optional[str]:
+        """[LLM Integration] 获取类型特定的返回提示"""
+        return None
+```
+
+**实施步骤**：
+1. Phase 1: 引入 `ReceiveMode` 枚举，替代 `is_deferred` 布尔值
+2. Phase 2: 扩展 `SideTable` 支持 `node_receive_mode`
+3. Phase 3: 扩展 `ParserCapability.get_llm_prompt_fragment()`
+4. Phase 4: 扩展 `TypeAxiom.get_return_type_hint()`
+5. Phase 5: 在 `LLMExecutor` 中根据 `receive_mode` 注入不同系统提示词
+
+---
+
+### 2.5 ParserCapability LLM 提示词片段扩展
+
+**任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法
+
+**设计目标**：
+- 当 LLM 函数的返回值类型被指向某个类时，声明"如何注入系统提示词"
+- 替代当前 AIPlugin 中硬编码的 `_return_type_prompts`
+
+**接口设计**：
+```python
+class ParserCapability(Protocol):
+    """解析能力：描述一个类型如何从 LLM 结果中解析出值"""
+    def parse_value(self, raw_value: str) -> Any: ...
+
+    # [Future] 获取该类型参与 LLM 调用时需要的系统提示词片段
+    def get_llm_prompt_fragment(self) -> Optional[str]:
+        """返回类型相关的提示词，如 '请仅返回一个整数作为回答，禁止包含任何其他解释文字。'"""
+        return None
+```
+
+**与 AIPlugin 的关系**：
+- AIPlugin 中的 `_return_type_prompts` 作为 fallback 实现
+- 公理层提供类型特定的提示词声明
+- 运行时在 `LLMExecutor` 中查询公理获取提示词片段
+
+**实施位置**：
+- `core/kernel/axioms/protocols.py` - 添加方法到 `ParserCapability`
+- `core/kernel/axioms/primitives.py` - 实现各原子类型的 `get_llm_prompt_fragment()`
+- `core/runtime/interpreter/llm_executor.py` - 调用公理获取提示词片段
+
 ---
 
 ### 2.3 Intent Stack 不可变性约束
@@ -257,36 +337,109 @@ def __deepcopy__(self, memo):
 
 **任务**：让零侵入插件能够注册原生 IBC-Inter 类型（如 float、int），而不需要继承任何核心类
 
-**搁置原因**：
-- 当前 vtable 只支持返回 `Callable`（方法）
-- 原生 IBC-Inter 类型（如 float）是通过 `Axiom` 定义的，不需要继承
-- 核心级插件（AI/IDBG/HOST）目前需要继承是合理的，但理论上有更优雅的方案
+**已完成**：
+- ✅ [2026-03] `discovery.py` 中实现 `__ibcext_vtable__()` 加载逻辑
 
-**技术方案**：
-1. 扩展 `__ibcext_vtable__()` 返回值类型，支持返回 `TypeDescriptor`
-2. loader 识别 `TypeDescriptor` 并调用 `registry.register()`
-3. 类型行为由 `Axiom` 定义（像 float 一样）
-
+**技术实现**：
 ```python
-# 零侵入插件示例
-def __ibcext_vtable__():
-    return {
-        "my_type": my_type_descriptor,  # TypeDescriptor，不是 Callable
-    }
-```
-
-```python
-# loader.py 扩展
-def _register_types_from_vtable(vtable):
-    for name, item in vtable.items():
-        if isinstance(item, TypeDescriptor):
-            registry.register(name, item)
+# core/runtime/module_system/discovery.py _load_spec()
+# 1. 加载 __ibcext_metadata__() → 注册 ModuleMetadata
+# 2. 加载 __ibcext_vtable__() → 将 Callable 转换为 FunctionMetadata 注册到 members
+if hasattr(mod, '__ibcext_vtable__'):
+    vtable = mod.__ibcext_vtable__()
+    for method_name, method_impl in vtable.items():
+        func_meta = FunctionMetadata(name=method_name, ...)
+        metadata.members[method_name] = func_meta
 ```
 
 **意义**：
-- 统一内置类型和插件类型的注册方式
-- 进一步减少核心级插件的特殊性
-- 插件可以像 float 一样声明自己的"类型身份"
+- 遵循 IES 2.2 协议（`__ibcext_vtable__()` 是协议的一部分）
+- 使插件方法在语义分析阶段可见（解决 `Type 'ai' has no member 'set_config'` 问题）
+- 为未来"插件原生类参与语义检查"奠定基础
+
+**未来演进**：
+- 支持 `__ibcext_vtable__()` 返回 `TypeDescriptor` 而非仅 `Callable`
+- loader 识别 `TypeDescriptor` 并调用 `registry.register()`
+- 类型行为由 `Axiom` 定义（像 float 一样）
+
+---
+
+### 9.2 显式引入原则 (Explicit Import Principle)
+
+**任务**：重构插件注册机制，严格遵循"必须显式 import 才能使用"原则
+
+**设计原则**：
+- 插件必须显式 `import` 才能在 IBCI 代码中可见
+- 不应该有隐式的全局插件注册
+- 以前：`import ai` 只意味着"导入了一个名为 ai 的组件，里面有一些可用函数"
+- 未来：`import ai` 应该是"导入了一个名为 ai 的原生类型"
+
+**当前问题**：
+- `discover_all()` 在 `Engine.__init__()` 时无条件调用
+- 所有 ibc_modules 下的模块元数据被注册到 MetadataRegistry
+- `Prelude._init_defaults()` 从 MetadataRegistry 自动加载所有模块到 `builtin_modules`
+- 导致 `import ai` 前 `ai` 就已经是内置符号，违反显式引入原则
+
+**临时方案（当前）**：
+- 接受插件元数据在 Engine 初始化时注册（用于静态类型检查）
+- 但区分"METHOD 模块"和"原生类型模块"
+- 通过 metadata 标记模块类型：
+  ```python
+  # _spec.py
+  def __ibcext_metadata__() -> Dict[str, Any]:
+      return {
+          "name": "ai",
+          "version": "2.2.0",
+          "kind": "method_module",  # 标记为方法模块，不是类型模块
+          ...
+      }
+  ```
+
+**长期方案（演进目标）**：
+1. 延迟 `discover_all()` 调用
+   - 不在 Engine 初始化时调用
+   - 改为首次 import 或显式调用时触发
+2. 明确内置模块列表
+   - 只将真正的内置模块（sys, time 等）放入 `builtin_modules`
+   - 其他插件模块必须显式 import
+3. 支持"方法模块"和"类型模块"两种注册方式
+   - 方法模块：通过 `import` 导入，提供函数调用
+   - 类型模块：通过 `import` 导入，提供原生 IBC-Inter 类型
+
+**实施步骤**：
+1. Phase 1: 在 metadata 中添加 `kind` 字段区分模块类型
+2. Phase 2: 修改 `Prelude._init_defaults()` 只加载类型模块
+3. Phase 3: 修改 Scheduler 符号注入逻辑，标记外部模块符号
+4. Phase 4: 延迟 discover_all() 到首次 import 时
+
+---
+
+### 9.3 模块符号去重机制
+
+**任务**：解决外部模块符号与用户定义符号的冲突问题
+
+**问题场景**：
+```
+用户代码:
+import ai              # Scheduler 注入 MODULE 符号 "ai"
+class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
+    pass              # 冲突! symbol_table["ai"] 已存在
+```
+
+**根因**：
+- `import ai` 在 Pass 1 之前注入 MODULE 符号
+- 用户代码 `class ai` 在 Pass 1 中收集 CLASS 符号
+- 两者在同一符号表中定义同一名称
+
+**临时方案**：
+- 在符号表中区分 MODULE 符号和 CLASS 符号
+- 允许同名但不同 kind 的符号共存
+- 或者：在注入 import 符号时检查是否已存在用户定义的同名符号
+
+**长期方案**：
+- 严格遵循显式引入原则
+- 外部模块符号不预注入到编译时符号表
+- 只在运行时通过 InterOp 访问
 
 ---
 
