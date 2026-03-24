@@ -2,7 +2,8 @@ from typing import List, Dict, Any, Optional, Union, Callable
 from core.kernel.types import (
     TypeDescriptor, INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
     BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR,
-    ClassMetadata, FunctionMetadata, ModuleMetadata
+    ClassMetadata, FunctionMetadata, ModuleMetadata,
+    LIST_DESCRIPTOR, DICT_DESCRIPTOR
 )
 
 class ClassSpecBuilder:
@@ -40,7 +41,9 @@ class SpecBuilder:
             "bool": BOOL_DESCRIPTOR,
             "void": VOID_DESCRIPTOR,
             "any": ANY_DESCRIPTOR,
-            "var": ANY_DESCRIPTOR
+            "var": ANY_DESCRIPTOR,
+            "dict": DICT_DESCRIPTOR,
+            "list": LIST_DESCRIPTOR
         }
         self._current_class_builder: Optional[ClassSpecBuilder] = None
 
