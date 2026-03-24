@@ -21,11 +21,11 @@ class IDbgPlugin(IbPlugin):
         self.stack_inspector = capabilities.stack_inspector
         self.state_reader = capabilities.state_reader
 
-    def get_vars(self):
+    def vars(self):
         if not self.state_reader: return {}
         return self.state_reader.get_vars()
 
-    def get_last_llm(self) -> Dict[str, Any]:
+    def last_llm(self) -> Dict[str, Any]:
         if not self._capabilities:
             return {}
 
@@ -37,7 +37,7 @@ class IDbgPlugin(IbPlugin):
 
         return {}
 
-    def get_env(self) -> Dict[str, Any]:
+    def env(self) -> Dict[str, Any]:
         if not self._capabilities or not self._capabilities.stack_inspector:
             return {}
 
@@ -48,7 +48,7 @@ class IDbgPlugin(IbPlugin):
             "active_intents": inspector.get_active_intents()
         }
 
-    def inspect_fields(self, obj: Any) -> Dict[str, Any]:
+    def fields(self, obj: Any) -> Dict[str, Any]:
         if hasattr(obj, 'fields'):
             if hasattr(obj, 'serialize_for_debug'):
                 data = obj.serialize_for_debug()

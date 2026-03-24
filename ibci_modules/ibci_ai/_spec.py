@@ -1,9 +1,12 @@
 """
 [IES 2.2] AI 插件规范
 
-IES 2.2 协议实现：
+IES 2.2 协议实现（第一方组件 - 深度嵌入）：
 - __ibcext_metadata__() 返回插件元数据
-- __ibcext_vtable__() 返回方法映射表
+- __ibcext_vtable__() 返回方法映射表（使用 Python callable）
+
+注意：ai 模块深度嵌入运行流程，需要与内核代码高度绑定。
+其他模块应使用纯字典格式元数据声明。
 """
 from typing import Dict, Any, Callable
 
@@ -19,8 +22,12 @@ def __ibcext_metadata__() -> Dict[str, Any]:
 
 
 def __ibcext_vtable__() -> Dict[str, Callable]:
-    """[IES 2.2] 方法虚表"""
-    from .core import AIPlugin
+    """
+    [IES 2.2] 方法虚表
+
+    ai 模块深度嵌入运行流程，返回 Python callable 以支持 LLM 集成。
+    """
+    from ibci_modules.ibci_ai.core import AIPlugin
     impl = AIPlugin()
     return {
         "set_config": impl.set_config,

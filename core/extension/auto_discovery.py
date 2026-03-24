@@ -63,7 +63,7 @@ class AutoDiscoveryService:
         """获取默认搜索路径"""
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         return [
-            os.path.join(base_dir, "ibc_modules"),
+            os.path.join(base_dir, "ibci_modules"),
             os.path.join(base_dir, "plugins"),
         ]
 

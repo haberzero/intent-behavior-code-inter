@@ -66,7 +66,7 @@ class IBCIEngine(IInterpreterFactory):
         self.debugger.output_callback = None # 默认
 
         # 1. 初始化模块发现服务 (内置路径 + 插件路径)
-        builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibc_modules")
+        builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibci_modules")
         plugins_path = os.path.join(self.root_dir, "plugins")
         
         self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
@@ -171,7 +171,7 @@ class IBCIEngine(IInterpreterFactory):
 
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
 
-        builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibc_modules")
+        builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibci_modules")
         plugins_path = os.path.join(self.root_dir, "plugins")
         discovery = AutoDiscoveryService([builtin_path, plugins_path])
 

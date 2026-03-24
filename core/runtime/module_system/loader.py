@@ -189,7 +189,7 @@ class ModuleLoader(IModuleLoader):
             implementation = host_interface.get_module_implementation(entry)
             if not implementation: continue
 
-            # [IES 2.2] 尝试绑定模块级 vtable（对于 ibc_modules 下的模块）
+            # [IES 2.2] 尝试绑定模块级 vtable（对于 ibci_modules 下的模块）
             self._bind_vtable_from_spec_auto(implementation, entry, self.search_paths)
 
             # [IES 2.0] 校验与绑定 (传入 capabilities 以支持 Proxy VTable 包装)
@@ -235,8 +235,8 @@ class ModuleLoader(IModuleLoader):
                     if project_root not in sys.path:
                         sys.path.insert(0, project_root)
                     
-                    # 使用全路径加载 (例如 ibc_modules.idbg)
-                    full_pkg_name = f"ibc_modules.{entry}"
+                    # 使用全路径加载 (例如 ibci_modules.ibci_idbg)
+                    full_pkg_name = f"ibci_modules.{entry}"
                     mod = importlib.import_module(full_pkg_name)
                     
                     # 实例化：优先寻找 create_implementation 工厂
