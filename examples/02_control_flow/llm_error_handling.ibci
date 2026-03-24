@@ -1,6 +1,13 @@
 import ai
+import file
+import json
 
 # 1. 生产环境配置
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 # 2. 模拟测试配置 (TESTONLY)
@@ -34,7 +41,7 @@ llmexcept:
 # 3. 混合 try-except 捕获普通运行时错误
 try:
     int x = 10 / 0
-except str as e:
-    print("\n捕获到普通运行时错误: " + e)
+except Exception as e:
+    print("\n捕获到普通运行时错误: " + (str)e)
 finally:
     print("清理工作已完成。")

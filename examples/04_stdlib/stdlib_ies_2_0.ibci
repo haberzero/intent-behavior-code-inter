@@ -1,5 +1,12 @@
 import ai
+import file
+import json
 # 生产环境配置
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 import net
@@ -9,7 +16,7 @@ print("--- [stdlib_ies_2_0.ibci] ---")
 
 # 1. 网络请求 (IES 2.0 新增)
 print("正在发起网络请求...")
-str html = net.get("https://www.example.com", {})
+str html = net.get("https://www.example.com")
 print("获取到的 HTML 长度: " + (str)@~ 数一下 $html 的长度 ~)
 
 # 2. 结构化校验 (IES 2.0 新增)

@@ -1,7 +1,14 @@
 import ai
+import file
+import json
 import idbg
 
 # 配置 AI (生产模式)
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 # 模拟模式 (可选)
@@ -25,9 +32,9 @@ else:
 # 查看最后一次 LLM 调用细节
 dict last_llm = idbg.last_llm()
 print("\n--- Last LLM Call Details ---")
-print("Sys Prompt: " + (str)last_llm.sys_prompt)
-print("User Prompt: " + (str)last_llm.user_prompt)
-print("Response: " + (str)last_llm.response)
+print("Sys Prompt: " + (str)last_llm["sys_prompt"])
+print("User Prompt: " + (str)last_llm["user_prompt"])
+print("Response: " + (str)last_llm["response"])
 
 # 查看环境信息
 dict env_info = idbg.env()

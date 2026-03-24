@@ -5,10 +5,10 @@ import file
 
 # 1. 加载配置
 dict config = json.parse(file.read("api_config.json"))
-dict default_model = config["default_model"]
-str url = default_model["base_url"]
-str key = default_model["api_key"]
-str model = default_model["model"]
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 
 ai.set_config(url, key, model)
 
@@ -28,7 +28,7 @@ intent "角色：历史学家":
     str res1 = @~请简述一下文艺复兴~
     # 使用 idbg 验证活跃意图
     dict env1 = idbg.env()
-    print("当前活跃意图总数: " + str(len(env1["active_intents"])))
+    print("当前活跃意图总数: " + (str) len((list) env1["active_intents"]))
     
     print("\n[意图块内] 使用 @! (排他模式/Override):")
     # @! 会忽略所有之前的意图，仅使用当前行定义的意图

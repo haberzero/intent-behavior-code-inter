@@ -1,7 +1,14 @@
 import ai
+import file
+import json
 
 # 使用注入的变量配置 AI
 # 这些变量由 main.py 从 api_config.json 自动注入
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 print("--- 正在测试本地 LLM 连接 (" + model + ") ---")

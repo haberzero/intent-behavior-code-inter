@@ -1,6 +1,13 @@
 import ai
+import file
+import json
 
 # 1. 生产环境配置：使用自动注入的变量
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 # 2. 模拟测试配置 (TESTONLY)：如果无法连接真实 LLM，请取消注释以下行
@@ -33,4 +40,4 @@ callable analyze = @~ 评论一下这段文字: $text ~
 
 str text = "白日依山尽，黄河入海流。"
 # 调用时，之前捕获的意图（文学评论家）会自动生效。
-print("文学评论: " + analyze())
+print("文学评论: " + (str) analyze())

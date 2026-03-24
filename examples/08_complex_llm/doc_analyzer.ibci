@@ -3,6 +3,11 @@ import file
 import json
 
 # 1. 生产环境配置
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 # 2. 模拟测试配置 (TESTONLY)
@@ -43,8 +48,8 @@ if file.exists(sample_path):
     dict report = 分析文档(content, "提取核心概念和历史背景")
     
     print("\n[AI 分析报告]:")
-    print("标题: " + report["title"])
-    print("摘要: " + report["summary"])
+    print("标题: " + (str)report["title"])
+    print("摘要: " + (str)report["summary"])
     
     # 4. 容错处理
     if @~ 检查报告是否完整且包含量子纠缠的描述？请回答 1 或 0。 ~:

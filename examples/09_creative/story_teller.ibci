@@ -3,6 +3,11 @@ import file
 import idbg
 
 # 1. 生产环境配置
+dict config = json.parse(file.read("api_config.json"))
+dict default_model = (dict) config["default_model"]
+str url = (str) default_model["base_url"]
+str key = (str) default_model["api_key"]
+str model = (str) default_model["model"]
 ai.set_config(url, key, model)
 
 # 2. 模拟测试配置 (TESTONLY)
@@ -39,13 +44,13 @@ intent "风格：蒸汽朋克 + 忧郁":
     print("正在构思第一章...")
     dict chapter1 = 生成章节(background, protagonist, 1)
     
-    print("\n[第一章: " + chapter1["title"] + "]")
-    print("内容预览: " + chapter1["content"])
-    print("氛围: " + str(chapter1["atmosphere"]))
+    print("\n[第一章: " + (str)chapter1["title"] + "]")
+    print("内容预览: " + (str)chapter1["content"])
+    print("氛围: " + (str)chapter1["atmosphere"])
     
     # 4. 使用 idbg 观察“创作现场”
     dict env = idbg.env()
-    print("\n[内核观测] 创作现场活跃意图数量: " + str(len(env["active_intents"])))
+    print("\n[内核观测] 创作现场活跃意图数量: " + (str)len((list)env["active_intents"]))
 
 # 5. 意图排他性创作：转向喜剧风格
 print("\n风格突变！切换到排他性意图模式...")
