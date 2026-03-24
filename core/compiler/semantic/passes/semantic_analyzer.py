@@ -170,6 +170,10 @@ class SemanticAnalyzer:
         return self._any_desc
 
     def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000", hint: Optional[str] = None):
+        if code == "INT_001":
+            import traceback
+            traceback.print_stack()
+            raise Exception(message)
         self.issue_tracker.error(message, node, code=code, hint=hint)
 
     def _visit_llmexcept(self, fallback: Optional[List[ast.IbStmt]]):
@@ -559,7 +563,8 @@ class SemanticAnalyzer:
             # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
             iter_trait = iter_type.get_iter_trait()
             if iter_trait:
-                element_type = iter_type.get_element_type()
+                # [IES 2.1] 修复：通过 TypeDescriptor 统一获取 element_type，以支持引用解析
+                element_type = iter_type.get_element_type() or self._any_desc
             else:
                 self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                 element_type = self._any_desc
@@ -805,7 +810,7 @@ class SemanticAnalyzer:
         # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
         target_type = self._resolve_type(node.type_annotation)
         if target_type:
-            self.side_table.bind_type(node.uid, target_type)
+            self.side_table.bind_type(node, target_type)
             return target_type
         return self._any_desc
         
@@ -909,6 +914,7 @@ class SemanticAnalyzer:
             
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
         res = func_type.resolve_return(arg_types)
+        
         if not res:
             # [IES 2.1 Axiom] 通过 Trait 提取签名信息进行诊断
             if call_trait and hasattr(call_trait, 'param_types'):

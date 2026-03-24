@@ -252,6 +252,9 @@ class TypeDescriptor:
                 axiom_hint = s._axiom.get_diff_hint(o)
                 if axiom_hint: return axiom_hint
             
+            if s.is_dynamic() or s.name in ("Any", "var"):
+                return f"Expected '{o.name}', but got dynamic type '{s.name}'. Use explicit cast (e.g. '({o.name}) expr') to convert it."
+            
             return f"Expected '{o.name}', but got '{s.name}'."
 
         # 2. 泛型参数匹配 (如果子类支持)
@@ -539,11 +542,8 @@ class FunctionMetadata(TypeDescriptor):
         return self
 
     def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
-        # 优先使用 Axiom (如果有)
-        res = super().resolve_return(args)
-        if res: return res
-        
-        # 回退到静态推导
+        # [FIX] FunctionMetadata 是具体的签名描述，不应该被动态公理拦截
+        # 静态推导：检查参数匹配
         if len(args) != len(self.param_types):
             return None
         for i, (expected, actual) in enumerate(zip(self.param_types, args)):
