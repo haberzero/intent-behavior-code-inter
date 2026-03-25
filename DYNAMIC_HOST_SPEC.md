@@ -208,4 +208,50 @@ DynamicHost 依赖插件系统提供服务：
 
 ---
 
+## 附录：实现状态说明
+
+> 本附录于 2026-03-25 添加，用于说明本规范中描述功能的实现状态。
+
+### A.1 已实现功能
+
+| 功能 | 状态 | 备注 |
+|------|------|------|
+| 实例级隔离 | ✅ 已实现 | 通过 registry.clone() 实现 |
+| 环境继承 | ✅ 已实现 | 通过 inherit_plugins 配置实现 |
+| 快照保存/恢复 | ✅ 已实现 | save_state/load_state |
+| 文件交互 | ✅ 已实现 | 主环境通过文件与子环境交互 |
+| 返回基本类型 | ✅ 已实现 | int/str/bool/float/none |
+| 异常传播 | ⚠️ 部分实现 | 异常会传播但状态可能不干净 |
+
+### A.2 代码审计发现的问题
+
+#### A.2.1 异常处理后状态可能不干净
+
+**问题描述**：
+- 异常恢复后主环境可能已受副作用影响（如已写入文件）
+- 快照恢复在异常抛出之前执行
+
+**涉及代码**：
+- `core/runtime/host/service.py:176-181`
+
+#### A.2.2 intent_stack 序列化缺失
+
+**问题描述**：
+- IntentNode 链表无法直接序列化
+- `runtime_context.py` 的 `intent_stack` setter 期望 IntentNode 但传入 list
+
+**涉及代码**：
+- `core/runtime/interpreter/runtime_context.py:418-424`
+- `core/runtime/serialization/runtime_serializer.py:200`
+
+### A.3 与代码不一致处
+
+| 规范描述 | 实际代码行为 |
+|---------|-------------|
+| 异常传播机制 | 实现但状态可能不干净 |
+| 向后兼容适配器 | 规范说"已排除"但代码已实现 generate_and_run 相关功能 |
+
+---
+
 *本文档为 DynamicHost 动态宿主的说明文档，客观描述其在 IBC-Inter 项目中的定义和作用。*
+*最后更新：2026-03-25（添加实现状态附录）*

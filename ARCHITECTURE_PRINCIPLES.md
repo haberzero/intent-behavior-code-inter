@@ -576,5 +576,61 @@ IBCI脚本 ──→ import host ──→ HostImplementation ──→ HostServ
 
 ---
 
+## 附录：2026-03-25 代码审计新增问题
+
+> 以下问题在 2026-03-25 代码审计中新发现，需要在未来版本中修复。
+
+### B.1 intent_stack 类型不匹配
+
+**问题描述**：
+- `intent_stack` setter 期望 `IntentNode`，但多处传入 `list`
+- 会导致 `TypeError`
+
+**涉及文件**：
+- `core/runtime/interpreter/runtime_context.py` (setter 定义)
+- `core/runtime/interpreter/handlers/base_handler.py:91` (调用点)
+- `core/runtime/serialization/runtime_serializer.py:200` (调用点)
+
+**修复方案**：
+- 方案A：将 setter 改为接受 `list` 并转换为 `IntentNode` 链表
+- 方案B：将调用点改为传入 `IntentNode`
+
+### B.2 llmexcept 机制异常捕获路径断裂
+
+**问题描述**：
+- `visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装
+- 子节点抛出的 `LLMUncertaintyError` 无法被父节点 llmexcept 捕获
+
+**涉及文件**：
+- `core/runtime/interpreter/handlers/stmt_handler.py`
+
+### B.3 Symbol.Kind typo
+
+**问题描述**：
+- `scope_manager.py:44` 使用了不存在的 `Symbol.Kind` 而非 `SymbolKind`
+- 会导致 AttributeError
+
+**涉及文件**：
+- `core/compiler/semantic/passes/scope_manager.py:44`
+
+### B.4 FunctionMetadata 逆变检查错误
+
+**问题描述**：
+- 参数类型检查使用协变而非逆变
+- 导致 `int` 不能赋值给 `float` 参数槽位
+
+**涉及文件**：
+- `core/kernel/types/descriptors.py`
+
+### B.5 int // int 返回 float
+
+**问题描述**：
+- 整除操作应返回 `int`，实际返回 `float`
+
+**涉及文件**：
+- `core/kernel/axioms/primitives.py`
+
+---
+
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
-*最后更新：2026-03-21*
+*最后更新：2026-03-25（添加代码审计新增问题附录 B）*

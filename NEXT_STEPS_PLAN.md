@@ -1,129 +1,317 @@
-# IBC-Inter 下一步工作计划
+# IBC-Inter MVP 实现计划
 
-> 本文档记录 IBC-Inter 项目的已完成工作和后续计划。
+> 本文档记录 IBC-Inter 第一版 MVP Demo 的实现计划。
 >
-> **生成日期**：2026-03-21
-> **版本**：V4.0
-> **状态**：Phase 0-5 全部完成，待单元测试验证
+> **MVP 核心范围**：behavior、llm、llmexcept、llmretry、DynamicHost最小功能
+>
+> **目标**：能够真正展示 IBC-Inter 的核心亮点，而不是"编译通过但功能不正确"
+>
+> **生成日期**：2026-03-25
+> **版本**：V2.0
 
 ---
 
-## 一、已完成工作汇总
+## 一、MVP 目标声明
 
-### Phase 0：架构修复
+### 1.1 什么是 MVP Demo
 
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| A.0.1 HostInterface 位置 | ✅ | 维持在 runtime/host/ |
-| A.0.2 MetadataRegistry 双轨制 | ✅ | discover_all() 正确传递 registry.get_metadata_registry() |
-| A.0.3 HOST 插件 spec 命名 | ✅ | spec.py → _spec.py，run → run_isolated |
-| A.0.4 builtin_initializer 清理 | ✅ | 移除孤立的 host_* 函数 |
+MVP (Minimum Viable Product) Demo 的目标是：
 
-### Phase 1：公理体系健壮性
+1. **功能正确** - 不是"编译通过但运行错误"，而是真正工作的核心功能
+2. **亮点突出** - 清晰展示 IBC-Inter 的核心创新：behavior、意图系统、llmexcept/retry
+3. **可运行** - 用户运行后能直接看到 AI 调用的实际效果
 
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| 3.0 ListMetadata/DictMetadata fallback | ✅ | 移除妥协性 fallback |
-| 3.1 StrAxiom 修复 | ✅ | resolve_item/get_element_type 正确实现 |
-| 3.2 AxiomHydrator 修复 | ✅ | 移除静默返回 |
-| 3.3 ExpressionAnalyzer 修复 | ✅ | 移除静默 fallback |
+### 1.2 MVP 核心功能清单
 
-### Phase 2：风险消除
-
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| inherit_intents 默认值 | ✅ | 修改为 False |
-
-### Phase 3：DynamicHost 最小实现
-
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| 3.1 基本内置类型返回值机制 | ✅ | TypeAxiom 添加 can_return_from_isolated() |
-| 3.2 DynamicHost 异常处理 | ✅ | IsolatedRunResult 结构化返回 |
-| 3.3 IssueTracker 序列化 | ✅ | to_dict() 方法 |
-
-### Phase 4：核心语法完善
-
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| 4.1 HOST 插件 spec 更新 | ✅ | _spec.py + IES 2.2 协议 |
-| 4.2 str 方法扩展 | ✅ | upper/lower/strip/split/is_empty |
-
-### Phase 5：可选扩展
-
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| 5.1 AI 组件异步并发 | ✅ | 最小可行层 llm_tasks.py |
-| 5.2 子解释器快照机制 | ✅ | SnapshotOptions 配置 |
-
-### Phase 6：IES 2.2 插件系统重构
-
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| 6.1 AutoDiscoveryService | ✅ | 自动插件发现 |
-| 6.2 固定命名方法协议 | ✅ | __ibcext_metadata__ / __ibcext_vtable__ |
-| 6.3 向后兼容适配器 | ❌ | **已删除**，不需要兼容旧版 |
-| 6.4 内置插件迁移 | ✅ | HOST/AI/IDBG 实现 IES 2.2 |
-| 6.5 元数据序列化 | ✅ | to_dict() + export_metadata() |
-
-### 额外完成工作
-
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| 装饰器体系删除 | ✅ | 移除 @method/@module 装饰器 |
-| IES 2.2 vtable 绑定 | ✅ | _ibcext_vtable_func 机制 |
-| DynamicHost IES 2.2 | ✅ | 迁移到模块级 vtable |
-| 兼容性回退清理 | ✅ | 移除所有 fallback 代码 |
-| legacy_plugin 删除 | ✅ | 删除旧插件目录 |
-
----
-
-## 二、IES 2.2 架构
-
-### 插件分类
-
-| 类型 | 示例 | 核心绑定 | 说明 |
-|------|------|---------|------|
-| **零侵入插件** | math, json, time, net, schema, file*, sys* | ❌ | 不继承任何核心类 |
-| **核心级插件** | host, ai, idbg | ✅ | 继承 IbPlugin/ILLMProvider |
-
-*file/sys 在最小版本绕过 permission_manager
-
-### IES 2.2 协议
-
-```
-_spec.py (模块级)
-├── __ibcext_metadata__() → 返回元数据
-└── __ibcext_vtable__() → 返回方法映射表
-
-↓ loader 自动绑定
-
-implementation (类实例)
-└── _ibcext_vtable_func → 指向模块级函数
-```
-
-### 禁止事项
-
-- ❌ 禁止在插件中使用 @method/@module 装饰器
-- ❌ 禁止在 _spec.py 中 import SpecBuilder
-- ❌ 禁止保留任何兼容性回退代码
-- ❌ 禁止使用 fallback 逻辑
-
----
-
-## 三、待执行工作
-
-### 单元测试收敛
-
-| 任务 | 优先级 | 说明 |
+| 功能 | 优先级 | 说明 |
 |------|--------|------|
-| Phase 0-6 回归测试 | 高 | 验证所有修改未破坏现有功能 |
+| **Behavior** | 🔴 核心 | @~...~ 语法，LLM 调用 |
+| **Intent 系统** | 🔴 核心 | @, @+, @-, @! 意图修饰符 |
+| **llm 函数** | 🔴 核心 | llm ... __sys__ ... __user__ ... llmend |
+| **llmexcept** | 🔴 核心 | AI 逻辑判断模糊时进入 except 分支 |
+| **llmretry** | 🔴 核心 | retry 重新发起 LLM 调用 |
+| **DynamicHost 最小功能** | 🔴 核心 | 实例隔离、快照保存/恢复 |
+
+### 1.3 排除在 MVP 之外的功能
+
+以下功能在 PENDING_TASKS.md 中被标记为"高级特性"或"架构理想"，不在 MVP 范围内：
+
+- Intent 公理化
+- Behavior 公理化
+- 零侵入插件注册
+- dict key 类型约束
+- 多值返回 Tuple
+- 意图标签 (#1, #2)
+- 进程级隔离
 
 ---
 
-## 四、版本历史
+## 二、P0 紧急修复任务
 
-| 版本 | 日期 | 变更 |
-|------|------|------|
-| V4.0 | 2026-03-22 | Phase 0-6 全部完成，IES 2.2 架构确立 |
-| V3.2 | 2026-03-21 | 初始版本 |
+> 这些问题在代码审计中被发现，必须在 MVP 之前修复，否则核心功能无法正常工作。
+
+### 2.1 llmexcept 机制修复 🔴 最高优先级
+
+**问题**：`visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装，异常捕获路径断裂
+
+**影响**：
+- llmexcept 块永远不会执行
+- AI 判断模糊时程序会直接崩溃，而不是进入 except 分支
+- **MVP 的 llmexcept/retry 核心亮点无法展示**
+
+**涉及文件**：
+- `core/runtime/interpreter/handlers/stmt_handler.py`
+
+**修复方案**：
+1. 修改 `visit_IbIf/While/For` 使用 `_with_unified_fallback` 包装 LLM 调用
+2. 确保子节点抛出的 `LLMUncertaintyError` 能被父节点 llmexcept 捕获
+
+**验证标准**：
+```ibc-inter
+if @~MOCK:FAIL 这是一个测试~:
+    print("不应该打印")
+llmexcept:
+    print("应该打印这一行")
+```
+运行结果应该是：`应该打印这一行`
+
+---
+
+### 2.2 intent_stack 类型修复
+
+**问题**：`intent_stack` setter 期望 `IntentNode`，但多处传入 `list`，会导致 `TypeError`
+
+**影响**：
+- 运行时可能抛出 TypeError
+- 意图栈功能失效
+
+**涉及文件**：
+- `core/runtime/interpreter/runtime_context.py`
+- `core/runtime/interpreter/handlers/base_handler.py`
+- `core/runtime/serialization/runtime_serializer.py`
+
+**修复方案**：
+- 将 setter 改为接受 `list` 并转换为 `IntentNode` 链表
+
+---
+
+### 2.3 Mock 机制完善
+
+**问题**：MOCK:FAIL/REPAIR 前缀完全未实现，TESTONLY 模式总是返回 "1"
+
+**影响**：
+- 无法模拟 AI 判断模糊的场景
+- **llmexcept/retry 测试无法进行**
+
+**涉及文件**：
+- `ibci_modules/ibci_ai/core.py`
+
+**修复方案**：
+1. 实现 `MOCK:FAIL` - 触发 llmexcept
+2. 实现 `MOCK:TRUE/FALSE` - 返回固定判定值
+3. 实现 `MOCK:REPAIR` - 首次返回模糊值，重试后返回确定值
+
+**验证标准**：
+```ibc-inter
+# 测试 llmexcept
+if @~MOCK:FAIL 测试~:
+    print("不会执行")
+llmexcept:
+    print("应该执行")
+
+# 测试 llmretry
+for @~MOCK:REPAIR 请判断~:
+    print("循环体")
+    break
+```
+
+---
+
+## 三、P1 功能完善任务
+
+> 这些问题影响功能正确性，但有 workaround 或仅影响边缘场景。
+
+### 3.1 Symbol.Kind typo 修复
+
+**问题**：`scope_manager.py:44` 使用了不存在的 `Symbol.Kind` 而非 `SymbolKind`
+
+**影响**：特定代码路径可能触发 AttributeError
+
+**涉及文件**：
+- `core/compiler/semantic/passes/scope_manager.py:44`
+
+**修复方案**：将 `Symbol.Kind.VARIABLE` 改为 `SymbolKind.VARIABLE`
+
+---
+
+### 3.2 ai.set_retry() 功能实现
+
+**问题**：重试次数配置被存储但从未读取，硬编码为 3
+
+**影响**：用户无法通过 API 配置重试次数
+
+**涉及文件**：
+- `ibci_modules/ibci_ai/core.py`
+- `core/runtime/interpreter/interpreter.py`
+
+**修复方案**：让 `_with_unified_fallback` 读取配置的重试次数
+
+---
+
+## 四、MVP Example 实现
+
+> 这些是 MVP Demo 真正需要运行的 Example。
+
+### 4.1 基础 Behavior 示例
+
+```ibc-inter
+# basic_behavior_demo.ibci
+# 目标：展示 @~...~ 语法调用 LLM
+
+str response = @~请简单介绍一下自己~
+print(response)
+```
+
+**预期结果**：调用 LLM，返回自我介绍
+
+---
+
+### 4.2 Intent 修饰符示例
+
+```ibc-inter
+# intent_demo.ibci
+# 目标：展示 @, @+, @-, @! 意图修饰符
+
+@+ 你是一个严肃的顾问
+str advice = @~请给出一个建议~
+print(advice)
+```
+
+**预期结果**：LLM 收到"严肃顾问"的上下文约束
+
+---
+
+### 4.3 llm 函数定义示例
+
+```ibc-inter
+# llm_function_demo.ibci
+# 目标：展示 llm ... __sys__ ... __user__ ... llmend 语法
+
+llm 翻译(str 原文, str 目标语言) -> str:
+    __sys__
+    你是一个专业翻译。
+    __user__
+    原文: $__原文__
+    目标语言: $__目标语言__
+llmend
+
+str result = 翻译("Hello", "中文")
+print(result)
+```
+
+**预期结果**：调用 LLM 翻译，返回中文
+
+---
+
+### 4.4 llmexcept + llmretry 示例 🔴 核心亮点
+
+```ibc-inter
+# llm_error_handling_demo.ibci
+# 目标：展示 llmexcept 和 llmretry 机制
+# 这是 IBC-Inter 的核心创新！
+
+print("开始测试 llmexcept...")
+
+if @~MOCK:FAIL 请判断 1+1 是否等于 2~:
+    print("条件为真（AI 判断模糊）")
+else:
+    print("条件为假")
+
+llmexcept:
+    print("检测到 AI 判断模糊，正在重试...")
+    retry "请直接回答 1 或 0，不要解释"
+```
+
+**预期结果**：
+1. 第一次 AI 调用返回模糊值
+2. 进入 llmexcept 分支
+3. 执行 retry，重新发起调用
+4. 第二次调用返回确定值
+
+**这是 IBC-Inter 区别于其他编程语言的核心亮点！**
+
+---
+
+### 4.5 DynamicHost 最小功能示例
+
+```ibc-inter
+# dynamic_host_demo.ibci
+# 目标：展示 DynamicHost 的实例隔离和快照恢复
+
+host.print("主环境开始")
+
+# 启动隔离子环境
+host.run_isolated({
+    "inherit_plugins": true
+}, {
+    host.print("子环境开始")
+    host.set_var("x", 42)
+    host.print("子环境设置 x = " + (str)host.get_var("x"))
+})
+
+host.print("主环境恢复")
+host.print("子环境的修改没有影响主环境")
+```
+
+**预期结果**：子环境的修改被隔离，不影响主环境
+
+---
+
+## 五、MVP 测试验证清单
+
+> MVP 必须通过以下测试验证：
+
+| 测试 | 验证内容 | 通过标准 |
+|------|---------|---------|
+| T1 | Behavior 语法 | @~...~ 能调用 LLM 并返回结果 |
+| T2 | Intent 修饰符 | @+ 能叠加意图上下文 |
+| T3 | llm 函数定义 | llm ... llmend 能定义并调用 LLM 函数 |
+| T4 | llmexcept 捕获 | AI 判断模糊时进入 except 分支 |
+| T5 | llmretry 重试 | retry 能重新发起 LLM 调用 |
+| T6 | DynamicHost 隔离 | 子环境修改不影响主环境 |
+| T7 | Mock FAIL | MOCK:FAIL 能触发 llmexcept |
+| T8 | Mock REPAIR | MOCK:REPAIR 能触发 retry |
+
+---
+
+## 六、MVP 发布检查清单
+
+在发布 MVP Demo 之前，必须确认：
+
+- [ ] P0 所有问题已修复
+- [ ] P1 问题已记录或有 workaround
+- [ ] Example 4.4 (llmexcept/retry) 能真正工作
+- [ ] Mock 机制能模拟 AI 模糊判断
+- [ ] DynamicHost 隔离功能正常
+- [ ] README 中的快速开始指南能运行成功
+- [ ] 没有"编译通过但功能错误"的 Example
+
+---
+
+## 七、MVP 之后
+
+MVP 发布后，以下功能可以在后续版本中迭代：
+
+| 功能 | 优先级 | 说明 |
+|------|--------|------|
+| Intent 公理化 | 中 | 更优雅的编译期设计 |
+| Behavior 公理化 | 中 | 更完整的类型系统 |
+| 意图标签 | 低 | 精细化意图控制 |
+| 零侵入插件 | 低 | 生产环境特性 |
+
+详见 [PENDING_TASKS.md](PENDING_TASKS.md)
+
+---
+
+*本文档为 IBC-Inter MVP 实现计划*
+*最后更新：2026-03-25*

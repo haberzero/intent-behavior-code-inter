@@ -80,6 +80,8 @@
 - Intent 相关类型只是 DynamicAxiom 占位符
 - 涉及文件：kernel/axioms/primitives.py, kernel/types/descriptors.py, runtime/serialization/runtime_serializer.py, runtime/objects/intent.py
 
+**与MVP关系**：不影响MVP核心功能（behavior、llm、llmexcept、llmretry）
+
 ---
 
 ### 2.2 Behavior 完整公理化
@@ -92,6 +94,8 @@
 
 **当前状态**：
 - `DynamicAxiom("behavior")` 只是占位符
+
+**与MVP关系**：不影响MVP核心功能
 
 **未来演进 - LLM 接收模式 (Receive Mode)**：
 
@@ -253,7 +257,113 @@ class ParserCapability(Protocol):
 
 ## 五、其他未解决问题
 
-### 5.1 LLM 输出持久化
+### 5.0 审计新发现 P0 紧急问题 ⚠️ [2026-03-25 审计]
+
+> 以下问题在本次审计中被发现，之前未被记录，必须在MVP之前确认或修复。
+
+#### 5.0.1 llmexcept 机制设计缺陷 🔴 P0
+
+**问题**：`visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装，异常捕获路径断裂
+
+**影响**：
+- llmexcept 块永远不会执行
+- AI 判断模糊时程序会直接崩溃，而不是进入 except 分支
+- **MVP 的 llmexcept/retry 核心亮点无法展示**
+
+**涉及文件**：
+- `core/runtime/interpreter/handlers/stmt_handler.py:132-143`
+
+**解决方案方向**：
+1. 修改 `visit_IbIf/While/For` 使用 `_with_unified_fallback` 包装 LLM 调用
+2. 确保子节点抛出的 `LLMUncertaintyError` 能被父节点 llmexcept 捕获
+
+**与MVP关系**：🔴 **直接影响MVP核心亮点，必须修复**
+
+---
+
+#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 🔴 P0
+
+**问题**：文档声称的 `MOCK:TRUE/FALSE/FAIL/REPAIR` 前缀检测**完全不存在**，TESTONLY 模式总是返回 "1"
+
+**影响**：
+- 无法模拟 AI 判断模糊的场景
+- **llmexcept/retry 测试无法进行**
+
+**涉及文件**：
+- `ibci_modules/ibci_ai/core.py:165-184`
+
+**解决方案方向**：
+1. 实现 `MOCK:FAIL` - 触发 llmexcept
+2. 实现 `MOCK:TRUE/FALSE` - 返回固定判定值
+3. 实现 `MOCK:REPAIR` - 首次返回模糊值，重试后返回确定值
+
+**与MVP关系**：🔴 **直接影响MVP测试验证，必须修复**
+
+---
+
+#### 5.0.3 意图标签解析缺失 🔴 P0
+
+**问题**：语法手册描述了 `@+#1`, `@-#2` 等语法，但 `#1`, `#2` 标签**完全未被解析**，tag 字段始终为 None
+
+**影响**：
+- 意图标签功能无法使用
+- 精细化意图控制失效
+
+**涉及文件**：
+- `core/compiler/parser/components/statement.py:148-203`
+
+**解决方案方向**：
+1. 在 lexer/scanner 中识别 `#数字` 标签语法
+2. 在 parser 的 intent 处理中提取标签
+3. 在 IntentNode 中存储 tag 信息
+
+**与MVP关系**：🟡 **不影响MVP核心亮点展示，属于边缘功能**
+
+---
+
+#### 5.0.4 Symbol.Kind typo 🔴 P1
+
+**问题**：`scope_manager.py:44` 使用了不存在的 `Symbol.Kind` 而非 `SymbolKind`
+
+**影响**：特定代码路径可能触发 AttributeError
+
+**涉及文件**：
+- `core/compiler/semantic/passes/scope_manager.py:44`
+
+**解决方案方向**：将 `Symbol.Kind.VARIABLE` 改为 `SymbolKind.VARIABLE`
+
+**与MVP关系**：🟡 **如不触发则不影响，但属于低级错误应修复**
+
+---
+
+#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1
+
+**问题**：`@!` 修饰的意图内容不会被注入到 prompt
+
+**涉及文件**：
+- `core/kernel/intent_resolver.py:46-48`
+
+**解决方案方向**：修复 intent_resolver 确保 `@!` 内容被正确追加
+
+**与MVP关系**：🟡 **属于语义正确性问题**
+
+---
+
+#### 5.0.6 ai.set_retry() 功能未实现 🔴 P1
+
+**问题**：重试次数配置被存储但从未读取，硬编码为 3
+
+**涉及文件**：
+- `ibci_modules/ibci_ai/core.py:86-87`
+- `core/runtime/interpreter/interpreter.py`
+
+**解决方案方向**：让 `_with_unified_fallback` 读取配置的重试次数
+
+**与MVP关系**：🟡 **用户无法配置重试次数，但有默认值可工作**
+
+---
+
+### 5.2 LLM 输出持久化
 
 **任务**：AI 插件需支持文件保存 LLM 输出
 
@@ -267,7 +377,7 @@ class ParserCapability(Protocol):
 
 ---
 
-### 5.2 子解释器变量深拷贝隔离
+### 5.3 子解释器变量深拷贝隔离
 
 **任务**：实现 `RuntimeContext.inject_variable()` 方法
 
@@ -337,8 +447,9 @@ def __deepcopy__(self, memo):
 
 **任务**：让零侵入插件能够注册原生 IBC-Inter 类型（如 float、int），而不需要继承任何核心类
 
-**已完成**：
+**状态更新**：[2026-03-25 审计修订]
 - ✅ [2026-03] `discovery.py` 中实现 `__ibcext_vtable__()` 加载逻辑
+- ⚠️ 但 vtable 参数签名提取**未实现**（见 9.5）
 
 **技术实现**：
 ```python
