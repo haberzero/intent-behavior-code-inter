@@ -443,4 +443,97 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 ---
 
+---
+
+### 9.4 多值返回与 Tuple 类型系统
+
+**任务**：实现 `return a, b, c` 多值返回语法和 tuple 类型系统
+
+**问题场景**：
+```
+用户期望：
+    def foo():
+        return 1, "hello", [1, 2, 3]
+    a, b, c = foo()
+    # 或
+    result = foo()  # result 是 tuple
+```
+
+**当前状态**：
+| 层级 | 状态 | 问题 |
+|------|------|------|
+| 语法解析 | ✅ | `return a, b` 被解析为 `IbTuple` |
+| AST 定义 | ✅ | `IbTuple(elts, ctx)` 定义完整 |
+| 语义分析 | ❌ | 无 `visit_IbTuple`，编译错误 |
+| 运行时执行 | ❌ | 无 `visit_IbTuple`，执行崩溃 |
+| 类型系统 | ❌ | 无 `TupleType`/`TupleMetadata` |
+
+**技术缺口**：
+1. `IbTuple` 在语义分析阶段没有 `visit_IbTuple` 方法处理
+2. `expr_handler.py` 没有 `visit_IbTuple` 运行时处理器
+3. 类型系统缺少 `TupleType` 元数据类型描述符
+4. Python tuple 返回时无法正确拆包到 IBC tuple
+
+**影响文件**（预估 7-8 个）：
+- `core/kernel/types/descriptors.py` - 添加 TupleMetadata
+- `core/kernel/axioms/primitives.py` - 添加 TupleAxiom
+- `core/compiler/semantic/passes/semantic_analyzer.py` - 添加 visit_IbTuple
+- `core/runtime/objects/` - 添加 IbTuple 运行时对象
+- `core/runtime/interpreter/handlers/expr_handler.py` - 添加 visit_IbTuple
+- `core/compiler/semantic/passes/semantic_analyzer.py` - tuple 拆包赋值逻辑
+
+**实施步骤**：
+1. Phase 1: 添加 `TupleMetadata` 类型描述符
+2. Phase 2: 实现 `visit_IbTuple` 语义分析
+3. Phase 3: 实现 `IbTuple` 运行时对象和 `visit_IbTuple`
+4. Phase 4: 实现 tuple 拆包多重赋值
+
+**优先级**：中等（不影响核心编译流程）
+
+---
+
+### 9.5 vtable 参数签名提取
+
+**任务**：修复 discovery.py 加载 vtable 时未提取 Python 函数签名信息的问题
+
+**问题场景**：
+```
+用户调用插件方法时：
+    ai.set_config("url", "key", "model")
+    
+语义分析阶段：
+    ❌ 无法校验参数数量（param_types 为空列表）
+    
+运行时阶段（loader.py:117-118）：
+    ❌ 比较 Python 实现的参数数量 vs spec_desc.param_types（空列表）
+    ❌ 比较无意义，签名校验失效
+```
+
+**根因**：
+discovery.py 第 145-149 行创建 FunctionMetadata 时只传递了 name 和 module_path：
+```python
+func_meta = FunctionMetadata(
+    name=method_name,
+    module_path=module_name,
+    members={}
+    # param_types = [] ← 空列表
+)
+```
+
+**解决方案**：
+在 vtable 加载时使用 `inspect.signature()` 提取 Python 函数的参数类型：
+```python
+import inspect
+sig = inspect.signature(method_impl)
+param_types = [self._type_from_python(p.annotation) for p in sig.parameters.values() if p.name != 'self']
+```
+
+**影响文件**：
+- `core/runtime/module_system/discovery.py` - 添加签名提取逻辑
+- `core/runtime/module_system/loader.py` - 修复 param_types 比较逻辑
+
+**优先级**：高（影响插件方法调用校验）
+
+---
+
 *本文档为 IBC-Inter 待实现任务清单，供未来智能体和开发者参考。*
