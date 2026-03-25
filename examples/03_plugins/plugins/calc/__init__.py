@@ -1,12 +1,9 @@
-from core.extension import ibcext
-
 class Calculator:
-    @ibcext.method("add")
-    def add_numbers(self, a: int, b: int):
+    def add(self, a: int, b: int) -> int:
         return a + b
 
-    @ibcext.method("mul")
-    def multiply_numbers(self, a: int, b: int):
+    def mul(self, a: int, b: int) -> int:
         return a * b
 
-implementation = Calculator()
+def create_implementation():
+    return Calculator()
