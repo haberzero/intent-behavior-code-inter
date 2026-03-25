@@ -127,13 +127,9 @@ class ModuleDiscoveryService:
                     vtable.name = raw_name
                     metadata = vtable
 
-                # 协议1：新版第一方组件（字典格式，零侵入）
-                elif vtable and isinstance(vtable, dict) and "functions" in vtable:
-                    metadata = self._build_metadata_from_dict(raw_name, module_name, vtable)
-
-                # 协议2：旧版第三方插件（Callable 格式）
+                # 协议1：新版第一方组件和标准插件（字典格式，零侵入）
                 elif vtable and isinstance(vtable, dict):
-                    metadata = self._build_metadata_from_callable(raw_name, module_name, vtable)
+                    metadata = self._build_metadata_from_dict(raw_name, module_name, vtable)
 
             except ImportError:
                 pass
@@ -162,6 +158,9 @@ class ModuleDiscoveryService:
                     "param_types": ["str"],
                     "return_type": "dict"
                 }
+            },
+            "variables": {
+                "pi": "float"
             }
         }
 
@@ -192,126 +191,3 @@ class ModuleDiscoveryService:
         metadata = builder.build()
         metadata.module_path = module_path_val
         return metadata
-
-    def _build_metadata_from_callable(self, raw_name: str, module_name: str, vtable: Dict[str, Any]) -> ModuleMetadata:
-        """
-        [IES 2.2] 从 Callable 格式构建 ModuleMetadata（向后兼容）
-
-        通过 inspect.signature() 提取函数签名。
-        这是旧版第三方插件使用的格式。
-        """
-        if "." in raw_name:
-            parts = raw_name.split(".")
-            module_path_val = parts[0]
-            name_val = parts[1] if len(parts) > 1 else raw_name
-        else:
-            module_path_val = None
-            name_val = raw_name
-
-        metadata = ModuleMetadata(
-            name=name_val,
-            module_path=module_path_val,
-            members={}
-        )
-
-        for method_name, method_impl in vtable.items():
-            if callable(method_impl):
-                func_meta = self._create_function_metadata(method_name, module_name, method_impl)
-                metadata.members[method_name] = func_meta
-
-        return metadata
-
-    def _create_function_metadata(self, method_name: str, module_name: str, method_impl: Callable) -> FunctionMetadata:
-        """
-        [IES 2.2] 从 Python callable 提取函数签名信息并创建 FunctionMetadata。
-
-        使用 inspect.signature() 提取参数类型注解，映射为 IBC-Inter 内置类型。
-        仅用于旧版第三方插件。
-        """
-        param_types: List[TypeDescriptor] = []
-        return_type: Optional[TypeDescriptor] = None
-
-        try:
-            sig = inspect.signature(method_impl)
-            for param_name, param in sig.parameters.items():
-                if param_name == 'self':
-                    continue
-                if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
-                    continue
-                param_type = self._python_type_to_ibc(param.annotation, param.default)
-                param_types.append(param_type)
-            if sig.return_annotation and sig.return_annotation is not inspect.Signature.empty:
-                return_type = self._python_type_to_ibc(sig.return_annotation, None)
-        except (ValueError, TypeError):
-            pass
-
-        return FunctionMetadata(
-            name=method_name,
-            module_path=module_name,
-            param_types=param_types,
-            return_type=return_type,
-            members={}
-        )
-
-    def _python_type_to_ibc(self, annotation: Any, default: Any) -> TypeDescriptor:
-        """
-        [IES 2.2] 将 Python 类型注解映射为 IBC-Inter 内置类型描述符。
-
-        支持的类型映射：
-        - str -> STR_DESCRIPTOR
-        - int -> INT_DESCRIPTOR
-        - float -> FLOAT_DESCRIPTOR
-        - bool -> BOOL_DESCRIPTOR
-        - list/List -> LIST_DESCRIPTOR
-        - dict/Dict -> DICT_DESCRIPTOR
-        - 无注解但有默认值 -> ANY_DESCRIPTOR
-        - 完全无法识别 -> ANY_DESCRIPTOR
-        """
-        from core.kernel.types.descriptors import (
-            STR_DESCRIPTOR, INT_DESCRIPTOR, FLOAT_DESCRIPTOR, BOOL_DESCRIPTOR,
-            LIST_DESCRIPTOR, DICT_DESCRIPTOR, ANY_DESCRIPTOR, VOID_DESCRIPTOR,
-            ListMetadata, DictMetadata
-        )
-
-        if annotation is None or annotation is inspect.Parameter.empty:
-            if default is not None:
-                return ANY_DESCRIPTOR
-            return ANY_DESCRIPTOR
-
-        type_name = getattr(annotation, '__name__', None)
-        if type_name is None:
-            type_name = str(annotation)
-
-        type_map = {
-            'str': STR_DESCRIPTOR,
-            'int': INT_DESCRIPTOR,
-            'float': FLOAT_DESCRIPTOR,
-            'bool': BOOL_DESCRIPTOR,
-            'list': LIST_DESCRIPTOR,
-            'dict': DICT_DESCRIPTOR,
-            'List': LIST_DESCRIPTOR,
-            'Dict': DICT_DESCRIPTOR,
-        }
-
-        if type_name in type_map:
-            result = type_map[type_name]
-            if type_name in ('list', 'List', 'dict', 'Dict'):
-                try:
-                    args = getattr(annotation, '__args__', None)
-                    if args and len(args) > 0:
-                        if type_name in ('list', 'List'):
-                            element_type = self._python_type_to_ibc(args[0], None)
-                            result = ListMetadata(name="list", element_type=element_type)
-                        elif type_name in ('dict', 'Dict'):
-                            if len(args) >= 2:
-                                key_type = self._python_type_to_ibc(args[0], None)
-                                value_type = self._python_type_to_ibc(args[1], None)
-                                result = DictMetadata(name="dict", key_type=key_type, value_type=value_type)
-                except (TypeError, AttributeError):
-                    pass
-            return result
-
-        if type_name == 'None' or annotation is type(None):
-            return VOID_DESCRIPTOR
-
-        return ANY_DESCRIPTOR
