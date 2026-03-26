@@ -59,6 +59,7 @@ class AIPlugin(ILLMProvider):
             self._capabilities.llm_provider = self
 
     def _init_client(self):
+        """初始化 OpenAI 客户端 (单例/复用模式)"""
         is_test_mode = (
             self._config["url"] == "TESTONLY" or
             os.environ.get("IBC_TEST_MODE") == "1"
@@ -67,16 +68,24 @@ class AIPlugin(ILLMProvider):
             self._client = "MOCK_CLIENT"
             return
 
-        if self._config["url"] and self._config["key"]:
-            try:
-                from openai import OpenAI
+        try:
+            from openai import OpenAI
+            
+            base_url = self._config["url"]
+            # [IES 2.2 Fix] 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
+            if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
+                base_url = f"{base_url.rstrip('/')}/v1"
+            
+            if base_url and self._config["key"]:
                 self._client = OpenAI(
-                    base_url=self._config["url"],
                     api_key=self._config["key"],
+                    base_url=base_url,
                     timeout=self._config["timeout"]
                 )
-            except ImportError:
-                pass
+        except ImportError:
+            self._client = None
+        except Exception:
+            self._client = None
 
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
@@ -179,21 +188,15 @@ class AIPlugin(ILLMProvider):
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
             
-            # [IES 2.2 Real LLM] 使用 OpenAI 官方 SDK
+            # [IES 2.2 Real LLM] 优先使用预初始化的客户端 (单例复用)
+            if not self._client or self._client == "MOCK_CLIENT":
+                self._init_client()
+            
+            if not self._client or self._client == "MOCK_CLIENT":
+                raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
+            
             try:
-                from openai import OpenAI
-                
-                base_url = self._config["url"]
-                # 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
-                if "/v1" not in base_url and "127.0.0.1" in base_url:
-                    base_url = f"{base_url.rstrip('/')}/v1"
-                
-                client = OpenAI(
-                    api_key=self._config["key"],
-                    base_url=base_url
-                )
-                
-                completion = client.chat.completions.create(
+                completion = self._client.chat.completions.create(
                     model=self._config["model"],
                     messages=[
                         {"role": "system", "content": sys_prompt},
@@ -206,9 +209,8 @@ class AIPlugin(ILLMProvider):
                     raise RuntimeError(f"LLM 返回异常响应: {completion}")
 
                 res = completion.choices[0].message.content.strip()
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "raw_response": res, "scene": scene}
                 return res
-            except ImportError:
-                raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
             except Exception as e:
                 raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
