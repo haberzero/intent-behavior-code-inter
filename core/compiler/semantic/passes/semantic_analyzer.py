@@ -63,17 +63,18 @@ class SemanticAnalyzer:
         
         # 1. 注册内置函数
         for name, func_desc in self.prelude.get_builtins().items():
-            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=func_desc, metadata={"is_builtin": True})
+            # [IES 2.2] 使用全局唯一的内置符号 UID，消除模块相关性
+            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=func_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 2. 注册内置类型
         for name, type_desc in self.prelude.get_builtin_types().items():
-            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=type_desc, metadata={"is_builtin": True})
+            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=type_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 3. 注册内置模块 (如果 Registry 中存在)
         for name, mod_desc in self.prelude.get_builtin_modules().items():
-            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, metadata={"is_builtin": True})
+            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
     def analyze(self, node: ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
@@ -119,7 +120,8 @@ class SemanticAnalyzer:
                 node_to_type=self.side_table.node_to_type,
                 node_is_deferred=self.side_table.node_is_deferred,
                 node_intents=self.side_table.node_intents,
-                node_to_loc=self.side_table.node_to_loc
+                node_to_loc=self.side_table.node_to_loc,
+                decision_maps=self.side_table.decision_maps
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
@@ -520,6 +522,8 @@ class SemanticAnalyzer:
     def visit_IbIf(self, node: ast.IbIf):
         # 1. 条件测试属于 BRANCH 场景
         self.scope_manager.push_scene(ast.IbScene.BRANCH)
+        # [NEW] 记录控制流节点本身的场景
+        self.side_table.bind_scene(node, ast.IbScene.BRANCH)
         try:
             self.visit(node.test)
         finally:
@@ -539,6 +543,8 @@ class SemanticAnalyzer:
     def visit_IbWhile(self, node: ast.IbWhile):
         # 1. 循环条件属于 LOOP 场景
         self.scope_manager.push_scene(ast.IbScene.LOOP)
+        # [NEW] 记录控制流节点本身的场景
+        self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             self.visit(node.test)
         finally:
@@ -558,6 +564,8 @@ class SemanticAnalyzer:
     def visit_IbFor(self, node: ast.IbFor):
         # 1. 迭代头部属于 LOOP 场景
         self.scope_manager.push_scene(ast.IbScene.LOOP)
+        # [NEW] 记录控制流节点本身的场景
+        self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             iter_type = self.visit(node.iter)
             # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
@@ -658,7 +666,8 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                self.side_table.bind_symbol(node, sym)
+                # [IES 2.2 Fix] 绑定到 alias 节点，以便解释器正确获取 UID
+                self.side_table.bind_symbol(alias, sym)
             else:
                 self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
                 # 仅作为错误恢复，定义为 Any
@@ -677,7 +686,8 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                self.side_table.bind_symbol(node, sym)
+                # [IES 2.2 Fix] 绑定到 alias 节点
+                self.side_table.bind_symbol(alias, sym)
             else:
                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
                 self._define_var(name, self._any_desc, node)

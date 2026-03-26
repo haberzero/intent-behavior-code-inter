@@ -21,29 +21,20 @@ class ExprHandler(BaseHandler):
         return self.registry.box(self.execution_context.resolve_value(node_data.get("value")))
 
     def visit_IbName(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """变量读取：优先通过 Symbol UID 查找"""
+        """变量读取：严格通过 Symbol UID 查找"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
-        if sym_uid:
-            try:
-                return self.runtime_context.get_variable_by_uid(sym_uid)
-            except Exception:
-                # 如果是严格模式，UID 查找失败即报错
-                if self.execution_context.strict_mode: raise
-
-        # 兼容性/动态代码回退：名称查找
-        name = node_data.get("id")
         
+        # [IES 2.2 Standard] 彻底废除名称查找 fallback。
+        # 任何合法的 IBCI 产物都必须在编译阶段完成符号决议并记录在 node_to_symbol 侧表中。
+        if not sym_uid:
+             name = node_data.get("id")
+             raise self.report_error(f"Execution Error: Symbol UID missing for name '{name}'. Artifact is corrupted or unanalyzed.", node_uid)
+             
         try:
-            return self.runtime_context.get_variable(name)
+            return self.runtime_context.get_variable_by_uid(sym_uid)
         except Exception:
-            # 2. 尝试从 Registry 获取类 (支持内置类型名称如 int, str)
-            cls = self.registry.get_class(name)
-            if cls: return cls
-            
-            if self.execution_context.strict_mode and not sym_uid:
-                raise self.report_error(f"Strict mode: Symbol UID missing for variable '{name}'.", node_uid)
-            
-            raise
+            # 如果是严格模式，或者在正常模式下 UID 查找彻底失败（未定义变量），则报错
+            raise self.report_error(f"Execution Error: Symbol with UID '{sym_uid}' (name: '{node_data.get('id')}') is not defined in current context.", node_uid)
 
     def visit_IbBinOp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """二元运算实现"""
@@ -67,7 +58,7 @@ class ExprHandler(BaseHandler):
             if not is_or and not self.execution_context.is_truthy(val): return val
         return last_val
 
-    def visit_IfExp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+    def visit_IbIfExp(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """三元表达式"""
         if self.execution_context.is_truthy(self.visit(node_data.get("test"))):
             return self.visit(node_data.get("body"))

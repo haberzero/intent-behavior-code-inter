@@ -34,10 +34,10 @@ class ArtifactLoader:
     def __init__(self, registry: KernelRegistry):
         self.registry = registry
 
-    def load(self, artifact_dict: Dict[str, Any]) -> LoadedArtifact:
+    def load(self, artifact_dict: Mapping[str, Any]) -> LoadedArtifact:
         """从扁平化字典中加载并执行类型重水化"""
-        if not isinstance(artifact_dict, dict):
-            raise TypeError(f"ArtifactLoader expects a dictionary, but got {type(artifact_dict).__name__}")
+        if not isinstance(artifact_dict, Mapping):
+            raise TypeError(f"ArtifactLoader expects a mapping (dict or ImmutableArtifact), but got {type(artifact_dict).__name__}")
         
         pools = artifact_dict.get("pools", {})
         node_pool = pools.get("nodes", {})

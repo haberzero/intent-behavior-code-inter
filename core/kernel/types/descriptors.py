@@ -740,22 +740,22 @@ class ModuleMetadata(TypeDescriptor):
             self.name = "module"
 
 # 预定义常量描述符 (作为原型存在)
-INT_DESCRIPTOR = TypeDescriptor(name="int", is_nullable=False)
-STR_DESCRIPTOR = TypeDescriptor(name="str", is_nullable=False)
-FLOAT_DESCRIPTOR = TypeDescriptor(name="float", is_nullable=False)
-BOOL_DESCRIPTOR = TypeDescriptor(name="bool", is_nullable=False)
-VOID_DESCRIPTOR = TypeDescriptor(name="void", is_nullable=False)
-ANY_DESCRIPTOR = TypeDescriptor(name="Any", is_nullable=True)
-VAR_DESCRIPTOR = TypeDescriptor(name="var", is_nullable=True)
-CALLABLE_DESCRIPTOR = TypeDescriptor(name="callable", is_nullable=True)
-EXCEPTION_DESCRIPTOR = TypeDescriptor(name="Exception", is_nullable=True)
+INT_DESCRIPTOR = TypeDescriptor(name="int", is_nullable=False, is_user_defined=False)
+STR_DESCRIPTOR = TypeDescriptor(name="str", is_nullable=False, is_user_defined=False)
+FLOAT_DESCRIPTOR = TypeDescriptor(name="float", is_nullable=False, is_user_defined=False)
+BOOL_DESCRIPTOR = TypeDescriptor(name="bool", is_nullable=False, is_user_defined=False)
+VOID_DESCRIPTOR = TypeDescriptor(name="void", is_nullable=False, is_user_defined=False)
+ANY_DESCRIPTOR = TypeDescriptor(name="Any", is_nullable=True, is_user_defined=False)
+VAR_DESCRIPTOR = TypeDescriptor(name="var", is_nullable=True, is_user_defined=False)
+CALLABLE_DESCRIPTOR = TypeDescriptor(name="callable", is_nullable=True, is_user_defined=False)
+EXCEPTION_DESCRIPTOR = TypeDescriptor(name="Exception", is_nullable=True, is_user_defined=False)
 
 # [New] Missing Descriptors
-NONE_DESCRIPTOR = TypeDescriptor(name="None", is_nullable=True)
-BEHAVIOR_DESCRIPTOR = TypeDescriptor(name="behavior", is_nullable=True)
-BOUND_METHOD_DESCRIPTOR = BoundMethodMetadata() # name will be "bound_method"
+NONE_DESCRIPTOR = TypeDescriptor(name="None", is_nullable=True, is_user_defined=False)
+BEHAVIOR_DESCRIPTOR = TypeDescriptor(name="behavior", is_nullable=True, is_user_defined=False)
+BOUND_METHOD_DESCRIPTOR = BoundMethodMetadata(is_user_defined=False) # name will be "bound_method"
 
 # 集合类型占位描述符 (用于基础元数据注册)
-LIST_DESCRIPTOR = ListMetadata(name="list", is_nullable=True)
-DICT_DESCRIPTOR = DictMetadata(name="dict", is_nullable=True)
-MODULE_DESCRIPTOR = ModuleMetadata(name="module", is_nullable=False)
+LIST_DESCRIPTOR = ListMetadata(name="list", is_nullable=True, is_user_defined=False)
+DICT_DESCRIPTOR = DictMetadata(name="dict", is_nullable=True, is_user_defined=False)
+MODULE_DESCRIPTOR = ModuleMetadata(name="module", is_nullable=False, is_user_defined=False)

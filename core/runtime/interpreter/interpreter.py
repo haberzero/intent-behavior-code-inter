@@ -362,16 +362,24 @@ class Interpreter:
         return self._execution_context
 
     def get_side_table(self, table_name: str, node_uid: str) -> Any:
-        """从侧表中获取信息，支持多模块架构"""
-        if not self.current_module_name:
+        """从当前活跃模块的侧表中获取数据"""
+        module_name = self.current_module_name or self.entry_module
+        if not module_name:
             return None
-        
-        module_data = self.artifact_dict.get("modules", {}).get(self.current_module_name, {})
+            
+        module_data = self.artifact_dict.get("modules", {}).get(module_name, {})
         if not isinstance(module_data, Mapping):
             return None
             
-        table = module_data.get("side_tables", {}).get(table_name, {})
-        return table.get(node_uid)
+        side_tables = module_data.get("side_tables", {})
+        table = side_tables.get(table_name, {})
+        val = table.get(node_uid)
+        
+        # [IES 2.1 Rehydration] 自动重水化类型引用
+        if table_name == "node_to_type" and isinstance(val, str):
+            return self.type_hydrator.hydrate(val)
+            
+        return val
 
     def push_stack(self, name: str, location: Optional[Location] = None, is_user_function: bool = False, **kwargs):
         """[IES 2.1 Decoupling] 向逻辑调用栈压入一帧"""
@@ -434,7 +442,8 @@ class Interpreter:
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
                 if not getattr(ib_class.descriptor, 'is_user_defined', True):
-                    context.define_variable(name, ib_class, is_const=True, force=force)
+                    # [IES 2.2] 注入时带上稳定的内置符号 UID，与编译器对齐
+                    context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
                     defined_names.add(name)
 
     def _setup_context(self, context: RuntimeContext):

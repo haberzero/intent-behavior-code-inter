@@ -3,7 +3,7 @@ from core.kernel.types.registry import MetadataRegistry
 from core.base.enums import RegistrationState
 from core.kernel.types.descriptors import (
     TypeDescriptor, 
-    ListMetadata, DictMetadata, FunctionMetadata, ClassMetadata,
+    ListMetadata, DictMetadata, FunctionMetadata, ClassMetadata, ModuleMetadata,
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, BOOL_DESCRIPTOR, 
     VOID_DESCRIPTOR, ANY_DESCRIPTOR, VAR_DESCRIPTOR, CALLABLE_DESCRIPTOR,
     LIST_DESCRIPTOR, DICT_DESCRIPTOR

@@ -11,15 +11,21 @@ class ImmutableArtifact(Mapping):
     2. 提供只读的 dict-like 访问接口
     3. 嵌套 dict 也会被自动包装为 ImmutableArtifact
     """
-    def __init__(self, data: Dict[str, Any]):
-        object.__setattr__(self, '_data', self._wrap_if_dict(data))
+    def __init__(self, data: Dict[str, Any], _memo: set = None):
+        if _memo is None:
+            _memo = set()
+        object.__setattr__(self, '_data', self._wrap_if_dict(data, _memo))
 
-    def _wrap_if_dict(self, value: Any) -> Any:
-        """递归将嵌套 dict 包装为 ImmutableArtifact"""
+    def _wrap_if_dict(self, value: Any, memo: set) -> Any:
+        """递归将嵌套 dict 包装为 ImmutableArtifact，带循环引用检测"""
         if isinstance(value, dict):
-            return ImmutableArtifact(value)
+            obj_id = id(value)
+            if obj_id in memo:
+                return value
+            memo.add(obj_id)
+            return ImmutableArtifact(value, _memo=memo)
         elif isinstance(value, list):
-            return tuple(self._wrap_if_dict(item) for item in value)
+            return tuple(self._wrap_if_dict(item, memo) for item in value)
         return value
 
     def __getitem__(self, key: str) -> Any:
