@@ -42,11 +42,7 @@ class HostService(IHostService):
     def save_state(self, path: str):
         """深度序列化当前运行时上下文并保存到磁盘"""
         self.sync() # 必须先同步
-        serializer = RuntimeSerializer(self.registry)
-        data = serializer.serialize_context(
-            self.execution_context.runtime_context, 
-            execution_context=self.execution_context
-        )
+        data = self.snapshot()
         
         abs_path = os.path.abspath(path)
         base_dir = os.path.dirname(abs_path)
@@ -85,7 +81,7 @@ class HostService(IHostService):
                     with open(asset_path, "r", encoding="utf-8") as af:
                         assets[uid] = af.read()
                         
-        deserializer = RuntimeDeserializer(self.registry)
+        deserializer = RuntimeDeserializer(self.registry, factory=self.execution_context.factory)
         new_ctx = deserializer.deserialize_context(data)
         
         # 重新绑定环境能力 (Intrinsics & Plugins)
@@ -127,7 +123,23 @@ class HostService(IHostService):
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
-        """通过协调器工厂开启隔离的解释器子运行环境"""
+        """通过运行时调度器开启隔离的解释器子运行环境"""
+        # [IES 2.2] 优先委派给调度器进行宏观调度
+        scheduler = getattr(self.execution_context.service_context, 'scheduler', None)
+        if scheduler:
+            from core.runtime.interfaces import ExecutionRequest, IsolationLevel
+            # 将 policy 转换为隔离级别
+            isolation = IsolationLevel.SCOPE
+            if policy.get("isolated", True):
+                # 如果明确要求隔离 Registry，则提升隔离级别
+                if policy.get("registry_isolation", False):
+                    isolation = IsolationLevel.REGISTRY
+            
+            request = ExecutionRequest(node_uid=path, isolation=isolation, payload=policy)
+            signal = scheduler.dispatch(request, self.execution_context)
+            return signal.value
+
+        # 回退逻辑 (如果调度器未就绪，维持原有的 HostService 逻辑以保证兼容性)
         serializer = RuntimeSerializer(self.registry)
         snapshot = serializer.serialize_context(
             self.execution_context.runtime_context,
@@ -174,7 +186,7 @@ class HostService(IHostService):
             return sub_interpreter.run()
 
         except Exception as e:
-            deserializer = RuntimeDeserializer(self.registry)
+            deserializer = RuntimeDeserializer(self.registry, factory=self.execution_context.factory)
             restored_ctx = deserializer.deserialize_context(snapshot)
             self._rebind_environment(restored_ctx)
             self.execution_context.runtime_context = restored_ctx

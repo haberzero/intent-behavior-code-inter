@@ -23,8 +23,8 @@ class AIPlugin(ILLMProvider):
             "auto_type_constraint": True,
             "auto_intent_injection": True,
             "decision_map": {
-                "1": "1", "true": "1", "yes": "1", "ok": "1",
-                "0": "0", "false": "0", "no": "0", "fail": "0"
+                "1": 1, "true": 1, "yes": 1, "ok": 1,
+                "0": 0, "false": 0, "no": 0, "fail": 0
             }
         }
         self._scene_prompts = {
@@ -184,6 +184,11 @@ class AIPlugin(ILLMProvider):
             os.environ.get("IBC_TEST_MODE") == "1"
         )
 
+        # [IES 2.2] 强化决策场景的 User Prompt 约束
+        scene_str = str(scene).lower()
+        if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
+            user_prompt += "\n\n### 强制回答要求 ###\n- 你必须【仅】返回数字 0 或 1。\n- 如果条件成立/满足/继续，你必须且仅能返回 1。\n- 如果条件不成立/不满足/停止，你必须且仅能返回 0。\n- 严禁包含任何其他字符（包括解释、Markdown、引号等）。"
+
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
@@ -195,6 +200,9 @@ class AIPlugin(ILLMProvider):
             if not self._client or self._client == "MOCK_CLIENT":
                 raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
             
+            # [IES 2.2 Strict Mode] 决策场景下，限制 max_tokens 以减少噪音
+            is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
+            
             try:
                 completion = self._client.chat.completions.create(
                     model=self._config["model"],
@@ -202,7 +210,7 @@ class AIPlugin(ILLMProvider):
                         {"role": "system", "content": sys_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=1024
+                    max_tokens=10 if is_decision else 1024
                 )
                 
                 if not completion or not hasattr(completion, 'choices') or not completion.choices:

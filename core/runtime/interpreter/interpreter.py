@@ -124,11 +124,13 @@ class Interpreter:
                  permission_manager: Optional[PermissionManager] = None,
                  object_factory: Optional[IObjectFactory] = None,
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
-                 kernel_token: Optional[Any] = None):
+                 kernel_token: Optional[Any] = None,
+                 instance_id: Optional[str] = None):
         
         # 0. 启动内核引导
         self._registry = registry or KernelRegistry()
         self._kernel_token = kernel_token
+        self.instance_id = instance_id or f"inst_{id(self)}"
         
         # [IES 2.1 Decoupling] 引入对象工厂
         object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
@@ -203,17 +205,7 @@ class Interpreter:
                 root_dir=root_dir
             )
             
-            # [IES 2.1 Regularization] 初始化 HostService，注入特定回调而非 Interpreter 实例
-            self.host_service = HostService(
-                registry=self.registry,
-                execution_context=self._execution_context,
-                interop=interop,
-                compiler=self.compiler,
-                factory=self.factory,
-                setup_context_callback=self.setup_context,
-                get_current_module_callback=lambda: self.current_module_name
-            )
-
+            # [IES 2.2] 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService
             self.service_context = ServiceContextImpl(
                 issue_tracker=issue_tracker,
                 llm_executor=llm_executor,
@@ -222,12 +214,15 @@ class Interpreter:
                 permission_manager=permission_manager,
                 object_factory=object_factory,
                 registry=self.registry,
-                host_service=self.host_service,
+                host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
                 compiler=self.compiler,
                 debugger=self.debugger,
                 output_callback=output_callback,
-                input_callback=input_callback
+                input_callback=input_callback,
+                scheduler=None, # 占位，由 Engine 统一装配
+                capability_registry=None, # 占位，由 Engine 统一装配
+                interpreter=self # [IES 2.2] 注入解释器实例引用
             )
             
             # [IES 2.1] 完成延迟水化
@@ -575,10 +570,17 @@ class Interpreter:
                             continue
                     
                     # 2. 内核级自动意图注入 (能力探测)
-                    ai_module = self.interop.get_package("ai")
                     retry_prompt = None
-                    if ai_module and hasattr(ai_module, "get_retry_prompt"):
-                        retry_prompt = ai_module.get_retry_prompt(node_type)
+                    if self.service_context.capability_registry:
+                        provider = self.service_context.capability_registry.get("llm_provider")
+                        if provider and hasattr(provider, "get_retry_prompt"):
+                            retry_prompt = provider.get_retry_prompt(node_type)
+                    
+                    if not retry_prompt:
+                        # 回退到从 ai 模块获取 (兼容旧模式)
+                        ai_module = self.interop.get_package("ai")
+                        if ai_module and hasattr(ai_module, "get_retry_prompt"):
+                            retry_prompt = ai_module.get_retry_prompt(node_type)
                     
                     if retry_prompt:
                         self.runtime_context.push_intent(retry_prompt, tag="AUTO_RETRY")

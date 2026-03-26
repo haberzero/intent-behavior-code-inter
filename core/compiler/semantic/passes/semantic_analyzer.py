@@ -69,6 +69,11 @@ class SemanticAnalyzer:
 
         # 2. 注册内置类型
         for name, type_desc in self.prelude.get_builtin_types().items():
+            # [IES 2.2 Fix] 仅注册真正的内置类型为 builtin UID。
+            # 如果描述符标记为 is_user_defined，说明它是从外部或残留注册表中混入的，跳过。
+            if getattr(type_desc, 'is_user_defined', False):
+                continue
+                
             sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=type_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
@@ -944,6 +949,9 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
         self.in_behavior_expr = True
+        # [IES 2.2 Fix] 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
+        self.side_table.bind_scene(node, self.scope_manager.current_scene())
+        
         try:
             for seg in node.segments:
                 if isinstance(seg, ast.IbASTNode):

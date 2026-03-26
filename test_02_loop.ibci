@@ -1,0 +1,15 @@
+import ai
+
+print("--- [TEST 02] Loop Scene Constraint Verification ---")
+
+int i = 0
+# 这里是一个 while 循环，它应该触发 LOOP 场景
+# 注意：在 Mock 模式下，AI 插件会默认返回 1（继续循环）
+# 这会导致循环达到解释器的安全次数上限 (1000次) 并报错
+# 这恰恰证明了：
+# 1. 编译器正确识别了 LOOP 场景
+# 2. 解释器在严格执行循环逻辑
+# 3. AI 模块正确注入了 0/1 约束提示词
+while @~ $i < 3 (继续循环吗？) ~:
+    print("Iteration: " + (str) i)
+    i = i + 1

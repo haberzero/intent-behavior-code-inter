@@ -191,12 +191,21 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         return source.get_base_axiom_name() in ("int", "str", "bool")
 
     def parse_value(self, raw_value: str) -> Any:
+        import re
         val = raw_value.strip().lower()
+        
+        # 1. 优先精确匹配
         if val in ("true", "1", "yes", "on"): return True
         if val in ("false", "0", "no", "off"): return False
-        # 尝试从文本中搜索
-        if "true" in val: return True
-        if "false" in val: return False
+        
+        # 2. 使用正则边界匹配 (防止 "not true" 误匹配)
+        # [IES 2.2 Refactor] 同步 llm_executor 的健壮解析逻辑
+        true_pattern = r'\b(true|yes|1|on)\b'
+        false_pattern = r'\b(false|no|0|off)\b'
+        
+        if re.search(true_pattern, val): return True
+        if re.search(false_pattern, val): return False
+        
         raise ValueError(f"No boolean found in response: {raw_value}")
 
     def get_call_capability(self) -> Optional[CallCapability]: return None

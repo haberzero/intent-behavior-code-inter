@@ -3,7 +3,7 @@ from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
-from core.kernel.issue import InterpreterError
+from core.kernel.issue import InterpreterError, LLMUncertaintyError
 
 from .ib_type_mapping import register_ib_type
 
@@ -152,7 +152,19 @@ class IbString(IbObject):
         return self.ib_class.registry.box(len(self.value))
 
     def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(1 if self.value.strip() else 0)
+        val = self.value.strip().lower()
+        # [IES 2.2 Strict Mode] 字符串的布尔值逻辑：
+        # 1. 只有严格匹配 "1" 或 "0" (或等价的 yes/no/true/false) 才被视为合法布尔值。
+        # 2. 其余任何字符串均被视为“不确定响应”，抛出 LLMUncertaintyError 以触发 llmexcept 机制。
+        if val in ("1", "true", "yes", "on", "ok"):
+            return self.ib_class.registry.box(1)
+        if val in ("0", "false", "no", "off", "null", "none"):
+            return self.ib_class.registry.box(0)
+            
+        raise LLMUncertaintyError(
+            f"布尔判定失败：期望确定性的 '1' 或 '0'，但实际收到非标准响应 '{self.value}'。这通常是由于 LLM 回复模糊导致的。",
+            raw_response=self.value
+        )
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
@@ -259,10 +271,12 @@ class IbList(IbObject):
 
     def cast_to(self, target_class: Any) -> IbObject:
         """[IES 2.1] 支持 List 的强转逻辑"""
-        # 如果目标是 list 本身或 Any，直接返回
         if target_class.name in ("list", "Any"):
             return self
-        # 暂时不支持深度转换，仅允许原样保留 (UTS 宽松校验)
+        if target_class.name == "str":
+            # 转换为字符串表示
+            items_repr = [str(e.to_native()) for e in self.elements]
+            return self.ib_class.registry.box("[" + ", ".join(items_repr) + "]")
         return self
 
     def __getitem__(self, key: Any) -> IbObject:
@@ -323,6 +337,9 @@ class IbDict(IbObject):
         """[IES 2.1] 支持 Dict 的强转逻辑"""
         if target_class.name in ("dict", "Any"):
             return self
+        if target_class.name == "str":
+            items_repr = [f"{k}: {str(v.to_native())}" for k, v in self.fields.items()]
+            return self.ib_class.registry.box("{" + ", ".join(items_repr) + "}")
         return self
 
     def __getitem__(self, key: Any) -> IbObject:

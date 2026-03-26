@@ -221,7 +221,9 @@ class LLMExecutorImpl:
         # [IES 2.1] 获取消解后的最终列表
         all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
         # 核心：使用 side_tables 中的 node_scenes
-        scene_name = execution_context.get_side_table("node_scenes", node_uid) or "general"
+        scene_val = execution_context.get_side_table("node_scenes", node_uid)
+        scene_name = str(scene_val).lower() if scene_val else "general"
+        
         sys_prompt = "你是一个意图行为代码执行器。"
         
         current_retry_hint = context.retry_hint
@@ -241,19 +243,20 @@ class LLMExecutorImpl:
             sys_prompt += intent_block
 
         # 5. 调用底层模型
-        response = self._call_llm(sys_prompt, content, node_uid)
+        response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name)
         
         # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": content,
             "response": response,
-            "raw_response": response
+            "raw_response": response,
+            "scene": scene_name
         }
 
         # 6. 处理返回类型
         # [IES 2.1 Unified Decision] 统一处理分支、循环和决策场景的模糊判定
-        if scene_name in ("decision", "choice", "BRANCH", "LOOP", "IbScene.BRANCH", "IbScene.LOOP"):
+        if any(keyword in scene_name for keyword in ("decision", "choice", "branch", "loop")):
             # 1. 优先尝试从侧表获取节点特有的决策映射
             decision_map = execution_context.get_side_table("decision_maps", node_uid)
             

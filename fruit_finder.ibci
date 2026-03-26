@@ -23,12 +23,15 @@ int total_len = len(items)
 
 print("--- IBC-Inter Fruit Finder ---")
 
-for @~Progress: $count / $total_len. Continue if count is less than total_len.~:
-    str current_item = items[count]
-    if @~Is $current_item a fruit?~:
-        fruit_indices = fruit_indices + [count]
+while count < total_len:
+    str current_item = (str) items[count]
+    if @~ $current_item 是水果？(1/0) ~:
+        fruit_indices.append(count)
         print("[Found] " + current_item)
     count = count + 1
+llmexcept:
+    print("AI 响应模糊，正在通过 llmexcept 进行修正...")
+    retry "只答 1/0"
 
 print("--- Result ---")
 print(fruit_indices)
