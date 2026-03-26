@@ -2,8 +2,7 @@ import json
 import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
-from core.runtime.interfaces import IExecutionContext
-from core.runtime.interpreter.runtime_context import RuntimeContextImpl, ScopeImpl, RuntimeSymbolImpl
+from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
 from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
 
@@ -18,10 +17,10 @@ class RuntimeSerializer(BaseFlatSerializer):
         self.runtime_scope_pool: Dict[str, Any] = {}
         self.memo: Dict[int, str] = {} # 记录已处理对象的 Python ID
 
-    def serialize_context(self, context: RuntimeContextImpl, include_static: bool = True, execution_context: Optional[IExecutionContext] = None) -> Dict[str, Any]:
+    def serialize_context(self, context: IStateProvider, include_static: bool = True, execution_context: Optional[IExecutionContext] = None) -> Dict[str, Any]:
         """序列化完整的运行时上下文"""
         # 1. 递归序列化作用域链 (从当前作用域向上)
-        root_scope_uid = self._collect_runtime_scope(context.current_scope)
+        root_scope_uid = self._collect_runtime_scope(context.get_current_scope())
         
         pools = {
             "instances": self.instance_pool,
@@ -45,11 +44,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
             "intent_stack": [self._process_value(i) for i in context.get_active_intents()],
-            "intent_exclusive_depth": context._intent_exclusive_depth,
+            "intent_exclusive_depth": context.intent_exclusive_depth,
             "pools": pools
         }
 
-    def _collect_runtime_scope(self, scope: Any) -> Optional[str]:
+    def _collect_runtime_scope(self, scope: Optional[Scope]) -> Optional[str]:
         if scope is None:
             return None
             
@@ -66,8 +65,10 @@ class RuntimeSerializer(BaseFlatSerializer):
             symbols_data[name] = self._serialize_symbol(sym)
             
         uid_symbols_data = {}
+        # 注意：_uid_to_symbol 目前不在 Scope 接口中，但这是内部实现细节
+        # 如果需要彻底解耦，应在 Scope 接口中增加获取 UID 符号的方法
         if hasattr(scope, '_uid_to_symbol'):
-            for suid, sym in scope._uid_to_symbol.items():
+            for suid, sym in getattr(scope, '_uid_to_symbol').items():
                 uid_symbols_data[suid] = self._serialize_symbol(sym)
 
         self.runtime_scope_pool[uid] = {
@@ -78,7 +79,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         }
         return uid
 
-    def _serialize_symbol(self, sym: RuntimeSymbolImpl) -> Dict[str, Any]:
+    def _serialize_symbol(self, sym: RuntimeSymbol) -> Dict[str, Any]:
         return {
             "name": sym.name,
             "value": self._process_value(sym.value),
@@ -169,13 +170,14 @@ class RuntimeDeserializer:
     """
     运行时反序列化器：从扁平化池数据重建完整的执行上下文和对象图。
     """
-    def __init__(self, registry):
+    def __init__(self, registry: Any, factory: Optional[IObjectFactory] = None):
         self.registry = registry
+        self.factory = factory
         self.instance_cache: Dict[str, IbObject] = {}
-        self.scope_cache: Dict[str, ScopeImpl] = {}
+        self.scope_cache: Dict[str, Scope] = {}
         self.asset_pool: Dict[str, str] = {} 
 
-    def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContextImpl:
+    def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
         """从字典数据重建运行时上下文"""
         pools = data.get("pools", {})
         self.node_pool = pools.get("nodes", {})
@@ -185,6 +187,9 @@ class RuntimeDeserializer:
         self.instance_pool = pools.get("instances", {})
         self.runtime_scope_pool = pools.get("runtime_scopes", {})
         self.asset_pool = pools.get("assets", {}) 
+        
+        if not self.factory:
+            raise RuntimeError("RuntimeDeserializer: ObjectFactory is required for deserialization.")
 
         root_scope_uid = data["root_scope_uid"]
         current_scope = self._get_scope(root_scope_uid)
@@ -193,12 +198,27 @@ class RuntimeDeserializer:
         while global_scope.parent:
             global_scope = global_scope.parent
             
-        context = RuntimeContextImpl(initial_scope=global_scope, registry=self.registry)
-        context._current_scope = current_scope
+        context = self.factory.create_context(initial_scope=global_scope)
+        # 使用反射设置私有属性，保持接口纯净
+        if hasattr(context, '_current_scope'):
+            setattr(context, '_current_scope', current_scope)
+            
+        if "global_intents" in data:
+            # 恢复全局意图 (通常是 IbIntent 实例)
+            ctx_global = context.get_global_intents()
+            ctx_global.clear()
+            for i_data in data["global_intents"]:
+                 ctx_global.append(self._deserialize_value(i_data))
         
-        context._global_intents = data.get("global_intents", [])
-        context.intent_stack = [self._deserialize_value(i) for i in data.get("intent_stack", [])]
-        context._intent_exclusive_depth = data.get("intent_exclusive_depth", 0)
+        intent_stack_data = data.get("intent_stack", [])
+        active_intents = [self._deserialize_value(i) for i in intent_stack_data]
+        
+        # 恢复活跃意图栈
+        if hasattr(context, 'restore_active_intents'):
+            getattr(context, 'restore_active_intents')(active_intents)
+        
+        if hasattr(context, '_intent_exclusive_depth'):
+            setattr(context, '_intent_exclusive_depth', data.get("intent_exclusive_depth", 0))
         
         return context
 
@@ -209,7 +229,7 @@ class RuntimeDeserializer:
                 if obj.logic_id in logic_id_map:
                     obj.py_func = logic_id_map[obj.logic_id]
 
-    def _get_scope(self, uid: str) -> ScopeImpl:
+    def _get_scope(self, uid: str) -> Scope:
         if uid in self.scope_cache:
             return self.scope_cache[uid]
             
@@ -217,20 +237,23 @@ class RuntimeDeserializer:
         parent_uid = data.get("parent_uid")
         parent = self._get_scope(parent_uid) if parent_uid else None
         
-        scope = ScopeImpl(parent=parent, registry=self.registry)
+        scope = self.factory.create_scope(parent=parent)
         self.scope_cache[uid] = scope
         
         for name, sym_data in data.get("symbols", {}).items():
-            scope._symbols[name] = self._deserialize_symbol(sym_data)
+            sym = self._deserialize_symbol(sym_data)
+            scope.define_variable(name, sym.value, declared_type=sym.declared_type, is_const=sym.is_const)
             
         for suid, sym_data in data.get("uid_to_symbol", {}).items():
-            scope._uid_to_symbol[suid] = self._deserialize_symbol(sym_data)
+            sym = self._deserialize_symbol(sym_data)
+            if hasattr(scope, 'bind_symbol_by_uid'):
+                getattr(scope, 'bind_symbol_by_uid')(suid, sym)
             
         return scope
 
-    def _deserialize_symbol(self, data: Dict[str, Any]) -> RuntimeSymbolImpl:
+    def _deserialize_symbol(self, data: Dict[str, Any]) -> RuntimeSymbol:
         val = self._deserialize_value(data["value"])
-        return RuntimeSymbolImpl(
+        return self.factory.create_runtime_symbol(
             name=data["name"], 
             value=val, 
             is_const=data.get("is_const", False)
@@ -268,18 +291,19 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "list":
-            obj = IbList([], ib_class)
+            obj = self.factory.create_list([])
             self.instance_cache[uid] = obj 
             obj.elements = [self._deserialize_value(e) for e in data.get("elements", [])]
             
         elif _type == "dict":
+            # IbDict 尚未有标准工厂方法，暂用 Registry
             obj = IbDict({}, ib_class)
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
             
         elif _type == "module":
             scope = self._get_scope(data["scope_uid"])
-            obj = IbModule(data["name"], scope, registry=self.registry)
+            obj = self.factory.create_module(data["name"], scope)
             self.instance_cache[uid] = obj
             
         elif _type == "native":
@@ -306,9 +330,9 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "behavior":
-            obj = IbBehavior(data["node_uid"], None, [], data.get("expected_type"))
+            captured = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
+            obj = self.factory.create_behavior(data["node_uid"], captured, data.get("expected_type"))
             self.instance_cache[uid] = obj
-            obj.captured_intents = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
             
         else:
             obj = IbObject(ib_class)

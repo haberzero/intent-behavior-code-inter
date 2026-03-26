@@ -1,11 +1,11 @@
 from typing import Any, Dict, Optional, List, Mapping, Callable
 from core.runtime.interfaces import (
-    IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent
+    IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent, RuntimeContext, RuntimeSymbol
 )
 from core.kernel.registry import KernelRegistry
 
 # 这些导入需要指向它们的新物理位置
-from core.runtime.interpreter.runtime_context import ScopeImpl
+from core.runtime.interpreter.runtime_context import ScopeImpl, RuntimeContextImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbModule, IbNativeObject
 from core.runtime.objects.builtins import IbBehavior, IbList
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
@@ -65,6 +65,12 @@ class RuntimeObjectFactory(IObjectFactory):
             ib_class=self._registry.get_class("Intent"),
             role=role or IntentRole.BLOCK
         )
+
+    def create_context(self, initial_scope: Optional[Scope] = None) -> RuntimeContext:
+        return RuntimeContextImpl(initial_scope=initial_scope, registry=self._registry)
+
+    def create_runtime_symbol(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False) -> RuntimeSymbol:
+        return RuntimeSymbolImpl(name=name, value=value, declared_type=declared_type, is_const=is_const)
 
     # --- 逻辑组件创建 (IoC 实现) ---
 

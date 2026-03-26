@@ -8,16 +8,8 @@ from typing import Optional, Dict, Any
 from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
-from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
-from core.runtime.interpreter.module_manager import ModuleManagerImpl
-from core.runtime.interpreter.interop import InterOpImpl
-from core.runtime.interpreter.llm_executor import LLMExecutorImpl
-from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.factory import RuntimeObjectFactory
-from core.runtime.interpreter.handlers.stmt_handler import StmtHandler
-from core.runtime.interpreter.handlers.expr_handler import ExprHandler
-from core.runtime.interpreter.handlers.import_handler import ImportHandler
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.runtime.host.host_interface import HostInterface
@@ -30,7 +22,7 @@ from core.compiler.semantic.passes.contract_validator import ContractValidator
 from core.kernel.types import ModuleMetadata
 from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
-from core.kernel.issue import InterpreterError, LexerError, ParserError, SemanticError
+from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
 from core.kernel.types.descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
@@ -39,7 +31,10 @@ from core.kernel.types.descriptors import (
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext
 from core.runtime.interfaces import IExecutionContext
+from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
+from core.runtime.capability_registry import CapabilityRegistry
+from core.runtime.interfaces import IsolationLevel
 
 
 from core.base.enums import RegistrationState
@@ -65,16 +60,18 @@ class IBCIEngine(IInterpreterFactory):
         # [NEW] 同步输出回调到调试器，确保内核追踪能被捕获
         self.debugger.output_callback = None # 默认
 
+        # [IES 2.2] 初始化能力注册中心
+        self.capability_registry = CapabilityRegistry()
+        
         # 1. 初始化模块发现服务 (内置路径 + 插件路径)
         builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibci_modules")
         plugins_path = os.path.join(self.root_dir, "plugins")
         
         self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
-        self.module_loader = ModuleLoader([builtin_path, plugins_path])
+        self.module_loader = ModuleLoader([builtin_path, plugins_path], capability_registry=self.capability_registry)
         
         # [IES 2.1 IoC] 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
-        self._configure_factory(self.object_factory)
 
         # 2. 加载元数据以支持静态分析
         self.host_interface = self.discovery_service.discover_all(self.registry)
@@ -82,68 +79,61 @@ class IBCIEngine(IInterpreterFactory):
         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
         
-        self.interpreter: Optional[Interpreter] = None
-
-    def _configure_factory(self, factory: RuntimeObjectFactory):
-        """配置工厂的 IoC 注册表"""
-        # 1. 注册逻辑处理器 (Handlers)
-        factory.register_handler_factory(lambda sc, ec: StmtHandler(sc, ec))
-        factory.register_handler_factory(lambda sc, ec: ExprHandler(sc, ec))
-        factory.register_handler_factory(lambda sc, ec: ImportHandler(sc, ec))
+        # [IES 2.2] 初始化运行时调度器
+        self.rt_scheduler = RuntimeSchedulerImpl(None) # 此时 ServiceContext 尚未就绪，将在后续注入
         
-        # 2. 注册 LLM 执行器
-        factory.register_llm_executor_factory(lambda sc, ec: LLMExecutorImpl(sc, ec))
+        self.interpreter: Optional[Interpreter] = None
 
     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
-        effective_registry = registry
-
-        # [P2-B] 对 artifact_dict 做深拷贝，防止子环境修改影响父环境
-        # 注意：此时 artifact 已经是 FlatSerializer 序列化后的 dict
-        if artifact is not None and isinstance(artifact, dict):
-            effective_artifact = copy.deepcopy(artifact)
-        else:
-            effective_artifact = artifact
-
-        # [P2-B.1] 为子环境创建独立的 IssueTracker 实例，实现实例级隔离
-        from core.compiler.diagnostics.issue_tracker import IssueTracker
-        sub_issue_tracker = IssueTracker()
-
-        sub_interpreter = Interpreter(
-            issue_tracker=sub_issue_tracker,
-            artifact=effective_artifact,
-            registry=effective_registry,
+        # [IES 2.2] 委派给调度器进行组装与隔离管理
+        instance_id = self.rt_scheduler.spawn(
+            artifact=artifact,
+            isolation=IsolationLevel.SCOPE if isolated else IsolationLevel.NONE,
+            registry=registry,
             host_interface=host_interface,
-            output_callback=self.interpreter.output_callback if self.interpreter else None,
-            input_callback=getattr(self.interpreter, 'input_callback', None) if self.interpreter else None,
-            source_provider=self.scheduler.source_manager,
-            compiler=self.scheduler,
             root_dir=root_dir,
             factory=self,
             object_factory=self.object_factory,
             plugin_loader=self._load_plugins,
-            kernel_token=self._kernel_token
+            kernel_token=self._kernel_token,
+            issue_tracker=IssueTracker(), # 为子环境创建独立追踪器
+            output_callback=self.interpreter.output_callback if self.interpreter else None,
+            input_callback=getattr(self.interpreter, 'input_callback', None) if self.interpreter else None
         )
-        return sub_interpreter
+        return self.rt_scheduler.instances[instance_id]
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
-        # [IES 2.0] 彻底消除后期注入，构造期完成依赖图谱闭合
-        self.interpreter = Interpreter(
-            self.issue_tracker, 
-            output_callback=output_callback,
-            artifact=artifact, 
+        # [IES 2.2] 委派给调度器进行主实例装配
+        main_id = self.rt_scheduler.spawn(
+            artifact=artifact,
+            isolation=IsolationLevel.NONE,
+            instance_id="main",
+            issue_tracker=self.issue_tracker,
+            registry=self.registry,
             host_interface=self.host_interface,
             debugger=self.debugger,
             root_dir=self.root_dir,
-            registry=self.registry,
             source_provider=self.scheduler.source_manager,
             compiler=self.scheduler,
             factory=self,
-            object_factory=self.object_factory, # [IES 2.1 IoC]
-            plugin_loader=self._load_plugins, # 注入生命周期钩子
-            kernel_token=self._kernel_token # 注入内核令牌以驱动状态流转
+            object_factory=self.object_factory,
+            plugin_loader=self._load_plugins,
+            kernel_token=self._kernel_token,
+            output_callback=output_callback
         )
+        
+        self.interpreter = self.rt_scheduler.instances[main_id]
+        
+        # [IES 2.2] 统一装配调度器与能力注册中心
+        service_context = self.interpreter.service_context
+        self.rt_scheduler.hydrate(service_context)
+        
+        if hasattr(service_context, '_scheduler'):
+            setattr(service_context, '_scheduler', self.rt_scheduler)
+        if hasattr(service_context, '_capability_registry'):
+            setattr(service_context, '_capability_registry', self.capability_registry)
         
         # [IES 2.1 Transition] STAGE 7: 深度契约校验与就绪
         # [IES 2.1 Refactor] 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
@@ -315,13 +305,10 @@ class IBCIEngine(IInterpreterFactory):
         if not self.interpreter:
             self._prepare_interpreter(immutable_artifact, output_callback=output_callback)
         
-        # 1. 注入初始变量
-        if variables:
-            for name, val in variables.items():
-                self.interpreter.runtime_context.define_variable(name, val)
-        
-        # 2. 启动执行
-        return self.interpreter.run()
+        # [IES 2.2] 委派执行权给运行时调度器
+        # 目前调度器内部仍然通过 Engine 的准备机制来启动解释器
+        # 但从宏观视角看，Engine 已经不再直接驱动 Interpreter
+        return self.rt_scheduler.execute(immutable_artifact, variables=variables, output_callback=output_callback)
 
     def set_variable(self, name: str, val: Any):
         """[Engine API] 向当前解释器环境注入变量"""
