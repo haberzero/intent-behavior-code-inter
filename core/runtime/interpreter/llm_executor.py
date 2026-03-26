@@ -54,10 +54,19 @@ class LLMExecutorImpl:
     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
-        # 动态从 ai 模块获取 Provider
+        # [IES 2.2] 动态从 ai 模块获取 Provider
         ai_module = self.interop.get_package("ai")
-        if ai_module and hasattr(ai_module, "get_llm_provider"):
+        if not ai_module:
+            return None
+            
+        # 1. 优先尝试显式获取 Provider 接口 (用于复杂插件代理)
+        if hasattr(ai_module, "get_llm_provider"):
             return ai_module.get_llm_provider()
+            
+        # 2. 其次检查模块实现是否直接实现了 ILLMProvider (用于核心 AI 插件)
+        if isinstance(ai_module, ILLMProvider):
+            return ai_module
+            
         return None
 
     def push_expected_type(self, type_name: str):
@@ -236,21 +245,36 @@ class LLMExecutorImpl:
         }
 
         # 6. 处理返回类型
-        if scene_name in ("decision", "choice"):
-            decision_map = execution_context.get_side_table("decision_maps", node_uid) or {}
+        # [IES 2.1 Unified Decision] 统一处理分支、循环和决策场景的模糊判定
+        if scene_name in ("decision", "choice", "BRANCH", "LOOP", "IbScene.BRANCH", "IbScene.LOOP"):
+            # 1. 优先尝试从侧表获取节点特有的决策映射
+            decision_map = execution_context.get_side_table("decision_maps", node_uid)
+            
+            # 2. 如果侧表没有，则尝试从 AI 插件获取该场景的全局默认映射
+            if not decision_map and ai_module and hasattr(ai_module, "get_decision_map"):
+                decision_map = ai_module.get_decision_map()
+            
             if decision_map:
                 clean_res = response.strip().lower()
-                # 模糊匹配
-                for k in decision_map:
-                    if k.lower() in clean_res:
-                        context.retry_hint = None
-                        return self.registry.box(decision_map[k])
                 
+                # 1. 优先尝试精确匹配
                 if clean_res in decision_map:
                     context.retry_hint = None
                     return self.registry.box(decision_map[clean_res])
                 
-                raise LLMUncertaintyError(f"LLM decision format error: {response}", node_uid, raw_response=response)
+                # 2. 尝试带边界的关键词匹配 (防止 "maybe_yes" 匹配到 "yes")
+                for k in decision_map:
+                    pattern = rf"\b{re.escape(k.lower())}\b"
+                    if re.search(pattern, clean_res):
+                        context.retry_hint = None
+                        return self.registry.box(decision_map[k])
+                
+                # [IES 2.1 Enforcement] 如果没有匹配到任何项，说明 AI 的回复是模糊的，必须抛出异常
+                raise LLMUncertaintyError(
+                    f"LLM 决策格式错误或回复模糊：期望匹配 {list(decision_map.keys())} 之一，但 AI 返回了: {response}", 
+                    node_uid, 
+                    raw_response=response
+                )
 
         context.retry_hint = None
         return self.registry.box(response)

@@ -89,6 +89,11 @@ class FlatSerializer(BaseFlatSerializer):
             node_uid = self._collect_node(node)
             remaped_node_to_loc[node_uid] = loc
 
+        remaped_decision_maps = {}
+        for node, d_map in result.decision_maps.items():
+            node_uid = self._collect_node(node)
+            remaped_decision_maps[node_uid] = d_map
+
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
@@ -98,7 +103,8 @@ class FlatSerializer(BaseFlatSerializer):
                 "node_to_type": remaped_node_to_type,
                 "node_is_deferred": remaped_node_is_deferred,
                 "node_intents": remaped_node_intents,
-                "node_to_loc": remaped_node_to_loc
+                "node_to_loc": remaped_node_to_loc,
+                "decision_maps": remaped_decision_maps
             },
             "pools": {
                 "nodes": self.node_pool,

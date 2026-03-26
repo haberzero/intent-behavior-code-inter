@@ -17,6 +17,7 @@ class SideTableManager:
         self.node_is_deferred: Dict[Any, bool] = {}
         self.node_intents: Dict[Any, List[Any]] = {}
         self.node_to_loc: Dict[Any, Any] = {}
+        self.decision_maps: Dict[Any, Dict[str, str]] = {}
 
     def bind_symbol(self, node: Any, sym: Symbol) -> None:
         self.node_to_symbol[node] = sym
@@ -26,6 +27,9 @@ class SideTableManager:
 
     def bind_scene(self, node: Any, scene: Any) -> None:
         self.node_scenes[node] = scene
+
+    def bind_decision_map(self, node: Any, decision_map: Dict[str, str]) -> None:
+        self.decision_maps[node] = decision_map
 
     def set_deferred(self, node: Any, is_deferred: bool = True) -> None:
         self.node_is_deferred[node] = is_deferred

@@ -50,30 +50,21 @@ MVP (Minimum Viable Product) Demo 的目标是：
 
 > 这些问题在代码审计中被发现，必须在 MVP 之前修复，否则核心功能无法正常工作。
 
-### 2.1 llmexcept 机制修复 🔴 最高优先级
+### 2.1 llmexcept 机制修复 🔴 最高优先级 [已完成]
 
-**问题**：`visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装，异常捕获路径断裂
+**问题分析**：
+1. **编译器侧元数据缺失 (Decision Maps)**：编译器目前没有生成 `decision_maps` 侧表。该表负责将 AI 的自然语言回复（如 "yes", "no"）映射为机器逻辑值（"1", "0"）。缺失此表导致解释器无法判定 AI 回复是否“模糊”。
+2. **场景名称不匹配 (Scene Mismatch)**：编译器为 `if/while` 绑定的场景是 `IbScene.BRANCH/LOOP`，而解释器 `LLMExecutorImpl` 仅在场景名为 `"decision"` 或 `"choice"` 时才执行模糊判定逻辑。
+3. **异常链路断裂**：由于上述原因，解释器将 AI 的模糊回复当作普通字符串处理（判定为 True），从未抛出 `LLMUncertaintyError`，导致 `llmexcept` 块永远不会被触发。
 
-**影响**：
-- llmexcept 块永远不会执行
-- AI 判断模糊时程序会直接崩溃，而不是进入 except 分支
-- **MVP 的 llmexcept/retry 核心亮点无法展示**
+**修复方案 (已实施)**：
+1. **Compiler**: 在 `SideTableManager` 中实现了 `decision_maps` 侧表，并在 `SemanticAnalyzer` 中为控制流语句绑定 `BRANCH/LOOP` 场景。
+2. **Interpreter**: 修正了 `LLMExecutorImpl` 的场景匹配逻辑，增加了基于正则边界的关键词匹配，确保 `BRANCH/LOOP` 场景下匹配失败时抛出 `LLMUncertaintyError`。
+3. **Interpreter**: 修改了 `visit_IbIf/While/For` 使用 `_with_unified_fallback` 包装 LLM 调用。
+4. **Plugin System**: 按照 IES 2.2 标准重构了插件加载体系，解决了目录名与模块名不一致导致的加载失败问题，并统一了所有内置插件的导出协议。
 
-**涉及文件**：
-- `core/runtime/interpreter/handlers/stmt_handler.py`
-
-**修复方案**：
-1. 修改 `visit_IbIf/While/For` 使用 `_with_unified_fallback` 包装 LLM 调用
-2. 确保子节点抛出的 `LLMUncertaintyError` 能被父节点 llmexcept 捕获
-
-**验证标准**：
-```ibc-inter
-if @~MOCK:FAIL 这是一个测试~:
-    print("不应该打印")
-llmexcept:
-    print("应该打印这一行")
-```
-运行结果应该是：`应该打印这一行`
+**验证结果**：
+通过 `verify_llmexcept.py` 验证成功，`MOCK:FAIL` 已能正确触发 `llmexcept` 分支。
 
 ---
 
@@ -133,14 +124,7 @@ for @~MOCK:REPAIR 请判断~:
 
 ### 3.1 Symbol.Kind typo 修复
 
-**问题**：`scope_manager.py:44` 使用了不存在的 `Symbol.Kind` 而非 `SymbolKind`
-
-**影响**：特定代码路径可能触发 AttributeError
-
-**涉及文件**：
-- `core/compiler/semantic/passes/scope_manager.py:44`
-
-**修复方案**：将 `Symbol.Kind.VARIABLE` 改为 `SymbolKind.VARIABLE`
+已完成
 
 ---
 

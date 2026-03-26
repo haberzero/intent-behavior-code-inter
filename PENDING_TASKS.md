@@ -301,38 +301,17 @@ class ParserCapability(Protocol):
 
 ---
 
-#### 5.0.3 意图标签解析缺失 🔴 P0
+#### 5.0.3 意图标签解析缺失 ✅ [2026-03-26 已修复]
 
-**问题**：语法手册描述了 `@+#1`, `@-#2` 等语法，但 `#1`, `#2` 标签**完全未被解析**，tag 字段始终为 None
-
-**影响**：
-- 意图标签功能无法使用
-- 精细化意图控制失效
-
-**涉及文件**：
-- `core/compiler/parser/components/statement.py:148-203`
-
-**解决方案方向**：
-1. 在 lexer/scanner 中识别 `#数字` 标签语法
-2. 在 parser 的 intent 处理中提取标签
-3. 在 IntentNode 中存储 tag 信息
-
-**与MVP关系**：🟡 **不影响MVP核心亮点展示，属于边缘功能**
+**状态**: 已实现 `#tag` 解析逻辑。
+**文件**: `core/compiler/parser/components/statement.py`
 
 ---
 
-#### 5.0.4 Symbol.Kind typo 🔴 P1
+#### 5.0.4 Symbol.Kind typo ✅ [2026-03-26 已修复]
 
-**问题**：`scope_manager.py:44` 使用了不存在的 `Symbol.Kind` 而非 `SymbolKind`
-
-**影响**：特定代码路径可能触发 AttributeError
-
-**涉及文件**：
-- `core/compiler/semantic/passes/scope_manager.py:44`
-
-**解决方案方向**：将 `Symbol.Kind.VARIABLE` 改为 `SymbolKind.VARIABLE`
-
-**与MVP关系**：🟡 **如不触发则不影响，但属于低级错误应修复**
+**状态**: 已修正为 `SymbolKind.VARIABLE`。
+**文件**: `core/compiler/semantic/passes/scope_manager.py:44`
 
 ---
 
