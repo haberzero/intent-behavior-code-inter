@@ -2,9 +2,8 @@ import re
 import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, TYPE_CHECKING
-from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
-from core.runtime.interfaces import IExecutionContext
 
 from core.kernel.issue import InterpreterError, LLMUncertaintyError
 from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
@@ -127,10 +126,11 @@ class LLMExecutorImpl:
         # 4. 调用底层模型
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
         
-        # 记录最后一次调用信息
+        # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": user_prompt,
+            "response": raw_res,
             "raw_response": raw_res
         }
         
@@ -237,10 +237,11 @@ class LLMExecutorImpl:
         # 5. 调用底层模型
         response = self._call_llm(sys_prompt, content, node_uid)
         
-        # 记录最后一次调用信息
+        # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": content,
+            "response": response,
             "raw_response": response
         }
 
