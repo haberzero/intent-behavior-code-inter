@@ -53,7 +53,13 @@ class LLMExecutorImpl:
     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
-        # [IES 2.2] 动态从 ai 模块获取 Provider
+        # [IES 2.2] 优先从能力注册中心获取 Provider (能力名: llm_provider)
+        if self.service_context.capability_registry:
+            provider = self.service_context.capability_registry.get("llm_provider")
+            if provider:
+                return provider
+
+        # 回退到从 ai 模块获取 (兼容旧模式)
         ai_module = self.interop.get_package("ai")
         if not ai_module:
             return None
@@ -117,9 +123,9 @@ class LLMExecutorImpl:
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
-        ai_module = self.interop.get_package("ai")
-        if ai_module and hasattr(ai_module, "get_return_type_prompt"):
-            type_prompt = ai_module.get_return_type_prompt(type_name)
+        # [IES 2.2] 从 LLM Provider 获取返回类型提示
+        if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
+            type_prompt = self.llm_callback.get_return_type_prompt(type_name)
             if type_prompt:
                 sys_prompt += f"\n\n{type_prompt}"
 

@@ -55,8 +55,8 @@ class AIPlugin(ILLMProvider):
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
-        if self._capabilities.llm_provider is None:
-            self._capabilities.llm_provider = self
+        # [IES 2.2] 向能力注册表注册自己为 LLM Provider
+        capabilities.expose("llm_provider", self)
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""

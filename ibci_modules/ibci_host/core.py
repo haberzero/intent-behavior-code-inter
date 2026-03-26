@@ -16,6 +16,8 @@ class HostImplementation(IbPlugin):
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
+        # [IES 2.2] 向能力注册表注册自己为 Host Provider
+        capabilities.expose("host_provider", self)
 
     @property
     def plugin_id(self) -> str:
@@ -35,7 +37,13 @@ class HostImplementation(IbPlugin):
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
         if self._capabilities and self._capabilities.service_context:
-            return self._capabilities.service_context.host_service.run_isolated(path, policy)
+            scheduler = self._capabilities.service_context.scheduler
+            if scheduler:
+                from core.runtime.interfaces import ExecutionRequest
+                request = ExecutionRequest(node_uid=path, payload=policy)
+                # 目前 dispatch 暂不接受 execution_context，需要从 capabilities 获取或调整接口
+                # 暂时还是通过 host_service 保持兼容，直到 scheduler 完全接管
+                return self._capabilities.service_context.host_service.run_isolated(path, policy)
         return False
 
     def get_source(self) -> str:

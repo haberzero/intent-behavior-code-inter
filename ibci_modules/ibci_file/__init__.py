@@ -24,6 +24,10 @@ class FileLib:
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
 
+    def remove(self, path: str) -> None:
+        if os.path.exists(path):
+            os.remove(path)
+
 
 def create_implementation():
     return FileLib()
