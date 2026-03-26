@@ -6,9 +6,15 @@ import importlib.util
 from typing import Dict, Any, Optional
 
 # 确保项目根目录在路径中
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.abspath(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from core.engine import IBCIEngine
+from core.kernel.issue import CompilerError
+from core.compiler.diagnostics.formatter import DiagnosticFormatter
+from core.compiler.lexer.lexer import Lexer
+from core.runtime.objects.kernel import CoreModule, DebugLevel
 
 def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
     """从本地 Python 文件动态加载插件"""
@@ -33,18 +39,18 @@ def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
             print(f"Failed to load plugin {path}: {str(e)}")
 
 def main():
-    parser = argparse.ArgumentParser(description="IBC-Inter (Intent-Behavior-Code Interaction) Interpreter")
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
-
+    parser = argparse.ArgumentParser(description="IBC-Inter CLI")
+    subparsers = parser.add_subparsers(dest="command")
+    
     # Run command
-    run_parser = subparsers.add_parser("run", help="Run an IBCI file")
+    run_parser = subparsers.add_parser("run", help="Compile and run an IBCI file")
     run_parser.add_argument("file", help="Path to the .ibci entry file")
-    run_parser.add_argument("--config", help="Path to API config JSON file", default="test_target_proj/api_config.json")
-    run_parser.add_argument("--root", help="Project root directory (default: current dir)", default=None)
+    run_parser.add_argument("--root", help="Project root directory", default=None)
+    run_parser.add_argument("--config", help="Path to JSON config file for variables", default=None)
+    run_parser.add_argument("--var", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
-    run_parser.add_argument("--var", action="append", help="Inject variables in key=value format")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
-    run_parser.add_argument("--core-debug", help='Enable core debugging. Pass a JSON string (e.g. \'{"INTERPRETER": "DATA"}\') or a file path.')
+    run_parser.add_argument("--core-debug", help="Core debugger config (JSON string or file path)", default=None)
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -115,36 +121,25 @@ def main():
         load_external_plugins(engine, args.plugin)
 
     if args.command == "run":
-        # 2. 处理变量
-        variables = {}
-
-        # 从配置文件加载
+        # 加载外部配置 (作为运行时变量)
+        cli_variables = {}
         if getattr(args, 'config', None) and os.path.exists(args.config):
             try:
-                with open(args.config, 'r', encoding='utf-8') as f:
-                    cfg_data = json.load(f)
-                    # 兼容 test_target_proj 的格式
-                    if "default_model" in cfg_data:
-                        m = cfg_data["default_model"]
-                        variables.update({
-                            "url": m.get("base_url"),
-                            "key": m.get("api_key"),
-                            "model": m.get("model")
-                        })
-                    else:
-                        variables.update(cfg_data)
+                with open(args.config, "r", encoding="utf-8") as f:
+                    cli_variables.update(json.load(f))
             except Exception as e:
                 print(f"Warning: Failed to load config: {e}")
         
-        # 从命令行参数加载 (--var key=value)
         if getattr(args, 'var', None):
-            for v in args.var:
-                if "=" in v:
-                    k, val = v.split("=", 1)
-                    variables[k] = val
+            for var in args.var:
+                if "=" in var:
+                    k, v = var.split("=", 1)
+                    cli_variables[k] = v
 
-        # 3. 执行
-        success = engine.run(args.file, variables=variables)
+        # 运行引擎
+        # [IES 2.2 Fix] 仅将变量传入 run()，不通过 engine.define_variable 注入全局符号表，
+        # 从而避免编译阶段的 SEM_002 重定义错误。
+        success = engine.run(args.file, variables=cli_variables)
         sys.exit(0 if success else 1)
 
     elif args.command == "check":
@@ -152,7 +147,6 @@ def main():
         sys.exit(0 if success else 1)
 
     elif args.command == "compile":
-        import json
         success = engine.compile(args.file)
         if success:
             from core.compiler.serialization.serializer import FlatSerializer
@@ -179,13 +173,12 @@ def main():
         sys.exit(0)
 
     elif args.command == "parse":
-        import json
-        success = engine.compile(args.file)
-        if success:
-            entry_rel = os.path.relpath(os.path.abspath(args.file), engine.root_dir)
-            module_name = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
-            if module_name in success.modules:
-                mod_result = success.modules[module_name]
+        artifact = engine.compile(args.file)
+        if artifact:
+            # 获取入口模块名（对应用户提供的文件）
+            entry_module = artifact.entry_module
+            if entry_module in artifact.modules:
+                mod_result = artifact.modules[entry_module]
                 ast_node = mod_result.module_ast
                 ast_dict = {
                     "type": type(ast_node).__name__,
@@ -198,14 +191,12 @@ def main():
             sys.exit(0)
         sys.exit(1)
 
-    elif args.command == "semantic":
-        import json
-        success = engine.compile(args.file)
-        if success:
-            entry_rel = os.path.relpath(os.path.abspath(args.file), engine.root_dir)
-            module_name = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
-            if module_name in success.modules:
-                mod_result = success.modules[module_name]
+    elif args.command == "inspect":
+        artifact = engine.compile(args.file)
+        if artifact:
+            entry_module = artifact.entry_module
+            if entry_module in artifact.modules:
+                mod_result = artifact.modules[entry_module]
                 sym_table = mod_result.symbol_table
                 result = {
                     "module": module_name,
