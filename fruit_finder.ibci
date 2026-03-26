@@ -1,5 +1,20 @@
 import ai
-ai.set_config(url, key, model)
+import json
+import file
+
+# 1. 自动从 api_config.json 加载配置 (IES 2.2 推荐模式)
+try:
+    dict config = json.parse(file.read("api_config.json"))
+    dict default_model = (dict) config["default_model"]
+    str url = (str) default_model["base_url"]
+    str key = (str) default_model["api_key"]
+    str model = (str) default_model["model"]
+    ai.set_config(url, key, model)
+    print("成功加载 AI 配置")
+except Exception as e:
+    print("警告：无法加载 api_config.json，尝试使用默认注入变量")
+    # 如果 main.py --config 注入了变量，此处会通过 Fallback 机制尝试
+    ai.set_config(url, key, model)
 
 list items = ["apple", "carrot", "banana", "Python Programming Book", "orange", "potato", "History of Rome", "strawberry"]
 list fruit_indices = []
