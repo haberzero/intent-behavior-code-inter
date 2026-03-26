@@ -34,7 +34,7 @@ class SchemaLib:
 
         return True
 
-    def _assert(self, data: Dict[str, Any], rules: Dict[str, Any]):
+    def assert_schema(self, data: Dict[str, Any], rules: Dict[str, Any]):
         if not self.validate(data, rules):
             raise RuntimeError(f"Schema validation failed. Data: {data}, Rules: {rules}")
 

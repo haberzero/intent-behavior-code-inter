@@ -51,7 +51,8 @@ class ModuleDiscoveryService:
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
                         if spec_metadata:
-                            host.register_module(entry, None, spec_metadata)
+                            # [IES 2.2 Standard] 注册时同时提供逻辑名称（ai）和物理发现名称（ibci_ai）
+                            host.register_module(spec_metadata.name, None, spec_metadata, discovery_name=entry)
                             discovered_modules.add(entry)
                     except Exception as e:
                         raise RuntimeError(f"Fatal Error: Failed to load spec for module '{entry}': {e}") from e

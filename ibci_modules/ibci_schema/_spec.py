@@ -23,7 +23,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     [IES 2.2] 方法虚表 - 返回原生 IBC-Inter 元数据声明
 
     validate: (dict, dict) -> bool (校验数据是否符合规则)
-    assert: (dict, dict) -> void (校验失败则抛出异常)
+    assert_schema: (dict, dict) -> void (校验失败则抛出异常)
     """
     return {
         "functions": {
@@ -31,7 +31,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 "param_types": ["dict", "dict"],
                 "return_type": "bool"
             },
-            "assert": {
+            "assert_schema": {
                 "param_types": ["dict", "dict"],
                 "return_type": "void"
             }

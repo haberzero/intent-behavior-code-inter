@@ -22,17 +22,17 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     """
     [IES 2.2] 方法虚表 - 返回原生 IBC-Inter 元数据声明
 
-    get: str -> str (HTTP GET 请求)
-    post: (str, any) -> dict (HTTP POST 请求)
+    get: (str, dict) -> str (HTTP GET 请求)
+    post: (str, any, dict) -> dict (HTTP POST 请求)
     """
     return {
         "functions": {
             "get": {
-                "param_types": ["str"],
+                "param_types": ["str", "dict"],
                 "return_type": "str"
             },
             "post": {
-                "param_types": ["str", "any"],
+                "param_types": ["str", "any", "dict"],
                 "return_type": "dict"
             }
         }

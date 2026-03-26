@@ -25,20 +25,20 @@ class HostImplementation(IbPlugin):
     def plugin_name(self) -> str:
         return "Host"
 
-    def ib_save_state(self, path: str):
+    def save_state(self, path: str):
         if self._capabilities and self._capabilities.service_context:
             self._capabilities.service_context.host_service.save_state(path)
 
-    def ib_load_state(self, path: str):
+    def load_state(self, path: str):
         if self._capabilities and self._capabilities.service_context:
             self._capabilities.service_context.host_service.load_state(path)
 
-    def ib_run(self, path: str, policy: Dict[str, Any]) -> bool:
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
         if self._capabilities and self._capabilities.service_context:
             return self._capabilities.service_context.host_service.run_isolated(path, policy)
         return False
 
-    def ib_get_source(self) -> str:
+    def get_source(self) -> str:
         if self._capabilities and self._capabilities.service_context:
             return self._capabilities.service_context.host_service.get_source()
         return ""

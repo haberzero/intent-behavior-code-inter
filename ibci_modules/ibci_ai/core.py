@@ -45,6 +45,13 @@ class AIPlugin(ILLMProvider):
             "IbAssign": "目标值计算模糊。请确保返回的内容能被清晰地识别并赋值给变量。"
         }
         self._capabilities: Optional[ExtensionCapabilities] = None
+        self._mock_state: Dict[str, int] = {}
+        self._mock_retry_counts: Dict[str, int] = {}
+
+    def reset_mock_state(self) -> None:
+        """重置Mock状态，用于测试隔离"""
+        self._mock_state.clear()
+        self._mock_retry_counts.clear()
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
@@ -171,17 +178,61 @@ class AIPlugin(ILLMProvider):
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
+            return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
 
         if is_test_mode:
-            res = "1"
-            if scene in ("branch", "loop"):
-                res = "1"
-            else:
-                res = f"[MOCK] {user_prompt}"
+            res = self._handle_mock_response(user_prompt, scene)
             self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
             return res
 
         return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
+
+    def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
+        """
+        [IES 2.2 Mock Testing] 处理 MOCK 前缀指令。
+        MOCK:FAIL - 触发 llmexcept
+        MOCK:TRUE - 返回 "1"
+        MOCK:FALSE - 返回 "0"
+        MOCK:REPAIR - 首次返回模糊值，重试后返回确定值
+        """
+        if not user_prompt.startswith("MOCK:"):
+            if scene in ("branch", "loop"):
+                return "1"
+            return f"[MOCK] {user_prompt}"
+
+        parts = user_prompt[5:].split(" ", 1)
+        mock_cmd = parts[0].upper() if parts else ""
+        mock_content = parts[1] if len(parts) > 1 else ""
+
+        if mock_cmd == "FAIL":
+            self._mock_state[mock_content] = -1
+            return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+
+        if mock_cmd == "TRUE":
+            self._mock_state[mock_content] = 1
+            return "1"
+
+        if mock_cmd == "FALSE":
+            self._mock_state[mock_content] = 0
+            return "0"
+
+        if mock_cmd == "REPAIR":
+            retry_key = f"_repair_{mock_content}"
+            if retry_key not in self._mock_retry_counts:
+                self._mock_retry_counts[retry_key] = 0
+
+            if self._mock_retry_counts[retry_key] == 0:
+                self._mock_retry_counts[retry_key] = 1
+                self._mock_state[mock_content] = -1
+                return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+            else:
+                self._mock_retry_counts[retry_key] = 0
+                self._mock_state[mock_content] = 1
+                return "1"
+
+        if scene in ("branch", "loop"):
+            return "1"
+        return f"[MOCK] {user_prompt}"
 
 
 def create_implementation():
