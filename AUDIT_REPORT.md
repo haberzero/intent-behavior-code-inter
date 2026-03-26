@@ -7,9 +7,28 @@
 - **现状**: 系统通过局部 `import` 和 `callback` 勉强维持运行，模块化封闭性极差。
 - **修复方案建议**: 引入 `IHostService` 和 `ISerializer` 接口，通过依赖注入 (DI) 解耦具体实现。
 
-### 1.2 实现类泄露 (Implementation Leakage)
+### 1.2 实现类泄露与动态宿主架构不一致 (Implementation Leakage & Dynamic Host)
 - **现状**: `RuntimeSerializer` 直接引用 `RuntimeContextImpl` 的私有属性，违反 IES 2.1 物理隔离原则。
 - **现状**: `InterOpImpl` 直接持有 `HostInterface` 具体实现类，导致解释器层对宿主层有非预期的强感知。
+- **动态宿主机制问题**: 
+    1. **组件形态不一**: 动态宿主 (Dynamic Host) 实现方式与 `ai`、`idbg` 等标准插件不一致，存在类似 `ai_server` 的格格不入模块，而非标准 `llm_provider` 模式。
+    2. **层级混乱**: 解释器本应只负责微观执行，但目前与动态宿主、序列化器等组件耦合过深。
+    3. **引用越权**: 动态宿主与序列化器等组件直接或间接持有解释器实例引用，违反了“仅通过上下文/回调交互”的解耦原则。
+
+---
+
+## 2. 架构重构提议：RuntimeScheduler (待评估)
+
+### 2.1 引入 `rt_scheduler` 层
+- **定位**: 位于 `core/runtime` 根目录，对应编译器的 `scheduler`。
+- **职责**: 
+    - 统一管理 `Interpreter`、`RuntimeSerializer`、`DynamicHost` 的生命周期与调度。
+    - 持有 `Interpreter` 实例，而其它组件（如动态宿主、序列化器）仅通过 `rt_scheduler` 提供的通知或上下文实例进行交互。
+    - 承接 `Engine` 层的指令，处理宏观层面的运行流转（如动态宿主申请创建新实例并跳入）。
+
+### 2.2 解释器纯净化
+- **职责**: 仅负责代码层面的微观执行与状态流转。
+- **解耦**: 彻底移除对宿主环境、序列化细节的直接感知。
 
 ---
 

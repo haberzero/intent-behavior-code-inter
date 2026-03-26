@@ -23,10 +23,32 @@ def run_example_via_main(example_rel_path):
     if "cli_config.ibci" in example_rel_path:
         cmd += ["--config", "api_config.json"]
     
+    # Determine if we should use Real LLM or Mock
+    # We keep flow control syntax and complex integration as Real calls
+    real_llm_examples = {
+        "intent_driven_loop.ibci",
+        "llm_error_handling.ibci",
+        "intent_stacking.ibci",
+        "story_teller.ibci",
+        "complex_workflow.ibci",
+        "integration.ibci",
+        "doc_analyzer.ibci",
+        "04_mock_advanced.ibci"
+    }
+    
+    use_mock = True
+    for real_name in real_llm_examples:
+        if real_name in example_rel_path:
+            use_mock = False
+            break
+            
     try:
-        # Disable IBC_TEST_MODE to use real API
+        # Set IBC_TEST_MODE based on our gray-scale policy
         env = os.environ.copy()
-        env["IBC_TEST_MODE"] = "0"
+        env["IBC_TEST_MODE"] = "1" if use_mock else "0"
+        
+        mode_str = "MOCK" if use_mock else "REAL LLM"
+        print(f"Mode: {mode_str}")
         
         result = subprocess.run(
             cmd, 
@@ -56,12 +78,12 @@ def run_example_via_main(example_rel_path):
         return False, str(e)
 
 def main():
-    # Discover all .ibci files in examples_temp
-    examples_temp_dir = project_root / "examples_temp"
+    # Discover all .ibci files in test_target_proj
+    test_target_dir = project_root / "test_target_proj"
     examples_to_test = []
     
     # Priority order or just all
-    for p in examples_temp_dir.rglob("*.ibci"):
+    for p in test_target_dir.rglob("*.ibci"):
         rel_path = p.relative_to(project_root)
         # Skip some files if necessary (e.g. interactive ones)
         if "interactive_debug.ibci" in str(rel_path): continue
