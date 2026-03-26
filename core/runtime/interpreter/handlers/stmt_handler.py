@@ -132,14 +132,12 @@ class StmtHandler(BaseHandler):
     def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """条件分支语句"""
         condition = self.visit(node_data.get("test"))
-        
         if self.execution_context.is_truthy(condition):
             for stmt_uid in node_data.get("body", []):
                 self.visit(stmt_uid)
         else:
             for stmt_uid in node_data.get("orelse", []):
                 self.visit(stmt_uid)
-                
         return self.registry.get_none()
 
     def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -156,7 +154,6 @@ class StmtHandler(BaseHandler):
                 break
             except ContinueException:
                 continue
-                
         return self.registry.get_none()
     
     def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -167,7 +164,6 @@ class StmtHandler(BaseHandler):
         
         # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
-            # 这种情况不需要 to_list 协议，而是直接根据条件的真值决定是否继续
             while self.execution_context.is_truthy(self.visit(iter_uid)):
                 try:
                     for stmt_uid in body:
@@ -180,26 +176,14 @@ class StmtHandler(BaseHandler):
 
         # 标准 Foreach 循环 (for item in list)
         iterable_obj = self.visit(iter_uid)
+        elements_obj = iterable_obj.receive('to_list', [])
+        if not isinstance(elements_obj, IIbList):
+            raise self.report_error(f"Object is not iterable", node_uid)
         
-        # UTS: 使用消息传递获取迭代列表 (to_list 协议)
-        try:
-            elements_obj = iterable_obj.receive('to_list', [])
-            if not isinstance(elements_obj, IIbList):
-                raise self.report_error(f"Object is not iterable", node_uid)
-            
-            elements = elements_obj.elements
-        except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
-            raise
-        except Exception as e:
-            if isinstance(e, InterpreterError): raise
-            raise self.report_error(f"Iteration failed: {str(e)}", node_uid)
-        
+        elements = elements_obj.elements
         total = len(elements)
         for i, item in enumerate(elements):
-            # 注入循环上下文
             self.runtime_context.push_loop_context(i, total)
-            
-            # 绑定循环变量
             target_data = self.get_node_data(target_uid)
             if target_data and target_data["_type"] == "IbName":
                 name = target_data.get("id")
@@ -228,8 +212,18 @@ class StmtHandler(BaseHandler):
         except (ReturnException, BreakException, ContinueException, RetryException):
             raise
         except (ThrownException, Exception) as e:
-            # 包装 Python 原生异常
-            error_obj = e.value if isinstance(e, ThrownException) else self.registry.box(str(e))
+            # [IES 2.1 Refactor] 统一异常对象化
+            if isinstance(e, ThrownException):
+                error_obj = e.value
+            else:
+                # 包装 Python 原生异常为 IBC-Inter 的 Exception 实例
+                exc_class = self.registry.get_class("Exception")
+                if not exc_class:
+                    raise self.report_error("Critical Error: 'Exception' builtin class not found in registry. Bootstrap failed.", node_uid)
+                
+                # [FIX] 传入空参数列表给 instantiate
+                error_obj = exc_class.instantiate([])
+                error_obj.fields["message"] = self.registry.box(str(e))
             
             # 查找匹配的 except 块
             handled = False
@@ -251,7 +245,9 @@ class StmtHandler(BaseHandler):
                 # 2. 绑定异常变量
                 name = handler_data.get("name")
                 if name:
-                    self.runtime_context.define_variable(name, error_obj)
+                    # [IES 2.2 Fix] 必须获取并传递符号 UID
+                    sym_uid = self.get_side_table("node_to_symbol", handler_uid)
+                    self.runtime_context.define_variable(name, error_obj, uid=sym_uid)
                 
                 # 3. 执行处理体
                 for stmt_uid in handler_data.get("body", []):

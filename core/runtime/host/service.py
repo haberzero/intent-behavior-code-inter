@@ -112,7 +112,7 @@ class HostService(IHostService):
         
         # 2. 重新注入原生插件 (Native Plugins)
         # [IES 2.1 Refactor] 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
-        for name in self.interop.host_interface.metadata.get_all_modules().keys():
+        for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg:
                 if not isinstance(pkg, IIbObject):
@@ -148,11 +148,11 @@ class HostService(IHostService):
             sub_host_interface = HostInterface()
             inherit_plugins = policy.get("inherit_plugins", [])
             if inherit_plugins is True:
-                inherit_plugins = list(self.interop.host_interface.metadata.get_all_modules().keys())
+                inherit_plugins = self.interop.get_all_package_names()
 
             for p_name in inherit_plugins:
-                impl = self.interop.host_interface.get_module_implementation(p_name)
-                meta = self.interop.host_interface.metadata.resolve(p_name)
+                impl = self.interop.get_package(p_name)
+                meta = self.interop.metadata.resolve(p_name)
                 if impl:
                     sub_host_interface.register_module(p_name, impl, meta)
 
