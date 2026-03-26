@@ -175,9 +175,24 @@ class StatementComponent(BaseComponent):
                     mode = IntentMode.REMOVE
             
         segments = []
+        tag = None
+        
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
             if self.stream.match(TokenType.RAW_TEXT):
-                segments.append(self.stream.previous().value)
+                val = self.stream.previous().value
+                # [IES 2.1] 解析意图标签 #tag
+                # TODO 应该从lexer开始就提供支持。现在是临时方案
+                if tag is None and not segments and val.startswith("#"):
+                    # 尝试提取标签
+                    import re
+                    match = re.match(r"^#([a-zA-Z0-9_]+)\s*", val)
+                    if match:
+                        tag = match.group(1)
+                        remaining = val[match.end():]
+                        if remaining:
+                            segments.append(remaining)
+                        continue
+                segments.append(val)
             elif self.stream.match(TokenType.STRING):
                 val = self.stream.previous().value
                 # Strip quotes if present
@@ -200,7 +215,7 @@ class StatementComponent(BaseComponent):
                 
         # If single segment and it's a string, we can flatten it
         content = "".join([s if isinstance(s, str) else str(s) for s in segments]).strip()
-        return ast.IbIntentInfo(mode=mode, content=content, segments=segments)
+        return ast.IbIntentInfo(mode=mode, content=content, segments=segments, tag=tag)
 
 
     def if_statement(self) -> ast.IbStmt:

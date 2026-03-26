@@ -98,14 +98,15 @@ class ModuleManagerImpl(ModuleManager):
     def import_from(self, module_name: str, names: List[tuple], execution_context: IExecutionContext) -> None:
         """
         处理 from module_name import names...
+        names: List[Tuple[name, asname, uid]]
         """
         context = execution_context.runtime_context
         # 1. 优先从 InterOp 注册包中查找
         package = self.interop.get_package(module_name)
         if package:
             # Check if any alias is '*'
-            if any(name == '*' for name, _ in names):
-                # 导入所有非私有属性
+            if any(name == '*' for name, _, _ in names):
+                # 导入所有非私有属性 (注意：import * 通常不带 UID)
                 for attr_name in dir(package):
                     if not attr_name.startswith('_'):
                         try:
@@ -113,11 +114,11 @@ class ModuleManagerImpl(ModuleManager):
                             context.define_variable(attr_name, attr_val)
                         except AttributeError: pass
             else:
-                for name, asname in names:
+                for name, asname, uid in names:
                     try:
                         attr_val = getattr(package, name)
                         target_name = asname or name
-                        context.define_variable(target_name, attr_val)
+                        context.define_variable(target_name, attr_val, uid=uid)
                     except AttributeError:
                         raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
             return
@@ -129,19 +130,19 @@ class ModuleManagerImpl(ModuleManager):
             
             module_instance = self._loaded_modules.get(module_name)
             if module_instance:
-                if any(name == '*' for name, _ in names):
+                if any(name == '*' for name, _, _ in names):
                     # 使用接口公开方法获取符号
                     symbols = module_instance.scope.get_all_symbols()
                     for sym_name, sym in symbols.items():
                         if not sym.is_const: # 排除 print, int 等内置符号
                             context.define_variable(sym_name, sym.value, declared_type=sym.declared_type)
                 else:
-                    for name, asname in names:
+                    for name, asname, uid in names:
                         try:
                             val = module_instance.get_variable(name)
                             symbol = module_instance.scope.get_symbol(name)
                             target_name = asname or name
-                            context.define_variable(target_name, val, declared_type=symbol.declared_type if symbol else None)
+                            context.define_variable(target_name, val, declared_type=symbol.declared_type if symbol else None, uid=uid)
                         except (InterpreterError, KeyError):
                             raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
                 return

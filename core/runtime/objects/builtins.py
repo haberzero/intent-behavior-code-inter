@@ -194,6 +194,23 @@ class IbString(IbObject):
     def __eq__(self, other: IbObject) -> bool: return self.value == other.to_native()
     def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 
+@register_ib_type("Exception")
+class IbException(IbObject):
+    """Exception 类型的运行时实现"""
+    
+    def message(self) -> IbObject:
+        msg = self.fields.get("message")
+        if msg: return msg
+        return self.ib_class.registry.box("")
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """[IES 2.1] 支持 Exception 的强转逻辑"""
+        if target_class.name in ("str", "Any"):
+            msg = self.fields.get("message")
+            if msg: return msg
+            return self.ib_class.registry.box("Exception")
+        return self
+
 @register_ib_type("list")
 class IbList(IbObject):
     """
@@ -239,6 +256,14 @@ class IbList(IbObject):
 
     def len(self) -> IbObject:
         return self.ib_class.registry.box(len(self.elements))
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """[IES 2.1] 支持 List 的强转逻辑"""
+        # 如果目标是 list 本身或 Any，直接返回
+        if target_class.name in ("list", "Any"):
+            return self
+        # 暂时不支持深度转换，仅允许原样保留 (UTS 宽松校验)
+        return self
 
     def __getitem__(self, key: Any) -> IbObject:
         idx = key.to_native() if hasattr(key, 'to_native') else key
@@ -293,6 +318,12 @@ class IbDict(IbObject):
 
     def len(self) -> IbObject:
         return self.ib_class.registry.box(len(self.fields))
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """[IES 2.1] 支持 Dict 的强转逻辑"""
+        if target_class.name in ("dict", "Any"):
+            return self
+        return self
 
     def __getitem__(self, key: Any) -> IbObject:
         k = key.to_native() if hasattr(key, 'to_native') else key

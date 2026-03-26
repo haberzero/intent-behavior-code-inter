@@ -273,21 +273,16 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         return other.get_base_axiom_name() == "str"
 
 
-class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability):
+class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability, ConverterCapability):
     """list 类型的行为公理"""
     
     @property
     def name(self) -> str: return "list"
     
-    def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # [IES 2.1 Refactor] 使用公理名称判定替代 identity 判定
-        if other.get_base_axiom_name() == "str":
-            return "Did you forget to join the list into a string?"
-        return None
-    
     def get_iter_capability(self) -> Optional[IterCapability]: return self
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -296,6 +291,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
             "len": FunctionMetadata(name="len", param_types=[], return_type=INT_DESCRIPTOR),
             "sort": FunctionMetadata(name="sort", param_types=[], return_type=VOID_DESCRIPTOR),
             "clear": FunctionMetadata(name="clear", param_types=[], return_type=VOID_DESCRIPTOR),
+            "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR),
             "__getitem__": FunctionMetadata(name="__getitem__", param_types=[INT_DESCRIPTOR], return_type=ANY_DESCRIPTOR),
             "__setitem__": FunctionMetadata(name="__setitem__", param_types=[INT_DESCRIPTOR, ANY_DESCRIPTOR], return_type=VOID_DESCRIPTOR)
         }
@@ -335,7 +331,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return other.get_base_axiom_name() == "list"
 
 
-class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability):
+class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability, ConverterCapability):
     """dict 类型的行为公理"""
     
     @property
@@ -344,6 +340,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
     def get_iter_capability(self) -> Optional[IterCapability]: return self
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -351,6 +348,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
             "keys": FunctionMetadata(name="keys", param_types=[], return_type=ListMetadata(element_type=ANY_DESCRIPTOR)),
             "values": FunctionMetadata(name="values", param_types=[], return_type=ListMetadata(element_type=ANY_DESCRIPTOR)),
             "len": FunctionMetadata(name="len", param_types=[], return_type=INT_DESCRIPTOR),
+            "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR),
             "__getitem__": FunctionMetadata(name="__getitem__", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR),
             "__setitem__": FunctionMetadata(name="__setitem__", param_types=[ANY_DESCRIPTOR, ANY_DESCRIPTOR], return_type=VOID_DESCRIPTOR)
         }
@@ -421,15 +419,18 @@ class DynamicAxiom(BaseAxiom, CallCapability, IterCapability, SubscriptCapabilit
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return True
 
-class ExceptionAxiom(BaseAxiom):
+class ExceptionAxiom(BaseAxiom, ConverterCapability):
     """Exception 类型的行为公理"""
     
     @property
     def name(self) -> str: return "Exception"
     
+    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
+    
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
-            "message": FunctionMetadata(name="message", param_types=[], return_type=STR_DESCRIPTOR)
+            "message": FunctionMetadata(name="message", param_types=[], return_type=STR_DESCRIPTOR),
+            "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR)
         }
 
 class BoundMethodAxiom(BaseAxiom, CallCapability):

@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict
-from core.kernel.symbols import SymbolTable, VariableSymbol, Symbol
+from core.kernel.symbols import SymbolTable, VariableSymbol, Symbol, SymbolKind
 from core.kernel.types.descriptors import TypeDescriptor
 
 
@@ -41,7 +41,7 @@ class ScopeManager:
     ) -> VariableSymbol:
         sym = VariableSymbol(
             name=name,
-            kind=Symbol.Kind.VARIABLE,
+            kind=SymbolKind.VARIABLE,
             descriptor=var_type,
             def_node=def_node,
             owned_scope=self._current_scope

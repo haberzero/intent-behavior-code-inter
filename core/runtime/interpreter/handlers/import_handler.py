@@ -27,6 +27,8 @@ class ImportHandler(BaseHandler):
         for alias_uid in node_data.get("names", []):
             alias_data = self.get_node_data(alias_uid)
             if alias_data:
-                names.append((alias_data.get("name"), alias_data.get("asname")))
+                # 获取符号 UID
+                sym_uid = self.get_side_table("node_to_symbol", alias_uid)
+                names.append((alias_data.get("name"), alias_data.get("asname"), sym_uid))
         self.service_context.module_manager.import_from(node_data.get("module"), names, self.execution_context)
         return self.registry.get_none()

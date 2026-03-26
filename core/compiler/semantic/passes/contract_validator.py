@@ -16,12 +16,13 @@ class ContractValidator:
         self.debugger = debugger
 
     def validate_all(self):
-        """执行全局审计"""
+        """
+        [IES 2.1 Final Audit] 遍历注册表中的所有描述符，验证其内部契约一致性。
+        """
         if self.debugger:
             self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, "Starting Global Contract Validation (STAGE 7)...")
-            
-        # 遍历注册表中所有的描述符
-        for desc in self.registry.get_all_descriptors():
+
+        for desc in self.registry.all_descriptors.values():
             # 1. 审计类契约
             if desc.is_class():
                 self._validate_class(desc)
