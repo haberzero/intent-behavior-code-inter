@@ -3,7 +3,7 @@ import os
 import sys
 import json
 import importlib.util
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # 确保项目根目录在路径中
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))

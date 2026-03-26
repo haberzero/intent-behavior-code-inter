@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict, List, Union, Protocol, runtime_checkable, TYPE_CHECKING
+from typing import Optional, Any, Dict, List, Union, Protocol, runtime_checkable, TYPE_CHECKING, Callable
 import copy
 
 # [Axiom Layer Integration]
@@ -33,15 +33,22 @@ class TypeDescriptor:
     # [New] 公理绑定
     _axiom: Optional['TypeAxiom'] = field(default=None, init=False, repr=False)
 
-    def walk_references(self, callback: Any) -> None:
+    def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         """
-        [IES 2.1] 遍历并应用回调到所有内部持有的类型引用。
-        包括成员符号所持有的描述符。
+        [IES 2.1] 深度遍历描述符持有的类型引用。
+        与 walk_references 的区别在于，它不包含 members 遍历，
+        专门用于 clone 过程中处理子类特有的字段（如 element_type）。
+        """
+        pass
+
+    def walk_references(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
+        """
+        [IES 2.1] 深度遍历描述符持有的类型引用（包含成员符号）。
         """
         if self.members:
             for sym in self.members.values():
-                # 注意：Symbol.walk_references 应该能够接受并应用回调
                 sym.walk_references(callback)
+        self.walk_references_raw(callback)
 
     def get_references(self) -> Dict[str, Any]:
         """
@@ -70,11 +77,16 @@ class TypeDescriptor:
         # 3. 递归克隆成员符号
         if self.members:
             # 注意：此处必须使用 dict comprehension 确保 Symbol.clone 也能使用同一个 memo
-            # 同时 Symbol.clone 会递归调用 TypeDescriptor.clone(memo)
             new_desc.members = {name: sym.clone(memo) for name, sym in self.members.items()}
             
-        # 4. [IES 2.1 Refactor] 多态处理子类持有的结构化类型引用，消除 isinstance 硬编码
-        new_desc.walk_references(lambda d: d.clone(memo))
+        # 4. [IES 2.1 Refactor] 多态处理子类持有的结构化类型引用
+        # 注意：此处必须使用一个新的 callback，它只对“尚未被克隆”的原生引用调用 clone
+        def clone_ref(d: 'TypeDescriptor') -> 'TypeDescriptor':
+            if id(d) in memo:
+                return memo[id(d)]
+            return d.clone(memo)
+
+        new_desc.walk_references_raw(clone_ref)
             
         return new_desc
 
@@ -323,7 +335,7 @@ class LazyDescriptor(TypeDescriptor):
         self.target_name = name
         self.target_module = module_path
 
-    def walk_references(self, callback: Any) -> None:
+    def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         """[IES 2.1] 延迟加载描述符也需要参与多态遍历"""
         if self._resolved:
             self._resolved = callback(self._resolved)
@@ -391,8 +403,7 @@ class ListMetadata(TypeDescriptor):
     """列表类型元数据"""
     element_type: Optional[TypeDescriptor] = None
 
-    def walk_references(self, callback: Any) -> None:
-        super().walk_references(callback)
+    def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         if self.element_type:
             self.element_type = callback(self.element_type)
 
@@ -444,8 +455,7 @@ class DictMetadata(TypeDescriptor):
     key_type: Optional[TypeDescriptor] = None
     value_type: Optional[TypeDescriptor] = None
 
-    def walk_references(self, callback: Any) -> None:
-        super().walk_references(callback)
+    def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         if self.key_type: self.key_type = callback(self.key_type)
         if self.value_type: self.value_type = callback(self.value_type)
 
@@ -507,8 +517,7 @@ class FunctionMetadata(TypeDescriptor):
     param_types: List[TypeDescriptor] = field(default_factory=list)
     return_type: Optional[TypeDescriptor] = None
 
-    def walk_references(self, callback: Any) -> None:
-        super().walk_references(callback)
+    def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         self.param_types = [callback(p) for p in self.param_types]
         if self.return_type: self.return_type = callback(self.return_type)
 
@@ -632,8 +641,7 @@ class BoundMethodMetadata(TypeDescriptor):
     receiver_type: Optional[TypeDescriptor] = field(default=None)
     function_type: Optional[TypeDescriptor] = field(default=None)
 
-    def walk_references(self, callback: Any) -> None:
-        super().walk_references(callback)
+    def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         if self.receiver_type: self.receiver_type = callback(self.receiver_type)
         if self.function_type: self.function_type = callback(self.function_type)
 

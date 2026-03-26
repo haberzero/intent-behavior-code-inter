@@ -178,7 +178,39 @@ class AIPlugin(ILLMProvider):
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
-            return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
+            
+            # [IES 2.2 Real LLM] 使用 OpenAI 官方 SDK
+            try:
+                from openai import OpenAI
+                
+                base_url = self._config["url"]
+                # 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
+                if "/v1" not in base_url and "127.0.0.1" in base_url:
+                    base_url = f"{base_url.rstrip('/')}/v1"
+                
+                client = OpenAI(
+                    api_key=self._config["key"],
+                    base_url=base_url
+                )
+                
+                completion = client.chat.completions.create(
+                    model=self._config["model"],
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=1024
+                )
+                
+                if not completion or not hasattr(completion, 'choices') or not completion.choices:
+                    raise RuntimeError(f"LLM 返回异常响应: {completion}")
+
+                res = completion.choices[0].message.content.strip()
+                return res
+            except ImportError:
+                raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
+            except Exception as e:
+                raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
         if is_test_mode:
             res = self._handle_mock_response(user_prompt, scene)

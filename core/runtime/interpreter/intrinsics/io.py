@@ -18,7 +18,17 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
         if callback:
             callback(msg)
         else:
-            print(msg)
+            try:
+                # [WINDOWS FIX] 尝试以 UTF-8 编码打印
+                import sys
+                if hasattr(sys.stdout, 'reconfigure'):
+                    try:
+                        sys.stdout.reconfigure(encoding='utf-8')
+                    except Exception: pass
+                print(msg)
+            except UnicodeEncodeError:
+                # 最后的兜底：转义非 GBK 字符
+                print(msg.encode(sys.stdout.encoding or 'gbk', errors='replace').decode(sys.stdout.encoding or 'gbk'))
         return manager.registry.get_none()
 
     def _input(prompt: Optional[IbObject] = None):
