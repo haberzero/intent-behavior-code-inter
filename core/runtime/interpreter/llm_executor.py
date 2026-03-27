@@ -153,8 +153,10 @@ class LLMExecutorImpl:
         for segment in segments:
             # [IES 2.2 Security Update] 处理外部资产引用
             if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
-                # 注意：目前由 Interpreter 在更高层处理，此处仅作为占位
-                pass
+                # 直接通过执行上下文解析外部资产
+                val = execution_context.resolve_value(segment)
+                content_parts.append(str(val))
+                continue
 
             if isinstance(segment, str):
                 if segment.startswith("node_"):

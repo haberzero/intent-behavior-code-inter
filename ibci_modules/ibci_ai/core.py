@@ -240,13 +240,23 @@ class AIPlugin(ILLMProvider):
         MOCK:TRUE - 返回 "1"
         MOCK:FALSE - 返回 "0"
         MOCK:REPAIR - 首次返回模糊值，重试后返回确定值
+        MOCK:[...] - 直接返回列表内容
+        MOCK:{...} - 直接返回字典内容
         """
         if not user_prompt.startswith("MOCK:"):
             if scene in ("branch", "loop"):
                 return "1"
             return f"[MOCK] {user_prompt}"
 
-        parts = user_prompt[5:].split(" ", 1)
+        # 提取指令部分
+        content_after_mock = user_prompt[5:].strip()
+        
+        # 1. 检查结构化直接返回 (MOCK:[...] 或 MOCK:{...})
+        if content_after_mock.startswith('[') or content_after_mock.startswith('{'):
+            return content_after_mock
+
+        # 2. 处理命名指令
+        parts = content_after_mock.split(" ", 1)
         mock_cmd = parts[0].upper() if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
 
