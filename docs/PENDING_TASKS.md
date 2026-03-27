@@ -145,13 +145,76 @@ class TypeAxiom:
 4. Phase 4: 扩展 `TypeAxiom.get_return_type_hint()`
 5. Phase 5: 在 `LLMExecutor` 中根据 `receive_mode` 注入不同系统提示词
 
----
-
 ### 2.5 ParserCapability LLM 提示词片段扩展
 
 **任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法
 
+---
+
+### 二、架构与设计提案 [2026-03-27]
+
+#### 2.1 意图系统对象化 (Intent-as-Object)
+
+**任务**：将意图（Intent）从侧表绑定的元数据，转变为公理体系内的一级公民对象。
+
 **设计目标**：
+- 消除“侧表（Side Table）”作为意图存储的中间层，使意图直接作为 AST 节点和运行时对象存在。
+- 在 `primitives.py` 中实现 `IntentAxiom`，定义意图类型的行为（如 `merge`, `resolve`, `is_active`）。
+- 支持意图变量声明：`intent my_i = @~ "..." ~`。
+
+**实施步骤**：
+1. **Parser 层**：将 `@ "..."` 从语句装饰器扩展为独立的表达式节点 `IbIntentExpr`。
+2. **Axiom 层**：在 `core/kernel/axioms/primitives.py` 中增加 `IntentAxiom` 实现。
+3. **Semantic 层**：支持意图类型的类型检查与推导。
+4. **Runtime 层**：统一 `IbIntent` 对象的协议，使其能直接参与运算。
+
+**风险评估**：中等偏大。涉及编译器前端到后端的链路打通，建议作为 IES 2.3 的核心目标。
+
+---
+
+#### 2.2 统一 LLM 语义失效信号
+
+**任务**：将所有“LLM 无法满足语义要求”的场景统一通过 `LLMUncertaintyError` 抛出。
+
+**设计目标**：
+- 确保 `llmexcept` 能够捕获所有非预期的 LLM 行为。
+- **覆盖范围扩展**：
+  - 0/1 判定模糊（已实现）。
+  - **类型转换失败**：当 `(list) str_val` 无法解析出 JSON 时抛出（已实现，基于 `FuzzyJsonParser`）。
+  - **结构化解析失败**：当 `FuzzyJsonParser` 无法在文本中定位到任何有效结构时抛出。
+
+**与 MVP 关系**：极大增强 `llmexcept/retry` 机制的实用价值。
+
+---
+
+#### 2.3 动态类型与 var 类型推导增强
+
+**任务**：改进 `var` 关键字的类型推导机制，支持“渐进式强类型”。
+
+**问题描述**：
+- 目前 `var` 仅在首次赋值时通过侧表（Side Table）绑定类型描述符。
+- 一旦绑定，后续赋值如果类型不一致会触发 `InterpreterError`。
+- **限制**：无法支持 LLM 输出类型在运行时发生语义漂移的场景。
+
+**解决方案方向**：
+1. **类型松绑**：允许 `var` 变量在特定条件下重新推导类型。
+2. **Union 类型支持**：在编译期为 `var` 生成 `Union` 描述符。
+3. **运行时动态检查**：将类型检查压力部分从编译期移向运行期（针对 `var`）。
+
+---
+
+#### 2.4 意图插值语法的一等公民化
+
+**任务**：允许 `@~ ... ~` 在任何表达式上下文中使用，而非仅作为语句装饰器或特定的 `IbBehaviorExpr`。
+
+**设计目标**：
+- 支持 `str my_prompt = @~ "Current user is $user" ~`。
+- 解决目前插值逻辑在 `LLMExecutor` 中重复实现的问题。
+- 统一 `ext_ref`（外部资产）的解析链路。
+
+---
+
+## 三、类型系统相关任务**设计目标**：
 - 当 LLM 函数的返回值类型被指向某个类时，声明"如何注入系统提示词"
 - 替代当前 AIPlugin 中硬编码的 `_return_type_prompts`
 
