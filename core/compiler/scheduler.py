@@ -348,8 +348,6 @@ class Scheduler(ICompilerService):
             if not tokens:
                 # re-lex 纯粹的防御机制，常规情况下，理论上来讲不应该出现
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Token cache miss for {file_path}, re-lexing.")
-                print(f"[DEBUG] Something went wrong but may not be critical, Lexing source for {file_path}")
-                print(f"[DEBUG] Contact the developer please.")
                 lexer = Lexer(source, file_tracker, debugger=self.debugger)
                 tokens = lexer.tokenize()
             
