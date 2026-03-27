@@ -12,16 +12,10 @@ def _cast_string_to_native(val: str, target_desc: Any) -> Any:
     if target_desc and target_desc._axiom:
         parser = target_desc._axiom.get_parser_capability()
         if parser:
-            try:
-                return parser.parse_value(val)
-            except (ValueError, TypeError):
-                # [IES 2.1 Refactor] 使用公理名称判定替代 identity (is) 检查
-                axiom_name = target_desc.get_base_axiom_name()
-                if axiom_name == "int": return 0
-                if axiom_name == "float": return 0.0
-                if axiom_name == "bool": return False
+            # [IES 2.2] 让 Axiom 抛出的 ValueError 冒泡，由调用方(IbString.cast_to)统一处理
+            return parser.parse_value(val)
     
-    # Fallback: 默认返回原始字符串或基本转换
+    # Fallback: 默认返回原始字符串
     return val
 
 def _cast_numeric_to_native(val: Any, target_desc: Any) -> Any:

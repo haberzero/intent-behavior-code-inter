@@ -150,6 +150,7 @@ class Interpreter:
             resolve_type_from_symbol_callback=self._resolve_type_from_symbol,
             extract_name_id_callback=self._extract_name_id,
             resolve_value_callback=self._resolve_value,
+            visit_with_fallback_callback=self._with_unified_fallback,
             strict_mode=strict_mode
         )
 
@@ -278,6 +279,7 @@ class Interpreter:
         # 运行限制
         self.max_instructions = max_instructions
         self.instruction_count = 0
+        self._fallback_stack = [] # [IES 2.2] 用于追踪正在进行 Fallback 的节点
         
         # [IES 2.1 Defensive Patch] 递归深度安全校验
         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
@@ -544,43 +546,67 @@ class Interpreter:
         return err
 
     def _with_unified_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> IbObject:
-        """[IES 2.1 Unified Fallback] 统一的 LLM 容错执行逻辑"""
+        """
+        [IES 2.1] 统一的 LLM 异常处理装饰器逻辑。
+        支持从 node_data 中提取用户定义的 llmexcept 块并执行。
+        """
         retry_count = 0
         pushed_intents = 0
         
+        # 提取当前节点的 fallback 块
+        fallback_uids = node_data.get("llm_fallback", [])
+
+        # [IES 2.2 Strict] 防止递归重入
+        self._fallback_stack.append(node_uid)
+
         try:
             while True:
                 try:
-                    return action()
-                except LLMUncertaintyError as e:
+                    # 重新从 node_pool 获取最新数据，确保 Retry 时使用的是最新的侧表和意图
+                    current_node_data = self.get_node_data(node_uid)
+                    return action(node_uid, current_node_data)
+                except LLMUncertaintyError as outer_e:
+                    # [IES 2.2 Strict] 逻辑修正：
+                    # 只有语句级别或具有显式 fallback 的节点才在此处理
+                    is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type)
+                    
+                    if not fallback_uids and not is_stmt:
+                        # [NEW] 如果不是 Stmt 且没有 fallback，向上抛出，
+                        # 但由于我们在栈中标记了该节点，外部的 visit 会识别并直接调用 action，
+                        # 最终会让更高层的 Stmt 捕获到这个异常。
+                        raise outer_e
+                        
                     retry_count += 1
                     if retry_count > 3: # 物理硬限制
-                        raise e
+                        raise outer_e
                     
                     # 1. 优先执行显式 llmexcept 块 (用户级)
-                    fallback_uids = node_data.get("llm_fallback", [])
                     if fallback_uids:
                         try:
                             # 执行 fallback 逻辑
                             for f_uid in fallback_uids:
                                 self.visit(f_uid)
-                            return self.registry.get_none()
+                            # 如果执行完毕没有抛出异常，默认重试
+                            raise RetryException()
                         except RetryException:
-                            # 显式触发 retry
+                            # 显式触发 retry，继续循环
                             continue
+                        except Exception as inner_e:
+                            # 如果 fallback 块中发生了其他错误，不再重试，向上抛出
+                            raise inner_e
                     
                     # 2. 内核级自动意图注入 (能力探测)
                     retry_prompt = None
-                    if self.service_context.capability_registry:
-                        provider = self.service_context.capability_registry.get("llm_provider")
-                        if provider and hasattr(provider, "get_retry_prompt"):
-                            retry_prompt = provider.get_retry_prompt(node_type)
-                    
-                    if not retry_prompt:
-                        # 回退到从 ai 模块获取 (兼容旧模式)
-                        ai_module = self.interop.get_package("ai")
-                        if ai_module and hasattr(ai_module, "get_retry_prompt"):
-                            retry_prompt = ai_module.get_retry_prompt(node_type)
+                    if is_stmt:
+                        if self.service_context.capability_registry:
+                            provider = self.service_context.capability_registry.get("llm_provider")
+                            if provider and hasattr(provider, "get_retry_prompt"):
+                                retry_prompt = provider.get_retry_prompt(node_type)
+                        
+                        if not retry_prompt:
+                            ai_module = self.service_context.interop.get_package("ai")
+                            if ai_module and hasattr(ai_module, "get_retry_prompt"):
+                                retry_prompt = ai_module.get_retry_prompt(node_type)
                     
                     if retry_prompt:
                         self.runtime_context.push_intent(retry_prompt, tag="AUTO_RETRY")
@@ -590,8 +616,10 @@ class Interpreter:
                         continue
                     
                     # 无策可施，向上抛出
-                    raise e
+                    raise outer_e
         finally:
+            if self._fallback_stack:
+                self._fallback_stack.pop()
             # 环境清理
             for _ in range(pushed_intents):
                 self.runtime_context.pop_intent()
@@ -779,10 +807,13 @@ class Interpreter:
                 
                 # [IES 2.1 Unified Fallback] 统一语句级 LLM 容错分发
                 fallback_uids = node_data.get("llm_fallback", [])
-                if fallback_uids:
-                    return self._with_unified_fallback(node_uid, node_type, node_data, lambda: visitor(node_uid, node_data))
                 
-                return visitor(node_uid, node_data)
+                # [IES 2.2 Strict] 为所有可能包含 LLM 行为的语句启用潜在的 LLM 异常捕获
+                # 如果当前节点正在处理 Fallback（防止递归重入），我们直接调用 visitor
+                if node_uid in self._fallback_stack:
+                    return visitor(node_uid, node_data)
+                
+                return self._with_unified_fallback(node_uid, node_type, node_data, visitor)
             except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
                 raise
             except InterpreterError as e:
@@ -820,3 +851,14 @@ class Interpreter:
         """UTS: 使用 to_bool 协议判断真值"""
         res = value.receive('to_bool', [])
         return res.to_native() != 0
+
+    # --- 代理到 StmtHandler 的核心方法以支持 Fallback 逻辑 ---
+
+    def visit_IbAssign_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.stmt_handler.visit_IbAssign(node_uid, node_data)
+
+    def visit_IbIf_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.stmt_handler.visit_IbIf(node_uid, node_data)
+
+    def visit_IbWhile_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.stmt_handler.visit_IbWhile(node_uid, node_data)

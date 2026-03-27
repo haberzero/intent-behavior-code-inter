@@ -170,8 +170,15 @@ class IbString(IbObject):
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
-        res_val = _cast_string_to_native(self.value, target_desc)
-        return self.ib_class.registry.box(res_val)
+        try:
+            res_val = _cast_string_to_native(self.value, target_desc)
+            return self.ib_class.registry.box(res_val)
+        except (ValueError, TypeError) as e:
+            # [IES 2.2] 统一抛出 LLMUncertaintyError，使强转失败能被 llmexcept 捕获
+            raise LLMUncertaintyError(
+                f"Casting string '{self.value}' to {target_desc} failed: {str(e)}",
+                raw_response=self.value
+            )
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())
