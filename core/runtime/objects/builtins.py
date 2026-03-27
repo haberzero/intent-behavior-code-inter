@@ -153,16 +153,18 @@ class IbString(IbObject):
 
     def to_bool(self) -> IbObject:
         val = self.value.strip().lower()
-        # [IES 2.2 Strict Mode] 字符串的布尔值逻辑：
-        # 1. 只有严格匹配 "1" 或 "0" (或等价的 yes/no/true/false) 才被视为合法布尔值。
-        # 2. 其余任何字符串均被视为“不确定响应”，抛出 LLMUncertaintyError 以触发 llmexcept 机制。
-        if val in ("1", "true", "yes", "on", "ok"):
+        # [IES 2.2 Strict] 强约束决策逻辑：
+        # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
+        # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
+        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发 LLMUncertaintyError 以便 llmexcept 捕获
+        if val in ("1", "true", "yes", "on"):
             return self.ib_class.registry.box(1)
-        if val in ("0", "false", "no", "off", "null", "none"):
+        if val in ("0", "false", "no", "off", "null", "none", ""):
             return self.ib_class.registry.box(0)
             
+        # [IES 2.2 Enforcement] 非空且非明确布尔语义的字符串，直接判定为模糊
         raise LLMUncertaintyError(
-            f"布尔判定失败：期望确定性的 '1' 或 '0'，但实际收到非标准响应 '{self.value}'。这通常是由于 LLM 回复模糊导致的。",
+            f"Ambiguous boolean string: '{self.value}'. Expected '0' or '1'.",
             raw_response=self.value
         )
 
