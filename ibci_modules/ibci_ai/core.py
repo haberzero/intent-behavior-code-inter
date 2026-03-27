@@ -29,8 +29,8 @@ class AIPlugin(ILLMProvider):
         }
         self._scene_prompts = {
             "general": "你是一个助人为乐的助手。",
-            "branch": "你是一个逻辑判断专家。请分析用户提供的意图和内容，判断当前条件是否满足。如果条件满足请返回 1，否则请返回 0。禁止输出任何其他解释文字。",
-            "loop": "你是一个循环控制专家。请分析用户提供的意图和内容，判断当前循环条件是否满足。如果条件满足应当继续循环请返回 1，否则（已达到停止条件或不再需要继续）请返回 0。禁止输出任何其他解释文字。"
+            "branch": "你是一个逻辑判断专家。请根据用户提供的内容进行判断：成立则返回 1，不成立则返回 0。严禁返回任何其他文字。",
+            "loop": "你是一个循环控制专家。请根据用户提供的内容判断循环是否应继续：继续则返回 1，停止则返回 0。严禁返回任何其他文字。"
         }
         self._return_type_prompts = {
             "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
@@ -183,12 +183,21 @@ class AIPlugin(ILLMProvider):
             self._config["url"] == "TESTONLY" or
             os.environ.get("IBC_TEST_MODE") == "1"
         )
+        
+        # [IES 2.2 Strict] 统一对输入内容进行清洗
+        user_prompt = user_prompt.strip()
+
+        # [IES 2.2 Mock Priority] 在注入约束后缀前，先检查 Mock 指令
+        if is_test_mode:
+            res = self._handle_mock_response(user_prompt, scene)
+            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+            return res
 
         # [IES 2.2] 强化决策场景的 User Prompt 约束
         scene_str = str(scene).lower()
         if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
-            user_prompt += "\n\n### 强制回答要求 ###\n- 你必须【仅】返回数字 0 或 1。\n- 如果条件成立/满足/继续，你必须且仅能返回 1。\n- 如果条件不成立/不满足/停止，你必须且仅能返回 0。\n- 严禁包含任何其他字符（包括解释、Markdown、引号等）。"
-
+            user_prompt += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
+            
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
@@ -221,11 +230,6 @@ class AIPlugin(ILLMProvider):
                 return res
             except Exception as e:
                 raise RuntimeError(f"LLM 调用失败: {str(e)}")
-
-        if is_test_mode:
-            res = self._handle_mock_response(user_prompt, scene)
-            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
-            return res
 
         return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
 
