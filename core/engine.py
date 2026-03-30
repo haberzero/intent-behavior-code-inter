@@ -29,7 +29,7 @@ from core.kernel.types.descriptors import (
     BOOL_DESCRIPTOR, ANY_DESCRIPTOR
 )
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
-from core.runtime.interfaces import IInterpreterFactory, ServiceContext
+from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
 from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
@@ -39,7 +39,7 @@ from core.runtime.interfaces import IsolationLevel
 
 from core.base.enums import RegistrationState
 
-class IBCIEngine(IInterpreterFactory):
+class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
@@ -97,38 +97,38 @@ class IBCIEngine(IInterpreterFactory):
             object_factory=self.object_factory,
             plugin_loader=self._load_plugins,
             kernel_token=self._kernel_token,
-            issue_tracker=IssueTracker(), # 为子环境创建独立追踪器
-            output_callback=self.interpreter.output_callback if self.interpreter else None,
-            input_callback=getattr(self.interpreter, 'input_callback', None) if self.interpreter else None
+            issue_tracker=self.issue_tracker, # 为子环境创建独立追踪器
+            output_callback=self.debugger.output_callback,
+            input_callback=None # 未来可支持
         )
         return self.rt_scheduler.instances[instance_id]
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
         # [IES 2.2] 委派给调度器进行主实例装配
-        main_id = self.rt_scheduler.spawn(
+        # 将 Engine 自身作为 orchestrator 注入，建立从 Runtime 到 Engine 的系统调用通道
+        self.interpreter = self.spawn_interpreter(
             artifact=artifact,
-            isolation=IsolationLevel.NONE,
-            instance_id="main",
-            issue_tracker=self.issue_tracker,
             registry=self.registry,
             host_interface=self.host_interface,
-            debugger=self.debugger,
             root_dir=self.root_dir,
-            source_provider=self.scheduler.source_manager,
-            compiler=self.scheduler,
-            factory=self,
-            object_factory=self.object_factory,
-            plugin_loader=self._load_plugins,
-            kernel_token=self._kernel_token,
-            output_callback=output_callback
+            parent_context=None, # 主实例无父环境
+            isolated=False
         )
         
-        self.interpreter = self.rt_scheduler.instances[main_id]
+        # TODO: 怀疑有vibe带来的异味？后续检查 MVP Demo 阶段不深究
+        # 强制更新 service_context 的 orchestrator
+        if hasattr(self.interpreter, 'service_context'):
+            self.interpreter.service_context._orchestrator = self
+            if self.interpreter.service_context.host_service:
+                self.interpreter.service_context.host_service.orchestrator = self
         
         # [IES 2.2] 统一装配调度器与能力注册中心
         service_context = self.interpreter.service_context
         self.rt_scheduler.hydrate(service_context)
+        
+        # 设定主实例 ID
+        self.rt_scheduler._main_instance_id = self.interpreter.instance_id
         
         if hasattr(service_context, '_scheduler'):
             setattr(service_context, '_scheduler', self.rt_scheduler)
@@ -360,3 +360,30 @@ class IBCIEngine(IInterpreterFactory):
         analyzer.analyze(module, raise_on_error=raise_on_error)
         
         return analyzer
+
+    def request_isolated_run(self, entry_path: str, policy: Dict[str, Any], initial_vars: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        [IKernelOrchestrator] 处理来自运行时的隔离执行系统调用。
+        核心逻辑：启动一个全新的 Engine 实例，实现编译与运行的完全隔离。
+        """
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Handling kernel system call: request_isolated_run -> {entry_path}")
+        
+        # 1. 决定子项目的 target_proj_root (永远等于入口文件所在目录)
+        abs_path = os.path.abspath(entry_path)
+        sub_root_dir = os.path.dirname(abs_path)
+        
+        # 2. 实例化全新的 Engine
+        # 这将触发全新的插件发现 (基于 sub_root_dir/plugins) 和注册表水合
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Bootstrapping new Engine instance for sub-project root: {sub_root_dir}")
+        sub_engine = IBCIEngine(
+            root_dir=sub_root_dir,
+            auto_sniff=True,
+            core_debug_config=self.debugger.config # 继承调试配置
+        )
+        
+        # 3. 运行子项目
+        # 将 policy 中的 inherit_variables 提取的初始状态作为 CLI vars 注入子项目
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Running isolated artifact...")
+        success = sub_engine.run(abs_path, variables=initial_vars)
+        
+        return success

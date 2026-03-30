@@ -46,7 +46,6 @@ def main():
     run_parser = subparsers.add_parser("run", help="Compile and run an IBCI file")
     run_parser.add_argument("file", help="Path to the .ibci entry file")
     run_parser.add_argument("--root", help="Project root directory", default=None)
-    run_parser.add_argument("--config", help="Path to JSON config file for variables", default=None)
     run_parser.add_argument("--var", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
@@ -121,15 +120,8 @@ def main():
         load_external_plugins(engine, args.plugin)
 
     if args.command == "run":
-        # 加载外部配置 (作为运行时变量)
+        # 加载命令行变量
         cli_variables = {}
-        if getattr(args, 'config', None) and os.path.exists(args.config):
-            try:
-                with open(args.config, "r", encoding="utf-8") as f:
-                    cli_variables.update(json.load(f))
-            except Exception as e:
-                print(f"Warning: Failed to load config: {e}")
-        
         if getattr(args, 'var', None):
             for var in args.var:
                 if "=" in var:
@@ -137,8 +129,6 @@ def main():
                     cli_variables[k] = v
 
         # 运行引擎
-        # [IES 2.2 Fix] 仅将变量传入 run()，不通过 engine.define_variable 注入全局符号表，
-        # 从而避免编译阶段的 SEM_002 重定义错误。
         success = engine.run(args.file, variables=cli_variables)
         sys.exit(0 if success else 1)
 

@@ -9,6 +9,20 @@
 
 ---
 
+#### 2.5 IBCI 核心路径解析能力增强 （理论上已完成，目前还处于MVP阶段，未来需要更正式全面的prelude以及Bootloader管理机制梳理、重整、优化。）
+
+**任务**：为 IBCI 语言和标准库提供“当前脚本目录”上下文。
+
+**问题背景**：
+- 目前 `ibci_file` 插件直接使用 Python 的 `open()`，路径解析依赖于进程的 `cwd`（通常是项目根目录）。
+- 导致位于子目录的脚本（如 `test_target_proj/10_local_llm_test/complex_workflow.ibci`）若使用相对路径 `"system.log"`，文件会产生在根目录，造成污染。
+- 脚本作者无法编写位置无关的文件操作代码。
+
+**建议方案**：
+1.  **内置变量**：在 `Interpreter` 中注入 `__file__` 或 `sys.script_dir` 内置变量。
+2.  **插件增强**：修改 `ibci_file` 插件，允许其接受一个基准目录（Base Directory）参数，或者自动根据当前执行节点的模块路径进行解析。
+3.  **规范化临时文件**：在 IES 2.2 规范中明确建议脚本在完成验证后使用 `file.remove()` 自行清理临时文件。
+
 ## 一、动态宿主（DynamicHost）相关任务
 
 ### 1.1 Intent Stack 深拷贝实现

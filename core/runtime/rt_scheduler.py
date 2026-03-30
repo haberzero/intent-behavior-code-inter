@@ -1,5 +1,6 @@
 import uuid
 import copy
+import os
 from typing import Any, Dict, List, Optional, Mapping, Callable
 
 from core.runtime.interfaces import (
@@ -18,6 +19,8 @@ from core.runtime.interpreter.handlers.stmt_handler import StmtHandler
 from core.runtime.interpreter.handlers.expr_handler import ExprHandler
 from core.runtime.interpreter.handlers.import_handler import ImportHandler
 from core.runtime.interpreter.llm_executor import LLMExecutorImpl
+from core.runtime.module_system.discovery import ModuleDiscoveryService
+from core.runtime.module_system.loader import ModuleLoader
 
 class RuntimeSchedulerImpl:
     """
@@ -34,7 +37,12 @@ class RuntimeSchedulerImpl:
         """延迟水化调度器，注入运行时服务"""
         self.service_context = service_context
         self.debugger = service_context.debugger
-        
+    # TODO: 可能是代码异味？此处是智能体快速vibe实现，还没严格审查，暂时保留
+    def _resolve_builtin_path(self) -> str:
+        """标准化内置模块路径发现逻辑"""
+        import ibci_modules
+        return os.path.dirname(os.path.abspath(ibci_modules.__file__))
+
     def spawn(self, 
               artifact: Any, 
               isolation: str = IsolationLevel.NONE,
@@ -57,63 +65,95 @@ class RuntimeSchedulerImpl:
         if obj_factory:
             self._configure_factory(obj_factory)
             
-        issue_tracker = kwargs.get('issue_tracker', sc.issue_tracker if sc else None)
-        registry = kwargs.get('registry', sc.registry if sc else None)
-        host_interface = kwargs.get('host_interface')
-        debugger = kwargs.get('debugger', sc.debugger if sc else self.debugger)
         root_dir = kwargs.get('root_dir')
-        source_provider = kwargs.get('source_provider', sc.source_provider if sc else None)
-        compiler = kwargs.get('compiler', sc.compiler if sc else None)
-        factory = kwargs.get('factory')
-        object_factory = kwargs.get('object_factory', sc.object_factory if sc else None)
-        plugin_loader = kwargs.get('plugin_loader')
-        kernel_token = kwargs.get('kernel_token')
-        output_callback = kwargs.get('output_callback')
-        input_callback = kwargs.get('input_callback')
-
-        # 2. 处理隔离逻辑
-        effective_registry = registry
-        if isolation == IsolationLevel.REGISTRY:
-            # TODO: 实现 Registry 克隆逻辑
-            pass
+        
+        # [IES 2.2 Fix] 如果是隔离模式，必须确保 root_dir 已正确设置
+        if isolation != IsolationLevel.NONE and not root_dir:
+             if isinstance(artifact, str) and (os.path.isabs(artifact) or os.path.exists(artifact)):
+                 root_dir = os.path.dirname(os.path.abspath(artifact))
+        
+        # 2. 处理隔离逻辑 (Registry, HostInterface, PluginLoader)
+        effective_registry = kwargs.get('registry', sc.registry if sc else None)
+        effective_host_interface = kwargs.get('host_interface')
+        effective_plugin_loader = kwargs.get('plugin_loader')
+        
+        if isolation != IsolationLevel.NONE:
+            # A. 克隆注册表，确保子环境对类的修改不影响父环境
+            if effective_registry:
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, "Cloning Registry for isolated instance")
+                effective_registry = effective_registry.clone()
             
-        effective_artifact = artifact
-        if isolation != IsolationLevel.NONE and isinstance(artifact, dict):
-            effective_artifact = copy.deepcopy(artifact)
+            # B. [Total Isolation] 重新发现并加载子环境特有的插件
+            if root_dir:
+                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Total Isolation: Re-discovering plugins for {root_dir}")
+                
+                builtin_path = self._resolve_builtin_path()
+                plugins_path = os.path.join(root_dir, "plugins")
+                
+                # 重新执行发现流程
+                discovery = ModuleDiscoveryService([builtin_path, plugins_path])
+                effective_host_interface = discovery.discover_all(effective_registry)
+                
+                # 创建全新的插件加载器
+                sub_loader = ModuleLoader(
+                    [builtin_path, plugins_path], 
+                    capability_registry=sc.capability_registry if sc else None
+                )
+                # 定义加载钩子
+                effective_plugin_loader = lambda sc_sub, ec, im: sub_loader.load_and_register_all(sc_sub, ec)
 
-        # 3. 实例化 Interpreter
+        # 3. 实例化 Interpreter (不再处理编译，编译由外界传入或由 Orchestrator 负责)
+        effective_artifact = artifact
+        if isolation != IsolationLevel.NONE and isinstance(effective_artifact, dict):
+            # 隔离模式下进行深拷贝防止交叉污染
+            effective_artifact = copy.deepcopy(effective_artifact)
+
+        # 4. 实例化 Interpreter
         interpreter = Interpreter(
-            issue_tracker=issue_tracker,
+            issue_tracker=kwargs.get('issue_tracker', sc.issue_tracker if sc else None),
             artifact=effective_artifact,
             registry=effective_registry,
-            host_interface=host_interface,
-            debugger=debugger,
+            host_interface=effective_host_interface,
+            debugger=kwargs.get('debugger', sc.debugger if sc else self.debugger),
             root_dir=root_dir,
-            source_provider=source_provider,
-            compiler=compiler,
-            factory=factory,
-            object_factory=object_factory,
-            plugin_loader=plugin_loader,
-            kernel_token=kernel_token,
-            output_callback=output_callback,
-            input_callback=input_callback,
-            instance_id=instance_id
+            source_provider=kwargs.get('source_provider', sc.source_provider if sc else None),
+            factory=kwargs.get('factory'),
+            object_factory=kwargs.get('object_factory', sc.object_factory if sc else None),
+            plugin_loader=effective_plugin_loader,
+            kernel_token=kwargs.get('kernel_token'),
+            output_callback=kwargs.get('output_callback'),
+            input_callback=kwargs.get('input_callback'),
+            instance_id=instance_id,
+            strict_mode=kwargs.get('strict_mode', True),
+            orchestrator=kwargs.get('orchestrator', getattr(sc, 'orchestrator', None) if sc else None)
         )
 
         # 4. 装配 ServiceContext
         sub_sc = interpreter.service_context
-        if hasattr(sub_sc, '_scheduler'):
-            setattr(sub_sc, '_scheduler', self)
-        if hasattr(sub_sc, '_capability_registry') and sc:
-            setattr(sub_sc, '_capability_registry', sc.capability_registry)
+        if hasattr(sub_sc, 'hydrate'):
+             sub_sc.hydrate(
+                 issue_tracker=kwargs.get('issue_tracker', sc.issue_tracker if sc else None),
+                 registry=effective_registry,
+                 host_interface=effective_host_interface,
+                 debugger=kwargs.get('debugger', sc.debugger if sc else self.debugger),
+                 root_dir=root_dir,
+                 source_provider=kwargs.get('source_provider', sc.source_provider if sc else None),
+                 orchestrator=getattr(sc, 'orchestrator', None) if sc else None,
+                 execution_context=interpreter._execution_context,
+                 interop=sub_sc.interop,
+                 factory=kwargs.get('factory'),
+                 setup_context_callback=interpreter.setup_context,
+                 object_factory=kwargs.get('object_factory', sc.object_factory if sc else None),
+                 scheduler=self
+             )
             
         # 5. 装配 HostService
+        # TODO: 此处的getattr是否是代码异味？
         host_service = HostService(
             registry=effective_registry,
             execution_context=interpreter._execution_context,
             interop=sub_sc.interop,
-            compiler=compiler,
-            factory=factory,
+            orchestrator=getattr(sc, 'orchestrator', None) if sc else None,
             setup_context_callback=interpreter.setup_context,
             get_current_module_callback=lambda: interpreter.current_module_name
         )
@@ -166,35 +206,33 @@ class RuntimeSchedulerImpl:
         # 1. 自动决定隔离级别 (如果请求中未指定)
         isolation = request.isolation or IsolationLevel.SCOPE
         
-        # 2. 孵化子环境
-        # 获取当前主实例的元数据用于克隆环境
+        # 2. 获取主实例信息
         main_interpreter = self.instances.get(self._main_instance_id)
         if not main_interpreter:
             return ExecutionSignal(type="exit", value=False)
             
-        # 这里的 spawn 逻辑需要能继承父环境的部分配置
+        # 3. 孵化子实例 (所有隔离细节已下沉到 spawn)
         sub_id = self.spawn(
-            artifact=main_interpreter._artifact, # 共享蓝图
+            artifact=request.node_uid, # 必须是已编译好的产物字典
             isolation=isolation,
-            registry=main_interpreter.registry,
-            host_interface=main_interpreter.host_interface,
-            root_dir=main_interpreter.root_dir,
+            instance_id=None,
+            # 继承必要的全局上下文
             factory=main_interpreter.factory,
             object_factory=main_interpreter.object_factory,
-            plugin_loader=main_interpreter.plugin_loader,
             kernel_token=main_interpreter._kernel_token,
             output_callback=main_interpreter.output_callback,
-            input_callback=getattr(main_interpreter, 'input_callback', None)
+            input_callback=getattr(main_interpreter, 'input_callback', None),
+            source_provider=main_interpreter.source_provider
         )
         
         sub_interpreter = self.instances[sub_id]
         
-        # 3. 同步状态 (Sync State)
-        # 根据隔离策略，将父环境的状态同步到子环境
+        # 4. 同步状态 (Sync State)
         sub_interpreter.sync_state(execution_context.runtime_context, request.payload)
         
         try:
-            # 4. 执行子环境
+            # 5. 执行子环境
+            # 如果 node_uid 是文件，Interpreter 会识别并执行
             success = sub_interpreter.execute_module(
                 request.node_uid, 
                 sub_interpreter.current_module_name, 
@@ -202,7 +240,7 @@ class RuntimeSchedulerImpl:
             )
             return ExecutionSignal(type="exit", value=success)
         finally:
-            # 5. 销毁子环境
+            # 6. 销毁子环境
             self.terminate(sub_id)
 
     def snapshot(self, instance_id: str) -> Dict[str, Any]:

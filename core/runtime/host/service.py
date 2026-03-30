@@ -3,11 +3,10 @@ import os
 import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
-from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject, IExecutionContext
+from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject, IExecutionContext, IKernelOrchestrator
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
-from core.compiler.serialization.serializer import FlatSerializer
 from core.runtime.objects.kernel import IbObject
 
 class HostService(IHostService):
@@ -19,15 +18,13 @@ class HostService(IHostService):
                  registry: KernelRegistry,
                  execution_context: IExecutionContext,
                  interop: InterOp,
-                 compiler: Any,
-                 factory: IInterpreterFactory,
+                 orchestrator: Optional[IKernelOrchestrator],
                  setup_context_callback: Callable,
                  get_current_module_callback: Callable):
         self.registry = registry
         self.execution_context = execution_context
         self.interop = interop
-        self.compiler = compiler
-        self.factory = factory
+        self.orchestrator = orchestrator
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
         self._sync_manager = SyncManager()
@@ -104,7 +101,7 @@ class HostService(IHostService):
         环境重绑定：将快照中的“空壳”重新链接到当前物理环境的功能实现。
         """
         # 1. 重新注入内置函数 (Intrinsics) - 使用特权覆盖 (通过回调)
-        self.setup_context_callback(context, force=True, deserializer=deserializer)
+        self.setup_context_callback(context, force=True)
         
         # 2. 重新注入原生插件 (Native Plugins)
         # [IES 2.1 Refactor] 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
@@ -123,76 +120,39 @@ class HostService(IHostService):
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
-        """通过运行时调度器开启隔离的解释器子运行环境"""
-        # [IES 2.2] 优先委派给调度器进行宏观调度
-        scheduler = getattr(self.execution_context.service_context, 'scheduler', None)
-        if scheduler:
-            from core.runtime.interfaces import ExecutionRequest, IsolationLevel
-            # 将 policy 转换为隔离级别
-            isolation = IsolationLevel.SCOPE
-            if policy.get("isolated", True):
-                # 如果明确要求隔离 Registry，则提升隔离级别
-                if policy.get("registry_isolation", False):
-                    isolation = IsolationLevel.REGISTRY
+        """
+        [IES 2.2] 通过内核协调器开启完全隔离的解释器环境。
+        不再负责手动孵化实例或编译代码，而是将请求作为系统调用上报。
+        """
+        if not self.orchestrator:
+            raise RuntimeError("Kernel Orchestrator not available. Isolated execution cannot be performed.")
             
-            request = ExecutionRequest(node_uid=path, isolation=isolation, payload=policy)
-            signal = scheduler.dispatch(request, self.execution_context)
-            return signal.value
+        # 根据 policy 提取 initial_vars (如果需要传递状态)
+        initial_vars = None
+        if policy.get("inherit_variables", False):
+            # 提取父环境的全局变量 (排除内部变量)
+            global_symbols = self.execution_context.runtime_context.global_scope.get_all_symbols()
+            initial_vars = {}
+            for name, sym in global_symbols.items():
+                if not name.startswith("__") and not sym.metadata.get("is_builtin", False):
+                    # 仅传递基础类型值或可安全序列化的值，此处简化为值引用传递，
+                    # 实际在 Engine 接收端会被装箱
+                    val = self.execution_context.runtime_context.global_scope.resolve(name)
+                    if hasattr(val, 'get_value'):
+                        initial_vars[name] = val.get_value()
 
-        # 回退逻辑 (如果调度器未就绪，维持原有的 HostService 逻辑以保证兼容性)
-        serializer = RuntimeSerializer(self.registry)
-        snapshot = serializer.serialize_context(
-            self.execution_context.runtime_context,
-            execution_context=self.execution_context
-        )
-
-        try:
-            abs_path = os.path.abspath(path)
-            artifact = self.compiler.compile_file(abs_path)
-
-            # [P2-A] 将 CompilationArtifact 序列化为不可变 dict，消除对象引用穿透
-            flat_serializer = FlatSerializer()
-            artifact_dict = flat_serializer.serialize_artifact(artifact)
-
-            # [P2-D] 包装为 ImmutableArtifact，防止解释器修改 artifact
-            immutable_artifact = ImmutableArtifact(artifact_dict)
-
-            sub_host_interface = HostInterface()
-            inherit_plugins = policy.get("inherit_plugins", [])
-            if inherit_plugins is True:
-                inherit_plugins = self.interop.get_all_package_names()
-
-            for p_name in inherit_plugins:
-                impl = self.interop.get_package(p_name)
-                meta = self.interop.metadata.resolve(p_name)
-                if impl:
-                    sub_host_interface.register_module(p_name, impl, meta)
-
-            isolated = policy.get("isolated", True)
-
-            # [P2-A.1] 由HostService负责registry克隆，隔离策略的决定权在调用者
-            effective_registry = self.registry.clone() if isolated else self.registry
-
-            sub_interpreter = self.factory.spawn_interpreter(
-                artifact=immutable_artifact,
-                registry=effective_registry,
-                host_interface=sub_host_interface,
-                root_dir=os.path.dirname(abs_path),
-                parent_context=self.execution_context.runtime_context,
-                isolated=False  # 已在HostService层处理
-            )
-
-            sub_interpreter.sync_state(self.execution_context.runtime_context, policy)
-            return sub_interpreter.run()
-
-        except Exception as e:
-            deserializer = RuntimeDeserializer(self.registry, factory=self.execution_context.factory)
-            restored_ctx = deserializer.deserialize_context(snapshot)
-            self._rebind_environment(restored_ctx)
-            self.execution_context.runtime_context = restored_ctx
-            raise e
+        # 发起系统调用，阻塞等待执行完成
+        abs_path = os.path.abspath(path)
+        success = self.orchestrator.request_isolated_run(abs_path, policy, initial_vars)
+        
+        # TODO: 怀疑此处有vibe带来的妥协性问题。当前MVP Demo阶段不深究。
+        # 返回执行结果 (暂简化为布尔值的 IbObject 封装)
+        return self.registry.box(success)
 
     def get_source(self) -> str:
         """元编程：获取当前运行模块的源代码"""
         current_mod = self.get_current_module_callback()
-        return self.compiler.get_module_source(current_mod) or ""
+        provider = getattr(self.execution_context.service_context, 'source_provider', None)
+        if provider:
+            return provider.get_module_source(current_mod) or ""
+        return ""

@@ -78,6 +78,13 @@ class Scheduler(ICompilerService):
         """ICompilerService: Compiles a file and its dependencies."""
         return self.compile_project(file_path)
 
+    # TODO: 怀疑是智能体引入的妥协性操作。后续需要单独严格审核。目前MVP Demo暂时不深究
+    def compile_to_artifact_dict(self, file_path: str) -> Dict[str, Any]:
+        """ICompilerService: 编译文件并返回平铺化的字典产物，供解释器直接加载。"""
+        artifact = self.compile_file(file_path)
+        from core.compiler.serialization.serializer import FlatSerializer
+        return FlatSerializer().serialize_artifact(artifact)
+
     def resolve_module_path(self, module_name: str) -> Optional[str]:
         """ICompilerService: Resolves a module name to its absolute file path."""
         # Check cache first

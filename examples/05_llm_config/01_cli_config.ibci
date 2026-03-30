@@ -2,27 +2,26 @@ import ai
 import file
 import json
 
-# 情况 1：直接利用 main.py 提供的 --config 对外接口
+# 情况 1：显式加载本目录下的配置
 # 
 # 运行方式：
-# python main.py run examples/05_llm_config/01_cli_config.ibci --config examples/05_llm_config/api_config.json
-#
-# main.py 会自动解析 json 中的 url, key, model 字段并注入为全局变量。
+# python main.py run examples/05_llm_config/01_cli_config.ibci
 
 print("--- [01_cli_config.ibci] ---")
 
+str config_path = __dir__ + "/api_config.json"
+print("Loading config from: " + config_path)
+
 # 检查变量是否已由 main.py 注入
 try:
-    # 生产环境配置：使用注入的变量
-    dict config = json.parse(file.read("api_config.json"))
-    dict default_model = (dict) config["default_model"]
-    str url = (str) default_model["base_url"]
-    str key = (str) default_model["api_key"]
-    str model = (str) default_model["model"]
+    dict config = json.parse(file.read(config_path))
+    str url = (str) config["url"]
+    str key = (str) config["key"]
+    str model = (str) config["model"]
     ai.set_config(url, key, model)
-    print("成功使用 CLI 注入的配置初始化 AI")
+    print("成功加载配置并初始化 AI")
 except Exception as e:
-    print("警告：未检测到 CLI 注入的配置变量，请确保使用了 --config 参数")
+    print("警告：加载配置失败，错误: " + (str)e)
     # 模拟测试配置 (TESTONLY)
     # ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
