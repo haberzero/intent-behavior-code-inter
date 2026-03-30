@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import sys
@@ -102,6 +103,8 @@ class Interpreter:
         """[IES 2.1] 从父上下文同步类定义"""
         pass
 
+
+    # TODO: 怀疑此处 instance_id: str = "main"  这一行有代码异味。MVP Demo 阶段暂不深究
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None, 
                  input_callback: Optional[Callable[[str], str]] = None, 
@@ -111,7 +114,7 @@ class Interpreter:
                  host_interface: Optional[HostInterface] = None,
                  debugger: Optional[Any] = None,
                  root_dir: str = ".",
-                 strict_mode: bool = False,
+                 strict_mode: bool = True,
                  registry: Optional[Registry] = None,
                  source_provider: Optional[ISourceProvider] = None,
                  compiler: Optional[ICompilerService] = None,
@@ -125,7 +128,8 @@ class Interpreter:
                  object_factory: Optional[IObjectFactory] = None,
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
                  kernel_token: Optional[Any] = None,
-                 instance_id: Optional[str] = None):
+                 instance_id: str = "main",
+                 orchestrator: Optional[Any] = None):
         
         # 0. 启动内核引导
         self._registry = registry or KernelRegistry()
@@ -217,7 +221,7 @@ class Interpreter:
                 registry=self.registry,
                 host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
-                compiler=self.compiler,
+                orchestrator=kwargs.get('orchestrator', None) if 'kwargs' in locals() else None,
                 debugger=self.debugger,
                 output_callback=output_callback,
                 input_callback=input_callback,
@@ -274,7 +278,7 @@ class Interpreter:
         self._pre_evaluate_user_classes()
 
         # 4. 设置上下文
-        self._setup_context(self.runtime_context)
+        self.setup_context(self.runtime_context)
 
         # 运行限制
         self.max_instructions = max_instructions
@@ -425,14 +429,14 @@ class Interpreter:
         self.call_stack_depth = state["call_stack_depth"]
         self.current_module_name = state["current_module_name"]
 
-    def setup_context(self, context: RuntimeContext, force: bool = False, deserializer: Optional[Any] = None):
+    def setup_context(self, context: RuntimeContext, force: bool = False):
         """为 Context 注入基础内置变量 (Public API)"""
         # 使用私有属性访问以仅检查当前作用域，避免与后续 bootstrap 冲突
         global_symbols = context.global_scope.get_all_symbols()
         defined_names = set(global_symbols.keys())
         
         # [IES 2.0] 内置功能插件化重绑定
-        self.intrinsic_manager.rebind(self, context, deserializer=deserializer)
+        self.intrinsic_manager.rebind(self, context)
         
         # 注入内置类 (int, str, float, list, dict 等)
         # [IES 2.0] 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
@@ -442,9 +446,6 @@ class Interpreter:
                     # [IES 2.2] 注入时带上稳定的内置符号 UID，与编译器对齐
                     context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
                     defined_names.add(name)
-
-    def _setup_context(self, context: RuntimeContext):
-        self.setup_context(context)
 
     def interpret(self, module_uid: str) -> IbObject:
         """从模块 UID 开始执行"""
@@ -486,19 +487,29 @@ class Interpreter:
              # 创建新 Context 并绑定 Scope
              new_ctx = RuntimeContextImpl(initial_scope=scope, registry=self.registry)
              self.runtime_context = new_ctx
-             self._setup_context(self.runtime_context)
 
         self.instruction_count = 0
         result = self.registry.get_none()
         
+        # [IES 2.2 Core] 注入内置路径变量
+        loc_data = self.get_side_table("node_to_loc", module_uid)
+        if not loc_data:
+             raise self._report_error(f"Critical: Location metadata missing for module {module_uid}. Compiled artifact might be corrupted.", module_uid)
+        
+        loc = Location(
+            file_path=loc_data.get("file_path"),
+            line=loc_data.get("line", 1),
+            column=loc_data.get("column", 0)
+        )
+
         # [NEW] Logical CallStack 追踪 (Module 层级)
         self.logical_stack.push(
             name=f"module:{module_name}",
             local_vars={},
-            location=Location(file_path=module_name, line=1, column=0),
+            location=loc,
             intent_stack=[i.content for i in self.runtime_context.get_active_intents()]
         )
-        
+
         try:
             # 模块主体是语句 UID 列表
             body = module_data.get("body", [])

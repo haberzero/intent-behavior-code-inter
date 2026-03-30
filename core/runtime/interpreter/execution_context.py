@@ -1,3 +1,4 @@
+import os
 from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING, Callable
 from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
@@ -188,3 +189,15 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
 
     def get_captured_intents(self, obj: Any) -> List[str]:
         return self._get_captured_intents_callback(obj)
+
+    def get_current_script_path(self) -> Optional[str]:
+        if self._logical_stack and self._logical_stack.frames:
+            # 从调用栈中查找最近的一个具有 Location 的帧
+            for frame in reversed(self._logical_stack.frames):
+                if frame.location and frame.location.file_path:
+                    return os.path.abspath(frame.location.file_path)
+        return None
+
+    def get_current_script_dir(self) -> Optional[str]:
+        path = self.get_current_script_path()
+        return os.path.dirname(path) if path else None

@@ -82,6 +82,11 @@ class SemanticAnalyzer:
             sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
+        # 4. [IES 2.2] 注册内置变量/常量 (如 __file__, __dir__)
+        for name, var_desc in self.prelude.get_builtin_variables().items():
+            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=var_desc, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
+            self.symbol_table.define(sym)
+
     def analyze(self, node: ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
         self.debugger.enter_scope(CoreModule.SEMANTIC, "Starting static semantic analysis...")
         try:

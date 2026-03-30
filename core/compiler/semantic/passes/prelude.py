@@ -17,6 +17,7 @@ class Prelude:
         self.builtin_functions: Dict[str, FunctionMetadata] = {}
         self.builtin_modules: Dict[str, TypeDescriptor] = {} # 模块也是一种 TypeDescriptor (ModuleMetadata)
         self.builtin_types: Dict[str, TypeDescriptor] = {}
+        self.builtin_variables: Dict[str, TypeDescriptor] = {} # [IES 2.2] 内置全局变量/常量
         self.registry = registry
         self.host_interface = host_interface
         self._init_defaults()
@@ -44,7 +45,12 @@ class Prelude:
             else:
                 self.builtin_types[name] = desc
 
-        # 2. 从 HostInterface 导入外部发现的模块
+        # 2. [IES 2.2] (原用于注册标准内置常量 __file__ / __dir__，现已移至 sys 模块封装)
+        # 保持 builtin_variables 机制不变，以防未来有其他安全的环境变量需要注入
+        str_desc = metadata_reg.resolve("str") or STR_DESCRIPTOR
+
+        # TODO: 此处似乎是代码异味？ 目前看起来MVP可以运行，暂缓，后续再进行严格审核
+        # 3. 从 HostInterface 导入外部发现的模块
         # [NEW Policy] Prelude 不再自动加载所有 Host 模块。
         # 只有那些显式标记为 "auto_import" 或特殊地位的模块才放入 builtin_modules。
         # 目前 IBCI 要求大多数插件通过 import 显式引入。
@@ -74,3 +80,7 @@ class Prelude:
 
     def get_builtin_modules(self) -> Dict[str, TypeDescriptor]:
         return self.builtin_modules.copy()
+
+    def get_builtin_variables(self) -> Dict[str, TypeDescriptor]:
+        """[IES 2.2] 获取内置全局变量/常量描述符"""
+        return self.builtin_variables.copy()
