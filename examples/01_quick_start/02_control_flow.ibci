@@ -1,0 +1,28 @@
+import sys
+import ai
+import json
+import file
+
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
+print("--- [02_control_flow.ibci] ---")
+
+# 1. 意图驱动的条件分支 (If)
+str fruit = "apple"
+print("Testing item: " + fruit)
+if @~ $fruit 是水果吗？ ~:
+    print("AI 判断结果: 是水果！")
+else:
+    print("AI 判断结果: 不是水果。")
+
+# 2. 意图驱动的循环 (While)
+print("\n开始意图驱动循环...")
+int count = 0
+# 当 count 小于 3 时继续
+while @~ $count 小于 3 吗？ ~:
+    count = count + 1
+    print("执行中... 当前次数: " + (str)count)
+
+print("循环结束，总计次数: " + (str)count)

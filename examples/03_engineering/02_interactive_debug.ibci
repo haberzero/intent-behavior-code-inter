@@ -1,18 +1,27 @@
+import sys
+import json
+import file
+import sys
+import json
+import file
 import ai
 import file
 import json
 import idbg
 
-# 1. 生产环境配置
-dict config = json.parse(file.read("api_config.json"))
+# 1. 模拟测试配置 (TESTONLY)
+
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
 dict default_model = (dict) config["default_model"]
-str url = (str) default_model["base_url"]
-str key = (str) default_model["api_key"]
-str model = (str) default_model["model"]
-ai.set_config(url, key, model)
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
 
 # 2. 模拟测试配置 (TESTONLY)
-# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
 
 print("--- [07_idbg/interactive_debug.ibci] ---")
 

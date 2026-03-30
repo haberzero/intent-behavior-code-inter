@@ -14,13 +14,9 @@ def __ibcext_metadata__() -> Dict[str, Any]:
 def __ibcext_vtable__() -> Dict[str, Any]:
     return {
         "functions": {
-            "add": {
-                "param_types": ["int", "int"],
-                "return_type": "int"
-            },
-            "mul": {
-                "param_types": ["int", "int"],
-                "return_type": "int"
-            }
+            "add": {"param_types": ["int", "int"], "return_type": "int"},
+            "sub": {"param_types": ["int", "int"], "return_type": "int"},
+            "mul": {"param_types": ["int", "int"], "return_type": "int"},
+            "div": {"param_types": ["int", "int"], "return_type": "int"}
         }
     }

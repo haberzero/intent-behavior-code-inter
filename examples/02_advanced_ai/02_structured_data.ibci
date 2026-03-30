@@ -1,0 +1,48 @@
+import sys
+import ai
+import json
+import file
+
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
+print("--- [02_structured_data.ibci] ---")
+
+# 1. 结构化分析函数 (llm ... llmend)
+llm 分析文档(str 文档内容) -> dict:
+    __sys__
+    你是一个文档摘要提取器。请提取文档的标题和核心摘要。
+    必须返回 JSON 格式，包含 "title" 和 "summary" 两个字段。
+    __user__
+    请分析以下文档：
+    $文档内容
+llmend
+
+str doc = "量子纠缠是一种奇特的物理现象。在量子力学里，当几个粒子在彼此相互作用后，由于各个粒子所拥有的特性已综合成为整体性质，无法单独描述各个粒子的性质，只能描述整体系统的性质，则称这现象为量子缠结或量子纠缠。"
+
+# 2. 调用 LLM 函数并获取字典
+dict result = 分析文档(doc)
+
+print("\n[AI 分析报告]:")
+print("标题: " + (str)result["title"])
+print("摘要: " + (str)result["summary"])
+
+# 3. 另一种强制结构化输出的方式
+ai.set_return_type_prompt("dict", "请返回一个严格符合 JSON 格式的对象。禁止包含 Markdown 代码块标记。")
+
+llm 分析日志(str 日志行) -> dict:
+    __sys__
+    你是一个日志分析专家。
+    请提取日志的级别(level)和信息(message)。
+    必须返回 JSON 格式。
+    __user__
+    日志：$日志行
+llmend
+
+dict log_res = 分析日志("[2023-10-05 14:23:45] ERROR: Connection refused to database.")
+print("\n[日志分析结果]:")
+print("级别: " + (str)log_res["level"])
+print("信息: " + (str)log_res["message"])
+
+print("\n--- 分析任务完成 ---")

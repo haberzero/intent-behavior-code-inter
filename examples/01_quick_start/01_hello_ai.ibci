@@ -1,18 +1,12 @@
+import sys
 import ai
 import json
 import file
 
-# 1. 加载配置
-dict config = json.parse(file.read("api_config.json"))
+# 1. 显式加载本地配置
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
 dict default_model = (dict) config["default_model"]
-str url = (str) default_model["base_url"]
-str key = (str) default_model["api_key"]
-str model = (str) default_model["model"]
-
-ai.set_config(url, key, model)
-
-# 2. 模拟测试配置 (TESTONLY)：如果无法连接真实 LLM，请取消注释以下行
-# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
 
 print("--- [01_basic_ai.ibci] ---")
 

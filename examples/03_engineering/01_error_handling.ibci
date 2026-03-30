@@ -1,35 +1,37 @@
+import sys
+import json
+import file
+import sys
+import json
+import file
 import ai
 import file
 import json
 
-# 1. 生产环境配置
-dict config = json.parse(file.read("api_config.json"))
-dict default_model = (dict) config["default_model"]
-str url = (str) default_model["base_url"]
-str key = (str) default_model["api_key"]
-str model = (str) default_model["model"]
-ai.set_config(url, key, model)
+# 1. 模拟测试配置 (TESTONLY)
 
-# 2. 模拟测试配置 (TESTONLY)
-# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
 
 print("--- [02_llm_error_handling.ibci] ---")
 
 # 1. 使用 llmexcept 处理 LLM 判断不明确的情况
-# 在真实 LLM 下，这通常会在 AI 给出长篇大论而不是 1/0 时触发。
-if @~ 检查今天的天气是否适合户外野餐？请直接回答 1 (适合) 或 0 (不适合)。 ~:
+# 使用 模拟：第一次模糊，重试后确定
+if @~ 适合户外野餐？只答 1/0 ~:
     print("AI 建议：天气非常适合！")
 else:
     print("AI 建议：天气不适合，建议待在室内。")
 llmexcept:
     print("AI 返回判断模糊，正在启动重试机制...")
-    # 注入重试提示词，引导 AI 给出确定性回答
     # retry 语句会携带此 hint 重新发起请求
-    retry "请务必只返回 1 或 0，不要包含任何解释文字"
+    retry "只答 1/0"
 
 # 2. 循环中的 AI 判断
+# 使用 确保循环能跑起来
 int count = 0
-while @~ 判定当前任务是否还需要继续？请回答 1 或 0。 ~:
+while @~ 任务继续？只答 1/0 ~:
     count = count + 1
     print("正在执行第 " + (str)count + " 次任务")
     if count >= 2:

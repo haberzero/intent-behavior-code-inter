@@ -19,11 +19,13 @@ float pi = math.pi
 print("Value of PI: " + (str)pi)
 
 # 3. 文件读写 (受沙箱保护)
-str file_path = "temp_output.txt"
+str file_path = (str)sys.script_dir() + "/temp_output.txt"
 file.write(file_path, "Hello from IBC-Inter stdlib!")
 if file.exists(file_path):
     str content = file.read(file_path)
     print("File Content: " + content)
+    file.remove(file_path)
+    print("Cleaned up temporary file: " + file_path)
 
 # 4. 系统权限
 if sys.is_sandboxed():
