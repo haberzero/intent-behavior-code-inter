@@ -1,4 +1,4 @@
-from typing import Any, List, Dict, Optional, Callable
+from typing import Any, List, Dict, Optional, Callable, Union
 from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
@@ -382,14 +382,14 @@ class IbBehavior(IbObject, IIbBehavior):
     """
     延迟执行的行为对象 (~...~)。
     """
-    def __init__(self, node_uid: str, captured_intents: List[Any], ib_class: IbClass, expected_type: Optional[str] = None):
+    def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
         """
         [IES 2.0 Architectural Update] IbBehavior 现在是纯粹的数据描述符。
         不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
         """
         super().__init__(ib_class)
         self.node = node_uid
-        self.captured_intents = captured_intents
+        self.captured_intents = captured_intents # [IES 2.2] 支持 IntentNode (结构共享)
         self.expected_type = expected_type
         self._cache: Optional[IbObject] = None
 

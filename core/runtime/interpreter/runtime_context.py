@@ -398,6 +398,22 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
             return []
         return self._intent_top.to_list()
 
+    def restore_active_intents(self, intents: Union[List[IbIntent], Optional[IntentNode]]) -> None:
+        """
+        [IES 2.1] 恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
+        """
+        if intents is None:
+            self._intent_top = None
+        elif isinstance(intents, IntentNode):
+            self._intent_top = intents
+        elif isinstance(intents, list):
+            # 扁平列表恢复：假设列表顺序为 [bottom, ..., top]
+            self._intent_top = None
+            for intent in intents:
+                self._intent_top = IntentNode(intent, self._intent_top)
+        else:
+            raise TypeError(f"Invalid intent stack type for restoration: {type(intents)}")
+
     def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IIbIntent] = None) -> List[str]:
         """
         [IES 2.1 Decoupling] 获取最终消解后的 Prompt 字符串列表。

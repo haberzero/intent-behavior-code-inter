@@ -213,7 +213,7 @@ class IIbIntent(IIbObject, Protocol):
 class IIbBehavior(IIbObject, Protocol):
     """延迟执行的行为对象协议 (~...~)"""
     node: str
-    captured_intents: List[Any]
+    captured_intents: Union[List[Any], Any] # [IES 2.2] 支持 IntentNode 或 列表
     expected_type: Optional[str]
 
 @runtime_checkable

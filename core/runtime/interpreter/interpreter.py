@@ -824,6 +824,16 @@ class Interpreter:
                 if node_uid in self._fallback_stack:
                     return visitor(node_uid, node_data)
                 
+                # [NEW] 转发语句到核心逻辑，以支持 Fallback 机制
+                if node_type == "IbAssign":
+                    visitor = self.visit_IbAssign_core
+                elif node_type == "IbIf":
+                    visitor = self.visit_IbIf_core
+                elif node_type == "IbWhile":
+                    visitor = self.visit_IbWhile_core
+                elif node_type == "IbFor":
+                    visitor = self.visit_IbFor_core
+                
                 return self._with_unified_fallback(node_uid, node_type, node_data, visitor)
             except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
                 raise
@@ -873,3 +883,6 @@ class Interpreter:
 
     def visit_IbWhile_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         return self.stmt_handler.visit_IbWhile(node_uid, node_data)
+
+    def visit_IbFor_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.stmt_handler.visit_IbFor(node_uid, node_data)

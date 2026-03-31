@@ -196,7 +196,7 @@ class LLMExecutorImpl:
         # Fallback (Default to string boxing if no descriptor, axiom or no parser capability)
         return self.registry.box(raw_res)
 
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional[Any] = None) -> IbObject:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
@@ -221,7 +221,19 @@ class LLMExecutorImpl:
                 return self.registry.box(call_intent.resolve_content(context, execution_context))
 
         # [IES 2.1] 获取消解后的最终列表
-        all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
+        # [IES 2.2] 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
+        if captured_intents is not None:
+            active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
+            all_intents = IntentResolver.resolve(
+                active_intents=active_list,
+                global_intents=context.get_global_intents(),
+                call_intent=call_intent,
+                context=context,
+                execution_context=execution_context
+            )
+        else:
+            all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
+            
         # 核心：使用 side_tables 中的 node_scenes
         scene_val = execution_context.get_side_table("node_scenes", node_uid)
         scene_name = str(scene_val).lower() if scene_val else "general"
@@ -311,7 +323,8 @@ class LLMExecutorImpl:
 
         try:
             # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
-            res = self.execute_behavior_expression(behavior.node, execution_context)
+            # [IES 2.2] 传入行为对象捕获的意图栈
+            res = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
             behavior._cache = res
             return res
         finally:

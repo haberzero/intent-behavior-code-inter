@@ -5,6 +5,7 @@ from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
 from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
+from core.runtime.interpreter.runtime_context import IntentNode
 
 class RuntimeSerializer(BaseFlatSerializer):
     """
@@ -15,6 +16,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         self.registry = registry
         self.instance_pool: Dict[str, Any] = {}
         self.runtime_scope_pool: Dict[str, Any] = {}
+        self.intent_pool: Dict[str, Any] = {} # [IES 2.2] 意图节点池，实现拓扑序列化
         self.memo: Dict[int, str] = {} # 记录已处理对象的 Python ID
 
     def serialize_context(self, context: IStateProvider, include_static: bool = True, execution_context: Optional[IExecutionContext] = None) -> Dict[str, Any]:
@@ -25,6 +27,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         pools = {
             "instances": self.instance_pool,
             "runtime_scopes": self.runtime_scope_pool,
+            "intents": self.intent_pool, # [IES 2.2]
             "types": self.type_pool,
             "assets": self.external_assets 
         }
@@ -43,10 +46,30 @@ class RuntimeSerializer(BaseFlatSerializer):
             "version": "2.0",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": [self._process_value(i) for i in context.get_active_intents()],
+            "intent_stack": self._process_value(context.intent_stack), # [IES 2.2] 改为拓扑序列化
             "intent_exclusive_depth": context.intent_exclusive_depth,
             "pools": pools
         }
+
+    def _collect_intent_node(self, node: Any) -> str:
+        """[IES 2.2] 实现 IntentNode 的拓扑序列化，保留链表引用关系"""
+        if node is None:
+            return None
+            
+        node_id = id(node)
+        if node_id in self.memo:
+            return self.memo[node_id]
+            
+        uid = f"intent_{uuid.uuid4().hex[:16]}"
+        self.memo[node_id] = uid
+        
+        # 记录节点内容及父节点引用
+        self.intent_pool[uid] = {
+            "uid": uid,
+            "intent": self._process_value(node.intent),
+            "parent_uid": self._collect_intent_node(node.parent) if node.parent else None
+        }
+        return uid
 
     def _collect_runtime_scope(self, scope: Optional[Scope]) -> Optional[str]:
         if scope is None:
@@ -92,6 +115,11 @@ class RuntimeSerializer(BaseFlatSerializer):
         if isinstance(value, IbObject):
             return self._collect_instance(value)
         
+        # [IES 2.2] 拓扑序列化 IntentNode，保留结构共享
+        # 注意：此处使用鸭子类型判定以避免循环依赖 (RuntimeSerializer 不直接导入 IntentNode 实现类)
+        if hasattr(value, 'intent') and hasattr(value, 'parent') and hasattr(value, 'to_list'):
+            return self._collect_intent_node(value)
+
         # 处理基本 Python 类型 (Fallback)
         return super()._process_value(value)
 
@@ -175,6 +203,7 @@ class RuntimeDeserializer:
         self.factory = factory
         self.instance_cache: Dict[str, IbObject] = {}
         self.scope_cache: Dict[str, Scope] = {}
+        self.intent_cache: Dict[str, IntentNode] = {} # [IES 2.2] 意图节点缓存
         self.asset_pool: Dict[str, str] = {} 
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
@@ -186,6 +215,7 @@ class RuntimeDeserializer:
         self.type_pool = pools.get("types", {})
         self.instance_pool = pools.get("instances", {})
         self.runtime_scope_pool = pools.get("runtime_scopes", {})
+        self.intent_pool = pools.get("intents", {}) # [IES 2.2]
         self.asset_pool = pools.get("assets", {}) 
         
         if not self.factory:
@@ -210,8 +240,9 @@ class RuntimeDeserializer:
             for i_data in data["global_intents"]:
                  ctx_global.append(self._deserialize_value(i_data))
         
-        intent_stack_data = data.get("intent_stack", [])
-        active_intents = [self._deserialize_value(i) for i in intent_stack_data]
+        # [IES 2.2] 恢复意图栈 (拓扑结构)
+        intent_stack_raw = data.get("intent_stack")
+        active_intents = self._deserialize_value(intent_stack_raw)
         
         # 恢复活跃意图栈
         if hasattr(context, 'restore_active_intents'):
@@ -221,6 +252,20 @@ class RuntimeDeserializer:
             setattr(context, '_intent_exclusive_depth', data.get("intent_exclusive_depth", 0))
         
         return context
+
+    def _get_intent_node(self, uid: str) -> IntentNode:
+        """[IES 2.2] 从池中重建 IntentNode 链表节点，保留结构共享"""
+        if uid in self.intent_cache:
+            return self.intent_cache[uid]
+            
+        data = self.intent_pool[uid]
+        intent = self._deserialize_value(data["intent"])
+        parent_uid = data.get("parent_uid")
+        parent_node = self._get_intent_node(parent_uid) if parent_uid else None
+        
+        node = IntentNode(intent, parent_node)
+        self.intent_cache[uid] = node
+        return node
 
     def on_rebind(self, logic_id_map: Dict[str, Any]):
         """全局重绑定协议"""
@@ -260,8 +305,11 @@ class RuntimeDeserializer:
         )
 
     def _deserialize_value(self, val: Any) -> Any:
-        if isinstance(val, str) and val.startswith("inst_"):
-            return self._get_instance(val)
+        if isinstance(val, str):
+            if val.startswith("inst_"):
+                return self._get_instance(val)
+            if val.startswith("intent_"):
+                return self._get_intent_node(val)
             
         if isinstance(val, dict) and val.get("_type") == "ext_ref":
             uid = val.get("uid")
