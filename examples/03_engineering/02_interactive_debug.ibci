@@ -1,23 +1,10 @@
 import sys
-import json
-import file
-import sys
-import json
-import file
 import ai
-import file
 import json
+import file
 import idbg
 
-# 1. 模拟测试配置 (TESTONLY)
-
-dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
-dict default_model = (dict) config["default_model"]
-ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
-
-
-# 2. 模拟测试配置 (TESTONLY)
-
+# 1. 显式加载本地配置
 dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
 dict default_model = (dict) config["default_model"]
 ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
