@@ -1,10 +1,15 @@
 import ai
 import json
 import file
+import sys
 
 # 1. 显式加载本地配置 (IES 2.2 推荐模式)
-dict config = json.parse(file.read(__dir__ + "/api_config.json"))
-ai.set_config(config["url"], config["key"], config["model"])
+# [IES 2.2 Fix] 强制类型转换以确保通过严格的二元运算校验
+str base_dir = (str) sys.script_dir()
+str config_json = file.read(base_dir + "/api_config.json")
+dict config = (dict) json.parse(config_json)
+dict model_config = (dict) config["default_model"]
+ai.set_config((str)model_config["base_url"], (str)model_config["api_key"], (str)model_config["model"])
 print("成功加载 AI 配置")
 
 list items = ["apple", "carrot", "banana", "Python Programming Book", "orange", "potato", "History of Rome", "strawberry"]
