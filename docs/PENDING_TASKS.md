@@ -2,14 +2,32 @@
 
 > 本文档记录 IBC-Inter 项目中被搁置或标记为未来实现的任务。
 > 每个任务都标注了搁置原因和解决方案方向。
-> 优先级低于 NEXT_STEPS_PLAN.md，可独立使用。
->
-> **生成日期**：2026-03-21
-> **版本**：V3.0
+> **[IES 2.2 更新]**: 采用加法标注模式。核心未完成任务置顶，历史任务标注状态。
 
 ---
 
-#### 2.5 IBCI 核心路径解析能力增强 （理论上已完成，目前还处于MVP阶段，未来需要更正式全面的prelude以及Bootloader管理机制梳理、重整、优化。）
+## 🔴 优先级待办任务 (Priority Unfinished Tasks)
+
+### 0.1 Mock 仿真引擎增强 (P0)
+**状态**: `PENDING`
+**问题**: 目前 `MOCK:FAIL/REPAIR/TRUE/FALSE` 前缀逻辑未在 `ibci_ai` 中实现，导致 `llmexcept` 无法进行自动化压力测试。
+**涉及文件**: `ibci_modules/ibci_ai/core.py`
+
+### 0.2 ai.set_retry() 配置穿透 (P1)
+**状态**: `PENDING`
+**问题**: `ai.set_retry()` 设置的次数被存储但从未读取，解释器内核 `_with_unified_fallback` 目前硬编码为 3 次。
+**涉及文件**: `core/runtime/interpreter/interpreter.py`
+
+### 0.3 vtable 参数签名提取 (P1)
+**状态**: `PENDING`
+**问题**: `discovery.py` 加载插件 vtable 时未提取 Python 函数签名，导致语义分析阶段无法校验参数数量。
+**涉及文件**: `core/runtime/module_system/discovery.py`
+
+---
+
+#### 2.5 IBCI 核心路径解析能力增强 [COMPLETED - IES 2.2]
+**状态说明**: 此任务已通过 `ibci_sys` 模块及其 `sys.script_dir()` API 完整实现。
+- **现状**: 废弃了 `__dir__` 裸调用，统一采用位置无关代码 (PIC) 标准。
 
 **任务**：为 IBCI 语言和标准库提供“当前脚本目录”上下文。
 
@@ -25,7 +43,9 @@
 
 ## 一、动态宿主（DynamicHost）相关任务
 
-### 1.1 Intent Stack 深拷贝实现
+### 1.1 Intent Stack 深拷贝实现 [RESOLVED - IES 2.2]
+**状态说明**: 此问题已在 IES 2.2 中通过 **拓扑序列化 (Topology Serialization)** 彻底解决。
+- **现状**: 引入了 `IntentNode` 链表池化技术，反序列化时通过 `intent_cache` 恢复物理引用关系，实现了内存级的结构共享，不再需要传统的递归深拷贝。
 
 **任务**：实现 Intent Stack 的深拷贝机制，解决引用赋值问题
 
@@ -46,8 +66,7 @@
 
 ---
 
-### 1.2 子解释器插件注册
-
+### 1.2 子解释器插件注册 [PENDING]
 **任务**：允许子解释器独立注册自己的插件
 
 **搁置原因**：
@@ -65,8 +84,7 @@
 
 ---
 
-### 1.3 HOST 插件 breakpoint 接口
-
+### 1.3 HOST 插件 breakpoint 接口 [PENDING]
 **任务**：为 HOST 插件添加 breakpoint 相关接口
 
 **搁置原因**：
@@ -82,8 +100,7 @@
 
 ## 二、公理化相关任务
 
-### 2.1 Intent 完整公理化
-
+### 2.1 Intent 完整公理化 [VISION / FUTURE]
 **任务**：创建 IntentAxiom、完善 RuntimeSerializer 序列化支持
 
 **搁置原因**：
@@ -98,8 +115,7 @@
 
 ---
 
-### 2.2 Behavior 完整公理化
-
+### 2.2 Behavior 完整公理化 [VISION / FUTURE]
 **任务**：创建 BehaviorAxiom 替代 DynamicAxiom("behavior") 占位符
 
 **搁置原因**：
@@ -338,7 +354,8 @@ class ParserCapability(Protocol):
 
 > 以下问题在本次审计中被发现，之前未被记录，必须在MVP之前确认或修复。
 
-#### 5.0.1 llmexcept 机制设计缺陷 🔴 P0
+#### 5.0.1 llmexcept 机制设计缺陷 [FIXED - IES 2.2]
+**状态说明**: 已完成。`visit_IbIf/While/For` 均已使用 `_with_unified_fallback` 包装。
 
 **问题**：`visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装，异常捕获路径断裂
 
@@ -358,7 +375,8 @@ class ParserCapability(Protocol):
 
 ---
 
-#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 🔴 P0
+#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 [PENDING - P0]
+**状态**: 见顶部 0.1 章节。
 
 **问题**：文档声称的 `MOCK:TRUE/FALSE/FAIL/REPAIR` 前缀检测**完全不存在**，TESTONLY 模式总是返回 "1"
 

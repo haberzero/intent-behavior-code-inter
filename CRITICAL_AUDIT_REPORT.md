@@ -35,8 +35,14 @@
 
 ## 3. 已知语法限制与未来优化建议
 
-- **ai.set_retry() 穿透性**: 目前解释器层面的物理重试上限硬编码为 3 次，需打通 `ServiceContext` 配置文件与运行时逻辑。
-- **Tuple 多值返回**: 需补齐语义分析层对 `IbTuple` 的类型推导及运行时的解包支持。
+- **ai.set_retry() 穿透性 (P1)**: 目前解释器层面的物理重试上限硬编码为 3 次，需打通 `ServiceContext` 配置文件与运行时逻辑。
+- **Tuple 多值返回 (P2)**: 需补齐语义分析层对 `IbTuple` 的类型推导及运行时的解包支持（目前仅支持循环变量解包）。
+- **Mock 仿真引擎增强 (P0)**: `MOCK:FAIL/REPAIR` 逻辑尚未在 `ibci_ai` 中落实，导致自愈链路无法进行自动化压力测试。
+- **RuntimeContext 序列化类型安全性**: `intent_stack` 的恢复逻辑虽已支持拓扑还原，但需警惕从外部 JSON 注入非法列表导致的类型崩溃。
+- **vtable 参数签名提取**: 插件加载时未提取签名，导致语义分析无法在静态阶段拦截错误的插件调用。
+- **循环依赖链条 (Circular Dependency)**: `Interpreter` -> `HostService` -> `RuntimeSerializer` -> `RuntimeContextImpl` 之间存在深层耦合，模块化封闭性较差。
+- **AI 客户端初始化冗余**: `ibci_ai` 插件每次调用都会重新实例化 OpenAI 客户端，存在性能抖动风险。
+- **提示词硬编码**: `llm_executor.py` 中存在大量硬编码的中文字符串提示词，不利于 i18n 扩展。
 
 ---
 

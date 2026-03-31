@@ -1,13 +1,20 @@
 # IBC-Inter MVP 实现计划
 
 > 本文档记录 IBC-Inter 第一版 MVP Demo 的实现计划。
->
-> **MVP 核心范围**：behavior、llm、llmexcept、llmretry、DynamicHost最小功能
->
-> **目标**：能够真正展示 IBC-Inter 的核心亮点，而不是"编译通过但功能不正确"
->
-> **生成日期**：2026-03-25
-> **版本**：V2.0
+> **[IES 2.2 更新]**: 核心未完成加固任务置顶，历史任务标注完成状态以供追踪。
+
+---
+
+## 🔴 核心未完成加固任务 (Critical Unfinished Tasks)
+
+### 1.1 Mock 机制完善 (P0)
+**现状**: `MOCK:FAIL/REPAIR` 前缀逻辑尚未在 `ibci_ai` 中落实。
+**影响**: 无法在本地无 API 环境下测试 `llmexcept` 的闭环自愈能力。
+**涉及文件**: `ibci_modules/ibci_ai/core.py`
+
+### 1.2 ai.set_retry() 配置生效 (P1)
+**现状**: 内核硬编码为 3 次重试，不响应 `ai.set_retry()` 的用户设置。
+**涉及文件**: `core/runtime/interpreter/interpreter.py`
 
 ---
 
@@ -50,7 +57,10 @@ MVP (Minimum Viable Product) Demo 的目标是：
 
 > 这些问题在代码审计中被发现，必须在 MVP 之前修复，否则核心功能无法正常工作。
 
-### 2.1 llmexcept 机制修复 🔴 最高优先级 [已完成]
+### 2.1 llmexcept 机制修复 [COMPLETED - IES 2.2]
+**状态说明**: 已完成。
+- **修复内容**: 在 `SideTableManager` 中实现了 `decision_maps` 侧表，并在 `interpreter.py` 中实现了 `_with_unified_fallback` 包装器。
+- **验证结果**: `test_new_syntax.ibci` 运行通过。
 
 **问题分析**：
 1. **编译器侧元数据缺失 (Decision Maps)**：编译器目前没有生成 `decision_maps` 侧表。该表负责将 AI 的自然语言回复（如 "yes", "no"）映射为机器逻辑值（"1", "0"）。缺失此表导致解释器无法判定 AI 回复是否“模糊”。
@@ -68,7 +78,9 @@ MVP (Minimum Viable Product) Demo 的目标是：
 
 ---
 
-### 2.2 intent_stack 类型修复
+### 2.2 intent_stack 类型修复 [COMPLETED - IES 2.2]
+**状态说明**: 已完成。
+- **修复内容**: 补齐了 `RuntimeContextImpl.restore_active_intents` 接口，并重构了序列化器以支持拓扑还原。
 
 **问题**：`intent_stack` setter 期望 `IntentNode`，但多处传入 `list`，会导致 `TypeError`
 
@@ -86,7 +98,8 @@ MVP (Minimum Viable Product) Demo 的目标是：
 
 ---
 
-### 2.3 Mock 机制完善
+### 2.3 Mock 机制完善 [PENDING - P0]
+**状态**: 见顶部 1.1 章节。
 
 **问题**：MOCK:FAIL/REPAIR 前缀完全未实现，TESTONLY 模式总是返回 "1"
 
@@ -122,13 +135,13 @@ for @~MOCK:REPAIR 请判断~:
 
 > 这些问题影响功能正确性，但有 workaround 或仅影响边缘场景。
 
-### 3.1 Symbol.Kind typo 修复
-
-已完成
+### 3.1 Symbol.Kind typo 修复 [COMPLETED]
+已完成。统一对齐到 `SymbolKind.VARIABLE`。
 
 ---
 
-### 3.2 ai.set_retry() 功能实现
+### 3.2 ai.set_retry() 功能实现 [PENDING - P1]
+**状态**: 见顶部 1.2 章节。
 
 **问题**：重试次数配置被存储但从未读取，硬编码为 3
 

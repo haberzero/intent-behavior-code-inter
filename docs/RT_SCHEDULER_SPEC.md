@@ -50,41 +50,32 @@
 
 ---
 
-## 3. 最终分析结论与架构蓝图
+## 3. 最终分析结论与架构实现 (Current Implementation)
 
-基于以上收敛结论，确立以下实施准则：
+基于以上收敛结论，IES 2.2 已完成以下架构实现：
 
-### 3.1 RuntimeScheduler 核心接口 (Proposed)
-```python
-class IRuntimeScheduler(Protocol):
-    def spawn(self, artifact: CompilationArtifact, isolation: IsolationLevel) -> str: ...
-    def dispatch(self, request: ExecutionRequest) -> ExecutionSignal: ...
-    def snapshot(self, instance_id: str) -> StateSnapshot: ...
-    def restore(self, instance_id: str, snapshot: StateSnapshot) -> None: ...
-```
+### 3.1 RuntimeScheduler 核心实现
+- **位置**: `core/runtime/rt_scheduler.py`
+- **角色**: 作为运行时环境的“指挥中心”，负责解释器实例的生命周期管理、资源隔离与状态同步。
+- **核心能力**:
+    - **spawn()**: 根据指定的 `IsolationLevel` 创建并初始化新的解释器实例。
+    - **execute()**: 启动指定实例的执行流，并处理宏观退出信号。
+    - **hydrate()**: 在运行时将调度器自身注入 `ServiceContext`，建立系统调用通道。
 
-### 3.2 关键机制变更
-1.  **写时复制 (CoW) 注册表**：子环境默认共享父级 Registry 镜像，仅在写入新类型/符号时触发局部克隆，大幅降低调度开销。
-2.  **信号驱动跳转**：隔离执行的退出必须携带信号，解释器在 `visit` 循环的每一轮检查调度器发出的外部指令。
-3.  **能力导向 (Capability-Oriented)**：内核与插件的通信通道唯一化，彻底隔离物理实现。
+### 3.2 关键机制落地
+1.  **隔离级别 (IsolationLevel)**: 
+    - 统一使用 `NONE`, `SCOPE`, `REGISTRY` 三级隔离模型。
+    - `REGISTRY` 级别触发 **写时复制 (CoW) 注册表** 克隆，确保类型系统完全隔离。
+2.  **Kernel Gateway 模式**: 
+    - 解释器不再直接持有 `HostService`，而是通过 `IKernelOrchestrator` (由 `Engine` 实现) 向调度器发起请求。
+3.  **拓扑序列化支持**: 
+    - 调度器配合 `RuntimeSerializer` 实现了 `IntentStack` 的拓扑保持，确保实例快照恢复后的结构共享特性。
 
 ---
 
-## 4. 后续具体执行计划
+## 4. 当前运行状态 (Status Report)
 
-计划分为三个阶段稳步推进，确保不破坏现有功能：
-
-### 第一阶段：基础设施与接口定义 (Foundation)
-- 在 `core/runtime/interfaces.py` 中定义 `IRuntimeScheduler`、`IStateProvider` 和 `ExecutionSignal` 协议。
-- 在 `core/runtime/` 下创建 `rt_scheduler.py` 基础框架，但不接入逻辑。
-- 重构 `CapabilityRegistry`，支持“能力自推销”模式。
-
-### 第二阶段：组件剥离与重定向 (Decoupling)
-- **Serializer 重构**：修改 [RuntimeSerializer](file:///c:/myself/proj/intent-behavior-code-inter/core/runtime/serialization/runtime_serializer.py)，使其仅依赖接口，删除对 `Interpreter` 具体类的导入。
-- **DynamicHost 重构**：将 `HostService` 的隔离运行逻辑提取至 `rt_scheduler`。
-- **Interpreter 纯净化**：删除 `Interpreter` 内部直接实例化 `HostService` 的逻辑，改为从 `ServiceContext` 获取调度器能力。
-
-### 第三阶段：插件标准化与全链路切换 (Standardization)
-- 将 `ibci_ai` 和 `ibci_host` 重构为符合 IES 2.2 规范的标准插件。
-- 在 [Engine.py](file:///c:/myself/proj/intent-behavior-code-inter/core/engine.py) 中完成 `rt_scheduler` 的装配，将执行控制权正式移交。
-- 运行全量回归测试，验证基于调度器的多实例跳转逻辑。
+目前 `RuntimeScheduler` 已正式接管执行权：
+- **[Engine.py](file:///c:/myself/proj/intent-behavior-code-inter/core/engine.py)** 已完成装配，所有 `run()` 请求均委派给 `rt_scheduler`。
+- **隔离运行**: `host.run_isolated` 已通过调度器实现真正的内核级隔离。
+- **状态一致性**: 修复了 `intent_stack` 的类型崩溃问题，支持从列表或节点直接恢复。
