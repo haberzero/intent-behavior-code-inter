@@ -249,6 +249,11 @@ class ExpressionComponent(BaseComponent):
 
     def tuple_expr(self, left: ast.IbExpr) -> ast.IbExpr:
         elts = [left]
+        # [IES 2.2 Fix] 修正元组解析：第一个逗号已被 parse_precedence 消费
+        # 我们必须至少解析一个后续元素
+        if not self.stream.check(TokenType.RPAREN) and not self.stream.check(TokenType.RBRACKET) and not self.stream.check(TokenType.RBRACE):
+            elts.append(self.parse_precedence(IbPrecedence.TUPLE))
+            
         while self.stream.match(TokenType.COMMA):
             if self.stream.check(TokenType.RPAREN) or self.stream.check(TokenType.RBRACKET) or self.stream.check(TokenType.RBRACE):
                 break
