@@ -1,4 +1,4 @@
-# IBC-Inter (Intent-Behavior-Code Interaction)
+# IBC-Inter (Intent-Behavior-Code Interactive)
 
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
