@@ -1,8 +1,6 @@
 # IBC-Inter (Intent Behavior Code - Interactive)
 
-**请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
-
-**Attention!! This repository remains in the EXPERIMENTAL DEMO phase, Please refer with caution and Do not use in production!!**
+**这是作者进行ai编程的主要操作分支，有可能会涉及大量激进的重构以及逻辑梳理。暂时不建议直接进行合并请求，请暂时等待作者考虑协作开发方案**
 
 IBC-Inter 是一种实验性的**意图驱动型混合编程语言**。它旨在将确定性的结构化代码（Python-style）与不确定性的自然语言推理（LLM）深度融合，通过原生的"意图机制"和"AI 容错控制流"解决 LLM 在复杂逻辑编排中的落地难题。
 
