@@ -2,12 +2,12 @@ from typing import Any, Optional, TYPE_CHECKING, Callable
 from core.runtime.objects.kernel import IbObject
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.interfaces import IssueTracker, ISourceProvider, ICompilerService
-from core.runtime.interfaces import ServiceContext
+from core.runtime.interfaces import ServiceContext, IKernelOrchestrator
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import (
         LLMExecutor, ModuleManager, IObjectFactory, InterOp, 
-        PermissionManager, IHostService, Interpreter
+        PermissionManager, IHostService, Interpreter, IRuntimeScheduler
     )
 
 class ServiceContextImpl(ServiceContext):
@@ -26,10 +26,13 @@ class ServiceContextImpl(ServiceContext):
                  registry: Any,
                  host_service: Optional['IHostService'] = None,
                  source_provider: Optional[ISourceProvider] = None,
-                 compiler: Optional[ICompilerService] = None,
+                 orchestrator: Optional[IKernelOrchestrator] = None,
                  debugger: Any = None,
                  output_callback: Optional[Callable[[str], None]] = None,
-                 input_callback: Optional[Callable[[str], str]] = None):
+                 input_callback: Optional[Callable[[str], str]] = None,
+                 scheduler: Optional['IRuntimeScheduler'] = None,
+                 capability_registry: Optional[Any] = None,
+                 interpreter: Optional['Interpreter'] = None):
         self._issue_tracker = issue_tracker
         self._llm_executor = llm_executor
         self._module_manager = module_manager
@@ -39,10 +42,25 @@ class ServiceContextImpl(ServiceContext):
         self._registry = registry
         self._host_service = host_service
         self._source_provider = source_provider
-        self._compiler = compiler
+        self._orchestrator = orchestrator
         self._debugger = debugger
         self._output_callback = output_callback
         self._input_callback = input_callback
+        self._scheduler = scheduler
+        self._capability_registry = capability_registry
+        self._interpreter = interpreter
+
+    @property
+    def scheduler(self) -> Optional['IRuntimeScheduler']:
+        return self._scheduler
+
+    @property
+    def capability_registry(self) -> Optional[Any]:
+        return self._capability_registry
+
+    @property
+    def interpreter(self) -> Optional['Interpreter']:
+        return self._interpreter
 
     @property
     def output_callback(self) -> Optional[Callable[[str], None]]:
@@ -97,8 +115,8 @@ class ServiceContextImpl(ServiceContext):
         return self._source_provider
 
     @property
-    def compiler(self) -> Optional[ICompilerService]:
-        return self._compiler
+    def orchestrator(self) -> Optional[IKernelOrchestrator]:
+        return self._orchestrator
 
     @property
     def debugger(self) -> Any:

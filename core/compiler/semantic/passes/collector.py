@@ -14,17 +14,28 @@ class SymbolExtractor:
     """
     @staticmethod
     def get_assigned_names(node: ast.IbASTNode) -> List[Tuple[str, ast.IbASTNode]]:
-        """提取赋值语句中的目标名称及对应的节点"""
+        """提取赋值或迭代语句中的目标名称及对应的节点"""
         results = []
+        
+        def _extract(target: ast.IbASTNode):
+            if isinstance(target, ast.IbName):
+                results.append((target.id, target))
+            elif isinstance(target, ast.IbTypeAnnotatedExpr):
+                # 如果是带类型的表达式，我们同时记录外部节点和内部节点
+                # 外部节点用于语义分析器获取 annotation
+                # 内部节点用于解析器/解释器识别标识符
+                results.append((target.target.id, target))
+                _extract(target.target)
+            elif isinstance(target, ast.IbTuple):
+                for el in target.elts:
+                    _extract(el)
+        
         if isinstance(node, ast.IbAssign):
             for target in node.targets:
-                if isinstance(target, ast.IbName):
-                    results.append((target.id, target))
-                elif isinstance(target, ast.IbTypeAnnotatedExpr) and isinstance(target.target, ast.IbName):
-                    results.append((target.target.id, target.target))
+                _extract(target)
         elif isinstance(node, ast.IbFor):
-            if isinstance(node.target, ast.IbName):
-                results.append((node.target.id, node.target))
+            if node.target:
+                _extract(node.target)
         elif isinstance(node, ast.IbExceptHandler):
             if node.name:
                 results.append((node.name, node))

@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, TYPE_CHECKING, Any, Union
 import re
 import json
+from core.runtime.support.fuzzy_json import FuzzyJsonParser
 from core.kernel.axioms.protocols import TypeAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ConverterCapability, ParserCapability
 from core.kernel.types.descriptors import (
     FunctionMetadata, ListMetadata, DictMetadata,
@@ -191,12 +192,21 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         return source.get_base_axiom_name() in ("int", "str", "bool")
 
     def parse_value(self, raw_value: str) -> Any:
+        import re
         val = raw_value.strip().lower()
+        
+        # 1. 优先精确匹配
         if val in ("true", "1", "yes", "on"): return True
         if val in ("false", "0", "no", "off"): return False
-        # 尝试从文本中搜索
-        if "true" in val: return True
-        if "false" in val: return False
+        
+        # 2. 使用正则边界匹配 (防止 "not true" 误匹配)
+        # [IES 2.2 Refactor] 同步 llm_executor 的健壮解析逻辑
+        true_pattern = r'\b(true|yes|1|on)\b'
+        false_pattern = r'\b(false|no|0|off)\b'
+        
+        if re.search(true_pattern, val): return True
+        if re.search(false_pattern, val): return False
+        
         raise ValueError(f"No boolean found in response: {raw_value}")
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -314,15 +324,10 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return None
 
     def parse_value(self, raw_value: str) -> Any:
-        start = raw_value.find('[')
-        end = raw_value.rfind(']')
-        if start != -1 and end != -1:
-            try:
-                json_str = raw_value[start:end+1]
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                pass
-        raise ValueError(f"No JSON list found in response: {raw_value}")
+        try:
+            return FuzzyJsonParser.parse(raw_value, expected_type="list")
+        except ValueError as e:
+            raise ValueError(f"No valid JSON list found in response: {raw_value}. Error: {str(e)}")
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_operator_capability(self) -> Optional[OperatorCapability]: return None
@@ -368,15 +373,10 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return None # Values
 
     def parse_value(self, raw_value: str) -> Any:
-        start = raw_value.find('{')
-        end = raw_value.rfind('}')
-        if start != -1 and end != -1:
-            try:
-                json_str = raw_value[start:end+1]
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                pass
-        raise ValueError(f"No JSON dict found in response: {raw_value}")
+        try:
+            return FuzzyJsonParser.parse(raw_value, expected_type="dict")
+        except ValueError as e:
+            raise ValueError(f"No valid JSON dict found in response: {raw_value}. Error: {str(e)}")
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_operator_capability(self) -> Optional[OperatorCapability]: return None
@@ -452,6 +452,22 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "bound_method"
 
+class NoneAxiom(BaseAxiom, ConverterCapability):
+    """None 类型的行为公理"""
+    
+    @property
+    def name(self) -> str: return "None"
+    
+    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
+    
+    def get_methods(self) -> Dict[str, FunctionMetadata]:
+        return {
+            "cast_to": FunctionMetadata(name="cast_to", param_types=[ANY_DESCRIPTOR], return_type=ANY_DESCRIPTOR),
+            "to_bool": FunctionMetadata(name="to_bool", param_types=[], return_type=BOOL_DESCRIPTOR)
+        }
+
+    def is_compatible(self, other: 'TypeDescriptor') -> bool:
+        return other.get_base_axiom_name() == "None"
 
 def register_core_axioms(registry: 'AxiomRegistry'):
     """[Factory] 向指定的公理注册表注册所有核心公理"""
@@ -463,10 +479,10 @@ def register_core_axioms(registry: 'AxiomRegistry'):
     registry.register(DictAxiom())
     registry.register(ExceptionAxiom())
     registry.register(BoundMethodAxiom())
+    registry.register(NoneAxiom())
     
     registry.register(DynamicAxiom("Any"))
     registry.register(DynamicAxiom("var"))
     registry.register(DynamicAxiom("callable"))
-    registry.register(DynamicAxiom("None"))
     registry.register(DynamicAxiom("void"))
     registry.register(DynamicAxiom("behavior"))

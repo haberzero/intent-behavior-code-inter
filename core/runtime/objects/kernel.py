@@ -459,6 +459,20 @@ class IbNone(IbObject):
     def __to_prompt__(self) -> str:
         return "null"
 
+    def to_bool(self) -> IbObject:
+        """[IES 2.1] None 始终为 False"""
+        return self.ib_class.registry.box(0)
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """[IES 2.1] 支持 None 的强转逻辑"""
+        if target_class.name == "str":
+            return self.ib_class.registry.box("None")
+        if target_class.name in ("int", "float"):
+            return self.ib_class.registry.box(0)
+        if target_class.name == "bool":
+            return self.ib_class.registry.box(0)
+        return self
+
     def __repr__(self):
         return "null"
 

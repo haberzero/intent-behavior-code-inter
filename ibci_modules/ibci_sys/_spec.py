@@ -34,6 +34,18 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "is_sandboxed": {
                 "param_types": [],
                 "return_type": "bool"
+            },
+            "script_dir": {
+                "param_types": [],
+                "return_type": "str"
+            },
+            "script_path": {
+                "param_types": [],
+                "return_type": "str"
+            },
+            "project_root": {
+                "param_types": [],
+                "return_type": "str"
             }
         }
     }

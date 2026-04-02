@@ -272,19 +272,29 @@ class StatementComponent(BaseComponent):
     def for_statement(self) -> ast.IbStmt:
         start_token = self.stream.previous()
         
-        expr1 = self.expression.parse_expression()
+        # [IES 2.2 Fix] 支持带类型标注的循环目标 (e.g. for str name in names)
+        # 或者元组声明 (e.g. for (int x, int y) in coords)
+        from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
+        
+        target_candidate = None
+        if SyntaxRecognizer.get_role(self.stream) == SyntaxRole.VARIABLE_DECLARATION:
+            # 这是一个带类型的声明作为目标
+            target_candidate = self._parse_for_loop_target()
+        else:
+            target_candidate = self.expression.parse_expression()
         
         target = None
         iter_expr = None
         
         if self.stream.match(TokenType.IN):
-            # Case: for i in list
-            target = expr1
+            # 情况 1: for i in list  或  for str name in names
+            target = target_candidate
             iter_expr = self.expression.parse_expression()
         elif self.stream.check(TokenType.COLON):
-            # Case: for 10:  or  for ~behavior~:
+            # 情况 2: for 10:  或  for @~...~: (条件驱动模式)
+            # 此时 target_candidate 实际上就是迭代/条件表达式
             target = None
-            iter_expr = expr1
+            iter_expr = target_candidate
         else:
             raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.", code="PAR_001")
             
@@ -297,6 +307,31 @@ class StatementComponent(BaseComponent):
         end_token = self.stream.previous() # DEDENT
         
         return self._loc(ast.IbFor(target=target, iter=iter_expr, body=body, orelse=[]), start_token, end_token)
+
+    def _parse_for_loop_target(self) -> ast.IbExpr:
+        """解析循环变量目标，支持 (int x, int y) 或 str name"""
+        if self.stream.match(TokenType.LPAREN):
+            # 解析元组声明 (int x, int y)
+            start_token = self.stream.previous()
+            elts = []
+            while True:
+                # 递归解析单个声明
+                type_node = self.context.type_parser.parse_type_annotation()
+                name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect loop variable name.")
+                name_node = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
+                elts.append(self._loc(ast.IbTypeAnnotatedExpr(target=name_node, annotation=type_node), type_node))
+                
+                if not self.stream.match(TokenType.COMMA):
+                    break
+            
+            end_token = self.stream.consume(TokenType.RPAREN, "Expect ')' after typed tuple.")
+            return self._loc(ast.IbTuple(elts=elts, ctx='Store'), start_token, end_token)
+        else:
+            # 解析单个声明 str name
+            type_node = self.context.type_parser.parse_type_annotation()
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect loop variable name.")
+            name_node = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
+            return self._loc(ast.IbTypeAnnotatedExpr(target=name_node, annotation=type_node), type_node)
 
     def expression_statement(self) -> ast.IbStmt:
         expr = self.expression.parse_expression()
@@ -340,7 +375,8 @@ class StatementComponent(BaseComponent):
 
     def _parse_llm_fallback(self) -> Optional[List[ast.IbStmt]]:
         """Helper to parse llmexcept block or declarative retry."""
-        # Skip optional newlines before llmexcept
+        # Skip optional newlines before llmexcept/llmretry
+        # [AUDIT] 必须在 peek 之前消费换行符，否则 match 会因为位置不对而失败
         while self.stream.check(TokenType.NEWLINE):
             self.stream.advance()
             
@@ -357,6 +393,17 @@ class StatementComponent(BaseComponent):
             else:
                 self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
                 return self.block()
+        
+        # Check for syntactic sugar: llmretry "hint"
+        if self.stream.match(TokenType.LLM_RETRY):
+            hint = None
+            if self.stream.check(TokenType.STRING):
+                hint = self.expression.parse_expression()
+            
+            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
+            self.stream.consume_end_of_statement("Expect newline after llmretry sugar.")
+            return [retry_stmt]
+
         return None
 
     def try_statement(self) -> ast.IbTry:

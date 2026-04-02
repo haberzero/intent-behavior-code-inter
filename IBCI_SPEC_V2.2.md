@@ -1,0 +1,179 @@
+# IBC-Inter 2.2 官方语法说明手册 (Official Grammar Manual)
+
+本文档定义了 IBC-Inter (Intent-Behavior-Code-Inter) 编程语言的最新语法规范、功能特性及当前版本的局限性。
+
+---
+
+## 1. 核心哲学 (Core Philosophy)
+
+IBC-Inter 是一种**意图驱动**的编程语言。它将大语言模型 (LLM) 的非确定性能力与传统编程语言的确定性逻辑相结合。
+- **Intent (意图)**: 描述“想要做什么”或“处于什么场景”。
+- **Behavior (行为)**: 触发 LLM 执行的具体指令。
+- **Code (代码)**: 结构化的强类型逻辑控制。
+
+---
+
+## 2. 基础语法 (Basic Syntax)
+
+### 2.1 变量与类型
+IBCI 是**静态强类型**语言，支持以下基础类型：
+- `int`, `float`, `bool`, `str`
+- `list`, `dict`, `var` (万能引用类型)
+- `tuple` (多值返回与解包支持)
+- `callable` (可调用对象/闭包)
+
+**声明与赋值：**
+```ibci
+int count = 10
+str name = "Alice"
+dict config = {"version": "2.2"}
+# 元组解包赋值
+(int x, int y) = (1, 2)
+```
+
+### 2.2 模块导入 (Modules)
+使用 `import` 关键字导入系统插件或用户自定义模块：
+```ibci
+import ai      # 核心 AI 能力
+import sys     # 系统环境与路径
+import json    # JSON 解析
+import file    # 受限文件系统
+```
+
+---
+
+## 3. 意图系统 (Intent System)
+
+意图是 IBCI 的灵魂，它为后续的所有 AI 操作提供上下文背景。
+
+### 3.1 意图操作符
+意图是 IBCI 的灵魂，支持符号与语义别名（IES 2.2 增强）：
+- `@ [content]` / `intent [content]`: **单行意图注入**。为当前作用域添加一个意图。
+- `@+ [content]` / `append [content]`: **增量注入 (Append)**。在现有意图栈顶部追加新意图。
+- `@- [content]` / `remove [content]`: **意图移除 (Remove)**。尝试从栈中移除匹配的意图。
+- `@! [content]` / `override [content]`: **排他注入 (Override)**。清空当前栈并仅保留此意图。
+
+### 3.2 意图块 (Intent Block)
+使用 `intent` 关键字定义具有作用域限制的意图环境：
+```ibci
+intent "场景：代码审计":
+    # 此块内的所有 AI 调用都将携带该意图
+    str res = @~ 请分析这段逻辑 ~
+# 退出块后，意图自动弹出
+```
+
+---
+
+## 4. AI 驱动能力 (AI Capabilities)
+
+### 4.1 即时行为 (Immediate Behavior)
+使用 `@~ ... ~` 触发一次 LLM 调用。它可以作为表达式使用：
+```ibci
+str joke = @~ 讲一个关于程序员的笑话 ~
+```
+
+### 4.2 LLM 函数 (LLM Functions)
+定义结构化的、带提示词工程的 AI 函数：
+```ibci
+llm 翻译(str 文本, str 目标语言) -> str:
+    __sys__
+    你是一个翻译专家。
+    __user__
+    请将 "$文本" 翻译为 $目标语言。
+llmend
+```
+
+### 4.3 意图驱动控制流
+AI 可以直接参与逻辑判定：
+```ibci
+# 1. 意图驱动条件 (If)
+if @~ $input 包含负面情绪吗？ ~:
+    print("检测到负面情绪")
+
+# 2. 意图驱动循环 (While)
+while @~ 任务尚未完成 ~:
+    # 执行任务逻辑...
+
+# 3. 条件驱动循环 (For @~ ... ~:) [NEW 2.2]
+# 此语法不使用 in 关键字，而是由 AI 判定是否继续执行循环体。
+for @~ $count 小于 3 吗？只回答 1 或 0 ~:
+    count = count + 1
+    print("循环中...")
+```
+
+### 4.4 迭代驱动循环 (For...in)
+标准的集合迭代，现已支持复杂解包目标：
+```ibci
+list coords = [[1, 2], [3, 4]]
+# 支持元组解包 (IES 2.2 Fix)
+for (int x, int y) in coords:
+    print("坐标: " + (str)x + "," + (str)y)
+```
+
+---
+
+## 5. 健壮性与自愈 (Robustness & Self-healing)
+
+### 5.1 异常捕获与重试
+IBCI 引入了 `llmexcept` 关键字专门处理 AI 调用产生的非确定性错误（如解析失败、逻辑模糊）：
+```ibci
+try:
+    int result = (int) @~ 1 + 1 等于几？只答数字 ~
+llmexcept:
+    print("AI 响应无法解析为整数，正在重试...")
+    retry "请务必只返回一个纯数字，不要带标点"
+except Exception as e:
+    print("发生了常规运行时错误: " + (str)e)
+```
+
+### 5.2 llmretry 语法糖 [NEW 2.2]
+为了简化开发，`llmretry` 提供了一种极其精简的重试引导。它必须独立成行，紧跟在可能触发模糊判定的意图语句之后：
+```ibci
+str res = @~ 判定当前状态 ~
+llmretry "如果无法判定，请回复 0 并给出原因"
+```
+**注意：**
+- `llmretry` 本质上是一个挂载在上一条语句上的 Fallback 节点。
+- 如果触发重试，解释器将精准返回到上一条语句的起始处重新评估。
+- 在循环中使用时，若挂载在循环体内的某条语句后，重试只会重新执行该行，而不会重启整个循环。
+
+---
+
+## 6. 工程化特性 (Engineering Features)
+
+### 6.1 位置无关路径解析
+不再使用 `__dir__` 或 `__file__` 全局变量，统一通过 `sys` 模块获取：
+- `sys.script_dir()`: 获取当前脚本所在目录。
+- `sys.script_path()`: 获取当前脚本的绝对路径。
+
+### 6.2 动态宿主隔离 (DynamicHost)
+支持在完全隔离的环境中运行子脚本：
+```ibci
+import host
+dict policy = {"isolated": True, "registry_isolation": True}
+host.run_isolated(sys.script_dir() + "/sub.ibci", policy)
+```
+
+---
+
+## 7. 已知限制与注意事项 (Known Limitations)
+
+1. **类型转换严格性**: 
+   从 AI 返回的 `Any` 类型向 `int`, `float`, `list`, `dict` 转换时，必须使用显式强转 `(int) expr`。
+2. **意图栈深度与序列化**: 
+   - 过深的意图栈可能导致 LLM Token 消耗过快或提示词混淆，建议适时使用 `@!` 整理栈。
+   - **IES 2.2 Fix**: 意图栈现在支持拓扑序列化，确保在快照恢复后维持内存结构共享，避免了副本激增问题。
+3. **插值迭代限制**: 
+   目前不支持 `for i in @~ ... $var[i] ... ~:` 这种引用了尚未定义的循环变量的插值语法（作用域悖论）。建议先使用 Behavior 产生列表，再进行常规 `for` 循环。
+4. **重试上限限制**: 
+   目前的物理重试上限硬编码为 3 次。`ai.set_retry()` 配置目前主要用于插件提示，尚不能直接穿透控制内核的重试次数。
+5. **隔离环境限制**: 
+   在 `run_isolated` 环境下，除非明确在 `policy` 中开启 `inherit_variables`，否则子环境无法访问父环境的变量。
+6. **If/While 条件中的 llmexcept**: 
+   当前版本中，若 `if` 或 `while` 的条件判断触发了 AI 解析错误，错误会直接向上抛出，无法在当前的 `llmexcept` 块中捕获（需在外部包裹 `try...llmexcept`）。
+7. **Mock 局限性**: 
+   目前的内置 Mock 机制尚无法完美模拟复杂的 `retry` 成功链路，建议开发时配合真实 API 调试。
+
+---
+*Document Date: 2026-03-31*
+*Version: IBC-Inter v2.2-stable*

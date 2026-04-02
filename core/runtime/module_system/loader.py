@@ -20,8 +20,9 @@ class ModuleLoader(IModuleLoader):
     IBC-Inter 运行时模块加载器。
     负责在执行阶段动态加载模块实现，并注入所需的依赖。
     """
-    def __init__(self, search_paths: List[str]):
+    def __init__(self, search_paths: List[str], capability_registry: Optional[Any] = None):
         self.search_paths = [os.path.abspath(p) for p in search_paths]
+        self.capability_registry = capability_registry
 
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
         """
@@ -128,8 +129,8 @@ class ModuleLoader(IModuleLoader):
         permission_manager = context.permission_manager
         llm_executor = context.llm_executor
         
-        # 准备扩展能力集合 (IES 2.0 SDK)
-        capabilities = ExtensionCapabilities(_registry=registry)
+        # 准备扩展能力集合 (IES 2.2 SDK)
+        capabilities = ExtensionCapabilities(_registry=registry, _capability_registry=self.capability_registry)
         
         rt_context = execution_context.runtime_context
         if rt_context:
@@ -188,15 +189,14 @@ class ModuleLoader(IModuleLoader):
                     continue
                     
                 try:
-                    # 动态加载实现
-                    # [IES 2.0] 使用标准的包路径加载，以支持内部相对导入
-                    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-                    if project_root not in sys.path:
-                        sys.path.insert(0, project_root)
+                    # [IES 2.0] 动态加载实现层
+                    # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
+                    pkg_dir = os.path.dirname(module_dir)
+                    if pkg_dir not in sys.path:
+                        sys.path.insert(0, pkg_dir)
                     
-                    # 使用全路径加载 (例如 ibci_modules.ibci_idbg)
-                    full_pkg_name = f"ibci_modules.{entry}"
-                    mod = importlib.import_module(full_pkg_name)
+                    # 使用 importlib 直接导入文件夹作为包，这能正确处理内部的相对导入
+                    mod = importlib.import_module(entry)
                     
                     # 实例化：优先寻找 create_implementation 工厂
                     if hasattr(mod, 'create_implementation'):

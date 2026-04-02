@@ -1,0 +1,17 @@
+import sys
+import file
+import json
+import isolated_plugin
+
+print("\n--- [CHILD] Starting ---")
+print("CHILD sys.script_path(): " + (str)sys.script_path())
+
+# 显式加载属于自己的配置
+dict cfg = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+print("CHILD Config URL: " + (str)((dict)cfg["default_model"])["base_url"])
+
+# 调用属于自己的私有插件
+str secret = isolated_plugin.get_secret()
+print("CHILD Plugin Secret: " + secret)
+
+print("--- [CHILD] Finished ---")

@@ -61,8 +61,67 @@ class SyntaxRecognizer:
         if token.type == TokenType.IDENTIFIER:
             if SyntaxRecognizer._is_declaration_lookahead(stream):
                 return SyntaxRole.VARIABLE_DECLARATION
+        
+        # Check for typed tuple: (int x, int y)
+        if token.type == TokenType.LPAREN:
+             if SyntaxRecognizer._is_typed_tuple_lookahead(stream):
+                 return SyntaxRole.VARIABLE_DECLARATION
             
         return SyntaxRole.EXPRESSION_STATEMENT
+
+    @staticmethod
+    def _is_typed_tuple_lookahead(stream: TokenStream) -> bool:
+        """
+        Check if (ID ID, ID ID) or (Type Name, Type Name) exists.
+        Handles (int x, int y) or (list[int] x, str y).
+        """
+        # Skip '('
+        offset = 1
+        
+        # We need to find at least one 'Type Name' inside the parentheses
+        # followed by a comma or ')'
+        while True:
+            t = stream.peek(offset)
+            if t.type in (TokenType.EOF, TokenType.NEWLINE, TokenType.RPAREN):
+                break
+            
+            # Check for a single declaration: Type Name
+            if t.type == TokenType.IDENTIFIER:
+                # Use the existing declaration logic starting from current offset
+                # We need a modified version of _is_declaration_lookahead that works with an offset
+                if SyntaxRecognizer._check_declaration_at_offset(stream, offset):
+                    return True
+            
+            # If it's not a declaration, it might be a comma or just a value.
+            # But we only care if we find a typed declaration.
+            offset += 1
+            if offset > 20: # Safety limit for lookahead
+                break
+                
+        return False
+
+    @staticmethod
+    def _check_declaration_at_offset(stream: TokenStream, offset: int) -> bool:
+        """Lookahead at a specific offset to see if it's a Type Name declaration."""
+        current = offset
+        
+        # 1. Skip dotted names
+        while stream.peek(current).type == TokenType.IDENTIFIER:
+            if stream.peek(current + 1).type == TokenType.DOT:
+                current += 2
+            else:
+                break
+        
+        # 2. Check next token
+        next_t = stream.peek(current + 1)
+        if next_t.type == TokenType.IDENTIFIER:
+            return True
+            
+        # 3. Check generics
+        if next_t.type == TokenType.LBRACKET:
+            return SyntaxRecognizer._check_generic_lookahead(stream, current + 1)
+            
+        return False
 
     @staticmethod
     def _is_declaration_lookahead(stream: TokenStream) -> bool:

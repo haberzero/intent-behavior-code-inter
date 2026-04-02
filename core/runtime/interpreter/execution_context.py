@@ -1,4 +1,5 @@
-from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING
+import os
+from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING, Callable
 from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
@@ -26,6 +27,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
                  resolve_type_from_symbol_callback: Any,
                  extract_name_id_callback: Any,
                  resolve_value_callback: Any,
+                 visit_with_fallback_callback: Any,
                  strict_mode: bool = False):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
@@ -51,6 +53,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._resolve_type_from_symbol_callback = resolve_type_from_symbol_callback
         self._extract_name_id_callback = extract_name_id_callback
         self._resolve_value_callback = resolve_value_callback
+        self._visit_with_fallback_callback = visit_with_fallback_callback
 
     @property
     def logical_stack(self) -> Any:
@@ -171,6 +174,9 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     def resolve_value(self, val: Any) -> Any:
         return self._resolve_value_callback(val)
 
+    def visit_with_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> 'IbObject':
+        return self._visit_with_fallback_callback(node_uid, node_type, node_data, action)
+
     # IStackInspector Implementation (Delegated to Data or Callback)
     def get_call_stack_depth(self) -> int:
         return self._logical_stack.depth if self._logical_stack else 0
@@ -183,3 +189,15 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
 
     def get_captured_intents(self, obj: Any) -> List[str]:
         return self._get_captured_intents_callback(obj)
+
+    def get_current_script_path(self) -> Optional[str]:
+        if self._logical_stack and self._logical_stack.frames:
+            # 从调用栈中查找最近的一个具有 Location 的帧
+            for frame in reversed(self._logical_stack.frames):
+                if frame.location and frame.location.file_path:
+                    return os.path.abspath(frame.location.file_path)
+        return None
+
+    def get_current_script_dir(self) -> Optional[str]:
+        path = self.get_current_script_path()
+        return os.path.dirname(path) if path else None

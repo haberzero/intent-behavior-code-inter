@@ -88,11 +88,24 @@ class BaseHandler:
             
         # 1. 意图栈切换 (由解释器管理环境)
         old_stack = self.runtime_context.intent_stack
-        self.runtime_context.intent_stack = list(behavior.captured_intents)
+        
+        # 注意：behavior.captured_intents 是一个列表，需要重建为 IntentNode 链表
+        from core.runtime.interpreter.runtime_context import IntentNode
+        captured_stack = None
+        for intent in behavior.captured_intents:
+            captured_stack = IntentNode(intent, captured_stack)
+            
+        self.runtime_context.intent_stack = captured_stack
         
         try:
             # 2. 调用执行器 (此时环境已就绪)
-            return self.service_context.llm_executor.execute_behavior_object(behavior, self.execution_context)
+            # [IES 2.0] IbBehavior 使用 .node 存储 node_uid
+            node_uid = getattr(behavior, 'node', None) or getattr(behavior, 'node_uid', None)
+            return self.service_context.llm_executor.execute_behavior_expression(
+                node_uid, 
+                self._execution_context,
+                call_intent=None # 行为内部执行
+            )
         finally:
             # 3. 环境恢复
             self.runtime_context.intent_stack = old_stack

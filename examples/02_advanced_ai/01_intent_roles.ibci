@@ -1,0 +1,36 @@
+import sys
+import ai
+import json
+import file
+
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
+# 设置全局意图 (Global Intent)
+ai.set_global_intent("语言风格：正式且专业")
+ai.set_global_intent("禁止使用表情符号")
+
+print("--- [01_intent_roles.ibci] ---")
+
+# 1. 意图块 (Intent Block) - 叠加模式
+intent "角色：历史学家":
+    print("\n[意图块内] 默认叠加模式:")
+    # 此时意图 = [正式且专业] + [禁止使用表情符号] + [角色：历史学家]
+    str res1 = @~文艺复兴(简述，10字内)~
+    print("回复 1: " + res1)
+    
+    print("\n[意图块内] 使用 @! (排他模式/Override):")
+    # @! 会忽略所有之前的意图，仅使用当前行定义的意图
+    @! 角色：脱口秀演员
+    str res2 = @~文艺复兴(简述，10字内)~
+    print("回复 2: " + res2)
+
+# 2. 意图叠加 (@+ Append)
+print("\n[意图块外] 单行意图叠加:")
+@+ 任务：简短解释
+str res3 = @~量子力学(10字内)~
+print("回复 3: " + res3)
+
+ai.clear_global_intents()
+print("\n全局意图已清理。")

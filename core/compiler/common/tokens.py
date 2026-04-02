@@ -45,6 +45,7 @@ class TokenType(Enum):
     LLM_USER = auto()
     LLM_EXCEPT = auto()
     RETRY = auto()
+    LLM_RETRY = auto()
     INTENT_STMT = auto()
 
     # 标识符与字面量

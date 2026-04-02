@@ -25,6 +25,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     read: str -> str (读取文件内容)
     write: (str, str) -> void (写入文件内容)
     exists: str -> bool (检查文件是否存在)
+    remove: str -> void (删除文件)
     """
     return {
         "functions": {
@@ -39,6 +40,10 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "exists": {
                 "param_types": ["str"],
                 "return_type": "bool"
+            },
+            "remove": {
+                "param_types": ["str"],
+                "return_type": "void"
             }
         }
     }

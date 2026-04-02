@@ -2,9 +2,8 @@ import re
 import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, TYPE_CHECKING
-from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
-from core.runtime.interfaces import IExecutionContext
 
 from core.kernel.issue import InterpreterError, LLMUncertaintyError
 from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
@@ -54,7 +53,13 @@ class LLMExecutorImpl:
     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
-        # [IES 2.2] 动态从 ai 模块获取 Provider
+        # [IES 2.2] 优先从能力注册中心获取 Provider (能力名: llm_provider)
+        if self.service_context.capability_registry:
+            provider = self.service_context.capability_registry.get("llm_provider")
+            if provider:
+                return provider
+
+        # 回退到从 ai 模块获取 (兼容旧模式)
         ai_module = self.interop.get_package("ai")
         if not ai_module:
             return None
@@ -118,19 +123,20 @@ class LLMExecutorImpl:
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
-        ai_module = self.interop.get_package("ai")
-        if ai_module and hasattr(ai_module, "get_return_type_prompt"):
-            type_prompt = ai_module.get_return_type_prompt(type_name)
+        # [IES 2.2] 从 LLM Provider 获取返回类型提示
+        if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
+            type_prompt = self.llm_callback.get_return_type_prompt(type_name)
             if type_prompt:
                 sys_prompt += f"\n\n{type_prompt}"
 
         # 4. 调用底层模型
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
         
-        # 记录最后一次调用信息
+        # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": user_prompt,
+            "response": raw_res,
             "raw_response": raw_res
         }
         
@@ -147,8 +153,10 @@ class LLMExecutorImpl:
         for segment in segments:
             # [IES 2.2 Security Update] 处理外部资产引用
             if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
-                # 注意：目前由 Interpreter 在更高层处理，此处仅作为占位
-                pass
+                # 直接通过执行上下文解析外部资产
+                val = execution_context.resolve_value(segment)
+                content_parts.append(str(val))
+                continue
 
             if isinstance(segment, str):
                 if segment.startswith("node_"):
@@ -188,7 +196,7 @@ class LLMExecutorImpl:
         # Fallback (Default to string boxing if no descriptor, axiom or no parser capability)
         return self.registry.box(raw_res)
 
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional[Any] = None) -> IbObject:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
         """
@@ -213,9 +221,23 @@ class LLMExecutorImpl:
                 return self.registry.box(call_intent.resolve_content(context, execution_context))
 
         # [IES 2.1] 获取消解后的最终列表
-        all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
+        # [IES 2.2] 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
+        if captured_intents is not None:
+            active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
+            all_intents = IntentResolver.resolve(
+                active_intents=active_list,
+                global_intents=context.get_global_intents(),
+                call_intent=call_intent,
+                context=context,
+                execution_context=execution_context
+            )
+        else:
+            all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
+            
         # 核心：使用 side_tables 中的 node_scenes
-        scene_name = execution_context.get_side_table("node_scenes", node_uid) or "general"
+        scene_val = execution_context.get_side_table("node_scenes", node_uid)
+        scene_name = str(scene_val).lower() if scene_val else "general"
+        
         sys_prompt = "你是一个意图行为代码执行器。"
         
         current_retry_hint = context.retry_hint
@@ -235,18 +257,20 @@ class LLMExecutorImpl:
             sys_prompt += intent_block
 
         # 5. 调用底层模型
-        response = self._call_llm(sys_prompt, content, node_uid)
+        response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name)
         
-        # 记录最后一次调用信息
+        # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": content,
-            "raw_response": response
+            "response": response,
+            "raw_response": response,
+            "scene": scene_name
         }
 
         # 6. 处理返回类型
         # [IES 2.1 Unified Decision] 统一处理分支、循环和决策场景的模糊判定
-        if scene_name in ("decision", "choice", "BRANCH", "LOOP", "IbScene.BRANCH", "IbScene.LOOP"):
+        if any(keyword in scene_name for keyword in ("decision", "choice", "branch", "loop")):
             # 1. 优先尝试从侧表获取节点特有的决策映射
             decision_map = execution_context.get_side_table("decision_maps", node_uid)
             
@@ -299,7 +323,8 @@ class LLMExecutorImpl:
 
         try:
             # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
-            res = self.execute_behavior_expression(behavior.node, execution_context)
+            # [IES 2.2] 传入行为对象捕获的意图栈
+            res = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
             behavior._cache = res
             return res
         finally:

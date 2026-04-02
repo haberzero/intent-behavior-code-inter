@@ -226,6 +226,10 @@ class TypeDescriptor:
         # [IES 2.1 Refactor] 默认通过 kind 判定，消除 isinstance
         return self.kind == "ModuleMetadata"
 
+    def is_behavior(self) -> bool:
+        """是否为行为描述类型。"""
+        return self.name == "behavior"
+
     def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
         """
         类型兼容性校验 (Axiom-Driven)
