@@ -1,4 +1,5 @@
-from typing import Any, List
+from typing import Any, List, Optional
+import os
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.interfaces import ServiceContext
 
@@ -10,7 +11,6 @@ def register_meta(manager: Any, execution_context: Any, service_context: Any):
         # [IES 2.1 Decoupling]
         # 核心：通过 service_context 和 execution_context 获取信息，严禁穿透持有 interpreter
         ctx = service_context
-        current_mod = execution_context.current_module_name
         
         if ctx.host_service:
             return ctx.host_service.get_source()

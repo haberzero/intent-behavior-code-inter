@@ -1,5 +1,16 @@
 import ai
-ai.set_config(url, key, model)
+import json
+import file
+import sys
+
+# 1. 显式加载本地配置 (IES 2.2 推荐模式)
+# [IES 2.2 Fix] 强制类型转换以确保通过严格的二元运算校验
+str base_dir = (str) sys.script_dir()
+str config_json = file.read(base_dir + "/api_config.json")
+dict config = (dict) json.parse(config_json)
+dict model_config = (dict) config["default_model"]
+ai.set_config((str)model_config["base_url"], (str)model_config["api_key"], (str)model_config["model"])
+print("成功加载 AI 配置")
 
 list items = ["apple", "carrot", "banana", "Python Programming Book", "orange", "potato", "History of Rome", "strawberry"]
 list fruit_indices = []
@@ -8,12 +19,15 @@ int total_len = len(items)
 
 print("--- IBC-Inter Fruit Finder ---")
 
-for @~Progress: $count / $total_len. Continue if count is less than total_len.~:
-    str current_item = items[count]
-    if @~Is $current_item a fruit?~:
-        fruit_indices = fruit_indices + [count]
+while count < total_len:
+    str current_item = (str) items[count]
+    if @~ $current_item 是水果？(1/0) ~:
+        fruit_indices.append(count)
         print("[Found] " + current_item)
     count = count + 1
+llmexcept:
+    print("AI 响应模糊，正在通过 llmexcept 进行修正...")
+    retry "只答 1/0"
 
 print("--- Result ---")
 print(fruit_indices)

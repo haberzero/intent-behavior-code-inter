@@ -1,8 +1,7 @@
 from typing import Any, Mapping, List, Optional, Callable
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
-from core.runtime.interfaces import IExecutionContext
-from core.runtime.interfaces import ServiceContext, IIbList, IIbBehavior
+from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList, IIbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException, RetryException
 )
@@ -35,63 +34,74 @@ class StmtHandler(BaseHandler):
             return self._execute_behavior(res)
         return res
 
-    def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """赋值语句实现"""
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
+    def _assign_to_target(self, target_uid: str, value: IbObject, define_only: bool = False):
+        """通用赋值逻辑，支持 Name, TypeAnnotatedExpr, Attribute, Subscript, Tuple Unpacking"""
+        target_data = self.get_node_data(target_uid)
+        if not target_data: return
         
-        value_uid = node_data.get("value")
-        value = self.visit(value_uid)
-        
-        # 处理多重赋值目标 (var a, b = 1)
-        targets = node_data.get("targets", [])
-        for target_uid in targets:
-            target_data = self.get_node_data(target_uid)
-            if not target_data: continue
-            
-            # 1. 普通变量赋值 (Name)
-            if target_data["_type"] == "IbName":
-                sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                name = target_data.get("id")
-                if sym_uid:
-                    # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
-                    if self.runtime_context.get_symbol_by_uid(sym_uid):
-                        self.runtime_context.set_variable_by_uid(sym_uid, value)
-                    else:
-                        declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-                        self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
-                elif not self.execution_context.strict_mode:
-                    # 回退到名称查找
-                    # [IES 2.0] 动态回退：如果变量不存在则定义，存在则赋值
-                    try:
-                        self.runtime_context.get_variable(name)
-                        self.runtime_context.set_variable(name, value)
-                    except Exception:
-                        self.runtime_context.define_variable(name, value)
+        # 1. 普通变量赋值 (Name)
+        if target_data["_type"] == "IbName":
+            sym_uid = self.get_side_table("node_to_symbol", target_uid)
+            name = target_data.get("id")
+            if sym_uid:
+                # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
+                if not define_only and self.runtime_context.get_symbol_by_uid(sym_uid):
+                    self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
-                    raise self.report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
-            
-            # 2. 类型标注表达式 (TypeAnnotatedExpr)
-            elif target_data["_type"] == "IbTypeAnnotatedExpr":
-                inner_target_uid = target_data.get("target")
-                inner_target_data = self.get_node_data(inner_target_uid)
-                if inner_target_data and inner_target_data["_type"] == "IbName":
-                    sym_uid = self.get_side_table("node_to_symbol", inner_target_uid)
-                    name = inner_target_data.get("id")
-                    # 总是定义新变量
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
                     self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+            elif not self.execution_context.strict_mode:
+                # 回退到名称查找
+                try:
+                    self.runtime_context.get_variable(name)
+                    if define_only:
+                         self.runtime_context.define_variable(name, value)
+                    else:
+                         self.runtime_context.set_variable(name, value)
+                except Exception:
+                    self.runtime_context.define_variable(name, value)
+            else:
+                raise self.report_error(f"Strict mode: Symbol UID missing for assignment to '{name}'.", target_uid)
+        
+        # 2. 类型标注表达式 (TypeAnnotatedExpr)
+        elif target_data["_type"] == "IbTypeAnnotatedExpr":
+            inner_target_uid = target_data.get("target")
+            # 递归处理内部目标，但强制使用 define 模式
+            self._assign_to_target(inner_target_uid, value, define_only=True)
+        
+        # 3. 属性赋值 (Attribute)
+        elif target_data["_type"] == "IbAttribute":
+            obj = self.visit(target_data.get("value"))
+            attr = target_data.get("attr")
+            obj.receive('__setattr__', [self.registry.box(attr), value])
+        
+        # 4. 下标赋值 (Subscript)
+        elif target_data["_type"] == "IbSubscript":
+            obj = self.visit(target_data.get("value"))
+            slice_val = self.visit(target_data.get("slice"))
+            obj.receive('__setitem__', [slice_val, value])
             
-            # 3. 属性赋值 (Attribute)
-            elif target_data["_type"] == "IbAttribute":
-                obj = self.visit(target_data.get("value"))
-                attr = target_data.get("attr")
-                obj.receive('__setattr__', [self.registry.box(attr), value])
+        # 5. 元组解包 (Tuple)
+        elif target_data["_type"] == "IbTuple":
+            elements_obj = value.receive('to_list', [])
+            if not isinstance(elements_obj, IIbList):
+                raise self.report_error(f"Cannot unpack non-iterable object", target_uid)
             
-            # 4. 下标赋值 (Subscript)
-            elif target_data["_type"] == "IbSubscript":
-                obj = self.visit(target_data.get("value"))
-                slice_val = self.visit(target_data.get("slice"))
-                obj.receive('__setitem__', [slice_val, value])
+            vals = elements_obj.elements
+            targets = target_data.get("elts", [])
+            if len(vals) != len(targets):
+                raise self.report_error(f"Unpack error: expected {len(targets)} values, got {len(vals)}", target_uid)
+            
+            for t_uid, val in zip(targets, vals):
+                self._assign_to_target(t_uid, val, define_only=define_only)
+
+    def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """实现赋值语句"""
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
+        value = self.visit(node_data.get("value"))
+        
+        for target_uid in node_data.get("targets", []):
+            self._assign_to_target(target_uid, value)
                 
         return self.registry.get_none()
 
@@ -184,12 +194,10 @@ class StmtHandler(BaseHandler):
         total = len(elements)
         for i, item in enumerate(elements):
             self.runtime_context.push_loop_context(i, total)
-            target_data = self.get_node_data(target_uid)
-            if target_data and target_data["_type"] == "IbName":
-                name = target_data.get("id")
-                sym_uid = self.get_side_table("node_to_symbol", target_uid)
-                declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-                self.runtime_context.define_variable(name, item, declared_type=declared_type, uid=sym_uid)
+            
+            # [IES 2.2 Fix] 使用统一的赋值逻辑支持复杂循环目标
+            if target_uid:
+                self._assign_to_target(target_uid, item, define_only=True)
             
             try:
                 for stmt_uid in body:
@@ -245,7 +253,8 @@ class StmtHandler(BaseHandler):
                 # 2. 绑定异常变量
                 name = handler_data.get("name")
                 if name:
-                    # [IES 2.2 Fix] 必须获取并传递符号 UID
+                    # [IES 2.2 Fix] 使用统一的赋值逻辑支持异常变量绑定
+                    # 简单起见，既然目前只有 Name，我们可以直接保留
                     sym_uid = self.get_side_table("node_to_symbol", handler_uid)
                     self.runtime_context.define_variable(name, error_obj, uid=sym_uid)
                 

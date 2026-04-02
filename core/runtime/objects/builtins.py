@@ -1,9 +1,9 @@
-from typing import Any, List, Dict, Optional, Callable
+from typing import Any, List, Dict, Optional, Callable, Union
 from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
-from core.kernel.issue import InterpreterError
+from core.kernel.issue import InterpreterError, LLMUncertaintyError
 
 from .ib_type_mapping import register_ib_type
 
@@ -152,12 +152,33 @@ class IbString(IbObject):
         return self.ib_class.registry.box(len(self.value))
 
     def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(1 if self.value.strip() else 0)
+        val = self.value.strip().lower()
+        # [IES 2.2 Strict] 强约束决策逻辑：
+        # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
+        # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
+        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发 LLMUncertaintyError 以便 llmexcept 捕获
+        if val in ("1", "true", "yes", "on"):
+            return self.ib_class.registry.box(1)
+        if val in ("0", "false", "no", "off", "null", "none", ""):
+            return self.ib_class.registry.box(0)
+            
+        # [IES 2.2 Enforcement] 非空且非明确布尔语义的字符串，直接判定为模糊
+        raise LLMUncertaintyError(
+            f"Ambiguous boolean string: '{self.value}'. Expected '0' or '1'.",
+            raw_response=self.value
+        )
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
-        res_val = _cast_string_to_native(self.value, target_desc)
-        return self.ib_class.registry.box(res_val)
+        try:
+            res_val = _cast_string_to_native(self.value, target_desc)
+            return self.ib_class.registry.box(res_val)
+        except (ValueError, TypeError) as e:
+            # [IES 2.2] 统一抛出 LLMUncertaintyError，使强转失败能被 llmexcept 捕获
+            raise LLMUncertaintyError(
+                f"Casting string '{self.value}' to {target_desc} failed: {str(e)}",
+                raw_response=self.value
+            )
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())
@@ -259,10 +280,12 @@ class IbList(IbObject):
 
     def cast_to(self, target_class: Any) -> IbObject:
         """[IES 2.1] 支持 List 的强转逻辑"""
-        # 如果目标是 list 本身或 Any，直接返回
         if target_class.name in ("list", "Any"):
             return self
-        # 暂时不支持深度转换，仅允许原样保留 (UTS 宽松校验)
+        if target_class.name == "str":
+            # 转换为字符串表示
+            items_repr = [str(e.to_native()) for e in self.elements]
+            return self.ib_class.registry.box("[" + ", ".join(items_repr) + "]")
         return self
 
     def __getitem__(self, key: Any) -> IbObject:
@@ -323,6 +346,9 @@ class IbDict(IbObject):
         """[IES 2.1] 支持 Dict 的强转逻辑"""
         if target_class.name in ("dict", "Any"):
             return self
+        if target_class.name == "str":
+            items_repr = [f"{k}: {str(v.to_native())}" for k, v in self.fields.items()]
+            return self.ib_class.registry.box("{" + ", ".join(items_repr) + "}")
         return self
 
     def __getitem__(self, key: Any) -> IbObject:
@@ -356,14 +382,14 @@ class IbBehavior(IbObject, IIbBehavior):
     """
     延迟执行的行为对象 (~...~)。
     """
-    def __init__(self, node_uid: str, captured_intents: List[Any], ib_class: IbClass, expected_type: Optional[str] = None):
+    def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
         """
         [IES 2.0 Architectural Update] IbBehavior 现在是纯粹的数据描述符。
         不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
         """
         super().__init__(ib_class)
         self.node = node_uid
-        self.captured_intents = captured_intents
+        self.captured_intents = captured_intents # [IES 2.2] 支持 IntentNode (结构共享)
         self.expected_type = expected_type
         self._cache: Optional[IbObject] = None
 

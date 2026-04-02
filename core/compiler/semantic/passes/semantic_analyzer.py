@@ -69,12 +69,22 @@ class SemanticAnalyzer:
 
         # 2. 注册内置类型
         for name, type_desc in self.prelude.get_builtin_types().items():
+            # [IES 2.2 Fix] 仅注册真正的内置类型为 builtin UID。
+            # 如果描述符标记为 is_user_defined，说明它是从外部或残留注册表中混入的，跳过。
+            if getattr(type_desc, 'is_user_defined', False):
+                continue
+                
             sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=type_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 3. 注册内置模块 (如果 Registry 中存在)
         for name, mod_desc in self.prelude.get_builtin_modules().items():
             sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            self.symbol_table.define(sym)
+
+        # 4. [IES 2.2] 注册内置变量/常量 (如 __file__, __dir__)
+        for name, var_desc in self.prelude.get_builtin_variables().items():
+            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=var_desc, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
     def analyze(self, node: ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
@@ -568,28 +578,49 @@ class SemanticAnalyzer:
         self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             iter_type = self.visit(node.iter)
-            # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
-            iter_trait = iter_type.get_iter_trait()
-            if iter_trait:
-                # [IES 2.1] 修复：通过 TypeDescriptor 统一获取 element_type，以支持引用解析
-                element_type = iter_type.get_element_type() or self._any_desc
-            else:
-                self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
-                element_type = self._any_desc
             
-            for var_name, target in SymbolExtractor.get_assigned_names(node):
-                # 检查是否已在 Pass 2.5 预扫描中定义
-                sym = self.symbol_table.symbols.get(var_name)
-                # 如果未定义，或者定义为 Any/var 占位符，则进行推导
-                if not sym or sym.descriptor.is_dynamic():
-                    sym = self._define_var(var_name, element_type, target, allow_overwrite=(sym is not None))
+            # [IES 2.2 Stabilization] 统一循环协议检查
+            if node.target is None:
+                # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
+                # 语义：等同于 while，要求表达式具有“布尔评估能力”
+                # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
+                # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
+                if not iter_type.is_dynamic() and not iter_type.is_behavior() and iter_type.name != "bool":
+                    # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
+                    pass
+            else:
+                # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
+                # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
+                # [NEW] 如果是 behavior 类型，我们认为它“潜在可迭代”
+                if iter_type.is_behavior():
+                    element_type = self._any_desc 
                 else:
-                    # 显式定义的变量（如带有类型标注），则执行类型更新
-                    if sym.is_variable:
-                        sym.descriptor = element_type
+                    iter_trait = iter_type.get_iter_trait()
+                    if iter_trait:
+                        # [IES 2.1] 修复：通过 TypeDescriptor 统一获取 element_type，以支持引用解析
+                        element_type = iter_type.get_element_type() or self._any_desc
+                    else:
+                        self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
+                        element_type = self._any_desc
                 
-                if sym:
-                    self.side_table.bind_symbol(target, sym)
+                for var_name, target in SymbolExtractor.get_assigned_names(node):
+                    # [NEW] 优先使用显式类型标注，而非推导出的 element_type
+                    effective_type = element_type
+                    if isinstance(target, ast.IbTypeAnnotatedExpr):
+                        effective_type = self.visit(target.annotation)
+                    
+                    # 检查是否已在 Pass 2.5 预扫描中定义
+                    sym = self.symbol_table.symbols.get(var_name)
+                    
+                    # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
+                    if not sym or sym.descriptor.is_dynamic():
+                        sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
+                    elif not effective_type.is_dynamic():
+                        # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
+                        sym.descriptor = effective_type
+                    
+                    if sym:
+                        self.side_table.bind_symbol(target, sym)
         finally:
             self.scope_manager.pop_scene()
             
@@ -944,6 +975,9 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
         self.in_behavior_expr = True
+        # [IES 2.2 Fix] 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
+        self.side_table.bind_scene(node, self.scope_manager.current_scene())
+        
         try:
             for seg in node.segments:
                 if isinstance(seg, ast.IbASTNode):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
-from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent
+from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent, IStateProvider
 from core.base.source_atomic import Location
 from core.runtime.exceptions import RetryException, BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError
@@ -204,7 +204,7 @@ class IntentNode:
         self._cached_list = res
         return res
 
-class RuntimeContextImpl(RuntimeContext, IStateReader):
+class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):
         if not registry:
             raise ValueError("Registry is required for RuntimeContext creation")
@@ -216,6 +216,13 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
         self._retry_hint: Optional[str] = None # [IES 2.1] 运行时重试提示词
+
+    @property
+    def intent_exclusive_depth(self) -> int:
+        return self._intent_exclusive_depth
+
+    def get_current_scope(self) -> Scope:
+        return self._current_scope
 
     @property
     def retry_hint(self) -> Optional[str]:
@@ -390,6 +397,22 @@ class RuntimeContextImpl(RuntimeContext, IStateReader):
         if not self._intent_top:
             return []
         return self._intent_top.to_list()
+
+    def restore_active_intents(self, intents: Union[List[IbIntent], Optional[IntentNode]]) -> None:
+        """
+        [IES 2.1] 恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
+        """
+        if intents is None:
+            self._intent_top = None
+        elif isinstance(intents, IntentNode):
+            self._intent_top = intents
+        elif isinstance(intents, list):
+            # 扁平列表恢复：假设列表顺序为 [bottom, ..., top]
+            self._intent_top = None
+            for intent in intents:
+                self._intent_top = IntentNode(intent, self._intent_top)
+        else:
+            raise TypeError(f"Invalid intent stack type for restoration: {type(intents)}")
 
     def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IIbIntent] = None) -> List[str]:
         """

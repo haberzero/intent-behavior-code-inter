@@ -174,7 +174,9 @@ class ExprHandler(BaseHandler):
 
         if is_deferred:
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
-            captured_intents = list(self.runtime_context.get_active_intents())
+            # [IES 2.2 Optimization] 捕获原始 IntentNode 链表以保留结构共享
+            captured_intents = self.runtime_context.intent_stack
+            
             # 如果是延迟执行，行为对象需要持有自己的 call_intent
             # [FIX] 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
             # 暂时保持现状，等待下一步重构 behavior 对象。

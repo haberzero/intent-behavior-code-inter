@@ -156,6 +156,20 @@ class MetadataRegistry:
             cloned_desc = descriptor.clone(memo)
             new_registry._descriptors[key] = cloned_desc
 
+        # [IES 2.2 Fix] 重新水合克隆出的所有描述符，绑定新的注册表并注入公理能力
+        # 否则子环境中的描述符将丢失 _registry 和 _axiom 引用，导致运算符解析失败
+        for desc in memo.values():
+            if isinstance(desc, TypeDescriptor):
+                # 显式绑定到新的注册表
+                desc._registry = new_registry
+                
+                # 重新填充成员 (Symbols)
+                if desc.members:
+                    new_registry._deep_hydrate(desc)
+                
+                # 重新注入公理能力 (Operators, Callables, etc.)
+                new_registry._hydrator.inject_axioms(desc)
+
         return new_registry
 
     def to_dict(self) -> Dict[str, Any]:

@@ -23,14 +23,14 @@ class AIPlugin(ILLMProvider):
             "auto_type_constraint": True,
             "auto_intent_injection": True,
             "decision_map": {
-                "1": "1", "true": "1", "yes": "1", "ok": "1",
-                "0": "0", "false": "0", "no": "0", "fail": "0"
+                "1": 1, "true": 1, "yes": 1, "ok": 1,
+                "0": 0, "false": 0, "no": 0, "fail": 0
             }
         }
         self._scene_prompts = {
             "general": "你是一个助人为乐的助手。",
-            "branch": "你是一个逻辑判断专家。请分析用户提供的意图和内容，判断当前条件是否满足。如果条件满足请返回 1，否则请返回 0。禁止输出任何其他解释文字。",
-            "loop": "你是一个循环控制专家。请分析用户提供的意图和内容，判断当前循环条件是否满足。如果条件满足应当继续循环请返回 1，否则（已达到停止条件或不再需要继续）请返回 0。禁止输出任何其他解释文字。"
+            "branch": "你是一个逻辑判断专家。请根据用户提供的内容进行判断：成立则返回 1，不成立则返回 0。严禁返回任何其他文字。",
+            "loop": "你是一个循环控制专家。请根据用户提供的内容判断循环是否应继续：继续则返回 1，停止则返回 0。严禁返回任何其他文字。"
         }
         self._return_type_prompts = {
             "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
@@ -55,10 +55,11 @@ class AIPlugin(ILLMProvider):
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
-        if self._capabilities.llm_provider is None:
-            self._capabilities.llm_provider = self
+        # [IES 2.2] 向能力注册表注册自己为 LLM Provider
+        capabilities.expose("llm_provider", self)
 
     def _init_client(self):
+        """初始化 OpenAI 客户端 (单例/复用模式)"""
         is_test_mode = (
             self._config["url"] == "TESTONLY" or
             os.environ.get("IBC_TEST_MODE") == "1"
@@ -67,16 +68,24 @@ class AIPlugin(ILLMProvider):
             self._client = "MOCK_CLIENT"
             return
 
-        if self._config["url"] and self._config["key"]:
-            try:
-                from openai import OpenAI
+        try:
+            from openai import OpenAI
+            
+            base_url = self._config["url"]
+            # [IES 2.2 Fix] 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
+            if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
+                base_url = f"{base_url.rstrip('/')}/v1"
+            
+            if base_url and self._config["key"]:
                 self._client = OpenAI(
-                    base_url=self._config["url"],
                     api_key=self._config["key"],
+                    base_url=base_url,
                     timeout=self._config["timeout"]
                 )
-            except ImportError:
-                pass
+        except ImportError:
+            self._client = None
+        except Exception:
+            self._client = None
 
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
@@ -174,48 +183,53 @@ class AIPlugin(ILLMProvider):
             self._config["url"] == "TESTONLY" or
             os.environ.get("IBC_TEST_MODE") == "1"
         )
+        
+        # [IES 2.2 Strict] 统一对输入内容进行清洗
+        user_prompt = user_prompt.strip()
 
+        # [IES 2.2 Mock Priority] 在注入约束后缀前，先检查 Mock 指令
+        if is_test_mode:
+            res = self._handle_mock_response(user_prompt, scene)
+            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+            return res
+
+        # [IES 2.2] 强化决策场景的 User Prompt 约束
+        scene_str = str(scene).lower()
+        if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
+            user_prompt += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
+            
         if not is_test_mode:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
             
-            # [IES 2.2 Real LLM] 使用 OpenAI 官方 SDK
+            # [IES 2.2 Real LLM] 优先使用预初始化的客户端 (单例复用)
+            if not self._client or self._client == "MOCK_CLIENT":
+                self._init_client()
+            
+            if not self._client or self._client == "MOCK_CLIENT":
+                raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
+            
+            # [IES 2.2 Strict Mode] 决策场景下，限制 max_tokens 以减少噪音
+            is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
+            
             try:
-                from openai import OpenAI
-                
-                base_url = self._config["url"]
-                # 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
-                if "/v1" not in base_url and "127.0.0.1" in base_url:
-                    base_url = f"{base_url.rstrip('/')}/v1"
-                
-                client = OpenAI(
-                    api_key=self._config["key"],
-                    base_url=base_url
-                )
-                
-                completion = client.chat.completions.create(
+                completion = self._client.chat.completions.create(
                     model=self._config["model"],
                     messages=[
                         {"role": "system", "content": sys_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=1024
+                    max_tokens=10 if is_decision else 1024
                 )
                 
                 if not completion or not hasattr(completion, 'choices') or not completion.choices:
                     raise RuntimeError(f"LLM 返回异常响应: {completion}")
 
                 res = completion.choices[0].message.content.strip()
+                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "raw_response": res, "scene": scene}
                 return res
-            except ImportError:
-                raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
             except Exception as e:
                 raise RuntimeError(f"LLM 调用失败: {str(e)}")
-
-        if is_test_mode:
-            res = self._handle_mock_response(user_prompt, scene)
-            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
-            return res
 
         return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
 
@@ -226,13 +240,23 @@ class AIPlugin(ILLMProvider):
         MOCK:TRUE - 返回 "1"
         MOCK:FALSE - 返回 "0"
         MOCK:REPAIR - 首次返回模糊值，重试后返回确定值
+        MOCK:[...] - 直接返回列表内容
+        MOCK:{...} - 直接返回字典内容
         """
         if not user_prompt.startswith("MOCK:"):
             if scene in ("branch", "loop"):
                 return "1"
             return f"[MOCK] {user_prompt}"
 
-        parts = user_prompt[5:].split(" ", 1)
+        # 提取指令部分
+        content_after_mock = user_prompt[5:].strip()
+        
+        # 1. 检查结构化直接返回 (MOCK:[...] 或 MOCK:{...})
+        if content_after_mock.startswith('[') or content_after_mock.startswith('{'):
+            return content_after_mock
+
+        # 2. 处理命名指令
+        parts = content_after_mock.split(" ", 1)
         mock_cmd = parts[0].upper() if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
 

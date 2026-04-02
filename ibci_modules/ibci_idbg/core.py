@@ -20,6 +20,8 @@ class IDbgPlugin(IbPlugin):
         self._capabilities = capabilities
         self.stack_inspector = capabilities.stack_inspector
         self.state_reader = capabilities.state_reader
+        # [IES 2.2] 向能力注册表注册自己为 Debugger Provider
+        capabilities.expose("debugger_provider", self)
 
     def vars(self):
         if not self.state_reader: return {}

@@ -1,0 +1,49 @@
+import sys
+import ai
+import json
+import file
+
+# 1. 显式加载本地配置
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json")) 
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+ai.set_retry(3) # 设置最大重试次数
+
+print("\n1. 模拟常规文本生成：")
+str res = @~你好，请自我介绍~
+print("Mock 回复: " + res)
+
+print("\n2. 模拟精确的分支控制：")
+# 使用一个具体的描述，避免模型触发安全/拒绝逻辑
+if @~ 这是一个关于地球是圆的的描述。请判定是否为真？ ~:
+    print("判定结果：真")
+else:
+    print("判定结果：假")
+
+print("\n3. 模拟 LLM 判定模糊与 llmexcept 捕获：")
+# 使用 会强制让 LLM 返回一个无法解析为 1/0 的模糊结果
+try:
+    if @~执行一个注定失败的判断~:
+        print("执行成功（不应出现）")
+    llmexcept:
+        print("成功捕获到 AI 判定模糊！")
+except Exception as e:
+    print("捕获到运行时异常: " + (str)e)
+
+print("\n4. 模拟“失败 -> 修复 -> 重试”的完整闭环：")
+# 我们通过一个必定触发失败的指令来演示 llmexcept 的威力
+# retry 语句会修改下一次调用的 prompt 提示词
+int retry_count = 0
+if @~ 帮我修复错误并返回 1 ~:
+    print("修复成功！")
+else:
+    print("意外的分支")
+llmexcept:
+    retry_count = retry_count + 1
+    if retry_count <= 3:
+        print("第 " + (str)retry_count + " 次尝试失败，正在注入修复提示词并重试...")
+        retry "必须只答 1"
+    else:
+        print("重试次数过多，放弃。")
+
+print("\n--- Mock 验证完成 ---")
