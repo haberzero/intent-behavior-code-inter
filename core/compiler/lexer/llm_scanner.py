@@ -89,7 +89,6 @@ class LLMScanner:
 
         while not self.scanner.is_at_end() and self.scanner.peek() != '\n':
             if self.scanner.peek() == '$':
-                # [IES 2.2] 排除 $__ 格式（历史遗留格式）
                 if self.scanner.peek(1).isalpha() or (self.scanner.peek(1) == '_' and self.scanner.peek(2) != '_'):
                     if text:
                         tokens.append(Token(TokenType.RAW_TEXT, text, start_line, start_col))
