@@ -526,26 +526,23 @@ class IbUserFunction(IbFunction):
             node_data = self.context.get_node_data(self.node_uid)
             params_uids = node_data.get("args", [])
             
-            # [NEW] 使用已经切换好的作用域进入局部作用域
             rt_context.enter_scope()
         
-        # [NEW] Logical CallStack 追踪
-        loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
-        loc = None
-        if loc_data:
-            loc = Location(
-                file_path=loc_data.get("file_path"),
-                line=loc_data.get("line", 0),
-                column=loc_data.get("column", 0)
+            loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
+            loc = None
+            if loc_data:
+                loc = Location(
+                    file_path=loc_data.get("file_path"),
+                    line=loc_data.get("line", 0),
+                    column=loc_data.get("column", 0)
+                )
+            
+            self.context.push_stack(
+                name=node_data.get("name", "anonymous"),
+                location=loc,
+                is_user_function=True
             )
-        
-        self.context.push_stack(
-            name=node_data.get("name", "anonymous"),
-            location=loc,
-            is_user_function=True
-        )
-        
-        try:
+            
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
                 rt_context.define_variable("self", receiver)
@@ -616,27 +613,23 @@ class IbLLMFunction(IbFunction):
 
         try:
             node_data = self.context.get_node_data(self.node_uid)
-        
-        rt_context.enter_scope()
-        
-        # [NEW] Logical CallStack 追踪
-        loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
-        loc = None
-        if loc_data:
-            loc = Location(
-                file_path=loc_data.get("file_path"),
-                line=loc_data.get("line", 0),
-                column=loc_data.get("column", 0)
+            rt_context.enter_scope()
+            
+            loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
+            loc = None
+            if loc_data:
+                loc = Location(
+                    file_path=loc_data.get("file_path"),
+                    line=loc_data.get("line", 0),
+                    column=loc_data.get("column", 0)
+                )
+            
+            self.context.push_stack(
+                name=node_data.get("name", "llm_anonymous"),
+                location=loc,
+                is_user_function=True
             )
-        
-        self.context.push_stack(
-            name=node_data.get("name", "llm_anonymous"),
-            location=loc,
-            is_user_function=True
-        )
-        
-        try:
-            # 绑定参数
+            
             params_uids = node_data.get("args", [])
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)

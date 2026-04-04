@@ -1,7 +1,7 @@
 import re
 import json
 from types import SimpleNamespace
-from typing import Any, List, Optional, Dict, Union, Callable, Mapping, TYPE_CHECKING
+from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, TYPE_CHECKING
 from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
 
@@ -99,14 +99,18 @@ class LLMExecutorImpl:
         """
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
-        
-        # 此时 context 已经是进入过函数作用域的状态
+
         name = node_data.get("name", "unknown")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{name}'")
 
-        # 1. 提取并评估结构化 Prompt
-        sys_prompt = self._evaluate_segments(node_data.get("sys_prompt"), execution_context)
-        user_prompt = self._evaluate_segments(node_data.get("user_prompt"), execution_context)
+        sys_prompt_segments = node_data.get("sys_prompt")
+        user_prompt_segments = node_data.get("user_prompt")
+        
+        # [IES 2.2] 获取函数参数列表，用于在 prompt 中进行参数替换
+        param_names = self._get_function_param_names(node_data)
+
+        sys_prompt = self._evaluate_segments(sys_prompt_segments, execution_context, param_names)
+        user_prompt = self._evaluate_segments(user_prompt_segments, execution_context, param_names)
         
         # 2. 注入意图增强 (被动消费已消解的现场)
         # 呼叫级意图已由 Caller 通过参数传递
@@ -143,24 +147,39 @@ class LLMExecutorImpl:
         # 5. 解析结果
         return self._parse_result(raw_res, type_name, node_uid)
 
+    def _get_function_param_names(self, node_data: Mapping[str, Any]) -> Set[str]:
+        """
+        获取 llm 函数的参数名列表。
+        [IES 2.2] 用于判断 prompt 中的 $var 是否是函数参数。
+        """
+        param_names = set()
+        args = node_data.get("args", [])
+        for arg in args:
+            if isinstance(arg, Mapping):
+                if arg.get("_type") == "IbArg":
+                    param_names.add(arg.get("arg", ""))
+        return param_names
 
-    def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext) -> str:
-        """评估结构化提示词片段"""
+    def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> str:
+        """
+        评估结构化提示词片段。
+
+        [IES 2.2] 增强的变量替换逻辑：
+        - 只有当变量名是 llm 函数参数时，才会进行变量替换
+        - 其他 $变量名 会被作为普通文本处理
+        """
         if not segments:
             return ""
-        
+
         content_parts = []
         for segment in segments:
-            # [IES 2.2 Security Update] 处理外部资产引用
             if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
-                # 直接通过执行上下文解析外部资产
                 val = execution_context.resolve_value(segment)
                 content_parts.append(str(val))
                 continue
 
             if isinstance(segment, str):
                 if segment.startswith("node_"):
-                    # 这是一个节点 UID
                     val = execution_context.visit(segment)
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
@@ -170,6 +189,22 @@ class LLMExecutorImpl:
                         content_parts.append(str(val))
                 else:
                     content_parts.append(segment)
+            elif hasattr(segment, 'id'):
+                # IbName 节点（变量引用）
+                var_name = segment.id
+                
+                # [IES 2.2] 只有当变量名是函数参数时才进行替换
+                if param_names and var_name in param_names:
+                    val = execution_context.visit(segment)
+                    if hasattr(val, '__to_prompt__'):
+                        content_parts.append(val.__to_prompt__())
+                    elif hasattr(val, 'to_native'):
+                        content_parts.append(str(val.to_native()))
+                    else:
+                        content_parts.append(str(val))
+                else:
+                    # 非函数参数的 $var，作为普通文本处理（保持 $ 符号）
+                    content_parts.append(f"${var_name}")
             else:
                 content_parts.append(str(segment))
         return "".join(content_parts)

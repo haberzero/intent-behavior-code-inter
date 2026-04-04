@@ -271,9 +271,11 @@ class DeclarationComponent(BaseComponent):
                 segments.append(self.stream.previous().value)
             elif self.stream.match(TokenType.NEWLINE):
                 segments.append("\n")
-            elif self.stream.match(TokenType.EMBEDDED_PARAM):
-                param_name = self.stream.previous().value
-                var_ref = ast.IbName(id=param_name, ctx='Load')
+            elif self.stream.match(TokenType.VAR_REF):
+                # [IES 2.2] 支持 $变量名 格式
+                # 注意：只有当变量名是 llm 函数参数时才会被替换，否则作为普通文本
+                var_name = self.stream.previous().value
+                var_ref = ast.IbName(id=var_name, ctx='Load')
                 segments.append(var_ref)
             else:
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
