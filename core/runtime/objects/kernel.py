@@ -58,7 +58,6 @@ class IbObject:
             # 降级查找类方法
             method = self.ib_class.lookup_method(attr_name)
             if method:
-                # [FIX] 如果是方法，我们需要返回一个 BoundMethod 以便后续调用能正确传入 receiver
                 return IbBoundMethod(self, method)
 
         # 2. 正常消息路由：查找类方法

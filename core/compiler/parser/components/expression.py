@@ -91,7 +91,7 @@ class ExpressionComponent(BaseComponent):
         # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
         
-        # [NEW] Variable Reference
+        # Variable Reference
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
@@ -240,7 +240,7 @@ class ExpressionComponent(BaseComponent):
                     break
         end_token = self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
         
-        # [NEW] 意图节点化：不再向 Call 注入 intent 属性
+        # 意图节点化：不再向 Call 注入 intent 属性
         return self._loc(ast.IbCall(func=left, args=arguments, keywords=[]), left, end_token)
 
     def dot(self, left: ast.IbExpr) -> ast.IbExpr:
@@ -249,7 +249,7 @@ class ExpressionComponent(BaseComponent):
 
     def tuple_expr(self, left: ast.IbExpr) -> ast.IbExpr:
         elts = [left]
-        # [IES 2.2 Fix] 修正元组解析：第一个逗号已被 parse_precedence 消费
+        # 修正元组解析：第一个逗号已被 parse_precedence 消费
         # 我们必须至少解析一个后续元素
         if not self.stream.check(TokenType.RPAREN) and not self.stream.check(TokenType.RBRACKET) and not self.stream.check(TokenType.RBRACE):
             elts.append(self.parse_precedence(IbPrecedence.TUPLE))

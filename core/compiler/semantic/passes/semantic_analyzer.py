@@ -63,13 +63,13 @@ class SemanticAnalyzer:
         
         # 1. 注册内置函数
         for name, func_desc in self.prelude.get_builtins().items():
-            # [IES 2.2] 使用全局唯一的内置符号 UID，消除模块相关性
+            # 使用全局唯一的内置符号 UID，消除模块相关性
             sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=func_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 2. 注册内置类型
         for name, type_desc in self.prelude.get_builtin_types().items():
-            # [IES 2.2 Fix] 仅注册真正的内置类型为 builtin UID。
+            # 仅注册真正的内置类型为 builtin UID。
             # 如果描述符标记为 is_user_defined，说明它是从外部或残留注册表中混入的，跳过。
             if getattr(type_desc, 'is_user_defined', False):
                 continue
@@ -82,7 +82,7 @@ class SemanticAnalyzer:
             sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
-        # 4. [IES 2.2] 注册内置变量/常量 (如 __file__, __dir__)
+        # 4. 注册内置变量/常量 (如 __file__, __dir__)
         for name, var_desc in self.prelude.get_builtin_variables().items():
             sym = symbols.VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=var_desc, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
@@ -147,8 +147,8 @@ class SemanticAnalyzer:
             "column": node.col_offset
         })
 
-        # [NEW] 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
-        # [IES 2.0 Policy] 侧表仅记录“当前节点特有”的涂抹意图（即通过 @ 标注的意图）。
+        # 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
+        # 侧表仅记录"当前节点特有"的涂抹意图（即通过 @ 标注的意图）。
         # 块级意图（通过 intent 语句定义）由解释器在执行时通过 AST 结构动态维护在栈中。
         # 这样避免了静态分析时重复涂抹导致的逻辑冲突。
         if hasattr(node, "_pending_intents"):
@@ -156,7 +156,7 @@ class SemanticAnalyzer:
             if intents:
                 self.side_table.bind_intents(node, intents)
 
-        # [NEW] 记录场景上下文侧表
+        # 记录场景上下文侧表
         if isinstance(node, ast.IbExpr):
             self.side_table.bind_scene(node, self.scope_manager.current_scene())
 
@@ -164,7 +164,7 @@ class SemanticAnalyzer:
         visitor = getattr(self, method_name, self.generic_visit)
         res_type = visitor(node)
         
-        # [NEW Phase 5] 记录类型推导侧表
+        # 记录类型推导侧表
         if isinstance(node, ast.IbExpr) and res_type:
             self.side_table.bind_type(node, res_type)
             
@@ -285,7 +285,7 @@ class SemanticAnalyzer:
             return self._void_desc
             
         self.side_table.bind_symbol(node, sym)
-        # [NEW] 决议真实的函数签名并更新元数据
+        # 决议真实的函数签名并更新元数据
         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
         # 类方法第一个参数是 self
         if self.current_class:
@@ -293,7 +293,7 @@ class SemanticAnalyzer:
             
         ret_type = self._resolve_type(node.returns)
         
-        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = sym.descriptor.get_call_trait()
         writable = call_trait.get_writable_trait() if call_trait else None
 
@@ -306,11 +306,11 @@ class SemanticAnalyzer:
         local_scope = SymbolTable(parent=old_table, name=node.name)
         self.symbol_table = local_scope
         
-        # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
+        # 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
         if sym.is_function:
             sym.owned_scope = local_scope
         
-        # [NEW] 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
+        # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
         if self.current_class:
             # self 的类型就是当前类
             self._define_var("self", self.current_class, node)
@@ -454,7 +454,7 @@ class SemanticAnalyzer:
                 continue
             
             if var_name:
-                # [NEW] 决议最终目标类型 (Inference Policy)
+                # 决议最终目标类型 (Inference Policy)
                 sym = self.symbol_table.symbols.get(var_name)
                 
                 if declared_type:
@@ -467,7 +467,7 @@ class SemanticAnalyzer:
                     # [SEM_002] 检查是否在当前作用域重复声明
                     if var_name in self.symbol_table.symbols:
                         existing = self.symbol_table.symbols[var_name]
-                        # [Fix] 允许同一个节点在 Pass 3 更新它在 Pass 1 定义的符号类型
+                        # 允许同一个节点在 Pass 3 更新它在 Pass 1 定义的符号类型
                         if existing.def_node is not node:
                             # 如果不是内置符号，且不是同类型的重新赋值（IBCI 允许同名覆盖但通常通过 allow_overwrite 控制）
                             # 这里我们遵循更严格的静态语言规则：同作用域禁止显式类型重声明
@@ -532,7 +532,7 @@ class SemanticAnalyzer:
     def visit_IbIf(self, node: ast.IbIf):
         # 1. 条件测试属于 BRANCH 场景
         self.scope_manager.push_scene(ast.IbScene.BRANCH)
-        # [NEW] 记录控制流节点本身的场景
+        # 记录控制流节点本身的场景
         self.side_table.bind_scene(node, ast.IbScene.BRANCH)
         try:
             self.visit(node.test)
@@ -553,7 +553,7 @@ class SemanticAnalyzer:
     def visit_IbWhile(self, node: ast.IbWhile):
         # 1. 循环条件属于 LOOP 场景
         self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # [NEW] 记录控制流节点本身的场景
+        # 记录控制流节点本身的场景
         self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             self.visit(node.test)
@@ -579,7 +579,7 @@ class SemanticAnalyzer:
         try:
             iter_type = self.visit(node.iter)
             
-            # [IES 2.2 Stabilization] 统一循环协议检查
+            # 统一循环协议检查
             if node.target is None:
                 # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
                 # 语义：等同于 while，要求表达式具有“布尔评估能力”
@@ -597,14 +597,14 @@ class SemanticAnalyzer:
                 else:
                     iter_trait = iter_type.get_iter_trait()
                     if iter_trait:
-                        # [IES 2.1] 修复：通过 TypeDescriptor 统一获取 element_type，以支持引用解析
+                        # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
                         element_type = iter_type.get_element_type() or self._any_desc
                     else:
                         self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                         element_type = self._any_desc
                 
                 for var_name, target in SymbolExtractor.get_assigned_names(node):
-                    # [NEW] 优先使用显式类型标注，而非推导出的 element_type
+                    # 优先使用显式类型标注，而非推导出的 element_type
                     effective_type = element_type
                     if isinstance(target, ast.IbTypeAnnotatedExpr):
                         effective_type = self.visit(target.annotation)
@@ -999,7 +999,7 @@ class SemanticAnalyzer:
             sym = self.symbol_table.resolve(node.id)
             if sym:
                 self.side_table.bind_symbol(node, sym)
-                # [FIX] 如果符号本身就是 TypeSymbol，直接返回其 descriptor
+                # 如果符号本身就是 TypeSymbol，直接返回其 descriptor
                 if sym.is_type:
                     return sym.descriptor
                 return sym.descriptor

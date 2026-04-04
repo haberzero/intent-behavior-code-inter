@@ -207,7 +207,7 @@ class CoreTokenScanner:
         self.scanner.start_token()
         char = self.scanner.peek()
 
-        # [NEW] 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
+        # 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
         # 使用尝试性扫描，避免物理回退
         if char == '$':
             self.try_scan(tokens, self._scan_var_ref)

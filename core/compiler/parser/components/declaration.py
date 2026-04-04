@@ -39,7 +39,7 @@ class DeclarationComponent(BaseComponent):
     def parse_declaration(self) -> Optional[ast.IbStmt]:
         role = SyntaxRecognizer.get_role(self.stream)
         
-        # [NEW] 提前消费待处理意图注释，准备进行侧表涂抹关联
+        # 提前消费待处理意图注释，准备进行侧表涂抹关联
         # 无论是什么类型的语句，都应该在这里消费意图，防止遗留到子节点
         pending_intents = self.context.consume_intents()
 
@@ -62,7 +62,7 @@ class DeclarationComponent(BaseComponent):
             stmt = self.statement.parse_statement()
         
         if pending_intents and stmt is not None:
-            # [NEW] 涂抹式关联：暂存在节点对象上，由 SemanticAnalyzer 转入侧表，实现 AST 扁平化
+            # 涂抹式关联：暂存在节点对象上，由 SemanticAnalyzer 转入侧表，实现 AST 扁平化
             setattr(stmt, "_pending_intents", pending_intents)
             
         return stmt
@@ -272,7 +272,7 @@ class DeclarationComponent(BaseComponent):
             elif self.stream.match(TokenType.NEWLINE):
                 segments.append("\n")
             elif self.stream.match(TokenType.VAR_REF):
-                # [IES 2.2] 支持 $变量名 格式
+                # 支持 $变量名 格式
                 # 注意：只有当变量名是 llm 函数参数时才会被替换，否则作为普通文本
                 var_name = self.stream.previous().value
                 var_ref = ast.IbName(id=var_name, ctx='Load')

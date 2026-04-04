@@ -174,7 +174,7 @@ class IbString(IbObject):
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
-            # [IES 2.2] 统一抛出 LLMUncertaintyError，使强转失败能被 llmexcept 捕获
+            # 统一抛出 LLMUncertaintyError，使强转失败能被 llmexcept 捕获
             raise LLMUncertaintyError(
                 f"Casting string '{self.value}' to {target_desc} failed: {str(e)}",
                 raw_response=self.value
@@ -389,7 +389,7 @@ class IbBehavior(IbObject, IIbBehavior):
         """
         super().__init__(ib_class)
         self.node = node_uid
-        self.captured_intents = captured_intents # [IES 2.2] 支持 IntentNode (结构共享)
+        self.captured_intents = captured_intents # 支持 IntentNode (结构共享)
         self.expected_type = expected_type
         self._cache: Optional[IbObject] = None
 
