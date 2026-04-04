@@ -18,7 +18,7 @@ print("Sqrt of 16.0: " + (str)root)
 float pi = math.pi
 print("Value of PI: " + (str)pi)
 
-# 3. 文件读写 (受沙箱保护)
+# 3. 文件读写
 str file_path = (str)sys.script_dir() + "/temp_output.txt"
 file.write(file_path, "Hello from IBC-Inter stdlib!")
 if file.exists(file_path):
@@ -27,11 +27,7 @@ if file.exists(file_path):
     file.remove(file_path)
     print("Cleaned up temporary file: " + file_path)
 
-# 4. 系统权限
-if sys.is_sandboxed():
-    print("当前处于沙箱保护模式。")
-
-# 5. 时间函数
+# 4. 时间
 float t1 = time.now()
 time.sleep(0.5)
 float t2 = time.now()

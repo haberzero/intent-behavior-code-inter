@@ -13,24 +13,25 @@ ai.set_global_intent("禁止使用表情符号")
 
 print("--- [01_intent_roles.ibci] ---")
 
-# 1. 意图块 (Intent Block) - 叠加模式
-intent "角色：历史学家":
-    print("\n[意图块内] 默认叠加模式:")
-    # 此时意图 = [正式且专业] + [禁止使用表情符号] + [角色：历史学家]
-    str res1 = @~文艺复兴(简述，10字内)~
-    print("回复 1: " + res1)
-    
-    print("\n[意图块内] 使用 @! (排他模式/Override):")
-    # @! 会忽略所有之前的意图，仅使用当前行定义的意图
-    @! 角色：脱口秀演员
-    str res2 = @~文艺复兴(简述，10字内)~
-    print("回复 2: " + res2)
+str res1 = @~请描述一下现在的天气~
+print("正式且专业的回答: " + res1)
 
-# 2. 意图叠加 (@+ Append)
-print("\n[意图块外] 单行意图叠加:")
-@+ 任务：简短解释
-str res3 = @~量子力学(10字内)~
-print("回复 3: " + res3)
+# 2. 行为描述行中的变量插值
+str name = "IBCI"
+@ 请以幽默风格回答
+str res2 = @~向 $name 打个招呼~
+print("幽默回答: " + res2)
+
+# 3. LLM 函数定义
+llm 翻译(str 文本):
+__sys__
+你是一个中英文翻译助手。
+__user__
+请将以下内容翻译成英文: $__文本__
+llmend
+
+str translated = 翻译("生命不息，奋斗不止")
+print("翻译结果: " + translated)
 
 ai.clear_global_intents()
 print("\n全局意图已清理。")
