@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 class IDbgPlugin(IbPlugin):
     """
-    [IES 2.2] IDBG 内核观察者插件。
+    IDBG 内核观察者插件。
     核心级插件，必须继承 IbPlugin 以获取 stack_inspector 和 state_reader 能力。
     """
     def __init__(self):
@@ -20,7 +20,7 @@ class IDbgPlugin(IbPlugin):
         self._capabilities = capabilities
         self.stack_inspector = capabilities.stack_inspector
         self.state_reader = capabilities.state_reader
-        # [IES 2.2] 向能力注册表注册自己为 Debugger Provider
+        # 向能力注册表注册自己为 Debugger Provider
         capabilities.expose("debugger_provider", self)
 
     def vars(self):

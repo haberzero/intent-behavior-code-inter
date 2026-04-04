@@ -1,5 +1,5 @@
 """
-[IES 2.2] Calc 插件规范
+Calc 插件规范
 """
 from typing import Dict, Any
 

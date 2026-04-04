@@ -50,7 +50,7 @@ class Symbol:
 
     def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'Symbol':
         """
-        [IES 2.0 Isolation] 克隆符号对象。
+        克隆符号对象。
         注意：递归克隆关联的描述符以确保物理隔离。
         """
         if memo is None: memo = {}
@@ -66,7 +66,7 @@ class Symbol:
 
     def get_content_hash(self) -> str:
         """
-        [IES 2.1 Deterministic] 获取符号的内容哈希，用于生成匿名 UID。
+        获取符号的内容哈希，用于生成匿名 UID。
         """
         import hashlib
         # 基础特征：名称 + 类型
@@ -163,7 +163,7 @@ class SymbolTable:
 
     def define(self, sym: Symbol, allow_overwrite: bool = False):
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
-        # [IES 2.1 Shadowing] 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
+        # 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
         # 格式：scope_uid:symbol_name
         # 这确保了即使是同名变量 (Shadowing)，在扁平池中也拥有不同的物理 UID
         if not sym.uid:
@@ -171,7 +171,7 @@ class SymbolTable:
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            # [IES 2.1 UTS Integration] 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
+            # 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
             # [Temporary] 外部模块符号和内置符号之间的兼容性处理
             # [Future] 严格遵循显式引入原则时，此逻辑将被移除
             is_compatible_builtin = (

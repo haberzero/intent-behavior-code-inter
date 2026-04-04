@@ -34,7 +34,7 @@ class BaseFlatSerializer:
         return value
 
     def _process_text_asset(self, text: str) -> Any:
-        """[IES 2.2 Security Update] 文本资产化处理"""
+        """文本资产化处理"""
         if not isinstance(text, str):
             return text
             

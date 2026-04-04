@@ -1,5 +1,5 @@
 """
-[IES 2.2 SDK] IBC-Inter Extension SDK
+IBC-Inter Extension SDK
 
 推荐导入方式：
     from core.extension import ibcext

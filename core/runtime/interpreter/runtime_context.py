@@ -416,7 +416,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
 
     def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IIbIntent] = None) -> List[str]:
         """
-        [IES 2.1 Decoupling] 获取最终消解后的 Prompt 字符串列表。
+        获取最终消解后的 Prompt 字符串列表。
         不再由 Executor 手动合并，而是由 Context 负责消解。
         """
         # 使用工厂或直接从执行上下文获取消解器，避免局部 import

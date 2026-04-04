@@ -70,7 +70,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
         self.module_loader = ModuleLoader([builtin_path, plugins_path], capability_registry=self.capability_registry)
         
-        # [IES 2.1 IoC] 初始化并配置运行时对象工厂
+        # 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
         # 2. 加载元数据以支持静态分析
@@ -135,7 +135,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if hasattr(service_context, '_capability_registry'):
             setattr(service_context, '_capability_registry', self.capability_registry)
         
-        # [IES 2.1 Transition] STAGE 7: 深度契约校验与就绪
+        # STAGE 7: 深度契约校验与就绪
         # 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
         if self.registry.state_level < RegistrationState.STAGE_6_PRE_EVAL.value:
              self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)

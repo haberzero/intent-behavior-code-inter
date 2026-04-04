@@ -61,7 +61,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     bootstrapper.initialize(metadata_registry)
     token = bootstrapper.token
     
-    # [IES 2.0 Transition] 跃迁到 STAGE_2_CORE_TYPES
+    # 跃迁到 STAGE_2_CORE_TYPES
     registry.set_state_level(RegistrationState.STAGE_2_CORE_TYPES.value, token)
     
     # 注册元数据注册表到 Registry
@@ -71,7 +71,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 遍历 AxiomRegistry 自动初始化所有注册的原子类型
     
     # 基础类型映射表 (用于绑定具体的 IbClass 实现)
-    # [IES 2.1 Regularization] 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
+    # 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
     # 自动创建类并注册
     # 注意：我们必须保证顺序，或者允许多次查找
     # 依赖于 pritmives.py 中的注册顺序 (int before bool)
@@ -95,7 +95,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         parent = "Object"
         axiom = desc._axiom if desc else None
         if axiom:
-            # [IES 2.1 Axiom-Driven] 从公理中自动提取继承关系，消除硬编码判定
+            # 从公理中自动提取继承关系，消除硬编码判定
             parent = axiom.get_parent_axiom_name() or "Object"
         
         ib_cls = registry.create_subclass(name, desc, parent_name=parent)
@@ -108,7 +108,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         axiom = desc._axiom if desc else None
         if axiom:
             methods = axiom.get_methods()
-            # [IES 2.1 Regularization] 从全局类型注册表获取实现类，消除硬编码映射
+            # 从全局类型注册表获取实现类，消除硬编码映射
             py_impl_cls = get_ib_implementation(name)
             if py_impl_cls:
                 for method_name in methods:
@@ -218,8 +218,8 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
 
-    # [IES 2.0 Transition] 跃迁到 STAGE_3_PLUGIN_METADATA
+    # 跃迁到 STAGE_3_PLUGIN_METADATA
     registry.set_state_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value, token)
     
-    # [IES 2.1 Audit] 清理遗留 Legacy 术语与残留注释
+    # 清理遗留 Legacy 术语与残留注释
     return token

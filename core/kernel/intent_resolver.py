@@ -3,7 +3,7 @@ from core.kernel.intent_logic import IntentProtocol
 
 class IntentResolver:
     """
-    统一的意图冲突消解算法 (IES 2.0)。
+    统一的意图冲突消解算法。
     负责合并 Global, Block, Smear, Call 三层意图。
     """
     @staticmethod

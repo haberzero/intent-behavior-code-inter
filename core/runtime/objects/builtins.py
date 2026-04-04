@@ -153,7 +153,7 @@ class IbString(IbObject):
 
     def to_bool(self) -> IbObject:
         val = self.value.strip().lower()
-        # [IES 2.2 Strict] 强约束决策逻辑：
+        # 强约束决策逻辑：
         # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
         # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
         # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发 LLMUncertaintyError 以便 llmexcept 捕获
@@ -162,7 +162,7 @@ class IbString(IbObject):
         if val in ("0", "false", "no", "off", "null", "none", ""):
             return self.ib_class.registry.box(0)
             
-        # [IES 2.2 Enforcement] 非空且非明确布尔语义的字符串，直接判定为模糊
+        # 非空且非明确布尔语义的字符串，直接判定为模糊
         raise LLMUncertaintyError(
             f"Ambiguous boolean string: '{self.value}'. Expected '0' or '1'.",
             raw_response=self.value
@@ -425,7 +425,7 @@ class IbBehavior(IbObject, IIbBehavior):
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """
-        [IES 2.1 Resilience] 行为对象的消息处理。
+        行为对象的消息处理。
         允许查询元数据，仅在尝试“执行行为本身”且无上下文时才抛出异常。
         """
         if self._cache: return self._cache.receive(message, args)

@@ -80,7 +80,7 @@ class BaseHandler:
 
     def _execute_behavior(self, behavior: IbObject) -> IbObject:
         """
-        [IES 2.1 Regularization] 统一的行为对象执行入口。
+        统一的行为对象执行入口。
         负责在解释器层管理意图栈的恢复与切换，保持 Executor 无状态。
         """
         if not isinstance(behavior, IIbBehavior):

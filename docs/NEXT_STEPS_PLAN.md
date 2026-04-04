@@ -1,7 +1,7 @@
 # IBC-Inter MVP 实现计划
 
 > 本文档记录 IBC-Inter 第一版 MVP Demo 的实现计划。
-> **[IES 2.2 更新]**: 核心未完成加固任务置顶，历史任务标注完成状态以供追踪。
+> 核心未完成加固任务置顶，历史任务标注完成状态以供追踪。
 
 ---
 
@@ -57,7 +57,7 @@ MVP (Minimum Viable Product) Demo 的目标是：
 
 > 这些问题在代码审计中被发现，必须在 MVP 之前修复，否则核心功能无法正常工作。
 
-### 2.1 llmexcept 机制修复 [COMPLETED - IES 2.2]
+### 2.1 llmexcept 机制修复 [COMPLETED]
 **状态说明**: 已完成。
 - **修复内容**: 在 `SideTableManager` 中实现了 `decision_maps` 侧表，并在 `interpreter.py` 中实现了 `_with_unified_fallback` 包装器。
 - **验证结果**: `test_new_syntax.ibci` 运行通过。
@@ -71,14 +71,14 @@ MVP (Minimum Viable Product) Demo 的目标是：
 1. **Compiler**: 在 `SideTableManager` 中实现了 `decision_maps` 侧表，并在 `SemanticAnalyzer` 中为控制流语句绑定 `BRANCH/LOOP` 场景。
 2. **Interpreter**: 修正了 `LLMExecutorImpl` 的场景匹配逻辑，增加了基于正则边界的关键词匹配，确保 `BRANCH/LOOP` 场景下匹配失败时抛出 `LLMUncertaintyError`。
 3. **Interpreter**: 修改了 `visit_IbIf/While/For` 使用 `_with_unified_fallback` 包装 LLM 调用。
-4. **Plugin System**: 按照 IES 2.2 标准重构了插件加载体系，解决了目录名与模块名不一致导致的加载失败问题，并统一了所有内置插件的导出协议。
+4. **Plugin System**: 按照 标准重构了插件加载体系，解决了目录名与模块名不一致导致的加载失败问题，并统一了所有内置插件的导出协议。
 
 **验证结果**：
 通过 `verify_llmexcept.py` 验证成功，`MOCK:FAIL` 已能正确触发 `llmexcept` 分支。
 
 ---
 
-### 2.2 intent_stack 类型修复 [COMPLETED - IES 2.2]
+### 2.2 intent_stack 类型修复 [COMPLETED]
 **状态说明**: 已完成。
 - **修复内容**: 补齐了 `RuntimeContextImpl.restore_active_intents` 接口，并重构了序列化器以支持拓扑还原。
 

@@ -26,9 +26,8 @@ class ModuleLoader(IModuleLoader):
 
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
         """
-         严格契约绑定。
+        严格契约绑定。
         
-        强制遵循 IES 2.2 协议：
         1. 元数据必须已通过 Discovery 阶段从 _spec.py 加载并注册到 HostInterface。
         2. 实现对象必须包含元数据中声明的所有成员。
         3. 严禁隐式反射，所有暴露给 IBC-Inter 的成员必须在 _spec.py 中显式声明。
@@ -129,7 +128,7 @@ class ModuleLoader(IModuleLoader):
         permission_manager = context.permission_manager
         llm_executor = context.llm_executor
         
-        # 准备扩展能力集合 (IES 2.2 SDK)
+        # 准备扩展能力集合
         capabilities = ExtensionCapabilities(_registry=registry, _capability_registry=self.capability_registry)
         
         rt_context = execution_context.runtime_context
@@ -150,7 +149,7 @@ class ModuleLoader(IModuleLoader):
         
         loaded_modules = set()
         
-        # [IES Enhancement] 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
+        # 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
         # 这确保了手动注册的 Mock 对象能被正确初始化并同步到 capabilities
         # 直接遍历元数据注册表，消除兼容性接口
         interop = context.interop
@@ -220,5 +219,5 @@ class ModuleLoader(IModuleLoader):
                     loaded_modules.add(entry)
                     
                 except Exception as e:
-                    # [IES 2.0 Strict] 插件加载失败必须导致初始化中断，严禁静默失败
+                    # 插件加载失败必须导致初始化中断，严禁静默失败
                     raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}")

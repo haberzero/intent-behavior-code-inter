@@ -4,14 +4,14 @@
 
 ---
 
-## 1. IntentStack 序列化与快照恢复风险 (已修复 - IES 2.2)
+## 1. IntentStack 序列化与快照恢复风险 (已修复)
 
 ### 1.1 风险描述 (回顾)
 此前 `RuntimeSerializer` 在处理 `intent_stack` 时存在严重的逻辑断裂。
 - **方法缺失**: 反序列化器尝试调用 `RuntimeContextImpl.restore_active_intents`，但该方法在代码中尚未定义。
 - **结构塌陷**: `IntentNode` 采用不可变链表设计。旧版序列化将其展平为 `List[IbIntent]`，导致恢复后共享节点变为独立副本，物理引用关系丢失。
 
-### 1.2 修复方案 (IES 2.2 实施)
+### 1.2 修复方案
 - **拓扑序列化 (Topology Serialization)**: 引入 `intent_pool`。`RuntimeSerializer` 现在递归记录 `IntentNode` 的引用关系，确保在序列化产物中保留链表拓扑。
 - **结构共享恢复**: `RuntimeDeserializer` 通过池化还原技术，确保恢复后的 `IntentNode` 链表在内存中依然保持物理共享。
 - **Behavior 捕获优化**: `IbBehavior` 对象现在直接捕获 `IntentNode` 引用而非展平列表，使其在延迟执行时能精准还原定义时的意图现场。
@@ -27,7 +27,7 @@
 - **性能与成本风险**: 实现此语法需要引入“步进式 AI 生成器”模式，每轮循环都会触发一次 LLM 调用，会导致 Token 消耗激增且执行效率极低。
 
 ### 2.2 结论
-基于以上架构冲突和稳定性考量，**该语法在 IES 2.2 版本中正式搁置**。
+基于以上架构冲突和稳定性考量，**该语法暂时搁置**。
 - **规避建议**: 推荐使用“先预取列表 (Pre-fetch)，后标准迭代”或“条件驱动循环 (for @~...~:)”方案。
 - **未来规划**: 仅当未来引入流式生成器 (Streaming Generator) 协议时，再重新评估其可行性。
 

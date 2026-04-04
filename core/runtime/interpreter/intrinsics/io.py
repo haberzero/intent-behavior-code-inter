@@ -7,7 +7,7 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
     """注册 I/O 相关内置函数"""
     
     def _print(*args):
-        # [IES 2.1 Decoupling] 
+
         # 核心：通过 service_context 获取输出回调，严禁直接访问 interpreter
         callback = service_context.output_callback
         

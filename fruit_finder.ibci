@@ -3,8 +3,8 @@ import json
 import file
 import sys
 
-# 1. 显式加载本地配置 (IES 2.2 推荐模式)
-# [IES 2.2 Fix] 强制类型转换以确保通过严格的二元运算校验
+# 1. 显式加载本地配置
+# 强制类型转换以确保通过严格的二元运算校验
 str base_dir = (str) sys.script_dir()
 str config_json = file.read(base_dir + "/api_config.json")
 dict config = (dict) json.parse(config_json)

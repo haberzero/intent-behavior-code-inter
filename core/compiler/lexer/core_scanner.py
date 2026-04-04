@@ -90,7 +90,7 @@ class CoreTokenScanner:
 
     def try_scan(self, tokens: List[Token], scan_func, *args) -> bool:
         """
-        [IES 2.0 Speculative Engine]
+        
         尝试执行特定的扫描函数。如果失败（抛出异常或返回 False），则回滚所有状态。
         """
         original_token_count = len(tokens)

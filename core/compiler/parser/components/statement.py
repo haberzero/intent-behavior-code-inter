@@ -27,7 +27,7 @@ class StatementComponent(BaseComponent):
     # Removed set_decl_parser method
 
     def parse_statement(self) -> ast.IbStmt:
-        """[IES 2.1 Unified Entry] 所有语句的统一入口，处理公共装饰逻辑（如 llm except）"""
+        """所有语句的统一入口，处理公共装饰逻辑（如 llm except）"""
         stmt = self._parse_statement_core()
         
         # 统一处理 llm except 块
@@ -82,7 +82,7 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
-        # [IES 2.1 Enforcement] 
+
         # 严禁在非顶层（如代码块、函数、类内部）使用 import。
         # 这一限制保证了调度器（Scheduler）可以高效地进行“无副作用”的依赖扫描。
         if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):
@@ -204,7 +204,7 @@ class StatementComponent(BaseComponent):
                 # Use check instead of match, so parse_expression can consume the token
                 segments.append(self.expression.parse_expression())
             else:
-                # [IES 2.1 Speculative Parsing]
+
                 # 尝试解析表达式段。若解析失败则停止消费意图内容。
                 # 开启静默前瞻模式，防止解析失败污染诊断状态。
                 with self.stream.speculate():

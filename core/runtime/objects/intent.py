@@ -28,7 +28,7 @@ class IbIntent(IbObject, IntentProtocol):
     @staticmethod
     def from_node_data(node_uid: str, node_data: Mapping[str, Any], ib_class: IbClass, role: IntentRole = IntentRole.BLOCK) -> 'IbIntent':
         """
-        [IES 2.1 Factory] 从 AST 节点数据构造运行时意图对象。
+        从 AST 节点数据构造运行时意图对象。
         """
         return IbIntent(
             ib_class=ib_class,
@@ -42,7 +42,7 @@ class IbIntent(IbObject, IntentProtocol):
 
     def resolve_content(self, context: RuntimeContext, execution_context: Any = None) -> str:
         """
-        [IES 2.1 Regularization] 解析意图内容。
+        解析意图内容。
         不再反向回调 LLMExecutor，而是直接利用 IExecutionContext 的 visit 能力进行自评估。
         """
         if self.segments and execution_context:

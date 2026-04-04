@@ -87,7 +87,7 @@ class TestCompilerMacroComprehensive(unittest.TestCase):
         self.assertIn("__to_prompt__", method_names)
 
         # 3. 类型绑定检查
-        # 检查带类型注解的赋值，验证其 targets[0] 节点是否有类型信息 (IES 2.1 规范)
+        # 检查带类型注解的赋值，验证其 targets[0] 节点是否有类型信息
         found_type_info = False
         for field in user_class_node.fields:
             if isinstance(field, IbAssign) and field.targets:
@@ -179,7 +179,7 @@ class TestCompilerMacroComprehensive(unittest.TestCase):
         for node in module.module_ast.body:
             loc = module.node_to_loc.get(node)
             self.assertIsNotNone(loc, f"Statement {node} missing location info")
-            # 验证 loc 是 dict 格式 (IES 2.1 序列化后的特征)
+            # 验证 loc 是 dict 格式
             self.assertIsInstance(loc, dict, f"Location info for {node} should be a dict, got {type(loc)}")
             self.assertIn("file_path", loc)
             self.assertIn("basic_ai.ibci", loc["file_path"])
@@ -199,7 +199,7 @@ class TestCompilerMacroComprehensive(unittest.TestCase):
         main_module_data = data["modules"][artifact.entry_module]
         side_tables = main_module_data.get("side_tables", {})
         
-        # 验证 6 个核心侧表是否存在 (IES 2.1)
+        # 验证 6 个核心侧表是否存在
         required_tables = [
             "node_scenes", "node_to_symbol", "node_to_type", 
             "node_is_deferred", "node_intents", "node_to_loc"

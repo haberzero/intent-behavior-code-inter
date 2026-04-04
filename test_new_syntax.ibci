@@ -18,18 +18,18 @@ for @~ $count 小于 3 吗？只答 1/0 ~:
     count = count + 1
     print("Looping... count = " + (str)count)
 
-# 3. 测试复杂目标的 For 循环变量提取 (IES 2.2 Fix)
+# 3. 测试复杂目标的 For 循环变量提取
 print("\n[Test 3] Complex Target For Loop:")
 list names = ["Alice", "Bob"]
 for str name in names:
     print("Name: " + name)
 
 list coords = [[1, 2], [3, 4]]
-# 测试元组解包 (IES 2.2 Fix)
+# 测试元组解包
 for (x, y) in coords:
     print("Coord (untyped): " + (str)x + "," + (str)y)
 
-# 测试带类型标注的元组解包 (IES 2.2 NEW)
+# 测试带类型标注的元组解包
 for (int cx, int cy) in coords:
     print("Coord (typed): " + (str)cx + "," + (str)cy)
 

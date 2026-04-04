@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 class ExecutionContextImpl(IExecutionContext, IStackInspector):
     """
-    [IES 2.1 Decoupling] 运行时执行上下文的具体实现。
+    运行时执行上下文的具体实现。
     它作为纯状态容器，持有 node_pool、栈和运行时上下文的引用。
     同时，它持有指向 Interpreter 逻辑的回调函数，以实现物理层面的逻辑与数据分离。
     """

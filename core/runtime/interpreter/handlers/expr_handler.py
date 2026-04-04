@@ -24,7 +24,7 @@ class ExprHandler(BaseHandler):
         """变量读取：严格通过 Symbol UID 查找"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         
-        # [IES 2.2 Standard] 彻底废除名称查找 fallback。
+        # 彻底废除名称查找 fallback。
         # 任何合法的 IBCI 产物都必须在编译阶段完成符号决议并记录在 node_to_symbol 侧表中。
         if not sym_uid:
              name = node_data.get("id")
@@ -160,7 +160,7 @@ class ExprHandler(BaseHandler):
         # 1. 检查是否显式标记为延迟
         is_deferred = self.get_side_table("node_is_deferred", node_uid)
         
-        # [IES 2.1 Factory] 统一解析呼叫级意图
+        # 统一解析呼叫级意图
         intent_uid = node_data.get("intent")
         call_intent = None
         if intent_uid:
@@ -174,7 +174,7 @@ class ExprHandler(BaseHandler):
 
         if is_deferred:
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
-            # [IES 2.2 Optimization] 捕获原始 IntentNode 链表以保留结构共享
+            # 捕获原始 IntentNode 链表以保留结构共享
             captured_intents = self.runtime_context.intent_stack
             
             # 如果是延迟执行，行为对象需要持有自己的 call_intent
@@ -196,7 +196,7 @@ class ExprHandler(BaseHandler):
         # 强制从 side_tables 获取决议后的目标描述符
         target_descriptor = self.get_side_table("node_to_type", node_uid)
         if not target_descriptor:
-            # [Active Defense] 严禁回退到名称查找，确保 IES 2.1 契约完整性
+            # 严禁回退到名称查找，确保完整性
             return value
             
         # 寻找对应的 IbClass (基于 UTS 唯一标识)

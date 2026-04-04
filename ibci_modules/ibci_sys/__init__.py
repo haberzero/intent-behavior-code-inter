@@ -1,5 +1,5 @@
 """
-[IES 2.2] Sys 系统能力插件
+Sys 系统能力插件
 
 纯 Python 实现，零侵入。
 最小版本暂时绕过沙箱权限管理。
@@ -8,7 +8,7 @@
 
 class SysLib:
     """
-    [IES 2.2] Sys 2.2: 系统能力插件。
+    Sys 2.2: 系统能力插件。
     具备对运行时栈和路径环境的查询能力。
     """
     def setup(self, capabilities):

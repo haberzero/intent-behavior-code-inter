@@ -136,14 +136,14 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbConstant(value=None), token)
 
     def grouping(self) -> ast.IbExpr:
-        # [IES 2.1 Ambiguity Resolution] 
+
         # 语法歧义解析：(Type) expr [Cast] vs (expr) [Grouping]
         # 由于 Type 可以是复杂的标识符、属性或下标访问，LL(1) 无法区分。
         # 我们采用推测性前瞻（Speculative Lookahead）模式进行判定。
         
         if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.VAR, TokenType.CALLABLE):
             checkpoint = self.stream.get_checkpoint()
-            # [IES 2.1 Speculative Analysis]
+
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
             with self.stream.speculate():
                 try:
@@ -154,7 +154,7 @@ class ExpressionComponent(BaseComponent):
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
                 except ParseControlFlowError:
-                    # [IES 2.1 Resolution] 
+
                     # 类型转换（Cast）语法解析失败，由于处于 speculate() 上下文中，
                     # 产生的错误已被隔离。此处静默 pass 是为了允许流回退并尝试普通表达式分组解析。
                     pass

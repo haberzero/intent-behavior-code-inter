@@ -8,7 +8,7 @@ __all__ = [
 
 @dataclass
 class PluginCapabilities:
-    """[IES 2.1 SDK] 插件能力容器。统一管理所有可注入到插件的能力。"""
+    """插件能力容器。统一管理所有可注入到插件的能力。"""
     llm_provider: Optional[Any] = None
     llm_executor: Optional[Any] = None
     intent_manager: Optional[Any] = None

@@ -1,7 +1,6 @@
 """
-[IES 2.2] JSON 处理插件规范
+JSON 处理插件规范
 
-IES 2.2 协议实现（第一方组件）：
 - __ibcext_vtable__() 返回纯字典（原生 IBC-Inter 元数据声明）
 - 不导入任何内核代码，保持零侵入
 
@@ -14,7 +13,7 @@ from typing import Dict, Any
 
 
 def __ibcext_metadata__() -> Dict[str, Any]:
-    """[IES 2.2] 插件元数据"""
+    """插件元数据"""
     return {
         "name": "json",
         "version": "2.2.0",
@@ -25,7 +24,7 @@ def __ibcext_metadata__() -> Dict[str, Any]:
 
 def __ibcext_vtable__() -> Dict[str, Any]:
     """
-    [IES 2.2] 方法虚表 - 返回原生 IBC-Inter 元数据声明
+    方法虚表 - 返回原生 IBC-Inter 元数据声明
 
     parse: str -> dict (JSON 字符串解析为字典)
     stringify: any -> str (任意对象序列化为 JSON 字符串)

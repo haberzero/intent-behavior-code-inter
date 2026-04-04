@@ -22,7 +22,7 @@ def create_default_registry() -> MetadataRegistry:
     # 注入到元数据注册表
     reg = MetadataRegistry(axiom_registry=axiom_reg)
 
-    # [IES 2.0 Bootstrapping] 采用两阶段注册协议，统一由 register() 负责
+    # 采用两阶段注册协议，统一由 register() 负责
     # 克隆、hydration 和 axiom injection，消除双重克隆开销。
     for d in (INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
               BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR,

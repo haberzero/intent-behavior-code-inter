@@ -52,7 +52,7 @@
 
 ## 3. 最终分析结论与架构实现 (Current Implementation)
 
-基于以上收敛结论，IES 2.2 已完成以下架构实现：
+基于以上收敛结论，已完成架构实现：
 
 ### 3.1 RuntimeScheduler 核心实现
 - **位置**: `core/runtime/rt_scheduler.py`

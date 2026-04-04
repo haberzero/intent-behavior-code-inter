@@ -198,7 +198,7 @@ class LocalSymbolCollector:
             # [LIFECYCLE] 符号生命周期管理
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
-            # [IES 2.1 Axiom] 如果现有符号是 Any/var 占位符，允许覆盖，消除名称硬编码
+            # 如果现有符号是 Any/var 占位符，允许覆盖，消除名称硬编码
             if existing and (not existing.descriptor or existing.descriptor.is_dynamic()):
                 allow_overwrite = True
             
@@ -230,7 +230,7 @@ class LocalSymbolCollector:
             if is_explicit:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
-                # [IES 2.1 Axiom] 使用 is_dynamic 判定，消除硬编码
+                # 使用 is_dynamic 判定，消除硬编码
                 if existing and existing.descriptor and not existing.descriptor.is_dynamic():
                     continue
 

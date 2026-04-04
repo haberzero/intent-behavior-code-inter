@@ -59,7 +59,7 @@ class TypeDescriptor:
 
     def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'TypeDescriptor':
         """
-        [IES 2.0 Isolation] 深度克隆描述符，确保引擎实例间的物理隔离。
+        深度克隆描述符，确保引擎实例间的物理隔离。
         使用 memo 字典防止循环引用导致的无限递归。
         """
         if memo is None: memo = {}
@@ -263,7 +263,7 @@ class TypeDescriptor:
         
         # 1. 极简匹配 (基础名不匹配)
         if s.name != o.name:
-            # [IES 2.1 Axiom-Driven] 优先尝试公理提供的诊断提示，消除硬编码字符串比对
+            # 优先尝试公理提供的诊断提示，消除硬编码字符串比对
             if s._axiom:
                 axiom_hint = s._axiom.get_diff_hint(o)
                 if axiom_hint: return axiom_hint
@@ -547,7 +547,7 @@ class FunctionMetadata(TypeDescriptor):
     # --- Trait Implementations ---
 
     def update_signature(self, param_types: List['TypeDescriptor'], return_type: Optional['TypeDescriptor']) -> None:
-        """[IES 2.1 WritableTrait] 安全更新函数签名"""
+        """安全更新函数签名"""
         self.param_types = param_types
         self.return_type = return_type
 

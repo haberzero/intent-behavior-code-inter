@@ -42,7 +42,7 @@ class IntrinsicManager:
             logic_id_map = {f.logic_id: f.py_func for f in self._intrinsics.values() if f.logic_id}
             deserializer.on_rebind(logic_id_map)
         
-        # [IES 2.0 Meta-API] 特权：为每个内置函数显式设置逻辑标识
+        # 特权：为每个内置函数显式设置逻辑标识
         for name, func in self._intrinsics.items():
             func.logic_id = f"intrinsic:{name}"
 

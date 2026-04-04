@@ -7,7 +7,7 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 
 class IbPlugin(ABC):
     """
-    [IES 2.1 SDK] 插件基类。
+    插件基类。
     提供自动化的虚表（VTable）生成和依赖注入契约支持。
     所有现代 IBCI 插件均应继承此类。
     """
@@ -27,7 +27,7 @@ class IbPlugin(ABC):
 
     def setup(self, capabilities: PluginCapabilities) -> None:
         """
-        [IES 2.0 Contract] 插件初始化入口。
+        插件初始化入口。
         子类若需重写，请务必调用 super().setup(capabilities) 或确保持有 capabilities 引用。
         """
         self._capabilities = capabilities

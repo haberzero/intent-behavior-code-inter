@@ -22,7 +22,7 @@ class FlatSerializer(BaseFlatSerializer):
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
         """序列化整个蓝图产物"""
         modules_data = {}
-        # [IES 2.1 Deterministic] 排序模块名以确保输出稳定
+        # 排序模块名以确保输出稳定
         for name in sorted(artifact.modules.keys()):
             res = artifact.modules[name]
             modules_data[name] = self.serialize_result(res)
@@ -123,7 +123,7 @@ class FlatSerializer(BaseFlatSerializer):
         if node_id in self.type_map:
             return self.type_map[node_id]
             
-        # [IES 2.1 Deterministic]
+
         # 先收集字段数据，再根据内容生成确定性哈希作为 UID。
         node_data = {"_type": node.__class__.__name__}
         
@@ -143,7 +143,7 @@ class FlatSerializer(BaseFlatSerializer):
         if sym_id in self.type_map:
             return self.type_map[sym_id]
             
-        # [IES 2.1 Deterministic] 使用符号自身的稳定 UID (name@depth)
+        # 使用符号自身的稳定 UID (name@depth)
         uid = getattr(sym, 'uid', None)
         if not uid:
             # 对于没有 UID 的对象 (如直接存储的 TypeDescriptor)，生成基于属性的 UID
@@ -187,7 +187,7 @@ class FlatSerializer(BaseFlatSerializer):
         if t_id in self.type_map:
             return self.type_map[t_id]
             
-        # [IES 2.1 Deterministic] 基于类型全名生成稳定 UID
+        # 基于类型全名生成稳定 UID
         uid = f"type_{t.module_path or 'root'}.{t.name}"
         self.type_map[t_id] = uid
         
@@ -230,7 +230,7 @@ class FlatSerializer(BaseFlatSerializer):
         if scope_id in self.type_map:
             return self.type_map[scope_id]
             
-        # [IES 2.1 Deterministic] 使用作用域自身的路径 UID
+        # 使用作用域自身的路径 UID
         uid = scope.uid
         self.type_map[scope_id] = uid
         

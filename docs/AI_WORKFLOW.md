@@ -195,7 +195,7 @@ Task(tool):
 **模块级**：
 ```python
 """
-[IES 2.2] 模块描述
+模块描述
 
 简短说明模块职责。
 """
@@ -205,7 +205,7 @@ Task(tool):
 ```python
 class IbPlugin:
     """
-    [IES 2.2] 类描述。
+    类描述。
 
     详细说明类的作用和使用方式。
     """
@@ -215,7 +215,7 @@ class IbPlugin:
 ```python
 def get_vtable(self) -> Dict[str, Callable]:
     """
-    [IES 2.2] 方法描述。
+    方法描述。
 
     Args:
         param1: 参数说明

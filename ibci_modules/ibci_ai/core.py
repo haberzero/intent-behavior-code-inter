@@ -7,7 +7,7 @@ from core.extension.ibcext import ExtensionCapabilities
 
 class AIPlugin(ILLMProvider):
     """
-    [IES 2.2] AI LLM 供应者插件。
+    AI LLM 供应者插件。
     核心级插件，必须继承 ILLMProvider 以与解释器深度绑定。
     """
     def __init__(self):
@@ -63,7 +63,7 @@ class AIPlugin(ILLMProvider):
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
-        # [IES 2.2] 向能力注册表注册自己为 LLM Provider
+        # 向能力注册表注册自己为 LLM Provider
         capabilities.expose("llm_provider", self)
 
     def _init_client(self):
@@ -80,7 +80,7 @@ class AIPlugin(ILLMProvider):
             from openai import OpenAI
             
             base_url = self._config["url"]
-            # [IES 2.2 Fix] 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
+            # 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
             if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
                 base_url = f"{base_url.rstrip('/')}/v1"
             
@@ -271,16 +271,16 @@ class AIPlugin(ILLMProvider):
             os.environ.get("IBC_TEST_MODE") == "1"
         )
         
-        # [IES 2.2 Strict] 统一对输入内容进行清洗
+        # 统一对输入内容进行清洗
         user_prompt = user_prompt.strip()
 
-        # [IES 2.2 Mock Priority] 在注入约束后缀前，先检查 Mock 指令
+        # 在注入约束后缀前，先检查 Mock 指令
         if is_test_mode:
             res = self._handle_mock_response(user_prompt, scene)
             self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
             return res
 
-        # [IES 2.2] 强化决策场景的 User Prompt 约束
+        # 强化决策场景的 User Prompt 约束
         scene_str = str(scene).lower()
         if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
             user_prompt += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
@@ -289,14 +289,14 @@ class AIPlugin(ILLMProvider):
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
             
-            # [IES 2.2 Real LLM] 优先使用预初始化的客户端 (单例复用)
+            # 优先使用预初始化的客户端 (单例复用)
             if not self._client or self._client == "MOCK_CLIENT":
                 self._init_client()
             
             if not self._client or self._client == "MOCK_CLIENT":
                 raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
             
-            # [IES 2.2 Strict Mode] 决策场景下限制 max_tokens
+            # 决策场景下限制 max_tokens
             is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
             
             # 如果没有主动探测过，可以在这里触发一次懒加载探测，或者直接使用默认策略
@@ -384,7 +384,7 @@ class AIPlugin(ILLMProvider):
 
     def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
         """
-        [IES 2.2 Mock Testing] 处理 MOCK 前缀指令。
+        处理 MOCK 前缀指令。
         MOCK:FAIL - 触发 llmexcept
         MOCK:TRUE - 返回 "1"
         MOCK:FALSE - 返回 "0"

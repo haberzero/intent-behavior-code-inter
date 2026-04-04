@@ -1,5 +1,5 @@
 """
-[IES 2.2] Schema JSON Schema 校验插件
+Schema JSON Schema 校验插件
 
 纯 Python 实现，零侵入。
 """
@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 class SchemaLib:
     """
-    [IES 2.2] Schema 2.2: JSON Schema 校验插件。
+    Schema 2.2: JSON Schema 校验插件。
     不继承任何核心类，完全独立。
     """
     def validate(self, data: Dict[str, Any], rules: Dict[str, Any]) -> bool:

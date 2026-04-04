@@ -2,7 +2,7 @@ from enum import Enum
 from typing import List, Optional, Any, Protocol, Union
 
 class IntentMode(Enum):
-    """意图合并模式 (IES 2.0)"""
+    """意图合并模式"""
     APPEND = "+"    # 叠加 (默认)
     OVERRIDE = "!"  # 排他 (覆盖之前的所有意图)
     REMOVE = "-"    # 移除 (从栈中移除匹配的意图)

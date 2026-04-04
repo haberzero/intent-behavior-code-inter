@@ -1,5 +1,5 @@
 """
-[IES 2.2] File 文件操作插件
+File 文件操作插件
 
 纯 Python 实现，零侵入。
 最小版本暂时绕过 permission_manager。
@@ -9,17 +9,17 @@ import os
 
 class FileLib:
     """
-    [IES 2.2] File 2.2: 文件操作插件。
+    File 2.2: 文件操作插件。
     具备基准路径解析能力，支持位置无关代码。
     """
     def setup(self, capabilities):
         self.capabilities = capabilities
-        # [IES 2.2] 统一通过权限管理器校验路径，强制执行沙箱规则
+        # 统一通过权限管理器校验路径，强制执行沙箱规则
         self.permission_manager = capabilities.service_context.permission_manager
 
     def _resolve_path(self, path: str) -> str:
         """
-        [IES 2.2] 核心路径解析逻辑。
+        核心路径解析逻辑。
         - 绝对路径：直接校验权限并使用。
         - 以 ./ 或 ../ 开头：基于当前 IBCI 脚本所在目录解析。
         - 裸路径：基于当前工作目录 (CWD) 解析。

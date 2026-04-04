@@ -115,7 +115,7 @@ class ArtifactRehydrator:
             
         data = self.type_pool[uid]
         
-        # [IES 2.1 Axiom-Driven] 使用重水化接口，消除硬编码 isinstance 检查
+        # 使用重水化接口，消除硬编码 isinstance 检查
         descriptor.rehydrate_fields(data, self)
             
         return descriptor

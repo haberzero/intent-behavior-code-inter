@@ -13,7 +13,7 @@ from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 class RuntimeObjectFactory(IObjectFactory):
     """
     运行时对象工厂实现。
-    [IES 2.1 IoC Refactor] 
+    
     1. 物理归位：迁移至 core/runtime，作为公共基础设施。
     2. 控制反转：采用注册制，消除对逻辑组件（Handlers/Executor）的硬编码物理引用。
     """
@@ -75,11 +75,11 @@ class RuntimeObjectFactory(IObjectFactory):
     # --- 逻辑组件创建 (IoC 实现) ---
 
     def create_handlers(self, service_context: Any, execution_context: Any) -> List[Any]:
-        """[IES 2.1 IoC] 动态创建已注册的所有处理器，无物理硬编码引用"""
+        """动态创建已注册的所有处理器，无物理硬编码引用"""
         return [f(service_context, execution_context) for f in self._handler_factories]
 
     def create_llm_executor(self, service_context: Any, execution_context: Any) -> Any:
-        """[IES 2.1 IoC] 动态创建已注册的 LLM 执行器"""
+        """动态创建已注册的 LLM 执行器"""
         if not self._llm_executor_factory:
             # 这种情况下通常意味着系统装配逻辑有误
             raise RuntimeError("RuntimeObjectFactory: LLMExecutor factory not registered.")

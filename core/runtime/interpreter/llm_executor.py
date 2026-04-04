@@ -210,7 +210,7 @@ class LLMExecutorImpl:
         return "".join(content_parts)
 
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
-        # [IES 2.1 Axiom-Driven] 直接通过描述符获取公理能力，彻底消除名称硬编码与降级逻辑
+        # 直接通过描述符获取公理能力，彻底消除名称硬编码与降级逻辑
         meta_reg = self.registry.get_metadata_registry()
         if meta_reg:
             descriptor = meta_reg.resolve(type_name)
@@ -304,7 +304,7 @@ class LLMExecutorImpl:
         }
 
         # 6. 处理返回类型
-        # [IES 2.1 Unified Decision] 统一处理分支、循环和决策场景的模糊判定
+        # 统一处理分支、循环和决策场景的模糊判定
         if any(keyword in scene_name for keyword in ("decision", "choice", "branch", "loop")):
             # 1. 优先尝试从侧表获取节点特有的决策映射
             decision_map = execution_context.get_side_table("decision_maps", node_uid)
@@ -328,7 +328,7 @@ class LLMExecutorImpl:
                         context.retry_hint = None
                         return self.registry.box(decision_map[k])
                 
-                # [IES 2.1 Enforcement] 如果没有匹配到任何项，说明 AI 的回复是模糊的，必须抛出异常
+                # 如果没有匹配到任何项，说明 AI 的回复是模糊的，必须抛出异常
                 raise LLMUncertaintyError(
                     f"LLM 决策格式错误或回复模糊：期望匹配 {list(decision_map.keys())} 之一，但 AI 返回了: {response}", 
                     node_uid, 

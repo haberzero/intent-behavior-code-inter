@@ -286,7 +286,7 @@ LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
 - `ibc_modules/ai/core.py` → `class AIPlugin(ibcext.IbPlugin, ILLMProvider): ...`
 - `ibc_modules/ai/_spec.py` → SpecBuilder 声明
 
-### 7.3 IES 2.2 插件架构愿景（零侵入自动嗅探）
+### 7.3 插件架构愿景（零侵入自动嗅探）
 
 > **设计目标**：插件不再需要 import 任何核心代码，实现真正的零侵入自动注册。
 
@@ -309,7 +309,7 @@ LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
 | `create_factory()` | 工厂函数入口 | Callable |
 | `create_implementation()` | 实现创建函数 | IbPlugin 实例 |
 
-**示例（IES 2.2 插件）**：
+**示例（插件）**：
 ```python
 # ibc_modules/ai/_spec.py - 不再 import ibcext
 def __ibcext_metadata__():
@@ -333,7 +333,7 @@ def create_implementation():
 
 ```python
 class AutoDiscoveryService:
-    """[IES 2.2] 全自动插件发现服务"""
+    """全自动插件发现服务"""
     
     def discover_plugins(self, plugin_dirs: List[str]) -> List[PluginSpec]:
         discovered = []
@@ -390,7 +390,7 @@ def __ibcext_vtable__():
 | **混合使用** | 同时支持 `@ibcext.method` 和 `__ibcext_vtable__()` |
 | **渐进迁移** | 逐步将内置插件迁移到 IES 2.2，不强制要求第三方迁移 |
 
-#### 7.3.7 IES 2.2 编译构建流程（静态类型检查保留）
+#### 7.3.7 编译构建流程（静态类型检查保留）
 
 > **核心洞察**：编译器在 STAGE_3 (PLUGIN_METADATA) 之后进行静态类型检查。只要在编译前完成 `discover_all()` 并将元数据注册到 `MetadataRegistry`，静态类型检查完全保留。
 
@@ -403,7 +403,7 @@ discovery_service.discover_all() → HostInterface.metadata
 compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 ```
 
-**IES 2.2 架构流程**：
+**架构流程**：
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ 构建阶段（ibcc 命令）                                                │
@@ -428,7 +428,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**IES 2.2 关键保证**：
+**关键保证**：
 | 保证 | 说明 |
 |------|------|
 | **静态类型检查保留** | 编译器通过 .ibc_meta 文件获取完整的 TypeDescriptor 信息 |
@@ -538,7 +538,7 @@ Engine.__init__()
                     └──→ MetadataRegistry (轨B) → 插件元数据
 ```
 
-**修复方案（IES 2.2）**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
+**修复方案**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
 
 ### A.2 HOST 插件游离问题
 

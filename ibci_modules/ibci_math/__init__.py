@@ -1,5 +1,5 @@
 """
-[IES 2.2] Math 数学计算插件
+Math 数学计算插件
 
 纯 Python 实现，零侵入。
 """
@@ -8,7 +8,7 @@ import math
 
 class MathLib:
     """
-    [IES 2.2] Math 2.2: 数学计算插件。
+    Math 2.2: 数学计算插件。
     不继承任何核心类，完全独立。
     """
     def __init__(self):

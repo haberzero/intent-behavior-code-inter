@@ -9,20 +9,20 @@
 
 本手册所描述的“UID 标识符系统”、“独立的继承关系表 (LineageTable)”以及“声明式方差系统”属于 IBC-Inter 长期演进的**最终愿景**。
 
-**当前实现 (IES 2.2) 状态**:
+**当前实现 状态**:
 - 采用 **Name-Based Typing** (基于名称的类型系统)。
 - 继承关系通过 `ClassMetadata` 内部的字符串引用 (`parent_name`) 维护。
 - 提供了基础的协变/逆变支持，满足 MVP 阶段的 AI 驱动开发需求。
 
 ---
 
-## 1. 执行摘要 (IES 2.2 Audit)
+## 1. 执行摘要
 
 ### 1.1 核心结论
 经过深度交叉验证，确认以下事实：
 1. **类型系统可运行但存在设计约束**：在单模块、单继承场景下表现稳固。
 2. **协变/逆变实现基本正确**：`ListMetadata`、`FunctionMetadata` 的方差逻辑经验证符合预期。
-3. **[已修复] 逻辑错误汇总**：IES 2.2 已修复了 `BoundMethodAxiom` 的名称冲突及 `DictMetadata` 的 identity 比较问题。
+3. **[已修复] 逻辑错误汇总**：已修复了 `BoundMethodAxiom` 的名称冲突及 `DictMetadata` 的 identity 比较问题。
 
 ---
 
@@ -490,7 +490,7 @@ def is_compatible(self, other: 'TypeDescriptor') -> bool:
 
 ```python
 def _is_structurally_compatible(self, other: 'TypeDescriptor') -> bool:
-    """[IES 2.1 Refactor] 子类可重写的结构化兼容性逻辑，消除硬编码比对"""
+    """子类可重写的结构化兼容性逻辑，消除硬编码比对"""
     if type(self) is not type(other):
         return False
     return self.name == other.name and self.get_references() == other.get_references()
@@ -1632,7 +1632,7 @@ TypeDescriptor ──持有──▶ TypeAxiom
 **修复代码**:
 ```python
 def is_compatible(self, other: 'TypeDescriptor') -> bool:
-    # [IES 2.1] bound_method 类型兼容性：检查对方是否为 bound_method
+    # bound_method 类型兼容性：检查对方是否为 bound_method
     return other.get_base_axiom_name() == "bound_method"
 ```
 

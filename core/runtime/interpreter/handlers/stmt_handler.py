@@ -366,13 +366,13 @@ class StmtHandler(BaseHandler):
         # 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
         existing_class = self.registry.get_class(name)
         if not existing_class:
-            raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. [IES 2.0 Contract Violation]", node_uid)
+            raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. ", node_uid)
         
         # 绑定到当前作用域 (作为常量类)
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         self.runtime_context.define_variable(name, existing_class, uid=sym_uid)
         
-        # [IES 2.1 Deep Audit] 深度契约校验：验证 AST 定义的方法是否全部在运行时虚表中就绪
+        # 深度契约校验：验证 AST 定义的方法是否全部在运行时虚表中就绪
         body = node_data.get("body", [])
         for stmt_uid in body:
             stmt_data = self.get_node_data(stmt_uid)
@@ -392,7 +392,7 @@ class StmtHandler(BaseHandler):
                     # 简单校验参数数量 (注意：self 在运行时会被处理，此处校验声明的一致性)
                     expected_count = len(method_obj.descriptor.params) if hasattr(method_obj.descriptor, 'params') else -1
                     if expected_count != -1 and len(params) != expected_count:
-                         # [IES 2.1 Final Audit] 强制执行严格契约校验
+                         # 强制执行严格契约校验
                          raise self.report_error(f"Contract Mismatch: Method '{method_name}' of class '{name}' parameter count mismatch. AST: {len(params)}, Descriptor: {expected_count}", stmt_uid)
 
         # 绑定到当前作用域 (作为常量类)
@@ -423,7 +423,7 @@ class StmtHandler(BaseHandler):
         if not intent_data:
             raise self.report_error("Invalid intent metadata: Intent must be a structured IbIntentInfo node.")
             
-        # [IES 2.1 Factory] 统一使用工厂方法构造，消除局部 import 和具体类依赖
+        # 统一使用工厂方法构造，消除局部 import 和具体类依赖
         intent = self.execution_context.factory.create_intent_from_node(
             intent_uid, 
             intent_data, 

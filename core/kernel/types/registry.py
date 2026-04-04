@@ -79,11 +79,11 @@ class MetadataRegistry:
         key = f"{descriptor.module_path}.{descriptor.name}" if descriptor.module_path else descriptor.name
         core_trace(CoreModule.UTS, DebugLevel.BASIC, f"Registering UTS descriptor: {key}")
 
-        # [IES 2.0 Isolation] 强制克隆描述符以确保引擎间物理隔离 (Item 12)
+        # 强制克隆描述符以确保引擎间物理隔离 (Item 12)
         memo = {}
         descriptor = self._clone_and_bind(descriptor, memo)
 
-        # [IES 2.0 Hydration] 采用两阶段注册模式
+        # 采用两阶段注册模式
         # 第一阶段：占位 (Shelling)
         self._descriptors[key] = descriptor
 

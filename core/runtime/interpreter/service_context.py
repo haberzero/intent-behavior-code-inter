@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 class ServiceContextImpl(ServiceContext):
     """
-    [IES 2.1 Regularization] 运行时核心服务上下文实现。
+    运行时核心服务上下文实现。
     作为横向服务定位器，它持有一组独立的服务组件。
     它不持有 Interpreter 实例，也不提供对 RuntimeContext 的访问，以实现职责单一化。
     """

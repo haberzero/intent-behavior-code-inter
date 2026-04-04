@@ -74,7 +74,7 @@ class Interpreter:
         return []
 
     def sync_state(self, parent_context: RuntimeContext, policy: Dict[str, Any]):
-        """[IES 2.1 Regularization] 从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
+        """从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
         isolation_policy = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
 
         if isolation_policy.inherit_intents:
@@ -92,7 +92,7 @@ class Interpreter:
             f"Interpreter state synced from parent context with policy: {policy}")
 
     def _sync_variables_from(self, parent_context: RuntimeContext):
-        """[IES 2.1 FULL Isolation] 从父上下文同步变量"""
+        """从父上下文同步变量"""
         parent_scope = parent_context.current_scope
         current_scope = self.runtime_context.current_scope
         for name, symbol in parent_scope._symbols.items():
@@ -136,10 +136,10 @@ class Interpreter:
         self._kernel_token = kernel_token
         self.instance_id = instance_id or f"inst_{id(self)}"
         
-        # [IES 2.1 Decoupling] 引入对象工厂
+        # 引入对象工厂
         object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
 
-        # [IES 2.1 Decoupling] 创建执行上下文数据容器，剥离状态与逻辑 (组合代替继承)
+        # 创建执行上下文数据容器，剥离状态与逻辑 (组合代替继承)
         self._execution_context = ExecutionContextImpl(
             registry=self._registry,
             factory=object_factory,
@@ -158,7 +158,7 @@ class Interpreter:
             strict_mode=strict_mode
         )
 
-        # [IES 2.1 Decoupling] 注册执行上下文引用到 Registry，底层仅持有该容器
+        # 注册执行上下文引用到 Registry，底层仅持有该容器
         self._kernel_token = self._registry.get_kernel_token()
         if self._kernel_token:
              self._registry.set_execution_context(self._execution_context, self._kernel_token)
@@ -181,7 +181,7 @@ class Interpreter:
         if artifact:
             self.node_pool = artifact.get("pools", {}).get("nodes", {})
         
-        # 1. [IES 2.1 Regularization] 依赖图谱闭合：构造期完成 ServiceContext 组装
+        # 1. 依赖图谱闭合：构造期完成 ServiceContext 组装
         # 核心：确保服务组件仅持有必要的数据结构，严禁穿透持有 Interpreter
         self.runtime_context = runtime_context or RuntimeContextImpl(registry=self.registry)
         
@@ -287,7 +287,7 @@ class Interpreter:
         self.instruction_count = 0
         self._fallback_stack = [] # 用于追踪正在进行 Fallback 的节点
         
-        # [IES 2.1 Defensive Patch] 递归深度安全校验
+        # 递归深度安全校验
         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
         # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
         python_limit = sys.getrecursionlimit()
@@ -309,7 +309,7 @@ class Interpreter:
         self.expr_handler = handlers[1]
         self.import_handler = handlers[2]
 
-        # [IES 2.0 Optimization] 预先映射访问方法
+        # 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
 
@@ -378,14 +378,14 @@ class Interpreter:
         table = side_tables.get(table_name, {})
         val = table.get(node_uid)
         
-        # [IES 2.1 Rehydration] 自动重水化类型引用
+        # 自动重水化类型引用
         if table_name == "node_to_type" and isinstance(val, str):
             return self.type_hydrator.hydrate(val)
             
         return val
 
     def push_stack(self, name: str, location: Optional[Location] = None, is_user_function: bool = False, **kwargs):
-        """[IES 2.1 Decoupling] 向逻辑调用栈压入一帧"""
+        """向逻辑调用栈压入一帧"""
         self.logical_stack.push(
             name=name,
             local_vars={}, # 暂时不快照变量，性能考虑
@@ -396,7 +396,7 @@ class Interpreter:
         )
 
     def pop_stack(self):
-        """[IES 2.1 Decoupling] 从逻辑调用栈弹出最后一帧"""
+        """从逻辑调用栈弹出最后一帧"""
         self.logical_stack.pop()
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
@@ -495,7 +495,7 @@ class Interpreter:
         self.instruction_count = 0
         result = self.registry.get_none()
         
-        # [IES 2.2 Core] 注入内置路径变量
+        # 注入内置路径变量
         loc_data = self.get_side_table("node_to_loc", module_uid)
         if not loc_data:
              raise self._report_error(f"Critical: Location metadata missing for module {module_uid}. Compiled artifact might be corrupted.", module_uid)
@@ -571,7 +571,7 @@ class Interpreter:
         # 提取当前节点的 fallback 块
         fallback_uids = node_data.get("llm_fallback", [])
 
-        # [IES 2.2 Strict] 防止递归重入
+        # 防止递归重入
         self._fallback_stack.append(node_uid)
 
         try:
@@ -581,7 +581,7 @@ class Interpreter:
                     current_node_data = self.get_node_data(node_uid)
                     return action(node_uid, current_node_data)
                 except LLMUncertaintyError as outer_e:
-                    # [IES 2.2 Strict] 逻辑修正：
+                    # 逻辑修正：
                     # 只有语句级别或具有显式 fallback 的节点才在此处理
                     is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type or "ExprStmt" in node_type)
                     
@@ -640,7 +640,7 @@ class Interpreter:
                 self.runtime_context.pop_intent()
 
     def _resolve_value(self, val: Any) -> Any:
-        """[IES 2.2 Security Update] 处理外部资产引用的解析"""
+        """处理外部资产引用的解析"""
         # 支持 dict 和 ReadOnlyNodePool (Mapping)
         if hasattr(val, "get") and val.get("_type") == "ext_ref":
             uid = val.get("uid")
@@ -651,7 +651,7 @@ class Interpreter:
         return val
 
     def _pre_evaluate_user_classes(self):
-        """[IES 2.1 Stage 5.5] 预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
+        """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
         old_module = self.current_module_name
         for name, ib_class in self.registry.get_all_classes().items():
             if not getattr(ib_class.descriptor, 'is_user_defined', False):
@@ -757,13 +757,13 @@ class Interpreter:
         if node_uid is None:
             return self.registry.get_none()
 
-        # [IES 2.1 Context Switch] 如果指定了模块，则临时切换上下文进行求值 (Lexical Scope Support)
+        # 如果指定了模块，则临时切换上下文进行求值 (Lexical Scope Support)
         old_module = self.current_module_name
         if module_name and module_name != old_module:
             self.current_module_name = module_name
 
         try:
-            # [IES 2.0 Evaluation] 处理字面量或裸 UID
+            # 处理字面量或裸 UID
             if not isinstance(node_uid, str):
                 if hasattr(node_uid, 'uid'):
                     node_uid = node_uid.uid
@@ -820,10 +820,10 @@ class Interpreter:
                 node_type = node_data.get("_type")
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
                 
-                # [IES 2.1 Unified Fallback] 统一语句级 LLM 容错分发
+                # 统一语句级 LLM 容错分发
                 fallback_uids = node_data.get("llm_fallback", [])
                 
-                # [IES 2.2 Strict] 为所有可能包含 LLM 行为的语句启用潜在的 LLM 异常捕获
+                # 为所有可能包含 LLM 行为的语句启用潜在的 LLM 异常捕获
                 # 如果当前节点正在处理 Fallback（防止递归重入），我们直接调用 visitor
                 if node_uid in self._fallback_stack:
                     return visitor(node_uid, node_data)
@@ -862,7 +862,7 @@ class Interpreter:
             self.current_module_name = old_module
 
     def _is_scope_defining(self, node_type: str, node_data: Optional[Mapping[str, Any]] = None) -> bool:
-        """[IES 2.1 Decoupling] 判断 AST 节点是否具有独立逻辑作用域。完全元数据驱动。"""
+        """判断 AST 节点是否具有独立逻辑作用域。完全元数据驱动。"""
         # 优先检查节点数据中是否带有分析器生成的标记
         if node_data and node_data.get("_is_scope"):
             return True

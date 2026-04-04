@@ -1,5 +1,5 @@
 """
-[IES 2.2] Plugin Info 插件规范
+Plugin Info 插件规范
 """
 from typing import Dict, Any
 

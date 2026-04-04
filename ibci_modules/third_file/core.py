@@ -1,5 +1,5 @@
 """
-[IES 2.2] Third File Analysis Plugin Implementation
+Third File Analysis Plugin Implementation
 Logic for advanced codebase analysis operations.
 """
 import os

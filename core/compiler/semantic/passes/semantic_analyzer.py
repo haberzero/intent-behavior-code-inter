@@ -231,7 +231,7 @@ class SemanticAnalyzer:
             self.symbol_table = sym.owned_scope
             
         old_class = self.current_class
-        # [IES 2.1 Axiom] 使用 is_class() 判定，消除对 ClassMetadata 的直接依赖
+        # 使用 is_class() 判定，消除对 ClassMetadata 的直接依赖
         if sym.descriptor.is_class():
             # 内部仍需类型转换为 ClassMetadata 以支持 members 访问，但判定逻辑已公理化
             self.current_class = sym.descriptor
@@ -248,7 +248,7 @@ class SemanticAnalyzer:
 
     def _define_var(self, name: str, var_type: TypeDescriptor, node: ast.IbASTNode, allow_overwrite: bool = False):
         try:
-            # [IES 2.1 Shadowing Refactor] 
+
             # 只有当变量已在 *当前* 作用域定义时，才考虑复用或覆盖。
             # 如果变量在父级作用域，则直接定义新符号以实现遮蔽。
             if name in self.symbol_table.symbols:
@@ -921,7 +921,7 @@ class SemanticAnalyzer:
             # [Axiom Hook] 自动合成绑定方法 (Bound Method)
             # 如果是实例方法且不是静态方法，则合成 BoundMethodMetadata
             if member_sym.is_function and not member_sym.metadata.get("is_static"):
-                # [IES 2.1 Axiom] 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
+                # 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
                 if not base_type.is_module():
                     # 使用工厂创建以确保驻留和能力注入
                     return self.registry.factory.create_bound_method(base_type, member_sym.descriptor)
@@ -957,7 +957,7 @@ class SemanticAnalyzer:
         res = func_type.resolve_return(arg_types)
         
         if not res:
-            # [IES 2.1 Axiom] 通过 Trait 提取签名信息进行诊断
+            # 通过 Trait 提取签名信息进行诊断
             if call_trait and hasattr(call_trait, 'param_types'):
                 param_types = call_trait.param_types
                 if len(arg_types) != len(param_types):
@@ -1018,7 +1018,7 @@ class SemanticAnalyzer:
             else:
                 generic_args = [self._resolve_type(node.slice, safe=safe)]
                 
-            # [IES 2.1 Axiom] 使用 resolve_specialization 替代硬编码判断，实现真正的类型演算
+            # 使用 resolve_specialization 替代硬编码判断，实现真正的类型演算
             return base_type.resolve_specialization(generic_args)
 
         elif isinstance(node, ast.IbAttribute):

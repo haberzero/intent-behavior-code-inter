@@ -312,7 +312,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return None 
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """[IES 2.1 Axiom-Driven] 实现列表泛型特化"""
+        """实现列表泛型特化"""
         element_type = args[0] if args else ANY_DESCRIPTOR
         desc = registry.factory.create_list(element_type)
         registry.register(desc)
@@ -362,7 +362,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return None # Keys
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """[IES 2.1 Axiom-Driven] 实现字典泛型特化"""
+        """实现字典泛型特化"""
         key_type = args[0] if len(args) > 0 else ANY_DESCRIPTOR
         val_type = args[1] if len(args) > 1 else ANY_DESCRIPTOR
         desc = registry.factory.create_dict(key_type, val_type)

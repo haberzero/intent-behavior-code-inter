@@ -66,7 +66,7 @@ class InterpreterError(IBCBaseException):
 
 class PluginError(IBCBaseException):
     """
-    [IES 2.1 SDK] 插件系统专用异常。
+    插件系统专用异常。
     当插件执行过程中发生错误时抛出，可被 issue_tracker 正确识别为插件相关错误。
     """
     def __init__(self, message: str, location: Optional[Location] = None, plugin_name: Optional[str] = None):

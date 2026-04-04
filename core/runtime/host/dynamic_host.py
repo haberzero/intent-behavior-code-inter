@@ -51,7 +51,7 @@ class DynamicHost(IbPlugin):
 
     def _validate_return_value(self, value: Any) -> Any:
         """
-        [IES 2.1 Security] 验证返回值是否允许从隔离环境返回。
+        验证返回值是否允许从隔离环境返回。
         只允许基本内置类型 (int/str/bool/float/none) 返回。
         """
         if value is None:

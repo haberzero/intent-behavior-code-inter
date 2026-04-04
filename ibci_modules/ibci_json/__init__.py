@@ -1,5 +1,5 @@
 """
-[IES 2.2] JSON 处理插件
+JSON 处理插件
 
 纯 Python 实现，零侵入。
 """
@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 class JSONLib:
     """
-    [IES 2.2] JSON 2.2: JSON 处理插件。
+    JSON 2.2: JSON 处理插件。
     不继承任何核心类，完全独立。
 
     注意：parse 方法始终返回 dict 类型。

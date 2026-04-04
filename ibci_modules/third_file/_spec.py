@@ -1,11 +1,11 @@
 """
-[IES 2.2] Third File Analysis Plugin Specification
+Third File Analysis Plugin Specification
 Provides enhanced file operations for large-scale codebase analysis.
 """
 from typing import Dict, Any
 
 def __ibcext_metadata__() -> Dict[str, Any]:
-    """[IES 2.2] Plugin metadata"""
+    """Plugin metadata"""
     return {
         "name": "third_file",
         "version": "1.0.0",
@@ -15,7 +15,7 @@ def __ibcext_metadata__() -> Dict[str, Any]:
 
 def __ibcext_vtable__() -> Dict[str, Any]:
     """
-    [IES 2.2] Method VTable - Native metadata declaration
+    Method VTable - Native metadata declaration
     """
     return {
         "functions": {
