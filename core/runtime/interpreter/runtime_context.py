@@ -450,6 +450,11 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def current_scope(self) -> Scope:
         return self._current_scope
 
+    @current_scope.setter
+    def current_scope(self, value: Scope) -> None:
+        """[IES 2.1] 允许切换当前作用域（用于跨模块调用）"""
+        self._current_scope = value
+
     @property
     def global_scope(self) -> Scope:
         return self._global_scope

@@ -157,13 +157,29 @@ class StmtHandler(BaseHandler):
             if not self.execution_context.is_truthy(condition):
                 break
             
-            try:
-                for stmt_uid in node_data.get("body", []):
-                    self.visit(stmt_uid)
-            except BreakException:
-                break
-            except ContinueException:
-                continue
+            # [IES 2.2 Fix] 局部重试支持，防止冒泡导致条件判定被跳过或重复执行
+            retry_count = 0
+            while True:
+                try:
+                    for stmt_uid in node_data.get("body", []):
+                        self.visit(stmt_uid)
+                    break # 成功完成当前迭代逻辑
+                except BreakException:
+                    return self.registry.get_none()
+                except ContinueException:
+                    break # 跳出局部重试，由外层 while 进行下一次条件判定
+                except (LLMUncertaintyError, RetryException) as e:
+                    fallback_uids = node_data.get("llm_fallback", [])
+                    if not fallback_uids and isinstance(e, LLMUncertaintyError):
+                        raise e # 无局部处理，向上冒泡
+                    
+                    retry_count += 1
+                    if retry_count > 3: raise e
+                    
+                    if fallback_uids:
+                        for f_uid in fallback_uids:
+                            self.visit(f_uid)
+                    continue # 重新执行当前循环体
         return self.registry.get_none()
     
     def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -175,13 +191,29 @@ class StmtHandler(BaseHandler):
         # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while self.execution_context.is_truthy(self.visit(iter_uid)):
-                try:
-                    for stmt_uid in body:
-                        self.visit(stmt_uid)
-                except BreakException: 
-                    return self.registry.get_none()
-                except ContinueException: 
-                    continue
+                # [IES 2.2 Fix] 局部重试支持
+                retry_count = 0
+                while True:
+                    try:
+                        for stmt_uid in body:
+                            self.visit(stmt_uid)
+                        break
+                    except BreakException: 
+                        return self.registry.get_none()
+                    except ContinueException: 
+                        break
+                    except (LLMUncertaintyError, RetryException) as e:
+                        fallback_uids = node_data.get("llm_fallback", [])
+                        if not fallback_uids and isinstance(e, LLMUncertaintyError):
+                            raise e
+                        
+                        retry_count += 1
+                        if retry_count > 3: raise e
+                        
+                        if fallback_uids:
+                            for f_uid in fallback_uids:
+                                self.visit(f_uid)
+                        continue
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
@@ -193,23 +225,42 @@ class StmtHandler(BaseHandler):
         elements = elements_obj.elements
         total = len(elements)
         for i, item in enumerate(elements):
-            self.runtime_context.push_loop_context(i, total)
-            
-            # [IES 2.2 Fix] 使用统一的赋值逻辑支持复杂循环目标
-            if target_uid:
-                self._assign_to_target(target_uid, item, define_only=True)
-            
-            try:
-                for stmt_uid in body:
-                    self.visit(stmt_uid)
-            except BreakException: 
-                self.runtime_context.pop_loop_context()
-                return self.registry.get_none()
-            except ContinueException: 
-                self.runtime_context.pop_loop_context()
-                continue
-            finally:
-                self.runtime_context.pop_loop_context()
+            # [IES 2.2 Fix] 局部重试闭环，防止冒泡导致迭代器重置 (死循环隐患修复)
+            retry_count = 0
+            while True:
+                self.runtime_context.push_loop_context(i, total)
+                
+                # [IES 2.2 Fix] 使用统一的赋值逻辑支持复杂循环目标
+                if target_uid:
+                    self._assign_to_target(target_uid, item, define_only=True)
+                
+                try:
+                    for stmt_uid in body:
+                        self.visit(stmt_uid)
+                    self.runtime_context.pop_loop_context()
+                    break # 成功完成当前项，进入下一个元素
+                except BreakException: 
+                    self.runtime_context.pop_loop_context()
+                    return self.registry.get_none()
+                except ContinueException: 
+                    self.runtime_context.pop_loop_context()
+                    break # 跳出局部重试，由外层 enumerate 进入下一项
+                except (LLMUncertaintyError, RetryException) as e:
+                    self.runtime_context.pop_loop_context()
+                    
+                    fallback_uids = node_data.get("llm_fallback", [])
+                    # 只有在有 fallback 或显式 RetryException 时才在局部拦截
+                    if not fallback_uids and isinstance(e, LLMUncertaintyError):
+                        raise e
+                    
+                    retry_count += 1
+                    if retry_count > 3: raise e
+                    
+                    if fallback_uids:
+                        for f_uid in fallback_uids:
+                            self.visit(f_uid)
+                    # 继续局部 while True，即重新执行当前 item 的逻辑
+                    continue
         return self.registry.get_none()
 
     def visit_IbTry(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:

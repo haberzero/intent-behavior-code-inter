@@ -193,24 +193,39 @@ class IbModule(IbObject):
         """
         [IES 2.0] 模块级消息传递核心。
         """
-        # 1. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
+        # 1. 处理 __getattr__ 协议
+        if message == '__getattr__' and len(args) > 0:
+            target_name = args[0].to_native()
+            
+            # 优先从 Native 虚表或实现中查找
+            if hasattr(self.scope, 'receive'):
+                try:
+                    return self.scope.receive('__getattr__', args)
+                except AttributeError:
+                    pass
+            
+            # 其次查找模块级定义的变量/函数 (Scope 模式)
+            if hasattr(self.scope, 'get'):
+                try:
+                    return self.scope.get(target_name)
+                except (KeyError, AttributeError):
+                    pass
+
+        # 2. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
         if hasattr(self.scope, 'receive'):
             try:
-                if message == '__getattr__':
-                    # 转发获取属性的消息
-                    return self.scope.receive('__getattr__', args)
                 return self.scope.receive(message, args)
             except AttributeError:
                 pass
 
-        # 2. 查找模块级定义的变量/函数 (Scope 模式)
+        # 3. 查找模块级定义的变量/函数 (Scope 模式)
         if hasattr(self.scope, 'get'):
             try:
                 return self.scope.get(message)
             except (KeyError, AttributeError):
                 pass
             
-        # 3. 后备：降级到基类公理 (如 __to_prompt__ 等)
+        # 4. 后备：降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def __repr__(self):
@@ -480,11 +495,12 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None, module_name: Optional[str] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
         self._descriptor = descriptor
+        self.module_name = module_name or context.current_module_name
 
     @property
     def descriptor(self) -> TypeDescriptor:
@@ -492,11 +508,26 @@ class IbUserFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
-        node_data = self.context.get_node_data(self.node_uid)
-        params_uids = node_data.get("args", [])
-        
+        # [IES 2.1 Context Switch] 切换到函数定义所在的模块上下文
         rt_context = self.context.runtime_context
-        rt_context.enter_scope()
+        old_module = self.context.current_module_name
+        old_scope = rt_context.current_scope
+        
+        if self.module_name and self.module_name != old_module:
+            self.context.current_module_name = self.module_name
+            # 获取目标模块的作用域
+            try:
+                mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
+                rt_context.current_scope = mod_inst.scope
+            except:
+                pass
+
+        try:
+            node_data = self.context.get_node_data(self.node_uid)
+            params_uids = node_data.get("args", [])
+            
+            # [NEW] 使用已经切换好的作用域进入局部作用域
+            rt_context.enter_scope()
         
         # [NEW] Logical CallStack 追踪
         loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
@@ -542,6 +573,9 @@ class IbUserFunction(IbFunction):
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
+            # 恢复之前的模块上下文
+            self.context.current_module_name = old_module
+            rt_context.current_scope = old_scope
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)
@@ -552,12 +586,13 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[TypeDescriptor] = None):
+    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[TypeDescriptor] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.context = context
         self._descriptor = descriptor
+        self.module_name = module_name or context.current_module_name
 
     @property
     def descriptor(self) -> TypeDescriptor:
@@ -565,8 +600,22 @@ class IbLLMFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
-        node_data = self.context.get_node_data(self.node_uid)
+        # [IES 2.1 Context Switch] 切换到函数定义所在的模块上下文
         rt_context = self.context.runtime_context
+        old_module = self.context.current_module_name
+        old_scope = rt_context.current_scope
+        
+        if self.module_name and self.module_name != old_module:
+            self.context.current_module_name = self.module_name
+            # 获取目标模块的作用域
+            try:
+                mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
+                rt_context.current_scope = mod_inst.scope
+            except:
+                pass
+
+        try:
+            node_data = self.context.get_node_data(self.node_uid)
         
         rt_context.enter_scope()
         
@@ -621,6 +670,9 @@ class IbLLMFunction(IbFunction):
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
+            # 恢复之前的模块上下文
+            self.context.current_module_name = old_module
+            rt_context.current_scope = old_scope
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)

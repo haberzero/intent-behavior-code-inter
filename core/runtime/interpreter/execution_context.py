@@ -28,6 +28,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
                  extract_name_id_callback: Any,
                  resolve_value_callback: Any,
                  visit_with_fallback_callback: Any,
+                 module_manager: Any = None,
                  strict_mode: bool = False):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
@@ -39,6 +40,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._runtime_context = None
         self._logical_stack = None # 由 Interpreter 初始化并注入
         self._current_module_name = None # [IES 2.1]
+        self._module_manager = module_manager
         self._strict_mode = strict_mode
         
         # Logic Callbacks
@@ -62,14 +64,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     @logical_stack.setter
     def logical_stack(self, value: Any):
         self._logical_stack = value
-
-    @property
-    def current_module_name(self) -> Optional[str]:
-        return self._current_module_name
-
-    @current_module_name.setter
-    def current_module_name(self, value: Optional[str]):
-        self._current_module_name = value
 
     @property
     def current_module_name(self) -> Optional[str]:
@@ -138,6 +132,14 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     @runtime_context.setter
     def runtime_context(self, value: Any):
         self._runtime_context = value
+
+    @property
+    def module_manager(self) -> Any:
+        return self._module_manager
+
+    @module_manager.setter
+    def module_manager(self, value: Any):
+        self._module_manager = value
 
     @property
     def strict_mode(self) -> bool:

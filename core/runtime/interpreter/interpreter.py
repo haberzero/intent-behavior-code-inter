@@ -108,7 +108,7 @@ class Interpreter:
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None, 
                  input_callback: Optional[Callable[[str], str]] = None, 
-                 max_instructions: int = 10000, 
+                 max_instructions: int = 100000000, 
                  max_call_stack: int = 100,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
@@ -188,6 +188,7 @@ class Interpreter:
         if service_context:
             # 外部注入模式
             self.service_context = service_context
+            self._execution_context.module_manager = self.service_context.module_manager
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
             interop = interop or InterOpImpl(host_interface=self.host_interface)
@@ -229,6 +230,7 @@ class Interpreter:
                 capability_registry=None, # 占位，由 Engine 统一装配
                 interpreter=self # [IES 2.2] 注入解释器实例引用
             )
+            self._execution_context.module_manager = self.service_context.module_manager
             
             # [IES 2.1] 完成延迟水化
             if hasattr(llm_executor, 'hydrate'):
@@ -487,6 +489,8 @@ class Interpreter:
              # 创建新 Context 并绑定 Scope
              new_ctx = RuntimeContextImpl(initial_scope=scope, registry=self.registry)
              self.runtime_context = new_ctx
+             # [BugFix] 修复内置函数（如 print）在模块切换时丢失的问题
+             self.setup_context(self.runtime_context)
 
         self.instruction_count = 0
         result = self.registry.get_none()
@@ -579,7 +583,7 @@ class Interpreter:
                 except LLMUncertaintyError as outer_e:
                     # [IES 2.2 Strict] 逻辑修正：
                     # 只有语句级别或具有显式 fallback 的节点才在此处理
-                    is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type)
+                    is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type or "ExprStmt" in node_type)
                     
                     if not fallback_uids and not is_stmt:
                         # [NEW] 如果不是 Stmt 且没有 fallback，向上抛出，
@@ -833,6 +837,8 @@ class Interpreter:
                     visitor = self.visit_IbWhile_core
                 elif node_type == "IbFor":
                     visitor = self.visit_IbFor_core
+                elif node_type == "IbExprStmt":
+                    visitor = self.visit_IbExprStmt_core
                 
                 return self._with_unified_fallback(node_uid, node_type, node_data, visitor)
             except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
@@ -886,3 +892,6 @@ class Interpreter:
 
     def visit_IbFor_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         return self.stmt_handler.visit_IbFor(node_uid, node_data)
+
+    def visit_IbExprStmt_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.stmt_handler.visit_IbExprStmt(node_uid, node_data)
