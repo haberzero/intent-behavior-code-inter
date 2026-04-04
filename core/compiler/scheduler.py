@@ -27,7 +27,7 @@ from core.base.interfaces import (
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.kernel.types.descriptors import ModuleMetadata
+from core.kernel.types.descriptors import ModuleMetadata, LazyDescriptor
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
@@ -372,6 +372,12 @@ class Scheduler(ICompilerService):
             
             # 3. Semantic Analysis
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
+            
+            # [IES 2.2 Fix] 在分析前预注册空的 ModuleMetadata 到注册表
+            # 这样 LazyDescriptor 才能在 unwrap 时找到目标，即使当前模块还未分析完
+            pre_mod_meta = ModuleMetadata(name=module_name)
+            self.registry.register(pre_mod_meta)
+            
             analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
@@ -394,9 +400,13 @@ class Scheduler(ICompilerService):
                 if imp.file_path:
                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
-                    imp_res = artifact.get_module(imp_mod_name)
-                    if imp_res:
-                        s_mod_type = ModuleMetadata(name=imp_mod_name, exported_scope=imp_res.symbol_table)
+                    
+                    # [IES 2.2 Fix] 统一使用 LazyDescriptor 解决循环依赖问题
+                    # 无论该模块是否已编译，都先注入 Lazy 描述符，
+                    # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
+                    s_mod_type = LazyDescriptor(name=imp_mod_name)
+                    # 必须绑定注册表以便后续解包
+                    s_mod_type._registry = self.registry
                 elif imp.module_name in self.host_interface._module_metadata_map:
                     s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
                 elif self.host_interface.metadata.resolve(imp.module_name) is not None:
@@ -512,6 +522,13 @@ class Scheduler(ICompilerService):
                                 )
             
             result = analyzer.analyze(ast_node)
+            
+            # [IES 2.2 Fix] 语义分析完成后，更新注册表中的元数据成员
+            # 这确保了 LazyDescriptor 在 unwrap 时能看到完整的符号表
+            final_mod_meta = self.registry.resolve(module_name)
+            if final_mod_meta:
+                # 过滤掉非导出的符号（如内部变量）可以在这里做，目前默认全量导出
+                final_mod_meta.members = result.symbol_table.symbols
             
             # Cache AST, Tokens, and SymbolTable
             self.ast_cache[file_path] = ast_node
