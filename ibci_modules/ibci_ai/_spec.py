@@ -25,6 +25,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     return {
         "functions": {
             "set_config": {"param_types": ["str", "str", "str"], "return_type": "void"},
+            "probe_model": {"param_types": [], "return_type": "str"},
             "set_retry": {"param_types": ["int"], "return_type": "void"},
             "set_timeout": {"param_types": ["float"], "return_type": "void"},
             "set_general_prompt": {"param_types": ["str"], "return_type": "void"},

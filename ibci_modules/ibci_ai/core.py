@@ -47,6 +47,14 @@ class AIPlugin(ILLMProvider):
         self._capabilities: Optional[ExtensionCapabilities] = None
         self._mock_state: Dict[str, int] = {}
         self._mock_retry_counts: Dict[str, int] = {}
+        
+        # [NEW] 模型能力策略缓存
+        self._model_capabilities = {
+            "probed": False,          # 是否已经探测过
+            "is_reasoning": False,    # 是否是强制推理模型
+            "supports_system": True,  # 是否支持 System 角色
+            "extract_strategy": "standard" # 提取策略: standard, tag_based, keyword_based
+        }
 
     def reset_mock_state(self) -> None:
         """重置Mock状态，用于测试隔离"""
@@ -97,7 +105,86 @@ class AIPlugin(ILLMProvider):
         if "auto_intent_injection" in kwargs:
             self._config["auto_intent_injection"] = bool(kwargs["auto_intent_injection"])
 
+        # 如果切换了模型，重置探测状态
+        self._model_capabilities["probed"] = False
         self._init_client()
+
+    def probe_model(self) -> str:
+        """
+        [IES 2.3] 模型能力探针 (Model Capability Probe)
+        通过发送特定的测试请求，动态检测模型是否属于"强制推理模型" (Reasoning/CoT Model)，
+        并在内部缓存探测结果以指导后续所有的工作流调用策略。
+        """
+        is_test_mode = (self._config["key"] == "MOCK_KEY" or self._config["url"] == "TESTONLY")
+        if is_test_mode:
+            self._model_capabilities.update({
+                "probed": True, "is_reasoning": False, "extract_strategy": "standard"
+            })
+            return "MOCK_PROBE_SUCCESS"
+
+        if not self._client:
+            self._init_client()
+
+        print(f"\n[AI Probe] 正在探测模型 {self._config['model']} 的响应特征...")
+        
+        # 探测 Prompt：要求极简回答，禁止思考
+        sys_prompt = "You are a direct assistant. Answer the following question with ONLY ONE WORD ('YES' or 'NO'). DO NOT output any reasoning, thinking process, or explanation."
+        user_prompt = "Is the sky blue?"
+        
+        try:
+            # 缩短超时，并且限制 max_tokens
+            completion = self._client.chat.completions.create(
+                model=self._config["model"],
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=50,
+                timeout=15.0
+            )
+            print("    -> [System] Called llm once (Probe).")
+            
+            raw_content = completion.choices[0].message.content
+            reasoning = getattr(completion.choices[0].message, "reasoning", None)
+            if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
+                reasoning = completion.choices[0].message.reasoning_content
+                
+            if raw_content is None:
+                raw_content = ""
+                
+            is_reasoning = False
+            # 判定条件：
+            # 1. 有专用的 reasoning 字段
+            # 2. content 里面包含了明显的 Thinking 标识
+            # 3. 不听指令，返回了长篇大论 (字数过多)
+            if reasoning:
+                is_reasoning = True
+                print("  => 探测到专用 reasoning 字段，判定为 [强制推理模型]。")
+            elif "Thinking Process:" in raw_content or "<think>" in raw_content:
+                is_reasoning = True
+                print("  => 探测到 Thinking 特征字符串，判定为 [强制推理模型]。")
+            elif len(raw_content.split()) > 10:
+                is_reasoning = True
+                print("  => 模型无视了 'ONLY ONE WORD' 指令，输出啰嗦内容，保守判定为 [强制推理模型]。")
+            else:
+                print("  => 模型遵循了极简指令，判定为 [标准指令模型]。")
+                
+            self._model_capabilities.update({
+                "probed": True,
+                "is_reasoning": is_reasoning,
+                "extract_strategy": "tag_based" if is_reasoning else "standard"
+            })
+            
+            return "REASONING_MODEL" if is_reasoning else "STANDARD_MODEL"
+            
+        except Exception as e:
+            print(f"  => [!警告] 探测失败 ({e})，将使用安全回退策略 (当作推理模型处理)。")
+            self._model_capabilities.update({
+                "probed": True,
+                "is_reasoning": True,
+                "extract_strategy": "tag_based"
+            })
+            return "PROBE_FAILED_FALLBACK_REASONING"
 
     def set_retry(self, count: int) -> None:
         self._config["retry"] = count
@@ -209,24 +296,86 @@ class AIPlugin(ILLMProvider):
             if not self._client or self._client == "MOCK_CLIENT":
                 raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
             
-            # [IES 2.2 Strict Mode] 决策场景下，限制 max_tokens 以减少噪音
+            # [IES 2.2 Strict Mode] 决策场景下限制 max_tokens
             is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
             
+            # 如果没有主动探测过，可以在这里触发一次懒加载探测，或者直接使用默认策略
+            if not self._model_capabilities["probed"]:
+                # 为避免隐式延迟，这里默认回退到保守的推理策略，
+                # 但推荐用户在脚本中显式调用 ai.probe_model()
+                is_reasoning_model = True
+            else:
+                is_reasoning_model = self._model_capabilities["is_reasoning"]
+            
+            # 动态调整策略：
+            if is_reasoning_model:
+                # 强制推理模型：放宽 Token 限制，并要求用 ANSWER 标签包裹最终结果
+                decision_max_tokens = 4096
+                enhanced_sys_prompt = sys_prompt + "\nIMPORTANT: You are a reasoning model. You MUST output your final, conclusive, and brief answer at the very end of your response, starting with 'ANSWER:'."
+            else:
+                # 标准指令模型：严格限制 Token 以防噪音，直接使用原 Prompt
+                decision_max_tokens = 10
+                enhanced_sys_prompt = sys_prompt
+
             try:
                 completion = self._client.chat.completions.create(
                     model=self._config["model"],
                     messages=[
-                        {"role": "system", "content": sys_prompt},
+                        {"role": "system", "content": enhanced_sys_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=10 if is_decision else 1024
+                    max_tokens=decision_max_tokens if is_decision else 4096
                 )
+                print("    -> [System] Called llm once.")
                 
                 if not completion or not hasattr(completion, 'choices') or not completion.choices:
                     raise RuntimeError(f"LLM 返回异常响应: {completion}")
 
-                res = completion.choices[0].message.content.strip()
-                self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "raw_response": res, "scene": scene}
+                raw_content = completion.choices[0].message.content
+                
+                # 兼容性处理：尝试提取 Reasoning 字段
+                reasoning = getattr(completion.choices[0].message, "reasoning", None)
+                if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
+                    reasoning = completion.choices[0].message.reasoning_content
+                
+                # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
+                if (raw_content is None or raw_content.strip() == "") and reasoning:
+                    raw_content = reasoning
+                
+                if raw_content is None:
+                    res = ""
+                else:
+                    raw_content = raw_content.strip()
+                    # === 核心改造：后处理提取器 ===
+                    # 1. 尝试匹配 ANSWER: 前缀
+                    if "ANSWER:" in raw_content:
+                        res = raw_content.split("ANSWER:")[-1].strip()
+                    elif "Answer:" in raw_content:
+                        res = raw_content.split("Answer:")[-1].strip()
+                    else:
+                        # 2. 回退处理：如果模型没写前缀，但是写了 Thinking Process 或思考过程
+                        # 我们假定思考过程结束后的最后一段文字就是答案
+                        
+                        # 剔除可能存在的 Thinking Process 块
+                        if "Thinking Process:" in raw_content:
+                            parts = raw_content.split("Thinking Process:")
+                            raw_content = parts[-1]
+                        
+                        # 按行分割，过滤掉看起来像推理步骤的行
+                        lines = [line.strip() for line in raw_content.split('\n') if line.strip()]
+                        valid_lines = []
+                        import re
+                        for line in lines:
+                            if not re.match(r'^[\d\-\*\s]+(Analyze|Consider|Think|Hypothesis|Wait|Wait,|Let\'s|Actually|Alternative|Decision|Correction|Hypothesis \d+|So|Since)', line, re.IGNORECASE):
+                                valid_lines.append(line)
+                        
+                        if valid_lines:
+                            # 取最后一行作为结论
+                            res = valid_lines[-1]
+                        else:
+                            res = raw_content
+
+                self._last_call_info = {"sys_prompt": enhanced_sys_prompt, "user_prompt": user_prompt, "response": res, "raw_response": raw_content, "scene": scene}
                 return res
             except Exception as e:
                 raise RuntimeError(f"LLM 调用失败: {str(e)}")
