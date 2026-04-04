@@ -40,6 +40,7 @@ def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
 
 def main():
     parser = argparse.ArgumentParser(description="IBC-Inter CLI")
+    parser.add_argument('--max-inst', type=int, default=100000000, help='Max instructions (default: 100000000)')
     subparsers = parser.add_subparsers(dest="command")
     
     # Run command
@@ -50,6 +51,7 @@ def main():
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
     run_parser.add_argument("--core-debug", help="Core debugger config (JSON string or file path)", default=None)
+    run_parser.add_argument('--max-inst', type=int, default=100000000, help='Max instructions (default: 100000000)')
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
