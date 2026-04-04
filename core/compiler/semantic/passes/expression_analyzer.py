@@ -9,7 +9,7 @@ from core.kernel.types.descriptors import TypeDescriptor
 
 class ExpressionAnalyzer:
     """
-    [IES 2.1] 表达式分析器。
+     表达式分析器。
     负责所有表达式节点的语义分析和类型推导。
     """
     def __init__(

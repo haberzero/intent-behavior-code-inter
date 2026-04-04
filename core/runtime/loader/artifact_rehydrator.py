@@ -9,7 +9,7 @@ from core.kernel.types.descriptors import (
     LIST_DESCRIPTOR, DICT_DESCRIPTOR
 )
 
-# [IES 2.0] 统一内置原始类型列表，确保水化阶段一致性
+# 统一内置原始类型列表，确保水化阶段一致性
 BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "Any", "var", "callable", "list", "dict", "behavior"]
 
 class ArtifactRehydrator:
@@ -51,7 +51,7 @@ class ArtifactRehydrator:
         classes = []
         for uid in self.type_pool:
             desc = self._fill_descriptor(uid)
-            # [IES 2.1 Refactor] 使用 is_class() 代替名称比对
+            # 使用 is_class() 代替名称比对
             if desc and desc.is_class():
                 classes.append(desc)
         
@@ -76,14 +76,14 @@ class ArtifactRehydrator:
             return self.memo[uid]
             
         data = self.type_pool[uid]
-        # [IES 2.1 Refactor] 使用 TypeDescriptor 作为通用回退标识
+        # 使用 TypeDescriptor 作为通用回退标识
         kind = data.get("kind", "TypeDescriptor")
         name = data.get("name", "")
         is_user_defined = data.get("is_user_defined", False)
         
         factory = self.registry.factory
         
-        # [IES 2.1 Refactor] 映射驱动的 Shell 创建，消除 if/elif kind 硬编码
+        # 映射驱动的 Shell 创建，消除 if/elif kind 硬编码
         shell_creators = {
             "ListMetadata": lambda: ListMetadata(name="list"),
             "DictMetadata": lambda: DictMetadata(name="dict"),

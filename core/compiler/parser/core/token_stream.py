@@ -63,17 +63,17 @@ class TokenStream:
         return False
 
     def get_checkpoint(self) -> int:
-        """[IES 2.1] 获取当前流的检查点，用于推测性解析的回滚"""
+        """ 获取当前流的检查点，用于推测性解析的回滚"""
         return self.current
 
     def restore_checkpoint(self, checkpoint: int):
-        """[IES 2.1] 回滚到指定的检查点"""
+        """ 回滚到指定的检查点"""
         self.current = checkpoint
 
     @contextmanager
     def speculate(self):
         """
-        [IES 2.1] 开启推测性解析上下文。
+         开启推测性解析上下文。
         在此期间产生的所有错误都会被收集到一个临时的 IssueTracker 中。
         如果解析成功（未抛出 ParseControlFlowError），则合并诊断信息。
         如果解析失败，则静默丢弃，防止误报。

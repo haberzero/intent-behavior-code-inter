@@ -30,7 +30,7 @@ class TypeResolver:
         visitor = getattr(self, method_name, self.generic_visit)
         res_type = visitor(node)
         
-        # [NEW Phase 5] 记录类型推导侧表
+        # 记录类型推导侧表
         if isinstance(node, ast.IbExpr) and res_type:
             self.analyzer.node_to_type[node] = res_type
         elif isinstance(node, ast.IbClassDef) and hasattr(self, "current_class_descriptor") and self.current_class_descriptor:
@@ -64,14 +64,14 @@ class TypeResolver:
         parent_desc = None
         if node.parent:
             parent_sym = self.symbol_table.resolve(node.parent)
-            # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
+            # 使用 is_class() 代替 isinstance 检查
             if parent_sym and parent_sym.descriptor and parent_sym.descriptor.is_class():
                 parent_desc = parent_sym.descriptor
             else:
                 self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
         # 2. 创建 ClassMetadata 并绑定到符号
-        # [IES 2.1 Refactor] 使用工厂创建以确保驻留
+        # 使用工厂创建以确保驻留
         descriptor = self.analyzer.registry.factory.create_class(
             name=node.name, 
             parent=node.parent
@@ -79,7 +79,7 @@ class TypeResolver:
         if parent_desc:
              descriptor.parent_name = parent_desc.name
         
-        # [NEW Phase 5] 注册到元数据注册表，以便后续继承解析能找到它
+        # 注册到元数据注册表，以便后续继承解析能找到它
         if self.analyzer.registry and hasattr(self.analyzer.registry, "_metadata_registry"):
             self.analyzer.registry._metadata_registry.register(descriptor)
              
@@ -104,7 +104,7 @@ class TypeResolver:
         # 解析参数类型
         param_types = []
         # if self.current_class_descriptor:
-        #     param_types.append(self.current_class_descriptor) # self param handling logic moved to BoundMethodMetadata
+        # param_types.append(self.current_class_descriptor) # self param handling logic moved to BoundMethodMetadata
             
         for arg_node in node.args:
             arg_type = ANY_DESCRIPTOR
@@ -112,7 +112,7 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # [IES 2.1 Refactor] 使用工厂创建 FunctionMetadata 以确保驻留
+        # 使用工厂创建 FunctionMetadata 以确保驻留
         func_desc = self.analyzer.registry.factory.create_function(
             params=param_types,
             ret=ret_type
@@ -141,7 +141,7 @@ class TypeResolver:
             
         param_types = []
         # if self.current_class_descriptor:
-        #     param_types.append(self.current_class_descriptor)
+        # param_types.append(self.current_class_descriptor)
             
         for arg_node in node.args:
             arg_type = ANY_DESCRIPTOR
@@ -149,7 +149,7 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # [IES 2.1 Refactor] 使用工厂创建 FunctionMetadata 以确保驻留
+        # 使用工厂创建 FunctionMetadata 以确保驻留
         func_desc = self.analyzer.registry.factory.create_function(
             params=param_types,
             ret=ret_type
@@ -179,7 +179,7 @@ class TypeResolver:
                     name = target.target.id
                     # 注入到描述符
                     if self.current_class_descriptor:
-                        # [Fix] 统一使用 Symbol 包装成员，以满足语义分析器的接口需求
+                        # 统一使用 Symbol 包装成员，以满足语义分析器的接口需求
                         self.current_class_descriptor.members[name] = symbols.VariableSymbol(
                             name=name,
                             kind=symbols.SymbolKind.VARIABLE,

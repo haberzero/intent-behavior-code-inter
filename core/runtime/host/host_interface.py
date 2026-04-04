@@ -23,7 +23,7 @@ class HostModuleRegistry:
 
 class HostInterface:
     """
-    [IES 2.2] 统一的宿主环境接口注册器。
+     统一的宿主环境接口注册器。
 
     协调元数据注册和运行时实现注册。
     所有 HostInterface 实例必须绑定到带有 AxiomRegistry 的 MetadataRegistry。
@@ -47,7 +47,7 @@ class HostInterface:
 
     def register_module(self, name: str, implementation: Any, metadata: Optional['ModuleMetadata'] = None, discovery_name: Optional[str] = None):
         """
-        [IES 2.2] 同时注册元数据 and 实现。
+         同时注册元数据 and 实现。
         
         discovery_name: 物理名称 (如目录名)。
         """
@@ -64,11 +64,11 @@ class HostInterface:
             self.metadata.register(ModuleMetadata(name=name))
 
     def get_module_by_discovery_name(self, discovery_name: str) -> Optional[str]:
-        """[IES 2.2] 根据物理发现名称查找已注册的模块名称"""
+        """ 根据物理发现名称查找已注册的模块名称"""
         return self._discovery_map.get(discovery_name)
 
     def get_discovery_name_by_module(self, module_name: str) -> Optional[str]:
-        """[IES 2.2] 根据逻辑模块名查找物理发现名称"""
+        """ 根据逻辑模块名查找物理发现名称"""
         return self._reverse_discovery_map.get(module_name)
 
     def register_global_function(self, name: str, implementation: Any, metadata: 'FunctionMetadata'):

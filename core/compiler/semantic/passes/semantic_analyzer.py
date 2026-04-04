@@ -26,7 +26,7 @@ class SemanticAnalyzer:
     语义分析器：执行静态分析和类型检查。
     贯彻"一切皆对象"思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
 
-    [IES 2.1 Refactor] 使用组件组合模式：
+     使用组件组合模式：
     - SideTableManager: 管理语义分析侧表
     - ScopeManager: 管理作用域和场景栈
     """
@@ -112,7 +112,7 @@ class SemanticAnalyzer:
             self.visit(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
-            # [NEW Phase 5] 自检校验：确保侧表完整性
+            # 自检校验：确保侧表完整性
             # 仅在没有收集到错误的情况下执行完整性检查，因为解析失败的节点本身就无法绑定
             if not self.issue_tracker.has_errors():
                 self._validate_integrity(node)
@@ -137,7 +137,7 @@ class SemanticAnalyzer:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
 
     def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
-        # [NEW Phase 3] 标记作用域定义节点 (元数据驱动)
+        # 标记作用域定义节点 (元数据驱动)
         if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef, ast.IbIntentStmt)):
             setattr(node, "_is_scope", True)
 
@@ -257,7 +257,7 @@ class SemanticAnalyzer:
                     self.side_table.bind_symbol(node, existing)
                     return existing
             
-            # [NEW] 检查是否由 Scheduler 注入的特殊符号（如模块）
+            # 检查是否由 Scheduler 注入的特殊符号（如模块）
             # 这些符号通常在全局表中，不应被随意遮蔽，除非是局部变量
             if name not in self.symbol_table.symbols:
                 existing_global = self.symbol_table.resolve(name)
@@ -272,7 +272,7 @@ class SemanticAnalyzer:
             if self.current_class:
                 self.current_class.members[name] = sym
 
-            # [NEW Phase 5] 记录侧表映射
+            # 记录侧表映射
             self.side_table.bind_symbol(node, sym)
             return sym
         except ValueError as e:
@@ -350,7 +350,7 @@ class SemanticAnalyzer:
             return self._void_desc
             
         self.side_table.bind_symbol(node, sym)
-        # [NEW] 决议真实的函数签名并更新元数据
+        # 决议真实的函数签名并更新元数据
         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
         if self.current_class:
             param_types.insert(0, self.current_class)
@@ -359,11 +359,11 @@ class SemanticAnalyzer:
         # [P3 FIX] LLM 函数默认返回 str 而非 void
         # 注意：这里的 "str" 语义是"文本接收"（LLM 生成的内容），而非纯字符串类型
         # [Future Evolution] 未来演进方向：
-        #   1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
-        #   2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
-        #   3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
+        # 1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
+        # 2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
+        # 3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
         
-        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = sym.descriptor.get_call_trait()
         writable = call_trait.get_writable_trait() if call_trait else None
         
@@ -376,7 +376,7 @@ class SemanticAnalyzer:
         local_scope = SymbolTable(parent=old_table, name=node.name)
         self.symbol_table = local_scope
         
-        # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
+        # 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
         if sym.is_function:
             sym.owned_scope = local_scope
         
@@ -489,9 +489,9 @@ class SemanticAnalyzer:
                     
                     # [P2 FIX] 行为描述行 Lambda 化判断 + 即时上下文处理
                     # [Future Evolution] 未来将演进为 ReceiveMode 枚举：
-                    #   - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
-                    #   - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
-                    #   - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
+                    # - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
+                    # - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
+                    # - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
                     # 相关演进：ParserCapability.get_llm_prompt_fragment() 用于注入系统提示词
                     target_desc = sym.descriptor
                     is_explicit_callable = False
@@ -574,7 +574,7 @@ class SemanticAnalyzer:
     def visit_IbFor(self, node: ast.IbFor):
         # 1. 迭代头部属于 LOOP 场景
         self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # [NEW] 记录控制流节点本身的场景
+        # 记录控制流节点本身的场景
         self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             iter_type = self.visit(node.iter)
@@ -591,7 +591,7 @@ class SemanticAnalyzer:
             else:
                 # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
                 # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
-                # [NEW] 如果是 behavior 类型，我们认为它“潜在可迭代”
+                # 如果是 behavior 类型，我们认为它“潜在可迭代”
                 if iter_type.is_behavior():
                     element_type = self._any_desc 
                 else:
@@ -697,7 +697,7 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                # [IES 2.2 Fix] 绑定到 alias 节点，以便解释器正确获取 UID
+                # 绑定到 alias 节点，以便解释器正确获取 UID
                 self.side_table.bind_symbol(alias, sym)
             else:
                 self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
@@ -717,7 +717,7 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                # [IES 2.2 Fix] 绑定到 alias 节点
+                # 绑定到 alias 节点
                 self.side_table.bind_symbol(alias, sym)
             else:
                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
@@ -848,7 +848,7 @@ class SemanticAnalyzer:
     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> TypeDescriptor:
         """类型强转语义分析"""
         self.visit(node.value)
-        # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
+        # 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
         target_type = self._resolve_type(node.type_annotation)
         if target_type:
             self.side_table.bind_type(node, target_type)
@@ -886,7 +886,7 @@ class SemanticAnalyzer:
 
     def visit_IbConstant(self, node: ast.IbConstant) -> TypeDescriptor:
         val = node.value
-        # [IES 2.1 Refactor] 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
+        # 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
         desc = self.registry.resolve_from_value(val)
         if desc:
             return desc
@@ -923,14 +923,14 @@ class SemanticAnalyzer:
             if member_sym.is_function and not member_sym.metadata.get("is_static"):
                 # [IES 2.1 Axiom] 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
                 if not base_type.is_module():
-                    # [IES 2.1 Refactor] 使用工厂创建以确保驻留和能力注入
+                    # 使用工厂创建以确保驻留和能力注入
                     return self.registry.factory.create_bound_method(base_type, member_sym.descriptor)
             
             return member_sym.descriptor
             
         # 2. [Dynamic Resolution] 如果是动态类型（Any/var），允许访问任意属性并返回 Any
         if base_type.is_dynamic():
-            # [IES 2.0] 动态代理：创建一个虚拟符号记录在侧表中
+            # 动态代理：创建一个虚拟符号记录在侧表中
             virtual_sym = symbols.VariableSymbol(
                 name=node.attr, 
                 kind=symbols.SymbolKind.VARIABLE, 
@@ -975,7 +975,7 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
         self.in_behavior_expr = True
-        # [IES 2.2 Fix] 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
+        # 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
         self.side_table.bind_scene(node, self.scope_manager.current_scene())
         
         try:

@@ -31,7 +31,7 @@ class StatementComponent(BaseComponent):
         stmt = self._parse_statement_core()
         
         # 统一处理 llm except 块
-        # [IES 2.1 Refactor] 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
+        # 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
         if stmt.supports_llm_fallback:
             llm_fallback = self._parse_llm_fallback()
             if llm_fallback:
@@ -161,7 +161,7 @@ class StatementComponent(BaseComponent):
             elif self.stream.match(TokenType.MINUS):
                 mode = IntentMode.REMOVE
             
-            # [IES 2.1 Refactor] 支持模式别名，消除硬编码字符串
+            # 支持模式别名，消除硬编码字符串
             elif self.stream.check(TokenType.IDENTIFIER):
                 peek_val = self.stream.peek().value.lower()
                 if peek_val in ("append", "add"):
@@ -180,7 +180,7 @@ class StatementComponent(BaseComponent):
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
             if self.stream.match(TokenType.RAW_TEXT):
                 val = self.stream.previous().value
-                # [IES 2.1] 解析意图标签 #tag
+                # 解析意图标签 #tag
                 # TODO 应该从lexer开始就提供支持。现在是临时方案
                 if tag is None and not segments and val.startswith("#"):
                     # 尝试提取标签
@@ -201,7 +201,7 @@ class StatementComponent(BaseComponent):
                 segments.append(val)
             elif self.stream.check(TokenType.VAR_REF):
                 # Variable reference $var or $(expr)
-                # [Fix] Use check instead of match, so parse_expression can consume the token
+                # Use check instead of match, so parse_expression can consume the token
                 segments.append(self.expression.parse_expression())
             else:
                 # [IES 2.1 Speculative Parsing]
@@ -272,7 +272,7 @@ class StatementComponent(BaseComponent):
     def for_statement(self) -> ast.IbStmt:
         start_token = self.stream.previous()
         
-        # [IES 2.2 Fix] 支持带类型标注的循环目标 (e.g. for str name in names)
+        # 支持带类型标注的循环目标 (e.g. for str name in names)
         # 或者元组声明 (e.g. for (int x, int y) in coords)
         from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
         
@@ -343,7 +343,7 @@ class StatementComponent(BaseComponent):
             return self._loc(ast.IbAssign(targets=[expr], value=value), expr)
         
         # 3. AugAssign (a += 1)
-        # [IES 2.1 Refactor] 使用 COMPOUND_OP_MAP 映射复合赋值运算符
+        # 使用 COMPOUND_OP_MAP 映射复合赋值运算符
         for token_type, op_str in COMPOUND_OP_MAP.items():
             if self.stream.match(token_type):
                 value = self.expression.parse_expression()

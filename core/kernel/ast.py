@@ -61,13 +61,13 @@ class IbASTNode:
 @dataclass(kw_only=True, eq=False)
 class IbStmt(IbASTNode):
     """语句节点基类"""
-    # [IES 2.1] 统一容错机制：所有语句均可附加 LLM 异常处理块
+    # 统一容错机制：所有语句均可附加 LLM 异常处理块
     llm_fallback: List['IbStmt'] = field(default_factory=list)
 
     @property
     def supports_llm_fallback(self) -> bool:
         """
-        [IES 2.1] 指示该语句是否支持附加 llm except 容错块。
+         指示该语句是否支持附加 llm except 容错块。
         默认支持，极简控制流语句（如 pass/break）需显式禁用。
         """
         return True
@@ -82,7 +82,7 @@ class IbExpr(IbASTNode):
 @dataclass(kw_only=True, eq=False)
 class IbIntentInfo(IbASTNode):
     """意图元数据信息"""
-    mode: IntentMode # [IES 2.1] 切换为枚举
+    mode: IntentMode # 切换为枚举
     tag: Optional[str] = None # Optional tag for precise removal/masking
     content: str # Raw content or constant string
     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."

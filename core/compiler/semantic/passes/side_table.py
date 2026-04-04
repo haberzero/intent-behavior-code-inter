@@ -7,7 +7,7 @@ from core.kernel.symbols import Symbol
 
 class SideTableManager:
     """
-    [IES 2.1] 侧表管理器。
+     侧表管理器。
     统一管理语义分析过程中产生的元数据侧表。
     """
     def __init__(self):

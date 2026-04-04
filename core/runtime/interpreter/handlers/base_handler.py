@@ -99,7 +99,7 @@ class BaseHandler:
         
         try:
             # 2. 调用执行器 (此时环境已就绪)
-            # [IES 2.0] IbBehavior 使用 .node 存储 node_uid
+            # IbBehavior 使用 .node 存储 node_uid
             node_uid = getattr(behavior, 'node', None) or getattr(behavior, 'node_uid', None)
             return self.service_context.llm_executor.execute_behavior_expression(
                 node_uid, 

@@ -1,5 +1,5 @@
 """
-[IES 2.2] 自动插件发现服务
+ 自动插件发现服务
 
 实现零侵入自动嗅探机制，插件不再需要 import 任何核心代码。
 
@@ -47,7 +47,7 @@ class PluginSpec:
 
 class AutoDiscoveryService:
     """
-    [IES 2.2] 自动插件发现服务
+     自动插件发现服务
 
     严格遵循 IES 2.2 协议，仅支持：
     - __ibcext_metadata__() 方法

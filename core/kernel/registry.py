@@ -200,7 +200,7 @@ class KernelRegistry:
         if name in self._classes:
              raise ValueError(f"Registry: Class '{name}' is already registered. Duplicate registration is forbidden in strict mode.")
 
-        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
+        # 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
             descriptor = self._metadata_registry.register(descriptor)
             
@@ -208,7 +208,7 @@ class KernelRegistry:
         ib_class.descriptor = descriptor
         self._classes[name] = ib_class
         
-        # [IES 2.0] 绑定注册表引用
+        # 绑定注册表引用
         if hasattr(ib_class, 'registry'):
             ib_class.registry = self
 
@@ -218,7 +218,7 @@ class KernelRegistry:
         if descriptor.name != name:
              raise ValueError(f"Registry: Function descriptor name '{descriptor.name}' does not match registered name '{name}'.")
              
-        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
+        # 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
             descriptor = self._metadata_registry.register(descriptor)
 
@@ -265,7 +265,7 @@ class KernelRegistry:
         return value
 
     def is_truthy(self, obj: Any) -> bool:
-        """[IES 2.1] 判定对象的真值 (Truthy)。"""
+        """ 判定对象的真值 (Truthy)。"""
         if obj is None or obj is self._none_instance:
             return False
         if hasattr(obj, 'to_bool'):

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 @dataclass
 class IsolationPolicy:
     """
-    [IES 2.1] 隔离级别策略。
+     隔离级别策略。
 
     | Level       | Registry | Plugins | Intents | Variables | CallStack |
     |-------------|----------|---------|---------|-----------|-----------|

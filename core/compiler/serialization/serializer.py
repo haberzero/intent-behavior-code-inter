@@ -27,7 +27,7 @@ class FlatSerializer(BaseFlatSerializer):
             res = artifact.modules[name]
             modules_data[name] = self.serialize_result(res)
             
-        # [IES 2.1 Fix] 确保全局符号也被正确池化，而非裸字典导出
+        # 确保全局符号也被正确池化，而非裸字典导出
         serialized_globals = {}
         if artifact.global_symbols:
             for name, sym in artifact.global_symbols.items():
@@ -46,7 +46,7 @@ class FlatSerializer(BaseFlatSerializer):
                 "symbols": self.symbol_pool,
                 "scopes": self.scope_pool,
                 "types": self.type_pool,
-                "assets": self.external_assets # [IES 2.2]
+                "assets": self.external_assets
             }
         }
 
@@ -111,7 +111,7 @@ class FlatSerializer(BaseFlatSerializer):
                 "symbols": self.symbol_pool,
                 "scopes": self.scope_pool,
                 "types": self.type_pool,
-                "assets": self.external_assets # [IES 2.2]
+                "assets": self.external_assets
             }
         }
 
@@ -197,10 +197,10 @@ class FlatSerializer(BaseFlatSerializer):
             "name": t.name,
             "module_path": t.module_path,
             "is_nullable": t.is_nullable,
-            "is_user_defined": t.is_user_defined, # [NEW]
+            "is_user_defined": t.is_user_defined,
         }
-        
-        # [IES 2.1 Refactor] 多态收集类型引用，消除 isinstance 硬编码检查
+
+        # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()
         for key, val in refs.items():
             if val is None: continue
@@ -209,13 +209,13 @@ class FlatSerializer(BaseFlatSerializer):
             else:
                 type_data[f"{key}_uid"] = self._collect_type(val)
         
-        # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
+        # 使用 is_class() 代替 isinstance 检查
         if t.is_class():
             # 这里的字段是字符串，直接存储
             type_data["parent_name"] = getattr(t, "parent_name", None)
             type_data["parent_module"] = getattr(t, "parent_module", None)
             
-        # [NEW] 收集成员表 (实现元数据与符号系统的闭环)
+        # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
         if t.members:
             type_data["members_uids"] = {

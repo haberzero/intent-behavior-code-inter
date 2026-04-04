@@ -69,7 +69,7 @@ class ExprHandler(BaseHandler):
         operand = self.visit(node_data.get("operand"))
         op_symbol = node_data.get("op")
         
-        # [IES 2.0] 使用全局归一化映射，消除 Handler 内部硬编码
+        # 使用全局归一化映射，消除 Handler 内部硬编码
         op = AST_OP_MAP.get(op_symbol, op_symbol)
         method = UNARY_OP_MAPPING.get(op)
         
@@ -82,7 +82,7 @@ class ExprHandler(BaseHandler):
         ops = node_data.get("ops", [])
         comparators = node_data.get("comparators", [])
         
-        # [IES 2.0] 必须处理链式比较，例如 a < b < c 
+        # 必须处理链式比较，例如 a < b < c 
         # Python 语义：(a < b) and (b < c)，且每个操作数只计算一次
         
         current_left = left
@@ -112,7 +112,7 @@ class ExprHandler(BaseHandler):
         args = [self.visit(a) for a in node_data.get("args", [])]
         
         try:
-            # [IES 2.0 Architectural Update] 识别被动行为对象并分发给执行器
+            # 识别被动行为对象并分发给执行器
             if isinstance(func, IIbBehavior):
                 return self._execute_behavior(func)
 
@@ -156,7 +156,7 @@ class ExprHandler(BaseHandler):
         return self.registry.box(data)
 
     def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """[IES 2.0 Architectural Update] 行为描述行不再立即执行，而是包装为被动行为对象。"""
+        """ 行为描述行不再立即执行，而是包装为被动行为对象。"""
         # 1. 检查是否显式标记为延迟
         is_deferred = self.get_side_table("node_is_deferred", node_uid)
         
@@ -178,7 +178,7 @@ class ExprHandler(BaseHandler):
             captured_intents = self.runtime_context.intent_stack
             
             # 如果是延迟执行，行为对象需要持有自己的 call_intent
-            # [FIX] 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
+            # 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
             # 暂时保持现状，等待下一步重构 behavior 对象。
             return self.service_context.object_factory.create_behavior(
                 node_uid, 
@@ -193,7 +193,7 @@ class ExprHandler(BaseHandler):
         """类型强转运行时实现"""
         value = self.visit(node_data.get("value"))
         
-        # [IES 2.1 Refactor] 强制从 side_tables 获取决议后的目标描述符
+        # 强制从 side_tables 获取决议后的目标描述符
         target_descriptor = self.get_side_table("node_to_type", node_uid)
         if not target_descriptor:
             # [Active Defense] 严禁回退到名称查找，确保 IES 2.1 契约完整性

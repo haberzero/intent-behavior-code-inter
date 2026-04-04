@@ -110,7 +110,7 @@ class ExpressionComponent(BaseComponent):
 
     def self_expr(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
+        # 使用语法常量，消除硬编码字符串
         return self._loc(ast.IbName(id=ID_SELF, ctx='Load'), token)
 
     def number(self) -> ast.IbExpr:
@@ -126,13 +126,13 @@ class ExpressionComponent(BaseComponent):
 
     def boolean(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 基于 Token 类型判定，消除字符串硬编码
+        # 基于 Token 类型判定，消除字符串硬编码
         val = (token.type == TokenType.TRUE)
         return self._loc(ast.IbConstant(value=val), token)
 
     def none_expr(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用标准 NONE Token，消除 Python None 直接引用
+        # 使用标准 NONE Token，消除 Python None 直接引用
         return self._loc(ast.IbConstant(value=None), token)
 
     def grouping(self) -> ast.IbExpr:
@@ -193,14 +193,14 @@ class ExpressionComponent(BaseComponent):
 
     def unary(self) -> ast.IbExpr:
         op_token = self.stream.previous()
-        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+        # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
         op = OP_MAP.get(op_token.type, op_token.type.name)
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
 
     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
-        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+        # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
         op_str = OP_MAP.get(op_token.type, op_token.type.name)
         
         rule = self.get_rule(op_token.type)
@@ -218,7 +218,7 @@ class ExpressionComponent(BaseComponent):
 
     def logical(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
+        # 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
         op = OP_MAP.get(op_token.type, op_token.type.name)
         rule = self.get_rule(op_token.type)
         right = self.parse_precedence(rule.precedence)

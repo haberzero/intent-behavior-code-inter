@@ -5,7 +5,7 @@ from typing import Any, Optional, Union
 
 class FuzzyJsonParser:
     """
-    [IES 2.2] 健壮的 JSON 解析器，专门用于从 LLM 杂乱的输出中提取结构化数据。
+     健壮的 JSON 解析器，专门用于从 LLM 杂乱的输出中提取结构化数据。
     支持处理：
     1. Markdown 代码块包裹 (```json ... ```)
     2. 前后缀干扰文本

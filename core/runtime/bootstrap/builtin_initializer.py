@@ -18,7 +18,7 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
     ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
 
 def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
-    """[IES 2.1] 基于公理声明自动化绑定二元运算符"""
+    """ 基于公理声明自动化绑定二元运算符"""
     axiom = ib_cls.descriptor._axiom
     if not axiom: return
     
@@ -49,7 +49,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     if registry.is_initialized:
         return None # 已初始化
         
-    # [IES 2.0] 确保处于 STAGE_1_BOOTSTRAP 状态
+    # 确保处于 STAGE_1_BOOTSTRAP 状态
     registry.verify_level(RegistrationState.STAGE_1_BOOTSTRAP.value)
     
     # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
@@ -68,7 +68,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     registry.register_metadata_registry(metadata_registry, token)
 
     # 3. 创建核心内置类 (Axiom-Driven Automation)
-    # [NEW] 遍历 AxiomRegistry 自动初始化所有注册的原子类型
+    # 遍历 AxiomRegistry 自动初始化所有注册的原子类型
     
     # 基础类型映射表 (用于绑定具体的 IbClass 实现)
     # [IES 2.1 Regularization] 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
@@ -118,7 +118,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
                         # 绑定为原生方法
                         _reg_native(ib_cls, method_name, py_method, unbox=False)
                 
-                # [IES 2.1] 自动化运算符绑定
+                # 自动化运算符绑定
                 _auto_bind_operators(ib_cls, py_impl_cls)
 
     # 获取引用以便后续绑定 (保持兼容性)
@@ -162,7 +162,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
     
-    # [NEW] int(x) 构造函数/转换逻辑
+    # int(x) 构造函数/转换逻辑
     def _int_call(self, *args):
         if not args: return self.registry.box(0)
         return args[0].receive('cast_to', [self])
@@ -171,7 +171,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # Float
     _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
 
-    # [NEW] float(x) 构造函数/转换逻辑
+    # float(x) 构造函数/转换逻辑
     def _float_call(self, *args):
         if not args: return self.registry.box(0.0)
         return args[0].receive('cast_to', [self])
@@ -180,7 +180,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
     
-    # [NEW] str(x) 构造函数/转换逻辑
+    # str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
         if not args: return self.registry.box("")
         return args[0].receive('__to_prompt__', [])

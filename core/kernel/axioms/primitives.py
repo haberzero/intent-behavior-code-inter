@@ -200,7 +200,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         if val in ("false", "0", "no", "off"): return False
         
         # 2. 使用正则边界匹配 (防止 "not true" 误匹配)
-        # [IES 2.2 Refactor] 同步 llm_executor 的健壮解析逻辑
+        # 同步 llm_executor 的健壮解析逻辑
         true_pattern = r'\b(true|yes|1|on)\b'
         false_pattern = r'\b(false|no|0|off)\b'
         
@@ -226,7 +226,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
     def name(self) -> str: return "str"
     
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # [IES 2.1 Refactor] 使用公理名称判定替代 identity 判定
+        # 使用公理名称判定替代 identity 判定
         if other.get_base_axiom_name() == "int":
             return "Use .cast_to(int) or int(s) to convert string to integer."
         return None
@@ -434,7 +434,7 @@ class ExceptionAxiom(BaseAxiom, ConverterCapability):
         }
 
 class BoundMethodAxiom(BaseAxiom, CallCapability):
-    """[IES 2.1] bound_method 类型的行为公理"""
+    """ bound_method 类型的行为公理"""
     
     @property
     def name(self) -> str: return "bound_method"

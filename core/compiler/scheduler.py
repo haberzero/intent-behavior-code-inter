@@ -44,7 +44,7 @@ class Scheduler(ICompilerService):
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
-        self.registry = registry # [NEW] 注册表实例，用于类型同步
+        self.registry = registry # 注册表实例，用于类型同步
         
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}
@@ -56,7 +56,7 @@ class Scheduler(ICompilerService):
         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
         
-        # [NEW] 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
+        # 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
         self.plugin_type_cache: Dict[str, Any] = {}
         
         # Build Cache
@@ -295,7 +295,7 @@ class Scheduler(ICompilerService):
             # 3. Resolve and Enqueue Imports
             for imp in imports:
                 # Skip external modules - they don't have source files
-                # [IES 2.1 Refactor] 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
+                # 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
                 module_name = imp.module_name
                 if self.host_interface.metadata.resolve(module_name) is not None:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {module_name}")
@@ -373,7 +373,7 @@ class Scheduler(ICompilerService):
             # 3. Semantic Analysis
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             
-            # [IES 2.2 Fix] 在分析前预注册空的 ModuleMetadata 到注册表
+            # 在分析前预注册空的 ModuleMetadata 到注册表
             # 这样 LazyDescriptor 才能在 unwrap 时找到目标，即使当前模块还未分析完
             pre_mod_meta = ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
@@ -401,7 +401,7 @@ class Scheduler(ICompilerService):
                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
                     
-                    # [IES 2.2 Fix] 统一使用 LazyDescriptor 解决循环依赖问题
+                    # 统一使用 LazyDescriptor 解决循环依赖问题
                     # 无论该模块是否已编译，都先注入 Lazy 描述符，
                     # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
                     s_mod_type = LazyDescriptor(name=imp_mod_name)
@@ -413,7 +413,7 @@ class Scheduler(ICompilerService):
                     if imp.module_name in self.plugin_type_cache:
                         s_mod_type = self.plugin_type_cache[imp.module_name]
                     else:
-                        # [IES 2.1 Refactor] 直接从宿主接口的元数据注册表解析描述符
+                        # 直接从宿主接口的元数据注册表解析描述符
                         s_mod_type = self.host_interface.metadata.resolve(imp.module_name)
                         if s_mod_type:
                             # [UTS 2.0 Hydration] 确保从 Host 加载的元数据被正确水合到当前编译注册表
@@ -436,9 +436,9 @@ class Scheduler(ICompilerService):
                         root_name = parts[0]
                         # 构造嵌套模块结构
                         root_sym = analyzer.symbol_table.resolve(root_name)
-                        # [IES 2.1 Refactor] 使用 is_module() 代替 isinstance
+                        # 使用 is_module() 代替 isinstance
                         if not root_sym or not root_sym.descriptor or not root_sym.descriptor.is_module():
-                            # [IES 2.1 Refactor] 使用工厂创建
+                            # 使用工厂创建
                             root_mod_type = self.registry.factory.create_primitive("module")
                             root_mod_type.name = root_name
                             root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, descriptor=root_mod_type)
@@ -453,7 +453,7 @@ class Scheduler(ICompilerService):
                                 curr_mod.exported_scope.define(target_sym)
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
-                                # [IES 2.1 Refactor] 使用 is_module() 代替 isinstance
+                                # 使用 is_module() 代替 isinstance
                                 if not next_mod_sym or not next_mod_sym.descriptor or not next_mod_sym.descriptor.is_module():
                                     next_mod_type = self.registry.factory.create_primitive("module")
                                     next_mod_type.name = part_name
@@ -504,7 +504,7 @@ class Scheduler(ICompilerService):
                                     pass  # 跳过重复注入
                                 else:
                                     # 创建一个指向原符号的克隆/别名符号
-                                    # [Refactor] 使用 descriptor 参数，而不是 var_type/type_signature
+                                    # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
                                         new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
                                     elif target_sym.kind == SymbolKind.FUNCTION:
@@ -523,7 +523,7 @@ class Scheduler(ICompilerService):
             
             result = analyzer.analyze(ast_node)
             
-            # [IES 2.2 Fix] 语义分析完成后，更新注册表中的元数据成员
+            # 语义分析完成后，更新注册表中的元数据成员
             # 这确保了 LazyDescriptor 在 unwrap 时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:

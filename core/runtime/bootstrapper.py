@@ -47,7 +47,7 @@ class Bootstrapper:
         module_desc = factory.create_class("IbModule", is_nullable=True)
         intent_desc = factory.create_class("Intent", is_nullable=True)
         
-        # [IES 2.0] 内核类不属于用户定义类
+        # 内核类不属于用户定义类
         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc]:
             d.is_user_defined = False
 

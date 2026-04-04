@@ -76,7 +76,7 @@ class SymbolCollector:
     def _define(self, sym: Symbol, node: ast.IbASTNode):
         try:
             self.symbol_table.define(sym)
-            # [NEW Phase 5] 记录侧表映射
+            # 记录侧表映射
             if self.analyzer and hasattr(self.analyzer, "node_to_symbol"):
                 self.analyzer.node_to_symbol[node] = sym
             
@@ -203,7 +203,7 @@ class LocalSymbolCollector:
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
-            # [NEW Phase 5] 记录侧表映射
+            # 记录侧表映射
             if hasattr(self.analyzer, "node_to_symbol"):
                 self.analyzer.node_to_symbol[node] = sym
         except ValueError as e:

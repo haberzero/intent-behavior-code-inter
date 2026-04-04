@@ -45,7 +45,7 @@ class DeclarationComponent(BaseComponent):
 
         stmt = None
         if role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
-            # [IES 2.0] 统一交由 StatementComponent 处理意图标记与语句
+            # 统一交由 StatementComponent 处理意图标记与语句
             stmt = self.statement.parse_statement()
         elif role == SyntaxRole.FUNCTION_DEFINITION:
             self.stream.advance() # func
@@ -106,7 +106,7 @@ class DeclarationComponent(BaseComponent):
             # 'var' keyword already consumed
             type_token = self.stream.previous()
             
-            # [IES 2.1 Refactor] 使用语法常量，消除硬编码
+            # 使用语法常量，消除硬编码
             var_name = ID_VAR
             if self.context.metadata:
                 var_desc = self.context.metadata.resolve(ID_VAR)

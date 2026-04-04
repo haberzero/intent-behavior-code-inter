@@ -34,7 +34,7 @@ class IbPlugin(ABC):
 
     def get_vtable(self) -> Dict[str, Callable]:
         """
-        [IES 2.2] 虚表生成。
+         虚表生成。
 
         从模块级 __ibcext_vtable__ 函数获取方法映射表。
         """
@@ -50,7 +50,7 @@ class IbPlugin(ABC):
         mode: str = EXPOSE_EAGER
     ) -> None:
         """
-        [IES 2.1] 暴露能力到注册表。
+         暴露能力到注册表。
         允许插件向 CapabilityRegistry 注册自己的能力供其他插件使用。
         """
         if mode == self.EXPOSE_LAZY:

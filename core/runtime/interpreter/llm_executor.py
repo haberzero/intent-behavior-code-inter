@@ -18,7 +18,7 @@ from core.kernel.registry import KernelRegistry
 class LLMExecutorImpl:
     """
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
-    [IES 2.1 Refactor] 采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
+     采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
     """
     def __init__(self, 
                  service_context: Optional[ServiceContext] = None,
@@ -34,7 +34,7 @@ class LLMExecutorImpl:
         self._expected_type_stack: List[str] = []
 
     def hydrate(self, service_context: ServiceContext):
-        """[IES 2.1] 水化依赖，由解释器在服务准备就绪后调用"""
+        """ 水化依赖，由解释器在服务准备就绪后调用"""
         self._service_context = service_context
 
     @property
@@ -53,7 +53,7 @@ class LLMExecutorImpl:
     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
-        # [IES 2.2] 优先从能力注册中心获取 Provider (能力名: llm_provider)
+        # 优先从能力注册中心获取 Provider (能力名: llm_provider)
         if self.service_context.capability_registry:
             provider = self.service_context.capability_registry.get("llm_provider")
             if provider:
@@ -106,7 +106,7 @@ class LLMExecutorImpl:
         sys_prompt_segments = node_data.get("sys_prompt")
         user_prompt_segments = node_data.get("user_prompt")
         
-        # [IES 2.2] 获取函数参数列表，用于在 prompt 中进行参数替换
+        # 获取函数参数列表，用于在 prompt 中进行参数替换
         param_names = self._get_function_param_names(node_data)
 
         sys_prompt = self._evaluate_segments(sys_prompt_segments, execution_context, param_names)
@@ -127,7 +127,7 @@ class LLMExecutorImpl:
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
-        # [IES 2.2] 从 LLM Provider 获取返回类型提示
+        # 从 LLM Provider 获取返回类型提示
         if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
             type_prompt = self.llm_callback.get_return_type_prompt(type_name)
             if type_prompt:
@@ -150,7 +150,7 @@ class LLMExecutorImpl:
     def _get_function_param_names(self, node_data: Mapping[str, Any]) -> Set[str]:
         """
         获取 llm 函数的参数名列表。
-        [IES 2.2] 用于判断 prompt 中的 $var 是否是函数参数。
+         用于判断 prompt 中的 $var 是否是函数参数。
         """
         param_names = set()
         args = node_data.get("args", [])
@@ -164,7 +164,7 @@ class LLMExecutorImpl:
         """
         评估结构化提示词片段。
 
-        [IES 2.2] 增强的变量替换逻辑：
+         增强的变量替换逻辑：
         - 只有当变量名是 llm 函数参数时，才会进行变量替换
         - 其他 $变量名 会被作为普通文本处理
         """
@@ -193,7 +193,7 @@ class LLMExecutorImpl:
                 # IbName 节点（变量引用）
                 var_name = segment.id
                 
-                # [IES 2.2] 只有当变量名是函数参数时才进行替换
+                # 只有当变量名是函数参数时才进行替换
                 if param_names and var_name in param_names:
                     val = execution_context.visit(segment)
                     if hasattr(val, '__to_prompt__'):
@@ -255,8 +255,8 @@ class LLMExecutorImpl:
                 # 强制覆盖模式：仅返回该意图
                 return self.registry.box(call_intent.resolve_content(context, execution_context))
 
-        # [IES 2.1] 获取消解后的最终列表
-        # [IES 2.2] 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
+        # 获取消解后的最终列表
+        # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
         if captured_intents is not None:
             active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
             all_intents = IntentResolver.resolve(
@@ -341,7 +341,7 @@ class LLMExecutorImpl:
 
     def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
         """
-        [IES 2.0 Architectural Update] 执行一个被动行为对象。
+         执行一个被动行为对象。
         环境（意图栈）已由 Interpreter/Handler 在调用前准备就绪。
         """
         if not isinstance(behavior, IIbBehavior):
@@ -358,7 +358,7 @@ class LLMExecutorImpl:
 
         try:
             # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
-            # [IES 2.2] 传入行为对象捕获的意图栈
+            # 传入行为对象捕获的意图栈
             res = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
             behavior._cache = res
             return res

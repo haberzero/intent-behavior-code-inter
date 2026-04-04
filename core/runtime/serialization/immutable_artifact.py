@@ -2,7 +2,7 @@ from typing import Any, Dict, Iterator, Mapping
 
 class ImmutableArtifact(Mapping):
     """
-    [IES 2.2] 不可变产物容器。
+     不可变产物容器。
     用于确保编译器输出的 artifact dict 无法被解释器修改，
     从而保证 save_state/load_state 断点机制的确定性。
 

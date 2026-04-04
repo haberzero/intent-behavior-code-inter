@@ -26,7 +26,7 @@ class ContractValidator:
             # 1. 审计类契约
             if desc.is_class():
                 self._validate_class(desc)
-            # 2. [IES 2.1 Refactor] 审计全局函数契约 (消除审计盲区)
+            # 2.  审计全局函数契约 (消除审计盲区)
             elif desc.get_call_trait():
                 self._validate_function(desc)
 

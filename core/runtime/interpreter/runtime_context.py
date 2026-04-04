@@ -100,7 +100,7 @@ class ScopeImpl:
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
             
-            # [NEW] 运行时类型校验
+            # 运行时类型校验
             self._check_type(boxed_value, symbol.declared_type, name)
             
             symbol.value = boxed_value
@@ -118,7 +118,7 @@ class ScopeImpl:
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
             
-            # [NEW] 运行时类型校验
+            # 运行时类型校验
             self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
             
             symbol.value = boxed_value
@@ -183,7 +183,7 @@ class SymbolViewImpl(SymbolView):
             return False
 
 class IntentNode:
-    """[IES 2.0] 不可变意图节点，支持结构共享以优化内存"""
+    """ 不可变意图节点，支持结构共享以优化内存"""
     def __init__(self, intent: Union[IbIntent, Any], parent: Optional['IntentNode'] = None):
         self.intent = intent
         self.parent = parent
@@ -215,7 +215,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         self._global_intents: List[IbIntent] = []
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
-        self._retry_hint: Optional[str] = None # [IES 2.1] 运行时重试提示词
+        self._retry_hint: Optional[str] = None # 运行时重试提示词
 
     @property
     def intent_exclusive_depth(self) -> int:
@@ -279,7 +279,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         return list(self._global_intents)
 
     def get_vars(self) -> Dict[str, Any]:
-        """[IES 2.0] 获取当前可见的所有真实变量对象 (IbObject)。"""
+        """ 获取当前可见的所有真实变量对象 (IbObject)。"""
         res = {}
         scope = self._current_scope
         while scope:
@@ -295,7 +295,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
                         continue
                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
                         continue
-                    # [IES 2.0] 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
+                    # 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
                     if symbol.is_const and name in ("len", "print", "range", "input", "get_self_source"):
                         continue
                     res[name] = val
@@ -381,7 +381,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
                 tag=tag,
                 role=IntentRole.DYNAMIC
             )
-        # [IES 2.0] 模式逻辑：
+        # 模式逻辑：
         # 1. 我们不再物理切断链条，以保证 pop_intent 能够正确恢复之前的栈状态。
         # 2. 逻辑上的切断（排他性/移除）由 LLMExecutor 在合并时根据 IntentMode 处理。
         self._intent_top = IntentNode(intent, self._intent_top)
@@ -400,7 +400,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
 
     def restore_active_intents(self, intents: Union[List[IbIntent], Optional[IntentNode]]) -> None:
         """
-        [IES 2.1] 恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
+         恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
         """
         if intents is None:
             self._intent_top = None
@@ -435,12 +435,12 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
 
     @property
     def intent_stack(self) -> Union[Optional[IntentNode], List[Any]]:
-        # [IES 2.0] 为了 IbBehavior 优化，直接返回栈顶节点
+        # 为了 IbBehavior 优化，直接返回栈顶节点
         return self._intent_top
         
     @intent_stack.setter
     def intent_stack(self, value: Optional[IntentNode]):
-        """[IES 2.1] 仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
+        """ 仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
         if value is None or isinstance(value, IntentNode):
             self._intent_top = value
         else:
@@ -452,7 +452,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
 
     @current_scope.setter
     def current_scope(self, value: Scope) -> None:
-        """[IES 2.1] 允许切换当前作用域（用于跨模块调用）"""
+        """ 允许切换当前作用域（用于跨模块调用）"""
         self._current_scope = value
 
     @property

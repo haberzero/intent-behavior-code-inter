@@ -46,13 +46,13 @@ class IbInteger(IbObject):
         return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
-        # [IES 2.1 Refactor] 强制从 ib_class.name 获取类型标签，消除硬编码
+        # 强制从 ib_class.name 获取类型标签，消除硬编码
         return {"type": self.ib_class.name, "value": self.value}
 
     def __repr__(self):
         return f"Integer({self.value})"
 
-    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
     def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
     def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
@@ -116,7 +116,7 @@ class IbFloat(IbObject):
     def __repr__(self):
         return f"Float({self.value})"
 
-    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
     def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
     def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
@@ -206,7 +206,7 @@ class IbString(IbObject):
     def __repr__(self):
         return f"String('{self.value}')"
 
-    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any:
         if other.ib_class.name != "str":
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
@@ -225,7 +225,7 @@ class IbException(IbObject):
         return self.ib_class.registry.box("")
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 Exception 的强转逻辑"""
+        """ 支持 Exception 的强转逻辑"""
         if target_class.name in ("str", "Any"):
             msg = self.fields.get("message")
             if msg: return msg
@@ -279,7 +279,7 @@ class IbList(IbObject):
         return self.ib_class.registry.box(len(self.elements))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 List 的强转逻辑"""
+        """ 支持 List 的强转逻辑"""
         if target_class.name in ("list", "Any"):
             return self
         if target_class.name == "str":
@@ -343,7 +343,7 @@ class IbDict(IbObject):
         return self.ib_class.registry.box(len(self.fields))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 Dict 的强转逻辑"""
+        """ 支持 Dict 的强转逻辑"""
         if target_class.name in ("dict", "Any"):
             return self
         if target_class.name == "str":
@@ -384,7 +384,7 @@ class IbBehavior(IbObject, IIbBehavior):
     """
     def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
         """
-        [IES 2.0 Architectural Update] IbBehavior 现在是纯粹的数据描述符。
+         IbBehavior 现在是纯粹的数据描述符。
         不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
         """
         super().__init__(ib_class)

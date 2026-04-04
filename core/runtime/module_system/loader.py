@@ -26,7 +26,7 @@ class ModuleLoader(IModuleLoader):
 
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
         """
-        [IES 2.2] 严格契约绑定。
+         严格契约绑定。
         
         强制遵循 IES 2.2 协议：
         1. 元数据必须已通过 Discovery 阶段从 _spec.py 加载并注册到 HostInterface。
@@ -40,7 +40,7 @@ class ModuleLoader(IModuleLoader):
         
         implementation._ibci_registry_id = id(context.registry)
 
-        # [IES 2.1 Refactor] 从元数据注册表解析 (元数据来源于 _spec.py)
+        # 从元数据注册表解析 (元数据来源于 _spec.py)
         metadata = context.interop.metadata.resolve(module_name)
         if not metadata or not metadata.is_module():
             raise InterpreterError(f"Plugin Protocol Error: Module '{module_name}' metadata not found. "
@@ -90,7 +90,7 @@ class ModuleLoader(IModuleLoader):
 
                 proxy_vtable[spec_name] = create_proxy(py_func, registry)
             
-            # 2. [IES 2.2] 处理变量 (Variable)
+            # 2.  处理变量 (Variable)
             else:
                 # 只要在元数据中声明了，就加入白名单允许通过 __getattr__ 访问
                 if not hasattr(implementation, spec_name):
@@ -152,7 +152,7 @@ class ModuleLoader(IModuleLoader):
         
         # [IES Enhancement] 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
         # 这确保了手动注册的 Mock 对象能被正确初始化并同步到 capabilities
-        # [IES 2.1 Refactor] 直接遍历元数据注册表，消除兼容性接口
+        # 直接遍历元数据注册表，消除兼容性接口
         interop = context.interop
         for entry in interop.metadata.get_all_modules().keys():
             implementation = interop.get_package(entry)
@@ -164,7 +164,7 @@ class ModuleLoader(IModuleLoader):
                 
             loaded_modules.add(entry)
 
-        # [IES 2.0] 扫描搜索路径，加载所有物理存在的模块
+        # 扫描搜索路径，加载所有物理存在的模块
         for path in self.search_paths:
             if not os.path.isdir(path):
                 continue
@@ -174,7 +174,7 @@ class ModuleLoader(IModuleLoader):
                     continue
                 
                 # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
-                # [IES 2.2 Refactor] 通过 discovery_map 映射物理目录名到逻辑模块名
+                # 通过 discovery_map 映射物理目录名到逻辑模块名
                 module_name = interop.get_module_name_by_discovery(entry)
                 if not module_name:
                     continue
@@ -189,7 +189,7 @@ class ModuleLoader(IModuleLoader):
                     continue
                     
                 try:
-                    # [IES 2.0] 动态加载实现层
+                    # 动态加载实现层
                     # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
                     pkg_dir = os.path.dirname(module_dir)
                     if pkg_dir not in sys.path:
@@ -208,11 +208,11 @@ class ModuleLoader(IModuleLoader):
                         # 兼容直接导出的类或函数（如有必要可扩展）
                         continue
 
-                    # [IES 2.0] 1. 自动依赖注入 (基于 setup 方法签名)
+                    # 1. 自动依赖注入 (基于 setup 方法签名)
                     # 必须在校验前注入，因为插件可能根据注入的能力动态决定其虚表 (vtable)
                     self._setup_implementation(implementation, context, capabilities)
                     
-                    # [IES 2.0] 2. 校验与绑定 (Proxy VTable)
+                    # 2. 校验与绑定 (Proxy VTable)
                     self._validate_and_bind(module_name, implementation, context, capabilities, registry)
                     
                     # 绑定到运行时宿主

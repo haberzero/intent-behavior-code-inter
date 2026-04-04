@@ -1,0 +1,2819 @@
+diff --git a/core/base/serialization.py b/core/base/serialization.py
+index 4df8f93..ad5eb69 100644
+--- a/core/base/serialization.py
++++ b/core/base/serialization.py
+@@ -10,11 +10,11 @@ class BaseFlatSerializer:
+     """
+     def __init__(self):
+         self.type_pool: Dict[str, Any] = {}
+-        self.external_assets: Dict[str, str] = {} # [IES 2.2] 存储外部文本资产: uid -> content
++        self.external_assets: Dict[str, str] = {} # 存储外部文本资产: uid -> content
+         self.type_map: Dict[int, str] = {} # 映射内存 ID 到稳定 UID
+         
+     def _generate_deterministic_uid(self, prefix: str, content: str) -> str:
+-        """[IES 2.1] 生成确定性 UID，基于内容的 SHA-256 哈希"""
++        """ 生成确定性 UID，基于内容的 SHA-256 哈希"""
+         h = hashlib.sha256(content.encode('utf-8')).hexdigest()
+         return f"{prefix}_{h[:16]}"
+ 
+@@ -45,7 +45,7 @@ class BaseFlatSerializer:
+             if text_id in self.type_map:
+                 return {"_type": "ext_ref", "uid": self.type_map[text_id]}
+                 
+-            # [IES 2.1] 改为确定性哈希，确保 Prompt Cache 命中率
++            # 改为确定性哈希，确保 Prompt Cache 命中率
+             uid = self._generate_deterministic_uid("asset", text)
+             self.type_map[text_id] = uid
+             self.external_assets[uid] = text
+diff --git a/core/compiler/diagnostics/issue_tracker.py b/core/compiler/diagnostics/issue_tracker.py
+index 1b2943a..79bd45f 100644
+--- a/core/compiler/diagnostics/issue_tracker.py
++++ b/core/compiler/diagnostics/issue_tracker.py
+@@ -78,7 +78,7 @@ class IssueTracker:
+ 
+     def to_dict(self) -> dict:
+         """
+-        [IES 2.1] 序列化 IssueTracker 为字典，支持状态保存和恢复。
++         序列化 IssueTracker 为字典，支持状态保存和恢复。
+         """
+         return {
+             "file_path": self.file_path,
+diff --git a/core/compiler/lexer/llm_scanner.py b/core/compiler/lexer/llm_scanner.py
+index 76817a1..59535df 100644
+--- a/core/compiler/lexer/llm_scanner.py
++++ b/core/compiler/lexer/llm_scanner.py
+@@ -7,7 +7,7 @@ class LLMScanner:
+     Handles token scanning within an LLM block (between 'llm ...:' and 'llmend').
+     Parses prompt keywords (__sys__, __user__), raw text, and variable placeholders ($var).
+ 
+-    [IES 2.2] 简化设计：仅支持 $var 格式的变量引用。
++     简化设计：仅支持 $var 格式的变量引用。
+     只有当变量名是 llm 函数中声明的参数时，才会被替换；其他情况作为普通文本。
+     """
+     def __init__(self, scanner: StrStream):
+diff --git a/core/compiler/parser/components/declaration.py b/core/compiler/parser/components/declaration.py
+index 697d436..f92ce82 100644
+--- a/core/compiler/parser/components/declaration.py
++++ b/core/compiler/parser/components/declaration.py
+@@ -45,7 +45,7 @@ class DeclarationComponent(BaseComponent):
+ 
+         stmt = None
+         if role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
+-            # [IES 2.0] 统一交由 StatementComponent 处理意图标记与语句
++            # 统一交由 StatementComponent 处理意图标记与语句
+             stmt = self.statement.parse_statement()
+         elif role == SyntaxRole.FUNCTION_DEFINITION:
+             self.stream.advance() # func
+@@ -106,7 +106,7 @@ class DeclarationComponent(BaseComponent):
+             # 'var' keyword already consumed
+             type_token = self.stream.previous()
+             
+-            # [IES 2.1 Refactor] 使用语法常量，消除硬编码
++            # 使用语法常量，消除硬编码
+             var_name = ID_VAR
+             if self.context.metadata:
+                 var_desc = self.context.metadata.resolve(ID_VAR)
+diff --git a/core/compiler/parser/components/expression.py b/core/compiler/parser/components/expression.py
+index a339d7b..f3f90e4 100644
+--- a/core/compiler/parser/components/expression.py
++++ b/core/compiler/parser/components/expression.py
+@@ -110,7 +110,7 @@ class ExpressionComponent(BaseComponent):
+ 
+     def self_expr(self) -> ast.IbExpr:
+         token = self.stream.previous()
+-        # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
++        # 使用语法常量，消除硬编码字符串
+         return self._loc(ast.IbName(id=ID_SELF, ctx='Load'), token)
+ 
+     def number(self) -> ast.IbExpr:
+@@ -126,13 +126,13 @@ class ExpressionComponent(BaseComponent):
+ 
+     def boolean(self) -> ast.IbExpr:
+         token = self.stream.previous()
+-        # [IES 2.1 Refactor] 基于 Token 类型判定，消除字符串硬编码
++        # 基于 Token 类型判定，消除字符串硬编码
+         val = (token.type == TokenType.TRUE)
+         return self._loc(ast.IbConstant(value=val), token)
+ 
+     def none_expr(self) -> ast.IbExpr:
+         token = self.stream.previous()
+-        # [IES 2.1 Refactor] 使用标准 NONE Token，消除 Python None 直接引用
++        # 使用标准 NONE Token，消除 Python None 直接引用
+         return self._loc(ast.IbConstant(value=None), token)
+ 
+     def grouping(self) -> ast.IbExpr:
+@@ -193,14 +193,14 @@ class ExpressionComponent(BaseComponent):
+ 
+     def unary(self) -> ast.IbExpr:
+         op_token = self.stream.previous()
+-        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
++        # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+         op = OP_MAP.get(op_token.type, op_token.type.name)
+         operand = self.parse_precedence(IbPrecedence.UNARY)
+         return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
+ 
+     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
+         op_token = self.stream.previous()
+-        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
++        # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+         op_str = OP_MAP.get(op_token.type, op_token.type.name)
+         
+         rule = self.get_rule(op_token.type)
+@@ -218,7 +218,7 @@ class ExpressionComponent(BaseComponent):
+ 
+     def logical(self, left: ast.IbExpr) -> ast.IbExpr:
+         op_token = self.stream.previous()
+-        # [IES 2.1 Refactor] 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
++        # 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
+         op = OP_MAP.get(op_token.type, op_token.type.name)
+         rule = self.get_rule(op_token.type)
+         right = self.parse_precedence(rule.precedence)
+diff --git a/core/compiler/parser/components/statement.py b/core/compiler/parser/components/statement.py
+index 3a4f5db..0b97e96 100644
+--- a/core/compiler/parser/components/statement.py
++++ b/core/compiler/parser/components/statement.py
+@@ -31,7 +31,7 @@ class StatementComponent(BaseComponent):
+         stmt = self._parse_statement_core()
+         
+         # 统一处理 llm except 块
+-        # [IES 2.1 Refactor] 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
++        # 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
+         if stmt.supports_llm_fallback:
+             llm_fallback = self._parse_llm_fallback()
+             if llm_fallback:
+@@ -161,7 +161,7 @@ class StatementComponent(BaseComponent):
+             elif self.stream.match(TokenType.MINUS):
+                 mode = IntentMode.REMOVE
+             
+-            # [IES 2.1 Refactor] 支持模式别名，消除硬编码字符串
++            # 支持模式别名，消除硬编码字符串
+             elif self.stream.check(TokenType.IDENTIFIER):
+                 peek_val = self.stream.peek().value.lower()
+                 if peek_val in ("append", "add"):
+@@ -180,7 +180,7 @@ class StatementComponent(BaseComponent):
+         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
+             if self.stream.match(TokenType.RAW_TEXT):
+                 val = self.stream.previous().value
+-                # [IES 2.1] 解析意图标签 #tag
++                # 解析意图标签 #tag
+                 # TODO 应该从lexer开始就提供支持。现在是临时方案
+                 if tag is None and not segments and val.startswith("#"):
+                     # 尝试提取标签
+@@ -201,7 +201,7 @@ class StatementComponent(BaseComponent):
+                 segments.append(val)
+             elif self.stream.check(TokenType.VAR_REF):
+                 # Variable reference $var or $(expr)
+-                # [Fix] Use check instead of match, so parse_expression can consume the token
++                # Use check instead of match, so parse_expression can consume the token
+                 segments.append(self.expression.parse_expression())
+             else:
+                 # [IES 2.1 Speculative Parsing]
+@@ -272,7 +272,7 @@ class StatementComponent(BaseComponent):
+     def for_statement(self) -> ast.IbStmt:
+         start_token = self.stream.previous()
+         
+-        # [IES 2.2 Fix] 支持带类型标注的循环目标 (e.g. for str name in names)
++        # 支持带类型标注的循环目标 (e.g. for str name in names)
+         # 或者元组声明 (e.g. for (int x, int y) in coords)
+         from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
+         
+@@ -343,7 +343,7 @@ class StatementComponent(BaseComponent):
+             return self._loc(ast.IbAssign(targets=[expr], value=value), expr)
+         
+         # 3. AugAssign (a += 1)
+-        # [IES 2.1 Refactor] 使用 COMPOUND_OP_MAP 映射复合赋值运算符
++        # 使用 COMPOUND_OP_MAP 映射复合赋值运算符
+         for token_type, op_str in COMPOUND_OP_MAP.items():
+             if self.stream.match(token_type):
+                 value = self.expression.parse_expression()
+diff --git a/core/compiler/parser/components/type_def.py b/core/compiler/parser/components/type_def.py
+index 44c3c0f..e05f657 100644
+--- a/core/compiler/parser/components/type_def.py
++++ b/core/compiler/parser/components/type_def.py
+@@ -24,7 +24,7 @@ class TypeComponent(BaseComponent):
+                 
+         elif self.stream.match(TokenType.CALLABLE):
+             token = self.stream.previous()
+-            # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
++            # 使用语法常量，消除硬编码字符串
+             callable_name = ID_CALLABLE
+             if self.context.metadata:
+                 callable_desc = self.context.metadata.resolve(ID_CALLABLE)
+diff --git a/core/compiler/parser/core/component.py b/core/compiler/parser/core/component.py
+index a1a5a1c..0bc9adb 100644
+--- a/core/compiler/parser/core/component.py
++++ b/core/compiler/parser/core/component.py
+@@ -44,7 +44,7 @@ class BaseComponent:
+                 node.end_col_offset = end_obj.end_col_offset
+         
+         # [Intent Smearing] 暂存 Parser 发现的意图
+-        # [Fix] 仅将意图附加到语句或特定的表达式（如 BehaviorExpr）上，防止 sub-nodes (如 IbName) 过早夺取意图
++        # 仅将意图附加到语句或特定的表达式（如 BehaviorExpr）上，防止 sub-nodes (如 IbName) 过早夺取意图
+         if isinstance(node, (ast.IbStmt, ast.IbBehaviorExpr, ast.IbTypeAnnotatedExpr)):
+             intents = self.context.consume_intents()
+             if intents:
+diff --git a/core/compiler/parser/core/token_stream.py b/core/compiler/parser/core/token_stream.py
+index b453c30..68c6f6c 100644
+--- a/core/compiler/parser/core/token_stream.py
++++ b/core/compiler/parser/core/token_stream.py
+@@ -63,17 +63,17 @@ class TokenStream:
+         return False
+ 
+     def get_checkpoint(self) -> int:
+-        """[IES 2.1] 获取当前流的检查点，用于推测性解析的回滚"""
++        """ 获取当前流的检查点，用于推测性解析的回滚"""
+         return self.current
+ 
+     def restore_checkpoint(self, checkpoint: int):
+-        """[IES 2.1] 回滚到指定的检查点"""
++        """ 回滚到指定的检查点"""
+         self.current = checkpoint
+ 
+     @contextmanager
+     def speculate(self):
+         """
+-        [IES 2.1] 开启推测性解析上下文。
++         开启推测性解析上下文。
+         在此期间产生的所有错误都会被收集到一个临时的 IssueTracker 中。
+         如果解析成功（未抛出 ParseControlFlowError），则合并诊断信息。
+         如果解析失败，则静默丢弃，防止误报。
+diff --git a/core/compiler/scheduler.py b/core/compiler/scheduler.py
+index 2876358..6154097 100644
+--- a/core/compiler/scheduler.py
++++ b/core/compiler/scheduler.py
+@@ -44,7 +44,7 @@ class Scheduler(ICompilerService):
+         self.resolver = ModuleResolver(self.root_dir)
+         self.host_interface = host_interface or HostInterface()
+         self.debugger = debugger or core_debugger
+-        self.registry = registry # [NEW] 注册表实例，用于类型同步
++        self.registry = registry # 注册表实例，用于类型同步
+         
+         # Initial symbols to pre-populate in every module's global scope
+         self.predefined_symbols: Dict[str, Any] = {}
+@@ -56,7 +56,7 @@ class Scheduler(ICompilerService):
+         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
+         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
+         
+-        # [NEW] 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
++        # 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
+         self.plugin_type_cache: Dict[str, Any] = {}
+         
+         # Build Cache
+@@ -295,7 +295,7 @@ class Scheduler(ICompilerService):
+             # 3. Resolve and Enqueue Imports
+             for imp in imports:
+                 # Skip external modules - they don't have source files
+-                # [IES 2.1 Refactor] 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
++                # 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
+                 module_name = imp.module_name
+                 if self.host_interface.metadata.resolve(module_name) is not None:
+                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {module_name}")
+@@ -373,7 +373,7 @@ class Scheduler(ICompilerService):
+             # 3. Semantic Analysis
+             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
+             
+-            # [IES 2.2 Fix] 在分析前预注册空的 ModuleMetadata 到注册表
++            # 在分析前预注册空的 ModuleMetadata 到注册表
+             # 这样 LazyDescriptor 才能在 unwrap 时找到目标，即使当前模块还未分析完
+             pre_mod_meta = ModuleMetadata(name=module_name)
+             self.registry.register(pre_mod_meta)
+@@ -401,7 +401,7 @@ class Scheduler(ICompilerService):
+                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
+                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
+                     
+-                    # [IES 2.2 Fix] 统一使用 LazyDescriptor 解决循环依赖问题
++                    # 统一使用 LazyDescriptor 解决循环依赖问题
+                     # 无论该模块是否已编译，都先注入 Lazy 描述符，
+                     # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
+                     s_mod_type = LazyDescriptor(name=imp_mod_name)
+@@ -413,7 +413,7 @@ class Scheduler(ICompilerService):
+                     if imp.module_name in self.plugin_type_cache:
+                         s_mod_type = self.plugin_type_cache[imp.module_name]
+                     else:
+-                        # [IES 2.1 Refactor] 直接从宿主接口的元数据注册表解析描述符
++                        # 直接从宿主接口的元数据注册表解析描述符
+                         s_mod_type = self.host_interface.metadata.resolve(imp.module_name)
+                         if s_mod_type:
+                             # [UTS 2.0 Hydration] 确保从 Host 加载的元数据被正确水合到当前编译注册表
+@@ -436,9 +436,9 @@ class Scheduler(ICompilerService):
+                         root_name = parts[0]
+                         # 构造嵌套模块结构
+                         root_sym = analyzer.symbol_table.resolve(root_name)
+-                        # [IES 2.1 Refactor] 使用 is_module() 代替 isinstance
++                        # 使用 is_module() 代替 isinstance
+                         if not root_sym or not root_sym.descriptor or not root_sym.descriptor.is_module():
+-                            # [IES 2.1 Refactor] 使用工厂创建
++                            # 使用工厂创建
+                             root_mod_type = self.registry.factory.create_primitive("module")
+                             root_mod_type.name = root_name
+                             root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, descriptor=root_mod_type)
+@@ -453,7 +453,7 @@ class Scheduler(ICompilerService):
+                                 curr_mod.exported_scope.define(target_sym)
+                             else:
+                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
+-                                # [IES 2.1 Refactor] 使用 is_module() 代替 isinstance
++                                # 使用 is_module() 代替 isinstance
+                                 if not next_mod_sym or not next_mod_sym.descriptor or not next_mod_sym.descriptor.is_module():
+                                     next_mod_type = self.registry.factory.create_primitive("module")
+                                     next_mod_type.name = part_name
+@@ -504,7 +504,7 @@ class Scheduler(ICompilerService):
+                                     pass  # 跳过重复注入
+                                 else:
+                                     # 创建一个指向原符号的克隆/别名符号
+-                                    # [Refactor] 使用 descriptor 参数，而不是 var_type/type_signature
++                                    # 使用 descriptor 参数，而不是 var_type/type_signature
+                                     if target_sym.kind == SymbolKind.VARIABLE:
+                                         new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                     elif target_sym.kind == SymbolKind.FUNCTION:
+@@ -523,7 +523,7 @@ class Scheduler(ICompilerService):
+             
+             result = analyzer.analyze(ast_node)
+             
+-            # [IES 2.2 Fix] 语义分析完成后，更新注册表中的元数据成员
++            # 语义分析完成后，更新注册表中的元数据成员
+             # 这确保了 LazyDescriptor 在 unwrap 时能看到完整的符号表
+             final_mod_meta = self.registry.resolve(module_name)
+             if final_mod_meta:
+diff --git a/core/compiler/semantic/passes/collector.py b/core/compiler/semantic/passes/collector.py
+index be2d854..95d95c0 100644
+--- a/core/compiler/semantic/passes/collector.py
++++ b/core/compiler/semantic/passes/collector.py
+@@ -76,7 +76,7 @@ class SymbolCollector:
+     def _define(self, sym: Symbol, node: ast.IbASTNode):
+         try:
+             self.symbol_table.define(sym)
+-            # [NEW Phase 5] 记录侧表映射
++            # 记录侧表映射
+             if self.analyzer and hasattr(self.analyzer, "node_to_symbol"):
+                 self.analyzer.node_to_symbol[node] = sym
+             
+@@ -203,7 +203,7 @@ class LocalSymbolCollector:
+                 allow_overwrite = True
+             
+             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
+-            # [NEW Phase 5] 记录侧表映射
++            # 记录侧表映射
+             if hasattr(self.analyzer, "node_to_symbol"):
+                 self.analyzer.node_to_symbol[node] = sym
+         except ValueError as e:
+diff --git a/core/compiler/semantic/passes/contract_validator.py b/core/compiler/semantic/passes/contract_validator.py
+index b4717fe..0dc8d4f 100644
+--- a/core/compiler/semantic/passes/contract_validator.py
++++ b/core/compiler/semantic/passes/contract_validator.py
+@@ -26,7 +26,7 @@ class ContractValidator:
+             # 1. 审计类契约
+             if desc.is_class():
+                 self._validate_class(desc)
+-            # 2. [IES 2.1 Refactor] 审计全局函数契约 (消除审计盲区)
++            # 2.  审计全局函数契约 (消除审计盲区)
+             elif desc.get_call_trait():
+                 self._validate_function(desc)
+ 
+diff --git a/core/compiler/semantic/passes/expression_analyzer.py b/core/compiler/semantic/passes/expression_analyzer.py
+index fabe535..f8ff453 100644
+--- a/core/compiler/semantic/passes/expression_analyzer.py
++++ b/core/compiler/semantic/passes/expression_analyzer.py
+@@ -9,7 +9,7 @@ from core.kernel.types.descriptors import TypeDescriptor
+ 
+ class ExpressionAnalyzer:
+     """
+-    [IES 2.1] 表达式分析器。
++     表达式分析器。
+     负责所有表达式节点的语义分析和类型推导。
+     """
+     def __init__(
+diff --git a/core/compiler/semantic/passes/resolver.py b/core/compiler/semantic/passes/resolver.py
+index f11ca9e..8c6efe5 100644
+--- a/core/compiler/semantic/passes/resolver.py
++++ b/core/compiler/semantic/passes/resolver.py
+@@ -30,7 +30,7 @@ class TypeResolver:
+         visitor = getattr(self, method_name, self.generic_visit)
+         res_type = visitor(node)
+         
+-        # [NEW Phase 5] 记录类型推导侧表
++        # 记录类型推导侧表
+         if isinstance(node, ast.IbExpr) and res_type:
+             self.analyzer.node_to_type[node] = res_type
+         elif isinstance(node, ast.IbClassDef) and hasattr(self, "current_class_descriptor") and self.current_class_descriptor:
+@@ -64,14 +64,14 @@ class TypeResolver:
+         parent_desc = None
+         if node.parent:
+             parent_sym = self.symbol_table.resolve(node.parent)
+-            # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
++            # 使用 is_class() 代替 isinstance 检查
+             if parent_sym and parent_sym.descriptor and parent_sym.descriptor.is_class():
+                 parent_desc = parent_sym.descriptor
+             else:
+                 self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
+         
+         # 2. 创建 ClassMetadata 并绑定到符号
+-        # [IES 2.1 Refactor] 使用工厂创建以确保驻留
++        # 使用工厂创建以确保驻留
+         descriptor = self.analyzer.registry.factory.create_class(
+             name=node.name, 
+             parent=node.parent
+@@ -79,7 +79,7 @@ class TypeResolver:
+         if parent_desc:
+              descriptor.parent_name = parent_desc.name
+         
+-        # [NEW Phase 5] 注册到元数据注册表，以便后续继承解析能找到它
++        # 注册到元数据注册表，以便后续继承解析能找到它
+         if self.analyzer.registry and hasattr(self.analyzer.registry, "_metadata_registry"):
+             self.analyzer.registry._metadata_registry.register(descriptor)
+              
+@@ -104,7 +104,7 @@ class TypeResolver:
+         # 解析参数类型
+         param_types = []
+         # if self.current_class_descriptor:
+-        #     param_types.append(self.current_class_descriptor) # self param handling logic moved to BoundMethodMetadata
++        # param_types.append(self.current_class_descriptor) # self param handling logic moved to BoundMethodMetadata
+             
+         for arg_node in node.args:
+             arg_type = ANY_DESCRIPTOR
+@@ -112,7 +112,7 @@ class TypeResolver:
+                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
+             param_types.append(arg_type)
+             
+-        # [IES 2.1 Refactor] 使用工厂创建 FunctionMetadata 以确保驻留
++        # 使用工厂创建 FunctionMetadata 以确保驻留
+         func_desc = self.analyzer.registry.factory.create_function(
+             params=param_types,
+             ret=ret_type
+@@ -141,7 +141,7 @@ class TypeResolver:
+             
+         param_types = []
+         # if self.current_class_descriptor:
+-        #     param_types.append(self.current_class_descriptor)
++        # param_types.append(self.current_class_descriptor)
+             
+         for arg_node in node.args:
+             arg_type = ANY_DESCRIPTOR
+@@ -149,7 +149,7 @@ class TypeResolver:
+                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
+             param_types.append(arg_type)
+             
+-        # [IES 2.1 Refactor] 使用工厂创建 FunctionMetadata 以确保驻留
++        # 使用工厂创建 FunctionMetadata 以确保驻留
+         func_desc = self.analyzer.registry.factory.create_function(
+             params=param_types,
+             ret=ret_type
+@@ -179,7 +179,7 @@ class TypeResolver:
+                     name = target.target.id
+                     # 注入到描述符
+                     if self.current_class_descriptor:
+-                        # [Fix] 统一使用 Symbol 包装成员，以满足语义分析器的接口需求
++                        # 统一使用 Symbol 包装成员，以满足语义分析器的接口需求
+                         self.current_class_descriptor.members[name] = symbols.VariableSymbol(
+                             name=name,
+                             kind=symbols.SymbolKind.VARIABLE,
+diff --git a/core/compiler/semantic/passes/scope_manager.py b/core/compiler/semantic/passes/scope_manager.py
+index e0463c8..a42cf87 100644
+--- a/core/compiler/semantic/passes/scope_manager.py
++++ b/core/compiler/semantic/passes/scope_manager.py
+@@ -5,7 +5,7 @@ from core.kernel.types.descriptors import TypeDescriptor
+ 
+ class ScopeManager:
+     """
+-    [IES 2.1] 作用域管理器。
++     作用域管理器。
+     负责符号表和场景栈的管理。
+     """
+     def __init__(self, global_scope: Optional[SymbolTable] = None, module_name: Optional[str] = None):
+diff --git a/core/compiler/semantic/passes/semantic_analyzer.py b/core/compiler/semantic/passes/semantic_analyzer.py
+index 8cc03d8..4a89a88 100644
+--- a/core/compiler/semantic/passes/semantic_analyzer.py
++++ b/core/compiler/semantic/passes/semantic_analyzer.py
+@@ -26,7 +26,7 @@ class SemanticAnalyzer:
+     语义分析器：执行静态分析和类型检查。
+     贯彻"一切皆对象"思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
+ 
+-    [IES 2.1 Refactor] 使用组件组合模式：
++     使用组件组合模式：
+     - SideTableManager: 管理语义分析侧表
+     - ScopeManager: 管理作用域和场景栈
+     """
+@@ -112,7 +112,7 @@ class SemanticAnalyzer:
+             self.visit(node)
+             self.debugger.exit_scope(CoreModule.SEMANTIC)
+             
+-            # [NEW Phase 5] 自检校验：确保侧表完整性
++            # 自检校验：确保侧表完整性
+             # 仅在没有收集到错误的情况下执行完整性检查，因为解析失败的节点本身就无法绑定
+             if not self.issue_tracker.has_errors():
+                 self._validate_integrity(node)
+@@ -137,7 +137,7 @@ class SemanticAnalyzer:
+             self.debugger.exit_scope(CoreModule.SEMANTIC)
+ 
+     def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
+-        # [NEW Phase 3] 标记作用域定义节点 (元数据驱动)
++        # 标记作用域定义节点 (元数据驱动)
+         if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef, ast.IbIntentStmt)):
+             setattr(node, "_is_scope", True)
+ 
+@@ -257,7 +257,7 @@ class SemanticAnalyzer:
+                     self.side_table.bind_symbol(node, existing)
+                     return existing
+             
+-            # [NEW] 检查是否由 Scheduler 注入的特殊符号（如模块）
++            # 检查是否由 Scheduler 注入的特殊符号（如模块）
+             # 这些符号通常在全局表中，不应被随意遮蔽，除非是局部变量
+             if name not in self.symbol_table.symbols:
+                 existing_global = self.symbol_table.resolve(name)
+@@ -272,7 +272,7 @@ class SemanticAnalyzer:
+             if self.current_class:
+                 self.current_class.members[name] = sym
+ 
+-            # [NEW Phase 5] 记录侧表映射
++            # 记录侧表映射
+             self.side_table.bind_symbol(node, sym)
+             return sym
+         except ValueError as e:
+@@ -350,7 +350,7 @@ class SemanticAnalyzer:
+             return self._void_desc
+             
+         self.side_table.bind_symbol(node, sym)
+-        # [NEW] 决议真实的函数签名并更新元数据
++        # 决议真实的函数签名并更新元数据
+         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
+         if self.current_class:
+             param_types.insert(0, self.current_class)
+@@ -359,11 +359,11 @@ class SemanticAnalyzer:
+         # [P3 FIX] LLM 函数默认返回 str 而非 void
+         # 注意：这里的 "str" 语义是"文本接收"（LLM 生成的内容），而非纯字符串类型
+         # [Future Evolution] 未来演进方向：
+-        #   1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
+-        #   2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
+-        #   3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
++        # 1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
++        # 2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
++        # 3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
+         
+-        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
++        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+         call_trait = sym.descriptor.get_call_trait()
+         writable = call_trait.get_writable_trait() if call_trait else None
+         
+@@ -376,7 +376,7 @@ class SemanticAnalyzer:
+         local_scope = SymbolTable(parent=old_table, name=node.name)
+         self.symbol_table = local_scope
+         
+-        # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
++        # 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
+         if sym.is_function:
+             sym.owned_scope = local_scope
+         
+@@ -489,9 +489,9 @@ class SemanticAnalyzer:
+                     
+                     # [P2 FIX] 行为描述行 Lambda 化判断 + 即时上下文处理
+                     # [Future Evolution] 未来将演进为 ReceiveMode 枚举：
+-                    #   - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
+-                    #   - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
+-                    #   - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
++                    # - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
++                    # - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
++                    # - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
+                     # 相关演进：ParserCapability.get_llm_prompt_fragment() 用于注入系统提示词
+                     target_desc = sym.descriptor
+                     is_explicit_callable = False
+@@ -574,7 +574,7 @@ class SemanticAnalyzer:
+     def visit_IbFor(self, node: ast.IbFor):
+         # 1. 迭代头部属于 LOOP 场景
+         self.scope_manager.push_scene(ast.IbScene.LOOP)
+-        # [NEW] 记录控制流节点本身的场景
++        # 记录控制流节点本身的场景
+         self.side_table.bind_scene(node, ast.IbScene.LOOP)
+         try:
+             iter_type = self.visit(node.iter)
+@@ -591,7 +591,7 @@ class SemanticAnalyzer:
+             else:
+                 # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
+                 # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
+-                # [NEW] 如果是 behavior 类型，我们认为它“潜在可迭代”
++                # 如果是 behavior 类型，我们认为它“潜在可迭代”
+                 if iter_type.is_behavior():
+                     element_type = self._any_desc 
+                 else:
+@@ -697,7 +697,7 @@ class SemanticAnalyzer:
+             # [Strict Import] 符号应由 Scheduler 预先注入
+             sym = self.symbol_table.resolve(name)
+             if sym:
+-                # [IES 2.2 Fix] 绑定到 alias 节点，以便解释器正确获取 UID
++                # 绑定到 alias 节点，以便解释器正确获取 UID
+                 self.side_table.bind_symbol(alias, sym)
+             else:
+                 self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
+@@ -717,7 +717,7 @@ class SemanticAnalyzer:
+             # [Strict Import] 符号应由 Scheduler 预先注入
+             sym = self.symbol_table.resolve(name)
+             if sym:
+-                # [IES 2.2 Fix] 绑定到 alias 节点
++                # 绑定到 alias 节点
+                 self.side_table.bind_symbol(alias, sym)
+             else:
+                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
+@@ -848,7 +848,7 @@ class SemanticAnalyzer:
+     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> TypeDescriptor:
+         """类型强转语义分析"""
+         self.visit(node.value)
+-        # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
++        # 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
+         target_type = self._resolve_type(node.type_annotation)
+         if target_type:
+             self.side_table.bind_type(node, target_type)
+@@ -886,7 +886,7 @@ class SemanticAnalyzer:
+ 
+     def visit_IbConstant(self, node: ast.IbConstant) -> TypeDescriptor:
+         val = node.value
+-        # [IES 2.1 Refactor] 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
++        # 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
+         desc = self.registry.resolve_from_value(val)
+         if desc:
+             return desc
+@@ -923,14 +923,14 @@ class SemanticAnalyzer:
+             if member_sym.is_function and not member_sym.metadata.get("is_static"):
+                 # [IES 2.1 Axiom] 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
+                 if not base_type.is_module():
+-                    # [IES 2.1 Refactor] 使用工厂创建以确保驻留和能力注入
++                    # 使用工厂创建以确保驻留和能力注入
+                     return self.registry.factory.create_bound_method(base_type, member_sym.descriptor)
+             
+             return member_sym.descriptor
+             
+         # 2. [Dynamic Resolution] 如果是动态类型（Any/var），允许访问任意属性并返回 Any
+         if base_type.is_dynamic():
+-            # [IES 2.0] 动态代理：创建一个虚拟符号记录在侧表中
++            # 动态代理：创建一个虚拟符号记录在侧表中
+             virtual_sym = symbols.VariableSymbol(
+                 name=node.attr, 
+                 kind=symbols.SymbolKind.VARIABLE, 
+@@ -975,7 +975,7 @@ class SemanticAnalyzer:
+ 
+     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
+         self.in_behavior_expr = True
+-        # [IES 2.2 Fix] 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
++        # 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
+         self.side_table.bind_scene(node, self.scope_manager.current_scene())
+         
+         try:
+diff --git a/core/compiler/semantic/passes/side_table.py b/core/compiler/semantic/passes/side_table.py
+index 5577546..9d1f8ae 100644
+--- a/core/compiler/semantic/passes/side_table.py
++++ b/core/compiler/semantic/passes/side_table.py
+@@ -7,7 +7,7 @@ from core.kernel.symbols import Symbol
+ 
+ class SideTableManager:
+     """
+-    [IES 2.1] 侧表管理器。
++     侧表管理器。
+     统一管理语义分析过程中产生的元数据侧表。
+     """
+     def __init__(self):
+diff --git a/core/compiler/serialization/serializer.py b/core/compiler/serialization/serializer.py
+index ca57714..6edf2cc 100644
+--- a/core/compiler/serialization/serializer.py
++++ b/core/compiler/serialization/serializer.py
+@@ -27,7 +27,7 @@ class FlatSerializer(BaseFlatSerializer):
+             res = artifact.modules[name]
+             modules_data[name] = self.serialize_result(res)
+             
+-        # [IES 2.1 Fix] 确保全局符号也被正确池化，而非裸字典导出
++        # 确保全局符号也被正确池化，而非裸字典导出
+         serialized_globals = {}
+         if artifact.global_symbols:
+             for name, sym in artifact.global_symbols.items():
+@@ -46,8 +46,7 @@ class FlatSerializer(BaseFlatSerializer):
+                 "symbols": self.symbol_pool,
+                 "scopes": self.scope_pool,
+                 "types": self.type_pool,
+-                "assets": self.external_assets # [IES 2.2]
+-            }
++                "assets": self.external_assets #            }
+         }
+ 
+     def serialize_result(self, result: CompilationResult) -> Dict[str, Any]:
+@@ -111,8 +110,7 @@ class FlatSerializer(BaseFlatSerializer):
+                 "symbols": self.symbol_pool,
+                 "scopes": self.scope_pool,
+                 "types": self.type_pool,
+-                "assets": self.external_assets # [IES 2.2]
+-            }
++                "assets": self.external_assets #            }
+         }
+ 
+     def _collect_node(self, node: Any) -> Optional[str]:
+@@ -197,10 +195,9 @@ class FlatSerializer(BaseFlatSerializer):
+             "name": t.name,
+             "module_path": t.module_path,
+             "is_nullable": t.is_nullable,
+-            "is_user_defined": t.is_user_defined, # [NEW]
+-        }
++            "is_user_defined": t.is_user_defined, #        }
+         
+-        # [IES 2.1 Refactor] 多态收集类型引用，消除 isinstance 硬编码检查
++        # 多态收集类型引用，消除 isinstance 硬编码检查
+         refs = t.get_references()
+         for key, val in refs.items():
+             if val is None: continue
+@@ -209,13 +206,13 @@ class FlatSerializer(BaseFlatSerializer):
+             else:
+                 type_data[f"{key}_uid"] = self._collect_type(val)
+         
+-        # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
++        # 使用 is_class() 代替 isinstance 检查
+         if t.is_class():
+             # 这里的字段是字符串，直接存储
+             type_data["parent_name"] = getattr(t, "parent_name", None)
+             type_data["parent_module"] = getattr(t, "parent_module", None)
+             
+-        # [NEW] 收集成员表 (实现元数据与符号系统的闭环)
++        # 收集成员表 (实现元数据与符号系统的闭环)
+         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
+         if t.members:
+             type_data["members_uids"] = {
+diff --git a/core/engine.py b/core/engine.py
+index 3d84f85..47b5e91 100644
+--- a/core/engine.py
++++ b/core/engine.py
+@@ -57,10 +57,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+             self.debugger.configure(core_debug_config)
+             self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Core Debugger initialized with config: {core_debug_config}")
+             
+-        # [NEW] 同步输出回调到调试器，确保内核追踪能被捕获
++        # 同步输出回调到调试器，确保内核追踪能被捕获
+         self.debugger.output_callback = None # 默认
+ 
+-        # [IES 2.2] 初始化能力注册中心
++        # 初始化能力注册中心
+         self.capability_registry = CapabilityRegistry()
+         
+         # 1. 初始化模块发现服务 (内置路径 + 插件路径)
+@@ -79,14 +79,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
+         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
+         
+-        # [IES 2.2] 初始化运行时调度器
++        # 初始化运行时调度器
+         self.rt_scheduler = RuntimeSchedulerImpl(None) # 此时 ServiceContext 尚未就绪，将在后续注入
+         
+         self.interpreter: Optional[Interpreter] = None
+ 
+     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False) -> Interpreter:
+         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
+-        # [IES 2.2] 委派给调度器进行组装与隔离管理
++        # 委派给调度器进行组装与隔离管理
+         instance_id = self.rt_scheduler.spawn(
+             artifact=artifact,
+             isolation=IsolationLevel.SCOPE if isolated else IsolationLevel.NONE,
+@@ -105,7 +105,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+ 
+     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
+         """初始化解释器并动态加载模块实现"""
+-        # [IES 2.2] 委派给调度器进行主实例装配
++        # 委派给调度器进行主实例装配
+         # 将 Engine 自身作为 orchestrator 注入，建立从 Runtime 到 Engine 的系统调用通道
+         self.interpreter = self.spawn_interpreter(
+             artifact=artifact,
+@@ -123,7 +123,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+             if self.interpreter.service_context.host_service:
+                 self.interpreter.service_context.host_service.orchestrator = self
+         
+-        # [IES 2.2] 统一装配调度器与能力注册中心
++        # 统一装配调度器与能力注册中心
+         service_context = self.interpreter.service_context
+         self.rt_scheduler.hydrate(service_context)
+         
+@@ -136,7 +136,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+             setattr(service_context, '_capability_registry', self.capability_registry)
+         
+         # [IES 2.1 Transition] STAGE 7: 深度契约校验与就绪
+-        # [IES 2.1 Refactor] 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
++        # 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
+         if self.registry.state_level < RegistrationState.STAGE_6_PRE_EVAL.value:
+              self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
+ 
+@@ -152,9 +152,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+         self.registry.seal_classes(self._kernel_token)
+ 
+     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
+-        """[IES 2.0] 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
++        """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
+ 
+-        [IES 2.2] 在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
++         在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
+         这确保自定义公理能在封印前注册到 AxiomRegistry。
+         """
+         from core.extension.auto_discovery import AutoDiscoveryService
+@@ -181,14 +181,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+ 
+     def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
+         """
+-        [IES 2.1] 显式注册一个原生 Python 模块实现及其元数据。
++         显式注册一个原生 Python 模块实现及其元数据。
+         """
+         self.host_interface.register_module(name, implementation, type_metadata)
+         self.scheduler.host_interface = self.host_interface
+ 
+     def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> CompilationArtifact:
+         """
+-        [NEW] 编译一段 IBCI 代码字符串，返回蓝图。
++         编译一段 IBCI 代码字符串，返回蓝图。
+         """
+         # Use system temp directory but explicitly allow this file in scheduler
+         with tempfile.NamedTemporaryFile(mode='w', suffix='.ibci', delete=False, encoding='utf-8') as f:
+@@ -260,7 +260,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+ 
+     def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> Any:
+         """
+-        [NEW] 核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
++         核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
+         """
+         abs_entry = os.path.abspath(entry_file)
+         
+@@ -288,7 +288,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+ 
+     def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
+         """
+-        [IES 2.0] 调度入口。执行编译产物。
++         调度入口。执行编译产物。
+         注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
+         """
+         serializer = FlatSerializer()
+@@ -305,7 +305,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+         if not self.interpreter:
+             self._prepare_interpreter(immutable_artifact, output_callback=output_callback)
+         
+-        # [IES 2.2] 委派执行权给运行时调度器
++        # 委派执行权给运行时调度器
+         # 目前调度器内部仍然通过 Engine 的准备机制来启动解释器
+         # 但从宏观视角看，Engine 已经不再直接驱动 Interpreter
+         return self.rt_scheduler.execute(immutable_artifact, variables=variables, output_callback=output_callback)
+@@ -344,7 +344,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
+ 
+     def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):
+         """
+-        [NEW] 暴露分段语义分析接口，允许观察中间产物。
++         暴露分段语义分析接口，允许观察中间产物。
+         按顺序运行 Pass 1 (Collector), Pass 2 (Resolver), Pass 3 (Analyzer)。
+         """
+         if analyzer is None:
+diff --git a/core/extension/auto_discovery.py b/core/extension/auto_discovery.py
+index 0215ffc..5a00758 100644
+--- a/core/extension/auto_discovery.py
++++ b/core/extension/auto_discovery.py
+@@ -1,5 +1,5 @@
+ """
+-[IES 2.2] 自动插件发现服务
++ 自动插件发现服务
+ 
+ 实现零侵入自动嗅探机制，插件不再需要 import 任何核心代码。
+ 
+@@ -47,7 +47,7 @@ class PluginSpec:
+ 
+ class AutoDiscoveryService:
+     """
+-    [IES 2.2] 自动插件发现服务
++     自动插件发现服务
+ 
+     严格遵循 IES 2.2 协议，仅支持：
+     - __ibcext_metadata__() 方法
+diff --git a/core/extension/ibcext.py b/core/extension/ibcext.py
+index 2730abd..103ad5f 100644
+--- a/core/extension/ibcext.py
++++ b/core/extension/ibcext.py
+@@ -34,7 +34,7 @@ class IbPlugin(ABC):
+ 
+     def get_vtable(self) -> Dict[str, Callable]:
+         """
+-        [IES 2.2] 虚表生成。
++         虚表生成。
+ 
+         从模块级 __ibcext_vtable__ 函数获取方法映射表。
+         """
+@@ -50,7 +50,7 @@ class IbPlugin(ABC):
+         mode: str = EXPOSE_EAGER
+     ) -> None:
+         """
+-        [IES 2.1] 暴露能力到注册表。
++         暴露能力到注册表。
+         允许插件向 CapabilityRegistry 注册自己的能力供其他插件使用。
+         """
+         if mode == self.EXPOSE_LAZY:
+diff --git a/core/kernel/ast.py b/core/kernel/ast.py
+index faa3d9f..e7cd78c 100644
+--- a/core/kernel/ast.py
++++ b/core/kernel/ast.py
+@@ -61,13 +61,13 @@ class IbASTNode:
+ @dataclass(kw_only=True, eq=False)
+ class IbStmt(IbASTNode):
+     """语句节点基类"""
+-    # [IES 2.1] 统一容错机制：所有语句均可附加 LLM 异常处理块
++    # 统一容错机制：所有语句均可附加 LLM 异常处理块
+     llm_fallback: List['IbStmt'] = field(default_factory=list)
+ 
+     @property
+     def supports_llm_fallback(self) -> bool:
+         """
+-        [IES 2.1] 指示该语句是否支持附加 llm except 容错块。
++         指示该语句是否支持附加 llm except 容错块。
+         默认支持，极简控制流语句（如 pass/break）需显式禁用。
+         """
+         return True
+@@ -82,7 +82,7 @@ class IbExpr(IbASTNode):
+ @dataclass(kw_only=True, eq=False)
+ class IbIntentInfo(IbASTNode):
+     """意图元数据信息"""
+-    mode: IntentMode # [IES 2.1] 切换为枚举
++    mode: IntentMode # 切换为枚举
+     tag: Optional[str] = None # Optional tag for precise removal/masking
+     content: str # Raw content or constant string
+     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
+diff --git a/core/kernel/axioms/primitives.py b/core/kernel/axioms/primitives.py
+index 312c5fe..0475e32 100644
+--- a/core/kernel/axioms/primitives.py
++++ b/core/kernel/axioms/primitives.py
+@@ -200,7 +200,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
+         if val in ("false", "0", "no", "off"): return False
+         
+         # 2. 使用正则边界匹配 (防止 "not true" 误匹配)
+-        # [IES 2.2 Refactor] 同步 llm_executor 的健壮解析逻辑
++        # 同步 llm_executor 的健壮解析逻辑
+         true_pattern = r'\b(true|yes|1|on)\b'
+         false_pattern = r'\b(false|no|0|off)\b'
+         
+@@ -226,7 +226,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
+     def name(self) -> str: return "str"
+     
+     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
+-        # [IES 2.1 Refactor] 使用公理名称判定替代 identity 判定
++        # 使用公理名称判定替代 identity 判定
+         if other.get_base_axiom_name() == "int":
+             return "Use .cast_to(int) or int(s) to convert string to integer."
+         return None
+@@ -434,7 +434,7 @@ class ExceptionAxiom(BaseAxiom, ConverterCapability):
+         }
+ 
+ class BoundMethodAxiom(BaseAxiom, CallCapability):
+-    """[IES 2.1] bound_method 类型的行为公理"""
++    """ bound_method 类型的行为公理"""
+     
+     @property
+     def name(self) -> str: return "bound_method"
+diff --git a/core/kernel/axioms/protocols.py b/core/kernel/axioms/protocols.py
+index 030aa07..b8123e9 100644
+--- a/core/kernel/axioms/protocols.py
++++ b/core/kernel/axioms/protocols.py
+@@ -31,7 +31,7 @@ class ParserCapability(Protocol):
+     def parse_value(self, raw_value: str) -> Any: ...
+ 
+ class WritableTrait(Protocol):
+-    """[IES 2.1] 写能力：描述一个元数据对象如何被安全地更新（如分析阶段回填签名）"""
++    """ 写能力：描述一个元数据对象如何被安全地更新（如分析阶段回填签名）"""
+     def update_signature(self, param_types: List['TypeDescriptor'], return_type: Optional['TypeDescriptor']) -> None: ...
+ 
+ class TypeAxiom(Protocol):
+@@ -56,7 +56,7 @@ class TypeAxiom(Protocol):
+         ...
+     
+     def get_operators(self) -> Dict[str, str]:
+-        """[IES 2.1] 获取支持的二元运算符及其对应的魔术方法名 (如 {"+": "__add__"})"""
++        """ 获取支持的二元运算符及其对应的魔术方法名 (如 {"+": "__add__"})"""
+         ...
+     
+     def is_dynamic(self) -> bool:
+@@ -76,15 +76,15 @@ class TypeAxiom(Protocol):
+         ...
+ 
+     def get_parent_axiom_name(self) -> Optional[str]:
+-        """[IES 2.1] 继承关系：返回父类公理名称 (如 bool -> int)"""
++        """ 继承关系：返回父类公理名称 (如 bool -> int)"""
+         ...
+ 
+     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
+-        """[IES 2.1] 类型演算：根据泛型参数产生新的特化类型"""
++        """ 类型演算：根据泛型参数产生新的特化类型"""
+         ...
+ 
+     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
+-        """[IES 2.1] 诊断增强：获取类型不匹配时的公理化提示"""
++        """ 诊断增强：获取类型不匹配时的公理化提示"""
+         ...
+ 
+     def can_return_from_isolated(self) -> bool:
+diff --git a/core/kernel/registry.py b/core/kernel/registry.py
+index 5088ab3..1fd3ac1 100644
+--- a/core/kernel/registry.py
++++ b/core/kernel/registry.py
+@@ -200,7 +200,7 @@ class KernelRegistry:
+         if name in self._classes:
+              raise ValueError(f"Registry: Class '{name}' is already registered. Duplicate registration is forbidden in strict mode.")
+ 
+-        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
++        # 自动同步到元数据注册表，并获取克隆后的隔离副本
+         if self._metadata_registry:
+             descriptor = self._metadata_registry.register(descriptor)
+             
+@@ -208,7 +208,7 @@ class KernelRegistry:
+         ib_class.descriptor = descriptor
+         self._classes[name] = ib_class
+         
+-        # [IES 2.0] 绑定注册表引用
++        # 绑定注册表引用
+         if hasattr(ib_class, 'registry'):
+             ib_class.registry = self
+ 
+@@ -218,7 +218,7 @@ class KernelRegistry:
+         if descriptor.name != name:
+              raise ValueError(f"Registry: Function descriptor name '{descriptor.name}' does not match registered name '{name}'.")
+              
+-        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
++        # 自动同步到元数据注册表，并获取克隆后的隔离副本
+         if self._metadata_registry:
+             descriptor = self._metadata_registry.register(descriptor)
+ 
+@@ -265,7 +265,7 @@ class KernelRegistry:
+         return value
+ 
+     def is_truthy(self, obj: Any) -> bool:
+-        """[IES 2.1] 判定对象的真值 (Truthy)。"""
++        """ 判定对象的真值 (Truthy)。"""
+         if obj is None or obj is self._none_instance:
+             return False
+         if hasattr(obj, 'to_bool'):
+diff --git a/core/kernel/symbols.py b/core/kernel/symbols.py
+index e9a43bd..725ade1 100644
+--- a/core/kernel/symbols.py
++++ b/core/kernel/symbols.py
+@@ -21,17 +21,17 @@ class Symbol:
+     """静态符号基类"""
+     name: str
+     kind: SymbolKind
+-    uid: Optional[str] = None # [IES 2.1] 唯一标识符，用于解决变量遮蔽 (Shadowing)
++    uid: Optional[str] = None # 唯一标识符，用于解决变量遮蔽 (Shadowing)
+     def_node: Optional[Any] = None # 直接引用定义它的 AST 节点对象
+     owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
+     metadata: Dict[str, Any] = field(default_factory=dict)
+     
+-    # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中称层
++    # 直接持有 TypeDescriptor，不再使用 StaticType 中称层
+     descriptor: Optional[TypeDescriptor] = None
+ 
+     def walk_references(self, callback: Any) -> None:
+         """
+-        [IES 2.1] 遍历符号持有的类型引用。
++         遍历符号持有的类型引用。
+         """
+         if self.descriptor:
+             self.descriptor = callback(self.descriptor)
+@@ -134,12 +134,12 @@ class SymbolTable:
+     """
+     def __init__(self, parent: Optional['SymbolTable'] = None, name: Optional[str] = None):
+         self.parent = parent
+-        self.name = name # [IES 2.1] 作用域名称 (如函数名、类名)
+-        self.depth = (parent.depth + 1) if parent else 0 # [IES 2.1] 作用域深度
++        self.name = name # 作用域名称 (如函数名、类名)
++        self.depth = (parent.depth + 1) if parent else 0 # 作用域深度
+         self.symbols: Dict[str, Symbol] = {}
+         self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
+         self._uid = None
+-        self._child_count = 0 # [IES 2.1] 用于生成确定性匿名 UID
++        self._child_count = 0 # 用于生成确定性匿名 UID
+         
+         if parent:
+             parent._child_count += 1
+@@ -147,7 +147,7 @@ class SymbolTable:
+ 
+     @property
+     def uid(self) -> str:
+-        """[IES 2.1] 生成确定性作用域 UID"""
++        """ 生成确定性作用域 UID"""
+         if self._uid: return self._uid
+         if not self.parent:
+             # 模块/全局作用域：UID = scope_{name}
+diff --git a/core/kernel/types/axiom_hydrator.py b/core/kernel/types/axiom_hydrator.py
+index 44367c5..6f0fe48 100644
+--- a/core/kernel/types/axiom_hydrator.py
++++ b/core/kernel/types/axiom_hydrator.py
+@@ -33,18 +33,16 @@ class AxiomHydrator:
+                 if method_descs:
+                     # [ARCHITECTURE NOTE]
+                     # 延迟导入 FunctionSymbol 和 SymbolKind 以避免循环依赖：
+-                    #   axiom_hydrator.py → descriptors.py → types/__init__.py →
+-                    #   registry.py → axiom_hydrator.py (顶层会形成循环)
+-                    #
+-                    # Symbol ↔ TypeDescriptor 的双向引用是设计的内在需求：
+-                    #   - Symbol.descriptor: 符号需要知道自己的类型
+-                    #   - TypeDescriptor.members: 类型需要知道自己的成员
++                    # axiom_hydrator.py → descriptors.py → types/__init__.py →
++                    # registry.py → axiom_hydrator.py (顶层会形成循环)
++                    #                    # Symbol ↔ TypeDescriptor 的双向引用是设计的内在需求：
++                    # - Symbol.descriptor: 符号需要知道自己的类型
++                    # - TypeDescriptor.members: 类型需要知道自己的成员
+                     # 这反映了编译器中符号表与类型系统的固有耦合关系。
+-                    #
+-                    # 未来如需彻底解耦，可考虑：
+-                    #   1. 引入 StaticType 中间接口层
+-                    #   2. 将 SymbolKind 等枚举移至独立子模块
+-                    #   3. 使用依赖注入容器管理初始化顺序
++                    #                    # 未来如需彻底解耦，可考虑：
++                    # 1. 引入 StaticType 中间接口层
++                    # 2. 将 SymbolKind 等枚举移至独立子模块
++                    # 3. 使用依赖注入容器管理初始化顺序
+                     from core.kernel.symbols import FunctionSymbol, SymbolKind
+                     for m_name, m_desc in method_descs.items():
+                         hydrated_m_desc = self.hydrate_metadata(m_desc)
+diff --git a/core/kernel/types/descriptors.py b/core/kernel/types/descriptors.py
+index b644154..b4c85d3 100644
+--- a/core/kernel/types/descriptors.py
++++ b/core/kernel/types/descriptors.py
+@@ -30,12 +30,12 @@ class TypeDescriptor:
+     # 运行时绑定的注册表上下文
+     _registry: Optional['MetadataRegistry'] = field(default=None, init=False, repr=False)
+     
+-    # [New] 公理绑定
++    # 公理绑定
+     _axiom: Optional['TypeAxiom'] = field(default=None, init=False, repr=False)
+ 
+     def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
+         """
+-        [IES 2.1] 深度遍历描述符持有的类型引用。
++         深度遍历描述符持有的类型引用。
+         与 walk_references 的区别在于，它不包含 members 遍历，
+         专门用于 clone 过程中处理子类特有的字段（如 element_type）。
+         """
+@@ -43,7 +43,7 @@ class TypeDescriptor:
+ 
+     def walk_references(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
+         """
+-        [IES 2.1] 深度遍历描述符持有的类型引用（包含成员符号）。
++         深度遍历描述符持有的类型引用（包含成员符号）。
+         """
+         if self.members:
+             for sym in self.members.values():
+@@ -52,7 +52,7 @@ class TypeDescriptor:
+ 
+     def get_references(self) -> Dict[str, Any]:
+         """
+-        [IES 2.1] 获取所有内部持有的类型引用。
++         获取所有内部持有的类型引用。
+         用于序列化和结构分析，消除 isinstance 检查。
+         """
+         return {}
+@@ -79,7 +79,7 @@ class TypeDescriptor:
+             # 注意：此处必须使用 dict comprehension 确保 Symbol.clone 也能使用同一个 memo
+             new_desc.members = {name: sym.clone(memo) for name, sym in self.members.items()}
+             
+-        # 4. [IES 2.1 Refactor] 多态处理子类持有的结构化类型引用
++        # 4.  多态处理子类持有的结构化类型引用
+         # 注意：此处必须使用一个新的 callback，它只对“尚未被克隆”的原生引用调用 clone
+         def clone_ref(d: 'TypeDescriptor') -> 'TypeDescriptor':
+             if id(d) in memo:
+@@ -96,18 +96,18 @@ class TypeDescriptor:
+     def __eq__(self, other: Any) -> bool:
+         if type(self) is not type(other):
+             return False
+-        # [IES 2.1 Refactor] 基于名称与引用进行一致性判定，消除子类中的冗余 isinstance
++        # 基于名称与引用进行一致性判定，消除子类中的冗余 isinstance
+         return self.name == other.name and self.get_references() == other.get_references()
+ 
+     def unwrap(self) -> 'TypeDescriptor':
+         return self
+ 
+     def get_signature(self) -> Optional[tuple[List['TypeDescriptor'], Optional['TypeDescriptor']]]:
+-        """[IES 2.1] 获取函数签名 (参数列表, 返回类型)。多态实现，消除 isinstance。"""
++        """ 获取函数签名 (参数列表, 返回类型)。多态实现，消除 isinstance。"""
+         return None
+ 
+     def get_base_axiom_name(self) -> str:
+-        """[IES 2.1] 获取该描述符对应的基础公理名称"""
++        """ 获取该描述符对应的基础公理名称"""
+         return self.name
+ 
+     # --- Capability Accessors (Delegated to Axiom) ---
+@@ -162,13 +162,13 @@ class TypeDescriptor:
+         return None
+ 
+     def resolve_specialization(self, args: List['TypeDescriptor']) -> 'TypeDescriptor':
+-        """[IES 2.1] 产生特化类型（委托给公理）"""
++        """ 产生特化类型（委托给公理）"""
+         if self._axiom and self._registry:
+             return self._axiom.resolve_specialization(self._registry, args)
+         return self
+ 
+     def rehydrate_fields(self, data: Dict[str, Any], hydrator: Any) -> None:
+-        """[IES 2.1] 重水化：根据扁平化数据恢复对象字段"""
++        """ 重水化：根据扁平化数据恢复对象字段"""
+         pass
+ 
+     def get_operator_result(self, op: str, other: Optional['TypeDescriptor'] = None) -> Optional['TypeDescriptor']:
+@@ -198,7 +198,7 @@ class TypeDescriptor:
+         """获取写能力（用于分析阶段更新元数据）"""
+         if self._axiom:
+             return self._axiom.get_writable_trait()
+-        # [IES 2.1 Refactor] 使用能力探测替代 isinstance 检查
++        # 使用能力探测替代 isinstance 检查
+         if hasattr(self, 'update_signature'):
+             return self
+         return None
+@@ -216,14 +216,14 @@ class TypeDescriptor:
+         """是否为类类型。"""
+         if self._axiom:
+             return self._axiom.is_class()
+-        # [IES 2.1 Refactor] 默认通过 kind 判定，消除 isinstance
++        # 默认通过 kind 判定，消除 isinstance
+         return self.kind == "ClassMetadata"
+ 
+     def is_module(self) -> bool:
+         """是否为模块类型。"""
+         if self._axiom:
+             return self._axiom.is_module()
+-        # [IES 2.1 Refactor] 默认通过 kind 判定，消除 isinstance
++        # 默认通过 kind 判定，消除 isinstance
+         return self.kind == "ModuleMetadata"
+ 
+     def is_behavior(self) -> bool:
+@@ -304,7 +304,7 @@ class TypeDescriptor:
+ 
+     # TODO: 疑问：是否存在问题？结构化兼容逻辑是不是有点宽松？
+     def _is_structurally_compatible(self, other: 'TypeDescriptor') -> bool:
+-        """[IES 2.1 Refactor] 子类可重写的结构化兼容性逻辑，消除硬编码比对"""
++        """ 子类可重写的结构化兼容性逻辑，消除硬编码比对"""
+         if type(self) is not type(other):
+             return False
+         return self.name == other.name and self.get_references() == other.get_references()
+@@ -340,7 +340,7 @@ class LazyDescriptor(TypeDescriptor):
+         self.target_module = module_path
+ 
+     def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
+-        """[IES 2.1] 延迟加载描述符也需要参与多态遍历"""
++        """ 延迟加载描述符也需要参与多态遍历"""
+         if self._resolved:
+             self._resolved = callback(self._resolved)
+ 
+@@ -395,7 +395,7 @@ class LazyDescriptor(TypeDescriptor):
+         return self.unwrap().resolve_item(key)
+ 
+     def get_references(self) -> Dict[str, Any]:
+-        """[IES 2.1] 延迟加载描述符返回已解析描述符的引用"""
++        """ 延迟加载描述符返回已解析描述符的引用"""
+         if self._resolved:
+             return {"_resolved": self._resolved}
+         return {}
+@@ -555,7 +555,7 @@ class FunctionMetadata(TypeDescriptor):
+         return self
+ 
+     def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']:
+-        # [FIX] FunctionMetadata 是具体的签名描述，不应该被动态公理拦截
++        # FunctionMetadata 是具体的签名描述，不应该被动态公理拦截
+         # 静态推导：检查参数匹配
+         if len(args) != len(self.param_types):
+             return None
+@@ -571,7 +571,7 @@ class FunctionMetadata(TypeDescriptor):
+         if o is CALLABLE_DESCRIPTOR:
+             return True
+             
+-        # [IES 2.1 Refactor] 使用能力探测 (get_signature) 代替 isinstance 检查
++        # 使用能力探测 (get_signature) 代替 isinstance 检查
+         o_sig = o.get_signature()
+         if o_sig:
+             o_params, o_ret = o_sig
+@@ -607,7 +607,7 @@ class ClassMetadata(TypeDescriptor):
+         return self
+ 
+     def get_references(self) -> Dict[str, Any]:
+-        """[IES 2.1] 补全类元数据的引用获取，支持结构化比对"""
++        """ 补全类元数据的引用获取，支持结构化比对"""
+         refs = super().get_references()
+         parent = self.resolve_parent()
+         if parent:
+@@ -666,7 +666,7 @@ class BoundMethodMetadata(TypeDescriptor):
+ 
+     @property
+     def param_types(self) -> List[TypeDescriptor]:
+-        """[IES 2.1] 代理函数签名的参数列表，并移除第一个 self 参数"""
++        """ 代理函数签名的参数列表，并移除第一个 self 参数"""
+         sig = self.function_type.get_signature() if self.function_type else None
+         if sig:
+             params, _ = sig
+@@ -704,7 +704,7 @@ class BoundMethodMetadata(TypeDescriptor):
+ 
+     def __post_init__(self):
+         super().__post_init__()
+-        # [NEW] 统一绑定方法的名称标识，通过结构化校验实现强类型
++        # 统一绑定方法的名称标识，通过结构化校验实现强类型
+         self.name = "bound_method"
+ 
+     def is_assignable_to(self, other: TypeDescriptor) -> bool:
+@@ -714,7 +714,7 @@ class BoundMethodMetadata(TypeDescriptor):
+         if o is CALLABLE_DESCRIPTOR:
+             return True
+             
+-        # [IES 2.1 Refactor] 使用能力探测代替 isinstance 检查
++        # 使用能力探测代替 isinstance 检查
+         o_receiver = o.get_receiver_type()
+         o_func = o.get_function_type()
+         
+@@ -737,7 +737,7 @@ class ModuleMetadata(TypeDescriptor):
+         return "module"
+ 
+     def get_references(self) -> Dict[str, Any]:
+-        """[IES 2.1] 模块元数据的引用获取"""
++        """ 模块元数据的引用获取"""
+         refs = super().get_references()
+         if hasattr(self, 'required_capabilities') and self.required_capabilities:
+             refs["required_capabilities"] = self.required_capabilities
+@@ -762,7 +762,7 @@ VAR_DESCRIPTOR = TypeDescriptor(name="var", is_nullable=True, is_user_defined=Fa
+ CALLABLE_DESCRIPTOR = TypeDescriptor(name="callable", is_nullable=True, is_user_defined=False)
+ EXCEPTION_DESCRIPTOR = TypeDescriptor(name="Exception", is_nullable=True, is_user_defined=False)
+ 
+-# [New] Missing Descriptors
++# Missing Descriptors
+ NONE_DESCRIPTOR = TypeDescriptor(name="None", is_nullable=True, is_user_defined=False)
+ BEHAVIOR_DESCRIPTOR = TypeDescriptor(name="behavior", is_nullable=True, is_user_defined=False)
+ BOUND_METHOD_DESCRIPTOR = BoundMethodMetadata(is_user_defined=False) # name will be "bound_method"
+diff --git a/core/kernel/types/registry.py b/core/kernel/types/registry.py
+index f09a1dc..f21c9e5 100644
+--- a/core/kernel/types/registry.py
++++ b/core/kernel/types/registry.py
+@@ -121,7 +121,7 @@ class MetadataRegistry:
+         return self._descriptors.get(key)
+ 
+     def resolve_from_value(self, value: Any) -> Optional[TypeDescriptor]:
+-        """[IES 2.1] 根据 Python 原生值解析对应的 UTS 描述符"""
++        """ 根据 Python 原生值解析对应的 UTS 描述符"""
+         if isinstance(value, bool): return self.resolve("bool")
+         if isinstance(value, int): return self.resolve("int")
+         if isinstance(value, float): return self.resolve("float")
+@@ -156,7 +156,7 @@ class MetadataRegistry:
+             cloned_desc = descriptor.clone(memo)
+             new_registry._descriptors[key] = cloned_desc
+ 
+-        # [IES 2.2 Fix] 重新水合克隆出的所有描述符，绑定新的注册表并注入公理能力
++        # 重新水合克隆出的所有描述符，绑定新的注册表并注入公理能力
+         # 否则子环境中的描述符将丢失 _registry 和 _axiom 引用，导致运算符解析失败
+         for desc in memo.values():
+             if isinstance(desc, TypeDescriptor):
+@@ -174,7 +174,7 @@ class MetadataRegistry:
+ 
+     def to_dict(self) -> Dict[str, Any]:
+         """
+-        [IES 2.2] 将 MetadataRegistry 序列化为字典，用于 .ibc_meta 文件生成。
++         将 MetadataRegistry 序列化为字典，用于 .ibc_meta 文件生成。
+         实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
+         """
+         result = {
+diff --git a/core/runtime/bootstrap/builtin_initializer.py b/core/runtime/bootstrap/builtin_initializer.py
+index 626a1e3..d7cbf4c 100644
+--- a/core/runtime/bootstrap/builtin_initializer.py
++++ b/core/runtime/bootstrap/builtin_initializer.py
+@@ -18,7 +18,7 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
+     ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
+ 
+ def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
+-    """[IES 2.1] 基于公理声明自动化绑定二元运算符"""
++    """ 基于公理声明自动化绑定二元运算符"""
+     axiom = ib_cls.descriptor._axiom
+     if not axiom: return
+     
+@@ -49,7 +49,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+     if registry.is_initialized:
+         return None # 已初始化
+         
+-    # [IES 2.0] 确保处于 STAGE_1_BOOTSTRAP 状态
++    # 确保处于 STAGE_1_BOOTSTRAP 状态
+     registry.verify_level(RegistrationState.STAGE_1_BOOTSTRAP.value)
+     
+     # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
+@@ -68,7 +68,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+     registry.register_metadata_registry(metadata_registry, token)
+ 
+     # 3. 创建核心内置类 (Axiom-Driven Automation)
+-    # [NEW] 遍历 AxiomRegistry 自动初始化所有注册的原子类型
++    # 遍历 AxiomRegistry 自动初始化所有注册的原子类型
+     
+     # 基础类型映射表 (用于绑定具体的 IbClass 实现)
+     # [IES 2.1 Regularization] 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
+@@ -118,7 +118,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+                         # 绑定为原生方法
+                         _reg_native(ib_cls, method_name, py_method, unbox=False)
+                 
+-                # [IES 2.1] 自动化运算符绑定
++                # 自动化运算符绑定
+                 _auto_bind_operators(ib_cls, py_impl_cls)
+ 
+     # 获取引用以便后续绑定 (保持兼容性)
+@@ -162,7 +162,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
+     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
+     
+-    # [NEW] int(x) 构造函数/转换逻辑
++    # int(x) 构造函数/转换逻辑
+     def _int_call(self, *args):
+         if not args: return self.registry.box(0)
+         return args[0].receive('cast_to', [self])
+@@ -171,7 +171,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+     # Float
+     _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
+ 
+-    # [NEW] float(x) 构造函数/转换逻辑
++    # float(x) 构造函数/转换逻辑
+     def _float_call(self, *args):
+         if not args: return self.registry.box(0.0)
+         return args[0].receive('cast_to', [self])
+@@ -180,7 +180,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+     # String
+     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
+     
+-    # [NEW] str(x) 构造函数/转换逻辑
++    # str(x) 构造函数/转换逻辑
+     def _str_call(self, *args):
+         if not args: return self.registry.box("")
+         return args[0].receive('__to_prompt__', [])
+diff --git a/core/runtime/bootstrapper.py b/core/runtime/bootstrapper.py
+index 4acf58c..f38d511 100644
+--- a/core/runtime/bootstrapper.py
++++ b/core/runtime/bootstrapper.py
+@@ -47,7 +47,7 @@ class Bootstrapper:
+         module_desc = factory.create_class("IbModule", is_nullable=True)
+         intent_desc = factory.create_class("Intent", is_nullable=True)
+         
+-        # [IES 2.0] 内核类不属于用户定义类
++        # 内核类不属于用户定义类
+         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc]:
+             d.is_user_defined = False
+ 
+diff --git a/core/runtime/capability_registry.py b/core/runtime/capability_registry.py
+index a96b9c7..f73d97b 100644
+--- a/core/runtime/capability_registry.py
++++ b/core/runtime/capability_registry.py
+@@ -32,7 +32,7 @@ class CapabilityProvider:
+ 
+ class CapabilityRegistry:
+     """
+-    [IES 2.1] 能力注册中心。
++     能力注册中心。
+     统一管理内核能力的注册、获取和替换。
+     """
+     CAP_LLM_PROVIDER = "llm_provider"
+diff --git a/core/runtime/host/dynamic_host.py b/core/runtime/host/dynamic_host.py
+index 703520f..b50abf3 100644
+--- a/core/runtime/host/dynamic_host.py
++++ b/core/runtime/host/dynamic_host.py
+@@ -7,7 +7,7 @@ from core.runtime.host.isolation_policy import IsolationPolicy
+ @dataclass
+ class IsolatedRunResult:
+     """
+-    [IES 2.1] 隔离子环境运行结果。
++     隔离子环境运行结果。
+     替代简单的 bool 返回值，提供完整的执行状态信息。
+     """
+     success: bool
+@@ -18,7 +18,7 @@ class IsolatedRunResult:
+ 
+ 
+ def _dynamic_host_vtable() -> Dict[str, Any]:
+-    """[IES 2.2] DynamicHost 虚表"""
++    """ DynamicHost 虚表"""
+     impl = DynamicHost()
+     return {
+         "save_state": impl.save_state,
+@@ -31,7 +31,7 @@ def _dynamic_host_vtable() -> Dict[str, Any]:
+ 
+ class DynamicHost(IbPlugin):
+     """
+-    [IES 2.1] 动态宿主插件。
++     动态宿主插件。
+     实现运行时持久化、隔离执行、事务快照和元编程能力。
+     """
+     def __init__(self):
+@@ -132,7 +132,7 @@ class DynamicHost(IbPlugin):
+         return ""
+ 
+     def generate_and_run(self, code: str, policy: Dict[str, Any]) -> 'IsolatedRunResult':
+-        """[IES 2.1] 动态生成 IBCI 代码并执行"""
++        """ 动态生成 IBCI 代码并执行"""
+         import tempfile
+         import os
+         sc = self._capabilities.service_context
+diff --git a/core/runtime/host/host_interface.py b/core/runtime/host/host_interface.py
+index 486765a..0a7b1aa 100644
+--- a/core/runtime/host/host_interface.py
++++ b/core/runtime/host/host_interface.py
+@@ -23,7 +23,7 @@ class HostModuleRegistry:
+ 
+ class HostInterface:
+     """
+-    [IES 2.2] 统一的宿主环境接口注册器。
++     统一的宿主环境接口注册器。
+ 
+     协调元数据注册和运行时实现注册。
+     所有 HostInterface 实例必须绑定到带有 AxiomRegistry 的 MetadataRegistry。
+@@ -47,7 +47,7 @@ class HostInterface:
+ 
+     def register_module(self, name: str, implementation: Any, metadata: Optional['ModuleMetadata'] = None, discovery_name: Optional[str] = None):
+         """
+-        [IES 2.2] 同时注册元数据 and 实现。
++         同时注册元数据 and 实现。
+         
+         discovery_name: 物理名称 (如目录名)。
+         """
+@@ -64,11 +64,11 @@ class HostInterface:
+             self.metadata.register(ModuleMetadata(name=name))
+ 
+     def get_module_by_discovery_name(self, discovery_name: str) -> Optional[str]:
+-        """[IES 2.2] 根据物理发现名称查找已注册的模块名称"""
++        """ 根据物理发现名称查找已注册的模块名称"""
+         return self._discovery_map.get(discovery_name)
+ 
+     def get_discovery_name_by_module(self, module_name: str) -> Optional[str]:
+-        """[IES 2.2] 根据逻辑模块名查找物理发现名称"""
++        """ 根据逻辑模块名查找物理发现名称"""
+         return self._reverse_discovery_map.get(module_name)
+ 
+     def register_global_function(self, name: str, implementation: Any, metadata: 'FunctionMetadata'):
+diff --git a/core/runtime/host/isolation_policy.py b/core/runtime/host/isolation_policy.py
+index 9a26c85..3d475a3 100644
+--- a/core/runtime/host/isolation_policy.py
++++ b/core/runtime/host/isolation_policy.py
+@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
+ @dataclass
+ class IsolationPolicy:
+     """
+-    [IES 2.1] 隔离级别策略。
++     隔离级别策略。
+ 
+     | Level       | Registry | Plugins | Intents | Variables | CallStack |
+     |-------------|----------|---------|---------|-----------|-----------|
+diff --git a/core/runtime/host/service.py b/core/runtime/host/service.py
+index 116d8e3..28ee558 100644
+--- a/core/runtime/host/service.py
++++ b/core/runtime/host/service.py
+@@ -31,7 +31,7 @@ class HostService(IHostService):
+ 
+     def sync(self) -> bool:
+         """
+-        [IES 2.1] 安全点同步 (Safe Point Sync) 原语。
++         安全点同步 (Safe Point Sync) 原语。
+         等待所有执行上下文达到一致状态后返回。
+         """
+         return self._sync_manager.sync()
+@@ -104,7 +104,7 @@ class HostService(IHostService):
+         self.setup_context_callback(context, force=True)
+         
+         # 2. 重新注入原生插件 (Native Plugins)
+-        # [IES 2.1 Refactor] 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
++        # 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
+         for name in self.interop.get_all_package_names():
+             pkg = self.interop.get_package(name)
+             if pkg:
+@@ -121,7 +121,7 @@ class HostService(IHostService):
+ 
+     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
+         """
+-        [IES 2.2] 通过内核协调器开启完全隔离的解释器环境。
++         通过内核协调器开启完全隔离的解释器环境。
+         不再负责手动孵化实例或编译代码，而是将请求作为系统调用上报。
+         """
+         if not self.orchestrator:
+diff --git a/core/runtime/host/sync_manager.py b/core/runtime/host/sync_manager.py
+index 55b1205..7ddb3cc 100644
+--- a/core/runtime/host/sync_manager.py
++++ b/core/runtime/host/sync_manager.py
+@@ -19,7 +19,7 @@ class SyncPoint:
+ 
+ class SyncManager:
+     """
+-    [IES 2.1] 安全点同步管理器。
++     安全点同步管理器。
+     协调多线程/协程环境下的同步操作。
+     """
+     def __init__(self):
+diff --git a/core/runtime/interfaces.py b/core/runtime/interfaces.py
+index 1051455..f6353ca 100644
+--- a/core/runtime/interfaces.py
++++ b/core/runtime/interfaces.py
+@@ -143,7 +143,7 @@ class IHostService(Protocol):
+ 
+ class IKernelOrchestrator(Protocol):
+     """
+-    [IES 2.2] 内核协调器协议。
++     内核协调器协议。
+     定义了运行时环境向引擎层（Host/Engine）发起的最高特权系统调用。
+     用于解决架构穿透问题，使运行时无需感知 Compiler 等底层构建组件。
+     """
+@@ -213,7 +213,7 @@ class IIbIntent(IIbObject, Protocol):
+ class IIbBehavior(IIbObject, Protocol):
+     """延迟执行的行为对象协议 (~...~)"""
+     node: str
+-    captured_intents: Union[List[Any], Any] # [IES 2.2] 支持 IntentNode 或 列表
++    captured_intents: Union[List[Any], Any] # 支持 IntentNode 或 列表
+     expected_type: Optional[str]
+ 
+ @runtime_checkable
+diff --git a/core/runtime/interpreter/constants.py b/core/runtime/interpreter/constants.py
+index 971e9f9..22ff030 100644
+--- a/core/runtime/interpreter/constants.py
++++ b/core/runtime/interpreter/constants.py
+@@ -21,7 +21,7 @@ OP_MAPPING = {
+     '>=': '__ge__',
+ }
+ 
+-# [IES 2.0] AST 节点符号到标准运算符的映射 (归一化转换)
++# AST 节点符号到标准运算符的映射 (归一化转换)
+ AST_OP_MAP = {
+     # 二元/复合赋值
+     'Add': '+', 'Sub': '-', 'Mult': '*', 'Div': '/', 'FloorDiv': '//', 'Mod': '%',
+diff --git a/core/runtime/interpreter/execution_context.py b/core/runtime/interpreter/execution_context.py
+index a72e198..ad966f6 100644
+--- a/core/runtime/interpreter/execution_context.py
++++ b/core/runtime/interpreter/execution_context.py
+@@ -39,8 +39,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
+         self._factory = factory
+         self._runtime_context = None
+         self._logical_stack = None # 由 Interpreter 初始化并注入
+-        self._current_module_name = None # [IES 2.1]
+-        self._module_manager = module_manager
++        self._current_module_name = None #        self._module_manager = module_manager
+         self._strict_mode = strict_mode
+         
+         # Logic Callbacks
+diff --git a/core/runtime/interpreter/handlers/base_handler.py b/core/runtime/interpreter/handlers/base_handler.py
+index 016c20f..f5b73da 100644
+--- a/core/runtime/interpreter/handlers/base_handler.py
++++ b/core/runtime/interpreter/handlers/base_handler.py
+@@ -99,7 +99,7 @@ class BaseHandler:
+         
+         try:
+             # 2. 调用执行器 (此时环境已就绪)
+-            # [IES 2.0] IbBehavior 使用 .node 存储 node_uid
++            # IbBehavior 使用 .node 存储 node_uid
+             node_uid = getattr(behavior, 'node', None) or getattr(behavior, 'node_uid', None)
+             return self.service_context.llm_executor.execute_behavior_expression(
+                 node_uid, 
+diff --git a/core/runtime/interpreter/handlers/expr_handler.py b/core/runtime/interpreter/handlers/expr_handler.py
+index ac0e871..dbafdc1 100644
+--- a/core/runtime/interpreter/handlers/expr_handler.py
++++ b/core/runtime/interpreter/handlers/expr_handler.py
+@@ -69,7 +69,7 @@ class ExprHandler(BaseHandler):
+         operand = self.visit(node_data.get("operand"))
+         op_symbol = node_data.get("op")
+         
+-        # [IES 2.0] 使用全局归一化映射，消除 Handler 内部硬编码
++        # 使用全局归一化映射，消除 Handler 内部硬编码
+         op = AST_OP_MAP.get(op_symbol, op_symbol)
+         method = UNARY_OP_MAPPING.get(op)
+         
+@@ -82,7 +82,7 @@ class ExprHandler(BaseHandler):
+         ops = node_data.get("ops", [])
+         comparators = node_data.get("comparators", [])
+         
+-        # [IES 2.0] 必须处理链式比较，例如 a < b < c 
++        # 必须处理链式比较，例如 a < b < c 
+         # Python 语义：(a < b) and (b < c)，且每个操作数只计算一次
+         
+         current_left = left
+@@ -112,7 +112,7 @@ class ExprHandler(BaseHandler):
+         args = [self.visit(a) for a in node_data.get("args", [])]
+         
+         try:
+-            # [IES 2.0 Architectural Update] 识别被动行为对象并分发给执行器
++            # 识别被动行为对象并分发给执行器
+             if isinstance(func, IIbBehavior):
+                 return self._execute_behavior(func)
+ 
+@@ -156,7 +156,7 @@ class ExprHandler(BaseHandler):
+         return self.registry.box(data)
+ 
+     def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+-        """[IES 2.0 Architectural Update] 行为描述行不再立即执行，而是包装为被动行为对象。"""
++        """ 行为描述行不再立即执行，而是包装为被动行为对象。"""
+         # 1. 检查是否显式标记为延迟
+         is_deferred = self.get_side_table("node_is_deferred", node_uid)
+         
+@@ -178,7 +178,7 @@ class ExprHandler(BaseHandler):
+             captured_intents = self.runtime_context.intent_stack
+             
+             # 如果是延迟执行，行为对象需要持有自己的 call_intent
+-            # [FIX] 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
++            # 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
+             # 暂时保持现状，等待下一步重构 behavior 对象。
+             return self.service_context.object_factory.create_behavior(
+                 node_uid, 
+@@ -193,7 +193,7 @@ class ExprHandler(BaseHandler):
+         """类型强转运行时实现"""
+         value = self.visit(node_data.get("value"))
+         
+-        # [IES 2.1 Refactor] 强制从 side_tables 获取决议后的目标描述符
++        # 强制从 side_tables 获取决议后的目标描述符
+         target_descriptor = self.get_side_table("node_to_type", node_uid)
+         if not target_descriptor:
+             # [Active Defense] 严禁回退到名称查找，确保 IES 2.1 契约完整性
+diff --git a/core/runtime/interpreter/handlers/import_handler.py b/core/runtime/interpreter/handlers/import_handler.py
+index a75444a..1230eb1 100644
+--- a/core/runtime/interpreter/handlers/import_handler.py
++++ b/core/runtime/interpreter/handlers/import_handler.py
+@@ -17,7 +17,7 @@ class ImportHandler(BaseHandler):
+                 # 绑定到当前作用域：优先使用别名，否则使用原始模块名
+                 target_name = asname if asname else name
+                 
+-                # [FIX] 必须获取符号 UID 并绑定，否则 visit_IbName 无法通过 UID 查找到该模块
++                # 必须获取符号 UID 并绑定，否则 visit_IbName 无法通过 UID 查找到该模块
+                 sym_uid = self.get_side_table("node_to_symbol", alias_uid)
+                 self.runtime_context.define_variable(target_name, mod_inst, is_const=True, uid=sym_uid)
+         return self.registry.get_none()
+diff --git a/core/runtime/interpreter/handlers/stmt_handler.py b/core/runtime/interpreter/handlers/stmt_handler.py
+index 657a065..29d0ad9 100644
+--- a/core/runtime/interpreter/handlers/stmt_handler.py
++++ b/core/runtime/interpreter/handlers/stmt_handler.py
+@@ -113,7 +113,7 @@ class StmtHandler(BaseHandler):
+         value = self.visit(node_data.get("value"))
+         op_symbol = node_data.get("op")
+         
+-        # [IES 2.0] 使用全局归一化映射，支持完整运算符集（包含 % // 等）
++        # 使用全局归一化映射，支持完整运算符集（包含 % // 等）
+         op = AST_OP_MAP.get(op_symbol, op_symbol)
+         method = OP_MAPPING.get(op)
+         
+@@ -157,7 +157,7 @@ class StmtHandler(BaseHandler):
+             if not self.execution_context.is_truthy(condition):
+                 break
+             
+-            # [IES 2.2 Fix] 局部重试支持，防止冒泡导致条件判定被跳过或重复执行
++            # 局部重试支持，防止冒泡导致条件判定被跳过或重复执行
+             retry_count = 0
+             while True:
+                 try:
+@@ -188,10 +188,10 @@ class StmtHandler(BaseHandler):
+         iter_uid = node_data.get("iter")
+         body = node_data.get("body", [])
+         
+-        # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
++        # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
+         if target_uid is None:
+             while self.execution_context.is_truthy(self.visit(iter_uid)):
+-                # [IES 2.2 Fix] 局部重试支持
++                # 局部重试支持
+                 retry_count = 0
+                 while True:
+                     try:
+@@ -225,12 +225,12 @@ class StmtHandler(BaseHandler):
+         elements = elements_obj.elements
+         total = len(elements)
+         for i, item in enumerate(elements):
+-            # [IES 2.2 Fix] 局部重试闭环，防止冒泡导致迭代器重置 (死循环隐患修复)
++            # 局部重试闭环，防止冒泡导致迭代器重置 (死循环隐患修复)
+             retry_count = 0
+             while True:
+                 self.runtime_context.push_loop_context(i, total)
+                 
+-                # [IES 2.2 Fix] 使用统一的赋值逻辑支持复杂循环目标
++                # 使用统一的赋值逻辑支持复杂循环目标
+                 if target_uid:
+                     self._assign_to_target(target_uid, item, define_only=True)
+                 
+@@ -271,7 +271,7 @@ class StmtHandler(BaseHandler):
+         except (ReturnException, BreakException, ContinueException, RetryException):
+             raise
+         except (ThrownException, Exception) as e:
+-            # [IES 2.1 Refactor] 统一异常对象化
++            # 统一异常对象化
+             if isinstance(e, ThrownException):
+                 error_obj = e.value
+             else:
+@@ -280,7 +280,7 @@ class StmtHandler(BaseHandler):
+                 if not exc_class:
+                     raise self.report_error("Critical Error: 'Exception' builtin class not found in registry. Bootstrap failed.", node_uid)
+                 
+-                # [FIX] 传入空参数列表给 instantiate
++                # 传入空参数列表给 instantiate
+                 error_obj = exc_class.instantiate([])
+                 error_obj.fields["message"] = self.registry.box(str(e))
+             
+@@ -304,7 +304,7 @@ class StmtHandler(BaseHandler):
+                 # 2. 绑定异常变量
+                 name = handler_data.get("name")
+                 if name:
+-                    # [IES 2.2 Fix] 使用统一的赋值逻辑支持异常变量绑定
++                    # 使用统一的赋值逻辑支持异常变量绑定
+                     # 简单起见，既然目前只有 Name，我们可以直接保留
+                     sym_uid = self.get_side_table("node_to_symbol", handler_uid)
+                     self.runtime_context.define_variable(name, error_obj, uid=sym_uid)
+@@ -359,11 +359,11 @@ class StmtHandler(BaseHandler):
+ 
+     def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+         """验证类契约并将其绑定到当前作用域"""
+-        # [IES 2.0] IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
++        # IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
+         # 此处仅负责契约验证与作用域定义。
+         name = node_data.get("name")
+         
+-        # [IES 2.0] 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
++        # 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
+         existing_class = self.registry.get_class(name)
+         if not existing_class:
+             raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. [IES 2.0 Contract Violation]", node_uid)
+diff --git a/core/runtime/interpreter/interpreter.py b/core/runtime/interpreter/interpreter.py
+index 15525f3..d5d06a6 100644
+--- a/core/runtime/interpreter/interpreter.py
++++ b/core/runtime/interpreter/interpreter.py
+@@ -62,7 +62,7 @@ class Interpreter:
+         return self.instruction_count
+ 
+     def get_captured_intents(self, obj: Any) -> List[str]:
+-        """[IES 2.1] 获取指定对象（如 Behavior）捕获的意图栈内容"""
++        """ 获取指定对象（如 Behavior）捕获的意图栈内容"""
+         if isinstance(obj, IIbBehavior):
+             res = []
+             for i in obj.captured_intents:
+@@ -100,7 +100,7 @@ class Interpreter:
+                 current_scope.define(name, symbol.descriptor, is_const=symbol.is_const, force=True)
+ 
+     def _sync_classes_from(self, parent_context: RuntimeContext):
+-        """[IES 2.1] 从父上下文同步类定义"""
++        """ 从父上下文同步类定义"""
+         pass
+ 
+ 
+@@ -163,11 +163,11 @@ class Interpreter:
+         if self._kernel_token:
+              self._registry.set_execution_context(self._execution_context, self._kernel_token)
+         
+-        # [IES 2.0] 仅在注册表未初始化时执行引导
++        # 仅在注册表未初始化时执行引导
+         if not self.registry.is_initialized:
+             initialize_builtin_classes(self.registry)
+             
+-        # [NEW] 加载内置函数插件 (Intrinsics)
++        # 加载内置函数插件 (Intrinsics)
+         self.intrinsic_manager = IntrinsicManager(self.registry)
+         # load_defaults 将在 ServiceContext 准备好后调用
+         
+@@ -195,13 +195,13 @@ class Interpreter:
+             # object_factory 已经在前面初始化
+             permission_manager = permission_manager or PermissionManagerImpl(root_dir)
+             
+-            # [IES 2.1] 初始化 LLMExecutor，注入最小数据依赖
++            # 初始化 LLMExecutor，注入最小数据依赖
+             llm_executor = llm_executor or object_factory.create_llm_executor(
+                 service_context=None, # 此时 ServiceContext 尚未完全就绪，将在后续水化
+                 execution_context=self._execution_context
+             )
+             
+-            # [IES 2.1] 初始化 ModuleManager，注入最小依赖与回调
++            # 初始化 ModuleManager，注入最小依赖与回调
+             module_manager = module_manager or ModuleManagerImpl(
+                 interop=interop, 
+                 registry=self.registry,
+@@ -211,7 +211,7 @@ class Interpreter:
+                 root_dir=root_dir
+             )
+             
+-            # [IES 2.2] 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService
++            # 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService
+             self.service_context = ServiceContextImpl(
+                 issue_tracker=issue_tracker,
+                 llm_executor=llm_executor,
+@@ -228,15 +228,15 @@ class Interpreter:
+                 input_callback=input_callback,
+                 scheduler=None, # 占位，由 Engine 统一装配
+                 capability_registry=None, # 占位，由 Engine 统一装配
+-                interpreter=self # [IES 2.2] 注入解释器实例引用
++                interpreter=self # 注入解释器实例引用
+             )
+             self._execution_context.module_manager = self.service_context.module_manager
+             
+-            # [IES 2.1] 完成延迟水化
++            # 完成延迟水化
+             if hasattr(llm_executor, 'hydrate'):
+                 llm_executor.hydrate(self.service_context)
+             
+-        # 2. [IES 2.1] 加载内置函数 (不再穿透持有 Interpreter)
++        # 2.  加载内置函数 (不再穿透持有 Interpreter)
+         self.intrinsic_manager.load_defaults(self._execution_context, self.service_context)
+ 
+         # 3. [STAGE 4] 插件加载钩子
+@@ -269,7 +269,7 @@ class Interpreter:
+         # 2. 注入全局符号与类定义
+         self._hydrate_user_classes(loaded.class_to_node)
+         
+-        # 3. [IES 2.1] STAGE 6: 预评估类字段 (Late Evaluation)
++        # 3.  STAGE 6: 预评估类字段 (Late Evaluation)
+         if self._kernel_token:
+             self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
+         else:
+@@ -285,7 +285,7 @@ class Interpreter:
+         # 运行限制
+         self.max_instructions = max_instructions
+         self.instruction_count = 0
+-        self._fallback_stack = [] # [IES 2.2] 用于追踪正在进行 Fallback 的节点
++        self._fallback_stack = [] # 用于追踪正在进行 Fallback 的节点
+         
+         # [IES 2.1 Defensive Patch] 递归深度安全校验
+         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
+@@ -303,7 +303,7 @@ class Interpreter:
+         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
+         self.strict_mode = strict_mode
+ 
+-        # [IES 4.3] 初始化分片 Handlers (通过工厂解耦)
++        # 初始化分片 Handlers (通过工厂解耦)
+         handlers = object_factory.create_handlers(self.service_context, self._execution_context)
+         self.stmt_handler = handlers[0]
+         self.expr_handler = handlers[1]
+@@ -437,15 +437,15 @@ class Interpreter:
+         global_symbols = context.global_scope.get_all_symbols()
+         defined_names = set(global_symbols.keys())
+         
+-        # [IES 2.0] 内置功能插件化重绑定
++        # 内置功能插件化重绑定
+         self.intrinsic_manager.rebind(self, context)
+         
+         # 注入内置类 (int, str, float, list, dict 等)
+-        # [IES 2.0] 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
++        # 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
+         for name, ib_class in self.registry.get_all_classes().items():
+             if name not in defined_names or force:
+                 if not getattr(ib_class.descriptor, 'is_user_defined', True):
+-                    # [IES 2.2] 注入时带上稳定的内置符号 UID，与编译器对齐
++                    # 注入时带上稳定的内置符号 UID，与编译器对齐
+                     context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
+                     defined_names.add(name)
+ 
+@@ -506,7 +506,7 @@ class Interpreter:
+             column=loc_data.get("column", 0)
+         )
+ 
+-        # [NEW] Logical CallStack 追踪 (Module 层级)
++        # Logical CallStack 追踪 (Module 层级)
+         self.logical_stack.push(
+             name=f"module:{module_name}",
+             local_vars={},
+@@ -562,7 +562,7 @@ class Interpreter:
+ 
+     def _with_unified_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> IbObject:
+         """
+-        [IES 2.1] 统一的 LLM 异常处理装饰器逻辑。
++         统一的 LLM 异常处理装饰器逻辑。
+         支持从 node_data 中提取用户定义的 llmexcept 块并执行。
+         """
+         retry_count = 0
+@@ -586,7 +586,7 @@ class Interpreter:
+                     is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type or "ExprStmt" in node_type)
+                     
+                     if not fallback_uids and not is_stmt:
+-                        # [NEW] 如果不是 Stmt 且没有 fallback，向上抛出，
++                        # 如果不是 Stmt 且没有 fallback，向上抛出，
+                         # 但由于我们在栈中标记了该节点，外部的 visit 会识别并直接调用 action，
+                         # 最终会让更高层的 Stmt 捕获到这个异常。
+                         raise outer_e
+@@ -675,7 +675,7 @@ class Interpreter:
+         self.current_module_name = old_module
+ 
+     def _hydrate_user_classes(self, class_to_node: Dict[str, Any]):
+-        """[IES 2.0] STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
++        """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
+         old_module = self.current_module_name
+         for name, info in class_to_node.items():
+             node_uid, module_name = info if isinstance(info, tuple) else (info, "main")
+@@ -702,7 +702,7 @@ class Interpreter:
+                     declared_type = self._resolve_type_from_symbol(sym_uid)
+                     ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, descriptor=declared_type))
+                 elif stmt_data["_type"] == "IbAssign":
+-                    # [IES 2.1 Refactor] 使用 IbDeferredField 统一管理
++                    # 使用 IbDeferredField 统一管理
+                     val_uid = stmt_data.get("value")
+                     for target_uid in stmt_data.get("targets", []):
+                         target_name = self._extract_name_id(target_uid)
+@@ -789,7 +789,7 @@ class Interpreter:
+             self.call_stack_depth += 1
+             loc = self._get_location(node_uid)
+ 
+-            # [IES 2.1 Refactor] 识别具有独立作用域的节点 (基于元数据特性驱动)
++            # 识别具有独立作用域的节点 (基于元数据特性驱动)
+             pushed_frame = False
+             node_type = node_data.get("_type")
+ 
+@@ -797,7 +797,7 @@ class Interpreter:
+                 self.push_stack(name=f"{node_type}:{node_uid}", location=loc)
+                 pushed_frame = True
+ 
+-            # [NEW] 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化
++            # 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化
+             pushed_count = 0
+             intent_uids = self.get_side_table("node_intents", node_uid)
+             if intent_uids:
+@@ -828,7 +828,7 @@ class Interpreter:
+                 if node_uid in self._fallback_stack:
+                     return visitor(node_uid, node_data)
+                 
+-                # [NEW] 转发语句到核心逻辑，以支持 Fallback 机制
++                # 转发语句到核心逻辑，以支持 Fallback 机制
+                 if node_type == "IbAssign":
+                     visitor = self.visit_IbAssign_core
+                 elif node_type == "IbIf":
+@@ -854,7 +854,7 @@ class Interpreter:
+                 if pushed_frame:
+                     self.logical_stack.pop()
+                 self.call_stack_depth -= 1
+-                # [NEW] 自动出栈，确保意图作用域正确恢复
++                # 自动出栈，确保意图作用域正确恢复
+                 for _ in range(pushed_count):
+                     self.runtime_context.pop_intent()
+         finally:
+diff --git a/core/runtime/interpreter/intrinsics/__init__.py b/core/runtime/interpreter/intrinsics/__init__.py
+index b9a2ace..60e67dc 100644
+--- a/core/runtime/interpreter/intrinsics/__init__.py
++++ b/core/runtime/interpreter/intrinsics/__init__.py
+@@ -32,9 +32,9 @@ class IntrinsicManager:
+         """
+         环境重绑定协议：将逻辑上的内置函数符号链接到当前物理环境的实现。
+         """
+-        # [IES 2.1 Refactor] 直接通过 context.define_variable 进行注入，保持单向依赖
++        # 直接通过 context.define_variable 进行注入，保持单向依赖
+         for name, func in self._intrinsics.items():
+-            # [IES 2.2] 注入时带上稳定的内置符号 UID，与编译器对齐
++            # 注入时带上稳定的内置符号 UID，与编译器对齐
+             context.define_variable(name, func, is_const=True, force=True, uid=f"builtin:{name}")
+         
+         # 2. 扫描池中已加载的对象 (用于处理那些被赋值给其他变量的函数)
+diff --git a/core/runtime/interpreter/llm_executor.py b/core/runtime/interpreter/llm_executor.py
+index 0aab1a2..cbb460b 100644
+--- a/core/runtime/interpreter/llm_executor.py
++++ b/core/runtime/interpreter/llm_executor.py
+@@ -18,7 +18,7 @@ from core.kernel.registry import KernelRegistry
+ class LLMExecutorImpl:
+     """
+     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
+-    [IES 2.1 Refactor] 采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
++     采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
+     """
+     def __init__(self, 
+                  service_context: Optional[ServiceContext] = None,
+@@ -34,7 +34,7 @@ class LLMExecutorImpl:
+         self._expected_type_stack: List[str] = []
+ 
+     def hydrate(self, service_context: ServiceContext):
+-        """[IES 2.1] 水化依赖，由解释器在服务准备就绪后调用"""
++        """ 水化依赖，由解释器在服务准备就绪后调用"""
+         self._service_context = service_context
+ 
+     @property
+@@ -53,7 +53,7 @@ class LLMExecutorImpl:
+     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
+     @property
+     def llm_callback(self) -> Optional[ILLMProvider]:
+-        # [IES 2.2] 优先从能力注册中心获取 Provider (能力名: llm_provider)
++        # 优先从能力注册中心获取 Provider (能力名: llm_provider)
+         if self.service_context.capability_registry:
+             provider = self.service_context.capability_registry.get("llm_provider")
+             if provider:
+@@ -106,7 +106,7 @@ class LLMExecutorImpl:
+         sys_prompt_segments = node_data.get("sys_prompt")
+         user_prompt_segments = node_data.get("user_prompt")
+         
+-        # [IES 2.2] 获取函数参数列表，用于在 prompt 中进行参数替换
++        # 获取函数参数列表，用于在 prompt 中进行参数替换
+         param_names = self._get_function_param_names(node_data)
+ 
+         sys_prompt = self._evaluate_segments(sys_prompt_segments, execution_context, param_names)
+@@ -127,7 +127,7 @@ class LLMExecutorImpl:
+             if returns_data and returns_data["_type"] == "IbName":
+                 type_name = returns_data.get("id", "str")
+ 
+-        # [IES 2.2] 从 LLM Provider 获取返回类型提示
++        # 从 LLM Provider 获取返回类型提示
+         if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
+             type_prompt = self.llm_callback.get_return_type_prompt(type_name)
+             if type_prompt:
+@@ -150,7 +150,7 @@ class LLMExecutorImpl:
+     def _get_function_param_names(self, node_data: Mapping[str, Any]) -> Set[str]:
+         """
+         获取 llm 函数的参数名列表。
+-        [IES 2.2] 用于判断 prompt 中的 $var 是否是函数参数。
++         用于判断 prompt 中的 $var 是否是函数参数。
+         """
+         param_names = set()
+         args = node_data.get("args", [])
+@@ -164,7 +164,7 @@ class LLMExecutorImpl:
+         """
+         评估结构化提示词片段。
+ 
+-        [IES 2.2] 增强的变量替换逻辑：
++         增强的变量替换逻辑：
+         - 只有当变量名是 llm 函数参数时，才会进行变量替换
+         - 其他 $变量名 会被作为普通文本处理
+         """
+@@ -193,7 +193,7 @@ class LLMExecutorImpl:
+                 # IbName 节点（变量引用）
+                 var_name = segment.id
+                 
+-                # [IES 2.2] 只有当变量名是函数参数时才进行替换
++                # 只有当变量名是函数参数时才进行替换
+                 if param_names and var_name in param_names:
+                     val = execution_context.visit(segment)
+                     if hasattr(val, '__to_prompt__'):
+@@ -255,8 +255,8 @@ class LLMExecutorImpl:
+                 # 强制覆盖模式：仅返回该意图
+                 return self.registry.box(call_intent.resolve_content(context, execution_context))
+ 
+-        # [IES 2.1] 获取消解后的最终列表
+-        # [IES 2.2] 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
++        # 获取消解后的最终列表
++        # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
+         if captured_intents is not None:
+             active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
+             all_intents = IntentResolver.resolve(
+@@ -341,7 +341,7 @@ class LLMExecutorImpl:
+ 
+     def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
+         """
+-        [IES 2.0 Architectural Update] 执行一个被动行为对象。
++         执行一个被动行为对象。
+         环境（意图栈）已由 Interpreter/Handler 在调用前准备就绪。
+         """
+         if not isinstance(behavior, IIbBehavior):
+@@ -358,7 +358,7 @@ class LLMExecutorImpl:
+ 
+         try:
+             # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
+-            # [IES 2.2] 传入行为对象捕获的意图栈
++            # 传入行为对象捕获的意图栈
+             res = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
+             behavior._cache = res
+             return res
+diff --git a/core/runtime/interpreter/module_manager.py b/core/runtime/interpreter/module_manager.py
+index 9f33f03..ee71ff7 100644
+--- a/core/runtime/interpreter/module_manager.py
++++ b/core/runtime/interpreter/module_manager.py
+@@ -56,7 +56,7 @@ class ModuleManagerImpl(ModuleManager):
+         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
+         package = self.interop.get_package(module_name)
+         if package:
+-            # [IES 2.0 FIX] 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
++            # 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
+             if not hasattr(package, 'receive'): 
+                 # 尝试获取已绑定的 vtable
+                 vtable = getattr(package, '_ibci_vtable', None)
+@@ -78,7 +78,7 @@ class ModuleManagerImpl(ModuleManager):
+                 # 创建该模块的 Global Scope
+                 module_scope = self.object_factory.create_scope(parent=None)
+                 
+-                # [FIX] 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
++                # 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
+                 module_instance = self.object_factory.create_module(module_name, module_scope)
+                 self._loaded_modules[module_name] = module_instance
+                 
+diff --git a/core/runtime/interpreter/runtime_context.py b/core/runtime/interpreter/runtime_context.py
+index 78f69e7..2befb85 100644
+--- a/core/runtime/interpreter/runtime_context.py
++++ b/core/runtime/interpreter/runtime_context.py
+@@ -100,7 +100,7 @@ class ScopeImpl:
+             if symbol.is_const:
+                 raise InterpreterError(f"Cannot reassign constant '{name}'", error_code=RUN_TYPE_MISMATCH)
+             
+-            # [NEW] 运行时类型校验
++            # 运行时类型校验
+             self._check_type(boxed_value, symbol.declared_type, name)
+             
+             symbol.value = boxed_value
+@@ -118,7 +118,7 @@ class ScopeImpl:
+             if symbol.is_const:
+                 raise InterpreterError(f"Cannot reassign constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
+             
+-            # [NEW] 运行时类型校验
++            # 运行时类型校验
+             self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
+             
+             symbol.value = boxed_value
+@@ -183,7 +183,7 @@ class SymbolViewImpl(SymbolView):
+             return False
+ 
+ class IntentNode:
+-    """[IES 2.0] 不可变意图节点，支持结构共享以优化内存"""
++    """ 不可变意图节点，支持结构共享以优化内存"""
+     def __init__(self, intent: Union[IbIntent, Any], parent: Optional['IntentNode'] = None):
+         self.intent = intent
+         self.parent = parent
+@@ -215,7 +215,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+         self._global_intents: List[IbIntent] = []
+         self._intent_exclusive_depth = 0
+         self._loop_stack: List[Dict[str, int]] = []
+-        self._retry_hint: Optional[str] = None # [IES 2.1] 运行时重试提示词
++        self._retry_hint: Optional[str] = None # 运行时重试提示词
+ 
+     @property
+     def intent_exclusive_depth(self) -> int:
+@@ -279,7 +279,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+         return list(self._global_intents)
+ 
+     def get_vars(self) -> Dict[str, Any]:
+-        """[IES 2.0] 获取当前可见的所有真实变量对象 (IbObject)。"""
++        """ 获取当前可见的所有真实变量对象 (IbObject)。"""
+         res = {}
+         scope = self._current_scope
+         while scope:
+@@ -295,7 +295,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+                         continue
+                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
+                         continue
+-                    # [IES 2.0] 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
++                    # 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
+                     if symbol.is_const and name in ("len", "print", "range", "input", "get_self_source"):
+                         continue
+                     res[name] = val
+@@ -381,7 +381,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+                 tag=tag,
+                 role=IntentRole.DYNAMIC
+             )
+-        # [IES 2.0] 模式逻辑：
++        # 模式逻辑：
+         # 1. 我们不再物理切断链条，以保证 pop_intent 能够正确恢复之前的栈状态。
+         # 2. 逻辑上的切断（排他性/移除）由 LLMExecutor 在合并时根据 IntentMode 处理。
+         self._intent_top = IntentNode(intent, self._intent_top)
+@@ -400,7 +400,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+ 
+     def restore_active_intents(self, intents: Union[List[IbIntent], Optional[IntentNode]]) -> None:
+         """
+-        [IES 2.1] 恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
++         恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
+         """
+         if intents is None:
+             self._intent_top = None
+@@ -435,12 +435,12 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+ 
+     @property
+     def intent_stack(self) -> Union[Optional[IntentNode], List[Any]]:
+-        # [IES 2.0] 为了 IbBehavior 优化，直接返回栈顶节点
++        # 为了 IbBehavior 优化，直接返回栈顶节点
+         return self._intent_top
+         
+     @intent_stack.setter
+     def intent_stack(self, value: Optional[IntentNode]):
+-        """[IES 2.1] 仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
++        """ 仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
+         if value is None or isinstance(value, IntentNode):
+             self._intent_top = value
+         else:
+@@ -452,7 +452,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+ 
+     @current_scope.setter
+     def current_scope(self, value: Scope) -> None:
+-        """[IES 2.1] 允许切换当前作用域（用于跨模块调用）"""
++        """ 允许切换当前作用域（用于跨模块调用）"""
+         self._current_scope = value
+ 
+     @property
+diff --git a/core/runtime/loader/artifact_loader.py b/core/runtime/loader/artifact_loader.py
+index 0b7a069..69857a5 100644
+--- a/core/runtime/loader/artifact_loader.py
++++ b/core/runtime/loader/artifact_loader.py
+@@ -52,7 +52,7 @@ class ArtifactLoader:
+         hydrator = ArtifactRehydrator(type_pool, self.registry.get_metadata_registry())
+         user_classes = hydrator.hydrate_all(self.registry)
+ 
+-        # [IES 2.0] STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
++        # STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
+         class_to_node = {}
+         # 1. 扫描所有模块寻找类定义节点
+         for module_name, module_data in artifact_dict.get("modules", {}).items():
+@@ -87,7 +87,7 @@ class ArtifactLoader:
+             remaining = still_remaining
+             
+         if remaining:
+-            # [IES 2.0 FIX] 继承链断裂属于致命错误 (Item 2.2 Audit)
++            # 继承链断裂属于致命错误 (Item 2.2 Audit)
+             # 必须在加载阶段拦截，严禁进入运行时。
+             missing = [f"{c.name} (extends {c.parent_name or 'Object'})" for c in remaining]
+             raise RegistryIsolationError(f"Linker Error: Broken inheritance chain for classes: {', '.join(missing)}. "
+diff --git a/core/runtime/loader/artifact_rehydrator.py b/core/runtime/loader/artifact_rehydrator.py
+index 4b5a575..82cacbb 100644
+--- a/core/runtime/loader/artifact_rehydrator.py
++++ b/core/runtime/loader/artifact_rehydrator.py
+@@ -9,7 +9,7 @@ from core.kernel.types.descriptors import (
+     LIST_DESCRIPTOR, DICT_DESCRIPTOR
+ )
+ 
+-# [IES 2.0] 统一内置原始类型列表，确保水化阶段一致性
++# 统一内置原始类型列表，确保水化阶段一致性
+ BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "Any", "var", "callable", "list", "dict", "behavior"]
+ 
+ class ArtifactRehydrator:
+@@ -51,7 +51,7 @@ class ArtifactRehydrator:
+         classes = []
+         for uid in self.type_pool:
+             desc = self._fill_descriptor(uid)
+-            # [IES 2.1 Refactor] 使用 is_class() 代替名称比对
++            # 使用 is_class() 代替名称比对
+             if desc and desc.is_class():
+                 classes.append(desc)
+         
+@@ -76,14 +76,14 @@ class ArtifactRehydrator:
+             return self.memo[uid]
+             
+         data = self.type_pool[uid]
+-        # [IES 2.1 Refactor] 使用 TypeDescriptor 作为通用回退标识
++        # 使用 TypeDescriptor 作为通用回退标识
+         kind = data.get("kind", "TypeDescriptor")
+         name = data.get("name", "")
+         is_user_defined = data.get("is_user_defined", False)
+         
+         factory = self.registry.factory
+         
+-        # [IES 2.1 Refactor] 映射驱动的 Shell 创建，消除 if/elif kind 硬编码
++        # 映射驱动的 Shell 创建，消除 if/elif kind 硬编码
+         shell_creators = {
+             "ListMetadata": lambda: ListMetadata(name="list"),
+             "DictMetadata": lambda: DictMetadata(name="dict"),
+diff --git a/core/runtime/module_system/discovery.py b/core/runtime/module_system/discovery.py
+index c411b35..0071882 100644
+--- a/core/runtime/module_system/discovery.py
++++ b/core/runtime/module_system/discovery.py
+@@ -61,7 +61,7 @@ class ModuleDiscoveryService:
+ 
+     def export_metadata(self, host: HostInterface, output_path: str) -> None:
+         """
+-        [IES 2.2] 将发现的元数据导出为 .ibc_meta 文件
++         将发现的元数据导出为 .ibc_meta 文件
+ 
+         实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
+         """
+@@ -83,7 +83,7 @@ class ModuleDiscoveryService:
+ 
+     def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleType]:
+         """
+-        [IES 2.2] 动态加载 _spec.py，完整实现协议。
++         动态加载 _spec.py，完整实现协议。
+ 
+         支持三种协议：
+         1. 新版第一方组件（字典格式）：__ibcext_vtable__() 返回 {"functions": {...}}
+@@ -150,7 +150,7 @@ class ModuleDiscoveryService:
+ 
+     def _build_metadata_from_dict(self, raw_name: str, module_name: str, vtable: Dict[str, Any]) -> ModuleMetadata:
+         """
+-        [IES 2.2] 从字典格式元数据构建 ModuleMetadata
++         从字典格式元数据构建 ModuleMetadata
+ 
+         字典格式：
+         {
+diff --git a/core/runtime/module_system/loader.py b/core/runtime/module_system/loader.py
+index 36e334b..46ce769 100644
+--- a/core/runtime/module_system/loader.py
++++ b/core/runtime/module_system/loader.py
+@@ -26,7 +26,7 @@ class ModuleLoader(IModuleLoader):
+ 
+     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
+         """
+-        [IES 2.2] 严格契约绑定。
++         严格契约绑定。
+         
+         强制遵循 IES 2.2 协议：
+         1. 元数据必须已通过 Discovery 阶段从 _spec.py 加载并注册到 HostInterface。
+@@ -40,7 +40,7 @@ class ModuleLoader(IModuleLoader):
+         
+         implementation._ibci_registry_id = id(context.registry)
+ 
+-        # [IES 2.1 Refactor] 从元数据注册表解析 (元数据来源于 _spec.py)
++        # 从元数据注册表解析 (元数据来源于 _spec.py)
+         metadata = context.interop.metadata.resolve(module_name)
+         if not metadata or not metadata.is_module():
+             raise InterpreterError(f"Plugin Protocol Error: Module '{module_name}' metadata not found. "
+@@ -90,7 +90,7 @@ class ModuleLoader(IModuleLoader):
+ 
+                 proxy_vtable[spec_name] = create_proxy(py_func, registry)
+             
+-            # 2. [IES 2.2] 处理变量 (Variable)
++            # 2.  处理变量 (Variable)
+             else:
+                 # 只要在元数据中声明了，就加入白名单允许通过 __getattr__ 访问
+                 if not hasattr(implementation, spec_name):
+@@ -152,7 +152,7 @@ class ModuleLoader(IModuleLoader):
+         
+         # [IES Enhancement] 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
+         # 这确保了手动注册的 Mock 对象能被正确初始化并同步到 capabilities
+-        # [IES 2.1 Refactor] 直接遍历元数据注册表，消除兼容性接口
++        # 直接遍历元数据注册表，消除兼容性接口
+         interop = context.interop
+         for entry in interop.metadata.get_all_modules().keys():
+             implementation = interop.get_package(entry)
+@@ -164,7 +164,7 @@ class ModuleLoader(IModuleLoader):
+                 
+             loaded_modules.add(entry)
+ 
+-        # [IES 2.0] 扫描搜索路径，加载所有物理存在的模块
++        # 扫描搜索路径，加载所有物理存在的模块
+         for path in self.search_paths:
+             if not os.path.isdir(path):
+                 continue
+@@ -174,7 +174,7 @@ class ModuleLoader(IModuleLoader):
+                     continue
+                 
+                 # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
+-                # [IES 2.2 Refactor] 通过 discovery_map 映射物理目录名到逻辑模块名
++                # 通过 discovery_map 映射物理目录名到逻辑模块名
+                 module_name = interop.get_module_name_by_discovery(entry)
+                 if not module_name:
+                     continue
+@@ -189,7 +189,7 @@ class ModuleLoader(IModuleLoader):
+                     continue
+                     
+                 try:
+-                    # [IES 2.0] 动态加载实现层
++                    # 动态加载实现层
+                     # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
+                     pkg_dir = os.path.dirname(module_dir)
+                     if pkg_dir not in sys.path:
+@@ -208,11 +208,11 @@ class ModuleLoader(IModuleLoader):
+                         # 兼容直接导出的类或函数（如有必要可扩展）
+                         continue
+ 
+-                    # [IES 2.0] 1. 自动依赖注入 (基于 setup 方法签名)
++                    # 1. 自动依赖注入 (基于 setup 方法签名)
+                     # 必须在校验前注入，因为插件可能根据注入的能力动态决定其虚表 (vtable)
+                     self._setup_implementation(implementation, context, capabilities)
+                     
+-                    # [IES 2.0] 2. 校验与绑定 (Proxy VTable)
++                    # 2. 校验与绑定 (Proxy VTable)
+                     self._validate_and_bind(module_name, implementation, context, capabilities, registry)
+                     
+                     # 绑定到运行时宿主
+diff --git a/core/runtime/objects/builtins.py b/core/runtime/objects/builtins.py
+index 525df8d..58a720e 100644
+--- a/core/runtime/objects/builtins.py
++++ b/core/runtime/objects/builtins.py
+@@ -46,13 +46,13 @@ class IbInteger(IbObject):
+         return self.ib_class.registry.box(res_val)
+ 
+     def serialize_for_debug(self) -> Dict[str, Any]:
+-        # [IES 2.1 Refactor] 强制从 ib_class.name 获取类型标签，消除硬编码
++        # 强制从 ib_class.name 获取类型标签，消除硬编码
+         return {"type": self.ib_class.name, "value": self.value}
+ 
+     def __repr__(self):
+         return f"Integer({self.value})"
+ 
+-    # --- [IES 2.1] 自动化运算符绑定支持 ---
++    # ---  自动化运算符绑定支持 ---
+     def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
+     def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
+     def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
+@@ -116,7 +116,7 @@ class IbFloat(IbObject):
+     def __repr__(self):
+         return f"Float({self.value})"
+ 
+-    # --- [IES 2.1] 自动化运算符绑定支持 ---
++    # ---  自动化运算符绑定支持 ---
+     def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
+     def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
+     def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
+@@ -206,7 +206,7 @@ class IbString(IbObject):
+     def __repr__(self):
+         return f"String('{self.value}')"
+ 
+-    # --- [IES 2.1] 自动化运算符绑定支持 ---
++    # ---  自动化运算符绑定支持 ---
+     def __add__(self, other: IbObject) -> Any:
+         if other.ib_class.name != "str":
+              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
+@@ -225,7 +225,7 @@ class IbException(IbObject):
+         return self.ib_class.registry.box("")
+ 
+     def cast_to(self, target_class: Any) -> IbObject:
+-        """[IES 2.1] 支持 Exception 的强转逻辑"""
++        """ 支持 Exception 的强转逻辑"""
+         if target_class.name in ("str", "Any"):
+             msg = self.fields.get("message")
+             if msg: return msg
+@@ -279,7 +279,7 @@ class IbList(IbObject):
+         return self.ib_class.registry.box(len(self.elements))
+ 
+     def cast_to(self, target_class: Any) -> IbObject:
+-        """[IES 2.1] 支持 List 的强转逻辑"""
++        """ 支持 List 的强转逻辑"""
+         if target_class.name in ("list", "Any"):
+             return self
+         if target_class.name == "str":
+@@ -343,7 +343,7 @@ class IbDict(IbObject):
+         return self.ib_class.registry.box(len(self.fields))
+ 
+     def cast_to(self, target_class: Any) -> IbObject:
+-        """[IES 2.1] 支持 Dict 的强转逻辑"""
++        """ 支持 Dict 的强转逻辑"""
+         if target_class.name in ("dict", "Any"):
+             return self
+         if target_class.name == "str":
+@@ -384,7 +384,7 @@ class IbBehavior(IbObject, IIbBehavior):
+     """
+     def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
+         """
+-        [IES 2.0 Architectural Update] IbBehavior 现在是纯粹的数据描述符。
++         IbBehavior 现在是纯粹的数据描述符。
+         不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
+         """
+         super().__init__(ib_class)
+diff --git a/core/runtime/objects/kernel.py b/core/runtime/objects/kernel.py
+index 0e0dfd2..f000f8c 100644
+--- a/core/runtime/objects/kernel.py
++++ b/core/runtime/objects/kernel.py
+@@ -43,7 +43,7 @@ class IbObject:
+         """
+         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
+         
+-        # [IES 2.1 Refactor] 下沉至公理层能力探测
++        # 下沉至公理层能力探测
+         # 针对 __call__ 消息，检查类型公理是否声明了调用能力
+         if message == '__call__':
+             call_trait = self.descriptor.get_call_trait()
+@@ -84,7 +84,7 @@ class IbObject:
+             # 仅在方法缺失或解释器主动报错时回退
+             return f"<Instance of {self.ib_class.name}>"
+ 
+-    # --- [IES 2.1] 基础协议实现 ---
++    # ---  基础协议实现 ---
+     def __not__(self) -> 'IbObject':
+         """逻辑非运算协议"""
+         # 使用 to_bool 判定并取反
+@@ -116,14 +116,14 @@ class IbNativeObject(IbObject):
+     def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None):
+         super().__init__(ib_class)
+         self.py_obj = py_obj
+-        # [IES 2.0] 显式持有虚表，消除对 py_obj 的动态属性依赖
++        # 显式持有虚表，消除对 py_obj 的动态属性依赖
+         self.vtable = vtable if vtable is not None else getattr(py_obj, '_ibci_vtable', {})
+         # [SECURITY] 属性访问白名单
+         self.whitelist = whitelist if whitelist is not None else getattr(py_obj, '_ibci_whitelist', [])
+ 
+     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+         """
+-        [IES 2.0] Native 消息分发核心。
++         Native 消息分发核心。
+         强制通过虚表映射，禁止任何非预期的 Python 属性穿透。
+         """
+         # [Registry Isolation] 校验对象所属 Registry 身份
+@@ -145,7 +145,7 @@ class IbNativeObject(IbObject):
+             # [IES 2.0 Proxy Binding] 如果是虚表方法，包装为 IbNativeFunction 导出
+             if target_name in self.vtable:
+                 reg = self.ib_class.registry
+-                # [IES 2.0] 强制通过 Gatekeeper 获取协议类
++                # 强制通过 Gatekeeper 获取协议类
+                 reg.verify_level_at_least(RegistrationState.STAGE_2_CORE_TYPES.value)
+                 
+                 callable_cls = reg.get_class("callable")
+@@ -190,7 +190,7 @@ class IbModule(IbObject):
+ 
+     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+         """
+-        [IES 2.0] 模块级消息传递核心。
++         模块级消息传递核心。
+         """
+         # 1. 处理 __getattr__ 协议
+         if message == '__getattr__' and len(args) > 0:
+@@ -296,7 +296,7 @@ class IbClass(IbObject):
+     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
+         instance = IbObject(self)
+         
+-        # [IES 2.1 Refactor] 延迟执行字段初始化 (Item 2.1 Audit)
++        # 延迟执行字段初始化 (Item 2.1 Audit)
+         for name, val_info in self.default_fields.items():
+             if isinstance(val_info, IbDeferredField):
+                 if val_info.static_val is not None:
+@@ -377,7 +377,7 @@ class IbNativeFunction(IbFunction):
+     用于引导阶段注入基础运算（如 int.__add__）。
+     """
+     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[TypeDescriptor] = None):
+-        # [IES 2.0 FIX] 强制绑定到协议类，移除静默兜底
++        # 强制绑定到协议类，移除静默兜底
+         reg = ib_class.registry if ib_class else None
+         target_class = ib_class
+         
+@@ -474,11 +474,11 @@ class IbNone(IbObject):
+         return "null"
+ 
+     def to_bool(self) -> IbObject:
+-        """[IES 2.1] None 始终为 False"""
++        """ None 始终为 False"""
+         return self.ib_class.registry.box(0)
+ 
+     def cast_to(self, target_class: Any) -> IbObject:
+-        """[IES 2.1] 支持 None 的强转逻辑"""
++        """ 支持 None 的强转逻辑"""
+         if target_class.name == "str":
+             return self.ib_class.registry.box("None")
+         if target_class.name in ("int", "float"):
+diff --git a/core/runtime/rt_scheduler.py b/core/runtime/rt_scheduler.py
+index 87cf578..1fdb935 100644
+--- a/core/runtime/rt_scheduler.py
++++ b/core/runtime/rt_scheduler.py
+@@ -10,7 +10,7 @@ from core.runtime.interfaces import (
+ )
+ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+ 
+-# [IES 2.2] 顶层导入核心实现类，已通过接口化解除物理循环依赖
++# 顶层导入核心实现类，已通过接口化解除物理循环依赖
+ from core.runtime.interpreter.interpreter import Interpreter
+ from core.runtime.interpreter.service_context import ServiceContextImpl
+ from core.runtime.host.service import HostService
+@@ -24,7 +24,7 @@ from core.runtime.module_system.loader import ModuleLoader
+ 
+ class RuntimeSchedulerImpl:
+     """
+-    [IES 2.2] RuntimeScheduler 核心调度器实现。
++     RuntimeScheduler 核心调度器实现。
+     负责管理解释器实例生命周期、资源调度及宏观状态同步。
+     """
+     def __init__(self, service_context: Optional[ServiceContext] = None):
+@@ -49,7 +49,7 @@ class RuntimeSchedulerImpl:
+               instance_id: Optional[str] = None,
+               **kwargs) -> str:
+         """
+-        [IES 2.2] 创建并初始化一个新的解释器实例。
++         创建并初始化一个新的解释器实例。
+         承担了原 Engine._prepare_interpreter 的装配职责。
+         """
+         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Spawning new interpreter instance (Isolation: {isolation})")
+@@ -60,14 +60,14 @@ class RuntimeSchedulerImpl:
+         # 1. 准备配置参数
+         sc = self.service_context
+         
+-        # [IES 2.2] 自动配置工厂 (如果提供了)
++        # 自动配置工厂 (如果提供了)
+         obj_factory = kwargs.get('object_factory', sc.object_factory if sc else None)
+         if obj_factory:
+             self._configure_factory(obj_factory)
+             
+         root_dir = kwargs.get('root_dir')
+         
+-        # [IES 2.2 Fix] 如果是隔离模式，必须确保 root_dir 已正确设置
++        # 如果是隔离模式，必须确保 root_dir 已正确设置
+         if isolation != IsolationLevel.NONE and not root_dir:
+              if isinstance(artifact, str) and (os.path.isabs(artifact) or os.path.exists(artifact)):
+                  root_dir = os.path.dirname(os.path.abspath(artifact))
+@@ -169,7 +169,7 @@ class RuntimeSchedulerImpl:
+ 
+     def execute(self, artifact: Any, variables: Optional[Dict[str, Any]] = None, output_callback: Optional[Callable[[str], None]] = None) -> bool:
+         """
+-        [IES 2.2] 顶层执行入口。
++         顶层执行入口。
+         调度一个解释器实例并开始执行。
+         """
+         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Starting top-level execution via scheduler")
+@@ -199,7 +199,7 @@ class RuntimeSchedulerImpl:
+ 
+     def dispatch(self, request: ExecutionRequest, execution_context: IExecutionContext) -> ExecutionSignal:
+         """
+-        [IES 2.2] 分发执行请求。处理隔离运行逻辑。
++         分发执行请求。处理隔离运行逻辑。
+         """
+         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Dispatching execution request for node: {request.node_uid}")
+         
+@@ -286,7 +286,7 @@ class RuntimeSchedulerImpl:
+                 self._main_instance_id = None
+ 
+     def _configure_factory(self, factory: Any):
+-        """[IES 2.2] 配置工厂的 IoC 注册表。从 Engine 迁移而来。"""
++        """ 配置工厂的 IoC 注册表。从 Engine 迁移而来。"""
+         # 1. 注册逻辑处理器 (Handlers)
+         factory.register_handler_factory(lambda sc, ec: StmtHandler(sc, ec))
+         factory.register_handler_factory(lambda sc, ec: ExprHandler(sc, ec))
+diff --git a/core/runtime/serialization/immutable_artifact.py b/core/runtime/serialization/immutable_artifact.py
+index 839aeaa..accd9b5 100644
+--- a/core/runtime/serialization/immutable_artifact.py
++++ b/core/runtime/serialization/immutable_artifact.py
+@@ -2,7 +2,7 @@ from typing import Any, Dict, Iterator, Mapping
+ 
+ class ImmutableArtifact(Mapping):
+     """
+-    [IES 2.2] 不可变产物容器。
++     不可变产物容器。
+     用于确保编译器输出的 artifact dict 无法被解释器修改，
+     从而保证 save_state/load_state 断点机制的确定性。
+ 
+diff --git a/core/runtime/serialization/runtime_serializer.py b/core/runtime/serialization/runtime_serializer.py
+index 3fc147d..b62a1df 100644
+--- a/core/runtime/serialization/runtime_serializer.py
++++ b/core/runtime/serialization/runtime_serializer.py
+@@ -16,7 +16,7 @@ class RuntimeSerializer(BaseFlatSerializer):
+         self.registry = registry
+         self.instance_pool: Dict[str, Any] = {}
+         self.runtime_scope_pool: Dict[str, Any] = {}
+-        self.intent_pool: Dict[str, Any] = {} # [IES 2.2] 意图节点池，实现拓扑序列化
++        self.intent_pool: Dict[str, Any] = {} # 意图节点池，实现拓扑序列化
+         self.memo: Dict[int, str] = {} # 记录已处理对象的 Python ID
+ 
+     def serialize_context(self, context: IStateProvider, include_static: bool = True, execution_context: Optional[IExecutionContext] = None) -> Dict[str, Any]:
+@@ -27,18 +27,17 @@ class RuntimeSerializer(BaseFlatSerializer):
+         pools = {
+             "instances": self.instance_pool,
+             "runtime_scopes": self.runtime_scope_pool,
+-            "intents": self.intent_pool, # [IES 2.2]
+-            "types": self.type_pool,
++            "intents": self.intent_pool, #            "types": self.type_pool,
+             "assets": self.external_assets 
+         }
+         
+-        # [IES 2.1] 如果提供，包含静态池以实现全量快照
++        # 如果提供，包含静态池以实现全量快照
+         if include_static and execution_context:
+             pools["nodes"] = execution_context.node_pool
+             pools["symbols"] = execution_context.symbol_pool
+             pools["scopes"] = execution_context.scope_pool
+             pools["types"] = execution_context.type_pool
+-            # [IES 2.2] 合并现有的资产池
++            # 合并现有的资产池
+             if hasattr(execution_context, 'asset_pool'):
+                 self.external_assets.update(execution_context.asset_pool)
+             
+@@ -46,13 +45,13 @@ class RuntimeSerializer(BaseFlatSerializer):
+             "version": "2.0",
+             "root_scope_uid": root_scope_uid,
+             "global_intents": context.get_global_intents(),
+-            "intent_stack": self._process_value(context.intent_stack), # [IES 2.2] 改为拓扑序列化
++            "intent_stack": self._process_value(context.intent_stack), # 改为拓扑序列化
+             "intent_exclusive_depth": context.intent_exclusive_depth,
+             "pools": pools
+         }
+ 
+     def _collect_intent_node(self, node: Any) -> str:
+-        """[IES 2.2] 实现 IntentNode 的拓扑序列化，保留链表引用关系"""
++        """ 实现 IntentNode 的拓扑序列化，保留链表引用关系"""
+         if node is None:
+             return None
+             
+@@ -115,7 +114,7 @@ class RuntimeSerializer(BaseFlatSerializer):
+         if isinstance(value, IbObject):
+             return self._collect_instance(value)
+         
+-        # [IES 2.2] 拓扑序列化 IntentNode，保留结构共享
++        # 拓扑序列化 IntentNode，保留结构共享
+         # 注意：此处使用鸭子类型判定以避免循环依赖 (RuntimeSerializer 不直接导入 IntentNode 实现类)
+         if hasattr(value, 'intent') and hasattr(value, 'parent') and hasattr(value, 'to_list'):
+             return self._collect_intent_node(value)
+@@ -203,7 +202,7 @@ class RuntimeDeserializer:
+         self.factory = factory
+         self.instance_cache: Dict[str, IbObject] = {}
+         self.scope_cache: Dict[str, Scope] = {}
+-        self.intent_cache: Dict[str, IntentNode] = {} # [IES 2.2] 意图节点缓存
++        self.intent_cache: Dict[str, IntentNode] = {} # 意图节点缓存
+         self.asset_pool: Dict[str, str] = {} 
+ 
+     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
+@@ -215,8 +214,7 @@ class RuntimeDeserializer:
+         self.type_pool = pools.get("types", {})
+         self.instance_pool = pools.get("instances", {})
+         self.runtime_scope_pool = pools.get("runtime_scopes", {})
+-        self.intent_pool = pools.get("intents", {}) # [IES 2.2]
+-        self.asset_pool = pools.get("assets", {}) 
++        self.intent_pool = pools.get("intents", {}) #        self.asset_pool = pools.get("assets", {}) 
+         
+         if not self.factory:
+             raise RuntimeError("RuntimeDeserializer: ObjectFactory is required for deserialization.")
+@@ -240,7 +238,7 @@ class RuntimeDeserializer:
+             for i_data in data["global_intents"]:
+                  ctx_global.append(self._deserialize_value(i_data))
+         
+-        # [IES 2.2] 恢复意图栈 (拓扑结构)
++        # 恢复意图栈 (拓扑结构)
+         intent_stack_raw = data.get("intent_stack")
+         active_intents = self._deserialize_value(intent_stack_raw)
+         
+@@ -254,7 +252,7 @@ class RuntimeDeserializer:
+         return context
+ 
+     def _get_intent_node(self, uid: str) -> IntentNode:
+-        """[IES 2.2] 从池中重建 IntentNode 链表节点，保留结构共享"""
++        """ 从池中重建 IntentNode 链表节点，保留结构共享"""
+         if uid in self.intent_cache:
+             return self.intent_cache[uid]
+             
+diff --git a/core/runtime/support/converters.py b/core/runtime/support/converters.py
+index d01b4e9..6993e19 100644
+--- a/core/runtime/support/converters.py
++++ b/core/runtime/support/converters.py
+@@ -12,7 +12,7 @@ def _cast_string_to_native(val: str, target_desc: Any) -> Any:
+     if target_desc and target_desc._axiom:
+         parser = target_desc._axiom.get_parser_capability()
+         if parser:
+-            # [IES 2.2] 让 Axiom 抛出的 ValueError 冒泡，由调用方(IbString.cast_to)统一处理
++            # 让 Axiom 抛出的 ValueError 冒泡，由调用方(IbString.cast_to)统一处理
+             return parser.parse_value(val)
+     
+     # Fallback: 默认返回原始字符串
+@@ -23,7 +23,7 @@ def _cast_numeric_to_native(val: Any, target_desc: Any) -> Any:
+     if not target_desc:
+         return val
+         
+-    # [IES 2.1 Refactor] 使用公理名称判定，解决多引擎隔离下的 identity 失效问题
++    # 使用公理名称判定，解决多引擎隔离下的 identity 失效问题
+     axiom_name = target_desc.get_base_axiom_name()
+     if axiom_name == "str":
+         return str(val)
+diff --git a/core/runtime/support/fuzzy_json.py b/core/runtime/support/fuzzy_json.py
+index 0f6b157..d2d1173 100644
+--- a/core/runtime/support/fuzzy_json.py
++++ b/core/runtime/support/fuzzy_json.py
+@@ -5,7 +5,7 @@ from typing import Any, Optional, Union
+ 
+ class FuzzyJsonParser:
+     """
+-    [IES 2.2] 健壮的 JSON 解析器，专门用于从 LLM 杂乱的输出中提取结构化数据。
++     健壮的 JSON 解析器，专门用于从 LLM 杂乱的输出中提取结构化数据。
+     支持处理：
+     1. Markdown 代码块包裹 (```json ... ```)
+     2. 前后缀干扰文本

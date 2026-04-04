@@ -21,17 +21,17 @@ class Symbol:
     """静态符号基类"""
     name: str
     kind: SymbolKind
-    uid: Optional[str] = None # [IES 2.1] 唯一标识符，用于解决变量遮蔽 (Shadowing)
+    uid: Optional[str] = None # 唯一标识符，用于解决变量遮蔽 (Shadowing)
     def_node: Optional[Any] = None # 直接引用定义它的 AST 节点对象
     owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中称层
+    # 直接持有 TypeDescriptor，不再使用 StaticType 中称层
     descriptor: Optional[TypeDescriptor] = None
 
     def walk_references(self, callback: Any) -> None:
         """
-        [IES 2.1] 遍历符号持有的类型引用。
+         遍历符号持有的类型引用。
         """
         if self.descriptor:
             self.descriptor = callback(self.descriptor)
@@ -134,12 +134,12 @@ class SymbolTable:
     """
     def __init__(self, parent: Optional['SymbolTable'] = None, name: Optional[str] = None):
         self.parent = parent
-        self.name = name # [IES 2.1] 作用域名称 (如函数名、类名)
-        self.depth = (parent.depth + 1) if parent else 0 # [IES 2.1] 作用域深度
+        self.name = name # 作用域名称 (如函数名、类名)
+        self.depth = (parent.depth + 1) if parent else 0 # 作用域深度
         self.symbols: Dict[str, Symbol] = {}
         self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
         self._uid = None
-        self._child_count = 0 # [IES 2.1] 用于生成确定性匿名 UID
+        self._child_count = 0 # 用于生成确定性匿名 UID
         
         if parent:
             parent._child_count += 1
@@ -147,7 +147,7 @@ class SymbolTable:
 
     @property
     def uid(self) -> str:
-        """[IES 2.1] 生成确定性作用域 UID"""
+        """ 生成确定性作用域 UID"""
         if self._uid: return self._uid
         if not self.parent:
             # 模块/全局作用域：UID = scope_{name}

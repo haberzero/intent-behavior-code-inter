@@ -31,7 +31,7 @@ class HostService(IHostService):
 
     def sync(self) -> bool:
         """
-        [IES 2.1] 安全点同步 (Safe Point Sync) 原语。
+         安全点同步 (Safe Point Sync) 原语。
         等待所有执行上下文达到一致状态后返回。
         """
         return self._sync_manager.sync()
@@ -104,7 +104,7 @@ class HostService(IHostService):
         self.setup_context_callback(context, force=True)
         
         # 2. 重新注入原生插件 (Native Plugins)
-        # [IES 2.1 Refactor] 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
+        # 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
         for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg:
@@ -121,7 +121,7 @@ class HostService(IHostService):
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
         """
-        [IES 2.2] 通过内核协调器开启完全隔离的解释器环境。
+         通过内核协调器开启完全隔离的解释器环境。
         不再负责手动孵化实例或编译代码，而是将请求作为系统调用上报。
         """
         if not self.orchestrator:

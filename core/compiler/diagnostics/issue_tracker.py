@@ -78,7 +78,7 @@ class IssueTracker:
 
     def to_dict(self) -> dict:
         """
-        [IES 2.1] 序列化 IssueTracker 为字典，支持状态保存和恢复。
+         序列化 IssueTracker 为字典，支持状态保存和恢复。
         """
         return {
             "file_path": self.file_path,

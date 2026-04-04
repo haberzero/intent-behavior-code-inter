@@ -43,7 +43,7 @@ class IbObject:
         """
         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
         
-        # [IES 2.1 Refactor] 下沉至公理层能力探测
+        # 下沉至公理层能力探测
         # 针对 __call__ 消息，检查类型公理是否声明了调用能力
         if message == '__call__':
             call_trait = self.descriptor.get_call_trait()
@@ -84,7 +84,7 @@ class IbObject:
             # 仅在方法缺失或解释器主动报错时回退
             return f"<Instance of {self.ib_class.name}>"
 
-    # --- [IES 2.1] 基础协议实现 ---
+    # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':
         """逻辑非运算协议"""
         # 使用 to_bool 判定并取反
@@ -116,14 +116,14 @@ class IbNativeObject(IbObject):
     def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None):
         super().__init__(ib_class)
         self.py_obj = py_obj
-        # [IES 2.0] 显式持有虚表，消除对 py_obj 的动态属性依赖
+        # 显式持有虚表，消除对 py_obj 的动态属性依赖
         self.vtable = vtable if vtable is not None else getattr(py_obj, '_ibci_vtable', {})
         # [SECURITY] 属性访问白名单
         self.whitelist = whitelist if whitelist is not None else getattr(py_obj, '_ibci_whitelist', [])
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
-        [IES 2.0] Native 消息分发核心。
+         Native 消息分发核心。
         强制通过虚表映射，禁止任何非预期的 Python 属性穿透。
         """
         # [Registry Isolation] 校验对象所属 Registry 身份
@@ -145,7 +145,7 @@ class IbNativeObject(IbObject):
             # [IES 2.0 Proxy Binding] 如果是虚表方法，包装为 IbNativeFunction 导出
             if target_name in self.vtable:
                 reg = self.ib_class.registry
-                # [IES 2.0] 强制通过 Gatekeeper 获取协议类
+                # 强制通过 Gatekeeper 获取协议类
                 reg.verify_level_at_least(RegistrationState.STAGE_2_CORE_TYPES.value)
                 
                 callable_cls = reg.get_class("callable")
@@ -190,7 +190,7 @@ class IbModule(IbObject):
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
-        [IES 2.0] 模块级消息传递核心。
+         模块级消息传递核心。
         """
         # 1. 处理 __getattr__ 协议
         if message == '__getattr__' and len(args) > 0:
@@ -296,7 +296,7 @@ class IbClass(IbObject):
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
         
-        # [IES 2.1 Refactor] 延迟执行字段初始化 (Item 2.1 Audit)
+        # 延迟执行字段初始化 (Item 2.1 Audit)
         for name, val_info in self.default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
@@ -377,7 +377,7 @@ class IbNativeFunction(IbFunction):
     用于引导阶段注入基础运算（如 int.__add__）。
     """
     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[TypeDescriptor] = None):
-        # [IES 2.0 FIX] 强制绑定到协议类，移除静默兜底
+        # 强制绑定到协议类，移除静默兜底
         reg = ib_class.registry if ib_class else None
         target_class = ib_class
         
@@ -474,11 +474,11 @@ class IbNone(IbObject):
         return "null"
 
     def to_bool(self) -> IbObject:
-        """[IES 2.1] None 始终为 False"""
+        """ None 始终为 False"""
         return self.ib_class.registry.box(0)
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 None 的强转逻辑"""
+        """ 支持 None 的强转逻辑"""
         if target_class.name == "str":
             return self.ib_class.registry.box("None")
         if target_class.name in ("int", "float"):

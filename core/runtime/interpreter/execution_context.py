@@ -39,7 +39,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._factory = factory
         self._runtime_context = None
         self._logical_stack = None # 由 Interpreter 初始化并注入
-        self._current_module_name = None # [IES 2.1]
+        self._current_module_name = None
         self._module_manager = module_manager
         self._strict_mode = strict_mode
         

@@ -5,7 +5,7 @@ from core.kernel.types.descriptors import TypeDescriptor
 
 class ScopeManager:
     """
-    [IES 2.1] 作用域管理器。
+     作用域管理器。
     负责符号表和场景栈的管理。
     """
     def __init__(self, global_scope: Optional[SymbolTable] = None, module_name: Optional[str] = None):

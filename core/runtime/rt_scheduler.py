@@ -10,7 +10,7 @@ from core.runtime.interfaces import (
 )
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
-# [IES 2.2] 顶层导入核心实现类，已通过接口化解除物理循环依赖
+# 顶层导入核心实现类，已通过接口化解除物理循环依赖
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.host.service import HostService
@@ -24,7 +24,7 @@ from core.runtime.module_system.loader import ModuleLoader
 
 class RuntimeSchedulerImpl:
     """
-    [IES 2.2] RuntimeScheduler 核心调度器实现。
+     RuntimeScheduler 核心调度器实现。
     负责管理解释器实例生命周期、资源调度及宏观状态同步。
     """
     def __init__(self, service_context: Optional[ServiceContext] = None):
@@ -49,7 +49,7 @@ class RuntimeSchedulerImpl:
               instance_id: Optional[str] = None,
               **kwargs) -> str:
         """
-        [IES 2.2] 创建并初始化一个新的解释器实例。
+         创建并初始化一个新的解释器实例。
         承担了原 Engine._prepare_interpreter 的装配职责。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Spawning new interpreter instance (Isolation: {isolation})")
@@ -60,14 +60,14 @@ class RuntimeSchedulerImpl:
         # 1. 准备配置参数
         sc = self.service_context
         
-        # [IES 2.2] 自动配置工厂 (如果提供了)
+        # 自动配置工厂 (如果提供了)
         obj_factory = kwargs.get('object_factory', sc.object_factory if sc else None)
         if obj_factory:
             self._configure_factory(obj_factory)
             
         root_dir = kwargs.get('root_dir')
         
-        # [IES 2.2 Fix] 如果是隔离模式，必须确保 root_dir 已正确设置
+        # 如果是隔离模式，必须确保 root_dir 已正确设置
         if isolation != IsolationLevel.NONE and not root_dir:
              if isinstance(artifact, str) and (os.path.isabs(artifact) or os.path.exists(artifact)):
                  root_dir = os.path.dirname(os.path.abspath(artifact))
@@ -169,7 +169,7 @@ class RuntimeSchedulerImpl:
 
     def execute(self, artifact: Any, variables: Optional[Dict[str, Any]] = None, output_callback: Optional[Callable[[str], None]] = None) -> bool:
         """
-        [IES 2.2] 顶层执行入口。
+         顶层执行入口。
         调度一个解释器实例并开始执行。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Starting top-level execution via scheduler")
@@ -199,7 +199,7 @@ class RuntimeSchedulerImpl:
 
     def dispatch(self, request: ExecutionRequest, execution_context: IExecutionContext) -> ExecutionSignal:
         """
-        [IES 2.2] 分发执行请求。处理隔离运行逻辑。
+         分发执行请求。处理隔离运行逻辑。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Dispatching execution request for node: {request.node_uid}")
         
@@ -286,7 +286,7 @@ class RuntimeSchedulerImpl:
                 self._main_instance_id = None
 
     def _configure_factory(self, factory: Any):
-        """[IES 2.2] 配置工厂的 IoC 注册表。从 Engine 迁移而来。"""
+        """ 配置工厂的 IoC 注册表。从 Engine 迁移而来。"""
         # 1. 注册逻辑处理器 (Handlers)
         factory.register_handler_factory(lambda sc, ec: StmtHandler(sc, ec))
         factory.register_handler_factory(lambda sc, ec: ExprHandler(sc, ec))

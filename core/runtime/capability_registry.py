@@ -32,7 +32,7 @@ class CapabilityProvider:
 
 class CapabilityRegistry:
     """
-    [IES 2.1] 能力注册中心。
+     能力注册中心。
     统一管理内核能力的注册、获取和替换。
     """
     CAP_LLM_PROVIDER = "llm_provider"

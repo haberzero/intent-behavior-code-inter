@@ -7,7 +7,7 @@ class LLMScanner:
     Handles token scanning within an LLM block (between 'llm ...:' and 'llmend').
     Parses prompt keywords (__sys__, __user__), raw text, and variable placeholders ($var).
 
-    [IES 2.2] 简化设计：仅支持 $var 格式的变量引用。
+     简化设计：仅支持 $var 格式的变量引用。
     只有当变量名是 llm 函数中声明的参数时，才会被替换；其他情况作为普通文本。
     """
     def __init__(self, scanner: StrStream):

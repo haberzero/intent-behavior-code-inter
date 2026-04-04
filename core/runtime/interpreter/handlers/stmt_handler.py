@@ -113,7 +113,7 @@ class StmtHandler(BaseHandler):
         value = self.visit(node_data.get("value"))
         op_symbol = node_data.get("op")
         
-        # [IES 2.0] 使用全局归一化映射，支持完整运算符集（包含 % // 等）
+        # 使用全局归一化映射，支持完整运算符集（包含 % // 等）
         op = AST_OP_MAP.get(op_symbol, op_symbol)
         method = OP_MAPPING.get(op)
         
@@ -157,7 +157,7 @@ class StmtHandler(BaseHandler):
             if not self.execution_context.is_truthy(condition):
                 break
             
-            # [IES 2.2 Fix] 局部重试支持，防止冒泡导致条件判定被跳过或重复执行
+            # 局部重试支持，防止冒泡导致条件判定被跳过或重复执行
             retry_count = 0
             while True:
                 try:
@@ -188,10 +188,10 @@ class StmtHandler(BaseHandler):
         iter_uid = node_data.get("iter")
         body = node_data.get("body", [])
         
-        # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
+        # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while self.execution_context.is_truthy(self.visit(iter_uid)):
-                # [IES 2.2 Fix] 局部重试支持
+                # 局部重试支持
                 retry_count = 0
                 while True:
                     try:
@@ -225,12 +225,12 @@ class StmtHandler(BaseHandler):
         elements = elements_obj.elements
         total = len(elements)
         for i, item in enumerate(elements):
-            # [IES 2.2 Fix] 局部重试闭环，防止冒泡导致迭代器重置 (死循环隐患修复)
+            # 局部重试闭环，防止冒泡导致迭代器重置 (死循环隐患修复)
             retry_count = 0
             while True:
                 self.runtime_context.push_loop_context(i, total)
                 
-                # [IES 2.2 Fix] 使用统一的赋值逻辑支持复杂循环目标
+                # 使用统一的赋值逻辑支持复杂循环目标
                 if target_uid:
                     self._assign_to_target(target_uid, item, define_only=True)
                 
@@ -271,7 +271,7 @@ class StmtHandler(BaseHandler):
         except (ReturnException, BreakException, ContinueException, RetryException):
             raise
         except (ThrownException, Exception) as e:
-            # [IES 2.1 Refactor] 统一异常对象化
+            # 统一异常对象化
             if isinstance(e, ThrownException):
                 error_obj = e.value
             else:
@@ -280,7 +280,7 @@ class StmtHandler(BaseHandler):
                 if not exc_class:
                     raise self.report_error("Critical Error: 'Exception' builtin class not found in registry. Bootstrap failed.", node_uid)
                 
-                # [FIX] 传入空参数列表给 instantiate
+                # 传入空参数列表给 instantiate
                 error_obj = exc_class.instantiate([])
                 error_obj.fields["message"] = self.registry.box(str(e))
             
@@ -304,7 +304,7 @@ class StmtHandler(BaseHandler):
                 # 2. 绑定异常变量
                 name = handler_data.get("name")
                 if name:
-                    # [IES 2.2 Fix] 使用统一的赋值逻辑支持异常变量绑定
+                    # 使用统一的赋值逻辑支持异常变量绑定
                     # 简单起见，既然目前只有 Name，我们可以直接保留
                     sym_uid = self.get_side_table("node_to_symbol", handler_uid)
                     self.runtime_context.define_variable(name, error_obj, uid=sym_uid)
@@ -359,11 +359,11 @@ class StmtHandler(BaseHandler):
 
     def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """验证类契约并将其绑定到当前作用域"""
-        # [IES 2.0] IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
+        # IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
         # 此处仅负责契约验证与作用域定义。
         name = node_data.get("name")
         
-        # [IES 2.0] 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
+        # 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
         existing_class = self.registry.get_class(name)
         if not existing_class:
             raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. [IES 2.0 Contract Violation]", node_uid)
