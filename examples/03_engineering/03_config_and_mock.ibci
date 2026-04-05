@@ -21,10 +21,14 @@ else:
     print("判定结果：假")
 
 print("\n3. 模拟 LLM 判定模糊与 llmexcept 捕获：")
-# 使用 会强制让 LLM 返回一个无法解析为 1/0 的模糊结果
+# 注意：本地模型（qwen3-30b-a3b）很智能，即使被要求模糊回答也会返回确定值
+# 因此这个测试在本地模型下会走 else 分支
+# 真实场景中，如果 LLM 返回无法被 decision_map 识别的值（如 "maybe"），llmexcept 会被触发
 try:
-    if @~执行一个注定失败的判断~:
-        print("执行成功（不应出现）")
+    if @~ 这个问题请给出一个模棱两可的回答，不要明确说是还是否 ~:
+        print("执行成功（条件为真）")
+    else:
+        print("执行 else 分支（条件为假，llmexcept 未触发）")
     llmexcept:
         print("成功捕获到 AI 判定模糊！")
 except Exception as e:

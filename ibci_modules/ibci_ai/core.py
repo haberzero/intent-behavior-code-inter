@@ -91,9 +91,9 @@ class AIPlugin(ILLMProvider):
                     timeout=self._config["timeout"]
                 )
         except ImportError:
-            self._client = None
-        except Exception:
-            self._client = None
+            raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
+        except Exception as e:
+            raise RuntimeError(f"OpenAI 客户端初始化失败: {str(e)}")
 
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url

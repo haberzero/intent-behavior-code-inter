@@ -1,10 +1,15 @@
 import ai
 import file
+import json
 import sys
 
 # --- [0] 初始化真实 API 配置 ---
-print(">>> [Test] 初始化真实 API 配置...")
-ai.set_config("http://10.11.13.4:8722/v1", "sk-LOCAL", "Qwen3.5-122B-A10B-GPTQ-Int4")
+print(">>> [Test] 从 api_config.json 初始化真实 API 配置...")
+str config_content = file.read("api_config.json")
+dict config_obj = json.parse(config_content)
+dict default_model = (dict) config_obj["default_model"]
+
+ai.set_config((str) default_model["base_url"], (str) default_model["api_key"], (str) default_model["model"])
 ai.set_timeout(120.0)
 
 # === [核心新增] 主动调用模型探针接口 ===
@@ -23,25 +28,22 @@ llmend
 str test_goal = "寻找和分析 interpreter.py 中对于 retry 的异常捕获逻辑 (LLMUncertaintyError 和 RetryException)"
 print("\n>>> [Test 1] 测试目标: " + test_goal)
 
-int keyword_retry = 0
-int keyword_success = 0
-str keyword_res = ""
-
-while keyword_retry < 3:
-    if keyword_success == 1:
-        break
-    if @~ 判断 AI 提取的关键字是否为纯逗号分隔的英文单词：[keyword_res] ~:
-        keyword_res = extract_keywords(test_goal)
-        keyword_success = 1
-    llmexcept:
-        print("  [自愈] 关键字提取异常或格式不对，重试...")
-        ai.set_retry_hint("请严格输出逗号分隔的纯英文字符串，不要有任何前缀或后缀。")
-        keyword_retry = keyword_retry + 1
-
-if keyword_success == 1:
-    print("  => 提取结果: " + keyword_res)
+# 使用标准的 llmexcept 模式，消除逻辑死锁
+# 这里的语义是：执行提取，如果不符合后续的验证意图，则触发 llmexcept
+str keyword_res = extract_keywords(test_goal)
+if @~ 判断 AI 提取的关键字是否为纯逗号分隔的英文单词：[keyword_res] ~:
+    print("  => 提取结果通过验证: " + keyword_res)
 else:
-    print("  => [!失败] 关键字提取无法达到要求。最终结果: " + keyword_res)
+    # 强制进入不确定状态，触发保护
+    # 注意：在 IBCI 中，如果 behavior 表达式返回 False，且后面有 llmexcept，
+    # 我们可以通过逻辑设计让其重试
+    print("  => [!警告] 格式校验未通过，尝试自愈...")
+    
+llmexcept:
+    print("  [自愈] 触发重试逻辑...")
+    retry "请严格输出逗号分隔的纯英文字符串，不要有任何前缀或后缀。"
+
+print("  => 最终提取结果: " + keyword_res)
 
 # --- [2] 抽取关键逻辑：局部摘要 ---
 llm generate_local_summary(str code_chunk, str goal) -> str:
@@ -55,50 +57,23 @@ llmend
 
 str mock_code = "try:\n    do_something()\nexcept LLMUncertaintyError as e:\n    print('Caught uncertainty, will retry.')\n    retry_logic()"
 print("\n>>> [Test 2] 测试局部摘要生成 (应为相关摘要)...")
-print("  输入代码:\n" + mock_code)
 
-int summary_retry = 0
-int summary_success = 0
-str summary_res = ""
+str summary_res = generate_local_summary(mock_code, test_goal)
+if @~ 判断该摘要是否用一句话概括了代码逻辑且没有废话：[summary_res] ~:
+    print("  => 摘要通过验证")
+llmexcept:
+    print("  [自愈] 摘要生成不符合要求，重试...")
+    retry "请只回答一句话摘要，或者回答'无'。"
 
-while summary_retry < 3:
-    if summary_success == 1:
-        break
-    if @~ 判断该摘要是否用一句话概括了代码逻辑且没有废话：[summary_res] ~:
-        summary_res = generate_local_summary(mock_code, test_goal)
-        summary_success = 1
-    llmexcept:
-        print("  [自愈] 摘要生成格式不符合要求，重试...")
-        ai.set_retry_hint("请只回答一句话摘要，或者回答'无'。")
-        summary_retry = summary_retry + 1
-
-if summary_success == 1:
-    print("  => 提取结果: " + summary_res)
-else:
-    print("  => [!失败] 摘要生成无法达到要求。最终结果: " + summary_res)
+print("  => 摘要结果: " + summary_res)
 
 str mock_unrelated_code = "def add(a, b):\n    return a + b"
 print("\n>>> [Test 3] 测试局部摘要生成 (应为'无')...")
-print("  输入代码:\n" + mock_unrelated_code)
 
-summary_retry = 0
-summary_success = 0
-summary_res = ""
+str summary_res_2 = generate_local_summary(mock_unrelated_code, test_goal)
+if @~ 判断该摘要是否明确回答了'无'或提供了有效概括：[summary_res_2] ~:
+    print("  => 验证通过")
+llmexcept:
+    retry "请只回答一句话摘要，或者回答'无'。"
 
-while summary_retry < 3:
-    if summary_success == 1:
-        break
-    if @~ 判断该摘要是否明确回答了'无'或提供了有效概括：[summary_res] ~:
-        summary_res = generate_local_summary(mock_unrelated_code, test_goal)
-        summary_success = 1
-    llmexcept:
-        print("  [自愈] 摘要生成格式不符合要求，重试...")
-        ai.set_retry_hint("如果无关，请只回答'无'。")
-        summary_retry = summary_retry + 1
-
-if summary_success == 1:
-    print("  => 提取结果: " + summary_res)
-else:
-    print("  => [!失败] 摘要生成无法达到要求。最终结果: " + summary_res)
-
-print("\n>>> 真实 API 测试完成！")
+print("  => 最终结果: " + summary_res_2)

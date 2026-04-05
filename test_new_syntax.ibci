@@ -33,12 +33,16 @@ for (x, y) in coords:
 for (int cx, int cy) in coords:
     print("Coord (typed): " + (str)cx + "," + (str)cy)
 
-# 2. 测试 llmretry 语法糖
+# [Test 2] llmretry 语法糖
+# 模拟一个会失败重试的场景
+# 当 LLM 返回不确定结果时，影子执行驱动器会拦截并进入 llmexcept 逻辑
 print("\n[Test 2] llmretry Syntactic Sugar:")
-# 使用 MOCK:FAIL 强制触发一次模糊判定，触发 llmretry
-# [FIX] llmretry 必须位于语句之后，这里我们用一个赋值语句来承载行为描述
-str res = @~ MOCK:FAIL 返回一个模糊的结果 ~
-llmretry "请务必返回 1 或 0"
-print("Result after retry: " + res)
+int max_retry = 3
+while max_retry > 0:
+    str res = @~ MOCK:FAIL 返回一个模糊的结果 ~
+    llmretry "请务必返回 1 或 0"
+    print("LLM 返回: " + res)
+    max_retry = max_retry - 1
+print("重试测试完成")
 
 print("\n--- [TEST COMPLETE] ---")

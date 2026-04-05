@@ -24,10 +24,10 @@ while count < total_len:
     if @~ $current_item 是水果？(1/0) ~:
         fruit_indices.append(count)
         print("[Found] " + current_item)
+    llmexcept:
+        print("AI 响应模糊，正在通过 llmexcept 进行修正...")
+        retry "只答 1/0"
     count = count + 1
-llmexcept:
-    print("AI 响应模糊，正在通过 llmexcept 进行修正...")
-    retry "只答 1/0"
 
 print("--- Result ---")
 print(fruit_indices)

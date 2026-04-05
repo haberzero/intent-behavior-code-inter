@@ -1,22 +1,20 @@
-"""
-IBCI 循环重试与局部自愈功能验证脚本
------------------------------------
-用途：
-    本脚本用于验证"循环重试导致迭代器重置"隐患的修复效果。
-    主要验证两个维度的修复：
-    1. 语句级重试 (Granular Retry)：验证行为描述行（IbExprStmt）或分支语句（IbIf）触发 AI 模糊判定时，
-       是否能实现原地重试，而不导致所属的循环块重新从头执行。
-    2. 循环内局部自愈 (Internal Loop Fallback)：验证在循环声明处挂载的 llmexcept 块，
-       是否能正确捕获循环体内的异常并仅重试当前迭代项。
-
-背景：
-    在此修复前，IBCI 解释器的重试机制会向上冒泡至被装饰的语句。如果一个 for 循环内部的语句失败，
-    异常会抛给 for 循环，导致循环处理器（stmt_handler）被重新调用，迭代器从 index 0 重新开始，
-    这在确定性失败的情况下会导致严重的死循环。
-
-使用方法：
-    python main.py run tests/manual/verify_loop_retry_fix.ibci
-"""
+# IBCI 循环重试与局部自愈功能验证脚本
+# -----------------------------------
+# 用途：
+#     本脚本用于验证"循环重试导致迭代器重置"隐患的修复效果。
+#     主要验证两个维度的修复：
+#     1. 语句级重试 (Granular Retry)：验证行为描述行（IbExprStmt）或分支语句（IbIf）触发 AI 模糊判定时，
+#        是否能实现原地重试，而不导致所属的循环块重新从头执行。
+#     2. 循环内局部自愈 (Internal Loop Fallback)：验证在循环声明处挂载的 llmexcept 块，
+#        是否能正确捕获循环体内的异常并仅重试当前迭代项。
+#
+# 背景：
+#     在此修复前，IBCI 解释器的重试机制会向上冒泡至被装饰的语句。如果一个 for 循环内部的语句失败，
+#     异常会抛给 for 循环，导致循环处理器（stmt_handler）被重新调用，迭代器从 index 0 重新开始，
+#     这在确定性失败的情况下会导致严重的死循环。
+#
+# 使用方法：
+#     python main.py run tests/manual/verify_loop_retry_fix.ibci
 
 import ai
 
@@ -28,6 +26,7 @@ items = [1, 2, 3]
 for item in items:
     # 期望表现：每个 item 只打印一次"处理项目..."，即使 item 触发了重试
     print("处理项目...")
+    # llmexcept 必须紧跟在包含 @~...~ 的语句后面
     if @~ MOCK:REPAIR 是否通过 ~:
         print("通过")
     llmexcept:
@@ -43,9 +42,9 @@ for item in items:
     i = i + 1
     print("当前循环项索引:")
     print(i)
-    if item == 2:
-        # 这个 if 没有局部 llmexcept，异常会冒泡到 for 层级
-        if @~ MOCK:REPAIR 判定项目2 ~:
+    # 注意：这里没有局部 llmexcept，异常会冒泡到 for 层级
+    if @~ MOCK:REPAIR 判定项目2 ~:
+        if item == 2:
             print("项目2成功")
     if item == 3:
         print("处理项目3结束")

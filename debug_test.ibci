@@ -1,0 +1,18 @@
+import ai
+
+print("=== Debug Test: llmexcept mechanism (Result mode) ===")
+
+ai.set_config("TESTONLY", "MOCK_KEY", "mock-model")
+ai.set_timeout(5.0)
+
+str test_val = "initial"
+
+print("\n[Test 1] Testing llmexcept with decision...")
+if @~ MOCK:REPAIR test_decision ~:
+    print("  Decision: yes")
+    test_val = "success"
+llmexcept:
+    print("  [Retry block executed]")
+
+print("\n[Test 2] Done. test_val = " + test_val)
+print("=== Debug Test Complete ===")
