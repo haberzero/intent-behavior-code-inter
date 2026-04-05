@@ -32,10 +32,10 @@ class TokenStream:
     def is_at_end(self) -> bool:
         return self.peek().type == TokenType.EOF
 
-    def check(self, type: TokenType) -> bool:
+    def check(self, *types: TokenType) -> bool:
         if self.is_at_end():
             return False
-        return self.peek().type == type
+        return self.peek().type in types
 
     def advance(self) -> Token:
         if not self.is_at_end():
