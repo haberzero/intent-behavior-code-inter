@@ -18,6 +18,12 @@ class SideTableManager:
         self.node_intents: Dict[Any, List[Any]] = {}
         self.node_to_loc: Dict[Any, Any] = {}
         self.decision_maps: Dict[Any, Dict[str, str]] = {}
+        # 节点保护表：被保护节点 UID -> llmexcept 处理器节点 UID
+        self.node_protection: Dict[Any, Any] = {}
+
+    def bind_protection(self, target_node: Any, handler_node: Any) -> None:
+        """建立保护关系侧表"""
+        self.node_protection[target_node] = handler_node
 
     def bind_symbol(self, node: Any, sym: Symbol) -> None:
         self.node_to_symbol[node] = sym
@@ -65,3 +71,5 @@ class SideTableManager:
         self.node_is_deferred.clear()
         self.node_intents.clear()
         self.node_to_loc.clear()
+        self.node_protection.clear()
+        self.decision_maps.clear()

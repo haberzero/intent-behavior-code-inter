@@ -107,8 +107,13 @@ class SemanticAnalyzer:
             resolver.resolve(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
-            # Pass 3: 深度语义检查 (Body, Expressions, Type Checking)
-            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3: Deep checking...")
+            # Pass 3: llmexcept 关联和合法性检查
+            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3: llmexcept binding and validation...")
+            self._bind_llm_except(node)
+            self.debugger.exit_scope(CoreModule.SEMANTIC)
+            
+            # Pass 4: 深度语义检查 (Body, Expressions, Type Checking)
+            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 4: Deep checking...")
             self.visit(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
@@ -131,10 +136,147 @@ class SemanticAnalyzer:
                 node_is_deferred=self.side_table.node_is_deferred,
                 node_intents=self.side_table.node_intents,
                 node_to_loc=self.side_table.node_to_loc,
-                decision_maps=self.side_table.decision_maps
+                decision_maps=self.side_table.decision_maps,
+                node_protection=self.side_table.node_protection
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
+
+    def _bind_llm_except(self, node: ast.IbASTNode) -> None:
+        """
+        Pass 3: llmexcept 关联和合法性检查。
+        
+        遍历 AST，将 llmexcept 语句与前一个语句关联，
+        并检查 llmexcept 的 target 是否包含 @~...~ 行为描述。
+        """
+        if isinstance(node, ast.IbModule):
+            self._bind_llm_except_in_body(node.body, node)
+        elif isinstance(node, ast.IbFunctionDef):
+            self._bind_llm_except_in_body(node.body, node)
+        elif isinstance(node, ast.IbLLMFunctionDef):
+            pass
+        elif isinstance(node, ast.IbClassDef):
+            for method in node.body:
+                if isinstance(method, ast.IbFunctionDef):
+                    self._bind_llm_except_in_body(method.body, method)
+                elif isinstance(method, ast.IbLLMFunctionDef):
+                    pass
+        elif isinstance(node, ast.IbIntentStmt):
+            self._bind_llm_except_in_body(node.body, node)
+
+    def _bind_llm_except_in_body(self, body: List[ast.IbStmt], parent: ast.IbASTNode) -> None:
+        """
+        处理语句块中的 llmexcept 关联。
+
+        注意：不扁平化 body，保持 IbLLMExceptionalStmt 作为包装器结构。
+        这样解释器可以正确处理 LLMUncertaintyError。
+        """
+        if not body:
+            return
+
+        new_body = []
+        i = 0
+        while i < len(body):
+            stmt = body[i]
+
+            if isinstance(stmt, ast.IbLLMExceptionalStmt):
+                # llmexcept 是一个独立的语句，需要与前一个语句关联
+                if not new_body:
+                    self.issue_tracker.add_error(
+                        f"llmexcept must follow a statement, but no previous statement found.",
+                        stmt, code="SEM_051"
+                    )
+                    i += 1
+                    continue
+
+                prev_stmt = new_body[-1]
+
+                # 检查前一个语句是否包含行为描述
+                if not self._stmt_contains_behavior(prev_stmt):
+                    self.issue_tracker.add_error(
+                        f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
+                        f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
+                        stmt, code="SEM_050"
+                    )
+
+                # 关联侧表：被保护节点 UID -> llmexcept 处理器节点 UID
+                # 这是实现解释器 visit 拦截的核心
+                self.side_table.bind_protection(prev_stmt, stmt)
+
+                # 同时在 AST 中建立关联，确保序列化时包含 target 字段
+                stmt.target = prev_stmt
+
+                # IbLLMExceptionalStmt 保留在 body 中，确保 Pass 4 深度检查和序列化能够访问到它
+                # 它的重复执行问题将由 Interpreter.visit 逻辑处理
+                new_body.append(stmt)
+
+                # 递归处理 llmexcept body
+                for body_stmt in stmt.body:
+                    self._bind_llm_except(body_stmt)
+            else:
+                new_body.append(stmt)
+                # 递归处理子节点
+                self._bind_llm_except(stmt)
+
+            i += 1
+
+        # 更新 body
+        if isinstance(parent, ast.IbModule):
+            parent.body = new_body
+        elif isinstance(parent, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbIntentStmt)):
+            parent.body = new_body
+        elif isinstance(parent, ast.IbClassDef):
+            # [FIX] 找到对应的 method 并更新其 body
+            for method in parent.body:
+                if isinstance(method, (ast.IbFunctionDef, ast.IbLLMFunctionDef)) and method.body is body:
+                    method.body = new_body
+                    break
+
+    def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
+        """
+        检查语句是否包含行为描述 @~...~。
+        """
+        if isinstance(stmt, ast.IbExprStmt):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbIf):
+            return self._expr_contains_behavior(stmt.test)
+        elif isinstance(stmt, ast.IbWhile):
+            return self._expr_contains_behavior(stmt.test)
+        elif isinstance(stmt, ast.IbFor):
+            return self._expr_contains_behavior(stmt.iter)
+        elif isinstance(stmt, ast.IbAssign):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbReturn):
+            if stmt.value:
+                return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbLLMExceptionalStmt):
+            return self._stmt_contains_behavior(stmt.target) if stmt.target else False
+        return False
+
+    def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
+        """
+        检查表达式是否包含行为描述 @~...~。
+        """
+        if isinstance(expr, ast.IbBehaviorExpr):
+            return True
+        elif isinstance(expr, ast.IbCall):
+            # 检查方法调用
+            if self._expr_contains_behavior(expr.func):
+                return True
+            for arg in expr.args:
+                if self._expr_contains_behavior(arg):
+                    return True
+        elif isinstance(expr, ast.IbBinOp):
+            return self._expr_contains_behavior(expr.left) or self._expr_contains_behavior(expr.right)
+        elif isinstance(expr, ast.IbCompare):
+            return self._expr_contains_behavior(expr.left) or self._expr_contains_behavior(expr.comparators[0])
+        elif isinstance(expr, ast.IbUnaryOp):
+            return self._expr_contains_behavior(expr.operand)
+        elif isinstance(expr, ast.IbIfExpr):
+            return (self._expr_contains_behavior(expr.test) or 
+                    self._expr_contains_behavior(expr.body) or 
+                    self._expr_contains_behavior(expr.orelse))
+        return False
 
     def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
         # 标记作用域定义节点 (元数据驱动)
@@ -188,13 +330,20 @@ class SemanticAnalyzer:
             raise Exception(message)
         self.issue_tracker.error(message, node, code=code, hint=hint)
 
-    def _visit_llmexcept(self, fallback: Optional[List[ast.IbStmt]]):
-        """访问 llmexcept (llm_fallback) 块"""
-        if fallback:
-            # [Pass 2.5] 使用独立的 LocalSymbolCollector 进行预扫描
-            LocalSymbolCollector(self.symbol_table, self).collect(fallback)
-            for stmt in fallback:
-                self.visit(stmt)
+    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
+        """
+        访问 llmexcept 语句。
+        
+        IbLLMExceptionalStmt 在 Pass 3 被 _bind_llm_except 处理，
+        这里只需要访问 body 中的语句。
+        """
+        for stmt in node.body:
+            self.visit(stmt)
+        return self._void_desc
+
+    def visit_IbRetry(self, node: ast.IbRetry):
+        """访问 retry 语句"""
+        return self._void_desc
 
     # --- 访问者实现 ---
 
@@ -524,9 +673,6 @@ class SemanticAnalyzer:
                     hint = val_type.get_diff_hint(target_type)
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003", hint=hint)
         
-        # 4. 处理回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbIf(self, node: ast.IbIf):
@@ -545,9 +691,6 @@ class SemanticAnalyzer:
         for stmt in node.orelse:
             self.visit(stmt)
             
-        # 3. 回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbWhile(self, node: ast.IbWhile):
@@ -566,9 +709,6 @@ class SemanticAnalyzer:
         for stmt in node.orelse:
             self.visit(stmt)
             
-        # 3. 回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbFor(self, node: ast.IbFor):
@@ -628,22 +768,15 @@ class SemanticAnalyzer:
         for stmt in node.body:
             self.visit(stmt)
             
-        # 3. 回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt):
         res = self.visit(node.value)
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return res
 
     def visit_IbAugAssign(self, node: ast.IbAugAssign):
         self.visit(node.target)
         self.visit(node.value)
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbTry(self, node: ast.IbTry):
@@ -655,8 +788,6 @@ class SemanticAnalyzer:
             self.visit(stmt)
         for stmt in node.finalbody:
             self.visit(stmt)
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbExceptHandler(self, node: ast.IbExceptHandler):

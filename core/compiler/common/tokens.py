@@ -43,6 +43,7 @@ class TokenType(Enum):
     LLM_END = auto()
     LLM_SYS = auto()
     LLM_USER = auto()
+    LLM_RETRY_HINT = auto()
     LLM_EXCEPT = auto()
     RETRY = auto()
     LLM_RETRY = auto()

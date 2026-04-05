@@ -94,6 +94,12 @@ class FlatSerializer(BaseFlatSerializer):
             node_uid = self._collect_node(node)
             remaped_decision_maps[node_uid] = d_map
 
+        remaped_node_protection = {}
+        for node, handler in result.node_protection.items():
+            node_uid = self._collect_node(node)
+            handler_uid = self._collect_node(handler)
+            remaped_node_protection[node_uid] = handler_uid
+
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
@@ -104,7 +110,8 @@ class FlatSerializer(BaseFlatSerializer):
                 "node_is_deferred": remaped_node_is_deferred,
                 "node_intents": remaped_node_intents,
                 "node_to_loc": remaped_node_to_loc,
-                "decision_maps": remaped_decision_maps
+                "decision_maps": remaped_decision_maps,
+                "node_protection": remaped_node_protection
             },
             "pools": {
                 "nodes": self.node_pool,

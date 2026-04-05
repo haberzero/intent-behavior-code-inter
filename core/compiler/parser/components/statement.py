@@ -27,19 +27,8 @@ class StatementComponent(BaseComponent):
     # Removed set_decl_parser method
 
     def parse_statement(self) -> ast.IbStmt:
-        """所有语句的统一入口，处理公共装饰逻辑（如 llm except）"""
-        stmt = self._parse_statement_core()
-        
-        # 统一处理 llm except 块
-        # 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
-        if stmt.supports_llm_fallback:
-            llm_fallback = self._parse_llm_fallback()
-            if llm_fallback:
-                stmt.llm_fallback = llm_fallback
-                # 扩展语句的物理位置以包含容错块
-                self._extend_loc(stmt, self.stream.previous())
-                
-        return stmt
+        """所有语句的统一入口"""
+        return self._parse_statement_core()
 
     def _parse_statement_core(self) -> ast.IbStmt:
         """核心语句解析逻辑"""
@@ -77,6 +66,9 @@ class StatementComponent(BaseComponent):
             self.stream.consume_end_of_statement("Expect newline after retry.")
             return self._loc(ast.IbRetry(hint=hint), start)
         
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            return self.llm_except_statement()
+        
         if self.stream.match(TokenType.INTENT_STMT):
             return self.intent_statement()
         if self.stream.match(TokenType.INTENT):
@@ -110,6 +102,72 @@ class StatementComponent(BaseComponent):
                 break
         self.stream.consume_end_of_statement("Expect newline after global declaration.")
         return self._loc(ast.IbGlobalStmt(names=names), start_token)
+
+    def llm_except_statement(self) -> ast.IbLLMExceptionalStmt:
+        """
+        解析 llmexcept 语句。
+        llmexcept 是一个独立的语句，它的 target 应该由前一个语句提供。
+        在语义分析阶段进行合法性检查。
+        
+        语法：
+            statement
+            llmexcept:
+                statements...
+            
+            statement
+            llmexcept retry "hint"
+        """
+        start_token = self.stream.previous()
+        
+        # 消费换行符
+        while self.stream.check(TokenType.NEWLINE):
+            self.stream.advance()
+        
+        # 检查是否是 llmexcept retry 形式
+        if self.stream.match(TokenType.RETRY):
+            # llmexcept retry "hint"
+            hint = None
+            if self.stream.check(TokenType.STRING):
+                hint = self.expression.parse_expression()
+            
+            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
+            self.stream.consume_end_of_statement("Expect newline after llmexcept retry.")
+            
+            return self._loc(
+                ast.IbLLMExceptionalStmt(target=None, body=[retry_stmt]),
+                start_token
+            )
+        
+        # llmexcept: 形式
+        self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+        
+        # 解析 llmexcept 块
+        body = self.llm_except_body()
+        
+        return self._loc(
+            ast.IbLLMExceptionalStmt(target=None, body=body),
+            start_token
+        )
+
+    def llm_except_body(self) -> List[ast.IbStmt]:
+        """
+        解析 llmexcept 块的内容。
+        使用与 block() 相同的缩进检测机制。
+        """
+        self.stream.consume(TokenType.NEWLINE, "Expect newline before llmexcept body.")
+        self.stream.consume(TokenType.INDENT, "Expect indent after llmexcept ':'.")
+        
+        body = []
+        while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
+            if self.stream.match(TokenType.NEWLINE):
+                continue
+            
+            # llmexcept 块内的语句不再处理 llmexcept
+            stmt = self.parse_statement()
+            body.append(stmt)
+        
+        self.stream.consume(TokenType.DEDENT, "Expect dedent after llmexcept body.")
+        return body
 
     def intent_statement(self) -> ast.IbIntentStmt:
         """Parse 'intent "content": block'"""

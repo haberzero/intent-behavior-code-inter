@@ -18,6 +18,7 @@ class CompilationResult:
     node_intents: Dict[ast_domain.IbASTNode, List[ast_domain.IbIntentInfo]] = field(default_factory=dict) # Node object -> List of IntentInfo
     node_to_loc: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Location info
     decision_maps: Dict[ast_domain.IbASTNode, Dict[str, str]] = field(default_factory=dict) # Node object -> Decision Map
+    node_protection: Dict[ast_domain.IbASTNode, ast_domain.IbASTNode] = field(default_factory=dict) # Node object -> Handler object
     
     @property
     def has_errors(self) -> bool:

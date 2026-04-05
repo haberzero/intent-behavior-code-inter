@@ -61,16 +61,7 @@ class IbASTNode:
 @dataclass(kw_only=True, eq=False)
 class IbStmt(IbASTNode):
     """语句节点基类"""
-    # 统一容错机制：所有语句均可附加 LLM 异常处理块
-    llm_fallback: List['IbStmt'] = field(default_factory=list)
-
-    @property
-    def supports_llm_fallback(self) -> bool:
-        """
-         指示该语句是否支持附加 llm except 容错块。
-        默认支持，极简控制流语句（如 pass/break）需显式禁用。
-        """
-        return True
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbExpr(IbASTNode):
@@ -149,6 +140,7 @@ class IbLLMFunctionDef(IbStmt):
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
     sys_prompt: Optional[List[Union[str, IbExpr]]]
     user_prompt: Optional[List[Union[str, IbExpr]]]
+    retry_hint: Optional[List[Union[str, IbExpr]]] = None
     returns: Optional[IbExpr] = None
     
     @property
@@ -162,9 +154,6 @@ class IbGlobalStmt(IbStmt):
 @dataclass(kw_only=True, eq=False)
 class IbReturn(IbStmt):
     value: Optional[IbExpr] = None
-
-    @property
-    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbAssign(IbStmt):
@@ -214,15 +203,9 @@ class IbRaise(IbStmt):
     exc: Optional[IbExpr]
     cause: Optional[IbExpr] = None
 
-    @property
-    def supports_llm_fallback(self) -> bool: return False
-
 @dataclass(kw_only=True, eq=False)
 class IbImport(IbStmt):
     names: List['IbAlias']
-
-    @property
-    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbImportFrom(IbStmt):
@@ -230,36 +213,43 @@ class IbImportFrom(IbStmt):
     names: List['IbAlias']
     level: int = 0
 
-    @property
-    def supports_llm_fallback(self) -> bool: return False
-
 @dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
 
 @dataclass(kw_only=True, eq=False)
 class IbPass(IbStmt):
-    @property
-    def supports_llm_fallback(self) -> bool: return False
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbBreak(IbStmt):
-    @property
-    def supports_llm_fallback(self) -> bool: return False
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbContinue(IbStmt):
-    @property
-    def supports_llm_fallback(self) -> bool: return False
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbRetry(IbStmt):
-    hint: Optional[IbExpr] = None  # retry "hint"
+    hint: Optional[IbExpr] = None
 
-    @property
-    def supports_llm_fallback(self) -> bool: return False
-
-# IbLLMExceptionalStmt removed
+@dataclass(kw_only=True, eq=False)
+class IbLLMExceptionalStmt(IbStmt):
+    """
+    llmexcept 语句结构。
+    包含触发语句和对应的异常处理块。
+    
+    语法：
+    statement
+    llmexcept:
+        statements...
+    
+    或者：
+    statement
+    llmexcept retry "hint"
+    """
+    target: IbStmt
+    body: List[IbStmt] = field(default_factory=list)
 
 # --- Expressions ---
 

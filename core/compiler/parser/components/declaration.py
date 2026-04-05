@@ -44,7 +44,10 @@ class DeclarationComponent(BaseComponent):
         pending_intents = self.context.consume_intents()
 
         stmt = None
-        if role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
+        if role == SyntaxRole.LLM_EXCEPT:
+            self.stream.advance()  # 消费 llmexcept keyword
+            stmt = self.statement.llm_except_statement()
+        elif role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
             # 统一交由 StatementComponent 处理意图标记与语句
             stmt = self.statement.parse_statement()
         elif role == SyntaxRole.FUNCTION_DEFINITION:
@@ -184,11 +187,12 @@ class DeclarationComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
         
-        llm_node = self._loc(ast.IbLLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, returns=returns), start_token)
+        llm_node = self._loc(ast.IbLLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, retry_hint=None, returns=returns), start_token)
         
-        sys_prompt, user_prompt = self.llm_body()
+        sys_prompt, user_prompt, retry_hint = self.llm_body()
         llm_node.sys_prompt = sys_prompt
         llm_node.user_prompt = user_prompt
+        llm_node.retry_hint = retry_hint
         
         return self._extend_loc(llm_node, self.stream.previous())
 
@@ -242,29 +246,32 @@ class DeclarationComponent(BaseComponent):
                     break
         return params
 
-    def llm_body(self) -> tuple[Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]]]:
+    def llm_body(self) -> tuple[Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]]]:
         self.stream.consume(TokenType.NEWLINE, "Expect newline before LLM block.")
         
         sys_prompt = None
         user_prompt = None
+        retry_hint = None
         
         while not self.stream.check(TokenType.LLM_END) and not self.stream.is_at_end():
             if self.stream.match(TokenType.LLM_SYS):
                 sys_prompt = self.parse_llm_section_content()
             elif self.stream.match(TokenType.LLM_USER):
                 user_prompt = self.parse_llm_section_content()
+            elif self.stream.match(TokenType.LLM_RETRY_HINT):
+                retry_hint = self.parse_llm_section_content()
             elif self.stream.match(TokenType.NEWLINE):
                 continue
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', or 'llmend'.", code="PAR_002")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code="PAR_002")
 
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
-        return sys_prompt, user_prompt
+        return sys_prompt, user_prompt, retry_hint
 
     def parse_llm_section_content(self) -> List[Union[str, ast.IbExpr]]:
         segments = []
         while not self.stream.is_at_end():
-            if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_END):
+            if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_RETRY_HINT) or self.stream.check(TokenType.LLM_END):
                 break
 
             if self.stream.match(TokenType.RAW_TEXT):
@@ -274,8 +281,9 @@ class DeclarationComponent(BaseComponent):
             elif self.stream.match(TokenType.VAR_REF):
                 # 支持 $变量名 格式
                 # 注意：只有当变量名是 llm 函数参数时才会被替换，否则作为普通文本
-                var_name = self.stream.previous().value
-                var_ref = ast.IbName(id=var_name, ctx='Load')
+                token = self.stream.previous()
+                var_name = token.value
+                var_ref = self._loc(ast.IbName(id=var_name, ctx='Load'), token)
                 segments.append(var_ref)
             else:
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
