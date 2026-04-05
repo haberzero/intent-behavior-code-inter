@@ -1,7 +1,7 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject
-from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
+from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior, IbBool
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -223,7 +223,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     
     # 5. 注册装箱逻辑
     registry.register_boxer(int, lambda reg, v, memo=None: IbInteger.from_native(v, reg.get_class("int")), token)
-    registry.register_boxer(bool, lambda reg, v, memo=None: IbInteger.from_native(1 if v else 0, reg.get_class("int")), token)
+    registry.register_boxer(bool, lambda reg, v, memo=None: IbBool(v, reg.get_class("bool")), token)
     registry.register_boxer(float, lambda reg, v, memo=None: IbFloat(v, reg.get_class("float")), token)
     registry.register_boxer(str, lambda reg, v, memo=None: IbString(v, reg.get_class("str")), token)
     

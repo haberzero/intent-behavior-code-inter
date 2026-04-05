@@ -88,6 +88,36 @@ class IbInteger(IbObject):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+@register_ib_type("bool")
+class IbBool(IbObject):
+    """
+    包装 Python 原生 bool 的 IBC 对象。
+    """
+    __slots__ = ('value',)
+
+    def __init__(self, value: bool, ib_class: IbClass):
+        super().__init__(ib_class)
+        self.value = value
+
+    def to_native(self, memo=None) -> bool:
+        return self.value
+
+    def to_int(self) -> int:
+        return 1 if self.value else 0
+
+    def __eq__(self, other):
+        if isinstance(other, IbBool):
+            return self.value == other.value
+        if hasattr(other, 'to_native'):
+            return self.value == other.to_native()
+        return False
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __bool__(self):
+        return self.value
+
 @register_ib_type("float")
 class IbFloat(IbObject):
     """
