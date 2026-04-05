@@ -469,9 +469,20 @@ class NoneAxiom(BaseAxiom, ConverterCapability):
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "None"
 
+class SliceAxiom(BaseAxiom):
+    """slice 类型的行为公理"""
+    @property
+    def name(self) -> str: return "slice"
+    
+    def get_base_axiom_name(self) -> str: return "slice"
+
+    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+        return other.get_base_axiom_name() == "slice"
+
 def register_core_axioms(registry: 'AxiomRegistry'):
     """[Factory] 向指定的公理注册表注册所有核心公理"""
     registry.register(IntAxiom())
+    registry.register(SliceAxiom())
     registry.register(FloatAxiom())
     registry.register(BoolAxiom())
     registry.register(StrAxiom())
