@@ -215,6 +215,15 @@ class IbString(IbObject):
     def is_empty(self) -> IbObject:
         return self.ib_class.registry.box(1 if len(self.value.strip()) == 0 else 0)
 
+    def __getitem__(self, key: Any) -> IbObject:
+        """支持字符串下标与切片"""
+        idx = key.to_native() if hasattr(key, 'to_native') else key
+        try:
+            res = self.value[idx]
+            return self.ib_class.registry.box(res)
+        except IndexError:
+            raise InterpreterError(f"IndexError: string index out of range: {idx}")
+
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {"type": self.ib_class.name, "value": self.value}
 
@@ -305,7 +314,14 @@ class IbList(IbObject):
 
     def __getitem__(self, key: Any) -> IbObject:
         idx = key.to_native() if hasattr(key, 'to_native') else key
-        return self.elements[idx]
+        try:
+            res = self.elements[idx]
+            if isinstance(idx, slice):
+                # 切片返回的是 IbObject 列表，需要重新装箱为 IbList
+                return self.ib_class.registry.box(res)
+            return res
+        except IndexError:
+            raise InterpreterError(f"IndexError: list index out of range: {idx}")
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         idx = key.to_native() if hasattr(key, 'to_native') else key
