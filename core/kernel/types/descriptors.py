@@ -762,6 +762,7 @@ BOOL_DESCRIPTOR = TypeDescriptor(name="bool", is_nullable=False, is_user_defined
 VOID_DESCRIPTOR = TypeDescriptor(name="void", is_nullable=False, is_user_defined=False)
 ANY_DESCRIPTOR = TypeDescriptor(name="any", is_nullable=True, is_user_defined=False)
 AUTO_DESCRIPTOR = TypeDescriptor(name="auto", is_nullable=True, is_user_defined=False)
+SLICE_DESCRIPTOR = TypeDescriptor(name="slice", is_nullable=False, is_user_defined=False)
 CALLABLE_DESCRIPTOR = TypeDescriptor(name="callable", is_nullable=True, is_user_defined=False)
 EXCEPTION_DESCRIPTOR = TypeDescriptor(name="Exception", is_nullable=True, is_user_defined=False)
 
