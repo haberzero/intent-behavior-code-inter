@@ -152,6 +152,15 @@ class AIPlugin(ILLMProvider):
             if raw_content is None:
                 raw_content = ""
                 
+            # 记录调用信息以便调试
+            self._last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": user_prompt,
+                "response": raw_content,
+                "raw_response": raw_content,
+                "scene": "probe"
+            }
+
             is_reasoning = False
             # 判定条件：
             # 1. 有专用的 reasoning 字段

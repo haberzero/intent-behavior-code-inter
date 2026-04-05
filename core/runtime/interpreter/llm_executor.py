@@ -180,7 +180,7 @@ class LLMExecutorImpl:
     def _get_function_param_names(self, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Set[str]:
         """
         获取 llm 函数的参数名列表。
-         用于判断 prompt 中的 $var 是否是函数参数。
+         用于判断 prompt 中的 $auto 是否是函数参数。
         """
         param_names = set()
         args = node_data.get("args", [])
@@ -242,7 +242,7 @@ class LLMExecutorImpl:
                     else:
                         content_parts.append(str(val))
                 else:
-                    # 非函数参数的 $var，作为普通文本处理（保持 $ 符号）
+                    # 非函数参数的 $auto，作为普通文本处理（保持 $ 符号）
                     content_parts.append(f"${var_name}")
             else:
                 content_parts.append(str(segment))

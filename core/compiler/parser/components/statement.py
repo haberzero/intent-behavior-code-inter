@@ -4,7 +4,7 @@ from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.core.syntax import ID_VAR, COMPOUND_OP_MAP
+from core.compiler.parser.core.syntax import ID_AUTO, COMPOUND_OP_MAP
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -74,7 +74,18 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
-
+        if self.stream.match(TokenType.LLM_RETRY):
+            # 支持顶层的 llmretry "hint" 语法糖
+            hint = None
+            if self.stream.check(TokenType.STRING):
+                hint = self.expression.parse_expression()
+            
+            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
+            self.stream.consume_end_of_statement("Expect newline after llmretry sugar.")
+            
+            # 将 llmretry 包装为 IbLLMExceptionalStmt，以便 SemanticAnalyzer 识别并绑定
+            return self._loc(ast.IbLLMExceptionalStmt(target=None, body=[retry_stmt]), self.stream.previous())
+        
         # 严禁在非顶层（如代码块、函数、类内部）使用 import。
         # 这一限制保证了调度器（Scheduler）可以高效地进行“无副作用”的依赖扫描。
         if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):
@@ -162,9 +173,14 @@ class StatementComponent(BaseComponent):
             if self.stream.match(TokenType.NEWLINE):
                 continue
             
-            # llmexcept 块内的语句不再处理 llmexcept
-            stmt = self.parse_statement()
-            body.append(stmt)
+            # [Result Mode Fix] llmexcept 块内应该允许变量声明
+            if self.decl_parser:
+                stmt = self.decl_parser.parse_declaration()
+                if stmt:
+                    body.append(stmt)
+            else:
+                stmt = self.parse_statement()
+                body.append(stmt)
         
         self.stream.consume(TokenType.DEDENT, "Expect dedent after llmexcept body.")
         return body
@@ -196,7 +212,7 @@ class StatementComponent(BaseComponent):
         # 使用 consume_end_of_statement 处理换行或 EOF
         self.stream.consume_end_of_statement("Expect newline after @ shorthand.")
         
-        # 重要：使用 declaration() 而非 parse_statement()，以支持 @ 下面的 var/func 定义
+        # 重要：使用 declaration() 而非 parse_statement()，以支持 @ 下面的 auto/func 定义
         return self.context.declaration_parser.parse_declaration()
 
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
@@ -258,7 +274,7 @@ class StatementComponent(BaseComponent):
                     val = val[1:-1]
                 segments.append(val)
             elif self.stream.check(TokenType.VAR_REF):
-                # Variable reference $var or $(expr)
+                # Variable reference $auto or $(expr)
                 # Use check instead of match, so parse_expression can consume the token
                 segments.append(self.expression.parse_expression())
             else:
@@ -430,39 +446,6 @@ class StatementComponent(BaseComponent):
                 
         self.stream.consume(TokenType.DEDENT, "Expect dedent after block.")
         return stmts
-
-    def _parse_llm_fallback(self) -> Optional[List[ast.IbStmt]]:
-        """Helper to parse llmexcept block or declarative retry."""
-        # Skip optional newlines before llmexcept/llmretry
-        # [AUDIT] 必须在 peek 之前消费换行符，否则 match 会因为位置不对而失败
-        while self.stream.check(TokenType.NEWLINE):
-            self.stream.advance()
-            
-        if self.stream.match(TokenType.LLM_EXCEPT):
-            # Check for declarative retry: llmexcept retry "hint"
-            if self.stream.match(TokenType.RETRY):
-                hint = None
-                if self.stream.check(TokenType.STRING):
-                    hint = self.expression.parse_expression()
-                
-                retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
-                self.stream.consume_end_of_statement("Expect newline after declarative retry.")
-                return [retry_stmt]
-            else:
-                self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-                return self.block()
-        
-        # Check for syntactic sugar: llmretry "hint"
-        if self.stream.match(TokenType.LLM_RETRY):
-            hint = None
-            if self.stream.check(TokenType.STRING):
-                hint = self.expression.parse_expression()
-            
-            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
-            self.stream.consume_end_of_statement("Expect newline after llmretry sugar.")
-            return [retry_stmt]
-
-        return None
 
     def try_statement(self) -> ast.IbTry:
         start_token = self.stream.previous()

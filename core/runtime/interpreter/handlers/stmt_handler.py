@@ -62,9 +62,19 @@ class StmtHandler(BaseHandler):
                 frame.last_result = result
                 frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
 
+                # [IMPORTANT] 在执行 llmexcept 块之前，临时清除不确定性标记。
+                # 否则，块内的任何 IbAssign 都会因为看到 last_llm_result.is_uncertain 而跳过赋值。
+                self.runtime_context.set_last_llm_result(None)
+
                 # 执行 llmexcept 的 body 块 (处理逻辑)
-                for stmt_uid in body_uids:
-                    self.visit(stmt_uid)
+                try:
+                    for stmt_uid in body_uids:
+                        self.visit(stmt_uid)
+                finally:
+                    # 恢复最后的结果信息，以便块内的 idbg.last_result() 能拿到数据
+                    # 注意：如果 body 块内又产生了新的 LLM 调用，这里不应该覆盖它
+                    if self.runtime_context.get_last_llm_result() is None:
+                        self.runtime_context.set_last_llm_result(result)
 
                 # 检查重试计数
                 if not frame.increment_retry():
@@ -99,6 +109,7 @@ class StmtHandler(BaseHandler):
                     self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
+                    # print(f"[DEBUG] Defining variable '{name}' with UID '{sym_uid}'")
                     self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
             elif not self.execution_context.strict_mode:
                 # 回退到名称查找
