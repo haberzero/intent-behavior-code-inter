@@ -1,0 +1,90 @@
+# File 插件与切片语法综合演示
+# 展示文件操作与切片语法的有机结合
+
+import file
+
+print("=== File Plugin + Slicing Syntax Demo ===")
+
+# 创建测试文件
+str test_file = "./demo_text.txt"
+str test_content = "Line 1: Apple\nLine 2: Banana\nLine 3: Cherry\nLine 4: Date\nLine 5: Elderberry\nLine 6: Fig\nLine 7: Grape\nLine 8: Honeydew"
+
+print("\n[1] Writing test file...")
+file.write(test_file, test_content)
+print("File created: " + test_file)
+
+# 读取文件内容
+print("\n[2] Reading file content...")
+str content = file.read(test_file)
+print(content)
+
+# 按行切片处理
+print("\n[3] Slicing file content...")
+list all_lines = file.read_lines_range(test_file, 1, 8)
+print("Total lines: " + (str)all_lines.len())
+
+# 提取前3行
+list first_three = all_lines[0:3]
+print("\nFirst 3 lines (all_lines[0:3]):")
+int i = 0
+while i < first_three.len():
+    print("  " + (str)(i + 1) + ": " + (str)first_three[i])
+    i = i + 1
+
+# 提取后3行
+list last_three = all_lines[5:]
+print("\nLast 3 lines (all_lines[5:]):")
+i = 5
+while i < all_lines.len():
+    print("  " + (str)(i + 1) + ": " + (str)all_lines[i])
+    i = i + 1
+
+# 奇数行
+list odd_lines = all_lines[::2]
+print("\nOdd lines (all_lines[::2]):")
+i = 0
+while i < odd_lines.len():
+    print("  " + (str)odd_lines[i])
+    i = i + 1
+
+# 反向遍历
+list reversed_lines = all_lines[::-1]
+print("\nReversed (all_lines[::-1]):")
+i = 0
+while i < reversed_lines.len():
+    print("  " + (str)reversed_lines[i])
+    i = i + 1
+
+# 实际应用：文件分块处理
+print("\n[4] Practical: Chunk-based processing...")
+str long_text = "IBCI 2.0 introduces advanced slicing syntax for strings and lists."
+int chunk_size = 10
+int pos = 0
+while pos < long_text.len():
+    int end = pos + chunk_size
+    if end > long_text.len():
+        end = long_text.len()
+    str chunk = long_text[pos:end]
+    print("Chunk [" + (str)pos + ":" + (str)end + "]: '" + chunk + "'")
+    pos = pos + chunk_size
+
+# 文件信息
+print("\n[5] File metadata:")
+int size = file.get_file_size(test_file)
+print("File size: " + (str)size + " bytes")
+int line_count = all_lines.len()
+print("Line count: " + (str)line_count)
+print("Avg line length: " + (str)(size / line_count) + " chars")
+
+# 清理
+print("\n[6] Cleanup...")
+file.remove(test_file)
+if file.exists(test_file):
+    print("Cleanup failed")
+else:
+    print("File removed successfully")
+
+print("\n=== Demo Complete ===")
+print("This demo showcases the integration of:")
+print("  - File plugin: read, write, exists, remove, read_lines_range, get_file_size")
+print("  - Slicing syntax: [start:end], [start:], [:end], [::step], [::-1]")
