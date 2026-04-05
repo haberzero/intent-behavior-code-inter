@@ -141,7 +141,7 @@ class ExpressionComponent(BaseComponent):
         # 由于 Type 可以是复杂的标识符、属性或下标访问，LL(1) 无法区分。
         # 我们采用推测性前瞻（Speculative Lookahead）模式进行判定。
         
-        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.VAR, TokenType.CALLABLE):
+        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO, TokenType.CALLABLE):
             checkpoint = self.stream.get_checkpoint()
 
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。

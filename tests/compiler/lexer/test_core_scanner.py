@@ -12,10 +12,10 @@ class TestCoreTokenScanner(unittest.TestCase):
         return CoreTokenScanner(stream, tracker), stream, tracker
 
     def test_keywords(self):
-        scanner, _, _ = self._make_scanner("func var if else return")
+        scanner, _, _ = self._make_scanner("func auto if else return")
         tokens, _, _ = scanner.scan_line()
         types = [t.type for t in tokens]
-        self.assertEqual(types, [TokenType.FUNC, TokenType.VAR, TokenType.IF, TokenType.ELSE, TokenType.RETURN])
+        self.assertEqual(types, [TokenType.FUNC, TokenType.AUTO, TokenType.IF, TokenType.ELSE, TokenType.RETURN])
 
     def test_identifier(self):
         scanner, _, _ = self._make_scanner("myVar")
@@ -186,7 +186,7 @@ class TestCoreTokenScanner(unittest.TestCase):
         self.assertEqual(scanner.scanner.pos, 0)
 
     def test_try_scan_success(self):
-        scanner, _, _ = self._make_scanner("$var")
+        scanner, _, _ = self._make_scanner("$auto")
         tokens = []
         result = scanner.try_scan(tokens, scanner._scan_var_ref)
         self.assertTrue(result)

@@ -40,7 +40,8 @@ class SemanticAnalyzer:
         if self.registry is None:
             raise ValueError("SemanticAnalyzer requires a valid MetadataRegistry instance. 'None' is not allowed.")
 
-        self._any_desc = self.registry.resolve("Any")
+        self._any_desc = self.registry.resolve("any")
+        self._auto_desc = self.registry.resolve("auto")
         self._void_desc = self.registry.resolve("void")
         self._bool_desc = self.registry.resolve("bool")
         self._int_desc = self.registry.resolve("int")
@@ -182,7 +183,7 @@ class SemanticAnalyzer:
             if isinstance(stmt, ast.IbLLMExceptionalStmt):
                 # llmexcept 是一个独立的语句，需要与前一个语句关联
                 if not new_body:
-                    self.issue_tracker.add_error(
+                    self.issue_tracker.error(
                         f"llmexcept must follow a statement, but no previous statement found.",
                         stmt, code="SEM_051"
                     )
@@ -193,7 +194,7 @@ class SemanticAnalyzer:
 
                 # 检查前一个语句是否包含行为描述
                 if not self._stmt_contains_behavior(prev_stmt):
-                    self.issue_tracker.add_error(
+                    self.issue_tracker.error(
                         f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
                         f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
                         stmt, code="SEM_050"
@@ -272,7 +273,7 @@ class SemanticAnalyzer:
             return self._expr_contains_behavior(expr.left) or self._expr_contains_behavior(expr.comparators[0])
         elif isinstance(expr, ast.IbUnaryOp):
             return self._expr_contains_behavior(expr.operand)
-        elif isinstance(expr, ast.IbIfExpr):
+        elif isinstance(expr, ast.IbIfExp):
             return (self._expr_contains_behavior(expr.test) or 
                     self._expr_contains_behavior(expr.body) or 
                     self._expr_contains_behavior(expr.orelse))
@@ -411,7 +412,7 @@ class SemanticAnalyzer:
             if name not in self.symbol_table.symbols:
                 existing_global = self.symbol_table.resolve(name)
                 if existing_global and existing_global.kind in (SymbolKind.MODULE, SymbolKind.CLASS):
-                    # 模块和类在语义上不建议被遮蔽，但如果是 var 定义则允许
+                    # 模块和类在语义上不建议被遮蔽，但如果是 auto 定义则允许
                     pass
 
             sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, descriptor=var_type, def_node=node)
@@ -607,7 +608,7 @@ class SemanticAnalyzer:
                 sym = self.symbol_table.symbols.get(var_name)
                 
                 if declared_type:
-                    # 1. 有显式标注：优先尊重标注，除非标注是动态的 (var/Any)
+                    # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
                     if declared_type.is_dynamic():
                         target_type = val_type
                     else:
@@ -625,7 +626,7 @@ class SemanticAnalyzer:
                     # 定义或更新符号
                     sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
                 else:
-                    # 2. 无标注：如果尚未定义，或者现有定义是动态的 (Any/var)，则进行推导
+                    # 2. 无标注：如果尚未定义，或者现有定义是动态的 (any/auto)，则进行推导
                     if not sym or sym.descriptor.is_dynamic():
                         sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
                 
@@ -1021,7 +1022,7 @@ class SemanticAnalyzer:
         desc = self.registry.resolve_from_value(val)
         if desc:
             return desc
-        return self.registry.resolve("Any")
+        return self.registry.resolve("any")
 
     def visit_IbName(self, node: ast.IbName) -> TypeDescriptor:
         # 1. 解析符号
@@ -1059,7 +1060,7 @@ class SemanticAnalyzer:
             
             return member_sym.descriptor
             
-        # 2. [Dynamic Resolution] 如果是动态类型（Any/var），允许访问任意属性并返回 Any
+        # 2. [Dynamic Resolution] 如果是动态类型（any/auto），允许访问任意属性并返回 any
         if base_type.is_dynamic():
             # 动态代理：创建一个虚拟符号记录在侧表中
             virtual_sym = symbols.VariableSymbol(

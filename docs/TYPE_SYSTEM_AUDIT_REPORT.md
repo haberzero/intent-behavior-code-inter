@@ -59,7 +59,7 @@
 3. **存在高优先级的逻辑错误** - BoundMethodAxiom.is_compatible 检查了错误的名称
 4. **继承链遍历逻辑正确** - 但效率低下且无循环检测
 5. **结构兼容过于宽松** - 基于名称比较，不考虑 module_path
-6. **var 类型语义正确** - `var → int` 返回 False，符合静态类型安全原则
+6. **auto 类型语义正确** - `auto → int` 返回 False，符合静态类型安全原则
 
 ### 1.3 当前状态评估
 
@@ -302,10 +302,8 @@ is_assignable_to(other)
 **正确性验证：**
 - 分支1：正确调用基类
 - 分支3：正确处理 Any 类型
-- 分支4：正确处理无键值类型的情况
-
-**问题：**
-- 分支5存在问题：当 `self.key_type` 为 None 但 `o_key` 不为 None 时，`k_comp` 保持 True，但实际上应该是 False（dict[str, V] 不能赋值给 dict[Any, V]）
+- 分支3：正确处理 any 类型
+- 分支5存在问题：当 `self.key_type` 为 None 但 `o_key` 不为 None 时，`k_comp` 保持 True，但实际上应该是 False（dict[str, V] 不能赋值给 dict[any, V]）
 - 同样问题存在于 `v_comp`
 
 #### 3.2.4 FunctionMetadata.is_assignable_to() (行 554-575)
@@ -505,7 +503,7 @@ def is_assignable_to(self, other: 'TypeDescriptor') -> bool:
     # 1. 引用相等
     if s is o: return True
 
-    # 2. 目标动态类型 (Any/var)
+    # 2. 目标动态类型 (any/auto)
     if o.is_dynamic(): return True
 
     # 3. 源动态类型
@@ -876,17 +874,17 @@ if self.function_type and o_func:
 def is_dynamic(self) -> bool:
     if self._axiom:
         return self._axiom.is_dynamic()
-    return self.name in ("Any", "var")
+    return self.name in ("any", "auto")
 ```
 
 **验证结果**：
 - 有 axiom 时委托给公理判断 ✓
 - 无 axiom 时回退到名称检查 ✓
-- `var` 和 `Any` 都被视为动态类型 ✓
+- `auto` 和 `any` 都被视为动态类型 ✓
 
-**var 类型的赋值规则**：
-- `int → var` = True ✓（具体类型可赋值给动态类型）
-- `var → int` = False ✓（动态类型不可直接赋值给具体类型，需要 cast）
+**auto 类型的赋值规则**：
+- `int → auto` = True ✓（具体类型可赋值给动态类型）
+- `auto → int` = False ✓（动态类型不可直接赋值给具体类型，需要 cast）
 
 ---
 
@@ -969,7 +967,7 @@ TypeID = (uid, module_path, local_name)
 is_assignable_to(source, target):
 
 1. 同一实例 → True
-2. target 是 dynamic (Any/var) → True
+2. target 是 dynamic (any/auto) → True
 3. source 是 dynamic，目标非 dynamic → False
 4. 精确类型等价 (UID相等) → True
 5. target_uid 是 source_uid 的祖先 → True (通过 lineage 表查询)
@@ -1017,7 +1015,7 @@ class Variance(Enum):
 
 | # | 位置 | 问题描述 | 建议修复 |
 |---|------|---------|---------|
-| 4 | `ListMetadata.is_assignable_to` (descriptors.py:429) | `o_elem is ANY_DESCRIPTOR` 使用 identity 比较，可能误判不同实例 | 改用 `o_elem.name == "Any"` 或让 `o_elem.is_dynamic()` |
+| 4 | `ListMetadata.is_assignable_to` (descriptors.py:429) | `o_elem.is_dynamic()` 逻辑正确 | 已修复 |
 | 5 | `ClassMetadata.is_assignable_to` (descriptors.py:609-612) | 没有处理循环继承的防护 | 添加 visited 集合防止无限递归 |
 | 6 | `BaseAxiom.is_compatible` (primitives.py:25-26) | 与子类实现风格不一致（类型 vs 名称） | 统一使用 `get_base_axiom_name()` 比较 |
 
@@ -1085,28 +1083,28 @@ hydrate_metadata(B)  # B 是自引用类型
 1. **hydration**: 创建描述符并建立成员关系（需要循环检测）
 2. **axiom injection**: 只负责绑定公理能力（无循环风险）
 
-### 9.4 var 类型语义验证
+### 9.4 auto 类型语义验证
 
 #### 9.4.1 当前设计：**符合静态类型安全原则**
 
 | 场景 | `is_assignable_to` 结果 | 是否需要 cast |
 |------|------------------------|---------------|
-| `int → var` | `True` | 否（协变） |
-| `var → int` | `False` | **是（需要 cast）** |
-| `var → Any` | `True` | 否 |
-| `Any → var` | `True` | 否 |
+| `int → auto` | `True` | 否（协变） |
+| `auto → int` | `False` | **是（需要 cast）** |
+| `auto → any` | `True` | 否 |
+| `any → auto` | `True` | 否 |
 
-#### 9.4.2 `var` 不能绕过类型检查
+#### 9.4.2 `auto` 不能绕过类型检查
 
 ```python
-# 当前行为：var -> int 返回 False
-var_desc.is_assignable_to(INT_DESCRIPTOR)  # False
+# 当前行为：auto -> int 返回 False
+auto_desc.is_assignable_to(INT_DESCRIPTOR)  # False
 
 # 这意味着：
-x: int = some_var  # 编译错误！需要显式 cast
+x: int = some_auto  # 编译错误！需要显式 cast
 ```
 
-**当前实现已经符合用户要求**。`var` 必须通过显式 `IbCastExpr` 才能赋值给具体类型。
+**当前实现已经符合用户要求**。`auto` 必须通过显式 `IbCastExpr` 才能赋值给具体类型。
 
 ---
 
@@ -1227,7 +1225,7 @@ x: int = some_var  # 编译错误！需要显式 cast
 
 关键发现：
 1. **Axiom 系统与描述符解耦**：类型行为由 Axiom 定义，描述符只存储结构
-2. **动态类型兜底**：`is_dynamic()` 对 `Any`/`var` 返回 True，允许绕过严格检查
+2. **动态类型兜底**：`is_dynamic()` 对 `any`/`auto` 返回 True，允许绕过严格检查
 3. **循环检测机制存在**：Interpreter 的 `_processing` 集合已实现循环检测
 
 #### 问题 3：动态宿主 (HostInterface) 设计愿景是否仍可行？

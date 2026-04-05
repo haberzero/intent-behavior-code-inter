@@ -138,10 +138,10 @@ class TestDynamicAxiomIsCompatible(unittest.TestCase):
     """测试 DynamicAxiom.is_compatible 方法"""
 
     def setUp(self):
-        self.axiom = DynamicAxiom(name="var")
+        self.axiom = DynamicAxiom(name="auto")
 
-    def test_var_compatible_with_everything(self):
-        """var (Any) 与任何类型兼容"""
+    def test_auto_compatible_with_everything(self):
+        """auto (any) 与任何类型兼容"""
         types = [
             TypeDescriptor(name="int"),
             TypeDescriptor(name="str"),

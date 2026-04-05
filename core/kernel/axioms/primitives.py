@@ -386,7 +386,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
 
 
 class DynamicAxiom(BaseAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability):
-    """Any/var 类型的行为公理 (The Top Type)"""
+    """any/auto 类型的行为公理 (The Top Type)"""
     
     def __init__(self, name: str):
         self._name = name
@@ -481,8 +481,8 @@ def register_core_axioms(registry: 'AxiomRegistry'):
     registry.register(BoundMethodAxiom())
     registry.register(NoneAxiom())
     
-    registry.register(DynamicAxiom("Any"))
-    registry.register(DynamicAxiom("var"))
+    registry.register(DynamicAxiom("any"))
+    registry.register(DynamicAxiom("auto"))
     registry.register(DynamicAxiom("callable"))
     registry.register(DynamicAxiom("void"))
     registry.register(DynamicAxiom("behavior"))

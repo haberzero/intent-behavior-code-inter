@@ -21,7 +21,7 @@ class TokenType(Enum):
     FOR = auto()
     WHILE = auto()
     IN = auto()
-    VAR = auto()
+    AUTO = auto()
     GLOBAL = auto()
     PASS = auto()
     BREAK = auto()

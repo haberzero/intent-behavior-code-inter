@@ -241,7 +241,7 @@ class IbException(IbObject):
 
     def cast_to(self, target_class: Any) -> IbObject:
         """ 支持 Exception 的强转逻辑"""
-        if target_class.name in ("str", "Any"):
+        if target_class.name in ("str", "any"):
             msg = self.fields.get("message")
             if msg: return msg
             return self.ib_class.registry.box("Exception")
@@ -295,7 +295,7 @@ class IbList(IbObject):
 
     def cast_to(self, target_class: Any) -> IbObject:
         """ 支持 List 的强转逻辑"""
-        if target_class.name in ("list", "Any"):
+        if target_class.name in ("list", "any"):
             return self
         if target_class.name == "str":
             # 转换为字符串表示
@@ -359,7 +359,7 @@ class IbDict(IbObject):
 
     def cast_to(self, target_class: Any) -> IbObject:
         """ 支持 Dict 的强转逻辑"""
-        if target_class.name in ("dict", "Any"):
+        if target_class.name in ("dict", "any"):
             return self
         if target_class.name == "str":
             items_repr = [f"{k}: {str(v.to_native())}" for k, v in self.fields.items()]

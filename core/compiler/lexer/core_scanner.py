@@ -31,7 +31,7 @@ class CoreTokenScanner:
             'callable': TokenType.CALLABLE,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
-            'var': TokenType.VAR, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
+            'auto': TokenType.AUTO, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,

@@ -5,12 +5,12 @@ from core.kernel.types.descriptors import (
     TypeDescriptor, 
     ListMetadata, DictMetadata, FunctionMetadata, ClassMetadata, ModuleMetadata,
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, BOOL_DESCRIPTOR, 
-    VOID_DESCRIPTOR, ANY_DESCRIPTOR, VAR_DESCRIPTOR, CALLABLE_DESCRIPTOR,
+    VOID_DESCRIPTOR, ANY_DESCRIPTOR, AUTO_DESCRIPTOR, CALLABLE_DESCRIPTOR,
     LIST_DESCRIPTOR, DICT_DESCRIPTOR
 )
 
 # 统一内置原始类型列表，确保水化阶段一致性
-BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "Any", "var", "callable", "list", "dict", "behavior"]
+BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "any", "auto", "callable", "list", "dict", "behavior"]
 
 class ArtifactRehydrator:
     """

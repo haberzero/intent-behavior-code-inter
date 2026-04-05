@@ -14,7 +14,7 @@ class TestFactoryCreateDefaultRegistry(unittest.TestCase):
         """验证注册了所有原始类型"""
         registry = create_default_registry()
 
-        expected_types = ["int", "str", "float", "bool", "void", "Any", "var",
+        expected_types = ["int", "str", "float", "bool", "void", "any", "auto",
                           "callable", "list", "dict", "None", "behavior",
                           "bound_method", "Exception", "module"]
 
@@ -51,7 +51,7 @@ class TestFactoryCreateDefaultRegistry(unittest.TestCase):
         self.assertIsNotNone(dict_desc._axiom)
 
     def test_primitive_types_are_not_nullable(self):
-        """验证原始类型（除 Any/var 外）不可空"""
+        """验证原始类型（除 any/auto 外）不可空"""
         registry = create_default_registry()
 
         non_nullable = ["int", "str", "float", "bool"]
@@ -60,11 +60,10 @@ class TestFactoryCreateDefaultRegistry(unittest.TestCase):
             self.assertIsNotNone(desc)
             self.assertFalse(desc.is_nullable, f"Type '{type_name}' should not be nullable")
 
-    def test_any_and_var_are_nullable(self):
-        """验证 Any 和 var 可为空"""
+    def test_any_and_auto_are_nullable(self):
+        """验证 any 和 auto 可为空"""
         registry = create_default_registry()
-
-        nullable = ["Any", "var"]
+        nullable = ["any", "auto"]
         for type_name in nullable:
             desc = registry.resolve(type_name)
             self.assertIsNotNone(desc)

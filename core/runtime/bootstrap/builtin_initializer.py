@@ -82,7 +82,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         core_axioms = axiom_registry.get_all_names()
     else:
         # Fallback (Safety net) - 仅在极端的 UTS 注册表未对齐时使用
-        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "var", "Any", "void"]
+        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "auto", "any", "void"]
     
     # 自动创建类并注册
     ib_classes = {}
@@ -136,13 +136,13 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 4. 注册内置全局函数元数据 (供编译器发现)
     registry.register_function("print", FunctionMetadata(
         name="print",
-        param_types=[metadata_registry.resolve("Any")],
+        param_types=[metadata_registry.resolve("any")],
         return_type=metadata_registry.resolve("void")
     ), token)
 
     registry.register_function("len", FunctionMetadata(
         name="len",
-        param_types=[metadata_registry.resolve("Any")],
+        param_types=[metadata_registry.resolve("any")],
         return_type=metadata_registry.resolve("int")
     ), token)
 

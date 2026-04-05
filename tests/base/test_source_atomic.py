@@ -47,7 +47,7 @@ class TestLocation(unittest.TestCase):
             length=3,
             end_line=10,
             end_column=8,
-            context_line="var x = 42"
+            context_line="auto x = 42"
         )
         self.assertEqual(loc.file_path, "test.ibci")
         self.assertEqual(loc.line, 10)
@@ -55,7 +55,7 @@ class TestLocation(unittest.TestCase):
         self.assertEqual(loc.length, 3)
         self.assertEqual(loc.end_line, 10)
         self.assertEqual(loc.end_column, 8)
-        self.assertEqual(loc.context_line, "var x = 42")
+        self.assertEqual(loc.context_line, "auto x = 42")
 
     def test_location_str_with_file(self):
         """测试带文件路径的 __str__"""

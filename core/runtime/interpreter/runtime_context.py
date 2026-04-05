@@ -409,7 +409,7 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
                 if name not in res:
                     val = symbol.value
                     # 获取运行时类型名称
-                    type_name = "var"
+                    type_name = "auto"
                     if hasattr(val, 'ib_class') and val.ib_class:
                         type_name = val.ib_class.name
                     elif symbol.declared_type:

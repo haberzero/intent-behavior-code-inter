@@ -60,11 +60,11 @@ class TypeAxiom(Protocol):
         ...
     
     def is_dynamic(self) -> bool:
-        """是否为动态类型 (Any/var/etc.)"""
+        """是否为动态类型 (any/auto/etc.)"""
         ...
 
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
-        """公理级兼容性判断（用于处理 Any/var 等特殊逻辑）"""
+        """公理级兼容性判断（用于处理 any/auto 等特殊逻辑）"""
         ...
 
     def is_class(self) -> bool:

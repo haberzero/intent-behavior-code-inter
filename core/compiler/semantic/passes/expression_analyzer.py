@@ -25,7 +25,7 @@ class ExpressionAnalyzer:
         self.registry = registry
         self.issue_tracker = issue_tracker
         self.debugger = debugger
-        self._any_desc = registry.resolve("Any")
+        self._any_desc = registry.resolve("any")
         self._bool_desc = registry.resolve("bool")
 
     def visit(self, node: Any) -> 'TypeDescriptor':

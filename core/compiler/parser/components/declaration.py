@@ -5,7 +5,7 @@ from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStr
 from core.kernel import ast as ast
 from core.kernel.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.core.syntax import ID_VAR, IbPrecedence
+from core.compiler.parser.core.syntax import ID_AUTO, IbPrecedence
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
@@ -59,8 +59,8 @@ class DeclarationComponent(BaseComponent):
             self.stream.advance() # class
             stmt = self.class_declaration()
         elif role == SyntaxRole.VARIABLE_DECLARATION:
-            explicit_var = self.stream.match(TokenType.VAR)
-            stmt = self.variable_declaration(explicit_var=explicit_var)
+            explicit_auto = self.stream.match(TokenType.AUTO)
+            stmt = self.variable_declaration(explicit_auto=explicit_auto)
         else:
             stmt = self.statement.parse_statement()
         
@@ -101,26 +101,33 @@ class DeclarationComponent(BaseComponent):
         )
         return self._loc(ast.IbIntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token, end_token)
 
-    def variable_declaration(self, explicit_var: bool = False) -> ast.IbAssign:
+    def variable_declaration(self, explicit_auto: bool = False) -> ast.IbAssign:
+        """
+        变量/资产声明。
+        格式：
+        1. auto x = 1 (推导类型)
+        2. int x = 1 (显式类型)
+        3. auto x: int = 1 (显式覆盖)
+        """
         type_token = None
         type_annotation = None
         
-        if explicit_var:
-            # 'var' keyword already consumed
+        if explicit_auto:
+            # 'auto' keyword already consumed
             type_token = self.stream.previous()
             
             # 使用语法常量，消除硬编码
-            var_name = ID_VAR
+            auto_name = ID_AUTO
             if self.context.metadata:
-                var_desc = self.context.metadata.resolve(ID_VAR)
-                if var_desc:
-                    var_name = var_desc.name
+                auto_desc = self.context.metadata.resolve(ID_AUTO)
+                if auto_desc:
+                    auto_name = auto_desc.name
             
-            type_annotation = self._loc(ast.IbName(id=var_name, ctx='Load'), type_token)
+            type_annotation = self._loc(ast.IbName(id=auto_name, ctx='Load'), type_token)
             
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
             
-            # Optional type override: var x: int = 1
+            # Optional type override: auto x: int = 1
             if self.stream.match(TokenType.COLON):
                 type_annotation = self.type_def.parse_type_annotation()
         else:
@@ -141,16 +148,7 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume_end_of_statement("Expect newline after variable declaration.")
         end_token = self.stream.previous()
         
-        # 解析可选的 llmexcept 块
-        llm_fallback = self.statement._parse_llm_fallback()
-        if llm_fallback:
-             end_token = self.stream.previous()
-             
-        stmt = self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
-        
-        if llm_fallback:
-            stmt.llm_fallback = llm_fallback
-        return stmt
+        return self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
 
     def function_declaration(self) -> ast.IbFunctionDef:
         start_token = self.stream.previous()

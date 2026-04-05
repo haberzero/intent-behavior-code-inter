@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 from .ib_type_mapping import register_ib_type
 
-@register_ib_type("Any")
-@register_ib_type("var")
+@register_ib_type("any")
+@register_ib_type("auto")
 @register_ib_type("callable")
 @register_ib_type("void")
 @register_ib_type("bound_method")

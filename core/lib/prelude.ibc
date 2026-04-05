@@ -10,13 +10,13 @@ class Object:
 
 class List:
     func map(callback: callable) -> list:
-        var result = []
+        auto result = []
         for item in self:
             result.append(callback(item))
         return result
 
     func filter(callback: callable) -> list:
-        var result = []
+        auto result = []
         for item in self:
             if callback(item):
                 result.append(item)

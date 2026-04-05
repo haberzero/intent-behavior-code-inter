@@ -33,7 +33,7 @@ class IbParseRule:
 
 # Identifier constants for keyword tokens
 ID_SELF: str = "self"
-ID_VAR: str = "var"
+ID_AUTO: str = "auto"
 ID_CALLABLE: str = "callable"
 
 # Operator mapping: TokenType -> operator string

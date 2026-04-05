@@ -191,7 +191,7 @@ class Parser:
             elif self.stream.match(TokenType.FROM):
                 return self.import_component.parse_from_import()
         
-        # DeclarationComponent handles func, var, llm, and falls back to statement
+        # DeclarationComponent handles func, auto, llm, and falls back to statement
         return self.decl_component.parse_declaration()
 
     def synchronize(self):
@@ -203,7 +203,7 @@ class Parser:
             if self.stream.previous().type == TokenType.NEWLINE:
                 return
             
-            if self.stream.peek().type in (TokenType.FUNC, TokenType.VAR, TokenType.FOR,
+            if self.stream.peek().type in (TokenType.FUNC, TokenType.AUTO, TokenType.FOR,
                                     TokenType.IF, TokenType.WHILE, TokenType.RETURN,
                                     TokenType.LLM_DEF, TokenType.IMPORT, TokenType.FROM,
                                     TokenType.BREAK, TokenType.CONTINUE):

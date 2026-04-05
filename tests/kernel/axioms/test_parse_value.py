@@ -189,7 +189,7 @@ class TestDynamicAxiomParseValue(unittest.TestCase):
     """测试 DynamicAxiom.parse_value 方法"""
 
     def setUp(self):
-        self.axiom = DynamicAxiom(name="var")
+        self.axiom = DynamicAxiom(name="auto")
 
     def test_parse_returns_stripped_string(self):
         """测试 Any 类型直接返回去除首尾空格的字符串"""

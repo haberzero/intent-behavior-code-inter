@@ -5,9 +5,8 @@ from core.compiler.lexer.str_stream import StrStream
 class LLMScanner:
     """
     Handles token scanning within an LLM block (between 'llm ...:' and 'llmend').
-    Parses prompt keywords (__sys__, __user__), raw text, and variable placeholders ($var).
-
-     简化设计：仅支持 $var 格式的变量引用。
+    Parses prompt keywords (__sys__, __user__), raw text, and variable placeholders ($auto).
+    简化设计：仅支持 $auto 格式的变量引用。
     只有当变量名是 llm 函数中声明的参数时，才会被替换；其他情况作为普通文本。
     """
     def __init__(self, scanner: StrStream):
@@ -112,7 +111,7 @@ class LLMScanner:
 
     def _scan_var_ref(self, tokens: List[Token]):
         """
-        扫描变量引用 $var。
+        扫描变量引用 $auto。
         注意：这只是标记位置，实际的变量替换在运行时通过参数名匹配决定。
         """
         self.scanner.start_token()

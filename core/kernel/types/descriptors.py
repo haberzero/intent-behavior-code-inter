@@ -205,12 +205,12 @@ class TypeDescriptor:
 
     def is_dynamic(self) -> bool:
         """
-        判断是否为动态/Any类型。
+        判断是否为动态/any类型。
         完全委托给公理系统判断。如果未绑定公理，默认视为非动态（安全回退）。
         """
         if self._axiom:
             return self._axiom.is_dynamic()
-        return self.name in ("Any", "var")
+        return self.name in ("any", "auto")
 
     def is_class(self) -> bool:
         """是否为类类型。"""
@@ -268,7 +268,7 @@ class TypeDescriptor:
                 axiom_hint = s._axiom.get_diff_hint(o)
                 if axiom_hint: return axiom_hint
             
-            if s.is_dynamic() or s.name in ("Any", "var"):
+            if s.is_dynamic() or s.name in ("any", "auto"):
                 return f"Expected '{o.name}', but got dynamic type '{s.name}'. Use explicit cast (e.g. '({o.name}) expr') to convert it."
             
             return f"Expected '{o.name}', but got '{s.name}'."
@@ -444,7 +444,10 @@ class ListMetadata(TypeDescriptor):
         o_iter = o.get_iter_trait()
         if o_iter:
             o_elem = o_iter.get_element_type()
-            if o is LIST_DESCRIPTOR or self.element_type is ANY_DESCRIPTOR or o_elem is ANY_DESCRIPTOR:
+            # 允许赋值给 any/auto 或不带泛型的容器
+            if o is LIST_DESCRIPTOR or o_elem is None or \
+               self.element_type in (ANY_DESCRIPTOR, AUTO_DESCRIPTOR) or \
+               o_elem in (ANY_DESCRIPTOR, AUTO_DESCRIPTOR):
                 return True
             if o_elem is None:
                 return self.element_type is None
@@ -500,7 +503,7 @@ class DictMetadata(TypeDescriptor):
         o_key = o.get_key_type()
         o_val = o.get_value_type()
 
-        if o_key is ANY_DESCRIPTOR and o_val is ANY_DESCRIPTOR:
+        if o_key in (ANY_DESCRIPTOR, AUTO_DESCRIPTOR) and o_val in (ANY_DESCRIPTOR, AUTO_DESCRIPTOR):
             return True
 
         if o is DICT_DESCRIPTOR:
@@ -757,8 +760,8 @@ STR_DESCRIPTOR = TypeDescriptor(name="str", is_nullable=False, is_user_defined=F
 FLOAT_DESCRIPTOR = TypeDescriptor(name="float", is_nullable=False, is_user_defined=False)
 BOOL_DESCRIPTOR = TypeDescriptor(name="bool", is_nullable=False, is_user_defined=False)
 VOID_DESCRIPTOR = TypeDescriptor(name="void", is_nullable=False, is_user_defined=False)
-ANY_DESCRIPTOR = TypeDescriptor(name="Any", is_nullable=True, is_user_defined=False)
-VAR_DESCRIPTOR = TypeDescriptor(name="var", is_nullable=True, is_user_defined=False)
+ANY_DESCRIPTOR = TypeDescriptor(name="any", is_nullable=True, is_user_defined=False)
+AUTO_DESCRIPTOR = TypeDescriptor(name="auto", is_nullable=True, is_user_defined=False)
 CALLABLE_DESCRIPTOR = TypeDescriptor(name="callable", is_nullable=True, is_user_defined=False)
 EXCEPTION_DESCRIPTOR = TypeDescriptor(name="Exception", is_nullable=True, is_user_defined=False)
 

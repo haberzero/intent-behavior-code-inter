@@ -2,9 +2,8 @@ from typing import Dict, Optional, List, Any
 from core.kernel import types as uts
 from core.kernel.types.descriptors import (
     TypeDescriptor, FunctionMetadata, ModuleMetadata,
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
-    BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR,
-    VAR_DESCRIPTOR, LIST_DESCRIPTOR, DICT_DESCRIPTOR,
+    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, BOOL_DESCRIPTOR, 
+    VOID_DESCRIPTOR, ANY_DESCRIPTOR, AUTO_DESCRIPTOR, LIST_DESCRIPTOR, DICT_DESCRIPTOR,
     CALLABLE_DESCRIPTOR, BEHAVIOR_DESCRIPTOR, EXCEPTION_DESCRIPTOR
 )
 from core.kernel.factory import create_default_registry
@@ -60,8 +59,8 @@ class Prelude:
             pass
 
         # 3. 补全特殊映射
-        if "Any" in self.builtin_types and "var" not in self.builtin_types:
-            self.builtin_types["var"] = self.builtin_types["Any"]
+        if "any" in self.builtin_types and "auto" not in self.builtin_types:
+            self.builtin_types["auto"] = self.builtin_types["any"]
         if "void" in self.builtin_types and "none" not in self.builtin_types:
             self.builtin_types["none"] = self.builtin_types["void"]
             

@@ -72,7 +72,7 @@ class TestRegisterCoreAxioms(unittest.TestCase):
 
         expected_axioms = ["int", "str", "float", "bool", "list", "dict",
                          "None", "callable", "behavior", "bound_method",
-                         "Exception", "var", "Any"]
+                         "Exception", "auto", "any"]
 
         for name in expected_axioms:
             axiom = registry.get_axiom(name)

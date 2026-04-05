@@ -58,7 +58,7 @@ class SyntaxRecognizer:
         if token.type == TokenType.RETURN:
             return SyntaxRole.RETURN_STATEMENT
         
-        if token.type in (TokenType.VAR, TokenType.CALLABLE):
+        if token.type in (TokenType.AUTO, TokenType.CALLABLE):
             return SyntaxRole.VARIABLE_DECLARATION
         
         # Check for implicit declaration: Type Name (e.g., int x, MyClass c)

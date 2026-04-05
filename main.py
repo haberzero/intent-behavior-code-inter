@@ -47,7 +47,7 @@ def main():
     run_parser = subparsers.add_parser("run", help="Compile and run an IBCI file")
     run_parser.add_argument("file", help="Path to the .ibci entry file")
     run_parser.add_argument("--root", help="Project root directory", default=None)
-    run_parser.add_argument("--var", action="append", help="Set variable (key=value)")
+    run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
     run_parser.add_argument("--core-debug", help="Core debugger config (JSON string or file path)", default=None)
@@ -124,10 +124,10 @@ def main():
     if args.command == "run":
         # 加载命令行变量
         cli_variables = {}
-        if getattr(args, 'var', None):
-            for var in args.var:
-                if "=" in var:
-                    k, v = var.split("=", 1)
+        if getattr(args, 'auto', None):
+            for auto_var in args.auto:
+                if "=" in auto_var:
+                    k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
         # 运行引擎

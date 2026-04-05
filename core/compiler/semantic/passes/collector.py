@@ -198,7 +198,7 @@ class LocalSymbolCollector:
             # [LIFECYCLE] 符号生命周期管理
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
-            # 如果现有符号是 Any/var 占位符，允许覆盖，消除名称硬编码
+            # 如果现有符号是 any/auto 占位符，允许覆盖，消除名称硬编码
             if existing and (not existing.descriptor or existing.descriptor.is_dynamic()):
                 allow_overwrite = True
             

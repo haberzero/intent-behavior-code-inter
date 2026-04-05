@@ -49,7 +49,7 @@ class Person:
     str name = "Alice"
     int age = 30
 
-var p = Person()
+auto p = Person()
 dict fields = idbg.fields(p)
 print("\n[idbg.fields] 对象字段详情:")
 print("name: " + (str)fields["name"])

@@ -13,7 +13,7 @@ from core.kernel.types.descriptors import (
     BOOL_DESCRIPTOR,
     VOID_DESCRIPTOR,
     ANY_DESCRIPTOR,
-    VAR_DESCRIPTOR,
+    AUTO_DESCRIPTOR,
     CALLABLE_DESCRIPTOR,
     LIST_DESCRIPTOR,
     DICT_DESCRIPTOR,
@@ -68,14 +68,14 @@ class TestTypeDescriptorIsAssignableToWithAxiom(unittest.TestCase):
         self.assertTrue(int_desc.is_assignable_to(int_desc))
 
     def test_axiom_compatible_int_to_any(self):
-        """公理兼容：int 应该兼容 Any (var)"""
-        int_desc = TypeDescriptor(name="int", is_nullable=False)
+        """公理兼容：int 应该兼容 any (auto)"""
+        int_desc = TypeDescriptor(name="int")
         int_desc._axiom = IntAxiom()
+        
+        auto_desc = TypeDescriptor(name="auto", is_nullable=True)
+        auto_desc._axiom = DynamicAxiom(name="auto")
 
-        var_desc = TypeDescriptor(name="var", is_nullable=True)
-        var_desc._axiom = DynamicAxiom(name="var")
-
-        self.assertTrue(int_desc.is_assignable_to(var_desc))
+        self.assertTrue(int_desc.is_assignable_to(auto_desc))
 
     def test_axiom_not_compatible_int_to_str(self):
         """公理不兼容：int 不应该兼容 str"""
@@ -407,15 +407,15 @@ class TestIsAssignableToEdgeCases(unittest.TestCase):
         self.assertTrue(result)
 
     def test_var_dynamic_compatibility(self):
-        """var (动态类型) 兼容性"""
-        var = TypeDescriptor(name="var", is_nullable=True)
-        var._axiom = DynamicAxiom(name="var")
-
-        int_desc = TypeDescriptor(name="int", is_nullable=False)
+        """auto (动态类型) 兼容性"""
+        auto = TypeDescriptor(name="auto", is_nullable=True)
+        auto._axiom = DynamicAxiom(name="auto")
+        
+        int_desc = TypeDescriptor(name="int")
         int_desc._axiom = IntAxiom()
-
-        self.assertTrue(int_desc.is_assignable_to(var))
-        self.assertFalse(var.is_assignable_to(int_desc))
+        
+        self.assertTrue(int_desc.is_assignable_to(auto))
+        self.assertFalse(auto.is_assignable_to(int_desc))
 
 
 class TestIsAssignableToWithPredefinedDescriptors(unittest.TestCase):

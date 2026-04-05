@@ -42,7 +42,7 @@ class TestTokenStream(unittest.TestCase):
                   self._token(TokenType.EOF)]
         stream = self._make_stream(tokens)
         self.assertTrue(stream.check(TokenType.FUNC))
-        self.assertFalse(stream.check(TokenType.VAR))
+        self.assertFalse(stream.check(TokenType.AUTO))
 
     def test_advance(self):
         tokens = [self._token(TokenType.IDENTIFIER),
@@ -56,7 +56,7 @@ class TestTokenStream(unittest.TestCase):
         tokens = [self._token(TokenType.FUNC),
                   self._token(TokenType.EOF)]
         stream = self._make_stream(tokens)
-        result = stream.match(TokenType.FUNC, TokenType.VAR)
+        result = stream.match(TokenType.FUNC, TokenType.AUTO)
         self.assertTrue(result)
         self.assertEqual(stream.current, 1)
 
