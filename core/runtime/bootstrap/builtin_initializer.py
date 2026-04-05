@@ -195,24 +195,25 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(dict_class, 'len', lambda self: self.len())
     
     # 5. 注册装箱逻辑
-    registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class), token)
-    registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0, integer_class), token)
-    registry.register_boxer(float, lambda v, memo=None: IbFloat(v, float_class), token)
-    registry.register_boxer(str, lambda v, memo=None: IbString(v, string_class), token)
+    registry.register_boxer(int, lambda reg, v, memo=None: IbInteger.from_native(v, reg.get_class("int")), token)
+    registry.register_boxer(bool, lambda reg, v, memo=None: IbInteger.from_native(1 if v else 0, reg.get_class("int")), token)
+    registry.register_boxer(float, lambda reg, v, memo=None: IbFloat(v, reg.get_class("float")), token)
+    registry.register_boxer(str, lambda reg, v, memo=None: IbString(v, reg.get_class("str")), token)
     
-    def _box_list(val, memo):
-        res = IbList([], list_class)
+    def _box_list(reg, val, memo):
+        res = IbList([], reg.get_class("list"))
         memo[id(val)] = res
-        res.elements = [registry.box(i, memo) for i in val]
+        res.elements = [reg.box(i, memo) for i in val]
         return res
         
-    def _box_dict(val, memo):
-        res = IbDict({}, dict_class)
+    def _box_dict(reg, val, memo):
+        res = IbDict({}, reg.get_class("dict"))
         memo[id(val)] = res
-        res.fields = {k: registry.box(v, memo) for k, v in val.items()}
+        res.fields = {k: reg.box(v, memo) for k, v in val.items()}
         return res
         
     registry.register_boxer(list, _box_list, token)
+    registry.register_boxer(tuple, _box_list, token)
     registry.register_boxer(dict, _box_dict, token)
     
     # 6. 封印注册表结构 (Active Defense)

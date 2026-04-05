@@ -557,6 +557,7 @@ class IbUserFunction(IbFunction):
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
+                    # print(f"[DEBUG] Defining LLM param: {arg_name} with UID: {sym_uid}")
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])

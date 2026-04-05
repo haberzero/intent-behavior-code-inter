@@ -97,11 +97,5 @@ class FatalCompilerError(CompilerError):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__([diagnostic])
 
-class LLMUncertaintyError(InterpreterError):
-    """LLM 在严格模式下返回了无法解析的值"""
-    def __init__(self, message: str, location: Optional[Location] = None, raw_response: str = ""):
-        super().__init__(message, location, error_code="RUN_009")
-        self.raw_response = raw_response
-
 # --- 运行时流控异常 (已迁移) ---
 # 已迁移至 core/runtime/exceptions.py，请勿在此处添加

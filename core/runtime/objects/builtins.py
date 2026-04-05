@@ -3,7 +3,7 @@ from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
-from core.kernel.issue import InterpreterError, LLMUncertaintyError
+from core.kernel.issue import InterpreterError
 
 from .ib_type_mapping import register_ib_type
 
@@ -156,17 +156,26 @@ class IbString(IbObject):
         # 强约束决策逻辑：
         # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
         # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
-        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发 LLMUncertaintyError 以便 llmexcept 捕获
+        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发不确定性标志，以便 llmexcept 捕获
         if val in ("1", "true", "yes", "on"):
             return self.ib_class.registry.box(1)
         if val in ("0", "false", "no", "off", "null", "none", ""):
             return self.ib_class.registry.box(0)
             
-        # 非空且非明确布尔语义的字符串，直接判定为模糊
-        raise LLMUncertaintyError(
-            f"Ambiguous boolean string: '{self.value}'. Expected '0' or '1'.",
-            raw_response=self.value
-        )
+        # [Result Mode Refactor] 不再抛出 Python 异常。
+        # 通过 Registry 获取当前执行上下文并设置不确定性结果。
+        execution_context = self.ib_class.registry.get_execution_context()
+        if execution_context and execution_context.runtime_context:
+            from core.runtime.interpreter.llm_result import LLMResult
+            execution_context.runtime_context.set_last_llm_result(
+                LLMResult.uncertain_result(
+                    raw_response=self.value,
+                    retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 '0' 或 '1'。"
+                )
+            )
+            
+        # 返回 none (或者 0)，解释器（如 visit_IbIf）会检查 last_llm_result.is_uncertain 并立即停止执行
+        return self.ib_class.registry.get_none()
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
@@ -174,11 +183,17 @@ class IbString(IbObject):
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
-            # 统一抛出 LLMUncertaintyError，使强转失败能被 llmexcept 捕获
-            raise LLMUncertaintyError(
-                f"Casting string '{self.value}' to {target_desc} failed: {str(e)}",
-                raw_response=self.value
-            )
+            # [Result Mode Refactor] 统一通过 LLMResult 信号不确定性，不再使用 Python 异常
+            execution_context = self.ib_class.registry.get_execution_context()
+            if execution_context and execution_context.runtime_context:
+                from core.runtime.interpreter.llm_result import LLMResult
+                execution_context.runtime_context.set_last_llm_result(
+                    LLMResult.uncertain_result(
+                        raw_response=self.value,
+                        retry_hint=f"类型强制转换失败: 将 '{self.value}' 转换为 {target_desc} 失败: {str(e)}"
+                    )
+                )
+            return self.ib_class.registry.get_none()
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())

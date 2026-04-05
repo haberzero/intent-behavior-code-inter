@@ -176,7 +176,7 @@ class Bootstrapper:
         # 1. 尝试从 Registry 获取预注册的工厂函数
         boxer_func = registry.get_boxer(type(val))
         if boxer_func:
-            return boxer_func(val, memo)
+            return boxer_func(registry, val, memo)
 
         # 2. Callable 与 Native 对象兜底
         if callable(val):
