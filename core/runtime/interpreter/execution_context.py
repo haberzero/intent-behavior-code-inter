@@ -3,6 +3,7 @@ from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING, Callable
 from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
+from core.runtime.path import IbPath
 
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
@@ -188,13 +189,29 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         return self._get_captured_intents_callback(obj)
 
     def get_current_script_path(self) -> Optional[str]:
+        """
+        获取当前脚本的绝对路径
+
+        返回:
+            Optional[str]: 脚本绝对路径（字符串格式），未找到则返回 None
+        """
         if self._logical_stack and self._logical_stack.frames:
-            # 从调用栈中查找最近的一个具有 Location 的帧
             for frame in reversed(self._logical_stack.frames):
                 if frame.location and frame.location.file_path:
-                    return os.path.abspath(frame.location.file_path)
+                    ib_path = IbPath.from_native(frame.location.file_path)
+                    return ib_path.resolve_dot_segments().to_native()
         return None
 
     def get_current_script_dir(self) -> Optional[str]:
+        """
+        获取当前脚本所在目录
+
+        返回:
+            Optional[str]: 脚本目录（字符串格式），未找到则返回 None
+        """
         path = self.get_current_script_path()
-        return os.path.dirname(path) if path else None
+        if path:
+            ib_path = IbPath.from_native(path)
+            parent = ib_path.parent
+            return parent.to_native() if parent else None
+        return None

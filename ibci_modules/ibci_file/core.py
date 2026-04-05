@@ -1,47 +1,50 @@
 """
 File 文件操作插件核心实现
 合并了基础文件操作和高级文件分析功能
+
+使用 IBCI Path 模块进行路径管理，与 Python 解耦。
 """
 import os
 import re
 from typing import List, Dict, Any
+from core.runtime.path import IbPath, PathResolver
 
 
 class FileLib:
     """
-    File 插件核心类 (v2.3.0)
+    File 插件核心类 (v2.4.0)
     合并基础文件操作和高级文件分析功能：
     - 基础操作: read, write, exists, remove
     - 高级分析: search_in_files, list_files_recursive, get_line_count, read_lines_range, get_file_size, find_todos
+
+    使用 IBCI PathResolver 进行路径管理。
     """
     def setup(self, capabilities):
         """插件入口点，支持上下文感知设置"""
         self.capabilities = capabilities
         self.permission_manager = capabilities.service_context.permission_manager
 
+        script_dir = capabilities.stack_inspector.get_current_script_dir()
+        script_dir_ib = IbPath.from_native(script_dir) if script_dir else None
+
+        project_root_ib = IbPath.from_native(
+            capabilities.service_context.permission_manager.root_dir
+        )
+
+        self._path_resolver = PathResolver(project_root_ib, script_dir_ib)
+
     def _resolve_path(self, path: str) -> str:
         """
-        核心路径解析逻辑。
+        核心路径解析逻辑（使用 IBCI PathResolver）
+
         - 绝对路径：直接校验权限并使用。
         - 以 ./ 或 ../ 开头：基于当前 IBCI 脚本所在目录解析。
-        - 裸路径：基于当前工作目录 (CWD) 解析。
+        - 裸路径：基于项目根目录解析。
         """
-        if os.path.isabs(path):
-            self.permission_manager.validate_path(path)
-            return os.path.normpath(path)
-
-        # 1. 相对脚本路径支持 (Position-Independent Code)
-        if path.startswith("./") or path.startswith("../"):
-            script_dir = self.capabilities.stack_inspector.get_current_script_dir()
-            if script_dir:
-                abs_path = os.path.normpath(os.path.join(script_dir, path))
-                self.permission_manager.validate_path(abs_path)
-                return abs_path
-
-        # 2. 传统相对路径支持 (Backward Compatibility)
-        abs_path = os.path.abspath(path)
-        self.permission_manager.validate_path(abs_path)
-        return os.path.normpath(abs_path)
+        ib_path = self._path_resolver.resolve(path)
+        native_path = ib_path.to_native()
+        self.permission_manager.validate_path(native_path)
+        return native_path
 
     # === 基础文件操作 ===
 
