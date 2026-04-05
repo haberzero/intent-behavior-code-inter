@@ -139,6 +139,19 @@ class ExprHandler(BaseHandler):
         slice_obj = self.visit(node_data.get("slice"))
         return value.receive('__getitem__', [slice_obj])
 
+    def visit_IbSlice(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """切片对象构建"""
+        lower = node_data.get("lower")
+        upper = node_data.get("upper")
+        step = node_data.get("step")
+        
+        l_val = self.visit(lower).to_native() if lower else None
+        u_val = self.visit(upper).to_native() if upper else None
+        s_val = self.visit(step).to_native() if step else None
+        
+        # 封装为 Python slice 对象并用 registry 包装
+        return self.registry.box(slice(l_val, u_val, s_val))
+
     def visit_IbListExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
         elts = [self.visit(e) for e in node_data.get("elts", [])]
