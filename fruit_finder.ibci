@@ -3,31 +3,35 @@ import json
 import file
 import sys
 
-# 1. 显式加载本地配置
-# 强制类型转换以确保通过严格的二元运算校验
-str base_dir = (str) sys.script_dir()
-str config_json = file.read(base_dir + "/api_config.json")
-dict config = (dict) json.parse(config_json)
-dict model_config = (dict) config["default_model"]
-ai.set_config((str)model_config["base_url"], (str)model_config["api_key"], (str)model_config["model"])
-print("成功加载 AI 配置")
+# 1. 配置加载 (从本地 JSON 读取)
+dict config = (dict) json.parse(file.read((str)sys.script_dir() + "/api_config.json"))
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
+print("--- IBC-Inter Fruit Finder (Basic Example) ---")
 
 list items = ["apple", "carrot", "banana", "Python Programming Book", "orange", "potato", "History of Rome", "strawberry"]
 list fruit_indices = []
-int count = 0
-int total_len = len(items)
 
-print("--- IBC-Inter Fruit Finder ---")
+int count = 0
+int total_len = items.len()
 
 while count < total_len:
     str current_item = (str) items[count]
-    if @~ $current_item 是水果？(1/0) ~:
+    
+    # 使用 if + @~ ~ 实现 LLM 决策
+    # 如果 AI 响应模糊（不匹配 1/0），Result Mode 会自动触发自愈
+    if @~ $current_item 是水果吗？(1/0) ~:
         fruit_indices.append(count)
-        print("[Found] " + current_item)
+        print("[Found Fruit] " + current_item)
+    else:
+        print("[Not Fruit] " + current_item)
+        
     llmexcept:
-        print("AI 响应模糊，正在通过 llmexcept 进行修正...")
-        retry "只答 1/0"
+        # 当 LLM 返回模糊输出时，此块会被拦截执行
+        retry "请严格基于常识判断：如果是水果则答 1，否则答 0。"
+    
     count = count + 1
 
-print("--- Result ---")
-print(fruit_indices)
+print("\n--- Result Indices ---")
+print((str)fruit_indices)
