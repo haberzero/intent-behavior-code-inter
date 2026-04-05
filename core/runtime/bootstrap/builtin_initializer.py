@@ -127,6 +127,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     string_class = ib_classes.get("str")
     list_class = ib_classes.get("list")
     dict_class = ib_classes.get("dict")
+    slice_class = ib_classes.get("slice")
     none_class = ib_classes.get("None")
     bool_class = ib_classes.get("bool")
     
@@ -144,6 +145,24 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         name="len",
         param_types=[metadata_registry.resolve("any")],
         return_type=metadata_registry.resolve("int")
+    ), token)
+
+    registry.register_function("range", FunctionMetadata(
+        name="range",
+        param_types=[metadata_registry.resolve("int")],
+        return_type=metadata_registry.resolve("list")
+    ), token)
+
+    registry.register_function("range", FunctionMetadata(
+        name="range",
+        param_types=[metadata_registry.resolve("int"), metadata_registry.resolve("int")],
+        return_type=metadata_registry.resolve("list")
+    ), token)
+
+    registry.register_function("range", FunctionMetadata(
+        name="range",
+        param_types=[metadata_registry.resolve("int"), metadata_registry.resolve("int"), metadata_registry.resolve("int")],
+        return_type=metadata_registry.resolve("list")
     ), token)
 
     registry.register_function("get_self_source", FunctionMetadata(
@@ -179,6 +198,14 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
+    _reg_native(string_class, '__getitem__', lambda self, key: self.__getitem__(key), unbox=False)
+
+    # range(start, stop, step) 构造函数
+    def _range_impl(reg, *args):
+        native_args = [a.to_native() for a in args]
+        return reg.box(list(range(*native_args)))
+    
+    _reg_native(bootstrapper.get_class("Object"), "range", _range_impl, unbox=False)
     
     # str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
