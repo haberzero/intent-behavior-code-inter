@@ -8,7 +8,7 @@ from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.kernel.issue import InterpreterError
 from core.runtime.exceptions import (
-    ReturnException, BreakException, ContinueException, RetryException, ThrownException
+    ReturnException, BreakException, ContinueException, ThrownException
 )
 from ..constants import OP_MAPPING, UNARY_OP_MAPPING, AST_OP_MAP
 
@@ -31,6 +31,7 @@ class ExprHandler(BaseHandler):
              raise self.report_error(f"Execution Error: Symbol UID missing for name '{name}'. Artifact is corrupted or unanalyzed.", node_uid)
              
         try:
+            # print(f"[DEBUG] Looking up UID: {sym_uid} for node: {node_uid}")
             return self.runtime_context.get_variable_by_uid(sym_uid)
         except Exception:
             # 如果是严格模式，或者在正常模式下 UID 查找彻底失败（未定义变量），则报错
@@ -120,7 +121,7 @@ class ExprHandler(BaseHandler):
             if hasattr(func, 'call'):
                 return func.call(self.registry.get_none(), args)
             return func.receive('__call__', args)
-        except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
+        except (ReturnException, BreakException, ContinueException, ThrownException):
             raise
         except Exception as e:
             if isinstance(e, InterpreterError): raise
@@ -187,7 +188,13 @@ class ExprHandler(BaseHandler):
             )
         
         # [Fallback] 如果是非延迟模式，直接执行
-        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context, call_intent=call_intent)
+        result = self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context, call_intent=call_intent)
+
+        # 将结果存储到 RuntimeContext，供 visit_IbLLMExceptionalStmt 检查
+        self.runtime_context.set_last_llm_result(result)
+
+        # 返回 IbObject（而不是 LLMResult）
+        return result.value if result and result.value else self.registry.get_none()
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""

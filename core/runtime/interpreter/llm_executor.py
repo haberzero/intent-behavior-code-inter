@@ -1,11 +1,12 @@
 import re
 import json
 from types import SimpleNamespace
-from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, TYPE_CHECKING
+from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, Tuple, TYPE_CHECKING
 from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
 
-from core.kernel.issue import InterpreterError, LLMUncertaintyError
+from core.kernel.issue import InterpreterError
+from core.runtime.interpreter.llm_result import LLMResult
 from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
@@ -92,10 +93,12 @@ class LLMExecutorImpl:
             
         return {}
 
-    def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
+    def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> LLMResult:
         """
         [职责解耦] 仅处理 LLM 推理过程。
         作用域管理和参数绑定已由 IbLLMFunction.call 完成。
+
+        返回 LLMResult，不再抛出异常。
         """
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
@@ -107,7 +110,7 @@ class LLMExecutorImpl:
         user_prompt_segments = node_data.get("user_prompt")
         
         # 获取函数参数列表，用于在 prompt 中进行参数替换
-        param_names = self._get_function_param_names(node_data)
+        param_names = self._get_function_param_names(node_data, execution_context)
 
         sys_prompt = self._evaluate_segments(sys_prompt_segments, execution_context, param_names)
         user_prompt = self._evaluate_segments(user_prompt_segments, execution_context, param_names)
@@ -119,7 +122,27 @@ class LLMExecutorImpl:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
             sys_prompt += intent_block
             
-        # 3. 处理返回类型提示注入
+        # 3. 处理 __llmretry__ 提示词注入
+        # 优先级：运行时 context.retry_hint (来自 llmretry 语句) > 函数定义中的 retry_hint
+        retry_hint_segments = None
+        
+        # 首先检查运行时上下文中的 retry_hint（来自 llmretry 语句）
+        current_retry_hint = context.retry_hint
+        if current_retry_hint:
+            retry_hint_segments = [current_retry_hint]
+        else:
+            # 回退到函数定义中的 __llmretry__ 提示词
+            retry_hint_segments = node_data.get("retry_hint")
+        
+        # 如果有 retry_hint，注入到系统提示词
+        if retry_hint_segments:
+            retry_hint_text = self._evaluate_segments(retry_hint_segments, execution_context, param_names)
+            sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
+            
+        # 清除运行时上下文中的 retry_hint（防止污染后续调用）
+        context.retry_hint = None
+            
+        # 4. 处理返回类型提示注入
         type_name = "str"
         returns_uid = node_data.get("returns")
         if returns_uid:
@@ -133,9 +156,16 @@ class LLMExecutorImpl:
             if type_prompt:
                 sys_prompt += f"\n\n{type_prompt}"
 
-        # 4. 调用底层模型
-        raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
-        
+        # 5. 调用底层模型
+        raw_res, error_msg = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
+
+        # 如果调用失败
+        if error_msg:
+            return LLMResult.uncertain_result(
+                raw_response="",
+                retry_hint=f"LLM 调用失败: {error_msg}"
+            )
+
         # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
@@ -143,21 +173,30 @@ class LLMExecutorImpl:
             "response": raw_res,
             "raw_response": raw_res
         }
-        
-        # 5. 解析结果
+
+        # 6. 解析结果
         return self._parse_result(raw_res, type_name, node_uid)
 
-    def _get_function_param_names(self, node_data: Mapping[str, Any]) -> Set[str]:
+    def _get_function_param_names(self, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Set[str]:
         """
         获取 llm 函数的参数名列表。
          用于判断 prompt 中的 $var 是否是函数参数。
         """
         param_names = set()
         args = node_data.get("args", [])
-        for arg in args:
-            if isinstance(arg, Mapping):
-                if arg.get("_type") == "IbArg":
-                    param_names.add(arg.get("arg", ""))
+        for arg_uid in args:
+            arg_data = execution_context.get_node_data(arg_uid)
+            if not arg_data:
+                continue
+            
+            # 处理直接的 IbArg 或 被 IbTypeAnnotatedExpr 包装的 IbArg
+            actual_arg_data = arg_data
+            if arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                actual_arg_uid = arg_data.get("target")
+                actual_arg_data = execution_context.get_node_data(actual_arg_uid)
+            
+            if actual_arg_data and actual_arg_data.get("_type") == "IbArg":
+                param_names.add(actual_arg_data.get("arg", ""))
         return param_names
 
     def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> str:
@@ -209,7 +248,14 @@ class LLMExecutorImpl:
                 content_parts.append(str(segment))
         return "".join(content_parts)
 
-    def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> IbObject:
+    def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> LLMResult:
+        # [Robustness] 兼容 UID 格式的 type_name (来自序列化后的 AST 节点字段)
+        # 转换 'type_root.str' -> 'str', 'type_pkg.cls' -> 'pkg.cls'
+        if type_name and type_name.startswith("type_"):
+            type_name = type_name[5:] # 去掉 'type_'
+            if type_name.startswith("root."):
+                type_name = type_name[5:] # 去掉 'root.'
+        
         # 直接通过描述符获取公理能力，彻底消除名称硬编码与降级逻辑
         meta_reg = self.registry.get_metadata_registry()
         if meta_reg:
@@ -219,41 +265,56 @@ class LLMExecutorImpl:
                 if parser:
                     try:
                         val = parser.parse_value(raw_res)
-                        return self.registry.box(val)
+                        return LLMResult.success_result(
+                            value=self.registry.box(val),
+                            raw_response=raw_res
+                        )
                     except Exception as e:
                         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response via Axiom for type '{type_name}': {str(e)}")
-                        raise LLMUncertaintyError(
-                            f"LLM 返回值类型转换失败：期望 {type_name}，但解析出错。\n原始返回: {raw_res}\n详细错误: {str(e)}",
-                            node_uid,
-                            raw_response=raw_res
+                        return LLMResult.uncertain_result(
+                            raw_response=raw_res,
+                            retry_hint=f"LLM 返回值类型转换失败：期望 {type_name}。详细: {str(e)}"
                         )
 
         # Fallback (Default to string boxing if no descriptor, axiom or no parser capability)
-        return self.registry.box(raw_res)
+        return LLMResult.success_result(
+            value=self.registry.box(raw_res),
+            raw_response=raw_res
+        )
 
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional[Any] = None) -> IbObject:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional[Any] = None) -> LLMResult:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
+
+        返回 LLMResult：
+        - success=True, is_uncertain=False: 成功且结果确定
+        - success=True, is_uncertain=True: 成功但结果不确定，需要 retry
+        - success=False: 执行失败
+
+        不再抛出 LLMUncertaintyError，所有不确定性通过 LLMResult 返回。
         """
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
-        
+
         # 0. 准备环境
         ai_module = self.interop.get_package("ai")
 
         # 1. 评估段式插值
         content = self._evaluate_segments(node_data.get("segments"), execution_context)
-        
+
         # 2. 收集与合并意图 (被动消费已消解的现场)
         auto_intent = True
         if ai_module and hasattr(ai_module, "_config"):
             auto_intent = ai_module._config.get("auto_intent_injection", True)
-        
+
         if not auto_intent:
             # 如果关闭了自动注入，仅保留当前节点的意图 (如果有)
             if call_intent:
-                # 强制覆盖模式：仅返回该意图
-                return self.registry.box(call_intent.resolve_content(context, execution_context))
+                content_str = call_intent.resolve_content(context, execution_context)
+                return LLMResult.success_result(
+                    value=self.registry.box(content_str),
+                    raw_response=content_str
+                )
 
         # 获取消解后的最终列表
         # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
@@ -268,21 +329,21 @@ class LLMExecutorImpl:
             )
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
-            
+
         # 核心：使用 side_tables 中的 node_scenes
         scene_val = execution_context.get_side_table("node_scenes", node_uid)
         scene_name = str(scene_val).lower() if scene_val else "general"
-        
+
         sys_prompt = "你是一个意图行为代码执行器。"
-        
+
         current_retry_hint = context.retry_hint
         if ai_module:
             if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
                 current_retry_hint = ai_module._retry_hint
-            
+
             if hasattr(ai_module, "get_scene_prompt"):
                 sys_prompt = ai_module.get_scene_prompt(scene_name)
-        
+
         if current_retry_hint:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
 
@@ -292,8 +353,15 @@ class LLMExecutorImpl:
             sys_prompt += intent_block
 
         # 5. 调用底层模型
-        response = self._call_llm(sys_prompt, content, node_uid, scene=scene_name)
-        
+        response, error_msg = self._call_llm(sys_prompt, content, node_uid, scene=scene_name)
+
+        # 6. 处理调用失败
+        if error_msg:
+            return LLMResult.uncertain_result(
+                raw_response="",
+                retry_hint=f"LLM 调用失败: {error_msg}"
+            )
+
         # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
         self.last_call_info = {
             "sys_prompt": sys_prompt,
@@ -303,52 +371,63 @@ class LLMExecutorImpl:
             "scene": scene_name
         }
 
-        # 6. 处理返回类型
+        # 7. 处理返回类型
         # 统一处理分支、循环和决策场景的模糊判定
         if any(keyword in scene_name for keyword in ("decision", "choice", "branch", "loop")):
             # 1. 优先尝试从侧表获取节点特有的决策映射
             decision_map = execution_context.get_side_table("decision_maps", node_uid)
-            
+
             # 2. 如果侧表没有，则尝试从 AI 插件获取该场景的全局默认映射
             if not decision_map and ai_module and hasattr(ai_module, "get_decision_map"):
                 decision_map = ai_module.get_decision_map()
-            
+
             if decision_map:
                 clean_res = response.strip().lower()
-                
+
                 # 1. 优先尝试精确匹配
                 if clean_res in decision_map:
                     context.retry_hint = None
-                    return self.registry.box(decision_map[clean_res])
-                
+                    return LLMResult.success_result(
+                        value=self.registry.box(decision_map[clean_res]),
+                        raw_response=response
+                    )
+
                 # 2. 尝试带边界的关键词匹配 (防止 "maybe_yes" 匹配到 "yes")
                 for k in decision_map:
                     pattern = rf"\b{re.escape(k.lower())}\b"
                     if re.search(pattern, clean_res):
                         context.retry_hint = None
-                        return self.registry.box(decision_map[k])
-                
-                # 如果没有匹配到任何项，说明 AI 的回复是模糊的，必须抛出异常
-                raise LLMUncertaintyError(
-                    f"LLM 决策格式错误或回复模糊：期望匹配 {list(decision_map.keys())} 之一，但 AI 返回了: {response}", 
-                    node_uid, 
-                    raw_response=response
+                        return LLMResult.success_result(
+                            value=self.registry.box(decision_map[k]),
+                            raw_response=response
+                        )
+
+                # 如果没有匹配到任何项，返回不确定性结果
+                context.retry_hint = None
+                return LLMResult.uncertain_result(
+                    raw_response=response,
+                    retry_hint=f"期望匹配 {list(decision_map.keys())} 之一，但 AI 返回了: {response}"
                 )
 
         context.retry_hint = None
-        return self.registry.box(response)
+        return LLMResult.success_result(
+            value=self.registry.box(response),
+            raw_response=response
+        )
 
 
-    def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
+    def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> LLMResult:
         """
-         执行一个被动行为对象。
+        执行一个被动行为对象。
         环境（意图栈）已由 Interpreter/Handler 在调用前准备就绪。
+
+        返回 LLMResult。
         """
         if not isinstance(behavior, IIbBehavior):
-             return behavior
+             return LLMResult.success_result(value=behavior)
 
         if behavior._cache is not None:
-            return behavior._cache
+            return LLMResult.success_result(value=behavior._cache)
 
         # 1. 处理预期类型注入
         type_pushed = False
@@ -359,34 +438,41 @@ class LLMExecutorImpl:
         try:
             # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
             # 传入行为对象捕获的意图栈
-            res = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
-            behavior._cache = res
-            return res
+            result = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
+            behavior._cache = result.value if result else None
+            return result
         finally:
             # 3. 环境恢复 (类型栈)
             if type_pushed:
                 self.pop_expected_type()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general", execution_context: Optional[IExecutionContext] = None) -> str:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, scene: str = "general", execution_context: Optional[IExecutionContext] = None) -> Tuple[Optional[str], Optional[str]]:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Calling LLM (Scene: {scene})")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
-        
+
         context = execution_context.runtime_context if execution_context else None
         retry_hint = context.retry_hint if context else None
 
         if self.llm_callback:
-            # 同步同步重试提示词
-            if retry_hint:
-                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {retry_hint}")
-                self.llm_callback.set_retry_hint(retry_hint)
-            
-            # 调用 Provider
-            response = self.llm_callback(sys_prompt, user_prompt, scene=scene)
-            self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
-            return response
-        
+            try:
+                # 同步同步重试提示词
+                if retry_hint:
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {retry_hint}")
+                    self.llm_callback.set_retry_hint(retry_hint)
+
+                # 调用 Provider
+                response = self.llm_callback(sys_prompt, user_prompt, scene=scene)
+                self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
+                self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
+                return response, None
+            except Exception as e:
+                # 连接失败等异常，返回错误信息
+                self.debugger.trace(CoreModule.LLM, DebugLevel.ERROR, f"LLM call failed: {e}")
+                # [Active Defense] 增强错误提示，让用户在控制台能看到具体失败原因
+                print(f"\n[AI 拦截器] 发现 AI 服务连接异常: {str(e)}")
+                return None, str(e)
+
         # 如果没有回调，说明配置缺失，抛出错误
         raise InterpreterError(
             "LLM 运行配置缺失：未配置有效的 LLM 调用接口。\n"

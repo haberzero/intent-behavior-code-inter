@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, TYPE_CHECKING as TC
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent, IStateProvider
 from core.base.source_atomic import Location
-from core.runtime.exceptions import RetryException, BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
+from core.runtime.exceptions import BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.kernel.registry import KernelRegistry
@@ -11,6 +11,10 @@ from core.kernel.types.descriptors import TypeDescriptor
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule, IbObject
+
+if TYPE_CHECKING:
+    from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
+    from core.runtime.interpreter.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: TypeDescriptor | None = None, is_const: bool = False):
@@ -216,6 +220,99 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
         self._retry_hint: Optional[str] = None # 运行时重试提示词
+        
+        # [LLMExceptFrame] LLM 异常重试帧栈
+        # 当 llmexcept/retry 机制完全迁移到帧栈后，此属性用于管理嵌套的 llmexcept 结构。
+        # 每个帧保存执行状态（变量快照、intent 栈、loop 上下文），支持状态恢复和精确重试。
+        self._llm_except_frames: List['LLMExceptFrame'] = []
+
+        # [LLMResult] 最后一个 LLM 执行结果
+        # 用于 visit_IbLLMExceptionalStmt 检查 LLM 调用是否返回不确定性
+        self._last_llm_result: Optional['LLMResult'] = None
+
+    # --- LLM Result 管理 ---
+
+    def set_last_llm_result(self, result: 'LLMResult') -> None:
+        """设置最后一个 LLM 执行结果"""
+        self._last_llm_result = result
+
+    def get_last_llm_result(self) -> Optional['LLMResult']:
+        """获取最后一个 LLM 执行结果"""
+        return self._last_llm_result
+
+    def clear_last_llm_result(self) -> None:
+        """清除最后一个 LLM 执行结果"""
+        self._last_llm_result = None
+
+    def push_llm_except_frame(self, frame: 'LLMExceptFrame') -> None:
+        """
+        将新的 LLMExceptFrame 入栈。
+        
+        TODO [优先级: 高]: 完成后移除此注释
+        用于 llmexcept 语句执行前保存现场。
+        """
+        self._llm_except_frames.append(frame)
+
+    def pop_llm_except_frame(self) -> Optional['LLMExceptFrame']:
+        """
+        弹出栈顶 LLMExceptFrame。
+        
+        TODO [优先级: 高]: 完成后移除此注释
+        用于 llmexcept body 执行完毕后清理现场。
+        """
+        if self._llm_except_frames:
+            return self._llm_except_frames.pop()
+        return None
+
+    def get_current_llm_except_frame(self) -> Optional['LLMExceptFrame']:
+        """
+        获取当前 LLMExceptFrame（不弹出）。
+        
+        TODO [优先级: 高]: 完成后移除此注释
+        用于 retry 语句访问当前帧信息。
+        """
+        if self._llm_except_frames:
+            return self._llm_except_frames[-1]
+        return None
+
+    def save_llm_except_state(self, target_uid: str, node_type: str = "unknown", max_retry: int = 3) -> 'LLMExceptFrame':
+        """
+        创建并保存 LLMExceptFrame 现场。
+        
+        TODO [优先级: 高]: 完成后移除此注释
+        1. 序列化当前作用域的变量快照
+        2. 保存 intent 栈状态
+        3. 保存 loop 上下文
+        4. 保存 retry_hint
+        """
+        from core.runtime.interpreter.llm_except_frame import LLMExceptFrame
+        frame = LLMExceptFrame(
+            target_uid=target_uid,
+            node_type=node_type,
+            max_retry=max_retry
+        )
+        frame.save_context(self)
+        self.push_llm_except_frame(frame)
+        return frame
+
+    def restore_llm_except_state(self) -> bool:
+        """
+        从当前 LLMExceptFrame 恢复现场。
+        
+        TODO [优先级: 高]: 完成后移除此注释
+        1. 恢复变量快照
+        2. 恢复 intent 栈
+        3. 恢复 loop 上下文
+        4. 恢复 retry_hint
+        
+        Returns:
+            True 如果恢复成功，False 如果帧栈为空
+        """
+        frame = self.get_current_llm_except_frame()
+        if frame:
+            frame.restore_context(self)
+            return True
+        return False
 
     @property
     def intent_exclusive_depth(self) -> int:

@@ -3,13 +3,13 @@ from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
 from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList, IIbBehavior
 from core.runtime.exceptions import (
-    ReturnException, BreakException, ContinueException, ThrownException, RetryException
+    ReturnException, BreakException, ContinueException, ThrownException
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.base.enums import RegistrationState
 
-from core.kernel.issue import LLMUncertaintyError, InterpreterError
+from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from ..constants import OP_MAPPING, AST_OP_MAP
 
@@ -24,6 +24,56 @@ class StmtHandler(BaseHandler):
         return result
 
     def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.registry.get_none()
+
+    def visit_IbLLMExceptionalStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        执行 llmexcept 语句 (影子执行驱动模式)。
+        """
+        target_uid = node_data.get("target")
+        body_uids = node_data.get("body", [])
+
+        if not target_uid:
+            return self.registry.get_none()
+
+        # 创建帧并保存上下文切片
+        frame = self.runtime_context.save_llm_except_state(
+            target_uid=target_uid,
+            node_type="IbLLMExceptionalStmt",
+            max_retry=3
+        )
+
+        try:
+            while frame.should_continue_retrying():
+                # 显式恢复上下文快照 (如果是 retry 跳转回来的)
+                frame.restore_snapshot(self.runtime_context)
+
+                # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
+                self.execution_context.visit(target_uid, bypass_protection=True)
+
+                # 检查执行后的 LLM 结果确定性
+                result = self.runtime_context.get_last_llm_result()
+
+                # 如果没有 LLM 调用，或者 LLM 调用是确定的（成功匹配或明确失败）
+                if result is None or not result.is_uncertain:
+                    break
+
+                # 运行到这里说明 LLM 返回了 UNCERTAIN 结果
+                frame.last_result = result
+                frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
+
+                # 执行 llmexcept 的 body 块 (处理逻辑)
+                for stmt_uid in body_uids:
+                    self.visit(stmt_uid)
+
+                # 检查重试计数
+                if not frame.increment_retry():
+                    break
+
+        finally:
+            # 弹出当前帧
+            self.runtime_context.pop_llm_except_frame()
+
         return self.registry.get_none()
 
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -99,6 +149,11 @@ class StmtHandler(BaseHandler):
         """实现赋值语句"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
         value = self.visit(node_data.get("value"))
+
+        # 检查是否由于 LLM 不确定性导致赋值未完成
+        last_result = self.runtime_context.get_last_llm_result()
+        if last_result and last_result.is_uncertain:
+            return self.registry.get_none()
         
         for target_uid in node_data.get("targets", []):
             self._assign_to_target(target_uid, value)
@@ -142,6 +197,13 @@ class StmtHandler(BaseHandler):
     def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """条件分支语句"""
         condition = self.visit(node_data.get("test"))
+
+        # 核心：检查测试表达式是否产生了不确定的 LLM 结果
+        # 如果不确定，说明 AI 决策模糊，我们需要立即终止 IbIf 的执行，让控制流回退到保护者
+        last_result = self.runtime_context.get_last_llm_result()
+        if last_result and last_result.is_uncertain:
+            return self.registry.get_none()
+
         if self.execution_context.is_truthy(condition):
             for stmt_uid in node_data.get("body", []):
                 self.visit(stmt_uid)
@@ -157,29 +219,8 @@ class StmtHandler(BaseHandler):
             if not self.execution_context.is_truthy(condition):
                 break
             
-            # 局部重试支持，防止冒泡导致条件判定被跳过或重复执行
-            retry_count = 0
-            while True:
-                try:
-                    for stmt_uid in node_data.get("body", []):
-                        self.visit(stmt_uid)
-                    break # 成功完成当前迭代逻辑
-                except BreakException:
-                    return self.registry.get_none()
-                except ContinueException:
-                    break # 跳出局部重试，由外层 while 进行下一次条件判定
-                except (LLMUncertaintyError, RetryException) as e:
-                    fallback_uids = node_data.get("llm_fallback", [])
-                    if not fallback_uids and isinstance(e, LLMUncertaintyError):
-                        raise e # 无局部处理，向上冒泡
-                    
-                    retry_count += 1
-                    if retry_count > 3: raise e
-                    
-                    if fallback_uids:
-                        for f_uid in fallback_uids:
-                            self.visit(f_uid)
-                    continue # 重新执行当前循环体
+            for stmt_uid in node_data.get("body", []):
+                self.visit(stmt_uid)
         return self.registry.get_none()
     
     def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -191,29 +232,8 @@ class StmtHandler(BaseHandler):
         # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while self.execution_context.is_truthy(self.visit(iter_uid)):
-                # 局部重试支持
-                retry_count = 0
-                while True:
-                    try:
-                        for stmt_uid in body:
-                            self.visit(stmt_uid)
-                        break
-                    except BreakException: 
-                        return self.registry.get_none()
-                    except ContinueException: 
-                        break
-                    except (LLMUncertaintyError, RetryException) as e:
-                        fallback_uids = node_data.get("llm_fallback", [])
-                        if not fallback_uids and isinstance(e, LLMUncertaintyError):
-                            raise e
-                        
-                        retry_count += 1
-                        if retry_count > 3: raise e
-                        
-                        if fallback_uids:
-                            for f_uid in fallback_uids:
-                                self.visit(f_uid)
-                        continue
+                for stmt_uid in body:
+                    self.visit(stmt_uid)
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
@@ -223,44 +243,16 @@ class StmtHandler(BaseHandler):
             raise self.report_error(f"Object is not iterable", node_uid)
         
         elements = elements_obj.elements
-        total = len(elements)
         for i, item in enumerate(elements):
-            # 局部重试闭环，防止冒泡导致迭代器重置 (死循环隐患修复)
-            retry_count = 0
-            while True:
-                self.runtime_context.push_loop_context(i, total)
-                
-                # 使用统一的赋值逻辑支持复杂循环目标
-                if target_uid:
-                    self._assign_to_target(target_uid, item, define_only=True)
-                
-                try:
-                    for stmt_uid in body:
-                        self.visit(stmt_uid)
-                    self.runtime_context.pop_loop_context()
-                    break # 成功完成当前项，进入下一个元素
-                except BreakException: 
-                    self.runtime_context.pop_loop_context()
-                    return self.registry.get_none()
-                except ContinueException: 
-                    self.runtime_context.pop_loop_context()
-                    break # 跳出局部重试，由外层 enumerate 进入下一项
-                except (LLMUncertaintyError, RetryException) as e:
-                    self.runtime_context.pop_loop_context()
-                    
-                    fallback_uids = node_data.get("llm_fallback", [])
-                    # 只有在有 fallback 或显式 RetryException 时才在局部拦截
-                    if not fallback_uids and isinstance(e, LLMUncertaintyError):
-                        raise e
-                    
-                    retry_count += 1
-                    if retry_count > 3: raise e
-                    
-                    if fallback_uids:
-                        for f_uid in fallback_uids:
-                            self.visit(f_uid)
-                    # 继续局部 while True，即重新执行当前 item 的逻辑
-                    continue
+            self.runtime_context.push_loop_context(i, len(elements))
+            
+            if target_uid:
+                self._assign_to_target(target_uid, item, define_only=True)
+            
+            for stmt_uid in body:
+                self.visit(stmt_uid)
+            
+            self.runtime_context.pop_loop_context()
         return self.registry.get_none()
 
     def visit_IbTry(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -268,7 +260,7 @@ class StmtHandler(BaseHandler):
         try:
             for stmt_uid in node_data.get("body", []):
                 self.visit(stmt_uid)
-        except (ReturnException, BreakException, ContinueException, RetryException):
+        except (ReturnException, BreakException, ContinueException):
             raise
         except (ThrownException, Exception) as e:
             # 统一异常对象化
@@ -329,15 +321,34 @@ class StmtHandler(BaseHandler):
         return self.registry.get_none()
 
     def visit_IbRetry(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        处理 retry 语句。
+
+        语义：
+        1. 获取可选的 retry hint
+        2. 从当前 llmexcept 帧恢复上下文切片
+        3. 设置 should_retry = True，让 llmexcept 重新执行 target
+
+        注意：
+        - 不抛出任何异常
+        - 不使用 RetryException
+        """
         hint_uid = node_data.get("hint")
         hint_val = None
         if hint_uid:
             hint_obj = self.visit(hint_uid)
             hint_val = hint_obj.to_native() if hasattr(hint_obj, 'to_native') else str(hint_obj)
-        
-        # 将 hint 设置到运行时上下文
+
+        # 设置 retry hint
         self.runtime_context.retry_hint = hint_val
-        raise RetryException()
+
+        # 从当前帧恢复上下文并设置重试标志
+        frame = self.runtime_context.get_current_llm_except_frame()
+        if frame:
+            frame.restore_snapshot(self.runtime_context)
+            frame.should_retry = True  # 设置标志，让外层循环继续重试
+
+        return self.registry.get_none()
 
     def visit_IbFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """普通函数定义"""

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 from core.kernel import ast as ast
 from core.kernel.issue import (
-    InterpreterError, LLMUncertaintyError, Severity
+    InterpreterError, Severity
 )
 from core.runtime.exceptions import (
-    ReturnException, BreakException, ContinueException, ThrownException, RetryException
+    ReturnException, BreakException, ContinueException, ThrownException
 )
 from core.runtime.host.isolation_policy import IsolationPolicy
 from core.base.source_atomic import Location
@@ -45,6 +45,7 @@ from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
+from .llm_result import LLMResult
 
 
 class Interpreter:
@@ -154,7 +155,6 @@ class Interpreter:
             resolve_type_from_symbol_callback=self._resolve_type_from_symbol,
             extract_name_id_callback=self._extract_name_id,
             resolve_value_callback=self._resolve_value,
-            visit_with_fallback_callback=self._with_unified_fallback,
             strict_mode=strict_mode
         )
 
@@ -285,7 +285,6 @@ class Interpreter:
         # 运行限制
         self.max_instructions = max_instructions
         self.instruction_count = 0
-        self._fallback_stack = [] # 用于追踪正在进行 Fallback 的节点
         
         # 递归深度安全校验
         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
@@ -560,84 +559,7 @@ class Interpreter:
         err.location = loc
         return err
 
-    def _with_unified_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> IbObject:
-        """
-         统一的 LLM 异常处理装饰器逻辑。
-        支持从 node_data 中提取用户定义的 llmexcept 块并执行。
-        """
-        retry_count = 0
-        pushed_intents = 0
-        
-        # 提取当前节点的 fallback 块
-        fallback_uids = node_data.get("llm_fallback", [])
 
-        # 防止递归重入
-        self._fallback_stack.append(node_uid)
-
-        try:
-            while True:
-                try:
-                    # 重新从 node_pool 获取最新数据，确保 Retry 时使用的是最新的侧表和意图
-                    current_node_data = self.get_node_data(node_uid)
-                    return action(node_uid, current_node_data)
-                except LLMUncertaintyError as outer_e:
-                    # 逻辑修正：
-                    # 只有语句级别或具有显式 fallback 的节点才在此处理
-                    is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type or "ExprStmt" in node_type)
-                    
-                    if not fallback_uids and not is_stmt:
-                        # 如果不是 Stmt 且没有 fallback，向上抛出，
-                        # 但由于我们在栈中标记了该节点，外部的 visit 会识别并直接调用 action，
-                        # 最终会让更高层的 Stmt 捕获到这个异常。
-                        raise outer_e
-                        
-                    retry_count += 1
-                    if retry_count > 3: # 物理硬限制
-                        raise outer_e
-                    
-                    # 1. 优先执行显式 llmexcept 块 (用户级)
-                    if fallback_uids:
-                        try:
-                            # 执行 fallback 逻辑
-                            for f_uid in fallback_uids:
-                                self.visit(f_uid)
-                            # 如果执行完毕没有抛出异常，默认重试
-                            raise RetryException()
-                        except RetryException:
-                            # 显式触发 retry，继续循环
-                            continue
-                        except Exception as inner_e:
-                            # 如果 fallback 块中发生了其他错误，不再重试，向上抛出
-                            raise inner_e
-                    
-                    # 2. 内核级自动意图注入 (能力探测)
-                    retry_prompt = None
-                    if is_stmt:
-                        if self.service_context.capability_registry:
-                            provider = self.service_context.capability_registry.get("llm_provider")
-                            if provider and hasattr(provider, "get_retry_prompt"):
-                                retry_prompt = provider.get_retry_prompt(node_type)
-                        
-                        if not retry_prompt:
-                            ai_module = self.service_context.interop.get_package("ai")
-                            if ai_module and hasattr(ai_module, "get_retry_prompt"):
-                                retry_prompt = ai_module.get_retry_prompt(node_type)
-                    
-                    if retry_prompt:
-                        self.runtime_context.push_intent(retry_prompt, tag="AUTO_RETRY")
-                        pushed_intents += 1
-                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, 
-                            f"LLM Uncertainty at {node_type}: Injected specialized retry prompt #{retry_count}")
-                        continue
-                    
-                    # 无策可施，向上抛出
-                    raise outer_e
-        finally:
-            if self._fallback_stack:
-                self._fallback_stack.pop()
-            # 环境清理
-            for _ in range(pushed_intents):
-                self.runtime_context.pop_intent()
 
     def _resolve_value(self, val: Any) -> Any:
         """处理外部资产引用的解析"""
@@ -752,10 +674,18 @@ class Interpreter:
             column=loc_data.get("column", 0)
         )
 
-    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None) -> IbObject:
+    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None, bypass_protection: bool = False) -> IbObject:
         """核心评估逻辑：分发 AST 节点到相应的 Handler 处理"""
         if node_uid is None:
             return self.registry.get_none()
+
+        # 1. 影子执行拦截逻辑：检查侧表看该节点是否被 llmexcept 保护
+        if not bypass_protection and isinstance(node_uid, str):
+            handler_uid = self.get_side_table("node_protection", node_uid)
+            if handler_uid:
+                # 将执行权交给处理节点，由它来驱动 target 的执行
+                # 注意：必须传入 bypass_protection=True，否则处理器节点也会被拦截跳过
+                return self.visit(handler_uid, bypass_protection=True)
 
         # 如果指定了模块，则临时切换上下文进行求值 (Lexical Scope Support)
         old_module = self.current_module_name
@@ -818,33 +748,29 @@ class Interpreter:
 
             try:
                 node_type = node_data.get("_type")
+
+                # 2. 避免处理器节点被重复执行：
+                # 如果当前节点是一个 llmexcept 处理器，且我们不是通过影子执行逻辑（bypass_protection=True）进入的，
+                # 则跳过它，因为它已经被它的 target 触发执行过了。
+                if not bypass_protection and node_type == "IbLLMExceptionalStmt":
+                    return self.registry.get_none()
+
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
+                result = visitor(node_uid, node_data)
                 
-                # 统一语句级 LLM 容错分发
-                fallback_uids = node_data.get("llm_fallback", [])
+                # [Result Mode] 自动拦截不确定性结果
+                if isinstance(result, LLMResult):
+                    self.runtime_context.set_last_llm_result(result)
+                    if result.is_uncertain:
+                        # 对于不确定的结果，我们返回 None。
+                        # 上层逻辑（如 IbAssign）会根据 last_llm_result.is_uncertain 决定是否中断。
+                        return self.registry.get_none()
+                    return result.value # 返回解包后的 IbObject
                 
-                # 为所有可能包含 LLM 行为的语句启用潜在的 LLM 异常捕获
-                # 如果当前节点正在处理 Fallback（防止递归重入），我们直接调用 visitor
-                if node_uid in self._fallback_stack:
-                    return visitor(node_uid, node_data)
-                
-                # 转发语句到核心逻辑，以支持 Fallback 机制
-                if node_type == "IbAssign":
-                    visitor = self.visit_IbAssign_core
-                elif node_type == "IbIf":
-                    visitor = self.visit_IbIf_core
-                elif node_type == "IbWhile":
-                    visitor = self.visit_IbWhile_core
-                elif node_type == "IbFor":
-                    visitor = self.visit_IbFor_core
-                elif node_type == "IbExprStmt":
-                    visitor = self.visit_IbExprStmt_core
-                
-                return self._with_unified_fallback(node_uid, node_type, node_data, visitor)
-            except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
+                return result
+            except (ReturnException, BreakException, ContinueException, ThrownException):
                 raise
             except InterpreterError as e:
-                # 如果异常还没有位置信息，则尝试补全
                 if not e.location:
                     e.location = loc
                 raise
@@ -878,20 +804,3 @@ class Interpreter:
         """UTS: 使用 to_bool 协议判断真值"""
         res = value.receive('to_bool', [])
         return res.to_native() != 0
-
-    # --- 代理到 StmtHandler 的核心方法以支持 Fallback 逻辑 ---
-
-    def visit_IbAssign_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbAssign(node_uid, node_data)
-
-    def visit_IbIf_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbIf(node_uid, node_data)
-
-    def visit_IbWhile_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbWhile(node_uid, node_data)
-
-    def visit_IbFor_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbFor(node_uid, node_data)
-
-    def visit_IbExprStmt_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbExprStmt(node_uid, node_data)

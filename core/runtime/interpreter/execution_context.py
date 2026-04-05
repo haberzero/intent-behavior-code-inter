@@ -27,7 +27,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
                  resolve_type_from_symbol_callback: Any,
                  extract_name_id_callback: Any,
                  resolve_value_callback: Any,
-                 visit_with_fallback_callback: Any,
                  module_manager: Any = None,
                  strict_mode: bool = False):
         self._node_pool: Mapping[str, Any] = {}
@@ -55,7 +54,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._resolve_type_from_symbol_callback = resolve_type_from_symbol_callback
         self._extract_name_id_callback = extract_name_id_callback
         self._resolve_value_callback = resolve_value_callback
-        self._visit_with_fallback_callback = visit_with_fallback_callback
 
     @property
     def logical_stack(self) -> Any:
@@ -149,8 +147,8 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     def strict_mode(self, value: bool):
         self._strict_mode = value
 
-    def visit(self, node_uid: str, module_name: Optional[str] = None) -> 'IbObject':
-        return self._visit_callback(node_uid, module_name=module_name)
+    def visit(self, node_uid: str, module_name: Optional[str] = None, bypass_protection: bool = False) -> 'IbObject':
+        return self._visit_callback(node_uid, module_name=module_name, bypass_protection=bypass_protection)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         return self._get_node_data_callback(node_uid)
@@ -175,9 +173,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
 
     def resolve_value(self, val: Any) -> Any:
         return self._resolve_value_callback(val)
-
-    def visit_with_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> 'IbObject':
-        return self._visit_with_fallback_callback(node_uid, node_type, node_data, action)
 
     # IStackInspector Implementation (Delegated to Data or Callback)
     def get_call_stack_depth(self) -> int:
