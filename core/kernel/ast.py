@@ -321,6 +321,12 @@ class IbSubscript(IbExpr):
     ctx: str
 
 @dataclass(kw_only=True, eq=False)
+class IbSlice(IbExpr):
+    lower: Optional[IbExpr] = None
+    upper: Optional[IbExpr] = None
+    step: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
 class IbName(IbExpr):
     id: str
     ctx: str
