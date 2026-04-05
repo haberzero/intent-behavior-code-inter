@@ -261,9 +261,52 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbTuple(elts=elts, ctx='Load'), left, elts[-1])
 
     def subscript(self, left: ast.IbExpr) -> ast.IbSubscript:
-        slice_expr = self.parse_expression()
+        """解析下标或切片：obj[index] 或 obj[start:end:step]"""
+        slice_node = self._parse_slice_or_index()
         end_token = self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-        return self._loc(ast.IbSubscript(value=left, slice=slice_expr, ctx='Load'), left, end_token)
+        return self._loc(ast.IbSubscript(value=left, slice=slice_node, ctx='Load'), left, end_token)
+
+    def _parse_slice_or_index(self) -> ast.IbExpr:
+        """解析切片或单点索引"""
+        if self.stream.match(TokenType.COLON):
+            return self._parse_slice_rest(lower=None, colon_token=self.stream.previous())
+
+        if self.stream.check(TokenType.MINUS):
+            expr = self._parse_slice_expression()
+        else:
+            expr = self.parse_expression()
+
+        if self.stream.match(TokenType.COLON):
+            return self._parse_slice_rest(lower=expr, colon_token=self.stream.previous())
+
+        return expr
+
+    def _parse_slice_rest(self, lower: Optional[ast.IbExpr], colon_token) -> ast.IbSlice:
+        """辅助解析切片的后续部分"""
+        upper = None
+        if not self.stream.check(TokenType.COLON, TokenType.RBRACKET):
+            upper = self._parse_slice_expression()
+
+        step = None
+        if self.stream.match(TokenType.COLON):
+            if not self.stream.check(TokenType.RBRACKET):
+                step = self._parse_slice_expression()
+
+        return self._loc(ast.IbSlice(lower=lower, upper=upper, step=step), colon_token)
+
+    def _parse_slice_expression(self) -> ast.IbExpr:
+        """解析切片表达式中的数字，支持负数"""
+        start_token = self.stream.peek()
+        if self.stream.match(TokenType.MINUS):
+            if self.stream.check(TokenType.NUMBER):
+                num_token = self.stream.advance()
+                negative_num = ast.IbConstant(
+                    value=-int(num_token.value)
+                )
+                return self._loc(negative_num, start_token)
+            else:
+                self.stream.rewind()
+        return self.parse_expression()
 
     def behavior_expression(self) -> ast.IbBehaviorExpr:
         start_token = self.stream.previous()
@@ -305,10 +348,10 @@ class ExpressionComponent(BaseComponent):
                 node = self._loc(ast.IbAttribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
             elif self.stream.match(TokenType.LBRACKET):
                 lbracket_token = self.stream.previous()
-                # Now we can use the standard expression parser for the index!
-                slice_expr = self.parse_expression()
+                # 使用统一的切片/索引解析器
+                slice_node = self._parse_slice_or_index()
                 self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-                node = self._loc(ast.IbSubscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
+                node = self._loc(ast.IbSubscript(value=node, slice=slice_node, ctx='Load'), lbracket_token)
             else:
                 break
         return node
