@@ -975,7 +975,24 @@ class SemanticAnalyzer:
             return self._any_desc
             
         res = value_type.resolve_item(key_type)
+        if not res:
+            # 特殊处理：如果是 list 且 key 是 int，返回其 element_type
+            if value_type.get_base_axiom_name() == "list" and key_type.get_base_axiom_name() == "int":
+                return value_type.get_element_type() or self._any_desc
+            # 如果是 list/str 且 key 是 slice，返回自身类型
+            if value_type.get_base_axiom_name() in ("list", "str") and key_type.get_base_axiom_name() == "slice":
+                return value_type
+            
         return res or self._any_desc
+
+    def visit_IbSlice(self, node: ast.IbSlice) -> TypeDescriptor:
+        """分析切片表达式"""
+        if node.lower: self.visit(node.lower)
+        if node.upper: self.visit(node.upper)
+        if node.step: self.visit(node.step)
+        
+        # 暂时返回预定义的 slice 描述符
+        return self.registry.resolve("slice") or self._any_desc
 
     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> TypeDescriptor:
         """类型强转语义分析"""
