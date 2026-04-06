@@ -276,6 +276,26 @@ s.trim()         # "Hello, IBCI!"
 s.to_upper()    # "  HELLO, IBCI!  "
 s.to_lower()    # "  hello, ibci!  "
 s.len()         # 16
+s.is_empty()    # false
+s.contains("IBCI")  # true
+```
+
+### 字符串查找
+
+```ibci
+str text = "Hello, IBCI World!"
+
+# 查找子串位置
+int pos = text.find("IBCI")      # 7 (首次出现)
+int last = text.find_last("o")   # 17 (最后一次出现)
+int not_found = text.find("xyz")  # -1 (未找到)
+
+# 查找的实用示例
+str filename = "document.pdf"
+int dot_pos = filename.find_last(".")
+if dot_pos >= 0:
+    str name = filename[0:dot_pos]  # "document"
+    str ext = filename[dot_pos + 1:]  # "pdf"
 ```
 
 ### 字符串切片

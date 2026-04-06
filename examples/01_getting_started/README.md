@@ -7,10 +7,9 @@
 ```
 01_getting_started/
 ├── README.md              # 本文件
-├── SYNTAX_REFERENCE.md   # 语法参考手册
+├── SYNTAX_REFERENCE.md   # 语法参考手册（含切片、字符串方法等）
 ├── api_config.json       # AI API 配置
 ├── 01_hello_ai.ibci     # ⭐ 第一个程序：AI 交互
-├── 02_slicing.ibci       # 切片语法
 └── 03_path_management.ibci # 路径管理规则
 ```
 
@@ -27,21 +26,18 @@ python main.py run examples/01_getting_started/01_hello_ai.ibci
 - **LLM 函数调用** - 与 AI 模型实时交互
 - **意图注释** - 让 AI 理解代码意图
 
-### 第二步：掌握切片语法
-
-```bash
-python main.py run examples/01_getting_started/02_slicing.ibci
-```
-
-### 第三步：理解路径管理
+### 第二步：理解路径管理
 
 ```bash
 python main.py run examples/01_getting_started/03_path_management.ibci
 ```
 
-### 第四步：查阅语法参考
+### 第三步：查阅语法参考
 
-打开 [SYNTAX_REFERENCE.md](SYNTAX_REFERENCE.md) 查看完整语法说明。
+打开 [SYNTAX_REFERENCE.md](SYNTAX_REFERENCE.md) 查看完整语法说明，包括：
+- 列表和字符串切片
+- 字符串查找方法 (`find`, `find_last`)
+- 所有基础语法
 
 ## 核心概念
 

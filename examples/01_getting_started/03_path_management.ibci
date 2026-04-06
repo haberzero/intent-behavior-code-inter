@@ -1,60 +1,13 @@
-# 03_path_management.ibci
 # 路径管理规则
 
-print("=== 路径管理规则 ===")
-
-import file
 import isys
+import file
 
-print("\n=== IBCI 路径概念 ===")
-
-print("\n[1] 获取路径信息")
-str project_root = isys.project_root()
-str entry_dir = isys.entry_dir()
 str entry_path = isys.entry_path()
+str entry_dir = isys.entry_dir()
+str project_root = isys.project_root()
 
-print("项目根目录: " + project_root)
-print("入口文件目录: " + entry_dir)
-print("入口文件路径: " + entry_path)
+file.write("./meta.txt", entry_path + "\n" + entry_dir)
 
-print("\n=== 统一路径语义 ===")
-
-print("\n[1] 绝对路径")
-str abs_path = "/home/user/project/data.txt"
-print("绝对路径: " + abs_path)
-print("说明: 以 / 开头的路径，直接使用")
-
-print("\n[2] 入口相对路径 (推荐)")
-str entry_rel = "./config.txt"
-print("入口相对路径: " + entry_rel)
-print("说明: 所有相对路径都基于入口文件目录")
-
-print("\n=== 文件操作示例 ===")
-
-print("\n[1] 使用入口相对路径")
-str local_file = "./test_local.txt"
-file.write(local_file, "这是本地文件内容")
-if file.exists(local_file):
-    print("OK: ./test_local.txt 创建成功")
-    str content = file.read(local_file)
-    print("  内容: " + content)
-    file.remove(local_file)
-    print("OK: 已清理")
-
-print("\n=== 路径安全机制 ===")
-
-print("\n[1] 沙箱边界")
-print("IBCI 限制文件操作在项目根目录内")
-
-print("\n[2] 沙箱安全说明")
-print("外部路径访问会被沙箱阻止")
-print("这是设计行为，确保安全性")
-
-print("\n=== 路径解析规则总结 ===")
-print("")
-print("| 路径类型 | 示例 | 解析基准 |")
-print("|---------|------|----------|")
-print("| 绝对路径 | /home/user/file.txt | 直接使用 |")
-print("| 入口相对 | ./file.txt | 入口文件目录 |")
-print("")
-print("推荐使用: 入口相对路径 (./)")
+if file.exists("./meta.txt"):
+    file.remove("./meta.txt")
