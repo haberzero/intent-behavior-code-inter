@@ -46,9 +46,10 @@ class Bootstrapper:
         callable_desc = factory.create_class("callable", is_nullable=True)
         module_desc = factory.create_class("IbModule", is_nullable=True)
         intent_desc = factory.create_class("Intent", is_nullable=True)
-        
+        intent_stack_desc = factory.create_class("IntentStack", is_nullable=True)
+
         # 内核类不属于用户定义类
-        for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc]:
+        for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc, intent_stack_desc]:
             d.is_user_defined = False
 
         # Step 1: Create Type Shells (注入内存)
@@ -57,20 +58,23 @@ class Bootstrapper:
         self.CallableClass = IbClass("callable", registry=self.registry)
         self.ModuleClass = IbClass("IbModule", registry=self.registry)
         self.IntentClass = IbClass("Intent", registry=self.registry)
-        
+        self.IntentStackClass = IbClass("IntentStack", registry=self.registry)
+
         # Step 2: Wire Relationships (打破循环并绑定描述符)
         self.TypeClass.ib_class = self.TypeClass
         self.ObjectClass.ib_class = self.TypeClass
         self.CallableClass.ib_class = self.TypeClass
         self.ModuleClass.ib_class = self.TypeClass
         self.IntentClass.ib_class = self.TypeClass
-        
+        self.IntentStackClass.ib_class = self.TypeClass
+
         # 强制绑定描述符
         self.TypeClass.descriptor = type_desc
         self.ObjectClass.descriptor = obj_desc
         self.CallableClass.descriptor = callable_desc
         self.ModuleClass.descriptor = module_desc
         self.IntentClass.descriptor = intent_desc
+        self.IntentStackClass.descriptor = intent_stack_desc
 
         # Object 没有父类
         self.ObjectClass.parent = None
@@ -79,13 +83,15 @@ class Bootstrapper:
         self.CallableClass.parent = self.ObjectClass
         self.ModuleClass.parent = self.ObjectClass
         self.IntentClass.parent = self.ObjectClass
-        
+        self.IntentStackClass.parent = self.ObjectClass
+
         # 注册到本实例表并同步到元数据注册表
         self.register_class(self.TypeClass, type_desc)
         self.register_class(self.ObjectClass, obj_desc)
         self.register_class(self.CallableClass, callable_desc)
         self.register_class(self.ModuleClass, module_desc)
         self.register_class(self.IntentClass, intent_desc)
+        self.register_class(self.IntentStackClass, intent_stack_desc)
         
         # Step 3: Register Core Protocols (元方法注入)
         # (后续逻辑保持不变，用于补全成员元数据)

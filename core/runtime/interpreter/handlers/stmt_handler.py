@@ -94,6 +94,79 @@ class StmtHandler(BaseHandler):
             return self._execute_behavior(res)
         return res
 
+    def visit_IbIntentAnnotation(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        处理意图注释节点 - @ 和 @! 专用
+
+        IbIntentAnnotation 代表单行意图注释，必须后续紧跟 LLM 调用。
+
+        语义区别：
+        - @ : 将意图压入运行时栈（持续有效）
+        - @! : 设置临时的排他意图（只对当前这一次 LLM 调用有效）
+
+        @! 是临时的单次作用的 IntentStack 实例，LLM 调用完成后自动清除。
+        全局意图栈保持不变。
+        """
+        intent_info_uid = node_data.get("intent")
+        if not intent_info_uid:
+            return self.registry.get_none()
+
+        intent_data = self.get_node_data(intent_info_uid)
+        if not intent_data:
+            return self.registry.get_none()
+
+        intent = self.execution_context.factory.create_intent_from_node(
+            intent_info_uid,
+            intent_data,
+            role=IntentRole.SMEAR
+        )
+
+        # @! 排他意图：设置为临时的单次意图
+        # 这是临时的 IntentStack 实例，只对当前这一次 LLM 调用有效
+        if intent.is_override:
+            self.runtime_context.set_pending_override_intent(intent)
+        else:
+            # @ 普通意图：压入运行时栈
+            self.runtime_context.push_intent(intent)
+
+        return self.registry.get_none()
+
+    def visit_IbIntentStackOperation(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        处理意图栈操作节点 - @+ 和 @- 专用
+
+        IbIntentStackOperation 代表意图栈操作，允许独立存在。
+        - @+: 将意图压入栈
+        - @-: 从栈中物理移除匹配的意图（按标签或内容）
+
+        此方法通过 IntentStack 内置类进行操作（公理体系融入）。
+        """
+        intent_info_uid = node_data.get("intent")
+        if not intent_info_uid:
+            return self.registry.get_none()
+
+        intent_data = self.get_node_data(intent_info_uid)
+        if not intent_data:
+            return self.registry.get_none()
+
+        intent = self.execution_context.factory.create_intent_from_node(
+            intent_info_uid,
+            intent_data,
+            role=IntentRole.STACK
+        )
+
+        # @- 从栈中物理移除匹配的意图
+        if intent.is_remove:
+            if intent.tag:
+                self.runtime_context.remove_intent(tag=intent.tag)
+            elif intent.content:
+                self.runtime_context.remove_intent(content=intent.content)
+        else:
+            # @+ 压入栈
+            self.runtime_context.push_intent(intent)
+
+        return self.registry.get_none()
+
     def _assign_to_target(self, target_uid: str, value: IbObject, define_only: bool = False):
         """通用赋值逻辑，支持 Name, TypeAnnotatedExpr, Attribute, Subscript, Tuple Unpacking"""
         target_data = self.get_node_data(target_uid)

@@ -21,10 +21,11 @@ class IntentMode(Enum):
 class IntentRole(Enum):
     """意图来源角色"""
     BLOCK = "block"      # 意图块 (intent "..." { ... })
-    SMEAR = "smear"      # 涂抹式注释 (@ ...)
+    SMEAR = "smear"      # 涂抹式注释 (@ ...) - 必须紧跟 LLM 调用
     CALL = "call"        # 函数调用时携带的意图 (func(...) @ ...)
     GLOBAL = "global"    # 全局意图 (context.set_global_intent)
     DYNAMIC = "dynamic"  # 编程式动态推入 (context.push_intent)
+    STACK = "stack"      # 意图栈操作 (@+/@-) - 允许独立存在
 
 class IntentProtocol(Protocol):
     """

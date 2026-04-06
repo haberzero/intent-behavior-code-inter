@@ -113,6 +113,11 @@ class SemanticAnalyzer:
             self._bind_llm_except(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
+            # Pass 3.5: 意图注释上下文验证 (@/@! 必须紧跟 LLM 调用)
+            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3.5: Validating intent annotation context...")
+            self._validate_intent_annotation_context(node)
+            self.debugger.exit_scope(CoreModule.SEMANTIC)
+
             # Pass 4: 深度语义检查 (Body, Expressions, Type Checking)
             self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 4: Deep checking...")
             self.visit(node)
@@ -135,7 +140,6 @@ class SemanticAnalyzer:
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
                 node_is_deferred=self.side_table.node_is_deferred,
-                node_intents=self.side_table.node_intents,
                 node_to_loc=self.side_table.node_to_loc,
                 decision_maps=self.side_table.decision_maps,
                 node_protection=self.side_table.node_protection
@@ -287,15 +291,6 @@ class SemanticAnalyzer:
             "line": node.lineno,
             "column": node.col_offset
         })
-
-        # 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
-        # 侧表仅记录"当前节点特有"的涂抹意图（即通过 @ 标注的意图）。
-        # 块级意图（通过 intent 语句定义）由解释器在执行时通过 AST 结构动态维护在栈中。
-        # 这样避免了静态分析时重复涂抹导致的逻辑冲突。
-        if hasattr(node, "_pending_intents"):
-            intents = getattr(node, "_pending_intents")
-            if intents:
-                self.side_table.bind_intents(node, intents)
 
         # 记录场景上下文侧表
         if isinstance(node, ast.IbExpr):
@@ -865,6 +860,102 @@ class SemanticAnalyzer:
                 if isinstance(seg, ast.IbASTNode):
                     self.visit(seg)
         return self._void_desc
+
+    def visit_IbIntentAnnotation(self, node: ast.IbIntentAnnotation):
+        """访问意图注释节点 - @ 和 @! 专用"""
+        # 访问内部的意图信息
+        self.visit(node.intent)
+        return self._void_desc
+
+    def visit_IbIntentStackOperation(self, node: ast.IbIntentStackOperation):
+        """访问意图栈操作节点 - @+ 和 @- 专用"""
+        # 访问内部的意图信息
+        self.visit(node.intent)
+        return self._void_desc
+
+    def _validate_intent_annotation_context(self, node: ast.IbASTNode) -> None:
+        """
+        Pass 3.5: 意图注释上下文验证。
+
+        检查 IbIntentAnnotation (@/@!) 必须紧跟**后面**的行为表达式。
+        @+/@- (IbIntentStackOperation) 可以独立存在，无需检查。
+
+        正确用法示例：
+            @ 用简洁回复
+            result = @~打招呼~
+        """
+        if isinstance(node, ast.IbModule):
+            self._validate_intent_in_body(node.body)
+        elif isinstance(node, ast.IbFunctionDef):
+            self._validate_intent_in_body(node.body)
+        elif isinstance(node, ast.IbLLMFunctionDef):
+            pass
+        elif isinstance(node, ast.IbClassDef):
+            for method in node.body:
+                if isinstance(method, ast.IbFunctionDef):
+                    self._validate_intent_in_body(method.body)
+                elif isinstance(method, ast.IbLLMFunctionDef):
+                    pass
+
+    def _validate_intent_in_body(self, body: List[ast.IbStmt]) -> None:
+        """验证语句块中的意图注释上下文"""
+        if not body:
+            return
+
+        i = 0
+        while i < len(body):
+            stmt = body[i]
+
+            if isinstance(stmt, ast.IbIntentAnnotation):
+                if i == len(body) - 1:
+                    self.issue_tracker.error(
+                        f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
+                        f"This is the last statement with no following LLM call.",
+                        stmt, code="SEM_060"
+                    )
+                else:
+                    next_stmt = body[i + 1]
+                    if not self._stmt_contains_behavior(next_stmt):
+                        self.issue_tracker.error(
+                            f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
+                            f"Following statement is '{next_stmt.__class__.__name__}' which does not contain a behavior expression.",
+                            stmt, code="SEM_060"
+                        )
+
+            elif isinstance(stmt, ast.IbLLMExceptionalStmt):
+                self._validate_intent_in_body(stmt.body)
+
+            i += 1
+
+    def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
+        """检查语句是否包含行为表达式"""
+        if isinstance(stmt, ast.IbExprStmt):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbAssign):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbReturn):
+            if stmt.value:
+                return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbExprStmt) and isinstance(stmt.value, ast.IbBehaviorExpr):
+            return True
+        return False
+
+    def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
+        """检查表达式是否包含行为表达式"""
+        if isinstance(expr, ast.IbBehaviorExpr):
+            return True
+        if isinstance(expr, ast.IbCall):
+            func = expr.func
+            if isinstance(func, ast.IbAttribute):
+                if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
+                    return True
+                if isinstance(func.value, ast.IbName):
+                    if func.value.id in ("llm", "LLM", "model", "Model", "ai", "AI"):
+                        return True
+            elif isinstance(func, ast.IbName):
+                if func.id in ("call", "complete", "generate", "llm", "LLM"):
+                    return True
+        return False
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """处理带类型标注的表达式包装节点 (例如 Casts 或声明)"""

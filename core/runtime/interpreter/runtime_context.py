@@ -197,7 +197,7 @@ class IntentNode:
         """展平为列表（带缓存）"""
         if self._cached_list is not None:
             return self._cached_list
-        
+
         res = []
         curr = self
         while curr:
@@ -217,10 +217,14 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         self._current_scope = self._global_scope
         self._intent_top: Optional[IntentNode] = None # 意图栈顶节点
         self._global_intents: List[IbIntent] = []
-        self._intent_exclusive_depth = 0
         self._loop_stack: List[Dict[str, int]] = []
         self._retry_hint: Optional[str] = None # 运行时重试提示词
-        
+
+        # [排他意图] 临时的单次作用排他意图
+        # @! 创建一个临时的 IntentStack 实例，用于当前这一次 LLM 调用后销毁
+        # 全局意图栈保持不变
+        self._pending_override_intent: Optional[IbIntent] = None
+
         # [LLMExceptFrame] LLM 异常重试帧栈
         # 当 llmexcept/retry 机制完全迁移到帧栈后，此属性用于管理嵌套的 llmexcept 结构。
         # 每个帧保存执行状态（变量快照、intent 栈、loop 上下文），支持状态恢复和精确重试。
@@ -229,6 +233,32 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         # [LLMResult] 最后一个 LLM 执行结果
         # 用于 visit_IbLLMExceptionalStmt 检查 LLM 调用是否返回不确定性
         self._last_llm_result: Optional['LLMResult'] = None
+
+    # --- 排他意图管理 ---
+
+    def set_pending_override_intent(self, intent: IbIntent) -> None:
+        """
+        设置临时的排他意图。
+
+        @! 创建临时的单次作用 IntentStack 实例，用于当前这一次 LLM 调用后销毁。
+        全局意图栈保持不变。
+        """
+        self._pending_override_intent = intent
+
+    def consume_pending_override_intent(self) -> Optional[IbIntent]:
+        """
+        消费并清除临时的排他意图。
+
+        返回排他意图（如果有），并清除状态。
+        这在 LLM 调用完成后被调用。
+        """
+        intent = self._pending_override_intent
+        self._pending_override_intent = None
+        return intent
+
+    def has_pending_override_intent(self) -> bool:
+        """检查是否存在待处理的排他意图"""
+        return self._pending_override_intent is not None
 
     # --- LLM Result 管理 ---
 
@@ -314,10 +344,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
             return True
         return False
 
-    @property
-    def intent_exclusive_depth(self) -> int:
-        return self._intent_exclusive_depth
-
     def get_current_scope(self) -> Scope:
         return self._current_scope
 
@@ -340,15 +366,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         if self._loop_stack:
             return self._loop_stack[-1]
         return None
-
-    def enter_intent_exclusive_scope(self) -> None:
-        self._intent_exclusive_depth += 1
-
-    def exit_intent_exclusive_scope(self) -> None:
-        self._intent_exclusive_depth = max(0, self._intent_exclusive_depth - 1)
-
-    def is_intent_exclusive(self) -> bool:
-        return self._intent_exclusive_depth > 0
 
     def set_global_intent(self, intent: Union[str, IbIntent]) -> None:
         if isinstance(intent, str):
@@ -490,6 +507,86 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
             return content
         return None
 
+    def remove_intent(self, tag: Optional[str] = None, content: Optional[str] = None) -> bool:
+        """
+        从栈中物理移除匹配的意图。
+
+        @- #tag → 按标签移除（移除最近添加的匹配标签的意图）
+        @- content → 按内容移除（移除最近添加的匹配内容的意图）
+
+        返回是否成功移除。
+        """
+        if not self._intent_top:
+            return False
+
+        if tag:
+            removed = self._remove_by_tag(tag)
+            if removed:
+                return True
+
+        if content:
+            removed = self._remove_by_content(content)
+            if removed:
+                return True
+
+        return False
+
+    def _remove_by_tag(self, tag: str) -> bool:
+        """按标签移除意图（栈顶优先）"""
+        if not self._intent_top:
+            return False
+
+        current = self._intent_top
+        previous = None
+
+        while current:
+            intent = current.intent
+            if intent.tag == tag:
+                if previous:
+                    previous.parent = current.parent
+                else:
+                    self._intent_top = current.parent
+                # 清除 _intent_top 的缓存，因为 to_list() 是从它开始调用的
+                self._intent_top._cached_list = None if self._intent_top else None
+                self._invalidate_cache_up_to_root(previous)
+                return True
+            previous = current
+            current = current.parent
+
+        return False
+
+    def _remove_by_content(self, content: str) -> bool:
+        """按内容移除意图（栈顶优先）"""
+        if not self._intent_top:
+            return False
+
+        current = self._intent_top
+        previous = None
+
+        while current:
+            intent = current.intent
+            has_content = hasattr(intent, 'content')
+            intent_content = getattr(intent, 'content', None) if has_content else None
+            if has_content and intent_content == content:
+                if previous:
+                    previous.parent = current.parent
+                else:
+                    self._intent_top = current.parent
+                # 清除 _intent_top 的缓存，因为 to_list() 是从它开始调用的
+                self._intent_top._cached_list = None if self._intent_top else None
+                self._invalidate_cache_up_to_root(previous)
+                return True
+            previous = current
+            current = current.parent
+
+        return False
+
+    def _invalidate_cache_up_to_root(self, node: Optional['IntentNode']) -> None:
+        """清除从节点到根节点的所有缓存"""
+        while node:
+            node._cached_list = None
+            node = node.parent
+
     def get_active_intents(self) -> List[Union[IbIntent, Any]]:
         if not self._intent_top:
             return []
@@ -511,21 +608,30 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         else:
             raise TypeError(f"Invalid intent stack type for restoration: {type(intents)}")
 
-    def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[IIbIntent] = None) -> List[str]:
+    def get_resolved_prompt_intents(self, execution_context: Any) -> List[str]:
         """
         获取最终消解后的 Prompt 字符串列表。
-        不再由 Executor 手动合并，而是由 Context 负责消解。
+
+        如果存在待处理的排他意图 (@!)，只返回排他意图的内容，
+        忽略其他所有意图（全局意图栈保持不变）。
+
+        这是临时的单次作用的 IntentStack 实例，用于当前这一次 LLM 调用。
         """
-        # 使用工厂或直接从执行上下文获取消解器，避免局部 import
-        # [TODO] 未来可以将 IntentResolver 也协议化注入
-        
+        # 检查是否有待处理的排他意图 (@!)
+        pending_override = self._pending_override_intent
+        if pending_override:
+            # 消费排他意图（清除状态）
+            self._pending_override_intent = None
+            content = pending_override.resolve_content(self, execution_context)
+            return [content] if content else []
+
+        # 正常解析意图栈
         active_intents = self.get_active_intents()
         global_intents = self.get_global_intents()
-        
+
         return IntentResolver.resolve(
             active_intents=active_intents,
             global_intents=global_intents,
-            call_intent=call_intent,
             context=self,
             execution_context=execution_context
         )

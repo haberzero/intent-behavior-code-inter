@@ -93,6 +93,30 @@ class IbIntentInfo(IbASTNode):
         """
         return str(self.content).strip()
 
+@dataclass(kw_only=True, eq=False)
+class IbIntentAnnotation(IbStmt):
+    """
+    意图注释节点 - @ 和 @! 专用
+    替代涂抹式关联，实现意图注释的 AST 级别独立表示。
+    
+    设计说明：
+    - @ (APPEND): 单行意图，必须后续紧跟 LLM 调用
+    - @! (OVERRIDE): 排他意图，必须后续紧跟 LLM 调用
+    """
+    intent: IbIntentInfo
+
+@dataclass(kw_only=True, eq=False)
+class IbIntentStackOperation(IbStmt):
+    """
+    意图栈操作节点 - @+ 和 @- 专用
+    允许独立存在，作为全局意图栈操作。
+    
+    设计说明：
+    - @+ (APPEND): 叠加意图到栈，允许独立存在
+    - @- (REMOVE): 从栈中移除意图，允许独立存在
+    """
+    intent: IbIntentInfo
+
 # --- Module ---
 
 @dataclass(kw_only=True, eq=False)

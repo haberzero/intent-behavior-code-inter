@@ -312,6 +312,11 @@ class Interpreter:
         self.expr_handler = handlers[1]
         self.import_handler = handlers[2]
 
+        # [Phase 4] IntentStack 与 runtime_context 关联
+        intent_stack = self.registry.get_builtin_instance("IntentStack")
+        if intent_stack and hasattr(intent_stack, 'set_runtime_context'):
+            intent_stack.set_runtime_context(self.runtime_context)
+
         # 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
@@ -731,25 +736,6 @@ class Interpreter:
                 self.push_stack(name=f"{node_type}:{node_uid}", location=loc)
                 pushed_frame = True
 
-            # 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化
-            pushed_count = 0
-            intent_uids = self.get_side_table("node_intents", node_uid)
-            if intent_uids:
-                for i_uid in intent_uids:
-                    i_data = self.node_pool.get(i_uid)
-                    if i_data:
-                        intent = IbIntent(
-                            ib_class=self.registry.get_class("Intent"),
-                            content=i_data.get('content', ''),
-                            mode=IntentMode.from_str(i_data.get('mode', '+')),
-                            tag=i_data.get('tag'),
-                            segments=i_data.get('segments', []),
-                            role=IntentRole.SMEAR,
-                            source_uid=i_uid
-                        )
-                        self.runtime_context.push_intent(intent)
-                        pushed_count += 1
-
             try:
                 node_type = node_data.get("_type")
 
@@ -784,9 +770,6 @@ class Interpreter:
                 if pushed_frame:
                     self.logical_stack.pop()
                 self.call_stack_depth -= 1
-                # 自动出栈，确保意图作用域正确恢复
-                for _ in range(pushed_count):
-                    self.runtime_context.pop_intent()
         finally:
             # 恢复之前的模块上下文
             self.current_module_name = old_module

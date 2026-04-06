@@ -43,6 +43,9 @@ class KernelRegistry:
         self._is_structure_sealed = False
         self._is_classes_sealed = False
 
+        # [Builtin Instances] 内置单例实例 (如 IntentStack)
+        self._builtin_instances: Dict[str, Any] = {}
+
     @property
     def state_level(self) -> int:
         return self._state_level
@@ -146,6 +149,19 @@ class KernelRegistry:
         """注册元数据注册表实例。"""
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
+
+    def register_builtin_instance(self, name: str, instance: Any, token: Any = None):
+        """
+        注册内置单例实例（如 IntentStack）。
+        内置实例在结构封印后仍然可以注册，但仅限初始化阶段。
+        """
+        if self._is_structure_sealed:
+            raise PermissionError("Registry: Cannot register builtin instance after structure is sealed.")
+        self._builtin_instances[name] = instance
+
+    def get_builtin_instance(self, name: str) -> Optional[Any]:
+        """获取内置单例实例。"""
+        return self._builtin_instances.get(name)
 
     def set_execution_context(self, context: 'IExecutionContext', token: Any):
         """注册执行上下文引用，仅内核可调。"""

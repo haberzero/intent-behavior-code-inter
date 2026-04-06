@@ -116,10 +116,8 @@ class LLMExecutorImpl:
         user_prompt = self._evaluate_segments(user_prompt_segments, execution_context, param_names)
         
         # 2. 注入意图增强 (被动消费已消解的现场)
-        # 呼叫级意图已由 Caller 通过参数传递
-        active_intents = context.get_active_intents()
-        global_intents = context.get_global_intents()
-        merged_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
+        # @! 排他意图已由 RuntimeContext 作为临时单次意图处理
+        merged_intents = context.get_resolved_prompt_intents(execution_context)
         if merged_intents:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
             sys_prompt += intent_block
@@ -328,12 +326,11 @@ class LLMExecutorImpl:
             all_intents = IntentResolver.resolve(
                 active_intents=active_list,
                 global_intents=context.get_global_intents(),
-                call_intent=call_intent,
                 context=context,
                 execution_context=execution_context
             )
         else:
-            all_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
+            all_intents = context.get_resolved_prompt_intents(execution_context)
 
         # 核心：使用 side_tables 中的 node_scenes
         scene_val = execution_context.get_side_table("node_scenes", node_uid)

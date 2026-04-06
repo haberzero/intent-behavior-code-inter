@@ -8,6 +8,9 @@ class CompilationResult:
     """
     语义分析阶段的单模块产出物协议。
     它是蓝图层（Domain）的基本构成单元。
+
+    注意：意图注释不再使用侧表存储，而是作为独立 AST 节点
+    (IbIntentAnnotation, IbIntentStackOperation) 由解释器直接处理。
     """
     module_ast: ast_domain.IbModule
     symbol_table: SymbolTable
@@ -15,7 +18,6 @@ class CompilationResult:
     node_to_symbol: Dict[ast_domain.IbASTNode, Symbol] = field(default_factory=dict) # Node object -> Symbol object
     node_to_type: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Type name
     node_is_deferred: Dict[ast_domain.IbASTNode, bool] = field(default_factory=dict) # Node object -> bool
-    node_intents: Dict[ast_domain.IbASTNode, List[ast_domain.IbIntentInfo]] = field(default_factory=dict) # Node object -> List of IntentInfo
     node_to_loc: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Location info
     decision_maps: Dict[ast_domain.IbASTNode, Dict[str, str]] = field(default_factory=dict) # Node object -> Decision Map
     node_protection: Dict[ast_domain.IbASTNode, ast_domain.IbASTNode] = field(default_factory=dict) # Node object -> Handler object

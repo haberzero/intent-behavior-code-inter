@@ -184,21 +184,35 @@ class StatementComponent(BaseComponent):
         return body
 
     def at_intent_shorthand(self) -> ast.IbStmt:
-        """Parse '@ "content" \n statement'"""
+        """
+        Parse '@ "content"' as standalone AST node.
+        
+        根据意图模式返回不同的节点类型：
+        - @ (APPEND) / @! (OVERRIDE): IbIntentAnnotation（必须紧跟 LLM 调用）
+        - @+ (APPEND) / @- (REMOVE): IbIntentStackOperation（允许独立存在）
+        """
         start_token = self.stream.previous()
         
         # 1. Parse content
         intent_info = self._parse_intent_info(start_token)
         
-        # 2. 压入 Pending Intents，下一个被解析的语句将自动关联它
-        self.context.push_intent(intent_info)
-        
-        # 3. 解析下一个语句作为主体
-        # 使用 consume_end_of_statement 处理换行或 EOF
+        # 2. Consume newline (意图注释独立于后续语句)
         self.stream.consume_end_of_statement("Expect newline after @ shorthand.")
         
-        # 重要：使用 declaration() 而非 parse_statement()，以支持 @ 下面的 auto/func 定义
-        return self.context.declaration_parser.parse_declaration()
+        # 3. 根据意图模式返回不同的节点类型
+        # @- (REMOVE) 永远返回 IbIntentStackOperation
+        if intent_info.mode == IntentMode.REMOVE:
+            return self._loc(ast.IbIntentStackOperation(intent=intent_info), start_token)
+        
+        # @/@! 返回 IbIntentAnnotation（意图注释）
+        # @+ 返回 IbIntentStackOperation（栈操作）
+        # 注：mode_char 存储在 start_token.value 中，如 "@", "@+", "@!"
+        mode_char = start_token.value[1:] if start_token.value.startswith("@") else ""
+        
+        if mode_char == "+":
+            return self._loc(ast.IbIntentStackOperation(intent=intent_info), start_token)
+        else:
+            return self._loc(ast.IbIntentAnnotation(intent=intent_info), start_token)
 
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
         """Parse 'mode "content"' or 'mode identifier'"""
@@ -241,16 +255,17 @@ class StatementComponent(BaseComponent):
                 val = self.stream.previous().value
                 # 解析意图标签 #tag
                 # TODO 应该从lexer开始就提供支持。现在是临时方案
-                if tag is None and not segments and val.startswith("#"):
-                    # 尝试提取标签
-                    import re
-                    match = re.match(r"^#([a-zA-Z0-9_]+)\s*", val)
-                    if match:
-                        tag = match.group(1)
-                        remaining = val[match.end():]
-                        if remaining:
-                            segments.append(remaining)
-                        continue
+                if tag is None and not segments:
+                    val_stripped = val.lstrip()
+                    if val_stripped.startswith("#"):
+                        import re
+                        match = re.match(r"^#([a-zA-Z0-9_]+)\s*", val_stripped)
+                        if match:
+                            tag = match.group(1)
+                            remaining = val[match.end():].lstrip()
+                            if remaining:
+                                segments.append(remaining)
+                            continue
                 segments.append(val)
             elif self.stream.match(TokenType.STRING):
                 val = self.stream.previous().value

@@ -242,7 +242,24 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     registry.register_boxer(list, _box_list, token)
     registry.register_boxer(tuple, _box_list, token)
     registry.register_boxer(dict, _box_dict, token)
-    
+
+    # 5.5 注册 IntentStack 内置类（公理体系融入）
+    from core.runtime.objects.intent_stack import IbIntentStack
+
+    intent_stack_class = bootstrapper.get_class("IntentStack")
+    intent_stack_desc = metadata_registry.resolve("IntentStack")
+
+    _reg_native(intent_stack_class, 'push', IbIntentStack.push, unbox=False)
+    _reg_native(intent_stack_class, 'pop', IbIntentStack.pop, unbox=False)
+    _reg_native(intent_stack_class, 'clear', IbIntentStack.clear, unbox=False)
+    _reg_native(intent_stack_class, 'get_active', IbIntentStack.get_active, unbox=False)
+    _reg_native(intent_stack_class, 'resolve', IbIntentStack.resolve, unbox=False)
+    _reg_native(intent_stack_class, '__iter__', IbIntentStack.__iter__, unbox=False)
+    _reg_native(intent_stack_class, '__len__', IbIntentStack.__len__, unbox=False)
+    _reg_native(intent_stack_class, '__repr__', IbIntentStack.__repr__, unbox=False)
+
+    registry.register_builtin_instance("IntentStack", IbIntentStack(intent_stack_class))
+
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
 
