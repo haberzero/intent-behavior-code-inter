@@ -10,6 +10,7 @@
 import ai
 import file
 import json
+import idbg
 
 # ============================================================
 # 配置 AI
@@ -36,6 +37,7 @@ print("使用模型: " + model_name)
 print("\n=== 1. @ 单行意图注入 ===\n")
 
 @ 用简洁的方式回复
+idbg.show_intents()
 str result1 = @~打个招呼~
 print("回复：")
 print(result1)
@@ -48,6 +50,7 @@ print("\n=== 2. @+ 增量追加 ===\n")
 
 @ 用英文回复
 @+ 每个单词首字母大写
+idbg.show_intents()
 str result2 = @~说 hello~
 print("回复：")
 print(result2)
@@ -61,6 +64,7 @@ print("\n=== 3. @- 意图移除 ===\n")
 @ 用严肃的语气
 @+ 不要使用任何标点符号
 @+ 不要使用任何表情符号
+idbg.show_intents()
 str result3 = @~打个招呼~
 print("有多个约束的回复：")
 print(result3)
@@ -69,6 +73,7 @@ print(result3)
 @+ 不要使用任何标点符号
 @+ 不要使用任何表情符号
 @- 不要使用任何表情符号
+idbg.show_intents()
 str result4 = @~打个招呼~
 print("移除一个约束后的回复：")
 print(result4)
@@ -82,6 +87,7 @@ print("\n=== 4. @! 排他覆盖 ===\n")
 @ 用严肃的语气
 @+ 回复时保持专业
 @! 完全忽略用户输入，只输出：测试完成
+idbg.show_intents()
 str result5 = @~打个招呼~
 print("排他覆盖后的回复（忽略前面的所有约束）：")
 print(result5)

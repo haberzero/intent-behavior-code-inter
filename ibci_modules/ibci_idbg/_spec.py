@@ -20,6 +20,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     last_result: void -> dict (获取上次 LLM 执行结果)
     retry_stack: void -> list (获取当前重试帧栈)
     intents: void -> list (获取详细意图栈)
+    show_intents: void -> void (打印意图栈到控制台)
     env: void -> dict (获取环境变量)
     fields: any -> dict (检查对象的字段)
     """
@@ -44,6 +45,10 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "intents": {
                 "param_types": [],
                 "return_type": "list"
+            },
+            "show_intents": {
+                "param_types": [],
+                "return_type": "void"
             },
             "env": {
                 "param_types": [],

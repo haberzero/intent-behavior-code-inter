@@ -143,6 +143,42 @@ class IDbgPlugin(IbPlugin):
             for i in intents
         ]
 
+    def show_intents(self):
+        """直接打印意图栈到控制台（IBCI 友好）"""
+        print("[IDBG] 意图栈:")
+        
+        intents = None
+        
+        if self._capabilities and self._capabilities.stack_inspector:
+            try:
+                inspector = self._capabilities.stack_inspector
+                if hasattr(inspector, 'get_active_intents'):
+                    raw = inspector.get_active_intents()
+                    if raw:
+                        print("  (via stack_inspector)")
+                        for idx, content in enumerate(raw):
+                            print(f"  [{idx}] {content}")
+                        return
+            except Exception:
+                pass
+        
+        if self.state_reader:
+            try:
+                if hasattr(self.state_reader, 'get_active_intents'):
+                    intents = self.state_reader.get_active_intents()
+                    if intents:
+                        print("  (via state_reader)")
+                        for idx, i in enumerate(intents):
+                            content = i.content if hasattr(i, 'content') else str(i)
+                            mode = i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+'))
+                            role = i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', '?'))
+                            print(f"  [{idx}] {mode} | {role} | {content}")
+                            return
+            except Exception:
+                pass
+        
+        print("  (空)")
+
     def env(self) -> Dict[str, Any]:
         if not self._capabilities or not self._capabilities.stack_inspector:
             return {}
