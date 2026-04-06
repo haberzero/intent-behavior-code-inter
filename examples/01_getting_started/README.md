@@ -1,87 +1,103 @@
 # 01 - 快速开始
 
-本章节介绍 IBCI 的原生语法基础，不涉及任何 AI 相关功能。
+本章节展示 IBCI 的核心特性：**行为描述语句** + **AI 交互**。
 
 ## 目录结构
 
 ```
 01_getting_started/
 ├── README.md              # 本文件
-├── 01_hello_world.ibci   # 第一个程序：你好，世界
-├── 02_variables.ibci     # 变量与类型
-├── 03_operators.ibci     # 运算符与表达式
-├── 04_control_flow.ibci   # 控制流
-├── 05_functions.ibci     # 函数定义
-├── 06_lists.ibci         # 列表操作
-├── 07_strings.ibci       # 字符串操作
-├── 08_slicing.ibci       # 切片语法
-└── 09_path_management.ibci # 路径管理规则
+├── SYNTAX_REFERENCE.md   # 语法参考手册
+├── api_config.json       # AI API 配置
+├── 01_hello_ai.ibci     # ⭐ 第一个程序：AI 交互
+├── 02_slicing.ibci       # 切片语法
+└── 03_path_management.ibci # 路径管理规则
 ```
 
 ## 学习路径
 
-### 第一步：运行你的第一个程序
+### 第一步：体验 IBCI 的 AI 能力
 
 ```bash
-python main.py run examples/01_getting_started/01_hello_world.ibci
+python main.py run examples/01_getting_started/01_hello_ai.ibci
 ```
 
-### 第二步：理解变量与类型
+这将运行一个展示 IBCI 核心特性的程序：
+- **行为描述语句** - 描述"做什么"而非"怎么做"
+- **LLM 函数调用** - 与 AI 模型实时交互
+- **意图注释** - 让 AI 理解代码意图
+
+### 第二步：掌握切片语法
 
 ```bash
-python main.py run examples/01_getting_started/02_variables.ibci
+python main.py run examples/01_getting_started/02_slicing.ibci
 ```
 
-### 第三步：掌握控制流
+### 第三步：理解路径管理
 
 ```bash
-python main.py run examples/01_getting_started/04_control_flow.ibci
+python main.py run examples/01_getting_started/03_path_management.ibci
 ```
 
-### 第四步：理解路径管理
+### 第四步：查阅语法参考
 
-路径管理是 IBCI 的核心特性之一，详见 `09_path_management.ibci`。
+打开 [SYNTAX_REFERENCE.md](SYNTAX_REFERENCE.md) 查看完整语法说明。
 
 ## 核心概念
 
 ### 行为描述语句
 
-IBCI 的核心是**行为描述语句**，用于描述"做什么"而非"怎么做"：
+IBCI 的核心是**行为描述语句**：
 
 ```ibci
-# 行为描述：获取用户输入并打印
-str name = input("请输入你的名字：")
-print("你好，" + name)
+# 行为描述：打印问候语
+print("你好，世界！")
+
+# 行为描述：计算两个数的和
+int sum = 10 + 20
+print("10 + 20 = " + (str)sum)
 ```
 
-### 类型系统
+### LLM 函数
 
-IBCI 是强类型语言，主要类型包括：
-
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| `int` | 整数 | `int age = 25` |
-| `float` | 浮点数 | `float pi = 3.14` |
-| `str` | 字符串 | `str name = "Alice"` |
-| `bool` | 布尔值 | `bool flag = true` |
-| `list` | 列表 | `list items = ["a", "b"]` |
-| `dict` | 字典 | `dict data = {"key": "value"}` |
-
-### 路径管理
-
-IBCI 有自己独立的路径管理体系，与 Python 解耦：
+与 AI 模型交互：
 
 ```ibci
-import sys
+import ai
 
-str project_root = sys.project_root()    # 项目根目录
-str script_dir = sys.script_dir()        # 脚本所在目录
+# 向 AI 提问
+str response = ai.chat("请用一句话介绍 IBCI")
+print(response)
 ```
 
-详细说明请参考 `09_path_management.ibci`。
+### 意图注释
+
+使用 `#@` 语法让代码意图更清晰：
+
+```ibci
+#@ 计算购物车总价
+float total = 0.0
+int i = 0
+while i < prices.len():
+    total = total + (float)prices[i]
+    i = i + 1
+```
+
+## 配置 AI
+
+确保 `api_config.json` 中配置了正确的 API：
+
+```json
+{
+    "default_model": {
+        "base_url": "http://127.0.0.1:12234",
+        "api_key": "LOCAL",
+        "model": "qwen3-30b-a3b-instruct-2507"
+    }
+}
+```
 
 ## 下一步
 
-- 继续学习 [02_operators.ibci](01_operators.ibci) 掌握运算符
-- 学习 [05_functions.ibci](05_functions.ibci) 定义自己的函数
-- 学习 [06_lists.ibci](06_lists.ibci) 和 [08_slicing.ibci](08_slicing.ibci) 处理数据集合
+- 学习 [SYNTAX_REFERENCE.md](SYNTAX_REFERENCE.md) 掌握完整语法
+- 继续学习 [02_ai_modules](../02_ai_modules/README.md) 深入 AI 功能
