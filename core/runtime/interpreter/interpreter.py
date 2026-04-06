@@ -107,9 +107,9 @@ class Interpreter:
 
     # TODO: 怀疑此处 instance_id: str = "main"  这一行有代码异味。MVP Demo 阶段暂不深究
     def __init__(self, issue_tracker: IssueTracker,
-                 output_callback: Optional[Callable[[str], None]] = None, 
-                 input_callback: Optional[Callable[[str], str]] = None, 
-                 max_instructions: int = 100000000, 
+                 output_callback: Optional[Callable[[str], None]] = None,
+                 input_callback: Optional[Callable[[str], str]] = None,
+                 max_instructions: int = 100000000,
                  max_call_stack: int = 100,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
@@ -130,7 +130,9 @@ class Interpreter:
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
                  kernel_token: Optional[Any] = None,
                  instance_id: str = "main",
-                 orchestrator: Optional[Any] = None):
+                 orchestrator: Optional[Any] = None,
+                 entry_file: str = None,
+                 entry_dir: str = None):
         
         # 0. 启动内核引导
         self._registry = registry or KernelRegistry()
@@ -155,7 +157,9 @@ class Interpreter:
             resolve_type_from_symbol_callback=self._resolve_type_from_symbol,
             extract_name_id_callback=self._extract_name_id,
             resolve_value_callback=self._resolve_value,
-            strict_mode=strict_mode
+            strict_mode=strict_mode,
+            entry_file=entry_file,
+            entry_dir=entry_dir
         )
 
         # 注册执行上下文引用到 Registry，底层仅持有该容器

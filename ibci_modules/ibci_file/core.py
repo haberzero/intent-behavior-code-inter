@@ -2,46 +2,37 @@
 File 文件操作插件核心实现
 合并了基础文件操作和高级文件分析功能
 
-使用 IBCI Path 模块进行路径管理，与 Python 解耦。
+使用 ExecutionContext 的统一路径解析，与 Python 解耦。
 """
 import os
 import re
 from typing import List, Dict, Any
-from core.runtime.path import IbPath, PathResolver
+from core.runtime.path import IbPath
 
 
 class FileLib:
     """
-    File 插件核心类 (v2.4.0)
+    File 插件核心类 (v2.5.0)
     合并基础文件操作和高级文件分析功能：
     - 基础操作: read, write, exists, remove
     - 高级分析: search_in_files, list_files_recursive, get_line_count, read_lines_range, get_file_size, find_todos
 
-    使用 IBCI PathResolver 进行路径管理。
+    使用 ExecutionContext.resolve_path() 进行统一路径解析。
+    所有相对路径都基于入口文件目录。
     """
     def setup(self, capabilities):
-        """插件入口点，支持上下文感知设置"""
+        """插件入口点"""
         self.capabilities = capabilities
         self.permission_manager = capabilities.service_context.permission_manager
 
-        script_dir = capabilities.stack_inspector.get_current_script_dir()
-        script_dir_ib = IbPath.from_native(script_dir) if script_dir else None
-
-        project_root_ib = IbPath.from_native(
-            capabilities.service_context.permission_manager.root_dir
-        )
-
-        self._path_resolver = PathResolver(project_root_ib, script_dir_ib)
-
     def _resolve_path(self, path: str) -> str:
         """
-        核心路径解析逻辑（使用 IBCI PathResolver）
+        核心路径解析逻辑（使用 ExecutionContext.resolve_path()）
 
-        - 绝对路径：直接校验权限并使用。
-        - 以 ./ 或 ../ 开头：基于当前 IBCI 脚本所在目录解析。
-        - 裸路径：基于项目根目录解析。
+        所有相对路径都基于入口文件目录解析，确保无论在哪个 IBCI 文件中执行，
+        相对路径都相对于入口文件目录。
         """
-        ib_path = self._path_resolver.resolve(path)
+        ib_path = self.capabilities.execution_context.resolve_path(path)
         native_path = ib_path.to_native()
         self.permission_manager.validate_path(native_path)
         return native_path

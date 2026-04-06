@@ -14,7 +14,7 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     它作为纯状态容器，持有 node_pool、栈和运行时上下文的引用。
     同时，它持有指向 Interpreter 逻辑的回调函数，以实现物理层面的逻辑与数据分离。
     """
-    def __init__(self, 
+    def __init__(self,
                  registry: Any,
                  factory: Any,
                  visit_callback: Any,
@@ -29,7 +29,9 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
                  extract_name_id_callback: Any,
                  resolve_value_callback: Any,
                  module_manager: Any = None,
-                 strict_mode: bool = False):
+                 strict_mode: bool = False,
+                 entry_file: str = None,
+                 entry_dir: str = None):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
         self._scope_pool: Mapping[str, Any] = {}
@@ -42,6 +44,8 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._current_module_name = None
         self._module_manager = module_manager
         self._strict_mode = strict_mode
+        self._entry_file = entry_file
+        self._entry_dir = entry_dir
         
         # Logic Callbacks
         self._visit_callback = visit_callback
@@ -215,3 +219,31 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
             parent = ib_path.parent
             return parent.to_native() if parent else None
         return None
+
+    def get_entry_path(self) -> Optional[str]:
+        """获取入口文件路径"""
+        return self._entry_file
+
+    def get_entry_dir(self) -> Optional[str]:
+        """获取入口文件目录"""
+        return self._entry_dir
+
+    def resolve_path(self, path: str) -> IbPath:
+        """
+        所有相对路径的统一解析入口
+
+        所有相对路径都基于入口文件目录解析，确保无论在哪个 IBCI 文件中执行，
+        相对路径都相对于入口文件目录。
+        """
+        if not path:
+            return IbPath.from_native("")
+
+        ib_path = IbPath.from_native(path)
+
+        if ib_path.is_absolute:
+            return ib_path.resolve_dot_segments()
+
+        if self._entry_dir:
+            return (IbPath.from_native(self._entry_dir) / ib_path).resolve_dot_segments()
+
+        return ib_path

@@ -123,14 +123,17 @@ class ModuleLoader(IModuleLoader):
         registry = execution_context.registry
         if registry:
             registry.verify_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
-            
+
         interop = context.interop
         permission_manager = context.permission_manager
         llm_executor = context.llm_executor
-        
+
         # 准备扩展能力集合
         capabilities = ExtensionCapabilities(_registry=registry, _capability_registry=self.capability_registry)
-        
+
+        # 注入 execution_context，使插件可以访问入口文件路径
+        capabilities.execution_context = execution_context
+
         rt_context = execution_context.runtime_context
         if rt_context:
             if isinstance(rt_context, IStateReader):

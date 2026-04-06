@@ -104,9 +104,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         
         self.interpreter: Optional[Interpreter] = None
 
-    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False) -> Interpreter:
+    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False, entry_file: str = None, entry_dir: str = None) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
-        # 委派给调度器进行组装与隔离管理
         instance_id = self.rt_scheduler.spawn(
             artifact=artifact,
             isolation=IsolationLevel.SCOPE if isolated else IsolationLevel.NONE,
@@ -117,23 +116,25 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             object_factory=self.object_factory,
             plugin_loader=self._load_plugins,
             kernel_token=self._kernel_token,
-            issue_tracker=self.issue_tracker, # 为子环境创建独立追踪器
+            issue_tracker=self.issue_tracker,
             output_callback=self.debugger.output_callback,
-            input_callback=None # 未来可支持
+            input_callback=None,
+            entry_file=entry_file,
+            entry_dir=entry_dir
         )
         return self.rt_scheduler.instances[instance_id]
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
-        # 委派给调度器进行主实例装配
-        # 将 Engine 自身作为 orchestrator 注入，建立从 Runtime 到 Engine 的系统调用通道
         self.interpreter = self.spawn_interpreter(
             artifact=artifact,
             registry=self.registry,
             host_interface=self.host_interface,
             root_dir=self.root_dir,
-            parent_context=None, # 主实例无父环境
-            isolated=False
+            parent_context=None,
+            isolated=False,
+            entry_file=getattr(self, '_entry_file', None),
+            entry_dir=getattr(self, '_entry_dir', None)
         )
         
         # TODO: 怀疑有vibe带来的异味？后续检查 MVP Demo 阶段不深究
@@ -244,24 +245,24 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             raise e
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
-        abs_entry = os.path.abspath(entry_file)
-        # 同步调试器输出回调
+        self._entry_file = os.path.abspath(entry_file)
+        self._entry_dir = os.path.dirname(self._entry_file)
+        abs_entry = self._entry_file
+
         if output_callback:
             self.debugger.output_callback = output_callback
-        
+
         if not os.path.exists(abs_entry):
             if not silent:
                 print(f"Error: Entry file not found: {abs_entry}")
             return False
 
         try:
-            # 1. 静态编译阶段
             artifact = self.compile(abs_entry, variables, silent=silent)
-            
-            # 2. 执行阶段 (可选)
+
             if prepare_interpreter:
                 return self.execute(artifact, variables, output_callback)
-            
+
             return True
 
         except CompilerError as e:
@@ -282,7 +283,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
         """
-        abs_entry = os.path.abspath(entry_file)
+        if not hasattr(self, '_entry_file'):
+            self._entry_file = os.path.abspath(entry_file)
+            self._entry_dir = os.path.dirname(self._entry_file)
+        abs_entry = self._entry_file
         
         # 同步静默状态到调试器
         self.debugger.silent = silent

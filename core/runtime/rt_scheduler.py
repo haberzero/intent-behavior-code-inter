@@ -125,7 +125,9 @@ class RuntimeSchedulerImpl:
             input_callback=kwargs.get('input_callback'),
             instance_id=instance_id,
             strict_mode=kwargs.get('strict_mode', True),
-            orchestrator=kwargs.get('orchestrator', getattr(sc, 'orchestrator', None) if sc else None)
+            orchestrator=kwargs.get('orchestrator', getattr(sc, 'orchestrator', None) if sc else None),
+            entry_file=kwargs.get('entry_file'),
+            entry_dir=kwargs.get('entry_dir')
         )
 
         # 4. 装配 ServiceContext

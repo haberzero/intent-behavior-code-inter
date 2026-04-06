@@ -17,6 +17,7 @@ class PluginCapabilities:
     stack_inspector: Optional[Any] = None
     permission_manager: Optional[Any] = None
     service_context: Optional[Any] = None
+    execution_context: Optional[Any] = None
     _capability_registry: Optional[Any] = field(default=None, repr=False)
     _registry: Optional[Any] = field(default=None, repr=False)
 
