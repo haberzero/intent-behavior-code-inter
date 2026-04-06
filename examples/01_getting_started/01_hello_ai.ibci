@@ -5,11 +5,14 @@
 # 1. 行为描述语句 - 用 @~...~ 语法直接调用 AI
 # 2. LLM 函数 - 用 llm 关键字定义 AI 函数
 # 3. 意图注释 - 用 #@ 让 AI 理解代码意图
+#
+# 注意：
+# - 所有相对路径都基于入口文件目录
+# - 无需显式获取脚本目录
 
 import ai
 import file
 import json
-import sys
 
 print("=== IBCI 入门：你好，AI 世界 ===")
 
@@ -19,9 +22,8 @@ print("=== IBCI 入门：你好，AI 世界 ===")
 
 print("\n--- AI 配置 ---")
 
-# 加载 API 配置
-str config_path = (str)sys.script_dir() + "/api_config.json"
-dict config = json.parse(file.read(config_path))
+# 直接使用相对路径（基于入口文件目录）
+dict config = json.parse(file.read("./api_config.json"))
 dict default_model = (dict)config["default_model"]
 
 # 配置 AI 提供者

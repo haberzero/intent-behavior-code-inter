@@ -2,15 +2,8 @@
 # 这个脚本运行在隔离的子项目中
 
 import file
-import sys
 
 print("=== 子项目脚本 ===")
-
-str project_root = sys.project_root()
-str script_dir = sys.script_dir()
-
-print("子项目根目录: " + project_root)
-print("脚本目录: " + script_dir)
 
 print("\n这个脚本运行在独立的沙箱中")
 print("只能访问 sub_project 目录内的文件")
@@ -26,4 +19,3 @@ else:
 
 print("\n验证: 子项目无法访问父目录")
 print("（通过路径可见性验证隔离）")
-print("子项目根目录与父项目不同")

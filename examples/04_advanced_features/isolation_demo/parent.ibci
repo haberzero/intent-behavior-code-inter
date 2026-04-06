@@ -1,9 +1,7 @@
-import sys
-import file
 import host
 
 print("--- [PARENT] Starting ---")
-print("PARENT sys.script_path(): " + (str)sys.script_path())
+print("PARENT: 使用入口文件目录作为基准")
 
 # 简单配置示例
 dict cfg = {
@@ -20,6 +18,7 @@ dict policy = {
     "registry_isolation": true,
     "inherit_variables": false
 }
-host.run_isolated((str)sys.script_dir() + "/sub_project/child.ibci", policy)
+# 使用绝对路径（需要确保路径正确）
+host.run_isolated("examples/04_advanced_features/isolation_demo/sub_project/child.ibci", policy)
 
 print("\n--- [PARENT] Finished ---")
