@@ -59,9 +59,36 @@ import file    # 受限文件系统
 str joke = @~ 讲一个关于程序员的笑话 ~
 ```
 
-行为描述语句是即时触发的。触发行为描述语句时，会根据其所在场景注入不同的提示词。
+行为描述语句是即时触发的。触发行为描述语句时，会根据目标类型注入相应的输出约束。
 
-例如，对于对int类型的赋值，提示词中会注入关于整数的约束。对于dict类型的赋值，提示词中会注入关于字典格式的约束。
+### 3.1.1 输入机制：__to_prompt__
+
+当变量作为参数被送入 LLM 调用过程时，IBC-Inter 通过 `__to_prompt__` 协议将变量转换为提示词的一部分。
+
+```ibci
+str name = "Alice"
+str greeting = @~ 用 $name 打个招呼 ~
+# name 的 __to_prompt__() 会被调用，结果作为提示词的一部分
+```
+
+### 3.1.2 输出约束：__llmoutput_hint__
+
+每个类型可以定义 `__llmoutput_hint__` 方法，用于描述期望的 LLM 输出格式。该约束会被注入到系统提示词中。
+
+```ibci
+int result = (int) @~ 1+1等于几？只答数字 ~
+// int 的 __llmoutput_hint__() 返回: "请只返回一个整数，如: 42"
+```
+
+### 3.1.3 输出解析：__from_prompt__
+
+LLM 返回后，IBC-Inter 通过 `__from_prompt__` 方法将原始文本解析为目标类型。
+
+```ibci
+// __from_prompt__ 返回 (success, value_or_hint)
+// - (True, value): 解析成功
+// - (False, hint): 解析失败，hint 用于提示重试方向
+```
 
 ### 3.2 LLM 函数
 
