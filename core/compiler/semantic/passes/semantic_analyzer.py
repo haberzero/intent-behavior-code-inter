@@ -1084,6 +1084,14 @@ class SemanticAnalyzer:
         func_type = self.visit(node.func)
         arg_types = [self.visit(arg) for arg in node.args]
         
+        # 0. 特殊处理内置类型的构造函数调用
+        # 当 TypeDescriptor 没有 get_call_trait() 但类型名是内置类型时，
+        # 允许构造函数调用并返回对应类型
+        if isinstance(func_type, TypeDescriptor) and not func_type.get_call_trait():
+            type_name = func_type.name
+            if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict'):
+                return func_type
+        
         # 1. 检查是否可调用 (使用 Trait 契约)
         call_trait = func_type.get_call_trait()
         if not call_trait:
