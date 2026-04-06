@@ -342,7 +342,9 @@ class AIPlugin(ILLMProvider):
                     ],
                     max_tokens=decision_max_tokens if is_decision else 4096
                 )
-                print("    -> [System] Called llm once.")
+                
+                # 调试输出，偶尔会使用。注释并保留
+                # print("    -> [System] Called llm once.")
                 
                 if not completion or not hasattr(completion, 'choices') or not completion.choices:
                     raise RuntimeError(f"LLM 返回异常响应: {completion}")
