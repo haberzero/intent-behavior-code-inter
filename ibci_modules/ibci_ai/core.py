@@ -205,6 +205,9 @@ class AIPlugin(ILLMProvider):
     def set_retry(self, count: int) -> None:
         self._config["retry"] = count
 
+    def get_retry(self) -> int:
+        return self._config.get("retry", 3)
+
     def set_timeout(self, seconds: float) -> None:
         self._config["timeout"] = seconds
         self._init_client()
