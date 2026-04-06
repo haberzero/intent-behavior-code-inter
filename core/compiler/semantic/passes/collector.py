@@ -76,7 +76,7 @@ class SymbolCollector:
     def _define(self, sym: Symbol, node: ast.IbASTNode):
         try:
             self.symbol_table.define(sym)
-            # [NEW Phase 5] 记录侧表映射
+            # 记录侧表映射
             if self.analyzer and hasattr(self.analyzer, "node_to_symbol"):
                 self.analyzer.node_to_symbol[node] = sym
             
@@ -97,7 +97,7 @@ class SymbolCollector:
     def visit_IbClassDef(self, node: ast.IbClassDef):
         # 1. 创建类元数据并注册
         cls_meta = self.analyzer.registry.factory.create_class(name=node.name, parent=node.parent)
-        cls_meta.is_user_defined = True # [NEW] 标识为脚本定义
+        cls_meta.is_user_defined = True
         self.analyzer.registry.register(cls_meta)
         
         # 2. 注册类符号
@@ -108,7 +108,6 @@ class SymbolCollector:
         old_table = self.symbol_table
         self.symbol_table = SymbolTable(parent=old_table, name=node.name)
         
-        # [NEW] 设置当前类上下文，以便 _define 能正确同步成员
         old_class = self.analyzer.current_class
         self.analyzer.current_class = cls_meta
         
@@ -124,7 +123,7 @@ class SymbolCollector:
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         # 1. 创建函数元数据 (暂定为 Any -> Any)
         func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
-        func_meta.is_user_defined = True # [NEW] 标识为脚本定义
+        func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
         
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, descriptor=func_meta)
@@ -134,7 +133,7 @@ class SymbolCollector:
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         # 1. 创建函数元数据
         func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
-        func_meta.is_user_defined = True # [NEW] 标识为脚本定义
+        func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
         
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, def_node=node, descriptor=func_meta)
@@ -199,12 +198,12 @@ class LocalSymbolCollector:
             # [LIFECYCLE] 符号生命周期管理
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
-            # [IES 2.1 Axiom] 如果现有符号是 Any/var 占位符，允许覆盖，消除名称硬编码
+            # 如果现有符号是 any/auto 占位符，允许覆盖，消除名称硬编码
             if existing and (not existing.descriptor or existing.descriptor.is_dynamic()):
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
-            # [NEW Phase 5] 记录侧表映射
+            # 记录侧表映射
             if hasattr(self.analyzer, "node_to_symbol"):
                 self.analyzer.node_to_symbol[node] = sym
         except ValueError as e:
@@ -231,7 +230,7 @@ class LocalSymbolCollector:
             if is_explicit:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
-                # [IES 2.1 Axiom] 使用 is_dynamic 判定，消除硬编码
+                # 使用 is_dynamic 判定，消除硬编码
                 if existing and existing.descriptor and not existing.descriptor.is_dynamic():
                     continue
 

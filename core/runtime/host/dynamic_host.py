@@ -7,7 +7,7 @@ from core.runtime.host.isolation_policy import IsolationPolicy
 @dataclass
 class IsolatedRunResult:
     """
-    [IES 2.1] 隔离子环境运行结果。
+     隔离子环境运行结果。
     替代简单的 bool 返回值，提供完整的执行状态信息。
     """
     success: bool
@@ -18,7 +18,7 @@ class IsolatedRunResult:
 
 
 def _dynamic_host_vtable() -> Dict[str, Any]:
-    """[IES 2.2] DynamicHost 虚表"""
+    """ DynamicHost 虚表"""
     impl = DynamicHost()
     return {
         "save_state": impl.save_state,
@@ -31,7 +31,7 @@ def _dynamic_host_vtable() -> Dict[str, Any]:
 
 class DynamicHost(IbPlugin):
     """
-    [IES 2.1] 动态宿主插件。
+     动态宿主插件。
     实现运行时持久化、隔离执行、事务快照和元编程能力。
     """
     def __init__(self):
@@ -51,7 +51,7 @@ class DynamicHost(IbPlugin):
 
     def _validate_return_value(self, value: Any) -> Any:
         """
-        [IES 2.1 Security] 验证返回值是否允许从隔离环境返回。
+        验证返回值是否允许从隔离环境返回。
         只允许基本内置类型 (int/str/bool/float/none) 返回。
         """
         if value is None:
@@ -132,7 +132,7 @@ class DynamicHost(IbPlugin):
         return ""
 
     def generate_and_run(self, code: str, policy: Dict[str, Any]) -> 'IsolatedRunResult':
-        """[IES 2.1] 动态生成 IBCI 代码并执行"""
+        """ 动态生成 IBCI 代码并执行"""
         import tempfile
         import os
         sc = self._capabilities.service_context

@@ -29,11 +29,11 @@ class IbParseRule:
         self.precedence = precedence
 
 
-# --- Syntax Constants (IES 2.1) ---
+# --- Syntax Constants ---
 
 # Identifier constants for keyword tokens
 ID_SELF: str = "self"
-ID_VAR: str = "var"
+ID_AUTO: str = "auto"
 ID_CALLABLE: str = "callable"
 
 # Operator mapping: TokenType -> operator string

@@ -56,7 +56,7 @@ class ModuleManagerImpl(ModuleManager):
         # 1. 优先从 InterOp 注册包中查找 (Python 扩展/标准库)
         package = self.interop.get_package(module_name)
         if package:
-            # [IES 2.0 FIX] 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
+            # 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
             if not hasattr(package, 'receive'): 
                 # 尝试获取已绑定的 vtable
                 vtable = getattr(package, '_ibci_vtable', None)
@@ -78,7 +78,7 @@ class ModuleManagerImpl(ModuleManager):
                 # 创建该模块的 Global Scope
                 module_scope = self.object_factory.create_scope(parent=None)
                 
-                # [FIX] 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
+                # 预先创建并缓存模块实例，以支持循环引用 (a -> b -> a)
                 module_instance = self.object_factory.create_module(module_name, module_scope)
                 self._loaded_modules[module_name] = module_instance
                 

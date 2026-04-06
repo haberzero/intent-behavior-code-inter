@@ -3,13 +3,13 @@ from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
 from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList, IIbBehavior
 from core.runtime.exceptions import (
-    ReturnException, BreakException, ContinueException, ThrownException, RetryException
+    ReturnException, BreakException, ContinueException, ThrownException
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.base.enums import RegistrationState
 
-from core.kernel.issue import LLMUncertaintyError, InterpreterError
+from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from ..constants import OP_MAPPING, AST_OP_MAP
 
@@ -26,6 +26,73 @@ class StmtHandler(BaseHandler):
     def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         return self.registry.get_none()
 
+    def visit_IbLLMExceptionalStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        执行 llmexcept 语句 (影子执行驱动模式)。
+        """
+        target_uid = node_data.get("target")
+        body_uids = node_data.get("body", [])
+
+        if not target_uid:
+            return self.registry.get_none()
+
+        # 从 ai 组件获取重试次数配置
+        max_retry = 3
+        if self.service_context.capability_registry:
+            llm_provider = self.service_context.capability_registry.get("llm_provider")
+            if llm_provider and hasattr(llm_provider, "get_retry"):
+                max_retry = llm_provider.get_retry()
+
+        # 创建帧并保存上下文切片
+        frame = self.runtime_context.save_llm_except_state(
+            target_uid=target_uid,
+            node_type="IbLLMExceptionalStmt",
+            max_retry=max_retry
+        )
+
+        try:
+            while frame.should_continue_retrying():
+                # 显式恢复上下文快照 (如果是 retry 跳转回来的)
+                frame.restore_snapshot(self.runtime_context)
+
+                # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
+                self.execution_context.visit(target_uid, bypass_protection=True)
+
+                # 检查执行后的 LLM 结果确定性
+                result = self.runtime_context.get_last_llm_result()
+
+                # 如果没有 LLM 调用，或者 LLM 调用是确定的（成功匹配或明确失败）
+                if result is None or not result.is_uncertain:
+                    break
+
+                # 运行到这里说明 LLM 返回了 UNCERTAIN 结果
+                frame.last_result = result
+                frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
+
+                # [IMPORTANT] 在执行 llmexcept 块之前，临时清除不确定性标记。
+                # 否则，块内的任何 IbAssign 都会因为看到 last_llm_result.is_uncertain 而跳过赋值。
+                self.runtime_context.set_last_llm_result(None)
+
+                # 执行 llmexcept 的 body 块 (处理逻辑)
+                try:
+                    for stmt_uid in body_uids:
+                        self.visit(stmt_uid)
+                finally:
+                    # 恢复最后的结果信息，以便块内的 idbg.last_result() 能拿到数据
+                    # 注意：如果 body 块内又产生了新的 LLM 调用，这里不应该覆盖它
+                    if self.runtime_context.get_last_llm_result() is None:
+                        self.runtime_context.set_last_llm_result(result)
+
+                # 检查重试计数
+                if not frame.increment_retry():
+                    break
+
+        finally:
+            # 弹出当前帧
+            self.runtime_context.pop_llm_except_frame()
+
+        return self.registry.get_none()
+
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """表达式语句"""
         res = self.visit(node_data.get("value"))
@@ -33,6 +100,83 @@ class StmtHandler(BaseHandler):
         if isinstance(res, IIbBehavior):
             return self._execute_behavior(res)
         return res
+
+    def visit_IbIntentAnnotation(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        处理意图注释节点 - @ 和 @! 专用
+
+        IbIntentAnnotation 代表单行意图注释，必须后续紧跟 LLM 调用。
+
+        语义区别：
+        - @ : 将意图压入运行时栈（持续有效）
+        - @! : 设置临时的排他意图（只对当前这一次 LLM 调用有效）
+
+        @! 是临时的单次作用的 IntentStack 实例，LLM 调用完成后自动清除。
+        全局意图栈保持不变。
+        """
+        intent_info_uid = node_data.get("intent")
+        if not intent_info_uid:
+            return self.registry.get_none()
+
+        intent_data = self.get_node_data(intent_info_uid)
+        if not intent_data:
+            return self.registry.get_none()
+
+        intent = self.execution_context.factory.create_intent_from_node(
+            intent_info_uid,
+            intent_data,
+            role=IntentRole.SMEAR
+        )
+
+        # @! 排他意图：设置为临时的单次意图
+        # 这是临时的 IntentStack 实例，只对当前这一次 LLM 调用有效
+        if intent.is_override:
+            self.runtime_context.set_pending_override_intent(intent)
+        else:
+            # @ 普通意图：压入运行时栈
+            self.runtime_context.push_intent(intent)
+
+        return self.registry.get_none()
+
+    def visit_IbIntentStackOperation(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        处理意图栈操作节点 - @+ 和 @- 专用
+
+        IbIntentStackOperation 代表意图栈操作，允许独立存在。
+        - @+: 将意图压入栈
+        - @-: 从栈中物理移除匹配的意图（按标签或内容）
+        - @- (无参数): 移除栈顶意图
+
+        此方法通过 IntentStack 内置类进行操作（公理体系融入）。
+        """
+        intent_info_uid = node_data.get("intent")
+        if not intent_info_uid:
+            return self.registry.get_none()
+
+        intent_data = self.get_node_data(intent_info_uid)
+        if not intent_data:
+            return self.registry.get_none()
+
+        intent = self.execution_context.factory.create_intent_from_node(
+            intent_info_uid,
+            intent_data,
+            role=IntentRole.STACK
+        )
+
+        # @- 无参数：移除栈顶意图
+        if intent.is_pop_top:
+            self.runtime_context.pop_intent()
+        # @- 按标签或内容移除
+        elif intent.is_remove:
+            if intent.tag:
+                self.runtime_context.remove_intent(tag=intent.tag)
+            elif intent.content:
+                self.runtime_context.remove_intent(content=intent.content)
+        else:
+            # @+ 压入栈
+            self.runtime_context.push_intent(intent)
+
+        return self.registry.get_none()
 
     def _assign_to_target(self, target_uid: str, value: IbObject, define_only: bool = False):
         """通用赋值逻辑，支持 Name, TypeAnnotatedExpr, Attribute, Subscript, Tuple Unpacking"""
@@ -49,6 +193,7 @@ class StmtHandler(BaseHandler):
                     self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
+                    # print(f"[DEBUG] Defining variable '{name}' with UID '{sym_uid}'")
                     self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
             elif not self.execution_context.strict_mode:
                 # 回退到名称查找
@@ -99,6 +244,11 @@ class StmtHandler(BaseHandler):
         """实现赋值语句"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
         value = self.visit(node_data.get("value"))
+
+        # 检查是否由于 LLM 不确定性导致赋值未完成
+        last_result = self.runtime_context.get_last_llm_result()
+        if last_result and last_result.is_uncertain:
+            return self.registry.get_none()
         
         for target_uid in node_data.get("targets", []):
             self._assign_to_target(target_uid, value)
@@ -113,7 +263,7 @@ class StmtHandler(BaseHandler):
         value = self.visit(node_data.get("value"))
         op_symbol = node_data.get("op")
         
-        # [IES 2.0] 使用全局归一化映射，支持完整运算符集（包含 % // 等）
+        # 使用全局归一化映射，支持完整运算符集（包含 % // 等）
         op = AST_OP_MAP.get(op_symbol, op_symbol)
         method = OP_MAPPING.get(op)
         
@@ -142,6 +292,13 @@ class StmtHandler(BaseHandler):
     def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """条件分支语句"""
         condition = self.visit(node_data.get("test"))
+
+        # 核心：检查测试表达式是否产生了不确定的 LLM 结果
+        # 如果不确定，说明 AI 决策模糊，我们需要立即终止 IbIf 的执行，让控制流回退到保护者
+        last_result = self.runtime_context.get_last_llm_result()
+        if last_result and last_result.is_uncertain:
+            return self.registry.get_none()
+
         if self.execution_context.is_truthy(condition):
             for stmt_uid in node_data.get("body", []):
                 self.visit(stmt_uid)
@@ -157,13 +314,8 @@ class StmtHandler(BaseHandler):
             if not self.execution_context.is_truthy(condition):
                 break
             
-            try:
-                for stmt_uid in node_data.get("body", []):
-                    self.visit(stmt_uid)
-            except BreakException:
-                break
-            except ContinueException:
-                continue
+            for stmt_uid in node_data.get("body", []):
+                self.visit(stmt_uid)
         return self.registry.get_none()
     
     def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -172,16 +324,11 @@ class StmtHandler(BaseHandler):
         iter_uid = node_data.get("iter")
         body = node_data.get("body", [])
         
-        # [IES 2.0] 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
+        # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while self.execution_context.is_truthy(self.visit(iter_uid)):
-                try:
-                    for stmt_uid in body:
-                        self.visit(stmt_uid)
-                except BreakException: 
-                    return self.registry.get_none()
-                except ContinueException: 
-                    continue
+                for stmt_uid in body:
+                    self.visit(stmt_uid)
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
@@ -191,25 +338,16 @@ class StmtHandler(BaseHandler):
             raise self.report_error(f"Object is not iterable", node_uid)
         
         elements = elements_obj.elements
-        total = len(elements)
         for i, item in enumerate(elements):
-            self.runtime_context.push_loop_context(i, total)
+            self.runtime_context.push_loop_context(i, len(elements))
             
-            # [IES 2.2 Fix] 使用统一的赋值逻辑支持复杂循环目标
             if target_uid:
                 self._assign_to_target(target_uid, item, define_only=True)
             
-            try:
-                for stmt_uid in body:
-                    self.visit(stmt_uid)
-            except BreakException: 
-                self.runtime_context.pop_loop_context()
-                return self.registry.get_none()
-            except ContinueException: 
-                self.runtime_context.pop_loop_context()
-                continue
-            finally:
-                self.runtime_context.pop_loop_context()
+            for stmt_uid in body:
+                self.visit(stmt_uid)
+            
+            self.runtime_context.pop_loop_context()
         return self.registry.get_none()
 
     def visit_IbTry(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -217,10 +355,10 @@ class StmtHandler(BaseHandler):
         try:
             for stmt_uid in node_data.get("body", []):
                 self.visit(stmt_uid)
-        except (ReturnException, BreakException, ContinueException, RetryException):
+        except (ReturnException, BreakException, ContinueException):
             raise
         except (ThrownException, Exception) as e:
-            # [IES 2.1 Refactor] 统一异常对象化
+            # 统一异常对象化
             if isinstance(e, ThrownException):
                 error_obj = e.value
             else:
@@ -229,7 +367,7 @@ class StmtHandler(BaseHandler):
                 if not exc_class:
                     raise self.report_error("Critical Error: 'Exception' builtin class not found in registry. Bootstrap failed.", node_uid)
                 
-                # [FIX] 传入空参数列表给 instantiate
+                # 传入空参数列表给 instantiate
                 error_obj = exc_class.instantiate([])
                 error_obj.fields["message"] = self.registry.box(str(e))
             
@@ -253,7 +391,7 @@ class StmtHandler(BaseHandler):
                 # 2. 绑定异常变量
                 name = handler_data.get("name")
                 if name:
-                    # [IES 2.2 Fix] 使用统一的赋值逻辑支持异常变量绑定
+                    # 使用统一的赋值逻辑支持异常变量绑定
                     # 简单起见，既然目前只有 Name，我们可以直接保留
                     sym_uid = self.get_side_table("node_to_symbol", handler_uid)
                     self.runtime_context.define_variable(name, error_obj, uid=sym_uid)
@@ -278,15 +416,34 @@ class StmtHandler(BaseHandler):
         return self.registry.get_none()
 
     def visit_IbRetry(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        处理 retry 语句。
+
+        语义：
+        1. 获取可选的 retry hint
+        2. 从当前 llmexcept 帧恢复上下文切片
+        3. 设置 should_retry = True，让 llmexcept 重新执行 target
+
+        注意：
+        - 不抛出任何异常
+        - 不使用 RetryException
+        """
         hint_uid = node_data.get("hint")
         hint_val = None
         if hint_uid:
             hint_obj = self.visit(hint_uid)
             hint_val = hint_obj.to_native() if hasattr(hint_obj, 'to_native') else str(hint_obj)
-        
-        # 将 hint 设置到运行时上下文
+
+        # 设置 retry hint
         self.runtime_context.retry_hint = hint_val
-        raise RetryException()
+
+        # 从当前帧恢复上下文并设置重试标志
+        frame = self.runtime_context.get_current_llm_except_frame()
+        if frame:
+            frame.restore_snapshot(self.runtime_context)
+            frame.should_retry = True  # 设置标志，让外层循环继续重试
+
+        return self.registry.get_none()
 
     def visit_IbFunctionDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """普通函数定义"""
@@ -308,20 +465,20 @@ class StmtHandler(BaseHandler):
 
     def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """验证类契约并将其绑定到当前作用域"""
-        # [IES 2.0] IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
+        # 类必须在 STAGE 5 预水合完成。
         # 此处仅负责契约验证与作用域定义。
         name = node_data.get("name")
         
-        # [IES 2.0] 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
+        # 生产环境/封印状态：不再允许创建和注册新类，仅执行契约校验
         existing_class = self.registry.get_class(name)
         if not existing_class:
-            raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. [IES 2.0 Contract Violation]", node_uid)
+            raise self.report_error(f"Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5. ", node_uid)
         
         # 绑定到当前作用域 (作为常量类)
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         self.runtime_context.define_variable(name, existing_class, uid=sym_uid)
         
-        # [IES 2.1 Deep Audit] 深度契约校验：验证 AST 定义的方法是否全部在运行时虚表中就绪
+        # 深度契约校验：验证 AST 定义的方法是否全部在运行时虚表中就绪
         body = node_data.get("body", [])
         for stmt_uid in body:
             stmt_data = self.get_node_data(stmt_uid)
@@ -341,7 +498,7 @@ class StmtHandler(BaseHandler):
                     # 简单校验参数数量 (注意：self 在运行时会被处理，此处校验声明的一致性)
                     expected_count = len(method_obj.descriptor.params) if hasattr(method_obj.descriptor, 'params') else -1
                     if expected_count != -1 and len(params) != expected_count:
-                         # [IES 2.1 Final Audit] 强制执行严格契约校验
+                         # 强制执行严格契约校验
                          raise self.report_error(f"Contract Mismatch: Method '{method_name}' of class '{name}' parameter count mismatch. AST: {len(params)}, Descriptor: {expected_count}", stmt_uid)
 
         # 绑定到当前作用域 (作为常量类)
@@ -362,27 +519,3 @@ class StmtHandler(BaseHandler):
         exc_uid = node_data.get("exc")
         exc_val = self.visit(exc_uid) if exc_uid else self.registry.get_none()
         raise ThrownException(exc_val)
-
-    def visit_IbIntentStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """处理意图块 (IES 2.0 强契约)"""
-        intent_uid = node_data.get("intent")
-        intent_data = self.get_node_data(intent_uid)
-        
-        # [Active Defense] 仅接受结构化意图对象，不再支持原始字符串
-        if not intent_data:
-            raise self.report_error("Invalid intent metadata: Intent must be a structured IbIntentInfo node.")
-            
-        # [IES 2.1 Factory] 统一使用工厂方法构造，消除局部 import 和具体类依赖
-        intent = self.execution_context.factory.create_intent_from_node(
-            intent_uid, 
-            intent_data, 
-            role=IntentRole.BLOCK
-        )
-            
-        self.runtime_context.push_intent(intent)
-        try:
-            for stmt_uid in node_data.get("body", []):
-                self.visit(stmt_uid)
-        finally:
-            self.runtime_context.pop_intent()
-        return self.registry.get_none()

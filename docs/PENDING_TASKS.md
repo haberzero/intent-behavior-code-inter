@@ -2,7 +2,7 @@
 
 > 本文档记录 IBC-Inter 项目中被搁置或标记为未来实现的任务。
 > 每个任务都标注了搁置原因和解决方案方向。
-> **[IES 2.2 更新]**: 采用加法标注模式。核心未完成任务置顶，历史任务标注状态。
+> 采用加法标注模式。核心未完成任务置顶，历史任务标注状态。
 
 ---
 
@@ -25,7 +25,7 @@
 
 ---
 
-#### 2.5 IBCI 核心路径解析能力增强 [COMPLETED - IES 2.2]
+#### 2.5 IBCI 核心路径解析能力增强 [COMPLETED]
 **状态说明**: 此任务已通过 `ibci_sys` 模块及其 `sys.script_dir()` API 完整实现。
 - **现状**: 废弃了 `__dir__` 裸调用，统一采用位置无关代码 (PIC) 标准。
 
@@ -39,12 +39,12 @@
 **建议方案**：
 1.  **内置变量**：在 `Interpreter` 中注入 `__file__` 或 `sys.script_dir` 内置变量。
 2.  **插件增强**：修改 `ibci_file` 插件，允许其接受一个基准目录（Base Directory）参数，或者自动根据当前执行节点的模块路径进行解析。
-3.  **规范化临时文件**：在 IES 2.2 规范中明确建议脚本在完成验证后使用 `file.remove()` 自行清理临时文件。
+3.  **规范化临时文件**：在 规范中明确建议脚本在完成验证后使用 `file.remove()` 自行清理临时文件。
 
 ## 一、动态宿主（DynamicHost）相关任务
 
-### 1.1 Intent Stack 深拷贝实现 [RESOLVED - IES 2.2]
-**状态说明**: 此问题已在 IES 2.2 中通过 **拓扑序列化 (Topology Serialization)** 彻底解决。
+### 1.1 Intent Stack 深拷贝实现 [RESOLVED]
+**状态说明**: 此问题已在 中通过 **拓扑序列化 (Topology Serialization)** 彻底解决。
 - **现状**: 引入了 `IntentNode` 链表池化技术，反序列化时通过 `intent_cache` 恢复物理引用关系，实现了内存级的结构共享，不再需要传统的递归深拷贝。
 
 **任务**：实现 Intent Stack 的深拷贝机制，解决引用赋值问题
@@ -198,7 +198,7 @@ class TypeAxiom:
 3. **Semantic 层**：支持意图类型的类型检查与推导。
 4. **Runtime 层**：统一 `IbIntent` 对象的协议，使其能直接参与运算。
 
-**风险评估**：中等偏大。涉及编译器前端到后端的链路打通，建议作为 IES 2.3 的核心目标。
+**风险评估**：中等偏大。涉及编译器前端到后端的链路打通
 
 ---
 
@@ -217,19 +217,16 @@ class TypeAxiom:
 
 ---
 
-#### 2.3 动态类型与 var 类型推导增强
+#### 2.3 动态类型与 auto 类型推导增强
 
-**任务**：改进 `var` 关键字的类型推导机制，支持“渐进式强类型”。
+**任务**：改进 `auto` 关键字的类型推导机制，支持“渐进式强类型”。
 
-**问题描述**：
-- 目前 `var` 仅在首次赋值时通过侧表（Side Table）绑定类型描述符。
-- 一旦绑定，后续赋值如果类型不一致会触发 `InterpreterError`。
-- **限制**：无法支持 LLM 输出类型在运行时发生语义漂移的场景。
+- 目前 `auto` 仅在首次赋值时通过侧表（Side Table）绑定类型描述符。
+- 目标是实现更智能的流敏感分析（Flow-sensitive Analysis）。
 
-**解决方案方向**：
-1. **类型松绑**：允许 `var` 变量在特定条件下重新推导类型。
-2. **Union 类型支持**：在编译期为 `var` 生成 `Union` 描述符。
-3. **运行时动态检查**：将类型检查压力部分从编译期移向运行期（针对 `var`）。
+1. **类型松绑**：允许 `auto` 变量在特定条件下重新推导类型。
+2. **Union 类型支持**：在编译期为 `auto` 生成 `Union` 描述符。
+3. **运行时动态检查**：将类型检查压力部分从编译期移向运行期（针对 `auto`）。
 
 ---
 
@@ -298,9 +295,9 @@ class ParserCapability(Protocol):
 
 ## 三、类型系统相关任务
 
-### 3.1 禁止 var 向明确类型隐式赋值
+### 3.1 禁止 auto 向明确类型隐式赋值
 
-**任务**：实现 var 类型约束机制，禁止 var 向明确类型隐式赋值
+**任务**：实现 auto 类型约束机制，禁止 auto 向明确类型隐式赋值
 
 **搁置原因**：
 - 最低优先级
@@ -354,7 +351,7 @@ class ParserCapability(Protocol):
 
 > 以下问题在本次审计中被发现，之前未被记录，必须在MVP之前确认或修复。
 
-#### 5.0.1 llmexcept 机制设计缺陷 [FIXED - IES 2.2]
+#### 5.0.1 llmexcept 机制设计缺陷 [FIXED]
 **状态说明**: 已完成。`visit_IbIf/While/For` 均已使用 `_with_unified_fallback` 包装。
 
 **问题**：`visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装，异常捕获路径断裂
@@ -410,7 +407,7 @@ class ParserCapability(Protocol):
 
 ---
 
-#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1
+#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1 ✅ 已修复
 
 **问题**：`@!` 修饰的意图内容不会被注入到 prompt
 
@@ -418,6 +415,11 @@ class ParserCapability(Protocol):
 - `core/kernel/intent_resolver.py:46-48`
 
 **解决方案方向**：修复 intent_resolver 确保 `@!` 内容被正确追加
+
+**修复内容**：
+- 添加 `override_content` 变量跟踪排他意图内容
+- 在遇到 `@!` 时清空 `resolved_block_intents` 并只保留 `@!` 的内容
+- 修复后 `@!` 行为：屏蔽意图栈，只应用 `@!` 本身的内容（一次性调用，不影响栈状态）
 
 **与MVP关系**：🟡 **属于语义正确性问题**
 
@@ -515,7 +517,7 @@ def __deepcopy__(self, memo):
 
 ---
 
-## 九、IES 2.2 插件系统扩展
+## 九、插件系统扩展
 
 ### 9.1 零侵入插件注册原生 IBC-Inter 类型
 
@@ -538,7 +540,7 @@ if hasattr(mod, '__ibcext_vtable__'):
 ```
 
 **意义**：
-- 遵循 IES 2.2 协议（`__ibcext_vtable__()` 是协议的一部分）
+- 遵循 协议（`__ibcext_vtable__()` 是协议的一部分）
 - 使插件方法在语义分析阶段可见（解决 `Type 'ai' has no member 'set_config'` 问题）
 - 为未来"插件原生类参与语义检查"奠定基础
 
@@ -574,7 +576,7 @@ if hasattr(mod, '__ibcext_vtable__'):
   def __ibcext_metadata__() -> Dict[str, Any]:
       return {
           "name": "ai",
-          "version": "2.2.0",
+          "version": "0.0.1",
           "kind": "method_module",  # 标记为方法模块，不是类型模块
           ...
       }

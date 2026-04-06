@@ -22,12 +22,12 @@ class FlatSerializer(BaseFlatSerializer):
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
         """序列化整个蓝图产物"""
         modules_data = {}
-        # [IES 2.1 Deterministic] 排序模块名以确保输出稳定
+        # 排序模块名以确保输出稳定
         for name in sorted(artifact.modules.keys()):
             res = artifact.modules[name]
             modules_data[name] = self.serialize_result(res)
             
-        # [IES 2.1 Fix] 确保全局符号也被正确池化，而非裸字典导出
+        # 确保全局符号也被正确池化，而非裸字典导出
         serialized_globals = {}
         if artifact.global_symbols:
             for name, sym in artifact.global_symbols.items():
@@ -46,7 +46,7 @@ class FlatSerializer(BaseFlatSerializer):
                 "symbols": self.symbol_pool,
                 "scopes": self.scope_pool,
                 "types": self.type_pool,
-                "assets": self.external_assets # [IES 2.2]
+                "assets": self.external_assets
             }
         }
 
@@ -79,11 +79,6 @@ class FlatSerializer(BaseFlatSerializer):
             node_uid = self._collect_node(node)
             remaped_node_is_deferred[node_uid] = val
 
-        remaped_node_intents = {}
-        for node, intents in result.node_intents.items():
-            node_uid = self._collect_node(node)
-            remaped_node_intents[node_uid] = [self._collect_node(i) for i in intents]
-
         remaped_node_to_loc = {}
         for node, loc in result.node_to_loc.items():
             node_uid = self._collect_node(node)
@@ -94,6 +89,12 @@ class FlatSerializer(BaseFlatSerializer):
             node_uid = self._collect_node(node)
             remaped_decision_maps[node_uid] = d_map
 
+        remaped_node_protection = {}
+        for node, handler in result.node_protection.items():
+            node_uid = self._collect_node(node)
+            handler_uid = self._collect_node(handler)
+            remaped_node_protection[node_uid] = handler_uid
+
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
@@ -102,16 +103,16 @@ class FlatSerializer(BaseFlatSerializer):
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,
                 "node_is_deferred": remaped_node_is_deferred,
-                "node_intents": remaped_node_intents,
                 "node_to_loc": remaped_node_to_loc,
-                "decision_maps": remaped_decision_maps
+                "decision_maps": remaped_decision_maps,
+                "node_protection": remaped_node_protection
             },
             "pools": {
                 "nodes": self.node_pool,
                 "symbols": self.symbol_pool,
                 "scopes": self.scope_pool,
                 "types": self.type_pool,
-                "assets": self.external_assets # [IES 2.2]
+                "assets": self.external_assets
             }
         }
 
@@ -123,7 +124,7 @@ class FlatSerializer(BaseFlatSerializer):
         if node_id in self.type_map:
             return self.type_map[node_id]
             
-        # [IES 2.1 Deterministic]
+
         # 先收集字段数据，再根据内容生成确定性哈希作为 UID。
         node_data = {"_type": node.__class__.__name__}
         
@@ -143,7 +144,7 @@ class FlatSerializer(BaseFlatSerializer):
         if sym_id in self.type_map:
             return self.type_map[sym_id]
             
-        # [IES 2.1 Deterministic] 使用符号自身的稳定 UID (name@depth)
+        # 使用符号自身的稳定 UID (name@depth)
         uid = getattr(sym, 'uid', None)
         if not uid:
             # 对于没有 UID 的对象 (如直接存储的 TypeDescriptor)，生成基于属性的 UID
@@ -187,7 +188,7 @@ class FlatSerializer(BaseFlatSerializer):
         if t_id in self.type_map:
             return self.type_map[t_id]
             
-        # [IES 2.1 Deterministic] 基于类型全名生成稳定 UID
+        # 基于类型全名生成稳定 UID
         uid = f"type_{t.module_path or 'root'}.{t.name}"
         self.type_map[t_id] = uid
         
@@ -197,10 +198,10 @@ class FlatSerializer(BaseFlatSerializer):
             "name": t.name,
             "module_path": t.module_path,
             "is_nullable": t.is_nullable,
-            "is_user_defined": t.is_user_defined, # [NEW]
+            "is_user_defined": t.is_user_defined,
         }
-        
-        # [IES 2.1 Refactor] 多态收集类型引用，消除 isinstance 硬编码检查
+
+        # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()
         for key, val in refs.items():
             if val is None: continue
@@ -209,13 +210,13 @@ class FlatSerializer(BaseFlatSerializer):
             else:
                 type_data[f"{key}_uid"] = self._collect_type(val)
         
-        # [IES 2.1 Refactor] 使用 is_class() 代替 isinstance 检查
+        # 使用 is_class() 代替 isinstance 检查
         if t.is_class():
             # 这里的字段是字符串，直接存储
             type_data["parent_name"] = getattr(t, "parent_name", None)
             type_data["parent_module"] = getattr(t, "parent_module", None)
             
-        # [NEW] 收集成员表 (实现元数据与符号系统的闭环)
+        # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
         if t.members:
             type_data["members_uids"] = {
@@ -230,7 +231,7 @@ class FlatSerializer(BaseFlatSerializer):
         if scope_id in self.type_map:
             return self.type_map[scope_id]
             
-        # [IES 2.1 Deterministic] 使用作用域自身的路径 UID
+        # 使用作用域自身的路径 UID
         uid = scope.uid
         self.type_map[scope_id] = uid
         

@@ -61,16 +61,7 @@ class IbASTNode:
 @dataclass(kw_only=True, eq=False)
 class IbStmt(IbASTNode):
     """语句节点基类"""
-    # [IES 2.1] 统一容错机制：所有语句均可附加 LLM 异常处理块
-    llm_fallback: List['IbStmt'] = field(default_factory=list)
-
-    @property
-    def supports_llm_fallback(self) -> bool:
-        """
-        [IES 2.1] 指示该语句是否支持附加 llm except 容错块。
-        默认支持，极简控制流语句（如 pass/break）需显式禁用。
-        """
-        return True
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbExpr(IbASTNode):
@@ -82,11 +73,12 @@ class IbExpr(IbASTNode):
 @dataclass(kw_only=True, eq=False)
 class IbIntentInfo(IbASTNode):
     """意图元数据信息"""
-    mode: IntentMode # [IES 2.1] 切换为枚举
+    mode: IntentMode # 切换为枚举
     tag: Optional[str] = None # Optional tag for precise removal/masking
     content: str # Raw content or constant string
     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
     expr: Optional['IbExpr'] = None # Dynamic expression for 'intent expr:'
+    pop_top: bool = False # 特殊标记：@- 无参数时为 True，表示移除栈顶意图
 
     @property
     def is_override(self) -> bool:
@@ -96,11 +88,40 @@ class IbIntentInfo(IbASTNode):
     def is_remove(self) -> bool:
         return self.mode == IntentMode.REMOVE
 
+    @property
+    def is_pop_top(self) -> bool:
+        """判断是否为无参数的 @-（移除栈顶意图）"""
+        return self.mode == IntentMode.REMOVE and self.pop_top
+
     def resolve_content(self, context: Any, evaluator: Any = None) -> str:
         """
         编译器阶段的意图解析：尽可能返回静态内容。
         """
         return str(self.content).strip()
+
+@dataclass(kw_only=True, eq=False)
+class IbIntentAnnotation(IbStmt):
+    """
+    意图注释节点 - @ 和 @! 专用
+    替代涂抹式关联，实现意图注释的 AST 级别独立表示。
+    
+    设计说明：
+    - @ (APPEND): 单行意图，必须后续紧跟 LLM 调用
+    - @! (OVERRIDE): 排他意图，必须后续紧跟 LLM 调用
+    """
+    intent: IbIntentInfo
+
+@dataclass(kw_only=True, eq=False)
+class IbIntentStackOperation(IbStmt):
+    """
+    意图栈操作节点 - @+ 和 @- 专用
+    允许独立存在，作为全局意图栈操作。
+    
+    设计说明：
+    - @+ (APPEND): 叠加意图到栈，允许独立存在
+    - @- (REMOVE): 从栈中移除意图，允许独立存在
+    """
+    intent: IbIntentInfo
 
 # --- Module ---
 
@@ -149,6 +170,7 @@ class IbLLMFunctionDef(IbStmt):
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
     sys_prompt: Optional[List[Union[str, IbExpr]]]
     user_prompt: Optional[List[Union[str, IbExpr]]]
+    retry_hint: Optional[List[Union[str, IbExpr]]] = None
     returns: Optional[IbExpr] = None
     
     @property
@@ -162,9 +184,6 @@ class IbGlobalStmt(IbStmt):
 @dataclass(kw_only=True, eq=False)
 class IbReturn(IbStmt):
     value: Optional[IbExpr] = None
-
-    @property
-    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbAssign(IbStmt):
@@ -214,15 +233,9 @@ class IbRaise(IbStmt):
     exc: Optional[IbExpr]
     cause: Optional[IbExpr] = None
 
-    @property
-    def supports_llm_fallback(self) -> bool: return False
-
 @dataclass(kw_only=True, eq=False)
 class IbImport(IbStmt):
     names: List['IbAlias']
-
-    @property
-    def supports_llm_fallback(self) -> bool: return False
 
 @dataclass(kw_only=True, eq=False)
 class IbImportFrom(IbStmt):
@@ -230,36 +243,43 @@ class IbImportFrom(IbStmt):
     names: List['IbAlias']
     level: int = 0
 
-    @property
-    def supports_llm_fallback(self) -> bool: return False
-
 @dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
 
 @dataclass(kw_only=True, eq=False)
 class IbPass(IbStmt):
-    @property
-    def supports_llm_fallback(self) -> bool: return False
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbBreak(IbStmt):
-    @property
-    def supports_llm_fallback(self) -> bool: return False
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbContinue(IbStmt):
-    @property
-    def supports_llm_fallback(self) -> bool: return False
+    pass
 
 @dataclass(kw_only=True, eq=False)
 class IbRetry(IbStmt):
-    hint: Optional[IbExpr] = None  # retry "hint"
+    hint: Optional[IbExpr] = None
 
-    @property
-    def supports_llm_fallback(self) -> bool: return False
-
-# IbLLMExceptionalStmt removed
+@dataclass(kw_only=True, eq=False)
+class IbLLMExceptionalStmt(IbStmt):
+    """
+    llmexcept 语句结构。
+    包含触发语句和对应的异常处理块。
+    
+    语法：
+    statement
+    llmexcept:
+        statements...
+    
+    或者：
+    statement
+    llmexcept retry "hint"
+    """
+    target: IbStmt
+    body: List[IbStmt] = field(default_factory=list)
 
 # --- Expressions ---
 
@@ -303,12 +323,6 @@ class IbCompare(IbExpr):
     comparators: List[IbExpr]
 
 @dataclass(kw_only=True, eq=False)
-class IbIntentStmt(IbStmt):
-    intent: IbIntentInfo
-    body: List[IbStmt]
-    is_exclusive: bool = False # intent ! { ... }
-
-@dataclass(kw_only=True, eq=False)
 class IbCall(IbExpr):
     func: IbExpr
     args: List[IbExpr]
@@ -329,6 +343,12 @@ class IbSubscript(IbExpr):
     value: IbExpr
     slice: IbExpr
     ctx: str
+
+@dataclass(kw_only=True, eq=False)
+class IbSlice(IbExpr):
+    lower: Optional[IbExpr] = None
+    upper: Optional[IbExpr] = None
+    step: Optional[IbExpr] = None
 
 @dataclass(kw_only=True, eq=False)
 class IbName(IbExpr):

@@ -3,7 +3,9 @@ import importlib.util
 import tempfile
 import traceback
 import copy
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+
+from core.project_detector import ProjectDetector
 
 from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
@@ -47,30 +49,48 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.registry = KernelRegistry()
         # STAGE 1 & 2 handled inside initialize_builtin_classes
         self._kernel_token = initialize_builtin_classes(self.registry)
-        
+
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.issue_tracker = IssueTracker()
         self.debugger = CoreDebugger()
-        
+
         # 0. 配置内核调试器
         if core_debug_config:
             self.debugger.configure(core_debug_config)
             self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Core Debugger initialized with config: {core_debug_config}")
-            
-        # [NEW] 同步输出回调到调试器，确保内核追踪能被捕获
+
+        # 同步输出回调到调试器，确保内核追踪能被捕获
         self.debugger.output_callback = None # 默认
 
-        # [IES 2.2] 初始化能力注册中心
+        # 初始化能力注册中心
         self.capability_registry = CapabilityRegistry()
-        
-        # 1. 初始化模块发现服务 (内置路径 + 插件路径)
+
+        # 1. 初始化模块发现服务 (内置路径 + 动态插件路径)
         builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibci_modules")
-        plugins_path = os.path.join(self.root_dir, "plugins")
+
+        # 自动检测项目插件路径
+        project_plugin_paths = ProjectDetector.get_plugin_paths(self.root_dir)
+
+        # 合并插件路径
+        all_plugin_paths = project_plugin_paths.copy()
+        if auto_sniff and project_plugin_paths:
+            # 如果找到项目插件路径，使用它们
+            search_paths = [builtin_path] + all_plugin_paths
+        elif auto_sniff:
+            # 如果未找到项目插件路径，使用默认的 root_dir/plugins
+            default_plugins = os.path.join(self.root_dir, "plugins")
+            if os.path.isdir(default_plugins):
+                search_paths = [builtin_path, default_plugins]
+            else:
+                search_paths = [builtin_path]
+        else:
+            # 不自动嗅探
+            search_paths = [builtin_path]
+
+        self.discovery_service = ModuleDiscoveryService(search_paths)
+        self.module_loader = ModuleLoader(search_paths, capability_registry=self.capability_registry)
         
-        self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
-        self.module_loader = ModuleLoader([builtin_path, plugins_path], capability_registry=self.capability_registry)
-        
-        # [IES 2.1 IoC] 初始化并配置运行时对象工厂
+        # 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
         # 2. 加载元数据以支持静态分析
@@ -79,14 +99,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
         
-        # [IES 2.2] 初始化运行时调度器
+        # 初始化运行时调度器
         self.rt_scheduler = RuntimeSchedulerImpl(None) # 此时 ServiceContext 尚未就绪，将在后续注入
         
         self.interpreter: Optional[Interpreter] = None
 
-    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False) -> Interpreter:
+    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False, entry_file: str = None, entry_dir: str = None) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
-        # [IES 2.2] 委派给调度器进行组装与隔离管理
         instance_id = self.rt_scheduler.spawn(
             artifact=artifact,
             isolation=IsolationLevel.SCOPE if isolated else IsolationLevel.NONE,
@@ -97,23 +116,25 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             object_factory=self.object_factory,
             plugin_loader=self._load_plugins,
             kernel_token=self._kernel_token,
-            issue_tracker=self.issue_tracker, # 为子环境创建独立追踪器
+            issue_tracker=self.issue_tracker,
             output_callback=self.debugger.output_callback,
-            input_callback=None # 未来可支持
+            input_callback=None,
+            entry_file=entry_file,
+            entry_dir=entry_dir
         )
         return self.rt_scheduler.instances[instance_id]
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
-        # [IES 2.2] 委派给调度器进行主实例装配
-        # 将 Engine 自身作为 orchestrator 注入，建立从 Runtime 到 Engine 的系统调用通道
         self.interpreter = self.spawn_interpreter(
             artifact=artifact,
             registry=self.registry,
             host_interface=self.host_interface,
             root_dir=self.root_dir,
-            parent_context=None, # 主实例无父环境
-            isolated=False
+            parent_context=None,
+            isolated=False,
+            entry_file=getattr(self, '_entry_file', None),
+            entry_dir=getattr(self, '_entry_dir', None)
         )
         
         # TODO: 怀疑有vibe带来的异味？后续检查 MVP Demo 阶段不深究
@@ -123,7 +144,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             if self.interpreter.service_context.host_service:
                 self.interpreter.service_context.host_service.orchestrator = self
         
-        # [IES 2.2] 统一装配调度器与能力注册中心
+        # 统一装配调度器与能力注册中心
         service_context = self.interpreter.service_context
         self.rt_scheduler.hydrate(service_context)
         
@@ -135,8 +156,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if hasattr(service_context, '_capability_registry'):
             setattr(service_context, '_capability_registry', self.capability_registry)
         
-        # [IES 2.1 Transition] STAGE 7: 深度契约校验与就绪
-        # [IES 2.1 Refactor] 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
+        # STAGE 7: 深度契约校验与就绪
+        # 强制检查状态流转，确保 STAGE 6 (预评估) 已完成
         if self.registry.state_level < RegistrationState.STAGE_6_PRE_EVAL.value:
              self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
 
@@ -152,9 +173,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.registry.seal_classes(self._kernel_token)
 
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
-        """[IES 2.0] 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
+        """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
 
-        [IES 2.2] 在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
+         在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
         这确保自定义公理能在封印前注册到 AxiomRegistry。
         """
         from core.extension.auto_discovery import AutoDiscoveryService
@@ -181,14 +202,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
         """
-        [IES 2.1] 显式注册一个原生 Python 模块实现及其元数据。
+         显式注册一个原生 Python 模块实现及其元数据。
         """
         self.host_interface.register_module(name, implementation, type_metadata)
         self.scheduler.host_interface = self.host_interface
 
     def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> CompilationArtifact:
         """
-        [NEW] 编译一段 IBCI 代码字符串，返回蓝图。
+         编译一段 IBCI 代码字符串，返回蓝图。
         """
         # Use system temp directory but explicitly allow this file in scheduler
         with tempfile.NamedTemporaryFile(mode='w', suffix='.ibci', delete=False, encoding='utf-8') as f:
@@ -224,24 +245,24 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             raise e
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
-        abs_entry = os.path.abspath(entry_file)
-        # 同步调试器输出回调
+        self._entry_file = os.path.abspath(entry_file)
+        self._entry_dir = os.path.dirname(self._entry_file)
+        abs_entry = self._entry_file
+
         if output_callback:
             self.debugger.output_callback = output_callback
-        
+
         if not os.path.exists(abs_entry):
             if not silent:
                 print(f"Error: Entry file not found: {abs_entry}")
             return False
 
         try:
-            # 1. 静态编译阶段
             artifact = self.compile(abs_entry, variables, silent=silent)
-            
-            # 2. 执行阶段 (可选)
+
             if prepare_interpreter:
                 return self.execute(artifact, variables, output_callback)
-            
+
             return True
 
         except CompilerError as e:
@@ -260,9 +281,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> Any:
         """
-        [NEW] 核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
+         核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
         """
-        abs_entry = os.path.abspath(entry_file)
+        if not hasattr(self, '_entry_file'):
+            self._entry_file = os.path.abspath(entry_file)
+            self._entry_dir = os.path.dirname(self._entry_file)
+        abs_entry = self._entry_file
         
         # 同步静默状态到调试器
         self.debugger.silent = silent
@@ -288,7 +312,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
         """
-        [IES 2.0] 调度入口。执行编译产物。
+         调度入口。执行编译产物。
         注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
         """
         serializer = FlatSerializer()
@@ -305,7 +329,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if not self.interpreter:
             self._prepare_interpreter(immutable_artifact, output_callback=output_callback)
         
-        # [IES 2.2] 委派执行权给运行时调度器
+        # 委派执行权给运行时调度器
         # 目前调度器内部仍然通过 Engine 的准备机制来启动解释器
         # 但从宏观视角看，Engine 已经不再直接驱动 Interpreter
         return self.rt_scheduler.execute(immutable_artifact, variables=variables, output_callback=output_callback)
@@ -344,7 +368,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):
         """
-        [NEW] 暴露分段语义分析接口，允许观察中间产物。
+         暴露分段语义分析接口，允许观察中间产物。
         按顺序运行 Pass 1 (Collector), Pass 2 (Resolver), Pass 3 (Analyzer)。
         """
         if analyzer is None:

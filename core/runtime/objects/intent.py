@@ -12,11 +12,12 @@ class IbIntent(IbObject, IntentProtocol):
     封装了意图的内容、模式以及来源信息。
     现在是真正的 IbObject 子类 (Everything is an Object)。
     """
-    __slots__ = ('content', 'segments', 'mode', 'tag', 'source_uid', 'role')
+    __slots__ = ('content', 'segments', 'mode', 'tag', 'source_uid', 'role', 'pop_top')
     
     def __init__(self, ib_class: IbClass, content: str = "", segments: List[Any] = None, 
                  mode: IntentMode = IntentMode.APPEND, tag: Optional[str] = None,
-                 source_uid: Optional[str] = None, role: IntentRole = IntentRole.BLOCK):
+                 source_uid: Optional[str] = None, role: IntentRole = IntentRole.BLOCK,
+                 pop_top: bool = False):
         super().__init__(ib_class)
         self.content = content
         self.segments = segments if segments is not None else []
@@ -24,11 +25,12 @@ class IbIntent(IbObject, IntentProtocol):
         self.tag = tag
         self.source_uid = source_uid
         self.role = role
+        self.pop_top = pop_top
 
     @staticmethod
     def from_node_data(node_uid: str, node_data: Mapping[str, Any], ib_class: IbClass, role: IntentRole = IntentRole.BLOCK) -> 'IbIntent':
         """
-        [IES 2.1 Factory] 从 AST 节点数据构造运行时意图对象。
+        从 AST 节点数据构造运行时意图对象。
         """
         return IbIntent(
             ib_class=ib_class,
@@ -37,12 +39,13 @@ class IbIntent(IbObject, IntentProtocol):
             mode=IntentMode.from_str(node_data.get('mode', '+')),
             tag=node_data.get('tag'),
             role=role,
-            source_uid=node_uid
+            source_uid=node_uid,
+            pop_top=node_data.get('pop_top', False)
         )
 
     def resolve_content(self, context: RuntimeContext, execution_context: Any = None) -> str:
         """
-        [IES 2.1 Regularization] 解析意图内容。
+        解析意图内容。
         不再反向回调 LLMExecutor，而是直接利用 IExecutionContext 的 visit 能力进行自评估。
         """
         if self.segments and execution_context:
@@ -70,6 +73,11 @@ class IbIntent(IbObject, IntentProtocol):
     @property
     def is_remove(self) -> bool:
         return self.mode == IntentMode.REMOVE
+    
+    @property
+    def is_pop_top(self) -> bool:
+        """判断是否为无参数的 @-（移除栈顶意图）"""
+        return self.mode == IntentMode.REMOVE and self.pop_top
     
     def __repr__(self):
         tag_str = f" tag={self.tag}" if self.tag else ""

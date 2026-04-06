@@ -51,7 +51,7 @@ class ModuleDiscoveryService:
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
                         if spec_metadata:
-                            # [IES 2.2 Standard] 注册时同时提供逻辑名称（ai）和物理发现名称（ibci_ai）
+                            # 注册时同时提供逻辑名称（ai）和物理发现名称（ibci_ai）
                             host.register_module(spec_metadata.name, None, spec_metadata, discovery_name=entry)
                             discovered_modules.add(entry)
                     except Exception as e:
@@ -61,7 +61,7 @@ class ModuleDiscoveryService:
 
     def export_metadata(self, host: HostInterface, output_path: str) -> None:
         """
-        [IES 2.2] 将发现的元数据导出为 .ibc_meta 文件
+         将发现的元数据导出为 .ibc_meta 文件
 
         实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
         """
@@ -83,7 +83,7 @@ class ModuleDiscoveryService:
 
     def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleType]:
         """
-        [IES 2.2] 动态加载 _spec.py，完整实现协议。
+         动态加载 _spec.py，完整实现协议。
 
         支持三种协议：
         1. 新版第一方组件（字典格式）：__ibcext_vtable__() 返回 {"functions": {...}}
@@ -150,7 +150,7 @@ class ModuleDiscoveryService:
 
     def _build_metadata_from_dict(self, raw_name: str, module_name: str, vtable: Dict[str, Any]) -> ModuleMetadata:
         """
-        [IES 2.2] 从字典格式元数据构建 ModuleMetadata
+         从字典格式元数据构建 ModuleMetadata
 
         字典格式：
         {

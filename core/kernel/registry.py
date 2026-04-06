@@ -23,12 +23,12 @@ class KernelRegistry:
         self._boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
         self._int_cache: Dict[int, Any] = {} # 小整数驻留缓存 (引擎实例隔离)
         
-        # [IES 2.1 Decoupling] 绑定执行上下文数据，不再持有整个解释器实例
+        # 绑定执行上下文数据，不再持有整个解释器实例
         self._execution_context: Optional[Any] = None
         self._execution_context_lock = threading.Lock()
         self._registry_lock = threading.Lock()
         
-        # [IES 2.0 Mechanism] 注册状态机级别。默认为 1。
+        # 注册状态机级别。默认为 1。
         self._state_level = 1
         
         # [Isolation] 元数据注册表 (UTS 驱动)
@@ -42,6 +42,9 @@ class KernelRegistry:
         
         self._is_structure_sealed = False
         self._is_classes_sealed = False
+
+        # [Builtin Instances] 内置单例实例 (如 IntentStack)
+        self._builtin_instances: Dict[str, Any] = {}
 
     @property
     def state_level(self) -> int:
@@ -147,8 +150,21 @@ class KernelRegistry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
+    def register_builtin_instance(self, name: str, instance: Any, token: Any = None):
+        """
+        注册内置单例实例（如 IntentStack）。
+        内置实例在结构封印后仍然可以注册，但仅限初始化阶段。
+        """
+        if self._is_structure_sealed:
+            raise PermissionError("Registry: Cannot register builtin instance after structure is sealed.")
+        self._builtin_instances[name] = instance
+
+    def get_builtin_instance(self, name: str) -> Optional[Any]:
+        """获取内置单例实例。"""
+        return self._builtin_instances.get(name)
+
     def set_execution_context(self, context: 'IExecutionContext', token: Any):
-        """[IES 2.1 Decoupling] 注册执行上下文引用，仅内核可调。"""
+        """注册执行上下文引用，仅内核可调。"""
         self._verify_kernel(token)
         if self._is_structure_sealed:
             raise PermissionError("Registry: Cannot re-bind ExecutionContext after structure is sealed.")
@@ -156,7 +172,7 @@ class KernelRegistry:
             self._execution_context = context
 
     def get_execution_context(self) -> Optional['IExecutionContext']:
-        """[IES 2.1 Decoupling] 获取执行上下文引用。
+        """获取执行上下文引用。
         
         注意：此方法供内核内部使用（IbClass 实例化等）。
         在 Registry 封印后返回已设置的上下文引用。
@@ -169,7 +185,7 @@ class KernelRegistry:
 
     def create_instance(self, class_name: str, *args, **kwargs) -> Any:
         """
-        [IES 2.0 Factory] 统一对象实例化入口。
+        统一对象实例化入口。
         确保每个实例都绑定到当前的 Registry，并根据真相源获取类定义。
         """
         ib_class = self.get_class(class_name)
@@ -200,7 +216,7 @@ class KernelRegistry:
         if name in self._classes:
              raise ValueError(f"Registry: Class '{name}' is already registered. Duplicate registration is forbidden in strict mode.")
 
-        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
+        # 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
             descriptor = self._metadata_registry.register(descriptor)
             
@@ -208,7 +224,7 @@ class KernelRegistry:
         ib_class.descriptor = descriptor
         self._classes[name] = ib_class
         
-        # [IES 2.0] 绑定注册表引用
+        # 绑定注册表引用
         if hasattr(ib_class, 'registry'):
             ib_class.registry = self
 
@@ -218,7 +234,7 @@ class KernelRegistry:
         if descriptor.name != name:
              raise ValueError(f"Registry: Function descriptor name '{descriptor.name}' does not match registered name '{name}'.")
              
-        # [IES 2.0] 自动同步到元数据注册表，并获取克隆后的隔离副本
+        # 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
             descriptor = self._metadata_registry.register(descriptor)
 
@@ -245,7 +261,7 @@ class KernelRegistry:
 
     def create_subclass(self, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> Any:
         """[Authorized] 通过内核绑定的工厂方法创建类。强制校验封印状态。"""
-        # [IES 2.1 Security] 类注册封印后，禁止通过任何途径（包括工厂）创建新类
+        # 类注册封印后，禁止通过任何途径（包括工厂）创建新类
         if self._is_classes_sealed:
             raise PermissionError(f"Sealed Registry Violation: Cannot create subclass '{name}' after registry is sealed.")
             
@@ -265,7 +281,7 @@ class KernelRegistry:
         return value
 
     def is_truthy(self, obj: Any) -> bool:
-        """[IES 2.1] 判定对象的真值 (Truthy)。"""
+        """ 判定对象的真值 (Truthy)。"""
         if obj is None or obj is self._none_instance:
             return False
         if hasattr(obj, 'to_bool'):
@@ -278,7 +294,7 @@ class KernelRegistry:
 
     def clone(self) -> 'KernelRegistry':
         """
-        [IES 2.1 Isolation] 创建 KernelRegistry 的浅克隆。
+        创建 KernelRegistry 的浅克隆。
         类定义和函数通过引用共享，但 MetadataRegistry 进行深克隆以确保类型隔离。
         用于 spawn_interpreter 创建隔离的解释器实例。
         """

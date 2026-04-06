@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 from core.kernel import ast as ast
 from core.kernel.issue import (
-    InterpreterError, LLMUncertaintyError, Severity
+    InterpreterError, Severity
 )
 from core.runtime.exceptions import (
-    ReturnException, BreakException, ContinueException, ThrownException, RetryException
+    ReturnException, BreakException, ContinueException, ThrownException
 )
 from core.runtime.host.isolation_policy import IsolationPolicy
 from core.base.source_atomic import Location
@@ -45,6 +45,7 @@ from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
+from .llm_result import LLMResult
 
 
 class Interpreter:
@@ -62,7 +63,7 @@ class Interpreter:
         return self.instruction_count
 
     def get_captured_intents(self, obj: Any) -> List[str]:
-        """[IES 2.1] 获取指定对象（如 Behavior）捕获的意图栈内容"""
+        """ 获取指定对象（如 Behavior）捕获的意图栈内容"""
         if isinstance(obj, IIbBehavior):
             res = []
             for i in obj.captured_intents:
@@ -74,7 +75,7 @@ class Interpreter:
         return []
 
     def sync_state(self, parent_context: RuntimeContext, policy: Dict[str, Any]):
-        """[IES 2.1 Regularization] 从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
+        """从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
         isolation_policy = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
 
         if isolation_policy.inherit_intents:
@@ -92,7 +93,7 @@ class Interpreter:
             f"Interpreter state synced from parent context with policy: {policy}")
 
     def _sync_variables_from(self, parent_context: RuntimeContext):
-        """[IES 2.1 FULL Isolation] 从父上下文同步变量"""
+        """从父上下文同步变量"""
         parent_scope = parent_context.current_scope
         current_scope = self.runtime_context.current_scope
         for name, symbol in parent_scope._symbols.items():
@@ -100,15 +101,15 @@ class Interpreter:
                 current_scope.define(name, symbol.descriptor, is_const=symbol.is_const, force=True)
 
     def _sync_classes_from(self, parent_context: RuntimeContext):
-        """[IES 2.1] 从父上下文同步类定义"""
+        """ 从父上下文同步类定义"""
         pass
 
 
     # TODO: 怀疑此处 instance_id: str = "main"  这一行有代码异味。MVP Demo 阶段暂不深究
     def __init__(self, issue_tracker: IssueTracker,
-                 output_callback: Optional[Callable[[str], None]] = None, 
-                 input_callback: Optional[Callable[[str], str]] = None, 
-                 max_instructions: int = 10000, 
+                 output_callback: Optional[Callable[[str], None]] = None,
+                 input_callback: Optional[Callable[[str], str]] = None,
+                 max_instructions: int = 100000000,
                  max_call_stack: int = 100,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
@@ -129,17 +130,19 @@ class Interpreter:
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
                  kernel_token: Optional[Any] = None,
                  instance_id: str = "main",
-                 orchestrator: Optional[Any] = None):
+                 orchestrator: Optional[Any] = None,
+                 entry_file: str = None,
+                 entry_dir: str = None):
         
         # 0. 启动内核引导
         self._registry = registry or KernelRegistry()
         self._kernel_token = kernel_token
         self.instance_id = instance_id or f"inst_{id(self)}"
         
-        # [IES 2.1 Decoupling] 引入对象工厂
+        # 引入对象工厂
         object_factory = object_factory or RuntimeObjectFactory(registry=self.registry)
 
-        # [IES 2.1 Decoupling] 创建执行上下文数据容器，剥离状态与逻辑 (组合代替继承)
+        # 创建执行上下文数据容器，剥离状态与逻辑 (组合代替继承)
         self._execution_context = ExecutionContextImpl(
             registry=self._registry,
             factory=object_factory,
@@ -154,20 +157,21 @@ class Interpreter:
             resolve_type_from_symbol_callback=self._resolve_type_from_symbol,
             extract_name_id_callback=self._extract_name_id,
             resolve_value_callback=self._resolve_value,
-            visit_with_fallback_callback=self._with_unified_fallback,
-            strict_mode=strict_mode
+            strict_mode=strict_mode,
+            entry_file=entry_file,
+            entry_dir=entry_dir
         )
 
-        # [IES 2.1 Decoupling] 注册执行上下文引用到 Registry，底层仅持有该容器
+        # 注册执行上下文引用到 Registry，底层仅持有该容器
         self._kernel_token = self._registry.get_kernel_token()
         if self._kernel_token:
              self._registry.set_execution_context(self._execution_context, self._kernel_token)
         
-        # [IES 2.0] 仅在注册表未初始化时执行引导
+        # 仅在注册表未初始化时执行引导
         if not self.registry.is_initialized:
             initialize_builtin_classes(self.registry)
             
-        # [NEW] 加载内置函数插件 (Intrinsics)
+        # 加载内置函数插件 (Intrinsics)
         self.intrinsic_manager = IntrinsicManager(self.registry)
         # load_defaults 将在 ServiceContext 准备好后调用
         
@@ -181,26 +185,27 @@ class Interpreter:
         if artifact:
             self.node_pool = artifact.get("pools", {}).get("nodes", {})
         
-        # 1. [IES 2.1 Regularization] 依赖图谱闭合：构造期完成 ServiceContext 组装
+        # 1. 依赖图谱闭合：构造期完成 ServiceContext 组装
         # 核心：确保服务组件仅持有必要的数据结构，严禁穿透持有 Interpreter
         self.runtime_context = runtime_context or RuntimeContextImpl(registry=self.registry)
         
         if service_context:
             # 外部注入模式
             self.service_context = service_context
+            self._execution_context.module_manager = self.service_context.module_manager
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
             interop = interop or InterOpImpl(host_interface=self.host_interface)
             # object_factory 已经在前面初始化
             permission_manager = permission_manager or PermissionManagerImpl(root_dir)
             
-            # [IES 2.1] 初始化 LLMExecutor，注入最小数据依赖
+            # 初始化 LLMExecutor，注入最小数据依赖
             llm_executor = llm_executor or object_factory.create_llm_executor(
                 service_context=None, # 此时 ServiceContext 尚未完全就绪，将在后续水化
                 execution_context=self._execution_context
             )
             
-            # [IES 2.1] 初始化 ModuleManager，注入最小依赖与回调
+            # 初始化 ModuleManager，注入最小依赖与回调
             module_manager = module_manager or ModuleManagerImpl(
                 interop=interop, 
                 registry=self.registry,
@@ -210,7 +215,7 @@ class Interpreter:
                 root_dir=root_dir
             )
             
-            # [IES 2.2] 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService
+            # 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService
             self.service_context = ServiceContextImpl(
                 issue_tracker=issue_tracker,
                 llm_executor=llm_executor,
@@ -227,14 +232,15 @@ class Interpreter:
                 input_callback=input_callback,
                 scheduler=None, # 占位，由 Engine 统一装配
                 capability_registry=None, # 占位，由 Engine 统一装配
-                interpreter=self # [IES 2.2] 注入解释器实例引用
+                interpreter=self # 注入解释器实例引用
             )
+            self._execution_context.module_manager = self.service_context.module_manager
             
-            # [IES 2.1] 完成延迟水化
+            # 完成延迟水化
             if hasattr(llm_executor, 'hydrate'):
                 llm_executor.hydrate(self.service_context)
             
-        # 2. [IES 2.1] 加载内置函数 (不再穿透持有 Interpreter)
+        # 2.  加载内置函数 (不再穿透持有 Interpreter)
         self.intrinsic_manager.load_defaults(self._execution_context, self.service_context)
 
         # 3. [STAGE 4] 插件加载钩子
@@ -267,7 +273,7 @@ class Interpreter:
         # 2. 注入全局符号与类定义
         self._hydrate_user_classes(loaded.class_to_node)
         
-        # 3. [IES 2.1] STAGE 6: 预评估类字段 (Late Evaluation)
+        # 3.  STAGE 6: 预评估类字段 (Late Evaluation)
         if self._kernel_token:
             self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
         else:
@@ -283,9 +289,8 @@ class Interpreter:
         # 运行限制
         self.max_instructions = max_instructions
         self.instruction_count = 0
-        self._fallback_stack = [] # [IES 2.2] 用于追踪正在进行 Fallback 的节点
         
-        # [IES 2.1 Defensive Patch] 递归深度安全校验
+        # 递归深度安全校验
         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
         # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
         python_limit = sys.getrecursionlimit()
@@ -301,13 +306,18 @@ class Interpreter:
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
         self.strict_mode = strict_mode
 
-        # [IES 4.3] 初始化分片 Handlers (通过工厂解耦)
+        # 初始化分片 Handlers (通过工厂解耦)
         handlers = object_factory.create_handlers(self.service_context, self._execution_context)
         self.stmt_handler = handlers[0]
         self.expr_handler = handlers[1]
         self.import_handler = handlers[2]
 
-        # [IES 2.0 Optimization] 预先映射访问方法
+        # [Phase 4] IntentStack 与 runtime_context 关联
+        intent_stack = self.registry.get_builtin_instance("IntentStack")
+        if intent_stack and hasattr(intent_stack, 'set_runtime_context'):
+            intent_stack.set_runtime_context(self.runtime_context)
+
+        # 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
 
@@ -376,14 +386,14 @@ class Interpreter:
         table = side_tables.get(table_name, {})
         val = table.get(node_uid)
         
-        # [IES 2.1 Rehydration] 自动重水化类型引用
+        # 自动重水化类型引用
         if table_name == "node_to_type" and isinstance(val, str):
             return self.type_hydrator.hydrate(val)
             
         return val
 
     def push_stack(self, name: str, location: Optional[Location] = None, is_user_function: bool = False, **kwargs):
-        """[IES 2.1 Decoupling] 向逻辑调用栈压入一帧"""
+        """向逻辑调用栈压入一帧"""
         self.logical_stack.push(
             name=name,
             local_vars={}, # 暂时不快照变量，性能考虑
@@ -394,7 +404,7 @@ class Interpreter:
         )
 
     def pop_stack(self):
-        """[IES 2.1 Decoupling] 从逻辑调用栈弹出最后一帧"""
+        """从逻辑调用栈弹出最后一帧"""
         self.logical_stack.pop()
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
@@ -435,15 +445,15 @@ class Interpreter:
         global_symbols = context.global_scope.get_all_symbols()
         defined_names = set(global_symbols.keys())
         
-        # [IES 2.0] 内置功能插件化重绑定
+        # 内置功能插件化重绑定
         self.intrinsic_manager.rebind(self, context)
         
         # 注入内置类 (int, str, float, list, dict 等)
-        # [IES 2.0] 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
+        # 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
                 if not getattr(ib_class.descriptor, 'is_user_defined', True):
-                    # [IES 2.2] 注入时带上稳定的内置符号 UID，与编译器对齐
+                    # 注入时带上稳定的内置符号 UID，与编译器对齐
                     context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
                     defined_names.add(name)
 
@@ -487,11 +497,13 @@ class Interpreter:
              # 创建新 Context 并绑定 Scope
              new_ctx = RuntimeContextImpl(initial_scope=scope, registry=self.registry)
              self.runtime_context = new_ctx
+             # [BugFix] 修复内置函数（如 print）在模块切换时丢失的问题
+             self.setup_context(self.runtime_context)
 
         self.instruction_count = 0
         result = self.registry.get_none()
         
-        # [IES 2.2 Core] 注入内置路径变量
+        # 注入内置路径变量
         loc_data = self.get_side_table("node_to_loc", module_uid)
         if not loc_data:
              raise self._report_error(f"Critical: Location metadata missing for module {module_uid}. Compiled artifact might be corrupted.", module_uid)
@@ -502,7 +514,7 @@ class Interpreter:
             column=loc_data.get("column", 0)
         )
 
-        # [NEW] Logical CallStack 追踪 (Module 层级)
+        # Logical CallStack 追踪 (Module 层级)
         self.logical_stack.push(
             name=f"module:{module_name}",
             local_vars={},
@@ -556,87 +568,10 @@ class Interpreter:
         err.location = loc
         return err
 
-    def _with_unified_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> IbObject:
-        """
-        [IES 2.1] 统一的 LLM 异常处理装饰器逻辑。
-        支持从 node_data 中提取用户定义的 llmexcept 块并执行。
-        """
-        retry_count = 0
-        pushed_intents = 0
-        
-        # 提取当前节点的 fallback 块
-        fallback_uids = node_data.get("llm_fallback", [])
 
-        # [IES 2.2 Strict] 防止递归重入
-        self._fallback_stack.append(node_uid)
-
-        try:
-            while True:
-                try:
-                    # 重新从 node_pool 获取最新数据，确保 Retry 时使用的是最新的侧表和意图
-                    current_node_data = self.get_node_data(node_uid)
-                    return action(node_uid, current_node_data)
-                except LLMUncertaintyError as outer_e:
-                    # [IES 2.2 Strict] 逻辑修正：
-                    # 只有语句级别或具有显式 fallback 的节点才在此处理
-                    is_stmt = node_type.startswith("Ib") and ("Assign" in node_type or "If" in node_type or "While" in node_type or "For" in node_type or "Return" in node_type)
-                    
-                    if not fallback_uids and not is_stmt:
-                        # [NEW] 如果不是 Stmt 且没有 fallback，向上抛出，
-                        # 但由于我们在栈中标记了该节点，外部的 visit 会识别并直接调用 action，
-                        # 最终会让更高层的 Stmt 捕获到这个异常。
-                        raise outer_e
-                        
-                    retry_count += 1
-                    if retry_count > 3: # 物理硬限制
-                        raise outer_e
-                    
-                    # 1. 优先执行显式 llmexcept 块 (用户级)
-                    if fallback_uids:
-                        try:
-                            # 执行 fallback 逻辑
-                            for f_uid in fallback_uids:
-                                self.visit(f_uid)
-                            # 如果执行完毕没有抛出异常，默认重试
-                            raise RetryException()
-                        except RetryException:
-                            # 显式触发 retry，继续循环
-                            continue
-                        except Exception as inner_e:
-                            # 如果 fallback 块中发生了其他错误，不再重试，向上抛出
-                            raise inner_e
-                    
-                    # 2. 内核级自动意图注入 (能力探测)
-                    retry_prompt = None
-                    if is_stmt:
-                        if self.service_context.capability_registry:
-                            provider = self.service_context.capability_registry.get("llm_provider")
-                            if provider and hasattr(provider, "get_retry_prompt"):
-                                retry_prompt = provider.get_retry_prompt(node_type)
-                        
-                        if not retry_prompt:
-                            ai_module = self.service_context.interop.get_package("ai")
-                            if ai_module and hasattr(ai_module, "get_retry_prompt"):
-                                retry_prompt = ai_module.get_retry_prompt(node_type)
-                    
-                    if retry_prompt:
-                        self.runtime_context.push_intent(retry_prompt, tag="AUTO_RETRY")
-                        pushed_intents += 1
-                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, 
-                            f"LLM Uncertainty at {node_type}: Injected specialized retry prompt #{retry_count}")
-                        continue
-                    
-                    # 无策可施，向上抛出
-                    raise outer_e
-        finally:
-            if self._fallback_stack:
-                self._fallback_stack.pop()
-            # 环境清理
-            for _ in range(pushed_intents):
-                self.runtime_context.pop_intent()
 
     def _resolve_value(self, val: Any) -> Any:
-        """[IES 2.2 Security Update] 处理外部资产引用的解析"""
+        """处理外部资产引用的解析"""
         # 支持 dict 和 ReadOnlyNodePool (Mapping)
         if hasattr(val, "get") and val.get("_type") == "ext_ref":
             uid = val.get("uid")
@@ -647,7 +582,7 @@ class Interpreter:
         return val
 
     def _pre_evaluate_user_classes(self):
-        """[IES 2.1 Stage 5.5] 预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
+        """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
         old_module = self.current_module_name
         for name, ib_class in self.registry.get_all_classes().items():
             if not getattr(ib_class.descriptor, 'is_user_defined', False):
@@ -671,7 +606,7 @@ class Interpreter:
         self.current_module_name = old_module
 
     def _hydrate_user_classes(self, class_to_node: Dict[str, Any]):
-        """[IES 2.0] STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
+        """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
         old_module = self.current_module_name
         for name, info in class_to_node.items():
             node_uid, module_name = info if isinstance(info, tuple) else (info, "main")
@@ -698,7 +633,7 @@ class Interpreter:
                     declared_type = self._resolve_type_from_symbol(sym_uid)
                     ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, descriptor=declared_type))
                 elif stmt_data["_type"] == "IbAssign":
-                    # [IES 2.1 Refactor] 使用 IbDeferredField 统一管理
+                    # 使用 IbDeferredField 统一管理
                     val_uid = stmt_data.get("value")
                     for target_uid in stmt_data.get("targets", []):
                         target_name = self._extract_name_id(target_uid)
@@ -748,18 +683,26 @@ class Interpreter:
             column=loc_data.get("column", 0)
         )
 
-    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None) -> IbObject:
+    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None, bypass_protection: bool = False) -> IbObject:
         """核心评估逻辑：分发 AST 节点到相应的 Handler 处理"""
         if node_uid is None:
             return self.registry.get_none()
 
-        # [IES 2.1 Context Switch] 如果指定了模块，则临时切换上下文进行求值 (Lexical Scope Support)
+        # 1. 影子执行拦截逻辑：检查侧表看该节点是否被 llmexcept 保护
+        if not bypass_protection and isinstance(node_uid, str):
+            handler_uid = self.get_side_table("node_protection", node_uid)
+            if handler_uid:
+                # 将执行权交给处理节点，由它来驱动 target 的执行
+                # 注意：必须传入 bypass_protection=True，否则处理器节点也会被拦截跳过
+                return self.visit(handler_uid, bypass_protection=True)
+
+        # 如果指定了模块，则临时切换上下文进行求值 (Lexical Scope Support)
         old_module = self.current_module_name
         if module_name and module_name != old_module:
             self.current_module_name = module_name
 
         try:
-            # [IES 2.0 Evaluation] 处理字面量或裸 UID
+            # 处理字面量或裸 UID
             if not isinstance(node_uid, str):
                 if hasattr(node_uid, 'uid'):
                     node_uid = node_uid.uid
@@ -785,7 +728,7 @@ class Interpreter:
             self.call_stack_depth += 1
             loc = self._get_location(node_uid)
 
-            # [IES 2.1 Refactor] 识别具有独立作用域的节点 (基于元数据特性驱动)
+            # 识别具有独立作用域的节点 (基于元数据特性驱动)
             pushed_frame = False
             node_type = node_data.get("_type")
 
@@ -793,52 +736,31 @@ class Interpreter:
                 self.push_stack(name=f"{node_type}:{node_uid}", location=loc)
                 pushed_frame = True
 
-            # [NEW] 意图自动化拦截：从侧表获取绑定意图并自动压栈，实现“语义涂抹”自动化
-            pushed_count = 0
-            intent_uids = self.get_side_table("node_intents", node_uid)
-            if intent_uids:
-                for i_uid in intent_uids:
-                    i_data = self.node_pool.get(i_uid)
-                    if i_data:
-                        intent = IbIntent(
-                            ib_class=self.registry.get_class("Intent"),
-                            content=i_data.get('content', ''),
-                            mode=IntentMode.from_str(i_data.get('mode', '+')),
-                            tag=i_data.get('tag'),
-                            segments=i_data.get('segments', []),
-                            role=IntentRole.SMEAR,
-                            source_uid=i_uid
-                        )
-                        self.runtime_context.push_intent(intent)
-                        pushed_count += 1
-
             try:
                 node_type = node_data.get("_type")
+
+                # 2. 避免处理器节点被重复执行：
+                # 如果当前节点是一个 llmexcept 处理器，且我们不是通过影子执行逻辑（bypass_protection=True）进入的，
+                # 则跳过它，因为它已经被它的 target 触发执行过了。
+                if not bypass_protection and node_type == "IbLLMExceptionalStmt":
+                    return self.registry.get_none()
+
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
+                result = visitor(node_uid, node_data)
                 
-                # [IES 2.1 Unified Fallback] 统一语句级 LLM 容错分发
-                fallback_uids = node_data.get("llm_fallback", [])
+                # [Result Mode] 自动拦截不确定性结果
+                if isinstance(result, LLMResult):
+                    self.runtime_context.set_last_llm_result(result)
+                    if result.is_uncertain:
+                        # 对于不确定的结果，我们返回 None。
+                        # 上层逻辑（如 IbAssign）会根据 last_llm_result.is_uncertain 决定是否中断。
+                        return self.registry.get_none()
+                    return result.value # 返回解包后的 IbObject
                 
-                # [IES 2.2 Strict] 为所有可能包含 LLM 行为的语句启用潜在的 LLM 异常捕获
-                # 如果当前节点正在处理 Fallback（防止递归重入），我们直接调用 visitor
-                if node_uid in self._fallback_stack:
-                    return visitor(node_uid, node_data)
-                
-                # [NEW] 转发语句到核心逻辑，以支持 Fallback 机制
-                if node_type == "IbAssign":
-                    visitor = self.visit_IbAssign_core
-                elif node_type == "IbIf":
-                    visitor = self.visit_IbIf_core
-                elif node_type == "IbWhile":
-                    visitor = self.visit_IbWhile_core
-                elif node_type == "IbFor":
-                    visitor = self.visit_IbFor_core
-                
-                return self._with_unified_fallback(node_uid, node_type, node_data, visitor)
-            except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
+                return result
+            except (ReturnException, BreakException, ContinueException, ThrownException):
                 raise
             except InterpreterError as e:
-                # 如果异常还没有位置信息，则尝试补全
                 if not e.location:
                     e.location = loc
                 raise
@@ -848,15 +770,12 @@ class Interpreter:
                 if pushed_frame:
                     self.logical_stack.pop()
                 self.call_stack_depth -= 1
-                # [NEW] 自动出栈，确保意图作用域正确恢复
-                for _ in range(pushed_count):
-                    self.runtime_context.pop_intent()
         finally:
             # 恢复之前的模块上下文
             self.current_module_name = old_module
 
     def _is_scope_defining(self, node_type: str, node_data: Optional[Mapping[str, Any]] = None) -> bool:
-        """[IES 2.1 Decoupling] 判断 AST 节点是否具有独立逻辑作用域。完全元数据驱动。"""
+        """判断 AST 节点是否具有独立逻辑作用域。完全元数据驱动。"""
         # 优先检查节点数据中是否带有分析器生成的标记
         if node_data and node_data.get("_is_scope"):
             return True
@@ -872,17 +791,3 @@ class Interpreter:
         """UTS: 使用 to_bool 协议判断真值"""
         res = value.receive('to_bool', [])
         return res.to_native() != 0
-
-    # --- 代理到 StmtHandler 的核心方法以支持 Fallback 逻辑 ---
-
-    def visit_IbAssign_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbAssign(node_uid, node_data)
-
-    def visit_IbIf_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbIf(node_uid, node_data)
-
-    def visit_IbWhile_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbWhile(node_uid, node_data)
-
-    def visit_IbFor_core(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        return self.stmt_handler.visit_IbFor(node_uid, node_data)

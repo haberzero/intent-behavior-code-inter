@@ -10,9 +10,6 @@ class BreakException(Exception):
 class ContinueException(Exception):
     pass
 
-class RetryException(Exception):
-    pass
-
 class StageTransitionError(Exception):
     """违反注册生命周期顺序或访问未就绪阶段"""
     pass

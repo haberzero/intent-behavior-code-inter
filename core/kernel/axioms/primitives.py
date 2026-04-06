@@ -200,7 +200,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         if val in ("false", "0", "no", "off"): return False
         
         # 2. 使用正则边界匹配 (防止 "not true" 误匹配)
-        # [IES 2.2 Refactor] 同步 llm_executor 的健壮解析逻辑
+        # 同步 llm_executor 的健壮解析逻辑
         true_pattern = r'\b(true|yes|1|on)\b'
         false_pattern = r'\b(false|no|0|off)\b'
         
@@ -226,7 +226,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
     def name(self) -> str: return "str"
     
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # [IES 2.1 Refactor] 使用公理名称判定替代 identity 判定
+        # 使用公理名称判定替代 identity 判定
         if other.get_base_axiom_name() == "int":
             return "Use .cast_to(int) or int(s) to convert string to integer."
         return None
@@ -246,6 +246,9 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
             "strip": FunctionMetadata(name="strip", param_types=[], return_type=STR_DESCRIPTOR),
             "split": FunctionMetadata(name="split", param_types=[STR_DESCRIPTOR], return_type=ListMetadata(element_type=STR_DESCRIPTOR)),
             "is_empty": FunctionMetadata(name="is_empty", param_types=[], return_type=BOOL_DESCRIPTOR),
+            "find": FunctionMetadata(name="find", param_types=[STR_DESCRIPTOR], return_type=INT_DESCRIPTOR),
+            "find_last": FunctionMetadata(name="find_last", param_types=[STR_DESCRIPTOR], return_type=INT_DESCRIPTOR),
+            "contains": FunctionMetadata(name="contains", param_types=[STR_DESCRIPTOR], return_type=BOOL_DESCRIPTOR),
         }
 
     def get_operators(self) -> Dict[str, str]:
@@ -312,7 +315,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return None 
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """[IES 2.1 Axiom-Driven] 实现列表泛型特化"""
+        """实现列表泛型特化"""
         element_type = args[0] if args else ANY_DESCRIPTOR
         desc = registry.factory.create_list(element_type)
         registry.register(desc)
@@ -362,7 +365,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return None # Keys
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """[IES 2.1 Axiom-Driven] 实现字典泛型特化"""
+        """实现字典泛型特化"""
         key_type = args[0] if len(args) > 0 else ANY_DESCRIPTOR
         val_type = args[1] if len(args) > 1 else ANY_DESCRIPTOR
         desc = registry.factory.create_dict(key_type, val_type)
@@ -386,7 +389,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
 
 
 class DynamicAxiom(BaseAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ParserCapability):
-    """Any/var 类型的行为公理 (The Top Type)"""
+    """any/auto 类型的行为公理 (The Top Type)"""
     
     def __init__(self, name: str):
         self._name = name
@@ -434,7 +437,7 @@ class ExceptionAxiom(BaseAxiom, ConverterCapability):
         }
 
 class BoundMethodAxiom(BaseAxiom, CallCapability):
-    """[IES 2.1] bound_method 类型的行为公理"""
+    """ bound_method 类型的行为公理"""
     
     @property
     def name(self) -> str: return "bound_method"
@@ -469,9 +472,20 @@ class NoneAxiom(BaseAxiom, ConverterCapability):
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "None"
 
+class SliceAxiom(BaseAxiom):
+    """slice 类型的行为公理"""
+    @property
+    def name(self) -> str: return "slice"
+    
+    def get_base_axiom_name(self) -> str: return "slice"
+
+    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+        return other.get_base_axiom_name() == "slice"
+
 def register_core_axioms(registry: 'AxiomRegistry'):
     """[Factory] 向指定的公理注册表注册所有核心公理"""
     registry.register(IntAxiom())
+    registry.register(SliceAxiom())
     registry.register(FloatAxiom())
     registry.register(BoolAxiom())
     registry.register(StrAxiom())
@@ -481,8 +495,8 @@ def register_core_axioms(registry: 'AxiomRegistry'):
     registry.register(BoundMethodAxiom())
     registry.register(NoneAxiom())
     
-    registry.register(DynamicAxiom("Any"))
-    registry.register(DynamicAxiom("var"))
+    registry.register(DynamicAxiom("any"))
+    registry.register(DynamicAxiom("auto"))
     registry.register(DynamicAxiom("callable"))
     registry.register(DynamicAxiom("void"))
     registry.register(DynamicAxiom("behavior"))

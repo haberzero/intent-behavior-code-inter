@@ -41,7 +41,7 @@ class SpecBuilder:
             "bool": BOOL_DESCRIPTOR,
             "void": VOID_DESCRIPTOR,
             "any": ANY_DESCRIPTOR,
-            "var": ANY_DESCRIPTOR,
+            "auto": ANY_DESCRIPTOR,
             "dict": DICT_DESCRIPTOR,
             "list": LIST_DESCRIPTOR
         }
@@ -67,7 +67,7 @@ class SpecBuilder:
         self.exports[name] = FunctionMetadata(name=name, param_types=param_types, return_type=return_type)
         return self
 
-    def var(self, name: str, type: Union[str, TypeDescriptor] = "any") -> 'SpecBuilder':
+    def auto(self, name: str, type: Union[str, TypeDescriptor] = "any") -> 'SpecBuilder':
         """声明一个全局变量"""
         self.exports[name] = self._resolve_type(type)
         return self

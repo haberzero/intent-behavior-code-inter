@@ -1,14 +1,14 @@
 """
-[IES 2.2] 自动插件发现服务
+ 自动插件发现服务
 
-实现零侵入自动嗅探机制，插件不再需要 import 任何核心代码。
+实现零侵入自动嗅探机制，常规插件不再需要 import 任何核心代码。
 
-IES 2.2 固定命名方法协议（必须实现）：
+固定命名方法协议（必须实现）：
 - __ibcext_metadata__() -> Dict[str, Any]  返回插件元数据（必需）
 - __ibcext_vtable__() -> Dict[str, Callable]  返回方法映射表（必需）
 - create_implementation() -> Any  工厂函数（可选）
 
-IES 2.2 扩展协议（可选）：
+扩展协议（可选）：
 - __ibcext_axiom__() -> Dict[str, 'TypeAxiom']  返回插件公理映射表（可选）
   插件可通过此函数声明自定义公理，在封印前注册到 AxiomRegistry。
 """
@@ -47,9 +47,8 @@ class PluginSpec:
 
 class AutoDiscoveryService:
     """
-    [IES 2.2] 自动插件发现服务
+     自动插件发现服务
 
-    严格遵循 IES 2.2 协议，仅支持：
     - __ibcext_metadata__() 方法
     - __ibcext_vtable__() 方法
     - create_implementation() 工厂函数
@@ -93,10 +92,10 @@ class AutoDiscoveryService:
                     if spec:
                         self._discovered[entry] = spec
                 except Exception:
-                    raise RuntimeError(f"Failed to load IES 2.2 plugin '{entry}' at {spec_path}")
+                    raise RuntimeError(f"Failed to load plugin '{entry}' at {spec_path}")
 
     def _load_plugin_spec(self, module_name: str, spec_path: str) -> Optional[PluginSpec]:
-        """加载单个插件的规范（仅支持 IES 2.2 协议）"""
+        """加载单个插件的规范"""
         internal_name = f"ibc_autodiscovery_{module_name}"
         spec_loader = importlib.util.spec_from_file_location(internal_name, spec_path)
         if not spec_loader or not spec_loader.loader:
@@ -107,16 +106,16 @@ class AutoDiscoveryService:
         try:
             spec_loader.loader.exec_module(mod)
         except Exception as e:
-            raise RuntimeError(f"Failed to execute IES 2.2 plugin '{module_name}': {e}") from e
+            raise RuntimeError(f"Failed to execute plugin '{module_name}': {e}") from e
 
         if not hasattr(mod, '__ibcext_metadata__') or not callable(mod.__ibcext_metadata__):
             raise RuntimeError(
-                f"IES 2.2 plugin '{module_name}' must implement __ibcext_metadata__() method"
+                f"plugin '{module_name}' must implement __ibcext_metadata__() method"
             )
 
         if not hasattr(mod, '__ibcext_vtable__') or not callable(mod.__ibcext_vtable__):
             raise RuntimeError(
-                f"IES 2.2 plugin '{module_name}' must implement __ibcext_vtable__() method"
+                f"plugin '{module_name}' must implement __ibcext_vtable__() method"
             )
 
         spec = PluginSpec(
@@ -132,12 +131,12 @@ class AutoDiscoveryService:
             spec.description = metadata.get("description", "")
             spec.dependencies = metadata.get("dependencies", [])
         except Exception as e:
-            raise RuntimeError(f"Failed to get metadata from IES 2.2 plugin '{module_name}': {e}") from e
+            raise RuntimeError(f"Failed to get metadata from plugin '{module_name}': {e}") from e
 
         try:
             spec.vtable = mod.__ibcext_vtable__()
         except Exception as e:
-            raise RuntimeError(f"Failed to get vtable from IES 2.2 plugin '{module_name}': {e}") from e
+            raise RuntimeError(f"Failed to get vtable from plugin '{module_name}': {e}") from e
 
         if hasattr(mod, 'create_implementation') and callable(mod.create_implementation):
             spec.factory = mod.create_implementation
@@ -146,7 +145,7 @@ class AutoDiscoveryService:
             try:
                 spec.axioms = mod.__ibcext_axiom__()
             except Exception as e:
-                raise RuntimeError(f"Failed to get axioms from IES 2.2 plugin '{module_name}': {e}") from e
+                raise RuntimeError(f"Failed to get axioms from plugin '{module_name}': {e}") from e
 
         return spec
 

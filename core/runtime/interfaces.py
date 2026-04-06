@@ -143,7 +143,7 @@ class IHostService(Protocol):
 
 class IKernelOrchestrator(Protocol):
     """
-    [IES 2.2] 内核协调器协议。
+     内核协调器协议。
     定义了运行时环境向引擎层（Host/Engine）发起的最高特权系统调用。
     用于解决架构穿透问题，使运行时无需感知 Compiler 等底层构建组件。
     """
@@ -213,7 +213,7 @@ class IIbIntent(IIbObject, Protocol):
 class IIbBehavior(IIbObject, Protocol):
     """延迟执行的行为对象协议 (~...~)"""
     node: str
-    captured_intents: Union[List[Any], Any] # [IES 2.2] 支持 IntentNode 或 列表
+    captured_intents: Union[List[Any], Any] # 支持 IntentNode 或 列表
     expected_type: Optional[str]
 
 @runtime_checkable
@@ -324,7 +324,7 @@ class Interpreter(Protocol):
     def registry(self) -> Any: ...
     @property
     def symbol_view(self) -> SymbolView: ...
-    def visit(self, node_uid: str) -> Any: ...
+    def visit(self, node_uid: str, bypass_protection: bool = False) -> Any: ...
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]: ...
     def get_side_table(self, table_name: str, key: str) -> Any: ...
     def execute_module(self, root_node_uid: str, module_name: str, scope: Any): ...

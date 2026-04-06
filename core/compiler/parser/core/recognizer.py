@@ -13,7 +13,7 @@ class SyntaxRole(Enum):
     RETURN_STATEMENT = auto()      # return
     EXPRESSION_STATEMENT = auto()  # Assignment or pure expression
     INTENT_MARKER = auto()         # @ intent
-    INTENT_DEFINITION = auto()     # intent "..." { ... }
+    LLM_EXCEPT = auto()            # llmexcept: ...
     BLOCK_MARKER = auto()          # INDENT / DEDENT
     OTHER = auto()
 
@@ -30,8 +30,8 @@ class SyntaxRecognizer:
         if token.type == TokenType.INTENT:
             return SyntaxRole.INTENT_MARKER
         
-        if token.type == TokenType.INTENT_STMT:
-            return SyntaxRole.INTENT_DEFINITION
+        if token.type == TokenType.LLM_EXCEPT:
+            return SyntaxRole.LLM_EXCEPT
         
         if token.type in (TokenType.INDENT, TokenType.DEDENT):
             return SyntaxRole.BLOCK_MARKER
@@ -54,7 +54,7 @@ class SyntaxRecognizer:
         if token.type == TokenType.RETURN:
             return SyntaxRole.RETURN_STATEMENT
         
-        if token.type in (TokenType.VAR, TokenType.CALLABLE):
+        if token.type in (TokenType.AUTO, TokenType.CALLABLE):
             return SyntaxRole.VARIABLE_DECLARATION
         
         # Check for implicit declaration: Type Name (e.g., int x, MyClass c)

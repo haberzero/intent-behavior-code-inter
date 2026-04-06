@@ -21,7 +21,7 @@ class TokenType(Enum):
     FOR = auto()
     WHILE = auto()
     IN = auto()
-    VAR = auto()
+    AUTO = auto()
     GLOBAL = auto()
     PASS = auto()
     BREAK = auto()
@@ -43,10 +43,10 @@ class TokenType(Enum):
     LLM_END = auto()
     LLM_SYS = auto()
     LLM_USER = auto()
+    LLM_RETRY_HINT = auto()
     LLM_EXCEPT = auto()
     RETRY = auto()
     LLM_RETRY = auto()
-    INTENT_STMT = auto()
 
     # 标识符与字面量
     IDENTIFIER = auto()

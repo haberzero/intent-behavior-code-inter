@@ -5,7 +5,7 @@ __all__ = ["IExecutionContext"]
 @runtime_checkable
 class IExecutionContext(Protocol):
     """
-    [IES 2.1 Decoupling] 运行时执行上下文数据协议。
+    运行时执行上下文数据协议。
     作为 Interpreter 与底层组件（Kernel/Foundation）解耦的桥梁。
     它仅包含执行所需的只读数据池、栈内省能力以及求值入口。
 
@@ -40,9 +40,18 @@ class IExecutionContext(Protocol):
     def runtime_context(self) -> Any: ...
 
     @property
+    def module_manager(self) -> Any: ...
+
+    @property
+    def current_module_name(self) -> Optional[str]: ...
+
+    @current_module_name.setter
+    def current_module_name(self, value: Optional[str]) -> None: ...
+
+    @property
     def strict_mode(self) -> bool: ...
 
-    def visit(self, node_uid: str, module_name: Optional[str] = None) -> Any: ...
+    def visit(self, node_uid: str, module_name: Optional[str] = None, bypass_protection: bool = False) -> Any: ...
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]: ...
 

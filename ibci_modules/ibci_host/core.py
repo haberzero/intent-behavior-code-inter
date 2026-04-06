@@ -1,5 +1,5 @@
 """
-[IES 2.2] Host 宿主能力插件核心实现
+Host 宿主能力插件核心实现
 """
 from typing import Any, Dict, Optional
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
@@ -7,7 +7,7 @@ from core.extension.ibcext import IbPlugin, ExtensionCapabilities
 
 class HostImplementation(IbPlugin):
     """
-    [IES 2.2] Host 宿主能力插件。
+    Host 宿主能力插件。
     核心级插件，必须继承 IbPlugin 以获取 ServiceContext 能力。
     """
     def __init__(self):
@@ -16,7 +16,7 @@ class HostImplementation(IbPlugin):
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
-        # [IES 2.2] 向能力注册表注册自己为 Host Provider
+        # 向能力注册表注册自己为 Host Provider
         capabilities.expose("host_provider", self)
 
     @property

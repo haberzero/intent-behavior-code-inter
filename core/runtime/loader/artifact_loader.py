@@ -52,7 +52,7 @@ class ArtifactLoader:
         hydrator = ArtifactRehydrator(type_pool, self.registry.get_metadata_registry())
         user_classes = hydrator.hydrate_all(self.registry)
 
-        # [IES 2.0] STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
+        # STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
         class_to_node = {}
         # 1. 扫描所有模块寻找类定义节点
         for module_name, module_data in artifact_dict.get("modules", {}).items():
@@ -87,7 +87,7 @@ class ArtifactLoader:
             remaining = still_remaining
             
         if remaining:
-            # [IES 2.0 FIX] 继承链断裂属于致命错误 (Item 2.2 Audit)
+            # 继承链断裂属于致命错误 (Item 2.2 Audit)
             # 必须在加载阶段拦截，严禁进入运行时。
             missing = [f"{c.name} (extends {c.parent_name or 'Object'})" for c in remaining]
             raise RegistryIsolationError(f"Linker Error: Broken inheritance chain for classes: {', '.join(missing)}. "

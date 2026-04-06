@@ -32,9 +32,9 @@ class IntrinsicManager:
         """
         环境重绑定协议：将逻辑上的内置函数符号链接到当前物理环境的实现。
         """
-        # [IES 2.1 Refactor] 直接通过 context.define_variable 进行注入，保持单向依赖
+        # 直接通过 context.define_variable 进行注入，保持单向依赖
         for name, func in self._intrinsics.items():
-            # [IES 2.2] 注入时带上稳定的内置符号 UID，与编译器对齐
+            # 注入时带上稳定的内置符号 UID，与编译器对齐
             context.define_variable(name, func, is_const=True, force=True, uid=f"builtin:{name}")
         
         # 2. 扫描池中已加载的对象 (用于处理那些被赋值给其他变量的函数)
@@ -42,7 +42,7 @@ class IntrinsicManager:
             logic_id_map = {f.logic_id: f.py_func for f in self._intrinsics.values() if f.logic_id}
             deserializer.on_rebind(logic_id_map)
         
-        # [IES 2.0 Meta-API] 特权：为每个内置函数显式设置逻辑标识
+        # 特权：为每个内置函数显式设置逻辑标识
         for name, func in self._intrinsics.items():
             func.logic_id = f"intrinsic:{name}"
 

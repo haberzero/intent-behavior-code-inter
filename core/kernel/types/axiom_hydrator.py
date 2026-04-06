@@ -33,18 +33,16 @@ class AxiomHydrator:
                 if method_descs:
                     # [ARCHITECTURE NOTE]
                     # 延迟导入 FunctionSymbol 和 SymbolKind 以避免循环依赖：
-                    #   axiom_hydrator.py → descriptors.py → types/__init__.py →
-                    #   registry.py → axiom_hydrator.py (顶层会形成循环)
-                    #
-                    # Symbol ↔ TypeDescriptor 的双向引用是设计的内在需求：
-                    #   - Symbol.descriptor: 符号需要知道自己的类型
-                    #   - TypeDescriptor.members: 类型需要知道自己的成员
+                    # axiom_hydrator.py → descriptors.py → types/__init__.py →
+                    # registry.py → axiom_hydrator.py (顶层会形成循环)
+                    #                    # Symbol ↔ TypeDescriptor 的双向引用是设计的内在需求：
+                    # - Symbol.descriptor: 符号需要知道自己的类型
+                    # - TypeDescriptor.members: 类型需要知道自己的成员
                     # 这反映了编译器中符号表与类型系统的固有耦合关系。
-                    #
-                    # 未来如需彻底解耦，可考虑：
-                    #   1. 引入 StaticType 中间接口层
-                    #   2. 将 SymbolKind 等枚举移至独立子模块
-                    #   3. 使用依赖注入容器管理初始化顺序
+                    #                    # 未来如需彻底解耦，可考虑：
+                    # 1. 引入 StaticType 中间接口层
+                    # 2. 将 SymbolKind 等枚举移至独立子模块
+                    # 3. 使用依赖注入容器管理初始化顺序
                     from core.kernel.symbols import FunctionSymbol, SymbolKind
                     for m_name, m_desc in method_descs.items():
                         hydrated_m_desc = self.hydrate_metadata(m_desc)

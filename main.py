@@ -11,6 +11,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from core.engine import IBCIEngine
+from core.project_detector import ProjectDetector
 from core.kernel.issue import CompilerError
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
@@ -40,16 +41,18 @@ def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
 
 def main():
     parser = argparse.ArgumentParser(description="IBC-Inter CLI")
+    parser.add_argument('--max-inst', type=int, default=100000000, help='Max instructions (default: 100000000)')
     subparsers = parser.add_subparsers(dest="command")
     
     # Run command
     run_parser = subparsers.add_parser("run", help="Compile and run an IBCI file")
     run_parser.add_argument("file", help="Path to the .ibci entry file")
     run_parser.add_argument("--root", help="Project root directory", default=None)
-    run_parser.add_argument("--var", action="append", help="Set variable (key=value)")
+    run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
     run_parser.add_argument("--core-debug", help="Core debugger config (JSON string or file path)", default=None)
+    run_parser.add_argument('--max-inst', type=int, default=100000000, help='Max instructions (default: 100000000)')
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -89,11 +92,21 @@ def main():
         return
 
     # 确定项目根目录 (root_dir)
-    # 逻辑：如果显式指定了 --root，则使用它；
-    # 否则，默认将目标 .ibci 文件所在的目录作为根目录。
+    # 逻辑：
+    # 1. 如果显式指定了 --root，则使用它
+    # 2. 否则，自动检测项目根目录（向上查找 plugins/ 或 ibci_modules/）
+    # 3. 如果未检测到，则使用入口文件所在目录
     root_dir = args.root
     if not root_dir and hasattr(args, 'file'):
-        root_dir = os.path.dirname(os.path.abspath(args.file))
+        detected_root = ProjectDetector.detect_project_root(args.file)
+        if detected_root:
+            root_dir = detected_root
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"[Auto-detect] {ProjectDetector.describe_detection(args.file)}")
+        else:
+            root_dir = os.path.dirname(os.path.abspath(args.file))
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"[Auto-detect] No project root detected, using entry directory: {root_dir}")
 
     # 初始化引擎，决定是否自动嗅探
     auto_sniff = not getattr(args, 'no_sniff', False)
@@ -122,10 +135,10 @@ def main():
     if args.command == "run":
         # 加载命令行变量
         cli_variables = {}
-        if getattr(args, 'var', None):
-            for var in args.var:
-                if "=" in var:
-                    k, v = var.split("=", 1)
+        if getattr(args, 'auto', None):
+            for auto_var in args.auto:
+                if "=" in auto_var:
+                    k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
         # 运行引擎

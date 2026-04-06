@@ -91,7 +91,7 @@ class ExpressionComponent(BaseComponent):
         # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
         
-        # [NEW] Variable Reference
+        # Variable Reference
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
@@ -110,7 +110,7 @@ class ExpressionComponent(BaseComponent):
 
     def self_expr(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
+        # 使用语法常量，消除硬编码字符串
         return self._loc(ast.IbName(id=ID_SELF, ctx='Load'), token)
 
     def number(self) -> ast.IbExpr:
@@ -126,24 +126,24 @@ class ExpressionComponent(BaseComponent):
 
     def boolean(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 基于 Token 类型判定，消除字符串硬编码
+        # 基于 Token 类型判定，消除字符串硬编码
         val = (token.type == TokenType.TRUE)
         return self._loc(ast.IbConstant(value=val), token)
 
     def none_expr(self) -> ast.IbExpr:
         token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用标准 NONE Token，消除 Python None 直接引用
+        # 使用标准 NONE Token，消除 Python None 直接引用
         return self._loc(ast.IbConstant(value=None), token)
 
     def grouping(self) -> ast.IbExpr:
-        # [IES 2.1 Ambiguity Resolution] 
+
         # 语法歧义解析：(Type) expr [Cast] vs (expr) [Grouping]
         # 由于 Type 可以是复杂的标识符、属性或下标访问，LL(1) 无法区分。
         # 我们采用推测性前瞻（Speculative Lookahead）模式进行判定。
         
-        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.VAR, TokenType.CALLABLE):
+        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO, TokenType.CALLABLE):
             checkpoint = self.stream.get_checkpoint()
-            # [IES 2.1 Speculative Analysis]
+
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
             with self.stream.speculate():
                 try:
@@ -154,7 +154,7 @@ class ExpressionComponent(BaseComponent):
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
                 except ParseControlFlowError:
-                    # [IES 2.1 Resolution] 
+
                     # 类型转换（Cast）语法解析失败，由于处于 speculate() 上下文中，
                     # 产生的错误已被隔离。此处静默 pass 是为了允许流回退并尝试普通表达式分组解析。
                     pass
@@ -193,14 +193,14 @@ class ExpressionComponent(BaseComponent):
 
     def unary(self) -> ast.IbExpr:
         op_token = self.stream.previous()
-        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+        # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
         op = OP_MAP.get(op_token.type, op_token.type.name)
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
 
     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
-        # [IES 2.1 Refactor] 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
+        # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
         op_str = OP_MAP.get(op_token.type, op_token.type.name)
         
         rule = self.get_rule(op_token.type)
@@ -218,7 +218,7 @@ class ExpressionComponent(BaseComponent):
 
     def logical(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
-        # [IES 2.1 Refactor] 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
+        # 使用 OP_MAP 映射逻辑运算符，消除硬编码字符串
         op = OP_MAP.get(op_token.type, op_token.type.name)
         rule = self.get_rule(op_token.type)
         right = self.parse_precedence(rule.precedence)
@@ -240,7 +240,7 @@ class ExpressionComponent(BaseComponent):
                     break
         end_token = self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
         
-        # [NEW] 意图节点化：不再向 Call 注入 intent 属性
+        # 意图节点化：不再向 Call 注入 intent 属性
         return self._loc(ast.IbCall(func=left, args=arguments, keywords=[]), left, end_token)
 
     def dot(self, left: ast.IbExpr) -> ast.IbExpr:
@@ -249,7 +249,7 @@ class ExpressionComponent(BaseComponent):
 
     def tuple_expr(self, left: ast.IbExpr) -> ast.IbExpr:
         elts = [left]
-        # [IES 2.2 Fix] 修正元组解析：第一个逗号已被 parse_precedence 消费
+        # 修正元组解析：第一个逗号已被 parse_precedence 消费
         # 我们必须至少解析一个后续元素
         if not self.stream.check(TokenType.RPAREN) and not self.stream.check(TokenType.RBRACKET) and not self.stream.check(TokenType.RBRACE):
             elts.append(self.parse_precedence(IbPrecedence.TUPLE))
@@ -261,9 +261,52 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbTuple(elts=elts, ctx='Load'), left, elts[-1])
 
     def subscript(self, left: ast.IbExpr) -> ast.IbSubscript:
-        slice_expr = self.parse_expression()
+        """解析下标或切片：obj[index] 或 obj[start:end:step]"""
+        slice_node = self._parse_slice_or_index()
         end_token = self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-        return self._loc(ast.IbSubscript(value=left, slice=slice_expr, ctx='Load'), left, end_token)
+        return self._loc(ast.IbSubscript(value=left, slice=slice_node, ctx='Load'), left, end_token)
+
+    def _parse_slice_or_index(self) -> ast.IbExpr:
+        """解析切片或单点索引"""
+        if self.stream.match(TokenType.COLON):
+            return self._parse_slice_rest(lower=None, colon_token=self.stream.previous())
+
+        if self.stream.check(TokenType.MINUS):
+            expr = self._parse_slice_expression()
+        else:
+            expr = self.parse_expression()
+
+        if self.stream.match(TokenType.COLON):
+            return self._parse_slice_rest(lower=expr, colon_token=self.stream.previous())
+
+        return expr
+
+    def _parse_slice_rest(self, lower: Optional[ast.IbExpr], colon_token) -> ast.IbSlice:
+        """辅助解析切片的后续部分"""
+        upper = None
+        if not self.stream.check(TokenType.COLON, TokenType.RBRACKET):
+            upper = self._parse_slice_expression()
+
+        step = None
+        if self.stream.match(TokenType.COLON):
+            if not self.stream.check(TokenType.RBRACKET):
+                step = self._parse_slice_expression()
+
+        return self._loc(ast.IbSlice(lower=lower, upper=upper, step=step), colon_token)
+
+    def _parse_slice_expression(self) -> ast.IbExpr:
+        """解析切片表达式中的数字，支持负数"""
+        start_token = self.stream.peek()
+        if self.stream.match(TokenType.MINUS):
+            if self.stream.check(TokenType.NUMBER):
+                num_token = self.stream.advance()
+                negative_num = ast.IbConstant(
+                    value=-int(num_token.value)
+                )
+                return self._loc(negative_num, start_token)
+            else:
+                self.stream.rewind()
+        return self.parse_expression()
 
     def behavior_expression(self) -> ast.IbBehaviorExpr:
         start_token = self.stream.previous()
@@ -305,10 +348,10 @@ class ExpressionComponent(BaseComponent):
                 node = self._loc(ast.IbAttribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
             elif self.stream.match(TokenType.LBRACKET):
                 lbracket_token = self.stream.previous()
-                # Now we can use the standard expression parser for the index!
-                slice_expr = self.parse_expression()
+                # 使用统一的切片/索引解析器
+                slice_node = self._parse_slice_or_index()
                 self.stream.consume(TokenType.RBRACKET, "Expect ']' after subscript.")
-                node = self._loc(ast.IbSubscript(value=node, slice=slice_expr, ctx='Load'), lbracket_token)
+                node = self._loc(ast.IbSubscript(value=node, slice=slice_node, ctx='Load'), lbracket_token)
             else:
                 break
         return node

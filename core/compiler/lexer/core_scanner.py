@@ -31,7 +31,7 @@ class CoreTokenScanner:
             'callable': TokenType.CALLABLE,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
-            'var': TokenType.VAR, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
+            'auto': TokenType.AUTO, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,
@@ -43,9 +43,9 @@ class CoreTokenScanner:
             'llmexcept': TokenType.LLM_EXCEPT, 
             'llmretry': TokenType.LLM_RETRY,
             'retry': TokenType.RETRY,
-            'intent': TokenType.INTENT_STMT,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
-            'True': TokenType.TRUE, 'False': TokenType.FALSE
+            '__llmretry__': TokenType.LLM_RETRY_HINT,
+            'true': TokenType.TRUE, 'false': TokenType.FALSE
         }
 
     @property
@@ -90,7 +90,7 @@ class CoreTokenScanner:
 
     def try_scan(self, tokens: List[Token], scan_func, *args) -> bool:
         """
-        [IES 2.0 Speculative Engine]
+        
         尝试执行特定的扫描函数。如果失败（抛出异常或返回 False），则回滚所有状态。
         """
         original_token_count = len(tokens)
@@ -207,7 +207,7 @@ class CoreTokenScanner:
         self.scanner.start_token()
         char = self.scanner.peek()
 
-        # [NEW] 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
+        # 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
         # 使用尝试性扫描，避免物理回退
         if char == '$':
             self.try_scan(tokens, self._scan_var_ref)
@@ -645,6 +645,24 @@ class CoreTokenScanner:
             
         self.is_new_line_flag = False
 
+    def _is_at_expression_start(self) -> bool:
+        """检查是否处于表达式开头（用于判断负号是负号还是减号）"""
+        idx = self.scanner.pos
+        while idx > 0:
+            pos = idx - 1
+            if pos < 0:
+                break
+            char = self.scanner.source[pos]
+            if char == ' ' or char == '\t':
+                idx = pos
+                continue
+            if char == '\n':
+                return True
+            if char in '+-*/%=<>!&|,':
+                return True
+            return False
+        return True
+
     def _scan_number(self, first_char: str, tokens: List[Token]):
         value = first_char
         
@@ -685,7 +703,23 @@ class CoreTokenScanner:
                     value += self.scanner.advance()
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
-        
+
+        # Check for negative number
+        # Only treat as negative if this is at the start of an expression (after whitespace, operator, or at beginning of line)
+        if self.is_new_line_flag or self._is_at_expression_start():
+            if self.scanner.peek() == '-':
+                self.scanner.advance()
+                next_char = self.scanner.peek()
+                if next_char.isdigit():
+                    value = '-' + value
+                    while self.scanner.peek().isdigit():
+                        value += self.scanner.advance()
+                    # Check for negative float
+                    if self.scanner.peek() == '.' and self.scanner.peek(1).isdigit():
+                        value += self.scanner.advance()
+                        while self.scanner.peek().isdigit():
+                            value += self.scanner.advance()
+
         tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
         self.is_new_line_flag = False
 

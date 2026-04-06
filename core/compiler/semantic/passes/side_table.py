@@ -7,17 +7,24 @@ from core.kernel.symbols import Symbol
 
 class SideTableManager:
     """
-    [IES 2.1] 侧表管理器。
+     侧表管理器。
     统一管理语义分析过程中产生的元数据侧表。
+
+    注意：意图注释不再使用侧表存储，而是作为独立 AST 节点
+    (IbIntentAnnotation, IbIntentStackOperation) 由解释器直接处理。
     """
     def __init__(self):
         self.node_scenes: Dict[Any, Any] = {}
         self.node_to_symbol: Dict[Any, Symbol] = {}
         self.node_to_type: Dict[Any, 'TypeDescriptor'] = {}
         self.node_is_deferred: Dict[Any, bool] = {}
-        self.node_intents: Dict[Any, List[Any]] = {}
         self.node_to_loc: Dict[Any, Any] = {}
         self.decision_maps: Dict[Any, Dict[str, str]] = {}
+        self.node_protection: Dict[Any, Any] = {}
+
+    def bind_protection(self, target_node: Any, handler_node: Any) -> None:
+        """建立保护关系侧表"""
+        self.node_protection[target_node] = handler_node
 
     def bind_symbol(self, node: Any, sym: Symbol) -> None:
         self.node_to_symbol[node] = sym
@@ -37,9 +44,6 @@ class SideTableManager:
     def is_deferred(self, node: Any) -> bool:
         return self.node_is_deferred.get(node, False)
 
-    def bind_intents(self, node: Any, intents: List[Any]) -> None:
-        self.node_intents[node] = intents
-
     def bind_location(self, node: Any, loc: Any) -> None:
         self.node_to_loc[node] = loc
 
@@ -52,9 +56,6 @@ class SideTableManager:
     def get_scene(self, node: Any) -> Optional[Any]:
         return self.node_scenes.get(node)
 
-    def get_intents(self, node: Any) -> Optional[List[Any]]:
-        return self.node_intents.get(node)
-
     def get_location(self, node: Any) -> Optional[Any]:
         return self.node_to_loc.get(node)
 
@@ -63,5 +64,6 @@ class SideTableManager:
         self.node_to_symbol.clear()
         self.node_to_type.clear()
         self.node_is_deferred.clear()
-        self.node_intents.clear()
         self.node_to_loc.clear()
+        self.node_protection.clear()
+        self.decision_maps.clear()

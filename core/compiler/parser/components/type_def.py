@@ -24,7 +24,7 @@ class TypeComponent(BaseComponent):
                 
         elif self.stream.match(TokenType.CALLABLE):
             token = self.stream.previous()
-            # [IES 2.1 Refactor] 使用语法常量，消除硬编码字符串
+            # 使用语法常量，消除硬编码字符串
             callable_name = ID_CALLABLE
             if self.context.metadata:
                 callable_desc = self.context.metadata.resolve(ID_CALLABLE)

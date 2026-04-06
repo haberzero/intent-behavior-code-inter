@@ -8,7 +8,7 @@ from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.kernel.issue import InterpreterError
 from core.runtime.exceptions import (
-    ReturnException, BreakException, ContinueException, RetryException, ThrownException
+    ReturnException, BreakException, ContinueException, ThrownException
 )
 from ..constants import OP_MAPPING, UNARY_OP_MAPPING, AST_OP_MAP
 
@@ -24,13 +24,14 @@ class ExprHandler(BaseHandler):
         """变量读取：严格通过 Symbol UID 查找"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         
-        # [IES 2.2 Standard] 彻底废除名称查找 fallback。
+        # 彻底废除名称查找 fallback。
         # 任何合法的 IBCI 产物都必须在编译阶段完成符号决议并记录在 node_to_symbol 侧表中。
         if not sym_uid:
              name = node_data.get("id")
              raise self.report_error(f"Execution Error: Symbol UID missing for name '{name}'. Artifact is corrupted or unanalyzed.", node_uid)
              
         try:
+            # print(f"[DEBUG] Looking up UID: {sym_uid} for node: {node_uid}")
             return self.runtime_context.get_variable_by_uid(sym_uid)
         except Exception:
             # 如果是严格模式，或者在正常模式下 UID 查找彻底失败（未定义变量），则报错
@@ -69,7 +70,7 @@ class ExprHandler(BaseHandler):
         operand = self.visit(node_data.get("operand"))
         op_symbol = node_data.get("op")
         
-        # [IES 2.0] 使用全局归一化映射，消除 Handler 内部硬编码
+        # 使用全局归一化映射，消除 Handler 内部硬编码
         op = AST_OP_MAP.get(op_symbol, op_symbol)
         method = UNARY_OP_MAPPING.get(op)
         
@@ -82,7 +83,7 @@ class ExprHandler(BaseHandler):
         ops = node_data.get("ops", [])
         comparators = node_data.get("comparators", [])
         
-        # [IES 2.0] 必须处理链式比较，例如 a < b < c 
+        # 必须处理链式比较，例如 a < b < c 
         # Python 语义：(a < b) and (b < c)，且每个操作数只计算一次
         
         current_left = left
@@ -112,7 +113,7 @@ class ExprHandler(BaseHandler):
         args = [self.visit(a) for a in node_data.get("args", [])]
         
         try:
-            # [IES 2.0 Architectural Update] 识别被动行为对象并分发给执行器
+            # 识别被动行为对象并分发给执行器
             if isinstance(func, IIbBehavior):
                 return self._execute_behavior(func)
 
@@ -120,7 +121,7 @@ class ExprHandler(BaseHandler):
             if hasattr(func, 'call'):
                 return func.call(self.registry.get_none(), args)
             return func.receive('__call__', args)
-        except (ReturnException, BreakException, ContinueException, RetryException, ThrownException):
+        except (ReturnException, BreakException, ContinueException, ThrownException):
             raise
         except Exception as e:
             if isinstance(e, InterpreterError): raise
@@ -137,6 +138,19 @@ class ExprHandler(BaseHandler):
         value = self.visit(node_data.get("value"))
         slice_obj = self.visit(node_data.get("slice"))
         return value.receive('__getitem__', [slice_obj])
+
+    def visit_IbSlice(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """切片对象构建"""
+        lower = node_data.get("lower")
+        upper = node_data.get("upper")
+        step = node_data.get("step")
+        
+        l_val = self.visit(lower).to_native() if lower else None
+        u_val = self.visit(upper).to_native() if upper else None
+        s_val = self.visit(step).to_native() if step else None
+        
+        # 封装为 Python slice 对象并用 registry 包装
+        return self.registry.box(slice(l_val, u_val, s_val))
 
     def visit_IbListExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
@@ -156,11 +170,11 @@ class ExprHandler(BaseHandler):
         return self.registry.box(data)
 
     def visit_IbBehaviorExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """[IES 2.0 Architectural Update] 行为描述行不再立即执行，而是包装为被动行为对象。"""
+        """ 行为描述行不再立即执行，而是包装为被动行为对象。"""
         # 1. 检查是否显式标记为延迟
         is_deferred = self.get_side_table("node_is_deferred", node_uid)
         
-        # [IES 2.1 Factory] 统一解析呼叫级意图
+        # 统一解析呼叫级意图
         intent_uid = node_data.get("intent")
         call_intent = None
         if intent_uid:
@@ -174,11 +188,11 @@ class ExprHandler(BaseHandler):
 
         if is_deferred:
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
-            # [IES 2.2 Optimization] 捕获原始 IntentNode 链表以保留结构共享
+            # 捕获原始 IntentNode 链表以保留结构共享
             captured_intents = self.runtime_context.intent_stack
             
             # 如果是延迟执行，行为对象需要持有自己的 call_intent
-            # [FIX] 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
+            # 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
             # 暂时保持现状，等待下一步重构 behavior 对象。
             return self.service_context.object_factory.create_behavior(
                 node_uid, 
@@ -187,16 +201,22 @@ class ExprHandler(BaseHandler):
             )
         
         # [Fallback] 如果是非延迟模式，直接执行
-        return self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context, call_intent=call_intent)
+        result = self.service_context.llm_executor.execute_behavior_expression(node_uid, self.execution_context, call_intent=call_intent)
+
+        # 将结果存储到 RuntimeContext，供 visit_IbLLMExceptionalStmt 检查
+        self.runtime_context.set_last_llm_result(result)
+
+        # 返回 IbObject（而不是 LLMResult）
+        return result.value if result and result.value else self.registry.get_none()
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""
         value = self.visit(node_data.get("value"))
         
-        # [IES 2.1 Refactor] 强制从 side_tables 获取决议后的目标描述符
+        # 强制从 side_tables 获取决议后的目标描述符
         target_descriptor = self.get_side_table("node_to_type", node_uid)
         if not target_descriptor:
-            # [Active Defense] 严禁回退到名称查找，确保 IES 2.1 契约完整性
+            # 严禁回退到名称查找，确保完整性
             return value
             
         # 寻找对应的 IbClass (基于 UTS 唯一标识)

@@ -3,81 +3,51 @@ from core.kernel.intent_logic import IntentProtocol
 
 class IntentResolver:
     """
-    统一的意图冲突消解算法 (IES 2.0)。
-    负责合并 Global, Block, Smear, Call 三层意图。
+    统一的意图冲突消解算法。
+    负责合并 Global 和 Active (栈内) 两层意图。
+
+    设计说明：
+    - @+ : 物理压入意图栈
+    - @- : 物理从栈中移除匹配的意图
+    - @! : 作为临时的单次意图，在 get_resolved_prompt_intents 中处理
+
+    IntentResolver 只负责简单的意图合并和去重。
     """
     @staticmethod
     def resolve(
         active_intents: List[IntentProtocol],
         global_intents: List[IntentProtocol] = None,
-        call_intent: Optional[IntentProtocol] = None,
         context: Any = None,
         execution_context: Any = None
     ) -> List[str]:
         """
         合并并解析意图列表，返回最终的 Prompt 字符串列表。
-        active_intents: 栈顶是最近推入的 (内层)
+        active_intents: 栈内活跃意图（按从底到顶的顺序）
         """
-        resolved_block_intents = []
-        is_exclusive = False
-        removed_tags = set()
-        removed_contents = set()
-        
-        # 1. 从内向外 (反向遍历栈) 处理块级/涂抹意图
-        for i in reversed(active_intents):
-            if is_exclusive:
-                break
-                
-            # 解析内容 (基于执行上下文进行动态评估)
+        resolved = []
+
+        # 添加活跃意图
+        for i in active_intents:
             content = i.resolve_content(context, execution_context)
-            
-            # 处理移除模式
-            if i.is_remove:
-                if i.tag: removed_tags.add(i.tag)
-                if content: removed_contents.add(content)
-                continue
-            
-            # 检查是否已被更内层的意图显式移除
-            if (i.tag and i.tag in removed_tags) or (content and content in removed_contents):
-                continue
-                
-            # 处理排他模式
-            if i.is_override:
-                is_exclusive = True
-            
-            # 添加到结果集 (insert at 0 to maintain original order)
-            resolved_block_intents.insert(0, content)
-            
-        # 2. 处理全局意图 (如果非排他模式)
-        final_list = []
-        if not is_exclusive and global_intents:
+            if content:
+                resolved.append(content)
+
+        # 添加全局意图
+        if global_intents:
             for i in global_intents:
                 content = i.resolve_content(context, execution_context)
-                if (i.tag and i.tag in removed_tags) or (content and content in removed_contents):
-                    continue
-                final_list.append(content)
-        
-        final_list.extend(resolved_block_intents)
-        
-        # 3. 处理 Call 级意图 (最高优先级，可覆盖一切)
-        if call_intent:
-            content = call_intent.resolve_content(context, execution_context)
-            if call_intent.is_override:
-                return [content]
-            elif call_intent.is_remove:
-                if content in final_list: final_list.remove(content)
-            else:
-                if content not in final_list: final_list.append(content)
-                
-        return IntentResolver._unique_merge(final_list)
+                if content and content not in resolved:
+                    resolved.append(content)
+
+        return IntentResolver._unique_keep_order(resolved)
 
     @staticmethod
-    def _unique_merge(intents: List[str]) -> List[str]:
+    def _unique_keep_order(intents: List[str]) -> List[str]:
         """去重并保持顺序"""
         seen = set()
-        unique_intents = []
+        result = []
         for i in intents:
             if i and i not in seen:
-                unique_intents.append(i)
                 seen.add(i)
-        return unique_intents
+                result.append(i)
+        return result

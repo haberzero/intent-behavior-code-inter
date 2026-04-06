@@ -2,7 +2,7 @@ from enum import Enum
 from typing import List, Optional, Any, Protocol, Union
 
 class IntentMode(Enum):
-    """意图合并模式 (IES 2.0)"""
+    """意图合并模式"""
     APPEND = "+"    # 叠加 (默认)
     OVERRIDE = "!"  # 排他 (覆盖之前的所有意图)
     REMOVE = "-"    # 移除 (从栈中移除匹配的意图)
@@ -21,10 +21,11 @@ class IntentMode(Enum):
 class IntentRole(Enum):
     """意图来源角色"""
     BLOCK = "block"      # 意图块 (intent "..." { ... })
-    SMEAR = "smear"      # 涂抹式注释 (@ ...)
+    SMEAR = "smear"      # 涂抹式注释 (@ ...) - 必须紧跟 LLM 调用
     CALL = "call"        # 函数调用时携带的意图 (func(...) @ ...)
     GLOBAL = "global"    # 全局意图 (context.set_global_intent)
     DYNAMIC = "dynamic"  # 编程式动态推入 (context.push_intent)
+    STACK = "stack"      # 意图栈操作 (@+/@-) - 允许独立存在
 
 class IntentProtocol(Protocol):
     """

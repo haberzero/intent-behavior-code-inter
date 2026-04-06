@@ -1,0 +1,49 @@
+# 02_sys_module.ibci
+# 系统模块
+
+import sys
+import isys
+
+print("=== 系统模块 ===")
+
+print("\n=== 路径信息 ===")
+
+print("\n[1] 项目根目录")
+str project_root = isys.project_root()
+print("项目根目录: " + project_root)
+print("说明: IBCI 项目的根目录，所有文件操作限制在此范围内")
+
+print("\n[2] 入口文件目录")
+str entry_dir = isys.entry_dir()
+print("入口文件目录: " + entry_dir)
+print("说明: IBCI 程序入口文件所在的目录")
+
+print("\n[3] 入口文件路径")
+str entry_path = isys.entry_path()
+print("入口文件路径: " + entry_path)
+print("说明: IBCI 程序入口文件的完整路径")
+
+print("\n=== 沙箱控制 ===")
+
+print("\n[4] 沙箱状态")
+bool sandboxed = sys.is_sandboxed()
+print("是否启用沙箱: " + (str)sandboxed)
+print("说明: 沙箱限制文件操作在项目目录内")
+
+print("\n[5] 启用外部访问")
+print("警告: 启用外部访问可能带来安全风险")
+print("当前沙箱状态: " + (str)sandboxed)
+
+print("\n=== 路径关系 ===")
+print("路径层次结构:")
+print("  1. Python 进程 (os.getcwd)")
+print("  2. 项目根目录 (isys.project_root)")
+print("  3. 入口文件目录 (isys.entry_dir)")
+print("")
+print("相对路径解析:")
+print("  ./file.txt → 入口文件目录")
+print("  file.txt → 入口文件目录")
+
+print("\n=== 模块职责 ===")
+print("isys 模块: 入口文件路径和运行时状态查询（内核级）")
+print("sys 模块: 沙箱控制和权限管理（可替换）")

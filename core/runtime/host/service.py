@@ -31,7 +31,7 @@ class HostService(IHostService):
 
     def sync(self) -> bool:
         """
-        [IES 2.1] 安全点同步 (Safe Point Sync) 原语。
+         安全点同步 (Safe Point Sync) 原语。
         等待所有执行上下文达到一致状态后返回。
         """
         return self._sync_manager.sync()
@@ -45,7 +45,7 @@ class HostService(IHostService):
         base_dir = os.path.dirname(abs_path)
         os.makedirs(base_dir, exist_ok=True)
         
-        # [IES 2.2 Security Update] 文本资产外部化持久化
+        # 文本资产外部化持久化
         assets = data["pools"].get("assets", {})
         if assets:
             asset_dir = abs_path + ".assets"
@@ -68,7 +68,7 @@ class HostService(IHostService):
         with open(abs_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             
-        # [IES 2.2 Security Update] 恢复外部文本资产
+        # 恢复外部文本资产
         asset_dir = abs_path + ".assets"
         if os.path.exists(asset_dir):
             assets = data["pools"].get("assets", {})
@@ -104,24 +104,24 @@ class HostService(IHostService):
         self.setup_context_callback(context, force=True)
         
         # 2. 重新注入原生插件 (Native Plugins)
-        # [IES 2.1 Refactor] 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
+        # 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
         for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg:
                 if not isinstance(pkg, IIbObject):
-                    # [IES 2.1 Factory] 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
+                    # 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
                     pkg_obj = self.execution_context.factory.create_native_object(
                         pkg, 
                         self.registry.get_class("Object")
                     )
                 else:
                     pkg_obj = pkg
-                # [IES 2.0 Privileged] 强制覆盖常量符号
+                # 强制覆盖常量符号
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
         """
-        [IES 2.2] 通过内核协调器开启完全隔离的解释器环境。
+         通过内核协调器开启完全隔离的解释器环境。
         不再负责手动孵化实例或编译代码，而是将请求作为系统调用上报。
         """
         if not self.orchestrator:

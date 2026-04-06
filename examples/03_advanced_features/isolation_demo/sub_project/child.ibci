@@ -1,0 +1,21 @@
+# 子项目中的脚本
+# 这个脚本运行在隔离的子项目中
+
+import file
+
+print("=== 子项目脚本 ===")
+
+print("\n这个脚本运行在独立的沙箱中")
+print("只能访问 sub_project 目录内的文件")
+
+str test_file = "./local_test.txt"
+file.write(test_file, "子项目本地文件")
+
+if file.exists(test_file):
+    print("OK: 子项目本地文件创建成功")
+    file.remove(test_file)
+else:
+    print("FAIL: 创建失败")
+
+print("\n验证: 子项目无法访问父目录")
+print("（通过路径可见性验证隔离）")

@@ -13,7 +13,9 @@ venv/
 
 backup/
 prompt.txt
-test_target_proj/
+test_target_proj*/
 test.py
 api_config.json
 backup_tests
+
+diff_output_ibci_all.md

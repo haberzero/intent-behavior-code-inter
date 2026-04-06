@@ -1,0 +1,94 @@
+# 01_hello_ai.ibci
+# IBCI 入门：行为描述 + AI 交互
+
+# 本示例展示 IBCI 的核心特性：
+# 1. 行为描述语句 - 用 @~...~ 语法直接调用 AI
+# 2. LLM 函数 - 用 llm 关键字定义 AI 函数
+# 3. 意图注释 - 用 @ 编写意图注释，作为场景控制/额外提示词注入
+
+import ai
+import file
+import json
+
+# ============================================================
+# 配置 AI
+# ============================================================
+
+print("\n--- AI 配置 ---\n")
+
+# 直接使用相对路径（基于入口文件目录）
+dict config = json.parse(file.read("./api_config.json"))
+dict default_model = (dict)config["default_model"]
+
+# 配置 AI 提供者
+# 由于 ibci demo 当前的设计限制，从dict容器中获取内容目前必须使用强制类型转换。
+# 未来对于容器以及泛型的支持更完善后可能会取消此限制
+ai.set_config(
+    (str)default_model["base_url"],
+    (str)default_model["api_key"],
+    (str)default_model["model"]
+)
+
+str model_name = (str)default_model["model"]
+print("使用模型: " + model_name)
+
+# ============================================================
+# 行为描述语句
+# ============================================================
+
+print("\n--- 行为描述语句 ---\n")
+
+str greeting = "你好，请打个招呼"
+str result = @~ 请根据要求进行回复： $greeting ~
+print("llm 回复的打招呼内容：")
+print(result)
+
+print("\n")
+
+int a = 10
+int b = 20
+int sum = (int)@~ 请计算 $a 和 $b 之和~
+print("llm 回复的计算结果：")
+print((str)sum)
+
+# ============================================================
+# LLM 函数
+# ============================================================
+
+print("\n--- LLM 函数 ---\n")
+
+# 定义一个翻译函数
+# llm 函数利用 llmend 关键字标记结束定义。
+# llm函数书写不需要缩进，这是为了阅读以及提示词管理的非歧义/便利性。
+# 非缩进的内容确保所有非顶格书写的空格都可以正常被作为提示词的一部分被送入ai调用过程。
+llm 翻译(str 文本, str 目标语言):
+__sys__
+你是一个翻译助手，只返回翻译结果。不输出任何额外内容
+__user__
+请将以下内容翻译成 $目标语言： $文本
+llmend
+
+str chinese_text = "编程让世界更美好"
+str english_text = 翻译(chinese_text, "English")
+print("原文: " + chinese_text)
+print("翻译: " + english_text)
+
+# ============================================================
+# 意图注释
+# ============================================================
+
+print("\n--- 意图注释 ---\n")
+
+# 意图注释是ibc-inter中的重要特性，用于动态地向提示词注入额外约束
+@ 用客观无感情且最简洁的方式回复用户
+str result_of_intent_control = @~打个招呼~
+print("客观无感情且最简洁的回复结果：")
+print(result_of_intent_control)
+
+print("\n")
+
+# llm 函数自身的定义不变，利用意图注释注入额外约束
+@ 所有英文回复信息都采用大写字母
+english_text = 翻译(chinese_text, "English")
+print("增加了额外的大写字母约束的回复结果")
+print("翻译: " + english_text)

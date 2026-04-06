@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 from .ib_type_mapping import register_ib_type
 
-@register_ib_type("Any")
-@register_ib_type("var")
+@register_ib_type("any")
+@register_ib_type("auto")
 @register_ib_type("callable")
 @register_ib_type("void")
 @register_ib_type("bound_method")
@@ -43,7 +43,7 @@ class IbObject:
         """
         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
         
-        # [IES 2.1 Refactor] 下沉至公理层能力探测
+        # 下沉至公理层能力探测
         # 针对 __call__ 消息，检查类型公理是否声明了调用能力
         if message == '__call__':
             call_trait = self.descriptor.get_call_trait()
@@ -58,7 +58,6 @@ class IbObject:
             # 降级查找类方法
             method = self.ib_class.lookup_method(attr_name)
             if method:
-                # [FIX] 如果是方法，我们需要返回一个 BoundMethod 以便后续调用能正确传入 receiver
                 return IbBoundMethod(self, method)
 
         # 2. 正常消息路由：查找类方法
@@ -85,7 +84,7 @@ class IbObject:
             # 仅在方法缺失或解释器主动报错时回退
             return f"<Instance of {self.ib_class.name}>"
 
-    # --- [IES 2.1] 基础协议实现 ---
+    # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':
         """逻辑非运算协议"""
         # 使用 to_bool 判定并取反
@@ -117,25 +116,25 @@ class IbNativeObject(IbObject):
     def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None):
         super().__init__(ib_class)
         self.py_obj = py_obj
-        # [IES 2.0] 显式持有虚表，消除对 py_obj 的动态属性依赖
+        # 显式持有虚表，消除对 py_obj 的动态属性依赖
         self.vtable = vtable if vtable is not None else getattr(py_obj, '_ibci_vtable', {})
         # [SECURITY] 属性访问白名单
         self.whitelist = whitelist if whitelist is not None else getattr(py_obj, '_ibci_whitelist', [])
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
-        [IES 2.0] Native 消息分发核心。
+         Native 消息分发核心。
         强制通过虚表映射，禁止任何非预期的 Python 属性穿透。
         """
         # [Registry Isolation] 校验对象所属 Registry 身份
         if hasattr(self.py_obj, '_ibci_registry_id'):
             if self.py_obj._ibci_registry_id != id(self.ib_class.registry):
-                raise RegistryIsolationError(f"Security Violation: Native object from another engine instance detected. [IES 2.0 Isolation Rule]")
+                raise RegistryIsolationError(f"Security Violation: Native object from another engine instance detected. ")
 
         # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:
             attr = self.vtable[message]
-            # [IES 2.0 Proxy] 所有的 Proxy VTable 都已经由 ModuleLoader 完成了自动装箱转换
+            # 所有的 Proxy VTable 都已经由 ModuleLoader 完成了自动装箱转换
             # 直接调用并返回 IbObject
             return attr(*args)
 
@@ -143,17 +142,17 @@ class IbNativeObject(IbObject):
         if message == '__getattr__' and len(args) > 0:
             target_name = args[0].to_native()
             
-            # [IES 2.0 Proxy Binding] 如果是虚表方法，包装为 IbNativeFunction 导出
+            # 如果是虚表方法，包装为 IbNativeFunction 导出
             if target_name in self.vtable:
                 reg = self.ib_class.registry
-                # [IES 2.0] 强制通过 Gatekeeper 获取协议类
+                # 强制通过 Gatekeeper 获取协议类
                 reg.verify_level_at_least(RegistrationState.STAGE_2_CORE_TYPES.value)
                 
                 callable_cls = reg.get_class("callable")
                 if not callable_cls:
                     # 如果进入了插件加载阶段（STAGE 4+），callable 缺失属于严重初始化错误
                     reg.verify_level_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
-                    raise InterpreterError("Core Error: 'callable' class not found in registry. Builtins initialization failed? [IES 2.0 Fatal Assertion]")
+                    raise InterpreterError("Core Error: 'callable' class not found in registry. Builtins initialization failed? ")
                     
                 return IbNativeFunction(
                     self.vtable[target_name], 
@@ -166,7 +165,7 @@ class IbNativeObject(IbObject):
                 if hasattr(self.py_obj, target_name):
                     return self.ib_class.registry.box(getattr(self.py_obj, target_name))
             
-            # [IES 2.0 Strict] 未在契约或白名单声明的成员，坚决抛出异常
+            # 未在契约或白名单声明的成员，坚决抛出异常
             raise AttributeError(f"Plugin Error: '{target_name}' is not defined in module contract (_spec.py)")
 
         # 3. 降级到基类公理 (如 __to_prompt__ 等)
@@ -191,33 +190,48 @@ class IbModule(IbObject):
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
-        [IES 2.0] 模块级消息传递核心。
+         模块级消息传递核心。
         """
-        # 1. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
+        # 1. 处理 __getattr__ 协议
+        if message == '__getattr__' and len(args) > 0:
+            target_name = args[0].to_native()
+            
+            # 优先从 Native 虚表或实现中查找
+            if hasattr(self.scope, 'receive'):
+                try:
+                    return self.scope.receive('__getattr__', args)
+                except AttributeError:
+                    pass
+            
+            # 其次查找模块级定义的变量/函数 (Scope 模式)
+            if hasattr(self.scope, 'get'):
+                try:
+                    return self.scope.get(target_name)
+                except (KeyError, AttributeError):
+                    pass
+
+        # 2. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
         if hasattr(self.scope, 'receive'):
             try:
-                if message == '__getattr__':
-                    # 转发获取属性的消息
-                    return self.scope.receive('__getattr__', args)
                 return self.scope.receive(message, args)
             except AttributeError:
                 pass
 
-        # 2. 查找模块级定义的变量/函数 (Scope 模式)
+        # 3. 查找模块级定义的变量/函数 (Scope 模式)
         if hasattr(self.scope, 'get'):
             try:
                 return self.scope.get(message)
             except (KeyError, AttributeError):
                 pass
             
-        # 3. 后备：降级到基类公理 (如 __to_prompt__ 等)
+        # 4. 后备：降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def __repr__(self):
         return f"<Module '{self.name}'>"
 
 class IbDeferredField:
-    """[IES 2.1 Stage 5.5] 延迟字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
+    """延迟字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
     def __init__(self, val_uid: str, static_val: Optional[IbObject] = None, module_name: Optional[str] = None):
         self.val_uid = val_uid
         self.static_val = static_val
@@ -268,13 +282,13 @@ class IbClass(IbObject):
         return False
 
     def register_method(self, name: str, method: 'IIbFunction') -> None:
-        # [IES 2.1 Security] 封印校验：禁止在 Registry READY 状态下修改虚表
+        # 封印校验：禁止在 Registry READY 状态下修改虚表
         if self.registry.is_sealed:
             raise PermissionError(f"Sealed Registry Violation: Cannot register method '{name}' to class '{self.name}' in READY state.")
         self.methods[name] = method
 
     def register_field(self, name: str, default_value: 'IbObject') -> None:
-        # [IES 2.1 Security] 封印校验
+        # 封印校验
         if self.registry.is_sealed:
             raise PermissionError(f"Sealed Registry Violation: Cannot register field '{name}' to class '{self.name}' in READY state.")
         self.default_fields[name] = default_value
@@ -282,7 +296,7 @@ class IbClass(IbObject):
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
         
-        # [IES 2.1 Refactor] 延迟执行字段初始化 (Item 2.1 Audit)
+        # 延迟执行字段初始化 (Item 2.1 Audit)
         for name, val_info in self.default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
@@ -291,7 +305,7 @@ class IbClass(IbObject):
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
-                        # [IES 2.1 Lexical Scope] 确保在定义该字段的模块上下文中进行求值
+                        # 确保在定义该字段的模块上下文中进行求值
                         evaluated = context.visit(val_info.val_uid, module_name=val_info.module_name)
                         instance.fields[name] = evaluated
                         # 如果是简单的纯函数或常量表达式，可以缓存到类描述符中
@@ -302,12 +316,12 @@ class IbClass(IbObject):
                 else:
                     instance.fields[name] = self.registry.get_none()
             else:
-                # [Active Defense] 仅支持 IbDeferredField，确保 IES 2.1 字段初始化的一致性
+                # [Active Defense] 仅支持 IbDeferredField，确保字段初始化的一致性
                 instance.fields[name] = val_info
         
         init_method = self.lookup_method('__init__')
         if init_method:
-            # [IES 2.1 Validation] 契约一致性校验：校验 __init__ 参数数量
+            # 契约一致性校验：校验 __init__ 参数数量
             # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
             if init_method.descriptor:
                 sig = init_method.descriptor.get_signature()
@@ -330,14 +344,14 @@ class IbClass(IbObject):
         2. 其他 -> 正常消息处理 (查找静态方法等)
         """
         if message == "__call__":
-            # [IES 2.0 Meta-Model] 优先从自身的 methods 字典中查找 __call__
+            # 优先从自身的 methods 字典中查找 __call__
             # 注意：类作为对象时，其方法存在 self.methods 中
             if "__call__" in self.methods:
                 method = self.methods["__call__"]
                 # 绑定到类自身进行调用 (如果是 NativeFunction 会自动根据 is_method 注入 receiver)
                 return IbBoundMethod(self, method).receive("__call__", args)
             
-            # [IES 2.1 Decoupling] 实例化时传入执行上下文以支持复杂字段初始化
+            # 实例化时传入执行上下文以支持复杂字段初始化
             # 通过 Registry 正式接口获取执行上下文
             context = self.registry.get_execution_context()
             
@@ -363,7 +377,7 @@ class IbNativeFunction(IbFunction):
     用于引导阶段注入基础运算（如 int.__add__）。
     """
     def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[TypeDescriptor] = None):
-        # [IES 2.0 FIX] 强制绑定到协议类，移除静默兜底
+        # 强制绑定到协议类，移除静默兜底
         reg = ib_class.registry if ib_class else None
         target_class = ib_class
         
@@ -371,7 +385,7 @@ class IbNativeFunction(IbFunction):
             if reg.state_level >= RegistrationState.STAGE_2_CORE_TYPES.value:
                 target_class = reg.get_class("callable")
                 if not target_class and reg.state_level >= RegistrationState.STAGE_4_PLUGIN_IMPL.value:
-                    raise InterpreterError(f"Core Error: 'callable' class missing during STAGE {RegistrationState(reg.state_level).name}. [IES 2.0 Fatal Assertion]")
+                    raise InterpreterError(f"Core Error: 'callable' class missing during STAGE {RegistrationState(reg.state_level).name}. ")
         
         super().__init__(target_class)
         self.py_func = py_func
@@ -386,7 +400,7 @@ class IbNativeFunction(IbFunction):
         return self._descriptor or super().descriptor
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        # [IES 2.0 Proxy Support] 如果 py_func 本身就是 IbObject (例如是一个 Proxy)，直接转发消息
+        # 如果 py_func 本身就是 IbObject (例如是一个 Proxy)，直接转发消息
         if isinstance(self.py_func, IbObject):
             return self.py_func.receive('__call__', args)
 
@@ -460,11 +474,11 @@ class IbNone(IbObject):
         return "null"
 
     def to_bool(self) -> IbObject:
-        """[IES 2.1] None 始终为 False"""
+        """ None 始终为 False"""
         return self.ib_class.registry.box(0)
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 None 的强转逻辑"""
+        """ 支持 None 的强转逻辑"""
         if target_class.name == "str":
             return self.ib_class.registry.box("None")
         if target_class.name in ("int", "float"):
@@ -480,11 +494,12 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None, module_name: Optional[str] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
         self._descriptor = descriptor
+        self.module_name = module_name or context.current_module_name
 
     @property
     def descriptor(self) -> TypeDescriptor:
@@ -492,29 +507,41 @@ class IbUserFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
-        node_data = self.context.get_node_data(self.node_uid)
-        params_uids = node_data.get("args", [])
-        
+        # 切换到函数定义所在的模块上下文
         rt_context = self.context.runtime_context
-        rt_context.enter_scope()
+        old_module = self.context.current_module_name
+        old_scope = rt_context.current_scope
         
-        # [NEW] Logical CallStack 追踪
-        loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
-        loc = None
-        if loc_data:
-            loc = Location(
-                file_path=loc_data.get("file_path"),
-                line=loc_data.get("line", 0),
-                column=loc_data.get("column", 0)
-            )
-        
-        self.context.push_stack(
-            name=node_data.get("name", "anonymous"),
-            location=loc,
-            is_user_function=True
-        )
-        
+        if self.module_name and self.module_name != old_module:
+            self.context.current_module_name = self.module_name
+            # 获取目标模块的作用域
+            try:
+                mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
+                rt_context.current_scope = mod_inst.scope
+            except:
+                pass
+
         try:
+            node_data = self.context.get_node_data(self.node_uid)
+            params_uids = node_data.get("args", [])
+            
+            rt_context.enter_scope()
+        
+            loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
+            loc = None
+            if loc_data:
+                loc = Location(
+                    file_path=loc_data.get("file_path"),
+                    line=loc_data.get("line", 0),
+                    column=loc_data.get("column", 0)
+                )
+            
+            self.context.push_stack(
+                name=node_data.get("name", "anonymous"),
+                location=loc,
+                is_user_function=True
+            )
+            
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
                 rt_context.define_variable("self", receiver)
@@ -530,6 +557,7 @@ class IbUserFunction(IbFunction):
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
+                    # print(f"[DEBUG] Defining LLM param: {arg_name} with UID: {sym_uid}")
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
@@ -542,6 +570,9 @@ class IbUserFunction(IbFunction):
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
+            # 恢复之前的模块上下文
+            self.context.current_module_name = old_module
+            rt_context.current_scope = old_scope
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)
@@ -552,12 +583,13 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[TypeDescriptor] = None):
+    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[TypeDescriptor] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.context = context
         self._descriptor = descriptor
+        self.module_name = module_name or context.current_module_name
 
     @property
     def descriptor(self) -> TypeDescriptor:
@@ -565,29 +597,39 @@ class IbLLMFunction(IbFunction):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
-        node_data = self.context.get_node_data(self.node_uid)
+        # 切换到函数定义所在的模块上下文
         rt_context = self.context.runtime_context
+        old_module = self.context.current_module_name
+        old_scope = rt_context.current_scope
         
-        rt_context.enter_scope()
-        
-        # [NEW] Logical CallStack 追踪
-        loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
-        loc = None
-        if loc_data:
-            loc = Location(
-                file_path=loc_data.get("file_path"),
-                line=loc_data.get("line", 0),
-                column=loc_data.get("column", 0)
-            )
-        
-        self.context.push_stack(
-            name=node_data.get("name", "llm_anonymous"),
-            location=loc,
-            is_user_function=True
-        )
-        
+        if self.module_name and self.module_name != old_module:
+            self.context.current_module_name = self.module_name
+            # 获取目标模块的作用域
+            try:
+                mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
+                rt_context.current_scope = mod_inst.scope
+            except:
+                pass
+
         try:
-            # 绑定参数
+            node_data = self.context.get_node_data(self.node_uid)
+            rt_context.enter_scope()
+            
+            loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
+            loc = None
+            if loc_data:
+                loc = Location(
+                    file_path=loc_data.get("file_path"),
+                    line=loc_data.get("line", 0),
+                    column=loc_data.get("column", 0)
+                )
+            
+            self.context.push_stack(
+                name=node_data.get("name", "llm_anonymous"),
+                location=loc,
+                is_user_function=True
+            )
+            
             params_uids = node_data.get("args", [])
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
@@ -603,7 +645,7 @@ class IbLLMFunction(IbFunction):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
-            # [IES 2.1 Factory] 解析呼叫级意图 (函数头上的意图)
+            # 解析呼叫级意图 (函数头上的意图)
             intent_uid = node_data.get("intent")
             call_intent = None
             if intent_uid:
@@ -616,11 +658,14 @@ class IbLLMFunction(IbFunction):
                 )
             
             # 分发给 LLM 执行器
-            # [IES 2.1 Regularization] 传递执行上下文网关，并传递解析后的意图
+            # 传递执行上下文网关，并传递解析后的意图
             return self.llm_executor.execute_llm_function(self.node_uid, self.context, call_intent=call_intent)
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
+            # 恢复之前的模块上下文
+            self.context.current_module_name = old_module
+            rt_context.current_scope = old_scope
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)

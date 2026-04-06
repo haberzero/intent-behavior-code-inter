@@ -8,7 +8,7 @@ def register_meta(manager: Any, execution_context: Any, service_context: Any):
     
     def get_self_source() -> str:
         """获取当前模块的源代码"""
-        # [IES 2.1 Decoupling]
+
         # 核心：通过 service_context 和 execution_context 获取信息，严禁穿透持有 interpreter
         ctx = service_context
         

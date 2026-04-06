@@ -31,7 +31,7 @@ class ParserCapability(Protocol):
     def parse_value(self, raw_value: str) -> Any: ...
 
 class WritableTrait(Protocol):
-    """[IES 2.1] 写能力：描述一个元数据对象如何被安全地更新（如分析阶段回填签名）"""
+    """ 写能力：描述一个元数据对象如何被安全地更新（如分析阶段回填签名）"""
     def update_signature(self, param_types: List['TypeDescriptor'], return_type: Optional['TypeDescriptor']) -> None: ...
 
 class TypeAxiom(Protocol):
@@ -56,15 +56,15 @@ class TypeAxiom(Protocol):
         ...
     
     def get_operators(self) -> Dict[str, str]:
-        """[IES 2.1] 获取支持的二元运算符及其对应的魔术方法名 (如 {"+": "__add__"})"""
+        """ 获取支持的二元运算符及其对应的魔术方法名 (如 {"+": "__add__"})"""
         ...
     
     def is_dynamic(self) -> bool:
-        """是否为动态类型 (Any/var/etc.)"""
+        """是否为动态类型 (any/auto/etc.)"""
         ...
 
     def is_compatible(self, other: 'TypeDescriptor') -> bool:
-        """公理级兼容性判断（用于处理 Any/var 等特殊逻辑）"""
+        """公理级兼容性判断（用于处理 any/auto 等特殊逻辑）"""
         ...
 
     def is_class(self) -> bool:
@@ -76,17 +76,17 @@ class TypeAxiom(Protocol):
         ...
 
     def get_parent_axiom_name(self) -> Optional[str]:
-        """[IES 2.1] 继承关系：返回父类公理名称 (如 bool -> int)"""
+        """ 继承关系：返回父类公理名称 (如 bool -> int)"""
         ...
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """[IES 2.1] 类型演算：根据泛型参数产生新的特化类型"""
+        """ 类型演算：根据泛型参数产生新的特化类型"""
         ...
 
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        """[IES 2.1] 诊断增强：获取类型不匹配时的公理化提示"""
+        """ 诊断增强：获取类型不匹配时的公理化提示"""
         ...
 
     def can_return_from_isolated(self) -> bool:
-        """[IES 2.1 Security] 判断该类型的实例是否允许从隔离子环境返回"""
+        """判断该类型的实例是否允许从隔离子环境返回"""
         ...

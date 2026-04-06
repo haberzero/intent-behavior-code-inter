@@ -16,7 +16,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         self.registry = registry
         self.instance_pool: Dict[str, Any] = {}
         self.runtime_scope_pool: Dict[str, Any] = {}
-        self.intent_pool: Dict[str, Any] = {} # [IES 2.2] 意图节点池，实现拓扑序列化
+        self.intent_pool: Dict[str, Any] = {} # 意图节点池，实现拓扑序列化
         self.memo: Dict[int, str] = {} # 记录已处理对象的 Python ID
 
     def serialize_context(self, context: IStateProvider, include_static: bool = True, execution_context: Optional[IExecutionContext] = None) -> Dict[str, Any]:
@@ -27,18 +27,18 @@ class RuntimeSerializer(BaseFlatSerializer):
         pools = {
             "instances": self.instance_pool,
             "runtime_scopes": self.runtime_scope_pool,
-            "intents": self.intent_pool, # [IES 2.2]
+            "intents": self.intent_pool,
             "types": self.type_pool,
             "assets": self.external_assets 
         }
         
-        # [IES 2.1] 如果提供，包含静态池以实现全量快照
+        # 如果提供，包含静态池以实现全量快照
         if include_static and execution_context:
             pools["nodes"] = execution_context.node_pool
             pools["symbols"] = execution_context.symbol_pool
             pools["scopes"] = execution_context.scope_pool
             pools["types"] = execution_context.type_pool
-            # [IES 2.2] 合并现有的资产池
+            # 合并现有的资产池
             if hasattr(execution_context, 'asset_pool'):
                 self.external_assets.update(execution_context.asset_pool)
             
@@ -46,13 +46,13 @@ class RuntimeSerializer(BaseFlatSerializer):
             "version": "2.0",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": self._process_value(context.intent_stack), # [IES 2.2] 改为拓扑序列化
+            "intent_stack": self._process_value(context.intent_stack), # 改为拓扑序列化
             "intent_exclusive_depth": context.intent_exclusive_depth,
             "pools": pools
         }
 
     def _collect_intent_node(self, node: Any) -> str:
-        """[IES 2.2] 实现 IntentNode 的拓扑序列化，保留链表引用关系"""
+        """ 实现 IntentNode 的拓扑序列化，保留链表引用关系"""
         if node is None:
             return None
             
@@ -115,7 +115,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if isinstance(value, IbObject):
             return self._collect_instance(value)
         
-        # [IES 2.2] 拓扑序列化 IntentNode，保留结构共享
+        # 拓扑序列化 IntentNode，保留结构共享
         # 注意：此处使用鸭子类型判定以避免循环依赖 (RuntimeSerializer 不直接导入 IntentNode 实现类)
         if hasattr(value, 'intent') and hasattr(value, 'parent') and hasattr(value, 'to_list'):
             return self._collect_intent_node(value)
@@ -203,7 +203,7 @@ class RuntimeDeserializer:
         self.factory = factory
         self.instance_cache: Dict[str, IbObject] = {}
         self.scope_cache: Dict[str, Scope] = {}
-        self.intent_cache: Dict[str, IntentNode] = {} # [IES 2.2] 意图节点缓存
+        self.intent_cache: Dict[str, IntentNode] = {} # 意图节点缓存
         self.asset_pool: Dict[str, str] = {} 
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
@@ -215,7 +215,7 @@ class RuntimeDeserializer:
         self.type_pool = pools.get("types", {})
         self.instance_pool = pools.get("instances", {})
         self.runtime_scope_pool = pools.get("runtime_scopes", {})
-        self.intent_pool = pools.get("intents", {}) # [IES 2.2]
+        self.intent_pool = pools.get("intents", {}) 
         self.asset_pool = pools.get("assets", {}) 
         
         if not self.factory:
@@ -240,7 +240,7 @@ class RuntimeDeserializer:
             for i_data in data["global_intents"]:
                  ctx_global.append(self._deserialize_value(i_data))
         
-        # [IES 2.2] 恢复意图栈 (拓扑结构)
+        # 恢复意图栈 (拓扑结构)
         intent_stack_raw = data.get("intent_stack")
         active_intents = self._deserialize_value(intent_stack_raw)
         
@@ -254,7 +254,7 @@ class RuntimeDeserializer:
         return context
 
     def _get_intent_node(self, uid: str) -> IntentNode:
-        """[IES 2.2] 从池中重建 IntentNode 链表节点，保留结构共享"""
+        """ 从池中重建 IntentNode 链表节点，保留结构共享"""
         if uid in self.intent_cache:
             return self.intent_cache[uid]
             

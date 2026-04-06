@@ -1,0 +1,81 @@
+# 01_file_operations.ibci
+# 文件操作
+
+import file
+import isys
+
+print("=== 文件操作模块 ===")
+
+print("\n=== 获取路径信息 ===")
+str project_root = isys.project_root()
+str entry_dir = isys.entry_dir()
+print("项目根目录: " + project_root)
+print("入口文件目录: " + entry_dir)
+
+print("\n=== 基本文件操作 ===")
+
+print("\n[1] 写入文件")
+str test_file = "./test_file_demo.txt"
+str content = "这是测试文件内容\n第二行数据\n第三行数据"
+file.write(test_file, content)
+print("✓ 文件写入成功: " + test_file)
+
+print("\n[2] 读取文件")
+str read_content = file.read(test_file)
+print("文件内容:")
+print(read_content)
+
+print("\n[3] 检查文件存在")
+bool exists = file.exists(test_file)
+print("文件存在: " + (str)exists)
+
+print("\n[4] 获取文件大小")
+int size = file.get_file_size(test_file)
+print("文件大小: " + (str)size + " 字节")
+
+print("\n=== 高级文件操作 ===")
+
+print("\n[5] 获取文件行数")
+int line_count = file.get_line_count(test_file)
+print("文件行数: " + (str)line_count)
+
+print("\n[6] 读取指定范围行")
+list lines = file.read_lines_range(test_file, 1, 2)
+print("第1-2行:")
+int i = 0
+while i < lines.len():
+    print("  " + (str)(i + 1) + ": " + (str)lines[i])
+    i = i + 1
+
+print("\n[7] 搜索文件内容")
+list matches = file.search_in_files(".", "测试", [".txt"])
+print("找到 " + (str)matches.len() + " 个匹配")
+i = 0
+while i < matches.len():
+    any match = (any)matches[i]
+    print("  " + (str)match["path"] + ":" + (str)match["line"] + " - " + (str)match["content"])
+    i = i + 1
+
+print("\n[8] 列出目录文件")
+list txt_files = file.list_files_recursive(".", [".txt"])
+print("找到 " + (str)txt_files.len() + " 个 .txt 文件:")
+i = 0
+while i < txt_files.len():
+    print("  " + (str)txt_files[i])
+    i = i + 1
+
+print("\n[9] 删除文件")
+file.remove(test_file)
+if file.exists(test_file):
+    print("✗ 删除失败")
+else:
+    print("✓ 文件删除成功")
+
+print("\n=== 文件路径规则 ===")
+print("所有相对路径都基于入口文件目录解析")
+print("  ./file.txt - 相对于入口文件目录")
+
+print("\n=== 安全特性 ===")
+print("✓ 所有文件操作限制在项目目录内")
+print("✓ 无法访问项目外部路径")
+print("✓ 无法访问系统敏感文件")

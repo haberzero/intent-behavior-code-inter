@@ -26,7 +26,7 @@ class SemanticAnalyzer:
     语义分析器：执行静态分析和类型检查。
     贯彻"一切皆对象"思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
 
-    [IES 2.1 Refactor] 使用组件组合模式：
+     使用组件组合模式：
     - SideTableManager: 管理语义分析侧表
     - ScopeManager: 管理作用域和场景栈
     """
@@ -40,7 +40,8 @@ class SemanticAnalyzer:
         if self.registry is None:
             raise ValueError("SemanticAnalyzer requires a valid MetadataRegistry instance. 'None' is not allowed.")
 
-        self._any_desc = self.registry.resolve("Any")
+        self._any_desc = self.registry.resolve("any")
+        self._auto_desc = self.registry.resolve("auto")
         self._void_desc = self.registry.resolve("void")
         self._bool_desc = self.registry.resolve("bool")
         self._int_desc = self.registry.resolve("int")
@@ -63,13 +64,13 @@ class SemanticAnalyzer:
         
         # 1. 注册内置函数
         for name, func_desc in self.prelude.get_builtins().items():
-            # [IES 2.2] 使用全局唯一的内置符号 UID，消除模块相关性
+            # 使用全局唯一的内置符号 UID，消除模块相关性
             sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=func_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 2. 注册内置类型
         for name, type_desc in self.prelude.get_builtin_types().items():
-            # [IES 2.2 Fix] 仅注册真正的内置类型为 builtin UID。
+            # 仅注册真正的内置类型为 builtin UID。
             # 如果描述符标记为 is_user_defined，说明它是从外部或残留注册表中混入的，跳过。
             if getattr(type_desc, 'is_user_defined', False):
                 continue
@@ -82,7 +83,7 @@ class SemanticAnalyzer:
             sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
-        # 4. [IES 2.2] 注册内置变量/常量 (如 __file__, __dir__)
+        # 4. 注册内置变量/常量 (如 __file__, __dir__)
         for name, var_desc in self.prelude.get_builtin_variables().items():
             sym = symbols.VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=var_desc, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
@@ -107,12 +108,22 @@ class SemanticAnalyzer:
             resolver.resolve(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
-            # Pass 3: 深度语义检查 (Body, Expressions, Type Checking)
-            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3: Deep checking...")
+            # Pass 3: llmexcept 关联和合法性检查
+            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3: llmexcept binding and validation...")
+            self._bind_llm_except(node)
+            self.debugger.exit_scope(CoreModule.SEMANTIC)
+            
+            # Pass 3.5: 意图注释上下文验证 (@/@! 必须紧跟 LLM 调用)
+            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3.5: Validating intent annotation context...")
+            self._validate_intent_annotation_context(node)
+            self.debugger.exit_scope(CoreModule.SEMANTIC)
+
+            # Pass 4: 深度语义检查 (Body, Expressions, Type Checking)
+            self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 4: Deep checking...")
             self.visit(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
-            # [NEW Phase 5] 自检校验：确保侧表完整性
+            # 自检校验：确保侧表完整性
             # 仅在没有收集到错误的情况下执行完整性检查，因为解析失败的节点本身就无法绑定
             if not self.issue_tracker.has_errors():
                 self._validate_integrity(node)
@@ -129,16 +140,150 @@ class SemanticAnalyzer:
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
                 node_is_deferred=self.side_table.node_is_deferred,
-                node_intents=self.side_table.node_intents,
                 node_to_loc=self.side_table.node_to_loc,
-                decision_maps=self.side_table.decision_maps
+                decision_maps=self.side_table.decision_maps,
+                node_protection=self.side_table.node_protection
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
 
+    def _bind_llm_except(self, node: ast.IbASTNode) -> None:
+        """
+        Pass 3: llmexcept 关联和合法性检查。
+        
+        遍历 AST，将 llmexcept 语句与前一个语句关联，
+        并检查 llmexcept 的 target 是否包含 @~...~ 行为描述。
+        """
+        if isinstance(node, ast.IbModule):
+            self._bind_llm_except_in_body(node.body, node)
+        elif isinstance(node, ast.IbFunctionDef):
+            self._bind_llm_except_in_body(node.body, node)
+        elif isinstance(node, ast.IbLLMFunctionDef):
+            pass
+        elif isinstance(node, ast.IbClassDef):
+            for method in node.body:
+                if isinstance(method, ast.IbFunctionDef):
+                    self._bind_llm_except_in_body(method.body, method)
+                elif isinstance(method, ast.IbLLMFunctionDef):
+                    pass
+
+    def _bind_llm_except_in_body(self, body: List[ast.IbStmt], parent: ast.IbASTNode) -> None:
+        """
+        处理语句块中的 llmexcept 关联。
+
+        注意：不扁平化 body，保持 IbLLMExceptionalStmt 作为包装器结构。
+        这样解释器可以正确处理 LLMUncertaintyError。
+        """
+        if not body:
+            return
+
+        new_body = []
+        i = 0
+        while i < len(body):
+            stmt = body[i]
+
+            if isinstance(stmt, ast.IbLLMExceptionalStmt):
+                # llmexcept 是一个独立的语句，需要与前一个语句关联
+                if not new_body:
+                    self.issue_tracker.error(
+                        f"llmexcept must follow a statement, but no previous statement found.",
+                        stmt, code="SEM_051"
+                    )
+                    i += 1
+                    continue
+
+                prev_stmt = new_body[-1]
+
+                # 检查前一个语句是否包含行为描述
+                if not self._stmt_contains_behavior(prev_stmt):
+                    self.issue_tracker.error(
+                        f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
+                        f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
+                        stmt, code="SEM_050"
+                    )
+
+                # 关联侧表：被保护节点 UID -> llmexcept 处理器节点 UID
+                # 这是实现解释器 visit 拦截的核心
+                self.side_table.bind_protection(prev_stmt, stmt)
+
+                # 同时在 AST 中建立关联，确保序列化时包含 target 字段
+                stmt.target = prev_stmt
+
+                # IbLLMExceptionalStmt 保留在 body 中，确保 Pass 4 深度检查和序列化能够访问到它
+                # 它的重复执行问题将由 Interpreter.visit 逻辑处理
+                new_body.append(stmt)
+
+                # 递归处理 llmexcept body
+                for body_stmt in stmt.body:
+                    self._bind_llm_except(body_stmt)
+            else:
+                new_body.append(stmt)
+                # 递归处理子节点
+                self._bind_llm_except(stmt)
+
+            i += 1
+
+        # 更新 body
+        if isinstance(parent, ast.IbModule):
+            parent.body = new_body
+        elif isinstance(parent, (ast.IbFunctionDef, ast.IbLLMFunctionDef)):
+            parent.body = new_body
+        elif isinstance(parent, ast.IbClassDef):
+            # [FIX] 找到对应的 method 并更新其 body
+            for method in parent.body:
+                if isinstance(method, (ast.IbFunctionDef, ast.IbLLMFunctionDef)) and method.body is body:
+                    method.body = new_body
+                    break
+
+    def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
+        """
+        检查语句是否包含行为描述 @~...~。
+        """
+        if isinstance(stmt, ast.IbExprStmt):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbIf):
+            return self._expr_contains_behavior(stmt.test)
+        elif isinstance(stmt, ast.IbWhile):
+            return self._expr_contains_behavior(stmt.test)
+        elif isinstance(stmt, ast.IbFor):
+            return self._expr_contains_behavior(stmt.iter)
+        elif isinstance(stmt, ast.IbAssign):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbReturn):
+            if stmt.value:
+                return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbLLMExceptionalStmt):
+            return self._stmt_contains_behavior(stmt.target) if stmt.target else False
+        return False
+
+    def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
+        """
+        检查表达式是否包含行为描述 @~...~。
+        """
+        if isinstance(expr, ast.IbBehaviorExpr):
+            return True
+        elif isinstance(expr, ast.IbCall):
+            # 检查方法调用
+            if self._expr_contains_behavior(expr.func):
+                return True
+            for arg in expr.args:
+                if self._expr_contains_behavior(arg):
+                    return True
+        elif isinstance(expr, ast.IbBinOp):
+            return self._expr_contains_behavior(expr.left) or self._expr_contains_behavior(expr.right)
+        elif isinstance(expr, ast.IbCompare):
+            return self._expr_contains_behavior(expr.left) or self._expr_contains_behavior(expr.comparators[0])
+        elif isinstance(expr, ast.IbUnaryOp):
+            return self._expr_contains_behavior(expr.operand)
+        elif isinstance(expr, ast.IbIfExp):
+            return (self._expr_contains_behavior(expr.test) or 
+                    self._expr_contains_behavior(expr.body) or 
+                    self._expr_contains_behavior(expr.orelse))
+        return False
+
     def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
-        # [NEW Phase 3] 标记作用域定义节点 (元数据驱动)
-        if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef, ast.IbIntentStmt)):
+        # 标记作用域定义节点 (元数据驱动)
+        if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
             setattr(node, "_is_scope", True)
 
         self.side_table.bind_location(node, {
@@ -147,16 +292,7 @@ class SemanticAnalyzer:
             "column": node.col_offset
         })
 
-        # [NEW] 意图涂抹关联：将 Parser 暂存在节点上的意图转入侧表，实现 AST 扁平化
-        # [IES 2.0 Policy] 侧表仅记录“当前节点特有”的涂抹意图（即通过 @ 标注的意图）。
-        # 块级意图（通过 intent 语句定义）由解释器在执行时通过 AST 结构动态维护在栈中。
-        # 这样避免了静态分析时重复涂抹导致的逻辑冲突。
-        if hasattr(node, "_pending_intents"):
-            intents = getattr(node, "_pending_intents")
-            if intents:
-                self.side_table.bind_intents(node, intents)
-
-        # [NEW] 记录场景上下文侧表
+        # 记录场景上下文侧表
         if isinstance(node, ast.IbExpr):
             self.side_table.bind_scene(node, self.scope_manager.current_scene())
 
@@ -164,7 +300,7 @@ class SemanticAnalyzer:
         visitor = getattr(self, method_name, self.generic_visit)
         res_type = visitor(node)
         
-        # [NEW Phase 5] 记录类型推导侧表
+        # 记录类型推导侧表
         if isinstance(node, ast.IbExpr) and res_type:
             self.side_table.bind_type(node, res_type)
             
@@ -188,13 +324,20 @@ class SemanticAnalyzer:
             raise Exception(message)
         self.issue_tracker.error(message, node, code=code, hint=hint)
 
-    def _visit_llmexcept(self, fallback: Optional[List[ast.IbStmt]]):
-        """访问 llmexcept (llm_fallback) 块"""
-        if fallback:
-            # [Pass 2.5] 使用独立的 LocalSymbolCollector 进行预扫描
-            LocalSymbolCollector(self.symbol_table, self).collect(fallback)
-            for stmt in fallback:
-                self.visit(stmt)
+    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
+        """
+        访问 llmexcept 语句。
+        
+        IbLLMExceptionalStmt 在 Pass 3 被 _bind_llm_except 处理，
+        这里只需要访问 body 中的语句。
+        """
+        for stmt in node.body:
+            self.visit(stmt)
+        return self._void_desc
+
+    def visit_IbRetry(self, node: ast.IbRetry):
+        """访问 retry 语句"""
+        return self._void_desc
 
     # --- 访问者实现 ---
 
@@ -231,7 +374,7 @@ class SemanticAnalyzer:
             self.symbol_table = sym.owned_scope
             
         old_class = self.current_class
-        # [IES 2.1 Axiom] 使用 is_class() 判定，消除对 ClassMetadata 的直接依赖
+        # 使用 is_class() 判定，消除对 ClassMetadata 的直接依赖
         if sym.descriptor.is_class():
             # 内部仍需类型转换为 ClassMetadata 以支持 members 访问，但判定逻辑已公理化
             self.current_class = sym.descriptor
@@ -248,7 +391,7 @@ class SemanticAnalyzer:
 
     def _define_var(self, name: str, var_type: TypeDescriptor, node: ast.IbASTNode, allow_overwrite: bool = False):
         try:
-            # [IES 2.1 Shadowing Refactor] 
+
             # 只有当变量已在 *当前* 作用域定义时，才考虑复用或覆盖。
             # 如果变量在父级作用域，则直接定义新符号以实现遮蔽。
             if name in self.symbol_table.symbols:
@@ -257,12 +400,12 @@ class SemanticAnalyzer:
                     self.side_table.bind_symbol(node, existing)
                     return existing
             
-            # [NEW] 检查是否由 Scheduler 注入的特殊符号（如模块）
+            # 检查是否由 Scheduler 注入的特殊符号（如模块）
             # 这些符号通常在全局表中，不应被随意遮蔽，除非是局部变量
             if name not in self.symbol_table.symbols:
                 existing_global = self.symbol_table.resolve(name)
                 if existing_global and existing_global.kind in (SymbolKind.MODULE, SymbolKind.CLASS):
-                    # 模块和类在语义上不建议被遮蔽，但如果是 var 定义则允许
+                    # 模块和类在语义上不建议被遮蔽，但如果是 auto 定义则允许
                     pass
 
             sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, descriptor=var_type, def_node=node)
@@ -272,7 +415,7 @@ class SemanticAnalyzer:
             if self.current_class:
                 self.current_class.members[name] = sym
 
-            # [NEW Phase 5] 记录侧表映射
+            # 记录侧表映射
             self.side_table.bind_symbol(node, sym)
             return sym
         except ValueError as e:
@@ -285,7 +428,7 @@ class SemanticAnalyzer:
             return self._void_desc
             
         self.side_table.bind_symbol(node, sym)
-        # [NEW] 决议真实的函数签名并更新元数据
+        # 决议真实的函数签名并更新元数据
         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
         # 类方法第一个参数是 self
         if self.current_class:
@@ -293,7 +436,7 @@ class SemanticAnalyzer:
             
         ret_type = self._resolve_type(node.returns)
         
-        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = sym.descriptor.get_call_trait()
         writable = call_trait.get_writable_trait() if call_trait else None
 
@@ -306,11 +449,11 @@ class SemanticAnalyzer:
         local_scope = SymbolTable(parent=old_table, name=node.name)
         self.symbol_table = local_scope
         
-        # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
+        # 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
         if sym.is_function:
             sym.owned_scope = local_scope
         
-        # [NEW] 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
+        # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
         if self.current_class:
             # self 的类型就是当前类
             self._define_var("self", self.current_class, node)
@@ -350,7 +493,7 @@ class SemanticAnalyzer:
             return self._void_desc
             
         self.side_table.bind_symbol(node, sym)
-        # [NEW] 决议真实的函数签名并更新元数据
+        # 决议真实的函数签名并更新元数据
         param_types = [self._resolve_type(arg.annotation) for arg in node.args]
         if self.current_class:
             param_types.insert(0, self.current_class)
@@ -359,11 +502,11 @@ class SemanticAnalyzer:
         # [P3 FIX] LLM 函数默认返回 str 而非 void
         # 注意：这里的 "str" 语义是"文本接收"（LLM 生成的内容），而非纯字符串类型
         # [Future Evolution] 未来演进方向：
-        #   1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
-        #   2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
-        #   3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
+        # 1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
+        # 2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
+        # 3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
         
-        # [IES 2.1 Refactor] 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
+        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = sym.descriptor.get_call_trait()
         writable = call_trait.get_writable_trait() if call_trait else None
         
@@ -376,7 +519,7 @@ class SemanticAnalyzer:
         local_scope = SymbolTable(parent=old_table, name=node.name)
         self.symbol_table = local_scope
         
-        # [NEW Phase 5] 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
+        # 将局部作用域回填到符号中，以便序列化器能够递归发现局部符号
         if sym.is_function:
             sym.owned_scope = local_scope
         
@@ -454,11 +597,11 @@ class SemanticAnalyzer:
                 continue
             
             if var_name:
-                # [NEW] 决议最终目标类型 (Inference Policy)
+                # 决议最终目标类型 (Inference Policy)
                 sym = self.symbol_table.symbols.get(var_name)
                 
                 if declared_type:
-                    # 1. 有显式标注：优先尊重标注，除非标注是动态的 (var/Any)
+                    # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
                     if declared_type.is_dynamic():
                         target_type = val_type
                     else:
@@ -467,7 +610,7 @@ class SemanticAnalyzer:
                     # [SEM_002] 检查是否在当前作用域重复声明
                     if var_name in self.symbol_table.symbols:
                         existing = self.symbol_table.symbols[var_name]
-                        # [Fix] 允许同一个节点在 Pass 3 更新它在 Pass 1 定义的符号类型
+                        # 允许同一个节点在 Pass 3 更新它在 Pass 1 定义的符号类型
                         if existing.def_node is not node:
                             # 如果不是内置符号，且不是同类型的重新赋值（IBCI 允许同名覆盖但通常通过 allow_overwrite 控制）
                             # 这里我们遵循更严格的静态语言规则：同作用域禁止显式类型重声明
@@ -476,7 +619,7 @@ class SemanticAnalyzer:
                     # 定义或更新符号
                     sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
                 else:
-                    # 2. 无标注：如果尚未定义，或者现有定义是动态的 (Any/var)，则进行推导
+                    # 2. 无标注：如果尚未定义，或者现有定义是动态的 (any/auto)，则进行推导
                     if not sym or sym.descriptor.is_dynamic():
                         sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
                 
@@ -489,9 +632,9 @@ class SemanticAnalyzer:
                     
                     # [P2 FIX] 行为描述行 Lambda 化判断 + 即时上下文处理
                     # [Future Evolution] 未来将演进为 ReceiveMode 枚举：
-                    #   - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
-                    #   - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
-                    #   - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
+                    # - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
+                    # - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
+                    # - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
                     # 相关演进：ParserCapability.get_llm_prompt_fragment() 用于注入系统提示词
                     target_desc = sym.descriptor
                     is_explicit_callable = False
@@ -524,15 +667,12 @@ class SemanticAnalyzer:
                     hint = val_type.get_diff_hint(target_type)
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003", hint=hint)
         
-        # 4. 处理回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbIf(self, node: ast.IbIf):
         # 1. 条件测试属于 BRANCH 场景
         self.scope_manager.push_scene(ast.IbScene.BRANCH)
-        # [NEW] 记录控制流节点本身的场景
+        # 记录控制流节点本身的场景
         self.side_table.bind_scene(node, ast.IbScene.BRANCH)
         try:
             self.visit(node.test)
@@ -545,15 +685,12 @@ class SemanticAnalyzer:
         for stmt in node.orelse:
             self.visit(stmt)
             
-        # 3. 回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbWhile(self, node: ast.IbWhile):
         # 1. 循环条件属于 LOOP 场景
         self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # [NEW] 记录控制流节点本身的场景
+        # 记录控制流节点本身的场景
         self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             self.visit(node.test)
@@ -566,20 +703,17 @@ class SemanticAnalyzer:
         for stmt in node.orelse:
             self.visit(stmt)
             
-        # 3. 回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbFor(self, node: ast.IbFor):
         # 1. 迭代头部属于 LOOP 场景
         self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # [NEW] 记录控制流节点本身的场景
+        # 记录控制流节点本身的场景
         self.side_table.bind_scene(node, ast.IbScene.LOOP)
         try:
             iter_type = self.visit(node.iter)
             
-            # [IES 2.2 Stabilization] 统一循环协议检查
+            # 统一循环协议检查
             if node.target is None:
                 # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
                 # 语义：等同于 while，要求表达式具有“布尔评估能力”
@@ -591,20 +725,20 @@ class SemanticAnalyzer:
             else:
                 # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
                 # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
-                # [NEW] 如果是 behavior 类型，我们认为它“潜在可迭代”
+                # 如果是 behavior 类型，我们认为它“潜在可迭代”
                 if iter_type.is_behavior():
                     element_type = self._any_desc 
                 else:
                     iter_trait = iter_type.get_iter_trait()
                     if iter_trait:
-                        # [IES 2.1] 修复：通过 TypeDescriptor 统一获取 element_type，以支持引用解析
+                        # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
                         element_type = iter_type.get_element_type() or self._any_desc
                     else:
                         self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                         element_type = self._any_desc
                 
                 for var_name, target in SymbolExtractor.get_assigned_names(node):
-                    # [NEW] 优先使用显式类型标注，而非推导出的 element_type
+                    # 优先使用显式类型标注，而非推导出的 element_type
                     effective_type = element_type
                     if isinstance(target, ast.IbTypeAnnotatedExpr):
                         effective_type = self.visit(target.annotation)
@@ -628,22 +762,15 @@ class SemanticAnalyzer:
         for stmt in node.body:
             self.visit(stmt)
             
-        # 3. 回退块
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt):
         res = self.visit(node.value)
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return res
 
     def visit_IbAugAssign(self, node: ast.IbAugAssign):
         self.visit(node.target)
         self.visit(node.value)
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbTry(self, node: ast.IbTry):
@@ -655,8 +782,6 @@ class SemanticAnalyzer:
             self.visit(stmt)
         for stmt in node.finalbody:
             self.visit(stmt)
-        if node.llm_fallback:
-            self._visit_llmexcept(node.llm_fallback)
         return self._void_desc
 
     def visit_IbExceptHandler(self, node: ast.IbExceptHandler):
@@ -697,7 +822,7 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                # [IES 2.2 Fix] 绑定到 alias 节点，以便解释器正确获取 UID
+                # 绑定到 alias 节点，以便解释器正确获取 UID
                 self.side_table.bind_symbol(alias, sym)
             else:
                 self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
@@ -717,22 +842,12 @@ class SemanticAnalyzer:
             # [Strict Import] 符号应由 Scheduler 预先注入
             sym = self.symbol_table.resolve(name)
             if sym:
-                # [IES 2.2 Fix] 绑定到 alias 节点
+                # 绑定到 alias 节点
                 self.side_table.bind_symbol(alias, sym)
             else:
                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
                 self._define_var(name, self._any_desc, node)
                 
-        return self._void_desc
-
-    def visit_IbIntentStmt(self, node: ast.IbIntentStmt):
-        # 1. 访问意图元数据（检查其中的表达式等）
-        self.visit(node.intent)
-        
-        # 2. 访问意图块内部
-        for stmt in node.body:
-            self.visit(stmt)
-            
         return self._void_desc
 
     def visit_IbIntentInfo(self, node: ast.IbIntentInfo):
@@ -745,6 +860,102 @@ class SemanticAnalyzer:
                 if isinstance(seg, ast.IbASTNode):
                     self.visit(seg)
         return self._void_desc
+
+    def visit_IbIntentAnnotation(self, node: ast.IbIntentAnnotation):
+        """访问意图注释节点 - @ 和 @! 专用"""
+        # 访问内部的意图信息
+        self.visit(node.intent)
+        return self._void_desc
+
+    def visit_IbIntentStackOperation(self, node: ast.IbIntentStackOperation):
+        """访问意图栈操作节点 - @+ 和 @- 专用"""
+        # 访问内部的意图信息
+        self.visit(node.intent)
+        return self._void_desc
+
+    def _validate_intent_annotation_context(self, node: ast.IbASTNode) -> None:
+        """
+        Pass 3.5: 意图注释上下文验证。
+
+        检查 IbIntentAnnotation (@/@!) 必须紧跟**后面**的行为表达式。
+        @+/@- (IbIntentStackOperation) 可以独立存在，无需检查。
+
+        正确用法示例：
+            @ 用简洁回复
+            result = @~打招呼~
+        """
+        if isinstance(node, ast.IbModule):
+            self._validate_intent_in_body(node.body)
+        elif isinstance(node, ast.IbFunctionDef):
+            self._validate_intent_in_body(node.body)
+        elif isinstance(node, ast.IbLLMFunctionDef):
+            pass
+        elif isinstance(node, ast.IbClassDef):
+            for method in node.body:
+                if isinstance(method, ast.IbFunctionDef):
+                    self._validate_intent_in_body(method.body)
+                elif isinstance(method, ast.IbLLMFunctionDef):
+                    pass
+
+    def _validate_intent_in_body(self, body: List[ast.IbStmt]) -> None:
+        """验证语句块中的意图注释上下文"""
+        if not body:
+            return
+
+        i = 0
+        while i < len(body):
+            stmt = body[i]
+
+            if isinstance(stmt, ast.IbIntentAnnotation):
+                if i == len(body) - 1:
+                    self.issue_tracker.error(
+                        f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
+                        f"This is the last statement with no following LLM call.",
+                        stmt, code="SEM_060"
+                    )
+                else:
+                    next_stmt = body[i + 1]
+                    if not self._stmt_contains_behavior(next_stmt):
+                        self.issue_tracker.error(
+                            f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
+                            f"Following statement is '{next_stmt.__class__.__name__}' which does not contain a behavior expression.",
+                            stmt, code="SEM_060"
+                        )
+
+            elif isinstance(stmt, ast.IbLLMExceptionalStmt):
+                self._validate_intent_in_body(stmt.body)
+
+            i += 1
+
+    def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
+        """检查语句是否包含行为表达式"""
+        if isinstance(stmt, ast.IbExprStmt):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbAssign):
+            return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbReturn):
+            if stmt.value:
+                return self._expr_contains_behavior(stmt.value)
+        elif isinstance(stmt, ast.IbExprStmt) and isinstance(stmt.value, ast.IbBehaviorExpr):
+            return True
+        return False
+
+    def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
+        """检查表达式是否包含行为表达式"""
+        if isinstance(expr, ast.IbBehaviorExpr):
+            return True
+        if isinstance(expr, ast.IbCall):
+            func = expr.func
+            if isinstance(func, ast.IbAttribute):
+                if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
+                    return True
+                if isinstance(func.value, ast.IbName):
+                    if func.value.id in ("llm", "LLM", "model", "Model", "ai", "AI"):
+                        return True
+            elif isinstance(func, ast.IbName):
+                if func.id in ("call", "complete", "generate", "llm", "LLM"):
+                    return True
+        return False
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """处理带类型标注的表达式包装节点 (例如 Casts 或声明)"""
@@ -843,12 +1054,29 @@ class SemanticAnalyzer:
             return self._any_desc
             
         res = value_type.resolve_item(key_type)
+        if not res:
+            # 特殊处理：如果是 list 且 key 是 int，返回其 element_type
+            if value_type.get_base_axiom_name() == "list" and key_type.get_base_axiom_name() == "int":
+                return value_type.get_element_type() or self._any_desc
+            # 如果是 list/str 且 key 是 slice，返回自身类型
+            if value_type.get_base_axiom_name() in ("list", "str") and key_type.get_base_axiom_name() == "slice":
+                return value_type
+            
         return res or self._any_desc
+
+    def visit_IbSlice(self, node: ast.IbSlice) -> TypeDescriptor:
+        """分析切片表达式"""
+        if node.lower: self.visit(node.lower)
+        if node.upper: self.visit(node.upper)
+        if node.step: self.visit(node.step)
+        
+        # 暂时返回预定义的 slice 描述符
+        return self.registry.resolve("slice") or self._any_desc
 
     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> TypeDescriptor:
         """类型强转语义分析"""
         self.visit(node.value)
-        # [IES 2.1 Refactor] 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
+        # 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
         target_type = self._resolve_type(node.type_annotation)
         if target_type:
             self.side_table.bind_type(node, target_type)
@@ -886,11 +1114,11 @@ class SemanticAnalyzer:
 
     def visit_IbConstant(self, node: ast.IbConstant) -> TypeDescriptor:
         val = node.value
-        # [IES 2.1 Refactor] 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
+        # 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
         desc = self.registry.resolve_from_value(val)
         if desc:
             return desc
-        return self.registry.resolve("Any")
+        return self.registry.resolve("any")
 
     def visit_IbName(self, node: ast.IbName) -> TypeDescriptor:
         # 1. 解析符号
@@ -921,16 +1149,16 @@ class SemanticAnalyzer:
             # [Axiom Hook] 自动合成绑定方法 (Bound Method)
             # 如果是实例方法且不是静态方法，则合成 BoundMethodMetadata
             if member_sym.is_function and not member_sym.metadata.get("is_static"):
-                # [IES 2.1 Axiom] 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
+                # 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
                 if not base_type.is_module():
-                    # [IES 2.1 Refactor] 使用工厂创建以确保驻留和能力注入
+                    # 使用工厂创建以确保驻留和能力注入
                     return self.registry.factory.create_bound_method(base_type, member_sym.descriptor)
             
             return member_sym.descriptor
             
-        # 2. [Dynamic Resolution] 如果是动态类型（Any/var），允许访问任意属性并返回 Any
+        # 2. [Dynamic Resolution] 如果是动态类型（any/auto），允许访问任意属性并返回 any
         if base_type.is_dynamic():
-            # [IES 2.0] 动态代理：创建一个虚拟符号记录在侧表中
+            # 动态代理：创建一个虚拟符号记录在侧表中
             virtual_sym = symbols.VariableSymbol(
                 name=node.attr, 
                 kind=symbols.SymbolKind.VARIABLE, 
@@ -947,6 +1175,14 @@ class SemanticAnalyzer:
         func_type = self.visit(node.func)
         arg_types = [self.visit(arg) for arg in node.args]
         
+        # 0. 特殊处理内置类型的构造函数调用
+        # 当 TypeDescriptor 没有 get_call_trait() 但类型名是内置类型时，
+        # 允许构造函数调用并返回对应类型
+        if isinstance(func_type, TypeDescriptor) and not func_type.get_call_trait():
+            type_name = func_type.name
+            if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict'):
+                return func_type
+        
         # 1. 检查是否可调用 (使用 Trait 契约)
         call_trait = func_type.get_call_trait()
         if not call_trait:
@@ -957,7 +1193,7 @@ class SemanticAnalyzer:
         res = func_type.resolve_return(arg_types)
         
         if not res:
-            # [IES 2.1 Axiom] 通过 Trait 提取签名信息进行诊断
+            # 通过 Trait 提取签名信息进行诊断
             if call_trait and hasattr(call_trait, 'param_types'):
                 param_types = call_trait.param_types
                 if len(arg_types) != len(param_types):
@@ -975,7 +1211,7 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
         self.in_behavior_expr = True
-        # [IES 2.2 Fix] 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
+        # 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
         self.side_table.bind_scene(node, self.scope_manager.current_scene())
         
         try:
@@ -999,7 +1235,7 @@ class SemanticAnalyzer:
             sym = self.symbol_table.resolve(node.id)
             if sym:
                 self.side_table.bind_symbol(node, sym)
-                # [FIX] 如果符号本身就是 TypeSymbol，直接返回其 descriptor
+                # 如果符号本身就是 TypeSymbol，直接返回其 descriptor
                 if sym.is_type:
                     return sym.descriptor
                 return sym.descriptor
@@ -1018,7 +1254,7 @@ class SemanticAnalyzer:
             else:
                 generic_args = [self._resolve_type(node.slice, safe=safe)]
                 
-            # [IES 2.1 Axiom] 使用 resolve_specialization 替代硬编码判断，实现真正的类型演算
+            # 使用 resolve_specialization 替代硬编码判断，实现真正的类型演算
             return base_type.resolve_specialization(generic_args)
 
         elif isinstance(node, ast.IbAttribute):

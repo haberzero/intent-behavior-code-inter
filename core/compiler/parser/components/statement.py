@@ -4,7 +4,7 @@ from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.core.syntax import ID_VAR, COMPOUND_OP_MAP
+from core.compiler.parser.core.syntax import ID_AUTO, COMPOUND_OP_MAP
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -27,19 +27,8 @@ class StatementComponent(BaseComponent):
     # Removed set_decl_parser method
 
     def parse_statement(self) -> ast.IbStmt:
-        """[IES 2.1 Unified Entry] 所有语句的统一入口，处理公共装饰逻辑（如 llm except）"""
-        stmt = self._parse_statement_core()
-        
-        # 统一处理 llm except 块
-        # [IES 2.1 Refactor] 使用 AST 节点自身的能力探测（supports_llm_fallback）替代硬编码的 isinstance 列表
-        if stmt.supports_llm_fallback:
-            llm_fallback = self._parse_llm_fallback()
-            if llm_fallback:
-                stmt.llm_fallback = llm_fallback
-                # 扩展语句的物理位置以包含容错块
-                self._extend_loc(stmt, self.stream.previous())
-                
-        return stmt
+        """所有语句的统一入口"""
+        return self._parse_statement_core()
 
     def _parse_statement_core(self) -> ast.IbStmt:
         """核心语句解析逻辑"""
@@ -77,12 +66,24 @@ class StatementComponent(BaseComponent):
             self.stream.consume_end_of_statement("Expect newline after retry.")
             return self._loc(ast.IbRetry(hint=hint), start)
         
-        if self.stream.match(TokenType.INTENT_STMT):
-            return self.intent_statement()
+        if self.stream.match(TokenType.LLM_EXCEPT):
+            return self.llm_except_statement()
+        
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
-        # [IES 2.1 Enforcement] 
+        if self.stream.match(TokenType.LLM_RETRY):
+            # 支持顶层的 llmretry "hint" 语法糖
+            hint = None
+            if self.stream.check(TokenType.STRING):
+                hint = self.expression.parse_expression()
+            
+            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
+            self.stream.consume_end_of_statement("Expect newline after llmretry sugar.")
+            
+            # 将 llmretry 包装为 IbLLMExceptionalStmt，以便 SemanticAnalyzer 识别并绑定
+            return self._loc(ast.IbLLMExceptionalStmt(target=None, body=[retry_stmt]), self.stream.previous())
+        
         # 严禁在非顶层（如代码块、函数、类内部）使用 import。
         # 这一限制保证了调度器（Scheduler）可以高效地进行“无副作用”的依赖扫描。
         if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):
@@ -111,35 +112,107 @@ class StatementComponent(BaseComponent):
         self.stream.consume_end_of_statement("Expect newline after global declaration.")
         return self._loc(ast.IbGlobalStmt(names=names), start_token)
 
-    def intent_statement(self) -> ast.IbIntentStmt:
-        """Parse 'intent "content": block'"""
+    def llm_except_statement(self) -> ast.IbLLMExceptionalStmt:
+        """
+        解析 llmexcept 语句。
+        llmexcept 是一个独立的语句，它的 target 应该由前一个语句提供。
+        在语义分析阶段进行合法性检查。
+        
+        语法：
+            statement
+            llmexcept:
+                statements...
+            
+            statement
+            llmexcept retry "hint"
+        """
         start_token = self.stream.previous()
         
-        # 1. Parse content (string or variable)
-        intent_info = self._parse_intent_info(start_token)
+        # 消费换行符
+        while self.stream.check(TokenType.NEWLINE):
+            self.stream.advance()
         
-        # 2. Parse block
-        self.stream.consume(TokenType.COLON, "Expect ':' after intent.")
-        body = self.block()
+        # 检查是否是 llmexcept retry 形式
+        if self.stream.match(TokenType.RETRY):
+            # llmexcept retry "hint"
+            hint = None
+            if self.stream.check(TokenType.STRING):
+                hint = self.expression.parse_expression()
+            
+            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
+            self.stream.consume_end_of_statement("Expect newline after llmexcept retry.")
+            
+            return self._loc(
+                ast.IbLLMExceptionalStmt(target=None, body=[retry_stmt]),
+                start_token
+            )
         
-        return self._loc(ast.IbIntentStmt(intent=intent_info, body=body), start_token)
+        # llmexcept: 形式
+        self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
+        
+        # 解析 llmexcept 块
+        body = self.llm_except_body()
+        
+        return self._loc(
+            ast.IbLLMExceptionalStmt(target=None, body=body),
+            start_token
+        )
+
+    def llm_except_body(self) -> List[ast.IbStmt]:
+        """
+        解析 llmexcept 块的内容。
+        使用与 block() 相同的缩进检测机制。
+        """
+        self.stream.consume(TokenType.NEWLINE, "Expect newline before llmexcept body.")
+        self.stream.consume(TokenType.INDENT, "Expect indent after llmexcept ':'.")
+        
+        body = []
+        while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
+            if self.stream.match(TokenType.NEWLINE):
+                continue
+            
+            # [Result Mode Fix] llmexcept 块内应该允许变量声明
+            if self.decl_parser:
+                stmt = self.decl_parser.parse_declaration()
+                if stmt:
+                    body.append(stmt)
+            else:
+                stmt = self.parse_statement()
+                body.append(stmt)
+        
+        self.stream.consume(TokenType.DEDENT, "Expect dedent after llmexcept body.")
+        return body
 
     def at_intent_shorthand(self) -> ast.IbStmt:
-        """Parse '@ "content" \n statement'"""
+        """
+        Parse '@ "content"' as standalone AST node.
+        
+        根据意图模式返回不同的节点类型：
+        - @ (APPEND) / @! (OVERRIDE): IbIntentAnnotation（必须紧跟 LLM 调用）
+        - @+ (APPEND) / @- (REMOVE): IbIntentStackOperation（允许独立存在）
+        """
         start_token = self.stream.previous()
         
         # 1. Parse content
         intent_info = self._parse_intent_info(start_token)
         
-        # 2. 压入 Pending Intents，下一个被解析的语句将自动关联它
-        self.context.push_intent(intent_info)
-        
-        # 3. 解析下一个语句作为主体
-        # 使用 consume_end_of_statement 处理换行或 EOF
+        # 2. Consume newline (意图注释独立于后续语句)
         self.stream.consume_end_of_statement("Expect newline after @ shorthand.")
         
-        # 重要：使用 declaration() 而非 parse_statement()，以支持 @ 下面的 var/func 定义
-        return self.context.declaration_parser.parse_declaration()
+        # 3. 根据意图模式返回不同的节点类型
+        # @- (REMOVE) 永远返回 IbIntentStackOperation
+        if intent_info.mode == IntentMode.REMOVE:
+            return self._loc(ast.IbIntentStackOperation(intent=intent_info), start_token)
+        
+        # @/@! 返回 IbIntentAnnotation（意图注释）
+        # @+ 返回 IbIntentStackOperation（栈操作）
+        # 注：mode_char 存储在 start_token.value 中，如 "@", "@+", "@!"
+        mode_char = start_token.value[1:] if start_token.value.startswith("@") else ""
+        
+        if mode_char == "+":
+            return self._loc(ast.IbIntentStackOperation(intent=intent_info), start_token)
+        else:
+            return self._loc(ast.IbIntentAnnotation(intent=intent_info), start_token)
 
     def _parse_intent_info(self, start_token) -> ast.IbIntentInfo:
         """Parse 'mode "content"' or 'mode identifier'"""
@@ -161,7 +234,7 @@ class StatementComponent(BaseComponent):
             elif self.stream.match(TokenType.MINUS):
                 mode = IntentMode.REMOVE
             
-            # [IES 2.1 Refactor] 支持模式别名，消除硬编码字符串
+            # 支持模式别名，消除硬编码字符串
             elif self.stream.check(TokenType.IDENTIFIER):
                 peek_val = self.stream.peek().value.lower()
                 if peek_val in ("append", "add"):
@@ -177,21 +250,41 @@ class StatementComponent(BaseComponent):
         segments = []
         tag = None
         
+        # 检查 @- 无参数的特殊情况（移除栈顶意图）
+        # 如果 @- 后面直接是换行符或文件结束，则认为是 pop_top 模式
+        is_pop_top = False
+        if mode == IntentMode.REMOVE:
+            if (self.stream.check(TokenType.NEWLINE) or 
+                self.stream.check(TokenType.EOF) or 
+                self.stream.is_at_end()):
+                is_pop_top = True
+            else:
+                # 检查是否是纯粹的 @- 后跟空格然后换行（可能有空白字符）
+                # 这种情况下 peek() 可能返回 RAW_TEXT 包含空白
+                if self.stream.check(TokenType.RAW_TEXT):
+                    next_text = self.stream.peek().value.strip()
+                    if not next_text:
+                        is_pop_top = True
+        
+        if is_pop_top:
+            return ast.IbIntentInfo(mode=mode, content="", segments=[], tag=None, pop_top=True)
+        
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
             if self.stream.match(TokenType.RAW_TEXT):
                 val = self.stream.previous().value
-                # [IES 2.1] 解析意图标签 #tag
+                # 解析意图标签 #tag
                 # TODO 应该从lexer开始就提供支持。现在是临时方案
-                if tag is None and not segments and val.startswith("#"):
-                    # 尝试提取标签
-                    import re
-                    match = re.match(r"^#([a-zA-Z0-9_]+)\s*", val)
-                    if match:
-                        tag = match.group(1)
-                        remaining = val[match.end():]
-                        if remaining:
-                            segments.append(remaining)
-                        continue
+                if tag is None and not segments:
+                    val_stripped = val.lstrip()
+                    if val_stripped.startswith("#"):
+                        import re
+                        match = re.match(r"^#([a-zA-Z0-9_]+)\s*", val_stripped)
+                        if match:
+                            tag = match.group(1)
+                            remaining = val[match.end():].lstrip()
+                            if remaining:
+                                segments.append(remaining)
+                            continue
                 segments.append(val)
             elif self.stream.match(TokenType.STRING):
                 val = self.stream.previous().value
@@ -200,11 +293,11 @@ class StatementComponent(BaseComponent):
                     val = val[1:-1]
                 segments.append(val)
             elif self.stream.check(TokenType.VAR_REF):
-                # Variable reference $var or $(expr)
-                # [Fix] Use check instead of match, so parse_expression can consume the token
+                # Variable reference $auto or $(expr)
+                # Use check instead of match, so parse_expression can consume the token
                 segments.append(self.expression.parse_expression())
             else:
-                # [IES 2.1 Speculative Parsing]
+
                 # 尝试解析表达式段。若解析失败则停止消费意图内容。
                 # 开启静默前瞻模式，防止解析失败污染诊断状态。
                 with self.stream.speculate():
@@ -215,7 +308,7 @@ class StatementComponent(BaseComponent):
                 
         # If single segment and it's a string, we can flatten it
         content = "".join([s if isinstance(s, str) else str(s) for s in segments]).strip()
-        return ast.IbIntentInfo(mode=mode, content=content, segments=segments, tag=tag)
+        return ast.IbIntentInfo(mode=mode, content=content, segments=segments, tag=tag, pop_top=False)
 
 
     def if_statement(self) -> ast.IbStmt:
@@ -272,7 +365,7 @@ class StatementComponent(BaseComponent):
     def for_statement(self) -> ast.IbStmt:
         start_token = self.stream.previous()
         
-        # [IES 2.2 Fix] 支持带类型标注的循环目标 (e.g. for str name in names)
+        # 支持带类型标注的循环目标 (e.g. for str name in names)
         # 或者元组声明 (e.g. for (int x, int y) in coords)
         from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
         
@@ -343,7 +436,7 @@ class StatementComponent(BaseComponent):
             return self._loc(ast.IbAssign(targets=[expr], value=value), expr)
         
         # 3. AugAssign (a += 1)
-        # [IES 2.1 Refactor] 使用 COMPOUND_OP_MAP 映射复合赋值运算符
+        # 使用 COMPOUND_OP_MAP 映射复合赋值运算符
         for token_type, op_str in COMPOUND_OP_MAP.items():
             if self.stream.match(token_type):
                 value = self.expression.parse_expression()
@@ -372,39 +465,6 @@ class StatementComponent(BaseComponent):
                 
         self.stream.consume(TokenType.DEDENT, "Expect dedent after block.")
         return stmts
-
-    def _parse_llm_fallback(self) -> Optional[List[ast.IbStmt]]:
-        """Helper to parse llmexcept block or declarative retry."""
-        # Skip optional newlines before llmexcept/llmretry
-        # [AUDIT] 必须在 peek 之前消费换行符，否则 match 会因为位置不对而失败
-        while self.stream.check(TokenType.NEWLINE):
-            self.stream.advance()
-            
-        if self.stream.match(TokenType.LLM_EXCEPT):
-            # Check for declarative retry: llmexcept retry "hint"
-            if self.stream.match(TokenType.RETRY):
-                hint = None
-                if self.stream.check(TokenType.STRING):
-                    hint = self.expression.parse_expression()
-                
-                retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
-                self.stream.consume_end_of_statement("Expect newline after declarative retry.")
-                return [retry_stmt]
-            else:
-                self.stream.consume(TokenType.COLON, "Expect ':' after llmexcept.")
-                return self.block()
-        
-        # Check for syntactic sugar: llmretry "hint"
-        if self.stream.match(TokenType.LLM_RETRY):
-            hint = None
-            if self.stream.check(TokenType.STRING):
-                hint = self.expression.parse_expression()
-            
-            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
-            self.stream.consume_end_of_statement("Expect newline after llmretry sugar.")
-            return [retry_stmt]
-
-        return None
 
     def try_statement(self) -> ast.IbTry:
         start_token = self.stream.previous()

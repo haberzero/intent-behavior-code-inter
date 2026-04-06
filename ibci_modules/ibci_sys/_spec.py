@@ -1,51 +1,32 @@
 """
-[IES 2.2] Sys 系统能力插件规范
+Sys 系统能力插件规范
 
-IES 2.2 协议实现（第一方组件）：
-- __ibcext_vtable__() 返回纯字典（原生 IBC-Inter 元数据声明）
-- 不导入任何内核代码，保持零侵入
+非侵入式系统能力插件。
 """
-from typing import Dict, Any
 
-
-def __ibcext_metadata__() -> Dict[str, Any]:
-    """[IES 2.2] 插件元数据"""
+def __ibcext_metadata__() -> dict:
+    """插件元数据"""
     return {
         "name": "sys",
-        "version": "2.2.0",
-        "description": "System capability plugin",
+        "version": "2.3.0",
+        "description": "IBCI 系统能力插件（非侵入式）- 沙箱控制和权限管理",
         "dependencies": [],
     }
 
 
-def __ibcext_vtable__() -> Dict[str, Any]:
-    """
-    [IES 2.2] 方法虚表 - 返回原生 IBC-Inter 元数据声明
-
-    request_external_access: void -> void (请求外部访问权限)
-    is_sandboxed: void -> bool (检查是否在沙箱中运行)
-    """
+def __ibcext_vtable__() -> dict:
+    """插件虚表 - 定义暴露给 IBCI 的方法"""
     return {
         "functions": {
             "request_external_access": {
                 "param_types": [],
-                "return_type": "void"
+                "return_type": "void",
+                "description": "请求启用外部访问权限（沙箱控制）"
             },
             "is_sandboxed": {
                 "param_types": [],
-                "return_type": "bool"
+                "return_type": "bool",
+                "description": "检查当前是否在沙箱模式运行"
             },
-            "script_dir": {
-                "param_types": [],
-                "return_type": "str"
-            },
-            "script_path": {
-                "param_types": [],
-                "return_type": "str"
-            },
-            "project_root": {
-                "param_types": [],
-                "return_type": "str"
-            }
         }
     }

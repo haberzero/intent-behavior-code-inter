@@ -1,0 +1,206 @@
+# IBC-Inter 语法说明手册
+
+本文档定义了 IBC-Inter (Intent-Behavior-Code-Inter) 编程语言的最新语法规范、功能特性及当前版本的局限性。
+
+---
+
+## 1. 核心设计
+
+IBC-Inter 是一种**意图驱动**的编程语言。它将大语言模型 (LLM) 的非确定性能力与传统编程语言的确定性逻辑相结合。
+
+- **Intent (意图)**: 描述“想要做什么”或“处于什么场景”。
+- **Behavior (行为)**: 触发 LLM 执行的具体指令。
+- **Code (代码)**: 结构化的强类型逻辑控制。
+
+---
+
+## 2. 基础语法
+
+### 2.1 变量与类型
+
+IBCI 是**静态强类型**语言，支持以下基础类型：
+
+- `int`, `float`, `bool`, `str`
+- `list`, `dict`, `auto`
+- `tuple` (多值返回与解包支持)
+- `callable` (可调用对象/闭包)
+
+**声明与赋值：**
+
+```ibci
+int count = 10
+str name = "Alice"
+dict config = {"version": "2.2"}
+# 元组解包赋值
+(int x, int y) = (1, 2)
+```
+
+### 2.2 模块导入
+
+使用 `import` 关键字导入系统插件或用户自定义模块：
+
+```ibci
+import ai      # 核心 AI 能力
+import sys     # 沙箱控制（非侵入式插件）
+import isys    # 运行时状态与路径查询（内核侵入式插件）
+import json    # JSON 解析
+import file    # 受限文件系统
+```
+
+---
+
+## 3. AI 驱动能力
+
+### 3.1 行为描述语句
+
+使用 `@~ ... ~` 触发一次 LLM 调用。它可以作为表达式使用：
+
+```ibci
+str joke = @~ 讲一个关于程序员的笑话 ~
+```
+
+行为描述语句是即时触发的。触发行为描述语句时，会根据其所在场景注入不同的提示词。
+
+例如，对于对int类型的赋值，提示词中会注入关于整数的约束。对于dict类型的赋值，提示词中会注入关于字典格式的约束。
+
+### 3.2 LLM 函数
+
+定义结构化的、带提示词工程的 AI 函数：
+
+```ibci
+llm 翻译(str 文本, str 目标语言) -> str:
+__sys__
+你是一个翻译专家。
+__user__
+请将 "$文本" 翻译为 $目标语言。
+llmend
+```
+
+llm 函数利用 llmend 关键字标记结束定义。
+
+llm函数书写不需要缩进，这是为了阅读以及提示词管理的非歧义/便利性，确保所有非顶格书写的空格都可以正常被作为提示词的一部分被送入ai调用过程。
+
+### 3.3 意图驱动控制流
+
+AI 可以直接参与逻辑判定：
+
+```ibci
+# 1. 意图驱动条件 (If)
+if @~ $input 包含负面情绪吗？ ~:
+    print("检测到负面情绪")
+
+# 2. 条件驱动循环
+# 此语法不使用 in 关键字，而是由 AI 判定是否继续执行循环体。
+for @~ $count 小于 3 吗？只回答 1 或 0 ~:
+    count = count + 1
+    print("循环中...")
+
+while @~ 任务尚未完成 ~:
+    # 执行任务逻辑...
+```
+
+---
+
+## 4. 意图系统
+
+意图是 IBCI 的特殊特性。它为 AI 操作提供特定的上下文环境
+
+### 意图操作符
+
+- `@ [content]` / `intent [content]`: **单行意图注入**。为当前作用域添加一个意图。
+- `@+ [content]` / `append [content]`: **增量注入 (Append)**。在现有意图栈顶部追加新意图。
+- `@- [content]` / `remove [content]`: **意图移除 (Remove)**。尝试从栈中移除匹配的意图。
+- `@-` (无参数): **栈顶移除 (Pop)**。移除栈顶的最新意图。适用于与 `@+` 配对使用，临时添加意图后快速移除。
+- `@! [content]` / `override [content]`: **排他注入 (Override)**。屏蔽当前栈并仅保留此意图。
+
+---
+
+## 5. 健壮性与自愈 (Robustness & Self-healing)
+
+### 5.1 异常捕获与重试
+
+IBCI 引入了 `llmexcept` 关键字专门处理 AI 调用产生的非确定性错误（如解析失败、逻辑模糊）：
+
+```ibci
+int result = (int) @~ 1 + 1 等于几？只答数字 ~
+llmexcept:
+    print("AI 响应无法解析为整数，正在重试...")
+    retry "请务必只返回一个纯数字，不要带标点"
+```
+
+### 5.2 llmretry 语法糖
+
+为了简化开发，`llmretry` 提供了一种极其精简的重试引导。它必须独立成行，紧跟在可能触发模糊判定的意图语句之后：
+
+```ibci
+str res = @~ 判定当前状态 ~
+llmretry "如果无法判定，请回复 0 并给出原因"
+```
+
+**注意：**
+
+- `llmretry` 本质上是一个挂载在上一条语句上的 Fallback 节点。
+- 如果触发重试，解释器将精准返回到上一条语句的起始处重新评估。
+- 在循环中使用时，若挂载在循环体内的某条语句后，重试只会重新执行该行，而不会重启整个循环。
+
+---
+
+## 6. 其它特性
+
+### 6.1 位置无关路径解析
+
+| 方法 | 说明 |
+| ------ | ------ |
+| `isys.entry_path()` | 获取入口文件的绝对路径 |
+| `isys.entry_dir()` | 获取入口文件所在的目录 |
+| `isys.project_root()` | 获取项目根目录（沙箱边界） |
+
+**统一路径语义**: 所有相对路径都基于入口文件目录解析，无论在哪个 IBCI 文件中执行。
+
+```ibci
+import isys
+
+str entry = isys.entry_path()   # /project/main.ibci
+str dir = isys.entry_dir()     # /project
+str root = isys.project_root() # /project
+```
+
+### 6.2 动态宿主机制
+
+支持在完全隔离的环境中运行子脚本：
+
+```ibci
+import host
+import isys
+
+dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}
+# 子环境有独立的入口文件、路径管理、插件发现
+host.run_isolated("./sub/child.ibci", policy)
+```
+
+**子环境特性**：
+
+- 完全独立的 Engine 实例
+- 独立的入口文件和路径上下文
+- 独立的插件发现机制
+- 默认不继承父环境变量
+
+---
+
+## 7. 已知限制与注意事项 (Known Limitations)
+
+1. **类型转换严格性**:
+   从 AI 返回的 `any` 类型向 `int`, `float`, `list`, `dict` 转换时，必须使用显式强转 `(int) expr`。
+2. **意图栈深度与序列化**:
+   - 过深的意图栈可能导致 LLM Token 消耗过快或提示词混淆，建议适时使用 `@!` 整理栈。
+   - 意图栈现在支持拓扑序列化，确保在快照恢复后维持内存结构共享，避免了副本激增问题。
+3. **插值迭代限制**:
+   目前不支持 `for i in @~ ... $auto[i] ... ~:` 这种引用了尚未定义的循环变量的插值语法（作用域悖论）。建议先使用 Behavior 产生列表，再进行常规 `for` 循环。
+4. **重试上限限制**:
+   LLM 调用重试次数可通过 `ai.set_retry(n)` 进行配置，默认值为 3 次。
+5. **隔离环境限制**:
+   在 `run_isolated` 环境下，除非明确在 `policy` 中开启 `inherit_variables`，否则子环境无法访问父环境的变量。默认 `inherit_variables: False`，确保子环境完全独立。
+6. **If/While 条件中的 llmexcept**:
+   `llmexcept` 是独立的语法成分，直接保护前一个同级语句。若 `if` 或 `while` 的条件判断触发了 AI 解析错误，应在条件判断语句后紧跟 `llmexcept` 进行处理，无需也不应当与 `try` 配合使用。
+7. **Mock 局限性**:
+   目前的内置 Mock 机制尚无法完美模拟复杂的 `retry` 成功链路，建议开发时配合真实 API 调试。

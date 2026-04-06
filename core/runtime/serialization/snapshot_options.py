@@ -1,5 +1,5 @@
 """
-[IES 2.1+] 子解释器快照配置选项
+子解释器快照配置选项
 
 为 HostService.snapshot() 和 save_state() 提供细粒度的快照控制能力。
 """

@@ -5,7 +5,7 @@ from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStr
 from core.kernel import ast as ast
 from core.kernel.issue import Severity
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.core.syntax import ID_VAR, IbPrecedence
+from core.compiler.parser.core.syntax import ID_AUTO, IbPrecedence
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
@@ -39,13 +39,16 @@ class DeclarationComponent(BaseComponent):
     def parse_declaration(self) -> Optional[ast.IbStmt]:
         role = SyntaxRecognizer.get_role(self.stream)
         
-        # [NEW] 提前消费待处理意图注释，准备进行侧表涂抹关联
+        # 提前消费待处理意图注释，准备进行侧表涂抹关联
         # 无论是什么类型的语句，都应该在这里消费意图，防止遗留到子节点
         pending_intents = self.context.consume_intents()
 
         stmt = None
-        if role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
-            # [IES 2.0] 统一交由 StatementComponent 处理意图标记与语句
+        if role == SyntaxRole.LLM_EXCEPT:
+            self.stream.advance()  # 消费 llmexcept keyword
+            stmt = self.statement.llm_except_statement()
+        elif role == SyntaxRole.INTENT_MARKER:
+            # 统一交由 StatementComponent 处理意图标记与语句
             stmt = self.statement.parse_statement()
         elif role == SyntaxRole.FUNCTION_DEFINITION:
             self.stream.advance() # func
@@ -56,68 +59,44 @@ class DeclarationComponent(BaseComponent):
             self.stream.advance() # class
             stmt = self.class_declaration()
         elif role == SyntaxRole.VARIABLE_DECLARATION:
-            explicit_var = self.stream.match(TokenType.VAR)
-            stmt = self.variable_declaration(explicit_var=explicit_var)
+            explicit_auto = self.stream.match(TokenType.AUTO)
+            stmt = self.variable_declaration(explicit_auto=explicit_auto)
         else:
             stmt = self.statement.parse_statement()
         
         if pending_intents and stmt is not None:
-            # [NEW] 涂抹式关联：暂存在节点对象上，由 SemanticAnalyzer 转入侧表，实现 AST 扁平化
+            # 涂抹式关联：暂存在节点对象上，由 SemanticAnalyzer 转入侧表，实现 AST 扁平化
             setattr(stmt, "_pending_intents", pending_intents)
             
         return stmt
 
-    def intent_declaration(self) -> ast.IbIntentStmt:
-        start_token = self.stream.previous() # intent
-        
-        is_exclusive = False
-        if self.stream.match(TokenType.NOT): # !
-            is_exclusive = True
-            
-        # 允许表达式而非仅字符串
-        intent_expr = self.expression.parse_expression()
-        
-        self.stream.consume(TokenType.COLON, "Expect ':' before intent body.")
-        
-        body = self.statement.block()
-        end_token = self.stream.previous() # DEDENT
-        
-        # 将表达式封装为 IntentInfo
-        # 如果是 Constant 且为 string，则填充 content
-        content = ""
-        if isinstance(intent_expr, ast.IbConstant) and isinstance(intent_expr.value, str):
-            content = intent_expr.value
-            intent_expr = None
-            
-        info = ast.IbIntentInfo(
-            mode=IntentMode.OVERRIDE if is_exclusive else IntentMode.APPEND, 
-            content=content, 
-            expr=intent_expr,
-            lineno=start_token.line,
-            col_offset=start_token.column
-        )
-        return self._loc(ast.IbIntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token, end_token)
-
-    def variable_declaration(self, explicit_var: bool = False) -> ast.IbAssign:
+    def variable_declaration(self, explicit_auto: bool = False) -> ast.IbAssign:
+        """
+        变量/资产声明。
+        格式：
+        1. auto x = 1 (推导类型)
+        2. int x = 1 (显式类型)
+        3. auto x: int = 1 (显式覆盖)
+        """
         type_token = None
         type_annotation = None
         
-        if explicit_var:
-            # 'var' keyword already consumed
+        if explicit_auto:
+            # 'auto' keyword already consumed
             type_token = self.stream.previous()
             
-            # [IES 2.1 Refactor] 使用语法常量，消除硬编码
-            var_name = ID_VAR
+            # 使用语法常量，消除硬编码
+            auto_name = ID_AUTO
             if self.context.metadata:
-                var_desc = self.context.metadata.resolve(ID_VAR)
-                if var_desc:
-                    var_name = var_desc.name
+                auto_desc = self.context.metadata.resolve(ID_AUTO)
+                if auto_desc:
+                    auto_name = auto_desc.name
             
-            type_annotation = self._loc(ast.IbName(id=var_name, ctx='Load'), type_token)
+            type_annotation = self._loc(ast.IbName(id=auto_name, ctx='Load'), type_token)
             
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
             
-            # Optional type override: var x: int = 1
+            # Optional type override: auto x: int = 1
             if self.stream.match(TokenType.COLON):
                 type_annotation = self.type_def.parse_type_annotation()
         else:
@@ -138,16 +117,7 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume_end_of_statement("Expect newline after variable declaration.")
         end_token = self.stream.previous()
         
-        # 解析可选的 llmexcept 块
-        llm_fallback = self.statement._parse_llm_fallback()
-        if llm_fallback:
-             end_token = self.stream.previous()
-             
-        stmt = self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
-        
-        if llm_fallback:
-            stmt.llm_fallback = llm_fallback
-        return stmt
+        return self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
 
     def function_declaration(self) -> ast.IbFunctionDef:
         start_token = self.stream.previous()
@@ -184,11 +154,12 @@ class DeclarationComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
         
-        llm_node = self._loc(ast.IbLLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, returns=returns), start_token)
+        llm_node = self._loc(ast.IbLLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, retry_hint=None, returns=returns), start_token)
         
-        sys_prompt, user_prompt = self.llm_body()
+        sys_prompt, user_prompt, retry_hint = self.llm_body()
         llm_node.sys_prompt = sys_prompt
         llm_node.user_prompt = user_prompt
+        llm_node.retry_hint = retry_hint
         
         return self._extend_loc(llm_node, self.stream.previous())
 
@@ -242,38 +213,44 @@ class DeclarationComponent(BaseComponent):
                     break
         return params
 
-    def llm_body(self) -> tuple[Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]]]:
+    def llm_body(self) -> tuple[Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]]]:
         self.stream.consume(TokenType.NEWLINE, "Expect newline before LLM block.")
         
         sys_prompt = None
         user_prompt = None
+        retry_hint = None
         
         while not self.stream.check(TokenType.LLM_END) and not self.stream.is_at_end():
             if self.stream.match(TokenType.LLM_SYS):
                 sys_prompt = self.parse_llm_section_content()
             elif self.stream.match(TokenType.LLM_USER):
                 user_prompt = self.parse_llm_section_content()
+            elif self.stream.match(TokenType.LLM_RETRY_HINT):
+                retry_hint = self.parse_llm_section_content()
             elif self.stream.match(TokenType.NEWLINE):
                 continue
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', or 'llmend'.", code="PAR_002")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code="PAR_002")
 
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
-        return sys_prompt, user_prompt
+        return sys_prompt, user_prompt, retry_hint
 
     def parse_llm_section_content(self) -> List[Union[str, ast.IbExpr]]:
         segments = []
         while not self.stream.is_at_end():
-            if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_END):
+            if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_RETRY_HINT) or self.stream.check(TokenType.LLM_END):
                 break
 
             if self.stream.match(TokenType.RAW_TEXT):
                 segments.append(self.stream.previous().value)
             elif self.stream.match(TokenType.NEWLINE):
                 segments.append("\n")
-            elif self.stream.match(TokenType.EMBEDDED_PARAM):
-                param_name = self.stream.previous().value
-                var_ref = ast.IbName(id=param_name, ctx='Load')
+            elif self.stream.match(TokenType.VAR_REF):
+                # 支持 $变量名 格式
+                # 注意：只有当变量名是 llm 函数参数时才会被替换，否则作为普通文本
+                token = self.stream.previous()
+                var_name = token.value
+                var_ref = self._loc(ast.IbName(id=var_name, ctx='Load'), token)
                 segments.append(var_ref)
             else:
                 raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")

@@ -44,7 +44,7 @@ class BaseComponent:
                 node.end_col_offset = end_obj.end_col_offset
         
         # [Intent Smearing] 暂存 Parser 发现的意图
-        # [Fix] 仅将意图附加到语句或特定的表达式（如 BehaviorExpr）上，防止 sub-nodes (如 IbName) 过早夺取意图
+        # 仅将意图附加到语句或特定的表达式（如 BehaviorExpr）上，防止 sub-nodes (如 IbName) 过早夺取意图
         if isinstance(node, (ast.IbStmt, ast.IbBehaviorExpr, ast.IbTypeAnnotatedExpr)):
             intents = self.context.consume_intents()
             if intents:

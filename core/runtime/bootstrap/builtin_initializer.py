@@ -1,7 +1,7 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject
-from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
+from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior, IbBool
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -18,7 +18,7 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
     ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
 
 def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
-    """[IES 2.1] 基于公理声明自动化绑定二元运算符"""
+    """ 基于公理声明自动化绑定二元运算符"""
     axiom = ib_cls.descriptor._axiom
     if not axiom: return
     
@@ -49,7 +49,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     if registry.is_initialized:
         return None # 已初始化
         
-    # [IES 2.0] 确保处于 STAGE_1_BOOTSTRAP 状态
+    # 确保处于 STAGE_1_BOOTSTRAP 状态
     registry.verify_level(RegistrationState.STAGE_1_BOOTSTRAP.value)
     
     # 1. 准备 UTS 元数据注册表 (隔离引擎实例)
@@ -61,17 +61,17 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     bootstrapper.initialize(metadata_registry)
     token = bootstrapper.token
     
-    # [IES 2.0 Transition] 跃迁到 STAGE_2_CORE_TYPES
+    # 跃迁到 STAGE_2_CORE_TYPES
     registry.set_state_level(RegistrationState.STAGE_2_CORE_TYPES.value, token)
     
     # 注册元数据注册表到 Registry
     registry.register_metadata_registry(metadata_registry, token)
 
     # 3. 创建核心内置类 (Axiom-Driven Automation)
-    # [NEW] 遍历 AxiomRegistry 自动初始化所有注册的原子类型
+    # 遍历 AxiomRegistry 自动初始化所有注册的原子类型
     
     # 基础类型映射表 (用于绑定具体的 IbClass 实现)
-    # [IES 2.1 Regularization] 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
+    # 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
     # 自动创建类并注册
     # 注意：我们必须保证顺序，或者允许多次查找
     # 依赖于 pritmives.py 中的注册顺序 (int before bool)
@@ -82,7 +82,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         core_axioms = axiom_registry.get_all_names()
     else:
         # Fallback (Safety net) - 仅在极端的 UTS 注册表未对齐时使用
-        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "var", "Any", "void"]
+        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "auto", "any", "void"]
     
     # 自动创建类并注册
     ib_classes = {}
@@ -95,7 +95,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         parent = "Object"
         axiom = desc._axiom if desc else None
         if axiom:
-            # [IES 2.1 Axiom-Driven] 从公理中自动提取继承关系，消除硬编码判定
+            # 从公理中自动提取继承关系，消除硬编码判定
             parent = axiom.get_parent_axiom_name() or "Object"
         
         ib_cls = registry.create_subclass(name, desc, parent_name=parent)
@@ -108,7 +108,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         axiom = desc._axiom if desc else None
         if axiom:
             methods = axiom.get_methods()
-            # [IES 2.1 Regularization] 从全局类型注册表获取实现类，消除硬编码映射
+            # 从全局类型注册表获取实现类，消除硬编码映射
             py_impl_cls = get_ib_implementation(name)
             if py_impl_cls:
                 for method_name in methods:
@@ -118,7 +118,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
                         # 绑定为原生方法
                         _reg_native(ib_cls, method_name, py_method, unbox=False)
                 
-                # [IES 2.1] 自动化运算符绑定
+                # 自动化运算符绑定
                 _auto_bind_operators(ib_cls, py_impl_cls)
 
     # 获取引用以便后续绑定 (保持兼容性)
@@ -127,6 +127,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     string_class = ib_classes.get("str")
     list_class = ib_classes.get("list")
     dict_class = ib_classes.get("dict")
+    slice_class = ib_classes.get("slice")
     none_class = ib_classes.get("None")
     bool_class = ib_classes.get("bool")
     
@@ -136,14 +137,32 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 4. 注册内置全局函数元数据 (供编译器发现)
     registry.register_function("print", FunctionMetadata(
         name="print",
-        param_types=[metadata_registry.resolve("Any")],
+        param_types=[metadata_registry.resolve("any")],
         return_type=metadata_registry.resolve("void")
     ), token)
 
     registry.register_function("len", FunctionMetadata(
         name="len",
-        param_types=[metadata_registry.resolve("Any")],
+        param_types=[metadata_registry.resolve("any")],
         return_type=metadata_registry.resolve("int")
+    ), token)
+
+    registry.register_function("range", FunctionMetadata(
+        name="range",
+        param_types=[metadata_registry.resolve("int")],
+        return_type=metadata_registry.resolve("list")
+    ), token)
+
+    registry.register_function("range", FunctionMetadata(
+        name="range",
+        param_types=[metadata_registry.resolve("int"), metadata_registry.resolve("int")],
+        return_type=metadata_registry.resolve("list")
+    ), token)
+
+    registry.register_function("range", FunctionMetadata(
+        name="range",
+        param_types=[metadata_registry.resolve("int"), metadata_registry.resolve("int"), metadata_registry.resolve("int")],
+        return_type=metadata_registry.resolve("list")
     ), token)
 
     registry.register_function("get_self_source", FunctionMetadata(
@@ -162,7 +181,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
     
-    # [NEW] int(x) 构造函数/转换逻辑
+    # int(x) 构造函数/转换逻辑
     def _int_call(self, *args):
         if not args: return self.registry.box(0)
         return args[0].receive('cast_to', [self])
@@ -171,7 +190,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # Float
     _reg_native(float_class, '__to_prompt__', lambda self: str(self.to_native()))
 
-    # [NEW] float(x) 构造函数/转换逻辑
+    # float(x) 构造函数/转换逻辑
     def _float_call(self, *args):
         if not args: return self.registry.box(0.0)
         return args[0].receive('cast_to', [self])
@@ -179,8 +198,16 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
+    _reg_native(string_class, '__getitem__', lambda self, key: self.__getitem__(key), unbox=False)
+
+    # range(start, stop, step) 构造函数
+    def _range_impl(reg, *args):
+        native_args = [a.to_native() for a in args]
+        return reg.box(list(range(*native_args)))
     
-    # [NEW] str(x) 构造函数/转换逻辑
+    _reg_native(bootstrapper.get_class("Object"), "range", _range_impl, unbox=False)
+    
+    # str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
         if not args: return self.registry.box("")
         return args[0].receive('__to_prompt__', [])
@@ -195,31 +222,49 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(dict_class, 'len', lambda self: self.len())
     
     # 5. 注册装箱逻辑
-    registry.register_boxer(int, lambda v, memo=None: IbInteger.from_native(v, integer_class), token)
-    registry.register_boxer(bool, lambda v, memo=None: IbInteger.from_native(1 if v else 0, integer_class), token)
-    registry.register_boxer(float, lambda v, memo=None: IbFloat(v, float_class), token)
-    registry.register_boxer(str, lambda v, memo=None: IbString(v, string_class), token)
+    registry.register_boxer(int, lambda reg, v, memo=None: IbInteger.from_native(v, reg.get_class("int")), token)
+    registry.register_boxer(bool, lambda reg, v, memo=None: IbBool(v, reg.get_class("bool")), token)
+    registry.register_boxer(float, lambda reg, v, memo=None: IbFloat(v, reg.get_class("float")), token)
+    registry.register_boxer(str, lambda reg, v, memo=None: IbString(v, reg.get_class("str")), token)
     
-    def _box_list(val, memo):
-        res = IbList([], list_class)
+    def _box_list(reg, val, memo):
+        res = IbList([], reg.get_class("list"))
         memo[id(val)] = res
-        res.elements = [registry.box(i, memo) for i in val]
+        res.elements = [reg.box(i, memo) for i in val]
         return res
         
-    def _box_dict(val, memo):
-        res = IbDict({}, dict_class)
+    def _box_dict(reg, val, memo):
+        res = IbDict({}, reg.get_class("dict"))
         memo[id(val)] = res
-        res.fields = {k: registry.box(v, memo) for k, v in val.items()}
+        res.fields = {k: reg.box(v, memo) for k, v in val.items()}
         return res
         
     registry.register_boxer(list, _box_list, token)
+    registry.register_boxer(tuple, _box_list, token)
     registry.register_boxer(dict, _box_dict, token)
-    
+
+    # 5.5 注册 IntentStack 内置类（公理体系融入）
+    from core.runtime.objects.intent_stack import IbIntentStack
+
+    intent_stack_class = bootstrapper.get_class("IntentStack")
+    intent_stack_desc = metadata_registry.resolve("IntentStack")
+
+    _reg_native(intent_stack_class, 'push', IbIntentStack.push, unbox=False)
+    _reg_native(intent_stack_class, 'pop', IbIntentStack.pop, unbox=False)
+    _reg_native(intent_stack_class, 'clear', IbIntentStack.clear, unbox=False)
+    _reg_native(intent_stack_class, 'get_active', IbIntentStack.get_active, unbox=False)
+    _reg_native(intent_stack_class, 'resolve', IbIntentStack.resolve, unbox=False)
+    _reg_native(intent_stack_class, '__iter__', IbIntentStack.__iter__, unbox=False)
+    _reg_native(intent_stack_class, '__len__', IbIntentStack.__len__, unbox=False)
+    _reg_native(intent_stack_class, '__repr__', IbIntentStack.__repr__, unbox=False)
+
+    registry.register_builtin_instance("IntentStack", IbIntentStack(intent_stack_class))
+
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
 
-    # [IES 2.0 Transition] 跃迁到 STAGE_3_PLUGIN_METADATA
+    # 跃迁到 STAGE_3_PLUGIN_METADATA
     registry.set_state_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value, token)
     
-    # [IES 2.1 Audit] 清理遗留 Legacy 术语与残留注释
+    # 清理遗留 Legacy 术语与残留注释
     return token

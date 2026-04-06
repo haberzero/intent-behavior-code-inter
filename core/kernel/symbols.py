@@ -21,17 +21,17 @@ class Symbol:
     """静态符号基类"""
     name: str
     kind: SymbolKind
-    uid: Optional[str] = None # [IES 2.1] 唯一标识符，用于解决变量遮蔽 (Shadowing)
+    uid: Optional[str] = None # 唯一标识符，用于解决变量遮蔽 (Shadowing)
     def_node: Optional[Any] = None # 直接引用定义它的 AST 节点对象
     owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    # [Refactor] 直接持有 TypeDescriptor，不再使用 StaticType 中称层
+    # 直接持有 TypeDescriptor，不再使用 StaticType 中称层
     descriptor: Optional[TypeDescriptor] = None
 
     def walk_references(self, callback: Any) -> None:
         """
-        [IES 2.1] 遍历符号持有的类型引用。
+         遍历符号持有的类型引用。
         """
         if self.descriptor:
             self.descriptor = callback(self.descriptor)
@@ -50,7 +50,7 @@ class Symbol:
 
     def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'Symbol':
         """
-        [IES 2.0 Isolation] 克隆符号对象。
+        克隆符号对象。
         注意：递归克隆关联的描述符以确保物理隔离。
         """
         if memo is None: memo = {}
@@ -66,7 +66,7 @@ class Symbol:
 
     def get_content_hash(self) -> str:
         """
-        [IES 2.1 Deterministic] 获取符号的内容哈希，用于生成匿名 UID。
+        获取符号的内容哈希，用于生成匿名 UID。
         """
         import hashlib
         # 基础特征：名称 + 类型
@@ -134,12 +134,12 @@ class SymbolTable:
     """
     def __init__(self, parent: Optional['SymbolTable'] = None, name: Optional[str] = None):
         self.parent = parent
-        self.name = name # [IES 2.1] 作用域名称 (如函数名、类名)
-        self.depth = (parent.depth + 1) if parent else 0 # [IES 2.1] 作用域深度
+        self.name = name # 作用域名称 (如函数名、类名)
+        self.depth = (parent.depth + 1) if parent else 0 # 作用域深度
         self.symbols: Dict[str, Symbol] = {}
         self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
         self._uid = None
-        self._child_count = 0 # [IES 2.1] 用于生成确定性匿名 UID
+        self._child_count = 0 # 用于生成确定性匿名 UID
         
         if parent:
             parent._child_count += 1
@@ -147,7 +147,7 @@ class SymbolTable:
 
     @property
     def uid(self) -> str:
-        """[IES 2.1] 生成确定性作用域 UID"""
+        """ 生成确定性作用域 UID"""
         if self._uid: return self._uid
         if not self.parent:
             # 模块/全局作用域：UID = scope_{name}
@@ -163,7 +163,7 @@ class SymbolTable:
 
     def define(self, sym: Symbol, allow_overwrite: bool = False):
         """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
-        # [IES 2.1 Shadowing] 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
+        # 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
         # 格式：scope_uid:symbol_name
         # 这确保了即使是同名变量 (Shadowing)，在扁平池中也拥有不同的物理 UID
         if not sym.uid:
@@ -171,7 +171,7 @@ class SymbolTable:
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            # [IES 2.1 UTS Integration] 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
+            # 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
             # [Temporary] 外部模块符号和内置符号之间的兼容性处理
             # [Future] 严格遵循显式引入原则时，此逻辑将被移除
             is_compatible_builtin = (

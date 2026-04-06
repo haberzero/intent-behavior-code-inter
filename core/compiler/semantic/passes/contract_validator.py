@@ -6,7 +6,7 @@ from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
 class ContractValidator:
     """
-    [IES 2.1 Stage 7] 全局契约校验器。
+    全局契约校验器。
     在系统启动前（STAGE 7），对所有已注册的类进行深度审计，
     确保方法签名对齐父类契约（协变/逆变）以及公理契约。
     """
@@ -17,7 +17,7 @@ class ContractValidator:
 
     def validate_all(self):
         """
-        [IES 2.1 Final Audit] 遍历注册表中的所有描述符，验证其内部契约一致性。
+        遍历注册表中的所有描述符，验证其内部契约一致性。
         """
         if self.debugger:
             self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, "Starting Global Contract Validation (STAGE 7)...")
@@ -26,7 +26,7 @@ class ContractValidator:
             # 1. 审计类契约
             if desc.is_class():
                 self._validate_class(desc)
-            # 2. [IES 2.1 Refactor] 审计全局函数契约 (消除审计盲区)
+            # 2.  审计全局函数契约 (消除审计盲区)
             elif desc.get_call_trait():
                 self._validate_function(desc)
 
@@ -38,7 +38,7 @@ class ContractValidator:
 
         # 1. 检查方法重写的一致性 (Inheritance Contract)
         for name, member in cls_desc.members.items():
-            # [IES 2.1 Deep Audit] 校验成员水合完整性
+            # 校验成员水合完整性
             if member.descriptor is None:
                 self.issue_tracker.report_error(
                     f"Contract Violation: Member '{name}' in class '{cls_desc.name}' has unhydrated type descriptor.",
@@ -88,7 +88,7 @@ class ContractValidator:
 
     def _check_method_compatibility(self, cls_desc: ClassMetadata, name: str, sub_sig: TypeDescriptor, super_sig: TypeDescriptor, source: str):
         """校验方法子类型化规则：参数逆变，返回值协变"""
-        # [IES 2.1 Deep Audit]
+
         # 1. 校验参数数量一致性
         sub_info = sub_sig.get_signature()
         super_info = super_sig.get_signature()

@@ -79,11 +79,11 @@ class MetadataRegistry:
         key = f"{descriptor.module_path}.{descriptor.name}" if descriptor.module_path else descriptor.name
         core_trace(CoreModule.UTS, DebugLevel.BASIC, f"Registering UTS descriptor: {key}")
 
-        # [IES 2.0 Isolation] 强制克隆描述符以确保引擎间物理隔离 (Item 12)
+        # 强制克隆描述符以确保引擎间物理隔离 (Item 12)
         memo = {}
         descriptor = self._clone_and_bind(descriptor, memo)
 
-        # [IES 2.0 Hydration] 采用两阶段注册模式
+        # 采用两阶段注册模式
         # 第一阶段：占位 (Shelling)
         self._descriptors[key] = descriptor
 
@@ -121,7 +121,7 @@ class MetadataRegistry:
         return self._descriptors.get(key)
 
     def resolve_from_value(self, value: Any) -> Optional[TypeDescriptor]:
-        """[IES 2.1] 根据 Python 原生值解析对应的 UTS 描述符"""
+        """ 根据 Python 原生值解析对应的 UTS 描述符"""
         if isinstance(value, bool): return self.resolve("bool")
         if isinstance(value, int): return self.resolve("int")
         if isinstance(value, float): return self.resolve("float")
@@ -156,7 +156,7 @@ class MetadataRegistry:
             cloned_desc = descriptor.clone(memo)
             new_registry._descriptors[key] = cloned_desc
 
-        # [IES 2.2 Fix] 重新水合克隆出的所有描述符，绑定新的注册表并注入公理能力
+        # 重新水合克隆出的所有描述符，绑定新的注册表并注入公理能力
         # 否则子环境中的描述符将丢失 _registry 和 _axiom 引用，导致运算符解析失败
         for desc in memo.values():
             if isinstance(desc, TypeDescriptor):
@@ -174,7 +174,7 @@ class MetadataRegistry:
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        [IES 2.2] 将 MetadataRegistry 序列化为字典，用于 .ibc_meta 文件生成。
+         将 MetadataRegistry 序列化为字典，用于 .ibc_meta 文件生成。
         实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
         """
         result = {

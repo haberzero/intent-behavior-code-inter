@@ -52,6 +52,6 @@ class ParserContext:
         if self.host_interface is None:
             self.host_interface = HostInterface()
             
-        # [IES 2.1 Axiom] 自动从宿主接口提取元数据注册表
+        # 自动从宿主接口提取元数据注册表
         if self.metadata is None and self.host_interface:
             self.metadata = self.host_interface.metadata

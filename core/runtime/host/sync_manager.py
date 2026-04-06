@@ -19,7 +19,7 @@ class SyncPoint:
 
 class SyncManager:
     """
-    [IES 2.1] 安全点同步管理器。
+     安全点同步管理器。
     协调多线程/协程环境下的同步操作。
     """
     def __init__(self):

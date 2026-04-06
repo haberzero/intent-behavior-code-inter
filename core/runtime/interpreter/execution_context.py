@@ -3,17 +3,18 @@ from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING, Callable
 from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
+from core.runtime.path import IbPath
 
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
 
 class ExecutionContextImpl(IExecutionContext, IStackInspector):
     """
-    [IES 2.1 Decoupling] 运行时执行上下文的具体实现。
+    运行时执行上下文的具体实现。
     它作为纯状态容器，持有 node_pool、栈和运行时上下文的引用。
     同时，它持有指向 Interpreter 逻辑的回调函数，以实现物理层面的逻辑与数据分离。
     """
-    def __init__(self, 
+    def __init__(self,
                  registry: Any,
                  factory: Any,
                  visit_callback: Any,
@@ -27,8 +28,10 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
                  resolve_type_from_symbol_callback: Any,
                  extract_name_id_callback: Any,
                  resolve_value_callback: Any,
-                 visit_with_fallback_callback: Any,
-                 strict_mode: bool = False):
+                 module_manager: Any = None,
+                 strict_mode: bool = False,
+                 entry_file: str = None,
+                 entry_dir: str = None):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
         self._scope_pool: Mapping[str, Any] = {}
@@ -38,8 +41,11 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._factory = factory
         self._runtime_context = None
         self._logical_stack = None # 由 Interpreter 初始化并注入
-        self._current_module_name = None # [IES 2.1]
+        self._current_module_name = None
+        self._module_manager = module_manager
         self._strict_mode = strict_mode
+        self._entry_file = entry_file
+        self._entry_dir = entry_dir
         
         # Logic Callbacks
         self._visit_callback = visit_callback
@@ -53,7 +59,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._resolve_type_from_symbol_callback = resolve_type_from_symbol_callback
         self._extract_name_id_callback = extract_name_id_callback
         self._resolve_value_callback = resolve_value_callback
-        self._visit_with_fallback_callback = visit_with_fallback_callback
 
     @property
     def logical_stack(self) -> Any:
@@ -62,14 +67,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     @logical_stack.setter
     def logical_stack(self, value: Any):
         self._logical_stack = value
-
-    @property
-    def current_module_name(self) -> Optional[str]:
-        return self._current_module_name
-
-    @current_module_name.setter
-    def current_module_name(self, value: Optional[str]):
-        self._current_module_name = value
 
     @property
     def current_module_name(self) -> Optional[str]:
@@ -140,6 +137,14 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         self._runtime_context = value
 
     @property
+    def module_manager(self) -> Any:
+        return self._module_manager
+
+    @module_manager.setter
+    def module_manager(self, value: Any):
+        self._module_manager = value
+
+    @property
     def strict_mode(self) -> bool:
         return self._strict_mode
 
@@ -147,8 +152,8 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     def strict_mode(self, value: bool):
         self._strict_mode = value
 
-    def visit(self, node_uid: str, module_name: Optional[str] = None) -> 'IbObject':
-        return self._visit_callback(node_uid, module_name=module_name)
+    def visit(self, node_uid: str, module_name: Optional[str] = None, bypass_protection: bool = False) -> 'IbObject':
+        return self._visit_callback(node_uid, module_name=module_name, bypass_protection=bypass_protection)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         return self._get_node_data_callback(node_uid)
@@ -174,9 +179,6 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
     def resolve_value(self, val: Any) -> Any:
         return self._resolve_value_callback(val)
 
-    def visit_with_fallback(self, node_uid: str, node_type: str, node_data: Mapping[str, Any], action: Callable) -> 'IbObject':
-        return self._visit_with_fallback_callback(node_uid, node_type, node_data, action)
-
     # IStackInspector Implementation (Delegated to Data or Callback)
     def get_call_stack_depth(self) -> int:
         return self._logical_stack.depth if self._logical_stack else 0
@@ -191,13 +193,57 @@ class ExecutionContextImpl(IExecutionContext, IStackInspector):
         return self._get_captured_intents_callback(obj)
 
     def get_current_script_path(self) -> Optional[str]:
+        """
+        获取当前脚本的绝对路径
+
+        返回:
+            Optional[str]: 脚本绝对路径（字符串格式），未找到则返回 None
+        """
         if self._logical_stack and self._logical_stack.frames:
-            # 从调用栈中查找最近的一个具有 Location 的帧
             for frame in reversed(self._logical_stack.frames):
                 if frame.location and frame.location.file_path:
-                    return os.path.abspath(frame.location.file_path)
+                    ib_path = IbPath.from_native(frame.location.file_path)
+                    return ib_path.resolve_dot_segments().to_native()
         return None
 
     def get_current_script_dir(self) -> Optional[str]:
+        """
+        获取当前脚本所在目录
+
+        返回:
+            Optional[str]: 脚本目录（字符串格式），未找到则返回 None
+        """
         path = self.get_current_script_path()
-        return os.path.dirname(path) if path else None
+        if path:
+            ib_path = IbPath.from_native(path)
+            parent = ib_path.parent
+            return parent.to_native() if parent else None
+        return None
+
+    def get_entry_path(self) -> Optional[str]:
+        """获取入口文件路径"""
+        return self._entry_file
+
+    def get_entry_dir(self) -> Optional[str]:
+        """获取入口文件目录"""
+        return self._entry_dir
+
+    def resolve_path(self, path: str) -> IbPath:
+        """
+        所有相对路径的统一解析入口
+
+        所有相对路径都基于入口文件目录解析，确保无论在哪个 IBCI 文件中执行，
+        相对路径都相对于入口文件目录。
+        """
+        if not path:
+            return IbPath.from_native("")
+
+        ib_path = IbPath.from_native(path)
+
+        if ib_path.is_absolute:
+            return ib_path.resolve_dot_segments()
+
+        if self._entry_dir:
+            return (IbPath.from_native(self._entry_dir) / ib_path).resolve_dot_segments()
+
+        return ib_path

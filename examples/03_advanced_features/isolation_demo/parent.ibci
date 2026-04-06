@@ -1,0 +1,24 @@
+import host
+
+print("--- [PARENT] Starting ---")
+print("PARENT: 使用入口文件目录作为基准")
+
+# 简单配置示例
+dict cfg = {
+    "model": "gpt-4",
+    "api_key": "demo-key-12345"
+}
+print("PARENT Config Model: " + (str)cfg["model"])
+
+# 隔离运行子项目
+print("\nLaunching CHILD in isolation...")
+# 指定策略：独立 Registry, 不继承变量
+dict policy = {
+    "isolated": true,
+    "registry_isolation": true,
+    "inherit_variables": false
+}
+# 使用绝对路径（需要确保路径正确）
+host.run_isolated("examples/04_advanced_features/isolation_demo/sub_project/child.ibci", policy)
+
+print("\n--- [PARENT] Finished ---")

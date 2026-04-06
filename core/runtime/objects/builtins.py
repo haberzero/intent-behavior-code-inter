@@ -3,7 +3,7 @@ from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
-from core.kernel.issue import InterpreterError, LLMUncertaintyError
+from core.kernel.issue import InterpreterError
 
 from .ib_type_mapping import register_ib_type
 
@@ -46,13 +46,13 @@ class IbInteger(IbObject):
         return self.ib_class.registry.box(res_val)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
-        # [IES 2.1 Refactor] 强制从 ib_class.name 获取类型标签，消除硬编码
+        # 强制从 ib_class.name 获取类型标签，消除硬编码
         return {"type": self.ib_class.name, "value": self.value}
 
     def __repr__(self):
         return f"Integer({self.value})"
 
-    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
     def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
     def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
@@ -88,6 +88,36 @@ class IbInteger(IbObject):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+@register_ib_type("bool")
+class IbBool(IbObject):
+    """
+    包装 Python 原生 bool 的 IBC 对象。
+    """
+    __slots__ = ('value',)
+
+    def __init__(self, value: bool, ib_class: IbClass):
+        super().__init__(ib_class)
+        self.value = value
+
+    def to_native(self, memo=None) -> bool:
+        return self.value
+
+    def to_int(self) -> int:
+        return 1 if self.value else 0
+
+    def __eq__(self, other):
+        if isinstance(other, IbBool):
+            return self.value == other.value
+        if hasattr(other, 'to_native'):
+            return self.value == other.to_native()
+        return False
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __bool__(self):
+        return self.value
+
 @register_ib_type("float")
 class IbFloat(IbObject):
     """
@@ -116,7 +146,7 @@ class IbFloat(IbObject):
     def __repr__(self):
         return f"Float({self.value})"
 
-    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any: return self.value + other.to_native()
     def __sub__(self, other: IbObject) -> Any: return self.value - other.to_native()
     def __mul__(self, other: IbObject) -> Any: return self.value * other.to_native()
@@ -153,20 +183,29 @@ class IbString(IbObject):
 
     def to_bool(self) -> IbObject:
         val = self.value.strip().lower()
-        # [IES 2.2 Strict] 强约束决策逻辑：
+        # 强约束决策逻辑：
         # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
         # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
-        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发 LLMUncertaintyError 以便 llmexcept 捕获
+        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发不确定性标志，以便 llmexcept 捕获
         if val in ("1", "true", "yes", "on"):
             return self.ib_class.registry.box(1)
         if val in ("0", "false", "no", "off", "null", "none", ""):
             return self.ib_class.registry.box(0)
             
-        # [IES 2.2 Enforcement] 非空且非明确布尔语义的字符串，直接判定为模糊
-        raise LLMUncertaintyError(
-            f"Ambiguous boolean string: '{self.value}'. Expected '0' or '1'.",
-            raw_response=self.value
-        )
+        # [Result Mode Refactor] 不再抛出 Python 异常。
+        # 通过 Registry 获取当前执行上下文并设置不确定性结果。
+        execution_context = self.ib_class.registry.get_execution_context()
+        if execution_context and execution_context.runtime_context:
+            from core.runtime.interpreter.llm_result import LLMResult
+            execution_context.runtime_context.set_last_llm_result(
+                LLMResult.uncertain_result(
+                    raw_response=self.value,
+                    retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 '0' 或 '1'。"
+                )
+            )
+            
+        # 返回 none (或者 0)，解释器（如 visit_IbIf）会检查 last_llm_result.is_uncertain 并立即停止执行
+        return self.ib_class.registry.get_none()
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
@@ -174,11 +213,17 @@ class IbString(IbObject):
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
-            # [IES 2.2] 统一抛出 LLMUncertaintyError，使强转失败能被 llmexcept 捕获
-            raise LLMUncertaintyError(
-                f"Casting string '{self.value}' to {target_desc} failed: {str(e)}",
-                raw_response=self.value
-            )
+            # [Result Mode Refactor] 统一通过 LLMResult 信号不确定性，不再使用 Python 异常
+            execution_context = self.ib_class.registry.get_execution_context()
+            if execution_context and execution_context.runtime_context:
+                from core.runtime.interpreter.llm_result import LLMResult
+                execution_context.runtime_context.set_last_llm_result(
+                    LLMResult.uncertain_result(
+                        raw_response=self.value,
+                        retry_hint=f"类型强制转换失败: 将 '{self.value}' 转换为 {target_desc} 失败: {str(e)}"
+                    )
+                )
+            return self.ib_class.registry.get_none()
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())
@@ -200,13 +245,40 @@ class IbString(IbObject):
     def is_empty(self) -> IbObject:
         return self.ib_class.registry.box(1 if len(self.value.strip()) == 0 else 0)
 
+    def find(self, substring: Any) -> IbObject:
+        """查找子串首次出现的位置，未找到返回 -1"""
+        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        idx = self.value.find(sub_str)
+        return self.ib_class.registry.box(idx)
+
+    def find_last(self, substring: Any) -> IbObject:
+        """查找子串最后一次出现的位置，未找到返回 -1"""
+        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        idx = self.value.rfind(sub_str)
+        return self.ib_class.registry.box(idx)
+
+    def contains(self, substring: Any) -> IbObject:
+        """检查是否包含子串"""
+        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        result = sub_str in self.value
+        return self.ib_class.registry.box(1 if result else 0)
+
+    def __getitem__(self, key: Any) -> IbObject:
+        """支持字符串下标与切片"""
+        idx = key.to_native() if hasattr(key, 'to_native') else key
+        try:
+            res = self.value[idx]
+            return self.ib_class.registry.box(res)
+        except IndexError:
+            raise InterpreterError(f"IndexError: string index out of range: {idx}")
+
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {"type": self.ib_class.name, "value": self.value}
 
     def __repr__(self):
         return f"String('{self.value}')"
 
-    # --- [IES 2.1] 自动化运算符绑定支持 ---
+    # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any:
         if other.ib_class.name != "str":
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
@@ -225,8 +297,8 @@ class IbException(IbObject):
         return self.ib_class.registry.box("")
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 Exception 的强转逻辑"""
-        if target_class.name in ("str", "Any"):
+        """ 支持 Exception 的强转逻辑"""
+        if target_class.name in ("str", "any"):
             msg = self.fields.get("message")
             if msg: return msg
             return self.ib_class.registry.box("Exception")
@@ -279,8 +351,8 @@ class IbList(IbObject):
         return self.ib_class.registry.box(len(self.elements))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 List 的强转逻辑"""
-        if target_class.name in ("list", "Any"):
+        """ 支持 List 的强转逻辑"""
+        if target_class.name in ("list", "any"):
             return self
         if target_class.name == "str":
             # 转换为字符串表示
@@ -290,7 +362,14 @@ class IbList(IbObject):
 
     def __getitem__(self, key: Any) -> IbObject:
         idx = key.to_native() if hasattr(key, 'to_native') else key
-        return self.elements[idx]
+        try:
+            res = self.elements[idx]
+            if isinstance(idx, slice):
+                # 切片返回的是 IbObject 列表，需要重新装箱为 IbList
+                return self.ib_class.registry.box(res)
+            return res
+        except IndexError:
+            raise InterpreterError(f"IndexError: list index out of range: {idx}")
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         idx = key.to_native() if hasattr(key, 'to_native') else key
@@ -343,8 +422,8 @@ class IbDict(IbObject):
         return self.ib_class.registry.box(len(self.fields))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """[IES 2.1] 支持 Dict 的强转逻辑"""
-        if target_class.name in ("dict", "Any"):
+        """ 支持 Dict 的强转逻辑"""
+        if target_class.name in ("dict", "any"):
             return self
         if target_class.name == "str":
             items_repr = [f"{k}: {str(v.to_native())}" for k, v in self.fields.items()]
@@ -384,12 +463,12 @@ class IbBehavior(IbObject, IIbBehavior):
     """
     def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
         """
-        [IES 2.0 Architectural Update] IbBehavior 现在是纯粹的数据描述符。
+         IbBehavior 现在是纯粹的数据描述符。
         不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
         """
         super().__init__(ib_class)
         self.node = node_uid
-        self.captured_intents = captured_intents # [IES 2.2] 支持 IntentNode (结构共享)
+        self.captured_intents = captured_intents # 支持 IntentNode (结构共享)
         self.expected_type = expected_type
         self._cache: Optional[IbObject] = None
 
@@ -425,7 +504,7 @@ class IbBehavior(IbObject, IIbBehavior):
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """
-        [IES 2.1 Resilience] 行为对象的消息处理。
+        行为对象的消息处理。
         允许查询元数据，仅在尝试“执行行为本身”且无上下文时才抛出异常。
         """
         if self._cache: return self._cache.receive(message, args)
