@@ -256,12 +256,27 @@ class SemanticAnalyzer:
 
     def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
         """
-        检查表达式是否包含行为描述 @~...~。
+        检查表达式是否包含行为描述 @~...~ 或 LLM 函数调用。
         """
         if isinstance(expr, ast.IbBehaviorExpr):
             return True
         elif isinstance(expr, ast.IbCall):
-            # 检查方法调用
+            func = expr.func
+            if isinstance(func, ast.IbName):
+                func_name = func.id
+                sym = self.symbol_table.resolve(func_name)
+                if sym:
+                    print(f"[DEBUG] Found symbol '{func_name}': kind={sym.kind}, metadata={sym.metadata}")
+                    if sym.kind == SymbolKind.LLM_FUNCTION or sym.metadata.get("is_llm"):
+                        return True
+                else:
+                    print(f"[DEBUG] Symbol '{func_name}' not found in symbol table. Available: {list(self.symbol_table.symbols.keys())}")
+            elif isinstance(func, ast.IbAttribute):
+                if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
+                    return True
+                if isinstance(func.value, ast.IbName):
+                    if func.value.id in ("llm", "LLM", "model", "Model", "ai", "AI"):
+                        return True
             if self._expr_contains_behavior(expr.func):
                 return True
             for arg in expr.args:
@@ -274,8 +289,8 @@ class SemanticAnalyzer:
         elif isinstance(expr, ast.IbUnaryOp):
             return self._expr_contains_behavior(expr.operand)
         elif isinstance(expr, ast.IbIfExp):
-            return (self._expr_contains_behavior(expr.test) or 
-                    self._expr_contains_behavior(expr.body) or 
+            return (self._expr_contains_behavior(expr.test) or
+                    self._expr_contains_behavior(expr.body) or
                     self._expr_contains_behavior(expr.orelse))
         return False
 
@@ -908,23 +923,6 @@ class SemanticAnalyzer:
                 return self._expr_contains_behavior(stmt.value)
         elif isinstance(stmt, ast.IbExprStmt) and isinstance(stmt.value, ast.IbBehaviorExpr):
             return True
-        return False
-
-    def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
-        """检查表达式是否包含行为表达式"""
-        if isinstance(expr, ast.IbBehaviorExpr):
-            return True
-        if isinstance(expr, ast.IbCall):
-            func = expr.func
-            if isinstance(func, ast.IbAttribute):
-                if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
-                    return True
-                if isinstance(func.value, ast.IbName):
-                    if func.value.id in ("llm", "LLM", "model", "Model", "ai", "AI"):
-                        return True
-            elif isinstance(func, ast.IbName):
-                if func.id in ("call", "complete", "generate", "llm", "LLM"):
-                    return True
         return False
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
