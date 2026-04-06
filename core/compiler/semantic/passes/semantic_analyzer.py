@@ -136,12 +136,10 @@ class SemanticAnalyzer:
             return CompilationResult(
                 module_ast=node if isinstance(node, ast.IbModule) else None,
                 symbol_table=self.symbol_table,
-                node_scenes=self.side_table.node_scenes,
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
                 node_is_deferred=self.side_table.node_is_deferred,
                 node_to_loc=self.side_table.node_to_loc,
-                decision_maps=self.side_table.decision_maps,
                 node_protection=self.side_table.node_protection
             )
         finally:
@@ -291,10 +289,6 @@ class SemanticAnalyzer:
             "line": node.lineno,
             "column": node.col_offset
         })
-
-        # 记录场景上下文侧表
-        if isinstance(node, ast.IbExpr):
-            self.side_table.bind_scene(node, self.scope_manager.current_scene())
 
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
@@ -670,98 +664,74 @@ class SemanticAnalyzer:
         return self._void_desc
 
     def visit_IbIf(self, node: ast.IbIf):
-        # 1. 条件测试属于 BRANCH 场景
-        self.scope_manager.push_scene(ast.IbScene.BRANCH)
-        # 记录控制流节点本身的场景
-        self.side_table.bind_scene(node, ast.IbScene.BRANCH)
-        try:
-            self.visit(node.test)
-        finally:
-            self.scope_manager.pop_scene()
-            
-        # 2. Body 和 Orelse 恢复父级场景
+        self.visit(node.test)
+
         for stmt in node.body:
             self.visit(stmt)
         for stmt in node.orelse:
             self.visit(stmt)
-            
+
         return self._void_desc
 
     def visit_IbWhile(self, node: ast.IbWhile):
-        # 1. 循环条件属于 LOOP 场景
-        self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # 记录控制流节点本身的场景
-        self.side_table.bind_scene(node, ast.IbScene.LOOP)
-        try:
-            self.visit(node.test)
-        finally:
-            self.scope_manager.pop_scene()
-            
-        # 2. 循环体
+        self.visit(node.test)
+
         for stmt in node.body:
             self.visit(stmt)
         for stmt in node.orelse:
             self.visit(stmt)
-            
+
         return self._void_desc
 
     def visit_IbFor(self, node: ast.IbFor):
-        # 1. 迭代头部属于 LOOP 场景
-        self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # 记录控制流节点本身的场景
-        self.side_table.bind_scene(node, ast.IbScene.LOOP)
-        try:
-            iter_type = self.visit(node.iter)
-            
-            # 统一循环协议检查
-            if node.target is None:
-                # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
-                # 语义：等同于 while，要求表达式具有“布尔评估能力”
-                # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
-                # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
-                if not iter_type.is_dynamic() and not iter_type.is_behavior() and iter_type.name != "bool":
-                    # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
-                    pass
+        iter_type = self.visit(node.iter)
+        
+        # 统一循环协议检查
+        if node.target is None:
+            # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
+            # 语义：等同于 while，要求表达式具有“布尔评估能力”
+            # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
+            # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
+            if not iter_type.is_dynamic() and not iter_type.is_behavior() and iter_type.name != "bool":
+                # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
+                pass
+        else:
+            # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
+            # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
+            # 如果是 behavior 类型，我们认为它“潜在可迭代”
+            if iter_type.is_behavior():
+                element_type = self._any_desc 
             else:
-                # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
-                # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
-                # 如果是 behavior 类型，我们认为它“潜在可迭代”
-                if iter_type.is_behavior():
-                    element_type = self._any_desc 
+                iter_trait = iter_type.get_iter_trait()
+                if iter_trait:
+                    # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
+                    element_type = iter_type.get_element_type() or self._any_desc
                 else:
-                    iter_trait = iter_type.get_iter_trait()
-                    if iter_trait:
-                        # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
-                        element_type = iter_type.get_element_type() or self._any_desc
-                    else:
-                        self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
-                        element_type = self._any_desc
-                
-                for var_name, target in SymbolExtractor.get_assigned_names(node):
-                    # 优先使用显式类型标注，而非推导出的 element_type
-                    effective_type = element_type
-                    if isinstance(target, ast.IbTypeAnnotatedExpr):
-                        effective_type = self.visit(target.annotation)
-                    
-                    # 检查是否已在 Pass 2.5 预扫描中定义
-                    sym = self.symbol_table.symbols.get(var_name)
-                    
-                    # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
-                    if not sym or sym.descriptor.is_dynamic():
-                        sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
-                    elif not effective_type.is_dynamic():
-                        # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
-                        sym.descriptor = effective_type
-                    
-                    if sym:
-                        self.side_table.bind_symbol(target, sym)
-        finally:
-            self.scope_manager.pop_scene()
+                    self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
+                    element_type = self._any_desc
             
-        # 2. 循环体
+            for var_name, target in SymbolExtractor.get_assigned_names(node):
+                # 优先使用显式类型标注，而非推导出的 element_type
+                effective_type = element_type
+                if isinstance(target, ast.IbTypeAnnotatedExpr):
+                    effective_type = self.visit(target.annotation)
+                
+                # 检查是否已在 Pass 2.5 预扫描中定义
+                sym = self.symbol_table.symbols.get(var_name)
+                
+                # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
+                if not sym or sym.descriptor.is_dynamic():
+                    sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
+                elif not effective_type.is_dynamic():
+                    # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
+                    sym.descriptor = effective_type
+                
+                if sym:
+                    self.side_table.bind_symbol(target, sym)
+
         for stmt in node.body:
             self.visit(stmt)
-            
+
         return self._void_desc
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt):
@@ -1211,9 +1181,7 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
         self.in_behavior_expr = True
-        # 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
-        self.side_table.bind_scene(node, self.scope_manager.current_scene())
-        
+
         try:
             for seg in node.segments:
                 if isinstance(seg, ast.IbASTNode):

@@ -1,16 +1,9 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, Any
-from enum import IntEnum, Enum, auto
+from enum import IntEnum, auto
 from core.base.source_atomic import Location
 from .intent_logic import IntentMode
 
-
-# --- Scene ---
-
-class IbScene(Enum):
-    GENERAL = auto()
-    BRANCH = auto()
-    LOOP = auto()
 
 # --- AST Nodes ---
 

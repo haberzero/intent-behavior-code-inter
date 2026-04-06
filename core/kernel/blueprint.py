@@ -14,12 +14,10 @@ class CompilationResult:
     """
     module_ast: ast_domain.IbModule
     symbol_table: SymbolTable
-    node_scenes: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Scene name
     node_to_symbol: Dict[ast_domain.IbASTNode, Symbol] = field(default_factory=dict) # Node object -> Symbol object
     node_to_type: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Type name
     node_is_deferred: Dict[ast_domain.IbASTNode, bool] = field(default_factory=dict) # Node object -> bool
     node_to_loc: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Location info
-    decision_maps: Dict[ast_domain.IbASTNode, Dict[str, str]] = field(default_factory=dict) # Node object -> Decision Map
     node_protection: Dict[ast_domain.IbASTNode, ast_domain.IbASTNode] = field(default_factory=dict) # Node object -> Handler object
     
     @property
