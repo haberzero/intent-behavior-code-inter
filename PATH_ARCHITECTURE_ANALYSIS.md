@@ -291,12 +291,26 @@ class SysLib:
 
 ## 四、实施计划
 
-### 阶段1: 核心路径重构 (高优先级)
+### 阶段1: 核心路径重构 ✅ 已完成
 
-| 步骤 | 修改文件 | 说明 |
+| 步骤 | 修改文件 | 状态 |
 |------|----------|------|
-| 1.1 | `core/engine.py` | 保存入口文件到实例属性 |
-| 1.2 | `core/execution_context.py` | 添加 `entry_file`/`entry_dir` 参数和 `resolve_path()` 方法 |
+| 1.1 | `core/engine.py` | ✅ 保存 `_entry_file` 和 `_entry_dir` |
+| 1.2 | `core/execution_context.py` | ✅ 添加 `entry_file`/`entry_dir` 和 `resolve_path()` |
+| 1.3 | `ibci_modules/ibci_file/core.py` | ✅ 使用 `resolve_path()` 替代手动解析 |
+| 1.4 | `core/runtime/rt_scheduler.py` | ✅ 传递入口文件参数 |
+| 1.5 | `core/runtime/interpreter/interpreter.py` | ✅ 传递入口文件参数 |
+| 1.6 | `core/extension/capabilities.py` | ✅ 添加 `execution_context` 属性 |
+| 1.7 | `core/runtime/module_system/loader.py` | ✅ 注入 `execution_context` 到 capabilities |
+
+### 阶段2: sys/isys 职责分离 ✅ 已完成
+
+| 步骤 | 修改文件 | 状态 |
+|------|----------|------|
+| 2.1 | `ibci_modules/ibci_isys/__init__.py` | ✅ 创建内核运行时模块 |
+| 2.2 | `ibci_modules/ibci_isys/_spec.py` | ✅ 创建插件规范 |
+| 2.3 | `ibci_modules/ibci_sys/__init__.py` | ✅ 重构为非侵入式插件 |
+| 2.4 | `ibci_modules/ibci_sys/_spec.py` | ✅ 更新插件规范 |
 | 1.3 | `ibci_modules/ibci_file/core.py` | 使用 `resolve_path()` 替代手动解析 |
 | 1.4 | `core/runner.py` | 传递入口文件到 Context |
 
