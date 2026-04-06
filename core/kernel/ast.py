@@ -78,6 +78,7 @@ class IbIntentInfo(IbASTNode):
     content: str # Raw content or constant string
     segments: Optional[List[Union[str, 'IbExpr']]] = None # Interpolated segments for comments like @ "..."
     expr: Optional['IbExpr'] = None # Dynamic expression for 'intent expr:'
+    pop_top: bool = False # 特殊标记：@- 无参数时为 True，表示移除栈顶意图
 
     @property
     def is_override(self) -> bool:
@@ -86,6 +87,11 @@ class IbIntentInfo(IbASTNode):
     @property
     def is_remove(self) -> bool:
         return self.mode == IntentMode.REMOVE
+
+    @property
+    def is_pop_top(self) -> bool:
+        """判断是否为无参数的 @-（移除栈顶意图）"""
+        return self.mode == IntentMode.REMOVE and self.pop_top
 
     def resolve_content(self, context: Any, evaluator: Any = None) -> str:
         """

@@ -250,6 +250,25 @@ class StatementComponent(BaseComponent):
         segments = []
         tag = None
         
+        # 检查 @- 无参数的特殊情况（移除栈顶意图）
+        # 如果 @- 后面直接是换行符或文件结束，则认为是 pop_top 模式
+        is_pop_top = False
+        if mode == IntentMode.REMOVE:
+            if (self.stream.check(TokenType.NEWLINE) or 
+                self.stream.check(TokenType.EOF) or 
+                self.stream.is_at_end()):
+                is_pop_top = True
+            else:
+                # 检查是否是纯粹的 @- 后跟空格然后换行（可能有空白字符）
+                # 这种情况下 peek() 可能返回 RAW_TEXT 包含空白
+                if self.stream.check(TokenType.RAW_TEXT):
+                    next_text = self.stream.peek().value.strip()
+                    if not next_text:
+                        is_pop_top = True
+        
+        if is_pop_top:
+            return ast.IbIntentInfo(mode=mode, content="", segments=[], tag=None, pop_top=True)
+        
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
             if self.stream.match(TokenType.RAW_TEXT):
                 val = self.stream.previous().value
@@ -289,7 +308,7 @@ class StatementComponent(BaseComponent):
                 
         # If single segment and it's a string, we can flatten it
         content = "".join([s if isinstance(s, str) else str(s) for s in segments]).strip()
-        return ast.IbIntentInfo(mode=mode, content=content, segments=segments, tag=tag)
+        return ast.IbIntentInfo(mode=mode, content=content, segments=segments, tag=tag, pop_top=False)
 
 
     def if_statement(self) -> ast.IbStmt:

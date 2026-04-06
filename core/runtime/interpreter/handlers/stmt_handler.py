@@ -36,11 +36,18 @@ class StmtHandler(BaseHandler):
         if not target_uid:
             return self.registry.get_none()
 
+        # 从 ai 组件获取重试次数配置
+        max_retry = 3
+        if self.service_context.capability_registry:
+            llm_provider = self.service_context.capability_registry.get("llm_provider")
+            if llm_provider and hasattr(llm_provider, "get_retry"):
+                max_retry = llm_provider.get_retry()
+
         # 创建帧并保存上下文切片
         frame = self.runtime_context.save_llm_except_state(
             target_uid=target_uid,
             node_type="IbLLMExceptionalStmt",
-            max_retry=3
+            max_retry=max_retry
         )
 
         try:
@@ -138,6 +145,7 @@ class StmtHandler(BaseHandler):
         IbIntentStackOperation 代表意图栈操作，允许独立存在。
         - @+: 将意图压入栈
         - @-: 从栈中物理移除匹配的意图（按标签或内容）
+        - @- (无参数): 移除栈顶意图
 
         此方法通过 IntentStack 内置类进行操作（公理体系融入）。
         """
@@ -155,8 +163,11 @@ class StmtHandler(BaseHandler):
             role=IntentRole.STACK
         )
 
-        # @- 从栈中物理移除匹配的意图
-        if intent.is_remove:
+        # @- 无参数：移除栈顶意图
+        if intent.is_pop_top:
+            self.runtime_context.pop_intent()
+        # @- 按标签或内容移除
+        elif intent.is_remove:
             if intent.tag:
                 self.runtime_context.remove_intent(tag=intent.tag)
             elif intent.content:

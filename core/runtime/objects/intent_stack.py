@@ -17,6 +17,7 @@ class IbIntentStack(IbObject):
     - @+ "content" → IntentStack.push(Intent(content, APPEND))
     - @! "content" → IntentStack.push(Intent(content, OVERRIDE))
     - @- #tag → IntentStack.pop(tag=tag)
+    - @- → IntentStack.pop() (移除栈顶意图)
     """
     __slots__ = ('_runtime_context',)
 
