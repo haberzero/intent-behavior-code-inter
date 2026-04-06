@@ -32,8 +32,6 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "get_return_type_prompt": {"param_types": ["str"], "return_type": "str"},
             "set_retry_hint": {"param_types": ["str"], "return_type": "void"},
             "get_last_call_info": {"param_types": [], "return_type": "dict"},
-            "set_decision_map": {"param_types": ["dict"], "return_type": "void"},
-            "get_decision_map": {"param_types": [], "return_type": "dict"},
             "set_global_intent": {"param_types": ["str"], "return_type": "void"},
             "clear_global_intents": {"param_types": [], "return_type": "void"},
             "remove_global_intent": {"param_types": ["str"], "return_type": "void"},

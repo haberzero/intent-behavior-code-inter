@@ -21,16 +21,7 @@ class AIPlugin(ILLMProvider):
             "retry": 0,
             "timeout": 30.0,
             "auto_type_constraint": True,
-            "auto_intent_injection": True,
-            "decision_map": {
-                "1": 1, "true": 1, "yes": 1, "ok": 1,
-                "0": 0, "false": 0, "no": 0, "fail": 0
-            }
-        }
-        self._scene_prompts = {
-            "general": "你是一个助人为乐的助手。",
-            "branch": "你是一个逻辑判断专家。请根据用户提供的内容进行判断：成立则返回 1，不成立则返回 0。严禁返回任何其他文字。",
-            "loop": "你是一个循环控制专家。请根据用户提供的内容判断循环是否应继续：继续则返回 1，停止则返回 0。严禁返回任何其他文字。"
+            "auto_intent_injection": True
         }
         self._return_type_prompts = {
             "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
@@ -225,9 +216,6 @@ class AIPlugin(ILLMProvider):
         if "prompt" in config:
             self._scene_prompts[scene] = config["prompt"]
 
-    def get_scene_prompt(self, scene: str) -> str:
-        return self._scene_prompts.get(scene, self._scene_prompts["general"])
-
     def get_retry_prompt(self, node_type: str) -> Optional[str]:
         return self._retry_prompts.get(node_type)
 
@@ -242,12 +230,6 @@ class AIPlugin(ILLMProvider):
 
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info
-
-    def set_decision_map(self, decision_map: Dict[str, str]) -> None:
-        self._config["decision_map"] = decision_map
-
-    def get_decision_map(self) -> Dict[str, str]:
-        return self._config.get("decision_map", {})
 
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
