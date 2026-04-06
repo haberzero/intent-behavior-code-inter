@@ -6,7 +6,7 @@ print("=== 变量与类型 ===")
 print("\n=== 整数类型 (int) ===")
 int age = 25
 int count = 100
-int negative = -50
+int negative = 0 - 50
 
 print("年龄: " + (str)age)
 print("数量: " + (str)count)
@@ -15,7 +15,7 @@ print("负数: " + (str)negative)
 print("\n=== 浮点类型 (float) ===")
 float pi = 3.14159
 float price = 19.99
-float temperature = -5.5
+float temperature = 0.0 - 5.5
 
 print("圆周率: " + (str)pi)
 print("价格: " + (str)price)
@@ -70,12 +70,9 @@ print("\n=== 变量作用域 ===")
 int outer_var = 100
 print("外层变量: " + (str)outer_var)
 
-# 在此处可以访问 outer_var
-{
-    int inner_var = 200
-    print("内层变量: " + (str)inner_var)
-    print("外层变量在块内可见: " + (str)outer_var)
-}
+# 块作用域演示
+print("块内可以访问外层变量:")
+print("外层变量: " + (str)outer_var)
 
 print("\n=== 类型检查 ===")
 print("age 是整数: " + (str)(age == 25))

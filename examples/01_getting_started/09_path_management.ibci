@@ -55,7 +55,7 @@ if file.exists(project_file):
     print("✓ 已清理")
 
 print("\n[3] 使用绝对路径")
-str abs_file = project_dir + "/test_absolute.txt"
+str abs_file = project_root + "/test_absolute.txt"
 file.write(abs_file, "绝对路径文件")
 if file.exists(abs_file):
     print("✓ 绝对路径文件创建成功")
