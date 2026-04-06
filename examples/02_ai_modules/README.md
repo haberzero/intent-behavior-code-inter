@@ -1,15 +1,14 @@
 # 02 - AI 模块使用介绍
 
-本章节介绍 IBCI 的 AI 相关功能模块，包括 AI 调用和交互式调试。
+本章节介绍 IBCI 的 AI 相关功能模块，包括行为描述语句和意图注释。
 
 ## 目录结构
 
 ```
 02_ai_modules/
-├── README.md              # 本文件
-├── 01_ai_basics.ibci     # AI 基础使用
-├── 02_intent_annotation.ibci  # 单行意图注释
-└── 03_idbg.ibci          # 交互式调试
+├── README.md                    # 本文件
+├── 01_ai_basics.ibci          # AI 基础使用
+└── 02_intent_annotation.ibci   # 单行意图注释
 ```
 
 ## 核心概念
@@ -21,7 +20,8 @@ IBCI 提供 `ai` 内置模块，用于与大语言模型交互：
 ```ibci
 import ai
 
-str response = ai.chat("你好，请介绍一下你自己")
+# 行为描述语句：直接调用 AI
+str response = @~请用一句话介绍 IBCI~
 print(response)
 ```
 
@@ -31,20 +31,7 @@ print(response)
 
 ```ibci
 #@ 分析用户情绪，返回积极或消极
-str sentiment = ai.analyze("我今天很开心")
-```
-
-### idbg 交互式调试
-
-`idbg` 模块提供交互式调试能力：
-
-```ibci
-import idbg
-
-idbg.set_trace()
-int x = 10
-str name = "test"
-# 程序会在此处暂停，等待调试命令
+str sentiment = @~判断这句话的情感：今天天气真好~
 ```
 
 ## 学习路径
@@ -61,18 +48,22 @@ python main.py run examples/02_ai_modules/01_ai_basics.ibci
 python main.py run examples/02_ai_modules/02_intent_annotation.ibci
 ```
 
-### 第三步：学习交互调试
+## 关于 idbg 模块
 
-```bash
-python main.py run examples/02_ai_modules/03_idbg.ibci
-```
+idbg 模块提供**非侵入式**状态查询功能：
+
+- `idbg.vars()` - 获取当前作用域变量
+- `idbg.last_llm()` - 获取上次 LLM 调用信息
+- `idbg.last_result()` - 获取上次 AI 执行结果
+
+> 注意: idbg 的交互式断点调试功能暂不实现。
+> 详见 [IDBG_DESIGN_PRINCIPLES.md](../../IDBG_DESIGN_PRINCIPLES.md)
 
 ## 前提条件
 
 使用 AI 模块需要：
-1. 配置 LLM API 密钥（通过环境变量或配置文件）
+1. 配置 LLM API 密钥（通过 `api_config.json` 或环境变量）
 2. 稳定的网络连接
-3. 适当的 API 配额
 
 ## 下一步
 
