@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 核心哲学 (Core Philosophy)
+## 1. 核心设计
 
 IBC-Inter 是一种**意图驱动**的编程语言。它将大语言模型 (LLM) 的非确定性能力与传统编程语言的确定性逻辑相结合。
 - **Intent (意图)**: 描述“想要做什么”或“处于什么场景”。
@@ -13,12 +13,12 @@ IBC-Inter 是一种**意图驱动**的编程语言。它将大语言模型 (LLM)
 
 ---
 
-## 2. 基础语法 (Basic Syntax)
+## 2. 基础语法
 
 ### 2.1 变量与类型
 IBCI 是**静态强类型**语言，支持以下基础类型：
 - `int`, `float`, `bool`, `str`
-- `list`, `dict`, `auto` (万能引用类型)
+- `list`, `dict`, `auto`
 - `tuple` (多值返回与解包支持)
 - `callable` (可调用对象/闭包)
 
@@ -31,7 +31,7 @@ dict config = {"version": "2.2"}
 (int x, int y) = (1, 2)
 ```
 
-### 2.2 模块导入 (Modules)
+### 2.2 模块导入
 使用 `import` 关键字导入系统插件或用户自定义模块：
 ```ibci
 import ai      # 核心 AI 能力
@@ -43,37 +43,15 @@ import file    # 受限文件系统
 
 ---
 
-## 3. 意图系统 (Intent System)
+## 3. AI 驱动能力
 
-意图是 IBCI 的灵魂，它为后续的所有 AI 操作提供上下文背景。
-
-### 3.1 意图操作符
-意图是 IBCI 的灵魂，支持符号与语义别名：
-- `@ [content]` / `intent [content]`: **单行意图注入**。为当前作用域添加一个意图。
-- `@+ [content]` / `append [content]`: **增量注入 (Append)**。在现有意图栈顶部追加新意图。
-- `@- [content]` / `remove [content]`: **意图移除 (Remove)**。尝试从栈中移除匹配的意图。
-- `@! [content]` / `override [content]`: **排他注入 (Override)**。清空当前栈并仅保留此意图。
-
-### 3.2 意图块 (Intent Block)
-使用 `intent` 关键字定义具有作用域限制的意图环境：
-```ibci
-intent "场景：代码审计":
-    # 此块内的所有 AI 调用都将携带该意图
-    str res = @~ 请分析这段逻辑 ~
-# 退出块后，意图自动弹出
-```
-
----
-
-## 4. AI 驱动能力 (AI Capabilities)
-
-### 4.1 即时行为 (Immediate Behavior)
+### 3.1 即时行为 (Immediate Behavior)
 使用 `@~ ... ~` 触发一次 LLM 调用。它可以作为表达式使用：
 ```ibci
 str joke = @~ 讲一个关于程序员的笑话 ~
 ```
 
-### 4.2 LLM 函数 (LLM Functions)
+### 3.2 LLM 函数 (LLM Functions)
 定义结构化的、带提示词工程的 AI 函数：
 ```ibci
 llm 翻译(str 文本, str 目标语言) -> str:
@@ -84,7 +62,7 @@ llm 翻译(str 文本, str 目标语言) -> str:
 llmend
 ```
 
-### 4.3 意图驱动控制流
+### 3.3 意图驱动控制流
 AI 可以直接参与逻辑判定：
 ```ibci
 # 1. 意图驱动条件 (If)
@@ -102,14 +80,18 @@ for @~ $count 小于 3 吗？只回答 1 或 0 ~:
     print("循环中...")
 ```
 
-### 4.4 迭代驱动循环 (For...in)
-标准的集合迭代，现已支持复杂解包目标：
-```ibci
-list coords = [[1, 2], [3, 4]]
-# 支持元组解包
-for (int x, int y) in coords:
-    print("坐标: " + (str)x + "," + (str)y)
-```
+---
+
+## 4. 意图系统
+
+意图是 IBCI 的特殊特性。它为 AI 操作提供特定的上下文环境
+
+### 意图操作符
+
+- `@ [content]` / `intent [content]`: **单行意图注入**。为当前作用域添加一个意图。
+- `@+ [content]` / `append [content]`: **增量注入 (Append)**。在现有意图栈顶部追加新意图。
+- `@- [content]` / `remove [content]`: **意图移除 (Remove)**。尝试从栈中移除匹配的意图。
+- `@! [content]` / `override [content]`: **排他注入 (Override)**。清空当前栈并仅保留此意图。
 
 ---
 
@@ -143,7 +125,6 @@ llmretry "如果无法判定，请回复 0 并给出原因"
 ## 6. 工程化特性 (Engineering Features)
 
 ### 6.1 位置无关路径解析
-不再使用 `__dir__` 或 `__file__` 全局变量，通过 `isys` 模块获取：
 
 | 方法 | 说明 |
 |------|------|
