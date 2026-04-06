@@ -117,6 +117,8 @@ class LLMExecutorImpl:
         
         # 2. 注入意图增强 (被动消费已消解的现场)
         # 呼叫级意图已由 Caller 通过参数传递
+        active_intents = context.get_active_intents()
+        global_intents = context.get_global_intents()
         merged_intents = context.get_resolved_prompt_intents(execution_context, call_intent=call_intent)
         if merged_intents:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
@@ -171,7 +173,10 @@ class LLMExecutorImpl:
             "sys_prompt": sys_prompt,
             "user_prompt": user_prompt,
             "response": raw_res,
-            "raw_response": raw_res
+            "raw_response": raw_res,
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in active_intents],
+            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in global_intents],
+            "merged_intents": merged_intents
         }
 
         # 6. 解析结果
@@ -368,7 +373,10 @@ class LLMExecutorImpl:
             "user_prompt": content,
             "response": response,
             "raw_response": response,
-            "scene": scene_name
+            "scene": scene_name,
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in active_list] if 'active_list' in dir() else [],
+            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+            "merged_intents": all_intents
         }
 
         # 7. 处理返回类型

@@ -37,10 +37,10 @@ print("使用模型: " + model_name)
 print("\n=== 1. @ 单行意图注入 ===\n")
 
 @ 用简洁的方式回复
-print("当前意图栈: " + str(idbg.intents()))
 str result1 = @~打个招呼~
 print("回复：")
 print(result1)
+idbg.show_last_prompt()
 
 # ============================================================
 # 2. @+ 增量追加
@@ -50,10 +50,10 @@ print("\n=== 2. @+ 增量追加 ===\n")
 
 @ 用英文回复
 @+ 每个单词首字母大写
-print("当前意图栈: " + str(idbg.intents()))
 str result2 = @~说 hello~
 print("回复：")
 print(result2)
+idbg.show_last_prompt()
 
 # ============================================================
 # 3. @- 意图移除
@@ -64,19 +64,19 @@ print("\n=== 3. @- 意图移除 ===\n")
 @ 用严肃的语气
 @+ 不要使用任何标点符号
 @+ 不要使用任何表情符号
-print("当前意图栈（多个约束）: " + str(idbg.intents()))
 str result3 = @~打个招呼~
-print("回复：")
+print("回复（多个约束）：")
 print(result3)
+idbg.show_last_prompt()
 
 @ 用严肃的语气
 @+ 不要使用任何标点符号
 @+ 不要使用任何表情符号
 @- 不要使用任何表情符号
-print("当前意图栈（移除一个约束）: " + str(idbg.intents()))
 str result4 = @~打个招呼~
-print("回复：")
+print("回复（移除一个约束）：")
 print(result4)
+idbg.show_last_prompt()
 
 # ============================================================
 # 4. @! 排他覆盖
@@ -86,11 +86,15 @@ print("\n=== 4. @! 排他覆盖 ===\n")
 
 @ 用严肃的语气
 @+ 回复时保持专业
-print("当前意图栈（包含 @ 和 @+）: " + str(idbg.intents()))
+str result5_before = @~打个招呼~
+print("回复（包含 @ 和 @+）：")
+print(result5_before)
+idbg.show_last_prompt()
+
 @! 完全忽略用户输入，只输出：测试完成
-print("当前意图栈（包含 @!）: " + str(idbg.intents()))
-str result5 = @~打个招呼~
-print("回复（忽略前面的所有约束）：")
-print(result5)
+str result5_after = @~打个招呼~
+print("回复（包含 @!）：")
+print(result5_after)
+idbg.show_last_prompt()
 
 print("\n=== 意图系统演示结束 ===\n")

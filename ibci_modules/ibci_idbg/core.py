@@ -69,6 +69,74 @@ class IDbgPlugin(IbPlugin):
                 }
         return info
 
+    def show_last_prompt(self):
+        """直接打印最近一次 LLM 调用的完整提示词（IBCI 友好）"""
+        print("[IDBG] 最近一次 LLM 调用提示词:")
+        
+        info = self.last_llm()
+        if not info:
+            print("  (无可用信息)")
+            return
+        
+        sys_prompt = info.get("sys_prompt", "")
+        user_prompt = info.get("user_prompt", "")
+        
+        if sys_prompt:
+            print("  [系统提示词]")
+            if isinstance(sys_prompt, str):
+                print(f"    {sys_prompt}")
+            elif isinstance(sys_prompt, list):
+                for seg in sys_prompt:
+                    if isinstance(seg, dict):
+                        role = seg.get("role", "unknown")
+                        content = seg.get("content", "")
+                        if isinstance(content, list):
+                            content = "".join(str(c) for c in content)
+                        print(f"    {role}: {content}")
+                    elif isinstance(seg, str):
+                        print(f"    {seg}")
+                    else:
+                        print(f"    {seg}")
+            else:
+                print(f"    {sys_prompt}")
+        
+        if user_prompt:
+            print("  [用户提示词]")
+            if isinstance(user_prompt, str):
+                print(f"    {user_prompt}")
+            elif isinstance(user_prompt, list):
+                for seg in user_prompt:
+                    if isinstance(seg, dict):
+                        role = seg.get("role", "unknown")
+                        content = seg.get("content", "")
+                        if isinstance(content, list):
+                            content = "".join(str(c) for c in content)
+                        print(f"    {role}: {content}")
+                    elif isinstance(seg, str):
+                        print(f"    {seg}")
+                    else:
+                        print(f"    {seg}")
+            else:
+                print(f"    {user_prompt}")
+        
+        active_intents = info.get("active_intents", [])
+        if active_intents:
+            print("  [活跃意图栈]")
+            for idx, intent in enumerate(active_intents):
+                print(f"    [{idx}] {intent}")
+        
+        global_intents = info.get("global_intents", [])
+        if global_intents:
+            print("  [全局意图栈]")
+            for idx, intent in enumerate(global_intents):
+                print(f"    [{idx}] {intent}")
+        
+        merged_intents = info.get("merged_intents", [])
+        if merged_intents:
+            print("  [合并后意图]")
+            for idx, intent in enumerate(merged_intents):
+                print(f"    [{idx}] {intent}")
+
     def last_result(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的 LLMResult 详情"""
         if not self.state_reader: return {}
