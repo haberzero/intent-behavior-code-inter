@@ -2,7 +2,7 @@
 # 配置与模拟
 
 import file
-import sys
+import json
 
 print("=== 配置与模拟模式 ===")
 

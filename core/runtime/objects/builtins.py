@@ -245,6 +245,24 @@ class IbString(IbObject):
     def is_empty(self) -> IbObject:
         return self.ib_class.registry.box(1 if len(self.value.strip()) == 0 else 0)
 
+    def find(self, substring: Any) -> IbObject:
+        """查找子串首次出现的位置，未找到返回 -1"""
+        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        idx = self.value.find(sub_str)
+        return self.ib_class.registry.box(idx)
+
+    def find_last(self, substring: Any) -> IbObject:
+        """查找子串最后一次出现的位置，未找到返回 -1"""
+        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        idx = self.value.rfind(sub_str)
+        return self.ib_class.registry.box(idx)
+
+    def contains(self, substring: Any) -> IbObject:
+        """检查是否包含子串"""
+        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        result = sub_str in self.value
+        return self.ib_class.registry.box(1 if result else 0)
+
     def __getitem__(self, key: Any) -> IbObject:
         """支持字符串下标与切片"""
         idx = key.to_native() if hasattr(key, 'to_native') else key

@@ -47,7 +47,7 @@ int original_price = 1000
 int discount_rate = 20
 int discount = original_price * discount_rate / 100
 int final_price = original_price - discount
-print("原价: " + (str)original_price))
+print("原价: " + (str)original_price)
 print("折后价: " + (str)final_price)
 
 print("\n=== 意图注释的最佳实践 ===")

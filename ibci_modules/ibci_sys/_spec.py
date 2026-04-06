@@ -7,7 +7,7 @@ Sys 系统能力插件规范
 def __ibcext_metadata__() -> dict:
     """插件元数据"""
     return {
-        "name": "ibci_sys",
+        "name": "sys",
         "version": "2.3.0",
         "description": "IBCI 系统能力插件（非侵入式）- 沙箱控制和权限管理",
         "dependencies": [],

@@ -109,6 +109,13 @@ class AIPlugin(ILLMProvider):
         self._model_capabilities["probed"] = False
         self._init_client()
 
+    def has_api_key(self) -> bool:
+        """检查是否已配置 API 密钥"""
+        key = self._config.get("key", "")
+        url = self._config.get("url", "")
+        model = self._config.get("model", "")
+        return bool(key and url and model)
+
     def probe_model(self) -> str:
         """
         [IES 2.3] 模型能力探针 (Model Capability Probe)

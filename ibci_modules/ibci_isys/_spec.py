@@ -7,7 +7,7 @@ IBCI 内核运行时状态模块规范。
 def __ibcext_metadata__() -> dict:
     """插件元数据"""
     return {
-        "name": "ibci_isys",
+        "name": "isys",
         "version": "1.0.0",
         "description": "IBCI 内核运行时状态模块 - 入口文件路径和运行时状态查询",
         "dependencies": [],

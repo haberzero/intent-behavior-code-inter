@@ -2,15 +2,15 @@
 # 文件操作
 
 import file
-import sys
+import isys
 
 print("=== 文件操作模块 ===")
 
 print("\n=== 获取路径信息 ===")
-str project_root = sys.project_root()
-str script_dir = sys.script_dir()
+str project_root = isys.project_root()
+str entry_dir = isys.entry_dir()
 print("项目根目录: " + project_root)
-print("脚本目录: " + script_dir)
+print("入口文件目录: " + entry_dir)
 
 print("\n=== 基本文件操作 ===")
 
@@ -72,10 +72,8 @@ else:
     print("✓ 文件删除成功")
 
 print("\n=== 文件路径规则 ===")
-print("使用相对路径时:")
-print("  ./file.txt - 相对于脚本目录")
-print("  file.txt - 相对于项目根目录")
-print("  ../file.txt - 父目录（受沙箱限制）")
+print("所有相对路径都基于入口文件目录解析")
+print("  ./file.txt - 相对于入口文件目录")
 
 print("\n=== 安全特性 ===")
 print("✓ 所有文件操作限制在项目目录内")

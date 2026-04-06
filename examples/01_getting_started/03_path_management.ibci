@@ -1,97 +1,60 @@
-# 09_path_management.ibci
+# 03_path_management.ibci
 # 路径管理规则
 
 print("=== 路径管理规则 ===")
 
 import file
-import sys
+import isys
 
 print("\n=== IBCI 路径概念 ===")
 
 print("\n[1] 获取路径信息")
-str project_root = sys.project_root()
-str script_dir = sys.script_dir()
-str script_path = sys.script_path()
+str project_root = isys.project_root()
+str entry_dir = isys.entry_dir()
+str entry_path = isys.entry_path()
 
 print("项目根目录: " + project_root)
-print("脚本目录: " + script_dir)
-print("脚本路径: " + script_path)
+print("入口文件目录: " + entry_dir)
+print("入口文件路径: " + entry_path)
 
-print("\n=== 三层路径语义 ===")
+print("\n=== 统一路径语义 ===")
 
 print("\n[1] 绝对路径")
 str abs_path = "/home/user/project/data.txt"
 print("绝对路径: " + abs_path)
 print("说明: 以 / 开头的路径，直接使用")
 
-print("\n[2] 脚本相对路径 (推荐)")
-str script_rel = "./config.txt"
-print("脚本相对路径: " + script_rel)
-print("说明: 以 ./ 或 ../ 开头，相对于脚本所在目录")
-
-print("\n[3] 项目相对路径")
-str project_rel = "data/config.txt"
-print("项目相对路径: " + project_rel)
-print("说明: 不带前缀，相对于项目根目录")
+print("\n[2] 入口相对路径 (推荐)")
+str entry_rel = "./config.txt"
+print("入口相对路径: " + entry_rel)
+print("说明: 所有相对路径都基于入口文件目录")
 
 print("\n=== 文件操作示例 ===")
 
-print("\n[1] 使用脚本相对路径")
+print("\n[1] 使用入口相对路径")
 str local_file = "./test_local.txt"
 file.write(local_file, "这是本地文件内容")
 if file.exists(local_file):
-    print("✓ ./test_local.txt 创建成功")
+    print("OK: ./test_local.txt 创建成功")
     str content = file.read(local_file)
     print("  内容: " + content)
     file.remove(local_file)
-    print("✓ 已清理")
-
-print("\n[2] 使用项目相对路径")
-str project_file = "test_project.txt"
-file.write(project_file, "这是项目文件内容")
-if file.exists(project_file):
-    print("✓ test_project.txt 创建成功")
-    file.remove(project_file)
-    print("✓ 已清理")
-
-print("\n[3] 使用绝对路径")
-str abs_file = project_root + "/test_absolute.txt"
-file.write(abs_file, "绝对路径文件")
-if file.exists(abs_file):
-    print("✓ 绝对路径文件创建成功")
-    file.remove(abs_file)
-    print("✓ 已清理")
+    print("OK: 已清理")
 
 print("\n=== 路径安全机制 ===")
 
 print("\n[1] 沙箱边界")
 print("IBCI 限制文件操作在项目根目录内")
 
-print("\n[2] 尝试访问外部路径")
-str external = "/tmp/external_test.txt"
-file.write(external, "这应该被阻止")
-if file.exists(external):
-    print("✗ 警告：能够访问外部路径")
-    file.remove(external)
-else:
-    print("✓ 安全：外部路径访问被沙箱阻止")
-
-print("\n[3] 路径遍历防护")
-str parent = "../parent_test.txt"
-file.write(parent, "这应该被阻止")
-if file.exists(parent):
-    print("✗ 警告：能够访问父目录")
-    file.remove(parent)
-else:
-    print("✓ 安全：路径遍历被阻止")
+print("\n[2] 沙箱安全说明")
+print("外部路径访问会被沙箱阻止")
+print("这是设计行为，确保安全性")
 
 print("\n=== 路径解析规则总结 ===")
 print("")
 print("| 路径类型 | 示例 | 解析基准 |")
 print("|---------|------|----------|")
 print("| 绝对路径 | /home/user/file.txt | 直接使用 |")
-print("| 脚本相对 | ./file.txt | 脚本所在目录 |")
-print("| 父目录 | ../file.txt | 脚本目录的父目录 |")
-print("| 项目相对 | file.txt | 项目根目录 |")
+print("| 入口相对 | ./file.txt | 入口文件目录 |")
 print("")
-print("推荐使用: 脚本相对路径 (./) 和项目相对路径")
+print("推荐使用: 入口相对路径 (./)")

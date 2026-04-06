@@ -2,25 +2,26 @@
 # 系统模块
 
 import sys
+import isys
 
 print("=== 系统模块 ===")
 
 print("\n=== 路径信息 ===")
 
 print("\n[1] 项目根目录")
-str project_root = sys.project_root()
+str project_root = isys.project_root()
 print("项目根目录: " + project_root)
 print("说明: IBCI 项目的根目录，所有文件操作限制在此范围内")
 
-print("\n[2] 脚本目录")
-str script_dir = sys.script_dir()
-print("脚本目录: " + script_dir)
-print("说明: 当前执行脚本所在的目录")
+print("\n[2] 入口文件目录")
+str entry_dir = isys.entry_dir()
+print("入口文件目录: " + entry_dir)
+print("说明: IBCI 程序入口文件所在的目录")
 
-print("\n[3] 脚本路径")
-str script_path = sys.script_path()
-print("脚本路径: " + script_path)
-print("说明: 当前执行脚本的完整路径")
+print("\n[3] 入口文件路径")
+str entry_path = isys.entry_path()
+print("入口文件路径: " + entry_path)
+print("说明: IBCI 程序入口文件的完整路径")
 
 print("\n=== 沙箱控制 ===")
 
@@ -36,16 +37,13 @@ print("当前沙箱状态: " + (str)sandboxed)
 print("\n=== 路径关系 ===")
 print("路径层次结构:")
 print("  1. Python 进程 (os.getcwd)")
-print("  2. 项目根目录 (sys.project_root)")
-print("  3. 脚本目录 (sys.script_dir)")
+print("  2. 项目根目录 (isys.project_root)")
+print("  3. 入口文件目录 (isys.entry_dir)")
 print("")
 print("相对路径解析:")
-print("  ./file.txt → 脚本目录")
-print("  file.txt → 项目根目录")
-print("  ../file.txt → 脚本目录的父目录（受沙箱限制）")
+print("  ./file.txt → 入口文件目录")
+print("  file.txt → 入口文件目录")
 
-print("\n=== 最佳实践 ===")
-print("1. 使用 sys.script_dir() 获取脚本位置")
-print("2. 使用 ./ 相对路径操作脚本附近文件")
-print("3. 保持沙箱启用以确保安全")
-print("4. 避免使用绝对路径，提高可移植性")
+print("\n=== 模块职责 ===")
+print("isys 模块: 入口文件路径和运行时状态查询（内核级）")
+print("sys 模块: 沙箱控制和权限管理（可替换）")

@@ -246,6 +246,9 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
             "strip": FunctionMetadata(name="strip", param_types=[], return_type=STR_DESCRIPTOR),
             "split": FunctionMetadata(name="split", param_types=[STR_DESCRIPTOR], return_type=ListMetadata(element_type=STR_DESCRIPTOR)),
             "is_empty": FunctionMetadata(name="is_empty", param_types=[], return_type=BOOL_DESCRIPTOR),
+            "find": FunctionMetadata(name="find", param_types=[STR_DESCRIPTOR], return_type=INT_DESCRIPTOR),
+            "find_last": FunctionMetadata(name="find_last", param_types=[STR_DESCRIPTOR], return_type=INT_DESCRIPTOR),
+            "contains": FunctionMetadata(name="contains", param_types=[STR_DESCRIPTOR], return_type=BOOL_DESCRIPTOR),
         }
 
     def get_operators(self) -> Dict[str, str]:
