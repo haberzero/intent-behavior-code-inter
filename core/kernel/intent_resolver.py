@@ -24,8 +24,9 @@ class IntentResolver:
         removed_contents = set()
         
         # 1. 从内向外 (反向遍历栈) 处理块级/涂抹意图
+        override_content = None  # 记录排他意图的内容
         for i in reversed(active_intents):
-            if is_exclusive:
+            if is_exclusive and override_content is not None:
                 break
                 
             # 解析内容 (基于执行上下文进行动态评估)
@@ -41,12 +42,19 @@ class IntentResolver:
             if (i.tag and i.tag in removed_tags) or (content and content in removed_contents):
                 continue
                 
-            # 处理排他模式
+            # 处理排他模式：清空之前累积的意图，只保留当前 @!
             if i.is_override:
                 is_exclusive = True
+                override_content = content
+                resolved_block_intents.clear()
+                continue
             
             # 添加到结果集 (insert at 0 to maintain original order)
             resolved_block_intents.insert(0, content)
+        
+        # 如果存在排他意图，将其内容作为唯一的块级意图
+        if override_content is not None:
+            resolved_block_intents = [override_content]
             
         # 2. 处理全局意图 (如果非排他模式)
         final_list = []

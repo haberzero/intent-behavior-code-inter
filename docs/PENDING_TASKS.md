@@ -407,7 +407,7 @@ class ParserCapability(Protocol):
 
 ---
 
-#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1
+#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1 ✅ 已修复
 
 **问题**：`@!` 修饰的意图内容不会被注入到 prompt
 
@@ -415,6 +415,11 @@ class ParserCapability(Protocol):
 - `core/kernel/intent_resolver.py:46-48`
 
 **解决方案方向**：修复 intent_resolver 确保 `@!` 内容被正确追加
+
+**修复内容**：
+- 添加 `override_content` 变量跟踪排他意图内容
+- 在遇到 `@!` 时清空 `resolved_block_intents` 并只保留 `@!` 的内容
+- 修复后 `@!` 行为：屏蔽意图栈，只应用 `@!` 本身的内容（一次性调用，不影响栈状态）
 
 **与MVP关系**：🟡 **属于语义正确性问题**
 

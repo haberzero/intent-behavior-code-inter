@@ -293,12 +293,6 @@ class IbCompare(IbExpr):
     comparators: List[IbExpr]
 
 @dataclass(kw_only=True, eq=False)
-class IbIntentStmt(IbStmt):
-    intent: IbIntentInfo
-    body: List[IbStmt]
-    is_exclusive: bool = False # intent ! { ... }
-
-@dataclass(kw_only=True, eq=False)
 class IbCall(IbExpr):
     func: IbExpr
     args: List[IbExpr]

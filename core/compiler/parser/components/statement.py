@@ -69,8 +69,6 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.LLM_EXCEPT):
             return self.llm_except_statement()
         
-        if self.stream.match(TokenType.INTENT_STMT):
-            return self.intent_statement()
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
@@ -184,19 +182,6 @@ class StatementComponent(BaseComponent):
         
         self.stream.consume(TokenType.DEDENT, "Expect dedent after llmexcept body.")
         return body
-
-    def intent_statement(self) -> ast.IbIntentStmt:
-        """Parse 'intent "content": block'"""
-        start_token = self.stream.previous()
-        
-        # 1. Parse content (string or variable)
-        intent_info = self._parse_intent_info(start_token)
-        
-        # 2. Parse block
-        self.stream.consume(TokenType.COLON, "Expect ':' after intent.")
-        body = self.block()
-        
-        return self._loc(ast.IbIntentStmt(intent=intent_info, body=body), start_token)
 
     def at_intent_shorthand(self) -> ast.IbStmt:
         """Parse '@ "content" \n statement'"""

@@ -47,7 +47,7 @@ class DeclarationComponent(BaseComponent):
         if role == SyntaxRole.LLM_EXCEPT:
             self.stream.advance()  # 消费 llmexcept keyword
             stmt = self.statement.llm_except_statement()
-        elif role in (SyntaxRole.INTENT_MARKER, SyntaxRole.INTENT_DEFINITION):
+        elif role == SyntaxRole.INTENT_MARKER:
             # 统一交由 StatementComponent 处理意图标记与语句
             stmt = self.statement.parse_statement()
         elif role == SyntaxRole.FUNCTION_DEFINITION:
@@ -69,37 +69,6 @@ class DeclarationComponent(BaseComponent):
             setattr(stmt, "_pending_intents", pending_intents)
             
         return stmt
-
-    def intent_declaration(self) -> ast.IbIntentStmt:
-        start_token = self.stream.previous() # intent
-        
-        is_exclusive = False
-        if self.stream.match(TokenType.NOT): # !
-            is_exclusive = True
-            
-        # 允许表达式而非仅字符串
-        intent_expr = self.expression.parse_expression()
-        
-        self.stream.consume(TokenType.COLON, "Expect ':' before intent body.")
-        
-        body = self.statement.block()
-        end_token = self.stream.previous() # DEDENT
-        
-        # 将表达式封装为 IntentInfo
-        # 如果是 Constant 且为 string，则填充 content
-        content = ""
-        if isinstance(intent_expr, ast.IbConstant) and isinstance(intent_expr.value, str):
-            content = intent_expr.value
-            intent_expr = None
-            
-        info = ast.IbIntentInfo(
-            mode=IntentMode.OVERRIDE if is_exclusive else IntentMode.APPEND, 
-            content=content, 
-            expr=intent_expr,
-            lineno=start_token.line,
-            col_offset=start_token.column
-        )
-        return self._loc(ast.IbIntentStmt(intent=info, body=body, is_exclusive=is_exclusive), start_token, end_token)
 
     def variable_declaration(self, explicit_auto: bool = False) -> ast.IbAssign:
         """

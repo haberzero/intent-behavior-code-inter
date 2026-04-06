@@ -43,7 +43,6 @@ class CoreTokenScanner:
             'llmexcept': TokenType.LLM_EXCEPT, 
             'llmretry': TokenType.LLM_RETRY,
             'retry': TokenType.RETRY,
-            'intent': TokenType.INTENT_STMT,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
             '__llmretry__': TokenType.LLM_RETRY_HINT,
             'true': TokenType.TRUE, 'false': TokenType.FALSE

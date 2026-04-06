@@ -162,8 +162,6 @@ class SemanticAnalyzer:
                     self._bind_llm_except_in_body(method.body, method)
                 elif isinstance(method, ast.IbLLMFunctionDef):
                     pass
-        elif isinstance(node, ast.IbIntentStmt):
-            self._bind_llm_except_in_body(node.body, node)
 
     def _bind_llm_except_in_body(self, body: List[ast.IbStmt], parent: ast.IbASTNode) -> None:
         """
@@ -224,7 +222,7 @@ class SemanticAnalyzer:
         # 更新 body
         if isinstance(parent, ast.IbModule):
             parent.body = new_body
-        elif isinstance(parent, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbIntentStmt)):
+        elif isinstance(parent, (ast.IbFunctionDef, ast.IbLLMFunctionDef)):
             parent.body = new_body
         elif isinstance(parent, ast.IbClassDef):
             # [FIX] 找到对应的 method 并更新其 body
@@ -281,7 +279,7 @@ class SemanticAnalyzer:
 
     def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
         # 标记作用域定义节点 (元数据驱动)
-        if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef, ast.IbIntentStmt)):
+        if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
             setattr(node, "_is_scope", True)
 
         self.side_table.bind_location(node, {
@@ -855,16 +853,6 @@ class SemanticAnalyzer:
                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
                 self._define_var(name, self._any_desc, node)
                 
-        return self._void_desc
-
-    def visit_IbIntentStmt(self, node: ast.IbIntentStmt):
-        # 1. 访问意图元数据（检查其中的表达式等）
-        self.visit(node.intent)
-        
-        # 2. 访问意图块内部
-        for stmt in node.body:
-            self.visit(stmt)
-            
         return self._void_desc
 
     def visit_IbIntentInfo(self, node: ast.IbIntentInfo):

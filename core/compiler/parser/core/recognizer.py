@@ -13,7 +13,6 @@ class SyntaxRole(Enum):
     RETURN_STATEMENT = auto()      # return
     EXPRESSION_STATEMENT = auto()  # Assignment or pure expression
     INTENT_MARKER = auto()         # @ intent
-    INTENT_DEFINITION = auto()     # intent "..." { ... }
     LLM_EXCEPT = auto()            # llmexcept: ...
     BLOCK_MARKER = auto()          # INDENT / DEDENT
     OTHER = auto()
@@ -30,9 +29,6 @@ class SyntaxRecognizer:
         
         if token.type == TokenType.INTENT:
             return SyntaxRole.INTENT_MARKER
-        
-        if token.type == TokenType.INTENT_STMT:
-            return SyntaxRole.INTENT_DEFINITION
         
         if token.type == TokenType.LLM_EXCEPT:
             return SyntaxRole.LLM_EXCEPT

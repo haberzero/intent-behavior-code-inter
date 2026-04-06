@@ -435,27 +435,3 @@ class StmtHandler(BaseHandler):
         exc_uid = node_data.get("exc")
         exc_val = self.visit(exc_uid) if exc_uid else self.registry.get_none()
         raise ThrownException(exc_val)
-
-    def visit_IbIntentStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """处理意图块"""
-        intent_uid = node_data.get("intent")
-        intent_data = self.get_node_data(intent_uid)
-        
-        # [Active Defense] 仅接受结构化意图对象，不再支持原始字符串
-        if not intent_data:
-            raise self.report_error("Invalid intent metadata: Intent must be a structured IbIntentInfo node.")
-            
-        # 统一使用工厂方法构造，消除局部 import 和具体类依赖
-        intent = self.execution_context.factory.create_intent_from_node(
-            intent_uid, 
-            intent_data, 
-            role=IntentRole.BLOCK
-        )
-            
-        self.runtime_context.push_intent(intent)
-        try:
-            for stmt_uid in node_data.get("body", []):
-                self.visit(stmt_uid)
-        finally:
-            self.runtime_context.pop_intent()
-        return self.registry.get_none()
