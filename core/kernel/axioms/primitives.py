@@ -1,8 +1,8 @@
-from typing import Optional, List, Dict, TYPE_CHECKING, Any, Union
+from typing import Optional, List, Dict, TYPE_CHECKING, Any, Union, Tuple
 import re
 import json
 from core.runtime.support.fuzzy_json import FuzzyJsonParser
-from core.kernel.axioms.protocols import TypeAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ConverterCapability, ParserCapability
+from core.kernel.axioms.protocols import TypeAxiom, CallCapability, IterCapability, SubscriptCapability, OperatorCapability, ConverterCapability, ParserCapability, FromPromptCapability, IlmoutputHintCapability
 from core.kernel.types.descriptors import (
     FunctionMetadata, ListMetadata, DictMetadata,
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
@@ -18,20 +18,19 @@ if TYPE_CHECKING:
 class BaseAxiom(TypeAxiom):
     """公理基类，提供默认实现"""
     def get_methods(self) -> Dict[str, FunctionMetadata]: return {}
-    def get_operators(self) -> Dict[str, str]: return {} # 默认不支持运算符
+    def get_operators(self) -> Dict[str, str]: return {}
 
     def is_dynamic(self) -> bool: return False
     def is_class(self) -> bool: return False
     def is_module(self) -> bool: return False
-    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+    def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other._axiom and type(other._axiom) is type(self)
-    
-    def get_parent_axiom_name(self) -> Optional[str]: return "Object" # 默认继承自 Object
-    
+
+    def get_parent_axiom_name(self) -> Optional[str]: return "Object"
+
     def get_writable_trait(self) -> Optional['WritableTrait']: return None
-    
+
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        # 默认不支持特化，返回自身（原子类型）
         return registry.resolve(self.name)
 
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
@@ -40,15 +39,20 @@ class BaseAxiom(TypeAxiom):
     def can_return_from_isolated(self) -> bool:
         return False
 
-class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return None
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return None
+
+class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability, FromPromptCapability, IlmoutputHintCapability):
     """int 类型的行为公理"""
-    
+
     @property
     def name(self) -> str: return "int"
-    
+
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return self
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return self
 
     def can_return_from_isolated(self) -> bool: return True
 
@@ -61,23 +65,21 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
 
     def get_operators(self) -> Dict[str, str]:
         return {
-            "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__", 
+            "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__",
             "//": "__floordiv__", "%": "__mod__", "**": "__pow__",
             "&": "__and__", "|": "__or__", "^": "__xor__", "<<": "__lshift__", ">>": "__rshift__",
             "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__",
-            # 一元运算符
             "unary+": "__pos__", "unary-": "__neg__", "~": "__invert__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
-        # [Strict Axiom] 仅依赖公理定义
         if op in ('+', '-', '*', '/', '//', '%', '&', '|', '^', '<<', '>>'):
             if other:
                 axiom_name = other.get_base_axiom_name()
                 if axiom_name == "int":
-                    return "int" # int + int -> int
+                    return "int"
                 if axiom_name == "float":
-                    return "float" # int + float -> float
+                    return "float"
         if op in ('>', '>=', '<', '<=', '==', '!='):
             return "bool"
         return None
@@ -86,13 +88,22 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
         return source.get_base_axiom_name() in ("str", "float", "bool", "int")
 
     def parse_value(self, raw_value: str) -> Any:
-        # 从 LLM 结果中解析整数
         match = re.search(r'-?\d+', raw_value)
         if match:
             return int(match.group())
         raise ValueError(f"No integer found in response: {raw_value}")
 
-    # Int 不具备调用、迭代、下标能力
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """从 LLM 返回中解析整数"""
+        clean = raw_response.strip()
+        match = re.search(r'-?\d+', clean)
+        if match:
+            return (True, int(match.group()))
+        return (False, f"无法从 '{raw_response}' 解析整数。请只返回一个整数，如: 42 或 -15")
+
+    def __llmoutput_hint__(self) -> str:
+        return "请只返回一个整数，如: 42 或 -15，不要包含任何其他文字"
+
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
@@ -103,15 +114,17 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
         return other.get_base_axiom_name() == "int"
 
 
-class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
+class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability, FromPromptCapability, IlmoutputHintCapability):
     """float 类型的行为公理"""
-    
+
     @property
     def name(self) -> str: return "float"
-    
+
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return self
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return self
 
     def can_return_from_isolated(self) -> bool: return True
 
@@ -123,17 +136,16 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
 
     def get_operators(self) -> Dict[str, str]:
         return {
-            "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__", 
+            "+": "__add__", "-": "__sub__", "*": "__mul__", "/": "__truediv__",
             "//": "__floordiv__", "%": "__mod__", "**": "__pow__",
             "==": "__eq__", "!=": "__ne__", ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__",
-            # 一元运算符
             "unary+": "__pos__", "unary-": "__neg__"
         }
 
     def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional[Union['TypeDescriptor', str]]:
         if op in ('+', '-', '*', '/', '//', '%'):
             if other and other.get_base_axiom_name() in ("int", "float"):
-                return "float" # float wins
+                return "float"
         if op in ('>', '>=', '<', '<=', '==', '!='):
             return "bool"
         return None
@@ -147,36 +159,48 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
             return float(match.group())
         raise ValueError(f"No float found in response: {raw_value}")
 
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """从 LLM 返回中解析浮点数"""
+        clean = raw_response.strip()
+        match = re.search(r'-?\d+(?:\.\d+)?', clean)
+        if match:
+            return (True, float(match.group()))
+        return (False, f"无法从 '{raw_response}' 解析浮点数。请只返回一个数字，如: 3.14 或 -2.5")
+
+    def __llmoutput_hint__(self) -> str:
+        return "请只返回一个数字，如: 3.14 或 -2.5，不要包含任何其他文字"
+
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_iter_capability(self) -> Optional[IterCapability]: return None
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return None
 
     def can_return_from_isolated(self) -> bool: return True
 
-    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+    def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "float"
 
 
-class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability):
+class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapability, FromPromptCapability, IlmoutputHintCapability):
     """bool 类型的行为公理"""
-    
+
     @property
     def name(self) -> str: return "bool"
-    
+
     def get_parent_axiom_name(self) -> Optional[str]: return "int"
-    
+
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return self
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return self
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
-        return {} # No specific methods for bool yet
+        return {}
 
     def get_operators(self) -> Dict[str, str]:
         return {
             "&": "__and__", "|": "__or__", "^": "__xor__", "and": "__and__", "or": "__or__",
             "==": "__eq__", "!=": "__ne__",
-            # 一元运算符
             "not": "__not__"
         }
 
@@ -192,22 +216,40 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         return source.get_base_axiom_name() in ("int", "str", "bool")
 
     def parse_value(self, raw_value: str) -> Any:
-        import re
         val = raw_value.strip().lower()
-        
-        # 1. 优先精确匹配
+
         if val in ("true", "1", "yes", "on"): return True
         if val in ("false", "0", "no", "off"): return False
-        
-        # 2. 使用正则边界匹配 (防止 "not true" 误匹配)
-        # 同步 llm_executor 的健壮解析逻辑
+
         true_pattern = r'\b(true|yes|1|on)\b'
         false_pattern = r'\b(false|no|0|off)\b'
-        
+
         if re.search(true_pattern, val): return True
         if re.search(false_pattern, val): return False
-        
+
         raise ValueError(f"No boolean found in response: {raw_value}")
+
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """从 LLM 返回中解析布尔值"""
+        val = raw_response.strip().lower()
+
+        if val in ("true", "1", "yes", "on"):
+            return (True, True)
+        if val in ("false", "0", "no", "off"):
+            return (True, False)
+
+        true_pattern = r'\b(true|yes|1|on)\b'
+        false_pattern = r'\b(false|no|0|off)\b'
+
+        if re.search(true_pattern, val):
+            return (True, True)
+        if re.search(false_pattern, val):
+            return (True, False)
+
+        return (False, f"无法从 '{raw_response}' 解析布尔值。请明确回复: 1 表示是/true/yes，0 表示否/false/no")
+
+    def __llmoutput_hint__(self) -> str:
+        return "请只回复 1 表示是，0 表示否，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_iter_capability(self) -> Optional[IterCapability]: return None
@@ -219,22 +261,23 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
         return other.get_base_axiom_name() == "bool"
 
 
-class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapability, ParserCapability):
+class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapability, ParserCapability, FromPromptCapability, IlmoutputHintCapability):
     """str 类型的行为公理"""
-    
+
     @property
     def name(self) -> str: return "str"
-    
+
     def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        # 使用公理名称判定替代 identity 判定
         if other.get_base_axiom_name() == "int":
             return "Use .cast_to(int) or int(s) to convert string to integer."
         return None
-    
+
     def get_operator_capability(self) -> Optional[OperatorCapability]: return self
     def get_iter_capability(self) -> Optional[IterCapability]: return self
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return self
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return self
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -273,29 +316,37 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         return None
 
     def parse_value(self, raw_value: str) -> Any:
-        # 移除可能的 Markdown 代码块包裹
         clean_res = raw_value.strip()
         code_block_match = re.search(r'```(?:json|text)?\s*([\s\S]*?)\s*```', clean_res)
         if code_block_match:
             return code_block_match.group(1).strip()
         return clean_res
-        
+
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """从 LLM 返回中解析字符串"""
+        return (True, self.parse_value(raw_response))
+
+    def __llmoutput_hint__(self) -> str:
+        return "请直接返回文本内容，不要使用引号或代码块包裹"
+
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_converter_capability(self) -> Optional[ConverterCapability]: return None
-    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+    def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "str"
 
 
-class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability, ConverterCapability):
+class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability, ConverterCapability, FromPromptCapability, IlmoutputHintCapability):
     """list 类型的行为公理"""
-    
+
     @property
     def name(self) -> str: return "list"
-    
+
     def get_iter_capability(self) -> Optional[IterCapability]: return self
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return self
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return self
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -310,12 +361,9 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         }
 
     def get_element_type(self) -> 'TypeDescriptor':
-        # 泛型 List 的元素类型由 Descriptor 实例持有，Axiom 仅定义行为
-        # 在这里返回 None 表示由 Descriptor 进一步处理，或者 Axiom 不知道具体类型
-        return None 
+        return None
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """实现列表泛型特化"""
         element_type = args[0] if args else ANY_DESCRIPTOR
         desc = registry.factory.create_list(element_type)
         registry.register(desc)
@@ -323,7 +371,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
         if key.get_base_axiom_name() == "int":
-            return None # Delegate to descriptor
+            return None
         return None
 
     def parse_value(self, raw_value: str) -> Any:
@@ -332,16 +380,26 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         except ValueError as e:
             raise ValueError(f"No valid JSON list found in response: {raw_value}. Error: {str(e)}")
 
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """从 LLM 返回中解析列表"""
+        try:
+            return (True, FuzzyJsonParser.parse(raw_response, expected_type="list"))
+        except ValueError:
+            return (False, f"无法从 '{raw_response}' 解析 JSON 数组。请返回一个 JSON 数组，如: [1, 2, 3]")
+
+    def __llmoutput_hint__(self) -> str:
+        return "请返回一个 JSON 数组，如: [1, 2, 3]，不要包含任何其他文字"
+
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_operator_capability(self) -> Optional[OperatorCapability]: return None
     def get_converter_capability(self) -> Optional[ConverterCapability]: return None
-    def is_compatible(self, other: 'TypeDescriptor') -> bool: 
+    def is_compatible(self, other: 'TypeDescriptor') -> bool:
         return other.get_base_axiom_name() == "list"
 
 
-class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability, ConverterCapability):
+class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability, ConverterCapability, FromPromptCapability, IlmoutputHintCapability):
     """dict 类型的行为公理"""
-    
+
     @property
     def name(self) -> str: return "dict"
 
@@ -349,6 +407,8 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
     def get_converter_capability(self) -> Optional[ConverterCapability]: return self
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: return self
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: return self
 
     def get_methods(self) -> Dict[str, FunctionMetadata]:
         return {
@@ -362,10 +422,9 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         }
 
     def get_element_type(self) -> 'TypeDescriptor':
-        return None # Keys
+        return None
 
     def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """实现字典泛型特化"""
         key_type = args[0] if len(args) > 0 else ANY_DESCRIPTOR
         val_type = args[1] if len(args) > 1 else ANY_DESCRIPTOR
         desc = registry.factory.create_dict(key_type, val_type)
@@ -373,13 +432,23 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         return desc
 
     def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']:
-        return None # Values
+        return None
 
     def parse_value(self, raw_value: str) -> Any:
         try:
             return FuzzyJsonParser.parse(raw_value, expected_type="dict")
         except ValueError as e:
             raise ValueError(f"No valid JSON dict found in response: {raw_value}. Error: {str(e)}")
+
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """从 LLM 返回中解析字典"""
+        try:
+            return (True, FuzzyJsonParser.parse(raw_response, expected_type="dict"))
+        except ValueError:
+            return (False, f"无法从 '{raw_response}' 解析 JSON 对象。请返回一个 JSON 对象，如: {{'key': 'value'}}")
+
+    def __llmoutput_hint__(self) -> str:
+        return "请返回一个 JSON 对象，如: {'key': 'value'}，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
     def get_operator_capability(self) -> Optional[OperatorCapability]: return None
