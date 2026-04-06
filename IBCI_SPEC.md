@@ -110,6 +110,7 @@ while @~ 任务尚未完成 ~:
 - `@ [content]` / `intent [content]`: **单行意图注入**。为当前作用域添加一个意图。
 - `@+ [content]` / `append [content]`: **增量注入 (Append)**。在现有意图栈顶部追加新意图。
 - `@- [content]` / `remove [content]`: **意图移除 (Remove)**。尝试从栈中移除匹配的意图。
+- `@-` (无参数): **栈顶移除 (Pop)**。移除栈顶的最新意图。适用于与 `@+` 配对使用，临时添加意图后快速移除。
 - `@! [content]` / `override [content]`: **排他注入 (Override)**。屏蔽当前栈并仅保留此意图。
 
 ---
@@ -121,13 +122,10 @@ while @~ 任务尚未完成 ~:
 IBCI 引入了 `llmexcept` 关键字专门处理 AI 调用产生的非确定性错误（如解析失败、逻辑模糊）：
 
 ```ibci
-try:
-    int result = (int) @~ 1 + 1 等于几？只答数字 ~
+int result = (int) @~ 1 + 1 等于几？只答数字 ~
 llmexcept:
     print("AI 响应无法解析为整数，正在重试...")
     retry "请务必只返回一个纯数字，不要带标点"
-except Exception as e:
-    print("发生了常规运行时错误: " + (str)e)
 ```
 
 ### 5.2 llmretry 语法糖
@@ -199,10 +197,10 @@ host.run_isolated("./sub/child.ibci", policy)
 3. **插值迭代限制**:
    目前不支持 `for i in @~ ... $auto[i] ... ~:` 这种引用了尚未定义的循环变量的插值语法（作用域悖论）。建议先使用 Behavior 产生列表，再进行常规 `for` 循环。
 4. **重试上限限制**:
-   目前的物理重试上限硬编码为 3 次。`ai.set_retry()` 配置目前主要用于插件提示，尚不能直接穿透控制内核的重试次数。
+   LLM 调用重试次数可通过 `ai.set_retry(n)` 进行配置，默认值为 3 次。
 5. **隔离环境限制**:
    在 `run_isolated` 环境下，除非明确在 `policy` 中开启 `inherit_variables`，否则子环境无法访问父环境的变量。默认 `inherit_variables: False`，确保子环境完全独立。
 6. **If/While 条件中的 llmexcept**:
-   当前版本中，若 `if` 或 `while` 的条件判断触发了 AI 解析错误，错误会直接向上抛出，无法在当前的 `llmexcept` 块中捕获（需在外部包裹 `try...llmexcept`）。
+   `llmexcept` 是独立的语法成分，直接保护前一个同级语句。若 `if` 或 `while` 的条件判断触发了 AI 解析错误，应在条件判断语句后紧跟 `llmexcept` 进行处理，无需也不应当与 `try` 配合使用。
 7. **Mock 局限性**:
    目前的内置 Mock 机制尚无法完美模拟复杂的 `retry` 成功链路，建议开发时配合真实 API 调试。
