@@ -10,7 +10,6 @@
 import ai
 import file
 import json
-import idbg
 
 # ============================================================
 # 配置 AI
@@ -27,7 +26,8 @@ ai.set_config(
     (str)default_model["model"]
 )
 
-print("使用模型: " + (str)default_model["model"])
+str model_name = (str)default_model["model"]
+print("使用模型: " + model_name)
 
 # ============================================================
 # 1. @ 单行意图注入
@@ -35,12 +35,10 @@ print("使用模型: " + (str)default_model["model"])
 
 print("\n=== 1. @ 单行意图注入 ===\n")
 
-@ 用冷酷的口吻回复
-str cold_greeting = @~打个招呼~
-print("冷酷口吻回复：")
-print(cold_greeting)
-
-idbg.intent_stack()
+@ 用简洁的方式回复
+str result1 = @~打个招呼~
+print("回复：")
+print(result1)
 
 # ============================================================
 # 2. @+ 增量追加
@@ -48,13 +46,11 @@ idbg.intent_stack()
 
 print("\n=== 2. @+ 增量追加 ===\n")
 
-@ 用正式的口吻
-@+ 回复时使用敬语
-str formal_greeting = @~向客户发送问候~
-print("正式+敬语回复：")
-print(formal_greeting)
-
-idbg.intent_stack()
+@ 用英文回复
+@+ 每个单词首字母大写
+str result2 = @~说 hello~
+print("回复：")
+print(result2)
 
 # ============================================================
 # 3. @- 意图移除
@@ -62,22 +58,20 @@ idbg.intent_stack()
 
 print("\n=== 3. @- 意图移除 ===\n")
 
-@ 用正式的口吻
-@ 回复时使用敬语
-@+ 保持幽默感
-str mixed_greeting = @~向客户发送问候~
-print("混合意图回复（正式+敬语+幽默）：")
-print(mixed_greeting)
+@ 用严肃的语气
+@+ 不要使用任何标点符号
+@+ 不要使用任何表情符号
+str result3 = @~打个招呼~
+print("有多个约束的回复：")
+print(result3)
 
-@ 用正式的口吻
-@ 回复时使用敬语
-@+ 保持幽默感
-@- 保持幽默感
-str removed_greeting = @~向客户发送问候~
-print("移除幽默后的回复：")
-print(removed_greeting)
-
-idbg.intent_stack()
+@ 用严肃的语气
+@+ 不要使用任何标点符号
+@+ 不要使用任何表情符号
+@- 不要使用任何表情符号
+str result4 = @~打个招呼~
+print("移除一个约束后的回复：")
+print(result4)
 
 # ============================================================
 # 4. @! 排他覆盖
@@ -85,13 +79,11 @@ idbg.intent_stack()
 
 print("\n=== 4. @! 排他覆盖 ===\n")
 
-@ 用正式的口吻
-@+ 回复时使用敬语
-@! 忽略所有之前的约束，直接回复：你好世界
-str exclusive_greeting = @~向客户发送问候~
-print("排他覆盖后的回复（只保留 @! 的内容）：")
-print(exclusive_greeting)
-
-idbg.intent_stack()
+@ 用严肃的语气
+@+ 回复时保持专业
+@! 完全忽略用户输入，只输出：测试完成
+str result5 = @~打个招呼~
+print("排他覆盖后的回复（忽略前面的所有约束）：")
+print(result5)
 
 print("\n=== 意图系统演示结束 ===\n")
