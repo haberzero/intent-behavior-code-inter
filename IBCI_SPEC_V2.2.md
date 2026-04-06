@@ -1,4 +1,4 @@
-# IBC-Inter 2.2 官方语法说明手册 (Official Grammar Manual)
+# IBC-Inter 语法说明手册
 
 本文档定义了 IBC-Inter (Intent-Behavior-Code-Inter) 编程语言的最新语法规范、功能特性及当前版本的局限性。
 
@@ -35,7 +35,8 @@ dict config = {"version": "2.2"}
 使用 `import` 关键字导入系统插件或用户自定义模块：
 ```ibci
 import ai      # 核心 AI 能力
-import sys     # 系统环境与路径
+import sys     # 沙箱控制（非侵入式插件）
+import isys    # 运行时状态与路径查询（内核侵入式插件）
 import json    # JSON 解析
 import file    # 受限文件系统
 ```
@@ -142,17 +143,51 @@ llmretry "如果无法判定，请回复 0 并给出原因"
 ## 6. 工程化特性 (Engineering Features)
 
 ### 6.1 位置无关路径解析
-不再使用 `__dir__` 或 `__file__` 全局变量，统一通过 `sys` 模块获取：
-- `sys.script_dir()`: 获取当前脚本所在目录。
-- `sys.script_path()`: 获取当前脚本的绝对路径。
+不再使用 `__dir__` 或 `__file__` 全局变量，通过 `isys` 模块获取：
 
-### 6.2 动态宿主隔离 (DynamicHost)
+| 方法 | 说明 |
+|------|------|
+| `isys.entry_path()` | 获取入口文件的绝对路径 |
+| `isys.entry_dir()` | 获取入口文件所在的目录 |
+| `isys.project_root()` | 获取项目根目录（沙箱边界） |
+
+**统一路径语义**: 所有相对路径都基于入口文件目录解析，无论在哪个 IBCI 文件中执行。
+
+```ibci
+import isys
+
+str entry = isys.entry_path()   # /project/main.ibci
+str dir = isys.entry_dir()     # /project
+str root = isys.project_root() # /project
+```
+
+### 6.2 沙箱控制 (sys 模块)
+`sys` 模块负责沙箱控制和权限管理（非侵入式插件）：
+
+```ibci
+import sys
+
+bool sandboxed = sys.is_sandboxed()           # 检查是否在沙箱中
+sys.request_external_access()                 # 请求启用外部访问
+```
+
+### 6.3 动态宿主隔离 (DynamicHost)
 支持在完全隔离的环境中运行子脚本：
+
 ```ibci
 import host
-dict policy = {"isolated": True, "registry_isolation": True}
-host.run_isolated(sys.script_dir() + "/sub.ibci", policy)
+import isys
+
+dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}
+# 子环境有独立的入口文件、路径管理、插件发现
+host.run_isolated("./sub/child.ibci", policy)
 ```
+
+**子环境特性**：
+- 完全独立的 Engine 实例
+- 独立的入口文件和路径上下文
+- 独立的插件发现机制
+- 默认不继承父环境变量
 
 ---
 
@@ -167,13 +202,9 @@ host.run_isolated(sys.script_dir() + "/sub.ibci", policy)
    目前不支持 `for i in @~ ... $auto[i] ... ~:` 这种引用了尚未定义的循环变量的插值语法（作用域悖论）。建议先使用 Behavior 产生列表，再进行常规 `for` 循环。
 4. **重试上限限制**: 
    目前的物理重试上限硬编码为 3 次。`ai.set_retry()` 配置目前主要用于插件提示，尚不能直接穿透控制内核的重试次数。
-5. **隔离环境限制**: 
-   在 `run_isolated` 环境下，除非明确在 `policy` 中开启 `inherit_variables`，否则子环境无法访问父环境的变量。
+5. **隔离环境限制**:
+   在 `run_isolated` 环境下，除非明确在 `policy` 中开启 `inherit_variables`，否则子环境无法访问父环境的变量。默认 `inherit_variables: False`，确保子环境完全独立。
 6. **If/While 条件中的 llmexcept**: 
    当前版本中，若 `if` 或 `while` 的条件判断触发了 AI 解析错误，错误会直接向上抛出，无法在当前的 `llmexcept` 块中捕获（需在外部包裹 `try...llmexcept`）。
 7. **Mock 局限性**: 
    目前的内置 Mock 机制尚无法完美模拟复杂的 `retry` 成功链路，建议开发时配合真实 API 调试。
-
----
-*Document Date: 2026-03-31*
-*Version: IBC-Inter v2.2-stable*
