@@ -166,7 +166,7 @@ class LLMExecutorImpl:
                 retry_hint=f"LLM 调用失败: {error_msg}"
             )
 
-        # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
+        # 记录最后一次调用信息
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": user_prompt,
@@ -362,7 +362,7 @@ class LLMExecutorImpl:
                 retry_hint=f"LLM 调用失败: {error_msg}"
             )
 
-        # 记录最后一次调用信息 (兼容 IES 2.0/2.1 命名)
+        # 记录最后一次调用信息
         self.last_call_info = {
             "sys_prompt": sys_prompt,
             "user_prompt": content,

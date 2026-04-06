@@ -381,7 +381,7 @@ class StmtHandler(BaseHandler):
 
     def visit_IbClassDef(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """验证类契约并将其绑定到当前作用域"""
-        # IES 2.0 规范下，类必须在 STAGE 5 预水合完成。
+        # 类必须在 STAGE 5 预水合完成。
         # 此处仅负责契约验证与作用域定义。
         name = node_data.get("name")
         
@@ -437,7 +437,7 @@ class StmtHandler(BaseHandler):
         raise ThrownException(exc_val)
 
     def visit_IbIntentStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """处理意图块 (IES 2.0 强契约)"""
+        """处理意图块"""
         intent_uid = node_data.get("intent")
         intent_data = self.get_node_data(intent_uid)
         

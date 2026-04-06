@@ -102,7 +102,7 @@ class ModuleLoader(IModuleLoader):
         implementation._ibci_whitelist = whitelist
 
     def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
-        """IES 2.0 强制依赖注入协议：必须且仅接受 capabilities 参数"""
+        """强制依赖注入协议：必须且仅接受 capabilities 参数"""
         if not hasattr(implementation, 'setup'): return
         
         # 统一注入 ServiceContext 到容器中

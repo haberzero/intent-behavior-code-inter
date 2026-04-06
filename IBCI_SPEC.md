@@ -110,7 +110,7 @@ while @~ 任务尚未完成 ~:
 - `@ [content]` / `intent [content]`: **单行意图注入**。为当前作用域添加一个意图。
 - `@+ [content]` / `append [content]`: **增量注入 (Append)**。在现有意图栈顶部追加新意图。
 - `@- [content]` / `remove [content]`: **意图移除 (Remove)**。尝试从栈中移除匹配的意图。
-- `@! [content]` / `override [content]`: **排他注入 (Override)**。清空当前栈并仅保留此意图。
+- `@! [content]` / `override [content]`: **排他注入 (Override)**。屏蔽当前栈并仅保留此意图。
 
 ---
 

@@ -118,7 +118,7 @@ class AIPlugin(ILLMProvider):
 
     def probe_model(self) -> str:
         """
-        [IES 2.3] 模型能力探针 (Model Capability Probe)
+        模型能力探针 (Model Capability Probe)
         通过发送特定的测试请求，动态检测模型是否属于"强制推理模型" (Reasoning/CoT Model)，
         并在内部缓存探测结果以指导后续所有的工作流调用策略。
         """
