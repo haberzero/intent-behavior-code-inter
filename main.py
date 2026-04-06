@@ -11,6 +11,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from core.engine import IBCIEngine
+from core.project_detector import ProjectDetector
 from core.kernel.issue import CompilerError
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
@@ -91,11 +92,21 @@ def main():
         return
 
     # 确定项目根目录 (root_dir)
-    # 逻辑：如果显式指定了 --root，则使用它；
-    # 否则，默认将目标 .ibci 文件所在的目录作为根目录。
+    # 逻辑：
+    # 1. 如果显式指定了 --root，则使用它
+    # 2. 否则，自动检测项目根目录（向上查找 plugins/ 或 ibci_modules/）
+    # 3. 如果未检测到，则使用入口文件所在目录
     root_dir = args.root
     if not root_dir and hasattr(args, 'file'):
-        root_dir = os.path.dirname(os.path.abspath(args.file))
+        detected_root = ProjectDetector.detect_project_root(args.file)
+        if detected_root:
+            root_dir = detected_root
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"[Auto-detect] {ProjectDetector.describe_detection(args.file)}")
+        else:
+            root_dir = os.path.dirname(os.path.abspath(args.file))
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"[Auto-detect] No project root detected, using entry directory: {root_dir}")
 
     # 初始化引擎，决定是否自动嗅探
     auto_sniff = not getattr(args, 'no_sniff', False)

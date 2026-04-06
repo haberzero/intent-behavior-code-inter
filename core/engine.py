@@ -3,7 +3,9 @@ import importlib.util
 import tempfile
 import traceback
 import copy
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+
+from core.project_detector import ProjectDetector
 
 from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
@@ -47,28 +49,46 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.registry = KernelRegistry()
         # STAGE 1 & 2 handled inside initialize_builtin_classes
         self._kernel_token = initialize_builtin_classes(self.registry)
-        
+
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.issue_tracker = IssueTracker()
         self.debugger = CoreDebugger()
-        
+
         # 0. 配置内核调试器
         if core_debug_config:
             self.debugger.configure(core_debug_config)
             self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Core Debugger initialized with config: {core_debug_config}")
-            
+
         # 同步输出回调到调试器，确保内核追踪能被捕获
         self.debugger.output_callback = None # 默认
 
         # 初始化能力注册中心
         self.capability_registry = CapabilityRegistry()
-        
-        # 1. 初始化模块发现服务 (内置路径 + 插件路径)
+
+        # 1. 初始化模块发现服务 (内置路径 + 动态插件路径)
         builtin_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibci_modules")
-        plugins_path = os.path.join(self.root_dir, "plugins")
-        
-        self.discovery_service = ModuleDiscoveryService([builtin_path, plugins_path])
-        self.module_loader = ModuleLoader([builtin_path, plugins_path], capability_registry=self.capability_registry)
+
+        # 自动检测项目插件路径
+        project_plugin_paths = ProjectDetector.get_plugin_paths(self.root_dir)
+
+        # 合并插件路径
+        all_plugin_paths = project_plugin_paths.copy()
+        if auto_sniff and project_plugin_paths:
+            # 如果找到项目插件路径，使用它们
+            search_paths = [builtin_path] + all_plugin_paths
+        elif auto_sniff:
+            # 如果未找到项目插件路径，使用默认的 root_dir/plugins
+            default_plugins = os.path.join(self.root_dir, "plugins")
+            if os.path.isdir(default_plugins):
+                search_paths = [builtin_path, default_plugins]
+            else:
+                search_paths = [builtin_path]
+        else:
+            # 不自动嗅探
+            search_paths = [builtin_path]
+
+        self.discovery_service = ModuleDiscoveryService(search_paths)
+        self.module_loader = ModuleLoader(search_paths, capability_registry=self.capability_registry)
         
         # 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
