@@ -1,17 +1,9 @@
-"""
-JSON 处理插件
-
-纯 Python 实现，零侵入。
-"""
 import json
 from typing import Any, Dict
 
 
 class JSONLib:
     """
-    JSON 2.2: JSON 处理插件。
-    不继承任何核心类，完全独立。
-
     注意：parse 方法始终返回 dict 类型。
     - 如果解析成功且结果为 dict，直接返回
     - 如果解析成功但结果不是 dict，尝试转换为 dict 后返回

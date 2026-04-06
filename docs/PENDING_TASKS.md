@@ -571,7 +571,7 @@ if hasattr(mod, '__ibcext_vtable__'):
   def __ibcext_metadata__() -> Dict[str, Any]:
       return {
           "name": "ai",
-          "version": "2.2.0",
+          "version": "0.0.1",
           "kind": "method_module",  # 标记为方法模块，不是类型模块
           ...
       }

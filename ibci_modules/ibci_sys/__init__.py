@@ -1,31 +1,8 @@
-"""
-Sys 系统能力插件
-
-纯 Python 实现，零侵入。
-非内核侵入式插件，可被其他插件替代。
-
-职责：
-- 沙箱控制（request_external_access, is_sandboxed）
-- 外部访问权限管理
-
-注意：
-- 路径查询功能已移至 ibci_isys 内核插件
-- 这个模块只负责沙箱和权限相关功能
-"""
-
-
 class SysLib:
     """
-    Sys 2.3: 系统能力插件（非侵入式）。
-
     职责：
     - 请求外部访问权限
     - 检查沙箱状态
-
-    特点：
-    - 非侵入式：可被其他插件替代
-    - 只依赖 PermissionManager
-    - 不需要 ExecutionContext
     """
     def setup(self, capabilities):
         self.capabilities = capabilities

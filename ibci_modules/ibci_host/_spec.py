@@ -1,9 +1,3 @@
-"""
-HOST 主机能力插件规范
-
-- __ibcext_vtable__() 返回纯字典（原生 IBC-Inter 元数据声明）
-- 不导入任何内核代码，保持零侵入
-"""
 from typing import Dict, Any
 
 
@@ -11,7 +5,7 @@ def __ibcext_metadata__() -> Dict[str, Any]:
     """插件元数据"""
     return {
         "name": "host",
-        "version": "2.2.0",
+        "version": "0.0.1",
         "description": "Host capability plugin for runtime persistence and isolation",
         "dependencies": [],
     }

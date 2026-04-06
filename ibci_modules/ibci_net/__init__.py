@@ -1,16 +1,7 @@
-"""
-Net 网络请求插件
-
-纯 Python 实现，零侵入。
-"""
 from typing import Dict, Any, Optional
 
 
 class NetLib:
-    """
-    Net 2.2: 网络请求插件。
-    不继承任何核心类，完全独立。
-    """
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
         try:
             import requests

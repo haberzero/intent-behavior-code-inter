@@ -130,7 +130,7 @@ except Exception as e:
     print("发生了常规运行时错误: " + (str)e)
 ```
 
-### 5.2 llmretry 语法糖 [NEW 2.2]
+### 5.2 llmretry 语法糖
 
 为了简化开发，`llmretry` 提供了一种极其精简的重试引导。它必须独立成行，紧跟在可能触发模糊判定的意图语句之后：
 
@@ -147,7 +147,7 @@ llmretry "如果无法判定，请回复 0 并给出原因"
 
 ---
 
-## 6. 工程化特性 (Engineering Features)
+## 6. 其它特性
 
 ### 6.1 位置无关路径解析
 
@@ -167,18 +167,7 @@ str dir = isys.entry_dir()     # /project
 str root = isys.project_root() # /project
 ```
 
-### 6.2 沙箱控制 (sys 模块)
-
-`sys` 模块负责沙箱控制和权限管理（非侵入式插件）：
-
-```ibci
-import sys
-
-bool sandboxed = sys.is_sandboxed()           # 检查是否在沙箱中
-sys.request_external_access()                 # 请求启用外部访问
-```
-
-### 6.3 动态宿主隔离 (DynamicHost)
+### 6.2 动态宿主机制
 
 支持在完全隔离的环境中运行子脚本：
 

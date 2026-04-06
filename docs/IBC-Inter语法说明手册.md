@@ -445,7 +445,6 @@ dict vars = idbg.vars()
 | Intent 完整公理化 | 将 Intent 作为 TypeDescriptor 公理化 |
 | Behavior 完整公理化 | 将 Behavior 作为 TypeDescriptor 公理化 |
 | 进程级隔离 | DynamicHost 升级为独立进程 |
-| 零侵入插件注册 | 延迟 discover_all() 到首次 import |
 
 ---
 
