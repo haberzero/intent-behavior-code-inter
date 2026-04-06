@@ -1,0 +1,76 @@
+# 03_operators.ibci
+# 运算符与表达式
+
+print("=== 运算符与表达式 ===")
+
+print("\n=== 算术运算符 ===")
+int a = 10
+int b = 3
+
+print("a = " + (str)a + ", b = " + (str)b)
+print("a + b = " + (str)(a + b))
+print("a - b = " + (str)(a - b))
+print("a * b = " + (str)(a * b))
+print("a / b = " + (str)(a / b))
+print("a % b = " + (str)(a % b))
+print("a ^ b = " + (str)(a ^ b))  # 幂运算
+
+print("\n=== 比较运算符 ===")
+int x = 5
+int y = 10
+
+print("x = " + (str)x + ", y = " + (str)y)
+print("x == y: " + (str)(x == y))
+print("x != y: " + (str)(x != y))
+print("x < y: " + (str)(x < y))
+print("x > y: " + (str)(x > y))
+print("x <= y: " + (str)(x <= y))
+print("x >= y: " + (str)(x >= y))
+
+print("\n=== 逻辑运算符 ===")
+bool p = true
+bool q = false
+
+print("p = " + (str)p + ", q = " + (str)q)
+print("p && q: " + (str)(p && q))
+print("p || q: " + (str)(p || q))
+print("!p: " + (str)(!p))
+print("!q: " + (str)(!q))
+
+print("\n=== 字符串运算符 ===")
+str s1 = "Hello"
+str s2 = "World"
+
+print("s1 = \"" + s1 + "\"")
+print("s2 = \"" + s2 + "\"")
+print("s1 + s2: \"" + s1 + s2 + "\"")
+print("s1 + \", \" + s2: \"" + s1 + ", " + s2 + "\"")
+
+print("\n=== 赋值运算符 ===")
+int n = 5
+print("n = " + (str)n)
+
+n = n + 1
+print("n = n + 1 → n = " + (str)n)
+
+print("\n=== 三元运算符 ===")
+bool condition = true
+str result = condition ? "条件为真" : "条件为假"
+print("result = " + result)
+
+condition = false
+result = condition ? "条件为真" : "条件为假"
+print("result = " + result)
+
+print("\n=== 字符串方法 ===")
+str text = "  Hello, IBCI!  "
+
+print("原字符串: \"" + text + "\"")
+print("trim(): \"" + text.trim() + "\"")
+print("to_upper(): \"" + text.to_upper() + "\"")
+print("to_lower(): \"" + text.to_lower() + "\"")
+print("len(): " + (str)text.len())
+
+str email = "user@example.com"
+print("\n邮箱: " + email)
+print("contains('@'): " + (str)(email.contains("@")))

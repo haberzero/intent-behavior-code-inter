@@ -1,0 +1,43 @@
+import sys
+import ai
+import json
+import file
+
+# 1. 显式加载本地配置
+dict config = json.parse(file.read((str)sys.script_dir() + "/api_config.json")) 
+dict default_model = (dict) config["default_model"]
+ai.set_config((str)default_model["base_url"], (str)default_model["api_key"], (str)default_model["model"])
+
+
+print("--- [02_llm_error_handling.ibci] ---")
+
+# 1. 使用 llmexcept 处理 LLM 判断不明确的情况
+# 使用 模拟：第一次模糊，重试后确定
+if @~ 适合户外野餐？只答 1/0 ~:
+    print("AI 建议：天气非常适合！")
+else:
+    print("AI 建议：天气不适合，建议待在室内。")
+llmexcept:
+    print("AI 返回判断模糊，正在启动重试机制...")
+    # retry 语句会携带此 hint 重新发起请求
+    retry "只答 1/0"
+
+# 2. 循环中的 AI 判断
+# 使用 确保循环能跑起来
+int count = 0
+while @~ 任务继续？只答 1/0 ~:
+    count = count + 1
+    print("正在执行第 " + (str)count + " 次任务")
+    if count >= 2:
+        # 手动退出或改变环境状态
+        break
+llmexcept:
+    print("循环判断模糊，任务强制中止。")
+
+# 3. 混合 try-except 捕获普通运行时错误
+try:
+    int x = 10 / 0
+except Exception as e:
+    print("\n捕获到普通运行时错误: " + (str)e)
+finally:
+    print("清理工作已完成。")

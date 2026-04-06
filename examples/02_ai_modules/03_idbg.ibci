@@ -1,0 +1,82 @@
+# 03_idbg.ibci
+# 交互式调试
+
+print("=== 交互式调试 (idbg) ===")
+
+import idbg
+
+print("\n=== idbg 简介 ===")
+print("idbg 是 IBCI 的交互式调试模块")
+print("提供断点、变量检查、堆栈跟踪等功能")
+
+print("\n=== 基本调试功能 ===")
+
+print("\n[1] 设置断点")
+print("在关键位置设置断点，暂停程序执行")
+# idbg.set_trace()
+
+print("\n[2] 检查变量")
+print("程序执行时可以查看和修改变量值")
+
+print("\n=== 调试示例 ===")
+
+# 初始化调试器
+idbg.enable()
+
+# 定义一个需要调试的函数
+def debug_demo(n: int) -> int:
+    #@ 计算阶乘
+    if n <= 1:
+        return 1
+    return n * debug_demo(n - 1)
+end
+
+print("开始调试演示...")
+
+# 设置断点
+idbg.breakpoint("计算开始")
+
+# 计算阶乘
+int result = debug_demo(5)
+
+# 设置断点
+idbg.breakpoint("计算完成")
+
+print("5! = " + (str)result)
+
+print("\n=== idbg 常用命令 ===")
+print("idbg.enable() - 启用调试模式")
+print("idbg.breakpoint(label) - 设置断点")
+print("idbg.watch(variable) - 监视变量")
+print("idbg.stack() - 查看调用栈")
+print("idbg.step() - 单步执行")
+print("idbg.continue() - 继续执行")
+
+print("\n=== 调试工作流 ===")
+print("1. 在关键位置设置断点")
+print("2. 运行程序，自动停在断点处")
+print("3. 检查变量值")
+print("4. 单步执行或继续")
+print("5. 定位并修复问题")
+
+print("\n=== 实际调试示例 ===")
+
+# 演示如何追踪变量
+list items = [1, 2, 3, 4, 5]
+
+#@ 计算列表元素之和
+int sum = 0
+int idx = 0
+while idx < items.len():
+    # idbg.watch("sum")  # 监视 sum 变量
+    sum = sum + (int)items[idx]
+    idx = idx + 1
+end
+
+print("列表元素之和: " + (str)sum)
+
+print("\n=== 调试提示 ===")
+print("1. 善用断点 - 不要在太多地方设置断点")
+print("2. 关注变量 - 使用 watch 监视关键变量")
+print("3. 查看堆栈 - 使用 stack 了解调用关系")
+print("4. 逐步执行 - 使用 step 精确定位问题")

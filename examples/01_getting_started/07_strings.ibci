@@ -1,0 +1,84 @@
+# 07_strings.ibci
+# 字符串操作
+
+print("=== 字符串操作 ===")
+
+print("\n=== 创建字符串 ===")
+str s1 = "Hello"
+str s2 = 'World'
+str s3 = """多行
+字符串
+文本"""
+
+print("s1: " + s1)
+print("s2: " + s2)
+print("s3:")
+print(s3)
+
+print("\n=== 字符串长度 ===")
+str text = "IBCI Programming"
+print("\"" + text + "\" 的长度: " + (str)text.len())
+
+print("\n=== 字符串切片 ===")
+str greeting = "Hello, World!"
+print("原字符串: " + greeting)
+print("greeting[0:5]: " + greeting[0:5])
+print("greeting[7:]: " + greeting[7:])
+print("greeting[::2]: " + greeting[::2])
+print("greeting[::-1]: " + greeting[::-1])
+
+print("\n=== 字符串方法 ===")
+str s = "  Hello, IBCI!  "
+
+print("原字符串: \"" + s + "\"")
+print("trim(): \"" + s.trim() + "\"")
+print("to_upper(): " + s.to_upper())
+print("to_lower(): " + s.to_lower())
+
+str email = "User@Example.COM"
+print("\"" + email + "\":")
+print("to_lower(): " + email.to_lower())
+
+print("\n=== 字符串查找 ===")
+str paragraph = "The quick brown fox jumps over the lazy dog"
+
+print("段落: " + paragraph)
+print("contains('fox'): " + (str)paragraph.contains("fox"))
+print("contains('cat'): " + (str)paragraph.contains("cat"))
+
+int fox_pos = paragraph.find("fox")
+print("find('fox'): " + (str)fox_pos)
+
+print("\n=== 字符串替换 ===")
+str template = "Hello, NAME! Welcome to PLACE."
+str result = template.replace("NAME", "Alice")
+result = result.replace("PLACE", "IBCI")
+print("模板: " + template)
+print("替换后: " + result)
+
+print("\n=== 字符串分割 ===")
+str csv = "apple,banana,cherry,date"
+list fruits = csv.split(",")
+print("CSV 字符串: " + csv)
+print("分割后: " + (str)fruits)
+
+print("\n=== 字符串连接 ===")
+list words = ["Hello", "World", "IBCI"]
+str joined = words.join(" - ")
+print("连接: " + joined)
+
+print("\n=== 字符串模板 ===")
+str name = "Alice"
+int age = 25
+
+print("姓名: " + name)
+print("年龄: " + (str)age)
+
+print("\n=== 字符串比较 ===")
+str a = "apple"
+str b = "Apple"
+str c = "apple"
+
+print("\"" + a + "\" == \"" + b + "\": " + (str)(a == b))
+print("\"" + a + "\" == \"" + c + "\": " + (str)(a == c))
+print("\"" + a + "\".to_lower() == \"" + b + "\".to_lower(): " + (str)(a.to_lower() == b.to_lower()))

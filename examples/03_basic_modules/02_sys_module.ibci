@@ -1,0 +1,51 @@
+# 02_sys_module.ibci
+# 系统模块
+
+import sys
+
+print("=== 系统模块 ===")
+
+print("\n=== 路径信息 ===")
+
+print("\n[1] 项目根目录")
+str project_root = sys.project_root()
+print("项目根目录: " + project_root)
+print("说明: IBCI 项目的根目录，所有文件操作限制在此范围内")
+
+print("\n[2] 脚本目录")
+str script_dir = sys.script_dir()
+print("脚本目录: " + script_dir)
+print("说明: 当前执行脚本所在的目录")
+
+print("\n[3] 脚本路径")
+str script_path = sys.script_path()
+print("脚本路径: " + script_path)
+print("说明: 当前执行脚本的完整路径")
+
+print("\n=== 沙箱控制 ===")
+
+print("\n[4] 沙箱状态")
+bool sandboxed = sys.is_sandboxed()
+print("是否启用沙箱: " + (str)sandboxed)
+print("说明: 沙箱限制文件操作在项目目录内")
+
+print("\n[5] 启用外部访问")
+print("警告: 启用外部访问可能带来安全风险")
+print("当前沙箱状态: " + (str)sandboxed)
+
+print("\n=== 路径关系 ===")
+print("路径层次结构:")
+print("  1. Python 进程 (os.getcwd)")
+print("  2. 项目根目录 (sys.project_root)")
+print("  3. 脚本目录 (sys.script_dir)")
+print("")
+print("相对路径解析:")
+print("  ./file.txt → 脚本目录")
+print("  file.txt → 项目根目录")
+print("  ../file.txt → 脚本目录的父目录（受沙箱限制）")
+
+print("\n=== 最佳实践 ===")
+print("1. 使用 sys.script_dir() 获取脚本位置")
+print("2. 使用 ./ 相对路径操作脚本附近文件")
+print("3. 保持沙箱启用以确保安全")
+print("4. 避免使用绝对路径，提高可移植性")

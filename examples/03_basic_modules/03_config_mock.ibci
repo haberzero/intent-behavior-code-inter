@@ -1,0 +1,104 @@
+# 03_config_mock.ibci
+# 配置与模拟
+
+import file
+import sys
+
+print("=== 配置与模拟模式 ===")
+
+print("\n=== 配置文件操作 ===")
+
+print("\n[1] 创建配置数据")
+dict config = {
+    "app_name": "IBCI Demo",
+    "version": "1.0.0",
+    "debug": true,
+    "max_retries": 3,
+    "timeout": 30,
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "name": "demo_db"
+    }
+}
+
+print("应用名称: " + (str)config["app_name"])
+print("版本: " + (str)config["version"])
+print("调试模式: " + (str)config["debug"])
+print("最大重试次数: " + (str)config["max_retries"])
+
+print("\n数据库配置:")
+dict db = (dict)config["database"]
+print("  主机: " + (str)db["host"])
+print("  端口: " + (str)db["port"])
+print("  数据库: " + (str)db["name"])
+
+print("\n[2] 保存配置到文件")
+str config_file = "./config_demo.json"
+file.write(config_file, (str)config)
+print("✓ 配置已保存: " + config_file)
+
+print("\n[3] 读取配置文件")
+str saved_config = file.read(config_file)
+print("读取的内容:")
+print(saved_config)
+
+print("\n=== 模拟模式 ===")
+
+print("\n[4] 模拟 API 响应")
+dict mock_api_response = {
+    "status": "success",
+    "data": {
+        "user_id": 12345,
+        "username": "demo_user",
+        "email": "demo@example.com"
+    }
+}
+
+print("模拟 API 响应:")
+print("  状态: " + (str)mock_api_response["status"])
+dict user_data = (dict)mock_api_response["data"]
+print("  用户ID: " + (str)user_data["user_id"])
+print("  用户名: " + (str)user_data["username"])
+
+print("\n[5] 模拟数据库查询")
+list mock_users = [
+    {"id": 1, "name": "Alice", "role": "admin"},
+    {"id": 2, "name": "Bob", "role": "user"},
+    {"id": 3, "name": "Charlie", "role": "user"}
+]
+
+print("用户列表:")
+int i = 0
+while i < mock_users.len():
+    dict user = (dict)mock_users[i]
+    print("  " + (str)user["id"] + ". " + (str)user["name"] + " (" + (str)user["role"] + ")")
+    i = i + 1
+
+print("\n[6] 模拟错误处理")
+dict error_responses = {
+    "NOT_FOUND": "资源不存在",
+    "UNAUTHORIZED": "未授权访问",
+    "SERVER_ERROR": "服务器内部错误"
+}
+
+print("错误类型:")
+int j = 0
+list keys = error_responses.keys()
+while j < keys.len():
+    str key = (str)keys[j]
+    print("  " + key + ": " + (str)error_responses[key])
+    j = j + 1
+
+print("\n=== 清理 ===")
+file.remove(config_file)
+if file.exists(config_file):
+    print("✗ 清理失败")
+else:
+    print("✓ 临时文件已清理")
+
+print("\n=== 使用场景 ===")
+print("1. 开发测试 - 使用模拟数据无需真实后端")
+print("2. 配置管理 - 将配置与代码分离")
+print("3. 环境切换 - 开发/生产环境配置不同")
+print("4. 故障注入 - 模拟各种错误场景")

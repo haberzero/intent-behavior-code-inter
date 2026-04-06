@@ -1,0 +1,80 @@
+# 04_control_flow.ibci
+# 控制流
+
+print("=== 控制流 ===")
+
+print("\n=== if 语句 ===")
+int score = 85
+
+if score >= 90:
+    print("成绩等级: A")
+else if score >= 80:
+    print("成绩等级: B")
+else if score >= 70:
+    print("成绩等级: C")
+else if score >= 60:
+    print("成绩等级: D")
+else:
+    print("成绩等级: F")
+
+print("\n=== while 循环 ===")
+int i = 1
+while i <= 5:
+    print("计数: " + (str)i)
+    i = i + 1
+
+print("\n=== for 循环 ===")
+list fruits = ["苹果", "香蕉", "橙子", "葡萄"]
+
+int index = 0
+while index < fruits.len():
+    print("水果 " + (str)(index + 1) + ": " + (str)fruits[index])
+    index = index + 1
+
+print("\n=== break 语句 ===")
+int counter = 0
+while counter < 100:
+    counter = counter + 1
+    if counter == 10:
+        print("计数器达到 10，退出循环")
+        break
+    if counter % 3 == 0:
+        print(str(counter) + " 是 3 的倍数，继续")
+        continue
+    print("处理数字: " + (str)counter)
+
+print("\n=== 块作用域 ===")
+int outer = 10
+print("外层变量: " + (str)outer)
+
+{
+    int inner = 20
+    print("内层变量: " + (str)inner)
+    print("外层在块内可见: " + (str)outer)
+}
+
+print("\n=== 嵌套条件 ===")
+int age = 25
+bool is_student = true
+
+if age >= 18:
+    print("已成年")
+    if is_student:
+        print("是学生")
+    else:
+        print("已工作")
+else:
+    print("未成年")
+
+print("\n=== 列表推导式风格的循环 ===")
+list numbers = [1, 2, 3, 4, 5]
+list doubled = []
+
+int idx = 0
+while idx < numbers.len():
+    int num = (int)numbers[idx]
+    doubled.append(num * 2)
+    idx = idx + 1
+
+print("原列表: " + (str)numbers)
+print("翻倍列表: " + (str)doubled)
