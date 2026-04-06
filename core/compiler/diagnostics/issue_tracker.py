@@ -49,6 +49,12 @@ class IssueTracker:
     def error(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_ERROR", hint: Optional[str] = None):
         self.report(Severity.ERROR, code, message, location, hint)
 
+    def report_error(self, message: str, file_path: str = "<unknown>", line: int = 0, column: int = 0, code: str = "COMPILER_ERROR"):
+        """报告错误的便捷方法（用于兼容旧代码）"""
+        from core.base.source_atomic import Location
+        location = Location(file_path=file_path, line=line, column=column)
+        self.report(Severity.ERROR, code, message, location)
+
     def warning(self, message: str, location: Optional[Any] = None, code: str = "COMPILER_WARNING", hint: Optional[str] = None):
         self.report(Severity.WARNING, code, message, location, hint)
 

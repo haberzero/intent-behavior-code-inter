@@ -646,6 +646,24 @@ class CoreTokenScanner:
             
         self.is_new_line_flag = False
 
+    def _is_at_expression_start(self) -> bool:
+        """检查是否处于表达式开头（用于判断负号是负号还是减号）"""
+        idx = self.scanner.pos
+        while idx > 0:
+            pos = idx - 1
+            if pos < 0:
+                break
+            char = self.scanner.source[pos]
+            if char == ' ' or char == '\t':
+                idx = pos
+                continue
+            if char == '\n':
+                return True
+            if char in '+-*/%=<>!&|,':
+                return True
+            return False
+        return True
+
     def _scan_number(self, first_char: str, tokens: List[Token]):
         value = first_char
         
@@ -686,7 +704,23 @@ class CoreTokenScanner:
                     value += self.scanner.advance()
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
-        
+
+        # Check for negative number
+        # Only treat as negative if this is at the start of an expression (after whitespace, operator, or at beginning of line)
+        if self.is_new_line_flag or self._is_at_expression_start():
+            if self.scanner.peek() == '-':
+                self.scanner.advance()
+                next_char = self.scanner.peek()
+                if next_char.isdigit():
+                    value = '-' + value
+                    while self.scanner.peek().isdigit():
+                        value += self.scanner.advance()
+                    # Check for negative float
+                    if self.scanner.peek() == '.' and self.scanner.peek(1).isdigit():
+                        value += self.scanner.advance()
+                        while self.scanner.peek().isdigit():
+                            value += self.scanner.advance()
+
         tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
         self.is_new_line_flag = False
 
