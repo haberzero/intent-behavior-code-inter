@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
+from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping, Tuple
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -81,8 +81,30 @@ class IbObject:
             res = self.receive('__to_prompt__', [])
             return str(res.value) if hasattr(res, 'value') else str(res)
         except (AttributeError, InterpreterError):
-            # 仅在方法缺失或解释器主动报错时回退
             return f"<Instance of {self.ib_class.name}>"
+
+    def __from_prompt__(self, raw_response: str) -> Tuple[bool, Any]:
+        """
+        从 LLM 返回的原始文本中解析值。
+
+        默认实现：尝试使用 descriptor 的 Axiom 进行解析。
+        """
+        try:
+            axiom = self.descriptor._axiom
+            if axiom:
+                parser = axiom.get_parser_capability()
+                if parser:
+                    value = parser.parse_value(raw_response)
+                    return (True, value)
+        except Exception:
+            pass
+        return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
+
+    def __llmoutput_hint__(self) -> str:
+        """
+        返回期望的 LLM 输出格式描述。
+        """
+        return f"请返回一个 {self.ib_class.name} 类型的值"
 
     # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':

@@ -1,4 +1,4 @@
-from typing import Protocol, List, Optional, Any, TYPE_CHECKING, ForwardRef, Dict
+from typing import Protocol, List, Optional, Any, TYPE_CHECKING, ForwardRef, Dict, Tuple
 
 if TYPE_CHECKING:
     from core.kernel.types.descriptors import TypeDescriptor, FunctionMetadata
@@ -30,6 +30,27 @@ class ParserCapability(Protocol):
     """解析能力：描述一个类型如何从 LLM结果中解析出值"""
     def parse_value(self, raw_value: str) -> Any: ...
 
+class FromPromptCapability(Protocol):
+    """从提示词解析能力：描述一个类型如何从 LLM 返回的原始文本中解析出值"""
+    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+        """
+        解析 LLM 返回的原始文本。
+
+        Returns:
+            (True, parsed_value) - 解析成功
+            (False, retry_hint)  - 解析失败，retry_hint 用于提示重试方向
+        """
+        ...
+
+class IlmoutputHintCapability(Protocol):
+    """LLM 输出提示能力：描述期望的 LLM 输出格式"""
+    def __llmoutput_hint__(self) -> str:
+        """
+        返回期望的 LLM 输出格式描述。
+        用于提示词注入，告诉 LLM 应该输出什么格式。
+        """
+        ...
+
 class WritableTrait(Protocol):
     """ 写能力：描述一个元数据对象如何被安全地更新（如分析阶段回填签名）"""
     def update_signature(self, param_types: List['TypeDescriptor'], return_type: Optional['TypeDescriptor']) -> None: ...
@@ -49,6 +70,8 @@ class TypeAxiom(Protocol):
     def get_operator_capability(self) -> Optional[OperatorCapability]: ...
     def get_converter_capability(self) -> Optional[ConverterCapability]: ...
     def get_parser_capability(self) -> Optional[ParserCapability]: ...
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: ...
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: ...
     def get_writable_trait(self) -> Optional[WritableTrait]: ...
     
     def get_methods(self) -> 'Dict[str, FunctionMetadata]':
