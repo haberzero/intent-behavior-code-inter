@@ -55,6 +55,11 @@ class StmtHandler(BaseHandler):
                 # 显式恢复上下文快照 (如果是 retry 跳转回来的)
                 frame.restore_snapshot(self.runtime_context)
 
+                # [CRITICAL] retry 后重新执行赋值时，需要清除 last_llm_result
+                # 否则 visit_IbAssign 会因为 is_uncertain=True 而再次跳过赋值
+                if frame.should_retry:
+                    self.runtime_context.set_last_llm_result(None)
+
                 # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
                 self.execution_context.visit(target_uid, bypass_protection=True)
 
@@ -181,19 +186,20 @@ class StmtHandler(BaseHandler):
     def _assign_to_target(self, target_uid: str, value: IbObject, define_only: bool = False):
         """通用赋值逻辑，支持 Name, TypeAnnotatedExpr, Attribute, Subscript, Tuple Unpacking"""
         target_data = self.get_node_data(target_uid)
-        if not target_data: return
+        if not target_data: 
+            return
         
         # 1. 普通变量赋值 (Name)
         if target_data["_type"] == "IbName":
             sym_uid = self.get_side_table("node_to_symbol", target_uid)
             name = target_data.get("id")
             if sym_uid:
+                existing = self.runtime_context.get_symbol_by_uid(sym_uid)
                 # 如果有 Symbol UID，则根据其是否存在于当前作用域决定 define 还是 set
-                if not define_only and self.runtime_context.get_symbol_by_uid(sym_uid):
+                if not define_only and existing:
                     self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-                    # print(f"[DEBUG] Defining variable '{name}' with UID '{sym_uid}'")
                     self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
             elif not self.execution_context.strict_mode:
                 # 回退到名称查找
@@ -243,12 +249,14 @@ class StmtHandler(BaseHandler):
     def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """实现赋值语句"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
+        
         value = self.visit(node_data.get("value"))
 
         # 检查是否由于 LLM 不确定性导致赋值未完成
+        # 如果是，则赋值为 IbLLMUncertain 特殊值，而不是跳过赋值
         last_result = self.runtime_context.get_last_llm_result()
         if last_result and last_result.is_uncertain:
-            return self.registry.get_none()
+            value = self.registry.get_llm_uncertain()
         
         for target_uid in node_data.get("targets", []):
             self._assign_to_target(target_uid, value)
@@ -311,6 +319,11 @@ class StmtHandler(BaseHandler):
         """循环语句"""
         while True:
             condition = self.visit(node_data.get("test"))
+
+            last_result = self.runtime_context.get_last_llm_result()
+            if last_result and last_result.is_uncertain:
+                return self.registry.get_none()
+
             if not self.execution_context.is_truthy(condition):
                 break
             
@@ -326,7 +339,13 @@ class StmtHandler(BaseHandler):
         
         # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
-            while self.execution_context.is_truthy(self.visit(iter_uid)):
+            while True:
+                condition = self.visit(iter_uid)
+                last_result = self.runtime_context.get_last_llm_result()
+                if last_result and last_result.is_uncertain:
+                    return self.registry.get_none()
+                if not self.execution_context.is_truthy(condition):
+                    break
                 for stmt_uid in body:
                     self.visit(stmt_uid)
             return self.registry.get_none()
