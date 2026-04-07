@@ -26,7 +26,6 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "set_branch_prompt": {"param_types": ["str"], "return_type": "void"},
             "set_loop_prompt": {"param_types": ["str"], "return_type": "void"},
             "set_scene_config": {"param_types": ["str", "dict"], "return_type": "void"},
-            "get_scene_prompt": {"param_types": ["str"], "return_type": "str"},
             "get_retry_prompt": {"param_types": ["str"], "return_type": "str"},
             "set_return_type_prompt": {"param_types": ["str", "str"], "return_type": "void"},
             "get_return_type_prompt": {"param_types": ["str"], "return_type": "str"},

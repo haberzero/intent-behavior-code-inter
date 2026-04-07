@@ -18,6 +18,8 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     vars: void -> dict (获取当前作用域变量)
     last_llm: void -> dict (获取上次 LLM 调用信息)
     show_last_prompt: void -> void (打印上次 LLM 完整提示词)
+    show_last_result: void -> void (打印上次 LLM 原始输出结果)
+    show_all: void -> void (打印上次 LLM 完整信息)
     last_result: void -> dict (获取上次 LLM 执行结果)
     retry_stack: void -> list (获取当前重试帧栈)
     intents: void -> list (获取详细意图栈)
@@ -36,6 +38,14 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 "return_type": "dict"
             },
             "show_last_prompt": {
+                "param_types": [],
+                "return_type": "void"
+            },
+            "show_last_result": {
+                "param_types": [],
+                "return_type": "void"
+            },
+            "show_all": {
                 "param_types": [],
                 "return_type": "void"
             },

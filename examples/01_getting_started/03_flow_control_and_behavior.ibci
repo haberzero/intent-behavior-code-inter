@@ -38,12 +38,12 @@ print("\n=== 1. if 意图驱动条件判断 ===\n")
 str input_text = "今天天气真不错！"
 print("输入文本: " + input_text)
 
-if @~ "$input_text" 是否包含积极情绪？ ~
+if @~$input_text 是否包含积极情绪？~:
     print("检测到积极情绪！")
-    idbg.show_last_prompt()
-else
+    idbg.show_all()
+else:
     print("未检测到积极情绪")
-    idbg.show_last_prompt()
+    idbg.show_all()
 
 # ============================================================
 # 2. while - 意图驱动的条件循环
@@ -55,16 +55,16 @@ str user_input = "开始"
 int loop_count = 0
 
 print("开始循环判断...")
-while @~ "$user_input" 是否表示继续？ ~
+while @~$user_input 是否表示继续？~:
     loop_count = loop_count + 1
     print("循环第 " + (str)loop_count + " 次")
 
-    if loop_count >= 3
+    if loop_count >= 3:
         print("达到最大循环次数，退出")
         user_input = "停止"
-    else
+    else:
         user_input = "继续"
-    idbg.show_last_prompt()
+    idbg.show_all()
 
 print("循环结束")
 
@@ -77,13 +77,13 @@ print("\n=== 3. for + 行为描述迭代 ===\n")
 str continue_flag = "yes"
 int for_count = 0
 
-for @~ "$continue_flag" 是否为 yes？ ~:
+for @~$continue_flag 是否为 yes？~:
     for_count = for_count + 1
     print("for 循环第 " + (str)for_count + " 次")
 
-    if for_count >= 2
+    if for_count >= 2:
         continue_flag = "no"
-    idbg.show_last_prompt()
+    idbg.show_all()
 
 print("for 循环结束，共执行 " + (str)for_count + " 次")
 
@@ -96,17 +96,17 @@ print("\n=== 4. 嵌套条件判断 ===\n")
 str content = "这是一个关于编程的教程"
 print("分析内容: " + content)
 
-if @~ "$content" 是否包含技术相关关键词？ ~:
+if @~$content 是否包含技术相关关键词？~:
     print("  -> 外层判断：包含技术关键词")
 
-    if @~ "$content" 是否包含 Python 相关内容？ ~:
+    if @~$content 是否包含 Python 相关内容？~:
         print("  -> 内层判断：包含 Python 内容")
-        idbg.show_last_prompt()
-    else
+        idbg.show_all()
+    else:
         print("  -> 内层判断：不包含 Python 内容")
-        idbg.show_last_prompt()
+        idbg.show_all()
 
-else
+else:
     print("  -> 外层判断：不包含技术关键词")
 
 print("\n=== 流控与行为描述结合演示结束 ===\n")
