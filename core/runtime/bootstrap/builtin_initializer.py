@@ -1,6 +1,6 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
-from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject
+from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior, IbBool
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
@@ -177,7 +177,10 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     registry.register_none(IbNone(none_class), token)
     _reg_native(none_class, '__to_prompt__', lambda self: "None")
     _reg_native(none_class, 'to_bool', lambda self: 0)
-    
+
+    # 5. 注册 LLM 不确定结果单例 (IbLLMUncertain)
+    registry.register_llm_uncertain(IbLLMUncertain(none_class), token)
+
     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
     

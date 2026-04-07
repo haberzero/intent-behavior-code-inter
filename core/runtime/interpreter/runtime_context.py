@@ -41,6 +41,11 @@ class ScopeImpl:
         """运行时类型检查"""
         if declared_type is None:
             return
+
+        # 特殊处理：IbLLMUncertain 可以赋值给任何类型
+        from core.runtime.objects.kernel import IbLLMUncertain
+        if isinstance(value, IbLLMUncertain):
+            return
             
         # [Phase 3.3] 强契约：唯一使用描述符进行校验
         if not hasattr(value, 'descriptor'):

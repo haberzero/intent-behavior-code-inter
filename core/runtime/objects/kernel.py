@@ -512,6 +512,46 @@ class IbNone(IbObject):
     def __repr__(self):
         return "null"
 
+
+class IbLLMUncertain(IbObject):
+    """
+    表示 LLM 返回不确定/模糊结果的特殊值。
+
+    当 LLM 调用无法被正确解析为目标类型时（如返回模糊内容），
+    变量会被赋值为 IbLLMUncertain，而不是保持未定义状态。
+
+    语义：
+    - __bool__ 返回 False（与 if 条件结合时表示"不确定性"）
+    - to_native 返回 None
+    - 可以赋值给任何类型的变量
+    """
+    def __init__(self, ib_class: 'IbClass'):
+        super().__init__(ib_class)
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        return None
+
+    def __to_prompt__(self) -> str:
+        return "uncertain"
+
+    def to_bool(self) -> IbObject:
+        """ IbLLMUncertain 在布尔上下文中为 False """
+        return self.ib_class.registry.box(0)
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """ 支持 IbLLMUncertain 的强转逻辑 """
+        if target_class.name == "str":
+            return self.ib_class.registry.box("uncertain")
+        if target_class.name in ("int", "float"):
+            return self.ib_class.registry.box(0)
+        if target_class.name == "bool":
+            return self.ib_class.registry.box(0)
+        return self
+
+    def __repr__(self):
+        return "uncertain"
+
+
 class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
