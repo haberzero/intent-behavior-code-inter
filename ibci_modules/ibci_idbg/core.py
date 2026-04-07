@@ -72,15 +72,15 @@ class IDbgPlugin(IbPlugin):
     def show_last_prompt(self):
         """直接打印最近一次 LLM 调用的完整提示词（IBCI 友好）"""
         print("[IDBG] 最近一次 LLM 调用提示词:")
-        
+
         info = self.last_llm()
         if not info:
             print("  (无可用信息)")
             return
-        
+
         sys_prompt = info.get("sys_prompt", "")
         user_prompt = info.get("user_prompt", "")
-        
+
         if sys_prompt:
             print("  [系统提示词]")
             if isinstance(sys_prompt, str):
@@ -99,7 +99,7 @@ class IDbgPlugin(IbPlugin):
                         print(f"    {seg}")
             else:
                 print(f"    {sys_prompt}")
-        
+
         if user_prompt:
             print("  [用户提示词]")
             if isinstance(user_prompt, str):
@@ -118,24 +118,59 @@ class IDbgPlugin(IbPlugin):
                         print(f"    {seg}")
             else:
                 print(f"    {user_prompt}")
-        
+
         active_intents = info.get("active_intents", [])
         if active_intents:
             print("  [活跃意图栈]")
             for idx, intent in enumerate(active_intents):
                 print(f"    [{idx}] {intent}")
-        
+
         global_intents = info.get("global_intents", [])
         if global_intents:
             print("  [全局意图栈]")
             for idx, intent in enumerate(global_intents):
                 print(f"    [{idx}] {intent}")
-        
+
         merged_intents = info.get("merged_intents", [])
         if merged_intents:
             print("  [合并后意图]")
             for idx, intent in enumerate(merged_intents):
                 print(f"    [{idx}] {intent}")
+
+    def show_last_result(self):
+        """直接打印最近一次 LLM 调用的结果（IBCI 友好）"""
+        print("[IDBG] 最近一次 LLM 调用结果:")
+
+        res_info = self.last_result()
+        if not res_info:
+            print("  (无可用信息)")
+            return
+
+        print(f"  [执行状态]")
+        print(f"    success: {res_info.get('success')}")
+        print(f"    is_uncertain: {res_info.get('is_uncertain')}")
+        print(f"    error: {res_info.get('error')}")
+        print(f"    value: {res_info.get('value')}")
+
+        raw_response = res_info.get("raw_response", "")
+        if raw_response:
+            print(f"  [原始回复]")
+            if isinstance(raw_response, str):
+                for line in raw_response.split('\n'):
+                    print(f"    {line}")
+
+        retry_hint = res_info.get("retry_hint", "")
+        if retry_hint:
+            print(f"  [重试提示]")
+            if isinstance(retry_hint, str):
+                for line in retry_hint.split('\n'):
+                    print(f"    {line}")
+
+    def show_all(self):
+        """直接打印最近一次 LLM 调用的完整信息（提示词+结果）"""
+        self.show_last_prompt()
+        print()
+        self.show_last_result()
 
     def last_result(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的 LLMResult 详情"""
