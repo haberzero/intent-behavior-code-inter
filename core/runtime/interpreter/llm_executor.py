@@ -172,8 +172,6 @@ class LLMExecutorImpl:
             "user_prompt": user_prompt,
             "response": raw_res,
             "raw_response": raw_res,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in active_intents],
-            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in global_intents],
             "merged_intents": merged_intents
         }
 
@@ -251,7 +249,7 @@ class LLMExecutorImpl:
                 content_parts.append(str(segment))
         return "".join(content_parts)
 
-    def _get_llmoutput_hint(self, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
+    def _get_llmoutput_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
         """获取 __llmoutput_hint__ 用于注入到提示词"""
         returns_uid = node_data.get("returns")
         if returns_uid:
@@ -265,15 +263,33 @@ class LLMExecutorImpl:
                         hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
                         if hint_cap:
                             return hint_cap.__llmoutput_hint__()
+        
+        node_to_type = execution_context.get_side_table("node_to_type", node_uid)
+        if node_to_type:
+            if hasattr(node_to_type, 'name'):
+                meta_reg = self.registry.get_metadata_registry()
+                if meta_reg:
+                    descriptor = meta_reg.resolve(node_to_type.name)
+                    if descriptor and descriptor._axiom:
+                        hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
+                        if hint_cap:
+                            return hint_cap.__llmoutput_hint__()
+        
         return None
 
-    def _get_expected_type_hint(self, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
+    def _get_expected_type_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
         """获取预期的类型名称，用于 __from_prompt__ 解析"""
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 return returns_data.get("id", "str")
+        
+        node_to_type = execution_context.get_side_table("node_to_type", node_uid)
+        if node_to_type:
+            if hasattr(node_to_type, 'name'):
+                return node_to_type.name
+        
         return None
 
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> LLMResult:
@@ -370,7 +386,7 @@ class LLMExecutorImpl:
             all_intents = context.get_resolved_prompt_intents(execution_context)
 
         # 获取 __llmoutput_hint__ 注入到系统提示词
-        llmoutput_hint = self._get_llmoutput_hint(node_data, execution_context)
+        llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
 
         sys_prompt = "你是一个意图行为代码执行器。"
 
@@ -414,7 +430,7 @@ class LLMExecutorImpl:
 
         # 7. 处理返回类型
         # 使用 __from_prompt__ 机制进行解析
-        type_hint = self._get_expected_type_hint(node_data, execution_context)
+        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
         if type_hint:
             return self._parse_result(response, type_hint, node_uid)
 

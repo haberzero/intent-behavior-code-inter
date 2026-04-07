@@ -260,17 +260,20 @@ class SemanticAnalyzer:
         """
         if isinstance(expr, ast.IbBehaviorExpr):
             return True
+        elif isinstance(expr, ast.IbCastExpr):
+            return self._expr_contains_behavior(expr.value)
+        elif isinstance(expr, ast.IbTypeAnnotatedExpr):
+            return self._expr_contains_behavior(expr.target)
+        elif isinstance(expr, ast.IbFilteredExpr):
+            return self._expr_contains_behavior(expr.expr) or self._expr_contains_behavior(expr.filter)
         elif isinstance(expr, ast.IbCall):
             func = expr.func
             if isinstance(func, ast.IbName):
                 func_name = func.id
                 sym = self.symbol_table.resolve(func_name)
                 if sym:
-                    print(f"[DEBUG] Found symbol '{func_name}': kind={sym.kind}, metadata={sym.metadata}")
                     if sym.kind == SymbolKind.LLM_FUNCTION or sym.metadata.get("is_llm"):
                         return True
-                else:
-                    print(f"[DEBUG] Symbol '{func_name}' not found in symbol table. Available: {list(self.symbol_table.symbols.keys())}")
             elif isinstance(func, ast.IbAttribute):
                 if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
                     return True
@@ -654,17 +657,42 @@ class SemanticAnalyzer:
 
                         is_explicit_callable = (call_cap is not None) or is_dynamic
 
+                    # 检查是否是行为描述表达式（裸 @~...~ 或 (int)@~...~）
+                    inner_behavior_expr = None
                     if isinstance(node.value, ast.IbBehaviorExpr):
+                        inner_behavior_expr = node.value
+                    elif isinstance(node.value, ast.IbCastExpr) and isinstance(node.value.value, ast.IbBehaviorExpr):
+                        inner_behavior_expr = node.value.value
+
+                    if inner_behavior_expr:
                         if is_explicit_callable:
                             # 延迟上下文：behavior 表达式被包装为 callable，延迟执行
-                            self.side_table.set_deferred(node.value, True)
+                            self.side_table.set_deferred(inner_behavior_expr, True)
                             val_type = self._behavior_desc
                         else:
-                            # [P2 FIX] 即时上下文：behavior 表达式立即执行，返回 str 类型（LLM 调用结果）
-                            # 注意：这里的 "str" 语义是"文本接收"，而非纯字符串类型
-                            # [Future] 未来可通过 ReceiveMode.IMMEDIATE 统一处理，并在解释器层面注入相关提示词
-                            self.side_table.set_deferred(node.value, False)
-                            val_type = self._str_desc
+                            # 即时上下文：behavior 表达式立即执行
+                            self.side_table.set_deferred(inner_behavior_expr, False)
+
+                            # [FIX] 将赋值目标的类型绑定到 IbBehaviorExpr
+                            # 这样 _get_expected_type_hint 可以正确获取类型信息
+                            # 修复了：int result = @~ ... ~ 和 int result = (int)@~ ... ~ 行为不一致的问题
+                            if isinstance(node.value, ast.IbCastExpr):
+                                # 情况 1: 有强制类型转换 (int)@~...~
+                                # 从 IbCastExpr 获取目标类型，传递给内部的 IbBehaviorExpr
+                                cast_type = self._resolve_type(node.value.type_annotation)
+                                if cast_type and not cast_type.is_dynamic():
+                                    self.side_table.bind_type(inner_behavior_expr, cast_type)
+                                    val_type = cast_type
+                                else:
+                                    val_type = self._str_desc
+                            else:
+                                # 情况 2: 无强制类型转换 @~...~
+                                # 从赋值目标 sym.descriptor 获取类型
+                                if sym and sym.descriptor and not sym.descriptor.is_dynamic():
+                                    self.side_table.bind_type(inner_behavior_expr, sym.descriptor)
+                                    val_type = sym.descriptor
+                                else:
+                                    val_type = self._str_desc
                     
                     if not val_type.is_assignable_to(sym.descriptor):
                         hint = val_type.get_diff_hint(sym.descriptor)
@@ -679,7 +707,10 @@ class SemanticAnalyzer:
         return self._void_desc
 
     def visit_IbIf(self, node: ast.IbIf):
-        self.visit(node.test)
+        test_type = self.visit(node.test)
+
+        if isinstance(node.test, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.test, self._bool_desc)
 
         for stmt in node.body:
             self.visit(stmt)
@@ -689,7 +720,10 @@ class SemanticAnalyzer:
         return self._void_desc
 
     def visit_IbWhile(self, node: ast.IbWhile):
-        self.visit(node.test)
+        test_type = self.visit(node.test)
+
+        if isinstance(node.test, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.test, self._bool_desc)
 
         for stmt in node.body:
             self.visit(stmt)
@@ -701,6 +735,9 @@ class SemanticAnalyzer:
     def visit_IbFor(self, node: ast.IbFor):
         iter_type = self.visit(node.iter)
         
+        if isinstance(node.iter, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.iter, self._bool_desc)
+
         # 统一循环协议检查
         if node.target is None:
             # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
