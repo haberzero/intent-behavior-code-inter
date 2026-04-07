@@ -18,7 +18,7 @@ class AIPlugin(ILLMProvider):
             "url": None,
             "key": None,
             "model": None,
-            "retry": 0,
+            "retry": 3,
             "timeout": 30.0,
             "auto_type_constraint": True,
             "auto_intent_injection": True
