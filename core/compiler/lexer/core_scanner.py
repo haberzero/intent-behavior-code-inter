@@ -462,14 +462,19 @@ class CoreTokenScanner:
                 tokens.append(Token(TokenType.RAW_TEXT, "$", self.scanner.line, self.scanner.col))
                 return
 
-        # 3. Variable Reference
+        # 3. String Literals (支持字符串内变量引用)
+        if char == '"' or char == "'":
+            self._scan_string_in_behavior(tokens)
+            return
+
+        # 4. Variable Reference
         # 行为块内部的变量引用目前被视为强制性的
         if char == '$':
             self._scan_var_ref(tokens)
             self._scan_complex_access(tokens)
             return
             
-        # 4. Raw Text
+        # 5. Raw Text
         text = ""
         while not self.scanner.is_at_end():
             peek_char = self.scanner.peek()
@@ -484,11 +489,63 @@ class CoreTokenScanner:
                 next_c = self.scanner.peek(1)
                 if next_c == '~' or next_c == '$':
                     break
+            if peek_char == '"' or peek_char == "'":
+                break
                 
             text += self.scanner.advance()
         
         if text:
             tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+
+    def _scan_string_in_behavior(self, tokens: List[Token]):
+        """扫描行为表达式中的字符串字面量，支持内部变量引用如 "$var" """
+        quote_char = self.scanner.advance()  # consume opening quote
+        string_content = ""
+        
+        while not self.scanner.is_at_end():
+            char = self.scanner.peek()
+            
+            # 字符串结束
+            if char == quote_char:
+                self.scanner.advance()  # consume closing quote
+                if string_content:
+                    tokens.append(self.scanner.create_token(TokenType.STRING, string_content))
+                return
+            
+            # 转义序列
+            if char == '\\':
+                next_char = self.scanner.peek(1)
+                if next_char == quote_char or next_char == '\\' or next_char == 'n' or next_char == 't':
+                    string_content += self.scanner.advance()  # \
+                    string_content += self.scanner.advance()  # char
+                    continue
+                elif next_char == '$':
+                    # \$
+                    string_content += self.scanner.advance()  # \
+                    string_content += self.scanner.advance()  # $
+                    continue
+            
+            # 变量引用 - 先发出已累积的字符串内容
+            if char == '$':
+                if string_content:
+                    tokens.append(self.scanner.create_token(TokenType.STRING, string_content))
+                    string_content = ""
+                # 处理变量引用
+                self._scan_var_ref(tokens)
+                self._scan_complex_access(tokens)
+                continue
+            
+            # 换行 - 字符串不支持跨行
+            if char == '\n':
+                self.issue_tracker.error("Unexpected newline in string literal inside behavior expression", self.scanner, code="LEX_002")
+                return
+            
+            string_content += self.scanner.advance()
+        
+        # 未闭合的字符串
+        self.issue_tracker.error("Unterminated string literal in behavior expression", self.scanner, code="LEX_002")
+        if string_content:
+            tokens.append(self.scanner.create_token(TokenType.STRING, string_content))
 
     def _scan_intent_char(self, tokens: List[Token]):
         char = self.scanner.peek()
