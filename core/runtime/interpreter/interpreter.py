@@ -109,7 +109,7 @@ class Interpreter:
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
-                 max_instructions: int = 100000000,
+                 max_instructions: int = 0,
                  max_call_stack: int = 100,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
@@ -719,7 +719,7 @@ class Interpreter:
                 return self.registry.get_none()
 
             self.instruction_count += 1
-            if self.instruction_count > self.max_instructions:
+            if self.max_instructions > 0 and self.instruction_count > self.max_instructions:
                 raise self._report_error("Execution limit exceeded", node_uid, error_code=RUN_LIMIT_EXCEEDED)
 
             if self.call_stack_depth >= self.max_call_stack:
