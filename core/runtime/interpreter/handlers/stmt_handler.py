@@ -305,7 +305,6 @@ class StmtHandler(BaseHandler):
         if last_result and last_result.is_uncertain:
             return self.registry.get_none()
 
-        test_native = test_value.to_native() if hasattr(test_value, 'to_native') else test_value
         case_uids = node_data.get("cases", [])
         matched = False
 
@@ -317,9 +316,12 @@ class StmtHandler(BaseHandler):
                 matched = True
             else:
                 pattern_value = self.visit(pattern)
-                pattern_native = pattern_value.to_native() if hasattr(pattern_value, 'to_native') else pattern_value
+                
+                # 使用 __eq__ 方法进行比较（支持用户定义的相等性）
+                eq_result = test_value.receive('__eq__', [pattern_value])
+                is_equal = self.execution_context.is_truthy(eq_result)
 
-                if test_native == pattern_native:
+                if is_equal:
                     matched = True
 
             if matched:

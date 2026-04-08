@@ -394,20 +394,47 @@ class AIPlugin(ILLMProvider):
         MOCK:REPAIR - 首次返回模糊值，重试后返回确定值
         MOCK:[...] - 直接返回列表内容
         MOCK:{...} - 直接返回字典内容
+        
+        [二级 Mock 指令]
+        MOCK:INT:<value> - 返回整数，如 MOCK:INT:42
+        MOCK:STR:<value> - 返回字符串，如 MOCK:STR:"hello"
+        MOCK:FLOAT:<value> - 返回浮点数，如 MOCK:FLOAT:3.14
+        MOCK:BOOL:TRUE/FALSE - 返回布尔值，如 MOCK:BOOL:TRUE
+        MOCK:LIST:<json> - 返回列表，如 MOCK:LIST:[1,2,3]
+        MOCK:DICT:<json> - 返回字典，如 MOCK:DICT:{"key":"value"}
         """
         if not user_prompt.startswith("MOCK:"):
             if scene in ("branch", "loop"):
                 return "1"
             return f"[MOCK] {user_prompt}"
 
-        # 提取指令部分
         content_after_mock = user_prompt[5:].strip()
         
         # 1. 检查结构化直接返回 (MOCK:[...] 或 MOCK:{...})
         if content_after_mock.startswith('[') or content_after_mock.startswith('{'):
             return content_after_mock
 
-        # 2. 处理命名指令
+        # 2. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
+        if ':' in content_after_mock:
+            type_parts = content_after_mock.split(':', 2)
+            if len(type_parts) >= 2:
+                mock_type = type_parts[0].upper()
+                mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
+                
+                if mock_type == "INT":
+                    return str(int(mock_value))
+                elif mock_type == "STR":
+                    return mock_value
+                elif mock_type == "FLOAT":
+                    return str(float(mock_value))
+                elif mock_type == "BOOL":
+                    return "1" if mock_value.upper() == "TRUE" else "0"
+                elif mock_type == "LIST":
+                    return f"[{mock_value}]"
+                elif mock_type == "DICT":
+                    return f"{{{mock_value}}}"
+
+        # 3. 处理命名指令
         parts = content_after_mock.split(" ", 1)
         mock_cmd = parts[0].upper() if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
@@ -432,11 +459,17 @@ class AIPlugin(ILLMProvider):
             if self._mock_retry_counts[retry_key] == 0:
                 self._mock_retry_counts[retry_key] = 1
                 self._mock_state[mock_content] = -1
-                return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+                return "__MOCK_REPAIR__"
             else:
                 self._mock_retry_counts[retry_key] = 0
                 self._mock_state[mock_content] = 1
                 return "1"
+
+        # [Enum Hook] 支持自定义返回值
+        # MOCK:HAPPY -> 返回 "HAPPY"
+        # MOCK:HAPPY 请回复 -> 返回 "HAPPY"
+        if not mock_content:
+            return mock_cmd
 
         if scene in ("branch", "loop"):
             return "1"

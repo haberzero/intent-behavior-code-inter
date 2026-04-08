@@ -86,6 +86,11 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     
     # 自动创建类并注册
     ib_classes = {}
+    
+    # 确保 enum 在 core_axioms 中
+    if "enum" not in core_axioms:
+        core_axioms = core_axioms + ["enum"]
+    
     for name in core_axioms:
         # 获取描述符 (Bootstrapper 初始化时已经注入了 MetadataRegistry)
         desc = metadata_registry.resolve(name)
@@ -134,17 +139,60 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 特殊：module 类 (Bootstrapper 已经创建过一次)
     module_class = registry.create_subclass("module", metadata_registry.resolve("module"))
     
-    # [Enum Hook] 注册 Enum 类，使其可被继承
-    enum_desc = metadata_registry.factory.create_class(name="Enum", is_nullable=True)
-    enum_desc._axiom_name = "enum"  # 使用 EnumAxiom
-    enum_desc.is_user_defined = False  # 内置类
-    metadata_registry.register(enum_desc)
-    
     # 在 runtime registry 中也创建 Enum 类（继承 Object）
-    from core.runtime.objects.kernel import IbClass
+    # 注意：Enum 的元数据描述符已在 factory.py 中通过 ENUM_DESCRIPTOR 正确注册
+    from core.runtime.objects.kernel import IbClass, IbNativeFunction
     object_class = ib_classes.get("Object")
     enum_class = IbClass(name="Enum", parent=object_class, registry=registry)
-    registry.register_class("Enum", enum_class, registry._kernel_token, enum_desc)
+    
+    # [Enum Hook] 为 Enum 类注册 __init__ 方法
+    def enum_init_impl(receiver, *init_args):
+        """Enum.__init__ 实现：设置 _value 字段"""
+        if len(init_args) > 0:
+            receiver.fields["_value"] = init_args[0]
+        return registry.get_none()
+    
+    init_method = IbNativeFunction(
+        enum_init_impl,
+        unbox_args=False,
+        is_method=True,
+        ib_class=enum_class,
+        name="__init__"
+    )
+    enum_class.register_method("__init__", init_method)
+    
+    # [Enum Hook] 为 Enum 类注册 __eq__ 方法
+    def enum_eq_impl(receiver, *eq_args):
+        """Enum.__eq__ 实现：比较 _value 字段"""
+        if len(eq_args) < 1:
+            return registry.box(False)
+        other = eq_args[0]
+        
+        # 获取 receiver 的 _value
+        self_value = receiver.fields.get("_value") if hasattr(receiver, 'fields') else None
+        self_native = self_value.to_native() if self_value and hasattr(self_value, 'to_native') else self_value
+        
+        # 获取 other 的值（可能是另一个 Mood 实例或枚举字面量）
+        if hasattr(other, 'fields') and "_value" in other.fields:
+            other_value = other.fields.get("_value")
+            other_native = other_value.to_native() if hasattr(other_value, 'to_native') else other_value
+        elif hasattr(other, 'to_native'):
+            other_native = other.to_native()
+        else:
+            return registry.box(False)
+        
+        return registry.box(self_native == other_native)
+    
+    eq_method = IbNativeFunction(
+        enum_eq_impl,
+        unbox_args=False,
+        is_method=True,
+        ib_class=enum_class,
+        name="__eq__"
+    )
+    enum_class.register_method("__eq__", eq_method)
+    
+    registry.register_class("Enum", enum_class, registry._kernel_token, metadata_registry.resolve("Enum"))
     
     # 4. 注册内置全局函数元数据 (供编译器发现)
     registry.register_function("print", FunctionMetadata(

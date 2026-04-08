@@ -152,6 +152,21 @@ class ExpressionComponent(BaseComponent):
                     if self.stream.match(TokenType.RPAREN):
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
+                        
+                        # [IbBehaviorInstance Hook] 检测 (Type) @~...~ 语法糖
+                        # 当强制类型转换应用于行为描述时，创建 IbBehaviorInstance
+                        if isinstance(value, ast.IbBehaviorExpr):
+                            # 从 type_node 提取目标类型名称
+                            target_type_name = self._extract_type_name(type_node)
+                            return self._loc(
+                                ast.IbBehaviorInstance(
+                                    segments=value.segments,
+                                    target_type_name=target_type_name,
+                                    is_deferred=False
+                                ),
+                                type_node
+                            )
+                        
                         return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
                 except ParseControlFlowError:
 
@@ -165,6 +180,16 @@ class ExpressionComponent(BaseComponent):
         expr = self.parse_expression()
         self.stream.consume(TokenType.RPAREN, "Expect ')' after expression.")
         return expr
+    
+    def _extract_type_name(self, type_node: ast.IbASTNode) -> str:
+        """从类型节点中提取类型名称"""
+        if isinstance(type_node, ast.IbName):
+            return type_node.id
+        if isinstance(type_node, ast.IbAttribute):
+            # 处理 Type.attr 形式
+            value_name = self._extract_type_name(type_node.value)
+            return f"{value_name}.{type_node.attr}" if value_name else type_node.attr
+        return ""
     
     def list_display(self) -> ast.IbExpr:
         start_token = self.stream.previous()
