@@ -1,0 +1,51 @@
+# Switch-Case 完整测试
+
+print("=== Switch-Case 测试 ===")
+
+# 测试 1: 整数 switch
+print("--- 测试 1: 整数 switch ---")
+int x = 2
+switch x:
+    case 1:
+        print("x = 1")
+    case 2:
+        print("x = 2")
+    case 3:
+        print("x = 3")
+    default:
+        print("x 是其他值")
+
+# 测试 2: 字符串 switch
+print("--- 测试 2: 字符串 switch ---")
+str s = "hello"
+switch s:
+    case "world":
+        print("s = world")
+    case "hello":
+        print("s = hello")
+    default:
+        print("s 是其他值")
+
+# 测试 3: 表达式 switch
+print("--- 测试 3: default 测试 ---")
+int y = 99
+switch y:
+    case 1:
+        print("y = 1")
+    default:
+        print("y 不等于 1")
+
+# 测试 4: 枚举值 switch (使用整数值模拟)
+print("--- 测试 4: 枚举值 switch ---")
+int color = 2  # 2 代表 BLUE
+switch color:
+    case 0:
+        print("颜色是红色")
+    case 1:
+        print("颜色是绿色")
+    case 2:
+        print("颜色是蓝色")
+    default:
+        print("颜色是其他")
+
+print("=== 测试结束 ===")

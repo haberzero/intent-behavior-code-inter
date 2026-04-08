@@ -297,6 +297,38 @@ class StmtHandler(BaseHandler):
             
         return self.registry.get_none()
 
+    def visit_IbSwitch(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """Switch-Case 语句"""
+        test_value = self.visit(node_data.get("test"))
+
+        last_result = self.runtime_context.get_last_llm_result()
+        if last_result and last_result.is_uncertain:
+            return self.registry.get_none()
+
+        test_native = test_value.to_native() if hasattr(test_value, 'to_native') else test_value
+        case_uids = node_data.get("cases", [])
+        matched = False
+
+        for case_uid in case_uids:
+            case_data = self.execution_context.get_node_data(case_uid)
+            pattern = case_data.get("pattern")
+
+            if pattern is None:
+                matched = True
+            else:
+                pattern_value = self.visit(pattern)
+                pattern_native = pattern_value.to_native() if hasattr(pattern_value, 'to_native') else pattern_value
+
+                if test_native == pattern_native:
+                    matched = True
+
+            if matched:
+                for stmt_uid in case_data.get("body", []):
+                    self.visit(stmt_uid)
+                break
+
+        return self.registry.get_none()
+
     def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """条件分支语句"""
         condition = self.visit(node_data.get("test"))

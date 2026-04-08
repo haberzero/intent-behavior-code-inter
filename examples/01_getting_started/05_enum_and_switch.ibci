@@ -1,11 +1,10 @@
-# Enum 类型与 LLM 交互示例
+# Enum 类型与 switch-case 演示
 
 import ai
 
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-print("=== Enum 类型演示 ===")
-print("--- 定义枚举类 ---")
+print("=== Enum + Switch-Case 演示 ===")
 
 class Color(Enum):
     RED = 0
@@ -14,18 +13,19 @@ class Color(Enum):
 
 print("Color 枚举已定义: RED, GREEN, BLUE")
 
-print("--- 测试 1: 基本定义 ---")
-print("定义一个继承 Enum 的类，LLM 调用时会自动约束输出格式")
-
-print("--- 测试 2: LLM 调用 ---")
-print("使用 TESTONLY 模式测试...")
+print("--- 测试 Switch-Case ---")
 Color c = (Color) @~ MOCK:TRUE 天空是什么颜色？ ~
-print("结果: " + (str)(any)c)
+print("c = " + (str)(any)c)
 
-print("--- 说明 ---")
-print("1. Enum 基类提供了 __llmoutput_hint__ 协议")
-print("2. __llmoutput_hint__ 会根据枚举成员自动生成约束")
-print("3. LLM 只能输出预定义的枚举值")
-print("4. __from_prompt__ 会将 LLM 输出解析为枚举值")
+print("--- 执行 switch ---")
+switch c:
+    case Color.RED:
+        print("天空是红色的！")
+    case Color.GREEN:
+        print("天空是绿色的！")
+    case Color.BLUE:
+        print("天空是蓝色的！")
+    default:
+        print("天空是其他颜色")
 
-print("=== Enum 类型演示结束 ===")
+print("=== 演示结束 ===")

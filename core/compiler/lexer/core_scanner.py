@@ -30,6 +30,7 @@ class CoreTokenScanner:
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
             'callable': TokenType.CALLABLE,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
+            'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
             'auto': TokenType.AUTO, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,

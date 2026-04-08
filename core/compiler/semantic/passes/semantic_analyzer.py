@@ -723,6 +723,25 @@ class SemanticAnalyzer:
 
         return self._void_desc
 
+    def visit_IbSwitch(self, node: ast.IbSwitch):
+        """访问 switch-case 语句"""
+        self.visit(node.test)
+
+        for case in node.cases:
+            self.visit(case)
+
+        return self._void_desc
+
+    def visit_IbCase(self, node: ast.IbCase):
+        """访问 switch case"""
+        if node.pattern:
+            self.visit(node.pattern)
+
+        for stmt in node.body:
+            self.visit(stmt)
+
+        return self._void_desc
+
     def visit_IbWhile(self, node: ast.IbWhile):
         test_type = self.visit(node.test)
 

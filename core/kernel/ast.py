@@ -209,6 +209,18 @@ class IbIf(IbStmt):
     orelse: List[IbStmt] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
+class IbSwitch(IbStmt):
+    """Switch-Case 语句"""
+    test: IbExpr  # 要匹配的表达式
+    cases: List['IbCase']  # case 列表
+
+@dataclass(kw_only=True, eq=False)
+class IbCase(IbASTNode):
+    """Switch Case"""
+    pattern: Optional[IbExpr]  # 匹配的值，None 表示 default
+    body: List[IbStmt]  # case 匹配的语句体
+
+@dataclass(kw_only=True, eq=False)
 class IbTry(IbStmt):
     body: List[IbStmt]
     handlers: List['IbExceptHandler']
