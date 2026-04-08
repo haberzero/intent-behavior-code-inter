@@ -166,6 +166,13 @@ class LLMExecutorImpl:
                 retry_hint=f"LLM 调用失败: {error_msg}"
             )
 
+        # 处理 MOCK:REPAIR 特殊标记
+        if raw_res == "__MOCK_REPAIR__":
+            return LLMResult.uncertain_result(
+                raw_response="__MOCK_REPAIR__",
+                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+            )
+
         # 记录最后一次调用信息
         self.last_call_info = {
             "sys_prompt": sys_prompt,
@@ -263,18 +270,20 @@ class LLMExecutorImpl:
                         hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
                         if hint_cap:
                             return hint_cap.__llmoutput_hint__(descriptor)
-        
+
         node_to_type = execution_context.get_side_table("node_to_type", node_uid)
         if node_to_type:
-            if hasattr(node_to_type, 'name'):
-                meta_reg = self.registry.get_metadata_registry()
-                if meta_reg:
-                    descriptor = meta_reg.resolve(node_to_type.name)
-                    if descriptor and descriptor._axiom:
-                        hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
-                        if hint_cap:
-                            return hint_cap.__llmoutput_hint__(descriptor)
-        
+            type_name = getattr(node_to_type, 'name', None)
+            if type_name:
+                ib_class = self.registry.get_class(type_name)
+                if ib_class:
+                    type_descriptor = getattr(ib_class, 'descriptor', None)
+                    if type_descriptor:
+                        if hasattr(type_descriptor, '_axiom') and type_descriptor._axiom:
+                            hint_cap = type_descriptor._axiom.get_llmoutput_hint_capability()
+                            if hint_cap:
+                                return hint_cap.__llmoutput_hint__(type_descriptor)
+
         return None
 
     def _get_expected_type_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
@@ -416,6 +425,13 @@ class LLMExecutorImpl:
             return LLMResult.uncertain_result(
                 raw_response="",
                 retry_hint=f"LLM 调用失败: {error_msg}"
+            )
+
+        # 6.1 处理 MOCK:REPAIR 特殊标记
+        if response == "__MOCK_REPAIR__":
+            return LLMResult.uncertain_result(
+                raw_response="__MOCK_REPAIR__",
+                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
         # 记录最后一次调用信息
