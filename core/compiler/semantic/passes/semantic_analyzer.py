@@ -258,7 +258,7 @@ class SemanticAnalyzer:
         """
         检查表达式是否包含行为描述 @~...~ 或 LLM 函数调用。
         """
-        if isinstance(expr, ast.IbBehaviorExpr):
+        if isinstance(expr, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
             return True
         elif isinstance(expr, ast.IbCastExpr):
             return self._expr_contains_behavior(expr.value)
@@ -741,6 +741,29 @@ class SemanticAnalyzer:
             self.visit(stmt)
 
         return self._void_desc
+
+    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> TypeDescriptor:
+        """
+        访问隐式实例化的行为描述。
+        
+        (Type) @~...~ 语法创建此节点，指示解释器：
+        1. 执行 LLM 调用获取结果
+        2. 根据 target_type_name 解析结果
+        3. 返回目标类型的实例
+        """
+        # 解析 segments 中的变量引用
+        for seg in node.segments:
+            if isinstance(seg, ast.IbASTNode):
+                self.visit(seg)
+
+        # 绑定目标类型到 side_table 并返回目标类型
+        if node.target_type_name:
+            target_desc = self._resolve_type_by_name(node.target_type_name)
+            if target_desc:
+                self.side_table.bind_type(node, target_desc)
+                return target_desc
+
+        return self._any_desc
 
     def visit_IbWhile(self, node: ast.IbWhile):
         test_type = self.visit(node.test)
