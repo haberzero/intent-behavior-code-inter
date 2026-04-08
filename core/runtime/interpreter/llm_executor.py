@@ -262,7 +262,7 @@ class LLMExecutorImpl:
                     if descriptor and descriptor._axiom:
                         hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
                         if hint_cap:
-                            return hint_cap.__llmoutput_hint__()
+                            return hint_cap.__llmoutput_hint__(descriptor)
         
         node_to_type = execution_context.get_side_table("node_to_type", node_uid)
         if node_to_type:
@@ -273,7 +273,7 @@ class LLMExecutorImpl:
                     if descriptor and descriptor._axiom:
                         hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
                         if hint_cap:
-                            return hint_cap.__llmoutput_hint__()
+                            return hint_cap.__llmoutput_hint__(descriptor)
         
         return None
 
@@ -292,7 +292,7 @@ class LLMExecutorImpl:
         
         return None
 
-    def _parse_result(self, raw_res: str, type_name: str, node_uid: str) -> LLMResult:
+    def _parse_result(self, raw_res: str, type_name: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> LLMResult:
         # 兼容 UID 格式的 type_name (来自序列化后的 AST 节点字段)
         # 转换 'type_root.str' -> 'str', 'type_pkg.cls' -> 'pkg.cls'
         if type_name and type_name.startswith("type_"):
@@ -301,12 +301,13 @@ class LLMExecutorImpl:
                 type_name = type_name[5:]
 
         meta_reg = self.registry.get_metadata_registry()
+        descriptor = None
         if meta_reg:
             descriptor = meta_reg.resolve(type_name)
             if descriptor and descriptor._axiom:
                 from_prompt_cap = descriptor._axiom.get_from_prompt_capability()
                 if from_prompt_cap:
-                    success, result = from_prompt_cap.from_prompt(raw_res)
+                    success, result = from_prompt_cap.from_prompt(raw_res, descriptor)
                     if success:
                         return LLMResult.success_result(
                             value=self.registry.box(result),

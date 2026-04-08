@@ -1,0 +1,20 @@
+# 测试 Enum 基本功能
+
+import ai
+
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== 测试 Enum 基本功能 ===")
+
+# 注意：目前 IBCI 不支持 class 继承 Enum 语法
+# 这里用内置类型测试 __llmoutput_hint__ 的 descriptor 传递机制
+
+print("=== 测试 Bool 类型 __llmoutput_hint__ ===")
+int bool_result = (int) @~ MOCK:TRUE 今天天气好吗？ ~
+print("bool_result = " + (str)bool_result)
+
+print("\n=== 测试 Int 类型 __llmoutput_hint__ ===")
+int int_result = @~ MOCK:FAIL 请返回数字42 ~
+print("int_result = " + (str)int_result)
+
+print("\n=== 测试完成 ===")

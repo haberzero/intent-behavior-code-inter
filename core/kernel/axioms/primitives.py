@@ -8,6 +8,7 @@ from core.kernel.types.descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
     BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR
 )
+from core.kernel.axioms.enum import EnumAxiom
 
 if TYPE_CHECKING:
     from core.kernel.types.descriptors import TypeDescriptor
@@ -93,7 +94,7 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
             return int(match.group())
         raise ValueError(f"No integer found in response: {raw_value}")
 
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """从 LLM 返回中解析整数"""
         clean = raw_response.strip()
         match = re.search(r'-?\d+', clean)
@@ -101,7 +102,7 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
             return (True, int(match.group()))
         return (False, f"无法从 '{raw_response}' 解析整数。请只返回一个整数，如: 42 或 -15")
 
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请只返回一个整数，如: 42 或 -15，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -159,7 +160,7 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
             return float(match.group())
         raise ValueError(f"No float found in response: {raw_value}")
 
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """从 LLM 返回中解析浮点数"""
         clean = raw_response.strip()
         match = re.search(r'-?\d+(?:\.\d+)?', clean)
@@ -167,7 +168,7 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
             return (True, float(match.group()))
         return (False, f"无法从 '{raw_response}' 解析浮点数。请只返回一个数字，如: 3.14 或 -2.5")
 
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请只返回一个数字，如: 3.14 或 -2.5，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -229,7 +230,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
 
         raise ValueError(f"No boolean found in response: {raw_value}")
 
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """从 LLM 返回中解析布尔值"""
         val = raw_response.strip().lower()
 
@@ -248,7 +249,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
 
         return (False, f"无法从 '{raw_response}' 解析布尔值。请明确回复: 1 表示是/true/yes，0 表示否/false/no")
 
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请只回复 1 表示是，0 表示否，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -322,11 +323,11 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
             return code_block_match.group(1).strip()
         return clean_res
 
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """从 LLM 返回中解析字符串"""
         return (True, self.parse_value(raw_response))
 
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请直接返回文本内容，不要使用引号或代码块包裹"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -380,14 +381,14 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         except ValueError as e:
             raise ValueError(f"No valid JSON list found in response: {raw_value}. Error: {str(e)}")
 
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """从 LLM 返回中解析列表"""
         try:
             return (True, FuzzyJsonParser.parse(raw_response, expected_type="list"))
         except ValueError:
             return (False, f"无法从 '{raw_response}' 解析 JSON 数组。请返回一个 JSON 数组，如: [1, 2, 3]")
 
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请返回一个 JSON 数组，如: [1, 2, 3]，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -440,14 +441,14 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         except ValueError as e:
             raise ValueError(f"No valid JSON dict found in response: {raw_value}. Error: {str(e)}")
 
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """从 LLM 返回中解析字典"""
         try:
             return (True, FuzzyJsonParser.parse(raw_response, expected_type="dict"))
         except ValueError:
             return (False, f"无法从 '{raw_response}' 解析 JSON 对象。请返回一个 JSON 对象，如: {{'key': 'value'}}")
 
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请返回一个 JSON 对象，如: {'key': 'value'}，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -563,6 +564,7 @@ def register_core_axioms(registry: 'AxiomRegistry'):
     registry.register(ExceptionAxiom())
     registry.register(BoundMethodAxiom())
     registry.register(NoneAxiom())
+    registry.register(EnumAxiom())
     
     registry.register(DynamicAxiom("any"))
     registry.register(DynamicAxiom("auto"))

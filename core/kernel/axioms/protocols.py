@@ -32,9 +32,13 @@ class ParserCapability(Protocol):
 
 class FromPromptCapability(Protocol):
     """从提示词解析能力：描述一个类型如何从 LLM 返回的原始文本中解析出值"""
-    def from_prompt(self, raw_response: str) -> Tuple[bool, Any]:
+    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
         """
         解析 LLM 返回的原始文本。
+
+        Args:
+            raw_response: LLM 返回的原始文本
+            descriptor: 可选的类型描述符上下文，用于动态解析
 
         Returns:
             (True, parsed_value) - 解析成功
@@ -44,10 +48,13 @@ class FromPromptCapability(Protocol):
 
 class IlmoutputHintCapability(Protocol):
     """LLM 输出提示能力：描述期望的 LLM 输出格式"""
-    def __llmoutput_hint__(self) -> str:
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         """
         返回期望的 LLM 输出格式描述。
         用于提示词注入，告诉 LLM 应该输出什么格式。
+
+        Args:
+            descriptor: 可选的类型描述符上下文，用于动态生成提示
         """
         ...
 
