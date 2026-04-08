@@ -35,13 +35,13 @@ print("识别到的情感: " + (str)(any)mood)
 print("\n--- Switch 处理不同情感 ---")
 switch mood:
     case Mood.HAPPY:
-        print("太棒了！继续保持好心情！")
+        print("识别到happy")
     case Mood.SAD:
-        print("别难过，一切都会好起来的。")
+        print("识别到sad")
     case Mood.ANGRY:
-        print("深呼吸，冷静一下。")
+        print("识别到angry")
     case Mood.NEUTRAL:
-        print("保持平静，很好。")
+        print("识别到neutral")
     default:
         print("无法识别的情感")
 
