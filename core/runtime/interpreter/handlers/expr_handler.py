@@ -225,3 +225,76 @@ class ExprHandler(BaseHandler):
             return value
             
         return value.receive('cast_to', [target_class])
+
+    def visit_IbBehaviorInstance(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        隐式实例化的行为描述运行时实现。
+        
+        (Type) @~...~ 语法创建此节点，执行流程：
+        1. 构建 IbIntent 并执行 LLM 调用
+        2. 获取 LLM 返回的原始字符串
+        3. 使用目标类型的 from_prompt 解析
+        4. 调用目标类的构造函数创建实例
+        """
+        segments = node_data.get("segments", [])
+        target_type_name = node_data.get("target_type_name", "")
+
+        # 1. 构建 IbIntent
+        # 从 segments 构建 intent 内容
+        intent_content_parts = []
+        for seg in segments:
+            if isinstance(seg, str):
+                intent_content_parts.append(seg)
+            elif isinstance(seg, dict) and seg.get("_type") == "ext_ref":
+                intent_content_parts.append(self.execution_context.get_asset(seg.get("uid", "")))
+            elif hasattr(seg, "to_native"):
+                intent_content_parts.append(str(seg.to_native()))
+            else:
+                intent_content_parts.append(str(seg))
+        
+        intent_content = "".join(intent_content_parts)
+        
+        # 创建 IbIntent 实例
+        intent_class = self.registry.get_class("Intent")
+        if intent_class:
+            from core.runtime.objects.intent import IbIntent
+            call_intent = IbIntent(
+                ib_class=intent_class,
+                content=intent_content,
+                mode=IntentMode.APPEND
+            )
+        else:
+            call_intent = None
+
+        # 2. 获取目标类型描述符
+        target_descriptor = self.get_side_table("node_to_type", node_uid)
+        if not target_descriptor and target_type_name:
+            meta_reg = self.registry.get_metadata_registry()
+            if meta_reg:
+                target_descriptor = meta_reg.resolve(target_type_name)
+
+        # 3. 执行 LLM 调用
+        result = self.service_context.llm_executor.execute_behavior_expression(
+            node_uid,
+            self.execution_context,
+            call_intent=call_intent
+        )
+
+        self.runtime_context.set_last_llm_result(result)
+
+        # 4. 检查 LLM 结果
+        if not result or not result.value:
+            return self.registry.get_none()
+
+        # 注意：llm_executor._parse_result 已经调用了 from_prompt，
+        # 所以 result.value 已经是解析后的值，不需要再次调用 from_prompt
+
+        # 5. 调用目标类的构造函数创建实例
+        if target_type_name:
+            target_class = self.registry.get_class(target_type_name)
+            if target_class:
+                instance = target_class.receive('__call__', [result.value])
+                return instance
+
+        # 兜底：返回 result.value（已经是解析后的值）
+        return result.value

@@ -784,3 +784,7 @@ BOUND_METHOD_DESCRIPTOR = BoundMethodMetadata(is_user_defined=False) # name will
 LIST_DESCRIPTOR = ListMetadata(name="list", is_nullable=True, is_user_defined=False)
 DICT_DESCRIPTOR = DictMetadata(name="dict", is_nullable=True, is_user_defined=False)
 MODULE_DESCRIPTOR = ModuleMetadata(name="module", is_nullable=False, is_user_defined=False)
+
+# [Enum Hook] Enum 类型占位描述符
+ENUM_DESCRIPTOR = TypeDescriptor(name="Enum", is_nullable=True, is_user_defined=False)
+ENUM_DESCRIPTOR._axiom_name = "enum"

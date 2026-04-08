@@ -71,6 +71,38 @@ class IbObject:
             # 包装原始消息名作为第一个参数
             return method_missing.call(self, [self.ib_class.registry.box(message)] + args)
 
+        # [cast_to Hook] 处理类型转换消息
+        if message == 'cast_to':
+            if not args:
+                raise InterpreterError("cast_to requires exactly one argument: target class")
+
+            target_class = args[0]
+            target_name = getattr(target_class, 'name', None)
+            if not target_name:
+                raise InterpreterError("cast_to argument must be an IbClass")
+
+            # 同一类型转换：直接返回自身
+            if self.ib_class.name == target_name:
+                return self
+
+            # 如果对象自身有 cast_to 方法（特殊类型包装器），优先调用
+            if hasattr(self, 'cast_to'):
+                return self.cast_to(target_class)
+
+            # 尝试使用 __to_prompt__ 进行字符串转换
+            if target_name in ("str", "any"):
+                try:
+                    prompt_result = self.__to_prompt__()
+                    return self.ib_class.registry.box(prompt_result)
+                except Exception:
+                    pass
+
+            # 无法执行类型转换，抛出明确错误
+            raise InterpreterError(
+                f"TypeError: Cannot cast '{self.ib_class.name}' to '{target_name}'. "
+                f"Type '{self.ib_class.name}' does not implement type conversion."
+            )
+
         raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
 
     def __to_prompt__(self) -> str:
@@ -363,7 +395,8 @@ class IbClass(IbObject):
         """
         类对象的特殊消息处理：
         1. __call__ -> 实例化 (Instantiate) 或 类级别的 __call__
-        2. 其他 -> 正常消息处理 (查找静态方法等)
+        2. __getattr__ -> 访问类字段 (default_fields)
+        3. 其他 -> 正常消息处理 (查找静态方法等)
         """
         if message == "__call__":
             # 优先从自身的 methods 字典中查找 __call__
@@ -378,6 +411,22 @@ class IbClass(IbObject):
             context = self.registry.get_execution_context()
             
             return self.instantiate(args, context=context)
+        
+        if message == "__getattr__" and len(args) > 0:
+            attr_name = args[0].to_native()
+            # 优先查找类字段 (default_fields)
+            if attr_name in self.default_fields:
+                val_info = self.default_fields[attr_name]
+                if val_info is not None:
+                    if hasattr(val_info, 'static_val') and val_info.static_val is not None:
+                        return val_info.static_val
+                    return self.registry.box(val_info)
+            # 降级查找类方法
+            method = self.lookup_method(attr_name)
+            if method:
+                return IbBoundMethod(self, method)
+            raise AttributeError(f"Class '{self.name}' has no attribute '{attr_name}'")
+        
         return super().receive(message, args)
 
     def __repr__(self):
