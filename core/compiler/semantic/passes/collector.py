@@ -98,6 +98,12 @@ class SymbolCollector:
         # 1. 创建类元数据并注册
         cls_meta = self.analyzer.registry.factory.create_class(name=node.name, parent=node.parent)
         cls_meta.is_user_defined = True
+        
+        # [Enum Hook] 如果类继承 Enum，则将 axiom_name 设置为 "enum"
+        # 这样 hydrator 会注入 EnumAxiom，实现动态 __prompt__ 协议
+        if node.parent == "Enum":
+            cls_meta._axiom_name = "enum"
+        
         self.analyzer.registry.register(cls_meta)
         
         # 2. 注册类符号

@@ -134,6 +134,18 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 特殊：module 类 (Bootstrapper 已经创建过一次)
     module_class = registry.create_subclass("module", metadata_registry.resolve("module"))
     
+    # [Enum Hook] 注册 Enum 类，使其可被继承
+    enum_desc = metadata_registry.factory.create_class(name="Enum", is_nullable=True)
+    enum_desc._axiom_name = "enum"  # 使用 EnumAxiom
+    enum_desc.is_user_defined = False  # 内置类
+    metadata_registry.register(enum_desc)
+    
+    # 在 runtime registry 中也创建 Enum 类（继承 Object）
+    from core.runtime.objects.kernel import IbClass
+    object_class = ib_classes.get("Object")
+    enum_class = IbClass(name="Enum", parent=object_class, registry=registry)
+    registry.register_class("Enum", enum_class, registry._kernel_token, enum_desc)
+    
     # 4. 注册内置全局函数元数据 (供编译器发现)
     registry.register_function("print", FunctionMetadata(
         name="print",

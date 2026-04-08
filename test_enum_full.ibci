@@ -1,0 +1,23 @@
+# 测试 Enum 继承类 + LLM 调用
+
+import ai
+
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== 测试 Enum + LLM 调用 ===")
+
+# 定义一个枚举类（继承内置 Enum）
+class Color(Enum):
+    RED = 0
+    GREEN = 1
+    BLUE = 2
+
+print("Color 枚举已定义")
+
+# 测试：模拟 LLM 调用
+# 注意：TESTONLY 模式使用 MOCK
+print("\n=== 测试 LLM 调用返回枚举值 ===")
+Color c = (Color) @~ MOCK:TRUE 天空是什么颜色？ ~
+print("结果: " + (str)(any)c)
+
+print("\n=== 测试完成 ===")

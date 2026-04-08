@@ -47,7 +47,7 @@ class EnumAxiom(FromPromptCapability, IlmoutputHintCapability):
         return False
 
     def is_class(self) -> bool:
-        return False
+        return True  # Enum 是一个类类型，可以被继承
 
     def is_module(self) -> bool:
         return False

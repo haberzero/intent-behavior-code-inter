@@ -655,7 +655,11 @@ class SemanticAnalyzer:
                         call_cap = target_desc.get_call_trait()
                         is_dynamic = target_desc.is_dynamic()
 
-                        is_explicit_callable = (call_cap is not None) or is_dynamic
+                        # [Enum Hook] 检查是否是 Enum 类型
+                        # Enum 类型虽然实现了 CallCapability（用于实例化），但我们不希望它被视为延迟执行的可调用类型
+                        is_enum_type = target_desc.get_base_axiom_name() == "enum"
+
+                        is_explicit_callable = (call_cap is not None and not is_enum_type) or is_dynamic
 
                     # 检查是否是行为描述表达式（裸 @~...~ 或 (int)@~...~）
                     inner_behavior_expr = None

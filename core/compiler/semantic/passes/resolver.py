@@ -68,7 +68,17 @@ class TypeResolver:
             if parent_sym and parent_sym.descriptor and parent_sym.descriptor.is_class():
                 parent_desc = parent_sym.descriptor
             else:
-                self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
+                # [Enum Hook] 尝试从 meta_registry 查找父类（如 Enum）
+                # self.analyzer.registry 就是 MetadataRegistry
+                meta_reg = self.analyzer.registry
+                
+                if meta_reg:
+                    parent_desc = meta_reg.resolve(node.parent)
+                    if parent_desc and not parent_desc.is_class():
+                        parent_desc = None
+                
+                if not parent_desc:
+                    self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
         # 2. 创建 ClassMetadata 并绑定到符号
         # 使用工厂创建以确保驻留

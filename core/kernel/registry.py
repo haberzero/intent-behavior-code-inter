@@ -279,6 +279,12 @@ class KernelRegistry:
             raise ValueError(f"Registry: Cannot create subclass '{name}' without a UTS descriptor.")
         if descriptor.name != name:
             raise ValueError(f"Registry: Subclass descriptor name '{descriptor.name}' does not match '{name}'.")
+        
+        # [Enum Hook] 检查父类是否已在 _classes 中注册
+        # 如果父类已存在（如 Enum），则直接调用 Bootstrapper.create_subclass
+        if self.get_class(parent_name):
+            if self._create_subclass_func:
+                return self._create_subclass_func(self, name, descriptor, parent_name)
             
         if self._create_subclass_func:
             return self._create_subclass_func(self, name, descriptor, parent_name)
