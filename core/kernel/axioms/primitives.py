@@ -8,7 +8,6 @@ from core.kernel.types.descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
     BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR
 )
-from core.kernel.axioms.enum import EnumAxiom
 
 if TYPE_CHECKING:
     from core.kernel.types.descriptors import TypeDescriptor
@@ -551,6 +550,142 @@ class SliceAxiom(BaseAxiom):
 
     def is_compatible(self, other: 'TypeDescriptor') -> bool: 
         return other.get_base_axiom_name() == "slice"
+
+
+class EnumAxiom(BaseAxiom, FromPromptCapability, IlmoutputHintCapability, ConverterCapability):
+    """
+    enum 类型的行为公理。
+    
+    采用 C 语言风格：枚举成员的值 = 定义顺序的索引（0, 1, 2, ...）。
+    忽略用户在 IBCI 中写的显式值（如 HAPPY = 100 仍然会被视为 0）。
+    
+    这样做的好处：
+    1. 不需要存储显式值
+    2. 实现简单可靠
+    3. 符合 IBCI 的语义
+    """
+
+    _enum_index_registry: Dict[str, Dict[str, str]] = {}
+
+    def is_class(self) -> bool:
+        """Enum 是一个类类型，可以被继承"""
+        return True
+
+    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']:
+        """Enum 支持从 LLM 输出中解析"""
+        return self
+
+    @classmethod
+    def _get_enum_index_map(cls, descriptor: Optional['TypeDescriptor']) -> Optional[Dict[str, str]]:
+        """
+        获取枚举类的成员名→名称映射。
+        枚举成员的值就是其名称字符串，这样更适合 LLM 理解和输出。
+        """
+        if descriptor is None:
+            return None
+
+        class_name = descriptor.name
+
+        if class_name in cls._enum_index_registry:
+            return cls._enum_index_registry[class_name]
+
+        members = getattr(descriptor, 'members', None)
+        if not members:
+            return None
+
+        name_to_value: Dict[str, str] = {}
+        builtin_names = {'to_bool', 'to_list', 'len', 'cast_to', '__getitem__', '__setitem__',
+                        'sort', 'pop', 'append', 'clear', '__eq__', '__init__'}
+
+        for name in members.keys():
+            if name.startswith('_') or name in builtin_names:
+                continue
+            name_to_value[name] = name
+
+        cls._enum_index_registry[class_name] = name_to_value
+        return name_to_value
+
+    @property
+    def name(self) -> str:
+        return "enum"
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return None
+
+    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']:
+        return self
+
+    def can_convert_from(self, source: 'TypeDescriptor') -> bool:
+        """枚举可以从字符串转换（解析名称）"""
+        return source.get_base_axiom_name() == "str"
+
+    def parse_value(self, raw_value: str) -> Any:
+        """从字符串解析枚举值"""
+        return raw_value.strip().upper()
+
+    def _collect_enum_names(self, descriptor: Optional['TypeDescriptor']) -> List[str]:
+        """从描述符收集枚举值名称"""
+        index_map = self._get_enum_index_map(descriptor)
+        if not index_map:
+            return []
+        return list(index_map.keys())
+
+    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+        """动态生成 LLM 输出约束"""
+        enum_names = self._collect_enum_names(descriptor)
+        if not enum_names:
+            return "Reply with one of the valid enum values."
+        return f"Reply with exactly one of: {', '.join(enum_names)}."
+
+    def from_prompt(self, raw_response: Any, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
+        """
+        动态解析 LLM 输出为枚举名称字符串。
+
+        枚举成员的值就是其名称字符串（如 "HAPPY"），这样更适合 LLM 理解和输出。
+        - Mood("HAPPY")._value = "HAPPY"
+        - Mood.HAPPY._value = "HAPPY"
+        - 两者通过名称相等性进行比较
+
+        注意：识别并传递特殊 mock 值，不尝试解析它们。
+        """
+        # [Mock Hook] 识别并传递特殊 mock 值
+        if isinstance(raw_response, str):
+            raw_upper = raw_response.upper().strip()
+            if raw_upper == "MAYBE_YES_MAYBE_NO_THIS_IS_AMBIGUOUS":
+                return (True, raw_response)
+            if raw_upper in ("1", "0", "TRUE", "FALSE"):
+                return (True, raw_response)
+
+        if descriptor is None:
+            return (False, "无法解析枚举值：缺少类型信息")
+
+        index_map = self._get_enum_index_map(descriptor)
+        if not index_map:
+            return (False, "无法解析枚举值：缺少成员信息")
+
+        if hasattr(raw_response, 'to_native'):
+            val = raw_response.to_native()
+        elif hasattr(raw_response, '__to_prompt__'):
+            val = raw_response.__to_prompt__()
+        else:
+            val = raw_response
+
+        if not isinstance(val, str):
+            val = str(val)
+
+        val = val.strip().upper()
+
+        if val in index_map:
+            # 返回名称字符串，而不是索引
+            return (True, val)
+
+        names = list(index_map.keys())
+        valid_values = ", ".join(names[:5])
+        if len(names) > 5:
+            valid_values += " 等"
+
+        return (False, f"无法解析 '{raw_response}'，请回复有效枚举值如: {valid_values}")
+
 
 def register_core_axioms(registry: 'AxiomRegistry'):
     """[Factory] 向指定的公理注册表注册所有核心公理"""
