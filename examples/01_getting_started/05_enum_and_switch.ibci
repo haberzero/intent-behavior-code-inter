@@ -1,31 +1,38 @@
 # Enum 类型与 switch-case 演示
 
 import ai
-
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+import json
+import file
 
 print("=== Enum + Switch-Case 演示 ===")
 
+dict config = json.parse(file.read("./api_config.json"))
+dict default_model = (dict)config["default_model"]
+ai.set_config(
+    (str)default_model["base_url"],
+    (str)default_model["api_key"],
+    (str)default_model["model"]
+)
+
 class Color(Enum):
-    RED = 0
-    GREEN = 1
-    BLUE = 2
+    str RED = "RED"
+    str GREEN = "GREEN"
+    str BLUE = "BLUE"
 
 print("Color 枚举已定义: RED, GREEN, BLUE")
 
 print("--- 测试 Switch-Case ---")
-Color c = (Color) @~ MOCK:TRUE 天空是什么颜色？ ~
-print("c = " + (str)(any)c)
+Color c = (Color) @~ 天空是什么颜色？ ~
 
 print("--- 执行 switch ---")
 switch c:
     case Color.RED:
-        print("天空是红色的！")
+        print("匹配到红色！")
     case Color.GREEN:
-        print("天空是绿色的！")
+        print("匹配到绿色！")
     case Color.BLUE:
         print("天空是蓝色的！")
     default:
-        print("天空是其他颜色")
+        print("其他颜色")
 
 print("=== 演示结束 ===")

@@ -1,0 +1,48 @@
+# Enum + Switch + LLM 行为描述 演示
+
+import ai
+import json
+import file
+
+print("=== Enum + Switch + LLM 行为描述 演示 ===")
+
+dict config = json.parse(file.read("./api_config.json"))
+dict default_model = (dict)config["default_model"]
+ai.set_config(
+    (str)default_model["base_url"],
+    (str)default_model["api_key"],
+    (str)default_model["model"]
+)
+print("使用模型: " + (str)default_model["model"])
+
+print("\n--- 定义 Mood 枚举 ---")
+class Mood(Enum):
+    str HAPPY = "HAPPY"
+    str SAD = "SAD"
+    str ANGRY = "ANGRY"
+    str NEUTRAL = "NEUTRAL"
+
+print("Mood 枚举已定义: HAPPY, SAD, ANGRY, NEUTRAL")
+
+print("\n--- LLM 行为描述获取情感 ---")
+
+str text = "今天天气真不错，心情很棒！"
+print("分析文本: " + text)
+
+Mood mood = (Mood) @~ 请分析文本 "$text" 的情感类型，只回复情感词 ~
+print("识别到的情感: " + (str)(any)mood)
+
+print("\n--- Switch 处理不同情感 ---")
+switch mood:
+    case Mood.HAPPY:
+        print("太棒了！继续保持好心情！")
+    case Mood.SAD:
+        print("别难过，一切都会好起来的。")
+    case Mood.ANGRY:
+        print("深呼吸，冷静一下。")
+    case Mood.NEUTRAL:
+        print("保持平静，很好。")
+    default:
+        print("无法识别的情感")
+
+print("\n--- 演示结束 ---")
