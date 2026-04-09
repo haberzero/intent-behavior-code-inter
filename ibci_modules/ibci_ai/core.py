@@ -18,19 +18,10 @@ class AIPlugin(ILLMProvider):
             "url": None,
             "key": None,
             "model": None,
-            "retry": 0,
+            "retry": 3,
             "timeout": 30.0,
             "auto_type_constraint": True,
-            "auto_intent_injection": True,
-            "decision_map": {
-                "1": 1, "true": 1, "yes": 1, "ok": 1,
-                "0": 0, "false": 0, "no": 0, "fail": 0
-            }
-        }
-        self._scene_prompts = {
-            "general": "你是一个助人为乐的助手。",
-            "branch": "你是一个逻辑判断专家。请根据用户提供的内容进行判断：成立则返回 1，不成立则返回 0。严禁返回任何其他文字。",
-            "loop": "你是一个循环控制专家。请根据用户提供的内容判断循环是否应继续：继续则返回 1，停止则返回 0。严禁返回任何其他文字。"
+            "auto_intent_injection": True
         }
         self._return_type_prompts = {
             "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
@@ -225,9 +216,6 @@ class AIPlugin(ILLMProvider):
         if "prompt" in config:
             self._scene_prompts[scene] = config["prompt"]
 
-    def get_scene_prompt(self, scene: str) -> str:
-        return self._scene_prompts.get(scene, self._scene_prompts["general"])
-
     def get_retry_prompt(self, node_type: str) -> Optional[str]:
         return self._retry_prompts.get(node_type)
 
@@ -242,12 +230,6 @@ class AIPlugin(ILLMProvider):
 
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info
-
-    def set_decision_map(self, decision_map: Dict[str, str]) -> None:
-        self._config["decision_map"] = decision_map
-
-    def get_decision_map(self) -> Dict[str, str]:
-        return self._config.get("decision_map", {})
 
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
@@ -412,20 +394,47 @@ class AIPlugin(ILLMProvider):
         MOCK:REPAIR - 首次返回模糊值，重试后返回确定值
         MOCK:[...] - 直接返回列表内容
         MOCK:{...} - 直接返回字典内容
+        
+        [二级 Mock 指令]
+        MOCK:INT:<value> - 返回整数，如 MOCK:INT:42
+        MOCK:STR:<value> - 返回字符串，如 MOCK:STR:"hello"
+        MOCK:FLOAT:<value> - 返回浮点数，如 MOCK:FLOAT:3.14
+        MOCK:BOOL:TRUE/FALSE - 返回布尔值，如 MOCK:BOOL:TRUE
+        MOCK:LIST:<json> - 返回列表，如 MOCK:LIST:[1,2,3]
+        MOCK:DICT:<json> - 返回字典，如 MOCK:DICT:{"key":"value"}
         """
         if not user_prompt.startswith("MOCK:"):
             if scene in ("branch", "loop"):
                 return "1"
             return f"[MOCK] {user_prompt}"
 
-        # 提取指令部分
         content_after_mock = user_prompt[5:].strip()
         
         # 1. 检查结构化直接返回 (MOCK:[...] 或 MOCK:{...})
         if content_after_mock.startswith('[') or content_after_mock.startswith('{'):
             return content_after_mock
 
-        # 2. 处理命名指令
+        # 2. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
+        if ':' in content_after_mock:
+            type_parts = content_after_mock.split(':', 2)
+            if len(type_parts) >= 2:
+                mock_type = type_parts[0].upper()
+                mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
+                
+                if mock_type == "INT":
+                    return str(int(mock_value))
+                elif mock_type == "STR":
+                    return mock_value
+                elif mock_type == "FLOAT":
+                    return str(float(mock_value))
+                elif mock_type == "BOOL":
+                    return "1" if mock_value.upper() == "TRUE" else "0"
+                elif mock_type == "LIST":
+                    return f"[{mock_value}]"
+                elif mock_type == "DICT":
+                    return f"{{{mock_value}}}"
+
+        # 3. 处理命名指令
         parts = content_after_mock.split(" ", 1)
         mock_cmd = parts[0].upper() if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
@@ -450,11 +459,17 @@ class AIPlugin(ILLMProvider):
             if self._mock_retry_counts[retry_key] == 0:
                 self._mock_retry_counts[retry_key] = 1
                 self._mock_state[mock_content] = -1
-                return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+                return "__MOCK_REPAIR__"
             else:
                 self._mock_retry_counts[retry_key] = 0
                 self._mock_state[mock_content] = 1
                 return "1"
+
+        # [Enum Hook] 支持自定义返回值
+        # MOCK:HAPPY -> 返回 "HAPPY"
+        # MOCK:HAPPY 请回复 -> 返回 "HAPPY"
+        if not mock_content:
+            return mock_cmd
 
         if scene in ("branch", "loop"):
             return "1"

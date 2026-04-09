@@ -40,15 +40,33 @@ class TypeResolver:
         return res_type
 
     def generic_visit(self, node: ast.IbASTNode):
-        # 仅访问声明类节点和赋值节点（以推导全局变量类型）
+        result_type = None
+
+        # 遍历节点属性，访问子节点
         for attr in vars(node):
             child = getattr(node, attr)
+
+            # 处理列表类型的子节点
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, (ast.IbClassDef, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):
                         self.visit(item)
+                    elif isinstance(item, ast.IbExpr):
+                        item_type = self.visit(item)
+                        if item_type:
+                            result_type = item_type
+
+            # 处理语句类型的子节点
             elif isinstance(child, (ast.IbClassDef, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):
                 self.visit(child)
+
+            # 处理表达式类型的子节点（用于类型推导）
+            elif isinstance(child, ast.IbExpr):
+                item_type = self.visit(child)
+                if item_type:
+                    result_type = item_type
+
+        return result_type
 
     def visit_IbModule(self, node: ast.IbModule):
         for stmt in node.body:
@@ -68,7 +86,17 @@ class TypeResolver:
             if parent_sym and parent_sym.descriptor and parent_sym.descriptor.is_class():
                 parent_desc = parent_sym.descriptor
             else:
-                self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
+                # [Enum Hook] 尝试从 meta_registry 查找父类（如 Enum）
+                # self.analyzer.registry 就是 MetadataRegistry
+                meta_reg = self.analyzer.registry
+                
+                if meta_reg:
+                    parent_desc = meta_reg.resolve(node.parent)
+                    if parent_desc and not parent_desc.is_class():
+                        parent_desc = None
+                
+                if not parent_desc:
+                    self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
         # 2. 创建 ClassMetadata 并绑定到符号
         # 使用工厂创建以确保驻留
@@ -186,7 +214,24 @@ class TypeResolver:
                             descriptor=declared_type,
                             def_node=target
                         )
-                    
+
                     sym = self.symbol_table.resolve(name)
                     if sym and sym.is_variable:
                         sym.descriptor = declared_type
+
+    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance):
+        """
+        解析带类型标注的行为实例表达式 (Type) @~...~ 的返回类型。
+        类型信息用于 __llmoutput_hint__ 注入和类型检查。
+        """
+        target_type_name = getattr(node, 'target_type_name', None)
+        if target_type_name:
+            return self.analyzer._resolve_type(target_type_name)
+        return ANY_DESCRIPTOR
+
+    def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr):
+        """
+        解析不带类型标注的行为描述表达式 @~...~ 的返回类型。
+        默认返回字符串类型。
+        """
+        return STR_DESCRIPTOR

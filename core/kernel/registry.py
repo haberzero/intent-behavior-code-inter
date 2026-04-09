@@ -18,6 +18,7 @@ class KernelRegistry:
     def __init__(self):
         self._classes: Dict[str, Any] = {}
         self._none_instance: Any = None
+        self._llm_uncertain_instance: Any = None  # LLM 返回不确定结果时的特殊值
         self._box_func: Any = None
         self._create_subclass_func: Any = None
         self._boxers: Dict[type, Any] = {} # py_type -> Callable[[Any], IbObject]
@@ -136,6 +137,15 @@ class KernelRegistry:
     def register_none(self, instance: Any, token: Any):
         self._verify_structure(token)
         self._none_instance = instance
+
+    def register_llm_uncertain(self, instance: Any, token: Any):
+        """注册 LLM 不确定结果单例"""
+        self._verify_structure(token)
+        self._llm_uncertain_instance = instance
+
+    def get_llm_uncertain(self) -> Any:
+        """获取 LLM 不确定结果单例"""
+        return self._llm_uncertain_instance
 
     def register_box_func(self, func: Any, token: Any):
         self._verify_structure(token)
@@ -269,6 +279,12 @@ class KernelRegistry:
             raise ValueError(f"Registry: Cannot create subclass '{name}' without a UTS descriptor.")
         if descriptor.name != name:
             raise ValueError(f"Registry: Subclass descriptor name '{descriptor.name}' does not match '{name}'.")
+        
+        # [Enum Hook] 检查父类是否已在 _classes 中注册
+        # 如果父类已存在（如 Enum），则直接调用 Bootstrapper.create_subclass
+        if self.get_class(parent_name):
+            if self._create_subclass_func:
+                return self._create_subclass_func(self, name, descriptor, parent_name)
             
         if self._create_subclass_func:
             return self._create_subclass_func(self, name, descriptor, parent_name)
@@ -301,6 +317,7 @@ class KernelRegistry:
         new_registry = KernelRegistry()
         new_registry._classes = dict(self._classes)
         new_registry._none_instance = self._none_instance
+        new_registry._llm_uncertain_instance = self._llm_uncertain_instance
         new_registry._box_func = self._box_func
         new_registry._create_subclass_func = self._create_subclass_func
         new_registry._boxers = dict(self._boxers)

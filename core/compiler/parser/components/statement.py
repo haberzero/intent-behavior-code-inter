@@ -36,6 +36,8 @@ class StatementComponent(BaseComponent):
             return self.return_statement()
         if self.stream.match(TokenType.GLOBAL):
             return self.global_statement()
+        if self.stream.match(TokenType.SWITCH):
+            return self.switch_statement()
         if self.stream.match(TokenType.IF):
             return self.if_statement()
         if self.stream.match(TokenType.WHILE):
@@ -309,6 +311,69 @@ class StatementComponent(BaseComponent):
         # If single segment and it's a string, we can flatten it
         content = "".join([s if isinstance(s, str) else str(s) for s in segments]).strip()
         return ast.IbIntentInfo(mode=mode, content=content, segments=segments, tag=tag, pop_top=False)
+
+
+    def switch_statement(self) -> ast.IbStmt:
+        """解析 switch-case 语句"""
+        from core.compiler.common.tokens import TokenType
+        start_token = self.stream.previous()
+
+        # 解析 switch 表达式
+        test = self.expression.parse_expression()
+        self.stream.consume(TokenType.COLON, "Expect ':' after switch expression.")
+        # 消费 switch 表达式后的换行
+        self.stream.consume(TokenType.NEWLINE, "Expect newline after switch ':'.")
+        self.stream.consume(TokenType.INDENT, "Expect indent after switch ':'.")
+
+        # 解析 case 列表
+        cases = []
+        while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
+            # 跳过空行
+            if self.stream.match(TokenType.NEWLINE):
+                continue
+
+            if self.stream.match(TokenType.DEFAULT):
+                # default case
+                pattern = None
+                self.stream.consume(TokenType.COLON, "Expect ':' after 'default'.")
+            elif self.stream.match(TokenType.CASE):
+                # case <pattern>:
+                pattern = self.expression.parse_expression()
+                self.stream.consume(TokenType.COLON, "Expect ':' after case pattern.")
+            else:
+                break
+
+            # 解析 case 体
+            self.stream.consume(TokenType.NEWLINE, "Expect newline after case ':'.")
+            self.stream.consume(TokenType.INDENT, "Expect indent after case ':'.")
+
+            case_body = []
+            while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
+                if self.stream.match(TokenType.NEWLINE):
+                    continue
+                if self.decl_parser:
+                    stmt = self.decl_parser.parse_declaration()
+                    if stmt:
+                        case_body.append(stmt)
+                else:
+                    case_body.append(self.parse_statement())
+
+            self.stream.consume(TokenType.DEDENT, "Expect dedent after case body.")
+
+            case_node = self._loc(
+                ast.IbCase(pattern=pattern, body=case_body),
+                start_token,
+                self.stream.previous()
+            )
+            cases.append(case_node)
+
+        self.stream.consume(TokenType.DEDENT, "Expect dedent after switch body.")
+
+        if not cases:
+            self.stream.error("Switch statement must have at least one case.", self.stream.peek())
+
+        end_token = self.stream.previous()
+        return self._loc(ast.IbSwitch(test=test, cases=cases), start_token, end_token)
 
 
     def if_statement(self) -> ast.IbStmt:

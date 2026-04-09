@@ -75,15 +75,37 @@ class ArtifactLoader:
             still_remaining = []
             for cls_desc in remaining:
                 parent_name = cls_desc.parent_name or "Object"
-                try:
-                    self.registry.create_subclass(
-                        cls_desc.name, 
-                        cls_desc, 
-                        parent_name
-                    )
-                except ValueError:
-                    # 可能是父类尚未注册，等待下一轮
-                    still_remaining.append(cls_desc)
+                
+                # [Enum Hook] 检查父类是否已在 _classes 中注册
+                # 如果父类已存在（如 Enum），则直接创建子类
+                parent_class = self.registry.get_class(parent_name)
+                if parent_class:
+                    # 父类已存在，直接创建子类
+                    try:
+                        self.registry.create_subclass(
+                            cls_desc.name, 
+                            cls_desc, 
+                            parent_name
+                        )
+                    except ValueError:
+                        # 类可能已存在，忽略
+                        pass
+                    except PermissionError:
+                        # 注册表已封印，类可能已被注册，忽略
+                        pass
+                else:
+                    try:
+                        self.registry.create_subclass(
+                            cls_desc.name, 
+                            cls_desc, 
+                            parent_name
+                        )
+                    except ValueError:
+                        # 可能是父类尚未注册，等待下一轮
+                        still_remaining.append(cls_desc)
+                    except PermissionError:
+                        # 注册表已封印，可能父类是内置类
+                        still_remaining.append(cls_desc)
             remaining = still_remaining
             
         if remaining:

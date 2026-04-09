@@ -6,13 +6,12 @@ from core.kernel.types.descriptors import TypeDescriptor
 class ScopeManager:
     """
      作用域管理器。
-    负责符号表和场景栈的管理。
+    负责符号表的管理。
     """
     def __init__(self, global_scope: Optional[SymbolTable] = None, module_name: Optional[str] = None):
         self._global_scope = global_scope or SymbolTable(name=module_name)
         self._current_scope: SymbolTable = self._global_scope
         self._scope_stack: List[SymbolTable] = []
-        self._scene_stack: List[str] = ["GENERAL"]
 
     def current_scope(self) -> SymbolTable:
         return self._current_scope
@@ -51,20 +50,3 @@ class ScopeManager:
 
     def resolve(self, name: str) -> Optional[Symbol]:
         return self._current_scope.resolve(name)
-
-    def push_scene(self, scene: str) -> None:
-        self._scene_stack.append(scene)
-
-    def pop_scene(self) -> str:
-        if len(self._scene_stack) > 1:
-            return self._scene_stack.pop()
-        return self._scene_stack[0]
-
-    def current_scene(self) -> str:
-        return self._scene_stack[-1]
-
-    def is_in_loop(self) -> bool:
-        return "LOOP" in self._scene_stack
-
-    def is_in_branch(self) -> bool:
-        return "BRANCH" in self._scene_stack

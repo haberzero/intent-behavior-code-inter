@@ -1,0 +1,145 @@
+# 04_mock_and_llmexcept.ibci
+# IBCI 进阶：Mock 机制与 llmexcept 异常处理
+
+# 本示例展示 IBCI 中的 Mock 机制和 llmexcept 异常处理：
+# 1. Mock 机制 - 使用 MOCK: 前缀模拟 AI 响应
+# 2. llmexcept - 处理 AI 调用失败或返回模糊结果
+# 3. retry - 在 llmexcept 中显式触发重试
+
+import ai
+import file
+import json
+import idbg
+
+# ============================================================
+# 配置 AI（启用 Mock 模式）
+# ============================================================
+
+print("\n=== Mock 机制演示 ===\n")
+
+ai.set_config(
+    "TESTONLY",
+    "TESTONLY",
+    "TESTONLY"
+)
+
+print("使用 TESTONLY 模式启用 Mock")
+
+# ============================================================
+# Mock 指令格式说明
+# ============================================================
+
+print("\n=== Mock 指令格式 ===\n")
+
+print("MOCK:TRUE [key]    - 返回 '1'")
+print("MOCK:FALSE [key]   - 返回 '0'")
+print("MOCK:FAIL [key]    - 返回模糊值，触发 llmexcept")
+print("MOCK:REPAIR [key]  - 首次模糊，第二次成功")
+print("MOCK:[...]         - 直接返回列表")
+print("MOCK:{...}         - 直接返回字典")
+
+# ============================================================
+# 1. MOCK:TRUE / MOCK:FALSE
+# ============================================================
+
+print("\n=== 1. MOCK:TRUE / MOCK:FALSE ===\n")
+
+str result1 = @~ MOCK:TRUE 是否晴朗？ ~
+print("MOCK:TRUE 结果: " + result1)
+
+str result2 = @~ MOCK:FALSE 是否下雨？ ~
+print("MOCK:FALSE 结果: " + result2)
+
+# ============================================================
+# 2. MOCK:FAIL 触发 llmexcept
+# ============================================================
+
+print("\n=== 2. MOCK:FAIL 触发 llmexcept ===\n")
+
+print("MOCK:FAIL 会返回模糊值，触发 llmexcept...")
+
+int result3 = (int) @~ MOCK:FAIL 请提取数字 ~
+llmexcept:
+    print("进入 llmexcept 处理块")
+    print("模拟失败后重试...")
+    retry "请只返回一个整数，如: 42"
+
+print("提取结果: " + (str)result3)
+
+# ============================================================
+# 3. MOCK:REPAIR 模拟恢复
+# ============================================================
+
+print("\n=== 3. MOCK:REPAIR 模拟恢复 ===\n")
+
+print("MOCK:REPAIR 首次返回模糊值，重试后返回确定值...")
+
+str result4 = @~ MOCK:REPAIR simulate_recovery ~
+llmexcept:
+    print("首次尝试失败，进入 llmexcept")
+    retry "REPAIR第二次尝试"
+
+print("恢复结果: " + result4)
+
+# ============================================================
+# 4. MOCK:[...] / MOCK:{...} 直接返回结构
+# ============================================================
+
+print("\n=== 4. MOCK:[...] / MOCK:{...} ===\n")
+
+str result5 = @~ MOCK:["apple", "banana", "cherry"] ~
+print("列表结果: " + result5)
+
+str result6 = @~ MOCK:{"name": "Alice", "age": 30} ~
+print("字典结果: " + result6)
+
+# ============================================================
+# 5. llmexcept 与 idbg.last_result()
+# ============================================================
+
+print("\n=== 5. llmexcept 与 idbg.last_result() ===\n")
+
+print("使用 idbg.last_result() 获取详细的 LLM 响应信息...")
+
+str query = "hello"
+print("查询: " + query)
+
+str result7 = @~ MOCK:FAIL 请翻译 "$query" ~
+llmexcept:
+    any last_info = (any) idbg.last_result()
+    print("进入 llmexcept 处理块")
+    print("原始响应: " + (str)last_info["raw_response"])
+    retry "请直接翻译为中文，不要其他文字"
+
+print("翻译结果: " + result7)
+
+# ============================================================
+# 6. llmretry 语法糖
+# ============================================================
+
+print("\n=== 6. llmretry 语法糖 ===\n")
+
+str result8 = @~ MOCK:FAIL 请回答问题 ~
+llmretry "请只回复一个中文词语"
+
+print("结果: " + result8)
+
+# ============================================================
+# 7. 在流控中使用 Mock
+# ============================================================
+
+print("\n=== 7. 在流控中使用 Mock ===\n")
+
+print("使用 MOCK:TRUE/FALSE 测试 if 条件...")
+
+if @~ MOCK:TRUE 今天天气好吗？ ~:
+    print("条件为真，进入 if 分支")
+else:
+    print("条件为假，进入 else 分支")
+
+if @~ MOCK:FALSE 今天天气好吗？ ~:
+    print("条件为真，进入 if 分支")
+else:
+    print("条件为假，进入 else 分支")
+
+print("\n=== Mock 机制演示结束 ===\n")

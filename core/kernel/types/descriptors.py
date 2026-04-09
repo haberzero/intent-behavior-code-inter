@@ -32,6 +32,9 @@ class TypeDescriptor:
     
     # 公理绑定
     _axiom: Optional['TypeAxiom'] = field(default=None, init=False, repr=False)
+    
+    # 可选的公理名称覆盖（用于 Enum 等特殊类型）
+    _axiom_name: Optional[str] = field(default=None, init=False, repr=False)
 
     def walk_references_raw(self, callback: Callable[['TypeDescriptor'], 'TypeDescriptor']) -> None:
         """
@@ -108,6 +111,9 @@ class TypeDescriptor:
 
     def get_base_axiom_name(self) -> str:
         """ 获取该描述符对应的基础公理名称"""
+        # 优先使用 _axiom_name 覆盖（用于 Enum 等特殊类型）
+        if self._axiom_name:
+            return self._axiom_name
         return self.name
 
     # --- Capability Accessors (Delegated to Axiom) ---
@@ -597,6 +603,9 @@ class ClassMetadata(TypeDescriptor):
     parent_module: Optional[str] = None
 
     def get_base_axiom_name(self) -> str:
+        # 优先使用 _axiom_name 覆盖（用于 Enum 等特殊类型）
+        if self._axiom_name:
+            return self._axiom_name
         return "Type"
     
     # --- Trait Implementations ---
@@ -775,3 +784,7 @@ BOUND_METHOD_DESCRIPTOR = BoundMethodMetadata(is_user_defined=False) # name will
 LIST_DESCRIPTOR = ListMetadata(name="list", is_nullable=True, is_user_defined=False)
 DICT_DESCRIPTOR = DictMetadata(name="dict", is_nullable=True, is_user_defined=False)
 MODULE_DESCRIPTOR = ModuleMetadata(name="module", is_nullable=False, is_user_defined=False)
+
+# [Enum Hook] Enum 类型占位描述符
+ENUM_DESCRIPTOR = TypeDescriptor(name="Enum", is_nullable=True, is_user_defined=False)
+ENUM_DESCRIPTOR._axiom_name = "enum"

@@ -57,11 +57,6 @@ class FlatSerializer(BaseFlatSerializer):
         root_node_uid = self._collect_node(result.module_ast)
 
         # 2. 重新映射侧表 (支持跨模块符号懒加载)
-        remaped_scenes = {}
-        for node, scene in result.node_scenes.items():
-            node_uid = self._collect_node(node)
-            remaped_scenes[node_uid] = scene.name if hasattr(scene, 'name') else str(scene)
-
         remaped_node_to_symbol = {}
         for node, sym in result.node_to_symbol.items():
             node_uid = self._collect_node(node)
@@ -84,11 +79,6 @@ class FlatSerializer(BaseFlatSerializer):
             node_uid = self._collect_node(node)
             remaped_node_to_loc[node_uid] = loc
 
-        remaped_decision_maps = {}
-        for node, d_map in result.decision_maps.items():
-            node_uid = self._collect_node(node)
-            remaped_decision_maps[node_uid] = d_map
-
         remaped_node_protection = {}
         for node, handler in result.node_protection.items():
             node_uid = self._collect_node(node)
@@ -99,12 +89,10 @@ class FlatSerializer(BaseFlatSerializer):
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
             "side_tables": {
-                "node_scenes": remaped_scenes,
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,
                 "node_is_deferred": remaped_node_is_deferred,
                 "node_to_loc": remaped_node_to_loc,
-                "decision_maps": remaped_decision_maps,
                 "node_protection": remaped_node_protection
             },
             "pools": {

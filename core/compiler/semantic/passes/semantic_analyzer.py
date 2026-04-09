@@ -136,12 +136,10 @@ class SemanticAnalyzer:
             return CompilationResult(
                 module_ast=node if isinstance(node, ast.IbModule) else None,
                 symbol_table=self.symbol_table,
-                node_scenes=self.side_table.node_scenes,
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
                 node_is_deferred=self.side_table.node_is_deferred,
                 node_to_loc=self.side_table.node_to_loc,
-                decision_maps=self.side_table.decision_maps,
                 node_protection=self.side_table.node_protection
             )
         finally:
@@ -258,12 +256,30 @@ class SemanticAnalyzer:
 
     def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
         """
-        检查表达式是否包含行为描述 @~...~。
+        检查表达式是否包含行为描述 @~...~ 或 LLM 函数调用。
         """
-        if isinstance(expr, ast.IbBehaviorExpr):
+        if isinstance(expr, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
             return True
+        elif isinstance(expr, ast.IbCastExpr):
+            return self._expr_contains_behavior(expr.value)
+        elif isinstance(expr, ast.IbTypeAnnotatedExpr):
+            return self._expr_contains_behavior(expr.target)
+        elif isinstance(expr, ast.IbFilteredExpr):
+            return self._expr_contains_behavior(expr.expr) or self._expr_contains_behavior(expr.filter)
         elif isinstance(expr, ast.IbCall):
-            # 检查方法调用
+            func = expr.func
+            if isinstance(func, ast.IbName):
+                func_name = func.id
+                sym = self.symbol_table.resolve(func_name)
+                if sym:
+                    if sym.kind == SymbolKind.LLM_FUNCTION or sym.metadata.get("is_llm"):
+                        return True
+            elif isinstance(func, ast.IbAttribute):
+                if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
+                    return True
+                if isinstance(func.value, ast.IbName):
+                    if func.value.id in ("llm", "LLM", "model", "Model", "ai", "AI"):
+                        return True
             if self._expr_contains_behavior(expr.func):
                 return True
             for arg in expr.args:
@@ -276,8 +292,8 @@ class SemanticAnalyzer:
         elif isinstance(expr, ast.IbUnaryOp):
             return self._expr_contains_behavior(expr.operand)
         elif isinstance(expr, ast.IbIfExp):
-            return (self._expr_contains_behavior(expr.test) or 
-                    self._expr_contains_behavior(expr.body) or 
+            return (self._expr_contains_behavior(expr.test) or
+                    self._expr_contains_behavior(expr.body) or
                     self._expr_contains_behavior(expr.orelse))
         return False
 
@@ -291,10 +307,6 @@ class SemanticAnalyzer:
             "line": node.lineno,
             "column": node.col_offset
         })
-
-        # 记录场景上下文侧表
-        if isinstance(node, ast.IbExpr):
-            self.side_table.bind_scene(node, self.scope_manager.current_scene())
 
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
@@ -643,19 +655,48 @@ class SemanticAnalyzer:
                         call_cap = target_desc.get_call_trait()
                         is_dynamic = target_desc.is_dynamic()
 
-                        is_explicit_callable = (call_cap is not None) or is_dynamic
+                        # [Enum Hook] 检查是否是 Enum 类型
+                        # Enum 类型虽然实现了 CallCapability（用于实例化），但我们不希望它被视为延迟执行的可调用类型
+                        is_enum_type = target_desc.get_base_axiom_name() == "enum"
 
+                        is_explicit_callable = (call_cap is not None and not is_enum_type) or is_dynamic
+
+                    # 检查是否是行为描述表达式（裸 @~...~ 或 (int)@~...~）
+                    inner_behavior_expr = None
                     if isinstance(node.value, ast.IbBehaviorExpr):
+                        inner_behavior_expr = node.value
+                    elif isinstance(node.value, ast.IbCastExpr) and isinstance(node.value.value, ast.IbBehaviorExpr):
+                        inner_behavior_expr = node.value.value
+
+                    if inner_behavior_expr:
                         if is_explicit_callable:
                             # 延迟上下文：behavior 表达式被包装为 callable，延迟执行
-                            self.side_table.set_deferred(node.value, True)
+                            self.side_table.set_deferred(inner_behavior_expr, True)
                             val_type = self._behavior_desc
                         else:
-                            # [P2 FIX] 即时上下文：behavior 表达式立即执行，返回 str 类型（LLM 调用结果）
-                            # 注意：这里的 "str" 语义是"文本接收"，而非纯字符串类型
-                            # [Future] 未来可通过 ReceiveMode.IMMEDIATE 统一处理，并在解释器层面注入相关提示词
-                            self.side_table.set_deferred(node.value, False)
-                            val_type = self._str_desc
+                            # 即时上下文：behavior 表达式立即执行
+                            self.side_table.set_deferred(inner_behavior_expr, False)
+
+                            # [FIX] 将赋值目标的类型绑定到 IbBehaviorExpr
+                            # 这样 _get_expected_type_hint 可以正确获取类型信息
+                            # 修复了：int result = @~ ... ~ 和 int result = (int)@~ ... ~ 行为不一致的问题
+                            if isinstance(node.value, ast.IbCastExpr):
+                                # 情况 1: 有强制类型转换 (int)@~...~
+                                # 从 IbCastExpr 获取目标类型，传递给内部的 IbBehaviorExpr
+                                cast_type = self._resolve_type(node.value.type_annotation)
+                                if cast_type and not cast_type.is_dynamic():
+                                    self.side_table.bind_type(inner_behavior_expr, cast_type)
+                                    val_type = cast_type
+                                else:
+                                    val_type = self._str_desc
+                            else:
+                                # 情况 2: 无强制类型转换 @~...~
+                                # 从赋值目标 sym.descriptor 获取类型
+                                if sym and sym.descriptor and not sym.descriptor.is_dynamic():
+                                    self.side_table.bind_type(inner_behavior_expr, sym.descriptor)
+                                    val_type = sym.descriptor
+                                else:
+                                    val_type = self._str_desc
                     
                     if not val_type.is_assignable_to(sym.descriptor):
                         hint = val_type.get_diff_hint(sym.descriptor)
@@ -670,98 +711,125 @@ class SemanticAnalyzer:
         return self._void_desc
 
     def visit_IbIf(self, node: ast.IbIf):
-        # 1. 条件测试属于 BRANCH 场景
-        self.scope_manager.push_scene(ast.IbScene.BRANCH)
-        # 记录控制流节点本身的场景
-        self.side_table.bind_scene(node, ast.IbScene.BRANCH)
-        try:
-            self.visit(node.test)
-        finally:
-            self.scope_manager.pop_scene()
-            
-        # 2. Body 和 Orelse 恢复父级场景
+        test_type = self.visit(node.test)
+
+        if isinstance(node.test, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.test, self._bool_desc)
+
         for stmt in node.body:
             self.visit(stmt)
         for stmt in node.orelse:
             self.visit(stmt)
-            
+
         return self._void_desc
 
+    def visit_IbSwitch(self, node: ast.IbSwitch):
+        """访问 switch-case 语句"""
+        self.visit(node.test)
+
+        for case in node.cases:
+            self.visit(case)
+
+        return self._void_desc
+
+    def visit_IbCase(self, node: ast.IbCase):
+        """访问 switch case"""
+        if node.pattern:
+            self.visit(node.pattern)
+
+        for stmt in node.body:
+            self.visit(stmt)
+
+        return self._void_desc
+
+    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> TypeDescriptor:
+        """
+        访问隐式实例化的行为描述。
+        
+        (Type) @~...~ 语法创建此节点，指示解释器：
+        1. 执行 LLM 调用获取结果
+        2. 根据 target_type_name 解析结果
+        3. 返回目标类型的实例
+        """
+        # 解析 segments 中的变量引用
+        for seg in node.segments:
+            if isinstance(seg, ast.IbASTNode):
+                self.visit(seg)
+
+        # 绑定目标类型到 side_table 并返回目标类型
+        if node.target_type_name:
+            target_desc = self._resolve_type_by_name(node.target_type_name)
+            if target_desc:
+                self.side_table.bind_type(node, target_desc)
+                return target_desc
+
+        return self._any_desc
+
     def visit_IbWhile(self, node: ast.IbWhile):
-        # 1. 循环条件属于 LOOP 场景
-        self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # 记录控制流节点本身的场景
-        self.side_table.bind_scene(node, ast.IbScene.LOOP)
-        try:
-            self.visit(node.test)
-        finally:
-            self.scope_manager.pop_scene()
-            
-        # 2. 循环体
+        test_type = self.visit(node.test)
+
+        if isinstance(node.test, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.test, self._bool_desc)
+
         for stmt in node.body:
             self.visit(stmt)
         for stmt in node.orelse:
             self.visit(stmt)
-            
+
         return self._void_desc
 
     def visit_IbFor(self, node: ast.IbFor):
-        # 1. 迭代头部属于 LOOP 场景
-        self.scope_manager.push_scene(ast.IbScene.LOOP)
-        # 记录控制流节点本身的场景
-        self.side_table.bind_scene(node, ast.IbScene.LOOP)
-        try:
-            iter_type = self.visit(node.iter)
-            
-            # 统一循环协议检查
-            if node.target is None:
-                # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
-                # 语义：等同于 while，要求表达式具有“布尔评估能力”
-                # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
-                # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
-                if not iter_type.is_dynamic() and not iter_type.is_behavior() and iter_type.name != "bool":
-                    # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
-                    pass
+        iter_type = self.visit(node.iter)
+        
+        if isinstance(node.iter, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.iter, self._bool_desc)
+
+        # 统一循环协议检查
+        if node.target is None:
+            # 情况 1: 条件驱动模式 (for @~...~: 或 for is_ready():)
+            # 语义：等同于 while，要求表达式具有“布尔评估能力”
+            # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
+            # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
+            if not iter_type.is_dynamic() and not iter_type.is_behavior() and iter_type.name != "bool":
+                # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
+                pass
+        else:
+            # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
+            # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
+            # 如果是 behavior 类型，我们认为它“潜在可迭代”
+            if iter_type.is_behavior():
+                element_type = self._any_desc 
             else:
-                # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
-                # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
-                # 如果是 behavior 类型，我们认为它“潜在可迭代”
-                if iter_type.is_behavior():
-                    element_type = self._any_desc 
+                iter_trait = iter_type.get_iter_trait()
+                if iter_trait:
+                    # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
+                    element_type = iter_type.get_element_type() or self._any_desc
                 else:
-                    iter_trait = iter_type.get_iter_trait()
-                    if iter_trait:
-                        # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
-                        element_type = iter_type.get_element_type() or self._any_desc
-                    else:
-                        self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
-                        element_type = self._any_desc
-                
-                for var_name, target in SymbolExtractor.get_assigned_names(node):
-                    # 优先使用显式类型标注，而非推导出的 element_type
-                    effective_type = element_type
-                    if isinstance(target, ast.IbTypeAnnotatedExpr):
-                        effective_type = self.visit(target.annotation)
-                    
-                    # 检查是否已在 Pass 2.5 预扫描中定义
-                    sym = self.symbol_table.symbols.get(var_name)
-                    
-                    # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
-                    if not sym or sym.descriptor.is_dynamic():
-                        sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
-                    elif not effective_type.is_dynamic():
-                        # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
-                        sym.descriptor = effective_type
-                    
-                    if sym:
-                        self.side_table.bind_symbol(target, sym)
-        finally:
-            self.scope_manager.pop_scene()
+                    self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
+                    element_type = self._any_desc
             
-        # 2. 循环体
+            for var_name, target in SymbolExtractor.get_assigned_names(node):
+                # 优先使用显式类型标注，而非推导出的 element_type
+                effective_type = element_type
+                if isinstance(target, ast.IbTypeAnnotatedExpr):
+                    effective_type = self.visit(target.annotation)
+                
+                # 检查是否已在 Pass 2.5 预扫描中定义
+                sym = self.symbol_table.symbols.get(var_name)
+                
+                # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
+                if not sym or sym.descriptor.is_dynamic():
+                    sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
+                elif not effective_type.is_dynamic():
+                    # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
+                    sym.descriptor = effective_type
+                
+                if sym:
+                    self.side_table.bind_symbol(target, sym)
+
         for stmt in node.body:
             self.visit(stmt)
-            
+
         return self._void_desc
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt):
@@ -938,23 +1006,6 @@ class SemanticAnalyzer:
                 return self._expr_contains_behavior(stmt.value)
         elif isinstance(stmt, ast.IbExprStmt) and isinstance(stmt.value, ast.IbBehaviorExpr):
             return True
-        return False
-
-    def _expr_contains_behavior(self, expr: ast.IbExpr) -> bool:
-        """检查表达式是否包含行为表达式"""
-        if isinstance(expr, ast.IbBehaviorExpr):
-            return True
-        if isinstance(expr, ast.IbCall):
-            func = expr.func
-            if isinstance(func, ast.IbAttribute):
-                if func.attr in ("call", "complete", "generate", "execute", "run", "invoke", "ask"):
-                    return True
-                if isinstance(func.value, ast.IbName):
-                    if func.value.id in ("llm", "LLM", "model", "Model", "ai", "AI"):
-                        return True
-            elif isinstance(func, ast.IbName):
-                if func.id in ("call", "complete", "generate", "llm", "LLM"):
-                    return True
         return False
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
@@ -1211,9 +1262,7 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
         self.in_behavior_expr = True
-        # 绑定当前执行场景 (BRANCH/LOOP/GENERAL)，以便运行时注入正确的系统提示词
-        self.side_table.bind_scene(node, self.scope_manager.current_scene())
-        
+
         try:
             for seg in node.segments:
                 if isinstance(seg, ast.IbASTNode):

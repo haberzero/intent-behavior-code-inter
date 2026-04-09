@@ -1,4 +1,4 @@
-from typing import Any, Protocol, List, Dict, Callable, Optional, Type, Union, runtime_checkable, Mapping, TYPE_CHECKING
+from typing import Any, Protocol, List, Dict, Callable, Optional, Type, Union, runtime_checkable, Mapping, TYPE_CHECKING, Tuple
 from dataclasses import dataclass, field
 
 if TYPE_CHECKING:
@@ -176,6 +176,21 @@ class IIbObject(Protocol):
     def receive(self, message: str, args: List['IIbObject']) -> 'IIbObject': ...
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any: ...
     def __to_prompt__(self) -> str: ...
+    def __from_prompt__(self, raw_response: str) -> Tuple[bool, Any]:
+        """
+        从 LLM 返回的原始文本中解析值。
+
+        Returns:
+            (True, parsed_value) - 解析成功
+            (False, retry_hint)  - 解析失败，retry_hint 用于提示重试方向
+        """
+        ...
+    def __llmoutput_hint__(self) -> str:
+        """
+        返回期望的 LLM 输出格式描述。
+        用于提示词注入，告诉 LLM 应该输出什么格式。
+        """
+        ...
 
 @runtime_checkable
 class IIbClass(IIbObject, Protocol):

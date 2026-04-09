@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping
+from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING, Mapping, Tuple
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -71,6 +71,38 @@ class IbObject:
             # 包装原始消息名作为第一个参数
             return method_missing.call(self, [self.ib_class.registry.box(message)] + args)
 
+        # [cast_to Hook] 处理类型转换消息
+        if message == 'cast_to':
+            if not args:
+                raise InterpreterError("cast_to requires exactly one argument: target class")
+
+            target_class = args[0]
+            target_name = getattr(target_class, 'name', None)
+            if not target_name:
+                raise InterpreterError("cast_to argument must be an IbClass")
+
+            # 同一类型转换：直接返回自身
+            if self.ib_class.name == target_name:
+                return self
+
+            # 如果对象自身有 cast_to 方法（特殊类型包装器），优先调用
+            if hasattr(self, 'cast_to'):
+                return self.cast_to(target_class)
+
+            # 尝试使用 __to_prompt__ 进行字符串转换
+            if target_name in ("str", "any"):
+                try:
+                    prompt_result = self.__to_prompt__()
+                    return self.ib_class.registry.box(prompt_result)
+                except Exception:
+                    pass
+
+            # 无法执行类型转换，抛出明确错误
+            raise InterpreterError(
+                f"TypeError: Cannot cast '{self.ib_class.name}' to '{target_name}'. "
+                f"Type '{self.ib_class.name}' does not implement type conversion."
+            )
+
         raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
 
     def __to_prompt__(self) -> str:
@@ -81,8 +113,30 @@ class IbObject:
             res = self.receive('__to_prompt__', [])
             return str(res.value) if hasattr(res, 'value') else str(res)
         except (AttributeError, InterpreterError):
-            # 仅在方法缺失或解释器主动报错时回退
             return f"<Instance of {self.ib_class.name}>"
+
+    def __from_prompt__(self, raw_response: str) -> Tuple[bool, Any]:
+        """
+        从 LLM 返回的原始文本中解析值。
+
+        默认实现：尝试使用 descriptor 的 Axiom 进行解析。
+        """
+        try:
+            axiom = self.descriptor._axiom
+            if axiom:
+                parser = axiom.get_parser_capability()
+                if parser:
+                    value = parser.parse_value(raw_response)
+                    return (True, value)
+        except Exception:
+            pass
+        return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
+
+    def __llmoutput_hint__(self) -> str:
+        """
+        返回期望的 LLM 输出格式描述。
+        """
+        return f"请返回一个 {self.ib_class.name} 类型的值"
 
     # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':
@@ -341,7 +395,8 @@ class IbClass(IbObject):
         """
         类对象的特殊消息处理：
         1. __call__ -> 实例化 (Instantiate) 或 类级别的 __call__
-        2. 其他 -> 正常消息处理 (查找静态方法等)
+        2. __getattr__ -> 访问类字段 (default_fields)
+        3. 其他 -> 正常消息处理 (查找静态方法等)
         """
         if message == "__call__":
             # 优先从自身的 methods 字典中查找 __call__
@@ -356,6 +411,22 @@ class IbClass(IbObject):
             context = self.registry.get_execution_context()
             
             return self.instantiate(args, context=context)
+        
+        if message == "__getattr__" and len(args) > 0:
+            attr_name = args[0].to_native()
+            # 优先查找类字段 (default_fields)
+            if attr_name in self.default_fields:
+                val_info = self.default_fields[attr_name]
+                if val_info is not None:
+                    if hasattr(val_info, 'static_val') and val_info.static_val is not None:
+                        return val_info.static_val
+                    return self.registry.box(val_info)
+            # 降级查找类方法
+            method = self.lookup_method(attr_name)
+            if method:
+                return IbBoundMethod(self, method)
+            raise AttributeError(f"Class '{self.name}' has no attribute '{attr_name}'")
+        
         return super().receive(message, args)
 
     def __repr__(self):
@@ -489,6 +560,46 @@ class IbNone(IbObject):
 
     def __repr__(self):
         return "null"
+
+
+class IbLLMUncertain(IbObject):
+    """
+    表示 LLM 返回不确定/模糊结果的特殊值。
+
+    当 LLM 调用无法被正确解析为目标类型时（如返回模糊内容），
+    变量会被赋值为 IbLLMUncertain，而不是保持未定义状态。
+
+    语义：
+    - __bool__ 返回 False（与 if 条件结合时表示"不确定性"）
+    - to_native 返回 None
+    - 可以赋值给任何类型的变量
+    """
+    def __init__(self, ib_class: 'IbClass'):
+        super().__init__(ib_class)
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        return None
+
+    def __to_prompt__(self) -> str:
+        return "uncertain"
+
+    def to_bool(self) -> IbObject:
+        """ IbLLMUncertain 在布尔上下文中为 False """
+        return self.ib_class.registry.box(0)
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """ 支持 IbLLMUncertain 的强转逻辑 """
+        if target_class.name == "str":
+            return self.ib_class.registry.box("uncertain")
+        if target_class.name in ("int", "float"):
+            return self.ib_class.registry.box(0)
+        if target_class.name == "bool":
+            return self.ib_class.registry.box(0)
+        return self
+
+    def __repr__(self):
+        return "uncertain"
+
 
 class IbUserFunction(IbFunction):
     """

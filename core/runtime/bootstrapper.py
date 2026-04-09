@@ -158,8 +158,15 @@ class Bootstrapper:
         """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定描述符。"""
         if name in self._class_registry:
             return self._class_registry[name]
-            
+        
+        # 优先从 _class_registry 查找父类
         parent = self.get_class(parent_name)
+        
+        # [Enum Hook] 如果在 _class_registry 中找不到父类，检查 registry._classes
+        # 这样可以支持已注册到 KernelRegistry._classes 但未注册到 Bootstrapper._class_registry 的内置类
+        if not parent and parent_name != "Object":
+            parent = registry._classes.get(parent_name)
+        
         if not parent and name != "Object": # Object has no parent
             raise ValueError(f"Parent class '{parent_name}' not found")
         
