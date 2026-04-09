@@ -159,12 +159,12 @@ pip install openai
 }
 ```
 
-复制`examples\01_quick_start\01_hello_ai.ibci`到`test_target_proj`
+复制`examples/01_getting_started/01_hello_world.ibci`到`test_target_proj`
 
 尝试运行示例代码:
 
 ```bash
-python main.py run test_target_proj/01_hello_ai.ibci
+python main.py run test_target_proj/01_hello_world.ibci
 ```
 
 ## 其它
