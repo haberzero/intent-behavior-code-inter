@@ -9,6 +9,7 @@
 *.json text
 *.md text
 *.txt text
+.gitignore text
 
 
 # Declare files that will always have CRLF line endings on checkout.
