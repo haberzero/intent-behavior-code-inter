@@ -48,7 +48,7 @@ class FromPromptCapability(Protocol):
 
 class IlmoutputHintCapability(Protocol):
     """LLM 输出提示能力：描述期望的 LLM 输出格式"""
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         """
         返回期望的 LLM 输出格式描述。
         用于提示词注入，告诉 LLM 应该输出什么格式。

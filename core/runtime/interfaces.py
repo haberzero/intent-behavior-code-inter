@@ -185,7 +185,7 @@ class IIbObject(Protocol):
             (False, retry_hint)  - 解析失败，retry_hint 用于提示重试方向
         """
         ...
-    def __llmoutput_hint__(self) -> str:
+    def __outputhint_prompt__(self) -> str:
         """
         返回期望的 LLM 输出格式描述。
         用于提示词注入，告诉 LLM 应该输出什么格式。

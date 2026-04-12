@@ -71,13 +71,13 @@ str greeting = @~ 用 $name 打个招呼 ~
 # name 的 __to_prompt__() 会被调用，结果作为提示词的一部分
 ```
 
-### 3.1.2 输出约束：`__llmoutput_hint__`
+### 3.1.2 输出约束：`__outputhint_prompt__`
 
-每个类型可以定义 `__llmoutput_hint__` 方法，用于描述期望的 LLM 输出格式。该约束会被注入到系统提示词中。
+每个类型可以定义 `__outputhint_prompt__` 方法，用于描述期望的 LLM 输出格式。该约束会被注入到系统提示词中。
 
 ```ibci
 int result = (int) @~ 1+1等于几？只答数字 ~
-// int 的 __llmoutput_hint__() 返回: "请只返回一个整数，如: 42"
+// int 的 __outputhint_prompt__() 返回: "请只返回一个整数，如: 42"
 ```
 
 ### 3.1.3 输出解析：`__from_prompt__`
@@ -129,7 +129,7 @@ while @~ 任务尚未完成 ~:
 逻辑判定的原理是：
 
 - 当 `if` 语句或 `for` 循环等条件语句内部含有行为描述语句时，IBC-Inter 会隐式地将行为描述语句转化为一次bool赋值。
-- `bool` 内置类的 `__llmoutput_hint__` 会约束 LLM 输出只能是 0 或 1，随后由 `__from_prompt__` 方法解析为 bool 类型。
+- `bool` 内置类的 `__outputhint_prompt__` 会约束 LLM 输出只能是 0 或 1，随后由 `__from_prompt__` 方法解析为 bool 类型。
 - `__from_prompt__` 结束后，语句判断是否继续执行循环体或条件分支。
 - 如果 LLM 生成的结果为 1，执行循环体或条件分支；否则，跳过。
 

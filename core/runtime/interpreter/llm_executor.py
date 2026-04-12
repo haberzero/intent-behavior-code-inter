@@ -257,7 +257,7 @@ class LLMExecutorImpl:
         return "".join(content_parts)
 
     def _get_llmoutput_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
-        """获取 __llmoutput_hint__ 用于注入到提示词"""
+        """获取 __outputhint_prompt__ 用于注入到提示词"""
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = execution_context.get_node_data(returns_uid)
@@ -269,7 +269,7 @@ class LLMExecutorImpl:
                     if descriptor and descriptor._axiom:
                         hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
                         if hint_cap:
-                            return hint_cap.__llmoutput_hint__(descriptor)
+                            return hint_cap.__outputhint_prompt__(descriptor)
 
         node_to_type = execution_context.get_side_table("node_to_type", node_uid)
         if node_to_type:
@@ -282,7 +282,7 @@ class LLMExecutorImpl:
                         if hasattr(type_descriptor, '_axiom') and type_descriptor._axiom:
                             hint_cap = type_descriptor._axiom.get_llmoutput_hint_capability()
                             if hint_cap:
-                                return hint_cap.__llmoutput_hint__(type_descriptor)
+                                return hint_cap.__outputhint_prompt__(type_descriptor)
 
         return None
 
@@ -395,12 +395,12 @@ class LLMExecutorImpl:
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
 
-        # 获取 __llmoutput_hint__ 注入到系统提示词
+        # 获取 __outputhint_prompt__ 注入到系统提示词
         llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
 
         sys_prompt = "你是一个意图行为代码执行器。"
 
-        # 注入 __llmoutput_hint__
+        # 注入 __outputhint_prompt__
         if llmoutput_hint:
             sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
 

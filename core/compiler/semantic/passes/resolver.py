@@ -222,7 +222,7 @@ class TypeResolver:
     def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance):
         """
         解析带类型标注的行为实例表达式 (Type) @~...~ 的返回类型。
-        类型信息用于 __llmoutput_hint__ 注入和类型检查。
+        类型信息用于 __outputhint_prompt__ 注入和类型检查。
         """
         target_type_name = getattr(node, 'target_type_name', None)
         if target_type_name:

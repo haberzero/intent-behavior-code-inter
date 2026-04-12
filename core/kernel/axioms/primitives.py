@@ -101,7 +101,7 @@ class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabil
             return (True, int(match.group()))
         return (False, f"无法从 '{raw_response}' 解析整数。请只返回一个整数，如: 42 或 -15")
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请只返回一个整数，如: 42 或 -15，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -167,7 +167,7 @@ class FloatAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapab
             return (True, float(match.group()))
         return (False, f"无法从 '{raw_response}' 解析浮点数。请只返回一个数字，如: 3.14 或 -2.5")
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请只返回一个数字，如: 3.14 或 -2.5，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -248,7 +248,7 @@ class BoolAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ParserCapabi
 
         return (False, f"无法从 '{raw_response}' 解析布尔值。请明确回复: 1 表示是/true/yes，0 表示否/false/no")
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请只回复 1 表示是，0 表示否，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -326,7 +326,7 @@ class StrAxiom(BaseAxiom, OperatorCapability, IterCapability, SubscriptCapabilit
         """从 LLM 返回中解析字符串"""
         return (True, self.parse_value(raw_response))
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请直接返回文本内容，不要使用引号或代码块包裹"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -387,7 +387,7 @@ class ListAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         except ValueError:
             return (False, f"无法从 '{raw_response}' 解析 JSON 数组。请返回一个 JSON 数组，如: [1, 2, 3]")
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请返回一个 JSON 数组，如: [1, 2, 3]，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -447,7 +447,7 @@ class DictAxiom(BaseAxiom, IterCapability, SubscriptCapability, ParserCapability
         except ValueError:
             return (False, f"无法从 '{raw_response}' 解析 JSON 对象。请返回一个 JSON 对象，如: {{'key': 'value'}}")
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         return "请返回一个 JSON 对象，如: {'key': 'value'}，不要包含任何其他文字"
 
     def get_call_capability(self) -> Optional[CallCapability]: return None
@@ -630,7 +630,7 @@ class EnumAxiom(BaseAxiom, FromPromptCapability, IlmoutputHintCapability, Conver
             return []
         return list(index_map.keys())
 
-    def __llmoutput_hint__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
+    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
         """动态生成 LLM 输出约束"""
         enum_names = self._collect_enum_names(descriptor)
         if not enum_names:

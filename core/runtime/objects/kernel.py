@@ -132,7 +132,7 @@ class IbObject:
             pass
         return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
 
-    def __llmoutput_hint__(self) -> str:
+    def __outputhint_prompt__(self) -> str:
         """
         返回期望的 LLM 输出格式描述。
         """
