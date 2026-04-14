@@ -507,7 +507,7 @@ class LLMExecutorImpl:
                 self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
                 return response, None
             except Exception as e:
-                self.debugger.trace(CoreModule.LLM, DebugLevel.ERROR, f"LLM call failed: {e}")
+                self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"LLM call failed: {e}")
                 print(f"\n[AI 拦截器] 发现 AI 服务连接异常: {str(e)}")
                 return None, str(e)
 
