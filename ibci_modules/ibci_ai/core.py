@@ -138,7 +138,11 @@ class AIPlugin(ILLMProvider):
                     {"role": "user", "content": user_prompt}
                 ],
                 max_tokens=50,
-                timeout=15.0
+                timeout=15.0m,
+                extra_body={
+                    "enable_thinking": False,
+                    "chat_template_kwargs": {"enable_thinking": False}
+                }
             )
             print("    -> [System] Called llm once (Probe).")
             
@@ -325,7 +329,11 @@ class AIPlugin(ILLMProvider):
                         {"role": "system", "content": enhanced_sys_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=decision_max_tokens if is_decision else 4096
+                    max_tokens=decision_max_tokens if is_decision else 4096,
+                    extra_body={
+                        "enable_thinking": False,
+                        "chat_template_kwargs": {"enable_thinking": False}
+                    }
                 )
                 
                 # 调试输出，偶尔会使用。注释并保留

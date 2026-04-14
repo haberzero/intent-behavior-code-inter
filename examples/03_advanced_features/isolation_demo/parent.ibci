@@ -19,6 +19,6 @@ dict policy = {
     "inherit_variables": false
 }
 # 使用绝对路径（需要确保路径正确）
-host.run_isolated("examples/04_advanced_features/isolation_demo/sub_project/child.ibci", policy)
+host.run_isolated("examples/03_advanced_features/isolation_demo/sub_project/child.ibci", policy)
 
 print("\n--- [PARENT] Finished ---")

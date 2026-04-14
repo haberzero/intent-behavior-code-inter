@@ -167,6 +167,8 @@ pip install openai
 python main.py run test_target_proj/01_hello_world.ibci
 ```
 
+*注意！！！ 现阶段不推荐使用任何思考模型接入 IBC-Inter，思考模型在当前 IBCI 版本的提示词约束下，无法合理工作并收敛思考结论，容易陷入思考死循环。特别是本地小尺寸的思考模型，更容易陷入无穷无尽的“等一等，我应该更深入思考”之类的反思中。请务必使用非思考模式。
+
 ## 其它
 
 更多详情请参阅：
