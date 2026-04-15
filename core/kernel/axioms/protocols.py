@@ -22,7 +22,7 @@ The SpecRegistry then resolves the returned name to an IbSpec.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -114,6 +114,7 @@ class WritableTrait(Protocol):
 # TypeAxiom — the core axiom interface                                #
 # ------------------------------------------------------------------ #
 
+@runtime_checkable
 class TypeAxiom(Protocol):
     """
     Core axiom interface.  One axiom per built-in type.

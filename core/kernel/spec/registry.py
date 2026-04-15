@@ -116,8 +116,8 @@ class SpecFactory:
     def create_dict(
         self,
         key_type_name: str = "any",
-        key_type_module: Optional[str] = None,
         value_type_name: str = "any",
+        key_type_module: Optional[str] = None,
         value_type_module: Optional[str] = None,
     ) -> DictSpec:
         name = f"dict[{key_type_name},{value_type_name}]"
@@ -237,8 +237,10 @@ class SpecRegistry:
     # Capability access (replaces spec.get_xxx_trait())          #
     # ---------------------------------------------------------- #
 
-    def get_axiom(self, spec: IbSpec) -> Any:
+    def get_axiom(self, spec: Optional[IbSpec]) -> Any:
         """Return the axiom for this spec, or None."""
+        if spec is None:
+            return None
         return self._axiom_registry.get_axiom(spec.get_base_name())
 
     def get_call_cap(self, spec: IbSpec) -> Optional["CallCapability"]:
@@ -277,25 +279,33 @@ class SpecRegistry:
     # Derived capability helpers                                 #
     # ---------------------------------------------------------- #
 
-    def is_callable(self, spec: IbSpec) -> bool:
+    def is_callable(self, spec: Optional[IbSpec]) -> bool:
+        if spec is None:
+            return False
         if isinstance(spec, FuncSpec):
             return True
         return self.get_call_cap(spec) is not None
 
-    def is_dynamic(self, spec: IbSpec) -> bool:
+    def is_dynamic(self, spec: Optional[IbSpec]) -> bool:
         """True for any/auto and any axiom that declares itself dynamic."""
+        if spec is None:
+            return True  # unknown type treated as dynamic
         if spec.name in ("any", "auto"):
             return True
         axiom = self.get_axiom(spec)
         return bool(axiom and axiom.is_dynamic())
 
-    def is_class_spec(self, spec: IbSpec) -> bool:
+    def is_class_spec(self, spec: Optional[IbSpec]) -> bool:
+        if spec is None:
+            return False
         if isinstance(spec, ClassSpec):
             return True
         axiom = self.get_axiom(spec)
         return bool(axiom and axiom.is_class())
 
-    def is_module_spec(self, spec: IbSpec) -> bool:
+    def is_module_spec(self, spec: Optional[IbSpec]) -> bool:
+        if spec is None:
+            return False
         if isinstance(spec, ModuleSpec):
             return True
         axiom = self.get_axiom(spec)
@@ -415,11 +425,13 @@ class SpecRegistry:
 
         return None
 
-    def is_assignable(self, src: IbSpec, target: IbSpec) -> bool:
+    def is_assignable(self, src: Optional[IbSpec], target: Optional[IbSpec]) -> bool:
         """
         Check whether a value of type ``src`` can be assigned to a
         variable of type ``target``.
         """
+        if src is None or target is None:
+            return False
         if src is target:
             return True
         if self.is_dynamic(target):
