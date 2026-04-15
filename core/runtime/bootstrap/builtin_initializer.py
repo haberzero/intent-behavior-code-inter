@@ -5,9 +5,9 @@ from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbB
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
-from core.kernel.types.descriptors import (
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
-    BOOL_DESCRIPTOR, VOID_DESCRIPTOR, ANY_DESCRIPTOR, FunctionMetadata
+from core.kernel.spec import (
+    IbSpec, FuncSpec, ClassSpec, MethodMemberSpec,
+    INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC
 )
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.factory import create_default_registry
@@ -19,7 +19,8 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
 
 def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
     """ 基于公理声明自动化绑定二元运算符"""
-    axiom = ib_cls.descriptor._axiom
+    spec_reg = ib_cls.registry.get_metadata_registry() if ib_cls.registry else None
+    axiom = spec_reg.get_axiom(ib_cls.spec) if (spec_reg and ib_cls.spec) else None
     if not axiom: return
     
     operators = axiom.get_operators()
@@ -98,7 +99,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             
         # 创建类
         parent = "Object"
-        axiom = desc._axiom if desc else None
+        axiom = metadata_registry.get_axiom(desc) if desc else None
         if axiom:
             # 从公理中自动提取继承关系，消除硬编码判定
             parent = axiom.get_parent_axiom_name() or "Object"
@@ -109,10 +110,10 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # [Axiom-Driven Automation] 能力注入
     # 遍历公理中定义的所有方法，并从 IbObject 实现类中自动查找并绑定同名方法
     for name, ib_cls in ib_classes.items():
-        desc = ib_cls.descriptor
-        axiom = desc._axiom if desc else None
+        desc = ib_cls.spec
+        axiom = metadata_registry.get_axiom(desc) if desc else None
         if axiom:
-            methods = axiom.get_methods()
+            methods = axiom.get_method_specs()
             # 从全局类型注册表获取实现类，消除硬编码映射
             py_impl_cls = get_ib_implementation(name)
             if py_impl_cls:
@@ -195,40 +196,41 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     registry.register_class("Enum", enum_class, registry._kernel_token, metadata_registry.resolve("Enum"))
     
     # 4. 注册内置全局函数元数据 (供编译器发现)
-    registry.register_function("print", FunctionMetadata(
-        name="print",
-        param_types=[metadata_registry.resolve("any")],
-        return_type=metadata_registry.resolve("void")
+    factory = metadata_registry.factory
+    registry.register_function("print", factory.create_func(
+        "print",
+        param_type_names=["any"],
+        return_type_name="void"
     ), token)
 
-    registry.register_function("len", FunctionMetadata(
-        name="len",
-        param_types=[metadata_registry.resolve("any")],
-        return_type=metadata_registry.resolve("int")
+    registry.register_function("len", factory.create_func(
+        "len",
+        param_type_names=["any"],
+        return_type_name="int"
     ), token)
 
-    registry.register_function("range", FunctionMetadata(
-        name="range",
-        param_types=[metadata_registry.resolve("int")],
-        return_type=metadata_registry.resolve("list")
+    registry.register_function("range", factory.create_func(
+        "range",
+        param_type_names=["int"],
+        return_type_name="list"
     ), token)
 
-    registry.register_function("range", FunctionMetadata(
-        name="range",
-        param_types=[metadata_registry.resolve("int"), metadata_registry.resolve("int")],
-        return_type=metadata_registry.resolve("list")
+    registry.register_function("range", factory.create_func(
+        "range",
+        param_type_names=["int", "int"],
+        return_type_name="list"
     ), token)
 
-    registry.register_function("range", FunctionMetadata(
-        name="range",
-        param_types=[metadata_registry.resolve("int"), metadata_registry.resolve("int"), metadata_registry.resolve("int")],
-        return_type=metadata_registry.resolve("list")
+    registry.register_function("range", factory.create_func(
+        "range",
+        param_type_names=["int", "int", "int"],
+        return_type_name="list"
     ), token)
 
-    registry.register_function("get_self_source", FunctionMetadata(
-        name="get_self_source",
-        param_types=[],
-        return_type=metadata_registry.resolve("str")
+    registry.register_function("get_self_source", factory.create_func(
+        "get_self_source",
+        param_type_names=[],
+        return_type_name="str"
     ), token)
 
     # ------------------------------

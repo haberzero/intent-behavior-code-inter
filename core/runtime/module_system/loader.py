@@ -12,7 +12,7 @@ from core.runtime.interfaces import IExecutionContext
 from core.base.interfaces import IStateReader, ILLMExecutor, ISymbolView, IIntentManager
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
-from core.kernel.types.descriptors import FunctionMetadata
+from core.kernel.spec import MethodMemberSpec
 from core.kernel.symbols import FunctionSymbol
 
 class ModuleLoader(IModuleLoader):
@@ -50,10 +50,20 @@ class ModuleLoader(IModuleLoader):
 
         # 遍历元数据中声明的所有成员 (源自 _spec.py)
         for spec_name, spec_member in metadata.members.items():
-            spec_desc = spec_member.descriptor if hasattr(spec_member, 'descriptor') else spec_member
-            
-            # 1. 处理函数/方法 (Callable Trait)
-            if spec_desc.get_call_trait() and not spec_desc.is_class(): 
+            # Determine if this member is a callable (new MethodMemberSpec or old Symbol/descriptor compat)
+            is_callable_member = isinstance(spec_member, MethodMemberSpec)
+            param_count = len(spec_member.param_type_names) if is_callable_member else 0
+
+            if not is_callable_member:
+                # Old-system compat: Symbol objects carry a .descriptor with get_call_trait()
+                spec_desc = spec_member.descriptor if hasattr(spec_member, 'descriptor') else spec_member
+                if hasattr(spec_desc, 'get_call_trait') and spec_desc.get_call_trait() \
+                        and not (hasattr(spec_desc, 'is_class') and spec_desc.is_class()):
+                    is_callable_member = True
+                    param_count = len(spec_desc.param_types) if hasattr(spec_desc, 'param_types') else 0
+
+            # 1. 处理函数/方法
+            if is_callable_member:
                 # 强制要求实现对象具有同名属性
                 if not hasattr(implementation, spec_name):
                     raise InterpreterError(f"Plugin implementation error: Module '{module_name}' is missing required method '{spec_name}' "
@@ -70,9 +80,9 @@ class ModuleLoader(IModuleLoader):
                 fixed_params = [p for p in params if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
                 
                 # 允许实现层的参数比 spec 多（如果有默认值），但不能少
-                if len(fixed_params) < len(spec_desc.param_types):
+                if len(fixed_params) < param_count:
                     raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. "
-                                           f"Spec expects {len(spec_desc.param_types)} params, but implementation has only {len(fixed_params)}.")
+                                           f"Spec expects {param_count} params, but implementation has only {len(fixed_params)}.")
                 
                 def create_proxy(target_func, reg):
                     def proxy_wrapper(*args, **kwargs):
@@ -89,7 +99,7 @@ class ModuleLoader(IModuleLoader):
 
                 proxy_vtable[spec_name] = create_proxy(py_func, registry)
             
-            # 2.  处理变量 (Variable)
+            # 2. 处理变量 (Variable / plain MemberSpec)
             else:
                 # 只要在元数据中声明了，就加入白名单允许通过 __getattr__ 访问
                 if not hasattr(implementation, spec_name):
