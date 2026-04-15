@@ -1,5 +1,24 @@
 # IBC-Inter (Intent Behavior Code - Interactive)
 
+---
+
+> ## ⚠️ unsafe-vibe-dev 分支专用说明
+>
+> **当前所在分支：`unsafe-vibe-dev`**
+>
+> 本分支是专门用于 **Vibe Coding（快速探索性编码）** 的开发分支。在此分支上的代码可能：
+> - 包含未经严格审查的实验性改动
+> - 存在架构调整、重构尝试或破坏性变更
+> - 随时可能回滚或大幅修改
+>
+> **请谨慎参考本分支内容，切勿将本分支代码直接用于生产环境。**
+>
+> 将本分支合并回 `main` 时，**README.md 的变更应当被排除**，以避免污染 main 分支的文档。
+> 如需合并，请使用 `git merge --no-ff unsafe-vibe-dev` 后手动还原 README.md，
+> 或借助 `.gitattributes` 中已配置的 `merge=ours` 策略保护 README。
+
+---
+
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
 **Attention!! This repository remains in the EXPERIMENTAL DEMO phase, Please refer with caution and Do not use in production!!**
