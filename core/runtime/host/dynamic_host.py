@@ -65,7 +65,8 @@ class DynamicHost(IbPlugin):
         if not desc:
             return value
 
-        axiom = getattr(desc, '_axiom', None)
+        spec_reg = getattr(desc, 'ib_class', None) and desc.ib_class.registry.get_metadata_registry()
+        axiom = spec_reg.get_axiom(desc.ib_class.spec) if spec_reg and hasattr(desc, 'ib_class') and desc.ib_class.spec else None
         if axiom and hasattr(axiom, 'can_return_from_isolated'):
             if axiom.can_return_from_isolated():
                 return value

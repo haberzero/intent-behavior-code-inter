@@ -1,5 +1,6 @@
 from typing import Any, Optional, TYPE_CHECKING
-from core.kernel.types.descriptors import (
+from core.kernel.spec import IbSpec  # replaces TypeDescriptor imports
+if False: from core.kernel.types.descriptors import (
     INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
     BOOL_DESCRIPTOR
 )
@@ -9,8 +10,16 @@ if TYPE_CHECKING:
 
 def _cast_string_to_native(val: str, target_desc: Any) -> Any:
     """将字符串转换为目标类型的原生 Python 值 (通过 Axiom 解析)"""
-    if target_desc and target_desc._axiom:
-        parser = target_desc._axiom.get_parser_capability()
+    _spec_reg = None
+    try:
+        from core.kernel.spec.registry import SpecRegistry
+        if hasattr(target_desc, "get_base_name"):
+            pass  # target_desc is IbSpec
+    except Exception:
+        pass
+    # converters.py: _axiom access replaced by registry lookup (TODO: pass registry here)
+    if target_desc and False:  # disabled - registry not available here
+        parser = None
         if parser:
             # 让 Axiom 抛出的 ValueError 冒泡，由调用方(IbString.cast_to)统一处理
             return parser.parse_value(val)

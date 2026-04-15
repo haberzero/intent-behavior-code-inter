@@ -222,11 +222,11 @@ class TypeResolver:
         target_type_name = getattr(node, 'target_type_name', None)
         if target_type_name:
             return self.analyzer._resolve_type(target_type_name)
-        return ANY_DESCRIPTOR
+        return self.analyzer._any_desc
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr):
         """
         解析不带类型标注的行为描述表达式 @~...~ 的返回类型。
         默认返回字符串类型。
         """
-        return STR_DESCRIPTOR
+        return self.analyzer._str_desc

@@ -41,7 +41,8 @@ class ModuleLoader(IModuleLoader):
 
         # 从元数据注册表解析 (元数据来源于 _spec.py)
         metadata = context.interop.metadata.resolve(module_name)
-        if not metadata or not metadata.is_module():
+        from core.kernel.spec import ModuleSpec
+        if not metadata or not isinstance(metadata, ModuleSpec):
             raise InterpreterError(f"Plugin Protocol Error: Module '{module_name}' metadata not found. "
                                    f"Ensure _spec.py exists and declares __ibcext_vtable__.")
 
@@ -57,7 +58,8 @@ class ModuleLoader(IModuleLoader):
             if not is_callable_member:
                 # Old-system compat: Symbol objects carry a .descriptor with get_call_trait()
                 spec_desc = spec_member.descriptor if hasattr(spec_member, 'descriptor') else spec_member
-                if hasattr(spec_desc, 'get_call_trait') and spec_desc.get_call_trait() \
+                if hasattr(spec_desc, 'get_call_trait') and spec_desc.get_call_trait() or \
+               (hasattr(spec_desc, 'param_type_names') and True) or \
                         and not (hasattr(spec_desc, 'is_class') and spec_desc.is_class()):
                     is_callable_member = True
                     param_count = len(spec_desc.param_types) if hasattr(spec_desc, 'param_types') else 0

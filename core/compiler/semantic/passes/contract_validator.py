@@ -1,6 +1,5 @@
-from typing import Dict, List, Optional, Any
-from core.kernel.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata
-from core.kernel.types.registry import MetadataRegistry
+from typing import Any,  Dict, List, Optional, Any
+from core.kernel.spec import IbSpec, ClassSpec, FuncSpec
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
@@ -10,7 +9,7 @@ class ContractValidator:
     在系统启动前（STAGE 7），对所有已注册的类进行深度审计，
     确保方法签名对齐父类契约（协变/逆变）以及公理契约。
     """
-    def __init__(self, registry: MetadataRegistry, issue_tracker: IssueTracker, debugger: Optional[CoreDebugger] = None):
+    def __init__(self, registry: Any, issue_tracker: IssueTracker, debugger: Optional[CoreDebugger] = None):
         self.registry = registry
         self.issue_tracker = issue_tracker
         self.debugger = debugger
@@ -24,16 +23,16 @@ class ContractValidator:
 
         for desc in self.registry.all_descriptors.values():
             # 1. 审计类契约
-            if desc.is_class():
+            if self.registry.is_class_spec(desc):
                 self._validate_class(desc)
             # 2.  审计全局函数契约 (消除审计盲区)
-            elif desc.get_call_trait():
+            elif self.registry.get_call_cap(desc):
                 self._validate_function(desc)
 
-    def _validate_class(self, cls_desc: ClassMetadata):
+    def _validate_class(self, cls_desc: ClassSpec):
         """审计单个类的契约一致性"""
         parent = cls_desc.resolve_parent()
-        if not parent or not parent.is_class():
+        if not parent or not self.registry.is_class_spec(parent):
             return
 
         # 1. 检查方法重写的一致性 (Inheritance Contract)
@@ -50,20 +49,20 @@ class ContractValidator:
                 continue
                 
             # 寻找父类中同名成员
-            parent_member = parent.resolve_member(name)
+            parent_member = self.registry.resolve_member(parent, name)
             if parent_member and parent_member.is_function:
                 self._check_method_compatibility(cls_desc, name, member.descriptor, parent_member.descriptor, "parent class")
 
         # 2. 检查公理契约 (Axiom Contract)
-        axiom = cls_desc._axiom
+        axiom = self.registry.get_axiom(cls_desc)
         if axiom:
             axiom_methods = axiom.get_methods()
             for name, axiom_sig in axiom_methods.items():
-                member = cls_desc.resolve_member(name)
+                member = self.registry.resolve_member(cls_desc, name)
                 if member and member.is_function:
                     self._check_method_compatibility(cls_desc, name, member.descriptor, axiom_sig, "axiom definition")
 
-    def _validate_function(self, func_desc: TypeDescriptor):
+    def _validate_function(self, func_desc: IbSpec):
         """审计全局函数的合法性 (水合完整性校验)"""
         sig = func_desc.get_signature()
         if not sig:
@@ -86,12 +85,12 @@ class ContractValidator:
                 line=0, column=0, code="SEM_002"
             )
 
-    def _check_method_compatibility(self, cls_desc: ClassMetadata, name: str, sub_sig: TypeDescriptor, super_sig: TypeDescriptor, source: str):
+    def _check_method_compatibility(self, cls_desc: ClassSpec, name: str, sub_sig: IbSpec, super_sig: IbSpec, source: str):
         """校验方法子类型化规则：参数逆变，返回值协变"""
 
         # 1. 校验参数数量一致性
-        sub_info = sub_sig.get_signature()
-        super_info = super_sig.get_signature()
+        sub_info = (sub_sig.param_type_names, sub_sig.return_type_name) if isinstance(sub_sig, FuncSpec) else ([], 'any')
+        super_info = (super_sig.param_type_names, super_sig.return_type_name) if isinstance(super_sig, FuncSpec) else ([], 'any')
         
         if sub_info and super_info:
             sub_params, sub_ret = sub_info
@@ -119,7 +118,7 @@ class ContractValidator:
                 )
 
         # 2. 校验子类型化规则 (协变/逆变)
-        if not sub_sig.is_assignable_to(super_sig):
+        if not self.registry.is_assignable(sub_sig, super_sig):
             error_msg = f"Contract Violation: Method '{name}' in class '{cls_desc.name}' is incompatible with {source}."
             
             # 尝试提取更详细的差异信息

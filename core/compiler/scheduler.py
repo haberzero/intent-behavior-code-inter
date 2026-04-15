@@ -27,7 +27,7 @@ from core.base.interfaces import (
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.kernel.types.descriptors import ModuleMetadata, LazyDescriptor
+from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
@@ -375,7 +375,7 @@ class Scheduler(ICompilerService):
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
             # 这样 LazyDescriptor 才能在 unwrap 时找到目标，即使当前模块还未分析完
-            pre_mod_meta = ModuleMetadata(name=module_name)
+            pre_mod_meta = self._get_registry().factory.create_module(module_name) if self._get_registry() else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
             
             analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry, module_name=module_name)
@@ -437,7 +437,7 @@ class Scheduler(ICompilerService):
                         # 构造嵌套模块结构
                         root_sym = analyzer.symbol_table.resolve(root_name)
                         # 使用 is_module() 代替 isinstance
-                        if not root_sym or not root_sym.descriptor or not root_sym.descriptor.is_module():
+                        if not root_sym or not root_sym.spec or not isinstance(root_sym.spec, ModuleSpec):
                             # 使用工厂创建
                             root_mod_type = self.registry.factory.create_primitive("module")
                             root_mod_type.name = root_name
@@ -454,7 +454,7 @@ class Scheduler(ICompilerService):
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
                                 # 使用 is_module() 代替 isinstance
-                                if not next_mod_sym or not next_mod_sym.descriptor or not next_mod_sym.descriptor.is_module():
+                                if not next_mod_sym or not next_mod_sym.spec or not isinstance(next_mod_sym.spec, ModuleSpec):
                                     next_mod_type = self.registry.factory.create_primitive("module")
                                     next_mod_type.name = part_name
                                     next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, descriptor=next_mod_type)
