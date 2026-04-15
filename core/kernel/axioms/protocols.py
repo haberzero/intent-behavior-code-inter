@@ -1,122 +1,166 @@
-from typing import Protocol, List, Optional, Any, TYPE_CHECKING, ForwardRef, Dict, Tuple
+"""
+core/kernel/axioms/protocols.py
+
+Pure capability interfaces for the axiom layer.
+
+Key design change from the old version
+---------------------------------------
+ALL type references are now plain strings (type names) rather than
+TypeDescriptor / IbSpec objects.  This makes the axiom layer completely
+independent of the spec layer and eliminates the historic circular import.
+
+Capability query pattern:
+
+    axiom = axiom_registry.get_axiom("int")
+    cap   = axiom.get_operator_capability()
+    if cap:
+        result_name = cap.resolve_operation_type_name("+", "float")
+        # → "float"
+
+The SpecRegistry then resolves the returned name to an IbSpec.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.kernel.types.descriptors import TypeDescriptor, FunctionMetadata
+    from core.kernel.spec.base import IbSpec
+    from core.kernel.spec.member import MethodMemberSpec
 
-# [Axiom Layer] 定义最底层的能力接口，切断对具体实现的依赖
-# 使用 ForwardRef 或字符串引用 TypeDescriptor，避免运行时导入
+
+# ------------------------------------------------------------------ #
+# Capability interfaces                                                #
+# ------------------------------------------------------------------ #
 
 class CallCapability(Protocol):
-    """调用能力：描述一个类型如何被调用"""
-    def resolve_return(self, args: List['TypeDescriptor']) -> Optional['TypeDescriptor']: ...
+    """Callable: describes how a type is invoked."""
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        """Return the name of the return type, or None if unresolvable."""
+        ...
+
 
 class IterCapability(Protocol):
-    """迭代能力：描述一个类型如何被迭代"""
-    def get_element_type(self) -> 'TypeDescriptor': ...
+    """Iterable: describes the element type when iterating."""
+    def get_element_type_name(self) -> str:
+        """Return the name of the element type (e.g. ``"any"``)."""
+        ...
+
 
 class SubscriptCapability(Protocol):
-    """下标能力：描述一个类型如何被索引访问"""
-    def resolve_item(self, key: 'TypeDescriptor') -> Optional['TypeDescriptor']: ...
+    """Subscriptable: describes the item type for ``obj[key]``."""
+    def resolve_item_type_name(self, key_type_name: str) -> Optional[str]:
+        """Return the item type name, or None if unsupported."""
+        ...
+
 
 class OperatorCapability(Protocol):
-    """运算能力：描述一个类型如何参与二元运算"""
-    def resolve_operation(self, op: str, other: Optional['TypeDescriptor']) -> Optional['TypeDescriptor']: ...
+    """Operator-capable: describes binary operation result types."""
+    def resolve_operation_type_name(
+        self, op: str, other_type_name: Optional[str]
+    ) -> Optional[str]:
+        """Return the result type name for ``self op other``, or None."""
+        ...
+
 
 class ConverterCapability(Protocol):
-    """转换能力：描述一个类型如何被强制转换"""
-    def can_convert_from(self, source: 'TypeDescriptor') -> bool: ...
+    """Convertible: can be produced by a cast from another type."""
+    def can_convert_from(self, source_type_name: str) -> bool:
+        """True if a value of ``source_type_name`` can be cast to this type."""
+        ...
+
 
 class ParserCapability(Protocol):
-    """解析能力：描述一个类型如何从 LLM结果中解析出值"""
-    def parse_value(self, raw_value: str) -> Any: ...
+    """Parseable: can produce a Python native value from a raw string."""
+    def parse_value(self, raw_value: str) -> Any:
+        """Parse a native Python value from the raw string representation."""
+        ...
+
 
 class FromPromptCapability(Protocol):
-    """从提示词解析能力：描述一个类型如何从 LLM 返回的原始文本中解析出值"""
-    def from_prompt(self, raw_response: str, descriptor: Optional['TypeDescriptor'] = None) -> Tuple[bool, Any]:
+    """LLM-parseable: can parse a value from raw LLM output text."""
+    def from_prompt(
+        self,
+        raw_response: str,
+        spec: Optional["IbSpec"] = None,
+    ) -> Tuple[bool, Any]:
         """
-        解析 LLM 返回的原始文本。
-
-        Args:
-            raw_response: LLM 返回的原始文本
-            descriptor: 可选的类型描述符上下文，用于动态解析
+        Parse ``raw_response`` into a native Python value.
 
         Returns:
-            (True, parsed_value) - 解析成功
-            (False, retry_hint)  - 解析失败，retry_hint 用于提示重试方向
+            (True, parsed_value)    – success
+            (False, retry_hint)     – failure with a hint for LLM retry
         """
         ...
+
 
 class IlmoutputHintCapability(Protocol):
-    """LLM 输出提示能力：描述期望的 LLM 输出格式"""
-    def __outputhint_prompt__(self, descriptor: Optional['TypeDescriptor'] = None) -> str:
-        """
-        返回期望的 LLM 输出格式描述。
-        用于提示词注入，告诉 LLM 应该输出什么格式。
-
-        Args:
-            descriptor: 可选的类型描述符上下文，用于动态生成提示
-        """
+    """LLM output hint: can generate a format constraint prompt."""
+    def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
+        """Return a short string telling the LLM what format to use."""
         ...
 
+
 class WritableTrait(Protocol):
-    """ 写能力：描述一个元数据对象如何被安全地更新（如分析阶段回填签名）"""
-    def update_signature(self, param_types: List['TypeDescriptor'], return_type: Optional['TypeDescriptor']) -> None: ...
+    """Writable: the signature can be updated post-construction."""
+    def update_signature(
+        self,
+        param_type_names: List[str],
+        return_type_name: Optional[str],
+    ) -> None: ...
+
+
+# ------------------------------------------------------------------ #
+# TypeAxiom — the core axiom interface                                #
+# ------------------------------------------------------------------ #
 
 class TypeAxiom(Protocol):
     """
-    [Axiom] 类型公理接口
-    所有原子类型（如 int, str, Any）必须通过实现此接口来声明其行为。
-    严禁在代码中通过 if name == "int" 来判断行为。
+    Core axiom interface.  One axiom per built-in type.
+
+    An axiom is a stateless description of a type's *behaviour*.
+    It knows nothing about other types' structure — it only knows names.
+
+    Rules
+    -----
+    * Axioms MUST NOT import from core.kernel.spec or any runtime module.
+    * All type references in method signatures MUST be plain strings.
+    * ``get_method_specs()`` replaces the old ``get_methods()`` and returns
+      MethodMemberSpec objects (pure data, no IbSpec references).
     """
+
     @property
     def name(self) -> str: ...
-    
+
+    # Capability accessors
     def get_call_capability(self) -> Optional[CallCapability]: ...
     def get_iter_capability(self) -> Optional[IterCapability]: ...
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: ...
     def get_operator_capability(self) -> Optional[OperatorCapability]: ...
     def get_converter_capability(self) -> Optional[ConverterCapability]: ...
     def get_parser_capability(self) -> Optional[ParserCapability]: ...
-    def get_from_prompt_capability(self) -> Optional['FromPromptCapability']: ...
-    def get_llmoutput_hint_capability(self) -> Optional['IlmoutputHintCapability']: ...
+    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: ...
+    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: ...
     def get_writable_trait(self) -> Optional[WritableTrait]: ...
-    
-    def get_methods(self) -> 'Dict[str, FunctionMetadata]':
-        """获取该类型支持的内置方法签名 (Schema)"""
+
+    def get_method_specs(self) -> "Dict[str, MethodMemberSpec]":
+        """
+        Return pure-data method signatures for spec.members bootstrapping.
+        Replaces the old ``get_methods() -> Dict[str, FunctionMetadata]``.
+        """
         ...
-    
+
     def get_operators(self) -> Dict[str, str]:
-        """ 获取支持的二元运算符及其对应的魔术方法名 (如 {"+": "__add__"})"""
-        ...
-    
-    def is_dynamic(self) -> bool:
-        """是否为动态类型 (any/auto/etc.)"""
+        """Map operator symbols to magic method names (e.g. ``{"+": "__add__"}``)."""
         ...
 
-    def is_compatible(self, other: 'TypeDescriptor') -> bool:
-        """公理级兼容性判断（用于处理 any/auto 等特殊逻辑）"""
-        ...
+    # Type characteristics
+    def is_dynamic(self) -> bool: ...
+    def is_compatible(self, other_name: str) -> bool: ...
+    def is_class(self) -> bool: ...
+    def is_module(self) -> bool: ...
+    def can_return_from_isolated(self) -> bool: ...
 
-    def is_class(self) -> bool:
-        """是否为类类型"""
-        ...
+    def get_parent_axiom_name(self) -> Optional[str]: ...
 
-    def is_module(self) -> bool:
-        """是否为模块类型"""
-        ...
-
-    def get_parent_axiom_name(self) -> Optional[str]:
-        """ 继承关系：返回父类公理名称 (如 bool -> int)"""
-        ...
-
-    def resolve_specialization(self, registry: Any, args: List['TypeDescriptor']) -> 'TypeDescriptor':
-        """ 类型演算：根据泛型参数产生新的特化类型"""
-        ...
-
-    def get_diff_hint(self, other: 'TypeDescriptor') -> Optional[str]:
-        """ 诊断增强：获取类型不匹配时的公理化提示"""
-        ...
-
-    def can_return_from_isolated(self) -> bool:
-        """判断该类型的实例是否允许从隔离子环境返回"""
-        ...
+    def get_diff_hint(self, other_name: str) -> Optional[str]: ...

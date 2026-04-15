@@ -1,12 +1,13 @@
 import copy
+import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
-from .types.descriptors import TypeDescriptor
+from .spec import IbSpec, FuncSpec, ClassSpec, ModuleSpec
 
 
-# --- 符号系统 (Symbol System) ---
+# --- Symbol System ---
 
 class SymbolKind(Enum):
     VARIABLE = auto()
@@ -16,25 +17,41 @@ class SymbolKind(Enum):
     INTENT = auto()
     MODULE = auto()
 
+
 @dataclass(eq=False)
 class Symbol:
-    """静态符号基类"""
+    """Static symbol base class.
+
+    ``spec`` holds the pure-data IbSpec of this symbol's type.
+    The old field was named ``descriptor`` and held a TypeDescriptor;
+    keeping the field name ``spec`` makes the new semantics explicit.
+    """
     name: str
     kind: SymbolKind
-    uid: Optional[str] = None # 唯一标识符，用于解决变量遮蔽 (Shadowing)
-    def_node: Optional[Any] = None # 直接引用定义它的 AST 节点对象
-    owned_scope: Optional['SymbolTable'] = None # 符号拥有的内部作用域 (如类、函数的内部作用域)
+    uid: Optional[str] = None
+    def_node: Optional[Any] = None
+    owned_scope: Optional['SymbolTable'] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    # 直接持有 TypeDescriptor，不再使用 StaticType 中称层
-    descriptor: Optional[TypeDescriptor] = None
 
-    def walk_references(self, callback: Any) -> None:
-        """
-         遍历符号持有的类型引用。
-        """
-        if self.descriptor:
-            self.descriptor = callback(self.descriptor)
+    # The IbSpec for this symbol's type (pure data, no runtime state).
+    spec: Optional[IbSpec] = None
+
+    # ------------------------------------------------------------------
+    # Backward-compatibility shim
+    # ------------------------------------------------------------------
+    # Many call sites still use ``sym.descriptor``.  This property
+    # redirects to ``spec`` so we can migrate callers incrementally.
+    @property
+    def descriptor(self) -> Optional[IbSpec]:
+        return self.spec
+
+    @descriptor.setter
+    def descriptor(self, value: Optional[IbSpec]) -> None:
+        self.spec = value
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     @property
     def is_type(self) -> bool:
@@ -49,154 +66,122 @@ class Symbol:
         return self.kind == SymbolKind.VARIABLE
 
     def clone(self, memo: Optional[Dict[int, Any]] = None) -> 'Symbol':
-        """
-        克隆符号对象。
-        注意：递归克隆关联的描述符以确保物理隔离。
-        """
-        if memo is None: memo = {}
+        """Clone this symbol.  IbSpec objects are pure data; sharing is safe."""
+        if memo is None:
+            memo = {}
         if id(self) in memo:
             return memo[id(self)]
-            
         new_sym = copy.copy(self)
         memo[id(self)] = new_sym
-        
-        if self.descriptor:
-            new_sym.descriptor = self.descriptor.clone(memo)
+        # No deep-clone of spec: pure data can be shared
         return new_sym
 
     def get_content_hash(self) -> str:
-        """
-        获取符号的内容哈希，用于生成匿名 UID。
-        """
-        import hashlib
-        # 基础特征：名称 + 类型
         parts = [self.name, self.kind.name]
-        # 类型特征：描述符全名 (如果存在)
-        if self.descriptor:
-            parts.append(f"type:{self.descriptor.module_path or 'root'}.{self.descriptor.name}")
-        # 元数据特征 (可选，但为了确定性，排除不可序列化的 id)
+        if self.spec:
+            parts.append(f"type:{self.spec.module_path or 'root'}.{self.spec.name}")
         for k, v in sorted(self.metadata.items()):
             if isinstance(v, (str, int, float, bool)):
                 parts.append(f"{k}:{v}")
-        
         content = "|".join(parts)
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
 
 @dataclass
 class TypeSymbol(Symbol):
-    """表示一个类型定义 (类或内置类型)"""
+    """A type definition (class or built-in type)."""
     pass
+
 
 @dataclass
 class FunctionSymbol(Symbol):
-    """表示一个函数 (普通函数或 LLM 函数)"""
+    """A function (regular or LLM)."""
 
     @property
-    def return_type(self) -> 'Optional[TypeDescriptor]':
-        if not self.descriptor:
-            return None
-        sig = self.descriptor.get_signature()
-        if sig:
-            _, ret = sig
-            return ret
-        return None
+    def return_type_name(self) -> str:
+        if isinstance(self.spec, FuncSpec):
+            return self.spec.return_type_name
+        return "any"
 
     @property
-    def param_types(self) -> 'List[TypeDescriptor]':
-        if not self.descriptor:
-            return []
-        sig = self.descriptor.get_signature()
-        if sig:
-            params, _ = sig
-            return params
+    def param_type_names(self) -> List[str]:
+        if isinstance(self.spec, FuncSpec):
+            return list(self.spec.param_type_names)
         return []
+
 
 @dataclass
 class VariableSymbol(Symbol):
-    """表示变量或字段"""
+    """A variable or field."""
     is_const: bool = False
     is_global: bool = False
-    
-    # descriptor 存储变量的类型
+
 
 @dataclass
 class IntentSymbol(Symbol):
-    """表示一个意图块"""
+    """An intent block."""
     content: str = ""
     is_exclusive: bool = False
     parent_intent: Optional['IntentSymbol'] = None
 
 
 class SymbolTable:
-    """
-    静态符号表，支持作用域嵌套。
-    用于语义分析阶段。
-    """
-    def __init__(self, parent: Optional['SymbolTable'] = None, name: Optional[str] = None):
+    """Static symbol table with scope nesting."""
+
+    def __init__(
+        self,
+        parent: Optional['SymbolTable'] = None,
+        name: Optional[str] = None,
+    ):
         self.parent = parent
-        self.name = name # 作用域名称 (如函数名、类名)
-        self.depth = (parent.depth + 1) if parent else 0 # 作用域深度
+        self.name = name
+        self.depth = (parent.depth + 1) if parent else 0
         self.symbols: Dict[str, Symbol] = {}
-        self.global_refs: Set[str] = set() # 记录被 global 关键字显式声明的变量名
-        self._uid = None
-        self._child_count = 0 # 用于生成确定性匿名 UID
-        
+        self.global_refs: Set[str] = set()
+        self._uid: Optional[str] = None
+        self._child_count = 0
+
         if parent:
             parent._child_count += 1
             self._anon_id = parent._child_count
 
     @property
     def uid(self) -> str:
-        """ 生成确定性作用域 UID"""
-        if self._uid: return self._uid
+        if self._uid:
+            return self._uid
         if not self.parent:
-            # 模块/全局作用域：UID = scope_{name}
-            name = self.name or "global"
-            self._uid = f"scope_{name}"
+            self._uid = f"scope_{self.name or 'global'}"
         else:
-            # 嵌套作用域：UID = parent_uid / name
-            prefix = self.parent.uid
-            # 优先使用名称，否则使用其在父作用域中的确定性序号
-            name = self.name or f"anon_{self._anon_id}"
-            self._uid = f"{prefix}/{name}"
+            child_name = self.name or f"anon_{self._anon_id}"
+            self._uid = f"{self.parent.uid}/{child_name}"
         return self._uid
 
-    def define(self, sym: Symbol, allow_overwrite: bool = False):
-        """定义一个符号，如果已存在且不允许覆盖，则抛出 ValueError"""
-        # 为符号分配唯一的 UID (基于作用域路径，确保全局唯一)
-        # 格式：scope_uid:symbol_name
-        # 这确保了即使是同名变量 (Shadowing)，在扁平池中也拥有不同的物理 UID
+    def define(self, sym: Symbol, allow_overwrite: bool = False) -> None:
+        """Define a symbol; raise ValueError on conflict."""
         if not sym.uid:
             sym.uid = f"{self.uid}:{sym.name}"
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            # 内置符号允许通过 identity (Interning) 判定一致性，消除名称比对的脆弱性
-            # [Temporary] 外部模块符号和内置符号之间的兼容性处理
-            # [Future] 严格遵循显式引入原则时，此逻辑将被移除
-            is_compatible_builtin = (
-                (existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin")) or
-                (existing.metadata.get("is_external_module") and sym.metadata.get("is_builtin")) or
-                (existing.metadata.get("is_builtin") and sym.metadata.get("is_external_module")) or
-                (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
+            is_compatible = (
+                (existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"))
+                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_builtin"))
+                or (existing.metadata.get("is_builtin") and sym.metadata.get("is_external_module"))
+                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
             )
-            if is_compatible_builtin:
-                if existing.descriptor and sym.descriptor:
-                    # 在 UTS 体系下，Interning 确保了同类描述符在同一引擎下是唯一的
-                    # [Temporary] 对于外部模块符号，如果 name 相同则认为兼容
-                    # 因为 ModuleMetadata 会因为 clone 而产生不同对象，但语义相同
-                    if existing.descriptor is not sym.descriptor:
-                        # 检查是否是同名的外部模块（由于 clone 导致的）
-                        if (hasattr(existing.descriptor, 'name') and
-                            hasattr(sym.descriptor, 'name') and
-                            existing.descriptor.name == sym.descriptor.name):
-                            # 同名外部模块，语义兼容，跳过更新
-                            # [Future] 严格遵循显式引入原则时，此逻辑将被移除
-                            return
-                        raise ValueError(f"Builtin Symbol Conflict: Symbol '{sym.name}' redefined with incompatible descriptor (existing: '{existing.descriptor.name}')")
+            if is_compatible:
+                if existing.spec and sym.spec:
+                    if existing.spec is not sym.spec:
+                        if existing.spec.name == sym.spec.name:
+                            return  # same-name external module dup
+                        raise ValueError(
+                            f"Builtin Symbol Conflict: '{sym.name}' redefined with "
+                            f"incompatible spec (existing: '{existing.spec.name}')"
+                        )
                 self.symbols[sym.name] = sym
                 return
             raise ValueError(f"Symbol '{sym.name}' is already defined in this scope")
+
         self.symbols[sym.name] = sym
 
     def resolve(self, name: str) -> Optional[Symbol]:
@@ -207,33 +192,34 @@ class SymbolTable:
         return None
 
     def get_global_scope(self) -> 'SymbolTable':
-        """获取顶层全局作用域"""
         curr = self
         while curr.parent:
             curr = curr.parent
         return curr
-    
-    def add_global_ref(self, name: str):
+
+    def add_global_ref(self, name: str) -> None:
         self.global_refs.add(name)
 
+
 class SymbolFactory:
-    """负责将元数据转换为符号对象"""
-    @staticmethod
-    def create_from_descriptor(name: str, descriptor: TypeDescriptor) -> 'Symbol':
-        if descriptor.get_call_trait() and not descriptor.is_class():
-            return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=descriptor)
-        elif descriptor.is_class():
-            return TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=descriptor)
-        elif descriptor.is_module():
-            return VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=descriptor)
-        else:
-            return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=descriptor)
+    """Creates Symbol objects from IbSpec instances."""
 
     @staticmethod
-    def create_builtin_method(name: str, descriptor: TypeDescriptor) -> 'FunctionSymbol':
+    def create_from_spec(name: str, spec: IbSpec) -> 'Symbol':
+        from core.kernel.spec import FuncSpec, ClassSpec, ModuleSpec
+        if isinstance(spec, FuncSpec):
+            return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=spec)
+        if isinstance(spec, ClassSpec):
+            return TypeSymbol(name=name, kind=SymbolKind.CLASS, spec=spec)
+        if isinstance(spec, ModuleSpec):
+            return VariableSymbol(name=name, kind=SymbolKind.MODULE, spec=spec)
+        return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec)
+
+    @staticmethod
+    def create_builtin_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
         return FunctionSymbol(
             name=name,
             kind=SymbolKind.FUNCTION,
-            descriptor=descriptor,
-            metadata={"is_builtin": True, "axiom_provided": True}
+            spec=spec,
+            metadata={"is_builtin": True, "axiom_provided": True},
         )

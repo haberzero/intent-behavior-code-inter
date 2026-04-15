@@ -4,7 +4,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.base.enums import PrivilegeLevel, RegistrationState
 
 if TYPE_CHECKING:
-    from core.kernel.types.descriptors import TypeDescriptor
+    from core.kernel.spec.base import IbSpec
     from core.kernel.axioms.protocols import TypeAxiom
     from core.kernel.axioms.registry import AxiomRegistry
     from core.kernel.interfaces import IExecutionContext
@@ -210,7 +210,7 @@ class KernelRegistry:
         # Fallback: 如果是普通 Python 类 (例如在引导阶段)
         return ib_class(*args, **kwargs)
 
-    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: 'TypeDescriptor'):
+    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: 'IbSpec'):
         """
         注册类（内置或用户定义），并强制关联其 UTS 描述符。
         [Active Defense] 拒绝任何无元数据描述或名称不匹配的裸类注入。
@@ -238,7 +238,7 @@ class KernelRegistry:
         if hasattr(ib_class, 'registry'):
             ib_class.registry = self
 
-    def register_function(self, name: str, descriptor: 'TypeDescriptor', token: Any):
+    def register_function(self, name: str, descriptor: 'IbSpec', token: Any):
         """注册全局函数元数据 (仅用于编译器发现)"""
         self._verify_class_registration(token)
         if descriptor.name != name:
@@ -269,7 +269,7 @@ class KernelRegistry:
     def get_none(self) -> Any:
         return self._none_instance
 
-    def create_subclass(self, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> Any:
+    def create_subclass(self, name: str, descriptor: 'IbSpec', parent_name: str = "Object") -> Any:
         """[Authorized] 通过内核绑定的工厂方法创建类。强制校验封印状态。"""
         # 类注册封印后，禁止通过任何途径（包括工厂）创建新类
         if self._is_classes_sealed:
