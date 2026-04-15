@@ -2,11 +2,7 @@ from typing import List, Optional, Any, TYPE_CHECKING
 from core.kernel import ast as ast
 from core.kernel import symbols
 from core.kernel.symbols import SymbolTable, TypeSymbol, FunctionSymbol
-from core.kernel.types.descriptors import (
-    TypeDescriptor, ClassMetadata, FunctionMetadata,
-    VOID_DESCRIPTOR, STR_DESCRIPTOR, ANY_DESCRIPTOR
-)
-from core.kernel import types as uts
+from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ModuleSpec
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -20,7 +16,7 @@ class TypeResolver:
     def __init__(self, symbol_table: SymbolTable, semantic_analyzer: 'SemanticAnalyzer'):
         self.symbol_table = symbol_table
         self.analyzer = semantic_analyzer
-        self.current_class_descriptor: Optional[ClassMetadata] = None
+        self.current_class_descriptor: Optional[ClassSpec] = None
 
     def resolve(self, node: ast.IbASTNode):
         self.visit(node)
@@ -82,34 +78,32 @@ class TypeResolver:
         parent_desc = None
         if node.parent:
             parent_sym = self.symbol_table.resolve(node.parent)
-            # 使用 is_class() 代替 isinstance 检查
-            if parent_sym and parent_sym.descriptor and parent_sym.descriptor.is_class():
+            # 使用 is_class_spec() 代替 isinstance 检查
+            if parent_sym and parent_sym.descriptor and self.analyzer.registry.is_class_spec(parent_sym.descriptor):
                 parent_desc = parent_sym.descriptor
             else:
-                # [Enum Hook] 尝试从 meta_registry 查找父类（如 Enum）
-                # self.analyzer.registry 就是 MetadataRegistry
+                # [Enum Hook] 尝试从注册表查找父类（如 Enum）
                 meta_reg = self.analyzer.registry
                 
                 if meta_reg:
                     parent_desc = meta_reg.resolve(node.parent)
-                    if parent_desc and not parent_desc.is_class():
+                    if parent_desc and not self.analyzer.registry.is_class_spec(parent_desc):
                         parent_desc = None
                 
                 if not parent_desc:
                     self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
-        # 2. 创建 ClassMetadata 并绑定到符号
+        # 2. 创建 ClassSpec 并绑定到符号
         # 使用工厂创建以确保驻留
         descriptor = self.analyzer.registry.factory.create_class(
             name=node.name, 
-            parent=node.parent
+            parent_name=node.parent
         )
         if parent_desc:
              descriptor.parent_name = parent_desc.name
         
-        # 注册到元数据注册表，以便后续继承解析能找到它
-        if self.analyzer.registry and hasattr(self.analyzer.registry, "_metadata_registry"):
-            self.analyzer.registry._metadata_registry.register(descriptor)
+        # 注册到注册表，以便后续继承解析能找到它
+        self.analyzer.registry.register(descriptor)
              
         sym.descriptor = descriptor
         
@@ -125,26 +119,26 @@ class TypeResolver:
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         # 解析返回类型
-        ret_type = VOID_DESCRIPTOR
+        ret_type = self.analyzer._void_desc
         if node.returns:
             ret_type = self.analyzer._resolve_type(node.returns)
             
         # 解析参数类型
         param_types = []
-        # if self.current_class_descriptor:
-        # param_types.append(self.current_class_descriptor) # self param handling logic moved to BoundMethodMetadata
             
         for arg_node in node.args:
-            arg_type = ANY_DESCRIPTOR
+            arg_type = self.analyzer._any_desc
             if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 使用工厂创建 FunctionMetadata 以确保驻留
-        func_desc = self.analyzer.registry.factory.create_function(
-            params=param_types,
-            ret=ret_type
+        # 使用工厂创建 FuncSpec 以确保驻留
+        func_desc = self.analyzer.registry.factory.create_func(
+            name=node.name,
+            param_type_names=[p.name for p in param_types],
+            return_type_name=ret_type.name
         )
+        func_desc.is_user_defined = True
         
         if self.current_class_descriptor:
             # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
@@ -163,25 +157,26 @@ class TypeResolver:
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         # LLM 函数默认返回 string
-        ret_type = STR_DESCRIPTOR
+        ret_type = self.analyzer._str_desc
         if node.returns:
             ret_type = self.analyzer._resolve_type(node.returns)
             
         param_types = []
-        # if self.current_class_descriptor:
-        # param_types.append(self.current_class_descriptor)
             
         for arg_node in node.args:
-            arg_type = ANY_DESCRIPTOR
+            arg_type = self.analyzer._any_desc
             if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 使用工厂创建 FunctionMetadata 以确保驻留
-        func_desc = self.analyzer.registry.factory.create_function(
-            params=param_types,
-            ret=ret_type
+        # 使用工厂创建 FuncSpec 以确保驻留
+        func_desc = self.analyzer.registry.factory.create_func(
+            name=node.name,
+            param_type_names=[p.name for p in param_types],
+            return_type_name=ret_type.name,
+            is_llm=True
         )
+        func_desc.is_user_defined = True
         
         if self.current_class_descriptor:
             # 包装为符号对象

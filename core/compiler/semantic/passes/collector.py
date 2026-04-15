@@ -2,7 +2,7 @@ from typing import Optional, Any, List, Tuple, TYPE_CHECKING
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
-from core.kernel.types.descriptors import TypeDescriptor
+from core.kernel.spec import IbSpec, ClassSpec
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -96,7 +96,7 @@ class SymbolCollector:
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
         # 1. 创建类元数据并注册
-        cls_meta = self.analyzer.registry.factory.create_class(name=node.name, parent=node.parent)
+        cls_meta = self.analyzer.registry.factory.create_class(name=node.name, parent_name=node.parent)
         cls_meta.is_user_defined = True
         
         # [Enum Hook] 如果类继承 Enum，则将 axiom_name 设置为 "enum"
@@ -128,7 +128,7 @@ class SymbolCollector:
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         # 1. 创建函数元数据 (暂定为 Any -> Any)
-        func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
+        func_meta = self.analyzer.registry.factory.create_func(name=node.name, param_type_names=[], return_type_name="any")
         func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
         
@@ -138,7 +138,7 @@ class SymbolCollector:
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         # 1. 创建函数元数据
-        func_meta = self.analyzer.registry.factory.create_function(params=[], ret=self.analyzer._any_desc)
+        func_meta = self.analyzer.registry.factory.create_func(name=node.name, param_type_names=[], return_type_name="any")
         func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
         
@@ -205,7 +205,7 @@ class LocalSymbolCollector:
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
             # 如果现有符号是 any/auto 占位符，允许覆盖，消除名称硬编码
-            if existing and (not existing.descriptor or existing.descriptor.is_dynamic()):
+            if existing and (not existing.descriptor or self.analyzer.registry.is_dynamic(existing.descriptor)):
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
@@ -237,7 +237,7 @@ class LocalSymbolCollector:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
                 # 使用 is_dynamic 判定，消除硬编码
-                if existing and existing.descriptor and not existing.descriptor.is_dynamic():
+                if existing and existing.descriptor and not self.analyzer.registry.is_dynamic(existing.descriptor):
                     continue
 
                 sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=declared_type, def_node=node)
