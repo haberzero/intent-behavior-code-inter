@@ -173,6 +173,13 @@ class LLMExecutorImpl:
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
+        # 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
+        if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            return LLMResult.uncertain_result(
+                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            )
+
         # 记录最后一次调用信息
         self.last_call_info = {
             "sys_prompt": sys_prompt,
@@ -433,6 +440,13 @@ class LLMExecutorImpl:
             return LLMResult.uncertain_result(
                 raw_response="__MOCK_REPAIR__",
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+            )
+
+        # 6.2 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
+        if response == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            return LLMResult.uncertain_result(
+                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
             )
 
         # 记录最后一次调用信息
