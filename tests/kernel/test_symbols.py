@@ -5,7 +5,7 @@ Unit tests for core/kernel/symbols.py
 
 Coverage:
   - Symbol / FunctionSymbol / TypeSymbol / VariableSymbol construction
-  - Symbol.spec field and .descriptor backward-compat shim
+  - Symbol.spec field
   - Symbol.clone()
   - Symbol.get_content_hash() stability
   - SymbolTable.define / resolve (including scoped lookup)
@@ -30,7 +30,7 @@ def reg():
 
 
 # ---------------------------------------------------------------------------
-# 1. Symbol construction and spec/descriptor compat shim
+# 1. Symbol construction and spec
 # ---------------------------------------------------------------------------
 
 class TestSymbolBasic:
@@ -39,18 +39,10 @@ class TestSymbolBasic:
         sym = VariableSymbol(name="x", kind=SymbolKind.VARIABLE, spec=int_s)
         assert sym.name == "x"
         assert sym.spec is int_s
-        assert sym.descriptor is int_s  # compat shim
-
-    def test_descriptor_setter_routes_to_spec(self, reg):
-        sym = VariableSymbol(name="y", kind=SymbolKind.VARIABLE)
-        int_s = reg.resolve("int")
-        sym.descriptor = int_s  # use old-style setter
-        assert sym.spec is int_s
 
     def test_symbol_with_no_spec(self):
         sym = VariableSymbol(name="z", kind=SymbolKind.VARIABLE)
         assert sym.spec is None
-        assert sym.descriptor is None
 
     def test_function_symbol(self, reg):
         fn_spec = reg.factory.create_func("add", ["int", "int"], return_type_name="int")

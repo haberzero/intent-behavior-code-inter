@@ -210,28 +210,28 @@ class KernelRegistry:
         # Fallback: 如果是普通 Python 类 (例如在引导阶段)
         return ib_class(*args, **kwargs)
 
-    def register_class(self, name: str, ib_class: Any, token: Any, descriptor: 'IbSpec'):
+    def register_class(self, name: str, ib_class: Any, token: Any, spec: 'IbSpec'):
         """
         注册类（内置或用户定义），并强制关联其 UTS 描述符。
         [Active Defense] 拒绝任何无元数据描述或名称不匹配的裸类注入。
         """
         self._verify_class_registration(token)
         
-        if not descriptor:
-            raise ValueError(f"Registry: Cannot register class '{name}' without a UTS descriptor.")
+        if not spec:
+            raise ValueError(f"Registry: Cannot register class '{name}' without a UTS spec.")
             
-        if descriptor.name != name:
-             raise ValueError(f"Registry: Descriptor name '{descriptor.name}' does not match registered name '{name}'.")
+        if spec.name != name:
+             raise ValueError(f"Registry: Spec name '{spec.name}' does not match registered name '{name}'.")
 
         if name in self._classes:
              raise ValueError(f"Registry: Class '{name}' is already registered. Duplicate registration is forbidden in strict mode.")
 
         # 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
-            descriptor = self._metadata_registry.register(descriptor)
+            spec = self._metadata_registry.register(spec)
             
-        # 强制绑定描述符到类对象上 (此时 descriptor 已经是注册表返回的隔离副本)
-        ib_class.descriptor = descriptor
+        # 强制绑定到类对象 (此时 spec 已经是注册表返回的隔离副本)
+        ib_class.spec = spec
         self._classes[name] = ib_class
         
         # 绑定注册表引用

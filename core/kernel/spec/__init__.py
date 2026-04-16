@@ -13,6 +13,7 @@ from .specs import (
     DictSpec,
     BoundMethodSpec,
     ModuleSpec,
+    LazySpec,
     # Built-in prototype constants
     INT_SPEC,
     FLOAT_SPEC,
@@ -47,6 +48,7 @@ __all__ = [
     "DictSpec",
     "BoundMethodSpec",
     "ModuleSpec",
+    "LazySpec",
     # Built-in constants
     "INT_SPEC",
     "FLOAT_SPEC",

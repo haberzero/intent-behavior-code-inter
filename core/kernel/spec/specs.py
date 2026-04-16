@@ -124,6 +124,29 @@ class ModuleSpec(IbSpec):
         return self._axiom_name or "module"
 
 
+@dataclass
+class LazySpec(ModuleSpec):
+    """
+    A deferred module reference used by the compiler scheduler to handle
+    cross-file (circular) import dependencies.
+
+    When the scheduler encounters an import whose target module has not yet
+    been fully compiled, it creates a ``LazySpec`` as a placeholder.  The
+    semantic analyzer will later call ``SpecRegistry.resolve_member()`` which
+    transparently resolves the real ``ModuleSpec`` from the registry.
+
+    ``LazySpec`` carries no additional fields beyond the inherited ``name``.
+    The registry is NOT embedded here — resolution always goes through the
+    ``SpecRegistry`` instance that owns the analysis pass, keeping the spec
+    layer side-effect free.
+    """
+
+    is_lazy: bool = field(default=True, init=False, repr=False)
+
+    def get_base_name(self) -> str:
+        return "module"
+
+
 # ------------------------------------------------------------------ #
 # Built-in prototype constants                                         #
 # ------------------------------------------------------------------ #

@@ -5,7 +5,6 @@ from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
-TypeDescriptor = IbSpec  # backward compat alias
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -163,7 +162,7 @@ class FlatSerializer(BaseFlatSerializer):
                 "uid": uid,
                 "name": sym.name,
                 "kind": sym.kind.name if hasattr(sym.kind, 'name') else str(sym.kind),
-                "type_uid": self._collect_type(sym.descriptor) if hasattr(sym, 'descriptor') and sym.descriptor else None,
+                "type_uid": self._collect_type(sym.spec) if hasattr(sym, 'spec') and sym.spec else None,
                 "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
                 "owned_scope_uid": self._collect_scope(sym.owned_scope) if hasattr(sym, 'owned_scope') and sym.owned_scope else None,
                 "metadata": sym.metadata
@@ -171,7 +170,7 @@ class FlatSerializer(BaseFlatSerializer):
         self.symbol_pool[uid] = sym_data
         return uid
 
-    def _collect_type(self, t: TypeDescriptor) -> str:
+    def _collect_type(self, t: IbSpec) -> str:
         """收集类型对象"""
         t_id = id(t)
         if t_id in self.type_map:

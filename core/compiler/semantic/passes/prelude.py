@@ -39,9 +39,9 @@ class Prelude:
         for name, spec in spec_reg.all_specs.items():
             if "." in name:
                 continue
-            if spec_reg.is_callable(spec) and not spec_reg.is_class_spec(spec):
-                if isinstance(spec, FuncSpec):
-                    self.builtin_functions[name] = spec
+            # Only FuncSpec instances are builtin functions; all other specs are types
+            if isinstance(spec, FuncSpec):
+                self.builtin_functions[name] = spec
             elif spec_reg.is_module_spec(spec):
                 self.builtin_modules[name] = spec
             else:

@@ -31,11 +31,6 @@ class IbObject:
         self.ib_class = ib_class
         self.fields: Mapping[str, Any] = {}
 
-    @property
-    def descriptor(self) -> Optional[IbSpec]:
-        """Return the IbSpec of this object's class (backward-compat shim)."""
-        return self.ib_class.spec
-
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         统一消息传递接口。
@@ -324,15 +319,6 @@ class IbClass(IbObject):
     def spec(self, value: Optional[IbSpec]) -> None:
         self._spec = value
 
-    @property
-    def descriptor(self) -> Optional[IbSpec]:
-        return self._spec
-
-    @descriptor.setter
-    def descriptor(self, value: Optional[IbSpec]) -> None:
-        self._spec = value
-
-
     def lookup_method(self, name: str) -> Optional['IbFunction']:
         """在虚表中查找方法 (支持继承)"""
         if name in self.methods:
@@ -460,7 +446,7 @@ class IbNativeFunction(IbFunction):
     包装 Python 原生函数的 IBC 函数。
     用于引导阶段注入基础运算（如 int.__add__）。
     """
-    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[IbSpec] = None):
+    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, spec: Optional[IbSpec] = None):
         # 强制绑定到协议类，移除静默兜底
         reg = ib_class.registry if ib_class else None
         target_class = ib_class
@@ -477,11 +463,11 @@ class IbNativeFunction(IbFunction):
         self.is_method = is_method
         self.logic_id = logic_id
         self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
-        self._descriptor = descriptor
+        self._spec = spec
 
     @property
-    def descriptor(self) -> Optional[IbSpec]:
-        return self._descriptor if self._descriptor is not None else super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         # 如果 py_func 本身就是 IbObject (例如是一个 Proxy)，直接转发消息
@@ -522,14 +508,14 @@ class IbBoundMethod(IbFunction):
         self.method = method
 
     @property
-    def descriptor(self) -> Optional[IbSpec]:
+    def spec(self) -> Optional[IbSpec]:
         """Synthesise a BoundMethodSpec for this bound method."""
         spec_reg = self.ib_class.registry.get_metadata_registry()
         if spec_reg:
             r_name = self.receiver.ib_class.name if self.receiver else ""
             m_name = self.method.ib_class.name
             return spec_reg.factory.create_bound_method(r_name, m_name)
-        return super().descriptor
+        return self.ib_class.spec
 
     def call(self, _receiver: IbObject, args: List[IbObject]) -> IbObject:
         if self.receiver is None:
@@ -615,16 +601,16 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[IbSpec] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
-        self._descriptor = descriptor
+        self._spec = spec
         self.module_name = module_name or context.current_module_name
 
     @property
-    def descriptor(self) -> Optional[IbSpec]:
-        return self._descriptor if self._descriptor is not None else super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
@@ -709,12 +695,12 @@ class IbLLMFunction(IbFunction):
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.context = context
-        self._descriptor = descriptor
+        self._spec = spec
         self.module_name = module_name or context.current_module_name
 
     @property
-    def descriptor(self) -> Optional[IbSpec]:
-        return self._descriptor if self._descriptor is not None else super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""

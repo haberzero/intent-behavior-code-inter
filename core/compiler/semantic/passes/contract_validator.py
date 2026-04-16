@@ -38,7 +38,7 @@ class ContractValidator:
         # 1. 检查方法重写的一致性 (Inheritance Contract)
         for name, member in cls_desc.members.items():
             # 校验成员水合完整性
-            if member.descriptor is None:
+            if member.spec is None:
                 self.issue_tracker.report_error(
                     f"Contract Violation: Member '{name}' in class '{cls_desc.name}' has unhydrated type descriptor.",
                     file_path="<metadata>", line=0, column=0, code="SEM_002"
@@ -51,7 +51,7 @@ class ContractValidator:
             # 寻找父类中同名成员
             parent_member = self.registry.resolve_member(parent, name)
             if parent_member and parent_member.is_function:
-                self._check_method_compatibility(cls_desc, name, member.descriptor, parent_member.descriptor, "parent class")
+                self._check_method_compatibility(cls_desc, name, member.spec, parent_member.spec, "parent class")
 
         # 2. 检查公理契约 (Axiom Contract)
         axiom = self.registry.get_axiom(cls_desc)
@@ -60,7 +60,7 @@ class ContractValidator:
             for name, axiom_sig in axiom_methods.items():
                 member = self.registry.resolve_member(cls_desc, name)
                 if member and member.is_function:
-                    self._check_method_compatibility(cls_desc, name, member.descriptor, axiom_sig, "axiom definition")
+                    self._check_method_compatibility(cls_desc, name, member.spec, axiom_sig, "axiom definition")
 
     def _validate_function(self, func_desc: IbSpec):
         """审计全局函数的合法性 (水合完整性校验)"""

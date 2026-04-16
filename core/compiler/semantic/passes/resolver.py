@@ -3,6 +3,7 @@ from core.kernel import ast as ast
 from core.kernel import symbols
 from core.kernel.symbols import SymbolTable, TypeSymbol, FunctionSymbol
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ModuleSpec
+from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -79,8 +80,8 @@ class TypeResolver:
         if node.parent:
             parent_sym = self.symbol_table.resolve(node.parent)
             # 使用 is_class_spec() 代替 isinstance 检查
-            if parent_sym and parent_sym.descriptor and self.analyzer.registry.is_class_spec(parent_sym.descriptor):
-                parent_desc = parent_sym.descriptor
+            if parent_sym and parent_sym.spec and self.analyzer.registry.is_class_spec(parent_sym.spec):
+                parent_desc = parent_sym.spec
             else:
                 # [Enum Hook] 尝试从注册表查找父类（如 Enum）
                 meta_reg = self.analyzer.registry
@@ -105,7 +106,7 @@ class TypeResolver:
         # 注册到注册表，以便后续继承解析能找到它
         self.analyzer.registry.register(descriptor)
              
-        sym.descriptor = descriptor
+        sym.spec = descriptor
         
         # 3. 解析成员
         old_class = self.current_class_descriptor
@@ -141,19 +142,19 @@ class TypeResolver:
         func_desc.is_user_defined = True
         
         if self.current_class_descriptor:
-            # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
-            # 包装为符号对象，以满足语义分析器的接口需求
-            self.current_class_descriptor.members[node.name] = symbols.FunctionSymbol(
+            # 同步到 spec 的成员表中，使用正规的 MethodMemberSpec
+            self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
-                kind=symbols.SymbolKind.FUNCTION,
-                descriptor=func_desc,
-                def_node=node
+                kind="method",
+                param_type_names=[p.name for p in param_types],
+                param_type_modules=[p.module_path for p in param_types],
+                return_type_name=ret_type.name,
             )
             
         # 绑定到符号
         sym = self.symbol_table.resolve(node.name)
         if sym and sym.is_function:
-            sym.descriptor = func_desc
+            sym.spec = func_desc
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         # LLM 函数默认返回 string
@@ -179,18 +180,19 @@ class TypeResolver:
         func_desc.is_user_defined = True
         
         if self.current_class_descriptor:
-            # 包装为符号对象
-            self.current_class_descriptor.members[node.name] = symbols.FunctionSymbol(
+            # 同步到 spec 的成员表中，使用正规的 MethodMemberSpec
+            self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
-                kind=symbols.SymbolKind.LLM_FUNCTION,
-                descriptor=func_desc,
-                def_node=node,
-                metadata={"is_llm": True}
+                kind="method",
+                param_type_names=[p.name for p in param_types],
+                param_type_modules=[p.module_path for p in param_types],
+                return_type_name=ret_type.name,
+                llm=True,
             )
 
         sym = self.symbol_table.resolve(node.name)
         if sym and sym.is_function:
-            sym.descriptor = func_desc
+            sym.spec = func_desc
             sym.metadata["is_llm"] = True
 
     def visit_IbAssign(self, node: ast.IbAssign):
@@ -202,17 +204,16 @@ class TypeResolver:
                     name = target.target.id
                     # 注入到描述符
                     if self.current_class_descriptor:
-                        # 统一使用 Symbol 包装成员，以满足语义分析器的接口需求
-                        self.current_class_descriptor.members[name] = symbols.VariableSymbol(
+                        # 同步到 spec 的成员表中，使用正规的 MemberSpec
+                        self.current_class_descriptor.members[name] = MemberSpec(
                             name=name,
-                            kind=symbols.SymbolKind.VARIABLE,
-                            descriptor=declared_type,
-                            def_node=target
+                            kind="field",
+                            type_name=declared_type.name,
                         )
 
                     sym = self.symbol_table.resolve(name)
                     if sym and sym.is_variable:
-                        sym.descriptor = declared_type
+                        sym.spec = declared_type
 
     def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance):
         """

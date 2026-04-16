@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, TYPE_CHECKING as TC
+from typing import Optional, Any, Dict, List, Optional, Union, TYPE_CHECKING, TYPE_CHECKING as TC
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent, IStateProvider
 from core.base.source_atomic import Location
 from core.runtime.exceptions import BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
@@ -7,7 +7,7 @@ from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.kernel.registry import KernelRegistry
 from core.base.interfaces import IStateReader
-from core.kernel.types.descriptors import TypeDescriptor
+from core.kernel.spec import IbSpec
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule, IbObject
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from core.runtime.interpreter.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
-    def __init__(self, name: str, value: Any, declared_type: TypeDescriptor | None = None, is_const: bool = False):
+    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False):
         self.name = name
         self.value = value
         self.declared_type = declared_type
@@ -47,33 +47,22 @@ class ScopeImpl:
         if isinstance(value, IbLLMUncertain):
             return
             
-        # [Phase 3.3] 强契约：唯一使用描述符进行校验
-        if not hasattr(value, 'descriptor'):
+        # [Phase 3.3] 强契约：运行时类型校验
+        if not hasattr(value, 'ib_class'):
             value = self._registry.box(value)
-            
-        val_desc = value.descriptor
-        
-        # 如果 declared_type 是 TypeDescriptor
-        if isinstance(declared_type, TypeDescriptor):
-            if val_desc:
-                if not val_desc.is_assignable_to(declared_type):
-                    raise InterpreterError(
-                        f"Type mismatch: Cannot assign '{val_desc.name}' to '{declared_type.name}' for variable '{name}'",
-                        error_code=RUN_TYPE_MISMATCH
-                    )
-            else:
-                # 理论上所有运行时对象必须具备描述符 (由 Phase 1.1/1.3 保证)
+
+        val_spec = value.ib_class.spec if value.ib_class else None
+
+        # declared_type 是 IbSpec（来自编译器的类型标注）
+        if isinstance(declared_type, IbSpec):
+            if val_spec:
+                if not value.ib_class.is_assignable_to(value.ib_class.registry.get_class(declared_type.name) if declared_type.name else None):
+                    pass  # runtime assignability checked below
+            # Use class-level compatibility check
+            spec_reg = value.ib_class.registry.get_metadata_registry()
+            if spec_reg and val_spec and not spec_reg.is_assignable(val_spec, declared_type):
                 raise InterpreterError(
-                    f"System Error: Runtime object of class '{value.ib_class.name}' missing UTS descriptor.",
-                    error_code=RUN_TYPE_MISMATCH
-                )
-        elif hasattr(declared_type, 'is_assignable_to'):
-            # 支持其他具备兼容性检查接口的对象
-            # 注意：此处回退到 val_class 校验，仅作为非 UTS 描述符的补充
-            val_class = value.ib_class
-            if not val_class.is_assignable_to(declared_type):
-                 raise InterpreterError(
-                    f"Type mismatch: '{val_class.name}' is not assignable to declared type for variable '{name}'",
+                    f"Type mismatch: Cannot assign '{val_spec.name}' to '{declared_type.name}' for variable '{name}'",
                     error_code=RUN_TYPE_MISMATCH
                 )
 

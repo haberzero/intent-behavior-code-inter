@@ -37,19 +37,6 @@ class Symbol:
     spec: Optional[IbSpec] = None
 
     # ------------------------------------------------------------------
-    # Backward-compatibility shim
-    # ------------------------------------------------------------------
-    # Many call sites still use ``sym.descriptor``.  This property
-    # redirects to ``spec`` so we can migrate callers incrementally.
-    @property
-    def descriptor(self) -> Optional[IbSpec]:
-        return self.spec
-
-    @descriptor.setter
-    def descriptor(self, value: Optional[IbSpec]) -> None:
-        self.spec = value
-
-    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 

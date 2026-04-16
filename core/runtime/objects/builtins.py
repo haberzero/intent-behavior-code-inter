@@ -41,7 +41,7 @@ class IbInteger(IbObject):
         return self.ib_class.registry.box(list(range(self.value)))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         res_val = _cast_numeric_to_native(self.value, target_desc)
         return self.ib_class.registry.box(res_val)
 
@@ -136,7 +136,7 @@ class IbFloat(IbObject):
         return self.ib_class.registry.box(1 if self.value != 0.0 else 0)
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         res_val = _cast_numeric_to_native(self.value, target_desc)
         return self.ib_class.registry.box(res_val)
 
@@ -208,7 +208,7 @@ class IbString(IbObject):
         return self.ib_class.registry.get_none()
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         try:
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)

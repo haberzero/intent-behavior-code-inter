@@ -27,7 +27,7 @@ from core.base.interfaces import (
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec
+from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec, LazySpec
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
@@ -374,8 +374,8 @@ class Scheduler(ICompilerService):
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
-            # 这样 LazyDescriptor 才能在 unwrap 时找到目标，即使当前模块还未分析完
-            pre_mod_meta = self._get_registry().factory.create_module(module_name) if self._get_registry() else ModuleMetadata(name=module_name)
+            # 这样 LazySpec 才能在解析时找到目标，即使当前模块还未分析完
+            pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
             
             analyzer = SemanticAnalyzer(file_tracker, host_interface=self.host_interface, debugger=self.debugger, registry=self.registry, module_name=module_name)
@@ -401,12 +401,11 @@ class Scheduler(ICompilerService):
                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
                     
-                    # 统一使用 LazyDescriptor 解决循环依赖问题
+                    # 统一使用 LazySpec 解决循环依赖问题
                     # 无论该模块是否已编译，都先注入 Lazy 描述符，
                     # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
-                    s_mod_type = LazyDescriptor(name=imp_mod_name)
+                    s_mod_type = LazySpec(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
-                    s_mod_type._registry = self.registry
                 elif imp.module_name in self.host_interface._module_metadata_map:
                     s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
                 elif self.host_interface.metadata.resolve(imp.module_name) is not None:
@@ -441,15 +440,15 @@ class Scheduler(ICompilerService):
                             # 使用工厂创建
                             root_mod_type = self.registry.factory.create_primitive("module")
                             root_mod_type.name = root_name
-                            root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, descriptor=root_mod_type)
+                            root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, spec=root_mod_type)
                             analyzer.symbol_table.define(root_sym)
                         
-                        curr_mod = root_sym.descriptor
+                        curr_mod = root_sym.spec
                         for i in range(1, len(parts)):
                             part_name = parts[i]
                             is_last = (i == len(parts) - 1)
                             if is_last:
-                                target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, descriptor=s_mod_type)
+                                target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=s_mod_type)
                                 curr_mod.exported_scope.define(target_sym)
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
@@ -457,9 +456,9 @@ class Scheduler(ICompilerService):
                                 if not next_mod_sym or not next_mod_sym.spec or not isinstance(next_mod_sym.spec, ModuleSpec):
                                     next_mod_type = self.registry.factory.create_primitive("module")
                                     next_mod_type.name = part_name
-                                    next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, descriptor=next_mod_type)
+                                    next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_mod_type)
                                     curr_mod.exported_scope.define(next_mod_sym)
-                                curr_mod = next_mod_sym.descriptor
+                                curr_mod = next_mod_sym.spec
                     else:
                         # 普通导入或带别名导入
                         # [临时方案] 检查是否已存在同名符号
@@ -477,7 +476,7 @@ class Scheduler(ICompilerService):
                                 # 因为用户可能意图使用自己定义的符号
                                 pass
                         else:
-                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, descriptor=s_mod_type, metadata={"is_external_module": True})
+                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
                             analyzer.symbol_table.define(mod_sym)
                         
                 elif imp.import_type == ImportType.FROM_IMPORT:
@@ -491,7 +490,7 @@ class Scheduler(ICompilerService):
                                 if existing:
                                     pass  # 跳过重复注入
                                 else:
-                                    new_sym = SymbolFactory.create_from_descriptor(name, sym.descriptor) if sym.descriptor else sym
+                                    new_sym = SymbolFactory.create_from_descriptor(name, sym.spec) if sym.spec else sym
                                     analyzer.symbol_table.define(new_sym)
                         else:
                             # 注入特定符号
@@ -506,11 +505,11 @@ class Scheduler(ICompilerService):
                                     # 创建一个指向原符号的克隆/别名符号
                                     # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
-                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
                                     elif target_sym.kind == SymbolKind.FUNCTION:
-                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
                                     else:
-                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, descriptor=target_sym.descriptor, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
 
                                     analyzer.symbol_table.define(new_sym)
                             else:
@@ -524,7 +523,7 @@ class Scheduler(ICompilerService):
             result = analyzer.analyze(ast_node)
             
             # 语义分析完成后，更新注册表中的元数据成员
-            # 这确保了 LazyDescriptor 在 unwrap 时能看到完整的符号表
+            # 这确保了 LazySpec 在解析时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:
                 # 过滤掉非导出的符号（如内部变量）可以在这里做，目前默认全量导出

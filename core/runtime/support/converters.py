@@ -1,10 +1,5 @@
 from typing import Any, Optional, TYPE_CHECKING
-from core.kernel.spec import IbSpec  # replaces TypeDescriptor imports
-if False: from core.kernel.types.descriptors import (
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR,
-    BOOL_DESCRIPTOR
-)
-
+from core.kernel.spec import IbSpec
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
 
@@ -33,7 +28,7 @@ def _cast_numeric_to_native(val: Any, target_desc: Any) -> Any:
         return val
         
     # 使用公理名称判定，解决多引擎隔离下的 identity 失效问题
-    axiom_name = target_desc.get_base_axiom_name()
+    axiom_name = target_desc.get_base_name()
     if axiom_name == "str":
         return str(val)
     if axiom_name == "int":

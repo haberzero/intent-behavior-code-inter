@@ -502,7 +502,7 @@ class StmtHandler(BaseHandler):
         """普通函数定义"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbUserFunction(node_uid, self.execution_context, descriptor=declared_type)
+        func = IbUserFunction(node_uid, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
@@ -511,7 +511,7 @@ class StmtHandler(BaseHandler):
         """LLM 函数 definition"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, descriptor=declared_type)
+        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
@@ -545,11 +545,11 @@ class StmtHandler(BaseHandler):
                 
                 # 校验参数数量一致性 (如果有元数据支持)
                 method_obj = existing_class.methods[method_name]
-                if hasattr(method_obj, 'descriptor') and method_obj.descriptor:
+                if hasattr(method_obj, 'spec') and method_obj.spec:
                     # 获取 AST 中的参数列表
                     params = stmt_data.get("args", [])
                     # 简单校验参数数量 (注意：self 在运行时会被处理，此处校验声明的一致性)
-                    expected_count = len(method_obj.descriptor.params) if hasattr(method_obj.descriptor, 'params') else -1
+                    expected_count = len(method_obj.spec.params) if hasattr(method_obj.spec, 'params') else -1
                     if expected_count != -1 and len(params) != expected_count:
                          # 强制执行严格契约校验
                          raise self.report_error(f"Contract Mismatch: Method '{method_name}' of class '{name}' parameter count mismatch. AST: {len(params)}, Descriptor: {expected_count}", stmt_uid)

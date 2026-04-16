@@ -209,7 +209,7 @@ def main():
                     for name, sym in sym_table.symbols.items():
                         result["symbols"][name] = {
                             "kind": str(sym.kind),
-                            "type": str(sym.descriptor) if sym.descriptor else "None"
+                            "type": str(sym.spec) if sym.spec else "None"
                         }
                 output = json.dumps(result, indent=2, ensure_ascii=False)
                 print(output)

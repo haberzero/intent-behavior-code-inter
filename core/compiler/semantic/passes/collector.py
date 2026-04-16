@@ -83,7 +83,12 @@ class SymbolCollector:
             # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
             # 如果当前在类作用域内，且定义的不是类本身
             if self.analyzer and self.analyzer.current_class:
-                self.analyzer.current_class.members[sym.name] = sym
+                from core.kernel.spec.member import MemberSpec
+                self.analyzer.current_class.members[sym.name] = MemberSpec(
+                    name=sym.name,
+                    kind="field",
+                    type_name=sym.spec.name if sym.spec else "any",
+                )
                 
         except ValueError as e:
             if self.issue_tracker:
@@ -107,7 +112,7 @@ class SymbolCollector:
         self.analyzer.registry.register(cls_meta)
         
         # 2. 注册类符号
-        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, descriptor=cls_meta)
+        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, spec=cls_meta)
         self._define(sym, node)
         
         # 3. 进入类作用域收集成员
@@ -132,7 +137,7 @@ class SymbolCollector:
         func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
         
-        sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, descriptor=func_meta)
+        sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, spec=func_meta)
         self._define(sym, node)
         # 局部作用域由 SemanticAnalyzer.visit_IbFunctionDef 处理
 
@@ -142,7 +147,7 @@ class SymbolCollector:
         func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
         
-        sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, def_node=node, descriptor=func_meta)
+        sym = FunctionSymbol(name=node.name, kind=SymbolKind.LLM_FUNCTION, def_node=node, spec=func_meta)
         sym.metadata["is_llm"] = True
         self._define(sym, node)
 
@@ -153,7 +158,7 @@ class SymbolCollector:
         for name, target in SymbolExtractor.get_assigned_names(node):
             # 避免在 Pass 1 重复定义
             if name not in self.symbol_table.symbols:
-                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, def_node=node, descriptor=self.analyzer._any_desc if self.analyzer else None)
+                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, def_node=node, spec=self.analyzer._any_desc if self.analyzer else None)
                 self._define(sym, target) # 绑定 target 节点
         
         # 递归扫描回退块中的符号 (虽然赋值回退块通常不含类/函数定义)
@@ -205,7 +210,7 @@ class LocalSymbolCollector:
             existing = self.symbol_table.symbols.get(sym.name)
             allow_overwrite = False
             # 如果现有符号是 any/auto 占位符，允许覆盖，消除名称硬编码
-            if existing and (not existing.descriptor or self.analyzer.registry.is_dynamic(existing.descriptor)):
+            if existing and (not existing.spec or self.analyzer.registry.is_dynamic(existing.spec)):
                 allow_overwrite = True
             
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
@@ -237,10 +242,10 @@ class LocalSymbolCollector:
                 # [LIFECYCLE] 符号生命周期：如果该符号已在 Pass 2 中决议为具体类型，则跳过
                 existing = self.symbol_table.symbols.get(name)
                 # 使用 is_dynamic 判定，消除硬编码
-                if existing and existing.descriptor and not self.analyzer.registry.is_dynamic(existing.descriptor):
+                if existing and existing.spec and not self.analyzer.registry.is_dynamic(existing.spec):
                     continue
 
-                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=declared_type, def_node=node)
+                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=declared_type, def_node=node)
                 self._define(sym, target) # 绑定 target 节点
         
         # 递归扫描回退块中的局部定义 (Pass 2.5)
@@ -249,7 +254,7 @@ class LocalSymbolCollector:
     def visit_IbFor(self, node: ast.IbFor):
         # 预扫描 For 循环的迭代变量
         for name, target in SymbolExtractor.get_assigned_names(node):
-            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=self.analyzer._any_desc, def_node=node)
+            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=self.analyzer._any_desc, def_node=node)
             self._define(sym, target) # 绑定 target 节点
         self.generic_visit(node)
 
@@ -257,7 +262,7 @@ class LocalSymbolCollector:
         # 预扫描异常处理器中的变量
         for handler in node.handlers:
             for name, target in SymbolExtractor.get_assigned_names(handler):
-                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=self.analyzer._any_desc, def_node=handler)
+                sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=self.analyzer._any_desc, def_node=handler)
                 self._define(sym, target) # 绑定 target 节点
             self.visit(handler)
         self.generic_visit(node)

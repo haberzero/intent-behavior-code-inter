@@ -55,14 +55,6 @@ class ModuleLoader(IModuleLoader):
             is_callable_member = isinstance(spec_member, MethodMemberSpec)
             param_count = len(spec_member.param_type_names) if is_callable_member else 0
 
-            if not is_callable_member:
-                # Old-system compat: Symbol objects carry a .descriptor with get_call_trait()
-                spec_desc = spec_member.descriptor if hasattr(spec_member, 'descriptor') else spec_member
-                if hasattr(spec_desc, 'get_call_trait') and spec_desc.get_call_trait() or \
-               (hasattr(spec_desc, 'param_type_names') and True) or \
-                        and not (hasattr(spec_desc, 'is_class') and spec_desc.is_class()):
-                    is_callable_member = True
-                    param_count = len(spec_desc.param_types) if hasattr(spec_desc, 'param_types') else 0
 
             # 1. 处理函数/方法
             if is_callable_member:

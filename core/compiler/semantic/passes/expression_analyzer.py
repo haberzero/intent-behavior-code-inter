@@ -43,7 +43,7 @@ class ExpressionAnalyzer:
         left_type = self.visit(node.left)
         for op, comparator in zip(node.ops, node.comparators):
             right_type = self.visit(comparator)
-            res = left_type.get_operator_result(op, right_type)
+            res = self.registry.resolve_op(left_type, op, right_type)
             if not res:
                 self.error(
                     f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'",
@@ -110,14 +110,14 @@ class ExpressionAnalyzer:
         from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
         if hasattr(annotation, 'id'):
             sym = self.scope.resolve(annotation.id)
-            if sym and hasattr(sym, 'descriptor'):
-                return sym.descriptor
+            if sym and hasattr(sym, 'spec'):
+                return sym.spec
         return None
 
     def visit_IbBinOp(self, node: Any) -> 'IbSpec':
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
-        result = left_type.get_operator_result(node.op, right_type)
+        result = self.registry.resolve_op(left_type, node.op, right_type)
         if not result:
             self.error(
                 f"Operator '{node.op}' not supported for types '{left_type.name}' and '{right_type.name}'",
@@ -128,7 +128,7 @@ class ExpressionAnalyzer:
 
     def visit_IbUnaryOp(self, node: Any) -> 'IbSpec':
         operand_type = self.visit(node.operand)
-        result = operand_type.get_operator_result(type(node.op).__name__, None)
+        result = self.registry.resolve_op(operand_type, type(node.op).__name__, None)
         if not result:
             self.error(
                 f"Unary operator '{node.op}' not supported for type '{operand_type.name}'",
@@ -154,12 +154,12 @@ class ExpressionAnalyzer:
     def visit_IbName(self, node: Any) -> 'IbSpec':
         sym = self.scope.resolve(node.id)
         if sym:
-            if hasattr(sym, 'descriptor'):
+            if hasattr(sym, 'spec'):
                 self.side_table.bind_symbol(node, sym)
-                return sym.descriptor
-            elif hasattr(sym, 'descriptor') and sym.descriptor:
+                return sym.spec
+            elif hasattr(sym, 'spec') and sym.spec:
                 self.side_table.bind_symbol(node, sym)
-                return sym.descriptor
+                return sym.spec
         self.error(f"Undefined variable: '{node.id}'", node, code="SEM_001")
         return self._any_desc
 

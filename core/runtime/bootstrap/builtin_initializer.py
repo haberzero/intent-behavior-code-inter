@@ -34,12 +34,12 @@ def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
 
 def _cast_string_to(ib_str: 'IbString', target_class: Any) -> Any:
     """实现 Spec 中的自动类型转换策略 (Descriptor Identity 版)"""
-    target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+    target_desc = target_class.spec if hasattr(target_class, 'spec') else None
     return _cast_string_to_native(ib_str.to_native(), target_desc)
 
 def _cast_numeric_to(ib_num: 'IbObject', target_class: Any) -> Any:
     """数值类型到其他类型的转换 (Descriptor Identity 版)"""
-    target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+    target_desc = target_class.spec if hasattr(target_class, 'spec') else None
     return _cast_numeric_to_native(ib_num.to_native(), target_desc)
 
 def initialize_builtin_classes(registry: KernelRegistry) -> Any:

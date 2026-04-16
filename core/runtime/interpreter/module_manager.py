@@ -6,7 +6,7 @@ from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, Modu
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.kernel import ast as ast
-from core.kernel.types.descriptors import ModuleMetadata as ModuleType
+from core.kernel.spec import ModuleSpec as ModuleType
 from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import DEP_MODULE_NOT_FOUND
 from core.runtime.interfaces import IExecutionContext

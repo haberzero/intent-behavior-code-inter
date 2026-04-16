@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, DictSpec, BoundMethodSpec, ModuleSpec,
+    FuncSpec, ClassSpec, ListSpec, DictSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
@@ -49,6 +49,28 @@ if TYPE_CHECKING:
 # ------------------------------------------------------------------ #
 # SpecFactory                                                          #
 # ------------------------------------------------------------------ #
+
+class _FuncSpecCallCapability:
+    """
+    Sentinel ``CallCapability`` for ``FuncSpec`` and ``BoundMethodSpec`` instances.
+
+    These specs ARE inherently callable (they carry their own parameter and return
+    type information).  ``SpecRegistry.resolve_return()`` handles the actual
+    return-type inference; this object satisfies the boolean "is callable?" check
+    and provides stubs for other capability methods used by the semantic analyser.
+    """
+    def resolve_return_type_name(self, arg_type_names: list) -> None:
+        return None  # Handled by SpecRegistry.resolve_return(FuncSpec, ...)
+
+    def get_writable_trait(self):
+        return None
+
+    def get_parser_capability(self):
+        return None
+
+
+_FUNC_SPEC_CALL_CAP = _FuncSpecCallCapability()
+
 
 class SpecFactory:
     """
@@ -244,6 +266,9 @@ class SpecRegistry:
         return self._axiom_registry.get_axiom(spec.get_base_name())
 
     def get_call_cap(self, spec: IbSpec) -> Optional["CallCapability"]:
+        # FuncSpec and BoundMethodSpec are inherently callable — resolve_return handles them.
+        if isinstance(spec, (FuncSpec, BoundMethodSpec)):
+            return _FUNC_SPEC_CALL_CAP
         axiom = self.get_axiom(spec)
         return axiom.get_call_capability() if axiom else None
 
@@ -398,7 +423,16 @@ class SpecRegistry:
         Resolve the type of an attribute / method on ``spec``.
 
         Searches own members first, then the parent class chain.
+        For ``LazySpec`` placeholders the real spec is looked up first so
+        that cross-file imports resolve correctly during semantic analysis.
         """
+        # Transparently resolve lazy placeholders created by the scheduler.
+        if isinstance(spec, LazySpec) and not spec.members:
+            resolved = self.resolve(spec.name, spec.module_path)
+            if resolved and resolved is not spec:
+                return self.resolve_member(resolved, attr_name)
+            return self.resolve("any")
+
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):

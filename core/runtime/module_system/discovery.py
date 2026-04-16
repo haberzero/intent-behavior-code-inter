@@ -3,14 +3,10 @@ import sys
 import json
 import inspect
 import importlib.util
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any
 from core.runtime.host.host_interface import HostInterface
-from core.kernel.types.descriptors import ModuleMetadata as ModuleType, TypeDescriptor
-from core.kernel.symbols import SymbolFactory
+from core.kernel.spec import ModuleSpec, MethodMemberSpec, MemberSpec
 from core.base.enums import RegistrationState
-
-from core.kernel.types.descriptors import ModuleMetadata
-from core.kernel.types.descriptors import FunctionMetadata
 
 
 class ModuleDiscoveryService:
@@ -61,7 +57,7 @@ class ModuleDiscoveryService:
 
     def export_metadata(self, host: HostInterface, output_path: str) -> None:
         """
-         将发现的元数据导出为 .ibc_meta 文件
+        将发现的元数据导出为 .ibc_meta 文件。
 
         实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
         """
@@ -81,22 +77,18 @@ class ModuleDiscoveryService:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(metadata_snapshot, f, indent=2, ensure_ascii=False)
 
-    def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleType]:
+    def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleSpec]:
         """
-         动态加载 _spec.py，完整实现协议。
+        动态加载 _spec.py，完整实现协议。
 
-        支持三种协议：
-        1. 新版第一方组件（字典格式）：__ibcext_vtable__() 返回 {"functions": {...}}
+        支持两种协议：
+        1. 标准组件（字典格式）：__ibcext_vtable__() 返回 {"functions": {...}, "variables": {...}}
            - 纯字典，不导入内核代码
-           - discovery 内部使用 SpecBuilder 转换为原生元数据
-        2. 旧版第三方插件（Callable格式）：__ibcext_vtable__() 返回 Dict[str, Callable]
-           - 通过 inspect.signature() 提取签名
-        3. 深度嵌入模块：__ibcext_vtable__() 返回 ModuleMetadata
-           - 直接使用，ai 等模块专用
+           - discovery 内部将字典转换为 ModuleSpec
+        2. 深度嵌入模块：__ibcext_vtable__() 直接返回 ModuleSpec 实例
 
         这确保 IBC-Inter 内核完全独立于 Python 反射机制。
         """
-
         ibci_modules_path = os.path.dirname(os.path.dirname(spec_path))
         if ibci_modules_path not in sys.path:
             sys.path.insert(0, ibci_modules_path)
@@ -111,7 +103,6 @@ class ModuleDiscoveryService:
         except ImportError:
             mod = None
 
-        metadata = None
         raw_name = module_name
 
         if mod and hasattr(mod, '__ibcext_metadata__'):
@@ -123,34 +114,23 @@ class ModuleDiscoveryService:
             try:
                 vtable = mod.__ibcext_vtable__()
 
-                # 协议3：深度嵌入模块直接返回 ModuleMetadata
-                if isinstance(vtable, ModuleMetadata):
+                # 协议2：深度嵌入模块直接返回 ModuleSpec
+                if isinstance(vtable, ModuleSpec):
                     vtable.name = raw_name
-                    metadata = vtable
+                    return vtable
 
-                # 协议1：新版第一方组件和标准插件（字典格式，零侵入）
-                elif vtable and isinstance(vtable, dict):
-                    metadata = self._build_metadata_from_dict(raw_name, module_name, vtable)
+                # 协议1：标准插件（字典格式，零侵入）
+                if vtable and isinstance(vtable, dict):
+                    return self._build_spec_from_dict(raw_name, vtable)
 
             except ImportError:
                 pass
 
-        if metadata:
-            if hasattr(metadata, 'members'):
-                new_members = {}
-                for name, member in metadata.members.items():
-                    if isinstance(member, TypeDescriptor):
-                        new_members[name] = SymbolFactory.create_from_descriptor(name, member)
-                    else:
-                        new_members[name] = member
-                metadata.members = new_members
-            return metadata
-
         return None
 
-    def _build_metadata_from_dict(self, raw_name: str, module_name: str, vtable: Dict[str, Any]) -> ModuleMetadata:
+    def _build_spec_from_dict(self, raw_name: str, vtable: Dict[str, Any]) -> ModuleSpec:
         """
-         从字典格式元数据构建 ModuleMetadata
+        从字典格式元数据构建 ModuleSpec。
 
         字典格式：
         {
@@ -164,31 +144,34 @@ class ModuleDiscoveryService:
                 "pi": "float"
             }
         }
-
-        内部使用 SpecBuilder 将字典转换为原生 IBC-Inter 元数据。
         """
-        from core.extension.spec_builder import SpecBuilder
-
         if "." in raw_name:
-            parts = raw_name.split(".")
+            parts = raw_name.split(".", 1)
             module_path_val = parts[0]
-            name_val = parts[1] if len(parts) > 1 else raw_name
+            name_val = parts[1]
         else:
             module_path_val = None
             name_val = raw_name
 
-        builder = SpecBuilder(name_val)
+        spec = ModuleSpec(name=name_val, module_path=module_path_val)
 
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():
             param_types = func_sig.get("param_types", [])
-            return_type = func_sig.get("return_type", "any")
-            builder.func(func_name, params=param_types, returns=return_type)
+            return_type = func_sig.get("return_type", "void")
+            member = MethodMemberSpec(
+                name=func_name,
+                kind="method",
+                type_name=return_type,
+                param_type_names=list(param_types),
+                param_type_modules=[None] * len(param_types),
+                return_type_name=return_type,
+            )
+            spec.members[func_name] = member
 
         variables = vtable.get("variables", {})
         for var_name, var_type in variables.items():
-            builder.exports[var_name] = builder._resolve_type(var_type)
+            type_name = var_type if isinstance(var_type, str) else "any"
+            spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_name=type_name)
 
-        metadata = builder.build()
-        metadata.module_path = module_path_val
-        return metadata
+        return spec
