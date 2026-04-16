@@ -653,7 +653,10 @@ class IbUserFunction(IbFunction):
             
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
-                rt_context.define_variable("self", receiver)
+                # 查找 self 符号的 UID（语义分析阶段将函数定义节点映射到 self 符号）
+                self_sym = self.context.get_side_table("node_to_symbol", self.node_uid)
+                self_uid = self_sym if isinstance(self_sym, str) else (self_sym.uid if self_sym else None)
+                rt_context.define_variable("self", receiver, uid=self_uid)
                 
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)

@@ -698,7 +698,7 @@ class SemanticAnalyzer:
                                 else:
                                     val_type = self._str_desc
                     
-                    if not self.registry.is_assignable(val_type, sym.spec):
+                    if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
                         hint = self.registry.get_diff_hint(val_type, sym.spec)
                         self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
             else:

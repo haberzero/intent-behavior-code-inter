@@ -269,6 +269,9 @@ class SpecRegistry:
         # FuncSpec and BoundMethodSpec are inherently callable — resolve_return handles them.
         if isinstance(spec, (FuncSpec, BoundMethodSpec)):
             return _FUNC_SPEC_CALL_CAP
+        # ClassSpec is callable (constructor)
+        if isinstance(spec, ClassSpec):
+            return _FUNC_SPEC_CALL_CAP
         axiom = self.get_axiom(spec)
         return axiom.get_call_capability() if axiom else None
 
@@ -358,6 +361,9 @@ class SpecRegistry:
         """
         if isinstance(spec, FuncSpec):
             return self.resolve(spec.return_type_name, spec.return_type_module) or self.resolve("any")
+        # ClassSpec called as constructor returns an instance of itself
+        if isinstance(spec, ClassSpec):
+            return spec
         axiom = self.get_axiom(spec)
         if axiom:
             cap = axiom.get_call_capability()
@@ -383,6 +389,9 @@ class SpecRegistry:
                 ret_name = cap.resolve_operation_type_name(op, other_name)
                 if ret_name:
                     return self.resolve(ret_name) or self.resolve("any")
+        # User-defined class types support == and != by identity
+        if isinstance(spec, ClassSpec) and op in ("==", "!="):
+            return self.resolve("bool")
         return None
 
     def resolve_iter_element(self, spec: IbSpec) -> Optional[IbSpec]:
@@ -445,6 +454,9 @@ class SpecRegistry:
                     return_type_module=member.return_type_module,
                     is_llm=member.is_llm(),
                 )
+            # Enum variant access: return the enum class type itself
+            if isinstance(spec, ClassSpec) and spec.parent_name == "Enum" and spec.is_user_defined:
+                return spec
             return self.resolve(member.type_name, member.type_module) or self.resolve("any")
 
         # Walk parent chain for class specs

@@ -620,6 +620,9 @@ class Interpreter:
             if not node_data: continue
             
             body = node_data.get("body", [])
+            # Track declaration-only fields (no default value) in order
+            decl_only_fields: List[str] = []
+            
             for stmt_uid in body:
                 stmt_data = self.get_node_data(stmt_uid)
                 if not stmt_data: continue
@@ -648,6 +651,35 @@ class Interpreter:
                                 static_val=static_val, 
                                 module_name=module_name
                             )
+                            # 无默认值的声明字段需要通过构造函数参数赋值
+                            if val_uid is None and static_val is None:
+                                decl_only_fields.append(target_name)
+
+            # 若类没有显式 __init__ 但存在声明字段，自动生成位置参数 __init__
+            if decl_only_fields and '__init__' not in ib_class.methods:
+                field_names = decl_only_fields
+
+                def _make_auto_init(fnames):
+                    def _auto_init(self_obj, *args):
+                        if len(args) != len(fnames):
+                            from core.kernel.issue import InterpreterError
+                            raise InterpreterError(
+                                f"TypeError: {self_obj.ib_class.name}() expected {len(fnames)} argument(s), but got {len(args)}"
+                            )
+                        for fname, val in zip(fnames, args):
+                            self_obj.fields[fname] = val
+                        return self_obj.ib_class.registry.get_none()
+                    return _auto_init
+
+                from core.runtime.objects.kernel import IbNativeFunction
+                auto_init_fn = IbNativeFunction(
+                    _make_auto_init(field_names),
+                    unbox_args=False,
+                    is_method=True,
+                    name=f"{name}.__init__",
+                    ib_class=ib_class,
+                )
+                ib_class.register_method('__init__', auto_init_fn)
         
         self.current_module_name = old_module
 
