@@ -607,6 +607,25 @@ class SemanticAnalyzer:
                     hint = self.registry.get_diff_hint(val_type, target_type)
                     self.error(f"Cannot assign '{val_type.name}' to '{target_type.name}'", node, code="SEM_003", hint=hint)
                 continue
+            elif isinstance(target_node, ast.IbTuple):
+                # 元组解包：(int x, int y) = (10, 20)
+                # 逐个定义元组内的变量
+                for elt in target_node.elts:
+                    if isinstance(elt, ast.IbTypeAnnotatedExpr):
+                        elt_type = self._resolve_type(elt.annotation)
+                        if isinstance(elt.target, (ast.IbName, ast.IbArg)):
+                            elt_name = elt.target.id if isinstance(elt.target, ast.IbName) else elt.target.arg
+                            elt_sym = self._define_var(elt_name, elt_type, elt, allow_overwrite=True)
+                            self.side_table.bind_symbol(elt, elt_sym)
+                            self.side_table.bind_type(elt, elt_sym.spec)
+                            if isinstance(elt.target, ast.IbName):
+                                self.side_table.bind_symbol(elt.target, elt_sym)
+                                self.side_table.bind_type(elt.target, elt_sym.spec)
+                    elif isinstance(elt, ast.IbName):
+                        elt_sym = self.symbol_table.resolve(elt.id)
+                        if elt_sym:
+                            self.side_table.bind_symbol(elt, elt_sym)
+                continue
             
             if var_name:
                 # 决议最终目标类型 (Inference Policy)
@@ -1060,6 +1079,17 @@ class SemanticAnalyzer:
         for val in node.values:
             self.visit(val)
         return self._bool_desc
+
+    def visit_IbTuple(self, node: ast.IbTuple) -> IbSpec:
+        """元组表达式 -> 视为列表处理"""
+        element_type = self._any_desc
+        if node.elts:
+            element_type = self.visit(node.elts[0])
+            for elt in node.elts[1:]:
+                self.visit(elt)
+        desc = self.registry.factory.create_list(element_type.name if element_type else "any")
+        self.registry.register(desc)
+        return desc
 
     def visit_IbListExpr(self, node: ast.IbListExpr) -> IbSpec:
         element_type = self._any_desc

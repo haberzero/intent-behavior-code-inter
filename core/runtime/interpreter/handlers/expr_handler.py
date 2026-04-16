@@ -152,6 +152,11 @@ class ExprHandler(BaseHandler):
         # 封装为 Python slice 对象并用 registry 包装
         return self.registry.box(slice(l_val, u_val, s_val))
 
+    def visit_IbTuple(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """元组字面量 -> 统一装箱为列表"""
+        elts = [self.visit(e) for e in node_data.get("elts", [])]
+        return self.registry.box(elts)
+
     def visit_IbListExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """列表字面量 -> 统一装箱"""
         elts = [self.visit(e) for e in node_data.get("elts", [])]
