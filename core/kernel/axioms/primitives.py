@@ -544,6 +544,82 @@ class DictAxiom(
 
 
 # ------------------------------------------------------------------ #
+# tuple (immutable, fixed-length, heterogeneous)                      #
+# ------------------------------------------------------------------ #
+
+class TupleAxiom(
+    BaseAxiom, IterCapability, SubscriptCapability,
+    ParserCapability, ConverterCapability,
+    FromPromptCapability, IlmoutputHintCapability,
+):
+    """
+    元组公理：不可变、定长、异构集合。
+    与 ListAxiom 的关键区别：
+    - 没有 append / pop / sort / clear / __setitem__ (不可变)
+    - 支持 cast_to list (向列表转换)
+    """
+
+    @property
+    def name(self) -> str:
+        return "tuple"
+
+    def get_iter_capability(self) -> Optional[IterCapability]: return self
+    def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
+    def get_parser_capability(self) -> Optional[ParserCapability]: return self
+    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
+    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
+    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
+    def get_call_capability(self): return None
+    def get_operator_capability(self): return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "len":         _m("len",                                 ret="int"),
+            "cast_to":     _m("cast_to",     params=["any"],        ret="any"),
+            "__getitem__": _m("__getitem__", params=["int"],         ret="any"),
+            # 注意：没有 __setitem__ / append / pop / sort / clear → 不可变
+        }
+
+    def get_element_type_name(self) -> str:
+        return "any"
+
+    def resolve_item_type_name(self, key_type_name: str) -> Optional[str]:
+        if key_type_name == "int":
+            return "any"
+        return None
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return source_type_name in ("tuple", "list")
+
+    def parse_value(self, raw_value: str) -> Any:
+        try:
+            result = FuzzyJsonParser.parse(raw_value, expected_type="list")
+            return tuple(result) if isinstance(result, list) else result
+        except ValueError as e:
+            raise ValueError(f"No valid JSON array found for tuple: {raw_value}. Error: {e}")
+
+    def from_prompt(self, raw_response: str, spec: Optional["IbSpec"] = None) -> Tuple[bool, Any]:
+        try:
+            parsed = FuzzyJsonParser.parse(raw_response, expected_type="list")
+            return (True, tuple(parsed) if isinstance(parsed, list) else parsed)
+        except ValueError:
+            return (False, f"无法从 '{raw_response}' 解析 JSON 数组（元组）")
+
+    def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
+        return "请返回一个 JSON 数组（将作为元组处理），如: [1, 2, 3]，不要包含任何其他文字"
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name in ("tuple",) or other_name.startswith("tuple[")
+
+    def resolve_specialization_by_names(
+        self, registry: Any, arg_names: List[str]
+    ) -> Optional[Any]:
+        elem = arg_names[0] if arg_names else "any"
+        spec = registry.factory.create_tuple(element_type_name=elem)
+        return registry.register(spec)
+
+
+# ------------------------------------------------------------------ #
 # Dynamic (any / auto / callable / void / behavior)                  #
 # ------------------------------------------------------------------ #
 
@@ -813,6 +889,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(BoolAxiom())
     registry.register(StrAxiom())
     registry.register(ListAxiom())
+    registry.register(TupleAxiom())
     registry.register(DictAxiom())
     registry.register(ExceptionAxiom())
     registry.register(BoundMethodAxiom())

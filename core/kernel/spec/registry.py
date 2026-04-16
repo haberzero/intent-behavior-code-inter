@@ -30,10 +30,10 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, DictSpec, BoundMethodSpec, ModuleSpec, LazySpec,
+    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
-    BOUND_METHOD_SPEC, LIST_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
+    BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
 )
 
 if TYPE_CHECKING:
@@ -151,6 +151,20 @@ class SpecFactory:
             key_type_module=key_type_module,
             value_type_name=value_type_name,
             value_type_module=value_type_module,
+        )
+
+    def create_tuple(
+        self,
+        element_type_name: str = "any",
+        element_type_module: Optional[str] = None,
+    ) -> TupleSpec:
+        name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
+        return TupleSpec(
+            name=name,
+            is_nullable=True,
+            is_user_defined=False,
+            element_type_name=element_type_name,
+            element_type_module=element_type_module,
         )
 
     def create_bound_method(
@@ -396,7 +410,7 @@ class SpecRegistry:
 
     def resolve_iter_element(self, spec: IbSpec) -> Optional[IbSpec]:
         """Infer the element type of an iterable."""
-        if isinstance(spec, ListSpec):
+        if isinstance(spec, (ListSpec, TupleSpec)):
             return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom:
@@ -413,7 +427,7 @@ class SpecRegistry:
         key_spec: IbSpec,
     ) -> Optional[IbSpec]:
         """Infer the item type when spec[key] is accessed."""
-        if isinstance(spec, ListSpec):
+        if isinstance(spec, (ListSpec, TupleSpec)):
             if key_spec.get_base_name() == "int":
                 return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
         if isinstance(spec, DictSpec):
@@ -608,7 +622,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
         ANY_SPEC, AUTO_SPEC, NONE_SPEC, SLICE_SPEC,
         CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
-        BOUND_METHOD_SPEC, LIST_SPEC, DICT_SPEC, MODULE_SPEC,
+        BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC,
     ):
         reg.register(proto)

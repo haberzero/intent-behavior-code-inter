@@ -234,11 +234,20 @@ class StmtHandler(BaseHandler):
             
         # 5. 元组解包 (Tuple)
         elif target_data["_type"] == "IbTuple":
-            elements_obj = value.receive('to_list', [])
-            if not (hasattr(elements_obj, 'elements') and isinstance(elements_obj.elements, list)):
-                raise self.report_error(f"Cannot unpack non-iterable object", target_uid)
+            # 直接从 IbList/IbTuple 对象中获取元素
+            from core.runtime.objects.builtins import IbList, IbTuple as IbTupleObj
+            if isinstance(value, (IbList, IbTupleObj)):
+                vals = list(value.elements)
+            else:
+                # 回退：通过 to_list 消息获取
+                result = value.receive('to_list', [])
+                if isinstance(result, list):
+                    vals = result
+                elif hasattr(result, 'elements'):
+                    vals = list(result.elements)
+                else:
+                    raise self.report_error(f"Cannot unpack non-iterable object", target_uid)
             
-            vals = elements_obj.elements
             targets = target_data.get("elts", [])
             if len(vals) != len(targets):
                 raise self.report_error(f"Unpack error: expected {len(targets)} values, got {len(vals)}", target_uid)

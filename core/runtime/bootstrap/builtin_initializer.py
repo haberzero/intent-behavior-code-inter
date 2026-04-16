@@ -1,7 +1,7 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
-from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior, IbBool
+from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -282,6 +282,13 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(list_class, 'to_list', lambda self: self.elements)
     _reg_native(list_class, 'len', lambda self: self.len())
 
+    # Tuple
+    tuple_class = ib_classes.get("tuple")
+    if tuple_class:
+        _reg_native(tuple_class, '__to_prompt__', lambda self: "(" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + ")")
+        _reg_native(tuple_class, 'to_list', lambda self: list(self.elements))
+        _reg_native(tuple_class, 'len', lambda self: self.len())
+
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
     _reg_native(dict_class, 'len', lambda self: self.len())
@@ -297,6 +304,13 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         memo[id(val)] = res
         res.elements = [reg.box(i, memo) for i in val]
         return res
+
+    def _box_tuple(reg, val, memo):
+        # 先创建占位符以处理循环引用
+        boxed_elts = tuple(reg.box(i, memo) for i in val)
+        res = IbTuple(boxed_elts, reg.get_class("tuple"))
+        memo[id(val)] = res
+        return res
         
     def _box_dict(reg, val, memo):
         res = IbDict({}, reg.get_class("dict"))
@@ -305,7 +319,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         return res
         
     registry.register_boxer(list, _box_list, token)
-    registry.register_boxer(tuple, _box_list, token)
+    registry.register_boxer(tuple, _box_tuple, token)
     registry.register_boxer(dict, _box_dict, token)
 
     # 5.5 注册 IntentStack 内置类（公理体系融入）

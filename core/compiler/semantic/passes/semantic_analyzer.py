@@ -1081,13 +1081,13 @@ class SemanticAnalyzer:
         return self._bool_desc
 
     def visit_IbTuple(self, node: ast.IbTuple) -> IbSpec:
-        """元组表达式 -> 视为列表处理"""
+        """元组表达式 -> 不可变元组类型"""
         element_type = self._any_desc
         if node.elts:
             element_type = self.visit(node.elts[0])
             for elt in node.elts[1:]:
                 self.visit(elt)
-        desc = self.registry.factory.create_list(element_type.name if element_type else "any")
+        desc = self.registry.factory.create_tuple(element_type.name if element_type else "any")
         self.registry.register(desc)
         return desc
 

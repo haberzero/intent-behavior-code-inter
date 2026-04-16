@@ -153,8 +153,8 @@ class ExprHandler(BaseHandler):
         return self.registry.box(slice(l_val, u_val, s_val))
 
     def visit_IbTuple(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """元组字面量 -> 统一装箱为列表"""
-        elts = [self.visit(e) for e in node_data.get("elts", [])]
+        """元组字面量 -> 装箱为不可变元组"""
+        elts = tuple(self.visit(e) for e in node_data.get("elts", []))
         return self.registry.box(elts)
 
     def visit_IbListExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:

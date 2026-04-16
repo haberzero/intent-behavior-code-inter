@@ -83,6 +83,20 @@ class ListSpec(IbSpec):
 
 
 @dataclass(eq=False)
+class TupleSpec(IbSpec):
+    """
+    Describes an immutable, fixed-length tuple type: tuple[element_type].
+    Unlike ListSpec, tuples are heterogeneous and immutable at runtime.
+    """
+
+    element_type_name: str = "any"
+    element_type_module: Optional[str] = None
+
+    def get_base_name(self) -> str:
+        return self._axiom_name or "tuple"
+
+
+@dataclass(eq=False)
 class DictSpec(IbSpec):
     """
     Describes a generic dict type: dict[key_type, value_type].
@@ -169,6 +183,7 @@ EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=
 
 BOUND_METHOD_SPEC = BoundMethodSpec(name="bound_method", is_nullable=True, is_user_defined=False)
 LIST_SPEC         = ListSpec(name="list",   is_nullable=True,  is_user_defined=False)
+TUPLE_SPEC        = TupleSpec(name="tuple", is_nullable=True,  is_user_defined=False)
 DICT_SPEC         = DictSpec(name="dict",   is_nullable=True,  is_user_defined=False)
 MODULE_SPEC       = ModuleSpec(name="module", is_nullable=False, is_user_defined=False)
 
