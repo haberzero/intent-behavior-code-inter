@@ -136,7 +136,7 @@ class TestLexerBehaviorExpr:
         tokens = tokenize(code)
         types = [t for t, _ in tokens]
         # Should contain BEHAVIOR-related tokens
-        assert any("BEHAVIOR" in t.upper() for t in types)
+        assert any("BEHAVIOR" in t.name.upper() for t in types)
 
     def test_behavior_expression_with_interpolation(self):
         code = 'str x = @~ say $name ~'
@@ -173,8 +173,9 @@ else:
 """
         tokens = tokenize(code)
         types = [t for t, _ in tokens]
-        assert "INDENT" in types
-        assert "DEDENT" in types
+        from core.compiler.common.tokens import TokenType
+        assert TokenType.INDENT in types
+        assert TokenType.DEDENT in types
 
     def test_function_def(self):
         code = """func add(int a, int b) -> int:
@@ -182,7 +183,7 @@ else:
 """
         tokens = tokenize(code)
         values = [v for _, v in tokens if v not in ("", None)]
-        assert "def" in values
+        assert "func" in values
         assert "add" in values
         assert "return" in values
 

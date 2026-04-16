@@ -77,7 +77,12 @@ class DeclarationComponent(BaseComponent):
         1. auto x = 1 (推导类型)
         2. int x = 1 (显式类型)
         3. auto x: int = 1 (显式覆盖)
+        4. (int x, int y) = (10, 20) (元组解包声明)
         """
+        # Handle tuple destructuring declaration: (int x, int y) = expr
+        if not explicit_auto and self.stream.check(TokenType.LPAREN):
+            return self._tuple_variable_declaration()
+
         type_token = None
         type_annotation = None
         
@@ -118,6 +123,35 @@ class DeclarationComponent(BaseComponent):
         end_token = self.stream.previous()
         
         return self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
+
+    def _tuple_variable_declaration(self) -> ast.IbAssign:
+        """Parse (int x, int y) = expr tuple destructuring declaration."""
+        start_token = self.stream.peek()
+        self.stream.consume(TokenType.LPAREN, "Expect '('.")
+        
+        targets = []
+        while not self.stream.check(TokenType.RPAREN) and not self.stream.is_at_end():
+            type_token = self.stream.peek()
+            type_annotation = self.type_def.parse_type_annotation()
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
+            name_node = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
+            target = self._loc(ast.IbTypeAnnotatedExpr(target=name_node, annotation=type_annotation), type_token)
+            targets.append(target)
+            if not self.stream.match(TokenType.COMMA):
+                break
+        
+        self.stream.consume(TokenType.RPAREN, "Expect ')' after tuple declaration.")
+        
+        tuple_target = self._loc(ast.IbTuple(elts=targets, ctx='Store'), start_token)
+        
+        value = None
+        if self.stream.match(TokenType.ASSIGN):
+            value = self.expression.parse_expression()
+        
+        self.stream.consume_end_of_statement("Expect newline after declaration.")
+        end_token = self.stream.previous()
+        
+        return self._loc(ast.IbAssign(targets=[tuple_target], value=value), start_token, end_token)
 
     def function_declaration(self) -> ast.IbFunctionDef:
         start_token = self.stream.previous()

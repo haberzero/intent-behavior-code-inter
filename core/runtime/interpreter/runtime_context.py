@@ -49,8 +49,12 @@ class ScopeImpl:
 
         # 特殊处理：函数对象赋值给 FuncSpec 类型时直接放行
         # (callable 类型可以赋值给任意 FuncSpec 声明)
-        from core.kernel.spec.specs import FuncSpec, BoundMethodSpec
+        from core.kernel.spec.specs import FuncSpec, BoundMethodSpec, ClassSpec
         if isinstance(declared_type, (FuncSpec, BoundMethodSpec)) and isinstance(value, IbFunction):
+            return
+
+        # 用户定义类（含枚举）的赋值由编译器在语义分析阶段验证，运行时跳过类型检查
+        if isinstance(declared_type, ClassSpec) and declared_type.is_user_defined:
             return
             
         # [Phase 3.3] 强契约：运行时类型校验
