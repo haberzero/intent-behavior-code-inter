@@ -248,7 +248,7 @@ print(result)
         assert "hello" in lines
 
     def test_mock_str_double_quoted_value(self):
-        """MOCK:STR:\"hello\" 应返回 hello（不含引号）"""
+        """MOCK:STR:"hello" 应返回 hello（不含引号）"""
         code = ai_setup_code() + '''
 str result = @~ MOCK:STR:"hello" ~
 print(result)
@@ -258,7 +258,7 @@ print(result)
         assert '"hello"' not in lines
 
     def test_mock_str_quoted_with_spaces(self):
-        """MOCK:STR:\"hello world\" 应返回 hello world"""
+        """MOCK:STR:"hello world" 应返回 hello world"""
         code = ai_setup_code() + '''
 str result = @~ MOCK:STR:"hello world" ~
 print(result)
