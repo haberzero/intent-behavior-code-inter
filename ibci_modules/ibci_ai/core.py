@@ -138,7 +138,7 @@ class AIPlugin(ILLMProvider):
                     {"role": "user", "content": user_prompt}
                 ],
                 max_tokens=50,
-                timeout=15.0m,
+                timeout=15.0,
                 extra_body={
                     "enable_thinking": False,
                     "chat_template_kwargs": {"enable_thinking": False}
