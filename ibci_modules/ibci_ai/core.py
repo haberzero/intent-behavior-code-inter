@@ -435,15 +435,27 @@ class AIPlugin(ILLMProvider, IbStatefulPlugin):
                 if mock_type == "INT":
                     return str(int(mock_value))
                 elif mock_type == "STR":
+                    # Strip surrounding matched quotes (added by behavior-expression parser)
+                    if len(mock_value) >= 2 and (
+                        (mock_value[0] == '"' and mock_value[-1] == '"') or
+                        (mock_value[0] == "'" and mock_value[-1] == "'")
+                    ):
+                        return mock_value[1:-1]
                     return mock_value
                 elif mock_type == "FLOAT":
                     return str(float(mock_value))
                 elif mock_type == "BOOL":
                     return "1" if mock_value.upper() == "TRUE" else "0"
                 elif mock_type == "LIST":
+                    # If value already has surrounding brackets, return as-is
+                    if mock_value.startswith('[') and mock_value.endswith(']'):
+                        return mock_value
                     return f"[{mock_value}]"
                 elif mock_type == "DICT":
-                    return f"{{{mock_value}}}"
+                    # If value already has surrounding braces, return as-is
+                    if mock_value.startswith('{') and mock_value.endswith('}'):
+                        return mock_value
+                    return "{" + mock_value + "}"
 
         # 3. 处理命名指令
         parts = content_after_mock.split(" ", 1)

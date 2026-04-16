@@ -381,6 +381,34 @@ class TestAIMockSystem:
         result = ai_plugin._handle_mock_response("MOCK:STR:hello", "expr")
         assert result == "hello"
 
+    def test_mock_str_double_quoted_value(self, ai_plugin):
+        """MOCK:STR 的二级值若被双引号包裹，应自动剥除引号 (behavior-expression 解析器会重新加引号)"""
+        result = ai_plugin._handle_mock_response('MOCK:STR:"hello"', "expr")
+        assert result == "hello"
+
+    def test_mock_str_double_quoted_with_spaces(self, ai_plugin):
+        result = ai_plugin._handle_mock_response('MOCK:STR:"hello world"', "expr")
+        assert result == "hello world"
+
+    def test_mock_str_single_quoted_value(self, ai_plugin):
+        result = ai_plugin._handle_mock_response("MOCK:STR:'hi there'", "expr")
+        assert result == "hi there"
+
+    def test_mock_list_already_bracketed(self, ai_plugin):
+        """MOCK:LIST 的值若已含方括号，不应再次包裹"""
+        result = ai_plugin._handle_mock_response('MOCK:LIST:["a","b"]', "expr")
+        assert result == '["a","b"]'
+
+    def test_mock_list_plain_value(self, ai_plugin):
+        """MOCK:LIST 的值若无方括号，自动包裹"""
+        result = ai_plugin._handle_mock_response("MOCK:LIST:a,b,c", "expr")
+        assert result == "[a,b,c]"
+
+    def test_mock_dict_already_braced(self, ai_plugin):
+        """MOCK:DICT 的值若已含花括号，不应再次包裹"""
+        result = ai_plugin._handle_mock_response('MOCK:DICT:{"key":"val"}', "expr")
+        assert result == '{"key":"val"}'
+
     def test_non_mock_branch_returns_one(self, ai_plugin):
         result = ai_plugin._handle_mock_response("some user text", "branch")
         assert result == "1"

@@ -258,7 +258,10 @@ class StmtHandler(BaseHandler):
     def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """实现赋值语句"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
-        
+
+        # 在访问 value 前清除上一次的 LLM 结果，防止来自前序语句的过期不确定性标记
+        # 污染当前赋值。访问 value 后读取的结果仅反映本次值求值过程。
+        self.runtime_context.set_last_llm_result(None)
         value = self.visit(node_data.get("value"))
 
         # 检查是否由于 LLM 不确定性导致赋值未完成
@@ -308,6 +311,8 @@ class StmtHandler(BaseHandler):
 
     def visit_IbSwitch(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """Switch-Case 语句"""
+        # 清除过期的 LLM 结果，确保只检查 test 表达式自身的求值结果
+        self.runtime_context.set_last_llm_result(None)
         test_value = self.visit(node_data.get("test"))
 
         last_result = self.runtime_context.get_last_llm_result()
@@ -342,6 +347,8 @@ class StmtHandler(BaseHandler):
 
     def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """条件分支语句"""
+        # 清除过期的 LLM 结果，确保只检查 test 条件自身的求值结果
+        self.runtime_context.set_last_llm_result(None)
         condition = self.visit(node_data.get("test"))
 
         # 核心：检查测试表达式是否产生了不确定的 LLM 结果
@@ -361,6 +368,9 @@ class StmtHandler(BaseHandler):
     def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """循环语句"""
         while True:
+            # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
+            # 污染下一次循环条件的检测。只有本次条件求值产生的 LLM 结果才应被检查。
+            self.runtime_context.set_last_llm_result(None)
             condition = self.visit(node_data.get("test"))
 
             last_result = self.runtime_context.get_last_llm_result()
@@ -388,6 +398,9 @@ class StmtHandler(BaseHandler):
         # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while True:
+                # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
+                # 污染下一次循环条件的检测。
+                self.runtime_context.set_last_llm_result(None)
                 condition = self.visit(iter_uid)
                 last_result = self.runtime_context.get_last_llm_result()
                 if last_result and last_result.is_uncertain:

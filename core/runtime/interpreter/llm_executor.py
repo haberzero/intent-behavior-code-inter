@@ -412,7 +412,9 @@ class LLMExecutorImpl:
         if llmoutput_hint:
             sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
 
+        # 读取 retry_hint 后立即清除，防止污染后续 LLM 调用（无论本次执行走哪条路径）
         current_retry_hint = context.retry_hint
+        context.retry_hint = None
         if ai_module:
             if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
                 current_retry_hint = ai_module._retry_hint
@@ -466,7 +468,6 @@ class LLMExecutorImpl:
         if type_hint:
             return self._parse_result(response, type_hint, node_uid)
 
-        context.retry_hint = None
         return LLMResult.success_result(
             value=self.registry.box(response),
             raw_response=response
