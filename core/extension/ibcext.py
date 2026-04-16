@@ -28,7 +28,7 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 #   - 可通过 capabilities.expose("xxx_provider", self) 向 CapabilityRegistry
 #     注册自身，供其他插件或内核代码发现
 #   - 适合：运行时调试、系统状态查询、宿主能力（持久化/隔离执行）等
-#   - 代表模块：ibci_ihost, ibci_idbg, ibci_isys, ibci_sys
+#   - 代表模块：ibci_ihost, ibci_idbg, ibci_isys
 #
 # 两种层次使用相同的 _spec.py 协议（__ibcext_metadata__ + __ibcext_vtable__）
 # 和相同的 ModuleLoader 加载流程。核心层仅在实现类上额外继承 IbPlugin。

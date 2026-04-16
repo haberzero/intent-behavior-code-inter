@@ -1,13 +1,3 @@
-import time
+from .core import TimeLib, create_implementation
 
-
-class TimeLib:
-    def sleep(self, seconds: float) -> None:
-        time.sleep(seconds)
-
-    def now(self) -> float:
-        return time.time()
-
-
-def create_implementation():
-    return TimeLib()
+__all__ = ["TimeLib", "create_implementation"]

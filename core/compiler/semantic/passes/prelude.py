@@ -37,11 +37,17 @@ class Prelude:
         for name, spec in spec_reg.all_specs.items():
             if "." in name:
                 continue
-            # Only FuncSpec instances are builtin functions; all other specs are types
+            # Only FuncSpec instances are builtin functions; all other specs are types.
+            # ModuleSpec with is_user_defined=True are plugin modules that must be
+            # explicitly imported by ibci code — they must NOT be pre-registered as
+            # builtin symbols here (that would make every plugin visible in every file
+            # without an import statement).
             if isinstance(spec, FuncSpec):
                 self.builtin_functions[name] = spec
             elif spec_reg.is_module_spec(spec):
-                self.builtin_modules[name] = spec
+                if not getattr(spec, 'is_user_defined', True):
+                    # Only truly built-in module types (is_user_defined=False) belong here
+                    self.builtin_modules[name] = spec
             else:
                 self.builtin_types[name] = spec
 
