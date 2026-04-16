@@ -234,11 +234,20 @@ class StmtHandler(BaseHandler):
             
         # 5. 元组解包 (Tuple)
         elif target_data["_type"] == "IbTuple":
-            elements_obj = value.receive('to_list', [])
-            if not isinstance(elements_obj, IIbList):
-                raise self.report_error(f"Cannot unpack non-iterable object", target_uid)
+            # 直接从 IbList/IbTuple 对象中获取元素
+            from core.runtime.objects.builtins import IbList, IbTuple as IbTupleObj
+            if isinstance(value, (IbList, IbTupleObj)):
+                vals = list(value.elements)
+            else:
+                # 回退：通过 to_list 消息获取
+                result = value.receive('to_list', [])
+                if isinstance(result, list):
+                    vals = result
+                elif hasattr(result, 'elements'):
+                    vals = list(result.elements)
+                else:
+                    raise self.report_error(f"Cannot unpack non-iterable object", target_uid)
             
-            vals = elements_obj.elements
             targets = target_data.get("elts", [])
             if len(vals) != len(targets):
                 raise self.report_error(f"Unpack error: expected {len(targets)} values, got {len(vals)}", target_uid)
@@ -361,8 +370,13 @@ class StmtHandler(BaseHandler):
             if not self.execution_context.is_truthy(condition):
                 break
             
-            for stmt_uid in node_data.get("body", []):
-                self.visit(stmt_uid)
+            try:
+                for stmt_uid in node_data.get("body", []):
+                    self.visit(stmt_uid)
+            except BreakException:
+                break
+            except ContinueException:
+                continue
         return self.registry.get_none()
     
     def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -380,14 +394,27 @@ class StmtHandler(BaseHandler):
                     return self.registry.get_none()
                 if not self.execution_context.is_truthy(condition):
                     break
-                for stmt_uid in body:
-                    self.visit(stmt_uid)
+                try:
+                    for stmt_uid in body:
+                        self.visit(stmt_uid)
+                except BreakException:
+                    break
+                except ContinueException:
+                    continue
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
         iterable_obj = self.visit(iter_uid)
-        elements_obj = iterable_obj.receive('to_list', [])
-        if not isinstance(elements_obj, IIbList):
+        # Check for iterable: has 'elements' list attribute (duck-typing over IIbList protocol)
+        if hasattr(iterable_obj, 'elements') and isinstance(iterable_obj.elements, list):
+            elements_obj = iterable_obj
+        else:
+            try:
+                result = iterable_obj.receive('to_list', [])
+                elements_obj = result if (hasattr(result, 'elements') and isinstance(result.elements, list)) else None
+            except (AttributeError, InterpreterError):
+                elements_obj = None
+        if elements_obj is None:
             raise self.report_error(f"Object is not iterable", node_uid)
         
         elements = elements_obj.elements
@@ -397,8 +424,15 @@ class StmtHandler(BaseHandler):
             if target_uid:
                 self._assign_to_target(target_uid, item, define_only=True)
             
-            for stmt_uid in body:
-                self.visit(stmt_uid)
+            try:
+                for stmt_uid in body:
+                    self.visit(stmt_uid)
+            except BreakException:
+                self.runtime_context.pop_loop_context()
+                break
+            except ContinueException:
+                self.runtime_context.pop_loop_context()
+                continue
             
             self.runtime_context.pop_loop_context()
         return self.registry.get_none()
@@ -502,7 +536,7 @@ class StmtHandler(BaseHandler):
         """普通函数定义"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbUserFunction(node_uid, self.execution_context, descriptor=declared_type)
+        func = IbUserFunction(node_uid, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
@@ -511,7 +545,7 @@ class StmtHandler(BaseHandler):
         """LLM 函数 definition"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, descriptor=declared_type)
+        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()
@@ -545,11 +579,11 @@ class StmtHandler(BaseHandler):
                 
                 # 校验参数数量一致性 (如果有元数据支持)
                 method_obj = existing_class.methods[method_name]
-                if hasattr(method_obj, 'descriptor') and method_obj.descriptor:
+                if hasattr(method_obj, 'spec') and method_obj.spec:
                     # 获取 AST 中的参数列表
                     params = stmt_data.get("args", [])
                     # 简单校验参数数量 (注意：self 在运行时会被处理，此处校验声明的一致性)
-                    expected_count = len(method_obj.descriptor.params) if hasattr(method_obj.descriptor, 'params') else -1
+                    expected_count = len(method_obj.spec.params) if hasattr(method_obj.spec, 'params') else -1
                     if expected_count != -1 and len(params) != expected_count:
                          # 强制执行严格契约校验
                          raise self.report_error(f"Contract Mismatch: Method '{method_name}' of class '{name}' parameter count mismatch. AST: {len(params)}, Descriptor: {expected_count}", stmt_uid)

@@ -21,15 +21,11 @@ from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic.passes.contract_validator import ContractValidator
-from core.kernel.types import ModuleMetadata
 from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
-from core.kernel.types.descriptors import (
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, 
-    BOOL_DESCRIPTOR, ANY_DESCRIPTOR
-)
+from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
@@ -143,6 +139,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             self.interpreter.service_context._orchestrator = self
             if self.interpreter.service_context.host_service:
                 self.interpreter.service_context.host_service.orchestrator = self
+            # 将用户提供的 output_callback 注入 service_context
+            if output_callback is not None:
+                self.interpreter.service_context.output_callback = output_callback
         
         # 统一装配调度器与能力注册中心
         service_context = self.interpreter.service_context
@@ -200,7 +199,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         self.registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, self._kernel_token)
 
-    def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[ModuleMetadata] = None):
+    def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[Any] = None):
         """
          显式注册一个原生 Python 模块实现及其元数据。
         """
@@ -295,13 +294,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if variables:
             static_vars = {}
             for name, val in variables.items():
-                stype = ANY_DESCRIPTOR
-                if isinstance(val, bool): stype = BOOL_DESCRIPTOR
-                elif isinstance(val, int): stype = INT_DESCRIPTOR
-                elif isinstance(val, float): stype = FLOAT_DESCRIPTOR
-                elif isinstance(val, str): stype = STR_DESCRIPTOR
+                stype = ANY_SPEC
+                if isinstance(val, bool): stype = BOOL_SPEC
+                elif isinstance(val, int): stype = INT_SPEC
+                elif isinstance(val, float): stype = FLOAT_SPEC
+                elif isinstance(val, str): stype = STR_SPEC
                 
-                static_vars[name] = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=stype)
+                static_vars[name] = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=stype)
             
             self.scheduler.predefined_symbols.update(static_vars)
 
@@ -376,8 +375,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             analyzer = SemanticAnalyzer(
                 issue_tracker=self.issue_tracker, 
                 registry=self.registry.get_metadata_registry(),
-                debugger=self.debugger,
-                host_interface=self.host_interface
+                debugger=self.debugger
             )
         
         # 内部执行完整的 3-Pass 分析流

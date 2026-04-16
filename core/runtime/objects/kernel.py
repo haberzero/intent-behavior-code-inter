@@ -6,7 +6,7 @@ from core.base.source_atomic import Location
 from core.runtime.exceptions import ReturnException, RegistryIsolationError
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.intent_logic import IntentRole
-from core.kernel.types.descriptors import TypeDescriptor, ANY_DESCRIPTOR as ANY_TYPE
+from core.kernel.spec import IbSpec, FuncSpec, ClassSpec, ANY_SPEC
 
 if TYPE_CHECKING:
     from core.kernel import ast as ast
@@ -31,11 +31,6 @@ class IbObject:
         self.ib_class = ib_class
         self.fields: Mapping[str, Any] = {}
 
-    @property
-    def descriptor(self) -> TypeDescriptor:
-        """获取对象的运行时类型描述符"""
-        return self.ib_class.descriptor
-
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         统一消息传递接口。
@@ -46,9 +41,11 @@ class IbObject:
         # 下沉至公理层能力探测
         # 针对 __call__ 消息，检查类型公理是否声明了调用能力
         if message == '__call__':
-            call_trait = self.descriptor.get_call_trait()
-            if call_trait and hasattr(self, 'call'):
-                return self.call(self.ib_class.registry.get_none(), args)
+            spec_reg = self.ib_class.registry.get_metadata_registry()
+            if spec_reg and self.ib_class.spec:
+                call_cap = spec_reg.get_call_cap(self.ib_class.spec)
+                if call_cap and hasattr(self, 'call'):
+                    return self.call(self.ib_class.registry.get_none(), args)
             
         if message == '__getattr__' and len(args) > 0:
             attr_name = args[0].to_native()
@@ -117,17 +114,15 @@ class IbObject:
 
     def __from_prompt__(self, raw_response: str) -> Tuple[bool, Any]:
         """
-        从 LLM 返回的原始文本中解析值。
-
-        默认实现：尝试使用 descriptor 的 Axiom 进行解析。
+        Parse a value from raw LLM output text.
+        Delegates to the spec's axiom from_prompt capability.
         """
         try:
-            axiom = self.descriptor._axiom
-            if axiom:
-                parser = axiom.get_parser_capability()
-                if parser:
-                    value = parser.parse_value(raw_response)
-                    return (True, value)
+            spec_reg = self.ib_class.registry.get_metadata_registry()
+            if spec_reg and self.ib_class.spec:
+                cap = spec_reg.get_from_prompt_cap(self.ib_class.spec)
+                if cap:
+                    return cap.from_prompt(raw_response, self.ib_class.spec)
         except Exception:
             pass
         return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
@@ -298,23 +293,31 @@ class IbDeferredField:
 @register_ib_type("Class")
 class IbClass(IbObject):
     """
-    IBC-Inter 类对象 (元对象)。
-    贯彻“一切皆对象”思想：类本身也是一个对象。
-    它持有该类的元数据 (TypeDescriptor) 和运行时方法表 (vtable)。
+    IBC-Inter class object (meta-object).
+    Everything is an object — classes themselves are objects.
+    Holds the IbSpec (pure-data type description) and the runtime method vtable.
     """
-    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', 'descriptor')
+    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', '_spec')
 
     def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[KernelRegistry] = None):
         if not registry:
             raise ValueError("Registry is required for IbClass creation")
         self.registry = registry
-        IbObject.__init__(self, self) # IbClass 的类是它自己
+        IbObject.__init__(self, self)
         self.name = name
         self.methods: Dict[str, 'IbFunction'] = {}
         self.parent = parent
         self.default_fields: Mapping[str, Any] = {}
         self.member_types: Dict[str, Any] = {}
-        self.descriptor: Optional[TypeDescriptor] = None
+        self._spec: Optional[IbSpec] = None
+
+    @property
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec
+
+    @spec.setter
+    def spec(self, value: Optional[IbSpec]) -> None:
+        self._spec = value
 
     def lookup_method(self, name: str) -> Optional['IbFunction']:
         """在虚表中查找方法 (支持继承)"""
@@ -325,14 +328,14 @@ class IbClass(IbObject):
         return None
 
     def is_assignable_to(self, other: 'IbClass') -> bool:
-        """运行时类型兼容性检查 (UTS 协议)"""
-        if self is other: return True
-        
-        # [Active Defense] 强契约：唯一使用 UTS 描述符进行校验
-        if self.descriptor and other.descriptor:
-            return self.descriptor.is_assignable_to(other.descriptor)
-            
-        # 绝不回退到 Python 继承链，确保 UTS 语义的一致性
+        """Runtime type compatibility check (UTS protocol)."""
+        if self is other:
+            return True
+        if other is None:
+            return False
+        spec_reg = self.registry.get_metadata_registry()
+        if spec_reg and self._spec and other._spec:
+            return spec_reg.is_assignable(self._spec, other._spec)
         return False
 
     def register_method(self, name: str, method: 'IIbFunction') -> None:
@@ -377,12 +380,10 @@ class IbClass(IbObject):
         if init_method:
             # 契约一致性校验：校验 __init__ 参数数量
             # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
-            if init_method.descriptor:
-                sig = init_method.descriptor.get_signature()
-                if sig:
-                    expected_params, _ = sig
-                    if len(args) != len(expected_params):
-                        raise InterpreterError(f"TypeError: {self.name}.__init__() expected {len(expected_params)} arguments, but got {len(args)}")
+            if init_method.spec and isinstance(init_method.spec, FuncSpec):
+                expected_count = len(init_method.spec.param_type_names)
+                if len(args) != expected_count:
+                    raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
             
             init_method.call(instance, args)
         elif args:
@@ -447,7 +448,7 @@ class IbNativeFunction(IbFunction):
     包装 Python 原生函数的 IBC 函数。
     用于引导阶段注入基础运算（如 int.__add__）。
     """
-    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, descriptor: Optional[TypeDescriptor] = None):
+    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, spec: Optional[IbSpec] = None):
         # 强制绑定到协议类，移除静默兜底
         reg = ib_class.registry if ib_class else None
         target_class = ib_class
@@ -464,11 +465,11 @@ class IbNativeFunction(IbFunction):
         self.is_method = is_method
         self.logic_id = logic_id
         self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
-        self._descriptor = descriptor
+        self._spec = spec
 
     @property
-    def descriptor(self) -> TypeDescriptor:
-        return self._descriptor or super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         # 如果 py_func 本身就是 IbObject (例如是一个 Proxy)，直接转发消息
@@ -509,17 +510,14 @@ class IbBoundMethod(IbFunction):
         self.method = method
 
     @property
-    def descriptor(self) -> TypeDescriptor:
-        """合成绑定方法的描述符"""
-        reg = self.ib_class.registry
-        m_reg = reg.get_metadata_registry()
-        # 如果有元数据注册表，则动态合成结构化描述符
-        if m_reg:
-            r_desc = self.receiver.descriptor if self.receiver else None
-            m_desc = self.method.descriptor
-            if m_desc and m_desc.get_call_trait():
-                return m_reg.factory.create_bound_method(r_desc, m_desc)
-        return super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        """Synthesise a BoundMethodSpec for this bound method."""
+        spec_reg = self.ib_class.registry.get_metadata_registry()
+        if spec_reg:
+            r_name = self.receiver.ib_class.name if self.receiver else ""
+            m_name = self.method.ib_class.name
+            return spec_reg.factory.create_bound_method(r_name, m_name)
+        return self.ib_class.spec
 
     def call(self, _receiver: IbObject, args: List[IbObject]) -> IbObject:
         if self.receiver is None:
@@ -605,16 +603,16 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, descriptor: Optional[TypeDescriptor] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
-        self._descriptor = descriptor
+        self._spec = spec
         self.module_name = module_name or context.current_module_name
 
     @property
-    def descriptor(self) -> TypeDescriptor:
-        return self._descriptor or super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
@@ -655,7 +653,10 @@ class IbUserFunction(IbFunction):
             
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
-                rt_context.define_variable("self", receiver)
+                # 查找 self 符号的 UID（语义分析阶段将函数定义节点映射到 self 符号）
+                self_sym = self.context.get_side_table("node_to_symbol", self.node_uid)
+                self_uid = self_sym if isinstance(self_sym, str) else (self_sym.uid if self_sym else None)
+                rt_context.define_variable("self", receiver, uid=self_uid)
                 
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
@@ -694,17 +695,17 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[TypeDescriptor] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
         self.context = context
-        self._descriptor = descriptor
+        self._spec = spec
         self.module_name = module_name or context.current_module_name
 
     @property
-    def descriptor(self) -> TypeDescriptor:
-        return self._descriptor or super().descriptor
+    def spec(self) -> Optional[IbSpec]:
+        return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""

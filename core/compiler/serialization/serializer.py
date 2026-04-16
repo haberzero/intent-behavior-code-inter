@@ -4,7 +4,7 @@ import json
 from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
-from core.kernel.types.descriptors import TypeDescriptor, ClassMetadata, FunctionMetadata, BoundMethodMetadata, ListMetadata, DictMetadata
+from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -135,42 +135,26 @@ class FlatSerializer(BaseFlatSerializer):
         # 使用符号自身的稳定 UID (name@depth)
         uid = getattr(sym, 'uid', None)
         if not uid:
-            # 对于没有 UID 的对象 (如直接存储的 TypeDescriptor)，生成基于属性的 UID
-            if isinstance(sym, TypeDescriptor):
-                uid = f"type_sym_{sym.module_path or 'root'}.{sym.name}"
-            elif hasattr(sym, 'get_content_hash'):
+            if hasattr(sym, 'get_content_hash'):
                 uid = f"sym_anon_{sym.get_content_hash()}"
             else:
-                # 极端最后的兜底
                 uid = f"sym_anon_{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}"
         
         self.type_map[sym_id] = uid
         
-        # [Robustness] 兼容直接在 members 中存储 TypeDescriptor 的情况
-        if isinstance(sym, TypeDescriptor):
-            sym_data = {
-                "uid": uid,
-                "name": sym.name,
-                "kind": "VARIABLE", # 默认视为变量符号
-                "type_uid": self._collect_type(sym),
-                "node_uid": None,
-                "owned_scope_uid": None,
-                "metadata": {"is_synthetic": True}
-            }
-        else:
-            sym_data = {
-                "uid": uid,
-                "name": sym.name,
-                "kind": sym.kind.name if hasattr(sym.kind, 'name') else str(sym.kind),
-                "type_uid": self._collect_type(sym.descriptor) if hasattr(sym, 'descriptor') and sym.descriptor else None,
-                "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
-                "owned_scope_uid": self._collect_scope(sym.owned_scope) if hasattr(sym, 'owned_scope') and sym.owned_scope else None,
-                "metadata": sym.metadata
-            }
+        sym_data = {
+            "uid": uid,
+            "name": sym.name,
+            "kind": sym.kind.name if hasattr(sym.kind, 'name') else str(sym.kind),
+            "type_uid": self._collect_type(sym.spec) if hasattr(sym, 'spec') and sym.spec else None,
+            "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
+            "owned_scope_uid": self._collect_scope(sym.owned_scope) if hasattr(sym, 'owned_scope') and sym.owned_scope else None,
+            "metadata": sym.metadata
+        }
         self.symbol_pool[uid] = sym_data
         return uid
 
-    def _collect_type(self, t: TypeDescriptor) -> str:
+    def _collect_type(self, t: IbSpec) -> str:
         """收集类型对象"""
         t_id = id(t)
         if t_id in self.type_map:

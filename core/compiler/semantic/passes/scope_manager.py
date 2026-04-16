@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict
 from core.kernel.symbols import SymbolTable, VariableSymbol, Symbol, SymbolKind
-from core.kernel.types.descriptors import TypeDescriptor
+from core.kernel.spec import IbSpec
 
 
 class ScopeManager:
@@ -34,14 +34,14 @@ class ScopeManager:
     def define_var(
         self,
         name: str,
-        var_type: TypeDescriptor,
+        var_type: IbSpec,
         def_node,
         allow_overwrite: bool = False
     ) -> VariableSymbol:
         sym = VariableSymbol(
             name=name,
             kind=SymbolKind.VARIABLE,
-            descriptor=var_type,
+            spec=var_type,
             def_node=def_node,
             owned_scope=self._current_scope
         )

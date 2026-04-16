@@ -3,16 +3,12 @@ from core.kernel import ast as ast
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
-from core.runtime.host.host_interface import HostInterface
 
 from core.kernel import symbols
 from core.kernel.symbols import (
     SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol
 )
-from core.kernel.types.descriptors import (
-    TypeDescriptor, ClassMetadata, FunctionMetadata, ListMetadata, DictMetadata,
-    ModuleMetadata, BoundMethodMetadata
-)
+from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec
 
 from .prelude import Prelude
 from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
@@ -24,21 +20,20 @@ from core.kernel.blueprint import CompilationResult
 class SemanticAnalyzer:
     """
     语义分析器：执行静态分析和类型检查。
-    贯彻"一切皆对象"思想：Analyzer 仅作为调度者，核心逻辑由 TypeDescriptor (Axiom) 自决议。
+    贯彻"一切皆对象"思想：Analyzer 仅作为调度者，核心逻辑由 IbSpec (Axiom) 自决议。
 
      使用组件组合模式：
     - SideTableManager: 管理语义分析侧表
     - ScopeManager: 管理作用域和场景栈
     """
-    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None, module_name: Optional[str] = None):
+    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None, module_name: Optional[str] = None):
         self.issue_tracker = issue_tracker or IssueTracker()
-        self.host_interface = host_interface
         self.debugger = debugger or core_debugger
         self.registry = registry
         self._module_name = module_name
 
         if self.registry is None:
-            raise ValueError("SemanticAnalyzer requires a valid MetadataRegistry instance. 'None' is not allowed.")
+            raise ValueError("SemanticAnalyzer requires a valid SpecRegistry instance. 'None' is not allowed.")
 
         self._any_desc = self.registry.resolve("any")
         self._auto_desc = self.registry.resolve("auto")
@@ -48,11 +43,11 @@ class SemanticAnalyzer:
         self._str_desc = self.registry.resolve("str")
         self._behavior_desc = self.registry.resolve("behavior")
 
-        self.current_return_type: Optional[TypeDescriptor] = None
-        self.current_class: Optional[ClassMetadata] = None
+        self.current_return_type: Optional[IbSpec] = None
+        self.current_class: Optional[ClassSpec] = None
         self.in_behavior_expr = False
 
-        self.prelude = Prelude(self.host_interface, registry=self.registry)
+        self.prelude = Prelude(registry=self.registry)
 
         self.side_table = SideTableManager()
         self.scope_manager = ScopeManager(module_name=module_name)
@@ -65,7 +60,7 @@ class SemanticAnalyzer:
         # 1. 注册内置函数
         for name, func_desc in self.prelude.get_builtins().items():
             # 使用全局唯一的内置符号 UID，消除模块相关性
-            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, descriptor=func_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=func_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 2. 注册内置类型
@@ -75,17 +70,17 @@ class SemanticAnalyzer:
             if getattr(type_desc, 'is_user_defined', False):
                 continue
                 
-            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, descriptor=type_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, spec=type_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 3. 注册内置模块 (如果 Registry 中存在)
         for name, mod_desc in self.prelude.get_builtin_modules().items():
-            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, descriptor=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.MODULE, spec=mod_desc, uid=f"builtin:{name}", metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
         # 4. 注册内置变量/常量 (如 __file__, __dir__)
         for name, var_desc in self.prelude.get_builtin_variables().items():
-            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.VARIABLE, descriptor=var_desc, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
+            sym = symbols.VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=var_desc, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
             self.symbol_table.define(sym)
 
     def analyze(self, node: ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
@@ -297,7 +292,7 @@ class SemanticAnalyzer:
                     self._expr_contains_behavior(expr.orelse))
         return False
 
-    def visit(self, node: ast.IbASTNode) -> TypeDescriptor:
+    def visit(self, node: ast.IbASTNode) -> IbSpec:
         # 标记作用域定义节点 (元数据驱动)
         if isinstance(node, (ast.IbModule, ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
             setattr(node, "_is_scope", True)
@@ -318,7 +313,7 @@ class SemanticAnalyzer:
             
         return res_type
 
-    def generic_visit(self, node: ast.IbASTNode) -> TypeDescriptor:
+    def generic_visit(self, node: ast.IbASTNode) -> IbSpec:
         """
         [AUDIT] 严格访问模式：对于未明确处理的节点，不再静默返回 Any。
         """
@@ -386,10 +381,10 @@ class SemanticAnalyzer:
             self.symbol_table = sym.owned_scope
             
         old_class = self.current_class
-        # 使用 is_class() 判定，消除对 ClassMetadata 的直接依赖
-        if sym.descriptor.is_class():
-            # 内部仍需类型转换为 ClassMetadata 以支持 members 访问，但判定逻辑已公理化
-            self.current_class = sym.descriptor
+        # 使用 is_class() 判定，消除对 ClassSpec 的直接依赖
+        if isinstance(sym.spec, ClassSpec):
+            # 内部仍需类型转换为 ClassSpec 以支持 members 访问，但判定逻辑已公理化
+            self.current_class = sym.spec
         else:
             self.current_class = None # Should not happen
 
@@ -401,7 +396,7 @@ class SemanticAnalyzer:
             self.symbol_table = old_table
         return self._void_desc
 
-    def _define_var(self, name: str, var_type: TypeDescriptor, node: ast.IbASTNode, allow_overwrite: bool = False):
+    def _define_var(self, name: str, var_type: IbSpec, node: ast.IbASTNode, allow_overwrite: bool = False):
         try:
 
             # 只有当变量已在 *当前* 作用域定义时，才考虑复用或覆盖。
@@ -420,12 +415,17 @@ class SemanticAnalyzer:
                     # 模块和类在语义上不建议被遮蔽，但如果是 auto 定义则允许
                     pass
 
-            sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, descriptor=var_type, def_node=node)
+            sym = symbols.VariableSymbol(name=name, kind=symbols.SymbolKind.VARIABLE, spec=var_type, def_node=node)
             self.symbol_table.define(sym, allow_overwrite=allow_overwrite)
             
             # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
             if self.current_class:
-                self.current_class.members[name] = sym
+                from core.kernel.spec.member import MemberSpec
+                self.current_class.members[name] = MemberSpec(
+                    name=name,
+                    kind="field",
+                    type_name=sym.spec.name if sym.spec else "any",
+                )
 
             # 记录侧表映射
             self.side_table.bind_symbol(node, sym)
@@ -449,7 +449,7 @@ class SemanticAnalyzer:
         ret_type = self._resolve_type(node.returns)
         
         # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
-        call_trait = sym.descriptor.get_call_trait()
+        call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
         writable = call_trait.get_writable_trait() if call_trait else None
 
         if writable:
@@ -519,7 +519,7 @@ class SemanticAnalyzer:
         # 3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
         
         # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
-        call_trait = sym.descriptor.get_call_trait()
+        call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
         writable = call_trait.get_writable_trait() if call_trait else None
         
         if writable:
@@ -571,7 +571,7 @@ class SemanticAnalyzer:
             ret_type = self.visit(node.value)
             if ret_type is None:
                 self.error(f"Invalid return type: got None (void or unknown)", node, code="SEM_003")
-            elif self.current_return_type and not ret_type.is_assignable_to(self.current_return_type):
+            elif self.current_return_type and not self.registry.is_assignable(ret_type, self.current_return_type):
                 self.error(f"Invalid return type: expected '{self.current_return_type.name}', got '{ret_type.name}'", node, code="SEM_003")
         else:
             if self.current_return_type and self.current_return_type != self._void_desc:
@@ -603,9 +603,28 @@ class SemanticAnalyzer:
                 # 递归调用 visit 来决议目标位置的类型
                 target_type = self.visit(target_node)
                 # 检查类型兼容性
-                if not val_type.is_assignable_to(target_type):
-                    hint = val_type.get_diff_hint(target_type)
+                if not self.registry.is_assignable(val_type, target_type):
+                    hint = self.registry.get_diff_hint(val_type, target_type)
                     self.error(f"Cannot assign '{val_type.name}' to '{target_type.name}'", node, code="SEM_003", hint=hint)
+                continue
+            elif isinstance(target_node, ast.IbTuple):
+                # 元组解包：(int x, int y) = (10, 20)
+                # 逐个定义元组内的变量
+                for elt in target_node.elts:
+                    if isinstance(elt, ast.IbTypeAnnotatedExpr):
+                        elt_type = self._resolve_type(elt.annotation)
+                        if isinstance(elt.target, (ast.IbName, ast.IbArg)):
+                            elt_name = elt.target.id if isinstance(elt.target, ast.IbName) else elt.target.arg
+                            elt_sym = self._define_var(elt_name, elt_type, elt, allow_overwrite=True)
+                            self.side_table.bind_symbol(elt, elt_sym)
+                            self.side_table.bind_type(elt, elt_sym.spec)
+                            if isinstance(elt.target, ast.IbName):
+                                self.side_table.bind_symbol(elt.target, elt_sym)
+                                self.side_table.bind_type(elt.target, elt_sym.spec)
+                    elif isinstance(elt, ast.IbName):
+                        elt_sym = self.symbol_table.resolve(elt.id)
+                        if elt_sym:
+                            self.side_table.bind_symbol(elt, elt_sym)
                 continue
             
             if var_name:
@@ -614,7 +633,7 @@ class SemanticAnalyzer:
                 
                 if declared_type:
                     # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
-                    if declared_type.is_dynamic():
+                    if self.registry.is_dynamic(declared_type):
                         target_type = val_type
                     else:
                         target_type = declared_type
@@ -632,15 +651,15 @@ class SemanticAnalyzer:
                     sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
                 else:
                     # 2. 无标注：如果尚未定义，或者现有定义是动态的 (any/auto)，则进行推导
-                    if not sym or sym.descriptor.is_dynamic():
+                    if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
                         sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
                 
                 if sym:
                     self.side_table.bind_symbol(actual_target, sym)
-                    self.side_table.bind_type(target_node, sym.descriptor)
+                    self.side_table.bind_type(target_node, sym.spec)
                     if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
                         self.side_table.bind_symbol(target_node.target, sym)
-                        self.side_table.bind_type(target_node.target, sym.descriptor)
+                        self.side_table.bind_type(target_node.target, sym.spec)
                     
                     # [P2 FIX] 行为描述行 Lambda 化判断 + 即时上下文处理
                     # [Future Evolution] 未来将演进为 ReceiveMode 枚举：
@@ -648,16 +667,16 @@ class SemanticAnalyzer:
                     # - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
                     # - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
                     # 相关演进：ParserCapability.get_llm_prompt_fragment() 用于注入系统提示词
-                    target_desc = sym.descriptor
+                    target_desc = sym.spec
                     is_explicit_callable = False
 
                     if target_desc:
-                        call_cap = target_desc.get_call_trait()
-                        is_dynamic = target_desc.is_dynamic()
+                        call_cap = self.registry.get_call_cap(target_desc)
+                        is_dynamic = self.registry.is_dynamic(target_desc)
 
                         # [Enum Hook] 检查是否是 Enum 类型
                         # Enum 类型虽然实现了 CallCapability（用于实例化），但我们不希望它被视为延迟执行的可调用类型
-                        is_enum_type = target_desc.get_base_axiom_name() == "enum"
+                        is_enum_type = target_desc.get_base_name() == "enum"
 
                         is_explicit_callable = (call_cap is not None and not is_enum_type) or is_dynamic
 
@@ -684,28 +703,28 @@ class SemanticAnalyzer:
                                 # 情况 1: 有强制类型转换 (int)@~...~
                                 # 从 IbCastExpr 获取目标类型，传递给内部的 IbBehaviorExpr
                                 cast_type = self._resolve_type(node.value.type_annotation)
-                                if cast_type and not cast_type.is_dynamic():
+                                if cast_type and not self.registry.is_dynamic(cast_type):
                                     self.side_table.bind_type(inner_behavior_expr, cast_type)
                                     val_type = cast_type
                                 else:
                                     val_type = self._str_desc
                             else:
                                 # 情况 2: 无强制类型转换 @~...~
-                                # 从赋值目标 sym.descriptor 获取类型
-                                if sym and sym.descriptor and not sym.descriptor.is_dynamic():
-                                    self.side_table.bind_type(inner_behavior_expr, sym.descriptor)
-                                    val_type = sym.descriptor
+                                # 从赋值目标 sym.spec 获取类型
+                                if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
+                                    self.side_table.bind_type(inner_behavior_expr, sym.spec)
+                                    val_type = sym.spec
                                 else:
                                     val_type = self._str_desc
                     
-                    if not val_type.is_assignable_to(sym.descriptor):
-                        hint = val_type.get_diff_hint(sym.descriptor)
-                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.descriptor.name}'", node, code="SEM_003", hint=hint)
+                    if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
+                        hint = self.registry.get_diff_hint(val_type, sym.spec)
+                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
             else:
                 # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
-                if target_type and not val_type.is_assignable_to(target_type):
-                    hint = val_type.get_diff_hint(target_type)
+                if target_type and not self.registry.is_assignable(val_type, target_type):
+                    hint = self.registry.get_diff_hint(val_type, target_type)
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003", hint=hint)
         
         return self._void_desc
@@ -742,7 +761,7 @@ class SemanticAnalyzer:
 
         return self._void_desc
 
-    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> TypeDescriptor:
+    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> IbSpec:
         """
         访问隐式实例化的行为描述。
         
@@ -790,20 +809,20 @@ class SemanticAnalyzer:
             # 语义：等同于 while，要求表达式具有“布尔评估能力”
             # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
             # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
-            if not iter_type.is_dynamic() and not iter_type.is_behavior() and iter_type.name != "bool":
+            if not self.registry.is_dynamic(iter_type) and not (iter_type.name == "behavior") and iter_type.name != "bool":
                 # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
                 pass
         else:
             # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
             # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
             # 如果是 behavior 类型，我们认为它“潜在可迭代”
-            if iter_type.is_behavior():
+            if (iter_type.name == "behavior"):
                 element_type = self._any_desc 
             else:
-                iter_trait = iter_type.get_iter_trait()
-                if iter_trait:
-                    # 通过 TypeDescriptor 统一获取 element_type，以支持引用解析
-                    element_type = iter_type.get_element_type() or self._any_desc
+                iter_cap = self.registry.get_iter_cap(iter_type)
+                if iter_cap:
+                    # 通过 registry 统一获取 element_type，以支持引用解析
+                    element_type = self.registry.resolve_iter_element(iter_type) or self._any_desc
                 else:
                     self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                     element_type = self._any_desc
@@ -818,11 +837,11 @@ class SemanticAnalyzer:
                 sym = self.symbol_table.symbols.get(var_name)
                 
                 # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
-                if not sym or sym.descriptor.is_dynamic():
+                if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
                     sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
-                elif not effective_type.is_dynamic():
+                elif not self.registry.is_dynamic(effective_type):
                     # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
-                    sym.descriptor = effective_type
+                    sym.spec = effective_type
                 
                 if sym:
                     self.side_table.bind_symbol(target, sym)
@@ -862,7 +881,7 @@ class SemanticAnalyzer:
         for var_name, target in SymbolExtractor.get_assigned_names(node):
             # 检查是否已在 Pass 2.5 预扫描中定义
             sym = self.symbol_table.symbols.get(var_name)
-            if not sym or sym.descriptor.is_dynamic():
+            if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
                 # [Strict Exception] 异常变量默认为 Exception 类型，而非 Any
                 sym = self._define_var(var_name, exc_type, node, allow_overwrite=(sym is not None))
             
@@ -1018,7 +1037,7 @@ class SemanticAnalyzer:
         
         # 如果是显式标注，我们认为结果类型就是标注的类型（类似于 Cast）
         # 但我们需要校验内部表达式是否能被视为该类型
-        if not inner_type.is_assignable_to(annotated_type):
+        if not self.registry.is_assignable(inner_type, annotated_type):
             self.error(f"Type mismatch: Expression of type '{inner_type.name}' cannot be cast/assigned to '{annotated_type.name}'", node, code="SEM_003")
             
         return annotated_type
@@ -1044,11 +1063,11 @@ class SemanticAnalyzer:
             self.visit(node.hint)
         return self._void_desc
 
-    def visit_IbCompare(self, node: ast.IbCompare) -> TypeDescriptor:
+    def visit_IbCompare(self, node: ast.IbCompare) -> IbSpec:
         left_type = self.visit(node.left)
         for op, comparator in zip(node.ops, node.comparators):
             right_type = self.visit(comparator)
-            res = left_type.get_operator_result(op, right_type)
+            res = self.registry.resolve_op(left_type, op, right_type)
             if not res:
                 self.error(f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_003")
             # 链式比较中，前一轮的右操作数成为下一轮的左操作数
@@ -1056,25 +1075,36 @@ class SemanticAnalyzer:
         
         return self._bool_desc
 
-    def visit_IbBoolOp(self, node: ast.IbBoolOp) -> TypeDescriptor:
+    def visit_IbBoolOp(self, node: ast.IbBoolOp) -> IbSpec:
         for val in node.values:
             self.visit(val)
         return self._bool_desc
 
-    def visit_IbListExpr(self, node: ast.IbListExpr) -> TypeDescriptor:
+    def visit_IbTuple(self, node: ast.IbTuple) -> IbSpec:
+        """元组表达式 -> 不可变元组类型"""
+        element_type = self._any_desc
+        if node.elts:
+            element_type = self.visit(node.elts[0])
+            for elt in node.elts[1:]:
+                self.visit(elt)
+        desc = self.registry.factory.create_tuple(element_type.name if element_type else "any")
+        self.registry.register(desc)
+        return desc
+
+    def visit_IbListExpr(self, node: ast.IbListExpr) -> IbSpec:
         element_type = self._any_desc
         if node.elts:
             element_type = self.visit(node.elts[0])
             for elt in node.elts[1:]:
                 self.visit(elt)
         
-        # [Axiom-Driven] 使用 Factory 创建 ListMetadata
+        # [Axiom-Driven] 使用 Factory 创建 ListSpec
         # 严格模式：直接使用 Registry 工厂，并进行即时注册以注入公理
-        desc = self.registry.factory.create_list(element_type)
+        desc = self.registry.factory.create_list(element_type.name if element_type else "any")
         self.registry.register(desc)
         return desc
 
-    def visit_IbDict(self, node: ast.IbDict) -> TypeDescriptor:
+    def visit_IbDict(self, node: ast.IbDict) -> IbSpec:
         key_type = self._any_desc
         val_type = self._any_desc
         
@@ -1088,34 +1118,34 @@ class SemanticAnalyzer:
             for val in node.values[1:]:
                 self.visit(val)
                 
-        # [Axiom-Driven] 使用 Factory 创建 DictMetadata
+        # [Axiom-Driven] 使用 Factory 创建 DictSpec
         # 严格模式：直接使用 Registry 工厂并注册
-        desc = self.registry.factory.create_dict(key_type, val_type)
+        desc = self.registry.factory.create_dict(key_type.name if key_type else "any", val_type.name if val_type else "any")
         self.registry.register(desc)
         return desc
 
-    def visit_IbSubscript(self, node: ast.IbSubscript) -> TypeDescriptor:
+    def visit_IbSubscript(self, node: ast.IbSubscript) -> IbSpec:
         value_type = self.visit(node.value)
         key_type = self.visit(node.slice)
-        
-        # 贯彻“一切皆对象”协议：询问类型如何处理下标
-        trait = value_type.get_subscript_trait()
-        if not trait:
+
+        # 贯彻"一切皆对象"协议：询问类型如何处理下标
+        subscript_cap = self.registry.get_subscript_cap(value_type)
+        if not subscript_cap:
             self.error(f"Type '{value_type.name}' is not subscriptable", node, code="SEM_003")
             return self._any_desc
-            
-        res = value_type.resolve_item(key_type)
+
+        res = self.registry.resolve_subscript(value_type, key_type)
         if not res:
             # 特殊处理：如果是 list 且 key 是 int，返回其 element_type
-            if value_type.get_base_axiom_name() == "list" and key_type.get_base_axiom_name() == "int":
-                return value_type.get_element_type() or self._any_desc
+            if value_type.get_base_name() == "list" and key_type.get_base_name() == "int":
+                return self.registry.resolve_iter_element(value_type) or self._any_desc
             # 如果是 list/str 且 key 是 slice，返回自身类型
-            if value_type.get_base_axiom_name() in ("list", "str") and key_type.get_base_axiom_name() == "slice":
+            if value_type.get_base_name() in ("list", "str") and key_type.get_base_name() == "slice":
                 return value_type
-            
+
         return res or self._any_desc
 
-    def visit_IbSlice(self, node: ast.IbSlice) -> TypeDescriptor:
+    def visit_IbSlice(self, node: ast.IbSlice) -> IbSpec:
         """分析切片表达式"""
         if node.lower: self.visit(node.lower)
         if node.upper: self.visit(node.upper)
@@ -1124,7 +1154,7 @@ class SemanticAnalyzer:
         # 暂时返回预定义的 slice 描述符
         return self.registry.resolve("slice") or self._any_desc
 
-    def visit_IbCastExpr(self, node: ast.IbCastExpr) -> TypeDescriptor:
+    def visit_IbCastExpr(self, node: ast.IbCastExpr) -> IbSpec:
         """类型强转语义分析"""
         self.visit(node.value)
         # 支持复杂类型标注 (如 list[int])，消除硬编码名称查找
@@ -1134,36 +1164,36 @@ class SemanticAnalyzer:
             return target_type
         return self._any_desc
         
-    def _resolve_type_by_name(self, name: str) -> Optional[TypeDescriptor]:
+    def _resolve_type_by_name(self, name: str) -> Optional[IbSpec]:
         # Helper for CastExpr which uses string name
         sym = self.symbol_table.resolve(name)
         if sym and sym.is_type:
-            return sym.descriptor
+            return sym.spec
         # Try builtins
         return self.prelude.get_builtin_types().get(name)
 
-    def visit_IbBinOp(self, node: ast.IbBinOp) -> TypeDescriptor:
+    def visit_IbBinOp(self, node: ast.IbBinOp) -> IbSpec:
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
         
         # 贯彻“一切皆对象”：调用左操作数的自决议方法
-        res = left_type.get_operator_result(node.op, right_type)
+        res = self.registry.resolve_op(left_type, node.op, right_type)
         if not res:
             self.error(f"Binary operator '{node.op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_003")
             return self._any_desc
         return res
 
-    def visit_IbUnaryOp(self, node: ast.IbUnaryOp) -> TypeDescriptor:
+    def visit_IbUnaryOp(self, node: ast.IbUnaryOp) -> IbSpec:
         operand_type = self.visit(node.operand)
         
         # 贯彻“一切皆对象”：调用操作数的自决议方法 (other=None 表示一元运算)
-        res = operand_type.get_operator_result(node.op, None)
+        res = self.registry.resolve_op(operand_type, node.op, None)
         if not res:
             self.error(f"Unary operator '{node.op}' not supported for type '{operand_type.name}'", node, code="SEM_003")
             return self._any_desc
         return res
 
-    def visit_IbConstant(self, node: ast.IbConstant) -> TypeDescriptor:
+    def visit_IbConstant(self, node: ast.IbConstant) -> IbSpec:
         val = node.value
         # 委托给注册表根据原生值解析描述符，消除分析器对 Python 类型的硬编码依赖
         desc = self.registry.resolve_from_value(val)
@@ -1171,7 +1201,7 @@ class SemanticAnalyzer:
             return desc
         return self.registry.resolve("any")
 
-    def visit_IbName(self, node: ast.IbName) -> TypeDescriptor:
+    def visit_IbName(self, node: ast.IbName) -> IbSpec:
         # 1. 解析符号
         sym = self.symbol_table.resolve(node.id)
         
@@ -1185,63 +1215,46 @@ class SemanticAnalyzer:
         self.side_table.bind_symbol(node, sym)
         
         # 统一获取类型信息
-        res = sym.descriptor
+        res = sym.spec
             
         return res
 
-    def visit_IbAttribute(self, node: ast.IbAttribute) -> TypeDescriptor:
+    def visit_IbAttribute(self, node: ast.IbAttribute) -> IbSpec:
         base_type = self.visit(node.value)
-        
-        # 2. 处理内置方法注入
-        member_sym = base_type.resolve_member(node.attr)
-        
-        if member_sym:
-            self.side_table.bind_symbol(node, member_sym)
-            # [Axiom Hook] 自动合成绑定方法 (Bound Method)
-            # 如果是实例方法且不是静态方法，则合成 BoundMethodMetadata
-            if member_sym.is_function and not member_sym.metadata.get("is_static"):
-                # 使用 is_module() 判断，取代对 ModuleMetadata 的依赖
-                if not base_type.is_module():
-                    # 使用工厂创建以确保驻留和能力注入
-                    return self.registry.factory.create_bound_method(base_type, member_sym.descriptor)
-            
-            return member_sym.descriptor
-            
-        # 2. [Dynamic Resolution] 如果是动态类型（any/auto），允许访问任意属性并返回 any
-        if base_type.is_dynamic():
-            # 动态代理：创建一个虚拟符号记录在侧表中
-            virtual_sym = symbols.VariableSymbol(
-                name=node.attr, 
-                kind=symbols.SymbolKind.VARIABLE, 
-                descriptor=self._any_desc, 
-                metadata={"is_dynamic_proxy": True}
-            )
-            self.side_table.bind_symbol(node, virtual_sym)
+
+        # 处理属性/方法访问：通过 SpecRegistry 委托，不直接调用 spec 方法
+        member_type = self.registry.resolve_member(base_type, node.attr) if base_type else None
+
+        if member_type:
+            return member_type
+
+        # [Dynamic Resolution] 如果是动态类型（any/auto），允许访问任意属性并返回 any
+        if self.registry.is_dynamic(base_type):
             return self._any_desc
 
         self.error(f"Type '{base_type.name}' has no member '{node.attr}'", node, code="SEM_001")
         return self._any_desc
 
-    def visit_IbCall(self, node: ast.IbCall) -> TypeDescriptor:
+    def visit_IbCall(self, node: ast.IbCall) -> IbSpec:
         func_type = self.visit(node.func)
         arg_types = [self.visit(arg) for arg in node.args]
         
         # 0. 特殊处理内置类型的构造函数调用
-        # 当 TypeDescriptor 没有 get_call_trait() 但类型名是内置类型时，
+        # 当 IbSpec 没有 get_call_trait() 但类型名是内置类型时，
         # 允许构造函数调用并返回对应类型
-        if isinstance(func_type, TypeDescriptor) and not func_type.get_call_trait():
+        if func_type and not self.registry.get_call_cap(func_type):
             type_name = func_type.name
             if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict'):
                 return func_type
         
         # 1. 检查是否可调用 (使用 Trait 契约)
-        call_trait = func_type.get_call_trait()
+        call_trait = self.registry.get_call_cap(func_type)
         if not call_trait:
             self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             return self._any_desc
             
         # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
-        res = func_type.resolve_return(arg_types)
+        res = self.registry.resolve_return(func_type, arg_types)
         
         if not res:
             # 通过 Trait 提取签名信息进行诊断
@@ -1251,8 +1264,8 @@ class SemanticAnalyzer:
                     self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")
                 else:
                     for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
-                        if not actual.is_assignable_to(expected):
-                            hint = actual.get_diff_hint(expected)
+                        if not self.registry.is_assignable(actual, expected):
+                            hint = self.registry.get_diff_hint(actual, expected)
                             self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_003", hint=hint)
             else:
                 self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
@@ -1260,7 +1273,7 @@ class SemanticAnalyzer:
             
         return res
 
-    def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> TypeDescriptor:
+    def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> IbSpec:
         self.in_behavior_expr = True
 
         try:
@@ -1271,7 +1284,7 @@ class SemanticAnalyzer:
             self.in_behavior_expr = False
         return self._behavior_desc
 
-    def _resolve_type(self, node: Optional[ast.IbASTNode], safe: bool = False) -> TypeDescriptor:
+    def _resolve_type(self, node: Optional[ast.IbASTNode], safe: bool = False) -> IbSpec:
         """解析 AST 节点中的类型标注 (Axiom-Driven)"""
         if not node: return self._void_desc
         
@@ -1286,8 +1299,8 @@ class SemanticAnalyzer:
                 self.side_table.bind_symbol(node, sym)
                 # 如果符号本身就是 TypeSymbol，直接返回其 descriptor
                 if sym.is_type:
-                    return sym.descriptor
-                return sym.descriptor
+                    return sym.spec
+                return sym.spec
                 
             if not safe:
                 self.error(f"Unknown type '{node.id}'", node, code="SEM_001")
@@ -1310,18 +1323,16 @@ class SemanticAnalyzer:
             if safe:
                 if isinstance(node.value, ast.IbName):
                     base_sym = self.symbol_table.resolve(node.value.id)
-                    if base_sym and base_sym.descriptor:
-                        member_sym = base_sym.descriptor.resolve_member(node.attr)
-                        if member_sym:
-                            self.side_table.bind_symbol(node, member_sym)
-                            return member_sym.descriptor
+                    if base_sym and base_sym.spec:
+                        member_type = self.registry.resolve_member(base_sym.spec, node.attr)
+                        if member_type:
+                            return member_type
                 return self._any_desc
                 
             base_type = self.visit(node.value)
-            member_sym = base_type.resolve_member(node.attr)
-            if member_sym:
-                self.side_table.bind_symbol(node, member_sym)
-                return member_sym.descriptor
+            member_type = self.registry.resolve_member(base_type, node.attr) if base_type else None
+            if member_type:
+                return member_type
             self.error(f"Unknown type '{node.attr}' in '{base_type.name}'", node, code="SEM_001")
             
         return self._any_desc

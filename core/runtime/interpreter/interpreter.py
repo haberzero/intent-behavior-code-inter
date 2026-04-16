@@ -29,7 +29,7 @@ from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField
-from core.kernel.types.descriptors import TypeDescriptor as Type, ListMetadata as ListType, DictMetadata as DictType, ANY_DESCRIPTOR as ANY_TYPE
+from core.kernel.spec import IbSpec as Type, ListSpec as ListType, DictSpec as DictType, ANY_SPEC as ANY_TYPE
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.kernel.registry import KernelRegistry
@@ -98,7 +98,7 @@ class Interpreter:
         current_scope = self.runtime_context.current_scope
         for name, symbol in parent_scope._symbols.items():
             if not name.startswith("__"):
-                current_scope.define(name, symbol.descriptor, is_const=symbol.is_const, force=True)
+                current_scope.define(name, symbol.spec, is_const=symbol.is_const, force=True)
 
     def _sync_classes_from(self, parent_context: RuntimeContext):
         """ 从父上下文同步类定义"""
@@ -452,7 +452,7 @@ class Interpreter:
         # 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
-                if not getattr(ib_class.descriptor, 'is_user_defined', True):
+                if not getattr(ib_class.spec, 'is_user_defined', True):
                     # 注入时带上稳定的内置符号 UID，与编译器对齐
                     context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
                     defined_names.add(name)
@@ -585,7 +585,7 @@ class Interpreter:
         """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
         old_module = self.current_module_name
         for name, ib_class in self.registry.get_all_classes().items():
-            if not getattr(ib_class.descriptor, 'is_user_defined', False):
+            if not getattr(ib_class.spec, 'is_user_defined', False):
                 continue
             
             # 遍历所有默认字段并尝试预求值
@@ -613,13 +613,16 @@ class Interpreter:
             self.current_module_name = module_name
             
             ib_class = self.registry.get_class(name)
-            if not ib_class or not getattr(ib_class.descriptor, 'is_user_defined', False):
+            if not ib_class or not getattr(ib_class.spec, 'is_user_defined', False):
                 continue
             
             node_data = self.get_node_data(node_uid)
             if not node_data: continue
             
             body = node_data.get("body", [])
+            # Track declaration-only fields (no default value) in order
+            decl_only_fields: List[str] = []
+            
             for stmt_uid in body:
                 stmt_data = self.get_node_data(stmt_uid)
                 if not stmt_data: continue
@@ -627,11 +630,11 @@ class Interpreter:
                 if stmt_data["_type"] == "IbFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, descriptor=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, spec=declared_type))
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, descriptor=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, spec=declared_type))
                 elif stmt_data["_type"] == "IbAssign":
                     # 使用 IbDeferredField 统一管理
                     val_uid = stmt_data.get("value")
@@ -648,6 +651,35 @@ class Interpreter:
                                 static_val=static_val, 
                                 module_name=module_name
                             )
+                            # 无默认值的声明字段需要通过构造函数参数赋值
+                            if val_uid is None and static_val is None:
+                                decl_only_fields.append(target_name)
+
+            # 若类没有显式 __init__ 但存在声明字段，自动生成位置参数 __init__
+            if decl_only_fields and '__init__' not in ib_class.methods:
+                field_names = decl_only_fields
+
+                def _make_auto_init(fnames):
+                    def _auto_init(self_obj, *args):
+                        if len(args) != len(fnames):
+                            from core.kernel.issue import InterpreterError
+                            raise InterpreterError(
+                                f"TypeError: {self_obj.ib_class.name}() expected {len(fnames)} argument(s), but got {len(args)}"
+                            )
+                        for fname, val in zip(fnames, args):
+                            self_obj.fields[fname] = val
+                        return self_obj.ib_class.registry.get_none()
+                    return _auto_init
+
+                from core.runtime.objects.kernel import IbNativeFunction
+                auto_init_fn = IbNativeFunction(
+                    _make_auto_init(field_names),
+                    unbox_args=False,
+                    is_method=True,
+                    name=f"{name}.__init__",
+                    ib_class=ib_class,
+                )
+                ib_class.register_method('__init__', auto_init_fn)
         
         self.current_module_name = old_module
 

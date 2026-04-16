@@ -1,25 +1,19 @@
 from typing import Dict, Any, Optional, List
-from core.kernel.types.registry import MetadataRegistry
+from core.kernel.spec.registry import SpecRegistry
+from core.kernel.spec import IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
 from core.base.enums import RegistrationState
-from core.kernel.types.descriptors import (
-    TypeDescriptor, 
-    ListMetadata, DictMetadata, FunctionMetadata, ClassMetadata, ModuleMetadata,
-    INT_DESCRIPTOR, STR_DESCRIPTOR, FLOAT_DESCRIPTOR, BOOL_DESCRIPTOR, 
-    VOID_DESCRIPTOR, ANY_DESCRIPTOR, AUTO_DESCRIPTOR, CALLABLE_DESCRIPTOR,
-    LIST_DESCRIPTOR, DICT_DESCRIPTOR
-)
 
 # 统一内置原始类型列表，确保水化阶段一致性
 BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "any", "auto", "callable", "list", "dict", "behavior"]
 
 class ArtifactRehydrator:
     """
-    类型重水化器：将序列化后的 type_pool 还原为运行时的 TypeDescriptor 对象树。
+    类型重水化器：将序列化后的 type_pool 还原为运行时的 IbSpec 对象树。
     """
-    def __init__(self, type_pool: Dict[str, Any], registry: MetadataRegistry):
+    def __init__(self, type_pool: Dict[str, Any], registry: SpecRegistry):
         self.type_pool = type_pool
         self.registry = registry
-        self.memo: Dict[str, TypeDescriptor] = {}
+        self.memo: Dict[str, IbSpec] = {}
         
         # 预注册内置基础描述符，防止重复创建
         self._init_builtins()
@@ -35,10 +29,10 @@ class ArtifactRehydrator:
                         self.memo[uid] = desc
                         break
 
-    def hydrate_all(self, registry: Optional[Any] = None) -> List[ClassMetadata]:
+    def hydrate_all(self, registry: Optional[Any] = None) -> List[ClassSpec]:
         """
         水化池中所有类型。采用两阶段加载：先创建所有 Shell，再填充详细信息。
-        返回所有被成功水化的 ClassMetadata。
+        返回所有被成功水化的 ClassSpec。
         """
         if registry:
              registry.verify_level(RegistrationState.STAGE_5_HYDRATION.value)
@@ -50,14 +44,13 @@ class ArtifactRehydrator:
         # Phase 2: Fill all fields
         classes = []
         for uid in self.type_pool:
-            desc = self._fill_descriptor(uid)
-            # 使用 is_class() 代替名称比对
-            if desc and desc.is_class():
-                classes.append(desc)
+            spec = self._fill_descriptor(uid)
+            if isinstance(spec, ClassSpec):
+                classes.append(spec)
         
         return classes
 
-    def hydrate(self, uid: str) -> Optional[TypeDescriptor]:
+    def hydrate(self, uid: str) -> Optional[IbSpec]:
         """按需水化单个类型（支持递归调用）"""
         if not uid or uid not in self.type_pool:
             return None
@@ -66,56 +59,79 @@ class ArtifactRehydrator:
             return self.memo[uid]
             
         # 创建并填充
-        desc = self._create_shell(uid)
+        spec = self._create_shell(uid)
         self._fill_descriptor(uid)
-        return desc
+        return spec
 
-    def _create_shell(self, uid: str) -> TypeDescriptor:
-        """创建描述符外壳并存入缓存 (Phase 1)"""
+    def _create_shell(self, uid: str) -> IbSpec:
+        """创建 spec 外壳并存入缓存 (Phase 1)"""
         if uid in self.memo:
             return self.memo[uid]
             
         data = self.type_pool[uid]
-        # 使用 TypeDescriptor 作为通用回退标识
         kind = data.get("kind", "TypeDescriptor")
         name = data.get("name", "")
         is_user_defined = data.get("is_user_defined", False)
         
         factory = self.registry.factory
         
-        # 映射驱动的 Shell 创建，消除 if/elif kind 硬编码
+        # 映射驱动的 Shell 创建
         shell_creators = {
-            "ListMetadata": lambda: ListMetadata(name="list"),
-            "DictMetadata": lambda: DictMetadata(name="dict"),
-            "FunctionMetadata": lambda: FunctionMetadata(name="callable"),
-            "ClassMetadata": lambda: factory.create_class(name, parent=data.get("parent_name")),
-            "BoundMethodMetadata": lambda: factory.create_primitive("bound_method"),
-            "ModuleMetadata": lambda: ModuleMetadata(name=name)
+            "ListMetadata": lambda: ListSpec(name="list", is_user_defined=False),
+            "DictMetadata": lambda: DictSpec(name="dict", is_user_defined=False),
+            "FunctionMetadata": lambda: FuncSpec(name=name or "callable", is_user_defined=False),
+            "ClassMetadata": lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
+            "BoundMethodMetadata": lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
+            "ModuleMetadata": lambda: ModuleSpec(name=name, is_user_defined=False)
         }
         
         if name in BUILTIN_TYPES and kind == "TypeDescriptor":
-            descriptor = self.registry.resolve(name) or factory.create_primitive(name)
+            spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
-            creator = shell_creators.get(kind, lambda: TypeDescriptor(name=name))
-            descriptor = creator()
+            creator = shell_creators.get(kind)
+            if creator:
+                spec = creator()
+            else:
+                spec = self.registry.resolve(name) or IbSpec(name=name)
             
-        if descriptor:
-            descriptor.is_user_defined = is_user_defined
-            # 注册以确保物理隔离（克隆）并绑定注册表上下文
-            descriptor = self.registry.register(descriptor)
+        if spec:
+            spec.is_user_defined = is_user_defined
+            spec = self.registry.register(spec)
             
-        self.memo[uid] = descriptor
-        return descriptor
+        self.memo[uid] = spec
+        return spec
 
-    def _fill_descriptor(self, uid: str) -> Optional[TypeDescriptor]:
-        """填充描述符的详细字段 (Phase 2)"""
-        descriptor = self.memo.get(uid)
-        if not descriptor:
+    def _fill_descriptor(self, uid: str) -> Optional[IbSpec]:
+        """填充 spec 的详细字段 (Phase 2)"""
+        spec = self.memo.get(uid)
+        if not spec:
             return None
             
         data = self.type_pool[uid]
         
-        # 使用重水化接口，消除硬编码 isinstance 检查
-        descriptor.rehydrate_fields(data, self)
+        if isinstance(spec, ListSpec):
+            elem = self.hydrate(data.get("element_type_uid"))
+            if elem:
+                spec.element_type_name = elem.name
+                spec.name = f"list[{elem.name}]"
+        elif isinstance(spec, DictSpec):
+            key = self.hydrate(data.get("key_type_uid"))
+            val = self.hydrate(data.get("value_type_uid"))
+            if key:
+                spec.key_type_name = key.name
+            if val:
+                spec.value_type_name = val.name
+            spec.name = f"dict[{spec.key_type_name},{spec.value_type_name}]"
+        elif isinstance(spec, FuncSpec):
+            param_uids = data.get("param_types_uids", [])
+            spec.param_type_names = [
+                s.name for uid in param_uids
+                if (s := self.hydrate(uid)) is not None
+            ]
+            ret = self.hydrate(data.get("return_type_uid"))
+            spec.return_type_name = ret.name if ret else "void"
+        elif isinstance(spec, ClassSpec):
+            spec.parent_name = data.get("parent_name")
+            spec.parent_module = data.get("parent_module")
             
-        return descriptor
+        return spec

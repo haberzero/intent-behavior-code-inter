@@ -173,6 +173,13 @@ class LLMExecutorImpl:
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
+        # 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
+        if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            return LLMResult.uncertain_result(
+                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            )
+
         # 记录最后一次调用信息
         self.last_call_info = {
             "sys_prompt": sys_prompt,
@@ -266,8 +273,8 @@ class LLMExecutorImpl:
                 meta_reg = self.registry.get_metadata_registry()
                 if meta_reg:
                     descriptor = meta_reg.resolve(type_name)
-                    if descriptor and descriptor._axiom:
-                        hint_cap = descriptor._axiom.get_llmoutput_hint_capability()
+                    if descriptor:
+                        hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
                         if hint_cap:
                             return hint_cap.__outputhint_prompt__(descriptor)
 
@@ -279,8 +286,9 @@ class LLMExecutorImpl:
                 if ib_class:
                     type_descriptor = getattr(ib_class, 'descriptor', None)
                     if type_descriptor:
-                        if hasattr(type_descriptor, '_axiom') and type_descriptor._axiom:
-                            hint_cap = type_descriptor._axiom.get_llmoutput_hint_capability()
+                        meta_reg = self.registry.get_metadata_registry()
+                        if meta_reg:
+                            hint_cap = meta_reg.get_llm_output_hint_cap(type_descriptor)
                             if hint_cap:
                                 return hint_cap.__outputhint_prompt__(type_descriptor)
 
@@ -313,8 +321,8 @@ class LLMExecutorImpl:
         descriptor = None
         if meta_reg:
             descriptor = meta_reg.resolve(type_name)
-            if descriptor and descriptor._axiom:
-                from_prompt_cap = descriptor._axiom.get_from_prompt_capability()
+            if descriptor:
+                from_prompt_cap = meta_reg.get_from_prompt_cap(descriptor)
                 if from_prompt_cap:
                     success, result = from_prompt_cap.from_prompt(raw_res, descriptor)
                     if success:
@@ -328,7 +336,7 @@ class LLMExecutorImpl:
                             retry_hint=result
                         )
 
-                parser = descriptor._axiom.get_parser_capability()
+                parser = meta_reg.get_parser_cap(descriptor)
                 if parser:
                     try:
                         val = parser.parse_value(raw_res)
@@ -432,6 +440,13 @@ class LLMExecutorImpl:
             return LLMResult.uncertain_result(
                 raw_response="__MOCK_REPAIR__",
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+            )
+
+        # 6.2 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
+        if response == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            return LLMResult.uncertain_result(
+                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
             )
 
         # 记录最后一次调用信息

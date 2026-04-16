@@ -1,6 +1,11 @@
 # Set the default behavior, in case people don't have core.autocrlf set.
 * text=auto
 
+# [unsafe-vibe-dev] Prevent README.md from being overwritten when merging this branch into main.
+# The 'ours' merge driver always keeps the current branch's (i.e. main's) version of README.md.
+# Requires: git config merge.ours.driver true
+README.md merge=ours
+
 *.c text
 *.h text
 

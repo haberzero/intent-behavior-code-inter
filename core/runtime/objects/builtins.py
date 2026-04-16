@@ -41,7 +41,7 @@ class IbInteger(IbObject):
         return self.ib_class.registry.box(list(range(self.value)))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         res_val = _cast_numeric_to_native(self.value, target_desc)
         return self.ib_class.registry.box(res_val)
 
@@ -136,7 +136,7 @@ class IbFloat(IbObject):
         return self.ib_class.registry.box(1 if self.value != 0.0 else 0)
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         res_val = _cast_numeric_to_native(self.value, target_desc)
         return self.ib_class.registry.box(res_val)
 
@@ -208,7 +208,7 @@ class IbString(IbObject):
         return self.ib_class.registry.get_none()
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.descriptor if hasattr(target_class, 'descriptor') else None
+        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         try:
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
@@ -261,7 +261,7 @@ class IbString(IbObject):
         """检查是否包含子串"""
         sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
         result = sub_str in self.value
-        return self.ib_class.registry.box(1 if result else 0)
+        return self.ib_class.registry.box(result)
 
     def __getitem__(self, key: Any) -> IbObject:
         """支持字符串下标与切片"""
@@ -378,6 +378,63 @@ class IbList(IbObject):
     def sort(self) -> IbObject:
         self.elements.sort(key=lambda x: x.to_native())
         return self.ib_class.registry.get_none()
+
+@register_ib_type("tuple")
+class IbTuple(IbObject):
+    """
+    包装 Python 原生 tuple 的 IBC 对象。
+    与 IbList 的关键区别：不可变（没有 append/pop/sort/clear/__setitem__）。
+    """
+    __slots__ = ('elements',)
+
+    def __init__(self, elements: tuple, ib_class: IbClass):
+        super().__init__(ib_class)
+        self.elements = elements  # tuple of IbObject
+
+    def to_native(self, memo=None) -> tuple:
+        if memo is None: memo = {}
+        if id(self) in memo: return memo[id(self)]
+
+        res_list = []
+        memo[id(self)] = tuple(res_list)  # placeholder
+        for e in self.elements:
+            res_list.append(e.to_native(memo) if isinstance(e, IbObject) else e)
+        result = tuple(res_list)
+        memo[id(self)] = result
+        return result
+
+    def serialize_for_debug(self) -> Dict[str, Any]:
+        return {
+            "type": self.ib_class.name,
+            "value": [e.serialize_for_debug() for e in self.elements]
+        }
+
+    def __repr__(self):
+        return f"Tuple({self.elements})"
+
+    def len(self) -> IbObject:
+        return self.ib_class.registry.box(len(self.elements))
+
+    def cast_to(self, target_class: Any) -> IbObject:
+        """支持 Tuple 的强转逻辑"""
+        if target_class.name in ("tuple", "any"):
+            return self
+        if target_class.name == "list":
+            return self.ib_class.registry.box(list(self.elements))
+        if target_class.name == "str":
+            items_repr = [str(e.to_native()) for e in self.elements]
+            return self.ib_class.registry.box("(" + ", ".join(items_repr) + ")")
+        return self
+
+    def __getitem__(self, key: Any) -> IbObject:
+        idx = key.to_native() if hasattr(key, 'to_native') else key
+        try:
+            res = self.elements[idx]
+            if isinstance(idx, slice):
+                return self.ib_class.registry.box(tuple(res) if isinstance(res, (list, tuple)) else res)
+            return res
+        except IndexError:
+            raise InterpreterError(f"IndexError: tuple index out of range: {idx}")
 
 @register_ib_type("dict")
 class IbDict(IbObject):

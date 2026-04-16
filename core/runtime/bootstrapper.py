@@ -1,10 +1,8 @@
-from typing import Dict, Optional, Any, TYPE_CHECKING
+from typing import Dict, Optional, Any
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
-
-if TYPE_CHECKING:
-    from core.kernel.types.descriptors import TypeDescriptor
+from core.kernel.spec import IbSpec, ClassSpec
 
 class Bootstrapper:
     """
@@ -41,12 +39,12 @@ class Bootstrapper:
 
         # Step 0: Create Core Descriptors (元数据声明)
         factory = metadata_registry.factory
-        type_desc = factory.create_class("Type", is_nullable=False)
-        obj_desc = factory.create_class("Object", is_nullable=True)
-        callable_desc = factory.create_class("callable", is_nullable=True)
-        module_desc = factory.create_class("IbModule", is_nullable=True)
-        intent_desc = factory.create_class("Intent", is_nullable=True)
-        intent_stack_desc = factory.create_class("IntentStack", is_nullable=True)
+        type_desc = factory.create_class("Type")
+        obj_desc = factory.create_class("Object")
+        callable_desc = factory.create_class("callable")
+        module_desc = factory.create_class("IbModule")
+        intent_desc = factory.create_class("Intent")
+        intent_stack_desc = factory.create_class("IntentStack")
 
         # 内核类不属于用户定义类
         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc, intent_stack_desc]:
@@ -69,12 +67,12 @@ class Bootstrapper:
         self.IntentStackClass.ib_class = self.TypeClass
 
         # 强制绑定描述符
-        self.TypeClass.descriptor = type_desc
-        self.ObjectClass.descriptor = obj_desc
-        self.CallableClass.descriptor = callable_desc
-        self.ModuleClass.descriptor = module_desc
-        self.IntentClass.descriptor = intent_desc
-        self.IntentStackClass.descriptor = intent_stack_desc
+        self.TypeClass.spec = type_desc
+        self.ObjectClass.spec = obj_desc
+        self.CallableClass.spec = callable_desc
+        self.ModuleClass.spec = module_desc
+        self.IntentClass.spec = intent_desc
+        self.IntentStackClass.spec = intent_stack_desc
 
         # Object 没有父类
         self.ObjectClass.parent = None
@@ -141,12 +139,12 @@ class Bootstrapper:
         # 为 Type 注册 __call__ 消息实现 (实例化类)
         self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 
-    def register_class(self, ib_class: IbClass, descriptor: 'TypeDescriptor'):
-        """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定描述符。"""
+    def register_class(self, ib_class: IbClass, spec: 'IbSpec'):
+        """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定 spec。"""
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass
         self._class_registry[ib_class.name] = ib_class
-        self.registry.register_class(ib_class.name, ib_class, self._token, descriptor=descriptor)
+        self.registry.register_class(ib_class.name, ib_class, self._token, spec=spec)
 
     def get_class(self, name: str) -> Optional[IbClass]:
         return self._class_registry.get(name)
@@ -154,8 +152,8 @@ class Bootstrapper:
     def get_all_classes(self) -> Dict[str, IbClass]:
         return dict(self._class_registry)
 
-    def create_subclass(self, registry: KernelRegistry, name: str, descriptor: 'TypeDescriptor', parent_name: str = "Object") -> IbClass:
-        """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定描述符。"""
+    def create_subclass(self, registry: KernelRegistry, name: str, spec: 'IbSpec', parent_name: str = "Object") -> IbClass:
+        """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定 spec。"""
         if name in self._class_registry:
             return self._class_registry[name]
         
@@ -171,7 +169,7 @@ class Bootstrapper:
             raise ValueError(f"Parent class '{parent_name}' not found")
         
         new_class = IbClass(name, parent=parent, registry=registry)
-        self.register_class(new_class, descriptor)
+        self.register_class(new_class, spec)
         return new_class
 
     def box(self, registry: KernelRegistry, val: Any, memo: Optional[Dict[int, IbObject]] = None) -> IbObject:
