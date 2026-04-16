@@ -5,11 +5,46 @@ from core.extension.exceptions import PluginError, InterpreterError, CompilerErr
 from core.extension.capabilities import PluginCapabilities, ExtensionCapabilities
 
 
+# ---------------------------------------------------------------------------
+# IBC-Inter 插件体系层次说明
+# ---------------------------------------------------------------------------
+#
+# IBC-Inter 插件分为两个层次：
+#
+# 【非侵入层（Non-Invasive Level）】
+#   - 零内核依赖：_spec.py 只含纯 dict vtable，实现类不导入 core.*
+#   - 通过 setup(capabilities) 接收注入的能力容器，只按需取用浅层能力
+#     （如 capabilities.service_context.permission_manager）
+#   - 适合：数学计算、JSON、HTTP、文件操作等无状态工具性插件
+#   - 代表模块：ibci_math, ibci_json, ibci_time, ibci_net, ibci_file, ibci_schema
+#
+# 【核心层（Core Level）】
+#   - 继承本文件中的 IbPlugin 基类
+#   - 通过 PluginCapabilities 深度访问内核能力：
+#       stack_inspector  调用栈/意图栈内省
+#       state_reader     运行时变量和 LLM 结果读取
+#       llm_executor     LLM 执行器
+#       service_context  ServiceContext（含 host_service、scheduler 等）
+#   - 可通过 capabilities.expose("xxx_provider", self) 向 CapabilityRegistry
+#     注册自身，供其他插件或内核代码发现
+#   - 适合：运行时调试、系统状态查询、宿主能力（持久化/隔离执行）等
+#   - 代表模块：ibci_ihost, ibci_idbg, ibci_isys, ibci_sys
+#
+# 两种层次使用相同的 _spec.py 协议（__ibcext_metadata__ + __ibcext_vtable__）
+# 和相同的 ModuleLoader 加载流程。核心层仅在实现类上额外继承 IbPlugin。
+# ---------------------------------------------------------------------------
+
+
 class IbPlugin(ABC):
     """
-    插件基类。
-    提供自动化的虚表（VTable）生成和依赖注入契约支持。
-    所有现代 IBCI 插件均应继承此类。
+    核心层插件基类。
+
+    提供：
+    - setup(capabilities) 生命周期钩子，由 ModuleLoader 在加载时调用
+    - expose()/revoke() 向 CapabilityRegistry 注册/撤销能力
+    - plugin_id 唯一标识符
+
+    非侵入层插件不需要继承此类，直接实现 setup(capabilities) 方法即可。
     """
     EXPOSE_LAZY = "lazy"
     EXPOSE_EAGER = "eager"
