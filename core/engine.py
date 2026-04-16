@@ -372,8 +372,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             analyzer = SemanticAnalyzer(
                 issue_tracker=self.issue_tracker, 
                 registry=self.registry.get_metadata_registry(),
-                debugger=self.debugger,
-                host_interface=self.host_interface
+                debugger=self.debugger
             )
         
         # 内部执行完整的 3-Pass 分析流

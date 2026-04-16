@@ -3,7 +3,6 @@ from core.kernel import ast as ast
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
-from core.runtime.host.host_interface import HostInterface
 
 from core.kernel import symbols
 from core.kernel.symbols import (
@@ -27,9 +26,8 @@ class SemanticAnalyzer:
     - SideTableManager: 管理语义分析侧表
     - ScopeManager: 管理作用域和场景栈
     """
-    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None, module_name: Optional[str] = None):
+    def __init__(self, issue_tracker: Optional[DiagnosticReporter] = None, debugger: Optional[Any] = None, registry: Optional[Any] = None, module_name: Optional[str] = None):
         self.issue_tracker = issue_tracker or IssueTracker()
-        self.host_interface = host_interface
         self.debugger = debugger or core_debugger
         self.registry = registry
         self._module_name = module_name
@@ -49,7 +47,7 @@ class SemanticAnalyzer:
         self.current_class: Optional[ClassSpec] = None
         self.in_behavior_expr = False
 
-        self.prelude = Prelude(self.host_interface, registry=self.registry)
+        self.prelude = Prelude(registry=self.registry)
 
         self.side_table = SideTableManager()
         self.scope_manager = ScopeManager(module_name=module_name)

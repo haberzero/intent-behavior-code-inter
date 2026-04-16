@@ -15,7 +15,6 @@ class Prelude:
 
     def __init__(
         self,
-        host_interface: Optional[Any] = None,
         registry: Optional[Any] = None,
     ):
         self.builtin_functions: Dict[str, FuncSpec] = {}
@@ -23,7 +22,6 @@ class Prelude:
         self.builtin_types: Dict[str, IbSpec] = {}
         self.builtin_variables: Dict[str, IbSpec] = {}
         self.registry = registry
-        self.host_interface = host_interface
         self._init_defaults()
 
     # ------------------------------------------------------------------ #
