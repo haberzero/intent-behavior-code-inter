@@ -604,7 +604,7 @@ class SemanticAnalyzer:
                 target_type = self.visit(target_node)
                 # 检查类型兼容性
                 if not self.registry.is_assignable(val_type, target_type):
-                    hint = val_type.get_diff_hint(target_type)
+                    hint = self.registry.get_diff_hint(val_type, target_type)
                     self.error(f"Cannot assign '{val_type.name}' to '{target_type.name}'", node, code="SEM_003", hint=hint)
                 continue
             
@@ -699,13 +699,13 @@ class SemanticAnalyzer:
                                     val_type = self._str_desc
                     
                     if not self.registry.is_assignable(val_type, sym.spec):
-                        hint = val_type.get_diff_hint(sym.spec)
+                        hint = self.registry.get_diff_hint(val_type, sym.spec)
                         self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
             else:
                 # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
                 if target_type and not self.registry.is_assignable(val_type, target_type):
-                    hint = val_type.get_diff_hint(target_type)
+                    hint = self.registry.get_diff_hint(val_type, target_type)
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003", hint=hint)
         
         return self._void_desc
@@ -1235,7 +1235,7 @@ class SemanticAnalyzer:
                 else:
                     for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
                         if not self.registry.is_assignable(actual, expected):
-                            hint = actual.get_diff_hint(expected)
+                            hint = self.registry.get_diff_hint(actual, expected)
                             self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_003", hint=hint)
             else:
                 self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")

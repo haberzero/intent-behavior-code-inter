@@ -137,6 +137,10 @@ class IntAxiom(
         }
 
     def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if other_name is None:
+            if op in ("-", "+", "unary-", "unary+", "~"):
+                return "int"
+            return None
         if op in ("+", "-", "*", "/", "//", "%", "&", "|", "^", "<<", ">>"):
             if other_name == "int":
                 return "int"
@@ -207,6 +211,10 @@ class FloatAxiom(
         }
 
     def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if other_name is None:
+            if op in ("-", "+", "unary-", "unary+"):
+                return "float"
+            return None
         if op in ("+", "-", "*", "/", "//", "%"):
             if other_name in ("int", "float"):
                 return "float"
@@ -273,6 +281,10 @@ class BoolAxiom(
         }
 
     def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if other_name is None:
+            if op in ("not", "unary!"):
+                return "bool"
+            return None
         if op in ("&", "|", "^"):
             if other_name in ("bool", "int"):
                 return "bool"

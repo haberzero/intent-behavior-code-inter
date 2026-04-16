@@ -235,7 +235,7 @@ class StmtHandler(BaseHandler):
         # 5. 元组解包 (Tuple)
         elif target_data["_type"] == "IbTuple":
             elements_obj = value.receive('to_list', [])
-            if not isinstance(elements_obj, IIbList):
+            if not (hasattr(elements_obj, 'elements') and isinstance(elements_obj.elements, list)):
                 raise self.report_error(f"Cannot unpack non-iterable object", target_uid)
             
             vals = elements_obj.elements

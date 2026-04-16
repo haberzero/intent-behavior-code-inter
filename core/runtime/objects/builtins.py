@@ -261,7 +261,7 @@ class IbString(IbObject):
         """检查是否包含子串"""
         sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
         result = sub_str in self.value
-        return self.ib_class.registry.box(1 if result else 0)
+        return self.ib_class.registry.box(result)
 
     def __getitem__(self, key: Any) -> IbObject:
         """支持字符串下标与切片"""

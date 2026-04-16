@@ -692,7 +692,7 @@ class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', descriptor: Optional[IbSpec] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.llm_executor = llm_executor
