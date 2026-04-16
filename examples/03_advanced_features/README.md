@@ -1,11 +1,11 @@
-# 04 - 特殊功能
+# 03_advanced_features - 高级特性
 
-本章节介绍 IBCI 的特殊功能，包括动态宿主和插件系统。
+本章节介绍 IBCI 的高级特性，包括动态宿主和插件系统。
 
 ## 目录结构
 
 ```
-04_advanced_features/
+03_advanced_features/
 ├── README.md              # 本文件
 ├── plugins_demo/          # 插件系统演示
 │   ├── main.ibci
@@ -55,13 +55,13 @@ my_project/
 ### 第一步：理解插件系统
 
 ```bash
-python main.py run examples/04_advanced_features/plugins_demo/main.ibci
+python main.py run examples/03_advanced_features/plugins_demo/main.ibci
 ```
 
 ### 第二步：理解隔离机制
 
 ```bash
-python main.py run examples/04_advanced_features/isolation_demo/parent.ibci
+python main.py run examples/03_advanced_features/isolation_demo/parent.ibci
 ```
 
 ## 插件开发
@@ -112,4 +112,4 @@ def __ibcext_vtable__():
 ## 下一步
 
 - 回到 [01_getting_started](../01_getting_started/README.md) 复习基础
-- 学习 [03_basic_modules](../03_basic_modules/README.md) 掌握模块使用
+- 学习 [02_basic_modules](../02_basic_modules/README.md) 掌握模块使用
