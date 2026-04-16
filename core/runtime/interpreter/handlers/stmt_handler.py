@@ -396,15 +396,16 @@ class StmtHandler(BaseHandler):
 
         # 标准 Foreach 循环 (for item in list)
         iterable_obj = self.visit(iter_uid)
-        # If the object is already an IIbList, use it directly
-        if isinstance(iterable_obj, IIbList):
+        # Check for iterable: has 'elements' list attribute (duck-typing over IIbList protocol)
+        if hasattr(iterable_obj, 'elements') and isinstance(iterable_obj.elements, list):
             elements_obj = iterable_obj
         else:
             try:
-                elements_obj = iterable_obj.receive('to_list', [])
+                result = iterable_obj.receive('to_list', [])
+                elements_obj = result if (hasattr(result, 'elements') and isinstance(result.elements, list)) else None
             except (AttributeError, InterpreterError):
                 elements_obj = None
-        if not isinstance(elements_obj, IIbList):
+        if elements_obj is None:
             raise self.report_error(f"Object is not iterable", node_uid)
         
         elements = elements_obj.elements

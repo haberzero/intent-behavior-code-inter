@@ -43,8 +43,14 @@ class ScopeImpl:
             return
 
         # 特殊处理：IbLLMUncertain 可以赋值给任何类型
-        from core.runtime.objects.kernel import IbLLMUncertain
+        from core.runtime.objects.kernel import IbLLMUncertain, IbFunction
         if isinstance(value, IbLLMUncertain):
+            return
+
+        # 特殊处理：函数对象赋值给 FuncSpec 类型时直接放行
+        # (callable 类型可以赋值给任意 FuncSpec 声明)
+        from core.kernel.spec.specs import FuncSpec, BoundMethodSpec
+        if isinstance(declared_type, (FuncSpec, BoundMethodSpec)) and isinstance(value, IbFunction):
             return
             
         # [Phase 3.3] 强契约：运行时类型校验
