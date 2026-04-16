@@ -77,6 +77,24 @@ class IbSpec:
         """
         return self._axiom_name or self.name
 
+    def get_references(self) -> dict:
+        """
+        Return a dict of cross-reference fields that point to other IbSpec
+        objects (or lists of them).  Used by the serializer to walk the type
+        graph without hard-coding isinstance checks.
+
+        The default implementation returns an empty dict (no sub-spec refs).
+        Subclasses that actually hold IbSpec references should override this.
+        Since all concrete specs store type information as name-strings rather
+        than live IbSpec objects, the base default is sufficient for most cases.
+        """
+        return {}
+
+    def is_class(self) -> bool:
+        """Return True if this spec describes a class type."""
+        from .specs import ClassSpec
+        return isinstance(self, ClassSpec)
+
     # ------------------------------------------------------------------ #
     # Cloning                                                              #
     # ------------------------------------------------------------------ #

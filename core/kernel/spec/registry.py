@@ -561,6 +561,15 @@ class SpecRegistry:
     def all_specs(self) -> Dict[str, IbSpec]:  # type: ignore[override]
         return dict(self._specs)
 
+    @property
+    def all_descriptors(self) -> Dict[str, IbSpec]:
+        """Alias for all_specs for backward compatibility with ContractValidator."""
+        return self.all_specs
+
+    def get_metadata_registry(self) -> "SpecRegistry":
+        """Return self. Allows ContractValidator to receive the registry."""
+        return self
+
     # ---------------------------------------------------------- #
     # Internal helpers                                           #
     # ---------------------------------------------------------- #

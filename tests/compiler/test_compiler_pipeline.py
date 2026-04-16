@@ -141,21 +141,21 @@ while true:
 
 class TestCompileFunctions:
     def test_simple_function(self, engine):
-        code = """def add(int a, int b) -> int:
+        code = """func add(int a, int b) -> int:
     return a + b
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
     def test_void_function(self, engine):
-        code = """def greet(str name):
+        code = """func greet(str name):
     print("hello " + name)
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
     def test_function_call(self, engine):
-        code = """def double(int x) -> int:
+        code = """func double(int x) -> int:
     return x * 2
 
 int result = double(21)
@@ -174,7 +174,7 @@ class TestCompileClasses:
     str name
     int age
 
-    def bark(self) -> str:
+    func bark(self) -> str:
         return "Woof!"
 """
         artifact = engine.compile_string(code, silent=True)

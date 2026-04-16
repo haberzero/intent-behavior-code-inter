@@ -132,7 +132,7 @@ print((str)has)
 class TestE2ENestedScopes:
     def test_function_does_not_leak(self):
         code = """int x = 10
-def modify() -> int:
+func modify() -> int:
     int x = 20
     return x
 
@@ -151,7 +151,7 @@ print((str)result)
 
 class TestE2EComplexProgram:
     def test_factorial_program(self):
-        code = """def factorial(int n) -> int:
+        code = """func factorial(int n) -> int:
     if n <= 1:
         return 1
     return n * factorial(n - 1)

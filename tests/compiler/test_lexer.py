@@ -177,7 +177,7 @@ else:
         assert "DEDENT" in types
 
     def test_function_def(self):
-        code = """def add(int a, int b) -> int:
+        code = """func add(int a, int b) -> int:
     return a + b
 """
         tokens = tokenize(code)

@@ -32,7 +32,7 @@ def run_and_capture(code: str):
 
 class TestE2EFunctions:
     def test_simple_function_call(self):
-        code = """def greet(str name) -> str:
+        code = """func greet(str name) -> str:
     return "Hello, " + name
 
 str msg = greet("Alice")
@@ -42,7 +42,7 @@ print(msg)
         assert "Hello, Alice" in lines
 
     def test_int_function(self):
-        code = """def add(int a, int b) -> int:
+        code = """func add(int a, int b) -> int:
     return a + b
 
 int result = add(3, 4)
@@ -52,7 +52,7 @@ print((str)result)
         assert "7" in lines
 
     def test_void_function(self):
-        code = """def say_hello():
+        code = """func say_hello():
     print("hello from function")
 
 say_hello()
@@ -61,7 +61,7 @@ say_hello()
         assert "hello from function" in lines
 
     def test_function_with_local_vars(self):
-        code = """def compute(int x) -> int:
+        code = """func compute(int x) -> int:
     int doubled = x * 2
     int result = doubled + 1
     return result
@@ -78,7 +78,7 @@ print((str)compute(5))
 
 class TestE2EReturn:
     def test_return_in_if(self):
-        code = """def abs_val(int x) -> int:
+        code = """func abs_val(int x) -> int:
     if x < 0:
         return -x
     return x
@@ -91,7 +91,7 @@ print((str)abs_val(3))
         assert "3" in lines
 
     def test_early_return(self):
-        code = """def check(int x) -> str:
+        code = """func check(int x) -> str:
     if x > 10:
         return "big"
     return "small"
@@ -110,7 +110,7 @@ print(check(5))
 
 class TestE2ERecursion:
     def test_factorial(self):
-        code = """def factorial(int n) -> int:
+        code = """func factorial(int n) -> int:
     if n <= 1:
         return 1
     return n * factorial(n - 1)
@@ -121,7 +121,7 @@ print((str)factorial(5))
         assert "120" in lines
 
     def test_fibonacci(self):
-        code = """def fib(int n) -> int:
+        code = """func fib(int n) -> int:
     if n <= 1:
         return n
     return fib(n - 1) + fib(n - 2)
@@ -138,7 +138,7 @@ print((str)fib(10))
 
 class TestE2EFuncExpression:
     def test_function_in_expression(self):
-        code = """def double(int x) -> int:
+        code = """func double(int x) -> int:
     return x * 2
 
 int result = double(5) + 10
@@ -148,10 +148,10 @@ print((str)result)
         assert "20" in lines
 
     def test_nested_function_calls(self):
-        code = """def add(int a, int b) -> int:
+        code = """func add(int a, int b) -> int:
     return a + b
 
-def mul(int a, int b) -> int:
+func mul(int a, int b) -> int:
     return a * b
 
 int result = add(mul(2, 3), 4)
@@ -161,7 +161,7 @@ print((str)result)
         assert "10" in lines
 
     def test_multiple_calls_same_function(self):
-        code = """def inc(int x) -> int:
+        code = """func inc(int x) -> int:
     return x + 1
 
 int a = inc(1)

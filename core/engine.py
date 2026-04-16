@@ -139,6 +139,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             self.interpreter.service_context._orchestrator = self
             if self.interpreter.service_context.host_service:
                 self.interpreter.service_context.host_service.orchestrator = self
+            # 将用户提供的 output_callback 注入 service_context
+            if output_callback is not None:
+                self.interpreter.service_context.output_callback = output_callback
         
         # 统一装配调度器与能力注册中心
         service_context = self.interpreter.service_context

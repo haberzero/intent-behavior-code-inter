@@ -35,7 +35,7 @@ class TestE2EClasses:
     str name
     int age
 
-    def bark(self) -> str:
+    func bark(self) -> str:
         return "Woof!"
 
 Dog d = Dog("Rex", 5)
@@ -61,7 +61,7 @@ print((str)p.y)
         code = """class Calculator:
     int value
 
-    def add(self, int n) -> int:
+    func add(self, int n) -> int:
         return self.value + n
 
 Calculator c = Calculator(10)

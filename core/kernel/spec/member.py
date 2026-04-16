@@ -34,6 +34,7 @@ class MemberSpec:
     kind: str  # "field" | "method" | "llm_method"
     type_name: str = "any"
     type_module: Optional[str] = None
+    metadata: dict = field(default_factory=dict)
 
     def is_method(self) -> bool:
         return self.kind in ("method", "llm_method")

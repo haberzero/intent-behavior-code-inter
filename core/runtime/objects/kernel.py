@@ -331,6 +331,8 @@ class IbClass(IbObject):
         """Runtime type compatibility check (UTS protocol)."""
         if self is other:
             return True
+        if other is None:
+            return False
         spec_reg = self.registry.get_metadata_registry()
         if spec_reg and self._spec and other._spec:
             return spec_reg.is_assignable(self._spec, other._spec)

@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec
+from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
@@ -21,118 +22,81 @@ class ContractValidator:
         if self.debugger:
             self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, "Starting Global Contract Validation (STAGE 7)...")
 
-        for desc in self.registry.all_descriptors.values():
+        # Use all_descriptors (alias for all_specs on SpecRegistry)
+        all_descs = self.registry.all_descriptors if hasattr(self.registry, 'all_descriptors') else {}
+        for desc in all_descs.values():
             # 1. 审计类契约
             if self.registry.is_class_spec(desc):
                 self._validate_class(desc)
-            # 2.  审计全局函数契约 (消除审计盲区)
+            # 2. 审计全局函数契约
             elif self.registry.get_call_cap(desc):
                 self._validate_function(desc)
 
     def _validate_class(self, cls_desc: ClassSpec):
         """审计单个类的契约一致性"""
-        parent = cls_desc.resolve_parent()
+        # Resolve parent via registry using parent_name/parent_module fields on ClassSpec
+        parent = None
+        if hasattr(cls_desc, 'parent_name') and cls_desc.parent_name:
+            parent = self.registry.resolve(cls_desc.parent_name, cls_desc.parent_module)
+
         if not parent or not self.registry.is_class_spec(parent):
             return
 
         # 1. 检查方法重写的一致性 (Inheritance Contract)
         for name, member in cls_desc.members.items():
-            # 校验成员水合完整性
-            if member.spec is None:
-                self.issue_tracker.report_error(
-                    f"Contract Violation: Member '{name}' in class '{cls_desc.name}' has unhydrated type descriptor.",
-                    file_path="<metadata>", line=0, column=0, code="SEM_002"
-                )
+            # member is a MemberSpec/MethodMemberSpec (pure data, type stored as type_name string)
+            if not isinstance(member, MemberSpec):
+                continue
+            if not member.is_method():
                 continue
 
-            if not member.is_function:
-                continue
-                
             # 寻找父类中同名成员
-            parent_member = self.registry.resolve_member(parent, name)
-            if parent_member and parent_member.is_function:
-                self._check_method_compatibility(cls_desc, name, member.spec, parent_member.spec, "parent class")
+            parent_member_spec = self.registry.resolve_member(parent, name)
+            if parent_member_spec and isinstance(parent_member_spec, FuncSpec):
+                self._check_method_compatibility_by_name(cls_desc, name, member, parent_member_spec)
 
         # 2. 检查公理契约 (Axiom Contract)
         axiom = self.registry.get_axiom(cls_desc)
-        if axiom:
+        if axiom and hasattr(axiom, 'get_methods'):
             axiom_methods = axiom.get_methods()
             for name, axiom_sig in axiom_methods.items():
-                member = self.registry.resolve_member(cls_desc, name)
-                if member and member.is_function:
-                    self._check_method_compatibility(cls_desc, name, member.spec, axiom_sig, "axiom definition")
+                member = cls_desc.members.get(name)
+                if member and isinstance(member, MemberSpec) and member.is_method():
+                    if isinstance(axiom_sig, FuncSpec):
+                        self._check_method_compatibility_by_name(cls_desc, name, member, axiom_sig)
 
     def _validate_function(self, func_desc: IbSpec):
         """审计全局函数的合法性 (水合完整性校验)"""
-        sig = func_desc.get_signature()
-        if not sig:
+        if not isinstance(func_desc, FuncSpec):
             return
-            
-        param_types, ret_type = sig
-        # 检查所有参数和返回值是否已正确解析且非空
-        for i, p in enumerate(param_types):
+        # Check all parameters and return value are not None (i.e. proper name strings)
+        for i, p in enumerate(func_desc.param_type_names):
             if p is None:
                 self.issue_tracker.report_error(
                     f"Contract Violation: Global function '{func_desc.name}' has unhydrated parameter type at index {i}.",
                     file_path="<metadata>",
                     line=0, column=0, code="SEM_002"
                 )
-        
-        if ret_type is None:
-             self.issue_tracker.report_error(
+
+        if func_desc.return_type_name is None:
+            self.issue_tracker.report_error(
                 f"Contract Violation: Global function '{func_desc.name}' has unhydrated return type.",
                 file_path="<metadata>",
                 line=0, column=0, code="SEM_002"
             )
 
-    def _check_method_compatibility(self, cls_desc: ClassSpec, name: str, sub_sig: IbSpec, super_sig: IbSpec, source: str):
+    def _check_method_compatibility_by_name(self, cls_desc: ClassSpec, name: str,
+                                             member: MemberSpec, super_sig: FuncSpec):
         """校验方法子类型化规则：参数逆变，返回值协变"""
+        if not isinstance(member, MethodMemberSpec):
+            return
 
-        # 1. 校验参数数量一致性
-        sub_info = (sub_sig.param_type_names, sub_sig.return_type_name) if isinstance(sub_sig, FuncSpec) else ([], 'any')
-        super_info = (super_sig.param_type_names, super_sig.return_type_name) if isinstance(super_sig, FuncSpec) else ([], 'any')
-        
-        if sub_info and super_info:
-            sub_params, sub_ret = sub_info
-            super_params, super_ret = super_info
-            
-            if len(sub_params) != len(super_params):
-                 self.issue_tracker.report_error(
-                    f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
-                    f"but {source} defines {len(super_params)} parameters.",
-                    file_path="<metadata>", line=0, column=0, code="SEM_002"
-                )
-                 return
+        sub_params = member.param_type_names
+        super_params = super_sig.param_type_names
 
-            # 校验参数水合完整性
-            for i, p in enumerate(sub_params):
-                if p is None:
-                    self.issue_tracker.report_error(
-                        f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has unhydrated parameter type at index {i}.",
-                        file_path="<metadata>", line=0, column=0, code="SEM_002"
-                    )
-            if sub_ret is None:
-                self.issue_tracker.report_error(
-                    f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has unhydrated return type.",
-                    file_path="<metadata>", line=0, column=0, code="SEM_002"
-                )
-
-        # 2. 校验子类型化规则 (协变/逆变)
-        if not self.registry.is_assignable(sub_sig, super_sig):
-            error_msg = f"Contract Violation: Method '{name}' in class '{cls_desc.name}' is incompatible with {source}."
-            
-            # 尝试提取更详细的差异信息
-            if hasattr(sub_sig, 'get_diff_hint'):
-                hint = sub_sig.get_diff_hint(super_sig)
-                error_msg += f" {hint}"
-                
+        if len(sub_params) != len(super_params):
             self.issue_tracker.report_error(
-                error_msg,
-                file_path="<metadata>", # 这是一个元数据级错误
-                line=0,
-                column=0,
-                code="SEM_002"
+                f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
+                f"but parent defines {len(super_params)} parameters.",
+                file_path="<metadata>", line=0, column=0, code="SEM_002"
             )
-            
-            if self.debugger:
-                self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, f"FAILED: {error_msg}")

@@ -361,8 +361,13 @@ class StmtHandler(BaseHandler):
             if not self.execution_context.is_truthy(condition):
                 break
             
-            for stmt_uid in node_data.get("body", []):
-                self.visit(stmt_uid)
+            try:
+                for stmt_uid in node_data.get("body", []):
+                    self.visit(stmt_uid)
+            except BreakException:
+                break
+            except ContinueException:
+                continue
         return self.registry.get_none()
     
     def visit_IbFor(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -380,13 +385,25 @@ class StmtHandler(BaseHandler):
                     return self.registry.get_none()
                 if not self.execution_context.is_truthy(condition):
                     break
-                for stmt_uid in body:
-                    self.visit(stmt_uid)
+                try:
+                    for stmt_uid in body:
+                        self.visit(stmt_uid)
+                except BreakException:
+                    break
+                except ContinueException:
+                    continue
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
         iterable_obj = self.visit(iter_uid)
-        elements_obj = iterable_obj.receive('to_list', [])
+        # If the object is already an IIbList, use it directly
+        if isinstance(iterable_obj, IIbList):
+            elements_obj = iterable_obj
+        else:
+            try:
+                elements_obj = iterable_obj.receive('to_list', [])
+            except (AttributeError, InterpreterError):
+                elements_obj = None
         if not isinstance(elements_obj, IIbList):
             raise self.report_error(f"Object is not iterable", node_uid)
         
@@ -397,8 +414,15 @@ class StmtHandler(BaseHandler):
             if target_uid:
                 self._assign_to_target(target_uid, item, define_only=True)
             
-            for stmt_uid in body:
-                self.visit(stmt_uid)
+            try:
+                for stmt_uid in body:
+                    self.visit(stmt_uid)
+            except BreakException:
+                self.runtime_context.pop_loop_context()
+                break
+            except ContinueException:
+                self.runtime_context.pop_loop_context()
+                continue
             
             self.runtime_context.pop_loop_context()
         return self.registry.get_none()
