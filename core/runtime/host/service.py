@@ -8,6 +8,7 @@ from core.runtime.host.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
 from core.runtime.objects.kernel import IbObject
+from core.extension.ibcext import IbStatefulPlugin
 
 class HostService(IHostService):
     """
@@ -82,23 +83,37 @@ class HostService(IHostService):
         new_ctx = deserializer.deserialize_context(data)
         
         # 重新绑定环境能力 (Intrinsics & Plugins)
-        self._rebind_environment(new_ctx, deserializer)
+        plugin_states = data.get("plugin_states", {}) if isinstance(data, dict) else {}
+        self._rebind_environment(new_ctx, deserializer, plugin_states=plugin_states)
         
         # 强制同步到当前解释器实例 (通过容器更新)
         self.execution_context.runtime_context = new_ctx
 
     def snapshot(self) -> Dict[str, Any]:
-        """内存快照原语"""
+        """内存快照原语。同时捕获有状态插件的状态。"""
         serializer = RuntimeSerializer(self.registry)
         snapshot = serializer.serialize_context(
-            self.execution_context.runtime_context, 
+            self.execution_context.runtime_context,
             execution_context=self.execution_context
         )
+        # 收集所有有状态插件的快照
+        plugin_states: Dict[str, Any] = {}
+        for name in self.interop.get_all_package_names():
+            pkg = self.interop.get_package(name)
+            if pkg and isinstance(pkg, IbStatefulPlugin):
+                try:
+                    plugin_states[name] = pkg.save_plugin_state()
+                except Exception as e:
+                    # 插件状态保存失败不中断快照，但需要记录
+                    plugin_states[name] = {"__save_error__": str(e)}
+        if plugin_states:
+            snapshot["plugin_states"] = plugin_states
         return snapshot
 
-    def _rebind_environment(self, context: Any, deserializer: Optional[Any] = None):
+    def _rebind_environment(self, context: Any, deserializer: Optional[Any] = None, plugin_states: Optional[Dict[str, Any]] = None):
         """
         环境重绑定：将快照中的“空壳”重新链接到当前物理环境的功能实现。
+        对 IbStatefulPlugin 插件，额外调用 restore_plugin_state() 恢复其内部状态。
         """
         # 1. 重新注入内置函数 (Intrinsics) - 使用特权覆盖 (通过回调)
         self.setup_context_callback(context, force=True)
@@ -111,13 +126,23 @@ class HostService(IHostService):
                 if not isinstance(pkg, IIbObject):
                     # 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
                     pkg_obj = self.execution_context.factory.create_native_object(
-                        pkg, 
+                        pkg,
                         self.registry.get_class("Object")
                     )
                 else:
                     pkg_obj = pkg
                 # 强制覆盖常量符号
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
+
+        # 3. 恢复有状态插件的内部状态
+        if plugin_states:
+            for name, saved in plugin_states.items():
+                pkg = self.interop.get_package(name)
+                if pkg and isinstance(pkg, IbStatefulPlugin) and "__save_error__" not in saved:
+                    try:
+                        pkg.restore_plugin_state(saved)
+                    except Exception:
+                        pass  # 恢复失败不中断整体流程
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
         """

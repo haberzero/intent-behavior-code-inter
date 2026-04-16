@@ -1,5 +1,5 @@
 from typing import Any, Callable, Optional, List, Dict
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from core.extension.exceptions import PluginError, InterpreterError, CompilerError
 from core.extension.capabilities import PluginCapabilities, ExtensionCapabilities
@@ -32,6 +32,26 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 #
 # 两种层次使用相同的 _spec.py 协议（__ibcext_metadata__ + __ibcext_vtable__）
 # 和相同的 ModuleLoader 加载流程。核心层仅在实现类上额外继承 IbPlugin。
+#
+# ---------------------------------------------------------------------------
+# 有状态/无状态声明协议（ihost 断点协议）
+# ---------------------------------------------------------------------------
+#
+# IBCI 断点/动态宿主机制要求每个插件声明自身的状态可恢复性：
+#
+# 【IbStatelessPlugin】
+#   - Mixin 标记：插件运行时无需持久化任何内部状态
+#   - HostService 在 save/restore 时跳过此类插件，只重新调用 setup()
+#   - 适合：ibci_math, ibci_json, ibci_time, ibci_schema, ibci_isys, ibci_file 等
+#
+# 【IbStatefulPlugin】
+#   - 继承此 ABC：插件持有跨断点的内部状态（如网络配置、AI 配置等）
+#   - 必须实现 save_plugin_state() → dict  和  restore_plugin_state(state: dict)
+#   - HostService 在 snapshot 时调用 save_plugin_state()，恢复时调用 restore_plugin_state()
+#   - 适合：ibci_ai（LLM 配置/意图状态），ibci_net（认证 token/会话配置）等
+#   - 约束：save_plugin_state() 必须返回 JSON 可序列化的纯 dict，不能包含不可序列化对象
+#
+# 无论哪种，HostService 在恢复后都会重新调用 setup(capabilities) 重新绑定内核能力。
 # ---------------------------------------------------------------------------
 
 
@@ -132,3 +152,69 @@ class IbPlugin(ABC):
     def get_exposed_capabilities(self) -> Dict[str, Any]:
         """获取已暴露的能力列表"""
         return dict(self._exposed_capabilities)
+
+
+class IbStatelessPlugin:
+    """
+    无状态插件标记 Mixin。
+
+    插件继承此类即声明："本插件运行时不持有任何跨断点的内部状态"。
+    HostService 在 snapshot/restore 时对此类插件仅重新调用 setup()，
+    无需保存/恢复任何额外数据。
+
+    适合：ibci_math, ibci_json, ibci_time, ibci_schema, ibci_isys, ibci_file 等
+    纯工具性、每次 setup 就能完整恢复的插件。
+
+    使用示例：
+        class MathLib(IbStatelessPlugin):
+            def setup(self, capabilities): ...
+    """
+    pass
+
+
+class IbStatefulPlugin(ABC):
+    """
+    有状态插件协议 ABC。
+
+    插件继承此类即声明："本插件持有跨断点的内部状态，必须参与 HostService
+    的断点保存/恢复流程"。
+
+    必须实现：
+    - save_plugin_state() → dict     以 JSON 可序列化的纯 dict 导出当前状态
+    - restore_plugin_state(state)    从 dict 完整恢复状态
+
+    约束：
+    - save_plugin_state() 返回值必须为 JSON 可序列化的纯 dict（str/int/float/bool/list/dict/None）
+    - restore_plugin_state() 在 setup() 之后被调用，可以安全访问 capabilities
+    - 不应在此方法中执行网络 IO，仅恢复内存状态
+
+    适合：ibci_ai（LLM 配置/意图状态），ibci_net（认证配置）等
+    持有跨请求配置或会话状态的插件。
+
+    使用示例：
+        class AIPlugin(IbStatefulPlugin):
+            def save_plugin_state(self) -> dict:
+                return {"config": self._config, "intents": self._global_intents}
+
+            def restore_plugin_state(self, state: dict) -> None:
+                self._config.update(state.get("config", {}))
+                self._global_intents = state.get("intents", [])
+    """
+
+    @abstractmethod
+    def save_plugin_state(self) -> dict:
+        """
+        导出当前插件状态为 JSON 可序列化的纯 dict。
+
+        此方法由 HostService 在 save_state()/snapshot() 时调用。
+        返回值将被嵌入运行时快照文件，随断点一起持久化。
+        """
+
+    @abstractmethod
+    def restore_plugin_state(self, state: dict) -> None:
+        """
+        从快照 dict 恢复插件状态。
+
+        此方法由 HostService 在 load_state() 后、重新绑定环境时调用。
+        调用时 setup(capabilities) 已执行完毕，capabilities 可用。
+        """

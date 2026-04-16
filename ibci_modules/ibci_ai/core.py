@@ -2,13 +2,16 @@ import os
 import time
 from typing import Any, Optional, Dict, List
 from core.base.interfaces import ILLMProvider
-from core.extension.ibcext import ExtensionCapabilities
+from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
 
 
-class AIPlugin(ILLMProvider):
+class AIPlugin(ILLMProvider, IbStatefulPlugin):
     """
     AI LLM 供应者插件。
     核心级插件，必须继承 ILLMProvider 以与解释器深度绑定。
+
+    实现 IbStatefulPlugin 协议：LLM 配置、提示词定制等均为跨断点状态，
+    断点保存/恢复时由 HostService 负责持久化与恢复。
     """
     def __init__(self):
         self._retry_hint: Optional[str] = None
@@ -138,7 +141,7 @@ class AIPlugin(ILLMProvider):
                     {"role": "user", "content": user_prompt}
                 ],
                 max_tokens=50,
-                timeout=15.0m,
+                timeout=15.0,
                 extra_body={
                     "enable_thinking": False,
                     "chat_template_kwargs": {"enable_thinking": False}
@@ -482,6 +485,46 @@ class AIPlugin(ILLMProvider):
         if scene in ("branch", "loop"):
             return "1"
         return f"[MOCK] {user_prompt}"
+
+    # ------------------------------------------------------------------
+    # IbStatefulPlugin 协议：断点保存/恢复
+    # ------------------------------------------------------------------
+
+    def save_plugin_state(self) -> dict:
+        """
+        导出插件状态快照，用于 HostService 断点保存。
+
+        保存内容：
+        - _config：LLM 连接配置（url/key/model/timeout 等）
+        - _return_type_prompts：用户自定义的返回类型提示词
+        - _retry_prompts：用户自定义的重试提示词
+        注意：_client 为外部连接对象，不可序列化，恢复后由 _init_client() 重建。
+        注意：全局意图由 capabilities.intent_manager 管理，不在此处保存。
+        """
+        return {
+            "config": dict(self._config),
+            "return_type_prompts": dict(self._return_type_prompts),
+            "retry_prompts": dict(self._retry_prompts),
+        }
+
+    def restore_plugin_state(self, state: dict) -> None:
+        """
+        从断点快照恢复插件状态。
+
+        此方法在 setup(capabilities) 之后被调用，capabilities 已可用。
+        恢复 config 后会重新初始化 LLM 客户端连接。
+        """
+        if "config" in state:
+            self._config.update(state["config"])
+        if "return_type_prompts" in state:
+            self._return_type_prompts.update(state["return_type_prompts"])
+        if "retry_prompts" in state:
+            self._retry_prompts.update(state["retry_prompts"])
+        # 重建 LLM 客户端（连接对象无法序列化，必须在恢复后重建）
+        self._client = None
+        self._model_capabilities["probed"] = False
+        if self._config.get("url") and self._config.get("key"):
+            self._init_client()
 
 
 def create_implementation():
