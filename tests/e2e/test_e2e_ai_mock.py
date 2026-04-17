@@ -96,7 +96,7 @@ print(result)
 class TestE2EAITypeCast:
     def test_int_cast_from_behavior(self):
         code = ai_setup_code() + """
-int x = (int) @~ MOCK:INT:99 ~
+int x = @~ MOCK:INT:99 ~
 print((str)x)
 """
         lines = run_and_capture(code)

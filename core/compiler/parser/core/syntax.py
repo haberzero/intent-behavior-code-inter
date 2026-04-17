@@ -34,7 +34,6 @@ class IbParseRule:
 # Identifier constants for keyword tokens
 ID_SELF: str = "self"
 ID_AUTO: str = "auto"
-ID_CALLABLE: str = "callable"
 
 # Operator mapping: TokenType -> operator string
 OP_MAP: Dict[TokenType, str] = {

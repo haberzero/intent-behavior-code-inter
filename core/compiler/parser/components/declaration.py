@@ -85,6 +85,7 @@ class DeclarationComponent(BaseComponent):
 
         type_token = None
         type_annotation = None
+        deferred_mode = None
         
         if explicit_auto:
             # 'auto' keyword already consumed
@@ -109,6 +110,12 @@ class DeclarationComponent(BaseComponent):
             start_token = self.stream.peek()
             type_annotation = self.type_def.parse_type_annotation()
             type_token = start_token
+            # Optional deferred mode modifier: lambda / snapshot
+            deferred_mode = None
+            if self.stream.match(TokenType.LAMBDA):
+                deferred_mode = "lambda"
+            elif self.stream.match(TokenType.SNAPSHOT):
+                deferred_mode = "snapshot"
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
 
         target = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
@@ -122,7 +129,10 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume_end_of_statement("Expect newline after variable declaration.")
         end_token = self.stream.previous()
         
-        return self._loc(ast.IbAssign(targets=[target], value=value), type_token, end_token)
+        return self._loc(
+            ast.IbAssign(targets=[target], value=value, deferred_mode=deferred_mode),
+            type_token, end_token
+        )
 
     def _tuple_variable_declaration(self) -> ast.IbAssign:
         """Parse (int x, int y) = expr tuple destructuring declaration."""

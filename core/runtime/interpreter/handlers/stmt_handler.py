@@ -53,6 +53,7 @@ class StmtHandler(BaseHandler):
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
             f"llmexcept: entering frame for target={target_uid}, max_retry={max_retry}")
 
+        last_target_value = None
         try:
             while frame.should_continue_retrying():
                 attempt = frame.retry_count + 1
@@ -68,7 +69,7 @@ class StmtHandler(BaseHandler):
                     self.runtime_context.set_last_llm_result(None)
 
                 # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
-                self.execution_context.visit(target_uid, bypass_protection=True)
+                last_target_value = self.execution_context.visit(target_uid, bypass_protection=True)
 
                 # 检查执行后的 LLM 结果确定性
                 result = self.runtime_context.get_last_llm_result()
@@ -111,7 +112,8 @@ class StmtHandler(BaseHandler):
             # 弹出当前帧
             self.runtime_context.pop_llm_except_frame()
 
-        return self.registry.get_none()
+        # 返回 target 最后一次执行的值（对条件驱动 for 循环的条件表达式至关重要）
+        return last_target_value if last_target_value is not None else self.registry.get_none()
 
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """表达式语句"""

@@ -141,8 +141,9 @@ class ExpressionComponent(BaseComponent):
         # 由于 Type 可以是复杂的标识符、属性或下标访问，LL(1) 无法区分。
         # 我们采用推测性前瞻（Speculative Lookahead）模式进行判定。
         
-        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO, TokenType.CALLABLE):
+        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO):
             checkpoint = self.stream.get_checkpoint()
+            _behavior_cast_detected = False
 
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
             with self.stream.speculate():
@@ -153,26 +154,24 @@ class ExpressionComponent(BaseComponent):
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         
-                        # [IbBehaviorInstance Hook] 检测 (Type) @~...~ 语法糖
-                        # 当强制类型转换应用于行为描述时，创建 IbBehaviorInstance
+                        # [DEPRECATED] (Type) @~...~ 语法已废弃，发出硬错误。
+                        # 正确写法：int lambda varname = @~...~ 或 int snapshot varname = @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
-                            # 从 type_node 提取目标类型名称
-                            target_type_name = self._extract_type_name(type_node)
-                            return self._loc(
-                                ast.IbBehaviorInstance(
-                                    segments=value.segments,
-                                    target_type_name=target_type_name,
-                                    is_deferred=False
-                                ),
-                                type_node
-                            )
+                            _behavior_cast_detected = True
+                            raise ParseControlFlowError()
                         
                         return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
                 except ParseControlFlowError:
-
-                    # 类型转换（Cast）语法解析失败，由于处于 speculate() 上下文中，
-                    # 产生的错误已被隔离。此处静默 pass 是为了允许流回退并尝试普通表达式分组解析。
                     pass
+            
+            # 在 speculate 上下文外发出硬错误，确保记录到真实的 issue_tracker
+            if _behavior_cast_detected:
+                raise self.stream.error(
+                    self.stream.peek(),
+                    "Cast expression '(Type) @~...~' is no longer supported. "
+                    "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                    code="PAR_010"
+                )
             
             # 路径回退：若非 Cast，则回退到检查点按普通分组表达式解析
             self.stream.restore_checkpoint(checkpoint)

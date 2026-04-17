@@ -43,8 +43,8 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_native_object(self, py_obj: Any, ib_class: IIbClass, vtable: Optional[Dict[str, Any]] = None) -> IIbObject:
         return IbNativeObject(py_obj, ib_class, vtable=vtable)
 
-    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None) -> Any:
-        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent)
+    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, deferred_mode: Optional[str] = None) -> Any:
+        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, deferred_mode=deferred_mode)
 
     def create_list(self, elements: List[IIbObject]) -> IIbList:
         return IbList(elements, ib_class=self._registry.get_class("list"))
