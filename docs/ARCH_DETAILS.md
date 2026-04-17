@@ -305,4 +305,26 @@ Engine.__init__()
 
 ---
 
+## 十一、已知代码健康问题（2026-04-17 深度审计）
+
+以下为深度分析时发现的、尚未修复的遗留问题，记录于此作为开发者参考。详细待办项见 PENDING_TASKS.md 第十一章。
+
+### 11.1 IbTuple 未纳入快照和序列化
+
+`llm_except_frame.py` 的 `_is_serializable()` 和 `runtime_serializer.py` 的 `_process_value()` 均未处理 `IbTuple`，导致 Tuple 类型变量在 llmexcept 重试快照和宿主状态序列化中被跳过。修复方式为在两处添加与 `IbList` 类似的分支。
+
+### 11.2 ibci_file 的 core 依赖与"非侵入"定义存在轻微偏差
+
+`ibci_file/core.py` 导入 `from core.runtime.path import IbPath`，而文档将 `ibci_file` 归类为非侵入式插件。`IbPath` 是纯数据类，无状态依赖，属于可接受的边界导入，但文档描述应同步修正（已在 PENDING_TASKS.md 11.2 节记录）。
+
+### 11.3 scheduler.py 中的 [临时方案] 符号冲突静默处理
+
+`_inject_plugin_symbols` 方法中多处符号冲突检查以 `pass` 静默跳过，不发出任何警告。属于典型的"先跳过、后修正"妥协，可能导致导入被静默忽略。
+
+### 11.4 collector.py 中的废弃字段名引用
+
+`collector.py:200` 中 `"llm_fallback"` 属性遍历——该字段已从 AST 中移除，`getattr` 永远返回 `None`，属于无效代码。
+
+---
+
 *本文档为 IBC-Inter 重要架构细节备份，记录已稳定落地的设计决策。*

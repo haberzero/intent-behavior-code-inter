@@ -648,8 +648,99 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 ### 10.5 技术债务清理 (P2) [PENDING]
 
-- `collector.py` 中 `llm_fallback` 属性名引用（历史遗留，需确认是否仍有实际用途）
-- 清理代码中残留的 `TODO [优先级: 高]: 完成后移除此注释` 类型注释
+- `collector.py:200`：`"llm_fallback"` 属性名历史残留——该字段已不存在于 AST 中，`getattr(node, "llm_fallback", None)` 永远返回 `None`，属于无效遍历。应直接删除。
+- `runtime_context.py`：`push_llm_except_frame` / `pop_llm_except_frame` 等方法的 docstring 中有 5 处 `TODO [优先级: 高]: 完成后移除此注释`，功能实际已完成，可直接清理。
+- `interop.py:7`：`# TODO 这里有问题，为什么继承了protocol？`——继承 Protocol 在 Python typing 体系中是合法的，作为 ABC 使用（确保所有方法被实现）并无问题，此 TODO 可删除或补充说明。
+
+---
+
+## 十一、代码健康分析（2026-04-17 深度审计）
+
+本章记录在 2026-04-17 深度健康分析中发现的问题，包括历史包袱、tricky 操作、补丁式修复和暂时性妥协。
+
+### 11.1 IbTuple 未纳入快照/序列化体系 (P1) [PENDING]
+
+**问题描述**：Tuple 类型已完整实现（TupleSpec、TupleAxiom、IbTuple），但在两个关键序列化路径中均未包含：
+- `llm_except_frame.py` 的 `_is_serializable()` 方法仅处理 IbInteger/IbFloat/IbString/IbList/IbDict，IbTuple 会被跳过，导致 llmexcept 重试时包含 tuple 的变量无法被快照和恢复
+- `runtime_serializer.py` 的 `_process_value()` 方法也缺少 `IbTuple` 的 `elif` 分支，导致宿主快照（HostService.snapshot）中 tuple 类型变量序列化异常
+
+**涉及文件**：
+- `core/runtime/interpreter/llm_except_frame.py`（`_is_serializable`、`_save_vars_snapshot`）
+- `core/runtime/serialization/runtime_serializer.py`（`_process_value`）
+
+**解决方案**：在两处添加 IbTuple 分支，与 IbList 的处理逻辑并列。
+
+### 11.2 ibci_file 的 core 依赖与"非侵入"分类不符 (P2) [PENDING]
+
+**问题描述**：文档（含 ibcext.py 注释和 ARCHITECTURE_PRINCIPLES.md）将 `ibci_file` 归类为"非侵入式"插件，但 `ibci_file/core.py` 实际上 `from core.runtime.path import IbPath`，导入了内核路径模块。
+
+`IbPath` 是一个纯数据类（`@dataclass(frozen=True)`），不依赖解释器状态，可以合理视为允许的边界内依赖。但文档描述与实际不符，应修正。
+
+**建议**：
+- 将 `IbPath` 视为"可用于非侵入式插件的内核工具类"，并在文档中注明 `ibci_file` 是"轻量依赖"型插件
+- 或者将 `IbPath` 提取到独立的 `core/base/` 层（无状态工具类），使非侵入层可以安全导入
+
+**涉及文件**：`ibci_modules/ibci_file/core.py`、`core/extension/ibcext.py` 注释
+
+### 11.3 调度器 import 注入中的多处 [临时方案] (P1) [PENDING]
+
+**问题描述**：`core/compiler/scheduler.py` 中 `_inject_plugin_symbols` 方法有多处标注 `[临时方案]` 的符号冲突检查逻辑：
+- 普通导入时：若目标名称已存在，直接 `pass`（无警告）
+- `from X import *` 时：若导出符号已存在，直接 `pass`（无警告）
+- `from X import a as b` 时：同上
+
+这些 `pass` 属于"先跳过、不报告"的妥协，在实际开发中可能导致导入被静默忽略而开发者难以察觉。
+
+**涉及文件**：`core/compiler/scheduler.py`（约第 464-503 行）
+
+**建议**：至少在 DEBUG 模式下输出符号冲突警告；长期方案是严格遵循显式引入原则（见 9.2 节）。
+
+### 11.4 意图标签解析临时方案（parser 层）(P2) [PENDING]
+
+**问题描述**：`statement.py:278` 有注释 `TODO 应该从lexer开始就提供支持。现在是临时方案`。当前 `#tag` 的解析使用 inline `import re` + 正则表达式在 parser 的字符串处理循环中完成，属于词法层的职责被推后到语法层处理。
+
+**影响**：轻微的性能开销（多次 regex 调用），更主要的问题是 lexer 不感知 tag，导致 tag 语法在 token stream 中不可见，未来若需要对 tag 做语义分析（如检查 `@- #tag` 中的 tag 是否已定义）会比较困难。
+
+**涉及文件**：`core/compiler/parser/components/statement.py`（约第 278-289 行）
+
+### 11.5 behavior 对象延迟执行路径的 "暂时保持现状" (P2) [PENDING]
+
+**问题描述**：`expr_handler.py:201` 中有注释：
+```
+# 暂时保持现状，等待下一步重构 behavior 对象。
+```
+当延迟执行（`is_deferred=True`）时，创建的 `IbBehavior` 对象的 `call_intent` 字段未被正确设置（因为工厂方法 `create_behavior` 的参数不支持 `call_intent`）。这意味着通过 `@!` 修饰的 behavior 表达式若被延迟执行，其排他意图可能丢失。
+
+**涉及文件**：`core/runtime/interpreter/handlers/expr_handler.py`（约第 194-206 行）
+
+### 11.6 engine.py 和 service.py 中的 vibe 妥协标注 (P3) [PENDING]
+
+**问题描述**：多处被明确标注为"智能体快速 vibe 实现，未经严格审查"的代码片段：
+- `engine.py:136`：强制向 service_context 回写 orchestrator，属于双向引用注入
+- `service.py:173`：`host_run()` 内置函数的返回值被简化为布尔值 IbObject 封装，隐藏了实际执行结果
+- `rt_scheduler.py:40-44`：`_resolve_builtin_path()` 使用 `ibci_modules.__file__` 动态发现内置模块路径
+- `scheduler.py:81`：`compile_to_artifact_dict()` 方法本身是否合理存疑
+
+这些点尚未引起实际 bug，但属于设计上的模糊区域，需要在某次审计中专门处理。
+
+**涉及文件**：`core/engine.py`、`core/runtime/host/service.py`、`core/runtime/rt_scheduler.py`、`core/compiler/scheduler.py`
+
+### 11.7 behavior 类型的语义分析硬编码检查 (P2) [PENDING]
+
+**问题描述**：在 `semantic_analyzer.py` 的 `visit_IbFor` 中，有两处对字符串 `"behavior"` 的硬编码比较：
+```python
+if not self.registry.is_dynamic(iter_type) and not (iter_type.name == "behavior") and iter_type.name != "bool":
+if (iter_type.name == "behavior"):
+```
+在类型系统完整公理化之前，这是合理的临时处理，但长期应通过 `SpecRegistry.is_behavior()` 或公理层协议替代直接字符串比较。
+
+**涉及文件**：`core/compiler/semantic/passes/semantic_analyzer.py`
+
+### 11.8 instance_id 默认值为字符串 "main" (P3) [PENDING]
+
+**问题描述**：`interpreter.py:108` 有 TODO 标注：`instance_id: str = "main"` 这一参数默认值可能导致多个解释器实例 ID 碰撞（若调用方未传入唯一 ID）。当前代码中 `self.instance_id = instance_id or f"inst_{id(self)}"` 提供了一定的 fallback 保护，但 `"main"` 作为默认值仍是潜在隐患。
+
+**涉及文件**：`core/runtime/interpreter/interpreter.py`
 
 ---
 

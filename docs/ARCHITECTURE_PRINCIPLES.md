@@ -3,8 +3,7 @@
 > 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
 > 供未来参与 IBC-Inter 项目的智能体和开发者进行架构对齐使用。
 >
-> **生成日期**：2026-03-21，**最后更新**：2026-04-17
-> **版本**：V2.2
+> **最后更新**：2026-04-17
 >
 > 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./ARCH_DETAILS.md)。
 
@@ -292,8 +291,8 @@ LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
 
 | 级别 | 说明 | 包含插件 |
 |------|------|---------|
-| 非侵入式 | 不 import 任何 `core.*`，纯 Python 类 | ibci_math / ibci_json / ibci_time / ibci_net / ibci_file / ibci_schema |
-| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | ibci_ai / ibci_ihost / ibci_idbg / ibci_isys |
+| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入 | ibci_math / ibci_json / ibci_time / ibci_net / ibci_file / ibci_schema / ibci_isys |
+| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | ibci_ai / ibci_ihost / ibci_idbg |
 
 **示例（AI 插件）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
@@ -519,7 +518,6 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 | `core/runtime/interpreter/llm_except_frame.py` | 高 | LLMExceptFrame，llmexcept 现场帧 |
 | `core/runtime/interpreter/handlers/stmt_handler.py` | 高 | 语句节点处理（含 visit_IbLLMExceptionalStmt） |
 | `core/runtime/host/service.py` | 高 | HostService，断点快照/恢复 |
-| `core/runtime/host/dynamic_host.py` | 高 | DynamicHost，插件接口层 |
 | `core/runtime/host/host_interface.py` | 高 | HostInterface，宿主环境接口注册器 |
 | `core/runtime/bootstrap/builtin_initializer.py` | 高 | 内置类型注册与装箱器 |
 | `core/compiler/serialization/serializer.py` | 高 | FlatSerializer |
@@ -551,13 +549,13 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 ### A.2 HOST 插件游离问题
 
 **问题描述**：
-- DynamicHost 是核心接口层实现，`ibci_ihost` 是用户级模块实现，两者对同一宿主能力有双路暴露
+- `HostService`（核心层）和 `ibci_ihost`（用户级插件）对同一宿主能力有双路暴露
 - 历史上存在 `run()` vs `run_isolated()` 方法名不一致的问题
 
 **当前架构**：
 ```
-IBCI脚本 ──→ host_run() 内置函数 ──→ DynamicHost ──→ HostService
-                (builtin_initializer)    (内核暴露)    (实际执行)
+IBCI脚本 ──→ host_run() 内置函数 ──→ HostService
+                (builtin_initializer)    (实际执行)
 
 IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostService
                (ModuleDiscovery)   (插件实现)
@@ -569,10 +567,9 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
 
 **临时方案**：在符号表中区分 MODULE 符号和 CLASS 符号。**长期方案**：严格遵循显式引入原则，外部模块符号不预注入到编译时符号表（详见 PENDING_TASKS.md 章节九）。
 
-**涉及文件**：
-- `core/kernel/axioms/primitives.py`
+**涉及文件**：`core/compiler/scheduler.py`（`_inject_plugin_symbols` 中有若干 `[临时方案]` 注释）
 
 ---
 
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
-*最后更新：2026-03-25（添加代码审计新增问题附录 B）*
+*最后更新：2026-04-17*
