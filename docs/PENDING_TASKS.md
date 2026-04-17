@@ -76,65 +76,19 @@
 
 ---
 
-### 2.2 Behavior 完整公理化 [VISION / FUTURE]
-**任务**：创建 BehaviorAxiom 替代 DynamicAxiom("behavior") 占位符
+### 2.2 Behavior 完整公理化 [COMPLETED ✅]
 
-**搁置原因**：
-- 公理化相关工作全部暂缓
-- Behavior 公理化工作量预估 2-3 人天
+**状态**：已完整实现（PR: copilot/ibc-inter-design-review）。
 
-**当前状态**：
-- `DynamicAxiom("behavior")` 只是占位符
+**已完成内容**：
+- `BehaviorAxiom` 替换 `DynamicAxiom("behavior")`，`is_dynamic()=False`
+- `BehaviorCallCapability` 提供 `get_call_capability()`，返回类型为 `"auto"`（编译期延迟）
+- `IbBehavior.call()` 通过 `registry.get_llm_executor().invoke_behavior()` 自主执行
+- `_execute_behavior()` 旁路从 `BaseHandler` 彻底删除
+- `IILLMExecutor` 接口定义于 `core/base/interfaces.py`
+- `KernelRegistry.register_llm_executor()` / `get_llm_executor()` 完整注入链路
 
-**与MVP关系**：不影响MVP核心功能
-
-**未来演进 - LLM 接收模式 (Receive Mode)**：
-
-**设计目标**：统一 LLM 函数和 behavior 表达式的结果消费语义，支持系统提示词注入。
-
-**三种接收上下文**：
-| 上下文 | 枚举值 | 语义 | 返回类型 |
-|--------|--------|------|---------|
-| 即时执行 | `IMMEDIATE` | behavior 表达式立即执行 LLM 调用 | `str` |
-| 延迟执行 | `DEFERRED` | behavior 表达式被包装为 callable | `behavior` |
-| 类转换 | `CLASS_CAST` | behavior 执行后进行类型转换 | 目标类型 |
-
-**架构设计**：
-```python
-# 1. ReceiveMode 枚举
-class ReceiveMode(Enum):
-    IMMEDIATE = "immediate"   # 即时执行上下文
-    DEFERRED = "deferred"     # 延迟执行上下文
-    CLASS_CAST = "class_cast" # 类型转换上下文
-
-# 2. SideTable 扩展
-class SideTableManager:
-    def get_receive_mode(self, node) -> ReceiveMode: ...
-    def set_receive_mode(self, node, mode: ReceiveMode) -> None: ...
-
-# 3. 公理扩展 - ParserCapability
-class ParserCapability(Protocol):
-    def parse_value(self, raw_value: str) -> Any: ...
-
-    # [Future] 获取 LLM 调用时需要的系统提示词片段
-    def get_llm_prompt_fragment(self) -> Optional[str]:
-        """返回类型相关的提示词，如 '请仅返回一个整数' 或 None"""
-        return None
-
-# 4. 公理扩展 - TypeAxiom
-class TypeAxiom:
-    # [Future] 获取该类型返回值需要的提示词片段
-    def get_return_type_hint(self) -> Optional[str]:
-        """[LLM Integration] 获取类型特定的返回提示"""
-        return None
-```
-
-**实施步骤**：
-1. Phase 1: 引入 `ReceiveMode` 枚举，替代 `is_deferred` 布尔值
-2. Phase 2: 扩展 `SideTable` 支持 `node_receive_mode`
-3. Phase 3: 扩展 `ParserCapability.get_llm_prompt_fragment()`
-4. Phase 4: 扩展 `TypeAxiom.get_return_type_hint()`
-5. Phase 5: 在 `LLMExecutor` 中根据 `receive_mode` 注入不同系统提示词
+详见 `AXIOM_OOP_ANALYSIS.md` Step 1 + Step 2。
 
 ### 2.5 ParserCapability LLM 提示词片段扩展
 

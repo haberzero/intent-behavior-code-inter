@@ -4,7 +4,7 @@
 > 这些内容已在代码中稳定落地，但因过于具体而不适合放入总体架构说明。
 > 供开发者深入理解各模块实现时参考。
 >
-> **最后更新**：2026-04-17
+> **最后更新**：2026-04-17（新增第六章：公理化/万物皆对象框架完成记录）
 
 ---
 
@@ -373,3 +373,102 @@ Engine.__init__()
 - 无注解 → `"any"`
 - 返回类型无注解 → `"any"`（使用 `inspect.Signature.empty` 判断，注意与 `inspect.Parameter.empty` 的区别）
 
+
+---
+
+## 六、公理化 / 万物皆对象框架（2026-04-17 重大里程碑）
+
+本章记录 PR `copilot/ibc-inter-design-review` 完成的全局架构变更——IBC-Inter 公理化体系的核心阻塞点已被彻底突破。
+
+### 6.1 IILLMExecutor 接口 + KernelRegistry 注入（Step 1）
+
+**问题根因**：`IbBehavior` 是 IBC-Inter 对象（有 `IbClass`、有 Spec），但执行时需要 `LLMExecutor`。由于 `LLMExecutor` 在 `ServiceContext` 层，`IbBehavior.call()` 无法在不产生架构穿透的情况下合法取得它，因此只能抛 `RuntimeError`，实际执行权交给 handler 层的 `_execute_behavior()` 旁路。
+
+**解决方案**：在内核层建立 LLM 服务的合法通道。
+
+```
+core/base/interfaces.py
+    IILLMExecutor (Protocol)
+        invoke_behavior(behavior, context) → IbObject
+        execute_behavior_expression(node_uid, context, ...) → LLMResult
+        execute_behavior_object(behavior, context) → LLMResult
+        get_last_call_info() → Dict
+
+core/kernel/registry.py  (KernelRegistry)
+    _llm_executor: Any = None
+    register_llm_executor(executor, token)  # 内核令牌保护
+    get_llm_executor() → IILLMExecutor
+    clone()  # 传播 _llm_executor 引用
+
+core/runtime/interpreter/llm_executor.py  (LLMExecutorImpl)
+    invoke_behavior(behavior, ctx) → IbObject
+        → execute_behavior_object(behavior, ctx)
+        → ctx.runtime_context.set_last_llm_result(result)
+        → return result.value or registry.get_none()
+
+core/engine.py  (_prepare_interpreter, 末尾)
+    llm_executor = getattr(self.interpreter.service_context, 'llm_executor', None)
+    if llm_executor:
+        self.registry.register_llm_executor(llm_executor, self._kernel_token)
+```
+
+**设计约束**：
+- `kernel` 层只知道 `IILLMExecutor` 接口，不 import `LLMExecutorImpl`
+- 注入时机：`_prepare_interpreter()` 末尾（封印完成之后），因此 `register_llm_executor()` 免封印检查
+- `clone()` 传播引用，确保子解释器也能访问 executor
+
+### 6.2 BehaviorAxiom + BehaviorCallCapability（Step 2）
+
+`BehaviorAxiom` 替换了 `DynamicAxiom("behavior")`，`behavior` 从此是具体的一等公民类型。
+
+```python
+class BehaviorCallCapability(CallCapability):
+    def resolve_return_type_name(self, arg_type_names) -> Optional[str]:
+        return "auto"  # 编译期延迟；运行期由 IbBehavior.call() 按 expected_type 解析
+
+class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
+    name = "behavior"
+    is_dynamic() → False          # 严格：behavior ≠ any
+    is_compatible(other) → other == "behavior"
+    get_call_capability() → self  # behavior 对象可被调用
+    get_parent_axiom_name() → "Object"
+```
+
+**类型系统验证**：
+```
+is_dynamic(behavior_spec)    → False   ✅（不再是 any）
+is_behavior(behavior_spec)   → True    ✅
+is_assignable(behavior, str) → False   ✅（严格）
+is_assignable(behavior, behavior) → True ✅
+```
+
+### 6.3 IbBehavior 公理化重构（Step 2）
+
+`IbBehavior` 从被动数据描述符演进为**自主执行单元**，与 `IbUserFunction` 同构。
+
+```python
+class IbBehavior(IbObject, IIbBehavior):
+    def __init__(self, ..., execution_context=None):
+        self._execution_context = execution_context  # 创建时捕获
+
+    def call(self, receiver, args) → IbObject:
+        executor = self.ib_class.registry.get_llm_executor()
+        return executor.invoke_behavior(self, self._execution_context)
+```
+
+**意图栈管理**移入 `execute_behavior_object()`：
+- 保存/切换 `runtime_context.intent_stack`（使用 `captured_intents`）
+- 执行 `execute_behavior_expression(behavior.node, ctx, ...)`
+- 恢复意图栈
+
+### 6.4 旁路彻底清除（Step 2）
+
+| 删除 / 改变 | 位置 |
+|-----------|------|
+| `_execute_behavior()` 方法 **彻底删除** | `base_handler.py` |
+| `visit_IbCall` `is_behavior()` 特殊路由 **删除** | `expr_handler.py` |
+| `visit_IbExprStmt` → `res.call(none, [])` | `stmt_handler.py` |
+| `create_behavior()` 新增 `execution_context` 参数 | `factory.py`, `interfaces.py` |
+| `visit_IbBehaviorExpr` 传入 `execution_context` | `expr_handler.py` |
+
+**质量门控**：446 个测试全部通过，零回归，CodeQL 0 alerts。

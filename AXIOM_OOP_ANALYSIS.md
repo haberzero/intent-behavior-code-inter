@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-17（第二次修订：澄清 IILLMExecutor 接口注入原则、BehaviorCallCapability 返回类型、ibci_ai 职责拆分、ibci_ihost/idbg 分析、彻底重构原则）
+> **最后更新**：2026-04-17（第三次修订：Step 1 + Step 2 已于本轮完整落地）
 >
 > 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
 
@@ -19,13 +19,13 @@
 | None / slice / Exception | ✅ | ✅ | ✅ | ✅ |
 | Enum | ✅ | ✅ | ✅ | ✅ |
 | bound_method | ✅ | ✅ | ✅ | ✅ |
+| **behavior** | ✅ | ✅（`BehaviorAxiom`） | ✅ | ✅（`IbBehavior.call()` 自主执行） |
 | IbFunction / IbLLMFunction | ✅ | 部分（FuncSpec） | ✅ | ⚠️ 依赖外部 context |
 
 ### 尚未完整公理化的类型
 
 | 类型 | 问题描述 |
 |------|---------|
-| **behavior** | `DynamicAxiom("behavior")` 注册，`CallCapability` 为 None，`IbBehavior.call()` 直接抛 `RuntimeError`。调用必须绕道走 handler 层的 `_execute_behavior()`。 |
 | **callable** | 仅作为 `DynamicAxiom("callable")` 存在，是历史遗留的占位符，无真正语义。用户层已废弃（见 `lambda`/`snapshot`）。 |
 | **IbFunction** | `call()` 需要外部传入 `context`（`IExecutionContext`），不能自主执行。 |
 | **Intent** | `DynamicAxiom("intent")` 占位符，完整公理化依赖 behavior 先行。 |
@@ -168,40 +168,45 @@ class BehaviorCallCapability(CallCapability):
 
 ## 四、下一步迭代路线图（完整版）
 
-### Step 1（阻塞性前置，优先级最高）
+### Step 1 ✅ COMPLETED（已于本轮落地）
 
 **确立 `IILLMExecutor` 接口 + 注入 `KernelRegistry`**
 
-1. 在 `core/kernel/interfaces/` 下定义 `IILLMExecutor` 协议（Protocol）：
-   - `execute_behavior_expression(node_uid, context, call_intent=None) -> LLMResult`
-   - `execute_behavior_object(behavior_obj, context) -> IbObject`
-   - `get_retry() -> int`，`get_last_call_info() -> Dict`
-2. `KernelRegistry` 增加：
-   - `register_llm_executor(executor: IILLMExecutor, token: KernelToken) -> None`
-   - `get_llm_executor() -> IILLMExecutor`（无 executor 时抛 `KernelServiceNotReadyError`）
-3. `BuiltinInitializer` 在 bootstrap 阶段，从 `ServiceContext.llm_executor` 注入到 `KernelRegistry`
-4. `ServiceContext` 仍然持有 `llm_executor` 引用，**不删除**——它是 bootstrap 阶段的组装入口
-
-**预期收益**：建立 kernel 层访问 LLM 执行能力的合法通道，不产生架构穿透。
-
-**注意**：`LLMExecutorImpl`（`core/runtime/interpreter/llm_executor.py`）实现 `IILLMExecutor` 接口，但 kernel 层仅知道接口，不 import 实现。
+已完成内容：
+1. `IILLMExecutor` Protocol 在 `core/base/interfaces.py` 定义：
+   - `invoke_behavior(behavior, context) -> IbObject`
+   - `execute_behavior_expression(node_uid, context, call_intent=None, captured_intents=None) -> LLMResult`
+   - `execute_behavior_object(behavior, context) -> LLMResult`
+   - `get_last_call_info() -> Dict`
+2. `KernelRegistry` 增加了：
+   - `register_llm_executor(executor, token)` （内核令牌保护，免封印检查）
+   - `get_llm_executor() -> IILLMExecutor`
+   - `clone()` 传播 `_llm_executor` 引用
+3. `LLMExecutorImpl` 新增 `invoke_behavior()` 方法
+4. `engine._prepare_interpreter()` 完成后将 `llm_executor` 注入 `KernelRegistry`
 
 ---
 
-### Step 2（Step 1 完成后，同一 PR 或紧接的 PR）
+### Step 2 ✅ COMPLETED（已于本轮落地，与 Step 1 同一 PR）
 
 **给 `behavior` 类型声明真正的 `BehaviorAxiom` + `BehaviorCallCapability`**
 
-1. 新建 `BehaviorAxiom(BaseAxiom)` 替换 `DynamicAxiom("behavior")`
-2. 声明 `get_call_capability()` 返回 `BehaviorCallCapability`：
-   - `resolve_return_type_name(receiver, args)` → 返回 `receiver.expected_type or "str"`（**不允许返回 "any"**）
-3. 实现 `IbBehavior.call(registry, args)`：
-   - 内部调用 `registry.get_llm_executor().execute_behavior_object(self, ...)`
-   - 将意图栈切换逻辑从 handler 层的 `_execute_behavior()` 移入此方法
-4. **彻底删除** `_execute_behavior()` 旁路——不保留，不注释掉，直接删除
-5. `visit_IbCall` 中的 `is_behavior()` 特殊检测随之删除——`call()` 分支自然处理
+已完成内容：
+1. `BehaviorAxiom` 替换 `DynamicAxiom("behavior")`：
+   - `is_dynamic() = False` —— `behavior` 是一等公民具体类型，**严格不等于 `any`**
+   - `is_compatible()` 为身份匹配
+   - `BehaviorCallCapability.resolve_return_type_name()` 返回 `"auto"`（编译期延迟，运行期按 `expected_type` 解析）
+2. `IbBehavior` 完成公理化重构：
+   - 构造时捕获 `execution_context`（与 `IbUserFunction` 同构模式）
+   - `call()` 通过 `registry.get_llm_executor().invoke_behavior(self, ctx)` 自主执行
+   - 不再抛 `RuntimeError`
+3. `_execute_behavior()` **已从 `BaseHandler` 彻底删除**
+4. `visit_IbCall` 中的 `is_behavior()` 特殊路由 **已删除** —— behavior 通过标准 `hasattr(func, 'call')` 分支流转
+5. `visit_IbExprStmt` 中的 `_execute_behavior(res)` **已替换为** `res.call(none, [])`
+6. `IObjectFactory.create_behavior()` 和 `RuntimeObjectFactory.create_behavior()` 均新增 `execution_context` 参数
+7. `expr_handler.visit_IbBehaviorExpr` 向 `create_behavior()` 传入 `execution_context`
 
-**质量门控**：Step 2 完成后，所有测试必须通过，且代码中不再存在 `_execute_behavior` 调用路径。
+**质量门控**：Step 2 完成后，446 个测试全部通过，代码中不再存在 `_execute_behavior` 调用路径。
 
 ---
 
@@ -285,6 +290,16 @@ class BehaviorCallCapability(CallCapability):
 | `semantic_analyzer.py visit_IbFor` 中 `"behavior"` 硬编码改为 `is_behavior()` | P1 | `core/compiler/semantic/passes/semantic_analyzer.py` | 当前 PR |
 | `IBCI_SPEC.md`：删除废弃 `callable` 类型，补充 `lambda`/`snapshot` 语法，修正废弃示例 | 文档 | `IBCI_SPEC.md` | 当前 PR |
 | `PENDING_TASKS.md §11.7`：标注为 COMPLETED | 文档 | `docs/PENDING_TASKS.md` | 当前 PR |
+| **`IILLMExecutor` 接口定义**（Step 1） | 架构 | `core/base/interfaces.py` | copilot/ibc-inter-design-review |
+| **`KernelRegistry.register_llm_executor()` / `get_llm_executor()`**（Step 1） | 架构 | `core/kernel/registry.py` | copilot/ibc-inter-design-review |
+| **`LLMExecutorImpl.invoke_behavior()`**（Step 1） | 架构 | `core/runtime/interpreter/llm_executor.py` | copilot/ibc-inter-design-review |
+| **`engine._prepare_interpreter()` 注入 executor**（Step 1） | 架构 | `core/engine.py` | copilot/ibc-inter-design-review |
+| **`BehaviorAxiom` + `BehaviorCallCapability`**（Step 2） | 架构 | `core/kernel/axioms/primitives.py` | copilot/ibc-inter-design-review |
+| **`IbBehavior.call()` 自主执行 + `execution_context` 捕获**（Step 2） | 架构 | `core/runtime/objects/builtins.py` | copilot/ibc-inter-design-review |
+| **`_execute_behavior()` 从 `BaseHandler` 彻底删除**（Step 2） | 架构 | `core/runtime/interpreter/handlers/base_handler.py` | copilot/ibc-inter-design-review |
+| **`visit_IbCall` `is_behavior()` 特殊路由删除**（Step 2） | 架构 | `core/runtime/interpreter/handlers/expr_handler.py` | copilot/ibc-inter-design-review |
+| **`visit_IbExprStmt` 改为 `res.call()`**（Step 2） | 架构 | `core/runtime/interpreter/handlers/stmt_handler.py` | copilot/ibc-inter-design-review |
+| **`create_behavior()` 新增 `execution_context` 参数**（Step 2） | 架构 | `core/runtime/factory.py`、`core/runtime/interfaces.py` | copilot/ibc-inter-design-review |
 
 ---
 
@@ -323,4 +338,4 @@ class BehaviorCallCapability(CallCapability):
 
 ## 七、一句话总结
 
-> **万物公理化的真正障碍是"核心服务层边界不清导致对象无法自洽"。路线图的首要任务是在 `KernelRegistry` 中注册 `IILLMExecutor` 接口（Step 1），随后 `BehaviorAxiom + BehaviorCallCapability`（Step 2）可在一个 PR 内彻底完成，`_execute_behavior()` 旁路彻底删除，`behavior` 类型完整公理化。任何步骤都必须彻底完成，不允许留下并行的旧路径。**
+> **万物公理化的最后阻塞点已突破。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）和 Step 2（BehaviorAxiom + IbBehavior.call() 自主执行 + _execute_behavior() 彻底删除）已在同一 PR 中完整落地，446 个测试全部通过，代码中不再存在任何 behavior 类型相关的架构旁路。下一个重要里程碑是 Step 3（ibci_ai 职责拆分）和 Step 4（ibci_ihost/idbg 重构），均属中期目标，不阻塞当前功能。**

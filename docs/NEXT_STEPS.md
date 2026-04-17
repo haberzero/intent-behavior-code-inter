@@ -2,7 +2,7 @@
 
 > 本文档从 PENDING_TASKS.md 中提取最紧急、最值得近期开展的任务，作为下一阶段的工作指导。
 >
-> **最后更新**：2026-04-17
+> **最后更新**：2026-04-17（更新 §3.2 为已完成；公理化 Step 1+2 已落地，下一重点为 §3.1 显式引入原则严格化）
 
 ---
 
@@ -59,11 +59,13 @@
 
 ---
 
-### 3.2 behavior 类型语义分析硬编码检查替代 [PENDING_TASKS 11.7]
+### 3.2 behavior 类型语义分析硬编码检查替代 [COMPLETED ✅]
 
-`semantic_analyzer.py` 的 `visit_IbFor` 中使用字符串 `"behavior"` 进行直接类型名比较，应改为 `SpecRegistry.is_behavior()` 或公理层协议方法。
+`semantic_analyzer.py` 的 `visit_IbFor` 中使用字符串 `"behavior"` 进行直接类型名比较，已改为 `SpecRegistry.is_behavior()` 方法。
 
-**文件**：`core/compiler/semantic/passes/semantic_analyzer.py`
+**后续完成情况**（同 PR）：`visit_IbCall` 中的 `is_behavior()` 特殊路由整体删除——`BehaviorAxiom` 完成后，behavior 对象通过标准 `hasattr(func, 'call')` 分支自主执行，无需特判。
+
+**文件**：`core/runtime/interpreter/handlers/expr_handler.py`、`core/compiler/semantic/passes/semantic_analyzer.py`
 
 ---
 
