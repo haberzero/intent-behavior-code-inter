@@ -518,15 +518,17 @@ class IbBehavior(IbObject, IIbBehavior):
     """
     延迟执行的行为对象 (~...~)。
     """
-    def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
+    def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None, call_intent: Optional[Any] = None):
         """
          IbBehavior 现在是纯粹的数据描述符。
         不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
+        call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
         """
         super().__init__(ib_class)
         self.node = node_uid
         self.captured_intents = captured_intents # 支持 IntentNode (结构共享)
         self.expected_type = expected_type
+        self.call_intent = call_intent  # @! 排他意图（延迟执行时保存）
         self._cache: Optional[IbObject] = None
 
     def value(self):

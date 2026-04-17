@@ -195,14 +195,11 @@ class ExprHandler(BaseHandler):
             # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
             # 捕获原始 IntentNode 链表以保留结构共享
             captured_intents = self.runtime_context.intent_stack
-            
-            # 如果是延迟执行，行为对象需要持有自己的 call_intent
-            # 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
-            # 暂时保持现状，等待下一步重构 behavior 对象。
             return self.service_context.object_factory.create_behavior(
                 node_uid, 
                 captured_intents, 
-                expected_type=self.get_side_table("node_to_type", node_uid)
+                expected_type=self.get_side_table("node_to_type", node_uid),
+                call_intent=call_intent
             )
         
         # [Fallback] 如果是非延迟模式，直接执行
