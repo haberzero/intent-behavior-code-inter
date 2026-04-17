@@ -28,7 +28,8 @@ class CoreTokenScanner:
         self.KEYWORDS = {
             'import': TokenType.IMPORT, 'from': TokenType.FROM,
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
-            'callable': TokenType.CALLABLE,
+            'lambda': TokenType.LAMBDA,
+            'snapshot': TokenType.SNAPSHOT,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,

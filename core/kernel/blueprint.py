@@ -17,6 +17,7 @@ class CompilationResult:
     node_to_symbol: Dict[ast_domain.IbASTNode, Symbol] = field(default_factory=dict) # Node object -> Symbol object
     node_to_type: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Type name
     node_is_deferred: Dict[ast_domain.IbASTNode, bool] = field(default_factory=dict) # Node object -> bool
+    node_deferred_mode: Dict[ast_domain.IbASTNode, str] = field(default_factory=dict) # Node object -> 'lambda'|'snapshot'
     node_to_loc: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Location info
     node_protection: Dict[ast_domain.IbASTNode, ast_domain.IbASTNode] = field(default_factory=dict) # Node object -> Handler object
     

@@ -192,14 +192,17 @@ class ExprHandler(BaseHandler):
             )
 
         if is_deferred:
-            # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
-            # 捕获原始 IntentNode 链表以保留结构共享
-            captured_intents = self.runtime_context.intent_stack
+            # 根据 deferred_mode 决定捕获行为：
+            # - 'lambda'  : 不捕获意图状态（每次调用时以当前上下文为准）
+            # - 'snapshot': 捕获当前意图栈的快照（隔离执行，默认行为）
+            deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
+            captured_intents = [] if deferred_mode == "lambda" else self.runtime_context.intent_stack
             return self.service_context.object_factory.create_behavior(
                 node_uid, 
                 captured_intents, 
                 expected_type=self.get_side_table("node_to_type", node_uid),
-                call_intent=call_intent
+                call_intent=call_intent,
+                deferred_mode=deferred_mode
             )
         
         # [Fallback] 如果是非延迟模式，直接执行

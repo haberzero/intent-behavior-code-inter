@@ -134,6 +134,7 @@ class SemanticAnalyzer:
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
                 node_is_deferred=self.side_table.node_is_deferred,
+                node_deferred_mode=self.side_table.node_deferred_mode,
                 node_to_loc=self.side_table.node_to_loc,
                 node_protection=self.side_table.node_protection
             )
@@ -187,20 +188,30 @@ class SemanticAnalyzer:
 
                 prev_stmt = new_body[-1]
 
-                # 检查前一个语句是否包含行为描述
-                if not self._stmt_contains_behavior(prev_stmt):
-                    self.issue_tracker.error(
-                        f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
-                        f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
-                        stmt, code="SEM_050"
-                    )
-
-                # 关联侧表：被保护节点 UID -> llmexcept 处理器节点 UID
-                # 这是实现解释器 visit 拦截的核心
-                self.side_table.bind_protection(prev_stmt, stmt)
-
-                # 同时在 AST 中建立关联，确保序列化时包含 target 字段
-                stmt.target = prev_stmt
+                # [Task 1.2] 对条件驱动 for 循环的特殊处理：
+                # llmexcept 保护的是条件表达式本身，而非整个 for 循环节点。
+                # 这样每次循环的条件 LLM 调用都可以单独被重试，而不是重启整个循环。
+                if isinstance(prev_stmt, ast.IbFor) and prev_stmt.target is None:
+                    cond_expr = prev_stmt.iter
+                    if not self._expr_contains_behavior(cond_expr):
+                        self.issue_tracker.error(
+                            "llmexcept following a condition-driven 'for' loop requires a behavior expression "
+                            "'@~...~' as the loop condition.",
+                            stmt, code="SEM_050"
+                        )
+                    self.side_table.bind_protection(cond_expr, stmt)
+                    stmt.target = cond_expr
+                else:
+                    # 检查前一个语句是否包含行为描述
+                    if not self._stmt_contains_behavior(prev_stmt):
+                        self.issue_tracker.error(
+                            f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
+                            f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
+                            stmt, code="SEM_050"
+                        )
+                    # 关联侧表：被保护节点 UID -> llmexcept 处理器节点 UID
+                    self.side_table.bind_protection(prev_stmt, stmt)
+                    stmt.target = prev_stmt
 
                 # IbLLMExceptionalStmt 保留在 body 中，确保 Pass 4 深度检查和序列化能够访问到它
                 # 它的重复执行问题将由 Interpreter.visit 逻辑处理
@@ -630,11 +641,15 @@ class SemanticAnalyzer:
             if var_name:
                 # 决议最终目标类型 (Inference Policy)
                 sym = self.symbol_table.symbols.get(var_name)
+                deferred_mode = getattr(node, 'deferred_mode', None)
                 
                 if declared_type:
                     # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
                     if self.registry.is_dynamic(declared_type):
                         target_type = val_type
+                    elif deferred_mode:
+                        # 延迟模式：变量实际持有 behavior 对象；声明类型仅用作 LLM 输出类型提示
+                        target_type = self._behavior_desc
                     else:
                         target_type = declared_type
                     
@@ -643,8 +658,6 @@ class SemanticAnalyzer:
                         existing = self.symbol_table.symbols[var_name]
                         # 允许同一个节点在 Pass 3 更新它在 Pass 1 定义的符号类型
                         if existing.def_node is not node:
-                            # 如果不是内置符号，且不是同类型的重新赋值（IBCI 允许同名覆盖但通常通过 allow_overwrite 控制）
-                            # 这里我们遵循更严格的静态语言规则：同作用域禁止显式类型重声明
                             self.error(f"Variable '{var_name}' is already defined in this scope", node, code="SEM_002")
                     
                     # 定义或更新符号
@@ -661,61 +674,42 @@ class SemanticAnalyzer:
                         self.side_table.bind_symbol(target_node.target, sym)
                         self.side_table.bind_type(target_node.target, sym.spec)
                     
-                    # [P2 FIX] 行为描述行 Lambda 化判断 + 即时上下文处理
-                    # [Future Evolution] 未来将演进为 ReceiveMode 枚举：
-                    # - IMMEDIATE: 即时执行上下文，behavior 表达式直接执行 LLM 调用
-                    # - DEFERRED: 延迟执行上下文，behavior 表达式被包装为 callable
-                    # - CLASS_CAST: 类型转换上下文，behavior 表达式执行后进行类型转换
-                    # 相关演进：ParserCapability.get_llm_prompt_fragment() 用于注入系统提示词
-                    target_desc = sym.spec
-                    is_explicit_callable = False
+                    # 行为描述行延迟/即时上下文处理：
+                    # - deferred_mode='lambda' : 延迟执行，不捕获任何意图状态（每次调用时以当前上下文为准）
+                    # - deferred_mode='snapshot': 延迟执行，捕获当前意图栈的深拷贝（隔离执行）
+                    # - deferred_mode=None      : 即时执行，立即触发 LLM 调用
 
-                    if target_desc:
-                        call_cap = self.registry.get_call_cap(target_desc)
-                        is_dynamic = self.registry.is_dynamic(target_desc)
-
-                        # [Enum Hook] 检查是否是 Enum 类型
-                        # Enum 类型虽然实现了 CallCapability（用于实例化），但我们不希望它被视为延迟执行的可调用类型
-                        is_enum_type = target_desc.get_base_name() == "enum"
-
-                        is_explicit_callable = (call_cap is not None and not is_enum_type) or is_dynamic
-
-                    # 检查是否是行为描述表达式（裸 @~...~ 或 (int)@~...~）
+                    # 检查是否是行为描述表达式（裸 @~...~）
                     inner_behavior_expr = None
                     if isinstance(node.value, ast.IbBehaviorExpr):
                         inner_behavior_expr = node.value
                     elif isinstance(node.value, ast.IbCastExpr) and isinstance(node.value.value, ast.IbBehaviorExpr):
-                        inner_behavior_expr = node.value.value
+                        # (Type)@~...~ 已废弃，解析器会发出 PAR_010 错误。
+                        # 防御性兜底：如果此路径被到达，也在语义层报错。
+                        self.error(
+                            "Cast expression '(Type) @~...~' is no longer supported. "
+                            "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                            node, code="SEM_DEPRECATED"
+                        )
 
                     if inner_behavior_expr:
-                        if is_explicit_callable:
-                            # 延迟上下文：behavior 表达式被包装为 callable，延迟执行
+                        if deferred_mode:
+                            # 延迟上下文：behavior 表达式被包装为 lambda/snapshot，延迟执行
                             self.side_table.set_deferred(inner_behavior_expr, True)
+                            self.side_table.set_deferred_mode(inner_behavior_expr, deferred_mode)
+                            # 将声明类型绑定到行为表达式作为 LLM 输出期望类型（而非变量本身的类型）
+                            if declared_type and not self.registry.is_dynamic(declared_type):
+                                self.side_table.bind_type(inner_behavior_expr, declared_type)
                             val_type = self._behavior_desc
                         else:
                             # 即时上下文：behavior 表达式立即执行
                             self.side_table.set_deferred(inner_behavior_expr, False)
-
-                            # [FIX] 将赋值目标的类型绑定到 IbBehaviorExpr
-                            # 这样 _get_expected_type_hint 可以正确获取类型信息
-                            # 修复了：int result = @~ ... ~ 和 int result = (int)@~ ... ~ 行为不一致的问题
-                            if isinstance(node.value, ast.IbCastExpr):
-                                # 情况 1: 有强制类型转换 (int)@~...~
-                                # 从 IbCastExpr 获取目标类型，传递给内部的 IbBehaviorExpr
-                                cast_type = self._resolve_type(node.value.type_annotation)
-                                if cast_type and not self.registry.is_dynamic(cast_type):
-                                    self.side_table.bind_type(inner_behavior_expr, cast_type)
-                                    val_type = cast_type
-                                else:
-                                    val_type = self._str_desc
+                            # 从赋值目标 sym.spec 获取类型，传递给 IbBehaviorExpr 以构建正确的提示词
+                            if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
+                                self.side_table.bind_type(inner_behavior_expr, sym.spec)
+                                val_type = sym.spec
                             else:
-                                # 情况 2: 无强制类型转换 @~...~
-                                # 从赋值目标 sym.spec 获取类型
-                                if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
-                                    self.side_table.bind_type(inner_behavior_expr, sym.spec)
-                                    val_type = sym.spec
-                                else:
-                                    val_type = self._str_desc
+                                val_type = self._str_desc
                     
                     if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
                         hint = self.registry.get_diff_hint(val_type, sym.spec)
@@ -763,25 +757,14 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> IbSpec:
         """
-        访问隐式实例化的行为描述。
-        
-        (Type) @~...~ 语法创建此节点，指示解释器：
-        1. 执行 LLM 调用获取结果
-        2. 根据 target_type_name 解析结果
-        3. 返回目标类型的实例
+        [DEPRECATED] IbBehaviorInstance 对应的 (Type) @~...~ 语法已废弃 (PAR_010)。
+        该节点不再由解析器产生。此访问者仅作防御性兜底，正常情况下不会被调用。
         """
-        # 解析 segments 中的变量引用
-        for seg in node.segments:
-            if isinstance(seg, ast.IbASTNode):
-                self.visit(seg)
-
-        # 绑定目标类型到 side_table 并返回目标类型
-        if node.target_type_name:
-            target_desc = self._resolve_type_by_name(node.target_type_name)
-            if target_desc:
-                self.side_table.bind_type(node, target_desc)
-                return target_desc
-
+        self.error(
+            "Cast expression '(Type) @~...~' is no longer supported. "
+            "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+            node, code="SEM_DEPRECATED"
+        )
         return self._any_desc
 
     def visit_IbWhile(self, node: ast.IbWhile):

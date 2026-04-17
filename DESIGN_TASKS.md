@@ -16,8 +16,6 @@
 - for 循环体内部若需要保护，开发者应在循环体内部**独立编写** `llmexcept`
 - 重试时应从"触发失败的行为描述节点"位置重启 LLM 调用，**不应重启整个 for 循环**
 
-**当前 Bug**：`visit_IbFor` 遇到不确定时 `return get_none()`，`visit_IbLLMExceptionalStmt` 重新 `visit(target_uid)` 即重新执行整个 `IbFor` 节点，导致循环从头重启。
-
 **正确语义**（条件驱动循环）：
 1. 条件 LLM 调用返回 uncertain → 触发 llmexcept
 2. 重试：只重新执行 `iter_uid`（条件行为表达式），不重启循环体
@@ -29,8 +27,8 @@
 ### Z.2 callable 关键字废弃决定（设计层面）
 
 **结论**：
-- `callable` 关键字（作为用户可见的变量类型声明关键字）应被废弃
-- 替换为 `lambda` 和 `snapshot` 两个更语义明确的关键字
+- `callable` 关键字（作为用户可见的变量类型声明关键字）已废弃 ✅
+- 替换为 `lambda` 和 `snapshot` 两个更语义明确的关键字 ✅
 - `callable` 在类型系统内部（`CALLABLE_SPEC`、`BoundMethodAxiom.get_parent_axiom_name()` 等）的使用**保持不变**，不涉及面向用户的语法
 
 ---
@@ -46,6 +44,8 @@
 - 原 `(int) @~...~`（提示词注入用途）→ 改为 `int lambda f = @~...~` 或 `int snapshot f = @~...~`
 - 原 `int result = (int) @~...~`（即时执行带类型提示）→ 改为 `int result = @~...~`（LHS 类型自动成为提示词上下文）
 - `(int) expr`（对非行为表达式的类型转换）→ **保留**，不受影响
+
+**实现**：已实现（PAR_010 硬错误）✅
 
 ---
 
@@ -71,10 +71,10 @@ str snapshot my_handler = @~ 根据 $context 生成回复 ~
 - 无 LHS 类型时默认返回 `str`（与即时执行行为保持一致）
 
 **解析规则**（给解析器的约束）：
-- `TypeAnnotation lambda VariableName = @~...~` 是合法变量声明
-- `TypeAnnotation snapshot VariableName = @~...~` 是合法变量声明
-- `SyntaxRecognizer` 需要识别 `Type lambda/snapshot Name` 三 token 序列为 `VARIABLE_DECLARATION`
-- 语义分析器中，`lambda`/`snapshot` 触发 `is_deferred=True`，且分别设置不同的 `ReceiveMode`
+- `TypeAnnotation lambda VariableName = @~...~` 是合法变量声明 ✅
+- `TypeAnnotation snapshot VariableName = @~...~` 是合法变量声明 ✅
+- `SyntaxRecognizer` 识别 `Type lambda/snapshot Name` 三 token 序列为 `VARIABLE_DECLARATION` ✅
+- 语义分析器中，`lambda`/`snapshot` 触发 `is_deferred=True`，且分别设置不同的 `deferred_mode` ✅
 
 ---
 
@@ -94,52 +94,42 @@ str snapshot my_handler = @~ 根据 $context 生成回复 ~
 
 ---
 
-### 1.2 for @~condition~: + llmexcept 重试语义修复 [BUG / P0]
+### 1.2 for @~condition~: + llmexcept 重试语义修复 [BUG / P0] ✅ DONE
 
-**文件**：`core/runtime/interpreter/handlers/stmt_handler.py`（`visit_IbLLMExceptionalStmt` + `visit_IbFor`）
+**文件**：`core/compiler/semantic/passes/semantic_analyzer.py`（`_bind_llm_except_in_body`），`core/runtime/interpreter/handlers/stmt_handler.py`（`visit_IbLLMExceptionalStmt`）
 
-**问题**：当 `for @~condition~:` 的条件不确定时，`visit_IbFor` 直接 `return get_none()`，`visit_IbLLMExceptionalStmt` 重新 `visit(target_uid)` 等于重启整个 for 循环，不符合预期语义。
-
-**修复方案（方案 A：for 内部感知保护帧）**：
-
-在 `visit_IbFor`（条件驱动分支）中，当条件 LLM 调用返回 uncertain 时，**检查当前节点是否有保护帧**（通过 `get_side_table("node_protection", node_uid)` 查询）：
-- 若有保护帧 → 不退出循环，而是触发保护帧的 body 执行（等待 retry），然后**仅重试 `iter_uid`**，基于重试结果决定是否执行本轮 body
-- 若无保护帧 → 维持当前行为（`return get_none()`）
-
-同时修改 `visit_IbLLMExceptionalStmt`：当 target 为 `IbFor` 时，**不 re-visit 整个 `IbFor`**，只重新执行 `iter_uid`（从 target 的 node_data 中取 `iter` 字段）。
-
-**依赖**：需要在 `visit_IbFor` 中能访问 `node_protection` 侧表。当前已有 `get_side_table()` 接口，可直接使用。
+**修复**：
+- `_bind_llm_except_in_body`：检测前一语句是 condition-driven for 循环（`target is None`）时，将保护绑定到 `iter_uid`（条件表达式），而非整个 for 节点
+- `visit_IbLLMExceptionalStmt`：捕获 target 执行的返回值并作为自身返回值，使 `visit_IbFor` 的条件求值结果正确透传
 
 ---
 
-### 1.3 lambda / snapshot 关键字引入 + callable 废弃 [P0 设计实现]
+### 1.3 lambda / snapshot 关键字引入 + callable 废弃 [P0 设计实现] ✅ DONE
 
 **影响文件清单**：
-- `core/compiler/common/tokens.py`：新增 `LAMBDA`、`SNAPSHOT` TokenType；可标注 `CALLABLE` 为 `@deprecated`
-- `core/compiler/lexer/core_scanner.py`：新增 `'lambda'`、`'snapshot'` 关键字映射
-- `core/compiler/parser/core/recognizer.py`：`SyntaxRecognizer.get_role()` 识别 `LAMBDA`/`SNAPSHOT` 触发 `VARIABLE_DECLARATION`；`_is_declaration_lookahead()` 扩展支持 `Type lambda/snapshot Name` 序列
-- `core/compiler/parser/components/declaration.py`：`variable_declaration()` 解析 `Type lambda/snapshot Name = expr` 语法
-- `core/compiler/parser/components/type_def.py`：`TypeComponent` 不需要改（类型解析照旧）
-- `core/kernel/ast.py`：`IbAssign` 节点或新增 `IbDeferredBehaviorDecl` 节点，携带 `deferred_mode: DeferredMode` 字段（`LAMBDA` 或 `SNAPSHOT`）
-- `core/compiler/semantic/passes/semantic_analyzer.py`：识别新的 deferred_mode，设置对应的侧表标记（`is_deferred=True` + 新增 `deferred_mode` 侧表）
-- `core/compiler/semantic/passes/side_table.py`：新增 `node_deferred_mode` 侧表
-- `core/runtime/interpreter/handlers/expr_handler.py`：`visit_IbBehaviorExpr` 根据 `deferred_mode` 决定是否捕获意图栈（snapshot 捕获，lambda 不捕获）
-- `core/runtime/objects/builtins.py`：`IbBehavior` 新增 `deferred_mode` 字段区分 lambda/snapshot 行为（主要影响 invoke 时的上下文恢复逻辑）
-- `docs/PENDING_TASKS.md`：更新 §4.1 和 §2.2
+- `core/compiler/common/tokens.py`：新增 `LAMBDA`、`SNAPSHOT` TokenType；移除 `CALLABLE` ✅
+- `core/compiler/lexer/core_scanner.py`：新增 `'lambda'`、`'snapshot'` 关键字映射；移除 `callable` ✅
+- `core/compiler/parser/core/recognizer.py`：`SyntaxRecognizer.get_role()` 识别 `LAMBDA`/`SNAPSHOT` 触发 `VARIABLE_DECLARATION`；`_is_declaration_lookahead()` 扩展支持 `Type lambda/snapshot Name` 序列 ✅
+- `core/compiler/parser/components/declaration.py`：`variable_declaration()` 解析 `Type lambda/snapshot Name = expr` 语法 ✅
+- `core/compiler/parser/components/type_def.py`：移除 `CALLABLE` token 处理 ✅
+- `core/compiler/parser/core/syntax.py`：移除 `ID_CALLABLE` ✅
+- `core/kernel/ast.py`：`IbAssign` 节点新增 `deferred_mode: Optional[str]` 字段 ✅
+- `core/compiler/semantic/passes/semantic_analyzer.py`：识别新的 deferred_mode，设置对应的侧表标记（`is_deferred=True` + `deferred_mode` 侧表）；symbol 类型改为 `behavior` ✅
+- `core/compiler/semantic/passes/side_table.py`：新增 `node_deferred_mode` 侧表 ✅
+- `core/kernel/blueprint.py`：新增 `node_deferred_mode` 字段 ✅
+- `core/compiler/serialization/serializer.py`：序列化 `node_deferred_mode` ✅
+- `core/runtime/interpreter/handlers/expr_handler.py`：`visit_IbBehaviorExpr` 根据 `deferred_mode` 决定是否捕获意图栈（snapshot 捕获，lambda 不捕获）✅
+- `core/runtime/objects/builtins.py`：`IbBehavior` 新增 `deferred_mode` 字段 ✅
+- `core/runtime/factory.py` + `core/runtime/interfaces.py`：`create_behavior()` 新增 `deferred_mode` 参数 ✅
 
 ---
 
-### 1.4 `(Type) @~...~` 行为描述提示词注入用途废弃 [P0 设计实现]
+### 1.4 `(Type) @~...~` 行为描述提示词注入用途废弃 [P0 设计实现] ✅ DONE
 
 **影响文件**：
-- `core/compiler/parser/components/expression.py`：`grouping()` 中 `IbBehaviorInstance` hook 移除，或改为发出 deprecated 警告
-- `core/compiler/semantic/passes/semantic_analyzer.py`：`visit_IbAssign` 中对 `IbCastExpr + IbBehaviorExpr` 的特殊处理路径标注 deprecated，后续删除
-- `core/kernel/ast.py`：`IbBehaviorInstance` 节点在此方案下可以被废弃（或保留用于插件/元编程场景）
-- `docs/PENDING_TASKS.md`：更新 §4.1
-
-**废弃策略**（渐进式）：
-1. Phase 1：编译时 WARNING（`SEM_DEPRECATED`）：`(Type) @~...~` 用于提示词注入已废弃，请使用 `Type lambda/snapshot varname = @~...~`
-2. Phase 2：编译时 ERROR
+- `core/compiler/parser/components/expression.py`：`grouping()` 中检测 `(Type) @~...~` 并发出 PAR_010 硬错误 ✅
+- `core/compiler/semantic/passes/semantic_analyzer.py`：`visit_IbBehaviorInstance` 改为发出 SEM_DEPRECATED 错误；`visit_IbAssign` 防御性兜底路径同样发出 SEM_DEPRECATED ✅
+- `core/compiler/semantic/passes/prelude.py`：移除 `callable` 别名降级 fallback ✅
 
 ---
 

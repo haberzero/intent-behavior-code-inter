@@ -1,16 +1,15 @@
 from core.compiler.common.tokens import TokenType
 from core.kernel import ast as ast
 from core.compiler.parser.core.component import BaseComponent
-from core.compiler.parser.core.syntax import ID_CALLABLE
 
 class TypeComponent(BaseComponent):
     """
-    Component for parsing type annotations (e.g., int, list[str], callable).
+    Component for parsing type annotations (e.g., int, list[str]).
     Now purely token-based, leaving type validation to semantic analysis.
     """
     def parse_type_annotation(self, precedence: int = 0) -> ast.IbExpr:
         start_token = self.stream.peek()
-        # 1. Base Type (Identifier or 'callable')
+        # 1. Base Type (Identifier)
         base_type = None
         if self.stream.match(TokenType.IDENTIFIER):
             name_token = self.stream.previous()
@@ -21,17 +20,6 @@ class TypeComponent(BaseComponent):
                 dot_token = self.stream.previous()
                 member_token = self.stream.consume(TokenType.IDENTIFIER, "Expect member name after '.' in type annotation.")
                 base_type = self._loc(ast.IbAttribute(value=base_type, attr=member_token.value, ctx='Load'), dot_token)
-                
-        elif self.stream.match(TokenType.CALLABLE):
-            token = self.stream.previous()
-            # 使用语法常量，消除硬编码字符串
-            callable_name = ID_CALLABLE
-            if self.context.metadata:
-                callable_desc = self.context.metadata.resolve(ID_CALLABLE)
-                if callable_desc:
-                    callable_name = callable_desc.name
-            
-            base_type = self._loc(ast.IbName(id=callable_name, ctx='Load'), token)
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
 

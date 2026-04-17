@@ -56,8 +56,6 @@ class Prelude:
             self.builtin_types["auto"] = self.builtin_types["any"]
         if "void" in self.builtin_types and "none" not in self.builtin_types:
             self.builtin_types["none"] = self.builtin_types["void"]
-        if "behavior" not in self.builtin_types and "callable" in self.builtin_types:
-            self.builtin_types["behavior"] = self.builtin_types["callable"]
 
     # ------------------------------------------------------------------ #
     # Registration / query                                                 #

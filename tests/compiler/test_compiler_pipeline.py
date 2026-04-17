@@ -225,8 +225,25 @@ str result = @~ hello world ~
         assert artifact is not None
 
     def test_behavior_with_type_cast(self, engine):
+        """(Type) @~...~ 语法已废弃，编译器必须发出 PAR_010 错误。"""
         code = """import ai
 int x = (int) @~ what is 1+1 ~
+"""
+        with pytest.raises(CompilerError):
+            engine.compile_string(code, silent=True)
+
+    def test_behavior_lambda_deferred(self, engine):
+        """int lambda varname = @~...~ 创建延迟执行的 behavior 对象。"""
+        code = """import ai
+int lambda my_behavior = @~ what is 1+1 ~
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_behavior_snapshot_deferred(self, engine):
+        """int snapshot varname = @~...~ 创建捕获意图快照的 behavior 对象。"""
+        code = """import ai
+str snapshot my_snap = @~ say hello ~
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
