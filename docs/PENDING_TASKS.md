@@ -22,13 +22,10 @@
 
 详见 ARCH_DETAILS.md 第一章 1.5 节。
 
-### 0.3 vtable 参数签名提取 (P1) [PENDING]
+### 0.3 vtable 参数签名提取 (P1) [COMPLETED]
 
-**状态**: `PENDING`
-**问题**: `discovery.py` 加载插件 vtable 时，若插件未在 vtable 中显式提供 `param_types`，则 Python 函数签名无法被自动提取，导致语义分析阶段无法校验参数数量与类型。
+**状态**: 已实现。`_build_spec_from_dict()` 新增对 callable 类型 vtable 条目的支持，新增 `_extract_signature()` 方法通过 `inspect.signature()` 自动提取 Python 函数的参数名和类型注解，自动填充 `MethodMemberSpec.param_type_names`。已有显式 `param_types` 的字典格式（如 ibci_math 等插件）不受影响。
 **涉及文件**: `core/runtime/module_system/discovery.py`
-
-**解决方案**：在 vtable 加载时使用 `inspect.signature()` 提取 Python 函数的参数名和类型注解，自动填充 `MethodMemberSpec.param_type_names`。
 
 ---
 
@@ -611,7 +608,7 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 ---
 
-### 9.5 vtable 参数签名提取 [PENDING]
+### 9.5 vtable 参数签名提取 [COMPLETED]
 
 与顶部 0.3 章节相同，见 0.3 的详细说明。
 
@@ -646,11 +643,11 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 - 每次重试时输出详细日志（帧状态、重试次数、错误原因）
 - 支持通过 `idbg.last_result()` 等接口访问重试历史
 
-### 10.5 技术债务清理 (P2) [PENDING]
+### 10.5 技术债务清理 (P2) [COMPLETED]
 
-- `collector.py:200`：`"llm_fallback"` 属性名历史残留——该字段已不存在于 AST 中，`getattr(node, "llm_fallback", None)` 永远返回 `None`，属于无效遍历。应直接删除。
-- `runtime_context.py`：`push_llm_except_frame` / `pop_llm_except_frame` 等方法的 docstring 中有 5 处 `TODO [优先级: 高]: 完成后移除此注释`，功能实际已完成，可直接清理。
-- `interop.py:7`：`# TODO 这里有问题，为什么继承了protocol？`——继承 Protocol 在 Python typing 体系中是合法的，作为 ABC 使用（确保所有方法被实现）并无问题，此 TODO 可删除或补充说明。
+- `collector.py:200`：✅ 已删除 `"llm_fallback"` 无效属性遍历。
+- `runtime_context.py`：✅ 5 处 `TODO [优先级: 高]: 完成后移除此注释` 已全部清理。
+- `interop.py:7`：✅ 已将疑惑性 TODO 替换为解释性注释（Protocol 继承在 Python typing 体系中是合法的）。
 
 ---
 
@@ -658,17 +655,11 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 本章记录在 2026-04-17 深度健康分析中发现的问题，包括历史包袱、tricky 操作、补丁式修复和暂时性妥协。
 
-### 11.1 IbTuple 未纳入快照/序列化体系 (P1) [PENDING]
+### 11.1 IbTuple 未纳入快照/序列化体系 (P1) [COMPLETED]
 
-**问题描述**：Tuple 类型已完整实现（TupleSpec、TupleAxiom、IbTuple），但在两个关键序列化路径中均未包含：
-- `llm_except_frame.py` 的 `_is_serializable()` 方法仅处理 IbInteger/IbFloat/IbString/IbList/IbDict，IbTuple 会被跳过，导致 llmexcept 重试时包含 tuple 的变量无法被快照和恢复
-- `runtime_serializer.py` 的 `_process_value()` 方法也缺少 `IbTuple` 的 `elif` 分支，导致宿主快照（HostService.snapshot）中 tuple 类型变量序列化异常
-
-**涉及文件**：
-- `core/runtime/interpreter/llm_except_frame.py`（`_is_serializable`、`_save_vars_snapshot`）
-- `core/runtime/serialization/runtime_serializer.py`（`_process_value`）
-
-**解决方案**：在两处添加 IbTuple 分支，与 IbList 的处理逻辑并列。
+**状态说明**：已修复。在两个关键路径中均补充了 IbTuple 支持：
+- `llm_except_frame.py` 的 `_is_serializable()` 和 `_save_vars_snapshot()` 已将 IbTuple 与 IbList 并列处理
+- `runtime_serializer.py` 的序列化路径（`_collect_instance()`）和反序列化路径（`_get_instance()`）均已添加 `"tuple"` 分支，并更新了导入
 
 ### 11.2 ibci_file 的 core 依赖与"非侵入"分类不符 (P2) [PENDING]
 
@@ -682,18 +673,11 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 **涉及文件**：`ibci_modules/ibci_file/core.py`、`core/extension/ibcext.py` 注释
 
-### 11.3 调度器 import 注入中的多处 [临时方案] (P1) [PENDING]
+### 11.3 调度器 import 注入中的多处 [临时方案] (P1) [COMPLETED]
 
-**问题描述**：`core/compiler/scheduler.py` 中 `_inject_plugin_symbols` 方法有多处标注 `[临时方案]` 的符号冲突检查逻辑：
-- 普通导入时：若目标名称已存在，直接 `pass`（无警告）
-- `from X import *` 时：若导出符号已存在，直接 `pass`（无警告）
-- `from X import a as b` 时：同上
+**当前状态**：所有静默 `pass` 已替换为 `self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL/BASIC, ...)` 调用，调试模式下可见冲突信息。长期方案（严格遵循显式引入原则）仍在规划中，见 9.2 节。
 
-这些 `pass` 属于"先跳过、不报告"的妥协，在实际开发中可能导致导入被静默忽略而开发者难以察觉。
-
-**涉及文件**：`core/compiler/scheduler.py`（约第 464-503 行）
-
-**建议**：至少在 DEBUG 模式下输出符号冲突警告；长期方案是严格遵循显式引入原则（见 9.2 节）。
+**涉及文件**：`core/compiler/scheduler.py`（`_inject_plugin_symbols` 方法）
 
 ### 11.4 意图标签解析临时方案（parser 层）(P2) [PENDING]
 
@@ -703,15 +687,9 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 **涉及文件**：`core/compiler/parser/components/statement.py`（约第 278-289 行）
 
-### 11.5 behavior 对象延迟执行路径的 "暂时保持现状" (P2) [PENDING]
+### 11.5 behavior 对象延迟执行路径的 call_intent 传递 (P2) [COMPLETED]
 
-**问题描述**：`expr_handler.py:201` 中有注释：
-```
-# 暂时保持现状，等待下一步重构 behavior 对象。
-```
-当延迟执行（`is_deferred=True`）时，创建的 `IbBehavior` 对象的 `call_intent` 字段未被正确设置（因为工厂方法 `create_behavior` 的参数不支持 `call_intent`）。这意味着通过 `@!` 修饰的 behavior 表达式若被延迟执行，其排他意图可能丢失。
-
-**涉及文件**：`core/runtime/interpreter/handlers/expr_handler.py`（约第 194-206 行）
+**状态说明**：已修复。`IbBehavior` 增加了 `call_intent` 字段，`create_behavior()` 工厂方法（`factory.py`、`interfaces.py`）已更新签名，`expr_handler.py` 的延迟执行路径现在正确传入 `call_intent`。序列化/反序列化路径（`runtime_serializer.py`）也已同步更新，确保快照中 `call_intent` 不丢失。
 
 ### 11.6 engine.py 和 service.py 中的 vibe 妥协标注 (P3) [PENDING]
 

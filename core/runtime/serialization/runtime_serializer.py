@@ -350,9 +350,11 @@ class RuntimeDeserializer:
             obj.elements = [self._deserialize_value(e) for e in data.get("elements", [])]
 
         elif _type == "tuple":
-            elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
-            obj = IbTuple(elements, ib_class)
+            # Cache an empty IbTuple first to break potential circular references,
+            # then fill elements (mirroring the cache-before-recurse pattern used for IbList).
+            obj = IbTuple((), ib_class)
             self.instance_cache[uid] = obj
+            obj.elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
             
         elif _type == "dict":
             # IbDict 尚未有标准工厂方法，暂用 Registry

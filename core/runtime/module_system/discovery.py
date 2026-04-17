@@ -229,7 +229,7 @@ class ModuleDiscoveryService:
                     param_types.append(self._PY_TYPE_TO_IBCI.get(ann_name, "any"))
 
             ret_ann = sig.return_annotation
-            if ret_ann is inspect.Parameter.empty:
+            if ret_ann is inspect.Signature.empty:
                 return_type = "any"
             else:
                 ret_name = getattr(ret_ann, "__name__", str(ret_ann))
