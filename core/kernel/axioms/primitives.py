@@ -879,8 +879,65 @@ class EnumAxiom(
 
 
 # ------------------------------------------------------------------ #
-# Registration helper                                                 #
+# behavior                                                            #
 # ------------------------------------------------------------------ #
+
+class BehaviorCallCapability(CallCapability):
+    """
+    CallCapability for behavior objects.
+
+    At compile time the concrete return type is not known (it lives on the
+    IbBehavior instance as ``expected_type``).  We therefore return ``"auto"``
+    so that the SpecRegistry propagates a dynamic result type, which is then
+    resolved to the actual type at runtime by IbBehavior.call().
+    """
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        return "auto"
+
+
+class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
+    """
+    公理：behavior 类型。
+
+    * 不是 DynamicAxiom —— behavior 是一个具体的一等公民类型，非 any 妥协。
+    * 实现 CallCapability —— behavior 对象可被调用（触发 LLM 执行）。
+    * is_dynamic() = False —— 严格类型系统：behavior 只能赋值给 behavior。
+    * 编译期返回类型为 "auto"；运行期由 IbBehavior.call() 根据 expected_type 解析真实类型。
+    """
+
+    @property
+    def name(self) -> str:
+        return "behavior"
+
+    def get_call_capability(self) -> Optional[BehaviorCallCapability]:
+        return self
+
+    def get_iter_capability(self):
+        return None
+
+    def get_subscript_capability(self):
+        return None
+
+    def get_operator_capability(self):
+        return None
+
+    def get_converter_capability(self):
+        return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {}
+
+    def is_dynamic(self) -> bool:
+        return False
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "behavior"
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "Object"
+
+
+
 
 def register_core_axioms(registry: "AxiomRegistry") -> None:
     """Register all core axioms into the given AxiomRegistry."""
@@ -901,4 +958,4 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(DynamicAxiom("auto"))
     registry.register(DynamicAxiom("callable"))
     registry.register(DynamicAxiom("void"))
-    registry.register(DynamicAxiom("behavior"))
+    registry.register(BehaviorAxiom())

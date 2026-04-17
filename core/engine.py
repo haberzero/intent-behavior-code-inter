@@ -171,6 +171,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 封印类注册表
         self.registry.seal_classes(self._kernel_token)
 
+        # 将 LLM 执行器注入 KernelRegistry，使 IbBehavior.call() 可通过公理体系自主执行
+        llm_executor = getattr(self.interpreter.service_context, 'llm_executor', None)
+        if llm_executor is not None:
+            self.registry.register_llm_executor(llm_executor, self._kernel_token)
+
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
 

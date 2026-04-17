@@ -201,7 +201,14 @@ str snapshot my_handler = @~ 根据 $context 生成回复 ~
 
 ### 4.3 Behavior / Intent 完整公理化
 
-**状态**：`DynamicAxiom("behavior")` / `DynamicAxiom("callable")` 占位符。依赖 `lambda`/`snapshot` 关键字完成后推进。
+**状态**：**Behavior 已完成** ✅（PR: copilot/ibc-inter-design-review）
+
+**Behavior 完成内容**：
+- `BehaviorAxiom` + `BehaviorCallCapability` 完整落地
+- `IbBehavior.call()` 自主执行，`_execute_behavior()` 旁路已彻底删除
+- 详见 `AXIOM_OOP_ANALYSIS.md` Step 1 + Step 2
+
+**Intent 状态**：`DynamicAxiom("intent")` 仍为占位符。工作量预估 5-9 人天，不阻塞当前功能。见 `AXIOM_OOP_ANALYSIS.md` §6.2。
 
 ---
 

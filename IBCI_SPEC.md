@@ -23,7 +23,9 @@ IBCI 是**静态强类型**语言，支持以下基础类型：
 - `int`, `float`, `bool`, `str`
 - `list`, `dict`, `auto`
 - `tuple` (多值返回与解包支持)
-- `callable` (可调用对象/闭包)
+- `lambda` / `snapshot` (延迟执行的行为对象，见 §3.4)
+
+> **注意**：`callable` 关键字已废弃，不再作为用户可见的类型声明关键字。请使用 `lambda` 或 `snapshot`。
 
 **声明与赋值：**
 
@@ -40,12 +42,13 @@ dict config = {"version": "2.2"}
 使用 `import` 关键字导入系统插件或用户自定义模块：
 
 ```ibci
-import ai      # 核心 AI 能力
-import sys     # 沙箱控制（非侵入式插件）
+import ai      # LLM provider 配置（API key、model、retry 等）
 import isys    # 运行时状态与路径查询（内核侵入式插件）
 import json    # JSON 解析
 import file    # 受限文件系统
 ```
+
+> **重要**：`@~ ... ~` 行为描述语句是语言的核心特性，**不依赖 `import ai`**。`ai` 插件仅负责配置 LLM provider（API 地址、模型名称、重试次数等）。没有配置 `import ai` 时，行为描述语句依然是合法的语言构造，只是在运行时必须存在已注册的 LLM provider 才能真正发起调用。
 
 ---
 
@@ -76,9 +79,13 @@ str greeting = @~ 用 $name 打个招呼 ~
 每个类型可以定义 `__outputhint_prompt__` 方法，用于描述期望的 LLM 输出格式。该约束会被注入到系统提示词中。
 
 ```ibci
-int result = (int) @~ 1+1等于几？只答数字 ~
+int result = @~ 1+1等于几？只答数字 ~
 // int 的 __outputhint_prompt__() 返回: "请只返回一个整数，如: 42"
 ```
+
+> **废弃语法**：`(Type) @~ ... ~` 中将类型转换用作提示词注入的写法（如 `(int) @~...~`）已废弃，会产生编译错误 `PAR_010`。
+> - 原用途 `int result = (int) @~...~` → 改为 `int result = @~...~`（LHS 类型自动成为类型约束上下文）
+> - `(int) expr`（对非行为表达式的类型强制转换）→ **保留**，不受影响
 
 ### 3.1.3 输出解析：`__from_prompt__`
 
@@ -106,6 +113,30 @@ llmend
 llm 函数利用 llmend 关键字标记结束定义。
 
 llm函数书写不需要缩进，这是为了阅读以及提示词管理的非歧义/便利性，确保所有非顶格书写的空格都可以正常被作为提示词的一部分被送入ai调用过程。
+
+### 3.4 延迟执行行为（lambda / snapshot）
+
+使用 `lambda` 或 `snapshot` 关键字声明一个**延迟执行的行为对象**，而不是立即触发 LLM 调用：
+
+```ibci
+# lambda：延迟执行，调用时感知调用处的所有外部变量，不捕获意图栈
+int lambda compute = @~ 根据 $x 计算一个结果 ~
+
+# snapshot：延迟执行，定义时深拷贝当前意图栈
+str snapshot handler = @~ 根据 $context 生成回复 ~
+
+# 调用延迟行为（与调用函数语法相同）
+int result = compute()
+str reply = handler()
+```
+
+| 关键字 | 语义 | 意图栈处理 |
+|--------|------|-----------|
+| `lambda` | 延迟执行，调用时感知调用处当前上下文 | 不捕获，使用调用时当前意图栈 |
+| `snapshot` | 延迟执行，定义时快照意图栈 | 捕获定义时意图栈的深拷贝 |
+
+- LHS 类型（如 `int`）是该行为对象的**返回值类型**，同时作为 LLM 输出约束注入提示词
+- 无 LHS 类型时默认返回 `str`（与即时执行行为保持一致）
 
 ### 3.3 意图驱动控制流
 
@@ -173,7 +204,7 @@ print(result)
 IBCI 引入了 `llmexcept` 关键字专门处理 AI 调用产生的非确定性错误（如解析失败、逻辑模糊）：
 
 ```ibci
-int result = (int) @~ 1 + 1 等于几？只答数字 ~
+int result = @~ 1 + 1 等于几？只答数字 ~
 llmexcept:
     print("AI 响应无法解析为整数，正在重试...")
     retry "请务必只返回一个纯数字，不要带标点"

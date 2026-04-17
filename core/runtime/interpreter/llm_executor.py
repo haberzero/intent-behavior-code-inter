@@ -504,6 +504,22 @@ class LLMExecutorImpl:
             if type_pushed:
                 self.pop_expected_type()
 
+    def invoke_behavior(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
+        """
+        公理化行为调用入口 —— 供 IbBehavior.call() 使用。
+
+        封装了完整执行流程：
+        1. 委托给 execute_behavior_object 完成 LLM 调用及类型解析；
+        2. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        3. 直接返回 IbObject，调用方无需了解 LLMResult 内部结构。
+        """
+        result = self.execute_behavior_object(behavior, execution_context)
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        if result and result.value:
+            return result.value
+        return self.registry.get_none()
+
     def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> Tuple[Optional[str], Optional[str]]:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)

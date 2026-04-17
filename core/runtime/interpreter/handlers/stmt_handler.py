@@ -118,9 +118,9 @@ class StmtHandler(BaseHandler):
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """表达式语句"""
         res = self.visit(node_data.get("value"))
-        # 如果是行为描述行，则立即执行（作为语句时）
+        # 如果是行为对象（延迟 behavior 被当作语句直接使用），触发自主执行
         if isinstance(res, IIbBehavior):
-            return self._execute_behavior(res)
+            return res.call(self.registry.get_none(), [])
         return res
 
     def visit_IbIntentAnnotation(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
