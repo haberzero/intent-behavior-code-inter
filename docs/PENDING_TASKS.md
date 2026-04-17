@@ -502,16 +502,15 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 **涉及文件**：`core/engine.py`、`core/runtime/host/service.py`、`core/runtime/rt_scheduler.py`、`core/compiler/scheduler.py`
 
-### 11.7 behavior 类型的语义分析硬编码检查 (P2) [PENDING]
+### 11.7 behavior 类型的语义分析硬编码检查 (P2) [COMPLETED]
 
-**问题描述**：在 `semantic_analyzer.py` 的 `visit_IbFor` 中，有两处对字符串 `"behavior"` 的硬编码比较：
+**状态说明**：已修复。`semantic_analyzer.py` 的 `visit_IbFor` 中原有的两处字符串 `"behavior"` 直接比较：
 ```python
 if not self.registry.is_dynamic(iter_type) and not (iter_type.name == "behavior") and iter_type.name != "bool":
 if (iter_type.name == "behavior"):
 ```
-在类型系统完整公理化之前，这是合理的临时处理，但长期应通过 `SpecRegistry.is_behavior()` 或公理层协议替代直接字符串比较。
-
-**涉及文件**：`core/compiler/semantic/passes/semantic_analyzer.py`
+现已全部改为 `self.registry.is_behavior(iter_type)`，通过 `SpecRegistry.is_behavior()` 方法进行判断，消除了硬编码。
+对应方法 `SpecRegistry.is_behavior()` 已在 `core/kernel/spec/registry.py:331-335` 中实现。
 
 ### 11.8 instance_id 默认值为字符串 "main" (P3) [PENDING]
 
