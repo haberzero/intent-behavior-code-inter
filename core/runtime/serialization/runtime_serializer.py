@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
-from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
+from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple, IbBehavior
 from core.runtime.interpreter.runtime_context import IntentNode
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -165,6 +165,10 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbList):
             data["_type"] = "list"
             data["elements"] = [self._process_value(e) for e in obj.elements]
+
+        elif isinstance(obj, IbTuple):
+            data["_type"] = "tuple"
+            data["elements"] = [self._process_value(e) for e in obj.elements]
             
         elif isinstance(obj, IbDict):
             data["_type"] = "dict"
@@ -185,6 +189,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["node_uid"] = obj.node
             data["captured_intents"] = [self._process_value(i) for i in obj.captured_intents]
             data["expected_type"] = obj.expected_type
+            if obj.call_intent is not None:
+                data["call_intent"] = self._process_value(obj.call_intent)
             
         else:
             # 普通用户定义对象
@@ -342,6 +348,13 @@ class RuntimeDeserializer:
             obj = self.factory.create_list([])
             self.instance_cache[uid] = obj 
             obj.elements = [self._deserialize_value(e) for e in data.get("elements", [])]
+
+        elif _type == "tuple":
+            # Cache an empty IbTuple first to break potential circular references,
+            # then fill elements (mirroring the cache-before-recurse pattern used for IbList).
+            obj = IbTuple((), ib_class)
+            self.instance_cache[uid] = obj
+            obj.elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
             
         elif _type == "dict":
             # IbDict 尚未有标准工厂方法，暂用 Registry
@@ -379,7 +392,9 @@ class RuntimeDeserializer:
             
         elif _type == "behavior":
             captured = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
-            obj = self.factory.create_behavior(data["node_uid"], captured, data.get("expected_type"))
+            call_intent_raw = data.get("call_intent")
+            call_intent = self._deserialize_value(call_intent_raw) if call_intent_raw is not None else None
+            obj = self.factory.create_behavior(data["node_uid"], captured, data.get("expected_type"), call_intent=call_intent)
             self.instance_cache[uid] = obj
             
         else:

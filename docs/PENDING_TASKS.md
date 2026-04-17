@@ -8,70 +8,24 @@
 
 ---
 
-## 优先级待办任务
+## 优先级待办任务（已完成的历史条目）
 
-### 0.1 Mock 仿真引擎增强 [COMPLETED]
-
-**状态**: 已实现。`MOCK:FAIL/REPAIR/TRUE/FALSE/INT/FLOAT/STR/BOOL/LIST/DICT` 全部在 `ibci_modules/ibci_ai/core.py` 的 `_handle_mock_response()` 中实现。`MOCK:FAIL/REPAIR` 哨兵值在 `llm_executor.py` 的两条调用路径中均有专门检测，正确触发 `LLMResult.uncertain_result()`。
-
-详见 ARCH_DETAILS.md 第三章。
-
-### 0.2 ai.set_retry() 配置穿透 [COMPLETED]
-
-**状态**: 已实现。`visit_IbLLMExceptionalStmt` 通过 `capability_registry.get("llm_provider").get_retry()` 读取 `ai.set_retry()` 设置的值，不再硬编码。
-
-详见 ARCH_DETAILS.md 第一章 1.5 节。
-
-### 0.3 vtable 参数签名提取 (P1) [PENDING]
-
-**状态**: `PENDING`
-**问题**: `discovery.py` 加载插件 vtable 时，若插件未在 vtable 中显式提供 `param_types`，则 Python 函数签名无法被自动提取，导致语义分析阶段无法校验参数数量与类型。
-**涉及文件**: `core/runtime/module_system/discovery.py`
-
-**解决方案**：在 vtable 加载时使用 `inspect.signature()` 提取 Python 函数的参数名和类型注解，自动填充 `MethodMemberSpec.param_type_names`。
+| 条目 | 状态 | 详见 |
+|------|------|------|
+| 0.1 Mock 仿真引擎增强 | ✅ COMPLETED | ARCH_DETAILS.md 第三章 |
+| 0.2 ai.set_retry() 配置穿透 | ✅ COMPLETED | ARCH_DETAILS.md 第一章 1.5 节 |
+| 0.3 vtable 参数签名提取 | ✅ COMPLETED | `discovery.py` `_extract_signature()` |
+| 2.5 IBCI 核心路径解析 | ✅ COMPLETED | `ibci_sys` 模块，`sys.script_dir()` API |
 
 ---
-
-#### 2.5 IBCI 核心路径解析能力增强 [COMPLETED]
-**状态说明**: 此任务已通过 `ibci_sys` 模块及其 `sys.script_dir()` API 完整实现。
-- **现状**: 废弃了 `__dir__` 裸调用，统一采用位置无关代码 (PIC) 标准。
-
-**任务**：为 IBCI 语言和标准库提供“当前脚本目录”上下文。
-
-**问题背景**：
-- 目前 `ibci_file` 插件直接使用 Python 的 `open()`，路径解析依赖于进程的 `cwd`（通常是项目根目录）。
-- 导致位于子目录的脚本（如 `test_target_proj/10_local_llm_test/complex_workflow.ibci`）若使用相对路径 `"system.log"`，文件会产生在根目录，造成污染。
-- 脚本作者无法编写位置无关的文件操作代码。
-
-**建议方案**：
-1.  **内置变量**：在 `Interpreter` 中注入 `__file__` 或 `sys.script_dir` 内置变量。
-2.  **插件增强**：修改 `ibci_file` 插件，允许其接受一个基准目录（Base Directory）参数，或者自动根据当前执行节点的模块路径进行解析。
-3.  **规范化临时文件**：在 规范中明确建议脚本在完成验证后使用 `file.remove()` 自行清理临时文件。
 
 ## 一、动态宿主（DynamicHost）相关任务
 
 ### 1.1 Intent Stack 深拷贝实现 [RESOLVED]
-**状态说明**: 此问题已在 中通过 **拓扑序列化 (Topology Serialization)** 彻底解决。
-- **现状**: 引入了 `IntentNode` 链表池化技术，反序列化时通过 `intent_cache` 恢复物理引用关系，实现了内存级的结构共享，不再需要传统的递归深拷贝。
-
-**任务**：实现 Intent Stack 的深拷贝机制，解决引用赋值问题
-
-**搁置原因**：
-- 当前阶段不继承任何意图栈
-- Intent Stack 概念后续可能有大量需要澄清的要点
-- 触发条件：`inherit_intents=True`
-
-**技术细节**：
-- 问题位置：`interpreter.py:80`
-- 当前代码：`self.runtime_context.intent_stack = parent_context.intent_stack`（直接引用赋值）
-- 架构要求：必须深拷贝
-
-**解决方案方向**：
-1. 确认 Intent Stack 不可变性设计
-2. 实现 IntentNode 链表的深拷贝
-3. 重新评估继承策略
+**状态**：已通过 **拓扑序列化** 彻底解决。`IntentNode` 链表池化 + `intent_cache` 恢复物理引用，实现内存级结构共享。
 
 ---
+
 
 ### 1.2 子解释器插件注册 [PENDING]
 **任务**：允许子解释器独立注册自己的插件
@@ -184,95 +138,9 @@ class TypeAxiom:
 
 ### 2.5 ParserCapability LLM 提示词片段扩展
 
-**任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法
+**任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法，替代 AIPlugin 中硬编码的 `_return_type_prompts`。
 
----
-
-### 二、架构与设计提案 [2026-03-27]
-
-#### 2.1 意图系统对象化 (Intent-as-Object)
-
-**任务**：将意图（Intent）从侧表绑定的元数据，转变为公理体系内的一级公民对象。
-
-**设计目标**：
-- 消除“侧表（Side Table）”作为意图存储的中间层，使意图直接作为 AST 节点和运行时对象存在。
-- 在 `primitives.py` 中实现 `IntentAxiom`，定义意图类型的行为（如 `merge`, `resolve`, `is_active`）。
-- 支持意图变量声明：`intent my_i = @~ "..." ~`。
-
-**实施步骤**：
-1. **Parser 层**：将 `@ "..."` 从语句装饰器扩展为独立的表达式节点 `IbIntentExpr`。
-2. **Axiom 层**：在 `core/kernel/axioms/primitives.py` 中增加 `IntentAxiom` 实现。
-3. **Semantic 层**：支持意图类型的类型检查与推导。
-4. **Runtime 层**：统一 `IbIntent` 对象的协议，使其能直接参与运算。
-
-**风险评估**：中等偏大。涉及编译器前端到后端的链路打通
-
----
-
-#### 2.2 统一 LLM 语义失效信号
-
-**任务**：将所有“LLM 无法满足语义要求”的场景统一通过 `LLMUncertaintyError` 抛出。
-
-**设计目标**：
-- 确保 `llmexcept` 能够捕获所有非预期的 LLM 行为。
-- **覆盖范围扩展**：
-  - 0/1 判定模糊（已实现）。
-  - **类型转换失败**：当 `(list) str_val` 无法解析出 JSON 时抛出（已实现，基于 `FuzzyJsonParser`）。
-  - **结构化解析失败**：当 `FuzzyJsonParser` 无法在文本中定位到任何有效结构时抛出。
-
-**与 MVP 关系**：极大增强 `llmexcept/retry` 机制的实用价值。
-
----
-
-#### 2.3 动态类型与 auto 类型推导增强
-
-**任务**：改进 `auto` 关键字的类型推导机制，支持“渐进式强类型”。
-
-- 目前 `auto` 仅在首次赋值时通过侧表（Side Table）绑定类型描述符。
-- 目标是实现更智能的流敏感分析（Flow-sensitive Analysis）。
-
-1. **类型松绑**：允许 `auto` 变量在特定条件下重新推导类型。
-2. **Union 类型支持**：在编译期为 `auto` 生成 `Union` 描述符。
-3. **运行时动态检查**：将类型检查压力部分从编译期移向运行期（针对 `auto`）。
-
----
-
-#### 2.4 意图插值语法的一等公民化
-
-**任务**：允许 `@~ ... ~` 在任何表达式上下文中使用，而非仅作为语句装饰器或特定的 `IbBehaviorExpr`。
-
-**设计目标**：
-- 支持 `str my_prompt = @~ "Current user is $user" ~`。
-- 解决目前插值逻辑在 `LLMExecutor` 中重复实现的问题。
-- 统一 `ext_ref`（外部资产）的解析链路。
-
----
-
-## 三、类型系统相关任务**设计目标**：
-- 当 LLM 函数的返回值类型被指向某个类时，声明"如何注入系统提示词"
-- 替代当前 AIPlugin 中硬编码的 `_return_type_prompts`
-
-**接口设计**：
-```python
-class ParserCapability(Protocol):
-    """解析能力：描述一个类型如何从 LLM 结果中解析出值"""
-    def parse_value(self, raw_value: str) -> Any: ...
-
-    # [Future] 获取该类型参与 LLM 调用时需要的系统提示词片段
-    def get_llm_prompt_fragment(self) -> Optional[str]:
-        """返回类型相关的提示词，如 '请仅返回一个整数作为回答，禁止包含任何其他解释文字。'"""
-        return None
-```
-
-**与 AIPlugin 的关系**：
-- AIPlugin 中的 `_return_type_prompts` 作为 fallback 实现
-- 公理层提供类型特定的提示词声明
-- 运行时在 `LLMExecutor` 中查询公理获取提示词片段
-
-**实施位置**：
-- `core/kernel/axioms/protocols.py` - 添加方法到 `ParserCapability`
-- `core/kernel/axioms/primitives.py` - 实现各原子类型的 `get_llm_prompt_fragment()`
-- `core/runtime/interpreter/llm_executor.py` - 调用公理获取提示词片段
+**实施位置**：`core/kernel/axioms/protocols.py`、`core/kernel/axioms/primitives.py`、`core/runtime/interpreter/llm_executor.py`
 
 ---
 
@@ -280,9 +148,7 @@ class ParserCapability(Protocol):
 
 **任务**：实现 Intent Stack 不可变性约束
 
-**搁置原因**：
-- 依赖 Intent 公理化完成
-- Intent Stack 概念后续可能还有大量需要澄清的要点
+**搁置原因**：依赖 Intent 公理化完成；Intent Stack 概念后续可能还有大量需要澄清的要点。
 
 ---
 
@@ -290,13 +156,7 @@ class ParserCapability(Protocol):
 
 **任务**：修复 `_sync_variables_from()` 直接传递 symbol 引用的问题
 
-**搁置原因**：
-- 变量继承已禁用
-- 当前不影响核心功能
-
-**技术细节**：
-- 问题位置：`interpreter.py:93-99`
-- `_sync_variables_from()` 直接传递 symbol 引用
+**搁置原因**：变量继承已禁用，当前不影响核心功能。问题位置：`interpreter.py:93-99`
 
 ---
 
@@ -354,59 +214,16 @@ class ParserCapability(Protocol):
 
 ## 五、其他未解决问题
 
-### 5.0 审计新发现 P0 紧急问题 ⚠️ [2026-03-25 审计]
+### 5.0 审计新发现 P0 紧急问题 ⚠️ [2026-03-25 审计] — 全部已解决
 
-> 以下问题在本次审计中被发现，之前未被记录，必须在MVP之前确认或修复。
-
-#### 5.0.1 llmexcept 机制设计缺陷 [COMPLETED]
-
-**状态说明**: 已完成。当前架构采用"影子执行驱动模式"，`visit_IbIf/While/For` 均通过 `last_llm_result.is_uncertain` 标志位检测不确定性，立即返回空结果交由外层 `visit_IbLLMExceptionalStmt` 处理。`_with_unified_fallback` 和 `LLMUncertaintyError` 均已废弃，不再存在于代码中。
-
-详见 ARCH_DETAILS.md 第一章。
-
----
-
-#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 [COMPLETED]
-
-**状态**: 已实现，见顶部 0.1 章节说明及 ARCH_DETAILS.md 第三章。
-
----
-
-#### 5.0.3 意图标签解析缺失 ✅ [2026-03-26 已修复]
-
-**状态**: 已实现 `#tag` 解析逻辑。
-**文件**: `core/compiler/parser/components/statement.py`
-
----
-
-#### 5.0.4 Symbol.Kind typo ✅ [2026-03-26 已修复]
-
-**状态**: 已修正为 `SymbolKind.VARIABLE`。
-**文件**: `core/compiler/semantic/passes/scope_manager.py:44`
-
----
-
-#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1 ✅ 已修复
-
-**问题**：`@!` 修饰的意图内容不会被注入到 prompt
-
-**涉及文件**：
-- `core/kernel/intent_resolver.py:46-48`
-
-**解决方案方向**：修复 intent_resolver 确保 `@!` 内容被正确追加
-
-**修复内容**：
-- 添加 `override_content` 变量跟踪排他意图内容
-- 在遇到 `@!` 时清空 `resolved_block_intents` 并只保留 `@!` 的内容
-- 修复后 `@!` 行为：屏蔽意图栈，只应用 `@!` 本身的内容（一次性调用，不影响栈状态）
-
-**与MVP关系**：🟡 **属于语义正确性问题**
-
----
-
-#### 5.0.6 ai.set_retry() 功能未实现 [COMPLETED]
-
-**状态**: 已实现，见顶部 0.2 章节说明及 ARCH_DETAILS.md 第一章 1.5 节。
+| 条目 | 状态 | 详见 |
+|------|------|------|
+| 5.0.1 llmexcept 机制设计缺陷 | ✅ COMPLETED | ARCH_DETAILS.md 第一章（影子执行驱动模式） |
+| 5.0.2 Mock MOCK:FAIL/REPAIR 未实现 | ✅ COMPLETED | ARCH_DETAILS.md 第三章 |
+| 5.0.3 意图标签解析缺失 | ✅ 已修复 | `parser/components/statement.py` |
+| 5.0.4 Symbol.Kind typo | ✅ 已修复 | `scope_manager.py:44` |
+| 5.0.5 OVERRIDE 意图内容丢失 | ✅ 已修复 | `intent_resolver.py:46-48`（`override_content` 变量） |
+| 5.0.6 ai.set_retry() 未实现 | ✅ COMPLETED | ARCH_DETAILS.md 第一章 1.5 节 |
 
 ---
 
@@ -492,33 +309,16 @@ def __deepcopy__(self, memo):
 
 ### 9.1 零侵入插件注册原生 IBC-Inter 类型
 
-**任务**：让零侵入插件能够注册原生 IBC-Inter 类型（如 float、int），而不需要继承任何核心类
+**任务**：让零侵入插件能够注册原生 IBC-Inter 类型，而不需要继承任何核心类
 
-**状态更新**：[2026-03-25 审计修订]
-- ✅ [2026-03] `discovery.py` 中实现 `__ibcext_vtable__()` 加载逻辑
-- ⚠️ 但 vtable 参数签名提取**未实现**（见 9.5）
+**当前状态**：
+- ✅ `discovery.py` 已实现 `__ibcext_vtable__()` 加载逻辑，将 callable 条目转换为 `MethodMemberSpec` 并注册到 `ModuleSpec.members`
+- ✅ 参数签名自动提取（`_extract_signature()` via `inspect.signature()`）已实现（见 0.3/9.5）
+- `__ibcext_vtable__()` 支持两种格式：`callable` 直接传入（自动提取签名）或 `{"param_types": [...], "return_type": "..."}` 字典格式
 
-**技术实现**：
-```python
-# core/runtime/module_system/discovery.py _load_spec()
-# 1. 加载 __ibcext_metadata__() → 注册 ModuleMetadata
-# 2. 加载 __ibcext_vtable__() → 将 Callable 转换为 FunctionMetadata 注册到 members
-if hasattr(mod, '__ibcext_vtable__'):
-    vtable = mod.__ibcext_vtable__()
-    for method_name, method_impl in vtable.items():
-        func_meta = FunctionMetadata(name=method_name, ...)
-        metadata.members[method_name] = func_meta
-```
+**意义**：使插件方法在语义分析阶段可见，遵循 `__ibcext_vtable__()` 扩展协议。
 
-**意义**：
-- 遵循 协议（`__ibcext_vtable__()` 是协议的一部分）
-- 使插件方法在语义分析阶段可见（解决 `Type 'ai' has no member 'set_config'` 问题）
-- 为未来"插件原生类参与语义检查"奠定基础
-
-**未来演进**：
-- 支持 `__ibcext_vtable__()` 返回 `TypeDescriptor` 而非仅 `Callable`
-- loader 识别 `TypeDescriptor` 并调用 `registry.register()`
-- 类型行为由 `Axiom` 定义（像 float 一样）
+**未来演进**：支持 `__ibcext_vtable__()` 返回完整 `IbSpec` 对象直接注册，允许插件原生类型参与公理体系（类型行为由 `Axiom` 定义）。
 
 ---
 
@@ -601,19 +401,15 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 ---
 
----
-
 ### 9.4 多值返回与 Tuple 类型系统 [COMPLETED]
 
-**状态**: 已完整实现。Tuple 类型全栈实现，包括 TupleSpec、TUPLE_SPEC 原型常量、SpecFactory.create_tuple()、TupleAxiom（不可变约束）、IbTuple 运行时对象、`_box_tuple` 专用装箱器、语义分析 `visit_IbTuple`、运行时 `visit_IbTuple`、以及 `_assign_to_target` 中的 Tuple 解包支持。
-
-详见 ARCH_DETAILS.md 第五章。
+**状态**: ✅ 已完整实现。详见 ARCH_DETAILS.md 第五章。
 
 ---
 
-### 9.5 vtable 参数签名提取 [PENDING]
+### 9.5 vtable 参数签名提取 [COMPLETED]
 
-与顶部 0.3 章节相同，见 0.3 的详细说明。
+**状态**: ✅ 已完整实现。见 0.3 条目及 `discovery.py` `_extract_signature()`。
 
 ---
 
@@ -640,17 +436,23 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 **当前状态**: `LLMExceptFrameStack` 已支持多层嵌套帧的压栈/弹栈，但嵌套场景下的作用域隔离和帧交互未经过系统性测试。
 
-### 10.4 重试诊断日志 (P1) [PENDING]
+### 10.4 重试诊断日志 (P1) [COMPLETED]
 
-**待完善**:
-- 每次重试时输出详细日志（帧状态、重试次数、错误原因）
-- 支持通过 `idbg.last_result()` 等接口访问重试历史
+**已实现**：在 `stmt_handler.py` 的 `visit_IbLLMExceptionalStmt` 重试循环中新增 4 处 `self.debugger.trace()` 调用：
 
-### 10.5 技术债务清理 (P2) [PENDING]
+- **DETAIL**：进入 llmexcept 帧时输出 `target_uid` 和 `max_retry`
+- **DETAIL**：每次 while 循环迭代开始时输出当前尝试编号（`attempt N/M`）
+- **DETAIL**：正常退出（LLM 结果确定）时输出成功信息
+- **BASIC**：LLM 返回 UNCERTAIN 时输出原始响应预览（前 60 字符）
+- **BASIC**：重试次数耗尽时输出 max_retry 和 target_uid
 
-- `collector.py:200`：`"llm_fallback"` 属性名历史残留——该字段已不存在于 AST 中，`getattr(node, "llm_fallback", None)` 永远返回 `None`，属于无效遍历。应直接删除。
-- `runtime_context.py`：`push_llm_except_frame` / `pop_llm_except_frame` 等方法的 docstring 中有 5 处 `TODO [优先级: 高]: 完成后移除此注释`，功能实际已完成，可直接清理。
-- `interop.py:7`：`# TODO 这里有问题，为什么继承了protocol？`——继承 Protocol 在 Python typing 体系中是合法的，作为 ABC 使用（确保所有方法被实现）并无问题，此 TODO 可删除或补充说明。
+日志在 `CoreModule.INTERPRETER` 调试频道输出，只在对应级别启用时可见，不影响生产运行。
+
+### 10.5 技术债务清理 (P2) [COMPLETED]
+
+- `collector.py:200`：✅ 已删除 `"llm_fallback"` 无效属性遍历。
+- `runtime_context.py`：✅ 5 处 `TODO [优先级: 高]: 完成后移除此注释` 已全部清理。
+- `interop.py:7`：✅ 已将疑惑性 TODO 替换为解释性注释（Protocol 继承在 Python typing 体系中是合法的）。
 
 ---
 
@@ -658,42 +460,23 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 本章记录在 2026-04-17 深度健康分析中发现的问题，包括历史包袱、tricky 操作、补丁式修复和暂时性妥协。
 
-### 11.1 IbTuple 未纳入快照/序列化体系 (P1) [PENDING]
+### 11.1 IbTuple 未纳入快照/序列化体系 (P1) [COMPLETED]
 
-**问题描述**：Tuple 类型已完整实现（TupleSpec、TupleAxiom、IbTuple），但在两个关键序列化路径中均未包含：
-- `llm_except_frame.py` 的 `_is_serializable()` 方法仅处理 IbInteger/IbFloat/IbString/IbList/IbDict，IbTuple 会被跳过，导致 llmexcept 重试时包含 tuple 的变量无法被快照和恢复
-- `runtime_serializer.py` 的 `_process_value()` 方法也缺少 `IbTuple` 的 `elif` 分支，导致宿主快照（HostService.snapshot）中 tuple 类型变量序列化异常
+**状态说明**：已修复。在两个关键路径中均补充了 IbTuple 支持：
+- `llm_except_frame.py` 的 `_is_serializable()` 和 `_save_vars_snapshot()` 已将 IbTuple 与 IbList 并列处理
+- `runtime_serializer.py` 的序列化路径（`_collect_instance()`）和反序列化路径（`_get_instance()`）均已添加 `"tuple"` 分支，并更新了导入
 
-**涉及文件**：
-- `core/runtime/interpreter/llm_except_frame.py`（`_is_serializable`、`_save_vars_snapshot`）
-- `core/runtime/serialization/runtime_serializer.py`（`_process_value`）
+### 11.2 ibci_file 的 core 依赖与"非侵入"分类不符 (P2) ✅ 已修正（文档）
 
-**解决方案**：在两处添加 IbTuple 分支，与 IbList 的处理逻辑并列。
+**问题**：`ibci_file/core.py` 导入 `from core.runtime.path import IbPath` 并使用 `capabilities.execution_context`，但文档将其归类为"非侵入式"插件（零内核依赖）。
 
-### 11.2 ibci_file 的 core 依赖与"非侵入"分类不符 (P2) [PENDING]
+**已修正**：`ibcext.py` 注释新增"轻量依赖型"例外说明，`ARCHITECTURE_PRINCIPLES.md` 插件表格拆分为三行（非侵入式 / 非侵入式轻量依赖 / 核心级），将 `ibci_file` 单独列出。`IbPath` 是纯数据类，无解释器状态依赖，属可接受的工具类导入。
 
-**问题描述**：文档（含 ibcext.py 注释和 ARCHITECTURE_PRINCIPLES.md）将 `ibci_file` 归类为"非侵入式"插件，但 `ibci_file/core.py` 实际上 `from core.runtime.path import IbPath`，导入了内核路径模块。
+### 11.3 调度器 import 注入中的多处 [临时方案] (P1) [COMPLETED]
 
-`IbPath` 是一个纯数据类（`@dataclass(frozen=True)`），不依赖解释器状态，可以合理视为允许的边界内依赖。但文档描述与实际不符，应修正。
+**当前状态**：所有静默 `pass` 已替换为 `self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL/BASIC, ...)` 调用，调试模式下可见冲突信息。长期方案（严格遵循显式引入原则）仍在规划中，见 9.2 节。
 
-**建议**：
-- 将 `IbPath` 视为"可用于非侵入式插件的内核工具类"，并在文档中注明 `ibci_file` 是"轻量依赖"型插件
-- 或者将 `IbPath` 提取到独立的 `core/base/` 层（无状态工具类），使非侵入层可以安全导入
-
-**涉及文件**：`ibci_modules/ibci_file/core.py`、`core/extension/ibcext.py` 注释
-
-### 11.3 调度器 import 注入中的多处 [临时方案] (P1) [PENDING]
-
-**问题描述**：`core/compiler/scheduler.py` 中 `_inject_plugin_symbols` 方法有多处标注 `[临时方案]` 的符号冲突检查逻辑：
-- 普通导入时：若目标名称已存在，直接 `pass`（无警告）
-- `from X import *` 时：若导出符号已存在，直接 `pass`（无警告）
-- `from X import a as b` 时：同上
-
-这些 `pass` 属于"先跳过、不报告"的妥协，在实际开发中可能导致导入被静默忽略而开发者难以察觉。
-
-**涉及文件**：`core/compiler/scheduler.py`（约第 464-503 行）
-
-**建议**：至少在 DEBUG 模式下输出符号冲突警告；长期方案是严格遵循显式引入原则（见 9.2 节）。
+**涉及文件**：`core/compiler/scheduler.py`（`_inject_plugin_symbols` 方法）
 
 ### 11.4 意图标签解析临时方案（parser 层）(P2) [PENDING]
 
@@ -703,15 +486,9 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 **涉及文件**：`core/compiler/parser/components/statement.py`（约第 278-289 行）
 
-### 11.5 behavior 对象延迟执行路径的 "暂时保持现状" (P2) [PENDING]
+### 11.5 behavior 对象延迟执行路径的 call_intent 传递 (P2) [COMPLETED]
 
-**问题描述**：`expr_handler.py:201` 中有注释：
-```
-# 暂时保持现状，等待下一步重构 behavior 对象。
-```
-当延迟执行（`is_deferred=True`）时，创建的 `IbBehavior` 对象的 `call_intent` 字段未被正确设置（因为工厂方法 `create_behavior` 的参数不支持 `call_intent`）。这意味着通过 `@!` 修饰的 behavior 表达式若被延迟执行，其排他意图可能丢失。
-
-**涉及文件**：`core/runtime/interpreter/handlers/expr_handler.py`（约第 194-206 行）
+**状态说明**：已修复。`IbBehavior` 增加了 `call_intent` 字段，`create_behavior()` 工厂方法（`factory.py`、`interfaces.py`）已更新签名，`expr_handler.py` 的延迟执行路径现在正确传入 `call_intent`。序列化/反序列化路径（`runtime_serializer.py`）也已同步更新，确保快照中 `call_intent` 不丢失。
 
 ### 11.6 engine.py 和 service.py 中的 vibe 妥协标注 (P3) [PENDING]
 

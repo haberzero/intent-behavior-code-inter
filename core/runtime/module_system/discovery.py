@@ -132,13 +132,18 @@ class ModuleDiscoveryService:
         """
         从字典格式元数据构建 ModuleSpec。
 
+        支持两种函数描述格式：
+        1. 显式字典：{"param_types": ["str", "int"], "return_type": "float"}
+        2. 可调用对象：直接传入 Python 函数/方法，自动通过 inspect.signature() 提取参数类型注解
+
         字典格式：
         {
             "functions": {
                 "parse": {
                     "param_types": ["str"],
                     "return_type": "dict"
-                }
+                },
+                "auto_sig_func": some_python_callable,  # 自动推导签名
             },
             "variables": {
                 "pi": "float"
@@ -157,8 +162,16 @@ class ModuleDiscoveryService:
 
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():
-            param_types = func_sig.get("param_types", [])
-            return_type = func_sig.get("return_type", "void")
+            if callable(func_sig):
+                # 自动从 Python 函数签名提取参数类型名
+                param_types, return_type = self._extract_signature(func_sig)
+            elif isinstance(func_sig, dict):
+                param_types = func_sig.get("param_types", [])
+                return_type = func_sig.get("return_type", "void")
+            else:
+                param_types = []
+                return_type = "void"
+
             member = MethodMemberSpec(
                 name=func_name,
                 kind="method",
@@ -175,3 +188,53 @@ class ModuleDiscoveryService:
             spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_name=type_name)
 
         return spec
+
+    # Python type annotation → IBCI type name mapping
+    _PY_TYPE_TO_IBCI: Dict[str, str] = {
+        "int": "int",
+        "float": "float",
+        "str": "str",
+        "bool": "bool",
+        "list": "list",
+        "dict": "dict",
+        "tuple": "tuple",
+        "NoneType": "void",
+        "None": "void",
+    }
+
+    def _extract_signature(self, func: Any) -> tuple:
+        """
+        通过 inspect.signature() 从 Python 函数自动提取参数类型名和返回类型名。
+
+        - 跳过第一个参数（约定为 self）
+        - 有注解则映射为 IBCI 类型名，无注解默认为 "any"
+        - 返回类型无注解时默认为 "any"
+
+        返回:
+            (param_type_names: List[str], return_type_name: str)
+        """
+        try:
+            sig = inspect.signature(func)
+            params = list(sig.parameters.values())
+            # 跳过约定为 self 的首个参数
+            if params and params[0].name in ("self", "cls"):
+                params = params[1:]
+
+            param_types = []
+            for p in params:
+                if p.annotation is inspect.Parameter.empty:
+                    param_types.append("any")
+                else:
+                    ann_name = getattr(p.annotation, "__name__", str(p.annotation))
+                    param_types.append(self._PY_TYPE_TO_IBCI.get(ann_name, "any"))
+
+            ret_ann = sig.return_annotation
+            if ret_ann is inspect.Signature.empty:
+                return_type = "any"
+            else:
+                ret_name = getattr(ret_ann, "__name__", str(ret_ann))
+                return_type = self._PY_TYPE_TO_IBCI.get(ret_name, "any")
+
+            return param_types, return_type
+        except (ValueError, TypeError):
+            return [], "any"

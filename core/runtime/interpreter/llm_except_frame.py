@@ -121,7 +121,7 @@ class LLMExceptFrame:
         保存当前作用域的变量快照。
 
         只保存可序列化的类型:
-        - IbNone, IbInteger, IbFloat, IbString, IbList, IbDict
+        - IbNone, IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict
 
         不保存的类型 (设计决定):
         - IbNativeObject (Python 原生对象)
@@ -142,15 +142,15 @@ class LLMExceptFrame:
         判断值是否可序列化。
 
         可序列化的类型:
-        - IbNone, IbInteger, IbFloat, IbString, IbList, IbDict
+        - IbNone, IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict
 
-        注意: IbList 和 IbDict 内部元素也必须是可序列化类型。
+        注意: IbList、IbTuple 和 IbDict 内部元素也必须是可序列化类型。
         """
-        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict
+        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple
 
         if isinstance(val, (IbNone, IbInteger, IbFloat, IbString)):
             return True
-        if isinstance(val, IbList):
+        if isinstance(val, (IbList, IbTuple)):
             return all(self._is_serializable(e) for e in val.elements)
         if isinstance(val, IbDict):
             return all(

@@ -22,7 +22,7 @@ class TimeLib:
 
     def utcnow(self) -> str:
         """返回当前 UTC 时间的 ISO 8601 字符串（如 '2026-04-16T03:00:00'）。"""
-        return _datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        return _datetime.datetime.now(_datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
     def localtime(self) -> str:
         """返回本地时间的格式化字符串（如 '2026-04-16 03:00:00'）。"""

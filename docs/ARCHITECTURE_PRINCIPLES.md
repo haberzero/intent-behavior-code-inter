@@ -179,19 +179,21 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 ### 5.1 公理系统架构
 
+> **注意**：旧的 `core/kernel/types/`（TypeDescriptor、AxiomHydrator 等）已被删除。当前公理体系直接与 `core/kernel/spec/` 统一类型描述系统集成，详见 5.4 节。
+
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
-| **TypeAxiom** | 核心公理接口 | axioms/protocols.py |
-| **BaseAxiom** | 公理基类，提供默认实现 | axioms/primitives.py |
-| **IntAxiom/StrAxiom...** | 具体类型公理 | axioms/primitives.py |
-| **AxiomRegistry** | 公理注册表 | axioms/registry.py |
-| **AxiomHydrator** | 公理注入器，将公理方法注入到TypeDescriptor | types/axiom_hydrator.py |
+| **TypeAxiom** | 核心公理接口（capability 协议） | `axioms/protocols.py` |
+| **BaseAxiom** | 公理基类，提供默认实现 | `axioms/primitives.py` |
+| **IntAxiom/StrAxiom...** | 具体类型公理 | `axioms/primitives.py` |
+| **AxiomRegistry** | 公理注册表，按类型名索引公理实例 | `axioms/registry.py` |
 
 ### 5.2 公理与类型系统集成
 
-- TypeDescriptor 通过 `_axiom` 字段绑定公理
-- AxiomHydrator.inject_axioms() 将公理的 get_methods() 注入到 descriptor.members
-- 能力访问器（get_call_trait, get_operator_result 等）全部委托给公理
+- IbSpec（`core/kernel/spec/`）是唯一的类型描述符系统，旧的 `TypeDescriptor` / `AxiomHydrator` 已不存在
+- 公理通过 `AxiomRegistry` 查询，Capability（CallCapability、OperatorCapability 等）由公理直接实现
+- 所有类型引用在公理层均以**纯字符串类型名**传递，消除公理层对 spec 层的直接依赖
+- `SpecRegistry` 负责将公理返回的类型名字符串解析为对应的 `IbSpec` 对象
 
 ### 5.3 Fallback 策略原则（重要）
 
@@ -199,13 +201,13 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 #### 允许的 Fallback：职责分离型
 
-**设计原则**：公理层声明"行为规范"，描述符层持有"具体类型信息"
+**设计原则**：公理层声明"行为规范"，spec 层持有"具体类型信息"
 
 | 场景 | 说明 |
 |------|------|
-| **TypeDescriptor 基类能力访问器** | 返回 None 表示"未知"，子类有义务重写 |
-| **FunctionMetadata.resolve_return** | Axiom 优先，静态签名作为编译期后备（双轨制） |
-| **LazyDescriptor 正常情况** | 占位符模式，已解析时返回真实描述符 |
+| **IbSpec 基类能力访问器** | 返回 None 表示"未知"，子类有义务重写 |
+| **FuncSpec 返回类型解析** | 公理优先，静态签名作为编译期后备（双轨制） |
+| **LazySpec 正常情况** | 占位符模式，已解析时返回真实 IbSpec |
 
 #### 禁止的 Fallback：妥协性历史兼容
 
@@ -213,21 +215,14 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 问题 | 说明 |
 |------|------|
-| **ListMetadata/DictMetadata fallback** | 描述符同时充当数据存储，违反公理唯一真源原则 |
-| **StrAxiom.resolve_item 返回 None** | 公理实现错误，注释明确标注 "Should return STR_DESCRIPTOR" |
 | **ExpressionAnalyzer `or self._any_desc`** | 静默掩盖类型错误，应给出精确错误提示 |
-| **AxiomHydrator 静默返回** | 配置错误被静默忽略，应抛出 RuntimeError |
-| **LazyDescriptor 异常情况** | `resolve()`失败或`_registry`不可用时返回self占位，应抛出错误 |
+| **LazySpec 异常情况** | `resolve()` 失败时应抛出错误而非返回占位符 |
 
-**关于 LazyDescriptor 的详细说明**：
+**关于 LazySpec 的说明**：
 
-LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
-- **正常情况**：`unwrap()` 成功解析后返回真实 TypeDescriptor
-- **异常情况**：如果 `_registry` 不可用或 `resolve()` 失败，返回 `self` 作为占位符
-
-"返回 self" 作为占位符虽然允许编译继续，但掩盖了**配置错误或解析失败**。理想情况下：
-- `_registry` 不可用应该抛出错误（系统配置问题）
-- `resolve()` 失败也应该抛出错误（类型未注册）
+LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
+- **正常情况**：解析成功后返回真实 IbSpec
+- **异常情况**：`resolve()` 失败时理想应抛出错误（类型未注册），而非静默占位
 
 **违反后果**：妥协性 fallback 会导致类型信息丢失、错误掩盖、难以调试等问题，必须在后续迭代中修复。
 
@@ -291,7 +286,8 @@ LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
 
 | 级别 | 说明 | 包含插件 |
 |------|------|---------|
-| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入 | ibci_math / ibci_json / ibci_time / ibci_net / ibci_file / ibci_schema / ibci_isys |
+| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | ibci_math / ibci_json / ibci_time / ibci_net / ibci_schema / ibci_isys |
+| 非侵入式（轻量依赖）| 同上，但导入了 `core.runtime.path.IbPath`（纯数据类，无状态依赖）并通过 `execution_context` 进行路径解析 | ibci_file |
 | 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | ibci_ai / ibci_ihost / ibci_idbg |
 
 **示例（AI 插件）**：

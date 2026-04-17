@@ -16,7 +16,13 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 #   - 通过 setup(capabilities) 接收注入的能力容器，只按需取用浅层能力
 #     （如 capabilities.service_context.permission_manager）
 #   - 适合：数学计算、JSON、HTTP、文件操作等无状态工具性插件
-#   - 代表模块：ibci_math, ibci_json, ibci_time, ibci_net, ibci_file, ibci_schema
+#   - 代表模块：ibci_math, ibci_json, ibci_time, ibci_net, ibci_schema
+#
+#   【例外：ibci_file（轻量依赖型）】
+#     ibci_file 导入了 core.runtime.path.IbPath（纯 @dataclass(frozen=True)，无状态）
+#     并通过 capabilities.execution_context.resolve_path() 进行路径解析。
+#     IbPath 没有解释器状态依赖，属于可接受的工具类导入，但严格意义上不符合
+#     "零内核依赖"定义。因此 ibci_file 可视为"轻量依赖型"非侵入插件。
 #
 # 【核心层（Core Level）】
 #   - 继承本文件中的 IbPlugin 基类
