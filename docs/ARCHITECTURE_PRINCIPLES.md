@@ -3,8 +3,10 @@
 > 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
 > 供未来参与 IBC-Inter 项目的智能体和开发者进行架构对齐使用。
 >
-> **生成日期**：2026-03-21
-> **版本**：V2.1
+> **生成日期**：2026-03-21，**最后更新**：2026-04-17
+> **版本**：V2.2
+>
+> 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./ARCH_DETAILS.md)。
 
 ---
 
@@ -60,9 +62,8 @@ base/ (最底层 - 原子概念，可迁移到任何语言)
 kernel/ (核心层 - IBC-Inter核心语言概念)
     │
     ├── axioms/                 → 公理系统（类型行为规范）
-    ├── types/registry.py      → MetadataRegistry
-    ├── types/descriptors.py   → TypeDescriptor等
-    ├── symbols.py              → 符号系统
+    ├── spec/                   → 统一类型描述系统（IbSpec / SpecRegistry）
+    ├── symbols.py              → 符号系统（Symbol.spec 唯一字段）
     └── issue.py               → Diagnostic, 各种Error类
     │
     ▼ 依赖
@@ -82,7 +83,7 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 | 层级 | 职责 | 关键文件 |
 |------|------|----------|
 | **base** | 原子概念：位置信息、严重级别、调试基础设施 | source_atomic.py, debugger.py |
-| **kernel** | 核心语言概念：AST、符号、类型描述符、公理、异常 | symbols.py, descriptors.py, axioms/ |
+| **kernel** | 核心语言概念：AST、符号、统一类型描述系统、公理、异常 | symbols.py, spec/, axioms/ |
 | **compiler** | 编译：词法分析、语法分析、语义分析、序列化 | lexer/, parser/, semantic/, serialization/ |
 | **runtime** | 解释执行：解释器、宿主服务、插件执行 | interpreter/, host/, objects/ |
 | **extension** | 插件SDK：接口定义、能力注入 | ibcext.py, capabilities.py |
@@ -233,13 +234,21 @@ LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
 
 ---
 
-### 5.4 UTS（统一类型系统）
+### 5.4 统一类型描述系统（core/kernel/spec/）
+
+类型描述系统已从旧的 `core/kernel/types/`（已删除）完全迁移至 `core/kernel/spec/`。
 
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
-| **MetadataRegistry** | UTS元数据注册表，两阶段注册 | kernel/types/registry.py |
-| **TypeDescriptor** | 类型元数据描述符 | kernel/types/descriptors.py |
-| **TypeFactory** | 类型工厂 | kernel/types/registry.py |
+| **IbSpec** | 所有类型描述符的基类 | `kernel/spec/base.py` |
+| **FuncSpec / ClassSpec / ListSpec / TupleSpec / DictSpec 等** | 具体类型描述符 | `kernel/spec/specs.py` |
+| **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry.py` |
+| **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry.py` |
+| **MemberSpec / MethodMemberSpec** | 模块成员描述符 | `kernel/spec/member.py` |
+
+`Symbol` 只保留 `.spec` 字段（`IbSpec` 类型），不存在 `.descriptor` 属性或任何兼容 shim。
+
+关于 MetadataRegistry（公理 Capability 查询入口）以及 MetadataRegistry 双轨问题，详见 ARCH_DETAILS.md。
 
 ---
 
@@ -275,14 +284,21 @@ LazyDescriptor 是**占位符模式**实现，用于解决循环依赖：
 
 | 文件 | 职责 | 说明 |
 |------|------|------|
-| `_spec.py` | 元数据注入 | 通过 SpecBuilder 声明函数签名、类型信息 |
+| `_spec.py` | 元数据注入 | 声明函数签名、类型信息（`__ibcext_vtable__()` 格式或 SpecBuilder） |
 | `core.py` | 具体逻辑实现 | 插件的具体 Python 类实现 |
 | `__init__.py` | 工厂模式入口 | 只负责导入和 `create_implementation()` 工厂函数 |
 
+**两级插件架构**：
+
+| 级别 | 说明 | 包含插件 |
+|------|------|---------|
+| 非侵入式 | 不 import 任何 `core.*`，纯 Python 类 | ibci_math / ibci_json / ibci_time / ibci_net / ibci_file / ibci_schema |
+| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | ibci_ai / ibci_ihost / ibci_idbg / ibci_isys |
+
 **示例（AI 插件）**：
-- `ibc_modules/ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
-- `ibc_modules/ai/core.py` → `class AIPlugin(ibcext.IbPlugin, ILLMProvider): ...`
-- `ibc_modules/ai/_spec.py` → SpecBuilder 声明
+- `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
+- `ibci_modules/ibci_ai/core.py` → `class AIPlugin(ILLMProvider, IbStatefulPlugin): ...`
+- `ibci_modules/ibci_ai/_spec.py` → `__ibcext_vtable__()` 返回函数签名字典
 
 ### 7.3 插件架构愿景（零侵入自动嗅探）
 
@@ -458,9 +474,9 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 | 机制 | 位置 | 说明 |
 |------|------|------|
-| **ModuleDiscoveryService** | module_system/discovery.py | 扫描 ibc_modules/，通过 _spec.py 自动发现 |
-| **SpecBuilder** | extension/spec_builder.py | 声明式自动构建插件接口 |
-| **两阶段注册** | kernel/types/registry.py | 占位阶段 + 填充阶段 + 公理注入 |
+| **ModuleDiscoveryService** | `module_system/discovery.py` | 扫描 ibci_modules/，通过 _spec.py 自动发现 |
+| **SpecBuilder / vtable** | `extension/spec_builder.py` 或 `_spec.py` | 声明式自动构建插件接口 |
+| **两阶段注册** | `kernel/spec/registry.py` | 占位阶段 + 填充阶段 + 公理注入 |
 
 ---
 
@@ -492,136 +508,66 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 | 文件 | 重要性 | 说明 |
 |------|--------|------|
-| core/engine.py | 高 | IBCIEngine，解释器管理层，spawn_interpreter() |
-| core/kernel/registry.py | 高 | KernelRegistry |
-| core/kernel/types/registry.py | 高 | MetadataRegistry，两阶段注册 |
-| core/kernel/symbols.py | 中 | 符号系统 |
-| core/runtime/interpreter/execution_context.py | 高 | ExecutionContextImpl |
-| core/runtime/host/service.py | 高 | HostService，run_isolated/save_state |
-| core/runtime/host/dynamic_host.py | 高 | DynamicHost，插件接口层 |
-| core/runtime/host/host_interface.py | 高 | HostInterface，宿主环境接口注册器 |
-| core/compiler/serialization/serializer.py | 高 | FlatSerializer |
-| core/base/diagnostics/debugger.py | 中 | CoreDebugger |
-| core/runtime/module_system/discovery.py | 高 | ModuleDiscoveryService，插件发现服务 |
-| ibc_modules/idbg/core.py | 中 | IDBG 插件实现 |
-| ibc_modules/ai/core.py | 中 | AI 插件实现 |
-| ibc_modules/host/__init__.py | 中 | HOST 插件实现（用户级） |
+| `core/engine.py` | 高 | IBCIEngine，解释器管理层，spawn_interpreter() |
+| `core/kernel/registry.py` | 高 | KernelRegistry，运行时对象工厂 |
+| `core/kernel/spec/registry.py` | 高 | SpecRegistry + SpecFactory，统一类型描述系统 |
+| `core/kernel/spec/specs.py` | 高 | 具体 IbSpec 子类及内置类型原型常量 |
+| `core/kernel/axioms/primitives.py` | 高 | 内置类型公理实现（register_core_axioms） |
+| `core/kernel/symbols.py` | 中 | Symbol 系统（Symbol.spec 唯一类型字段） |
+| `core/runtime/interpreter/execution_context.py` | 高 | ExecutionContextImpl |
+| `core/runtime/interpreter/llm_executor.py` | 高 | LLMExecutorImpl，LLM 调用与结果解析 |
+| `core/runtime/interpreter/llm_except_frame.py` | 高 | LLMExceptFrame，llmexcept 现场帧 |
+| `core/runtime/interpreter/handlers/stmt_handler.py` | 高 | 语句节点处理（含 visit_IbLLMExceptionalStmt） |
+| `core/runtime/host/service.py` | 高 | HostService，断点快照/恢复 |
+| `core/runtime/host/dynamic_host.py` | 高 | DynamicHost，插件接口层 |
+| `core/runtime/host/host_interface.py` | 高 | HostInterface，宿主环境接口注册器 |
+| `core/runtime/bootstrap/builtin_initializer.py` | 高 | 内置类型注册与装箱器 |
+| `core/compiler/serialization/serializer.py` | 高 | FlatSerializer |
+| `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
+| `core/base/diagnostics/debugger.py` | 中 | CoreDebugger |
+| `core/runtime/module_system/discovery.py` | 高 | ModuleDiscoveryService，插件发现服务 |
+| `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin / IbStatelessPlugin |
+| `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（LLM Provider 核心实现） |
+| `ibci_modules/ibci_ihost/core.py` | 中 | HOST 插件实现（核心级） |
+| `ibci_modules/ibci_idbg/core.py` | 中 | IDBG 调试插件实现 |
 
 ---
 
 ## 附录：已知架构问题（历史遗留）
 
-> 以下问题已在代码中发现，将在后续版本中修复。
+> 以下问题已在代码中发现，将在后续版本中修复。详细技术背景见 ARCH_DETAILS.md。
 
 ### A.1 MetadataRegistry 双轨问题
 
 **问题描述**：
 - `KernelRegistry.get_metadata_registry()` 在 builtin 初始化时创建（轨A）
 - `HostInterface.metadata` 在 discover_all 时创建（轨B）
-- 两轨使用同名 `MetadataRegistry` 类，但实例不同
+- 两轨使用同名 `MetadataRegistry` 类，但实例不同，相互独立
 
 **根因**：架构演进中的设计妥协，builtin 类型系统和插件系统分别发展后未及时统一。
 
-**数据流**：
-```
-Engine.__init__()
-    │
-    ├── KernelRegistry() + initialize_builtin_classes()
-    │       └──→ MetadataRegistry (轨A) → 内置类型/函数
-    │
-    └── discover_all()
-            └──→ HostInterface() 
-                    └──→ MetadataRegistry (轨B) → 插件元数据
-```
-
-**修复方案**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
+**修复方向**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
 
 ### A.2 HOST 插件游离问题
 
 **问题描述**：
-- `ibc_modules/host/` 使用 `spec.py` 而非规范要求的 `_spec.py`
-- DynamicHost 和 ibc_modules/host/HostImplementation 功能重叠
-- `DynamicHost.run_isolated()` vs `HostImplementation.run()` 方法名不一致
-
-**根因**：DynamicHost 是核心接口层实现，HostImplementation 是用户级插件实现，演进过程中未统一。
+- DynamicHost 是核心接口层实现，`ibci_ihost` 是用户级模块实现，两者对同一宿主能力有双路暴露
+- 历史上存在 `run()` vs `run_isolated()` 方法名不一致的问题
 
 **当前架构**：
 ```
 IBCI脚本 ──→ host_run() 内置函数 ──→ DynamicHost ──→ HostService
-                (builtin_initializer)    (@method暴露)    (实际执行)
+                (builtin_initializer)    (内核暴露)    (实际执行)
 
-IBCI脚本 ──→ import host ──→ HostImplementation ──→ HostService
-               (ModuleDiscovery)     (@ibcext.method)
+IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostService
+               (ModuleDiscovery)   (插件实现)
 ```
 
-**修复方案**：
-1. 将 `ibc_modules/host/spec.py` 重命名为 `_spec.py`
-2. 统一方法名：`run` → `run_isolated`
-3. DynamicHost 作为内核级实现，HostImplementation 作为 IBC 模块实现，两者是同一接口的不同暴露方式
+### A.3 符号去重：import 与用户定义同名冲突
 
-### A.3 builtin_initializer 孤立 host_* 函数
+**问题描述**：若用户定义与已导入插件同名的 class/variable，Pass 1 符号收集阶段会与 Scheduler 注入的模块符号冲突。
 
-**问题描述**：
-- `builtin_initializer.py` 注册了 `host_save_state`、`host_load_state`、`host_run` 等函数元数据
-- 但没有实际的 Python 实现绑定
-- 这些函数元数据可能与 ibc_modules/host 的实际方法冲突
-
-**根因**：早期设计中希望将 HOST 能力作为内置函数，后改为插件实现，但遗留了元数据。
-
-**修复方案**：移除 builtin_initializer 中的孤立 host_* 函数元数据，统一通过 ibc_modules/host 插件提供。
-
----
-
-## 附录：2026-03-25 代码审计新增问题
-
-> 以下问题在 2026-03-25 代码审计中新发现，需要在未来版本中修复。
-
-### B.1 intent_stack 类型不匹配
-
-**问题描述**：
-- `intent_stack` setter 期望 `IntentNode`，但多处传入 `list`
-- 会导致 `TypeError`
-
-**涉及文件**：
-- `core/runtime/interpreter/runtime_context.py` (setter 定义)
-- `core/runtime/interpreter/handlers/base_handler.py:91` (调用点)
-- `core/runtime/serialization/runtime_serializer.py:200` (调用点)
-
-**修复方案**：
-- 方案A：将 setter 改为接受 `list` 并转换为 `IntentNode` 链表
-- 方案B：将调用点改为传入 `IntentNode`
-
-### B.2 llmexcept 机制异常捕获路径断裂
-
-**问题描述**：
-- `visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装
-- 子节点抛出的 `LLMUncertaintyError` 无法被父节点 llmexcept 捕获
-
-**涉及文件**：
-- `core/runtime/interpreter/handlers/stmt_handler.py`
-
-### B.3 Symbol.Kind typo
-
-**问题描述**：
-- `scope_manager.py:44` 使用了不存在的 `Symbol.Kind` 而非 `SymbolKind`
-- 会导致 AttributeError
-
-**涉及文件**：
-- `core/compiler/semantic/passes/scope_manager.py:44`
-
-### B.4 FunctionMetadata 逆变检查错误
-
-**问题描述**：
-- 参数类型检查使用协变而非逆变
-- 导致 `int` 不能赋值给 `float` 参数槽位
-
-**涉及文件**：
-- `core/kernel/types/descriptors.py`
-
-### B.5 int // int 返回 float
-
-**问题描述**：
-- 整除操作应返回 `int`，实际返回 `float`
+**临时方案**：在符号表中区分 MODULE 符号和 CLASS 符号。**长期方案**：严格遵循显式引入原则，外部模块符号不预注入到编译时符号表（详见 PENDING_TASKS.md 章节九）。
 
 **涉及文件**：
 - `core/kernel/axioms/primitives.py`

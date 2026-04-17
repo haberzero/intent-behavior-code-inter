@@ -2,26 +2,33 @@
 
 > 本文档记录 IBC-Inter 项目中被搁置或标记为未来实现的任务。
 > 每个任务都标注了搁置原因和解决方案方向。
-> 采用加法标注模式。核心未完成任务置顶，历史任务标注状态。
+> 采用加法标注模式。核心待完成任务置顶，历史任务标注状态。
+>
+> **最后更新**：2026-04-17
 
 ---
 
-## 🔴 优先级待办任务 (Priority Unfinished Tasks)
+## 优先级待办任务
 
-### 0.1 Mock 仿真引擎增强 (P0)
-**状态**: `PENDING`
-**问题**: 目前 `MOCK:FAIL/REPAIR/TRUE/FALSE` 前缀逻辑未在 `ibci_ai` 中实现，导致 `llmexcept` 无法进行自动化压力测试。
-**涉及文件**: `ibci_modules/ibci_ai/core.py`
+### 0.1 Mock 仿真引擎增强 [COMPLETED]
 
-### 0.2 ai.set_retry() 配置穿透 (P1)
-**状态**: `PENDING`
-**问题**: `ai.set_retry()` 设置的次数被存储但从未读取，解释器内核 `_with_unified_fallback` 目前硬编码为 3 次。
-**涉及文件**: `core/runtime/interpreter/interpreter.py`
+**状态**: 已实现。`MOCK:FAIL/REPAIR/TRUE/FALSE/INT/FLOAT/STR/BOOL/LIST/DICT` 全部在 `ibci_modules/ibci_ai/core.py` 的 `_handle_mock_response()` 中实现。`MOCK:FAIL/REPAIR` 哨兵值在 `llm_executor.py` 的两条调用路径中均有专门检测，正确触发 `LLMResult.uncertain_result()`。
 
-### 0.3 vtable 参数签名提取 (P1)
+详见 ARCH_DETAILS.md 第三章。
+
+### 0.2 ai.set_retry() 配置穿透 [COMPLETED]
+
+**状态**: 已实现。`visit_IbLLMExceptionalStmt` 通过 `capability_registry.get("llm_provider").get_retry()` 读取 `ai.set_retry()` 设置的值，不再硬编码。
+
+详见 ARCH_DETAILS.md 第一章 1.5 节。
+
+### 0.3 vtable 参数签名提取 (P1) [PENDING]
+
 **状态**: `PENDING`
-**问题**: `discovery.py` 加载插件 vtable 时未提取 Python 函数签名，导致语义分析阶段无法校验参数数量。
+**问题**: `discovery.py` 加载插件 vtable 时，若插件未在 vtable 中显式提供 `param_types`，则 Python 函数签名无法被自动提取，导致语义分析阶段无法校验参数数量与类型。
 **涉及文件**: `core/runtime/module_system/discovery.py`
+
+**解决方案**：在 vtable 加载时使用 `inspect.signature()` 提取 Python 函数的参数名和类型注解，自动填充 `MethodMemberSpec.param_type_names`。
 
 ---
 
@@ -109,7 +116,7 @@
 
 **当前状态**：
 - Intent 相关类型只是 DynamicAxiom 占位符
-- 涉及文件：kernel/axioms/primitives.py, kernel/types/descriptors.py, runtime/serialization/runtime_serializer.py, runtime/objects/intent.py
+- 涉及文件：`kernel/axioms/primitives.py`、`runtime/objects/intent.py`
 
 **与MVP关系**：不影响MVP核心功能（behavior、llm、llmexcept、llmretry）
 
@@ -351,45 +358,17 @@ class ParserCapability(Protocol):
 
 > 以下问题在本次审计中被发现，之前未被记录，必须在MVP之前确认或修复。
 
-#### 5.0.1 llmexcept 机制设计缺陷 [FIXED]
-**状态说明**: 已完成。`visit_IbIf/While/For` 均已使用 `_with_unified_fallback` 包装。
+#### 5.0.1 llmexcept 机制设计缺陷 [COMPLETED]
 
-**问题**：`visit_IbIf/While/For` 没有使用 `_with_unified_fallback` 包装，异常捕获路径断裂
+**状态说明**: 已完成。当前架构采用"影子执行驱动模式"，`visit_IbIf/While/For` 均通过 `last_llm_result.is_uncertain` 标志位检测不确定性，立即返回空结果交由外层 `visit_IbLLMExceptionalStmt` 处理。`_with_unified_fallback` 和 `LLMUncertaintyError` 均已废弃，不再存在于代码中。
 
-**影响**：
-- llmexcept 块永远不会执行
-- AI 判断模糊时程序会直接崩溃，而不是进入 except 分支
-- **MVP 的 llmexcept/retry 核心亮点无法展示**
-
-**涉及文件**：
-- `core/runtime/interpreter/handlers/stmt_handler.py:132-143`
-
-**解决方案方向**：
-1. 修改 `visit_IbIf/While/For` 使用 `_with_unified_fallback` 包装 LLM 调用
-2. 确保子节点抛出的 `LLMUncertaintyError` 能被父节点 llmexcept 捕获
-
-**与MVP关系**：🔴 **直接影响MVP核心亮点，必须修复**
+详见 ARCH_DETAILS.md 第一章。
 
 ---
 
-#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 [PENDING - P0]
-**状态**: 见顶部 0.1 章节。
+#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 [COMPLETED]
 
-**问题**：文档声称的 `MOCK:TRUE/FALSE/FAIL/REPAIR` 前缀检测**完全不存在**，TESTONLY 模式总是返回 "1"
-
-**影响**：
-- 无法模拟 AI 判断模糊的场景
-- **llmexcept/retry 测试无法进行**
-
-**涉及文件**：
-- `ibci_modules/ibci_ai/core.py:165-184`
-
-**解决方案方向**：
-1. 实现 `MOCK:FAIL` - 触发 llmexcept
-2. 实现 `MOCK:TRUE/FALSE` - 返回固定判定值
-3. 实现 `MOCK:REPAIR` - 首次返回模糊值，重试后返回确定值
-
-**与MVP关系**：🔴 **直接影响MVP测试验证，必须修复**
+**状态**: 已实现，见顶部 0.1 章节说明及 ARCH_DETAILS.md 第三章。
 
 ---
 
@@ -425,17 +404,9 @@ class ParserCapability(Protocol):
 
 ---
 
-#### 5.0.6 ai.set_retry() 功能未实现 🔴 P1
+#### 5.0.6 ai.set_retry() 功能未实现 [COMPLETED]
 
-**问题**：重试次数配置被存储但从未读取，硬编码为 3
-
-**涉及文件**：
-- `ibci_modules/ibci_ai/core.py:86-87`
-- `core/runtime/interpreter/interpreter.py`
-
-**解决方案方向**：让 `_with_unified_fallback` 读取配置的重试次数
-
-**与MVP关系**：🟡 **用户无法配置重试次数，但有默认值可工作**
+**状态**: 已实现，见顶部 0.2 章节说明及 ARCH_DETAILS.md 第一章 1.5 节。
 
 ---
 
@@ -632,94 +603,53 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 ---
 
-### 9.4 多值返回与 Tuple 类型系统
+### 9.4 多值返回与 Tuple 类型系统 [COMPLETED]
 
-**任务**：实现 `return a, b, c` 多值返回语法和 tuple 类型系统
+**状态**: 已完整实现。Tuple 类型全栈实现，包括 TupleSpec、TUPLE_SPEC 原型常量、SpecFactory.create_tuple()、TupleAxiom（不可变约束）、IbTuple 运行时对象、`_box_tuple` 专用装箱器、语义分析 `visit_IbTuple`、运行时 `visit_IbTuple`、以及 `_assign_to_target` 中的 Tuple 解包支持。
 
-**问题场景**：
-```
-用户期望：
-    def foo():
-        return 1, "hello", [1, 2, 3]
-    a, b, c = foo()
-    # 或
-    result = foo()  # result 是 tuple
-```
-
-**当前状态**：
-| 层级 | 状态 | 问题 |
-|------|------|------|
-| 语法解析 | ✅ | `return a, b` 被解析为 `IbTuple` |
-| AST 定义 | ✅ | `IbTuple(elts, ctx)` 定义完整 |
-| 语义分析 | ❌ | 无 `visit_IbTuple`，编译错误 |
-| 运行时执行 | ❌ | 无 `visit_IbTuple`，执行崩溃 |
-| 类型系统 | ❌ | 无 `TupleType`/`TupleMetadata` |
-
-**技术缺口**：
-1. `IbTuple` 在语义分析阶段没有 `visit_IbTuple` 方法处理
-2. `expr_handler.py` 没有 `visit_IbTuple` 运行时处理器
-3. 类型系统缺少 `TupleType` 元数据类型描述符
-4. Python tuple 返回时无法正确拆包到 IBC tuple
-
-**影响文件**（预估 7-8 个）：
-- `core/kernel/types/descriptors.py` - 添加 TupleMetadata
-- `core/kernel/axioms/primitives.py` - 添加 TupleAxiom
-- `core/compiler/semantic/passes/semantic_analyzer.py` - 添加 visit_IbTuple
-- `core/runtime/objects/` - 添加 IbTuple 运行时对象
-- `core/runtime/interpreter/handlers/expr_handler.py` - 添加 visit_IbTuple
-- `core/compiler/semantic/passes/semantic_analyzer.py` - tuple 拆包赋值逻辑
-
-**实施步骤**：
-1. Phase 1: 添加 `TupleMetadata` 类型描述符
-2. Phase 2: 实现 `visit_IbTuple` 语义分析
-3. Phase 3: 实现 `IbTuple` 运行时对象和 `visit_IbTuple`
-4. Phase 4: 实现 tuple 拆包多重赋值
-
-**优先级**：中等（不影响核心编译流程）
+详见 ARCH_DETAILS.md 第五章。
 
 ---
 
-### 9.5 vtable 参数签名提取
+### 9.5 vtable 参数签名提取 [PENDING]
 
-**任务**：修复 discovery.py 加载 vtable 时未提取 Python 函数签名信息的问题
+与顶部 0.3 章节相同，见 0.3 的详细说明。
 
-**问题场景**：
-```
-用户调用插件方法时：
-    ai.set_config("url", "key", "model")
-    
-语义分析阶段：
-    ❌ 无法校验参数数量（param_types 为空列表）
-    
-运行时阶段（loader.py:117-118）：
-    ❌ 比较 Python 实现的参数数量 vs spec_desc.param_types（空列表）
-    ❌ 比较无意义，签名校验失效
-```
+---
 
-**根因**：
-discovery.py 第 145-149 行创建 FunctionMetadata 时只传递了 name 和 module_path：
-```python
-func_meta = FunctionMetadata(
-    name=method_name,
-    module_path=module_name,
-    members={}
-    # param_types = [] ← 空列表
-)
-```
+## 十、llmexcept / retry 机制后续改进
 
-**解决方案**：
-在 vtable 加载时使用 `inspect.signature()` 提取 Python 函数的参数类型：
-```python
-import inspect
-sig = inspect.signature(method_impl)
-param_types = [self._type_from_python(p.annotation) for p in sig.parameters.values() if p.name != 'self']
-```
+基础实现已完成（影子执行驱动模式，详见 ARCH_DETAILS.md 第一章）。以下为仍待完善的方向。
 
-**影响文件**：
-- `core/runtime/module_system/discovery.py` - 添加签名提取逻辑
-- `core/runtime/module_system/loader.py` - 修复 param_types 比较逻辑
+### 10.1 Loop 上下文完整恢复 (P1) [PENDING]
 
-**优先级**：高（影响插件方法调用校验）
+**问题**: 当前 `LLMExceptFrame` 保存了 `_loop_stack` 的列表副本（浅拷贝），但循环迭代器状态（`for item in list` 中当前迭代位置）未被完整恢复。重试后循环会从头开始而不是从失败点之前的状态继续。
+
+**涉及文件**: `core/runtime/interpreter/llm_except_frame.py`
+
+### 10.2 重试策略配置 (P1) [PENDING]
+
+**当前状态**: 只支持固定次数重试（`ai.set_retry(n)`）。
+
+**待完善**:
+- 指数退避（Exponential Backoff）
+- 固定延迟（Fixed Delay）
+- 条件重试（基于错误类型）
+
+### 10.3 嵌套 llmexcept 完善 (P1) [PENDING]
+
+**当前状态**: `LLMExceptFrameStack` 已支持多层嵌套帧的压栈/弹栈，但嵌套场景下的作用域隔离和帧交互未经过系统性测试。
+
+### 10.4 重试诊断日志 (P1) [PENDING]
+
+**待完善**:
+- 每次重试时输出详细日志（帧状态、重试次数、错误原因）
+- 支持通过 `idbg.last_result()` 等接口访问重试历史
+
+### 10.5 技术债务清理 (P2) [PENDING]
+
+- `collector.py` 中 `llm_fallback` 属性名引用（历史遗留，需确认是否仍有实际用途）
+- 清理代码中残留的 `TODO [优先级: 高]: 完成后移除此注释` 类型注释
 
 ---
 
