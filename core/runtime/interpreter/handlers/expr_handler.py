@@ -113,14 +113,7 @@ class ExprHandler(BaseHandler):
         args = [self.visit(a) for a in node_data.get("args", [])]
         
         try:
-            # 通过公理体系检测 behavior 对象，而非 isinstance 特判
-            # 任何 ib_class.spec 被公理系统标记为 behavior 的对象走执行器路径
-            _spec_reg = self.registry.get_metadata_registry()
-            _func_spec = getattr(getattr(func, 'ib_class', None), 'spec', None)
-            if _spec_reg and _spec_reg.is_behavior(_func_spec):
-                return self._execute_behavior(func)
-
-            # 如果是 BoundMethod 或 IbFunction，其 call 内部会处理作用域
+            # 如果是 BoundMethod 或 IbFunction/IbBehavior，其 call 内部会处理作用域
             if hasattr(func, 'call'):
                 return func.call(self.registry.get_none(), args)
             return func.receive('__call__', args)
@@ -201,11 +194,12 @@ class ExprHandler(BaseHandler):
             deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
             captured_intents = [] if deferred_mode == "lambda" else self.runtime_context.intent_stack
             return self.service_context.object_factory.create_behavior(
-                node_uid, 
-                captured_intents, 
+                node_uid,
+                captured_intents,
                 expected_type=self.get_side_table("node_to_type", node_uid),
                 call_intent=call_intent,
-                deferred_mode=deferred_mode
+                deferred_mode=deferred_mode,
+                execution_context=self._execution_context,
             )
         
         # [Fallback] 如果是非延迟模式，直接执行

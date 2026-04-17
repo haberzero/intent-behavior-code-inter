@@ -517,25 +517,40 @@ class IbDict(IbObject):
 class IbBehavior(IbObject, IIbBehavior):
     """
     延迟执行的行为对象 (~...~)。
+
+    公理化设计原则
+    --------------
+    * 行为对象在创建时捕获 ``execution_context`` 引用（与 IbUserFunction 同构）。
+    * ``call()`` 通过 ``ib_class.registry.get_llm_executor().invoke_behavior()``
+      完成自主执行，不再依赖外部的 ``_execute_behavior`` 路由。
+    * BaseHandler 中的 ``_execute_behavior`` 方法已删除。
     """
-    def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None, call_intent: Optional[Any] = None, deferred_mode: Optional[str] = None):
+    def __init__(
+        self,
+        node_uid: str,
+        captured_intents: Union[List[Any], Any],
+        ib_class: IbClass,
+        expected_type: Optional[str] = None,
+        call_intent: Optional[Any] = None,
+        deferred_mode: Optional[str] = None,
+        execution_context: Optional[Any] = None,
+    ):
         """
-         IbBehavior 现在是纯粹的数据描述符。
-        不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
+        IbBehavior 是纯粹的数据描述符与自主执行单元。
         call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
         deferred_mode: 'lambda' | 'snapshot' | None (immediate)
+        execution_context: 创建时的执行上下文引用（供 call() 使用）。
         """
         super().__init__(ib_class)
         self.node = node_uid
-        self.captured_intents = captured_intents # 支持 IntentNode (结构共享)
+        self.captured_intents = captured_intents
         self.expected_type = expected_type
-        self.call_intent = call_intent  # @! 排他意图（延迟执行时保存）
-        self.deferred_mode = deferred_mode  # 延迟模式：lambda / snapshot / None
+        self.call_intent = call_intent
+        self.deferred_mode = deferred_mode
+        self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
 
     def value(self):
-        # 此时必须由外部调用 LLMExecutor.execute_behavior_object 才能获取真实值
-        # 这是一个被动描述符，不再支持主动 value 访问（除非已缓存）
         if self._cache: return self._cache.to_native()
         raise RuntimeError("Behavior is not executed. Please use LLMExecutor to run it.")
 
@@ -544,7 +559,6 @@ class IbBehavior(IbObject, IIbBehavior):
         return self
 
     def __to_prompt__(self) -> str:
-        # 如果已执行则返回结果，否则返回节点描述
         if self._cache: return self._cache.__to_prompt__()
         return f"<Behavior {self.node}>"
 
@@ -560,18 +574,33 @@ class IbBehavior(IbObject, IIbBehavior):
         }
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """不再支持主动调用，必须由引擎调度"""
-        raise RuntimeError("Behavior cannot execute itself. Use LLMExecutor.execute_behavior_object.")
+        """
+        公理化自主调用：通过内核 LLM 执行器完成行为执行。
+
+        执行流程：
+        1. 从 KernelRegistry 获取 IILLMExecutor（注入点：engine._prepare_interpreter）。
+        2. 调用 executor.invoke_behavior(self, execution_context)：
+           - 使用 captured_intents（snapshot 模式）或当前意图栈（lambda 模式）。
+           - 按 expected_type 解析 LLM 返回值。
+           - 将 LLMResult 写入 RuntimeContext 供 llmexcept 使用。
+        3. 返回解析后的 IbObject。
+        """
+        executor = self.ib_class.registry.get_llm_executor()
+        if executor is None:
+            raise RuntimeError(
+                f"IbBehavior '{self.node}': LLM executor not registered in KernelRegistry. "
+                "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
+            )
+        return executor.invoke_behavior(self, self._execution_context)
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """
         行为对象的消息处理。
-        允许查询元数据，仅在尝试“执行行为本身”且无上下文时才抛出异常。
+        允许查询元数据，仅在尝试"执行行为本身"且无上下文时才抛出异常。
         """
         if self._cache: return self._cache.receive(message, args)
-        
-        # 允许查询元数据或基本属性，防止调试器崩溃
+
         if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
             return self.ib_class.registry.box(str(self))
-            
+
         raise RuntimeError(f"Behavior '{self.node}' is not executed. Cannot process message '{message}'.")

@@ -47,6 +47,9 @@ class KernelRegistry:
         # [Builtin Instances] 内置单例实例 (如 IntentStack)
         self._builtin_instances: Dict[str, Any] = {}
 
+        # [LLM Executor] 内核 LLM 执行器引用（由解释器在启动时注入）
+        self._llm_executor: Any = None
+
     @property
     def state_level(self) -> int:
         return self._state_level
@@ -172,6 +175,20 @@ class KernelRegistry:
     def get_builtin_instance(self, name: str) -> Optional[Any]:
         """获取内置单例实例。"""
         return self._builtin_instances.get(name)
+
+    def register_llm_executor(self, executor: Any, token: Any) -> None:
+        """
+        注册内核 LLM 执行器。
+
+        由解释器在启动时（结构封印之后）调用，因此本方法不检查封印状态，
+        仅校验内核令牌以防止非授权注入。
+        """
+        self._verify_kernel(token)
+        self._llm_executor = executor
+
+    def get_llm_executor(self) -> Optional[Any]:
+        """获取内核 LLM 执行器引用（IILLMExecutor）。"""
+        return self._llm_executor
 
     def set_execution_context(self, context: 'IExecutionContext', token: Any):
         """注册执行上下文引用，仅内核可调。"""
@@ -325,4 +342,5 @@ class KernelRegistry:
         new_registry._is_structure_sealed = self._is_structure_sealed
         new_registry._is_classes_sealed = self._is_classes_sealed
         new_registry._state_level = self._state_level
+        new_registry._llm_executor = self._llm_executor
         return new_registry

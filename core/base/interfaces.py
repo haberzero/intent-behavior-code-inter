@@ -8,6 +8,7 @@ __all__ = [
     "ISymbolView",
     "ILLMProvider",
     "ILLMExecutor",
+    "IILLMExecutor",
     "IIntentManager",
 ]
 
@@ -58,8 +59,51 @@ class ILLMProvider(Protocol):
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
-    """提供对内核 LLM 执行器的内省能力"""
+    """提供对内核 LLM 执行器的内省能力（向后兼容接口）"""
     def get_last_call_info(self) -> Dict[str, Any]: ...
+
+
+@runtime_checkable
+class IILLMExecutor(Protocol):
+    """
+    内核级 LLM 执行器完整接口。
+
+    职责划分
+    --------
+    * ``invoke_behavior``             —— 行为对象公理化调用入口（供 IbBehavior.call() 使用）
+    * ``execute_behavior_expression`` —— 行为描述行底层执行
+    * ``execute_behavior_object``     —— 被动行为对象的底层执行
+    * ``get_last_call_info``          —— 内省上次 LLM 调用的诊断信息
+
+    设计原则：此接口驻留于 core.base，不依赖任何 runtime 具体类型；
+    所有参数/返回类型均使用 Any，由实现层负责具体类型约束。
+    """
+    def invoke_behavior(self, behavior: Any, context: Any) -> Any:
+        """
+        执行一个行为对象，返回 IbObject 结果。
+
+        该方法封装了全部执行细节（意图捕获、类型推导、结果缓存），
+        是 IbBehavior.call() 的唯一对外接触点，严禁再使用 _execute_behavior。
+        """
+        ...
+
+    def execute_behavior_expression(
+        self,
+        node_uid: str,
+        context: Any,
+        call_intent: Any = None,
+        captured_intents: Any = None,
+    ) -> Any:
+        """执行行为描述行节点，返回 LLMResult。"""
+        ...
+
+    def execute_behavior_object(self, behavior: Any, context: Any) -> Any:
+        """执行被动行为对象，返回 LLMResult。"""
+        ...
+
+    def get_last_call_info(self) -> Dict[str, Any]:
+        """获取最后一次 LLM 调用的诊断信息。"""
+        ...
 
 @runtime_checkable
 class IIntentManager(Protocol):
