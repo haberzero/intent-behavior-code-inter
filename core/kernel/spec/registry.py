@@ -328,6 +328,12 @@ class SpecRegistry:
             return True
         return self.get_call_cap(spec) is not None
 
+    def is_behavior(self, spec: Optional[IbSpec]) -> bool:
+        """True when spec represents a deferred behavior (lambda/snapshot)."""
+        if spec is None:
+            return False
+        return spec.get_base_name() == "behavior"
+
     def is_dynamic(self, spec: Optional[IbSpec]) -> bool:
         """True for any/auto and any axiom that declares itself dynamic."""
         if spec is None:

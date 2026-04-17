@@ -160,6 +160,30 @@ class SemanticAnalyzer:
                     self._bind_llm_except_in_body(method.body, method)
                 elif isinstance(method, ast.IbLLMFunctionDef):
                     pass
+        # [Task 1.1] 递归进入控制流容器节点，确保嵌套在循环/条件/try中的 llmexcept 能正确关联
+        elif isinstance(node, ast.IbFor):
+            self._bind_llm_except_in_body(node.body, node)
+            if node.orelse:
+                self._bind_llm_except_in_body(node.orelse, node)
+        elif isinstance(node, ast.IbIf):
+            self._bind_llm_except_in_body(node.body, node)
+            if node.orelse:
+                self._bind_llm_except_in_body(node.orelse, node)
+        elif isinstance(node, ast.IbWhile):
+            self._bind_llm_except_in_body(node.body, node)
+            if node.orelse:
+                self._bind_llm_except_in_body(node.orelse, node)
+        elif isinstance(node, ast.IbTry):
+            self._bind_llm_except_in_body(node.body, node)
+            for handler in node.handlers:
+                self._bind_llm_except_in_body(handler.body, handler)
+            if node.orelse:
+                self._bind_llm_except_in_body(node.orelse, node)
+            if node.finalbody:
+                self._bind_llm_except_in_body(node.finalbody, node)
+        elif isinstance(node, ast.IbSwitch):
+            for case in node.cases:
+                self._bind_llm_except_in_body(case.body, case)
 
     def _bind_llm_except_in_body(self, body: List[ast.IbStmt], parent: ast.IbASTNode) -> None:
         """
@@ -228,16 +252,20 @@ class SemanticAnalyzer:
             i += 1
 
         # 更新 body
-        if isinstance(parent, ast.IbModule):
-            parent.body = new_body
-        elif isinstance(parent, (ast.IbFunctionDef, ast.IbLLMFunctionDef)):
-            parent.body = new_body
-        elif isinstance(parent, ast.IbClassDef):
-            # [FIX] 找到对应的 method 并更新其 body
+        # IbClassDef 需要特殊处理：找到对应的 method 并更新其 body
+        if isinstance(parent, ast.IbClassDef):
             for method in parent.body:
                 if isinstance(method, (ast.IbFunctionDef, ast.IbLLMFunctionDef)) and method.body is body:
                     method.body = new_body
                     break
+        else:
+            # 通用更新：按引用恒等性确定 body/orelse/finalbody 哪个字段传入了本次调用
+            if hasattr(parent, 'body') and parent.body is body:
+                parent.body = new_body
+            elif hasattr(parent, 'orelse') and parent.orelse is body:
+                parent.orelse = new_body
+            elif hasattr(parent, 'finalbody') and parent.finalbody is body:
+                parent.finalbody = new_body
 
     def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
         """
@@ -792,14 +820,14 @@ class SemanticAnalyzer:
             # 语义：等同于 while，要求表达式具有“布尔评估能力”
             # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
             # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
-            if not self.registry.is_dynamic(iter_type) and not (iter_type.name == "behavior") and iter_type.name != "bool":
+            if not self.registry.is_dynamic(iter_type) and not self.registry.is_behavior(iter_type) and iter_type.name != "bool":
                 # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
                 pass
         else:
             # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)
             # 贯彻“一切皆对象”协议：询问类型如何提供迭代元素
             # 如果是 behavior 类型，我们认为它“潜在可迭代”
-            if (iter_type.name == "behavior"):
+            if self.registry.is_behavior(iter_type):
                 element_type = self._any_desc 
             else:
                 iter_cap = self.registry.get_iter_cap(iter_type)
