@@ -281,8 +281,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def push_llm_except_frame(self, frame: 'LLMExceptFrame') -> None:
         """
         将新的 LLMExceptFrame 入栈。
-        
-        TODO [优先级: 高]: 完成后移除此注释
         用于 llmexcept 语句执行前保存现场。
         """
         self._llm_except_frames.append(frame)
@@ -290,8 +288,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def pop_llm_except_frame(self) -> Optional['LLMExceptFrame']:
         """
         弹出栈顶 LLMExceptFrame。
-        
-        TODO [优先级: 高]: 完成后移除此注释
         用于 llmexcept body 执行完毕后清理现场。
         """
         if self._llm_except_frames:
@@ -301,8 +297,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def get_current_llm_except_frame(self) -> Optional['LLMExceptFrame']:
         """
         获取当前 LLMExceptFrame（不弹出）。
-        
-        TODO [优先级: 高]: 完成后移除此注释
         用于 retry 语句访问当前帧信息。
         """
         if self._llm_except_frames:
@@ -312,8 +306,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def save_llm_except_state(self, target_uid: str, node_type: str = "unknown", max_retry: int = 3) -> 'LLMExceptFrame':
         """
         创建并保存 LLMExceptFrame 现场。
-        
-        TODO [优先级: 高]: 完成后移除此注释
         1. 序列化当前作用域的变量快照
         2. 保存 intent 栈状态
         3. 保存 loop 上下文
@@ -332,8 +324,6 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def restore_llm_except_state(self) -> bool:
         """
         从当前 LLMExceptFrame 恢复现场。
-        
-        TODO [优先级: 高]: 完成后移除此注释
         1. 恢复变量快照
         2. 恢复 intent 栈
         3. 恢复 loop 上下文

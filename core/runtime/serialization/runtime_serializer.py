@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
-from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbBehavior
+from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple, IbBehavior
 from core.runtime.interpreter.runtime_context import IntentNode
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -164,6 +164,10 @@ class RuntimeSerializer(BaseFlatSerializer):
             
         elif isinstance(obj, IbList):
             data["_type"] = "list"
+            data["elements"] = [self._process_value(e) for e in obj.elements]
+
+        elif isinstance(obj, IbTuple):
+            data["_type"] = "tuple"
             data["elements"] = [self._process_value(e) for e in obj.elements]
             
         elif isinstance(obj, IbDict):
@@ -342,6 +346,11 @@ class RuntimeDeserializer:
             obj = self.factory.create_list([])
             self.instance_cache[uid] = obj 
             obj.elements = [self._deserialize_value(e) for e in data.get("elements", [])]
+
+        elif _type == "tuple":
+            elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
+            obj = IbTuple(elements, ib_class)
+            self.instance_cache[uid] = obj
             
         elif _type == "dict":
             # IbDict 尚未有标准工厂方法，暂用 Registry

@@ -197,7 +197,7 @@ class LocalSymbolCollector:
             return
 
         # 递归遍历所有可能包含代码块的属性
-        for attr in ("body", "orelse", "finalbody", "llm_fallback"):
+        for attr in ("body", "orelse", "finalbody"):
             child = getattr(node, attr, None)
             if isinstance(child, list):
                 for item in child:
