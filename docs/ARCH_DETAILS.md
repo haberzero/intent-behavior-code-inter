@@ -66,13 +66,15 @@ visit_IbLLMExceptionalStmt
 
 | 字段 | 内容 |
 |------|------|
-| `saved_vars` | 可序列化类型的变量快照（IbNone/IbInteger/IbFloat/IbString/IbList/IbDict） |
+| `saved_vars` | 可序列化类型的变量快照（IbNone/IbInteger/IbFloat/IbString/IbList/**IbTuple**/IbDict） |
 | `saved_intent_stack` | 意图栈顶节点 `_intent_top` 的引用（IntentNode 链表头） |
 | `saved_loop_context` | 循环上下文列表（`_loop_stack` 的浅拷贝） |
 | `saved_retry_hint` | 上次保存的 retry 提示词 |
 | `max_retry` | 最大重试次数，从 `llm_provider.get_retry()` 读取 |
 
 不参与快照的类型（设计决定）：IbFunction、IbBehavior、IbNativeObject 等引用类型。
+
+`IbTuple` 已在 `_is_serializable()` 中与 `IbList` 并列处理，元素递归序列化。
 
 `LLMExceptFrameStack` 管理嵌套的 llmexcept 块，支持多层嵌套场景（当前阶段主要使用单层）。
 
@@ -307,24 +309,65 @@ Engine.__init__()
 
 ## 十一、已知代码健康问题（2026-04-17 深度审计）
 
-以下为深度分析时发现的、尚未修复的遗留问题，记录于此作为开发者参考。详细待办项见 PENDING_TASKS.md 第十一章。
+以下为深度分析时发现的遗留问题，已修复的条目已标注；仍待处理的条目详见 PENDING_TASKS.md 第十一章。
 
-### 11.1 IbTuple 未纳入快照和序列化
+### 11.1 IbTuple 未纳入快照和序列化 ✅ 已修复
 
-`llm_except_frame.py` 的 `_is_serializable()` 和 `runtime_serializer.py` 的 `_process_value()` 均未处理 `IbTuple`，导致 Tuple 类型变量在 llmexcept 重试快照和宿主状态序列化中被跳过。修复方式为在两处添加与 `IbList` 类似的分支。
+`llm_except_frame.py` 的 `_is_serializable()` 和 `runtime_serializer.py` 的 `_collect_instance()` / `_get_instance()` 均已补充 `IbTuple` 分支（cache-before-recurse 模式，与 IbList 对称）。
 
-### 11.2 ibci_file 的 core 依赖与"非侵入"定义存在轻微偏差
+### 11.2 ibci_file 的 core 依赖与"非侵入"定义存在轻微偏差 [PENDING]
 
 `ibci_file/core.py` 导入 `from core.runtime.path import IbPath`，而文档将 `ibci_file` 归类为非侵入式插件。`IbPath` 是纯数据类，无状态依赖，属于可接受的边界导入，但文档描述应同步修正（已在 PENDING_TASKS.md 11.2 节记录）。
 
-### 11.3 scheduler.py 中的 [临时方案] 符号冲突静默处理
+### 11.3 scheduler.py 中的 [临时方案] 符号冲突静默处理 ✅ 已修复
 
-`_inject_plugin_symbols` 方法中多处符号冲突检查以 `pass` 静默跳过，不发出任何警告。属于典型的"先跳过、后修正"妥协，可能导致导入被静默忽略。
+`_inject_plugin_symbols` 方法中多处符号冲突检查从 `pass` 静默跳过升级为 `self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL/BASIC, ...)` 调用，调试模式下冲突可见。
 
-### 11.4 collector.py 中的废弃字段名引用
+### 11.4 collector.py / runtime_context.py / interop.py 技术债务 ✅ 已修复
 
-`collector.py:200` 中 `"llm_fallback"` 属性遍历——该字段已从 AST 中移除，`getattr` 永远返回 `None`，属于无效代码。
+- `collector.py:200`：删除 `"llm_fallback"` 无效属性遍历
+- `runtime_context.py`：清理 5 处过期 TODO 注释
+- `interop.py:7`：Protocol 继承 TODO 替换为解释性注释
 
 ---
 
 *本文档为 IBC-Inter 重要架构细节备份，记录已稳定落地的设计决策。*
+
+## 十二、IbBehavior.call_intent 与 vtable callable 签名自动提取
+
+### 12.1 IbBehavior.call_intent 字段
+
+`IbBehavior`（`core/runtime/objects/builtins.py`）新增 `call_intent: Optional[Any] = None` 字段，用于保存 `@!` 排他意图，确保其在延迟执行路径中不丢失。
+
+**修改链路**：
+
+| 位置 | 变更 |
+|------|------|
+| `IbBehavior.__init__` | 新增 `call_intent` 参数和字段 |
+| `IObjectFactory.create_behavior()` 协议 | 新增 `call_intent` kwarg |
+| `RuntimeObjectFactory.create_behavior()` | 传递 `call_intent` |
+| `expr_handler.py`（`is_deferred=True` 路径） | 创建 `IbBehavior` 时传入 `call_intent` |
+| `RuntimeSerializer._collect_instance()` | 序列化 `call_intent` 字段（非 None 时） |
+| `RuntimeDeserializer._get_instance()` | 反序列化时恢复 `call_intent` |
+
+**背景**：旧实现中，当 `@! "intent text"` 修饰的 behavior 表达式遇到 `is_deferred=True` 时，`call_intent` 未被传入 `create_behavior()`，导致排他意图在延迟执行时丢失。
+
+### 12.2 vtable callable 签名自动提取
+
+`discovery.py` 的 `_build_spec_from_dict()` 现支持 callable 类型的 vtable 条目：
+
+```python
+# 两种格式均支持：
+"functions": {
+    "parse": {"param_types": ["str"], "return_type": "dict"},  # 显式字典格式
+    "auto_sig_func": some_callable,                            # callable 格式，自动提取
+}
+```
+
+`_extract_signature(func)` 通过 `inspect.signature()` 提取参数和返回类型注解，映射到 IBCI 类型名（`_PY_TYPE_TO_IBCI` 字典）。规则：
+
+- 跳过首个 `self`/`cls` 参数
+- 有注解 → 按 `_PY_TYPE_TO_IBCI` 映射，未知类型 → `"any"`
+- 无注解 → `"any"`
+- 返回类型无注解 → `"any"`（使用 `inspect.Signature.empty` 判断，注意与 `inspect.Parameter.empty` 的区别）
+

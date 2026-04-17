@@ -8,67 +8,24 @@
 
 ---
 
-## 优先级待办任务
+## 优先级待办任务（已完成的历史条目）
 
-### 0.1 Mock 仿真引擎增强 [COMPLETED]
-
-**状态**: 已实现。`MOCK:FAIL/REPAIR/TRUE/FALSE/INT/FLOAT/STR/BOOL/LIST/DICT` 全部在 `ibci_modules/ibci_ai/core.py` 的 `_handle_mock_response()` 中实现。`MOCK:FAIL/REPAIR` 哨兵值在 `llm_executor.py` 的两条调用路径中均有专门检测，正确触发 `LLMResult.uncertain_result()`。
-
-详见 ARCH_DETAILS.md 第三章。
-
-### 0.2 ai.set_retry() 配置穿透 [COMPLETED]
-
-**状态**: 已实现。`visit_IbLLMExceptionalStmt` 通过 `capability_registry.get("llm_provider").get_retry()` 读取 `ai.set_retry()` 设置的值，不再硬编码。
-
-详见 ARCH_DETAILS.md 第一章 1.5 节。
-
-### 0.3 vtable 参数签名提取 (P1) [COMPLETED]
-
-**状态**: 已实现。`_build_spec_from_dict()` 新增对 callable 类型 vtable 条目的支持，新增 `_extract_signature()` 方法通过 `inspect.signature()` 自动提取 Python 函数的参数名和类型注解，自动填充 `MethodMemberSpec.param_type_names`。已有显式 `param_types` 的字典格式（如 ibci_math 等插件）不受影响。
-**涉及文件**: `core/runtime/module_system/discovery.py`
+| 条目 | 状态 | 详见 |
+|------|------|------|
+| 0.1 Mock 仿真引擎增强 | ✅ COMPLETED | ARCH_DETAILS.md 第三章 |
+| 0.2 ai.set_retry() 配置穿透 | ✅ COMPLETED | ARCH_DETAILS.md 第一章 1.5 节 |
+| 0.3 vtable 参数签名提取 | ✅ COMPLETED | `discovery.py` `_extract_signature()` |
+| 2.5 IBCI 核心路径解析 | ✅ COMPLETED | `ibci_sys` 模块，`sys.script_dir()` API |
 
 ---
-
-#### 2.5 IBCI 核心路径解析能力增强 [COMPLETED]
-**状态说明**: 此任务已通过 `ibci_sys` 模块及其 `sys.script_dir()` API 完整实现。
-- **现状**: 废弃了 `__dir__` 裸调用，统一采用位置无关代码 (PIC) 标准。
-
-**任务**：为 IBCI 语言和标准库提供“当前脚本目录”上下文。
-
-**问题背景**：
-- 目前 `ibci_file` 插件直接使用 Python 的 `open()`，路径解析依赖于进程的 `cwd`（通常是项目根目录）。
-- 导致位于子目录的脚本（如 `test_target_proj/10_local_llm_test/complex_workflow.ibci`）若使用相对路径 `"system.log"`，文件会产生在根目录，造成污染。
-- 脚本作者无法编写位置无关的文件操作代码。
-
-**建议方案**：
-1.  **内置变量**：在 `Interpreter` 中注入 `__file__` 或 `sys.script_dir` 内置变量。
-2.  **插件增强**：修改 `ibci_file` 插件，允许其接受一个基准目录（Base Directory）参数，或者自动根据当前执行节点的模块路径进行解析。
-3.  **规范化临时文件**：在 规范中明确建议脚本在完成验证后使用 `file.remove()` 自行清理临时文件。
 
 ## 一、动态宿主（DynamicHost）相关任务
 
 ### 1.1 Intent Stack 深拷贝实现 [RESOLVED]
-**状态说明**: 此问题已在 中通过 **拓扑序列化 (Topology Serialization)** 彻底解决。
-- **现状**: 引入了 `IntentNode` 链表池化技术，反序列化时通过 `intent_cache` 恢复物理引用关系，实现了内存级的结构共享，不再需要传统的递归深拷贝。
-
-**任务**：实现 Intent Stack 的深拷贝机制，解决引用赋值问题
-
-**搁置原因**：
-- 当前阶段不继承任何意图栈
-- Intent Stack 概念后续可能有大量需要澄清的要点
-- 触发条件：`inherit_intents=True`
-
-**技术细节**：
-- 问题位置：`interpreter.py:80`
-- 当前代码：`self.runtime_context.intent_stack = parent_context.intent_stack`（直接引用赋值）
-- 架构要求：必须深拷贝
-
-**解决方案方向**：
-1. 确认 Intent Stack 不可变性设计
-2. 实现 IntentNode 链表的深拷贝
-3. 重新评估继承策略
+**状态**：已通过 **拓扑序列化** 彻底解决。`IntentNode` 链表池化 + `intent_cache` 恢复物理引用，实现内存级结构共享。
 
 ---
+
 
 ### 1.2 子解释器插件注册 [PENDING]
 **任务**：允许子解释器独立注册自己的插件
@@ -181,95 +138,9 @@ class TypeAxiom:
 
 ### 2.5 ParserCapability LLM 提示词片段扩展
 
-**任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法
+**任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法，替代 AIPlugin 中硬编码的 `_return_type_prompts`。
 
----
-
-### 二、架构与设计提案 [2026-03-27]
-
-#### 2.1 意图系统对象化 (Intent-as-Object)
-
-**任务**：将意图（Intent）从侧表绑定的元数据，转变为公理体系内的一级公民对象。
-
-**设计目标**：
-- 消除“侧表（Side Table）”作为意图存储的中间层，使意图直接作为 AST 节点和运行时对象存在。
-- 在 `primitives.py` 中实现 `IntentAxiom`，定义意图类型的行为（如 `merge`, `resolve`, `is_active`）。
-- 支持意图变量声明：`intent my_i = @~ "..." ~`。
-
-**实施步骤**：
-1. **Parser 层**：将 `@ "..."` 从语句装饰器扩展为独立的表达式节点 `IbIntentExpr`。
-2. **Axiom 层**：在 `core/kernel/axioms/primitives.py` 中增加 `IntentAxiom` 实现。
-3. **Semantic 层**：支持意图类型的类型检查与推导。
-4. **Runtime 层**：统一 `IbIntent` 对象的协议，使其能直接参与运算。
-
-**风险评估**：中等偏大。涉及编译器前端到后端的链路打通
-
----
-
-#### 2.2 统一 LLM 语义失效信号
-
-**任务**：将所有“LLM 无法满足语义要求”的场景统一通过 `LLMUncertaintyError` 抛出。
-
-**设计目标**：
-- 确保 `llmexcept` 能够捕获所有非预期的 LLM 行为。
-- **覆盖范围扩展**：
-  - 0/1 判定模糊（已实现）。
-  - **类型转换失败**：当 `(list) str_val` 无法解析出 JSON 时抛出（已实现，基于 `FuzzyJsonParser`）。
-  - **结构化解析失败**：当 `FuzzyJsonParser` 无法在文本中定位到任何有效结构时抛出。
-
-**与 MVP 关系**：极大增强 `llmexcept/retry` 机制的实用价值。
-
----
-
-#### 2.3 动态类型与 auto 类型推导增强
-
-**任务**：改进 `auto` 关键字的类型推导机制，支持“渐进式强类型”。
-
-- 目前 `auto` 仅在首次赋值时通过侧表（Side Table）绑定类型描述符。
-- 目标是实现更智能的流敏感分析（Flow-sensitive Analysis）。
-
-1. **类型松绑**：允许 `auto` 变量在特定条件下重新推导类型。
-2. **Union 类型支持**：在编译期为 `auto` 生成 `Union` 描述符。
-3. **运行时动态检查**：将类型检查压力部分从编译期移向运行期（针对 `auto`）。
-
----
-
-#### 2.4 意图插值语法的一等公民化
-
-**任务**：允许 `@~ ... ~` 在任何表达式上下文中使用，而非仅作为语句装饰器或特定的 `IbBehaviorExpr`。
-
-**设计目标**：
-- 支持 `str my_prompt = @~ "Current user is $user" ~`。
-- 解决目前插值逻辑在 `LLMExecutor` 中重复实现的问题。
-- 统一 `ext_ref`（外部资产）的解析链路。
-
----
-
-## 三、类型系统相关任务**设计目标**：
-- 当 LLM 函数的返回值类型被指向某个类时，声明"如何注入系统提示词"
-- 替代当前 AIPlugin 中硬编码的 `_return_type_prompts`
-
-**接口设计**：
-```python
-class ParserCapability(Protocol):
-    """解析能力：描述一个类型如何从 LLM 结果中解析出值"""
-    def parse_value(self, raw_value: str) -> Any: ...
-
-    # [Future] 获取该类型参与 LLM 调用时需要的系统提示词片段
-    def get_llm_prompt_fragment(self) -> Optional[str]:
-        """返回类型相关的提示词，如 '请仅返回一个整数作为回答，禁止包含任何其他解释文字。'"""
-        return None
-```
-
-**与 AIPlugin 的关系**：
-- AIPlugin 中的 `_return_type_prompts` 作为 fallback 实现
-- 公理层提供类型特定的提示词声明
-- 运行时在 `LLMExecutor` 中查询公理获取提示词片段
-
-**实施位置**：
-- `core/kernel/axioms/protocols.py` - 添加方法到 `ParserCapability`
-- `core/kernel/axioms/primitives.py` - 实现各原子类型的 `get_llm_prompt_fragment()`
-- `core/runtime/interpreter/llm_executor.py` - 调用公理获取提示词片段
+**实施位置**：`core/kernel/axioms/protocols.py`、`core/kernel/axioms/primitives.py`、`core/runtime/interpreter/llm_executor.py`
 
 ---
 
@@ -277,9 +148,7 @@ class ParserCapability(Protocol):
 
 **任务**：实现 Intent Stack 不可变性约束
 
-**搁置原因**：
-- 依赖 Intent 公理化完成
-- Intent Stack 概念后续可能还有大量需要澄清的要点
+**搁置原因**：依赖 Intent 公理化完成；Intent Stack 概念后续可能还有大量需要澄清的要点。
 
 ---
 
@@ -287,13 +156,7 @@ class ParserCapability(Protocol):
 
 **任务**：修复 `_sync_variables_from()` 直接传递 symbol 引用的问题
 
-**搁置原因**：
-- 变量继承已禁用
-- 当前不影响核心功能
-
-**技术细节**：
-- 问题位置：`interpreter.py:93-99`
-- `_sync_variables_from()` 直接传递 symbol 引用
+**搁置原因**：变量继承已禁用，当前不影响核心功能。问题位置：`interpreter.py:93-99`
 
 ---
 
@@ -351,59 +214,16 @@ class ParserCapability(Protocol):
 
 ## 五、其他未解决问题
 
-### 5.0 审计新发现 P0 紧急问题 ⚠️ [2026-03-25 审计]
+### 5.0 审计新发现 P0 紧急问题 ⚠️ [2026-03-25 审计] — 全部已解决
 
-> 以下问题在本次审计中被发现，之前未被记录，必须在MVP之前确认或修复。
-
-#### 5.0.1 llmexcept 机制设计缺陷 [COMPLETED]
-
-**状态说明**: 已完成。当前架构采用"影子执行驱动模式"，`visit_IbIf/While/For` 均通过 `last_llm_result.is_uncertain` 标志位检测不确定性，立即返回空结果交由外层 `visit_IbLLMExceptionalStmt` 处理。`_with_unified_fallback` 和 `LLMUncertaintyError` 均已废弃，不再存在于代码中。
-
-详见 ARCH_DETAILS.md 第一章。
-
----
-
-#### 5.0.2 Mock 机制 MOCK:FAIL/REPAIR 未实现 [COMPLETED]
-
-**状态**: 已实现，见顶部 0.1 章节说明及 ARCH_DETAILS.md 第三章。
-
----
-
-#### 5.0.3 意图标签解析缺失 ✅ [2026-03-26 已修复]
-
-**状态**: 已实现 `#tag` 解析逻辑。
-**文件**: `core/compiler/parser/components/statement.py`
-
----
-
-#### 5.0.4 Symbol.Kind typo ✅ [2026-03-26 已修复]
-
-**状态**: 已修正为 `SymbolKind.VARIABLE`。
-**文件**: `core/compiler/semantic/passes/scope_manager.py:44`
-
----
-
-#### 5.0.5 OVERRIDE 意图内容丢失 🔴 P1 ✅ 已修复
-
-**问题**：`@!` 修饰的意图内容不会被注入到 prompt
-
-**涉及文件**：
-- `core/kernel/intent_resolver.py:46-48`
-
-**解决方案方向**：修复 intent_resolver 确保 `@!` 内容被正确追加
-
-**修复内容**：
-- 添加 `override_content` 变量跟踪排他意图内容
-- 在遇到 `@!` 时清空 `resolved_block_intents` 并只保留 `@!` 的内容
-- 修复后 `@!` 行为：屏蔽意图栈，只应用 `@!` 本身的内容（一次性调用，不影响栈状态）
-
-**与MVP关系**：🟡 **属于语义正确性问题**
-
----
-
-#### 5.0.6 ai.set_retry() 功能未实现 [COMPLETED]
-
-**状态**: 已实现，见顶部 0.2 章节说明及 ARCH_DETAILS.md 第一章 1.5 节。
+| 条目 | 状态 | 详见 |
+|------|------|------|
+| 5.0.1 llmexcept 机制设计缺陷 | ✅ COMPLETED | ARCH_DETAILS.md 第一章（影子执行驱动模式） |
+| 5.0.2 Mock MOCK:FAIL/REPAIR 未实现 | ✅ COMPLETED | ARCH_DETAILS.md 第三章 |
+| 5.0.3 意图标签解析缺失 | ✅ 已修复 | `parser/components/statement.py` |
+| 5.0.4 Symbol.Kind typo | ✅ 已修复 | `scope_manager.py:44` |
+| 5.0.5 OVERRIDE 意图内容丢失 | ✅ 已修复 | `intent_resolver.py:46-48`（`override_content` 变量） |
+| 5.0.6 ai.set_retry() 未实现 | ✅ COMPLETED | ARCH_DETAILS.md 第一章 1.5 节 |
 
 ---
 
@@ -489,33 +309,16 @@ def __deepcopy__(self, memo):
 
 ### 9.1 零侵入插件注册原生 IBC-Inter 类型
 
-**任务**：让零侵入插件能够注册原生 IBC-Inter 类型（如 float、int），而不需要继承任何核心类
+**任务**：让零侵入插件能够注册原生 IBC-Inter 类型，而不需要继承任何核心类
 
-**状态更新**：[2026-03-25 审计修订]
-- ✅ [2026-03] `discovery.py` 中实现 `__ibcext_vtable__()` 加载逻辑
-- ⚠️ 但 vtable 参数签名提取**未实现**（见 9.5）
+**当前状态**：
+- ✅ `discovery.py` 已实现 `__ibcext_vtable__()` 加载逻辑，将 callable 条目转换为 `MethodMemberSpec` 并注册到 `ModuleSpec.members`
+- ✅ 参数签名自动提取（`_extract_signature()` via `inspect.signature()`）已实现（见 0.3/9.5）
+- `__ibcext_vtable__()` 支持两种格式：`callable` 直接传入（自动提取签名）或 `{"param_types": [...], "return_type": "..."}` 字典格式
 
-**技术实现**：
-```python
-# core/runtime/module_system/discovery.py _load_spec()
-# 1. 加载 __ibcext_metadata__() → 注册 ModuleMetadata
-# 2. 加载 __ibcext_vtable__() → 将 Callable 转换为 FunctionMetadata 注册到 members
-if hasattr(mod, '__ibcext_vtable__'):
-    vtable = mod.__ibcext_vtable__()
-    for method_name, method_impl in vtable.items():
-        func_meta = FunctionMetadata(name=method_name, ...)
-        metadata.members[method_name] = func_meta
-```
+**意义**：使插件方法在语义分析阶段可见，遵循 `__ibcext_vtable__()` 扩展协议。
 
-**意义**：
-- 遵循 协议（`__ibcext_vtable__()` 是协议的一部分）
-- 使插件方法在语义分析阶段可见（解决 `Type 'ai' has no member 'set_config'` 问题）
-- 为未来"插件原生类参与语义检查"奠定基础
-
-**未来演进**：
-- 支持 `__ibcext_vtable__()` 返回 `TypeDescriptor` 而非仅 `Callable`
-- loader 识别 `TypeDescriptor` 并调用 `registry.register()`
-- 类型行为由 `Axiom` 定义（像 float 一样）
+**未来演进**：支持 `__ibcext_vtable__()` 返回完整 `IbSpec` 对象直接注册，允许插件原生类型参与公理体系（类型行为由 `Axiom` 定义）。
 
 ---
 
@@ -598,19 +401,15 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 ---
 
----
-
 ### 9.4 多值返回与 Tuple 类型系统 [COMPLETED]
 
-**状态**: 已完整实现。Tuple 类型全栈实现，包括 TupleSpec、TUPLE_SPEC 原型常量、SpecFactory.create_tuple()、TupleAxiom（不可变约束）、IbTuple 运行时对象、`_box_tuple` 专用装箱器、语义分析 `visit_IbTuple`、运行时 `visit_IbTuple`、以及 `_assign_to_target` 中的 Tuple 解包支持。
-
-详见 ARCH_DETAILS.md 第五章。
+**状态**: ✅ 已完整实现。详见 ARCH_DETAILS.md 第五章。
 
 ---
 
 ### 9.5 vtable 参数签名提取 [COMPLETED]
 
-与顶部 0.3 章节相同，见 0.3 的详细说明。
+**状态**: ✅ 已完整实现。见 0.3 条目及 `discovery.py` `_extract_signature()`。
 
 ---
 
