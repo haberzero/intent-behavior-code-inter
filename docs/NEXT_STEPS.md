@@ -8,11 +8,14 @@
 
 ## 一、代码健康（低风险，改动范围极小）
 
-### 1.1 ibci_file 文档描述修正 [PENDING_TASKS 11.2]
+### 1.1 ibci_file 文档描述修正 ✅ 已完成
 
-`ibci_file` 被文档归类为"非侵入式"插件，但其 `core.py` 导入了 `core.runtime.path.IbPath`。`IbPath` 是纯数据类（`@dataclass(frozen=True)`），无状态依赖，属可接受的轻量边界导入。
+`ibci_file` 导入 `IbPath`（`core.runtime.path`）并使用 `capabilities.execution_context`，与文档"零内核依赖"的定义不符。
 
-**建议**：在 `ibcext.py` 插件分级注释和 `ARCHITECTURE_PRINCIPLES.md` 中将 `ibci_file` 标注为"轻量依赖"型，并解释 `IbPath` 的可用范围。
+**已修正**：
+- `ibcext.py` 非侵入层注释新增"轻量依赖型"例外说明，`ibci_file` 从代表模块列表中单独提出
+- `ARCHITECTURE_PRINCIPLES.md` 插件架构表格拆分为三行，新增"非侵入式（轻量依赖）"行
+- `ARCH_DETAILS.md` §11.2 和 `PENDING_TASKS.md` §11.2 均标注为已修正
 
 ---
 
@@ -28,13 +31,19 @@
 
 ---
 
-### 2.2 重试诊断日志 [PENDING_TASKS 10.4]
+### 2.2 重试诊断日志 ✅ 已完成
 
-每次重试时缺少详细日志（帧状态、重试次数、错误原因），难以调试多次重试场景。
+**已实现**：在 `visit_IbLLMExceptionalStmt` 重试循环中添加 `self.debugger.trace(CoreModule.INTERPRETER, ...)` 调用：
 
-**建议**：在 `visit_IbLLMExceptionalStmt` 的重试循环中，通过 `core_debugger.trace()` 输出帧状态摘要。
+| 时机 | 级别 | 内容 |
+|------|------|------|
+| 进入 llmexcept 帧 | DETAIL | target_uid + max_retry |
+| 每次循环迭代开始 | DETAIL | 当前尝试编号 `N/M` |
+| LLM 结果正常退出 | DETAIL | resolved on attempt N |
+| LLM 返回 UNCERTAIN | BASIC | 原始响应前 60 字符预览 |
+| 重试次数耗尽 | BASIC | max_retry 和 target_uid |
 
-**文件**：`core/runtime/interpreter/handlers/stmt_handler.py`
+所有日志通过 `CoreModule.INTERPRETER` 频道输出，只在对应级别启用时可见，生产运行无影响。
 
 ---
 

@@ -286,7 +286,8 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 
 | 级别 | 说明 | 包含插件 |
 |------|------|---------|
-| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入 | ibci_math / ibci_json / ibci_time / ibci_net / ibci_file / ibci_schema / ibci_isys |
+| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | ibci_math / ibci_json / ibci_time / ibci_net / ibci_schema / ibci_isys |
+| 非侵入式（轻量依赖）| 同上，但导入了 `core.runtime.path.IbPath`（纯数据类，无状态依赖）并通过 `execution_context` 进行路径解析 | ibci_file |
 | 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | ibci_ai / ibci_ihost / ibci_idbg |
 
 **示例（AI 插件）**：

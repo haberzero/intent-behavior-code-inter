@@ -50,8 +50,15 @@ class StmtHandler(BaseHandler):
             max_retry=max_retry
         )
 
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
+            f"llmexcept: entering frame for target={target_uid}, max_retry={max_retry}")
+
         try:
             while frame.should_continue_retrying():
+                attempt = frame.retry_count + 1
+                self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
+                    f"llmexcept: attempt {attempt}/{frame.max_retry + 1}, target={target_uid}")
+
                 # 显式恢复上下文快照 (如果是 retry 跳转回来的)
                 frame.restore_snapshot(self.runtime_context)
 
@@ -68,9 +75,15 @@ class StmtHandler(BaseHandler):
 
                 # 如果没有 LLM 调用，或者 LLM 调用是确定的（成功匹配或明确失败）
                 if result is None or not result.is_uncertain:
+                    self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
+                        f"llmexcept: resolved on attempt {attempt}, target={target_uid}")
                     break
 
                 # 运行到这里说明 LLM 返回了 UNCERTAIN 结果
+                raw_preview = (result.raw_response or "")[:60].replace("\n", " ")
+                self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
+                    f"llmexcept: uncertain result on attempt {attempt} (raw: '{raw_preview}'), entering handler body")
+
                 frame.last_result = result
                 frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
 
@@ -90,6 +103,8 @@ class StmtHandler(BaseHandler):
 
                 # 检查重试计数
                 if not frame.increment_retry():
+                    self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
+                        f"llmexcept: max retries ({frame.max_retry}) exhausted for target={target_uid}")
                     break
 
         finally:

@@ -436,11 +436,17 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 
 **当前状态**: `LLMExceptFrameStack` 已支持多层嵌套帧的压栈/弹栈，但嵌套场景下的作用域隔离和帧交互未经过系统性测试。
 
-### 10.4 重试诊断日志 (P1) [PENDING]
+### 10.4 重试诊断日志 (P1) [COMPLETED]
 
-**待完善**:
-- 每次重试时输出详细日志（帧状态、重试次数、错误原因）
-- 支持通过 `idbg.last_result()` 等接口访问重试历史
+**已实现**：在 `stmt_handler.py` 的 `visit_IbLLMExceptionalStmt` 重试循环中新增 4 处 `self.debugger.trace()` 调用：
+
+- **DETAIL**：进入 llmexcept 帧时输出 `target_uid` 和 `max_retry`
+- **DETAIL**：每次 while 循环迭代开始时输出当前尝试编号（`attempt N/M`）
+- **DETAIL**：正常退出（LLM 结果确定）时输出成功信息
+- **BASIC**：LLM 返回 UNCERTAIN 时输出原始响应预览（前 60 字符）
+- **BASIC**：重试次数耗尽时输出 max_retry 和 target_uid
+
+日志在 `CoreModule.INTERPRETER` 调试频道输出，只在对应级别启用时可见，不影响生产运行。
 
 ### 10.5 技术债务清理 (P2) [COMPLETED]
 
@@ -460,17 +466,11 @@ class ai:             # Pass 1 尝试收集 CLASS 符号 "ai"
 - `llm_except_frame.py` 的 `_is_serializable()` 和 `_save_vars_snapshot()` 已将 IbTuple 与 IbList 并列处理
 - `runtime_serializer.py` 的序列化路径（`_collect_instance()`）和反序列化路径（`_get_instance()`）均已添加 `"tuple"` 分支，并更新了导入
 
-### 11.2 ibci_file 的 core 依赖与"非侵入"分类不符 (P2) [PENDING]
+### 11.2 ibci_file 的 core 依赖与"非侵入"分类不符 (P2) ✅ 已修正（文档）
 
-**问题描述**：文档（含 ibcext.py 注释和 ARCHITECTURE_PRINCIPLES.md）将 `ibci_file` 归类为"非侵入式"插件，但 `ibci_file/core.py` 实际上 `from core.runtime.path import IbPath`，导入了内核路径模块。
+**问题**：`ibci_file/core.py` 导入 `from core.runtime.path import IbPath` 并使用 `capabilities.execution_context`，但文档将其归类为"非侵入式"插件（零内核依赖）。
 
-`IbPath` 是一个纯数据类（`@dataclass(frozen=True)`），不依赖解释器状态，可以合理视为允许的边界内依赖。但文档描述与实际不符，应修正。
-
-**建议**：
-- 将 `IbPath` 视为"可用于非侵入式插件的内核工具类"，并在文档中注明 `ibci_file` 是"轻量依赖"型插件
-- 或者将 `IbPath` 提取到独立的 `core/base/` 层（无状态工具类），使非侵入层可以安全导入
-
-**涉及文件**：`ibci_modules/ibci_file/core.py`、`core/extension/ibcext.py` 注释
+**已修正**：`ibcext.py` 注释新增"轻量依赖型"例外说明，`ARCHITECTURE_PRINCIPLES.md` 插件表格拆分为三行（非侵入式 / 非侵入式轻量依赖 / 核心级），将 `ibci_file` 单独列出。`IbPath` 是纯数据类，无解释器状态依赖，属可接受的工具类导入。
 
 ### 11.3 调度器 import 注入中的多处 [临时方案] (P1) [COMPLETED]
 
