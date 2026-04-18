@@ -39,8 +39,17 @@ class IssueTracker(Protocol):
 
 @runtime_checkable
 class IStateReader(Protocol):
-    """提供对解释器运行时状态（如变量）的只读访问"""
+    """
+    提供对解释器运行时状态（变量、意图、LLM 结果）的只读访问。
+
+    由 RuntimeContextImpl 实现，通过 KernelRegistry.get_state_reader() 供
+    核心层插件（如 ibci_idbg）访问，无需持有 ServiceContext 引用。
+    """
     def get_vars_snapshot(self) -> Dict[str, Any]: ...
+    def get_vars(self) -> Dict[str, Any]: ...
+    def get_active_intents(self) -> List[Any]: ...
+    def get_last_llm_result(self) -> Optional[Any]: ...
+    def get_llm_except_frames(self) -> List[Any]: ...
 
 @runtime_checkable
 class ISymbolView(Protocol):

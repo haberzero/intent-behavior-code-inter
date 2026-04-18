@@ -3,20 +3,17 @@
 > 记录接下来可以直接开工的具体任务，按优先级排列。
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-18（P1 三项任务（循环迭代器恢复、显式引入原则 Phase 1、嵌套 llmexcept 测试）全部完成；下一重点：Step 4b ibci_ihost/idbg 重构）
+> **最后更新**：2026-04-18（Step 4b ibci_ihost/idbg KernelRegistry 重构完成；下一重点：Step 5 IbFunction.call() 去除 context 依赖）
 
 ---
 
-## 1. Step 4b：ibci_ihost / ibci_idbg 标准化重构 [P1]
+## 1. Step 5：IbFunction.call() 去除 context 参数依赖 [P2]
 
-**任务**：将 `ibci_ihost` 和 `ibci_idbg` 两个核心层插件从直接访问 `capabilities.service_context.host_service` / `capabilities.stack_inspector` / `capabilities.llm_executor` 等内部接口，迁移为通过 `KernelRegistry` 注册的稳定钩子接口（类比 `get_llm_executor()` 的模式）访问服务。
+**任务**：`IbUserFunction.call(self, receiver, args)` / `IbNativeFunction.call()` 当前仍通过外部传入 `execution_context` 执行。目标是让函数对象在创建时捕获执行上下文引用（类比 `IbBehavior` 的 `_execution_context` 模式），使 call() 真正自主执行，彻底消除对外部 context 参数的依赖。
 
-**设计方向**：
-- `KernelRegistry` 新增 `register_host_service()` / `get_host_service()` 钩子
-- `KernelRegistry` 新增 `register_stack_inspector()` / `get_stack_inspector()` 钩子，接口类型为 `IStackInspector` / `IStateReader`
-- `ibci_ihost` / `ibci_idbg` 通过上述稳定接口替换对 `capabilities.service_context.*` 的直接访问
+**注意**：此重构涉及调用栈、递归、闭包捕获等复杂并发场景，需要先仔细讨论并发模型再动工。
 
-**文件**：`core/kernel/registry.py`、`core/base/interfaces.py`、`ibci_modules/ibci_ihost/`、`ibci_modules/ibci_idbg/`
+**文件**：`core/runtime/objects/kernel.py`（IbUserFunction/IbNativeFunction）、`core/runtime/interpreter/handlers/expr_handler.py`、`core/runtime/interpreter/interpreter.py`
 
 ---
 

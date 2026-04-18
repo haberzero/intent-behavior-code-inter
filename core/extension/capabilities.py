@@ -37,5 +37,16 @@ class PluginCapabilities:
             return self._capability_registry.get(capability_name)
         return None
 
+    @property
+    def kernel_registry(self) -> Optional[Any]:
+        """
+        暴露 KernelRegistry 引用，供核心层插件使用。
+
+        通过此属性访问 KernelRegistry，使插件可以调用
+        get_host_service()、get_stack_inspector()、get_state_reader()、
+        get_llm_executor() 等稳定接口，而无需持有 ServiceContext 引用。
+        """
+        return self._registry
+
 
 ExtensionCapabilities = PluginCapabilities

@@ -145,6 +145,18 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 新增 `TestE2ELLMExceptNested` 测试类，包含三个场景：① 外层/内层 llmexcept 独立重试互不干扰；② 内层 LLM 恢复后外层代码正常继续；③ 内层重试耗尽后，后续普通赋值不被 `IbLLMUncertain` 污染。全部 500 测试通过。
 *文件：`tests/e2e/test_e2e_ai_mock.py`*
 
+### 4.12 ibci_ihost / ibci_idbg KernelRegistry 标准化（Step 4b）
+将 `ibci_ihost` 和 `ibci_idbg` 两个核心层插件从直接访问内核内部结构迁移为通过 `KernelRegistry` 稳定钩子接口访问，与 `IbBehavior.call()` / `IbLLMFunction.call()` 的公理化自主执行模式一致：
+- **`core/base/interfaces.py`**：扩展 `IStateReader` Protocol，新增 `get_vars()`、`get_active_intents()`、`get_last_llm_result()`、`get_llm_except_frames()` 方法签名。
+- **`core/runtime/interpreter/runtime_context.py`**：`RuntimeContextImpl` 新增 `get_llm_except_frames()` 方法（返回 `_llm_except_frames` 副本），消除插件对私有属性的直接访问。
+- **`core/kernel/registry.py`**：新增 `_host_service`、`_stack_inspector`、`_state_reader` 三个字段及对应 `register_host_service()` / `get_host_service()`、`register_stack_inspector()` / `get_stack_inspector()`、`register_state_reader()` / `get_state_reader()` 六个方法；`clone()` 同步复制新字段。
+- **`core/extension/capabilities.py`**：`PluginCapabilities` 新增 `kernel_registry` property，暴露 `_registry` 引用供核心层插件访问稳定钩子。
+- **`core/engine.py`**：`_prepare_interpreter()` 在注册 `llm_executor` 之后，同步将 `host_service`、`stack_inspector`（`execution_context.stack_inspector`）、`state_reader`（`runtime_context`）注册到 `KernelRegistry`。
+- **`ibci_modules/ibci_ihost/core.py`**：`_host_service()` 辅助方法改为 `capabilities.kernel_registry.get_host_service()`，删除对 `capabilities.service_context.host_service` 的直接访问。
+- **`ibci_modules/ibci_idbg/core.py`**：`setup()` 不再存储 `stack_inspector`/`state_reader` 实例，改为存储 `_kr`（KernelRegistry）和 `_cap_registry`（CapabilityRegistry）；所有方法通过 `self._kr.get_stack_inspector()` / `get_state_reader()` / `get_llm_executor()` 懒获取服务；`llm_provider` 通过 `self._cap_registry.get("llm_provider")` 访问；`protection_map()` TODO 注释精简。
+*全部 517 个测试通过。*
+
+
 ---
 
 ## 五、确认的设计决策

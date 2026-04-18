@@ -317,6 +317,14 @@ class RuntimeContextImpl(RuntimeContext):
             return self._llm_except_frames[-1]
         return None
 
+    def get_llm_except_frames(self) -> List['LLMExceptFrame']:
+        """
+        获取完整的 LLMExcept 帧栈（只读副本）。
+        供核心层插件（如 ibci_idbg）通过 IStateReader 接口访问，
+        避免直接访问内部属性 _llm_except_frames。
+        """
+        return list(self._llm_except_frames)
+
     def save_llm_except_state(self, target_uid: str, node_type: str = "unknown", max_retry: int = 3) -> 'LLMExceptFrame':
         """
         创建并保存 LLMExceptFrame 现场。

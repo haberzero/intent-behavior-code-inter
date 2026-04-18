@@ -5,7 +5,7 @@ IBCI IHost 核心级宿主能力插件实现。
 
 IHost 是 IBCI 核心级插件（Core-Level Plugin）：
 - 继承 IbPlugin，通过 setup(capabilities) 注入内核能力
-- 通过 capabilities.service_context.host_service 委托到内核 HostService
+- 通过 capabilities.kernel_registry.get_host_service() 访问内核 HostService
 - 向 CapabilityRegistry 注册自身为 "ihost_provider"，供其它插件查找
 
 暴露给 ibci 脚本的能力（通过 import ihost）：
@@ -22,7 +22,7 @@ class IHostPlugin(IbPlugin):
     """
     IHost 宿主能力插件。
 
-    核心级插件，通过 service_context.host_service 委托内核 HostService 完成
+    核心级插件，通过 KernelRegistry.get_host_service() 委托内核 HostService 完成
     所有实际操作，自身不持有任何运行时状态。
     """
     def __init__(self):
@@ -77,9 +77,11 @@ class IHostPlugin(IbPlugin):
     # ------------------------------------------------------------------
 
     def _host_service(self) -> Optional[Any]:
-        """获取内核 HostService 实例。"""
-        if self._capabilities and self._capabilities.service_context:
-            return self._capabilities.service_context.host_service
+        """通过 KernelRegistry 稳定钩子获取内核 HostService 实例。"""
+        if self._capabilities:
+            kr = self._capabilities.kernel_registry
+            if kr:
+                return kr.get_host_service()
         return None
 
 

@@ -50,6 +50,15 @@ class KernelRegistry:
         # [LLM Executor] 内核 LLM 执行器引用（由解释器在启动时注入）
         self._llm_executor: Any = None
 
+        # [Host Service] 内核宿主服务引用（由调度器在启动时注入）
+        self._host_service: Any = None
+
+        # [Stack Inspector] 调用栈/意图栈内省接口（由调度器在启动时注入）
+        self._stack_inspector: Any = None
+
+        # [State Reader] 运行时状态读取接口（由调度器在启动时注入）
+        self._state_reader: Any = None
+
     @property
     def state_level(self) -> int:
         return self._state_level
@@ -189,6 +198,49 @@ class KernelRegistry:
     def get_llm_executor(self) -> Optional[Any]:
         """获取内核 LLM 执行器引用（IILLMExecutor）。"""
         return self._llm_executor
+
+    def register_host_service(self, host_service: Any, token: Any) -> None:
+        """
+        注册内核宿主服务（IHostService）。
+
+        由调度器在解释器启动完成后调用，仅校验内核令牌。
+        供 ibci_ihost 等核心层插件通过 get_host_service() 访问，
+        无需持有 ServiceContext 引用。
+        """
+        self._verify_kernel(token)
+        self._host_service = host_service
+
+    def get_host_service(self) -> Optional[Any]:
+        """获取内核宿主服务引用（IHostService）。"""
+        return self._host_service
+
+    def register_stack_inspector(self, inspector: Any, token: Any) -> None:
+        """
+        注册调用栈/意图栈内省接口（IStackInspector）。
+
+        由调度器在解释器启动完成后调用，仅校验内核令牌。
+        供 ibci_idbg 等核心层插件通过 get_stack_inspector() 访问。
+        """
+        self._verify_kernel(token)
+        self._stack_inspector = inspector
+
+    def get_stack_inspector(self) -> Optional[Any]:
+        """获取调用栈/意图栈内省接口引用（IStackInspector）。"""
+        return self._stack_inspector
+
+    def register_state_reader(self, reader: Any, token: Any) -> None:
+        """
+        注册运行时状态读取接口（IStateReader）。
+
+        由调度器在解释器启动完成后调用，仅校验内核令牌。
+        供 ibci_idbg 等核心层插件通过 get_state_reader() 访问。
+        """
+        self._verify_kernel(token)
+        self._state_reader = reader
+
+    def get_state_reader(self) -> Optional[Any]:
+        """获取运行时状态读取接口引用（IStateReader）。"""
+        return self._state_reader
 
     def set_execution_context(self, context: 'IExecutionContext', token: Any):
         """注册执行上下文引用，仅内核可调。"""
@@ -343,4 +395,7 @@ class KernelRegistry:
         new_registry._is_classes_sealed = self._is_classes_sealed
         new_registry._state_level = self._state_level
         new_registry._llm_executor = self._llm_executor
+        new_registry._host_service = self._host_service
+        new_registry._stack_inspector = self._stack_inspector
+        new_registry._state_reader = self._state_reader
         return new_registry

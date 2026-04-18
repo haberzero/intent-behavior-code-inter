@@ -5,40 +5,74 @@ from core.extension.ibcext import IbPlugin, ExtensionCapabilities
 class IDbgPlugin(IbPlugin):
     """
     IDBG 内核观察者插件。
-    核心级插件，必须继承 IbPlugin 以获取 stack_inspector 和 state_reader 能力。
+
+    核心级插件，通过 KernelRegistry 的稳定钩子接口访问运行时内核能力：
+    - get_stack_inspector() → 调用栈/意图栈内省（IStackInspector）
+    - get_state_reader()    → 运行时变量/LLM 结果读取（IStateReader）
+    - get_llm_executor()    → LLM 执行器（IILLMExecutor）
+
+    不再直接持有 capabilities.stack_inspector / state_reader / llm_executor，
+    改为在运行时通过 kernel_registry 懒获取，与 IbBehavior/IbLLMFunction 的
+    公理化自主执行模式保持一致。
     """
     def __init__(self):
         super().__init__()
-        self.stack_inspector = None
-        self.state_reader = None
         self._capabilities: Optional[ExtensionCapabilities] = None
+        self._kr: Optional[Any] = None          # KernelRegistry 引用
+        self._cap_registry: Optional[Any] = None  # CapabilityRegistry 引用
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
-        self.stack_inspector = capabilities.stack_inspector
-        self.state_reader = capabilities.state_reader
+        self._kr = capabilities.kernel_registry
+        self._cap_registry = capabilities._capability_registry
         # 向能力注册表注册自己为 Debugger Provider
         capabilities.expose("debugger_provider", self)
 
+    # ------------------------------------------------------------------
+    # 内部辅助：懒获取内核服务
+    # ------------------------------------------------------------------
+
+    def _stack_inspector(self) -> Optional[Any]:
+        """通过 KernelRegistry 获取 IStackInspector 实例。"""
+        return self._kr.get_stack_inspector() if self._kr else None
+
+    def _state_reader(self) -> Optional[Any]:
+        """通过 KernelRegistry 获取 IStateReader 实例。"""
+        return self._kr.get_state_reader() if self._kr else None
+
+    def _llm_executor(self) -> Optional[Any]:
+        """通过 KernelRegistry 获取 IILLMExecutor 实例。"""
+        return self._kr.get_llm_executor() if self._kr else None
+
+    def _llm_provider(self) -> Optional[Any]:
+        """通过 CapabilityRegistry 获取 LLM Provider（由 ibci_ai 注册）。"""
+        return self._cap_registry.get("llm_provider") if self._cap_registry else None
+
+    # ------------------------------------------------------------------
+    # 公开接口
+    # ------------------------------------------------------------------
+
     def vars(self):
-        if not self.state_reader: return {}
-        return self.state_reader.get_vars()
+        sr = self._state_reader()
+        if not sr:
+            return {}
+        return sr.get_vars()
 
     def last_llm(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的完整详情 (合并 Executor 与 Provider 信息)"""
-        if not self._capabilities:
-            return {}
-
         info = {}
+
         # 1. 优先获取 Executor 记录的高层调用信息 (包含自动注入的意图和重试提示)
-        if self._capabilities.llm_executor:
-            executor_info = self._capabilities.llm_executor.get_last_call_info()
+        executor = self._llm_executor()
+        if executor:
+            executor_info = executor.get_last_call_info()
             if executor_info:
                 info.update(executor_info)
 
         # 2. 如果 Provider 有更底层或不同的记录 (如原生插件调用)，进行合并
-        if self._capabilities.llm_provider:
-            provider_info = self._capabilities.llm_provider.get_last_call_info()
+        provider = self._llm_provider()
+        if provider:
+            provider_info = provider.get_last_call_info()
             if provider_info:
                 # 仅当 Executor 信息为空或 Provider 信息更新时覆盖
                 for k, v in provider_info.items():
@@ -46,16 +80,16 @@ class IDbgPlugin(IbPlugin):
                         info[k] = v
 
         # 3. 合并 LLMResult 状态
-        if self.state_reader:
-            context = self.state_reader
-            res = None
-            if hasattr(context, 'get_last_llm_result'):
-                res = context.get_last_llm_result()
-            
+        sr = self._state_reader()
+        if sr:
+            res = sr.get_last_llm_result()
+
             # 同样考虑 llmexcept 块内的特殊情况
-            if not res and hasattr(context, '_llm_except_frames') and context._llm_except_frames:
-                res = context._llm_except_frames[-1].last_result
-                
+            if not res:
+                frames = sr.get_llm_except_frames()
+                if frames:
+                    res = frames[-1].last_result
+
             if res:
                 info["result"] = {
                     "success": res.success,
@@ -171,20 +205,22 @@ class IDbgPlugin(IbPlugin):
 
     def last_result(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的 LLMResult 详情"""
-        if not self.state_reader: return {}
-        context = self.state_reader
-        
-        res = None
-        if hasattr(context, 'get_last_llm_result'):
-            res = context.get_last_llm_result()
-            
+        sr = self._state_reader()
+        if not sr:
+            return {}
+
+        res = sr.get_last_llm_result()
+
         # [Result Mode Fix] 如果在 llmexcept 块内，当前的 last_llm_result 可能为了避免干扰赋值而被临时清空。
         # 此时尝试从重试帧 (LLMExceptFrame) 中获取触发异常的原始结果。
-        if not res and hasattr(context, '_llm_except_frames') and context._llm_except_frames:
-            res = context._llm_except_frames[-1].last_result
-            
-        if not res: return {}
-        
+        if not res:
+            frames = sr.get_llm_except_frames()
+            if frames:
+                res = frames[-1].last_result
+
+        if not res:
+            return {}
+
         return {
             "success": res.success,
             "is_uncertain": res.is_uncertain,
@@ -196,11 +232,11 @@ class IDbgPlugin(IbPlugin):
 
     def retry_stack(self) -> list:
         """获取当前的重试帧栈信息 (LLMExceptFrameStack)"""
-        if not self.state_reader: return []
-        context = self.state_reader
-        if not hasattr(context, '_llm_except_frames'): return []
-        
-        frames = context._llm_except_frames
+        sr = self._state_reader()
+        if not sr:
+            return []
+
+        frames = sr.get_llm_except_frames()
         return [
             {
                 "target": f.target_uid,
@@ -215,24 +251,15 @@ class IDbgPlugin(IbPlugin):
 
     def protection_map(self) -> Dict[str, str]:
         """获取节点保护表 (Shadow Execution Side Table)"""
-        if not self._capabilities or not self._capabilities.stack_inspector:
-            return {}
-        
-        inspector = self._capabilities.stack_inspector
-        # 尝试从执行上下文获取侧表
-        if hasattr(inspector, 'get_side_table'):
-            # 这是一个 hack，因为 side_table 接口通常只针对单个 key
-            # 但为了调试，我们希望看到全貌。
-            # 如果 inspector (Interpreter) 暴露了整个 side_table_manager 则更好。
-            pass
-        
-        # 备选方案：如果 runtime_context 记录了这些则从那里拿
+        # TODO: 需要内核暴露 side_table 接口后实现
         return {}
 
     def intents(self) -> list:
         """获取当前活跃的意图栈详情"""
-        if not self.state_reader: return []
-        intents = self.state_reader.get_active_intents()
+        sr = self._state_reader()
+        if not sr:
+            return []
+        intents = sr.get_active_intents()
         return [
             {
                 "content": i.content if hasattr(i, 'content') else str(i),
@@ -246,14 +273,12 @@ class IDbgPlugin(IbPlugin):
     def show_intents(self):
         """直接打印意图栈到控制台（IBCI 友好）"""
         print("[IDBG] 意图栈:")
-        
-        intents = None
-        
-        if self._capabilities and self._capabilities.stack_inspector:
+
+        si = self._stack_inspector()
+        if si:
             try:
-                inspector = self._capabilities.stack_inspector
-                if hasattr(inspector, 'get_active_intents'):
-                    raw = inspector.get_active_intents()
+                if hasattr(si, 'get_active_intents'):
+                    raw = si.get_active_intents()
                     if raw:
                         print("  (via stack_inspector)")
                         for idx, content in enumerate(raw):
@@ -261,33 +286,33 @@ class IDbgPlugin(IbPlugin):
                         return
             except Exception:
                 pass
-        
-        if self.state_reader:
+
+        sr = self._state_reader()
+        if sr:
             try:
-                if hasattr(self.state_reader, 'get_active_intents'):
-                    intents = self.state_reader.get_active_intents()
-                    if intents:
-                        print("  (via state_reader)")
-                        for idx, i in enumerate(intents):
-                            content = i.content if hasattr(i, 'content') else str(i)
-                            mode = i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+'))
-                            role = i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', '?'))
-                            print(f"  [{idx}] {mode} | {role} | {content}")
-                            return
+                intents = sr.get_active_intents()
+                if intents:
+                    print("  (via state_reader)")
+                    for idx, i in enumerate(intents):
+                        content = i.content if hasattr(i, 'content') else str(i)
+                        mode = i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+'))
+                        role = i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', '?'))
+                        print(f"  [{idx}] {mode} | {role} | {content}")
+                    return
             except Exception:
                 pass
-        
+
         print("  (空)")
 
     def env(self) -> Dict[str, Any]:
-        if not self._capabilities or not self._capabilities.stack_inspector:
+        si = self._stack_inspector()
+        if not si:
             return {}
 
-        inspector = self._capabilities.stack_inspector
         return {
-            "instruction_count": inspector.get_instruction_count(),
-            "call_stack_depth": inspector.get_call_stack_depth(),
-            "active_intents": inspector.get_active_intents()
+            "instruction_count": si.get_instruction_count(),
+            "call_stack_depth": si.get_call_stack_depth(),
+            "active_intents": si.get_active_intents()
         }
 
     def fields(self, obj: Any) -> Dict[str, Any]:
