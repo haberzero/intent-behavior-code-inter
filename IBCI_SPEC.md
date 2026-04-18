@@ -257,12 +257,12 @@ str root = isys.project_root() # /project
 支持在完全隔离的环境中运行子脚本：
 
 ```ibci
-import host
+import ihost
 import isys
 
 dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}
 # 子环境有独立的入口文件、路径管理、插件发现
-host.run_isolated("./sub/child.ibci", policy)
+ihost.run_isolated("./sub/child.ibci", policy)
 ```
 
 `./sub/child.ibci` 启动运行后，将会是一个全新的独立 IBC-Inter 实例，会独立进行一次全新的compile以及解释运行。

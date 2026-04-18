@@ -22,11 +22,11 @@
 
 | 语法 | 行为 | 说明 |
 |------|------|------|
-| `@ 内容` | 压入意图栈 | 持续有效，直到被移除 |
-| `@+ 内容` | 压入意图栈 | 与 `@` 相同 |
+| `@ 内容` | 一次性涂抹意图 | 只对紧跟的下一次 LLM 调用有效，调用后自动清除 |
+| `@+ 内容` | 压入意图栈 | 持续有效，直到被移除 |
 | `@- #tag` | 物理移除 | 从栈中移除匹配的标签意图 |
 | `@- 内容` | 物理移除 | 从栈中移除匹配内容的意图 |
-| `@! 内容` | 临时的单次 IntentStack | 只对当前 LLM 调用有效，全局栈不变 |
+| `@! 内容` | 临时的单次 IntentStack | 只对当前 LLM 调用有效，全局栈不变，同时屏蔽涂抹意图 |
 
 ### 语法规则
 
@@ -63,11 +63,13 @@ core/runtime/objects/intent_stack.py
 
 ```
 core/runtime/interpreter/runtime_context.py
-├── _intent_top              # 意图栈顶节点
+├── _intent_top              # 意图栈顶节点（@+ 持久栈）
+├── _pending_smear_intents   # @ 涂抹意图队列（一次性，LLM 调用后清除）
 ├── _pending_override_intent  # @! 临时排他意图
-├── push_intent()            # 压入意图
+├── push_intent()            # 压入持久意图栈（@+）
+├── add_smear_intent()       # 添加一次性涂抹意图（@）
 ├── remove_intent()          # 物理移除意图
-└── get_resolved_prompt_intents()  # 消解意图为 Prompt
+└── get_resolved_prompt_intents()  # 消解意图为 Prompt（按优先级：@! > @涂抹 > @+持久栈 > 全局）
 ```
 
 #### IntentNode 缓存机制
@@ -92,7 +94,10 @@ IntentNode
 ```python
 # visit_IbIntentAnnotation
 intent = factory.create_intent_from_node(...)
-runtime_context.push_intent(intent)
+# @ 一次性涂抹意图：不压入持久栈，下一次 LLM 调用消费后自动清除
+runtime_context.add_smear_intent(intent)
+# @+ 持久压栈：
+# runtime_context.push_intent(intent)  ← 由 visit_IbIntentStackOperation 处理
 ```
 
 ### 4.2 @! 排他意图
@@ -175,6 +180,10 @@ ibci_modules/ibci_idbg/core.py
 ## 七、测试验证
 
 ```ibci
+@ 只对下一次调用有效
+str r0 = @~打个招呼~
+# 此时 @ 意图已自动清除，不影响后续调用
+
 @+ 用英文回复
 @+ 每个单词首字母大写
 result = @~说 hello~
@@ -188,6 +197,7 @@ result = @~打个招呼~
 ```
 
 验证结果：
+- ✅ `@` 一次性意图 → 调用后自动清除，不残留
 - ✅ `@+` 增量追加 → 意图累积
 - ✅ `@-` 物理移除 → 正确移除指定意图
 - ✅ `@!` 临时单次 → 只对当前调用有效

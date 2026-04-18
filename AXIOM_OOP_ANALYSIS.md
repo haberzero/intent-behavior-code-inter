@@ -28,7 +28,7 @@
 |------|---------|
 | **callable** | 仅作为 `DynamicAxiom("callable")` 存在，是历史遗留的占位符，无真正语义。用户层已废弃（见 `lambda`/`snapshot`）。 |
 | **IbFunction** | `call()` 需要外部传入 `context`（`IExecutionContext`），不能自主执行。 |
-| **Intent** | `DynamicAxiom("intent")` 占位符，完整公理化依赖 behavior 先行。 |
+| **Intent** | 内置 ClassSpec（通过 `Bootstrapper.initialize()` 创建），无专用 Axiom。完整 IntentAxiom 公理化属于 Step 6 长期目标。 |
 
 ---
 
@@ -120,20 +120,21 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 `IILLMExecutor` 接口在 `kernel/interfaces/` 或 `kernel/spec/` 下定义，仅包含执行行为所需的最小 API，不涉及任何解释器具体实现。
 
-### 3.4 BehaviorCallCapability 的返回类型：使用 expected_type，不允许 "any" 妥协
+### 3.4 BehaviorCallCapability 的返回类型：`"auto"` 是正确的现阶段设计
 
-**已确认**：`behavior` 类型在编译期已有明确的类型检查结果。`IbBehavior.expected_type` 字段保存了 LHS 类型标注（如 `int`、`str`）。
+**实际实现**：`BehaviorCallCapability.resolve_return_type_name()` 返回 `"auto"`（编译期延迟），运行时通过 `push_expected_type(behavior.expected_type)` 在 LLM 调用时强制解析为具体类型。
 
-`BehaviorCallCapability.resolve_return_type_name()` **必须从 `IbBehavior.expected_type` 读取**，不允许硬返回 `"any"` 作为妥协：
+**为什么不能直接返回 `behavior.expected_type`**：`CallCapability.resolve_return_type_name(self, arg_type_names: List[str])` 是**编译期接口**，参数为类型名字符串列表，在协议层面**无法持有** IbObject 实例（`IbBehavior`）。任何试图从接口内访问 `receiver.expected_type` 的伪代码在当前架构下都无法实现。
 
-```python
-class BehaviorCallCapability(CallCapability):
-    def resolve_return_type_name(self, receiver: IbObject, args: List[IbObject]) -> str:
-        # receiver 是 IbBehavior 实例
-        if hasattr(receiver, 'expected_type') and receiver.expected_type:
-            return receiver.expected_type
-        return "str"  # 无 LHS 类型时默认 str，与即时执行行为一致
-```
+**`"auto"` ≠ `"any"`**：
+- `"any"` 表示"放弃类型信息"（永久未知）
+- `"auto"` 表示"编译期延迟，运行时精确解析"
+
+运行时路径：`invoke_behavior()` → `push_expected_type(behavior.expected_type)` → LLM 结果被约束为 `expected_type` 对应的类型。类型约束从未丢失，只是延迟到运行时生效。
+
+**当前已知限制（P2 目标）**：
+- 编译器中 `is_assignable(auto, int)` = False，导致 `int result = compute()` 在调用处产生 SEM_003 类型不匹配错误。这不是运行时 Bug，而是编译期类型推断精度不足。
+- **正确方向**：引入 `BehaviorSpec(return_type_name="int")` 使编译器在已知 lambda/snapshot 定义的 expected_type 时，调用处可推断为具体类型。这属于 Step 2 的延伸，不影响当前核心功能。
 
 ### 3.5 彻底重构原则（禁止渐进式补丁）
 
@@ -320,9 +321,19 @@ class BehaviorCallCapability(CallCapability):
 
 ---
 
-### 6.2 Intent 完整公理化
+### 6.2 Intent 公理化
 
-**状态**：`DynamicAxiom("intent")` 占位符，工作量预估 5-9 人天。依赖 `BehaviorAxiom`（Step 2）先行完成。不影响当前核心功能。
+**当前状态**：Intent 是通过 `Bootstrapper.initialize()` 注册的内置 `ClassSpec`（与 `IbModule`、`IntentStack` 同级）。它**不是** `DynamicAxiom("intent")` 占位符——内核的 `AxiomRegistry` 中不存在 intent 专属的 Axiom。
+
+**目前的正确描述**：
+- `Intent` 类通过 `factory.create_class("Intent")` 注册为 ClassSpec
+- `IbIntent` 是运行时对象，直接由 RuntimeContext 和 factory 管理
+- `IntentStack` 是独立的内置类型，已有完整的 `push`/`pop`/`remove`/`clear` 原生方法注册
+
+**完整公理化目标（Step 6 长期）**：
+- 为 Intent 定义专用 `IntentAxiom`（`is_class()=True`，完整的 vtable）
+- 将 Intent 的行为约束纳入公理体系，消除目前依赖运行时直接管理的隐式行为
+- 工作量预估 3-5 人天，不阻塞当前功能
 
 ---
 
