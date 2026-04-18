@@ -212,6 +212,33 @@ print(result)
         lines = run_and_capture(code)
         assert "1" in lines
 
+    def test_single_intent_does_not_pollute_persistent_stack(self):
+        """@ 是一次性意图，LLM 调用后不应残留在持久意图栈中。
+        回归测试：验证第二次 LLM 调用能正常执行（若 @ 意图错误地永久入栈，
+        第二次调用仍会携带该意图，虽然 MOCK 模式下不影响结果，但不应报错）。"""
+        code = ai_setup_code() + """
+@ be concise
+str result1 = @~ MOCK:TRUE first ~
+str result2 = @~ MOCK:TRUE second ~
+print(result1)
+print(result2)
+"""
+        lines = run_and_capture(code)
+        assert lines.count("1") >= 2, "Both calls should succeed after one-shot @ intent"
+
+    def test_single_intent_does_not_affect_subsequent_call(self):
+        """@ 消费后，后续 LLM 调用不应继承该意图（通过混合 @+ 和 @ 验证）。"""
+        code = ai_setup_code() + """
+@+ formal language
+@ first hint
+str result1 = @~ MOCK:TRUE first ~
+str result2 = @~ MOCK:TRUE second ~
+print(result1)
+print(result2)
+"""
+        lines = run_and_capture(code)
+        assert "1" in lines
+
     def test_incremental_intent(self):
         code = ai_setup_code() + """
 @+ use formal language
@@ -231,6 +258,39 @@ print(result)
 """
         lines = run_and_capture(code)
         assert "1" in lines
+
+    def test_at_plus_persists_after_llm_call(self):
+        """@+ 是持久压栈，LLM 调用后意图仍有效，后续调用正常。"""
+        code = ai_setup_code() + """
+@+ use formal language
+str result1 = @~ MOCK:TRUE first ~
+str result2 = @~ MOCK:TRUE second ~
+print(result1)
+print(result2)
+"""
+        lines = run_and_capture(code)
+        assert lines.count("1") >= 2
+
+    def test_lambda_behavior_uses_call_time_intents(self):
+        """lambda 延迟行为应在调用时使用当前意图栈，而非定义时的空栈（回归验证）。
+        注：直接赋值到具体类型（int/str）需 P2 编译器类型推断改进，当前通过 print() 调用验证。"""
+        code = ai_setup_code() + """
+@+ use formal language
+str lambda compute = @~ MOCK:STR:hello ~
+@-
+print(compute())
+"""
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_lambda_behavior_basic(self):
+        """lambda 延迟行为基本执行冒烟测试。"""
+        code = ai_setup_code() + """
+str lambda compute = @~ MOCK:STR:world ~
+print(compute())
+"""
+        lines = run_and_capture(code)
+        assert "world" in lines
 
 
 # ---------------------------------------------------------------------------

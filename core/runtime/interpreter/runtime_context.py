@@ -229,6 +229,10 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         # 全局意图栈保持不变
         self._pending_override_intent: Optional[IbIntent] = None
 
+        # [涂抹意图] 一次性单行意图（@）
+        # @ 不压入持久栈，只对紧跟的下一次 LLM 调用有效，调用后自动清除
+        self._pending_smear_intents: List[IbIntent] = []
+
         # [LLMExceptFrame] LLM 异常重试帧栈
         # 当 llmexcept/retry 机制完全迁移到帧栈后，此属性用于管理嵌套的 llmexcept 结构。
         # 每个帧保存执行状态（变量快照、intent 栈、loop 上下文），支持状态恢复和精确重试。
@@ -263,6 +267,17 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
     def has_pending_override_intent(self) -> bool:
         """检查是否存在待处理的排他意图"""
         return self._pending_override_intent is not None
+
+    # --- 涂抹意图管理 (@) ---
+
+    def add_smear_intent(self, intent: IbIntent) -> None:
+        """
+        添加一次性涂抹意图（@）。
+
+        @ 不压入持久意图栈，只对紧跟的下一次 LLM 调用有效，
+        调用完成后自动清除。与 @+ 的持久压栈语义不同。
+        """
+        self._pending_smear_intents.append(intent)
 
     # --- LLM Result 管理 ---
 
@@ -606,25 +621,32 @@ class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
         """
         获取最终消解后的 Prompt 字符串列表。
 
-        如果存在待处理的排他意图 (@!)，只返回排他意图的内容，
-        忽略其他所有意图（全局意图栈保持不变）。
-
-        这是临时的单次作用的 IntentStack 实例，用于当前这一次 LLM 调用。
+        优先级（从高到低）：
+        1. @! 排他意图（pending_override）：只返回该意图，清除所有 pending smear
+        2. @ 涂抹意图（pending_smear）：一次性，合并入本次结果后清除
+        3. 持久意图栈（active_intents via @+）
+        4. 全局意图
         """
         # 检查是否有待处理的排他意图 (@!)
         pending_override = self._pending_override_intent
         if pending_override:
             # 消费排他意图（清除状态）
             self._pending_override_intent = None
+            # @! 排他：丢弃同时存在的涂抹意图（两者语义互斥，编译器已阻止共存）
+            self._pending_smear_intents.clear()
             content = pending_override.resolve_content(self, execution_context)
             return [content] if content else []
+
+        # 消费一次性涂抹意图（@ 单行意图）
+        smear_intents = list(self._pending_smear_intents)
+        self._pending_smear_intents.clear()
 
         # 正常解析意图栈
         active_intents = self.get_active_intents()
         global_intents = self.get_global_intents()
 
         return IntentResolver.resolve(
-            active_intents=active_intents,
+            active_intents=active_intents + smear_intents,
             global_intents=global_intents,
             context=self,
             execution_context=execution_context

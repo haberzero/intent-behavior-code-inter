@@ -513,17 +513,119 @@ class IbDict(IbObject):
         native_key = key.to_native() if isinstance(key, IbObject) else key
         return self.fields[native_key]
 
+@register_ib_type("deferred")
+class IbDeferred(IbObject):
+    """
+    通用延迟表达式对象。
+
+    ``lambda`` / ``snapshot`` 修饰的任意表达式都会被包装为 IbDeferred。
+    调用时重新执行被延迟的 AST 节点（lambda 模式）或返回捕获的快照值
+    （snapshot 模式）。
+
+    公理化设计
+    ----------
+    * IbDeferred 在创建时捕获 ``execution_context`` 引用。
+    * ``call()`` 重新访问被延迟的 AST 节点以完成求值。
+    * deferred_mode='lambda'   —— 每次调用重新求值
+    * deferred_mode='snapshot' —— 首次调用时求值并缓存
+
+    继承链：IbDeferred → IbObject (axiom: deferred → callable → Object)
+    """
+
+    def __init__(
+        self,
+        node_uid: str,
+        ib_class: IbClass,
+        deferred_mode: str = "lambda",
+        execution_context: Optional[Any] = None,
+        captured_scope: Optional[Any] = None,
+    ):
+        super().__init__(ib_class)
+        self.node_uid = node_uid
+        self.deferred_mode = deferred_mode
+        self._execution_context = execution_context
+        self._captured_scope = captured_scope
+        self._cache: Optional[IbObject] = None
+
+    def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
+        """
+        调用延迟表达式：重新执行被延迟的 AST 节点。
+
+        - lambda 模式：每次调用都重新求值（使用当前上下文）
+        - snapshot 模式：首次调用求值并缓存，后续调用返回缓存
+        """
+        if self.deferred_mode == "snapshot" and self._cache is not None:
+            return self._cache
+
+        if self._execution_context is None:
+            raise RuntimeError(
+                f"IbDeferred '{self.node_uid}': execution_context is None. "
+                "This typically occurs when the deferred expression was deserialized "
+                "without a live interpreter, or when the factory failed to inject the context. "
+                "Ensure engine._prepare_interpreter() has completed before invoking a deferred expression."
+            )
+
+        # 在捕获的作用域（如果有）中求值
+        rt_context = self._execution_context.runtime_context
+        old_scope = None
+        if self._captured_scope is not None:
+            old_scope = rt_context.current_scope
+            rt_context.current_scope = self._captured_scope
+
+        try:
+            result = self._execution_context.visit(self.node_uid)
+        finally:
+            if old_scope is not None:
+                rt_context.current_scope = old_scope
+
+        if self.deferred_mode == "snapshot":
+            self._cache = result
+
+        return result
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        if self._cache is not None:
+            return self._cache.to_native()
+        return self
+
+    def __to_prompt__(self) -> str:
+        if self._cache is not None:
+            return self._cache.__to_prompt__()
+        return f"<Deferred {self.node_uid}>"
+
+    def receive(self, message: str, args: List[IbObject]) -> IbObject:
+        if self._cache is not None:
+            return self._cache.receive(message, args)
+
+        if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
+            return self.ib_class.registry.box(str(self))
+
+        if message == "__call__":
+            return self.call(self.ib_class.registry.get_none(), args)
+
+        raise RuntimeError(f"Deferred '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
+
+    def __repr__(self):
+        mode = self.deferred_mode or "immediate"
+        return f"<Deferred({mode}) {self.node_uid}>"
+
+
 @register_ib_type("behavior")
 class IbBehavior(IbObject, IIbBehavior):
     """
-    延迟执行的行为对象 (~...~)。
+    延迟执行的 LLM 行为对象 (~...~)。
 
     公理化设计原则
     --------------
+    IbBehavior 是 deferred 家族中针对 LLM 行为表达式的特化。
+    继承链：behavior → deferred → callable → Object
+
     * 行为对象在创建时捕获 ``execution_context`` 引用（与 IbUserFunction 同构）。
     * ``call()`` 通过 ``ib_class.registry.get_llm_executor().invoke_behavior()``
       完成自主执行，不再依赖外部的 ``_execute_behavior`` 路由。
     * BaseHandler 中的 ``_execute_behavior`` 方法已删除。
+    * 与 IbDeferred 的区别：IbBehavior 延迟的是 LLM 调用（需要意图栈），
+      IbDeferred 延迟的是普通表达式求值（纯 AST 重访）。
     """
     def __init__(
         self,

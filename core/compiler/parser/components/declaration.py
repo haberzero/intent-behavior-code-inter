@@ -99,7 +99,14 @@ class DeclarationComponent(BaseComponent):
                     auto_name = auto_desc.name
             
             type_annotation = self._loc(ast.IbName(id=auto_name, ctx='Load'), type_token)
-            
+
+            # Optional deferred mode modifier after 'auto': auto lambda x = ...
+            deferred_mode = None
+            if self.stream.match(TokenType.LAMBDA):
+                deferred_mode = "lambda"
+            elif self.stream.match(TokenType.SNAPSHOT):
+                deferred_mode = "snapshot"
+
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
             
             # Optional type override: auto x: int = 1

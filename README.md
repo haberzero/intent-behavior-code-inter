@@ -116,7 +116,7 @@ for @~判定 $current_content 内容是否足够热情~:
 ```ibc-inter
 # parent.ibci
 
-import host
+import ihost
 
 dict policy = {
     "isolated": true,
@@ -124,7 +124,7 @@ dict policy = {
     "inherit_variables": false
 }
 
-host.run_isolated("child.ibci", policy)
+ihost.run_isolated("child.ibci", policy)
 ```
 
 上面的语句，会让 IBC-Inter 的整个运行流程从 `child.ibci` 重启。 `child.ibci` 是一个全新的独立 IBC-Inter 实例，会独立进行一次全新的编译以及解释运行。因此，并不要求 `child.ibci` 在主环境启动运行之前存在。动态宿主的机制允许 `child.ibci` 在主环境运行时被动态生成。

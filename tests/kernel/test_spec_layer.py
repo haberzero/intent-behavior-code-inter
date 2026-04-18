@@ -361,6 +361,29 @@ class TestAssignability:
         assert spec_reg.is_assignable(None, int_s) is False
         assert spec_reg.is_assignable(int_s, None) is False
 
+    def test_void_not_assignable_to_int(self, spec_reg: SpecRegistry):
+        """VoidAxiom is not dynamic — void cannot be assigned to int (or any concrete type)."""
+        void_s = spec_reg.resolve("void")
+        int_s = spec_reg.resolve("int")
+        # void is not assignable to a concrete type
+        assert spec_reg.is_assignable(void_s, int_s) is False
+
+    def test_int_not_assignable_to_void(self, spec_reg: SpecRegistry):
+        """int cannot be assigned to a void-typed slot (void is not a dynamic/top type)."""
+        void_s = spec_reg.resolve("void")
+        int_s = spec_reg.resolve("int")
+        assert spec_reg.is_assignable(int_s, void_s) is False
+
+    def test_void_assignable_to_void(self, spec_reg: SpecRegistry):
+        void_s = spec_reg.resolve("void")
+        assert spec_reg.is_assignable(void_s, void_s) is True
+
+    def test_void_assignable_to_any(self, spec_reg: SpecRegistry):
+        """void can flow into any (any accepts everything)."""
+        void_s = spec_reg.resolve("void")
+        any_s = spec_reg.resolve("any")
+        assert spec_reg.is_assignable(void_s, any_s) is True
+
 
 # ---------------------------------------------------------------------------
 # 7. Integration: create_default_registry (factory module)
