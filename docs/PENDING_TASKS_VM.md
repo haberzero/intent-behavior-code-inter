@@ -1,9 +1,77 @@
 # IBCI VM 架构长期设想与路线图
 
 > 本文档记录 IBCI 运行时向"真正虚拟机（VM）"演进的长期架构设想。  
-> 内容来源：2026-04-18 架构讨论（VM建模 / 意图栈公理化 / 实例模型边界三轮探讨）。  
+> 内容来源：2026-04-18 架构讨论（VM建模 / 三层并发建模 / 意图栈公理化 / 实例模型边界）。  
 > 这里记录的是**设想和目标**，不是当前任务，不阻塞近期工作。  
 > 近期任务见 `docs/NEXT_STEPS.md`；已完成工作见 `docs/COMPLETED.md`。
+
+---
+
+## ⚠️ 危险悬案：llmexcept / retry 在并发模型下的语义危机
+
+> **状态：需要进一步深度探讨，当前无明确答案。不阻塞近期工作，但在引入 Layer 1（LLM 流水线）之前必须解决。**
+
+### 问题描述
+
+`llmexcept` / `retry` 的当前设计是**完全串行假设下的"时间机器"模型**：
+
+1. 遇到 LLM 调用不确定性时，`LLMExceptFrame.save_context()` 对 RuntimeContext 做快照（变量、意图栈 `_intent_top`、循环上下文、retry_hint）
+2. LLM 调用失败后，`restore_context()` 把 RuntimeContext 的状态回滚到快照时刻
+3. 重新触发 LLM 调用，直到成功或超出 max_retry
+
+这个模型在串行执行时是正确的。**但在 Layer 1（LLM 调用流水线）引入后，这个模型将面临根本性的语义危机：**
+
+### 危机一：并发 Future 的取消问题
+
+```
+str a = @~生成标题~    // dispatch → Future_A（已发出 HTTP）
+str b = @~生成摘要~    // dispatch → Future_B（已发出 HTTP，与 A 无依赖）
+// ... 使用点
+print(a)               // resolve → Future_A 失败，进入 llmexcept
+```
+
+当 `Future_A` 在 resolve 时失败，`Future_B` 可能已经完成并等待被 resolve。此时：
+- 如果 `llmexcept` 回滚到 dispatch 之前的状态并重试 A，那 `Future_B` 的结果怎么处理？
+- 丢弃 `Future_B` 的结果并重新 dispatch？（浪费，且 B 的结果可能已经被后续代码依赖）
+- 保留 `Future_B` 的结果？（但"快照"里没有 B 的 Future，restore 后 B 的状态未定义）
+
+**当前的 `LLMExceptFrame.saved_vars` 快照机制没有任何 Future 的概念。`_is_serializable` 方法甚至明确排除了 `IbBehavior` 等复杂类型。**
+
+### 危机二：IntentContext 快照时机的语义冲突
+
+当前 `LLMExceptFrame.save_context()` 直接保存 `runtime_context._intent_top` 的引用：
+
+```python
+# llm_except_frame.py:115-116
+if hasattr(runtime_context, '_intent_top'):
+    self.saved_intent_stack = runtime_context._intent_top
+```
+
+这是一个**引用快照**，不是值快照。如果 IntentContext 被公理化（Step 6），则：
+- dispatch 时必须 `fork()` IntentContext（为 Future 绑定发射时刻的意图快照）
+- 但 `LLMExceptFrame.restore_context()` 调用的是 `restore_active_intents(self.saved_intent_stack)`——它回滚的是整个 intent_top 链表，而不是某个特定 Future 的意图快照
+
+**这两种"保存意图状态"的需求（流水线的 dispatch-time fork vs. retry 的 restore-time rollback）在语义上存在根本冲突，当前实现没有区分这两件事。**
+
+### 危机三：retry 的"原子性"假设在并发下不成立
+
+`retry` 语句的语义是"重新执行当前 llmexcept 块保护的 LLM 调用"。在串行模型中，"重新执行"有明确含义：从快照时刻重新运行。
+
+在并发模型中，"重新执行"意味着什么？
+- 只重新 dispatch 失败的那个 Future？（那其他 Future 的状态怎么同步？）
+- 回滚所有并发中的 Future 并全部重新 dispatch？（代价极高，且破坏已完成的 Future 结果）
+- 还是说 `llmexcept` 只能保护串行的 LLM 调用（不能保护 dispatch_eligible 的并发调用）？
+
+**这第三种选项是目前最可能的出路——将 `llmexcept` 的保护范围限定为不能被流水线化的 LLM 调用（即 `dispatch_eligible=false` 的节点）。但这需要在语言设计层面显式做出此决策，并在编译器层面强制执行。**
+
+### 当前结论（待进一步探讨）
+
+1. **`llmexcept` 的语义需要在引入 Layer 1 流水线之前明确重新定义**，否则两个特性会产生不可调和的语义冲突
+2. **最保守的出路**：`llmexcept` 只保护 `dispatch_eligible=false` 的 LLM 调用；对 `dispatch_eligible=true` 的调用，失败处理由 `LLMFuture` 的 Future 错误传播机制处理（类似 `concurrent.futures` 的 `as_completed` 模式）
+3. **`LLMExceptFrame` 需要在 IbIntentContext 公理化之后重构**，使 `saved_intent_stack` 成为一个完整的 `IbIntentContext` 值快照（fork），而不是裸 `_intent_top` 引用
+4. **这是 IBCI 语言设计中最复杂的未解问题之一**，直接影响 `retry` 作为语言关键字的语义完整性
+
+---
 
 ---
 
