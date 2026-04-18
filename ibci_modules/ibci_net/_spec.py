@@ -9,6 +9,7 @@ Net 网络请求插件规范
 def __ibcext_metadata__() -> dict:
     return {
         "name": "net",
+        "kind": "method_module",
         "version": "2.0.0",
         "description": "IBCI HTTP 网络请求工具（含认证/会话配置）",
         "dependencies": [],

@@ -476,8 +476,27 @@ class StmtHandler(BaseHandler):
             raise self.report_error(f"Object is not iterable", node_uid)
         
         elements = elements_obj.elements
+        total = len(elements)
+
+        # 从当前 llmexcept 帧读取断点恢复索引（如果存在）。
+        # retry 后 for 循环从上次失败的迭代处继续，而非从头开始。
+        top_frame = (
+            self.runtime_context._llm_except_frames[-1]
+            if hasattr(self.runtime_context, '_llm_except_frames')
+               and self.runtime_context._llm_except_frames
+            else None
+        )
+        resume_from = top_frame.loop_resume.get(node_uid, 0) if top_frame is not None else 0
+
         for i, item in enumerate(elements):
-            self.runtime_context.push_loop_context(i, len(elements))
+            if i < resume_from:
+                continue
+
+            # 在迭代开始时更新帧的恢复索引，以便下次 retry 从此迭代继续。
+            if top_frame is not None:
+                top_frame.loop_resume[node_uid] = i
+
+            self.runtime_context.push_loop_context(i, total)
             
             if target_uid:
                 self._assign_to_target(target_uid, item, define_only=True)

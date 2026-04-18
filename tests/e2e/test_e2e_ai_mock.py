@@ -366,3 +366,268 @@ else:
 """
         lines = run_and_capture(code)
         assert "big" in lines
+
+
+# ---------------------------------------------------------------------------
+# 10. 嵌套 llmexcept 系统性集成测试
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptNested:
+    def test_outer_and_inner_llmexcept_independent_retry(self):
+        """外层 llmexcept 与内层 llmexcept 互不干扰，各自独立重试。
+
+        外层保护整个代码块；内层仅保护内部的 REPAIR 表达式。
+        内层 REPAIR 第一次 FAIL，内层 llmexcept 处理后 retry 恢复；
+        外层不应感知到内层的不确定结果（外层 last_llm_result 始终为确定性结果）。
+        最终应打印出由内层 REPAIR 恢复后写入的值。
+        """
+        code = ai_setup_code() + """
+str outer = @~ MOCK:STR:outer_ok ~
+llmexcept:
+    print("outer_exception_handler_ran")
+    retry "outer hint"
+
+str inner = @~ MOCK:REPAIR inner_key ~
+llmexcept:
+    print("inner_exception_handler_ran")
+    retry "inner hint"
+
+print(outer)
+print(inner)
+"""
+        lines = run_and_capture(code)
+        # 内层 REPAIR 触发 llmexcept，外层不应受影响
+        assert "inner_exception_handler_ran" in lines
+        assert "outer_exception_handler_ran" not in lines
+        assert "outer_ok" in lines
+
+    def test_inner_llmexcept_resolves_inner_outer_continues(self):
+        """内层 LLM 调用失败并经 llmexcept 恢复后，外层代码块正常继续执行。
+
+        验证内层 REPAIR 恢复后，后续语句（外层 str b）不受影响。
+        """
+        code = ai_setup_code() + """
+str a = @~ MOCK:REPAIR repair_key ~
+llmexcept:
+    retry "hint"
+
+str b = @~ MOCK:STR:b_ok ~
+print(a)
+print(b)
+"""
+        lines = run_and_capture(code)
+        # b 应正常被赋值
+        assert "b_ok" in lines
+
+    def test_inner_llmexcept_exhausted_outer_sees_uncertain(self):
+        """内层 llmexcept 重试耗尽后，赋值为 IbLLMUncertain；
+        外层如果没有额外保护，后续代码应仍能正常执行（不崩溃）。
+
+        此测试验证：inner llmexcept 耗尽后程序不崩溃，并且
+        在 inner 之后的普通赋值（int counter = 0）不受污染。
+        """
+        code = ai_setup_code() + """
+str result = @~ MOCK:FAIL exhaust_key ~
+llmexcept:
+    retry "retry1"
+
+int counter = 0
+counter = counter + 1
+print((str)counter)
+"""
+        lines = run_and_capture(code)
+        # counter 赋值不应被 UNCERTAIN 污染
+        assert "1" in lines
+
+
+# ---------------------------------------------------------------------------
+# 11. MOCK:SEQ + for 循环 llmexcept 系统性集成测试
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptForLoopMock:
+    """
+    MOCK:SEQ 驱动的 for 循环 llmexcept 集成测试。
+
+    覆盖场景：
+    - inner llmexcept 保护 for 循环体内的行为赋值
+    - 在特定迭代位置（首次、中间、最后）触发 uncertain
+    - 多次失败的循环（迭代 0 和迭代 3）
+    - 恢复后循环继续处理正确的迭代变量
+    - 条件驱动 for 循环的条件不确定性处理
+    """
+
+    def test_inner_llmexcept_fail_at_first_iteration(self):
+        """首迭代失败：iter0 触发 UNCERTAIN，inner llmexcept 恢复后循环继续完成全部 3 次迭代。"""
+        code = ai_setup_code() + """
+int count = 0
+list items = ["a", "b", "c"]
+for str item in items:
+    str x = @~ MOCK:SEQ:FAIL:ok:ok:ok first_fail_key ~
+    llmexcept:
+        print("handler_ran")
+        retry "hint"
+    count = count + 1
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        # handler ran exactly once (only iter0 failed)
+        assert "handler_ran" in lines
+        assert lines.count("handler_ran") == 1
+        # all 3 iterations completed
+        assert "3" in lines
+
+    def test_inner_llmexcept_fail_at_middle_iteration(self):
+        """中间迭代（iter2）失败：inner llmexcept 恢复后所有 5 次迭代均完成。"""
+        code = ai_setup_code() + """
+int count = 0
+list items = ["a", "b", "c", "d", "e"]
+for str item in items:
+    str x = @~ MOCK:SEQ:ok:ok:FAIL:ok:ok:ok mid_fail_key ~
+    llmexcept:
+        print("handler_ran")
+        retry "hint"
+    count = count + 1
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        assert "handler_ran" in lines
+        assert lines.count("handler_ran") == 1
+        # all 5 iterations completed
+        assert "5" in lines
+
+    def test_inner_llmexcept_fail_at_last_iteration(self):
+        """末尾迭代（iter4）失败：inner llmexcept 恢复后所有 5 次迭代均完成。"""
+        code = ai_setup_code() + """
+int count = 0
+list items = ["a", "b", "c", "d", "e"]
+for str item in items:
+    str x = @~ MOCK:SEQ:ok:ok:ok:ok:FAIL:ok last_fail_key ~
+    llmexcept:
+        print("handler_ran")
+        retry "hint"
+    count = count + 1
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        assert "handler_ran" in lines
+        assert lines.count("handler_ran") == 1
+        assert "5" in lines
+
+    def test_inner_llmexcept_multiple_failures(self):
+        """多次失败（iter0 和 iter3）：handler 被调用两次，循环完成全部 5 次迭代。"""
+        code = ai_setup_code() + """
+int count = 0
+list items = ["a", "b", "c", "d", "e"]
+for str item in items:
+    str x = @~ MOCK:SEQ:FAIL:ok:ok:ok:FAIL:ok:ok:ok multi_fail_key ~
+    llmexcept:
+        print("handler_ran")
+        retry "hint"
+    count = count + 1
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        # handler fired twice
+        assert lines.count("handler_ran") == 2
+        # loop still completed all 5 iterations
+        assert "5" in lines
+
+    def test_inner_llmexcept_prints_correct_item_when_failing(self):
+        """handler 体内可访问正确的循环变量（iter1 失败时 item 应为 'b'）。"""
+        code = ai_setup_code() + """
+list items = ["a", "b", "c"]
+for str item in items:
+    str x = @~ MOCK:SEQ:ok:FAIL:ok:ok item_check_key ~
+    llmexcept:
+        print("fail_at")
+        print(item)
+        retry "hint"
+    print("done")
+"""
+        lines = run_and_capture(code)
+        assert "fail_at" in lines
+        # the failing iteration is iter1 → item should be "b"
+        assert "b" in lines
+        # loop variable printed in handler must be "b", not "a" or "c"
+        fail_idx = lines.index("fail_at")
+        assert lines[fail_idx + 1] == "b"
+        # all 3 iterations printed "done"
+        assert lines.count("done") == 3
+
+    def test_inner_llmexcept_recovery_does_not_break_subsequent_iterations(self):
+        """llmexcept 恢复后，后续迭代的行为赋值正常执行，不受前次不确定性污染。"""
+        code = ai_setup_code() + """
+int count = 0
+list items = ["a", "b", "c", "d"]
+for str item in items:
+    str x = @~ MOCK:SEQ:ok:FAIL:ok:ok:ok:ok subseq_key ~
+    llmexcept:
+        print("handler_ran")
+        retry "hint"
+    count = count + 1
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        assert "handler_ran" in lines
+        # 恢复后所有 4 次迭代完成（count 包括失败迭代的 retry 后的正常执行）
+        assert "4" in lines
+
+
+# ---------------------------------------------------------------------------
+# 12. 条件驱动 for 循环 + llmexcept 集成测试
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptConditionDrivenLoop:
+    """
+    条件驱动 for 循环（for @~...~:）与 llmexcept 的集成测试。
+
+    条件驱动循环的 llmexcept 语义：每次条件 LLM 调用被单独保护，
+    uncertain 时 llmexcept handler 运行并可 retry 当前条件判断。
+    """
+
+    def test_condition_driven_loop_with_uncertain_at_middle(self):
+        """条件第 2 次判断触发 UNCERTAIN，llmexcept 恢复后循环继续，共执行 3 次循环体。"""
+        code = ai_setup_code() + """
+int count = 0
+for @~ MOCK:SEQ:1:1:FAIL:1:0 cond_key ~:
+    count = count + 1
+llmexcept:
+    print("cond_handler")
+    retry "hint"
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        assert "cond_handler" in lines
+        # 3 loop body executions: cond checks 0→1, 1→1, 2→FAIL(retry)→3→1, 4→0(exit)
+        assert "3" in lines
+
+    def test_condition_driven_loop_no_failure(self):
+        """条件判断全部确定时，llmexcept handler 不触发，循环正常结束。"""
+        code = ai_setup_code() + """
+int count = 0
+for @~ MOCK:SEQ:1:1:0 cond_clean_key ~:
+    count = count + 1
+llmexcept:
+    print("should_not_run")
+    retry "hint"
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        assert "should_not_run" not in lines
+        assert "2" in lines
+
+    def test_condition_driven_loop_uncertain_at_first_check(self):
+        """首次条件判断 UNCERTAIN，llmexcept 恢复后循环正常执行。"""
+        code = ai_setup_code() + """
+int count = 0
+for @~ MOCK:SEQ:FAIL:1:1:0 cond_first_key ~:
+    count = count + 1
+llmexcept:
+    print("cond_handler_first")
+    retry "hint"
+print((str)count)
+"""
+        lines = run_and_capture(code)
+        assert "cond_handler_first" in lines
+        # after retry, cond→1 (truthy), body runs twice, cond→0 exits
+        assert "2" in lines

@@ -9,6 +9,7 @@ JSON 序列化/操作插件规范
 def __ibcext_metadata__() -> dict:
     return {
         "name": "json",
+        "kind": "method_module",
         "version": "2.0.0",
         "description": "IBCI JSON 工具（parse/stringify/merge/嵌套操作/prompt协议）",
         "dependencies": [],

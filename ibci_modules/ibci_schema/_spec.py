@@ -9,6 +9,7 @@ Schema 数据校验插件规范
 def __ibcext_metadata__() -> dict:
     return {
         "name": "schema",
+        "kind": "method_module",
         "version": "2.0.0",
         "description": "IBCI 数据校验工具（JSON Schema 子集）",
         "dependencies": [],

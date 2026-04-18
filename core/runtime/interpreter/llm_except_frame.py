@@ -80,6 +80,13 @@ class LLMExceptFrame:
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
     saved_intent_stack: Any = field(default=None, repr=False)  # IntentNode 链表
     saved_loop_context: Optional[Dict[str, int]] = None
+
+    # 循环迭代器断点恢复索引
+    # 映射: for 循环节点 UID → 当次重试应从哪个迭代索引开始。
+    # 此字段由 visit_IbFor 在每次迭代开始时动态更新，
+    # restore_context() 故意 **不** 重置它，使得 retry 后 for 循环
+    # 能从失败的迭代处继续，而不是从头开始。
+    loop_resume: Dict[str, int] = field(default_factory=dict)
     
     # 错误信息
     last_error: Optional[Exception] = None
@@ -109,8 +116,10 @@ class LLMExceptFrame:
             self.saved_intent_stack = runtime_context._intent_top
 
         if hasattr(runtime_context, '_loop_stack') and runtime_context._loop_stack:
+            # 深拷贝 dict 对象，确保保存的快照与运行时 _loop_stack 完全独立，
+            # 即使 (将来) 循环上下文 dict 被就地修改，也不影响快照的正确性。
             self.saved_loop_context = {
-                'iterators': list(runtime_context._loop_stack) if runtime_context._loop_stack else []
+                'iterators': [dict(d) for d in runtime_context._loop_stack]
             }
 
         if hasattr(runtime_context, 'retry_hint'):
@@ -186,6 +195,10 @@ class LLMExceptFrame:
 
         if hasattr(runtime_context, 'retry_hint'):
             runtime_context.retry_hint = self.saved_retry_hint
+
+        # 注意：loop_resume 字段故意不在此处重置。
+        # visit_IbFor 依赖 loop_resume[node_uid] 来判断 retry 后应从哪个迭代索引继续，
+        # 如果此处清零，for 循环将重头开始，失去断点恢复能力。
 
     def _restore_vars(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
