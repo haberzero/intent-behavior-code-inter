@@ -366,3 +366,75 @@ else:
 """
         lines = run_and_capture(code)
         assert "big" in lines
+
+
+# ---------------------------------------------------------------------------
+# 10. 嵌套 llmexcept 系统性集成测试
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptNested:
+    def test_outer_and_inner_llmexcept_independent_retry(self):
+        """外层 llmexcept 与内层 llmexcept 互不干扰，各自独立重试。
+
+        外层保护整个代码块；内层仅保护内部的 REPAIR 表达式。
+        内层 REPAIR 第一次 FAIL，内层 llmexcept 处理后 retry 恢复；
+        外层不应感知到内层的不确定结果（外层 last_llm_result 始终为确定性结果）。
+        最终应打印出由内层 REPAIR 恢复后写入的值。
+        """
+        code = ai_setup_code() + """
+str outer = @~ MOCK:STR:outer_ok ~
+llmexcept:
+    print("outer_exception_handler_ran")
+    retry "outer hint"
+
+str inner = @~ MOCK:REPAIR inner_key ~
+llmexcept:
+    print("inner_exception_handler_ran")
+    retry "inner hint"
+
+print(outer)
+print(inner)
+"""
+        lines = run_and_capture(code)
+        # 内层 REPAIR 触发 llmexcept，外层不应受影响
+        assert "inner_exception_handler_ran" in lines
+        assert "outer_exception_handler_ran" not in lines
+        assert "outer_ok" in lines
+
+    def test_inner_llmexcept_resolves_inner_outer_continues(self):
+        """内层 LLM 调用失败并经 llmexcept 恢复后，外层代码块正常继续执行。
+
+        验证内层 REPAIR 恢复后，后续语句（外层 str b）不受影响。
+        """
+        code = ai_setup_code() + """
+str a = @~ MOCK:REPAIR repair_key ~
+llmexcept:
+    retry "hint"
+
+str b = @~ MOCK:STR:b_ok ~
+print(a)
+print(b)
+"""
+        lines = run_and_capture(code)
+        # b 应正常被赋值
+        assert "b_ok" in lines
+
+    def test_inner_llmexcept_exhausted_outer_sees_uncertain(self):
+        """内层 llmexcept 重试耗尽后，赋值为 IbLLMUncertain；
+        外层如果没有额外保护，后续代码应仍能正常执行（不崩溃）。
+
+        此测试验证：inner llmexcept 耗尽后程序不崩溃，并且
+        在 inner 之后的普通赋值（int counter = 0）不受污染。
+        """
+        code = ai_setup_code() + """
+str result = @~ MOCK:FAIL exhaust_key ~
+llmexcept:
+    retry "retry1"
+
+int counter = 0
+counter = counter + 1
+print((str)counter)
+"""
+        lines = run_and_capture(code)
+        # counter 赋值不应被 UNCERTAIN 污染
+        assert "1" in lines

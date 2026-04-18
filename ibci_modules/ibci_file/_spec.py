@@ -9,6 +9,7 @@ def __ibcext_metadata__() -> Dict[str, Any]:
     """插件元数据"""
     return {
         "name": "file",
+        "kind": "method_module",
         "version": "2.3.0",
         "description": "File operation and analysis plugin (unified from file + third_file)",
         "dependencies": [],

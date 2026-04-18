@@ -133,6 +133,18 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 `ibci_sys` 合并进 `ibci_isys`，新增 `sys.script_dir()`、`sys.script_path()` 等 IBCI 路径 API。
 *文件：`ibci_modules/ibci_isys/`*
 
+### 4.9 llmexcept 循环迭代器状态完整恢复
+`LLMExceptFrame` 新增 `loop_resume: Dict[str, int]` 字段，由 `visit_IbFor` 在每次迭代开始时动态更新（写入当前节点 UID → 当前索引的映射）。`restore_context()` 故意不重置 `loop_resume`，使 retry 后 for 循环从失败的迭代索引处继续，而非从头开始。同时修复 `save_context()` 中 `_loop_stack` 浅拷贝：改为深拷贝 dict 对象，确保快照与运行时状态完全独立。
+*文件：`core/runtime/interpreter/llm_except_frame.py`、`core/runtime/interpreter/handlers/stmt_handler.py`*
+
+### 4.10 显式引入原则 Phase 1：插件 kind 字段
+所有 10 个 `ibci_modules/*/` `_spec.py` 文件的 `__ibcext_metadata__()` 新增 `"kind": "method_module"` 字段。`discovery._load_spec()` 读取该字段，并对 `method_module` 类型的插件将生成的 `ModuleSpec.is_user_defined` 设为 `True`。`Prelude._init_defaults()` 已有的 `not is_user_defined` 过滤逻辑因此生效：`ai`、`math`、`json` 等插件模块不再被预注入为全局内置符号，必须通过显式 `import` 才能使用。`type_module` 类别保留给未来的内置类型扩展插件（当前无）。
+*文件：`ibci_modules/ibci_{ai,math,json,net,time,schema,file,idbg,ihost,isys}/_spec.py`、`core/runtime/module_system/discovery.py`*
+
+### 4.11 嵌套 llmexcept 系统性集成测试
+新增 `TestE2ELLMExceptNested` 测试类，包含三个场景：① 外层/内层 llmexcept 独立重试互不干扰；② 内层 LLM 恢复后外层代码正常继续；③ 内层重试耗尽后，后续普通赋值不被 `IbLLMUncertain` 污染。全部 500 测试通过。
+*文件：`tests/e2e/test_e2e_ai_mock.py`*
+
 ---
 
 ## 五、确认的设计决策

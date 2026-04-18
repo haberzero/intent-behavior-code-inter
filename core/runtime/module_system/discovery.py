@@ -104,11 +104,18 @@ class ModuleDiscoveryService:
             mod = None
 
         raw_name = module_name
+        # 读取插件种类声明：
+        #   "method_module" — 工具/方法插件（math, ai, json 等），必须显式 import 后才可用。
+        #   "type_module"   — 内置类型扩展，可由 Prelude 预注入为全局符号。
+        # 缺省值为 "method_module"，以确保向前兼容（所有未声明 kind 的旧插件
+        # 均被视为 method_module，不会意外成为预注入全局符号）。
+        plugin_kind = "method_module"
 
         if mod and hasattr(mod, '__ibcext_metadata__'):
             metadata_dict = mod.__ibcext_metadata__()
             if metadata_dict and isinstance(metadata_dict, dict):
                 raw_name = metadata_dict.get("name", module_name)
+                plugin_kind = metadata_dict.get("kind", "method_module")
 
         if mod and hasattr(mod, '__ibcext_vtable__'):
             try:
@@ -117,11 +124,18 @@ class ModuleDiscoveryService:
                 # 协议2：深度嵌入模块直接返回 ModuleSpec
                 if isinstance(vtable, ModuleSpec):
                     vtable.name = raw_name
+                    # 方法插件必须显式 import 才可用，不预注入为全局内置符号
+                    if plugin_kind == "method_module":
+                        vtable.is_user_defined = True
                     return vtable
 
                 # 协议1：标准插件（字典格式，零侵入）
                 if vtable and isinstance(vtable, dict):
-                    return self._build_spec_from_dict(raw_name, vtable)
+                    spec = self._build_spec_from_dict(raw_name, vtable)
+                    # 方法插件必须显式 import 才可用，不预注入为全局内置符号
+                    if plugin_kind == "method_module":
+                        spec.is_user_defined = True
+                    return spec
 
             except ImportError:
                 pass
