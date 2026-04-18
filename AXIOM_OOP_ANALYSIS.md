@@ -2,9 +2,9 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-18（第七次修订：BehaviorSpec 编译期返回类型推断完成——§3.4 限制已解除，§6.4 标注 COMPLETED，Step 6 BehaviorSpec 条目划勾，测试数 484→497）
+> **最后更新**：2026-04-18（第八次修订：§8 OOP×Protocol 边界清理完成——`IIbObject.descriptor` 幽灵字段删除，所有显式 Protocol 继承链条清除，所有 Protocol isinstance 替换为具体实现类检查，`_get_llmoutput_hint` 死代码路径修复，497 个测试全部通过）
 >
-> 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
+> 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章，OOP×Protocol 边界清理（已完成）见第八章。
 
 ---
 
@@ -502,4 +502,75 @@ Step 3a 将 `llm_callback` 单源化到 `capability_registry.get("llm_provider")
 
 ## 七、一句话总结
 
-> **LLM 执行链全面公理化 + 编译期类型推断完善。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior 自主执行）、Step 3（ibci_ai 职责拆分 + CallableAxiom + DeferredAxiom）、Step 4a（IbLLMFunction 公理化补完 + visit_IbBehaviorInstance 清理）均已完整落地。Step 6 部分工作（BehaviorSpec 编译期返回类型推断）提前完成：`int lambda f = @~...~; int result = f()` 编译期不再产生 SEM_003，`SpecRegistry.resolve_return()` 对 DeferredSpec/BehaviorSpec 直接推断 value_type_name。497 个测试全部通过。下一个里程碑是 Step 4b（ibci_ihost/idbg 重构），属中期目标，不阻塞当前功能。**
+> **LLM 执行链全面公理化 + 编译期类型推断完善 + OOP×Protocol 边界完整清理。Step 1-4a 均已落地，BehaviorSpec 编译期返回类型推断完成，OOP×Protocol 边界清理（PR-A）完成：`IIbObject.descriptor` 幽灵字段删除，`IbBehavior`/`IbIntent`/`AIPlugin` 多余 Protocol 继承全部去除，所有 Protocol isinstance 替换为具体类检查，`_get_llmoutput_hint` 死代码路径修复为正确 `meta_reg.resolve()` 实现，死 import 全部清理。497 个测试全部通过。下一里程碑是 Step 4b（ibci_ihost/idbg 重构），属中期目标。**
+
+---
+
+## 八、OOP × Protocol 边界清理（PR-A）✅ COMPLETED
+
+### 8.1 根本问题诊断
+
+**Python 3.12 `@runtime_checkable` Protocol 的行为**：在 Python 3.12+ 中，`isinstance(obj, SomeProtocol)` 会同时检查所有 `__protocol_attrs__`，包括数据属性（`@property`）和方法。因此：
+
+- 如果 Protocol 声明了一个数据属性（如 `descriptor`），而实现类没有该属性，`isinstance` 检查将失败。
+- 这迫使开发者为了让 `isinstance` 通过，而将 Protocol 加入实现类的显式继承列表——这是一种补丁式的架构穿透。
+
+**根因**：`IIbObject` Protocol 中声明了 `@property def descriptor -> Any`，但 `IbObject.__slots__ = ('ib_class', 'fields')` 从未实现该属性。`descriptor` 是一个遗留的幽灵字段（从未有任何实现，也从无实际读取返回有效值）。
+
+**连锁补丁链条**：
+
+| 问题 | 当前补丁 | 应有的正确状态 |
+|------|---------|-------------|
+| `IIbObject.descriptor` 幽灵字段 | 存在于 Protocol 声明中 | 彻底删除 |
+| `IbBehavior(IbObject, IIibBehavior)` | 显式 Protocol 继承 | `IbBehavior(IbObject)` 单继承 |
+| `IbIntent(IbObject, IntentProtocol)` | 装饰性继承（无运行时效果） | `IbIntent(IbObject)` 单继承 |
+| `AIPlugin(ILLMProvider, IbStatefulPlugin)` | 遗留历史绑定机制 | `AIPlugin(IbStatefulPlugin)` 单继承 |
+| `isinstance(res, IIibBehavior)` × 3处 | Protocol isinstance | `isinstance(res, IbBehavior)` |
+| `isinstance(pkg, IIibObject)` × 1处 | Protocol isinstance | `isinstance(pkg, IbObject)` |
+| `isinstance(i, IIibIntent)` × 1处 | Protocol isinstance | `isinstance(i, IbIntent)` |
+| `getattr(ib_class, 'descriptor', None)` | 永远返回 None 的死代码 | 修复为正确的 `meta_reg.resolve()` 实现 |
+| `isinstance(context.llm_executor, ILLMExecutor)` | 旧兼容性保护性检查 | 直接赋值（无条件） |
+
+### 8.2 完整变更清单（PR-A）
+
+#### 根因清除
+
+1. ✅ **`core/runtime/interfaces.py`**：删除 `IIbObject` 中的 `@property def descriptor -> Any`
+
+#### 实现类继承清理
+
+2. ✅ **`core/runtime/objects/builtins.py`**：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`，删除 `IIibBehavior` import
+3. ✅ **`core/runtime/objects/intent.py`**：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`，删除 `IntentProtocol` import
+4. ✅ **`ibci_modules/ibci_ai/core.py`**：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`，删除 `ILLMProvider` import
+
+#### isinstance 调用点替换
+
+5. ✅ **`core/runtime/interpreter/handlers/stmt_handler.py`**：`isinstance(res, IIibBehavior)` → `isinstance(res, IbBehavior)`
+6. ✅ **`core/runtime/interpreter/interpreter.py`**：`isinstance(obj, IIibBehavior)` → `isinstance(obj, IbBehavior)`；`isinstance(i, IIibIntent)` → `isinstance(i, IbIntent)`
+7. ✅ **`core/runtime/host/service.py`**：`isinstance(pkg, IIibObject)` → `isinstance(pkg, IbObject)`
+8. ✅ **`core/runtime/interpreter/llm_executor.py`**：`isinstance(behavior, IIibBehavior)` → `isinstance(behavior, IbBehavior)`
+
+#### 死代码与兼容性残留清理
+
+9. ✅ **`core/runtime/interpreter/llm_executor.py`**：修复 `_get_llmoutput_hint` 第二路径——将永远返回 None 的 `getattr(ib_class, 'descriptor', None)` 死代码，替换为与第一路径一致的 `meta_reg.resolve(type_name)` 正确实现
+10. ✅ **`core/runtime/module_system/loader.py`**：删除 `isinstance(context.llm_executor, ILLMExecutor)` 保护性检查，改为直接赋值
+
+#### import 悬挂清理
+
+11. ✅ 全部悬挂死 import 清理：
+    - `expr_handler.py`：删除 `IIibBehavior`
+    - `base_handler.py`：删除 `IIibBehavior`
+    - `runtime_context.py`：删除 `IIibIntent`
+    - `ibci_idbg/core.py`：删除 `IIibObject` TYPE_CHECKING 块
+
+**质量门控**：497 个测试全部通过。`IbObject` 现在完整结构满足 `IIibObject`（无需显式继承），`IbIntent` 完整结构满足 `IIibIntent`，所有 Python 3.12 runtime_checkable 断言均正确。
+
+### 8.3 设计原则说明
+
+- **`IIbBehavior`、`IIibObject`、`IIibIntent` 等 Protocol 声明继续保留**：它们作为编译期类型文档声明，供静态分析工具（mypy）使用。其 `isinstance` 调用点全部替换为具体实现类，消除对 Python 3.12 runtime_checkable 行为的隐式依赖。
+- **`IbBehavior`、`IbObject`、`IbIntent` 作为具体类型守卫**：这些是实现类，`isinstance` 检查具体类既准确又高效，不依赖 Protocol 结构匹配。
+- **单一继承原则**：所有 IbObject 子类应只继承 `IbObject`（或其子类），不应同时继承 Protocol 类。Protocol 声明的满足通过结构匹配（mypy 检查）实现，而非显式继承。
+
+### 8.4 后续工作（PR-B，可选）
+
+PR-B 将处理 Impl 类的声明性 Protocol 继承（`ExecutionContextImpl(IExecutionContext, IStackInspector)`、`RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider)` 等），这些是约定性文档声明，无 Bug 风险，工程量小，可在 PR-A 完成后作为独立整洁化工作进行。

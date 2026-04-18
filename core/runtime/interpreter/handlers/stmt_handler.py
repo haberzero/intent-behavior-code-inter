@@ -1,7 +1,8 @@
 from typing import Any, Mapping, List, Optional, Callable
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
-from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList, IIbBehavior
+from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList
+from core.runtime.objects.builtins import IbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException
 )
@@ -119,7 +120,7 @@ class StmtHandler(BaseHandler):
         """表达式语句"""
         res = self.visit(node_data.get("value"))
         # 如果是行为对象（延迟 behavior 被当作语句直接使用），触发自主执行
-        if isinstance(res, IIbBehavior):
+        if isinstance(res, IbBehavior):
             return res.call(self.registry.get_none(), [])
         return res
 

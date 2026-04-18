@@ -3,7 +3,6 @@ from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.interfaces import ServiceContext, IExecutionContext
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
-from core.runtime.interfaces import IIbBehavior
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.kernel.issue import InterpreterError

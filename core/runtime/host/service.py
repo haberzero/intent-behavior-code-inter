@@ -3,7 +3,7 @@ import os
 import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
-from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IIbObject, IExecutionContext, IKernelOrchestrator
+from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IExecutionContext, IKernelOrchestrator
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
@@ -123,7 +123,7 @@ class HostService(IHostService):
         for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg:
-                if not isinstance(pkg, IIbObject):
+                if not isinstance(pkg, IbObject):
                     # 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
                     pkg_obj = self.execution_context.factory.create_native_object(
                         pkg,

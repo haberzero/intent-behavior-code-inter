@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
-from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IIbIntent, IStateProvider
+from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IStateProvider
 from core.base.source_atomic import Location
 from core.runtime.exceptions import BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError

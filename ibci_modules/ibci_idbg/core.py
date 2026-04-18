@@ -1,9 +1,6 @@
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
 
-if TYPE_CHECKING:
-    from core.runtime.interfaces import IIbObject
-
 
 class IDbgPlugin(IbPlugin):
     """

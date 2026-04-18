@@ -4,7 +4,7 @@
 > 每个任务都标注了搁置原因和解决方案方向。
 > 采用加法标注模式。核心待完成任务置顶，历史任务标注状态。
 >
-> **最后更新**：2026-04-18（更新 §2.2 BehaviorSpec 编译期推断已完成）
+> **最后更新**：2026-04-18（更新 §11.9 OOP×Protocol 边界清理 PR-A 已完成）
 
 ---
 
@@ -472,6 +472,22 @@ if (iter_type.name == "behavior"):
 **问题描述**：`interpreter.py:108` 有 TODO 标注：`instance_id: str = "main"` 这一参数默认值可能导致多个解释器实例 ID 碰撞（若调用方未传入唯一 ID）。当前代码中 `self.instance_id = instance_id or f"inst_{id(self)}"` 提供了一定的 fallback 保护，但 `"main"` 作为默认值仍是潜在隐患。
 
 **涉及文件**：`core/runtime/interpreter/interpreter.py`
+
+### 11.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
+
+**状态说明**：已完整修复（PR-A）。
+
+根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
+
+**全部修复内容**：
+- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
+- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
+- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
+- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
+- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
+- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
+- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
+- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
 
 ---
 
