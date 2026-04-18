@@ -27,6 +27,7 @@ from core.kernel.axioms.protocols import (
     FromPromptCapability, IlmoutputHintCapability,
 )
 from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.axioms.intent_context import IntentContextAxiom
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -95,10 +96,8 @@ class BaseAxiom(TypeAxiom):
     def get_diff_hint(self, other_name: str) -> Optional[str]:
         return None
 
-
-# ------------------------------------------------------------------ #
-# int                                                                 #
-# ------------------------------------------------------------------ #
+    def get_llm_call_capability(self) -> Optional['LLMCallCapability']:
+        return None
 
 class IntAxiom(
     BaseAxiom, OperatorCapability, ConverterCapability,
@@ -1042,6 +1041,19 @@ class DeferredAxiom(BaseAxiom, DeferredCallCapability):
 # behavior                                                            #
 # ------------------------------------------------------------------ #
 
+class LLMCallCapability:
+    """
+    LLM 调用能力标记。
+
+    声明"此类型可以发起 LLM 调用"的能力标记，供编译期 DDG（数据依赖图）
+    分析识别 behavior 节点，而不需要 isinstance 判断。
+
+    这是一个纯声明标记——不包含执行逻辑。
+    执行逻辑仍由 LLMExecutorImpl 负责。
+    """
+    pass
+
+
 class BehaviorCallCapability(CallCapability):
     """
     CallCapability for behavior objects.
@@ -1098,6 +1110,13 @@ class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
     def get_parent_axiom_name(self) -> Optional[str]:
         return "deferred"
 
+    def get_llm_call_capability(self) -> Optional['LLMCallCapability']:
+        """
+        返回 LLM 调用能力标记。
+        编译期 DDG 分析通过此能力识别 behavior 节点（无需 isinstance）。
+        """
+        return LLMCallCapability()
+
 
 
 
@@ -1122,3 +1141,4 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(VoidAxiom())
     registry.register(DeferredAxiom())
     registry.register(BehaviorAxiom())
+    registry.register(IntentContextAxiom())

@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-18（OOP×Protocol PR-A 完成，BehaviorSpec 编译期推断完成，Steps 1-4a 全部落地）
+> **最后更新**：2026-04-18（Steps 1-4b 全部落地；517 个测试通过；11.1 Step 4b [COMPLETED]）
 
 ---
 
@@ -226,10 +226,8 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ## 十一、远期架构目标
 
-### 11.1 ibci_ihost / ibci_idbg 标准化重构（Step 4）
-**任务**：`ibci_ihost` 和 `ibci_idbg` 从 `IbPlugin` 内核特权模式降级为标准插件，通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`IStackInspector`/`IStateReader` 接口）访问服务，而非通过 `PluginCapabilities` 内核特权访问。用户可见接口（`ihost.run_isolated()` 等）保持不变。
-
-**依赖**：Step 1（KernelRegistry 服务注册机制）已完成。
+### 11.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
+**状态**：已完整落地（见 `docs/COMPLETED.md` § 4.12）。`ibci_ihost` 和 `ibci_idbg` 已改为通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`get_stack_inspector()`、`get_state_reader()`）访问服务。用户可见接口（`ihost.run_isolated()` 等）保持不变。517 个测试通过。
 
 ### 11.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
 

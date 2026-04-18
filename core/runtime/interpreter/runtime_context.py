@@ -608,6 +608,28 @@ class RuntimeContextImpl(RuntimeContext):
             return []
         return self._intent_top.to_list()
 
+    def fork_intent_snapshot(self) -> Optional['IntentNode']:
+        """
+        返回当前意图栈的不可变快照（结构共享）。
+        Step 6 完成后此方法将返回 IbIntentContext.fork()。
+        """
+        return self._intent_top
+
+    @property
+    def intent_context(self) -> 'IbIntentContext':
+        """
+        返回当前帧的意图上下文（IbIntentContext 视图）。
+        Step 6c: 新增访问器，供 LLMExceptFrame.save_context() 用于安全快照。
+        注意：返回的是当前状态的实时视图，fork() 调用才产生不可变快照。
+        """
+        from core.runtime.objects.intent_context import IbIntentContext
+        return IbIntentContext(
+            intent_top=self._intent_top,
+            smear_queue=list(self._pending_smear_intents),
+            override=self._pending_override_intent,
+            global_intents=list(self._global_intents),
+        )
+
     def restore_active_intents(self, intents: Union[List[IbIntent], Optional[IntentNode]]) -> None:
         """
          恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
