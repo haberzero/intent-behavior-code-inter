@@ -620,7 +620,46 @@ class TupleAxiom(
 
 
 # ------------------------------------------------------------------ #
-# Dynamic (any / auto / callable / void / behavior)                  #
+# void                                                                #
+# ------------------------------------------------------------------ #
+
+class VoidAxiom(BaseAxiom):
+    """
+    公理：void 类型（函数无返回值的类型标注）。
+
+    void 不是 any 的别名，也不是 None 的别名——它是一个独立的一等公民类型，
+    用于标注"此函数不返回任何值"的语义约束。
+    * is_dynamic() = False —— void 是具体类型，不再使用 DynamicAxiom 妥协。
+    * 无任何能力（不可调用、不可迭代、不可下标、不可运算）。
+    * is_compatible 仅接受 "void" 自身——void 值不可赋值给任何其他类型。
+    * get_parent_axiom_name() = "Object"。
+    """
+
+    @property
+    def name(self) -> str:
+        return "void"
+
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+    def get_converter_capability(self): return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {}
+
+    def is_dynamic(self) -> bool:
+        return False
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "void"
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "Object"
+
+
+# ------------------------------------------------------------------ #
+# Dynamic (any / auto)                                                #
 # ------------------------------------------------------------------ #
 
 class DynamicAxiom(
@@ -1080,6 +1119,6 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(DynamicAxiom("any"))
     registry.register(DynamicAxiom("auto"))
     registry.register(CallableAxiom())
-    registry.register(DynamicAxiom("void"))
+    registry.register(VoidAxiom())
     registry.register(DeferredAxiom())
     registry.register(BehaviorAxiom())

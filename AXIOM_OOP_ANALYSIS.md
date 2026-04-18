@@ -22,6 +22,7 @@
 | **callable** | ✅ | ✅（`CallableAxiom`） | N/A（抽象父类型） | N/A |
 | **deferred** | ✅（`DeferredSpec`） | ✅（`DeferredAxiom`） | ✅（`IbDeferred`） | ✅ |
 | **behavior** | ✅ | ✅（`BehaviorAxiom`） | ✅（`IbBehavior.call()` 自主执行） | ✅ |
+| **void** | ✅（`VOID_SPEC`） | ✅（`VoidAxiom`，`is_dynamic=False`） | N/A（无返回值标注） | N/A |
 | IbFunction / IbLLMFunction | ✅ | 部分（FuncSpec） | ✅ | ⚠️ 依赖外部 context |
 
 ### 尚未完整公理化的类型
@@ -35,6 +36,8 @@
 
 ```
 Object（根）
+  ├─ int / float / str / bool / list / tuple / dict / None / slice / Exception / Enum
+  ├─ void   (VoidAxiom, is_dynamic=False) — 无返回值的函数返回类型标注
   └─ callable  (CallableAxiom, is_dynamic=False) — 可调用对象的公理父类型
        ├─ bound_method  (BoundMethodAxiom) — 已绑定接收者的方法
        └─ deferred  (DeferredAxiom) — 延迟执行的通用表达式
@@ -337,6 +340,7 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | **`DeferredAxiom` + `DeferredSpec` + `IbDeferred` 通用延迟表达式**（Step 3b） | 架构 | `core/kernel/`, `core/runtime/objects/builtins.py` | copilot/review-docs-and-code |
 | **`is_compatible()` 方向 Bug 修复**：父类型不再反向向下兼容子类型 | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 | **`BoundMethodAxiom.is_compatible("callable")` 补充**：bound_method IS-A callable | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
+| **`VoidAxiom` 替代 `DynamicAxiom("void")`**：is_dynamic=False，无任何能力，is_compatible 仅 "void" | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 
 ---
 
