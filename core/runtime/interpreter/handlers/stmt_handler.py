@@ -65,7 +65,7 @@ class StmtHandler(BaseHandler):
                 frame.restore_snapshot(self.runtime_context)
 
                 # [CRITICAL] retry 后重新执行赋值时，需要清除 last_llm_result
-                # 否则 visit_IbAssign 会因为 is_uncertain=True 而再次跳过赋值
+                # 否则 visit_IbAssign 会因为 is_certain=False 而再次跳过赋值
                 if frame.should_retry:
                     self.runtime_context.set_last_llm_result(None)
 
@@ -76,7 +76,7 @@ class StmtHandler(BaseHandler):
                 result = self.runtime_context.get_last_llm_result()
 
                 # 如果没有 LLM 调用，或者 LLM 调用是确定的（成功匹配或明确失败）
-                if result is None or not result.is_uncertain:
+                if result is None or result.is_certain:
                     self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
                         f"llmexcept: resolved on attempt {attempt}, target={target_uid}")
                     break
@@ -90,7 +90,7 @@ class StmtHandler(BaseHandler):
                 frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
 
                 # [IMPORTANT] 在执行 llmexcept 块之前，临时清除不确定性标记。
-                # 否则，块内的任何 IbAssign 都会因为看到 last_llm_result.is_uncertain 而跳过赋值。
+                # 否则，块内的任何 IbAssign 都会因为看到 not last_llm_result.is_certain 而跳过赋值。
                 self.runtime_context.set_last_llm_result(None)
 
                 # 执行 llmexcept 的 body 块 (处理逻辑)
@@ -312,7 +312,7 @@ class StmtHandler(BaseHandler):
         # 检查是否由于 LLM 不确定性导致赋值未完成
         # 如果是，则赋值为 IbLLMUncertain 特殊值，而不是跳过赋值
         last_result = self.runtime_context.get_last_llm_result()
-        if last_result and last_result.is_uncertain:
+        if last_result and not last_result.is_certain:
             value = self.registry.get_llm_uncertain()
         
         for target_uid in node_data.get("targets", []):
@@ -361,7 +361,7 @@ class StmtHandler(BaseHandler):
         test_value = self.visit(node_data.get("test"))
 
         last_result = self.runtime_context.get_last_llm_result()
-        if last_result and last_result.is_uncertain:
+        if last_result and not last_result.is_certain:
             return self.registry.get_none()
 
         case_uids = node_data.get("cases", [])
@@ -399,7 +399,7 @@ class StmtHandler(BaseHandler):
         # 核心：检查测试表达式是否产生了不确定的 LLM 结果
         # 如果不确定，说明 AI 决策模糊，我们需要立即终止 IbIf 的执行，让控制流回退到保护者
         last_result = self.runtime_context.get_last_llm_result()
-        if last_result and last_result.is_uncertain:
+        if last_result and not last_result.is_certain:
             return self.registry.get_none()
 
         if self.execution_context.is_truthy(condition):
@@ -419,7 +419,7 @@ class StmtHandler(BaseHandler):
             condition = self.visit(node_data.get("test"))
 
             last_result = self.runtime_context.get_last_llm_result()
-            if last_result and last_result.is_uncertain:
+            if last_result and not last_result.is_certain:
                 return self.registry.get_none()
 
             if not self.execution_context.is_truthy(condition):
@@ -448,7 +448,7 @@ class StmtHandler(BaseHandler):
                 self.runtime_context.set_last_llm_result(None)
                 condition = self.visit(iter_uid)
                 last_result = self.runtime_context.get_last_llm_result()
-                if last_result and last_result.is_uncertain:
+                if last_result and not last_result.is_certain:
                     return self.registry.get_none()
                 if not self.execution_context.is_truthy(condition):
                     break

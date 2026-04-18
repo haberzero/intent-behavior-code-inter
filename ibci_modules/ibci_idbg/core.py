@@ -79,7 +79,7 @@ class IDbgPlugin(IbPlugin):
                     if k not in info or not info[k]:
                         info[k] = v
 
-        # 3. 合并 LLMResult 状态
+        # 3. 合并 LLMCallResult 状态
         sr = self._state_reader()
         if sr:
             res = sr.get_last_llm_result()
@@ -92,9 +92,9 @@ class IDbgPlugin(IbPlugin):
 
             if res:
                 info["result"] = {
-                    "success": res.success,
-                    "is_uncertain": res.is_uncertain,
-                    "error": res.error_message,
+                    "success": res.is_certain,
+                    "is_uncertain": not res.is_certain,
+                    "error": res.retry_hint if not res.is_certain else None,
                     "retry_hint": res.retry_hint,
                     "raw_response": res.raw_response
                 }
@@ -204,7 +204,7 @@ class IDbgPlugin(IbPlugin):
         self.show_last_result()
 
     def last_result(self) -> Dict[str, Any]:
-        """获取最近一次 LLM 调用的 LLMResult 详情"""
+        """获取最近一次 LLM 调用的 IbLLMCallResult 详情"""
         sr = self._state_reader()
         if not sr:
             return {}
@@ -222,10 +222,10 @@ class IDbgPlugin(IbPlugin):
             return {}
 
         return {
-            "success": res.success,
-            "is_uncertain": res.is_uncertain,
-            "value": str(res.value) if res.value else None,
-            "error": res.error_message,
+            "success": res.is_certain,
+            "is_uncertain": not res.is_certain,
+            "value": str(res.result_value) if res.result_value else None,
+            "error": res.retry_hint if not res.is_certain else None,
             "raw_response": res.raw_response,
             "retry_hint": res.retry_hint
         }

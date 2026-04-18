@@ -118,6 +118,12 @@ class ServiceContextImpl:
     def orchestrator(self) -> Optional[IKernelOrchestrator]:
         return self._orchestrator
 
+    def set_orchestrator(self, orchestrator: Optional[IKernelOrchestrator]) -> None:
+        """注入内核协调器（Engine 在解释器创建完毕后调用）。"""
+        self._orchestrator = orchestrator
+        if self._host_service and hasattr(self._host_service, 'orchestrator'):
+            self._host_service.orchestrator = orchestrator
+
     @property
     def debugger(self) -> Any:
         return self._debugger

@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-18（Steps 1-4b 全部落地；517 个测试通过；11.1 Step 4b [COMPLETED]）
+> **最后更新**：2026-04-18（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；517 个测试通过）
 
 ---
 
@@ -206,14 +206,15 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 10.2 engine.py / service.py "vibe" 妥协标注 [P3 / PENDING]
+### 10.2 engine.py / service.py "vibe" 妥协标注 [P3 - 部分已修复]
 **问题**：多处被标注为"智能体快速 vibe 实现，未经严格审查"：
-- `engine.py:136`：强制向 service_context 回写 orchestrator（双向引用注入）
-- `service.py:173`：`host_run()` 返回值简化为布尔值，隐藏实际结果
-- `rt_scheduler.py:40-44`：`_resolve_builtin_path()` 使用 `ibci_modules.__file__` 动态发现路径
+- ~~`engine.py:136`：强制向 service_context 回写 orchestrator（双向引用注入）~~ **[已修复]**：改用 `ServiceContextImpl.set_orchestrator()` 标准注入方法（见 COMPLETED.md §4.16）
+- ~~`interpreter.py:229`：`kwargs.get('orchestrator', ...)` 却没有 `**kwargs` 参数~~ **[已修复]**（见 COMPLETED.md §4.16）
+- `service.py:173`：`host_run()` 返回值简化为布尔值，隐藏实际结果（等待多返回值语法完善后修复，见 §11.3）
+- `rt_scheduler.py:40-44`：`_resolve_builtin_path()` 使用 `ibci_modules.__file__` 动态发现路径（合理但可用常量替代，低优先级）
 - `scheduler.py:81`：`compile_to_artifact_dict()` 方法设计合理性存疑
 
-**文件**：`core/engine.py`、`core/runtime/host/service.py`、`core/runtime/rt_scheduler.py`、`core/compiler/scheduler.py`
+**文件**：`core/runtime/host/service.py`、`core/runtime/rt_scheduler.py`、`core/compiler/scheduler.py`
 
 ---
 
@@ -245,28 +246,10 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 - `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
 - 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
 
-### 11.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
-
-**状态说明**：已完整修复（PR-A）。
-
-根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
-
-**全部修复内容**：
-- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
-- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
-- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
-- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
-- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
-- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
-- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
-- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
-
 ---
 
-### 11.2 IbFunction.call() 去除 context 参数依赖（Step 5）
-**任务**：`IbFunction.call(context, args)` 中的 `context` 外部传入与公理化"对象自洽执行"原则冲突。潜在方案：将"当前活跃 IExecutionContext"注入 KernelRegistry 作为线程本地状态。
-
-**风险**：⚠️ 高风险。未来支持并发解释器或协程式执行时，线程本地存储会产生严重复杂度。**必须先明确解释器并发模型设计后才能推进。**
+### 11.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
+**状态**：已完成（见 `docs/COMPLETED.md`，Step 5 完整路径：5a IExecutionFrame Protocol + 5b ContextVar 帧注册表）。`IbUserFunction.call()` 已通过 `get_current_frame()` 自主获取执行帧，不再依赖外部传入的 context 参数。
 
 ---
 

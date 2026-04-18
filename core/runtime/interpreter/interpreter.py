@@ -226,7 +226,7 @@ class Interpreter:
                 registry=self.registry,
                 host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
-                orchestrator=kwargs.get('orchestrator', None) if 'kwargs' in locals() else None,
+                orchestrator=orchestrator,
                 debugger=self.debugger,
                 output_callback=output_callback,
                 input_callback=input_callback,
@@ -787,14 +787,12 @@ class Interpreter:
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
                 result = visitor(node_uid, node_data)
                 
-                # [Result Mode] 自动拦截不确定性结果
+                # [Result Mode] 自动拦截不确定性结果（安全网）
                 if isinstance(result, LLMResult):
                     self.runtime_context.set_last_llm_result(result)
                     if result.is_uncertain:
-                        # 对于不确定的结果，我们返回 None。
-                        # 上层逻辑（如 IbAssign）会根据 last_llm_result.is_uncertain 决定是否中断。
                         return self.registry.get_none()
-                    return result.value # 返回解包后的 IbObject
+                    return result.value
                 
                 return result
             except (ReturnException, BreakException, ContinueException, ThrownException):

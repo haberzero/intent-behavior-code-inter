@@ -138,16 +138,69 @@ class IbIntentContext:
         return list(self._global_intents)
 
     def get_intent_top(self) -> Optional[Any]:
-        """返回持久意图栈顶节点（IntentNode 链表头）。供 backward-compat 代码使用。"""
+        """返回持久意图栈顶节点（IntentNode 链表头）。供 intent_stack property 使用。"""
         return self._intent_top
 
-    def consume_smear_snapshot(self) -> List[Any]:
-        """返回涂抹意图队列的副本（不消费，供快照恢复使用）。"""
-        return list(self._smear_queue)
+    def set_intent_top(self, node: Optional[Any]) -> None:
+        """直接设置栈顶节点（用于 intent_stack setter / restore_active_intents）。"""
+        self._intent_top = node
 
-    def get_override_snapshot(self) -> Optional[Any]:
-        """返回排他意图槽的值（不消费，供快照恢复使用）。"""
-        return self._override
+    def remove(self, tag: Optional[str] = None, content: Optional[str] = None) -> bool:
+        """
+        从持久意图栈中物理移除匹配的意图（栈顶优先）。
+
+        - tag   → 按标签移除（最近压入的匹配 tag 的意图）
+        - content → 按内容移除
+        返回是否成功移除。
+        """
+        if not self._intent_top:
+            return False
+
+        if tag and self._remove_by_tag(tag):
+            return True
+        if content and self._remove_by_content(content):
+            return True
+        return False
+
+    def _remove_by_tag(self, tag: str) -> bool:
+        """按标签移除意图（栈顶优先）"""
+        current = self._intent_top
+        previous = None
+        while current:
+            intent = current.intent
+            if getattr(intent, 'tag', None) == tag:
+                if previous:
+                    previous.parent = current.parent
+                else:
+                    self._intent_top = current.parent
+                self._invalidate_cache_up_to_root(previous)
+                return True
+            previous = current
+            current = current.parent
+        return False
+
+    def _remove_by_content(self, content: str) -> bool:
+        """按内容移除意图（栈顶优先）"""
+        current = self._intent_top
+        previous = None
+        while current:
+            intent = current.intent
+            if hasattr(intent, 'content') and getattr(intent, 'content', None) == content:
+                if previous:
+                    previous.parent = current.parent
+                else:
+                    self._intent_top = current.parent
+                self._invalidate_cache_up_to_root(previous)
+                return True
+            previous = current
+            current = current.parent
+        return False
+
+    def _invalidate_cache_up_to_root(self, node: Optional[Any]) -> None:
+        """清除从节点到根节点的所有缓存"""
+        while node:
+            node._cached_list = None
+            node = node.parent
 
     # ------------------------------------------------------------------ #
     # Convenience                                                          #

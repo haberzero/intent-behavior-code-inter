@@ -1120,6 +1120,56 @@ class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
 
 
 
+class LlmCallResultAxiom(BaseAxiom):
+    """
+    LLM 调用结果的类型公理。
+
+    IbLLMCallResult 是 llmexcept 保护块的结果容器类型，持有 LLM 调用的
+    确定性状态、返回值、原始响应和重试提示词。
+
+    Capabilities：
+    - 无 operator / converter / parser capability（不参与常规类型运算）
+    - 不可被用户变量声明（内核内部类型）
+    """
+
+    @property
+    def name(self) -> str:
+        return "llm_call_result"
+
+    def is_dynamic(self) -> bool:
+        return False
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "llm_call_result"
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "Object"
+
+    def get_call_capability(self):
+        return None
+
+    def get_operator_capability(self):
+        return None
+
+    def get_converter_capability(self):
+        return None
+
+    def get_iter_capability(self):
+        return None
+
+    def get_subscript_capability(self):
+        return None
+
+    def get_parser_capability(self):
+        return None
+
+    def get_from_prompt_capability(self):
+        return None
+
+    def get_llmoutput_hint_capability(self):
+        return None
+
+
 def register_core_axioms(registry: "AxiomRegistry") -> None:
     """Register all core axioms into the given AxiomRegistry."""
     registry.register(IntAxiom())
@@ -1142,3 +1192,4 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(DeferredAxiom())
     registry.register(BehaviorAxiom())
     registry.register(IntentContextAxiom())
+    registry.register(LlmCallResultAxiom())

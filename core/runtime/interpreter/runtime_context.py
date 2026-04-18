@@ -218,80 +218,76 @@ class RuntimeContextImpl(RuntimeContext):
         self._registry = registry
         self._global_scope = initial_scope or ScopeImpl(registry=self._registry)
         self._current_scope = self._global_scope
-        self._intent_top: Optional[IntentNode] = None # 意图栈顶节点
-        self._global_intents: List[IbIntent] = []
         self._loop_stack: List[Dict[str, int]] = []
         self._retry_hint: Optional[str] = None # 运行时重试提示词
 
-        # [排他意图] 临时的单次作用排他意图
-        # @! 创建一个临时的 IntentStack 实例，用于当前这一次 LLM 调用后销毁
-        # 全局意图栈保持不变
-        self._pending_override_intent: Optional[IbIntent] = None
-
-        # [涂抹意图] 一次性单行意图（@）
-        # @ 不压入持久栈，只对紧跟的下一次 LLM 调用有效，调用后自动清除
-        self._pending_smear_intents: List[IbIntent] = []
+        # 意图上下文（Step 6c 完整迁移）：
+        # 持久意图栈、涂抹意图队列、排他意图槽、全局意图全部统一持有在此对象中。
+        from core.runtime.objects.intent_context import IbIntentContext
+        self._intent_ctx: IbIntentContext = IbIntentContext()
 
         # [LLMExceptFrame] LLM 异常重试帧栈
-        # 当 llmexcept/retry 机制完全迁移到帧栈后，此属性用于管理嵌套的 llmexcept 结构。
-        # 每个帧保存执行状态（变量快照、intent 栈、loop 上下文），支持状态恢复和精确重试。
         self._llm_except_frames: List['LLMExceptFrame'] = []
 
-        # [LLMResult] 最后一个 LLM 执行结果
-        # 用于 visit_IbLLMExceptionalStmt 检查 LLM 调用是否返回不确定性
-        self._last_llm_result: Optional['LLMResult'] = None
+        # [IbLLMCallResult] 最后一个 LLM 执行结果（Step 7b）
+        # 已升级为 IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
+        self._last_llm_result: Optional[Any] = None
 
     # --- 排他意图管理 ---
 
     def set_pending_override_intent(self, intent: IbIntent) -> None:
-        """
-        设置临时的排他意图。
-
-        @! 创建临时的单次作用 IntentStack 实例，用于当前这一次 LLM 调用后销毁。
-        全局意图栈保持不变。
-        """
-        self._pending_override_intent = intent
+        """设置临时的排他意图（@! 语义）。"""
+        self._intent_ctx.set_override(intent)
 
     def consume_pending_override_intent(self) -> Optional[IbIntent]:
-        """
-        消费并清除临时的排他意图。
-
-        返回排他意图（如果有），并清除状态。
-        这在 LLM 调用完成后被调用。
-        """
-        intent = self._pending_override_intent
-        self._pending_override_intent = None
-        return intent
+        """消费并清除排他意图。"""
+        return self._intent_ctx.consume_override()
 
     def has_pending_override_intent(self) -> bool:
         """检查是否存在待处理的排他意图"""
-        return self._pending_override_intent is not None
+        return self._intent_ctx.has_override()
 
     # --- 涂抹意图管理 (@) ---
 
     def add_smear_intent(self, intent: IbIntent) -> None:
-        """
-        添加一次性涂抹意图（@）。
-
-        @ 不压入持久意图栈，只对紧跟的下一次 LLM 调用有效，
-        调用完成后自动清除。与 @+ 的持久压栈语义不同。
-        """
-        self._pending_smear_intents.append(intent)
+        """添加一次性涂抹意图（@）。"""
+        self._intent_ctx.add_smear(intent)
 
     # --- LLM Result 管理 ---
 
-    def set_last_llm_result(self, result: 'LLMResult') -> None:
-        """设置最后一个 LLM 执行结果"""
+    def set_last_llm_result(self, result: Any) -> None:
+        """
+        设置最后一个 LLM 执行结果。
+
+        接受 LLMResult（Python dataclass）或 IbLLMCallResult（IBCI 对象）。
+        LLMResult 会被自动转换为 IbLLMCallResult 后存储（Step 7b）。
+        """
+        if result is None:
+            self._last_llm_result = None
+            return
+        # 如果是内部 LLMResult dataclass，转换为 IbLLMCallResult
+        from core.runtime.interpreter.llm_result import LLMResult
+        if isinstance(result, LLMResult):
+            from core.runtime.objects.kernel import IbLLMCallResult
+            ib_cls = self._registry.get_class("llm_call_result")
+            if ib_cls is not None:
+                result = IbLLMCallResult(
+                    ib_class=ib_cls,
+                    is_certain=result.is_success,
+                    value=result.value,
+                    raw_response=result.raw_response or "",
+                    retry_hint=result.retry_hint or "",
+                )
+            # If ib_cls is not yet available (early init), fall through and store as-is
         self._last_llm_result = result
 
-    def get_last_llm_result(self) -> Optional['LLMResult']:
-        """获取最后一个 LLM 执行结果"""
+    def get_last_llm_result(self) -> Optional[Any]:
+        """获取最后一个 LLM 执行结果（IbLLMCallResult）"""
         return self._last_llm_result
 
     def clear_last_llm_result(self) -> None:
         """清除最后一个 LLM 执行结果"""
         self._last_llm_result = None
-
     def push_llm_except_frame(self, frame: 'LLMExceptFrame') -> None:
         """
         将新的 LLMExceptFrame 入栈。
@@ -391,22 +387,22 @@ class RuntimeContextImpl(RuntimeContext):
                 mode=IntentMode.APPEND,
                 role=IntentRole.GLOBAL
             )
-        if intent not in self._global_intents:
-            self._global_intents.append(intent)
+        current = self._intent_ctx.get_global_intents()
+        if intent not in current:
+            self._intent_ctx.set_global_intents(current + [intent])
 
     def clear_global_intents(self) -> None:
-        self._global_intents = []
+        self._intent_ctx.set_global_intents([])
 
     def remove_global_intent(self, intent: Union[str, IbIntent]) -> None:
         if isinstance(intent, str):
-            # 匹配内容的移除
-            self._global_intents = [i for i in self._global_intents if i.content != intent]
+            filtered = [i for i in self._intent_ctx.get_global_intents() if i.content != intent]
         else:
-            if intent in self._global_intents:
-                self._global_intents.remove(intent)
+            filtered = [i for i in self._intent_ctx.get_global_intents() if i is not intent]
+        self._intent_ctx.set_global_intents(filtered)
 
     def get_global_intents(self) -> List[IbIntent]:
-        return list(self._global_intents)
+        return self._intent_ctx.get_global_intents()
 
     def get_vars(self) -> Dict[str, Any]:
         """ 获取当前可见的所有真实变量对象 (IbObject)。"""
@@ -511,138 +507,48 @@ class RuntimeContextImpl(RuntimeContext):
                 tag=tag,
                 role=IntentRole.DYNAMIC
             )
-        # 模式逻辑：
-        # 1. 我们不再物理切断链条，以保证 pop_intent 能够正确恢复之前的栈状态。
-        # 2. 逻辑上的切断（排他性/移除）由 LLMExecutor 在合并时根据 IntentMode 处理。
-        self._intent_top = IntentNode(intent, self._intent_top)
+        self._intent_ctx.push(intent)
 
     def pop_intent(self) -> Optional[Union[IbIntent, Any]]:
-        if self._intent_top:
-            content = self._intent_top.intent
-            self._intent_top = self._intent_top.parent
-            return content
-        return None
+        return self._intent_ctx.pop()
 
     def remove_intent(self, tag: Optional[str] = None, content: Optional[str] = None) -> bool:
         """
-        从栈中物理移除匹配的意图。
+        从持久意图栈中物理移除匹配的意图。
 
         @- #tag → 按标签移除（移除最近添加的匹配标签的意图）
-        @- content → 按内容移除（移除最近添加的匹配内容的意图）
-
+        @- content → 按内容移除
         返回是否成功移除。
         """
-        if not self._intent_top:
-            return False
-
-        if tag:
-            removed = self._remove_by_tag(tag)
-            if removed:
-                return True
-
-        if content:
-            removed = self._remove_by_content(content)
-            if removed:
-                return True
-
-        return False
-
-    def _remove_by_tag(self, tag: str) -> bool:
-        """按标签移除意图（栈顶优先）"""
-        if not self._intent_top:
-            return False
-
-        current = self._intent_top
-        previous = None
-
-        while current:
-            intent = current.intent
-            if intent.tag == tag:
-                if previous:
-                    previous.parent = current.parent
-                else:
-                    self._intent_top = current.parent
-                # 清除 _intent_top 的缓存，因为 to_list() 是从它开始调用的
-                self._intent_top._cached_list = None if self._intent_top else None
-                self._invalidate_cache_up_to_root(previous)
-                return True
-            previous = current
-            current = current.parent
-
-        return False
-
-    def _remove_by_content(self, content: str) -> bool:
-        """按内容移除意图（栈顶优先）"""
-        if not self._intent_top:
-            return False
-
-        current = self._intent_top
-        previous = None
-
-        while current:
-            intent = current.intent
-            has_content = hasattr(intent, 'content')
-            intent_content = getattr(intent, 'content', None) if has_content else None
-            if has_content and intent_content == content:
-                if previous:
-                    previous.parent = current.parent
-                else:
-                    self._intent_top = current.parent
-                # 清除 _intent_top 的缓存，因为 to_list() 是从它开始调用的
-                self._intent_top._cached_list = None if self._intent_top else None
-                self._invalidate_cache_up_to_root(previous)
-                return True
-            previous = current
-            current = current.parent
-
-        return False
-
-    def _invalidate_cache_up_to_root(self, node: Optional['IntentNode']) -> None:
-        """清除从节点到根节点的所有缓存"""
-        while node:
-            node._cached_list = None
-            node = node.parent
+        return self._intent_ctx.remove(tag=tag, content=content)
 
     def get_active_intents(self) -> List[Union[IbIntent, Any]]:
-        if not self._intent_top:
-            return []
-        return self._intent_top.to_list()
+        return self._intent_ctx.get_active_intents()
 
-    def fork_intent_snapshot(self) -> Optional['IntentNode']:
+    def fork_intent_snapshot(self) -> 'IbIntentContext':
         """
-        返回当前意图栈的不可变快照（结构共享）。
-        Step 6 完成后此方法将返回 IbIntentContext.fork()。
+        返回当前意图上下文的不可变值快照（IbIntentContext.fork()）。
+        用于 LLM 流水线 dispatch 时刻和 LLMExceptFrame 的快照保存。
         """
-        return self._intent_top
+        return self._intent_ctx.fork()
 
     @property
     def intent_context(self) -> 'IbIntentContext':
-        """
-        返回当前帧的意图上下文（IbIntentContext 视图）。
-        Step 6c: 新增访问器，供 LLMExceptFrame.save_context() 用于安全快照。
-        注意：返回的是当前状态的实时视图，fork() 调用才产生不可变快照。
-        """
-        from core.runtime.objects.intent_context import IbIntentContext
-        return IbIntentContext(
-            intent_top=self._intent_top,
-            smear_queue=list(self._pending_smear_intents),
-            override=self._pending_override_intent,
-            global_intents=list(self._global_intents),
-        )
+        """当前帧的意图上下文（直接持有的 IbIntentContext 实例）。"""
+        return self._intent_ctx
 
-    def restore_active_intents(self, intents: Union[List[IbIntent], Optional[IntentNode]]) -> None:
+    def restore_active_intents(self, intents: Union[List[IbIntent], Optional['IntentNode']]) -> None:
         """
-         恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
+        恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。
         """
         if intents is None:
-            self._intent_top = None
+            self._intent_ctx.set_intent_top(None)
         elif isinstance(intents, IntentNode):
-            self._intent_top = intents
+            self._intent_ctx.set_intent_top(intents)
         elif isinstance(intents, list):
-            # 扁平列表恢复：假设列表顺序为 [bottom, ..., top]
-            self._intent_top = None
+            self._intent_ctx.set_intent_top(None)
             for intent in intents:
-                self._intent_top = IntentNode(intent, self._intent_top)
+                self._intent_ctx.push(intent)
         else:
             raise TypeError(f"Invalid intent stack type for restoration: {type(intents)}")
 
@@ -656,23 +562,15 @@ class RuntimeContextImpl(RuntimeContext):
         3. 持久意图栈（active_intents via @+）
         4. 全局意图
         """
-        # 检查是否有待处理的排他意图 (@!)
-        pending_override = self._pending_override_intent
-        if pending_override:
-            # 消费排他意图（清除状态）
-            self._pending_override_intent = None
-            # @! 排他：丢弃同时存在的涂抹意图（两者语义互斥，编译器已阻止共存）
-            self._pending_smear_intents.clear()
+        if self._intent_ctx.has_override():
+            pending_override = self._intent_ctx.consume_override()
+            self._intent_ctx.consume_smear()  # discard smear when override is active
             content = pending_override.resolve_content(self, execution_context)
             return [content] if content else []
 
-        # 消费一次性涂抹意图（@ 单行意图）
-        smear_intents = list(self._pending_smear_intents)
-        self._pending_smear_intents.clear()
-
-        # 正常解析意图栈
-        active_intents = self.get_active_intents()
-        global_intents = self.get_global_intents()
+        smear_intents = self._intent_ctx.consume_smear()
+        active_intents = self._intent_ctx.get_active_intents()
+        global_intents = self._intent_ctx.get_global_intents()
 
         return IntentResolver.resolve(
             active_intents=active_intents + smear_intents,
@@ -682,15 +580,14 @@ class RuntimeContextImpl(RuntimeContext):
         )
 
     @property
-    def intent_stack(self) -> Union[Optional[IntentNode], List[Any]]:
-        # 为了 IbBehavior 优化，直接返回栈顶节点
-        return self._intent_top
+    def intent_stack(self) -> Optional['IntentNode']:
+        return self._intent_ctx.get_intent_top()
         
     @intent_stack.setter
-    def intent_stack(self, value: Optional[IntentNode]):
-        """ 仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
+    def intent_stack(self, value: Optional['IntentNode']):
+        """仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
         if value is None or isinstance(value, IntentNode):
-            self._intent_top = value
+            self._intent_ctx.set_intent_top(value)
         else:
             raise TypeError(f"Invalid intent stack type: {type(value)}. Must be IntentNode or None.")
 
