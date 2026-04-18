@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
-from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple, IbBehavior
+from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple, IbBehavior, IbDeferred
 from core.runtime.interpreter.runtime_context import IntentNode
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -191,6 +191,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["expected_type"] = obj.expected_type
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)
+
+        elif isinstance(obj, IbDeferred):
+            data["_type"] = "deferred"
+            data["node_uid"] = obj.node_uid
+            data["deferred_mode"] = obj.deferred_mode
             
         else:
             # 普通用户定义对象

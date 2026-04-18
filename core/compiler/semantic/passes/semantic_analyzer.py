@@ -675,7 +675,14 @@ class SemanticAnalyzer:
                 if declared_type:
                     # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
                     if self.registry.is_dynamic(declared_type):
-                        target_type = val_type
+                        if deferred_mode:
+                            # auto lambda / auto snapshot → 变量持有延迟对象
+                            if isinstance(node.value, ast.IbBehaviorExpr):
+                                target_type = self._behavior_desc
+                            else:
+                                target_type = self._deferred_desc
+                        else:
+                            target_type = val_type
                     elif deferred_mode:
                         # 延迟模式：变量持有延迟对象；声明类型仅用作输出类型提示
                         # behavior 表达式 → behavior 类型；其他表达式 → deferred 类型
