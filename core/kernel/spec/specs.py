@@ -167,6 +167,41 @@ class DeferredSpec(IbSpec):
         return self._axiom_name or "deferred"
 
 
+@dataclass(eq=False)
+class BehaviorSpec(DeferredSpec):
+    """
+    Describes a typed behavior (LLM-backed lambda/snapshot) expression.
+
+    BehaviorSpec is the typed variant of DeferredSpec for ``@~...~`` behavior
+    expressions.  It carries the same ``value_type_name`` / ``deferred_mode``
+    fields as DeferredSpec and additionally preserves the LLM output type at
+    compile time.
+
+    Purpose
+    -------
+    When the user writes::
+
+        int lambda f = @~ compute something ~
+
+    the variable ``f`` is assigned a ``BehaviorSpec(value_type_name="int")``.
+    ``SpecRegistry.resolve_return()`` inspects ``value_type_name`` and returns
+    the ``int`` spec directly, so ``int result = f()`` compiles without SEM_003.
+
+    Design notes
+    ------------
+    * ``get_base_name()`` returns ``"behavior"`` so that axiom lookups (via
+      ``AxiomRegistry``) correctly resolve to ``BehaviorAxiom``.
+    * The spec is NOT registered in ``SpecRegistry`` (ad-hoc instances like
+      ``DeferredSpec`` instances are not registered either); it lives only in
+      the symbol-table entry for the deferred variable.
+    * Upward assignability (``behavior[int]`` into a ``behavior`` slot) works
+      because ``BehaviorAxiom.is_compatible("behavior")`` returns True.
+    """
+
+    def get_base_name(self) -> str:
+        return self._axiom_name or "behavior"
+
+
 @dataclass
 class LazySpec(ModuleSpec):
     """
