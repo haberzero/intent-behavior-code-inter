@@ -3,7 +3,7 @@
 > 本文档记录 IBC-Inter 项目中已明确方向的设计任务与后续工作。
 > 按优先级分类，每项包含结论与实施要点。
 >
-> **最后更新**：2026-04-17
+> **最后更新**：2026-04-18
 
 ---
 
@@ -80,13 +80,12 @@ str snapshot my_handler = @~ 根据 $context 生成回复 ~
 
 ## 一、P0 优先级任务（阻塞性 Bug / 核心设计缺口）
 
-### 1.1 llmexcept 在嵌套块内静默失效 [BUG / P0]
+### 1.1 llmexcept 在嵌套块内静默失效 [BUG / P0] ✅ DONE
 
 **文件**：`core/compiler/semantic/passes/semantic_analyzer.py`
 
-**问题**：`_bind_llm_except()` 只处理 `IbModule / IbFunctionDef / IbClassDef`，**不递归进入** `IbFor / IbIf / IbWhile / IbTry` 的 body。导致循环体内的 `llmexcept` 在 Pass 3 中 target 永远为 None，运行时静默失效（`visit_IbLLMExceptionalStmt` 遇到 `target=None` 直接 `return get_none()`）。
-
-**修复**：在 `_bind_llm_except()` 增加对 `IbFor`、`IbIf`、`IbWhile`、`IbTry` 等容器节点的递归处理，对其 body 调用 `_bind_llm_except_in_body()`。改动约 15 行，纯扩展，无破坏。
+**修复**：`_bind_llm_except()` 现已完整递归进入 `IbFor / IbIf / IbWhile / IbTry / IbSwitch` 的 body，
+对各容器节点的 body 及 orelse/finalbody/cases 均调用 `_bind_llm_except_in_body()`。
 
 **注**：此修复与 §Z.1 的语义澄清结合起来理解：
 - `llmexcept` 在 for 体外面（sibling）：保护 for 的条件调用（见 1.2 修复）
@@ -208,7 +207,10 @@ str snapshot my_handler = @~ 根据 $context 生成回复 ~
 - `IbBehavior.call()` 自主执行，`_execute_behavior()` 旁路已彻底删除
 - 详见 `AXIOM_OOP_ANALYSIS.md` Step 1 + Step 2
 
-**Intent 状态**：`DynamicAxiom("intent")` 仍为占位符。工作量预估 5-9 人天，不阻塞当前功能。见 `AXIOM_OOP_ANALYSIS.md` §6.2。
+**Intent 状态**：Intent **不是** `DynamicAxiom` 占位符——`AxiomRegistry` 中不存在 intent 专属 Axiom。
+当前正确描述：Intent 通过 `Bootstrapper.initialize()` 注册为内置 `ClassSpec`，`IbIntent` 是真正的 `IbObject`
+子类，`IntentStack` 已有完整的原生方法注册。完整公理化（专用 `IntentAxiom`）工作量预估 3-5 人天，
+不阻塞当前功能。见 `AXIOM_OOP_ANALYSIS.md` §6.2。
 
 ---
 

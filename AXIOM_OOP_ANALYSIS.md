@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-18（第四次修订：callable + deferred 公理化完整落地；is_compatible 方向修复）
+> **最后更新**：2026-04-18（第五次修订：Step 3a 完成——ibci_ai 职责拆分；DESIGN_TASKS.md §1.1/§4.3 文档修正）
 >
 > 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
 
@@ -246,11 +246,13 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
-### Step 3（独立 PR，中期目标）
+### Step 3 ✅ COMPLETED（Step 3a 完成于本轮，Step 3b 完成于上轮）
 
-**`ibci_ai` 职责拆分**
+**`ibci_ai` 职责拆分（Step 3a）+ 通用可调用类型公理化（Step 3b）**
 
-当前 `ibci_ai` 承担了两个不同职责，必须拆分：
+#### Step 3a（本轮完成）
+
+`ibci_ai` 职责已完整拆分：
 
 | 当前职责 | 拆分后归属 |
 |---------|-----------|
@@ -258,10 +260,24 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | LLM 配置 API（`set_retry`、`set_context`、`set_model`）| 保留在 `ibci_ai` 插件，通过 `import ai` 显式使用 |
 | `IbStatefulPlugin` 断点保存/恢复（LLM 配置状态） | 保留在 `ibci_ai` 插件 |
 
+**关键改动**：
+- `LLMExecutorImpl.llm_callback` 属性中**删除旧的 `interop.get_package("ai")` 回退路径**；
+  现在 Provider 的唯一来源是 `capability_registry.get("llm_provider")`，
+  由 `ibci_ai.setup(capabilities)` 在加载时通过 `capabilities.expose("llm_provider", self)` 注册。
+- `execute_behavior_expression` 中**删除 `ai_module = self.interop.get_package("ai")` 直接访问**；
+  `auto_intent_injection` 配置和 `_retry_hint` 回退均改为经由已注册的 `self.llm_callback` 读取。
+
 **拆分后**：
 - `ibci_ai` 的 IBCI 接口（`ai.set_retry()` 等）继续正常工作
-- `@~...~` 的执行不再路由经过 `ibci_ai`，而是通过 `KernelRegistry.get_llm_executor()` 直接执行
-- `ibci_ai.setup(capabilities)` 负责将自己注册的 provider 注入到 `KernelRegistry`
+- `@~...~` 的执行不再路由经过 `ibci_ai` 模块名，而是 100% 通过 `KernelRegistry.get_llm_executor()` 执行
+- `ibci_ai.setup(capabilities)` 是向内核注册具体 LLM provider 的唯一注册入口
+
+#### Step 3b（上轮完成，见前次修订）
+
+已完成内容：
+- `CallableAxiom` 替代 `DynamicAxiom("callable")`，`is_dynamic()=False`
+- `DeferredAxiom`、`DeferredSpec`、`IbDeferred` 通用延迟表达式完整落地
+- `is_compatible()` 方向 Bug 修复
 
 ---
 
@@ -341,6 +357,10 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | **`is_compatible()` 方向 Bug 修复**：父类型不再反向向下兼容子类型 | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 | **`BoundMethodAxiom.is_compatible("callable")` 补充**：bound_method IS-A callable | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 | **`VoidAxiom` 替代 `DynamicAxiom("void")`**：is_dynamic=False，无任何能力，is_compatible 仅 "void" | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
+| **Step 3a：`LLMExecutorImpl.llm_callback` 删除 `interop.get_package("ai")` 回退路径** | 架构 | `core/runtime/interpreter/llm_executor.py` | 本 PR |
+| **Step 3a：`execute_behavior_expression` 删除直接 `ai_module` 访问，改为 `self.llm_callback`** | 架构 | `core/runtime/interpreter/llm_executor.py` | 本 PR |
+| **文档修正：`DESIGN_TASKS.md §1.1` 标记为 ✅ DONE** | 文档 | `DESIGN_TASKS.md` | 本 PR |
+| **文档修正：`DESIGN_TASKS.md §4.3` Intent 描述更正**（无 `DynamicAxiom("intent")` 占位符） | 文档 | `DESIGN_TASKS.md` | 本 PR |
 
 ---
 
@@ -390,4 +410,4 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ## 七、一句话总结
 
-> **可调用类型体系（callable → deferred → behavior）已全面公理化并修复类型系统方向 Bug。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior.call() 自主执行）、Step 3b（CallableAxiom + DeferredAxiom + IbDeferred 通用延迟表达式）均已完整落地，479 个测试全部通过。`is_compatible()` 方向 Bug 已修复（父类型不再向下兼容子类型）。下一个重要里程碑是 Step 3a（ibci_ai 职责拆分）和 Step 4（ibci_ihost/idbg 重构），均属中期目标，不阻塞当前功能。**
+> **可调用类型体系（callable → deferred → behavior）已全面公理化并修复类型系统方向 Bug。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior.call() 自主执行）、Step 3（ibci_ai 职责拆分 + CallableAxiom + DeferredAxiom + IbDeferred 通用延迟表达式）均已完整落地，484 个测试全部通过。`@~...~` 执行路径不再经过 `interop.get_package("ai")`，100% 通过 `KernelRegistry.get_llm_executor()` 执行。下一个重要里程碑是 Step 4（ibci_ihost/idbg 重构），属中期目标，不阻塞当前功能。**
