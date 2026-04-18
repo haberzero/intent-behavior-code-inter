@@ -694,21 +694,39 @@ class IbUserFunction(IbFunction):
 class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
+
+    公理化设计原则
+    --------------
+    IbLLMFunction 与 IbBehavior 同构：不再在构造时持有 llm_executor 引用。
+    call() 通过 ib_class.registry.get_llm_executor().invoke_llm_function() 自主执行。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
-        self.llm_executor = llm_executor
         self.context = context
         self._spec = spec
         self.module_name = module_name or context.current_module_name
+        # 暂存由 call() 解析的呼叫级意图，供 invoke_llm_function 消费
+        self._pending_call_intent: Optional[Any] = None
 
     @property
     def spec(self) -> Optional[IbSpec]:
         return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
+        """
+        执行 LLM 函数：负责作用域管理和参数绑定，然后通过 KernelRegistry 分发给执行器。
+
+        与 IbBehavior.call() 同构：通过 registry.get_llm_executor() 获取执行器，
+        不再持有 llm_executor 直接引用。
+        """
+        executor = self.ib_class.registry.get_llm_executor()
+        if executor is None:
+            raise RuntimeError(
+                f"IbLLMFunction '{self.node_uid}': LLM executor not registered in KernelRegistry. "
+                "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
+            )
+
         # 切换到函数定义所在的模块上下文
         rt_context = self.context.runtime_context
         old_module = self.context.current_module_name
@@ -757,22 +775,21 @@ class IbLLMFunction(IbFunction):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
-            # 解析呼叫级意图 (函数头上的意图)
+            # 解析呼叫级意图（函数头上的意图），暂存供 invoke_llm_function 消费
             intent_uid = node_data.get("intent")
-            call_intent = None
+            self._pending_call_intent = None
             if intent_uid:
                 intent_data = self.context.get_node_data(intent_uid)
-                # 使用工厂创建意图对象，避免局部 import
-                call_intent = self.context.factory.create_intent_from_node(
-                    intent_uid, 
-                    intent_data, 
+                self._pending_call_intent = self.context.factory.create_intent_from_node(
+                    intent_uid,
+                    intent_data,
                     role=IntentRole.SMEAR
                 )
             
-            # 分发给 LLM 执行器
-            # 传递执行上下文网关，并传递解析后的意图
-            return self.llm_executor.execute_llm_function(self.node_uid, self.context, call_intent=call_intent)
+            # 公理化调用：通过 KernelRegistry 获取执行器，不再直接持有
+            return executor.invoke_llm_function(self, self.context)
         finally:
+            self._pending_call_intent = None
             self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复之前的模块上下文

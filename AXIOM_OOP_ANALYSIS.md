@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-18（第四次修订：callable + deferred 公理化完整落地；is_compatible 方向修复）
+> **最后更新**：2026-04-18（第七次修订：BehaviorSpec 编译期返回类型推断完成——§3.4 限制已解除，§6.4 标注 COMPLETED，Step 6 BehaviorSpec 条目划勾，测试数 484→497）
 >
 > 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
 
@@ -23,13 +23,13 @@
 | **deferred** | ✅（`DeferredSpec`） | ✅（`DeferredAxiom`） | ✅（`IbDeferred`） | ✅ |
 | **behavior** | ✅ | ✅（`BehaviorAxiom`） | ✅（`IbBehavior.call()` 自主执行） | ✅ |
 | **void** | ✅（`VOID_SPEC`） | ✅（`VoidAxiom`，`is_dynamic=False`） | N/A（无返回值标注） | N/A |
-| IbFunction / IbLLMFunction | ✅ | 部分（FuncSpec） | ✅ | ⚠️ 依赖外部 context |
+| **IbLLMFunction** | ✅（`FuncSpec(is_llm=True)`） | 部分（FuncSpec） | ✅ | ✅（Step 4a 完成，通过 `registry.get_llm_executor()` 自主执行） |
 
 ### 尚未完整公理化的类型
 
 | 类型 | 问题描述 |
 |------|---------|
-| **IbFunction** | `call()` 需要外部传入 `context`（`IExecutionContext`），不能自主执行。 |
+| **IbFunction** | `call()` 需要外部传入 `context`（`IExecutionContext`），不能自主执行。是 Step 5（线程本地存储）的目标，当前功能正确，属架构不优雅而非 Bug。 |
 | **Intent** | 内置 ClassSpec（通过 `Bootstrapper.initialize()` 创建），无专用 Axiom。完整 IntentAxiom 公理化属于 Step 6 长期目标。 |
 
 ### 公理类型层次（当前完整状态）
@@ -167,9 +167,10 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 运行时路径：`invoke_behavior()` → `push_expected_type(behavior.expected_type)` → LLM 结果被约束为 `expected_type` 对应的类型。类型约束从未丢失，只是延迟到运行时生效。
 
-**当前已知限制（P2 目标）**：
-- 编译器中 `is_assignable(auto, int)` = False，导致 `int result = compute()` 在调用处产生 SEM_003 类型不匹配错误。这不是运行时 Bug，而是编译期类型推断精度不足。
-- **正确方向**：引入 `BehaviorSpec(return_type_name="int")` 使编译器在已知 lambda/snapshot 定义的 expected_type 时，调用处可推断为具体类型。这属于 Step 2 的延伸，不影响当前核心功能。
+**✅ 已解决（本 PR）**：
+- `BehaviorSpec(value_type_name="int")` 已在当前 PR 中完整实现（详见 §6.4 COMPLETED 记录）。
+- `int result = compute()` 编译期不再产生 SEM_003 错误。
+- `SpecRegistry.resolve_return()` 对 `DeferredSpec`/`BehaviorSpec` 且 `value_type_name` 非 auto 时，直接返回声明的值类型。
 
 ### 3.5 彻底重构原则（禁止渐进式补丁）
 
@@ -246,11 +247,13 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
-### Step 3（独立 PR，中期目标）
+### Step 3 ✅ COMPLETED（Step 3a 完成于本轮，Step 3b 完成于上轮）
 
-**`ibci_ai` 职责拆分**
+**`ibci_ai` 职责拆分（Step 3a）+ 通用可调用类型公理化（Step 3b）**
 
-当前 `ibci_ai` 承担了两个不同职责，必须拆分：
+#### Step 3a（本轮完成）
+
+`ibci_ai` 职责已完整拆分：
 
 | 当前职责 | 拆分后归属 |
 |---------|-----------|
@@ -258,14 +261,73 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | LLM 配置 API（`set_retry`、`set_context`、`set_model`）| 保留在 `ibci_ai` 插件，通过 `import ai` 显式使用 |
 | `IbStatefulPlugin` 断点保存/恢复（LLM 配置状态） | 保留在 `ibci_ai` 插件 |
 
+**关键改动**：
+- `LLMExecutorImpl.llm_callback` 属性中**删除旧的 `interop.get_package("ai")` 回退路径**；
+  现在 Provider 的唯一来源是 `capability_registry.get("llm_provider")`，
+  由 `ibci_ai.setup(capabilities)` 在加载时通过 `capabilities.expose("llm_provider", self)` 注册。
+- `execute_behavior_expression` 中**删除 `ai_module = self.interop.get_package("ai")` 直接访问**；
+  `auto_intent_injection` 配置和 `_retry_hint` 回退均改为经由已注册的 `self.llm_callback` 读取。
+
 **拆分后**：
 - `ibci_ai` 的 IBCI 接口（`ai.set_retry()` 等）继续正常工作
-- `@~...~` 的执行不再路由经过 `ibci_ai`，而是通过 `KernelRegistry.get_llm_executor()` 直接执行
-- `ibci_ai.setup(capabilities)` 负责将自己注册的 provider 注入到 `KernelRegistry`
+- `@~...~` 的执行不再路由经过 `ibci_ai` 模块名，而是 100% 通过 `KernelRegistry.get_llm_executor()` 执行
+- `ibci_ai.setup(capabilities)` 是向内核注册具体 LLM provider 的唯一注册入口
+
+#### Step 3b（上轮完成，见前次修订）
+
+已完成内容：
+- `CallableAxiom` 替代 `DynamicAxiom("callable")`，`is_dynamic()=False`
+- `DeferredAxiom`、`DeferredSpec`、`IbDeferred` 通用延迟表达式完整落地
+- `is_compatible()` 方向 Bug 修复
 
 ---
 
-### Step 4（独立 PR，中期目标）
+### Step 4a ✅ COMPLETED（本 PR）
+
+**`IbLLMFunction` 公理化补完 + `visit_IbBehaviorInstance` 清理**
+
+#### 背景：Step 3a 完成后暴露的残余问题
+
+Step 3a 将 `llm_callback` 单源化到 `capability_registry.get("llm_provider")` 后，`IbLLMFunction`（命名 LLM 函数 `llm f(...) -> str: ...`）成为整个 LLM 执行链中**唯一尚未公理化的组件**，存在三个严重问题：
+
+1. **构造器持有 `llm_executor` 引用**：`IbLLMFunction.__init__` 接受并存储 `llm_executor` 参数，与 `IbBehavior` 已完成的改造（Step 2）不一致。若 executor 在对象创建后被替换，持有的是旧引用。
+2. **`call()` 返回 `LLMResult` 而非 `IbObject`**：`execute_llm_function` 返回 `LLMResult`，但 `call()` 签名是 `-> IbObject`——类型合约被违反。调用者（如 `visit_IbCall`）会拿到 `LLMResult` 对象而非 `IbObject`。
+3. **`set_last_llm_result` 从未被调用**：`llmexcept` 的不确定性检查对命名 LLM 函数调用**完全失效**——`llmexcept` 保护不会触发。
+
+另外，`visit_IbBehaviorInstance`（`(Type) @~...~` 废弃语法路径）仍直接访问 `service_context.llm_executor` 而非 `registry.get_llm_executor()`，与 Step 3a 的单源化原则冲突。
+
+#### 已完成内容
+
+**`IILLMExecutor` 接口扩展**：
+- 新增 `invoke_llm_function(func, context) -> Any`，与 `invoke_behavior` 对称，是 `IbLLMFunction.call()` 的唯一执行分发点
+- 位于 `core/base/interfaces.py`
+
+**`LLMExecutorImpl.invoke_llm_function()` 实现**：
+- 从 `func._pending_call_intent` 提取呼叫级意图（由 `IbLLMFunction.call()` 在调用前解析并暂存）
+- 委托给 `execute_llm_function` 完成 LLM 推理
+- 调用 `execution_context.runtime_context.set_last_llm_result(result)` 回写，修复 `llmexcept` 失效问题
+- 返回 `result.value`（`IbObject`），类型合约完整
+
+**`IbLLMFunction` 公理化重构**（与 `IbBehavior` Step 2 同构）：
+- `__init__` 移除 `llm_executor` 参数，不再持有 executor 引用
+- `call()` 通过 `self.ib_class.registry.get_llm_executor()` 获取执行器
+- 解析呼叫级意图后暂存到 `self._pending_call_intent`，finally 块清除
+- 调用 `executor.invoke_llm_function(self, self.context)` 完成自主执行
+- 添加 executor 为 None 时的明确 RuntimeError 提示
+
+**调用方更新**（移除旧的 `llm_executor` 参数传递）：
+- `stmt_handler.visit_IbLLMFunctionDef`：`IbLLMFunction(node_uid, self.execution_context, ...)` 不再传 executor
+- `interpreter.py` STAGE 5 预水化：同上
+
+**`visit_IbBehaviorInstance` 清理**：
+- 改为 `executor = self.registry.get_llm_executor()` + `executor.execute_behavior_expression(...)`
+- executor 为 None 时静默返回 `get_none()`，不崩溃
+
+**质量门控**：484 个测试全部通过（含 `TestE2ELLMFunctions.test_llm_function_call`、`TestE2ELLMExcept` 等）。
+
+---
+
+### Step 4b（独立 PR，中期目标）
 
 **`ibci_ihost` 和 `ibci_idbg` 的重构分析与执行**
 
@@ -310,8 +372,8 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 **万物皆对象完整化**
 
-- `IbLLMFunction` 自洽执行（类似 Step 2，依赖 `LLMExecutor` 内核化）
-- `Intent` 完整公理化（`IntentAxiom` 替换 `DynamicAxiom("intent")`）
+- ~~`BehaviorSpec(return_type_name=...)` 编译期返回类型推断（详见 §6.4）~~ ✅ COMPLETED（本 PR）
+- `Intent` 完整公理化（`IntentAxiom`，详见 §6.2）
 - 消除 `ServiceContext` 中所有游离于对象体系之外的"隐式依赖"
 
 ---
@@ -341,6 +403,22 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | **`is_compatible()` 方向 Bug 修复**：父类型不再反向向下兼容子类型 | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 | **`BoundMethodAxiom.is_compatible("callable")` 补充**：bound_method IS-A callable | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 | **`VoidAxiom` 替代 `DynamicAxiom("void")`**：is_dynamic=False，无任何能力，is_compatible 仅 "void" | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
+| **Step 3a：`LLMExecutorImpl.llm_callback` 删除 `interop.get_package("ai")` 回退路径** | 架构 | `core/runtime/interpreter/llm_executor.py` | copilot/check-architecture-and-documentation |
+| **Step 3a：`execute_behavior_expression` 删除直接 `ai_module` 访问，改为 `self.llm_callback`** | 架构 | `core/runtime/interpreter/llm_executor.py` | copilot/check-architecture-and-documentation |
+| **文档修正：`DESIGN_TASKS.md §1.1` 标记为 ✅ DONE** | 文档 | `DESIGN_TASKS.md` | copilot/check-architecture-and-documentation |
+| **文档修正：`DESIGN_TASKS.md §4.3` Intent 描述更正**（无 `DynamicAxiom("intent")` 占位符） | 文档 | `DESIGN_TASKS.md` | copilot/check-architecture-and-documentation |
+| **Step 4a：`IILLMExecutor` 新增 `invoke_llm_function()` 接口** | 架构 | `core/base/interfaces.py` | 本 PR |
+| **Step 4a：`LLMExecutorImpl.invoke_llm_function()` 实现**（修复 llmexcept 失效 + 返回 IbObject） | 架构 | `core/runtime/interpreter/llm_executor.py` | 本 PR |
+| **Step 4a：`IbLLMFunction` 移除 `llm_executor` 参数，`call()` 改为 `registry.get_llm_executor()`** | 架构 | `core/runtime/objects/kernel.py` | 本 PR |
+| **Step 4a：`visit_IbLLMFunctionDef` 移除 `llm_executor` 传参** | 架构 | `core/runtime/interpreter/handlers/stmt_handler.py` | 本 PR |
+| **Step 4a：`interpreter.py` STAGE 5 预水化移除 `llm_executor` 传参** | 架构 | `core/runtime/interpreter/interpreter.py` | 本 PR |
+| **Step 4a：`visit_IbBehaviorInstance` 改为 `registry.get_llm_executor()` 访问** | 架构 | `core/runtime/interpreter/handlers/expr_handler.py` | 本 PR |
+| **`BehaviorSpec(DeferredSpec)` 新增**：`get_base_name()` 返回 `"behavior"`，携带 `value_type_name`（§6.4） | 架构 | `core/kernel/spec/specs.py` | copilot/check-architecture-and-documentation |
+| **`SpecFactory.create_behavior(value_type_name, deferred_mode)`**：类型化 BehaviorSpec 工厂方法 | 架构 | `core/kernel/spec/registry.py` | copilot/check-architecture-and-documentation |
+| **`SpecRegistry.resolve_return()` DeferredSpec/BehaviorSpec 分支**：有 value_type_name 时编译期推断返回类型 | 架构 | `core/kernel/spec/registry.py` | copilot/check-architecture-and-documentation |
+| **`semantic_analyzer.py` deferred_mode + 具体类型 → 创建 BehaviorSpec/DeferredSpec**（替代通用占位符） | 架构 | `core/compiler/semantic/passes/semantic_analyzer.py` | copilot/check-architecture-and-documentation |
+| **`serializer.py` 持久化 `value_type_name` + `deferred_mode`** | 架构 | `core/compiler/serialization/serializer.py` | copilot/check-architecture-and-documentation |
+| **`artifact_rehydrator.py` 重建 BehaviorSpec/DeferredSpec 正确子类**（修复运行时 RUN_002 赋值错误） | 架构 | `core/runtime/loader/artifact_rehydrator.py` | copilot/check-architecture-and-documentation |
 
 ---
 
@@ -388,6 +466,40 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
+### 6.4 `BehaviorSpec(return_type_name=...)` 编译期返回类型推断 ✅ COMPLETED（本 PR）
+
+**问题描述（已解决）**：`BehaviorCallCapability.resolve_return_type_name()` 返回 `"auto"`（编译期延迟，运行期按 `expected_type` 解析），导致 `int result = compute()` 在调用处产生 SEM_003 类型不匹配错误。这不是运行时 Bug，而是编译期类型推断精度不足。
+
+**已完成的实现**：
+
+1. `BehaviorSpec(DeferredSpec)` 子类（`core/kernel/spec/specs.py`）：
+   - `get_base_name()` 返回 `"behavior"`，axiom 查找路径不变
+   - 携带 `value_type_name`（如 `"int"`、`"str"`）和 `deferred_mode`
+
+2. `SpecFactory.create_behavior(value_type_name, deferred_mode)` 工厂方法（`core/kernel/spec/registry.py`）
+
+3. `SpecRegistry.resolve_return()` 对 `DeferredSpec`/`BehaviorSpec` 的专用分支：
+   - `value_type_name` 非 `"auto"`/`"any"` 时，直接返回声明的值类型
+   - 编译期 `int result = f()` 正确推断 `f` 的返回类型为 `int`，不产生 SEM_003
+
+4. `semantic_analyzer.py`：`deferred_mode` + 具体声明类型时，通过工厂创建带类型的 `BehaviorSpec`/`DeferredSpec`
+
+5. `serializer.py`：持久化 `value_type_name` + `deferred_mode` 字段
+
+6. `artifact_rehydrator.py`：重建正确的 `BehaviorSpec`/`DeferredSpec` Python 子类实例（修复运行时 `is_assignable()` 失败 → RUN_002 错误）
+
+**质量门控**：497 个测试全部通过（含 13 个新增 `TestBehaviorSpecReturnTypeInference` 测试）。
+
+运行时路径保持不变：`invoke_behavior()` → `push_expected_type(behavior.expected_type)` → LLM 结果被约束为 `expected_type` 对应类型。类型信息既有编译期精确推断，也有运行时强制约束，两层双重保障。
+
+---
+
+### 6.5 `llm_tasks.py` 异步任务系统（草稿状态，暂缓）
+
+`core/runtime/async/llm_tasks.py` 目前是未完成的内部草稿。当前实现存在 `execution_context=None` 传入的必然 NPE 问题，且整个异步执行模型尚未在解释器层面设计完成。在并发执行模型讨论完成（Step 5 的先决条件）之前，此文件不应修改，也不应在任何用户接口中暴露。
+
+---
+
 ## 七、一句话总结
 
-> **可调用类型体系（callable → deferred → behavior）已全面公理化并修复类型系统方向 Bug。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior.call() 自主执行）、Step 3b（CallableAxiom + DeferredAxiom + IbDeferred 通用延迟表达式）均已完整落地，479 个测试全部通过。`is_compatible()` 方向 Bug 已修复（父类型不再向下兼容子类型）。下一个重要里程碑是 Step 3a（ibci_ai 职责拆分）和 Step 4（ibci_ihost/idbg 重构），均属中期目标，不阻塞当前功能。**
+> **LLM 执行链全面公理化 + 编译期类型推断完善。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior 自主执行）、Step 3（ibci_ai 职责拆分 + CallableAxiom + DeferredAxiom）、Step 4a（IbLLMFunction 公理化补完 + visit_IbBehaviorInstance 清理）均已完整落地。Step 6 部分工作（BehaviorSpec 编译期返回类型推断）提前完成：`int lambda f = @~...~; int result = f()` 编译期不再产生 SEM_003，`SpecRegistry.resolve_return()` 对 DeferredSpec/BehaviorSpec 直接推断 value_type_name。497 个测试全部通过。下一个里程碑是 Step 4b（ibci_ihost/idbg 重构），属中期目标，不阻塞当前功能。**

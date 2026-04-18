@@ -54,25 +54,12 @@ class LLMExecutorImpl:
     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
-        # 优先从能力注册中心获取 Provider (能力名: llm_provider)
+        # 唯一来源：通过能力注册中心获取 Provider (能力名: llm_provider)
+        # ibci_ai.setup() 在加载时调用 capabilities.expose("llm_provider", self) 完成注册。
         if self.service_context.capability_registry:
             provider = self.service_context.capability_registry.get("llm_provider")
             if provider:
                 return provider
-
-        # 回退到从 ai 模块获取 (兼容旧模式)
-        ai_module = self.interop.get_package("ai")
-        if not ai_module:
-            return None
-            
-        # 1. 优先尝试显式获取 Provider 接口 (用于复杂插件代理)
-        if hasattr(ai_module, "get_llm_provider"):
-            return ai_module.get_llm_provider()
-            
-        # 2. 其次检查模块实现是否直接实现了 ILLMProvider (用于核心 AI 插件)
-        if isinstance(ai_module, ILLMProvider):
-            return ai_module
-            
         return None
 
     def push_expected_type(self, type_name: str):
@@ -370,16 +357,15 @@ class LLMExecutorImpl:
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
 
-        # 0. 准备环境
-        ai_module = self.interop.get_package("ai")
-
         # 1. 评估段式插值
         content = self._evaluate_segments(node_data.get("segments"), execution_context)
 
         # 2. 收集与合并意图 (被动消费已消解的现场)
+        # auto_intent_injection 配置从已注册的 LLM Provider 读取（通过能力注册中心）
+        provider = self.llm_callback
         auto_intent = True
-        if ai_module and hasattr(ai_module, "_config"):
-            auto_intent = ai_module._config.get("auto_intent_injection", True)
+        if provider and hasattr(provider, "_config"):
+            auto_intent = provider._config.get("auto_intent_injection", True)
 
         if not auto_intent:
             # 如果关闭了自动注入，仅保留当前节点的意图 (如果有)
@@ -415,9 +401,8 @@ class LLMExecutorImpl:
         # 读取 retry_hint 后立即清除，防止污染后续 LLM 调用（无论本次执行走哪条路径）
         current_retry_hint = context.retry_hint
         context.retry_hint = None
-        if ai_module:
-            if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
-                current_retry_hint = ai_module._retry_hint
+        if provider and not current_retry_hint and hasattr(provider, "_retry_hint"):
+            current_retry_hint = provider._retry_hint
 
         if current_retry_hint:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
@@ -514,6 +499,25 @@ class LLMExecutorImpl:
         3. 直接返回 IbObject，调用方无需了解 LLMResult 内部结构。
         """
         result = self.execute_behavior_object(behavior, execution_context)
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        if result and result.value:
+            return result.value
+        return self.registry.get_none()
+
+    def invoke_llm_function(self, func: IbObject, execution_context: IExecutionContext) -> IbObject:
+        """
+        公理化命名 LLM 函数调用入口 —— 供 IbLLMFunction.call() 使用。
+
+        作用域管理和参数绑定已由 IbLLMFunction.call() 完成，此方法负责：
+        1. 从 func 对象提取 call_intent（函数头意图）；
+        2. 委托给 execute_llm_function 完成 LLM 推理并返回 LLMResult；
+        3. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        4. 直接返回 IbObject（result.value），调用方无需了解 LLMResult 内部结构。
+        """
+        # call_intent 由 IbLLMFunction 在调用前已解析并暂存到 _pending_call_intent
+        call_intent = getattr(func, '_pending_call_intent', None)
+        result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
         if execution_context is not None:
             execution_context.runtime_context.set_last_llm_result(result)
         if result and result.value:

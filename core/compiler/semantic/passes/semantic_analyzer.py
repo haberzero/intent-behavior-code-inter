@@ -677,6 +677,7 @@ class SemanticAnalyzer:
                     if self.registry.is_dynamic(declared_type):
                         if deferred_mode:
                             # auto lambda / auto snapshot → 变量持有延迟对象
+                            # declared_type 是 auto/any，不携带具体类型信息 → 使用通用 spec
                             if isinstance(node.value, ast.IbBehaviorExpr):
                                 target_type = self._behavior_desc
                             else:
@@ -684,12 +685,23 @@ class SemanticAnalyzer:
                         else:
                             target_type = val_type
                     elif deferred_mode:
-                        # 延迟模式：变量持有延迟对象；声明类型仅用作输出类型提示
-                        # behavior 表达式 → behavior 类型；其他表达式 → deferred 类型
+                        # 延迟模式：变量持有延迟对象；声明类型用作 LLM 输出期望类型。
+                        # 创建携带 value_type_name 的具体 Spec，使调用处能推断返回类型：
+                        #   int lambda f = @~...~  → BehaviorSpec(value_type_name="int")
+                        #   int lambda g = expr    → DeferredSpec(value_type_name="int")
+                        # 这样 int result = f() 在编译期可通过 resolve_return 确定类型，消除 SEM_003。
                         if isinstance(node.value, ast.IbBehaviorExpr):
-                            target_type = self._behavior_desc
+                            target_type = self.registry.factory.create_behavior(
+                                value_type_name=declared_type.name,
+                                value_type_module=declared_type.module_path,
+                                deferred_mode=deferred_mode,
+                            )
                         else:
-                            target_type = self._deferred_desc
+                            target_type = self.registry.factory.create_deferred(
+                                value_type_name=declared_type.name,
+                                value_type_module=declared_type.module_path,
+                                deferred_mode=deferred_mode,
+                            )
                     else:
                         target_type = declared_type
                     
