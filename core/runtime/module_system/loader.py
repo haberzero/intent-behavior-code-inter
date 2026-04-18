@@ -9,7 +9,7 @@ from core.base.enums import RegistrationState
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
-from core.base.interfaces import IStateReader, ILLMExecutor, ISymbolView, IIntentManager
+from core.base.interfaces import IStateReader, ISymbolView, IIntentManager
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import MethodMemberSpec
@@ -150,9 +150,8 @@ class ModuleLoader(IModuleLoader):
                 capabilities.symbol_view = rt_context.get_symbol_view()
                 
         capabilities.stack_inspector = execution_context.stack_inspector
-            
-        if isinstance(context.llm_executor, ILLMExecutor):
-            capabilities.llm_executor = context.llm_executor
+
+        capabilities.llm_executor = context.llm_executor
         
         loaded_modules = set()
         

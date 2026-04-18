@@ -1,5 +1,5 @@
 from typing import Any, Mapping, Optional, Union, List, Callable
-from core.runtime.interfaces import ServiceContext, IIbBehavior, IExecutionContext
+from core.runtime.interfaces import ServiceContext, IExecutionContext
 from core.kernel.issue import Severity, InterpreterError
 from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from core.base.source_atomic import Location

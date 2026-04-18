@@ -21,7 +21,7 @@ from core.runtime.interfaces import (
     Interpreter as InterpreterInterface,
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
     PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService, IObjectFactory,
-    IIbBehavior, IIbIntent, Registry
+    Registry
 )
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.factory import RuntimeObjectFactory
@@ -64,10 +64,10 @@ class Interpreter:
 
     def get_captured_intents(self, obj: Any) -> List[str]:
         """ 获取指定对象（如 Behavior）捕获的意图栈内容"""
-        if isinstance(obj, IIbBehavior):
+        if isinstance(obj, IbBehavior):
             res = []
             for i in obj.captured_intents:
-                if isinstance(i, IIbIntent):
+                if isinstance(i, IbIntent):
                     res.append(i.content)
                 else:
                     res.append(str(i))

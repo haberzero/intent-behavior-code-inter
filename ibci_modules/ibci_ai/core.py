@@ -1,14 +1,13 @@
 import os
 import time
 from typing import Any, Optional, Dict, List
-from core.base.interfaces import ILLMProvider
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
 
 
-class AIPlugin(ILLMProvider, IbStatefulPlugin):
+class AIPlugin(IbStatefulPlugin):
     """
     AI LLM 供应者插件。
-    核心级插件，必须继承 ILLMProvider 以与解释器深度绑定。
+    通过 capabilities.expose("llm_provider", self) 向内核注册 LLM provider。
 
     实现 IbStatefulPlugin 协议：LLM 配置、提示词定制等均为跨断点状态，
     断点保存/恢复时由 HostService 负责持久化与恢复。

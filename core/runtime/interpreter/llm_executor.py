@@ -2,7 +2,7 @@ import re
 import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, Tuple, TYPE_CHECKING
-from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry, IExecutionContext
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
 
 from core.kernel.issue import InterpreterError
@@ -11,6 +11,7 @@ from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.builtins import IbBehavior
 
 from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
@@ -269,15 +270,13 @@ class LLMExecutorImpl:
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                ib_class = self.registry.get_class(type_name)
-                if ib_class:
-                    type_descriptor = getattr(ib_class, 'descriptor', None)
-                    if type_descriptor:
-                        meta_reg = self.registry.get_metadata_registry()
-                        if meta_reg:
-                            hint_cap = meta_reg.get_llm_output_hint_cap(type_descriptor)
-                            if hint_cap:
-                                return hint_cap.__outputhint_prompt__(type_descriptor)
+                meta_reg = self.registry.get_metadata_registry()
+                if meta_reg:
+                    descriptor = meta_reg.resolve(type_name)
+                    if descriptor:
+                        hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
+                        if hint_cap:
+                            return hint_cap.__outputhint_prompt__(descriptor)
 
         return None
 
@@ -466,7 +465,7 @@ class LLMExecutorImpl:
 
         返回 LLMResult。
         """
-        if not isinstance(behavior, IIbBehavior):
+        if not isinstance(behavior, IbBehavior):
              return LLMResult.success_result(value=behavior)
 
         if behavior._cache is not None:
