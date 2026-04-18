@@ -176,6 +176,20 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if llm_executor is not None:
             self.registry.register_llm_executor(llm_executor, self._kernel_token)
 
+        # 将宿主服务、调用栈内省器、状态读取器注入 KernelRegistry
+        # 供核心层插件（ibci_ihost、ibci_idbg）通过稳定钩子接口访问，替代直接持有 ServiceContext
+        host_service = getattr(self.interpreter.service_context, 'host_service', None)
+        if host_service is not None:
+            self.registry.register_host_service(host_service, self._kernel_token)
+
+        stack_inspector = getattr(self.interpreter._execution_context, 'stack_inspector', None)
+        if stack_inspector is not None:
+            self.registry.register_stack_inspector(stack_inspector, self._kernel_token)
+
+        state_reader = self.interpreter.runtime_context
+        if state_reader is not None:
+            self.registry.register_state_reader(state_reader, self._kernel_token)
+
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
 
