@@ -2,7 +2,7 @@ from core.runtime.objects.kernel import IbModule
 from core.runtime.objects.intent import IbIntent
 from core.runtime.module_system.loader import ModuleLoader
 from core.runtime.module_system.discovery import ModuleDiscoveryService
-from core.runtime.interfaces import ModuleManager, RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
+from core.runtime.interfaces import RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
 import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.kernel import ast as ast
@@ -29,7 +29,7 @@ class ModuleInstanceImpl:
     def __getattr__(self, name: str) -> Any:
         return self.get_variable(name)
 
-class ModuleManagerImpl(ModuleManager):
+class ModuleManagerImpl:
     """
     模块管理器实现。
     负责模块的加载、缓存和导入处理。

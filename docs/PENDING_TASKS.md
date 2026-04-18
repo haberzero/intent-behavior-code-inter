@@ -100,6 +100,58 @@
 
 ---
 
+### 2.6 Axiom Capability 内部委托对象模式重构 [FUTURE / INDEPENDENT]
+
+**任务描述**：
+将 `primitives.py` 中所有 Axiom 类从"自身实现 Capability Protocol"模式，改造为"持有内部 Capability 对象"的委托模式。
+
+**当前模式（待改造）**：
+```python
+class IntAxiom(BaseAxiom, OperatorCapability, ConverterCapability, ...):
+    def get_operator_capability(self) -> OperatorCapability:
+        return self  # 自身既是 Axiom 又是 Capability
+    def resolve_operation_type_name(self, op, other): ...  # 方法写在 Axiom 上
+```
+
+**目标模式**：
+```python
+class _IntOperatorCapability:
+    def resolve_operation_type_name(self, op, other): ...  # 独立私有类
+
+class IntAxiom(BaseAxiom):          # 仅继承 BaseAxiom，无 Protocol 多继承
+    _op_cap = _IntOperatorCapability()
+
+    def get_operator_capability(self) -> OperatorCapability:
+        return self._op_cap          # 返回委托对象，而非 self
+```
+
+**工程量估算**：
+约需新增 40–50 个私有 Capability 类（每个 Axiom 现有几个 capability 方法组各提取为一个类）。`primitives.py` 文件行数从现在约 1120 行增至约 2000 行以上，届时需同步拆分文件。整体工程量约为「Impl 类 Protocol 继承清理」任务的 3–4 倍。
+
+**完成后的效果**：
+- 所有 Axiom 类 MRO 退化为单继承（只有 `BaseAxiom`）
+- `primitives.py` 中的 Protocol 多继承链条（当前约 48 处，横跨 14 个 Axiom 类，涉及 10 种 Capability Protocol）全部消除
+- Capability 对象可在不同 Axiom 间按需复用（当前各 Axiom 实现完全独立，无复用需求）
+- 公理层 MRO 极其干净，符合"公理类只继承 BaseAxiom"的理想形式
+
+**对外 API 影响**：
+零破坏性变更。所有调用方通过 `get_xxx_capability()` 访问 Capability，改造前后接口不变。SpecRegistry、compiler、runtime 无需任何修改。
+
+**搁置原因**：
+1. **无对应 Bug**：当前 capability 方法均为纯函数，无访问 Axiom 内部状态，现有模式功能完全正确。
+2. **Python 3.12 isinstance 风险不适用**：Capability Protocol 均无 `@runtime_checkable` 修饰，代码库中也没有 `isinstance(x, SomeCapability)` 调用，不存在已知运行时问题。
+3. **纯架构美观性改进**：改造前后行为等价，是"结构清洁"目标，而非"修复缺陷"目标。
+4. **DeferredCallCapability / BehaviorCallCapability 已是先例**：这两个 Capability 已经采用了独立类模式，但其他 14 个 Axiom 仍未跟进，可以等触发条件成熟时一次性完成。
+
+**建议触发时机**：
+- `primitives.py` 因内容增加需要强制拆分文件时（顺手完成）
+- 出现 Capability 逻辑需要在多个 Axiom 间复用时（当前无此需求）
+- mypy 静态分析对当前 MRO 报告误报时
+
+**涉及文件**：`core/kernel/axioms/primitives.py`（主要工作）
+
+---
+
 ### 2.3 Intent Stack 不可变性约束
 
 **任务**：实现 Intent Stack 不可变性约束

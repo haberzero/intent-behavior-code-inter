@@ -8,7 +8,7 @@ from core.runtime.path import IbPath
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
 
-class ExecutionContextImpl(IExecutionContext, IStackInspector):
+class ExecutionContextImpl:
     """
     运行时执行上下文的具体实现。
     它作为纯状态容器，持有 node_pool、栈和运行时上下文的引用。
