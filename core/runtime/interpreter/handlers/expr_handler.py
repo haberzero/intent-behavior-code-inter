@@ -189,10 +189,10 @@ class ExprHandler(BaseHandler):
 
         if is_deferred:
             # 根据 deferred_mode 决定捕获行为：
-            # - 'lambda'  : 不捕获意图状态（每次调用时以当前上下文为准）
+            # - 'lambda'  : 不捕获意图状态（每次调用时使用调用处的当前意图栈）
             # - 'snapshot': 捕获当前意图栈的快照（隔离执行，默认行为）
             deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
-            captured_intents = [] if deferred_mode == "lambda" else self.runtime_context.intent_stack
+            captured_intents = None if deferred_mode == "lambda" else self.runtime_context.intent_stack
             return self.service_context.object_factory.create_behavior(
                 node_uid,
                 captured_intents,

@@ -130,11 +130,10 @@ class StmtHandler(BaseHandler):
         IbIntentAnnotation 代表单行意图注释，必须后续紧跟 LLM 调用。
 
         语义区别：
-        - @ : 将意图压入运行时栈（持续有效）
-        - @! : 设置临时的排他意图（只对当前这一次 LLM 调用有效）
+        - @ : 一次性涂抹意图（只对紧跟的下一次 LLM 调用有效，自动清除）
+        - @! : 排他意图（只对当前这一次 LLM 调用有效，屏蔽当前栈）
 
-        @! 是临时的单次作用的 IntentStack 实例，LLM 调用完成后自动清除。
-        全局意图栈保持不变。
+        两者都是临时的，不会永久修改持久意图栈。
         """
         intent_info_uid = node_data.get("intent")
         if not intent_info_uid:
@@ -155,8 +154,9 @@ class StmtHandler(BaseHandler):
         if intent.is_override:
             self.runtime_context.set_pending_override_intent(intent)
         else:
-            # @ 普通意图：压入运行时栈
-            self.runtime_context.push_intent(intent)
+            # @ 一次性涂抹意图：加入 pending 队列，下一次 LLM 调用消费后自动清除
+            # 不压入持久意图栈（@+ 才是持久压栈）
+            self.runtime_context.add_smear_intent(intent)
 
         return self.registry.get_none()
 
