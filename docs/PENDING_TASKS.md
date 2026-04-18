@@ -69,8 +69,10 @@
 - Intent 公理化工作量预估 5-9 人天
 
 **当前状态**：
-- Intent 相关类型只是 DynamicAxiom 占位符
-- 涉及文件：`kernel/axioms/primitives.py`、`runtime/objects/intent.py`
+- Intent **不是** DynamicAxiom 占位符。`AxiomRegistry` 中**不存在** `DynamicAxiom("intent")` 或任何 Intent 专属 Axiom。
+- Intent 通过 `Bootstrapper.initialize()` 注册为内置 `ClassSpec`（与 `IbModule`、`IntentStack` 同级），`IbIntent` 是真正的 `IbObject` 子类，`IntentStack` 已有完整的原生方法注册（`push`/`pop`/`remove`/`clear`）。
+- 完整公理化目标（专用 `IntentAxiom`，`is_class()=True`，完整的 vtable）是长期工作，不阻塞当前功能。
+- 涉及文件：`core/runtime/bootstrapper.py`（ClassSpec 注册）、`core/runtime/objects/intent.py`（IbIntent 实现）
 
 **与MVP关系**：不影响MVP核心功能（behavior、llm、llmexcept、llmretry）
 
