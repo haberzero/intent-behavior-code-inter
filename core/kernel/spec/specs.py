@@ -246,6 +246,9 @@ BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=
 DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
 EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=False)
 
+# LLM 调用结果类型规格 — IbLLMCallResult 的公理化描述符
+LLM_CALL_RESULT_SPEC = IbSpec(name="llm_call_result", is_nullable=True, is_user_defined=False)
+
 BOUND_METHOD_SPEC = BoundMethodSpec(name="bound_method", is_nullable=True, is_user_defined=False)
 LIST_SPEC         = ListSpec(name="list",   is_nullable=True,  is_user_defined=False)
 TUPLE_SPEC        = TupleSpec(name="tuple", is_nullable=True,  is_user_defined=False)

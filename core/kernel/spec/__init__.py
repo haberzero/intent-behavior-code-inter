@@ -36,6 +36,7 @@ from .specs import (
     DICT_SPEC,
     MODULE_SPEC,
     ENUM_SPEC,
+    LLM_CALL_RESULT_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 
@@ -75,6 +76,7 @@ __all__ = [
     "DICT_SPEC",
     "MODULE_SPEC",
     "ENUM_SPEC",
+    "LLM_CALL_RESULT_SPEC",
     # Registry / factory
     "SpecRegistry",
     "SpecFactory",

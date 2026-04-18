@@ -117,7 +117,7 @@ class TestOverrideWithSmear:
         # @! 排他：只返回 override 内容
         assert resolved == ["override only"]
         # smear 应被清除
-        assert ctx._pending_smear_intents == []
+        assert ctx._intent_ctx._smear_queue == []
 
     def test_override_consumed_after_resolution(self, ctx, registry):
         """@! 排他意图在 get_resolved_prompt_intents() 后应被清除。"""

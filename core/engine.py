@@ -133,13 +133,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             entry_dir=getattr(self, '_entry_dir', None)
         )
         
-        # TODO: 怀疑有vibe带来的异味？后续检查 MVP Demo 阶段不深究
-        # 强制更新 service_context 的 orchestrator
+        # Post-construction wiring: inject orchestrator and output_callback into ServiceContext.
+        # This is intentional deferred injection — Engine is the orchestrator, but it can only
+        # inject itself after the interpreter is fully constructed.
         if hasattr(self.interpreter, 'service_context'):
-            self.interpreter.service_context._orchestrator = self
-            if self.interpreter.service_context.host_service:
-                self.interpreter.service_context.host_service.orchestrator = self
-            # 将用户提供的 output_callback 注入 service_context
+            self.interpreter.service_context.set_orchestrator(self)
             if output_callback is not None:
                 self.interpreter.service_context.output_callback = output_callback
         

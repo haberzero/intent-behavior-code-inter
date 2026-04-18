@@ -53,17 +53,13 @@ class LLMExceptFrame:
         retry_count: 当前重试次数
         max_retry: 最大重试次数 (默认 3)
         saved_vars: 重试前保存的变量快照
-        saved_intent_stack: 重试前保存的意图栈
-        saved_retry_hint: 重试前保存的提示词
+        saved_intent_ctx: 重试前保存的意图上下文快照（IbIntentContext.fork()）
         saved_loop_context: 重试前保存的循环上下文
+        saved_retry_hint: 重试前保存的提示词
         last_error: 最后一次捕获的异常
         last_llm_response: 最后一次 LLM 响应
         is_in_fallback: 是否正在执行 fallback 块
         should_retry: 是否应该继续重试
-
-    TODO [优先级: 低]:
-        - 考虑添加重试策略配置 (指数退避等)
-        - 考虑添加重试历史记录用于分析
     """
     
     # 基本信息
@@ -78,8 +74,7 @@ class LLMExceptFrame:
     # 上下文快照
     # TODO [优先级: 高]: 当前 saved_vars 是空实现，需要完善变量快照机制
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
-    saved_intent_stack: Any = field(default=None, repr=False)  # IntentNode 链表
-    saved_intent_ctx: Any = field(default=None, repr=False)    # IbIntentContext 快照（Step 6d）
+    saved_intent_ctx: Any = field(default=None, repr=False)    # IbIntentContext 快照
     saved_loop_context: Optional[Dict[str, int]] = None
 
     # 循环迭代器断点恢复索引
@@ -113,11 +108,7 @@ class LLMExceptFrame:
         """
         self._save_vars_snapshot(runtime_context)
 
-        if hasattr(runtime_context, 'intent_context'):
-            self.saved_intent_ctx = runtime_context.intent_context.fork()
-            self.saved_intent_stack = self.saved_intent_ctx.get_intent_top()  # backward compat
-        elif hasattr(runtime_context, '_intent_top'):
-            self.saved_intent_stack = runtime_context._intent_top
+        self.saved_intent_ctx = runtime_context.intent_context.fork()
 
         if hasattr(runtime_context, '_loop_stack') and runtime_context._loop_stack:
             # 深拷贝 dict 对象，确保保存的快照与运行时 _loop_stack 完全独立，
@@ -177,26 +168,15 @@ class LLMExceptFrame:
         恢复到保存的现场。
 
         恢复以下状态:
-        - 变量 (只恢复已存在的变量)
-        - 意图栈
+        - 变量（只恢复已存在的变量）
+        - 意图上下文（通过 IbIntentContext.merge() 原子恢复）
         - 循环上下文
         - retry_hint
-
-        变量恢复策略:
-        - 只恢复 saved_vars 中已存在的变量
-        - 不处理新定义的变量 (由 IBCI 语义决定)
-
-        参数:
-            runtime_context: 运行时上下文对象
         """
         self._restore_vars(runtime_context)
 
-        if self.saved_intent_ctx is not None and hasattr(runtime_context, 'intent_context'):
-            runtime_context.restore_active_intents(self.saved_intent_ctx.get_intent_top())
-            runtime_context._pending_smear_intents = self.saved_intent_ctx.consume_smear_snapshot()
-            runtime_context._pending_override_intent = self.saved_intent_ctx.get_override_snapshot()
-        elif hasattr(runtime_context, 'restore_active_intents') and self.saved_intent_stack is not None:
-            runtime_context.restore_active_intents(self.saved_intent_stack)
+        if self.saved_intent_ctx is not None:
+            runtime_context.intent_context.merge(self.saved_intent_ctx)
 
         if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:
             runtime_context._loop_stack = self.saved_loop_context.get('iterators', [])
