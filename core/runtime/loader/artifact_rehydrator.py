@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional, List
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.spec import IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
+from core.kernel.spec.specs import DeferredSpec, BehaviorSpec
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
@@ -82,7 +83,18 @@ class ArtifactRehydrator:
             "FunctionMetadata": lambda: FuncSpec(name=name or "callable", is_user_defined=False),
             "ClassMetadata": lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
             "BoundMethodMetadata": lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
-            "ModuleMetadata": lambda: ModuleSpec(name=name, is_user_defined=False)
+            "ModuleMetadata": lambda: ModuleSpec(name=name, is_user_defined=False),
+            # Typed deferred / behavior specs — reconstruct the proper subclass so
+            # that get_base_name() returns "deferred" / "behavior" (not "deferred[str]"),
+            # allowing SpecRegistry.is_assignable() to resolve the correct axiom.
+            "DeferredSpec": lambda: factory.create_deferred(
+                value_type_name=data.get("value_type_name", "auto"),
+                deferred_mode=data.get("deferred_mode", "lambda"),
+            ),
+            "BehaviorSpec": lambda: factory.create_behavior(
+                value_type_name=data.get("value_type_name", "auto"),
+                deferred_mode=data.get("deferred_mode", "lambda"),
+            ),
         }
         
         if name in BUILTIN_TYPES and kind == "TypeDescriptor":
@@ -130,6 +142,11 @@ class ArtifactRehydrator:
             ]
             ret = self.hydrate(data.get("return_type_uid"))
             spec.return_type_name = ret.name if ret else "void"
+        elif isinstance(spec, DeferredSpec):
+            # Restore scalar fields for DeferredSpec / BehaviorSpec.
+            # BehaviorSpec is a subclass of DeferredSpec so this branch covers both.
+            spec.value_type_name = data.get("value_type_name", spec.value_type_name)
+            spec.deferred_mode = data.get("deferred_mode", spec.deferred_mode)
         elif isinstance(spec, ClassSpec):
             spec.parent_name = data.get("parent_name")
             spec.parent_module = data.get("parent_module")
