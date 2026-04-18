@@ -634,7 +634,7 @@ class Interpreter:
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, spec=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self._execution_context, spec=declared_type))
                 elif stmt_data["_type"] == "IbAssign":
                     # 使用 IbDeferredField 统一管理
                     val_uid = stmt_data.get("value")

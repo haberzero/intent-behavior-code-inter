@@ -602,7 +602,7 @@ class StmtHandler(BaseHandler):
         """LLM 函数 definition"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, spec=declared_type)
+        func = IbLLMFunction(node_uid, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()

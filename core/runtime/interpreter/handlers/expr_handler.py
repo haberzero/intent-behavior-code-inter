@@ -276,7 +276,11 @@ class ExprHandler(BaseHandler):
                 target_descriptor = meta_reg.resolve(target_type_name)
 
         # 3. 执行 LLM 调用
-        result = self.service_context.llm_executor.execute_behavior_expression(
+        executor = self.registry.get_llm_executor()
+        if executor is None:
+            self.runtime_context.set_last_llm_result(None)
+            return self.registry.get_none()
+        result = executor.execute_behavior_expression(
             node_uid,
             self.execution_context,
             call_intent=call_intent

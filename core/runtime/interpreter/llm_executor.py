@@ -505,6 +505,25 @@ class LLMExecutorImpl:
             return result.value
         return self.registry.get_none()
 
+    def invoke_llm_function(self, func: IbObject, execution_context: IExecutionContext) -> IbObject:
+        """
+        公理化命名 LLM 函数调用入口 —— 供 IbLLMFunction.call() 使用。
+
+        作用域管理和参数绑定已由 IbLLMFunction.call() 完成，此方法负责：
+        1. 从 func 对象提取 call_intent（函数头意图）；
+        2. 委托给 execute_llm_function 完成 LLM 推理并返回 LLMResult；
+        3. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        4. 直接返回 IbObject（result.value），调用方无需了解 LLMResult 内部结构。
+        """
+        # call_intent 由 IbLLMFunction 在调用前已解析并暂存到 _pending_call_intent
+        call_intent = getattr(func, '_pending_call_intent', None)
+        result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        if result and result.value:
+            return result.value
+        return self.registry.get_none()
+
     def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> Tuple[Optional[str], Optional[str]]:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
