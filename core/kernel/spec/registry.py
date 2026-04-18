@@ -30,9 +30,9 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, BoundMethodSpec, ModuleSpec, LazySpec,
+    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
-    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
+    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
 )
 
@@ -190,6 +190,23 @@ class SpecFactory:
             is_user_defined=False,
         )
 
+    def create_deferred(
+        self,
+        value_type_name: str = "auto",
+        value_type_module: Optional[str] = None,
+        deferred_mode: str = "lambda",
+    ) -> DeferredSpec:
+        """Create a DeferredSpec describing a deferred (lambda/snapshot) expression."""
+        name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
+        return DeferredSpec(
+            name=name,
+            is_nullable=True,
+            is_user_defined=False,
+            value_type_name=value_type_name,
+            value_type_module=value_type_module,
+            deferred_mode=deferred_mode,
+        )
+
 
 # ------------------------------------------------------------------ #
 # SpecRegistry                                                         #
@@ -333,6 +350,13 @@ class SpecRegistry:
         if spec is None:
             return False
         return spec.get_base_name() == "behavior"
+
+    def is_deferred(self, spec: Optional[IbSpec]) -> bool:
+        """True when spec represents a deferred expression (lambda/snapshot)."""
+        if spec is None:
+            return False
+        base = spec.get_base_name()
+        return base in ("deferred", "behavior")
 
     def is_dynamic(self, spec: Optional[IbSpec]) -> bool:
         """True for any/auto and any axiom that declares itself dynamic."""
@@ -627,7 +651,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
     for proto in (
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
         ANY_SPEC, AUTO_SPEC, NONE_SPEC, SLICE_SPEC,
-        CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
+        CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
         BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC,
     ):

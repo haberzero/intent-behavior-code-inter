@@ -42,6 +42,7 @@ class SemanticAnalyzer:
         self._int_desc = self.registry.resolve("int")
         self._str_desc = self.registry.resolve("str")
         self._behavior_desc = self.registry.resolve("behavior")
+        self._deferred_desc = self.registry.resolve("deferred")
 
         self.current_return_type: Optional[IbSpec] = None
         self.current_class: Optional[ClassSpec] = None
@@ -676,8 +677,12 @@ class SemanticAnalyzer:
                     if self.registry.is_dynamic(declared_type):
                         target_type = val_type
                     elif deferred_mode:
-                        # 延迟模式：变量实际持有 behavior 对象；声明类型仅用作 LLM 输出类型提示
-                        target_type = self._behavior_desc
+                        # 延迟模式：变量持有延迟对象；声明类型仅用作输出类型提示
+                        # behavior 表达式 → behavior 类型；其他表达式 → deferred 类型
+                        if isinstance(node.value, ast.IbBehaviorExpr):
+                            target_type = self._behavior_desc
+                        else:
+                            target_type = self._deferred_desc
                     else:
                         target_type = declared_type
                     
@@ -702,10 +707,10 @@ class SemanticAnalyzer:
                         self.side_table.bind_symbol(target_node.target, sym)
                         self.side_table.bind_type(target_node.target, sym.spec)
                     
-                    # 行为描述行延迟/即时上下文处理：
-                    # - deferred_mode='lambda' : 延迟执行，不捕获任何意图状态（每次调用时以当前上下文为准）
-                    # - deferred_mode='snapshot': 延迟执行，捕获当前意图栈的深拷贝（隔离执行）
-                    # - deferred_mode=None      : 即时执行，立即触发 LLM 调用
+                    # 延迟表达式上下文处理（通用化：支持任意表达式，不限于 @~...~）：
+                    # - deferred_mode='lambda' : 延迟执行，每次调用时重新求值
+                    # - deferred_mode='snapshot': 延迟执行，首次调用时求值并缓存
+                    # - deferred_mode=None      : 即时执行
 
                     # 检查是否是行为描述表达式（裸 @~...~）
                     inner_behavior_expr = None
@@ -738,6 +743,12 @@ class SemanticAnalyzer:
                                 val_type = sym.spec
                             else:
                                 val_type = self._str_desc
+                    elif deferred_mode and node.value is not None:
+                        # 通用延迟表达式：非 @~...~ 的任意表达式被 lambda/snapshot 延迟
+                        # 将延迟标记设置到 value 表达式节点上
+                        self.side_table.set_deferred(node.value, True)
+                        self.side_table.set_deferred_mode(node.value, deferred_mode)
+                        val_type = self._deferred_desc
                     
                     if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
                         hint = self.registry.get_diff_hint(val_type, sym.spec)

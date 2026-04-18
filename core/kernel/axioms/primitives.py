@@ -879,6 +879,115 @@ class EnumAxiom(
 
 
 # ------------------------------------------------------------------ #
+# callable                                                             #
+# ------------------------------------------------------------------ #
+
+class CallableAxiom(BaseAxiom, CallCapability):
+    """
+    公理：callable 类型。
+
+    替代原来的 DynamicAxiom("callable")，成为函数/可调用对象的正式公理。
+    * is_dynamic() = False —— callable 是具体类型，不是 "any" 的妥协。
+    * CallCapability 返回 "auto" —— 编译期返回类型取决于具体的 FuncSpec。
+    * 与 behavior、deferred、bound_method 兼容（它们都是可调用家族的成员）。
+    """
+
+    @property
+    def name(self) -> str:
+        return "callable"
+
+    def get_call_capability(self) -> Optional[CallCapability]:
+        return self
+
+    def get_iter_capability(self):
+        return None
+
+    def get_subscript_capability(self):
+        return None
+
+    def get_operator_capability(self):
+        return None
+
+    def get_converter_capability(self):
+        return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {}
+
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        return "auto"
+
+    def is_dynamic(self) -> bool:
+        return False
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name in ("callable", "behavior", "deferred", "bound_method")
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "Object"
+
+
+# ------------------------------------------------------------------ #
+# deferred                                                             #
+# ------------------------------------------------------------------ #
+
+class DeferredCallCapability(CallCapability):
+    """
+    CallCapability for deferred expression objects.
+
+    At compile time the concrete return type depends on the wrapped expression.
+    We return ``"auto"`` so that the SpecRegistry propagates a dynamic result
+    type; at runtime ``IbDeferred.call()`` evaluates the expression and returns
+    the actual value.
+    """
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        return "auto"
+
+
+class DeferredAxiom(BaseAxiom, DeferredCallCapability):
+    """
+    公理：deferred 类型（通用延迟表达式）。
+
+    lambda/snapshot 不再仅限于 @~...~ 行为表达式——任何表达式都可以被延迟。
+    * 不是 DynamicAxiom —— deferred 是一个具体的一等公民类型，非 any 妥协。
+    * 实现 CallCapability —— deferred 对象可被调用（触发延迟表达式求值）。
+    * is_dynamic() = False —— 严格类型系统：deferred 只能赋值给 deferred 或 callable。
+    * 编译期返回类型为 "auto"；运行期由 IbDeferred.call() 执行实际表达式并返回结果。
+    """
+
+    @property
+    def name(self) -> str:
+        return "deferred"
+
+    def get_call_capability(self) -> Optional[DeferredCallCapability]:
+        return self
+
+    def get_iter_capability(self):
+        return None
+
+    def get_subscript_capability(self):
+        return None
+
+    def get_operator_capability(self):
+        return None
+
+    def get_converter_capability(self):
+        return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {}
+
+    def is_dynamic(self) -> bool:
+        return False
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name in ("deferred", "callable", "behavior")
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "callable"
+
+
+# ------------------------------------------------------------------ #
 # behavior                                                            #
 # ------------------------------------------------------------------ #
 
@@ -897,12 +1006,14 @@ class BehaviorCallCapability(CallCapability):
 
 class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
     """
-    公理：behavior 类型。
+    公理：behavior 类型（LLM 行为表达式的延迟对象）。
 
+    behavior 是 deferred 的特化子类型——它延迟的不是普通表达式，而是 LLM 行为描述。
     * 不是 DynamicAxiom —— behavior 是一个具体的一等公民类型，非 any 妥协。
     * 实现 CallCapability —— behavior 对象可被调用（触发 LLM 执行）。
-    * is_dynamic() = False —— 严格类型系统：behavior 只能赋值给 behavior。
+    * is_dynamic() = False —— 严格类型系统：behavior 只能赋值给 behavior 或 deferred。
     * 编译期返回类型为 "auto"；运行期由 IbBehavior.call() 根据 expected_type 解析真实类型。
+    * 继承链：behavior → deferred → callable → Object
     """
 
     @property
@@ -931,10 +1042,10 @@ class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
         return False
 
     def is_compatible(self, other_name: str) -> bool:
-        return other_name == "behavior"
+        return other_name in ("behavior", "deferred", "callable")
 
     def get_parent_axiom_name(self) -> Optional[str]:
-        return "Object"
+        return "deferred"
 
 
 
@@ -956,6 +1067,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
 
     registry.register(DynamicAxiom("any"))
     registry.register(DynamicAxiom("auto"))
-    registry.register(DynamicAxiom("callable"))
+    registry.register(CallableAxiom())
     registry.register(DynamicAxiom("void"))
+    registry.register(DeferredAxiom())
     registry.register(BehaviorAxiom())

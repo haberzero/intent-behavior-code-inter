@@ -279,7 +279,34 @@ class StmtHandler(BaseHandler):
         # 在访问 value 前清除上一次的 LLM 结果，防止来自前序语句的过期不确定性标记
         # 污染当前赋值。访问 value 后读取的结果仅反映本次值求值过程。
         self.runtime_context.set_last_llm_result(None)
-        value = self.visit(node_data.get("value"))
+
+        value_uid = node_data.get("value")
+
+        # 通用延迟表达式拦截：
+        # 如果 value 被标记为 deferred 且不是 behavior 表达式（behavior 有自己的延迟处理），
+        # 则创建 IbDeferred 对象而非立即求值。
+        is_deferred = self.get_side_table("node_is_deferred", value_uid) if value_uid else False
+        if is_deferred and value_uid:
+            value_node_data = self.get_node_data(value_uid) if isinstance(value_uid, str) else None
+            value_node_type = value_node_data.get("_type", "") if value_node_data is not None else ""
+            if value_node_type != "IbBehaviorExpr":
+                # 通用延迟：创建 IbDeferred 对象包裹任意表达式
+                deferred_mode = self.get_side_table("node_deferred_mode", value_uid) or "lambda"
+                captured_scope = None
+                if deferred_mode == "snapshot":
+                    # snapshot 模式：捕获当前作用域的引用
+                    captured_scope = self.runtime_context.current_scope
+                value = self.service_context.object_factory.create_deferred(
+                    value_uid,
+                    deferred_mode=deferred_mode,
+                    execution_context=self._execution_context,
+                    captured_scope=captured_scope,
+                )
+            else:
+                # behavior 表达式走原有路径（visit_IbBehaviorExpr 内部处理延迟）
+                value = self.visit(value_uid)
+        else:
+            value = self.visit(value_uid)
 
         # 检查是否由于 LLM 不确定性导致赋值未完成
         # 如果是，则赋值为 IbLLMUncertain 特殊值，而不是跳过赋值

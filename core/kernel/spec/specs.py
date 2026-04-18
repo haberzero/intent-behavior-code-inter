@@ -138,6 +138,35 @@ class ModuleSpec(IbSpec):
         return self._axiom_name or "module"
 
 
+@dataclass(eq=False)
+class DeferredSpec(IbSpec):
+    """
+    Describes a deferred (lambda/snapshot) expression type.
+
+    A deferred expression wraps ANY expression — not just behavior (@~...~) — and
+    delays its evaluation until explicitly called.  The ``value_type_name`` records
+    the type that the wrapped expression will produce when evaluated.
+
+    This is the axiom-driven replacement for the ad-hoc behavior-only deferred
+    mechanism.  ``IbBehavior`` (for LLM behavior expressions) is a *specialisation*
+    of the general deferred concept.
+
+    Fields
+    ------
+    value_type_name : str
+        The type the deferred expression evaluates to (e.g. "int", "str", "auto").
+    deferred_mode : str
+        'lambda' (re-evaluates with fresh context) or 'snapshot' (frozen context).
+    """
+
+    value_type_name: str = "auto"
+    value_type_module: Optional[str] = None
+    deferred_mode: str = "lambda"
+
+    def get_base_name(self) -> str:
+        return self._axiom_name or "deferred"
+
+
 @dataclass
 class LazySpec(ModuleSpec):
     """
@@ -179,6 +208,7 @@ SLICE_SPEC  = IbSpec(name="slice",  is_nullable=False, is_user_defined=False)
 
 CALLABLE_SPEC   = IbSpec(name="callable",    is_nullable=True,  is_user_defined=False)
 BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=False)
+DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
 EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=False)
 
 BOUND_METHOD_SPEC = BoundMethodSpec(name="bound_method", is_nullable=True, is_user_defined=False)
