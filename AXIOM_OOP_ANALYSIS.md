@@ -2,9 +2,9 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-18（Steps 1-4a 全部落地；BehaviorSpec 编译期推断完成；OOP×Protocol PR-A 完成；497 个测试全部通过）
+> **最后更新**：2026-04-18（Steps 1-4b 全部落地；BehaviorSpec 编译期推断完成；OOP×Protocol PR-A/PR-B 完成；ibci_ihost/idbg KernelRegistry 标准化完成；517 个测试全部通过）
 >
-> 已完成工作见 `docs/COMPLETED.md`，未来步骤（Step 4b-6）见第四章，远期高风险任务见第五章。
+> 已完成工作见 `docs/COMPLETED.md`，未来步骤（Step 5-6）见第四章，远期高风险任务见第五章。
 
 ---
 
@@ -203,7 +203,7 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ## 四、迭代路线图
 
-### Steps 1–4a ✅ COMPLETED
+### Steps 1–4b ✅ COMPLETED
 
 | Step | 内容 | 详情 |
 |------|------|------|
@@ -212,40 +212,12 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | Step 3a | `ibci_ai` 职责拆分：`llm_callback` 唯一来源为 `capability_registry.get("llm_provider")` | `core/runtime/interpreter/llm_executor.py`、`ibci_modules/ibci_ai/core.py` |
 | Step 3b | `CallableAxiom` + `DeferredAxiom` + `DeferredSpec` + `IbDeferred`，`is_compatible()` 方向 Bug 修复 | `core/kernel/axioms/primitives.py`、`core/kernel/spec/specs.py`、`core/runtime/objects/builtins.py` |
 | Step 4a | `IbLLMFunction` 自主执行（`invoke_llm_function`），移除 `llm_executor` 持有，修复 `llmexcept` 失效 | `core/runtime/objects/kernel.py`、`core/base/interfaces.py` |
+| Step 4b | `ibci_ihost`/`ibci_idbg` KernelRegistry 标准化：`IStateReader` 扩展、`KernelRegistry` 新增三组钩子、`PluginCapabilities.kernel_registry` 属性、engine 注册、两个插件改为懒获取 | `core/kernel/registry.py`、`core/base/interfaces.py`、`core/extension/capabilities.py`、`core/engine.py`、`ibci_modules/ibci_ihost/core.py`、`ibci_modules/ibci_idbg/core.py` |
 | BehaviorSpec | `BehaviorSpec(value_type_name)` 编译期返回类型推断，消除 `int result = f()` 处的 SEM_003 | `core/kernel/spec/specs.py`、`core/kernel/spec/registry.py`、`core/compiler/semantic/passes/semantic_analyzer.py` |
 | OOP PR-A | IbObject 子类单继承清理：删除 `IIbObject.descriptor` 幽灵字段，移除显式 Protocol 继承，替换 Protocol isinstance | `core/runtime/interfaces.py`、`core/runtime/objects/builtins.py`、`core/runtime/objects/intent.py` |
-| OOP PR-B | Impl 类 Protocol 声明性继承移除（`RuntimeContextImpl`、`SymbolViewImpl` 等 | `core/runtime/interpreter/runtime_context.py`、`core/runtime/interpreter/execution_context.py` |
+| OOP PR-B | Impl 类 Protocol 声明性继承移除（`RuntimeContextImpl`、`SymbolViewImpl` 等） | `core/runtime/interpreter/runtime_context.py`、`core/runtime/interpreter/execution_context.py` |
 
 完整实现细节见 `docs/COMPLETED.md`。
-
----
-
-### Step 4b（独立 PR，中期目标）
-
-**`ibci_ihost` 和 `ibci_idbg` 的重构分析与执行**
-
-#### 当前结构
-
-**`ibci_ihost`**：
-- 继承 `IbPlugin`，通过 `capabilities.service_context.host_service` 访问 `HostService`
-- IBCI 接口：`ihost.run_isolated(path, policy)` 等
-- 问题：通过 `IbPlugin` 特权访问内核服务，而非通过公开接口
-
-**`ibci_idbg`**：
-- 继承 `IbPlugin`，通过 `capabilities.stack_inspector`、`capabilities.state_reader`、`capabilities.llm_executor` 访问内核状态
-- IBCI 接口：`idbg.dump_stack()`、`idbg.inspect()`、`idbg.trace()` 等
-- 问题：深度依赖 `ExtensionCapabilities` 中的内核内部结构
-
-#### 重构目标
-
-| 目标 | 说明 |
-|------|------|
-| 保留 IBCI 显式 import 接口 | `import ihost`/`import idbg` 继续作为用户代码的显式入口 |
-| 去除 `IbPlugin` 内核特权访问 | 改为通过 `KernelRegistry` 的稳定钩子接口访问服务 |
-| `HostService` 通过 `KernelRegistry` 暴露 | 在 `KernelRegistry` 中增加 `get_host_service()` 钩子 |
-| 调试器能力通过协议接口暴露 | 定义 `IStackInspector`、`IStateReader` 为 kernel 层接口 |
-
-**重构后**：`ibci_ihost` 和 `ibci_idbg` 降级为"标准插件"，不再需要 `IbPlugin` 特权层级，通过与非侵入式插件一致的 setup 机制获取所需接口。IBCI 接口保持不变。
 
 ---
 
@@ -304,4 +276,4 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ## 六、一句话总结
 
-> **LLM 执行链全面公理化完成（Steps 1-4a）：IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行均落地。BehaviorSpec 编译期返回类型推断完成（`int result = f()` 不再产生 SEM_003）。OOP×Protocol 边界完整清理（PR-A + PR-B：幽灵字段删除、显式 Protocol 继承移除、isinstance 调用点替换、Impl 类声明性继承清理）。497 个测试全部通过。下一个里程碑是 Step 4b（ibci_ihost/idbg 标准化重构），属中期目标。**
+> **LLM 执行链与插件体系全面公理化完成（Steps 1-4b）：IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行、ibci_ihost/idbg KernelRegistry 标准化均落地。BehaviorSpec 编译期返回类型推断完成（`int result = f()` 不再产生 SEM_003）。OOP×Protocol 边界完整清理（PR-A + PR-B：幽灵字段删除、显式 Protocol 继承移除、isinstance 调用点替换、Impl 类声明性继承清理）。517 个测试全部通过。下一个里程碑是 Step 5（IbFunction.call() 去除 context 参数依赖），须先明确解释器并发模型后推进。**
