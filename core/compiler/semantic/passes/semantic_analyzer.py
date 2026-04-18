@@ -714,7 +714,7 @@ class SemanticAnalyzer:
                         self.side_table.bind_symbol(target_node.target, sym)
                         self.side_table.bind_type(target_node.target, sym.spec)
                     
-                    # 延迟表达式上下文处理（通用化：支持任意表达式，不限于 @~...~）：
+                    # 延迟表达式上下文处理（通用化: 支持任意表达式, 不限于 @~...~）：
                     # - deferred_mode='lambda' : 延迟执行，每次调用时重新求值
                     # - deferred_mode='snapshot': 延迟执行，首次调用时求值并缓存
                     # - deferred_mode=None      : 即时执行

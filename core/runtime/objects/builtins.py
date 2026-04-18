@@ -560,7 +560,9 @@ class IbDeferred(IbObject):
         if self._execution_context is None:
             raise RuntimeError(
                 f"IbDeferred '{self.node_uid}': execution_context is None. "
-                "Ensure the deferred expression was created with a valid context."
+                "This typically occurs when the deferred expression was deserialized "
+                "without a live interpreter, or when the factory failed to inject the context. "
+                "Ensure engine._prepare_interpreter() has completed before invoking a deferred expression."
             )
 
         # 在捕获的作用域（如果有）中求值

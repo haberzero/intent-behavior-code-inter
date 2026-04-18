@@ -85,7 +85,7 @@ print(greet())
 # ---------------------------------------------------------------------------
 
 class TestDeferredLambdaArithmetic:
-    def test_lambda_arithmetic_reval(self):
+    def test_lambda_arithmetic_reevaluates(self):
         """lambda wrapping arithmetic expression re-evaluates each call."""
         code = """
 int x = 10
