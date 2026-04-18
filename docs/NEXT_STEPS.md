@@ -3,7 +3,7 @@
 > 记录接下来可以直接开工的具体任务，按优先级排列。
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-18
+> **最后更新**：2026-04-18（Step 4a + BehaviorSpec 编译期推断 + OOP×Protocol PR-A 均已完成；下一重点：Step 4b ibci_ihost/idbg 重构，或显式引入原则 Phase 1）
 
 ---
 

@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BoundMethodSpec, ModuleSpec, LazySpec,
+    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
@@ -199,6 +199,34 @@ class SpecFactory:
         """Create a DeferredSpec describing a deferred (lambda/snapshot) expression."""
         name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
         return DeferredSpec(
+            name=name,
+            is_nullable=True,
+            is_user_defined=False,
+            value_type_name=value_type_name,
+            value_type_module=value_type_module,
+            deferred_mode=deferred_mode,
+        )
+
+    def create_behavior(
+        self,
+        value_type_name: str = "auto",
+        value_type_module: Optional[str] = None,
+        deferred_mode: str = "lambda",
+    ) -> BehaviorSpec:
+        """
+        Create a ``BehaviorSpec`` for a typed ``@~...~`` deferred behavior expression.
+
+        ``value_type_name`` is the LLM output type declared by the user (e.g. "int",
+        "str").  When it is ``"auto"`` the compiler cannot infer the return type at
+        call sites (same behaviour as before this feature was introduced).
+
+        Example::
+
+            # int lambda f = @~...~  →  create_behavior(value_type_name="int")
+            factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+        """
+        name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
+        return BehaviorSpec(
             name=name,
             is_nullable=True,
             is_user_defined=False,
@@ -402,12 +430,23 @@ class SpecRegistry:
         For FuncSpec (user-defined / axiom-bootstrapped functions) the
         return type is explicit.  For dynamic callables the axiom is
         consulted.
+
+        DeferredSpec / BehaviorSpec with a concrete ``value_type_name``
+        (i.e. not ``"auto"`` / ``"any"``) return the declared value type
+        directly, enabling compile-time type inference at call sites:
+
+            int lambda f = @~ compute something ~
+            int result = f()   # resolves to int, no SEM_003
         """
         if isinstance(spec, FuncSpec):
             return self.resolve(spec.return_type_name, spec.return_type_module) or self.resolve("any")
         # ClassSpec called as constructor returns an instance of itself
         if isinstance(spec, ClassSpec):
             return spec
+        # Typed DeferredSpec / BehaviorSpec: carry the expected value type explicitly.
+        # BehaviorSpec is a subclass of DeferredSpec, so this branch covers both.
+        if isinstance(spec, DeferredSpec) and spec.value_type_name not in ("auto", "any", None, ""):
+            return self.resolve(spec.value_type_name, spec.value_type_module) or self.resolve("auto")
         axiom = self.get_axiom(spec)
         if axiom:
             cap = axiom.get_call_capability()

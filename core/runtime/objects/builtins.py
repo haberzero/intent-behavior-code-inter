@@ -1,5 +1,4 @@
 from typing import Any, List, Dict, Optional, Callable, Union
-from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
@@ -611,7 +610,7 @@ class IbDeferred(IbObject):
 
 
 @register_ib_type("behavior")
-class IbBehavior(IbObject, IIbBehavior):
+class IbBehavior(IbObject):
     """
     延迟执行的 LLM 行为对象 (~...~)。
 

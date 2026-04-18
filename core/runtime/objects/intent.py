@@ -1,12 +1,12 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
-from core.kernel.intent_logic import IntentMode, IntentRole, IntentProtocol
+from core.kernel.intent_logic import IntentMode, IntentRole
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
-class IbIntent(IbObject, IntentProtocol):
+class IbIntent(IbObject):
     """
     表示运行时的意图对象。
     封装了意图的内容、模式以及来源信息。

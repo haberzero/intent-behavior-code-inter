@@ -101,31 +101,35 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 
 ## 四、代码健康 & 架构清理
 
-### 4.1 Impl 类 Protocol 继承清理
+### 4.1 OOP×Protocol 边界清理 PR-A（IbObject 子类单继承化）
+删除 `IIbObject.descriptor` 幽灵字段；将 `IbBehavior`、`IbIntent`、`AIPlugin` 的多余 Protocol 显式继承移除为单继承；全部 Protocol `isinstance` 调用点替换为具体类（`IbBehavior`/`IbIntent`/`IbObject`）；修复 `_get_llmoutput_hint` 第二路径死代码（`getattr(ib_class, 'descriptor', None)` → `meta_reg.resolve(type_name)`）；删除全部悬挂死 import（`IIibBehavior`、`IIibIntent`、`IIibObject` TYPE_CHECKING 块）。
+*文件：`core/runtime/interfaces.py`、`core/runtime/objects/builtins.py`、`core/runtime/objects/intent.py`、`ibci_modules/ibci_ai/core.py`、`core/runtime/interpreter/handlers/`、`core/runtime/interpreter/llm_executor.py`、`core/runtime/module_system/loader.py`*
+
+### 4.2 Impl 类 Protocol 继承清理（PR-B）
 6 个 Impl 类移除对 Protocol 接口的直接继承（Python `@runtime_checkable` 卫生清理）：`ExecutionContextImpl`、`SymbolViewImpl`、`RuntimeContextImpl`、`ModuleManagerImpl`、`InterOpImpl`、`ServiceContextImpl`。对外 API 零破坏。
 *文件：`core/runtime/interpreter/execution_context.py`、`runtime_context.py`、`module_manager.py`、`interop.py`、`service_context.py`*
 
-### 4.2 调度器 import 注入冲突日志
+### 4.3 调度器 import 注入冲突日志
 `_inject_plugin_symbols` 静默 `pass` 替换为 `debugger.trace()` 调用，调试模式下符号冲突可见。
 *文件：`core/compiler/scheduler.py`*
 
-### 4.3 技术债清理
+### 4.4 技术债清理
 - `collector.py`：删除 `"llm_fallback"` 无效属性遍历
 - `runtime_context.py`：清理 5 处过期 TODO 注释
 - `interop.py`：Protocol 继承 TODO 替换为解释性注释
 
-### 4.4 ibci_file 文档分类修正
+### 4.5 ibci_file 文档分类修正
 `ibci_file` 重新归类为"非侵入式（轻量依赖型）"，`ibcext.py` 注释和 `ARCHITECTURE_PRINCIPLES.md` 插件表格同步更新。
 
-### 4.5 Mock 仿真引擎完善
+### 4.6 Mock 仿真引擎完善
 `MOCK:FAIL` / `MOCK:REPAIR` / `MOCK:INT:n` / `MOCK:STR:text` / `MOCK:FLOAT:n` / `MOCK:["..."]` 等指令全部正确实现。`MOCK:REPAIR` 按调用点独立计数，`reset_mock_state()` 支持测试隔离。
 *文件：`ibci_modules/ibci_ai/core.py`*
 
-### 4.6 vtable callable 签名自动提取
+### 4.7 vtable callable 签名自动提取
 `discovery.py` 的 `_extract_signature()` 通过 `inspect.signature()` 自动提取 `__ibcext_vtable__()` callable 条目签名，转换为 `MethodMemberSpec`。
 *文件：`core/runtime/module_system/discovery.py`*
 
-### 4.7 ibci_isys v2.0
+### 4.8 ibci_isys v2.0
 `ibci_sys` 合并进 `ibci_isys`，新增 `sys.script_dir()`、`sys.script_path()` 等 IBCI 路径 API。
 *文件：`ibci_modules/ibci_isys/`*
 

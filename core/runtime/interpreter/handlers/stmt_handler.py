@@ -1,7 +1,8 @@
 from typing import Any, Mapping, List, Optional, Callable
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
-from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList, IIbBehavior
+from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList
+from core.runtime.objects.builtins import IbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException
 )
@@ -119,7 +120,7 @@ class StmtHandler(BaseHandler):
         """表达式语句"""
         res = self.visit(node_data.get("value"))
         # 如果是行为对象（延迟 behavior 被当作语句直接使用），触发自主执行
-        if isinstance(res, IIbBehavior):
+        if isinstance(res, IbBehavior):
             return res.call(self.registry.get_none(), [])
         return res
 
@@ -602,7 +603,7 @@ class StmtHandler(BaseHandler):
         """LLM 函数 definition"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, spec=declared_type)
+        func = IbLLMFunction(node_uid, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()

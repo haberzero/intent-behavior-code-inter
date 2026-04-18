@@ -5,6 +5,7 @@ from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
+from core.kernel.spec.specs import DeferredSpec
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -179,6 +180,13 @@ class FlatSerializer(BaseFlatSerializer):
             "is_nullable": t.is_nullable,
             "is_user_defined": t.is_user_defined,
         }
+
+        # Persist scalar fields for DeferredSpec / BehaviorSpec so the runtime
+        # rehydrator can reconstruct the proper subclass (and get_base_name()
+        # will return "deferred" / "behavior" instead of "deferred[str]").
+        if isinstance(t, DeferredSpec):
+            type_data["value_type_name"] = t.value_type_name
+            type_data["deferred_mode"] = t.deferred_mode
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()

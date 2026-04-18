@@ -87,6 +87,17 @@ class IILLMExecutor(Protocol):
         """
         ...
 
+    def invoke_llm_function(self, func: Any, context: Any) -> Any:
+        """
+        执行一个命名 LLM 函数对象，返回 IbObject 结果。
+
+        作用域管理和参数绑定已由 IbLLMFunction.call() 完成。
+        此方法负责：调用 execute_llm_function、回写 last_llm_result（供 llmexcept 使用），
+        并返回解析后的 IbObject，而非 LLMResult。
+        是 IbLLMFunction.call() 的唯一执行分发点。
+        """
+        ...
+
     def execute_behavior_expression(
         self,
         node_uid: str,

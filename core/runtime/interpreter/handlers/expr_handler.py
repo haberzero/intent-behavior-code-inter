@@ -3,7 +3,6 @@ from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.interfaces import ServiceContext, IExecutionContext
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
-from core.runtime.interfaces import IIbBehavior
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.kernel.issue import InterpreterError
@@ -276,7 +275,11 @@ class ExprHandler(BaseHandler):
                 target_descriptor = meta_reg.resolve(target_type_name)
 
         # 3. 执行 LLM 调用
-        result = self.service_context.llm_executor.execute_behavior_expression(
+        executor = self.registry.get_llm_executor()
+        if executor is None:
+            self.runtime_context.set_last_llm_result(None)
+            return self.registry.get_none()
+        result = executor.execute_behavior_expression(
             node_uid,
             self.execution_context,
             call_intent=call_intent

@@ -259,3 +259,153 @@ class TestDeferredAxiomLayer:
         assert not axiom.is_compatible("deferred")
         assert not axiom.is_compatible("behavior")
         assert not axiom.is_compatible("bound_method")
+
+
+# ---------------------------------------------------------------------------
+# 7. BehaviorSpec compile-time return type inference
+# ---------------------------------------------------------------------------
+
+class TestBehaviorSpecReturnTypeInference:
+    """Tests for BehaviorSpec(value_type_name) compile-time return-type inference.
+
+    When a user writes:
+        int lambda f = @~ compute something ~
+    the variable ``f`` receives a ``BehaviorSpec(value_type_name="int")``.
+    Calling ``f()`` should resolve to ``int`` at compile time, so that
+    ``int result = f()`` compiles without a SEM_003 type-mismatch error.
+    """
+
+    def test_behavior_spec_creation(self):
+        """SpecFactory.create_behavior() returns BehaviorSpec with correct fields."""
+        from core.kernel.factory import create_default_registry
+        from core.kernel.spec.specs import BehaviorSpec
+        reg = create_default_registry()
+        bs = reg.factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+        assert isinstance(bs, BehaviorSpec)
+        assert bs.value_type_name == "int"
+        assert bs.deferred_mode == "lambda"
+        assert bs.get_base_name() == "behavior"
+        assert bs.name == "behavior[int]"
+
+    def test_behavior_spec_auto_name(self):
+        """BehaviorSpec with value_type_name='auto' gets name 'behavior'."""
+        from core.kernel.factory import create_default_registry
+        from core.kernel.spec.specs import BehaviorSpec
+        reg = create_default_registry()
+        bs = reg.factory.create_behavior(value_type_name="auto", deferred_mode="lambda")
+        assert isinstance(bs, BehaviorSpec)
+        assert bs.name == "behavior"
+
+    def test_behavior_spec_is_assignable_to_behavior(self):
+        """behavior is assignable to behavior[str] (runtime container check)."""
+        from core.kernel.factory import create_default_registry
+        reg = create_default_registry()
+        behavior_spec = reg.resolve("behavior")
+        typed_spec = reg.factory.create_behavior(value_type_name="str")
+        assert reg.is_assignable(behavior_spec, typed_spec)
+
+    def test_behavior_spec_resolve_return(self):
+        """resolve_return on BehaviorSpec(value_type_name='int') returns int spec."""
+        from core.kernel.factory import create_default_registry
+        reg = create_default_registry()
+        bs = reg.factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+        ret = reg.resolve_return(bs, [])
+        assert ret is not None
+        assert ret.name == "int"
+
+    def test_behavior_spec_resolve_return_str(self):
+        """resolve_return on BehaviorSpec(value_type_name='str') returns str spec."""
+        from core.kernel.factory import create_default_registry
+        reg = create_default_registry()
+        bs = reg.factory.create_behavior(value_type_name="str", deferred_mode="lambda")
+        ret = reg.resolve_return(bs, [])
+        assert ret is not None
+        assert ret.name == "str"
+
+    def test_behavior_spec_auto_resolves_to_auto(self):
+        """resolve_return on BehaviorSpec(value_type_name='auto') resolves to auto."""
+        from core.kernel.factory import create_default_registry
+        reg = create_default_registry()
+        bs = reg.factory.create_behavior(value_type_name="auto")
+        ret = reg.resolve_return(bs, [])
+        # "auto" is dynamic — resolve_return falls back to axiom path which returns "auto"
+        assert ret is not None
+
+    def test_deferred_spec_creation(self):
+        """SpecFactory.create_deferred() creates DeferredSpec with correct get_base_name()."""
+        from core.kernel.factory import create_default_registry
+        from core.kernel.spec.specs import DeferredSpec, BehaviorSpec
+        reg = create_default_registry()
+        ds = reg.factory.create_deferred(value_type_name="int", deferred_mode="lambda")
+        assert isinstance(ds, DeferredSpec)
+        assert not isinstance(ds, BehaviorSpec)
+        assert ds.get_base_name() == "deferred"
+        assert ds.value_type_name == "int"
+        assert ds.name == "deferred[int]"
+
+    def test_deferred_spec_resolve_return(self):
+        """resolve_return on DeferredSpec(value_type_name='int') returns int spec."""
+        from core.kernel.factory import create_default_registry
+        reg = create_default_registry()
+        ds = reg.factory.create_deferred(value_type_name="int", deferred_mode="lambda")
+        ret = reg.resolve_return(ds, [])
+        assert ret is not None
+        assert ret.name == "int"
+
+    def test_compile_int_lambda_call_to_int_var(self):
+        """int lambda f = @~...~ ; int result = f() compiles without SEM_003."""
+        import os
+        from core.engine import IBCIEngine
+        from core.kernel.issue import CompilerError
+        code = """import ai
+int lambda f = @~ what is 1+1 ~
+int result = f()
+"""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_compile_str_snapshot_call_to_str_var(self):
+        """str snapshot b = @~...~ ; str s = b() compiles without SEM_003."""
+        import os
+        from core.engine import IBCIEngine
+        code = """import ai
+str snapshot b = @~ say hello ~
+str s = b()
+"""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_runtime_int_lambda_call_to_int_var(self):
+        """int lambda f = @~...~ ; int result = f() runs and result is an int."""
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+int lambda f = @~ MOCK:INT:42 ~
+int result = f()
+print((str)result)
+"""
+        lines = run_and_capture(code)
+        assert "42" in lines
+
+    def test_runtime_str_lambda_call_to_str_var(self):
+        """str lambda f = @~...~ ; str result = f() runs and result is a str."""
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+str lambda f = @~ MOCK:STR:hello ~
+str result = f()
+print(result)
+"""
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_auto_lambda_behavior_still_dynamic(self):
+        """auto lambda f = @~...~ ; result is still callable (no SEM_003)."""
+        import os
+        from core.engine import IBCIEngine
+        code = """import ai
+auto lambda f = @~ say hello ~
+"""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None

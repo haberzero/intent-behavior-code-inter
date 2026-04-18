@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-18
+> **最后更新**：2026-04-18（OOP×Protocol PR-A 完成，BehaviorSpec 编译期推断完成，Steps 1-4a 全部落地）
 
 ---
 
@@ -230,6 +230,22 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 **任务**：`ibci_ihost` 和 `ibci_idbg` 从 `IbPlugin` 内核特权模式降级为标准插件，通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`IStackInspector`/`IStateReader` 接口）访问服务，而非通过 `PluginCapabilities` 内核特权访问。用户可见接口（`ihost.run_isolated()` 等）保持不变。
 
 **依赖**：Step 1（KernelRegistry 服务注册机制）已完成。
+
+### 11.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
+
+**状态说明**：已完整修复（PR-A）。
+
+根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
+
+**全部修复内容**：
+- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
+- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
+- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
+- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
+- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
+- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
+- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
+- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
 
 ---
 
