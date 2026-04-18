@@ -10,6 +10,7 @@ __all__ = [
     "ILLMExecutor",
     "IILLMExecutor",
     "IIntentManager",
+    "IExecutionFrame",
 ]
 
 @runtime_checkable
@@ -134,3 +135,32 @@ class IIntentManager(Protocol):
     def get_global_intents(self) -> List[Any]: ...
     def get_active_intents(self) -> List[Any]: ...
     def push_intent(self, intent: Union[str, Any], mode: str = "+", tag: Optional[str] = None) -> None: ...
+
+
+@runtime_checkable
+class IExecutionFrame(Protocol):
+    """
+    IBCI 执行帧协议：单次函数调用的完整状态单元。
+    等价于 CPU 上下文切换寄存器组；是并发、快照、切片的最小单位。
+
+    RuntimeContextImpl 是其当前实现（无需修改现有代码，仅命名已有结构）。
+    未来 IbIntentContext 公理化后，intent_context 属性将持有 IbIntentContext 对象。
+
+    Protocol 方法约定：
+    - current_scope  —— 当前作用域链（局部变量）
+    - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
+    - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
+    - get_last_llm_result()   —— LLM 结果寄存器
+    - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照（Step 6 实现）
+    """
+    @property
+    def current_scope(self) -> Any: ...
+
+    @property
+    def intent_stack(self) -> Any: ...
+
+    def get_llm_except_frames(self) -> List[Any]: ...
+
+    def get_last_llm_result(self) -> Optional[Any]: ...
+
+    def fork_intent_snapshot(self) -> Any: ...

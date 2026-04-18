@@ -79,6 +79,7 @@ class LLMExceptFrame:
     # TODO [优先级: 高]: 当前 saved_vars 是空实现，需要完善变量快照机制
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
     saved_intent_stack: Any = field(default=None, repr=False)  # IntentNode 链表
+    saved_intent_ctx: Any = field(default=None, repr=False)    # IbIntentContext 快照（Step 6d）
     saved_loop_context: Optional[Dict[str, int]] = None
 
     # 循环迭代器断点恢复索引
@@ -112,7 +113,10 @@ class LLMExceptFrame:
         """
         self._save_vars_snapshot(runtime_context)
 
-        if hasattr(runtime_context, '_intent_top'):
+        if hasattr(runtime_context, 'intent_context'):
+            self.saved_intent_ctx = runtime_context.intent_context.fork()
+            self.saved_intent_stack = self.saved_intent_ctx._intent_top  # backward compat
+        elif hasattr(runtime_context, '_intent_top'):
             self.saved_intent_stack = runtime_context._intent_top
 
         if hasattr(runtime_context, '_loop_stack') and runtime_context._loop_stack:
@@ -187,7 +191,11 @@ class LLMExceptFrame:
         """
         self._restore_vars(runtime_context)
 
-        if hasattr(runtime_context, 'restore_active_intents') and self.saved_intent_stack is not None:
+        if self.saved_intent_ctx is not None and hasattr(runtime_context, 'intent_context'):
+            runtime_context.restore_active_intents(self.saved_intent_ctx._intent_top)
+            runtime_context._pending_smear_intents = list(self.saved_intent_ctx._smear_queue)
+            runtime_context._pending_override_intent = self.saved_intent_ctx._override
+        elif hasattr(runtime_context, 'restore_active_intents') and self.saved_intent_stack is not None:
             runtime_context.restore_active_intents(self.saved_intent_stack)
 
         if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:

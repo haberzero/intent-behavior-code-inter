@@ -599,6 +599,52 @@ class IbLLMUncertain(IbObject):
         return "uncertain"
 
 
+@register_ib_type("llm_call_result")
+class IbLLMCallResult(IbObject):
+    """
+    LLM 调用结果的结构化类型。
+
+    替代 IbLLMUncertain 的"例外特殊对象"模式，使 LLM 调用结果成为
+    公理体系中有完整语义的独立类型。
+
+    字段：
+    - is_certain: bool      结果是否确定（LLM 返回了可解析的有效值）
+    - value: IbObject       确定时的值；不确定时为 IbNone
+    - raw_response: str     LLM 原始响应（用于 retry_hint 生成）
+    - retry_hint: str       不确定时的重试提示（传递给下一次 LLM 调用）
+
+    语义：
+    - is_certain=True  → 调用成功，value 包含有效 IbObject
+    - is_certain=False → 调用不确定，retry_hint 描述问题，llmexcept 应处理此情况
+
+    与 IbLLMUncertain 的关系：
+    - IbLLMUncertain 仍是变量赋值"不确定值"的标记类型（保持不变）
+    - IbLLMCallResult 是 llmexcept 保护块的"调用结果容器"（新增）
+    - 未来 llmexcept 可改为接收 IbLLMCallResult 而非捕获异常
+    """
+    def __init__(self, ib_class: 'IbClass', is_certain: bool, value: Optional['IbObject'] = None,
+                 raw_response: str = "", retry_hint: str = ""):
+        super().__init__(ib_class)
+        self.is_certain = is_certain
+        self.result_value = value
+        self.raw_response = raw_response
+        self.retry_hint = retry_hint
+
+    def to_native(self, memo=None) -> Any:
+        if self.is_certain and self.result_value is not None:
+            return self.result_value.to_native(memo) if hasattr(self.result_value, 'to_native') else self.result_value
+        return None
+
+    def __to_prompt__(self) -> str:
+        if self.is_certain:
+            return f"LLMCallResult(certain, value={self.result_value})"
+        return f"LLMCallResult(uncertain, hint={self.retry_hint!r})"
+
+    def __repr__(self) -> str:
+        status = "certain" if self.is_certain else "uncertain"
+        return f"<LLMCallResult {status}: {self.result_value if self.is_certain else self.retry_hint!r}>"
+
+
 class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
@@ -617,7 +663,9 @@ class IbUserFunction(IbFunction):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
-        rt_context = self.context.runtime_context
+        from core.runtime.frame import get_current_frame as _get_frame
+        _frame = _get_frame()
+        rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
         
