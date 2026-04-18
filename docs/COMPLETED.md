@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-18
+> **最后更新**：2026-04-18（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；517 个测试通过）
 
 ---
 
@@ -155,6 +155,40 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 - **`ibci_modules/ibci_ihost/core.py`**：`_host_service()` 辅助方法改为 `capabilities.kernel_registry.get_host_service()`，删除对 `capabilities.service_context.host_service` 的直接访问。
 - **`ibci_modules/ibci_idbg/core.py`**：`setup()` 不再存储 `stack_inspector`/`state_reader` 实例，改为存储 `_kr`（KernelRegistry）和 `_cap_registry`（CapabilityRegistry）；所有方法通过 `self._kr.get_stack_inspector()` / `get_state_reader()` / `get_llm_executor()` 懒获取服务；`llm_provider` 通过 `self._cap_registry.get("llm_provider")` 访问；`protection_map()` TODO 注释精简。
 *全部 517 个测试通过。*
+
+### 4.13 Step 6c：RuntimeContextImpl 意图字段完整迁移
+`RuntimeContextImpl` 的四个意图相关私有字段（`_intent_top`、`_pending_smear_intents`、`_pending_override_intent`、`_global_intents`）全部迁移至 `IbIntentContext._intent_ctx` 字段持有：
+- `RuntimeContextImpl` 保留 `intent_context` 属性直接返回 `_intent_ctx` 实例。
+- `push_intent()` / `pop_intent()` / `remove_intent()` 全部委托至 `_intent_ctx.push/pop/remove()`。
+- `get_global_intents()` / `set_global_intent()` / `clear_global_intents()` / `remove_global_intent()` 全部委托至 `_intent_ctx` 的 `get/set_global_intents()` 系列方法。
+- `fork_intent_snapshot()` 现在返回 `IbIntentContext` 值快照（`_intent_ctx.fork()`），不再返回裸 `IntentNode` 引用。
+- `intent_stack` property getter/setter 改为通过 `_intent_ctx.get_intent_top()` / `set_intent_top()` 操作，保持与外部调用者的兼容性。
+- `get_resolved_prompt_intents()` 改为委托 `_intent_ctx` 的 smear/override/active/global 系列方法。
+- 私有帮助方法 `_remove_by_tag()` / `_remove_by_content()` / `_invalidate_cache_up_to_root()` 从 RuntimeContextImpl 删除，移入 `IbIntentContext`。
+- `IbIntentContext` 新增：`remove(tag, content)`、`get_intent_top()`、`set_intent_top()` 以及完整的私有移除和缓存无效化逻辑。
+- `IbIntentContext` 删除：`consume_smear_snapshot()` 和 `get_override_snapshot()` 两个已无调用者的旧兼容方法。
+*文件：`core/runtime/objects/intent_context.py`、`core/runtime/interpreter/runtime_context.py`*
+
+### 4.14 Step 6d：LLMExceptFrame 意图快照清洁化
+`LLMExceptFrame` 中的 `saved_intent_stack` 字段（裸 `IntentNode` 引用）完整删除，仅保留 `saved_intent_ctx`（`IbIntentContext` fork 值快照）：
+- `save_context()` 直接调用 `runtime_context.intent_context.fork()`，无任何分支备注和后备路径。
+- `restore_context()` 直接调用 `runtime_context.intent_context.merge(saved_intent_ctx)`，无 `elif` 旧路备份。
+- 类文档字符串更新，删除 `saved_intent_stack` 字段说明和 TODO。
+*文件：`core/runtime/interpreter/llm_except_frame.py`*
+
+### 4.15 Step 7b：LlmCallResultAxiom + IbLLMCallResult 全链路公理化接入
+- **`LlmCallResultAxiom`**：在 `core/kernel/axioms/primitives.py` 新增 `LlmCallResultAxiom`（`@property name = "llm_call_result"`），`register_core_axioms()` 末尾注册。
+- **`LLM_CALL_RESULT_SPEC`**：在 `core/kernel/spec/specs.py` 新增 `LLM_CALL_RESULT_SPEC = IbSpec(name="llm_call_result", ...)`，在 `create_default_spec_registry()` 中注册，确保 `initialize_builtin_classes()` 启动时创建对应 `IbClass`。导出至 `core/kernel/spec/__init__.py`。
+- **`set_last_llm_result()` 自动转换**：`RuntimeContextImpl.set_last_llm_result()` 现在接受 `LLMResult`（内部 Python dataclass）或 `IbLLMCallResult`（IBCI 对象），遇到 `LLMResult` 时自动转换为 `IbLLMCallResult` 后存储。`get_last_llm_result()` 只返回 `IbLLMCallResult`。
+- **读取端全面迁移**：`stmt_handler.py` 中所有 6 处 `result.is_uncertain` 改为 `not result.is_certain`；`ibci_idbg/core.py` 中 `get_last_call_info()` 和 `last_result()` 两处 `res.is_uncertain` / `res.success` / `res.value` / `res.error_message` 全部适配 `IbLLMCallResult` 字段（`is_certain`、`result_value`、`retry_hint`）。
+*文件：`core/kernel/axioms/primitives.py`、`core/kernel/spec/specs.py`、`core/kernel/spec/registry.py`、`core/kernel/spec/__init__.py`、`core/runtime/interpreter/runtime_context.py`、`core/runtime/interpreter/handlers/stmt_handler.py`、`ibci_modules/ibci_idbg/core.py`*
+
+### 4.16 Vibe 代码债务清理
+修复以下被标注为"vibe 快速实现"或历史遗留的代码问题：
+- **`interpreter.py:229` kwargs bug**：`orchestrator=kwargs.get('orchestrator', None) if 'kwargs' in locals() else None` 改为直接引用显式参数 `orchestrator=orchestrator`（`**kwargs` 从未存在于该签名）。
+- **`engine.py` orchestrator 注入**：删除 `TODO: 怀疑有vibe带来的异味` 注释；使用新增的 `ServiceContextImpl.set_orchestrator()` 方法替代直接写入私有字段 `_orchestrator`；`host_service.orchestrator` 旁路注入已内化到 `set_orchestrator()` 实现中。
+- **`ServiceContextImpl.set_orchestrator()`**：新增标准化注入方法，内聚 orchestrator + host_service 双向更新逻辑。
+*文件：`core/runtime/interpreter/interpreter.py`、`core/engine.py`、`core/runtime/interpreter/service_context.py`*
 
 
 ---
