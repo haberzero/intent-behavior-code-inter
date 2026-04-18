@@ -2,9 +2,9 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-18（第四次修订：callable + deferred 公理化完整落地；is_compatible 方向修复）
+> **最后更新**：2026-04-18（Steps 1-3 完整落地；callable + deferred + behavior 公理化全面完成）
 >
-> 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
+> 已完成工作见 `docs/COMPLETED.md`，未来步骤（Step 4-6）见第四章，远期高风险任务见第五章。
 
 ---
 
@@ -202,66 +202,19 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
-## 四、下一步迭代路线图（完整版）
+## 四、迭代路线图
 
-### Step 1 ✅ COMPLETED（已于本轮落地）
+### Steps 1–3 ✅ COMPLETED
 
-**确立 `IILLMExecutor` 接口 + 注入 `KernelRegistry`**
+| Step | 内容 | 详情 |
+|------|------|------|
+| Step 1 | `IILLMExecutor` 接口 + `KernelRegistry` 注入 | `core/base/interfaces.py`、`core/kernel/registry.py`、`core/engine.py` |
+| Step 2 | `BehaviorAxiom` + `IbBehavior.call()` 自主执行，`_execute_behavior()` 旁路彻底删除 | `core/kernel/axioms/primitives.py`、`core/runtime/objects/builtins.py` |
+| Step 3a | `ibci_ai` 职责拆分：`llm_callback` 唯一来源为 `capability_registry.get("llm_provider")` | `core/runtime/interpreter/llm_executor.py`、`ibci_modules/ibci_ai/core.py` |
+| Step 3b | `CallableAxiom` + `DeferredAxiom` + `DeferredSpec` + `IbDeferred`，`is_compatible()` 方向 Bug 修复 | `core/kernel/axioms/primitives.py`、`core/kernel/spec/specs.py`、`core/runtime/objects/builtins.py` |
+| Step 4a | `IbLLMFunction` 自主执行（`invoke_llm_function`） | `core/runtime/objects/kernel.py`、`core/base/interfaces.py` |
 
-已完成内容：
-1. `IILLMExecutor` Protocol 在 `core/base/interfaces.py` 定义：
-   - `invoke_behavior(behavior, context) -> IbObject`
-   - `execute_behavior_expression(node_uid, context, call_intent=None, captured_intents=None) -> LLMResult`
-   - `execute_behavior_object(behavior, context) -> LLMResult`
-   - `get_last_call_info() -> Dict`
-2. `KernelRegistry` 增加了：
-   - `register_llm_executor(executor, token)` （内核令牌保护，免封印检查）
-   - `get_llm_executor() -> IILLMExecutor`
-   - `clone()` 传播 `_llm_executor` 引用
-3. `LLMExecutorImpl` 新增 `invoke_behavior()` 方法
-4. `engine._prepare_interpreter()` 完成后将 `llm_executor` 注入 `KernelRegistry`
-
----
-
-### Step 2 ✅ COMPLETED（已于本轮落地，与 Step 1 同一 PR）
-
-**给 `behavior` 类型声明真正的 `BehaviorAxiom` + `BehaviorCallCapability`**
-
-已完成内容：
-1. `BehaviorAxiom` 替换 `DynamicAxiom("behavior")`：
-   - `is_dynamic() = False` —— `behavior` 是一等公民具体类型，**严格不等于 `any`**
-   - `is_compatible()` 为身份匹配
-   - `BehaviorCallCapability.resolve_return_type_name()` 返回 `"auto"`（编译期延迟，运行期按 `expected_type` 解析）
-2. `IbBehavior` 完成公理化重构：
-   - 构造时捕获 `execution_context`（与 `IbUserFunction` 同构模式）
-   - `call()` 通过 `registry.get_llm_executor().invoke_behavior(self, ctx)` 自主执行
-   - 不再抛 `RuntimeError`
-3. `_execute_behavior()` **已从 `BaseHandler` 彻底删除**
-4. `visit_IbCall` 中的 `is_behavior()` 特殊路由 **已删除** —— behavior 通过标准 `hasattr(func, 'call')` 分支流转
-5. `visit_IbExprStmt` 中的 `_execute_behavior(res)` **已替换为** `res.call(none, [])`
-6. `IObjectFactory.create_behavior()` 和 `RuntimeObjectFactory.create_behavior()` 均新增 `execution_context` 参数
-7. `expr_handler.visit_IbBehaviorExpr` 向 `create_behavior()` 传入 `execution_context`
-
-**质量门控**：Step 2 完成后，446 个测试全部通过，代码中不再存在 `_execute_behavior` 调用路径。
-
----
-
-### Step 3（独立 PR，中期目标）
-
-**`ibci_ai` 职责拆分**
-
-当前 `ibci_ai` 承担了两个不同职责，必须拆分：
-
-| 当前职责 | 拆分后归属 |
-|---------|-----------|
-| LLM API 调用（OpenAI/Ollama 等的 HTTP 请求） | 注入到 `KernelRegistry.llm_executor`（Step 1 完成后自然实现） |
-| LLM 配置 API（`set_retry`、`set_context`、`set_model`）| 保留在 `ibci_ai` 插件，通过 `import ai` 显式使用 |
-| `IbStatefulPlugin` 断点保存/恢复（LLM 配置状态） | 保留在 `ibci_ai` 插件 |
-
-**拆分后**：
-- `ibci_ai` 的 IBCI 接口（`ai.set_retry()` 等）继续正常工作
-- `@~...~` 的执行不再路由经过 `ibci_ai`，而是通过 `KernelRegistry.get_llm_executor()` 直接执行
-- `ibci_ai.setup(capabilities)` 负责将自己注册的 provider 注入到 `KernelRegistry`
+完整实现细节见 `docs/COMPLETED.md` §一 和 `docs/ARCH_DETAILS.md` 第六章。
 
 ---
 
@@ -290,9 +243,7 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | `HostService` 通过 `KernelRegistry` 暴露 | 在 `KernelRegistry` 中增加 `get_host_service()` 钩子 |
 | 调试器能力通过协议接口暴露 | 定义 `IStackInspector`、`IStateReader` 为 kernel 层接口 |
 
-**重构后**：`ibci_ihost` 和 `ibci_idbg` 降级为"标准插件"，不再需要 `IbPlugin` 特权层级，通过与非侵入式插件一致的 setup 机制获取所需接口。但它们的 IBCI 接口（用户可见的方法）保持不变。
-
-**注意**：此步骤依赖 Step 1（`KernelRegistry` 的服务注册机制建立），因此在 Step 1 完成后才可开展。
+**重构后**：`ibci_ihost` 和 `ibci_idbg` 降级为"标准插件"，不再需要 `IbPlugin` 特权层级，通过与非侵入式插件一致的 setup 机制获取所需接口。IBCI 接口保持不变。
 
 ---
 
@@ -302,7 +253,7 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 将解释器环境的获取方式改为通过 `ib_class.registry` 拿到 `KernelRegistry`，再由 `KernelRegistry` 提供"当前执行上下文"钩子。
 
-**⚠️ 此步骤的线程本地存储方案记录于第六章，属于高风险设计，需要单独讨论后推进。**
+**⚠️ 此步骤的线程本地存储方案属于高风险设计，需要单独讨论解释器并发模型后推进。见第五章。**
 
 ---
 
@@ -310,43 +261,14 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 **万物皆对象完整化**
 
-- `IbLLMFunction` 自洽执行（类似 Step 2，依赖 `LLMExecutor` 内核化）
-- `Intent` 完整公理化（`IntentAxiom` 替换 `DynamicAxiom("intent")`）
+- `Intent` 完整公理化（`IntentAxiom` 替换当前 ClassSpec 占位）
 - 消除 `ServiceContext` 中所有游离于对象体系之外的"隐式依赖"
 
 ---
 
-## 五、已完成的修复记录
+## 五、远期高风险任务记录
 
-| 修复 | 优先级 | 文件 | PR |
-|------|--------|------|----|
-| `_bind_llm_except` 递归进入嵌套控制流块（IbFor/IbIf/IbWhile/IbTry/IbSwitch） | P0 | `core/compiler/semantic/passes/semantic_analyzer.py` | copilot/check-ibc-inter-design-docs |
-| `SpecRegistry.is_behavior(spec)` 方法，消除 `"behavior"` 硬编码字符串比较 | P1 | `core/kernel/spec/registry.py` | copilot/check-ibc-inter-design-docs |
-| `visit_IbCall` behavior 检测改为通过 `spec_reg.is_behavior()` 路由 | P1 | `core/runtime/interpreter/handlers/expr_handler.py` | copilot/check-ibc-inter-design-docs |
-| `semantic_analyzer.py visit_IbFor` 中 `"behavior"` 硬编码改为 `is_behavior()` | P1 | `core/compiler/semantic/passes/semantic_analyzer.py` | 当前 PR |
-| `IBCI_SPEC.md`：删除废弃 `callable` 类型，补充 `lambda`/`snapshot` 语法，修正废弃示例 | 文档 | `IBCI_SPEC.md` | 当前 PR |
-| `PENDING_TASKS.md §11.7`：标注为 COMPLETED | 文档 | `docs/PENDING_TASKS.md` | 当前 PR |
-| **`IILLMExecutor` 接口定义**（Step 1） | 架构 | `core/base/interfaces.py` | copilot/ibc-inter-design-review |
-| **`KernelRegistry.register_llm_executor()` / `get_llm_executor()`**（Step 1） | 架构 | `core/kernel/registry.py` | copilot/ibc-inter-design-review |
-| **`LLMExecutorImpl.invoke_behavior()`**（Step 1） | 架构 | `core/runtime/interpreter/llm_executor.py` | copilot/ibc-inter-design-review |
-| **`engine._prepare_interpreter()` 注入 executor**（Step 1） | 架构 | `core/engine.py` | copilot/ibc-inter-design-review |
-| **`BehaviorAxiom` + `BehaviorCallCapability`**（Step 2） | 架构 | `core/kernel/axioms/primitives.py` | copilot/ibc-inter-design-review |
-| **`IbBehavior.call()` 自主执行 + `execution_context` 捕获**（Step 2） | 架构 | `core/runtime/objects/builtins.py` | copilot/ibc-inter-design-review |
-| **`_execute_behavior()` 从 `BaseHandler` 彻底删除**（Step 2） | 架构 | `core/runtime/interpreter/handlers/base_handler.py` | copilot/ibc-inter-design-review |
-| **`visit_IbCall` `is_behavior()` 特殊路由删除**（Step 2） | 架构 | `core/runtime/interpreter/handlers/expr_handler.py` | copilot/ibc-inter-design-review |
-| **`visit_IbExprStmt` 改为 `res.call()`**（Step 2） | 架构 | `core/runtime/interpreter/handlers/stmt_handler.py` | copilot/ibc-inter-design-review |
-| **`create_behavior()` 新增 `execution_context` 参数**（Step 2） | 架构 | `core/runtime/factory.py`、`core/runtime/interfaces.py` | copilot/ibc-inter-design-review |
-| **`CallableAxiom` 替代 `DynamicAxiom("callable")`**（Step 3b） | 架构 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
-| **`DeferredAxiom` + `DeferredSpec` + `IbDeferred` 通用延迟表达式**（Step 3b） | 架构 | `core/kernel/`, `core/runtime/objects/builtins.py` | copilot/review-docs-and-code |
-| **`is_compatible()` 方向 Bug 修复**：父类型不再反向向下兼容子类型 | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
-| **`BoundMethodAxiom.is_compatible("callable")` 补充**：bound_method IS-A callable | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
-| **`VoidAxiom` 替代 `DynamicAxiom("void")`**：is_dynamic=False，无任何能力，is_compatible 仅 "void" | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
-
----
-
-## 六、远期高风险任务记录（待未来 PR 推进）
-
-### 6.1 `IbFunction.call()` 线程本地存储方案
+### 5.1 `IbFunction.call()` 线程本地存储方案
 
 **问题**：`IbFunction.call(context, args)` 中的 `context`（`IExecutionContext`）是同一类问题——函数执行需要解释器环境。当前通过外部传入，与公理化"对象自洽执行"原则冲突。
 
@@ -370,24 +292,18 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 - `IbIntent` 是运行时对象，直接由 RuntimeContext 和 factory 管理
 - `IntentStack` 是独立的内置类型，已有完整的 `push`/`pop`/`remove`/`clear` 原生方法注册
 
+### 5.2 Intent 公理化
+
+**当前状态**：Intent 通过 `Bootstrapper.initialize()` 注册为内置 `ClassSpec`；`IbIntent` 是运行时对象，直接由 RuntimeContext 和 factory 管理；`IntentStack` 已有完整的原生方法注册（`push`/`pop`/`remove`/`clear`）。`AxiomRegistry` 中**不存在** Intent 专属 Axiom。
+
 **完整公理化目标（Step 6 长期）**：
 - 为 Intent 定义专用 `IntentAxiom`（`is_class()=True`，完整的 vtable）
-- 将 Intent 的行为约束纳入公理体系，消除目前依赖运行时直接管理的隐式行为
+- 将 Intent 的行为约束纳入公理体系，消除依赖运行时直接管理的隐式行为
 - 工作量预估 3-5 人天，不阻塞当前功能
 
 ---
 
-### 6.3 `callable` 内部占位符清理 ✅ COMPLETED
+## 六、一句话总结
 
-`DynamicAxiom("callable")` 已被 `CallableAxiom` 彻底替代。
-`CallableAxiom` 的 `is_dynamic()=False`，`is_compatible()` 仅声明自身兼容性（不反向列出子类型）。
-`BoundMethodAxiom.get_parent_axiom_name()` 仍返回 `"callable"`，且 `is_compatible("callable")` 已正确返回 True。
+> **可调用类型体系（callable → deferred → behavior）已全面公理化。Steps 1-3（IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行）均完整落地，全部测试通过。`is_compatible()` 方向 Bug 已修复。下一个里程碑是 Step 4（ibci_ihost/idbg 标准化重构）和 Step 5/6（IbFunction 去除 context 依赖、Intent 公理化），均属中长期目标。**
 
-同时修复：`is_compatible()` 方向 Bug 已在本轮彻底修复——
-所有父类型不再错误地向下兼容子类型，子类型通过自身 `is_compatible()` 声明向上兼容链。
-
----
-
-## 七、一句话总结
-
-> **可调用类型体系（callable → deferred → behavior）已全面公理化并修复类型系统方向 Bug。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior.call() 自主执行）、Step 3b（CallableAxiom + DeferredAxiom + IbDeferred 通用延迟表达式）均已完整落地，479 个测试全部通过。`is_compatible()` 方向 Bug 已修复（父类型不再向下兼容子类型）。下一个重要里程碑是 Step 3a（ibci_ai 职责拆分）和 Step 4（ibci_ihost/idbg 重构），均属中期目标，不阻塞当前功能。**
