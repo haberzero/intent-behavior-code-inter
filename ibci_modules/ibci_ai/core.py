@@ -40,6 +40,8 @@ class AIPlugin(IbStatefulPlugin):
         self._capabilities: Optional[ExtensionCapabilities] = None
         self._mock_state: Dict[str, int] = {}
         self._mock_retry_counts: Dict[str, int] = {}
+        # SEQ mock: per-key call index counter
+        self._mock_seq_counters: Dict[str, int] = {}
         
         # [NEW] 模型能力策略缓存
         self._model_capabilities = {
@@ -53,6 +55,7 @@ class AIPlugin(IbStatefulPlugin):
         """重置Mock状态，用于测试隔离"""
         self._mock_state.clear()
         self._mock_retry_counts.clear()
+        self._mock_seq_counters.clear()
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
@@ -455,6 +458,28 @@ class AIPlugin(IbStatefulPlugin):
                     if mock_value.startswith('{') and mock_value.endswith('}'):
                         return mock_value
                     return "{" + mock_value + "}"
+                elif mock_type == "SEQ":
+                    # MOCK:SEQ:v1:v2:v3 key
+                    # Returns values in sequence per call, keyed by 'key'.
+                    # Special sentinel values: FAIL → ambiguous (triggers llmexcept),
+                    # TRUE → "1", FALSE → "0". Repeats last value when exhausted.
+                    if " " in mock_value:
+                        seq_values_str, seq_key = mock_value.rsplit(" ", 1)
+                    else:
+                        seq_values_str, seq_key = mock_value, ""
+                    values = [v for v in seq_values_str.split(":") if v]
+                    counter_key = f"_seq_{seq_key}"
+                    idx = self._mock_seq_counters.get(counter_key, 0)
+                    self._mock_seq_counters[counter_key] = idx + 1
+                    val = values[idx] if idx < len(values) else (values[-1] if values else "")
+                    v_upper = val.upper()
+                    if v_upper == "FAIL":
+                        return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+                    if v_upper == "TRUE":
+                        return "1"
+                    if v_upper == "FALSE":
+                        return "0"
+                    return val
 
         # 3. 处理命名指令
         parts = content_after_mock.split(" ", 1)

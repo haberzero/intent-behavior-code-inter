@@ -420,6 +420,77 @@ class TestAIMockSystem:
     def test_reset_mock_state(self, ai_plugin):
         ai_plugin._mock_state["key"] = 1
         ai_plugin._mock_retry_counts["key"] = 2
+        ai_plugin._mock_seq_counters["_seq_key"] = 3
         ai_plugin.reset_mock_state()
         assert len(ai_plugin._mock_state) == 0
         assert len(ai_plugin._mock_retry_counts) == 0
+        assert len(ai_plugin._mock_seq_counters) == 0
+
+
+# ---------------------------------------------------------------------------
+# 7. MOCK:SEQ 序列化回放指令单元测试
+# ---------------------------------------------------------------------------
+
+class TestAIMockSEQ:
+    """MOCK:SEQ 按调用序列回放值的单元测试。"""
+
+    @pytest.fixture
+    def ai_plugin(self):
+        from ibci_modules.ibci_ai.core import AIPlugin
+        p = AIPlugin()
+        p.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+        return p
+
+    def test_seq_returns_values_in_order(self, ai_plugin):
+        """MOCK:SEQ 按调用顺序逐一返回序列中的值。"""
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b:c mykey", "expr") == "a"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b:c mykey", "expr") == "b"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b:c mykey", "expr") == "c"
+
+    def test_seq_repeats_last_value_when_exhausted(self, ai_plugin):
+        """序列耗尽后重复最后一个值。"""
+        ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr")
+        ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr")
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr") == "y"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr") == "y"
+
+    def test_seq_fail_returns_ambiguous_sentinel(self, ai_plugin):
+        """FAIL 值触发歧义哨兵（驱动 llmexcept）。"""
+        result = ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:ok fkey", "expr")
+        assert "ambiguous" in result.lower() or "maybe" in result.lower()
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:ok fkey", "expr") == "ok"
+
+    def test_seq_true_false_aliases(self, ai_plugin):
+        """TRUE/FALSE 别名正确解析为 '1'/'0'。"""
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:TRUE:FALSE tf_key", "expr") == "1"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:TRUE:FALSE tf_key", "expr") == "0"
+
+    def test_seq_independent_keys(self, ai_plugin):
+        """不同 key 的 SEQ 计数器互相独立。"""
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b key1", "expr") == "a"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y key2", "expr") == "x"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b key1", "expr") == "b"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y key2", "expr") == "y"
+
+    def test_seq_reset_clears_counter(self, ai_plugin):
+        """reset_mock_state() 将 SEQ 计数器清零，使序列从头开始。"""
+        ai_plugin._handle_mock_response("MOCK:SEQ:a:b reset_key", "expr")
+        ai_plugin.reset_mock_state()
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b reset_key", "expr") == "a"
+
+    def test_seq_no_key(self, ai_plugin):
+        """无 key 的 SEQ 指令共享同一计数器，可正常使用。"""
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:p:q:r", "expr") == "p"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:p:q:r", "expr") == "q"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:p:q:r", "expr") == "r"
+
+    def test_seq_mixed_sentinels_in_sequence(self, ai_plugin):
+        """序列中混合普通值与 FAIL/TRUE/FALSE 哨兵。"""
+        p = ai_plugin
+        r0 = p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr")
+        assert r0 == "ok"
+        r1 = p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr")
+        assert "ambiguous" in r1.lower() or "maybe" in r1.lower()
+        assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "1"
+        assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "0"
+        assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "done"
