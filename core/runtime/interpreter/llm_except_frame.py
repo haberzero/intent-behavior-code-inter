@@ -115,7 +115,7 @@ class LLMExceptFrame:
 
         if hasattr(runtime_context, 'intent_context'):
             self.saved_intent_ctx = runtime_context.intent_context.fork()
-            self.saved_intent_stack = self.saved_intent_ctx._intent_top  # backward compat
+            self.saved_intent_stack = self.saved_intent_ctx.get_intent_top()  # backward compat
         elif hasattr(runtime_context, '_intent_top'):
             self.saved_intent_stack = runtime_context._intent_top
 
@@ -192,9 +192,9 @@ class LLMExceptFrame:
         self._restore_vars(runtime_context)
 
         if self.saved_intent_ctx is not None and hasattr(runtime_context, 'intent_context'):
-            runtime_context.restore_active_intents(self.saved_intent_ctx._intent_top)
-            runtime_context._pending_smear_intents = list(self.saved_intent_ctx._smear_queue)
-            runtime_context._pending_override_intent = self.saved_intent_ctx._override
+            runtime_context.restore_active_intents(self.saved_intent_ctx.get_intent_top())
+            runtime_context._pending_smear_intents = self.saved_intent_ctx.consume_smear_snapshot()
+            runtime_context._pending_override_intent = self.saved_intent_ctx.get_override_snapshot()
         elif hasattr(runtime_context, 'restore_active_intents') and self.saved_intent_stack is not None:
             runtime_context.restore_active_intents(self.saved_intent_stack)
 

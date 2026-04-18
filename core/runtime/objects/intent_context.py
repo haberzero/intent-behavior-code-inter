@@ -137,6 +137,18 @@ class IbIntentContext:
     def get_global_intents(self) -> List[Any]:
         return list(self._global_intents)
 
+    def get_intent_top(self) -> Optional[Any]:
+        """返回持久意图栈顶节点（IntentNode 链表头）。供 backward-compat 代码使用。"""
+        return self._intent_top
+
+    def consume_smear_snapshot(self) -> List[Any]:
+        """返回涂抹意图队列的副本（不消费，供快照恢复使用）。"""
+        return list(self._smear_queue)
+
+    def get_override_snapshot(self) -> Optional[Any]:
+        """返回排他意图槽的值（不消费，供快照恢复使用）。"""
+        return self._override
+
     # ------------------------------------------------------------------ #
     # Convenience                                                          #
     # ------------------------------------------------------------------ #
