@@ -4,7 +4,7 @@
 > 每个任务都标注了搁置原因和解决方案方向。
 > 采用加法标注模式。核心待完成任务置顶，历史任务标注状态。
 >
-> **最后更新**：2026-04-17
+> **最后更新**：2026-04-18（更新 §2.2 BehaviorSpec 编译期推断已完成）
 
 ---
 
@@ -78,7 +78,7 @@
 
 ### 2.2 Behavior 完整公理化 [COMPLETED ✅]
 
-**状态**：已完整实现（PR: copilot/ibc-inter-design-review）。
+**状态**：已完整实现（PR: copilot/ibc-inter-design-review + copilot/check-architecture-and-documentation）。
 
 **已完成内容**：
 - `BehaviorAxiom` 替换 `DynamicAxiom("behavior")`，`is_dynamic()=False`
@@ -87,8 +87,9 @@
 - `_execute_behavior()` 旁路从 `BaseHandler` 彻底删除
 - `IILLMExecutor` 接口定义于 `core/base/interfaces.py`
 - `KernelRegistry.register_llm_executor()` / `get_llm_executor()` 完整注入链路
+- **`BehaviorSpec(value_type_name=...)` 编译期返回类型推断**：`int lambda f = @~...~; int result = f()` 编译期不产生 SEM_003。`SpecRegistry.resolve_return()` 对 DeferredSpec/BehaviorSpec 直接推断 value_type_name。（PR: copilot/check-architecture-and-documentation）
 
-详见 `AXIOM_OOP_ANALYSIS.md` Step 1 + Step 2。
+详见 `AXIOM_OOP_ANALYSIS.md` Step 1 + Step 2 + §6.4。
 
 ### 2.5 ParserCapability LLM 提示词片段扩展
 

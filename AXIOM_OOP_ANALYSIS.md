@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-18（第六次修订：Step 4a 完成——IbLLMFunction 公理化补完 + visit_IbBehaviorInstance 清理）
+> **最后更新**：2026-04-18（第七次修订：BehaviorSpec 编译期返回类型推断完成——§3.4 限制已解除，§6.4 标注 COMPLETED，Step 6 BehaviorSpec 条目划勾，测试数 484→497）
 >
 > 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
 
@@ -167,9 +167,10 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 运行时路径：`invoke_behavior()` → `push_expected_type(behavior.expected_type)` → LLM 结果被约束为 `expected_type` 对应的类型。类型约束从未丢失，只是延迟到运行时生效。
 
-**当前已知限制（P2 目标）**：
-- 编译器中 `is_assignable(auto, int)` = False，导致 `int result = compute()` 在调用处产生 SEM_003 类型不匹配错误。这不是运行时 Bug，而是编译期类型推断精度不足。
-- **正确方向**：引入 `BehaviorSpec(return_type_name="int")` 使编译器在已知 lambda/snapshot 定义的 expected_type 时，调用处可推断为具体类型。这属于 Step 2 的延伸，不影响当前核心功能。
+**✅ 已解决（本 PR）**：
+- `BehaviorSpec(value_type_name="int")` 已在当前 PR 中完整实现（详见 §6.4 COMPLETED 记录）。
+- `int result = compute()` 编译期不再产生 SEM_003 错误。
+- `SpecRegistry.resolve_return()` 对 `DeferredSpec`/`BehaviorSpec` 且 `value_type_name` 非 auto 时，直接返回声明的值类型。
 
 ### 3.5 彻底重构原则（禁止渐进式补丁）
 
@@ -371,7 +372,7 @@ Step 3a 将 `llm_callback` 单源化到 `capability_registry.get("llm_provider")
 
 **万物皆对象完整化**
 
-- `BehaviorSpec(return_type_name=...)` 编译期返回类型推断（详见 §6.4）
+- ~~`BehaviorSpec(return_type_name=...)` 编译期返回类型推断（详见 §6.4）~~ ✅ COMPLETED（本 PR）
 - `Intent` 完整公理化（`IntentAxiom`，详见 §6.2）
 - 消除 `ServiceContext` 中所有游离于对象体系之外的"隐式依赖"
 
@@ -412,6 +413,12 @@ Step 3a 将 `llm_callback` 单源化到 `capability_registry.get("llm_provider")
 | **Step 4a：`visit_IbLLMFunctionDef` 移除 `llm_executor` 传参** | 架构 | `core/runtime/interpreter/handlers/stmt_handler.py` | 本 PR |
 | **Step 4a：`interpreter.py` STAGE 5 预水化移除 `llm_executor` 传参** | 架构 | `core/runtime/interpreter/interpreter.py` | 本 PR |
 | **Step 4a：`visit_IbBehaviorInstance` 改为 `registry.get_llm_executor()` 访问** | 架构 | `core/runtime/interpreter/handlers/expr_handler.py` | 本 PR |
+| **`BehaviorSpec(DeferredSpec)` 新增**：`get_base_name()` 返回 `"behavior"`，携带 `value_type_name`（§6.4） | 架构 | `core/kernel/spec/specs.py` | copilot/check-architecture-and-documentation |
+| **`SpecFactory.create_behavior(value_type_name, deferred_mode)`**：类型化 BehaviorSpec 工厂方法 | 架构 | `core/kernel/spec/registry.py` | copilot/check-architecture-and-documentation |
+| **`SpecRegistry.resolve_return()` DeferredSpec/BehaviorSpec 分支**：有 value_type_name 时编译期推断返回类型 | 架构 | `core/kernel/spec/registry.py` | copilot/check-architecture-and-documentation |
+| **`semantic_analyzer.py` deferred_mode + 具体类型 → 创建 BehaviorSpec/DeferredSpec**（替代通用占位符） | 架构 | `core/compiler/semantic/passes/semantic_analyzer.py` | copilot/check-architecture-and-documentation |
+| **`serializer.py` 持久化 `value_type_name` + `deferred_mode`** | 架构 | `core/compiler/serialization/serializer.py` | copilot/check-architecture-and-documentation |
+| **`artifact_rehydrator.py` 重建 BehaviorSpec/DeferredSpec 正确子类**（修复运行时 RUN_002 赋值错误） | 架构 | `core/runtime/loader/artifact_rehydrator.py` | copilot/check-architecture-and-documentation |
 
 ---
 
@@ -459,13 +466,31 @@ Step 3a 将 `llm_callback` 单源化到 `capability_registry.get("llm_provider")
 
 ---
 
-### 6.4 `BehaviorSpec(return_type_name=...)` 编译期返回类型推断（P2）
+### 6.4 `BehaviorSpec(return_type_name=...)` 编译期返回类型推断 ✅ COMPLETED（本 PR）
 
-**问题描述**：`BehaviorCallCapability.resolve_return_type_name()` 返回 `"auto"`（编译期延迟，运行期按 `expected_type` 解析），导致 `int result = compute()` 在调用处产生 SEM_003 类型不匹配错误。这不是运行时 Bug，而是编译期类型推断精度不足。
+**问题描述（已解决）**：`BehaviorCallCapability.resolve_return_type_name()` 返回 `"auto"`（编译期延迟，运行期按 `expected_type` 解析），导致 `int result = compute()` 在调用处产生 SEM_003 类型不匹配错误。这不是运行时 Bug，而是编译期类型推断精度不足。
 
-**正确方向**：引入 `BehaviorSpec(return_type_name="int")` 使编译器在已知 lambda/snapshot 定义的 `expected_type` 时，调用处可推断为具体类型。`FuncSpec(is_llm=True)` 中 `return_type_name` 字段已存在，可作为同构参照。
+**已完成的实现**：
 
-**当前状态**：暂不实现，`auto` 返回类型策略在功能上正确（运行时约束未丢失）；P2 优化属于 Step 6 工作范围。
+1. `BehaviorSpec(DeferredSpec)` 子类（`core/kernel/spec/specs.py`）：
+   - `get_base_name()` 返回 `"behavior"`，axiom 查找路径不变
+   - 携带 `value_type_name`（如 `"int"`、`"str"`）和 `deferred_mode`
+
+2. `SpecFactory.create_behavior(value_type_name, deferred_mode)` 工厂方法（`core/kernel/spec/registry.py`）
+
+3. `SpecRegistry.resolve_return()` 对 `DeferredSpec`/`BehaviorSpec` 的专用分支：
+   - `value_type_name` 非 `"auto"`/`"any"` 时，直接返回声明的值类型
+   - 编译期 `int result = f()` 正确推断 `f` 的返回类型为 `int`，不产生 SEM_003
+
+4. `semantic_analyzer.py`：`deferred_mode` + 具体声明类型时，通过工厂创建带类型的 `BehaviorSpec`/`DeferredSpec`
+
+5. `serializer.py`：持久化 `value_type_name` + `deferred_mode` 字段
+
+6. `artifact_rehydrator.py`：重建正确的 `BehaviorSpec`/`DeferredSpec` Python 子类实例（修复运行时 `is_assignable()` 失败 → RUN_002 错误）
+
+**质量门控**：497 个测试全部通过（含 13 个新增 `TestBehaviorSpecReturnTypeInference` 测试）。
+
+运行时路径保持不变：`invoke_behavior()` → `push_expected_type(behavior.expected_type)` → LLM 结果被约束为 `expected_type` 对应类型。类型信息既有编译期精确推断，也有运行时强制约束，两层双重保障。
 
 ---
 
@@ -477,4 +502,4 @@ Step 3a 将 `llm_callback` 单源化到 `capability_registry.get("llm_provider")
 
 ## 七、一句话总结
 
-> **LLM 执行链全面公理化。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior 自主执行）、Step 3（ibci_ai 职责拆分 + CallableAxiom + DeferredAxiom）、Step 4a（IbLLMFunction 公理化补完 + visit_IbBehaviorInstance 清理）均已完整落地，484 个测试全部通过。整条 LLM 执行路径（`@~...~` 行为表达式 + 命名 `llm f()` 函数）均通过 `KernelRegistry.get_llm_executor()` 统一分发，`llmexcept` 对命名 LLM 函数的保护问题已修复。下一个里程碑是 Step 4b（ibci_ihost/idbg 重构），属中期目标，不阻塞当前功能。**
+> **LLM 执行链全面公理化 + 编译期类型推断完善。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior 自主执行）、Step 3（ibci_ai 职责拆分 + CallableAxiom + DeferredAxiom）、Step 4a（IbLLMFunction 公理化补完 + visit_IbBehaviorInstance 清理）均已完整落地。Step 6 部分工作（BehaviorSpec 编译期返回类型推断）提前完成：`int lambda f = @~...~; int result = f()` 编译期不再产生 SEM_003，`SpecRegistry.resolve_return()` 对 DeferredSpec/BehaviorSpec 直接推断 value_type_name。497 个测试全部通过。下一个里程碑是 Step 4b（ibci_ihost/idbg 重构），属中期目标，不阻塞当前功能。**

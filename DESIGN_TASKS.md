@@ -3,7 +3,7 @@
 > 本文档记录 IBC-Inter 项目中已明确方向的设计任务与后续工作。
 > 按优先级分类，每项包含结论与实施要点。
 >
-> **最后更新**：2026-04-18
+> **最后更新**：2026-04-18（§4.3 Behavior 完成内容新增 BehaviorSpec 编译期推断条目）
 
 ---
 
@@ -205,6 +205,9 @@ str snapshot my_handler = @~ 根据 $context 生成回复 ~
 **Behavior 完成内容**：
 - `BehaviorAxiom` + `BehaviorCallCapability` 完整落地
 - `IbBehavior.call()` 自主执行，`_execute_behavior()` 旁路已彻底删除
+- `BehaviorSpec(value_type_name=...)` 编译期返回类型推断已完成（PR: copilot/check-architecture-and-documentation）
+  - `int lambda f = @~...~; int result = f()` 编译期不再产生 SEM_003
+  - 详见 `AXIOM_OOP_ANALYSIS.md` §6.4 COMPLETED
 - 详见 `AXIOM_OOP_ANALYSIS.md` Step 1 + Step 2
 
 **Intent 状态**：Intent **不是** `DynamicAxiom` 占位符——`AxiomRegistry` 中不存在 intent 专属 Axiom。
