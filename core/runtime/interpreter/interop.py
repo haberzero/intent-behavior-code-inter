@@ -1,12 +1,9 @@
 from typing import Any, Callable, Dict, List, Optional
-from core.runtime.interfaces import InterOp
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.host.host_interface import HostInterface
 
-# InterOpImpl 继承自 Protocol 接口，确保所有接口方法被实现（类似 ABC）。
-# Python 允许此用法，isinstance 检查需要 @runtime_checkable 装饰。
-class InterOpImpl(InterOp):
+class InterOpImpl:
     def __init__(self, host_interface: Optional[HostInterface] = None):
         self.host_interface = host_interface or HostInterface()
 

@@ -1,12 +1,11 @@
 from __future__ import annotations
 from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
-from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView, IStateProvider
+from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.base.source_atomic import Location
 from core.runtime.exceptions import BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.kernel.registry import KernelRegistry
-from core.base.interfaces import IStateReader
 from core.kernel.spec import IbSpec
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
@@ -172,7 +171,7 @@ class ScopeImpl:
         """返回当前作用域的所有符号（不包含父作用域）"""
         return dict(self._symbols)
 
-class SymbolViewImpl(SymbolView):
+class SymbolViewImpl:
     """[Active Defense] 只读符号表视图实现"""
     def __init__(self, context: RuntimeContext):
         self._context = context
@@ -212,7 +211,7 @@ class IntentNode:
         self._cached_list = res
         return res
 
-class RuntimeContextImpl(RuntimeContext, IStateReader, IStateProvider):
+class RuntimeContextImpl(RuntimeContext):
     def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):
         if not registry:
             raise ValueError("Registry is required for RuntimeContext creation")
