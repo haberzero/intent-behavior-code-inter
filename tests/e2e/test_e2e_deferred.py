@@ -230,11 +230,32 @@ class TestDeferredAxiomLayer:
         assert axiom.is_compatible("behavior")
 
     def test_deferred_compatible_with_callable(self):
-        """DeferredAxiom should be compatible with 'callable'."""
+        """DeferredAxiom should be compatible with 'callable' and 'deferred' (upward only).
+        
+        is_compatible(target) means "can I be assigned to a variable of type target".
+        deferred IS-A callable, so deferred can go into callable/deferred slots.
+        behavior is a sub-type of deferred — deferred cannot go into a behavior slot.
+        """
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
         spec = reg.resolve("deferred")
         axiom = reg.get_axiom(spec)
         assert axiom.is_compatible("callable")
         assert axiom.is_compatible("deferred")
-        assert axiom.is_compatible("behavior")
+        # behavior is a sub-type of deferred — deferred cannot be assigned to behavior slot
+        assert not axiom.is_compatible("behavior")
+
+    def test_callable_not_compatible_with_subtypes(self):
+        """CallableAxiom can only be assigned to a callable slot, not to sub-type slots.
+        
+        Sub-types (deferred, behavior, bound_method) declare upward compatibility through
+        their own is_compatible(), not through callable declaring downward compatibility.
+        """
+        from core.kernel.factory import create_default_registry
+        reg = create_default_registry()
+        spec = reg.resolve("callable")
+        axiom = reg.get_axiom(spec)
+        assert axiom.is_compatible("callable")
+        assert not axiom.is_compatible("deferred")
+        assert not axiom.is_compatible("behavior")
+        assert not axiom.is_compatible("bound_method")

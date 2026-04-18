@@ -719,7 +719,8 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
         return "any"
 
     def is_compatible(self, other_name: str) -> bool:
-        return other_name == "bound_method"
+        # bound_method IS-A callable：可以赋值给 bound_method 或 callable 槽。
+        return other_name in ("bound_method", "callable")
 
 
 # ------------------------------------------------------------------ #
@@ -889,7 +890,10 @@ class CallableAxiom(BaseAxiom, CallCapability):
     替代原来的 DynamicAxiom("callable")，成为函数/可调用对象的正式公理。
     * is_dynamic() = False —— callable 是具体类型，不是 "any" 的妥协。
     * CallCapability 返回 "auto" —— 编译期返回类型取决于具体的 FuncSpec。
-    * 与 behavior、deferred、bound_method 兼容（它们都是可调用家族的成员）。
+
+    is_compatible(target) 语义：source 能否被赋值给 target 类型的变量。
+    callable 只能赋值给 callable 槽；子类型（deferred、behavior、bound_method）
+    通过自身的 is_compatible() 声明向上兼容父类型，而非父类型向下兼容子类型。
     """
 
     @property
@@ -921,7 +925,10 @@ class CallableAxiom(BaseAxiom, CallCapability):
         return False
 
     def is_compatible(self, other_name: str) -> bool:
-        return other_name in ("callable", "behavior", "deferred", "bound_method")
+        # callable 只能赋值给 callable 槽。
+        # 子类型（deferred、behavior、bound_method）通过自身的 is_compatible() 声明
+        # 向上兼容性，不需要父类型反向列出所有子类型。
+        return other_name == "callable"
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "Object"
@@ -953,6 +960,9 @@ class DeferredAxiom(BaseAxiom, DeferredCallCapability):
     * 实现 CallCapability —— deferred 对象可被调用（触发延迟表达式求值）。
     * is_dynamic() = False —— 严格类型系统：deferred 只能赋值给 deferred 或 callable。
     * 编译期返回类型为 "auto"；运行期由 IbDeferred.call() 执行实际表达式并返回结果。
+
+    is_compatible 方向：deferred IS-A callable，因此可以赋值给 callable 或 deferred 槽。
+    behavior 是 deferred 的子类型，不能反向将 deferred 赋给 behavior 槽。
     """
 
     @property
@@ -981,7 +991,9 @@ class DeferredAxiom(BaseAxiom, DeferredCallCapability):
         return False
 
     def is_compatible(self, other_name: str) -> bool:
-        return other_name in ("deferred", "callable", "behavior")
+        # deferred IS-A callable：可以赋值给 deferred 或 callable 槽。
+        # behavior 是 deferred 的子类型，不可反向赋值。
+        return other_name in ("deferred", "callable")
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "callable"

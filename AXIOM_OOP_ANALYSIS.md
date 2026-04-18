@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-17（第三次修订：Step 1 + Step 2 已于本轮完整落地）
+> **最后更新**：2026-04-18（第四次修订：callable + deferred 公理化完整落地；is_compatible 方向修复）
 >
 > 当前已完成的修复见第五章，正在进行中的工作见第四章，未来远期高风险任务见第六章。
 
@@ -19,16 +19,48 @@
 | None / slice / Exception | ✅ | ✅ | ✅ | ✅ |
 | Enum | ✅ | ✅ | ✅ | ✅ |
 | bound_method | ✅ | ✅ | ✅ | ✅ |
-| **behavior** | ✅ | ✅（`BehaviorAxiom`） | ✅ | ✅（`IbBehavior.call()` 自主执行） |
+| **callable** | ✅ | ✅（`CallableAxiom`） | N/A（抽象父类型） | N/A |
+| **deferred** | ✅（`DeferredSpec`） | ✅（`DeferredAxiom`） | ✅（`IbDeferred`） | ✅ |
+| **behavior** | ✅ | ✅（`BehaviorAxiom`） | ✅（`IbBehavior.call()` 自主执行） | ✅ |
 | IbFunction / IbLLMFunction | ✅ | 部分（FuncSpec） | ✅ | ⚠️ 依赖外部 context |
 
 ### 尚未完整公理化的类型
 
 | 类型 | 问题描述 |
 |------|---------|
-| **callable** | 仅作为 `DynamicAxiom("callable")` 存在，是历史遗留的占位符，无真正语义。用户层已废弃（见 `lambda`/`snapshot`）。 |
 | **IbFunction** | `call()` 需要外部传入 `context`（`IExecutionContext`），不能自主执行。 |
 | **Intent** | 内置 ClassSpec（通过 `Bootstrapper.initialize()` 创建），无专用 Axiom。完整 IntentAxiom 公理化属于 Step 6 长期目标。 |
+
+### 公理类型层次（当前完整状态）
+
+```
+Object（根）
+  └─ callable  (CallableAxiom, is_dynamic=False) — 可调用对象的公理父类型
+       ├─ bound_method  (BoundMethodAxiom) — 已绑定接收者的方法
+       └─ deferred  (DeferredAxiom) — 延迟执行的通用表达式
+            └─ behavior  (BehaviorAxiom) — 延迟执行的 LLM 行为表达式（特化）
+```
+
+**注意**：此层次是 IBCI 类型系统（公理层）的声明，与 Python 实现类的继承无关。
+`IbDeferred` 和 `IbBehavior` 都直接继承自 `IbObject`，不存在 Python 级别的互相继承关系——
+这是有意为之：两者的执行机制（AST 重访 vs LLM 调用）完全不同，不应共享实现代码。
+IBCI 类型系统通过公理声明类型层次，Python 类继承只用于实现代码复用。
+
+### `is_compatible(target)` 方向原则
+
+`is_compatible(target_name)` 的语义是：**"我（source 类型）能否被赋值给 `target_name` 类型的变量？"**
+
+子类型向上兼容，父类型不向下兼容：
+
+| source | 可赋值的目标类型 |
+|--------|---------------|
+| behavior | behavior、deferred、callable |
+| deferred | deferred、callable |
+| callable | callable（仅自身） |
+| bound_method | bound_method、callable |
+
+**禁止的反向赋值**：`callable → deferred`、`callable → behavior`、`deferred → behavior` 均为非法，
+`is_compatible()` 现已正确返回 False（已修复历史 Bug）。
 
 ---
 
@@ -301,6 +333,10 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 | **`visit_IbCall` `is_behavior()` 特殊路由删除**（Step 2） | 架构 | `core/runtime/interpreter/handlers/expr_handler.py` | copilot/ibc-inter-design-review |
 | **`visit_IbExprStmt` 改为 `res.call()`**（Step 2） | 架构 | `core/runtime/interpreter/handlers/stmt_handler.py` | copilot/ibc-inter-design-review |
 | **`create_behavior()` 新增 `execution_context` 参数**（Step 2） | 架构 | `core/runtime/factory.py`、`core/runtime/interfaces.py` | copilot/ibc-inter-design-review |
+| **`CallableAxiom` 替代 `DynamicAxiom("callable")`**（Step 3b） | 架构 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
+| **`DeferredAxiom` + `DeferredSpec` + `IbDeferred` 通用延迟表达式**（Step 3b） | 架构 | `core/kernel/`, `core/runtime/objects/builtins.py` | copilot/review-docs-and-code |
+| **`is_compatible()` 方向 Bug 修复**：父类型不再反向向下兼容子类型 | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
+| **`BoundMethodAxiom.is_compatible("callable")` 补充**：bound_method IS-A callable | P0 | `core/kernel/axioms/primitives.py` | copilot/review-docs-and-code |
 
 ---
 
@@ -337,16 +373,17 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
-### 6.3 `callable` 内部占位符清理
+### 6.3 `callable` 内部占位符清理 ✅ COMPLETED
 
-当前 `DynamicAxiom("callable")` 仍然存在（内部类型系统使用）。`BoundMethodAxiom.get_parent_axiom_name()` 返回 `"callable"`。
+`DynamicAxiom("callable")` 已被 `CallableAxiom` 彻底替代。
+`CallableAxiom` 的 `is_dynamic()=False`，`is_compatible()` 仅声明自身兼容性（不反向列出子类型）。
+`BoundMethodAxiom.get_parent_axiom_name()` 仍返回 `"callable"`，且 `is_compatible("callable")` 已正确返回 True。
 
-在 Step 2 完成后，需要评估：
-- `callable` 内部占位符是否还有实际语义需求
-- 若无，则完全从 `AxiomRegistry` 中移除，彻底清理历史遗留
+同时修复：`is_compatible()` 方向 Bug 已在本轮彻底修复——
+所有父类型不再错误地向下兼容子类型，子类型通过自身 `is_compatible()` 声明向上兼容链。
 
 ---
 
 ## 七、一句话总结
 
-> **万物公理化的最后阻塞点已突破。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）和 Step 2（BehaviorAxiom + IbBehavior.call() 自主执行 + _execute_behavior() 彻底删除）已在同一 PR 中完整落地，446 个测试全部通过，代码中不再存在任何 behavior 类型相关的架构旁路。下一个重要里程碑是 Step 3（ibci_ai 职责拆分）和 Step 4（ibci_ihost/idbg 重构），均属中期目标，不阻塞当前功能。**
+> **可调用类型体系（callable → deferred → behavior）已全面公理化并修复类型系统方向 Bug。Step 1（IILLMExecutor 接口 + KernelRegistry 注入）、Step 2（BehaviorAxiom + IbBehavior.call() 自主执行）、Step 3b（CallableAxiom + DeferredAxiom + IbDeferred 通用延迟表达式）均已完整落地，479 个测试全部通过。`is_compatible()` 方向 Bug 已修复（父类型不再向下兼容子类型）。下一个重要里程碑是 Step 3a（ibci_ai 职责拆分）和 Step 4（ibci_ihost/idbg 重构），均属中期目标，不阻塞当前功能。**
