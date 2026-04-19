@@ -1,7 +1,9 @@
 """
-LLM 异步任务管理层
+LLM 异步任务管理层 — 内部草稿，不对外暴露
 
-本模块提供最低限度的 LLM 异步调用支持可能性。
+⚠️  本模块是内部草稿，不应在任何用户接口、SDK、或 ibci_modules 插件中引用。
+   已知问题：_execute_sync() 中 execution_context=None 传入，存在 NPE 风险。
+   真正的多线程/async 支持依赖 VM CPS 调度循环（Step 9），当前实现不具备实际并发能力。
 
 当前实现为最小可行层（MVP），采用 Future 模式封装同步调用。
 真正的多线程/async 支持需要解释器核心架构大规模重构。
@@ -14,9 +16,11 @@ LLM 异步任务管理层
 
 架构演进路径：
 - 当前：同步调用封装 → Future 模式（无并发）
-- 未来：解释器核心重构 → 支持 async/await 语法
-- 未来：线程池/进程池 → 真正的并发执行
+- 未来：VM CPS 调度循环（Step 9）→ 支持真正的帧暂停/恢复
+- 未来：Layer 1 LLM 流水线（Step 10）→ DDG 编译器 + LLMScheduler
 - 最终：分布式 LLM 调度 → 跨进程/跨机器的 LLM 调用
+
+详见 docs/PENDING_TASKS_VM.md。
 """
 from typing import Any, Dict, List, Optional, Callable, Union
 from dataclasses import dataclass, field

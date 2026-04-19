@@ -166,18 +166,18 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ## 八、插件系统
 
-### 8.1 显式引入原则完整实现 [PENDING]
+### 8.1 显式引入原则完整实现 [Phase 1 ✅ / Phase 2 ✅ / Phase 3-4 PENDING]
 **任务**：严格实现"必须显式 import 才能使用"原则，彻底消除 `discover_all()` 无条件全局注册。
 
-**当前问题**：`discover_all()` 在 `Engine.__init__()` 时无条件调用，所有插件元数据被注册到全局 MetadataRegistry，导致 `import ai` 前 `ai` 已是内置符号。
+**Phase 1 ✅ 已完成**：`__ibcext_metadata__()` 的 `"kind"` 字段区分 `"method_module"`（工具插件，需显式 import）与 `"type_module"`（内置类型扩展）；`Prelude._init_defaults()` 按 `is_user_defined` 过滤，所有方法插件（`ai`、`math`、`json` 等）不预注入为全局内置符号——用户代码中使用 `ai.xxx` 而未 `import ai` 时，语义分析器会报 "undefined variable" 错误。
 
-**长期方案**（演进步骤）：
-1. **Phase 1**：在 `__ibcext_metadata__()` 返回值中添加 `"kind"` 字段；`Prelude._init_defaults()` 根据 kind 过滤，仅加载真正的内置类型模块（*近期任务，见 `NEXT_STEPS.md`*）
-2. **Phase 2**：延迟 `discover_all()` 调用到首次 `import` 时触发
-3. **Phase 3**：明确区分"方法模块"（提供函数调用）和"类型模块"（提供原生类型）
-4. **Phase 4**：Scheduler 符号注入逻辑，标记外部模块符号
+**Phase 2 ✅ 已完成（最小实现）**：`discover_all()` 不再在 `Engine.__init__()` 无条件调用。改由 `Engine._ensure_plugins_discovered()` 懒加载：仅在首次 `compile()` / `check()` 调用时执行一次。`Engine.__init__()` 阶段只创建空 `HostInterface()`，不触发任何插件发现。
 
-**文件**：`core/engine.py`、`core/compiler/semantic/passes/prelude.py`、所有插件 `_spec.py`
+**Phase 3 PENDING**：明确区分"方法模块"（提供函数调用）和"类型模块"（提供原生类型），完善 `kind` 字段语义。
+
+**Phase 4 PENDING**：Scheduler 符号注入逻辑，标记外部模块符号（区分内置符号与 import 注入符号）。
+
+**文件**：`core/engine.py`（`_ensure_plugins_discovered`）、`core/compiler/semantic/passes/prelude.py`、所有插件 `_spec.py`
 
 ---
 
