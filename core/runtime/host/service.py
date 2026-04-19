@@ -170,8 +170,7 @@ class HostService(IHostService):
         abs_path = os.path.abspath(path)
         success = self.orchestrator.request_isolated_run(abs_path, policy, initial_vars)
         
-        # TODO: 怀疑此处有vibe带来的妥协性问题。当前MVP Demo阶段不深究。
-        # 返回执行结果 (暂简化为布尔值的 IbObject 封装)
+        # 返回执行结果（当前简化为布尔值；多返回值改进见 PENDING_TASKS.md §10.2）
         return self.registry.box(success)
 
     def get_source(self) -> str:

@@ -4,7 +4,7 @@
 > 这些内容已在代码中稳定落地，但因过于具体而不适合放入总体架构说明。
 > 供开发者深入理解各模块实现时参考。
 >
-> **最后更新**：2026-04-17（新增第六章：公理化/万物皆对象框架完成记录）
+> **最后更新**：2026-04-19（新增 §1.6：llmexcept 快照隔离模型概念框架；修正 §1.4 LLMExceptFrame 字段表）
 
 ---
 
@@ -67,10 +67,12 @@ visit_IbLLMExceptionalStmt
 | 字段 | 内容 |
 |------|------|
 | `saved_vars` | 可序列化类型的变量快照（IbNone/IbInteger/IbFloat/IbString/IbList/**IbTuple**/IbDict） |
-| `saved_intent_stack` | 意图栈顶节点 `_intent_top` 的引用（IntentNode 链表头） |
-| `saved_loop_context` | 循环上下文列表（`_loop_stack` 的浅拷贝） |
+| `saved_intent_ctx` | `intent_context.fork()` 产生的意图上下文独立快照（IbIntentContext 值语义）|
+| `saved_loop_context` | 循环上下文列表（`_loop_stack` 的深拷贝） |
 | `saved_retry_hint` | 上次保存的 retry 提示词 |
+| `loop_resume` | for 循环断点恢复映射（`节点UID → 迭代索引`，`restore_context` 故意不重置） |
 | `max_retry` | 最大重试次数，从 `llm_provider.get_retry()` 读取 |
+| `last_result` | 最后一次 LLM 调用的 `LLMResult`（供 llmexcept body 查询） |
 
 不参与快照的类型（设计决定）：IbFunction、IbBehavior、IbNativeObject 等引用类型。
 
@@ -92,6 +94,44 @@ visit_IbLLMExceptionalStmt:
 ```
 
 `max_retry` 默认值为 3，通过 `ai.set_retry()` 可覆盖。
+
+### 1.6 快照隔离模型（llmexcept 的概念框架）
+
+llmexcept 机制的底层概念框架是**快照隔离（Snapshot Isolation）**，类比数据库事务：
+
+```
+数据库 SI:                            llmexcept 快照模型:
+─────────────────────                 ──────────────────────────────────
+BEGIN TRANSACTION                     LLM 语句进入执行
+  read from snapshot                    从快照读取变量/意图栈
+  private writes                        LLM 调用（retry 在内部循环）
+  on success: COMMIT                    成功：commit 到目标变量（单赋值）
+  on failure: ROLLBACK + propagate      失败：restore_snapshot + 向外传播
+END TRANSACTION
+```
+
+**快照内的变量访问规则**（语义规范，当前部分落地）：
+
+| 操作 | 规范 | 当前状态 |
+|------|------|--------|
+| 读取外部变量 | 允许（读到快照时刻值） | ✅ 已实现 |
+| 写入 `retry_hint` | 允许（retry-scoped，不 commit 外部）| ✅ 已实现 |
+| 写入普通外部变量 | **禁止**，应产生 SEM_xxx 编译期错误 | ⚠️ 未加限制（`restore_snapshot` 提供运行时回滚但无编译期保障）|
+| 快照失败后传播 | 应抛出 `LLMPermanentFailureError` | ⚠️ 当前 `break` + 返回最后值 |
+
+**为什么快照模型使 llmexcept 与并发无关**：
+- 每个 LLM 语句（无论串行还是并行 dispatch）都进入独立快照，与其他语句的执行状态完全隔离
+- llmexcept body 不修改外部状态，因此多个快照同时运行不会产生竞争条件
+- 成功时的 commit（单变量写入）是整个快照的唯一输出，串行发生（使用点解引用）
+
+**已落地的快照基础设施**（代码现状）：
+- `LLMExceptFrame.save_context()` → 保存 vars/intent_ctx/loop_ctx/retry_hint 的完整快照
+- `LLMExceptFrame.restore_snapshot()` → 每次 retry 前恢复快照，使 LLM 看到一致的输入状态
+- `intent_context.fork()` → 意图上下文值快照（Step 6d 落地）
+
+**尚未落地的快照完整性约束**（见 PENDING_TASKS.md §9.2、§9.3）：
+- 编译期 read-only 约束（SEM 错误）
+- `_last_llm_result` 从 `RuntimeContextImpl`（全局共享）迁移到 `LLMExceptFrame`（per-snapshot）
 
 ---
 

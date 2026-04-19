@@ -274,8 +274,8 @@ class StatementComponent(BaseComponent):
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
             if self.stream.match(TokenType.RAW_TEXT):
                 val = self.stream.previous().value
-                # 解析意图标签 #tag
-                # TODO 应该从lexer开始就提供支持。现在是临时方案
+                # 解析意图标签 #tag（当前在 parser 层用正则处理，
+                # 应迁移到 Lexer 层，见 PENDING_TASKS.md §10.1）
                 if tag is None and not segments:
                     val_stripped = val.lstrip()
                     if val_stripped.startswith("#"):

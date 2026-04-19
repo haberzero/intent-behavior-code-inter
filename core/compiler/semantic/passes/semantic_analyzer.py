@@ -191,7 +191,8 @@ class SemanticAnalyzer:
         处理语句块中的 llmexcept 关联。
 
         注意：不扁平化 body，保持 IbLLMExceptionalStmt 作为包装器结构。
-        这样解释器可以正确处理 LLMUncertaintyError。
+        这样解释器的影子执行驱动模式（visit_IbLLMExceptionalStmt）可以
+        正确主控目标节点的重试循环。
         """
         if not body:
             return
@@ -851,7 +852,7 @@ class SemanticAnalyzer:
             # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
             # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
             if not self.registry.is_dynamic(iter_type) and not self.registry.is_behavior(iter_type) and iter_type.name != "bool":
-                # TODO: 未来可引入 BooleanCapability 接口进行更严谨的校验
+                # 未来可引入 BooleanCapability 接口进行更严谨的校验（见 PENDING_TASKS.md §3.x）
                 pass
         else:
             # 情况 2: 标准迭代模式 (for i in list: 或 for i in @~...~:)

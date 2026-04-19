@@ -37,9 +37,9 @@ class RuntimeSchedulerImpl:
         """延迟水化调度器，注入运行时服务"""
         self.service_context = service_context
         self.debugger = service_context.debugger
-    # TODO: 可能是代码异味？此处是智能体快速vibe实现，还没严格审查，暂时保留
+
     def _resolve_builtin_path(self) -> str:
-        """标准化内置模块路径发现逻辑"""
+        """标准化内置模块路径发现逻辑（利用包的 __file__ 属性定位安装路径，标准 Python 惯用法）"""
         import ibci_modules
         return os.path.dirname(os.path.abspath(ibci_modules.__file__))
 
@@ -150,12 +150,12 @@ class RuntimeSchedulerImpl:
              )
             
         # 5. 装配 HostService
-        # TODO: 此处的getattr是否是代码异味？
+        # orchestrator 是 ServiceContext Protocol 的正式属性，直接访问即可
         host_service = HostService(
             registry=effective_registry,
             execution_context=interpreter._execution_context,
             interop=sub_sc.interop,
-            orchestrator=getattr(sc, 'orchestrator', None) if sc else None,
+            orchestrator=sc.orchestrator if sc else None,
             setup_context_callback=interpreter.setup_context,
             get_current_module_callback=lambda: interpreter.current_module_name
         )
