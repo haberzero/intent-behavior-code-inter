@@ -213,7 +213,9 @@ class ExprHandler(BaseHandler):
             # - 'lambda'  : 不捕获意图状态（每次调用时使用调用处的当前意图栈）
             # - 'snapshot': 捕获当前意图栈的快照（隔离执行，默认行为）
             deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
-            captured_intents = None if deferred_mode == "lambda" else self.runtime_context.intent_stack
+            # snapshot 语义：捕获当前作用域正在生效的意图栈的值快照（IbIntentContext.fork()）。
+            # lambda 语义：不捕获意图状态，每次调用时使用调用位置的当前意图栈。
+            captured_intents = None if deferred_mode == "lambda" else self.runtime_context.fork_intent_snapshot()
             return self.service_context.object_factory.create_behavior(
                 node_uid,
                 captured_intents,

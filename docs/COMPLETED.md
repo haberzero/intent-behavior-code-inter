@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-19（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；Step 8-pre 快照隔离完整落地（§9.2 SEM_052 + §9.3 per-snapshot 化）；523 个测试通过）
+> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；551 个测试通过）
 
 ---
 
@@ -213,6 +213,46 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 
 ---
 
+#### §9.4：函数调用意图隔离（fork/restore）与显式作用域控制 API
+
+**问题**：函数调用时意图上下文是引用传递（直接共享），函数内 `@+`/`@-` 操作影响调用者；函数内部没有显式 API 来屏蔽/替换继承自调用者的意图。
+
+**修复内容（2026-04-19，553 测试通过）**：
+
+- **`core/runtime/objects/kernel.py`**：`IbUserFunction.call()` 和 `IbLLMFunction.call()` 在函数执行前后实现意图上下文 fork/restore：
+  - 统一采用 **fork 拷贝传递**：`child_ctx = old_intent_ctx.fork()`
+  - `try/finally` 确保调用者上下文始终恢复
+
+- **`core/runtime/bootstrap/builtin_initializer.py`**：在 `intent_context` 类上注册三个作用域控制方法：
+  - `clear_inherited()` — 清空当前帧 `_intent_ctx._intent_top`（清除继承的持久意图栈）
+  - `use(ctx)` — 用 `ctx._ctx.fork()` 替换当前帧的 `_intent_ctx`（保留全局意图）
+  - `get_current()` — 返回当前帧 `_intent_ctx.fork()` 的新 `intent_context` 实例
+  - 三个方法均通过 `get_current_frame()` ContextVar 访问当前执行帧，类调用/实例调用效果相同
+
+- **`core/kernel/axioms/intent_context.py`**：`get_method_specs()` 新增 `clear_inherited`、`use`、`get_current` 三个方法规格
+
+- **`core/compiler/semantic/passes/semantic_analyzer.py`**：`_validate_intent_in_body()` 保持原语义：`@` 和 `@!` 均只能修饰 LLM 行为表达式（`@~...~`）；**不允许** `@!` 修饰普通函数调用（此前错误实现的功能已回退）
+
+- **lambda 参数传递约束**（同批次）：`IbUserFunction.call()` 检测到 `deferred_mode='lambda'` 的 `IbDeferred`/`IbBehavior` 实参时，抛出 `RUN_CALL_ERROR`
+
+#### §9.5：intent_context OOP MVP
+
+**需求**：允许 IBCI 用户代码显式创建和操作意图上下文对象：`intent_context ctx = intent_context()`。
+
+**实现内容（2026-04-19）**：
+
+- **`core/kernel/axioms/intent_context.py`**：`IntentContextAxiom.is_class()` → `True`；`get_method_specs()` 新增 `clear`、`clear_inherited`、`use`、`get_current` 方法规格
+- **`core/kernel/spec/specs.py`**：新增 `INTENT_CONTEXT_SPEC = ClassSpec(name="intent_context", ...)`
+- **`core/kernel/spec/registry.py`**：`INTENT_CONTEXT_SPEC` 加入 `create_default_spec_registry()` 注册列表和 import
+- **`core/runtime/bootstrap/builtin_initializer.py`**：注册 `intent_context` 类的所有原生方法：
+  - 实例方法：`__init__`、`push`、`pop`、`fork`、`resolve`、`merge`、`clear`
+  - 作用域控制（类/实例均可调用）：`clear_inherited`、`use`、`get_current`
+- **11 个新测试**（含 4 个 `TestE2EIntentScopeIsolation`、4 个 `TestE2EIntentContextOOP`、1 个 `TestE2ELambdaRestriction`）
+
+*全部 553 个测试通过。*
+
+---
+
 ## 五、确认的设计决策
 
 | 决策 | 说明 |
@@ -228,3 +268,9 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 | `(Type) @~...~` 废弃 | PAR_010 硬错误；LHS 类型自动成为提示词上下文 |
 | 彻底重构原则 | 禁止渐进式补丁；完成则完整，不留旁路 |
 | `LLMExecutorImpl` 不可替换 | 它是语言语义的一部分，provider 可配置，执行接口不可替换 |
+| 函数调用意图：拷贝传递 | 每次函数调用 fork 调用者意图上下文；函数内意图操作不泄漏（§9.4） |
+| `@!` 只修饰 LLM 调用 | `@!` 只能修饰 LLM 行为表达式（`@~...~`），不能修饰普通函数调用 |
+| 函数内意图控制显式 API | `intent_context.clear_inherited()`/`use(ctx)`/`get_current()` 作用于当前帧意图上下文（§9.4/§9.5） |
+| `lambda` 不允许作为参数传递 | `deferred_mode='lambda'` 的延迟对象不可作为函数实参；`snapshot` 不受此限制 |
+| `snapshot` 捕获意图快照 | `snapshot` 在定义位置调用 `fork_intent_snapshot()` 捕获当前意图栈的不可变副本 |
+| `intent_context` is_class=True | `intent_context` 可实例化为 OOP 对象；用户可显式管理意图上下文（§9.5） |

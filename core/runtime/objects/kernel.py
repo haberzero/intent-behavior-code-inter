@@ -671,11 +671,34 @@ class IbUserFunction(IbFunction):
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
         from core.runtime.frame import get_current_frame as _get_frame
+        from core.runtime.objects.builtins import IbDeferred, IbBehavior
+        from core.base.diagnostics.codes import RUN_CALL_ERROR
         _frame = _get_frame()
         rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-        
+
+        # --- lambda 参数传递约束 ---
+        # lambda 延迟对象不允许作为函数参数传递（语义约束）。
+        # snapshot 不受此限制。
+        for arg in args:
+            if isinstance(arg, (IbDeferred, IbBehavior)) and getattr(arg, 'deferred_mode', None) == 'lambda':
+                raise InterpreterError(
+                    "TypeError: lambda 延迟对象不允许作为函数参数传递。"
+                    " 如需跨作用域传递延迟值，请使用 snapshot 关键字。",
+                    error_code=RUN_CALL_ERROR
+                )
+
+        # --- 意图栈作用域隔離（拷贝传递语义）---
+        # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
+        # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：
+        #   intent_context.clear_inherited()  — 清空继承来的持久意图栈
+        #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
+        from core.runtime.objects.intent_context import IbIntentContext
+        old_intent_ctx = rt_context._intent_ctx
+        child_ctx = old_intent_ctx.fork()
+        rt_context._intent_ctx = child_ctx
+
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
             # 获取目标模块的作用域
@@ -724,7 +747,6 @@ class IbUserFunction(IbFunction):
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    # print(f"[DEBUG] Defining LLM param: {arg_name} with UID: {sym_uid}")
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
@@ -737,7 +759,8 @@ class IbUserFunction(IbFunction):
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
-            # 恢复之前的模块上下文
+            # 恢复调用者的意图上下文和模块上下文
+            rt_context._intent_ctx = old_intent_ctx
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 
@@ -786,7 +809,14 @@ class IbLLMFunction(IbFunction):
         rt_context = self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-        
+
+        # --- 意图栈作用域隔离（拷贝传递语义）---
+        # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
+        # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
+        old_intent_ctx = rt_context._intent_ctx
+        child_ctx = old_intent_ctx.fork()
+        rt_context._intent_ctx = child_ctx
+
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
             # 获取目标模块的作用域
@@ -847,9 +877,11 @@ class IbLLMFunction(IbFunction):
             self._pending_call_intent = None
             self.context.pop_stack()
             rt_context.exit_scope()
-            # 恢复之前的模块上下文
+            # 恢复调用者的意图上下文和模块上下文
+            rt_context._intent_ctx = old_intent_ctx
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
+
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)

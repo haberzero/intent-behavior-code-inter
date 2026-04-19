@@ -163,44 +163,51 @@ class IbIntentContext:
         return False
 
     def _remove_by_tag(self, tag: str) -> bool:
-        """按标签移除意图（栈顶优先）"""
+        """按标签移除意图（栈顶优先）。
+
+        通过重建不含目标节点的新链表来实现移除，保证结构共享安全
+        （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
+        """
+        from core.runtime.interpreter.runtime_context import IntentNode
+        intents: List[Any] = []
+        found = False
         current = self._intent_top
-        previous = None
         while current:
-            intent = current.intent
-            if getattr(intent, 'tag', None) == tag:
-                if previous:
-                    previous.parent = current.parent
-                else:
-                    self._intent_top = current.parent
-                self._invalidate_cache_up_to_root(previous)
-                return True
-            previous = current
+            if not found and getattr(current.intent, 'tag', None) == tag:
+                found = True  # 跳过该节点（不加入 intents）
+            else:
+                intents.append(current.intent)
             current = current.parent
-        return False
+        if not found:
+            return False
+        # intents 是从栈顶到栈底的顺序，重建时从栈底向上压入
+        self._intent_top = None
+        for intent in reversed(intents):
+            self._intent_top = IntentNode(intent, self._intent_top)
+        return True
 
     def _remove_by_content(self, content: str) -> bool:
-        """按内容移除意图（栈顶优先）"""
-        current = self._intent_top
-        previous = None
-        while current:
-            intent = current.intent
-            if hasattr(intent, 'content') and getattr(intent, 'content', None) == content:
-                if previous:
-                    previous.parent = current.parent
-                else:
-                    self._intent_top = current.parent
-                self._invalidate_cache_up_to_root(previous)
-                return True
-            previous = current
-            current = current.parent
-        return False
+        """按内容移除意图（栈顶优先）。
 
-    def _invalidate_cache_up_to_root(self, node: Optional[Any]) -> None:
-        """清除从节点到根节点的所有缓存"""
-        while node:
-            node._cached_list = None
-            node = node.parent
+        通过重建不含目标节点的新链表来实现移除，保证结构共享安全
+        （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
+        """
+        from core.runtime.interpreter.runtime_context import IntentNode
+        intents: List[Any] = []
+        found = False
+        current = self._intent_top
+        while current:
+            if not found and hasattr(current.intent, 'content') and getattr(current.intent, 'content', None) == content:
+                found = True  # 跳过该节点
+            else:
+                intents.append(current.intent)
+            current = current.parent
+        if not found:
+            return False
+        self._intent_top = None
+        for intent in reversed(intents):
+            self._intent_top = IntentNode(intent, self._intent_top)
+        return True
 
     # ------------------------------------------------------------------ #
     # Convenience                                                          #

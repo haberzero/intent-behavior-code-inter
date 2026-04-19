@@ -262,3 +262,7 @@ ENUM_SPEC._axiom_name = "enum"
 # Intent 意图对象类型规格 — IbIntent 的公理化描述符
 INTENT_SPEC = ClassSpec(name="Intent", is_nullable=True, is_user_defined=False,
                         parent_name="Object")
+
+# intent_context 意图上下文类型规格 — IbIntentContext 的公理化描述符（is_class=True）
+INTENT_CONTEXT_SPEC = ClassSpec(name="intent_context", is_nullable=True, is_user_defined=False,
+                                parent_name="Object")

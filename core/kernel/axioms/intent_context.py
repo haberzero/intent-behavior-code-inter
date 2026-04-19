@@ -76,11 +76,23 @@ class IntentContextAxiom(TypeAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
+            # --- 实例方法（在 intent_context 实例上调用）---
             "fork": _m("fork", ret="intent_context"),
             "resolve": _m("resolve", ret="any"),
-            "push": _m("push", params=["any", "str"], ret="void"),
+            "push": _m("push", params=["any"], ret="void"),
             "pop": _m("pop", ret="any"),
             "merge": _m("merge", params=["intent_context"], ret="void"),
+            "clear": _m("clear", ret="void"),
+            # --- 作用域控制方法（也可在 intent_context 类型或实例上调用）---
+            # clear_inherited(): 清空当前函数作用域从调用者继承的持久意图栈。
+            #   函数体内调用后，后续 LLM 调用不再受调用者 @+ 意图影响。
+            "clear_inherited": _m("clear_inherited", ret="void"),
+            # use(ctx): 以给定 intent_context 实例的内容替换当前作用域的意图上下文。
+            #   调用者的意图栈被完全替换为 ctx 的 fork（拷贝，不共享引用）。
+            "use": _m("use", params=["intent_context"], ret="void"),
+            # get_current(): 返回当前作用域正在生效的意图上下文的快照（fork）。
+            #   返回值是一个新的 intent_context 实例，可供后续检查或保存。
+            "get_current": _m("get_current", ret="intent_context"),
         }
 
     def get_operators(self) -> Dict[str, str]:
@@ -93,7 +105,7 @@ class IntentContextAxiom(TypeAxiom):
         return other_name == "intent_context"
 
     def is_class(self) -> bool:
-        return False
+        return True
 
     def is_module(self) -> bool:
         return False
