@@ -66,6 +66,7 @@ class TokenType(Enum):
     PLUS = auto()
     MINUS = auto()
     STAR = auto()
+    STAR_STAR = auto()  # **（幂运算）
     SLASH = auto()
     PERCENT = auto()
 
@@ -73,6 +74,7 @@ class TokenType(Enum):
     PLUS_ASSIGN = auto()
     MINUS_ASSIGN = auto()
     STAR_ASSIGN = auto()
+    STAR_STAR_ASSIGN = auto()  # **=
     SLASH_ASSIGN = auto()
     PERCENT_ASSIGN = auto()
 

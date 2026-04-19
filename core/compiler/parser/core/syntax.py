@@ -18,9 +18,10 @@ class IbPrecedence(IntEnum):
     SHIFT = 9       # << >>
     TERM = 10        # + -
     FACTOR = 11     # * / %
-    UNARY = 12      # ! - +
-    CALL = 13       # . ()
-    PRIMARY = 14
+    POW = 12        # ** (幂运算，高于乘除，右结合)
+    UNARY = 13      # ! - + ~
+    CALL = 14       # . ()
+    PRIMARY = 15
 
 class IbParseRule:
     def __init__(self, prefix, infix, precedence):
@@ -41,6 +42,7 @@ OP_MAP: Dict[TokenType, str] = {
     TokenType.PLUS: "+",
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
+    TokenType.STAR_STAR: "**",
     TokenType.SLASH: "/",
     TokenType.PERCENT: "%",
 
@@ -71,6 +73,7 @@ COMPOUND_OP_MAP: Dict[TokenType, str] = {
     TokenType.PLUS_ASSIGN: "+=",
     TokenType.MINUS_ASSIGN: "-=",
     TokenType.STAR_ASSIGN: "*=",
+    TokenType.STAR_STAR_ASSIGN: "**=",
     TokenType.SLASH_ASSIGN: "/=",
     TokenType.PERCENT_ASSIGN: "%=",
 }

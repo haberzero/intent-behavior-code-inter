@@ -337,7 +337,10 @@ class CoreTokenScanner:
             else: tokens.append(self.scanner.create_token(TokenType.PLUS))
             return False
         if char == '*': 
-            if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.STAR_ASSIGN, "*="))
+            if self.scanner.match('*'):
+                if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.STAR_STAR_ASSIGN, "**="))
+                else: tokens.append(self.scanner.create_token(TokenType.STAR_STAR, "**"))
+            elif self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.STAR_ASSIGN, "*="))
             else: tokens.append(self.scanner.create_token(TokenType.STAR))
             return False
         if char == '/': 
