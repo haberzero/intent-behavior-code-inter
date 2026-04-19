@@ -101,6 +101,15 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
+### 3.3 BooleanCapability 接口 [PENDING]
+**任务**：在语义分析器的条件驱动 for 循环类型校验中（`semantic_analyzer.py` 约第 853 行），引入 `BooleanCapability` 接口，替代现有的 `is_dynamic() or is_behavior() or iter_type.name == "bool"` 特例判断。
+
+**当前状态**：该分支逻辑直接 `pass`，无实质约束；现有条件足以覆盖已知场景。
+
+**搁置原因**：不影响当前功能正确性；需要在 `core/kernel/axioms/protocols.py` 中新增 `BooleanCapability` 协议并在所有布尔类型 Axiom 中实现。
+
+---
+
 ## 四、语法功能
 
 ### 4.1 (str n) @~ ... ~ 语法完善 [PENDING]

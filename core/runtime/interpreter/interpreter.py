@@ -105,7 +105,7 @@ class Interpreter:
         pass
 
 
-    # TODO: 怀疑此处 instance_id: str = "main"  这一行有代码异味。MVP Demo 阶段暂不深究
+    # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险（见 PENDING_TASKS.md §10.3）
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,

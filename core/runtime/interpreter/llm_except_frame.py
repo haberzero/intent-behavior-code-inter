@@ -2,29 +2,36 @@
 LLM 异常处理现场帧 (LLMExceptFrame)。
 
 本模块定义了 LLMExceptFrame 类，用于管理 llmexcept/retry 机制的轻量级现场状态。
-相比传统的 try-except 异常处理方式，现场帧模式提供了更清晰、可维护的重试逻辑。
+当前实现采用"影子执行驱动模式"（非异常驱动）：LLM 不确定性通过 LLMResult.is_uncertain
+标志位传递，不再抛出任何异常。
 
-核心设计思想:
-1. 状态化: 重试相关的所有状态都集中在一个帧对象中
-2. 可恢复: 每次重试前保存完整现场，重试后可以恢复到之前的状态
-3. 可追踪: 记录重试次数、最后错误、LLM响应等调试信息
+核心设计思想（快照隔离模型）:
+1. 状态化:   重试相关的所有状态都集中在一个帧对象中
+2. 快照隔离: 每次 LLM 语句执行进入独立快照（vars/intent_ctx/loop_ctx），retry 前
+             自动 restore_snapshot()，保证 LLM 始终看到一致的输入状态
+3. 可追踪:   记录重试次数、最后 LLM 结果等调试信息
 
-使用方式:
-    # 保存现场
-    frame = runtime_context.save_llm_except_state(target_uid, node_type)
-    
-    # 尝试执行
-    try:
-        execute_target()
-    except LLMUncertaintyError:
-        frame.set_error(e)
-        if frame.increment_retry():
-            runtime_context.restore_llm_except_state()
-            continue  # 重试
-        else:
-            raise  # 超出重试次数
-    
-    # 清理
+使用方式（影子执行驱动，由 visit_IbLLMExceptionalStmt 主控）:
+    # 1. 保存快照（save_llm_except_state 内部调用 frame.save_context()）
+    frame = runtime_context.save_llm_except_state(target_uid, node_type, max_retry)
+
+    # 2. 驱动循环
+    while frame.should_continue_retrying():
+        frame.restore_snapshot(runtime_context)           # 恢复快照
+        runtime_context.set_last_llm_result(None)         # 清除上次信号
+        execution_context.visit(target_uid)               # 驱动 LLM 节点执行
+
+        result = runtime_context.get_last_llm_result()
+        if result is None or result.is_certain:
+            break                                          # 成功，commit 到目标变量
+
+        # LLM 返回不确定（is_uncertain=True）
+        for stmt_uid in body_uids:                         # 执行 llmexcept body
+            visit(stmt_uid)
+        if not frame.increment_retry():
+            break                                          # 重试耗尽
+
+    # 3. 清理
     runtime_context.pop_llm_except_frame()
 
 Author: IBCI Development Team
@@ -72,7 +79,6 @@ class LLMExceptFrame:
     saved_retry_hint: Optional[str] = None
     
     # 上下文快照
-    # TODO [优先级: 高]: 当前 saved_vars 是空实现，需要完善变量快照机制
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
     saved_intent_ctx: Any = field(default=None, repr=False)    # IbIntentContext 快照
     saved_loop_context: Optional[Dict[str, int]] = None
