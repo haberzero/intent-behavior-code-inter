@@ -80,15 +80,12 @@ class IDbgPlugin(IbPlugin):
                         info[k] = v
 
         # 3. 合并 LLMCallResult 状态
+        # §9.3: 优先从活跃的 llmexcept 帧读取（per-snapshot 权威来源），
+        # 无活跃帧时回退到共享字段（llmexcept 外部的普通 LLM 调用路径）。
         sr = self._state_reader()
         if sr:
-            res = sr.get_last_llm_result()
-
-            # 同样考虑 llmexcept 块内的特殊情况
-            if not res:
-                frames = sr.get_llm_except_frames()
-                if frames:
-                    res = frames[-1].last_result
+            frames = sr.get_llm_except_frames()
+            res = frames[-1].last_result if frames else sr.get_last_llm_result()
 
             if res:
                 info["result"] = {
@@ -209,14 +206,11 @@ class IDbgPlugin(IbPlugin):
         if not sr:
             return {}
 
-        res = sr.get_last_llm_result()
-
-        # [Result Mode Fix] 如果在 llmexcept 块内，当前的 last_llm_result 可能为了避免干扰赋值而被临时清空。
-        # 此时尝试从重试帧 (LLMExceptFrame) 中获取触发异常的原始结果。
-        if not res:
-            frames = sr.get_llm_except_frames()
-            if frames:
-                res = frames[-1].last_result
+        # §9.3: _last_llm_result 生命周期已缩短为"快照内通信"；
+        # llmexcept body 执行期间该字段为 None，结果存于 LLMExceptFrame.last_result。
+        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时回退到共享字段。
+        frames = sr.get_llm_except_frames()
+        res = frames[-1].last_result if frames else sr.get_last_llm_result()
 
         if not res:
             return {}
@@ -237,17 +231,26 @@ class IDbgPlugin(IbPlugin):
             return []
 
         frames = sr.get_llm_except_frames()
-        return [
-            {
+        result = []
+        for f in frames:
+            entry = {
                 "target": f.target_uid,
                 "type": f.node_type,
                 "retry": f.retry_count,
                 "max_retry": f.max_retry,
                 "is_fallback": f.is_in_fallback,
-                "last_llm_response": f.last_llm_response
             }
-            for f in frames
-        ]
+            # §9.3: last_result 是帧私有字段（per-snapshot），包含上次不确定调用的详情。
+            if f.last_result:
+                entry["last_result"] = {
+                    "is_certain": f.last_result.is_certain,
+                    "raw_response": (f.last_result.raw_response or "")[:120],
+                    "retry_hint": f.last_result.retry_hint
+                }
+            else:
+                entry["last_result"] = None
+            result.append(entry)
+        return result
 
     def protection_map(self) -> Dict[str, str]:
         """获取节点保护表 (Shadow Execution Side Table)"""

@@ -332,3 +332,81 @@ class TestCompileErrors:
         """Using an undefined variable should raise a compiler error."""
         with pytest.raises(CompilerError):
             engine.compile_string("int y = undefined_var + 1", silent=True)
+
+
+# ---------------------------------------------------------------------------
+# 12. llmexcept body read-only constraint (SEM_052 — §9.2)
+# ---------------------------------------------------------------------------
+
+class TestLLMExceptBodyReadOnly:
+    """
+    验证 §9.2 快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_052。
+    """
+
+    def test_assign_to_outer_var_raises(self, engine):
+        """llmexcept body 内直接对外部变量赋值应产生编译期错误 (SEM_052)。"""
+        code = """str result = @~ greet ~
+llmexcept:
+    result = "fallback"
+    retry "hint"
+"""
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string(code, silent=True)
+        codes = [d.code for d in exc_info.value.diagnostics]
+        assert "SEM_052" in codes
+
+    def test_redeclare_outer_var_raises(self, engine):
+        """llmexcept body 内用类型标注重声明外部变量也应产生 SEM_052。"""
+        code = """str result = @~ greet ~
+llmexcept:
+    str result = "fallback"
+    retry "hint"
+"""
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string(code, silent=True)
+        codes = [d.code for d in exc_info.value.diagnostics]
+        assert "SEM_052" in codes
+
+    def test_new_local_var_allowed(self, engine):
+        """llmexcept body 内定义全新的局部变量是允许的（不产生 SEM_052）。"""
+        code = """str result = @~ greet ~
+llmexcept:
+    str hint = "please try again with a clear answer"
+    retry "please try again"
+"""
+        # Should compile without error
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_retry_statement_allowed(self, engine):
+        """llmexcept body 内使用 retry 语句是允许的（不产生 SEM_052）。"""
+        code = """str result = @~ greet ~
+llmexcept:
+    retry "try again"
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_read_outer_var_allowed(self, engine):
+        """llmexcept body 内读取外部变量是允许的（不产生 SEM_052）。"""
+        code = """str context = "context info"
+str result = @~ greet ~
+llmexcept:
+    str local_info = context
+    retry "try again"
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_assign_to_outer_int_var_raises(self, engine):
+        """llmexcept body 内对整型外部变量写入也应产生 SEM_052。"""
+        code = """int counter = 0
+str result = @~ greet ~
+llmexcept:
+    counter = 1
+    retry "hint"
+"""
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string(code, silent=True)
+        codes = [d.code for d in exc_info.value.diagnostics]
+        assert "SEM_052" in codes

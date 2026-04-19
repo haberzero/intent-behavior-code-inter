@@ -48,6 +48,10 @@ class SemanticAnalyzer:
         self.current_class: Optional[ClassSpec] = None
         self.in_behavior_expr = False
 
+        # §9.2: llmexcept body 外部作用域快照（read-only 约束）
+        # 非 None 时表示当前正在分析 llmexcept body；值为进入 body 前的变量名集合。
+        self._llmexcept_outer_scope_names: Optional[frozenset] = None
+
         self.prelude = Prelude(registry=self.registry)
 
         self.side_table = SideTableManager()
@@ -375,13 +379,52 @@ class SemanticAnalyzer:
     def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
         """
         访问 llmexcept 语句。
-        
+
         IbLLMExceptionalStmt 在 Pass 3 被 _bind_llm_except 处理，
-        这里只需要访问 body 中的语句。
+        这里只需要访问 body 中的语句，并在访问期间启用
+        §9.2 read-only 约束：捕获进入 body 前的外部作用域变量名集合，
+        visit_IbAssign 在检测到对这些变量的赋值时发出 SEM_052。
+
+        由于 LocalSymbolCollector（Pass 2.5）会把 body 内声明的变量预扫描进
+        symbol_table.symbols，需排除 body 内直接声明（有类型标注）的变量，
+        以避免误报 body-local 变量的 SEM_052。
         """
-        for stmt in node.body:
-            self.visit(stmt)
+        # 收集 body 直接层级声明的变量名（body-local），以便从外部作用域集合中排除
+        body_declared_names = self._collect_llmexcept_body_declared_names(node.body)
+
+        saved_outer_scope = self._llmexcept_outer_scope_names
+        self._llmexcept_outer_scope_names = (
+            frozenset(self.symbol_table.symbols.keys()) - body_declared_names
+        )
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self._llmexcept_outer_scope_names = saved_outer_scope
         return self._void_desc
+
+    def _collect_llmexcept_body_declared_names(self, body: List[ast.IbStmt]) -> frozenset:
+        """
+        收集 llmexcept body 直接层级（非嵌套）中 **真正新声明** 的变量名。
+
+        判断依据：LocalSymbolCollector（Pass 2.5）在预扫描时，若某变量在 body 外已存在，
+        则 **不会** 覆盖其符号；只有在外部未定义时，才以 body 内的 IbAssign 节点作为
+        def_node 创建新符号。因此，若 ``existing.def_node is stmt``，该变量是
+        body-local 新声明；若 def_node 指向别处，则是对外部作用域变量的重声明。
+        """
+        result: set = set()
+        for stmt in body:
+            if isinstance(stmt, ast.IbAssign):
+                for target in stmt.targets:
+                    if (isinstance(target, ast.IbTypeAnnotatedExpr)
+                            and isinstance(target.target, ast.IbName)):
+                        name = target.target.id
+                        existing = self.symbol_table.symbols.get(name)
+                        # 仅当 LocalSymbolCollector 以本 stmt 为 def_node 预扫描时，
+                        # 才视为 body-local 新声明（否则是外部变量的重声明，属于违规）
+                        if existing is not None and existing.def_node is stmt:
+                            result.add(name)
+        return frozenset(result)
 
     def visit_IbRetry(self, node: ast.IbRetry):
         """访问 retry 语句"""
@@ -669,6 +712,19 @@ class SemanticAnalyzer:
                 continue
             
             if var_name:
+                # §9.2: llmexcept body read-only 约束
+                # 如果当前位于 llmexcept body 内，禁止对外部作用域变量的任何赋值（含重声明）。
+                # 允许：在 body 内声明全新的局部变量（该名称在外部作用域不存在）。
+                # 禁止：对快照进入前已存在的外部变量的一切写入（无论是否带类型标注）。
+                if (self._llmexcept_outer_scope_names is not None
+                        and var_name in self._llmexcept_outer_scope_names):
+                    self.error(
+                        f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
+                        f"writes to outer-scope variables break snapshot isolation. "
+                        f"Use 'retry \"hint\"' to provide correction guidance instead.",
+                        node, code="SEM_052"
+                    )
+
                 # 决议最终目标类型 (Inference Policy)
                 sym = self.symbol_table.symbols.get(var_name)
                 deferred_mode = getattr(node, 'deferred_mode', None)
