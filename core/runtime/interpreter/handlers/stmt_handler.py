@@ -321,8 +321,9 @@ class StmtHandler(BaseHandler):
         value = self.visit(node_data.get("value"))
         op_symbol = node_data.get("op")
         
-        # 使用全局归一化映射，支持完整运算符集（包含 % // 等）
-        op = AST_OP_MAP.get(op_symbol, op_symbol)
+        # 复合赋值运算符存储为 "+=" 形式，去掉末尾 "=" 得到基础运算符
+        base_op = op_symbol.rstrip('=') if op_symbol and op_symbol.endswith('=') else op_symbol
+        op = AST_OP_MAP.get(base_op, base_op)
         method = OP_MAPPING.get(op)
         
         if not method: raise self.report_error(f"Unsupported aug op: {op_symbol}", node_uid)

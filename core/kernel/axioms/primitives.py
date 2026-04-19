@@ -146,6 +146,11 @@ class IntAxiom(
                 return "int"
             if other_name == "float":
                 return "float"
+        if op == "**":
+            if other_name == "int":
+                return "int"
+            if other_name == "float":
+                return "float"
         if op in (">", ">=", "<", "<=", "==", "!="):
             return "bool"
         return None
@@ -216,6 +221,9 @@ class FloatAxiom(
                 return "float"
             return None
         if op in ("+", "-", "*", "/", "//", "%"):
+            if other_name in ("int", "float"):
+                return "float"
+        if op == "**":
             if other_name in ("int", "float"):
                 return "float"
         if op in (">", ">=", "<", "<=", "==", "!="):

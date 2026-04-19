@@ -63,7 +63,9 @@ class ExpressionComponent(BaseComponent):
         
         # Binary Operations
         self.register(TokenType.STAR, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.STAR_STAR, None, self.pow_binary, IbPrecedence.POW)
         self.register(TokenType.SLASH, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.FLOOR_DIV, None, self.binary, IbPrecedence.FACTOR)
         self.register(TokenType.PERCENT, None, self.binary, IbPrecedence.FACTOR)
         
         # Bitwise Operations
@@ -221,6 +223,13 @@ class ExpressionComponent(BaseComponent):
         op = OP_MAP.get(op_token.type, op_token.type.name)
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
+
+    def pow_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """右结合幂运算符 **：parse 右侧时使用比当前优先级低一级的 FACTOR，
+        使得 a ** b ** c 解析为 a ** (b ** c)。"""
+        op_token = self.stream.previous()
+        right = self.parse_precedence(IbPrecedence.FACTOR)
+        return self._loc(ast.IbBinOp(left=left, op="**", right=right), left, right)
 
     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
