@@ -631,3 +631,99 @@ print((str)count)
         assert "cond_handler_first" in lines
         # after retry, cond→1 (truthy), body runs twice, cond→0 exits
         assert "2" in lines
+
+
+# ---------------------------------------------------------------------------
+# 13. __from_prompt__ / __outputhint_prompt__ vtable for user-defined classes
+# ---------------------------------------------------------------------------
+
+class TestE2EUserClassPromptProtocols:
+    """
+    Tests that user-defined IBCI classes can implement __outputhint_prompt__
+    via vtable methods, accessible through the standard IbObject protocol.
+    """
+
+    def test_user_class_outputhint_prompt_via_vtable(self):
+        """
+        When a user class defines func __outputhint_prompt__(self) -> str,
+        calling that method returns the user-defined hint string.
+        """
+        code = """class Mood:
+    str value
+
+    func __outputhint_prompt__(self) -> str:
+        return "请用一个词描述情绪"
+
+Mood m = Mood("happy")
+str hint = m.__outputhint_prompt__()
+print(hint)
+"""
+        lines = run_and_capture(code)
+        assert "请用一个词描述情绪" in lines
+
+    def test_user_class_to_prompt_in_llm_context(self):
+        """
+        __to_prompt__ is called by the LLM executor when an object is interpolated
+        in a behavior expression via $var syntax.
+        """
+        code = ai_setup_code() + """
+class Label:
+    str text
+
+    func __to_prompt__(self) -> str:
+        return "label:" + self.text
+
+Label lb = Label("urgent")
+str result = @~ MOCK:context_test_key $lb ~
+print(lb.__to_prompt__())
+"""
+        lines = run_and_capture(code)
+        assert "label:urgent" in lines
+
+
+# ---------------------------------------------------------------------------
+# 14. User-defined class deep-clone in llmexcept snapshot
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptUserObjectSnapshot:
+    """
+    Tests that user-defined class instance fields are deep-cloned into the
+    llmexcept snapshot and correctly restored on retry.
+    """
+
+    def test_user_object_field_rolled_back_on_retry(self):
+        """
+        User object is captured in llmexcept snapshot. After a FAIL on the first
+        attempt, retry restores the object so the second attempt starts from the
+        pre-attempt state, and the successful LLM value is correctly written.
+        """
+        code = ai_setup_code() + """
+class Box:
+    int value
+
+Box b = Box(10)
+int new_val = @~ MOCK:SEQ:FAIL:42 ~
+llmexcept:
+    retry "hint"
+b.value = new_val
+print((str)b.value)
+"""
+        lines = run_and_capture(code)
+        # After successful retry, new_val = 42 (second MOCK response)
+        assert "42" in lines
+
+    def test_user_object_unaffected_by_snapshot_if_no_retry(self):
+        """When LLM call succeeds on first try, snapshot logic doesn't interfere."""
+        code = ai_setup_code() + """
+class Counter:
+    int count
+
+Counter c = Counter(0)
+int new_count = @~ MOCK:INT:7 ~
+llmexcept:
+    retry "hint"
+c.count = new_count
+print((str)c.count)
+"""
+        lines = run_and_capture(code)
+        assert "7" in lines

@@ -130,44 +130,99 @@ class LLMExceptFrame:
         """
         保存当前作用域的变量快照。
 
-        只保存可序列化的类型:
-        - IbNone, IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict
+        可快照的类型（通过深克隆保存）：
+        - IbNone, IbInteger, IbFloat, IbString（不可变原语，直接共享引用）
+        - IbList, IbTuple, IbDict（递归深克隆所有元素/值）
+        - 用户自定义 IbObject 实例（递归深克隆所有字段）
 
-        不保存的类型 (设计决定):
-        - IbNativeObject (Python 原生对象)
-        - IbFunction/IbNativeFunction (函数引用)
-        - IbBehavior (LLM 调用对象)
-        - 用户自定义对象
+        不可快照的类型（跳过，不参与恢复）：
+        - IbFunction / IbNativeFunction / IbBehavior（可调用对象）
+        - IbNativeObject（Python 原生封装）
+        - 其他无法深克隆的对象
         """
         self.saved_vars = {}
         scope = runtime_context.get_current_scope()
 
         for name, symbol in scope.get_all_symbols().items():
             val = symbol.value
-            if self._is_serializable(val):
-                self.saved_vars[name] = val
+            cloned = self._try_deep_clone(val)
+            if cloned is not None:
+                self.saved_vars[name] = cloned
+
+    def _try_deep_clone(self, val: 'IbObject', memo: Optional[Dict[int, 'IbObject']] = None) -> Optional['IbObject']:
+        """
+        尝试深克隆一个 IbObject 实例（用于 llmexcept 快照）。
+
+        对不可变原语（IbNone/IbInteger/IbFloat/IbString）返回原对象（无需复制）。
+        对容器（IbList/IbTuple/IbDict）递归克隆所有元素/值。
+        对用户自定义 IbObject 实例递归克隆所有字段。
+        对函数/行为/原生对象等不可克隆类型返回 None（调用方跳过该变量）。
+
+        memo 字典用于环形引用检测与去重。
+        """
+        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple
+        from core.runtime.objects.kernel import IbObject as KernelIbObject
+
+        if memo is None:
+            memo = {}
+
+        val_id = id(val)
+        if val_id in memo:
+            return memo[val_id]
+
+        # 不可变原语：引用共享即可
+        if isinstance(val, (IbNone, IbInteger, IbFloat, IbString)):
+            return val
+
+        # IbList / IbTuple：递归克隆 elements
+        if isinstance(val, (IbList, IbTuple)):
+            # 占位符：处理自引用列表
+            new_elements: list = []
+            placeholder = val.__class__(new_elements, val.ib_class)
+            memo[val_id] = placeholder
+            for elem in val.elements:
+                cloned_elem = self._try_deep_clone(elem, memo)
+                if cloned_elem is None:
+                    return None  # 容器中有无法克隆的元素，放弃整个容器
+                new_elements.append(cloned_elem)
+            if isinstance(val, IbTuple):
+                # IbTuple.elements 为 tuple（不可变），需重新赋值
+                placeholder.elements = tuple(new_elements)
+            return placeholder
+
+        # IbDict：递归克隆所有键值对
+        if isinstance(val, IbDict):
+            new_fields: dict = {}
+            placeholder_dict = IbDict(new_fields, val.ib_class)
+            memo[val_id] = placeholder_dict
+            for k, v in val.fields.items():
+                cloned_v = self._try_deep_clone(v, memo)
+                if cloned_v is None:
+                    return None  # 值无法克隆，放弃整个 dict
+                new_fields[k] = cloned_v
+            return placeholder_dict
+
+        # 用户自定义 IbObject 实例（type 严格为 KernelIbObject，不含内置子类）
+        if type(val) is KernelIbObject:
+            new_obj = KernelIbObject.__new__(KernelIbObject)
+            new_obj.ib_class = val.ib_class
+            new_obj.fields = {}
+            memo[val_id] = new_obj
+            for fname, fval in val.fields.items():
+                cloned_fval = self._try_deep_clone(fval, memo)
+                if cloned_fval is not None:
+                    new_obj.fields[fname] = cloned_fval
+                # 无法克隆的字段（如内嵌函数引用）直接跳过：恢复时保留原值
+            return new_obj
+
+        # 其他类型（函数、行为、原生对象等）：不可克隆
+        return None
 
     def _is_serializable(self, val: IbObject) -> bool:
         """
-        判断值是否可序列化。
-
-        可序列化的类型:
-        - IbNone, IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict
-
-        注意: IbList、IbTuple 和 IbDict 内部元素也必须是可序列化类型。
+        判断值是否可序列化（兼容旧接口，内部委托给 _try_deep_clone）。
         """
-        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple
-
-        if isinstance(val, (IbNone, IbInteger, IbFloat, IbString)):
-            return True
-        if isinstance(val, (IbList, IbTuple)):
-            return all(self._is_serializable(e) for e in val.elements)
-        if isinstance(val, IbDict):
-            return all(
-                self._is_serializable(k) and self._is_serializable(v)
-                for k, v in val.fields.items()
-            )
-        return False
+        return self._try_deep_clone(val) is not None
     
     def restore_context(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
@@ -199,11 +254,13 @@ class LLMExceptFrame:
         恢复变量快照。
 
         恢复策略:
-        - 遍历 saved_vars，尝试恢复到当前作用域
-        - 只恢复已存在的变量 (通过 assign 方法)
-        - 不存在的变量会被跳过
+        - 遍历 saved_vars（只含已深克隆的值），尝试恢复到当前作用域
+        - 只恢复已存在的变量（通过 assign 方法）
+        - 不存在的变量（如函数引用、行为对象）不参与快照，直接跳过
 
-        注意: 这种策略适合 for 循环场景，因为迭代变量在循环开始时已定义。
+        注意：saved_vars 中的值为深克隆副本，因此不会与恢复前的引用共享状态。
+        用户自定义对象的字段也会被完整回滚（前提是字段值本身可克隆）。
+        适合 for 循环场景，因为迭代变量在循环开始时已定义。
         """
         scope = runtime_context.get_current_scope()
 

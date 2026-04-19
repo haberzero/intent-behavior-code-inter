@@ -128,6 +128,28 @@ class ExprHandler(BaseHandler):
         attr = node_data.get("attr")
         return value.receive('__getattr__', [self.registry.box(attr)])
 
+    def visit_IbFilteredExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """带过滤条件的表达式 (e.g., while expr if filter)
+
+        语义：先求值主表达式；主表达式为假时短路返回假值；
+              否则再求值过滤条件，过滤条件为假时返回 IbNone（falsy）。
+              用于 while ... if ... 语法。
+
+        注意：for ... in items if filter 的过滤逻辑由 visit_IbFor 直接处理，
+              因为过滤条件引用循环变量，必须在目标变量赋值之后才能求值。
+        """
+        # 求值主表达式
+        result = self.visit(node_data.get("expr"))
+        # 短路：主表达式为假，直接返回（不求值 filter）
+        if not self.execution_context.is_truthy(result):
+            return result
+        # 求值过滤条件
+        filter_val = self.visit(node_data.get("filter"))
+        if not self.execution_context.is_truthy(filter_val):
+            # 过滤条件不满足：返回假值（IbNone 在 is_truthy 中为 false）
+            return self.registry.get_none()
+        return result
+
     def visit_IbSubscript(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """下标访问 -> __getitem__"""
         value = self.visit(node_data.get("value"))

@@ -252,31 +252,59 @@ class LLMExecutorImpl:
         return "".join(content_parts)
 
     def _get_llmoutput_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
-        """获取 __outputhint_prompt__ 用于注入到提示词"""
+        """获取 __outputhint_prompt__ 用于注入到提示词
+
+        查找顺序：
+        1. Axiom 内置类型：通过 meta_reg.get_llm_output_hint_cap(descriptor)
+        2. 用户自定义 IBCI 类：通过类 vtable 查找 __outputhint_prompt__ 方法
+        """
+        def _try_axiom_hint(type_name: str) -> Optional[str]:
+            meta_reg = self.registry.get_metadata_registry()
+            if meta_reg:
+                descriptor = meta_reg.resolve(type_name)
+                if descriptor:
+                    hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
+                    if hint_cap:
+                        return hint_cap.__outputhint_prompt__(descriptor)
+            return None
+
+        def _try_vtable_hint(type_name: str) -> Optional[str]:
+            """回退：通过用户类 vtable 查找 __outputhint_prompt__（类方法语义）"""
+            ib_class = self.registry.get_class(type_name)
+            if ib_class:
+                method = ib_class.lookup_method('__outputhint_prompt__')
+                if method:
+                    try:
+                        result = method.call(ib_class, [])
+                        hint = result.to_native() if hasattr(result, 'to_native') else str(result)
+                        return str(hint) if hint is not None else None
+                    except Exception as e:
+                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,
+                            f"vtable __outputhint_prompt__ failed for '{type_name}': {e}")
+            return None
+
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 type_name = returns_data.get("id", "str")
-                meta_reg = self.registry.get_metadata_registry()
-                if meta_reg:
-                    descriptor = meta_reg.resolve(type_name)
-                    if descriptor:
-                        hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
-                        if hint_cap:
-                            return hint_cap.__outputhint_prompt__(descriptor)
+                hint = _try_axiom_hint(type_name)
+                if hint is not None:
+                    return hint
+                hint = _try_vtable_hint(type_name)
+                if hint is not None:
+                    return hint
 
         node_to_type = execution_context.get_side_table("node_to_type", node_uid)
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                meta_reg = self.registry.get_metadata_registry()
-                if meta_reg:
-                    descriptor = meta_reg.resolve(type_name)
-                    if descriptor:
-                        hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
-                        if hint_cap:
-                            return hint_cap.__outputhint_prompt__(descriptor)
+                hint = _try_axiom_hint(type_name)
+                if hint is not None:
+                    return hint
+                hint = _try_vtable_hint(type_name)
+                if hint is not None:
+                    return hint
 
         return None
 
@@ -336,6 +364,39 @@ class LLMExecutorImpl:
                             raw_response=raw_res,
                             retry_hint=f"LLM 返回值类型转换失败：期望 {type_name}。详细: {str(e)}"
                         )
+
+        # Axiom 路径无匹配，尝试用户自定义类 vtable 的 __from_prompt__ 方法。
+        # 用户在 IBCI 类中定义 func __from_prompt__(str raw) -> (bool, any)，
+        # 由此实现自定义的 LLM 输出解析逻辑。
+        # 调用语义：类方法（以 IbClass 对象为 receiver，不需要 self 实例）。
+        ib_class = self.registry.get_class(type_name) if type_name else None
+        if ib_class:
+            method = ib_class.lookup_method('__from_prompt__')
+            if method:
+                try:
+                    raw_arg = self.registry.box(raw_res)
+                    result_obj = method.call(ib_class, [raw_arg])
+                    # 约定返回值为 tuple (bool, any)：
+                    #   elements[0] 为成功标志（truthy/falsy），
+                    #   elements[1] 为解析后的值（成功时）或错误提示（失败时）
+                    if hasattr(result_obj, 'elements') and len(result_obj.elements) >= 2:
+                        success_val = result_obj.elements[0]
+                        parsed_val = result_obj.elements[1]
+                        success_native = success_val.to_native() if hasattr(success_val, 'to_native') else bool(success_val)
+                        if success_native:
+                            return LLMResult.success_result(
+                                value=parsed_val,
+                                raw_response=raw_res
+                            )
+                        else:
+                            hint = parsed_val.to_native() if hasattr(parsed_val, 'to_native') else str(parsed_val)
+                            return LLMResult.uncertain_result(
+                                raw_response=raw_res,
+                                retry_hint=str(hint)
+                            )
+                except Exception as e:
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,
+                        f"vtable __from_prompt__ failed for '{type_name}': {e}")
 
         return LLMResult.success_result(
             value=self.registry.box(raw_res),

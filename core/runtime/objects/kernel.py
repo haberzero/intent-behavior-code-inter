@@ -130,7 +130,14 @@ class IbObject:
     def __outputhint_prompt__(self) -> str:
         """
         返回期望的 LLM 输出格式描述。
+        优先尝试通过 vtable 调用用户定义的 __outputhint_prompt__ 方法，
+        没有时退回到默认描述。
         """
+        try:
+            res = self.receive('__outputhint_prompt__', [])
+            return str(res.to_native()) if hasattr(res, 'to_native') else str(res)
+        except (AttributeError, InterpreterError):
+            pass
         return f"请返回一个 {self.ib_class.name} 类型的值"
 
     # ---  基础协议实现 ---

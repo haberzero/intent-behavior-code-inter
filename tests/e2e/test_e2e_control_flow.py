@@ -158,3 +158,91 @@ if run:
 """
         lines = run_and_capture(code)
         assert "3" in lines
+
+
+# ---------------------------------------------------------------------------
+# 5. Filter syntax (for ... if and while ... if)
+# ---------------------------------------------------------------------------
+
+class TestE2EFilterSyntax:
+    def test_for_in_if_filter_even(self):
+        """for int n in items if n % 2 == 0: should only process even numbers"""
+        code = """list numbers = [1, 2, 3, 4, 5, 6]
+for int n in numbers if n % 2 == 0:
+    print((str)n)
+"""
+        lines = run_and_capture(code)
+        assert "2" in lines
+        assert "4" in lines
+        assert "6" in lines
+        assert "1" not in lines
+        assert "3" not in lines
+        assert "5" not in lines
+
+    def test_for_in_if_filter_no_match(self):
+        """filter that matches nothing should produce no output"""
+        code = """list numbers = [1, 3, 5]
+for int n in numbers if n % 2 == 0:
+    print((str)n)
+print("done")
+"""
+        lines = run_and_capture(code)
+        assert "done" in lines
+        assert "1" not in lines
+        assert "3" not in lines
+        assert "5" not in lines
+
+    def test_for_in_if_filter_with_string_items(self):
+        """filter on string length"""
+        code = """list words = ["a", "bb", "ccc", "dd", "e"]
+for str w in words if w.find("c") >= 0:
+    print(w)
+"""
+        lines = run_and_capture(code)
+        assert "ccc" in lines
+        assert "a" not in lines
+
+    def test_while_if_filter_terminates(self):
+        """while i < 10 if i < 5: loop should stop when filter fails"""
+        code = """int i = 0
+while i < 10 if i < 5:
+    i = i + 1
+print((str)i)
+"""
+        lines = run_and_capture(code)
+        assert "5" in lines
+
+    def test_while_if_filter_condition_false_immediately(self):
+        """if filter is immediately false, loop body should never run"""
+        code = """int i = 0
+int counter = 0
+while i < 10 if i > 100:
+    counter = counter + 1
+print((str)counter)
+"""
+        lines = run_and_capture(code)
+        assert "0" in lines
+
+    def test_for_in_if_filter_all_match(self):
+        """filter that matches all elements"""
+        code = """list nums = [2, 4, 6]
+for int n in nums if n % 2 == 0:
+    print((str)n)
+"""
+        lines = run_and_capture(code)
+        assert "2" in lines
+        assert "4" in lines
+        assert "6" in lines
+
+    def test_for_in_if_filter_break_works(self):
+        """break inside a filtered for loop should work correctly"""
+        code = """list nums = [1, 2, 3, 4, 5, 6]
+for int n in nums if n % 2 == 0:
+    if n == 4:
+        break
+    print((str)n)
+"""
+        lines = run_and_capture(code)
+        assert "2" in lines
+        assert "4" not in lines
+        assert "6" not in lines
