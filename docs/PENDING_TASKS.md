@@ -146,29 +146,45 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 > MVP 已落地（2026-04-19）：`intent_context` 可实例化，支持 `push/pop/fork/resolve/merge/clear` 方法。以下为用户明确要求的、尚未实现的完整功能。
 
-### 5.1 将 intent_context 实例作为函数调用参数传递 [PENDING]
+### 5.1 将 intent_context 实例作为函数调用参数传递 [PARTIAL ✅ / PENDING]
 
-**需求**：用户在调用函数时，能够显式传递自定义的 `intent_context` 实例，使函数内所有 LLM 调用使用该实例所表示的意图上下文，而非调用者上下文的 fork。
+**已实现（2026-04-19）**：用户可以将 `intent_context` 实例作为**普通参数**传递给函数，然后在函数内部调用 `intent_context.use(ctx)` 将其设置为当前作用域的意图上下文：
 
-**设计思路**：
-- 函数声明中以特殊方式声明 `intent_context` 参数（或约定特殊参数名 `_intent_ctx`）
-- 调用方 `my_func(@ctx some_intent_ctx_var)` 或 `my_func(intent_ctx=my_ctx)` 语法
-- 运行时：若有显式 intent_context 实参，则替换为该实参所包装的 IbIntentContext，而非 fork
+```ibci
+func process_with_custom_ctx(intent_context ctx):
+    intent_context.use(ctx)    # 用传入的上下文替换当前作用域（fork 拷贝，不共享引用）
+    str r = @~ MOCK ~          # 只见 ctx 中的意图
+    return r
 
-**搁置原因**：需要编译器和语义分析器支持意图上下文参数的类型推断，运行时需要新增参数绑定路径。
+intent_context my_ctx = intent_context()
+my_ctx.push("简洁明了")
+str result = process_with_custom_ctx(my_ctx)
+```
+
+**待实现（未来工作）**：
+- **隐式绑定语法**：函数声明中以特殊方式声明 `intent_context` 参数，运行时自动将其绑定到当前帧的 `_intent_ctx`（而非用户手动调用 `use(ctx)`）
+- **语法糖**：调用方 `my_func(@ctx my_ctx_var)` 使 `my_ctx_var` 自动成为函数作用域的意图上下文（无需函数体内显式 `use()`）
+- **运行时绑定路径**：若有显式 `intent_context` 实参，则替换为该实参所包装的 `IbIntentContext`，而非 fork 调用者上下文
+
+**搁置原因**：需要编译器和语义分析器支持意图上下文参数的自动绑定；当前通过 `intent_context.use(ctx)` 已可手动实现等效效果，此任务为语法层的简化。
 
 ---
 
-### 5.2 函数内部屏蔽全局意图栈的精细控制 [PENDING]
+### 5.2 函数内部屏蔽全局意图栈的精细控制 [✅ COMPLETED — 2026-04-19]
 
-**需求**：允许函数在内部书写显式屏蔽语句，使其内部所有或特定位置的 LLM 调用不受外部传入意图栈影响。
+**已实现（2026-04-19）**：
+- `intent_context.clear_inherited()` — 清空当前作用域从调用者继承的持久意图栈（✅ 已实现）
+- `intent_context.use(ctx)` — 用指定 intent_context 实例替换当前作用域的意图上下文（✅ 已实现）
+- `intent_context.get_current()` — 获取当前作用域意图上下文的快照副本（✅ 已实现）
 
-**设计思路**：
-- 函数体内 `@! "..."` 已可修饰单次 LLM 调用（✅ 已实现）
-- 函数体首部写 `intent_context.clear_inherited()` 或 `shield intents` 关键字：清空从调用者 fork 来的持久栈，但保留本地新建的意图
-- 进阶：允许函数体内在任意位置以 `@clear_inherited` 语句重置继承的意图
+**函数调用粒度的屏蔽**：
+- 每次函数调用 fork 调用者意图上下文（拷贝传递），函数内操作不泄漏（✅ 已实现）
+- 函数体内写 `intent_context.clear_inherited()` 清空继承的意图栈（✅ 已实现）
+- **`@!` 不修饰函数调用**（明确的设计决策：`@!` 只修饰 LLM 行为表达式 `@~...~`）
 
-**搁置原因**：需要新语法关键字或新的 intent_context 方法；当前 `@!` 已能在函数调用粒度实现屏蔽，此任务为函数内粒度控制。
+**待实现（未来工作）**：
+- **编译期 `@` 约束在函数调用时的静态检查**：目前 fork 是运行时行为；未来可在语义分析阶段对 `@` 作用域提前标注
+- `@clear` 关键字语法糖（作为 `intent_context.clear_inherited()` 的简写，属于语法糖，非必需）
 
 ---
 

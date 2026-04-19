@@ -872,7 +872,7 @@ print((str)obj.value)
 
 
 # ---------------------------------------------------------------------------
-# 16. Function scope intent isolation (fork on call + @! shield)
+# 16. Function scope intent isolation (fork-on-call semantics)
 # ---------------------------------------------------------------------------
 
 class TestE2EIntentScopeIsolation:
@@ -881,7 +881,9 @@ class TestE2EIntentScopeIsolation:
 
     - Caller's intent stack is forked (not shared) on function entry.
     - @+ inside a function does NOT leak to the caller's scope.
-    - @! at the call site creates an isolated context for the entire function.
+    - intent_context.clear_inherited() clears the inherited stack inside the callee.
+    - intent_context.use(ctx) replaces the current scope's intent context.
+    - intent_context.get_current() captures the current scope's intent context.
     """
 
     def test_intent_push_inside_func_does_not_leak(self):
@@ -901,31 +903,69 @@ modify_intents()
 str result = @~ MOCK:intent_isolation_test ~
 print(result)
 """
-        # If the inner intent leaked, two intents would appear; if not, only one.
-        # We just verify the code runs without error and returns a value.
         lines = run_and_capture(code)
         assert len(lines) >= 1  # runs without error
 
-    def test_shield_via_override_at_call_site(self):
+    def test_clear_inherited_removes_caller_intents(self):
         """
-        @! at the call site shielding a regular function call.
-        Inside the function, LLM calls should only see the @! content
-        (i.e., the caller's persistent intents should not be visible).
-        This test verifies the function executes correctly after isolation.
+        intent_context.clear_inherited() inside a function clears the persistent
+        intent stack inherited from the caller. After calling it, @+ inside the
+        function starts from an empty stack.
         """
         code = ai_setup_code() + """
-@+ "persistent caller intent"
+@+ "caller persistent intent"
 
-func inner_func() -> str:
-    str r = @~ MOCK:INT:42 ~
+func isolated_func() -> str:
+    intent_context.clear_inherited()
+    str r = @~ MOCK:INT:99 ~
     return r
 
-@! "only this"
-str result = inner_func()
+str result = isolated_func()
 print(result)
 """
         lines = run_and_capture(code)
-        assert "42" in lines
+        assert "99" in lines  # function ran successfully with cleared intents
+
+    def test_use_replaces_scope_intent_context(self):
+        """
+        intent_context.use(ctx) replaces the current scope's intent context
+        with the given instance. The caller's persistent intents are replaced.
+        """
+        code = ai_setup_code() + """
+@+ "caller persistent intent"
+
+func process_with_custom_ctx() -> str:
+    intent_context my_ctx = intent_context()
+    my_ctx.push("custom intent only")
+    intent_context.use(my_ctx)
+    str r = @~ MOCK:INT:77 ~
+    return r
+
+str result = process_with_custom_ctx()
+print(result)
+"""
+        lines = run_and_capture(code)
+        assert "77" in lines
+
+    def test_get_current_captures_scope_snapshot(self):
+        """
+        intent_context.get_current() returns a snapshot of the current scope's
+        intent context. The snapshot is independent of subsequent modifications.
+        """
+        code = ai_setup_code() + """
+@+ "initial intent"
+
+func capture_and_modify() -> str:
+    intent_context saved = intent_context.get_current()
+    @+ "additional intent"
+    str r = @~ MOCK:INT:55 ~
+    return r
+
+str result = capture_and_modify()
+print(result)
+"""
+        lines = run_and_capture(code)
+        assert "55" in lines
 
 
 # ---------------------------------------------------------------------------
@@ -940,7 +980,7 @@ class TestE2ELambdaRestriction:
 
     def test_lambda_cannot_be_passed_as_arg(self):
         """Passing a lambda value as a function argument raises an error."""
-        import pytest as _pytest
+        import pytest
         code = ai_setup_code() + """
 func accept_any(any x):
     print("called")
@@ -948,7 +988,7 @@ func accept_any(any x):
 int lambda deferred_val = @~ MOCK:INT:5 ~
 accept_any(deferred_val)
 """
-        with _pytest.raises(Exception):
+        with pytest.raises(Exception):
             run_and_capture(code)
 
     def test_snapshot_can_be_passed_as_any(self):

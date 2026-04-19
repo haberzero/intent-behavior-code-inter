@@ -678,8 +678,9 @@ class IbUserFunction(IbFunction):
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
 
-        # --- 意图栈作用域隔离 ---
-        # lambda 值不允许作为函数参数传递（语义约束）
+        # --- lambda 参数传递约束 ---
+        # lambda 延迟对象不允许作为函数参数传递（语义约束）。
+        # snapshot 不受此限制。
         for arg in args:
             if isinstance(arg, (IbDeferred, IbBehavior)) and getattr(arg, 'deferred_mode', None) == 'lambda':
                 raise InterpreterError(
@@ -688,21 +689,14 @@ class IbUserFunction(IbFunction):
                     error_code=RUN_CALL_ERROR
                 )
 
-        # 意图上下文拷贝传递语义：
-        # - 若调用者已设置 @! 排他意图：消费该意图，创建隔离上下文（仅含 @! 内容作为持久意图）。
-        #   这使函数内所有 LLM 调用只看到 @! 内容，不受外部意图栈干扰（屏蔽语义）。
-        # - 普通调用：fork 调用者的意图上下文（拷贝传递），函数内的 @+/@- 不泄漏给调用者。
+        # --- 意图栈作用域隔離（拷贝传递语义）---
+        # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
+        # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：
+        #   intent_context.clear_inherited()  — 清空继承来的持久意图栈
+        #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
         from core.runtime.objects.intent_context import IbIntentContext
         old_intent_ctx = rt_context._intent_ctx
-        if old_intent_ctx.has_override():
-            # @! 修饰函数调用 → 隔离上下文
-            override_intent = old_intent_ctx.consume_override()
-            child_ctx = IbIntentContext(global_intents=old_intent_ctx.get_global_intents())
-            if override_intent is not None:
-                child_ctx.push(override_intent)
-        else:
-            # 普通调用 → fork（拷贝传递）
-            child_ctx = old_intent_ctx.fork()
+        child_ctx = old_intent_ctx.fork()
         rt_context._intent_ctx = child_ctx
 
         if self.module_name and self.module_name != old_module:
@@ -816,18 +810,11 @@ class IbLLMFunction(IbFunction):
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
 
-        # --- 意图栈作用域隔离（与 IbUserFunction 对称）---
-        # @! 修饰 LLM 函数调用 → 隔离上下文（所有内部 LLM 调用只见 @! 内容）。
-        # 普通调用 → fork（拷贝传递，函数内 @+/@- 不泄漏给调用者）。
-        from core.runtime.objects.intent_context import IbIntentContext
+        # --- 意图栈作用域隔离（拷贝传递语义）---
+        # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
+        # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
         old_intent_ctx = rt_context._intent_ctx
-        if old_intent_ctx.has_override():
-            override_intent = old_intent_ctx.consume_override()
-            child_ctx = IbIntentContext(global_intents=old_intent_ctx.get_global_intents())
-            if override_intent is not None:
-                child_ctx.push(override_intent)
-        else:
-            child_ctx = old_intent_ctx.fork()
+        child_ctx = old_intent_ctx.fork()
         rt_context._intent_ctx = child_ctx
 
         if self.module_name and self.module_name != old_module:

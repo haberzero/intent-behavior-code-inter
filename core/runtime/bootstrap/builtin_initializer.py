@@ -424,6 +424,82 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         _reg_native(intent_context_class, 'merge', _ic_merge, unbox=False)
         _reg_native(intent_context_class, 'clear', _ic_clear, unbox=False)
 
+        # --- 作用域控制方法（可在类上或实例上调用，均操作当前帧的意图上下文）---
+        #
+        # 设计说明：这三个方法不操作 receiver（实例字段 _ctx），
+        # 而是直接操作当前执行帧的 _intent_ctx（当前作用域生效的意图上下文）。
+        # 因此既可以写 intent_context.clear_inherited()，
+        # 也可以写 ctx.clear_inherited()，效果完全相同。
+        #
+        # 使用场景：函数内部显式屏蔽/替换从调用者继承来的意图上下文：
+        #
+        #   func process():
+        #       intent_context.clear_inherited()   # 清空从调用者继承的意图
+        #       @+ "只以 JSON 格式回复"
+        #       str r = @~ 处理数据 ~              # 只见本函数局部意图
+        #
+        #   func process_with_ctx(intent_context ctx):
+        #       intent_context.use(ctx)            # 用传入的上下文替换当前作用域
+        #       str r = @~ 处理数据 ~              # 只见 ctx 中的意图
+        #
+        # ContextVar 路径：通过 get_current_frame() 获取当前 RuntimeContextImpl，
+        # 与 IbUserFunction.call() 使用相同的机制，安全且协程/线程隔离。
+
+        def _ic_clear_inherited(receiver, *args):
+            """
+            intent_context.clear_inherited()
+            清空当前函数作用域从调用者继承的持久意图栈。
+            调用后，当前作用域的 @+ 意图（即 _intent_top 链表）被重置为空。
+            函数内部的 @+ 操作从干净的起点开始，不受调用者意图干扰。
+            """
+            from core.runtime.frame import get_current_frame
+            frame = get_current_frame()
+            if frame is not None and hasattr(frame, '_intent_ctx'):
+                frame._intent_ctx.set_intent_top(None)
+            return registry.get_none()
+
+        def _ic_use(receiver, *args):
+            """
+            intent_context.use(ctx)
+            以给定的 intent_context 实例替换当前作用域的意图上下文。
+            等效于：当前作用域的意图栈 = fork(ctx)（不是引用，是拷贝）。
+            调用后，当前作用域所有 LLM 调用看到的意图完全来自 ctx 的内容。
+            """
+            from core.runtime.frame import get_current_frame
+            frame = get_current_frame()
+            if frame is None or not hasattr(frame, '_intent_ctx'):
+                return registry.get_none()
+            if not args:
+                return registry.get_none()
+            other = args[0]
+            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
+            if other_ctx is not None:
+                # fork 保证不共享引用，当前作用域对意图的修改不回流到 ctx
+                forked = other_ctx.fork()
+                # 保留全局意图（全局意图由 Engine 注入，不属于调用者/被调用者关系）
+                forked._global_intents = frame._intent_ctx._global_intents
+                frame._intent_ctx = forked
+            return registry.get_none()
+
+        def _ic_get_current(receiver, *args):
+            """
+            intent_context.get_current()
+            返回当前作用域正在生效的意图上下文的快照（fork 副本）。
+            返回值是一个新的 intent_context 实例，可检查、可保存，不影响当前作用域。
+            """
+            from core.runtime.frame import get_current_frame
+            frame = get_current_frame()
+            new_instance = IbObject(intent_context_class)
+            if frame is not None and hasattr(frame, '_intent_ctx'):
+                new_instance.fields['_ctx'] = frame._intent_ctx.fork()
+            else:
+                new_instance.fields['_ctx'] = IbIntentContext()
+            return new_instance
+
+        _reg_native(intent_context_class, 'clear_inherited', _ic_clear_inherited, unbox=False)
+        _reg_native(intent_context_class, 'use', _ic_use, unbox=False)
+        _reg_native(intent_context_class, 'get_current', _ic_get_current, unbox=False)
+
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
 

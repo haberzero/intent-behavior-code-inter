@@ -25,9 +25,9 @@
 - ✅ **`for...if` / `while...if` 过滤语法**：`visit_IbFilteredExpr` 实现（while 场景）；`visit_IbFor` 拆包 `IbFilteredExpr`，foreach 场景在目标赋值后求值 filter（`continue` 语义），条件驱动 for 场景 filter 失败终止循环（`break` 语义，与 `while...if` 一致）
 - ✅ **llmexcept 快照深克隆（方案A）**：`LLMExceptFrame._save_vars_snapshot()` 使用 `_try_deep_clone()`，支持用户自定义 `IbObject` 实例的递归字段克隆；循环引用通过 `memo` dict 安全处理
 - ✅ **llmexcept 用户协议快照（方案B）**：`saved_protocol_states` 字段；`_save_vars_snapshot()` 检测 `__snapshot__` vtable 并优先使用；`_restore_vars()` 调用 `__restore__(state)` 原地恢复；方案B优先于方案A，失败时自动降级；方案C（JSON 序列化）已作为 VM 任务记录在 `docs/PENDING_TASKS_VM.md`
-- ✅ **函数调用意图隔离（§9.4）**：`IbUserFunction.call()` + `IbLLMFunction.call()` 实现 fork/restore；`@!` 修饰函数调用创建隔离子上下文；`@` 修饰限制仍为 LLM 行为表达式
+- ✅ **函数调用意图隔离（§9.4）**：`IbUserFunction.call()` + `IbLLMFunction.call()` 统一 fork/restore；`@!` 语义恢复为只修饰 LLM 行为表达式（不修饰函数调用）；`intent_context.clear_inherited()`/`use(ctx)`/`get_current()` 三个显式作用域控制 API 在 `builtin_initializer.py` 注册
 - ✅ **lambda 参数传递约束**：`deferred_mode='lambda'` 的延迟对象作为函数实参时运行时报错；`snapshot` 不受限
-- ✅ **intent_context OOP MVP（§9.5）**：`IntentContextAxiom.is_class=True`；`INTENT_CONTEXT_SPEC = ClassSpec(...)`；原生方法 `__init__/push/pop/fork/resolve/merge/clear` 注册；551 测试通过
+- ✅ **intent_context OOP MVP（§9.5）**：`IntentContextAxiom.is_class=True`；`INTENT_CONTEXT_SPEC = ClassSpec(...)`；实例方法 `__init__/push/pop/fork/resolve/merge/clear` + 作用域控制方法 `clear_inherited/use/get_current` 注册；553 测试通过
 
 ---
 

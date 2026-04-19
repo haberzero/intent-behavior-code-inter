@@ -1092,9 +1092,6 @@ class SemanticAnalyzer:
             stmt = body[i]
 
             if isinstance(stmt, ast.IbIntentAnnotation):
-                intent_info = getattr(stmt, 'intent', None)
-                is_override = intent_info.is_override if intent_info else False
-
                 if i == len(body) - 1:
                     self.issue_tracker.error(
                         f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
@@ -1103,48 +1100,17 @@ class SemanticAnalyzer:
                     )
                 else:
                     next_stmt = body[i + 1]
-                    if is_override:
-                        # @! 可以修饰 LLM 行为表达式，也可以修饰普通函数调用（屏蔽语义）
-                        if not self._stmt_contains_behavior(next_stmt) and not self._stmt_contains_call(next_stmt):
-                            self.issue_tracker.error(
-                                f"Intent annotation '@!' must be followed by a behavior expression '@~...~' "
-                                f"or a function call. "
-                                f"Following statement is '{next_stmt.__class__.__name__}' which contains neither.",
-                                stmt, code="SEM_060"
-                            )
-                    else:
-                        # @ 只能修饰 LLM 行为表达式
-                        if not self._stmt_contains_behavior(next_stmt):
-                            self.issue_tracker.error(
-                                f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
-                                f"Following statement is '{next_stmt.__class__.__name__}' which does not contain a behavior expression.",
-                                stmt, code="SEM_060"
-                            )
+                    if not self._stmt_contains_behavior(next_stmt):
+                        self.issue_tracker.error(
+                            f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
+                            f"Following statement is '{next_stmt.__class__.__name__}' which does not contain a behavior expression.",
+                            stmt, code="SEM_060"
+                        )
 
             elif isinstance(stmt, ast.IbLLMExceptionalStmt):
                 self._validate_intent_in_body(stmt.body)
 
             i += 1
-
-    def _stmt_contains_call(self, stmt: ast.IbStmt) -> bool:
-        """检查语句是否包含函数调用（用于 @! 修饰普通函数调用的语义验证）"""
-        if isinstance(stmt, ast.IbExprStmt):
-            return self._expr_contains_call(stmt.value)
-        elif isinstance(stmt, ast.IbAssign):
-            return self._expr_contains_call(stmt.value)
-        elif isinstance(stmt, ast.IbReturn) and stmt.value:
-            return self._expr_contains_call(stmt.value)
-        return False
-
-    def _expr_contains_call(self, expr: Optional[ast.IbExpr]) -> bool:
-        """检查表达式是否包含函数调用（非 LLM 行为表达式）"""
-        if expr is None:
-            return False
-        if isinstance(expr, ast.IbCall):
-            return True
-        if isinstance(expr, ast.IbTypeAnnotatedExpr):
-            return self._expr_contains_call(getattr(expr, 'value', None))
-        return False
 
     def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
         """检查语句是否包含行为表达式"""
