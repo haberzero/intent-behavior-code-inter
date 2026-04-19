@@ -76,8 +76,43 @@ ENTER SNAPSHOT
 
 1. ~~**SEM 约束（§9.2）**：llmexcept body 内向外部变量的写操作产生编译期错误~~ → **已完成** ✅
 2. ~~**`_last_llm_result` 迁移（§9.3）**：将该字段从 `RuntimeContextImpl`（共享）移入 `LLMExceptFrame`（per-snapshot）~~ → **已完成** ✅
-3. **编译器 DDG 分析**（Step 8a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
-4. **失败传播语义**：重试耗尽时从 `break+返回最后值` 改为抛出明确的 `LLMPermanentFailureError`，由外层处理器接管
+3. ~~**用户自定义对象深克隆（§9.4，方案A）**：`_try_deep_clone` 支持 plain IbObject 实例~~ → **已完成** ✅
+4. ~~**用户协议快照（§9.5，方案B）**：`__snapshot__` / `__restore__` vtable 协议~~ → **已完成** ✅
+5. **编译器 DDG 分析**（Step 8a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
+6. **失败传播语义**：重试耗尽时从 `break+返回最后值` 改为抛出明确的 `LLMPermanentFailureError`，由外层处理器接管
+
+---
+
+### llmexcept 快照策略三方案总结（已完成：方案A + 方案B）
+
+| 方案 | 机制 | 状态 | 适用场景 |
+|------|------|------|---------|
+| **方案A（自动深克隆）** | `LLMExceptFrame._try_deep_clone()` 递归克隆用户 IbObject 实例、IbList、IbTuple、IbDict；循环引用通过 `memo` dict 安全处理 | ✅ **已落地** | 通用场景；无需用户干预；含函数引用的字段自动跳过 |
+| **方案B（用户协议）** | 用户在 IBCI 类中定义 `func __snapshot__(self)` 和 `func __restore__(self, state)`；运行时在快照时调用前者，retry 前调用后者原地恢复 | ✅ **已落地** | 用户需要精确控制快照粒度（如只保存关键字段）；含不可克隆字段（如嵌套函数引用）的复杂对象 |
+| **方案C（外部序列化）** | 用户通过 `func __to_json__(self)` / `func __from_json__(str json_str)` 将对象状态序列化为 JSON；支持跨进程持久化快照 | ⏳ **VM 阶段任务** | 跨 retry 持久化；VM 级并发模型（Step 9）；支持分布式 LLM 调用恢复 |
+
+**方案B 用户代码约定**：
+```ibci
+class Config:
+    str mode
+    int attempts
+
+    # __snapshot__ 返回值可以是任意类型（int、str、tuple、dict 等）
+    func __snapshot__(self) -> int:
+        return self.attempts   # 只保存关键字段
+
+    # __restore__ 接收 __snapshot__ 的返回值，类型需与之一致
+    func __restore__(self, int saved):
+        self.attempts = saved
+```
+
+**优先级规则**：
+- 若类定义了 `__snapshot__`：方案B 生效；`__restore__` 未定义时为最佳努力（不报错，不恢复）
+- 若类未定义 `__snapshot__`：自动回退到方案A（`_try_deep_clone`）
+- `__snapshot__` 调用抛出异常时：自动降级到方案A
+
+**方案C 路线（待定）**：
+适合 VM 阶段的并发模型。当 LLM 调用在独立线程/协程中并发执行时，快照需要支持跨线程序列化与恢复，此时 JSON 快照（方案C）比内存克隆（方案A）或原地恢复（方案B）更适合。具体设计待 Step 9（VM CPS 调度循环）完成后再推进。
 
 ---
 

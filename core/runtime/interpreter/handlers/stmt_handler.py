@@ -433,19 +433,33 @@ class StmtHandler(BaseHandler):
         target_uid = node_data.get("target")
         iter_uid = node_data.get("iter")
         body = node_data.get("body", [])
-        
+
+        # 检查 iter 是否为 IbFilteredExpr（for ... in items if filter: 或
+        # 条件驱动 for @~...~ if filter:），提前拆包为 actual_iter_uid + filter_uid。
+        filter_uid = None
+        actual_iter_uid = iter_uid
+        iter_node_data = self.get_node_data(iter_uid)
+        if iter_node_data and iter_node_data.get("_type") == "IbFilteredExpr":
+            actual_iter_uid = iter_node_data.get("expr")
+            filter_uid = iter_node_data.get("filter")
+
         # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while True:
                 # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
                 # 污染下一次循环条件的检测。
                 self.runtime_context.set_last_llm_result(None)
-                condition = self.visit(iter_uid)
+                condition = self.visit(actual_iter_uid)
                 last_result = self.runtime_context.get_last_llm_result()
                 if last_result and not last_result.is_certain:
                     return self.registry.get_none()
                 if not self.execution_context.is_truthy(condition):
                     break
+                # 过滤条件（如果有）：不满足则终止循环（与 while...if 语义一致）
+                if filter_uid is not None:
+                    filter_val = self.visit(filter_uid)
+                    if not self.execution_context.is_truthy(filter_val):
+                        break
                 try:
                     for stmt_uid in body:
                         self.visit(stmt_uid)
@@ -456,7 +470,7 @@ class StmtHandler(BaseHandler):
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
-        iterable_obj = self.visit(iter_uid)
+        iterable_obj = self.visit(actual_iter_uid)
         # Check for iterable: has 'elements' list attribute (duck-typing over IIbList protocol)
         if hasattr(iterable_obj, 'elements') and isinstance(iterable_obj.elements, list):
             elements_obj = iterable_obj
@@ -491,10 +505,18 @@ class StmtHandler(BaseHandler):
                 top_frame.loop_resume[node_uid] = i
 
             self.runtime_context.push_loop_context(i, total)
-            
+
+            # 先赋值目标变量（过滤条件可能引用该变量，例如 for int n in items if n % 2 == 0）
             if target_uid:
                 self._assign_to_target(target_uid, item, define_only=True)
-            
+
+            # 过滤条件（如果有）：不满足则跳过当前元素，继续下一个
+            if filter_uid is not None:
+                filter_val = self.visit(filter_uid)
+                if not self.execution_context.is_truthy(filter_val):
+                    self.runtime_context.pop_loop_context()
+                    continue
+
             try:
                 for stmt_uid in body:
                     self.visit(stmt_uid)

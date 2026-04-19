@@ -59,7 +59,8 @@ class LLMExceptFrame:
         node_type: 节点类型 (如 "IbIf", "IbExprStmt" 等)
         retry_count: 当前重试次数
         max_retry: 最大重试次数 (默认 3)
-        saved_vars: 重试前保存的变量快照
+        saved_vars: 方案A深克隆变量快照 {变量名 → 克隆值}
+        saved_protocol_states: 方案B用户协议快照 {变量名 → (原始对象, __snapshot__()返回值)}
         saved_intent_ctx: 重试前保存的意图上下文快照（IbIntentContext.fork()）
         saved_loop_context: 重试前保存的循环上下文
         saved_retry_hint: 重试前保存的提示词
@@ -67,6 +68,14 @@ class LLMExceptFrame:
         last_llm_response: 最后一次 LLM 响应
         is_in_fallback: 是否正在执行 fallback 块
         should_retry: 是否应该继续重试
+
+    快照策略（方案B优先，方案A兜底）:
+        若用户 IBCI 类定义了 ``func __snapshot__(self)`` 和 ``func __restore__(self, state)``，
+        llmexcept 帧优先使用该协议：在进入帧时调用 ``__snapshot__()``，
+        在每次 retry 前调用 ``__restore__(state)`` 原地恢复对象状态。
+        用户对快照粒度拥有完全控制权（可以只保存关键字段）。
+
+        对于未定义 ``__snapshot__`` 的类型，自动使用方案A（``_try_deep_clone``）。
     """
     
     # 基本信息
@@ -89,6 +98,11 @@ class LLMExceptFrame:
     # restore_context() 故意 **不** 重置它，使得 retry 后 for 循环
     # 能从失败的迭代处继续，而不是从头开始。
     loop_resume: Dict[str, int] = field(default_factory=dict)
+
+    # 方案B：用户协议快照（__snapshot__ / __restore__）
+    # 映射: 变量名 → (原始对象引用, __snapshot__() 返回的状态对象)
+    # 当用户 IBCI 类定义了 func __snapshot__ / func __restore__，此字段优先于方案A（_try_deep_clone）。
+    saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
     # 错误信息
     last_error: Optional[Exception] = None
@@ -130,44 +144,122 @@ class LLMExceptFrame:
         """
         保存当前作用域的变量快照。
 
-        只保存可序列化的类型:
-        - IbNone, IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict
+        查找顺序（每个变量独立决策）：
 
-        不保存的类型 (设计决定):
-        - IbNativeObject (Python 原生对象)
-        - IbFunction/IbNativeFunction (函数引用)
-        - IbBehavior (LLM 调用对象)
-        - 用户自定义对象
+        **方案B（用户协议，优先）**：
+        - 目标类型为用户自定义 IbObject 且 vtable 中定义了 `func __snapshot__(self)`
+        - 调用 `obj.__snapshot__()` 获取状态对象（可以是任意类型）
+        - 存入 `saved_protocol_states`；`_restore_vars` 时调用 `__restore__(state)` 原地恢复
+        - 如果 `__snapshot__` 调用出现异常，自动降级到方案A
+
+        **方案A（自动深克隆，回退）**：
+        - IbNone, IbInteger, IbFloat, IbString（不可变原语，直接共享引用）
+        - IbList, IbTuple, IbDict（递归深克隆所有元素/值）
+        - 用户自定义 IbObject（递归克隆所有字段，无法克隆的字段跳过）
+
+        **不可快照的类型（跳过）**：
+        - IbFunction / IbNativeFunction / IbBehavior（可调用对象）
+        - IbNativeObject（Python 原生封装）
         """
         self.saved_vars = {}
+        self.saved_protocol_states = {}
         scope = runtime_context.get_current_scope()
+
+        from core.runtime.objects.kernel import IbObject as KernelIbObject
 
         for name, symbol in scope.get_all_symbols().items():
             val = symbol.value
-            if self._is_serializable(val):
-                self.saved_vars[name] = val
+
+            # 方案B 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
+            if type(val) is KernelIbObject:
+                snapshot_method = val.ib_class.lookup_method('__snapshot__')
+                if snapshot_method:
+                    try:
+                        state = snapshot_method.call(val, [])
+                        self.saved_protocol_states[name] = (val, state)
+                        continue  # 跳过方案A克隆
+                    except Exception:
+                        pass  # 协议调用失败，降级到方案A
+
+            # 方案A：自动深克隆
+            cloned = self._try_deep_clone(val)
+            if cloned is not None:
+                self.saved_vars[name] = cloned
+
+    def _try_deep_clone(self, val: 'IbObject', memo: Optional[Dict[int, 'IbObject']] = None) -> Optional['IbObject']:
+        """
+        尝试深克隆一个 IbObject 实例（用于 llmexcept 快照）。
+
+        对不可变原语（IbNone/IbInteger/IbFloat/IbString）返回原对象（无需复制）。
+        对容器（IbList/IbTuple/IbDict）递归克隆所有元素/值。
+        对用户自定义 IbObject 实例递归克隆所有字段。
+        对函数/行为/原生对象等不可克隆类型返回 None（调用方跳过该变量）。
+
+        memo 字典用于环形引用检测与去重。
+        """
+        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple
+        from core.runtime.objects.kernel import IbObject as KernelIbObject
+
+        if memo is None:
+            memo = {}
+
+        val_id = id(val)
+        if val_id in memo:
+            return memo[val_id]
+
+        # 不可变原语：引用共享即可
+        if isinstance(val, (IbNone, IbInteger, IbFloat, IbString)):
+            return val
+
+        # IbList / IbTuple：递归克隆 elements
+        if isinstance(val, (IbList, IbTuple)):
+            # 占位符：处理自引用列表
+            new_elements: list = []
+            placeholder = val.__class__(new_elements, val.ib_class)
+            memo[val_id] = placeholder
+            for elem in val.elements:
+                cloned_elem = self._try_deep_clone(elem, memo)
+                if cloned_elem is None:
+                    return None  # 容器中有无法克隆的元素，放弃整个容器
+                new_elements.append(cloned_elem)
+            if isinstance(val, IbTuple):
+                # IbTuple.elements 为 tuple（不可变），需重新赋值
+                placeholder.elements = tuple(new_elements)
+            return placeholder
+
+        # IbDict：递归克隆所有键值对
+        if isinstance(val, IbDict):
+            new_fields: dict = {}
+            placeholder_dict = IbDict(new_fields, val.ib_class)
+            memo[val_id] = placeholder_dict
+            for k, v in val.fields.items():
+                cloned_v = self._try_deep_clone(v, memo)
+                if cloned_v is None:
+                    return None  # 值无法克隆，放弃整个 dict
+                new_fields[k] = cloned_v
+            return placeholder_dict
+
+        # 用户自定义 IbObject 实例（type 严格为 KernelIbObject，不含内置子类）
+        if type(val) is KernelIbObject:
+            new_obj = KernelIbObject.__new__(KernelIbObject)
+            new_obj.ib_class = val.ib_class
+            new_obj.fields = {}
+            memo[val_id] = new_obj
+            for fname, fval in val.fields.items():
+                cloned_fval = self._try_deep_clone(fval, memo)
+                if cloned_fval is not None:
+                    new_obj.fields[fname] = cloned_fval
+                # 无法克隆的字段（如内嵌函数引用）直接跳过：恢复时保留原值
+            return new_obj
+
+        # 其他类型（函数、行为、原生对象等）：不可克隆
+        return None
 
     def _is_serializable(self, val: IbObject) -> bool:
         """
-        判断值是否可序列化。
-
-        可序列化的类型:
-        - IbNone, IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict
-
-        注意: IbList、IbTuple 和 IbDict 内部元素也必须是可序列化类型。
+        判断值是否可序列化（兼容旧接口，内部委托给 _try_deep_clone）。
         """
-        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple
-
-        if isinstance(val, (IbNone, IbInteger, IbFloat, IbString)):
-            return True
-        if isinstance(val, (IbList, IbTuple)):
-            return all(self._is_serializable(e) for e in val.elements)
-        if isinstance(val, IbDict):
-            return all(
-                self._is_serializable(k) and self._is_serializable(v)
-                for k, v in val.fields.items()
-            )
-        return False
+        return self._try_deep_clone(val) is not None
     
     def restore_context(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
@@ -198,15 +290,37 @@ class LLMExceptFrame:
         """
         恢复变量快照。
 
-        恢复策略:
-        - 遍历 saved_vars，尝试恢复到当前作用域
-        - 只恢复已存在的变量 (通过 assign 方法)
-        - 不存在的变量会被跳过
+        恢复顺序：
 
-        注意: 这种策略适合 for 循环场景，因为迭代变量在循环开始时已定义。
+        **方案B（用户协议，原地恢复）**：
+        - 遍历 `saved_protocol_states`，找到对应变量的原始对象引用
+        - 若变量槽已被替换为其他对象，先将变量重新指向原始对象
+        - 调用 `original_obj.__restore__(saved_state)` 原地恢复字段状态
+        - 若 `__restore__` 未定义或调用失败，保留当前状态（最佳努力语义）
+
+        **方案A（替换绑定）**：
+        - 遍历 `saved_vars`（深克隆副本），将变量槽替换为克隆副本
+        - 只恢复已存在的变量（通过 assign）；不存在的变量直接跳过
+
+        注意：`loop_resume` 字段故意不在此处重置，以便 retry 后 for 循环从断点处继续。
         """
         scope = runtime_context.get_current_scope()
 
+        # 方案B：通过 __restore__ 协议原地恢复用户对象
+        for name, (original_obj, saved_state) in self.saved_protocol_states.items():
+            symbol = scope.get_symbol(name)
+            if symbol and not symbol.is_const:
+                restore_method = original_obj.ib_class.lookup_method('__restore__')
+                if restore_method:
+                    # 如果变量槽被替换为其他对象，先恢复原始对象引用
+                    if symbol.value is not original_obj:
+                        scope.assign(name, original_obj)
+                    try:
+                        restore_method.call(original_obj, [saved_state])
+                    except Exception:
+                        pass  # 协议调用失败：保留当前状态（最佳努力）
+
+        # 方案A：将变量绑定替换为深克隆副本
         for name, val in self.saved_vars.items():
             symbol = scope.get_symbol(name)
             if symbol and not symbol.is_const:

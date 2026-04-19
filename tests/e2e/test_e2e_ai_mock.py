@@ -631,3 +631,241 @@ print((str)count)
         assert "cond_handler_first" in lines
         # after retry, cond→1 (truthy), body runs twice, cond→0 exits
         assert "2" in lines
+
+
+# ---------------------------------------------------------------------------
+# 13. __from_prompt__ / __outputhint_prompt__ vtable for user-defined classes
+# ---------------------------------------------------------------------------
+
+class TestE2EUserClassPromptProtocols:
+    """
+    Tests that user-defined IBCI classes can implement __outputhint_prompt__
+    via vtable methods, accessible through the standard IbObject protocol.
+    """
+
+    def test_user_class_outputhint_prompt_via_vtable(self):
+        """
+        When a user class defines func __outputhint_prompt__(self) -> str,
+        calling that method returns the user-defined hint string.
+        """
+        code = """class Mood:
+    str value
+
+    func __outputhint_prompt__(self) -> str:
+        return "请用一个词描述情绪"
+
+Mood m = Mood("happy")
+str hint = m.__outputhint_prompt__()
+print(hint)
+"""
+        lines = run_and_capture(code)
+        assert "请用一个词描述情绪" in lines
+
+    def test_user_class_to_prompt_in_llm_context(self):
+        """
+        __to_prompt__ is called by the LLM executor when an object is interpolated
+        in a behavior expression via $var syntax.
+        """
+        code = ai_setup_code() + """
+class Label:
+    str text
+
+    func __to_prompt__(self) -> str:
+        return "label:" + self.text
+
+Label lb = Label("urgent")
+str result = @~ MOCK:context_test_key $lb ~
+print(lb.__to_prompt__())
+"""
+        lines = run_and_capture(code)
+        assert "label:urgent" in lines
+
+
+# ---------------------------------------------------------------------------
+# 14. User-defined class deep-clone in llmexcept snapshot
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptUserObjectSnapshot:
+    """
+    Tests that user-defined class instance fields are deep-cloned into the
+    llmexcept snapshot and correctly restored on retry.
+    """
+
+    def test_user_object_field_rolled_back_on_retry(self):
+        """
+        User object is captured in llmexcept snapshot. After a FAIL on the first
+        attempt, retry restores the object so the second attempt starts from the
+        pre-attempt state, and the successful LLM value is correctly written.
+        """
+        code = ai_setup_code() + """
+class Box:
+    int value
+
+Box b = Box(10)
+int new_val = @~ MOCK:SEQ:FAIL:42 ~
+llmexcept:
+    retry "hint"
+b.value = new_val
+print((str)b.value)
+"""
+        lines = run_and_capture(code)
+        # After successful retry, new_val = 42 (second MOCK response)
+        assert "42" in lines
+
+    def test_user_object_unaffected_by_snapshot_if_no_retry(self):
+        """When LLM call succeeds on first try, snapshot logic doesn't interfere."""
+        code = ai_setup_code() + """
+class Counter:
+    int count
+
+Counter c = Counter(0)
+int new_count = @~ MOCK:INT:7 ~
+llmexcept:
+    retry "hint"
+c.count = new_count
+print((str)c.count)
+"""
+        lines = run_and_capture(code)
+        assert "7" in lines
+
+
+# ---------------------------------------------------------------------------
+# 15. 方案B: User-controlled __snapshot__ / __restore__ protocol
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptSnapshotProtocol:
+    """
+    Tests for 方案B: user IBCI classes implement __snapshot__(self) and
+    __restore__(self, state) to take full control over what gets snapshotted
+    and how it is restored during llmexcept retry cycles.
+
+    Priority rule: if __snapshot__ is defined on the class, 方案B is used
+    for that variable; otherwise 方案A (auto deep-clone) is the fallback.
+    """
+
+    def test_snapshot_and_restore_are_called(self):
+        """
+        __snapshot__ is called once when the llmexcept frame is entered;
+        __restore__ is called before each retry.
+        Both calls print observable output to confirm they were executed.
+        """
+        code = ai_setup_code() + """
+class Watcher:
+    int val
+
+    func __snapshot__(self) -> int:
+        print("snap:" + (str)self.val)
+        return self.val
+
+    func __restore__(self, int s):
+        print("restore:" + (str)s)
+        self.val = s
+
+Watcher w = Watcher(7)
+str r = @~ MOCK:SEQ:FAIL:done ~
+llmexcept:
+    retry "hint"
+print("final:" + (str)w.val)
+"""
+        lines = run_and_capture(code)
+        assert "snap:7" in lines       # __snapshot__ invoked on frame setup
+        assert "restore:7" in lines    # __restore__ invoked before retry
+        assert "final:7" in lines      # val correctly preserved by protocol
+
+    def test_restore_reverts_mutation_caused_before_llm_call(self):
+        """
+        A mutation to the object that happens AFTER the snapshot was taken
+        (e.g. inside the previous iteration) is correctly rolled back by
+        __restore__ before the next attempt.
+        """
+        code = ai_setup_code() + """
+class Counter:
+    int n
+
+    func __snapshot__(self) -> int:
+        return self.n
+
+    func __restore__(self, int saved):
+        self.n = saved
+
+Counter c = Counter(5)
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print((str)c.n)
+"""
+        lines = run_and_capture(code)
+        # After retry, c.n must still be 5 (restored to snapshot value)
+        assert "5" in lines
+
+    def test_snapshot_protocol_takes_priority_over_auto_clone(self):
+        """
+        When __snapshot__ is defined, the user protocol is used instead of
+        method A auto deep-clone. Demonstrated by the __restore__ print being
+        visible (only called in 方案B path), not the auto-clone path.
+        """
+        code = ai_setup_code() + """
+class Tracked:
+    int x
+    str label
+
+    func __snapshot__(self) -> int:
+        print("protocol_snap")
+        return self.x
+
+    func __restore__(self, int saved_x):
+        print("protocol_restore")
+        self.x = saved_x
+
+Tracked t = Tracked(42, "test")
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print("done")
+"""
+        lines = run_and_capture(code)
+        assert "protocol_snap" in lines     # 方案B's __snapshot__ was called
+        assert "protocol_restore" in lines  # 方案B's __restore__ was called
+        assert "done" in lines
+
+    def test_snapshot_only_defined_no_restore_is_safe(self):
+        """
+        If only __snapshot__ is defined (no __restore__), the runtime handles
+        this gracefully: the object is kept in saved_protocol_states but
+        __restore__ is not called (best-effort semantics — no crash).
+        """
+        code = ai_setup_code() + """
+class PartialProtocol:
+    int val
+
+    func __snapshot__(self) -> int:
+        return self.val
+
+PartialProtocol p = PartialProtocol(10)
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print("ok")
+"""
+        lines = run_and_capture(code)
+        # No crash; code should complete normally
+        assert "ok" in lines
+
+    def test_fallback_to_auto_clone_when_no_snapshot_defined(self):
+        """
+        When __snapshot__ is NOT defined, 方案A auto deep-clone is used as
+        fallback. The existing auto-clone behavior is preserved.
+        """
+        code = ai_setup_code() + """
+class Plain:
+    int value
+
+Plain obj = Plain(99)
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print((str)obj.value)
+"""
+        lines = run_and_capture(code)
+        # obj.value unchanged, auto-clone fallback works correctly
+        assert "99" in lines

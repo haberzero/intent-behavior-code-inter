@@ -138,3 +138,74 @@ print((str)b.count)
         lines = run_and_capture(code)
         assert "0" in lines
         assert "10" in lines
+
+
+# ---------------------------------------------------------------------------
+# 4. Explicit __init__ constructor
+# ---------------------------------------------------------------------------
+
+class TestE2EExplicitInit:
+    def test_explicit_init_is_called(self):
+        """func __init__ is called as constructor and can override field values"""
+        code = """class Greeter:
+    str name
+
+    func __init__(self, str n):
+        self.name = "Hello, " + n
+
+Greeter g = Greeter("World")
+print(g.name)
+"""
+        lines = run_and_capture(code)
+        assert "Hello, World" in lines
+
+    def test_auto_init_positional(self):
+        """Auto-generated __init__ assigns positional args to declaration-only fields"""
+        code = """class Point:
+    int x
+    int y
+
+Point p = Point(3, 7)
+print((str)p.x)
+print((str)p.y)
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
+        assert "7" in lines
+
+    def test_explicit_init_overrides_auto_init(self):
+        """When func __init__ is defined, it takes complete control; auto-init is NOT generated"""
+        code = """class Pair:
+    int a
+    int b
+
+    func __init__(self, int x, int y):
+        self.a = x * 2
+        self.b = y * 2
+
+Pair p = Pair(3, 4)
+print((str)p.a)
+print((str)p.b)
+"""
+        lines = run_and_capture(code)
+        assert "6" in lines
+        assert "8" in lines
+
+    def test_plain_func_init_is_not_constructor(self):
+        """func init (without __) is a regular method, not the constructor"""
+        code = """class Box:
+    int value
+
+    func init(self, int v):
+        self.value = 999
+
+Box b = Box(42)
+print((str)b.value)
+b.init(1)
+print((str)b.value)
+"""
+        lines = run_and_capture(code)
+        # constructor used auto-init (42), not func init
+        assert "42" in lines
+        # explicit call to init() method worked
+        assert "999" in lines

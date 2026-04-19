@@ -708,12 +708,14 @@ str zh_summary = summarize(long_text, "Chinese")
 
 ### 定义类
 
+IBCI 的构造函数名称为 `__init__`（注意双下划线），这与 Python 一致。
+
 ```ibci
 class Person:
     str name
     int age
 
-    func init(str name, int age):
+    func __init__(self, str name, int age):
         self.name = name
         self.age = age
 
@@ -727,6 +729,23 @@ class Person:
     请描述这个人：姓名 $self.name，年龄 $self.age
     llmend
 ```
+
+> **注意**：`func init(...)` 是一个普通方法（名为 `init`），**不是**构造函数。构造函数必须命名为 `func __init__(...)`。
+
+### 自动生成构造函数
+
+如果类体中声明了**无默认值的字段**（如 `str name`、`int age`），且未定义 `func __init__`，IBCI 运行时会自动生成一个按声明顺序接收位置参数的构造函数：
+
+```ibci
+class Point:
+    int x
+    int y
+    # 无需手写 __init__，自动生成 __init__(self, int x, int y)
+
+Point p = Point(3, 7)   # x=3, y=7
+```
+
+如果类中所有字段都有默认值，则构造函数自动生成为无参形式（`Point()`）。
 
 ### 创建实例
 
@@ -742,7 +761,7 @@ str bio = alice.describe() # LLM 生成人物描述
 class Animal:
     str name
 
-    func init(str name):
+    func __init__(self, str name):
         self.name = name
 
     func speak() -> str:
