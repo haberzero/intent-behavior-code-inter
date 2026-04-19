@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-18（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；517 个测试通过）
+> **最后更新**：2026-04-19（IntentAxiom 落地；llmexcept 并发语义决议；517 个测试通过）
 
 ---
 
@@ -26,12 +26,15 @@
 
 ## 二、公理化相关
 
-### 2.1 Intent 完整公理化 [VISION / FUTURE]
-**任务**：创建 `IntentAxiom`，将 Intent 的行为约束纳入公理体系（`is_class()=True`，完整的 vtable）。
+### 2.1 Intent 完整公理化 [✅ COMPLETED — 2026-04-19]
 
-**当前状态**：Intent 通过 `Bootstrapper.initialize()` 注册为内置 `ClassSpec`；`IbIntent` 是真正的 `IbObject` 子类；`IntentStack` 已有完整的原生方法注册（`push`/`pop`/`remove`/`clear`）。专用 `IntentAxiom` 是长期目标，不阻塞当前功能。
-
-**工程量**：预估 3-5 人天。
+**完成内容**：
+- 新建 `core/kernel/axioms/intent.py`：`IntentAxiom`（`is_class()=True`，完整 vtable 声明）
+- `IbIntent` 添加 `@register_ib_type("Intent")` 装饰器及三个公共方法：`get_content()`、`get_tag()`、`get_mode()`
+- `register_core_axioms()` 注册 `IntentAxiom()`
+- `INTENT_SPEC = ClassSpec(name="Intent", ...)` 加入 `specs.py` 并注册到 `create_default_spec_registry()`，使 `_bootstrap_axiom_methods()` 在 `SpecRegistry` 初始化阶段即填充 `Intent` 成员表
+- `builtin_initializer.py` 显式导入 `IbIntent`，确保 `@register_ib_type("Intent")` 在公理自动化绑定循环之前执行
+- 517 个测试全部通过
 
 ---
 

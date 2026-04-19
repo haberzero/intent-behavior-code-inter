@@ -258,3 +258,7 @@ MODULE_SPEC       = ModuleSpec(name="module", is_nullable=False, is_user_defined
 ENUM_SPEC = ClassSpec(name="Enum", is_nullable=True, is_user_defined=False,
                       parent_name="Object")
 ENUM_SPEC._axiom_name = "enum"
+
+# Intent 意图对象类型规格 — IbIntent 的公理化描述符
+INTENT_SPEC = ClassSpec(name="Intent", is_nullable=True, is_user_defined=False,
+                        parent_name="Object")
