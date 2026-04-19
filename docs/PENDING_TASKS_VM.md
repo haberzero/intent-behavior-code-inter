@@ -1,42 +1,83 @@
 # IBCI VM 架构长期设想与路线图
 
 > 本文档记录 IBCI 运行时向"真正虚拟机（VM）"演进的长期架构设想。  
-> 内容来源：2026-04-18 架构讨论（VM建模 / 三层并发建模 / 意图栈公理化 / 实例模型边界）；2026-04-19 补充 llmexcept 并发语义决议。  
+> 内容来源：2026-04-18 架构讨论（VM建模 / 三层并发建模 / 意图栈公理化 / 实例模型边界）；2026-04-19 补充 llmexcept 并发语义决议；2026-04-19 升级为快照隔离模型（更优的语义设计）。  
 > 这里记录的是**设想和目标**，不是当前任务，不阻塞近期工作。  
 > 近期任务见 `docs/NEXT_STEPS.md`；已完成工作见 `docs/COMPLETED.md`。
 
 ---
 
-## ✅ 已决议：llmexcept / retry 的并发语义
+## ✅ 已决议：llmexcept 快照隔离模型
 
-> **状态：三个危机已全部通过语言规范决策和已有代码分析消解。结论记录如下，不再是悬案。**
+> **状态：已从初期防守性"dispatch_eligible=false 限制"演进为更优的"快照隔离模型"。结论记录如下，不再是悬案。**
 
-### 结论总结
+### 模型概述：快照隔离（Snapshot Isolation）
 
-**核心语义决策（语言规范层面）**：
+llmexcept 的核心语义是**快照隔离模型**：
 
-> **`llmexcept` 只保护 `dispatch_eligible=false` 的单一 LLM 调用节点；retry 语义就是"重新 visit 同一个 target_uid"。**
+> **每一个 LLM 语句执行，无论串行还是并行，本身都在一个独立的临时快照状态中运行。进入快照时与外部环境隔离；成功则将结果 commit 到目标变量（单赋值）；失败无法自愈则向外层传播异常。llmexcept 是附着于对应 LLM 节点的"快照内错误处理策略"，仅能读取外部变量（只读），仅能写入 retry-scoped 特殊变量（如 `retry_hint`）。**
 
-这一决策消解了全部三个危机：
+这一模型与并发无关——并发安全性是快照语义的自然推论，而非外加约束。
+
+对比旧方案（初期防守决策）与新模型：
+
+| 维度 | 旧决策（dispatch_eligible=false 限制） | 新模型（快照隔离） |
+|------|--------------------------------------|-----------------|
+| **出发点** | 防守性：避免并发场景的竞争条件 | 语义设计：定义正确的执行语义 |
+| **适用范围** | 仅串行节点（dispatch_eligible=false） | 所有 LLM 节点（快照隔离保证安全） |
+| **用户感知** | 用户须理解 dispatch_eligible 概念 | 用户只需知道"llmexcept 保护对应 LLM 语句" |
+| **并发安全** | 通过限制使用范围实现 | 通过语义正确性自然保证 |
+
+### 快照内的变量访问约束
+
+```
+LLM 语句执行流程（快照模型）:
+
+ENTER SNAPSHOT
+  ├── 创建 LLMExceptFrame（保存 vars/intent_ctx/loop_ctx/retry_hint）
+  ├── 执行 LLM 调用
+  │     ├── 成功（is_certain=True）→ COMMIT（写入目标变量）→ EXIT SNAPSHOT
+  │     └── 失败（is_uncertain=True）→ 执行 llmexcept body
+  │             │
+  │             ├── 允许：读取外部变量（只读）
+  │             ├── 允许：写入 retry-scoped 变量（retry_hint 等）
+  │             └── 禁止：写入快照外的外部变量
+  │
+  └── 重试次数耗尽 → 向外传播异常（PROPAGATE）
+```
+
+**约束说明**：
+
+| 操作 | 当前状态 | 目标状态 |
+|------|--------|--------|
+| 读取外部变量 | 允许（fast path：直接读快照时值）| ✅ |
+| 写入 `retry_hint` | 允许（retry-scoped，不 commit 到外部）| ✅ |
+| 写入普通外部变量 | **未加限制**（仅靠 restore_snapshot 回滚） | 应产生 SEM 编译期错误 |
+| 快照失败后传播异常 | 目前仅 break + 返回最后值 | 应抛出明确异常 |
+
+### 三个历史危机的消解方式（更新版）
 
 | 危机 | 消解方式 |
 |------|---------|
-| **危机一（并发 Future 取消）** | `llmexcept` 保护范围排除 `dispatch_eligible=true` 节点，保护范围内无 Future，危机根本不存在 |
-| **危机二（IntentContext 快照冲突）** | `LLMExceptFrame` 已使用 `intent_context.fork()` 做值快照（Step 6d 完成），危机已消解 |
-| **危机三（retry 原子性）** | 串行节点的 retry 就是"重新执行 target_uid"，原子性完全成立；并发节点不允许 llmexcept 保护 |
-
-### 待落地工程工作（不阻塞现有功能）
-
-1. **编译器 DDG 分析**（Step 10 前半段）：标注 behavior 节点的 `dispatch_eligible` 字段
-2. **编译期约束**：当 DDG 发现 `dispatch_eligible=true` 节点被 `llmexcept` 保护时，产生编译期警告（SEM 错误）
-3. **LLMFuture 错误传播**（Step 10 后半段）：`dispatch_eligible=true` 节点的失败由 `LLMFuture` 机制处理，不经过 llmexcept
+| **危机一（并发 Future 取消）** | 快照模型下，llmexcept body 在快照内执行，不感知外部 Future；并发 Future 的失败由 `LLMFuture` 机制独立处理 |
+| **危机二（IntentContext 快照冲突）** | `LLMExceptFrame` 已使用 `intent_context.fork()` 做值快照（Step 6d 完成）✅ |
+| **危机三（retry 原子性）** | 每次 retry 使用快照时刻的变量值，`restore_snapshot()` 确保一致性；快照隔离使原子性成立 ✅ |
 
 ### 代码现状验证
 
-- `LLMExceptFrame` 已使用 `saved_intent_ctx = runtime_context.intent_context.fork()`（值快照）✅
-- `visit_IbLLMExceptionalStmt` 当前只保护 `target_uid` 这一个节点 ✅（串行语义已是事实）
+- `LLMExceptFrame.save_context()` 保存完整快照（vars + intent_ctx.fork() + loop_ctx + retry_hint）✅
+- `LLMExceptFrame.restore_snapshot()` 在每次 retry 前恢复快照 ✅
+- `intent_context.fork()` 在快照进入时创建独立意图上下文 ✅
 - `loop_resume` 支持 for 循环从断点处 retry 恢复 ✅
-- 危机文档中提到的 `if hasattr(runtime_context, '_intent_top')` 裸引用快照代码**已不存在**（被 Step 6d 替换）✅
+- `_last_llm_result` 仍在 `RuntimeContextImpl` 上（共享字段）⚠️ — 并发场景下应移入 `LLMExceptFrame`（见 PENDING_TASKS.md §9.3）
+- llmexcept body 内的写操作**无编译期约束** ⚠️ — 需实现 SEM 错误（见 PENDING_TASKS.md §9.2）
+
+### 待落地工程工作
+
+1. **SEM 约束（§9.2）**：llmexcept body 内向外部变量的写操作产生编译期错误
+2. **`_last_llm_result` 迁移（§9.3）**：将该字段从 `RuntimeContextImpl`（共享）移入 `LLMExceptFrame`（per-snapshot）
+3. **编译器 DDG 分析**（Step 8a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
+4. **失败传播语义**：重试耗尽时从 `break+返回最后值` 改为抛出明确的 `LLMPermanentFailureError`，由外层处理器接管
 
 ---
 
@@ -492,17 +533,18 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ## 九、里程碑规划（订正版）
 
-| 里程碑 | 主要内容 | 前提 |
-|--------|---------|------|
-| **Step 5** | IbFunction.call() 去除 context 参数（ContextVar 引入） | Step 4b 完成 ✅ |
-| **Step 6** | IbIntentContext 公理化（意图栈实例化 + fork 语义） | Step 5 完成 |
-| **Step 7** | IExecutionFrame 接口归一 + 快照完整性 | Step 6 完成 |
-| **Step 8a** | DDG 编译器分析（behavior 节点标注 llm_deps + dispatch_eligible） | 独立，不依赖上述 |
-| **Step 8b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 8a 完成 |
-| **Step 8c** | VM dispatch-before-use 集成（visit() 感知 dispatch_eligible） | Step 7 + 8b 完成 |
-| **Step 9** | 多 Interpreter 实例并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） |
-| **Step 10** | VM CPS 调度循环（消除 Python 递归依赖，解锁第三层并发） | Step 7 完成 |
-| **Step 11** | 可移植性参考实现 + 完整并发行为测试套件 | Step 10 完成 |
+| 里程碑 | 主要内容 | 前提 | 状态 |
+|--------|---------|------|------|
+| **Step 5** | IbFunction.call() 去除 context 参数（ContextVar 引入） | Step 4b 完成 | ✅ 完成 |
+| **Step 6** | IbIntentContext 公理化（意图栈实例化 + fork 语义） | Step 5 完成 | ✅ 完成 |
+| **Step 7** | IExecutionFrame 接口归一 + LlmCallResultAxiom + IbLLMCallResult 接入 | Step 6 完成 | ✅ 完成 |
+| **Step 8-pre** | llmexcept 快照隔离语义落地（SEM read-only 约束 + `_last_llm_result` 迁移） | 独立，可随时推进 | ⏳ 待推进 |
+| **Step 8a** | DDG 编译器分析（behavior 节点标注 llm_deps + dispatch_eligible） | 独立，不依赖上述 | ⏳ 待推进 |
+| **Step 8b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 8a 完成 | ⏳ 待推进 |
+| **Step 8c** | VM dispatch-before-use 集成（visit() 感知 dispatch_eligible） | Step 7 + 8b 完成 | ⏳ 待推进 |
+| **Step 9** | 多 Interpreter 实例并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ⏳ 待推进 |
+| **Step 10** | VM CPS 调度循环（消除 Python 递归依赖，解锁第三层并发） | Step 7 完成 | ⏳ 待推进 |
+| **Step 11** | 可移植性参考实现 + 完整并发行为测试套件 | Step 10 完成 | ⏳ 待推进 |
 
 ---
 

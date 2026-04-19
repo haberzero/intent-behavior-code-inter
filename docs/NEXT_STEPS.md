@@ -4,8 +4,8 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-18（Step 5/6/7 全部完成；IbLLMCallResult 完整接入；vibe 代码债务清理。  
-> 以下任务是 VM 并发基础完成后的下一优先级。）
+> **最后更新**：2026-04-19（Step 5-7 全部完成；IntentAxiom 落地；llmexcept 快照隔离模型确立。  
+> 以下任务是快照隔离约束和 VM 并发基础完成后的下一优先级。）
 
 ---
 
@@ -31,6 +31,17 @@
 - `core/runtime/interpreter/interpreter.py` 头部：明确 Interpreter = 执行隔离单元，不是 LLM 并发单元
 - `core/engine.py` 头部：明确 Engine = 组装者，不参与执行
 - `core/runtime/host/service.py` 头部：明确 DynamicHost = 编排者，不亲自执行 IBCI 代码
+
+---
+
+## Step 8-pre：llmexcept 快照隔离约束完整落地 [P2 - 推荐下一步]
+
+快照隔离模型（见 `docs/PENDING_TASKS_VM.md` §已决议）已在概念上确立，但以下两个约束尚未落地：
+
+1. **§9.2 编译期 read-only 约束**（SEM 错误）：llmexcept body 内向普通外部变量写入产生编译期错误
+2. **§9.3 `_last_llm_result` per-snapshot 化**：将该字段从 `RuntimeContextImpl` 共享位置移入 `LLMExceptFrame`
+
+这两个任务相互独立，可分别推进。完成后快照隔离模型在代码层面完全自洽，是推进 LLM 流水线（Step 8a/8b）的重要前置条件。
 
 ---
 
