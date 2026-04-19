@@ -1,7 +1,7 @@
 # IBCI VM 架构长期设想与路线图
 
 > 本文档记录 IBCI 运行时向"真正虚拟机（VM）"演进的长期架构设想。  
-> 内容来源：2026-04-18 架构讨论（VM建模 / 三层并发建模 / 意图栈公理化 / 实例模型边界）；2026-04-19 补充 llmexcept 并发语义决议；2026-04-19 升级为快照隔离模型（更优的语义设计）。  
+> 内容来源：2026-04-18 架构讨论（VM建模 / 三层并发建模 / 意图栈公理化 / 实例模型边界）；2026-04-19 补充 llmexcept 并发语义决议；2026-04-19 升级为快照隔离模型（更优的语义设计）；2026-04-19 Steps 5/6 全部落地（IExecutionFrame + ContextVar + IbIntentContext + IntentContextAxiom + RuntimeContextImpl 迁移）。  
 > 这里记录的是**设想和目标**，不是当前任务，不阻塞近期工作。  
 > 近期任务见 `docs/NEXT_STEPS.md`；已完成工作见 `docs/COMPLETED.md`。
 
@@ -125,9 +125,9 @@ IbVM
 
 ## 三、增量演进路线（三个独立层次）
 
-### 层次 0：接口归一（零运行时改动）
+### 层次 0：接口归一 ✅ COMPLETED（Step 5a）
 
-**目标**：在 `core/base/interfaces.py` 或 `core/runtime/interfaces.py` 中正式定义 `IExecutionFrame` Protocol，使现有的 `RuntimeContextImpl` + `ExecutionContextImpl` 组合成为其一个实现。
+**目标**：在 `core/base/interfaces.py` 中正式定义 `IExecutionFrame` Protocol，使现有的 `RuntimeContextImpl` + `ExecutionContextImpl` 组合成为其一个实现。
 
 ```python
 class IExecutionFrame(Protocol):
@@ -148,22 +148,22 @@ class IExecutionFrame(Protocol):
     def visit(self, node_uid: str, **kwargs): ...   # 唯一的"执行"入口
 ```
 
-**影响范围**：零。只是给现有东西命名，不改任何实现。  
-**触发时机**：Step 5 前置设计阶段。
+**完成情况**：`core/base/interfaces.py` 已定义 `IExecutionFrame` Protocol；`core/runtime/interpreter/runtime_context.py` 已实现该接口。
 
 ---
 
-### 层次 1：ContextVar 引入（Step 5 的技术基础）
+### 层次 1：ContextVar 引入 ✅ COMPLETED（Step 5b）
 
 **目标**：用 `contextvars.ContextVar[IExecutionFrame]` 替代函数参数传递，使 `IbUserFunction.call()` 能自主获取当前执行帧，不再依赖外部 context 参数。
 
 ```python
-# core/runtime/frame.py（新文件）
+# core/runtime/frame.py（已创建）
 from contextvars import ContextVar
 _current_frame: ContextVar['IExecutionFrame'] = ContextVar('ibci_current_frame')
 
 def get_current_frame() -> IExecutionFrame: return _current_frame.get()
-def push_frame(frame: IExecutionFrame): return _current_frame.set(frame)
+def set_current_frame(frame: IExecutionFrame): return _current_frame.set(frame)
+def reset_current_frame(token) -> None: _current_frame.reset(token)
 ```
 
 **为什么选 `contextvars.ContextVar` 而非 `threading.local`**：
@@ -171,12 +171,7 @@ def push_frame(frame: IExecutionFrame): return _current_frame.set(frame)
 - 嵌套 set/reset 原子性：`token = var.set(frame)` / `var.reset(token)` 是原子的
 - 与 Python 生态对齐：FastAPI/Starlette 都用 ContextVar 做请求状态隔离
 
-**配套改动**：
-- `IbUserFunction.call()` 去除 context 参数，通过 `get_current_frame()` 获取
-- `Interpreter.execute_module()` / `run()` 入口设置 ContextVar
-- `IbBehavior._execution_context` 捕获语义澄清：**意图是定义时捕获的，执行帧是调用时获取的**
-
-**影响范围**：有限。主要改动集中在 `kernel.py` IbUserFunction 和 `interpreter.py` 执行入口。
+**完成情况**：`core/runtime/frame.py` 已创建，包含 `get_current_frame()`、`set_current_frame()`、`reset_current_frame()`；`IbUserFunction.call()` 已去除 context 参数；`Interpreter.execute_module()` / `run()` 入口已设置 ContextVar。
 
 ---
 
@@ -186,80 +181,76 @@ def push_frame(frame: IExecutionFrame): return _current_frame.set(frame)
 
 完成后，`ihost.run_isolated()` 可以真正地"暂停一个执行中的帧、切换到另一个宿主上下文、然后恢复"——这才是完备的动态宿主机制。
 
-**前提条件**：层次 0 + 层次 1 完成（有了 IExecutionFrame 作为第一公民）。  
+**前提条件**：层次 0 + 层次 1 完成（✅ 均已具备）。  
 **触发时机**：递归栈深度限制成为实际生产问题时，或开始支持真正的协程语义时。
 
 ---
 
-## 四、意图栈公理化（IbIntentContext）
+## ✅ 四、意图栈公理化（IbIntentContext）— COMPLETED（Steps 6a–6d）
 
-### 4.1 问题描述
+> **状态：Step 6 全部完成。以下记录设计目标的原始描述与当前实现状态的对应关系，供架构参考。**
 
-当前意图栈是 `RuntimeContextImpl` 中的全局状态：`_intent_top`、`_pending_smear_intents`、`_pending_override_intent`。当 IBCI 进入函数调用时，存在不明确行为：
-- 函数内部修改意图栈，是否影响外部？（当前：是的，全局共享）
-- 函数内部 `@+ intent` 是否应该只在函数作用域内有效？（当前：无此概念）
-- 跨模块调用时，意图栈如何传递和隔离？（当前：无规范）
+### 4.1 问题描述（历史背景）
+
+Step 6 之前，意图栈是 `RuntimeContextImpl` 中的四个独立全局字段：`_intent_top`、`_pending_smear_intents`、`_pending_override_intent`、`_global_intents`。这导致：
+- 函数内部修改意图栈，会影响外部（全局共享）
+- 函数内部 `@+ intent` 没有帧隔离语义
+- 跨模块调用时，意图栈无规范
 
 **根本原因**：意图栈被当作"专用寄存器组"而非公理体系中的对象。
 
-### 4.2 设计目标：IbIntentContext 作为第一公民
+### 4.2 设计目标与实现结果
 
-将意图栈本身实例化为 `IbIntentContext`，它是公理体系中的一个类型，是 IBCI 语言层可见的对象：
-
-```
-IbIntentContext（意图上下文）
-├── intent_stack: 持久意图（@+）的不可变链表
-├── smear_queue:  一次性意图（@）的消费队列
-├── override:     排他意图（@!）的单次覆盖槽
-└── parent_ref:   父 IntentContext 的引用（用于继承语义）
-```
-
-**关键语义明确**：
-
-| 操作 | 语义 |
-|------|------|
-| 进入函数调用（默认） | 创建新 IntentContext，**继承**父上下文的 intent_stack 快照（只读引用，非共享） |
-| 函数内 `@+ x` | 修改**当前帧**的 IntentContext，不影响父帧 |
-| 函数返回 | 当前帧 IntentContext 丢弃，恢复父帧 IntentContext |
-| 显式传递 `f(intent_ctx=ctx)` | 将 ctx 作为参数传入，函数内部可以修改它并让修改对调用者可见（引用传递） |
-| 全局意图 `@@ x` | 写入 Engine 级 IntentContext（跨函数调用持久），独立于帧级 IntentContext |
-
-这个设计解决了"意图到底是全局的还是局部的"这个根本问题：**默认是帧级隔离（继承快照），显式传递才是引用共享**，和普通变量的传值/传引用语义完全对齐。
-
-### 4.3 公理层表示
-
-`IntentContextAxiom` 将成为 `core/kernel/axioms/` 中的一个正式 Axiom，拥有完整的 vtable：
+将意图栈本身实例化为 `IbIntentContext`，成为公理体系中的一个类型：
 
 ```
-IntentContextAxiom.capabilities:
-├── CreateCapability   # new IntentContext() / new IntentContext(parent=parent_ctx)
-├── PushCapability     # ctx.push(intent)
-├── PopCapability      # ctx.pop()
-├── ResolveCapability  # ctx.resolve() → 返回当前有效意图列表（用于 LLM 调用）
-└── ForkCapability     # ctx.fork() → 创建继承快照的子上下文
+IbIntentContext（意图上下文）✅ 已实现
+├── _intent_top: IntentNode          持久意图（@+）的不可变链表
+├── _smear_queue: List[IbIntent]     一次性意图（@）的消费队列
+├── _override: Optional[IbIntent]    排他意图（@!）的单次覆盖槽
+└── _global_intents: List[IbIntent]  全局意图（Engine 级）
 ```
 
-### 4.4 与 IExecutionFrame 的关系
+**关键语义（当前实现）**：
 
-`IExecutionFrame.intent_context` 持有当前帧的 `IbIntentContext` 引用。  
-帧切换时，IntentContext 的 fork/restore 由 VM 调度循环自动管理，开发者无需手动操作。
+| 操作 | 当前实现状态 |
+|------|-------------|
+| 进入 llmexcept 快照 | `LLMExceptFrame` 调用 `intent_context.fork()` 保存值快照 ✅ |
+| `@+ x` 操作 | 修改当前 `_intent_ctx`，通过 `RuntimeContextImpl` 委托接口调用 ✅ |
+| 快照恢复（retry） | `restore_snapshot()` 恢复 `_intent_ctx` 引用 ✅ |
+| 函数调用帧级隔离 | **当前未完全实现**：函数内 `@+` 仍会影响调用者（全局 `_intent_ctx` 共享） |
+| 显式 `f(intent_ctx=ctx)` | 语言层暂未支持 |
+| 全局意图 `@@` 独立存储 | 通过 `_intent_ctx._global_intents` 分离存储 ✅ |
 
-**意图栈不再是 RuntimeContextImpl 的内部状态，而是 IExecutionFrame 持有的一个 IbIntentContext 对象实例。**
+> **说明**：函数调用时的帧级意图隔离（"进入函数时 fork IntentContext，返回时恢复"）尚未实现。这需要层次 2（VM 调度循环）或至少在 `IbUserFunction.call()` 中显式管理 IntentContext 的生命周期。**目前 llmexcept 快照已通过 `fork()` 安全隔离，这是实际生产中最关键的场景。**
+
+### 4.3 公理层表示（已完成）
+
+`IntentContextAxiom`（`core/kernel/axioms/intent_context.py`）已注册为正式 Axiom：
+
+```
+IntentContextAxiom  ✅ 已实现（core/kernel/axioms/intent_context.py）
+└── is_class = False（内部类型，不暴露给 IBCI 用户直接实例化）
+```
+
+`IntentAxiom`（`core/kernel/axioms/intent.py`）已注册，`is_class=True`，公开 `get_content()`、`get_tag()`、`get_mode()` 三个方法。
+
+### 4.4 与 IExecutionFrame 的关系（当前状态）
+
+`RuntimeContextImpl` 通过 `_intent_ctx: IbIntentContext` 字段持有意图上下文，并暴露 `fork_intent_snapshot()` 方法供 `LLMExceptFrame` 调用。
+
+完整的"帧切换时 IntentContext 自动 fork/restore"语义需要层次 2（VM 调度循环）完成后才能实现。
 
 ### 4.5 现有代码的映射关系
 
-| 现有状态字段 | 对应 IbIntentContext 字段 |
+| Step 6 之前的字段 | Step 6 之后的位置 |
 |---|---|
-| `RuntimeContextImpl._intent_top` | `IbIntentContext.intent_stack`（持久链表头） |
-| `RuntimeContextImpl._pending_smear_intents` | `IbIntentContext.smear_queue` |
-| `RuntimeContextImpl._pending_override_intent` | `IbIntentContext.override` |
-| `RuntimeContextImpl._global_intents` | Engine 级 `IbIntentContext`（全局单例） |
+| `RuntimeContextImpl._intent_top` | `RuntimeContextImpl._intent_ctx._intent_top` |
+| `RuntimeContextImpl._pending_smear_intents` | `RuntimeContextImpl._intent_ctx._smear_queue` |
+| `RuntimeContextImpl._pending_override_intent` | `RuntimeContextImpl._intent_ctx._override` |
+| `RuntimeContextImpl._global_intents` | `RuntimeContextImpl._intent_ctx._global_intents` |
 
-### 4.6 实现前提
-
-意图栈公理化依赖层次 1（ContextVar）完成，因为 `IbIntentContext` 需要绑定到当前 `IExecutionFrame`，而不是全局状态。
-
-**触发时机**：Step 5 完成后，作为 Step 6 的主要内容推进。
+所有外部调用接口（`push_intent()`、`add_smear_intent()` 等）保持不变，内部委托给 `_intent_ctx`。
 
 ---
 
