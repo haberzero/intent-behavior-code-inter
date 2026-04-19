@@ -28,6 +28,7 @@ from core.kernel.axioms.protocols import (
 )
 from core.kernel.spec.member import MethodMemberSpec
 from core.kernel.axioms.intent_context import IntentContextAxiom
+from core.kernel.axioms.intent import IntentAxiom
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -1192,4 +1193,5 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(DeferredAxiom())
     registry.register(BehaviorAxiom())
     registry.register(IntentContextAxiom())
+    registry.register(IntentAxiom())
     registry.register(LlmCallResultAxiom())

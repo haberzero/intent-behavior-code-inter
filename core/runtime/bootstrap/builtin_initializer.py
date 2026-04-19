@@ -2,6 +2,7 @@ from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
+from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
