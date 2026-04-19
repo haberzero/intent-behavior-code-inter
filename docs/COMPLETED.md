@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-19（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；Step 8-pre 快照隔离完整落地（§9.2 SEM_052 + §9.3 per-snapshot 化）；523 个测试通过）
+> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；551 个测试通过）
 
 ---
 
@@ -213,6 +213,46 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 
 ---
 
+#### §9.4：函数调用意图隔离（fork/restore + @! 屏蔽）
+
+**问题**：函数调用时意图上下文是引用传递（直接共享），函数内 `@+`/`@-` 操作影响调用者；`@!` 只能修饰 LLM 行为表达式，无法修饰普通函数调用。
+
+**修复内容（2026-04-19，551 测试通过）**：
+
+- **`core/runtime/objects/kernel.py`**：`IbUserFunction.call()` 和 `IbLLMFunction.call()` 在函数执行前后实现意图上下文 fork/restore：
+  - 普通调用：fork 调用者 `_intent_ctx`，函数内操作不泄漏给调用者
+  - `@!` 调用：消费 `_override`，创建以 `@!` 内容为唯一意图的隔离子上下文，完全屏蔽调用者持久栈
+  - `try/finally` 确保调用者上下文始终恢复
+
+- **`core/compiler/semantic/passes/semantic_analyzer.py`**：`_validate_intent_in_body()` 更新：
+  - `@`（APPEND 涂抹）仍只允许修饰 LLM 行为表达式（`@~...~`）
+  - `@!`（OVERRIDE 排他）新增允许修饰任意函数调用（`IbCall`）；新增 `_stmt_contains_call()` / `_expr_contains_call()` 辅助方法
+
+- **`core/runtime/objects/kernel.py`**：`IbUserFunction.call()` 新增 lambda 参数传递约束：检测到 `deferred_mode='lambda'` 的 `IbDeferred`/`IbBehavior` 实参时，抛出 `RUN_CALL_ERROR`（`lambda 不允许作为函数参数传递`）
+
+#### §9.5：intent_context OOP MVP
+
+**需求**：允许 IBCI 用户代码显式创建和操作意图上下文对象：`intent_context ctx = intent_context()`。
+
+**实现内容（2026-04-19）**：
+
+- **`core/kernel/axioms/intent_context.py`**：`IntentContextAxiom.is_class()` → `True`；`get_method_specs()` 新增 `clear` 方法；`push` 参数从 `["any", "str"]` 改为 `["any"]`（tag 为可选）
+- **`core/kernel/spec/specs.py`**：新增 `INTENT_CONTEXT_SPEC = ClassSpec(name="intent_context", ...)`
+- **`core/kernel/spec/registry.py`**：`INTENT_CONTEXT_SPEC` 加入 `create_default_spec_registry()` 注册列表和 import
+- **`core/runtime/bootstrap/builtin_initializer.py`**：注册 `intent_context` 类的原生方法：
+  - `__init__`：创建 `IbIntentContext()` 存入 `receiver.fields['_ctx']`
+  - `push(content[, tag])`：包装为 `IbIntent` 并压栈
+  - `pop()`：弹出栈顶，返回内容字符串
+  - `fork()`：返回新 `IbObject`（`intent_context` 类），`_ctx` 为 fork 后的 `IbIntentContext`
+  - `resolve()`：返回持久栈意图内容列表（`IbList`）
+  - `merge(other)`：将 other 的 `_ctx` 合并到 self
+  - `clear()`：清空持久栈（`set_intent_top(None)`）
+- **8 个新测试**：`TestE2EIntentScopeIsolation`、`TestE2ELambdaRestriction`、`TestE2EIntentContextOOP`
+
+*全部 551 个测试通过。*
+
+---
+
 ## 五、确认的设计决策
 
 | 决策 | 说明 |
@@ -228,3 +268,8 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 | `(Type) @~...~` 废弃 | PAR_010 硬错误；LHS 类型自动成为提示词上下文 |
 | 彻底重构原则 | 禁止渐进式补丁；完成则完整，不留旁路 |
 | `LLMExecutorImpl` 不可替换 | 它是语言语义的一部分，provider 可配置，执行接口不可替换 |
+| 函数调用意图：拷贝传递 | 每次函数调用 fork 调用者意图上下文；函数内意图操作不泄漏（§9.4） |
+| `@!` 修饰函数调用 | `@!` 可修饰任意函数调用，创建隔离子上下文；`@` 只能修饰 LLM 行为表达式 |
+| `lambda` 不允许作为参数传递 | `deferred_mode='lambda'` 的延迟对象不可作为函数实参；`snapshot` 不受此限制 |
+| `snapshot` 捕获意图快照 | `snapshot` 在定义位置调用 `fork_intent_snapshot()` 捕获当前意图栈的不可变副本 |
+| `intent_context` is_class=True | `intent_context` 可实例化为 OOP 对象；用户可显式管理意图上下文（§9.5） |

@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-19（快照隔离模型完整落地：§9.2 SEM_052 编译期约束 + §9.3 `_last_llm_result` per-snapshot 化均已完成；523 个测试通过）
+> **最后更新**：2026-04-19（意图上下文隔离 + intent_context OOP MVP 落地；551 个测试通过）
 
 ---
 
@@ -126,28 +126,107 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 4.3 lambda 闭包跨作用域传递语义 [VISION]
-**任务**：明确 lambda 作为回调函数跨作用域传递时，参数引用的捕获规则（调用位置变量 vs 定义位置变量）。
+### 4.3 lambda 语义约束完整化 [PARTIAL ✅ / PENDING]
 
-**当前策略**：暂不设计跨作用域传递语义，lambda 限制在定义作用域内使用。
+**已实现（2026-04-19）**：
+- `lambda` 延迟对象不允许作为函数参数传递（运行时 `RUN_CALL_ERROR`，见 `kernel.py` `IbUserFunction.call()`）
+- `lambda` 不允许被作为参数传递进任何函数调用
+
+**待实现（未来工作）**：
+- **编译期检查**：将上述约束提升到语义分析阶段（当前为运行时错误）
+- **工厂约束**：lambda 不允许被"工厂函数"制造后作为实例传递出定义作用域
+- **存储约束**：lambda 值不允许赋给跨作用域变量（如全局变量、类字段）
+- **明确 `snapshot` 的对比语义**：`snapshot` 捕获定义位置的意图栈快照，可被作为参数传递和跨作用域传递
+
+**搁置原因**：编译期 DDG 分析尚未实现（§5 编译器 DDG 分析），lambda 存储约束需要逃逸分析支持。
 
 ---
 
-## 五、其他功能
+## 五、intent_context 完整 OOP 化（已记录，待跟进）
 
-### 5.1 LLM 输出持久化 [PENDING]
+> MVP 已落地（2026-04-19）：`intent_context` 可实例化，支持 `push/pop/fork/resolve/merge/clear` 方法。以下为用户明确要求的、尚未实现的完整功能。
+
+### 5.1 将 intent_context 实例作为函数调用参数传递 [PENDING]
+
+**需求**：用户在调用函数时，能够显式传递自定义的 `intent_context` 实例，使函数内所有 LLM 调用使用该实例所表示的意图上下文，而非调用者上下文的 fork。
+
+**设计思路**：
+- 函数声明中以特殊方式声明 `intent_context` 参数（或约定特殊参数名 `_intent_ctx`）
+- 调用方 `my_func(@ctx some_intent_ctx_var)` 或 `my_func(intent_ctx=my_ctx)` 语法
+- 运行时：若有显式 intent_context 实参，则替换为该实参所包装的 IbIntentContext，而非 fork
+
+**搁置原因**：需要编译器和语义分析器支持意图上下文参数的类型推断，运行时需要新增参数绑定路径。
+
+---
+
+### 5.2 函数内部屏蔽全局意图栈的精细控制 [PENDING]
+
+**需求**：允许函数在内部书写显式屏蔽语句，使其内部所有或特定位置的 LLM 调用不受外部传入意图栈影响。
+
+**设计思路**：
+- 函数体内 `@! "..."` 已可修饰单次 LLM 调用（✅ 已实现）
+- 函数体首部写 `intent_context.clear_inherited()` 或 `shield intents` 关键字：清空从调用者 fork 来的持久栈，但保留本地新建的意图
+- 进阶：允许函数体内在任意位置以 `@clear_inherited` 语句重置继承的意图
+
+**搁置原因**：需要新语法关键字或新的 intent_context 方法；当前 `@!` 已能在函数调用粒度实现屏蔽，此任务为函数内粒度控制。
+
+---
+
+### 5.3 intent_context 作为函数参数类型 [PENDING]
+
+**需求**：函数可以声明 `intent_context` 类型的参数，允许调用者传入自定义意图上下文对象，函数内直接操作该对象（push/pop/etc.），影响此次调用下的 LLM 行为。
+
+```ibci
+func generate_text(intent_context ctx, str prompt) -> str:
+    ctx.push("保持简洁")
+    str result = @~ $prompt ~
+    return result
+```
+
+**搁置原因**：需要语义分析器对 intent_context 参数的特殊处理：绑定参数到当前帧的 `_intent_ctx`；与 5.1 协同设计。
+
+---
+
+### 5.4 intent_context 显式作为函数作用域默认上下文 [PENDING]
+
+**需求**：在函数体内可以显式声明一个 `intent_context` 变量作为"本函数的意图上下文"，所有 `@+`/`@-` 操作作用在该变量上，而非隐式的 `rt_context._intent_ctx`。
+
+```ibci
+func process():
+    intent_context my_ctx = intent_context()
+    # 以下 @+ 操作作用在 my_ctx 上（而非隐式上下文）
+    @+ "格式要求"  # → my_ctx.push(...)
+    str r = @~ MOCK:test ~
+```
+
+**搁置原因**：这需要对意图操作的作用目标（隐式 vs 显式）进行语法区分，属于较大的语言设计变更。
+
+---
+
+### 5.5 更复杂的意图上下文操作 [VISION]
+
+**需求（远期）**：
+- intent_context 实例之间的合并策略（`merge_with_priority()`, `intersect()`, `diff()`）
+- intent_context 的序列化 / 反序列化（JSON 快照，用于跨进程/持久化场景）
+- intent_context 的"冻结"（freeze）模式：创建后不可修改，适合在多个函数间共享
+
+---
+
+## 六、其他功能
+
+### 6.1 LLM 输出持久化 [PENDING]
 **任务**：AI 插件支持将 LLM 输出保存到文件。
 
 **搁置原因**：与 IssueTracker 持久化机制配合，属于扩展性功能。
 
 ---
 
-### 5.2 子解释器变量深拷贝隔离 [PENDING]
+### 6.2 子解释器变量深拷贝隔离 [PENDING]
 **任务**：实现 `RuntimeContext.inject_variable()` 方法（变量继承已禁用，当前不触发）。
 
 ---
 
-## 六、明确排除的设计
+## 七、明确排除的设计
 
 | 排除项 | 理由 |
 |--------|------|
@@ -160,25 +239,25 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-## 七、架构与基础设施
+## 八、架构与基础设施
 
-### 7.1 ImmutableArtifact `__deepcopy__` [PENDING]
+### 8.1 ImmutableArtifact `__deepcopy__` [PENDING]
 **任务**：添加 `__deepcopy__` 方法（不可变对象，深拷贝返回自身）。
 
 **搁置原因**：当前行为可接受，不影响核心功能。
 
 ---
 
-### 7.2 MetadataRegistry 双轨统一 [PENDING]
+### 8.2 MetadataRegistry 双轨统一 [PENDING]
 **任务**：解决 `Engine.__init__()` 初始化的 MetadataRegistry（轨 A，内置类型公理）与 `HostInterface` 各自创建的实例（轨 B，插件元数据）并行问题。
 
 **搁置原因**：两轨各有各的查询路径，当前不影响功能。
 
 ---
 
-## 八、插件系统
+## 九、插件系统
 
-### 8.1 显式引入原则完整实现 [Phase 1 ✅ / Phase 2 ✅ / Phase 3-4 PENDING]
+### 9.1 显式引入原则完整实现 [Phase 1 ✅ / Phase 2 ✅ / Phase 3-4 PENDING]
 **任务**：严格实现"必须显式 import 才能使用"原则，彻底消除 `discover_all()` 无条件全局注册。
 
 **Phase 1 ✅ 已完成**：`__ibcext_metadata__()` 的 `"kind"` 字段区分 `"method_module"`（工具插件，需显式 import）与 `"type_module"`（内置类型扩展）；`Prelude._init_defaults()` 按 `is_user_defined` 过滤，所有方法插件（`ai`、`math`、`json` 等）不预注入为全局内置符号——用户代码中使用 `ai.xxx` 而未 `import ai` 时，语义分析器会报 "undefined variable" 错误。
@@ -193,23 +272,23 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 8.2 模块符号去重机制 [PENDING]
+### 9.2 模块符号去重机制 [PENDING]
 **任务**：解决外部模块符号（`import ai` 注入 MODULE 符号 `"ai"`）与用户定义符号（`class ai`）的命名冲突问题。
 
 **根因**：`import ai` 在 Pass 1 之前注入 MODULE 符号，与用户 `class ai` 在 Pass 1 中收集的 CLASS 符号冲突。
 
 ---
 
-## 九、llmexcept / retry 机制后续
+## 十、llmexcept / retry 机制后续
 
-### 9.1 重试策略配置扩展 [PENDING]
+### 10.1 重试策略配置扩展 [PENDING]
 **任务**：在固定次数重试（`ai.set_retry(n)`）基础上，支持指数退避（Exponential Backoff）和条件重试（基于错误类型）。
 
 **文件**：`ibci_modules/ibci_ai/core.py`、`core/runtime/interpreter/handlers/stmt_handler.py`
 
 ---
 
-### 9.2 llmexcept body 内外部变量写入约束（SEM_052）[✅ COMPLETED — 2026-04-19]
+### 10.2 llmexcept body 内外部变量写入约束（SEM_052）[✅ COMPLETED — 2026-04-19]
 
 **完成内容**：
 - `core/base/diagnostics/codes.py`：新增 `SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"`
@@ -221,7 +300,7 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 9.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [✅ COMPLETED — 2026-04-19]
+### 10.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [✅ COMPLETED — 2026-04-19]
 
 **完成内容**：
 - `stmt_handler.py`：`visit_IbLLMExceptionalStmt` 中读取 `result` 后立即清零共享字段，并将 `frame.last_result = result` 作为 per-snapshot 权威存储；去除了依赖 `frame.should_retry` 的条件性清零（改为无条件清零）；删除了 `finally` 块中"将 result 恢复回 `_last_llm_result`"的兼容性代码。
@@ -230,9 +309,9 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-## 十、代码健康（审计遗留）
+## 十一、代码健康（审计遗留）
 
-### 10.1 意图标签解析迁移到 Lexer [P2 / PENDING]
+### 11.1 意图标签解析迁移到 Lexer [P2 / PENDING]
 **问题**：`statement.py:278` 的 `#tag` 解析使用 inline `import re` + 正则表达式在 parser 层处理，属于词法层职责被推后到语法层。未来对 tag 做语义分析（如检查 `@- #tag` 中 tag 是否已定义）时会比较困难。
 
 **文件**：`core/compiler/parser/components/statement.py`（约第 278-289 行）
@@ -251,19 +330,19 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 10.3 instance_id 默认值碰撞风险 [P3 / PENDING]
+### 11.3 instance_id 默认值碰撞风险 [P3 / PENDING]
 **问题**：`interpreter.py:108` `instance_id: str = "main"` 默认值可能导致多解释器实例 ID 碰撞。当前有 `instance_id or f"inst_{id(self)}"` fallback 保护，但 `"main"` 作为默认值仍是潜在隐患。
 
 **文件**：`core/runtime/interpreter/interpreter.py`
 
 ---
 
-## 十一、远期架构目标
+## 十二、远期架构目标
 
-### 11.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
+### 12.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
 **状态**：已完整落地（见 `docs/COMPLETED.md` § 4.12）。`ibci_ihost` 和 `ibci_idbg` 已改为通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`get_stack_inspector()`、`get_state_reader()`）访问服务。用户可见接口（`ihost.run_isolated()` 等）保持不变。517 个测试通过。
 
-### 11.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
+### 12.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
 
 **状态说明**：已完整修复（PR-A）。
 
@@ -281,17 +360,17 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 11.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
+### 12.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
 **状态**：已完成（见 `docs/COMPLETED.md`，Step 5 完整路径：5a IExecutionFrame Protocol + 5b ContextVar 帧注册表）。`IbUserFunction.call()` 已通过 `get_current_frame()` 自主获取执行帧，不再依赖外部传入的 context 参数。
 
 ---
 
-### 11.3 host.run_isolated() 返回值改进 [VISION]
+### 12.3 host.run_isolated() 返回值改进 [VISION]
 **当前**：返回简化布尔值。**目标**：多返回值/元组解包语法完整实现后，改为 `tuple(exit_code: int, result: str|dict)`。
 
 ---
 
-### 11.4 ReceiveMode 枚举演进 [VISION]
+### 12.4 ReceiveMode 枚举演进 [VISION]
 **当前**：`deferred_mode: str` 侧表（`'lambda'`/`'snapshot'`/`None`）。**目标**：迁移至 `ReceiveMode(IMMEDIATE / LAMBDA / SNAPSHOT)` 枚举，替代字符串，支持更严格的类型约束。
 
 ---

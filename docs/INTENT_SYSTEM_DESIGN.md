@@ -11,9 +11,10 @@
 ### 核心设计目标
 
 1. **AST 层独立节点**：意图注释作为独立 AST 节点处理，不依赖编译期侧表
-2. **公理体系融入**：意图栈正式成为 IBCI 内置类型（`IbIntentContext` + `IntentContextAxiom`）
+2. **公理体系融入**：意图栈正式成为 IBCI 内置类型（`IbIntentContext` + `IntentContextAxiom`，`is_class=True`）
 3. **帧级隔离**：意图上下文随执行帧（`IExecutionFrame`）持有，而非全局单例
 4. **快照安全**：`IbIntentContext.fork()` 支持值快照，保证 LLM 流水线 dispatch 时刻意图绑定的安全性
+5. **作用域隔离（拷贝传递）**：每次函数调用 fork 调用者的意图上下文，函数内的意图操作不泄漏给调用者
 
 ---
 
@@ -26,21 +27,31 @@
 | `@- #tag` | 按标签物理移除 | 从栈中移除匹配 `#tag` 的意图 |
 | `@- 内容` | 按内容物理移除 | 从栈中移除匹配内容的意图 |
 | `@-` | 弹出栈顶 | 无参数时移除最新压入的意图 |
-| `@! 内容` | 排他意图（单次覆盖） | 只对当前 LLM 调用有效，同时屏蔽涂抹意图和持久栈，调用后自动清除 |
+| `@! 内容` | 排他意图（单次覆盖/屏蔽） | 修饰 LLM 调用时：同时屏蔽涂抹意图和持久栈，只对当前 LLM 调用有效，调用后自动清除。修饰**函数调用**时：创建隔离的子意图上下文，函数内所有 LLM 调用只看到 `@!` 内容，完全屏蔽调用者的意图栈。 |
 
 ### 语法规则
 
-- `@`（涂抹）和 `@!`（排他）是**前置意图**，语义上紧跟后面的 LLM 调用
+- `@`（涂抹）：前置意图，**只能**紧跟 LLM 行为表达式（`@~...~`）
+- `@!`（排他）：前置意图，可以紧跟 **LLM 行为表达式**（`@~...~`）或**普通函数调用**
 - `@+`（压栈）和 `@-`（移除）可以**独立存在**，不需要后跟 LLM 调用
 - `@` 与修饰符之间**不能有空格**（如 `@-#tag` 正确，`@ - #tag` 错误）
 
-### 意图优先级（消解顺序）
+### 意图优先级（消解顺序，在 LLM 调用内）
 
 ```
 @!（排他覆盖）> @（一次性涂抹）> @+（持久栈）> 全局意图
 ```
 
 `@!` 存在时，其他所有意图均被屏蔽，只使用 `@!` 的内容。
+
+### 函数调用意图传递语义（拷贝传递）
+
+每次函数调用（`IbUserFunction.call()` 和 `IbLLMFunction.call()`）的意图上下文行为：
+
+| 调用方式 | 函数收到的意图上下文 |
+|----------|---------------------|
+| `my_func()` | 调用者意图栈的 **fork 快照**（拷贝传递）；函数内 `@+`/`@-` 不影响调用者 |
+| `@! "只有这个"\nmy_func()` | **隔离的空上下文**，且以 `@!` 内容作为唯一持久意图；函数内所有 LLM 调用只看到 `@!` 内容 |
 
 ---
 
@@ -51,39 +62,41 @@
 ```
 core/kernel/ast.py
 ├── IbIntentAnnotation       # @ 和 @! 专用节点（前置意图）
-│   └── 语义上紧跟后面的 LLM 调用
+│   └── 语义上紧跟后面的 LLM 调用或函数调用（@! 时）
 └── IbIntentStackOperation   # @+ 和 @- 专用节点（栈操作）
     └── 可独立存在
 ```
 
 `IbIntentInfo` 数据类携带意图的 `mode`（APPEND/OVERRIDE/REMOVE）、`content`（字符串段列表）、`tag`（可选标签）、`pop_top`（无参数 `@-`）。
 
-### 3.2 意图上下文（Step 6 ✅ 完成）
+### 3.2 意图上下文
 
 意图栈已从 `RuntimeContextImpl` 的私有字段群提升为独立的公理化类型：
 
 ```
 core/runtime/objects/intent_context.py
-└── IbIntentContext                         # 意图上下文运行时对象
+└── IbIntentContext                         # 意图上下文运行时对象（Python 层）
     ├── _intent_top: Optional[IntentNode]   # 持久意图栈顶节点（不可变链表，结构共享）
     ├── _smear_queue: List[IbIntent]        # 一次性涂抹意图队列（@ 语义）
     ├── _override: Optional[IbIntent]       # 排他意图槽（@! 语义）
     ├── _global_intents: List[IbIntent]     # 全局意图（Engine 级，跨函数调用持久）
-    ├── fork() → IbIntentContext            # 值快照（用于 LLMExceptFrame 和 LLM dispatch）
+    ├── fork() → IbIntentContext            # 值快照（不可变副本，用于 LLMExceptFrame 和函数调用隔离）
     ├── push(intent)                        # 压入持久栈（@+）
     ├── pop() → Optional[IbIntent]          # 弹出栈顶
-    ├── remove_by_tag(tag)                  # 按标签移除
-    ├── remove_by_content(content)          # 按内容移除
+    ├── remove(tag, content)               # 按标签或内容移除（重建链表，不原地修改）
     ├── add_smear(intent)                   # 添加涂抹意图（@）
     ├── set_override(intent)                # 设置排他意图（@!）
-    ├── consume_override() → Optional       # 消费并清除排他意图
-    └── get_resolved_prompt_intents() → list  # 消解为提示词片段列表
+    ├── has_override() → bool              # 检查是否有待消费的排他意图
+    ├── consume_override() → Optional      # 消费并清除排他意图
+    └── get_active_intents() → list        # 返回持久栈展平列表（不含 smear/override）
 
 core/kernel/axioms/intent_context.py
-└── IntentContextAxiom                      # 公理层表示（is_class=False，内部类型）
+└── IntentContextAxiom                      # 公理层表示（is_class=True，可实例化）
+    ├── 方法：fork, resolve, push, pop, merge, clear
+    └── INTENT_CONTEXT_SPEC = ClassSpec("intent_context")
 ```
 
-**`IntentNode` 缓存机制**：意图持久栈使用 `IntentNode` 结构实现不可变链表，支持结构共享以优化内存：
+**`IntentNode` 链表结构**：持久意图栈通过不可变链表实现结构共享：
 
 ```
 IntentNode
@@ -92,26 +105,24 @@ IntentNode
 └── _cached_list  # 展平列表缓存（懒加载，`to_list()` 时生成）
 ```
 
-`@-` 移除操作会创建新的链表头节点，而非修改原链表，保证结构共享安全。
+**重要**：`@-` 移除操作通过**重建链表**（而非原地修改 `previous.parent`）来保证结构共享安全。在存在 `fork()` 快照的情况下，原地修改会破坏快照的不可变性（已于 2026-04-19 修复此 Bug）。
 
 ### 3.3 运行时上下文（当前实际结构）
 
 ```
 core/runtime/interpreter/runtime_context.py
 └── RuntimeContextImpl
-    ├── _intent_ctx: IbIntentContext     # 意图上下文（Step 6c 完成：统一持有四类意图状态）
+    ├── _intent_ctx: IbIntentContext     # 意图上下文（统一持有四类意图状态）
     │
     │   # 以下为对 _intent_ctx 的委托接口：
     ├── push_intent(intent)              # 压入持久栈 → _intent_ctx.push()
     ├── add_smear_intent(intent)         # 添加涂抹意图 → _intent_ctx.add_smear()
     ├── set_pending_override_intent()    # 设置排他意图 → _intent_ctx.set_override()
     ├── consume_pending_override_intent() # 消费排他意图 → _intent_ctx.consume_override()
-    ├── remove_intent(tag/content)       # 移除意图 → _intent_ctx.remove_by_*()
+    ├── remove_intent(tag/content)       # 移除意图 → _intent_ctx.remove()
     ├── set_global_intent()              # 全局意图 → _intent_ctx.set_global_intents()
     └── fork_intent_snapshot()           # 值快照 → _intent_ctx.fork()
 ```
-
-> **历史说明（Step 6c 之前）**：`RuntimeContextImpl` 曾直接持有 `_intent_top`、`_pending_smear_intents`、`_pending_override_intent`、`_global_intents` 四个独立字段。Step 6c（Steps 5-7 路线图）完成后，这四个字段统一迁移进 `IbIntentContext` 对象，`RuntimeContextImpl` 只保留委托接口，不直接持有意图状态。
 
 ---
 
@@ -129,22 +140,39 @@ runtime_context.add_smear_intent(intent)   # → _intent_ctx.add_smear(intent)
 runtime_context.set_pending_override_intent(intent)  # → _intent_ctx.set_override(intent)
 ```
 
-### 4.2 @! 排他意图的消解
+### 4.2 @! 排他意图的消解（LLM 调用时）
 
 ```python
-# IbIntentContext.get_resolved_prompt_intents()
-override = self._override
+# RuntimeContextImpl.get_resolved_prompt_intents()
+override = self._intent_ctx.consume_override()
 if override:
-    self._override = None  # 消费后清除
     return [override.resolve_content()]  # 排他：屏蔽所有其他意图
 
 # 无排他意图：涂抹意图 + 持久栈 + 全局意图（按优先级合并）
-smears = self._smear_queue[:]
-self._smear_queue.clear()  # 消费后清除涂抹队列
+smears = self._intent_ctx.consume_smear()
 ...
 ```
 
-### 4.3 @- 移除意图
+### 4.3 @! 排他意图的消解（函数调用时）
+
+```python
+# IbUserFunction.call() / IbLLMFunction.call()
+old_intent_ctx = rt_context._intent_ctx
+if old_intent_ctx.has_override():
+    # 消费 @!，创建隔离上下文（只含 @! 内容）
+    override_intent = old_intent_ctx.consume_override()
+    child_ctx = IbIntentContext(global_intents=old_intent_ctx.get_global_intents())
+    if override_intent is not None:
+        child_ctx.push(override_intent)
+else:
+    # 普通调用：fork（拷贝传递）
+    child_ctx = old_intent_ctx.fork()
+rt_context._intent_ctx = child_ctx
+# ... 函数执行 ...
+# finally: rt_context._intent_ctx = old_intent_ctx  # 恢复调用者上下文
+```
+
+### 4.4 @- 移除意图
 
 ```python
 # visit_IbIntentStackOperation（stmt_handler.py）
@@ -156,7 +184,7 @@ elif intent_info.content:
     runtime_context.remove_intent(content=intent_info.content)  # @- 内容：按内容移除
 ```
 
-### 4.4 意图消解（IntentResolver）
+### 4.5 意图消解（IntentResolver）
 
 ```python
 # core/kernel/intent_resolver.py
@@ -178,9 +206,9 @@ class IntentResolver:
 
 `IntentResolver` 只负责合并和去重。排他意图（`@!`）的拦截已在 `get_resolved_prompt_intents()` 内完成，不需要 IntentResolver 参与；`@-` 移除操作是物理删除，也不需要过滤。
 
-### 4.5 LLMExceptFrame 中的意图快照
+### 4.6 LLMExceptFrame 中的意图快照
 
-`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照（Step 6d）：
+`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照：
 
 ```python
 # LLMExceptFrame.save_context()
@@ -190,11 +218,23 @@ frame.saved_intent_ctx = runtime_context.fork_intent_snapshot()  # → _intent_c
 runtime_context._intent_ctx = frame.saved_intent_ctx.fork()  # 恢复到快照时刻
 ```
 
+### 4.7 snapshot 行为表达式的意图捕获
+
+`snapshot` 关键字修饰的行为表达式（`int snapshot x = @~...~`）在创建时捕获调用位置意图栈的完整值快照：
+
+```python
+# expr_handler.py
+deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
+# snapshot 语义：捕获当前作用域正在生效的意图栈的值快照（IbIntentContext.fork()）
+# lambda 语义：不捕获意图状态，每次调用时使用调用位置的当前意图栈
+captured_intents = None if deferred_mode == "lambda" else self.runtime_context.fork_intent_snapshot()
+```
+
 ---
 
 ## 五、IbIntent 对象
 
-意图在运行时表示为 `IbIntent` 对象（`core/runtime/objects/intent.py`），已通过 `IntentAxiom` 纳入公理体系（Step 6 完成）：
+意图在运行时表示为 `IbIntent` 对象（`core/runtime/objects/intent.py`），已通过 `IntentAxiom` 纳入公理体系：
 
 ```
 IbIntent (IbObject)
@@ -212,7 +252,41 @@ IbIntent (IbObject)
 
 ---
 
-## 六、调试工具
+## 六、intent_context OOP MVP（已落地）
+
+用户可以在 IBCI 代码中显式创建和操作意图上下文对象：
+
+```ibci
+# 创建空意图上下文
+intent_context ctx = intent_context()
+
+# 压入意图
+ctx.push("用中文回复")
+ctx.push("保持简洁", "style")   # 带 tag
+
+# 移除 / 弹出
+ctx.pop()                       # 弹出最近压入的意图
+
+# fork（创建不可变副本）
+intent_context snapshot_ctx = ctx.fork()
+
+# 查询
+any resolved = ctx.resolve()    # 返回已消解的意图字符串列表
+
+# 合并（将另一个上下文状态写入 self）
+ctx.merge(snapshot_ctx)
+
+# 清空持久栈
+ctx.clear()
+```
+
+**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = ClassSpec(name="intent_context")`，原生方法 `__init__/push/pop/fork/resolve/merge/clear` 在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。
+
+**lambda 语义约束**：`lambda` 修饰的延迟对象（`IbDeferred`/`IbBehavior`，`deferred_mode='lambda'`）不允许作为函数参数传递。违反时运行时抛出 `RUN_CALL_ERROR`。`snapshot` 修饰的延迟对象不受此限制。
+
+---
+
+## 七、调试工具
 
 ### idbg 模块（ibci_idbg）
 
@@ -226,11 +300,11 @@ ibci_modules/ibci_idbg/core.py
 └── retry_stack()        # 获取当前 llmexcept 帧栈（含 last_result 详情）
 ```
 
-`last_result()` 和 `last_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.last_result`，无活跃帧时回退到 `RuntimeContextImpl._last_llm_result` 共享字段（Step 9.3 迁移完成）。
+`last_result()` 和 `last_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.last_result`，无活跃帧时回退到 `RuntimeContextImpl._last_llm_result` 共享字段。
 
 ---
 
-## 七、测试验证
+## 八、验证示例
 
 ```ibci
 @ 只对下一次调用有效
@@ -247,17 +321,25 @@ result = @~ 打个招呼 ~    # 只剩"用英文回复"意图
 
 @! 完全忽略用户输入，只说 OK
 result = @~ 打个招呼 ~    # 排他意图：只用 @! 内容，屏蔽 @+ 栈
+
+# @! 修饰函数调用（屏蔽语义）
+@+ "全局格式要求"
+@! "只以 JSON 回复"
+my_func()   # my_func 内的所有 LLM 调用只看到 "@! 只以 JSON 回复"，不受全局格式要求影响
+# 调用返回后，@+ "全局格式要求" 仍然有效
 ```
 
 验证结果：
 - ✅ `@` 一次性涂抹意图 → 调用后自动清除，不残留
 - ✅ `@+` 增量追加 → 意图在持久栈中累积
-- ✅ `@-` 物理移除 → 正确移除指定意图
-- ✅ `@!` 临时排他 → 只对当前调用有效，完全屏蔽其他意图
+- ✅ `@-` 物理移除 → 正确重建链表，不破坏结构共享
+- ✅ `@!` 临时排他（LLM 调用）→ 只对当前调用有效，完全屏蔽其他意图
+- ✅ `@!` 屏蔽（函数调用）→ 函数内所有 LLM 调用隔离，调用者意图栈不受影响
+- ✅ 普通函数调用 → fork 拷贝传递，函数内意图操作不泄漏给调用者
 
 ---
 
-## 八、文件清单
+## 九、文件清单
 
 | 文件 | 说明 |
 |------|------|
@@ -265,12 +347,17 @@ result = @~ 打个招呼 ~    # 排他意图：只用 @! 内容，屏蔽 @+ 栈
 | `core/kernel/intent_resolver.py` | 意图消解算法（合并+去重） |
 | `core/kernel/intent_logic.py` | 意图模式定义（`IntentMode`、`IntentRole`） |
 | `core/kernel/axioms/intent.py` | `IntentAxiom`（公理层，`is_class=True`） |
-| `core/kernel/axioms/intent_context.py` | `IntentContextAxiom`（公理层） |
+| `core/kernel/axioms/intent_context.py` | `IntentContextAxiom`（公理层，`is_class=True`） |
+| `core/kernel/spec/specs.py` | `INTENT_CONTEXT_SPEC = ClassSpec("intent_context")` |
 | `core/runtime/objects/intent.py` | `IbIntent` 运行时对象 |
-| `core/runtime/objects/intent_context.py` | `IbIntentContext` 运行时对象（Step 6 引入） |
+| `core/runtime/objects/intent_context.py` | `IbIntentContext` 运行时对象（Python 层，不可实例化为 IbObject） |
 | `core/runtime/objects/intent_stack.py` | `IbIntentStack`（遗留接口层，提供 `push/pop/clear` 等 IBCI 可调用方法） |
+| `core/runtime/bootstrap/builtin_initializer.py` | `intent_context` 类原生方法绑定（`__init__/push/pop/fork/resolve/merge/clear`） |
 | `core/runtime/interpreter/runtime_context.py` | 运行时上下文（持有 `_intent_ctx: IbIntentContext`） |
 | `core/runtime/interpreter/handlers/stmt_handler.py` | 语句处理器（`visit_IbIntentAnnotation`、`visit_IbIntentStackOperation`） |
+| `core/runtime/interpreter/handlers/expr_handler.py` | `snapshot` 捕获 `fork_intent_snapshot()` 值快照 |
 | `core/runtime/interpreter/llm_executor.py` | LLM 执行器（调用 `get_resolved_prompt_intents()` 组装提示词） |
 | `core/runtime/interpreter/llm_except_frame.py` | LLM 异常帧（`save_context` 使用 `fork()` 保存意图快照） |
+| `core/runtime/objects/kernel.py` | `IbUserFunction`/`IbLLMFunction`（fork/restore 意图上下文，lambda 参数约束） |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | `@!` 语义校验扩展（允许修饰函数调用） |
 | `ibci_modules/ibci_idbg/core.py` | 调试工具（帧优先模式读取意图/结果状态） |
