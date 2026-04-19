@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-18（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；517 个测试通过）
+> **最后更新**：2026-04-19（Steps 1-7 全部落地；IbLLMCallResult 全链路接入；vibe 债务清理；Step 8-pre 快照隔离完整落地（§9.2 SEM_052 + §9.3 per-snapshot 化）；523 个测试通过）
 
 ---
 
@@ -190,6 +190,26 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 - **`ServiceContextImpl.set_orchestrator()`**：新增标准化注入方法，内聚 orchestrator + host_service 双向更新逻辑。
 *文件：`core/runtime/interpreter/interpreter.py`、`core/engine.py`、`core/runtime/interpreter/service_context.py`*
 
+### 4.17 Step 8-pre：llmexcept 快照隔离约束完整落地（§9.2 + §9.3）
+
+#### §9.2：llmexcept body 编译期 read-only 约束（SEM_052）
+- **`core/base/diagnostics/codes.py`**：新增 `SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"` 错误码。
+- **`core/compiler/semantic/passes/semantic_analyzer.py`**：
+  - 新增 `_llmexcept_outer_scope_names: Optional[frozenset]` 字段（初始为 `None`），在进入 llmexcept body 时设置，离开时恢复。
+  - 新增 `_collect_llmexcept_body_declared_names(body)` 辅助方法：利用 `LocalSymbolCollector`（Pass 2.5）预扫描时写入的 `def_node` 信息，区分 body-local 新声明变量（`def_node is stmt`）与外部作用域变量的重声明（`def_node is not stmt`），只将前者加入排除集合。
+  - `visit_IbLLMExceptionalStmt` 在进入 body 前，以"所有已知符号名 - body-local 新声明名"为外部作用域快照（`_llmexcept_outer_scope_names`），在离开时通过 `try/finally` 恢复（支持嵌套 llmexcept 正确工作）。
+  - `visit_IbAssign` 新增前置检查：若 `_llmexcept_outer_scope_names` 不为 `None` 且目标变量名在外部作用域集合中，发出 SEM_052 错误（无论是否带类型标注）。
+- **`tests/compiler/test_compiler_pipeline.py`**：新增 `TestLLMExceptBodyReadOnly`（6 个测试）：直接赋值到外部变量、用类型标注重声明外部变量（均应报 SEM_052）；声明全新局部变量、使用 retry 语句、读取外部变量、对整型外部变量写入（前三者允许，最后一个 SEM_052）。
+
+#### §9.3：`_last_llm_result` per-snapshot 化
+- **`core/runtime/interpreter/handlers/stmt_handler.py`**：`visit_IbLLMExceptionalStmt` 中每次迭代无条件清零 `_last_llm_result`（进入快照前清零）；读取 LLM 结果后立即再次清零（不再等 body 执行完）；删除 `try/finally` 块中的"恢复兼容性"代码。`LLMExceptFrame.last_result` 成为 per-snapshot 权威来源。
+- **`ibci_modules/ibci_idbg/core.py`**：
+  - `last_result()`：改为"优先从活跃 llmexcept 帧读取（`frames[-1].last_result`），无帧时回退共享字段"的帧优先模式，移除旧注释"临时清空说明"。
+  - `last_llm()`：同样改为帧优先模式获取 `res`，移除嵌套 if/else 链。
+  - `retry_stack()`：将 `last_llm_response`（始终为 `None` 的死字段）替换为 `last_result` 字段，包含 `is_certain`、`raw_response`（前 120 字符）、`retry_hint` 三个子字段。
+
+*全部 523 个测试通过。*
+
 
 ---
 
@@ -203,6 +223,8 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 | `void` 独立语义 | 不与任何具体类型互相赋值；表达无返回值 |
 | `lambda` vs `snapshot` | lambda 使用调用时意图栈；snapshot 捕获定义时意图栈快照 |
 | `llmexcept` 边界语义 | sibling 保护条件表达式；body-nested 保护循环体内语句 |
+| `llmexcept` body 只读约束 | body 内禁止写入快照外的外部变量（SEM_052 编译期错误）；body-local 新声明和 retry 语句允许 |
+| `_last_llm_result` per-snapshot | 读取后立即清零共享字段；`LLMExceptFrame.last_result` 为 per-snapshot 权威来源 |
 | `(Type) @~...~` 废弃 | PAR_010 硬错误；LHS 类型自动成为提示词上下文 |
 | 彻底重构原则 | 禁止渐进式补丁；完成则完整，不留旁路 |
 | `LLMExecutorImpl` 不可替换 | 它是语言语义的一部分，provider 可配置，执行接口不可替换 |

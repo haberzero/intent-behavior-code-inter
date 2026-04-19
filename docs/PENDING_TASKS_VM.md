@@ -52,7 +52,7 @@ ENTER SNAPSHOT
 |------|--------|--------|
 | 读取外部变量 | 允许（fast path：直接读快照时值）| ✅ |
 | 写入 `retry_hint` | 允许（retry-scoped，不 commit 到外部）| ✅ |
-| 写入普通外部变量 | **未加限制**（仅靠 restore_snapshot 回滚） | 应产生 SEM 编译期错误 |
+| 写入普通外部变量 | ~~未加限制（仅靠 restore_snapshot 回滚）~~ → **已产生 SEM_052 编译期错误** ✅ | ✅ |
 | 快照失败后传播异常 | 目前仅 break + 返回最后值 | 应抛出明确异常 |
 
 ### 三个历史危机的消解方式（更新版）
@@ -69,13 +69,13 @@ ENTER SNAPSHOT
 - `LLMExceptFrame.restore_snapshot()` 在每次 retry 前恢复快照 ✅
 - `intent_context.fork()` 在快照进入时创建独立意图上下文 ✅
 - `loop_resume` 支持 for 循环从断点处 retry 恢复 ✅
-- `_last_llm_result` 仍在 `RuntimeContextImpl` 上（共享字段）⚠️ — 并发场景下应移入 `LLMExceptFrame`（见 PENDING_TASKS.md §9.3）
-- llmexcept body 内的写操作**无编译期约束** ⚠️ — 需实现 SEM 错误（见 PENDING_TASKS.md §9.2）
+- `_last_llm_result` ~~仍在 `RuntimeContextImpl` 上（共享字段）~~ → **已迁移为 per-snapshot（§9.3）**：读取后立即清零共享字段，帧私有 `frame.last_result` 为权威来源 ✅
+- llmexcept body 内的写操作 ~~无编译期约束~~ → **已实现 SEM_052 编译期错误（§9.2）** ✅
 
 ### 待落地工程工作
 
-1. **SEM 约束（§9.2）**：llmexcept body 内向外部变量的写操作产生编译期错误
-2. **`_last_llm_result` 迁移（§9.3）**：将该字段从 `RuntimeContextImpl`（共享）移入 `LLMExceptFrame`（per-snapshot）
+1. ~~**SEM 约束（§9.2）**：llmexcept body 内向外部变量的写操作产生编译期错误~~ → **已完成** ✅
+2. ~~**`_last_llm_result` 迁移（§9.3）**：将该字段从 `RuntimeContextImpl`（共享）移入 `LLMExceptFrame`（per-snapshot）~~ → **已完成** ✅
 3. **编译器 DDG 分析**（Step 8a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
 4. **失败传播语义**：重试耗尽时从 `break+返回最后值` 改为抛出明确的 `LLMPermanentFailureError`，由外层处理器接管
 

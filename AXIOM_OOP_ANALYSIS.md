@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-19（**Steps 1-7 全部完成**：IILLMExecutor 接口、BehaviorAxiom 自主执行、IbDeferred/CallableAxiom/DeferredAxiom、IbLLMFunction 自主执行、IbUserFunction ContextVar 自洽、IbIntentContext 意图公理化、LlmCallResultAxiom + IbLLMCallResult；OOP×Protocol PR-A/PR-B 完成；517 个测试全部通过）
+> **最后更新**：2026-04-19（**Steps 1-7 + Step 8-pre 全部完成**：IILLMExecutor 接口、BehaviorAxiom 自主执行、IbDeferred/CallableAxiom/DeferredAxiom、IbLLMFunction 自主执行、IbUserFunction ContextVar 自洽、IbIntentContext 意图公理化、LlmCallResultAxiom + IbLLMCallResult；OOP×Protocol PR-A/PR-B 完成；IntentAxiom 落地；§9.2 SEM_052 编译期快照隔离约束；§9.3 `_last_llm_result` per-snapshot 化；523 个测试全部通过）
 >
 > 已完成工作见 `docs/COMPLETED.md`，近期任务见 `docs/NEXT_STEPS.md`，VM 长期架构设想见 `docs/PENDING_TASKS_VM.md`。
 
@@ -32,7 +32,9 @@
 
 | 类型 | 问题描述 |
 |------|---------|
-| **Intent** | 内置 ClassSpec（通过 `Bootstrapper.initialize()` 创建），无专用 `IntentAxiom`。`IbIntent` 是真正的 `IbObject` 子类，`IntentStack` 有完整原生方法，功能正确。完整的 `IntentAxiom` 公理化是长期目标（预估 3-5 人天），不阻塞任何当前功能。见 `docs/PENDING_TASKS.md §2.1`。 |
+| **Intent** | ✅ `IntentAxiom`（`is_class()=True`，完整 vtable）已注册；`IbIntent` 含 `get_content()/get_tag()/get_mode()` 三个公共方法。已完成，见 `docs/COMPLETED.md §1.12`。 |
+
+> 所有内置类型均已完整公理化。上表保留 Intent 条目仅作历史记录。
 
 ### 公理类型层次（当前完整状态）
 
@@ -234,14 +236,15 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
-### 下一步：Step 8-11（VM 演进，见 `docs/NEXT_STEPS.md`）
+### 下一步：Step 8-pre + Step 9-11（VM 演进，见 `docs/NEXT_STEPS.md`）
 
-| Step | 内容 | 前提条件 |
-|------|------|---------|
-| Step 8 | 架构边界注释文档化 | 随时可做 |
-| Step 9 | VM CPS 调度循环（消除 Python 递归栈） | IExecutionFrame 接口完整（✅） |
-| Step 10 | Layer 1 LLM 流水线（DDG 编译器 + LLMScheduler） | IbIntentContext.fork() 完整（✅） |
-| Step 11 | Layer 2 多 Interpreter 并发 | ContextVar（✅） |
+| Step | 内容 | 前提条件 | 状态 |
+|------|------|---------|------|
+| Step 8-pre | llmexcept 快照隔离约束完整落地（§9.2 SEM_052 + §9.3 `_last_llm_result` per-snapshot） | — | ✅ 完成 |
+| Step 8 | 架构边界注释文档化 | 随时可做 | ⏳ |
+| Step 9 | VM CPS 调度循环（消除 Python 递归栈） | IExecutionFrame 接口完整（✅） | ⏳ |
+| Step 10 | Layer 1 LLM 流水线（DDG 编译器 + LLMScheduler） | IbIntentContext.fork() 完整（✅） | ⏳ |
+| Step 11 | Layer 2 多 Interpreter 并发 | ContextVar（✅） | ⏳ |
 
 详见 `docs/NEXT_STEPS.md` 和 `docs/PENDING_TASKS_VM.md`。
 
@@ -258,14 +261,11 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ---
 
-### 5.2 Intent 公理化（长期目标）
+### 5.2 Intent 公理化 ✅ 已完成（Step 2.1）
 
-**当前状态**：Intent 通过 `Bootstrapper.initialize()` 注册为内置 `ClassSpec`；`IbIntent` 是运行时对象，直接由 RuntimeContext 和 factory 管理；`IntentStack` 已有完整的原生方法注册（`push`/`pop`/`remove`/`clear`）。`AxiomRegistry` 中**不存在** Intent 专属 Axiom。
+**完成状态**：`IntentAxiom`（`is_class()=True`，完整 vtable）已注册到公理体系；`IbIntent` 持有 `get_content()`、`get_tag()`、`get_mode()` 三个公共方法；`INTENT_SPEC` 加入 `specs.py` 并注册到 `create_default_spec_registry()`。
 
-**完整公理化目标（长期）**：
-- 为 Intent 定义专用 `IntentAxiom`（`is_class()=True`，完整的 vtable）
-- 将 Intent 的行为约束纳入公理体系，消除依赖运行时直接管理的隐式行为
-- 工作量预估 3-5 人天，不阻塞当前功能
+完整实现细节见 `docs/COMPLETED.md §1.12` 和 `docs/PENDING_TASKS.md §2.1`。
 
 ---
 
@@ -281,4 +281,4 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ## 六、一句话总结
 
-> **公理化/万物皆对象改造全部完成（Steps 1-7）**：IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行、ibci_ihost/idbg KernelRegistry 标准化（Steps 1-4b）；IExecutionFrame Protocol + ContextVar 帧注册表、IbUserFunction 自洽执行（Step 5）；IntentContextAxiom + IbIntentContext + RuntimeContextImpl 完整迁移 + LLMExceptFrame 安全快照（Step 6）；LlmCallResultAxiom + IbLLMCallResult 全链路接入（Step 7）。BehaviorSpec 编译期返回类型推断完成。OOP×Protocol 边界完整清理（PR-A + PR-B）。517 个测试全部通过。**下一里程碑是 Step 9（VM CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）**，见 `docs/NEXT_STEPS.md`。
+> **公理化/万物皆对象改造全部完成（Steps 1-7 + Step 8-pre）**：IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行、ibci_ihost/idbg KernelRegistry 标准化（Steps 1-4b）；IExecutionFrame Protocol + ContextVar 帧注册表、IbUserFunction 自洽执行（Step 5）；IntentContextAxiom + IbIntentContext + RuntimeContextImpl 完整迁移 + LLMExceptFrame 安全快照（Step 6）；LlmCallResultAxiom + IbLLMCallResult 全链路接入（Step 7）；IntentAxiom 完整公理化（Step 2.1）；llmexcept 快照隔离完整落地：§9.2 SEM_052 编译期约束 + §9.3 `_last_llm_result` per-snapshot 迁移（Step 8-pre）。BehaviorSpec 编译期返回类型推断完成。OOP×Protocol 边界完整清理（PR-A + PR-B）。523 个测试全部通过。**下一里程碑是 Step 9（VM CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）**，见 `docs/NEXT_STEPS.md`。

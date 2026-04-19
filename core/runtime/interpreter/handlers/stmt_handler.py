@@ -64,16 +64,17 @@ class StmtHandler(BaseHandler):
                 # 显式恢复上下文快照 (如果是 retry 跳转回来的)
                 frame.restore_snapshot(self.runtime_context)
 
-                # [CRITICAL] retry 后重新执行赋值时，需要清除 last_llm_result
-                # 否则 visit_IbAssign 会因为 is_certain=False 而再次跳过赋值
-                if frame.should_retry:
-                    self.runtime_context.set_last_llm_result(None)
+                # §9.3: 进入快照前清除共享信号通道，防止前次结果污染本次判断。
+                # 此处总是清除（无条件），消除对 frame.should_retry 状态的依赖。
+                self.runtime_context.set_last_llm_result(None)
 
                 # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
                 last_target_value = self.execution_context.visit(target_uid, bypass_protection=True)
 
-                # 检查执行后的 LLM 结果确定性
+                # §9.3: 读取 LLM 结果后立即从共享字段迁移到帧私有字段，
+                # 使 _last_llm_result 的生命周期缩小为"快照内通信"（进入清零，读后清零）。
                 result = self.runtime_context.get_last_llm_result()
+                self.runtime_context.set_last_llm_result(None)
 
                 # 如果没有 LLM 调用，或者 LLM 调用是确定的（成功匹配或明确失败）
                 if result is None or result.is_certain:
@@ -86,22 +87,14 @@ class StmtHandler(BaseHandler):
                 self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
                     f"llmexcept: uncertain result on attempt {attempt} (raw: '{raw_preview}'), entering handler body")
 
+                # §9.3: 结果存入帧私有字段; _last_llm_result 在 body 执行期间维持 None。
+                # idbg.last_result() / idbg.last_llm() 从 frames[-1].last_result 读取，无需恢复。
                 frame.last_result = result
                 frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
 
-                # [IMPORTANT] 在执行 llmexcept 块之前，临时清除不确定性标记。
-                # 否则，块内的任何 IbAssign 都会因为看到 not last_llm_result.is_certain 而跳过赋值。
-                self.runtime_context.set_last_llm_result(None)
-
                 # 执行 llmexcept 的 body 块 (处理逻辑)
-                try:
-                    for stmt_uid in body_uids:
-                        self.visit(stmt_uid)
-                finally:
-                    # 恢复最后的结果信息，以便块内的 idbg.last_result() 能拿到数据
-                    # 注意：如果 body 块内又产生了新的 LLM 调用，这里不应该覆盖它
-                    if self.runtime_context.get_last_llm_result() is None:
-                        self.runtime_context.set_last_llm_result(result)
+                for stmt_uid in body_uids:
+                    self.visit(stmt_uid)
 
                 # 检查重试计数
                 if not frame.increment_retry():

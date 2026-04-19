@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-19（快照隔离模型确立；新增 §9.2/§9.3 llmexcept 完整性约束任务；517 个测试通过）
+> **最后更新**：2026-04-19（快照隔离模型完整落地：§9.2 SEM_052 编译期约束 + §9.3 `_last_llm_result` per-snapshot 化均已完成；523 个测试通过）
 
 ---
 
@@ -209,40 +209,24 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 9.2 llmexcept body 内外部变量写入约束（SEM 错误）[PENDING]
+### 9.2 llmexcept body 内外部变量写入约束（SEM_052）[✅ COMPLETED — 2026-04-19]
 
-**背景**：快照隔离模型要求 llmexcept body 内不允许写入快照外的外部变量（只读）。当前仅靠 `restore_snapshot()` 运行时回滚，无编译期保障。
-
-**任务**：在语义分析器中，对 llmexcept body 内的赋值语句做静态分析：
-- 允许写入 retry-scoped 特殊变量（`retry_hint` 等）
-- 禁止写入快照外的普通变量 → 产生 `SEM_xxx`（待分配）编译期错误
-
-**实现思路**：
-1. 语义分析阶段识别 `IbLLMExceptionalStmt` 的 body 块
-2. 在 body 块的 visit 过程中启用 `read_only_scope` 模式（类似 const 作用域标记）
-3. 对 body 块内的 `IbAssign` 节点检查目标变量是否为 retry-scoped；若否则产生 SEM 错误
-
-**文件**：`core/compiler/semantic/passes/semantic_analyzer.py`、`core/base/diagnostics/codes.py`
+**完成内容**：
+- `core/base/diagnostics/codes.py`：新增 `SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"`
+- `semantic_analyzer.py`：添加 `_llmexcept_outer_scope_names: Optional[frozenset]` 字段；
+  `visit_IbLLMExceptionalStmt` 进入 body 前通过 `_collect_llmexcept_body_declared_names()` 区分
+  body-local 新声明变量与外部作用域变量，并设置外部作用域快照；`visit_IbAssign` 在检测到对外部作用域变量的任何赋值时发出 SEM_052。
+- `tests/compiler/test_compiler_pipeline.py`：新增 `TestLLMExceptBodyReadOnly`（6 个测试）覆盖各场景。
+- 523 个测试全部通过。
 
 ---
 
-### 9.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [PENDING]
+### 9.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [✅ COMPLETED — 2026-04-19]
 
-**背景**：快照隔离模型中，每个 LLM 语句的执行结果是快照私有状态，不应放在全局共享的 `RuntimeContextImpl` 上。当前 `_last_llm_result` 作为 `RuntimeContextImpl` 的共享字段，在串行场景没有问题，但在未来的并发 dispatch 场景会产生竞争。
-
-**当前状态**：
-- `LLMExceptFrame.last_result` 已存在（frame-private 字段）✅
-- `RuntimeContextImpl._last_llm_result` 仍是共享字段 ⚠️
-- `stmt_handler` 通过 `runtime_context.get_last_llm_result()` 读取，`set_last_llm_result()` 写入
-
-**任务**：
-1. `visit_IbLLMExceptionalStmt` 内的 LLM 结果信号读写全部通过 `frame.last_result` 完成
-2. `runtime_context._last_llm_result` 的生命周期缩小为"快照内部通信"（进入快照时清零，退出快照时清零）
-3. 最终目标：`_last_llm_result` 仅在 frame-local 路径内有效，不再作为跨 frame 共享状态
-
-**文件**：`core/runtime/interpreter/runtime_context.py`、`core/runtime/interpreter/llm_except_frame.py`、`core/runtime/interpreter/handlers/stmt_handler.py`
-
-**注意**：此任务不阻塞现有功能，作为并发基础设施预备工作推进。
+**完成内容**：
+- `stmt_handler.py`：`visit_IbLLMExceptionalStmt` 中读取 `result` 后立即清零共享字段，并将 `frame.last_result = result` 作为 per-snapshot 权威存储；去除了依赖 `frame.should_retry` 的条件性清零（改为无条件清零）；删除了 `finally` 块中"将 result 恢复回 `_last_llm_result`"的兼容性代码。
+- `ibci_idbg/core.py`：`last_result()` 和 `last_llm()` 均改为"优先从活跃帧读取，无帧时回退共享字段"的帧优先模式；`retry_stack()` 替换 `last_llm_response`（始终为 None）为 `last_result` 帧私有字段详情。
+- 523 个测试全部通过。
 
 ---
 
