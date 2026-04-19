@@ -59,7 +59,8 @@ class LLMExceptFrame:
         node_type: 节点类型 (如 "IbIf", "IbExprStmt" 等)
         retry_count: 当前重试次数
         max_retry: 最大重试次数 (默认 3)
-        saved_vars: 重试前保存的变量快照
+        saved_vars: 方案A深克隆变量快照 {变量名 → 克隆值}
+        saved_protocol_states: 方案B用户协议快照 {变量名 → (原始对象, __snapshot__()返回值)}
         saved_intent_ctx: 重试前保存的意图上下文快照（IbIntentContext.fork()）
         saved_loop_context: 重试前保存的循环上下文
         saved_retry_hint: 重试前保存的提示词
@@ -67,6 +68,14 @@ class LLMExceptFrame:
         last_llm_response: 最后一次 LLM 响应
         is_in_fallback: 是否正在执行 fallback 块
         should_retry: 是否应该继续重试
+
+    快照策略（方案B优先，方案A兜底）:
+        若用户 IBCI 类定义了 ``func __snapshot__(self)`` 和 ``func __restore__(self, state)``，
+        llmexcept 帧优先使用该协议：在进入帧时调用 ``__snapshot__()``，
+        在每次 retry 前调用 ``__restore__(state)`` 原地恢复对象状态。
+        用户对快照粒度拥有完全控制权（可以只保存关键字段）。
+
+        对于未定义 ``__snapshot__`` 的类型，自动使用方案A（``_try_deep_clone``）。
     """
     
     # 基本信息
@@ -89,6 +98,11 @@ class LLMExceptFrame:
     # restore_context() 故意 **不** 重置它，使得 retry 后 for 循环
     # 能从失败的迭代处继续，而不是从头开始。
     loop_resume: Dict[str, int] = field(default_factory=dict)
+
+    # 方案B：用户协议快照（__snapshot__ / __restore__）
+    # 映射: 变量名 → (原始对象引用, __snapshot__() 返回的状态对象)
+    # 当用户 IBCI 类定义了 func __snapshot__ / func __restore__，此字段优先于方案A（_try_deep_clone）。
+    saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
     # 错误信息
     last_error: Optional[Exception] = None
@@ -130,21 +144,44 @@ class LLMExceptFrame:
         """
         保存当前作用域的变量快照。
 
-        可快照的类型（通过深克隆保存）：
+        查找顺序（每个变量独立决策）：
+
+        **方案B（用户协议，优先）**：
+        - 目标类型为用户自定义 IbObject 且 vtable 中定义了 `func __snapshot__(self)`
+        - 调用 `obj.__snapshot__()` 获取状态对象（可以是任意类型）
+        - 存入 `saved_protocol_states`；`_restore_vars` 时调用 `__restore__(state)` 原地恢复
+        - 如果 `__snapshot__` 调用出现异常，自动降级到方案A
+
+        **方案A（自动深克隆，回退）**：
         - IbNone, IbInteger, IbFloat, IbString（不可变原语，直接共享引用）
         - IbList, IbTuple, IbDict（递归深克隆所有元素/值）
-        - 用户自定义 IbObject 实例（递归深克隆所有字段）
+        - 用户自定义 IbObject（递归克隆所有字段，无法克隆的字段跳过）
 
-        不可快照的类型（跳过，不参与恢复）：
+        **不可快照的类型（跳过）**：
         - IbFunction / IbNativeFunction / IbBehavior（可调用对象）
         - IbNativeObject（Python 原生封装）
-        - 其他无法深克隆的对象
         """
         self.saved_vars = {}
+        self.saved_protocol_states = {}
         scope = runtime_context.get_current_scope()
+
+        from core.runtime.objects.kernel import IbObject as KernelIbObject
 
         for name, symbol in scope.get_all_symbols().items():
             val = symbol.value
+
+            # 方案B 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
+            if type(val) is KernelIbObject:
+                snapshot_method = val.ib_class.lookup_method('__snapshot__')
+                if snapshot_method:
+                    try:
+                        state = snapshot_method.call(val, [])
+                        self.saved_protocol_states[name] = (val, state)
+                        continue  # 跳过方案A克隆
+                    except Exception:
+                        pass  # 协议调用失败，降级到方案A
+
+            # 方案A：自动深克隆
             cloned = self._try_deep_clone(val)
             if cloned is not None:
                 self.saved_vars[name] = cloned
@@ -253,17 +290,37 @@ class LLMExceptFrame:
         """
         恢复变量快照。
 
-        恢复策略:
-        - 遍历 saved_vars（只含已深克隆的值），尝试恢复到当前作用域
-        - 只恢复已存在的变量（通过 assign 方法）
-        - 不存在的变量（如函数引用、行为对象）不参与快照，直接跳过
+        恢复顺序：
 
-        注意：saved_vars 中的值为深克隆副本，因此不会与恢复前的引用共享状态。
-        用户自定义对象的字段也会被完整回滚（前提是字段值本身可克隆）。
-        适合 for 循环场景，因为迭代变量在循环开始时已定义。
+        **方案B（用户协议，原地恢复）**：
+        - 遍历 `saved_protocol_states`，找到对应变量的原始对象引用
+        - 若变量槽已被替换为其他对象，先将变量重新指向原始对象
+        - 调用 `original_obj.__restore__(saved_state)` 原地恢复字段状态
+        - 若 `__restore__` 未定义或调用失败，保留当前状态（最佳努力语义）
+
+        **方案A（替换绑定）**：
+        - 遍历 `saved_vars`（深克隆副本），将变量槽替换为克隆副本
+        - 只恢复已存在的变量（通过 assign）；不存在的变量直接跳过
+
+        注意：`loop_resume` 字段故意不在此处重置，以便 retry 后 for 循环从断点处继续。
         """
         scope = runtime_context.get_current_scope()
 
+        # 方案B：通过 __restore__ 协议原地恢复用户对象
+        for name, (original_obj, saved_state) in self.saved_protocol_states.items():
+            symbol = scope.get_symbol(name)
+            if symbol and not symbol.is_const:
+                restore_method = original_obj.ib_class.lookup_method('__restore__')
+                if restore_method:
+                    # 如果变量槽被替换为其他对象，先恢复原始对象引用
+                    if symbol.value is not original_obj:
+                        scope.assign(name, original_obj)
+                    try:
+                        restore_method.call(original_obj, [saved_state])
+                    except Exception:
+                        pass  # 协议调用失败：保留当前状态（最佳努力）
+
+        # 方案A：将变量绑定替换为深克隆副本
         for name, val in self.saved_vars.items():
             symbol = scope.get_symbol(name)
             if symbol and not symbol.is_const:

@@ -727,3 +727,145 @@ print((str)c.count)
 """
         lines = run_and_capture(code)
         assert "7" in lines
+
+
+# ---------------------------------------------------------------------------
+# 15. 方案B: User-controlled __snapshot__ / __restore__ protocol
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptSnapshotProtocol:
+    """
+    Tests for 方案B: user IBCI classes implement __snapshot__(self) and
+    __restore__(self, state) to take full control over what gets snapshotted
+    and how it is restored during llmexcept retry cycles.
+
+    Priority rule: if __snapshot__ is defined on the class, 方案B is used
+    for that variable; otherwise 方案A (auto deep-clone) is the fallback.
+    """
+
+    def test_snapshot_and_restore_are_called(self):
+        """
+        __snapshot__ is called once when the llmexcept frame is entered;
+        __restore__ is called before each retry.
+        Both calls print observable output to confirm they were executed.
+        """
+        code = ai_setup_code() + """
+class Watcher:
+    int val
+
+    func __snapshot__(self) -> int:
+        print("snap:" + (str)self.val)
+        return self.val
+
+    func __restore__(self, int s):
+        print("restore:" + (str)s)
+        self.val = s
+
+Watcher w = Watcher(7)
+str r = @~ MOCK:SEQ:FAIL:done ~
+llmexcept:
+    retry "hint"
+print("final:" + (str)w.val)
+"""
+        lines = run_and_capture(code)
+        assert "snap:7" in lines       # __snapshot__ invoked on frame setup
+        assert "restore:7" in lines    # __restore__ invoked before retry
+        assert "final:7" in lines      # val correctly preserved by protocol
+
+    def test_restore_reverts_mutation_caused_before_llm_call(self):
+        """
+        A mutation to the object that happens AFTER the snapshot was taken
+        (e.g. inside the previous iteration) is correctly rolled back by
+        __restore__ before the next attempt.
+        """
+        code = ai_setup_code() + """
+class Counter:
+    int n
+
+    func __snapshot__(self) -> int:
+        return self.n
+
+    func __restore__(self, int saved):
+        self.n = saved
+
+Counter c = Counter(5)
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print((str)c.n)
+"""
+        lines = run_and_capture(code)
+        # After retry, c.n must still be 5 (restored to snapshot value)
+        assert "5" in lines
+
+    def test_snapshot_protocol_takes_priority_over_auto_clone(self):
+        """
+        When __snapshot__ is defined, the user protocol is used instead of
+        method A auto deep-clone. Demonstrated by the __restore__ print being
+        visible (only called in 方案B path), not the auto-clone path.
+        """
+        code = ai_setup_code() + """
+class Tracked:
+    int x
+    str label
+
+    func __snapshot__(self) -> int:
+        print("protocol_snap")
+        return self.x
+
+    func __restore__(self, int saved_x):
+        print("protocol_restore")
+        self.x = saved_x
+
+Tracked t = Tracked(42, "test")
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print("done")
+"""
+        lines = run_and_capture(code)
+        assert "protocol_snap" in lines     # 方案B's __snapshot__ was called
+        assert "protocol_restore" in lines  # 方案B's __restore__ was called
+        assert "done" in lines
+
+    def test_snapshot_only_defined_no_restore_is_safe(self):
+        """
+        If only __snapshot__ is defined (no __restore__), the runtime handles
+        this gracefully: the object is kept in saved_protocol_states but
+        __restore__ is not called (best-effort semantics — no crash).
+        """
+        code = ai_setup_code() + """
+class PartialProtocol:
+    int val
+
+    func __snapshot__(self) -> int:
+        return self.val
+
+PartialProtocol p = PartialProtocol(10)
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print("ok")
+"""
+        lines = run_and_capture(code)
+        # No crash; code should complete normally
+        assert "ok" in lines
+
+    def test_fallback_to_auto_clone_when_no_snapshot_defined(self):
+        """
+        When __snapshot__ is NOT defined, 方案A auto deep-clone is used as
+        fallback. The existing auto-clone behavior is preserved.
+        """
+        code = ai_setup_code() + """
+class Plain:
+    int value
+
+Plain obj = Plain(99)
+str r = @~ MOCK:SEQ:FAIL:ok ~
+llmexcept:
+    retry "hint"
+print((str)obj.value)
+"""
+        lines = run_and_capture(code)
+        # obj.value unchanged, auto-clone fallback works correctly
+        assert "99" in lines

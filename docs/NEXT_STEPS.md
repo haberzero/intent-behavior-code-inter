@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-19（`__prompt__` vtable 修复落地；`for...if`/`while...if` 过滤语法运行时实现；llmexcept 快照支持用户自定义类深克隆；`func __init__` 文档修正；538 个测试通过。）
+> **最后更新**：2026-04-19（`__prompt__` vtable 修复落地；`for...if`/`while...if` 过滤语法运行时实现；llmexcept 快照支持用户自定义类深克隆（方案A）和用户协议（方案B：`__snapshot__`/`__restore__`）；`func __init__` 文档修正；543 个测试通过。）
 
 ---
 
@@ -23,7 +23,8 @@
 - ✅ **Step 8-pre（快照隔离完整落地）**：§9.2 SEM_052 编译期 read-only 约束 + §9.3 `_last_llm_result` per-snapshot 化；idbg `last_result()` / `last_llm()` 帧优先模式；`retry_stack()` 含帧私有 `last_result` 详情
 - ✅ **`__prompt__` 协议 vtable 修复**：`_parse_result()` + `_get_llmoutput_hint()` 增加用户类 vtable 回退路径；`IbObject.__outputhint_prompt__()` 委托给 vtable 方法
 - ✅ **`for...if` / `while...if` 过滤语法**：`visit_IbFilteredExpr` 实现（while 场景）；`visit_IbFor` 拆包 `IbFilteredExpr`，foreach 场景在目标赋值后求值 filter（`continue` 语义），条件驱动 for 场景 filter 失败终止循环（`break` 语义，与 `while...if` 一致）
-- ✅ **llmexcept 快照深克隆**：`LLMExceptFrame._save_vars_snapshot()` 使用 `_try_deep_clone()`，支持用户自定义 `IbObject` 实例的递归字段克隆；循环引用通过 `memo` dict 安全处理
+- ✅ **llmexcept 快照深克隆（方案A）**：`LLMExceptFrame._save_vars_snapshot()` 使用 `_try_deep_clone()`，支持用户自定义 `IbObject` 实例的递归字段克隆；循环引用通过 `memo` dict 安全处理
+- ✅ **llmexcept 用户协议快照（方案B）**：`saved_protocol_states` 字段；`_save_vars_snapshot()` 检测 `__snapshot__` vtable 并优先使用；`_restore_vars()` 调用 `__restore__(state)` 原地恢复；方案B优先于方案A，失败时自动降级；方案C（JSON 序列化）已作为 VM 任务记录在 `docs/PENDING_TASKS_VM.md`
 
 ---
 
@@ -76,6 +77,7 @@ class MyType:
 1. **§9.2 编译期 read-only 约束**（SEM_052）✅：llmexcept body 内向外部作用域变量的任何赋值（含类型标注重声明）产生 `SEM_052` 编译期错误；body-local 新声明变量和 `retry` 语句不受限制。新增 `TestLLMExceptBodyReadOnly` 覆盖 6 个测试场景。
 2. **§9.3 `_last_llm_result` per-snapshot 化** ✅：读取后立即清零共享字段（不再依赖 `finally` 块恢复）；`LLMExceptFrame.last_result` 是 per-snapshot 权威来源；idbg `last_result()` / `last_llm()` 改为帧优先模式；`retry_stack()` 含帧私有 `last_result` 详情（替代始终为 None 的 `last_llm_response`）。
 3. **§9.4 用户自定义对象深克隆快照** ✅：`LLMExceptFrame._try_deep_clone()` 递归克隆用户 IBCI 对象实例，字段回滚在 retry 时生效；函数/行为/原生对象不参与快照（跳过，不影响正确性）。
+4. **§9.5 用户协议快照（方案B）** ✅：`LLMExceptFrame` 新增 `saved_protocol_states`；`_save_vars_snapshot()` 检测 vtable 中的 `__snapshot__` 方法，优先调用（方案B）；`_restore_vars()` 对方案B对象调用 `__restore__(state)` 原地恢复，方案A对象替换变量绑定；`__snapshot__` 调用失败时自动降级到方案A。
 
 ---
 
