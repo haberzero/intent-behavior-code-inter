@@ -68,6 +68,7 @@ class TokenType(Enum):
     STAR = auto()
     STAR_STAR = auto()  # **（幂运算）
     SLASH = auto()
+    FLOOR_DIV = auto()  # //（整除）
     PERCENT = auto()
 
     # 复合赋值
@@ -76,6 +77,7 @@ class TokenType(Enum):
     STAR_ASSIGN = auto()
     STAR_STAR_ASSIGN = auto()  # **=
     SLASH_ASSIGN = auto()
+    FLOOR_DIV_ASSIGN = auto()  # //=
     PERCENT_ASSIGN = auto()
 
     # 位运算

@@ -44,6 +44,7 @@ OP_MAP: Dict[TokenType, str] = {
     TokenType.STAR: "*",
     TokenType.STAR_STAR: "**",
     TokenType.SLASH: "/",
+    TokenType.FLOOR_DIV: "//",
     TokenType.PERCENT: "%",
 
     # Bitwise operators
@@ -75,5 +76,6 @@ COMPOUND_OP_MAP: Dict[TokenType, str] = {
     TokenType.STAR_ASSIGN: "*=",
     TokenType.STAR_STAR_ASSIGN: "**=",
     TokenType.SLASH_ASSIGN: "/=",
+    TokenType.FLOOR_DIV_ASSIGN: "//=",
     TokenType.PERCENT_ASSIGN: "%=",
 }

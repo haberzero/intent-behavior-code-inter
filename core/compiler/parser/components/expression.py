@@ -65,6 +65,7 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.STAR, None, self.binary, IbPrecedence.FACTOR)
         self.register(TokenType.STAR_STAR, None, self.pow_binary, IbPrecedence.POW)
         self.register(TokenType.SLASH, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.FLOOR_DIV, None, self.binary, IbPrecedence.FACTOR)
         self.register(TokenType.PERCENT, None, self.binary, IbPrecedence.FACTOR)
         
         # Bitwise Operations
