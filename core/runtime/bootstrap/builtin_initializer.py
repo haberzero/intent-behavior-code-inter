@@ -340,6 +340,90 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     registry.register_builtin_instance("IntentStack", IbIntentStack(intent_stack_class))
 
+    # 5.6 注册 intent_context 内置类（OOP MVP — is_class=True）
+    # 允许 IBCI 用户代码显式创建和操作意图上下文对象：
+    #   intent_context ctx = intent_context()
+    #   ctx.push("用中文回复")
+    #   ctx.fork() → 新的 intent_context 实例（拷贝）
+    intent_context_class = ib_classes.get("intent_context")
+    if intent_context_class:
+        from core.runtime.objects.intent_context import IbIntentContext
+        from core.runtime.objects.intent import IbIntent
+        from core.kernel.intent_logic import IntentMode, IntentRole
+
+        def _ic_init(receiver, *args):
+            """intent_context() 构造函数：创建空意图上下文。"""
+            receiver.fields['_ctx'] = IbIntentContext()
+            return registry.get_none()
+
+        def _ic_push(receiver, *args):
+            """ctx.push(content) 或 ctx.push(content, tag)：压入持久意图。"""
+            ctx = receiver.fields.get('_ctx')
+            if not ctx or not args:
+                return registry.get_none()
+            content_obj = args[0]
+            content_str = content_obj.to_native() if hasattr(content_obj, 'to_native') else str(content_obj)
+            tag_str = None
+            if len(args) >= 2:
+                tag_obj = args[1]
+                tag_str = tag_obj.to_native() if hasattr(tag_obj, 'to_native') else None
+            intent_cls = registry.get_class("Intent")
+            intent = IbIntent(ib_class=intent_cls, content=content_str,
+                              mode=IntentMode.APPEND, tag=tag_str, role=IntentRole.DYNAMIC)
+            ctx.push(intent)
+            return registry.get_none()
+
+        def _ic_pop(receiver, *args):
+            """ctx.pop()：弹出并返回栈顶意图内容。"""
+            ctx = receiver.fields.get('_ctx')
+            if ctx:
+                intent = ctx.pop()
+                if intent is not None and hasattr(intent, 'content'):
+                    return registry.box(intent.content)
+            return registry.get_none()
+
+        def _ic_fork(receiver, *args):
+            """ctx.fork()：返回新的 intent_context 实例（拷贝当前状态）。"""
+            ctx = receiver.fields.get('_ctx')
+            new_instance = IbObject(intent_context_class)
+            new_instance.fields['_ctx'] = ctx.fork() if ctx else IbIntentContext()
+            return new_instance
+
+        def _ic_resolve(receiver, *args):
+            """ctx.resolve()：返回当前意图上下文消解后的提示词字符串列表。"""
+            ctx = receiver.fields.get('_ctx')
+            if not ctx:
+                return registry.box([])
+            intents = ctx.get_active_intents()
+            strings = [i.content for i in intents if hasattr(i, 'content') and i.content]
+            return registry.box(strings)
+
+        def _ic_merge(receiver, *args):
+            """ctx.merge(other)：将另一个意图上下文的状态合并到 self。"""
+            ctx = receiver.fields.get('_ctx')
+            if not ctx or not args:
+                return registry.get_none()
+            other = args[0]
+            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
+            if other_ctx:
+                ctx.merge(other_ctx)
+            return registry.get_none()
+
+        def _ic_clear(receiver, *args):
+            """ctx.clear()：清空持久意图栈。"""
+            ctx = receiver.fields.get('_ctx')
+            if ctx:
+                ctx.set_intent_top(None)
+            return registry.get_none()
+
+        _reg_native(intent_context_class, '__init__', _ic_init, unbox=False)
+        _reg_native(intent_context_class, 'push', _ic_push, unbox=False)
+        _reg_native(intent_context_class, 'pop', _ic_pop, unbox=False)
+        _reg_native(intent_context_class, 'fork', _ic_fork, unbox=False)
+        _reg_native(intent_context_class, 'resolve', _ic_resolve, unbox=False)
+        _reg_native(intent_context_class, 'merge', _ic_merge, unbox=False)
+        _reg_native(intent_context_class, 'clear', _ic_clear, unbox=False)
+
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
 

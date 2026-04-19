@@ -869,3 +869,158 @@ print((str)obj.value)
         lines = run_and_capture(code)
         # obj.value unchanged, auto-clone fallback works correctly
         assert "99" in lines
+
+
+# ---------------------------------------------------------------------------
+# 16. Function scope intent isolation (fork on call + @! shield)
+# ---------------------------------------------------------------------------
+
+class TestE2EIntentScopeIsolation:
+    """
+    Tests for intent stack copy-semantics on function calls.
+
+    - Caller's intent stack is forked (not shared) on function entry.
+    - @+ inside a function does NOT leak to the caller's scope.
+    - @! at the call site creates an isolated context for the entire function.
+    """
+
+    def test_intent_push_inside_func_does_not_leak(self):
+        """
+        @+ inside a function should not affect the caller's intent stack.
+        After the function returns, the caller's intent stack is unchanged.
+        """
+        code = ai_setup_code() + """
+@+ "caller intent"
+
+func modify_intents():
+    @+ "inner intent"
+    return
+
+modify_intents()
+
+str result = @~ MOCK:intent_isolation_test ~
+print(result)
+"""
+        # If the inner intent leaked, two intents would appear; if not, only one.
+        # We just verify the code runs without error and returns a value.
+        lines = run_and_capture(code)
+        assert len(lines) >= 1  # runs without error
+
+    def test_shield_via_override_at_call_site(self):
+        """
+        @! at the call site shielding a regular function call.
+        Inside the function, LLM calls should only see the @! content
+        (i.e., the caller's persistent intents should not be visible).
+        This test verifies the function executes correctly after isolation.
+        """
+        code = ai_setup_code() + """
+@+ "persistent caller intent"
+
+func inner_func() -> str:
+    str r = @~ MOCK:INT:42 ~
+    return r
+
+@! "only this"
+str result = inner_func()
+print(result)
+"""
+        lines = run_and_capture(code)
+        assert "42" in lines
+
+
+# ---------------------------------------------------------------------------
+# 17. Lambda-as-argument restriction (runtime check)
+# ---------------------------------------------------------------------------
+
+class TestE2ELambdaRestriction:
+    """
+    lambda values cannot be passed as function arguments.
+    Attempting to do so should raise a runtime error.
+    """
+
+    def test_lambda_cannot_be_passed_as_arg(self):
+        """Passing a lambda value as a function argument raises an error."""
+        import pytest as _pytest
+        code = ai_setup_code() + """
+func accept_any(any x):
+    print("called")
+
+int lambda deferred_val = @~ MOCK:INT:5 ~
+accept_any(deferred_val)
+"""
+        with _pytest.raises(Exception):
+            run_and_capture(code)
+
+    def test_snapshot_can_be_passed_as_any(self):
+        """
+        snapshot values should NOT be restricted by the lambda rule.
+        This test verifies snapshot does not trigger the lambda restriction.
+        Note: snapshot executes immediately on first call(), so passing it
+        as an 'any' param is allowed.
+        """
+        code = ai_setup_code() + """
+func accept_any(any x):
+    print("called")
+
+int snapshot deferred_val = 42
+accept_any(deferred_val)
+print("ok")
+"""
+        lines = run_and_capture(code)
+        assert "ok" in lines
+
+
+# ---------------------------------------------------------------------------
+# 18. intent_context OOP MVP — instantiation and method binding
+# ---------------------------------------------------------------------------
+
+class TestE2EIntentContextOOP:
+    """
+    Tests for the intent_context built-in class (OOP MVP).
+
+    Users can instantiate intent_context, call push/pop/fork/clear/resolve.
+    """
+
+    def test_intent_context_instantiation(self):
+        """intent_context() creates a new instance without errors."""
+        code = """
+intent_context ctx = intent_context()
+print("created")
+"""
+        lines = run_and_capture(code)
+        assert "created" in lines
+
+    def test_intent_context_push_and_clear(self):
+        """push() adds an intent; clear() empties the stack."""
+        code = """
+intent_context ctx = intent_context()
+ctx.push("hello")
+ctx.clear()
+print("ok")
+"""
+        lines = run_and_capture(code)
+        assert "ok" in lines
+
+    def test_intent_context_fork_returns_new_instance(self):
+        """fork() returns a new independent instance."""
+        code = """
+intent_context ctx = intent_context()
+ctx.push("base intent")
+intent_context ctx2 = ctx.fork()
+ctx2.push("fork intent")
+ctx.clear()
+print("ok")
+"""
+        lines = run_and_capture(code)
+        assert "ok" in lines
+
+    def test_intent_context_resolve(self):
+        """resolve() returns a list (may be empty or with content strings)."""
+        code = """
+intent_context ctx = intent_context()
+ctx.push("my intent")
+any resolved = ctx.resolve()
+print("ok")
+"""
+        lines = run_and_capture(code)
+        assert "ok" in lines

@@ -439,13 +439,25 @@ class LLMExecutorImpl:
         # 获取消解后的最终列表
         # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
         if captured_intents is not None:
-            active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
-            all_intents = IntentResolver.resolve(
-                active_intents=active_list,
-                global_intents=context.get_global_intents(),
-                context=context,
-                execution_context=execution_context
-            )
+            from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
+            if isinstance(captured_intents, _IbIntentContext):
+                # snapshot 捕获了 IbIntentContext.fork() 的完整值快照
+                active_list = captured_intents.get_active_intents()
+                all_intents = IntentResolver.resolve(
+                    active_intents=active_list,
+                    global_intents=captured_intents.get_global_intents(),
+                    context=context,
+                    execution_context=execution_context
+                )
+            else:
+                # 兼容旧路径：IntentNode 链表（to_list）或已展平的列表
+                active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
+                all_intents = IntentResolver.resolve(
+                    active_intents=active_list,
+                    global_intents=context.get_global_intents(),
+                    context=context,
+                    execution_context=execution_context
+                )
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
 

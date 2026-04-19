@@ -671,11 +671,40 @@ class IbUserFunction(IbFunction):
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
         from core.runtime.frame import get_current_frame as _get_frame
+        from core.runtime.objects.builtins import IbDeferred, IbBehavior
+        from core.base.diagnostics.codes import RUN_CALL_ERROR
         _frame = _get_frame()
         rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-        
+
+        # --- 意图栈作用域隔离 ---
+        # lambda 值不允许作为函数参数传递（语义约束）
+        for arg in args:
+            if isinstance(arg, (IbDeferred, IbBehavior)) and getattr(arg, 'deferred_mode', None) == 'lambda':
+                raise InterpreterError(
+                    "TypeError: lambda 延迟对象不允许作为函数参数传递。"
+                    " 如需跨作用域传递延迟值，请使用 snapshot 关键字。",
+                    error_code=RUN_CALL_ERROR
+                )
+
+        # 意图上下文拷贝传递语义：
+        # - 若调用者已设置 @! 排他意图：消费该意图，创建隔离上下文（仅含 @! 内容作为持久意图）。
+        #   这使函数内所有 LLM 调用只看到 @! 内容，不受外部意图栈干扰（屏蔽语义）。
+        # - 普通调用：fork 调用者的意图上下文（拷贝传递），函数内的 @+/@- 不泄漏给调用者。
+        from core.runtime.objects.intent_context import IbIntentContext
+        old_intent_ctx = rt_context._intent_ctx
+        if old_intent_ctx.has_override():
+            # @! 修饰函数调用 → 隔离上下文
+            override_intent = old_intent_ctx.consume_override()
+            child_ctx = IbIntentContext(global_intents=old_intent_ctx.get_global_intents())
+            if override_intent is not None:
+                child_ctx.push(override_intent)
+        else:
+            # 普通调用 → fork（拷贝传递）
+            child_ctx = old_intent_ctx.fork()
+        rt_context._intent_ctx = child_ctx
+
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
             # 获取目标模块的作用域
@@ -724,7 +753,6 @@ class IbUserFunction(IbFunction):
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    # print(f"[DEBUG] Defining LLM param: {arg_name} with UID: {sym_uid}")
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
@@ -737,7 +765,8 @@ class IbUserFunction(IbFunction):
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
-            # 恢复之前的模块上下文
+            # 恢复调用者的意图上下文和模块上下文
+            rt_context._intent_ctx = old_intent_ctx
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 
@@ -786,7 +815,21 @@ class IbLLMFunction(IbFunction):
         rt_context = self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-        
+
+        # --- 意图栈作用域隔离（与 IbUserFunction 对称）---
+        # @! 修饰 LLM 函数调用 → 隔离上下文（所有内部 LLM 调用只见 @! 内容）。
+        # 普通调用 → fork（拷贝传递，函数内 @+/@- 不泄漏给调用者）。
+        from core.runtime.objects.intent_context import IbIntentContext
+        old_intent_ctx = rt_context._intent_ctx
+        if old_intent_ctx.has_override():
+            override_intent = old_intent_ctx.consume_override()
+            child_ctx = IbIntentContext(global_intents=old_intent_ctx.get_global_intents())
+            if override_intent is not None:
+                child_ctx.push(override_intent)
+        else:
+            child_ctx = old_intent_ctx.fork()
+        rt_context._intent_ctx = child_ctx
+
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
             # 获取目标模块的作用域
@@ -847,9 +890,11 @@ class IbLLMFunction(IbFunction):
             self._pending_call_intent = None
             self.context.pop_stack()
             rt_context.exit_scope()
-            # 恢复之前的模块上下文
+            # 恢复调用者的意图上下文和模块上下文
+            rt_context._intent_ctx = old_intent_ctx
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
+
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)

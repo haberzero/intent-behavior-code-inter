@@ -78,9 +78,10 @@ class IntentContextAxiom(TypeAxiom):
         return {
             "fork": _m("fork", ret="intent_context"),
             "resolve": _m("resolve", ret="any"),
-            "push": _m("push", params=["any", "str"], ret="void"),
+            "push": _m("push", params=["any"], ret="void"),
             "pop": _m("pop", ret="any"),
             "merge": _m("merge", params=["intent_context"], ret="void"),
+            "clear": _m("clear", ret="void"),
         }
 
     def get_operators(self) -> Dict[str, str]:
@@ -93,7 +94,7 @@ class IntentContextAxiom(TypeAxiom):
         return other_name == "intent_context"
 
     def is_class(self) -> bool:
-        return False
+        return True
 
     def is_module(self) -> bool:
         return False
