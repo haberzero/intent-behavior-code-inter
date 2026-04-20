@@ -209,3 +209,106 @@ print((str)b.value)
         assert "42" in lines
         # explicit call to init() method worked
         assert "999" in lines
+
+
+# ---------------------------------------------------------------------------
+# Inheritance tests
+# ---------------------------------------------------------------------------
+
+class TestE2EClassInheritance:
+    """Test class inheritance: child class accessing parent members."""
+
+    def test_child_accesses_parent_field(self):
+        """Child class can access fields defined in parent class."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n):
+        self.name = n
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b):
+        self.name = n
+        self.breed = b
+
+Dog d = Dog("Rex", "Lab")
+print(d.name)
+print(d.breed)
+"""
+        lines = run_and_capture(code)
+        assert "Rex" in lines
+        assert "Lab" in lines
+
+    def test_child_accesses_parent_method(self):
+        """Child class can call methods defined in parent class."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n):
+        self.name = n
+    func describe(self) -> str:
+        return "I am " + self.name
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b):
+        self.name = n
+        self.breed = b
+
+Dog d = Dog("Rex", "Lab")
+print(d.describe())
+"""
+        lines = run_and_capture(code)
+        assert "I am Rex" in lines
+
+    def test_child_overrides_parent_method(self):
+        """Child class can override parent methods."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n):
+        self.name = n
+    func speak(self) -> str:
+        return "..."
+
+class Cat(Animal):
+    func __init__(self, str n):
+        self.name = n
+    func speak(self) -> str:
+        return "Meow"
+
+Cat c = Cat("Kitty")
+print(c.speak())
+print(c.name)
+"""
+        lines = run_and_capture(code)
+        assert "Meow" in lines
+        assert "Kitty" in lines
+
+    def test_multi_level_inheritance(self):
+        """Multi-level inheritance: grandchild accesses grandparent members."""
+        code = """class Base:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+class Mid(Base):
+    int y
+    func __init__(self, int v, int w):
+        self.x = v
+        self.y = w
+
+class Leaf(Mid):
+    int z
+    func __init__(self, int a, int b, int c):
+        self.x = a
+        self.y = b
+        self.z = c
+
+Leaf obj = Leaf(1, 2, 3)
+print((str)obj.x)
+print((str)obj.y)
+print((str)obj.z)
+"""
+        lines = run_and_capture(code)
+        assert "1" in lines
+        assert "2" in lines
+        assert "3" in lines

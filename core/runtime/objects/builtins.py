@@ -237,7 +237,9 @@ class IbString(IbObject):
         if sep is None:
             parts = self.value.split()
         else:
-            parts = self.value.split(sep)
+            # sep 可能是 IbString（通过 unbox=False 注册的原生方法传入），需先拆箱
+            native_sep = sep.to_native() if hasattr(sep, 'to_native') else sep
+            parts = self.value.split(native_sep)
         registry = self.ib_class.registry
         return registry.box([registry.box(p) for p in parts])
 

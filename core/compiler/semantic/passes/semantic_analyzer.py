@@ -549,15 +549,22 @@ class SemanticAnalyzer:
         if sym.is_function:
             sym.owned_scope = local_scope
         
+        # 临时保存并清除 current_class，避免函数参数（self、形参）和
+        # 函数体内的局部变量被错误注册为类的成员字段。
+        # current_class 的真实值仍可通过 saved_class 在需要时访问。
+        saved_class = self.current_class
+        
         # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
-        if self.current_class:
+        if saved_class:
             # self 的类型就是当前类
-            self._define_var("self", self.current_class, node)
+            self.current_class = None  # 防止 _define_var 将 self 注册为类成员
+            self._define_var("self", saved_class, node)
 
-        # 注册参数
+        # 注册参数（current_class=None 确保参数不会被注册为类成员）
+        self.current_class = None
         for i, arg_node in enumerate(node.args):
             # 索引偏移：类方法的签名中包含隐含的 self
-            sig_idx = i + 1 if self.current_class else i
+            sig_idx = i + 1 if saved_class else i
             arg_type = param_types[sig_idx] if sig_idx < len(param_types) else self._any_desc
             
             # 获取参数名节点
@@ -580,6 +587,7 @@ class SemanticAnalyzer:
                 self.visit(stmt)
         finally:
             self.current_return_type = old_ret
+            self.current_class = saved_class  # 恢复类上下文
             self.symbol_table = old_table
         return self._void_desc
 
@@ -619,11 +627,17 @@ class SemanticAnalyzer:
         if sym.is_function:
             sym.owned_scope = local_scope
         
-        if self.current_class:
-            self._define_var("self", self.current_class, node)
+        # 与 visit_IbFunctionDef 对称：临时清除 current_class，
+        # 防止函数参数和局部变量被注册为类成员。
+        saved_class = self.current_class
         
+        if saved_class:
+            self.current_class = None
+            self._define_var("self", saved_class, node)
+        
+        self.current_class = None
         for i, arg_node in enumerate(node.args):
-            sig_idx = i + 1 if self.current_class else i
+            sig_idx = i + 1 if saved_class else i
             arg_type = param_types[sig_idx] if sig_idx < len(param_types) else self._any_desc
             
             # 获取参数名节点
@@ -647,6 +661,7 @@ class SemanticAnalyzer:
                     if isinstance(segment, ast.IbASTNode):
                         self.visit(segment)
         finally:
+            self.current_class = saved_class  # 恢复类上下文
             self.symbol_table = old_table
         return self._void_desc
 

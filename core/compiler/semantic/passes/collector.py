@@ -83,12 +83,21 @@ class SymbolCollector:
             # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
             # 如果当前在类作用域内，且定义的不是类本身
             if self.analyzer and self.analyzer.current_class:
-                from core.kernel.spec.member import MemberSpec
-                self.analyzer.current_class.members[sym.name] = MemberSpec(
-                    name=sym.name,
-                    kind="field",
-                    type_name=sym.spec.name if sym.spec else "any",
-                )
+                if sym.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION):
+                    from core.kernel.spec.member import MethodMemberSpec
+                    llm_kind = "llm_method" if sym.kind == SymbolKind.LLM_FUNCTION else "method"
+                    self.analyzer.current_class.members[sym.name] = MethodMemberSpec(
+                        name=sym.name,
+                        kind=llm_kind,
+                        type_name=sym.spec.name if sym.spec else "any",
+                    )
+                else:
+                    from core.kernel.spec.member import MemberSpec
+                    self.analyzer.current_class.members[sym.name] = MemberSpec(
+                        name=sym.name,
+                        kind="field",
+                        type_name=sym.spec.name if sym.spec else "any",
+                    )
                 
         except ValueError as e:
             if self.issue_tracker:
@@ -109,10 +118,14 @@ class SymbolCollector:
         if node.parent == "Enum":
             cls_meta._axiom_name = "enum"
         
-        self.analyzer.registry.register(cls_meta)
+        # register() 返回的是注册表中实际存储的 spec（可能是 clone），
+        # 后续所有操作必须使用 registered_meta 而非原始 cls_meta，
+        # 否则成员注册会写入原始对象，导致注册表中的 clone 缺少成员信息，
+        # 从而破坏继承链中父类成员的查找（resolve_member）。
+        registered_meta = self.analyzer.registry.register(cls_meta)
         
-        # 2. 注册类符号
-        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, spec=cls_meta)
+        # 2. 注册类符号（使用注册表中的 spec）
+        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, spec=registered_meta)
         self._define(sym, node)
         
         # 3. 进入类作用域收集成员
@@ -120,7 +133,7 @@ class SymbolCollector:
         self.symbol_table = SymbolTable(parent=old_table, name=node.name)
         
         old_class = self.analyzer.current_class
-        self.analyzer.current_class = cls_meta
+        self.analyzer.current_class = registered_meta
         
         try:
             for stmt in node.body:

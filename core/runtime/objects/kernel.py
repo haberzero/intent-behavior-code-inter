@@ -143,9 +143,9 @@ class IbObject:
     # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':
         """逻辑非运算协议"""
-        # 使用 to_bool 判定并取反
+        # 使用 to_bool 判定并取反，返回 bool 类型
         is_true = self.ib_class.registry.is_truthy(self)
-        return self.ib_class.registry.box(0 if is_true else 1)
+        return self.ib_class.registry.box(False if is_true else True)
 
     def serialize_for_debug(self) -> Mapping[str, Any]:
         """
