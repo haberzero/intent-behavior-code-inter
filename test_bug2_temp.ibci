@@ -1,5 +1,0 @@
-import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-
-dict d = @~ MOCK:DICT:{"a":1} ~
-print("dict d: " + (str)(any)d)

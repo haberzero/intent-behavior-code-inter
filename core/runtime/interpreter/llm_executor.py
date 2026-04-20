@@ -335,6 +335,12 @@ class LLMExecutorImpl:
         descriptor = None
         if meta_reg:
             descriptor = meta_reg.resolve(type_name)
+            # Bug #2 修复：当 type_name 含有泛型参数（如 "dict[any,any]"）时，
+            # SpecRegistry 中以基础名（如 "dict"）注册，resolve 会失败。
+            # 剥离泛型参数后重试，使 DictAxiom 等 Axiom 能够被正确找到。
+            if descriptor is None and type_name and '[' in type_name:
+                base_name = type_name.split('[')[0]
+                descriptor = meta_reg.resolve(base_name)
             if descriptor:
                 from_prompt_cap = meta_reg.get_from_prompt_cap(descriptor)
                 if from_prompt_cap:

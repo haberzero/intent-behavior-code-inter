@@ -58,6 +58,7 @@ from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
+from core.base.enums import RegistrationState
 from .llm_result import LLMResult
 
 
@@ -318,9 +319,7 @@ class Interpreter:
         self.call_stack_depth = 0
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
 
-        self._pre_evaluate_user_classes()
-
-        # 4. 设置上下文
+        # 4. 设置上下文（含内置变量）
         self.setup_context(self.runtime_context)
 
         # 初始化分片 Handlers (通过工厂解耦)
@@ -337,6 +336,11 @@ class Interpreter:
         # 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
+
+        # 5. 预评估用户类字段 (STAGE 6)
+        # 必须在 _visitor_cache 和执行上下文完整设置后运行，
+        # 确保 visit() 能正确分发到各 Handler（如 ListExpr、IbDict）。
+        self._pre_evaluate_user_classes()
 
     def _register_handlers(self, handlers: List[Any]):
         """从所有 Handler 中搜集 visit_ 方法并缓存"""
