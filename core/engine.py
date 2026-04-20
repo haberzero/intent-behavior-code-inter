@@ -5,6 +5,18 @@ import traceback
 import copy
 from typing import Optional, Dict, Any, List
 
+# =============================================================================
+# 架构边界说明：Engine = 组装者，不参与执行
+# =============================================================================
+# Engine 是 IBCI 运行环境的组装者（assembler）和入口点。
+# 职责：创建 KernelRegistry、加载编译器和模块、注入 LLM Executor，
+# 并将已组装的 Interpreter 交给调用方使用。
+#
+# Engine 本身不执行任何 IBCI 代码；执行发生在 Interpreter 内部。
+# 多 Interpreter 并发（Layer 2，PENDING_TASKS_VM.md Step 11）由
+# DynamicHost（HostService）负责调度，而非 Engine。
+# =============================================================================
+
 from core.project_detector import ProjectDetector
 
 from core.kernel.registry import KernelRegistry
