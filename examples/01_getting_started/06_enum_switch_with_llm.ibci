@@ -1,48 +1,140 @@
-# Enum + Switch + LLM 行为描述 演示
+# 06_enum_switch_with_llm.ibci
+# IBCI 进阶：情感分析 - Enum + LLM 行为描述（MOCK 模式）
+#
+# 本示例展示典型的 LLM 分类任务工作流：
+# 1. 定义情感 Enum 类型
+# 2. 通过 LLM 分析文本情感（返回字符串）
+# 3. 将 LLM 字符串结果映射到对应处理分支
+# 4. 使用 idbg 全程探查 LLM 调用中间变量
+#
+# 注意：已知 Bug #3 导致 Enum 类型无法直接接收 LLM 输出（得到 None）。
+#       本示例演示经过验证的规避方案：以 str 类型接收 LLM 输出。
 
 import ai
-import json
-import file
+import idbg
 
-print("=== Enum + Switch + LLM 行为描述 演示 ===")
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-dict config = json.parse(file.read("./api_config.json"))
-dict default_model = (dict)config["default_model"]
-ai.set_config(
-    (str)default_model["base_url"],
-    (str)default_model["api_key"],
-    (str)default_model["model"]
-)
-print("使用模型: " + (str)default_model["model"])
+# ============================================================
+# 1. 定义 Mood 枚举
+# ============================================================
 
-print("\n--- 定义 Mood 枚举 ---")
+print("=== 情感分析演示（MOCK 模式）===")
+print("")
+
 class Mood(Enum):
-    str HAPPY = "HAPPY"
-    str SAD = "SAD"
-    str ANGRY = "ANGRY"
+    str HAPPY   = "HAPPY"
+    str SAD     = "SAD"
+    str ANGRY   = "ANGRY"
     str NEUTRAL = "NEUTRAL"
 
 print("Mood 枚举已定义: HAPPY, SAD, ANGRY, NEUTRAL")
 
-print("\n--- LLM 行为描述获取情感 ---")
+# 验证枚举常量可正常访问
+print("Mood.HAPPY   = " + (str)(any)Mood.HAPPY)
+print("Mood.SAD     = " + (str)(any)Mood.SAD)
+print("Mood.ANGRY   = " + (str)(any)Mood.ANGRY)
+print("Mood.NEUTRAL = " + (str)(any)Mood.NEUTRAL)
+
+# ============================================================
+# 2. 情感分析：通过 LLM 获取情感字符串
+# ============================================================
+
+print("\n=== 情感分析 LLM 调用 ===")
 
 str text = "今天天气真不错，心情很棒！"
 print("分析文本: " + text)
+print("")
 
-Mood mood = (Mood) @~ 请分析文本 "$text" 的情感类型，只回复情感词 ~
-print("识别到的情感: " + (str)(any)mood)
+# Bug #3：Enum 类型变量无法直接接收 LLM 输出，以下写法会得到 None：
+#   Mood mood = @~ 请分析 "$text" 的情感，回复: HAPPY/SAD/ANGRY/NEUTRAL ~
+#
+# 正确规避方案：声明为 str 类型，再进行手动分支处理
+str mood_str = @~ MOCK:STR:HAPPY ~
 
-print("\n--- Switch 处理不同情感 ---")
-switch mood:
+# idbg 探查：确认 LLM 调用的完整上下文
+any call_info = idbg.last_llm()
+print("=== idbg 探查 LLM 调用 ===")
+print("  user_prompt : " + (str)call_info["user_prompt"])
+print("  response    : " + (str)call_info["response"])
+print("  raw_response: " + (str)call_info["raw_response"])
+print("  scene       : " + (str)call_info["scene"])
+print("")
+
+print("LLM 识别到的情感字符串: '" + mood_str + "'")
+
+# ============================================================
+# 3. 字符串结果 → 行为分支（规避 Bug #3 的标准模式）
+# ============================================================
+
+print("\n=== 根据情感执行对应处理 ===")
+
+if mood_str == "HAPPY":
+    print("  情感类型：HAPPY（开心）")
+    print("  处理：发送积极回应")
+else:
+    if mood_str == "SAD":
+        print("  情感类型：SAD（悲伤）")
+        print("  处理：发送安慰信息")
+    else:
+        if mood_str == "ANGRY":
+            print("  情感类型：ANGRY（愤怒）")
+            print("  处理：发送冷静引导")
+        else:
+            if mood_str == "NEUTRAL":
+                print("  情感类型：NEUTRAL（中性）")
+                print("  处理：发送标准回复")
+            else:
+                print("  情感类型：未知 = " + mood_str)
+
+# ============================================================
+# 4. MOCK:SEQ 模拟多轮情感分析
+# ============================================================
+
+print("\n=== 多轮情感分析（MOCK:SEQ）===")
+
+list test_texts = [
+    "今天丢了钱包，太糟糕了",
+    "升职了！超级开心！",
+    "今天就这样吧"
+]
+
+list expected_moods = ["SAD", "HAPPY", "NEUTRAL"]
+
+int ti = 0
+while ti < test_texts.len():
+    str t = (str)test_texts[ti]
+    str expected_mood = (str)expected_moods[ti]
+    print("  文本: " + t)
+    print("  MOCK 情感: " + expected_mood)
+
+    # 用 MOCK:SEQ 模拟 LLM 分析结果
+    str detected = @~ MOCK:SEQ:[SAD,HAPPY,NEUTRAL] mood_seq ~
+
+    # idbg 确认每次调用的返回值（last_llm 记录最近一次 LLM 调用的完整上下文）
+    any seq_info = idbg.last_llm()
+    print("  idbg last_llm response: " + (str)seq_info["response"])
+    print("  detected = '" + detected + "'")
+    print("")
+    ti = ti + 1
+
+# ============================================================
+# 5. Enum switch 独立工作验证（与 LLM 无关路径）
+# ============================================================
+
+print("=== Enum switch 独立路径验证 ===")
+Mood direct_mood = Mood.SAD
+switch direct_mood:
     case Mood.HAPPY:
-        print("识别到happy")
+        print("  switch: HAPPY")
     case Mood.SAD:
-        print("识别到sad")
+        print("  switch: SAD（正确匹配！）")
     case Mood.ANGRY:
-        print("识别到angry")
+        print("  switch: ANGRY")
     case Mood.NEUTRAL:
-        print("识别到neutral")
+        print("  switch: NEUTRAL")
     default:
-        print("无法识别的情感")
+        print("  switch: 无匹配（不应出现）")
 
-print("\n--- 演示结束 ---")
+print("\n=== 情感分析演示结束 ===")
+

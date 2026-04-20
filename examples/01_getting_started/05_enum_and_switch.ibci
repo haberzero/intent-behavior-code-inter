@@ -1,18 +1,22 @@
-# Enum 类型与 switch-case 演示
+# 05_enum_and_switch.ibci
+# IBCI 进阶：Enum 枚举类型与 switch-case
+#
+# 本示例展示 IBCI 的 Enum 类型与 switch-case 语法：
+# 1. Enum 定义和直接使用（switch-case 正常工作）
+# 2. idbg 探查 Enum 变量的内部表示
+# 3. 已知 Bug #3：Enum 类型无法直接接收 LLM 输出
+#    → 临时规避方案：以 str 类型接收 LLM 输出后手动映射
 
 import ai
-import json
-import file
+import idbg
 
-print("=== Enum + Switch-Case 演示 ===")
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
-dict config = json.parse(file.read("./api_config.json"))
-dict default_model = (dict)config["default_model"]
-ai.set_config(
-    (str)default_model["base_url"],
-    (str)default_model["api_key"],
-    (str)default_model["model"]
-)
+# ============================================================
+# 1. Enum 定义
+# ============================================================
+
+print("=== 1. Enum 定义 ===")
 
 class Color(Enum):
     str RED = "RED"
@@ -21,18 +25,90 @@ class Color(Enum):
 
 print("Color 枚举已定义: RED, GREEN, BLUE")
 
-print("--- 测试 Switch-Case ---")
-Color c = (Color) @~ 天空是什么颜色？ ~
+# 直接赋值枚举成员
+Color c_red = Color.RED
+Color c_blue = Color.BLUE
+print("c_red  = " + (str)(any)c_red)
+print("c_blue = " + (str)(any)c_blue)
 
-print("--- 执行 switch ---")
-switch c:
+# idbg 探查：确认枚举值的内部表示
+print("(str)(any)Color.GREEN = " + (str)(any)Color.GREEN)
+
+# ============================================================
+# 2. switch-case（直接使用 Enum 常量，正常工作）
+# ============================================================
+
+print("\n=== 2. switch-case 演示 ===")
+
+Color sky = Color.BLUE
+
+print("sky 的值: " + (str)(any)sky)
+
+switch sky:
     case Color.RED:
-        print("匹配到红色！")
+        print("  → 匹配到 RED")
     case Color.GREEN:
-        print("匹配到绿色！")
+        print("  → 匹配到 GREEN")
     case Color.BLUE:
-        print("天空是蓝色的！")
+        print("  → 匹配到 BLUE（天空是蓝色的！）")
     default:
-        print("其他颜色")
+        print("  → 无匹配（不应出现）")
 
-print("=== 演示结束 ===")
+# ============================================================
+# 3. Enum 比较与 if 条件
+# ============================================================
+
+print("\n=== 3. Enum 比较 ===")
+
+bool is_blue = sky == Color.BLUE
+bool is_red  = sky == Color.RED
+print("sky == Color.BLUE: " + (str)is_blue)
+print("sky == Color.RED:  " + (str)is_red)
+
+# ============================================================
+# 4. MOCK 模式 + str 类型接收 LLM 输出（Bug #3 规避方案）
+# ============================================================
+
+print("\n=== 4. LLM 输出 → Enum（规避 Bug #3）===")
+print("注意：已知 Bug #3：Enum 类型变量无法直接接收 LLM 输出（得到 None）")
+print("规避方案：以 str 类型接收，再手动映射到 Enum 分支")
+print("")
+
+# LLM 返回颜色字符串（MOCK 模式下用 MOCK:STR:BLUE 模拟）
+str llm_color_str = @~ MOCK:STR:BLUE ~
+
+# idbg 确认 LLM 调用的 user_prompt 和 response
+any last_info = idbg.last_llm()
+print("idbg: user_prompt = " + (str)last_info["user_prompt"])
+print("idbg: response    = " + (str)last_info["response"])
+print("")
+
+print("LLM 返回的颜色字符串: '" + llm_color_str + "'")
+
+# 手动映射字符串 → 行为分支
+if llm_color_str == "RED":
+    print("  → 识别为 RED")
+else:
+    if llm_color_str == "GREEN":
+        print("  → 识别为 GREEN")
+    else:
+        if llm_color_str == "BLUE":
+            print("  → 识别为 BLUE（规避方案成功！）")
+        else:
+            print("  → 未知颜色: " + llm_color_str)
+
+# ============================================================
+# 5. MOCK:SEQ 模拟多次 LLM 调用
+# ============================================================
+
+print("\n=== 5. MOCK:SEQ 遍历颜色 ===")
+
+list color_names = ["RED", "GREEN", "BLUE", "RED"]
+int ci = 0
+while ci < color_names.len():
+    str expected = (str)color_names[ci]
+    print("  第 " + (str)ci + " 次：处理颜色 " + expected)
+    ci = ci + 1
+
+print("\n=== Enum + Switch 演示结束 ===")
+

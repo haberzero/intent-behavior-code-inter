@@ -58,7 +58,7 @@ print("\n=== 2. MOCK:FAIL 触发 llmexcept ===\n")
 
 print("MOCK:FAIL 会返回模糊值，触发 llmexcept...")
 
-int result3 = (int) @~ MOCK:FAIL 请提取数字 ~
+int result3 = @~ MOCK:FAIL 请提取数字 ~
 llmexcept:
     print("进入 llmexcept 处理块")
     print("模拟失败后重试...")
@@ -82,16 +82,27 @@ llmexcept:
 print("恢复结果: " + result4)
 
 # ============================================================
-# 4. MOCK:[...] / MOCK:{...} 直接返回结构
+# 4. MOCK:LIST / MOCK:DICT 直接返回结构（正确格式）
 # ============================================================
 
-print("\n=== 4. MOCK:[...] / MOCK:{...} ===\n")
+print("\n=== 4. MOCK:LIST / MOCK:DICT 正确格式 ===\n")
 
-str result5 = @~ MOCK:["apple", "banana", "cherry"] ~
-print("列表结果: " + result5)
+# MOCK:LIST:[...] → list 类型可直接接收（Bug #2 不影响 list）
+list fruits = @~ MOCK:LIST:["apple","banana","cherry"] ~
+print("MOCK:LIST 返回的 list 长度: " + (str)fruits.len())
+int fi = 0
+while fi < fruits.len():
+    print("  fruits[" + (str)fi + "] = " + (str)fruits[fi])
+    fi = fi + 1
 
-str result6 = @~ MOCK:{"name": "Alice", "age": 30} ~
-print("字典结果: " + result6)
+# MOCK:DICT → 已知 Bug #2：dict 类型变量接收 LLM 输出会产生类型错误
+# 临时规避：使用 str 接收，原始字符串仍可查看
+str raw_dict = @~ MOCK:DICT:{"name":"Alice","age":30} ~
+print("MOCK:DICT 原始字符串: " + raw_dict)
+
+# 通过 idbg 确认 LLM 调用详情（中间变量探查）
+any last4 = idbg.last_llm()
+print("idbg.last_llm() 含 MOCK:DICT 标记: " + (str)("MOCK:DICT" in (str)last4))
 
 # ============================================================
 # 5. llmexcept 与 idbg.last_result()
@@ -106,12 +117,13 @@ print("查询: " + query)
 
 str result7 = @~ MOCK:FAIL 请翻译 "$query" ~
 llmexcept:
-    any last_info = (any) idbg.last_result()
+    any last_info = idbg.last_result()
     print("进入 llmexcept 处理块")
-    print("原始响应: " + (str)last_info["raw_response"])
+    print("idbg.last_result() raw_response: " + (str)last_info["raw_response"])
+    print("idbg.last_result() success:      " + (str)last_info["success"])
     retry "请直接翻译为中文，不要其他文字"
 
-print("翻译结果: " + result7)
+print("翻译结果: " + (str)result7)
 
 # ============================================================
 # 6. llmretry 语法糖
@@ -119,10 +131,18 @@ print("翻译结果: " + result7)
 
 print("\n=== 6. llmretry 语法糖 ===\n")
 
+# llmretry 是 llmexcept + retry 的单行语法糖
+# MOCK:FAIL 永远失败，所以 result8 最终为 None（重试耗尽）
 str result8 = @~ MOCK:FAIL 请回答问题 ~
 llmretry "请只回复一个中文词语"
 
-print("结果: " + result8)
+# 注意：result8 可能为 None（MOCK:FAIL 下重试耗尽），使用 (str) 安全转换
+print("结果: " + (str)result8)
+
+# 对比：使用 MOCK:REPAIR 演示 llmretry 成功的情况
+str result9 = @~ MOCK:REPAIR 修复演示 ~
+llmretry "重试提示"
+print("REPAIR 后结果（应为 1）: " + (str)result9)
 
 # ============================================================
 # 7. 在流控中使用 Mock
