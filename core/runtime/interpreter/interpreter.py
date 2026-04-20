@@ -176,7 +176,10 @@ class Interpreter:
         )
 
         # 注册执行上下文引用到 Registry，底层仅持有该容器
-        self._kernel_token = self._registry.get_kernel_token()
+        # 如果 kernel_token 已经由调用方（如 Engine）传入，则优先使用，避免重复调用
+        # get_kernel_token()（该方法是一次性的，第二次调用会返回 None）。
+        if not self._kernel_token:
+            self._kernel_token = self._registry.get_kernel_token()
         if self._kernel_token:
              self._registry.set_execution_context(self._execution_context, self._kernel_token)
         
@@ -293,16 +296,13 @@ class Interpreter:
             # 在某些脱离 Engine 的测试环境下，如果没有令牌，系统将无法正确追踪状态流转
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
                 "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.")
-            
-        self._pre_evaluate_user_classes()
 
-        # 4. 设置上下文
-        self.setup_context(self.runtime_context)
-
-        # 运行限制
+        # 运行限制必须在 _pre_evaluate_user_classes() 之前初始化，
+        # 因为 visit() 在预评估中会访问 instruction_count / max_instructions 等字段。
         self.max_instructions = max_instructions
         self.instruction_count = 0
-        
+        self.strict_mode = strict_mode
+
         # 递归深度安全校验
         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
         # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
@@ -313,11 +313,15 @@ class Interpreter:
                 f"Warning: max_call_stack {max_call_stack} is unsafe for Python limit {python_limit}. "
                 f"Auto-adjusting to safe limit {safe_limit}")
             max_call_stack = safe_limit
-            
+
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
-        self.strict_mode = strict_mode
+
+        self._pre_evaluate_user_classes()
+
+        # 4. 设置上下文
+        self.setup_context(self.runtime_context)
 
         # 初始化分片 Handlers (通过工厂解耦)
         handlers = object_factory.create_handlers(self.service_context, self._execution_context)
