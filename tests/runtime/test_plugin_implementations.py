@@ -494,3 +494,75 @@ class TestAIMockSEQ:
         assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "1"
         assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "0"
         assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "done"
+
+
+class TestAIMockCaseSensitive:
+    """MOCK instructions are case-sensitive: commands must be uppercase."""
+
+    @pytest.fixture
+    def ai_plugin(self):
+        from ibci_modules.ibci_ai.core import AIPlugin
+        p = AIPlugin()
+        p._config = {"key": "MOCK_KEY", "url": "http://test", "model": "test"}
+        p._client = "MOCK_CLIENT"
+        return p
+
+    def test_uppercase_fail_triggers_uncertain(self, ai_plugin):
+        """MOCK:FAIL (uppercase) triggers uncertain."""
+        result = ai_plugin._handle_mock_response("MOCK:FAIL", "expr")
+        assert "ambiguous" in result.lower() or "maybe" in result.lower()
+
+    def test_lowercase_fail_does_not_trigger_uncertain(self, ai_plugin):
+        """MOCK:fail (lowercase) is treated as a literal value, not FAIL command."""
+        result = ai_plugin._handle_mock_response("MOCK:fail", "expr")
+        assert result == "fail"
+
+    def test_uppercase_true_returns_one(self, ai_plugin):
+        """MOCK:TRUE (uppercase) returns '1'."""
+        assert ai_plugin._handle_mock_response("MOCK:TRUE", "expr") == "1"
+
+    def test_lowercase_true_is_literal(self, ai_plugin):
+        """MOCK:true (lowercase) is treated as a literal value."""
+        result = ai_plugin._handle_mock_response("MOCK:true", "expr")
+        assert result == "true"
+
+    def test_uppercase_false_returns_zero(self, ai_plugin):
+        """MOCK:FALSE (uppercase) returns '0'."""
+        assert ai_plugin._handle_mock_response("MOCK:FALSE", "expr") == "0"
+
+    def test_lowercase_false_is_literal(self, ai_plugin):
+        """MOCK:false (lowercase) is treated as a literal value."""
+        result = ai_plugin._handle_mock_response("MOCK:false", "expr")
+        assert result == "false"
+
+    def test_uppercase_int_type(self, ai_plugin):
+        """MOCK:INT:42 (uppercase) returns '42'."""
+        assert ai_plugin._handle_mock_response("MOCK:INT:42", "expr") == "42"
+
+    def test_lowercase_int_type_falls_through(self, ai_plugin):
+        """MOCK:int:42 (lowercase) does not match INT command, falls through."""
+        result = ai_plugin._handle_mock_response("MOCK:int:42", "expr")
+        # Falls through to named-command path; 'int' is not a recognized command
+        assert result != "42"
+
+    def test_uppercase_bool_true(self, ai_plugin):
+        """MOCK:BOOL:TRUE (uppercase value) returns '1'."""
+        assert ai_plugin._handle_mock_response("MOCK:BOOL:TRUE", "expr") == "1"
+
+    def test_lowercase_bool_true_is_not_true(self, ai_plugin):
+        """MOCK:BOOL:true (lowercase value) returns '0' since value != 'TRUE'."""
+        assert ai_plugin._handle_mock_response("MOCK:BOOL:true", "expr") == "0"
+
+    def test_seq_uppercase_sentinels(self, ai_plugin):
+        """MOCK:SEQ with uppercase FAIL/TRUE/FALSE sentinels work."""
+        r0 = ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:TRUE:FALSE cs_key", "expr")
+        assert "ambiguous" in r0.lower() or "maybe" in r0.lower()
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:TRUE:FALSE cs_key", "expr") == "1"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:TRUE:FALSE cs_key", "expr") == "0"
+
+    def test_seq_lowercase_sentinels_are_literals(self, ai_plugin):
+        """MOCK:SEQ with lowercase sentinels are treated as literal values."""
+        ai_plugin.reset_mock_state()
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:fail:true:false lc_key", "expr") == "fail"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:fail:true:false lc_key", "expr") == "true"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:fail:true:false lc_key", "expr") == "false"

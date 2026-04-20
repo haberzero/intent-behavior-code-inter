@@ -400,21 +400,26 @@ class AIPlugin(IbStatefulPlugin):
 
     def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
         """
-        处理 MOCK 前缀指令。
-        MOCK:FAIL - 触发 llmexcept
-        MOCK:TRUE - 返回 "1"
-        MOCK:FALSE - 返回 "0"
-        MOCK:REPAIR - 首次返回模糊值，重试后返回确定值
-        MOCK:[...] - 直接返回列表内容
-        MOCK:{...} - 直接返回字典内容
-        
-        [二级 Mock 指令]
-        MOCK:INT:<value> - 返回整数，如 MOCK:INT:42
-        MOCK:STR:<value> - 返回字符串，如 MOCK:STR:"hello"
-        MOCK:FLOAT:<value> - 返回浮点数，如 MOCK:FLOAT:3.14
-        MOCK:BOOL:TRUE/FALSE - 返回布尔值，如 MOCK:BOOL:TRUE
-        MOCK:LIST:<json> - 返回列表，如 MOCK:LIST:[1,2,3]
-        MOCK:DICT:<json> - 返回字典，如 MOCK:DICT:{"key":"value"}
+        处理 MOCK 前缀指令。所有指令关键字**区分大小写，必须全大写**。
+
+        MOCK:FAIL    - 触发 llmexcept
+        MOCK:TRUE    - 返回 "1"
+        MOCK:FALSE   - 返回 "0"
+        MOCK:REPAIR  - 首次返回模糊值，重试后返回确定值
+        MOCK:[...]   - 直接返回列表内容
+        MOCK:{...}   - 直接返回字典内容
+
+        [二级 Mock 指令]（指令关键字必须大写）
+        MOCK:INT:<value>       - 返回整数，如 MOCK:INT:42
+        MOCK:STR:<value>       - 返回字符串，如 MOCK:STR:"hello"
+        MOCK:FLOAT:<value>     - 返回浮点数，如 MOCK:FLOAT:3.14
+        MOCK:BOOL:TRUE/FALSE   - 返回布尔值，如 MOCK:BOOL:TRUE
+        MOCK:LIST:<json>       - 返回列表，如 MOCK:LIST:[1,2,3]
+        MOCK:DICT:<json>       - 返回字典，如 MOCK:DICT:{"key":"value"}
+        MOCK:SEQ:v1:v2:v3      - 按序返回值；FAIL/TRUE/FALSE 为哨兵（必须大写）
+
+        [自定义枚举值]
+        MOCK:<VALUE>           - 直接返回 VALUE 原始字符串（无匹配时兜底）
         """
         if not user_prompt.startswith("MOCK:"):
             if scene in ("branch", "loop"):
@@ -431,7 +436,7 @@ class AIPlugin(IbStatefulPlugin):
         if ':' in content_after_mock:
             type_parts = content_after_mock.split(':', 2)
             if len(type_parts) >= 2:
-                mock_type = type_parts[0].upper()
+                mock_type = type_parts[0]
                 mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
                 
                 if mock_type == "INT":
@@ -447,7 +452,7 @@ class AIPlugin(IbStatefulPlugin):
                 elif mock_type == "FLOAT":
                     return str(float(mock_value))
                 elif mock_type == "BOOL":
-                    return "1" if mock_value.upper() == "TRUE" else "0"
+                    return "1" if mock_value == "TRUE" else "0"
                 elif mock_type == "LIST":
                     # If value already has surrounding brackets, return as-is
                     if mock_value.startswith('[') and mock_value.endswith(']'):
@@ -472,18 +477,17 @@ class AIPlugin(IbStatefulPlugin):
                     idx = self._mock_seq_counters.get(counter_key, 0)
                     self._mock_seq_counters[counter_key] = idx + 1
                     val = values[idx] if idx < len(values) else (values[-1] if values else "")
-                    v_upper = val.upper()
-                    if v_upper == "FAIL":
+                    if val == "FAIL":
                         return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
-                    if v_upper == "TRUE":
+                    if val == "TRUE":
                         return "1"
-                    if v_upper == "FALSE":
+                    if val == "FALSE":
                         return "0"
                     return val
 
-        # 3. 处理命名指令
+        # 3. 处理命名指令（区分大小写，MOCK 指令必须全大写）
         parts = content_after_mock.split(" ", 1)
-        mock_cmd = parts[0].upper() if parts else ""
+        mock_cmd = parts[0] if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
 
         if mock_cmd == "FAIL":

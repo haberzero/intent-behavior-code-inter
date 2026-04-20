@@ -210,6 +210,23 @@ for str item in items:
 | `lambda` | 调用时执行 | 使用**调用时刻**的意图栈 |
 | `snapshot` | 定义时捕获，调用时执行 | 使用**定义时刻**的意图栈快照 |
 
+#### 语法
+
+```ibci
+# 变量声明语法：<type> lambda <name> = <expr>
+int lambda compute = @~ 计算一个随机数 ~
+
+# 也可以使用 auto
+auto lambda lazy_sum = a + b
+
+# snapshot 变体
+int snapshot cached = @~ 生成一个偶数 ~
+```
+
+#### 意图栈时机
+
+`lambda` 和 `snapshot` 的核心区别在于**意图（`@+`/`@-`）何时绑定**：
+
 ```ibci
 # lambda：每次调用时才执行，使用调用时的意图栈
 int lambda compute = @~ 计算一个随机数 ~
@@ -217,19 +234,47 @@ int lambda compute = @~ 计算一个随机数 ~
 @+ 结果必须是正数
 int result1 = compute()    # 受 @+ 意图影响
 
+@- 结果必须是正数
+int result2 = compute()    # @+ 已移除，意图栈已改变
+
 # snapshot：定义时捕获意图栈快照
 @+ 结果必须是偶数
 int snapshot cached = @~ 生成一个偶数 ~
 @- 结果必须是偶数            # 移除意图
-int result2 = cached()     # 仍使用定义时的快照意图（"结果必须是偶数"）
+int result3 = cached()     # 仍使用定义时的快照意图（"结果必须是偶数"）
 ```
 
-任意表达式（不只是 `@~...~`）都可以使用 `lambda`/`snapshot` 延迟执行：
+#### 延迟任意表达式
+
+`lambda`/`snapshot` 不局限于行为描述，任意表达式均可延迟：
 
 ```ibci
-auto lambda lazy_add = a + b      # 延迟计算 a + b
-int val = lazy_add()              # 调用时才真正计算
+int a = 3
+int b = 4
+auto lambda lazy_add = a + b      # 定义时不求值
+int val = lazy_add()              # 调用时才真正计算 a + b
 ```
+
+#### 调用语法
+
+延迟变量通过 `()` 调用，**不接受参数**：
+
+```ibci
+int lambda f = @~ 返回一个整数 ~
+int x = f()    # 正确
+# int y = f(1) # 错误：延迟表达式不接受参数
+```
+
+#### 类型
+
+延迟变量的底层类型为 `deferred`（延迟执行），其中行为描述（`@~...~`）的类型为 `behavior`（`deferred` 的子类型）：
+
+```
+callable  →  deferred  →  behavior
+（可调用）   （延迟执行）  （LLM 行为）
+```
+
+变量声明时的类型标注（如 `int lambda f = ...`）表示**调用时返回值的期望类型**，不影响变量本身的 `deferred` 类型。
 
 ---
 
@@ -481,12 +526,22 @@ a >> 1    # 右移:    0b0101 = 5
 
 ### 三元运算符
 
-> **⚠️ 未实现**：三元运算符 `? :` 目前尚未在解析器中实现，以下为规划中的语法。请使用 `if/else` 语句替代。
-
 ```ibci
 bool condition = true
-str result = condition ? "真" : "假"
+str result = condition ? "真" : "假"   # result = "真"
+
+# 可嵌套（右结合）
+int x = 5
+str label = x > 10 ? "大" : (x > 3 ? "中" : "小")   # label = "中"
+
+# 可与逻辑运算符组合：逻辑运算优先于三元
+bool a = true
+bool b = false
+str r = a or b ? "有" : "无"    # 等价于 (a or b) ? "有" : "无"
 ```
+
+> **语义**：`cond ? body : orelse` 当 `cond` 为真时返回 `body` 的值，否则返回 `orelse` 的值。  
+> 三元运算符优先级低于所有逻辑运算符（`and`/`or`/`not`）和比较运算符，高于赋值。
 
 ### 复合赋值运算符
 

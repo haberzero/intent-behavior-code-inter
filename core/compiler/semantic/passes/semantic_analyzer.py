@@ -1193,6 +1193,16 @@ class SemanticAnalyzer:
             self.visit(val)
         return self._bool_desc
 
+    def visit_IbIfExp(self, node: ast.IbIfExp) -> IbSpec:
+        """三元条件表达式：condition ? body : orelse"""
+        self.visit(node.test)
+        body_type = self.visit(node.body)
+        orelse_type = self.visit(node.orelse)
+        # 返回类型：若两侧类型相同则返回该类型，否则返回 any
+        if body_type and orelse_type and body_type.name == orelse_type.name:
+            return body_type
+        return self._any_desc
+
     def visit_IbTuple(self, node: ast.IbTuple) -> IbSpec:
         """元组表达式 -> 不可变元组类型"""
         element_type = self._any_desc

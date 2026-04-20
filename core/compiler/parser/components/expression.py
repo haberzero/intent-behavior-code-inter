@@ -87,6 +87,9 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
         self.register(TokenType.OR, None, self.logical, IbPrecedence.OR)
         
+        # Ternary operator: condition ? body : orelse
+        self.register(TokenType.QUESTION, None, self.ternary, IbPrecedence.ASSIGNMENT)
+        
         # Calls and Attributes
         self.register(TokenType.DOT, None, self.dot, IbPrecedence.CALL)
         
@@ -261,6 +264,16 @@ class ExpressionComponent(BaseComponent):
             return self._extend_loc(left, right)
             
         return self._loc(ast.IbBoolOp(op=op, values=[left, right]), left, right)
+
+    def ternary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """三元运算符：condition ? body : orelse"""
+        question_token = self.stream.previous()
+        # 解析真值分支（在 COLON 之前停止，因为 COLON 无 infix 规则，优先级为 LOWEST）
+        body = self.parse_expression(IbPrecedence.LOWEST)
+        self.stream.consume(TokenType.COLON, "Expect ':' in ternary expression 'cond ? expr : expr'.")
+        # 解析假值分支（右结合：再次从 LOWEST 开始，可嵌套三元）
+        orelse = self.parse_expression(IbPrecedence.LOWEST)
+        return self._loc(ast.IbIfExp(test=left, body=body, orelse=orelse), left, orelse)
 
     def call(self, left: ast.IbExpr) -> ast.IbCall:
         arguments = []
