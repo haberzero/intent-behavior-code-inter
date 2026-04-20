@@ -509,3 +509,50 @@ except Exception as e:
 '''
         lines = run_and_capture(code)
         assert "caught" in lines
+
+
+# ---------------------------------------------------------------------------
+# str.trim / to_upper / to_lower (IBCI-style aliases)
+# ---------------------------------------------------------------------------
+
+class TestE2EStringAliases:
+    def test_str_trim(self):
+        code = 'str s = "  hello  "\nstr r = s.trim()\nprint(r)'
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_str_to_upper(self):
+        code = 'str s = "hello"\nstr r = s.to_upper()\nprint(r)'
+        lines = run_and_capture(code)
+        assert "HELLO" in lines
+
+    def test_str_to_lower(self):
+        code = 'str s = "HELLO"\nstr r = s.to_lower()\nprint(r)'
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+
+# ---------------------------------------------------------------------------
+# dict.contains / dict.remove
+# ---------------------------------------------------------------------------
+
+class TestE2EDictContainsRemove:
+    def test_dict_contains_true(self):
+        code = 'dict d = {"a": 1, "b": 2}\nbool r = d.contains("a")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_dict_contains_false(self):
+        code = 'dict d = {"a": 1}\nbool r = d.contains("z")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_dict_remove(self):
+        code = 'dict d = {"a": 1, "b": 2}\nd.remove("a")\nprint((str)d.len())'
+        lines = run_and_capture(code)
+        assert "1" in lines
+
+    def test_dict_contains_after_remove(self):
+        code = 'dict d = {"x": 10}\nd.remove("x")\nbool r = d.contains("x")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines

@@ -233,6 +233,18 @@ class IbString(IbObject):
     def strip(self) -> IbObject:
         return self.ib_class.registry.box(self.value.strip())
 
+    def trim(self) -> IbObject:
+        """IBCI-style alias for strip()"""
+        return self.ib_class.registry.box(self.value.strip())
+
+    def to_upper(self) -> IbObject:
+        """IBCI-style alias for upper()"""
+        return self.ib_class.registry.box(self.value.upper())
+
+    def to_lower(self) -> IbObject:
+        """IBCI-style alias for lower()"""
+        return self.ib_class.registry.box(self.value.lower())
+
     def split(self, sep: Optional[str] = None) -> IbObject:
         if sep is None:
             parts = self.value.split()
@@ -575,6 +587,19 @@ class IbDict(IbObject):
         if default is not None:
             return default
         raise InterpreterError(f"KeyError: '{k}'")
+
+    def contains(self, key: Any) -> IbObject:
+        """检查 key 是否存在于字典中（便捷方法，等价于 key in dict）"""
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        return self.ib_class.registry.box(k in self.fields)
+
+    def remove(self, key: Any) -> IbObject:
+        """移除指定 key 的键值对，key 不存在时抛出错误"""
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        if k not in self.fields:
+            raise InterpreterError(f"KeyError: '{k}'")
+        del self.fields[k]
+        return self.ib_class.registry.get_none()
 
     def __iter__(self):
         return iter(self.fields)
