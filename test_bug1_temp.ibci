@@ -1,0 +1,10 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+class Stack:
+    list items = []
+    dict meta = {}
+
+Stack s = Stack()
+print("s.items type: " + (str)(any)s.items)
+print("s.meta type: " + (str)(any)s.meta)

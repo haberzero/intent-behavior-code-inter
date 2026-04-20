@@ -1,0 +1,6 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+any val = @~ MOCK:FAIL test ~
+bool is_none = val == none
+print("is_none: " + (str)is_none)
