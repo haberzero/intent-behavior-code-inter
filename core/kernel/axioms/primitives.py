@@ -26,7 +26,7 @@ from core.kernel.axioms.protocols import (
     OperatorCapability, ConverterCapability, ParserCapability,
     FromPromptCapability, IlmoutputHintCapability,
 )
-from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.member import MethodMemberSpec, MemberSpec
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
 
@@ -355,20 +355,22 @@ class StrAxiom(
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "len":      _m("len",      ret="int"),
-            "upper":    _m("upper",    ret="str"),
-            "lower":    _m("lower",    ret="str"),
-            "strip":    _m("strip",    ret="str"),
-            "split":    _m("split",    params=["str"], ret="list"),
-            "join":     _m("join",     params=["list"], ret="str"),
-            "replace":  _m("replace",  params=["str", "str"], ret="str"),
+            "len":        _m("len",        ret="int"),
+            "upper":      _m("upper",      ret="str"),
+            "lower":      _m("lower",      ret="str"),
+            "strip":      _m("strip",      ret="str"),
+            "split":      _m("split",      params=["str"], ret="list"),
+            "join":       _m("join",       params=["list"], ret="str"),
+            "replace":    _m("replace",    params=["str", "str"], ret="str"),
             "startswith": _m("startswith", params=["str"], ret="bool"),
-            "endswith": _m("endswith", params=["str"], ret="bool"),
-            "contains": _m("contains", params=["str"], ret="bool"),
-            "find":     _m("find",     params=["str"], ret="int"),
-            "format":   _m("format",   params=["any"], ret="str"),
-            "to_bool":  _m("to_bool",  ret="bool"),
-            "cast_to":  _m("cast_to",  params=["any"], ret="any"),
+            "endswith":   _m("endswith",   params=["str"], ret="bool"),
+            "contains":   _m("contains",   params=["str"], ret="bool"),
+            "find":       _m("find",       params=["str"], ret="int"),
+            "find_last":  _m("find_last",  params=["str"], ret="int"),
+            "is_empty":   _m("is_empty",   ret="bool"),
+            "format":     _m("format",     params=["any"], ret="str"),
+            "to_bool":    _m("to_bool",    ret="bool"),
+            "cast_to":    _m("cast_to",    params=["any"], ret="any"),
         }
 
     def get_operators(self) -> Dict[str, str]:
@@ -417,7 +419,7 @@ class StrAxiom(
 
 class ListAxiom(
     BaseAxiom, IterCapability, SubscriptCapability,
-    ParserCapability, ConverterCapability,
+    OperatorCapability, ParserCapability, ConverterCapability,
     FromPromptCapability, IlmoutputHintCapability,
 ):
     @property
@@ -431,19 +433,32 @@ class ListAxiom(
     def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
     def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
     def get_call_capability(self): return None
-    def get_operator_capability(self): return None
+    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "append":      _m("append",      params=["any"],        ret="void"),
-            "pop":         _m("pop",                                 ret="any"),
-            "len":         _m("len",                                 ret="int"),
-            "sort":        _m("sort",                                ret="void"),
-            "clear":       _m("clear",                               ret="void"),
-            "cast_to":     _m("cast_to",     params=["any"],        ret="any"),
-            "__getitem__": _m("__getitem__", params=["int"],         ret="any"),
-            "__setitem__": _m("__setitem__", params=["int", "any"],  ret="void"),
+            "append":        _m("append",        params=["any"],        ret="void"),
+            "insert":        _m("insert",         params=["int", "any"], ret="void"),
+            "remove":        _m("remove",         params=["any"],        ret="void"),
+            "pop":           _m("pop",                                   ret="any"),
+            "index":         _m("index",          params=["any"],        ret="int"),
+            "count":         _m("count",          params=["any"],        ret="int"),
+            "contains":      _m("contains",       params=["any"],        ret="bool"),
+            "len":           _m("len",                                   ret="int"),
+            "sort":          _m("sort",                                  ret="void"),
+            "clear":         _m("clear",                                 ret="void"),
+            "cast_to":       _m("cast_to",        params=["any"],        ret="any"),
+            "__getitem__":   _m("__getitem__",    params=["int"],        ret="any"),
+            "__setitem__":   _m("__setitem__",    params=["int", "any"], ret="void"),
         }
+
+    def get_operators(self) -> Dict[str, str]:
+        return {"+": "__add__"}
+
+    def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if op == "+" and other_name in ("list", "any"):
+            return "list"
+        return None
 
     def get_element_type_name(self) -> str:
         return "any"
@@ -507,6 +522,7 @@ class DictAxiom(
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "get":         _m("get",         params=["any", "any"], ret="any"),
+            "pop":         _m("pop",         params=["any"],        ret="any"),
             "keys":        _m("keys",                               ret="list"),
             "values":      _m("values",                             ret="list"),
             "len":         _m("len",                                ret="int"),
@@ -732,7 +748,9 @@ class ExceptionAxiom(BaseAxiom, ConverterCapability):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "message": _m("message", ret="str"),
+            # message 作为字段（field）声明，语义分析器 resolve_member 返回 str 类型，
+            # 运行时通过 __getattr__ → fields['message'] 直接取出字符串值。
+            "message": MemberSpec(name="message", kind="field", type_name="str"),
             "cast_to": _m("cast_to", params=["any"], ret="any"),
         }
 

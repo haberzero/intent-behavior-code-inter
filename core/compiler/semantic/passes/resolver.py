@@ -104,13 +104,15 @@ class TypeResolver:
              descriptor.parent_name = parent_desc.name
         
         # 注册到注册表，以便后续继承解析能找到它
-        self.analyzer.registry.register(descriptor)
+        # 必须使用返回的已注册克隆，否则成员信息只写入本地对象，
+        # 注册表中存放的是另一个独立副本，导致 resolve_member 在继承场景下看到空类型。
+        registered = self.analyzer.registry.register(descriptor)
              
-        sym.spec = descriptor
+        sym.spec = registered
         
         # 3. 解析成员
         old_class = self.current_class_descriptor
-        self.current_class_descriptor = descriptor
+        self.current_class_descriptor = registered
         try:
             for stmt in node.body:
                 if isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbAssign)):

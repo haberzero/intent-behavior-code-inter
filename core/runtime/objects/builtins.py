@@ -244,7 +244,7 @@ class IbString(IbObject):
         return registry.box([registry.box(p) for p in parts])
 
     def is_empty(self) -> IbObject:
-        return self.ib_class.registry.box(1 if len(self.value.strip()) == 0 else 0)
+        return self.ib_class.registry.box(len(self.value.strip()) == 0)
 
     def find(self, substring: Any) -> IbObject:
         """查找子串首次出现的位置，未找到返回 -1"""
@@ -261,8 +261,28 @@ class IbString(IbObject):
     def contains(self, substring: Any) -> IbObject:
         """检查是否包含子串"""
         sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
-        result = sub_str in self.value
-        return self.ib_class.registry.box(result)
+        return self.ib_class.registry.box(sub_str in self.value)
+
+    def __contains__(self, item: Any) -> bool:
+        """Python-level containment check used by the 'in' operator at runtime"""
+        sub_str = item.to_native() if isinstance(item, IbObject) else str(item)
+        return sub_str in self.value
+
+    def replace(self, old: Any, new: Any) -> IbObject:
+        """替换子串。对齐 Python str.replace(old, new)"""
+        old_str = old.to_native() if hasattr(old, 'to_native') else str(old)
+        new_str = new.to_native() if hasattr(new, 'to_native') else str(new)
+        return self.ib_class.registry.box(self.value.replace(old_str, new_str))
+
+    def startswith(self, prefix: Any) -> IbObject:
+        """判断是否以指定前缀开头。对齐 Python str.startswith(prefix)"""
+        prefix_str = prefix.to_native() if hasattr(prefix, 'to_native') else str(prefix)
+        return self.ib_class.registry.box(self.value.startswith(prefix_str))
+
+    def endswith(self, suffix: Any) -> IbObject:
+        """判断是否以指定后缀结尾。对齐 Python str.endswith(suffix)"""
+        suffix_str = suffix.to_native() if hasattr(suffix, 'to_native') else str(suffix)
+        return self.ib_class.registry.box(self.value.endswith(suffix_str))
 
     def __getitem__(self, key: Any) -> IbObject:
         """支持字符串下标与切片"""
@@ -379,6 +399,51 @@ class IbList(IbObject):
     def sort(self) -> IbObject:
         self.elements.sort(key=lambda x: x.to_native())
         return self.ib_class.registry.get_none()
+
+    def insert(self, index: Any, item: IbObject) -> IbObject:
+        """在指定位置插入元素。对齐 Python list.insert(index, item)"""
+        idx = index.to_native() if hasattr(index, 'to_native') else int(index)
+        self.elements.insert(idx, item)
+        return self.ib_class.registry.get_none()
+
+    def remove(self, item: Any) -> IbObject:
+        """删除第一个匹配元素。对齐 Python list.remove(item)"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        for i, el in enumerate(self.elements):
+            if el.to_native() == native:
+                del self.elements[i]
+                return self.ib_class.registry.get_none()
+        raise InterpreterError(f"ValueError: list.remove(x): x not in list")
+
+    def index(self, item: Any) -> IbObject:
+        """返回第一个匹配元素的索引。对齐 Python list.index(item)"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        for i, el in enumerate(self.elements):
+            if el.to_native() == native:
+                return self.ib_class.registry.box(i)
+        raise InterpreterError(f"ValueError: {native!r} is not in list")
+
+    def count(self, item: Any) -> IbObject:
+        """统计元素出现次数。对齐 Python list.count(item)"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        cnt = sum(1 for el in self.elements if el.to_native() == native)
+        return self.ib_class.registry.box(cnt)
+
+    def contains(self, item: Any) -> IbObject:
+        """检查是否包含元素（便捷方法，等价于 item in list）"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        return self.ib_class.registry.box(any(el.to_native() == native for el in self.elements))
+
+    def __contains__(self, item: Any) -> bool:
+        """Python-level containment check used by the 'in' operator at runtime"""
+        native = item.to_native() if isinstance(item, IbObject) else item
+        return any(el.to_native() == native for el in self.elements)
+
+    def __add__(self, other: IbObject) -> Any:
+        """列表拼接。对齐 Python list + list"""
+        if not isinstance(other, IbList):
+            raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list")
+        return self.elements + other.elements
 
 @register_ib_type("tuple")
 class IbTuple(IbObject):
@@ -501,6 +566,15 @@ class IbDict(IbObject):
         if k in self.fields:
             return self.fields[k]
         return default or self.ib_class.registry.get_none()
+
+    def pop(self, key: Any, default: Optional[IbObject] = None) -> IbObject:
+        """删除并返回指定 key 的值。对齐 Python dict.pop(key[, default])"""
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        if k in self.fields:
+            return self.fields.pop(k)
+        if default is not None:
+            return default
+        raise InterpreterError(f"KeyError: '{k}'")
 
     def __iter__(self):
         return iter(self.fields)

@@ -77,7 +77,7 @@ class ExprHandler(BaseHandler):
         return operand.receive(method, [])
 
     def visit_IbCompare(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """比较运算实现 (支持链式比较 a < b < c)"""
+        """比较运算实现 (支持链式比较 a < b < c，以及 in / not in)"""
         left = self.visit(node_data.get("left"))
         ops = node_data.get("ops", [])
         comparators = node_data.get("comparators", [])
@@ -90,12 +90,20 @@ class ExprHandler(BaseHandler):
         
         for op, comparator_uid in zip(ops, comparators):
             right = self.visit(comparator_uid)
-            method = OP_MAPPING.get(op)
-            if not method:
-                raise self.report_error(f"Unsupported comparison: {op}", node_uid)
-            
-            # 执行单步比较
-            cmp_res = current_left.receive(method, [right])
+
+            # 成员检测运算符由右侧容器的 __contains__ 处理
+            if op == "in":
+                contained = right.receive('__contains__', [current_left])
+                cmp_res = self.registry.box(bool(contained.to_native()) if hasattr(contained, 'to_native') else bool(contained))
+            elif op == "not in":
+                contained = right.receive('__contains__', [current_left])
+                native = contained.to_native() if hasattr(contained, 'to_native') else contained
+                cmp_res = self.registry.box(not bool(native))
+            else:
+                method = OP_MAPPING.get(op)
+                if not method:
+                    raise self.report_error(f"Unsupported comparison: {op}", node_uid)
+                cmp_res = current_left.receive(method, [right])
             
             # 短路：只要有一个比较不成立，立即返回 False
             if not self.execution_context.is_truthy(cmp_res):

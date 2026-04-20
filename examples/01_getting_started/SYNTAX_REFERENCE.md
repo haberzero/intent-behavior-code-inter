@@ -349,12 +349,14 @@ items.len()       # 长度: 3
 list fruits = ["apple", "banana"]
 
 fruits.append("cherry")       # 添加元素
-fruits.insert(1, "orange")   # 插入元素
-fruits.remove("banana")       # 移除元素
-str removed = fruits.pop()     # 弹出元素
+fruits.insert(1, "orange")   # 插入元素（对齐 Python list.insert）
+fruits.remove("banana")       # 移除第一个匹配元素（对齐 Python list.remove）
+str removed = fruits.pop()    # 弹出末尾元素
 
-bool has_apple = fruits.contains("apple")  # 检查包含
-int idx = fruits.index_of("cherry")       # 查找索引
+bool has_apple = fruits.contains("apple")  # 便捷包含检查
+bool via_in = "apple" in fruits             # 也可用 in 运算符（推荐）
+int idx = fruits.index("cherry")            # 查找索引（对齐 Python list.index）
+int cnt = fruits.count("apple")             # 统计出现次数（对齐 Python list.count）
 ```
 
 #### 列表切片
