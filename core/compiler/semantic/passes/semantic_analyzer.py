@@ -1127,19 +1127,6 @@ class SemanticAnalyzer:
 
             i += 1
 
-    def _stmt_contains_behavior(self, stmt: ast.IbStmt) -> bool:
-        """检查语句是否包含行为表达式"""
-        if isinstance(stmt, ast.IbExprStmt):
-            return self._expr_contains_behavior(stmt.value)
-        elif isinstance(stmt, ast.IbAssign):
-            return self._expr_contains_behavior(stmt.value)
-        elif isinstance(stmt, ast.IbReturn):
-            if stmt.value:
-                return self._expr_contains_behavior(stmt.value)
-        elif isinstance(stmt, ast.IbExprStmt) and isinstance(stmt.value, ast.IbBehaviorExpr):
-            return True
-        return False
-
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """处理带类型标注的表达式包装节点 (例如 Casts 或声明)"""
         # 1. 解析标注的类型
@@ -1448,8 +1435,9 @@ class SemanticAnalyzer:
             else:
                 generic_args = [self._resolve_type(node.slice, safe=safe)]
                 
-            # 使用 resolve_specialization 替代硬编码判断，实现真正的类型演算
-            return base_type.resolve_specialization(generic_args)
+            # 使用 registry.resolve_specialization 实现真正的类型演算（IbSpec 本身无此方法）
+            result = self.registry.resolve_specialization(base_type, generic_args)
+            return result if result is not None else base_type
 
         elif isinstance(node, ast.IbAttribute):
             if safe:

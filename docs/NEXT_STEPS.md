@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-20（str/dict 方法补全；Step 8 架构边界文档化；610 个测试通过）
+> **最后更新**：2026-04-20（str/dict 方法补全；Step 8 架构边界文档化；Bug 修复：IbBool(False) 假值判断 + `llmexcept`-after-if/while/for 修复 + `list[str]`/`dict[K,V]` 泛型专化；610 个测试通过）
 
 ---
 
@@ -31,6 +31,9 @@
 - ✅ **`in` / `not in` 运算符**：`IbCompare` 支持成员检测；`str`/`list`/`dict` 均实现 `__contains__` vtable
 - ✅ **标准库方法补全**：`str.{find_last, is_empty, replace, startswith, endswith, trim, to_upper, to_lower}`；`list.{insert, remove, index, count, contains}`；`dict.{pop, contains, remove}`；`Exception(msg)` 构造 + `e.message` 字段；`list + list` 拼接；610 测试通过
 - ✅ **Step 8（架构边界文档化）**：`interpreter.py`/`engine.py`/`service.py` 头部添加边界说明注释
+- ✅ **Bug #1 修复（IbBool(False) 假值）**：`result.value if result and result.value` 三处改为 `result is not None and result.value is not None`；修复 `bool b = @~ MOCK:FALSE ~` 报 `Type mismatch` 及 bool/int 零值被误替换为 None
+- ✅ **Bug #2 修复（重复 `_stmt_contains_behavior`）**：删除 `semantic_analyzer.py` 中 AI Agent 遗留的残缺重复定义（只处理 `IbExprStmt`/`IbAssign`/`IbReturn`），恢复正确版本（含 `IbIf`/`IbWhile`/`IbFor`）；修复 `llmexcept` 跟在 `if/while/for @~...~:` 后始终报 SEM_050 的问题
+- ✅ **Bug #3 修复（泛型专化崩溃）**：三处联合修复：`_resolve_type` 改调 `self.registry.resolve_specialization()`；`SpecRegistry.resolve_specialization` 修正 `hasattr` 检查名称 + 补全新注册 Spec 的方法成员；`list[str]`/`dict[str,int]`/`tuple[int]` 等泛型标注完全可用
 
 ---
 

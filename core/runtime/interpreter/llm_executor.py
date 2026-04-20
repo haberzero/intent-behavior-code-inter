@@ -573,7 +573,8 @@ class LLMExecutorImpl:
         result = self.execute_behavior_object(behavior, execution_context)
         if execution_context is not None:
             execution_context.runtime_context.set_last_llm_result(result)
-        if result and result.value:
+        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        if result is not None and result.value is not None:
             return result.value
         return self.registry.get_none()
 
@@ -592,7 +593,8 @@ class LLMExecutorImpl:
         result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
         if execution_context is not None:
             execution_context.runtime_context.set_last_llm_result(result)
-        if result and result.value:
+        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        if result is not None and result.value is not None:
             return result.value
         return self.registry.get_none()
 

@@ -240,7 +240,8 @@ class ExprHandler(BaseHandler):
         self.runtime_context.set_last_llm_result(result)
 
         # 返回 IbObject（而不是 LLMResult）
-        return result.value if result and result.value else self.registry.get_none()
+        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        return result.value if result is not None and result.value is not None else self.registry.get_none()
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""

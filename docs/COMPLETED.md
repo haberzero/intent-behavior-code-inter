@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；580 个测试通过）
+> **最后更新**：2026-04-20（Step 8 架构边界文档化；Bug 修复：IbBool(False) 假值判断、duplicate `_stmt_contains_behavior`、list[str]/dict[K,V] 泛型专化；610 个测试通过）
 
 ---
 
@@ -208,7 +208,7 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
   - `last_llm()`：同样改为帧优先模式获取 `res`，移除嵌套 if/else 链。
   - `retry_stack()`：将 `last_llm_response`（始终为 `None` 的死字段）替换为 `last_result` 字段，包含 `is_certain`、`raw_response`（前 120 字符）、`retry_hint` 三个子字段。
 
-*全部 580 个测试通过。*
+*全部 610 个测试通过。*
 
 
 ---
@@ -249,7 +249,28 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
   - 作用域控制（类/实例均可调用）：`clear_inherited`、`use`、`get_current`
 - **11 个新测试**（含 4 个 `TestE2EIntentScopeIsolation`、4 个 `TestE2EIntentContextOOP`、1 个 `TestE2ELambdaRestriction`）
 
-*全部 580 个测试通过。*
+*全部 610 个测试通过。*
+
+---
+
+## 四b、Bug 修复（2026-04-20，610 测试通过）
+
+### 4b.1 IbBool(False) / IbInteger(0) 假值误判（Bug #1）
+`result.value if result and result.value else registry.get_none()` 中 `bool(IbBool(False))` 为 Python `False`，导致 LLM 返回 `false`/`0` 时误替换为 `IbNone`，变量赋值时报 `Type mismatch`。  
+**修复**：三处全改为 `result is not None and result.value is not None`。  
+*文件：`core/runtime/interpreter/handlers/expr_handler.py`，`core/runtime/interpreter/llm_executor.py`*
+
+### 4b.2 重复 `_stmt_contains_behavior` 覆盖正确实现（Bug #2）
+同一方法在 `semantic_analyzer.py` 中被定义两次：第 276 行正确版含 `IbIf`/`IbWhile`/`IbFor` 分支；第 1130 行 AI Agent 遗留版仅处理 `IbExprStmt`/`IbAssign`/`IbReturn`。Python 类后定义覆盖前定义，导致 `llmexcept` 跟在 `if/while/for @~...~:` 后时总报 SEM_050。  
+**修复**：删除 1130–1141 行残缺重复实现。  
+*文件：`core/compiler/semantic/passes/semantic_analyzer.py`*
+
+### 4b.3 list[str] / dict[K,V] 泛型专化崩溃（Bug #3，含三处子修复）
+1. `semantic_analyzer.py:_resolve_type` 调用不存在的 `IbSpec.resolve_specialization()`，应为 `self.registry.resolve_specialization()`。
+2. `SpecRegistry.resolve_specialization()` 的 `hasattr` 检查错误（`"resolve_specialization"` 而非 `"resolve_specialization_by_names"`），导致始终返回 `None`。
+3. 新注册的专化 Spec 在 `_bootstrap_axiom_methods()` 之后创建，未自动填充方法成员；`resolve_specialization` 修复后同步使用 `axiom.get_method_specs()` 补全成员。  
+**修复**：三处联合修复；`list[str]`、`dict[str,int]`、`tuple[int]` 等泛型标注全部可用，含字面量赋值、行为表达式、方法调用、for 迭代。  
+*文件：`core/compiler/semantic/passes/semantic_analyzer.py`，`core/kernel/spec/registry.py`*
 
 ---
 
