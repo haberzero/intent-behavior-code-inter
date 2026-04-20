@@ -360,8 +360,21 @@ class IbClass(IbObject):
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
         
+        # Bug D 修复：收集完整的字段继承链（父类字段 + 子类字段）
+        # 父类字段先初始化，子类同名字段会覆盖父类字段
+        all_default_fields = {}
+        # 从继承链顶部开始收集（最远祖先优先）
+        ancestors = []
+        cls = self
+        while cls is not None:
+            ancestors.append(cls)
+            cls = cls.parent
+        for ancestor in reversed(ancestors):
+            for name, val_info in ancestor.default_fields.items():
+                all_default_fields[name] = val_info
+        
         # 延迟执行字段初始化 (Item 2.1 Audit)
-        for name, val_info in self.default_fields.items():
+        for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
                     # 优先使用预评估好的快照

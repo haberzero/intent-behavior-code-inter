@@ -31,5 +31,5 @@ def _cast_numeric_to_native(val: Any, target_desc: Any) -> Any:
     if axiom_name == "float":
         return float(val)
     if axiom_name == "bool":
-        return 1 if val else 0
+        return bool(val)
     return val

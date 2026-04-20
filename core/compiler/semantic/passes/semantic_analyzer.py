@@ -539,6 +539,17 @@ class SemanticAnalyzer:
         if writable:
             # 安全回填分析得到的参数与返回类型
             writable.update_signature(param_types, ret_type)
+        else:
+            # Known Limit 2 修复：嵌套函数的 FuncSpec 未被 Pass 2 (TypeResolver) 处理，
+            # 此时直接创建携带正确签名的 FuncSpec 并替换符号的 spec。
+            # 对于顶层函数，Pass 2 已正确设置 spec，此处为幂等操作。
+            updated_spec = self.registry.factory.create_func(
+                name=node.name,
+                param_type_names=[p.name for p in param_types],
+                return_type_name=ret_type.name if ret_type else "void"
+            )
+            updated_spec.is_user_defined = True
+            sym.spec = updated_spec
             
         # 进入局部作用域
         old_table = self.symbol_table
@@ -680,6 +691,22 @@ class SemanticAnalyzer:
     def visit_IbAssign(self, node: ast.IbAssign):
         # 1. 预先计算右值类型，避免在循环中重复 visit
         val_type = self.visit(node.value) if node.value else self._any_desc
+        
+        # Design 3 修复：编译期检测 void 函数返回值赋值
+        # 当右值类型为 void 时（如调用无返回值函数），赋值无意义，发出编译错误
+        if node.value and val_type is self._void_desc:
+            # 只在右值是函数调用时报错（避免误报其他 void 表达式如语句块）
+            if isinstance(node.value, ast.IbCall):
+                func_name = ""
+                if isinstance(node.value.func, ast.IbName):
+                    func_name = node.value.func.id
+                elif isinstance(node.value.func, ast.IbAttribute):
+                    func_name = f"...{node.value.func.attr}"
+                self.error(
+                    f"Cannot assign result of void function '{func_name}()' to a variable. "
+                    f"The function does not return a value.",
+                    node, code="SEM_003"
+                )
         
         # 2. 提取所有赋值目标中的变量名
         assigned_names = SymbolExtractor.get_assigned_names(node)

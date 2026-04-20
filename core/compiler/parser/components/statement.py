@@ -438,6 +438,12 @@ class StatementComponent(BaseComponent):
         if SyntaxRecognizer.get_role(self.stream) == SyntaxRole.VARIABLE_DECLARATION:
             # 这是一个带类型的声明作为目标
             target_candidate = self._parse_for_loop_target()
+        elif (self.stream.check(TokenType.IDENTIFIER) and 
+              self.stream.peek(1).type == TokenType.IN):
+            # Known Limit 1 修复：for item in items（无类型标注的裸变量名）
+            # 当 IDENTIFIER 紧跟 IN 时，识别为 foreach 循环变量（而非表达式中的 `in` 比较运算符）
+            name_token = self.stream.advance()
+            target_candidate = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
         else:
             target_candidate = self.expression.parse_expression()
         

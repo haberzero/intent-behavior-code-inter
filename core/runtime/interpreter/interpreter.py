@@ -612,6 +612,11 @@ class Interpreter:
     def _pre_evaluate_user_classes(self):
         """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
         old_module = self.current_module_name
+        # Bug C 修复：预评估失败不应污染 issue_tracker（导致 STAGE 7 契约校验误报错误）。
+        # 保存当前错误计数，预评估完成后恢复。
+        saved_error_count = self.issue_tracker._error_count
+        saved_diag_count = len(self.issue_tracker._diagnostics)
+        
         for name, ib_class in self.registry.get_all_classes().items():
             if not getattr(ib_class.spec, 'is_user_defined', False):
                 continue
@@ -630,6 +635,10 @@ class Interpreter:
                 except Exception:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
                     pass
+        
+        # 恢复 issue_tracker 状态：预评估期间产生的任何错误都是误报
+        self.issue_tracker._error_count = saved_error_count
+        self.issue_tracker._diagnostics = self.issue_tracker._diagnostics[:saved_diag_count]
         
         self.current_module_name = old_module
 

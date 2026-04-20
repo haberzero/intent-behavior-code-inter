@@ -279,3 +279,25 @@ class LocalSymbolCollector:
                 self._define(sym, target) # 绑定 target 节点
             self.visit(handler)
         self.generic_visit(node)
+
+    def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
+        """Known Limit 2 修复：预扫描嵌套函数定义，使其在外围作用域中可见。
+        
+        只在当前作用域中该名称未被定义时注册（避免与 Pass 1 中已注册的顶层函数冲突）。
+        """
+        # 如果已在当前作用域（或父作用域）中定义，则跳过（由 Pass 1 SymbolCollector 负责）
+        existing = self.symbol_table.symbols.get(node.name)
+        if existing:
+            return
+        
+        # 创建函数元数据并注册到 SpecRegistry
+        func_meta = self.analyzer.registry.factory.create_func(
+            name=node.name, param_type_names=[], return_type_name="any"
+        )
+        func_meta.is_user_defined = True
+        self.analyzer.registry.register(func_meta)
+        
+        # 将嵌套函数注册为当前作用域的符号
+        sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, spec=func_meta)
+        self._define(sym, node)
+        # 不递归进入函数体（函数体的局部符号由 SemanticAnalyzer.visit_IbFunctionDef 负责）
