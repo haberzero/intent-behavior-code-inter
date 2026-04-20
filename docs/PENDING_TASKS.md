@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-19（意图上下文隔离 + intent_context OOP MVP 落地；580 个测试通过）
+> **最后更新**：2026-04-20（Bug 修复：IbBool(False) 假值判断、duplicate `_stmt_contains_behavior`、`list[str]`/`dict[K,V]` 泛型专化；610 个测试通过）
 
 ---
 
@@ -312,7 +312,7 @@ func process():
   `visit_IbLLMExceptionalStmt` 进入 body 前通过 `_collect_llmexcept_body_declared_names()` 区分
   body-local 新声明变量与外部作用域变量，并设置外部作用域快照；`visit_IbAssign` 在检测到对外部作用域变量的任何赋值时发出 SEM_052。
 - `tests/compiler/test_compiler_pipeline.py`：新增 `TestLLMExceptBodyReadOnly`（6 个测试）覆盖各场景。
-- 580 个测试全部通过。
+- 610 个测试全部通过。
 
 ---
 
@@ -321,7 +321,7 @@ func process():
 **完成内容**：
 - `stmt_handler.py`：`visit_IbLLMExceptionalStmt` 中读取 `result` 后立即清零共享字段，并将 `frame.last_result = result` 作为 per-snapshot 权威存储；去除了依赖 `frame.should_retry` 的条件性清零（改为无条件清零）；删除了 `finally` 块中"将 result 恢复回 `_last_llm_result`"的兼容性代码。
 - `ibci_idbg/core.py`：`last_result()` 和 `last_llm()` 均改为"优先从活跃帧读取，无帧时回退共享字段"的帧优先模式；`retry_stack()` 替换 `last_llm_response`（始终为 None）为 `last_result` 帧私有字段详情。
-- 580 个测试全部通过。
+- 610 个测试全部通过。
 
 ---
 

@@ -603,9 +603,17 @@ class SpecRegistry:
     ) -> Optional[IbSpec]:
         """Resolve a generic type specialisation, e.g. list[int]."""
         axiom = self.get_axiom(spec)
-        if axiom and hasattr(axiom, "resolve_specialization"):
+        if axiom and hasattr(axiom, "resolve_specialization_by_names"):
             arg_names = [a.get_base_name() for a in arg_specs]
-            return axiom.resolve_specialization_by_names(self, arg_names)
+            result = axiom.resolve_specialization_by_names(self, arg_names)
+            if result is not None:
+                # Bootstrap axiom methods for the newly registered specialised spec.
+                # _bootstrap_axiom_methods() ran at init time before this spec existed,
+                # so we must populate its members here using the same axiom.
+                method_specs = axiom.get_method_specs()
+                for m_name, m_spec in method_specs.items():
+                    result.members.setdefault(m_name, m_spec)
+            return result
         return None
 
     # ---------------------------------------------------------- #
