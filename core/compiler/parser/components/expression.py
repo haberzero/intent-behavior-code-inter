@@ -375,7 +375,7 @@ class ExpressionComponent(BaseComponent):
                 node = self._parse_complex_access(var_name, var_token)
                 segments.append(node)
             elif self.stream.match(TokenType.STRING):
-                # 行为描述块内的带引号字符串字面量 (如 MOCK:["a","b","c"])
+                # 行为描述块内的带引号字符串字面量 (如 MOCK:LIST:["a","b","c"])
                 # 保留原始引号包裹，确保内容按原样传递给 LLM
                 segments.append('"' + self.stream.previous().value + '"')
             else:

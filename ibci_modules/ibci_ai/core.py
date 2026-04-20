@@ -406,17 +406,15 @@ class AIPlugin(IbStatefulPlugin):
         MOCK:TRUE    - 返回 "1"
         MOCK:FALSE   - 返回 "0"
         MOCK:REPAIR  - 首次返回模糊值，重试后返回确定值
-        MOCK:[...]   - 直接返回列表内容
-        MOCK:{...}   - 直接返回字典内容
 
         [二级 Mock 指令]（指令关键字必须大写）
-        MOCK:INT:<value>       - 返回整数，如 MOCK:INT:42
-        MOCK:STR:<value>       - 返回字符串，如 MOCK:STR:"hello"
-        MOCK:FLOAT:<value>     - 返回浮点数，如 MOCK:FLOAT:3.14
-        MOCK:BOOL:TRUE/FALSE   - 返回布尔值，如 MOCK:BOOL:TRUE
-        MOCK:LIST:<json>       - 返回列表，如 MOCK:LIST:[1,2,3]
-        MOCK:DICT:<json>       - 返回字典，如 MOCK:DICT:{"key":"value"}
-        MOCK:SEQ:v1:v2:v3      - 按序返回值；FAIL/TRUE/FALSE 为哨兵（必须大写）
+        MOCK:INT:<value>          - 返回整数，如 MOCK:INT:42
+        MOCK:STR:<value>          - 返回字符串，如 MOCK:STR:"hello"
+        MOCK:FLOAT:<value>        - 返回浮点数，如 MOCK:FLOAT:3.14
+        MOCK:BOOL:TRUE/FALSE      - 返回布尔值，如 MOCK:BOOL:TRUE
+        MOCK:LIST:<json>          - 返回列表，如 MOCK:LIST:[1,2,3]
+        MOCK:DICT:<json>          - 返回字典，如 MOCK:DICT:{"key":"value"}
+        MOCK:SEQ:[v1,v2,...] key  - 按序返回值；成员必须全大写；FAIL/TRUE/FALSE 为哨兵
 
         [自定义枚举值]
         MOCK:<VALUE>           - 直接返回 VALUE 原始字符串（无匹配时兜底）
@@ -428,11 +426,7 @@ class AIPlugin(IbStatefulPlugin):
 
         content_after_mock = user_prompt[5:].strip()
         
-        # 1. 检查结构化直接返回 (MOCK:[...] 或 MOCK:{...})
-        if content_after_mock.startswith('[') or content_after_mock.startswith('{'):
-            return content_after_mock
-
-        # 2. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
+        # 1. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
         if ':' in content_after_mock:
             type_parts = content_after_mock.split(':', 2)
             if len(type_parts) >= 2:
@@ -464,15 +458,19 @@ class AIPlugin(IbStatefulPlugin):
                         return mock_value
                     return "{" + mock_value + "}"
                 elif mock_type == "SEQ":
-                    # MOCK:SEQ:v1:v2:v3 key
+                    # MOCK:SEQ:[v1,v2,...] optional_key
                     # Returns values in sequence per call, keyed by 'key'.
                     # Special sentinel values: FAIL → ambiguous (triggers llmexcept),
                     # TRUE → "1", FALSE → "0". Repeats last value when exhausted.
-                    if " " in mock_value:
-                        seq_values_str, seq_key = mock_value.rsplit(" ", 1)
+                    mv = mock_value.strip()
+                    if mv.startswith('[') and ']' in mv:
+                        bracket_end = mv.index(']')
+                        seq_values_str = mv[1:bracket_end]
+                        remainder = mv[bracket_end + 1:].strip()
+                        seq_key = remainder if remainder else ""
                     else:
-                        seq_values_str, seq_key = mock_value, ""
-                    values = [v for v in seq_values_str.split(":") if v]
+                        seq_values_str, seq_key = mv, ""
+                    values = [v.strip() for v in seq_values_str.split(',') if v.strip()]
                     counter_key = f"_seq_{seq_key}"
                     idx = self._mock_seq_counters.get(counter_key, 0)
                     self._mock_seq_counters[counter_key] = idx + 1
@@ -485,7 +483,7 @@ class AIPlugin(IbStatefulPlugin):
                         return "0"
                     return val
 
-        # 3. 处理命名指令（区分大小写，MOCK 指令必须全大写）
+        # 2. 处理命名指令（区分大小写，MOCK 指令必须全大写）
         parts = content_after_mock.split(" ", 1)
         mock_cmd = parts[0] if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
