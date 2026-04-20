@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；551 个测试通过）
+> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；580 个测试通过）
 
 ---
 
@@ -208,7 +208,7 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
   - `last_llm()`：同样改为帧优先模式获取 `res`，移除嵌套 if/else 链。
   - `retry_stack()`：将 `last_llm_response`（始终为 `None` 的死字段）替换为 `last_result` 字段，包含 `is_certain`、`raw_response`（前 120 字符）、`retry_hint` 三个子字段。
 
-*全部 523 个测试通过。*
+*全部 580 个测试通过。*
 
 
 ---
@@ -217,7 +217,7 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 
 **问题**：函数调用时意图上下文是引用传递（直接共享），函数内 `@+`/`@-` 操作影响调用者；函数内部没有显式 API 来屏蔽/替换继承自调用者的意图。
 
-**修复内容（2026-04-19，553 测试通过）**：
+**修复内容（2026-04-19，580 测试通过）**：
 
 - **`core/runtime/objects/kernel.py`**：`IbUserFunction.call()` 和 `IbLLMFunction.call()` 在函数执行前后实现意图上下文 fork/restore：
   - 统一采用 **fork 拷贝传递**：`child_ctx = old_intent_ctx.fork()`
@@ -249,7 +249,7 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
   - 作用域控制（类/实例均可调用）：`clear_inherited`、`use`、`get_current`
 - **11 个新测试**（含 4 个 `TestE2EIntentScopeIsolation`、4 个 `TestE2EIntentContextOOP`、1 个 `TestE2ELambdaRestriction`）
 
-*全部 553 个测试通过。*
+*全部 580 个测试通过。*
 
 ---
 

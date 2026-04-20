@@ -58,6 +58,16 @@ class IDbgPlugin(IbPlugin):
             return {}
         return sr.get_vars()
 
+    def print_vars(self):
+        """打印当前作用域中所有变量及其值（vars() 的便捷打印版本）"""
+        variables = self.vars()
+        if not variables:
+            print("[IDBG] (无可用变量)")
+            return
+        print("[IDBG] 当前变量：")
+        for name, value in variables.items():
+            print(f"  {name} = {value}")
+
     def last_llm(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的完整详情 (合并 Executor 与 Provider 信息)"""
         info = {}

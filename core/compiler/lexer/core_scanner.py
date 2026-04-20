@@ -320,7 +320,11 @@ class CoreTokenScanner:
             if self.current_line_has_llm_def:
                 return True # Enter LLM Mode
             return False
-            
+        
+        if char == '?':
+            tokens.append(self.scanner.create_token(TokenType.QUESTION, "?"))
+            return False
+
         if char == '=':
             if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.EQ, "=="))
             else: tokens.append(self.scanner.create_token(TokenType.ASSIGN, "="))

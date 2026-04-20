@@ -353,14 +353,6 @@ class TestAIMockSystem:
         result = ai_plugin._handle_mock_response("MOCK:REPAIR test_key2", "expr")
         assert result == "1"
 
-    def test_mock_direct_list(self, ai_plugin):
-        result = ai_plugin._handle_mock_response('MOCK:["a","b"]', "expr")
-        assert result == '["a","b"]'
-
-    def test_mock_direct_dict(self, ai_plugin):
-        result = ai_plugin._handle_mock_response('MOCK:{"key":"val"}', "expr")
-        assert result == '{"key":"val"}'
-
     def test_mock_int_type(self, ai_plugin):
         result = ai_plugin._handle_mock_response("MOCK:INT:42", "expr")
         assert result == "42"
@@ -443,54 +435,126 @@ class TestAIMockSEQ:
 
     def test_seq_returns_values_in_order(self, ai_plugin):
         """MOCK:SEQ 按调用顺序逐一返回序列中的值。"""
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b:c mykey", "expr") == "a"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b:c mykey", "expr") == "b"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b:c mykey", "expr") == "c"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[A,B,C] mykey", "expr") == "A"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[A,B,C] mykey", "expr") == "B"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[A,B,C] mykey", "expr") == "C"
 
     def test_seq_repeats_last_value_when_exhausted(self, ai_plugin):
         """序列耗尽后重复最后一个值。"""
-        ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr")
-        ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr")
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr") == "y"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y mykey", "expr") == "y"
+        ai_plugin._handle_mock_response("MOCK:SEQ:[X,Y] mykey", "expr")
+        ai_plugin._handle_mock_response("MOCK:SEQ:[X,Y] mykey", "expr")
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[X,Y] mykey", "expr") == "Y"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[X,Y] mykey", "expr") == "Y"
 
     def test_seq_fail_returns_ambiguous_sentinel(self, ai_plugin):
         """FAIL 值触发歧义哨兵（驱动 llmexcept）。"""
-        result = ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:ok fkey", "expr")
+        result = ai_plugin._handle_mock_response("MOCK:SEQ:[FAIL,OK] fkey", "expr")
         assert "ambiguous" in result.lower() or "maybe" in result.lower()
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:FAIL:ok fkey", "expr") == "ok"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[FAIL,OK] fkey", "expr") == "OK"
 
     def test_seq_true_false_aliases(self, ai_plugin):
         """TRUE/FALSE 别名正确解析为 '1'/'0'。"""
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:TRUE:FALSE tf_key", "expr") == "1"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:TRUE:FALSE tf_key", "expr") == "0"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[TRUE,FALSE] tf_key", "expr") == "1"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[TRUE,FALSE] tf_key", "expr") == "0"
 
     def test_seq_independent_keys(self, ai_plugin):
         """不同 key 的 SEQ 计数器互相独立。"""
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b key1", "expr") == "a"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y key2", "expr") == "x"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b key1", "expr") == "b"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:x:y key2", "expr") == "y"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[A,B] key1", "expr") == "A"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[X,Y] key2", "expr") == "X"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[A,B] key1", "expr") == "B"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[X,Y] key2", "expr") == "Y"
 
     def test_seq_reset_clears_counter(self, ai_plugin):
         """reset_mock_state() 将 SEQ 计数器清零，使序列从头开始。"""
-        ai_plugin._handle_mock_response("MOCK:SEQ:a:b reset_key", "expr")
+        ai_plugin._handle_mock_response("MOCK:SEQ:[A,B] reset_key", "expr")
         ai_plugin.reset_mock_state()
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:a:b reset_key", "expr") == "a"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[A,B] reset_key", "expr") == "A"
 
     def test_seq_no_key(self, ai_plugin):
         """无 key 的 SEQ 指令共享同一计数器，可正常使用。"""
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:p:q:r", "expr") == "p"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:p:q:r", "expr") == "q"
-        assert ai_plugin._handle_mock_response("MOCK:SEQ:p:q:r", "expr") == "r"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[P,Q,R]", "expr") == "P"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[P,Q,R]", "expr") == "Q"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[P,Q,R]", "expr") == "R"
 
     def test_seq_mixed_sentinels_in_sequence(self, ai_plugin):
         """序列中混合普通值与 FAIL/TRUE/FALSE 哨兵。"""
         p = ai_plugin
-        r0 = p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr")
-        assert r0 == "ok"
-        r1 = p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr")
+        r0 = p._handle_mock_response("MOCK:SEQ:[OK,FAIL,TRUE,FALSE,DONE] mix_key", "expr")
+        assert r0 == "OK"
+        r1 = p._handle_mock_response("MOCK:SEQ:[OK,FAIL,TRUE,FALSE,DONE] mix_key", "expr")
         assert "ambiguous" in r1.lower() or "maybe" in r1.lower()
-        assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "1"
-        assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "0"
-        assert p._handle_mock_response("MOCK:SEQ:ok:FAIL:TRUE:FALSE:done mix_key", "expr") == "done"
+        assert p._handle_mock_response("MOCK:SEQ:[OK,FAIL,TRUE,FALSE,DONE] mix_key", "expr") == "1"
+        assert p._handle_mock_response("MOCK:SEQ:[OK,FAIL,TRUE,FALSE,DONE] mix_key", "expr") == "0"
+        assert p._handle_mock_response("MOCK:SEQ:[OK,FAIL,TRUE,FALSE,DONE] mix_key", "expr") == "DONE"
+
+
+class TestAIMockCaseSensitive:
+    """MOCK instructions are case-sensitive: commands must be uppercase."""
+
+    @pytest.fixture
+    def ai_plugin(self):
+        from ibci_modules.ibci_ai.core import AIPlugin
+        p = AIPlugin()
+        p._config = {"key": "MOCK_KEY", "url": "http://test", "model": "test"}
+        p._client = "MOCK_CLIENT"
+        return p
+
+    def test_uppercase_fail_triggers_uncertain(self, ai_plugin):
+        """MOCK:FAIL (uppercase) triggers uncertain."""
+        result = ai_plugin._handle_mock_response("MOCK:FAIL", "expr")
+        assert "ambiguous" in result.lower() or "maybe" in result.lower()
+
+    def test_lowercase_fail_does_not_trigger_uncertain(self, ai_plugin):
+        """MOCK:fail (lowercase) is not a recognized command; falls through to default."""
+        result = ai_plugin._handle_mock_response("MOCK:fail", "expr")
+        assert "ambiguous" not in result.lower() and "maybe" not in result.lower()
+
+    def test_uppercase_true_returns_one(self, ai_plugin):
+        """MOCK:TRUE (uppercase) returns '1'."""
+        assert ai_plugin._handle_mock_response("MOCK:TRUE", "expr") == "1"
+
+    def test_lowercase_true_is_literal(self, ai_plugin):
+        """MOCK:true (lowercase) is not a recognized command; falls through to default."""
+        result = ai_plugin._handle_mock_response("MOCK:true", "expr")
+        assert result != "1"
+
+    def test_uppercase_false_returns_zero(self, ai_plugin):
+        """MOCK:FALSE (uppercase) returns '0'."""
+        assert ai_plugin._handle_mock_response("MOCK:FALSE", "expr") == "0"
+
+    def test_lowercase_false_is_literal(self, ai_plugin):
+        """MOCK:false (lowercase) is not a recognized command; falls through to default."""
+        result = ai_plugin._handle_mock_response("MOCK:false", "expr")
+        assert result != "0"
+
+    def test_uppercase_int_type(self, ai_plugin):
+        """MOCK:INT:42 (uppercase) returns '42'."""
+        assert ai_plugin._handle_mock_response("MOCK:INT:42", "expr") == "42"
+
+    def test_lowercase_int_type_falls_through(self, ai_plugin):
+        """MOCK:int:42 (lowercase) does not match INT command, falls through."""
+        result = ai_plugin._handle_mock_response("MOCK:int:42", "expr")
+        # Falls through to named-command path; 'int' is not a recognized command
+        assert result != "42"
+
+    def test_uppercase_bool_true(self, ai_plugin):
+        """MOCK:BOOL:TRUE (uppercase value) returns '1'."""
+        assert ai_plugin._handle_mock_response("MOCK:BOOL:TRUE", "expr") == "1"
+
+    def test_lowercase_bool_true_is_not_true(self, ai_plugin):
+        """MOCK:BOOL:true (lowercase value) returns '0' since value != 'TRUE'."""
+        assert ai_plugin._handle_mock_response("MOCK:BOOL:true", "expr") == "0"
+
+    def test_seq_uppercase_sentinels(self, ai_plugin):
+        """MOCK:SEQ with uppercase FAIL/TRUE/FALSE sentinels work."""
+        r0 = ai_plugin._handle_mock_response("MOCK:SEQ:[FAIL,TRUE,FALSE] cs_key", "expr")
+        assert "ambiguous" in r0.lower() or "maybe" in r0.lower()
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[FAIL,TRUE,FALSE] cs_key", "expr") == "1"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[FAIL,TRUE,FALSE] cs_key", "expr") == "0"
+
+    def test_seq_lowercase_sentinels_are_literals(self, ai_plugin):
+        """MOCK:SEQ with lowercase sentinels are treated as literal values."""
+        ai_plugin.reset_mock_state()
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[fail,true,false] lc_key", "expr") == "fail"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[fail,true,false] lc_key", "expr") == "true"
+        assert ai_plugin._handle_mock_response("MOCK:SEQ:[fail,true,false] lc_key", "expr") == "false"

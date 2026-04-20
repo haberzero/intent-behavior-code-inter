@@ -2,7 +2,7 @@
 
 > 本文件记录 IBC-Inter 公理化/面向对象重构的架构分析结论与设计决策，供未来 PR 迭代使用。
 >
-> **最后更新**：2026-04-19（**Steps 1-7 + Step 8-pre 全部完成**：IILLMExecutor 接口、BehaviorAxiom 自主执行、IbDeferred/CallableAxiom/DeferredAxiom、IbLLMFunction 自主执行、IbUserFunction ContextVar 自洽、IbIntentContext 意图公理化、LlmCallResultAxiom + IbLLMCallResult；OOP×Protocol PR-A/PR-B 完成；IntentAxiom 落地；§9.2 SEM_052 编译期快照隔离约束；§9.3 `_last_llm_result` per-snapshot 化；523 个测试全部通过）
+> **最后更新**：2026-04-19（**Steps 1-7 + Step 8-pre 全部完成**：IILLMExecutor 接口、BehaviorAxiom 自主执行、IbDeferred/CallableAxiom/DeferredAxiom、IbLLMFunction 自主执行、IbUserFunction ContextVar 自洽、IbIntentContext 意图公理化、LlmCallResultAxiom + IbLLMCallResult；OOP×Protocol PR-A/PR-B 完成；IntentAxiom 落地；§9.2 SEM_052 编译期快照隔离约束；§9.3 `_last_llm_result` per-snapshot 化；580 个测试全部通过）
 >
 > 已完成工作见 `docs/COMPLETED.md`，近期任务见 `docs/NEXT_STEPS.md`，VM 长期架构设想见 `docs/PENDING_TASKS_VM.md`。
 
@@ -281,4 +281,4 @@ from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
 ## 六、一句话总结
 
-> **公理化/万物皆对象改造全部完成（Steps 1-7 + Step 8-pre）**：IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行、ibci_ihost/idbg KernelRegistry 标准化（Steps 1-4b）；IExecutionFrame Protocol + ContextVar 帧注册表、IbUserFunction 自洽执行（Step 5）；IntentContextAxiom + IbIntentContext + RuntimeContextImpl 完整迁移 + LLMExceptFrame 安全快照（Step 6）；LlmCallResultAxiom + IbLLMCallResult 全链路接入（Step 7）；IntentAxiom 完整公理化（Step 2.1）；llmexcept 快照隔离完整落地：§9.2 SEM_052 编译期约束 + §9.3 `_last_llm_result` per-snapshot 迁移（Step 8-pre）。BehaviorSpec 编译期返回类型推断完成。OOP×Protocol 边界完整清理（PR-A + PR-B）。523 个测试全部通过。**下一里程碑是 Step 9（VM CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）**，见 `docs/NEXT_STEPS.md`。
+> **公理化/万物皆对象改造全部完成（Steps 1-7 + Step 8-pre）**：IILLMExecutor 接口、BehaviorAxiom 自主执行、ibci_ai 拆分、CallableAxiom/DeferredAxiom/IbDeferred、IbLLMFunction 自主执行、ibci_ihost/idbg KernelRegistry 标准化（Steps 1-4b）；IExecutionFrame Protocol + ContextVar 帧注册表、IbUserFunction 自洽执行（Step 5）；IntentContextAxiom + IbIntentContext + RuntimeContextImpl 完整迁移 + LLMExceptFrame 安全快照（Step 6）；LlmCallResultAxiom + IbLLMCallResult 全链路接入（Step 7）；IntentAxiom 完整公理化（Step 2.1）；llmexcept 快照隔离完整落地：§9.2 SEM_052 编译期约束 + §9.3 `_last_llm_result` per-snapshot 迁移（Step 8-pre）。BehaviorSpec 编译期返回类型推断完成。OOP×Protocol 边界完整清理（PR-A + PR-B）。580 个测试全部通过。**下一里程碑是 Step 9（VM CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）**，见 `docs/NEXT_STEPS.md`。

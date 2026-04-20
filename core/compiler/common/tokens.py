@@ -96,6 +96,7 @@ class TokenType(Enum):
     LBRACE = auto()
     RBRACE = auto()
     COLON = auto()
+    QUESTION = auto()
     COMMA = auto()
     DOT = auto()
 

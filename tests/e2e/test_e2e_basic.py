@@ -213,3 +213,119 @@ print((str)x)
 """
         lines = run_and_capture(code)
         assert "15" in lines
+
+
+# ---------------------------------------------------------------------------
+# 7. String method tests
+# ---------------------------------------------------------------------------
+
+class TestE2EStringMethods:
+    def test_str_split_with_separator(self):
+        """str.split() correctly unboxes IbString separator."""
+        code = """str s = "Hello World Foo"
+list parts = s.split(" ")
+print((str)parts.len())
+print(parts[0])
+print(parts[1])
+print(parts[2])
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
+        assert "Hello" in lines
+        assert "World" in lines
+        assert "Foo" in lines
+
+    def test_str_split_no_separator(self):
+        """str.split() with no args splits on whitespace."""
+        code = """str s = "a  b  c"
+list parts = s.split()
+print((str)parts.len())
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
+
+
+# ---------------------------------------------------------------------------
+# 8. Not operator type correctness
+# ---------------------------------------------------------------------------
+
+class TestE2ENotOperator:
+    def test_not_true_returns_bool(self):
+        """not true should return bool false, assignable to bool variable."""
+        code = """bool x = not true
+print((str)x)
+"""
+        lines = run_and_capture(code)
+        assert any("false" in l.lower() for l in lines)
+
+    def test_not_false_returns_bool(self):
+        """not false should return bool true."""
+        code = """bool y = not false
+print((str)y)
+"""
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() for l in lines)
+
+    def test_not_in_condition(self):
+        """not operator result should work in if conditions."""
+        code = """bool flag = true
+if not flag:
+    print("wrong")
+else:
+    print("correct")
+"""
+        lines = run_and_capture(code)
+        assert "correct" in lines
+
+
+# ---------------------------------------------------------------------------
+# 9. Ternary operator tests
+# ---------------------------------------------------------------------------
+
+class TestE2ETernaryOperator:
+    def test_ternary_true_branch(self):
+        """Ternary returns body when condition is true."""
+        lines = run_and_capture('int x = 1\nstr r = x > 0 ? "pos" : "neg"\nprint(r)')
+        assert "pos" in lines
+
+    def test_ternary_false_branch(self):
+        """Ternary returns orelse when condition is false."""
+        lines = run_and_capture('int x = -1\nstr r = x > 0 ? "pos" : "neg"\nprint(r)')
+        assert "neg" in lines
+
+    def test_ternary_with_bool_var(self):
+        """Ternary works directly with a bool variable."""
+        code = """bool flag = true
+int a = flag ? 10 : 20
+print((str)a)
+"""
+        lines = run_and_capture(code)
+        assert "10" in lines
+
+    def test_ternary_nested(self):
+        """Ternary is right-associative and can be nested."""
+        code = """int x = 5
+str label = x > 10 ? "big" : (x > 3 ? "mid" : "small")
+print(label)
+"""
+        lines = run_and_capture(code)
+        assert "mid" in lines
+
+    def test_ternary_with_arithmetic(self):
+        """Ternary can return arithmetic expressions."""
+        code = """int n = 3
+int result = n > 0 ? n * 2 : 0
+print((str)result)
+"""
+        lines = run_and_capture(code)
+        assert "6" in lines
+
+    def test_ternary_lower_precedence_than_or(self):
+        """'or' binds tighter than ternary: (a or b) ? x : y."""
+        code = """bool a = false
+bool b = true
+str r = a or b ? "yes" : "no"
+print(r)
+"""
+        lines = run_and_capture(code)
+        assert "yes" in lines

@@ -56,14 +56,6 @@ print(result)
         lines = run_and_capture(code)
         assert "0" in lines
 
-    def test_mock_custom_value(self):
-        code = ai_setup_code() + """
-str result = @~ MOCK:HELLO ~
-print(result)
-"""
-        lines = run_and_capture(code)
-        assert "HELLO" in lines
-
     def test_mock_int_type(self):
         code = ai_setup_code() + """
 str result = @~ MOCK:INT:42 ~
@@ -82,7 +74,7 @@ print(result)
 
     def test_mock_list_direct(self):
         code = ai_setup_code() + """
-str result = @~ MOCK:["a","b","c"] ~
+str result = @~ MOCK:LIST:["a","b","c"] ~
 print(result)
 """
         lines = run_and_capture(code)
@@ -462,7 +454,7 @@ class TestE2ELLMExceptForLoopMock:
 int count = 0
 list items = ["a", "b", "c"]
 for str item in items:
-    str x = @~ MOCK:SEQ:FAIL:ok:ok:ok first_fail_key ~
+    str x = @~ MOCK:SEQ:[FAIL,OK,OK,OK] first_fail_key ~
     llmexcept:
         print("handler_ran")
         retry "hint"
@@ -482,7 +474,7 @@ print((str)count)
 int count = 0
 list items = ["a", "b", "c", "d", "e"]
 for str item in items:
-    str x = @~ MOCK:SEQ:ok:ok:FAIL:ok:ok:ok mid_fail_key ~
+    str x = @~ MOCK:SEQ:[OK,OK,FAIL,OK,OK,OK] mid_fail_key ~
     llmexcept:
         print("handler_ran")
         retry "hint"
@@ -501,7 +493,7 @@ print((str)count)
 int count = 0
 list items = ["a", "b", "c", "d", "e"]
 for str item in items:
-    str x = @~ MOCK:SEQ:ok:ok:ok:ok:FAIL:ok last_fail_key ~
+    str x = @~ MOCK:SEQ:[OK,OK,OK,OK,FAIL,OK] last_fail_key ~
     llmexcept:
         print("handler_ran")
         retry "hint"
@@ -519,7 +511,7 @@ print((str)count)
 int count = 0
 list items = ["a", "b", "c", "d", "e"]
 for str item in items:
-    str x = @~ MOCK:SEQ:FAIL:ok:ok:ok:FAIL:ok:ok:ok multi_fail_key ~
+    str x = @~ MOCK:SEQ:[FAIL,OK,OK,OK,FAIL,OK,OK,OK] multi_fail_key ~
     llmexcept:
         print("handler_ran")
         retry "hint"
@@ -537,7 +529,7 @@ print((str)count)
         code = ai_setup_code() + """
 list items = ["a", "b", "c"]
 for str item in items:
-    str x = @~ MOCK:SEQ:ok:FAIL:ok:ok item_check_key ~
+    str x = @~ MOCK:SEQ:[OK,FAIL,OK,OK] item_check_key ~
     llmexcept:
         print("fail_at")
         print(item)
@@ -560,7 +552,7 @@ for str item in items:
 int count = 0
 list items = ["a", "b", "c", "d"]
 for str item in items:
-    str x = @~ MOCK:SEQ:ok:FAIL:ok:ok:ok:ok subseq_key ~
+    str x = @~ MOCK:SEQ:[OK,FAIL,OK,OK,OK,OK] subseq_key ~
     llmexcept:
         print("handler_ran")
         retry "hint"
@@ -589,7 +581,7 @@ class TestE2ELLMExceptConditionDrivenLoop:
         """条件第 2 次判断触发 UNCERTAIN，llmexcept 恢复后循环继续，共执行 3 次循环体。"""
         code = ai_setup_code() + """
 int count = 0
-for @~ MOCK:SEQ:1:1:FAIL:1:0 cond_key ~:
+for @~ MOCK:SEQ:[1,1,FAIL,1,0] cond_key ~:
     count = count + 1
 llmexcept:
     print("cond_handler")
@@ -605,7 +597,7 @@ print((str)count)
         """条件判断全部确定时，llmexcept handler 不触发，循环正常结束。"""
         code = ai_setup_code() + """
 int count = 0
-for @~ MOCK:SEQ:1:1:0 cond_clean_key ~:
+for @~ MOCK:SEQ:[1,1,0] cond_clean_key ~:
     count = count + 1
 llmexcept:
     print("should_not_run")
@@ -620,7 +612,7 @@ print((str)count)
         """首次条件判断 UNCERTAIN，llmexcept 恢复后循环正常执行。"""
         code = ai_setup_code() + """
 int count = 0
-for @~ MOCK:SEQ:FAIL:1:1:0 cond_first_key ~:
+for @~ MOCK:SEQ:[FAIL,1,1,0] cond_first_key ~:
     count = count + 1
 llmexcept:
     print("cond_handler_first")
@@ -702,7 +694,7 @@ class Box:
     int value
 
 Box b = Box(10)
-int new_val = @~ MOCK:SEQ:FAIL:42 ~
+int new_val = @~ MOCK:SEQ:[FAIL,42] ~
 llmexcept:
     retry "hint"
 b.value = new_val
@@ -762,7 +754,7 @@ class Watcher:
         self.val = s
 
 Watcher w = Watcher(7)
-str r = @~ MOCK:SEQ:FAIL:done ~
+str r = @~ MOCK:SEQ:[FAIL,DONE] ~
 llmexcept:
     retry "hint"
 print("final:" + (str)w.val)
@@ -789,7 +781,7 @@ class Counter:
         self.n = saved
 
 Counter c = Counter(5)
-str r = @~ MOCK:SEQ:FAIL:ok ~
+str r = @~ MOCK:SEQ:[FAIL,OK] ~
 llmexcept:
     retry "hint"
 print((str)c.n)
@@ -818,7 +810,7 @@ class Tracked:
         self.x = saved_x
 
 Tracked t = Tracked(42, "test")
-str r = @~ MOCK:SEQ:FAIL:ok ~
+str r = @~ MOCK:SEQ:[FAIL,OK] ~
 llmexcept:
     retry "hint"
 print("done")
@@ -842,7 +834,7 @@ class PartialProtocol:
         return self.val
 
 PartialProtocol p = PartialProtocol(10)
-str r = @~ MOCK:SEQ:FAIL:ok ~
+str r = @~ MOCK:SEQ:[FAIL,OK] ~
 llmexcept:
     retry "hint"
 print("ok")
@@ -861,7 +853,7 @@ class Plain:
     int value
 
 Plain obj = Plain(99)
-str r = @~ MOCK:SEQ:FAIL:ok ~
+str r = @~ MOCK:SEQ:[FAIL,OK] ~
 llmexcept:
     retry "hint"
 print((str)obj.value)
