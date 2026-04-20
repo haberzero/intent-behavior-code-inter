@@ -243,10 +243,12 @@ class KernelRegistry:
         return self._state_reader
 
     def set_execution_context(self, context: 'IExecutionContext', token: Any):
-        """注册执行上下文引用，仅内核可调。"""
+        """注册执行上下文引用，仅内核可调。
+        
+        执行上下文是运行时绑定（非结构性元素），允许在结构封印后注册。
+        结构封印仅限制装箱器、类等静态注册，不限制运行时上下文绑定。
+        """
         self._verify_kernel(token)
-        if self._is_structure_sealed:
-            raise PermissionError("Registry: Cannot re-bind ExecutionContext after structure is sealed.")
         with self._execution_context_lock:
             self._execution_context = context
 

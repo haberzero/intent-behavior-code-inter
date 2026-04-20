@@ -47,7 +47,7 @@ print("\n")
 
 int a = 10
 int b = 20
-int sum = (int)@~ 请计算 $a 和 $b 之和~
+int sum = @~ 请计算 $a 和 $b 之和~
 print("llm 回复的计算结果：")
 print((str)sum)
 

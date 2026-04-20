@@ -1323,6 +1323,16 @@ class SemanticAnalyzer:
     def visit_IbName(self, node: ast.IbName) -> IbSpec:
         # 1. 解析符号
         sym = self.symbol_table.resolve(node.id)
+
+        # Bug #4 修复：'none'（全小写）在 Prelude 中被注册为 void 的别名，
+        # 编译期可解析，但运行时 'builtin:none' 变量不存在，导致崩溃。
+        # 在此处拦截并给出明确的编译错误提示，引导用户使用 'None'（首字母大写）。
+        if node.id == "none" and sym and getattr(sym, 'uid', None) == "builtin:none":
+            self.error(
+                "未定义的标识符 'none'。请使用 'None'（首字母大写）。",
+                node, code="SEM_001"
+            )
+            return self._void_desc
         
         if not sym:
             msg = f"Variable '{node.id}' is not defined"
