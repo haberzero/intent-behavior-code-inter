@@ -279,9 +279,35 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         return args[0].receive('__to_prompt__', [])
     _reg_native(string_class, '__call__', _str_call, unbox=False)
 
+    # str.__contains__: 用于 'in' 运算符（右侧为 str 时）
+    def _str_contains(self, item):
+        sub = item.to_native() if hasattr(item, 'to_native') else str(item)
+        return self.ib_class.registry.box(sub in self.value)
+    _reg_native(string_class, '__contains__', _str_contains, unbox=False)
+
     _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")
     _reg_native(list_class, 'to_list', lambda self: self.elements)
     _reg_native(list_class, 'len', lambda self: self.len())
+
+    # list.__contains__: 用于 'in' 运算符（右侧为 list 时）
+    def _list_contains(self, item):
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        result = any(el.to_native() == native for el in self.elements)
+        return self.ib_class.registry.box(result)
+    _reg_native(list_class, '__contains__', _list_contains, unbox=False)
+
+    # Exception: __init__ 存储 message 字段，使 Exception("msg") 可用
+    exception_class = ib_classes.get("Exception")
+    if exception_class:
+        def _exception_init(receiver, *init_args):
+            """Exception.__init__: 将首个参数存为 message 字段"""
+            if init_args:
+                msg_arg = init_args[0]
+                receiver.fields["message"] = msg_arg if hasattr(msg_arg, 'to_native') else registry.box(str(msg_arg))
+            else:
+                receiver.fields["message"] = registry.box("")
+            return registry.get_none()
+        _reg_native(exception_class, '__init__', _exception_init, unbox=False)
 
     # Tuple
     tuple_class = ib_classes.get("tuple")
@@ -293,6 +319,12 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
     _reg_native(dict_class, 'len', lambda self: self.len())
+
+    # dict.__contains__: 用于 'in' 运算符（右侧为 dict 时）
+    def _dict_contains(self, key):
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        return self.ib_class.registry.box(k in self.fields)
+    _reg_native(dict_class, '__contains__', _dict_contains, unbox=False)
     
     # 5. 注册装箱逻辑
     registry.register_boxer(int, lambda reg, v, memo=None: IbInteger.from_native(v, reg.get_class("int")), token)

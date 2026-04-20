@@ -58,7 +58,7 @@ class ExpressionComponent(BaseComponent):
         # Unary Operations
         self.register(TokenType.MINUS, self.unary, self.binary, IbPrecedence.TERM)
         self.register(TokenType.PLUS, None, self.binary, IbPrecedence.TERM)
-        self.register(TokenType.NOT, self.unary, None, IbPrecedence.UNARY)
+        self.register(TokenType.NOT, self.unary, self.not_in_binary, IbPrecedence.COMPARISON)
         self.register(TokenType.BIT_NOT, self.unary, None, IbPrecedence.UNARY)
         
         # Binary Operations
@@ -82,6 +82,9 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.LE, None, self.binary, IbPrecedence.COMPARISON)
         self.register(TokenType.EQ, None, self.binary, IbPrecedence.EQUALITY)
         self.register(TokenType.NE, None, self.binary, IbPrecedence.EQUALITY)
+
+        # Containment operators: in / not in (comparison-level precedence)
+        self.register(TokenType.IN, None, self.in_binary, IbPrecedence.COMPARISON)
         
         # Logical Operations
         self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
@@ -274,6 +277,17 @@ class ExpressionComponent(BaseComponent):
         # 解析假值分支（右结合：再次从 LOWEST 开始，可嵌套三元）
         orelse = self.parse_expression(IbPrecedence.LOWEST)
         return self._loc(ast.IbIfExp(test=left, body=body, orelse=orelse), left, orelse)
+
+    def in_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """成员检测运算符：elem in container"""
+        right = self.parse_precedence(IbPrecedence.COMPARISON)
+        return self._loc(ast.IbCompare(left=left, ops=["in"], comparators=[right]), left, right)
+
+    def not_in_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """成员非检测运算符：elem not in container（NOT 作为 infix 时消费 IN）"""
+        in_token = self.stream.consume(TokenType.IN, "Expect 'in' after 'not' in 'not in' expression.")
+        right = self.parse_precedence(IbPrecedence.COMPARISON)
+        return self._loc(ast.IbCompare(left=left, ops=["not in"], comparators=[right]), left, right)
 
     def call(self, left: ast.IbExpr) -> ast.IbCall:
         arguments = []

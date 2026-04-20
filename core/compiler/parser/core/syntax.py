@@ -67,6 +67,9 @@ OP_MAP: Dict[TokenType, str] = {
     TokenType.AND: "and",
     TokenType.OR: "or",
     TokenType.NOT: "not",
+
+    # Containment operators
+    TokenType.IN: "in",
 }
 
 # Compound assignment operator mapping: TokenType -> operator string

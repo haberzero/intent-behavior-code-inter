@@ -1180,9 +1180,18 @@ class SemanticAnalyzer:
         left_type = self.visit(node.left)
         for op, comparator in zip(node.ops, node.comparators):
             right_type = self.visit(comparator)
-            res = self.registry.resolve_op(left_type, op, right_type)
-            if not res:
-                self.error(f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_003")
+            # 成员检测运算符：要求右侧为可迭代容器类型（str/list/dict/any）
+            if op in ("in", "not in"):
+                if right_type and right_type.name not in ("str", "list", "dict", "tuple", "any"):
+                    self.error(
+                        f"Operator '{op}' requires an iterable container on the right-hand side, "
+                        f"but got '{right_type.name}'",
+                        node, code="SEM_003",
+                    )
+            else:
+                res = self.registry.resolve_op(left_type, op, right_type)
+                if not res:
+                    self.error(f"Comparison operator '{op}' not supported for types '{left_type.name}' and '{right_type.name}'", node, code="SEM_003")
             # 链式比较中，前一轮的右操作数成为下一轮的左操作数
             left_type = right_type
         
@@ -1367,7 +1376,7 @@ class SemanticAnalyzer:
         # 允许构造函数调用并返回对应类型
         if func_type and not self.registry.get_call_cap(func_type):
             type_name = func_type.name
-            if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict'):
+            if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict', 'Exception'):
                 return func_type
         
         # 1. 检查是否可调用 (使用 Trait 契约)

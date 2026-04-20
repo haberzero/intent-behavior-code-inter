@@ -329,3 +329,230 @@ print(r)
 """
         lines = run_and_capture(code)
         assert "yes" in lines
+
+
+# ---------------------------------------------------------------------------
+# String methods (Bug Fix: replace/startswith/endswith + spec alignment)
+# ---------------------------------------------------------------------------
+
+class TestE2EStringMethods:
+    def test_str_replace(self):
+        code = 'str s = "hello world"\nstr r = s.replace("world", "ibci")\nprint(r)'
+        lines = run_and_capture(code)
+        assert "hello ibci" in lines
+
+    def test_str_startswith_true(self):
+        code = 'str s = "hello"\nbool r = s.startswith("hel")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_str_startswith_false(self):
+        code = 'str s = "hello"\nbool r = s.startswith("world")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_str_endswith_true(self):
+        code = 'str s = "hello"\nbool r = s.endswith("llo")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_str_endswith_false(self):
+        code = 'str s = "hello"\nbool r = s.endswith("xyz")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_str_find_last(self):
+        code = 'str s = "abcabc"\nint idx = s.find_last("c")\nprint((str)idx)'
+        lines = run_and_capture(code)
+        assert "5" in lines
+
+    def test_str_is_empty_true(self):
+        code = 'str s = ""\nbool r = s.is_empty()\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_str_is_empty_false(self):
+        code = 'str s = "hi"\nbool r = s.is_empty()\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+
+# ---------------------------------------------------------------------------
+# List methods (new: insert, remove, index, count, contains)
+# ---------------------------------------------------------------------------
+
+class TestE2EListMethods:
+    def test_list_insert(self):
+        code = 'list nums = [1, 3]\nnums.insert(1, 2)\nprint((str)nums.len())'
+        lines = run_and_capture(code)
+        assert "3" in lines
+
+    def test_list_remove(self):
+        code = 'list nums = [1, 2, 3]\nnums.remove(2)\nprint((str)nums.len())'
+        lines = run_and_capture(code)
+        assert "2" in lines
+
+    def test_list_index(self):
+        code = 'list nums = [10, 20, 30]\nint idx = nums.index(20)\nprint((str)idx)'
+        lines = run_and_capture(code)
+        assert "1" in lines
+
+    def test_list_count(self):
+        code = 'list nums = [1, 2, 2, 3]\nint c = nums.count(2)\nprint((str)c)'
+        lines = run_and_capture(code)
+        assert "2" in lines
+
+    def test_list_contains_true(self):
+        code = 'list nums = [1, 2, 3]\nbool r = nums.contains(2)\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_list_contains_false(self):
+        code = 'list nums = [1, 2, 3]\nbool r = nums.contains(9)\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_list_add_concatenate(self):
+        code = 'list a = [1, 2]\nlist b = [3, 4]\nlist c = a + b\nprint((str)c.len())'
+        lines = run_and_capture(code)
+        assert "4" in lines
+
+
+# ---------------------------------------------------------------------------
+# Dict methods (new: pop)
+# ---------------------------------------------------------------------------
+
+class TestE2EDictMethods:
+    def test_dict_pop(self):
+        code = 'dict d = {"a": 1, "b": 2}\nint v = (int)d.pop("a")\nprint((str)v)\nprint((str)d.len())'
+        lines = run_and_capture(code)
+        assert "1" in lines
+        assert "1" in lines  # remaining len == 1
+
+
+# ---------------------------------------------------------------------------
+# in / not in operators
+# ---------------------------------------------------------------------------
+
+class TestE2EInOperator:
+    def test_str_in_true(self):
+        code = 'str s = "hello world"\nbool r = "world" in s\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_str_in_false(self):
+        code = 'str s = "hello"\nbool r = "xyz" in s\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_str_not_in(self):
+        code = 'str s = "hello"\nbool r = "xyz" not in s\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_list_in_true(self):
+        code = 'list nums = [1, 2, 3]\nbool r = 2 in nums\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_list_in_false(self):
+        code = 'list nums = [1, 2, 3]\nbool r = 9 in nums\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_list_not_in(self):
+        code = 'list nums = [1, 2, 3]\nbool r = 9 not in nums\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_dict_in_true(self):
+        code = 'dict d = {"a": 1}\nbool r = "a" in d\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_dict_in_false(self):
+        code = 'dict d = {"a": 1}\nbool r = "z" in d\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_in_in_if(self):
+        code = 'list items = ["apple", "banana"]\nif "apple" in items:\n    print("found")\n'
+        lines = run_and_capture(code)
+        assert "found" in lines
+
+    def test_not_in_in_if(self):
+        code = 'list items = ["apple", "banana"]\nif "cherry" not in items:\n    print("missing")\n'
+        lines = run_and_capture(code)
+        assert "missing" in lines
+
+
+# ---------------------------------------------------------------------------
+# Exception constructable: raise Exception("msg") and e.message
+# ---------------------------------------------------------------------------
+
+class TestE2EExceptionConstructable:
+    def test_raise_exception_with_message(self):
+        code = '''try:
+    raise Exception("something went wrong")
+except Exception as e:
+    print(e.message)
+'''
+        lines = run_and_capture(code)
+        assert "something went wrong" in lines
+
+    def test_exception_message_field_access(self):
+        code = '''try:
+    int x = (int)"bad"
+except Exception as e:
+    str msg = e.message
+    print("caught")
+'''
+        lines = run_and_capture(code)
+        assert "caught" in lines
+
+
+# ---------------------------------------------------------------------------
+# str.trim / to_upper / to_lower (IBCI-style aliases)
+# ---------------------------------------------------------------------------
+
+class TestE2EStringAliases:
+    def test_str_trim(self):
+        code = 'str s = "  hello  "\nstr r = s.trim()\nprint(r)'
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_str_to_upper(self):
+        code = 'str s = "hello"\nstr r = s.to_upper()\nprint(r)'
+        lines = run_and_capture(code)
+        assert "HELLO" in lines
+
+    def test_str_to_lower(self):
+        code = 'str s = "HELLO"\nstr r = s.to_lower()\nprint(r)'
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+
+# ---------------------------------------------------------------------------
+# dict.contains / dict.remove
+# ---------------------------------------------------------------------------
+
+class TestE2EDictContainsRemove:
+    def test_dict_contains_true(self):
+        code = 'dict d = {"a": 1, "b": 2}\nbool r = d.contains("a")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_dict_contains_false(self):
+        code = 'dict d = {"a": 1}\nbool r = d.contains("z")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_dict_remove(self):
+        code = 'dict d = {"a": 1, "b": 2}\nd.remove("a")\nprint((str)d.len())'
+        lines = run_and_capture(code)
+        assert "1" in lines
+
+    def test_dict_contains_after_remove(self):
+        code = 'dict d = {"x": 10}\nd.remove("x")\nbool r = d.contains("x")\nprint((str)r)'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines

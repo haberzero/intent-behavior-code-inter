@@ -4,6 +4,19 @@ import json
 import sys
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
+
+# =============================================================================
+# 架构边界说明：Interpreter = 执行隔离单元
+# =============================================================================
+# Interpreter 是单个 IBCI 执行会话的隔离单元。
+# 职责：接受已编译的 Artifact，在独立的运行时上下文中执行它，并返回结果。
+#
+# 不是 LLM 并发调度单元：Interpreter 自身不调度多线程 LLM 调用；
+# LLM 调用并发化属于 Layer 1 LLM Pipeline（PENDING_TASKS_VM.md Step 10）。
+#
+# 每个 Interpreter 实例对应一个隔离的执行上下文（RuntimeContext），
+# 包含独立的变量绑定、意图上下文（IbIntentContext）和帧栈。
+# =============================================================================
 from core.kernel import ast as ast
 from core.kernel.issue import (
     InterpreterError, Severity
