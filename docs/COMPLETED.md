@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；551 个测试通过）
+> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束；553 个测试通过）
 
 ---
 
@@ -208,7 +208,7 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
   - `last_llm()`：同样改为帧优先模式获取 `res`，移除嵌套 if/else 链。
   - `retry_stack()`：将 `last_llm_response`（始终为 `None` 的死字段）替换为 `last_result` 字段，包含 `is_certain`、`raw_response`（前 120 字符）、`retry_hint` 三个子字段。
 
-*全部 523 个测试通过。*
+*全部 553 个测试通过。*
 
 
 ---

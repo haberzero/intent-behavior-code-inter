@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束落地；551 个测试通过）
+> **最后更新**：2026-04-19（意图上下文隔离 + @! 函数屏蔽 + intent_context OOP MVP + lambda 参数约束落地；553 个测试通过）
 
 ---
 

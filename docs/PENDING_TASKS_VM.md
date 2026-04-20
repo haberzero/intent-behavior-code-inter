@@ -253,11 +253,11 @@ IbIntentContext（意图上下文）✅ 已实现
 | 进入 llmexcept 快照 | `LLMExceptFrame` 调用 `intent_context.fork()` 保存值快照 ✅ |
 | `@+ x` 操作 | 修改当前 `_intent_ctx`，通过 `RuntimeContextImpl` 委托接口调用 ✅ |
 | 快照恢复（retry） | `restore_snapshot()` 恢复 `_intent_ctx` 引用 ✅ |
-| 函数调用帧级隔离 | **当前未完全实现**：函数内 `@+` 仍会影响调用者（全局 `_intent_ctx` 共享） |
+| 函数调用帧级隔离 | ✅ **已实现**：`IbUserFunction.call()` 和 `IbLLMFunction.call()` 在函数入口处 `fork()` 调用者的 `_intent_ctx`，返回时恢复原引用（kernel.py:693-763, 814-881） |
 | 显式 `f(intent_ctx=ctx)` | 语言层暂未支持 |
 | 全局意图 `@@` 独立存储 | 通过 `_intent_ctx._global_intents` 分离存储 ✅ |
 
-> **说明**：函数调用时的帧级意图隔离（"进入函数时 fork IntentContext，返回时恢复"）尚未实现。这需要层次 2（VM 调度循环）或至少在 `IbUserFunction.call()` 中显式管理 IntentContext 的生命周期。**目前 llmexcept 快照已通过 `fork()` 安全隔离，这是实际生产中最关键的场景。**
+> **说明**：函数调用时的帧级意图隔离已通过 `IbUserFunction.call()` 和 `IbLLMFunction.call()` 中的 fork/restore 机制实现（2026-04-19，§9.4）。函数内的 `@+`/`@-` 操作不会泄漏给调用者。llmexcept 快照同样通过 `fork()` 安全隔离。
 
 ### 4.3 公理层表示（已完成）
 
@@ -265,7 +265,7 @@ IbIntentContext（意图上下文）✅ 已实现
 
 ```
 IntentContextAxiom  ✅ 已实现（core/kernel/axioms/intent_context.py）
-└── is_class = False（内部类型，不暴露给 IBCI 用户直接实例化）
+└── is_class = True（IBCI 用户可通过 `intent_context()` 显式实例化，§9.5 OOP MVP）
 ```
 
 `IntentAxiom`（`core/kernel/axioms/intent.py`）已注册，`is_class=True`，公开 `get_content()`、`get_tag()`、`get_mode()` 三个方法。
@@ -274,7 +274,7 @@ IntentContextAxiom  ✅ 已实现（core/kernel/axioms/intent_context.py）
 
 `RuntimeContextImpl` 通过 `_intent_ctx: IbIntentContext` 字段持有意图上下文，并暴露 `fork_intent_snapshot()` 方法供 `LLMExceptFrame` 调用。
 
-完整的"帧切换时 IntentContext 自动 fork/restore"语义需要层次 2（VM 调度循环）完成后才能实现。
+函数调用时的 fork/restore 已在 `IbUserFunction.call()` 和 `IbLLMFunction.call()` 中实现（§9.4）。未来 VM 调度循环（层次 2）可进一步将此机制与帧生命周期自动绑定。
 
 ### 4.5 现有代码的映射关系
 

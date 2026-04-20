@@ -481,6 +481,8 @@ a >> 1    # 右移:    0b0101 = 5
 
 ### 三元运算符
 
+> **⚠️ 未实现**：三元运算符 `? :` 目前尚未在解析器中实现，以下为规划中的语法。请使用 `if/else` 语句替代。
+
 ```ibci
 bool condition = true
 str result = condition ? "真" : "假"
