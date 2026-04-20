@@ -56,14 +56,6 @@ print(result)
         lines = run_and_capture(code)
         assert "0" in lines
 
-    def test_mock_custom_value(self):
-        code = ai_setup_code() + """
-str result = @~ MOCK:HELLO ~
-print(result)
-"""
-        lines = run_and_capture(code)
-        assert "HELLO" in lines
-
     def test_mock_int_type(self):
         code = ai_setup_code() + """
 str result = @~ MOCK:INT:42 ~

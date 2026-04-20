@@ -416,8 +416,6 @@ class AIPlugin(IbStatefulPlugin):
         MOCK:DICT:<json>          - 返回字典，如 MOCK:DICT:{"key":"value"}
         MOCK:SEQ:[v1,v2,...] key  - 按序返回值；成员必须全大写；FAIL/TRUE/FALSE 为哨兵
 
-        [自定义枚举值]
-        MOCK:<VALUE>           - 直接返回 VALUE 原始字符串（无匹配时兜底）
         """
         if not user_prompt.startswith("MOCK:"):
             if scene in ("branch", "loop"):
@@ -513,12 +511,6 @@ class AIPlugin(IbStatefulPlugin):
                 self._mock_retry_counts[retry_key] = 0
                 self._mock_state[mock_content] = 1
                 return "1"
-
-        # [Enum Hook] 支持自定义返回值
-        # MOCK:HAPPY -> 返回 "HAPPY"
-        # MOCK:HAPPY 请回复 -> 返回 "HAPPY"
-        if not mock_content:
-            return mock_cmd
 
         if scene in ("branch", "loop"):
             return "1"

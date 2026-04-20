@@ -505,27 +505,27 @@ class TestAIMockCaseSensitive:
         assert "ambiguous" in result.lower() or "maybe" in result.lower()
 
     def test_lowercase_fail_does_not_trigger_uncertain(self, ai_plugin):
-        """MOCK:fail (lowercase) is treated as a literal value, not FAIL command."""
+        """MOCK:fail (lowercase) is not a recognized command; falls through to default."""
         result = ai_plugin._handle_mock_response("MOCK:fail", "expr")
-        assert result == "fail"
+        assert "ambiguous" not in result.lower() and "maybe" not in result.lower()
 
     def test_uppercase_true_returns_one(self, ai_plugin):
         """MOCK:TRUE (uppercase) returns '1'."""
         assert ai_plugin._handle_mock_response("MOCK:TRUE", "expr") == "1"
 
     def test_lowercase_true_is_literal(self, ai_plugin):
-        """MOCK:true (lowercase) is treated as a literal value."""
+        """MOCK:true (lowercase) is not a recognized command; falls through to default."""
         result = ai_plugin._handle_mock_response("MOCK:true", "expr")
-        assert result == "true"
+        assert result != "1"
 
     def test_uppercase_false_returns_zero(self, ai_plugin):
         """MOCK:FALSE (uppercase) returns '0'."""
         assert ai_plugin._handle_mock_response("MOCK:FALSE", "expr") == "0"
 
     def test_lowercase_false_is_literal(self, ai_plugin):
-        """MOCK:false (lowercase) is treated as a literal value."""
+        """MOCK:false (lowercase) is not a recognized command; falls through to default."""
         result = ai_plugin._handle_mock_response("MOCK:false", "expr")
-        assert result == "false"
+        assert result != "0"
 
     def test_uppercase_int_type(self, ai_plugin):
         """MOCK:INT:42 (uppercase) returns '42'."""
