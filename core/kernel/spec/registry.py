@@ -649,7 +649,7 @@ class SpecRegistry:
         if isinstance(value, str):
             return self.resolve("str")
         if value is None:
-            return self.resolve("void")
+            return self.resolve("None")
         return None
 
     def get_all_modules(self) -> Dict[str, "ModuleSpec"]:

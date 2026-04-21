@@ -227,7 +227,7 @@ class TestSpecRegistryResolve:
 
     def test_resolve_from_value_none(self, spec_reg: SpecRegistry):
         s = spec_reg.resolve_from_value(None)
-        assert s is not None and s.name == "void"
+        assert s is not None and s.name == "None"
 
     def test_resolve_from_value_unknown(self, spec_reg: SpecRegistry):
         s = spec_reg.resolve_from_value(object())

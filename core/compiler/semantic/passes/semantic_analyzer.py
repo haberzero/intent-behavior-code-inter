@@ -48,6 +48,10 @@ class SemanticAnalyzer:
         self.current_class: Optional[ClassSpec] = None
         self.in_behavior_expr = False
 
+        # When inside an `-> auto` function, accumulates all observed return types.
+        # None means we are NOT in an auto-return function.
+        self._auto_return_types: Optional[List[IbSpec]] = None
+
         # §9.2: llmexcept body 外部作用域快照（read-only 约束）
         # 非 None 时表示当前正在分析 llmexcept body；值为进入 body 前的变量名集合。
         self._llmexcept_outer_scope_names: Optional[frozenset] = None
@@ -376,6 +380,49 @@ class SemanticAnalyzer:
             raise Exception(message)
         self.issue_tracker.error(message, node, code=code, hint=hint)
 
+    def warn(self, message: str, node: ast.IbASTNode, code: str = "SEM_000", hint: Optional[str] = None):
+        self.issue_tracker.warning(message, node, code=code, hint=hint)
+
+    # ------------------------------------------------------------------ #
+    # Return-path analysis helpers                                        #
+    # ------------------------------------------------------------------ #
+
+    def _all_paths_return(self, body: List[ast.IbStmt]) -> bool:
+        """
+        Conservative return-path check: returns True only if every execution
+        path through *body* is guaranteed to hit a `return <value>` or `raise`.
+
+        Rules (mirrors C/C++ flow analysis):
+        - `return <value>` → terminal                       (bare `return` is not)
+        - `raise`          → terminal
+        - `if` with both branches fully returning → terminal
+        - `switch` with a default case and all cases returning → terminal
+        - `try` blocks are conservatively treated as non-terminal
+        - Loops (`for`/`while`) are conservatively non-terminal (may not execute)
+        - All other statements are transparent (pass-through)
+        """
+        for stmt in body:
+            if isinstance(stmt, ast.IbReturn):
+                if stmt.value is not None:
+                    return True
+            elif isinstance(stmt, ast.IbRaise):
+                return True
+            elif isinstance(stmt, ast.IbIf):
+                has_else = bool(stmt.orelse)
+                if has_else and self._all_paths_return(stmt.body) and self._all_paths_return(stmt.orelse):
+                    return True
+            elif isinstance(stmt, ast.IbSwitch):
+                if self._switch_all_paths_return(stmt):
+                    return True
+        return False
+
+    def _switch_all_paths_return(self, node: ast.IbSwitch) -> bool:
+        """Return True if every case branch (including a default) returns."""
+        has_default = any(c.pattern is None for c in node.cases)
+        if not has_default:
+            return False
+        return all(self._all_paths_return(c.body) for c in node.cases)
+
     def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
         """
         访问 llmexcept 语句。
@@ -592,12 +639,56 @@ class SemanticAnalyzer:
         LocalSymbolCollector(self.symbol_table, self).collect(node.body)
 
         old_ret = self.current_return_type
-        self.current_return_type = ret_type
+        old_auto_returns = self._auto_return_types
+
+        is_auto_return = (ret_type is self._auto_desc)
+        if is_auto_return:
+            # Accumulate actual return types to infer the real return type.
+            self._auto_return_types = []
+            self.current_return_type = None  # no constraint yet; collect first
+        else:
+            self._auto_return_types = None
+            self.current_return_type = ret_type
+
         try:
             for stmt in node.body:
                 self.visit(stmt)
+
+            # ── Return-path analysis ──────────────────────────────────────
+            if is_auto_return:
+                # Resolve inferred return type from collected branches
+                unique = list({s.name: s for s in (self._auto_return_types or [])}.values())
+                if not unique:
+                    inferred = self._void_desc
+                elif len(unique) == 1:
+                    inferred = unique[0]
+                else:
+                    self.error(
+                        f"Function '{node.name}' is declared '-> auto' but returns conflicting types: "
+                        + ", ".join(f"'{s.name}'" for s in unique),
+                        node, code="SEM_026",
+                    )
+                    inferred = self._any_desc
+
+                # Backfill the inferred type into the function spec
+                call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
+                writable = call_trait.get_writable_trait() if call_trait else None
+                if writable:
+                    writable.update_signature(param_types, inferred)
+                elif sym.spec and isinstance(sym.spec, FuncSpec):
+                    sym.spec.return_type_name = inferred.name
+
+            elif ret_type is not self._void_desc:
+                # Non-void non-auto function: warn if not all paths return
+                if not self._all_paths_return(node.body):
+                    self.warn(
+                        f"Not all code paths in function '{node.name}' return a value.",
+                        node, code="SEM_025",
+                        hint="Add a return statement at the end of the function.",
+                    )
         finally:
             self.current_return_type = old_ret
+            self._auto_return_types = old_auto_returns
             self.current_class = saved_class  # 恢复类上下文
             self.symbol_table = old_table
         return self._void_desc
@@ -681,10 +772,16 @@ class SemanticAnalyzer:
             ret_type = self.visit(node.value)
             if ret_type is None:
                 self.error(f"Invalid return type: got None (void or unknown)", node, code="SEM_003")
+            elif self._auto_return_types is not None:
+                # Inside an `-> auto` function: accumulate the return type.
+                self._auto_return_types.append(ret_type)
             elif self.current_return_type and not self.registry.is_assignable(ret_type, self.current_return_type):
                 self.error(f"Invalid return type: expected '{self.current_return_type.name}', got '{ret_type.name}'", node, code="SEM_003")
         else:
-            if self.current_return_type and self.current_return_type != self._void_desc:
+            if self._auto_return_types is not None:
+                # bare `return` in an auto function contributes void
+                self._auto_return_types.append(self._void_desc)
+            elif self.current_return_type and self.current_return_type != self._void_desc:
                 self.error(f"Invalid return type: expected '{self.current_return_type.name}', got 'void'", node, code="SEM_003")
         return self._void_desc
 

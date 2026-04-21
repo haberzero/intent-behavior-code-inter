@@ -22,6 +22,8 @@ IBCI 是**静态强类型**语言，支持以下基础类型：
 
 - `int`, `float`, `bool`, `str`
 - `list`, `dict`, `auto`
+- `None` (NoneAxiom 类型；表示"值不存在")
+- `void` (函数无返回值标记；不可赋给任何变量)
 - `tuple` (多值返回与解包支持)
 - `lambda` / `snapshot` (延迟执行的行为对象，见 §3.4)
 
@@ -35,6 +37,89 @@ str name = "Alice"
 dict config = {"version": "2.2"}
 # 元组解包赋值
 (int x, int y) = (1, 2)
+```
+
+#### 2.1.1 `auto` 类型推断
+
+`auto` 声明的变量在编译期由右侧表达式推断其具体类型，推断完成后类型即固定，不可再接受其他类型的值（编译期强约束）：
+
+```ibci
+auto x = 42        # 推断为 int；后续 x = "hello" 将编译报错
+auto name = "Bob"  # 推断为 str
+auto empty = None  # 推断为 None；none_val 此时近乎等同于 None
+```
+
+对于函数，`-> auto` 表示返回类型由函数体内的 `return` 语句推断：
+
+```ibci
+func add(int a, int b) -> auto:
+    return a + b    # 推断为 int；编译器会回填为 int -> int -> int
+
+func id_any(any x) -> auto:
+    return x        # 推断为 any
+```
+
+若函数体内的 `return` 语句返回了多种不同类型，编译器会报 SEM_026 错误。
+
+#### 2.1.2 `None` 与 `void` 的区别
+
+| 类型 | 语义 | 可赋值给变量 | 作为函数返回 |
+|---|---|---|---|
+| `None` | 表示"值不存在"，是一个合法的值对象 | ✅（赋给 `any` 或 `auto`） | ✅ `func f() -> None:` |
+| `void` | 表示"函数不返回任何值"的标记 | ❌ 编译报 SEM_003 | ✅ `func f() -> void:` |
+
+```ibci
+any x = None       # ✅ 合法：any 可接受 None
+auto y = None      # ✅ 合法：auto 推断为 None 类型
+
+func do_work():    # 隐式 void，无 return 值
+    print("done")
+
+# 以下写法非法：
+int z = do_work()  # ❌ SEM_003：不能将 void 函数结果赋给变量
+```
+
+#### 2.1.3 布尔字面量大小写
+
+IBCI 中布尔字面量**严格区分大小写**，必须使用 `true` / `false`（小写）：
+
+```ibci
+bool flag = true    # ✅ 合法
+bool flag = True    # ❌ 会被解析为标识符 True，导致 SEM_001 未定义变量错误
+```
+
+> 这与 Python 的 `True` / `False`（首字母大写）不同。IBCI 使用 `true` / `false` 与 JSON、Rust、Go 等保持一致。
+
+#### 2.1.4 字符串的真值判定
+
+字符串的布尔真值遵循 Python 语义：空字符串 `""` 为假，任意非空字符串为真。这与 `list`、`dict` 的真值判定规则一致（空容器为假，非空为真）。
+
+```ibci
+if "hello":      # truthy（非空字符串）
+    print("yes")
+if "":           # falsy（空字符串）
+    print("no")
+if []:           # falsy（空列表）
+    print("no")
+if [1, 2]:       # truthy（非空列表）
+    print("yes")
+if {}:           # falsy（空字典）
+    print("no")
+```
+
+#### 2.1.5 整数除法
+
+IBCI 的整数除法 `/` 与 Python 3 的 `//`（地板除）语义对齐，即对两个整数操作数做除法时，结果向下取整（而非截断向零）：
+
+```ibci
+int a = 7 / 2    # 结果为 3（地板除，等同于 Python 的 7 // 2）
+int b = -7 / 2   # 结果为 -4（地板除，注意：不是 -3）
+```
+
+若需要浮点除法，请将至少一个操作数声明为 `float`：
+
+```ibci
+float c = 7.0 / 2   # 结果为 3.5
 ```
 
 ### 2.2 模块导入
