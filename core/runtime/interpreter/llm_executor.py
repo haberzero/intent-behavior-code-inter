@@ -375,6 +375,11 @@ class LLMExecutorImpl:
         # 用户在 IBCI 类中定义 func __from_prompt__(str raw) -> (bool, any)，
         # 由此实现自定义的 LLM 输出解析逻辑。
         # 调用语义：类方法（以 IbClass 对象为 receiver，不需要 self 实例）。
+        #
+        # Design 2 改进：__from_prompt__ 返回值自动装箱
+        # - (true, <class_instance>) → 直接使用实例（原始行为）
+        # - (true, <basic_value>) → 自动构造类实例，将 basic_value 设为第一个字段
+        # - (false, <hint_string>) → 不确定性，进入 retry 路径
         ib_class = self.registry.get_class(type_name) if type_name else None
         if ib_class:
             method = ib_class.lookup_method('__from_prompt__')
@@ -390,6 +395,29 @@ class LLMExecutorImpl:
                         parsed_val = result_obj.elements[1]
                         success_native = success_val.to_native() if hasattr(success_val, 'to_native') else bool(success_val)
                         if success_native:
+                            # Design 2：如果返回值不是目标类的实例，自动装箱
+                            # 判断 parsed_val 是否已经是目标类的实例
+                            is_instance_of_target = (
+                                hasattr(parsed_val, 'ib_class') and 
+                                parsed_val.ib_class is ib_class
+                            )
+                            if not is_instance_of_target:
+                                # 自动装箱：构造类实例，将 parsed_val 设为第一个字段
+                                # 如果类有 __init__ 接受一个参数，尝试调用
+                                try:
+                                    auto_instance = ib_class.instantiate([parsed_val], context=execution_context)
+                                    parsed_val = auto_instance
+                                except Exception:
+                                    # 如果构造失败（参数不匹配），尝试设为第一个字段
+                                    try:
+                                        auto_instance = ib_class.instantiate([], context=execution_context)
+                                        if ib_class.default_fields:
+                                            first_field = next(iter(ib_class.default_fields))
+                                            auto_instance.fields[first_field] = parsed_val
+                                        parsed_val = auto_instance
+                                    except Exception:
+                                        pass  # 保留原始 parsed_val
+                            
                             return LLMResult.success_result(
                                 value=parsed_val,
                                 raw_response=raw_res
