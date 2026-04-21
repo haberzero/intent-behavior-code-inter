@@ -1,4 +1,5 @@
 from core.compiler.common.tokens import TokenType
+from core.compiler.parser.core.syntax import ID_AUTO
 from core.kernel import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
@@ -9,7 +10,7 @@ class TypeComponent(BaseComponent):
     """
     def parse_type_annotation(self, precedence: int = 0) -> ast.IbExpr:
         start_token = self.stream.peek()
-        # 1. Base Type (Identifier)
+        # 1. Base Type (Identifier or reserved keyword used as a type)
         base_type = None
         if self.stream.match(TokenType.IDENTIFIER):
             name_token = self.stream.previous()
@@ -20,6 +21,10 @@ class TypeComponent(BaseComponent):
                 dot_token = self.stream.previous()
                 member_token = self.stream.consume(TokenType.IDENTIFIER, "Expect member name after '.' in type annotation.")
                 base_type = self._loc(ast.IbAttribute(value=base_type, attr=member_token.value, ctx='Load'), dot_token)
+        elif self.stream.match(TokenType.AUTO):
+            # Allow 'auto' as a return-type annotation: func f() -> auto:
+            name_token = self.stream.previous()
+            base_type = self._loc(ast.IbName(id=ID_AUTO, ctx='Load'), name_token)
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
 

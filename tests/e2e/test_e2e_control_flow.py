@@ -246,3 +246,52 @@ for int n in nums if n % 2 == 0:
         assert "2" in lines
         assert "4" not in lines
         assert "6" not in lines
+
+
+# ---------------------------------------------------------------------------
+# 6. Condition-driven for with if filter  (for @~...~ if cond:)
+# ---------------------------------------------------------------------------
+
+class TestE2EConditionDrivenForIf:
+    """Tests for condition-driven for-loop with an if-filter (parser P0 fix)."""
+
+    def _run(self, code: str):
+        from core.engine import IBCIEngine
+        lines = []
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.run_string(
+            'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n' + code,
+            output_callback=lambda t: lines.append(str(t)),
+            silent=True,
+        )
+        return lines
+
+    def test_condition_driven_for_if_filter_terminates(self):
+        """for @~MOCK:TRUE cond~ if count < 3: should stop when filter fails."""
+        code = """int count = 0
+for @~ MOCK:TRUE loop_cond ~ if count < 3:
+    count = count + 1
+print((str)count)
+"""
+        lines = self._run(code)
+        assert "3" in lines
+
+    def test_condition_driven_for_if_filter_never_entered(self):
+        """if filter is immediately false, loop body must not execute."""
+        code = """int count = 0
+for @~ MOCK:TRUE loop_cond ~ if count > 100:
+    count = count + 1
+print((str)count)
+"""
+        lines = self._run(code)
+        assert "0" in lines
+
+    def test_condition_driven_for_if_filter_with_static_condition(self):
+        """loop body runs while the static condition holds."""
+        code = """int x = 0
+for @~ MOCK:TRUE always ~ if x < 5:
+    x = x + 1
+print((str)x)
+"""
+        lines = self._run(code)
+        assert "5" in lines

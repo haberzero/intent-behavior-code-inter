@@ -264,6 +264,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
+    _reg_native(string_class, 'to_bool', lambda self: len(self.value) > 0)
     _reg_native(string_class, '__getitem__', lambda self, key: self.__getitem__(key), unbox=False)
 
     # range(start, stop, step) 构造函数
@@ -287,6 +288,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")
     _reg_native(list_class, 'to_list', lambda self: self.elements)
+    _reg_native(list_class, 'to_bool', lambda self: len(self.elements) > 0)
     _reg_native(list_class, 'len', lambda self: self.len())
 
     # list.__contains__: 用于 'in' 运算符（右侧为 list 时）
@@ -318,6 +320,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
+    _reg_native(dict_class, 'to_bool', lambda self: len(self.fields) > 0)
     _reg_native(dict_class, 'len', lambda self: self.len())
 
     # dict.__contains__: 用于 'in' 运算符（右侧为 dict 时）

@@ -454,8 +454,8 @@ class StatementComponent(BaseComponent):
             # 情况 1: for i in list  或  for str name in names
             target = target_candidate
             iter_expr = self.expression.parse_expression()
-        elif self.stream.check(TokenType.COLON):
-            # 情况 2: for 10:  或  for @~...~: (条件驱动模式)
+        elif self.stream.check(TokenType.COLON) or self.stream.check(TokenType.IF):
+            # 情况 2: for 10:  或  for @~...~:  或  for @~...~ if cond: (条件驱动模式)
             # 此时 target_candidate 实际上就是迭代/条件表达式
             target = None
             iter_expr = target_candidate

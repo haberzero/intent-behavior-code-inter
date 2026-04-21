@@ -123,12 +123,12 @@ class Bootstrapper:
         self.ObjectClass.register_method('__getattr__', IbNativeFunction(_default_getattr, is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('__setattr__', IbNativeFunction(_default_setattr, is_method=True, ib_class=self.ObjectClass))
 
-        # 基础比较逻辑：默认比较 ID (引用一致性)
+        # 基础比较逻辑：默认比较 ID (引用一致性)，返回 bool 类型
         def _default_eq(self, other):
-            return self.ib_class.registry.box(1 if self == other else 0)
+            return self.ib_class.registry.box(True if self is other else False)
             
         def _default_ne(self, other):
-            return self.ib_class.registry.box(1 if self != other else 0)
+            return self.ib_class.registry.box(False if self is other else True)
 
         self.ObjectClass.register_method('__eq__', IbNativeFunction(_default_eq, is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('__ne__', IbNativeFunction(_default_ne, is_method=True, ib_class=self.ObjectClass))

@@ -54,8 +54,13 @@ class Prelude:
         # Normalise common aliases
         if "any" in self.builtin_types and "auto" not in self.builtin_types:
             self.builtin_types["auto"] = self.builtin_types["any"]
-        if "void" in self.builtin_types and "none" not in self.builtin_types:
-            self.builtin_types["none"] = self.builtin_types["void"]
+        # Do NOT alias "none" → void: lowercase 'none' is intentionally trapped
+        # as an error in visit_IbName (Bug #4 fix) to guide users towards 'None'.
+        # Ensure 'None' (capitalised) is exposed as a type that _resolve_type can find.
+        if "None" not in self.builtin_types:
+            none_spec = self.registry.resolve("None")
+            if none_spec:
+                self.builtin_types["None"] = none_spec
 
     # ------------------------------------------------------------------ #
     # Registration / query                                                 #
