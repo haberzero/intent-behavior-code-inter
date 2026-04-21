@@ -312,3 +312,105 @@ print((str)obj.z)
         assert "1" in lines
         assert "2" in lines
         assert "3" in lines
+
+
+# ---------------------------------------------------------------------------
+# User-class equality operator (P0 fix: __eq__ must return bool, not int)
+# ---------------------------------------------------------------------------
+
+class TestE2EClassEquality:
+    """Tests for == / != on user-defined class instances (P0 bug fix)."""
+
+    def test_identity_equality_same_reference(self):
+        """o1 == o1 should be true (same reference)."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(5)
+bool same = o1 == o1
+print((str)same)
+"""
+        lines = run_and_capture(code)
+        assert "True" in lines
+
+    def test_identity_equality_different_instances(self):
+        """o1 == o2 (different instances, same value) should be false."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(5)
+Obj o2 = Obj(5)
+bool different = o1 == o2
+print((str)different)
+"""
+        lines = run_and_capture(code)
+        assert "False" in lines
+
+    def test_equality_assigned_reference(self):
+        """o3 = o1; o3 == o1 should be true."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(42)
+Obj o3 = o1
+bool same_ref = o3 == o1
+print((str)same_ref)
+"""
+        lines = run_and_capture(code)
+        assert "True" in lines
+
+    def test_not_equal_different_instances(self):
+        """o1 != o2 (different instances) should be true."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(5)
+Obj o2 = Obj(5)
+bool ne = o1 != o2
+print((str)ne)
+"""
+        lines = run_and_capture(code)
+        assert "True" in lines
+
+    def test_equality_in_if_condition(self):
+        """class equality in if-condition should work without type error."""
+        code = """class Pt:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Pt a = Pt(1)
+Pt b = a
+if a == b:
+    print("same")
+else:
+    print("different")
+"""
+        lines = run_and_capture(code)
+        assert "same" in lines
+
+    def test_equality_result_is_bool_not_int(self):
+        """== result must be assignable to bool variable (was returning int before fix)."""
+        code = """class Node:
+    int val
+    func __init__(self, int v):
+        self.val = v
+
+Node n1 = Node(10)
+Node n2 = Node(10)
+bool eq_result = n1 == n2
+bool same_result = n1 == n1
+print((str)eq_result)
+print((str)same_result)
+"""
+        lines = run_and_capture(code)
+        assert "False" in lines
+        assert "True" in lines
