@@ -890,7 +890,7 @@ import file       # 文件操作
 ```ibci
 import math
 float result = math.sqrt(16.0)    # 4.0
-float pi = math.pi()              # 3.14159...
+float pi = math.pi                # 3.14159...  (常量，不是函数，无括号)
 
 import json
 str text = '{"name": "Alice"}'

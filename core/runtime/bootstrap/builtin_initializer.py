@@ -248,9 +248,13 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
     
     # int(x) 构造函数/转换逻辑
+    # 注意：receiver 可能是 int 类对象（IbClass），也可能是一个 IbInteger 实例（如 42()）。
+    # 使用 self.ib_class.registry 保证两种情况均可访问注册表。
     def _int_call(self, *args):
-        if not args: return self.registry.box(0)
-        return args[0].receive('cast_to', [self])
+        reg = self.ib_class.registry
+        if not args: return reg.box(0)
+        target = self if isinstance(self, IbClass) else self.ib_class
+        return args[0].receive('cast_to', [target])
     _reg_native(integer_class, '__call__', _int_call, unbox=False)
     
     # Float
@@ -258,8 +262,10 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # float(x) 构造函数/转换逻辑
     def _float_call(self, *args):
-        if not args: return self.registry.box(0.0)
-        return args[0].receive('cast_to', [self])
+        reg = self.ib_class.registry
+        if not args: return reg.box(0.0)
+        target = self if isinstance(self, IbClass) else self.ib_class
+        return args[0].receive('cast_to', [target])
     _reg_native(float_class, '__call__', _float_call, unbox=False)
 
     # String
@@ -276,7 +282,8 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     
     # str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
-        if not args: return self.registry.box("")
+        reg = self.ib_class.registry
+        if not args: return reg.box("")
         return args[0].receive('__to_prompt__', [])
     _reg_native(string_class, '__call__', _str_call, unbox=False)
 

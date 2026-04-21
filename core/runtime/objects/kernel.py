@@ -377,8 +377,16 @@ class IbClass(IbObject):
         for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
-                    # 优先使用预评估好的快照
-                    instance.fields[name] = val_info.static_val
+                    # 优先使用预评估好的快照，但可变容器（IbList/IbDict）必须每次创建新实例，
+                    # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
+                    from core.runtime.objects.builtins import IbList, IbDict
+                    sv = val_info.static_val
+                    if isinstance(sv, IbList):
+                        instance.fields[name] = IbList(list(sv.elements), sv.ib_class)
+                    elif isinstance(sv, IbDict):
+                        instance.fields[name] = IbDict(dict(sv.fields), sv.ib_class)
+                    else:
+                        instance.fields[name] = sv
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
@@ -555,6 +563,15 @@ class IbNone(IbObject):
     """
     def __init__(self, ib_class: 'IbClass'):
         super().__init__(ib_class)
+
+    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        if message == '__eq__':
+            right = args[0] if args else None
+            return self.ib_class.registry.box(isinstance(right, IbNone))
+        if message == '__ne__':
+            right = args[0] if args else None
+            return self.ib_class.registry.box(not isinstance(right, IbNone))
+        return super().receive(message, args)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return None
