@@ -670,9 +670,8 @@ class SemanticAnalyzer:
                     )
                     inferred = self._any_desc
 
-                # Backfill the inferred type into the function spec
-                call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
-                writable = call_trait.get_writable_trait() if call_trait else None
+                # Backfill the inferred type into the function spec.
+                # `writable` and `sym` are already in scope from above.
                 if writable:
                     writable.update_signature(param_types, inferred)
                 elif sym.spec and isinstance(sym.spec, FuncSpec):

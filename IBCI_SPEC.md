@@ -46,7 +46,7 @@ dict config = {"version": "2.2"}
 ```ibci
 auto x = 42        # 推断为 int；后续 x = "hello" 将编译报错
 auto name = "Bob"  # 推断为 str
-auto empty = None  # 推断为 None；none_val 此时近乎等同于 None
+auto empty = None  # 推断为 None；empty 此时近乎等同于 None
 ```
 
 对于函数，`-> auto` 表示返回类型由函数体内的 `return` 语句推断：
