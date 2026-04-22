@@ -224,10 +224,11 @@ print((str)counter)
         assert "0" in lines
 
     def test_while_if_continue_semantics_body_only_when_filter_true(self):
-        """while...if: body executes only when filter is true; loop continues otherwise"""
+        """while...if: body executes only when filter is true; loop continues otherwise.
+        Here filter i >= 0 is always true for non-negative i, verifying body always runs."""
         code = """int i = 0
 int executed = 0
-while i < 3 if true:
+while i < 3 if i >= 0:
     executed = executed + 1
     i = i + 1
 print((str)executed)

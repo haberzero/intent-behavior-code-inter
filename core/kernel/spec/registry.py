@@ -130,6 +130,10 @@ class SpecFactory:
     ) -> ListSpec:
         if allowed_element_type_names:
             # Multi-type list: list[int, str, list]
+            # Names are sorted to produce a canonical spec name so that list[int,str]
+            # and list[str,int] resolve to the same registered spec entry. The original
+            # declaration order is preserved in allowed_element_type_names for informational
+            # purposes, but the canonical name (used as the registry key) is order-independent.
             sorted_names = sorted(allowed_element_type_names)
             name = f"list[{','.join(sorted_names)}]"
             return ListSpec(
