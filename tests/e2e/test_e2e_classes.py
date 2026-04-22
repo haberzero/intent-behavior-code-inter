@@ -414,3 +414,61 @@ print((str)same_result)
         lines = run_and_capture(code)
         assert "False" in lines
         assert "True" in lines
+
+
+# ---------------------------------------------------------------------------
+# Bug-fix regression: subclass explicit upcast (Bug B)
+# ---------------------------------------------------------------------------
+
+class TestE2EUpcast:
+    """Explicit (ParentClass)child_instance must succeed at runtime."""
+
+    def test_upcast_simple(self):
+        """(Animal)d must not raise and must expose inherited field."""
+        code = """class Animal:
+    str name = ""
+
+    func speak() -> str:
+        return "..."
+
+class Dog(Animal):
+    func speak() -> str:
+        return "Woof!"
+
+Dog d = Dog()
+d.name = "Rex"
+Animal a = (Animal)d
+print(a.name)
+"""
+        lines = run_and_capture(code)
+        assert "Rex" in lines
+
+    def test_upcast_method_dispatch_uses_child(self):
+        """After upcast, virtual method call dispatches to child override."""
+        code = """class Animal:
+    func speak() -> str:
+        return "..."
+
+class Dog(Animal):
+    func speak() -> str:
+        return "Woof!"
+
+Dog d = Dog()
+Animal a = (Animal)d
+print(a.speak())
+"""
+        lines = run_and_capture(code)
+        assert "Woof!" in lines
+
+    def test_upcast_same_type_noop(self):
+        """Casting to own type is a no-op."""
+        code = """class Animal:
+    str name = ""
+
+Animal a1 = Animal()
+a1.name = "Cat"
+Animal a2 = (Animal)a1
+print(a2.name)
+"""
+        lines = run_and_capture(code)
+        assert "Cat" in lines

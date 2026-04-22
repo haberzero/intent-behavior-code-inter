@@ -556,3 +556,31 @@ class TestE2EDictContainsRemove:
         code = 'dict d = {"x": 10}\nd.remove("x")\nbool r = d.contains("x")\nprint((str)r)'
         lines = run_and_capture(code)
         assert "False" in lines or "0" in lines
+
+
+# ---------------------------------------------------------------------------
+# Bug-fix regression: any variable cross-type reassignment (Bug A)
+# ---------------------------------------------------------------------------
+
+class TestE2EAnyVariable:
+    """any variables must accept reassignment to any type without SEM_003."""
+
+    def test_any_reassign_int_to_str(self):
+        code = 'any val = 42\nval = "hello"\nprint(val)'
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_any_reassign_str_to_int(self):
+        code = 'any val = "start"\nval = 99\nprint(val)'
+        lines = run_and_capture(code)
+        assert "99" in lines
+
+    def test_any_reassign_multiple_types(self):
+        code = 'any val = 1\nval = "two"\nval = true\nprint(val)'
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() or "True" in l for l in lines)
+
+    def test_any_holds_initial_value(self):
+        code = 'any val = 100\nprint(val)'
+        lines = run_and_capture(code)
+        assert "100" in lines

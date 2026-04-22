@@ -893,7 +893,12 @@ class SemanticAnalyzer:
                                 target_type = self._behavior_desc
                             else:
                                 target_type = self._deferred_desc
+                        elif declared_type.name == "any":
+                            # `any` 是真正的动态类型：变量的 spec 永久保持为 any，
+                            # 不因首次赋值的实际类型而窄化，允许后续赋值为任意类型。
+                            target_type = self._any_desc
                         else:
+                            # `auto`：从首次赋值的实际类型推断并锁定 spec。
                             target_type = val_type
                     elif deferred_mode:
                         # 延迟模式：变量持有延迟对象；声明类型用作 LLM 输出期望类型。
@@ -926,8 +931,10 @@ class SemanticAnalyzer:
                     # 定义或更新符号
                     sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
                 else:
-                    # 2. 无标注：如果尚未定义，或者现有定义是动态的 (any/auto)，则进行推导
-                    if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
+                    # 2. 无标注：如果尚未定义，或者现有定义是 auto（推断锁定），则进行推导。
+                    # `any` 例外：sym.spec 已为 any 时保持不变，允许后续任意类型赋值。
+                    spec_is_any = sym is not None and sym.spec is not None and sym.spec.name == "any"
+                    if not sym or (self.registry.is_dynamic(sym.spec or self._any_desc) and not spec_is_any):
                         sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
                 
                 if sym:
