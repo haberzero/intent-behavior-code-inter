@@ -405,33 +405,14 @@ class StmtHandler(BaseHandler):
         return self.registry.get_none()
 
     def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """循环语句
-
-        while...if 过滤语义（与 for...if 对齐，向 Python 靠拢）：
-        - while condition if guard: → guard 为假时跳过本次迭代 (continue)，
-          主条件仍继续检测；适用于主条件受外部状态驱动（如 LLM 条件循环）。
-        - for item in items if filter: → filter 为假时跳过当前元素 (continue)。
-        - for @~condition~ if guard: → guard 为假时终止循环 (break)，因为
-          条件驱动 for 没有有限迭代集，continue 会导致无限重检。
-
-        注意：while...if 使用 continue 语义要求主条件最终能因外部状态变化而为
-        假，否则 filter 持续为假时会造成无限循环。对简单计数器循环，建议在循环
-        体内使用显式 `if/continue` 代替 `while...if`。
-        """
-        # 检查 test 是否为 IbFilteredExpr（while expr if filter:），提前拆包
+        """循环语句"""
         test_uid = node_data.get("test")
-        filter_uid = None
-        actual_test_uid = test_uid
-        test_node_data = self.get_node_data(test_uid)
-        if test_node_data and test_node_data.get("_type") == "IbFilteredExpr":
-            actual_test_uid = test_node_data.get("expr")
-            filter_uid = test_node_data.get("filter")
         
         while True:
             # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
             # 污染下一次循环条件的检测。只有本次条件求值产生的 LLM 结果才应被检查。
             self.runtime_context.set_last_llm_result(None)
-            condition = self.visit(actual_test_uid)
+            condition = self.visit(test_uid)
 
             last_result = self.runtime_context.get_last_llm_result()
             if last_result and not last_result.is_certain:
@@ -439,12 +420,6 @@ class StmtHandler(BaseHandler):
 
             if not self.execution_context.is_truthy(condition):
                 break
-            
-            # 过滤条件（如果有）：不满足则跳过本次迭代 (continue 语义)，与 for...if 对齐
-            if filter_uid is not None:
-                filter_val = self.visit(filter_uid)
-                if not self.execution_context.is_truthy(filter_val):
-                    continue
             
             try:
                 for stmt_uid in node_data.get("body", []):

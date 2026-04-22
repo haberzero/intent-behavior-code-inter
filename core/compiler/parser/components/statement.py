@@ -416,10 +416,14 @@ class StatementComponent(BaseComponent):
         start_token = self.stream.previous()
         test = self.expression.parse_expression()
         
-        # Parse optional filter: while x > 0 if is_ready():
+        # while ... if ... is not supported; use an explicit if/continue inside the body instead.
         if self.stream.match(TokenType.IF):
-            filter_expr = self.expression.parse_expression()
-            test = self._loc(ast.IbFilteredExpr(expr=test, filter=filter_expr), start_token)
+            raise self.stream.error(
+                self.stream.previous(),
+                "The 'while ... if ...:' filter syntax is not supported. "
+                "Use an explicit 'if/continue' inside the loop body instead.",
+                code="PAR_002",
+            )
             
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
         body = self.block()
