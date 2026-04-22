@@ -61,6 +61,11 @@ class Prelude:
             none_spec = self.registry.resolve("None")
             if none_spec:
                 self.builtin_types["None"] = none_spec
+        # Expose 'llm_uncertain' as a named builtin type (for isinstance checks, type comparisons).
+        if "llm_uncertain" not in self.builtin_types:
+            lu_spec = self.registry.resolve("llm_uncertain")
+            if lu_spec:
+                self.builtin_types["llm_uncertain"] = lu_spec
 
     # ------------------------------------------------------------------ #
     # Registration / query                                                 #

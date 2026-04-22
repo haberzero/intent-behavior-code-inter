@@ -617,6 +617,22 @@ class SemanticAnalyzer:
             # self 的类型就是当前类
             self.current_class = None  # 防止 _define_var 将 self 注册为类成员
             self._define_var("self", saved_class, node)
+            
+            # super() 支持：在类方法作用域内注入 super 符号。
+            # 类型：如果父类存在则为父类类型（ClassSpec），否则为 any。
+            # super 符号使用固定 UID "builtin:super"，与运行时 IbSuperProxy 注入一致。
+            parent_spec = None
+            if saved_class.parent_name:
+                parent_spec = self.registry.resolve(saved_class.parent_name)
+            super_type = parent_spec if parent_spec else self._any_desc
+            super_sym = symbols.VariableSymbol(
+                name="super",
+                kind=symbols.SymbolKind.VARIABLE,
+                spec=super_type,
+                def_node=node,
+            )
+            super_sym.uid = "builtin:super"
+            self.symbol_table.define(super_sym, allow_overwrite=True)
 
         # 注册参数（current_class=None 确保参数不会被注册为类成员）
         self.current_class = None

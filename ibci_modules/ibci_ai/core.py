@@ -423,10 +423,13 @@ class AIPlugin(IbStatefulPlugin):
             return f"[MOCK] {user_prompt}"
 
         content_after_mock = user_prompt[5:].strip()
+        # 如果 user_prompt 是多行模板的一部分，MOCK 指令通常在第一行；
+        # 只取第一行内容进行解析，避免后续内容干扰。
+        first_line_after_mock = content_after_mock.split("\n", 1)[0].strip()
         
         # 1. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
-        if ':' in content_after_mock:
-            type_parts = content_after_mock.split(':', 2)
+        if ':' in first_line_after_mock:
+            type_parts = first_line_after_mock.split(':', 2)
             if len(type_parts) >= 2:
                 mock_type = type_parts[0]
                 mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
@@ -482,7 +485,8 @@ class AIPlugin(IbStatefulPlugin):
                     return val
 
         # 2. 处理命名指令（区分大小写，MOCK 指令必须全大写）
-        parts = content_after_mock.split(" ", 1)
+        # first_line_after_mock 已在上方提取（第一行内容，去除空白）。
+        parts = first_line_after_mock.split(" ", 1)
         mock_cmd = parts[0] if parts else ""
         mock_content = parts[1] if len(parts) > 1 else ""
 

@@ -798,6 +798,50 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
 
 
 # ------------------------------------------------------------------ #
+# LLMUncertain                                                        #
+# ------------------------------------------------------------------ #
+
+class LLMUncertainAxiom(BaseAxiom, ConverterCapability):
+    """
+    公理：llm_uncertain 类型。
+
+    语义：
+    - LLM 调用因重试耗尽而无法产生确定结果时，目标变量被赋值为此类型的单例。
+    - 布尔上下文中为假（is_truthy → False）。
+    - 可以赋值给任何类型的变量（is_compatible 宽松策略）。
+    - __to_prompt__ 返回 "uncertain"；cast_to str 返回 "uncertain"。
+    - 不抛出异常，不进入异常体系——用户应通过 if/while 逻辑主动检测。
+    """
+
+    @property
+    def name(self) -> str:
+        return "llm_uncertain"
+
+    def get_converter_capability(self): return self
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "__to_prompt__": _m("__to_prompt__", ret="str"),
+            "to_bool":       _m("to_bool",       ret="bool"),
+            "cast_to":       _m("cast_to", params=["any"], ret="any"),
+        }
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return source_type_name == "llm_uncertain"
+
+    def is_compatible(self, other_name: str) -> bool:
+        # llm_uncertain 可以被赋值给任何类型的变量（宽松兼容）
+        return True
+
+    def can_return_from_isolated(self) -> bool:
+        return True
+
+
+# ------------------------------------------------------------------ #
 # None                                                                #
 # ------------------------------------------------------------------ #
 
@@ -1230,3 +1274,4 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(IntentContextAxiom())
     registry.register(IntentAxiom())
     registry.register(LlmCallResultAxiom())
+    registry.register(LLMUncertainAxiom())
