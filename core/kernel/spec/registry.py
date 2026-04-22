@@ -473,6 +473,9 @@ class SpecRegistry:
                 ret_name = cap.resolve_operation_type_name(op, other_name)
                 if ret_name:
                     return self.resolve(ret_name) or self.resolve("any")
+        # None 比较：任何类型均可与 None 用 == 或 != 比较，返回 bool
+        if op in ("==", "!=") and (spec.name == "None" or (other and other.name == "None")):
+            return self.resolve("bool")
         # User-defined class types support == and != by identity
         if isinstance(spec, ClassSpec) and op in ("==", "!="):
             return self.resolve("bool")

@@ -422,6 +422,11 @@ class IbList(IbObject):
         self.elements.sort(key=lambda x: x.to_native())
         return self.ib_class.registry.get_none()
 
+    def reverse(self) -> IbObject:
+        """原地反转列表。对齐 Python list.reverse()"""
+        self.elements.reverse()
+        return self.ib_class.registry.get_none()
+
     def insert(self, index: Any, item: IbObject) -> IbObject:
         """在指定位置插入元素。对齐 Python list.insert(index, item)"""
         idx = index.to_native() if hasattr(index, 'to_native') else int(index)
@@ -562,6 +567,22 @@ class IbDict(IbObject):
     def values(self) -> IbObject:
         # 返回 IbList 包装的值列表
         return self.ib_class.registry.box(list(self.fields.values()))
+
+    def items(self) -> IbObject:
+        """返回 [(key, value), ...] 形式的列表。对齐 Python dict.items()"""
+        pairs = [[k, v] for k, v in self.fields.items()]
+        return self.ib_class.registry.box(pairs)
+
+    def update(self, other: Any) -> IbObject:
+        """将另一个字典合并到当前字典。对齐 Python dict.update(other)"""
+        if isinstance(other, IbDict):
+            self.fields.update(other.fields)
+        elif hasattr(other, 'to_native'):
+            src = other.to_native()
+            if isinstance(src, dict):
+                for k, v in src.items():
+                    self.fields[k] = self.ib_class.registry.box(v)
+        return self.ib_class.registry.get_none()
 
     def len(self) -> IbObject:
         return self.ib_class.registry.box(len(self.fields))

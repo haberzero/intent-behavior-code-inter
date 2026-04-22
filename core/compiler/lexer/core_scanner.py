@@ -753,6 +753,15 @@ class CoreTokenScanner:
             self.is_new_line_flag = False
             return
 
+        # 2b. Octal (0o...)
+        if first_char == '0' and (self.scanner.peek() == 'o' or self.scanner.peek() == 'O'):
+            value += self.scanner.advance()
+            while not self.scanner.is_at_end() and self.scanner.peek() in '01234567':
+                value += self.scanner.advance()
+            tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
+            self.is_new_line_flag = False
+            return
+
         # 3. Decimal / Float
         while self.scanner.peek().isdigit():
             value += self.scanner.advance()

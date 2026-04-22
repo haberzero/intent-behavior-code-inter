@@ -320,11 +320,12 @@ class LLMExceptFrame:
                     except Exception:
                         pass  # 协议调用失败：保留当前状态（最佳努力）
 
-        # 方案A：将变量绑定替换为深克隆副本
+        # 方案A：每次恢复时从黄金快照重新深克隆，防止上一轮 llmexcept body 修改了快照对象
         for name, val in self.saved_vars.items():
             symbol = scope.get_symbol(name)
             if symbol and not symbol.is_const:
-                scope.assign(name, val)
+                fresh = self._try_deep_clone(val)
+                scope.assign(name, fresh if fresh is not None else val)
     
     def increment_retry(self) -> bool:
         """

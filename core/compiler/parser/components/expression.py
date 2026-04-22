@@ -126,7 +126,7 @@ class ExpressionComponent(BaseComponent):
         if '.' in value or 'e' in value or 'E' in value:
             num = float(value)
         else:
-            num = int(value)
+            num = int(value, 0)
         return self._loc(ast.IbConstant(value=num), self.stream.previous())
 
     def string(self) -> ast.IbExpr:
@@ -361,7 +361,7 @@ class ExpressionComponent(BaseComponent):
             if self.stream.check(TokenType.NUMBER):
                 num_token = self.stream.advance()
                 negative_num = ast.IbConstant(
-                    value=-int(num_token.value)
+                    value=-int(num_token.value, 0)
                 )
                 return self._loc(negative_num, start_token)
             else:
