@@ -202,26 +202,38 @@ for str w in words if w.find("c") >= 0:
         assert "ccc" in lines
         assert "a" not in lines
 
-    def test_while_if_filter_terminates(self):
-        """while i < 10 if i < 5: loop should stop when filter fails"""
+    def test_while_if_filter_body_runs_when_filter_passes(self):
+        """while...if continue semantics: body runs every iteration when filter is always true"""
         code = """int i = 0
-while i < 10 if i < 5:
+while i < 5 if i >= 0:
     i = i + 1
 print((str)i)
 """
         lines = run_and_capture(code)
         assert "5" in lines
 
-    def test_while_if_filter_condition_false_immediately(self):
-        """if filter is immediately false, loop body should never run"""
+    def test_while_if_filter_body_skipped_when_main_condition_false(self):
+        """while main condition is false from the start, body never runs regardless of filter"""
         code = """int i = 0
 int counter = 0
-while i < 10 if i > 100:
+while i > 10 if i < 100:
     counter = counter + 1
 print((str)counter)
 """
         lines = run_and_capture(code)
         assert "0" in lines
+
+    def test_while_if_continue_semantics_body_only_when_filter_true(self):
+        """while...if: body executes only when filter is true; loop continues otherwise"""
+        code = """int i = 0
+int executed = 0
+while i < 3 if true:
+    executed = executed + 1
+    i = i + 1
+print((str)executed)
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
 
     def test_for_in_if_filter_all_match(self):
         """filter that matches all elements"""

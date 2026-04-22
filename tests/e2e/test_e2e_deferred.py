@@ -409,3 +409,61 @@ auto lambda f = @~ say hello ~
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
+
+
+# ---------------------------------------------------------------------------
+# 9. fn keyword — callable type inference
+# ---------------------------------------------------------------------------
+
+class TestFnKeyword:
+    """Tests for the 'fn' keyword: callable type inference."""
+
+    def test_fn_holds_regular_function(self):
+        """fn f = myFunc; f() can be called and returns correctly."""
+        code = """func add(int a, int b) -> int:
+    return a + b
+
+fn f = add
+int result = f(3, 4)
+print((str)result)
+"""
+        lines = run_and_capture(code)
+        assert "7" in lines
+
+    def test_fn_holds_auto_lambda(self):
+        """fn f = auto lambda expr; f() evaluates the expression."""
+        code = """int x = 10
+auto lambda compute = x + 5
+fn f = compute
+print((str)f())
+"""
+        lines = run_and_capture(code)
+        assert "15" in lines
+
+    def test_fn_lambda_declares_deferred_callable(self):
+        """fn lambda f = expr; f is a deferred callable."""
+        code = """int x = 3
+fn lambda f = x * 2
+print((str)f())
+x = 10
+print((str)f())
+"""
+        lines = run_and_capture(code)
+        assert "6" in lines
+        assert "20" in lines
+
+    def test_fn_compile_error_on_non_callable(self):
+        """fn f = 42 should raise a compile-time SEM_003 error."""
+        from core.engine import IBCIEngine
+        from core.kernel.issue import CompilerError
+        import os
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        raised = False
+        try:
+            engine.compile_string("fn f = 42", silent=True)
+        except CompilerError as e:
+            raised = True
+            # Verify it's a type mismatch error (SEM_003)
+            codes = [d.code for d in e.diagnostics]
+            assert "SEM_003" in codes, f"Expected SEM_003 but got: {codes}"
+        assert raised, "Expected CompilerError for 'fn f = 42' (non-callable RHS)"

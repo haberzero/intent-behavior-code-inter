@@ -472,3 +472,37 @@ print(a2.name)
 """
         lines = run_and_capture(code)
         assert "Cat" in lines
+
+
+# ---------------------------------------------------------------------------
+# __iter__ protocol tests
+# ---------------------------------------------------------------------------
+
+class TestIterProtocol:
+    """Tests for the lightweight __iter__ protocol on user-defined classes."""
+
+    def test_class_with_iter_method_is_iterable(self):
+        """A class that defines __iter__ returning a list can be used in for loops."""
+        code = """class NumberRange:
+    int start = 0
+    int end = 0
+
+    func __iter__(self) -> list:
+        list result = []
+        int i = self.start
+        while i < self.end:
+            result.append(i)
+            i = i + 1
+        return result
+
+NumberRange r = NumberRange()
+r.start = 1
+r.end = 4
+for any item in r:
+    print((str)item)
+"""
+        lines = run_and_capture(code)
+        assert "1" in lines
+        assert "2" in lines
+        assert "3" in lines
+        assert "4" not in lines

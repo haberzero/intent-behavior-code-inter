@@ -72,11 +72,24 @@ class ClassSpec(IbSpec):
 @dataclass(eq=False)
 class ListSpec(IbSpec):
     """
-    Describes a generic list type: list[element_type].
+    Describes a generic list type.
+
+    Single-type:  list[int]        → element_type_name="int",  allowed_element_type_names=[]
+    Multi-type:   list[int, str]   → element_type_name="any",  allowed_element_type_names=["int","str"]
+    Bare:         list             → element_type_name="any",  allowed_element_type_names=[]
+
+    For multi-type lists the subscript/iter element type is "any" (the user must cast explicitly);
+    the list only accepts elements of the declared types.
     """
 
     element_type_name: str = "any"
     element_type_module: Optional[str] = None
+    # Multi-type element names (empty = single-type or bare list)
+    allowed_element_type_names: list = None   # type: ignore[assignment]
+
+    def __post_init__(self):
+        if self.allowed_element_type_names is None:
+            object.__setattr__(self, 'allowed_element_type_names', [])
 
     def get_base_name(self) -> str:
         return self._axiom_name or "list"
@@ -245,6 +258,10 @@ CALLABLE_SPEC   = IbSpec(name="callable",    is_nullable=True,  is_user_defined=
 BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=False)
 DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
 EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=False)
+
+# fn — callable type inference marker (declaration-time keyword, like auto but for callables)
+# 不是一个独立的运行期类型：fn x = myFunc 实际上将 x 的 spec 推导为 myFunc 的具体 callable spec。
+FN_SPEC         = IbSpec(name="fn",          is_nullable=True,  is_user_defined=False)
 
 # LLM 调用结果类型规格 — IbLLMCallResult 的公理化描述符
 LLM_CALL_RESULT_SPEC = IbSpec(name="llm_call_result", is_nullable=True, is_user_defined=False)

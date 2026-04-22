@@ -60,7 +60,8 @@ class DeclarationComponent(BaseComponent):
             stmt = self.class_declaration()
         elif role == SyntaxRole.VARIABLE_DECLARATION:
             explicit_auto = self.stream.match(TokenType.AUTO)
-            stmt = self.variable_declaration(explicit_auto=explicit_auto)
+            explicit_fn = (not explicit_auto) and self.stream.match(TokenType.FN)
+            stmt = self.variable_declaration(explicit_auto=explicit_auto, explicit_fn=explicit_fn)
         else:
             stmt = self.statement.parse_statement()
         
@@ -70,17 +71,19 @@ class DeclarationComponent(BaseComponent):
             
         return stmt
 
-    def variable_declaration(self, explicit_auto: bool = False) -> ast.IbAssign:
+    def variable_declaration(self, explicit_auto: bool = False, explicit_fn: bool = False) -> ast.IbAssign:
         """
         变量/资产声明。
         格式：
         1. auto x = 1 (推导类型)
-        2. int x = 1 (显式类型)
-        3. auto x: int = 1 (显式覆盖)
-        4. (int x, int y) = (10, 20) (元组解包声明)
+        2. fn f = myFunc (可调用类型推导，类似 auto 但限于可调用)
+        3. int x = 1 (显式类型)
+        4. auto x: int = 1 (显式覆盖)
+        5. (int x, int y) = (10, 20) (元组解包声明)
         """
+        from core.compiler.parser.components.type_def import ID_FN
         # Handle tuple destructuring declaration: (int x, int y) = expr
-        if not explicit_auto and self.stream.check(TokenType.LPAREN):
+        if not explicit_auto and not explicit_fn and self.stream.check(TokenType.LPAREN):
             return self._tuple_variable_declaration()
 
         type_token = None
@@ -112,6 +115,16 @@ class DeclarationComponent(BaseComponent):
             # Optional type override: auto x: int = 1
             if self.stream.match(TokenType.COLON):
                 type_annotation = self.type_def.parse_type_annotation()
+        elif explicit_fn:
+            # 'fn' keyword already consumed — callable type inference
+            type_token = self.stream.previous()
+            type_annotation = self._loc(ast.IbName(id=ID_FN, ctx='Load'), type_token)
+            # Optional deferred mode: fn lambda f = expr / fn snapshot f = expr
+            if self.stream.match(TokenType.LAMBDA):
+                deferred_mode = "lambda"
+            elif self.stream.match(TokenType.SNAPSHOT):
+                deferred_mode = "snapshot"
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name after 'fn'.")
         else:
             # Parse type annotation: int x = 1
             start_token = self.stream.peek()

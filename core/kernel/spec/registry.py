@@ -31,7 +31,7 @@ from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
     FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, BoundMethodSpec, ModuleSpec, LazySpec,
-    INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
+    INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
@@ -126,7 +126,20 @@ class SpecFactory:
         self,
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
+        allowed_element_type_names: Optional[list] = None,
     ) -> ListSpec:
+        if allowed_element_type_names:
+            # Multi-type list: list[int, str, list]
+            sorted_names = sorted(allowed_element_type_names)
+            name = f"list[{','.join(sorted_names)}]"
+            return ListSpec(
+                name=name,
+                is_nullable=True,
+                is_user_defined=False,
+                element_type_name="any",
+                element_type_module=None,
+                allowed_element_type_names=list(allowed_element_type_names),
+            )
         name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
         return ListSpec(
             name=name,
@@ -391,7 +404,7 @@ class SpecRegistry:
         """True for any/auto and any axiom that declares itself dynamic."""
         if spec is None:
             return True  # unknown type treated as dynamic
-        if spec.name in ("any", "auto"):
+        if spec.name in ("any", "auto", "fn"):
             return True
         axiom = self.get_axiom(spec)
         return bool(axiom and axiom.is_dynamic())
@@ -484,6 +497,9 @@ class SpecRegistry:
     def resolve_iter_element(self, spec: IbSpec) -> Optional[IbSpec]:
         """Infer the element type of an iterable."""
         if isinstance(spec, (ListSpec, TupleSpec)):
+            # Multi-type list: element access returns any (user must cast explicitly)
+            if isinstance(spec, ListSpec) and getattr(spec, 'allowed_element_type_names', None):
+                return self.resolve("any")
             return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom:
@@ -502,6 +518,9 @@ class SpecRegistry:
         """Infer the item type when spec[key] is accessed."""
         if isinstance(spec, (ListSpec, TupleSpec)):
             if key_spec.get_base_name() == "int":
+                # Multi-type list: subscript access returns any
+                if isinstance(spec, ListSpec) and getattr(spec, 'allowed_element_type_names', None):
+                    return self.resolve("any")
                 return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
         if isinstance(spec, DictSpec):
             return self.resolve(spec.value_type_name, spec.value_type_module) or self.resolve("any")
@@ -574,6 +593,20 @@ class SpecRegistry:
 
         if src.name == target.name and src.module_path == target.module_path:
             return True
+
+        # Multi-type list compatibility: list[int,str] is assignable to list or list[int,str]
+        if isinstance(src, ListSpec) and isinstance(target, ListSpec):
+            src_allowed = getattr(src, 'allowed_element_type_names', None) or []
+            tgt_allowed = getattr(target, 'allowed_element_type_names', None) or []
+            if src_allowed or tgt_allowed:
+                # If target is bare list, accept any list variant
+                if not tgt_allowed and target.element_type_name == "any":
+                    return True
+                # If target has allowed types, source must have same or subset
+                if tgt_allowed and src_allowed:
+                    return set(src_allowed) == set(tgt_allowed)
+                # Single-type target, multi-type source: relaxed — allow
+                return True
 
         # Axiom-driven compatibility (e.g. bool isa int, None isa nullable)
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
@@ -701,7 +734,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
 
     for proto in (
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
-        ANY_SPEC, AUTO_SPEC, NONE_SPEC, SLICE_SPEC,
+        ANY_SPEC, AUTO_SPEC, FN_SPEC, NONE_SPEC, SLICE_SPEC,
         CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
         BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC, LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,

@@ -3,6 +3,8 @@ from core.compiler.parser.core.syntax import ID_AUTO
 from core.kernel import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
+ID_FN = "fn"  # sentinel name for the fn callable-type-inference keyword
+
 class TypeComponent(BaseComponent):
     """
     Component for parsing type annotations (e.g., int, list[str]).
@@ -25,6 +27,10 @@ class TypeComponent(BaseComponent):
             # Allow 'auto' as a return-type annotation: func f() -> auto:
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id=ID_AUTO, ctx='Load'), name_token)
+        elif self.stream.match(TokenType.FN):
+            # Allow 'fn' as a type annotation: fn f = myFunc
+            name_token = self.stream.previous()
+            base_type = self._loc(ast.IbName(id=ID_FN, ctx='Load'), name_token)
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
 

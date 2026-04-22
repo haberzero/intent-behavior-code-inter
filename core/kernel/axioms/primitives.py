@@ -497,8 +497,13 @@ class ListAxiom(
     def resolve_specialization_by_names(
         self, registry: Any, arg_names: List[str]
     ) -> Optional[Any]:
-        elem = arg_names[0] if arg_names else "any"
-        spec = registry.factory.create_list(element_type_name=elem)
+        if len(arg_names) == 1:
+            # Single-type: list[int]
+            elem = arg_names[0]
+            spec = registry.factory.create_list(element_type_name=elem)
+        else:
+            # Multi-type: list[int, str, list] — element access returns any
+            spec = registry.factory.create_list(allowed_element_type_names=arg_names)
         return registry.register(spec)
 
 
@@ -1267,6 +1272,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
 
     registry.register(DynamicAxiom("any"))
     registry.register(DynamicAxiom("auto"))
+    registry.register(DynamicAxiom("fn"))   # fn is a callable-inference sentinel treated as dynamic at registration
     registry.register(CallableAxiom())
     registry.register(VoidAxiom())
     registry.register(DeferredAxiom())
