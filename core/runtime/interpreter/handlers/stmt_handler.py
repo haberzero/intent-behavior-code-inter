@@ -405,30 +405,14 @@ class StmtHandler(BaseHandler):
         return self.registry.get_none()
 
     def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """循环语句
-        
-        Design 1 说明：while...if 与 for...if 过滤语义对称设计
-        - while condition if guard: → guard 为假时终止循环 (break)，因为 while 无有限迭代源
-        - for item in items if filter: → filter 为假时跳过 (continue)，因为有有限迭代集
-        - for @~condition~ if guard: → guard 为假时终止 (break)，与 while...if 一致
-        
-        三种循环的 if 语义统一规则：
-          有限迭代源 → skip (continue); 无限/条件驱动 → terminate (break)
-        """
-        # 检查 test 是否为 IbFilteredExpr（while expr if filter:），提前拆包
+        """循环语句"""
         test_uid = node_data.get("test")
-        filter_uid = None
-        actual_test_uid = test_uid
-        test_node_data = self.get_node_data(test_uid)
-        if test_node_data and test_node_data.get("_type") == "IbFilteredExpr":
-            actual_test_uid = test_node_data.get("expr")
-            filter_uid = test_node_data.get("filter")
         
         while True:
             # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
             # 污染下一次循环条件的检测。只有本次条件求值产生的 LLM 结果才应被检查。
             self.runtime_context.set_last_llm_result(None)
-            condition = self.visit(actual_test_uid)
+            condition = self.visit(test_uid)
 
             last_result = self.runtime_context.get_last_llm_result()
             if last_result and not last_result.is_certain:
@@ -436,12 +420,6 @@ class StmtHandler(BaseHandler):
 
             if not self.execution_context.is_truthy(condition):
                 break
-            
-            # 过滤条件（如果有）：不满足则终止循环 (break 语义)
-            if filter_uid is not None:
-                filter_val = self.visit(filter_uid)
-                if not self.execution_context.is_truthy(filter_val):
-                    break
             
             try:
                 for stmt_uid in node_data.get("body", []):
@@ -499,11 +477,21 @@ class StmtHandler(BaseHandler):
         if hasattr(iterable_obj, 'elements') and isinstance(iterable_obj.elements, list):
             elements_obj = iterable_obj
         else:
+            elements_obj = None
+            # 1. __iter__ 协议：对象实现了 __iter__() 方法，返回 list 对象
             try:
-                result = iterable_obj.receive('to_list', [])
-                elements_obj = result if (hasattr(result, 'elements') and isinstance(result.elements, list)) else None
+                result = iterable_obj.receive('__iter__', [])
+                if hasattr(result, 'elements') and isinstance(result.elements, list):
+                    elements_obj = result
             except (AttributeError, InterpreterError):
-                elements_obj = None
+                pass
+            # 2. to_list 兜底：旧版内置类型的转换接口
+            if elements_obj is None:
+                try:
+                    result = iterable_obj.receive('to_list', [])
+                    elements_obj = result if (hasattr(result, 'elements') and isinstance(result.elements, list)) else None
+                except (AttributeError, InterpreterError):
+                    elements_obj = None
         if elements_obj is None:
             raise self.report_error(f"Object is not iterable", node_uid)
         

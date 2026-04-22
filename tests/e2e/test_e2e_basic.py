@@ -556,3 +556,115 @@ class TestE2EDictContainsRemove:
         code = 'dict d = {"x": 10}\nd.remove("x")\nbool r = d.contains("x")\nprint((str)r)'
         lines = run_and_capture(code)
         assert "False" in lines or "0" in lines
+
+
+# ---------------------------------------------------------------------------
+# Bug-fix regression: any variable cross-type reassignment (Bug A)
+# ---------------------------------------------------------------------------
+
+class TestE2EAnyVariable:
+    """any variables must accept reassignment to any type without SEM_003."""
+
+    def test_any_reassign_int_to_str(self):
+        code = 'any val = 42\nval = "hello"\nprint(val)'
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_any_reassign_str_to_int(self):
+        code = 'any val = "start"\nval = 99\nprint(val)'
+        lines = run_and_capture(code)
+        assert "99" in lines
+
+    def test_any_reassign_multiple_types(self):
+        code = 'any val = 1\nval = "two"\nval = true\nprint(val)'
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() or "True" in l for l in lines)
+
+    def test_any_holds_initial_value(self):
+        code = 'any val = 100\nprint(val)'
+        lines = run_and_capture(code)
+        assert "100" in lines
+
+
+# ---------------------------------------------------------------------------
+# Undeclared variable → any semantics
+# ---------------------------------------------------------------------------
+
+class TestUndeclaredVarAnySemantics:
+    """Undeclared variables (no type annotation, no auto keyword) get 'any' semantics."""
+
+    def test_undeclared_var_can_hold_any_type(self):
+        """x = 42 followed by x = 'hello' works because x has any semantics."""
+        code = """x = 42
+x = "hello"
+print(x)
+"""
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_undeclared_var_printable(self):
+        """An undeclared variable can be printed without explicit cast."""
+        code = """msg = "world"
+print(msg)
+"""
+        lines = run_and_capture(code)
+        assert "world" in lines
+
+    def test_explicit_auto_still_infers_type(self):
+        """auto x = 42 still infers int (auto semantics unchanged)."""
+        code = """auto x = 42
+print((str)x)
+"""
+        lines = run_and_capture(code)
+        assert "42" in lines
+
+
+# ---------------------------------------------------------------------------
+# Container multi-type: list[int, str, list]
+# ---------------------------------------------------------------------------
+
+class TestContainerMultiType:
+    """Tests for multi-type container declarations: list[int, str, list]."""
+
+    def test_multi_type_list_declaration_compiles(self):
+        """list[int, str] declaration compiles without error."""
+        from core.engine import IBCIEngine
+        import os
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        artifact = engine.compile_string(
+            'list[int, str] items = [1, "hello", 2]', silent=True
+        )
+        assert artifact is not None
+
+    def test_multi_type_list_with_nested_list_compiles(self):
+        """list[int, str, list] with nested list type compiles."""
+        from core.engine import IBCIEngine
+        import os
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        artifact = engine.compile_string(
+            'list[int, str, list] mixed = [1, "hello"]', silent=True
+        )
+        assert artifact is not None
+
+    def test_multi_type_list_element_access_returns_any(self):
+        """Element of multi-type list is any; user must cast."""
+        code = """list[int, str] items = [42, "world"]
+any val = items[0]
+print((str)val)
+any val2 = items[1]
+print(val2)
+"""
+        lines = run_and_capture(code)
+        assert "42" in lines
+        assert "world" in lines
+
+    def test_multi_type_list_for_iteration(self):
+        """Multi-type list can be iterated; element type is any."""
+        code = """list[int, str] mixed = [1, "two", 3]
+for any item in mixed:
+    print((str)item)
+"""
+        lines = run_and_capture(code)
+        assert "1" in lines
+        assert "two" in lines
+        assert "3" in lines

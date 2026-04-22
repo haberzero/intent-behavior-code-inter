@@ -37,6 +37,7 @@ class SemanticAnalyzer:
 
         self._any_desc = self.registry.resolve("any")
         self._auto_desc = self.registry.resolve("auto")
+        self._fn_desc = self.registry.resolve("fn")    # fn: callable inference sentinel
         self._void_desc = self.registry.resolve("void")
         self._bool_desc = self.registry.resolve("bool")
         self._int_desc = self.registry.resolve("int")
@@ -884,8 +885,32 @@ class SemanticAnalyzer:
                 deferred_mode = getattr(node, 'deferred_mode', None)
                 
                 if declared_type:
+                    # 0. fn 声明：可调用类型推导，类似 auto 但要求 RHS 是可调用的。
+                    #    fn f = myFunc  → f 持有 myFunc 的具体 callable spec (FuncSpec 等)
+                    #    fn f = 42      → SEM_003 (42 不可调用)
+                    if declared_type.name == "fn":
+                        if deferred_mode:
+                            # fn lambda / fn snapshot — 创建延迟可调用对象
+                            if isinstance(node.value, ast.IbBehaviorExpr):
+                                target_type = self._behavior_desc
+                            else:
+                                target_type = self._deferred_desc
+                        elif self.registry.is_callable(val_type):
+                            # 推导实际可调用类型
+                            target_type = val_type
+                        elif self.registry.is_dynamic(val_type):
+                            # 右值是 any/auto：保守推导为 callable
+                            target_type = self.registry.resolve("callable") or self._any_desc
+                        else:
+                            self.error(
+                                f"'fn' requires a callable on the right-hand side, "
+                                f"but got '{val_type.name}'. "
+                                f"Use 'fn f = myFunction' or 'fn f = myLambda'.",
+                                node, code="SEM_003"
+                            )
+                            target_type = self.registry.resolve("callable") or self._any_desc
                     # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
-                    if self.registry.is_dynamic(declared_type):
+                    elif self.registry.is_dynamic(declared_type):
                         if deferred_mode:
                             # auto lambda / auto snapshot → 变量持有延迟对象
                             # declared_type 是 auto/any，不携带具体类型信息 → 使用通用 spec
@@ -893,7 +918,12 @@ class SemanticAnalyzer:
                                 target_type = self._behavior_desc
                             else:
                                 target_type = self._deferred_desc
+                        elif declared_type.name == "any":
+                            # `any` 是真正的动态类型：变量的 spec 永久保持为 any，
+                            # 不因首次赋值的实际类型而窄化，允许后续赋值为任意类型。
+                            target_type = self._any_desc
                         else:
+                            # `auto`：从首次赋值的实际类型推断并锁定 spec。
                             target_type = val_type
                     elif deferred_mode:
                         # 延迟模式：变量持有延迟对象；声明类型用作 LLM 输出期望类型。
@@ -926,9 +956,16 @@ class SemanticAnalyzer:
                     # 定义或更新符号
                     sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
                 else:
-                    # 2. 无标注：如果尚未定义，或者现有定义是动态的 (any/auto)，则进行推导
-                    if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
-                        sym = self._define_var(var_name, val_type, node, allow_overwrite=(sym is not None))
+                    # 2. 无标注：对首次定义的变量使用 any 语义（不绑定到右值类型）。
+                    # 明确的类型推导（锁定到具体类型）只能通过显式类型标注或 auto 关键字实现。
+                    # any 例外：sym.spec 已为 any 时保持不变，允许后续任意类型赋值。
+                    spec_is_any = sym is not None and sym.spec is not None and sym.spec.name == "any"
+                    if not sym:
+                        # 首次定义，无类型标注 → any 语义
+                        sym = self._define_var(var_name, self._any_desc, node, allow_overwrite=False)
+                    elif self.registry.is_dynamic(sym.spec or self._any_desc) and not spec_is_any:
+                        # 现有符号是动态类型（auto），重新推导（保留旧行为）
+                        sym = self._define_var(var_name, val_type, node, allow_overwrite=True)
                 
                 if sym:
                     self.side_table.bind_symbol(actual_target, sym)
@@ -981,8 +1018,10 @@ class SemanticAnalyzer:
                         val_type = self._deferred_desc
                     
                     if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
-                        hint = self.registry.get_diff_hint(val_type, sym.spec)
-                        self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
+                        # fn 声明：已在 fn 分支报告了错误，跳过重复检查
+                        if not (declared_type and declared_type.name == "fn"):
+                            hint = self.registry.get_diff_hint(val_type, sym.spec)
+                            self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
             else:
                 # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
@@ -1071,10 +1110,20 @@ class SemanticAnalyzer:
             if self.registry.is_behavior(iter_type):
                 element_type = self._any_desc 
             else:
+                from core.kernel.spec.specs import ClassSpec as _ClassSpec
                 iter_cap = self.registry.get_iter_cap(iter_type)
+                # __iter__ 协议：用户类若定义了 __iter__ 方法，视为可迭代
+                has_iter_method = (
+                    iter_cap is None
+                    and isinstance(iter_type, _ClassSpec)
+                    and self.registry.resolve_member(iter_type, "__iter__") is not None
+                )
                 if iter_cap:
                     # 通过 registry 统一获取 element_type，以支持引用解析
                     element_type = self.registry.resolve_iter_element(iter_type) or self._any_desc
+                elif has_iter_method:
+                    # __iter__ 方法返回 list，元素类型暂为 any
+                    element_type = self._any_desc
                 else:
                     self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                     element_type = self._any_desc

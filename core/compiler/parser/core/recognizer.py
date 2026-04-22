@@ -57,6 +57,9 @@ class SyntaxRecognizer:
         if token.type == TokenType.AUTO:
             return SyntaxRole.VARIABLE_DECLARATION
         
+        if token.type == TokenType.FN:
+            return SyntaxRole.VARIABLE_DECLARATION
+        
         # Check for implicit declaration: Type Name (e.g., int x, MyClass c)
         if token.type == TokenType.IDENTIFIER:
             if SyntaxRecognizer._is_declaration_lookahead(stream):

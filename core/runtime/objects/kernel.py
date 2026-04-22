@@ -82,6 +82,10 @@ class IbObject:
             if self.ib_class.name == target_name:
                 return self
 
+            # 向上转型（upcast）：目标类型是当前类的祖先，直接返回自身（安全且语义正确）
+            if isinstance(target_class, IbClass) and self.ib_class.is_assignable_to(target_class):
+                return self
+
             # 如果对象自身有 cast_to 方法（特殊类型包装器），优先调用
             if hasattr(self, 'cast_to'):
                 return self.cast_to(target_class)

@@ -26,6 +26,7 @@ class TokenType(Enum):
     WHILE = auto()
     IN = auto()
     AUTO = auto()
+    FN = auto()          # fn keyword: callable type inference (like auto but for callables)
     GLOBAL = auto()
     PASS = auto()
     BREAK = auto()

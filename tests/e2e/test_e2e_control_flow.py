@@ -202,27 +202,6 @@ for str w in words if w.find("c") >= 0:
         assert "ccc" in lines
         assert "a" not in lines
 
-    def test_while_if_filter_terminates(self):
-        """while i < 10 if i < 5: loop should stop when filter fails"""
-        code = """int i = 0
-while i < 10 if i < 5:
-    i = i + 1
-print((str)i)
-"""
-        lines = run_and_capture(code)
-        assert "5" in lines
-
-    def test_while_if_filter_condition_false_immediately(self):
-        """if filter is immediately false, loop body should never run"""
-        code = """int i = 0
-int counter = 0
-while i < 10 if i > 100:
-    counter = counter + 1
-print((str)counter)
-"""
-        lines = run_and_capture(code)
-        assert "0" in lines
-
     def test_for_in_if_filter_all_match(self):
         """filter that matches all elements"""
         code = """list nums = [2, 4, 6]

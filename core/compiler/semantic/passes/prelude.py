@@ -66,6 +66,11 @@ class Prelude:
             lu_spec = self.registry.resolve("llm_uncertain")
             if lu_spec:
                 self.builtin_types["llm_uncertain"] = lu_spec
+        # Expose 'fn' as a builtin type marker (callable type inference sentinel).
+        if "fn" not in self.builtin_types:
+            fn_spec = self.registry.resolve("fn")
+            if fn_spec:
+                self.builtin_types["fn"] = fn_spec
 
     # ------------------------------------------------------------------ #
     # Registration / query                                                 #
