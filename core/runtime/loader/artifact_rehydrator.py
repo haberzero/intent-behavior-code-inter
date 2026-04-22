@@ -5,7 +5,7 @@ from core.kernel.spec.specs import DeferredSpec, BehaviorSpec
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
-BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "any", "auto", "callable", "list", "dict", "behavior", "None"]
+BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "any", "auto", "callable", "list", "dict", "behavior", "None", "llm_uncertain"]
 
 class ArtifactRehydrator:
     """

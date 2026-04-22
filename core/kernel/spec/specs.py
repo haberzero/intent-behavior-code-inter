@@ -249,6 +249,10 @@ EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=
 # LLM 调用结果类型规格 — IbLLMCallResult 的公理化描述符
 LLM_CALL_RESULT_SPEC = IbSpec(name="llm_call_result", is_nullable=True, is_user_defined=False)
 
+# LLM 不确定结果类型规格 — IbLLMUncertain 的公理化描述符
+# 当 LLM 调用重试耗尽时，目标变量被赋值为此类型的单例（而非抛出异常）。
+LLM_UNCERTAIN_SPEC = IbSpec(name="llm_uncertain", is_nullable=True, is_user_defined=False)
+
 BOUND_METHOD_SPEC = BoundMethodSpec(name="bound_method", is_nullable=True, is_user_defined=False)
 LIST_SPEC         = ListSpec(name="list",   is_nullable=True,  is_user_defined=False)
 TUPLE_SPEC        = TupleSpec(name="tuple", is_nullable=True,  is_user_defined=False)

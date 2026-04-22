@@ -242,7 +242,16 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(none_class, 'to_bool', lambda self: 0)
 
     # 5. 注册 LLM 不确定结果单例 (IbLLMUncertain)
-    registry.register_llm_uncertain(IbLLMUncertain(none_class), token)
+    # llm_uncertain 有独立的公理类（不再借用 none_class），
+    # __to_prompt__ / to_bool / cast_to 通过公理方法自动绑定。
+    llm_uncertain_class = ib_classes.get("llm_uncertain")
+    if llm_uncertain_class:
+        registry.register_llm_uncertain(IbLLMUncertain(llm_uncertain_class), token)
+        _reg_native(llm_uncertain_class, '__to_prompt__', lambda self: "uncertain")
+        _reg_native(llm_uncertain_class, 'to_bool', lambda self: 0)
+    else:
+        # 安全回退（极端情况下 llm_uncertain 公理未注册）
+        registry.register_llm_uncertain(IbLLMUncertain(none_class), token)
 
     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
