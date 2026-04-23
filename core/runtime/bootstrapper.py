@@ -179,6 +179,10 @@ class Bootstrapper:
         if isinstance(val, IbObject): return val
         if val is None:
             return registry.get_none()
+        # Uncertain 字面量哨兵：Uncertain 关键字被解析为此特殊字符串常量，
+        # 此处将其映射到 llm_uncertain 单例，与 None → get_none() 的模式完全对称。
+        if val == "__IBCI_UNCERTAIN_LITERAL__":
+            return registry.get_llm_uncertain()
         
         # 处理循环引用 (主要针对列表/字典等容器)
         if memo is None: memo = {}

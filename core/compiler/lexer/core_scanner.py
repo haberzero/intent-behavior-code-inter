@@ -40,7 +40,7 @@ class CoreTokenScanner:
             'class': TokenType.CLASS, 'self': TokenType.SELF,
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
-            'None': TokenType.NONE,
+            'None': TokenType.NONE, 'Uncertain': TokenType.UNCERTAIN,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,
             'llmexcept': TokenType.LLM_EXCEPT, 
             'llmretry': TokenType.LLM_RETRY,

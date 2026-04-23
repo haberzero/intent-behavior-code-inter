@@ -714,6 +714,9 @@ class SpecRegistry:
         if isinstance(value, float):
             return self.resolve("float")
         if isinstance(value, str):
+            # Uncertain 字面量哨兵：Uncertain 关键字被解析为此特殊字符串
+            if value == "__IBCI_UNCERTAIN_LITERAL__":
+                return self.resolve("llm_uncertain")
             return self.resolve("str")
         if value is None:
             return self.resolve("None")

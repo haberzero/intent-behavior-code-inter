@@ -234,6 +234,12 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         return_type_name="str"
     ), token)
 
+    registry.register_function("is_uncertain", factory.create_func(
+        "is_uncertain",
+        param_type_names=["any"],
+        return_type_name="bool"
+    ), token)
+
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)
@@ -249,6 +255,15 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         registry.register_llm_uncertain(IbLLMUncertain(llm_uncertain_class), token)
         _reg_native(llm_uncertain_class, '__to_prompt__', lambda self: "uncertain")
         _reg_native(llm_uncertain_class, 'to_bool', lambda self: 0)
+        # 支持与 Uncertain 字面量（以及其他 llm_uncertain 值）进行 == / != 比较
+        def _lu_eq(self, other):
+            result = isinstance(other, IbLLMUncertain)
+            return self.ib_class.registry.box(result)
+        def _lu_ne(self, other):
+            result = not isinstance(other, IbLLMUncertain)
+            return self.ib_class.registry.box(result)
+        _reg_native(llm_uncertain_class, '__eq__', _lu_eq, unbox=False)
+        _reg_native(llm_uncertain_class, '__ne__', _lu_ne, unbox=False)
     else:
         # 安全回退（极端情况下 llm_uncertain 公理未注册）
         registry.register_llm_uncertain(IbLLMUncertain(none_class), token)

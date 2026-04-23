@@ -327,6 +327,10 @@ class IbString(IbObject):
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
         return self.value + other.to_native()
     
+    def __lt__(self, other: IbObject) -> bool: return self.value < other.to_native()
+    def __le__(self, other: IbObject) -> bool: return self.value <= other.to_native()
+    def __gt__(self, other: IbObject) -> bool: return self.value > other.to_native()
+    def __ge__(self, other: IbObject) -> bool: return self.value >= other.to_native()
     def __eq__(self, other: IbObject) -> bool: return self.value == other.to_native()
     def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 

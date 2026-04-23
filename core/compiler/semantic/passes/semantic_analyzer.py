@@ -1389,6 +1389,13 @@ class SemanticAnalyzer:
         inner_type = self.visit(node.expr)
         
         # 2. 访问过滤条件，它必须返回布尔值 (或可视为布尔值)
+        # BugFix: 若过滤条件是行为表达式（AI filter），必须将其绑定为 bool 类型上下文，
+        # 与 visit_IbIf / visit_IbWhile 中对测试条件的处理保持对称。
+        # 缺少此绑定会导致 execute_behavior_expression 拿不到 type_hint，
+        # 进而将 LLM 原始响应（如 "0"）包装为 IbString 而非 IbBool，
+        # 使得 is_truthy 判定始终为 True，过滤条件完全失效。
+        if isinstance(node.filter, ast.IbBehaviorExpr):
+            self.side_table.bind_type(node.filter, self._bool_desc)
         filter_type = self.visit(node.filter)
         
         # 3. 过滤后，表达式的类型保持不变

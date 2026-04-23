@@ -48,6 +48,7 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.TRUE, self.boolean, None, IbPrecedence.LOWEST)
         self.register(TokenType.FALSE, self.boolean, None, IbPrecedence.LOWEST)
         self.register(TokenType.NONE, self.none_expr, None, IbPrecedence.LOWEST)
+        self.register(TokenType.UNCERTAIN, self.uncertain_expr, None, IbPrecedence.LOWEST)
         
         # Grouping and Collections
         self.register(TokenType.LPAREN, self.grouping, self.call, IbPrecedence.CALL)
@@ -142,6 +143,11 @@ class ExpressionComponent(BaseComponent):
         token = self.stream.previous()
         # 使用标准 NONE Token，消除 Python None 直接引用
         return self._loc(ast.IbConstant(value=None), token)
+
+    def uncertain_expr(self) -> ast.IbExpr:
+        token = self.stream.previous()
+        # 使用内部哨兵字符串标记 Uncertain 字面量，序列化后可安全往返
+        return self._loc(ast.IbConstant(value="__IBCI_UNCERTAIN_LITERAL__"), token)
 
     def grouping(self) -> ast.IbExpr:
 
