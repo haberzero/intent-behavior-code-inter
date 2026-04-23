@@ -707,6 +707,22 @@ class SemanticAnalyzer:
             self._auto_return_types = old_auto_returns
             self.current_class = saved_class  # 恢复类上下文
             self.symbol_table = old_table
+
+        # [Pass 2 backfill] 将解析后的方法签名回填到类成员表的 MethodMemberSpec 中。
+        # 在 Pass 1（Collector）中，MethodMemberSpec 只记录方法名和占位类型，
+        # 返回类型和参数类型为默认值（"void"/"[]"）。
+        # Pass 2 结束后，sym.spec（FuncSpec）携带了正确签名，可以回填。
+        # 这使得 resolve_member('__call__') 能够返回正确的方法签名，
+        # 从而支持 fn 变量持有可调用类实例后的准确调用返回类型推断。
+        if saved_class and node.name in saved_class.members:
+            from core.kernel.spec.member import MethodMemberSpec as _MethodMemberSpec
+            m = saved_class.members[node.name]
+            if isinstance(m, _MethodMemberSpec) and isinstance(sym.spec, FuncSpec):
+                # 跳过 self（类方法的第一个参数）
+                user_params = param_types[1:] if saved_class else param_types
+                m.param_type_names = [p.name for p in user_params]
+                m.return_type_name = sym.spec.return_type_name
+
         return self._void_desc
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
@@ -905,8 +921,32 @@ class SemanticAnalyzer:
                                 target_type = self._behavior_desc
                             else:
                                 target_type = self._deferred_desc
+                        elif isinstance(val_type, ClassSpec):
+                            # ClassSpec 分两种情况：
+                            # (a) 类名引用（构造器）：fn f = Dog → 始终允许
+                            # (b) 类实例引用：fn f = dog_instance → 需要类定义了 __call__
+                            is_constructor_ref = (
+                                isinstance(node.value, ast.IbName) and
+                                self.symbol_table.resolve(node.value.id) is not None and
+                                self.symbol_table.resolve(node.value.id).kind == SymbolKind.CLASS
+                            )
+                            if is_constructor_ref:
+                                # fn f = Dog — f 持有构造器引用，始终有效
+                                target_type = val_type
+                            elif '__call__' in val_type.members:
+                                # fn f = callable_instance — 类定义了 __call__，有效
+                                target_type = val_type
+                            else:
+                                self.error(
+                                    f"'fn' requires a callable on the right-hand side. "
+                                    f"Type '{val_type.name}' does not define a '__call__' method. "
+                                    f"Add 'func __call__(self, ...)' to '{val_type.name}' "
+                                    f"to make its instances callable via 'fn'.",
+                                    node, code="SEM_003"
+                                )
+                                target_type = self.registry.resolve("callable") or self._any_desc
                         elif self.registry.is_callable(val_type):
-                            # 推导实际可调用类型
+                            # FuncSpec / deferred / behavior / bound_method 等
                             target_type = val_type
                         elif self.registry.is_dynamic(val_type):
                             # 右值是 any/auto：保守推导为 callable

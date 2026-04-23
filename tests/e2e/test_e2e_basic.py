@@ -277,6 +277,96 @@ else:
         lines = run_and_capture(code)
         assert "correct" in lines
 
+    def test_not_int_zero_is_true(self):
+        """not 0 returns true (zero is falsy)."""
+        code = """int x = 0
+bool r = not x
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() for l in lines)
+
+    def test_not_int_nonzero_is_false(self):
+        """not 42 returns false (nonzero is truthy)."""
+        code = """int x = 42
+bool r = not x
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("false" in l.lower() for l in lines)
+
+    def test_not_empty_str_is_true(self):
+        """not empty-string returns true."""
+        code = """str s = ""
+bool r = not s
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() for l in lines)
+
+    def test_not_nonempty_str_is_false(self):
+        """not non-empty string returns false."""
+        code = """str s = "hello"
+bool r = not s
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("false" in l.lower() for l in lines)
+
+    def test_not_empty_list_is_true(self):
+        """not [] returns true."""
+        code = """list items = []
+bool r = not items
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() for l in lines)
+
+    def test_not_nonempty_list_is_false(self):
+        """not [1,2,3] returns false."""
+        code = """list items = [1, 2, 3]
+bool r = not items
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("false" in l.lower() for l in lines)
+
+    def test_not_empty_dict_is_true(self):
+        """not {} returns true."""
+        code = """dict d = {}
+bool r = not d
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() for l in lines)
+
+    def test_not_nonempty_dict_is_false(self):
+        """not {"k": 1} returns false."""
+        code = """dict d = {"k": 1}
+bool r = not d
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("false" in l.lower() for l in lines)
+
+    def test_not_float_zero_is_true(self):
+        """not 0.0 returns true."""
+        code = """float f = 0.0
+bool r = not f
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("true" in l.lower() for l in lines)
+
+    def test_not_nonzero_float_is_false(self):
+        """not 3.14 returns false."""
+        code = """float f = 3.14
+bool r = not f
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert any("false" in l.lower() for l in lines)
+
 
 # ---------------------------------------------------------------------------
 # 9. Ternary operator tests

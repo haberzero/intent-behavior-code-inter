@@ -124,20 +124,18 @@ print((str)inner[1])    # 正常工作
 
 ---
 
-## 已知限制 #6：`dict` 类型接收 LLM 输出（等待 Bug #2 修复）
+## ✅ 已知限制 #6：`dict` 类型接收 LLM 输出（已修复，随 Bug #2 一并解决）
 
-由于 Bug #2，以下模式当前无法工作：
+`dict` 类型变量通过 `@~...~` 接收 LLM 输出现在**完全支持**：
 
 ```ibci
-dict result = @~ MOCK:DICT:{"key":"value"} ~   # 类型错误
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+dict d = @~ MOCK:DICT:{"key":"value"} ~   # ✅ 正常工作
 ```
 
-临时方案：以 `str` 类型接收，再通过 `json.parse()` 转换：
-```ibci
-import json
-str raw = @~ MOCK:DICT:{"key":"value"} ~
-dict result = json.parse(raw)
-```
+`dict` + LLM 输出已在 Bug #2 修复中同时解决。详见 Bug #2 条目。
 
 ---
 
@@ -146,6 +144,54 @@ dict result = json.parse(raw)
 与 Bug #1 相关：类字段初始化表达式中，只有字面量常量（`int`/`str`/`bool`）可靠工作。函数调用、构造器调用等动态表达式作为字段默认值均不可靠。
 
 **规避方案**：始终通过 `__init__` 构造函数进行动态字段初始化。
+
+---
+
+## 已知限制 #8：子类 auto-init 不含父类字段
+
+**严重级别**：低（符合 Python 语义，但与 C++/Java 使用者直觉不符）
+
+当子类没有显式 `__init__`，编译器会自动生成一个 `__init__`（auto-init），**仅接受当前类自身声明的字段**，不包含父类字段。
+
+**示例**：
+```ibci
+class Animal:
+    str name
+
+class Dog(Animal):
+    str breed        # Dog 的 auto-init 只接受 breed，不接受 name
+```
+
+构造 `Dog` 时只能传入 `breed`；父类字段 `name` 保持为 `None`（未初始化）：
+
+```ibci
+Dog d = Dog("Husky")    # 只设置 breed；d.name = None
+print(d.name)           # 输出 None
+```
+
+**规避方案**：在子类中显式定义 `__init__`，手动初始化父类字段：
+
+```ibci
+class Dog(Animal):
+    str breed
+
+    func __init__(self, str dog_name, str dog_breed):
+        self.name = dog_name    # 手动赋值父类字段
+        self.breed = dog_breed
+
+Dog d = Dog("Rex", "Husky")
+print(d.name)           # 输出 Rex
+print(d.breed)          # 输出 Husky
+```
+
+亦可在构造后手动赋值：
+
+```ibci
+Dog d = Dog("Husky")
+d.name = "Rex"
+```
+
+**根因**：auto-init 生成逻辑（`interpreter.py:_hydrate_user_classes`）仅遍历当前类 `body` 中声明的字段。父类字段通过 `default_fields` 继承，在实例化时被初始化为默认值或 `None`，但不加入构造函数参数。此设计与 Python 行为一致（子类不自动调用 `super().__init__`）。
 
 ---
 

@@ -140,6 +140,8 @@ class IntAxiom(
         if other_name is None:
             if op in ("-", "+", "unary-", "unary+", "~"):
                 return "int"
+            if op == "not":
+                return "bool"
             return None
         if op in ("+", "-", "*", "/", "//", "%", "&", "|", "^", "<<", ">>"):
             if other_name == "int":
@@ -219,6 +221,8 @@ class FloatAxiom(
         if other_name is None:
             if op in ("-", "+", "unary-", "unary+"):
                 return "float"
+            if op == "not":
+                return "bool"
             return None
         if op in ("+", "-", "*", "/", "//", "%"):
             if other_name in ("int", "float"):
@@ -385,6 +389,10 @@ class StrAxiom(
         }
 
     def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if other_name is None:
+            if op == "not":
+                return "bool"
+            return None
         if op == "+":
             if other_name == "str":
                 return "str"
@@ -458,6 +466,10 @@ class ListAxiom(
         return {"+": "__add__"}
 
     def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if other_name is None:
+            if op == "not":
+                return "bool"
+            return None
         if op == "+" and other_name in ("list", "any"):
             return "list"
         return None
@@ -510,7 +522,7 @@ class ListAxiom(
 
 class DictAxiom(
     BaseAxiom, IterCapability, SubscriptCapability,
-    ParserCapability, ConverterCapability,
+    OperatorCapability, ParserCapability, ConverterCapability,
     FromPromptCapability, IlmoutputHintCapability,
 ):
     @property
@@ -524,7 +536,7 @@ class DictAxiom(
     def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
     def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
     def get_call_capability(self): return None
-    def get_operator_capability(self): return None
+    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -542,11 +554,19 @@ class DictAxiom(
             "__setitem__": _m("__setitem__", params=["any", "any"],  ret="void"),
         }
 
+    def get_operators(self) -> Dict[str, str]:
+        return {"not": "__not__"}
+
     def get_element_type_name(self) -> str:
         return "any"
 
     def resolve_item_type_name(self, key_type_name: str) -> Optional[str]:
         return "any"
+
+    def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if op == "not" and other_name is None:
+            return "bool"
+        return None
 
     def can_convert_from(self, source_type_name: str) -> bool:
         return source_type_name == "dict"
@@ -584,7 +604,7 @@ class DictAxiom(
 
 class TupleAxiom(
     BaseAxiom, IterCapability, SubscriptCapability,
-    ParserCapability, ConverterCapability,
+    OperatorCapability, ParserCapability, ConverterCapability,
     FromPromptCapability, IlmoutputHintCapability,
 ):
     """
@@ -605,7 +625,10 @@ class TupleAxiom(
     def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
     def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
     def get_call_capability(self): return None
-    def get_operator_capability(self): return None
+    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
+
+    def get_operators(self) -> Dict[str, str]:
+        return {"not": "__not__"}
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -621,6 +644,11 @@ class TupleAxiom(
     def resolve_item_type_name(self, key_type_name: str) -> Optional[str]:
         if key_type_name == "int":
             return "any"
+        return None
+
+    def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if op == "not" and other_name is None:
+            return "bool"
         return None
 
     def can_convert_from(self, source_type_name: str) -> bool:
