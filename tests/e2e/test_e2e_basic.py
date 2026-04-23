@@ -487,6 +487,59 @@ class TestE2EInOperator:
 
 
 # ---------------------------------------------------------------------------
+# in/not in with generic (specialised) containers
+# ---------------------------------------------------------------------------
+
+class TestE2EInOperatorGeneric:
+    """Regression tests: 'in'/'not in' must work with generic-typed containers
+    (list[str], dict[str,int], etc.).  Before the fix these produced a spurious
+    SEM_003 because the semantic analyser compared spec.name (e.g. 'list[str]')
+    against the hard-coded base-name set ('list', 'dict', ...)."""
+
+    def test_list_str_in_true(self):
+        code = 'list[str] names = ["alice", "bob"]\nbool r = "alice" in names\nprint((str)r)\n'
+        assert "True" in run_and_capture(code) or "1" in run_and_capture(code)
+
+    def test_list_str_in_false(self):
+        code = 'list[str] names = ["alice", "bob"]\nbool r = "dave" in names\nprint((str)r)\n'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_list_str_not_in(self):
+        code = 'list[str] names = ["alice", "bob"]\nbool r = "dave" not in names\nprint((str)r)\n'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_list_int_in(self):
+        code = 'list[int] nums = [10, 20, 30]\nbool r = 20 in nums\nprint((str)r)\n'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_dict_str_int_in_true(self):
+        code = 'dict[str,int] d = {"a": 1, "b": 2}\nbool r = "a" in d\nprint((str)r)\n'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_dict_str_int_in_false(self):
+        code = 'dict[str,int] d = {"a": 1}\nbool r = "z" in d\nprint((str)r)\n'
+        lines = run_and_capture(code)
+        assert "False" in lines or "0" in lines
+
+    def test_dict_str_int_not_in(self):
+        code = 'dict[str,int] d = {"a": 1}\nbool r = "z" not in d\nprint((str)r)\n'
+        lines = run_and_capture(code)
+        assert "True" in lines or "1" in lines
+
+    def test_generic_list_in_if_branch(self):
+        code = 'list[str] items = ["apple", "banana"]\nif "apple" in items:\n    print("found")\n'
+        assert "found" in run_and_capture(code)
+
+    def test_generic_list_not_in_if_branch(self):
+        code = 'list[str] items = ["apple", "banana"]\nif "cherry" not in items:\n    print("missing")\n'
+        assert "missing" in run_and_capture(code)
+
+
+# ---------------------------------------------------------------------------
 # Exception constructable: raise Exception("msg") and e.message
 # ---------------------------------------------------------------------------
 

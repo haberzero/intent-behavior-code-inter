@@ -417,6 +417,88 @@ class TestAIMockSystem:
         assert len(ai_plugin._mock_state) == 0
         assert len(ai_plugin._mock_retry_counts) == 0
         assert len(ai_plugin._mock_seq_counters) == 0
+    def test_non_mock_with_embedded_mock_warns(self, ai_plugin):
+        """Prompt that contains MOCK: but not at position 0 emits UserWarning."""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = ai_plugin._handle_mock_response("some text\nMOCK:STR:hello\nmore text", "expr")
+        # Warning should be issued
+        assert any(issubclass(warning.category, UserWarning) for warning in w), \
+            "Expected UserWarning when MOCK: is embedded mid-prompt"
+        # The MOCK directive must NOT have been processed — falls back to generic mock
+        assert "[MOCK]" in result
+
+
+# ---------------------------------------------------------------------------
+# 6b. MOCK:REPAIR extended typed-fallback syntax
+# ---------------------------------------------------------------------------
+
+class TestAIMockRepairExtended:
+    """Unit tests for MOCK:REPAIR:<FALLBACK_DIRECTIVE> extended syntax."""
+
+    @pytest.fixture
+    def ai_plugin(self):
+        from ibci_modules.ibci_ai.core import AIPlugin
+        p = AIPlugin()
+        p.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+        return p
+
+    def test_repair_str_first_call_returns_repair_sentinel(self, ai_plugin):
+        """First call to MOCK:REPAIR:STR:hello returns __MOCK_REPAIR__ (uncertain)."""
+        result = ai_plugin._handle_mock_response("MOCK:REPAIR:STR:hello", "expr")
+        assert result == "__MOCK_REPAIR__"
+
+    def test_repair_str_second_call_returns_string(self, ai_plugin):
+        """Second call to MOCK:REPAIR:STR:hello returns the repaired string."""
+        ai_plugin._handle_mock_response("MOCK:REPAIR:STR:hello", "expr")
+        result = ai_plugin._handle_mock_response("MOCK:REPAIR:STR:hello", "expr")
+        assert result == "hello"
+
+    def test_repair_int_second_call_returns_int_string(self, ai_plugin):
+        """MOCK:REPAIR:INT:42 → second call returns '42'."""
+        ai_plugin._handle_mock_response("MOCK:REPAIR:INT:42", "expr")
+        result = ai_plugin._handle_mock_response("MOCK:REPAIR:INT:42", "expr")
+        assert result == "42"
+
+    def test_repair_bool_true_second_call(self, ai_plugin):
+        """MOCK:REPAIR:BOOL:TRUE → second call returns '1'."""
+        ai_plugin._handle_mock_response("MOCK:REPAIR:BOOL:TRUE", "expr")
+        result = ai_plugin._handle_mock_response("MOCK:REPAIR:BOOL:TRUE", "expr")
+        assert result == "1"
+
+    def test_repair_bool_false_second_call(self, ai_plugin):
+        """MOCK:REPAIR:BOOL:FALSE → second call returns '0'."""
+        ai_plugin._handle_mock_response("MOCK:REPAIR:BOOL:FALSE", "expr")
+        result = ai_plugin._handle_mock_response("MOCK:REPAIR:BOOL:FALSE", "expr")
+        assert result == "0"
+
+    def test_repair_float_second_call(self, ai_plugin):
+        """MOCK:REPAIR:FLOAT:3.14 → second call returns '3.14'."""
+        ai_plugin._handle_mock_response("MOCK:REPAIR:FLOAT:3.14", "expr")
+        result = ai_plugin._handle_mock_response("MOCK:REPAIR:FLOAT:3.14", "expr")
+        assert result == "3.14"
+
+    def test_repair_extended_and_bare_counters_are_independent(self, ai_plugin):
+        """MOCK:REPAIR:STR:x and bare MOCK:REPAIR key use separate counters."""
+        # Extended form: first call → REPAIR, second → "x"
+        ai_plugin._handle_mock_response("MOCK:REPAIR:STR:x", "expr")
+        ext_result = ai_plugin._handle_mock_response("MOCK:REPAIR:STR:x", "expr")
+        assert ext_result == "x"
+
+        # Legacy bare form: first call → REPAIR, second → "1"
+        ai_plugin._handle_mock_response("MOCK:REPAIR bare_key", "expr")
+        bare_result = ai_plugin._handle_mock_response("MOCK:REPAIR bare_key", "expr")
+        assert bare_result == "1"
+
+    def test_repair_extended_repeatable_after_reset(self, ai_plugin):
+        """After reset_mock_state(), the repair cycle restarts."""
+        ai_plugin._handle_mock_response("MOCK:REPAIR:STR:y", "expr")
+        ai_plugin._handle_mock_response("MOCK:REPAIR:STR:y", "expr")  # consumed
+        ai_plugin.reset_mock_state()
+        # After reset: first call should be uncertain again
+        result_after_reset = ai_plugin._handle_mock_response("MOCK:REPAIR:STR:y", "expr")
+        assert result_after_reset == "__MOCK_REPAIR__"
 
 
 # ---------------------------------------------------------------------------
