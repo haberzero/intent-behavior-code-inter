@@ -841,6 +841,16 @@ class SemanticAnalyzer:
                 # 处理属性赋值 (obj.x = 1) 或 下标赋值 (list[0] = 1)
                 # 递归调用 visit 来决议目标位置的类型
                 target_type = self.visit(target_node)
+                # Bug 修复：行为表达式赋值给字段/下标时，val_type 是 behavior（来自
+                # visit_IbBehaviorExpr 的返回值），与字段的具体类型不兼容，会产生误报
+                # SEM_003。正确处理：绑定字段的期望类型给行为表达式（供 LLM executor
+                # 的 _get_expected_type_hint 使用），跳过 behavior→target 的类型兼容检查。
+                deferred_mode = getattr(node, 'deferred_mode', None)
+                if isinstance(node.value, ast.IbBehaviorExpr) and not deferred_mode:
+                    if target_type and not self.registry.is_dynamic(target_type):
+                        self.side_table.bind_type(node.value, target_type)
+                    self.side_table.set_deferred(node.value, False)
+                    continue
                 # 检查类型兼容性
                 if not self.registry.is_assignable(val_type, target_type):
                     hint = self.registry.get_diff_hint(val_type, target_type)
@@ -924,7 +934,10 @@ class SemanticAnalyzer:
                             target_type = self._any_desc
                         else:
                             # `auto`：从首次赋值的实际类型推断并锁定 spec。
-                            target_type = val_type
+                            # 特殊情况：即时行为表达式（@~...~，非延迟模式）的 LLM 输出
+                            # 天然是字符串，不应推断为 behavior spec（behavior 是延迟对象的
+                            # 类型标记，而非 LLM 输出类型）。
+                            target_type = self._str_desc if self.registry.is_behavior(val_type) else val_type
                     elif deferred_mode:
                         # 延迟模式：变量持有延迟对象；声明类型用作 LLM 输出期望类型。
                         # 创建携带 value_type_name 的具体 Spec，使调用处能推断返回类型：
@@ -1100,7 +1113,7 @@ class SemanticAnalyzer:
             # 语义：等同于 while，要求表达式具有“布尔评估能力”
             # 贯彻“一切皆对象”协议：询问类型是否支持布尔决议
             # 即使是 behavior 类型，在 is_truthy 协议下也是合法的
-            if not self.registry.is_dynamic(iter_type) and not self.registry.is_behavior(iter_type) and iter_type.name != "bool":
+            if not self.registry.is_dynamic(iter_type) and not self.registry.is_behavior(iter_type) and iter_type.get_base_name() != "bool":
                 # 未来可引入 BooleanCapability 接口进行更严谨的校验（见 PENDING_TASKS.md §3.x）
                 pass
         else:
@@ -1357,12 +1370,17 @@ class SemanticAnalyzer:
             right_type = self.visit(comparator)
             # 成员检测运算符：要求右侧为可迭代容器类型（str/list/dict/any）
             if op in ("in", "not in"):
-                if right_type and right_type.name not in ("str", "list", "dict", "tuple", "any"):
-                    self.error(
-                        f"Operator '{op}' requires an iterable container on the right-hand side, "
-                        f"but got '{right_type.name}'",
-                        node, code="SEM_003",
-                    )
+                # Use get_base_name() so generic containers (list[int], dict[str,int]) are
+                # correctly classified — specialised specs have name="list[int]" but
+                # get_base_name()="list".  Dynamic types (any/auto) are always allowed.
+                if right_type and not self.registry.is_dynamic(right_type):
+                    right_base = right_type.get_base_name()
+                    if right_base not in ("str", "list", "dict", "tuple"):
+                        self.error(
+                            f"Operator '{op}' requires an iterable container on the right-hand side, "
+                            f"but got '{right_type.name}'",
+                            node, code="SEM_003",
+                        )
             else:
                 res = self.registry.resolve_op(left_type, op, right_type)
                 if not res:

@@ -421,3 +421,59 @@ class TestDefaultRegistry:
         int_s = reg.resolve("int")
         cap = reg.get_parser_cap(int_s)
         assert cap is not None
+
+
+# ---------------------------------------------------------------------------
+# get_base_spec() helper — type-system hygiene (Problem 8 Method A)
+# ---------------------------------------------------------------------------
+
+class TestGetBaseSpec:
+    """
+    Unit tests for SpecRegistry.get_base_spec(spec).
+    This helper is the canonical way to resolve a generic/specialised spec
+    back to its base spec for capability lookups and semantic classification.
+    """
+
+    @pytest.fixture
+    def reg(self):
+        return create_default_registry()
+
+    def test_primitive_returns_same_spec(self, reg):
+        """get_base_spec on a primitive (no generics) returns the same spec object."""
+        int_s = reg.resolve("int")
+        result = reg.get_base_spec(int_s)
+        assert result is int_s
+
+    def test_none_returns_none(self, reg):
+        """get_base_spec(None) must return None, not raise."""
+        assert reg.get_base_spec(None) is None
+
+    def test_generic_list_resolves_to_list(self, reg):
+        """get_base_spec(list[int]) must return the base 'list' spec."""
+        list_int = reg.factory.create_list("int")
+        reg.register(list_int)
+        base = reg.get_base_spec(list_int)
+        assert base is not None
+        assert base.name == "list"
+
+    def test_generic_dict_resolves_to_dict(self, reg):
+        """get_base_spec(dict[str,int]) must return the base 'dict' spec."""
+        dict_spec = reg.factory.create_dict("str", "int")
+        reg.register(dict_spec)
+        base = reg.get_base_spec(dict_spec)
+        assert base is not None
+        assert base.name == "dict"
+
+    def test_base_name_convention(self, reg):
+        """get_base_spec respects get_base_name() — the result's name == get_base_name() of the input."""
+        list_str = reg.factory.create_list("str")
+        reg.register(list_str)
+        base = reg.get_base_spec(list_str)
+        assert base.name == list_str.get_base_name()
+
+    def test_already_base_spec_is_identity(self, reg):
+        """For a spec that is already a base (name == get_base_name()), result is the same object."""
+        str_s = reg.resolve("str")
+        assert str_s.name == str_s.get_base_name()
+        result = reg.get_base_spec(str_s)
+        assert result is str_s

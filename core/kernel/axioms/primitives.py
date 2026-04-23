@@ -337,7 +337,7 @@ class BoolAxiom(
 
 class StrAxiom(
     BaseAxiom, OperatorCapability, IterCapability, SubscriptCapability,
-    ParserCapability, FromPromptCapability, IlmoutputHintCapability,
+    ParserCapability, FromPromptCapability,
 ):
     @property
     def name(self) -> str:
@@ -348,7 +348,7 @@ class StrAxiom(
     def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
     def get_parser_capability(self) -> Optional[ParserCapability]: return self
     def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
+    def get_llmoutput_hint_capability(self): return None  # str: LLM output is naturally str, no extra hint needed
     def get_call_capability(self): return None
     def get_converter_capability(self): return None
     def can_return_from_isolated(self) -> bool: return True
@@ -409,9 +409,6 @@ class StrAxiom(
 
     def from_prompt(self, raw_response: str, spec: Optional["IbSpec"] = None) -> Tuple[bool, Any]:
         return (True, self.parse_value(raw_response))
-
-    def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
-        return "请直接返回文本内容，不要使用引号或代码块包裹"
 
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "str"

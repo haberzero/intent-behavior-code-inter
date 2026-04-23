@@ -412,8 +412,96 @@ auto lambda f = @~ say hello ~
 
 
 # ---------------------------------------------------------------------------
-# 9. fn keyword — callable type inference
+# 10. auto + immediate behavior expression type inference
 # ---------------------------------------------------------------------------
+
+class TestAutoImmediateBehaviorInference:
+    """
+    Regression tests for: auto r = @~...~ should infer 'str' (the natural LLM
+    output type), NOT 'behavior' (which is the deferred-object sentinel).
+    See Problem 2a fix.
+    """
+
+    def test_auto_immediate_behavior_infers_str_at_runtime(self):
+        """auto r = @~MOCK:STR:hello~ ; r should hold the string 'hello'."""
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+auto r = @~MOCK:STR:hello~
+print(r)
+"""
+        lines = run_and_capture(code)
+        assert "hello" in lines
+
+    def test_auto_immediate_behavior_can_concat(self):
+        """auto r = @~...~ ; r can be used as string (concat, etc.)."""
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+auto r = @~MOCK:STR:world~
+str greeting = "hello " + r
+print(greeting)
+"""
+        lines = run_and_capture(code)
+        assert "hello world" in lines
+
+    def test_auto_immediate_behavior_print_is_str_not_behavior_repr(self):
+        """auto r = @~MOCK:INT:42~ ; print must not show 'behavior' or 'deferred'."""
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+auto r = @~MOCK:INT:42~
+print(r)
+"""
+        lines = run_and_capture(code)
+        # Must contain the actual value, not a behavior/deferred repr
+        assert any(ln.strip() == "42" for ln in lines), f"Expected '42' in {lines}"
+        assert all("behavior" not in ln.lower() and "deferred" not in ln.lower() for ln in lines)
+
+
+# ---------------------------------------------------------------------------
+# 11. Behavior expression assignment to object fields
+# ---------------------------------------------------------------------------
+
+class TestBehaviorExprFieldAssignment:
+    """
+    Regression tests for: assigning @~...~ to a class field must not produce
+    a spurious SEM_003 type-mismatch error and must execute the LLM call and
+    store the result in the field.  See Problem 3 fix.
+    """
+
+    def test_behavior_to_str_field_no_error(self):
+        """b.content = @~MOCK:STR:hello~ must compile without SEM_003."""
+        import os
+        from core.engine import IBCIEngine
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+class Box:
+    str content
+
+Box b = Box("")
+b.content = @~MOCK:STR:hello~
+print(b.content)
+"""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        lines = []
+        engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
+        assert "hello" in lines
+
+    def test_behavior_to_int_field_no_error(self):
+        """b.count = @~MOCK:INT:7~ must compile without SEM_003 and set the value."""
+        import os
+        from core.engine import IBCIEngine
+        code = """import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+class Counter:
+    int count
+
+Counter c = Counter(0)
+c.count = @~MOCK:INT:7~
+print((str)c.count)
+"""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        lines = []
+        engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
+        assert "7" in lines
 
 class TestFnKeyword:
     """Tests for the 'fn' keyword: callable type inference."""

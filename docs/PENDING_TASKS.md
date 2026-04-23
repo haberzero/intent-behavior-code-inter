@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-20（Bug 修复：IbBool(False) 假值判断、duplicate `_stmt_contains_behavior`、`list[str]`/`dict[K,V]` 泛型专化；610 个测试通过）
+> **最后更新**：2026-04-23（类型系统卫生修复：泛型 in/not in、auto+@~...~ 默认 str、行为表达式字段赋值 bug、MOCK:REPAIR 增强、类型系统长期改进方向记录）
 
 ---
 
@@ -388,6 +388,75 @@ func process():
 
 ### 12.4 ReceiveMode 枚举演进 [VISION]
 **当前**：`deferred_mode: str` 侧表（`'lambda'`/`'snapshot'`/`None`）。**目标**：迁移至 `ReceiveMode(IMMEDIATE / LAMBDA / SNAPSHOT)` 枚举，替代字符串，支持更严格的类型约束。
+
+---
+
+*本文档记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。*
+
+---
+
+## 十三、类型系统长期演进（TypeRef 重构）
+
+### 13.1 类型系统现状分析 [VISION]
+
+**背景**：当前 `IbSpec.name` 字段同时承担了两个职责：
+1. **注册表键**（唯一标识，含泛型参数），如 `"list[int]"`、`"dict[str,int]"`
+2. **语义分类标签**（类型族归属），如 `"list"`、`"dict"`
+
+泛型出现后这两个职责产生冲突：`"list[int]".name == "list[int]"` 而非 `"list"`，导致所有直接比较 `.name` 的语义检查对泛型失效（典型案例：`in`/`not in` 运算符的容器类型检查）。
+
+**近期补丁方案（已实施，方案 A）**：
+- 所有语义分类检查统一使用 `spec.get_base_name()` 而非 `spec.name`
+- 新增 `SpecRegistry.get_base_spec(spec)` 工具方法，将泛型专化 spec 解析回基础 spec
+- 约定：`.name` 仅用于 registry key 和 error message；`.get_base_name()` 用于能力查询和语义分类；`isinstance(spec, ListSpec/DictSpec/...)` 用于结构性能力判断
+
+**需要被修复的散布调用点**（已知）：
+- `visit_IbCompare`：`.name not in ("str","list","dict","tuple","any")` → 已修复 → `get_base_name()`
+- `visit_IbFor`：`iter_type.name != "bool"` → 已修复 → `get_base_name()`
+- 其他 `.name` 比较：仅用于 error message 显示，可保留
+
+### 13.2 长期目标：引入 TypeRef 统一类型引用 [VISION]
+
+**设计目标**：实现以下所有"类型内容"的逻辑正交性和设计统一性：
+
+| 类型维度 | 当前表示 | TypeRef 目标表示 |
+|---------|---------|----------------|
+| 变量本身的类型 | `sym.spec: IbSpec` | `sym.type_ref: TypeRef` |
+| 函数返回值类型 | `FuncSpec.return_type_name: str` | `FuncSpec.return_type: TypeRef` |
+| 泛型容器自身类型 | `ListSpec.name = "list[int]"` | `TypeRef(base="list", args=[TypeRef("int")])` |
+| 泛型容器元素类型 | `ListSpec.element_type_name: str` | `TypeRef.args[0]` |
+| 泛型容器嵌套类型 | 无法表达 | `TypeRef(args=[TypeRef(args=[...])])` |
+| 泛型下标成员类型 | `resolve_subscript()` 返回字符串 | `TypeRef.args[0]` |
+| 类成员类型 | `MemberSpec.type_name: str` | `MemberSpec.type_ref: TypeRef` |
+| 迭代器元素类型 | `resolve_iter_element()` 返回字符串 | `TypeRef.args[0]` |
+| 表达式类型 | side_table `node_to_type: IbSpec` | side_table `node_to_type: TypeRef` |
+
+**建议的 TypeRef 设计**：
+```python
+@dataclass(frozen=True)
+class TypeRef:
+    base_name: str                          # "list", "dict", "int"
+    args: Tuple["TypeRef", ...] = ()        # 泛型参数
+    module: Optional[str] = None
+    nullable: bool = False
+
+    @property
+    def canonical_name(self) -> str:        # 注册表键，兼容 IbSpec.name
+        if self.args:
+            return f"{self.base_name}[{','.join(a.canonical_name for a in self.args)}]"
+        return self.base_name
+
+    @property
+    def family_name(self) -> str:           # 语义分类，等价于 get_base_name()
+        return self.base_name
+```
+
+**实施前提**：
+- 需与 VM/CPS 调度循环重构一并规划（架构层二）
+- 需要修改所有 spec 字段（`FuncSpec`, `ListSpec`, `DictSpec`, `MemberSpec` 等）和序列化层
+- 成本极高，应在下一代架构升级时引入，不宜打补丁式渐进
+
+**当前状态**：方案 A（`get_base_name()` + `get_base_spec()`）已落地，为 TypeRef 重构保留接口兼容性。TypeRef 本体在 VM 阶段一并处理。
 
 ---
 
