@@ -1659,29 +1659,6 @@ class SemanticAnalyzer:
             return self._any_desc
             
         return res
-        if not call_trait:
-            self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
-            return self._any_desc
-            
-        # 2. 贯彻“一切皆对象”：询问类型对象调用后的返回结果
-        res = self.registry.resolve_return(func_type, arg_types)
-        
-        if not res:
-            # 通过 Trait 提取签名信息进行诊断
-            if call_trait and hasattr(call_trait, 'param_types'):
-                param_types = call_trait.param_types
-                if len(arg_types) != len(param_types):
-                    self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")
-                else:
-                    for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
-                        if not self.registry.is_assignable(actual, expected):
-                            hint = self.registry.get_diff_hint(actual, expected)
-                            self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_003", hint=hint)
-            else:
-                self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
-            return self._any_desc
-            
-        return res
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> IbSpec:
         self.in_behavior_expr = True
