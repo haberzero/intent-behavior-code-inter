@@ -326,7 +326,19 @@ class IbString(IbObject):
         if other.ib_class.name != "str":
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
         return self.value + other.to_native()
-    
+
+    def _require_str_other(self, op: str, other: IbObject) -> None:
+        if other.ib_class.name != "str":
+            raise InterpreterError(f"TypeError: Cannot compare 'str' and '{other.ib_class.name}' with '{op}'")
+
+    def __lt__(self, other: IbObject) -> bool:
+        self._require_str_other("<", other); return self.value < other.to_native()
+    def __le__(self, other: IbObject) -> bool:
+        self._require_str_other("<=", other); return self.value <= other.to_native()
+    def __gt__(self, other: IbObject) -> bool:
+        self._require_str_other(">", other); return self.value > other.to_native()
+    def __ge__(self, other: IbObject) -> bool:
+        self._require_str_other(">=", other); return self.value >= other.to_native()
     def __eq__(self, other: IbObject) -> bool: return self.value == other.to_native()
     def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 

@@ -1,5 +1,5 @@
 from typing import List, Any
-from core.runtime.objects.kernel import IbObject, IbNativeFunction
+from core.runtime.objects.kernel import IbObject, IbNativeFunction, IbLLMUncertain
 from core.kernel.registry import KernelRegistry
 
 def register_collection(manager: Any, execution_context: Any, service_context: Any):
@@ -19,5 +19,10 @@ def register_collection(manager: Any, execution_context: Any, service_context: A
         native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
         return manager.registry.box(list(range(*native_args)))
 
+    def _is_uncertain(obj: IbObject):
+        """全局 is_uncertain(v) 函数：检测值是否为 LLM 不确定结果（Uncertain 单例）。"""
+        return manager.registry.box(isinstance(obj, IbLLMUncertain))
+
     manager.register('len', _len, unbox=False)
     manager.register('range', _range, unbox=False)
+    manager.register('is_uncertain', _is_uncertain, unbox=False)

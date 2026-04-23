@@ -831,7 +831,7 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
 # LLMUncertain                                                        #
 # ------------------------------------------------------------------ #
 
-class LLMUncertainAxiom(BaseAxiom, ConverterCapability):
+class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
     """
     公理：llm_uncertain 类型。
 
@@ -840,7 +840,8 @@ class LLMUncertainAxiom(BaseAxiom, ConverterCapability):
     - 布尔上下文中为假（is_truthy → False）。
     - 可以赋值给任何类型的变量（is_compatible 宽松策略）。
     - __to_prompt__ 返回 "uncertain"；cast_to str 返回 "uncertain"。
-    - 不抛出异常，不进入异常体系——用户应通过 if/while 逻辑主动检测。
+    - 不抛出异常，不进入异常体系——用户应通过 is_uncertain() 或 if/while 逻辑主动检测。
+    - 支持 == 和 != 运算符（与 Uncertain 字面量比较时特别有用）。
     """
 
     @property
@@ -851,13 +852,23 @@ class LLMUncertainAxiom(BaseAxiom, ConverterCapability):
     def get_call_capability(self): return None
     def get_iter_capability(self): return None
     def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
+    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
+
+    def get_operators(self) -> Dict[str, str]:
+        return {"==": "__eq__", "!=": "__ne__"}
+
+    def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
+        if op in ("==", "!="):
+            return "bool"
+        return None
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "__to_prompt__": _m("__to_prompt__", ret="str"),
             "to_bool":       _m("to_bool",       ret="bool"),
             "cast_to":       _m("cast_to", params=["any"], ret="any"),
+            "__eq__":        _m("__eq__",  params=["any"], ret="bool"),
+            "__ne__":        _m("__ne__",  params=["any"], ret="bool"),
         }
 
     def can_convert_from(self, source_type_name: str) -> bool:

@@ -60,6 +60,7 @@ class TokenType(Enum):
     TRUE = auto()
     FALSE = auto()
     NONE = auto()
+    UNCERTAIN = auto()
 
     # 运算符
     ASSIGN = auto()
