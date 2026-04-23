@@ -147,9 +147,9 @@ class IbObject:
     # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':
         """逻辑非运算协议"""
-        # 使用 to_bool 判定并取反，返回 bool 类型
-        is_true = self.ib_class.registry.is_truthy(self)
-        return self.ib_class.registry.box(False if is_true else True)
+        # 使用 vtable to_bool 判定并取反，返回 bool 类型
+        bool_val = self.receive('to_bool', []).to_native()
+        return self.ib_class.registry.box(False if bool_val else True)
 
     def serialize_for_debug(self) -> Mapping[str, Any]:
         """
@@ -432,17 +432,10 @@ class IbClass(IbObject):
         3. 其他 -> 正常消息处理 (查找静态方法等)
         """
         if message == "__call__":
-            # 优先从自身的 methods 字典中查找 __call__
-            # 注意：类作为对象时，其方法存在 self.methods 中
-            if "__call__" in self.methods:
-                method = self.methods["__call__"]
-                # 绑定到类自身进行调用 (如果是 NativeFunction 会自动根据 is_method 注入 receiver)
-                return IbBoundMethod(self, method).receive("__call__", args)
-            
-            # 实例化时传入执行上下文以支持复杂字段初始化
-            # 通过 Registry 正式接口获取执行上下文
+            # 类作为构造器调用时，始终使用 instantiate 创建新实例。
+            # 用户定义的 __call__ 是实例方法（使实例可调用），不覆盖构造器。
+            # 实例的 __call__ 通过 IbObject.receive 中的 vtable 查找分发。
             context = self.registry.get_execution_context()
-            
             return self.instantiate(args, context=context)
         
         if message == "__getattr__" and len(args) > 0:

@@ -1622,8 +1622,43 @@ class SemanticAnalyzer:
             if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict', 'Exception'):
                 return func_type
         
+        # 0b. 变量持有可调用类实例的特殊处理：
+        # 当 fn f = instance_with_call 时，f 的类型是 ClassSpec（如 Adder）。
+        # 调用 f(args) 时应通过 __call__ 方法推断返回类型，而非构造器语义（返回 ClassSpec 自身）。
+        # 仅在 node.func 是变量引用（非类名引用）且该变量类型是带 __call__ 的 ClassSpec 时生效。
+        if isinstance(func_type, ClassSpec) and isinstance(node.func, ast.IbName):
+            sym = self.symbol_table.resolve(node.func.id)
+            if sym and not sym.is_type and '__call__' in func_type.members:
+                from core.kernel.spec import FuncSpec as _FuncSpec
+                call_spec = self.registry.resolve_member(func_type, '__call__')
+                if call_spec and isinstance(call_spec, _FuncSpec):
+                    return self.registry.resolve(call_spec.return_type_name) or self._any_desc
+        
         # 1. 检查是否可调用 (使用 Trait 契约)
         call_trait = self.registry.get_call_cap(func_type)
+        if not call_trait:
+            self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
+            return self._any_desc
+            
+        # 2. 贯彻"一切皆对象"：询问类型对象调用后的返回结果
+        res = self.registry.resolve_return(func_type, arg_types)
+        
+        if not res:
+            # 通过 Trait 提取签名信息进行诊断
+            if call_trait and hasattr(call_trait, 'param_types'):
+                param_types = call_trait.param_types
+                if len(arg_types) != len(param_types):
+                    self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")
+                else:
+                    for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
+                        if not self.registry.is_assignable(actual, expected):
+                            hint = self.registry.get_diff_hint(actual, expected)
+                            self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_003", hint=hint)
+            else:
+                self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
+            return self._any_desc
+            
+        return res
         if not call_trait:
             self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             return self._any_desc
