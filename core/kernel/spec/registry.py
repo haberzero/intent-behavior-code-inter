@@ -437,6 +437,30 @@ class SpecRegistry:
     # Type-inference helpers                                     #
     # ---------------------------------------------------------- #
 
+    def get_base_spec(self, spec: Optional["IbSpec"]) -> Optional["IbSpec"]:
+        """
+        Return the unspecialised base spec for a generic type.
+
+        For specialised specs (e.g. ``list[int]``, ``dict[str,int]``) the name
+        encodes the type arguments, but the axiom and capability lookup is always
+        keyed on the base name (``list``, ``dict``).  Use this helper whenever
+        you need to query capabilities or perform semantic classification on a
+        type and want to tolerate generic specialisations transparently.
+
+        Examples::
+
+            get_base_spec(list[int])  → list spec
+            get_base_spec(dict[str,int]) → dict spec
+            get_base_spec(int)        → int spec  (already base)
+            get_base_spec(None)       → None
+        """
+        if spec is None:
+            return None
+        base_name = spec.get_base_name()
+        if base_name != spec.name:
+            return self.resolve(base_name) or spec
+        return spec
+
     def resolve_return(
         self,
         spec: IbSpec,
