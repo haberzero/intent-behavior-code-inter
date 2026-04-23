@@ -100,7 +100,7 @@ class Bootstrapper:
         # 逻辑非协议 (Active Defense)
         def _default_not(self):
             bool_val = self.receive('to_bool', []).to_native()
-            return self.ib_class.registry.box(0 if bool_val else 1)
+            return self.ib_class.registry.box(False if bool_val else True)
             
         self.ObjectClass.register_method('__not__', IbNativeFunction(_default_not, is_method=True, ib_class=self.ObjectClass))
 

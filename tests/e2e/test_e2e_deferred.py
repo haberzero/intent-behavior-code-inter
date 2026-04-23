@@ -555,3 +555,58 @@ print((str)f())
             codes = [d.code for d in e.diagnostics]
             assert "SEM_003" in codes, f"Expected SEM_003 but got: {codes}"
         assert raised, "Expected CompilerError for 'fn f = 42' (non-callable RHS)"
+
+    def test_fn_holds_callable_class_instance(self):
+        """fn f = instance where class defines __call__ should work."""
+        code = """class Adder:
+    int base
+
+    func __init__(self, int b):
+        self.base = b
+
+    func __call__(self, int x) -> int:
+        return self.base + x
+
+Adder adder = Adder(10)
+fn my_fn = adder
+int result = my_fn(5)
+print((str)result)
+"""
+        lines = run_and_capture(code)
+        assert "15" in lines
+
+    def test_fn_holds_class_constructor(self):
+        """fn f = ClassName (constructor ref) should always be allowed."""
+        code = """class Point:
+    int x
+    int y
+
+fn ctor = Point
+Point p = ctor(3, 4)
+print((str)p.x)
+print((str)p.y)
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
+        assert "4" in lines
+
+    def test_fn_compile_error_instance_without_call(self):
+        """fn f = instance of class that lacks __call__ should raise SEM_003."""
+        from core.engine import IBCIEngine
+        from core.kernel.issue import CompilerError
+        import os
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        code = """class Plain:
+    str name
+
+Plain p = Plain("hi")
+fn f = p
+"""
+        raised = False
+        try:
+            engine.compile_string(code, silent=True)
+        except CompilerError as e:
+            raised = True
+            codes = [d.code for d in e.diagnostics]
+            assert "SEM_003" in codes, f"Expected SEM_003 but got: {codes}"
+        assert raised, "Expected CompilerError: Plain has no __call__"

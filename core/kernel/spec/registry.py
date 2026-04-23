@@ -520,6 +520,9 @@ class SpecRegistry:
         # User-defined class types support == and != by identity
         if isinstance(spec, ClassSpec) and op in ("==", "!="):
             return self.resolve("bool")
+        # All user-defined class instances support 'not' via IbObject.__not__ base implementation
+        if isinstance(spec, ClassSpec) and op == "not" and other is None:
+            return self.resolve("bool")
         return None
 
     def resolve_iter_element(self, spec: IbSpec) -> Optional[IbSpec]:
