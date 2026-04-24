@@ -578,7 +578,8 @@ class SemanticAnalyzer:
         if self.current_class:
             param_types.insert(0, self.current_class)
             
-        ret_type = self._resolve_type(node.returns)
+        # 没有返回类型标注时默认 auto（编译期推断），而非 void
+        ret_type = self._resolve_type(node.returns) if node.returns else self._auto_desc
         
         # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
         call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
@@ -801,6 +802,16 @@ class SemanticAnalyzer:
 
     def visit_IbReturn(self, node: ast.IbReturn):
         if node.value:
+            # 禁止 `return @~...~`：行为表达式的目标类型由左值驱动，
+            # 直接出现在 return 处会导致输出约束不明确。
+            # 用户应先赋值给有类型的局部变量，再 return 该变量。
+            if isinstance(node.value, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
+                self.error(
+                    "Cannot use a behavior expression directly in a return statement. "
+                    "Assign it to a typed local variable first, then return that variable.",
+                    node, code="SEM_003",
+                )
+                return self._void_desc
             ret_type = self.visit(node.value)
             if ret_type is None:
                 self.error(f"Invalid return type: got None (void or unknown)", node, code="SEM_003")

@@ -327,6 +327,13 @@ class IbString(IbObject):
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
         return self.value + other.to_native()
 
+    def __mul__(self, other: IbObject) -> Any:
+        """字符串重复: str * int"""
+        n = other.to_native() if hasattr(other, 'to_native') else other
+        if not isinstance(n, int):
+            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
+        return self.value * n
+
     def _require_str_other(self, op: str, other: IbObject) -> None:
         if other.ib_class.name != "str":
             raise InterpreterError(f"TypeError: Cannot compare 'str' and '{other.ib_class.name}' with '{op}'")
@@ -483,6 +490,13 @@ class IbList(IbObject):
         if not isinstance(other, IbList):
             raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list")
         return self.elements + other.elements
+
+    def __mul__(self, other: IbObject) -> Any:
+        """列表重复: list * int"""
+        n = other.to_native() if hasattr(other, 'to_native') else other
+        if not isinstance(n, int):
+            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
+        return self.elements * n
 
 @register_ib_type("tuple")
 class IbTuple(IbObject):

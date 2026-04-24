@@ -172,6 +172,20 @@ int result = @~ 1+1等于几？只答数字 ~
 > - 原用途 `int result = (int) @~...~` → 改为 `int result = @~...~`（LHS 类型自动成为类型约束上下文）
 > - `(int) expr`（对非行为表达式的类型强制转换）→ **保留**，不受影响
 
+> **禁止写法**：`return @~ ... ~` 不允许，会产生编译错误 `SEM_003`。
+> 原因：行为表达式的输出类型和提示词约束由左值类型驱动，直接出现在 `return` 处时类型上下文不明确。
+> 必须先赋值给有类型的局部变量，再 `return` 该变量：
+> ```ibci
+> # ❌ 不允许
+> func get_reply() -> str:
+>     return @~ 给我一句话 ~
+> 
+> # ✅ 正确
+> func get_reply() -> str:
+>     str reply = @~ 给我一句话 ~
+>     return reply
+> ```
+
 ### 3.1.3 输出解析：`__from_prompt__`
 
 LLM 返回后，IBC-Inter 通过 `__from_prompt__` 方法将原始文本解析为目标类型。
