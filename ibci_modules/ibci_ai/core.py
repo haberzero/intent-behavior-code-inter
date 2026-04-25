@@ -526,6 +526,8 @@ class AIPlugin(IbStatefulPlugin):
                     # Returns values in sequence per call, keyed by 'key'.
                     # Special sentinel values: FAIL → ambiguous (triggers llmexcept),
                     # TRUE → "1", FALSE → "0". Repeats last value when exhausted.
+                    # NOTE: bracket format [v1,v2,...] is REQUIRED; bare comma-separated
+                    # values are rejected to avoid ambiguous key/value boundary detection.
                     mv = mock_value.strip()
                     if mv.startswith('[') and ']' in mv:
                         bracket_end = mv.index(']')
@@ -533,7 +535,15 @@ class AIPlugin(IbStatefulPlugin):
                         remainder = mv[bracket_end + 1:].strip()
                         seq_key = remainder if remainder else ""
                     else:
-                        seq_values_str, seq_key = mv, ""
+                        import warnings
+                        warnings.warn(
+                            "MOCK:SEQ requires bracket format: MOCK:SEQ:[v1,v2,...] optional_key. "
+                            "Bare comma-separated values are no longer supported and will be ignored. "
+                            f"Got: MOCK:SEQ:{mv!r}",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        return ""
                     values = [v.strip() for v in seq_values_str.split(',') if v.strip()]
                     counter_key = f"_seq_{seq_key}"
                     idx = self._mock_seq_counters.get(counter_key, 0)

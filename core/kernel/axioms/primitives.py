@@ -384,6 +384,7 @@ class StrAxiom(
     def get_operators(self) -> Dict[str, str]:
         return {
             "+": "__add__",
+            "*": "__mul__",
             "==": "__eq__", "!=": "__ne__",
             ">": "__gt__", ">=": "__ge__", "<": "__lt__", "<=": "__le__",
         }
@@ -395,6 +396,9 @@ class StrAxiom(
             return None
         if op == "+":
             if other_name == "str":
+                return "str"
+        if op == "*":
+            if other_name in ("int", "any"):
                 return "str"
         if op in ("==", "!=", ">", ">=", "<", "<="):
             return "bool"
@@ -463,7 +467,7 @@ class ListAxiom(
         }
 
     def get_operators(self) -> Dict[str, str]:
-        return {"+": "__add__"}
+        return {"+": "__add__", "*": "__mul__"}
 
     def resolve_operation_type_name(self, op: str, other_name: Optional[str]) -> Optional[str]:
         if other_name is None:
@@ -471,6 +475,8 @@ class ListAxiom(
                 return "bool"
             return None
         if op == "+" and other_name in ("list", "any"):
+            return "list"
+        if op == "*" and other_name in ("int", "any"):
             return "list"
         return None
 

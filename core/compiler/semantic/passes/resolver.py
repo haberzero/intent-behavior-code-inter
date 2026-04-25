@@ -121,8 +121,8 @@ class TypeResolver:
             self.current_class_descriptor = old_class
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
-        # 解析返回类型
-        ret_type = self.analyzer._void_desc
+        # 解析返回类型：没有标注时默认 auto（编译期推断），而非 void
+        ret_type = self.analyzer._auto_desc
         if node.returns:
             ret_type = self.analyzer._resolve_type(node.returns)
             
