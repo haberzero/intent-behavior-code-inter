@@ -110,9 +110,15 @@ class ExpressionComponent(BaseComponent):
         
         # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
-        
+
         # Variable Reference
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
+
+        # Parameterized lambda / snapshot expressions (M1)
+        # 仅在表达式位置生效；旧的 `TYPE lambda NAME = EXPR` 形式由 declaration parser
+        # 在变量声明位置消费 LAMBDA/SNAPSHOT token，不会触达此 prefix handler。
+        self.register(TokenType.LAMBDA, self.lambda_expr, None, IbPrecedence.LOWEST)
+        self.register(TokenType.SNAPSHOT, self.lambda_expr, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
 
@@ -446,6 +452,87 @@ class ExpressionComponent(BaseComponent):
         self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~'.")
         
         return self._loc(ast.IbBehaviorExpr(segments=segments, tag=tag), start_token)
+
+    def lambda_expr(self) -> ast.IbExpr:
+        """
+        参数化 lambda/snapshot 表达式（M1）：
+            lambda(EXPR)              — 无参表达式形式
+            lambda(PARAMS)(EXPR)      — 有参表达式形式
+            snapshot(EXPR)            — 无参 snapshot
+            snapshot(PARAMS)(EXPR)    — 有参 snapshot
+
+        歧义解析：当第一组 ``(...)`` 之后紧跟另一个 ``(`` 时，将第一组内的内容
+        当作参数列表，第二组内的内容当作函数体表达式；否则将第一组内的内容直接
+        当作函数体表达式（无参形式）。这一前瞻仅扫描 token 平衡，不触发副作用。
+
+        旧形态 ``TYPE lambda NAME = EXPR`` 由 declaration parser 在变量声明位置
+        消费 ``lambda`` token，不会进入本路径，二者并存互不干扰。
+        """
+        keyword_token = self.stream.previous()
+        deferred_mode = "lambda" if keyword_token.type == TokenType.LAMBDA else "snapshot"
+
+        if not self.stream.check(TokenType.LPAREN):
+            raise self.stream.error(
+                self.stream.peek(),
+                f"Expect '(' after '{deferred_mode}' keyword in expression position.",
+                code="PAR_002",
+            )
+
+        # 前瞻：判断是否为有参形式 `lambda(PARAMS)(BODY)`
+        is_param_form = self._lambda_lookahead_is_param_form()
+
+        if is_param_form:
+            # 解析参数列表
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
+            decl = self.context.declaration_parser
+            if decl is None:
+                # 不可达：parser 装配阶段总是注入 declaration_parser
+                raise self.stream.error(
+                    keyword_token,
+                    "Internal: declaration parser not wired; cannot parse lambda parameters.",
+                    code="PAR_002",
+                )
+            params = decl.parameters()
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' parameter list.")
+
+            # 解析函数体（必须以 LPAREN 包裹的表达式形式；多行块形式留待后续小 PR）
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' to introduce '{deferred_mode}' body expression.")
+            body = self.parse_expression(IbPrecedence.LOWEST)
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' to close '{deferred_mode}' body expression.")
+        else:
+            # 无参形式：直接解析括号内的表达式作为函数体
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
+            params: List[ast.IbASTNode] = []
+            body = self.parse_expression(IbPrecedence.LOWEST)
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' body expression.")
+
+        node = ast.IbLambdaExpr(params=params, body=body, deferred_mode=deferred_mode)
+        return self._loc(node, keyword_token, self.stream.previous())
+
+    def _lambda_lookahead_is_param_form(self) -> bool:
+        """
+        前瞻判断 ``lambda(...) (...)`` 与 ``lambda(...)`` 形式。
+
+        此时 stream 已消费 ``lambda``/``snapshot`` 关键字，且当前 peek(0) 为 LPAREN。
+        在 token 流上做平衡括号扫描；若第一个 RPAREN 之后紧接的非 WS token 为 LPAREN
+        则视为有参形式。扫描严格只读，不修改 stream 位置。
+        """
+        depth = 0
+        offset = 0
+        # 安全上限：lambda 参数列表与正文不会超过若干百 token
+        while offset < 1024:
+            t = self.stream.peek(offset)
+            if t.type == TokenType.EOF or t.type == TokenType.NEWLINE:
+                return False
+            if t.type == TokenType.LPAREN:
+                depth += 1
+            elif t.type == TokenType.RPAREN:
+                depth -= 1
+                if depth == 0:
+                    next_t = self.stream.peek(offset + 1)
+                    return next_t.type == TokenType.LPAREN
+            offset += 1
+        return False
 
     def _parse_complex_access(self, var_name: str, var_token) -> ast.IbExpr:
         """Helper to parse complex access like $obj.attr[0] after a $var_ref."""

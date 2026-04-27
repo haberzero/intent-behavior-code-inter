@@ -43,12 +43,12 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_native_object(self, py_obj: Any, ib_class: IIbClass, vtable: Optional[Dict[str, Any]] = None) -> IIbObject:
         return IbNativeObject(py_obj, ib_class, vtable=vtable)
 
-    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, deferred_mode: Optional[str] = None, execution_context: Optional[Any] = None) -> Any:
-        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, deferred_mode=deferred_mode, execution_context=execution_context)
+    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, deferred_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
+        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, deferred_mode=deferred_mode, execution_context=execution_context, params_uids=params_uids, closure=closure)
 
-    def create_deferred(self, node_uid: str, deferred_mode: str = "lambda", execution_context: Optional[Any] = None, captured_scope: Optional[Any] = None) -> Any:
+    def create_deferred(self, node_uid: str, deferred_mode: str = "lambda", execution_context: Optional[Any] = None, captured_scope: Optional[Any] = None, params_uids: Optional[List[str]] = None, body_uid: Optional[str] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
         """Create a universal deferred expression object (for non-behavior lambda/snapshot)."""
-        return IbDeferred(node_uid, ib_class=self._registry.get_class("deferred"), deferred_mode=deferred_mode, execution_context=execution_context, captured_scope=captured_scope)
+        return IbDeferred(node_uid, ib_class=self._registry.get_class("deferred"), deferred_mode=deferred_mode, execution_context=execution_context, captured_scope=captured_scope, params_uids=params_uids, body_uid=body_uid, closure=closure)
 
     def create_list(self, elements: List[IIbObject]) -> IIbList:
         return IbList(elements, ib_class=self._registry.get_class("list"))

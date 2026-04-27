@@ -232,3 +232,23 @@ class TypeResolver:
         默认返回字符串类型。
         """
         return self.analyzer._str_desc
+
+    def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr):
+        """
+        参数化 lambda/snapshot 表达式（M1）的类型决议。
+
+        规则：
+        * 参数：visit 各参数的类型标注（用于完整性，结果不直接消费）。
+        * body：递归 visit；其类型作为 lambda 的返回类型。
+        * lambda 自身解析为 ``callable``——具体形参/返回类型由 SemanticAnalyzer
+          的 ``visit_IbLambdaExpr`` 在 Pass 3 进一步细化为 ``FuncSpec``。
+        """
+        for arg_node in node.params:
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+                # 解析以注册类型；返回值在此阶段无需保留
+                self.analyzer._resolve_type(arg_node.annotation, safe=True)
+        # 走访 body 以触发其内部的类型决议（类型来自 generic_visit 的副作用）
+        if node.body is not None:
+            self.visit(node.body)
+        # lambda 表达式自身视为 callable（与 ``fn`` 同构）
+        return self.analyzer.prelude.get_builtin_types().get("callable") or self.analyzer._any_desc

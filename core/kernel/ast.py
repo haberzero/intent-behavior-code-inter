@@ -403,6 +403,45 @@ class IbBehaviorInstance(IbExpr):
     target_type_name: str = ""           # 目标类型名称（如 "Mood"）
     is_deferred: bool = False           # 是否延迟执行
 
+
+@dataclass(kw_only=True, eq=False)
+class IbLambdaExpr(IbExpr):
+    """
+    参数化 lambda/snapshot 表达式（M1 fn 参数化语法引入）。
+
+    形式::
+        lambda(EXPR)              # 无参表达式形式
+        lambda(PARAMS)(EXPR)      # 有参表达式形式
+        snapshot(EXPR)            # 无参 snapshot 形式
+        snapshot(PARAMS)(EXPR)    # 有参 snapshot 形式
+
+    其中 ``PARAMS`` 是与函数参数同构的 ``IbArg`` / ``IbTypeAnnotatedExpr`` 列表，
+    ``EXPR`` 是任意 IBCI 表达式（含 ``IbBehaviorExpr``）。
+
+    语义
+    ----
+    * ``deferred_mode == 'lambda'``：自由变量 cell 共享捕获，每次调用 deref 最新值；
+      调用处的意图栈生效。
+    * ``deferred_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
+      对意图栈 fork。
+
+    AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
+    运行时构造 ``IbBehavior``；否则构造 ``IbDeferred``。两者都接受参数列表。
+
+    本节点新增于 M1（``docs/VM_EVOLUTION_PLAN.md`` §M1），与历史的
+    ``deferred_mode`` 字段（位于 ``IbAssign`` 上）形成两条并存的语法路径，旧路径
+    用于 ``TYPE lambda NAME = EXPR`` 形式，新路径用于 ``fn NAME = lambda(...)``
+    形式。
+    """
+    params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
+    body: Optional[IbExpr] = None
+    deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
+
+    @property
+    def creates_scope(self) -> bool:
+        # lambda/snapshot 体内的 params 与 body 形成新的词法作用域。
+        return True
+
 # --- Helpers ---
 
 @dataclass(kw_only=True, eq=False)
