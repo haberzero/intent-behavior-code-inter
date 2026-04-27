@@ -1,0 +1,34 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== IbString.to_bool 注册测试 ===")
+
+# Test: string "0" in boolean context
+# The registered lambda: len(self.value) > 0 
+# "0" → len=1 → True  (BUG: should be False!)
+str s0 = "0"
+str s1 = "1"
+str s_empty = ""
+
+if s0:
+    print("\"0\" is truthy (BUG - should use smart to_bool)")
+else:
+    print("\"0\" is falsy (correct)")
+
+if s1:
+    print("\"1\" is truthy (OK)")
+else:
+    print("\"1\" is falsy")
+
+if s_empty:
+    print("empty is truthy")
+else:
+    print("empty is falsy (OK)")
+
+# What about in a for...if context with non-AI bool?
+list[str] items = ["0", "1", "false", "true", ""]
+list[str] truthy = []
+for str item in items if item:
+    truthy.append(item)
+print("truthy items (non-empty check): " + (str)truthy)
+

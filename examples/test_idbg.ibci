@@ -1,0 +1,21 @@
+import ai
+import idbg
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+int x = 42
+idbg.inspect(x)
+str r = @~ MOCK:STR:idbg_test ~
+any last_r = idbg.last_result()
+print("success: " + (str)last_r["success"])
+print("raw: " + (str)last_r["raw_response"])
+any last_llm = idbg.last_llm()
+print("last_llm is not None: " + (str)(last_llm is not None))
+
+# Test dump_intent_stack
+@+ test intent
+idbg.dump_intent_stack()
+@-
+
+# Test idbg.vars()
+any vars_dict = idbg.vars()
+print("vars_dict type ok: " + (str)(vars_dict is not None))

@@ -1,0 +1,107 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== 边界条件测试 ===")
+
+# Test 1: str concat with Uncertain → runtime error
+str uncertain_str = @~ MOCK:FAIL edge1 ~
+llmexcept:
+    retry "retry"
+
+try:
+    str r1 = "prefix " + uncertain_str
+    print("concat succeeded: " + r1)
+except Exception as e:
+    print("concat with Uncertain: RUNTIME_ERROR (expected)")
+
+# Test 2: (str) cast on Uncertain works
+str uc = (str)uncertain_str
+print("(str)Uncertain = " + uc)
+
+# Test 3: Uncertain in boolean context
+if uncertain_str:
+    print("Uncertain is truthy")
+else:
+    print("Uncertain is falsy")
+
+# Test 4: List sort
+list[int] nums = [3, 1, 4, 1, 5, 9, 2, 6]
+nums.sort()
+print("sorted: " + (str)nums)
+
+# Test 5: List slice
+list[int] sliced = nums[2:5]
+print("sliced [2:5]: " + (str)sliced)
+
+# Test 6: Nested class - access field on typed var, not any
+class Node:
+    int val
+    func __init__(self, int v):
+        self.val = v
+
+Node n1 = Node(10)
+Node n2 = Node(20)
+list nodes = [n1, n2]
+int total = 0
+for any nd in nodes:
+    total = total + (int)nd.val   # must cast any→int
+print("nodes sum: " + (str)total)
+
+# Test 7: LLM in class method
+class Processor:
+    str prefix
+    func __init__(self, str p):
+        self.prefix = p
+    func process(self, str inp) -> str:
+        str result = @~ MOCK:STR:processed ~
+        return self.prefix + ": " + result
+
+Processor proc = Processor("Result")
+str proc_result = proc.process("test")
+print("Class with LLM: " + proc_result)
+
+# Test 8: int/float ops
+float pi = 3.14
+print("pi > 3: " + (str)(pi > 3))
+print("pi < 4: " + (str)(pi < 4))
+print("(int)pi = " + (str)((int)pi))
+
+# Test 9: Deep nested if + LLM
+@+ 你只能回答YES或NO
+int level = 0
+if @~ MOCK:TRUE outer ~:
+    level = level + 1
+    if @~ MOCK:TRUE inner ~:
+        level = level + 1
+@-
+print("nested AI level = " + (str)level)  # 2
+
+# Test 10: While with LLM condition
+int w_count = 0
+while @~ MOCK:SEQ:[1,1,0] while_ai ~:
+    w_count = w_count + 1
+print("while ai_count = " + (str)w_count)  # 2
+
+# Test 11: Multiple return paths
+func abs_val(int n) -> int:
+    if n < 0:
+        return -n
+    return n
+print("abs(-5) = " + (str)(abs_val(-5)))
+print("abs(3) = " + (str)(abs_val(3)))
+
+# Test 12: Mutual recursion-like pattern
+func even_check(int n) -> bool:
+    if n == 0:
+        return true
+    return odd_check(n - 1)
+
+func odd_check(int n) -> bool:
+    if n == 0:
+        return false
+    return even_check(n - 1)
+
+print("even_check(4) = " + (str)(even_check(4)))  # true
+print("odd_check(3) = " + (str)(odd_check(3)))     # true
+
+print("=== 边界条件测试完成 ===")

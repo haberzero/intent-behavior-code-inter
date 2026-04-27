@@ -1,0 +1,111 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== 边界条件测试 ===")
+
+# Test 1: str add with Uncertain - should fail
+str uncertain_str = @~ MOCK:FAIL edge1 ~
+llmexcept:
+    retry "retry"
+# Try str concat with Uncertain
+# str r1 = "prefix " + uncertain_str  # This should RUNTIME_ERROR according to memory
+# Let's test it carefully with a try
+try:
+    str r1 = "prefix " + uncertain_str
+    print("concat succeeded: " + r1)
+except Exception as e:
+    print("concat with Uncertain failed: " + e.message)
+
+# Test 2: (str) cast on Uncertain works
+str uc = (str)uncertain_str
+print("(str)Uncertain = " + uc)  # should be "uncertain"
+
+# Test 3: Using Uncertain in if condition (falsy)
+if uncertain_str:
+    print("Uncertain is truthy")
+else:
+    print("Uncertain is falsy")  # expected
+
+# Test 4: List operations
+list[int] nums = [3, 1, 4, 1, 5, 9, 2, 6]
+nums.sort()
+print("sorted: " + (str)nums)
+
+# Test 5: List slice
+list[int] sliced = nums[2:5]
+print("sliced [2:5]: " + (str)sliced)
+
+# Test 6: String indexed (not supported in IBCI?)
+str s = "hello"
+# str ch = s[0]  # Let's check
+
+# Test 7: Nested class instances
+class Node:
+    int val
+    
+    func __init__(self, int v):
+        self.val = v
+
+class Container:
+    list nodes = []
+    
+    func __init__(self):
+        self.nodes = []
+    
+    func add(self, int v):
+        Node n = Node(v)
+        self.nodes.append(n)
+    
+    func get_sum(self) -> int:
+        int total = 0
+        for any nd in self.nodes:
+            total = total + nd.val
+        return total
+
+Container c = Container()
+c.add(10)
+c.add(20)
+c.add(30)
+print("Container sum: " + (str)(c.get_sum()))  # 60
+
+# Test 8: Multi-line LLM function
+llm analyze(str text) -> str:
+__sys__
+You are an analyzer.
+__user__
+Analyze: "$text"
+llmend
+
+str analysis = analyze("test input")
+llmexcept:
+    retry "answer"
+print("LLM func result: " + analysis)
+
+# Test 9: LLM in class method
+class Processor:
+    str prefix
+    
+    func __init__(self, str p):
+        self.prefix = p
+    
+    func process(self, str input_str) -> str:
+        str result = @~ MOCK:STR:processed_output ~
+        return self.prefix + ": " + result
+
+Processor proc = Processor("Result")
+str proc_result = proc.process("test")
+print("Class with LLM: " + proc_result)
+
+# Test 10: int/float comparison
+float pi = 3.14
+bool gt3 = pi > 3
+bool lt4 = pi < 4
+print("pi > 3: " + (str)gt3)
+print("pi < 4: " + (str)lt4)
+
+# Test 11: None comparisons
+any maybe_none = None
+print("None == None: " + (str)(maybe_none == None))
+print("None is None: " + (str)(maybe_none is None))
+
+print("=== 边界条件测试完成 ===")

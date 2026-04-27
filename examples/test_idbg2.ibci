@@ -1,0 +1,19 @@
+import ai
+import idbg
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+str r = @~ MOCK:STR:idbg_test ~
+any last_r = idbg.last_result()
+print("success: " + (str)last_r["success"])
+any last_llm = idbg.last_llm()
+print("last_llm is not None: " + (str)(last_llm is not None))
+any user_prompt = last_llm["user_prompt"]
+print("user_prompt: " + (str)user_prompt)
+
+# idbg.fields()
+any f = idbg.fields(last_r)
+print("fields of last_r: " + (str)f)
+
+# vars
+any vs = idbg.vars()
+print("vars keys count: " + (str)(vs is not None))

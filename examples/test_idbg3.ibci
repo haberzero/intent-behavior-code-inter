@@ -1,0 +1,24 @@
+import ai
+import idbg
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+# Test idbg.last_result() ONLY inside llmexcept
+str r = @~ MOCK:FAIL idbg_fail_test ~
+llmexcept:
+    any last_r = idbg.last_result()
+    print("last_r is None: " + (str)(last_r is None))
+    if last_r is not None:
+        print("success: " + (str)last_r["success"])
+        print("raw: " + (str)last_r["raw_response"])
+    retry "retry"
+
+print("After llmexcept, r = " + (str)r)
+
+# Now test idbg.last_llm() with a successful call
+str s = @~ MOCK:STR:test ~
+any llm_info = idbg.last_llm()
+print("last_llm is None after success: " + (str)(llm_info is None))
+if llm_info is not None:
+    print("user_prompt: " + (str)llm_info["user_prompt"])
+    print("response: " + (str)llm_info["response"])
+

@@ -1,0 +1,39 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== for...if with AI filter ===")
+
+list[str] words = ["A", "B", "C", "D"]
+list[str] filtered = []
+
+# Test 1: for...if with non-AI filter (should work correctly)
+for str w in words if w == "A" or w == "C":
+    filtered.append(w)
+print("non-AI filter: " + (str)filtered)  # ["A", "C"]
+
+# Test 2: for...if with AI bool filter
+list[str] ai_filtered = []
+for str w in words if @~ MOCK:SEQ:[1,0,1,0] ai_filter ~:
+    ai_filtered.append(w)
+print("AI filter result: " + (str)ai_filtered)  # Should be ["A", "C"]
+
+# Test 3: Debug by printing the AI response
+print("Manual check of SEQ behavior:")
+str s1 = @~ MOCK:SEQ:[1,0,1,0] seq_test ~
+str s2 = @~ MOCK:SEQ:[1,0,1,0] seq_test ~
+str s3 = @~ MOCK:SEQ:[1,0,1,0] seq_test ~
+str s4 = @~ MOCK:SEQ:[1,0,1,0] seq_test ~
+print("seq_test[0]=" + s1 + " seq_test[1]=" + s2 + " seq_test[2]=" + s3 + " seq_test[3]=" + s4)
+
+# Test 4: for...if with MOCK:TRUE (always true)
+list[str] all_filtered = []
+for str w in words if @~ MOCK:TRUE always_true ~:
+    all_filtered.append(w)
+print("always TRUE filter: " + (str)all_filtered)  # Should be all 4
+
+# Test 5: for...if with MOCK:FALSE (always false)
+list[str] none_filtered = []
+for str w in words if @~ MOCK:FALSE always_false ~:
+    none_filtered.append(w)
+print("always FALSE filter: " + (str)none_filtered)  # Should be empty
+

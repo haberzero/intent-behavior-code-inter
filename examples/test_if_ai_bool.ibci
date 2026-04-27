@@ -1,0 +1,21 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== if @~ MOCK:FALSE ~: 测试 ===")
+
+if @~ MOCK:FALSE if_test ~:
+    print("MOCK:FALSE → TRUE (bug!)")
+else:
+    print("MOCK:FALSE → false (correct)")
+
+if @~ MOCK:TRUE if_test2 ~:
+    print("MOCK:TRUE → true (correct)")
+else:
+    print("MOCK:TRUE → FALSE (bug!)")
+
+# Now test that "0" as a string in if condition is truthy (Python semantics)
+str zero = "0"
+if zero:
+    print("\"0\" is truthy (len>0 semantics)")
+else:
+    print("\"0\" is falsy (smart semantics)")

@@ -1,0 +1,107 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+
+print("=== 压力测试与边界 ===")
+
+# 1. Deep recursion
+func fib(int n) -> int:
+    if n <= 1:
+        return n
+    return fib(n-1) + fib(n-2)
+print("fib(15) = " + (str)(fib(15)))
+
+# 2. Large list operations (avoid chained subscript)
+list[int] big = []
+int i = 0
+while i < 100:
+    big.append(i * i)
+    i = i + 1
+int big_len = big.len()
+print("big list len: " + (str)big_len)
+int elem99 = big[99]
+print("big[99] = " + (str)elem99)
+
+# 3. Large dict
+dict d = {}
+int j = 0
+while j < 50:
+    str key = "k" + (str)j
+    d[key] = j * 2
+    j = j + 1
+print("dict len: " + (str)(d.len()))
+
+# 4. Nested loops
+int nested_sum = 0
+int a = 0
+while a < 10:
+    int b = 0
+    while b < 10:
+        nested_sum = nested_sum + 1
+        b = b + 1
+    a = a + 1
+print("nested 10*10 = " + (str)nested_sum)
+
+# 5. Exception propagation
+func risky(int x) -> int:
+    if x == 0:
+        raise Exception("zero!")
+    return 100 / x
+
+func safe_call(int x) -> str:
+    try:
+        int r = risky(x)
+        return (str)r
+    except Exception as e:
+        return "caught: " + e.message
+
+print("safe_call(0): " + safe_call(0))
+print("safe_call(5): " + safe_call(5))
+
+# 6. Multiple LLM calls with state
+int llm_count = 0
+list[str] results = []
+int k = 0
+while k < 3:
+    str r = @~ MOCK:SEQ:[a,b,c] seq_stress ~
+    results.append(r)
+    llm_count = llm_count + 1
+    k = k + 1
+print("llm_count: " + (str)llm_count)
+print("results: " + (str)results)
+
+# 7. String operations stress
+str long_str = "a" * 100
+int long_len = long_str.len()
+print("long str len: " + (str)long_len)
+bool starts = long_str.startswith("a")
+bool ends = long_str.endswith("a")
+print("starts/ends: " + (str)starts + "/" + (str)ends)
+
+# 8. Chained method calls
+str chain = "  hello world  ".trim().to_upper().replace("WORLD", "IBCI")
+print("chain: " + chain)
+
+# 9. Enum + class combination
+class Status(Enum):
+    str ACTIVE = "ACTIVE"
+    str INACTIVE = "INACTIVE"
+    str PENDING = "PENDING"
+
+class User:
+    str name
+    
+    func __init__(self, str n):
+        self.name = n
+    
+    func get_status(self) -> str:
+        str s = @~ MOCK:SEQ:[ACTIVE,INACTIVE,PENDING] user_status ~
+        return s
+
+User u1 = User("Alice")
+User u2 = User("Bob")
+str s1 = u1.get_status()
+str s2 = u2.get_status()
+print("u1 status: " + s1)
+print("u2 status: " + s2)
+
+print("=== 压力测试完成 ===")
