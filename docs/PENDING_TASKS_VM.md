@@ -575,4 +575,105 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ---
 
+## 十、IBCI 对象模型与内存管理正式定义 [⏳ 规范已定义，待正式编码实现]
+
+> **状态**：本节是 IBCI 运行时的**语义规范层定义**，与 Python 宿主实现隔离。  
+> 规范内容于 2026-04-27 架构讨论中形成。所有公理编号（OM/SC/LT/GC）是本规范的正式引用标识。  
+> 现有 Python 实现中已有部分符合此规范（标注 ✅），未落地部分标注 ⏳。
+
+---
+
+### 10.1 对象模型（Object Model）
+
+**公理 OM-1（对象存在性）**：IBCI 程序中的一切运行时值都是"IBCI 对象"（IbObject），对象由三部分构成：`(类型标签, 有效载荷, 元数据)`。
+
+**公理 OM-2（类型二分）**：对象分为两类：
+- **值类型（Value）**：`int`, `float`, `bool`, `str`, `None`, `Uncertain`。赋值语义为深拷贝（copy-on-assign），不具有可变身份（identity）。
+- **引用类型（Ref）**：`list`, `dict`, 用户类实例, `fn`, `behavior`。赋值语义为引用复制，具有对象身份（`is` 运算符测试的就是这个）。
+
+**公理 OM-3（对象可达性）**：对象 O 是"可达的"当且仅当存在一条从某个**根集合**（根集合 = 全局作用域 ∪ 活跃调用栈帧 ∪ 所有活跃 Cell ∪ 所有活跃 IntentContextSnapshot）出发的引用链能到达 O。
+
+> 现状：OM-1、OM-2 已通过 `IbObject`/`IbClass`/`KernelRegistry` 体系落地 ✅。OM-3 的根集合定义是 GC 模型的前提，当前依赖 Python GC（详见 §10.4）。
+
+---
+
+### 10.2 作用域与变量分类模型（Scope Model）
+
+**公理 SC-1（词法嵌套）**：每个作用域 S 有一个词法父作用域 `parent(S)`，构成树结构。全局作用域 `Global` 是树根，`parent(Global) = ⊥`。
+
+**公理 SC-2（变量分类）**：一个函数体中的变量分为三类：
+- **本地变量（Local）**：在函数体内声明且未被任何内层函数引用的变量。
+- **Cell 变量（Cell）**：在函数体内声明且被至少一个内层嵌套函数/lambda/snapshot 引用的变量。
+- **自由变量（Free）**：在函数体内引用但未在此函数体内声明的变量，来自外层某个作用域。
+
+**公理 SC-3（Cell 语义）**：Cell 变量通过 `IbCell` 间接存储。`IbCell` 是一个独立的、与任何 `ScopeImpl` 无关的堆对象，包含字段 `value`。对 Cell 变量的读写实际上是对 `IbCell.value` 的读写。
+
+**公理 SC-4（自由变量捕获）**：在嵌套函数/lambda 被创建时，其所有自由变量的 `IbCell` 引用被复制进该函数对象的 `closure` 字典。此后该函数对象持有这些 `IbCell` 的引用，无论外层作用域是否仍然活跃。
+
+> 现状：SC-1 已通过 `ScopeImpl._parent` 链实现 ✅。SC-2/SC-3/SC-4（IbCell 机制）⏳ **待实现**：当前 lambda/snapshot 的自由变量通过直接的 scope 引用实现，尚未引入独立的 Cell 堆对象（见 §10.6 工程任务）。
+
+---
+
+### 10.3 生命周期模型（Lifetime Model）
+
+**公理 LT-1（作用域生命周期）**：一个 `ScopeImpl` 对象的设计生命周期为对应函数调用的持续时间。函数返回后，ScopeImpl 的符号字典引用被清除（不是手动销毁，而是该作用域不再可达）。
+
+**公理 LT-2（Cell 延长生命周期）**：如果某个 `ScopeImpl` 中的变量是 Cell 变量，其 `IbCell` 对象的生命周期由 closure 字典决定，而非由 ScopeImpl 决定。只要有任何一个 fn 对象持有该 Cell 的引用，Cell 就活着。
+
+**公理 LT-3（snapshot 对象的自包含性）**：`snapshot` 类型的 fn 对象是完全自包含的——它的生命周期只依赖于有无引用指向它，不依赖于任何外部作用域或意图上下文的生命周期。这就是它"确定无状态、确定可重入"的生命周期保证。
+
+**公理 LT-4（IntentContext 的生命周期）**：`IbIntentContext` 通过 `fork()` 实现隔离。每次函数调用 `fork()` 一个新的 `IbIntentContext`，该 context 的生命周期与函数调用的持续时间绑定，函数返回后恢复调用者的 context。`snapshot` 持有的 `frozen_intent_ctx` 的生命周期与 snapshot 对象绑定。
+
+> 现状：LT-1 已通过 `ScopeImpl` 的 enter/exit 机制实现 ✅。LT-4 已通过 `fork()/restore` 机制实现 ✅。LT-2/LT-3 的 Cell 自主生命周期 ⏳ **待实现**（依赖 SC-3 IbCell 机制）。
+
+---
+
+### 10.4 GC 模型（Garbage Collection Model）
+
+**GC 公理 GC-1（追踪式 GC）**：IBCI 规定使用**追踪式 GC（Tracing GC）**，而非引用计数。理由：
+1. IBCI 允许循环引用（list 可以包含自己，类实例可以互相引用）
+2. 追踪式 GC 的语义更简洁（无需考虑引用计数对用户可见的副作用）
+3. IBCI 不在意 VM 本体性能，无需引用计数的即时回收优势
+
+**GC 公理 GC-2（根集合）**：GC 根集合 = 全局作用域中的所有符号值 ∪ 活跃调用栈上所有帧的所有局部变量 ∪ 所有活跃 fn 对象的 `closure` 字典中的所有 Cell 值 ∪ 所有活跃 `snapshot` 对象持有的 `frozen_intent_ctx`。
+
+**GC 公理 GC-3（回收条件）**：一个对象 O 当且仅当从根集合不可达时可被回收。回收不依赖于 Python 的引用计数机制——这是 IBCI 规范层面的定义，实现层可以用 Python GC 来模拟，但语义上不应暴露 Python 的引用计数行为（如 `del` 导致析构）。
+
+**GC 公理 GC-4（终结器约束）**：IBCI 当前不规定终结器（finalizer）语义。IBCI 类的析构行为仅通过 `func __del__` 方法在未来版本中支持，且不保证析构时机（与 Python 的 `__del__` 不同，IBCI 的 `__del__` 是惰性的）。
+
+> 现状：GC-1/GC-2/GC-3/GC-4 均为**规范层定义** ⏳，当前完全依赖 Python CPython GC。IBCI 语义规范与 Python GC 实现的隔离界面见 §10.5。
+
+---
+
+### 10.5 与 Python 宿主实现的隔离界面
+
+上述公理构成 IBCI 的**语义规范**。Python 宿主实现是其中一种实现方式，需遵守以下隔离约定：
+
+| IBCI 语义层 | Python 宿主实现对应 | 必须遵守的约束 |
+|---|---|---|
+| `IbCell` | Python 堆对象（引用语义） | 不得直接使用 `ScopeImpl._symbols` 存储 Cell 变量值；Cell 对象应独立于 Scope 生命周期 |
+| `ScopeImpl` 退出 | 仅移动 `_current_scope` 指针 | 不依赖 `ScopeImpl` 被 Python GC 立即回收 |
+| `IbIntentContext` 生命周期 | 函数调用时 `fork()`，返回时 `restore` | 不允许在函数调用期间跨 `fork()` 边界读写 `_intent_ctx` |
+| GC 回收时机 | Python GC 决定 | IBCI 程序不应依赖对象被立即回收的可观察副作用 |
+| 值类型赋值 | Python 通常为引用传递 | `int`/`str`/`bool` 等值类型的 IBCI 语义应通过 `IbObject` 装箱实现深拷贝等价 |
+
+**IBCI 不应作为 Python 的依附**：上述规范的目标是使 IBCI 的语义定义能够在任意宿主语言（Rust/Go/C++ 等）上重新实现。现有 E2E 测试套件应当成为跨实现的合规测试集。
+
+---
+
+### 10.6 工程任务：IbCell 机制落地 [⏳ 待实现，Step 13]
+
+> **前提**：fn 参数化 lambda/snapshot 新语法（Step 12.5，见 `docs/NEXT_STEPS.md`）完成后，Cell 机制方能正式落地。
+
+**任务描述**：实现 `IbCell` 堆对象以支持词法闭包的正确生命周期管理：
+
+1. **新增 `IbCell` 类型**（`core/runtime/objects/cell.py`）：持有 `value: IbObject`，独立于 ScopeImpl 生命周期存在。
+2. **语义分析器 Cell 变量分析**：识别函数体内哪些变量被内层函数捕获，标注为 Cell 变量。
+3. **代码生成/运行时**：Cell 变量在栈帧创建时分配为 `IbCell` 对象；被捕获的函数对象在创建时将对应 `IbCell` 引用写入 `closure` 字典。
+4. **GC 根集合更新**：将所有活跃 fn 对象的 `closure` 字典中的 Cell 值加入 GC 根集合扫描路径。
+
+**搁置原因**：当前 lambda 不支持参数传递，自由变量直接通过 captured_scope 引用读取；此机制在无参数场景下功能正确，但不满足 LT-2 的 Cell 生命周期语义。需在 Step 12.5（新 fn 语法）后重写。
+
+---
+
 *本文档记录长期架构设想。近期任务见 `docs/NEXT_STEPS.md`。*
