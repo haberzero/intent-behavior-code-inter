@@ -6,6 +6,13 @@ from core.compiler.parser.core.syntax import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_SELF, OP_MAP
 
+# 表达式位置 ``lambda(...) (...)`` 与 ``lambda(...)`` 形式消歧的前瞻上限。
+# 取 1024 是源代码中单个 lambda 参数列表 + 函数体表达式 token 数的保守上界
+# （典型 lambda 表达式不超过几十 token）；超出该上限的写法在实际代码中极
+# 罕见，回退为 "无参形式" 不会引入二义性——后续 parse_expression 仍会按表
+# 达式语法继续消费，错误会以 PAR_002 形式正常报告。
+_MAX_LAMBDA_LOOKAHEAD_TOKENS = 1024
+
 class ExpressionComponent(BaseComponent):
     def __init__(self, context):
         super().__init__(context)
@@ -519,8 +526,7 @@ class ExpressionComponent(BaseComponent):
         """
         depth = 0
         offset = 0
-        # 安全上限：lambda 参数列表与正文不会超过若干百 token
-        while offset < 1024:
+        while offset < _MAX_LAMBDA_LOOKAHEAD_TOKENS:
             t = self.stream.peek(offset)
             if t.type == TokenType.EOF or t.type == TokenType.NEWLINE:
                 return False

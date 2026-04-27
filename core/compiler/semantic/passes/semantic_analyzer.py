@@ -1213,20 +1213,23 @@ class SemanticAnalyzer:
                     self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                     element_type = self._any_desc
             
-            # get_assigned_names 对带类型标注的 target 会同时产出 (name, IbTypeAnnotatedExpr)
-            # 与 (name, IbName) 两条条目（外层用于取 annotation，内层用于绑定标识符）。
-            # 若元组目标使用类型标注（如 for (int x, int y) in coords），未做去重会导致
-            # 内层 IbName 条目以未标注的 element_type 覆盖外层已写入的精确类型。
+            # ── 双条目去重背景说明 ──
+            # ``SymbolExtractor.get_assigned_names`` 对带类型标注的 target 会同时
+            # 展开两条记录：``(name, IbTypeAnnotatedExpr)`` 用于读取 annotation，
+            # ``(name, IbName)`` 用于绑定标识符节点。若元组目标使用类型标注
+            # （如 ``for (int x, int y) in coords``），无去重会让后处理的 IbName
+            # 条目用未标注的 element_type 覆盖前面写入的精确类型。
             entries = SymbolExtractor.get_assigned_names(node)
             typed_names = {n for n, t in entries if isinstance(t, ast.IbTypeAnnotatedExpr)}
-            # 是否为元组解包目标：此时每个 element 各有自己的（可选）注解，整体 element_type
-            # 不应被作为各分量的兜底类型——元组分量类型由 element_type 的成员推导决定，
-            # 这里没有可靠的成员类型时，宁可保持 any 也不要把整体 tuple 类型作为分量类型。
+            # 元组解包目标时每个 element 各有自己的（可选）注解，整体 element_type
+            # 不应被作为各分量的兜底类型——元组分量类型由 element_type 的成员推导
+            # 决定，这里没有可靠的成员类型时，宁可保持 any 也不要把整体 tuple 类型
+            # 作为分量类型。
             is_tuple_target = isinstance(node.target, ast.IbTuple)
 
             for var_name, target in entries:
                 is_typed_target = isinstance(target, ast.IbTypeAnnotatedExpr)
-                # 跳过同一名字的 IbName 重复条目：仅做 side_table 绑定，避免覆盖已确定的类型
+                # 双条目去重：同名 IbName 条目仅做 side_table 绑定，跳过类型重定义。
                 if (not is_typed_target) and var_name in typed_names:
                     sym = self.symbol_table.symbols.get(var_name)
                     if sym:
