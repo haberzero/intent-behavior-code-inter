@@ -2,6 +2,7 @@
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
 > **基准状态**（2026-04-27）：678 个测试通过；Step 1–8 全部完成；Step 9–13 待推进。  
+> **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。M1 后续工作可直接依赖该原语，不再重塑容器形态。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  
 > **关联文档**：`docs/PENDING_TASKS_VM.md`（详细设计）、`docs/NEXT_STEPS.md`（近期任务）、`docs/COMPLETED.md`（已完成记录）。
 
@@ -119,7 +120,7 @@ fn int my_fn = lambda(int x):
 | `core/compiler/semantic/passes/semantic_analyzer.py` | 新增自由变量分析：扫描 lambda/snapshot 体内的引用，标注 Cell 变量（公理 SC-2） | 在 `visit_IbFunctionDef` / 新增 `visit_IbFnDecl` 分析器中实现 |
 | `core/compiler/semantic/passes/resolver.py` | fn 声明的类型解析 | 参数类型注解解析；返回类型推断 |
 | `core/compiler/serialization/serializer.py` | 序列化 `IbFnDecl` 新 AST 节点或扩展 `IbDeferred` 节点字段 | 新增 `params`/`closure_vars`/`cell_vars` 字段 |
-| `core/runtime/objects/cell.py`（新建） | 新增 `IbCell` 类型 | `IbCell(value: IbObject)`，独立于 ScopeImpl 生命周期 |
+| `core/runtime/objects/cell.py`（新建） | 新增 `IbCell` 类型 | `IbCell(value: IbObject)`，独立于 ScopeImpl 生命周期 — **[✅ 奠基已完成]** 提供 `get/set/is_empty/trace_refs`，身份语义；M1 此行剩余工作仅需在 fn/closure 接线处使用该原语 |
 | `core/runtime/objects/builtins.py:680–775` | 重写 `IbDeferred.__init__` 和 `call()` | 接收参数列表；lambda 模式 deref Cell；snapshot 模式在定义时拷贝 Cell 值 |
 | `core/runtime/objects/builtins.py:777–870` | 重写 `IbBehavior.__init__` 和 `call()` | 同上，需处理意图上下文 fork（snapshot）vs 当前上下文（lambda） |
 | `core/runtime/interpreter/handlers/stmt_handler.py:650–659` | 更新 `visit_IbFunctionDef` 处理 fn 声明的 Cell 变量分配 | 在函数入口时为 Cell 变量分配 `IbCell` 对象 |
