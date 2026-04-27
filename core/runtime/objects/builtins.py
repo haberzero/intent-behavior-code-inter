@@ -323,6 +323,12 @@ class IbString(IbObject):
 
     # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any:
+        # TODO(future): 当 IBCI 完善 try/except 机制后，此处对 llm_uncertain 的
+        # 隐式拼接将被禁止，并改由统一的不确定性异常处理路径接管。
+        # 现阶段为避免静默崩溃打断常见的 `"prefix: " + str_var` 调试路径，
+        # 暂时允许将 Uncertain 视作 "uncertain" 字符串参与拼接。
+        if other.ib_class.name == "llm_uncertain":
+            return self.value + "uncertain"
         if other.ib_class.name != "str":
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
         return self.value + other.to_native()

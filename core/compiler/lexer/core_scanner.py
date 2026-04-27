@@ -47,7 +47,7 @@ class CoreTokenScanner:
             'retry': TokenType.RETRY,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
             '__llmretry__': TokenType.LLM_RETRY_HINT,
-            'true': TokenType.TRUE, 'false': TokenType.FALSE
+            'True': TokenType.TRUE, 'False': TokenType.FALSE
         }
 
     @property

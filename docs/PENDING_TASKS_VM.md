@@ -78,7 +78,7 @@ ENTER SNAPSHOT
 2. ~~**`_last_llm_result` 迁移（§9.3）**：将该字段从 `RuntimeContextImpl`（共享）移入 `LLMExceptFrame`（per-snapshot）~~ → **已完成** ✅
 3. ~~**用户自定义对象深克隆（§9.4，方案A）**：`_try_deep_clone` 支持 plain IbObject 实例~~ → **已完成** ✅
 4. ~~**用户协议快照（§9.5，方案B）**：`__snapshot__` / `__restore__` vtable 协议~~ → **已完成** ✅
-5. **编译器 DDG 分析**（Step 8a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
+5. **编译器 DDG 分析**（Step 10a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
 6. **失败传播语义**：重试耗尽时从 `break+返回最后值` 改为抛出明确的 `LLMPermanentFailureError`，由外层处理器接管
 
 ---
@@ -89,7 +89,7 @@ ENTER SNAPSHOT
 |------|------|------|---------|
 | **方案A（自动深克隆）** | `LLMExceptFrame._try_deep_clone()` 递归克隆用户 IbObject 实例、IbList、IbTuple、IbDict；循环引用通过 `memo` dict 安全处理 | ✅ **已落地** | 通用场景；无需用户干预；含函数引用的字段自动跳过 |
 | **方案B（用户协议）** | 用户在 IBCI 类中定义 `func __snapshot__(self)` 和 `func __restore__(self, state)`；运行时在快照时调用前者，retry 前调用后者原地恢复 | ✅ **已落地** | 用户需要精确控制快照粒度（如只保存关键字段）；含不可克隆字段（如嵌套函数引用）的复杂对象 |
-| **方案C（外部序列化）** | 用户通过 `func __to_json__(self)` / `func __from_json__(str json_str)` 将对象状态序列化为 JSON；支持跨进程持久化快照 | ⏳ **VM 阶段任务** | 跨 retry 持久化；VM 级并发模型（Step 9）；支持分布式 LLM 调用恢复 |
+| **方案C（外部序列化）** | 用户通过 `func __to_json__(self)` / `func __from_json__(str json_str)` 将对象状态序列化为 JSON；支持跨进程持久化快照 | ⏳ **VM 阶段任务** | 跨 retry 持久化；VM 级并发模型（Step 11）；支持分布式 LLM 调用恢复 |
 
 **方案B 用户代码约定**：
 ```ibci
@@ -556,20 +556,22 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ---
 
-## 九、里程碑规划（订正版）
+## 九、里程碑规划（订正版，与 `docs/NEXT_STEPS.md` 编号统一）
 
 | 里程碑 | 主要内容 | 前提 | 状态 |
 |--------|---------|------|------|
 | **Step 5** | IbFunction.call() 去除 context 参数（ContextVar 引入） | Step 4b 完成 | ✅ 完成 |
 | **Step 6** | IbIntentContext 公理化（意图栈实例化 + fork 语义） | Step 5 完成 | ✅ 完成 |
 | **Step 7** | IExecutionFrame 接口归一 + LlmCallResultAxiom + IbLLMCallResult 接入 | Step 6 完成 | ✅ 完成 |
-| **Step 8-pre** | llmexcept 快照隔离语义落地（SEM read-only 约束 + `_last_llm_result` 迁移） | 独立，可随时推进 | ⏳ 待推进 |
-| **Step 8a** | DDG 编译器分析（behavior 节点标注 llm_deps + dispatch_eligible） | 独立，不依赖上述 | ⏳ 待推进 |
-| **Step 8b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 8a 完成 | ⏳ 待推进 |
-| **Step 8c** | VM dispatch-before-use 集成（visit() 感知 dispatch_eligible） | Step 7 + 8b 完成 | ⏳ 待推进 |
-| **Step 9** | 多 Interpreter 实例并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ⏳ 待推进 |
-| **Step 10** | VM CPS 调度循环（消除 Python 递归依赖，解锁第三层并发） | Step 7 完成 | ⏳ 待推进 |
-| **Step 11** | 可移植性参考实现 + 完整并发行为测试套件 | Step 10 完成 | ⏳ 待推进 |
+| **Step 8-pre** | llmexcept 快照隔离语义落地（SEM_052 read-only 约束 + `_last_llm_result` per-snapshot 化 + 用户协议快照） | 独立 | ✅ 完成（2026-04-19） |
+| **Step 8** | 概念边界文档化（`interpreter.py`/`engine.py`/`service.py` 头部边界注释） | 独立 | ✅ 完成（2026-04-20） |
+| **Step 9** | VM CPS 调度循环（消除 Python 递归依赖，解锁第三层并发） | Step 7 完成 | ⏳ 待推进 |
+| **Step 10** | Layer 1 LLM 流水线（DDG 分析 + LLMScheduler + dispatch-before-use 集成） | Step 7 完成 | ⏳ 待推进 |
+| ├ **Step 10a** | DDG 编译器分析（behavior 节点标注 llm_deps + dispatch_eligible） | Step 7 完成 | ⏳ 待推进 |
+| ├ **Step 10b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 10a 完成 | ⏳ 待推进 |
+| └ **Step 10c** | VM dispatch-before-use 集成（`visit()` 感知 dispatch_eligible） | Step 10b + Step 9 完成 | ⏳ 待推进 |
+| **Step 11** | Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ⏳ 待推进 |
+| **Step 12** | 可移植性参考实现 + 完整并发行为测试套件 | Step 9 + Step 11 完成 | ⏳ 待推进 |
 
 ---
 

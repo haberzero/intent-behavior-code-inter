@@ -1419,17 +1419,20 @@ class SemanticAnalyzer:
         """处理带过滤条件的表达式包装节点 (e.g., expr if filter)"""
         # 1. 访问被包装的表达式 (例如 While 的 test 或 For 的 iter)
         inner_type = self.visit(node.expr)
-        
+
         # 2. 访问过滤条件，它必须返回布尔值 (或可视为布尔值)
+        filter_type = self.visit(node.filter)
+
         # BugFix: 若过滤条件是行为表达式（AI filter），必须将其绑定为 bool 类型上下文，
-        # 与 visit_IbIf / visit_IbWhile 中对测试条件的处理保持对称。
-        # 缺少此绑定会导致 execute_behavior_expression 拿不到 type_hint，
+        # 与 visit_IbIf / visit_IbWhile / visit_IbFor 对 test/iter 的处理保持对称。
+        # 注意：`bind_type` 必须放在 `self.visit()` **之后**——`visit()` 末尾会用
+        # `_behavior_desc` 覆写 `node_to_type[node.filter]`，先绑后访会被覆盖，
+        # 导致 execute_behavior_expression 拿不到 type_hint，
         # 进而将 LLM 原始响应（如 "0"）包装为 IbString 而非 IbBool，
         # 使得 is_truthy 判定始终为 True，过滤条件完全失效。
         if isinstance(node.filter, ast.IbBehaviorExpr):
             self.side_table.bind_type(node.filter, self._bool_desc)
-        filter_type = self.visit(node.filter)
-        
+
         # 3. 过滤后，表达式的类型保持不变
         return inner_type
 

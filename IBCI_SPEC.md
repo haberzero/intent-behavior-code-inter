@@ -81,14 +81,15 @@ int z = do_work()  # ❌ SEM_003：不能将 void 函数结果赋给变量
 
 #### 2.1.3 布尔字面量大小写
 
-IBCI 中布尔字面量**严格区分大小写**，必须使用 `true` / `false`（小写）：
+IBCI 中布尔字面量**严格区分大小写**，必须使用 `True` / `False`（首字母大写，与 Python 一致）：
 
 ```ibci
-bool flag = true    # ✅ 合法
-bool flag = True    # ❌ 会被解析为标识符 True，导致 SEM_001 未定义变量错误
+bool flag = True    # ✅ 合法
+bool flag = true    # ❌ 会被解析为标识符 true，导致 SEM_001 未定义变量错误
 ```
 
-> 这与 Python 的 `True` / `False`（首字母大写）不同。IBCI 使用 `true` / `false` 与 JSON、Rust、Go 等保持一致。
+> IBCI 的内置常量（`True` / `False` / `None` / `Uncertain`）均采用 Python 风格（首字母大写）。
+> 这与 JSON / Rust / Go 等使用全小写的语言不同——IBCI 的设计取向更靠近 Python 习惯。
 
 #### 2.1.4 字符串的真值判定
 

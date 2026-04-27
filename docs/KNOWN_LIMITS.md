@@ -1,8 +1,15 @@
-# IBC-Inter 已知限制
+# IBC-Inter 已知限制（语言级）
 
-> 本文档记录当前版本中已知的语言设计限制和注意事项。
+> 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"，
+> 不收录尚在跟进的临时 Bug。
 >
-> **最后更新**：2026-04-27（验证代码与文档一致性；删除 KNOWN_LIMITS.md 重复章节；修正 `get_intent_context()` 幻觉 API → `intent_context.get_current()`；690 个测试通过）
+> **与顶层 `BUG_REPORTS.md` 的分工**：
+> | 文件 | 定位 | 内容风格 |
+> |------|------|----------|
+> | `BUG_REPORTS.md` | 短期问题登记簿；属于"未归档的现场记录" | 实测复现 + 临时规避 + 修复跟进 |
+> | `docs/KNOWN_LIMITS.md`（本文件） | 正式语言限制说明 | 设计意图、根源描述、推荐写法 |
+>
+> **最后更新**：2026-04-27（明确与 `BUG_REPORTS.md` 的分工；为各条限制补充"根源"说明；移除已修复条目的 `del` 文档化；`fn` 强调后续改造计划；`@!` 单次性语义重申；690 个测试通过）
 
 ---
 
@@ -11,7 +18,10 @@
 **限制说明**
 
 函数声明中的返回类型注释（`-> <type>`）目前**不支持** `None` 作为返回类型。
-原因是 `None` 是词法层面的保留关键字（`TokenType.NONE`），类型注释解析器（`TypeComponent.parse_type_annotation`）只接受标识符（IDENTIFIER）、`auto` 和 `fn` 三种形式，无法识别 `None` 关键字作为类型名。
+
+**根源**
+
+`None` 是词法层面的保留关键字（`TokenType.NONE`），类型注释解析器（`TypeComponent.parse_type_annotation`）只接受标识符（IDENTIFIER）、`auto` 和 `fn` 三种形式，无法识别 `None` 关键字作为类型名。要支持 `-> None` 需在 type annotation 解析路径中显式接受 `NONE` token。
 
 **行为**
 
@@ -43,6 +53,14 @@ func my_func():
 
 当前 `try` / `except` / `finally` 语法自身存在设计问题，**强烈不建议使用**，将在未来版本中完善。
 
+**根源**
+
+`try`/`except` 是早期为兼容传统语言习惯而保留的关键字，但 IBCI 的核心健壮性叙事是
+"LLM 不确定性 → `llmexcept` 快照隔离"。`try`/`except` 自身的异常类型层级、`raise` 语义、
+`finally` 资源释放路径在当前解释器实现中并未与 `LLMExceptFrame` / `IbLLMCallResult` 对齐——
+词法 / 解析层接受 `try`/`except`/`raise`/`finally`，运行时按顺序执行各分支，但**不会真正捕获**
+非语言级的运行时异常。后续会与"unification with `llmexcept`"或"完整 try/except 重构"一并落地。
+
 ```ibci
 # ⚠️ 强烈不建议使用——存在设计问题，行为可能不符合预期
 try:
@@ -61,7 +79,11 @@ finally:
 
 **限制说明**
 
-当前 `fn` 变量语法以及所有的可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）自身存在设计问题，**强烈不建议使用**，将在未来版本中完善。
+当前 `fn` 变量语法以及所有的可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）自身存在设计问题，**强烈不建议使用**。`fn` 相关语法将在后续版本中进行深入改造，现阶段保持"不建议使用"状态。
+
+**根源**
+
+`fn` 类型推断在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 `lambda`/`snapshot` 互通的若干路径上存在不一致——尤其是当 `fn` 持有的可调用对象内部又触发 `@~...~` 或意图栈相关副作用时，类型推断与运行时分发之间的错位可能产生静默错误。彻底修复需要等待 `fn` 语义的整体重设计。
 
 ```ibci
 # ⚠️ 强烈不建议使用——存在设计问题，行为可能不符合预期
@@ -222,3 +244,28 @@ func get_reply() -> str:
 行为表达式的目标类型同时决定了注入给 LLM 的输出格式约束（通过 `__outputhint_prompt__`）以及 LLM 返回值的解析方式（通过 `__from_prompt__`）。将其绑定到明确的左值类型可以保证语义清晰、无歧义，而不是将执行语义与函数签名隐式耦合。
 
 
+
+---
+
+## 八、`str + Uncertain` 拼接：过渡期允许，未来将禁止
+
+**当前行为（过渡期）**
+
+`str` 类型变量在运行时持有 `Uncertain`（例如 `llmretry` 重试耗尽后）时，与字符串的 `+` 拼接被允许，且 `Uncertain` 被视作字符串 `"uncertain"` 参与拼接。这是为了避免 `print("结果: " + r)` 这类常见调试模式在 LLM 失败后立刻 RUNTIME_ERROR 的"安静崩溃"路径。
+
+```ibci
+# ✅ 当前过渡期允许
+str r = @~ MOCK:FAIL ~ llmretry "..."
+print("结果: " + r)    # 输出："结果: uncertain"
+```
+
+**未来计划**
+
+后续解释器架构升级（引入更完善的 except / 不确定性异常机制）后，本行为将被禁止：`str + Uncertain`
+将不再隐式 coerce，相关错误路径将由统一的 `try/except`（或与之等价的不确定性异常处理器）接管。
+届时 `Uncertain` 必须由 `is_uncertain(r)` 显式判断后再处理。
+
+**根源**
+
+`IbString.__add__` 与 `StrAxiom.resolve_operation_type_name` 当前对 `llm_uncertain` 操作数做了
+显式放行（参见 `core/runtime/objects/builtins.py` / `core/kernel/axioms/primitives.py` 中的 TODO 注释）。

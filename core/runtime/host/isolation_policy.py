@@ -19,7 +19,7 @@ class IsolationPolicy:
     inherit_intents: bool = False
     inherit_variables: bool = False
     inherit_classes: bool = True
-    max_call_stack: int = 100
+    max_call_stack: int = 1000
     max_instructions: int = 10000
 
     def __post_init__(self):
@@ -86,6 +86,6 @@ class IsolationPolicy:
             inherit_intents=data.get("inherit_intents", False),
             inherit_variables=data.get("inherit_variables", False),
             inherit_classes=data.get("inherit_classes", True),
-            max_call_stack=data.get("max_call_stack", 100),
+            max_call_stack=data.get("max_call_stack", 1000),
             max_instructions=data.get("max_instructions", 10000)
         )

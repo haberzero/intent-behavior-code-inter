@@ -94,8 +94,16 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
         self.register(TokenType.OR, None, self.logical, IbPrecedence.OR)
         
-        # Ternary operator: condition ? body : orelse
+        # Ternary operators:
+        #   - C-style:      condition ? body : orelse
+        #   - Python-style: body if condition else orelse
+        # Both register at ASSIGNMENT precedence (just above LOWEST). When `if`
+        # appears as a Pratt infix in an expression context, it parses as the
+        # Python-style ternary; statement-level `if`/`for ... if filter:` is
+        # unaffected because those callers parse expressions at ASSIGNMENT
+        # precedence (so IF infix is not picked up).
         self.register(TokenType.QUESTION, None, self.ternary, IbPrecedence.ASSIGNMENT)
+        self.register(TokenType.IF, None, self.if_else_ternary, IbPrecedence.ASSIGNMENT)
         
         # Calls and Attributes
         self.register(TokenType.DOT, None, self.dot, IbPrecedence.CALL)
@@ -278,7 +286,7 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbBoolOp(op=op, values=[left, right]), left, right)
 
     def ternary(self, left: ast.IbExpr) -> ast.IbExpr:
-        """三元运算符：condition ? body : orelse"""
+        """C 风格三元运算符：condition ? body : orelse"""
         question_token = self.stream.previous()
         # 解析真值分支（在 COLON 之前停止，因为 COLON 无 infix 规则，优先级为 LOWEST）
         body = self.parse_expression(IbPrecedence.LOWEST)
@@ -286,6 +294,27 @@ class ExpressionComponent(BaseComponent):
         # 解析假值分支（右结合：再次从 LOWEST 开始，可嵌套三元）
         orelse = self.parse_expression(IbPrecedence.LOWEST)
         return self._loc(ast.IbIfExp(test=left, body=body, orelse=orelse), left, orelse)
+
+    def if_else_ternary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """Python 风格三元运算符：body if condition else orelse
+
+        左值 `left` 已被预先解析为 body。本方法消费 `if cond else orelse` 部分。
+        与 C 风格 `?:` 等价；解析为同一 IbIfExp AST 节点。
+
+        注意：调用者（for-loop 的 iter 表达式）需以 ASSIGNMENT 优先级调用
+        parse_expression 以避免误吞作为过滤器关键字的 `if`。
+        """
+        if_token = self.stream.previous()
+        # 解析条件，停在 ELSE 之前。由于 ELSE 没有 infix 规则，
+        # 用 LOWEST 即可（与 `?:` 中 body 的处理一致）。
+        cond = self.parse_expression(IbPrecedence.LOWEST)
+        self.stream.consume(
+            TokenType.ELSE,
+            "Expect 'else' in ternary expression 'body if cond else orelse'.",
+        )
+        # 假值分支：右结合，允许嵌套（再次从 LOWEST 开始）。
+        orelse = self.parse_expression(IbPrecedence.LOWEST)
+        return self._loc(ast.IbIfExp(test=cond, body=left, orelse=orelse), left, orelse)
 
     def in_binary(self, left: ast.IbExpr) -> ast.IbExpr:
         """成员检测运算符：elem in container"""

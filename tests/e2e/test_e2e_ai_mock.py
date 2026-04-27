@@ -103,22 +103,22 @@ class TestE2EAIControlFlow:
     def test_if_mock_true(self):
         code = ai_setup_code() + """
 if @~ MOCK:TRUE condition ~:
-    print("true branch")
+    print("True branch")
 else:
-    print("false branch")
+    print("False branch")
 """
         lines = run_and_capture(code)
-        assert "true branch" in lines
+        assert "True branch" in lines
 
     def test_if_mock_false(self):
         code = ai_setup_code() + """
 if @~ MOCK:FALSE condition ~:
-    print("true branch")
+    print("True branch")
 else:
-    print("false branch")
+    print("False branch")
 """
         lines = run_and_capture(code)
-        assert "false branch" in lines
+        assert "False branch" in lines
 
 
 # ---------------------------------------------------------------------------
