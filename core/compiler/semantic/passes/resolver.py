@@ -185,11 +185,10 @@ class TypeResolver:
             # 同步到 spec 的成员表中，使用正规的 MethodMemberSpec
             self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
-                kind="method",
+                kind="llm_method",
                 param_type_names=[p.name for p in param_types],
                 param_type_modules=[p.module_path for p in param_types],
                 return_type_name=ret_type.name,
-                llm=True,
             )
 
         sym = self.symbol_table.resolve(node.name)

@@ -582,13 +582,35 @@ class SpecRegistry:
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):
+                # For specialized generic containers, override the return type of methods
+                # that are documented as returning the element/value type.
+                # ListSpec[T].pop() → T   (axiom declares "any" as a placeholder)
+                # DictSpec[K,V].pop(key) → V
+                effective_return = member.return_type_name
+                effective_return_module = member.return_type_module
+                if member.return_type_name == "any":
+                    if (
+                        isinstance(spec, ListSpec)
+                        and attr_name == "pop"
+                        and getattr(spec, "element_type_name", "any") != "any"
+                        and not getattr(spec, "allowed_element_type_names", None)
+                    ):
+                        effective_return = spec.element_type_name
+                        effective_return_module = getattr(spec, "element_type_module", None)
+                    elif (
+                        isinstance(spec, DictSpec)
+                        and attr_name == "pop"
+                        and getattr(spec, "value_type_name", "any") != "any"
+                    ):
+                        effective_return = spec.value_type_name
+                        effective_return_module = getattr(spec, "value_type_module", None)
                 return FuncSpec(
                     name=attr_name,
                     is_user_defined=spec.is_user_defined,
                     param_type_names=list(member.param_type_names),
                     param_type_modules=list(member.param_type_modules),
-                    return_type_name=member.return_type_name,
-                    return_type_module=member.return_type_module,
+                    return_type_name=effective_return,
+                    return_type_module=effective_return_module,
                     is_llm=member.is_llm(),
                 )
             # Enum variant access: return the enum class type itself
