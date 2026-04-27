@@ -1,9 +1,5 @@
 # IBC-Inter (Intent Behavior Code - Interactive)
 
-2026-04-16 警告：近期作者初次尝试使用 copilot web agent，任务创建以及代码合并过程中出现了一些误操作，为了不丢失工作状态不得不完整合并所有未经人工review的copilot代码，这导致目前main分支暂时处在不稳定状态，且主要功能都暂时未经过全面核验。作者需要约2天时间进行全面检验和清理后才能再次核实main分支的情况。
-
-出于尽量不直接回滚main的考虑，目前紧急从历史记录中单独分支出一个临时的 temp_stable_usable 。如有试用需求可以通过此分支进行，此分支内的所有examples都是确认可用的。
-
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
 **Attention!! This repository remains in the EXPERIMENTAL DEMO phase, Please refer with caution and Do not use in production!!**
