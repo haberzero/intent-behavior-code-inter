@@ -47,6 +47,8 @@ def test_empty_sentinel_is_singleton():
     assert a.is_empty() and b.is_empty()
     # Sentinel exposed on the class is identity-stable.
     assert IbCell.EMPTY is IbCell.EMPTY
+    # And both empty cells store that same sentinel internally.
+    assert a._value is b._value is IbCell.EMPTY
 
 
 # ---------------------------------------------------------------------------
