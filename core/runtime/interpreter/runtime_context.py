@@ -502,6 +502,17 @@ class RuntimeContextImpl(RuntimeContext):
         """在全局作用域中定义变量（用于 global 语句创建新全局变量）。"""
         self._global_scope.define(name, value, declared_type, is_const, uid=uid)
 
+    def is_global_symbol_uid(self, uid: str) -> bool:
+        """
+        判断符号 UID 是否属于全局作用域。
+
+        UID 格式约定：
+        - 全局作用域变量：`scope_<module>:<varname>`（作用域部分不含 '/'）
+        - 函数/类局部变量：`scope_<module>/<func>:<varname>`（作用域部分含 '/'）
+        """
+        scope_part = uid.rsplit(":", 1)[0] if ":" in uid else uid
+        return "/" not in scope_part
+
     def push_intent(self, intent: Union[str, IbIntent], mode: str = "+", tag: Optional[str] = None) -> None:
         if isinstance(intent, str):
             intent = IbIntent(

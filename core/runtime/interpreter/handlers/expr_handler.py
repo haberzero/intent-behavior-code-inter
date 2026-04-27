@@ -1,7 +1,7 @@
 from typing import Any, Mapping, List, Optional, Union
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.interfaces import ServiceContext, IExecutionContext
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbLLMUncertain
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
@@ -102,7 +102,6 @@ class ExprHandler(BaseHandler):
             elif op == "is":
                 # 身份比较：检查两个对象是否是同一个运行时实例
                 # 特殊情况：None 和 Uncertain 使用类型检查而非实例身份
-                from core.runtime.objects.kernel import IbLLMUncertain
                 if isinstance(right, IbNone):
                     cmp_res = self.registry.box(isinstance(current_left, IbNone))
                 elif isinstance(right, IbLLMUncertain):
@@ -110,7 +109,6 @@ class ExprHandler(BaseHandler):
                 else:
                     cmp_res = self.registry.box(current_left is right)
             elif op == "is not":
-                from core.runtime.objects.kernel import IbLLMUncertain
                 if isinstance(right, IbNone):
                     cmp_res = self.registry.box(not isinstance(current_left, IbNone))
                 elif isinstance(right, IbLLMUncertain):

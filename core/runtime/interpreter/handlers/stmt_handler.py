@@ -215,10 +215,10 @@ class StmtHandler(BaseHandler):
                     self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-                    # global 声明：如果 sym_uid 属于全局作用域（不含 '/' 的作用域前缀），
+                    # global 声明：如果 sym_uid 属于全局作用域且当前不在全局作用域，
                     # 则在全局作用域中定义，而非当前（函数）作用域。
-                    scope_part = sym_uid.rsplit(":", 1)[0] if ":" in sym_uid else sym_uid
-                    if "/" not in scope_part and self.runtime_context.current_scope is not self.runtime_context.global_scope:
+                    if (self.runtime_context.is_global_symbol_uid(sym_uid)
+                            and self.runtime_context.current_scope is not self.runtime_context.global_scope):
                         self.runtime_context.define_variable_at_global(name, value, declared_type=declared_type, uid=sym_uid)
                     else:
                         self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)

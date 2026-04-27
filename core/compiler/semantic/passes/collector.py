@@ -208,7 +208,9 @@ class LocalSymbolCollector:
         for stmt in body:
             if isinstance(stmt, ast.IbGlobalStmt):
                 self.visit_IbGlobalStmt(stmt)
-            elif not (stmt.creates_scope and not isinstance(stmt, ast.IbModule)):
+            elif not stmt.creates_scope or isinstance(stmt, ast.IbModule):
+                # 只递归不创建新作用域的语句块（如 if/while/for 的 body），
+                # 跳过函数/类定义（它们各自有独立作用域，global 不穿透）。
                 for attr in ("body", "orelse", "finalbody"):
                     child = getattr(stmt, attr, None)
                     if isinstance(child, list):
@@ -256,12 +258,8 @@ class LocalSymbolCollector:
         # 仅收集带有类型标注的显式定义
         for name, target in SymbolExtractor.get_assigned_names(node):
             # global 声明：该名称已声明为全局变量，不在本地作用域中创建符号。
-            # 将赋值目标节点绑定到全局符号，以确保运行时通过 UID 写入全局作用域。
+            # 符号绑定（node→sym）由 Pass 3 (SemanticAnalyzer.visit_IbAssign) 负责处理。
             if name in self.symbol_table.global_refs:
-                global_scope = self.symbol_table.get_global_scope()
-                global_sym = global_scope.symbols.get(name)
-                if global_sym and hasattr(self.analyzer, "node_to_symbol"):
-                    self.analyzer.node_to_symbol[target] = global_sym
                 continue
 
             # 检查该 target 是否被 TypeAnnotatedExpr 包装
