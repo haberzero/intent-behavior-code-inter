@@ -255,7 +255,6 @@ IbIntentContext（意图上下文）✅ 已实现
 | 快照恢复（retry） | `restore_snapshot()` 恢复 `_intent_ctx` 引用 ✅ |
 | 函数调用帧级隔离 | ✅ **已实现**：`IbUserFunction.call()` 和 `IbLLMFunction.call()` 在函数入口处 `fork()` 调用者的 `_intent_ctx`，返回时恢复原引用（kernel.py:693-763, 814-881） |
 | 显式 `f(intent_ctx=ctx)` | 语言层暂未支持 |
-| 全局意图 `@@` 独立存储 | 通过 `_intent_ctx._global_intents` 分离存储 ✅ |
 
 > **说明**：函数调用时的帧级意图隔离已通过 `IbUserFunction.call()` 和 `IbLLMFunction.call()` 中的 fork/restore 机制实现（2026-04-19，§9.4）。函数内的 `@+`/`@-` 操作不会泄漏给调用者。llmexcept 快照同样通过 `fork()` 安全隔离。
 

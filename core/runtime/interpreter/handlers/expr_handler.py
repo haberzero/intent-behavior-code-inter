@@ -1,7 +1,7 @@
 from typing import Any, Mapping, List, Optional, Union
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.interfaces import ServiceContext, IExecutionContext
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbLLMUncertain
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
@@ -77,7 +77,7 @@ class ExprHandler(BaseHandler):
         return operand.receive(method, [])
 
     def visit_IbCompare(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """比较运算实现 (支持链式比较 a < b < c，以及 in / not in)"""
+        """比较运算实现 (支持链式比较 a < b < c，以及 in / not in / is / is not)"""
         left = self.visit(node_data.get("left"))
         ops = node_data.get("ops", [])
         comparators = node_data.get("comparators", [])
@@ -99,6 +99,22 @@ class ExprHandler(BaseHandler):
                 contained = right.receive('__contains__', [current_left])
                 native = contained.to_native() if hasattr(contained, 'to_native') else contained
                 cmp_res = self.registry.box(not bool(native))
+            elif op == "is":
+                # 身份比较：检查两个对象是否是同一个运行时实例
+                # 特殊情况：None 和 Uncertain 使用类型检查而非实例身份
+                if isinstance(right, IbNone):
+                    cmp_res = self.registry.box(isinstance(current_left, IbNone))
+                elif isinstance(right, IbLLMUncertain):
+                    cmp_res = self.registry.box(isinstance(current_left, IbLLMUncertain))
+                else:
+                    cmp_res = self.registry.box(current_left is right)
+            elif op == "is not":
+                if isinstance(right, IbNone):
+                    cmp_res = self.registry.box(not isinstance(current_left, IbNone))
+                elif isinstance(right, IbLLMUncertain):
+                    cmp_res = self.registry.box(not isinstance(current_left, IbLLMUncertain))
+                else:
+                    cmp_res = self.registry.box(current_left is not right)
             else:
                 method = OP_MAPPING.get(op)
                 if not method:

@@ -86,6 +86,9 @@ class ExpressionComponent(BaseComponent):
 
         # Containment operators: in / not in (comparison-level precedence)
         self.register(TokenType.IN, None, self.in_binary, IbPrecedence.COMPARISON)
+
+        # Identity operators: is / is not (comparison-level precedence)
+        self.register(TokenType.IS, None, self.is_binary, IbPrecedence.COMPARISON)
         
         # Logical Operations
         self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
@@ -294,6 +297,15 @@ class ExpressionComponent(BaseComponent):
         in_token = self.stream.consume(TokenType.IN, "Expect 'in' after 'not' in 'not in' expression.")
         right = self.parse_precedence(IbPrecedence.COMPARISON)
         return self._loc(ast.IbCompare(left=left, ops=["not in"], comparators=[right]), left, right)
+
+    def is_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """身份检测运算符：x is y / x is not y"""
+        # 检查是否是 'is not' 复合运算符
+        if self.stream.match(TokenType.NOT):
+            right = self.parse_precedence(IbPrecedence.COMPARISON)
+            return self._loc(ast.IbCompare(left=left, ops=["is not"], comparators=[right]), left, right)
+        right = self.parse_precedence(IbPrecedence.COMPARISON)
+        return self._loc(ast.IbCompare(left=left, ops=["is"], comparators=[right]), left, right)
 
     def call(self, left: ast.IbExpr) -> ast.IbCall:
         arguments = []

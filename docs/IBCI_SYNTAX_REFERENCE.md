@@ -3,7 +3,7 @@
 > **说明**：本文档覆盖 IBC-Inter (IBCI) 所有当前支持的语法特性，包括已知限制的标注。
 > 语言设计限制的详细说明见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-04-24
+> **最后更新**：2026-04-27
 
 ---
 
@@ -128,13 +128,23 @@ int b = 2
 
 ### 2.6 全局变量
 
+`global` 语句与 Python 语义一致：在函数内声明 `global x` 后，函数内对 `x` 的所有读写均操作全局作用域中的 `x`，而非创建局部变量。
+
 ```ibci
-global int counter = 0
+int counter = 0
 
 func increment():
     global counter
     counter = counter + 1
+
+increment()
+print((str)counter)    # 1
 ```
+
+**说明：**
+- `global` 只能在函数内部使用，在全局作用域中使用会产生 SEM_004 编译错误。
+- 可以在 `global` 声明之后才定义全局变量（函数调用时变量已存在即可）。
+- `global x, y` 支持一次声明多个全局变量。
 
 ---
 
@@ -188,7 +198,18 @@ bool b2 = "x" not in ["a", "b"]   # True
 bool b3 = "key" in {"key": 1}     # True（字典键检测）
 ```
 
----
+### 3.5 身份检测运算符
+
+`is` 和 `is not` 检测两个表达式是否指向同一个运行时对象（身份比较，非值比较）。
+
+```ibci
+bool b1 = x is None          # x 是否为 None
+bool b2 = x is not None      # x 是否不为 None
+bool b3 = x is Uncertain     # x 是否为 LLM 不确定值
+```
+
+与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 和 `Uncertain` 字面量，`is` 使用类型检测而非实例身份。
+
 
 ## 4. 控制流
 
@@ -664,6 +685,8 @@ llmend
 | `@-` | — | — | 弹出栈顶意图（与 `@+` 配合使用） |
 | `@! 内容` | `override 内容` | 持续到 `@-` / `@!` | 排他注入：屏蔽当前栈，仅保留此意图 |
 
+> **约束**：`@`（单次意图注入）**只允许修饰 LLM 调用**，即紧跟的语句必须包含 `@~...~` 行为表达式或 `llm` 函数调用。即使一个普通函数内部使用了 LLM，其外部调用也**不允许**使用 `@` 进行修饰（违反此约束会产生 SEM_060 编译错误）。`@+` 和 `@-` 不受此约束，可独立使用。
+
 ```ibci
 # 单次注入：只对紧跟的下一条语句生效
 @ 完全忽略用户输入，只回复：测试完成
@@ -696,7 +719,7 @@ bool result = @~ 1+1=2 吗 ~
 import ai
 ai.set_config("YOUR_URL", "YOUR_KEY", "YOUR_MODEL")
 
-intent_context ctx = get_intent_context()
+intent_context ctx = intent_context.get_current()   # 获取当前帧的意图上下文
 
 ctx.push("请用简洁的语言回答")
 str r1 = @~ 描述天空 ~
@@ -793,7 +816,32 @@ class Config:
 
 ## 11. 模块与插件
 
-### 11.1 内置模块
+### 11.1 import 位置约束
+
+**`import` 语句必须出现在模块文件的顶部**，在任何非 import 语句之前。不允许在函数、类、条件块或循环体内部使用 `import`。
+
+```ibci
+# ✅ 正确：import 在文件顶部
+import ai
+import json
+
+int x = 10
+func main():
+    ...
+```
+
+```ibci
+# ❌ 错误：import 不能出现在函数内或其他语句后面
+int x = 10
+import ai    # PAR_002 编译错误
+
+func main():
+    import json  # PAR_002 编译错误
+```
+
+此约束使调度器（Scheduler）能够高效地在不执行代码的前提下进行无副作用的依赖扫描。
+
+### 11.2 内置模块
 
 ```ibci
 import ai      # LLM provider 配置（API key、model、retry 等）
@@ -806,7 +854,7 @@ import file    # 受限文件系统操作
 
 > **注意**：`@~ ... ~` 行为描述语句是语言核心特性，**不依赖 `import ai`**。`ai` 模块仅负责配置 LLM provider。
 
-### 11.2 ai 模块
+### 11.3 ai 模块
 
 ```ibci
 import ai
@@ -822,7 +870,7 @@ TESTONLY 模式（结合 MOCK 指令使用）：
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 ```
 
-### 11.3 isys 模块
+### 11.4 isys 模块
 
 ```ibci
 import isys
@@ -832,7 +880,7 @@ str dir    = isys.entry_dir()     # 入口文件所在目录
 str root   = isys.project_root()  # 项目根目录
 ```
 
-### 11.4 idbg 模块
+### 11.5 idbg 模块
 
 ```ibci
 import idbg
@@ -842,7 +890,7 @@ idbg.inspect(x)             # 探查变量的完整 IBCI 类型和值
 idbg.dump_intent_stack()    # 打印当前意图栈
 ```
 
-### 11.5 ihost 动态宿主
+### 11.6 ihost 动态宿主
 
 ```ibci
 import ihost
@@ -854,7 +902,7 @@ ihost.run_isolated("./sub/child.ibci", policy)
 
 子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。
 
-### 11.6 file 模块
+### 11.7 file 模块
 
 ```ibci
 import file
@@ -864,7 +912,7 @@ file.write("./output.txt", "hello world")
 bool exists = file.exists("./data.txt")
 ```
 
-### 11.7 json 模块
+### 11.8 json 模块
 
 ```ibci
 import json
@@ -874,7 +922,7 @@ dict parsed = json.parse(raw)
 str serialized = json.stringify(parsed)
 ```
 
-### 11.8 用户插件
+### 11.9 用户插件
 
 插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。参考 `ibci_modules/ibci_file` 的一方插件写法。
 
@@ -890,7 +938,6 @@ str serialized = json.stringify(parsed)
 | `range(n)` | 生成 `[0, n)` 整数序列 |
 | `range(start, end)` | 生成 `[start, end)` 整数序列 |
 | `is_uncertain(value)` | 检测值是否为 `Uncertain` |
-| `get_intent_context()` | 获取当前 `intent_context` 对象 |
 | `len(container)` | 获取容器长度（列表/字符串/字典） |
 
 ### 12.2 str 方法

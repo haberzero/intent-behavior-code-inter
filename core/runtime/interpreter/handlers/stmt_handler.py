@@ -27,6 +27,10 @@ class StmtHandler(BaseHandler):
     def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         return self.registry.get_none()
 
+    def visit_IbGlobalStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """global 声明是编译期语义，运行时无需操作。"""
+        return self.registry.get_none()
+
     def visit_IbLLMExceptionalStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """
         执行 llmexcept 语句 (影子执行驱动模式)。
@@ -211,7 +215,13 @@ class StmtHandler(BaseHandler):
                     self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-                    self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                    # global 声明：如果 sym_uid 属于全局作用域且当前不在全局作用域，
+                    # 则在全局作用域中定义，而非当前（函数）作用域。
+                    if (self.runtime_context.is_global_symbol_uid(sym_uid)
+                            and self.runtime_context.current_scope is not self.runtime_context.global_scope):
+                        self.runtime_context.define_variable_at_global(name, value, declared_type=declared_type, uid=sym_uid)
+                    else:
+                        self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
             elif not self.execution_context.strict_mode:
                 # 回退到名称查找
                 try:
