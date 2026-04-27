@@ -141,14 +141,53 @@ class DeclarationComponent(BaseComponent):
         target = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
         if type_annotation:
             target = self._loc(ast.IbTypeAnnotatedExpr(target=target, annotation=type_annotation), type_token)
-        
+
+        # 裸列形式元组解包：`int a, int b = t` / `auto a, auto b = t` / `int a, str b = (1, "x")`
+        # 与括号形式 `(int a, int b) = t` 等价。要求所有分量同样以变量声明开头
+        # （即每个分量都需要 type / auto / fn 引导，允许其后再带类型注解的标识符）。
+        # 不允许在 deferred_mode 修饰下的裸列形式（lambda/snapshot 仅支持单变量声明）。
+        if self.stream.check(TokenType.COMMA) and deferred_mode is None:
+            elts = [target]
+            while self.stream.match(TokenType.COMMA):
+                elt_type_token = self.stream.peek()
+                if self.stream.match(TokenType.AUTO):
+                    auto_name = ID_AUTO
+                    if self.context.metadata:
+                        auto_desc = self.context.metadata.resolve(ID_AUTO)
+                        if auto_desc:
+                            auto_name = auto_desc.name
+                    elt_annotation = self._loc(ast.IbName(id=auto_name, ctx='Load'), elt_type_token)
+                else:
+                    elt_annotation = self.type_def.parse_type_annotation()
+                elt_name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name in tuple destructuring.")
+                elt_name_node = self._loc(ast.IbName(id=elt_name_token.value, ctx='Store'), elt_name_token)
+                elt = self._loc(
+                    ast.IbTypeAnnotatedExpr(target=elt_name_node, annotation=elt_annotation),
+                    elt_type_token,
+                )
+                elts.append(elt)
+
+            tuple_target = self._loc(ast.IbTuple(elts=elts, ctx='Store'), type_token)
+
+            value = None
+            if self.stream.match(TokenType.ASSIGN):
+                value = self.expression.parse_expression()
+
+            self.stream.consume_end_of_statement("Expect newline after tuple destructuring declaration.")
+            end_token = self.stream.previous()
+
+            return self._loc(
+                ast.IbAssign(targets=[tuple_target], value=value, deferred_mode=None),
+                type_token, end_token,
+            )
+
         value = None
         if self.stream.match(TokenType.ASSIGN):
             value = self.expression.parse_expression()
-        
+
         self.stream.consume_end_of_statement("Expect newline after variable declaration.")
         end_token = self.stream.previous()
-        
+
         return self._loc(
             ast.IbAssign(targets=[target], value=value, deferred_mode=deferred_mode),
             type_token, end_token

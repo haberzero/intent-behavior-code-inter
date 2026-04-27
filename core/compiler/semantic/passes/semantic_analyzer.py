@@ -1213,22 +1213,45 @@ class SemanticAnalyzer:
                     self.error(f"Type '{iter_type.name}' is not iterable", node.iter, code="SEM_003")
                     element_type = self._any_desc
             
-            for var_name, target in SymbolExtractor.get_assigned_names(node):
+            # get_assigned_names 对带类型标注的 target 会同时产出 (name, IbTypeAnnotatedExpr)
+            # 与 (name, IbName) 两条条目（外层用于取 annotation，内层用于绑定标识符）。
+            # 若元组目标使用类型标注（如 for (int x, int y) in coords），未做去重会导致
+            # 内层 IbName 条目以未标注的 element_type 覆盖外层已写入的精确类型。
+            entries = SymbolExtractor.get_assigned_names(node)
+            typed_names = {n for n, t in entries if isinstance(t, ast.IbTypeAnnotatedExpr)}
+            # 是否为元组解包目标：此时每个 element 各有自己的（可选）注解，整体 element_type
+            # 不应被作为各分量的兜底类型——元组分量类型由 element_type 的成员推导决定，
+            # 这里没有可靠的成员类型时，宁可保持 any 也不要把整体 tuple 类型作为分量类型。
+            is_tuple_target = isinstance(node.target, ast.IbTuple)
+
+            for var_name, target in entries:
+                is_typed_target = isinstance(target, ast.IbTypeAnnotatedExpr)
+                # 跳过同一名字的 IbName 重复条目：仅做 side_table 绑定，避免覆盖已确定的类型
+                if (not is_typed_target) and var_name in typed_names:
+                    sym = self.symbol_table.symbols.get(var_name)
+                    if sym:
+                        self.side_table.bind_symbol(target, sym)
+                    continue
+
                 # 优先使用显式类型标注，而非推导出的 element_type
-                effective_type = element_type
-                if isinstance(target, ast.IbTypeAnnotatedExpr):
+                if is_typed_target:
                     effective_type = self.visit(target.annotation)
-                
+                elif is_tuple_target:
+                    # 元组解包但未给该元素加注解：保持 any，不要使用整体 element_type
+                    effective_type = self._any_desc
+                else:
+                    effective_type = element_type
+
                 # 检查是否已在 Pass 2.5 预扫描中定义
                 sym = self.symbol_table.symbols.get(var_name)
-                
+
                 # [STABILIZATION] 只有当新类型比现有类型更精确时才更新
                 if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
                     sym = self._define_var(var_name, effective_type, target, allow_overwrite=(sym is not None))
                 elif not self.registry.is_dynamic(effective_type):
                     # 如果新类型不是 Any，则强制更新（覆盖之前的推导）
                     sym.spec = effective_type
-                
+
                 if sym:
                     self.side_table.bind_symbol(target, sym)
 

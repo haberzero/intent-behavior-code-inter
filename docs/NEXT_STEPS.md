@@ -266,23 +266,24 @@ str msg = fmt("hello")    # → "INFO: hello"
 
 > **来源**：2026-04-27 实测核实。
 
-### 现状摘要
+### 现状摘要（2026-04-27 更新）
 
 | 写法 | 行为 | 备注 |
 |------|------|------|
-| `int a, int b = t` | ❌ 编译错 `PAR_001: Expect newline after variable declaration.` | 语法被解析为 "声明 a 后多余 token" |
-| `(int a, int b) = t` | ✅ 正常，按 `tuple → 两个 int` 解包 | 推荐写法 |
+| `int a, int b = t` | ✅ **已修复**（裸列形式元组解包） | 与 Python `a, b = t` 对齐 |
+| `(int a, int b) = t` | ✅ 正常，按 `tuple → 两个 int` 解包 | 等价写法 |
 | `(int a, int b) = (1, 2, 3)` | ❌ 运行期 `RUN_001: Unpack error: expected 2 values, got 3` | 元数检查正确 |
 | `(int a, str b) = (1, "x")` | ✅ 正常，混合类型解包正确 | — |
-| `for (int x, int y) in list[tuple]` | ❌ `RUN_002: Type mismatch: Cannot assign 'int' to 'tuple' for variable 'x'` | for-target 的元组形式未被识别为解包目标，整个 `(int x, int y)` 被当作"名为 x 的 tuple 变量声明"，迭代时把 int 元素塞到 tuple 槽，运行时类型检查失败 |
+| `for (int x, int y) in list[tuple]` | ✅ **已修复** | 解析为元组解包目标，每个分量按各自标注类型定义 |
 | `tuple t = (1, 2); auto a = t[0]; auto b = t[1]` | ✅ 正常 | 下标访问可用 |
 | `tuple` 函数返回值再下标 | ✅ 正常 | `(int)r[0]` 可用 |
 
-### 待改进项（Step 9 之前可独立推进，建议优先级 P3）
+### 已完成（小任务，2026-04-27）
 
-1. **`int a, int b = t`（裸列形式）应当合法**：与 Python `a, b = t` 对齐，无需括号。需要在语句解析路径检测"声明项后接逗号"模式并切到解包目标处理逻辑，而非报 `PAR_001`。
-2. **`for (int x, int y) in coords:` 失效（关键）**：当前 `for_statement` 中 `_parse_for_loop_target()` 对带类型标注的元组目标识别不完整：括号内的多声明被错误折叠为单变量声明（变量名 `x`，类型 `tuple`）。修复点在 `core/compiler/parser/components/statement.py:_parse_for_loop_target` 与 for 目标向 `_assign_to_target` 的传递路径——需将括号目标传为元组解包目标列表，而不是单个变量。
-3. **错误信息精炼**：当前 `RUN_001 Unpack error: expected N got M` 已可读，`RUN_002 Cannot assign 'int' to 'tuple' for variable 'x'` 在 for-tuple 误识别场景下信息误导，应在解析期就拒绝当前"折叠"形式，而不是延迟到运行时类型校验阶段。
+1. ✅ **裸列形式 `int a, int b = t` 元组解包**：解析器在解析单变量声明后探测 `,` 折叠为元组解包目标（`core/compiler/parser/components/declaration.py:variable_declaration`）；支持 `auto` / 类型混搭；`deferred_mode` 修饰下保持单变量语义不变。
+2. ✅ **`for (int x, int y) in coords:` 类型标注元组目标**：根因在语义分析的 `visit_IbFor` 对 `get_assigned_names` 输出的去重缺失——同名 `IbName` 条目以 `element_type` 覆盖了 `IbTypeAnnotatedExpr` 已写入的精确类型；修复后逐分量类型与注解一致（`core/compiler/semantic/passes/semantic_analyzer.py:visit_IbFor`）。
+3. ✅ **错误路径自然消解**：`for (int x, int y) in list[tuple]` 不再误用整体 `tuple` 类型作为分量类型，旧的 `RUN_002` 误导信息不再可达。元组目标但缺少注解的元素现在保持 `any`，避免错误的兜底类型。
+
 
 ### 临时规避
 
