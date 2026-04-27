@@ -3,7 +3,7 @@
 > **说明**：本文档覆盖 IBC-Inter (IBCI) 所有当前支持的语法特性，包括已知限制的标注。
 > 语言设计限制的详细说明见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-04-24
+> **最后更新**：2026-04-27
 
 ---
 
@@ -719,7 +719,7 @@ bool result = @~ 1+1=2 吗 ~
 import ai
 ai.set_config("YOUR_URL", "YOUR_KEY", "YOUR_MODEL")
 
-intent_context ctx = get_intent_context()
+intent_context ctx = intent_context.get_current()   # 获取当前帧的意图上下文
 
 ctx.push("请用简洁的语言回答")
 str r1 = @~ 描述天空 ~
@@ -938,7 +938,6 @@ str serialized = json.stringify(parsed)
 | `range(n)` | 生成 `[0, n)` 整数序列 |
 | `range(start, end)` | 生成 `[start, end)` 整数序列 |
 | `is_uncertain(value)` | 检测值是否为 `Uncertain` |
-| `get_intent_context()` | 获取当前 `intent_context` 对象 |
 | `len(container)` | 获取容器长度（列表/字符串/字典） |
 
 ### 12.2 str 方法

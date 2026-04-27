@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-20（str/dict 方法补全；Step 8 架构边界文档化；Bug 修复：IbBool(False) 假值判断 + `llmexcept`-after-if/while/for 修复 + `list[str]`/`dict[K,V]` 泛型专化；610 个测试通过）
+> **最后更新**：2026-04-27（文档与代码一致性审计；690 个测试通过；str/list * int 乘法、global 语句、is/is not 运算符等均已验证）
 
 ---
 
