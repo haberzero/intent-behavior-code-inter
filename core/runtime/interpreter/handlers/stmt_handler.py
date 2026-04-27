@@ -1,7 +1,8 @@
 from typing import Any, Mapping, List, Optional, Callable
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.objects.kernel import IbObject, IbUserFunction, IbLLMFunction, IbClass
-from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList, IIbBehavior
+from core.runtime.interfaces import IExecutionContext, ServiceContext, IIbList
+from core.runtime.objects.builtins import IbBehavior
 from core.runtime.exceptions import (
     ReturnException, BreakException, ContinueException, ThrownException
 )
@@ -24,6 +25,10 @@ class StmtHandler(BaseHandler):
         return result
 
     def visit_IbPass(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        return self.registry.get_none()
+
+    def visit_IbGlobalStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """global 声明是编译期语义，运行时无需操作。"""
         return self.registry.get_none()
 
     def visit_IbLLMExceptionalStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -50,60 +55,70 @@ class StmtHandler(BaseHandler):
             max_retry=max_retry
         )
 
+        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
+            f"llmexcept: entering frame for target={target_uid}, max_retry={max_retry}")
+
+        last_target_value = None
         try:
             while frame.should_continue_retrying():
+                attempt = frame.retry_count + 1
+                self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
+                    f"llmexcept: attempt {attempt}/{frame.max_retry + 1}, target={target_uid}")
+
                 # 显式恢复上下文快照 (如果是 retry 跳转回来的)
                 frame.restore_snapshot(self.runtime_context)
 
-                # [CRITICAL] retry 后重新执行赋值时，需要清除 last_llm_result
-                # 否则 visit_IbAssign 会因为 is_uncertain=True 而再次跳过赋值
-                if frame.should_retry:
-                    self.runtime_context.set_last_llm_result(None)
+                # §9.3: 进入快照前清除共享信号通道，防止前次结果污染本次判断。
+                # 此处总是清除（无条件），消除对 frame.should_retry 状态的依赖。
+                self.runtime_context.set_last_llm_result(None)
 
                 # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
-                self.execution_context.visit(target_uid, bypass_protection=True)
+                last_target_value = self.execution_context.visit(target_uid, bypass_protection=True)
 
-                # 检查执行后的 LLM 结果确定性
+                # §9.3: 读取 LLM 结果后立即从共享字段迁移到帧私有字段，
+                # 使 _last_llm_result 的生命周期缩小为"快照内通信"（进入清零，读后清零）。
                 result = self.runtime_context.get_last_llm_result()
+                self.runtime_context.set_last_llm_result(None)
 
                 # 如果没有 LLM 调用，或者 LLM 调用是确定的（成功匹配或明确失败）
-                if result is None or not result.is_uncertain:
+                if result is None or result.is_certain:
+                    self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL,
+                        f"llmexcept: resolved on attempt {attempt}, target={target_uid}")
                     break
 
                 # 运行到这里说明 LLM 返回了 UNCERTAIN 结果
+                raw_preview = (result.raw_response or "")[:60].replace("\n", " ")
+                self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
+                    f"llmexcept: uncertain result on attempt {attempt} (raw: '{raw_preview}'), entering handler body")
+
+                # §9.3: 结果存入帧私有字段; _last_llm_result 在 body 执行期间维持 None。
+                # idbg.last_result() / idbg.last_llm() 从 frames[-1].last_result 读取，无需恢复。
                 frame.last_result = result
                 frame.should_retry = False  # 重置为 False，等待 body 中的 retry 语句显式触发
 
-                # [IMPORTANT] 在执行 llmexcept 块之前，临时清除不确定性标记。
-                # 否则，块内的任何 IbAssign 都会因为看到 last_llm_result.is_uncertain 而跳过赋值。
-                self.runtime_context.set_last_llm_result(None)
-
                 # 执行 llmexcept 的 body 块 (处理逻辑)
-                try:
-                    for stmt_uid in body_uids:
-                        self.visit(stmt_uid)
-                finally:
-                    # 恢复最后的结果信息，以便块内的 idbg.last_result() 能拿到数据
-                    # 注意：如果 body 块内又产生了新的 LLM 调用，这里不应该覆盖它
-                    if self.runtime_context.get_last_llm_result() is None:
-                        self.runtime_context.set_last_llm_result(result)
+                for stmt_uid in body_uids:
+                    self.visit(stmt_uid)
 
                 # 检查重试计数
                 if not frame.increment_retry():
+                    self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
+                        f"llmexcept: max retries ({frame.max_retry}) exhausted for target={target_uid}")
                     break
 
         finally:
             # 弹出当前帧
             self.runtime_context.pop_llm_except_frame()
 
-        return self.registry.get_none()
+        # 返回 target 最后一次执行的值（对条件驱动 for 循环的条件表达式至关重要）
+        return last_target_value if last_target_value is not None else self.registry.get_none()
 
     def visit_IbExprStmt(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """表达式语句"""
         res = self.visit(node_data.get("value"))
-        # 如果是行为描述行，则立即执行（作为语句时）
-        if isinstance(res, IIbBehavior):
-            return self._execute_behavior(res)
+        # 如果是行为对象（延迟 behavior 被当作语句直接使用），触发自主执行
+        if isinstance(res, IbBehavior):
+            return res.call(self.registry.get_none(), [])
         return res
 
     def visit_IbIntentAnnotation(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
@@ -113,11 +128,10 @@ class StmtHandler(BaseHandler):
         IbIntentAnnotation 代表单行意图注释，必须后续紧跟 LLM 调用。
 
         语义区别：
-        - @ : 将意图压入运行时栈（持续有效）
-        - @! : 设置临时的排他意图（只对当前这一次 LLM 调用有效）
+        - @ : 一次性涂抹意图（只对紧跟的下一次 LLM 调用有效，自动清除）
+        - @! : 排他意图（只对当前这一次 LLM 调用有效，屏蔽当前栈）
 
-        @! 是临时的单次作用的 IntentStack 实例，LLM 调用完成后自动清除。
-        全局意图栈保持不变。
+        两者都是临时的，不会永久修改持久意图栈。
         """
         intent_info_uid = node_data.get("intent")
         if not intent_info_uid:
@@ -138,8 +152,9 @@ class StmtHandler(BaseHandler):
         if intent.is_override:
             self.runtime_context.set_pending_override_intent(intent)
         else:
-            # @ 普通意图：压入运行时栈
-            self.runtime_context.push_intent(intent)
+            # @ 一次性涂抹意图：加入 pending 队列，下一次 LLM 调用消费后自动清除
+            # 不压入持久意图栈（@+ 才是持久压栈）
+            self.runtime_context.add_smear_intent(intent)
 
         return self.registry.get_none()
 
@@ -200,7 +215,13 @@ class StmtHandler(BaseHandler):
                     self.runtime_context.set_variable_by_uid(sym_uid, value)
                 else:
                     declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-                    self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                    # global 声明：如果 sym_uid 属于全局作用域且当前不在全局作用域，
+                    # 则在全局作用域中定义，而非当前（函数）作用域。
+                    if (self.runtime_context.is_global_symbol_uid(sym_uid)
+                            and self.runtime_context.current_scope is not self.runtime_context.global_scope):
+                        self.runtime_context.define_variable_at_global(name, value, declared_type=declared_type, uid=sym_uid)
+                    else:
+                        self.runtime_context.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
             elif not self.execution_context.strict_mode:
                 # 回退到名称查找
                 try:
@@ -258,13 +279,43 @@ class StmtHandler(BaseHandler):
     def visit_IbAssign(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """实现赋值语句"""
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"Executing assignment {node_uid}")
-        
-        value = self.visit(node_data.get("value"))
+
+        # 在访问 value 前清除上一次的 LLM 结果，防止来自前序语句的过期不确定性标记
+        # 污染当前赋值。访问 value 后读取的结果仅反映本次值求值过程。
+        self.runtime_context.set_last_llm_result(None)
+
+        value_uid = node_data.get("value")
+
+        # 通用延迟表达式拦截：
+        # 如果 value 被标记为 deferred 且不是 behavior 表达式（behavior 有自己的延迟处理），
+        # 则创建 IbDeferred 对象而非立即求值。
+        is_deferred = self.get_side_table("node_is_deferred", value_uid) if value_uid else False
+        if is_deferred and value_uid:
+            value_node_data = self.get_node_data(value_uid) if isinstance(value_uid, str) else None
+            value_node_type = value_node_data.get("_type", "") if value_node_data is not None else ""
+            if value_node_type != "IbBehaviorExpr":
+                # 通用延迟：创建 IbDeferred 对象包裹任意表达式
+                deferred_mode = self.get_side_table("node_deferred_mode", value_uid) or "lambda"
+                captured_scope = None
+                if deferred_mode == "snapshot":
+                    # snapshot 模式：捕获当前作用域的引用
+                    captured_scope = self.runtime_context.current_scope
+                value = self.service_context.object_factory.create_deferred(
+                    value_uid,
+                    deferred_mode=deferred_mode,
+                    execution_context=self._execution_context,
+                    captured_scope=captured_scope,
+                )
+            else:
+                # behavior 表达式走原有路径（visit_IbBehaviorExpr 内部处理延迟）
+                value = self.visit(value_uid)
+        else:
+            value = self.visit(value_uid)
 
         # 检查是否由于 LLM 不确定性导致赋值未完成
         # 如果是，则赋值为 IbLLMUncertain 特殊值，而不是跳过赋值
         last_result = self.runtime_context.get_last_llm_result()
-        if last_result and last_result.is_uncertain:
+        if last_result and not last_result.is_certain:
             value = self.registry.get_llm_uncertain()
         
         for target_uid in node_data.get("targets", []):
@@ -280,8 +331,9 @@ class StmtHandler(BaseHandler):
         value = self.visit(node_data.get("value"))
         op_symbol = node_data.get("op")
         
-        # 使用全局归一化映射，支持完整运算符集（包含 % // 等）
-        op = AST_OP_MAP.get(op_symbol, op_symbol)
+        # 复合赋值运算符存储为 "+=" 形式，去掉末尾 "=" 得到基础运算符
+        base_op = op_symbol.rstrip('=') if op_symbol and op_symbol.endswith('=') else op_symbol
+        op = AST_OP_MAP.get(base_op, base_op)
         method = OP_MAPPING.get(op)
         
         if not method: raise self.report_error(f"Unsupported aug op: {op_symbol}", node_uid)
@@ -308,10 +360,12 @@ class StmtHandler(BaseHandler):
 
     def visit_IbSwitch(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """Switch-Case 语句"""
+        # 清除过期的 LLM 结果，确保只检查 test 表达式自身的求值结果
+        self.runtime_context.set_last_llm_result(None)
         test_value = self.visit(node_data.get("test"))
 
         last_result = self.runtime_context.get_last_llm_result()
-        if last_result and last_result.is_uncertain:
+        if last_result and not last_result.is_certain:
             return self.registry.get_none()
 
         case_uids = node_data.get("cases", [])
@@ -342,12 +396,14 @@ class StmtHandler(BaseHandler):
 
     def visit_IbIf(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """条件分支语句"""
+        # 清除过期的 LLM 结果，确保只检查 test 条件自身的求值结果
+        self.runtime_context.set_last_llm_result(None)
         condition = self.visit(node_data.get("test"))
 
         # 核心：检查测试表达式是否产生了不确定的 LLM 结果
         # 如果不确定，说明 AI 决策模糊，我们需要立即终止 IbIf 的执行，让控制流回退到保护者
         last_result = self.runtime_context.get_last_llm_result()
-        if last_result and last_result.is_uncertain:
+        if last_result and not last_result.is_certain:
             return self.registry.get_none()
 
         if self.execution_context.is_truthy(condition):
@@ -360,11 +416,16 @@ class StmtHandler(BaseHandler):
 
     def visit_IbWhile(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """循环语句"""
+        test_uid = node_data.get("test")
+        
         while True:
-            condition = self.visit(node_data.get("test"))
+            # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
+            # 污染下一次循环条件的检测。只有本次条件求值产生的 LLM 结果才应被检查。
+            self.runtime_context.set_last_llm_result(None)
+            condition = self.visit(test_uid)
 
             last_result = self.runtime_context.get_last_llm_result()
-            if last_result and last_result.is_uncertain:
+            if last_result and not last_result.is_certain:
                 return self.registry.get_none()
 
             if not self.execution_context.is_truthy(condition):
@@ -384,16 +445,33 @@ class StmtHandler(BaseHandler):
         target_uid = node_data.get("target")
         iter_uid = node_data.get("iter")
         body = node_data.get("body", [])
-        
+
+        # 检查 iter 是否为 IbFilteredExpr（for ... in items if filter: 或
+        # 条件驱动 for @~...~ if filter:），提前拆包为 actual_iter_uid + filter_uid。
+        filter_uid = None
+        actual_iter_uid = iter_uid
+        iter_node_data = self.get_node_data(iter_uid)
+        if iter_node_data and iter_node_data.get("_type") == "IbFilteredExpr":
+            actual_iter_uid = iter_node_data.get("expr")
+            filter_uid = iter_node_data.get("filter")
+
         # 条件驱动循环 (Condition-driven loop: for @~ ... ~:)
         if target_uid is None:
             while True:
-                condition = self.visit(iter_uid)
+                # 每次迭代前清除过期的 LLM 结果，防止循环体内的不确定性标记
+                # 污染下一次循环条件的检测。
+                self.runtime_context.set_last_llm_result(None)
+                condition = self.visit(actual_iter_uid)
                 last_result = self.runtime_context.get_last_llm_result()
-                if last_result and last_result.is_uncertain:
+                if last_result and not last_result.is_certain:
                     return self.registry.get_none()
                 if not self.execution_context.is_truthy(condition):
                     break
+                # 过滤条件（如果有）：不满足则终止循环（与 while...if 语义一致）
+                if filter_uid is not None:
+                    filter_val = self.visit(filter_uid)
+                    if not self.execution_context.is_truthy(filter_val):
+                        break
                 try:
                     for stmt_uid in body:
                         self.visit(stmt_uid)
@@ -404,26 +482,63 @@ class StmtHandler(BaseHandler):
             return self.registry.get_none()
 
         # 标准 Foreach 循环 (for item in list)
-        iterable_obj = self.visit(iter_uid)
+        iterable_obj = self.visit(actual_iter_uid)
         # Check for iterable: has 'elements' list attribute (duck-typing over IIbList protocol)
         if hasattr(iterable_obj, 'elements') and isinstance(iterable_obj.elements, list):
             elements_obj = iterable_obj
         else:
+            elements_obj = None
+            # 1. __iter__ 协议：对象实现了 __iter__() 方法，返回 list 对象
             try:
-                result = iterable_obj.receive('to_list', [])
-                elements_obj = result if (hasattr(result, 'elements') and isinstance(result.elements, list)) else None
+                result = iterable_obj.receive('__iter__', [])
+                if hasattr(result, 'elements') and isinstance(result.elements, list):
+                    elements_obj = result
             except (AttributeError, InterpreterError):
-                elements_obj = None
+                pass
+            # 2. to_list 兜底：旧版内置类型的转换接口
+            if elements_obj is None:
+                try:
+                    result = iterable_obj.receive('to_list', [])
+                    elements_obj = result if (hasattr(result, 'elements') and isinstance(result.elements, list)) else None
+                except (AttributeError, InterpreterError):
+                    elements_obj = None
         if elements_obj is None:
             raise self.report_error(f"Object is not iterable", node_uid)
         
         elements = elements_obj.elements
+        total = len(elements)
+
+        # 从当前 llmexcept 帧读取断点恢复索引（如果存在）。
+        # retry 后 for 循环从上次失败的迭代处继续，而非从头开始。
+        top_frame = (
+            self.runtime_context._llm_except_frames[-1]
+            if hasattr(self.runtime_context, '_llm_except_frames')
+               and self.runtime_context._llm_except_frames
+            else None
+        )
+        resume_from = top_frame.loop_resume.get(node_uid, 0) if top_frame is not None else 0
+
         for i, item in enumerate(elements):
-            self.runtime_context.push_loop_context(i, len(elements))
-            
+            if i < resume_from:
+                continue
+
+            # 在迭代开始时更新帧的恢复索引，以便下次 retry 从此迭代继续。
+            if top_frame is not None:
+                top_frame.loop_resume[node_uid] = i
+
+            self.runtime_context.push_loop_context(i, total)
+
+            # 先赋值目标变量（过滤条件可能引用该变量，例如 for int n in items if n % 2 == 0）
             if target_uid:
                 self._assign_to_target(target_uid, item, define_only=True)
-            
+
+            # 过滤条件（如果有）：不满足则跳过当前元素，继续下一个
+            if filter_uid is not None:
+                filter_val = self.visit(filter_uid)
+                if not self.execution_context.is_truthy(filter_val):
+                    self.runtime_context.pop_loop_context()
+                    continue
+
             try:
                 for stmt_uid in body:
                     self.visit(stmt_uid)
@@ -545,7 +660,7 @@ class StmtHandler(BaseHandler):
         """LLM 函数 definition"""
         sym_uid = self.get_side_table("node_to_symbol", node_uid)
         declared_type = self.execution_context.resolve_type_from_symbol(sym_uid)
-        func = IbLLMFunction(node_uid, self.service_context.llm_executor, self.execution_context, spec=declared_type)
+        func = IbLLMFunction(node_uid, self.execution_context, spec=declared_type)
         name = node_data.get("name")
         self.runtime_context.define_variable(name, func, declared_type=declared_type, uid=sym_uid)
         return self.registry.get_none()

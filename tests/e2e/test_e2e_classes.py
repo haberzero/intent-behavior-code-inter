@@ -138,3 +138,371 @@ print((str)b.count)
         lines = run_and_capture(code)
         assert "0" in lines
         assert "10" in lines
+
+
+# ---------------------------------------------------------------------------
+# 4. Explicit __init__ constructor
+# ---------------------------------------------------------------------------
+
+class TestE2EExplicitInit:
+    def test_explicit_init_is_called(self):
+        """func __init__ is called as constructor and can override field values"""
+        code = """class Greeter:
+    str name
+
+    func __init__(self, str n):
+        self.name = "Hello, " + n
+
+Greeter g = Greeter("World")
+print(g.name)
+"""
+        lines = run_and_capture(code)
+        assert "Hello, World" in lines
+
+    def test_auto_init_positional(self):
+        """Auto-generated __init__ assigns positional args to declaration-only fields"""
+        code = """class Point:
+    int x
+    int y
+
+Point p = Point(3, 7)
+print((str)p.x)
+print((str)p.y)
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
+        assert "7" in lines
+
+    def test_explicit_init_overrides_auto_init(self):
+        """When func __init__ is defined, it takes complete control; auto-init is NOT generated"""
+        code = """class Pair:
+    int a
+    int b
+
+    func __init__(self, int x, int y):
+        self.a = x * 2
+        self.b = y * 2
+
+Pair p = Pair(3, 4)
+print((str)p.a)
+print((str)p.b)
+"""
+        lines = run_and_capture(code)
+        assert "6" in lines
+        assert "8" in lines
+
+    def test_plain_func_init_is_not_constructor(self):
+        """func init (without __) is a regular method, not the constructor"""
+        code = """class Box:
+    int value
+
+    func init(self, int v):
+        self.value = 999
+
+Box b = Box(42)
+print((str)b.value)
+b.init(1)
+print((str)b.value)
+"""
+        lines = run_and_capture(code)
+        # constructor used auto-init (42), not func init
+        assert "42" in lines
+        # explicit call to init() method worked
+        assert "999" in lines
+
+
+# ---------------------------------------------------------------------------
+# Inheritance tests
+# ---------------------------------------------------------------------------
+
+class TestE2EClassInheritance:
+    """Test class inheritance: child class accessing parent members."""
+
+    def test_child_accesses_parent_field(self):
+        """Child class can access fields defined in parent class."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n):
+        self.name = n
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b):
+        self.name = n
+        self.breed = b
+
+Dog d = Dog("Rex", "Lab")
+print(d.name)
+print(d.breed)
+"""
+        lines = run_and_capture(code)
+        assert "Rex" in lines
+        assert "Lab" in lines
+
+    def test_child_accesses_parent_method(self):
+        """Child class can call methods defined in parent class."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n):
+        self.name = n
+    func describe(self) -> str:
+        return "I am " + self.name
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b):
+        self.name = n
+        self.breed = b
+
+Dog d = Dog("Rex", "Lab")
+print(d.describe())
+"""
+        lines = run_and_capture(code)
+        assert "I am Rex" in lines
+
+    def test_child_overrides_parent_method(self):
+        """Child class can override parent methods."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n):
+        self.name = n
+    func speak(self) -> str:
+        return "..."
+
+class Cat(Animal):
+    func __init__(self, str n):
+        self.name = n
+    func speak(self) -> str:
+        return "Meow"
+
+Cat c = Cat("Kitty")
+print(c.speak())
+print(c.name)
+"""
+        lines = run_and_capture(code)
+        assert "Meow" in lines
+        assert "Kitty" in lines
+
+    def test_multi_level_inheritance(self):
+        """Multi-level inheritance: grandchild accesses grandparent members."""
+        code = """class Base:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+class Mid(Base):
+    int y
+    func __init__(self, int v, int w):
+        self.x = v
+        self.y = w
+
+class Leaf(Mid):
+    int z
+    func __init__(self, int a, int b, int c):
+        self.x = a
+        self.y = b
+        self.z = c
+
+Leaf obj = Leaf(1, 2, 3)
+print((str)obj.x)
+print((str)obj.y)
+print((str)obj.z)
+"""
+        lines = run_and_capture(code)
+        assert "1" in lines
+        assert "2" in lines
+        assert "3" in lines
+
+
+# ---------------------------------------------------------------------------
+# User-class equality operator (P0 fix: __eq__ must return bool, not int)
+# ---------------------------------------------------------------------------
+
+class TestE2EClassEquality:
+    """Tests for == / != on user-defined class instances (P0 bug fix)."""
+
+    def test_identity_equality_same_reference(self):
+        """o1 == o1 should be true (same reference)."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(5)
+bool same = o1 == o1
+print((str)same)
+"""
+        lines = run_and_capture(code)
+        assert "True" in lines
+
+    def test_identity_equality_different_instances(self):
+        """o1 == o2 (different instances, same value) should be false."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(5)
+Obj o2 = Obj(5)
+bool different = o1 == o2
+print((str)different)
+"""
+        lines = run_and_capture(code)
+        assert "False" in lines
+
+    def test_equality_assigned_reference(self):
+        """o3 = o1; o3 == o1 should be true."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(42)
+Obj o3 = o1
+bool same_ref = o3 == o1
+print((str)same_ref)
+"""
+        lines = run_and_capture(code)
+        assert "True" in lines
+
+    def test_not_equal_different_instances(self):
+        """o1 != o2 (different instances) should be true."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Obj o1 = Obj(5)
+Obj o2 = Obj(5)
+bool ne = o1 != o2
+print((str)ne)
+"""
+        lines = run_and_capture(code)
+        assert "True" in lines
+
+    def test_equality_in_if_condition(self):
+        """class equality in if-condition should work without type error."""
+        code = """class Pt:
+    int x
+    func __init__(self, int v):
+        self.x = v
+
+Pt a = Pt(1)
+Pt b = a
+if a == b:
+    print("same")
+else:
+    print("different")
+"""
+        lines = run_and_capture(code)
+        assert "same" in lines
+
+    def test_equality_result_is_bool_not_int(self):
+        """== result must be assignable to bool variable (was returning int before fix)."""
+        code = """class Node:
+    int val
+    func __init__(self, int v):
+        self.val = v
+
+Node n1 = Node(10)
+Node n2 = Node(10)
+bool eq_result = n1 == n2
+bool same_result = n1 == n1
+print((str)eq_result)
+print((str)same_result)
+"""
+        lines = run_and_capture(code)
+        assert "False" in lines
+        assert "True" in lines
+
+
+# ---------------------------------------------------------------------------
+# Bug-fix regression: subclass explicit upcast (Bug B)
+# ---------------------------------------------------------------------------
+
+class TestE2EUpcast:
+    """Explicit (ParentClass)child_instance must succeed at runtime."""
+
+    def test_upcast_simple(self):
+        """(Animal)d must not raise and must expose inherited field."""
+        code = """class Animal:
+    str name = ""
+
+    func speak() -> str:
+        return "..."
+
+class Dog(Animal):
+    func speak() -> str:
+        return "Woof!"
+
+Dog d = Dog()
+d.name = "Rex"
+Animal a = (Animal)d
+print(a.name)
+"""
+        lines = run_and_capture(code)
+        assert "Rex" in lines
+
+    def test_upcast_method_dispatch_uses_child(self):
+        """After upcast, virtual method call dispatches to child override."""
+        code = """class Animal:
+    func speak() -> str:
+        return "..."
+
+class Dog(Animal):
+    func speak() -> str:
+        return "Woof!"
+
+Dog d = Dog()
+Animal a = (Animal)d
+print(a.speak())
+"""
+        lines = run_and_capture(code)
+        assert "Woof!" in lines
+
+    def test_upcast_same_type_noop(self):
+        """Casting to own type is a no-op."""
+        code = """class Animal:
+    str name = ""
+
+Animal a1 = Animal()
+a1.name = "Cat"
+Animal a2 = (Animal)a1
+print(a2.name)
+"""
+        lines = run_and_capture(code)
+        assert "Cat" in lines
+
+
+# ---------------------------------------------------------------------------
+# __iter__ protocol tests
+# ---------------------------------------------------------------------------
+
+class TestIterProtocol:
+    """Tests for the lightweight __iter__ protocol on user-defined classes."""
+
+    def test_class_with_iter_method_is_iterable(self):
+        """A class that defines __iter__ returning a list can be used in for loops."""
+        code = """class NumberRange:
+    int start = 0
+    int end = 0
+
+    func __iter__(self) -> list:
+        list result = []
+        int i = self.start
+        while i < self.end:
+            result.append(i)
+            i = i + 1
+        return result
+
+NumberRange r = NumberRange()
+r.start = 1
+r.end = 4
+for any item in r:
+    print((str)item)
+"""
+        lines = run_and_capture(code)
+        assert "1" in lines
+        assert "2" in lines
+        assert "3" in lines
+        assert "4" not in lines

@@ -8,6 +8,7 @@ Math 数学运算插件规范
 def __ibcext_metadata__() -> dict:
     return {
         "name": "math",
+        "kind": "method_module",
         "version": "2.0.0",
         "description": "IBCI 数学运算工具（基础/三角/对数/随机）",
         "dependencies": [],

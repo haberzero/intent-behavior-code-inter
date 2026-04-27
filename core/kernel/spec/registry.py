@@ -30,10 +30,11 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, BoundMethodSpec, ModuleSpec, LazySpec,
-    INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
-    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
+    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, BoundMethodSpec, ModuleSpec, LazySpec,
+    INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
+    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
+    LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
 )
 
 if TYPE_CHECKING:
@@ -125,7 +126,24 @@ class SpecFactory:
         self,
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
+        allowed_element_type_names: Optional[list] = None,
     ) -> ListSpec:
+        if allowed_element_type_names:
+            # Multi-type list: list[int, str, list]
+            # Names are sorted to produce a canonical spec name so that list[int,str]
+            # and list[str,int] resolve to the same registered spec entry. The original
+            # declaration order is preserved in allowed_element_type_names for informational
+            # purposes, but the canonical name (used as the registry key) is order-independent.
+            sorted_names = sorted(allowed_element_type_names)
+            name = f"list[{','.join(sorted_names)}]"
+            return ListSpec(
+                name=name,
+                is_nullable=True,
+                is_user_defined=False,
+                element_type_name="any",
+                element_type_module=None,
+                allowed_element_type_names=list(allowed_element_type_names),
+            )
         name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
         return ListSpec(
             name=name,
@@ -188,6 +206,51 @@ class SpecFactory:
             module_path=module,
             is_nullable=False,
             is_user_defined=False,
+        )
+
+    def create_deferred(
+        self,
+        value_type_name: str = "auto",
+        value_type_module: Optional[str] = None,
+        deferred_mode: str = "lambda",
+    ) -> DeferredSpec:
+        """Create a DeferredSpec describing a deferred (lambda/snapshot) expression."""
+        name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
+        return DeferredSpec(
+            name=name,
+            is_nullable=True,
+            is_user_defined=False,
+            value_type_name=value_type_name,
+            value_type_module=value_type_module,
+            deferred_mode=deferred_mode,
+        )
+
+    def create_behavior(
+        self,
+        value_type_name: str = "auto",
+        value_type_module: Optional[str] = None,
+        deferred_mode: str = "lambda",
+    ) -> BehaviorSpec:
+        """
+        Create a ``BehaviorSpec`` for a typed ``@~...~`` deferred behavior expression.
+
+        ``value_type_name`` is the LLM output type declared by the user (e.g. "int",
+        "str").  When it is ``"auto"`` the compiler cannot infer the return type at
+        call sites (same behaviour as before this feature was introduced).
+
+        Example::
+
+            # int lambda f = @~...~  →  create_behavior(value_type_name="int")
+            factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+        """
+        name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
+        return BehaviorSpec(
+            name=name,
+            is_nullable=True,
+            is_user_defined=False,
+            value_type_name=value_type_name,
+            value_type_module=value_type_module,
+            deferred_mode=deferred_mode,
         )
 
 
@@ -328,11 +391,24 @@ class SpecRegistry:
             return True
         return self.get_call_cap(spec) is not None
 
+    def is_behavior(self, spec: Optional[IbSpec]) -> bool:
+        """True when spec represents a deferred behavior (lambda/snapshot)."""
+        if spec is None:
+            return False
+        return spec.get_base_name() == "behavior"
+
+    def is_deferred(self, spec: Optional[IbSpec]) -> bool:
+        """True when spec represents a deferred expression (lambda/snapshot)."""
+        if spec is None:
+            return False
+        base = spec.get_base_name()
+        return base in ("deferred", "behavior")
+
     def is_dynamic(self, spec: Optional[IbSpec]) -> bool:
         """True for any/auto and any axiom that declares itself dynamic."""
         if spec is None:
             return True  # unknown type treated as dynamic
-        if spec.name in ("any", "auto"):
+        if spec.name in ("any", "auto", "fn"):
             return True
         axiom = self.get_axiom(spec)
         return bool(axiom and axiom.is_dynamic())
@@ -361,6 +437,30 @@ class SpecRegistry:
     # Type-inference helpers                                     #
     # ---------------------------------------------------------- #
 
+    def get_base_spec(self, spec: Optional["IbSpec"]) -> Optional["IbSpec"]:
+        """
+        Return the unspecialised base spec for a generic type.
+
+        For specialised specs (e.g. ``list[int]``, ``dict[str,int]``) the name
+        encodes the type arguments, but the axiom and capability lookup is always
+        keyed on the base name (``list``, ``dict``).  Use this helper whenever
+        you need to query capabilities or perform semantic classification on a
+        type and want to tolerate generic specialisations transparently.
+
+        Examples::
+
+            get_base_spec(list[int])  → list spec
+            get_base_spec(dict[str,int]) → dict spec
+            get_base_spec(int)        → int spec  (already base)
+            get_base_spec(None)       → None
+        """
+        if spec is None:
+            return None
+        base_name = spec.get_base_name()
+        if base_name != spec.name:
+            return self.resolve(base_name) or spec
+        return spec
+
     def resolve_return(
         self,
         spec: IbSpec,
@@ -372,12 +472,23 @@ class SpecRegistry:
         For FuncSpec (user-defined / axiom-bootstrapped functions) the
         return type is explicit.  For dynamic callables the axiom is
         consulted.
+
+        DeferredSpec / BehaviorSpec with a concrete ``value_type_name``
+        (i.e. not ``"auto"`` / ``"any"``) return the declared value type
+        directly, enabling compile-time type inference at call sites:
+
+            int lambda f = @~ compute something ~
+            int result = f()   # resolves to int, no SEM_003
         """
         if isinstance(spec, FuncSpec):
             return self.resolve(spec.return_type_name, spec.return_type_module) or self.resolve("any")
         # ClassSpec called as constructor returns an instance of itself
         if isinstance(spec, ClassSpec):
             return spec
+        # Typed DeferredSpec / BehaviorSpec: carry the expected value type explicitly.
+        # BehaviorSpec is a subclass of DeferredSpec, so this branch covers both.
+        if isinstance(spec, DeferredSpec) and spec.value_type_name not in ("auto", "any", None, ""):
+            return self.resolve(spec.value_type_name, spec.value_type_module) or self.resolve("auto")
         axiom = self.get_axiom(spec)
         if axiom:
             cap = axiom.get_call_capability()
@@ -403,14 +514,23 @@ class SpecRegistry:
                 ret_name = cap.resolve_operation_type_name(op, other_name)
                 if ret_name:
                     return self.resolve(ret_name) or self.resolve("any")
+        # None 比较：任何类型均可与 None 用 == 或 != 比较，返回 bool
+        if op in ("==", "!=") and (spec.name == "None" or (other and other.name == "None")):
+            return self.resolve("bool")
         # User-defined class types support == and != by identity
         if isinstance(spec, ClassSpec) and op in ("==", "!="):
+            return self.resolve("bool")
+        # All user-defined class instances support 'not' via IbObject.__not__ base implementation
+        if isinstance(spec, ClassSpec) and op == "not" and other is None:
             return self.resolve("bool")
         return None
 
     def resolve_iter_element(self, spec: IbSpec) -> Optional[IbSpec]:
         """Infer the element type of an iterable."""
         if isinstance(spec, (ListSpec, TupleSpec)):
+            # Multi-type list: element access returns any (user must cast explicitly)
+            if isinstance(spec, ListSpec) and getattr(spec, 'allowed_element_type_names', None):
+                return self.resolve("any")
             return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom:
@@ -429,6 +549,9 @@ class SpecRegistry:
         """Infer the item type when spec[key] is accessed."""
         if isinstance(spec, (ListSpec, TupleSpec)):
             if key_spec.get_base_name() == "int":
+                # Multi-type list: subscript access returns any
+                if isinstance(spec, ListSpec) and getattr(spec, 'allowed_element_type_names', None):
+                    return self.resolve("any")
                 return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
         if isinstance(spec, DictSpec):
             return self.resolve(spec.value_type_name, spec.value_type_module) or self.resolve("any")
@@ -502,6 +625,20 @@ class SpecRegistry:
         if src.name == target.name and src.module_path == target.module_path:
             return True
 
+        # Multi-type list compatibility: list[int,str] is assignable to list or list[int,str]
+        if isinstance(src, ListSpec) and isinstance(target, ListSpec):
+            src_allowed = getattr(src, 'allowed_element_type_names', None) or []
+            tgt_allowed = getattr(target, 'allowed_element_type_names', None) or []
+            if src_allowed or tgt_allowed:
+                # If target is bare list, accept any list variant
+                if not tgt_allowed and target.element_type_name == "any":
+                    return True
+                # If target has allowed types, source must have same or subset
+                if tgt_allowed and src_allowed:
+                    return set(src_allowed) == set(tgt_allowed)
+                # Single-type target, multi-type source: relaxed — allow
+                return True
+
         # Axiom-driven compatibility (e.g. bool isa int, None isa nullable)
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
         if src_axiom and src_axiom.is_compatible(target.get_base_name()):
@@ -533,9 +670,17 @@ class SpecRegistry:
     ) -> Optional[IbSpec]:
         """Resolve a generic type specialisation, e.g. list[int]."""
         axiom = self.get_axiom(spec)
-        if axiom and hasattr(axiom, "resolve_specialization"):
+        if axiom and hasattr(axiom, "resolve_specialization_by_names"):
             arg_names = [a.get_base_name() for a in arg_specs]
-            return axiom.resolve_specialization_by_names(self, arg_names)
+            result = axiom.resolve_specialization_by_names(self, arg_names)
+            if result is not None:
+                # Bootstrap axiom methods for the newly registered specialised spec.
+                # _bootstrap_axiom_methods() ran at init time before this spec existed,
+                # so we must populate its members here using the same axiom.
+                method_specs = axiom.get_method_specs()
+                for m_name, m_spec in method_specs.items():
+                    result.members.setdefault(m_name, m_spec)
+            return result
         return None
 
     # ---------------------------------------------------------- #
@@ -569,9 +714,12 @@ class SpecRegistry:
         if isinstance(value, float):
             return self.resolve("float")
         if isinstance(value, str):
+            # Uncertain 字面量哨兵：Uncertain 关键字被解析为此特殊字符串
+            if value == "__IBCI_UNCERTAIN_LITERAL__":
+                return self.resolve("llm_uncertain")
             return self.resolve("str")
         if value is None:
-            return self.resolve("void")
+            return self.resolve("None")
         return None
 
     def get_all_modules(self) -> Dict[str, "ModuleSpec"]:
@@ -620,10 +768,10 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
 
     for proto in (
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
-        ANY_SPEC, AUTO_SPEC, NONE_SPEC, SLICE_SPEC,
-        CALLABLE_SPEC, BEHAVIOR_SPEC, EXCEPTION_SPEC,
+        ANY_SPEC, AUTO_SPEC, FN_SPEC, NONE_SPEC, SLICE_SPEC,
+        CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
         BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
-        ENUM_SPEC,
+        ENUM_SPEC, LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
     ):
         reg.register(proto)
 

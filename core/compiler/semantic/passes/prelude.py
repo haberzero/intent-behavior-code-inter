@@ -54,10 +54,23 @@ class Prelude:
         # Normalise common aliases
         if "any" in self.builtin_types and "auto" not in self.builtin_types:
             self.builtin_types["auto"] = self.builtin_types["any"]
-        if "void" in self.builtin_types and "none" not in self.builtin_types:
-            self.builtin_types["none"] = self.builtin_types["void"]
-        if "behavior" not in self.builtin_types and "callable" in self.builtin_types:
-            self.builtin_types["behavior"] = self.builtin_types["callable"]
+        # Do NOT alias "none" → void: lowercase 'none' is intentionally trapped
+        # as an error in visit_IbName (Bug #4 fix) to guide users towards 'None'.
+        # Ensure 'None' (capitalised) is exposed as a type that _resolve_type can find.
+        if "None" not in self.builtin_types:
+            none_spec = self.registry.resolve("None")
+            if none_spec:
+                self.builtin_types["None"] = none_spec
+        # Expose 'llm_uncertain' as a named builtin type (for isinstance checks, type comparisons).
+        if "llm_uncertain" not in self.builtin_types:
+            lu_spec = self.registry.resolve("llm_uncertain")
+            if lu_spec:
+                self.builtin_types["llm_uncertain"] = lu_spec
+        # Expose 'fn' as a builtin type marker (callable type inference sentinel).
+        if "fn" not in self.builtin_types:
+            fn_spec = self.registry.resolve("fn")
+            if fn_spec:
+                self.builtin_types["fn"] = fn_spec
 
     # ------------------------------------------------------------------ #
     # Registration / query                                                 #

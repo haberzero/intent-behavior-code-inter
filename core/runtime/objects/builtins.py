@@ -1,5 +1,4 @@
 from typing import Any, List, Dict, Optional, Callable, Union
-from core.runtime.interfaces import IIbBehavior
 from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
@@ -35,7 +34,7 @@ class IbInteger(IbObject):
         return self.value
 
     def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(1 if self.value != 0 else 0)
+        return self.ib_class.registry.box(self.value != 0)
 
     def to_list(self) -> IbObject:
         return self.ib_class.registry.box(list(range(self.value)))
@@ -133,7 +132,7 @@ class IbFloat(IbObject):
         return self.value
 
     def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(1 if self.value != 0.0 else 0)
+        return self.ib_class.registry.box(self.value != 0.0)
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.spec if hasattr(target_class, 'spec') else None
@@ -188,9 +187,9 @@ class IbString(IbObject):
         # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
         # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发不确定性标志，以便 llmexcept 捕获
         if val in ("1", "true", "yes", "on"):
-            return self.ib_class.registry.box(1)
+            return self.ib_class.registry.box(True)
         if val in ("0", "false", "no", "off", "null", "none", ""):
-            return self.ib_class.registry.box(0)
+            return self.ib_class.registry.box(False)
             
         # [Result Mode Refactor] 不再抛出 Python 异常。
         # 通过 Registry 获取当前执行上下文并设置不确定性结果。
@@ -213,9 +212,14 @@ class IbString(IbObject):
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
-            # [Result Mode Refactor] 统一通过 LLMResult 信号不确定性，不再使用 Python 异常
+            # 检查当前是否在 llmexcept 保护范围内
             execution_context = self.ib_class.registry.get_execution_context()
+            has_llm_frame = False
             if execution_context and execution_context.runtime_context:
+                has_llm_frame = bool(execution_context.runtime_context.get_current_llm_except_frame())
+            
+            if has_llm_frame:
+                # [Result Mode Refactor] 在 llmexcept 保护范围内，通过 LLMResult 信号不确定性
                 from core.runtime.interpreter.llm_result import LLMResult
                 execution_context.runtime_context.set_last_llm_result(
                     LLMResult.uncertain_result(
@@ -223,7 +227,12 @@ class IbString(IbObject):
                         retry_hint=f"类型强制转换失败: 将 '{self.value}' 转换为 {target_desc} 失败: {str(e)}"
                     )
                 )
-            return self.ib_class.registry.get_none()
+                return self.ib_class.registry.get_none()
+            else:
+                # 在普通 try/except 范围内，抛出可捕获的异常
+                raise InterpreterError(
+                    f"TypeError: Cannot convert '{self.value}' to {target_desc.get_base_name() if target_desc and hasattr(target_desc, 'get_base_name') else 'target type'}: {str(e)}"
+                )
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())
@@ -234,16 +243,30 @@ class IbString(IbObject):
     def strip(self) -> IbObject:
         return self.ib_class.registry.box(self.value.strip())
 
+    def trim(self) -> IbObject:
+        """IBCI-style alias for strip()"""
+        return self.ib_class.registry.box(self.value.strip())
+
+    def to_upper(self) -> IbObject:
+        """IBCI-style alias for upper()"""
+        return self.ib_class.registry.box(self.value.upper())
+
+    def to_lower(self) -> IbObject:
+        """IBCI-style alias for lower()"""
+        return self.ib_class.registry.box(self.value.lower())
+
     def split(self, sep: Optional[str] = None) -> IbObject:
         if sep is None:
             parts = self.value.split()
         else:
-            parts = self.value.split(sep)
+            # sep 可能是 IbString（通过 unbox=False 注册的原生方法传入），需先拆箱
+            native_sep = sep.to_native() if hasattr(sep, 'to_native') else sep
+            parts = self.value.split(native_sep)
         registry = self.ib_class.registry
         return registry.box([registry.box(p) for p in parts])
 
     def is_empty(self) -> IbObject:
-        return self.ib_class.registry.box(1 if len(self.value.strip()) == 0 else 0)
+        return self.ib_class.registry.box(len(self.value.strip()) == 0)
 
     def find(self, substring: Any) -> IbObject:
         """查找子串首次出现的位置，未找到返回 -1"""
@@ -260,8 +283,28 @@ class IbString(IbObject):
     def contains(self, substring: Any) -> IbObject:
         """检查是否包含子串"""
         sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
-        result = sub_str in self.value
-        return self.ib_class.registry.box(result)
+        return self.ib_class.registry.box(sub_str in self.value)
+
+    def __contains__(self, item: Any) -> bool:
+        """Python-level containment check used by the 'in' operator at runtime"""
+        sub_str = item.to_native() if isinstance(item, IbObject) else str(item)
+        return sub_str in self.value
+
+    def replace(self, old: Any, new: Any) -> IbObject:
+        """替换子串。对齐 Python str.replace(old, new)"""
+        old_str = old.to_native() if hasattr(old, 'to_native') else str(old)
+        new_str = new.to_native() if hasattr(new, 'to_native') else str(new)
+        return self.ib_class.registry.box(self.value.replace(old_str, new_str))
+
+    def startswith(self, prefix: Any) -> IbObject:
+        """判断是否以指定前缀开头。对齐 Python str.startswith(prefix)"""
+        prefix_str = prefix.to_native() if hasattr(prefix, 'to_native') else str(prefix)
+        return self.ib_class.registry.box(self.value.startswith(prefix_str))
+
+    def endswith(self, suffix: Any) -> IbObject:
+        """判断是否以指定后缀结尾。对齐 Python str.endswith(suffix)"""
+        suffix_str = suffix.to_native() if hasattr(suffix, 'to_native') else str(suffix)
+        return self.ib_class.registry.box(self.value.endswith(suffix_str))
 
     def __getitem__(self, key: Any) -> IbObject:
         """支持字符串下标与切片"""
@@ -283,7 +326,26 @@ class IbString(IbObject):
         if other.ib_class.name != "str":
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
         return self.value + other.to_native()
-    
+
+    def __mul__(self, other: IbObject) -> Any:
+        """字符串重复: str * int"""
+        n = other.to_native() if hasattr(other, 'to_native') else other
+        if not isinstance(n, int):
+            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
+        return self.value * n
+
+    def _require_str_other(self, op: str, other: IbObject) -> None:
+        if other.ib_class.name != "str":
+            raise InterpreterError(f"TypeError: Cannot compare 'str' and '{other.ib_class.name}' with '{op}'")
+
+    def __lt__(self, other: IbObject) -> bool:
+        self._require_str_other("<", other); return self.value < other.to_native()
+    def __le__(self, other: IbObject) -> bool:
+        self._require_str_other("<=", other); return self.value <= other.to_native()
+    def __gt__(self, other: IbObject) -> bool:
+        self._require_str_other(">", other); return self.value > other.to_native()
+    def __ge__(self, other: IbObject) -> bool:
+        self._require_str_other(">=", other); return self.value >= other.to_native()
     def __eq__(self, other: IbObject) -> bool: return self.value == other.to_native()
     def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 
@@ -378,6 +440,63 @@ class IbList(IbObject):
     def sort(self) -> IbObject:
         self.elements.sort(key=lambda x: x.to_native())
         return self.ib_class.registry.get_none()
+
+    def reverse(self) -> IbObject:
+        """原地反转列表。对齐 Python list.reverse()"""
+        self.elements.reverse()
+        return self.ib_class.registry.get_none()
+
+    def insert(self, index: Any, item: IbObject) -> IbObject:
+        """在指定位置插入元素。对齐 Python list.insert(index, item)"""
+        idx = index.to_native() if hasattr(index, 'to_native') else int(index)
+        self.elements.insert(idx, item)
+        return self.ib_class.registry.get_none()
+
+    def remove(self, item: Any) -> IbObject:
+        """删除第一个匹配元素。对齐 Python list.remove(item)"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        for i, el in enumerate(self.elements):
+            if el.to_native() == native:
+                del self.elements[i]
+                return self.ib_class.registry.get_none()
+        raise InterpreterError(f"ValueError: list.remove(x): x not in list")
+
+    def index(self, item: Any) -> IbObject:
+        """返回第一个匹配元素的索引。对齐 Python list.index(item)"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        for i, el in enumerate(self.elements):
+            if el.to_native() == native:
+                return self.ib_class.registry.box(i)
+        raise InterpreterError(f"ValueError: {native!r} is not in list")
+
+    def count(self, item: Any) -> IbObject:
+        """统计元素出现次数。对齐 Python list.count(item)"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        cnt = sum(1 for el in self.elements if el.to_native() == native)
+        return self.ib_class.registry.box(cnt)
+
+    def contains(self, item: Any) -> IbObject:
+        """检查是否包含元素（便捷方法，等价于 item in list）"""
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        return self.ib_class.registry.box(any(el.to_native() == native for el in self.elements))
+
+    def __contains__(self, item: Any) -> bool:
+        """Python-level containment check used by the 'in' operator at runtime"""
+        native = item.to_native() if isinstance(item, IbObject) else item
+        return any(el.to_native() == native for el in self.elements)
+
+    def __add__(self, other: IbObject) -> Any:
+        """列表拼接。对齐 Python list + list"""
+        if not isinstance(other, IbList):
+            raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list")
+        return self.elements + other.elements
+
+    def __mul__(self, other: IbObject) -> Any:
+        """列表重复: list * int"""
+        n = other.to_native() if hasattr(other, 'to_native') else other
+        if not isinstance(n, int):
+            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
+        return self.elements * n
 
 @register_ib_type("tuple")
 class IbTuple(IbObject):
@@ -475,6 +594,22 @@ class IbDict(IbObject):
         # 返回 IbList 包装的值列表
         return self.ib_class.registry.box(list(self.fields.values()))
 
+    def items(self) -> IbObject:
+        """返回 [(key, value), ...] 形式的列表。对齐 Python dict.items()"""
+        pairs = [[k, v] for k, v in self.fields.items()]
+        return self.ib_class.registry.box(pairs)
+
+    def update(self, other: Any) -> IbObject:
+        """将另一个字典合并到当前字典。对齐 Python dict.update(other)"""
+        if isinstance(other, IbDict):
+            self.fields.update(other.fields)
+        elif hasattr(other, 'to_native'):
+            src = other.to_native()
+            if isinstance(src, dict):
+                for k, v in src.items():
+                    self.fields[k] = self.ib_class.registry.box(v)
+        return self.ib_class.registry.get_none()
+
     def len(self) -> IbObject:
         return self.ib_class.registry.box(len(self.fields))
 
@@ -501,6 +636,28 @@ class IbDict(IbObject):
             return self.fields[k]
         return default or self.ib_class.registry.get_none()
 
+    def pop(self, key: Any, default: Optional[IbObject] = None) -> IbObject:
+        """删除并返回指定 key 的值。对齐 Python dict.pop(key[, default])"""
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        if k in self.fields:
+            return self.fields.pop(k)
+        if default is not None:
+            return default
+        raise InterpreterError(f"KeyError: '{k}'")
+
+    def contains(self, key: Any) -> IbObject:
+        """检查 key 是否存在于字典中（便捷方法，等价于 key in dict）"""
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        return self.ib_class.registry.box(k in self.fields)
+
+    def remove(self, key: Any) -> IbObject:
+        """移除指定 key 的键值对，key 不存在时抛出错误"""
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        if k not in self.fields:
+            raise InterpreterError(f"KeyError: '{k}'")
+        del self.fields[k]
+        return self.ib_class.registry.get_none()
+
     def __iter__(self):
         return iter(self.fields)
 
@@ -513,25 +670,146 @@ class IbDict(IbObject):
         native_key = key.to_native() if isinstance(key, IbObject) else key
         return self.fields[native_key]
 
-@register_ib_type("behavior")
-class IbBehavior(IbObject, IIbBehavior):
+@register_ib_type("deferred")
+class IbDeferred(IbObject):
     """
-    延迟执行的行为对象 (~...~)。
+    通用延迟表达式对象。
+
+    ``lambda`` / ``snapshot`` 修饰的任意表达式都会被包装为 IbDeferred。
+    调用时重新执行被延迟的 AST 节点（lambda 模式）或返回捕获的快照值
+    （snapshot 模式）。
+
+    公理化设计
+    ----------
+    * IbDeferred 在创建时捕获 ``execution_context`` 引用。
+    * ``call()`` 重新访问被延迟的 AST 节点以完成求值。
+    * deferred_mode='lambda'   —— 每次调用重新求值
+    * deferred_mode='snapshot' —— 首次调用时求值并缓存
+
+    继承链：IbDeferred → IbObject (axiom: deferred → callable → Object)
     """
-    def __init__(self, node_uid: str, captured_intents: Union[List[Any], Any], ib_class: IbClass, expected_type: Optional[str] = None):
+
+    def __init__(
+        self,
+        node_uid: str,
+        ib_class: IbClass,
+        deferred_mode: str = "lambda",
+        execution_context: Optional[Any] = None,
+        captured_scope: Optional[Any] = None,
+    ):
+        super().__init__(ib_class)
+        self.node_uid = node_uid
+        self.deferred_mode = deferred_mode
+        self._execution_context = execution_context
+        self._captured_scope = captured_scope
+        self._cache: Optional[IbObject] = None
+
+    def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """
-         IbBehavior 现在是纯粹的数据描述符。
-        不再持有 interpreter 引用，执行逻辑已剥离至 LLMExecutor。
+        调用延迟表达式：重新执行被延迟的 AST 节点。
+
+        - lambda 模式：每次调用都重新求值（使用当前上下文）
+        - snapshot 模式：首次调用求值并缓存，后续调用返回缓存
+        """
+        if self.deferred_mode == "snapshot" and self._cache is not None:
+            return self._cache
+
+        if self._execution_context is None:
+            raise RuntimeError(
+                f"IbDeferred '{self.node_uid}': execution_context is None. "
+                "This typically occurs when the deferred expression was deserialized "
+                "without a live interpreter, or when the factory failed to inject the context. "
+                "Ensure engine._prepare_interpreter() has completed before invoking a deferred expression."
+            )
+
+        # 在捕获的作用域（如果有）中求值
+        rt_context = self._execution_context.runtime_context
+        old_scope = None
+        if self._captured_scope is not None:
+            old_scope = rt_context.current_scope
+            rt_context.current_scope = self._captured_scope
+
+        try:
+            result = self._execution_context.visit(self.node_uid)
+        finally:
+            if old_scope is not None:
+                rt_context.current_scope = old_scope
+
+        if self.deferred_mode == "snapshot":
+            self._cache = result
+
+        return result
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        if self._cache is not None:
+            return self._cache.to_native()
+        return self
+
+    def __to_prompt__(self) -> str:
+        if self._cache is not None:
+            return self._cache.__to_prompt__()
+        return f"<Deferred {self.node_uid}>"
+
+    def receive(self, message: str, args: List[IbObject]) -> IbObject:
+        if self._cache is not None:
+            return self._cache.receive(message, args)
+
+        if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
+            return self.ib_class.registry.box(str(self))
+
+        if message == "__call__":
+            return self.call(self.ib_class.registry.get_none(), args)
+
+        raise RuntimeError(f"Deferred '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
+
+    def __repr__(self):
+        mode = self.deferred_mode or "immediate"
+        return f"<Deferred({mode}) {self.node_uid}>"
+
+
+@register_ib_type("behavior")
+class IbBehavior(IbObject):
+    """
+    延迟执行的 LLM 行为对象 (~...~)。
+
+    公理化设计原则
+    --------------
+    IbBehavior 是 deferred 家族中针对 LLM 行为表达式的特化。
+    继承链：behavior → deferred → callable → Object
+
+    * 行为对象在创建时捕获 ``execution_context`` 引用（与 IbUserFunction 同构）。
+    * ``call()`` 通过 ``ib_class.registry.get_llm_executor().invoke_behavior()``
+      完成自主执行，不再依赖外部的 ``_execute_behavior`` 路由。
+    * BaseHandler 中的 ``_execute_behavior`` 方法已删除。
+    * 与 IbDeferred 的区别：IbBehavior 延迟的是 LLM 调用（需要意图栈），
+      IbDeferred 延迟的是普通表达式求值（纯 AST 重访）。
+    """
+    def __init__(
+        self,
+        node_uid: str,
+        captured_intents: Union[List[Any], Any],
+        ib_class: IbClass,
+        expected_type: Optional[str] = None,
+        call_intent: Optional[Any] = None,
+        deferred_mode: Optional[str] = None,
+        execution_context: Optional[Any] = None,
+    ):
+        """
+        IbBehavior 是纯粹的数据描述符与自主执行单元。
+        call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
+        deferred_mode: 'lambda' | 'snapshot' | None (immediate)
+        execution_context: 创建时的执行上下文引用（供 call() 使用）。
         """
         super().__init__(ib_class)
         self.node = node_uid
-        self.captured_intents = captured_intents # 支持 IntentNode (结构共享)
+        self.captured_intents = captured_intents
         self.expected_type = expected_type
+        self.call_intent = call_intent
+        self.deferred_mode = deferred_mode
+        self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
 
     def value(self):
-        # 此时必须由外部调用 LLMExecutor.execute_behavior_object 才能获取真实值
-        # 这是一个被动描述符，不再支持主动 value 访问（除非已缓存）
         if self._cache: return self._cache.to_native()
         raise RuntimeError("Behavior is not executed. Please use LLMExecutor to run it.")
 
@@ -540,7 +818,6 @@ class IbBehavior(IbObject, IIbBehavior):
         return self
 
     def __to_prompt__(self) -> str:
-        # 如果已执行则返回结果，否则返回节点描述
         if self._cache: return self._cache.__to_prompt__()
         return f"<Behavior {self.node}>"
 
@@ -556,18 +833,33 @@ class IbBehavior(IbObject, IIbBehavior):
         }
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """不再支持主动调用，必须由引擎调度"""
-        raise RuntimeError("Behavior cannot execute itself. Use LLMExecutor.execute_behavior_object.")
+        """
+        公理化自主调用：通过内核 LLM 执行器完成行为执行。
+
+        执行流程：
+        1. 从 KernelRegistry 获取 IILLMExecutor（注入点：engine._prepare_interpreter）。
+        2. 调用 executor.invoke_behavior(self, execution_context)：
+           - 使用 captured_intents（snapshot 模式）或当前意图栈（lambda 模式）。
+           - 按 expected_type 解析 LLM 返回值。
+           - 将 LLMResult 写入 RuntimeContext 供 llmexcept 使用。
+        3. 返回解析后的 IbObject。
+        """
+        executor = self.ib_class.registry.get_llm_executor()
+        if executor is None:
+            raise RuntimeError(
+                f"IbBehavior '{self.node}': LLM executor not registered in KernelRegistry. "
+                "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
+            )
+        return executor.invoke_behavior(self, self._execution_context)
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """
         行为对象的消息处理。
-        允许查询元数据，仅在尝试“执行行为本身”且无上下文时才抛出异常。
+        允许查询元数据，仅在尝试"执行行为本身"且无上下文时才抛出异常。
         """
         if self._cache: return self._cache.receive(message, args)
-        
-        # 允许查询元数据或基本属性，防止调试器崩溃
+
         if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
             return self.ib_class.registry.box(str(self))
-            
+
         raise RuntimeError(f"Behavior '{self.node}' is not executed. Cannot process message '{message}'.")

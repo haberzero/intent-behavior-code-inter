@@ -8,6 +8,7 @@ Time 时间工具插件规范
 def __ibcext_metadata__() -> dict:
     return {
         "name": "time",
+        "kind": "method_module",
         "version": "2.0.0",
         "description": "IBCI 时间工具（当前时间/格式化/解析/时间差/休眠）",
         "dependencies": [],

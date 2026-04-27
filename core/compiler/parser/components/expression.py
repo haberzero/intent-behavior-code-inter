@@ -48,6 +48,7 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.TRUE, self.boolean, None, IbPrecedence.LOWEST)
         self.register(TokenType.FALSE, self.boolean, None, IbPrecedence.LOWEST)
         self.register(TokenType.NONE, self.none_expr, None, IbPrecedence.LOWEST)
+        self.register(TokenType.UNCERTAIN, self.uncertain_expr, None, IbPrecedence.LOWEST)
         
         # Grouping and Collections
         self.register(TokenType.LPAREN, self.grouping, self.call, IbPrecedence.CALL)
@@ -58,12 +59,14 @@ class ExpressionComponent(BaseComponent):
         # Unary Operations
         self.register(TokenType.MINUS, self.unary, self.binary, IbPrecedence.TERM)
         self.register(TokenType.PLUS, None, self.binary, IbPrecedence.TERM)
-        self.register(TokenType.NOT, self.unary, None, IbPrecedence.UNARY)
+        self.register(TokenType.NOT, self.unary, self.not_in_binary, IbPrecedence.COMPARISON)
         self.register(TokenType.BIT_NOT, self.unary, None, IbPrecedence.UNARY)
         
         # Binary Operations
         self.register(TokenType.STAR, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.STAR_STAR, None, self.pow_binary, IbPrecedence.POW)
         self.register(TokenType.SLASH, None, self.binary, IbPrecedence.FACTOR)
+        self.register(TokenType.FLOOR_DIV, None, self.binary, IbPrecedence.FACTOR)
         self.register(TokenType.PERCENT, None, self.binary, IbPrecedence.FACTOR)
         
         # Bitwise Operations
@@ -80,10 +83,19 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.LE, None, self.binary, IbPrecedence.COMPARISON)
         self.register(TokenType.EQ, None, self.binary, IbPrecedence.EQUALITY)
         self.register(TokenType.NE, None, self.binary, IbPrecedence.EQUALITY)
+
+        # Containment operators: in / not in (comparison-level precedence)
+        self.register(TokenType.IN, None, self.in_binary, IbPrecedence.COMPARISON)
+
+        # Identity operators: is / is not (comparison-level precedence)
+        self.register(TokenType.IS, None, self.is_binary, IbPrecedence.COMPARISON)
         
         # Logical Operations
         self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
         self.register(TokenType.OR, None, self.logical, IbPrecedence.OR)
+        
+        # Ternary operator: condition ? body : orelse
+        self.register(TokenType.QUESTION, None, self.ternary, IbPrecedence.ASSIGNMENT)
         
         # Calls and Attributes
         self.register(TokenType.DOT, None, self.dot, IbPrecedence.CALL)
@@ -118,7 +130,7 @@ class ExpressionComponent(BaseComponent):
         if '.' in value or 'e' in value or 'E' in value:
             num = float(value)
         else:
-            num = int(value)
+            num = int(value, 0)
         return self._loc(ast.IbConstant(value=num), self.stream.previous())
 
     def string(self) -> ast.IbExpr:
@@ -135,14 +147,20 @@ class ExpressionComponent(BaseComponent):
         # 使用标准 NONE Token，消除 Python None 直接引用
         return self._loc(ast.IbConstant(value=None), token)
 
+    def uncertain_expr(self) -> ast.IbExpr:
+        token = self.stream.previous()
+        # 使用内部哨兵字符串标记 Uncertain 字面量，序列化后可安全往返
+        return self._loc(ast.IbConstant(value="__IBCI_UNCERTAIN_LITERAL__"), token)
+
     def grouping(self) -> ast.IbExpr:
 
         # 语法歧义解析：(Type) expr [Cast] vs (expr) [Grouping]
         # 由于 Type 可以是复杂的标识符、属性或下标访问，LL(1) 无法区分。
         # 我们采用推测性前瞻（Speculative Lookahead）模式进行判定。
         
-        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO, TokenType.CALLABLE):
+        if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO):
             checkpoint = self.stream.get_checkpoint()
+            _behavior_cast_detected = False
 
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
             with self.stream.speculate():
@@ -153,26 +171,24 @@ class ExpressionComponent(BaseComponent):
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         
-                        # [IbBehaviorInstance Hook] 检测 (Type) @~...~ 语法糖
-                        # 当强制类型转换应用于行为描述时，创建 IbBehaviorInstance
+                        # [DEPRECATED] (Type) @~...~ 语法已废弃，发出硬错误。
+                        # 正确写法：int lambda varname = @~...~ 或 int snapshot varname = @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
-                            # 从 type_node 提取目标类型名称
-                            target_type_name = self._extract_type_name(type_node)
-                            return self._loc(
-                                ast.IbBehaviorInstance(
-                                    segments=value.segments,
-                                    target_type_name=target_type_name,
-                                    is_deferred=False
-                                ),
-                                type_node
-                            )
+                            _behavior_cast_detected = True
+                            raise ParseControlFlowError()
                         
                         return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
                 except ParseControlFlowError:
-
-                    # 类型转换（Cast）语法解析失败，由于处于 speculate() 上下文中，
-                    # 产生的错误已被隔离。此处静默 pass 是为了允许流回退并尝试普通表达式分组解析。
                     pass
+            
+            # 在 speculate 上下文外发出硬错误，确保记录到真实的 issue_tracker
+            if _behavior_cast_detected:
+                raise self.stream.error(
+                    self.stream.peek(),
+                    "Cast expression '(Type) @~...~' is no longer supported. "
+                    "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                    code="PAR_010"
+                )
             
             # 路径回退：若非 Cast，则回退到检查点按普通分组表达式解析
             self.stream.restore_checkpoint(checkpoint)
@@ -223,6 +239,13 @@ class ExpressionComponent(BaseComponent):
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
 
+    def pow_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """右结合幂运算符 **：parse 右侧时使用比当前优先级低一级的 FACTOR，
+        使得 a ** b ** c 解析为 a ** (b ** c)。"""
+        op_token = self.stream.previous()
+        right = self.parse_precedence(IbPrecedence.FACTOR)
+        return self._loc(ast.IbBinOp(left=left, op="**", right=right), left, right)
+
     def binary(self, left: ast.IbExpr) -> ast.IbExpr:
         op_token = self.stream.previous()
         # 基于 TokenType 枚举从 OP_MAP 获取运算符，彻底消除字符串比对
@@ -253,6 +276,36 @@ class ExpressionComponent(BaseComponent):
             return self._extend_loc(left, right)
             
         return self._loc(ast.IbBoolOp(op=op, values=[left, right]), left, right)
+
+    def ternary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """三元运算符：condition ? body : orelse"""
+        question_token = self.stream.previous()
+        # 解析真值分支（在 COLON 之前停止，因为 COLON 无 infix 规则，优先级为 LOWEST）
+        body = self.parse_expression(IbPrecedence.LOWEST)
+        self.stream.consume(TokenType.COLON, "Expect ':' in ternary expression 'cond ? expr : expr'.")
+        # 解析假值分支（右结合：再次从 LOWEST 开始，可嵌套三元）
+        orelse = self.parse_expression(IbPrecedence.LOWEST)
+        return self._loc(ast.IbIfExp(test=left, body=body, orelse=orelse), left, orelse)
+
+    def in_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """成员检测运算符：elem in container"""
+        right = self.parse_precedence(IbPrecedence.COMPARISON)
+        return self._loc(ast.IbCompare(left=left, ops=["in"], comparators=[right]), left, right)
+
+    def not_in_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """成员非检测运算符：elem not in container（NOT 作为 infix 时消费 IN）"""
+        in_token = self.stream.consume(TokenType.IN, "Expect 'in' after 'not' in 'not in' expression.")
+        right = self.parse_precedence(IbPrecedence.COMPARISON)
+        return self._loc(ast.IbCompare(left=left, ops=["not in"], comparators=[right]), left, right)
+
+    def is_binary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """身份检测运算符：x is y / x is not y"""
+        # 检查是否是 'is not' 复合运算符
+        if self.stream.match(TokenType.NOT):
+            right = self.parse_precedence(IbPrecedence.COMPARISON)
+            return self._loc(ast.IbCompare(left=left, ops=["is not"], comparators=[right]), left, right)
+        right = self.parse_precedence(IbPrecedence.COMPARISON)
+        return self._loc(ast.IbCompare(left=left, ops=["is"], comparators=[right]), left, right)
 
     def call(self, left: ast.IbExpr) -> ast.IbCall:
         arguments = []
@@ -326,7 +379,7 @@ class ExpressionComponent(BaseComponent):
             if self.stream.check(TokenType.NUMBER):
                 num_token = self.stream.advance()
                 negative_num = ast.IbConstant(
-                    value=-int(num_token.value)
+                    value=-int(num_token.value, 0)
                 )
                 return self._loc(negative_num, start_token)
             else:
@@ -354,7 +407,7 @@ class ExpressionComponent(BaseComponent):
                 node = self._parse_complex_access(var_name, var_token)
                 segments.append(node)
             elif self.stream.match(TokenType.STRING):
-                # 行为描述块内的带引号字符串字面量 (如 MOCK:["a","b","c"])
+                # 行为描述块内的带引号字符串字面量 (如 MOCK:LIST:["a","b","c"])
                 # 保留原始引号包裹，确保内容按原样传递给 LLM
                 segments.append('"' + self.stream.previous().value + '"')
             else:

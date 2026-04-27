@@ -2,7 +2,7 @@ import re
 import json
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, Tuple, TYPE_CHECKING
-from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, IIbBehavior, IIbIntent, Registry, IExecutionContext
+from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
 
 from core.kernel.issue import InterpreterError
@@ -11,6 +11,7 @@ from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.builtins import IbBehavior
 
 from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
@@ -54,25 +55,12 @@ class LLMExecutorImpl:
     def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
-        # 优先从能力注册中心获取 Provider (能力名: llm_provider)
+        # 唯一来源：通过能力注册中心获取 Provider (能力名: llm_provider)
+        # ibci_ai.setup() 在加载时调用 capabilities.expose("llm_provider", self) 完成注册。
         if self.service_context.capability_registry:
             provider = self.service_context.capability_registry.get("llm_provider")
             if provider:
                 return provider
-
-        # 回退到从 ai 模块获取 (兼容旧模式)
-        ai_module = self.interop.get_package("ai")
-        if not ai_module:
-            return None
-            
-        # 1. 优先尝试显式获取 Provider 接口 (用于复杂插件代理)
-        if hasattr(ai_module, "get_llm_provider"):
-            return ai_module.get_llm_provider()
-            
-        # 2. 其次检查模块实现是否直接实现了 ILLMProvider (用于核心 AI 插件)
-        if isinstance(ai_module, ILLMProvider):
-            return ai_module
-            
         return None
 
     def push_expected_type(self, type_name: str):
@@ -264,33 +252,59 @@ class LLMExecutorImpl:
         return "".join(content_parts)
 
     def _get_llmoutput_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
-        """获取 __outputhint_prompt__ 用于注入到提示词"""
+        """获取 __outputhint_prompt__ 用于注入到提示词
+
+        查找顺序：
+        1. Axiom 内置类型：通过 meta_reg.get_llm_output_hint_cap(descriptor)
+        2. 用户自定义 IBCI 类：通过类 vtable 查找 __outputhint_prompt__ 方法
+        """
+        def _try_axiom_hint(type_name: str) -> Optional[str]:
+            meta_reg = self.registry.get_metadata_registry()
+            if meta_reg:
+                descriptor = meta_reg.resolve(type_name)
+                if descriptor:
+                    hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
+                    if hint_cap:
+                        return hint_cap.__outputhint_prompt__(descriptor)
+            return None
+
+        def _try_vtable_hint(type_name: str) -> Optional[str]:
+            """回退：通过用户类 vtable 查找 __outputhint_prompt__（类方法语义）"""
+            ib_class = self.registry.get_class(type_name)
+            if ib_class:
+                method = ib_class.lookup_method('__outputhint_prompt__')
+                if method:
+                    try:
+                        result = method.call(ib_class, [])
+                        hint = result.to_native() if hasattr(result, 'to_native') else str(result)
+                        return str(hint) if hint is not None else None
+                    except Exception as e:
+                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,
+                            f"vtable __outputhint_prompt__ failed for '{type_name}': {e}")
+            return None
+
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 type_name = returns_data.get("id", "str")
-                meta_reg = self.registry.get_metadata_registry()
-                if meta_reg:
-                    descriptor = meta_reg.resolve(type_name)
-                    if descriptor:
-                        hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
-                        if hint_cap:
-                            return hint_cap.__outputhint_prompt__(descriptor)
+                hint = _try_axiom_hint(type_name)
+                if hint is not None:
+                    return hint
+                hint = _try_vtable_hint(type_name)
+                if hint is not None:
+                    return hint
 
         node_to_type = execution_context.get_side_table("node_to_type", node_uid)
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                ib_class = self.registry.get_class(type_name)
-                if ib_class:
-                    type_descriptor = getattr(ib_class, 'descriptor', None)
-                    if type_descriptor:
-                        meta_reg = self.registry.get_metadata_registry()
-                        if meta_reg:
-                            hint_cap = meta_reg.get_llm_output_hint_cap(type_descriptor)
-                            if hint_cap:
-                                return hint_cap.__outputhint_prompt__(type_descriptor)
+                hint = _try_axiom_hint(type_name)
+                if hint is not None:
+                    return hint
+                hint = _try_vtable_hint(type_name)
+                if hint is not None:
+                    return hint
 
         return None
 
@@ -321,6 +335,12 @@ class LLMExecutorImpl:
         descriptor = None
         if meta_reg:
             descriptor = meta_reg.resolve(type_name)
+            # Bug #2 修复：当 type_name 含有泛型参数（如 "dict[any,any]"）时，
+            # SpecRegistry 中以基础名（如 "dict"）注册，resolve 会失败。
+            # 剥离泛型参数后重试，使 DictAxiom 等 Axiom 能够被正确找到。
+            if descriptor is None and type_name and '[' in type_name:
+                base_name = type_name.split('[')[0]
+                descriptor = meta_reg.resolve(base_name)
             if descriptor:
                 from_prompt_cap = meta_reg.get_from_prompt_cap(descriptor)
                 if from_prompt_cap:
@@ -351,6 +371,67 @@ class LLMExecutorImpl:
                             retry_hint=f"LLM 返回值类型转换失败：期望 {type_name}。详细: {str(e)}"
                         )
 
+        # Axiom 路径无匹配，尝试用户自定义类 vtable 的 __from_prompt__ 方法。
+        # 用户在 IBCI 类中定义 func __from_prompt__(str raw) -> (bool, any)，
+        # 由此实现自定义的 LLM 输出解析逻辑。
+        # 调用语义：类方法（以 IbClass 对象为 receiver，不需要 self 实例）。
+        #
+        # Design 2 改进：__from_prompt__ 返回值自动装箱
+        # - (true, <class_instance>) → 直接使用实例（原始行为）
+        # - (true, <basic_value>) → 自动构造类实例，将 basic_value 设为第一个字段
+        # - (false, <hint_string>) → 不确定性，进入 retry 路径
+        ib_class = self.registry.get_class(type_name) if type_name else None
+        if ib_class:
+            method = ib_class.lookup_method('__from_prompt__')
+            if method:
+                try:
+                    raw_arg = self.registry.box(raw_res)
+                    result_obj = method.call(ib_class, [raw_arg])
+                    # 约定返回值为 tuple (bool, any)：
+                    #   elements[0] 为成功标志（truthy/falsy），
+                    #   elements[1] 为解析后的值（成功时）或错误提示（失败时）
+                    if hasattr(result_obj, 'elements') and len(result_obj.elements) >= 2:
+                        success_val = result_obj.elements[0]
+                        parsed_val = result_obj.elements[1]
+                        success_native = success_val.to_native() if hasattr(success_val, 'to_native') else bool(success_val)
+                        if success_native:
+                            # Design 2：如果返回值不是目标类的实例，自动装箱
+                            # 判断 parsed_val 是否已经是目标类的实例
+                            is_instance_of_target = (
+                                hasattr(parsed_val, 'ib_class') and 
+                                parsed_val.ib_class is ib_class
+                            )
+                            if not is_instance_of_target:
+                                # 自动装箱：构造类实例，将 parsed_val 设为第一个字段
+                                # 如果类有 __init__ 接受一个参数，尝试调用
+                                try:
+                                    auto_instance = ib_class.instantiate([parsed_val], context=execution_context)
+                                    parsed_val = auto_instance
+                                except Exception:
+                                    # 如果构造失败（参数不匹配），尝试设为第一个字段
+                                    try:
+                                        auto_instance = ib_class.instantiate([], context=execution_context)
+                                        if ib_class.default_fields:
+                                            first_field = next(iter(ib_class.default_fields))
+                                            auto_instance.fields[first_field] = parsed_val
+                                        parsed_val = auto_instance
+                                    except Exception:
+                                        pass  # 保留原始 parsed_val
+                            
+                            return LLMResult.success_result(
+                                value=parsed_val,
+                                raw_response=raw_res
+                            )
+                        else:
+                            hint = parsed_val.to_native() if hasattr(parsed_val, 'to_native') else str(parsed_val)
+                            return LLMResult.uncertain_result(
+                                raw_response=raw_res,
+                                retry_hint=str(hint)
+                            )
+                except Exception as e:
+                    self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,
+                        f"vtable __from_prompt__ failed for '{type_name}': {e}")
+
         return LLMResult.success_result(
             value=self.registry.box(raw_res),
             raw_response=raw_res
@@ -370,16 +451,15 @@ class LLMExecutorImpl:
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
 
-        # 0. 准备环境
-        ai_module = self.interop.get_package("ai")
-
         # 1. 评估段式插值
         content = self._evaluate_segments(node_data.get("segments"), execution_context)
 
         # 2. 收集与合并意图 (被动消费已消解的现场)
+        # auto_intent_injection 配置从已注册的 LLM Provider 读取（通过能力注册中心）
+        provider = self.llm_callback
         auto_intent = True
-        if ai_module and hasattr(ai_module, "_config"):
-            auto_intent = ai_module._config.get("auto_intent_injection", True)
+        if provider and hasattr(provider, "_config"):
+            auto_intent = provider._config.get("auto_intent_injection", True)
 
         if not auto_intent:
             # 如果关闭了自动注入，仅保留当前节点的意图 (如果有)
@@ -393,13 +473,25 @@ class LLMExecutorImpl:
         # 获取消解后的最终列表
         # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
         if captured_intents is not None:
-            active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
-            all_intents = IntentResolver.resolve(
-                active_intents=active_list,
-                global_intents=context.get_global_intents(),
-                context=context,
-                execution_context=execution_context
-            )
+            from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
+            if isinstance(captured_intents, _IbIntentContext):
+                # snapshot 捕获了 IbIntentContext.fork() 的完整值快照
+                active_list = captured_intents.get_active_intents()
+                all_intents = IntentResolver.resolve(
+                    active_intents=active_list,
+                    global_intents=captured_intents.get_global_intents(),
+                    context=context,
+                    execution_context=execution_context
+                )
+            else:
+                # 兼容旧路径：IntentNode 链表（to_list）或已展平的列表
+                active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
+                all_intents = IntentResolver.resolve(
+                    active_intents=active_list,
+                    global_intents=context.get_global_intents(),
+                    context=context,
+                    execution_context=execution_context
+                )
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
 
@@ -412,10 +504,11 @@ class LLMExecutorImpl:
         if llmoutput_hint:
             sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
 
+        # 读取 retry_hint 后立即清除，防止污染后续 LLM 调用（无论本次执行走哪条路径）
         current_retry_hint = context.retry_hint
-        if ai_module:
-            if not current_retry_hint and hasattr(ai_module, "_retry_hint"):
-                current_retry_hint = ai_module._retry_hint
+        context.retry_hint = None
+        if provider and not current_retry_hint and hasattr(provider, "_retry_hint"):
+            current_retry_hint = provider._retry_hint
 
         if current_retry_hint:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
@@ -466,7 +559,6 @@ class LLMExecutorImpl:
         if type_hint:
             return self._parse_result(response, type_hint, node_uid)
 
-        context.retry_hint = None
         return LLMResult.success_result(
             value=self.registry.box(response),
             raw_response=response
@@ -480,7 +572,7 @@ class LLMExecutorImpl:
 
         返回 LLMResult。
         """
-        if not isinstance(behavior, IIbBehavior):
+        if not isinstance(behavior, IbBehavior):
              return LLMResult.success_result(value=behavior)
 
         if behavior._cache is not None:
@@ -502,6 +594,43 @@ class LLMExecutorImpl:
             # 3. 环境恢复 (类型栈)
             if type_pushed:
                 self.pop_expected_type()
+
+    def invoke_behavior(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
+        """
+        公理化行为调用入口 —— 供 IbBehavior.call() 使用。
+
+        封装了完整执行流程：
+        1. 委托给 execute_behavior_object 完成 LLM 调用及类型解析；
+        2. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        3. 直接返回 IbObject，调用方无需了解 LLMResult 内部结构。
+        """
+        result = self.execute_behavior_object(behavior, execution_context)
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        if result is not None and result.value is not None:
+            return result.value
+        return self.registry.get_none()
+
+    def invoke_llm_function(self, func: IbObject, execution_context: IExecutionContext) -> IbObject:
+        """
+        公理化命名 LLM 函数调用入口 —— 供 IbLLMFunction.call() 使用。
+
+        作用域管理和参数绑定已由 IbLLMFunction.call() 完成，此方法负责：
+        1. 从 func 对象提取 call_intent（函数头意图）；
+        2. 委托给 execute_llm_function 完成 LLM 推理并返回 LLMResult；
+        3. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        4. 直接返回 IbObject（result.value），调用方无需了解 LLMResult 内部结构。
+        """
+        # call_intent 由 IbLLMFunction 在调用前已解析并暂存到 _pending_call_intent
+        call_intent = getattr(func, '_pending_call_intent', None)
+        result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        if result is not None and result.value is not None:
+            return result.value
+        return self.registry.get_none()
 
     def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> Tuple[Optional[str], Optional[str]]:
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")

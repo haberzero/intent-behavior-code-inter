@@ -17,6 +17,7 @@ class SideTableManager:
         self.node_to_symbol: Dict[Any, Symbol] = {}
         self.node_to_type: Dict[Any, 'IbSpec'] = {}
         self.node_is_deferred: Dict[Any, bool] = {}
+        self.node_deferred_mode: Dict[Any, str] = {}
         self.node_to_loc: Dict[Any, Any] = {}
         self.node_protection: Dict[Any, Any] = {}
 
@@ -32,6 +33,12 @@ class SideTableManager:
 
     def set_deferred(self, node: Any, is_deferred: bool = True) -> None:
         self.node_is_deferred[node] = is_deferred
+
+    def set_deferred_mode(self, node: Any, mode: str) -> None:
+        self.node_deferred_mode[node] = mode
+
+    def get_deferred_mode(self, node: Any) -> Optional[str]:
+        return self.node_deferred_mode.get(node)
 
     def is_deferred(self, node: Any) -> bool:
         return self.node_is_deferred.get(node, False)
@@ -52,5 +59,6 @@ class SideTableManager:
         self.node_to_symbol.clear()
         self.node_to_type.clear()
         self.node_is_deferred.clear()
+        self.node_deferred_mode.clear()
         self.node_to_loc.clear()
         self.node_protection.clear()

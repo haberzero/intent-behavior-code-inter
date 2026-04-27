@@ -1,11 +1,9 @@
 from typing import Any, Callable, Dict, List, Optional
-from core.runtime.interfaces import InterOp
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.host.host_interface import HostInterface
 
-# TODO 这里有问题，为什么继承了protocol？
-class InterOpImpl(InterOp):
+class InterOpImpl:
     def __init__(self, host_interface: Optional[HostInterface] = None):
         self.host_interface = host_interface or HostInterface()
 

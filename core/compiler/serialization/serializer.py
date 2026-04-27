@@ -5,6 +5,7 @@ from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
+from core.kernel.spec.specs import DeferredSpec
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -85,6 +86,12 @@ class FlatSerializer(BaseFlatSerializer):
             handler_uid = self._collect_node(handler)
             remaped_node_protection[node_uid] = handler_uid
 
+        remaped_node_deferred_mode = {}
+        for node, mode in result.node_deferred_mode.items():
+            node_uid = self._collect_node(node)
+            if node_uid:
+                remaped_node_deferred_mode[node_uid] = mode
+
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
@@ -93,7 +100,8 @@ class FlatSerializer(BaseFlatSerializer):
                 "node_to_type": remaped_node_to_type,
                 "node_is_deferred": remaped_node_is_deferred,
                 "node_to_loc": remaped_node_to_loc,
-                "node_protection": remaped_node_protection
+                "node_protection": remaped_node_protection,
+                "node_deferred_mode": remaped_node_deferred_mode
             },
             "pools": {
                 "nodes": self.node_pool,
@@ -172,6 +180,13 @@ class FlatSerializer(BaseFlatSerializer):
             "is_nullable": t.is_nullable,
             "is_user_defined": t.is_user_defined,
         }
+
+        # Persist scalar fields for DeferredSpec / BehaviorSpec so the runtime
+        # rehydrator can reconstruct the proper subclass (and get_base_name()
+        # will return "deferred" / "behavior" instead of "deferred[str]").
+        if isinstance(t, DeferredSpec):
+            type_data["value_type_name"] = t.value_type_name
+            type_data["deferred_mode"] = t.deferred_mode
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()

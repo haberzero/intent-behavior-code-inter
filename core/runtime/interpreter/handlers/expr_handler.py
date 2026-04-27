@@ -1,9 +1,8 @@
 from typing import Any, Mapping, List, Optional, Union
 from core.runtime.interpreter.handlers.base_handler import BaseHandler
 from core.runtime.interfaces import ServiceContext, IExecutionContext
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbLLMUncertain
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone
-from core.runtime.interfaces import IIbBehavior
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 from core.kernel.issue import InterpreterError
@@ -78,7 +77,7 @@ class ExprHandler(BaseHandler):
         return operand.receive(method, [])
 
     def visit_IbCompare(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        """比较运算实现 (支持链式比较 a < b < c)"""
+        """比较运算实现 (支持链式比较 a < b < c，以及 in / not in / is / is not)"""
         left = self.visit(node_data.get("left"))
         ops = node_data.get("ops", [])
         comparators = node_data.get("comparators", [])
@@ -91,12 +90,36 @@ class ExprHandler(BaseHandler):
         
         for op, comparator_uid in zip(ops, comparators):
             right = self.visit(comparator_uid)
-            method = OP_MAPPING.get(op)
-            if not method:
-                raise self.report_error(f"Unsupported comparison: {op}", node_uid)
-            
-            # 执行单步比较
-            cmp_res = current_left.receive(method, [right])
+
+            # 成员检测运算符由右侧容器的 __contains__ 处理
+            if op == "in":
+                contained = right.receive('__contains__', [current_left])
+                cmp_res = self.registry.box(bool(contained.to_native()) if hasattr(contained, 'to_native') else bool(contained))
+            elif op == "not in":
+                contained = right.receive('__contains__', [current_left])
+                native = contained.to_native() if hasattr(contained, 'to_native') else contained
+                cmp_res = self.registry.box(not bool(native))
+            elif op == "is":
+                # 身份比较：检查两个对象是否是同一个运行时实例
+                # 特殊情况：None 和 Uncertain 使用类型检查而非实例身份
+                if isinstance(right, IbNone):
+                    cmp_res = self.registry.box(isinstance(current_left, IbNone))
+                elif isinstance(right, IbLLMUncertain):
+                    cmp_res = self.registry.box(isinstance(current_left, IbLLMUncertain))
+                else:
+                    cmp_res = self.registry.box(current_left is right)
+            elif op == "is not":
+                if isinstance(right, IbNone):
+                    cmp_res = self.registry.box(not isinstance(current_left, IbNone))
+                elif isinstance(right, IbLLMUncertain):
+                    cmp_res = self.registry.box(not isinstance(current_left, IbLLMUncertain))
+                else:
+                    cmp_res = self.registry.box(current_left is not right)
+            else:
+                method = OP_MAPPING.get(op)
+                if not method:
+                    raise self.report_error(f"Unsupported comparison: {op}", node_uid)
+                cmp_res = current_left.receive(method, [right])
             
             # 短路：只要有一个比较不成立，立即返回 False
             if not self.execution_context.is_truthy(cmp_res):
@@ -113,11 +136,7 @@ class ExprHandler(BaseHandler):
         args = [self.visit(a) for a in node_data.get("args", [])]
         
         try:
-            # 识别被动行为对象并分发给执行器
-            if isinstance(func, IIbBehavior):
-                return self._execute_behavior(func)
-
-            # 如果是 BoundMethod 或 IbFunction，其 call 内部会处理作用域
+            # 如果是 BoundMethod 或 IbFunction/IbBehavior，其 call 内部会处理作用域
             if hasattr(func, 'call'):
                 return func.call(self.registry.get_none(), args)
             return func.receive('__call__', args)
@@ -132,6 +151,28 @@ class ExprHandler(BaseHandler):
         value = self.visit(node_data.get("value"))
         attr = node_data.get("attr")
         return value.receive('__getattr__', [self.registry.box(attr)])
+
+    def visit_IbFilteredExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """带过滤条件的表达式 (e.g., while expr if filter)
+
+        语义：先求值主表达式；主表达式为假时短路返回假值；
+              否则再求值过滤条件，过滤条件为假时返回 IbNone（falsy）。
+              用于 while ... if ... 语法。
+
+        注意：for ... in items if filter 的过滤逻辑由 visit_IbFor 直接处理，
+              因为过滤条件引用循环变量，必须在目标变量赋值之后才能求值。
+        """
+        # 求值主表达式
+        result = self.visit(node_data.get("expr"))
+        # 短路：主表达式为假，直接返回（不求值 filter）
+        if not self.execution_context.is_truthy(result):
+            return result
+        # 求值过滤条件
+        filter_val = self.visit(node_data.get("filter"))
+        if not self.execution_context.is_truthy(filter_val):
+            # 过滤条件不满足：返回假值（IbNone 在 is_truthy 中为 false）
+            return self.registry.get_none()
+        return result
 
     def visit_IbSubscript(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """下标访问 -> __getitem__"""
@@ -192,17 +233,20 @@ class ExprHandler(BaseHandler):
             )
 
         if is_deferred:
-            # 返回延迟执行的行为对象 (不再传入 interpreter 引用)
-            # 捕获原始 IntentNode 链表以保留结构共享
-            captured_intents = self.runtime_context.intent_stack
-            
-            # 如果是延迟执行，行为对象需要持有自己的 call_intent
-            # 目前 IbBehavior 的工厂方法可能还不支持传递 call_intent，
-            # 暂时保持现状，等待下一步重构 behavior 对象。
+            # 根据 deferred_mode 决定捕获行为：
+            # - 'lambda'  : 不捕获意图状态（每次调用时使用调用处的当前意图栈）
+            # - 'snapshot': 捕获当前意图栈的快照（隔离执行，默认行为）
+            deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
+            # snapshot 语义：捕获当前作用域正在生效的意图栈的值快照（IbIntentContext.fork()）。
+            # lambda 语义：不捕获意图状态，每次调用时使用调用位置的当前意图栈。
+            captured_intents = None if deferred_mode == "lambda" else self.runtime_context.fork_intent_snapshot()
             return self.service_context.object_factory.create_behavior(
-                node_uid, 
-                captured_intents, 
-                expected_type=self.get_side_table("node_to_type", node_uid)
+                node_uid,
+                captured_intents,
+                expected_type=self.get_side_table("node_to_type", node_uid),
+                call_intent=call_intent,
+                deferred_mode=deferred_mode,
+                execution_context=self._execution_context,
             )
         
         # [Fallback] 如果是非延迟模式，直接执行
@@ -212,7 +256,8 @@ class ExprHandler(BaseHandler):
         self.runtime_context.set_last_llm_result(result)
 
         # 返回 IbObject（而不是 LLMResult）
-        return result.value if result and result.value else self.registry.get_none()
+        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        return result.value if result is not None and result.value is not None else self.registry.get_none()
 
     def visit_IbCastExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """类型强转运行时实现"""
@@ -279,7 +324,11 @@ class ExprHandler(BaseHandler):
                 target_descriptor = meta_reg.resolve(target_type_name)
 
         # 3. 执行 LLM 调用
-        result = self.service_context.llm_executor.execute_behavior_expression(
+        executor = self.registry.get_llm_executor()
+        if executor is None:
+            self.runtime_context.set_last_llm_result(None)
+            return self.registry.get_none()
+        result = executor.execute_behavior_expression(
             node_uid,
             self.execution_context,
             call_intent=call_intent

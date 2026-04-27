@@ -78,7 +78,6 @@ class Scheduler(ICompilerService):
         """ICompilerService: Compiles a file and its dependencies."""
         return self.compile_project(file_path)
 
-    # TODO: 怀疑是智能体引入的妥协性操作。后续需要单独严格审核。目前MVP Demo暂时不深究
     def compile_to_artifact_dict(self, file_path: str) -> Dict[str, Any]:
         """ICompilerService: 编译文件并返回平铺化的字典产物，供解释器直接加载。"""
         artifact = self.compile_file(file_path)
@@ -469,12 +468,14 @@ class Scheduler(ICompilerService):
                             if existing.kind == SymbolKind.MODULE:
                                 # 跳过重复注入
                                 # 这符合"显式引入"原则的临时妥协：允许未 import 时使用 ai.xxx
-                                pass
+                                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                    f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
                             else:
                                 # 情况2：已存在用户定义的符号（CLASS, FUNCTION 等）
                                 # 外部模块的 import 应该被忽略或给出警告
                                 # 因为用户可能意图使用自己定义的符号
-                                pass
+                                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC,
+                                    f"[import] Symbol '{local_name}' conflicts with an existing {existing.kind.name} symbol in '{file_path}'. Import silently ignored.")
                         else:
                             mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
                             analyzer.symbol_table.define(mod_sym)
@@ -488,7 +489,8 @@ class Scheduler(ICompilerService):
                             for name, sym in s_mod_type.exported_scope.symbols.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
-                                    pass  # 跳过重复注入
+                                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                        f"[from-import *] Symbol '{name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
                                     new_sym = SymbolFactory.create_from_descriptor(name, sym.spec) if sym.spec else sym
                                     analyzer.symbol_table.define(new_sym)
@@ -500,9 +502,9 @@ class Scheduler(ICompilerService):
                                 # [临时方案] 检查是否已存在同名符号
                                 existing = analyzer.symbol_table.resolve(local_name)
                                 if existing:
-                                    pass  # 跳过重复注入
+                                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                        f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
-                                    # 创建一个指向原符号的克隆/别名符号
                                     # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
                                         new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})

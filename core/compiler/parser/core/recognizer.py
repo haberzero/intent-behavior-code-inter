@@ -54,7 +54,10 @@ class SyntaxRecognizer:
         if token.type == TokenType.RETURN:
             return SyntaxRole.RETURN_STATEMENT
         
-        if token.type in (TokenType.AUTO, TokenType.CALLABLE):
+        if token.type == TokenType.AUTO:
+            return SyntaxRole.VARIABLE_DECLARATION
+        
+        if token.type == TokenType.FN:
             return SyntaxRole.VARIABLE_DECLARATION
         
         # Check for implicit declaration: Type Name (e.g., int x, MyClass c)
@@ -145,6 +148,10 @@ class SyntaxRecognizer:
         if next_t.type == TokenType.IDENTIFIER:
             return True
             
+        # 2b. Heuristic check: '... ID lambda/snapshot ID' (e.g., 'int lambda x')
+        if next_t.type in (TokenType.LAMBDA, TokenType.SNAPSHOT):
+            return True
+            
         # 3. Heuristic check: '... ID [ ... ] ID' (e.g., 'list[int] x', 'a.b[int] y')
         if next_t.type == TokenType.LBRACKET:
             return SyntaxRecognizer._check_generic_lookahead(stream, current_offset + 1)
@@ -166,9 +173,9 @@ class SyntaxRecognizer:
             elif t.type == TokenType.RBRACKET:
                 bracket_depth -= 1
                 if bracket_depth == 0:
-                    # Found closing bracket. Check if next is an identifier.
+                    # Found closing bracket. Check if next is an identifier, lambda, or snapshot.
                     next_t = stream.peek(current_offset + 1)
-                    return next_t.type == TokenType.IDENTIFIER
+                    return next_t.type in (TokenType.IDENTIFIER, TokenType.LAMBDA, TokenType.SNAPSHOT)
             
             current_offset += 1
             if current_offset > 100: # Safety limit

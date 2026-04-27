@@ -4,6 +4,19 @@ import json
 import sys
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
+
+# =============================================================================
+# 架构边界说明：Interpreter = 执行隔离单元
+# =============================================================================
+# Interpreter 是单个 IBCI 执行会话的隔离单元。
+# 职责：接受已编译的 Artifact，在独立的运行时上下文中执行它，并返回结果。
+#
+# 不是 LLM 并发调度单元：Interpreter 自身不调度多线程 LLM 调用；
+# LLM 调用并发化属于 Layer 1 LLM Pipeline（PENDING_TASKS_VM.md Step 10）。
+#
+# 每个 Interpreter 实例对应一个隔离的执行上下文（RuntimeContext），
+# 包含独立的变量绑定、意图上下文（IbIntentContext）和帧栈。
+# =============================================================================
 from core.kernel import ast as ast
 from core.kernel.issue import (
     InterpreterError, Severity
@@ -21,7 +34,7 @@ from core.runtime.interfaces import (
     Interpreter as InterpreterInterface,
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
     PermissionManager, Scope, SymbolView, ISourceProvider, ICompilerService, IObjectFactory,
-    IIbBehavior, IIbIntent, Registry
+    Registry
 )
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.factory import RuntimeObjectFactory
@@ -45,6 +58,7 @@ from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
+from core.base.enums import RegistrationState
 from .llm_result import LLMResult
 
 
@@ -64,10 +78,10 @@ class Interpreter:
 
     def get_captured_intents(self, obj: Any) -> List[str]:
         """ 获取指定对象（如 Behavior）捕获的意图栈内容"""
-        if isinstance(obj, IIbBehavior):
+        if isinstance(obj, IbBehavior):
             res = []
             for i in obj.captured_intents:
-                if isinstance(i, IIbIntent):
+                if isinstance(i, IbIntent):
                     res.append(i.content)
                 else:
                     res.append(str(i))
@@ -105,7 +119,7 @@ class Interpreter:
         pass
 
 
-    # TODO: 怀疑此处 instance_id: str = "main"  这一行有代码异味。MVP Demo 阶段暂不深究
+    # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险（见 PENDING_TASKS.md §10.3）
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
@@ -163,7 +177,10 @@ class Interpreter:
         )
 
         # 注册执行上下文引用到 Registry，底层仅持有该容器
-        self._kernel_token = self._registry.get_kernel_token()
+        # 如果 kernel_token 已经由调用方（如 Engine）传入，则优先使用，避免重复调用
+        # get_kernel_token()（该方法是一次性的，第二次调用会返回 None）。
+        if not self._kernel_token:
+            self._kernel_token = self._registry.get_kernel_token()
         if self._kernel_token:
              self._registry.set_execution_context(self._execution_context, self._kernel_token)
         
@@ -226,7 +243,7 @@ class Interpreter:
                 registry=self.registry,
                 host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
-                orchestrator=kwargs.get('orchestrator', None) if 'kwargs' in locals() else None,
+                orchestrator=orchestrator,
                 debugger=self.debugger,
                 output_callback=output_callback,
                 input_callback=input_callback,
@@ -280,16 +297,13 @@ class Interpreter:
             # 在某些脱离 Engine 的测试环境下，如果没有令牌，系统将无法正确追踪状态流转
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
                 "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.")
-            
-        self._pre_evaluate_user_classes()
 
-        # 4. 设置上下文
-        self.setup_context(self.runtime_context)
-
-        # 运行限制
+        # 运行限制必须在 _pre_evaluate_user_classes() 之前初始化，
+        # 因为 visit() 在预评估中会访问 instruction_count / max_instructions 等字段。
         self.max_instructions = max_instructions
         self.instruction_count = 0
-        
+        self.strict_mode = strict_mode
+
         # 递归深度安全校验
         # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
         # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
@@ -300,11 +314,13 @@ class Interpreter:
                 f"Warning: max_call_stack {max_call_stack} is unsafe for Python limit {python_limit}. "
                 f"Auto-adjusting to safe limit {safe_limit}")
             max_call_stack = safe_limit
-            
+
         self.max_call_stack = max_call_stack
         self.call_stack_depth = 0
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
-        self.strict_mode = strict_mode
+
+        # 4. 设置上下文（含内置变量）
+        self.setup_context(self.runtime_context)
 
         # 初始化分片 Handlers (通过工厂解耦)
         handlers = object_factory.create_handlers(self.service_context, self._execution_context)
@@ -320,6 +336,11 @@ class Interpreter:
         # 预先映射访问方法
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
+
+        # 5. 预评估用户类字段 (STAGE 6)
+        # 必须在 _visitor_cache 和执行上下文完整设置后运行，
+        # 确保 visit() 能正确分发到各 Handler（如 ListExpr、IbDict）。
+        self._pre_evaluate_user_classes()
 
     def _register_handlers(self, handlers: List[Any]):
         """从所有 Handler 中搜集 visit_ 方法并缓存"""
@@ -463,6 +484,8 @@ class Interpreter:
 
     def run(self) -> IbObject:
         """从入口模块开始执行完整的项目"""
+        from core.runtime.frame import set_current_frame, reset_current_frame
+        _token = set_current_frame(self.runtime_context)
         try:
             if not self.entry_module:
                 return self.registry.get_none()
@@ -478,10 +501,14 @@ class Interpreter:
                 import traceback
                 traceback.print_exc()
             raise e
+        finally:
+            reset_current_frame(_token)
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
-        
+        from core.runtime.frame import set_current_frame, reset_current_frame
+        _frame_token = set_current_frame(self.runtime_context)
+
         old_module = self.current_module_name
         self.current_module_name = module_name
         
@@ -537,6 +564,7 @@ class Interpreter:
             self.logical_stack.pop()
             self.runtime_context = old_context
             self.current_module_name = old_module
+            reset_current_frame(_frame_token)
 
     def _report_error(self, message: str, node_uid: Optional[str] = None, error_code: Optional[str] = None) -> InterpreterError:
         """
@@ -584,6 +612,11 @@ class Interpreter:
     def _pre_evaluate_user_classes(self):
         """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
         old_module = self.current_module_name
+        # Bug C 修复：预评估失败不应污染 issue_tracker（导致 STAGE 7 契约校验误报错误）。
+        # 保存当前错误计数，预评估完成后恢复。
+        saved_error_count = self.issue_tracker._error_count
+        saved_diag_count = len(self.issue_tracker._diagnostics)
+        
         for name, ib_class in self.registry.get_all_classes().items():
             if not getattr(ib_class.spec, 'is_user_defined', False):
                 continue
@@ -602,6 +635,10 @@ class Interpreter:
                 except Exception:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
                     pass
+        
+        # 恢复 issue_tracker 状态：预评估期间产生的任何错误都是误报
+        self.issue_tracker._error_count = saved_error_count
+        self.issue_tracker._diagnostics = self.issue_tracker._diagnostics[:saved_diag_count]
         
         self.current_module_name = old_module
 
@@ -630,11 +667,11 @@ class Interpreter:
                 if stmt_data["_type"] == "IbFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, spec=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class))
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self.service_context.llm_executor, self._execution_context, spec=declared_type))
+                    ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self._execution_context, spec=declared_type))
                 elif stmt_data["_type"] == "IbAssign":
                     # 使用 IbDeferredField 统一管理
                     val_uid = stmt_data.get("value")
@@ -780,14 +817,12 @@ class Interpreter:
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
                 result = visitor(node_uid, node_data)
                 
-                # [Result Mode] 自动拦截不确定性结果
+                # [Result Mode] 自动拦截不确定性结果（安全网）
                 if isinstance(result, LLMResult):
                     self.runtime_context.set_last_llm_result(result)
                     if result.is_uncertain:
-                        # 对于不确定的结果，我们返回 None。
-                        # 上层逻辑（如 IbAssign）会根据 last_llm_result.is_uncertain 决定是否中断。
                         return self.registry.get_none()
-                    return result.value # 返回解包后的 IbObject
+                    return result.value
                 
                 return result
             except (ReturnException, BreakException, ContinueException, ThrownException):

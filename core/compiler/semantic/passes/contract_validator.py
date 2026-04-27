@@ -43,11 +43,18 @@ class ContractValidator:
             return
 
         # 1. 检查方法重写的一致性 (Inheritance Contract)
+        # 注意：构造函数 __init__ 及协议方法允许子类自由修改签名，不参与契约校验。
+        _SIGNATURE_FREE_METHODS = frozenset({
+            "__init__", "__snapshot__", "__restore__",
+            "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
+        })
         for name, member in cls_desc.members.items():
             # member is a MemberSpec/MethodMemberSpec (pure data, type stored as type_name string)
             if not isinstance(member, MemberSpec):
                 continue
             if not member.is_method():
+                continue
+            if name in _SIGNATURE_FREE_METHODS:
                 continue
 
             # 寻找父类中同名成员

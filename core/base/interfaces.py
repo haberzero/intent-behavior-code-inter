@@ -8,7 +8,9 @@ __all__ = [
     "ISymbolView",
     "ILLMProvider",
     "ILLMExecutor",
+    "IILLMExecutor",
     "IIntentManager",
+    "IExecutionFrame",
 ]
 
 @runtime_checkable
@@ -38,8 +40,17 @@ class IssueTracker(Protocol):
 
 @runtime_checkable
 class IStateReader(Protocol):
-    """提供对解释器运行时状态（如变量）的只读访问"""
+    """
+    提供对解释器运行时状态（变量、意图、LLM 结果）的只读访问。
+
+    由 RuntimeContextImpl 实现，通过 KernelRegistry.get_state_reader() 供
+    核心层插件（如 ibci_idbg）访问，无需持有 ServiceContext 引用。
+    """
     def get_vars_snapshot(self) -> Dict[str, Any]: ...
+    def get_vars(self) -> Dict[str, Any]: ...
+    def get_active_intents(self) -> List[Any]: ...
+    def get_last_llm_result(self) -> Optional[Any]: ...
+    def get_llm_except_frames(self) -> List[Any]: ...
 
 @runtime_checkable
 class ISymbolView(Protocol):
@@ -58,8 +69,62 @@ class ILLMProvider(Protocol):
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
-    """提供对内核 LLM 执行器的内省能力"""
+    """提供对内核 LLM 执行器的内省能力（向后兼容接口）"""
     def get_last_call_info(self) -> Dict[str, Any]: ...
+
+
+@runtime_checkable
+class IILLMExecutor(Protocol):
+    """
+    内核级 LLM 执行器完整接口。
+
+    职责划分
+    --------
+    * ``invoke_behavior``             —— 行为对象公理化调用入口（供 IbBehavior.call() 使用）
+    * ``execute_behavior_expression`` —— 行为描述行底层执行
+    * ``execute_behavior_object``     —— 被动行为对象的底层执行
+    * ``get_last_call_info``          —— 内省上次 LLM 调用的诊断信息
+
+    设计原则：此接口驻留于 core.base，不依赖任何 runtime 具体类型；
+    所有参数/返回类型均使用 Any，由实现层负责具体类型约束。
+    """
+    def invoke_behavior(self, behavior: Any, context: Any) -> Any:
+        """
+        执行一个行为对象，返回 IbObject 结果。
+
+        该方法封装了全部执行细节（意图捕获、类型推导、结果缓存），
+        是 IbBehavior.call() 的唯一对外接触点，严禁再使用 _execute_behavior。
+        """
+        ...
+
+    def invoke_llm_function(self, func: Any, context: Any) -> Any:
+        """
+        执行一个命名 LLM 函数对象，返回 IbObject 结果。
+
+        作用域管理和参数绑定已由 IbLLMFunction.call() 完成。
+        此方法负责：调用 execute_llm_function、回写 last_llm_result（供 llmexcept 使用），
+        并返回解析后的 IbObject，而非 LLMResult。
+        是 IbLLMFunction.call() 的唯一执行分发点。
+        """
+        ...
+
+    def execute_behavior_expression(
+        self,
+        node_uid: str,
+        context: Any,
+        call_intent: Any = None,
+        captured_intents: Any = None,
+    ) -> Any:
+        """执行行为描述行节点，返回 LLMResult。"""
+        ...
+
+    def execute_behavior_object(self, behavior: Any, context: Any) -> Any:
+        """执行被动行为对象，返回 LLMResult。"""
+        ...
+
+    def get_last_call_info(self) -> Dict[str, Any]:
+        """获取最后一次 LLM 调用的诊断信息。"""
+        ...
 
 @runtime_checkable
 class IIntentManager(Protocol):
@@ -70,3 +135,32 @@ class IIntentManager(Protocol):
     def get_global_intents(self) -> List[Any]: ...
     def get_active_intents(self) -> List[Any]: ...
     def push_intent(self, intent: Union[str, Any], mode: str = "+", tag: Optional[str] = None) -> None: ...
+
+
+@runtime_checkable
+class IExecutionFrame(Protocol):
+    """
+    IBCI 执行帧协议：单次函数调用的完整状态单元。
+    等价于 CPU 上下文切换寄存器组；是并发、快照、切片的最小单位。
+
+    RuntimeContextImpl 是其当前实现（无需修改现有代码，仅命名已有结构）。
+    未来 IbIntentContext 公理化后，intent_context 属性将持有 IbIntentContext 对象。
+
+    Protocol 方法约定：
+    - current_scope  —— 当前作用域链（局部变量）
+    - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
+    - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
+    - get_last_llm_result()   —— LLM 结果寄存器
+    - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照（Step 6 实现）
+    """
+    @property
+    def current_scope(self) -> Any: ...
+
+    @property
+    def intent_stack(self) -> Any: ...
+
+    def get_llm_except_frames(self) -> List[Any]: ...
+
+    def get_last_llm_result(self) -> Optional[Any]: ...
+
+    def fork_intent_snapshot(self) -> Any: ...

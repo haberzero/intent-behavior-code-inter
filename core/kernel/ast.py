@@ -182,6 +182,7 @@ class IbReturn(IbStmt):
 class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
+    deferred_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):

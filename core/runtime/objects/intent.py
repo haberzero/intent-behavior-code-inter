@@ -1,12 +1,14 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
-from core.kernel.intent_logic import IntentMode, IntentRole, IntentProtocol
+from core.runtime.objects.ib_type_mapping import register_ib_type
+from core.kernel.intent_logic import IntentMode, IntentRole
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
-class IbIntent(IbObject, IntentProtocol):
+@register_ib_type("Intent")
+class IbIntent(IbObject):
     """
     表示运行时的意图对象。
     封装了意图的内容、模式以及来源信息。
@@ -79,6 +81,22 @@ class IbIntent(IbObject, IntentProtocol):
         """判断是否为无参数的 @-（移除栈顶意图）"""
         return self.mode == IntentMode.REMOVE and self.pop_top
     
+    # ------------------------------------------------------------------ #
+    # Public vtable methods (IntentAxiom.get_method_specs)              #
+    # ------------------------------------------------------------------ #
+
+    def get_content(self) -> str:
+        """返回意图内容字符串。"""
+        return self.content or ""
+
+    def get_tag(self) -> str:
+        """返回意图标签；无标签时返回空字符串。"""
+        return self.tag or ""
+
+    def get_mode(self) -> str:
+        """返回意图模式字符串：'+', '!', 或 '-'。"""
+        return self.mode.value if self.mode else "+"
+
     def __repr__(self):
         tag_str = f" tag={self.tag}" if self.tag else ""
         return f"<Intent mode={self.mode.name}{tag_str} role={self.role.value} content='{self.content[:20]}...'>"

@@ -18,9 +18,10 @@ class IbPrecedence(IntEnum):
     SHIFT = 9       # << >>
     TERM = 10        # + -
     FACTOR = 11     # * / %
-    UNARY = 12      # ! - +
-    CALL = 13       # . ()
-    PRIMARY = 14
+    POW = 12        # ** (幂运算，高于乘除，右结合)
+    UNARY = 13      # ! - + ~
+    CALL = 14       # . ()
+    PRIMARY = 15
 
 class IbParseRule:
     def __init__(self, prefix, infix, precedence):
@@ -34,7 +35,6 @@ class IbParseRule:
 # Identifier constants for keyword tokens
 ID_SELF: str = "self"
 ID_AUTO: str = "auto"
-ID_CALLABLE: str = "callable"
 
 # Operator mapping: TokenType -> operator string
 OP_MAP: Dict[TokenType, str] = {
@@ -42,7 +42,9 @@ OP_MAP: Dict[TokenType, str] = {
     TokenType.PLUS: "+",
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
+    TokenType.STAR_STAR: "**",
     TokenType.SLASH: "/",
+    TokenType.FLOOR_DIV: "//",
     TokenType.PERCENT: "%",
 
     # Bitwise operators
@@ -65,6 +67,9 @@ OP_MAP: Dict[TokenType, str] = {
     TokenType.AND: "and",
     TokenType.OR: "or",
     TokenType.NOT: "not",
+
+    # Containment operators
+    TokenType.IN: "in",
 }
 
 # Compound assignment operator mapping: TokenType -> operator string
@@ -72,6 +77,8 @@ COMPOUND_OP_MAP: Dict[TokenType, str] = {
     TokenType.PLUS_ASSIGN: "+=",
     TokenType.MINUS_ASSIGN: "-=",
     TokenType.STAR_ASSIGN: "*=",
+    TokenType.STAR_STAR_ASSIGN: "**=",
     TokenType.SLASH_ASSIGN: "/=",
+    TokenType.FLOOR_DIV_ASSIGN: "//=",
     TokenType.PERCENT_ASSIGN: "%=",
 }

@@ -2,6 +2,7 @@ from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
+from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -83,7 +84,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         core_axioms = axiom_registry.get_all_names()
     else:
         # Fallback (Safety net) - 仅在极端的 UTS 注册表未对齐时使用
-        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "callable", "bound_method", "auto", "any", "void"]
+        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "deferred", "callable", "bound_method", "auto", "any", "void", "llm_call_result"]
     
     # 自动创建类并注册
     ib_classes = {}
@@ -233,6 +234,12 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         return_type_name="str"
     ), token)
 
+    registry.register_function("is_uncertain", factory.create_func(
+        "is_uncertain",
+        param_type_names=["any"],
+        return_type_name="bool"
+    ), token)
+
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)
@@ -241,15 +248,37 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(none_class, 'to_bool', lambda self: 0)
 
     # 5. 注册 LLM 不确定结果单例 (IbLLMUncertain)
-    registry.register_llm_uncertain(IbLLMUncertain(none_class), token)
+    # llm_uncertain 有独立的公理类（不再借用 none_class），
+    # __to_prompt__ / to_bool / cast_to 通过公理方法自动绑定。
+    llm_uncertain_class = ib_classes.get("llm_uncertain")
+    if llm_uncertain_class:
+        registry.register_llm_uncertain(IbLLMUncertain(llm_uncertain_class), token)
+        _reg_native(llm_uncertain_class, '__to_prompt__', lambda self: "uncertain")
+        _reg_native(llm_uncertain_class, 'to_bool', lambda self: 0)
+        # 支持与 Uncertain 字面量（以及其他 llm_uncertain 值）进行 == / != 比较
+        def _lu_eq(self, other):
+            result = isinstance(other, IbLLMUncertain)
+            return self.ib_class.registry.box(result)
+        def _lu_ne(self, other):
+            result = not isinstance(other, IbLLMUncertain)
+            return self.ib_class.registry.box(result)
+        _reg_native(llm_uncertain_class, '__eq__', _lu_eq, unbox=False)
+        _reg_native(llm_uncertain_class, '__ne__', _lu_ne, unbox=False)
+    else:
+        # 安全回退（极端情况下 llm_uncertain 公理未注册）
+        registry.register_llm_uncertain(IbLLMUncertain(none_class), token)
 
     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))
     
     # int(x) 构造函数/转换逻辑
+    # 注意：receiver 可能是 int 类对象（IbClass），也可能是一个 IbInteger 实例（如 42()）。
+    # 使用 self.ib_class.registry 保证两种情况均可访问注册表。
     def _int_call(self, *args):
-        if not args: return self.registry.box(0)
-        return args[0].receive('cast_to', [self])
+        reg = self.ib_class.registry
+        if not args: return reg.box(0)
+        target = self if isinstance(self, IbClass) else self.ib_class
+        return args[0].receive('cast_to', [target])
     _reg_native(integer_class, '__call__', _int_call, unbox=False)
     
     # Float
@@ -257,12 +286,15 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # float(x) 构造函数/转换逻辑
     def _float_call(self, *args):
-        if not args: return self.registry.box(0.0)
-        return args[0].receive('cast_to', [self])
+        reg = self.ib_class.registry
+        if not args: return reg.box(0.0)
+        target = self if isinstance(self, IbClass) else self.ib_class
+        return args[0].receive('cast_to', [target])
     _reg_native(float_class, '__call__', _float_call, unbox=False)
 
     # String
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
+    _reg_native(string_class, 'to_bool', lambda self: len(self.value) > 0)
     _reg_native(string_class, '__getitem__', lambda self, key: self.__getitem__(key), unbox=False)
 
     # range(start, stop, step) 构造函数
@@ -274,13 +306,41 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     
     # str(x) 构造函数/转换逻辑
     def _str_call(self, *args):
-        if not args: return self.registry.box("")
+        reg = self.ib_class.registry
+        if not args: return reg.box("")
         return args[0].receive('__to_prompt__', [])
     _reg_native(string_class, '__call__', _str_call, unbox=False)
 
+    # str.__contains__: 用于 'in' 运算符（右侧为 str 时）
+    def _str_contains(self, item):
+        sub = item.to_native() if hasattr(item, 'to_native') else str(item)
+        return self.ib_class.registry.box(sub in self.value)
+    _reg_native(string_class, '__contains__', _str_contains, unbox=False)
+
     _reg_native(list_class, '__to_prompt__', lambda self: "[" + ", ".join(e.receive('__to_prompt__', []).to_native() for e in self.elements) + "]")
     _reg_native(list_class, 'to_list', lambda self: self.elements)
+    _reg_native(list_class, 'to_bool', lambda self: len(self.elements) > 0)
     _reg_native(list_class, 'len', lambda self: self.len())
+
+    # list.__contains__: 用于 'in' 运算符（右侧为 list 时）
+    def _list_contains(self, item):
+        native = item.to_native() if hasattr(item, 'to_native') else item
+        result = any(el.to_native() == native for el in self.elements)
+        return self.ib_class.registry.box(result)
+    _reg_native(list_class, '__contains__', _list_contains, unbox=False)
+
+    # Exception: __init__ 存储 message 字段，使 Exception("msg") 可用
+    exception_class = ib_classes.get("Exception")
+    if exception_class:
+        def _exception_init(receiver, *init_args):
+            """Exception.__init__: 将首个参数存为 message 字段"""
+            if init_args:
+                msg_arg = init_args[0]
+                receiver.fields["message"] = msg_arg if hasattr(msg_arg, 'to_native') else registry.box(str(msg_arg))
+            else:
+                receiver.fields["message"] = registry.box("")
+            return registry.get_none()
+        _reg_native(exception_class, '__init__', _exception_init, unbox=False)
 
     # Tuple
     tuple_class = ib_classes.get("tuple")
@@ -291,7 +351,14 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # Dict
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
+    _reg_native(dict_class, 'to_bool', lambda self: len(self.fields) > 0)
     _reg_native(dict_class, 'len', lambda self: self.len())
+
+    # dict.__contains__: 用于 'in' 运算符（右侧为 dict 时）
+    def _dict_contains(self, key):
+        k = key.to_native() if hasattr(key, 'to_native') else key
+        return self.ib_class.registry.box(k in self.fields)
+    _reg_native(dict_class, '__contains__', _dict_contains, unbox=False)
     
     # 5. 注册装箱逻辑
     registry.register_boxer(int, lambda reg, v, memo=None: IbInteger.from_native(v, reg.get_class("int")), token)
@@ -338,6 +405,166 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(intent_stack_class, '__repr__', IbIntentStack.__repr__, unbox=False)
 
     registry.register_builtin_instance("IntentStack", IbIntentStack(intent_stack_class))
+
+    # 5.6 注册 intent_context 内置类（OOP MVP — is_class=True）
+    # 允许 IBCI 用户代码显式创建和操作意图上下文对象：
+    #   intent_context ctx = intent_context()
+    #   ctx.push("用中文回复")
+    #   ctx.fork() → 新的 intent_context 实例（拷贝）
+    intent_context_class = ib_classes.get("intent_context")
+    if intent_context_class:
+        from core.runtime.objects.intent_context import IbIntentContext
+        from core.runtime.objects.intent import IbIntent
+        from core.kernel.intent_logic import IntentMode, IntentRole
+
+        def _ic_init(receiver, *args):
+            """intent_context() 构造函数：创建空意图上下文。"""
+            receiver.fields['_ctx'] = IbIntentContext()
+            return registry.get_none()
+
+        def _ic_push(receiver, *args):
+            """ctx.push(content) 或 ctx.push(content, tag)：压入持久意图。"""
+            ctx = receiver.fields.get('_ctx')
+            if not ctx or not args:
+                return registry.get_none()
+            content_obj = args[0]
+            content_str = content_obj.to_native() if hasattr(content_obj, 'to_native') else str(content_obj)
+            tag_str = None
+            if len(args) >= 2:
+                tag_obj = args[1]
+                tag_str = tag_obj.to_native() if hasattr(tag_obj, 'to_native') else None
+            intent_cls = registry.get_class("Intent")
+            intent = IbIntent(ib_class=intent_cls, content=content_str,
+                              mode=IntentMode.APPEND, tag=tag_str, role=IntentRole.DYNAMIC)
+            ctx.push(intent)
+            return registry.get_none()
+
+        def _ic_pop(receiver, *args):
+            """ctx.pop()：弹出并返回栈顶意图内容。"""
+            ctx = receiver.fields.get('_ctx')
+            if ctx:
+                intent = ctx.pop()
+                if intent is not None and hasattr(intent, 'content'):
+                    return registry.box(intent.content)
+            return registry.get_none()
+
+        def _ic_fork(receiver, *args):
+            """ctx.fork()：返回新的 intent_context 实例（拷贝当前状态）。"""
+            ctx = receiver.fields.get('_ctx')
+            new_instance = IbObject(intent_context_class)
+            new_instance.fields['_ctx'] = ctx.fork() if ctx else IbIntentContext()
+            return new_instance
+
+        def _ic_resolve(receiver, *args):
+            """ctx.resolve()：返回当前意图上下文消解后的提示词字符串列表。"""
+            ctx = receiver.fields.get('_ctx')
+            if not ctx:
+                return registry.box([])
+            intents = ctx.get_active_intents()
+            strings = [i.content for i in intents if hasattr(i, 'content') and i.content]
+            return registry.box(strings)
+
+        def _ic_merge(receiver, *args):
+            """ctx.merge(other)：将另一个意图上下文的状态合并到 self。"""
+            ctx = receiver.fields.get('_ctx')
+            if not ctx or not args:
+                return registry.get_none()
+            other = args[0]
+            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
+            if other_ctx:
+                ctx.merge(other_ctx)
+            return registry.get_none()
+
+        def _ic_clear(receiver, *args):
+            """ctx.clear()：清空持久意图栈。"""
+            ctx = receiver.fields.get('_ctx')
+            if ctx:
+                ctx.set_intent_top(None)
+            return registry.get_none()
+
+        _reg_native(intent_context_class, '__init__', _ic_init, unbox=False)
+        _reg_native(intent_context_class, 'push', _ic_push, unbox=False)
+        _reg_native(intent_context_class, 'pop', _ic_pop, unbox=False)
+        _reg_native(intent_context_class, 'fork', _ic_fork, unbox=False)
+        _reg_native(intent_context_class, 'resolve', _ic_resolve, unbox=False)
+        _reg_native(intent_context_class, 'merge', _ic_merge, unbox=False)
+        _reg_native(intent_context_class, 'clear', _ic_clear, unbox=False)
+
+        # --- 作用域控制方法（可在类上或实例上调用，均操作当前帧的意图上下文）---
+        #
+        # 设计说明：这三个方法不操作 receiver（实例字段 _ctx），
+        # 而是直接操作当前执行帧的 _intent_ctx（当前作用域生效的意图上下文）。
+        # 因此既可以写 intent_context.clear_inherited()，
+        # 也可以写 ctx.clear_inherited()，效果完全相同。
+        #
+        # 使用场景：函数内部显式屏蔽/替换从调用者继承来的意图上下文：
+        #
+        #   func process():
+        #       intent_context.clear_inherited()   # 清空从调用者继承的意图
+        #       @+ "只以 JSON 格式回复"
+        #       str r = @~ 处理数据 ~              # 只见本函数局部意图
+        #
+        #   func process_with_ctx(intent_context ctx):
+        #       intent_context.use(ctx)            # 用传入的上下文替换当前作用域
+        #       str r = @~ 处理数据 ~              # 只见 ctx 中的意图
+        #
+        # ContextVar 路径：通过 get_current_frame() 获取当前 RuntimeContextImpl，
+        # 与 IbUserFunction.call() 使用相同的机制，安全且协程/线程隔离。
+
+        def _ic_clear_inherited(receiver, *args):
+            """
+            intent_context.clear_inherited()
+            清空当前函数作用域从调用者继承的持久意图栈。
+            调用后，当前作用域的 @+ 意图（即 _intent_top 链表）被重置为空。
+            函数内部的 @+ 操作从干净的起点开始，不受调用者意图干扰。
+            """
+            from core.runtime.frame import get_current_frame
+            frame = get_current_frame()
+            if frame is not None and hasattr(frame, '_intent_ctx'):
+                frame._intent_ctx.set_intent_top(None)
+            return registry.get_none()
+
+        def _ic_use(receiver, *args):
+            """
+            intent_context.use(ctx)
+            以给定的 intent_context 实例替换当前作用域的意图上下文。
+            等效于：当前作用域的意图栈 = fork(ctx)（不是引用，是拷贝）。
+            调用后，当前作用域所有 LLM 调用看到的意图完全来自 ctx 的内容。
+            """
+            from core.runtime.frame import get_current_frame
+            frame = get_current_frame()
+            if frame is None or not hasattr(frame, '_intent_ctx'):
+                return registry.get_none()
+            if not args:
+                return registry.get_none()
+            other = args[0]
+            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
+            if other_ctx is not None:
+                # fork 保证不共享引用，当前作用域对意图的修改不回流到 ctx
+                forked = other_ctx.fork()
+                # 保留全局意图（全局意图由 Engine 注入，不属于调用者/被调用者关系）
+                forked._global_intents = frame._intent_ctx._global_intents
+                frame._intent_ctx = forked
+            return registry.get_none()
+
+        def _ic_get_current(receiver, *args):
+            """
+            intent_context.get_current()
+            返回当前作用域正在生效的意图上下文的快照（fork 副本）。
+            返回值是一个新的 intent_context 实例，可检查、可保存，不影响当前作用域。
+            """
+            from core.runtime.frame import get_current_frame
+            frame = get_current_frame()
+            new_instance = IbObject(intent_context_class)
+            if frame is not None and hasattr(frame, '_intent_ctx'):
+                new_instance.fields['_ctx'] = frame._intent_ctx.fork()
+            else:
+                new_instance.fields['_ctx'] = IbIntentContext()
+            return new_instance
+
+        _reg_native(intent_context_class, 'clear_inherited', _ic_clear_inherited, unbox=False)
+        _reg_native(intent_context_class, 'use', _ic_use, unbox=False)
+        _reg_native(intent_context_class, 'get_current', _ic_get_current, unbox=False)
 
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)

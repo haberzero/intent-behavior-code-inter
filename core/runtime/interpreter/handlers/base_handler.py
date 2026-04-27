@@ -1,5 +1,5 @@
 from typing import Any, Mapping, Optional, Union, List, Callable
-from core.runtime.interfaces import ServiceContext, IIbBehavior, IExecutionContext
+from core.runtime.interfaces import ServiceContext, IExecutionContext
 from core.kernel.issue import Severity, InterpreterError
 from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from core.base.source_atomic import Location
@@ -76,44 +76,3 @@ class BaseHandler:
         err = InterpreterError(message, error_code=error_code or RUN_GENERIC_ERROR)
         err.location = loc
         return err
-
-    def _execute_behavior(self, behavior: IbObject) -> IbObject:
-        """
-        统一的行为对象执行入口。
-        负责在解释器层管理意图栈的恢复与切换，保持 Executor 无状态。
-
-        执行行为表达式后，将 LLMResult 存储到 RuntimeContext，
-        供 visit_IbLLMExceptionalStmt 检查。
-        """
-        if not isinstance(behavior, IIbBehavior):
-            return behavior
-
-        # 1. 意图栈切换 (由解释器管理环境)
-        old_stack = self.runtime_context.intent_stack
-
-        # 注意：behavior.captured_intents 是一个列表，需要重建为 IntentNode 链表
-        from core.runtime.interpreter.runtime_context import IntentNode
-        captured_stack = None
-        for intent in behavior.captured_intents:
-            captured_stack = IntentNode(intent, captured_stack)
-
-        self.runtime_context.intent_stack = captured_stack
-
-        try:
-            # 2. 调用执行器 (此时环境已就绪)
-            # IbBehavior 使用 .node 存储 node_uid
-            node_uid = getattr(behavior, 'node', None) or getattr(behavior, 'node_uid', None)
-            result = self.service_context.llm_executor.execute_behavior_expression(
-                node_uid,
-                self._execution_context,
-                call_intent=None
-            )
-
-            # 3. 将结果存储到 RuntimeContext，供 visit_IbLLMExceptionalStmt 检查
-            self.runtime_context.set_last_llm_result(result)
-
-            # 4. 返回值（如果是成功的结果）
-            return result.value if result and result.value else self.registry.get_none()
-        finally:
-            # 5. 环境恢复
-            self.runtime_context.intent_stack = old_stack

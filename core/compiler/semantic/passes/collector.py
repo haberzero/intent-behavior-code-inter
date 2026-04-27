@@ -83,12 +83,21 @@ class SymbolCollector:
             # [Axiom Hook] 同步到描述符的成员表中 (保持物理隔离下的元数据完备性)
             # 如果当前在类作用域内，且定义的不是类本身
             if self.analyzer and self.analyzer.current_class:
-                from core.kernel.spec.member import MemberSpec
-                self.analyzer.current_class.members[sym.name] = MemberSpec(
-                    name=sym.name,
-                    kind="field",
-                    type_name=sym.spec.name if sym.spec else "any",
-                )
+                if sym.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION):
+                    from core.kernel.spec.member import MethodMemberSpec
+                    llm_kind = "llm_method" if sym.kind == SymbolKind.LLM_FUNCTION else "method"
+                    self.analyzer.current_class.members[sym.name] = MethodMemberSpec(
+                        name=sym.name,
+                        kind=llm_kind,
+                        type_name=sym.spec.name if sym.spec else "any",
+                    )
+                else:
+                    from core.kernel.spec.member import MemberSpec
+                    self.analyzer.current_class.members[sym.name] = MemberSpec(
+                        name=sym.name,
+                        kind="field",
+                        type_name=sym.spec.name if sym.spec else "any",
+                    )
                 
         except ValueError as e:
             if self.issue_tracker:
@@ -109,10 +118,14 @@ class SymbolCollector:
         if node.parent == "Enum":
             cls_meta._axiom_name = "enum"
         
-        self.analyzer.registry.register(cls_meta)
+        # register() 返回的是注册表中实际存储的 spec（可能是 clone），
+        # 后续所有操作必须使用 registered_meta 而非原始 cls_meta，
+        # 否则成员注册会写入原始对象，导致注册表中的 clone 缺少成员信息，
+        # 从而破坏继承链中父类成员的查找（resolve_member）。
+        registered_meta = self.analyzer.registry.register(cls_meta)
         
-        # 2. 注册类符号
-        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, spec=cls_meta)
+        # 2. 注册类符号（使用注册表中的 spec）
+        sym = TypeSymbol(name=node.name, kind=SymbolKind.CLASS, def_node=node, spec=registered_meta)
         self._define(sym, node)
         
         # 3. 进入类作用域收集成员
@@ -120,7 +133,7 @@ class SymbolCollector:
         self.symbol_table = SymbolTable(parent=old_table, name=node.name)
         
         old_class = self.analyzer.current_class
-        self.analyzer.current_class = cls_meta
+        self.analyzer.current_class = registered_meta
         
         try:
             for stmt in node.body:
@@ -183,8 +196,25 @@ class LocalSymbolCollector:
         self.analyzer = analyzer # 期望是 SemanticAnalyzer 实例
 
     def collect(self, body: list):
+        # Pre-pass: 预先注册所有 global 声明，确保 global_refs 在处理赋值时已填充。
+        # 这使得 'global x' 的效果对整个函数体有效，无论声明位置在赋值之前还是之后。
+        self._prescan_globals(body)
+        # Main pass
         for stmt in body:
             self.visit(stmt)
+
+    def _prescan_globals(self, body: list):
+        """递归预扫描 global 声明（不跨越作用域边界）。"""
+        for stmt in body:
+            if isinstance(stmt, ast.IbGlobalStmt):
+                self.visit_IbGlobalStmt(stmt)
+            elif not stmt.creates_scope or isinstance(stmt, ast.IbModule):
+                # 只递归不创建新作用域的语句块（如 if/while/for 的 body），
+                # 跳过函数/类定义（它们各自有独立作用域，global 不穿透）。
+                for attr in ("body", "orelse", "finalbody"):
+                    child = getattr(stmt, attr, None)
+                    if isinstance(child, list):
+                        self._prescan_globals(child)
 
     def visit(self, node: ast.IbASTNode):
         method_name = f'visit_{node.__class__.__name__}'
@@ -197,7 +227,7 @@ class LocalSymbolCollector:
             return
 
         # 递归遍历所有可能包含代码块的属性
-        for attr in ("body", "orelse", "finalbody", "llm_fallback"):
+        for attr in ("body", "orelse", "finalbody"):
             child = getattr(node, attr, None)
             if isinstance(child, list):
                 for item in child:
@@ -221,12 +251,17 @@ class LocalSymbolCollector:
             self.analyzer.error(str(e), node, code="SEM_002")
 
     def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt):
-        # 处理 global 声明
+        # 处理 global 声明（幂等：pre-scan 和 main pass 均可调用）
         self.analyzer.visit_IbGlobalStmt(node)
 
     def visit_IbAssign(self, node: ast.IbAssign):
         # 仅收集带有类型标注的显式定义
         for name, target in SymbolExtractor.get_assigned_names(node):
+            # global 声明：该名称已声明为全局变量，不在本地作用域中创建符号。
+            # 符号绑定（node→sym）由 Pass 3 (SemanticAnalyzer.visit_IbAssign) 负责处理。
+            if name in self.symbol_table.global_refs:
+                continue
+
             # 检查该 target 是否被 TypeAnnotatedExpr 包装
             is_explicit = False
             declared_type = self.analyzer._any_desc
@@ -266,3 +301,25 @@ class LocalSymbolCollector:
                 self._define(sym, target) # 绑定 target 节点
             self.visit(handler)
         self.generic_visit(node)
+
+    def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
+        """Known Limit 2 修复：预扫描嵌套函数定义，使其在外围作用域中可见。
+        
+        只在当前作用域中该名称未被定义时注册（避免与 Pass 1 中已注册的顶层函数冲突）。
+        """
+        # 如果已在当前作用域（或父作用域）中定义，则跳过（由 Pass 1 SymbolCollector 负责）
+        existing = self.symbol_table.symbols.get(node.name)
+        if existing:
+            return
+        
+        # 创建函数元数据并注册到 SpecRegistry
+        func_meta = self.analyzer.registry.factory.create_func(
+            name=node.name, param_type_names=[], return_type_name="any"
+        )
+        func_meta.is_user_defined = True
+        self.analyzer.registry.register(func_meta)
+        
+        # 将嵌套函数注册为当前作用域的符号
+        sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, spec=func_meta)
+        self._define(sym, node)
+        # 不递归进入函数体（函数体的局部符号由 SemanticAnalyzer.visit_IbFunctionDef 负责）

@@ -12,6 +12,7 @@ from .specs import (
     ListSpec,
     TupleSpec,
     DictSpec,
+    DeferredSpec,
     BoundMethodSpec,
     ModuleSpec,
     LazySpec,
@@ -27,6 +28,7 @@ from .specs import (
     SLICE_SPEC,
     CALLABLE_SPEC,
     BEHAVIOR_SPEC,
+    DEFERRED_SPEC,
     EXCEPTION_SPEC,
     BOUND_METHOD_SPEC,
     LIST_SPEC,
@@ -34,6 +36,7 @@ from .specs import (
     DICT_SPEC,
     MODULE_SPEC,
     ENUM_SPEC,
+    LLM_CALL_RESULT_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 
@@ -49,6 +52,7 @@ __all__ = [
     "ListSpec",
     "TupleSpec",
     "DictSpec",
+    "DeferredSpec",
     "BoundMethodSpec",
     "ModuleSpec",
     "LazySpec",
@@ -64,6 +68,7 @@ __all__ = [
     "SLICE_SPEC",
     "CALLABLE_SPEC",
     "BEHAVIOR_SPEC",
+    "DEFERRED_SPEC",
     "EXCEPTION_SPEC",
     "BOUND_METHOD_SPEC",
     "LIST_SPEC",
@@ -71,6 +76,7 @@ __all__ = [
     "DICT_SPEC",
     "MODULE_SPEC",
     "ENUM_SPEC",
+    "LLM_CALL_RESULT_SPEC",
     # Registry / factory
     "SpecRegistry",
     "SpecFactory",

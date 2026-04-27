@@ -14,7 +14,8 @@ class TokenType(Enum):
     FROM = auto()
     FUNC = auto()
     RETURN = auto()
-    CALLABLE = auto()
+    LAMBDA = auto()
+    SNAPSHOT = auto()
     IF = auto()
     ELIF = auto()
     ELSE = auto()
@@ -25,6 +26,7 @@ class TokenType(Enum):
     WHILE = auto()
     IN = auto()
     AUTO = auto()
+    FN = auto()          # fn keyword: callable type inference (like auto but for callables)
     GLOBAL = auto()
     PASS = auto()
     BREAK = auto()
@@ -58,6 +60,7 @@ class TokenType(Enum):
     TRUE = auto()
     FALSE = auto()
     NONE = auto()
+    UNCERTAIN = auto()
 
     # 运算符
     ASSIGN = auto()
@@ -65,14 +68,18 @@ class TokenType(Enum):
     PLUS = auto()
     MINUS = auto()
     STAR = auto()
+    STAR_STAR = auto()  # **（幂运算）
     SLASH = auto()
+    FLOOR_DIV = auto()  # //（整除）
     PERCENT = auto()
 
     # 复合赋值
     PLUS_ASSIGN = auto()
     MINUS_ASSIGN = auto()
     STAR_ASSIGN = auto()
+    STAR_STAR_ASSIGN = auto()  # **=
     SLASH_ASSIGN = auto()
+    FLOOR_DIV_ASSIGN = auto()  # //=
     PERCENT_ASSIGN = auto()
 
     # 位运算
@@ -91,6 +98,7 @@ class TokenType(Enum):
     LBRACE = auto()
     RBRACE = auto()
     COLON = auto()
+    QUESTION = auto()
     COMMA = auto()
     DOT = auto()
 

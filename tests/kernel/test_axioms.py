@@ -113,8 +113,21 @@ class TestOperatorCapability:
 
     def test_void_no_operator_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("void")
-        # void may or may not have operator cap, just shouldn't crash
-        _ = ax.get_operator_capability() if ax else None
+        assert ax is not None, "VoidAxiom must be registered"
+        # void is not dynamic — it has a concrete, non-permissive axiom
+        assert ax.is_dynamic() is False
+        # void has no capabilities
+        assert ax.get_operator_capability() is None
+        assert ax.get_call_capability() is None
+        assert ax.get_iter_capability() is None
+        assert ax.get_subscript_capability() is None
+
+    def test_void_compatible_only_with_void(self, ax_reg: AxiomRegistry):
+        ax = ax_reg.get_axiom("void")
+        assert ax.is_compatible("void") is True
+        assert ax.is_compatible("int") is False
+        assert ax.is_compatible("any") is False
+        assert ax.is_compatible("None") is False
 
 
 # ---------------------------------------------------------------------------

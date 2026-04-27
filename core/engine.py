@@ -5,6 +5,18 @@ import traceback
 import copy
 from typing import Optional, Dict, Any, List
 
+# =============================================================================
+# 架构边界说明：Engine = 组装者，不参与执行
+# =============================================================================
+# Engine 是 IBCI 运行环境的组装者（assembler）和入口点。
+# 职责：创建 KernelRegistry、加载编译器和模块、注入 LLM Executor，
+# 并将已组装的 Interpreter 交给调用方使用。
+#
+# Engine 本身不执行任何 IBCI 代码；执行发生在 Interpreter 内部。
+# 多 Interpreter 并发（Layer 2，PENDING_TASKS_VM.md Step 11）由
+# DynamicHost（HostService）负责调度，而非 Engine。
+# =============================================================================
+
 from core.project_detector import ProjectDetector
 
 from core.kernel.registry import KernelRegistry
@@ -89,9 +101,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
-        # 2. 加载元数据以支持静态分析
-        self.host_interface = self.discovery_service.discover_all(self.registry)
-        
+        # 2. 延迟插件发现（Phase 2 显式引入原则）：
+        #    在首次编译/静态检查时才调用 discover_all()，而非在 Engine 初始化时无条件加载。
+        #    这确保插件元数据只在真正需要（编译）时才注入 MetadataRegistry，
+        #    使"必须 import ai 才能使用"的语义清晰度在 Engine 生命周期内保持一致。
+        #    调用入口：_ensure_plugins_discovered()，由 compile() 和 check() 在开始前触发。
+        self.host_interface = HostInterface()  # 空接口，将在首次编译前填充
+        self._plugins_discovered = False
+
         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
         self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
         
@@ -133,13 +150,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             entry_dir=getattr(self, '_entry_dir', None)
         )
         
-        # TODO: 怀疑有vibe带来的异味？后续检查 MVP Demo 阶段不深究
-        # 强制更新 service_context 的 orchestrator
+        # Post-construction wiring: inject orchestrator and output_callback into ServiceContext.
+        # This is intentional deferred injection — Engine is the orchestrator, but it can only
+        # inject itself after the interpreter is fully constructed.
         if hasattr(self.interpreter, 'service_context'):
-            self.interpreter.service_context._orchestrator = self
-            if self.interpreter.service_context.host_service:
-                self.interpreter.service_context.host_service.orchestrator = self
-            # 将用户提供的 output_callback 注入 service_context
+            self.interpreter.service_context.set_orchestrator(self)
             if output_callback is not None:
                 self.interpreter.service_context.output_callback = output_callback
         
@@ -170,6 +185,25 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.registry.set_state_level(RegistrationState.STAGE_7_READY.value, self._kernel_token)
         # 封印类注册表
         self.registry.seal_classes(self._kernel_token)
+
+        # 将 LLM 执行器注入 KernelRegistry，使 IbBehavior.call() 可通过公理体系自主执行
+        llm_executor = getattr(self.interpreter.service_context, 'llm_executor', None)
+        if llm_executor is not None:
+            self.registry.register_llm_executor(llm_executor, self._kernel_token)
+
+        # 将宿主服务、调用栈内省器、状态读取器注入 KernelRegistry
+        # 供核心层插件（ibci_ihost、ibci_idbg）通过稳定钩子接口访问，替代直接持有 ServiceContext
+        host_service = getattr(self.interpreter.service_context, 'host_service', None)
+        if host_service is not None:
+            self.registry.register_host_service(host_service, self._kernel_token)
+
+        stack_inspector = getattr(self.interpreter._execution_context, 'stack_inspector', None)
+        if stack_inspector is not None:
+            self.registry.register_stack_inspector(stack_inspector, self._kernel_token)
+
+        state_reader = self.interpreter.runtime_context
+        if state_reader is not None:
+            self.registry.register_state_reader(state_reader, self._kernel_token)
 
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
@@ -205,6 +239,21 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         self.host_interface.register_module(name, implementation, type_metadata)
         self.scheduler.host_interface = self.host_interface
+
+    def _ensure_plugins_discovered(self) -> None:
+        """
+        确保插件元数据已加载到 host_interface（懒加载，只在首次编译/检查时触发）。
+
+        Phase 2 显式引入原则：discover_all() 不在 Engine.__init__() 中无条件调用，
+        而是延迟到首次编译时才执行。这确保：
+        1. 仅创建 Engine 实例而不编译时，不触发任何插件发现。
+        2. Scheduler 在编译开始前获得完整的 host_interface（含所有插件元数据）。
+        3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Phase 1 的 Prelude 过滤保证）。
+        """
+        if not self._plugins_discovered:
+            self.host_interface = self.discovery_service.discover_all(self.registry)
+            self.scheduler.host_interface = self.host_interface
+            self._plugins_discovered = True
 
     def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> CompilationArtifact:
         """
@@ -282,6 +331,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
         """
+        # 懒加载插件元数据（Phase 2 显式引入原则）
+        self._ensure_plugins_discovered()
+
         if not hasattr(self, '_entry_file'):
             self._entry_file = os.path.abspath(entry_file)
             self._entry_dir = os.path.dirname(self._entry_file)
@@ -352,6 +404,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         仅对项目进行静态检查（编译和语义分析）。
         """
+        # 懒加载插件元数据（Phase 2 显式引入原则）
+        self._ensure_plugins_discovered()
+
         abs_entry = os.path.abspath(entry_file)
         try:
             self.scheduler.compile_project(abs_entry)

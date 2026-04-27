@@ -5,6 +5,7 @@ def __ibcext_metadata__() -> Dict[str, Any]:
     """插件元数据"""
     return {
         "name": "idbg",
+        "kind": "method_module",
         "version": "0.0.1",
         "description": "Kernel debugger plugin for runtime introspection",
         "dependencies": [],

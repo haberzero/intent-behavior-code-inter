@@ -22,8 +22,12 @@ IBCI 是**静态强类型**语言，支持以下基础类型：
 
 - `int`, `float`, `bool`, `str`
 - `list`, `dict`, `auto`
+- `None` (NoneAxiom 类型；表示"值不存在")
+- `void` (函数无返回值标记；不可赋给任何变量)
 - `tuple` (多值返回与解包支持)
-- `callable` (可调用对象/闭包)
+- `lambda` / `snapshot` (延迟执行的行为对象，见 §3.4)
+
+> **注意**：`callable` 关键字已废弃，不再作为用户可见的类型声明关键字。请使用 `lambda` 或 `snapshot`。
 
 **声明与赋值：**
 
@@ -35,17 +39,101 @@ dict config = {"version": "2.2"}
 (int x, int y) = (1, 2)
 ```
 
+#### 2.1.1 `auto` 类型推断
+
+`auto` 声明的变量在编译期由右侧表达式推断其具体类型，推断完成后类型即固定，不可再接受其他类型的值（编译期强约束）：
+
+```ibci
+auto x = 42        # 推断为 int；后续 x = "hello" 将编译报错
+auto name = "Bob"  # 推断为 str
+auto empty = None  # 推断为 None；empty 此时近乎等同于 None
+```
+
+对于函数，`-> auto` 表示返回类型由函数体内的 `return` 语句推断：
+
+```ibci
+func add(int a, int b) -> auto:
+    return a + b    # 推断为 int；编译器会回填为 int -> int -> int
+
+func id_any(any x) -> auto:
+    return x        # 推断为 any
+```
+
+若函数体内的 `return` 语句返回了多种不同类型，编译器会报 SEM_026 错误。
+
+#### 2.1.2 `None` 与 `void` 的区别
+
+| 类型 | 语义 | 可赋值给变量 | 作为函数返回 |
+|---|---|---|---|
+| `None` | 表示"值不存在"，是一个合法的值对象 | ✅（赋给 `any` 或 `auto`） | ✅ `func f() -> None:` |
+| `void` | 表示"函数不返回任何值"的标记 | ❌ 编译报 SEM_003 | ✅ `func f() -> void:` |
+
+```ibci
+any x = None       # ✅ 合法：any 可接受 None
+auto y = None      # ✅ 合法：auto 推断为 None 类型
+
+func do_work():    # 隐式 void，无 return 值
+    print("done")
+
+# 以下写法非法：
+int z = do_work()  # ❌ SEM_003：不能将 void 函数结果赋给变量
+```
+
+#### 2.1.3 布尔字面量大小写
+
+IBCI 中布尔字面量**严格区分大小写**，必须使用 `true` / `false`（小写）：
+
+```ibci
+bool flag = true    # ✅ 合法
+bool flag = True    # ❌ 会被解析为标识符 True，导致 SEM_001 未定义变量错误
+```
+
+> 这与 Python 的 `True` / `False`（首字母大写）不同。IBCI 使用 `true` / `false` 与 JSON、Rust、Go 等保持一致。
+
+#### 2.1.4 字符串的真值判定
+
+字符串的布尔真值遵循 Python 语义：空字符串 `""` 为假，任意非空字符串为真。这与 `list`、`dict` 的真值判定规则一致（空容器为假，非空为真）。
+
+```ibci
+if "hello":      # truthy（非空字符串）
+    print("yes")
+if "":           # falsy（空字符串）
+    print("no")
+if []:           # falsy（空列表）
+    print("no")
+if [1, 2]:       # truthy（非空列表）
+    print("yes")
+if {}:           # falsy（空字典）
+    print("no")
+```
+
+#### 2.1.5 整数除法
+
+IBCI 的整数除法 `/` 与 Python 3 的 `//`（地板除）语义对齐，即对两个整数操作数做除法时，结果向下取整（而非截断向零）：
+
+```ibci
+int a = 7 / 2    # 结果为 3（地板除，等同于 Python 的 7 // 2）
+int b = -7 / 2   # 结果为 -4（地板除，注意：不是 -3）
+```
+
+若需要浮点除法，请将至少一个操作数声明为 `float`：
+
+```ibci
+float c = 7.0 / 2   # 结果为 3.5
+```
+
 ### 2.2 模块导入
 
 使用 `import` 关键字导入系统插件或用户自定义模块：
 
 ```ibci
-import ai      # 核心 AI 能力
-import sys     # 沙箱控制（非侵入式插件）
+import ai      # LLM provider 配置（API key、model、retry 等）
 import isys    # 运行时状态与路径查询（内核侵入式插件）
 import json    # JSON 解析
 import file    # 受限文件系统
 ```
+
+> **重要**：`@~ ... ~` 行为描述语句是语言的核心特性，**不依赖 `import ai`**。`ai` 插件仅负责配置 LLM provider（API 地址、模型名称、重试次数等）。没有配置 `import ai` 时，行为描述语句依然是合法的语言构造，只是在运行时必须存在已注册的 LLM provider 才能真正发起调用。
 
 ---
 
@@ -76,9 +164,27 @@ str greeting = @~ 用 $name 打个招呼 ~
 每个类型可以定义 `__outputhint_prompt__` 方法，用于描述期望的 LLM 输出格式。该约束会被注入到系统提示词中。
 
 ```ibci
-int result = (int) @~ 1+1等于几？只答数字 ~
+int result = @~ 1+1等于几？只答数字 ~
 // int 的 __outputhint_prompt__() 返回: "请只返回一个整数，如: 42"
 ```
+
+> **废弃语法**：`(Type) @~ ... ~` 中将类型转换用作提示词注入的写法（如 `(int) @~...~`）已废弃，会产生编译错误 `PAR_010`。
+> - 原用途 `int result = (int) @~...~` → 改为 `int result = @~...~`（LHS 类型自动成为类型约束上下文）
+> - `(int) expr`（对非行为表达式的类型强制转换）→ **保留**，不受影响
+
+> **禁止写法**：`return @~ ... ~` 不允许，会产生编译错误 `SEM_003`。
+> 原因：行为表达式的输出类型和提示词约束由左值类型驱动，直接出现在 `return` 处时类型上下文不明确。
+> 必须先赋值给有类型的局部变量，再 `return` 该变量：
+> ```ibci
+> # ❌ 不允许
+> func get_reply() -> str:
+>     return @~ 给我一句话 ~
+> 
+> # ✅ 正确
+> func get_reply() -> str:
+>     str reply = @~ 给我一句话 ~
+>     return reply
+> ```
 
 ### 3.1.3 输出解析：`__from_prompt__`
 
@@ -106,6 +212,30 @@ llmend
 llm 函数利用 llmend 关键字标记结束定义。
 
 llm函数书写不需要缩进，这是为了阅读以及提示词管理的非歧义/便利性，确保所有非顶格书写的空格都可以正常被作为提示词的一部分被送入ai调用过程。
+
+### 3.4 延迟执行行为（lambda / snapshot）
+
+使用 `lambda` 或 `snapshot` 关键字声明一个**延迟执行的行为对象**，而不是立即触发 LLM 调用：
+
+```ibci
+# lambda：延迟执行，调用时感知调用处的所有外部变量，不捕获意图栈
+int lambda compute = @~ 根据 $x 计算一个结果 ~
+
+# snapshot：延迟执行，定义时深拷贝当前意图栈
+str snapshot handler = @~ 根据 $context 生成回复 ~
+
+# 调用延迟行为（与调用函数语法相同）
+int result = compute()
+str reply = handler()
+```
+
+| 关键字 | 语义 | 意图栈处理 |
+|--------|------|-----------|
+| `lambda` | 延迟执行，调用时感知调用处当前上下文 | 不捕获，使用调用时当前意图栈 |
+| `snapshot` | 延迟执行，定义时快照意图栈 | 捕获定义时意图栈的深拷贝 |
+
+- LHS 类型（如 `int`）是该行为对象的**返回值类型**，同时作为 LLM 输出约束注入提示词
+- 无 LHS 类型时默认返回 `str`（与即时执行行为保持一致）
 
 ### 3.3 意图驱动控制流
 
@@ -173,7 +303,7 @@ print(result)
 IBCI 引入了 `llmexcept` 关键字专门处理 AI 调用产生的非确定性错误（如解析失败、逻辑模糊）：
 
 ```ibci
-int result = (int) @~ 1 + 1 等于几？只答数字 ~
+int result = @~ 1 + 1 等于几？只答数字 ~
 llmexcept:
     print("AI 响应无法解析为整数，正在重试...")
     retry "请务必只返回一个纯数字，不要带标点"
@@ -226,12 +356,12 @@ str root = isys.project_root() # /project
 支持在完全隔离的环境中运行子脚本：
 
 ```ibci
-import host
+import ihost
 import isys
 
 dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}
 # 子环境有独立的入口文件、路径管理、插件发现
-host.run_isolated("./sub/child.ibci", policy)
+ihost.run_isolated("./sub/child.ibci", policy)
 ```
 
 `./sub/child.ibci` 启动运行后，将会是一个全新的独立 IBC-Inter 实例，会独立进行一次全新的compile以及解释运行。

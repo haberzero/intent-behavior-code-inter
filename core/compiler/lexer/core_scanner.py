@@ -28,18 +28,19 @@ class CoreTokenScanner:
         self.KEYWORDS = {
             'import': TokenType.IMPORT, 'from': TokenType.FROM,
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
-            'callable': TokenType.CALLABLE,
+            'lambda': TokenType.LAMBDA,
+            'snapshot': TokenType.SNAPSHOT,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
-            'auto': TokenType.AUTO, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
+            'auto': TokenType.AUTO, 'fn': TokenType.FN, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,
             'class': TokenType.CLASS, 'self': TokenType.SELF,
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
-            'None': TokenType.NONE,
+            'None': TokenType.NONE, 'Uncertain': TokenType.UNCERTAIN,
             'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,
             'llmexcept': TokenType.LLM_EXCEPT, 
             'llmretry': TokenType.LLM_RETRY,
@@ -319,7 +320,11 @@ class CoreTokenScanner:
             if self.current_line_has_llm_def:
                 return True # Enter LLM Mode
             return False
-            
+        
+        if char == '?':
+            tokens.append(self.scanner.create_token(TokenType.QUESTION, "?"))
+            return False
+
         if char == '=':
             if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.EQ, "=="))
             else: tokens.append(self.scanner.create_token(TokenType.ASSIGN, "="))
@@ -336,11 +341,17 @@ class CoreTokenScanner:
             else: tokens.append(self.scanner.create_token(TokenType.PLUS))
             return False
         if char == '*': 
-            if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.STAR_ASSIGN, "*="))
+            if self.scanner.match('*'):
+                if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.STAR_STAR_ASSIGN, "**="))
+                else: tokens.append(self.scanner.create_token(TokenType.STAR_STAR, "**"))
+            elif self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.STAR_ASSIGN, "*="))
             else: tokens.append(self.scanner.create_token(TokenType.STAR))
             return False
         if char == '/': 
-            if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.SLASH_ASSIGN, "/="))
+            if self.scanner.match('/'):
+                if self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.FLOOR_DIV_ASSIGN, "//="))
+                else: tokens.append(self.scanner.create_token(TokenType.FLOOR_DIV, "//"))
+            elif self.scanner.match('='): tokens.append(self.scanner.create_token(TokenType.SLASH_ASSIGN, "/="))
             else: tokens.append(self.scanner.create_token(TokenType.SLASH))
             return False
         if char == '%': 
@@ -737,6 +748,15 @@ class CoreTokenScanner:
         if first_char == '0' and (self.scanner.peek() == 'b' or self.scanner.peek() == 'B'):
             value += self.scanner.advance()
             while not self.scanner.is_at_end() and self.scanner.peek() in '01':
+                value += self.scanner.advance()
+            tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
+            self.is_new_line_flag = False
+            return
+
+        # 2b. Octal (0o...)
+        if first_char == '0' and (self.scanner.peek() == 'o' or self.scanner.peek() == 'O'):
+            value += self.scanner.advance()
+            while not self.scanner.is_at_end() and self.scanner.peek() in '01234567':
                 value += self.scanner.advance()
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
             self.is_new_line_flag = False

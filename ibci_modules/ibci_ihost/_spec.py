@@ -5,6 +5,7 @@ def __ibcext_metadata__() -> Dict[str, Any]:
     """插件元数据"""
     return {
         "name": "ihost",
+        "kind": "method_module",
         "version": "1.0.0",
         "description": "IBCI host capability plugin: runtime persistence, isolated execution and meta-programming",
         "dependencies": [],

@@ -2,7 +2,7 @@ from typing import Any, Optional, TYPE_CHECKING, Callable
 from core.runtime.objects.kernel import IbObject
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.interfaces import IssueTracker, ISourceProvider, ICompilerService
-from core.runtime.interfaces import ServiceContext, IKernelOrchestrator
+from core.runtime.interfaces import IKernelOrchestrator
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import (
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
         PermissionManager, IHostService, Interpreter, IRuntimeScheduler
     )
 
-class ServiceContextImpl(ServiceContext):
+class ServiceContextImpl:
     """
     运行时核心服务上下文实现。
     作为横向服务定位器，它持有一组独立的服务组件。
@@ -117,6 +117,12 @@ class ServiceContextImpl(ServiceContext):
     @property
     def orchestrator(self) -> Optional[IKernelOrchestrator]:
         return self._orchestrator
+
+    def set_orchestrator(self, orchestrator: Optional[IKernelOrchestrator]) -> None:
+        """注入内核协调器（Engine 在解释器创建完毕后调用）。"""
+        self._orchestrator = orchestrator
+        if self._host_service and hasattr(self._host_service, 'orchestrator'):
+            self._host_service.orchestrator = orchestrator
 
     @property
     def debugger(self) -> Any:

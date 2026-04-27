@@ -82,6 +82,10 @@ class IbObject:
             if self.ib_class.name == target_name:
                 return self
 
+            # 向上转型（upcast）：目标类型是当前类的祖先，直接返回自身（安全且语义正确）
+            if isinstance(target_class, IbClass) and self.ib_class.is_assignable_to(target_class):
+                return self
+
             # 如果对象自身有 cast_to 方法（特殊类型包装器），优先调用
             if hasattr(self, 'cast_to'):
                 return self.cast_to(target_class)
@@ -130,15 +134,22 @@ class IbObject:
     def __outputhint_prompt__(self) -> str:
         """
         返回期望的 LLM 输出格式描述。
+        优先尝试通过 vtable 调用用户定义的 __outputhint_prompt__ 方法，
+        没有时退回到默认描述。
         """
+        try:
+            res = self.receive('__outputhint_prompt__', [])
+            return str(res.to_native()) if hasattr(res, 'to_native') else str(res)
+        except (AttributeError, InterpreterError):
+            pass
         return f"请返回一个 {self.ib_class.name} 类型的值"
 
     # ---  基础协议实现 ---
     def __not__(self) -> 'IbObject':
         """逻辑非运算协议"""
-        # 使用 to_bool 判定并取反
-        is_true = self.ib_class.registry.is_truthy(self)
-        return self.ib_class.registry.box(0 if is_true else 1)
+        # 使用 vtable to_bool 判定并取反，返回 bool 类型
+        bool_val = self.receive('to_bool', []).to_native()
+        return self.ib_class.registry.box(False if bool_val else True)
 
     def serialize_for_debug(self) -> Mapping[str, Any]:
         """
@@ -353,12 +364,33 @@ class IbClass(IbObject):
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         instance = IbObject(self)
         
+        # Bug D 修复：收集完整的字段继承链（父类字段 + 子类字段）
+        # 父类字段先初始化，子类同名字段会覆盖父类字段
+        all_default_fields = {}
+        # 从继承链顶部开始收集（最远祖先优先）
+        ancestors = []
+        cls = self
+        while cls is not None:
+            ancestors.append(cls)
+            cls = cls.parent
+        for ancestor in reversed(ancestors):
+            for name, val_info in ancestor.default_fields.items():
+                all_default_fields[name] = val_info
+        
         # 延迟执行字段初始化 (Item 2.1 Audit)
-        for name, val_info in self.default_fields.items():
+        for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
-                    # 优先使用预评估好的快照
-                    instance.fields[name] = val_info.static_val
+                    # 优先使用预评估好的快照，但可变容器（IbList/IbDict）必须每次创建新实例，
+                    # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
+                    from core.runtime.objects.builtins import IbList, IbDict
+                    sv = val_info.static_val
+                    if isinstance(sv, IbList):
+                        instance.fields[name] = IbList(list(sv.elements), sv.ib_class)
+                    elif isinstance(sv, IbDict):
+                        instance.fields[name] = IbDict(dict(sv.fields), sv.ib_class)
+                    else:
+                        instance.fields[name] = sv
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
@@ -400,17 +432,10 @@ class IbClass(IbObject):
         3. 其他 -> 正常消息处理 (查找静态方法等)
         """
         if message == "__call__":
-            # 优先从自身的 methods 字典中查找 __call__
-            # 注意：类作为对象时，其方法存在 self.methods 中
-            if "__call__" in self.methods:
-                method = self.methods["__call__"]
-                # 绑定到类自身进行调用 (如果是 NativeFunction 会自动根据 is_method 注入 receiver)
-                return IbBoundMethod(self, method).receive("__call__", args)
-            
-            # 实例化时传入执行上下文以支持复杂字段初始化
-            # 通过 Registry 正式接口获取执行上下文
+            # 类作为构造器调用时，始终使用 instantiate 创建新实例。
+            # 用户定义的 __call__ 是实例方法（使实例可调用），不覆盖构造器。
+            # 实例的 __call__ 通过 IbObject.receive 中的 vtable 查找分发。
             context = self.registry.get_execution_context()
-            
             return self.instantiate(args, context=context)
         
         if message == "__getattr__" and len(args) > 0:
@@ -527,7 +552,44 @@ class IbBoundMethod(IbFunction):
     def __repr__(self):
         return f"<BoundMethod {self.method} bound to {self.receiver}>"
 
-@register_ib_type("None")
+
+class IbSuperProxy(IbObject):
+    """
+    super() 代理对象。
+
+    在 IBCI 方法体内调用 super() 时创建此对象。
+    - receiver：当前 self（方法接收者）
+    - owner_class：定义当前方法的类（编译期/hydration 期绑定）
+    - parent_class：owner_class 的父类，方法查找从此处开始
+
+    使用方式：
+        super().method_name(args)  ← super() 返回此代理；.method_name 通过 __getattr__ 返回绑定了 receiver 的父类方法
+    """
+    def __init__(self, receiver: IbObject, parent_class: Optional['IbClass']):
+        # 借用 callable class 作为宿主类型（super() 是纯运行时内核概念，无对应 axiom）
+        ib_cls = receiver.ib_class.registry.get_class("callable") or receiver.ib_class
+        super().__init__(ib_cls)
+        self._receiver = receiver
+        self._parent_class = parent_class
+
+    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        if message == '__getattr__' and args:
+            attr_name = args[0].to_native()
+            if self._parent_class:
+                method = self._parent_class.lookup_method(attr_name)
+                if method:
+                    return IbBoundMethod(self._receiver, method)
+            raise AttributeError(f"super(): parent class has no method '{attr_name}'")
+        if message == '__call__':
+            # super() called directly (not super().method()) — not meaningful; return self
+            return self
+        raise AttributeError(f"super() proxy does not support message '{message}'")
+
+    def __repr__(self):
+        parent_name = self._parent_class.name if self._parent_class else "<no parent>"
+        return f"<super: <class '{parent_name}'>, <{self._receiver.ib_class.name} object>>"
+
+
 class IbNone(IbObject):
     """
     IBC-Inter 的空对象 (None)。
@@ -535,6 +597,15 @@ class IbNone(IbObject):
     """
     def __init__(self, ib_class: 'IbClass'):
         super().__init__(ib_class)
+
+    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
+        if message == '__eq__':
+            right = args[0] if args else None
+            return self.ib_class.registry.box(isinstance(right, IbNone))
+        if message == '__ne__':
+            right = args[0] if args else None
+            return self.ib_class.registry.box(not isinstance(right, IbNone))
+        return super().receive(message, args)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return None
@@ -560,17 +631,19 @@ class IbNone(IbObject):
         return "null"
 
 
+@register_ib_type("llm_uncertain")
 class IbLLMUncertain(IbObject):
     """
-    表示 LLM 返回不确定/模糊结果的特殊值。
+    表示 LLM 调用重试耗尽后仍无法得到确定结果的特殊值。
 
-    当 LLM 调用无法被正确解析为目标类型时（如返回模糊内容），
-    变量会被赋值为 IbLLMUncertain，而不是保持未定义状态。
+    公理类型：llm_uncertain（有独立 IbClass / AxiomSpec，不依附于 None 类型）
 
     语义：
-    - __bool__ 返回 False（与 if 条件结合时表示"不确定性"）
+    - 布尔上下文中为 False（if r: → 不进入分支）
     - to_native 返回 None
-    - 可以赋值给任何类型的变量
+    - __to_prompt__ / (str) 强转返回 "uncertain"
+    - 可以赋值给任何类型的变量（LLMUncertainAxiom.is_compatible 宽松策略）
+    - 不进入异常体系——用户通过 if/while 逻辑主动检测
     """
     def __init__(self, ib_class: 'IbClass'):
         super().__init__(ib_class)
@@ -582,11 +655,11 @@ class IbLLMUncertain(IbObject):
         return "uncertain"
 
     def to_bool(self) -> IbObject:
-        """ IbLLMUncertain 在布尔上下文中为 False """
+        """IbLLMUncertain 在布尔上下文中为 False"""
         return self.ib_class.registry.box(0)
 
     def cast_to(self, target_class: Any) -> IbObject:
-        """ 支持 IbLLMUncertain 的强转逻辑 """
+        """支持 IbLLMUncertain 的强转逻辑"""
         if target_class.name == "str":
             return self.ib_class.registry.box("uncertain")
         if target_class.name in ("int", "float"):
@@ -599,16 +672,65 @@ class IbLLMUncertain(IbObject):
         return "uncertain"
 
 
+@register_ib_type("llm_call_result")
+class IbLLMCallResult(IbObject):
+    """
+    LLM 调用结果的结构化类型。
+
+    替代 IbLLMUncertain 的"例外特殊对象"模式，使 LLM 调用结果成为
+    公理体系中有完整语义的独立类型。
+
+    字段：
+    - is_certain: bool      结果是否确定（LLM 返回了可解析的有效值）
+    - value: IbObject       确定时的值；不确定时为 IbNone
+    - raw_response: str     LLM 原始响应（用于 retry_hint 生成）
+    - retry_hint: str       不确定时的重试提示（传递给下一次 LLM 调用）
+
+    语义：
+    - is_certain=True  → 调用成功，value 包含有效 IbObject
+    - is_certain=False → 调用不确定，retry_hint 描述问题，llmexcept 应处理此情况
+
+    与 IbLLMUncertain 的关系：
+    - IbLLMUncertain 仍是变量赋值"不确定值"的标记类型（保持不变）
+    - IbLLMCallResult 是 llmexcept 保护块的"调用结果容器"（新增）
+    - 未来 llmexcept 可改为接收 IbLLMCallResult 而非捕获异常
+    """
+    def __init__(self, ib_class: 'IbClass', is_certain: bool, value: Optional['IbObject'] = None,
+                 raw_response: str = "", retry_hint: str = ""):
+        super().__init__(ib_class)
+        self.is_certain = is_certain
+        self.result_value = value
+        self.raw_response = raw_response
+        self.retry_hint = retry_hint
+
+    def to_native(self, memo=None) -> Any:
+        if self.is_certain and self.result_value is not None:
+            return self.result_value.to_native(memo) if hasattr(self.result_value, 'to_native') else self.result_value
+        return None
+
+    def __to_prompt__(self) -> str:
+        if self.is_certain:
+            return f"LLMCallResult(certain, value={self.result_value})"
+        return f"LLMCallResult(uncertain, hint={self.retry_hint!r})"
+
+    def __repr__(self) -> str:
+        status = "certain" if self.is_certain else "uncertain"
+        return f"<LLMCallResult {status}: {self.result_value if self.is_certain else self.retry_hint!r}>"
+
+
 class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None, owner_class: Optional['IbClass'] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
         self._spec = spec
         self.module_name = module_name or context.current_module_name
+        # 定义该方法的 IbClass（方法归属类）。用于 super() 支持。
+        # 对于顶层函数，此字段为 None（不在类内）。
+        self.owner_class: Optional['IbClass'] = owner_class
 
     @property
     def spec(self) -> Optional[IbSpec]:
@@ -617,10 +739,35 @@ class IbUserFunction(IbFunction):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
-        rt_context = self.context.runtime_context
+        from core.runtime.frame import get_current_frame as _get_frame
+        from core.runtime.objects.builtins import IbDeferred, IbBehavior
+        from core.base.diagnostics.codes import RUN_CALL_ERROR
+        _frame = _get_frame()
+        rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-        
+
+        # --- lambda 参数传递约束 ---
+        # lambda 延迟对象不允许作为函数参数传递（语义约束）。
+        # snapshot 不受此限制。
+        for arg in args:
+            if isinstance(arg, (IbDeferred, IbBehavior)) and getattr(arg, 'deferred_mode', None) == 'lambda':
+                raise InterpreterError(
+                    "TypeError: lambda 延迟对象不允许作为函数参数传递。"
+                    " 如需跨作用域传递延迟值，请使用 snapshot 关键字。",
+                    error_code=RUN_CALL_ERROR
+                )
+
+        # --- 意图栈作用域隔離（拷贝传递语义）---
+        # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
+        # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：
+        #   intent_context.clear_inherited()  — 清空继承来的持久意图栈
+        #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
+        from core.runtime.objects.intent_context import IbIntentContext
+        old_intent_ctx = rt_context._intent_ctx
+        child_ctx = old_intent_ctx.fork()
+        rt_context._intent_ctx = child_ctx
+
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
             # 获取目标模块的作用域
@@ -658,6 +805,13 @@ class IbUserFunction(IbFunction):
                 self_uid = self_sym if isinstance(self_sym, str) else (self_sym.uid if self_sym else None)
                 rt_context.define_variable("self", receiver, uid=self_uid)
                 
+                # super() 支持：若该函数有归属类（owner_class）且归属类有父类，
+                # 则在方法作用域内注入 super 代理对象。
+                # super 使用固定 UID "builtin:super" 以避免符号查找冲突。
+                if self.owner_class and self.owner_class.parent:
+                    super_proxy = IbSuperProxy(receiver, self.owner_class.parent)
+                    rt_context.define_variable("super", super_proxy, uid="builtin:super")
+                
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
                 actual_arg_uid = arg_uid
@@ -669,7 +823,6 @@ class IbUserFunction(IbFunction):
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    # print(f"[DEBUG] Defining LLM param: {arg_name} with UID: {sym_uid}")
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
@@ -682,7 +835,8 @@ class IbUserFunction(IbFunction):
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
-            # 恢复之前的模块上下文
+            # 恢复调用者的意图上下文和模块上下文
+            rt_context._intent_ctx = old_intent_ctx
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 
@@ -694,26 +848,51 @@ class IbUserFunction(IbFunction):
 class IbLLMFunction(IbFunction):
     """
     用户定义的 LLM 函数。
+
+    公理化设计原则
+    --------------
+    IbLLMFunction 与 IbBehavior 同构：不再在构造时持有 llm_executor 引用。
+    call() 通过 ib_class.registry.get_llm_executor().invoke_llm_function() 自主执行。
     """
-    def __init__(self, node_uid: str, llm_executor: Any, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid
-        self.llm_executor = llm_executor
         self.context = context
         self._spec = spec
         self.module_name = module_name or context.current_module_name
+        # 暂存由 call() 解析的呼叫级意图，供 invoke_llm_function 消费
+        self._pending_call_intent: Optional[Any] = None
 
     @property
     def spec(self) -> Optional[IbSpec]:
         return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """执行 LLM 函数：负责作用域管理和参数绑定，然后分发给执行器"""
+        """
+        执行 LLM 函数：负责作用域管理和参数绑定，然后通过 KernelRegistry 分发给执行器。
+
+        与 IbBehavior.call() 同构：通过 registry.get_llm_executor() 获取执行器，
+        不再持有 llm_executor 直接引用。
+        """
+        executor = self.ib_class.registry.get_llm_executor()
+        if executor is None:
+            raise RuntimeError(
+                f"IbLLMFunction '{self.node_uid}': LLM executor not registered in KernelRegistry. "
+                "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
+            )
+
         # 切换到函数定义所在的模块上下文
         rt_context = self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-        
+
+        # --- 意图栈作用域隔离（拷贝传递语义）---
+        # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
+        # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
+        old_intent_ctx = rt_context._intent_ctx
+        child_ctx = old_intent_ctx.fork()
+        rt_context._intent_ctx = child_ctx
+
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
             # 获取目标模块的作用域
@@ -757,27 +936,28 @@ class IbLLMFunction(IbFunction):
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
-            # 解析呼叫级意图 (函数头上的意图)
+            # 解析呼叫级意图（函数头上的意图），暂存供 invoke_llm_function 消费
             intent_uid = node_data.get("intent")
-            call_intent = None
+            self._pending_call_intent = None
             if intent_uid:
                 intent_data = self.context.get_node_data(intent_uid)
-                # 使用工厂创建意图对象，避免局部 import
-                call_intent = self.context.factory.create_intent_from_node(
-                    intent_uid, 
-                    intent_data, 
+                self._pending_call_intent = self.context.factory.create_intent_from_node(
+                    intent_uid,
+                    intent_data,
                     role=IntentRole.SMEAR
                 )
             
-            # 分发给 LLM 执行器
-            # 传递执行上下文网关，并传递解析后的意图
-            return self.llm_executor.execute_llm_function(self.node_uid, self.context, call_intent=call_intent)
+            # 公理化调用：通过 KernelRegistry 获取执行器，不再直接持有
+            return executor.invoke_llm_function(self, self.context)
         finally:
+            self._pending_call_intent = None
             self.context.pop_stack()
             rt_context.exit_scope()
-            # 恢复之前的模块上下文
+            # 恢复调用者的意图上下文和模块上下文
+            rt_context._intent_ctx = old_intent_ctx
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
+
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)

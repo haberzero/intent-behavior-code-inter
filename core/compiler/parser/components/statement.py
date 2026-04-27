@@ -274,8 +274,8 @@ class StatementComponent(BaseComponent):
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
             if self.stream.match(TokenType.RAW_TEXT):
                 val = self.stream.previous().value
-                # 解析意图标签 #tag
-                # TODO 应该从lexer开始就提供支持。现在是临时方案
+                # 解析意图标签 #tag（当前在 parser 层用正则处理，
+                # 应迁移到 Lexer 层，见 PENDING_TASKS.md §10.1）
                 if tag is None and not segments:
                     val_stripped = val.lstrip()
                     if val_stripped.startswith("#"):
@@ -416,10 +416,14 @@ class StatementComponent(BaseComponent):
         start_token = self.stream.previous()
         test = self.expression.parse_expression()
         
-        # Parse optional filter: while x > 0 if is_ready():
+        # while ... if ... is not supported; use an explicit if/continue inside the body instead.
         if self.stream.match(TokenType.IF):
-            filter_expr = self.expression.parse_expression()
-            test = self._loc(ast.IbFilteredExpr(expr=test, filter=filter_expr), start_token)
+            raise self.stream.error(
+                self.stream.previous(),
+                "The 'while ... if ...:' filter syntax is not supported. "
+                "Use an explicit 'if/continue' inside the loop body instead.",
+                code="PAR_002",
+            )
             
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
         body = self.block()
@@ -438,6 +442,12 @@ class StatementComponent(BaseComponent):
         if SyntaxRecognizer.get_role(self.stream) == SyntaxRole.VARIABLE_DECLARATION:
             # 这是一个带类型的声明作为目标
             target_candidate = self._parse_for_loop_target()
+        elif (self.stream.check(TokenType.IDENTIFIER) and 
+              self.stream.peek(1).type == TokenType.IN):
+            # Known Limit 1 修复：for item in items（无类型标注的裸变量名）
+            # 当 IDENTIFIER 紧跟 IN 时，识别为 foreach 循环变量（而非表达式中的 `in` 比较运算符）
+            name_token = self.stream.advance()
+            target_candidate = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
         else:
             target_candidate = self.expression.parse_expression()
         
@@ -448,8 +458,8 @@ class StatementComponent(BaseComponent):
             # 情况 1: for i in list  或  for str name in names
             target = target_candidate
             iter_expr = self.expression.parse_expression()
-        elif self.stream.check(TokenType.COLON):
-            # 情况 2: for 10:  或  for @~...~: (条件驱动模式)
+        elif self.stream.check(TokenType.COLON) or self.stream.check(TokenType.IF):
+            # 情况 2: for 10:  或  for @~...~:  或  for @~...~ if cond: (条件驱动模式)
             # 此时 target_candidate 实际上就是迭代/条件表达式
             target = None
             iter_expr = target_candidate

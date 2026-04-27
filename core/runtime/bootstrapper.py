@@ -100,7 +100,7 @@ class Bootstrapper:
         # 逻辑非协议 (Active Defense)
         def _default_not(self):
             bool_val = self.receive('to_bool', []).to_native()
-            return self.ib_class.registry.box(0 if bool_val else 1)
+            return self.ib_class.registry.box(False if bool_val else True)
             
         self.ObjectClass.register_method('__not__', IbNativeFunction(_default_not, is_method=True, ib_class=self.ObjectClass))
 
@@ -123,12 +123,12 @@ class Bootstrapper:
         self.ObjectClass.register_method('__getattr__', IbNativeFunction(_default_getattr, is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('__setattr__', IbNativeFunction(_default_setattr, is_method=True, ib_class=self.ObjectClass))
 
-        # 基础比较逻辑：默认比较 ID (引用一致性)
+        # 基础比较逻辑：默认比较 ID (引用一致性)，返回 bool 类型
         def _default_eq(self, other):
-            return self.ib_class.registry.box(1 if self == other else 0)
+            return self.ib_class.registry.box(True if self is other else False)
             
         def _default_ne(self, other):
-            return self.ib_class.registry.box(1 if self != other else 0)
+            return self.ib_class.registry.box(False if self is other else True)
 
         self.ObjectClass.register_method('__eq__', IbNativeFunction(_default_eq, is_method=True, ib_class=self.ObjectClass))
         self.ObjectClass.register_method('__ne__', IbNativeFunction(_default_ne, is_method=True, ib_class=self.ObjectClass))
@@ -179,6 +179,10 @@ class Bootstrapper:
         if isinstance(val, IbObject): return val
         if val is None:
             return registry.get_none()
+        # Uncertain 字面量哨兵：Uncertain 关键字被解析为此特殊字符串常量，
+        # 此处将其映射到 llm_uncertain 单例，与 None → get_none() 的模式完全对称。
+        if val == "__IBCI_UNCERTAIN_LITERAL__":
+            return registry.get_llm_uncertain()
         
         # 处理循环引用 (主要针对列表/字典等容器)
         if memo is None: memo = {}
