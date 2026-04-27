@@ -34,9 +34,9 @@
 | `int` | 整数 | `42`, `-7` |
 | `float` | 浮点数 | `3.14`, `-0.5` |
 | `str` | 字符串 | `"hello"`, `"world"` |
-| `bool` | 布尔值 | `True`, `False` |
+| `bool` | 布尔值 | `true`, `false` |
 | `list` | 动态列表 | `[1, 2, 3]` |
-| `tuple` | 不可变元组 | `(1, "a", True)` |
+| `tuple` | 不可变元组 | `(1, "a", true)` |
 | `dict` | 键值字典 | `{"key": "val"}` |
 | `None` | 空值 | `None` |
 | `void` | 无返回值（仅用于函数返回类型标注） | — |
@@ -86,7 +86,7 @@ any a = (any)x          # any 类型
 ```ibci
 int count = 10
 str name = "Alice"
-bool flag = True
+bool flag = true
 float price = 9.99
 list[int] nums = [1, 2, 3]
 dict[str,int] scores = {"Alice": 95}
@@ -185,9 +185,9 @@ list[int] l = [1,2] * 3   # [1,2,1,2,1,2]
 ### 3.3 逻辑运算符
 
 ```ibci
-bool r1 = True and False    # False
-bool r2 = True or False     # True
-bool r3 = not True          # False
+bool r1 = true and false    # false
+bool r2 = true or false     # true
+bool r3 = not true          # false
 ```
 
 ### 3.4 成员检测运算符
@@ -226,10 +226,10 @@ else:
     print("小于 5")
 ```
 
-三元表达式：
+三元表达式（C 风格 `?:`）：
 
 ```ibci
-int result = 1 if x > 5 else 0
+int result = x > 5 ? 1 : 0
 ```
 
 ### 4.2 while 循环
@@ -886,9 +886,22 @@ str root   = isys.project_root()  # 项目根目录
 import idbg
 
 int x = 42
-idbg.inspect(x)             # 探查变量的完整 IBCI 类型和值
-idbg.dump_intent_stack()    # 打印当前意图栈
+idbg.vars()              # 打印当前作用域所有变量及其值
+idbg.print_vars()        # 同 vars()，别名
+idbg.last_llm()          # 返回最后一次 LLM 调用的详细信息（dict）
+idbg.last_result()       # 返回最后一次 LLM 调用的结果对象
+idbg.show_last_prompt()  # 打印最后一次 LLM 调用的提示词
+idbg.show_last_result()  # 打印最后一次 LLM 调用的结果
+idbg.show_all()          # 打印变量、最后结果等全部调试信息
+idbg.retry_stack()       # 返回当前 llmexcept 重试栈
+idbg.intents()           # 返回当前意图栈列表
+idbg.show_intents()      # 打印当前意图栈
+idbg.env()               # 返回当前运行环境信息
+idbg.fields(obj)         # 返回对象所有字段
 ```
+
+> **⚠️ 已知限制**：`idbg.inspect(x)` 和 `idbg.dump_intent_stack()` 在当前版本中**未实现**，调用会产生运行时错误。
+> 请使用 `idbg.vars()` 代替 `idbg.inspect()`，使用 `idbg.show_intents()` 代替 `idbg.dump_intent_stack()`。
 
 ### 11.6 ihost 动态宿主
 
@@ -896,7 +909,7 @@ idbg.dump_intent_stack()    # 打印当前意图栈
 import ihost
 import isys
 
-dict policy = {"isolated": True}
+dict policy = {"isolated": true}
 ihost.run_isolated("./sub/child.ibci", policy)
 ```
 
@@ -1007,7 +1020,7 @@ del d["a"]
 ### 12.5 tuple
 
 ```ibci
-tuple t = (1, "hello", True)
+tuple t = (1, "hello", true)
 auto first = t[0]     # 1（下标访问）
 int n = t.len()       # 3
 ```
