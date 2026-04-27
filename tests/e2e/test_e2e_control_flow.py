@@ -78,7 +78,7 @@ while i < 3:
 
     def test_while_with_break(self):
         code = """int i = 0
-while true:
+while True:
     if i >= 3:
         break
     print((str)i)
@@ -149,7 +149,7 @@ for int item in items:
         assert "3" not in lines
 
     def test_while_in_if(self):
-        code = """bool run = true
+        code = """bool run = True
 if run:
     int count = 0
     while count < 3:
@@ -256,7 +256,7 @@ print((str)count)
         assert "3" in lines
 
     def test_condition_driven_for_if_filter_never_entered(self):
-        """if filter is immediately false, loop body must not execute."""
+        """if filter is immediately False, loop body must not execute."""
         code = """int count = 0
 for @~ MOCK:TRUE loop_cond ~ if count > 100:
     count = count + 1

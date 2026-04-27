@@ -65,11 +65,11 @@ class TestE2EVariables:
         assert any("3.14" in l for l in lines)
 
     def test_bool_variable_true(self):
-        lines = run_and_capture('bool flag = true\nprint((str)flag)')
+        lines = run_and_capture('bool flag = True\nprint((str)flag)')
         assert any("true" in l.lower() or "True" in l for l in lines)
 
     def test_bool_variable_false(self):
-        lines = run_and_capture('bool flag = false\nprint((str)flag)')
+        lines = run_and_capture('bool flag = False\nprint((str)flag)')
         assert any("false" in l.lower() or "False" in l for l in lines)
 
     def test_list_variable(self):
@@ -177,11 +177,11 @@ class TestE2EBoolLogic:
         assert any("true" in l.lower() or "True" in l for l in lines)
 
     def test_and_logic(self):
-        lines = run_and_capture('bool r = true and true\nprint((str)r)')
+        lines = run_and_capture('bool r = True and True\nprint((str)r)')
         assert any("true" in l.lower() or "True" in l for l in lines)
 
     def test_or_logic(self):
-        lines = run_and_capture('bool r = false or true\nprint((str)r)')
+        lines = run_and_capture('bool r = False or True\nprint((str)r)')
         assert any("true" in l.lower() or "True" in l for l in lines)
 
 
@@ -251,16 +251,16 @@ print((str)parts.len())
 
 class TestE2ENotOperator:
     def test_not_true_returns_bool(self):
-        """not true should return bool false, assignable to bool variable."""
-        code = """bool x = not true
+        """not True should return bool False, assignable to bool variable."""
+        code = """bool x = not True
 print((str)x)
 """
         lines = run_and_capture(code)
         assert any("false" in l.lower() for l in lines)
 
     def test_not_false_returns_bool(self):
-        """not false should return bool true."""
-        code = """bool y = not false
+        """not False should return bool True."""
+        code = """bool y = not False
 print((str)y)
 """
         lines = run_and_capture(code)
@@ -268,7 +268,7 @@ print((str)y)
 
     def test_not_in_condition(self):
         """not operator result should work in if conditions."""
-        code = """bool flag = true
+        code = """bool flag = True
 if not flag:
     print("wrong")
 else:
@@ -341,7 +341,7 @@ print((str)r)
         assert any("true" in l.lower() for l in lines)
 
     def test_not_nonempty_dict_is_false(self):
-        """not {"k": 1} returns false."""
+        """not {"k": 1} returns False."""
         code = """dict d = {"k": 1}
 bool r = not d
 print((str)r)
@@ -385,7 +385,7 @@ class TestE2ETernaryOperator:
 
     def test_ternary_with_bool_var(self):
         """Ternary works directly with a bool variable."""
-        code = """bool flag = true
+        code = """bool flag = True
 int a = flag ? 10 : 20
 print((str)a)
 """
@@ -412,8 +412,8 @@ print((str)result)
 
     def test_ternary_lower_precedence_than_or(self):
         """'or' binds tighter than ternary: (a or b) ? x : y."""
-        code = """bool a = false
-bool b = true
+        code = """bool a = False
+bool b = True
 str r = a or b ? "yes" : "no"
 print(r)
 """
@@ -719,7 +719,7 @@ class TestE2EAnyVariable:
         assert "99" in lines
 
     def test_any_reassign_multiple_types(self):
-        code = 'any val = 1\nval = "two"\nval = true\nprint(val)'
+        code = 'any val = 1\nval = "two"\nval = True\nprint(val)'
         lines = run_and_capture(code)
         assert any("true" in l.lower() or "True" in l for l in lines)
 

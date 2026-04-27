@@ -124,7 +124,7 @@ class Interpreter:
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
                  max_instructions: int = 0,
-                 max_call_stack: int = 100,
+                 max_call_stack: int = 1000,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
                  debugger: Optional[Any] = None,

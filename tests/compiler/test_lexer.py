@@ -166,7 +166,7 @@ print(x)
         assert "print" in values
 
     def test_if_else_indentation(self):
-        code = """if true:
+        code = """if True:
     print("yes")
 else:
     print("no")

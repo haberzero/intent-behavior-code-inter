@@ -49,7 +49,7 @@ class TestCompileVariables:
         assert artifact is not None
 
     def test_bool_declaration(self, engine):
-        artifact = engine.compile_string("bool flag = true", silent=True)
+        artifact = engine.compile_string("bool flag = True", silent=True)
         assert artifact is not None
 
     def test_list_declaration(self, engine):
@@ -83,7 +83,7 @@ class TestCompileExpressions:
         assert artifact is not None
 
     def test_logical_ops(self, engine):
-        artifact = engine.compile_string("bool result = true and false", silent=True)
+        artifact = engine.compile_string("bool result = True and False", silent=True)
         assert artifact is not None
 
     def test_unary_ops(self, engine):
@@ -124,7 +124,7 @@ for int item in items:
 
     def test_break_continue(self, engine):
         code = """int i = 0
-while true:
+while True:
     i = i + 1
     if i > 3:
         break

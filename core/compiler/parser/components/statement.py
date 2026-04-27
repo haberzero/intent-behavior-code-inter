@@ -4,6 +4,7 @@ from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
+from core.compiler.parser.core.syntax import IbPrecedence
 from core.compiler.parser.core.syntax import ID_AUTO, COMPOUND_OP_MAP
 
 if TYPE_CHECKING:
@@ -449,7 +450,9 @@ class StatementComponent(BaseComponent):
             name_token = self.stream.advance()
             target_candidate = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
         else:
-            target_candidate = self.expression.parse_expression()
+            # 以 ASSIGNMENT 优先级解析，避免 IF 被当作 Python 风格三元的中缀消费，
+            # 从而打断 `for @~...~ if cond:` 等条件驱动 for...if 语法。
+            target_candidate = self.expression.parse_expression(IbPrecedence.ASSIGNMENT)
         
         target = None
         iter_expr = None
@@ -457,7 +460,10 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.IN):
             # 情况 1: for i in list  或  for str name in names
             target = target_candidate
-            iter_expr = self.expression.parse_expression()
+            # 以 ASSIGNMENT 优先级解析迭代表达式，使 `if` 仍可作为 for...if 过滤器
+            # 关键字而不是被吞作 Python 风格三元 (`body if cond else orelse`) 的中缀。
+            # 如确需在迭代位置使用三元，请用括号: `for x in (a if c else b):`
+            iter_expr = self.expression.parse_expression(IbPrecedence.ASSIGNMENT)
         elif self.stream.check(TokenType.COLON) or self.stream.check(TokenType.IF):
             # 情况 2: for 10:  或  for @~...~:  或  for @~...~ if cond: (条件驱动模式)
             # 此时 target_candidate 实际上就是迭代/条件表达式
