@@ -1,23 +1,8 @@
 # IBC-Inter (Intent Behavior Code - Interactive)
 
----
+2026-04-16 警告：近期作者初次尝试使用 copilot web agent，任务创建以及代码合并过程中出现了一些误操作，为了不丢失工作状态不得不完整合并所有未经人工review的copilot代码，这导致目前main分支暂时处在不稳定状态，且主要功能都暂时未经过全面核验。作者需要约2天时间进行全面检验和清理后才能再次核实main分支的情况。
 
-> ## ⚠️ unsafe-vibe-dev 分支专用说明
->
-> **当前所在分支：`unsafe-vibe-dev`**
->
-> 本分支是专门用于 **Vibe Coding（快速探索性编码）** 的开发分支。在此分支上的代码可能：
-> - 包含未经严格审查的实验性改动
-> - 存在架构调整、重构尝试或破坏性变更
-> - 随时可能回滚或大幅修改
->
-> **请谨慎参考本分支内容，切勿将本分支代码直接用于生产环境。**
->
-> 将本分支合并回 `main` 时，**README.md 的变更应当被排除**，以避免污染 main 分支的文档。
-> 如需合并，请使用 `git merge --no-ff unsafe-vibe-dev` 后手动还原 README.md，
-> 或借助 `.gitattributes` 中已配置的 `merge=ours` 策略保护 README。
-
----
+出于尽量不直接回滚main的考虑，目前紧急从历史记录中单独分支出一个临时的 temp_stable_usable 。如有试用需求可以通过此分支进行，此分支内的所有examples都是确认可用的。
 
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
@@ -196,3 +181,4 @@ python main.py run test_target_proj/01_hello_world.ibci
 - [架构原则](docs/ARCHITECTURE_PRINCIPLES.md) (核心设计思路)
 
 ***
+
