@@ -596,8 +596,8 @@ class TestAIMockCaseSensitive:
         assert ai_plugin._handle_mock_response("MOCK:TRUE", "expr") == "1"
 
     def test_lowercase_true_is_literal(self, ai_plugin):
-        """MOCK:True (lowercase) is not a recognized command; falls through to default."""
-        result = ai_plugin._handle_mock_response("MOCK:True", "expr")
+        """MOCK:true (lowercase) is not a recognized command; falls through to default."""
+        result = ai_plugin._handle_mock_response("MOCK:true", "expr")
         assert result != "1"
 
     def test_uppercase_false_returns_zero(self, ai_plugin):
@@ -605,8 +605,8 @@ class TestAIMockCaseSensitive:
         assert ai_plugin._handle_mock_response("MOCK:FALSE", "expr") == "0"
 
     def test_lowercase_false_is_literal(self, ai_plugin):
-        """MOCK:False (lowercase) is not a recognized command; falls through to default."""
-        result = ai_plugin._handle_mock_response("MOCK:False", "expr")
+        """MOCK:false (lowercase) is not a recognized command; falls through to default."""
+        result = ai_plugin._handle_mock_response("MOCK:false", "expr")
         assert result != "0"
 
     def test_uppercase_int_type(self, ai_plugin):
@@ -624,8 +624,8 @@ class TestAIMockCaseSensitive:
         assert ai_plugin._handle_mock_response("MOCK:BOOL:TRUE", "expr") == "1"
 
     def test_lowercase_bool_true_is_not_true(self, ai_plugin):
-        """MOCK:BOOL:True (lowercase value) returns '0' since value != 'TRUE'."""
-        assert ai_plugin._handle_mock_response("MOCK:BOOL:True", "expr") == "0"
+        """MOCK:BOOL:true (lowercase value) returns '0' since value != 'TRUE'."""
+        assert ai_plugin._handle_mock_response("MOCK:BOOL:true", "expr") == "0"
 
     def test_seq_uppercase_sentinels(self, ai_plugin):
         """MOCK:SEQ with uppercase FAIL/TRUE/FALSE sentinels work."""

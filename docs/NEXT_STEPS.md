@@ -60,8 +60,8 @@ class MyType:
     str field
 
     func __from_prompt__(str raw) -> tuple:
-        # 解析 raw，返回 (true, parsed_value) 或 (false, "错误提示")
-        return (true, raw)
+        # 解析 raw，返回 (True, parsed_value) 或 (False, "错误提示")
+        return (True, raw)
 
     func __outputhint_prompt__(self) -> str:
         return "请返回一个 JSON 格式的 MyType 对象"
@@ -144,7 +144,37 @@ Step 4b（完成）
     └──→ Step 8（文档化，随时可做）
 ```
 
-**下一优先路径**：Step 8（架构边界文档化，随时可做）→ Step 9（CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）
+**下一优先路径**：Step 9（CPS 调度循环）→ Step 10（LLM 流水线，含 10a/10b/10c 三阶段）→ Step 11（多 Interpreter 并发）→ Step 12（可移植性参考实现）
+
+---
+
+## 元组解包（tuple unpacking）现状记录 — 待改进项
+
+> **来源**：2026-04-27 实测核实。
+
+### 现状摘要
+
+| 写法 | 行为 | 备注 |
+|------|------|------|
+| `int a, int b = t` | ❌ 编译错 `PAR_001: Expect newline after variable declaration.` | 语法被解析为 "声明 a 后多余 token" |
+| `(int a, int b) = t` | ✅ 正常，按 `tuple → 两个 int` 解包 | 推荐写法 |
+| `(int a, int b) = (1, 2, 3)` | ❌ 运行期 `RUN_001: Unpack error: expected 2 values, got 3` | 元数检查正确 |
+| `(int a, str b) = (1, "x")` | ✅ 正常，混合类型解包正确 | — |
+| `for (int x, int y) in list[tuple]` | ❌ `RUN_002: Type mismatch: Cannot assign 'int' to 'tuple' for variable 'x'` | for-target 的元组形式未被识别为解包目标，整个 `(int x, int y)` 被当作"名为 x 的 tuple 变量声明"，迭代时把 int 元素塞到 tuple 槽，运行时类型检查失败 |
+| `tuple t = (1, 2); auto a = t[0]; auto b = t[1]` | ✅ 正常 | 下标访问可用 |
+| `tuple` 函数返回值再下标 | ✅ 正常 | `(int)r[0]` 可用 |
+
+### 待改进项（Step 9 之前可独立推进，建议优先级 P3）
+
+1. **`int a, int b = t`（裸列形式）应当合法**：与 Python `a, b = t` 对齐，无需括号。需要在语句解析路径检测"声明项后接逗号"模式并切到解包目标处理逻辑，而非报 `PAR_001`。
+2. **`for (int x, int y) in coords:` 失效（关键）**：当前 `for_statement` 中 `_parse_for_loop_target()` 对带类型标注的元组目标识别不完整：括号内的多声明被错误折叠为单变量声明（变量名 `x`，类型 `tuple`）。修复点在 `core/compiler/parser/components/statement.py:_parse_for_loop_target` 与 for 目标向 `_assign_to_target` 的传递路径——需将括号目标传为元组解包目标列表，而不是单个变量。
+3. **错误信息精炼**：当前 `RUN_001 Unpack error: expected N got M` 已可读，`RUN_002 Cannot assign 'int' to 'tuple' for variable 'x'` 在 for-tuple 误识别场景下信息误导，应在解析期就拒绝当前"折叠"形式，而不是延迟到运行时类型校验阶段。
+
+### 临时规避
+
+- 无类型 / `auto` 解包：`auto a = t[0]; auto b = t[1]`
+- `for tuple pair in coords:` + `auto x = pair[0]; auto y = pair[1]`
+- 多返回值场景使用 `(int a, int b) = func()` （加括号）
 
 ---
 

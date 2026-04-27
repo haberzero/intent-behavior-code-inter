@@ -512,3 +512,38 @@ class IbBehavior(IbObject, IIbBehavior):
 | `visit_IbBehaviorExpr` 传入 `execution_context` | `expr_handler.py` |
 
 **质量门控**：446 个测试全部通过，零回归，CodeQL 0 alerts。
+
+---
+
+## 七、公理类型层次（参考）
+
+> 此节归档自原 `AXIOM_OOP_ANALYSIS.md` §一。AXIOM_OOP_ANALYSIS.md 文件已删除，内容拆分到 `docs/COMPLETED.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/PENDING_TASKS_VM.md` 与本文件。
+
+### 7.1 完整公理类型层次（声明视角）
+
+```
+Object（根）
+  ├─ int / float / str / bool / list / tuple / dict / None / slice / Exception / Enum
+  ├─ void           (VoidAxiom, is_dynamic=False) — 无返回值的函数返回类型标注
+  ├─ intent_context (IntentContextAxiom)          — 意图上下文对象（Step 6）
+  ├─ llm_call_result (LlmCallResultAxiom)         — LLM 调用结果类型（Step 7）
+  └─ callable       (CallableAxiom, is_dynamic=False) — 可调用对象的公理父类型
+       ├─ bound_method  (BoundMethodAxiom) — 已绑定接收者的方法
+       └─ deferred  (DeferredAxiom) — 延迟执行的通用表达式
+            └─ behavior  (BehaviorAxiom) — 延迟执行的 LLM 行为表达式（特化）
+```
+
+**说明**：此层次是 IBCI 类型系统（公理层）的声明，与 Python 实现类的继承无关。
+`IbDeferred` 与 `IbBehavior` 都直接继承自 `IbObject`——两者执行机制（AST 重访 vs LLM 调用）完全不同，
+不共享 Python 实现，仅共享 IBCI 类型系统中的父子关系。
+
+### 7.2 `is_compatible()` 方向原则
+
+| source | 可赋值的目标类型 |
+|--------|---------------|
+| behavior | behavior、deferred、callable |
+| deferred | deferred、callable |
+| callable | callable（仅自身） |
+| bound_method | bound_method、callable |
+
+子类型向上兼容、父类型不向下兼容；`callable→deferred`、`deferred→behavior` 等反向赋值均为非法。
