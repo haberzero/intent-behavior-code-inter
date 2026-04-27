@@ -661,18 +661,19 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ---
 
-### 10.6 工程任务：IbCell 机制落地 [⏳ 待实现，Step 13]
+### 10.6 工程任务：IbCell 机制落地 [⏳ 部分推进中，Step 13]
 
-> **前提**：fn 参数化 lambda/snapshot 新语法（Step 12.5，见 `docs/NEXT_STEPS.md`）完成后，Cell 机制方能正式落地。
+> **前提**：fn 参数化 lambda/snapshot 新语法（Step 12.5，见 `docs/NEXT_STEPS.md`）完成后，Cell 机制方能正式与闭包集成；但作为基础原语的 `IbCell` 类型可独立先行落地。
 
 **任务描述**：实现 `IbCell` 堆对象以支持词法闭包的正确生命周期管理：
 
-1. **新增 `IbCell` 类型**（`core/runtime/objects/cell.py`）：持有 `value: IbObject`，独立于 ScopeImpl 生命周期存在。
-2. **语义分析器 Cell 变量分析**：识别函数体内哪些变量被内层函数捕获，标注为 Cell 变量。
-3. **代码生成/运行时**：Cell 变量在栈帧创建时分配为 `IbCell` 对象；被捕获的函数对象在创建时将对应 `IbCell` 引用写入 `closure` 字典。
-4. **GC 根集合更新**：将所有活跃 fn 对象的 `closure` 字典中的 Cell 值加入 GC 根集合扫描路径。
+1. **新增 `IbCell` 类型**（`core/runtime/objects/cell.py`）：持有 `value: IbObject`，独立于 ScopeImpl 生命周期存在。  
+   **[✅ 已落地]**：`IbCell` 原语已实现，提供 `get()/set()/is_empty()/trace_refs()`，采用身份语义（基于 `id`），不继承 `IbObject`，纯 VM 内部容器。单元测试位于 `tests/runtime/test_ib_cell.py`（18 用例）。后续 fn 集成与 GC 根扫描可直接依赖该类型，无需重塑容器形态。
+2. **语义分析器 Cell 变量分析**：识别函数体内哪些变量被内层函数捕获，标注为 Cell 变量。⏳ 待 M1 实施
+3. **代码生成/运行时**：Cell 变量在栈帧创建时分配为 `IbCell` 对象；被捕获的函数对象在创建时将对应 `IbCell` 引用写入 `closure` 字典。⏳ 待 M1 实施
+4. **GC 根集合更新**：将所有活跃 fn 对象的 `closure` 字典中的 Cell 值加入 GC 根集合扫描路径。⏳ 待 M2 实施（`IbCell.trace_refs()` 钩子已就绪）
 
-**搁置原因**：当前 lambda 不支持参数传递，自由变量直接通过 captured_scope 引用读取；此机制在无参数场景下功能正确，但不满足 LT-2 的 Cell 生命周期语义。需在 Step 12.5（新 fn 语法）后重写。
+**搁置原因**：当前 lambda 不支持参数传递，自由变量直接通过 captured_scope 引用读取；此机制在无参数场景下功能正确，但不满足 LT-2 的 Cell 生命周期语义。需在 Step 12.5（新 fn 语法）后重写。第 1 步（原语本身）作为 M1/M2 的奠基已先行完成。
 
 ---
 
