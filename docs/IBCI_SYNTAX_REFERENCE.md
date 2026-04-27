@@ -34,9 +34,9 @@
 | `int` | 整数 | `42`, `-7` |
 | `float` | 浮点数 | `3.14`, `-0.5` |
 | `str` | 字符串 | `"hello"`, `"world"` |
-| `bool` | 布尔值 | `True`, `False` |
+| `bool` | 布尔值 | `true`, `false` |
 | `list` | 动态列表 | `[1, 2, 3]` |
-| `tuple` | 不可变元组 | `(1, "a", True)` |
+| `tuple` | 不可变元组 | `(1, "a", true)` |
 | `dict` | 键值字典 | `{"key": "val"}` |
 | `None` | 空值 | `None` |
 | `void` | 无返回值（仅用于函数返回类型标注） | — |
@@ -86,7 +86,7 @@ any a = (any)x          # any 类型
 ```ibci
 int count = 10
 str name = "Alice"
-bool flag = True
+bool flag = true
 float price = 9.99
 list[int] nums = [1, 2, 3]
 dict[str,int] scores = {"Alice": 95}
@@ -185,9 +185,9 @@ list[int] l = [1,2] * 3   # [1,2,1,2,1,2]
 ### 3.3 逻辑运算符
 
 ```ibci
-bool r1 = True and False    # False
-bool r2 = True or False     # True
-bool r3 = not True          # False
+bool r1 = true and false    # false
+bool r2 = true or false     # true
+bool r3 = not true          # false
 ```
 
 ### 3.4 成员检测运算符
@@ -896,7 +896,7 @@ idbg.dump_intent_stack()    # 打印当前意图栈
 import ihost
 import isys
 
-dict policy = {"isolated": True}
+dict policy = {"isolated": true}
 ihost.run_isolated("./sub/child.ibci", policy)
 ```
 
@@ -1007,7 +1007,7 @@ del d["a"]
 ### 12.5 tuple
 
 ```ibci
-tuple t = (1, "hello", True)
+tuple t = (1, "hello", true)
 auto first = t[0]     # 1（下标访问）
 int n = t.len()       # 3
 ```
