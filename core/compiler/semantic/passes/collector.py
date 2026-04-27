@@ -196,8 +196,23 @@ class LocalSymbolCollector:
         self.analyzer = analyzer # 期望是 SemanticAnalyzer 实例
 
     def collect(self, body: list):
+        # Pre-pass: 预先注册所有 global 声明，确保 global_refs 在处理赋值时已填充。
+        # 这使得 'global x' 的效果对整个函数体有效，无论声明位置在赋值之前还是之后。
+        self._prescan_globals(body)
+        # Main pass
         for stmt in body:
             self.visit(stmt)
+
+    def _prescan_globals(self, body: list):
+        """递归预扫描 global 声明（不跨越作用域边界）。"""
+        for stmt in body:
+            if isinstance(stmt, ast.IbGlobalStmt):
+                self.visit_IbGlobalStmt(stmt)
+            elif not (stmt.creates_scope and not isinstance(stmt, ast.IbModule)):
+                for attr in ("body", "orelse", "finalbody"):
+                    child = getattr(stmt, attr, None)
+                    if isinstance(child, list):
+                        self._prescan_globals(child)
 
     def visit(self, node: ast.IbASTNode):
         method_name = f'visit_{node.__class__.__name__}'
@@ -234,12 +249,21 @@ class LocalSymbolCollector:
             self.analyzer.error(str(e), node, code="SEM_002")
 
     def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt):
-        # 处理 global 声明
+        # 处理 global 声明（幂等：pre-scan 和 main pass 均可调用）
         self.analyzer.visit_IbGlobalStmt(node)
 
     def visit_IbAssign(self, node: ast.IbAssign):
         # 仅收集带有类型标注的显式定义
         for name, target in SymbolExtractor.get_assigned_names(node):
+            # global 声明：该名称已声明为全局变量，不在本地作用域中创建符号。
+            # 将赋值目标节点绑定到全局符号，以确保运行时通过 UID 写入全局作用域。
+            if name in self.symbol_table.global_refs:
+                global_scope = self.symbol_table.get_global_scope()
+                global_sym = global_scope.symbols.get(name)
+                if global_sym and hasattr(self.analyzer, "node_to_symbol"):
+                    self.analyzer.node_to_symbol[target] = global_sym
+                continue
+
             # 检查该 target 是否被 TypeAnnotatedExpr 包装
             is_explicit = False
             declared_type = self.analyzer._any_desc

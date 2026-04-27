@@ -498,6 +498,10 @@ class RuntimeContextImpl(RuntimeContext):
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
         self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
 
+    def define_variable_at_global(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
+        """在全局作用域中定义变量（用于 global 语句创建新全局变量）。"""
+        self._global_scope.define(name, value, declared_type, is_const, uid=uid)
+
     def push_intent(self, intent: Union[str, IbIntent], mode: str = "+", tag: Optional[str] = None) -> None:
         if isinstance(intent, str):
             intent = IbIntent(

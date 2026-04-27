@@ -496,9 +496,17 @@ class SemanticAnalyzer:
         for name in node.names:
             global_scope = self.symbol_table.get_global_scope()
             if name not in global_scope.symbols:
-                self.error(f"Global variable '{name}' is not defined in global scope", node, code="SEM_001")
-            else:
-                self.symbol_table.add_global_ref(name)
+                # Python semantics: 'global x' is valid even if x is not yet defined in global scope.
+                # Create a placeholder global symbol with 'any' type so that later assignments
+                # inside this function can correctly route to the global scope.
+                global_sym = symbols.VariableSymbol(
+                    name=name,
+                    kind=symbols.SymbolKind.VARIABLE,
+                    spec=self._any_desc,
+                    def_node=node,
+                )
+                global_scope.define(global_sym)
+            self.symbol_table.add_global_ref(name)
         return self._void_desc
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
@@ -916,6 +924,19 @@ class SemanticAnalyzer:
                         f"Use 'retry \"hint\"' to provide correction guidance instead.",
                         node, code="SEM_052"
                     )
+
+                # global 声明：如果变量已声明为 global，将赋值绑定到全局作用域的符号，
+                # 不在本地作用域中创建新符号。
+                if var_name in self.symbol_table.global_refs:
+                    global_scope = self.symbol_table.get_global_scope()
+                    global_sym = global_scope.symbols.get(var_name)
+                    if global_sym:
+                        self.side_table.bind_symbol(actual_target, global_sym)
+                        self.side_table.bind_type(target_node, global_sym.spec)
+                        if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
+                            self.side_table.bind_symbol(target_node.target, global_sym)
+                            self.side_table.bind_type(target_node.target, global_sym.spec)
+                    continue
 
                 # 决议最终目标类型 (Inference Policy)
                 sym = self.symbol_table.symbols.get(var_name)
@@ -1439,6 +1460,10 @@ class SemanticAnalyzer:
                             f"but got '{right_type.name}'",
                             node, code="SEM_003",
                         )
+            elif op in ("is", "is not"):
+                # 身份检测运算符：始终有效，返回 bool。
+                # 不调度到公理方法，身份比较是语言内核语义。
+                pass
             else:
                 res = self.registry.resolve_op(left_type, op, right_type)
                 if not res:
