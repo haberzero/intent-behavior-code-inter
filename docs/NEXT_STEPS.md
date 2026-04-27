@@ -144,11 +144,125 @@ Step 4b（完成）
     └──→ Step 8（文档化，随时可做）
 ```
 
-**下一优先路径**：Step 9（CPS 调度循环）→ Step 10（LLM 流水线，含 10a/10b/10c 三阶段）→ Step 11（多 Interpreter 并发）→ Step 12（可移植性参考实现）
+**下一优先路径**：Step 9（CPS 调度循环）→ Step 10（LLM 流水线，含 10a/10b/10c 三阶段）→ Step 11（多 Interpreter 并发）→ Step 12（可移植性参考实现）→ **Step 12.5（fn 参数化 lambda/snapshot 新语法 + IbCell 机制）**
 
 ---
 
-## 元组解包（tuple unpacking）现状记录 — 待改进项
+## Step 12.5：fn 参数化 lambda/snapshot 新语法 [P2 - 独立，可在 Step 9 之后推进]
+
+> **来源**：2026-04-27 架构讨论，用户已确认接受本方案。  
+> **前提**：Step 9（VM CPS 调度循环）完成后，或独立推进（无强依赖）。  
+> **关联**：`docs/PENDING_TASKS_VM.md` §10.6（IbCell 机制）、`docs/INTENT_SYSTEM_DESIGN.md` §9（延迟对象意图规则）。
+
+### 背景
+
+当前的 `lambda`/`snapshot` 语法（`TYPE lambda NAME = EXPR`）存在以下问题：
+1. **不支持参数传递**：延迟对象调用时不能传入参数，表达能力受限（见 `docs/PENDING_TASKS.md` §4.3）
+2. **变量捕获语义不明确**：自由变量通过 `captured_scope` 引用捕获，未引入 `IbCell` 机制，不满足词法闭包正式语义（见 `docs/PENDING_TASKS_VM.md` §10.2）
+3. **声明风格与 fn 关键字不对齐**：旧语法 `TYPE lambda NAME = EXPR` 与 `fn NAME = FUNC_REF` 风格不一致
+
+**本 Step 的目标**：用新的统一 `fn` 声明语法替代旧语法，同时引入参数传递能力和明确的捕获语义。
+
+---
+
+### 新语法规范
+
+#### 无参数形式（替代当前 `auto/TYPE lambda NAME = EXPR`）
+
+```ibci
+# 无参 lambda：捕获自由变量的 cell，调用时 deref 最新值
+fn my_fn = lambda(n * 2)
+
+# 无参 snapshot：定义时对自由变量值拷贝，定义时对意图栈 fork，结果缓存
+fn my_fn = snapshot(n * 2)
+
+# 带返回类型标注
+fn int my_fn = lambda(n * 2)
+fn str my_fn = snapshot(@~ 翻译 $text ~)
+```
+
+#### 有参数形式（新增）
+
+```ibci
+# 带参 lambda（词法闭包 + 参数）
+fn int my_fn = lambda(int x)(x + n)
+# 含义：每次调用传入 int x；n 是自由变量，cell 捕获；返回 x + current(n)
+
+# 带参 snapshot（冻结闭包 + 参数）
+fn int my_fn = snapshot(int x)(x + n)
+# 含义：每次调用传入 int x；n 在定义时值拷贝为常量；返回 x + frozen(n)
+
+# 带参 behavior（意图规则见 §9）
+fn str translate = lambda(str text)(@~ 翻译 $text ~)
+fn str translate = snapshot(str text)(@~ 翻译 $text ~)
+```
+
+#### 多行函数体形式
+
+```ibci
+fn int my_fn = lambda(int x):
+    int doubled = x * 2
+    return doubled + n        # n 是 cell 捕获的自由变量
+
+fn int my_fn = snapshot(int x):
+    return x + n              # n 在定义时已被冻结
+```
+
+#### 高阶函数示例
+
+```ibci
+# 工厂函数：返回 lambda 闭包
+func make_formatter(str prefix) -> fn:
+    fn str result = lambda(str s)(prefix + ": " + s)
+    # prefix 是 cell 捕获，s 是参数
+    return result
+
+fn str fmt = make_formatter("INFO")
+str msg = fmt("hello")    # → "INFO: hello"
+```
+
+---
+
+### 与旧语法的对比
+
+| 旧语法 | 新语法 | 说明 |
+|--------|--------|------|
+| `int lambda f = @~ ... ~` | `fn int f = lambda()(@~ ... ~)` | 无参 lambda + behavior |
+| `str snapshot b = @~ ... ~` | `fn str b = snapshot()(@~ ... ~)` | 无参 snapshot + behavior |
+| `auto lambda lazy = x + 5` | `fn lazy = lambda(x + 5)` | 无参 lambda + 普通表达式 |
+| `auto snapshot cached = x + 5` | `fn cached = snapshot(x + 5)` | 无参 snapshot + 普通表达式 |
+| `fn f = my_func`（现有，不变） | `fn f = my_func`（保持不变） | 函数引用赋值，不变 |
+
+---
+
+### 实现任务清单
+
+1. **词法分析器**：`lambda`/`snapshot` 关键字已有，确认与新语法解析路径兼容
+2. **语法解析器**：
+   - 新增 `fn` 声明中识别 `= lambda(...)` / `= snapshot(...)` 形式
+   - 区分无参形式 `lambda(EXPR)` 和有参形式 `lambda(PARAMS)(BODY)`
+   - 支持多行块形式 `lambda(PARAMS):\n BODY`
+3. **语义分析器**：
+   - 分析自由变量并标注 Cell 变量（SC-2）
+   - 在 `closure` 字典中记录 Cell 引用（SC-4）
+   - 区分 `lambda`（cell 捕获）和 `snapshot`（值拷贝）的自由变量处理方式
+4. **运行时**：
+   - 引入 `IbCell` 类型（`docs/PENDING_TASKS_VM.md` §10.6）
+   - 更新 `IbDeferred.call()` / `IbBehavior.call()` 支持参数传递
+   - 更新意图上下文交互（`docs/INTENT_SYSTEM_DESIGN.md` §9）
+5. **测试**：
+   - 重写 `tests/e2e/test_e2e_deferred.py` 中已注释的旧语法测试
+   - 补充参数传递、Cell 生命周期、意图交互的新测试
+
+---
+
+### 旧语法的废弃路径
+
+1. Step 12.5 **实现阶段**：新旧语法并存，旧语法输出 `DEP_001` 废弃警告
+2. Step 12.5 **稳定后**：旧语法产生 `PAR_001` 解析错误，正式移除
+3. 已注释的旧语法测试（`test_e2e_deferred.py`）在新语法稳定后重写
+
+---
 
 > **来源**：2026-04-27 实测核实。
 

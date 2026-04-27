@@ -595,11 +595,15 @@ for @~ $count 小于 3 吗？只回答 1 或 0 ~:
 
 ### 7.4 延迟执行行为
 
-#### lambda
+> ⚠️ **语法变更通知**：本节描述的 `TYPE lambda NAME = EXPR` / `TYPE snapshot NAME = EXPR` 语法为**当前（旧）语法**，将在 Step 12.5 中被新的 `fn` 参数化语法替代。  
+> 新语法规范见 `docs/NEXT_STEPS.md` Step 12.5；意图栈交互完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9。
 
-延迟执行，调用时使用调用处的当前意图上下文：
+#### lambda（当前语法，待废弃）
+
+延迟执行，每次调用时使用**调用处**的当前意图上下文（调用处意图完全敏感）：
 
 ```ibci
+# [当前语法 - 待废弃，将被 fn 语法替代]
 int lambda compute = @~ 根据 $x 计算一个结果 ~
 # 此时不会执行 LLM 调用
 
@@ -607,24 +611,53 @@ int x = 5
 int result = compute()   # 调用时触发 LLM，使用当前 x 和意图栈
 ```
 
-#### snapshot
+**lambda 意图语义**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9.4）：
+- 定义时**不捕获**任何意图上下文
+- 调用时使用调用处的持久意图栈（`@+` 累积）和一次性意图（`@` smear）
+- 作为高阶函数参数传出后，调用时使用的仍是**调用点**的意图栈（不是定义处）
 
-延迟执行，定义时深拷贝当前意图栈（与 lambda 的区别在于意图栈的捕获时机）：
+#### snapshot（当前语法，待废弃）
+
+延迟执行，定义时对当前意图栈进行 `fork()` 快照（与 lambda 的区别在于意图冻结）：
 
 ```ibci
+# [当前语法 - 待废弃，将被 fn 语法替代]
 @+ 聚焦于正面回答
 str snapshot handler = @~ 根据 $context 生成回复 ~
 @-   # 移除刚才添加的意图
 
-# handler 持有定义时的意图栈快照，调用时不受后续意图变化影响
+# handler 持有定义时的意图栈快照，调用时绝对不受后续意图变化影响
 str reply = handler()
 ```
 
-| 关键字 | 语义 | 意图栈 |
+**snapshot 意图语义**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9.3）：
+- 定义时 `fork()` 当时的完整意图上下文，存储为 `frozen_intent_ctx`
+- 调用时**绝对忽略**调用处的所有意图（持久栈、`@` smear、`@!` 排他）
+- `snapshot` 是 IBCI 中唯一"确定无状态、确定可重入"的延迟对象
+
+| 关键字 | 语义 | 意图栈（完整规则见 §9） |
 |--------|------|--------|
-| `lambda` | 延迟 | 调用时的意图栈 |
-| `snapshot` | 延迟 | 定义时的意图栈快照 |
+| `lambda` | 延迟，调用时执行 | 调用时的意图栈（完全敏感） |
+| `snapshot` | 延迟，定义时冻结意图 | 定义时的意图栈快照（完全免疫调用处意图） |
 | 无关键字（即时） | 立即执行 | 执行时的意图栈 |
+
+#### 新语法预览（Step 12.5，计划中）
+
+```ibci
+# 无参 lambda（替代 "auto lambda NAME = EXPR"）
+fn my_fn = lambda(x + 5)
+fn int my_fn = lambda()(@~ 根据 $x 计算 ~)
+
+# 带参 lambda（新增）
+fn int my_fn = lambda(int x)(x + n)
+
+# 无参 snapshot（替代 "auto snapshot NAME = EXPR"）
+fn my_fn = snapshot(x + 5)
+fn str my_fn = snapshot()(@~ 根据 $context 生成回复 ~)
+
+# 带参 snapshot（新增）
+fn str my_fn = snapshot(str text)(@~ 翻译 $text ~)
+```
 
 ---
 

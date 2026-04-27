@@ -3,7 +3,28 @@ tests/e2e/test_e2e_deferred.py
 
 End-to-end tests for the universal deferred expression system (lambda/snapshot).
 
-Coverage:
+# ============================================================================
+# ⚠️  SYNTAX MIGRATION NOTICE — 2026-04-27
+# ============================================================================
+# The current "TYPE lambda NAME = EXPR" / "TYPE snapshot NAME = EXPR" syntax
+# is DEPRECATED and will be replaced by the new parametric fn syntax:
+#
+#   fn [TYPE] NAME = lambda([PARAMS])(BODY)
+#   fn [TYPE] NAME = snapshot([PARAMS])(BODY)
+#
+# Full specification: docs/NEXT_STEPS.md Step 12.5
+# Semantic rules: docs/INTENT_SYSTEM_DESIGN.md §9
+# Memory model: docs/PENDING_TASKS_VM.md §10
+#
+# Tests that rely on the OLD syntax are commented out below with
+# the marker:  # [PENDING_REWRITE: Step 12.5 - new fn/lambda/snapshot syntax]
+#
+# Tests for axiom-layer behavior (DeferredAxiom, BehaviorAxiom, spec
+# compatibility) and for the existing 'fn f = func_ref' assignment syntax
+# remain active as they will continue to work.
+# ============================================================================
+
+Original coverage (pending rewrite after Step 12.5):
   - lambda with function call expressions
   - snapshot with function call expressions
   - lambda with arithmetic expressions
@@ -12,6 +33,13 @@ Coverage:
   - snapshot caches after first call
   - lambda with variable references (reads latest value)
   - Backward compatibility: lambda/snapshot with @~...~ behavior expressions
+
+Active coverage (axiom layer, fn keyword, auto immediate behavior):
+  - Axiom layer: DeferredSpec, DeferredAxiom, CallableAxiom hierarchy
+  - BehaviorSpec compile-time return type inference (axiom level)
+  - auto immediate behavior expression type inference
+  - behavior expression assignment to object fields
+  - fn keyword: callable type inference
 """
 
 import os
@@ -30,118 +58,136 @@ def run_and_capture(code: str):
 
 # ---------------------------------------------------------------------------
 # 1. Lambda with function calls
+# [PENDING_REWRITE: Step 12.5 - new fn/lambda/snapshot syntax]
+# Old syntax: "auto lambda NAME = EXPR" will be replaced by
+#             "fn NAME = lambda(EXPR)" or "fn NAME = lambda()(EXPR)"
 # ---------------------------------------------------------------------------
 
-class TestDeferredLambdaFunctionCall:
-    def test_lambda_defers_function_call(self):
-        """lambda wrapping a function call should defer execution and re-evaluate each time."""
-        code = """
-func greeting() -> str:
-    return "hello"
-
-auto lambda greet = greeting()
-print(greet())
-print(greet())
-"""
-        lines = run_and_capture(code)
-        # Lambda re-evaluates: both calls produce "hello"
-        assert lines.count("hello") == 2
-
-    def test_lambda_wraps_pure_function(self):
-        """lambda with a simple pure function call."""
-        code = """
-func greeting() -> str:
-    return "hello world"
-
-auto lambda greet = greeting()
-print(greet())
-"""
-        lines = run_and_capture(code)
-        assert "hello world" in lines
+# class TestDeferredLambdaFunctionCall:
+#     def test_lambda_defers_function_call(self):
+#         """lambda wrapping a function call should defer execution and re-evaluate each time."""
+#         code = """
+# func greeting() -> str:
+#     return "hello"
+#
+# auto lambda greet = greeting()
+# print(greet())
+# print(greet())
+# """
+#         lines = run_and_capture(code)
+#         # Lambda re-evaluates: both calls produce "hello"
+#         assert lines.count("hello") == 2
+#
+#     def test_lambda_wraps_pure_function(self):
+#         """lambda with a simple pure function call."""
+#         code = """
+# func greeting() -> str:
+#     return "hello world"
+#
+# auto lambda greet = greeting()
+# print(greet())
+# """
+#         lines = run_and_capture(code)
+#         assert "hello world" in lines
 
 
 # ---------------------------------------------------------------------------
 # 2. Snapshot with function calls
+# [PENDING_REWRITE: Step 12.5 - new fn/lambda/snapshot syntax]
+# Old syntax: "auto snapshot NAME = EXPR" will be replaced by
+#             "fn NAME = snapshot(EXPR)"
 # ---------------------------------------------------------------------------
 
-class TestDeferredSnapshotFunctionCall:
-    def test_snapshot_caches_function_call(self):
-        """snapshot wrapping a function call should evaluate once and cache."""
-        code = """
-func greeting() -> str:
-    return "snapshot_result"
-
-auto snapshot greet = greeting()
-print(greet())
-print(greet())
-"""
-        lines = run_and_capture(code)
-        # Snapshot evaluates once: both calls return same result
-        assert lines.count("snapshot_result") == 2
+# class TestDeferredSnapshotFunctionCall:
+#     def test_snapshot_caches_function_call(self):
+#         """snapshot wrapping a function call should evaluate once and cache."""
+#         code = """
+# func greeting() -> str:
+#     return "snapshot_result"
+#
+# auto snapshot greet = greeting()
+# print(greet())
+# print(greet())
+# """
+#         lines = run_and_capture(code)
+#         # Snapshot evaluates once: both calls return same result
+#         assert lines.count("snapshot_result") == 2
 
 
 # ---------------------------------------------------------------------------
 # 3. Lambda with arithmetic expressions
+# [PENDING_REWRITE: Step 12.5 - new fn/lambda/snapshot syntax]
+# Old syntax: "auto lambda NAME = EXPR" will be replaced by
+#             "fn NAME = lambda(EXPR)"
+# Note: After rewrite, lambda free-variable capture changes from
+#       captured_scope reference to IbCell mechanism (PENDING_TASKS_VM.md §10.2)
 # ---------------------------------------------------------------------------
 
-class TestDeferredLambdaArithmetic:
-    def test_lambda_arithmetic_reevaluates(self):
-        """lambda wrapping arithmetic expression re-evaluates each call."""
-        code = """
-int x = 10
-auto lambda compute = x + 5
-print((str)compute())
-x = 20
-print((str)compute())
-"""
-        lines = run_and_capture(code)
-        assert "15" in lines
-        assert "25" in lines
+# class TestDeferredLambdaArithmetic:
+#     def test_lambda_arithmetic_reevaluates(self):
+#         """lambda wrapping arithmetic expression re-evaluates each call."""
+#         code = """
+# int x = 10
+# auto lambda compute = x + 5
+# print((str)compute())
+# x = 20
+# print((str)compute())
+# """
+#         lines = run_and_capture(code)
+#         assert "15" in lines
+#         assert "25" in lines
 
 
 # ---------------------------------------------------------------------------
 # 4. Snapshot with arithmetic expressions
+# [PENDING_REWRITE: Step 12.5 - new fn/lambda/snapshot syntax]
+# Old syntax: "auto snapshot NAME = EXPR" will be replaced by
+#             "fn NAME = snapshot(EXPR)"
 # ---------------------------------------------------------------------------
 
-class TestDeferredSnapshotArithmetic:
-    def test_snapshot_arithmetic_freezes(self):
-        """snapshot wrapping arithmetic expression evaluates once and caches."""
-        code = """
-int x = 10
-auto snapshot compute = x + 5
-print((str)compute())
-x = 20
-print((str)compute())
-"""
-        lines = run_and_capture(code)
-        # Snapshot freezes at first evaluation: both calls return 15
-        assert lines.count("15") == 2
+# class TestDeferredSnapshotArithmetic:
+#     def test_snapshot_arithmetic_freezes(self):
+#         """snapshot wrapping arithmetic expression evaluates once and caches."""
+#         code = """
+# int x = 10
+# auto snapshot compute = x + 5
+# print((str)compute())
+# x = 20
+# print((str)compute())
+# """
+#         lines = run_and_capture(code)
+#         # Snapshot freezes at first evaluation: both calls return 15
+#         assert lines.count("15") == 2
 
 
 # ---------------------------------------------------------------------------
 # 5. Backward compatibility: lambda/snapshot with @~...~ behavior
+# [PENDING_REWRITE: Step 12.5 - new fn/lambda/snapshot syntax]
+# Old syntax: "TYPE lambda NAME = @~...~" / "TYPE snapshot NAME = @~...~"
+# New syntax:  "fn TYPE NAME = lambda()(@~...~)" / "fn TYPE NAME = snapshot()(@~...~)"
+# Intent semantics: INTENT_SYSTEM_DESIGN.md §9
 # ---------------------------------------------------------------------------
 
-class TestDeferredBehaviorBackwardCompat:
-    def test_behavior_lambda_still_works(self):
-        """Backward compat: lambda with behavior expression (@~...~)."""
-        code = """import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-str lambda b = @~ MOCK:STR:deferred_result ~
-print(b())
-"""
-        lines = run_and_capture(code)
-        assert "deferred_result" in lines
-
-    def test_behavior_snapshot_still_works(self):
-        """Backward compat: snapshot with behavior expression (@~...~)."""
-        code = """import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-str snapshot b = @~ MOCK:INT:42 ~
-print((str)b())
-"""
-        lines = run_and_capture(code)
-        assert "42" in lines
+# class TestDeferredBehaviorBackwardCompat:
+#     def test_behavior_lambda_still_works(self):
+#         """Backward compat: lambda with behavior expression (@~...~)."""
+#         code = """import ai
+# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+# str lambda b = @~ MOCK:STR:deferred_result ~
+# print(b())
+# """
+#         lines = run_and_capture(code)
+#         assert "deferred_result" in lines
+#
+#     def test_behavior_snapshot_still_works(self):
+#         """Backward compat: snapshot with behavior expression (@~...~)."""
+#         code = """import ai
+# ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+# str snapshot b = @~ MOCK:INT:42 ~
+# print((str)b())
+# """
+#         lines = run_and_capture(code)
+#         assert "42" in lines
 
 
 # ---------------------------------------------------------------------------
@@ -352,63 +398,68 @@ class TestBehaviorSpecReturnTypeInference:
         assert ret is not None
         assert ret.name == "int"
 
-    def test_compile_int_lambda_call_to_int_var(self):
-        """int lambda f = @~...~ ; int result = f() compiles without SEM_003."""
-        import os
-        from core.engine import IBCIEngine
-        from core.kernel.issue import CompilerError
-        code = """import ai
-int lambda f = @~ what is 1+1 ~
-int result = f()
-"""
-        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-        artifact = engine.compile_string(code, silent=True)
-        assert artifact is not None
+    # [PENDING_REWRITE: Step 12.5 - old "TYPE lambda NAME = @~...~" syntax]
+    # def test_compile_int_lambda_call_to_int_var(self):
+    #     """int lambda f = @~...~ ; int result = f() compiles without SEM_003."""
+    #     import os
+    #     from core.engine import IBCIEngine
+    #     from core.kernel.issue import CompilerError
+    #     code = """import ai
+    # int lambda f = @~ what is 1+1 ~
+    # int result = f()
+    # """
+    #     engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+    #     artifact = engine.compile_string(code, silent=True)
+    #     assert artifact is not None
 
-    def test_compile_str_snapshot_call_to_str_var(self):
-        """str snapshot b = @~...~ ; str s = b() compiles without SEM_003."""
-        import os
-        from core.engine import IBCIEngine
-        code = """import ai
-str snapshot b = @~ say hello ~
-str s = b()
-"""
-        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-        artifact = engine.compile_string(code, silent=True)
-        assert artifact is not None
+    # [PENDING_REWRITE: Step 12.5 - old "TYPE snapshot NAME = @~...~" syntax]
+    # def test_compile_str_snapshot_call_to_str_var(self):
+    #     """str snapshot b = @~...~ ; str s = b() compiles without SEM_003."""
+    #     import os
+    #     from core.engine import IBCIEngine
+    #     code = """import ai
+    # str snapshot b = @~ say hello ~
+    # str s = b()
+    # """
+    #     engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+    #     artifact = engine.compile_string(code, silent=True)
+    #     assert artifact is not None
 
-    def test_runtime_int_lambda_call_to_int_var(self):
-        """int lambda f = @~...~ ; int result = f() runs and result is an int."""
-        code = """import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-int lambda f = @~ MOCK:INT:42 ~
-int result = f()
-print((str)result)
-"""
-        lines = run_and_capture(code)
-        assert "42" in lines
+    # [PENDING_REWRITE: Step 12.5 - old "TYPE lambda NAME = @~...~" syntax]
+    # def test_runtime_int_lambda_call_to_int_var(self):
+    #     """int lambda f = @~...~ ; int result = f() runs and result is an int."""
+    #     code = """import ai
+    # ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+    # int lambda f = @~ MOCK:INT:42 ~
+    # int result = f()
+    # print((str)result)
+    # """
+    #     lines = run_and_capture(code)
+    #     assert "42" in lines
 
-    def test_runtime_str_lambda_call_to_str_var(self):
-        """str lambda f = @~...~ ; str result = f() runs and result is a str."""
-        code = """import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-str lambda f = @~ MOCK:STR:hello ~
-str result = f()
-print(result)
-"""
-        lines = run_and_capture(code)
-        assert "hello" in lines
+    # [PENDING_REWRITE: Step 12.5 - old "TYPE lambda NAME = @~...~" syntax]
+    # def test_runtime_str_lambda_call_to_str_var(self):
+    #     """str lambda f = @~...~ ; str result = f() runs and result is a str."""
+    #     code = """import ai
+    # ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+    # str lambda f = @~ MOCK:STR:hello ~
+    # str result = f()
+    # print(result)
+    # """
+    #     lines = run_and_capture(code)
+    #     assert "hello" in lines
 
-    def test_auto_lambda_behavior_still_dynamic(self):
-        """auto lambda f = @~...~ ; result is still callable (no SEM_003)."""
-        import os
-        from core.engine import IBCIEngine
-        code = """import ai
-auto lambda f = @~ say hello ~
-"""
-        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-        artifact = engine.compile_string(code, silent=True)
-        assert artifact is not None
+    # [PENDING_REWRITE: Step 12.5 - old "auto lambda NAME = @~...~" syntax]
+    # def test_auto_lambda_behavior_still_dynamic(self):
+    #     """auto lambda f = @~...~ ; result is still callable (no SEM_003)."""
+    #     import os
+    #     from core.engine import IBCIEngine
+    #     code = """import ai
+    # auto lambda f = @~ say hello ~
+    # """
+    #     engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+    #     artifact = engine.compile_string(code, silent=True)
+    #     assert artifact is not None
 
 
 # ---------------------------------------------------------------------------

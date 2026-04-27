@@ -203,16 +203,20 @@ for str item in items:
 
 ### 延迟行为（lambda / snapshot）
 
+> ⚠️ **语法变更通知**：本节描述的旧语法（`TYPE lambda NAME = EXPR`）将在 Step 12.5 中被新的 `fn` 参数化语法替代。  
+> 新语法规范见 `docs/NEXT_STEPS.md` Step 12.5。
+
 使用 `lambda` 或 `snapshot` 关键字声明**延迟执行**的行为或表达式：
 
 | 关键字 | 语义 | 意图栈时机 |
 |--------|------|-----------|
-| `lambda` | 调用时执行 | 使用**调用时刻**的意图栈 |
-| `snapshot` | 定义时捕获，调用时执行 | 使用**定义时刻**的意图栈快照 |
+| `lambda` | 调用时执行 | 使用**调用时刻**的意图栈（调用处完全敏感） |
+| `snapshot` | 定义时冻结，调用时执行 | 使用**定义时刻**的意图栈快照（调用处完全免疫） |
 
-#### 语法
+#### 语法（当前旧语法，待废弃）
 
 ```ibci
+# [当前语法 - 待废弃，将被 fn 语法替代]
 # 变量声明语法：<type> lambda <name> = <expr>
 int lambda compute = @~ 计算一个随机数 ~
 
@@ -225,9 +229,11 @@ int snapshot cached = @~ 生成一个偶数 ~
 
 #### 意图栈时机
 
-`lambda` 和 `snapshot` 的核心区别在于**意图（`@+`/`@-`）何时绑定**：
+`lambda` 和 `snapshot` 的核心区别在于**意图（`@+`/`@-`）何时绑定**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9）：
 
 ```ibci
+# [当前语法 - 待废弃]
+
 # lambda：每次调用时才执行，使用调用时的意图栈
 int lambda compute = @~ 计算一个随机数 ~
 
@@ -237,32 +243,50 @@ int result1 = compute()    # 受 @+ 意图影响
 @- 结果必须是正数
 int result2 = compute()    # @+ 已移除，意图栈已改变
 
-# snapshot：定义时捕获意图栈快照
+# snapshot：定义时捕获意图栈快照（之后任何意图变化对其无效）
 @+ 结果必须是偶数
 int snapshot cached = @~ 生成一个偶数 ~
 @- 结果必须是偶数            # 移除意图
 int result3 = cached()     # 仍使用定义时的快照意图（"结果必须是偶数"）
 ```
 
-#### 延迟任意表达式
-
-`lambda`/`snapshot` 不局限于行为描述，任意表达式均可延迟：
+#### 延迟任意表达式（当前旧语法，待废弃）
 
 ```ibci
+# [当前语法 - 待废弃]
 int a = 3
 int b = 4
 auto lambda lazy_add = a + b      # 定义时不求值
 int val = lazy_add()              # 调用时才真正计算 a + b
 ```
 
-#### 调用语法
+#### 调用语法（当前旧语法）
 
-延迟变量通过 `()` 调用，**不接受参数**：
+延迟变量通过 `()` 调用，**不接受参数**（新语法将支持参数传递）：
 
 ```ibci
+# [当前语法 - 待废弃]
 int lambda f = @~ 返回一个整数 ~
 int x = f()    # 正确
-# int y = f(1) # 错误：延迟表达式不接受参数
+# int y = f(1) # 错误：当前延迟表达式不接受参数
+```
+
+#### 新语法预览（Step 12.5，计划中）
+
+```ibci
+# 无参 lambda（替代旧 "auto lambda NAME = EXPR"）
+fn int compute = lambda()(@~ 计算一个随机数 ~)
+fn lazy_add = lambda(a + b)
+
+# 带参 lambda（新增能力）
+fn int add_n = lambda(int x)(x + n)
+str result = add_n(5)
+
+# 无参 snapshot（替代旧 "auto snapshot NAME = EXPR"）
+fn int cached = snapshot()(@~ 生成一个偶数 ~)
+
+# 带参 snapshot（新增能力）
+fn str translate = snapshot(str text)(@~ 翻译 $text ~)
 ```
 
 #### 类型
@@ -274,7 +298,7 @@ callable  →  deferred  →  behavior
 （可调用）   （延迟执行）  （LLM 行为）
 ```
 
-变量声明时的类型标注（如 `int lambda f = ...`）表示**调用时返回值的期望类型**，不影响变量本身的 `deferred` 类型。
+变量声明时的类型标注（如 `fn int f = lambda(...)`）表示**调用时返回值的期望类型**，不影响变量本身的 `deferred` 类型。
 
 ---
 
@@ -964,8 +988,11 @@ str answer = @~ 请回答 ~
 llmexcept:
     retry "请提供更清晰的回答"
 
-# 延迟行为
-int lambda lazy = @~ 计算结果 ~   # 调用时执行，用调用时意图栈
-int snapshot fixed = @~ 计算 ~    # 调用时执行，用定义时意图栈快照
-int val = lazy()
+# 延迟行为（旧语法，待废弃，将被 fn 语法替代，见 docs/NEXT_STEPS.md Step 12.5）
+# int lambda lazy = @~ 计算结果 ~   # 旧语法：调用时执行，用调用时意图栈
+# int snapshot fixed = @~ 计算 ~    # 旧语法：调用时执行，用定义时意图栈快照
+# int val = lazy()
+# 新语法（计划中）：
+# fn int lazy = lambda()(@~ 计算结果 ~)
+# fn int fixed = snapshot()(@~ 计算 ~)
 ```
