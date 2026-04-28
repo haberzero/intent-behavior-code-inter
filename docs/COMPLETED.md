@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-28（代码债务清理 H1/H2/H3/M1：删除 `_captured_scope` 僵尸字段、修复 `DeferredAxiom.is_compatible`、移除 closure 解包死分支；780 个测试通过）
+> **最后更新**：2026-04-28（M3b 控制信号数据化 + M5a DDG 编译期分析；867 个测试通过）
 
 ---
 
@@ -603,6 +603,111 @@ for sym_uid, (name, cell) in self.closure.items():
 
 ### 10.6 后续里程碑
 
-* **M3b**：把 `ControlSignalException` 替换为 `VMTaskResult.SIGNAL` 数据对象；调度循环显式拦截信号
+* **M3b**：把 `ControlSignalException` 替换为 `VMTaskResult.SIGNAL` 数据对象；调度循环显式拦截信号 ✅ — 见 §十一
 * **M3c**：把 `LLMExceptFrame` retry 循环纳入调度器（用 `task.locals['snapshot']` 保存重试位点）
 * **M3d**：把 `Interpreter.visit()` 主路径切换到 VMExecutor，全部节点纳入 CPS 调度，删除递归路径与 `ControlSignalException` 过渡类
+
+---
+
+## 十一、M3b：控制信号数据化 [✅ COMPLETED — 2026-04-28]
+
+把 VM 内部的控制流（`return` / `break` / `continue`）从 Python 原生异常机制
+（`ControlSignalException`）迁移为显式 **数据对象** `Signal(kind, value)`，
+作为生成器协程的 `StopIteration.value` 沿帧栈传递。
+
+### 11.1 核心数据对象 `Signal`
+
+* `core/runtime/vm/task.py`：新增 `@dataclass(frozen=True) class Signal { kind: ControlSignal; value: Any }`
+* `ControlSignalException.from_signal(sig)` 类方法：从 Signal 构造异常（边界兼容）
+* 公开导出：`from core.runtime.vm import Signal, ControlSignal, ControlSignalException`
+
+### 11.2 Handler 协议改造
+
+| Handler | M3a（旧） | M3b（新） |
+|---------|-----------|-----------|
+| `vm_handle_IbReturn` | `raise ControlSignalException(RETURN, v)` | `return Signal(RETURN, v)` |
+| `vm_handle_IbBreak` | `raise CSE(BREAK)` | `return Signal(BREAK)` |
+| `vm_handle_IbContinue` | `raise CSE(CONTINUE)` | `return Signal(CONTINUE)` |
+| `vm_handle_IbModule` | 直接 `yield stmt_uid` | 检查 `isinstance(res, Signal)`，是则 `return res` 透传 |
+| `vm_handle_IbIf` | 同上 | 同上 |
+| `vm_handle_IbWhile` | `try/except CSE` 拦截 BREAK/CONTINUE | 检查 Signal：BREAK 跳出、CONTINUE 跳到下一轮、其他 `return res` 透传 |
+
+### 11.3 调度器改造（`vm_executor.py`）
+
+* `StopIteration.value` 是 `Signal` 时：作为 `pending_value` 传给父帧（父 handler 通过 `gen.send(Signal)` 接收）
+* 顶层栈空仍持有未消费 Signal：包装为 `ControlSignalException` 抛给调用者（**保留**与既有 `pytest.raises(ControlSignalException)` 测试合约的兼容）
+* `fallback_visit()` 路径产生的旧 `ControlSignalException`（来自递归解释器 `ReturnException` 等）继续沿帧栈传播
+
+### 11.4 测试覆盖（22 个新增 + 49 个 M3a 全部回归）
+
+* `tests/unit/test_vm_executor_signals.py`：
+  - **Signal 数据形态**（5 测试）：frozen / 携带 value / 等价 / kinds 互斥 / repr
+  - **Handler 不再 raise**（3 测试）：IbBreak / IbContinue / IbReturn 通过 `return Signal(...)` 触发 `StopIteration.value`
+  - **顶层逸出**（4 测试）：循环外 break/continue 转 CSE / return 携带 value / return 无值
+  - **while 消费**（3 测试）：BREAK 终止循环 / CONTINUE 跳过剩余 / 嵌套 if 中 break
+  - **非循环容器透传**（3 测试）：IbIf 透传 BREAK / IbIf 内 break 不执行后续语句 / else 分支 break
+  - **无异常路径**（2 测试）：循环内 BREAK/CONTINUE 被消费时 `run()` 不抛异常
+  - **CSE 边界转换器**（2 测试）：`from_signal` 保留 kind/value
+* 总测试数 829 → 851
+
+### 11.5 设计要点
+
+* **不变性**：`Signal` 用 `frozen=True` 防止帧间被误改
+* **零额外开销**：消费帧通过 `isinstance(res, Signal)` 单测试即可识别；非控制流场景零开销
+* **可逆兼容**：`ControlSignalException` 保留作为**边界封装**类型，使外部测试与 fallback 路径无需改动；后续 M3d 完成全部节点 CPS 化后才能彻底删除
+
+---
+
+## 十二、M5a：DDG 编译期分析（BehaviorDependencyAnalyzer）[✅ COMPLETED — 2026-04-28]
+
+为支撑后续 M5b/M5c 的 LLM 并行调度，在语义分析阶段对每个 `IbBehaviorExpr`
+计算其上游依赖图（DDG = Dynamic-host Dependency Graph）。
+
+### 12.1 AST 字段扩展
+
+`core/kernel/ast.py::IbBehaviorExpr`：
+
+```python
+llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)
+dispatch_eligible: bool = True
+```
+
+* `llm_deps`：本节点求值依赖的上游 `IbBehaviorExpr` 节点（按 AST 出现顺序、去重）
+* `dispatch_eligible`：是否可在 LLM 调度阶段被独立 dispatch（True：DAG / False：参与依赖环）
+
+### 12.2 BehaviorDependencyAnalyzer Pass
+
+`core/compiler/semantic/passes/behavior_dependency_analyzer.py`（新文件，240 行）：
+
+1. **第一轮**：前序 AST 遍历，维护 `id(symbol) → IbBehaviorExpr` 映射
+   - 遇到 `IbAssign(targets=[t], value=IbBehaviorExpr | IbCastExpr(IbBehaviorExpr) | IbTypeAnnotatedExpr(IbBehaviorExpr))` 时把所有 LHS Symbol 注册为该上游 behavior 的来源
+   - 遇到 `IbBehaviorExpr` 时扫描 `segments` 中的 `$var` 插值（被解析为 `IbName`），通过 `side_table.get_symbol(name_node)` 找到 Symbol 并查表
+   - 元组解包目标 / `IbTypeAnnotatedExpr` 包装目标都正确处理
+2. **第二轮**：基于 Tarjan SCC 分析 `llm_deps` 图；含多元素或自环的 SCC 内所有节点 `dispatch_eligible = False`，其余保持默认 `True`
+
+### 12.3 流水线集成
+
+`SemanticAnalyzer.analyze()` 新增 **Pass 5**（在 Pass 4 深度检查之后），仅在前序 Pass 无错误时运行，避免半绑定状态产生噪音误差。
+
+### 12.4 序列化
+
+无需修改 `FlatSerializer._collect_node`：现有的 `_process_value` 自动把 `List[IbBehaviorExpr]` 转为 UID 列表，`bool` 字段直接存为 JSON 布尔值。运行时通过 `node_data.get("llm_deps")` / `node_data.get("dispatch_eligible")` 即可访问（不需要修改 `ArtifactRehydrator`，它只处理类型池）。
+
+### 12.5 测试覆盖（16 个新增）
+
+* `tests/unit/test_ddg_analysis.py`：
+  - **无依赖**（3 测试）：单 behavior / 两个独立 behavior / 引用普通整型变量
+  - **单依赖 / 链式 / 多源 / 去重**（4 测试）：A→B、A→B→C、{A,B}→C、A 引用两次只出现一次
+  - **重新赋值保守**（1 测试）：覆盖为字面量后保留 ≤1 个依赖（保守近似，安全可靠）
+  - **dispatch_eligible**（3 测试）：DAG 全 True / 人工互依赖环 False / 自环 False
+  - **跨函数保守**（1 测试）：函数返回值不会被识别为 behavior 来源
+  - **序列化**（1 测试）：`FlatSerializer` 输出含 UID 列表 + `dispatch_eligible: True`
+  - **嵌套调用**（1 测试）：`print(@~direct $a~)` 中的 behavior 也参与依赖解析
+  - **AST 默认值合约**（2 测试）：每个实例独立 `llm_deps=[]`、`dispatch_eligible=True`
+* 总测试数 851 → **867**
+
+### 12.6 后续
+
+* **M5b**：基于 `dispatch_eligible == True` 的 behaviors 在调度器中并行 dispatch
+* **M5c**：把 DDG 与 VMExecutor 帧栈结合，做拓扑排序的依赖等待
+* **跨函数追溯**（DEFERRED）：当前实现仅在同作用域内追溯；未来可能扩展到跨函数返回值传播

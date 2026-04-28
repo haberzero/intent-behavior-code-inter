@@ -104,11 +104,28 @@ target_uid = self.body_uid if self.body_uid else self.node_uid
 
 ---
 
+### [C5] `ControlSignalException` 边界封装类删除（M3b 完成后引入）
+**文件**：`core/runtime/vm/task.py::ControlSignalException`  
+**当前状态**：M3b 已经把 VM 内部的控制流迁移为 `Signal(kind, value)` 数据对象；但 `ControlSignalException` 作为**边界封装**保留：
+1. `VMExecutor.run()` 在顶层栈空仍持有 Signal 时包装为 CSE 抛给调用者
+2. `fallback_visit()` 路径中递归解释器抛出的 `ReturnException`/`BreakException`/`ContinueException` 仍会被捕获并转 CSE 沿帧栈传播
+3. 现有外部测试 `pytest.raises(ControlSignalException)` 依赖该类型
+
+**目标**：M3d 完成（全部节点 CPS 化、`Interpreter.visit()` 主路径切换到 VMExecutor）后：
+1. 删除 `fallback_visit` 中的 `ReturnException`/`BreakException`/`ContinueException` → CSE 转换路径
+2. 删除 `VMExecutor.run()` 顶层 Signal → CSE 包装路径，调用方直接处理 Signal
+3. 把 `ControlSignalException` 类彻底删除；`from_signal()` 也一并移除
+4. 调整使用 `pytest.raises(ControlSignalException)` 的测试为检查 `Signal` 数据对象
+
+**风险**：M3d 之前删除会破坏现有 `IbCall` / `IbFunctionDef` 的 RETURN 语义，因为这两个节点尚未 CPS 化。
+
+---
+
 ## 三、PR 操作建议
 
-1. **顺序**：建议在 M3b + M5a 主线 PR 合并之后，把 L1–L4 + C1–C4 集中到一个独立的 **"chore: deferred cleanup (L1–L4 + C1–C4)"** PR。
+1. **顺序**：建议在 M3b + M5a 主线 PR 合并之后，把 L1–L4 + C1–C4 集中到一个独立的 **"chore: deferred cleanup (L1–L4 + C1–C4)"** PR。**C5 必须等 M3d 完成后**作为后续 PR 处理。
 2. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
-3. **测试基线**：以 M3b/M5a 完成后的最新基线为准；若中间 M3c/M3d 已合并，以那时基线为准。
+3. **测试基线**：以 M3b/M5a 完成后的最新基线（**867 个测试**）为准；若中间 M3c/M3d 已合并，以那时基线为准。
 4. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）。
 
 ---

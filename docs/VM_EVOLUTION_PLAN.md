@@ -1,7 +1,7 @@
 # IBCI VM 演进总规划（Master Plan）
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
-> **基准状态**（2026-04-28）：**829 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**（`define()` fallback UID id-based + warning、snapshot 自由变量诊断、`to_native()` 抛错、`iter_cells()` 上提至 Scope 协议）；**M3b/M5a 待开工**（当前优先路径），M3c/M3d/M4/M5b/M5c/M6 待推进。  
+> **基准状态**（2026-04-28）：**867 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M5a 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架 + 控制信号数据化 + DDG 编译期分析）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**（`define()` fallback UID id-based + warning、snapshot 自由变量诊断、`to_native()` 抛错、`iter_cells()` 上提至 Scope 协议）；**M3c/M5b 待开工**（当前优先路径），M3d/M4/M5c/M6 待推进。  
 > **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  
 > **关联文档**：`docs/PENDING_TASKS_VM.md`（详细设计）、`docs/NEXT_STEPS.md`（近期任务）、`docs/COMPLETED.md`（已完成记录）。
@@ -50,7 +50,7 @@ visit(node_uid)
 ### 1.4 测试基线
 
 ```
-python3 -m pytest tests/ -q --tb=short   # 829 passed（2026-04-28，M3a + URGENT_ISSUES 中优清理后）
+python3 -m pytest tests/ -q --tb=short   # 867 passed（2026-04-28，M3b + M5a 完成后）
 ```
 
 每个 Milestone 完成后必须以此命令验证测试不退化。
@@ -60,8 +60,8 @@ python3 -m pytest tests/ -q --tb=short   # 829 passed（2026-04-28，M3a + URGEN
 ## 二、总体演进路线图
 
 ```
-已完成（Step 1–8 + M1 + M2 + M3a + fn declaration-side 语法 + URGENT_ISSUES 中优清理）
-  └─── 当前状态（基准：829 tests）
+已完成（Step 1–8 + M1 + M2 + M3a + M3b + M5a + fn declaration-side 语法 + URGENT_ISSUES 中优清理）
+  └─── 当前状态（基准：867 tests）
          │
          ├─── ✅ M1：fn 新语法 + IbCell（Step 12.5）                  [已完成 2026-04-28]
          │      │
@@ -69,21 +69,21 @@ python3 -m pytest tests/ -q --tb=short   # 829 passed（2026-04-28，M3a + URGEN
          │
          ├─── ✅ M3a：CPS 调度循环骨架（Step 9a）                      [已完成 2026-04-28]
          │      │
-         │      ├─── M3b：return/break/continue 迁移到 Signal（Step 9b）  ⏳ 当前任务
+         │      ├─── ✅ M3b：return/break/continue 迁移到 Signal（Step 9b）[已完成 2026-04-28]
          │      │      │
-         │      │      └─── M3c：llmexcept retry + intent fork 调度化（Step 9c）
+         │      │      └─── M3c：llmexcept retry + intent fork 调度化（Step 9c）⏳ 当前任务
          │      │
          │      └─── M4：Layer 2 多 Interpreter 并发（Step 11）     [依赖 M3a ✅]
          │
          └─── M5：LLM 流水线（Step 10a/10b/10c）                    [依赖 Step 6 ✅，可独立]
-                ├─── M5a：DDG 编译器分析                            ⏳ 当前任务
-                ├─── M5b：LLMScheduler                              [依赖 M5a]
+                ├─── ✅ M5a：DDG 编译器分析                          [已完成 2026-04-28]
+                ├─── M5b：LLMScheduler                              [依赖 M5a ✅] ⏳ 当前任务
                 └─── M5c：dispatch-before-use（依赖 M5b + M3c）
                        │
                        └─── M6：可移植性参考实现 + 并发行为测试套件（Step 12）[依赖 M3c + M4 + M5c]
 ```
 
-**当前优先路径**：M3b（CPS 控制信号数据化）+ M5a（DDG 编译器分析）并行推进 → M3c → M3d / M4 / M5b/M5c → M6
+**当前优先路径**：M3c（llmexcept retry / intent fork 调度化）+ M5b（LLMScheduler）并行推进 → M3d / M4 / M5c → M6
 
 ---
 
@@ -253,48 +253,23 @@ class VMTask:
 
 ---
 
-### M3b：return/break/continue/throw 迁移到 ControlSignal（Step 9b）
+### M3b：return/break/continue/throw 迁移到 ControlSignal（Step 9b）✅ COMPLETED — 2026-04-28
 
-**目标**：在 `VMExecutor` 中彻底消除 `ReturnException`/`BreakException`/`ContinueException`/`ThrownException`，改为显式 `ControlSignal` 数据对象在调度器循环中传播。
+**完成状态**：✅ 全部落地，851 个测试通过（829 + 22 新增信号专属测试）。详见 `docs/COMPLETED.md §十一`。
 
-**前提**：M3a 完成
+**实际实现摘要**：
 
-**核心改动**：
+* `core/runtime/vm/task.py` 新增 `Signal(kind, value)` frozen 数据类 + `ControlSignalException.from_signal()` 转换器
+* `core/runtime/vm/handlers.py` 中 `vm_handle_IbReturn` / `IbBreak` / `IbContinue` 改为 `return Signal(...)`；`IbModule` / `IbIf` 通过 `isinstance(res, Signal)` 透传；`IbWhile` 在循环帧消费 BREAK / CONTINUE
+* `core/runtime/vm/vm_executor.py` 调度循环：`StopIteration.value` 是 Signal 时通过 `gen.send(Signal)` 数据化向上传递；顶层栈空仍持有 Signal 时包装为 `ControlSignalException` 抛出（保持外部测试与 fallback 路径兼容）
+* 旧 `ControlSignalException` 类作为**边界封装**保留，未删除；M3d 全部节点 CPS 化后才能彻底移除
 
-旧实现（Python 异常）：
-```python
-# stmt_handler.py:709
-def visit_IbReturn(self, node_uid, node_data):
-    value = self.visit(node_data.get("value"))
-    raise ReturnException(value)
-```
+**与原计划差异**：
 
-新实现（ControlSignal）：
-```python
-# vm/handlers/control_handler.py
-def handle_IbReturn(task: VMTask, node_data: dict) -> VMTaskResult:
-    value_task = VMTask(node_data["value"], ...)
-    def on_value(v: IbObject):
-        task.signal(ControlSignal.RETURN, v)
-    value_task.continuation = on_value
-    return VMTaskResult.SUSPEND(value_task)
-```
-
-调度器循环中拦截 `ControlSignal`，沿帧栈向上传播直到找到对应的处理帧（函数帧拦截 `RETURN`，循环帧拦截 `BREAK`/`CONTINUE`，try 帧拦截 `THROW`）。
-
-**文件级修改清单**：
-
-| 文件 | 改动性质 |
-|------|---------|
-| `core/runtime/vm/task.py` | 添加 `ControlSignal` 枚举和 `task.signal()` 方法 |
-| `core/runtime/vm/vm_executor.py` | 在调度循环中添加 `ControlSignal` 传播逻辑；`FunctionCallFrame` 拦截 `RETURN`；`LoopFrame` 拦截 `BREAK`/`CONTINUE` |
-| `core/runtime/vm/handlers/control_handler.py` | 重写 `handle_IbReturn`/`handle_IbBreak`/`handle_IbContinue`/`handle_IbRaise` |
-| `core/runtime/exceptions.py` | 标注旧异常类为 `@deprecated("Use VMExecutor ControlSignal instead")`（不删除，旧 visit() 仍需要） |
-
-**出口契约（完成后）**：  
-- `VMExecutor` 中 return/break/continue/throw 不再依赖 Python 异常  
-- 678 个原有测试仍由旧 `visit()` 驱动，不退化  
-- `VMExecutor` 测试新增 ≥20 个控制流相关案例（包括嵌套 return、带 finally 的 throw 等）
+| 项目 | 原计划 | 实际实现 | 原因 |
+|------|--------|---------|------|
+| `task.signal()` 方法 | 在 VMTask 上挂 `signal()` | 改用纯数据 `Signal(kind, value)` 经 `StopIteration.value` 传递 | 与 Python 生成器协议天然契合，省去 frame-级状态机 |
+| `FunctionCallFrame` 拦截 RETURN | 显式帧类 | 暂未实现，因为 M3a/M3b 阶段还没有 CPS 化的 `IbCall`/`IbFunctionDef`（属于 M3d 范围） | 保留给 M3d，当前 RETURN 在栈空时仍会包装 CSE 抛给 fallback `IbUserFunction.call()` |
 
 ---
 
@@ -403,15 +378,24 @@ class LLMExceptTask(VMTask):
 
 **前提**：Step 6（IbIntentContext.fork()）✅ 已具备；可以在 M3a 之前独立推进 10a+10b，但 10c 的 dispatch-before-use 集成需要 M3c 完成后才能完整
 
-#### Step 10a：DDG 编译器分析
+#### Step 10a：DDG 编译器分析 ✅ COMPLETED — 2026-04-28
 
-**文件级修改清单**：
+**完成状态**：✅ 全部落地，867 个测试通过（851 + 16 新增 DDG 测试）。详见 `docs/COMPLETED.md §十二`。
 
-| 文件 | 改动性质 |
-|------|---------|
-| `core/compiler/semantic/passes/expression_analyzer.py` | 新增 `BehaviorDependencyAnalyzer`：分析 `IbBehaviorExpr` 模板中引用的变量，向上追溯定义来源是否为另一个 behavior |
-| `core/compiler/serialization/serializer.py` | `IbBehaviorExpr` 节点新增 `llm_deps: List[str]` 和 `dispatch_eligible: bool` 字段 |
-| `tests/unit/test_ddg_analysis.py`（新建） | DDG 提取的单元测试 |
+**实际实现摘要**：
+
+* `core/kernel/ast.py::IbBehaviorExpr` 扩展 `llm_deps: List[IbBehaviorExpr]` + `dispatch_eligible: bool` 字段
+* `core/compiler/semantic/passes/behavior_dependency_analyzer.py` 新建：扫描 `$var` 插值（`IbName` 段），通过 `side_table.get_symbol()` 追溯到定义其值的 `IbBehaviorExpr`；用 Tarjan SCC 推导 `dispatch_eligible`（DAG → True；环 → False）
+* `core/compiler/semantic/passes/semantic_analyzer.py::analyze()` 新增 Pass 5 在 Pass 4 后执行，仅在前序 Pass 无错误时运行
+* `FlatSerializer` 无需修改：`_collect_node` 的 `_process_value` 自动把 `List[IbBehaviorExpr]` 转为 UID 引用列表
+
+**与原计划差异**：
+
+| 项目 | 原计划 | 实际实现 | 原因 |
+|------|--------|---------|------|
+| 文件位置 | `expression_analyzer.py` 内 | 独立新文件 `behavior_dependency_analyzer.py` | 单独 Pass 边界更清晰，便于后续 M5b 引用 |
+| `llm_deps` 类型 | `List[str]`（UID） | AST 阶段为 `List[IbBehaviorExpr]`，序列化阶段自动转 UID | AST 阶段保留对象引用更便于 SCC 等图算法 |
+| 序列化器修改 | 显式新增字段 | 自动透传（`vars()` 遍历） | `FlatSerializer._process_value` 已支持 List of AST node |
 
 #### Step 10b：LLMScheduler
 
