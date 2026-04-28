@@ -42,7 +42,7 @@ body 中每个 stmt_uid 进行"保护重定向"：
 LLMExceptFrame 快照，彻底消除递归路径对 Python try/except 的依赖（M3c 目标）。
 """
 from __future__ import annotations
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Dict, List, Set
 
 from core.runtime.vm.task import (
     ControlSignal,
@@ -55,7 +55,20 @@ from core.runtime.interpreter.constants import (
     AST_OP_MAP,
 )
 from core.runtime.objects.builtins import IbBehavior
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import (
+    IbObject,
+    IbUserFunction,
+    IbLLMFunction,
+    IbClass,
+)
+from core.runtime.exceptions import (
+    ReturnException,
+    BreakException,
+    ContinueException,
+    ThrownException,
+)
+from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.kernel.issue import InterpreterError
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +513,331 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
 
 
 # ---------------------------------------------------------------------------
+# M3d-prep：扩展 CPS handler 覆盖
+#
+# 以下 handler 把 ExprHandler / StmtHandler 中对应 visit_X 方法的语义 1:1
+# 镜像到 CPS 风格，但保留下面几个事实：
+#   * 对象的 ``call()`` / ``receive()`` 仍是 Python 调用——这与 IbCall handler
+#     的 M3a 选择一致（M3d 才需要把函数体本身用 CPS 驱动）；
+#   * 控制流仍由父级容器 handler（Module/If/While/llmexcept）承担消费；
+#     IbReturn/IbBreak/IbContinue 仍 ``return Signal(...)``；新增的 IbRaise
+#     则把 ThrownException 显式抛出，沿用 fallback 路径在 IbTry 中捕获。
+# ---------------------------------------------------------------------------
+
+
+# === 简单表达式扩展 ===
+
+def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """字典字面量 -> 装箱 dict（以 native key 索引）。"""
+    keys = node_data.get("keys", [])
+    values = node_data.get("values", [])
+    data: Dict[Any, Any] = {}
+    for k_uid, v_uid in zip(keys, values):
+        if k_uid:
+            key_obj = yield k_uid
+        else:
+            key_obj = executor.registry.get_none()
+        val_obj = yield v_uid
+        native_key = key_obj.to_native() if hasattr(key_obj, "to_native") else key_obj
+        data[native_key] = val_obj
+    return executor.registry.box(data)
+
+
+def vm_handle_IbSlice(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """切片对象（lower/upper/step 任意可空）-> Python slice 装箱。"""
+    lower_uid = node_data.get("lower")
+    upper_uid = node_data.get("upper")
+    step_uid = node_data.get("step")
+
+    l_val = None
+    u_val = None
+    s_val = None
+    if lower_uid:
+        lo = yield lower_uid
+        l_val = lo.to_native() if hasattr(lo, "to_native") else lo
+    if upper_uid:
+        up = yield upper_uid
+        u_val = up.to_native() if hasattr(up, "to_native") else up
+    if step_uid:
+        st = yield step_uid
+        s_val = st.to_native() if hasattr(st, "to_native") else st
+    return executor.registry.box(slice(l_val, u_val, s_val))
+
+
+def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """类型强转：与 ExprHandler.visit_IbCastExpr 同语义。
+
+    若目标类型描述符或目标 IbClass 缺失，按既有保守语义直接返回原值。
+    """
+    value = yield node_data.get("value")
+    target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)
+    if not target_descriptor:
+        return value
+    target_class = executor.registry.get_class(target_descriptor.name)
+    if not target_class:
+        return value
+    return value.receive("cast_to", [target_class])
+
+
+def vm_handle_IbFilteredExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """带过滤条件的表达式（while ... if filter 等）。
+
+    与 ExprHandler.visit_IbFilteredExpr 同语义：主表达式为假则短路返回；
+    过滤条件为假则返回 IbNone。
+    """
+    result = yield node_data.get("expr")
+    if not executor.ec.is_truthy(result):
+        return result
+    filter_val = yield node_data.get("filter")
+    if not executor.ec.is_truthy(filter_val):
+        return executor.registry.get_none()
+    return result
+
+
+# === 简单语句 ===
+
+def vm_handle_IbGlobalStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """global 声明是编译期语义，运行时无操作。"""
+    if False:
+        yield  # pragma: no cover — 强制 generator function
+    return executor.registry.get_none()
+
+
+def vm_handle_IbRaise(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """raise 语句：求值异常对象后抛出 ``ThrownException``。
+
+    ``ThrownException`` 在 IbTry 的 fallback 路径中捕获；M3d 完成后，IbTry
+    的 CPS 实现会用 Signal 模式接管，这里仍保留显式异常以兼容现有 fallback。
+    """
+    exc_uid = node_data.get("exc")
+    if exc_uid:
+        exc_val = yield exc_uid
+    else:
+        exc_val = executor.registry.get_none()
+    raise ThrownException(exc_val)
+
+
+def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``import x`` 在 IBCI 当前阶段为编译期语义，运行时无操作。"""
+    if False:
+        yield
+    return executor.registry.get_none()
+
+
+def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``from x import y`` 在 IBCI 当前阶段为编译期语义，运行时无操作。"""
+    if False:
+        yield
+    return executor.registry.get_none()
+
+
+# === 复合赋值 ===
+
+def vm_handle_IbAugAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """复合赋值（``a += b`` 等）：与 StmtHandler.visit_IbAugAssign 同语义。
+
+    支持 IbName / IbAttribute 目标。下标 / 元组解包在原 handler 中也未支持，
+    此处一并保持不变。
+    """
+    target_uid = node_data.get("target")
+    target_data = executor.ec.get_node_data(target_uid)
+    value = yield node_data.get("value")
+    op_symbol = node_data.get("op")
+    base_op = (
+        op_symbol.rstrip("=") if op_symbol and op_symbol.endswith("=") else op_symbol
+    )
+    op = AST_OP_MAP.get(base_op, base_op)
+    method = OP_MAPPING.get(op)
+    if not method:
+        raise RuntimeError(f"VM: Unsupported aug op: {op_symbol}")
+
+    # 1. 读取旧值
+    old_val = yield target_uid
+    # 2. 计算新值
+    new_val = old_val.receive(method, [value])
+    # 3. 写回
+    if target_data and target_data.get("_type") == "IbName":
+        sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
+        if sym_uid:
+            executor.runtime_context.set_variable_by_uid(sym_uid, new_val)
+        else:
+            executor.runtime_context.set_variable(target_data.get("id"), new_val)
+    elif target_data and target_data.get("_type") == "IbAttribute":
+        obj = yield target_data.get("value")
+        attr = target_data.get("attr")
+        obj.receive("__setattr__", [executor.registry.box(attr), new_val])
+    return executor.registry.get_none()
+
+
+# === Switch ===
+
+def vm_handle_IbSwitch(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """Switch-Case 语句：与 StmtHandler.visit_IbSwitch 同语义。
+
+    test 求值产生不确定 LLM 结果时直接返回 None（与 IbIf 一致）。
+    case body 内的 Signal 被透传给上层（return / break / continue / throw）。
+    case body 内的受保护节点通过 _resolve_stmt_uid 重定向到 llmexcept handler。
+    """
+    executor.runtime_context.set_last_llm_result(None)
+    test_value = yield node_data.get("test")
+    last = executor.runtime_context.get_last_llm_result()
+    if last and not last.is_certain:
+        return executor.registry.get_none()
+
+    case_uids = node_data.get("cases", [])
+    matched = False
+    for case_uid in case_uids:
+        case_data = executor.ec.get_node_data(case_uid)
+        if not case_data:
+            continue
+        pattern = case_data.get("pattern")
+        if pattern is None:
+            matched = True
+        else:
+            pattern_value = yield pattern
+            eq_result = test_value.receive("__eq__", [pattern_value])
+            if executor.ec.is_truthy(eq_result):
+                matched = True
+
+        if matched:
+            for stmt_uid in case_data.get("body", []):
+                effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+                if effective_uid is None:
+                    continue
+                res = yield effective_uid
+                if isinstance(res, Signal):
+                    return res
+            break
+    return executor.registry.get_none()
+
+
+# === 定义类语句（不下钻 body 内子节点） ===
+
+def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """普通函数定义：在当前作用域绑定 IbUserFunction。"""
+    if False:
+        yield
+    sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
+    declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
+    func = IbUserFunction(node_uid, executor.ec, spec=declared_type)
+    name = node_data.get("name")
+    executor.runtime_context.define_variable(
+        name, func, declared_type=declared_type, uid=sym_uid
+    )
+    return executor.registry.get_none()
+
+
+def vm_handle_IbLLMFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """LLM 函数定义：在当前作用域绑定 IbLLMFunction。"""
+    if False:
+        yield
+    sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
+    declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
+    func = IbLLMFunction(node_uid, executor.ec, spec=declared_type)
+    name = node_data.get("name")
+    executor.runtime_context.define_variable(
+        name, func, declared_type=declared_type, uid=sym_uid
+    )
+    return executor.registry.get_none()
+
+
+def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """类契约校验 + 作用域绑定。
+
+    与 StmtHandler.visit_IbClassDef 同语义：类必须在 STAGE 5 已预水合，此处
+    仅做契约校验并绑定到当前作用域。校验失败时抛 RuntimeError（与原 handler
+    的 self.report_error 等价的"严格模式"）。
+    """
+    if False:
+        yield
+    name = node_data.get("name")
+    existing_class = executor.registry.get_class(name)
+    if not existing_class:
+        raise RuntimeError(
+            f"VM: Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5."
+        )
+    sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
+    executor.runtime_context.define_variable(name, existing_class, uid=sym_uid)
+
+    # 深度契约校验：AST body 中声明的方法必须已注入虚表
+    body = node_data.get("body", [])
+    for stmt_uid in body:
+        stmt_data = executor.ec.get_node_data(stmt_uid)
+        if not stmt_data:
+            continue
+        if stmt_data.get("_type") in ("IbFunctionDef", "IbLLMFunctionDef"):
+            method_name = stmt_data.get("name")
+            if method_name not in existing_class.methods:
+                raise RuntimeError(
+                    f"VM: Hydration Leak: Method '{method_name}' of class "
+                    f"'{name}' was not hydrated in STAGE 5."
+                )
+            method_obj = existing_class.methods[method_name]
+            if hasattr(method_obj, "spec") and method_obj.spec:
+                params = stmt_data.get("args", [])
+                expected_count = (
+                    len(method_obj.spec.params)
+                    if hasattr(method_obj.spec, "params")
+                    else -1
+                )
+                if expected_count != -1 and len(params) != expected_count:
+                    raise RuntimeError(
+                        f"VM: Contract Mismatch: Method '{method_name}' of class "
+                        f"'{name}' parameter count mismatch. "
+                        f"AST: {len(params)}, Descriptor: {expected_count}"
+                    )
+    return executor.registry.get_none()
+
+
+# === 意图操作 ===
+
+def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``@`` / ``@!`` 单次意图涂抹：与 StmtHandler.visit_IbIntentAnnotation 同。"""
+    if False:
+        yield
+    intent_info_uid = node_data.get("intent")
+    if not intent_info_uid:
+        return executor.registry.get_none()
+    intent_data = executor.ec.get_node_data(intent_info_uid)
+    if not intent_data:
+        return executor.registry.get_none()
+    intent = executor.ec.factory.create_intent_from_node(
+        intent_info_uid, intent_data, role=IntentRole.SMEAR
+    )
+    if intent.is_override:
+        executor.runtime_context.set_pending_override_intent(intent)
+    else:
+        executor.runtime_context.add_smear_intent(intent)
+    return executor.registry.get_none()
+
+
+def vm_handle_IbIntentStackOperation(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``@+`` / ``@-`` 意图栈操作：与 StmtHandler.visit_IbIntentStackOperation 同。"""
+    if False:
+        yield
+    intent_info_uid = node_data.get("intent")
+    if not intent_info_uid:
+        return executor.registry.get_none()
+    intent_data = executor.ec.get_node_data(intent_info_uid)
+    if not intent_data:
+        return executor.registry.get_none()
+    intent = executor.ec.factory.create_intent_from_node(
+        intent_info_uid, intent_data, role=IntentRole.STACK
+    )
+    if intent.is_pop_top:
+        executor.runtime_context.pop_intent()
+    elif intent.is_remove:
+        if intent.tag:
+            executor.runtime_context.remove_intent(tag=intent.tag)
+        elif intent.content:
+            executor.runtime_context.remove_intent(content=intent.content)
+    else:
+        executor.runtime_context.push_intent(intent)
+    return executor.registry.get_none()
+
+
+
+# ---------------------------------------------------------------------------
 # 注册表
 # ---------------------------------------------------------------------------
 
@@ -519,6 +857,11 @@ def build_dispatch_table() -> dict:
         "IbSubscript": vm_handle_IbSubscript,
         "IbTuple": vm_handle_IbTuple,
         "IbListExpr": vm_handle_IbListExpr,
+        # M3d-prep 表达式扩展
+        "IbDict": vm_handle_IbDict,
+        "IbSlice": vm_handle_IbSlice,
+        "IbCastExpr": vm_handle_IbCastExpr,
+        "IbFilteredExpr": vm_handle_IbFilteredExpr,
         # 语句
         "IbModule": vm_handle_IbModule,
         "IbPass": vm_handle_IbPass,
@@ -531,4 +874,16 @@ def build_dispatch_table() -> dict:
         "IbAssign": vm_handle_IbAssign,
         # M3c：llmexcept 保护机制
         "IbLLMExceptionalStmt": vm_handle_IbLLMExceptionalStmt,
+        # M3d-prep 语句扩展
+        "IbAugAssign": vm_handle_IbAugAssign,
+        "IbGlobalStmt": vm_handle_IbGlobalStmt,
+        "IbRaise": vm_handle_IbRaise,
+        "IbImport": vm_handle_IbImport,
+        "IbImportFrom": vm_handle_IbImportFrom,
+        "IbSwitch": vm_handle_IbSwitch,
+        "IbFunctionDef": vm_handle_IbFunctionDef,
+        "IbLLMFunctionDef": vm_handle_IbLLMFunctionDef,
+        "IbClassDef": vm_handle_IbClassDef,
+        "IbIntentAnnotation": vm_handle_IbIntentAnnotation,
+        "IbIntentStackOperation": vm_handle_IbIntentStackOperation,
     }
