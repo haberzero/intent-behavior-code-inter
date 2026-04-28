@@ -2,48 +2,46 @@
 
 > 来源：代码全链路审查（IbCell / 闭包 / fn / 语义分析器 / 类型系统）  
 > 优先级：**高** = 正确性风险或严重误导；**中** = 代码健康度；**低** = 维护性改善  
-> 状态：⚠️ 待修复 / ✅ 已记录待下一 PR 处理
+> 状态：⚠️ 待修复 / ✅ 已修复
 
 ---
 
 ## 高优先级（正确性风险 / 严重文档误导）
 
-### [H1] `IbDeferred` docstring 严重落后于 M2 实现
-**文件**：`core/runtime/objects/builtins.py:705-706`  
+### [H1] ✅ FIXED (2026-04-28) `IbDeferred` docstring 严重落后于 M2 实现
+**文件**：`core/runtime/objects/builtins.py:703-707`  
 **问题**：类 docstring 中仍残留 M1 时代的说明——
 ```
 lambda 模式仍使用 ``captured_scope`` 引用链，
 ``closure`` 通常为空字典（保留接口以便后续 GC 根扫描接入）
 ```
 这与 M2 后的实际实现**完全相反**：M2 后 lambda 模式同样使用 closure + 共享 IbCell，`captured_scope` 在 lambda 路径下始终为 `None`。  
-**风险**：误导维护者认为 lambda 仍使用 `captured_scope` 作用域切换，写出错误代码。  
-**修复**：删除 `captured_scope` 相关说明，更新为 M2 语义：自由变量通过共享 IbCell 间接访问。
+**修复**：docstring 更新为 M2 语义（`closure` 字段说明覆盖 lambda/snapshot 两种模式；`captured_scope` 路径说明已删除）。
 
 ---
 
-### [H2] `_captured_scope` 僵尸字段存活
-**文件**：`core/runtime/objects/builtins.py:715, 724`  
+### [H2] ✅ FIXED (2026-04-28) `_captured_scope` 僵尸字段存活
+**文件**：`core/runtime/objects/builtins.py`，`core/runtime/factory.py`，`core/runtime/interfaces.py`，`core/runtime/interpreter/handlers/expr_handler.py`，`core/runtime/interpreter/handlers/stmt_handler.py`  
 **问题**：`IbDeferred.__init__` 仍接受 `captured_scope` 参数并存储到 `self._captured_scope`，但 M2 后 `IbDeferred.call()` 完全不读取它。`expr_handler.py` 也是显式传 `None`。整个字段是死代码。  
-**风险**：增加认知负担，让读者误认为 lambda 路径仍有作用域切换分支。  
-**修复**：删除 `captured_scope` 参数、`self._captured_scope` 存储，以及 `expr_handler.py` 中的显式传 `None`。
+**修复**：删除 `IbDeferred.__init__` 的 `captured_scope` 参数及 `self._captured_scope` 赋值；同步清理 `factory.py`、`interfaces.py` 中的签名，以及 `expr_handler.py`、`stmt_handler.py` 中的死参传递。
 
 ---
 
-### [H3] `DeferredAxiom.is_compatible` 与自身文档语义矛盾
+### [H3] ✅ FIXED (2026-04-28) `DeferredAxiom.is_compatible` 与自身文档语义矛盾
 **文件**：`core/kernel/axioms/primitives.py`（DeferredAxiom.is_compatible 实现）  
 **问题**：docstring 明确声明"behavior 是 deferred 的子类型，deferred 槽位不接受 behavior 值"，但代码中有：
 ```python
 or other_name.startswith("behavior[")  # ← 这行允许 deferred 赋值给 behavior 槽位
 ```
 与文档语义矛盾。被 `is_fn_decl` guard 掩盖（fn 声明不走 `is_assignable`），但直接写 `behavior[int] f = lambda: expr` 时会错误通过编译，运行时对象是 IbDeferred 而非 IbBehavior，可能导致 LLM executor 路径混乱。  
-**修复**：移除 `or other_name.startswith("behavior[")` 这行，或在 docstring 中明确解释为何故意允许。
+**修复**：移除 `or other_name.startswith("behavior[")` 这行，使 `is_compatible` 与 docstring 一致。
 
 ---
 
 ## 中优先级（代码健康度）
 
-### [M1] IbDeferred.call() 和 IbBehavior.call() 中的"兼容历史"死分支
-**文件**：`core/runtime/objects/builtins.py`（IbDeferred.call ~776-785 行，IbBehavior.call ~960-969 行）  
+### [M1] ✅ FIXED (2026-04-28) IbDeferred.call() 和 IbBehavior.call() 中的"兼容历史"死分支
+**文件**：`core/runtime/objects/builtins.py`  
 **问题**：两处都有相同的 closure 解包兼容分支：
 ```python
 if isinstance(payload, tuple) and len(payload) == 2:
@@ -53,7 +51,7 @@ else:
     name, cell = None, payload
 ```
 自 M2 后，`visit_IbLambdaExpr` 始终生成 `(name, IbCell)` 元组，`else` 分支是死代码。两处代码完全相同，违反 DRY 原则。  
-**修复**：删除 `else` 分支；若需共用，抽取为 `_unpack_closure_payload(payload)` 工具函数。
+**修复**：两处均改为直接解包 `for sym_uid, (name, cell) in self.closure.items()`，删除 `else` 分支。
 
 ---
 
@@ -137,11 +135,11 @@ if symbol.is_const and name in ("len", "print", "range", "input", "get_self_sour
 
 ## 汇总统计
 
-| 优先级 | 问题数 | 最高风险 |
-|--------|--------|---------|
-| 高 | 3 | H3 类型系统文档/代码矛盾，可能导致编译器错放 behavior/deferred 赋值 |
-| 中 | 5 | M1 死代码累积；M4 to_native 静默失败 |
-| 低 | 4 | 维护性/可读性问题，不影响正确性 |
-| **合计** | **12** | — |
+| 优先级 | 问题数 | 已修复 | 最高风险 |
+|--------|--------|--------|---------|
+| 高 | 3 | **3** ✅ | H3 类型系统文档/代码矛盾（已修复） |
+| 中 | 5 | **1** (M1) | M4 to_native 静默失败 |
+| 低 | 4 | 0 | 维护性/可读性问题，不影响正确性 |
+| **合计** | **12** | **4** | — |
 
-> 建议在下一个 PR（M3a CPS 骨架之前）先处理 H1、H2、H3 三项，避免为后续 VM 演进埋下隐患。
+> H1/H2/H3/M1 已于 2026-04-28 完成修复，780 个测试通过。M2–M5 及低优先级问题留待后续 PR 处理。

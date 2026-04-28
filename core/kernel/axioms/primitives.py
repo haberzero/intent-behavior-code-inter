@@ -1163,12 +1163,11 @@ class DeferredAxiom(BaseAxiom, DeferredCallCapability):
 
     def is_compatible(self, other_name: str) -> bool:
         # deferred IS-A callable：可以赋值给 deferred 或 callable 槽。
-        # 同时接受带 value_type 的 deferred[TYPE] / behavior[TYPE] 槽（声明侧 TYPE fn 语法）。
-        # behavior 是 deferred 的子类型，不可反向赋值（仅 BehaviorAxiom 接受 behavior 槽）。
+        # 同时接受带 value_type 的 deferred[TYPE] 槽（声明侧 TYPE fn 语法）。
+        # behavior 是 deferred 的子类型，不可反向赋值——deferred 值不能赋给 behavior 槽。
         return (
             other_name in ("deferred", "callable")
             or other_name.startswith("deferred[")
-            or other_name.startswith("behavior[")
         )
 
     def get_parent_axiom_name(self) -> Optional[str]:

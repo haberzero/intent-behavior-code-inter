@@ -700,10 +700,10 @@ class IbDeferred(IbObject):
       绑定到本地作用域（与 ``IbUserFunction`` 同构）。
     * ``body_uid``     —— 当 deferred 由 ``IbLambdaExpr`` 创建时，此为 lambda
       函数体表达式 uid；``call()`` 会评估该 uid 而不是 ``node_uid``。
-    * ``closure``      —— Dict[str, IbCell]。snapshot 模式下持有自由变量的独立
-      ``IbCell`` 副本（公理 SC-3/SC-4），调用时安装到本地作用域，使 body 内对
-      自由变量的引用读取定义时的值。lambda 模式仍使用 ``captured_scope`` 引用
-      链，``closure`` 通常为空字典（保留接口以便后续 GC 根扫描接入）。
+    * ``closure``      —— Dict[sym_uid, (name, IbCell)]。lambda/snapshot 两种模式
+      均通过此字典访问自由变量（公理 SC-3/SC-4）。snapshot 模式存储定义时刻的值
+      拷贝（独立 IbCell），lambda 模式存储共享 IbCell 引用——调用时 cell.get()
+      返回调用时刻的最新值（M2 语义，``captured_scope`` 路径已于 M2 彻底删除）。
     """
 
     def __init__(
@@ -712,7 +712,6 @@ class IbDeferred(IbObject):
         ib_class: IbClass,
         deferred_mode: str = "lambda",
         execution_context: Optional[Any] = None,
-        captured_scope: Optional[Any] = None,
         params_uids: Optional[List[str]] = None,
         body_uid: Optional[str] = None,
         closure: Optional[Dict[str, Any]] = None,
@@ -721,7 +720,6 @@ class IbDeferred(IbObject):
         self.node_uid = node_uid
         self.deferred_mode = deferred_mode
         self._execution_context = execution_context
-        self._captured_scope = captured_scope
         self._cache: Optional[IbObject] = None
         # M1: parametric/closure 字段。无参/无闭包路径下保持向后兼容（默认 None/空）。
         self.params_uids: List[str] = list(params_uids) if params_uids else []
@@ -758,26 +756,19 @@ class IbDeferred(IbObject):
 
         try:
             # 1) 若有参或有闭包，进入子作用域以承载 params 与 closure cells。
-            #    M2 (SC-4)：lambda 模式的自由变量已通过共享 IbCell 存入 closure，
-            #    此处与 snapshot 模式共用同一套安装逻辑，无需再切换 captured_scope。
+            #    M2 (SC-4)：lambda/snapshot 两种模式均通过 closure 字典访问自由变量；
+            #    closure 形如 Dict[sym_uid, (name, IbCell)]——按 UID 重新登记是必须
+            #    的：runtime IbName 解析走 UID 路径，仅按名字定义会被父链同名符号
+            #    的 UID 命中给截胡。
+            #    snapshot 模式：cell.get() = 定义时刻的冻结值；
+            #    lambda 模式（M2）：cell.get() = 调用时刻的最新值（共享 IbCell）。
             needs_subscope = bool(self.params_uids) or bool(self.closure)
             if needs_subscope:
                 rt_context.enter_scope()
                 pushed_scope = True
 
-                # 安装闭包 cell：将其值写入当前作用域，使 body 内的自由变量引用解析为正确值。
-                # closure 形如 ``Dict[sym_uid, (name, IbCell)]``——按 UID 重新登记
-                # 是必须的：runtime IbName 解析走 UID 路径，仅按名字定义会被父链同名
-                # 符号的 UID 命中给截胡。
-                # snapshot 模式：cell.get() = 定义时刻的冻结值；
-                # lambda 模式（M2）：cell.get() = 调用时刻的最新值（共享 IbCell）。
                 from core.runtime.objects.cell import IbCell
-                for sym_uid, payload in self.closure.items():
-                    if isinstance(payload, tuple) and len(payload) == 2:
-                        name, cell = payload
-                    else:
-                        # 兼容历史：直接给定 cell（无名称）
-                        name, cell = None, payload
+                for sym_uid, (name, cell) in self.closure.items():
                     if isinstance(cell, IbCell):
                         if not cell.is_empty():
                             rt_context.define_variable(name, cell.get(), uid=sym_uid)
@@ -957,11 +948,7 @@ class IbBehavior(IbObject):
         rt_context.enter_scope()
         try:
             from core.runtime.objects.cell import IbCell
-            for sym_uid, payload in self.closure.items():
-                if isinstance(payload, tuple) and len(payload) == 2:
-                    name, cell = payload
-                else:
-                    name, cell = None, payload
+            for sym_uid, (name, cell) in self.closure.items():
                 if isinstance(cell, IbCell):
                     if not cell.is_empty():
                         rt_context.define_variable(name, cell.get(), uid=sym_uid)
