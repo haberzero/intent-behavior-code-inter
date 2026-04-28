@@ -1,5 +1,5 @@
 """
-core.runtime.vm.vm_executor — VM 调度循环主类（M3a 骨架）。
+core.runtime.vm.vm_executor — VM 调度循环主类（M3a + M3b）。
 
 调度协议
 --------
@@ -9,13 +9,19 @@ core.runtime.vm.vm_executor — VM 调度循环主类（M3a 骨架）。
    * 取栈顶任务的生成器，执行 ``send(value)`` （或首次 ``send(None)``）：
      - 若生成器 ``yield child_uid``：基于 ``child_uid`` 创建新 VMTask 并压栈，
        下一轮调度新任务（由它产生 child 的求值结果）
-     - 若生成器 ``StopIteration(value)``：弹栈，把 value 通过 ``send`` 传给父帧
+     - 若生成器 ``StopIteration(value)``：弹栈
+        - 若 ``value`` 是 :class:`Signal` 数据对象（M3b 控制信号数据化）：
+          视作控制流信号，沿帧栈向上数据化传递（``send(Signal)`` 给父帧）；
+          父 handler 用 ``isinstance(res, Signal)`` 决定拦截或继续传播。
+          若帧栈空仍持有未消费 Signal，包装为 :class:`ControlSignalException`
+          抛给调用者（边界兼容）。
+        - 否则把 value 通过 ``send`` 传给父帧
      - 若生成器 ``raise``：弹栈，沿帧栈向上 ``throw`` 给父帧的生成器；调度循环
        会持续向上传播，直到某帧的 ``except`` 子句捕获或栈空（向调用者抛出）
 
 3. 当帧栈空时，最后一个 ``send`` 的结果即为整体执行结果。
 
-主循环不使用 Python 递归。这是 M3a 的核心成果——为 M3b/M3c 的 LLM 流水线、
+主循环不使用 Python 递归。这是 M3a/M3b 的核心成果——为 M3c 的 LLM 流水线、
 DynamicHost 切片调度奠定调度层基础。
 
 未实现的节点类型自动回退到 ``execution_context.visit(uid)`` （递归路径），
@@ -29,12 +35,13 @@ from core.runtime.vm.task import (
     VMTaskResult,
     ControlSignal,
     ControlSignalException,
+    Signal,
 )
 from core.runtime.vm.handlers import build_dispatch_table
 
 
 class VMExecutor:
-    """显式帧栈 CPS 调度执行器（M3a 骨架）。
+    """显式帧栈 CPS 调度执行器（M3a + M3b）。
 
     构造参数:
         execution_context: 已配置的 :class:`ExecutionContextImpl`，提供节点池、
@@ -144,12 +151,19 @@ class VMExecutor:
                     child_uid = gen.send(val)
             except StopIteration as si:
                 stack.pop()
-                pending_value = (
-                    si.value if si.value is not None else self.registry.get_none()
-                )
+                ret_value = si.value
+                # M3b：StopIteration.value 若是 Signal，作为控制流数据沿栈传递
+                if isinstance(ret_value, Signal):
+                    pending_value = ret_value
+                else:
+                    pending_value = (
+                        ret_value if ret_value is not None else self.registry.get_none()
+                    )
                 continue
             except ControlSignalException as cse:
-                # 控制流信号：弹栈并把异常向上传递给父帧
+                # M3b：内部 handler 不再 raise CSE；此分支仅用于 fallback 路径
+                # 旧解释器 visit() 抛出的 ReturnException/BreakException/...
+                # 走这条路径继续沿生成器栈传播。
                 stack.pop()
                 pending_exception = cse
                 continue
@@ -169,14 +183,18 @@ class VMExecutor:
                 # 不支持的子节点：通过 fallback 同步求值，把结果送回父生成器
                 try:
                     pending_value = self._ec.visit(child_uid)
-                except ControlSignalException:
-                    raise  # 不应发生（fallback 路径不会抛 CPS 异常）
+                except ControlSignalException as cse:
+                    # fallback 路径产生的 CSE：转为 pending_exception 沿栈传递
+                    pending_exception = cse
                 except Exception as e:
                     pending_exception = e
 
-        # 栈空：返回最终结果，或抛出未消费的异常
+        # 栈空：处理最终结果
         if pending_exception is not None:
             raise pending_exception
+        # M3b：未消费的顶层 Signal → 包装为 ControlSignalException 抛出（边界兼容）
+        if isinstance(pending_value, Signal):
+            raise ControlSignalException.from_signal(pending_value)
         return pending_value if pending_value is not None else self.registry.get_none()
 
     # ------------------------------------------------------------------

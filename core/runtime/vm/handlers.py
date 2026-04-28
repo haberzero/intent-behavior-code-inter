@@ -1,26 +1,38 @@
 """
-core.runtime.vm.handlers — CPS 节点处理器（M3a 骨架）。
+core.runtime.vm.handlers — CPS 节点处理器。
 
-每个 ``vm_handle_<NodeType>`` 是一个 **生成器函数**，遵循以下契约：
+每个 ``vm_handle_<NodeType>`` 是一个 **生成器函数**，遵循以下契约（M3b 起）：
 
 * ``yield child_uid``        —— 挂起当前任务，调度器会启动 ``child_uid`` 的求值；
                                  求值完成后通过 ``generator.send(result)`` 把结果送回
 * ``return value``           —— 任务完成，``value`` 通过 ``StopIteration.value``
                                  传给调用方
-* ``raise ControlSignalException(signal, value)``
-                              —— 触发控制流信号；调度器沿帧栈向上 ``throw``，
-                                 由对应的循环帧 / 函数帧捕获
+* ``return Signal(kind, v)`` —— 触发控制流信号（M3b 数据化路径）：调度器识别
+                                 ``StopIteration.value`` 是 :class:`Signal` 时，
+                                 把 Signal 通过 ``gen.send(Signal)`` 传给父帧；
+                                 父 handler 用 ``isinstance(res, Signal)`` 检查
+                                 是否拦截/继续传播
 
 handler 形参：
     ``executor`` —— :class:`VMExecutor` 实例，提供 ``ec`` / ``runtime_context``
                     / ``registry`` 等访问入口
 
 handler 内可调用 ``executor.fallback_visit(uid)`` 同步求值未实现的节点子树。
+
+**多语句容器的信号检查约定（M3b）**：
+``IbModule`` / ``IbIf`` / ``IbWhile`` 这类包含子语句序列的 handler，每次
+``yield stmt_uid`` 后必须检查返回值是否为 ``Signal``：循环 handler 自行
+消费 BREAK/CONTINUE，其余信号（RETURN/THROW）和非循环 handler 应通过
+``return res`` 把信号继续向上传播。
 """
 from __future__ import annotations
 from typing import Any, Mapping
 
-from core.runtime.vm.task import ControlSignal, ControlSignalException
+from core.runtime.vm.task import (
+    ControlSignal,
+    ControlSignalException,
+    Signal,
+)
 from core.runtime.interpreter.constants import (
     OP_MAPPING,
     UNARY_OP_MAPPING,
@@ -175,6 +187,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
             return func.call(executor.registry.get_none(), args)
         return func.receive("__call__", args)
     except ControlSignalException:
+        # 透传：函数体内的 ReturnException 等可能从 fallback 路径冒出
         raise
     except Exception as e:
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误
@@ -215,11 +228,18 @@ def vm_handle_IbModule(executor, node_uid: str, node_data: Mapping[str, Any]):
     result = executor.registry.get_none()
     for stmt_uid in node_data.get("body", []):
         result = yield stmt_uid
+        if isinstance(result, Signal):
+            # 顶层模块遇到信号：直接透传给调度器，让 run() 决定包装为 ControlSignalException
+            return result
     return result
 
 
 def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     res = yield node_data.get("value")
+    if isinstance(res, Signal):
+        # 表达式不应产生信号（语句生成的信号才会从子帧返回到此处）；
+        # 安全起见仍透传。
+        return res
     if isinstance(res, IbBehavior):
         # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor），M3a 不重写
         return res.call(executor.registry.get_none(), [])
@@ -227,23 +247,25 @@ def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """条件分支（与 StmtHandler.visit_IbIf 同语义）。"""
+    """条件分支（与 StmtHandler.visit_IbIf 同语义）。
+
+    M3b：每个子语句的执行结果都要检查 ``Signal``，若是则透传给上层。
+    """
     executor.runtime_context.set_last_llm_result(None)
     cond = yield node_data.get("test")
     last = executor.runtime_context.get_last_llm_result()
     if last and not last.is_certain:
         return executor.registry.get_none()
-    if executor.ec.is_truthy(cond):
-        for stmt_uid in node_data.get("body", []):
-            yield stmt_uid
-    else:
-        for stmt_uid in node_data.get("orelse", []):
-            yield stmt_uid
+    branch = node_data.get("body", []) if executor.ec.is_truthy(cond) else node_data.get("orelse", [])
+    for stmt_uid in branch:
+        res = yield stmt_uid
+        if isinstance(res, Signal):
+            return res
     return executor.registry.get_none()
 
 
 def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """while 循环（捕获 BREAK/CONTINUE 信号）。"""
+    """while 循环（M3b：消费 BREAK/CONTINUE 数据信号；其他信号透传）。"""
     test_uid = node_data.get("test")
     body = node_data.get("body", [])
     while True:
@@ -254,37 +276,47 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
             return executor.registry.get_none()
         if not executor.ec.is_truthy(cond):
             break
-        try:
-            for stmt_uid in body:
-                yield stmt_uid
-        except ControlSignalException as cse:
-            if cse.signal is ControlSignal.BREAK:
-                break
-            if cse.signal is ControlSignal.CONTINUE:
-                continue
-            raise
+
+        # 执行循环体；任意 stmt 返回 Signal 时立即处理
+        consumed = None  # type: ControlSignal | None
+        for stmt_uid in body:
+            res = yield stmt_uid
+            if isinstance(res, Signal):
+                if res.kind is ControlSignal.BREAK:
+                    consumed = ControlSignal.BREAK
+                    break
+                if res.kind is ControlSignal.CONTINUE:
+                    consumed = ControlSignal.CONTINUE
+                    break
+                # RETURN / THROW：透传给上层（函数帧 / 顶层）
+                return res
+        if consumed is ControlSignal.BREAK:
+            break
+        # CONTINUE 或正常结束：进入下一轮循环
     return executor.registry.get_none()
 
 
 def vm_handle_IbReturn(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """return：以 :class:`Signal` 数据化形式结束当前任务（M3b）。"""
     value_uid = node_data.get("value")
     if value_uid:
         value = yield value_uid
     else:
         value = executor.registry.get_none()
-    raise ControlSignalException(ControlSignal.RETURN, value)
+    # M3b：return Signal 而非 raise ControlSignalException
+    return Signal(ControlSignal.RETURN, value)
 
 
 def vm_handle_IbBreak(executor, node_uid: str, node_data: Mapping[str, Any]):
     if False:
         yield
-    raise ControlSignalException(ControlSignal.BREAK)
+    return Signal(ControlSignal.BREAK)
 
 
 def vm_handle_IbContinue(executor, node_uid: str, node_data: Mapping[str, Any]):
     if False:
         yield
-    raise ControlSignalException(ControlSignal.CONTINUE)
+    return Signal(ControlSignal.CONTINUE)
 
 
 def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
@@ -312,7 +344,6 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     for target_uid in node_data.get("targets", []):
         executor.assign_to_target(target_uid, value)
     return executor.registry.get_none()
-
 
 # ---------------------------------------------------------------------------
 # 注册表
@@ -345,3 +376,5 @@ def build_dispatch_table() -> dict:
         "IbContinue": vm_handle_IbContinue,
         "IbAssign": vm_handle_IbAssign,
     }
+
+
