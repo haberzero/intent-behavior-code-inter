@@ -425,8 +425,8 @@ int r = f(5)            # 10
 fn g = lambda: 42       # 持有无参 lambda
 int v = g()             # 42
 
-fn h = lambda(int x) -> int: x * 2   # 持有带参 lambda
-int w = h(3)            # 6
+int fn h = lambda(int x): x * 2   # 带返回类型标注（声明侧），带参 lambda
+int w = h(3)                       # 6
 ```
 
 延迟执行的完整语法见 §7.4。
@@ -610,7 +610,7 @@ for @~ $count 小于 3 吗？只回答 1 或 0 ~:
 
 ```ibci
 # 无参 lambda（使用调用时意图栈）
-fn compute = lambda -> int: @~ 根据 $x 计算一个结果 ~
+int fn compute = lambda: @~ 根据 $x 计算一个结果 ~
 # 此时不会执行 LLM 调用
 
 int x = 5
@@ -620,10 +620,10 @@ int result = compute()   # 调用时触发 LLM，使用当前 x 和意图栈
 **带参数（lambda 是词法闭包 + 参数）**：
 
 ```ibci
-fn translate = lambda(str text) -> str: @~ 翻译 $text ~
+str fn translate = lambda(str text): @~ 翻译 $text ~
 str r = translate("hello")
 
-fn add = lambda(int a, int b) -> int: a + b
+int fn add = lambda(int a, int b): a + b
 int s = add(3, 4)
 ```
 
@@ -631,7 +631,7 @@ int s = add(3, 4)
 - 定义时**不捕获**任何意图上下文
 - 调用时使用调用处的持久意图栈（`@+` 累积）和一次性意图（`@` smear）
 - 作为高阶函数参数传出后，调用时使用的仍是**调用点**的意图栈（不是定义处）
-- ⚠️ `lambda` 延迟对象**不能作为函数参数传递**（运行期 RUN_CALL_ERROR）；`snapshot` 无此限制
+- ✅ `lambda` 延迟对象可以自由作为高阶函数参数传递（M2 落地后限制已移除）
 
 #### snapshot
 
@@ -640,7 +640,7 @@ int s = add(3, 4)
 ```ibci
 # 无参 snapshot（捕获定义时意图上下文）
 @+ 聚焦于正面回答
-fn handler = snapshot -> str: @~ 根据 $context 生成回复 ~
+str fn handler = snapshot: @~ 根据 $context 生成回复 ~
 @-   # 移除刚才添加的意图
 
 # handler 持有定义时的意图栈快照，调用时绝对不受后续意图变化影响
@@ -650,7 +650,7 @@ str reply = handler()
 **带参数**：
 
 ```ibci
-fn translate = snapshot(str text) -> str: @~ 翻译 $text ~
+str fn translate = snapshot(str text): @~ 翻译 $text ~
 str r = translate("hello")
 ```
 
@@ -661,16 +661,32 @@ str r = translate("hello")
 
 #### 完整语法形式（8 种，lambda/snapshot 对称）
 
+返回类型标注统一写在**声明侧**（`TYPE fn f = lambda: EXPR`），不允许写在表达式侧（`lambda -> TYPE: EXPR` 已被 PAR_005 错误禁止）：
+
 | 形式 | 语法 |
 |------|------|
 | 无参，无返回类型标注 | `fn f = lambda: EXPR` |
-| 无参，有返回类型标注 | `fn f = lambda -> TYPE: EXPR` |
+| 无参，有返回类型标注 | `TYPE fn f = lambda: EXPR` |
 | 带参，无返回类型标注 | `fn f = lambda(PARAMS): EXPR` |
-| 带参，有返回类型标注 | `fn f = lambda(PARAMS) -> TYPE: EXPR` |
+| 带参，有返回类型标注 | `TYPE fn f = lambda(PARAMS): EXPR` |
 | 无参 snapshot | `fn f = snapshot: EXPR` |
-| 无参 snapshot，有返回类型 | `fn f = snapshot -> TYPE: EXPR` |
+| 无参 snapshot，有返回类型 | `TYPE fn f = snapshot: EXPR` |
 | 带参 snapshot | `fn f = snapshot(PARAMS): EXPR` |
-| 带参 snapshot，有返回类型 | `fn f = snapshot(PARAMS) -> TYPE: EXPR` |
+| 带参 snapshot，有返回类型 | `TYPE fn f = snapshot(PARAMS): EXPR` |
+
+其中 `TYPE` 可以是任意类型（包括泛型如 `tuple[int,str]`、`list[str]`，以及用户自定义类名）：
+
+```ibci
+int fn add = lambda(int a, int b): a + b
+str fn greet = lambda(str name): "Hello, " + name
+tuple[int,str] fn make_pair = lambda(int n, str s): (n, s)
+```
+
+**已禁止的表达式侧返回类型语法**（会产生 PAR_005 编译错误）：
+```ibci
+fn f = lambda -> int: EXPR            # ❌ PAR_005：返回类型应写在声明侧
+fn f = lambda(PARAMS) -> int: EXPR    # ❌ PAR_005
+```
 
 #### 意图模式对比
 
