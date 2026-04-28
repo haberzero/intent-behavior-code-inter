@@ -76,6 +76,16 @@ class VMExecutor:
     def registry(self) -> Any:
         return self._ec.registry
 
+    @property
+    def service_context(self) -> Any:
+        """ServiceContext（通过 interpreter 间接访问）；若无 interpreter 则返回 None。
+
+        handlers 通过此属性获取 capability_registry（例如 llm_provider.get_retry()）。
+        """
+        if self._interpreter is not None:
+            return getattr(self._interpreter, "service_context", None)
+        return None
+
     # ------------------------------------------------------------------
     # 节点求值入口
     # ------------------------------------------------------------------

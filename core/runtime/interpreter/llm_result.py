@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
@@ -69,3 +69,40 @@ class LLMResult:
             is_uncertain=False,
             error_message=error_message
         )
+
+
+@dataclass
+class LLMFuture:
+    """M5b：LLM 异步调用的 Future 包装（LLMScheduler 并发 dispatch 基础设施）。
+
+    由 ``LLMExecutorImpl.dispatch_eager()`` 创建，通过 ``resolve()`` 阻塞等待结果。
+
+    字段说明：
+    - node_uid: 对应的 IbBehaviorExpr 节点 UID（用于日志与 pending 查询）
+    - future: ``concurrent.futures.Future``，持有后台线程的 ``LLMResult``
+
+    使用模式（M5c 集成）::
+
+        future = scheduler.dispatch_eager(node_uid, ec, intent_ctx)
+        # … 其他工作 …
+        result_obj = scheduler.resolve(node_uid)  # 阻塞等待
+    """
+
+    node_uid: str
+    future: Any  # concurrent.futures.Future[LLMResult]
+
+    @property
+    def is_done(self) -> bool:
+        """返回 True 当且仅当后台 LLM 调用已完成（无论成功与否）。"""
+        return self.future.done()
+
+    def get(self, registry: Any) -> 'IbObject':
+        """阻塞等待 Future 完成并返回 IbObject。若已完成则零开销。
+
+        若后台线程抛出异常，该异常将在此处重新抛出。
+        """
+        result: LLMResult = self.future.result()
+        if result is not None and result.value is not None:
+            return result.value
+        return registry.get_none()
+
