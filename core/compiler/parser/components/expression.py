@@ -464,26 +464,19 @@ class ExpressionComponent(BaseComponent):
         """
         参数化 lambda/snapshot 表达式。
 
-        全部支持的形式
-        -------------
-        **括号形式（原有，向后兼容）**::
+        全部支持的形式（``:`` 为唯一 body 起始符）::
 
-            lambda(EXPR)                         — 无参，body 括号包裹
-            lambda -> TYPE (EXPR)                — 无参 + 返回类型，body 括号包裹
-            lambda(PARAMS)(EXPR)                 — 有参，body 括号包裹
-            lambda(PARAMS) -> TYPE (EXPR)        — 有参 + 返回类型，body 括号包裹
-            snapshot(...)                        — snapshot 完全对称
-
-        **冒号形式（新增）**::
-
-            lambda: EXPR                         — 无参，body 从 ':' 后直到行尾
-            lambda -> TYPE: EXPR                 — 无参 + 返回类型，body 从 ':' 后直到行尾
-            lambda(PARAMS): EXPR                 — 有参，body 从 ':' 后直到行尾
-            lambda(PARAMS) -> TYPE: EXPR         — 有参 + 返回类型，body 从 ':' 后
+            lambda: EXPR                         — 无参
+            lambda -> TYPE: EXPR                 — 无参 + 返回类型
+            lambda(PARAMS): EXPR                 — 有参
+            lambda(PARAMS) -> TYPE: EXPR         — 有参 + 返回类型
             snapshot: EXPR                       — snapshot 完全对称
+            snapshot -> TYPE: EXPR
+            snapshot(PARAMS): EXPR
+            snapshot(PARAMS) -> TYPE: EXPR
 
-        冒号形式中 body 是单一表达式（不需括号包裹），解析优先级为 LOWEST，
-        在当前 token 行结束（NEWLINE/EOF）时自然终止（由 parse_expression 处理）。
+        body 是单一表达式，解析优先级为 LOWEST，在当前 token 行结束
+        （NEWLINE/EOF）时自然终止（由 parse_expression 处理）。
 
         旧形态 ``TYPE lambda NAME = EXPR`` 由 declaration parser 在变量声明位置
         消费 ``lambda`` token，不会进入本路径，二者并存互不干扰。
@@ -495,7 +488,7 @@ class ExpressionComponent(BaseComponent):
         params: List[ast.IbASTNode] = []
 
         # ------------------------------------------------------------------ #
-        # 1. 无参 + 返回类型：`lambda -> TYPE ...body...`                     #
+        # 1. 无参 + 返回类型：`lambda -> TYPE: EXPR`                          #
         # ------------------------------------------------------------------ #
         if self.stream.check(TokenType.ARROW):
             self.stream.advance()  # consume ->
@@ -507,72 +500,60 @@ class ExpressionComponent(BaseComponent):
                     code="PAR_002",
                 )
             returns = type_parser.parse_type_annotation()
-            # Body: 冒号形式或括号形式
-            if self.stream.check(TokenType.COLON):
-                self.stream.advance()  # consume ':'
-                body = self.parse_expression(IbPrecedence.LOWEST)
-            else:
-                self.stream.consume(TokenType.LPAREN, f"Expect '(' or ':' to introduce '{deferred_mode}' body expression after return type.")
-                body = self.parse_expression(IbPrecedence.LOWEST)
-                self.stream.consume(TokenType.RPAREN, f"Expect ')' to close '{deferred_mode}' body expression.")
+            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{deferred_mode}' body expression after return type.")
+            body = self.parse_expression(IbPrecedence.LOWEST)
 
         # ------------------------------------------------------------------ #
-        # 2. 无参 + 无返回类型 + 冒号形式：`lambda: EXPR`                     #
+        # 2. 无参 + 无返回类型：`lambda: EXPR`                                #
         # ------------------------------------------------------------------ #
         elif self.stream.check(TokenType.COLON):
             self.stream.advance()  # consume ':'
             body = self.parse_expression(IbPrecedence.LOWEST)
 
         # ------------------------------------------------------------------ #
-        # 3. 括号开头：有参形式 或 无参括号形式                               #
+        # 3. 括号开头：有参形式 `lambda(PARAMS): EXPR`                        #
         # ------------------------------------------------------------------ #
         elif self.stream.check(TokenType.LPAREN):
-            # 前瞻：判断是否为有参形式
-            is_param_form = self._lambda_lookahead_is_param_form()
+            if not self._lambda_lookahead_is_param_form():
+                raise self.stream.error(
+                    self.stream.peek(),
+                    f"Expect ':' or '->' after '{deferred_mode}' parameter list, or ':' directly after '{deferred_mode}' keyword. "
+                    f"Parenthesis-only body forms are not supported; use '{deferred_mode}: EXPR' or '{deferred_mode}(PARAMS): EXPR'.",
+                    code="PAR_002",
+                )
 
-            if is_param_form:
-                # 解析参数列表
-                self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
-                decl = self.context.declaration_parser
-                if decl is None:
+            # 解析参数列表
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
+            decl = self.context.declaration_parser
+            if decl is None:
+                raise self.stream.error(
+                    keyword_token,
+                    "Internal: declaration parser not wired; cannot parse lambda parameters.",
+                    code="PAR_002",
+                )
+            params = decl.parameters()
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' parameter list.")
+
+            # 可选 `-> TYPE` 返回类型标注
+            if self.stream.check(TokenType.ARROW):
+                self.stream.advance()  # consume ->
+                type_parser = self.context.type_parser
+                if type_parser is None:
                     raise self.stream.error(
                         keyword_token,
-                        "Internal: declaration parser not wired; cannot parse lambda parameters.",
+                        "Internal: type parser not wired; cannot parse lambda return type.",
                         code="PAR_002",
                     )
-                params = decl.parameters()
-                self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' parameter list.")
+                returns = type_parser.parse_type_annotation()
 
-                # 可选 `-> TYPE` 返回类型标注
-                if self.stream.check(TokenType.ARROW):
-                    self.stream.advance()  # consume ->
-                    type_parser = self.context.type_parser
-                    if type_parser is None:
-                        raise self.stream.error(
-                            keyword_token,
-                            "Internal: type parser not wired; cannot parse lambda return type.",
-                            code="PAR_002",
-                        )
-                    returns = type_parser.parse_type_annotation()
-
-                # Body: 冒号形式或括号形式
-                if self.stream.check(TokenType.COLON):
-                    self.stream.advance()  # consume ':'
-                    body = self.parse_expression(IbPrecedence.LOWEST)
-                else:
-                    self.stream.consume(TokenType.LPAREN, f"Expect '(' or ':' to introduce '{deferred_mode}' body expression.")
-                    body = self.parse_expression(IbPrecedence.LOWEST)
-                    self.stream.consume(TokenType.RPAREN, f"Expect ')' to close '{deferred_mode}' body expression.")
-            else:
-                # 无参括号形式：直接解析括号内的表达式
-                self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
-                body = self.parse_expression(IbPrecedence.LOWEST)
-                self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' body expression.")
+            # Body 必须以 ':' 起始
+            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{deferred_mode}' body expression.")
+            body = self.parse_expression(IbPrecedence.LOWEST)
 
         else:
             raise self.stream.error(
                 self.stream.peek(),
-                f"Expect '(', '->', or ':' after '{deferred_mode}' keyword in expression position.",
+                f"Expect '->', ':', or '(' after '{deferred_mode}' keyword in expression position.",
                 code="PAR_002",
             )
 
@@ -581,13 +562,11 @@ class ExpressionComponent(BaseComponent):
 
     def _lambda_lookahead_is_param_form(self) -> bool:
         """
-        前瞻判断 ``lambda(...) (...)``、``lambda(...) -> TYPE (...)``、
-        ``lambda(...) -> TYPE: ...``、``lambda(...): ...`` 与 ``lambda(...)``
-        形式。
+        前瞻判断 ``lambda(...): ...`` 与 ``lambda(...) -> TYPE: ...`` 形式。
 
         此时 stream 已消费 ``lambda``/``snapshot`` 关键字，且当前 peek(0) 为 LPAREN。
-        在 token 流上做平衡括号扫描；若第一个 RPAREN 之后紧接的非 WS token 为
-        LPAREN、ARROW（``->``）或 COLON（``:``），则视为有参形式（参数列表形式）。
+        在 token 流上做平衡括号扫描；若第一个 RPAREN 之后紧接的 token 为
+        ARROW（``->``）或 COLON（``:``），则视为有参形式（参数列表形式）。
         扫描严格只读，不修改 stream 位置。
         """
         depth = 0
@@ -602,9 +581,7 @@ class ExpressionComponent(BaseComponent):
                 depth -= 1
                 if depth == 0:
                     next_t = self.stream.peek(offset + 1)
-                    # 参数形式：(PARAMS)(BODY) 或 (PARAMS) -> TYPE (BODY)/(BODY)
-                    # 或 (PARAMS): BODY 或 (PARAMS) -> TYPE: BODY
-                    return next_t.type in (TokenType.LPAREN, TokenType.ARROW, TokenType.COLON)
+                    return next_t.type in (TokenType.ARROW, TokenType.COLON)
             offset += 1
         return False
 
