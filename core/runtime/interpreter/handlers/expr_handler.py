@@ -355,17 +355,23 @@ class ExprHandler(BaseHandler):
 
     def visit_IbLambdaExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         """
-        参数化 lambda/snapshot 表达式（M1）的运行时实现。
+        参数化 lambda/snapshot 表达式的运行时实现。
 
         语义
         ----
-        * 'lambda'   —— 创建 IbDeferred/IbBehavior 持有 ``captured_scope`` 引用；
-          调用时进入子作用域绑定实参，body 内对自由变量的引用透过父链解析为
-          调用时刻的最新值。
         * 'snapshot' —— 创建 IbDeferred/IbBehavior 持有 ``closure`` 字典（按符号
           UID 索引到 ``(name, IbCell(value))``，IbCell 为定义时取值的独立副本）；
           调用时把 cell 的值在子作用域以相同 ``uid`` 重新绑定，body 内的 IbName
           走 UID 解析时即可命中本地副本而不是定义后变更的外部符号。
+        * 'lambda'   —— 创建 IbDeferred/IbBehavior 持有 ``closure`` 字典（按符号
+          UID 索引到 ``(name, shared_IbCell)``，IbCell 为**共享引用**，与定义处
+          作用域的同一 IbCell 实例绑定，公理 SC-4）；调用时 cell.get() 返回调用
+          时刻的最新值，外层对该变量的赋值会同步到 cell（公理 SC-3）。
+          全局作用域变量不提升，仍通过调用处作用域链正常访问。
+
+        M2 变更（SC-4 落地）：lambda 模式不再持有 ``captured_scope`` 引用，
+        而是和 snapshot 一样使用 ``closure`` 字典；区别在于 snapshot 存值拷贝，
+        lambda 存共享 IbCell 引用。
 
         当 body 是 ``IbBehaviorExpr`` 时构造 ``IbBehavior``（沿用 LLM 执行器路径），
         否则构造 ``IbDeferred``（普通表达式重访路径）。
@@ -380,24 +386,28 @@ class ExprHandler(BaseHandler):
         # 形参符号 UID 集合：用于把"形参引用"从"自由变量引用"中剔除
         param_sym_uids = self._collect_param_sym_uids(params_uids)
 
-        # snapshot 模式：构造 closure(uid → (name, IbCell(value))) 副本
-        # lambda 模式：保留 captured_scope 引用，free vars 透过父链解析即可
         closure: Dict[str, Any] = {}
-        captured_scope = None
-        if deferred_mode == "snapshot" and body_uid:
+        if body_uid:
             from core.runtime.objects.cell import IbCell
+            current_scope = self.runtime_context.current_scope
             for name, sym_uid in self._collect_free_refs(body_uid, param_sym_uids):
                 if sym_uid in closure:
                     continue
-                try:
-                    val = self.runtime_context.current_scope.get_by_uid(sym_uid)
-                except (KeyError, AttributeError):
-                    val = None
-                if val is not None:
-                    closure[sym_uid] = (name, IbCell(val))
-        else:
-            # lambda 模式：捕获当前作用域引用即可
-            captured_scope = self.runtime_context.current_scope
+                if deferred_mode == "snapshot":
+                    # snapshot 模式：值拷贝——在定义时刻创建独立 IbCell(current_value)
+                    try:
+                        val = current_scope.get_by_uid(sym_uid)
+                    except (KeyError, AttributeError):
+                        val = None
+                    if val is not None:
+                        closure[sym_uid] = (name, IbCell(val))
+                else:
+                    # lambda 模式（M2 SC-4）：共享引用——将外层变量提升为 Cell 并持有
+                    # 同一 IbCell 实例。全局作用域变量不提升（promote_to_cell 返回 None），
+                    # 它们通过调用处作用域链正常访问。
+                    cell = current_scope.promote_to_cell(sym_uid)
+                    if cell is not None:
+                        closure[sym_uid] = (name, cell)
 
         if body_is_behavior:
             # IbBehavior 路径：复用 visit_IbBehaviorExpr 的意图捕获逻辑
@@ -420,7 +430,7 @@ class ExprHandler(BaseHandler):
             node_uid,
             deferred_mode=deferred_mode,
             execution_context=self._execution_context,
-            captured_scope=captured_scope,
+            captured_scope=None,
             params_uids=params_uids,
             body_uid=body_uid,
             closure=closure,

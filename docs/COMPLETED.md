@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-28（M1 fn/lambda/snapshot 全新语法落地，旧语法彻底移除；758 个测试通过）
+> **最后更新**：2026-04-28（fn 声明侧返回类型语法落地；表达式侧 `-> TYPE` 形式 PAR_005 禁止；`fn[TYPE]` 解析为 DeferredSpec；780 个测试通过）
 
 ---
 
@@ -371,3 +371,107 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 | `tests/e2e/test_e2e_ai_mock.py` | — | lambda/snapshot + behavior 表达式；deferred 传参 |
 | `tests/compiler/test_compiler_pipeline.py` | `TestBehaviorDeferred` | 新语法编译期通过 |
 
+
+---
+
+## 七、M2：IbCell GC 根集合 + 词法作用域正式化 [✅ COMPLETED — 2026-04-28]
+
+**前提**：M1（已具备）  
+**测试基线**：776 个测试通过（较 M2 前 758 增加 18 个）
+
+### 7.1 ScopeImpl Cell 变量提升（公理 SC-3 / SC-4）
+
+`core/runtime/interpreter/runtime_context.py`：
+
+- `RuntimeSymbolImpl` 新增 `cell: Optional[IbCell]` 字段，追踪是否已提升为 Cell 变量
+- `ScopeImpl` 新增 `_cell_map: Dict[str, IbCell]`（sym_uid → IbCell）
+- `ScopeImpl.promote_to_cell(sym_uid)` 方法：首次被 lambda 捕获时将符号提升为 Cell 变量；全局作用域（`_parent is None`）不提升（全局变量始终可达）；幂等：再次调用返回已有 Cell
+- `ScopeImpl.iter_cells()` 方法：枚举当前作用域所有 IbCell（GC-2 根集合扫描入口）
+- `assign()` / `assign_by_uid()` 修改：若符号已有 `cell`，赋值时同步调用 `cell.set(value)`，确保持有该 Cell 的 lambda 闭包看到最新值
+
+### 7.2 lambda 共享 IbCell 捕获（SC-4 落地）
+
+`core/runtime/interpreter/handlers/expr_handler.py`：
+
+- `visit_IbLambdaExpr` lambda 模式：改为对每个自由变量调用 `scope.promote_to_cell(sym_uid)`，将共享 Cell 引用存入 `closure` 字典；不再传递 `captured_scope`
+- snapshot 模式逻辑不变（独立 `IbCell(value_copy)`）
+- 两种模式统一使用 `closure` 字典格式：`{sym_uid: (name, IbCell)}`
+
+### 7.3 IbDeferred.call() 简化（移除 captured_scope 切换）
+
+`core/runtime/objects/builtins.py`：
+
+- 删除 `IbDeferred.call()` 中 `captured_scope` 作用域切换代码（`old_scope` / `rt_context.current_scope = _captured_scope`）
+- lambda/snapshot 统一通过 `closure` 字典安装自由变量，无需切换作用域基底
+- `_captured_scope` 字段保留（历史 API 兼容），但 M2 后的 lambda 路径始终传 `None`
+
+### 7.4 IbUserFunction 移除 lambda 参数传递限制
+
+`core/runtime/objects/kernel.py`：
+
+- 删除 `IbUserFunction.call()` 中 lambda 参数传递约束代码（约束理由："IbCell 未落地时 lambda 跨作用域不安全"）
+- M2 落地后 lambda 携带共享 IbCell 闭包，可安全跨作用域传递和调用
+
+### 7.5 GC-2 根集合接口
+
+`core/runtime/interpreter/runtime_context.py`：
+
+- `RuntimeContextImpl.collect_gc_roots()` 生成器方法：遍历作用域链（`_current_scope` → global），逐一 yield 符号值；对 Cell 变量调用 `cell.trace_refs()` yield 持有的对象
+
+### 7.6 测试覆盖
+
+| 测试文件 | 测试类 | 覆盖场景 |
+|----------|--------|---------|
+| `tests/e2e/test_e2e_m2_higher_order.py` | `TestLambdaAsHigherOrderArg` | lambda 传入高阶函数并调用（7 个场景） |
+| | `TestLambdaSharedIbCell` | lambda 共享 Cell 读最新值（SC-4） |
+| | `TestSnapshotIbCellIsolation` | snapshot 独立 Cell 冻结值（SC-3 回归） |
+| | `TestLambdaFactory` | 工厂模式：函数返回 lambda，外层作用域退出后仍可调用 |
+| | `TestCollectGcRoots` | `collect_gc_roots()` 接口可调用；Cell 变量值出现在根集合中 |
+| `tests/e2e/test_e2e_ai_mock.py` | `TestE2ELambdaRestriction` | 反转为：lambda 可自由传递；snapshot 可传递（回归） |
+
+---
+
+## 八、fn 声明侧返回类型语法演进 [✅ COMPLETED — 2026-04-28]
+
+**前提**：M2（已具备）  
+**测试基线**：780 个测试通过（较 M2 前 776 增加 4 个）
+
+### 8.1 核心语法变更
+
+将 fn/lambda/snapshot 的返回类型标注从**表达式侧**（`lambda -> TYPE: EXPR`）迁移到**声明侧**（`TYPE fn NAME = lambda: EXPR`）：
+
+| 旧语法（已禁止，PAR_005） | 新语法（声明侧） |
+|--------------------------|----------------|
+| `fn f = lambda -> int: EXPR` | `int fn f = lambda: EXPR` |
+| `fn f = lambda(PARAMS) -> str: EXPR` | `str fn f = lambda(PARAMS): EXPR` |
+| `fn f = snapshot -> float: EXPR` | `float fn f = snapshot: EXPR` |
+
+**优势**：
+- 返回类型标注对工厂模式和高阶函数参数同样有效（RHS 不是 lambda 字面量时也可标注）
+- 与变量声明语法一致（`TYPE NAME = EXPR`）
+- 支持泛型返回类型：`tuple[int,str] fn make_pair = lambda(int n, str s): (n, s)`
+
+### 8.2 实现细节
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/compiler/parser/components/declaration.py` | `TYPE fn NAME` 三词识别路径；`fn[TYPE]` 包装为 IbSubscript；处理工厂模式（RHS 可为任意表达式） |
+| `core/compiler/parser/components/expression.py` | `lambda_expr`/`snapshot_expr` 移除 `-> TYPE` 语法；任何尝试触发 PAR_005 编译错误（含迁移提示） |
+| `core/compiler/parser/components/recognizer.py` | 三处 lookahead 路径扩展以识别 `TYPE fn NAME` 形式 |
+| `core/kernel/spec/registry.py` | `resolve_specialization`：`fn[TYPE]` → `DeferredSpec(value_type_name=TYPE)` |
+| `core/kernel/axioms/primitives.py` | `DeferredAxiom.is_compatible` / `BehaviorAxiom.is_compatible`：接受 `deferred[…]` / `behavior[…]` 槽位 |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | `visit_IbAssign`：检测 `DeferredSpec` 类型声明时注入 `_pending_fn_return_type`（try/finally 保证嵌套安全）；`visit_IbLambdaExpr` 优先读取 pending type |
+| `core/kernel/ast.py` | `IbLambdaExpr.returns` docstring 标注为历史兼容字段，解析器不再设置 |
+| `tests/e2e/test_e2e_fn_lambda_syntax.py` | 所有 `lambda -> TYPE` 形式的测试迁移为 `TYPE fn` 声明侧；新增工厂模式、HOF 赋值场景 |
+
+### 8.3 `fn[TYPE]` 类型推导链
+
+```
+TYPE fn f = lambda(PARAMS): EXPR
+  ↓ parser: 声明类型 = fn[TYPE] = IbSubscript(fn, TYPE)
+  ↓ semantic: resolve_specialization(fn, [TYPE]) → DeferredSpec(value_type_name=TYPE.name)
+  ↓ semantic: _pending_fn_return_type = TYPE_spec
+  ↓ visit_IbLambdaExpr: returns_type = TYPE_spec → 注入 body 的 expected_type
+  ↓ 调用处: resolve_return(DeferredSpec[TYPE], []) → TYPE_spec
+  → int r = f() 在编译期类型决议正确
+```

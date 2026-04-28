@@ -233,17 +233,17 @@ int x = (int) @~ what is 1+1 ~
             engine.compile_string(code, silent=True)
 
     def test_behavior_lambda_deferred(self, engine):
-        """fn varname = lambda -> TYPE: @~...~ 创建延迟执行的 behavior 对象。"""
+        """TYPE fn varname = lambda: @~...~ 创建延迟执行的 behavior 对象。"""
         code = """import ai
-fn my_behavior = lambda -> int: @~ what is 1+1 ~
+int fn my_behavior = lambda: @~ what is 1+1 ~
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
     def test_behavior_snapshot_deferred(self, engine):
-        """fn varname = snapshot -> TYPE: @~...~ 创建捕获意图快照的 behavior 对象。"""
+        """TYPE fn varname = snapshot: @~...~ 创建捕获意图快照的 behavior 对象。"""
         code = """import ai
-fn my_snap = snapshot -> str: @~ say hello ~
+str fn my_snap = snapshot: @~ say hello ~
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None

@@ -747,17 +747,6 @@ class IbUserFunction(IbFunction):
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
 
-        # --- lambda 参数传递约束 ---
-        # lambda 延迟对象不允许作为函数参数传递（语义约束）。
-        # snapshot 不受此限制。
-        for arg in args:
-            if isinstance(arg, (IbDeferred, IbBehavior)) and getattr(arg, 'deferred_mode', None) == 'lambda':
-                raise InterpreterError(
-                    "TypeError: lambda 延迟对象不允许作为函数参数传递。"
-                    " 如需跨作用域传递延迟值，请使用 snapshot 关键字。",
-                    error_code=RUN_CALL_ERROR
-                )
-
         # --- 意图栈作用域隔離（拷贝传递语义）---
         # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
         # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：

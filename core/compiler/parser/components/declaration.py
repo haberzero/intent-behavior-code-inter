@@ -113,11 +113,25 @@ class DeclarationComponent(BaseComponent):
             type_annotation = self._loc(ast.IbName(id=ID_FN, ctx='Load'), type_token)
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name after 'fn'.")
         else:
-            # Parse type annotation: int x = 1
+            # Parse type annotation: int x = 1  OR  int fn f = lambda: ...
             start_token = self.stream.peek()
             type_annotation = self.type_def.parse_type_annotation()
             type_token = start_token
-            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
+
+            # Check for 'RETURN_TYPE fn NAME' pattern:
+            # e.g. `int fn f = lambda: ...` or `tuple[int, str] fn parser = make_parser()`
+            # The annotation becomes IbSubscript(fn, RETURN_TYPE) which resolves to
+            # DeferredSpec(value_type_name="RETURN_TYPE") in the semantic pass.
+            if self.stream.match(TokenType.FN):
+                fn_token = self.stream.previous()
+                fn_node = self._loc(ast.IbName(id=ID_FN, ctx='Load'), fn_token)
+                type_annotation = self._loc(
+                    ast.IbSubscript(value=fn_node, slice=type_annotation, ctx='Load'),
+                    type_token,
+                )
+                name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name after 'fn'.")
+            else:
+                name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
 
         target = self._loc(ast.IbName(id=name_token.value, ctx='Store'), name_token)
         if type_annotation:

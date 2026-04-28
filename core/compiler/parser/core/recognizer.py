@@ -117,7 +117,7 @@ class SyntaxRecognizer:
         
         # 2. Check next token
         next_t = stream.peek(current + 1)
-        if next_t.type == TokenType.IDENTIFIER:
+        if next_t.type in (TokenType.IDENTIFIER, TokenType.FN):
             return True
             
         # 3. Check generics
@@ -148,8 +148,8 @@ class SyntaxRecognizer:
         if next_t.type == TokenType.IDENTIFIER:
             return True
             
-        # 2b. Heuristic check: '... ID lambda/snapshot ID' (e.g., 'int lambda x')
-        if next_t.type in (TokenType.LAMBDA, TokenType.SNAPSHOT):
+        # 2b. Heuristic check: '... ID lambda/snapshot/fn ID' (e.g., 'int fn f', 'int lambda x')
+        if next_t.type in (TokenType.LAMBDA, TokenType.SNAPSHOT, TokenType.FN):
             return True
             
         # 3. Heuristic check: '... ID [ ... ] ID' (e.g., 'list[int] x', 'a.b[int] y')
@@ -173,9 +173,9 @@ class SyntaxRecognizer:
             elif t.type == TokenType.RBRACKET:
                 bracket_depth -= 1
                 if bracket_depth == 0:
-                    # Found closing bracket. Check if next is an identifier, lambda, or snapshot.
+                    # Found closing bracket. Check if next is an identifier, lambda, snapshot, or fn.
                     next_t = stream.peek(current_offset + 1)
-                    return next_t.type in (TokenType.IDENTIFIER, TokenType.LAMBDA, TokenType.SNAPSHOT)
+                    return next_t.type in (TokenType.IDENTIFIER, TokenType.LAMBDA, TokenType.SNAPSHOT, TokenType.FN)
             
             current_offset += 1
             if current_offset > 100: # Safety limit

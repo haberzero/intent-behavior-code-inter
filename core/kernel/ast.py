@@ -409,15 +409,18 @@ class IbLambdaExpr(IbExpr):
     """
     参数化 lambda/snapshot 表达式（M1 fn 参数化语法引入）。
 
-    形式::
-        lambda(EXPR)                       # 无参表达式形式
-        lambda -> TYPE (EXPR)              # 无参 + 显式返回类型
-        lambda(PARAMS)(EXPR)               # 有参表达式形式
-        lambda(PARAMS) -> TYPE (EXPR)      # 有参 + 显式返回类型
-        snapshot(EXPR)                     # 无参 snapshot 形式
-        snapshot -> TYPE (EXPR)            # 无参 snapshot + 显式返回类型
-        snapshot(PARAMS)(EXPR)             # 有参 snapshot 形式
-        snapshot(PARAMS) -> TYPE (EXPR)    # 有参 snapshot + 显式返回类型
+    表达式侧支持的形式（``:`` 为唯一 body 起始符）::
+
+        lambda: EXPR                       # 无参
+        lambda(PARAMS): EXPR               # 有参
+        snapshot: EXPR                     # 无参 snapshot
+        snapshot(PARAMS): EXPR             # 有参 snapshot
+
+    返回类型标注统一写在**声明侧**，不允许写在表达式侧::
+
+        int fn f = lambda: EXPR            # f() 返回 int
+        int fn f = lambda(PARAMS): EXPR    # 带参，f(...) 返回 int
+        tuple[int, str] fn p = make_fn()   # 工厂模式也支持
 
     其中 ``PARAMS`` 是与函数参数同构的 ``IbArg`` / ``IbTypeAnnotatedExpr`` 列表，
     ``EXPR`` 是任意 IBCI 表达式（含 ``IbBehaviorExpr``）。
@@ -428,25 +431,17 @@ class IbLambdaExpr(IbExpr):
       调用处的意图栈生效。
     * ``deferred_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
       对意图栈 fork。
-    * ``returns``：可选的显式返回类型标注节点（通常为 ``IbName``）。
-      当 body 是 ``IbBehaviorExpr`` 时，``returns`` 的类型被绑定到 body 节点的
-      ``node_to_type`` 侧表，使 LLM executor 能注入 ``__outputhint_prompt__``
-      并正确解析 LLM 返回值（``_parse_result``）。
-      对于非行为 body，``returns`` 同时用于编译期类型检查（与 body 表达式类型兼容
-      性校验）以及 ``fn f = lambda -> int (...)`` 时 ``f()`` 调用返回类型的推导。
+    * ``returns``：保留字段（历史兼容），解析器不再设置它。
+      声明侧返回类型由 ``visit_IbAssign`` 通过 ``_pending_fn_return_type`` 注入到
+      ``visit_IbLambdaExpr``，不再经由本字段传递。
 
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
     运行时构造 ``IbBehavior``；否则构造 ``IbDeferred``。两者都接受参数列表。
-
-    本节点新增于 M1（``docs/VM_EVOLUTION_PLAN.md`` §M1），与历史的
-    ``deferred_mode`` 字段（位于 ``IbAssign`` 上）形成两条并存的语法路径，旧路径
-    用于 ``TYPE lambda NAME = EXPR`` 形式，新路径用于 ``fn NAME = lambda(...)``
-    形式。
     """
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
-    returns: Optional['IbASTNode'] = None  # 可选显式返回类型标注
+    returns: Optional['IbASTNode'] = None  # 保留字段（历史兼容），解析器不再设置
 
     @property
     def creates_scope(self) -> bool:

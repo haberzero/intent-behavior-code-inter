@@ -642,7 +642,13 @@ class SpecRegistry:
         if self.is_dynamic(target):
             return True
         if self.is_dynamic(src):
-            return self.is_dynamic(target)
+            if self.is_dynamic(target):
+                return True
+            # A dynamic callable (fn / auto) can be assigned to any callable slot,
+            # including typed DeferredSpec/BehaviorSpec (e.g. `int fn f = make_adder()`).
+            if self.is_callable(target):
+                return True
+            return False
 
         if src.name == target.name and src.module_path == target.module_path:
             return True
@@ -662,8 +668,9 @@ class SpecRegistry:
                 return True
 
         # Axiom-driven compatibility (e.g. bool isa int, None isa nullable)
+        # Pass the full target name so axioms can handle typed variants like "deferred[int]".
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
-        if src_axiom and src_axiom.is_compatible(target.get_base_name()):
+        if src_axiom and src_axiom.is_compatible(target.name):
             return True
 
         # Nullable target accepts None
@@ -690,7 +697,20 @@ class SpecRegistry:
         spec: IbSpec,
         arg_specs: List[IbSpec],
     ) -> Optional[IbSpec]:
-        """Resolve a generic type specialisation, e.g. list[int]."""
+        """Resolve a generic type specialisation, e.g. list[int].
+
+        Special case: ``fn[TYPE]`` — declaration-side return-type annotation.
+        ``int fn f = lambda: EXPR`` builds ``IbSubscript(fn, int)`` which
+        resolves here as ``DeferredSpec(value_type_name="int")``.  This enables
+        call-site inference: ``int r = f()`` compiles without SEM_003.
+        """
+        # Special case: fn[RETURN_TYPE] → DeferredSpec(value_type_name=RETURN_TYPE)
+        if spec.name == "fn" and arg_specs:
+            value_type = arg_specs[0]
+            return self.factory.create_deferred(
+                value_type_name=value_type.name,
+                value_type_module=getattr(value_type, 'module_path', None),
+            )
         axiom = self.get_axiom(spec)
         if axiom and hasattr(axiom, "resolve_specialization_by_names"):
             arg_names = [a.get_base_name() for a in arg_specs]

@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-28（M1 fn/lambda/snapshot 全新语法落地完成；758 个测试通过）
+> **最后更新**：2026-04-28（fn 声明侧返回类型语法落地；表达式侧 `-> TYPE` 已 PAR_005 禁止；780 个测试通过；M2 IbCell GC 根集合 + 词法作用域正式化完成）
 
 ---
 
@@ -26,7 +26,9 @@
 - ✅ **llmexcept 快照深克隆（方案A）**：`LLMExceptFrame._save_vars_snapshot()` 使用 `_try_deep_clone()`，支持用户自定义 `IbObject` 实例的递归字段克隆；循环引用通过 `memo` dict 安全处理
 - ✅ **llmexcept 用户协议快照（方案B）**：`saved_protocol_states` 字段；`_save_vars_snapshot()` 检测 `__snapshot__` vtable 并优先使用；`_restore_vars()` 调用 `__restore__(state)` 原地恢复；方案B优先于方案A，失败时自动降级；方案C（JSON 序列化）已作为 VM 任务记录在 `docs/PENDING_TASKS_VM.md`
 - ✅ **函数调用意图隔离（§9.4）**：`IbUserFunction.call()` + `IbLLMFunction.call()` 统一 fork/restore；`@!` 语义恢复为只修饰 LLM 行为表达式（不修饰函数调用）；`intent_context.clear_inherited()`/`use(ctx)`/`get_current()` 三个显式作用域控制 API 在 `builtin_initializer.py` 注册
-- ✅ **lambda 参数传递约束**：`deferred_mode='lambda'` 的延迟对象作为函数实参时运行时报错；`snapshot` 不受限
+- ✅ **M1 fn/lambda/snapshot 全新语法落地**：758 → 780 个测试通过（M1 + M2 + fn declaration-side 三阶段）
+- ✅ **M2 IbCell GC 根集合 + 词法作用域正式化**：lambda 自由变量通过共享 IbCell，lambda 可自由作为高阶函数参数传递；`ScopeImpl.promote_to_cell()`；`collect_gc_roots()`
+- ✅ **fn 声明侧返回类型**：`TYPE fn NAME = lambda: EXPR`；表达式侧 `lambda -> TYPE:` 禁止（PAR_005）；`fn[TYPE]` 解析为 DeferredSpec
 - ✅ **intent_context OOP MVP（§9.5）**：`IntentContextAxiom.is_class=True`；`INTENT_CONTEXT_SPEC = ClassSpec(...)`；实例方法 `__init__/push/pop/fork/resolve/merge/clear` + 作用域控制方法 `clear_inherited/use/get_current` 注册
 - ✅ **`in` / `not in` 运算符**：`IbCompare` 支持成员检测；`str`/`list`/`dict` 均实现 `__contains__` vtable
 - ✅ **标准库方法补全**：`str.{find_last, is_empty, replace, startswith, endswith, trim, to_upper, to_lower}`；`list.{insert, remove, index, count, contains}`；`dict.{pop, contains, remove}`；`Exception(msg)` 构造 + `e.message` 字段；`list + list` 拼接；610 测试通过
@@ -153,18 +155,19 @@ Step 4b（完成）
 > **完成总结**：M1 全部落地。758 个测试通过（从基准 678 增至 758）。  
 > 旧语法已彻底移除（parse error）。详见 `docs/COMPLETED.md §五`。
 
-### 实际落地的语法（8 种形式，lambda/snapshot 对称）
+### 实际落地的语法（最终形式：声明侧返回类型）
 
 ```ibci
-fn f = lambda: EXPR
-fn f = lambda -> TYPE: EXPR
-fn f = lambda(PARAMS): EXPR
-fn f = lambda(PARAMS) -> TYPE: EXPR
+int fn f = lambda: EXPR
+int fn f = lambda(PARAMS): EXPR
+str fn f = snapshot: EXPR
+str fn f = snapshot(PARAMS): EXPR
 
+# 无返回类型标注（不带 TYPE）
+fn f = lambda: EXPR
+fn f = lambda(PARAMS): EXPR
 fn f = snapshot: EXPR
-fn f = snapshot -> TYPE: EXPR
 fn f = snapshot(PARAMS): EXPR
-fn f = snapshot(PARAMS) -> TYPE: EXPR
 ```
 
 ### 已移除的旧语法（现产生 parse error）
@@ -175,9 +178,10 @@ auto snapshot g = expr       # ❌
 fn lambda h = expr           # ❌
 lambda(EXPR)                 # ❌ 旧括号体
 lambda(PARAMS)(EXPR)         # ❌ 旧括号体
+fn f = lambda -> int: EXPR   # ❌ PAR_005（表达式侧返回类型）
 ```
 
-> **后续**：M2（IbCell GC 根集合 + 词法作用域正式化）现在可以独立推进。
+> **后续**：fn declaration-side 语法（M3 前置）已完成（780 tests）；M3a（CPS 调度循环）现在可以独立推进。
 
 ---
 
