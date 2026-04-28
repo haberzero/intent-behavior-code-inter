@@ -966,29 +966,41 @@ print(result)
 
 class TestE2ELambdaRestriction:
     """
-    lambda values cannot be passed as function arguments.
-    Attempting to do so should raise a runtime error.
+    M2: lambda 值现在可以自由作为函数参数传递（高阶函数场景）。
+
+    M1 时期的限制（"lambda 延迟对象不允许作为函数参数传递"）已在 M2 中移除：
+    lambda 闭包的自由变量通过共享 IbCell 捕获，生命周期安全，可以跨作用域传递。
     """
 
-    def test_lambda_cannot_be_passed_as_arg(self):
-        """Passing a lambda value as a function argument raises an error."""
-        import pytest
+    def test_lambda_can_be_passed_as_arg(self):
+        """M2: lambda 值可以作为函数参数传递，高阶函数能调用它。"""
         code = ai_setup_code() + """
-func accept_any(any x):
-    print("called")
+func apply(fn f, int val) -> auto:
+    return f(val)
 
-fn deferred_val = lambda -> int: @~ MOCK:INT:5 ~
-accept_any(deferred_val)
+fn double = lambda(int x): x * 2
+int result = (int)apply(double, 5)
+print((str)result)
 """
-        with pytest.raises(Exception):
-            run_and_capture(code)
+        lines = run_and_capture(code)
+        assert lines == ["10"]
+
+    def test_lambda_passed_as_any_and_called(self):
+        """lambda 传入 any 参数，函数内可以正常调用。"""
+        code = ai_setup_code() + """
+func call_it(fn f) -> str:
+    return (str)f()
+
+fn greet = lambda: "hello"
+str r = call_it(greet)
+print(r)
+"""
+        lines = run_and_capture(code)
+        assert lines == ["hello"]
 
     def test_snapshot_can_be_passed_as_any(self):
         """
-        snapshot values should NOT be restricted by the lambda rule.
-        This test verifies snapshot does not trigger the lambda restriction.
-        Note: snapshot executes immediately on first call(), so passing it
-        as an 'any' param is allowed.
+        snapshot 值仍然可以作为参数传递（M1 起即支持）。
         """
         code = ai_setup_code() + """
 func accept_any(any x):

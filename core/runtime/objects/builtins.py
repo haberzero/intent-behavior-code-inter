@@ -754,27 +754,23 @@ class IbDeferred(IbObject):
             )
 
         rt_context = self._execution_context.runtime_context
-        old_scope = None
         pushed_scope = False
 
-        # 1) 选择作用域基底：snapshot 模式下使用调用者的当前作用域作为父链
-        #    （闭包 cell 自带值快照，独立于定义时的外部作用域）；lambda 模式
-        #    切换到 captured_scope 以保持对自由变量的最新可见性。
-        if self.deferred_mode == "lambda" and self._captured_scope is not None:
-            old_scope = rt_context.current_scope
-            rt_context.current_scope = self._captured_scope
-
         try:
-            # 2) 若有参或有闭包，进入子作用域以承载 params 与 closure cells
+            # 1) 若有参或有闭包，进入子作用域以承载 params 与 closure cells。
+            #    M2 (SC-4)：lambda 模式的自由变量已通过共享 IbCell 存入 closure，
+            #    此处与 snapshot 模式共用同一套安装逻辑，无需再切换 captured_scope。
             needs_subscope = bool(self.params_uids) or bool(self.closure)
             if needs_subscope:
                 rt_context.enter_scope()
                 pushed_scope = True
 
-                # 安装闭包 cell：将其值写入当前作用域，使 body 内的自由变量引用解析为冻结值。
+                # 安装闭包 cell：将其值写入当前作用域，使 body 内的自由变量引用解析为正确值。
                 # closure 形如 ``Dict[sym_uid, (name, IbCell)]``——按 UID 重新登记
                 # 是必须的：runtime IbName 解析走 UID 路径，仅按名字定义会被父链同名
                 # 符号的 UID 命中给截胡。
+                # snapshot 模式：cell.get() = 定义时刻的冻结值；
+                # lambda 模式（M2）：cell.get() = 调用时刻的最新值（共享 IbCell）。
                 from core.runtime.objects.cell import IbCell
                 for sym_uid, payload in self.closure.items():
                     if isinstance(payload, tuple) and len(payload) == 2:
@@ -801,14 +797,12 @@ class IbDeferred(IbObject):
                         sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
                         rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
-            # 3) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）
+            # 2) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）
             target_uid = self.body_uid if self.body_uid else self.node_uid
             result = self._execution_context.visit(target_uid)
         finally:
             if pushed_scope:
                 rt_context.exit_scope()
-            if old_scope is not None:
-                rt_context.current_scope = old_scope
 
         # 缓存：仅"无参 snapshot"缓存返回值（对应历史无参延迟语义）。
         if self.deferred_mode == "snapshot" and not self.params_uids:

@@ -22,11 +22,16 @@ class RuntimeSymbolImpl:
         self.declared_type = declared_type
         self.current_type = type(value) if value is not None else None
         self.is_const = is_const
+        # M2 (SC-3): 当变量被内层 lambda 捕获时，提升为 Cell 变量；
+        # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
+        self.cell: Optional[Any] = None  # Optional[IbCell]
 
 class ScopeImpl:
     def __init__(self, parent: Optional['Scope'] = None, registry: Optional[Registry] = None):
         self._symbols: Dict[str, RuntimeSymbol] = {}
         self._uid_to_symbol: Dict[str, RuntimeSymbol] = {} # 基于 Symbol UID 的直接映射
+        # M2 (SC-3/GC-2): sym_uid → IbCell 映射，仅包含已提升为 Cell 变量的条目。
+        self._cell_map: Dict[str, Any] = {}  # Dict[str, IbCell]
         self._parent = parent
         # 如果没有传入 registry，则从父作用域继承
         if registry:
@@ -112,6 +117,10 @@ class ScopeImpl:
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
+            # M2 (SC-3): Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
+            # lambda 闭包在下次调用时读到最新值。
+            if symbol.cell is not None:
+                symbol.cell.set(boxed_value)
             return True
         if self._parent:
             return self._parent.assign(name, value)
@@ -130,6 +139,9 @@ class ScopeImpl:
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
+            # M2 (SC-3): Cell 变量赋值时同步更新共享 IbCell。
+            if symbol.cell is not None:
+                symbol.cell.set(boxed_value)
             return True
         if self._parent and hasattr(self._parent, 'assign_by_uid'):
             return self._parent.assign_by_uid(uid, value)
@@ -170,6 +182,50 @@ class ScopeImpl:
     def get_all_symbols(self) -> Dict[str, RuntimeSymbol]:
         """返回当前作用域的所有符号（不包含父作用域）"""
         return dict(self._symbols)
+
+    # ------------------------------------------------------------------
+    # M2 (SC-3 / SC-4 / GC-2): Cell 变量支持
+    # ------------------------------------------------------------------
+
+    def promote_to_cell(self, sym_uid: str) -> Optional[Any]:
+        """
+        将符号提升为 Cell 变量（公理 SC-3）。
+
+        规则：
+        - 若该 UID 在当前作用域的 _cell_map 中已有 IbCell，直接返回共享引用（幂等）。
+        - 若该 UID 对应的符号在本作用域中且本作用域非全局（parent 非 None），
+          创建 IbCell(current_value)，写入 symbol.cell 与 _cell_map，返回该 IbCell。
+        - 全局作用域（parent 为 None）的变量不提升——它们始终可达，IbCell 无必要。
+        - 若本作用域没有该 UID，向上查找父作用域递归处理（SC-4 向外层捕获）。
+
+        返回：IbCell 引用，或 None（变量不存在 / 属于全局作用域不需要提升）。
+        """
+        from core.runtime.objects.cell import IbCell
+        if sym_uid in self._cell_map:
+            return self._cell_map[sym_uid]
+        if sym_uid in self._uid_to_symbol:
+            # 全局作用域（顶层）的变量永远可达，不提升
+            if self._parent is None:
+                return None
+            sym = self._uid_to_symbol[sym_uid]
+            if sym.cell is not None:
+                # 符号已有 cell（e.g. 通过 name-map 已提升），复用
+                self._cell_map[sym_uid] = sym.cell
+                return sym.cell
+            cell = IbCell(sym.value)
+            sym.cell = cell
+            self._cell_map[sym_uid] = cell
+            return cell
+        # 向上查找
+        if self._parent and hasattr(self._parent, 'promote_to_cell'):
+            return self._parent.promote_to_cell(sym_uid)
+        return None
+
+    def iter_cells(self):
+        """
+        枚举本作用域（不递归父）的所有 IbCell（公理 GC-2 根集合扫描入口）。
+        """
+        return iter(self._cell_map.values())
 
 class SymbolViewImpl:
     """[Active Defense] 只读符号表视图实现"""
@@ -618,6 +674,32 @@ class RuntimeContextImpl(RuntimeContext):
     @property
     def global_scope(self) -> Scope:
         return self._global_scope
+
+    def collect_gc_roots(self):
+        """
+        枚举 GC 根集合中的所有 IbObject（公理 GC-2）。
+
+        根集合 = 当前作用域链中所有符号值 ∪ 所有活跃 Cell 的持有对象。
+
+        返回一个生成器，逐一 yield IbObject。
+
+        注意
+        ----
+        本方法是 IBCI 规范层 GC-2 的接口落地。Python 宿主依赖 CPython 引用计数，
+        不需要手动 GC；此方法主要用于调试、合规测试以及未来非 Python 宿主迁移。
+        """
+        from core.runtime.objects.cell import IbCell
+        scope = self._current_scope
+        while scope is not None:
+            # 1. 所有符号值
+            for sym in scope.get_all_symbols().values():
+                if sym.value is not None:
+                    yield sym.value
+            # 2. Cell 变量：通过 trace_refs() 枚举 IbCell 持有的对象
+            if hasattr(scope, 'iter_cells'):
+                for cell in scope.iter_cells():
+                    yield from cell.trace_refs()
+            scope = scope.parent
 
     def get_symbol_view(self) -> SymbolView:
         return SymbolViewImpl(self)
