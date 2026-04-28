@@ -364,3 +364,148 @@ str r = f()
 print(r)
 """
         assert run_and_capture(code) == ["frozen"]
+
+
+# ---------------------------------------------------------------------------
+# Colon body-start syntax: ``fn f = lambda: EXPR`` and all variants.
+# The ':' form eliminates the need to wrap the body in parentheses.
+# ---------------------------------------------------------------------------
+
+class TestFnLambdaColonSyntax:
+    """Colon body-start syntax for lambda/snapshot (all eight forms)."""
+
+    # --- lambda: EXPR (no params, no return type) ---
+
+    def test_no_param_lambda_colon_compile(self):
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn f = lambda: 1 + 2", silent=True)
+
+    def test_no_param_lambda_colon_runtime(self):
+        assert run_and_capture("fn f = lambda: 21 * 2\nprint((str)f())") == ["42"]
+
+    def test_no_param_lambda_colon_free_var(self):
+        code = """int x = 10
+fn f = lambda: x * 4
+print((str)f())
+x = 20
+print((str)f())
+"""
+        assert run_and_capture(code) == ["40", "80"]
+
+    # --- lambda -> TYPE: EXPR (no params + return type) ---
+
+    def test_no_param_lambda_colon_with_return_type_compiles(self):
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn f = lambda -> int: 21 * 2\nint r = f()", silent=True)
+
+    def test_no_param_lambda_colon_with_return_type_runtime(self):
+        code = """
+fn f = lambda -> int: 21 * 2
+int r = f()
+print((str)r)
+"""
+        assert run_and_capture(code) == ["42"]
+
+    # --- lambda(PARAMS): EXPR (params, no return type) ---
+
+    def test_param_lambda_colon_compile(self):
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn add = lambda(int a, int b): a + b", silent=True)
+
+    def test_param_lambda_colon_runtime(self):
+        code = """
+fn add = lambda(int a, int b): a + b
+auto r = add(10, 32)
+print((str)r)
+"""
+        assert run_and_capture(code) == ["42"]
+
+    # --- lambda(PARAMS) -> TYPE: EXPR (params + return type) ---
+
+    def test_param_lambda_colon_with_return_type_compiles(self):
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn mul = lambda(int a, int b) -> int: a * b\nint r = mul(6, 7)", silent=True)
+
+    def test_param_lambda_colon_with_return_type_runtime(self):
+        code = """
+fn mul = lambda(int a, int b) -> int: a * b
+int r = mul(6, 7)
+print((str)r)
+"""
+        assert run_and_capture(code) == ["42"]
+
+    # --- snapshot: EXPR (no params, free var frozen) ---
+
+    def test_snapshot_colon_freezes_free_var(self):
+        code = """
+int n = 10
+fn f = snapshot: n + 5
+n = 999
+auto r = f()
+print((str)r)
+"""
+        assert run_and_capture(code) == ["15"]
+
+    # --- snapshot -> TYPE: EXPR ---
+
+    def test_snapshot_colon_with_return_type(self):
+        code = """
+int n = 10
+fn f = snapshot -> int: n + 5
+n = 999
+int r = f()
+print((str)r)
+"""
+        assert run_and_capture(code) == ["15"]
+
+    # --- snapshot(PARAMS): EXPR ---
+
+    def test_snapshot_param_colon_runtime(self):
+        code = """
+int scale = 3
+fn f = snapshot(int n): n * scale
+scale = 100
+auto r = f(7)
+print((str)r)
+"""
+        assert run_and_capture(code) == ["21"]
+
+    # --- snapshot(PARAMS) -> TYPE: EXPR ---
+
+    def test_snapshot_param_colon_with_return_type_runtime(self):
+        code = """
+int scale = 3
+fn f = snapshot(int n) -> int: n * scale
+scale = 100
+int r = f(7)
+print((str)r)
+"""
+        assert run_and_capture(code) == ["21"]
+
+    # --- String body with colon ---
+
+    def test_snapshot_colon_string_concat(self):
+        code = """
+str prefix = "hello"
+fn f = snapshot -> str: prefix + " world"
+prefix = "bye"
+str r = f()
+print(r)
+"""
+        assert run_and_capture(code) == ["hello world"]
+
+    # --- Backward compat: old parenthesis forms unchanged ---
+
+    def test_old_bracket_forms_still_work(self):
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn f = lambda(1 + 2)", silent=True)
+        IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
+            "fn f = lambda -> int (21 * 2)\nint r = f()", silent=True)
+
+    def test_colon_returns_type_mismatch(self):
+        """Body type mismatch with `-> TYPE:` raises SEM_003."""
+        from core.kernel.issue import CompilerError
+        with pytest.raises(CompilerError) as exc_info:
+            IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
+                "fn f = lambda(int a) -> str: a + 1", silent=True)
+        assert any(d.code == "SEM_003" for d in exc_info.value.diagnostics)
