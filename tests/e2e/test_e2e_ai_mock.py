@@ -268,7 +268,7 @@ print(result2)
         注：直接赋值到具体类型（int/str）需 P2 编译器类型推断改进，当前通过 print() 调用验证。"""
         code = ai_setup_code() + """
 @+ use formal language
-fn compute = lambda -> str: @~ MOCK:STR:hello ~
+str fn compute = lambda: @~ MOCK:STR:hello ~
 @-
 print(compute())
 """
@@ -278,7 +278,7 @@ print(compute())
     def test_lambda_behavior_basic(self):
         """lambda 延迟行为基本执行冒烟测试。"""
         code = ai_setup_code() + """
-fn compute = lambda -> str: @~ MOCK:STR:world ~
+str fn compute = lambda: @~ MOCK:STR:world ~
 print(compute())
 """
         lines = run_and_capture(code)
