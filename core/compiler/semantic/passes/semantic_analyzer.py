@@ -1749,18 +1749,31 @@ class SemanticAnalyzer:
 
         策略
         ----
-        1. 为参数列表与函数体打开新的 ``SymbolTable``（局部作用域），保证 body 内
+        1. 解析可选的 ``returns`` 类型标注（``-> TYPE``）。
+        2. 为参数列表与函数体打开新的 ``SymbolTable``（局部作用域），保证 body 内
            的 ``IbName`` 决议能将形参指向局部符号而非误捕外层同名变量。
-        2. 形参解析为 ``VariableSymbol``，类型来自注解（缺省为 ``any``）。
-        3. visit body：触发完整的 Pass 3 类型检查与 ``node_to_symbol`` 绑定。
-        4. lambda 表达式自身的 spec 为 ``deferred``/``behavior``（依据 body 类型）；
-           调用方（如 ``fn f = lambda(...)``）通过 ``__call__`` 协议获得返回类型。
+        3. 形参解析为 ``VariableSymbol``，类型来自注解（缺省为 ``any``）。
+        4. visit body：触发完整的 Pass 3 类型检查与 ``node_to_symbol`` 绑定。
+        5. 若 body 是 ``IbBehaviorExpr`` 且 ``returns`` 提供了具体类型，则将该类型
+           绑定到 body 节点的 ``node_to_type`` 侧表——这是 LLM executor 读取
+           ``expected_type``（用于 ``__outputhint_prompt__`` 注入和 ``_parse_result``
+           返回值解析）的关键入口。
+        6. 若 body 是非行为表达式且 ``returns`` 存在，检查 body 类型与 ``returns``
+           类型的兼容性（编译期类型校验）。
+        7. lambda 表达式自身的 spec：若 ``returns`` 携带具体类型则返回带 value_type
+           的 BehaviorSpec/DeferredSpec（使 ``fn f = lambda -> int (...)`` 时
+           ``int r = f()`` 能在编译期通过类型决议），否则返回通用 spec。
 
         与 ``IbBehaviorExpr``（无参延迟形态）的区别在于：本节点拥有独立的形参
         作用域；body 通过 visit 走通用类型决议路径，无需复制 ``in_behavior_expr``
         语义（相关标记由 visit_IbBehaviorExpr 在 body 是 IbBehaviorExpr 时自身处置）。
         """
-        # 1. 为 lambda 局部作用域打开新的符号表
+        # 1. 在外部作用域解析 returns 类型标注（不受 lambda 局部作用域影响）
+        returns_type: Optional[IbSpec] = None
+        if node.returns is not None:
+            returns_type = self._resolve_type(node.returns)
+
+        # 2. 为 lambda 局部作用域打开新的符号表
         old_table = self.symbol_table
         local_scope = SymbolTable(parent=old_table, name=f"<lambda:{node.deferred_mode}>")
         self.symbol_table = local_scope
@@ -1769,7 +1782,7 @@ class SemanticAnalyzer:
         saved_class = self.current_class
         self.current_class = None
         try:
-            # 2. 注册形参符号
+            # 3. 注册形参符号
             for arg_node in node.params:
                 arg_type = self._any_desc
                 name_node = arg_node
@@ -1782,7 +1795,7 @@ class SemanticAnalyzer:
                 elif isinstance(name_node, ast.IbName):
                     self._define_var(name_node.id, arg_type, name_node)
 
-            # 3. 走访 body，触发完整类型决议
+            # 4. 走访 body，触发完整类型决议
             if node.body is not None:
                 body_type = self.visit(node.body)
             else:
@@ -1791,11 +1804,48 @@ class SemanticAnalyzer:
             self.current_class = saved_class
             self.symbol_table = old_table
 
-        # 4. lambda 表达式的静态类型：body 是 IbBehaviorExpr → behavior 类（参与
-        #    LLM 调用），否则统一为 deferred 类。两者均实现 __call__，可被 fn 持有。
-        if isinstance(node.body, ast.IbBehaviorExpr):
+        # 5. 若 body 是 IbBehaviorExpr 且 returns 携带具体类型，
+        #    将该类型绑定到 body 节点的 node_to_type 侧表，使 LLM executor
+        #    在执行时能正确注入提示词格式要求并解析返回值。
+        is_behavior_body = isinstance(node.body, ast.IbBehaviorExpr)
+        has_concrete_returns = (
+            returns_type is not None
+            and not self.registry.is_dynamic(returns_type)
+        )
+
+        if is_behavior_body and has_concrete_returns:
+            self.side_table.bind_type(node.body, returns_type)
+
+        # 6. 非行为 body：检查 body 类型与 returns 类型的兼容性
+        if (not is_behavior_body
+                and has_concrete_returns
+                and body_type is not None
+                and body_type is not self._void_desc
+                and not self.registry.is_assignable(body_type, returns_type)
+                and not self.registry.is_dynamic(body_type)):
+            self.error(
+                f"Lambda body type '{body_type.name}' is not compatible with "
+                f"declared return type '{returns_type.name}'.",
+                node, code="SEM_003",
+            )
+
+        # 7. 返回带 value_type 的 Spec（使调用处 resolve_return 能推导出具体类型）
+        if is_behavior_body:
+            if has_concrete_returns:
+                return self.registry.factory.create_behavior(
+                    value_type_name=returns_type.name,
+                    value_type_module=getattr(returns_type, 'module_path', None),
+                    deferred_mode=node.deferred_mode,
+                )
             return self._behavior_desc
-        return self._deferred_desc
+        else:
+            if has_concrete_returns:
+                return self.registry.factory.create_deferred(
+                    value_type_name=returns_type.name,
+                    value_type_module=getattr(returns_type, 'module_path', None),
+                    deferred_mode=node.deferred_mode,
+                )
+            return self._deferred_desc
 
     def _resolve_type(self, node: Optional[ast.IbASTNode], safe: bool = False) -> IbSpec:
         """解析 AST 节点中的类型标注 (Axiom-Driven)"""

@@ -198,11 +198,100 @@ class TestFnLambdaErrors:
     """Compile/runtime error paths for the new syntax."""
 
     def test_lambda_without_paren_is_error(self):
-        """``lambda`` keyword in expression position must be followed by '('."""
+        """``lambda`` keyword in expression position must be followed by '(' or '->'."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
             engine.compile_string("fn f = lambda 5", silent=True)
+
+    def test_lambda_returns_type_mismatch(self):
+        """Body type incompatible with declared return type raises SEM_003."""
+        from core.kernel.issue import CompilerError
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string("fn f = lambda(int a) -> str (a + 1)", silent=True)
+        assert any(d.code == "SEM_003" for d in exc_info.value.diagnostics)
+
+
+# ---------------------------------------------------------------------------
+# Return type annotation: ``fn f = lambda -> TYPE (EXPR)``
+# and ``fn f = lambda(PARAMS) -> TYPE (EXPR)``
+# ---------------------------------------------------------------------------
+
+class TestFnLambdaReturnsAnnotation:
+    """Explicit return type annotation on lambda/snapshot (M1 extension)."""
+
+    def test_no_param_lambda_returns_int_compiles(self):
+        """`fn f = lambda -> int (EXPR)` resolves `int r = f()` at compile time."""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("""
+fn f = lambda -> int (21 * 2)
+int r = f()
+""", silent=True)
+
+    def test_no_param_lambda_returns_int_runtime(self):
+        code = """
+fn f = lambda -> int (21 * 2)
+int r = f()
+print((str)r)
+"""
+        assert run_and_capture(code) == ["42"]
+
+    def test_param_lambda_returns_int_compiles(self):
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("""
+fn add = lambda(int a, int b) -> int (a + b)
+int r = add(1, 2)
+""", silent=True)
+
+    def test_param_lambda_returns_int_runtime(self):
+        code = """
+fn add = lambda(int a, int b) -> int (a + b)
+int r = add(10, 32)
+print((str)r)
+"""
+        assert run_and_capture(code) == ["42"]
+
+    def test_snapshot_returns_int_freezes_free_var(self):
+        code = """
+int base = 10
+fn f = snapshot -> int (base + 5)
+base = 999
+int r = f()
+print((str)r)
+"""
+        assert run_and_capture(code) == ["15"]
+
+    def test_snapshot_returns_int_with_params(self):
+        code = """
+int scale = 3
+fn f = snapshot(int n) -> int (n * scale)
+scale = 100
+int r = f(7)
+print((str)r)
+"""
+        # scale frozen at 3 at snapshot creation time → 7 * 3 = 21
+        assert run_and_capture(code) == ["21"]
+
+    def test_returns_str_concat(self):
+        code = """
+fn greet = lambda(str name) -> str ("Hello, " + name + "!")
+str r = greet("World")
+print(r)
+"""
+        assert run_and_capture(code) == ["Hello, World!"]
+
+    def test_type_checking_call_site(self):
+        """``int r = f()`` passes compile-time check when ``-> int`` is annotated."""
+        from core.kernel.issue import CompilerError
+        engine_dir = os.path.dirname(os.path.abspath(__file__))
+        # Without annotation → SEM_003 (auto → int mismatch)
+        with pytest.raises(CompilerError):
+            IBCIEngine(root_dir=engine_dir, auto_sniff=False).compile_string(
+                "fn f = lambda(1 + 1)\nint r = f()", silent=True)
+        # With annotation → compiles OK
+        IBCIEngine(root_dir=engine_dir, auto_sniff=False).compile_string(
+            "fn f = lambda -> int (1 + 1)\nint r = f()", silent=True)
 
 
 # ---------------------------------------------------------------------------
@@ -233,3 +322,45 @@ str r2 = (str)greet("bob")
 print(r2)
 """
         assert run_and_capture(code) == ["hi-alice", "hi-bob"]
+
+
+class TestFnLambdaBehaviorBodyReturnsAnnotation:
+    """Behavior-body lambdas with explicit ``-> TYPE`` return type annotation."""
+
+    def test_behavior_lambda_returns_str_no_param(self):
+        """``fn f = lambda -> str (@~...~)`` annotates expected LLM output type."""
+        code = _ai_prefix() + """
+fn f = lambda -> str (@~MOCK:STR:hello~)
+str r = f()
+print(r)
+"""
+        assert run_and_capture(code) == ["hello"]
+
+    def test_behavior_lambda_returns_str_call_site_typed(self):
+        """`fn f = lambda -> str (@~...~)` enables `str r = f()` without cast."""
+        from core.kernel.issue import CompilerError
+        # Without annotation: `str r = f()` would be SEM_003
+        with pytest.raises(CompilerError):
+            IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
+                _ai_prefix() + "\nfn f = lambda(@~MOCK:STR:hi~)\nstr r = f()", silent=True)
+        # With annotation: compiles OK
+        IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
+            _ai_prefix() + "\nfn f = lambda -> str (@~MOCK:STR:hi~)\nstr r = f()", silent=True)
+
+    def test_param_behavior_lambda_returns_str(self):
+        """Parametric behavior lambda with ``-> str`` and prompt variable."""
+        code = _ai_prefix() + """
+fn greet = lambda(str name) -> str (@~MOCK:STR:hi-$name~)
+str r = greet("alice")
+print(r)
+"""
+        assert run_and_capture(code) == ["hi-alice"]
+
+    def test_snapshot_behavior_returns_str_freezes_intent(self):
+        """``snapshot -> TYPE (@~...~)`` freezes intent context at definition time."""
+        code = _ai_prefix() + """
+fn f = snapshot -> str (@~MOCK:STR:frozen~)
+str r = f()
+print(r)
+"""
+        assert run_and_capture(code) == ["frozen"]

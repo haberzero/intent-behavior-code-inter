@@ -410,10 +410,14 @@ class IbLambdaExpr(IbExpr):
     参数化 lambda/snapshot 表达式（M1 fn 参数化语法引入）。
 
     形式::
-        lambda(EXPR)              # 无参表达式形式
-        lambda(PARAMS)(EXPR)      # 有参表达式形式
-        snapshot(EXPR)            # 无参 snapshot 形式
-        snapshot(PARAMS)(EXPR)    # 有参 snapshot 形式
+        lambda(EXPR)                       # 无参表达式形式
+        lambda -> TYPE (EXPR)              # 无参 + 显式返回类型
+        lambda(PARAMS)(EXPR)               # 有参表达式形式
+        lambda(PARAMS) -> TYPE (EXPR)      # 有参 + 显式返回类型
+        snapshot(EXPR)                     # 无参 snapshot 形式
+        snapshot -> TYPE (EXPR)            # 无参 snapshot + 显式返回类型
+        snapshot(PARAMS)(EXPR)             # 有参 snapshot 形式
+        snapshot(PARAMS) -> TYPE (EXPR)    # 有参 snapshot + 显式返回类型
 
     其中 ``PARAMS`` 是与函数参数同构的 ``IbArg`` / ``IbTypeAnnotatedExpr`` 列表，
     ``EXPR`` 是任意 IBCI 表达式（含 ``IbBehaviorExpr``）。
@@ -424,6 +428,12 @@ class IbLambdaExpr(IbExpr):
       调用处的意图栈生效。
     * ``deferred_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
       对意图栈 fork。
+    * ``returns``：可选的显式返回类型标注节点（通常为 ``IbName``）。
+      当 body 是 ``IbBehaviorExpr`` 时，``returns`` 的类型被绑定到 body 节点的
+      ``node_to_type`` 侧表，使 LLM executor 能注入 ``__outputhint_prompt__``
+      并正确解析 LLM 返回值（``_parse_result``）。
+      对于非行为 body，``returns`` 同时用于编译期类型检查（与 body 表达式类型兼容
+      性校验）以及 ``fn f = lambda -> int (...)`` 时 ``f()`` 调用返回类型的推导。
 
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
     运行时构造 ``IbBehavior``；否则构造 ``IbDeferred``。两者都接受参数列表。
@@ -436,6 +446,7 @@ class IbLambdaExpr(IbExpr):
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
+    returns: Optional['IbASTNode'] = None  # 可选显式返回类型标注
 
     @property
     def creates_scope(self) -> bool:
