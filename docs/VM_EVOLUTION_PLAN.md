@@ -163,7 +163,7 @@ lambda(PARAMS)(EXPR)         # ❌ 旧括号体语法
 |------|---------|
 | `core/runtime/interpreter/runtime_context.py` | `RuntimeSymbolImpl` 添加 `cell` 字段；`ScopeImpl` 添加 `_cell_map`、`promote_to_cell()`、`iter_cells()`；`assign`/`assign_by_uid` 同步写入 IbCell；`RuntimeContextImpl` 新增 `collect_gc_roots()` |
 | `core/runtime/interpreter/handlers/expr_handler.py` | `visit_IbLambdaExpr` lambda 模式改为共享 IbCell 引用（`promote_to_cell()`），不再传递 `captured_scope` |
-| `core/runtime/objects/builtins.py` | `IbDeferred.call()` 移除 `captured_scope` 作用域切换逻辑；lambda/snapshot 统一通过 `closure` 字典安装自由变量 |
+| `core/runtime/objects/builtins.py` | `IbDeferred.call()` 移除 `captured_scope` 作用域切换逻辑；lambda/snapshot 统一通过 `closure` 字典安装自由变量（注：`_captured_scope` 字段本身在后续代码债务清理 PR 中完全删除，见 `docs/COMPLETED.md §九`）|
 | `core/runtime/objects/kernel.py` | `IbUserFunction.call()` 删除 lambda 参数传递限制 |
 | `tests/e2e/test_e2e_m2_higher_order.py` | 新增 17 个 M2 专项测试（HOF、IbCell 语义、GC 根集合） |
 | `tests/e2e/test_e2e_ai_mock.py` | `TestE2ELambdaRestriction` 反转：改为验证 lambda 可自由传递 |

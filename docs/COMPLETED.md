@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-28（fn 声明侧返回类型语法落地；表达式侧 `-> TYPE` 形式 PAR_005 禁止；`fn[TYPE]` 解析为 DeferredSpec；780 个测试通过）
+> **最后更新**：2026-04-28（代码债务清理 H1/H2/H3/M1：删除 `_captured_scope` 僵尸字段、修复 `DeferredAxiom.is_compatible`、移除 closure 解包死分支；780 个测试通过）
 
 ---
 
@@ -403,7 +403,7 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 
 - 删除 `IbDeferred.call()` 中 `captured_scope` 作用域切换代码（`old_scope` / `rt_context.current_scope = _captured_scope`）
 - lambda/snapshot 统一通过 `closure` 字典安装自由变量，无需切换作用域基底
-- `_captured_scope` 字段保留（历史 API 兼容），但 M2 后的 lambda 路径始终传 `None`
+- `_captured_scope` 字段在此阶段仍保留（历史 API 兼容，M2 后始终传 `None`）；字段完全删除于代码债务清理 PR（§九）
 
 ### 7.4 IbUserFunction 移除 lambda 参数传递限制
 
@@ -475,3 +475,60 @@ TYPE fn f = lambda(PARAMS): EXPR
   ↓ 调用处: resolve_return(DeferredSpec[TYPE], []) → TYPE_spec
   → int r = f() 在编译期类型决议正确
 ```
+
+---
+
+## 九、代码债务清理（H1/H2/H3/M1）[✅ COMPLETED — 2026-04-28]
+
+**前提**：M2 + fn 声明侧语法（已具备）  
+**测试基线**：780 个测试通过（无新增测试，无回归）  
+**背景**：基于 M2 落地后代码全链路审查（`URGENT_ISSUES.md` 高/中优先级问题）清理历史遗留死代码与文档/代码语义矛盾。
+
+### 9.1 [H1] IbDeferred docstring 更新
+
+`core/runtime/objects/builtins.py`：
+
+- `IbDeferred` 类 docstring 中 `closure` 字段说明从 M1 旧描述更新为 M2 语义
+- 删除 "lambda 模式仍使用 `captured_scope` 引用链" 说法
+- 新描述：lambda/snapshot 两种模式均通过 `closure: Dict[sym_uid, (name, IbCell)]` 访问自由变量；snapshot 存独立 IbCell（值拷贝），lambda 存共享 IbCell（引用）
+
+### 9.2 [H2] `_captured_scope` 僵尸字段完全删除
+
+M2 后 `captured_scope` 参数始终传 `None`，字段从未被读取，属于死代码。本次完全删除：
+
+| 文件 | 改动 |
+|------|------|
+| `core/runtime/objects/builtins.py` | `IbDeferred.__init__` 删除 `captured_scope` 参数及 `self._captured_scope = captured_scope` 赋值 |
+| `core/runtime/factory.py` | `create_deferred` 签名删除 `captured_scope` 参数 |
+| `core/runtime/interfaces.py` | `IObjectFactory.create_deferred` 抽象签名删除 `captured_scope` 参数 |
+| `core/runtime/interpreter/handlers/expr_handler.py` | 删除 `captured_scope=None` 的显式传 None |
+| `core/runtime/interpreter/handlers/stmt_handler.py` | 删除 `captured_scope = None` / `captured_scope = self.runtime_context.current_scope` 计算逻辑及相关传参（3 行死代码）|
+
+### 9.3 [H3] `DeferredAxiom.is_compatible` 语义矛盾修复
+
+`core/kernel/axioms/primitives.py`：
+
+- 删除 `or other_name.startswith("behavior[")` 分支
+- 该分支允许 `deferred` 值被赋给 `behavior[TYPE]` 槽，与 docstring 声明的"behavior 是 deferred 子类型、不可反向赋值"矛盾
+- 修复前：`behavior[int] f = lambda: EXPR` 错误通过编译，产生 `IbDeferred` 运行时对象而非 `IbBehavior`，LLM executor 路径静默失效
+- 修复后：`is_compatible` 与 docstring 一致；仅接受 `deferred`、`callable`、`deferred[TYPE]` 槽
+
+### 9.4 [M1] closure 解包死分支删除
+
+`core/runtime/objects/builtins.py`（两处）：
+
+M2 后 `visit_IbLambdaExpr` 始终将 closure 条目存储为 `(name, IbCell)` 元组，`else` 分支永远不会执行：
+
+```python
+# 删除前
+for sym_uid, payload in self.closure.items():
+    if isinstance(payload, tuple) and len(payload) == 2:
+        name, cell = payload
+    else:
+        name, cell = None, payload  # 死代码
+
+# 删除后
+for sym_uid, (name, cell) in self.closure.items():
+```
+
+`IbDeferred.call()` 和 `IbBehavior.call()` 两处均已更新。
