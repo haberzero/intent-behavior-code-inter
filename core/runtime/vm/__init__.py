@@ -31,6 +31,7 @@ from core.runtime.vm.task import (
     VMTaskResult,
     ControlSignal,
     ControlSignalException,
+    Signal,
 )
 from core.runtime.vm.vm_executor import VMExecutor
 
@@ -39,5 +40,6 @@ __all__ = [
     "VMTaskResult",
     "ControlSignal",
     "ControlSignalException",
+    "Signal",
     "VMExecutor",
 ]

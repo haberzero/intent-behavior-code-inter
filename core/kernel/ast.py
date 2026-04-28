@@ -387,6 +387,18 @@ class IbFilteredExpr(IbExpr):
 class IbBehaviorExpr(IbExpr):
     segments: List[Union[str, IbExpr]]
     tag: str = ""
+    # M5a (DDG 编译期分析)：当本 IbBehaviorExpr 求值依赖其他 behavior 节点的
+    # 结果时，按 AST 顺序记录这些依赖节点的 ``IbBehaviorExpr`` 对象（语义阶段
+    # 写入；序列化时通过侧表/UID 自动转化）。``dispatch_eligible`` 表示本节点
+    # 是否可在 LLM 调度阶段被独立 dispatch（True：可并行；False：含未解析依赖、
+    # 必须等上游完成后再求值）。
+    #
+    # 默认值的语义：
+    # * ``llm_deps == []`` ：本 behavior 无 LLM 依赖（只引用普通变量）
+    # * ``dispatch_eligible == True`` ：可独立调度（无依赖或依赖图无环时由
+    #   M5a 在分析后保留；分析未运行时也按 True 默认，与现有行为一致）
+    llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)
+    dispatch_eligible: bool = True
 
 @dataclass(kw_only=True, eq=False)
 class IbBehaviorInstance(IbExpr):

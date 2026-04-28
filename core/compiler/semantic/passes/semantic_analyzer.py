@@ -15,6 +15,7 @@ from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
 from .resolver import TypeResolver
 from .side_table import SideTableManager
 from .scope_manager import ScopeManager
+from .behavior_dependency_analyzer import BehaviorDependencyAnalyzer
 from core.kernel.blueprint import CompilationResult
 
 class SemanticAnalyzer:
@@ -133,6 +134,13 @@ class SemanticAnalyzer:
             self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 4: Deep checking...")
             self.visit(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
+
+            # Pass 5 (M5a): IbBehaviorExpr LLM 依赖图分析（DDG）
+            # 仅在前序 Pass 无错误时才运行，避免因部分绑定缺失产生噪音误差。
+            if not self.issue_tracker.has_errors():
+                self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 5: Behavior dependency analysis (DDG)...")
+                BehaviorDependencyAnalyzer(self.side_table).analyze(node)
+                self.debugger.exit_scope(CoreModule.SEMANTIC)
             
             # 自检校验：确保侧表完整性
             # 仅在没有收集到错误的情况下执行完整性检查，因为解析失败的节点本身就无法绑定
