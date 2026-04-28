@@ -1,7 +1,7 @@
 # IBCI VM 演进总规划（Master Plan）
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
-> **基准状态**（2026-04-27）：678 个测试通过；Step 1–8 全部完成；Step 9–13 待推进。  
+> **基准状态**（2026-04-28）：**758 个测试通过**；Step 1–8 全部完成；**M1 已完成**（fn/lambda/snapshot 全新语法落地，旧声明语法已移除）；Step 9–13 待推进。  
 > **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。M1 后续工作可直接依赖该原语，不再重塑容器形态。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  
 > **关联文档**：`docs/PENDING_TASKS_VM.md`（详细设计）、`docs/NEXT_STEPS.md`（近期任务）、`docs/COMPLETED.md`（已完成记录）。
@@ -49,7 +49,7 @@ visit(node_uid)
 ### 1.4 测试基线
 
 ```
-python3 -m pytest tests/ -q --tb=short   # 678 passed（2026-04-27）
+python3 -m pytest tests/ -q --tb=short   # 758 passed（2026-04-28，M1 完成后）
 ```
 
 每个 Milestone 完成后必须以此命令验证测试不退化。
@@ -59,10 +59,10 @@ python3 -m pytest tests/ -q --tb=short   # 678 passed（2026-04-27）
 ## 二、总体演进路线图
 
 ```
-已完成（Step 1–8）
-  └─── 当前状态（基准：678 tests）
+已完成（Step 1–8 + M1）
+  └─── 当前状态（基准：758 tests）
          │
-         ├─── M1：fn 新语法 + IbCell（Step 12.5）                  [独立入口]
+         ├─── ✅ M1：fn 新语法 + IbCell（Step 12.5）                  [已完成 2026-04-28]
          │      │
          │      └─── M2：IbCell GC 根集合 + 词法作用域正式化（Step 13）
          │
@@ -87,59 +87,62 @@ python3 -m pytest tests/ -q --tb=short   # 678 passed（2026-04-27）
 
 ---
 
-### M1：fn 参数化 lambda/snapshot 新语法 + IbCell 基础（Step 12.5）
+### M1：fn 参数化 lambda/snapshot 新语法 + IbCell 基础（Step 12.5）✅ COMPLETED — 2026-04-28
 
 **目标**：用新的统一 `fn` 声明语法替代旧语法，引入参数传递能力；引入 `IbCell` 堆对象实现公理 SC-3/SC-4。
 
 **前提**：Step 8 完成（✅ 已具备）
 
-**新语法规范**（已决议，来源：`docs/NEXT_STEPS.md §Step 12.5`）：
+**完成状态**：✅ 全部落地，758 个测试通过。详见 `docs/COMPLETED.md §五`。
+
+**已落地的新语法规范**：
 
 ```ibci
-# 无参形式
-fn my_fn = lambda(n * 2)
-fn my_fn = snapshot(n * 2)
-fn int my_fn = lambda(n * 2)
+# 无参形式（冒号语法）
+fn f = lambda: EXPR
+fn f = lambda -> TYPE: EXPR
+fn f = snapshot: EXPR
+fn f = snapshot -> TYPE: EXPR
 
-# 带参形式（新增）
-fn int my_fn = lambda(int x)(x + n)
-fn int my_fn = snapshot(int x)(x + n)
-
-# 多行块形式
-fn int my_fn = lambda(int x):
-    int doubled = x * 2
-    return doubled + n
+# 带参形式
+fn f = lambda(PARAMS): EXPR
+fn f = lambda(PARAMS) -> TYPE: EXPR
+fn f = snapshot(PARAMS): EXPR
+fn f = snapshot(PARAMS) -> TYPE: EXPR
 ```
 
-**文件级修改清单**：
+**已移除的旧语法**（现产生 parse error）：
+```ibci
+# 以下形式已废弃，解析器拒绝：
+int lambda f = expr          # ❌ 旧声明语法
+auto snapshot g = expr       # ❌ 旧声明语法
+fn lambda h = expr           # ❌ 旧声明语法
+lambda(EXPR)                 # ❌ 旧括号体语法
+lambda(PARAMS)(EXPR)         # ❌ 旧括号体语法
+```
 
-| 文件 | 改动性质 | 关键改动点 |
-|------|---------|-----------|
-| `core/compiler/lexer/core_scanner.py` | 确认 `lambda`/`snapshot` token 与新解析路径兼容 | 无需新 token |
-| `core/compiler/parser/components/declaration.py:108–138` | 重写 `fn`/`auto` 的 deferred 解析逻辑 | 识别 `= lambda(PARAMS)(BODY)` / `= lambda(EXPR)` 两形式；支持多行块 |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | 新增自由变量分析：扫描 lambda/snapshot 体内的引用，标注 Cell 变量（公理 SC-2） | 在 `visit_IbFunctionDef` / 新增 `visit_IbFnDecl` 分析器中实现 |
-| `core/compiler/semantic/passes/resolver.py` | fn 声明的类型解析 | 参数类型注解解析；返回类型推断 |
-| `core/compiler/serialization/serializer.py` | 序列化 `IbFnDecl` 新 AST 节点或扩展 `IbDeferred` 节点字段 | 新增 `params`/`closure_vars`/`cell_vars` 字段 |
-| `core/runtime/objects/cell.py`（新建） | 新增 `IbCell` 类型 | `IbCell(value: IbObject)`，独立于 ScopeImpl 生命周期 — **[✅ 奠基已完成]** 提供 `get/set/is_empty/trace_refs`，身份语义；M1 此行剩余工作仅需在 fn/closure 接线处使用该原语 |
-| `core/runtime/objects/builtins.py:680–775` | 重写 `IbDeferred.__init__` 和 `call()` | 接收参数列表；lambda 模式 deref Cell；snapshot 模式在定义时拷贝 Cell 值 |
-| `core/runtime/objects/builtins.py:777–870` | 重写 `IbBehavior.__init__` 和 `call()` | 同上，需处理意图上下文 fork（snapshot）vs 当前上下文（lambda） |
-| `core/runtime/interpreter/handlers/stmt_handler.py:650–659` | 更新 `visit_IbFunctionDef` 处理 fn 声明的 Cell 变量分配 | 在函数入口时为 Cell 变量分配 `IbCell` 对象 |
-| `tests/e2e/test_e2e_deferred.py` | 重写已注释的旧语法测试 | 补充参数传递、Cell 生命周期测试 |
+**实际落地的文件**：
 
-**入口契约（完成前）**：  
-- 旧语法 `TYPE lambda NAME = EXPR` 仍可正常运行  
-- `IbDeferred.call()` 不接受参数
+| 文件 | 改动性质 |
+|------|---------|
+| `core/compiler/parser/components/declaration.py` | 移除所有 `deferred_mode` 检测分支（auto/fn/TYPE 三处），`IbAssign` 不再携带 `deferred_mode` |
+| `core/compiler/parser/components/expression.py` | `lambda_expr`/`snapshot_expr` 强制冒号 body-start；移除旧括号体形式；更新废弃错误消息 |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | 移除 `visit_IbAssign` 中所有 `deferred_mode` 相关分支；`visit_IbLambdaExpr` 处理参数、自由变量、返回类型绑定；IbCell 闭包接线 |
+| `core/runtime/objects/builtins.py` | `IbDeferred`/`IbBehavior` 支持参数列表；lambda 持有 `captured_scope` 引用；snapshot 持有 `closure: Dict[sym_uid, (name, IbCell)]` |
+| `core/runtime/interpreter/handlers/expr_handler.py` | `visit_IbLambdaExpr` 构建 IbDeferred/IbBehavior；`_collect_free_refs` 自由变量扫描 |
+| `core/runtime/objects/cell.py` | ✅ 已奠基，M1 接线使用 |
+| `tests/e2e/test_e2e_fn_lambda_syntax.py` | 80+ 个测试；旧语法测试改为断言 parse error |
+| `tests/e2e/test_e2e_deferred.py` | 更新为新语法 |
+| `tests/e2e/test_e2e_ai_mock.py` | 更新为新语法 |
+| `tests/compiler/test_compiler_pipeline.py` | 更新为新语法 |
 
-**出口契约（完成后）**：  
-- 新语法 `fn NAME = lambda(PARAMS)(BODY)` 解析并执行正确  
-- `IbDeferred.call(args)` 接受参数列表  
-- 旧语法输出 `DEP_001` 废弃警告（不直接报错）  
-- `IbCell` 对象存在于 `core/runtime/objects/cell.py`  
-- 678 个测试全部通过，新增 ≥20 个 fn/lambda/cell 相关测试
-
-**废弃路径**：
-1. M1 合并后：旧语法 `DEP_001` 警告
-2. M1 后续稳定期（独立小 PR）：旧语法产生 `PAR_001` 解析错误，正式移除
+**完成后的出口契约**（均已验证）：
+- ✅ 新语法 `fn f = lambda: EXPR` / `fn f = lambda(PARAMS) -> TYPE: EXPR` 8 种形式全部可用
+- ✅ `IbDeferred.call(args)` / `IbBehavior.call(args)` 支持参数列表
+- ✅ lambda 闭包语义：自由变量通过 `captured_scope` 引用，读取最新值
+- ✅ snapshot 闭包语义：自由变量通过 `IbCell` 值拷贝，调用时与外部隔离
+- ✅ 旧语法（`int lambda f = ...`、`auto snapshot g = ...`、括号体形式）产生 parse error（非警告）
+- ✅ 758 个测试全部通过（新增 ≥30 个 fn/lambda/snapshot 相关测试）
 
 ---
 

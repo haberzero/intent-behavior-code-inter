@@ -570,9 +570,9 @@ print((str)result)
         assert "7" in lines
 
     def test_fn_holds_auto_lambda(self):
-        """fn f = auto lambda expr; f() evaluates the expression."""
+        """fn f = lambda expr; f() evaluates the expression."""
         code = """int x = 10
-auto lambda compute = x + 5
+fn compute = lambda: x + 5
 fn f = compute
 print((str)f())
 """
@@ -580,9 +580,9 @@ print((str)f())
         assert "15" in lines
 
     def test_fn_lambda_declares_deferred_callable(self):
-        """fn lambda f = expr; f is a deferred callable."""
+        """fn f = lambda: expr; f is a deferred callable."""
         code = """int x = 3
-fn lambda f = x * 2
+fn f = lambda: x * 2
 print((str)f())
 x = 10
 print((str)f())

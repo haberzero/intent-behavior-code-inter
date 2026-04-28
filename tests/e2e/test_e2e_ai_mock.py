@@ -268,7 +268,7 @@ print(result2)
         注：直接赋值到具体类型（int/str）需 P2 编译器类型推断改进，当前通过 print() 调用验证。"""
         code = ai_setup_code() + """
 @+ use formal language
-str lambda compute = @~ MOCK:STR:hello ~
+fn compute = lambda -> str: @~ MOCK:STR:hello ~
 @-
 print(compute())
 """
@@ -278,7 +278,7 @@ print(compute())
     def test_lambda_behavior_basic(self):
         """lambda 延迟行为基本执行冒烟测试。"""
         code = ai_setup_code() + """
-str lambda compute = @~ MOCK:STR:world ~
+fn compute = lambda -> str: @~ MOCK:STR:world ~
 print(compute())
 """
         lines = run_and_capture(code)
@@ -977,7 +977,7 @@ class TestE2ELambdaRestriction:
 func accept_any(any x):
     print("called")
 
-int lambda deferred_val = @~ MOCK:INT:5 ~
+fn deferred_val = lambda -> int: @~ MOCK:INT:5 ~
 accept_any(deferred_val)
 """
         with pytest.raises(Exception):
@@ -994,7 +994,7 @@ accept_any(deferred_val)
 func accept_any(any x):
     print("called")
 
-int snapshot deferred_val = 42
+fn deferred_val = snapshot: 42
 accept_any(deferred_val)
 print("ok")
 """

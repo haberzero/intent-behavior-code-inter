@@ -693,6 +693,17 @@ class IbDeferred(IbObject):
     * deferred_mode='snapshot' —— 首次调用时求值并缓存
 
     继承链：IbDeferred → IbObject (axiom: deferred → callable → Object)
+
+    M1 参数化拓展
+    -------------
+    * ``params_uids``  —— 来自 ``IbLambdaExpr`` 的参数节点 uid 列表，调用时按位
+      绑定到本地作用域（与 ``IbUserFunction`` 同构）。
+    * ``body_uid``     —— 当 deferred 由 ``IbLambdaExpr`` 创建时，此为 lambda
+      函数体表达式 uid；``call()`` 会评估该 uid 而不是 ``node_uid``。
+    * ``closure``      —— Dict[str, IbCell]。snapshot 模式下持有自由变量的独立
+      ``IbCell`` 副本（公理 SC-3/SC-4），调用时安装到本地作用域，使 body 内对
+      自由变量的引用读取定义时的值。lambda 模式仍使用 ``captured_scope`` 引用
+      链，``closure`` 通常为空字典（保留接口以便后续 GC 根扫描接入）。
     """
 
     def __init__(
@@ -702,6 +713,9 @@ class IbDeferred(IbObject):
         deferred_mode: str = "lambda",
         execution_context: Optional[Any] = None,
         captured_scope: Optional[Any] = None,
+        params_uids: Optional[List[str]] = None,
+        body_uid: Optional[str] = None,
+        closure: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(ib_class)
         self.node_uid = node_uid
@@ -709,6 +723,10 @@ class IbDeferred(IbObject):
         self._execution_context = execution_context
         self._captured_scope = captured_scope
         self._cache: Optional[IbObject] = None
+        # M1: parametric/closure 字段。无参/无闭包路径下保持向后兼容（默认 None/空）。
+        self.params_uids: List[str] = list(params_uids) if params_uids else []
+        self.body_uid: Optional[str] = body_uid
+        self.closure: Dict[str, Any] = dict(closure) if closure else {}
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """
@@ -716,8 +734,15 @@ class IbDeferred(IbObject):
 
         - lambda 模式：每次调用都重新求值（使用当前上下文）
         - snapshot 模式：首次调用求值并缓存，后续调用返回缓存
+
+        当存在参数（``params_uids`` 非空）或闭包（``closure`` 非空）时，进入
+        独立的子作用域并在其中绑定参数与闭包 cell；调用结束后自动退出。
         """
-        if self.deferred_mode == "snapshot" and self._cache is not None:
+        # snapshot 缓存仅适用于"无参"路径——有参 snapshot 每次调用应使用相同的
+        # 冻结闭包 + 不同的实参重新求值，缓存单一返回值会破坏正确性。
+        if (self.deferred_mode == "snapshot"
+                and self._cache is not None
+                and not self.params_uids):
             return self._cache
 
         if self._execution_context is None:
@@ -728,20 +753,65 @@ class IbDeferred(IbObject):
                 "Ensure engine._prepare_interpreter() has completed before invoking a deferred expression."
             )
 
-        # 在捕获的作用域（如果有）中求值
         rt_context = self._execution_context.runtime_context
         old_scope = None
-        if self._captured_scope is not None:
+        pushed_scope = False
+
+        # 1) 选择作用域基底：snapshot 模式下使用调用者的当前作用域作为父链
+        #    （闭包 cell 自带值快照，独立于定义时的外部作用域）；lambda 模式
+        #    切换到 captured_scope 以保持对自由变量的最新可见性。
+        if self.deferred_mode == "lambda" and self._captured_scope is not None:
             old_scope = rt_context.current_scope
             rt_context.current_scope = self._captured_scope
 
         try:
-            result = self._execution_context.visit(self.node_uid)
+            # 2) 若有参或有闭包，进入子作用域以承载 params 与 closure cells
+            needs_subscope = bool(self.params_uids) or bool(self.closure)
+            if needs_subscope:
+                rt_context.enter_scope()
+                pushed_scope = True
+
+                # 安装闭包 cell：将其值写入当前作用域，使 body 内的自由变量引用解析为冻结值。
+                # closure 形如 ``Dict[sym_uid, (name, IbCell)]``——按 UID 重新登记
+                # 是必须的：runtime IbName 解析走 UID 路径，仅按名字定义会被父链同名
+                # 符号的 UID 命中给截胡。
+                from core.runtime.objects.cell import IbCell
+                for sym_uid, payload in self.closure.items():
+                    if isinstance(payload, tuple) and len(payload) == 2:
+                        name, cell = payload
+                    else:
+                        # 兼容历史：直接给定 cell（无名称）
+                        name, cell = None, payload
+                    if isinstance(cell, IbCell):
+                        if not cell.is_empty():
+                            rt_context.define_variable(name, cell.get(), uid=sym_uid)
+                    else:
+                        rt_context.define_variable(name, cell, uid=sym_uid)
+
+                # 绑定形参：与 IbUserFunction.call 同构地处理 IbTypeAnnotatedExpr 包装。
+                for i, arg_uid in enumerate(self.params_uids):
+                    arg_data = self._execution_context.get_node_data(arg_uid)
+                    actual_arg_uid = arg_uid
+                    actual_arg_data = arg_data
+                    if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                        actual_arg_uid = arg_data.get("target")
+                        actual_arg_data = self._execution_context.get_node_data(actual_arg_uid)
+                    arg_name = (actual_arg_data or {}).get("arg")
+                    if arg_name and i < len(args):
+                        sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
+                        rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+
+            # 3) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）
+            target_uid = self.body_uid if self.body_uid else self.node_uid
+            result = self._execution_context.visit(target_uid)
         finally:
+            if pushed_scope:
+                rt_context.exit_scope()
             if old_scope is not None:
                 rt_context.current_scope = old_scope
 
-        if self.deferred_mode == "snapshot":
+        # 缓存：仅"无参 snapshot"缓存返回值（对应历史无参延迟语义）。
+        if self.deferred_mode == "snapshot" and not self.params_uids:
             self._cache = result
 
         return result
@@ -799,12 +869,24 @@ class IbBehavior(IbObject):
         call_intent: Optional[Any] = None,
         deferred_mode: Optional[str] = None,
         execution_context: Optional[Any] = None,
+        params_uids: Optional[List[str]] = None,
+        closure: Optional[Dict[str, Any]] = None,
     ):
         """
         IbBehavior 是纯粹的数据描述符与自主执行单元。
         call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
         deferred_mode: 'lambda' | 'snapshot' | None (immediate)
         execution_context: 创建时的执行上下文引用（供 call() 使用）。
+
+        M1 参数化拓展（与 IbDeferred 同构）：
+            * ``params_uids`` —— ``IbLambdaExpr`` 提供的参数节点 uid 列表；
+              当 ``IbLambdaExpr`` 的 body 是 ``IbBehaviorExpr`` 时，``call()``
+              在子作用域中绑定参数后再调用 LLM 执行器。注意：``node_uid``
+              本身已指向 ``IbBehaviorExpr``（即 lambda 的 body），无需另设
+              字段——执行器解析 prompt 时直接使用 ``self.node``。
+            * ``closure``     —— Dict[str, IbCell]，snapshot 模式下持有自由
+              变量值快照；调用时安装到本地作用域，使 prompt 中的变量引用
+              读取定义时的值。
         """
         super().__init__(ib_class)
         self.node = node_uid
@@ -814,6 +896,9 @@ class IbBehavior(IbObject):
         self.deferred_mode = deferred_mode
         self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
+        # M1 参数化拓展
+        self.params_uids: List[str] = list(params_uids) if params_uids else []
+        self.closure: Dict[str, Any] = dict(closure) if closure else {}
 
     def value(self):
         if self._cache: return self._cache.to_native()
@@ -849,6 +934,10 @@ class IbBehavior(IbObject):
            - 按 expected_type 解析 LLM 返回值。
            - 将 LLMResult 写入 RuntimeContext 供 llmexcept 使用。
         3. 返回解析后的 IbObject。
+
+        M1 参数化路径：当 ``params_uids`` / ``body_uid`` / ``closure`` 任一非空时，
+        进入临时子作用域并绑定参数与闭包 cell，再委托给 executor。executor
+        在 prompt 解析阶段查找 ``$name`` 时即可读取到已绑定的值。
         """
         executor = self.ib_class.registry.get_llm_executor()
         if executor is None:
@@ -856,7 +945,50 @@ class IbBehavior(IbObject):
                 f"IbBehavior '{self.node}': LLM executor not registered in KernelRegistry. "
                 "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
             )
-        return executor.invoke_behavior(self, self._execution_context)
+
+        needs_subscope = bool(self.params_uids) or bool(self.closure)
+        if not needs_subscope:
+            return executor.invoke_behavior(self, self._execution_context)
+
+        if self._execution_context is None:
+            raise RuntimeError(
+                f"IbBehavior '{self.node}': execution_context is None for parametric behavior."
+            )
+
+        # 参数化路径：每次调用都应是独立的 LLM 推理（实参不同 → 提示词不同），
+        # 因此先清除上一次执行残留的 _cache，避免 execute_behavior_object 的早期短路。
+        self._cache = None
+
+        rt_context = self._execution_context.runtime_context
+        rt_context.enter_scope()
+        try:
+            from core.runtime.objects.cell import IbCell
+            for sym_uid, payload in self.closure.items():
+                if isinstance(payload, tuple) and len(payload) == 2:
+                    name, cell = payload
+                else:
+                    name, cell = None, payload
+                if isinstance(cell, IbCell):
+                    if not cell.is_empty():
+                        rt_context.define_variable(name, cell.get(), uid=sym_uid)
+                else:
+                    rt_context.define_variable(name, cell, uid=sym_uid)
+
+            for i, arg_uid in enumerate(self.params_uids):
+                arg_data = self._execution_context.get_node_data(arg_uid)
+                actual_arg_uid = arg_uid
+                actual_arg_data = arg_data
+                if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                    actual_arg_uid = arg_data.get("target")
+                    actual_arg_data = self._execution_context.get_node_data(actual_arg_uid)
+                arg_name = (actual_arg_data or {}).get("arg")
+                if arg_name and i < len(args):
+                    sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
+                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+
+            return executor.invoke_behavior(self, self._execution_context)
+        finally:
+            rt_context.exit_scope()
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """

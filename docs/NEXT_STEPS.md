@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-27（文档与代码一致性审计；690 个测试通过；str/list * int 乘法、global 语句、is/is not 运算符等均已验证）
+> **最后更新**：2026-04-28（M1 fn/lambda/snapshot 全新语法落地完成；758 个测试通过）
 
 ---
 
@@ -148,141 +148,59 @@ Step 4b（完成）
 
 ---
 
-## Step 12.5：fn 参数化 lambda/snapshot 新语法 [P2 - 独立，可在 Step 9 之后推进]
+## Step 12.5：fn 参数化 lambda/snapshot 新语法 [✅ COMPLETED — 2026-04-28]
 
-> **来源**：2026-04-27 架构讨论，用户已确认接受本方案。  
-> **前提**：Step 9（VM CPS 调度循环）完成后，或独立推进（无强依赖）。  
-> **关联**：`docs/PENDING_TASKS_VM.md` §10.6（IbCell 机制）、`docs/INTENT_SYSTEM_DESIGN.md` §9（延迟对象意图规则）。
+> **完成总结**：M1 全部落地。758 个测试通过（从基准 678 增至 758）。  
+> 旧语法已彻底移除（parse error）。详见 `docs/COMPLETED.md §五`。
 
-### 背景
-
-当前的 `lambda`/`snapshot` 语法（`TYPE lambda NAME = EXPR`）存在以下问题：
-1. **不支持参数传递**：延迟对象调用时不能传入参数，表达能力受限（见 `docs/PENDING_TASKS.md` §4.3）
-2. **变量捕获语义不明确**：自由变量通过 `captured_scope` 引用捕获，未引入 `IbCell` 机制，不满足词法闭包正式语义（见 `docs/PENDING_TASKS_VM.md` §10.2）
-3. **声明风格与 fn 关键字不对齐**：旧语法 `TYPE lambda NAME = EXPR` 与 `fn NAME = FUNC_REF` 风格不一致
-
-**本 Step 的目标**：用新的统一 `fn` 声明语法替代旧语法，同时引入参数传递能力和明确的捕获语义。
-
----
-
-### 新语法规范
-
-#### 无参数形式（替代当前 `auto/TYPE lambda NAME = EXPR`）
+### 实际落地的语法（8 种形式，lambda/snapshot 对称）
 
 ```ibci
-# 无参 lambda：捕获自由变量的 cell，调用时 deref 最新值
-fn my_fn = lambda(n * 2)
+fn f = lambda: EXPR
+fn f = lambda -> TYPE: EXPR
+fn f = lambda(PARAMS): EXPR
+fn f = lambda(PARAMS) -> TYPE: EXPR
 
-# 无参 snapshot：定义时对自由变量值拷贝，定义时对意图栈 fork，结果缓存
-fn my_fn = snapshot(n * 2)
-
-# 带返回类型标注
-fn int my_fn = lambda(n * 2)
-fn str my_fn = snapshot(@~ 翻译 $text ~)
+fn f = snapshot: EXPR
+fn f = snapshot -> TYPE: EXPR
+fn f = snapshot(PARAMS): EXPR
+fn f = snapshot(PARAMS) -> TYPE: EXPR
 ```
 
-#### 有参数形式（新增）
+### 已移除的旧语法（现产生 parse error）
 
 ```ibci
-# 带参 lambda（词法闭包 + 参数）
-fn int my_fn = lambda(int x)(x + n)
-# 含义：每次调用传入 int x；n 是自由变量，cell 捕获；返回 x + current(n)
-
-# 带参 snapshot（冻结闭包 + 参数）
-fn int my_fn = snapshot(int x)(x + n)
-# 含义：每次调用传入 int x；n 在定义时值拷贝为常量；返回 x + frozen(n)
-
-# 带参 behavior（意图规则见 §9）
-fn str translate = lambda(str text)(@~ 翻译 $text ~)
-fn str translate = snapshot(str text)(@~ 翻译 $text ~)
+int lambda f = expr          # ❌
+auto snapshot g = expr       # ❌
+fn lambda h = expr           # ❌
+lambda(EXPR)                 # ❌ 旧括号体
+lambda(PARAMS)(EXPR)         # ❌ 旧括号体
 ```
 
-#### 多行函数体形式
-
-```ibci
-fn int my_fn = lambda(int x):
-    int doubled = x * 2
-    return doubled + n        # n 是 cell 捕获的自由变量
-
-fn int my_fn = snapshot(int x):
-    return x + n              # n 在定义时已被冻结
-```
-
-#### 高阶函数示例
-
-```ibci
-# 工厂函数：返回 lambda 闭包
-func make_formatter(str prefix) -> fn:
-    fn str result = lambda(str s)(prefix + ": " + s)
-    # prefix 是 cell 捕获，s 是参数
-    return result
-
-fn str fmt = make_formatter("INFO")
-str msg = fmt("hello")    # → "INFO: hello"
-```
-
----
-
-### 与旧语法的对比
-
-| 旧语法 | 新语法 | 说明 |
-|--------|--------|------|
-| `int lambda f = @~ ... ~` | `fn int f = lambda()(@~ ... ~)` | 无参 lambda + behavior |
-| `str snapshot b = @~ ... ~` | `fn str b = snapshot()(@~ ... ~)` | 无参 snapshot + behavior |
-| `auto lambda lazy = x + 5` | `fn lazy = lambda(x + 5)` | 无参 lambda + 普通表达式 |
-| `auto snapshot cached = x + 5` | `fn cached = snapshot(x + 5)` | 无参 snapshot + 普通表达式 |
-| `fn f = my_func`（现有，不变） | `fn f = my_func`（保持不变） | 函数引用赋值，不变 |
-
----
-
-### 实现任务清单
-
-1. **词法分析器**：`lambda`/`snapshot` 关键字已有，确认与新语法解析路径兼容
-2. **语法解析器**：
-   - 新增 `fn` 声明中识别 `= lambda(...)` / `= snapshot(...)` 形式
-   - 区分无参形式 `lambda(EXPR)` 和有参形式 `lambda(PARAMS)(BODY)`
-   - 支持多行块形式 `lambda(PARAMS):\n BODY`
-3. **语义分析器**：
-   - 分析自由变量并标注 Cell 变量（SC-2）
-   - 在 `closure` 字典中记录 Cell 引用（SC-4）
-   - 区分 `lambda`（cell 捕获）和 `snapshot`（值拷贝）的自由变量处理方式
-4. **运行时**：
-   - 引入 `IbCell` 类型（`docs/PENDING_TASKS_VM.md` §10.6）
-   - 更新 `IbDeferred.call()` / `IbBehavior.call()` 支持参数传递
-   - 更新意图上下文交互（`docs/INTENT_SYSTEM_DESIGN.md` §9）
-5. **测试**：
-   - 重写 `tests/e2e/test_e2e_deferred.py` 中已注释的旧语法测试
-   - 补充参数传递、Cell 生命周期、意图交互的新测试
-
----
-
-### 旧语法的废弃路径
-
-1. Step 12.5 **实现阶段**：新旧语法并存，旧语法输出 `DEP_001` 废弃警告
-2. Step 12.5 **稳定后**：旧语法产生 `PAR_001` 解析错误，正式移除
-3. 已注释的旧语法测试（`test_e2e_deferred.py`）在新语法稳定后重写
+> **后续**：M2（IbCell GC 根集合 + 词法作用域正式化）现在可以独立推进。
 
 ---
 
 > **来源**：2026-04-27 实测核实。
 
-### 现状摘要
+### 现状摘要（2026-04-27 更新）
 
 | 写法 | 行为 | 备注 |
 |------|------|------|
-| `int a, int b = t` | ❌ 编译错 `PAR_001: Expect newline after variable declaration.` | 语法被解析为 "声明 a 后多余 token" |
-| `(int a, int b) = t` | ✅ 正常，按 `tuple → 两个 int` 解包 | 推荐写法 |
+| `int a, int b = t` | ✅ **已修复**（裸列形式元组解包） | 与 Python `a, b = t` 对齐 |
+| `(int a, int b) = t` | ✅ 正常，按 `tuple → 两个 int` 解包 | 等价写法 |
 | `(int a, int b) = (1, 2, 3)` | ❌ 运行期 `RUN_001: Unpack error: expected 2 values, got 3` | 元数检查正确 |
 | `(int a, str b) = (1, "x")` | ✅ 正常，混合类型解包正确 | — |
-| `for (int x, int y) in list[tuple]` | ❌ `RUN_002: Type mismatch: Cannot assign 'int' to 'tuple' for variable 'x'` | for-target 的元组形式未被识别为解包目标，整个 `(int x, int y)` 被当作"名为 x 的 tuple 变量声明"，迭代时把 int 元素塞到 tuple 槽，运行时类型检查失败 |
+| `for (int x, int y) in list[tuple]` | ✅ **已修复** | 解析为元组解包目标，每个分量按各自标注类型定义 |
 | `tuple t = (1, 2); auto a = t[0]; auto b = t[1]` | ✅ 正常 | 下标访问可用 |
 | `tuple` 函数返回值再下标 | ✅ 正常 | `(int)r[0]` 可用 |
 
-### 待改进项（Step 9 之前可独立推进，建议优先级 P3）
+### 已完成（小任务，2026-04-27）
 
-1. **`int a, int b = t`（裸列形式）应当合法**：与 Python `a, b = t` 对齐，无需括号。需要在语句解析路径检测"声明项后接逗号"模式并切到解包目标处理逻辑，而非报 `PAR_001`。
-2. **`for (int x, int y) in coords:` 失效（关键）**：当前 `for_statement` 中 `_parse_for_loop_target()` 对带类型标注的元组目标识别不完整：括号内的多声明被错误折叠为单变量声明（变量名 `x`，类型 `tuple`）。修复点在 `core/compiler/parser/components/statement.py:_parse_for_loop_target` 与 for 目标向 `_assign_to_target` 的传递路径——需将括号目标传为元组解包目标列表，而不是单个变量。
-3. **错误信息精炼**：当前 `RUN_001 Unpack error: expected N got M` 已可读，`RUN_002 Cannot assign 'int' to 'tuple' for variable 'x'` 在 for-tuple 误识别场景下信息误导，应在解析期就拒绝当前"折叠"形式，而不是延迟到运行时类型校验阶段。
+1. ✅ **裸列形式 `int a, int b = t` 元组解包**：解析器在解析单变量声明后探测 `,` 折叠为元组解包目标（`core/compiler/parser/components/declaration.py:variable_declaration`）；支持 `auto` / 类型混搭；`deferred_mode` 修饰下保持单变量语义不变。
+2. ✅ **`for (int x, int y) in coords:` 类型标注元组目标**：根因在语义分析的 `visit_IbFor` 对 `get_assigned_names` 输出的去重缺失——同名 `IbName` 条目以 `element_type` 覆盖了 `IbTypeAnnotatedExpr` 已写入的精确类型；修复后逐分量类型与注解一致（`core/compiler/semantic/passes/semantic_analyzer.py:visit_IbFor`）。
+3. ✅ **错误路径自然消解**：`for (int x, int y) in list[tuple]` 不再误用整体 `tuple` 类型作为分量类型，旧的 `RUN_002` 误导信息不再可达。元组目标但缺少注解的元素现在保持 `any`，避免错误的兜底类型。
+
 
 ### 临时规避
 

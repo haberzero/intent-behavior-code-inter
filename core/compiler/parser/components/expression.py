@@ -6,6 +6,13 @@ from core.compiler.parser.core.syntax import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_SELF, OP_MAP
 
+# 表达式位置 ``lambda(...) (...)`` 与 ``lambda(...)`` 形式消歧的前瞻上限。
+# 取 1024 是源代码中单个 lambda 参数列表 + 函数体表达式 token 数的保守上界
+# （典型 lambda 表达式不超过几十 token）；超出该上限的写法在实际代码中极
+# 罕见，回退为 "无参形式" 不会引入二义性——后续 parse_expression 仍会按表
+# 达式语法继续消费，错误会以 PAR_002 形式正常报告。
+_MAX_LAMBDA_LOOKAHEAD_TOKENS = 1024
+
 class ExpressionComponent(BaseComponent):
     def __init__(self, context):
         super().__init__(context)
@@ -110,9 +117,15 @@ class ExpressionComponent(BaseComponent):
         
         # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
-        
+
         # Variable Reference
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
+
+        # Parameterized lambda / snapshot expressions (M1)
+        # 仅在表达式位置生效；旧的 `TYPE lambda NAME = EXPR` 形式由 declaration parser
+        # 在变量声明位置消费 LAMBDA/SNAPSHOT token，不会触达此 prefix handler。
+        self.register(TokenType.LAMBDA, self.lambda_expr, None, IbPrecedence.LOWEST)
+        self.register(TokenType.SNAPSHOT, self.lambda_expr, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
 
@@ -180,7 +193,7 @@ class ExpressionComponent(BaseComponent):
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         
                         # [DEPRECATED] (Type) @~...~ 语法已废弃，发出硬错误。
-                        # 正确写法：int lambda varname = @~...~ 或 int snapshot varname = @~...~
+                        # 正确写法：fn varname = lambda -> TYPE: @~...~ 或 fn varname = snapshot -> TYPE: @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
                             _behavior_cast_detected = True
                             raise ParseControlFlowError()
@@ -194,7 +207,7 @@ class ExpressionComponent(BaseComponent):
                 raise self.stream.error(
                     self.stream.peek(),
                     "Cast expression '(Type) @~...~' is no longer supported. "
-                    "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                    "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                     code="PAR_010"
                 )
             
@@ -446,6 +459,131 @@ class ExpressionComponent(BaseComponent):
         self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~'.")
         
         return self._loc(ast.IbBehaviorExpr(segments=segments, tag=tag), start_token)
+
+    def lambda_expr(self) -> ast.IbExpr:
+        """
+        参数化 lambda/snapshot 表达式。
+
+        全部支持的形式（``:`` 为唯一 body 起始符）::
+
+            lambda: EXPR                         — 无参
+            lambda -> TYPE: EXPR                 — 无参 + 返回类型
+            lambda(PARAMS): EXPR                 — 有参
+            lambda(PARAMS) -> TYPE: EXPR         — 有参 + 返回类型
+            snapshot: EXPR                       — snapshot 完全对称
+            snapshot -> TYPE: EXPR
+            snapshot(PARAMS): EXPR
+            snapshot(PARAMS) -> TYPE: EXPR
+
+        body 是单一表达式，解析优先级为 LOWEST，在当前 token 行结束
+        （NEWLINE/EOF）时自然终止（由 parse_expression 处理）。
+
+        旧形态 ``TYPE lambda NAME = EXPR`` 由 declaration parser 在变量声明位置
+        消费 ``lambda`` token，不会进入本路径，二者并存互不干扰。
+        """
+        keyword_token = self.stream.previous()
+        deferred_mode = "lambda" if keyword_token.type == TokenType.LAMBDA else "snapshot"
+
+        returns: Optional[ast.IbASTNode] = None
+        params: List[ast.IbASTNode] = []
+
+        # ------------------------------------------------------------------ #
+        # 1. 无参 + 返回类型：`lambda -> TYPE: EXPR`                          #
+        # ------------------------------------------------------------------ #
+        if self.stream.check(TokenType.ARROW):
+            self.stream.advance()  # consume ->
+            type_parser = self.context.type_parser
+            if type_parser is None:
+                raise self.stream.error(
+                    keyword_token,
+                    "Internal: type parser not wired; cannot parse lambda return type.",
+                    code="PAR_002",
+                )
+            returns = type_parser.parse_type_annotation()
+            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{deferred_mode}' body expression after return type.")
+            body = self.parse_expression(IbPrecedence.LOWEST)
+
+        # ------------------------------------------------------------------ #
+        # 2. 无参 + 无返回类型：`lambda: EXPR`                                #
+        # ------------------------------------------------------------------ #
+        elif self.stream.check(TokenType.COLON):
+            self.stream.advance()  # consume ':'
+            body = self.parse_expression(IbPrecedence.LOWEST)
+
+        # ------------------------------------------------------------------ #
+        # 3. 括号开头：有参形式 `lambda(PARAMS): EXPR`                        #
+        # ------------------------------------------------------------------ #
+        elif self.stream.check(TokenType.LPAREN):
+            if not self._lambda_lookahead_is_param_form():
+                raise self.stream.error(
+                    self.stream.peek(),
+                    f"Expect ':' or '->' after '{deferred_mode}' parameter list, or ':' directly after '{deferred_mode}' keyword. "
+                    f"Parenthesis-only body forms are not supported; use '{deferred_mode}: EXPR' or '{deferred_mode}(PARAMS): EXPR'.",
+                    code="PAR_002",
+                )
+
+            # 解析参数列表
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
+            decl = self.context.declaration_parser
+            if decl is None:
+                raise self.stream.error(
+                    keyword_token,
+                    "Internal: declaration parser not wired; cannot parse lambda parameters.",
+                    code="PAR_002",
+                )
+            params = decl.parameters()
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' parameter list.")
+
+            # 可选 `-> TYPE` 返回类型标注
+            if self.stream.check(TokenType.ARROW):
+                self.stream.advance()  # consume ->
+                type_parser = self.context.type_parser
+                if type_parser is None:
+                    raise self.stream.error(
+                        keyword_token,
+                        "Internal: type parser not wired; cannot parse lambda return type.",
+                        code="PAR_002",
+                    )
+                returns = type_parser.parse_type_annotation()
+
+            # Body 必须以 ':' 起始
+            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{deferred_mode}' body expression.")
+            body = self.parse_expression(IbPrecedence.LOWEST)
+
+        else:
+            raise self.stream.error(
+                self.stream.peek(),
+                f"Expect '->', ':', or '(' after '{deferred_mode}' keyword in expression position.",
+                code="PAR_002",
+            )
+
+        node = ast.IbLambdaExpr(params=params, body=body, deferred_mode=deferred_mode, returns=returns)
+        return self._loc(node, keyword_token, self.stream.previous())
+
+    def _lambda_lookahead_is_param_form(self) -> bool:
+        """
+        前瞻判断 ``lambda(...): ...`` 与 ``lambda(...) -> TYPE: ...`` 形式。
+
+        此时 stream 已消费 ``lambda``/``snapshot`` 关键字，且当前 peek(0) 为 LPAREN。
+        在 token 流上做平衡括号扫描；若第一个 RPAREN 之后紧接的 token 为
+        ARROW（``->``）或 COLON（``:``），则视为有参形式（参数列表形式）。
+        扫描严格只读，不修改 stream 位置。
+        """
+        depth = 0
+        offset = 0
+        while offset < _MAX_LAMBDA_LOOKAHEAD_TOKENS:
+            t = self.stream.peek(offset)
+            if t.type == TokenType.EOF or t.type == TokenType.NEWLINE:
+                return False
+            if t.type == TokenType.LPAREN:
+                depth += 1
+            elif t.type == TokenType.RPAREN:
+                depth -= 1
+                if depth == 0:
+                    next_t = self.stream.peek(offset + 1)
+                    return next_t.type in (TokenType.ARROW, TokenType.COLON)
+            offset += 1
+        return False
 
     def _parse_complex_access(self, var_name: str, var_token) -> ast.IbExpr:
         """Helper to parse complex access like $obj.attr[0] after a $var_ref."""

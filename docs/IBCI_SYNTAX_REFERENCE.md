@@ -3,7 +3,7 @@
 > **说明**：本文档覆盖 IBC-Inter (IBCI) 所有当前支持的语法特性，包括已知限制的标注。
 > 语言设计限制的详细说明见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-04-27
+> **最后更新**：2026-04-28
 
 ---
 
@@ -42,9 +42,8 @@
 | `void` | 无返回值（仅用于函数返回类型标注） | — |
 | `any` | 任意类型（无类型约束） | — |
 | `auto` | 编译期推断类型 | — |
-| `fn` | 函数引用类型（推断具体可调用类型） | — |
+| `fn` | 函数引用 / 延迟闭包类型（推断具体可调用类型） | — |
 
-> ⚠️ **Known Limit (docs/KNOWN_LIMITS.md §三)**：`fn` 变量与可调用类实例存在已知设计问题，不建议使用。
 
 ### 1.2 泛型容器类型
 
@@ -412,17 +411,25 @@ func outer(int x) -> int:
     return inner(x) + 1
 ```
 
-### 5.5 `fn` 函数引用
+### 5.5 `fn` 函数引用与延迟对象
 
-> ⚠️ **Known Limit (docs/KNOWN_LIMITS.md §三)**：`fn` 变量存在已知设计问题，不建议使用。
+`fn` 用于持有任何可调用值：函数引用、lambda 闭包、snapshot 延迟对象。
 
 ```ibci
 func double(int x) -> int:
     return x * 2
 
-fn f = double    # 推断 f 的类型为 double 的函数类型
-int r = f(5)     # 10
+fn f = double           # 持有函数引用
+int r = f(5)            # 10
+
+fn g = lambda: 42       # 持有无参 lambda
+int v = g()             # 42
+
+fn h = lambda(int x) -> int: x * 2   # 持有带参 lambda
+int w = h(3)            # 6
 ```
+
+延迟执行的完整语法见 §7.4。
 
 ---
 
@@ -595,39 +602,56 @@ for @~ $count 小于 3 吗？只回答 1 或 0 ~:
 
 ### 7.4 延迟执行行为
 
-> ⚠️ **语法变更通知**：本节描述的 `TYPE lambda NAME = EXPR` / `TYPE snapshot NAME = EXPR` 语法为**当前（旧）语法**，将在 Step 12.5 中被新的 `fn` 参数化语法替代。  
-> 新语法规范见 `docs/NEXT_STEPS.md` Step 12.5；意图栈交互完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9。
+延迟执行通过 `fn NAME = lambda: EXPR` / `fn NAME = snapshot: EXPR` 语法声明。`lambda` 在每次调用时求值；`snapshot` 在定义时捕获意图上下文快照，调用时与调用处意图完全隔离。
 
-#### lambda（当前语法，待废弃）
+#### lambda
 
 延迟执行，每次调用时使用**调用处**的当前意图上下文（调用处意图完全敏感）：
 
 ```ibci
-# [当前语法 - 待废弃，将被 fn 语法替代]
-int lambda compute = @~ 根据 $x 计算一个结果 ~
+# 无参 lambda（使用调用时意图栈）
+fn compute = lambda -> int: @~ 根据 $x 计算一个结果 ~
 # 此时不会执行 LLM 调用
 
 int x = 5
 int result = compute()   # 调用时触发 LLM，使用当前 x 和意图栈
 ```
 
+**带参数（lambda 是词法闭包 + 参数）**：
+
+```ibci
+fn translate = lambda(str text) -> str: @~ 翻译 $text ~
+str r = translate("hello")
+
+fn add = lambda(int a, int b) -> int: a + b
+int s = add(3, 4)
+```
+
 **lambda 意图语义**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9.4）：
 - 定义时**不捕获**任何意图上下文
 - 调用时使用调用处的持久意图栈（`@+` 累积）和一次性意图（`@` smear）
 - 作为高阶函数参数传出后，调用时使用的仍是**调用点**的意图栈（不是定义处）
+- ⚠️ `lambda` 延迟对象**不能作为函数参数传递**（运行期 RUN_CALL_ERROR）；`snapshot` 无此限制
 
-#### snapshot（当前语法，待废弃）
+#### snapshot
 
 延迟执行，定义时对当前意图栈进行 `fork()` 快照（与 lambda 的区别在于意图冻结）：
 
 ```ibci
-# [当前语法 - 待废弃，将被 fn 语法替代]
+# 无参 snapshot（捕获定义时意图上下文）
 @+ 聚焦于正面回答
-str snapshot handler = @~ 根据 $context 生成回复 ~
+fn handler = snapshot -> str: @~ 根据 $context 生成回复 ~
 @-   # 移除刚才添加的意图
 
 # handler 持有定义时的意图栈快照，调用时绝对不受后续意图变化影响
 str reply = handler()
+```
+
+**带参数**：
+
+```ibci
+fn translate = snapshot(str text) -> str: @~ 翻译 $text ~
+str r = translate("hello")
 ```
 
 **snapshot 意图语义**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9.3）：
@@ -635,29 +659,26 @@ str reply = handler()
 - 调用时**绝对忽略**调用处的所有意图（持久栈、`@` smear、`@!` 排他）
 - `snapshot` 是 IBCI 中唯一"确定无状态、确定可重入"的延迟对象
 
+#### 完整语法形式（8 种，lambda/snapshot 对称）
+
+| 形式 | 语法 |
+|------|------|
+| 无参，无返回类型标注 | `fn f = lambda: EXPR` |
+| 无参，有返回类型标注 | `fn f = lambda -> TYPE: EXPR` |
+| 带参，无返回类型标注 | `fn f = lambda(PARAMS): EXPR` |
+| 带参，有返回类型标注 | `fn f = lambda(PARAMS) -> TYPE: EXPR` |
+| 无参 snapshot | `fn f = snapshot: EXPR` |
+| 无参 snapshot，有返回类型 | `fn f = snapshot -> TYPE: EXPR` |
+| 带参 snapshot | `fn f = snapshot(PARAMS): EXPR` |
+| 带参 snapshot，有返回类型 | `fn f = snapshot(PARAMS) -> TYPE: EXPR` |
+
+#### 意图模式对比
+
 | 关键字 | 语义 | 意图栈（完整规则见 §9） |
 |--------|------|--------|
 | `lambda` | 延迟，调用时执行 | 调用时的意图栈（完全敏感） |
 | `snapshot` | 延迟，定义时冻结意图 | 定义时的意图栈快照（完全免疫调用处意图） |
 | 无关键字（即时） | 立即执行 | 执行时的意图栈 |
-
-#### 新语法预览（Step 12.5，计划中）
-
-```ibci
-# 无参 lambda（替代 "auto lambda NAME = EXPR"）
-fn my_fn = lambda(x + 5)
-fn int my_fn = lambda()(@~ 根据 $x 计算 ~)
-
-# 带参 lambda（新增）
-fn int my_fn = lambda(int x)(x + n)
-
-# 无参 snapshot（替代 "auto snapshot NAME = EXPR"）
-fn my_fn = snapshot(x + 5)
-fn str my_fn = snapshot()(@~ 根据 $context 生成回复 ~)
-
-# 带参 snapshot（新增）
-fn str my_fn = snapshot(str text)(@~ 翻译 $text ~)
-```
 
 ---
 

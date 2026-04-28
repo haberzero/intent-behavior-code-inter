@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-27（文档与代码一致性审计；690 个测试通过）
+> **最后更新**：2026-04-28（M1 fn/lambda/snapshot 全新语法落地，旧语法彻底移除；758 个测试通过）
 
 ---
 
@@ -292,6 +292,82 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 | 函数调用意图：拷贝传递 | 每次函数调用 fork 调用者意图上下文；函数内意图操作不泄漏（§9.4） |
 | `@!` 只修饰 LLM 调用 | `@!` 只能修饰 LLM 行为表达式（`@~...~`），不能修饰普通函数调用 |
 | 函数内意图控制显式 API | `intent_context.clear_inherited()`/`use(ctx)`/`get_current()` 作用于当前帧意图上下文（§9.4/§9.5） |
-| `lambda` 不允许作为参数传递 | `deferred_mode='lambda'` 的延迟对象不可作为函数实参；`snapshot` 不受此限制 |
+| `lambda` 不允许作为参数传递 | lambda 延迟对象（`IbDeferred`/`IbBehavior`）不可作为函数实参；`snapshot` 不受此限制 |
 | `snapshot` 捕获意图快照 | `snapshot` 在定义位置调用 `fork_intent_snapshot()` 捕获当前意图栈的不可变副本 |
 | `intent_context` is_class=True | `intent_context` 可实例化为 OOP 对象；用户可显式管理意图上下文（§9.5） |
+| `:` 是 lambda/snapshot 唯一有效体起始符 | 括号体形式（`lambda(EXPR)`、`lambda(PARAMS)(EXPR)`）已移除；`lambda: EXPR` / `lambda(PARAMS): EXPR` 为规范 |
+| 旧 `TYPE lambda/snapshot NAME = EXPR` 声明语法移除 | 产生 parse error（非废弃警告），彻底不兼容 |
+
+---
+
+## 六、M1：fn/lambda/snapshot 全新语法落地 [✅ COMPLETED — 2026-04-28]
+
+**前提**：Step 8 + IbCell 奠基（已具备）  
+**测试基线**：758 个测试通过（较 M1 前 678 增加 80 个）
+
+### 6.1 IbCell 原语奠基（M1 前置）
+
+`IbCell` 基础原语先行落地：
+
+- **`core/runtime/objects/cell.py`**（新建）：纯 VM 容器（非 `IbObject`），`get()/set(v)/is_empty()/trace_refs()`，身份语义（`__eq__`/`__hash__` 基于 id），`IbCell.EMPTY` 哨兵，读取未初始化单元抛出 `RuntimeError`。
+- **`tests/runtime/test_ib_cell.py`**：18 个单元测试，无现有路径行为变化。
+
+### 6.2 表达式语法：lambda/snapshot 冒号强制 body-start
+
+`core/compiler/parser/components/expression.py` 的 `lambda_expr`/`snapshot_expr`：
+
+- `:` 是**唯一**有效的 body 起始符（原括号体形式已移除）
+- 8 种合法形式：`lambda: EXPR`、`lambda -> TYPE: EXPR`、`lambda(PARAMS): EXPR`、`lambda(PARAMS) -> TYPE: EXPR`（snapshot 对称）
+- 旧括号体形式（`lambda(EXPR)`、`lambda(PARAMS)(EXPR)`）产生 `PAR_002` parse error
+- `IbLambdaExpr.returns` 字段持有可选返回类型标注节点；语义阶段通过 `side_table.bind_type` 将返回类型绑定到 body `IbBehaviorExpr`，修复 LLM executor `_get_expected_type_hint` 的类型推断
+
+### 6.3 声明语法：移除旧 `TYPE lambda NAME = EXPR` 形式
+
+`core/compiler/parser/components/declaration.py`：
+
+- 移除 `variable_declaration` 中所有 3 处 `deferred_mode` 检测块（`auto`/`fn`/显式类型 三个分支）
+- 移除 `deferred_mode = None` 初始化
+- `IbAssign(deferred_mode=...)` 参数移除，`deferred_mode` 字段不再由 parser 设置为非 `None`
+- 旧声明语法（`int lambda f = ...`、`auto snapshot g = ...`、`fn lambda h = ...`）现在因后跟 `lambda`/`snapshot` 关键字无法匹配 `IDENTIFIER`，产生 parse error
+
+### 6.4 语义分析：移除 deferred_mode 路径 + 新增 IbLambdaExpr 分析
+
+`core/compiler/semantic/passes/semantic_analyzer.py`：
+
+- `visit_IbAssign` 中两处 `deferred_mode = getattr(node, 'deferred_mode', None)` 及全部依赖分支删除：
+  - `fn lambda / fn snapshot` 分支
+  - `auto lambda / auto snapshot` 分支
+  - `elif deferred_mode:` 显式类型延迟分支
+  - behavior 表达式的 `if deferred_mode:` 分支
+  - 通用表达式的 `elif deferred_mode and node.value:` 分支
+- `visit_IbLambdaExpr`：push 局部 SymbolTable 注册形参；分析自由变量（`_collect_free_refs`）；处理 `-> TYPE` 返回类型标注（`bind_type` 到 body）
+
+### 6.5 运行时：IbDeferred/IbBehavior 参数化 + IbCell 闭包
+
+`core/runtime/objects/builtins.py`：
+
+- `IbDeferred.__init__(params, body_node, deferred_mode, captured_scope)` 支持参数列表
+- `IbBehavior.__init__(params, body_node, deferred_mode, captured_scope/closure)` 同步
+- **lambda 闭包语义**：持有 `captured_scope` 引用（自由变量读取最新值），不缓存
+- **snapshot 闭包语义**：持有 `closure: Dict[sym_uid, (name, IbCell(value))]`，定义时值拷贝；调用时按 `sym_uid` 在子作用域 `define_variable(name, val, uid=sym_uid)` 重登记，IbName UID-lookup 命中本地副本
+
+`core/runtime/interpreter/handlers/expr_handler.py`：
+
+- `visit_IbLambdaExpr`：构建 `IbDeferred` (普通 body) 或 `IbBehavior` (IbBehaviorExpr body)；snapshot 模式调用 `_collect_free_refs` + `IbCell` 值拷贝；lambda 模式仅传递 `captured_scope`
+- `_collect_free_refs`：扫描 lambda/snapshot 体内的 `IbName` 节点，按 `sym_uid` 区分自由变量与局部变量
+
+### 6.6 测试覆盖
+
+| 测试文件 | 测试类 | 覆盖场景 |
+|----------|--------|---------|
+| `tests/e2e/test_e2e_fn_lambda_syntax.py` | `TestFnLambdaColonSyntax` | 8 种冒号形式正确执行 |
+| | `TestFnLambdaReturnType` | `-> TYPE` 标注；类型不匹配 SEM_003 |
+| | `TestFnLambdaParams` | 带参数 lambda/snapshot；参数传递 |
+| | `TestFnLambdaClosures` | lambda 闭包读最新值；snapshot 闭包冻结值 |
+| | `TestFnSnapshotIntentIsolation` | snapshot 意图隔离；lambda 意图敏感 |
+| | `TestFnLambdaBackwardCompat` | 旧语法断言 parse error（不兼容） |
+| | `TestFnLambdaErrors` | 旧括号体语法 parse error；lambda 不可作参数 |
+| `tests/e2e/test_e2e_deferred.py` | — | deferred 调用、fn 持有 lambda 引用 |
+| `tests/e2e/test_e2e_ai_mock.py` | — | lambda/snapshot + behavior 表达式；deferred 传参 |
+| `tests/compiler/test_compiler_pipeline.py` | `TestBehaviorDeferred` | 新语法编译期通过 |
+

@@ -352,3 +352,138 @@ class ExprHandler(BaseHandler):
 
         # 兜底：返回 result.value（已经是解析后的值）
         return result.value
+
+    def visit_IbLambdaExpr(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
+        """
+        参数化 lambda/snapshot 表达式（M1）的运行时实现。
+
+        语义
+        ----
+        * 'lambda'   —— 创建 IbDeferred/IbBehavior 持有 ``captured_scope`` 引用；
+          调用时进入子作用域绑定实参，body 内对自由变量的引用透过父链解析为
+          调用时刻的最新值。
+        * 'snapshot' —— 创建 IbDeferred/IbBehavior 持有 ``closure`` 字典（按符号
+          UID 索引到 ``(name, IbCell(value))``，IbCell 为定义时取值的独立副本）；
+          调用时把 cell 的值在子作用域以相同 ``uid`` 重新绑定，body 内的 IbName
+          走 UID 解析时即可命中本地副本而不是定义后变更的外部符号。
+
+        当 body 是 ``IbBehaviorExpr`` 时构造 ``IbBehavior``（沿用 LLM 执行器路径），
+        否则构造 ``IbDeferred``（普通表达式重访路径）。
+        """
+        params_uids: List[str] = list(node_data.get("params") or [])
+        body_uid = node_data.get("body")
+        deferred_mode = node_data.get("deferred_mode") or "lambda"
+
+        body_data = self.execution_context.get_node_data(body_uid) if body_uid else None
+        body_is_behavior = bool(body_data) and body_data.get("_type") == "IbBehaviorExpr"
+
+        # 形参符号 UID 集合：用于把"形参引用"从"自由变量引用"中剔除
+        param_sym_uids = self._collect_param_sym_uids(params_uids)
+
+        # snapshot 模式：构造 closure(uid → (name, IbCell(value))) 副本
+        # lambda 模式：保留 captured_scope 引用，free vars 透过父链解析即可
+        closure: Dict[str, Any] = {}
+        captured_scope = None
+        if deferred_mode == "snapshot" and body_uid:
+            from core.runtime.objects.cell import IbCell
+            for name, sym_uid in self._collect_free_refs(body_uid, param_sym_uids):
+                if sym_uid in closure:
+                    continue
+                try:
+                    val = self.runtime_context.current_scope.get_by_uid(sym_uid)
+                except (KeyError, AttributeError):
+                    val = None
+                if val is not None:
+                    closure[sym_uid] = (name, IbCell(val))
+        else:
+            # lambda 模式：捕获当前作用域引用即可
+            captured_scope = self.runtime_context.current_scope
+
+        if body_is_behavior:
+            # IbBehavior 路径：复用 visit_IbBehaviorExpr 的意图捕获逻辑
+            captured_intents = (
+                None if deferred_mode == "lambda"
+                else self.runtime_context.fork_intent_snapshot()
+            )
+            expected_type = self.get_side_table("node_to_type", body_uid)
+            return self.service_context.object_factory.create_behavior(
+                body_uid,
+                captured_intents,
+                expected_type=expected_type,
+                deferred_mode=deferred_mode,
+                execution_context=self._execution_context,
+                params_uids=params_uids,
+                closure=closure,
+            )
+
+        return self.service_context.object_factory.create_deferred(
+            node_uid,
+            deferred_mode=deferred_mode,
+            execution_context=self._execution_context,
+            captured_scope=captured_scope,
+            params_uids=params_uids,
+            body_uid=body_uid,
+            closure=closure,
+        )
+
+    def _collect_param_sym_uids(self, params_uids: List[str]) -> set:
+        """提取 lambda 形参的符号 UID 集合（解开 IbTypeAnnotatedExpr 包装）。"""
+        sym_uids = set()
+        for puid in params_uids:
+            actual = puid
+            pdata = self.execution_context.get_node_data(puid)
+            if pdata and pdata.get("_type") == "IbTypeAnnotatedExpr":
+                actual = pdata.get("target")
+            if actual:
+                sid = self.get_side_table("node_to_symbol", actual)
+                if sid:
+                    sym_uids.add(sid)
+        return sym_uids
+
+    def _collect_free_refs(self, root_uid: str, exclude_sym_uids: set) -> List:
+        """
+        浅层 AST 走访收集 ``IbName`` (Load 上下文) 的 ``(name, sym_uid)`` 二元组，
+        过滤掉形参符号；遇到嵌套 ``IbLambdaExpr`` 时屏蔽其内层形参（最近词法
+        绑定）。返回去重前的列表，由调用方按 sym_uid 去重。
+
+        本实现避免引入新的语义侧表，runtime 期遍历开销与 body 节点数线性相关，
+        典型 lambda body 规模较小，开销可忽略。
+        """
+        refs: List = []
+        visited: set = set()
+        # 栈元素: (uid, exclude_set)；嵌套 lambda 会扩展 exclude_set
+        stack: List = [(root_uid, exclude_sym_uids)]
+        while stack:
+            cur, excl = stack.pop()
+            if not isinstance(cur, str) or cur in visited:
+                continue
+            visited.add(cur)
+            data = self.execution_context.get_node_data(cur)
+            if not data:
+                continue
+            ntype = data.get("_type")
+            if ntype == "IbName":
+                if data.get("ctx", "Load") == "Load":
+                    sym_uid = self.get_side_table("node_to_symbol", cur)
+                    if sym_uid and sym_uid not in excl:
+                        nm = data.get("id") or ""
+                        refs.append((nm, sym_uid))
+                continue
+            if ntype == "IbLambdaExpr":
+                inner_param_uids = self._collect_param_sym_uids(list(data.get("params") or []))
+                inner_body = data.get("body")
+                if inner_body:
+                    stack.append((inner_body, excl | inner_param_uids))
+                continue
+            # 通用展开：将所有 list 字段中的字符串 uid 与字符串字段中合法 uid 视作子节点
+            pool = self.execution_context.node_pool
+            for k, v in data.items():
+                if k.startswith("_"):
+                    continue
+                if isinstance(v, list):
+                    for it in v:
+                        if isinstance(it, str) and it in pool:
+                            stack.append((it, excl))
+                elif isinstance(v, str) and v in pool:
+                    stack.append((v, excl))
+        return refs
