@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-28（代码债务清理 H1/H2/H3/M1 完成：删除 `_captured_scope` 僵尸字段、修复 `DeferredAxiom.is_compatible`、移除 closure 解包死分支；780 个测试通过）
+> **最后更新**：2026-04-28（M3a CPS 调度循环骨架 + URGENT_ISSUES 中等优先级清理 M2/M3/M4/M5 完成；829 个测试通过；下一里程碑：M3b 控制信号数据化 / M5a DDG 编译器分析）
 
 ---
 
@@ -30,6 +30,8 @@
 - ✅ **M2 IbCell GC 根集合 + 词法作用域正式化**：lambda 自由变量通过共享 IbCell，lambda 可自由作为高阶函数参数传递；`ScopeImpl.promote_to_cell()`；`collect_gc_roots()`
 - ✅ **fn 声明侧返回类型**：`TYPE fn NAME = lambda: EXPR`；表达式侧 `lambda -> TYPE:` 禁止（PAR_005）；`fn[TYPE]` 解析为 DeferredSpec
 - ✅ **代码债务清理（H1/H2/H3/M1）**：删除 `_captured_scope` 僵尸字段（`IbDeferred` + factory/interfaces/expr_handler/stmt_handler 全链路）；修复 `DeferredAxiom.is_compatible` 文档/代码矛盾；移除 closure 解包死 `else` 分支（两处）；780 个测试通过
+- ✅ **M3a：CPS 调度循环骨架**（`core/runtime/vm/`：VMExecutor + 21 节点 generator handler + VMTask/VMTaskResult/ControlSignal/ControlSignalException + IVMExecutor/IVMTask Protocol）；49 个 VM 单元测试新增；未实现节点回退到 `execution_context.visit(uid)`；829 个测试通过
+- ✅ **URGENT_ISSUES 中等优先级清理（M2/M3/M4/M5）**：`define()` fallback UID 改 id+RuntimeWarning；snapshot 自由变量 `val is None` 不再静默；`IbDeferred/IbBehavior.to_native()` 未执行时抛 RuntimeError（不再静默 `return self`）；`iter_cells()` 上提至 Scope 协议
 - ✅ **intent_context OOP MVP（§9.5）**：`IntentContextAxiom.is_class=True`；`INTENT_CONTEXT_SPEC = ClassSpec(...)`；实例方法 `__init__/push/pop/fork/resolve/merge/clear` + 作用域控制方法 `clear_inherited/use/get_current` 注册
 - ✅ **`in` / `not in` 运算符**：`IbCompare` 支持成员检测；`str`/`list`/`dict` 均实现 `__contains__` vtable
 - ✅ **标准库方法补全**：`str.{find_last, is_empty, replace, startswith, endswith, trim, to_upper, to_lower}`；`list.{insert, remove, index, count, contains}`；`dict.{pop, contains, remove}`；`Exception(msg)` 构造 + `e.message` 字段；`list + list` 拼接；610 测试通过
@@ -93,68 +95,74 @@ class MyType:
 
 ---
 
-## Step 9：VM CPS 调度循环 [P2 - IExecutionFrame 接口完整后可推进]
+## Step 9a：M3a CPS 调度循环骨架 [✅ COMPLETED — 2026-04-28]
 
-**前提**：Step 5 IExecutionFrame 接口已完整（✅ 已具备）
-
-**本质**：消除当前解释器的 Python 递归调用栈，改用 CPS（Continuation-Passing Style）调度循环，支持：
-- 解释器不再受 Python 调用栈深度限制
-- 为 Layer 2 多 Interpreter 并发（`DynamicHost.spawn` 线程化）铺路
-
-详见 `docs/PENDING_TASKS_VM.md`。
+详见 `docs/COMPLETED.md §十`。`core/runtime/vm/` 子包提供 VMExecutor + 21 节点 generator handler；与原 `Interpreter.visit()` 并存，未实现节点回退到 `execution_context.visit(uid)`；49 个 VM 单元测试新增。
 
 ---
 
-## Step 10：Layer 1 LLM 流水线 [P2 - Step 6 意图 fork 完成后可推进]
+## Step 9b：M3b 控制信号数据化 [⏳ NEXT — 主线下一步]
 
-**前提**：Step 6 `IbIntentContext.fork()` 已完整（✅ 已具备）
+**前提**：M3a 完成（✅ 已具备）
 
-**本质**：DDG 编译器 + `LLMScheduler` 实现 dispatch 时刻意图绑定，支持 LLM 调用并行化。
+**本质**：把 VMExecutor 内的 `ControlSignalException`（return/break/continue/throw）替换为显式 `VMTaskResult.SIGNAL(kind, value)` 数据传递；调度循环显式拦截信号，循环帧消费 BREAK/CONTINUE，函数帧消费 RETURN，未拦截信号转换为对应 Python 异常向 fallback 路径外泄。
 
-详见 `docs/PENDING_TASKS_VM.md`。
-
----
-
-## Step 11：Layer 2 多 Interpreter 并发 [P3 - Step 5 ContextVar 完整后]
-
-**前提**：Step 5 ContextVar（多线程下帧状态隔离）已完整（✅ 已具备）
-
-**本质**：`DynamicHost.spawn` 线程化，每个 Interpreter 实例持有独立 ContextVar 槽位。
-
-详见 `docs/PENDING_TASKS_VM.md`。
+详细规范见 `docs/VM_EVOLUTION_PLAN.md §M3b`。
 
 ---
 
-## 任务依赖图（历史完成路径）
+## Step 10a：M5a DDG 编译器分析 [⏳ NEXT — 可与 M3b 并行]
+
+**前提**：Step 6（IbIntentContext.fork()）✅ 已具备
+
+**本质**：在语义分析阶段对每个 `IbBehaviorExpr` 节点扫描模板插值变量，向上追溯定义来源是否为另一 behavior，产出 `llm_deps: List[node_uid]` 与 `dispatch_eligible: bool`，写入 AST 与序列化 artifact，为后续 M5b（LLMScheduler）和 M5c（dispatch-before-use）奠基。
+
+详细规范见 `docs/VM_EVOLUTION_PLAN.md §M5a`。
+
+---
+
+## Step 10/11/12：后续里程碑
+
+- **M3c**：llmexcept retry + intent fork/restore 调度化（依赖 M3b）
+- **M3d**：Interpreter.visit() 主路径切换到 VMExecutor（依赖 M3c）
+- **M4**：Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化，依赖 M3a）
+- **M5b**：LLMScheduler（ThreadPoolExecutor + LLMFuture，依赖 M5a）
+- **M5c**：VM dispatch-before-use 集成（依赖 M5b + M3c）
+- **M6**：可移植性参考实现 + 完整并发行为测试套件（依赖 M3d + M4 + M5c）
+
+详见 `docs/VM_EVOLUTION_PLAN.md` 与 `docs/PENDING_TASKS_VM.md`。
+
+---
+
+## 任务依赖图（精确版）
 
 ```
-Step 4b（完成）
+Step 1–8 + M1 + M2 + M3a（已完成）
     │
-    ├──→ Step 5a（IExecutionFrame Protocol 定义）[✅ 完成]
-    │        │
-    │        └──→ Step 5b（ContextVar，IbUserFunction 去除 context 参数）[✅ 完成]
+    ├──→ M3b（ControlSignal 数据化）⏳ 当前任务
+    │      │
+    │      └──→ M3c（llmexcept 调度化）
+    │             │
+    │             └──→ M3d（主路径切换）
     │                    │
-    │                    └──→ Step 6a（IntentContextAxiom）[✅ 完成]
-    │                                 │
-    │                                 ├──→ Step 6b（IbIntentContext 运行时对象）[✅ 完成]
-    │                                 │            │
-    │                                 │            └──→ Step 6c（RuntimeContextImpl 迁移）[✅ 完成]
-    │                                 │                         │
-    │                                 │                         └──→ Step 6d（LLMExceptFrame 修复）[✅ 完成]
-    │                                 │
-    │                                 └──→ Step 7（LlmCallResultAxiom + IbLLMCallResult 接入）[✅ 完成]
+    │                    └──→ M4（多 Interpreter 并发）
     │
-    └──→ Step 8（文档化，随时可做）
+    ├──→ M5a（DDG 编译器分析）⏳ 当前任务（可与 M3b 并行）
+    │      │
+    │      └──→ M5b（LLMScheduler）
+    │             │
+    │             └──→ M5c（dispatch-before-use，需 M3c）
+    │
+    └──→ M6（可移植性 + 合规测试套件，需 M3d + M4 + M5c）
 ```
 
-**下一优先路径**：Step 9（CPS 调度循环）→ Step 10（LLM 流水线，含 10a/10b/10c 三阶段）→ Step 11（多 Interpreter 并发）→ Step 12（可移植性参考实现）→ **Step 12.5（fn 参数化 lambda/snapshot 新语法 + IbCell 机制）**
+**当前优先路径**：M3b（CPS 控制信号数据化）+ M5a（DDG 编译器分析）并行 → M3c → M3d / M4 / M5b/M5c → M6
 
 ---
 
 ## Step 12.5：fn 参数化 lambda/snapshot 新语法 [✅ COMPLETED — 2026-04-28]
 
-> **完成总结**：M1 全部落地。758 个测试通过（从基准 678 增至 758）。  
-> 旧语法已彻底移除（parse error）。详见 `docs/COMPLETED.md §五`。
+> **完成总结**：M1 全部落地，旧语法已彻底移除（parse error）。详见 `docs/COMPLETED.md §六/§七/§八`。
 
 ### 实际落地的语法（最终形式：声明侧返回类型）
 
@@ -182,38 +190,20 @@ lambda(PARAMS)(EXPR)         # ❌ 旧括号体
 fn f = lambda -> int: EXPR   # ❌ PAR_005（表达式侧返回类型）
 ```
 
-> **后续**：fn declaration-side 语法（M3 前置）已完成（780 tests）；M3a（CPS 调度循环）现在可以独立推进。
-
 ---
 
-> **来源**：2026-04-27 实测核实。
-
-### 现状摘要（2026-04-27 更新）
+## 元组解包 / for-tuple 现状（2026-04-27 实测核实）
 
 | 写法 | 行为 | 备注 |
 |------|------|------|
-| `int a, int b = t` | ✅ **已修复**（裸列形式元组解包） | 与 Python `a, b = t` 对齐 |
-| `(int a, int b) = t` | ✅ 正常，按 `tuple → 两个 int` 解包 | 等价写法 |
-| `(int a, int b) = (1, 2, 3)` | ❌ 运行期 `RUN_001: Unpack error: expected 2 values, got 3` | 元数检查正确 |
-| `(int a, str b) = (1, "x")` | ✅ 正常，混合类型解包正确 | — |
-| `for (int x, int y) in list[tuple]` | ✅ **已修复** | 解析为元组解包目标，每个分量按各自标注类型定义 |
-| `tuple t = (1, 2); auto a = t[0]; auto b = t[1]` | ✅ 正常 | 下标访问可用 |
-| `tuple` 函数返回值再下标 | ✅ 正常 | `(int)r[0]` 可用 |
-
-### 已完成（小任务，2026-04-27）
-
-1. ✅ **裸列形式 `int a, int b = t` 元组解包**：解析器在解析单变量声明后探测 `,` 折叠为元组解包目标（`core/compiler/parser/components/declaration.py:variable_declaration`）；支持 `auto` / 类型混搭；`deferred_mode` 修饰下保持单变量语义不变。
-2. ✅ **`for (int x, int y) in coords:` 类型标注元组目标**：根因在语义分析的 `visit_IbFor` 对 `get_assigned_names` 输出的去重缺失——同名 `IbName` 条目以 `element_type` 覆盖了 `IbTypeAnnotatedExpr` 已写入的精确类型；修复后逐分量类型与注解一致（`core/compiler/semantic/passes/semantic_analyzer.py:visit_IbFor`）。
-3. ✅ **错误路径自然消解**：`for (int x, int y) in list[tuple]` 不再误用整体 `tuple` 类型作为分量类型，旧的 `RUN_002` 误导信息不再可达。元组目标但缺少注解的元素现在保持 `any`，避免错误的兜底类型。
-
-
-### 临时规避
-
-- 无类型 / `auto` 解包：`auto a = t[0]; auto b = t[1]`
-- `for tuple pair in coords:` + `auto x = pair[0]; auto y = pair[1]`
-- 多返回值场景使用 `(int a, int b) = func()` （加括号）
+| `int a, int b = t` | ✅ 已修复（裸列形式元组解包） | 与 Python `a, b = t` 对齐 |
+| `(int a, int b) = t` | ✅ 正常 | 等价写法 |
+| `(int a, int b) = (1, 2, 3)` | ❌ 运行期 `RUN_001: Unpack error` | 元数检查正确 |
+| `(int a, str b) = (1, "x")` | ✅ 正常 | 混合类型 |
+| `for (int x, int y) in list[tuple]` | ✅ 已修复 | 类型标注精确 |
+| `tuple t = (1, 2); auto a = t[0]` | ✅ 正常 | 下标访问 |
 
 ---
 
-*本文档记录近期可执行任务。VM 架构长期设想（三层并发/llmexcept危险悬案）见 `docs/PENDING_TASKS_VM.md`。*
+*本文档记录近期可执行任务。VM 架构长期设想（三层并发/llmexcept危险悬案）见 `docs/PENDING_TASKS_VM.md`；低优维护性任务见 `docs/DEFERRED_CLEANUP.md`。*
 

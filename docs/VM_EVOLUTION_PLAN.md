@@ -1,7 +1,7 @@
 # IBCI VM 演进总规划（Master Plan）
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
-> **基准状态**（2026-04-28）：**780 个测试通过**；Step 1–8 全部完成；**M1 已完成**（fn/lambda/snapshot 全新语法落地）；**M2 已完成**（IbCell GC 根集合 + 词法作用域正式化，lambda 可自由传递）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；Step 9–12 待推进。  
+> **基准状态**（2026-04-28）：**829 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**（`define()` fallback UID id-based + warning、snapshot 自由变量诊断、`to_native()` 抛错、`iter_cells()` 上提至 Scope 协议）；**M3b/M5a 待开工**（当前优先路径），M3c/M3d/M4/M5b/M5c/M6 待推进。  
 > **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  
 > **关联文档**：`docs/PENDING_TASKS_VM.md`（详细设计）、`docs/NEXT_STEPS.md`（近期任务）、`docs/COMPLETED.md`（已完成记录）。
@@ -50,7 +50,7 @@ visit(node_uid)
 ### 1.4 测试基线
 
 ```
-python3 -m pytest tests/ -q --tb=short   # 780 passed（2026-04-28，fn declaration-side 语法完成后）
+python3 -m pytest tests/ -q --tb=short   # 829 passed（2026-04-28，M3a + URGENT_ISSUES 中优清理后）
 ```
 
 每个 Milestone 完成后必须以此命令验证测试不退化。
@@ -60,27 +60,30 @@ python3 -m pytest tests/ -q --tb=short   # 780 passed（2026-04-28，fn declarat
 ## 二、总体演进路线图
 
 ```
-已完成（Step 1–8 + M1 + M2 + fn declaration-side 语法）
-  └─── 当前状态（基准：780 tests）
+已完成（Step 1–8 + M1 + M2 + M3a + fn declaration-side 语法 + URGENT_ISSUES 中优清理）
+  └─── 当前状态（基准：829 tests）
          │
          ├─── ✅ M1：fn 新语法 + IbCell（Step 12.5）                  [已完成 2026-04-28]
          │      │
          │      └─── ✅ M2：IbCell GC 根集合 + 词法作用域正式化（Step 13）[已完成 2026-04-28]
          │
-         ├─── M3a：CPS 调度循环骨架（Step 9a）                      [独立入口，M2 完成后可进]
+         ├─── ✅ M3a：CPS 调度循环骨架（Step 9a）                      [已完成 2026-04-28]
          │      │
-         │      ├─── M3b：return/break/continue 迁移到 Signal（Step 9b）
+         │      ├─── M3b：return/break/continue 迁移到 Signal（Step 9b）  ⏳ 当前任务
          │      │      │
          │      │      └─── M3c：llmexcept retry + intent fork 调度化（Step 9c）
          │      │
-         │      └─── M4：Layer 2 多 Interpreter 并发（Step 11）     [依赖 M3a]
+         │      └─── M4：Layer 2 多 Interpreter 并发（Step 11）     [依赖 M3a ✅]
          │
          └─── M5：LLM 流水线（Step 10a/10b/10c）                    [依赖 Step 6 ✅，可独立]
-                └─── M6：可移植性参考实现 + 并发行为测试套件（Step 12）[依赖 M3c + M4 + M5]
+                ├─── M5a：DDG 编译器分析                            ⏳ 当前任务
+                ├─── M5b：LLMScheduler                              [依赖 M5a]
+                └─── M5c：dispatch-before-use（依赖 M5b + M3c）
+                       │
+                       └─── M6：可移植性参考实现 + 并发行为测试套件（Step 12）[依赖 M3c + M4 + M5c]
 ```
 
-**推荐执行顺序**：M1 → M2 → M3a → M3b → M3c → M4 → M5 → M6  
-（M5 可在 M3a 之前并行推进，但 M5 的 dispatch-before-use 集成需要 M3c 完成后才能完整）
+**当前优先路径**：M3b（CPS 控制信号数据化）+ M5a（DDG 编译器分析）并行推进 → M3c → M3d / M4 / M5b/M5c → M6
 
 ---
 
@@ -179,11 +182,11 @@ lambda(PARAMS)(EXPR)         # ❌ 旧括号体语法
 
 ---
 
-### M3a：CPS 调度循环骨架（Step 9a）
+### M3a：CPS 调度循环骨架（Step 9a）✅ COMPLETED — 2026-04-28
 
 **目标**：在现有 `interpreter.py` 旁新增一个 `vm_executor.py`，实现基于显式帧栈（而非 Python 递归）的 `visit_cps()` 方法。**本阶段不替换 `visit()`**，而是作为独立的并行实现路径验证正确性。
 
-**前提**：Step 7 完成（✅ 已具备）；M1 完成后更安全（但不强依赖）
+**完成状态**：✅ 全部落地，829 个测试通过（780 + 49 新增 VM 单元测试）。详见 `docs/COMPLETED.md §十`。
 
 **核心设计**：
 
@@ -474,15 +477,15 @@ M3d + M4 + M5c
 
 | Milestone | 必须通过 | 必须新增 |
 |-----------|---------|---------|
-| M1 | 678 个基线测试 | ≥20 fn/lambda/Cell 测试 |
-| M2 | M1 后全部测试 | ≥10 Cell 生命周期测试 |
-| M3a | 678 个基线测试 | ≥30 VMExecutor 专属测试 |
-| M3b | M3a 后全部测试 | ≥20 ControlSignal 控制流测试 |
+| M1 | 678 个基线测试 | ≥20 fn/lambda/Cell 测试 |（✅ 758 passed）
+| M2 | M1 后全部测试 | ≥10 Cell 生命周期测试 |（✅ 776 passed）
+| M3a | 780 个基线测试 | ≥30 VMExecutor 专属测试 |（✅ 829 passed，新增 49）
+| M3b | 829 个基线测试 | ≥20 ControlSignal 控制流测试 |
 | M3c | M3b 后全部测试 | ≥15 llmexcept/retry 调度化测试 |
-| M3d | 678 + M3a/b/c 新增，全部由 VMExecutor 路径驱动 | 无新增要求，重点是不退化 |
+| M3d | M3a/b/c 新增全部由 VMExecutor 路径驱动 | 无新增要求，重点是不退化 |
 | M4 | M3a 后全部测试 | ≥10 并发 spawn/collect 测试 |
-| M5a | 基线测试 | ≥10 DDG 分析单元测试 |
-| M5b | 基线测试 | ≥10 LLMScheduler/Future 单元测试 |
+| M5a | 829 个基线测试 | ≥10 DDG 分析单元测试 |
+| M5b | M5a 后全部测试 | ≥10 LLMScheduler/Future 单元测试 |
 | M5c | M3c + M5b 后全部测试 | ≥10 并发 LLM 调用时序 E2E 测试 |
 | M6 | 全部 | Compliance Test Suite 独立运行通过 |
 
