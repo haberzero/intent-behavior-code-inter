@@ -492,7 +492,7 @@ class ExpressionComponent(BaseComponent):
             raise self.stream.error(
                 self.stream.peek(),
                 f"Return type annotation on '{deferred_mode}' is not allowed on the expression side. "
-                f"Use the declaration side instead: 'TYPE fn name = {deferred_mode}: EXPR'. "
+                f"Use the declaration side instead: 'TYPE fn NAME = {deferred_mode}: EXPR'. "
                 f"For example: 'int fn f = lambda: 1 + 1'.",
                 code="PAR_005",
             )
@@ -530,7 +530,7 @@ class ExpressionComponent(BaseComponent):
                 raise self.stream.error(
                     self.stream.peek(),
                     f"Return type annotation on '{deferred_mode}' is not allowed on the expression side. "
-                    f"Use the declaration side instead: 'TYPE fn name = {deferred_mode}(PARAMS): EXPR'. "
+                    f"Use the declaration side instead: 'TYPE fn NAME = {deferred_mode}(PARAMS): EXPR'. "
                     f"For example: 'int fn f = lambda(int a): a + 1'.",
                     code="PAR_005",
                 )
