@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-28（M1 + M2 + fn declaration-side 完成；780 个测试通过；fn/lambda/snapshot 全新语法落地，IbCell GC 根集合 + 词法作用域正式化）
+> **最后更新**：2026-04-28（M1 + M2 + M3a 完成；829 个测试通过；fn/lambda/snapshot 语法定型，IbCell GC 根集合 + 词法作用域正式化，VM/CPS 调度循环骨架落地）
 
 ---
 
@@ -134,7 +134,7 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 - ✅ IbCell 机制（SC-3/SC-4）：lambda 自由变量通过共享 IbCell 引用，snapshot 通过独立 IbCell 值拷贝
 - ✅ M2 `ScopeImpl.promote_to_cell()` + `RuntimeContextImpl.collect_gc_roots()`，lambda 可自由作为 HOF 参数传递
 - ✅ 旧语法（`TYPE lambda NAME = EXPR`、括号体形式、表达式侧 `lambda -> TYPE: EXPR`）全部产生 parse error（`PAR_005`）
-- ✅ 780 个测试通过
+- ✅ 829 个测试通过
 
 **详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`
 
