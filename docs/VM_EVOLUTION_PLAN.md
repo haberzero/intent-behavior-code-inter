@@ -1,7 +1,7 @@
 # IBCI VM 演进总规划（Master Plan）
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
-> **基准状态**（2026-04-28）：**867 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M5a 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架 + 控制信号数据化 + DDG 编译期分析）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**（`define()` fallback UID id-based + warning、snapshot 自由变量诊断、`to_native()` 抛错、`iter_cells()` 上提至 Scope 协议）；**M3c/M5b 待开工**（当前优先路径），M3d/M4/M5c/M6 待推进。  
+> **基准状态**（2026-04-28）：**905 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M3c + M5a + M5b 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架 + 控制信号数据化 + llmexcept 调度化 + DDG 编译期分析 + LLMScheduler）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**（`define()` fallback UID id-based + warning、snapshot 自由变量诊断、`to_native()` 抛错、`iter_cells()` 上提至 Scope 协议）；**M3d/M4/M5c/M6 待推进**（当前优先路径：M3d 切换主执行路径 + M5c dispatch-before-use）。  
 > **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  
 > **关联文档**：`docs/PENDING_TASKS_VM.md`（详细设计）、`docs/NEXT_STEPS.md`（近期任务）、`docs/COMPLETED.md`（已完成记录）。
@@ -273,7 +273,7 @@ class VMTask:
 
 ---
 
-### M3c：llmexcept retry + intent fork/restore 调度化（Step 9c）
+### M3c：llmexcept retry + intent fork/restore 调度化（Step 9c）✅ COMPLETED — 2026-04-28
 
 **目标**：将 `LLMExceptFrame` 的 retry 循环和意图 fork/restore 迁移到 `VMExecutor` 的调度循环中管理，消除对 Python try/except + `LLMExceptFrame.restore_snapshot()` 的直接依赖。
 
@@ -397,7 +397,7 @@ class LLMExceptTask(VMTask):
 | `llm_deps` 类型 | `List[str]`（UID） | AST 阶段为 `List[IbBehaviorExpr]`，序列化阶段自动转 UID | AST 阶段保留对象引用更便于 SCC 等图算法 |
 | 序列化器修改 | 显式新增字段 | 自动透传（`vars()` 遍历） | `FlatSerializer._process_value` 已支持 List of AST node |
 
-#### Step 10b：LLMScheduler
+#### Step 10b：LLMScheduler ✅ COMPLETED — 2026-04-28
 
 **文件级修改清单**：
 

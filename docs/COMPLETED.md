@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-28（M3b 控制信号数据化 + M5a DDG 编译期分析；867 个测试通过）
+> **最后更新**：2026-04-28（M3c llmexcept 调度化 + M5b LLMScheduler；905 个测试通过）
 
 ---
 
@@ -711,3 +711,112 @@ dispatch_eligible: bool = True
 * **M5b**：基于 `dispatch_eligible == True` 的 behaviors 在调度器中并行 dispatch
 * **M5c**：把 DDG 与 VMExecutor 帧栈结合，做拓扑排序的依赖等待
 * **跨函数追溯**（DEFERRED）：当前实现仅在同作用域内追溯；未来可能扩展到跨函数返回值传播
+
+---
+
+## 十三、M3c：IbLLMExceptionalStmt CPS 调度化
+
+> **完成状态**：✅ 全部落地，905 个测试通过（867 + 21 新增 M3c + 17 新增 M5b）。
+
+**目标**：将 `LLMExceptFrame` 的 retry 循环和意图 fork/restore 迁移到 `VMExecutor` 调度循环中管理，消除对 Python try/except 的直接依赖（M3c 出口契约）。
+
+### 13.1 保护重定向机制
+
+`core/runtime/vm/handlers.py` 新增 `_resolve_stmt_uid(executor, stmt_uid)` 辅助函数：
+
+* `_type == "IbLLMExceptionalStmt"` → 返回 `None`（直接 llmexcept 节点在 body 中跳过）
+* `node_protection[stmt_uid]` 存在 → 返回对应 handler uid（重定向到 llmexcept handler）
+* 其他 → 原样直通
+
+`vm_handle_IbModule` / `vm_handle_IbIf` / `vm_handle_IbWhile` 均改为通过 `_resolve_stmt_uid` 对 body 中每个 stmt 进行解析，返回 `None` 时 `continue` 跳过。
+
+### 13.2 vm_handle_IbLLMExceptionalStmt handler
+
+新增生成器 handler，遵循 CPS 契约：
+
+1. 从 LLM Provider 读取 `max_retry`（默认 3）
+2. 创建 `LLMExceptFrame` 并保存上下文快照
+3. 循环（最多 max_retry 次）：CPS 执行 target → 读取 `last_llm_result` → 确定则 break → 不确定则执行 body → `increment_retry`
+4. `finally`：保证 `pop_llm_except_frame` 始终执行（无论正常退出 / Signal 传播 / 异常）
+
+信号（RETURN/BREAK/CONTINUE/THROW）在 target 或 body 执行后立即透传给父帧。
+
+### 13.3 VMExecutor.service_context 属性
+
+`core/runtime/vm/vm_executor.py` 新增 `service_context` property，通过 `interpreter.service_context` 访问能力注册中心（供 handler 查询 `llm_provider.get_retry()`）。
+
+### 13.4 注册
+
+`build_dispatch_table()` 新增 `"IbLLMExceptionalStmt": vm_handle_IbLLMExceptionalStmt` 条目。
+
+### 13.5 文件级修改清单
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/runtime/vm/handlers.py` | 新增 `_resolve_stmt_uid`、`vm_handle_IbLLMExceptionalStmt`；更新三个容器 handler；注册到 dispatch table |
+| `core/runtime/vm/vm_executor.py` | 新增 `service_context` property |
+| `tests/unit/test_vm_executor_llmexcept.py`（新建） | 21 个测试：调度表注册 / `_resolve_stmt_uid` 路径 / 帧生命周期 / CPS 路径执行 / E2E 行为保留 |
+
+### 13.6 测试覆盖（21 个新增）
+
+* `TestDispatchTableRegistration`（3 测试）：dispatch table 注册、callable、generator function 类型
+* `TestResolveStmtUid`（5 测试）：None / 重定向 / 直通 / 缺失 node_data / protection 优先
+* `TestVMServiceContext`（2 测试）：无 interpreter → None / 有 interpreter → 正确上下文
+* `TestFrameLifecycle`（2 测试）：CPS 执行后帧已出栈 / 多次执行不泄露帧
+* `TestCPSExecution`（3 测试）：`vm.run(llmexcept_uid)` str / int / `supports()` 返回 True
+* `TestE2EBehaviorPreservation`（6 测试）：无 retry / REPAIR retry / 多 llmexcept / if 分支 / while 循环 / retry hint
+
+---
+
+## 十四、M5b：LLMScheduler / LLMFuture
+
+> **完成状态**：✅ 全部落地，905 个测试通过。
+
+**目标**：为 `LLMExecutorImpl` 添加并发 dispatch 基础设施（`dispatch_eager` + `resolve` + `LLMFuture`），为 M5c 的 dispatch-before-use 集成提供就绪接口。
+
+### 14.1 LLMFuture 数据类
+
+`core/runtime/interpreter/llm_result.py` 新增 `LLMFuture`：
+
+```python
+@dataclass
+class LLMFuture:
+    node_uid: str
+    future: Any  # concurrent.futures.Future[LLMResult]
+
+    @property
+    def is_done(self) -> bool: ...
+    def get(self, registry: Any) -> IbObject: ...
+```
+
+`get()` 阻塞等待 `future.result()` 完成，返回 `LLMResult.value` 或 `registry.get_none()`。
+
+### 14.2 LLMExecutorImpl 扩展
+
+`core/runtime/interpreter/llm_executor.py`：
+
+* `__init__` 新增 `max_workers: int = 8`，内部维护 `_thread_pool`（惰性）和 `_pending_futures: Dict[str, LLMFuture]`
+* `_get_thread_pool()` 惰性初始化 `ThreadPoolExecutor`（首次 `dispatch_eager` 时创建）
+* `dispatch_eager(node_uid, execution_context, intent_ctx)` → 提交到线程池，返回 `LLMFuture`，存入 `_pending_futures`
+* `resolve(node_uid)` → 从 `_pending_futures` 弹出对应 Future，阻塞等待并返回 `IbObject`；uid 不存在或二次 resolve 抛 `RuntimeError`
+* `__del__()` → 非阻塞关闭线程池
+
+### 14.3 文件级修改清单
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/runtime/interpreter/llm_result.py` | 新增 `LLMFuture` 数据类 |
+| `core/runtime/interpreter/llm_executor.py` | 添加 `ThreadPoolExecutor`、`dispatch_eager`、`resolve`、`_get_thread_pool`、`__del__` |
+| `tests/unit/test_llm_scheduler.py`（新建） | 17 个测试 |
+
+### 14.4 测试覆盖（17 个新增）
+
+* `TestLLMFuture`（6 测试）：is_done True/False / get() 返回 IbObject / None 降级 / 阻塞直到完成 / node_uid 字段
+* `TestDispatchEager`（3 测试）：返回 LLMFuture / 非阻塞 / 存入 _pending_futures
+* `TestResolve`（4 测试）：返回 IbObject / 消费后清除 / 未知 uid 抛错 / 二次 resolve 抛错
+* `TestThreadPoolLazyInit`（3 测试）：dispatch 前为 None / dispatch 后非 None / 同一实例
+* `TestBackwardCompat`（1 测试）：execute_behavior_expression 仍正常工作
+
+### 14.5 后续
+
+* **M5c**：dispatch-before-use 集成（依赖 M3c + M5b）：`dispatch_eligible=True` 时 VMExecutor 调用 `dispatch_eager()`，使用点调用 `resolve()`
