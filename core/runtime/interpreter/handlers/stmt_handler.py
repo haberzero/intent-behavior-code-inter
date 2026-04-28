@@ -296,15 +296,10 @@ class StmtHandler(BaseHandler):
             if value_node_type != "IbBehaviorExpr":
                 # 通用延迟：创建 IbDeferred 对象包裹任意表达式
                 deferred_mode = self.get_side_table("node_deferred_mode", value_uid) or "lambda"
-                captured_scope = None
-                if deferred_mode == "snapshot":
-                    # snapshot 模式：捕获当前作用域的引用
-                    captured_scope = self.runtime_context.current_scope
                 value = self.service_context.object_factory.create_deferred(
                     value_uid,
                     deferred_mode=deferred_mode,
                     execution_context=self._execution_context,
-                    captured_scope=captured_scope,
                 )
             else:
                 # behavior 表达式走原有路径（visit_IbBehaviorExpr 内部处理延迟）

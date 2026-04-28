@@ -430,7 +430,6 @@ class ExprHandler(BaseHandler):
             node_uid,
             deferred_mode=deferred_mode,
             execution_context=self._execution_context,
-            captured_scope=None,
             params_uids=params_uids,
             body_uid=body_uid,
             closure=closure,
