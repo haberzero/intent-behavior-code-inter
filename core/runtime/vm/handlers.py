@@ -429,7 +429,7 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
 
     if not target_uid:
         if False:
-            yield  # pragma: no cover
+            yield  # pragma: no cover — 无 target 时仍需维持 generator function 签名
         return executor.registry.get_none()
 
     # 从 LLM Provider 获取重试次数配置

@@ -506,6 +506,16 @@ class LLMExecutorImpl:
             )
         return llm_future.get(self.registry)
 
+    def close(self) -> None:
+        """关闭线程池（等待已提交任务完成）。
+
+        应优先调用此方法显式释放资源，而非依赖 ``__del__``。
+        关闭后不应再调用 ``dispatch_eager()``（会重新创建线程池）。
+        """
+        if self._thread_pool is not None:
+            self._thread_pool.shutdown(wait=True)
+            self._thread_pool = None
+
     def __del__(self) -> None:
         """关闭线程池（非阻塞；允许已提交的任务完成）。"""
         if self._thread_pool is not None:

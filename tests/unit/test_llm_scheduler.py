@@ -154,7 +154,7 @@ class TestDispatchEager:
         # Clean up: resolve to avoid pending future leak
         try:
             executor.resolve(node_uid)
-        except Exception:
+        except RuntimeError:
             pass
 
     def test_dispatch_eager_is_nonblocking(self):
@@ -173,7 +173,7 @@ class TestDispatchEager:
         # Cleanup
         try:
             executor.resolve(node_uid)
-        except Exception:
+        except RuntimeError:
             pass
 
     def test_dispatch_eager_stores_in_pending_futures(self):
@@ -189,7 +189,7 @@ class TestDispatchEager:
         # Cleanup
         try:
             executor.resolve(node_uid)
-        except Exception:
+        except RuntimeError:
             pass
 
 
@@ -270,7 +270,7 @@ class TestThreadPoolLazyInit:
         # Cleanup
         try:
             executor.resolve(node_uid)
-        except Exception:
+        except RuntimeError:
             pass
 
     def test_get_thread_pool_returns_same_instance(self):
