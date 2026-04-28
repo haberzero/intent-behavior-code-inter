@@ -49,6 +49,12 @@ class Scope(Protocol):
     def get_all_symbols(self) -> Dict[str, RuntimeSymbol]: ...
     @property
     def parent(self) -> Optional['Scope']: ...
+    def iter_cells(self) -> Any:
+        """
+        枚举本作用域（不递归父）已提升为 IbCell 的变量条目（公理 GC-2 根集合扫描入口）。
+        默认实现返回空迭代器；具体作用域类型若支持 Cell 提升应覆写此方法。
+        """
+        return iter(())
 
 class RuntimeContext(Protocol):
     """解释器运行时上下文，管理作用域和意图栈"""

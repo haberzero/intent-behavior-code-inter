@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.base.source_atomic import Location
@@ -98,11 +99,19 @@ class ScopeImpl:
         if uid:
             self._uid_to_symbol[uid] = sym
         else:
-            import hashlib
-            content_repr = f"{name}:{type(boxed_value).__name__}"
-            if hasattr(boxed_value, 'value'):
-                content_repr += f":{boxed_value.value!r}"
-            fallback_uid = f"rt_{hashlib.sha256(content_repr.encode()).hexdigest()[:12]}"
+            # M2 修复（URGENT_ISSUES）：合法编译路径下语义分析始终提供 UID。
+            # 此 fallback 仅作为内核引导期/特殊路径的安全网，发出警告以暴露潜在的
+            # "UID 未注入"调用方。使用 id(sym) 作为唯一性来源（不再使用内容哈希），
+            # 避免相同 (name, type, value) 的不同变量产生相同 UID 而静默覆盖。
+            warnings.warn(
+                f"ScopeImpl.define() called without uid for symbol "
+                f"name={name!r} type={type(boxed_value).__name__}; "
+                f"falling back to identity-based UID. "
+                f"Callers should provide a UID from semantic analysis.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            fallback_uid = f"rt_{id(sym):x}"
             self._uid_to_symbol[fallback_uid] = sym
 
     def assign(self, name: str, value: Any) -> bool:
@@ -688,17 +697,16 @@ class RuntimeContextImpl(RuntimeContext):
         本方法是 IBCI 规范层 GC-2 的接口落地。Python 宿主依赖 CPython 引用计数，
         不需要手动 GC；此方法主要用于调试、合规测试以及未来非 Python 宿主迁移。
         """
-        from core.runtime.objects.cell import IbCell
         scope = self._current_scope
         while scope is not None:
             # 1. 所有符号值
             for sym in scope.get_all_symbols().values():
                 if sym.value is not None:
                     yield sym.value
-            # 2. Cell 变量：通过 trace_refs() 枚举 IbCell 持有的对象
-            if hasattr(scope, 'iter_cells'):
-                for cell in scope.iter_cells():
-                    yield from cell.trace_refs()
+            # 2. Cell 变量：通过 Scope 协议方法 iter_cells() 枚举本作用域的所有 IbCell。
+            #    Scope 协议提供默认空迭代器实现，因此无需 hasattr 检查。
+            for cell in scope.iter_cells():
+                yield from cell.trace_refs()
             scope = scope.parent
 
     def get_symbol_view(self) -> SymbolView:

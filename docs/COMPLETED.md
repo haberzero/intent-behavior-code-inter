@@ -532,3 +532,77 @@ for sym_uid, (name, cell) in self.closure.items():
 ```
 
 `IbDeferred.call()` 和 `IbBehavior.call()` 两处均已更新。
+
+---
+
+## 十、M3a：CPS 调度循环骨架 + 次要代码债务清理 [✅ COMPLETED — 2026-04-28]
+
+**前提**：M2 + 代码债务清理（已具备）  
+**测试基线**：829 个测试通过（较 M2 后 780 增加 49 个；M3a 新增 49 个 VM 单元测试）  
+**背景**：按 `docs/VM_EVOLUTION_PLAN.md` Step 9，落地 CPS 调度循环骨架——`Interpreter.visit()` 的并行路径，为 M3b/M3c/M3d 的控制流数据化、LLM exception 帧调度、主路径切换奠定调度层基础。
+
+### 10.1 VM 包：`core/runtime/vm/`
+
+新建 VM 子系统：
+
+| 文件 | 职责 |
+|------|------|
+| `core/runtime/vm/__init__.py` | 公开 API：`VMTask`、`VMTaskResult`、`ControlSignal`、`ControlSignalException`、`VMExecutor` |
+| `core/runtime/vm/task.py` | 调度数据对象：`VMTask`（节点 uid + 生成器协程）、`VMTaskResult`（DONE/SUSPEND/SIGNAL）、`ControlSignal` 枚举、`ControlSignalException`（M3a 过渡用） |
+| `core/runtime/vm/handlers.py` | M3a 节点 CPS 处理器（基于 generator function）：覆盖 IbConstant/IbName/IbBinOp/IbUnaryOp/IbBoolOp/IbCompare/IbIfExp/IbCall/IbAttribute/IbSubscript/IbTuple/IbListExpr/IbModule/IbPass/IbExprStmt/IbAssign/IbIf/IbWhile/IbReturn/IbBreak/IbContinue 共 21 种节点 |
+| `core/runtime/vm/vm_executor.py` | `VMExecutor` 显式帧栈调度循环（trampoline）：`run(uid)` / `supports(uid)` / `fallback_visit(uid)` / `assign_to_target(uid, val)` |
+
+### 10.2 调度循环设计
+
+* **生成器 trampoline**：每个支持的 AST 节点对应一个 generator function；`yield child_uid` 让出控制权，`return value` 完成任务，`raise ControlSignalException` 触发控制流信号。
+* **显式帧栈**：`stack: list[VMTask]` 维护求值上下文；不依赖 Python 递归。
+* **控制流信号**：M3a 通过 `ControlSignalException` + `generator.throw()` 跨帧传播；循环帧（IbWhile）拦截 BREAK/CONTINUE，函数帧（未来 M3b/M3c）拦截 RETURN。M3b 将把控制流改为显式 `VMTaskResult` 数据传递。
+* **回退路径**：未实现的节点类型自动调用 `execution_context.visit(uid)` 回退到原递归路径，确保混合执行的程序仍能正确运行——这是 M3a 作为"骨架"的关键设计。
+
+### 10.3 协议定义
+
+`core/base/interfaces.py` 新增两个 Protocol（`runtime_checkable`）：
+
+* `IVMTask`：声明 `node_uid` / `generator` 两个属性
+* `IVMExecutor`：声明 `supports(uid)` / `run(uid)` / `fallback_visit(uid)` 三个方法
+
+供 `__all__` 导出，与既有 `IExecutionFrame` 等协议位于同一文件。
+
+### 10.4 测试覆盖
+
+`tests/unit/test_vm_executor.py` 共 49 个测试，分 11 个类：
+
+1. **数据类**（4 测试）：ControlSignal 枚举值 / ControlSignalException 携带数据 / VMTaskResult 工厂方法 / VMTask 默认 locals
+2. **基础表达式**（12 测试）：IbConstant、IbName、IbBinOp（加/减/乘/嵌套）、IbUnaryOp、IbBoolOp（and/or 短路）、IbIfExp（true/false 分支）
+3. **比较运算**（5 测试）：等于/不等/链式比较/短路链/in 列表
+4. **复合表达式**（3 测试）：IbTuple、IbListExpr、IbSubscript
+5. **控制流**（8 测试）：if true/false/else 分支、while 循环、break/continue、break 单独传播、return signal 携带值
+6. **函数调用**（2 测试）：print 通过 VM 调用 / IbCastExpr 回退路径
+7. **赋值**（2 测试）：常量目标 / 表达式目标
+8. **Module/Pass/ExprStmt**（2 测试）：pass / module 顺序执行
+9. **调度器基础设施**（6 测试）：supports/fallback_visit/run(None)/run(unsupported)/step_count
+10. **CPS-vs-递归一致性**（3 测试）：算术/比较/while 循环模块级一致性
+11. **信号传播**（2 测试）：while 内 break 不逃逸 / continue 跳过剩余
+
+### 10.5 次要代码债务清理（M2/M3/M4/M5）
+
+伴随 M3a 的辅助工作，按 `URGENT_ISSUES.md` 中等优先级清单同步完成：
+
+| 编号 | 文件 | 改动 |
+|------|------|------|
+| M2 | `core/runtime/interpreter/runtime_context.py` | `define()` 的 fallback UID 路径：原 SHA256 hash 改为 `id(sym)`-based 唯一标识；通过 `warnings.warn(..., RuntimeWarning)` 显式告警；`import warnings` 提到模块顶层 |
+| M3 | `core/runtime/interpreter/handlers/expr_handler.py` | snapshot 自由变量 `val is None` 不再静默跳过：通过 `debugger.trace(BASIC)` 输出诊断警告 |
+| M4 | `core/runtime/objects/builtins.py` | `IbDeferred.to_native()` / `IbBehavior.to_native()` 不再静默 `return self`，改为抛出 `RuntimeError`（同步更新 `tests/e2e/test_e2e_m2_higher_order.py::TestCollectGcRoots` 过滤未执行的延迟值）|
+| M5 | `core/runtime/interfaces.py`、`core/runtime/interpreter/runtime_context.py` | `iter_cells()` 提升到 `Scope` 协议（默认空迭代器实现）；`collect_gc_roots()` 移除 `hasattr` 检查，改为直接调用 |
+
+**文档同步**：
+
+* `docs/PENDING_TASKS.md` 头部测试基线 758 → 829，状态描述更新
+* `docs/PENDING_TASKS.md §4.3` 状态从 `REDESIGNED` 改为 `COMPLETED`
+* `docs/COMPLETED.md` §十 新增本节
+
+### 10.6 后续里程碑
+
+* **M3b**：把 `ControlSignalException` 替换为 `VMTaskResult.SIGNAL` 数据对象；调度循环显式拦截信号
+* **M3c**：把 `LLMExceptFrame` retry 循环纳入调度器（用 `task.locals['snapshot']` 保存重试位点）
+* **M3d**：把 `Interpreter.visit()` 主路径切换到 VMExecutor，全部节点纳入 CPS 调度，删除递归路径与 `ControlSignalException` 过渡类

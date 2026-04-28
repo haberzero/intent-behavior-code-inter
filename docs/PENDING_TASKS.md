@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-28（M1 完成；758 个测试通过；fn/lambda/snapshot 全新语法落地，旧语法彻底移除）
+> **最后更新**：2026-04-28（M1 + M2 + M3a 完成；829 个测试通过；fn/lambda/snapshot 语法定型，IbCell GC 根集合 + 词法作用域正式化，VM/CPS 调度循环骨架落地）
 
 ---
 
@@ -126,30 +126,17 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 4.3 lambda/snapshot 语法重构与语义完整化 [REDESIGNED ⏳ — 2026-04-27]
+### 4.3 lambda/snapshot 语法重构与语义完整化 [✅ COMPLETED — 2026-04-28]
 
-> **状态**：本任务已升级为完整的语法重构任务。新语法方案已于 2026-04-27 确认，完整规范见 `docs/NEXT_STEPS.md` Step 12.5。
+**完成内容**（M1 + M2 + fn declaration-side 三阶段）：
+- ✅ 新 fn 声明语法：`TYPE fn NAME = lambda: EXPR` / `TYPE fn NAME = lambda(PARAMS): EXPR`（snapshot 同构）；`fn[TYPE]` → DeferredSpec
+- ✅ 参数传递：`IbDeferred.call()` / `IbBehavior.call()` 支持参数列表
+- ✅ IbCell 机制（SC-3/SC-4）：lambda 自由变量通过共享 IbCell 引用，snapshot 通过独立 IbCell 值拷贝
+- ✅ M2 `ScopeImpl.promote_to_cell()` + `RuntimeContextImpl.collect_gc_roots()`，lambda 可自由作为 HOF 参数传递
+- ✅ 旧语法（`TYPE lambda NAME = EXPR`、括号体形式、表达式侧 `lambda -> TYPE: EXPR`）全部产生 parse error（`PAR_005`）
+- ✅ 829 个测试通过
 
-**旧语法（将废弃）**：`TYPE lambda NAME = EXPR` / `TYPE snapshot NAME = EXPR`  
-**新语法（计划）**：`fn [TYPE] NAME = lambda([PARAMS])(BODY)` / `fn [TYPE] NAME = snapshot([PARAMS])(BODY)`
-
-**已实现（2026-04-19，现行旧语法下）**：
-- `lambda` 延迟对象不允许作为函数参数传递（运行时 `RUN_CALL_ERROR`，见 `kernel.py` `IbUserFunction.call()`）
-- `snapshot` 捕获定义位置的意图栈快照，可被作为参数传递和跨作用域传递
-- `IbBehavior(deferred_mode='snapshot')` 在 `captured_intents` 字段存储意图快照
-
-**已明确的语义规范（2026-04-27，待新语法实现后落地）**：
-- 参见 `docs/INTENT_SYSTEM_DESIGN.md` §9（意图栈交互规则 IT-1 至 IT-4）
-- 参见 `docs/PENDING_TASKS_VM.md` §10.2—10.3（Cell 变量模型 + 生命周期模型）
-
-**待实现（Step 12.5 任务）**：
-- **新 fn 语法**：`fn int my_fn = lambda(int x)(x + n)` 有参形式；`fn my_fn = lambda(expr)` 无参形式
-- **参数传递**：`IbDeferred.call()` / `IbBehavior.call()` 支持参数传入
-- **IbCell 机制**：引入 Cell 堆对象实现词法闭包正确语义（SC-2 至 SC-4）
-- **编译期约束**：lambda 存储约束（不允许赋给全局变量、类字段）提升到语义分析阶段
-- **废弃旧语法**：新语法稳定后，旧语法先输出 `DEP_001` 警告，最终产生 `PAR_001` 错误
-
-**搁置原因**：编译器 DDG 分析和 IbCell 机制需要系统性工程工作；旧语法测试已暂时注释（见 `tests/e2e/test_e2e_deferred.py`）。
+**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`
 
 ---
 

@@ -401,6 +401,16 @@ class ExprHandler(BaseHandler):
                         val = None
                     if val is not None:
                         closure[sym_uid] = (name, IbCell(val))
+                    else:
+                        # M3 修复（URGENT_ISSUES）：UID 查找失败时之前会静默跳过，
+                        # 导致后续调用 snapshot 时缺失变量、抛出难以定位的 "UID not found"
+                        # 错误。改为发出 debug 跟踪警告，便于排查。
+                        self.debugger.trace(
+                            CoreModule.INTERPRETER, DebugLevel.BASIC,
+                            f"snapshot closure capture failed: free var "
+                            f"name={name!r} sym_uid={sym_uid!r} not found in scope; "
+                            f"variable will be missing from snapshot closure"
+                        )
                 else:
                     # lambda 模式（M2 SC-4）：共享引用——将外层变量提升为 Cell 并持有
                     # 同一 IbCell 实例。全局作用域变量不提升（promote_to_cell 返回 None），

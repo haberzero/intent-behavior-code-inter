@@ -804,7 +804,12 @@ class IbDeferred(IbObject):
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         if self._cache is not None:
             return self._cache.to_native()
-        return self
+        # M4 修复（URGENT_ISSUES）：未执行时静默返回 self（IBCI 运行时对象），
+        # 调用方期望 Python 原生值——产生类型混淆。改为显式抛错。
+        raise RuntimeError(
+            f"IbDeferred '{self.node_uid}' has not been executed; "
+            f"call .call(receiver, args) first before to_native()."
+        )
 
     def __to_prompt__(self) -> str:
         if self._cache is not None:
@@ -891,7 +896,12 @@ class IbBehavior(IbObject):
 
     def to_native(self) -> Any:
         if self._cache: return self._cache.to_native()
-        return self
+        # M4 修复（URGENT_ISSUES）：未执行时静默返回 self 会让调用方拿到 IBCI 运行时
+        # 对象而非原生值，后续无声地产生类型混淆。改为显式抛错。
+        raise RuntimeError(
+            f"IbBehavior '{self.node}' has not been executed; "
+            f"call via LLM executor (or .call(receiver, args)) first before to_native()."
+        )
 
     def __to_prompt__(self) -> str:
         if self._cache: return self._cache.__to_prompt__()

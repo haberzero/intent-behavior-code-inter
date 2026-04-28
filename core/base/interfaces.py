@@ -11,6 +11,8 @@ __all__ = [
     "IILLMExecutor",
     "IIntentManager",
     "IExecutionFrame",
+    "IVMTask",
+    "IVMExecutor",
 ]
 
 @runtime_checkable
@@ -164,3 +166,48 @@ class IExecutionFrame(Protocol):
     def get_last_llm_result(self) -> Optional[Any]: ...
 
     def fork_intent_snapshot(self) -> Any: ...
+
+
+# ---------------------------------------------------------------------------
+# VM 调度循环协议（M3a 骨架；M3b/M3c/M3d 将逐步扩展）
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class IVMTask(Protocol):
+    """VM 调度单元协议（公理 VM-T1）。
+
+    每个 VMTask 包装一个生成器协程，形态等价于 CPU 寄存器组：
+    ``node_uid`` 标识当前帧对应的 AST 节点；``generator`` 是按 yield 协议表达的
+    协程，节点之间通过 ``yield child_uid`` 让出控制权。
+
+    M3a 阶段实现位于 ``core.runtime.vm.task.VMTask``；该协议仅声明对外可观测属性。
+    """
+    node_uid: str
+    generator: Any
+
+
+@runtime_checkable
+class IVMExecutor(Protocol):
+    """VM 调度循环协议（公理 VM-S1）。
+
+    职责
+    ----
+    * 显式帧栈管理：以非 Python 递归的方式驱动 IBCI AST 求值
+    * 控制流信号传播：在帧栈上传播 ``ControlSignal``（M3a 通过异常，M3b 数据化）
+    * 与既有 ``Interpreter.visit()`` 并行：未实现节点回退到 ``fallback_visit``
+
+    M3a 阶段实现位于 ``core.runtime.vm.vm_executor.VMExecutor``。
+    M3d 阶段会把 ``Interpreter.visit()`` 主路径改为本协议驱动。
+    """
+
+    def supports(self, node_uid: str) -> bool:
+        """判断节点是否有 CPS 处理器。"""
+        ...
+
+    def run(self, node_uid: str) -> Any:
+        """执行 ``node_uid`` 子树并返回 IbObject 结果。"""
+        ...
+
+    def fallback_visit(self, node_uid: str) -> Any:
+        """对未实现节点回退到原递归 visit() 路径。"""
+        ...
