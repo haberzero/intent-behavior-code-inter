@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-28（M3c IbLLMExceptionalStmt CPS 调度化 + M5b LLMScheduler/LLMFuture；905 个测试通过；下一里程碑：M3d 主路径切换 / M5c dispatch-before-use 集成 / M4 多 Interpreter 并发）
+> **最后更新**：2026-04-28（M3c IbLLMExceptionalStmt CPS 调度化 + M5b LLMScheduler/LLMFuture + M3d-prep 扩展 CPS handler 覆盖 22→37 节点；926 个测试通过；下一里程碑：M3d 主路径切换 / M5c dispatch-before-use 集成 / M4 多 Interpreter 并发）
 
 ---
 
@@ -35,6 +35,7 @@
 - ✅ **M5a：DDG 编译期分析**（`IbBehaviorExpr.llm_deps` + `dispatch_eligible` 字段；`BehaviorDependencyAnalyzer` 作为 SemanticAnalyzer Pass 5 通过 Tarjan SCC 推导可调度性；`FlatSerializer` 自动序列化为 UID 列表）；16 个新增单元测试；851 → 867 个测试通过
 - ✅ **M3c：IbLLMExceptionalStmt CPS 调度化**（`_resolve_stmt_uid` 保护重定向辅助；`vm_handle_IbLLMExceptionalStmt` CPS 生成器管理 retry 循环 + LLMExceptFrame；`IbModule`/`IbIf`/`IbWhile` 容器 handler 全部接入；`VMExecutor.service_context` property 暴露 capability_registry）；21 个新增单元测试；867 → 888 个测试通过
 - ✅ **M5b：LLMScheduler / LLMFuture**（`LLMFuture(node_uid, future)` 包装 `concurrent.futures.Future`；`LLMExecutorImpl.dispatch_eager(node_uid, ec, intent_ctx)→LLMFuture`、`resolve(node_uid)→IbObject`、`__del__` 关闭线程池；`ThreadPoolExecutor` 惰性初始化；`_pending_futures` dict 单消费语义）；17 个新增单元测试；888 → 905 个测试通过
+- ✅ **M3d-prep：扩展 CPS handler 覆盖（22→37 节点类型）**（新增 14 个 vm_handle_X：表达式 IbDict/IbSlice/IbCastExpr/IbFilteredExpr；语句 IbAugAssign/IbGlobalStmt/IbRaise/IbImport/IbImportFrom/IbSwitch/IbFunctionDef/IbLLMFunctionDef/IbClassDef/IbIntentAnnotation/IbIntentStackOperation；全部 1:1 镜像现存递归 visit_X 语义；不触碰 IbUserFunction.call() 内的 ReturnException 捕获——留待 M3d 整体处理）；21 个新增单元测试；905 → 926 个测试通过
 - ✅ **URGENT_ISSUES 中等优先级清理（M2/M3/M4/M5）**：`define()` fallback UID 改 id+RuntimeWarning；snapshot 自由变量 `val is None` 不再静默；`IbDeferred/IbBehavior.to_native()` 未执行时抛 RuntimeError（不再静默 `return self`）；`iter_cells()` 上提至 Scope 协议
 - ✅ **intent_context OOP MVP（§9.5）**：`IntentContextAxiom.is_class=True`；`INTENT_CONTEXT_SPEC = ClassSpec(...)`；实例方法 `__init__/push/pop/fork/resolve/merge/clear` + 作用域控制方法 `clear_inherited/use/get_current` 注册
 - ✅ **`in` / `not in` 运算符**：`IbCompare` 支持成员检测；`str`/`list`/`dict` 均实现 `__contains__` vtable

@@ -125,7 +125,7 @@ target_uid = self.body_uid if self.body_uid else self.node_uid
 
 1. **顺序**：建议在 M3b + M5a 主线 PR 合并之后，把 L1–L4 + C1–C4 集中到一个独立的 **"chore: deferred cleanup (L1–L4 + C1–C4)"** PR。**C5 必须等 M3d 完成后**作为后续 PR 处理。
 2. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
-3. **测试基线**：以 M3b/M5a 完成后的最新基线（**867 个测试**）为准；若中间 M3c/M3d 已合并，以那时基线为准。
+3. **测试基线**：以 M3b/M5a 完成后的最新基线（**867 个测试**）为准；若中间 M3c/M3d 已合并，以那时基线为准（M3c+M5b 完成后基线 905；M3d-prep 完成后基线 926）。
 4. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）。
 
 ---

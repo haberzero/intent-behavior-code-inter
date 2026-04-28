@@ -820,3 +820,84 @@ class LLMFuture:
 ### 14.5 后续
 
 * **M5c**：dispatch-before-use 集成（依赖 M3c + M5b）：`dispatch_eligible=True` 时 VMExecutor 调用 `dispatch_eager()`，使用点调用 `resolve()`
+
+---
+
+## 十五、M3d-prep：扩展 CPS handler 覆盖 [✅ COMPLETED — 2026-04-28]
+
+> **结论**：把 VM CPS handler 覆盖从 22 个节点类型扩展到 37 个；此为 M3d（主路径切换）必需的预备工作。  
+> 测试基线：905 → 926 个测试通过（+21 单元测试）
+
+### 15.1 新增的 CPS handler
+
+新增 11 个 dispatch table 条目，对应 15 个 AST 节点类型（部分公用 handler）。每个 handler 1:1 镜像 `ExprHandler.visit_X` / `StmtHandler.visit_X` 的语义，仅形态由递归改为 generator-based CPS：
+
+**表达式（4 个新 handler）**：
+| 节点类型 | handler | 行为 |
+|---------|---------|------|
+| `IbDict` | `vm_handle_IbDict` | 装箱 dict（key 通过 `to_native()` 解构） |
+| `IbSlice` | `vm_handle_IbSlice` | 装箱 Python `slice(lower, upper, step)`（任意可空） |
+| `IbCastExpr` | `vm_handle_IbCastExpr` | 通过 `node_to_type` side_table 解析目标类，调用 `cast_to` 消息 |
+| `IbFilteredExpr` | `vm_handle_IbFilteredExpr` | 主表达式短路 + 过滤条件求值（while...if 语义） |
+
+**简单语句（5 个新 handler）**：
+| 节点类型 | handler | 行为 |
+|---------|---------|------|
+| `IbAugAssign` | `vm_handle_IbAugAssign` | 复合赋值（`a += b`）：读旧值 + receive + 写回；支持 IbName / IbAttribute 目标 |
+| `IbGlobalStmt` | `vm_handle_IbGlobalStmt` | 编译期语义；运行时无操作 |
+| `IbRaise` | `vm_handle_IbRaise` | 求值异常对象后抛 `ThrownException`（fallback 路径中由 IbTry 捕获） |
+| `IbImport` | `vm_handle_IbImport` | 当前阶段为 no-op |
+| `IbImportFrom` | `vm_handle_IbImportFrom` | 当前阶段为 no-op |
+
+**Switch（1 个新 handler）**：
+| 节点类型 | handler | 行为 |
+|---------|---------|------|
+| `IbSwitch` | `vm_handle_IbSwitch` | test 求值 + 不确定性短路 + case 模式匹配 + body 的 Signal 透传 + `_resolve_stmt_uid` llmexcept 重定向 |
+
+**定义类语句（3 个新 handler）**：
+| 节点类型 | handler | 行为 |
+|---------|---------|------|
+| `IbFunctionDef` | `vm_handle_IbFunctionDef` | 绑定 `IbUserFunction` 到当前作用域 |
+| `IbLLMFunctionDef` | `vm_handle_IbLLMFunctionDef` | 绑定 `IbLLMFunction` 到当前作用域 |
+| `IbClassDef` | `vm_handle_IbClassDef` | 类必须 STAGE 5 已预水合；契约校验 + 作用域绑定（与原 handler 同语义） |
+
+**意图操作（2 个新 handler）**：
+| 节点类型 | handler | 行为 |
+|---------|---------|------|
+| `IbIntentAnnotation` | `vm_handle_IbIntentAnnotation` | `@` 涂抹（add_smear_intent）/ `@!` 排他（set_pending_override_intent） |
+| `IbIntentStackOperation` | `vm_handle_IbIntentStackOperation` | `@+` push / `@-` pop_top / `@-` remove(tag/content) |
+
+### 15.2 dispatch table 扩展
+
+`build_dispatch_table()` 现包含 37 个条目，组成如下：22（M3a 骨架）+ 1（M3c IbLLMExceptionalStmt）+ 14（M3d-prep 本节新增）= 37。
+
+### 15.3 文件级修改清单
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/runtime/vm/handlers.py` | 新增 14 个 vm_handle_X 函数；扩展 imports（IbUserFunction/IbLLMFunction/IbClass/Thrown 等）；扩展 build_dispatch_table |
+| `tests/unit/test_vm_executor_m3dprep.py` | 新建文件；21 个单元测试 |
+| `tests/unit/test_vm_executor.py` | `test_supports_unknown_node` 改用 `IbBehaviorExpr`（IbCastExpr 已支持） |
+
+### 15.4 测试覆盖（21 个新增）
+
+`tests/unit/test_vm_executor_m3dprep.py` 包含：
+* TestDispatchTableRegistration（2）：所有新 handler 已注册 + 全部为 generator function
+* TestIbDictHandler（2）、TestIbSliceHandler（2）、TestIbCastExprHandler（1）、TestIbFilteredExprHandler（2）
+* TestIbAugAssignHandler（1）、TestIbGlobalStmtHandler（1）、TestIbRaiseHandler（1）
+* TestIbImportHandlers（1）、TestIbSwitchHandler（3）
+* TestDefinitionHandlers（3）、TestIntentHandlers（2）
+
+### 15.5 设计要点
+
+* **handler 一致性**：所有新 handler 使用相同的"通过 `executor.ec` / `executor.runtime_context` / `executor.registry` 访问解释器服务"接口模式，与 M3a/M3b/M3c 现存 handler 完全统一。
+* **Signal 透传**：IbSwitch 在 case body 中遇到 Signal 时立即返回 Signal，与 IbWhile/IbIf 一致。
+* **llmexcept 重定向**：IbSwitch 的 case body 通过 `_resolve_stmt_uid` 处理 `node_protection`，与其他容器 handler 行为一致。
+* **保持原语义**：所有新 handler 都是 1:1 语义镜像，无任何行为改动。覆盖扩展仅是 M3d 的形态准备。
+* **不做妥协**：未触碰 `IbUserFunction.call()` 内部的 `ReturnException` 捕获——这部分必须等 M3d 主路径切换 + 函数帧 CPS 化后整体处理（参见 `docs/DEFERRED_CLEANUP.md` C5）。
+
+### 15.6 后续
+
+* **M3d**：剩余 unsupported 节点（`IbFor`、`IbTry`、`IbRetry`、`IbLambdaExpr`、`IbBehaviorExpr`、`IbBehaviorInstance`、`IbExceptHandler`、`IbCase`、`IbTypeAnnotatedExpr`、`IbIntentInfo` 等）需要在 M3d 阶段统一 CPS 化；同时切换 `Interpreter.visit()` 主路径，移除 `ReturnException`/`BreakException`/`ContinueException`。
+* **测试基线**：M3d-prep 后为 **926 个测试**。
+
