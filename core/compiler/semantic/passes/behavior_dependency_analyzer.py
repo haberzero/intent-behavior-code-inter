@@ -49,8 +49,10 @@ class BehaviorDependencyAnalyzer:
     def __init__(self, side_table: "SideTableManager"):
         self.side_table = side_table
         # symbol id() → 最近一次定义它的 ``IbBehaviorExpr``（如果是 LLM 来源）。
-        # 使用 id(sym) 作为键：Symbol 对象本身可能 unhashable / mutable，
-        # id() 在分析阶段对单个 Symbol 实例稳定可靠。
+        # 使用 id(sym) 作为键：Symbol 对象本身可能 unhashable / mutable。
+        # 注意：id() 仅在同一 Python 对象生命周期内稳定；若 Symbol 被重建
+        # （如反序列化），id() 键失效，需改用 UID。本分析器在语义阶段一次性
+        # 遍历同一棵 AST，所有 Symbol 实例在该阶段都活跃，无此问题。
         self._symbol_to_behavior_def: Dict[int, ast.IbBehaviorExpr] = {}
 
     # ------------------------------------------------------------------

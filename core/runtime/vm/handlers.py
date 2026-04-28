@@ -237,8 +237,8 @@ def vm_handle_IbModule(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     res = yield node_data.get("value")
     if isinstance(res, Signal):
-        # 表达式不应产生信号（语句生成的信号才会从子帧返回到此处）；
-        # 安全起见仍透传。
+        # 表达式求值理论上不产生控制信号；但若子节点（如嵌套语句块的 fallback
+        # 路径）意外携带信号上来，仍按数据透传给父帧处理而不是当场丢弃。
         return res
     if isinstance(res, IbBehavior):
         # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor），M3a 不重写
