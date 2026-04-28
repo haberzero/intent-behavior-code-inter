@@ -284,6 +284,13 @@ class TestCollectGcRoots:
         engine.run_string(code, output_callback=lambda t: None, silent=True)
         rt_ctx = engine.interpreter.runtime_context
         roots = list(rt_ctx.collect_gc_roots())
-        values = [obj.to_native() for obj in roots if hasattr(obj, 'to_native')]
+        # 过滤掉未执行的 IbDeferred/IbBehavior（M4：to_native 在未执行时抛错），
+        # 直接对其余对象调用 to_native()。
+        from core.runtime.objects.builtins import IbDeferred, IbBehavior
+        values = [
+            obj.to_native()
+            for obj in roots
+            if hasattr(obj, 'to_native') and not isinstance(obj, (IbDeferred, IbBehavior))
+        ]
         assert 42 in values, f"GC roots should contain x=42; got native values: {values}"
 
