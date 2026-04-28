@@ -193,7 +193,7 @@ class ExpressionComponent(BaseComponent):
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         
                         # [DEPRECATED] (Type) @~...~ 语法已废弃，发出硬错误。
-                        # 正确写法：int lambda varname = @~...~ 或 int snapshot varname = @~...~
+                        # 正确写法：fn varname = lambda -> TYPE: @~...~ 或 fn varname = snapshot -> TYPE: @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
                             _behavior_cast_detected = True
                             raise ParseControlFlowError()
@@ -207,7 +207,7 @@ class ExpressionComponent(BaseComponent):
                 raise self.stream.error(
                     self.stream.peek(),
                     "Cast expression '(Type) @~...~' is no longer supported. "
-                    "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                    "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                     code="PAR_010"
                 )
             

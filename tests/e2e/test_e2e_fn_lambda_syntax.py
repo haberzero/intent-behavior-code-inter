@@ -178,24 +178,21 @@ print((str)outer(7))
 
 
 class TestFnLambdaBackwardCompat:
-    """Legacy ``TYPE lambda NAME = EXPR`` syntax must continue to work."""
+    """Legacy ``TYPE lambda NAME = EXPR`` syntax is no longer supported."""
 
-    def test_legacy_int_lambda(self):
-        code = """int x = 3
-int lambda f = x * 2
-print((str)f())
-x = 10
-print((str)f())
-"""
-        lines = run_and_capture(code)
-        assert lines == ["6", "20"]
+    def test_legacy_int_lambda_is_error(self):
+        """Old ``int lambda NAME = EXPR`` declaration syntax is a parse error."""
+        from core.kernel.issue import CompilerError
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        with pytest.raises(CompilerError):
+            engine.compile_string("int x = 3\nint lambda f = x * 2", silent=True)
 
-    def test_legacy_auto_lambda(self):
-        code = """int x = 4
-auto lambda g = x + 1
-print((str)g())
-"""
-        assert run_and_capture(code) == ["5"]
+    def test_legacy_auto_lambda_is_error(self):
+        """Old ``auto lambda NAME = EXPR`` declaration syntax is a parse error."""
+        from core.kernel.issue import CompilerError
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        with pytest.raises(CompilerError):
+            engine.compile_string("int x = 4\nauto lambda g = x + 1", silent=True)
 
 
 class TestFnLambdaErrors:

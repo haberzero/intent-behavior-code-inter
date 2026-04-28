@@ -880,8 +880,7 @@ class SemanticAnalyzer:
                 # visit_IbBehaviorExpr 的返回值），与字段的具体类型不兼容，会产生误报
                 # SEM_003。正确处理：绑定字段的期望类型给行为表达式（供 LLM executor
                 # 的 _get_expected_type_hint 使用），跳过 behavior→target 的类型兼容检查。
-                deferred_mode = getattr(node, 'deferred_mode', None)
-                if isinstance(node.value, ast.IbBehaviorExpr) and not deferred_mode:
+                if isinstance(node.value, ast.IbBehaviorExpr):
                     if target_type and not self.registry.is_dynamic(target_type):
                         self.side_table.bind_type(node.value, target_type)
                     self.side_table.set_deferred(node.value, False)
@@ -940,20 +939,13 @@ class SemanticAnalyzer:
 
                 # 决议最终目标类型 (Inference Policy)
                 sym = self.symbol_table.symbols.get(var_name)
-                deferred_mode = getattr(node, 'deferred_mode', None)
                 
                 if declared_type:
                     # 0. fn 声明：可调用类型推导，类似 auto 但要求 RHS 是可调用的。
                     #    fn f = myFunc  → f 持有 myFunc 的具体 callable spec (FuncSpec 等)
                     #    fn f = 42      → SEM_003 (42 不可调用)
                     if declared_type.name == "fn":
-                        if deferred_mode:
-                            # fn lambda / fn snapshot — 创建延迟可调用对象
-                            if isinstance(node.value, ast.IbBehaviorExpr):
-                                target_type = self._behavior_desc
-                            else:
-                                target_type = self._deferred_desc
-                        elif isinstance(val_type, ClassSpec):
+                        if isinstance(val_type, ClassSpec):
                             # ClassSpec 分两种情况：
                             # (a) 类名引用（构造器）：fn f = Dog → 始终允许
                             # (b) 类实例引用：fn f = dog_instance → 需要类定义了 __call__
@@ -993,14 +985,7 @@ class SemanticAnalyzer:
                             target_type = self.registry.resolve("callable") or self._any_desc
                     # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
                     elif self.registry.is_dynamic(declared_type):
-                        if deferred_mode:
-                            # auto lambda / auto snapshot → 变量持有延迟对象
-                            # declared_type 是 auto/any，不携带具体类型信息 → 使用通用 spec
-                            if isinstance(node.value, ast.IbBehaviorExpr):
-                                target_type = self._behavior_desc
-                            else:
-                                target_type = self._deferred_desc
-                        elif declared_type.name == "any":
+                        if declared_type.name == "any":
                             # `any` 是真正的动态类型：变量的 spec 永久保持为 any，
                             # 不因首次赋值的实际类型而窄化，允许后续赋值为任意类型。
                             target_type = self._any_desc
@@ -1010,24 +995,6 @@ class SemanticAnalyzer:
                             # 天然是字符串，不应推断为 behavior spec（behavior 是延迟对象的
                             # 类型标记，而非 LLM 输出类型）。
                             target_type = self._str_desc if self.registry.is_behavior(val_type) else val_type
-                    elif deferred_mode:
-                        # 延迟模式：变量持有延迟对象；声明类型用作 LLM 输出期望类型。
-                        # 创建携带 value_type_name 的具体 Spec，使调用处能推断返回类型：
-                        #   int lambda f = @~...~  → BehaviorSpec(value_type_name="int")
-                        #   int lambda g = expr    → DeferredSpec(value_type_name="int")
-                        # 这样 int result = f() 在编译期可通过 resolve_return 确定类型，消除 SEM_003。
-                        if isinstance(node.value, ast.IbBehaviorExpr):
-                            target_type = self.registry.factory.create_behavior(
-                                value_type_name=declared_type.name,
-                                value_type_module=declared_type.module_path,
-                                deferred_mode=deferred_mode,
-                            )
-                        else:
-                            target_type = self.registry.factory.create_deferred(
-                                value_type_name=declared_type.name,
-                                value_type_module=declared_type.module_path,
-                                deferred_mode=deferred_mode,
-                            )
                     else:
                         target_type = declared_type
                     
@@ -1059,11 +1026,6 @@ class SemanticAnalyzer:
                         self.side_table.bind_symbol(target_node.target, sym)
                         self.side_table.bind_type(target_node.target, sym.spec)
                     
-                    # 延迟表达式上下文处理（通用化: 支持任意表达式, 不限于 @~...~）：
-                    # - deferred_mode='lambda' : 延迟执行，每次调用时重新求值
-                    # - deferred_mode='snapshot': 延迟执行，首次调用时求值并缓存
-                    # - deferred_mode=None      : 即时执行
-
                     # 检查是否是行为描述表达式（裸 @~...~）
                     inner_behavior_expr = None
                     if isinstance(node.value, ast.IbBehaviorExpr):
@@ -1073,34 +1035,19 @@ class SemanticAnalyzer:
                         # 防御性兜底：如果此路径被到达，也在语义层报错。
                         self.error(
                             "Cast expression '(Type) @~...~' is no longer supported. "
-                            "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                            "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                             node, code="SEM_DEPRECATED"
                         )
 
                     if inner_behavior_expr:
-                        if deferred_mode:
-                            # 延迟上下文：behavior 表达式被包装为 lambda/snapshot，延迟执行
-                            self.side_table.set_deferred(inner_behavior_expr, True)
-                            self.side_table.set_deferred_mode(inner_behavior_expr, deferred_mode)
-                            # 将声明类型绑定到行为表达式作为 LLM 输出期望类型（而非变量本身的类型）
-                            if declared_type and not self.registry.is_dynamic(declared_type):
-                                self.side_table.bind_type(inner_behavior_expr, declared_type)
-                            val_type = self._behavior_desc
+                        # 即时上下文：behavior 表达式立即执行
+                        self.side_table.set_deferred(inner_behavior_expr, False)
+                        # 从赋值目标 sym.spec 获取类型，传递给 IbBehaviorExpr 以构建正确的提示词
+                        if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
+                            self.side_table.bind_type(inner_behavior_expr, sym.spec)
+                            val_type = sym.spec
                         else:
-                            # 即时上下文：behavior 表达式立即执行
-                            self.side_table.set_deferred(inner_behavior_expr, False)
-                            # 从赋值目标 sym.spec 获取类型，传递给 IbBehaviorExpr 以构建正确的提示词
-                            if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
-                                self.side_table.bind_type(inner_behavior_expr, sym.spec)
-                                val_type = sym.spec
-                            else:
-                                val_type = self._str_desc
-                    elif deferred_mode and node.value is not None:
-                        # 通用延迟表达式：非 @~...~ 的任意表达式被 lambda/snapshot 延迟
-                        # 将延迟标记设置到 value 表达式节点上
-                        self.side_table.set_deferred(node.value, True)
-                        self.side_table.set_deferred_mode(node.value, deferred_mode)
-                        val_type = self._deferred_desc
+                            val_type = self._str_desc
                     
                     if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
                         # fn 声明：已在 fn 分支报告了错误，跳过重复检查
