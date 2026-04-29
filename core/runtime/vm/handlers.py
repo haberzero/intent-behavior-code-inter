@@ -451,9 +451,14 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 仅支持简单的 IbName / IbTypeAnnotatedExpr(IbName) 目标——
         # 复杂目标（attribute/subscript/tuple unpack）此处不并发化，
         # fallback 到同步路径以保证语义一致。
+        # 同时排除已被提升为 IbCell 的变量（lambda HOF 捕获）：cell 的
+        # 共享可见性需要立即可见的 IbObject，写入 LLMFuture 占位符会
+        # 让 cell 持有者读到非法值。
         targets = node_data.get("targets", [])
         future_assignable = all(
-            _is_simple_name_target(executor, t_uid) for t_uid in targets
+            _is_simple_name_target(executor, t_uid)
+            and not _target_is_promoted_cell(executor, t_uid)
+            for t_uid in targets
         )
         if future_assignable:
             for target_uid in targets:
@@ -503,6 +508,36 @@ def _is_simple_name_target(executor, target_uid: str) -> bool:
     return False
 
 
+def _target_is_promoted_cell(executor, target_uid: str) -> bool:
+    """判断赋值目标对应的符号是否已被提升为 IbCell（lambda HOF 闭包捕获）。
+
+    M5c 安全护栏：被 IbCell 持有的变量必须保持立即可见的 IbObject 语义；
+    若把 LLMFuture 占位符写入 ``sym.value`` 而不同步到 cell，外部 lambda
+    通过 ``cell.get()`` 会读到陈旧值；同步到 cell 又会让 cell 持有非法
+    LLMFuture。最稳妥的做法是退回同步路径。
+
+    BehaviorDependencyAnalyzer 当前不感知 cell 提升，因此该判断在运行
+    时进行。"""
+    target_data = executor.ec.get_node_data(target_uid)
+    if not target_data:
+        return False
+    if target_data.get("_type") == "IbTypeAnnotatedExpr":
+        inner = target_data.get("target")
+        return _target_is_promoted_cell(executor, inner) if inner else False
+
+    sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
+    if not sym_uid:
+        return False
+    rc = executor.runtime_context
+    # 沿作用域链查找 cell（promote_to_cell 把 cell 注册到声明所在 scope）
+    scope = rc.current_scope
+    while scope is not None:
+        if hasattr(scope, "_cell_map") and sym_uid in scope._cell_map:
+            return True
+        scope = getattr(scope, "parent", None)
+    return False
+
+
 def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) -> None:
     """把 ``LLMFuture`` 占位符直接写入目标变量符号绑定，跳过类型/值校验。
 
@@ -544,9 +579,8 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
         sym.value = future
         sym.current_type = type(future)
         # 显式不同步 IbCell：LLMFuture 不是合法 IbObject，不应进入 cell.set。
-        # 该路径覆盖的变量已在 ScopeImpl.promote_to_cell 中提升为 Cell 时
-        # 的不变式：lambda HOF 捕获的变量不应在 LLM 并发管道中被
-        # dispatch_eager 路径写入。该约束由 SemanticAnalyzer 保证。
+        # 调用方（vm_handle_IbAssign）已通过 _target_is_promoted_cell() 保证
+        # 该路径只覆盖未提升为 cell 的符号，因此跳过 cell 同步是安全的。
         return
 
     # 2) 首次定义 → 直接构造 RuntimeSymbolImpl 写入 _uid_to_symbol/_symbols

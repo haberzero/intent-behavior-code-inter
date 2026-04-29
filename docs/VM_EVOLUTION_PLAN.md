@@ -1,7 +1,7 @@
 # IBCI VM 演进总规划（Master Plan）
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
-> **基准状态**（2026-04-28）：**926 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M3c + M5a + M5b + M3d-prep 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架 + 控制信号数据化 + llmexcept 调度化 + DDG 编译期分析 + LLMScheduler + 扩展 CPS handler 覆盖 22→37 节点类型）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**（`define()` fallback UID id-based + warning、snapshot 自由变量诊断、`to_native()` 抛错、`iter_cells()` 上提至 Scope 协议）；**M3d/M4/M5c/M6 待推进**（当前优先路径：M3d 切换主执行路径 + M5c dispatch-before-use）。  
+> **基准状态**（2026-04-29）：**949 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M3c + M3d + M5a + M5b + M5c 已完成**（fn 新语法 + IbCell GC 根集合 + CPS 调度循环骨架 + 控制信号数据化 + llmexcept 调度化 + 主执行路径切换至 VMExecutor + DDG 编译期分析 + LLMScheduler + dispatch-before-use）；**fn declaration-side 语法已完成**（`TYPE fn NAME = lambda: EXPR`，表达式侧 `-> TYPE` PAR_005 禁止）；**URGENT_ISSUES 中等优先级 M2/M3/M4/M5 已清理**；**M4/M6 待推进**（当前优先路径：M4 多 Interpreter 并发）。  
 > **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  
 > **关联文档**：`docs/PENDING_TASKS_VM.md`（详细设计）、`docs/NEXT_STEPS.md`（近期任务）、`docs/COMPLETED.md`（已完成记录）。
