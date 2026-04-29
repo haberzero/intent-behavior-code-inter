@@ -231,6 +231,42 @@ class ScopeImpl:
             return self._parent.promote_to_cell(sym_uid)
         return None
 
+    def is_cell_promoted(self, sym_uid: str) -> bool:
+        """判断 sym_uid 对应的符号是否已提升为 Cell 变量（C12 封装替代私有 _cell_map 探测）。
+
+        供 VMExecutor M5c 护栏（``_target_is_promoted_cell``）使用：
+        不再直接访问 ``scope._cell_map``，通过本方法保持 ScopeImpl 内部封装。
+        """
+        return sym_uid in self._cell_map
+
+    def define_raw(self, name: Optional[str], value: Any, uid: Optional[str] = None, declared_type: Any = None) -> 'RuntimeSymbolImpl':
+        """低级符号写入：绕过类型检查与 box 操作（VM 特殊路径专用，C12）。
+
+        仅供 VMExecutor 的 ``LLMFuture`` 占位符写入使用（M5c dispatch-before-use）。
+        普通变量定义应使用 :meth:`define`；本方法不进行类型校验，不调用 ``registry.box``，
+        也不触发 Cell 同步（LLMFuture 不是合法 ``IbObject``，不应进入 cell.set）。
+
+        参数:
+            name: 变量名（可为 None，但 name 和 uid 至少须提供其一）
+            value: 原始值（通常为 ``LLMFuture`` 占位符）
+            uid: 符号 UID（可为 None，此时以 name 生成回退 UID）
+            declared_type: 可选的类型标注（来自编译器侧表，仅记录不校验）
+
+        返回:
+            新建或覆写的 :class:`RuntimeSymbolImpl` 实例。
+        """
+        new_sym = RuntimeSymbolImpl(
+            name=name or "", value=value, declared_type=declared_type, is_const=False
+        )
+        if name:
+            self._symbols[name] = new_sym
+        if uid:
+            self._uid_to_symbol[uid] = new_sym
+        elif name:
+            # 无 UID 时以对象 id 生成回退键（仅此特殊路径，不影响常规符号表）
+            self._uid_to_symbol[f"rt_{id(new_sym):x}"] = new_sym
+        return new_sym
+
     def iter_cells(self):
         """
         枚举本作用域（不递归父）的所有 IbCell（公理 GC-2 根集合扫描入口）。

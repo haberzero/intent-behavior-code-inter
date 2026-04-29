@@ -815,10 +815,10 @@ class IbUserFunction(IbFunction):
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
-            # M3d：通过 VMExecutor 驱动函数体语句，与 Interpreter.execute_module() 一致。
-            # ControlSignalException（顶层未消费 RETURN）由本帧捕获并提取返回值；
-            # BREAK/CONTINUE 在函数体外属于错误（既有 except ReturnException 路径
-            # 已不接受其它控制流，由 VMExecutor 内部 IbWhile/IbFor 消费）。
+            # M3d + C6：通过 VMExecutor 驱动函数体语句。
+            # C6 后，run_body() 不再将控制信号转换为 ReturnException；
+            # ControlSignalException 直接传播至此，由下方 except CSE 消费。
+            # BREAK/CONTINUE 在函数体外属于错误，透传到调用者报错。
             #
             # C13：通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
             # Interpreter 在首个 ``execute_module()`` 调用时即已通过 ``_get_vm_executor()``
@@ -837,7 +837,13 @@ class IbUserFunction(IbFunction):
                 vm.run_body(body)
 
             return ib_none
+        except _CSE as cse:
+            # C6：直接捕获 ControlSignalException，避免三层 Signal→CSE→ReturnException 翻译。
+            if cse.signal is _CS.RETURN:
+                return cse.value
+            raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者
         except ReturnException as e:
+            # 兼容性保留：vm=None 递归路径仍可能抛出 ReturnException。
             return e.value
         finally:
             self.context.pop_stack()

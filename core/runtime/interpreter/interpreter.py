@@ -59,6 +59,7 @@ from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 from core.base.enums import RegistrationState
+from core.runtime.vm.task import ControlSignalException
 from .llm_result import LLMResult
 
 
@@ -583,10 +584,10 @@ class Interpreter:
 
         try:
             # 模块主体是语句 UID 列表
-            # M3d + C10：通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的
-            # CPS 执行——node_protection 重定向、IbLLMExceptionalStmt 跳过、
-            # 控制信号到 Python 异常的边界恢复均由 ``run_body`` 统一处理，
-            # 与 ``IbUserFunction.call()`` 共享同一段实现。
+            # M3d + C10 + C6：通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的
+            # CPS 执行——node_protection 重定向、IbLLMExceptionalStmt 跳过均由
+            # ``run_body`` 统一处理。C6 后 ``run_body`` 不再转换控制信号为
+            # Python 原生异常，ControlSignalException 直接传播到此处捕获。
             vm = self._get_vm_executor()
             body = module_data.get("body", [])
             result = vm.run_body(body)
@@ -594,7 +595,10 @@ class Interpreter:
             return result
         except InterpreterError:
             raise
+        except ControlSignalException:
+            raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         except (ReturnException, BreakException, ContinueException):
+            # 兼容性保留：若 vm 未能拦截（极端边角情形），与上一行保持同语义。
             raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         finally:
             self.logical_stack.pop()

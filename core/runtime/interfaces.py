@@ -56,6 +56,19 @@ class Scope(Protocol):
         默认实现返回空迭代器；具体作用域类型若支持 Cell 提升应覆写此方法。
         """
         return iter(())
+    def is_cell_promoted(self, sym_uid: str) -> bool:
+        """判断 sym_uid 是否已提升为 Cell 变量（C12 封装替代私有 _cell_map 探测）。
+
+        默认返回 False；支持 Cell 提升的 ScopeImpl 应覆写此方法。
+        """
+        return False
+    def define_raw(self, name: Optional[str], value: Any, uid: Optional[str] = None, declared_type: Any = None) -> Any:
+        """低级符号写入，绕过类型检查（VM 特殊路径专用，C12）。
+
+        默认实现委托到 define()；支持 LLMFuture 占位符写入的 ScopeImpl 应覆写此方法。
+        """
+        self.define(name or "", value, uid=uid)
+        return None
 
 class RuntimeContext(Protocol):
     """解释器运行时上下文，管理作用域和意图栈"""

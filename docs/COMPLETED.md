@@ -1064,3 +1064,81 @@ C5 / C6 / C7 / C8 / C9 / C11 / C12 / C14 按计划延后：C5/C6 等 ControlSign
 
 ### 18.6 测试基线
 949 → 964（+15 M4 专项测试，0 退化）。
+
+---
+
+## §十九：M6 可移植性参考实现 + Phase 1 轻量债务清理（C6/C12）— 2026-04-29
+
+### 19.1 目标
+
+M6 的核心目标是在主线功能（M1–M5c + M4）全部稳定后，建立**正式规范层**与**跨实现合规测试套件**，使 IBCI VM 的可观察行为在未来任何宿主实现（Rust/Go/C++ 等）中均可验证。同时完成 Phase 1 轻量债务清理（C6/C12），使代码与规范描述对齐。
+
+### 19.2 VM 规范文档（docs/VM_SPEC.md）
+
+新建 `docs/VM_SPEC.md` 作为 IBCI VM 的**正式规范**：
+- **§1 执行模型**：CPS 调度循环公理（EXEC-1/2/3）、节点类型分类表（含 CPS/fallback 状态标注）
+- **§2 内存模型**：对象模型公理（OM-1/2）、作用域公理（SC-1/2/3/4）、生命周期公理（LT-1/2/3/4）、GC 公理（GC-1/2/3）
+- **§3 LLM 数据流模型**：DDG 编译期分析规则、LLMScheduler/LLMFuture 公理（LLM-1/2/3）
+- **§4 多 Interpreter 并发**：执行隔离公理（ISO-1/2/3）、spawn/collect 契约（SC-1/2/3/4/5）
+- **§5 意图上下文模型**：fork/restore/snapshot 公理（IC-1/2/3）
+- **§6 合规测试套件说明**：目录结构、运行方式、可移植性约束
+- **§7 与现有文档的对应关系**：章节-Milestone-PENDING_TASKS 映射表
+
+### 19.3 合规测试套件（tests/compliance/）
+
+新建 `tests/compliance/` 目录，包含 32 个合规测试（3 个测试文件）：
+
+**`test_execution_isolation.py`（SPEC §4，19 测试）**：
+- §4.1 子 Interpreter 变量不泄漏到主 Interpreter；主 Interpreter 变量不继承到子；两个子相互独立
+- §4.2 collect 返回 dict；包含 str/int/bool/list/dict；排除内置符号；空脚本返回空 dict
+- §4.3 重复 collect 抛 RuntimeError；子编译失败时 collect 传播错误；spawn 立即返回字符串 handle
+
+**`test_concurrent_llm.py`（SPEC §3，9 测试）**：
+- §3.1 两个/三个独立 behavior 赋值最终值正确；多次读取幂等；int 类型值正确
+- §3.2 有数据依赖的 behavior 不破坏结果正确性；循环内 behavior 每次迭代正确
+- §3.3 程序输出顺序遵从语义顺序而非 dispatch 顺序；dispatch 与同步代码混合正确
+- §3.4 llmexcept 保护路径（同步路径）值正确
+
+**`test_memory_model.py`（SPEC §2，18 测试）**：
+- §2.1 lambda 共享 Cell：外部修改可见；两个 lambda 共享同一 Cell；多个自由变量独立
+- §2.2 snapshot 值快照：外部修改不可见；snapshot vs lambda 不同结果对比
+- §2.3 Cell 延长生命周期：工厂函数返回的 lambda 在外层退出后仍可调用；snapshot 创建时捕获值
+- §2.4 值类型赋值深拷贝等价：int/str/bool 修改原变量不影响副本
+- §2.5 lambda 高阶函数传递：作为参数传入被调用；从函数返回后仍可调用
+
+### 19.4 C6 轻量债务清理（Signal→CSE→ReturnException 三层桥消除）
+
+**`core/runtime/vm/vm_executor.py:run_body()`**：
+- 移除 `except _CSE` 块（CSE→ReturnException/BreakException/ContinueException 转换），让 ControlSignalException 直接向调用方传播
+
+**`core/runtime/interpreter/interpreter.py:execute_module()`**：
+- 改为直接捕获 `ControlSignalException`（同时保留 ReturnException/BreakException/ContinueException 兜底）
+- 新增 `from core.runtime.vm.task import ControlSignalException` 导入
+
+**`core/runtime/objects/kernel.py:IbUserFunction.call()`**：
+- 新增 `except ControlSignalException as cse`，`kind==RETURN` 时直接返回 `cse.value`
+- 保留 `except ReturnException`（vm=None 递归路径兼容）
+
+### 19.5 C12 轻量债务清理（ScopeImpl 私有字段访问封装）
+
+**`core/runtime/interpreter/runtime_context.py:ScopeImpl`**：
+- 新增 `is_cell_promoted(sym_uid: str) -> bool`：封装 `_cell_map` 私有字典探测
+- 新增 `define_raw(name, value, uid, declared_type) -> RuntimeSymbolImpl`：低级符号写入，绕过类型检查与 box 操作（LLMFuture 占位符写入专用）
+
+**`core/runtime/interfaces.py:Scope`**：
+- 新增 `is_cell_promoted` 和 `define_raw` 默认实现方法
+
+**`core/runtime/vm/handlers.py`**：
+- `_target_is_promoted_cell()`：`hasattr(scope, "_cell_map") and sym_uid in scope._cell_map` 改为 `scope.is_cell_promoted(sym_uid)`
+- `_assign_future_to_name_target()`：首次定义路径改用 `target_scope.define_raw(...)` 替代直接写 `_symbols`/`_uid_to_symbol` 私有字段；删除 `from core.runtime.interpreter.runtime_context import RuntimeSymbolImpl` 局部导入
+
+### 19.6 文档更新
+
+- `docs/VM_EVOLUTION_PLAN.md`：更新基准状态（964→996）；路线图标注 M4/M5c/M6 全部为 ✅；新增编译器深度清洁后续路径说明
+- `docs/PENDING_TASKS_VM.md`：Step 12（M6）更新为 ✅ COMPLETED
+- `docs/DEFERRED_CLEANUP.md`：更新基线（949→996）；C6 标记为 PARTIAL DONE；C12 标记为 DONE；PR 操作建议增加第二阶段说明
+- `docs/NEXT_STEPS.md`：更新状态标签；增加"下一主线：编译器深度清洁"章节
+
+### 19.7 测试基线
+
+964 → 996（+32 合规测试，0 退化）。
