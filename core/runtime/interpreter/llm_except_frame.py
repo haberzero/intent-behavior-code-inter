@@ -255,12 +255,6 @@ class LLMExceptFrame:
         # 其他类型（函数、行为、原生对象等）：不可克隆
         return None
 
-    def _is_serializable(self, val: IbObject) -> bool:
-        """
-        判断值是否可序列化（兼容旧接口，内部委托给 _try_deep_clone）。
-        """
-        return self._try_deep_clone(val) is not None
-    
     def restore_context(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
         恢复到保存的现场。

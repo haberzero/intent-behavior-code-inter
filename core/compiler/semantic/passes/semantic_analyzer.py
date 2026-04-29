@@ -62,6 +62,16 @@ class SemanticAnalyzer:
         # visit_IbAssign 在发现 DeferredSpec(value_type_name≠auto) 声明且 RHS 是
         # IbLambdaExpr 时，预先将返回类型设置到此字段；visit_IbLambdaExpr 优先读取它。
         # 嵌套 lambda 时通过 save/restore 保护外层状态。
+        #
+        # L3 注：本字段是 ``visit_IbAssign → visit_IbLambdaExpr`` 之间的隐式上下文
+        # 通道——这是经过审慎选择的设计决策（非"未完成的临时方案"）：
+        #   - 替代方案"在 IbLambdaExpr 节点上携带 returns 字段"已删除（L1，2026-04-29），
+        #     原因是返回类型语义上属于"声明侧"而非"表达式侧"（参见 PAR_005：表达式
+        #     侧 ``lambda -> TYPE: EXPR`` 在解析期即被拒绝）。
+        #   - 替代方案"参数化 visit_IbLambdaExpr"会污染访问者签名并破坏统一分发。
+        # 嵌套安全性：``visit_IbAssign`` 在调用 ``visit(node.value)`` 前 save 旧值，
+        # 在 ``finally`` 中 restore——即使内层 lambda body 中又出现一个 ``TYPE fn ...``
+        # 声明（其 visit_IbAssign 同样 save/restore），状态正确按栈式语义恢复。
         self._pending_fn_return_type: Optional[IbSpec] = None
 
         self.prelude = Prelude(registry=self.registry)
@@ -1737,9 +1747,9 @@ class SemanticAnalyzer:
 
         策略
         ----
-        1. 确定 returns_type：优先读取 ``_pending_fn_return_type``（由 visit_IbAssign
-           在 ``TYPE fn NAME = lambda: ...`` 声明时注入），其次回退到已废弃的
-           ``node.returns`` 字段（语义等价于旧式 ``lambda -> TYPE: EXPR``）。
+        1. 确定 returns_type：来自 ``_pending_fn_return_type``（由 visit_IbAssign
+           在 ``TYPE fn NAME = lambda: ...`` 声明时注入）。历史的
+           ``IbLambdaExpr.returns`` 字段已删除（L1，2026-04-29）。
         2. 为参数列表与函数体打开新的 ``SymbolTable``（局部作用域），保证 body 内
            的 ``IbName`` 决议能将形参指向局部符号而非误捕外层同名变量。
         4. 形参解析为 ``VariableSymbol``，类型来自注解（缺省为 ``any``）。
@@ -1754,13 +1764,11 @@ class SemanticAnalyzer:
            的 BehaviorSpec/DeferredSpec（使 ``int fn f = lambda: ...`` 时
            ``int r = f()`` 能在编译期通过类型决议），否则返回通用 spec。
         """
-        # 1. 确定返回类型：声明侧注入优先，旧式 node.returns 字段次之
-        returns_type: Optional[IbSpec] = None
-        if self._pending_fn_return_type is not None:
-            returns_type = self._pending_fn_return_type
-        elif node.returns is not None:
-            # 保留对旧式 node.returns 的支持（例如旧缓存 AST 或程序化构造）
-            returns_type = self._resolve_type(node.returns)
+        # 1. 确定返回类型：来自声明侧 ``TYPE fn NAME = lambda ...`` 的 ``TYPE``，
+        #    通过 ``visit_IbAssign`` → ``_pending_fn_return_type`` 隐式通道传递。
+        #    历史的 ``IbLambdaExpr.returns`` 字段已删除（L1）；表达式侧
+        #    ``lambda -> TYPE: EXPR`` 在解析期即被拒绝（PAR_005）。
+        returns_type: Optional[IbSpec] = self._pending_fn_return_type
 
         # 3. 为 lambda 局部作用域打开新的符号表
         old_table = self.symbol_table

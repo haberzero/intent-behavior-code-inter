@@ -788,7 +788,15 @@ class IbDeferred(IbObject):
                         sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
                         rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
-            # 2) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）
+            # 2) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）。
+            #
+            # C4 审计（2026-04-29）：经审查，``body_uid is None`` 路径在 M1 之后
+            # 仅理论上由 ``stmt_handler.visit_IbAssign`` 中"is_deferred=True 且
+            # value_node_type != IbBehaviorExpr"分支构造，而 ``node_is_deferred``
+            # 侧表的唯一写入点（``expression_analyzer.visit_IbBehaviorExpr``）
+            # 限定写入 IbBehaviorExpr 节点；两个条件互斥，故该分支在合法编译
+            # 路径下不可达。保留 ``or self.node_uid`` 作为防御性回退（不抛异常），
+            # 以兼容潜在的程序化构造路径（artifact 反序列化、测试 harness 等）。
             target_uid = self.body_uid if self.body_uid else self.node_uid
             result = self._execution_context.visit(target_uid)
         finally:
@@ -853,7 +861,7 @@ class IbBehavior(IbObject):
     def __init__(
         self,
         node_uid: str,
-        captured_intents: Union[List[Any], Any],
+        captured_intents: Optional[Any],  # Optional[IbIntentContext]
         ib_class: IbClass,
         expected_type: Optional[str] = None,
         call_intent: Optional[Any] = None,
@@ -867,6 +875,8 @@ class IbBehavior(IbObject):
         call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
         deferred_mode: 'lambda' | 'snapshot' | None (immediate)
         execution_context: 创建时的执行上下文引用（供 call() 使用）。
+        captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
+            模式 / dispatch_eager）。Step 6c/6d 之后不再支持 IntentNode 链表 / list。
 
         M1 参数化拓展（与 IbDeferred 同构）：
             * ``params_uids`` —— ``IbLambdaExpr`` 提供的参数节点 uid 列表；
@@ -911,10 +921,18 @@ class IbBehavior(IbObject):
         return f"<Behavior {self.node}>"
 
     def serialize_for_debug(self) -> Dict[str, Any]:
+        # captured_intents 现在是 None 或 IbIntentContext（非可迭代）
+        ci = self.captured_intents
+        if ci is None:
+            ci_repr: List[str] = []
+        elif hasattr(ci, "get_active_intents"):
+            ci_repr = [str(i) for i in ci.get_active_intents()]
+        else:
+            ci_repr = [str(ci)]
         return {
             "type": self.ib_class.name,
             "node_uid": self.node,
-            "captured_intents": [str(i) for i in self.captured_intents],
+            "captured_intents": ci_repr,
             "expected_type": self.expected_type
         }
 

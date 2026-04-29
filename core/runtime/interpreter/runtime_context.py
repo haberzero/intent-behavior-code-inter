@@ -1,5 +1,4 @@
 from __future__ import annotations
-import warnings
 from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.base.source_atomic import Location
@@ -17,12 +16,16 @@ if TYPE_CHECKING:
     from core.runtime.interpreter.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
-    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False):
+    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_builtin: bool = False):
         self.name = name
         self.value = value
         self.declared_type = declared_type
         self.current_type = type(value) if value is not None else None
         self.is_const = is_const
+        # L2：内置函数（intrinsic）标志位，由 IntrinsicManager 在注入 print/len/range/...
+        # 时设置；``get_vars()`` 使用本标志过滤掉运行时调试不应显示的特权符号，
+        # 替代历史的硬编码名单 (``"len", "print", "range", ...``)。
+        self.is_builtin = is_builtin
         # M2 (SC-3): 当变量被内层 lambda 捕获时，提升为 Cell 变量；
         # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
         self.cell: Optional[Any] = None  # Optional[IbCell]
@@ -81,7 +84,7 @@ class ScopeImpl:
                     error_code=RUN_TYPE_MISMATCH
                 )
 
-    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
+    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
         
@@ -93,23 +96,21 @@ class ScopeImpl:
             if uid in self._uid_to_symbol and self._uid_to_symbol[uid].is_const:
                 raise InterpreterError(f"Cannot redefine constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
 
-        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
+        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const, is_builtin=is_builtin)
         if name:
             self._symbols[name] = sym
         if uid:
             self._uid_to_symbol[uid] = sym
         else:
-            # M2 修复（URGENT_ISSUES）：合法编译路径下语义分析始终提供 UID。
-            # 此 fallback 仅作为内核引导期/特殊路径的安全网，发出警告以暴露潜在的
-            # "UID 未注入"调用方。使用 id(sym) 作为唯一性来源（不再使用内容哈希），
-            # 避免相同 (name, type, value) 的不同变量产生相同 UID 而静默覆盖。
-            warnings.warn(
-                f"ScopeImpl.define() called without uid for symbol "
-                f"name={name!r} type={type(boxed_value).__name__}; "
-                f"falling back to identity-based UID. "
-                f"Callers should provide a UID from semantic analysis.",
-                RuntimeWarning,
-                stacklevel=2,
+            # 合法编译路径下语义分析始终提供 UID。剩余的无 UID 调用仅来自
+            # 内核引导期 / 跨上下文同步路径（``RuntimeContextImpl.sync_state``、
+            # ``HostService`` plugin 恢复等），它们持有可信的 ``name`` 但无符号
+            # UID。此处使用 ``id(sym)`` 派生唯一 UID，不再发出 RuntimeWarning：
+            # 经 -W error::RuntimeWarning 全测试套件验证（949 测试），常规执行
+            # 路径下此分支永不命中。如新代码引入此路径请显式传入 ``uid``。
+            assert name, (
+                "ScopeImpl.define(): caller must provide either uid or name; "
+                "both missing indicates a bootstrap bug."
             )
             fallback_uid = f"rt_{id(sym):x}"
             self._uid_to_symbol[fallback_uid] = sym
@@ -486,8 +487,10 @@ class RuntimeContextImpl(RuntimeContext):
                         continue
                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
                         continue
-                    # 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
-                    if symbol.is_const and name in ("len", "print", "range", "input", "get_self_source"):
+                    # L2：通过 RuntimeSymbolImpl.is_builtin 标志过滤内置函数（intrinsic），
+                    # 替代历史的硬编码名单 ("len", "print", "range", "input", "get_self_source")。
+                    # 内置函数仅供 IBCI 代码调用，不应在调试器变量面板中暴露给用户。
+                    if getattr(symbol, "is_builtin", False):
                         continue
                     res[name] = val
             scope = scope.parent
@@ -560,8 +563,8 @@ class RuntimeContextImpl(RuntimeContext):
         if not self._current_scope.assign_by_uid(uid, value):
             raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
-        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
+    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:
+        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force, is_builtin=is_builtin)
 
     def define_variable_at_global(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
         """在全局作用域中定义变量（用于 global 语句创建新全局变量）。"""

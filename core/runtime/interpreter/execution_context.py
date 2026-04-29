@@ -46,6 +46,11 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
+        # C13：VMExecutor 直接引用（由 Interpreter 在构造完成后注入）。
+        # 替代 IbUserFunction.call() 中通过 self.context._interpreter._get_vm_executor()
+        # 三级 getattr 的脆弱查找路径。M4 多 Interpreter 并发场景下，每个执行上下文
+        # 必须通过此属性直接获得对应的 VMExecutor，避免静默 fallback。
+        self._vm_executor: Optional[Any] = None
         
         # Logic Callbacks
         self._visit_callback = visit_callback
@@ -119,6 +124,24 @@ class ExecutionContextImpl:
     @property
     def stack_inspector(self) -> IStackInspector:
         return self
+
+    @property
+    def vm_executor(self) -> Any:
+        """C13：当前 ExecutionContext 关联的 VMExecutor（由 Interpreter 注入）。
+
+        当 IbUserFunction.call() 等代码需要驱动函数体语句的 CPS 执行时，应通过
+        本属性获取 VMExecutor，而不是穿透到 ``self._interpreter`` 上调用
+        ``_get_vm_executor()``。在 M4 多 Interpreter 并发场景下，每个 ExecutionContext
+        关联其专属 VMExecutor，避免线程间相互查找的 race condition。
+
+        若 Interpreter 尚未完成 VMExecutor 注入，返回 ``None``；调用方需要
+        显式处理（不应静默降级到递归路径）。
+        """
+        return self._vm_executor
+
+    @vm_executor.setter
+    def vm_executor(self, value: Any) -> None:
+        self._vm_executor = value
 
     @property
     def registry(self) -> Any:

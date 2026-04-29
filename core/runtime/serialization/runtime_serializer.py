@@ -187,7 +187,16 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbBehavior):
             data["_type"] = "behavior"
             data["node_uid"] = obj.node
-            data["captured_intents"] = [self._process_value(i) for i in obj.captured_intents]
+            # captured_intents 协议（Step 6c/6d 之后）：None 或 IbIntentContext。
+            # 此处展开为 active_intents 的 list 形态以兼容序列化反序列化的读取方。
+            ci = obj.captured_intents
+            if ci is None:
+                data["captured_intents"] = []
+            elif hasattr(ci, "get_active_intents"):
+                data["captured_intents"] = [self._process_value(i) for i in ci.get_active_intents()]
+            else:
+                # 不应到达：IIbBehavior 契约要求 None 或 IbIntentContext。
+                data["captured_intents"] = []
             data["expected_type"] = obj.expected_type
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)

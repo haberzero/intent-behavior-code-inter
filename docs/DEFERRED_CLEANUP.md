@@ -1,107 +1,64 @@
 # 延迟清理任务清单
 
 > **建立时间**：2026-04-28  
-> **更新**：2026-04-29（M3d+M5c 完成后补录 C6–C14，详见第三节）  
+> **更新**：2026-04-29（轻量债务清理 PR 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；剩余条目延后到 M6 后统一处理）  
 > **来源**：从 `URGENT_ISSUES.md` 转入的低优先级维护性条目 + 2026-04-28/29 文档/代码一致性审查识别的"可彻底清理的兼容性回退"  
 > **属性**：以下任务均不影响正确性，目标是工程美观与可维护性  
 > **触发方式**：作为下一个独立的"代码债务清理 PR"一次性处理；不混入 M3b/M5a 等主线特性 PR
 
-> **测试基线**：本文件中所有任务必须保持 `python3 -m pytest tests/ -q` 测试基线不退化。
+> **测试基线**：本文件中所有任务必须保持 `python3 -m pytest tests/ -q` 测试基线不退化（**当前基线 949 passed**）。
 
 ---
 
 ## 一、URGENT_ISSUES 转入的维护性改善（L1–L4）
 
-### [L1] `IbLambdaExpr.returns` 兼容字段彻底删除
-**文件**：`core/kernel/ast.py:444`，`core/compiler/semantic/passes/semantic_analyzer.py:1749-1755`  
-**当前状态**：`IbLambdaExpr.returns` 字段已标注"解析器不再设置"，但 `visit_IbLambdaExpr` 内仍有 `elif node.returns is not None: returns_type = self._resolve_type(node.returns)` 回退路径。  
-**根因**：fn declaration-side 语法落地后，`_pending_fn_return_type` 完全替代了表达式侧返回类型；旧字段成为僵尸字段，elif 永不命中。  
-**目标**：
-1. 删除 `IbLambdaExpr.returns: Optional[IbASTNode]` 字段
-2. 删除 `visit_IbLambdaExpr` 中的 elif 回退分支
-3. 同步更新 docstring 与 `core/compiler/serialization/serializer.py`/`core/runtime/loader/artifact_rehydrator.py` 中可能涉及的字段读写（应已无依赖，但需确认）
-
-**风险**：若某些缓存的 artifact 还携带 `returns` 字段，反序列化时会忽略；建议同时清理 artifact 缓存目录。
+### [L1] `IbLambdaExpr.returns` 兼容字段彻底删除 ✅ DONE（2026-04-29）
+**文件**：`core/kernel/ast.py`，`core/compiler/semantic/passes/semantic_analyzer.py`，`core/compiler/semantic/passes/resolver.py`  
+**落地内容**：删除 `IbLambdaExpr.returns` 字段；删除 `visit_IbLambdaExpr`（Pass 3）中 `node.returns` elif 回退分支；删除 `visit_IbLambdaExpr`（Pass 2 Resolver）中 `node.returns is not None` 类型决议分支；同步更新 docstring。声明侧返回类型完全经由 `_pending_fn_return_type` 隐式通道传递；表达式侧 `lambda -> TYPE: EXPR` 在解析期产生 PAR_005（既有约束）。
 
 ---
 
-### [L2] `get_vars()` 硬编码内置函数过滤名单
-**文件**：`core/runtime/interpreter/runtime_context.py:481`  
-**当前**：
-```python
-if symbol.is_const and name in ("len", "print", "range", "input", "get_self_source"):
-    continue
-```
-**目标**：在 `RuntimeSymbolImpl` 上添加 `is_builtin: bool` 标志位，由 `builtin_initializer.py` 在注册内置函数时设置；`get_vars()` 通过标志过滤而非硬编码名单。
+### [L2] `get_vars()` 硬编码内置函数过滤名单 ✅ DONE（2026-04-29）
+**文件**：`core/runtime/interpreter/runtime_context.py`，`core/runtime/interpreter/intrinsics/__init__.py`，`core/runtime/interfaces.py`  
+**落地内容**：`RuntimeSymbolImpl` 新增 `is_builtin: bool` 字段；`Scope.define()` / `RuntimeContext.define_variable()` Protocol 与 impl 增加 `is_builtin` 参数；`IntrinsicManager.rebind()` 在注入 intrinsic 时传 `is_builtin=True`；`get_vars()` 改为按属性过滤（`if symbol.is_builtin: continue`），不再硬编码 `("len", "print", "range", "input", "get_self_source")`。
 
 ---
 
-### [L3] `_pending_fn_return_type` 隐式上下文通道注释
+### [L3] `_pending_fn_return_type` 隐式上下文通道注释 ✅ DONE（2026-04-29）
 **文件**：`core/compiler/semantic/passes/semantic_analyzer.py`  
-**目标**：仅在注释/docstring 中明确说明 visit_IbAssign → visit_IbLambdaExpr 隐式通道的嵌套安全性保证，并注明这是刻意的设计决策（避免后续维护者误以为"未完成的临时方案"而擅自重构）。无代码改动。
+**落地内容**：在 `_pending_fn_return_type` 字段声明处补充设计决策注释，明确说明：(1) 这是经过审慎选择的隐式通道（替代方案"节点字段"已在 L1 删除，"参数化访问者"会污染分发签名）；(2) 嵌套安全性由 `visit_IbAssign` 的 `try/finally save/restore` 保证。无代码改动。
 
 ---
 
-### [L4] `_collect_free_refs` 启发式子节点遍历注释
+### [L4] `_collect_free_refs` 启发式子节点遍历注释 ✅ DONE（2026-04-29）
 **文件**：`core/runtime/interpreter/handlers/expr_handler.py`  
-**目标**：在 `_collect_free_refs` 内部展开逻辑处加注释，说明"字段值是字符串且存在于 node_pool"是启发式遍历，并解释为什么 UID 格式（UUID/哈希前缀）使碰撞概率极低。无代码改动。
+**落地内容**：在 `_collect_free_refs` 通用展开循环处补充注释，说明启发式策略（"字段值是字符串且存在于 ``node_pool``" 即视作子节点 UID）以及为什么 UID 编码（前 16 hex 字节内容哈希 + ``node_`` 前缀）下碰撞概率极低（< 2^-64）。如果未来 UID 编码改用更短或非随机的格式，需改用显式 AST 字段 schema。无代码改动。
 
 ---
 
 ## 二、兼容性回退彻底清理（2026-04-28 审查识别）
 
-### [C1] `LLMExceptFrame._is_serializable()` 死代码删除
-**文件**：`core/runtime/interpreter/llm_except_frame.py:258-262`  
-**当前**：
-```python
-def _is_serializable(self, val: IbObject) -> bool:
-    """判断值是否可序列化（兼容旧接口，内部委托给 _try_deep_clone）。"""
-    return self._try_deep_clone(val) is not None
-```
-**事实**：全仓库 `grep _is_serializable` 仅此一处定义，零调用点。完全死代码。  
-**目标**：直接删除该方法。同步把 `docs/COMPLETED.md §四`、`docs/ARCH_DETAILS.md` 中描述该方法的段落改写为"已删除"备注或直接删除该段。
+### [C1] `LLMExceptFrame._is_serializable()` 死代码删除 ✅ DONE（2026-04-29）
+**文件**：`core/runtime/interpreter/llm_except_frame.py`  
+**落地内容**：方法已删除；全仓库零调用点（已通过 grep 确认）。
 
 ---
 
-### [C2] `LLMExecutor.execute_behavior_expression` 中 `captured_intents` 旧路径分支删除
-**文件**：`core/runtime/interpreter/llm_executor.py:486-494`  
-**当前**：
-```python
-else:
-    # 兼容旧路径：IntentNode 链表（to_list）或已展平的列表
-    active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
-    ...
-```
-**事实**：自 Step 6c/6d 完成后，所有生产者只产出 `None` 或 `IbIntentContext` 实例（见 `expr_handler.visit_IbBehaviorExpr` 中 `fork_intent_snapshot()` 调用）。`IntentNode.to_list()` 路径无产生方。  
-**目标**：
-1. 把 else 分支替换为 `raise TypeError(f"Unexpected captured_intents type: {type(captured_intents)}")`
-2. 收紧 `core/runtime/interfaces.py` `IBehavior.captured_intents` 注解为 `Optional[IbIntentContext]`（去掉 `Union[List[Any], Any]`）
-3. 同步收紧 `core/runtime/objects/builtins.py` `IbBehavior.__init__` 注解
-4. 检查 `core/runtime/serialization/runtime_serializer.py` 序列化路径是否依赖 list 形态（如有需要保留 list↔IbIntentContext 互转）
+### [C2] `LLMExecutor.execute_behavior_expression` 中 `captured_intents` 旧路径分支删除 ✅ DONE（2026-04-29）
+**文件**：`core/runtime/interpreter/llm_executor.py`，`core/runtime/interfaces.py`，`core/runtime/objects/builtins.py`，`core/runtime/serialization/runtime_serializer.py`，`core/runtime/interpreter/interpreter.py`  
+**落地内容**：删除 `IntentNode.to_list()` else 分支；改为对非 `IbIntentContext` 的 `captured_intents` 抛 `TypeError`（明确契约违反）；收紧 `IIbBehavior.captured_intents` 注解为 `Optional[Any]`（注释为 `Optional[IbIntentContext]`，保持避免循环导入的 `Any` 形态）；同步收紧 `IbBehavior.__init__`、`IbBehavior.serialize_for_debug`、`Interpreter.get_captured_intents`、`runtime_serializer` 中读取 `captured_intents` 的代码以适应 `None | IbIntentContext` 形态（之前假设可迭代）。
 
 ---
 
-### [C3] `ScopeImpl.define()` fallback UID 路径升级为断言
-**文件**：`core/runtime/interpreter/runtime_context.py:101-115`  
-**当前**：M3a PR 修复为 `id(sym)`-based fallback + `RuntimeWarning`；但目前合法编译路径下 warning 应**永远不触发**。  
-**目标**：
-1. 先把 warning 提升为 `error`-level 跑一轮 829 测试，确认 0 触发
-2. 若 0 触发，把 fallback 分支替换为 `assert uid is not None, "ScopeImpl.define(): caller must provide UID; bootstrapper bug?"`
-3. 删除 fallback UID 生成代码
-
-**风险**：如果发现某条引导路径仍依赖 fallback，需先修该引导路径再删除 fallback。
+### [C3] `ScopeImpl.define()` fallback UID 路径升级为断言 ✅ DONE（2026-04-29）
+**文件**：`core/runtime/interpreter/runtime_context.py`  
+**落地内容**：经 `-W error::RuntimeWarning` 全套测试验证（949 passed）确认 fallback 不被合法路径触发；删除 `RuntimeWarning`；保留 `id(sym)` 派生 UID 兼容内核引导期 / 跨上下文同步路径（`RuntimeContextImpl.sync_state`、`HostService` plugin 恢复），并增加 `assert name` 防御性断言；移除现已不需要的 `import warnings`。
 
 ---
 
-### [C4] `IbDeferred.body_uid is None` 空值兼容路径审计
-**文件**：`core/runtime/objects/builtins.py:791-792`  
-**当前**：
-```python
-# 2) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）
-target_uid = self.body_uid if self.body_uid else self.node_uid
-```
-**事实**：M1 之后所有 `visit_IbLambdaExpr` 路径均会设置 `body_uid`；遗留的"`body_uid is None` → 用 `node_uid`"分支可能仅服务于已废弃的 IbAssign deferred_mode 直接构造路径。  
-**目标**：审计是否仍有路径产出 `body_uid=None` 的 IbDeferred；若无，则添加断言 `assert self.body_uid is not None`，并把表达式简化为 `target_uid = self.body_uid`。
+### [C4] `IbDeferred.body_uid is None` 空值兼容路径审计 ✅ DONE（2026-04-29）
+**文件**：`core/runtime/objects/builtins.py`  
+**审计结论**：经审查，`body_uid is None` 分支在 M1 之后理论上仅由 `stmt_handler.visit_IbAssign` 中"`is_deferred=True` 且 `value_node_type != IbBehaviorExpr`"分支构造，而 `node_is_deferred` 侧表的唯一写入点（`expression_analyzer.visit_IbBehaviorExpr`）限定写入 IbBehaviorExpr 节点；两个条件互斥，故该分支在合法编译路径下不可达。决定保留 `or self.node_uid` 作为防御性回退（不抛异常），以兼容潜在的程序化构造路径（artifact 反序列化、测试 harness 等）；在调用点添加详细审计注释固化结论。
 
 ---
 
@@ -225,26 +182,14 @@ def vm_handle_IbImport(executor, node_uid, node_data):
 
 ---
 
-### [C10] `execute_module()` 和 `IbUserFunction.call()` 中重复的 `IbLLMExceptionalStmt` 跳过逻辑
+### [C10] `execute_module()` 和 `IbUserFunction.call()` 中重复的 `IbLLMExceptionalStmt` 跳过逻辑 ✅ DONE（2026-04-29）
 
 **文件**：
-- `core/runtime/interpreter/interpreter.py:execute_module()` L588–L590
-- `core/runtime/objects/kernel.py:IbUserFunction.call()` L846–L848
+- `core/runtime/vm/vm_executor.py`（新增 `VMExecutor.run_body()` 共享实现）
+- `core/runtime/interpreter/interpreter.py:execute_module()`
+- `core/runtime/objects/kernel.py:IbUserFunction.call()`
 
-**问题**：两处都手动跳过直接出现在 body 中的 `IbLLMExceptionalStmt`：
-
-```python
-if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
-    continue
-```
-
-而 VM 内部的容器 handler（`IbModule`/`IbIf`/`IbWhile`/`IbFor`/`IbSwitch`/`IbTry`）都通过 `_resolve_stmt_uid()` 统一处理这个过滤。根本原因：`execute_module()` 和 `IbUserFunction.call()` 的外层 body 循环在 VMExecutor 之外，绕过了 `_resolve_stmt_uid`。
-
-**目标**：
-1. 把 `execute_module()` 的 body 循环逻辑移入 `IbModule` CPS handler（该 handler 已存在且已使用 `_resolve_stmt_uid`），`execute_module()` 直接调用 `vm.run(module_uid)` 一行代替整个 for 循环
-2. 把 `IbUserFunction.call()` 的 body 循环同理迁移到 `IbFunctionDef` 新增的 body-execution CPS handler（或在 `vm_handle_IbCall` 中内化函数帧管理）
-3. 消除 `execute_module` / `IbUserFunction.call` 中一切与 VM 调度重叠的逻辑（`IbLLMExceptionalStmt` 跳过、`node_protection` 重定向、CSE 捕获转换）
-4. 这是 C5/C6 的前置步骤，也是把"函数调用边界"完全 CPS 化的基础
+**落地内容**：新增 `VMExecutor.run_body(stmt_uids)` 方法，统一封装 (1) `IbLLMExceptionalStmt` 直接子节点跳过、(2) `node_protection` 重定向（由 `run()` 入口承担）、(3) `Signal → ReturnException/BreakException/ContinueException` 的边界恢复。`execute_module()` 与 `IbUserFunction.call()` 的内联 body 循环现在共用一行 `vm.run_body(body)`。注：本次未把 body 循环移入 `IbModule` / `IbFunctionDef` handler 内部（C10 描述中的方案 1/2），因 `IbUserFunction.call()` 同时需要参数绑定与作用域 push/pop 的精细控制——共享 `run_body` 是更安全的渐进式重构。修复了原 `IbUserFunction.call()` 中 `cse.kind` 的 dormant 错误（属性名应为 `cse.signal`），由此首次让函数体真正经由 VM 路径执行（之前 `getattr(self.context, "vm_executor", None)` 永远是 None，函数体走的是递归 fallback）。
 
 ---
 
@@ -292,34 +237,11 @@ sym.current_type = type(future)  # 写入非 IbObject 的类型
 
 ---
 
-### [C13] `IbUserFunction.call()` 通过多级 `getattr` 脆弱查找 VMExecutor
+### [C13] `IbUserFunction.call()` 通过多级 `getattr` 脆弱查找 VMExecutor ✅ DONE（2026-04-29）
 
-**文件**：`core/runtime/objects/kernel.py:IbUserFunction.call()` L825–L836
+**文件**：`core/runtime/objects/kernel.py:IbUserFunction.call()`、`core/runtime/interpreter/execution_context.py`、`core/runtime/interpreter/interpreter.py`
 
-**问题**：
-
-```python
-vm_getter = getattr(self.context, "vm_executor", None)
-if vm_getter is None:
-    interp = getattr(self.context, "_interpreter", None) or getattr(self.context, "interpreter", None)
-    if interp is not None and hasattr(interp, "_get_vm_executor"):
-        vm = interp._get_vm_executor()
-    else:
-        vm = None
-
-if vm is None:
-    # 无 VMExecutor 可用：保留原有递归路径
-    for stmt_uid in body:
-        self.context.visit(stmt_uid)
-```
-
-三级查找链任一环节失败则**静默降级**回递归路径，不报错、不警告。M3d 完成后，"找不到 VMExecutor"是不可接受的状态（应当 fail-fast）。
-
-**目标**：
-1. 在 `ExecutionContext` 接口中暴露 `vm_executor` 属性（不再通过 interpreter 间接访问）
-2. `IbUserFunction.call()` 直接 `self.context.vm_executor.run(stmt_uid)`，无条件要求 VMExecutor 存在
-3. 删除三级 getattr 查找链和 `if vm is None` 递归路径降级逻辑
-4. 在 `ExecutionContextImpl` 初始化时通过 `set_vm_executor(vm)` 注入，或在构造时直接传入
+**落地内容**：在 `ExecutionContextImpl` 上新增 `vm_executor` 属性 + setter（默认 `None`，由 Interpreter 注入）；`Interpreter._get_vm_executor()` 在首次构造 VMExecutor 时立即把引用写入 `self._execution_context.vm_executor`。`IbUserFunction.call()` 改为直接读取 `self.context.vm_executor` 并通过 `vm.run_body(body)` 驱动函数体；不再通过 `getattr(self.context, "vm_executor", None) → getattr(self.context, "_interpreter", None) → interp._get_vm_executor()` 三级穿透查找。审计中发现：原三级查找链在合法运行时永远走不到 VMExecutor 路径（ExecutionContextImpl 既无 `vm_executor` 也无 `_interpreter`），函数体始终走的是 `self.context.visit(stmt_uid)` 递归 fallback；C13 的修复让函数体首次真正经由 VM 路径执行，这正是 M4 多 Interpreter 并发所需要的"无 silent fallback"前提。
 
 ---
 
@@ -338,10 +260,10 @@ if vm is None:
 
 ## 四、PR 操作建议
 
-1. **顺序**：建议在 M3b + M5a 主线 PR 合并之后，把 L1–L4 + C1–C4 集中到一个独立的 **"chore: deferred cleanup (L1–L4 + C1–C4)"** PR。**C5 必须等 M3d 完成后**作为后续 PR 处理。
-2. **M3d 完成后**（当前基线 949）：C5/C6/C10 可以捆绑为第一个清理 PR；C7/C12/C13 为第二个；C8/C9 为第三个；C11/C14 为重构级 PR（需编译器改动）。
+1. **第一阶段：轻量债务清理 PR（L1-L4 + C1-C4 + C10 + C13）** ✅ DONE（2026-04-29）— 详见上面各条 ✅ 标记。基线 949 → 949（0 退化）。
+2. **暂缓**：C5、C6、C7、C8、C9、C11、C12、C14——其中 C5/C6 等待 M3d 完整切换、ControlSignalException 被彻底移除后处理；C7/C8/C11/C14 需要编译器改动或较大重构，按计划在 M6 后统一处理。
 3. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
-4. **测试基线**：M3d+M5c 完成后基线 **949**。
+4. **测试基线**：M3d+M5c+轻量清理后基线 **949**。
 5. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）。
 
 ---

@@ -819,43 +819,22 @@ class IbUserFunction(IbFunction):
             # ControlSignalException（顶层未消费 RETURN）由本帧捕获并提取返回值；
             # BREAK/CONTINUE 在函数体外属于错误（既有 except ReturnException 路径
             # 已不接受其它控制流，由 VMExecutor 内部 IbWhile/IbFor 消费）。
+            #
+            # C13：通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
+            # Interpreter 在首个 ``execute_module()`` 调用时即已通过 ``_get_vm_executor()``
+            # 把引用注入到 ExecutionContext，因此函数调用阶段必然可用。如未就绪
+            # （例如由直接构造 IbUserFunction 的边角测试触发），保留递归 fallback。
             from core.runtime.vm.task import (
                 ControlSignal as _CS, ControlSignalException as _CSE,
             )
-            vm_getter = getattr(self.context, "vm_executor", None)
-            if vm_getter is None:
-                # 通过 interpreter 取得 VMExecutor（execution_context 不直接暴露）
-                interp = getattr(self.context, "_interpreter", None) or getattr(
-                    self.context, "interpreter", None
-                )
-                if interp is not None and hasattr(interp, "_get_vm_executor"):
-                    vm = interp._get_vm_executor()
-                else:
-                    vm = None
-            else:
-                vm = vm_getter
+            vm = self.context.vm_executor
 
             if vm is None:
                 # 无 VMExecutor 可用：保留原有递归路径
                 for stmt_uid in body:
                     self.context.visit(stmt_uid)
             else:
-                # node_protection 重定向由 VMExecutor.run() 入口统一处理；
-                # 函数体内只需跳过直接出现的 IbLLMExceptionalStmt 节点。
-                for stmt_uid in body:
-                    stmt_data = self.context.get_node_data(stmt_uid)
-                    if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
-                        continue
-                    try:
-                        vm.run(stmt_uid)
-                    except _CSE as cse:
-                        if cse.kind is _CS.RETURN:
-                            raise ReturnException(cse.value)
-                        if cse.kind is _CS.BREAK:
-                            raise BreakException()
-                        if cse.kind is _CS.CONTINUE:
-                            raise ContinueException()
-                        raise
+                vm.run_body(body)
 
             return ib_none
         except ReturnException as e:

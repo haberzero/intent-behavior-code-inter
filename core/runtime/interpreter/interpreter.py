@@ -77,16 +77,21 @@ class Interpreter:
         return self.instruction_count
 
     def get_captured_intents(self, obj: Any) -> List[str]:
-        """ 获取指定对象（如 Behavior）捕获的意图栈内容"""
-        if isinstance(obj, IbBehavior):
-            res = []
-            for i in obj.captured_intents:
-                if isinstance(i, IbIntent):
-                    res.append(i.content)
-                else:
-                    res.append(str(i))
-            return res
-        return []
+        """ 获取指定对象（如 Behavior）捕获的意图栈内容。
+
+        ``obj.captured_intents`` 现在协议为 ``None`` 或 ``IbIntentContext`` 实例
+        （Step 6c/6d 之后；详见 ``core.runtime.objects.builtins.IbBehavior``）。
+        """
+        if not isinstance(obj, IbBehavior):
+            return []
+        ci = obj.captured_intents
+        if ci is None:
+            return []
+        if hasattr(ci, "get_active_intents"):
+            return [i.content if isinstance(i, IbIntent) else str(i)
+                    for i in ci.get_active_intents()]
+        # Defensive: should be unreachable per IIbBehavior contract.
+        return [str(ci)]
 
     def sync_state(self, parent_context: RuntimeContext, policy: Dict[str, Any]):
         """从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
@@ -515,12 +520,20 @@ class Interpreter:
         VMExecutor 在 ``execute_module()`` 与 ``IbUserFunction.call()`` 中作为
         主路径调度器使用；不支持的节点类型会自动回退到 ``Interpreter.visit()``
         递归路径，保证向后兼容。
+
+        C13 增强：构造完成后立即把引用写入 ``ExecutionContext.vm_executor``，
+        使 ``IbUserFunction.call()`` 等持有 ExecutionContext 的代码不再需要
+        通过 ``getattr(self.context, "_interpreter", ...)._get_vm_executor()``
+        三级穿透查找。
         """
         if self._vm_executor is None:
             from core.runtime.vm.vm_executor import VMExecutor
             self._vm_executor = VMExecutor(
                 self._execution_context, interpreter=self
             )
+            # C13：把 VMExecutor 直接绑定到 ExecutionContext，供下游调用方
+            # 通过 ``self.context.vm_executor`` 直接获取。
+            self._execution_context.vm_executor = self._vm_executor
         return self._vm_executor
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
@@ -570,34 +583,13 @@ class Interpreter:
 
         try:
             # 模块主体是语句 UID 列表
-            # M3d：通过 VMExecutor.run() 驱动顶层语句的 CPS 执行；
-            # 不支持的节点类型由 VMExecutor 自动 fallback 到 visit()。
-            # ControlSignalException（顶层未消费的 Signal）恢复为原始
-            # Return/Break/Continue 异常类型，让既有边界处理（line ↓）
-            # 把"控制流出现在函数/循环之外"识别并报错。
-            #
-            # node_protection 重定向由 VMExecutor.run() 入口统一处理
-            # （等价于 Interpreter.visit() 顶部的拦截语义）；本循环只需跳过
-            # 直接出现在 body 中的 IbLLMExceptionalStmt（其执行由 target 重定向触发）。
-            from core.runtime.vm.task import (
-                ControlSignal as _CS, ControlSignalException as _CSE,
-            )
+            # M3d + C10：通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的
+            # CPS 执行——node_protection 重定向、IbLLMExceptionalStmt 跳过、
+            # 控制信号到 Python 异常的边界恢复均由 ``run_body`` 统一处理，
+            # 与 ``IbUserFunction.call()`` 共享同一段实现。
             vm = self._get_vm_executor()
             body = module_data.get("body", [])
-            for stmt_uid in body:
-                stmt_data = self.get_node_data(stmt_uid)
-                if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
-                    continue
-                try:
-                    result = vm.run(stmt_uid)
-                except _CSE as cse:
-                    if cse.kind is _CS.RETURN:
-                        raise ReturnException(cse.value)
-                    if cse.kind is _CS.BREAK:
-                        raise BreakException()
-                    if cse.kind is _CS.CONTINUE:
-                        raise ContinueException()
-                    raise
+            result = vm.run_body(body)
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError:
