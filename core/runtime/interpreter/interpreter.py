@@ -59,7 +59,7 @@ from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 from core.base.enums import RegistrationState
-from core.runtime.vm.task import ControlSignalException
+from core.runtime.vm.task import UnhandledSignal
 from .llm_result import LLMResult
 
 
@@ -584,10 +584,8 @@ class Interpreter:
 
         try:
             # 模块主体是语句 UID 列表
-            # M3d + C10 + C6：通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的
-            # CPS 执行——node_protection 重定向、IbLLMExceptionalStmt 跳过均由
-            # ``run_body`` 统一处理。C6 后 ``run_body`` 不再转换控制信号为
-            # Python 原生异常，ControlSignalException 直接传播到此处捕获。
+            # M3d + C10 + C6 + C11：通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的
+            # CPS 执行。C5 后 ``run_body`` 以 UnhandledSignal 传播顶层控制流。
             vm = self._get_vm_executor()
             body = module_data.get("body", [])
             result = vm.run_body(body)
@@ -595,7 +593,7 @@ class Interpreter:
             return result
         except InterpreterError:
             raise
-        except ControlSignalException:
+        except UnhandledSignal:
             raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         except (ReturnException, BreakException, ContinueException):
             # 兼容性保留：若 vm 未能拦截（极端边角情形），与上一行保持同语义。
@@ -847,12 +845,6 @@ class Interpreter:
 
             try:
                 node_type = node_data.get("_type")
-
-                # 2. 避免处理器节点被重复执行：
-                # 如果当前节点是一个 llmexcept 处理器，且我们不是通过影子执行逻辑（bypass_protection=True）进入的，
-                # 则跳过它，因为它已经被它的 target 触发执行过了。
-                if not bypass_protection and node_type == "IbLLMExceptionalStmt":
-                    return self.registry.get_none()
 
                 visitor = self._visitor_cache.get(node_type, self.generic_visit)
                 result = visitor(node_uid, node_data)

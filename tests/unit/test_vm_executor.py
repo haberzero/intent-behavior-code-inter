@@ -16,7 +16,7 @@ M3a — VMExecutor (CPS Scheduling Loop) 骨架测试。
               IbIfExp, IbCall, IbAttribute, IbSubscript, IbTuple, IbListExpr
     * 语句  ：IbModule, IbPass, IbExprStmt, IbAssign, IbIf, IbWhile,
               IbReturn, IbBreak, IbContinue
-    * 数据类：VMTask, VMTaskResult, ControlSignal, ControlSignalException
+    * 数据类：VMTask, VMTaskResult, ControlSignal, UnhandledSignal
     * 调度  ：fallback_visit, supports, step_count
 """
 import os
@@ -28,7 +28,7 @@ from core.runtime.vm import (
     VMTask,
     VMTaskResult,
     ControlSignal,
-    ControlSignalException,
+    UnhandledSignal,
 )
 
 
@@ -95,10 +95,12 @@ class TestVMDataClasses:
         assert ControlSignal.CONTINUE.value == "continue"
         assert ControlSignal.THROW.value == "throw"
 
-    def test_control_signal_exception_carries_signal_and_value(self):
-        exc = ControlSignalException(ControlSignal.RETURN, "v")
-        assert exc.signal is ControlSignal.RETURN
-        assert exc.value == "v"
+    def test_unhandled_signal_carries_signal_and_value(self):
+        from core.runtime.vm.task import Signal
+        sig = Signal(ControlSignal.RETURN, "v")
+        exc = UnhandledSignal(sig)
+        assert exc.signal.kind is ControlSignal.RETURN
+        assert exc.signal.value == "v"
         # subclass of Exception
         assert isinstance(exc, Exception)
 
@@ -400,14 +402,14 @@ class TestControlFlow:
         assert native(engine.get_variable("s")) == 12
 
     def test_break_outside_loop_propagates(self):
-        # IbBreak alone raises ControlSignalException; must propagate to caller.
+        # IbBreak alone raises UnhandledSignal; must propagate to caller.
         engine = make_engine("int x = 0\nwhile x < 1:\n    break\n    x = x + 1\n")
         # Find an IbBreak node and run it directly via VM
         break_uid = find_node_uid(engine, "IbBreak")
         vm = make_vm(engine)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(break_uid)
-        assert ei.value.signal is ControlSignal.BREAK
+        assert ei.value.signal.kind is ControlSignal.BREAK
 
     def test_return_signal_value(self):
         # Build an IbReturn at the top level via a function.
@@ -420,10 +422,10 @@ class TestControlFlow:
         # IbReturn yielded its value as 42.
         ret_uid = find_node_uid(engine, "IbReturn")
         vm = make_vm(engine)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(ret_uid)
-        assert ei.value.signal is ControlSignal.RETURN
-        assert native(ei.value.value) == 42
+        assert ei.value.signal.kind is ControlSignal.RETURN
+        assert native(ei.value.signal.value) == 42
 
 
 # ===========================================================================

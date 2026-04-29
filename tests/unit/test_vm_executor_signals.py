@@ -2,15 +2,14 @@
 tests/unit/test_vm_executor_signals.py
 ======================================
 
-M3b — VMExecutor 控制信号数据化（``Signal(kind, value)``）专属测试。
+M3b / C5 — VMExecutor 控制信号数据化（``Signal(kind, value)``）专属测试。
 
 测试目标
 --------
-1. **数据形态**：handler ``return Signal(...)`` 而非 ``raise ControlSignalException``
+1. **数据形态**：handler ``return Signal(...)`` 而非 raise 异常
 2. **传播路径**：Signal 通过 ``StopIteration.value`` → ``gen.send(Signal)`` 沿帧栈
    数据化向上传递；非循环帧透传（``return res``），循环帧消费 BREAK/CONTINUE
-3. **边界兼容**：顶层未消费 Signal 时仍包装为 ``ControlSignalException`` 抛给
-   调用者；fallback 路径产生的 ``ControlSignalException`` 也能正确传播
+3. **边界（C5）**：顶层未消费 Signal 时以 ``UnhandledSignal`` 抛给调用者
 4. **多语句容器**：``IbModule`` / ``IbIf`` 在收到 Signal 后立即停止执行后续语句
    并向上透传
 
@@ -23,7 +22,7 @@ from core.runtime.vm import (
     VMExecutor,
     Signal,
     ControlSignal,
-    ControlSignalException,
+    UnhandledSignal,
 )
 from core.runtime.vm.handlers import (
     vm_handle_IbBreak,
@@ -124,56 +123,56 @@ class TestHandlersReturnSignal:
             assert si.value.kind is ControlSignal.CONTINUE
 
     def test_break_handler_does_not_raise(self):
-        """M3b 行为：旧的 raise ControlSignalException 路径已彻底消失。"""
+        """M3b 行为：旧的 raise 异常路径已彻底消失；仅通过 StopIteration.value 传递 Signal。"""
         gen = vm_handle_IbBreak(None, "u", {})
-        # 不会抛出 ControlSignalException
+        # 不会抛出任何异常（除 StopIteration）
         with pytest.raises(StopIteration):
             next(gen)
 
 
 # ===========================================================================
-# 3. 顶层执行：未消费 Signal 包装为 CSE 抛出（边界兼容）
+# 3. 顶层执行：未消费 Signal 以 UnhandledSignal 抛出（C5 边界）
 # ===========================================================================
 
 class TestTopLevelSignalEscape:
-    def test_break_outside_loop_escapes_as_cse(self):
+    def test_break_outside_loop_escapes_as_unhandled(self):
         engine = make_engine("pass\n")
         # 单独执行一个 IbBreak 节点
         # 先获取一个真实存在的 IbBreak 节点（构造一段含 while 的代码）
         engine2 = make_engine("while False:\n    break\n")
         break_uid = find_node_uid(engine2, "IbBreak")
         vm = make_vm(engine2)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(break_uid)
-        assert ei.value.signal is ControlSignal.BREAK
+        assert ei.value.signal.kind is ControlSignal.BREAK
 
-    def test_continue_outside_loop_escapes_as_cse(self):
+    def test_continue_outside_loop_escapes_as_unhandled(self):
         engine = make_engine("while False:\n    continue\n")
         cont_uid = find_node_uid(engine, "IbContinue")
         vm = make_vm(engine)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(cont_uid)
-        assert ei.value.signal is ControlSignal.CONTINUE
+        assert ei.value.signal.kind is ControlSignal.CONTINUE
 
     def test_return_at_module_level_escapes_with_value(self):
         engine = make_engine("func f():\n    return 99\n")
         # 找到函数体内的 return 节点，单独 run 它
         ret_uid = find_node_uid(engine, "IbReturn")
         vm = make_vm(engine)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(ret_uid)
-        assert ei.value.signal is ControlSignal.RETURN
-        assert native(ei.value.value) == 99
+        assert ei.value.signal.kind is ControlSignal.RETURN
+        assert native(ei.value.signal.value) == 99
 
     def test_return_with_no_value_carries_none(self):
         engine = make_engine("func f():\n    return\n")
         ret_uid = find_node_uid(engine, "IbReturn")
         vm = make_vm(engine)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(ret_uid)
-        assert ei.value.signal is ControlSignal.RETURN
+        assert ei.value.signal.kind is ControlSignal.RETURN
         # value is IbNone or has to_native()==None
-        assert native(ei.value.value) is None
+        assert native(ei.value.signal.value) is None
 
 
 # ===========================================================================
@@ -265,9 +264,9 @@ class TestNonLoopContainersPropagate:
         )
         if_uid = find_node_uid(engine2, "IbIf")
         vm = make_vm(engine2)
-        with pytest.raises(ControlSignalException) as ei:
+        with pytest.raises(UnhandledSignal) as ei:
             vm.run(if_uid)
-        assert ei.value.signal is ControlSignal.BREAK
+        assert ei.value.signal.kind is ControlSignal.BREAK
 
     def test_if_stops_after_signal_in_branch(self):
         # if 体内第一条语句产生 break，第二条不应执行
@@ -344,18 +343,23 @@ class TestNoExceptionForControlFlow:
 
 
 # ===========================================================================
-# 7. ControlSignalException.from_signal 转换器
+# 7. UnhandledSignal 构造（C5）
 # ===========================================================================
 
-class TestSignalToCSEConversion:
-    def test_from_signal_preserves_kind_and_value(self):
+class TestUnhandledSignal:
+    def test_unhandled_signal_carries_signal(self):
         sig = Signal(ControlSignal.RETURN, 7)
-        cse = ControlSignalException.from_signal(sig)
-        assert cse.signal is ControlSignal.RETURN
-        assert cse.value == 7
+        exc = UnhandledSignal(sig)
+        assert exc.signal.kind is ControlSignal.RETURN
+        assert exc.signal.value == 7
 
-    def test_from_signal_for_break(self):
+    def test_unhandled_signal_is_exception(self):
         sig = Signal(ControlSignal.BREAK)
-        cse = ControlSignalException.from_signal(sig)
-        assert cse.signal is ControlSignal.BREAK
-        assert cse.value is None
+        exc = UnhandledSignal(sig)
+        assert isinstance(exc, Exception)
+
+    def test_unhandled_signal_for_break(self):
+        sig = Signal(ControlSignal.BREAK)
+        exc = UnhandledSignal(sig)
+        assert exc.signal.kind is ControlSignal.BREAK
+        assert exc.signal.value is None

@@ -13,8 +13,8 @@ core.runtime.vm.vm_executor — VM 调度循环主类（M3a + M3b）。
         - 若 ``value`` 是 :class:`Signal` 数据对象（M3b 控制信号数据化）：
           视作控制流信号，沿帧栈向上数据化传递（``send(Signal)`` 给父帧）；
           父 handler 用 ``isinstance(res, Signal)`` 决定拦截或继续传播。
-          若帧栈空仍持有未消费 Signal，包装为 :class:`ControlSignalException`
-          抛给调用者（边界兼容）。
+          若帧栈空仍持有未消费 Signal，以 :class:`UnhandledSignal` 形式
+          抛给调用者（C5）。
         - 否则把 value 通过 ``send`` 传给父帧
      - 若生成器 ``raise``：弹栈，沿帧栈向上 ``throw`` 给父帧的生成器；调度循环
        会持续向上传播，直到某帧的 ``except`` 子句捕获或栈空（向调用者抛出）
@@ -34,7 +34,7 @@ from core.runtime.vm.task import (
     VMTask,
     VMTaskResult,
     ControlSignal,
-    ControlSignalException,
+    UnhandledSignal,
     Signal,
 )
 from core.runtime.vm.handlers import build_dispatch_table
@@ -141,8 +141,10 @@ class VMExecutor:
         return self._drive_loop([self._make_task(node_uid)])
 
     def run_body(self, stmt_uids: Any) -> Any:
-        """C10 + C6：执行一个语句列表（模块或函数体），统一处理 ``node_protection``
-        重定向与 ``IbLLMExceptionalStmt`` 直接子节点跳过。
+        """C10 + C6 + C11：执行一个语句列表（模块或函数体）。
+
+        C11 后：body 中的 IbLLMExceptionalStmt 节点已经是正则 stmt（替换了
+        原来的 target），直接 run() 即可，无需特殊跳过逻辑。
 
         替代 ``Interpreter.execute_module()`` 与 ``IbUserFunction.call()`` 中
         各自维护的内联 body 循环——既消除重复逻辑，又确保 M4 多 Interpreter
@@ -155,19 +157,12 @@ class VMExecutor:
             最后一条语句的求值结果；空 body 返回 ``IbNone``。
 
         异常:
-            ``ControlSignalException``（C6）：顶层未消费的控制信号直接以
-                ``ControlSignalException`` 形式向调用方传播，不再经由
-                ``ReturnException`` / ``BreakException`` / ``ContinueException``
-                中转。调用方（``IbUserFunction.call``、``execute_module``）直接
-                捕获 CSE 并按 ``cse.signal`` 分类处理。
+            ``UnhandledSignal``（C6）：顶层未消费的控制信号直接以
+                ``UnhandledSignal`` 形式向调用方传播。调用方（``IbUserFunction.call``、
+                ``execute_module``）直接捕获并按 ``e.signal.kind`` 分类处理。
         """
         result = self.registry.get_none()
         for stmt_uid in stmt_uids or ():
-            stmt_data = self._ec.get_node_data(stmt_uid)
-            if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
-                # IbLLMExceptionalStmt 直接出现在 body 中：由其 target 的
-                # node_protection 重定向驱动，这里直接跳过。
-                continue
             result = self.run(stmt_uid)
         return result
 
@@ -214,12 +209,11 @@ class VMExecutor:
                         ret_value if ret_value is not None else self.registry.get_none()
                     )
                 continue
-            except ControlSignalException as cse:
-                # M3b：内部 handler 不再 raise CSE；此分支仅用于 fallback 路径
-                # 旧解释器 visit() 抛出的 ReturnException/BreakException/...
-                # 走这条路径继续沿生成器栈传播。
+            except UnhandledSignal as use:
+                # C5：fallback 路径产生的 UnhandledSignal（旧路径 ControlSignalException
+                # 已由 C6 清除；此分支仅兜底）：弹栈并向上传递
                 stack.pop()
-                pending_exception = cse
+                pending_exception = use
                 continue
             except Exception as e:
                 # 其他运行时异常：弹栈并向上传递
@@ -246,18 +240,18 @@ class VMExecutor:
                 # 不支持的子节点：通过 fallback 同步求值，把结果送回父生成器
                 try:
                     pending_value = self._ec.visit(child_uid)
-                except ControlSignalException as cse:
-                    # fallback 路径产生的 CSE：转为 pending_exception 沿栈传递
-                    pending_exception = cse
+                except UnhandledSignal as use:
+                    # fallback 路径产生的 UnhandledSignal：转为 pending_exception 沿栈传递
+                    pending_exception = use
                 except Exception as e:
                     pending_exception = e
 
         # 栈空：处理最终结果
         if pending_exception is not None:
             raise pending_exception
-        # M3b：未消费的顶层 Signal → 包装为 ControlSignalException 抛出（边界兼容）
+        # C5：未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
         if isinstance(pending_value, Signal):
-            raise ControlSignalException.from_signal(pending_value)
+            raise UnhandledSignal(pending_value)
         return pending_value if pending_value is not None else self.registry.get_none()
 
     # ------------------------------------------------------------------

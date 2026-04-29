@@ -223,9 +223,20 @@ class SemanticAnalyzer:
         """
         处理语句块中的 llmexcept 关联。
 
-        注意：不扁平化 body，保持 IbLLMExceptionalStmt 作为包装器结构。
-        这样解释器的影子执行驱动模式（visit_IbLLMExceptionalStmt）可以
-        正确主控目标节点的重试循环。
+        C11：IbLLMExceptionalStmt 在 body 中**替换**其 target 而非紧随其后。
+
+        正则情形（prev_stmt 不是条件驱动 for 循环）：
+          - new_body 中弹出 prev_stmt，仅保留 IbLLMExceptionalStmt（它的 target
+            字段直接指向 prev_stmt node）。
+          - 不写 node_protection 侧表——容器 handler 遍历 body 时直接遇到
+            IbLLMExceptionalStmt 节点，vm_handle_IbLLMExceptionalStmt 负责 yield
+            其 target_uid 并管理 retry 循环。
+
+        条件驱动 for 循环情形（prev_stmt 是 target=None 的 IbFor）：
+          - IbFor 保留在 body 中，IbLLMExceptionalStmt **不**写入 body。
+          - node_protection[cond_expr] = llmexcept_stmt 仍然保留，供
+            _apply_protection_redirect 在 vm_handle_IbFor 内部重定向每次条件
+            表达式的求值使用。
         """
         if not body:
             return
@@ -258,8 +269,16 @@ class SemanticAnalyzer:
                             "'@~...~' as the loop condition.",
                             stmt, code="SEM_050"
                         )
+                    # C11: 条件 for 情形——保留 node_protection 侧表供
+                    # _apply_protection_redirect 在 IbFor 内部重定向条件表达式；
+                    # IbLLMExceptionalStmt 本身不加入 body（IbFor 是主体）。
                     self.side_table.bind_protection(cond_expr, stmt)
                     stmt.target = cond_expr
+                    # 仅递归处理 llmexcept body，不 append stmt 到 new_body
+                    for body_stmt in stmt.body:
+                        self._bind_llm_except(body_stmt)
+                    i += 1
+                    continue
                 else:
                     # 检查前一个语句是否包含行为描述
                     if not self._stmt_contains_behavior(prev_stmt):
@@ -268,13 +287,12 @@ class SemanticAnalyzer:
                             f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
                             stmt, code="SEM_050"
                         )
-                    # 关联侧表：被保护节点 UID -> llmexcept 处理器节点 UID
-                    self.side_table.bind_protection(prev_stmt, stmt)
+                    # C11: 正则情形——IbLLMExceptionalStmt 替换 prev_stmt 成为
+                    # body 中的唯一条目；target 字段直接引用 prev_stmt node，
+                    # 不再需要 node_protection 侧表。
                     stmt.target = prev_stmt
-
-                # IbLLMExceptionalStmt 保留在 body 中，确保 Pass 4 深度检查和序列化能够访问到它
-                # 它的重复执行问题将由 Interpreter.visit 逻辑处理
-                new_body.append(stmt)
+                    new_body.pop()  # 弹出已入队的 prev_stmt
+                    new_body.append(stmt)
 
                 # 递归处理 llmexcept body
                 for body_stmt in stmt.body:
@@ -452,15 +470,21 @@ class SemanticAnalyzer:
         """
         访问 llmexcept 语句。
 
-        IbLLMExceptionalStmt 在 Pass 3 被 _bind_llm_except 处理，
-        这里只需要访问 body 中的语句，并在访问期间启用
-        §9.2 read-only 约束：捕获进入 body 前的外部作用域变量名集合，
-        visit_IbAssign 在检测到对这些变量的赋值时发出 SEM_052。
+        C11：IbLLMExceptionalStmt 已替换 prev_stmt 进入 body 主列表。
+        ``node.target`` 是原 prev_stmt（IbAssign 或条件 for 的 IbFor），
+        Pass 4 需先 visit 它以完成符号绑定、类型检查等。
+
+        body 访问期间启用 §9.2 read-only 约束：捕获进入 body 前的外部
+        作用域变量名集合，visit_IbAssign 在检测到对这些变量的赋值时发出 SEM_052。
 
         由于 LocalSymbolCollector（Pass 2.5）会把 body 内声明的变量预扫描进
         symbol_table.symbols，需排除 body 内直接声明（有类型标注）的变量，
         以避免误报 body-local 变量的 SEM_052。
         """
+        # C11: 先访问 target（正则情形为 IbAssign；条件 for 情形为 IbFor）
+        if node.target is not None:
+            self.visit(node.target)
+
         # 收集 body 直接层级声明的变量名（body-local），以便从外部作用域集合中排除
         body_declared_names = self._collect_llmexcept_body_declared_names(node.body)
 
@@ -1258,6 +1282,13 @@ class SemanticAnalyzer:
 
         for stmt in node.body:
             self.visit(stmt)
+
+        # C11: 条件驱动 for 情形——IbLLMExceptionalStmt 不在 body 中，
+        # 但其 handler body 的符号绑定必须在此显式触发。
+        if node.target is None:
+            handler = self.side_table.node_protection.get(node.iter)
+            if handler is not None and isinstance(handler, ast.IbLLMExceptionalStmt):
+                self.visit(handler)
 
         return self._void_desc
 
