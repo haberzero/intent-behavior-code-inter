@@ -175,8 +175,8 @@ class ExecutionContextImpl:
     def strict_mode(self, value: bool):
         self._strict_mode = value
 
-    def visit(self, node_uid: str, module_name: Optional[str] = None, bypass_protection: bool = False) -> 'IbObject':
-        return self._visit_callback(node_uid, module_name=module_name, bypass_protection=bypass_protection)
+    def visit(self, node_uid: str, module_name: Optional[str] = None) -> 'IbObject':
+        return self._visit_callback(node_uid, module_name=module_name)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         return self._get_node_data_callback(node_uid)

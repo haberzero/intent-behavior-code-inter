@@ -22,7 +22,7 @@ llmexcept 机制经历了三个阶段的演进：
 
 `_with_unified_fallback` 包装器和 `LLMUncertaintyError` 异常均已完全废弃（代码中不存在）。当前实现的核心思路：
 
-- `visit_IbLLMExceptionalStmt` 是主控外壳，主动调用 `execution_context.visit(target_uid, bypass_protection=True)` 驱动目标节点执行
+- `visit_IbLLMExceptionalStmt` 是主控外壳，主动调用 `execution_context.visit(target_uid)` 驱动目标节点执行（C11/P3 完成后，`bypass_protection` 参数已删除——所有 llmexcept 关联通过 AST 字段直接建立，不再有侧表重定向需要绕过）
 - LLM 执行器不再抛出异常，改为通过 `LLMResult.is_uncertain` 标志位传递不确定性信号
 - `runtime_context.set_last_llm_result(result)` 将每次 LLM 调用的结果存入上下文，供外层轮询检查
 - `visit_IbAssign` 检测 `last_llm_result.is_uncertain`，若为 True 则将目标变量赋值为 `IbLLMUncertain` 哨兵对象（而非跳过赋值）

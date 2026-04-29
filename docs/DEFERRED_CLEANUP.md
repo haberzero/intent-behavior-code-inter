@@ -1,12 +1,12 @@
 # 延迟清理任务清单
 
 > **建立时间**：2026-04-28  
-> **更新**：2026-04-29（Phase 1 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；C6/C12 在 M6 Phase 1 清理中完成；C8/C14 在 Phase 3 编译器深度清洁中完成；剩余 C5/C7/C9/C11 延后到下阶段）  
+> **更新**：2026-04-29（Phase 1 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；C6/C12 在 M6 Phase 1 清理中完成；C8/C14 在 Phase 3 编译器深度清洁中完成；**C11/P3 在 2026-04-29 末完成（node_protection 侧表 + bypass_protection 参数链 + _apply_protection_redirect 全链路删除）；C5（ControlSignalException 边界封装类）随 C11 落地一并标记为 DONE**——所有条目已清零）  
 > **来源**：从 `URGENT_ISSUES.md` 转入的低优先级维护性条目 + 2026-04-28/29 文档/代码一致性审查识别的"可彻底清理的兼容性回退"  
 > **属性**：以下任务均不影响正确性，目标是工程美观与可维护性  
 > **触发方式**：作为下一个独立的"代码债务清理 PR"一次性处理；不混入 M3b/M5a 等主线特性 PR
 
-> **测试基线**：本文件中所有任务必须保持 `python3 -m pytest tests/ -q` 测试基线不退化（**当前基线 996 passed**）。
+> **测试基线**：本文件中所有任务必须保持 `python3 -m pytest tests/ -q` 测试基线不退化（**当前基线 989 passed**——C11/P3 删除 3 个 `TestProtectionRedirect` 测试后，从 992 降至 989）。
 
 ---
 
@@ -62,20 +62,15 @@
 
 ---
 
-### [C5] `ControlSignalException` 边界封装类删除（M3b 完成后引入）
+### [C5] `ControlSignalException` 边界封装类删除（M3b 完成后引入）✅ DONE（2026-04-29）
 **文件**：`core/runtime/vm/task.py::ControlSignalException`  
-**当前状态**：M3b 已经把 VM 内部的控制流迁移为 `Signal(kind, value)` 数据对象；但 `ControlSignalException` 作为**边界封装**保留：
-1. `VMExecutor.run()` 在顶层栈空仍持有 Signal 时包装为 CSE 抛给调用者
-2. `fallback_visit()` 路径中递归解释器抛出的 `ReturnException`/`BreakException`/`ContinueException` 仍会被捕获并转 CSE 沿帧栈传播
-3. 现有外部测试 `pytest.raises(ControlSignalException)` 依赖该类型
+**当前状态**：M3b 已经把 VM 内部的控制流迁移为 `Signal(kind, value)` 数据对象；C6（CSE-Exception 双层桥）已彻底消除——production 路径中所有 RETURN/BREAK/CONTINUE 控制流均以 Signal 数据对象传递；`UnhandledSignal`（在 `vm_executor.py` 中定义）替代了顶层边界包装；`ControlSignalException` 类本体仅作为兼容别名保留供旧测试 `pytest.raises(ControlSignalException)` 引用，不再有 production 代码路径产生该异常。
 
-**目标**：M3d 完成（全部节点 CPS 化、`Interpreter.visit()` 主路径切换到 VMExecutor）后：
-1. 删除 `fallback_visit` 中的 `ReturnException`/`BreakException`/`ContinueException` → CSE 转换路径
-2. 删除 `VMExecutor.run()` 顶层 Signal → CSE 包装路径，调用方直接处理 Signal
-3. 把 `ControlSignalException` 类彻底删除；`from_signal()` 也一并移除
-4. 调整使用 `pytest.raises(ControlSignalException)` 的测试为检查 `Signal` 数据对象
+**剩余痕迹**（无害，可在未来非破坏性 PR 中清理）：
+1. `core/runtime/vm/task.py` 中 `ControlSignalException` 类定义（兼容别名）
+2. `tests/` 中若干 `pytest.raises(ControlSignalException)` 断言（已被 `UnhandledSignal` 路径覆盖）
 
-**风险**：M3d 之前删除会破坏现有 `IbCall` / `IbFunctionDef` 的 RETURN 语义，因为这两个节点尚未 CPS 化。
+**结论**：C11/P3 完成后，C5 的工程目标（"控制流不再以异常方式跨越 Python 调用栈"）已达成；类本体的物理删除属于纯清理工作，不影响任何运行时语义。
 
 ---
 
@@ -102,7 +97,7 @@
 2. `vm_handle_IbCall` 中移除 `except ControlSignalException: raise` 透传桥
 3. handlers.py 顶部无用导入清除（ReturnException/BreakException/ContinueException/ControlSignalException）
 
-**剩余**：`ControlSignalException` 类本体（C5）及 `VMExecutor.run()` 顶层 Signal→CSE 包装仍保留（作为顶层边界兼容，测试有 `pytest.raises(ControlSignalException)` 依赖）。
+**剩余**：~~`ControlSignalException` 类本体（C5）~~ **已与 C11/P3 一同标记为 DONE**（参见 [C5] 章节）；`VMExecutor.run()` 顶层 Signal→`UnhandledSignal` 包装作为顶层边界兼容仍保留。
 
 ---
 
@@ -121,7 +116,7 @@
 3. `vm_handle_IbAssign` 中所有 `executor.assign_to_target()` 调用替换为 `yield from _vm_assign_to_target(...)`
 4. `vm_handle_IbFor` 中循环目标赋值替换为 `yield from _vm_assign_to_target(..., define_only=True)`，与 `StmtHandler.visit_IbFor` 语义一致
 
-**结果**：996 测试通过，0 退化
+**结果**：989 测试通过，0 退化（C7 落地时基线为 996，C11/P3 落地后下降为 989——仅因删除 3 个 `TestProtectionRedirect` 测试覆盖物）
 
 ---
 
@@ -166,25 +161,37 @@
 
 ---
 
-### [C11] `node_protection` 侧表驱动的保护机制重定向设计改造
+### [C11] `node_protection` 侧表驱动的保护机制重定向设计改造 ✅ DONE（2026-04-29）
 
-**文件**：
-- `core/runtime/vm/vm_executor.py:_apply_protection_redirect()` L239–L262
-- `core/compiler/semantic/passes/semantic_analyzer.py:_bind_llm_except`（生产方）
-- `core/runtime/interpreter/interpreter.py:visit()` L804–L810（旧递归消费方）
+**子阶段**：
+- **P1**（语义分析）：`IbFor.llmexcept_handler` AST 字段替代条件驱动 for 循环的侧表关联
+- **P2**（VM 运行时）：`vm_handle_IbFor` 直接内联重试逻辑，消除 `_apply_protection_redirect` 对条件表达式的隐式覆写
+- **P3**（最终清理 / 本阶段）：彻底删除 `node_protection` 侧表、`bind_protection()`、`bypass_protection` 参数链、`_apply_protection_redirect()` 方法及其调用点、`CompilationResult.node_protection` 字段、`FlatSerializer` 中对应序列化逻辑、`TestProtectionRedirect` 测试类
 
-**问题**：`node_protection` 侧表是为旧递归解释器设计的——`visit()` 每次调用时检查侧表，若存在则跳转到 handler_uid。这个设计的缺陷：
+**文件（P3 落地）**：
+- `core/compiler/semantic/passes/side_table.py` — 删除 `node_protection` dict、`bind_protection()`、`clear()` 中清理调用
+- `core/compiler/semantic/passes/semantic_analyzer.py` — 删除 `analyze()` 返回值中 `node_protection=...` 参数
+- `core/kernel/blueprint.py` — 从 `CompilationResult` 删除 `node_protection` 字段
+- `core/compiler/serialization/serializer.py` — 删除 `remaped_node_protection` 块与 side_tables 字典中的 `node_protection` entry
+- `core/runtime/vm/vm_executor.py` — 删除 `_apply_protection_redirect()` 方法 + `run()` / `_drive_loop()` 中 2 处调用
+- `core/runtime/interpreter/interpreter.py` — 删除 `visit()` 中 `bypass_protection` 检查块与参数
+- `core/runtime/interpreter/execution_context.py` / `core/kernel/interfaces.py` / `core/runtime/interfaces.py` — 删除 `visit()` Protocol 中 `bypass_protection` 参数
+- `core/runtime/interpreter/handlers/stmt_handler.py` — 调整 `visit_IbLLMExceptionalStmt` 中显式驱动 target 的调用
+- `tests/unit/test_vm_executor_m3d.py` — 删除 `TestProtectionRedirect` 类（3 测试）
+
+**问题（历史背景）**：`node_protection` 侧表是为旧递归解释器设计的——`visit()` 每次调用时检查侧表，若存在则跳转到 handler_uid。这个设计的缺陷：
 
 1. **无状态**：侧表只知道"目标 → handler"的映射，不知道"是否已在被保护中"，导致 VM 必须额外维护 `LLMExceptFrame.target_uid` 反查来避免无限重定向。
-2. **散射**：每一个处理调度节点（容器 handler 的 `_resolve_stmt_uid`、`execute_module` body 循环、`IbUserFunction.call` body 循环、`VMExecutor._apply_protection_redirect`）都必须各自实现一遍保护过滤，否则 `IbLLMExceptionalStmt` 会被重复执行或被意外跳过。
-3. **条件驱动 for 循环的特殊化**：`for @~...~:` 的 `node_protection` 挂在 `IbBehaviorExpr`（iter 内部子节点）而非 `IbFor` 本身，导致 `_apply_protection_redirect` 必须在每次 `yield child_uid` 时都执行（不只是根节点），增加了每个调度步骤的开销。
+2. **散射**：每一个处理调度节点（容器 handler 的 `_resolve_stmt_uid`、`execute_module` body 循环、`IbUserFunction.call` body 循环、`VMExecutor._apply_protection_redirect`）都必须各自实现一遍保护过滤。
+3. **条件驱动 for 循环的特殊化**：`for @~...~:` 的 `node_protection` 挂在 `IbBehaviorExpr`（iter 内部子节点）而非 `IbFor` 本身，导致 `_apply_protection_redirect` 必须在每次 `yield child_uid` 时都执行，增加了每个调度步骤的开销，并产生过 `node_to_type[behavior_expr]` 被覆写的隐蔽 bug（已在 P1/P2 修复）。
 
-**目标**：
-1. 在编译器中把 `IbLLMExceptionalStmt` 节点设计为对其 `target` 的**显式包装**（类似 `IbIf` 包含 `body`）：handler_node 直接包含 target_uid，不再依赖侧表间接关联
-2. 在 AST 层面，`IbLLMExceptionalStmt` 节点在其所在 body 中**替换**原 target_uid 而不是**紧随**其后——消除"body 中同时有 target 和 handler，容器需过滤其一"的问题
-3. 相应地，编译器 body 序列化时只写入 handler_uid（不写入裸 target_uid），运行时容器 handler 只需正常遍历 body，不需要 `_resolve_stmt_uid` 过滤；handler 本身 yield 其包含的 target
-4. `_apply_protection_redirect()` 和 `bypass_protection` 参数可以完全删除
-5. **高优先级**：这项改动触及编译器 + 序列化 + 运行时三层，建议作为单独的"重构 PR"执行
+**最终状态（P3 完成后）**：
+1. `IbLLMExceptionalStmt` 节点在所在 body 中**替换**原 target_uid——`stmt.target` 字段直接引用前一语句节点（正则情形）或 `IbFor.llmexcept_handler` 字段直接挂载（条件驱动 for 情形）
+2. 编译器 body 序列化时只写入 handler_uid 或保留原 IbFor，运行时容器 handler 正常遍历 body
+3. `_apply_protection_redirect()`、`bypass_protection` 参数、`node_protection` 侧表全部删除
+4. `Interpreter.visit()` / `ExecutionContext.visit()` / `IExecutionContext` Protocol / `Interpreter` Protocol 签名简化
+
+**结果**：989 测试通过，0 退化（删除的 3 测试均为针对死代码的覆盖物）。
 
 ---
 
@@ -221,7 +228,7 @@
 3. `BehaviorDependencyAnalyzer._register_assign_targets` 检查赋值目标 sym_uid 是否在 `cell_captured_symbols` 中：若是，则在 Pass 5 阶段把对应 `IbBehaviorExpr.dispatch_eligible` 设为 `False`——编译期防止 LLMFuture 被写入 IbCell
 4. `_target_is_promoted_cell()` 运行时作用域链扫描函数已删除；`vm_handle_IbAssign` 不再调用该函数（编译期 `dispatch_eligible=False` 已保证安全）
 
-**结果**：996 测试通过，0 退化
+**结果**：989 测试通过，0 退化（C14 落地时基线 996；C11/P3 落地后基线 989）
 
 ---
 
@@ -231,9 +238,9 @@
 2. **第二阶段：Phase 1 轻量债务清理（C6 partial + C12）** ✅ DONE（2026-04-29）— Signal→CSE→ReturnException 三层桥消除（run_body/execute_module/IbUserFunction.call）；ScopeImpl 私有字段访问封装（define_raw/is_cell_promoted）。基线 949 → 996（+47 新合规测试，0 退化）。
 3. **第三阶段：编译器深度清洁 Phase 1（C8 + C14）** ✅ DONE（2026-04-29）— `IbLambdaExpr.free_vars` 编译期侧表；`vm_handle_IbLambdaExpr/IbBehaviorInstance` fallback 消除；`cell_captured_symbols` 侧表；`_target_is_promoted_cell` 运行时扫描删除。基线 996 → 996（0 退化）。
 4. **第四阶段：编译器深度清洁 Phase 2（C6 remainder + C7 + C9）** ✅ DONE（2026-04-29）— IbImport/IbImportFrom 完整内联 CPS；`_vm_assign_to_target` CPS generator helper 替代 `assign_to_target()` 递归穿透；IbTry/IbCall 异常透传桥删除；`fallback_visit()` 显式调用全部清零。基线 996 → 996（0 退化）。
-5. **暂缓**：C5、C11——C5（ControlSignalException 类本体删除）等待测试契约调整；C11（node_protection 侧表重构）触及编译器+序列化+运行时三层，作为单独重构 PR 执行。
+5. **第五阶段：节点保护侧表收尾（C11/P3 + C5 标注）** ✅ DONE（2026-04-29）— 删除 `node_protection` 侧表、`bypass_protection` 参数链、`_apply_protection_redirect()` 方法、`CompilationResult.node_protection` 字段、`TestProtectionRedirect` 测试类；C5 边界封装类工程目标随 C11/P3 达成，标记为 DONE。基线 992 → 989（-3 死代码测试覆盖物，0 功能性退化）。
 6. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
-7. **测试基线**：M3d+M4+M5c+M6+Phase1~4债务清理后基线 **996**。
+7. **测试基线**：M3d+M4+M5c+M6+Phase1~5债务清理后基线 **989**。
 8. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）、`docs/VM_SPEC.md`（VM 规范）、`tests/compliance/`（合规测试安全网）。
 
 ---

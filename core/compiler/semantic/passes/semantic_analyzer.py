@@ -170,7 +170,6 @@ class SemanticAnalyzer:
                 node_is_deferred=self.side_table.node_is_deferred,
                 node_deferred_mode=self.side_table.node_deferred_mode,
                 node_to_loc=self.side_table.node_to_loc,
-                node_protection=self.side_table.node_protection
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)
@@ -228,15 +227,16 @@ class SemanticAnalyzer:
         正则情形（prev_stmt 不是条件驱动 for 循环）：
           - new_body 中弹出 prev_stmt，仅保留 IbLLMExceptionalStmt（它的 target
             字段直接指向 prev_stmt node）。
-          - 不写 node_protection 侧表——容器 handler 遍历 body 时直接遇到
-            IbLLMExceptionalStmt 节点，vm_handle_IbLLMExceptionalStmt 负责 yield
-            其 target_uid 并管理 retry 循环。
+          - 容器 handler 遍历 body 时直接遇到 IbLLMExceptionalStmt 节点，
+            vm_handle_IbLLMExceptionalStmt 负责 yield 其 target_uid 并管理 retry 循环。
 
         条件驱动 for 循环情形（prev_stmt 是 target=None 的 IbFor）：
           - IbFor 保留在 body 中，IbLLMExceptionalStmt **不**写入 body。
-          - node_protection[cond_expr] = llmexcept_stmt 仍然保留，供
-            _apply_protection_redirect 在 vm_handle_IbFor 内部重定向每次条件
-            表达式的求值使用。
+          - llmexcept handler 通过 ``IbFor.llmexcept_handler`` 字段直接引用，
+            vm_handle_IbFor 在条件求值返回 uncertain 时内联执行 handler body 并重试。
+
+        C11/P3（已完成）：所有 llmexcept 关联均通过 AST 字段建立，旧的
+        ``node_protection`` 侧表 + ``_apply_protection_redirect`` 重定向机制已删除。
         """
         if not body:
             return
@@ -260,10 +260,9 @@ class SemanticAnalyzer:
 
                 # [Task 1.2 / C11/P1] 对条件驱动 for 循环的特殊处理：
                 # llmexcept 保护的是条件表达式本身，而非整个 for 循环节点。
-                # P1 修复：不再使用 node_protection 侧表 + stmt.target = cond_expr，
-                # 改为将 IbLLMExceptionalStmt 直接挂载到 IbFor.llmexcept_handler。
-                # 原方案（bind_protection + stmt.target = cond_expr）的缺陷：
-                # visit_IbLLMExceptionalStmt 会再次 visit(node.target = cond_expr)，
+                # P1 修复：将 IbLLMExceptionalStmt 直接挂载到 IbFor.llmexcept_handler，
+                # 不再使用已删除的 node_protection 侧表 + stmt.target = cond_expr。
+                # 旧方案的缺陷：visit_IbLLMExceptionalStmt 会再次 visit(node.target = cond_expr)，
                 # 从而将 node_to_type[behavior_expr] 从 bool 覆写为 behavior，
                 # 导致运行时 IbBehaviorExpr 返回 IbString('0') 而非 IbBool(False)，
                 # 造成条件驱动 for 循环永不退出（IbString('0') 是 truthy）。
@@ -276,9 +275,9 @@ class SemanticAnalyzer:
                             stmt, code="SEM_050"
                         )
                     # C11/P1: 将 llmexcept handler 直接挂载到 IbFor.llmexcept_handler；
-                    # 显式保持 stmt.target = None（不指向 cond_expr），不写 node_protection 侧表；
+                    # 显式保持 stmt.target = None（区别于正则情形）；
                     # IbLLMExceptionalStmt 不加入 body，IbFor 是 body 中的唯一主体。
-                    stmt.target = None  # 显式不绑定到 cond_expr（区别于正则情形）
+                    stmt.target = None
                     prev_stmt.llmexcept_handler = stmt
                     # 仅递归处理 llmexcept body，不 append stmt 到 new_body
                     for body_stmt in stmt.body:
@@ -294,8 +293,7 @@ class SemanticAnalyzer:
                             stmt, code="SEM_050"
                         )
                     # C11: 正则情形——IbLLMExceptionalStmt 替换 prev_stmt 成为
-                    # body 中的唯一条目；target 字段直接引用 prev_stmt node，
-                    # 不再需要 node_protection 侧表。
+                    # body 中的唯一条目；target 字段直接引用 prev_stmt node。
                     stmt.target = prev_stmt
                     new_body.pop()  # 弹出已入队的 prev_stmt
                     new_body.append(stmt)
@@ -1291,7 +1289,7 @@ class SemanticAnalyzer:
 
         # C11/P1: 条件驱动 for 情形——IbLLMExceptionalStmt 不在 body 中，
         # 但其 handler body 的符号绑定必须在此显式触发。
-        # 使用 node.llmexcept_handler 替代旧的 node_protection 侧表查找。
+        # 通过 node.llmexcept_handler 直接引用（C11/P3 已删除 node_protection 侧表）。
         if node.target is None and node.llmexcept_handler is not None:
             self.visit(node.llmexcept_handler)
 

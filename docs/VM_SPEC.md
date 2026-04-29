@@ -2,7 +2,7 @@
 
 > **文档性质**：本文档是 IBCI 虚拟机的**正式规范层定义**，与 Python 宿主实现隔离。  
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。  
-> **基准状态**（2026-04-29）：Python 宿主实现（`core/`）全部符合本规范；996 测试通过。  
+> **基准状态**（2026-04-29）：Python 宿主实现（`core/`）全部符合本规范；989 测试通过。  
 > **关联文档**：`docs/VM_EVOLUTION_PLAN.md`（里程碑演进规划）、`docs/PENDING_TASKS_VM.md`（详细设计与任务清单）。
 
 ---
@@ -26,11 +26,11 @@ while frame_stack:
 
 **公理 EXEC-1（无 Python 递归）**：主执行路径（`VMExecutor._drive_loop`）不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制。
 
-**公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递（C6 完成后）。外部边界（帧栈空仍持有 Signal）包装为 `ControlSignalException` 传出，供调用方捕获。
+**公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递（C6 完成后）。外部边界（帧栈空仍持有 Signal）以 `UnhandledSignal` 透传给调用方处理。
 
-**公理 EXEC-3（保护重定向）**：每次调度子节点前，调度循环检查 `node_protection` 侧表；若目标 UID 有 llmexcept 保护且当前不处于 retry 中，重定向到 `IbLLMExceptionalStmt` handler 执行。
+**公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段在编译期建立——正则情形通过 `IbLLMExceptionalStmt.target` 字段引用前一语句节点，并在 body 中**替换**该节点；条件驱动 for 循环情形通过 `IbFor.llmexcept_handler` 字段直接引用 handler。运行时 `vm_handle_IbLLMExceptionalStmt` 显式 yield target_uid 驱动 target 求值并管理 retry 循环；`vm_handle_IbFor` 在条件求值返回 uncertain 时内联执行 handler body。**不存在**侧表驱动的隐式重定向机制（旧 `node_protection` + `_apply_protection_redirect` 已在 C11/P3 彻底删除）。
 
-**已知限制（C8）**：`IbLambdaExpr` 和 `IbBehaviorInstance` 目前仍通过 `fallback_visit()` 走旧递归路径，属于已知技术债务（见 `docs/DEFERRED_CLEANUP.md §三 C8`），计划在 M6 之后的编译器深度清洁阶段完成。
+**已知限制**：无——所有节点类型均已 CPS 化（编译器深度清洁 Phase 1–5 完成）。`IbLambdaExpr` 和 `IbBehaviorInstance` 在 Phase 3（C8）已彻底消除 fallback 路径。
 
 ---
 
@@ -43,7 +43,7 @@ while frame_stack:
 | 表达式 | `IbName` `IbConst` `IbBinOp` `IbUnaryOp` `IbCompare` `IbBoolOp` `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbList` `IbDict` `IbSlice` `IbFString` | ✅ CPS handler |
 | 表达式 | `IbBehaviorExpr` | ✅ CPS handler（M5c） |
 | 表达式 | `IbTypeAnnotatedExpr` `IbIntentInfo` | ✅ CPS handler |
-| 表达式 | `IbLambdaExpr` `IbBehaviorInstance` | ⚠️ fallback（C8 待清理） |
+| 表达式 | `IbLambdaExpr` `IbBehaviorInstance` | ✅ CPS handler（C8 已清理） |
 | 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` `IbImport` `IbImportFrom` | ✅ CPS handler |
 
 ---
