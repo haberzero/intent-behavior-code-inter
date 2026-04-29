@@ -170,7 +170,6 @@ class SemanticAnalyzer:
                 node_is_deferred=self.side_table.node_is_deferred,
                 node_deferred_mode=self.side_table.node_deferred_mode,
                 node_to_loc=self.side_table.node_to_loc,
-                node_protection=self.side_table.node_protection
             )
         finally:
             self.debugger.exit_scope(CoreModule.SEMANTIC)

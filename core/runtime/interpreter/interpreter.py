@@ -790,18 +790,10 @@ class Interpreter:
             column=loc_data.get("column", 0)
         )
 
-    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None, bypass_protection: bool = False) -> IbObject:
+    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None) -> IbObject:
         """核心评估逻辑：分发 AST 节点到相应的 Handler 处理"""
         if node_uid is None:
             return self.registry.get_none()
-
-        # 1. 影子执行拦截逻辑：检查侧表看该节点是否被 llmexcept 保护
-        if not bypass_protection and isinstance(node_uid, str):
-            handler_uid = self.get_side_table("node_protection", node_uid)
-            if handler_uid:
-                # 将执行权交给处理节点，由它来驱动 target 的执行
-                # 注意：必须传入 bypass_protection=True，否则处理器节点也会被拦截跳过
-                return self.visit(handler_uid, bypass_protection=True)
 
         # 如果指定了模块，则临时切换上下文进行求值 (Lexical Scope Support)
         old_module = self.current_module_name

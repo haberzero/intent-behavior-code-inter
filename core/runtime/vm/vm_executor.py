@@ -133,7 +133,6 @@ class VMExecutor:
         """
         if node_uid is None:
             return self.registry.get_none()
-        node_uid = self._apply_protection_redirect(node_uid)
         if not self.supports(node_uid):
             # 不支持的根节点：直接走旧路径
             return self.fallback_visit(node_uid)
@@ -227,13 +226,6 @@ class VMExecutor:
                 pending_value = self.registry.get_none()
                 continue
 
-            if isinstance(child_uid, str):
-                # M3d：在调度入口应用 llmexcept 保护重定向
-                # （等价于 Interpreter.visit() 顶部的 node_protection 拦截）。
-                # 通过比对当前活跃的 LLMExceptFrame.target_uid 避免对正在
-                # 被 llmexcept 处理的 target 再次重定向（防止无限递归）。
-                child_uid = self._apply_protection_redirect(child_uid)
-
             if isinstance(child_uid, str) and self.supports(child_uid):
                 stack.append(self._make_task(child_uid))
             else:
@@ -272,31 +264,6 @@ class VMExecutor:
             )
         gen = handler(self, node_uid, node_data)
         return VMTask(node_uid=node_uid, generator=gen)
-
-    def _apply_protection_redirect(self, node_uid: str) -> str:
-        """应用 llmexcept 保护重定向（与 ``Interpreter.visit()`` 顶部语义一致）。
-
-        若 ``node_uid`` 在 ``node_protection`` 侧表中且当前没有任何活跃的
-        ``LLMExceptFrame`` 正在保护该节点，则返回对应的 IbLLMExceptionalStmt
-        UID；否则原样返回。
-
-        "已在被保护中" 的判定通过比对 ``LLMExceptFrame.target_uid`` 实现：
-        当 ``vm_handle_IbLLMExceptionalStmt`` 通过 ``yield target_uid``
-        驱动 target 执行时，调度器需要直接执行 target 而非再次走重定向，
-        否则会形成 ``llmexcept ↔ target`` 的无限循环。
-        """
-        if not isinstance(node_uid, str):
-            return node_uid
-        handler_uid = self._ec.get_side_table("node_protection", node_uid)
-        if not handler_uid:
-            return node_uid
-        # 检查活跃 LLMExceptFrame 是否已经在保护此 target
-        rc = self.runtime_context
-        if rc is not None and hasattr(rc, "get_llm_except_frames"):
-            for frame in rc.get_llm_except_frames():
-                if getattr(frame, "target_uid", None) == node_uid:
-                    return node_uid  # 已被保护中，跳过重定向
-        return handler_uid
 
     def _make_const_task(self, node_uid: str, value: Any) -> VMTask:
         """把一个已知值包装成立即完成的任务（仅供未知节点 fallback）。"""

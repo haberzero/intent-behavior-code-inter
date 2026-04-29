@@ -72,8 +72,10 @@ class StmtHandler(BaseHandler):
                 # 此处总是清除（无条件），消除对 frame.should_retry 状态的依赖。
                 self.runtime_context.set_last_llm_result(None)
 
-                # 关键：主动驱动 target 执行，但传入 bypass_protection=True 避免无限递归
-                last_target_value = self.execution_context.visit(target_uid, bypass_protection=True)
+                # C11/P3：node_protection 侧表已删除（C11 完成）；
+                # llmexcept handler 通过 target 字段直接引用 prev_stmt，
+                # vm_handle_IbLLMExceptionalStmt 显式 yield target_uid 驱动执行。
+                last_target_value = self.execution_context.visit(target_uid)
 
                 # §9.3: 读取 LLM 结果后立即从共享字段迁移到帧私有字段，
                 # 使 _last_llm_result 的生命周期缩小为"快照内通信"（进入清零，读后清零）。

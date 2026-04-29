@@ -9,12 +9,15 @@ M3d — 主路径切换测试。
 * M3d 新增的 6 个 CPS handler：
     - 表达式：IbBehaviorExpr, IbBehaviorInstance, IbLambdaExpr
     - 控制流：IbFor, IbTry, IbRetry
-* VMExecutor.run() 入口 / yield child 路径的 ``node_protection`` 重定向
 * Interpreter.execute_module() 与 IbUserFunction.call() 已切换至
   VMExecutor 主路径（M3d 出口契约）
 
 策略：编译合法 IBCI 程序、对相关节点单独通过 VMExecutor.run() 驱动，
 断言行为与递归 visit() 一致。
+
+注：原 ``TestProtectionRedirect`` 测试类已在 C11/P3 删除——其覆盖的
+``_apply_protection_redirect()`` 与 ``node_protection`` 侧表机制
+随保护重定向系统一同移除。
 """
 import os
 import inspect
@@ -231,43 +234,3 @@ print((str)outer(5))
         engine = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
         engine.run_string(code, output_callback=lambda s: out.append(s), silent=True)
         assert "11" in out
-
-
-# ===========================================================================
-# VMExecutor.run() — node_protection 重定向
-# ===========================================================================
-
-class TestProtectionRedirect:
-    def test_apply_protection_redirect_no_protection(self):
-        engine = make_engine("int x = 1")
-        vm = make_vm(engine)
-        # 任意未受保护 UID 原样返回
-        for uid in engine.interpreter.node_pool:
-            assert vm._apply_protection_redirect(uid) == uid
-
-    def test_apply_protection_redirect_non_string(self):
-        engine = make_engine("int x = 1")
-        vm = make_vm(engine)
-        # 非字符串原样返回
-        assert vm._apply_protection_redirect(None) is None
-        assert vm._apply_protection_redirect(42) == 42
-
-    def test_apply_protection_redirect_skips_active_frame(self):
-        """当 LLMExceptFrame 已经在保护 target 时，不再重定向（防止递归）。"""
-        engine = make_engine("int x = 1")
-        vm = make_vm(engine)
-        rc = vm.runtime_context
-        # 在 runtime_context 中模拟一个活跃 LLMExceptFrame
-        from core.runtime.interpreter.llm_except_frame import LLMExceptFrame
-        fake_frame = LLMExceptFrame(
-            target_uid="fake_target_uid",
-            node_type="IbLLMExceptionalStmt",
-            max_retry=3,
-        )
-        rc._llm_except_frames.append(fake_frame)
-        try:
-            # 即便侧表中存在保护，也应跳过重定向
-            # （此处 fake_target_uid 不存在保护，仅验证正向路径）
-            assert vm._apply_protection_redirect("fake_target_uid") == "fake_target_uid"
-        finally:
-            rc._llm_except_frames.pop()

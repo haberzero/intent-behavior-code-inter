@@ -19,17 +19,12 @@ class SideTableManager:
         self.node_is_deferred: Dict[Any, bool] = {}
         self.node_deferred_mode: Dict[Any, str] = {}
         self.node_to_loc: Dict[Any, Any] = {}
-        self.node_protection: Dict[Any, Any] = {}
         # C14：lambda 捕获分析（Pass 4）填充。
         # 包含"被至少一个 lambda 捕获为自由变量"的所有符号 UID。
         # BehaviorDependencyAnalyzer（Pass 5）用此集合将这些变量对应的
         # IbBehaviorExpr 标记为 dispatch_eligible=False，避免 LLMFuture
         # 占位符被写入 IbCell（IbCell 只能持有合法 IbObject，不能持有 LLMFuture）。
         self.cell_captured_symbols: Set[str] = set()
-
-    def bind_protection(self, target_node: Any, handler_node: Any) -> None:
-        """建立保护关系侧表"""
-        self.node_protection[target_node] = handler_node
 
     def bind_symbol(self, node: Any, sym: Symbol) -> None:
         self.node_to_symbol[node] = sym
@@ -67,5 +62,4 @@ class SideTableManager:
         self.node_is_deferred.clear()
         self.node_deferred_mode.clear()
         self.node_to_loc.clear()
-        self.node_protection.clear()
         self.cell_captured_symbols.clear()
