@@ -46,7 +46,6 @@ from typing import Any, Mapping, Optional, Dict, List, Set
 
 from core.runtime.vm.task import (
     ControlSignal,
-    ControlSignalException,
     Signal,
 )
 from core.runtime.interpreter.constants import (
@@ -62,9 +61,6 @@ from core.runtime.objects.kernel import (
     IbClass,
 )
 from core.runtime.exceptions import (
-    ReturnException,
-    BreakException,
-    ContinueException,
     ThrownException,
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
@@ -247,6 +243,9 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     """函数调用（M3a 骨架）：调用方对象的 ``call()`` 内部仍走递归实现，
     但参数与函数表达式本身的求值通过 CPS 完成。
+
+    C6：移除 ``except ControlSignalException: raise`` 透传桥——C9 完成后
+    import 是最后一个 fallback 路径，已完全 CPS 化，不再产生 CSE。
     """
     func = yield node_data.get("func")
     args = []
@@ -257,9 +256,6 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         if hasattr(func, "call"):
             return func.call(executor.registry.get_none(), args)
         return func.receive("__call__", args)
-    except ControlSignalException:
-        # 透传：函数体内的 ReturnException 等可能从 fallback 路径冒出
-        raise
     except Exception as e:
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误
         raise RuntimeError(f"VM: Call failed: {e}") from e
@@ -403,14 +399,20 @@ def vm_handle_IbContinue(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """赋值语句（M3a 骨架）：仅支持 IbName / IbTypeAnnotatedExpr(IbName) 目标，
-    其余目标（属性 / 下标 / 元组解包）回退到原 ``_assign_to_target`` 路径。
+    """赋值语句完整 CPS 实现。
 
     M5c：当 RHS 为 ``IbBehaviorExpr`` 且其 ``dispatch_eligible=True``、非 deferred
     时，调用 ``LLMScheduler.dispatch_eager`` 立即提交后台 LLM 调用，得到
     ``LLMFuture`` 占位符并直接绑定到目标变量；后续在使用点（``IbName``）解析。
     这是 LLM 数据流流水线的核心机制：相邻独立 LLM 表达式可并发执行，时序近似
     ``max(T_a, T_b, ..)`` 而非 ``sum``。
+
+    C7：所有赋值目标（IbName / IbTypeAnnotatedExpr / IbAttribute / IbSubscript /
+    IbTuple 解包）均通过 CPS ``_vm_assign_to_target`` 处理，不再穿透到
+    ``StmtHandler._assign_to_target`` 递归路径。
+
+    C9（间接）：is_deferred 路径改用 ``yield value_uid``——``vm_handle_IbBehaviorExpr``
+    已完整实现 deferred 模式的 IbBehavior 包装，无需 fallback_visit。
     """
     executor.runtime_context.set_last_llm_result(None)
     value_uid = node_data.get("value")
@@ -463,33 +465,30 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             for target_uid in targets:
                 _assign_future_to_name_target(executor, target_uid, dispatched_future)
             return executor.registry.get_none()
-        # 复杂目标：撤销 dispatch 改走同步路径
+        # 复杂目标：撤销 dispatch 改走同步路径（C7：用 _vm_assign_to_target CPS）
         try:
             sync_result = executor.service_context.llm_executor.resolve(
                 dispatched_future.node_uid
             )
         except Exception:
-            # 万一 resolve 失败，仍走同步 fallback；下方 yield 路径会重新求值
             sync_result = None
         if sync_result is not None:
             for target_uid in targets:
-                executor.assign_to_target(target_uid, sync_result)
+                yield from _vm_assign_to_target(executor, target_uid, sync_result)
             return executor.registry.get_none()
         # 兜底：让下面的同步路径继续执行（极少触发）
 
-    if is_deferred and value_uid:
-        # 延迟值的创建涉及对 IbBehaviorExpr / 普通子树的特殊处理；
-        # 直接复用 ExprHandler 的处理路径，避免 M3a 阶段重写 deferred 语义。
-        value = executor.fallback_visit(value_uid)
-    else:
-        value = yield value_uid
+    # C9（is_deferred 路径）：vm_handle_IbBehaviorExpr 已完整实现 deferred 模式
+    # 的 IbBehavior 包装，故无需 fallback_visit——直接 yield 走 CPS 调度。
+    value = yield value_uid
 
     last = executor.runtime_context.get_last_llm_result()
     if last and not last.is_certain:
         value = executor.registry.get_llm_uncertain()
 
+    # C7：所有目标类型均通过 CPS helper 处理
     for target_uid in node_data.get("targets", []):
-        executor.assign_to_target(target_uid, value)
+        yield from _vm_assign_to_target(executor, target_uid, value)
     return executor.registry.get_none()
 
 
@@ -557,8 +556,114 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
 
 
 # ---------------------------------------------------------------------------
-# M3c：IbLLMExceptionalStmt CPS handler
+# C7：CPS-friendly 通用赋值目标辅助
 # ---------------------------------------------------------------------------
+
+def _assign_name_target(
+    executor, target_uid: str, target_data: dict, value: Any, define_only: bool = False
+) -> None:
+    """``IbName`` 目标的纯同步赋值（无 yield）。
+
+    与 ``StmtHandler._assign_to_target`` 中 IbName 分支语义完全一致。
+    """
+    sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
+    name = target_data.get("id")
+    rc = executor.runtime_context
+    if sym_uid:
+        existing = rc.get_symbol_by_uid(sym_uid)
+        if not define_only and existing:
+            rc.set_variable_by_uid(sym_uid, value)
+        else:
+            declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
+            if (
+                rc.is_global_symbol_uid(sym_uid)
+                and rc.current_scope is not rc.global_scope
+            ):
+                rc.define_variable_at_global(
+                    name, value, declared_type=declared_type, uid=sym_uid
+                )
+            else:
+                rc.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
+    elif not executor.ec.strict_mode:
+        try:
+            rc.get_variable(name)
+            if define_only:
+                rc.define_variable(name, value)
+            else:
+                rc.set_variable(name, value)
+        except Exception:
+            rc.define_variable(name, value)
+    else:
+        raise RuntimeError(
+            f"VM: Strict mode: Symbol UID missing for assignment to '{name}'."
+        )
+
+
+def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: bool = False):
+    """CPS-friendly 通用赋值目标求值辅助（C7）。
+
+    支持所有赋值目标类型：
+    * ``IbName``               — 纯同步，直接操作作用域（无 yield）
+    * ``IbTypeAnnotatedExpr``  — 递归以 ``define_only=True`` 处理内层目标
+    * ``IbAttribute``          — ``yield`` 求值 obj，再调用 ``__setattr__``
+    * ``IbSubscript``          — ``yield`` 求值 obj 和 slice，再调用 ``__setitem__``
+    * ``IbTuple``              — 解包迭代对象，对每个子目标 ``yield from`` 递归
+
+    是 generator function（因包含 ``yield``/``yield from``），在父 handler
+    中用 ``yield from _vm_assign_to_target(...)`` 调用。
+    """
+    target_data = executor.ec.get_node_data(target_uid)
+    if not target_data:
+        return
+    t = target_data.get("_type")
+
+    if t == "IbName":
+        _assign_name_target(executor, target_uid, target_data, value, define_only)
+
+    elif t == "IbTypeAnnotatedExpr":
+        inner_uid = target_data.get("target")
+        if inner_uid:
+            yield from _vm_assign_to_target(executor, inner_uid, value, define_only=True)
+
+    elif t == "IbAttribute":
+        obj = yield target_data.get("value")
+        attr = target_data.get("attr")
+        obj.receive("__setattr__", [executor.registry.box(attr), value])
+
+    elif t == "IbSubscript":
+        obj = yield target_data.get("value")
+        slice_obj = yield target_data.get("slice")
+        obj.receive("__setitem__", [slice_obj, value])
+
+    elif t == "IbTuple":
+        from core.runtime.objects.builtins import IbList
+        from core.runtime.objects.builtins import IbTuple as IbTupleObj
+        if isinstance(value, (IbList, IbTupleObj)):
+            vals = list(value.elements)
+        else:
+            try:
+                r = value.receive("to_list", [])
+                if isinstance(r, list):
+                    vals = r
+                elif hasattr(r, "elements") and isinstance(r.elements, list):
+                    vals = list(r.elements)
+                else:
+                    vals = None
+            except Exception:
+                vals = None
+            if vals is None:
+                raise RuntimeError(
+                    f"VM: Cannot unpack non-iterable for target {target_uid}"
+                )
+        elts = target_data.get("elts", [])
+        if len(vals) != len(elts):
+            raise RuntimeError(
+                f"VM: Unpack error: expected {len(elts)} values, got {len(vals)}"
+            )
+        for t_uid, val in zip(elts, vals):
+            yield from _vm_assign_to_target(executor, t_uid, val, define_only=define_only)
+
+
 
 def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     """llmexcept 语句的 CPS 调度器实现（M3c）。
@@ -764,21 +869,47 @@ def vm_handle_IbRaise(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``import x`` 委托到 ``ImportHandler.visit_IbImport``——它通过
-    ``module_manager`` 加载模块并把模块对象绑定到当前作用域（提供运行时
-    可访问的符号）。M3d-prep 早期版本误标注为"编译期无操作"导致 VM 主路径
-    切换后所有 import 都被丢弃；此 fix 把语义统一到递归 handler。"""
+    """``import x`` / ``import x as y`` の完整 CPS 实现（C9）。
+
+    内联 ``ImportHandler.visit_IbImport`` 逻辑：通过 ``module_manager``
+    加载模块并调用 ``runtime_context.define_variable`` 绑定到当前作用域。
+    无需递归 ``visit()``，故无 yield——``if False: yield`` 满足调度协议。
+    """
     if False:
         yield
-    return executor.fallback_visit(node_uid)
+    sc = executor.service_context
+    for alias_uid in node_data.get("names", []):
+        alias_data = executor.ec.get_node_data(alias_uid)
+        if alias_data:
+            name = alias_data.get("name")
+            asname = alias_data.get("asname")
+            mod_inst = sc.module_manager.import_module(name, executor.ec)
+            target_name = asname if asname else name
+            sym_uid = executor.ec.get_side_table("node_to_symbol", alias_uid)
+            executor.runtime_context.define_variable(
+                target_name, mod_inst, is_const=True, uid=sym_uid
+            )
+    return executor.registry.get_none()
 
 
 def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``from x import y`` 委托到 ``ImportHandler.visit_IbImportFrom``。
-    与 ``vm_handle_IbImport`` 同理——M3d-prep 早期错误的 no-op 实现已修正。"""
+    """``from x import y [as z]`` の完整 CPS 实现（C9）。
+
+    内联 ``ImportHandler.visit_IbImportFrom`` 逻辑：收集名称列表后调用
+    ``module_manager.import_from``，由其负责把符号注入当前作用域。
+    无 yield——``if False: yield`` 满足调度协议。
+    """
     if False:
         yield
-    return executor.fallback_visit(node_uid)
+    sc = executor.service_context
+    names = []
+    for alias_uid in node_data.get("names", []):
+        alias_data = executor.ec.get_node_data(alias_uid)
+        if alias_data:
+            sym_uid = executor.ec.get_side_table("node_to_symbol", alias_uid)
+            names.append((alias_data.get("name"), alias_data.get("asname"), sym_uid))
+    sc.module_manager.import_from(node_data.get("module"), names, executor.ec)
+    return executor.registry.get_none()
 
 
 # === 复合赋值 ===
@@ -1297,10 +1428,7 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
 
         # 先赋值循环目标（filter 可能引用循环变量）
         if target_uid:
-            executor.assign_to_target(target_uid, item)
-            # define_only=True 语义在标准 fallback _assign_to_target 中通过
-            # IbTypeAnnotatedExpr 包装实现；此处统一路径使用 assign_to_target
-            # 调用与原 fallback 完全一致。
+            yield from _vm_assign_to_target(executor, target_uid, item, define_only=True)
 
         if filter_uid is not None:
             filter_val = yield filter_uid
@@ -1341,6 +1469,10 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
     * 子树抛出的 ``ThrownException`` / 通用异常通过 generator 的 try/except 捕获
     * else 仅在 body 正常结束（无 Signal、无异常）时执行
     * finally 在所有路径上都执行
+
+    C6：移除 ``except (ReturnException, BreakException, ContinueException): raise``
+    透传桥——C9 完成后所有 production 路径均经由 CPS handler，控制流以 Signal
+    数据对象传递，不再产生 Python 原生控制流异常。
     """
     body = node_data.get("body", [])
     handlers = node_data.get("handlers", [])
@@ -1360,9 +1492,6 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
             if isinstance(res, Signal):
                 pending_signal = res
                 break
-    except (ReturnException, BreakException, ContinueException):
-        # 控制流异常（fallback 路径）：透传，但仍要走 finally
-        raise
     except ThrownException as te:
         raised_exc = te
     except Exception as e:
