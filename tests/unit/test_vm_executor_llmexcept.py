@@ -2,17 +2,16 @@
 tests/unit/test_vm_executor_llmexcept.py
 =========================================
 
-M3c — VMExecutor ``IbLLMExceptionalStmt`` CPS handler 专项测试。
+M3c / C11 — VMExecutor ``IbLLMExceptionalStmt`` CPS handler 专项测试。
 
 覆盖范围
 --------
 1. 调度表注册：``IbLLMExceptionalStmt`` 已加入 dispatch table
-2. 保护辅助函数 ``_resolve_stmt_uid``：跳过 / 重定向 / 直通三条路径
-3. ``VMExecutor.service_context`` 属性：有 / 无 interpreter 两种情形
-4. 帧生命周期：CPS handler 执行前后 LLMExceptFrame 的入栈 / 出栈
-5. CPS 路径执行：vm.run(llmexcept_uid) + vm.run(module_uid) 级别验证
-6. E2E 行为（递归路径）：正常退出 / uncertain→retry→certain / if 分支 / 嵌套 handler
-   目的是确认 M3c 的容器 handler 改动不退化现有语义
+2. ``VMExecutor.service_context`` 属性：有 / 无 interpreter 两种情形
+3. 帧生命周期：CPS handler 执行前后 LLMExceptFrame 的入栈 / 出栈
+4. CPS 路径执行：vm.run(llmexcept_uid) + vm.run(module_uid) 级别验证
+5. E2E 行为（递归路径）：正常退出 / uncertain→retry→certain / if 分支 / 嵌套 handler
+   目的是确认 C11 容器 handler 改动（直接 yield stmt_uid）不退化现有语义
 """
 import inspect
 import pytest
@@ -21,7 +20,6 @@ from core.engine import IBCIEngine
 from core.runtime.vm import VMExecutor
 from core.runtime.vm.handlers import (
     build_dispatch_table,
-    _resolve_stmt_uid,
     vm_handle_IbLLMExceptionalStmt,
 )
 
@@ -87,69 +85,7 @@ class TestDispatchTableRegistration:
 
 
 # ===========================================================================
-# 2. _resolve_stmt_uid 辅助函数
-# ===========================================================================
-
-class TestResolveStmtUid:
-    """测试容器 handler 的保护重定向辅助函数。"""
-
-    def _make_executor_stub(self, node_pool, side_table_map):
-        """构造仅支持 get_node_data + get_side_table 的最小 executor stub。"""
-        class FakeEC:
-            def get_node_data(self_inner, uid):
-                return node_pool.get(uid)
-
-            def get_side_table(self_inner, table_name, uid):
-                if table_name == "node_protection":
-                    return side_table_map.get(uid)
-                return None
-
-        class FakeExecutor:
-            ec = FakeEC()
-
-        return FakeExecutor()
-
-    def test_returns_none_for_llmexcept_type(self):
-        """IbLLMExceptionalStmt 节点应被跳过（返回 None）。"""
-        executor = self._make_executor_stub(
-            {"handler_uid": {"_type": "IbLLMExceptionalStmt"}},
-            {},
-        )
-        assert _resolve_stmt_uid(executor, "handler_uid") is None
-
-    def test_returns_protection_uid_for_protected_node(self):
-        """有 node_protection 条目的节点应重定向到 handler uid。"""
-        executor = self._make_executor_stub(
-            {"target_uid": {"_type": "IbAssign"}, "handler_uid": {"_type": "IbLLMExceptionalStmt"}},
-            {"target_uid": "handler_uid"},
-        )
-        assert _resolve_stmt_uid(executor, "target_uid") == "handler_uid"
-
-    def test_returns_stmt_uid_for_unprotected_node(self):
-        """无 node_protection 条目的节点应直通（原样返回）。"""
-        executor = self._make_executor_stub(
-            {"plain_uid": {"_type": "IbAssign"}},
-            {},
-        )
-        assert _resolve_stmt_uid(executor, "plain_uid") == "plain_uid"
-
-    def test_returns_stmt_uid_when_node_data_none(self):
-        """node_data 不存在时不应崩溃，且无 protection 时直通。"""
-        executor = self._make_executor_stub({}, {})
-        result = _resolve_stmt_uid(executor, "missing_uid")
-        assert result == "missing_uid"
-
-    def test_protection_takes_priority_over_passthrough(self):
-        """同时有 protection 条目且节点类型不是 IbLLMExceptionalStmt → 重定向。"""
-        executor = self._make_executor_stub(
-            {"x_uid": {"_type": "IbExprStmt"}},
-            {"x_uid": "llmexcept_uid"},
-        )
-        assert _resolve_stmt_uid(executor, "x_uid") == "llmexcept_uid"
-
-
-# ===========================================================================
-# 3. VMExecutor.service_context 属性
+# 2. VMExecutor.service_context 属性
 # ===========================================================================
 
 class TestVMServiceContext:
@@ -167,7 +103,7 @@ class TestVMServiceContext:
 
 
 # ===========================================================================
-# 4. 帧生命周期：LLMExceptFrame 入栈 / 出栈
+# 3. 帧生命周期：LLMExceptFrame 入栈 / 出栈
 # ===========================================================================
 
 class TestFrameLifecycle:
@@ -209,7 +145,7 @@ class TestFrameLifecycle:
 
 
 # ===========================================================================
-# 5. CPS 路径执行：vm.run(llmexcept_uid) + vm.run(module_uid)
+# 4. CPS 路径执行：vm.run(llmexcept_uid) + vm.run(module_uid)
 # ===========================================================================
 
 class TestCPSExecution:
@@ -256,12 +192,12 @@ class TestCPSExecution:
 
 
 # ===========================================================================
-# 6. E2E 行为验证（递归路径 + 容器 handler 保护重定向）
+# 5. E2E 行为验证（C11 容器 handler 直接 yield）
 # ===========================================================================
 
 class TestE2EBehaviorPreservation:
-    """验证 M3c 的容器 handler 改动（_resolve_stmt_uid）不退化现有行为。
-    这些测试通过 engine.run_string()（递归路径）执行，确保正确性。
+    """验证 C11 的容器 handler 改动（直接 yield stmt_uid）不退化现有行为。
+    这些测试通过 engine.run_string()（完整路径）执行，确保正确性。
     """
 
     def test_e2e_certain_result_no_retry(self):

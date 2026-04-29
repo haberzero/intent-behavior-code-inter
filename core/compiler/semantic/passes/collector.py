@@ -293,6 +293,12 @@ class LocalSymbolCollector:
             self._define(sym, target) # 绑定 target 节点
         self.generic_visit(node)
 
+        # C11/P1: 条件驱动 for 情形——预扫描 llmexcept handler body 中的局部变量
+        # 使用 node.llmexcept_handler 替代旧的 node_protection 侧表查找。
+        if node.target is None and node.llmexcept_handler is not None:
+            for stmt in (node.llmexcept_handler.body or []):
+                self.visit(stmt)
+
     def visit_IbTry(self, node: ast.IbTry):
         # 预扫描异常处理器中的变量
         for handler in node.handlers:
@@ -302,23 +308,37 @@ class LocalSymbolCollector:
             self.visit(handler)
         self.generic_visit(node)
 
+    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt):
+        """C11：IbLLMExceptionalStmt 已替换 prev_stmt 成为 body 的主体节点。
+
+        target 是 prev_stmt（正则情形：IbAssign；条件 for 情形：IbFor）。
+        需要像在顶层 body 中一样预扫描 target，确保 Pass 2.5 正确定义变量符号。
+        handler body 通过 generic_visit 扫描（IbLLMExceptionalStmt.body）。
+        """
+        # 扫描 target（prev_stmt），使其变量定义进入符号表
+        if node.target is not None:
+            self.visit(node.target)
+        # 扫描 handler body（§9.2 约束内声明的局部变量）
+        for stmt in (node.body or []):
+            self.visit(stmt)
+
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         """Known Limit 2 修复：预扫描嵌套函数定义，使其在外围作用域中可见。
-        
+
         只在当前作用域中该名称未被定义时注册（避免与 Pass 1 中已注册的顶层函数冲突）。
         """
         # 如果已在当前作用域（或父作用域）中定义，则跳过（由 Pass 1 SymbolCollector 负责）
         existing = self.symbol_table.symbols.get(node.name)
         if existing:
             return
-        
+
         # 创建函数元数据并注册到 SpecRegistry
         func_meta = self.analyzer.registry.factory.create_func(
             name=node.name, param_type_names=[], return_type_name="any"
         )
         func_meta.is_user_defined = True
         self.analyzer.registry.register(func_meta)
-        
+
         # 将嵌套函数注册为当前作用域的符号
         sym = FunctionSymbol(name=node.name, kind=SymbolKind.FUNCTION, def_node=node, spec=func_meta)
         self._define(sym, node)

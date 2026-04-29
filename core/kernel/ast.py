@@ -196,6 +196,10 @@ class IbFor(IbStmt):
     iter: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    # C11/P1：条件驱动 for 循环的 llmexcept handler（不写入 body，
+    # 不使用 node_protection 侧表——vm_handle_IbFor 直接内联重试逻辑）。
+    # 正则 for 循环该字段为 None。
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbWhile(IbStmt):
@@ -284,7 +288,7 @@ class IbLLMExceptionalStmt(IbStmt):
     statement
     llmexcept retry "hint"
     """
-    target: IbStmt
+    target: Optional[IbStmt]
     body: List[IbStmt] = field(default_factory=list)
 
 # --- Expressions ---

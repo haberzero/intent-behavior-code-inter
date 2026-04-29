@@ -14,22 +14,16 @@ VMTaskResult
 
 Signal 控制信号语义（M3b 起）
 ----------------------------
-M3b 的核心改动：控制流不再依赖 Python 异常 (``ControlSignalException``)
-跨帧传播，而是用 :class:`Signal` 数据对象作为生成器协程的 **返回值**
+M3b 的核心改动：控制流不再依赖 Python 异常跨帧传播，而是用
+:class:`Signal` 数据对象作为生成器协程的 **返回值**
 （即 ``StopIteration.value``）显式传递。调度循环识别 ``Signal`` 类型
 的任务结果，沿帧栈数据化向上传递（通过 ``gen.send(Signal)``），由
 循环帧 / 函数帧的 handler 通过 ``isinstance(res, Signal)`` 检查显式
 拦截或继续传播。
 
-仅在以下两种情况下仍会出现 :class:`ControlSignalException`：
-
-1. **顶层未消费 Signal**：``VMExecutor.run()`` 帧栈空且仍持有未消费的
-   Signal 时，包装为 ``ControlSignalException`` 抛给调用者（保持与旧
-   行为兼容，便于 ``break`` 顶层裸 break 测试与外部 try/except 集成）
-2. **fallback 路径**：当 VM 回退到 ``execution_context.visit(uid)``
-   时，旧路径仍可能抛出 ``ReturnException`` / ``BreakException``
-   等 Python 原生异常。调度器照常以 ``Exception`` 通用路径捕获 + 沿
-   生成器栈 ``throw`` 给父帧（保持向后兼容直至 M3d 主路径切换）。
+:class:`UnhandledSignal` 是唯一的边界异常（C5）：仅在 ``VMExecutor.run()``
+帧栈空且仍持有未消费的 Signal 时抛出，调用方（IbUserFunction.call、
+execute_module）捕获后按 ``e.signal.kind`` 分类处理。
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -67,27 +61,23 @@ class Signal:
         return f"Signal({self.kind.value}, {self.value!r})"
 
 
-class ControlSignalException(Exception):
-    """控制流信号的边界封装（M3b 后仅用于 VM 顶层与 fallback 路径）。
+class UnhandledSignal(Exception):
+    """VM 顶层未消费信号的边界异常（C5）。
 
-    用途：
-    1. ``VMExecutor.run()`` 在帧栈耗尽仍持有未消费 Signal 时包装抛出
-    2. 旧递归 ``Interpreter.visit()`` fallback 路径中的兼容入口
-    3. 现有测试 ``pytest.raises(ControlSignalException)`` 的契约保持
+    ``VMExecutor.run()`` 在帧栈耗尽仍持有未消费 Signal 时以
+    ``raise UnhandledSignal(signal)`` 抛给调用者。
 
-    M3b 起，VM **内部**不再用本异常跨帧传播；handler 必须使用
-    ``return Signal(...)`` 数据形式触发信号。
+    调用方通过 ``e.signal.kind`` 判断信号类型（ControlSignal 枚举），
+    通过 ``e.signal.value`` 获取关联值。
+
+    VM 内部不使用本异常跨帧传播；handler 必须使用 ``return Signal(...)``
+    数据形式触发信号。
     """
-    __slots__ = ("signal", "value")
+    __slots__ = ("signal",)
 
-    def __init__(self, signal: ControlSignal, value: Any = None):
-        super().__init__(f"ControlSignal({signal.value})")
+    def __init__(self, signal: "Signal"):
+        super().__init__(f"UnhandledSignal({signal.kind.value})")
         self.signal = signal
-        self.value = value
-
-    @classmethod
-    def from_signal(cls, sig: "Signal") -> "ControlSignalException":
-        return cls(sig.kind, sig.value)
 
 
 @dataclass
@@ -135,9 +125,6 @@ class VMTask:
       * return value              —— 完成（``StopIteration.value``）；若
                                      value 是 :class:`Signal`，则视为
                                      控制流信号沿帧栈数据化向上传播
-      * raise ControlSignalException —— 已废弃路径（M3b 之前）；仍兼容
-                                     fallback 旁路抛出的 Python 原生
-                                     ReturnException 等
     """
     node_uid: str
     generator: Any = None

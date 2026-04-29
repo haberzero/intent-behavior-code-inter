@@ -815,17 +815,16 @@ class IbUserFunction(IbFunction):
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
-            # M3d + C6：通过 VMExecutor 驱动函数体语句。
-            # C6 后，run_body() 不再将控制信号转换为 ReturnException；
-            # ControlSignalException 直接传播至此，由下方 except CSE 消费。
-            # BREAK/CONTINUE 在函数体外属于错误，透传到调用者报错。
+            # M3d + C5 + C6：通过 VMExecutor 驱动函数体语句。
+            # C5 后，run_body() 以 UnhandledSignal 传播顶层控制信号；
+            # 由下方 except _CSE 消费；BREAK/CONTINUE 透传至调用者。
             #
             # C13：通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
             # Interpreter 在首个 ``execute_module()`` 调用时即已通过 ``_get_vm_executor()``
             # 把引用注入到 ExecutionContext，因此函数调用阶段必然可用。如未就绪
             # （例如由直接构造 IbUserFunction 的边角测试触发），保留递归 fallback。
             from core.runtime.vm.task import (
-                ControlSignal as _CS, ControlSignalException as _CSE,
+                ControlSignal as _CS, UnhandledSignal as _CSE,
             )
             vm = self.context.vm_executor
 
@@ -837,10 +836,10 @@ class IbUserFunction(IbFunction):
                 vm.run_body(body)
 
             return ib_none
-        except _CSE as cse:
-            # C6：直接捕获 ControlSignalException，避免三层 Signal→CSE→ReturnException 翻译。
-            if cse.signal is _CS.RETURN:
-                return cse.value
+        except _CSE as e:
+            # C5/C6：捕获 UnhandledSignal，按信号类型处理。
+            if e.signal.kind is _CS.RETURN:
+                return e.signal.value
             raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者
         except ReturnException as e:
             # 兼容性保留：vm=None 递归路径仍可能抛出 ReturnException。
