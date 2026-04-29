@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-28（M1 + M2 + M3a 完成；829 个测试通过；fn/lambda/snapshot 语法定型，IbCell GC 根集合 + 词法作用域正式化，VM/CPS 调度循环骨架落地）
+> **最后更新**：2026-04-28（M1 + M2 + M3a + M3b + M3c + M5a + M5b + M3d-prep 完成；926 个测试通过；fn/lambda/snapshot 语法定型，IbCell GC 根集合 + 词法作用域正式化，VM CPS 调度循环骨架 + 控制信号数据化 + IbLLMExceptionalStmt CPS handler 落地，CPS handler 覆盖扩展至 37 节点类型，DDG 编译期分析 + LLMScheduler/LLMFuture 就绪）
 
 ---
 
