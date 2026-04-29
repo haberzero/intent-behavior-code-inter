@@ -276,8 +276,9 @@ class SemanticAnalyzer:
                             stmt, code="SEM_050"
                         )
                     # C11/P1: 将 llmexcept handler 直接挂载到 IbFor.llmexcept_handler；
-                    # 不设 stmt.target（保持 None），不写 node_protection 侧表；
+                    # 显式保持 stmt.target = None（不指向 cond_expr），不写 node_protection 侧表；
                     # IbLLMExceptionalStmt 不加入 body，IbFor 是 body 中的唯一主体。
+                    stmt.target = None  # 显式不绑定到 cond_expr（区别于正则情形）
                     prev_stmt.llmexcept_handler = stmt
                     # 仅递归处理 llmexcept body，不 append stmt 到 new_body
                     for body_stmt in stmt.body:
