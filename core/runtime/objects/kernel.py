@@ -3,7 +3,7 @@ from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.base.source_atomic import Location
-from core.runtime.exceptions import ReturnException, RegistryIsolationError
+from core.runtime.exceptions import ReturnException, BreakException, ContinueException, RegistryIsolationError
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.intent_logic import IntentRole
 from core.kernel.spec import IbSpec, FuncSpec, ClassSpec, ANY_SPEC
@@ -815,9 +815,48 @@ class IbUserFunction(IbFunction):
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
-            for stmt_uid in body:
-                self.context.visit(stmt_uid)
-                
+            # M3d：通过 VMExecutor 驱动函数体语句，与 Interpreter.execute_module() 一致。
+            # ControlSignalException（顶层未消费 RETURN）由本帧捕获并提取返回值；
+            # BREAK/CONTINUE 在函数体外属于错误（既有 except ReturnException 路径
+            # 已不接受其它控制流，由 VMExecutor 内部 IbWhile/IbFor 消费）。
+            from core.runtime.vm.task import (
+                ControlSignal as _CS, ControlSignalException as _CSE,
+            )
+            vm_getter = getattr(self.context, "vm_executor", None)
+            if vm_getter is None:
+                # 通过 interpreter 取得 VMExecutor（execution_context 不直接暴露）
+                interp = getattr(self.context, "_interpreter", None) or getattr(
+                    self.context, "interpreter", None
+                )
+                if interp is not None and hasattr(interp, "_get_vm_executor"):
+                    vm = interp._get_vm_executor()
+                else:
+                    vm = None
+            else:
+                vm = vm_getter
+
+            if vm is None:
+                # 无 VMExecutor 可用：保留原有递归路径
+                for stmt_uid in body:
+                    self.context.visit(stmt_uid)
+            else:
+                # node_protection 重定向由 VMExecutor.run() 入口统一处理；
+                # 函数体内只需跳过直接出现的 IbLLMExceptionalStmt 节点。
+                for stmt_uid in body:
+                    stmt_data = self.context.get_node_data(stmt_uid)
+                    if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
+                        continue
+                    try:
+                        vm.run(stmt_uid)
+                    except _CSE as cse:
+                        if cse.kind is _CS.RETURN:
+                            raise ReturnException(cse.value)
+                        if cse.kind is _CS.BREAK:
+                            raise BreakException()
+                        if cse.kind is _CS.CONTINUE:
+                            raise ContinueException()
+                        raise
+
             return ib_none
         except ReturnException as e:
             return e.value

@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-28（M3c llmexcept 调度化 + M5b LLMScheduler；905 个测试通过）
+> **最后更新**：2026-04-29（M3d 主路径切换 + M5c LLM dispatch-before-use；949 个测试通过）
 
 ---
 
@@ -900,4 +900,76 @@ class LLMFuture:
 
 * **M3d**：剩余 unsupported 节点（`IbFor`、`IbTry`、`IbRetry`、`IbLambdaExpr`、`IbBehaviorExpr`、`IbBehaviorInstance`、`IbExceptHandler`、`IbCase`、`IbTypeAnnotatedExpr`、`IbIntentInfo` 等）需要在 M3d 阶段统一 CPS 化；同时切换 `Interpreter.visit()` 主路径，移除 `ReturnException`/`BreakException`/`ContinueException`。
 * **测试基线**：M3d-prep 后为 **926 个测试**。
+
+---
+
+## 十六、M3d + M5c：主路径切换 + LLM dispatch-before-use [✅ COMPLETED — 2026-04-29]
+
+### 16.1 新增的 CPS handler（M3d 范围内最后一批）
+
+`core/runtime/vm/handlers.py` 新增 6 个 handler，把 dispatch table 扩展到 43 个节点类型（22 M3a + 1 M3c + 14 M3d-prep + 6 M3d）：
+
+* **表达式**：`IbBehaviorExpr`、`IbBehaviorInstance`、`IbLambdaExpr`
+* **控制流**：`IbFor`（含 iterable / condition-driven / IbFilteredExpr 三种形态）、`IbTry`（try/except/else/finally + IbExceptHandler 类型匹配）、`IbRetry`
+
+`IbBehaviorExpr` handler 同时承担 M5c 的 dispatch hook：当上层 IbAssign 检测到 RHS 满足条件时，跳过同步执行直接调用 `LLMExecutor.dispatch_eager()`。
+
+### 16.2 主执行路径切换
+
+* `core/runtime/interpreter/interpreter.py::Interpreter.execute_module()` 顶层语句循环改为通过 `VMExecutor.run()` 驱动；`ControlSignalException`（`Signal` 顶层未消费包装）转回 `ReturnException`/`BreakException`/`ContinueException` 以便既有的"控制流位于函数/循环之外"边界检查继续工作。
+* `core/runtime/objects/kernel.py::IbUserFunction.call()` 函数体执行改为通过 `VMExecutor.run()` 驱动；同样的 CSE → ReturnException 桥保留。
+* `Interpreter._get_vm_executor()` 提供单例 `VMExecutor` 的延迟构造入口。
+
+### 16.3 VMExecutor 中的 node_protection 重定向
+
+`core/runtime/vm/vm_executor.py::VMExecutor._apply_protection_redirect()` 把原本只在 `Interpreter.visit()` 顶部生效的 llmexcept 拦截语义统一上提到 VM 层：
+
+* 在 `run()` 入口和每次 yield 子节点 UID 时执行重定向；
+* 通过比对 `RuntimeContext.get_llm_except_frames()[*].target_uid` 防止"已经在被保护中"的目标重复重定向（避免 llmexcept ↔ target 无限循环）。
+
+这一步同时修复了一个 M3c 起就存在的潜在缺陷：条件驱动 for 循环（`for @~...~:`）的 `node_protection` 实际作用于 iter 中的 `IbBehaviorExpr`（语义分析阶段决定），主路径切换前依赖 `Interpreter.visit()` 入口拦截，切换后必须由 VM 层提供等价机制。
+
+### 16.4 M5c：LLM dispatch-before-use 集成
+
+实现位置：`core/runtime/vm/handlers.py::vm_handle_IbAssign` 与 `vm_handle_IbName`：
+
+* `vm_handle_IbAssign`：当 RHS 是 `IbBehaviorExpr`、`dispatch_eligible == True`、不在 `is_deferred` 模式、当前没有活跃 LLMExceptFrame、目标是简单 `IbName` 时，调用 `LLMExecutor.dispatch_eager(node_uid, ec)` 并把返回的 `LLMFuture` 直接绑定到符号（绕过类型检查——LLMFuture 不是真实的 IbObject）；其余情况退回同步路径。
+* `vm_handle_IbName`：读取符号时检测到值为 `LLMFuture`，调用 `LLMExecutor.resolve()` 同步等待 future，把结果回写符号槽（lazy resolve、单次消费、之后 O(1)）。
+
+llmexcept frame 检查是必须的——同步协议依赖 `runtime_context.set_last_llm_result(result)` 在 `last_llm_result` 通道传递不确定性；dispatch 路径使用 future 异步通道，与 last_llm_result 不兼容。
+
+### 16.5 关联修复
+
+* `vm_handle_IbImport` / `vm_handle_IbImportFrom`：M3d-prep 阶段的"编译期无操作"实现错误地丢弃了 import 的运行时绑定。M3d 主路径切换后所有 import 都通过 VM 走，必须委托回 `ImportHandler.visit_IbImport*`，由它把模块对象写入当前作用域的符号表。
+* `vm_handle_IbTry`：移除 `except InterpreterError: raise` 分支；现在与递归 `StmtHandler.visit_IbTry` 一致，`InterpreterError` 等 Python 内部异常作为通用 `Exception` 被捕获并包装为 IBCI `Exception` 实例。
+
+### 16.6 文件级修改清单
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/runtime/vm/handlers.py` | 新增 6 个 handler；vm_handle_IbAssign 增加 dispatch 分支；vm_handle_IbName 增加 LLMFuture lazy resolve；修复 import handler |
+| `core/runtime/vm/vm_executor.py` | 新增 `_apply_protection_redirect()`；run() 入口与 yield 子节点路径调用 |
+| `core/runtime/interpreter/interpreter.py` | execute_module() 顶层循环切换至 VMExecutor；新增 `_get_vm_executor()` |
+| `core/runtime/objects/kernel.py` | IbUserFunction.call() 函数体循环切换至 VMExecutor；导入 BreakException/ContinueException |
+| `tests/unit/test_vm_executor_m3d.py` | 新建：M3d 6 handler + 主路径切换 + protection 重定向（16 个测试） |
+| `tests/e2e/test_e2e_llm_pipeline.py` | 新建：M5c 并发派发 / lazy resolve / dispatch-skip / 语义等价（7 个测试） |
+| `tests/unit/test_llm_scheduler.py` | 更新 `test_dispatch_eager_stores_in_pending_futures` 适配 M5c 隐式派发 |
+
+### 16.7 测试基线
+
+`python3 -m pytest tests/ -q --tb=short` → **949 passed**（926 + 16 新 M3d + 7 新 M5c）。
+
+### 16.8 设计要点
+
+* **Signal vs Exception 分层**：CPS 内部一律用 `Signal(kind, value)` 数据流传播 RETURN/BREAK/CONTINUE；只在 VMExecutor.run() 出口处把未消费的 Signal 包装成 `ControlSignalException` 跨越 Python 调用栈到达 `execute_module` / `IbUserFunction.call`，再由这两处转回原始 `ReturnException` / `BreakException` / `ContinueException` 让既有的边界检查工作。该 ExceptionBridge 保留至 DEFERRED_CLEANUP C5。
+* **保护重定向单点化**：M3c 时由各容器 handler 各自实现 `_resolve_stmt_uid`；M3d 把这一职责上提到 VMExecutor 调度循环统一处理，所有 yield child_uid 自动获得保护语义，handler 内不必关心。
+* **dispatch 决策保守**：仅在能严格判定"目标是简单赋值、无 deferred、无 llmexcept 保护"的场景启用 M5c 派发；任何不确定情况都退回同步路径，保证语义不退化。
+* **未变动**：`ReturnException` 类、`ControlSignalException` 类继续保留作为边界封装。`Interpreter.visit()` 仍是 fallback 路径——VMExecutor 不支持的节点类型会回退到这里，同时模块外部接口（如解释器嵌入测试用例）不受影响。
+
+### 16.9 后续
+
+* **M4**：Layer 2 多 Interpreter 并发（`DynamicHost.spawn` 线程化）。M3d 完成后 ContextVar 帧管理已从 Python 递归栈解耦，可以在独立线程中运行子 Interpreter。
+* **C5（DEFERRED_CLEANUP）**：移除 `ReturnException`/`BreakException`/`ContinueException` 与 `ControlSignalException`，把函数返回完全数据化为 Signal 帧。
+
+---
 

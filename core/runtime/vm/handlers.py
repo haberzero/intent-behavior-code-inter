@@ -68,6 +68,7 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.runtime.interpreter.llm_result import LLMFuture
 from core.kernel.issue import InterpreterError
 
 
@@ -106,7 +107,11 @@ def vm_handle_IbConstant(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """变量读取（严格 UID 路径，与 ExprHandler.visit_IbName 同语义）。"""
+    """变量读取（严格 UID 路径，与 ExprHandler.visit_IbName 同语义）。
+
+    M5c：若读到的值是 ``LLMFuture``（dispatch-before-use 残留的待解析占位符），
+    在此处阻塞解析并写回，使后续读取为 O(1) 命中。
+    """
     if False:
         yield
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
@@ -117,12 +122,26 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
             f"Artifact is corrupted or unanalyzed."
         )
     try:
-        return executor.runtime_context.get_variable_by_uid(sym_uid)
+        val = executor.runtime_context.get_variable_by_uid(sym_uid)
     except Exception as e:
         raise RuntimeError(
             f"VM Execution Error: Symbol with UID '{sym_uid}' "
             f"(name: '{node_data.get('id')}') is not defined."
         ) from e
+
+    # M5c：变量使用点的 LLMFuture 解引用。
+    if isinstance(val, LLMFuture):
+        sc = executor.service_context
+        llm_executor = sc.llm_executor if sc is not None else None
+        if llm_executor is not None and hasattr(llm_executor, "resolve"):
+            resolved = llm_executor.resolve(val.node_uid)
+        else:
+            # service_context 不可用时回退到 LLMFuture.get（仍阻塞，结果等价）
+            resolved = val.get(executor.registry)
+        # 写回，避免后续读取再次 resolve（且每个 Future 只能 resolve 一次）
+        executor.runtime_context.set_variable_by_uid(sym_uid, resolved)
+        val = resolved
+    return val
 
 
 def vm_handle_IbPass(executor, node_uid: str, node_data: Mapping[str, Any]):
@@ -386,6 +405,12 @@ def vm_handle_IbContinue(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     """赋值语句（M3a 骨架）：仅支持 IbName / IbTypeAnnotatedExpr(IbName) 目标，
     其余目标（属性 / 下标 / 元组解包）回退到原 ``_assign_to_target`` 路径。
+
+    M5c：当 RHS 为 ``IbBehaviorExpr`` 且其 ``dispatch_eligible=True``、非 deferred
+    时，调用 ``LLMScheduler.dispatch_eager`` 立即提交后台 LLM 调用，得到
+    ``LLMFuture`` 占位符并直接绑定到目标变量；后续在使用点（``IbName``）解析。
+    这是 LLM 数据流流水线的核心机制：相邻独立 LLM 表达式可并发执行，时序近似
+    ``max(T_a, T_b, ..)`` 而非 ``sum``。
     """
     executor.runtime_context.set_last_llm_result(None)
     value_uid = node_data.get("value")
@@ -393,6 +418,65 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     is_deferred = False
     if value_uid:
         is_deferred = bool(executor.ec.get_side_table("node_is_deferred", value_uid))
+
+    # M5c：识别 dispatch-before-use 路径
+    dispatched_future: Optional[LLMFuture] = None
+    if value_uid and not is_deferred:
+        value_node_data = executor.ec.get_node_data(value_uid)
+        if (
+            value_node_data
+            and value_node_data.get("_type") == "IbBehaviorExpr"
+            and value_node_data.get("dispatch_eligible", True)
+            # 不在 llmexcept 保护下调度：llmexcept 协议依赖同步读取 LLM 结果
+            # 来检测不确定性并触发 retry；异步 dispatch 会绕过该协议导致占位符
+            # 直接落入用户变量。
+            and executor.runtime_context.get_current_llm_except_frame() is None
+        ):
+            sc = executor.service_context
+            llm_executor = sc.llm_executor if sc is not None else None
+            if llm_executor is not None and hasattr(llm_executor, "dispatch_eager"):
+                # 在 dispatch 时刻 fork 当前意图栈快照，确保后台线程看到的
+                # 意图状态与同步执行点一致（避免 dispatch 后主线程 push/pop
+                # 改变 LLM 提示词构造的语义）。
+                try:
+                    intent_snapshot = executor.runtime_context.fork_intent_snapshot()
+                except Exception:
+                    intent_snapshot = None
+                dispatched_future = llm_executor.dispatch_eager(
+                    value_uid, executor.ec, intent_ctx=intent_snapshot
+                )
+
+    if dispatched_future is not None:
+        # 直接把 LLMFuture 写入目标，跳过 LLM 不确定性检查与同步求值。
+        # 仅支持简单的 IbName / IbTypeAnnotatedExpr(IbName) 目标——
+        # 复杂目标（attribute/subscript/tuple unpack）此处不并发化，
+        # fallback 到同步路径以保证语义一致。
+        # 同时排除已被提升为 IbCell 的变量（lambda HOF 捕获）：cell 的
+        # 共享可见性需要立即可见的 IbObject，写入 LLMFuture 占位符会
+        # 让 cell 持有者读到非法值。
+        targets = node_data.get("targets", [])
+        future_assignable = all(
+            _is_simple_name_target(executor, t_uid)
+            and not _target_is_promoted_cell(executor, t_uid)
+            for t_uid in targets
+        )
+        if future_assignable:
+            for target_uid in targets:
+                _assign_future_to_name_target(executor, target_uid, dispatched_future)
+            return executor.registry.get_none()
+        # 复杂目标：撤销 dispatch 改走同步路径
+        try:
+            sync_result = executor.service_context.llm_executor.resolve(
+                dispatched_future.node_uid
+            )
+        except Exception:
+            # 万一 resolve 失败，仍走同步 fallback；下方 yield 路径会重新求值
+            sync_result = None
+        if sync_result is not None:
+            for target_uid in targets:
+                executor.assign_to_target(target_uid, sync_result)
+            return executor.registry.get_none()
+        # 兜底：让下面的同步路径继续执行（极少触发）
 
     if is_deferred and value_uid:
         # 延迟值的创建涉及对 IbBehaviorExpr / 普通子树的特殊处理；
@@ -408,6 +492,108 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     for target_uid in node_data.get("targets", []):
         executor.assign_to_target(target_uid, value)
     return executor.registry.get_none()
+
+
+def _is_simple_name_target(executor, target_uid: str) -> bool:
+    """判断赋值目标是否为简单 ``IbName`` 或 ``IbTypeAnnotatedExpr(IbName)``。"""
+    target_data = executor.ec.get_node_data(target_uid)
+    if not target_data:
+        return False
+    t = target_data.get("_type")
+    if t == "IbName":
+        return True
+    if t == "IbTypeAnnotatedExpr":
+        inner = target_data.get("target")
+        return _is_simple_name_target(executor, inner) if inner else False
+    return False
+
+
+def _target_is_promoted_cell(executor, target_uid: str) -> bool:
+    """判断赋值目标对应的符号是否已被提升为 IbCell（lambda HOF 闭包捕获）。
+
+    M5c 安全护栏：被 IbCell 持有的变量必须保持立即可见的 IbObject 语义；
+    若把 LLMFuture 占位符写入 ``sym.value`` 而不同步到 cell，外部 lambda
+    通过 ``cell.get()`` 会读到陈旧值；同步到 cell 又会让 cell 持有非法
+    LLMFuture。最稳妥的做法是退回同步路径。
+
+    BehaviorDependencyAnalyzer 当前不感知 cell 提升，因此该判断在运行
+    时进行。"""
+    target_data = executor.ec.get_node_data(target_uid)
+    if not target_data:
+        return False
+    if target_data.get("_type") == "IbTypeAnnotatedExpr":
+        inner = target_data.get("target")
+        return _target_is_promoted_cell(executor, inner) if inner else False
+
+    sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
+    if not sym_uid:
+        return False
+    rc = executor.runtime_context
+    # 沿作用域链查找 cell（promote_to_cell 把 cell 注册到声明所在 scope）
+    scope = rc.current_scope
+    while scope is not None:
+        if hasattr(scope, "_cell_map") and sym_uid in scope._cell_map:
+            return True
+        scope = getattr(scope, "parent", None)
+    return False
+
+
+def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) -> None:
+    """把 ``LLMFuture`` 占位符直接写入目标变量符号绑定，跳过类型/值校验。
+
+    M5c：与 ``StmtHandler._assign_to_target`` 中 ``IbName`` 分支语义一致，
+    但写入的值是 ``LLMFuture``（非 ``IbObject``）。读取点（``vm_handle_IbName``）
+    会在第一次访问时阻塞 resolve 并写回真实 ``IbObject``。
+
+    实现细节：``RuntimeContext.set_variable_by_uid`` / ``define_variable`` 走的
+    是 ``ScopeImpl.assign_by_uid`` / ``define`` 路径，会触发 ``_check_type`` 和
+    ``registry.box`` 把 ``LLMFuture`` 包装成普通 ``IbObject``——这与占位符语义
+    冲突。本函数直接操作底层 ``RuntimeSymbolImpl``（与 vm/handlers 同层），
+    保留原始 ``LLMFuture`` 引用直到被 resolve 写回。
+    """
+    from core.runtime.interpreter.runtime_context import RuntimeSymbolImpl
+
+    target_data = executor.ec.get_node_data(target_uid)
+    if not target_data:
+        return
+    if target_data.get("_type") == "IbTypeAnnotatedExpr":
+        _assign_future_to_name_target(executor, target_data.get("target"), future)
+        return
+
+    sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
+    name = target_data.get("id")
+    rc = executor.runtime_context
+
+    # 选择落地作用域（尊重 global 语义）
+    target_scope = rc.current_scope
+    if (
+        sym_uid
+        and rc.is_global_symbol_uid(sym_uid)
+        and rc.current_scope is not rc.global_scope
+    ):
+        target_scope = rc.global_scope
+
+    # 1) 已存在符号 → 直接覆盖 .value，绕过 _check_type 与 box
+    sym = rc.get_symbol_by_uid(sym_uid) if sym_uid else None
+    if sym is not None:
+        sym.value = future
+        sym.current_type = type(future)
+        # 显式不同步 IbCell：LLMFuture 不是合法 IbObject，不应进入 cell.set。
+        # 调用方（vm_handle_IbAssign）已通过 _target_is_promoted_cell() 保证
+        # 该路径只覆盖未提升为 cell 的符号，因此跳过 cell 同步是安全的。
+        return
+
+    # 2) 首次定义 → 直接构造 RuntimeSymbolImpl 写入 _uid_to_symbol/_symbols
+    declared_type = (
+        executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+    )
+    new_sym = RuntimeSymbolImpl(
+        name=name, value=future, declared_type=declared_type, is_const=False
+    )
+    if name:
+        target_scope._symbols[name] = new_sym
+    if sym_uid:
+        target_scope._uid_to_symbol[sym_uid] = new_sym
 
 
 # ---------------------------------------------------------------------------
@@ -618,17 +804,21 @@ def vm_handle_IbRaise(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``import x`` 在 IBCI 当前阶段为编译期语义，运行时无操作。"""
+    """``import x`` 委托到 ``ImportHandler.visit_IbImport``——它通过
+    ``module_manager`` 加载模块并把模块对象绑定到当前作用域（提供运行时
+    可访问的符号）。M3d-prep 早期版本误标注为"编译期无操作"导致 VM 主路径
+    切换后所有 import 都被丢弃；此 fix 把语义统一到递归 handler。"""
     if False:
         yield
-    return executor.registry.get_none()
+    return executor.fallback_visit(node_uid)
 
 
 def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``from x import y`` 在 IBCI 当前阶段为编译期语义，运行时无操作。"""
+    """``from x import y`` 委托到 ``ImportHandler.visit_IbImportFrom``。
+    与 ``vm_handle_IbImport`` 同理——M3d-prep 早期错误的 no-op 实现已修正。"""
     if False:
         yield
-    return executor.registry.get_none()
+    return executor.fallback_visit(node_uid)
 
 
 # === 复合赋值 ===
@@ -836,6 +1026,376 @@ def vm_handle_IbIntentStackOperation(executor, node_uid: str, node_data: Mapping
     return executor.registry.get_none()
 
 
+# ---------------------------------------------------------------------------
+# M3d：剩余节点 CPS handler
+#
+# 这些 handler 与 ExprHandler / StmtHandler 中对应 visit_X 方法 1:1 同语义，
+# 控制流通过 Signal 数据化（M3b）；异常仍以 Python 异常机制处理（IbTry 在
+# generator 内 try/except 捕获）。
+# ---------------------------------------------------------------------------
+
+
+def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """LLM 行为描述行（``@~ ... ~``）。
+
+    与 ExprHandler.visit_IbBehaviorExpr 同语义：
+    * 若被标记为 deferred，根据 ``deferred_mode`` 创建 ``IbBehavior`` 包装
+      （snapshot 捕获意图栈快照，lambda 不捕获）。
+    * 否则直接同步执行 LLM 调用，把 ``LLMResult`` 写入
+      ``runtime_context.set_last_llm_result``，返回 ``result.value``。
+
+    注意：M5c 的 dispatch-before-use 路径**不**在这里触发——dispatch_eager
+    由 ``vm_handle_IbAssign`` 在识别到 RHS 为本节点且 ``dispatch_eligible=True``
+    时调用，避免 LLMFuture 占位符泄漏到非赋值上下文。
+    """
+    if False:
+        yield
+    is_deferred = executor.ec.get_side_table("node_is_deferred", node_uid)
+
+    intent_uid = node_data.get("intent")
+    call_intent: Optional[IbIntent] = None
+    if intent_uid:
+        intent_data = executor.ec.get_node_data(intent_uid)
+        intent_class = executor.registry.get_class("Intent")
+        call_intent = IbIntent.from_node_data(
+            intent_uid, intent_data, intent_class, role=IntentRole.SMEAR
+        )
+
+    sc = executor.service_context
+
+    if is_deferred:
+        deferred_mode = executor.ec.get_side_table("node_deferred_mode", node_uid)
+        captured_intents = (
+            None if deferred_mode == "lambda"
+            else executor.runtime_context.fork_intent_snapshot()
+        )
+        return sc.object_factory.create_behavior(
+            node_uid,
+            captured_intents,
+            expected_type=executor.ec.get_side_table("node_to_type", node_uid),
+            call_intent=call_intent,
+            deferred_mode=deferred_mode,
+            execution_context=executor.ec,
+        )
+
+    # 同步执行（fallback 共享同一 LLMExecutor）
+    result = sc.llm_executor.execute_behavior_expression(
+        node_uid, executor.ec, call_intent=call_intent
+    )
+    executor.runtime_context.set_last_llm_result(result)
+    if result is not None and result.value is not None:
+        return result.value
+    return executor.registry.get_none()
+
+
+def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``(Type) @~ ... ~`` 隐式实例化。
+
+    与 ExprHandler.visit_IbBehaviorInstance 同语义。该节点不下钻子节点
+    （segments 在 LLM Executor 内部求值），故无 yield。
+    """
+    if False:
+        yield
+    return executor.fallback_visit(node_uid)
+
+
+def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """lambda / snapshot 表达式：构造 ``IbDeferred`` 或 ``IbBehavior``（M2 SC-3/SC-4）。
+
+    自由变量分析与 IbCell 提升涉及大量 AST 走访 + 作用域操作，且不下钻 body
+    节点（body 在调用时才执行），CPS 化收益为零。直接 fallback 到
+    ExprHandler.visit_IbLambdaExpr。
+    """
+    if False:
+        yield
+    return executor.fallback_visit(node_uid)
+
+
+def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``retry`` 语句：与 StmtHandler.visit_IbRetry 同语义。
+
+    1. 求值可选的 retry hint，写入 ``runtime_context.retry_hint``
+    2. 通过 ``frame.restore_snapshot`` 恢复 llmexcept 帧的快照
+    3. 设置 ``frame.should_retry = True``，由外层 llmexcept handler 重新执行 target
+    """
+    hint_uid = node_data.get("hint")
+    hint_val: Optional[str] = None
+    if hint_uid:
+        hint_obj = yield hint_uid
+        hint_val = hint_obj.to_native() if hasattr(hint_obj, "to_native") else str(hint_obj)
+    executor.runtime_context.retry_hint = hint_val
+    frame = executor.runtime_context.get_current_llm_except_frame()
+    if frame is not None:
+        frame.restore_snapshot(executor.runtime_context)
+        frame.should_retry = True
+    return executor.registry.get_none()
+
+
+def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``for`` 循环：与 StmtHandler.visit_IbFor 同语义。
+
+    支持三种形态：
+    * 标准 foreach：``for T name in iterable [if filter]:``
+    * 条件驱动：``for @~...~ [if filter]:`` （``target`` 为 ``None``）
+    * llmexcept loop_resume：从当前帧的 ``loop_resume[node_uid]`` 索引继续
+    """
+    target_uid = node_data.get("target")
+    iter_uid = node_data.get("iter")
+    body = node_data.get("body", [])
+
+    # 拆包 IbFilteredExpr：``for ... in items if filter``
+    filter_uid: Optional[str] = None
+    actual_iter_uid = iter_uid
+    iter_node_data = executor.ec.get_node_data(iter_uid) if iter_uid else None
+    if iter_node_data and iter_node_data.get("_type") == "IbFilteredExpr":
+        actual_iter_uid = iter_node_data.get("expr")
+        filter_uid = iter_node_data.get("filter")
+
+    # ----- 条件驱动循环 -----
+    if target_uid is None:
+        while True:
+            executor.runtime_context.set_last_llm_result(None)
+            condition = yield actual_iter_uid
+            if isinstance(condition, Signal):
+                return condition
+            last_result = executor.runtime_context.get_last_llm_result()
+            if last_result and not last_result.is_certain:
+                return executor.registry.get_none()
+            if not executor.ec.is_truthy(condition):
+                break
+            if filter_uid is not None:
+                filter_val = yield filter_uid
+                if isinstance(filter_val, Signal):
+                    return filter_val
+                if not executor.ec.is_truthy(filter_val):
+                    break
+
+            consumed: Optional[ControlSignal] = None
+            for stmt_uid in body:
+                effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+                if effective_uid is None:
+                    continue
+                res = yield effective_uid
+                if isinstance(res, Signal):
+                    if res.kind is ControlSignal.BREAK:
+                        consumed = ControlSignal.BREAK
+                        break
+                    if res.kind is ControlSignal.CONTINUE:
+                        consumed = ControlSignal.CONTINUE
+                        break
+                    return res
+            if consumed is ControlSignal.BREAK:
+                break
+        return executor.registry.get_none()
+
+    # ----- 标准 Foreach 循环 -----
+    iterable_obj = yield actual_iter_uid
+    if isinstance(iterable_obj, Signal):
+        return iterable_obj
+
+    # 解析迭代序列（与 StmtHandler.visit_IbFor 同协议）
+    elements_obj = None
+    if hasattr(iterable_obj, "elements") and isinstance(iterable_obj.elements, list):
+        elements_obj = iterable_obj
+    else:
+        try:
+            r = iterable_obj.receive("__iter__", [])
+            if hasattr(r, "elements") and isinstance(r.elements, list):
+                elements_obj = r
+        except (AttributeError, InterpreterError):
+            pass
+        if elements_obj is None:
+            try:
+                r = iterable_obj.receive("to_list", [])
+                if hasattr(r, "elements") and isinstance(r.elements, list):
+                    elements_obj = r
+            except (AttributeError, InterpreterError):
+                elements_obj = None
+    if elements_obj is None:
+        raise RuntimeError(f"VM: Object is not iterable (uid={node_uid})")
+
+    elements = elements_obj.elements
+    total = len(elements)
+
+    # llmexcept 帧的循环断点恢复
+    rc = executor.runtime_context
+    top_frame = (
+        rc._llm_except_frames[-1]
+        if hasattr(rc, "_llm_except_frames") and rc._llm_except_frames
+        else None
+    )
+    resume_from = top_frame.loop_resume.get(node_uid, 0) if top_frame is not None else 0
+
+    for i, item in enumerate(elements):
+        if i < resume_from:
+            continue
+        if top_frame is not None:
+            top_frame.loop_resume[node_uid] = i
+        rc.push_loop_context(i, total)
+
+        # 先赋值循环目标（filter 可能引用循环变量）
+        if target_uid:
+            executor.assign_to_target(target_uid, item)
+            # define_only=True 语义在标准 fallback _assign_to_target 中通过
+            # IbTypeAnnotatedExpr 包装实现；此处统一路径使用 assign_to_target
+            # 调用与原 fallback 完全一致。
+
+        if filter_uid is not None:
+            filter_val = yield filter_uid
+            if isinstance(filter_val, Signal):
+                rc.pop_loop_context()
+                return filter_val
+            if not executor.ec.is_truthy(filter_val):
+                rc.pop_loop_context()
+                continue
+
+        consumed = None
+        for stmt_uid in body:
+            effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+            if effective_uid is None:
+                continue
+            res = yield effective_uid
+            if isinstance(res, Signal):
+                if res.kind is ControlSignal.BREAK:
+                    consumed = ControlSignal.BREAK
+                    break
+                if res.kind is ControlSignal.CONTINUE:
+                    consumed = ControlSignal.CONTINUE
+                    break
+                rc.pop_loop_context()
+                return res
+
+        rc.pop_loop_context()
+        if consumed is ControlSignal.BREAK:
+            break
+    return executor.registry.get_none()
+
+
+def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``try / except / else / finally`` 块。
+
+    与 StmtHandler.visit_IbTry 同语义；CPS 适配：
+    * body 中的 stmt 通过 ``yield`` 求值；返回 Signal 直接透传（finally 仍执行）
+    * 子树抛出的 ``ThrownException`` / 通用异常通过 generator 的 try/except 捕获
+    * else 仅在 body 正常结束（无 Signal、无异常）时执行
+    * finally 在所有路径上都执行
+    """
+    body = node_data.get("body", [])
+    handlers = node_data.get("handlers", [])
+    orelse = node_data.get("orelse", [])
+    finalbody = node_data.get("finalbody", [])
+
+    pending_signal: Optional[Signal] = None
+    raised_exc: Optional[BaseException] = None
+    handled_exc = False
+
+    try:
+        for stmt_uid in body:
+            effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+            if effective_uid is None:
+                continue
+            res = yield effective_uid
+            if isinstance(res, Signal):
+                pending_signal = res
+                break
+    except (ReturnException, BreakException, ContinueException):
+        # 控制流异常（fallback 路径）：透传，但仍要走 finally
+        raise
+    except ThrownException as te:
+        raised_exc = te
+    except Exception as e:
+        # 与 StmtHandler.visit_IbTry 同语义：``InterpreterError`` 等
+        # 解释器内部包装的 Python 异常也作为可捕获错误对待。
+        raised_exc = e
+
+    if raised_exc is not None:
+        # 构造异常对象
+        if isinstance(raised_exc, ThrownException):
+            error_obj = raised_exc.value
+        else:
+            exc_class = executor.registry.get_class("Exception")
+            if not exc_class:
+                raise RuntimeError(
+                    "VM: Critical Error: 'Exception' builtin class not found in registry."
+                )
+            error_obj = exc_class.instantiate([])
+            error_obj.fields["message"] = executor.registry.box(str(raised_exc))
+
+        # 匹配 except 处理器
+        for handler_uid in handlers:
+            handler_data = executor.ec.get_node_data(handler_uid)
+            if not handler_data:
+                continue
+            type_uid = handler_data.get("type")
+            if type_uid:
+                expected_type_obj = yield type_uid
+                if isinstance(expected_type_obj, Signal):
+                    pending_signal = expected_type_obj
+                    handled_exc = True  # 防止再次 raise；signal 触发 finally 路径
+                    break
+                if isinstance(expected_type_obj, IbClass):
+                    if not error_obj.ib_class.is_assignable_to(expected_type_obj):
+                        continue
+                elif expected_type_obj is not error_obj:
+                    continue
+            # 绑定异常变量
+            name = handler_data.get("name")
+            if name:
+                sym_uid = executor.ec.get_side_table("node_to_symbol", handler_uid)
+                executor.runtime_context.define_variable(name, error_obj, uid=sym_uid)
+            # 执行处理体
+            handler_body_signal: Optional[Signal] = None
+            for stmt_uid in handler_data.get("body", []):
+                effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+                if effective_uid is None:
+                    continue
+                res = yield effective_uid
+                if isinstance(res, Signal):
+                    handler_body_signal = res
+                    break
+            handled_exc = True
+            if handler_body_signal is not None:
+                pending_signal = handler_body_signal
+            break
+
+        if not handled_exc:
+            # 没有匹配的 handler：先跑 finally，再 re-raise
+            for stmt_uid in finalbody:
+                effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+                if effective_uid is None:
+                    continue
+                res = yield effective_uid
+                if isinstance(res, Signal):
+                    # finally 中的信号优先级最高（覆盖原始异常，与原递归路径一致）
+                    return res
+            raise raised_exc
+    else:
+        # 没有异常：执行 else（仅当 body 没有 signal 终止）
+        if pending_signal is None:
+            for stmt_uid in orelse:
+                effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+                if effective_uid is None:
+                    continue
+                res = yield effective_uid
+                if isinstance(res, Signal):
+                    pending_signal = res
+                    break
+
+    # finally：所有路径都要执行
+    for stmt_uid in finalbody:
+        effective_uid = _resolve_stmt_uid(executor, stmt_uid)
+        if effective_uid is None:
+            continue
+        res = yield effective_uid
+        if isinstance(res, Signal):
+            # finally 中的 signal 覆盖任何 pending signal
+            return res
+
+    if pending_signal is not None:
+        return pending_signal
+    return executor.registry.get_none()
+
+
 
 # ---------------------------------------------------------------------------
 # 注册表
@@ -886,4 +1446,11 @@ def build_dispatch_table() -> dict:
         "IbClassDef": vm_handle_IbClassDef,
         "IbIntentAnnotation": vm_handle_IbIntentAnnotation,
         "IbIntentStackOperation": vm_handle_IbIntentStackOperation,
+        # M3d：剩余节点
+        "IbBehaviorExpr": vm_handle_IbBehaviorExpr,
+        "IbBehaviorInstance": vm_handle_IbBehaviorInstance,
+        "IbLambdaExpr": vm_handle_IbLambdaExpr,
+        "IbFor": vm_handle_IbFor,
+        "IbTry": vm_handle_IbTry,
+        "IbRetry": vm_handle_IbRetry,
     }

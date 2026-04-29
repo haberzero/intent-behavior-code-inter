@@ -540,20 +540,15 @@ class TestSchedulerInfrastructure:
         assert vm.supports(binop_uid) is True
 
     def test_supports_unknown_node(self):
-        # IbBehaviorExpr is not yet in the dispatch table — pick an artifact
-        # that contains one. (M3d-prep added IbCastExpr/IbDict/IbSlice/etc.;
-        # remaining unsupported types include IbBehaviorExpr, IbLambdaExpr,
-        # IbFor, IbTry, IbRetry, IbBehaviorInstance.)
-        engine = make_engine("str s = @~ MOCK:hi ~")
-        beh_uid = None
-        for uid, data in engine.interpreter.node_pool.items():
-            if data.get("_type") == "IbBehaviorExpr":
-                beh_uid = uid
-                break
-        if beh_uid is None:
-            pytest.skip("No IbBehaviorExpr in artifact")
+        # M3d 完成后所有 IBCI AST 节点类型都纳入调度表；通过注入一个未实现的
+        # 伪节点类型来验证 supports() 的兜底逻辑（_dispatch 查表 miss → False）。
+        engine = make_engine("int x = 1")
+        fake_uid = "fake_unsupported_uid_for_testing"
+        engine.interpreter.node_pool[fake_uid] = {
+            "_type": "IbHypotheticalNotImplementedType"
+        }
         vm = make_vm(engine)
-        assert vm.supports(beh_uid) is False
+        assert vm.supports(fake_uid) is False
 
     def test_step_count_increments(self):
         engine = make_engine("int x = 1 + 2 + 3")
