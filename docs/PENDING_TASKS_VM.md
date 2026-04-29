@@ -572,6 +572,9 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 | └ **Step 10c** | VM dispatch-before-use 集成（`visit()` 感知 dispatch_eligible） | Step 10b + Step 9 完成 | ✅ 完成（M5c） |
 | **Step 11** | Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ✅ 完成（M4，2026-04-29） |
 | **Step 12** | 可移植性参考实现 + 完整并发行为测试套件 | Step 9 + Step 11 完成 | ✅ 完成（M6，2026-04-29）`docs/VM_SPEC.md` + `tests/compliance/`（32 合规测试，C6/C12 轻量债务已清理） |
+| **编译器深度清洁 Phase 1–4**（C6–C14）| CPS handler 覆盖 43 节点；所有 fallback_visit() 归零；_vm_assign_to_target() CPS helper；Signal 桥清理；IbLambdaExpr.free_vars 编译期；cell_captured_symbols 侧表 | M6 完成 | ✅ 完成（2026-04-29） |
+| **C5** | `ControlSignalException` 类本体删除；测试契约由 `pytest.raises(CSE)` → `pytest.raises(ControlSignalException)` 调整 | Phase 4 完成 | ⏳ 暂缓（需调整测试契约） |
+| **C11** | `node_protection` 侧表重构（AST 层面显式包装替代侧表间接关联；编译器 + 序列化 + 运行时三层） | Phase 4 完成 | ⏳ 暂缓（独立 PR，高风险重构） |
 
 ---
 

@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-29（M6 可移植性参考实现落地：`docs/VM_SPEC.md` 正式规范 + `tests/compliance/` 32 个合规测试 + Phase 1 C6/C12 债务清理；996 个测试通过；下一里程碑：**编译器深度清洁 C7/C8/C9/C11/C14**）
+> **最后更新**：2026-04-29（编译器深度清洁 Phase 1–4 全部完成：C6/C7/C8/C9/C12/C13/C14 均已落地；CPS dispatch table 覆盖 43 个 AST 节点类型；所有 `fallback_visit()` 显式调用归零；996 个测试通过；**剩余技术债：C5（ControlSignalException 类本体）+ C11（node_protection 侧表重构）**；下一里程碑：**C11 node_protection 重构** 或 **M7（IBCI→目标语言可移植性）**）
 
 ---
 
@@ -131,31 +131,36 @@ class MyType:
 
 ---
 
-## 下一主线：编译器深度清洁（C7/C8/C9/C11/C14）
+## 当前状态：编译器深度清洁 Phase 1–4 全部完成（2026-04-29）
 
-M6 安全网（996 测试 + `tests/compliance/` 合规套件）已就绪。建议按以下顺序推进编译器深度清洁：
+M6 安全网建立后，4 个阶段的编译器深度清洁已全部完成：
 
-1. **C8（最高优先）**：`IbLambdaExpr` + `IbBehaviorInstance` CPS handler 全量实现（当前是"注册壳 + fallback"）。完成后才能真正兑现"消除 Python 递归依赖"的设计目标。
-2. **C7**：`VMExecutor.assign_to_target()` 穿透路径重写（赋值目标求值完全 CPS 化）。
-3. **C11**：`node_protection` 侧表驱动机制重构（AST 层面显式包装替代侧表间接关联）。
-4. **C14**：编译器 Pass 4 → Pass 5 `cell_captured_symbols` 侧表传递（消除运行时作用域链扫描）。
-5. **C5/C6 剩余**：`ControlSignalException` 类彻底删除（依赖 C8 fallback 完全消除）。
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| Phase 1（C10 + C13）| `run_body()` 共享 body 循环；`IbUserFunction.call()` VMExecutor 路径修复 | ✅ DONE |
+| Phase 2（C6 partial + C12）| Signal→CSE→ReturnException 三层桥消除；`ScopeImpl` 私有字段封装 | ✅ DONE |
+| Phase 3（C8 + C14）| `IbLambdaExpr.free_vars` 编译期填充；`vm_handle_IbLambdaExpr/IbBehaviorInstance` fallback 完全消除；`cell_captured_symbols` 侧表；`_target_is_promoted_cell` 运行时扫描删除 | ✅ DONE |
+| Phase 4（C6 remainder + C7 + C9）| `IbImport/IbImportFrom` 完整内联 CPS；`_vm_assign_to_target()` CPS generator helper（所有目标类型）；`IbTry/IbCall` 异常透传桥删除；所有显式 `fallback_visit()` 调用归零 | ✅ DONE |
+
+**CPS dispatch table 现覆盖 43 个 AST 节点类型**（全部可直接调度节点；helper 节点 IbCase/IbExceptHandler/IbTypeAnnotatedExpr 由父 handler 内联处理，无需独立 dispatch entry）。
+
+**剩余技术债（已暂缓）**：
+- **C5**：`ControlSignalException` 类本体删除 + 测试契约调整（多处 `pytest.raises(ControlSignalException)` 依赖）
+- **C11**：`node_protection` 侧表重构（编译器 + 序列化 + 运行时三层，需单独重构 PR）
 
 ---
 
-## 任务依赖图（精确版）
+## 任务依赖图（精确版，2026-04-29 更新）
 
 ```
-Step 1–8 + M1 + M2 + M3a + M3b + M3c + M3d + M5a + M5b + M5c + M4 + M6 + Phase 1 C6/C12 轻量清理（已完成；996 测试通过）
+Step 1–8 + M1 + M2 + M3a–M3d + M4 + M5a–M5c + M6 + Phase 1–4 编译器深度清洁（已完成；996 测试通过）
     │
-    └──→ 编译器深度清洁（C7/C8/C9/C11/C14）⏳ **当前主线**
-         ├── C8：IbLambdaExpr/IbBehaviorInstance 完整 CPS（彻底消除 Python 递归依赖）
-         ├── C7：assign_to_target 穿透路径消除
-         ├── C11：node_protection 机制重构
-         └── C14：cell_captured_symbols 侧表传递
+    ├──→ C5：ControlSignalException 类本体删除（需调整测试契约）
+    ├──→ C11：node_protection 侧表重构（编译器+序列化+运行时，独立 PR）
+    └──→ 下一功能里程碑（见 docs/VM_EVOLUTION_PLAN.md）
 ```
 
-**当前优先路径**：**M4（多 Interpreter 并发）✅ COMPLETED（2026-04-29）**。`ihost.spawn_isolated` + `ihost.collect` + Engine 层 `request_spawn_isolated`/`request_collect` 全链路落地；15 个 M4 专项测试通过；964 总测试通过（949 原有 + 15 新增）。下一里程碑：**M6（可移植性参考实现 + 完整并发行为测试套件）**。
+**推荐下一步**：**C11**（node_protection 侧表重构）是当前最大尚未完成的结构性技术债；或直接推进新功能里程碑。
 
 ---
 
