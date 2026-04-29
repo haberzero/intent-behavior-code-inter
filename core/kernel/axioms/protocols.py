@@ -64,7 +64,29 @@ class OperatorCapability(Protocol):
 
 
 class ConverterCapability(Protocol):
-    """Convertible: can be produced by a cast from another type."""
+    """Convertible: this type can be produced by an explicit cast from another type.
+
+    Design intent
+    -------------
+    ``can_convert_from(src)`` answers "can *this* (target) type accept an explicit
+    cast FROM ``src``?".  This is the **target-side** query for explicit type
+    conversion (e.g. the ``(int)x`` cast expression).
+
+    This is intentionally separate from ``TypeAxiom.is_compatible(target)``, which
+    is the **source-side** query for *implicit* assignment compatibility.
+
+    * ``is_compatible``    → source asks: "can I be implicitly assigned to target?"
+                             Called by ``SpecRegistry.is_assignable()`` on every
+                             assignment / return-type check.
+    * ``can_convert_from`` → target asks: "can I accept an explicit cast from src?"
+                             Intended caller: ``SpecRegistry.get_converter_cap()``
+                             from the semantic analyzer's ``IbCastExpr`` validator
+                             (activation deferred — see TODO in get_converter_cap).
+
+    Axioms that implement this capability declare which source types are legal for
+    explicit casting to themselves.  Axioms that do NOT implement it (return None
+    from ``get_converter_capability()``) do not support explicit casts as targets.
+    """
     def can_convert_from(self, source_type_name: str) -> bool:
         """True if a value of ``source_type_name`` can be cast to this type."""
         ...
