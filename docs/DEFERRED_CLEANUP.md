@@ -1,7 +1,7 @@
 # 延迟清理任务清单
 
 > **建立时间**：2026-04-28  
-> **更新**：2026-04-29（Phase 1 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；C6/C12 在 M6 Phase 1 清理中完成；剩余 C5/C7/C8/C9/C11/C14 延后到编译器深度清洁阶段，现已有 M6 合规测试安全网）  
+> **更新**：2026-04-29（Phase 1 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；C6/C12 在 M6 Phase 1 清理中完成；C8/C14 在 Phase 3 编译器深度清洁中完成；剩余 C5/C7/C9/C11 延后到下阶段）  
 > **来源**：从 `URGENT_ISSUES.md` 转入的低优先级维护性条目 + 2026-04-28/29 文档/代码一致性审查识别的"可彻底清理的兼容性回退"  
 > **属性**：以下任务均不影响正确性，目标是工程美观与可维护性  
 > **触发方式**：作为下一个独立的"代码债务清理 PR"一次性处理；不混入 M3b/M5a 等主线特性 PR
@@ -93,8 +93,8 @@
 - `core/runtime/interpreter/interpreter.py:execute_module()` — 已改为直接捕获 `ControlSignalException`
 - `core/runtime/objects/kernel.py:IbUserFunction.call()` — 已改为直接捕获 `ControlSignalException`（保留 ReturnException 兜底供 vm=None fallback 路径）
 - `core/runtime/vm/vm_executor.py:run_body()` — 已删除 CSE→ReturnException/BreakException/ContinueException 转换桥
-- `core/runtime/vm/handlers.py:vm_handle_IbTry` L1301–L1303 — `except (ReturnException, BreakException, ContinueException): raise` 透传桥（待 C8/C9 fallback 完全消除后删除）
-- `core/runtime/vm/handlers.py:vm_handle_IbCall` L260–L261 — `except ControlSignalException: raise` 透传桥（待 C8 fallback 完全消除后删除）
+- `core/runtime/vm/handlers.py:vm_handle_IbTry` — `except (ReturnException, BreakException, ContinueException): raise` 透传桥（待 C9 fallback 完全消除后删除）
+- `core/runtime/vm/handlers.py:vm_handle_IbCall` — `except ControlSignalException: raise` 透传桥（C8 fallback 已消除，待 C9 import 完全 CPS 化后一并清零）
 
 **落地内容（Phase 1，2026-04-29）**：Signal→CSE→ReturnException 三层桥已缩减为 Signal→CSE 两层：
 1. `run_body()` 不再将 CSE 转换为 Python 原生异常，直接让 CSE 向调用方传播
@@ -105,7 +105,7 @@
 - `vm_handle_IbTry` 和 `vm_handle_IbCall` 中的 `ReturnException/CSE` 透传桥
 - `ControlSignalException` 类本体（C5）彻底删除
 
-**前提**：剩余清理依赖 C8（IbLambdaExpr/IbBehaviorInstance 进入完整 CPS 路径）和 C9（import 完全 CPS 化）。
+**前提**：剩余清理依赖 C9（import 完全 CPS 化）。C8 已在 Phase 3 完成。
 
 ---
 
@@ -134,30 +134,19 @@ a, b = pair         # IbTuple 解包 → 递归 visit
 
 ---
 
-### [C8] `vm_handle_IbLambdaExpr` 与 `vm_handle_IbBehaviorInstance` 的全量 fallback 消除
+### [C8] `vm_handle_IbLambdaExpr` 与 `vm_handle_IbBehaviorInstance` 的全量 fallback 消除 ✅ DONE（2026-04-29）
 
-**文件**：`core/runtime/vm/handlers.py:vm_handle_IbLambdaExpr` L1102–L1111、`vm_handle_IbBehaviorInstance` L1091–L1099
+**文件**：`core/runtime/vm/handlers.py:vm_handle_IbLambdaExpr`、`vm_handle_IbBehaviorInstance`；`core/kernel/ast.py:IbLambdaExpr.free_vars`；`core/compiler/semantic/passes/semantic_analyzer.py:visit_IbLambdaExpr/_collect_free_var_refs_ast`
 
-**问题**：这两个 handler 目前是 "CPS 注册壳 + 立即 fallback"，实际执行路径与没有 CPS handler 完全相同：
+**落地内容**：
+1. **`IbLambdaExpr`**：
+   - `IbLambdaExpr` AST 节点新增 `free_vars: List` 字段（序列化到 artifact）
+   - `semantic_analyzer.visit_IbLambdaExpr` 末尾新增 `_collect_free_var_refs_ast()` 调用，在 Pass 4 body 分析完成后于 AST 对象树上收集所有自由变量引用（`[[name, sym_uid], ...]`），填入 `node.free_vars`
+   - `_collect_free_var_refs_ast()` 正确处理嵌套 lambda（内层形参加入 exclusion set 后递归内层 body）
+   - `vm_handle_IbLambdaExpr` 改为直接读取 `node_data["free_vars"]` 构建 closure，不再调用 `fallback_visit()`；handler 已是真正 CPS（无递归）
+2. **`IbBehaviorInstance`**：废弃语法（PAR_010 硬错误），无新代码可生成此节点；`vm_handle_IbBehaviorInstance` 内联 `visit_IbBehaviorInstance` 逻辑，删除 `fallback_visit()` 调用
 
-```python
-def vm_handle_IbLambdaExpr(executor, node_uid, node_data):
-    if False: yield
-    return executor.fallback_visit(node_uid)  # ← 完全递归
-
-def vm_handle_IbBehaviorInstance(executor, node_uid, node_data):
-    if False: yield
-    return executor.fallback_visit(node_uid)  # ← 完全递归
-```
-
-根本原因：
-- `IbLambdaExpr`：自由变量分析 + IbCell 提升逻辑全部在 `ExprHandler.visit_IbLambdaExpr` 的递归路径中，且 lambda body 在调用时才执行。CPS 化需要把自由变量扫描拆分为编译期侧表（`free_vars` 侧表），运行时只做 `IbCell` 分配与 `IbDeferred` 构造。
-- `IbBehaviorInstance`：`segments` 由 `LLMExecutor._evaluate_segments()` 递归求值，未暴露为单独 UID 供 CPS yield。
-
-**目标**：
-1. **`IbLambdaExpr`**：在语义分析阶段生成 `free_vars` 侧表（变量 UID 列表），运行时 handler 只需根据侧表分配 IbCell + 构造 IbDeferred，不再遍历 AST；删除 fallback，handler 升级为真正 CPS。
-2. **`IbBehaviorInstance`**：把 `_evaluate_segments()` 的子节点 UID 提升为 `IbBehaviorInstance` 节点的 `segment_uids` 字段，运行时 handler 逐一 `yield` 各段求值，再把结果传入同步的 LLM 调用；删除 fallback。
-3. 这两项都需要**编译器改动**（语义分析 pass 或序列化字段扩展），属于"编译器设计欠债导致运行时无法简化"的典型案例。
+**结果**：996 测试通过，0 退化
 
 ---
 
@@ -238,16 +227,17 @@ def vm_handle_IbImport(executor, node_uid, node_data):
 
 ---
 
-### [C14] `BehaviorDependencyAnalyzer` 不感知 IbCell 提升导致运行时扫描
+### [C14] `BehaviorDependencyAnalyzer` 不感知 IbCell 提升导致运行时扫描 ✅ DONE（2026-04-29）
 
-**文件**：`core/runtime/vm/handlers.py:_target_is_promoted_cell()` L511–L538
+**文件**：`core/compiler/semantic/passes/side_table.py:cell_captured_symbols`；`core/compiler/semantic/passes/semantic_analyzer.py:visit_IbLambdaExpr`；`core/compiler/semantic/passes/behavior_dependency_analyzer.py:_register_assign_targets`；`core/runtime/vm/handlers.py`（删除 `_target_is_promoted_cell`）
 
-**问题**：M5c 的 dispatch 决策必须在运行时通过 `hasattr(scope, "_cell_map")` 私有探测判断变量是否被 lambda 捕获。根本原因：`BehaviorDependencyAnalyzer`（M5a）在 Pass 5 中只做数据依赖图分析，不感知 Pass 4 中 lambda 捕获分析产生的 IbCell 提升信息。
+**落地内容**：
+1. `SideTableManager` 新增 `cell_captured_symbols: Set[str]`——Pass 4 中 lambda 模式自由变量的 sym_uid 集合
+2. `semantic_analyzer.visit_IbLambdaExpr` 在 `deferred_mode == "lambda"` 时将 free_vars 中的 sym_uid 写入 `side_table.cell_captured_symbols`
+3. `BehaviorDependencyAnalyzer._register_assign_targets` 检查赋值目标 sym_uid 是否在 `cell_captured_symbols` 中：若是，则在 Pass 5 阶段把对应 `IbBehaviorExpr.dispatch_eligible` 设为 `False`——编译期防止 LLMFuture 被写入 IbCell
+4. `_target_is_promoted_cell()` 运行时作用域链扫描函数已删除；`vm_handle_IbAssign` 不再调用该函数（编译期 `dispatch_eligible=False` 已保证安全）
 
-**目标**：
-1. 在语义分析 Pass 4（lambda 捕获分析）完成后，把"被提升为 IbCell 的符号 UID"列表写入侧表 `cell_captured_symbols: Set[str]`
-2. Pass 5（`BehaviorDependencyAnalyzer`）利用该侧表：若 `IbBehaviorExpr` 的 target 符号 UID 在 `cell_captured_symbols` 中，则强制 `dispatch_eligible = False`
-3. 运行时 `_target_is_promoted_cell()` 可以改为简单侧表查询，删除作用域链扫描与私有属性探测
+**结果**：996 测试通过，0 退化
 
 ---
 
@@ -255,7 +245,8 @@ def vm_handle_IbImport(executor, node_uid, node_data):
 
 1. **第一阶段：轻量债务清理 PR（L1-L4 + C1-C4 + C10 + C13）** ✅ DONE（2026-04-29）— 详见上面各条 ✅ 标记。基线 949 → 949（0 退化）。
 2. **第二阶段：Phase 1 轻量债务清理（C6 partial + C12）** ✅ DONE（2026-04-29）— Signal→CSE→ReturnException 三层桥消除（run_body/execute_module/IbUserFunction.call）；ScopeImpl 私有字段访问封装（define_raw/is_cell_promoted）。基线 949 → 996（+47 新合规测试，0 退化）。
-3. **暂缓**：C5、C6（剩余部分）、C7、C8、C9、C11、C14——C5/C6 剩余部分等待 C8（IbLambdaExpr/IbBehaviorInstance CPS 化）完成后处理；C7/C8/C11/C14 需要编译器改动或较大重构，按计划在 M6 安全网就绪后推进。
+3. **第三阶段：编译器深度清洁 Phase 1（C8 + C14）** ✅ DONE（2026-04-29）— `IbLambdaExpr.free_vars` 编译期侧表；`vm_handle_IbLambdaExpr/IbBehaviorInstance` fallback 消除；`cell_captured_symbols` 侧表；`_target_is_promoted_cell` 运行时扫描删除。基线 996 → 996（0 退化）。
+4. **暂缓**：C5、C6（剩余部分）、C7、C9、C11——C5/C6 剩余部分等待 C9（import 完全 CPS 化）完成后处理；C7/C9/C11 需要编译器改动或较大重构，按计划推进。
 4. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
 5. **测试基线**：M3d+M4+M5c+M6+Phase1债务清理后基线 **996**。
 6. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）、`docs/VM_SPEC.md`（VM 规范）、`tests/compliance/`（合规测试安全网）。

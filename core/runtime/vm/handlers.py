@@ -451,13 +451,12 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 仅支持简单的 IbName / IbTypeAnnotatedExpr(IbName) 目标——
         # 复杂目标（attribute/subscript/tuple unpack）此处不并发化，
         # fallback 到同步路径以保证语义一致。
-        # 同时排除已被提升为 IbCell 的变量（lambda HOF 捕获）：cell 的
-        # 共享可见性需要立即可见的 IbObject，写入 LLMFuture 占位符会
-        # 让 cell 持有者读到非法值。
+        # C14：cell 捕获变量已在编译期被标记为 dispatch_eligible=False，
+        # 故 dispatched_future 不会为被 cell 捕获的目标变量生成。
+        # 此处只需简单判断目标形式，不再需要运行时 scope 链扫描。
         targets = node_data.get("targets", [])
         future_assignable = all(
             _is_simple_name_target(executor, t_uid)
-            and not _target_is_promoted_cell(executor, t_uid)
             for t_uid in targets
         )
         if future_assignable:
@@ -508,37 +507,6 @@ def _is_simple_name_target(executor, target_uid: str) -> bool:
     return False
 
 
-def _target_is_promoted_cell(executor, target_uid: str) -> bool:
-    """判断赋值目标对应的符号是否已被提升为 IbCell（lambda HOF 闭包捕获）。
-
-    M5c 安全护栏：被 IbCell 持有的变量必须保持立即可见的 IbObject 语义；
-    若把 LLMFuture 占位符写入 ``sym.value`` 而不同步到 cell，外部 lambda
-    通过 ``cell.get()`` 会读到陈旧值；同步到 cell 又会让 cell 持有非法
-    LLMFuture。最稳妥的做法是退回同步路径。
-
-    C12：改用 ``scope.is_cell_promoted(sym_uid)`` 接口，不再直接访问
-    ``scope._cell_map`` 私有属性。BehaviorDependencyAnalyzer 当前不感知
-    cell 提升，因此该判断仍在运行时进行（C14 将来消除）。"""
-    target_data = executor.ec.get_node_data(target_uid)
-    if not target_data:
-        return False
-    if target_data.get("_type") == "IbTypeAnnotatedExpr":
-        inner = target_data.get("target")
-        return _target_is_promoted_cell(executor, inner) if inner else False
-
-    sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
-    if not sym_uid:
-        return False
-    rc = executor.runtime_context
-    # 沿作用域链查找 cell（promote_to_cell 把 cell 注册到声明所在 scope）
-    scope = rc.current_scope
-    while scope is not None:
-        if scope.is_cell_promoted(sym_uid):
-            return True
-        scope = getattr(scope, "parent", None)
-    return False
-
-
 def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) -> None:
     """把 ``LLMFuture`` 占位符直接写入目标变量符号绑定，跳过类型/值校验。
 
@@ -550,6 +518,9 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
     ``scope._symbols`` / ``scope._uid_to_symbol`` 私有字段。已存在符号
     的覆写（``sym.value = future``）仍通过 ``RuntimeSymbolImpl`` 公开属性进行，
     这是有意的——``define_raw`` 仅用于首次定义路径。
+
+    C14：调用方已通过编译期 ``dispatch_eligible=False`` 保证不会对被 lambda
+    捕获的变量（cell 变量）产生 LLMFuture，故此处无需 cell 同步检查。
     """
     target_data = executor.ec.get_node_data(target_uid)
     if not target_data:
@@ -576,9 +547,6 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
     if sym is not None:
         sym.value = future
         sym.current_type = type(future)
-        # 显式不同步 IbCell：LLMFuture 不是合法 IbObject，不应进入 cell.set。
-        # 调用方（vm_handle_IbAssign）已通过 _target_is_promoted_cell() 保证
-        # 该路径只覆盖未提升为 cell 的符号，因此跳过 cell 同步是安全的。
         return
 
     # 2) 首次定义 → 通过 define_raw() 写入，避免直接操作私有字段（C12）
@@ -1081,26 +1049,128 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
 
 
 def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``(Type) @~ ... ~`` 隐式实例化。
+    """``(Type) @~ ... ~`` 隐式实例化（废弃语法 PAR_010，保留运行时路径）。
 
-    与 ExprHandler.visit_IbBehaviorInstance 同语义。该节点不下钻子节点
-    （segments 在 LLM Executor 内部求值），故无 yield。
+    segments 为字面字符串与 ext_ref dicts，不含子表达式 UID，故无需 yield。
+    逻辑与 ExprHandler.visit_IbBehaviorInstance 完全对应，但走 VM 路径（C8）。
     """
     if False:
         yield
-    return executor.fallback_visit(node_uid)
+    from core.runtime.objects.intent import IbIntent, IntentMode
+    segments = node_data.get("segments", [])
+    target_type_name = node_data.get("target_type_name", "")
+
+    intent_content_parts = []
+    for seg in segments:
+        if isinstance(seg, str):
+            intent_content_parts.append(seg)
+        elif isinstance(seg, dict) and seg.get("_type") == "ext_ref":
+            intent_content_parts.append(executor.ec.get_asset(seg.get("uid", "")))
+        elif hasattr(seg, "to_native"):
+            intent_content_parts.append(str(seg.to_native()))
+        else:
+            intent_content_parts.append(str(seg))
+    intent_content = "".join(intent_content_parts)
+
+    intent_class = executor.registry.get_class("Intent")
+    if intent_class:
+        call_intent = IbIntent(ib_class=intent_class, content=intent_content, mode=IntentMode.APPEND)
+    else:
+        call_intent = None
+
+    target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)
+    if not target_descriptor and target_type_name:
+        meta_reg = executor.registry.get_metadata_registry()
+        if meta_reg:
+            target_descriptor = meta_reg.resolve(target_type_name)
+
+    sc = executor.service_context
+    llm_exec = sc.llm_executor if sc is not None else None
+    if llm_exec is None:
+        executor.runtime_context.set_last_llm_result(None)
+        return executor.registry.get_none()
+
+    result = llm_exec.execute_behavior_expression(node_uid, executor.ec, call_intent=call_intent)
+    executor.runtime_context.set_last_llm_result(result)
+
+    if not result or not result.value:
+        return executor.registry.get_none()
+
+    if target_type_name:
+        target_class = executor.registry.get_class(target_type_name)
+        if target_class:
+            return target_class.receive("__call__", [result.value])
+
+    return result.value
 
 
 def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     """lambda / snapshot 表达式：构造 ``IbDeferred`` 或 ``IbBehavior``（M2 SC-3/SC-4）。
 
-    自由变量分析与 IbCell 提升涉及大量 AST 走访 + 作用域操作，且不下钻 body
-    节点（body 在调用时才执行），CPS 化收益为零。直接 fallback 到
-    ExprHandler.visit_IbLambdaExpr。
+    C8：改用编译期填充的 ``node_data["free_vars"]``（``[[name, sym_uid], ...]``）
+    代替运行时 AST 走访（``_collect_free_refs``），消除 fallback 路径。
+    ``free_vars`` 由 ``semantic_analyzer.visit_IbLambdaExpr`` 在 Pass 4 末尾写入
+    ``IbLambdaExpr.free_vars`` 字段，序列化后进入 artifact node_data。
+
+    body 节点在 lambda 被调用时才执行，此处无需 yield——handler 为 generator
+    function（``if False: yield``）满足 VMExecutor 调度协议。
     """
     if False:
         yield
-    return executor.fallback_visit(node_uid)
+    from core.runtime.objects.cell import IbCell
+    params_uids: List[str] = list(node_data.get("params") or [])
+    body_uid = node_data.get("body")
+    deferred_mode = node_data.get("deferred_mode") or "lambda"
+    free_vars = node_data.get("free_vars") or []  # [[name, sym_uid], ...]
+
+    body_data = executor.ec.get_node_data(body_uid) if body_uid else None
+    body_is_behavior = bool(body_data) and body_data.get("_type") == "IbBehaviorExpr"
+
+    # 根据编译期收集的自由变量列表构建 closure，无需走访 AST。
+    closure: Dict[str, Any] = {}
+    if free_vars:
+        current_scope = executor.runtime_context.current_scope
+        for name, sym_uid in free_vars:
+            if sym_uid in closure:
+                continue
+            if deferred_mode == "snapshot":
+                # snapshot 模式：定义时刻的值拷贝（IbCell 独立副本，SC-3）
+                try:
+                    val = current_scope.get_by_uid(sym_uid)
+                except (KeyError, AttributeError):
+                    val = None
+                if val is not None:
+                    closure[sym_uid] = (name, IbCell(val))
+            else:
+                # lambda 模式：共享引用（promote_to_cell 返回 None 表示全局变量，SC-4）
+                cell = current_scope.promote_to_cell(sym_uid)
+                if cell is not None:
+                    closure[sym_uid] = (name, cell)
+
+    if body_is_behavior:
+        captured_intents = (
+            None if deferred_mode == "lambda"
+            else executor.runtime_context.fork_intent_snapshot()
+        )
+        expected_type = executor.ec.get_side_table("node_to_type", body_uid)
+        return executor.service_context.object_factory.create_behavior(
+            body_uid,
+            captured_intents,
+            expected_type=expected_type,
+            deferred_mode=deferred_mode,
+            execution_context=executor.ec,
+            params_uids=params_uids,
+            closure=closure,
+        )
+
+    return executor.service_context.object_factory.create_deferred(
+        node_uid,
+        deferred_mode=deferred_mode,
+        execution_context=executor.ec,
+        params_uids=params_uids,
+        body_uid=body_uid,
+        closure=closure,
+    )
 
 
 def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):

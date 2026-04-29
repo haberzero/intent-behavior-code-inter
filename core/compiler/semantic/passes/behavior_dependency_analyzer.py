@@ -89,7 +89,12 @@ class BehaviorDependencyAnalyzer:
 
     def _register_assign_targets(self, assign: ast.IbAssign) -> None:
         """如果 RHS 是 IbBehaviorExpr（含 IbCastExpr 包装），把 LHS 的所有
-        Symbol 标记为依赖该 IbBehaviorExpr。"""
+        Symbol 标记为依赖该 IbBehaviorExpr。
+
+        C14：若任一目标 Symbol UID 在 ``cell_captured_symbols`` 中（即该变量被
+        至少一个 lambda 捕获为共享 cell），则把 behavior expr 标记为
+        ``dispatch_eligible=False``。IbCell 只能持有合法 IbObject，LLMFuture
+        占位符不允许写入 cell，因此必须退回同步路径。"""
         rhs = assign.value
         # 递归剥离 IbCastExpr / IbTypeAnnotatedExpr
         while isinstance(rhs, (ast.IbCastExpr, ast.IbTypeAnnotatedExpr)):
@@ -101,6 +106,12 @@ class BehaviorDependencyAnalyzer:
             for sym in self._iter_target_symbols(tgt):
                 if sym is not None:
                     self._symbol_to_behavior_def[id(sym)] = rhs
+                    # C14：cell 捕获变量 → 禁止 dispatch-before-use
+                    if (
+                        sym.uid
+                        and sym.uid in self.side_table.cell_captured_symbols
+                    ):
+                        rhs.dispatch_eligible = False
 
     def _iter_target_symbols(self, target: Any):
         """从赋值目标 AST 节点抽取所有 Symbol。"""

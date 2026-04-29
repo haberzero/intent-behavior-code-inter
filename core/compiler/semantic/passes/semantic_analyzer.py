@@ -1778,8 +1778,9 @@ class SemanticAnalyzer:
         # 临时清除 current_class，避免把 lambda 形参登记为类成员
         saved_class = self.current_class
         self.current_class = None
+        param_sym_uids: set = set()
         try:
-            # 4. 注册形参符号
+            # 4. 注册形参符号，同时收集形参的 sym_uid（供自由变量分析剔除）
             for arg_node in node.params:
                 arg_type = self._any_desc
                 name_node = arg_node
@@ -1788,9 +1789,13 @@ class SemanticAnalyzer:
                     name_node = arg_node.target
 
                 if isinstance(name_node, ast.IbArg):
-                    self._define_var(name_node.arg, arg_type, name_node)
+                    sym = self._define_var(name_node.arg, arg_type, name_node)
+                    if sym is not None and sym.uid:
+                        param_sym_uids.add(sym.uid)
                 elif isinstance(name_node, ast.IbName):
-                    self._define_var(name_node.id, arg_type, name_node)
+                    sym = self._define_var(name_node.id, arg_type, name_node)
+                    if sym is not None and sym.uid:
+                        param_sym_uids.add(sym.uid)
 
             # 5. 走访 body，触发完整类型决议
             if node.body is not None:
@@ -1800,6 +1805,20 @@ class SemanticAnalyzer:
         finally:
             self.current_class = saved_class
             self.symbol_table = old_table
+
+        # C8/C14：编译期自由变量分析。
+        # 在 symbol_table 已恢复为外层作用域后执行，确保 side_table 中所有
+        # body 内 IbName 的 sym_uid 均已由 Pass 4 绑定完毕。
+        # 结果写入 node.free_vars（序列化到 artifact），并将 lambda 模式捕获的
+        # sym_uid 加入 side_table.cell_captured_symbols（供 Pass 5 BDA 使用）。
+        free_var_refs = self._collect_free_var_refs_ast(node.body, param_sym_uids)
+        node.free_vars = [[name, sym_uid] for name, sym_uid in free_var_refs]
+        if node.deferred_mode == "lambda":
+            # lambda 模式：自由变量通过共享 IbCell 捕获（SC-4）。
+            # 将这些 sym_uid 注册为 cell_captured_symbols，让 Pass 5 把对应
+            # 赋值语句中的 behavior 表达式标记为 dispatch_eligible=False。
+            for _name, sym_uid in free_var_refs:
+                self.side_table.cell_captured_symbols.add(sym_uid)
 
         # 6. 若 body 是 IbBehaviorExpr 且 returns_type 携带具体类型，
         #    将该类型绑定到 body 节点的 node_to_type 侧表，使 LLM executor
@@ -1843,6 +1862,69 @@ class SemanticAnalyzer:
                     deferred_mode=node.deferred_mode,
                 )
             return self._deferred_desc
+
+    def _collect_free_var_refs_ast(
+        self, body_node: Optional['ast.IbASTNode'], param_sym_uids: set
+    ) -> List:
+        """编译期自由变量收集（对 AST 对象树）。
+
+        与 ``ExprHandler._collect_free_refs`` 逻辑对应，但在 Pass 4 完成后于
+        AST 对象（Python dataclass 实例）上操作，而非在运行时遍历 artifact dict。
+
+        返回 ``[(name, sym_uid), ...]``，每项表示一个自由变量引用，按首次出现
+        去重；调用方按 sym_uid 再次去重（与运行时版本行为一致）。
+
+        **嵌套 lambda 处理**：遇到 ``IbLambdaExpr`` 时，将内层形参 UID 加入
+        exclusion set 并递归进入其 body——与运行时版本完全对应：外层 lambda
+        需捕获内层 body 引用到的外层变量，以便在定义内层 lambda 时正确 promote_to_cell。
+
+        **全局变量**：分析结果保守，包含全局作用域变量。运行时 ``promote_to_cell``
+        对全局变量返回 ``None``（不提升），closure 中不会出现全局变量的 cell。
+        """
+        if body_node is None:
+            return []
+
+        refs: List = []
+        seen_sym_uids: set = set()
+
+        def walk(node: Any, excl: set) -> None:
+            if not isinstance(node, ast.IbASTNode):
+                return
+            if isinstance(node, ast.IbName):
+                # 只处理 Load 上下文（读取，非赋值目标）
+                if getattr(node, "ctx", "Load") in ("Load", ""):
+                    sym = self.side_table.node_to_symbol.get(node)
+                    if sym is not None and sym.uid and sym.uid not in excl:
+                        if sym.uid not in seen_sym_uids:
+                            seen_sym_uids.add(sym.uid)
+                            refs.append((node.id, sym.uid))
+                return
+            if isinstance(node, ast.IbLambdaExpr):
+                # 嵌套 lambda：将内层形参加入 excl 后递归进入 body
+                inner_excl = set(excl)
+                for arg_node in (node.params or []):
+                    actual = arg_node
+                    if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+                        actual = arg_node.target
+                    sym = self.side_table.node_to_symbol.get(actual)
+                    if sym is not None and sym.uid:
+                        inner_excl.add(sym.uid)
+                if node.body is not None:
+                    walk(node.body, inner_excl)
+                return
+            # 通用展开：递归所有 AST 子节点（列表字段 + 单值字段）
+            for field_name, value in vars(node).items():
+                if field_name in ("llm_deps", "free_vars"):
+                    continue  # 跳过 DDG 元数据和已计算的自由变量列表
+                if isinstance(value, ast.IbASTNode):
+                    walk(value, excl)
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, ast.IbASTNode):
+                            walk(item, excl)
+
+        walk(body_node, param_sym_uids)
+        return refs
 
     def _resolve_type(self, node: Optional[ast.IbASTNode], safe: bool = False) -> IbSpec:
         """解析 AST 节点中的类型标注 (Axiom-Driven)"""
