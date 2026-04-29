@@ -770,17 +770,21 @@ def vm_handle_IbRaise(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``import x`` 在 IBCI 当前阶段为编译期语义，运行时无操作。"""
+    """``import x`` 委托到 ``ImportHandler.visit_IbImport``——它通过
+    ``module_manager`` 加载模块并把模块对象绑定到当前作用域（提供运行时
+    可访问的符号）。M3d-prep 早期版本误标注为"编译期无操作"导致 VM 主路径
+    切换后所有 import 都被丢弃；此 fix 把语义统一到递归 handler。"""
     if False:
         yield
-    return executor.registry.get_none()
+    return executor.fallback_visit(node_uid)
 
 
 def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``from x import y`` 在 IBCI 当前阶段为编译期语义，运行时无操作。"""
+    """``from x import y`` 委托到 ``ImportHandler.visit_IbImportFrom``。
+    与 ``vm_handle_IbImport`` 同理——M3d-prep 早期错误的 no-op 实现已修正。"""
     if False:
         yield
-    return executor.registry.get_none()
+    return executor.fallback_visit(node_uid)
 
 
 # === 复合赋值 ===
@@ -1265,9 +1269,9 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
         raise
     except ThrownException as te:
         raised_exc = te
-    except InterpreterError:
-        raise
     except Exception as e:
+        # 与 StmtHandler.visit_IbTry 同语义：``InterpreterError`` 等
+        # 解释器内部包装的 Python 异常也作为可捕获错误对待。
         raised_exc = e
 
     if raised_exc is not None:

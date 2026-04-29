@@ -337,6 +337,11 @@ class Interpreter:
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
 
+        # M3d：VMExecutor 主路径——延迟初始化
+        # （ExecutionContext / Handlers 必须先就绪；首个 execute_module() 调用时
+        # 通过 ``_get_vm_executor()`` 实例化）
+        self._vm_executor: Optional[Any] = None
+
         # 5. 预评估用户类字段 (STAGE 6)
         # 必须在 _visitor_cache 和执行上下文完整设置后运行，
         # 确保 visit() 能正确分发到各 Handler（如 ListExpr、IbDict）。
@@ -504,6 +509,20 @@ class Interpreter:
         finally:
             reset_current_frame(_token)
 
+    def _get_vm_executor(self):
+        """M3d：延迟构造并返回单例 VMExecutor。
+
+        VMExecutor 在 ``execute_module()`` 与 ``IbUserFunction.call()`` 中作为
+        主路径调度器使用；不支持的节点类型会自动回退到 ``Interpreter.visit()``
+        递归路径，保证向后兼容。
+        """
+        if self._vm_executor is None:
+            from core.runtime.vm.vm_executor import VMExecutor
+            self._vm_executor = VMExecutor(
+                self._execution_context, interpreter=self
+            )
+        return self._vm_executor
+
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
         from core.runtime.frame import set_current_frame, reset_current_frame
@@ -551,9 +570,34 @@ class Interpreter:
 
         try:
             # 模块主体是语句 UID 列表
+            # M3d：通过 VMExecutor.run() 驱动顶层语句的 CPS 执行；
+            # 不支持的节点类型由 VMExecutor 自动 fallback 到 visit()。
+            # ControlSignalException（顶层未消费的 Signal）恢复为原始
+            # Return/Break/Continue 异常类型，让既有边界处理（line ↓）
+            # 把"控制流出现在函数/循环之外"识别并报错。
+            #
+            # node_protection 重定向由 VMExecutor.run() 入口统一处理
+            # （等价于 Interpreter.visit() 顶部的拦截语义）；本循环只需跳过
+            # 直接出现在 body 中的 IbLLMExceptionalStmt（其执行由 target 重定向触发）。
+            from core.runtime.vm.task import (
+                ControlSignal as _CS, ControlSignalException as _CSE,
+            )
+            vm = self._get_vm_executor()
             body = module_data.get("body", [])
             for stmt_uid in body:
-                result = self.visit(stmt_uid)
+                stmt_data = self.get_node_data(stmt_uid)
+                if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
+                    continue
+                try:
+                    result = vm.run(stmt_uid)
+                except _CSE as cse:
+                    if cse.kind is _CS.RETURN:
+                        raise ReturnException(cse.value)
+                    if cse.kind is _CS.BREAK:
+                        raise BreakException()
+                    if cse.kind is _CS.CONTINUE:
+                        raise ContinueException()
+                    raise
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError:

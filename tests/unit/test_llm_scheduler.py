@@ -183,6 +183,9 @@ class TestDispatchEager:
         executor = interp.service_context.llm_executor
         node_uid = find_behavior_expr_uid(engine)
 
+        # M5c：engine.run_string 已对赋值的 RHS 触发了 dispatch_eager；
+        # 清空残留以独立验证 dispatch_eager() 自身的写入行为。
+        executor._pending_futures.clear()
         assert node_uid not in executor._pending_futures
         fut = executor.dispatch_eager(node_uid, interp._execution_context)
         assert node_uid in executor._pending_futures
