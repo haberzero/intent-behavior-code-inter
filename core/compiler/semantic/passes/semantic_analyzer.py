@@ -258,9 +258,15 @@ class SemanticAnalyzer:
 
                 prev_stmt = new_body[-1]
 
-                # [Task 1.2] 对条件驱动 for 循环的特殊处理：
+                # [Task 1.2 / C11/P1] 对条件驱动 for 循环的特殊处理：
                 # llmexcept 保护的是条件表达式本身，而非整个 for 循环节点。
-                # 这样每次循环的条件 LLM 调用都可以单独被重试，而不是重启整个循环。
+                # P1 修复：不再使用 node_protection 侧表 + stmt.target = cond_expr，
+                # 改为将 IbLLMExceptionalStmt 直接挂载到 IbFor.llmexcept_handler。
+                # 原方案（bind_protection + stmt.target = cond_expr）的缺陷：
+                # visit_IbLLMExceptionalStmt 会再次 visit(node.target = cond_expr)，
+                # 从而将 node_to_type[behavior_expr] 从 bool 覆写为 behavior，
+                # 导致运行时 IbBehaviorExpr 返回 IbString('0') 而非 IbBool(False)，
+                # 造成条件驱动 for 循环永不退出（IbString('0') 是 truthy）。
                 if isinstance(prev_stmt, ast.IbFor) and prev_stmt.target is None:
                     cond_expr = prev_stmt.iter
                     if not self._expr_contains_behavior(cond_expr):
@@ -269,11 +275,10 @@ class SemanticAnalyzer:
                             "'@~...~' as the loop condition.",
                             stmt, code="SEM_050"
                         )
-                    # C11: 条件 for 情形——保留 node_protection 侧表供
-                    # _apply_protection_redirect 在 IbFor 内部重定向条件表达式；
-                    # IbLLMExceptionalStmt 本身不加入 body（IbFor 是主体）。
-                    self.side_table.bind_protection(cond_expr, stmt)
-                    stmt.target = cond_expr
+                    # C11/P1: 将 llmexcept handler 直接挂载到 IbFor.llmexcept_handler；
+                    # 不设 stmt.target（保持 None），不写 node_protection 侧表；
+                    # IbLLMExceptionalStmt 不加入 body，IbFor 是 body 中的唯一主体。
+                    prev_stmt.llmexcept_handler = stmt
                     # 仅递归处理 llmexcept body，不 append stmt 到 new_body
                     for body_stmt in stmt.body:
                         self._bind_llm_except(body_stmt)
@@ -1283,12 +1288,11 @@ class SemanticAnalyzer:
         for stmt in node.body:
             self.visit(stmt)
 
-        # C11: 条件驱动 for 情形——IbLLMExceptionalStmt 不在 body 中，
+        # C11/P1: 条件驱动 for 情形——IbLLMExceptionalStmt 不在 body 中，
         # 但其 handler body 的符号绑定必须在此显式触发。
-        if node.target is None:
-            handler = self.side_table.node_protection.get(node.iter)
-            if handler is not None and isinstance(handler, ast.IbLLMExceptionalStmt):
-                self.visit(handler)
+        # 使用 node.llmexcept_handler 替代旧的 node_protection 侧表查找。
+        if node.target is None and node.llmexcept_handler is not None:
+            self.visit(node.llmexcept_handler)
 
         return self._void_desc
 

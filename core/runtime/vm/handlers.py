@@ -1291,6 +1291,19 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
     * 标准 foreach：``for T name in iterable [if filter]:``
     * 条件驱动：``for @~...~ [if filter]:`` （``target`` 为 ``None``）
     * llmexcept loop_resume：从当前帧的 ``loop_resume[node_uid]`` 索引继续
+
+    C11/P2：条件驱动 for + llmexcept 的内联重试逻辑
+    --------------------------------------------------
+    当 ``node_data["llmexcept_handler"]`` 存在时，条件 LLM 调用返回 uncertain
+    (``last_result.is_certain == False``) 不再直接退出循环，而是：
+    1. 创建 ``LLMExceptFrame``（保存快照、记录 target_uid）
+    2. 执行 handler body（通常含 ``retry "hint"`` 语句）
+    3. 若 ``frame.should_retry`` 为 True（由 ``vm_handle_IbRetry`` 设置）且重试
+       次数未耗尽（``frame.increment_retry()`` 返回 True），则 continue 重试条件求值
+    4. 否则退出循环（等同于 uncertain-无-handler 情形：``return get_none()``）
+
+    此方案消除了旧 ``node_protection + _apply_protection_redirect`` 重定向机制
+    对 ``node_to_type[behavior_expr]`` 的隐式覆写（P1 语义修复的配套运行时实现）。
     """
     target_uid = node_data.get("target")
     iter_uid = node_data.get("iter")
@@ -1306,14 +1319,58 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     # ----- 条件驱动循环 -----
     if target_uid is None:
+        # C11/P2: 读取 llmexcept_handler uid（由 P1 语义分析阶段写入）
+        llmexcept_handler_uid: Optional[str] = node_data.get("llmexcept_handler")
+
+        # 从 LLM provider 读取 max_retry（与 vm_handle_IbLLMExceptionalStmt 保持一致）
+        max_retry = 3
+        sc = executor.service_context
+        if sc is not None:
+            cap_reg = getattr(sc, "capability_registry", None)
+            if cap_reg is not None:
+                llm_provider = cap_reg.get("llm_provider") if hasattr(cap_reg, "get") else None
+                if llm_provider is not None and hasattr(llm_provider, "get_retry"):
+                    max_retry = llm_provider.get_retry()
+
         while True:
             executor.runtime_context.set_last_llm_result(None)
             condition = yield actual_iter_uid
             if isinstance(condition, Signal):
                 return condition
             last_result = executor.runtime_context.get_last_llm_result()
+
             if last_result and not last_result.is_certain:
-                return executor.registry.get_none()
+                if llmexcept_handler_uid is not None:
+                    # C11/P2: uncertain + llmexcept —— 内联重试逻辑
+                    llmexcept_data = executor.ec.get_node_data(llmexcept_handler_uid)
+                    handler_body_uids = llmexcept_data.get("body", []) if llmexcept_data else []
+
+                    # 创建 LLMExceptFrame，保存当前作用域快照
+                    frame = executor.runtime_context.save_llm_except_state(
+                        target_uid=actual_iter_uid,
+                        node_type="IbLLMExceptionalStmt",
+                        max_retry=max_retry,
+                    )
+                    frame.last_result = last_result
+                    frame.should_retry = False  # 等待 retry 语句显式设置
+
+                    try:
+                        for handler_stmt_uid in handler_body_uids:
+                            handler_res = yield handler_stmt_uid
+                            if isinstance(handler_res, Signal):
+                                return handler_res
+                    finally:
+                        executor.runtime_context.pop_llm_except_frame()
+
+                    # 仅当 retry 语句被执行（should_retry=True）且重试次数未耗尽时继续
+                    if frame.should_retry and frame.increment_retry():
+                        continue  # 重试条件求值
+                    else:
+                        return executor.registry.get_none()  # 退出循环
+                else:
+                    # uncertain 且无 llmexcept handler：优雅退出循环
+                    return executor.registry.get_none()
+
             if not executor.ec.is_truthy(condition):
                 break
             if filter_uid is not None:

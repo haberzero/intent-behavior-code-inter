@@ -293,12 +293,11 @@ class LocalSymbolCollector:
             self._define(sym, target) # 绑定 target 节点
         self.generic_visit(node)
 
-        # C11: 条件驱动 for 情形——预扫描 llmexcept handler body 中的局部变量
-        if node.target is None:
-            handler = self.analyzer.side_table.node_protection.get(node.iter)
-            if handler is not None:
-                for stmt in getattr(handler, "body", []):
-                    self.visit(stmt)
+        # C11/P1: 条件驱动 for 情形——预扫描 llmexcept handler body 中的局部变量
+        # 使用 node.llmexcept_handler 替代旧的 node_protection 侧表查找。
+        if node.target is None and node.llmexcept_handler is not None:
+            for stmt in (node.llmexcept_handler.body or []):
+                self.visit(stmt)
 
     def visit_IbTry(self, node: ast.IbTry):
         # 预扫描异常处理器中的变量
