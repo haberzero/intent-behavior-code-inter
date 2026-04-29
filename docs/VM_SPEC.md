@@ -102,7 +102,7 @@ while frame_stack:
 
 **规则**：以下情况强制 `dispatch_eligible = False`：
 - 目标变量是插值依赖（前序 behavior 的输出是当前 behavior 的 $var 输入）
-- 赋值目标是 Cell 变量（IbCell 不允许持有 LLMFuture 占位符，见 DEFERRED_CLEANUP C14）
+- 赋值目标是 Cell 变量（IbCell 不允许持有 LLMFuture 占位符，见 `docs/COMPLETED.md` §二十一 C14 条目）
 - 节点处于 llmexcept 保护下（snapshot 隔离约束）
 
 ### §3.2 LLMScheduler + LLMFuture（M5b）

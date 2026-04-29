@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-29（M4 多 Interpreter 并发落地：ihost.spawn_isolated + ihost.collect；964 个测试通过）
+> **最后更新**：2026-04-29（编译器深度清洁 Phase 1–5 全部落地：C5/C6/C7/C8/C9/C10/C11/C12/C13/C14 完成；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零；`node_protection` 侧表 + `bypass_protection` 参数链 + `_apply_protection_redirect()` + `ControlSignalException` 类全链路删除；`docs/DEFERRED_CLEANUP.md` 与 `URGENT_ISSUES.md` 与 `BUG_REPORTS.md` 已合并归档至本文件并删除原文件；**989 个测试通过**）
 
 ---
 
@@ -1142,3 +1142,131 @@ M6 的核心目标是在主线功能（M1–M5c + M4）全部稳定后，建立*
 ### 19.7 测试基线
 
 964 → 996（+32 合规测试，0 退化）。
+
+---
+
+## §二十：编译器深度清洁 Phase 2–5（C5–C14 全链路落地）— 2026-04-29
+
+> Phase 1 已记录于 §十九（C6 部分 / C12）。本节汇总 Phase 2–5 的清洁工作，覆盖 `docs/DEFERRED_CLEANUP.md` 中 C5/C7/C8/C9/C11/C14 全部条目；自此该文件全部 ✅ DONE 并已归档进本文件后删除。
+
+### 20.1 Phase 2（C8 + C14）— 编译期 free_vars / cell_captured_symbols 侧表
+
+**C8：`vm_handle_IbLambdaExpr` / `vm_handle_IbBehaviorInstance` 全量 fallback 消除**
+
+- `core/kernel/ast.py`：`IbLambdaExpr` 新增 `free_vars: List` 字段（`[[name, sym_uid], ...]`），编译期填充并序列化进 artifact。
+- `core/compiler/semantic/passes/semantic_analyzer.py`：`visit_IbLambdaExpr` 末尾通过新增的 `_collect_free_var_refs_ast()` 在 Pass 4 body 分析完成后于 AST 对象树上收集所有自由变量引用；正确处理嵌套 lambda（内层形参加入 exclusion set）。
+- `core/runtime/vm/handlers.py`：`vm_handle_IbLambdaExpr` 改为直接读取 `node_data["free_vars"]` 构建 closure，删除 `executor.fallback_visit()` 调用——handler 真正 CPS 化。
+- `IbBehaviorInstance` 节点对应 PAR_010 废弃语法，`vm_handle_IbBehaviorInstance` 内联处理路径并清理 fallback。
+
+**C14：`BehaviorDependencyAnalyzer` 不感知 IbCell 提升导致运行时扫描**
+
+- `core/compiler/semantic/passes/side_table.py`：`SideTableManager` 新增 `cell_captured_symbols: Set[str]`——Pass 4 中 lambda 模式自由变量的 sym_uid 集合。
+- `semantic_analyzer.visit_IbLambdaExpr` 在 `deferred_mode == "lambda"` 时把 free_vars 中的 sym_uid 写入侧表。
+- `core/compiler/semantic/passes/behavior_dependency_analyzer.py`：`_register_assign_targets` 检查赋值目标 sym_uid 是否在 `cell_captured_symbols` 中，是则把对应 `IbBehaviorExpr.dispatch_eligible` 设为 `False`——编译期防止 LLMFuture 被写入 IbCell。
+- `core/runtime/vm/handlers.py`：`_target_is_promoted_cell()` 运行时作用域链扫描函数删除；`vm_handle_IbAssign` 不再调用该函数。
+
+### 20.2 Phase 3（C6 remainder + C7 + C9）— `fallback_visit()` 显式调用归零
+
+**C9：`vm_handle_IbImport` / `vm_handle_IbImportFrom` fallback 升级为真正 CPS**
+
+- `core/runtime/vm/handlers.py`：两个 handler 内联 `ImportHandler.visit_*` 逻辑，调用 `sc.module_manager.import_module()` / `import_from()`，再 `runtime_context.define_variable()` 绑定；`if False: yield` 满足调度协议，彻底删除 `executor.fallback_visit(node_uid)` 调用。
+- `vm_handle_IbAssign` 中 `is_deferred` 路径的 `fallback_visit(value_uid)` 替换为 `yield value_uid`——`vm_handle_IbBehaviorExpr` 已完整实现 deferred 模式的 IbBehavior 包装，fallback 冗余。
+- 至此 handlers.py 中所有显式 `executor.fallback_visit()` 调用清零。
+
+**C7：`assign_to_target()` 穿透到 StmtHandler 的递归赋值彻底重写为 CPS generator**
+
+- `core/runtime/vm/handlers.py`：新增 `_assign_name_target()` 纯同步 IbName 赋值帮助函数；新增 `_vm_assign_to_target()` CPS generator helper，支持所有目标类型（IbName / IbTypeAnnotatedExpr / IbAttribute / IbSubscript / IbTuple 解包）。
+- `vm_handle_IbAssign` / `vm_handle_IbFor` 中所有 `executor.assign_to_target()` 调用替换为 `yield from _vm_assign_to_target(...)`。
+- `core/runtime/vm/vm_executor.py`：`VMExecutor.assign_to_target()` 标注为已废弃（兼容保留），生产路径不再使用。
+
+**C6 收尾：`IbTry` / `IbCall` 异常透传桥删除**
+
+- `core/runtime/vm/handlers.py`：`vm_handle_IbTry` body try-except 中移除 `except (ReturnException, BreakException, ContinueException): raise` 透传桥；`vm_handle_IbCall` 中移除 `except ControlSignalException: raise` 透传桥；handlers.py 顶部清除 `ReturnException/BreakException/ContinueException/ControlSignalException` 全部无用导入。
+
+### 20.3 Phase 4（M3d/C13 主路径切换）
+
+**C13：`IbUserFunction.call()` 通过多级 `getattr` 脆弱查找 VMExecutor**
+
+- `core/runtime/interpreter/execution_context.py` / `interpreter.py`：`ExecutionContextImpl` 新增 `vm_executor` 属性 + setter（默认 `None`，由 Interpreter 注入）；`Interpreter._get_vm_executor()` 在首次构造 VMExecutor 时立即把引用写入 `self._execution_context.vm_executor`。
+- `core/runtime/objects/kernel.py`：`IbUserFunction.call()` 改为直接读取 `self.context.vm_executor` 并通过 `vm.run_body(body)` 驱动函数体。
+- 审计修复：原三级查找链在合法运行时永远走不到 VMExecutor 路径，函数体始终走 `context.visit(stmt_uid)` 递归 fallback；C13 让函数体首次真正经由 VM 路径执行——这正是 M4 多 Interpreter 并发所需要的"无 silent fallback"前提。
+
+### 20.4 Phase 5（C11 / P3 + C5）— `node_protection` 侧表 + `ControlSignalException` 全链路删除
+
+**C11/P1**（语义分析）：`IbFor.llmexcept_handler` AST 字段替代条件驱动 for 循环的侧表关联。
+
+**C11/P2**（VM 运行时）：`vm_handle_IbFor` 直接内联重试逻辑，消除 `_apply_protection_redirect` 对条件表达式的隐式覆写；修复条件驱动 for + llmexcept 无限循环 bug。
+
+**C11/P3**（最终清理）：
+
+- `core/compiler/semantic/passes/side_table.py`：删除 `node_protection` dict、`bind_protection()`、`clear()` 中清理调用。
+- `core/compiler/semantic/passes/semantic_analyzer.py`：`analyze()` 返回值删除 `node_protection=...` 参数。
+- `core/kernel/blueprint.py`：`CompilationResult` 删除 `node_protection` 字段。
+- `core/compiler/serialization/serializer.py`：删除 `remaped_node_protection` 块与 side_tables 字典中的 `node_protection` entry。
+- `core/runtime/vm/vm_executor.py`：删除 `_apply_protection_redirect()` 方法 + `run()` / `_drive_loop()` 中 2 处调用。
+- `core/runtime/interpreter/interpreter.py`：删除 `visit()` 中 `bypass_protection` 检查块与参数。
+- `core/runtime/interpreter/execution_context.py` / `core/kernel/interfaces.py` / `core/runtime/interfaces.py`：`visit()` Protocol 中 `bypass_protection` 参数删除。
+- `core/runtime/interpreter/handlers/stmt_handler.py`：调整 `visit_IbLLMExceptionalStmt` 中显式驱动 target 的调用。
+- `tests/unit/test_vm_executor_m3d.py`：删除 `TestProtectionRedirect` 类（3 个针对死代码的测试覆盖物）。
+
+**C5**（控制流不再以异常方式跨越 Python 调用栈）：C11/P3 完成后，`ControlSignalException` 类本体在 `core/runtime/vm/task.py` 中**已彻底删除**，仅余 `UnhandledSignal`（VM 顶层未消费 Signal 的边界异常）。production 与 test 路径中均无任何引用。
+
+### 20.5 测试基线与最终状态
+
+- 基线：996（M6 + Phase 1 完成）→ 989（C11/P3 完成；删除 3 个 `TestProtectionRedirect` 死代码测试覆盖物，0 功能性退化）。
+- CPS dispatch table 覆盖 **43 个 AST 节点 handler**（helper 节点 IbCase / IbExceptHandler / IbTypeAnnotatedExpr 由父 handler 内联，无需独立 dispatch entry）。
+- handlers.py 中所有显式 `executor.fallback_visit()` 调用归零；`vm_executor.py` 的 fallback 仅作为分发层兜底（`dispatch[type] is None` 时返回值，所有 production 路径都已有显式 handler）。
+- `docs/DEFERRED_CLEANUP.md` 中 L1–L4 + C1–C14 全部 ✅ DONE。
+
+---
+
+## §二十一：URGENT_ISSUES / BUG_REPORTS / DEFERRED_CLEANUP 历史归档
+
+> 三个独立的"工作进行中"文件在 2026-04-29 全部完成清零；为减少冗余文档与未来 agent 误读风险，文件原内容（历史修复条目）已合并至本节备查，原文件已删除。
+
+### 21.1 `URGENT_ISSUES.md`（Code Review 2026-04-28）历史归档
+
+- **H1**（FIXED 2026-04-28）`IbDeferred` docstring 落后 M2 实现 — 更新为 closure 字段语义。`core/runtime/objects/builtins.py:703-707`
+- **H2**（FIXED 2026-04-28）`_captured_scope` 僵尸字段存活 — 全链路删除。`core/runtime/objects/builtins.py`、`core/runtime/factory.py`、`core/runtime/interfaces.py`、`core/runtime/interpreter/handlers/expr_handler.py`、`core/runtime/interpreter/handlers/stmt_handler.py`
+- **H3**（FIXED 2026-04-28）`DeferredAxiom.is_compatible` 与自身文档矛盾 — 移除 `or other_name.startswith("behavior[")` 行。`core/kernel/axioms/primitives.py`
+- **M1**（FIXED 2026-04-28）`IbDeferred.call()` / `IbBehavior.call()` "兼容历史"死分支 — 改为直接解包 `closure.items()`。
+- **M2**（FIXED 2026-04-28，M3a PR 同步）`define()` fallback UID hash 生成 — 改为 `id(sym)`-based + `RuntimeWarning`。
+- **M3**（FIXED 2026-04-28，M3a PR 同步）snapshot 模式自由变量捕获静默失败 — `val is None` 改为通过 `debugger.trace(BASIC)` 输出诊断警告。
+- **M4**（FIXED 2026-04-28，M3a PR 同步）`IbDeferred.to_native()` / `IbBehavior.to_native()` 静默返回 self — 未执行时抛 `RuntimeError`。
+- **M5**（FIXED 2026-04-28，M3a PR 同步）`collect_gc_roots()` 用 `hasattr` 做接口检查 — `iter_cells()` 提升到 `Scope` 协议。
+- **L1–L4**（DONE 2026-04-29，轻量债务清理 PR）—— 详见 §十七 与 §20。
+
+### 21.2 `BUG_REPORTS.md` Bug #1–#4 历史归档
+
+- **Bug #1**（FIXED）类字段列表/字典字面量默认值静默失效 — `Interpreter.__init__` 不再覆盖 `_kernel_token`；`KernelRegistry.set_execution_context()` 移除过度限制；运行时 handler 在 `_pre_evaluate_user_classes()` 之前初始化。
+- **Bug #2**（FIXED）`dict` 类型变量接收 `@~...~` LLM 输出失败 — `_parse_result()` 在 `meta_reg.resolve(type_name)` 失败时剥离泛型参数重试（`"dict[any,any]"` → `"dict"`）。
+- **Bug #3**（FIXED, CONFIRMED）Enum 类型从 LLM 输出解析失败 — `_check_type` 对 `is_user_defined=True` 的 `ClassSpec` 跳过类型校验，正常工作。
+- **Bug #4**（FIXED）`none`（小写）关键字在运行时未定义 — `visit_IbName()` 检测到 `node.id == "none"` 时立即发 SEM_001 编译期错误。
+
+> Bug #1–#3 涉及"`return` 中行为表达式""泛型专化崩溃"等子修复细节已分散记录于 §四 / §四b。
+
+### 21.3 `DEFERRED_CLEANUP.md` 历史归档
+
+> 全部 L1–L4 + C1–C14 条目已 ✅ DONE，详细落地说明见 §十七、§十九、§二十。本节仅留索引。
+
+| 编号 | 主题 | 详细记录 |
+|------|------|---------|
+| L1   | `IbLambdaExpr.returns` 兼容字段彻底删除 | §十七 |
+| L2   | `get_vars()` 硬编码内置函数过滤名单 → `is_builtin` 字段 | §十七 |
+| L3   | `_pending_fn_return_type` 隐式上下文通道注释固化 | §十七 |
+| L4   | `_collect_free_refs` 启发式子节点遍历注释固化 | §十七 |
+| C1   | `LLMExceptFrame._is_serializable()` 死代码删除 | §十七 |
+| C2   | `LLMExecutor.execute_behavior_expression` 中 `captured_intents` 旧路径分支删除 | §十七 |
+| C3   | `ScopeImpl.define()` fallback UID 路径升级为断言 | §十七 |
+| C4   | `IbDeferred.body_uid is None` 空值兼容路径审计 | §十七 |
+| C5   | `ControlSignalException` 边界封装类删除 | §20.4 |
+| C6   | CSE-Exception 双层桥彻底消除（含 IbTry/IbCall 异常透传桥） | §十九 + §20.2 |
+| C7   | `assign_to_target()` 穿透到 StmtHandler 的 CPS generator helper 重写 | §20.2 |
+| C8   | `vm_handle_IbLambdaExpr` / `vm_handle_IbBehaviorInstance` 全量 fallback 消除 | §20.1 |
+| C9   | `vm_handle_IbImport` / `vm_handle_IbImportFrom` 真正 CPS 化 | §20.2 |
+| C10  | `execute_module()` 与 `IbUserFunction.call()` 中重复的 `IbLLMExceptionalStmt` 跳过逻辑收敛到 `VMExecutor.run_body()` | §十七 |
+| C11  | `node_protection` 侧表驱动的保护机制重定向设计改造（P1+P2+P3） | §20.4 |
+| C12  | `_assign_future_to_name_target()` 直接操作 `ScopeImpl` 私有属性 → `define_raw()` / `is_cell_promoted()` 封装 | §十九 |
+| C13  | `IbUserFunction.call()` 通过多级 `getattr` 脆弱查找 VMExecutor → 显式注入 | §20.3 |
+| C14  | `BehaviorDependencyAnalyzer` 不感知 IbCell 提升 → `cell_captured_symbols` 侧表 | §20.1 |
+
