@@ -249,8 +249,10 @@ class TypeResolver:
             if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
                 # 解析以注册类型；返回值在此阶段无需保留
                 self.analyzer._resolve_type(arg_node.annotation, safe=True)
-        # ``IbLambdaExpr.returns`` 字段已删除（L1）；声明侧返回类型经
-        # ``_pending_fn_return_type`` 通道在 Pass 3 处理，本 Pass 无需处理。
+        # D2：node.returns 携带表达式侧返回类型标注；Pass 2 仅做完整性 visit，
+        # 实际决议在 Pass 3（SemanticAnalyzer.visit_IbLambdaExpr）中完成。
+        if node.returns is not None:
+            self.analyzer._resolve_type(node.returns, safe=True)
         # 走访 body 以触发其内部的类型决议（类型来自 generic_visit 的副作用）
         if node.body is not None:
             self.visit(node.body)

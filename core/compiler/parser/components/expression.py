@@ -484,18 +484,21 @@ class ExpressionComponent(BaseComponent):
         deferred_mode = "lambda" if keyword_token.type == TokenType.LAMBDA else "snapshot"
 
         params: List[ast.IbASTNode] = []
+        returns_node: Optional[ast.IbExpr] = None
+        type_parser = self.context.type_parser
 
         # ------------------------------------------------------------------ #
-        # 1. 无参：`lambda: EXPR` 或 `snapshot: EXPR`                        #
+        # 1. 无参：`lambda: EXPR` / `lambda -> TYPE: EXPR`                   #
         # ------------------------------------------------------------------ #
         if self.stream.check(TokenType.ARROW):
-            raise self.stream.error(
-                self.stream.peek(),
-                f"Return type annotation on '{deferred_mode}' is not allowed on the expression side. "
-                f"Use the declaration side instead: 'TYPE fn NAME = {deferred_mode}: EXPR'. "
-                f"For example: 'int fn f = lambda: 1 + 1'.",
-                code="PAR_005",
+            # D2：表达式侧 `-> TYPE` 合法化
+            self.stream.advance()  # consume '->'
+            returns_node = type_parser.parse_type_annotation()
+            self.stream.consume(
+                TokenType.COLON,
+                f"Expect ':' after return type annotation in '{deferred_mode}' expression.",
             )
+            body = self.parse_expression(IbPrecedence.LOWEST)
 
         elif self.stream.check(TokenType.COLON):
             self.stream.advance()  # consume ':'
@@ -525,15 +528,10 @@ class ExpressionComponent(BaseComponent):
             params = decl.parameters()
             self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' parameter list.")
 
-            # 拒绝表达式侧 `-> TYPE` 标注
+            # D2：表达式侧 `-> TYPE` 合法化（有参形式）
             if self.stream.check(TokenType.ARROW):
-                raise self.stream.error(
-                    self.stream.peek(),
-                    f"Return type annotation on '{deferred_mode}' is not allowed on the expression side. "
-                    f"Use the declaration side instead: 'TYPE fn NAME = {deferred_mode}(PARAMS): EXPR'. "
-                    f"For example: 'int fn f = lambda(int a): a + 1'.",
-                    code="PAR_005",
-                )
+                self.stream.advance()  # consume '->'
+                returns_node = type_parser.parse_type_annotation()
 
             # Body 必须以 ':' 起始
             self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{deferred_mode}' body expression.")
@@ -546,7 +544,7 @@ class ExpressionComponent(BaseComponent):
                 code="PAR_002",
             )
 
-        node = ast.IbLambdaExpr(params=params, body=body, deferred_mode=deferred_mode)
+        node = ast.IbLambdaExpr(params=params, body=body, deferred_mode=deferred_mode, returns=returns_node)
         return self._loc(node, keyword_token, self.stream.previous())
 
     def _lambda_lookahead_is_param_form(self) -> bool:

@@ -15,11 +15,12 @@ Coverage:
     captured intents/closure
   - Backward compatibility: legacy ``TYPE lambda NAME = EXPR`` still errors
 
-Syntax rules:
+Syntax rules (D1/D2):
   - ``:`` is the only valid body-start delimiter.
   - Old parenthesis-only body forms are no longer supported.
-  - Return type annotation must appear on the DECLARATION side:
-    ``TYPE fn name = lambda: EXPR``  (not ``fn name = lambda -> TYPE: EXPR``).
+  - Return type annotation must appear on the EXPRESSION side:
+    ``fn name = lambda -> TYPE: EXPR``  (not ``TYPE fn name = lambda: EXPR``).
+  - Declaration-side return type (``TYPE fn name = lambda: EXPR``) is now PAR_003.
 """
 
 import os
@@ -219,43 +220,53 @@ class TestFnLambdaErrors:
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError) as exc_info:
-            engine.compile_string("str fn f = lambda(int a): a + 1", silent=True)
+            engine.compile_string("fn f = lambda(int a) -> str: a + 1", silent=True)
         assert any(d.code == "SEM_003" for d in exc_info.value.diagnostics)
 
-    def test_lambda_exprside_arrow_is_error(self):
-        """``fn f = lambda -> TYPE: EXPR`` expression-side annotation is now a parse error."""
+    def test_decl_side_type_fn_is_error(self):
+        """Old ``int fn f = lambda: EXPR`` declaration-side return type is now PAR_003."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
-            engine.compile_string("fn f = lambda -> int: 1 + 1", silent=True)
+            engine.compile_string("int fn f = lambda: 1 + 1", silent=True)
 
-    def test_lambda_exprside_arrow_params_is_error(self):
-        """``fn f = lambda(PARAMS) -> TYPE: EXPR`` expression-side annotation is a parse error."""
+    def test_decl_side_type_fn_params_is_error(self):
+        """Old ``int fn add = lambda(int a, int b): a+b`` declaration-side form is PAR_003."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
-            engine.compile_string("fn f = lambda(int a) -> int: a + 1", silent=True)
+            engine.compile_string("int fn add = lambda(int a, int b): a + b", silent=True)
+
+    def test_lambda_exprside_arrow_compiles(self):
+        """``fn f = lambda -> int: EXPR`` expression-side annotation is now valid (D2)."""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn f = lambda -> int: 1 + 1\nint r = f()", silent=True)
+
+    def test_lambda_exprside_arrow_params_compiles(self):
+        """``fn f = lambda(PARAMS) -> int: EXPR`` expression-side annotation is now valid (D2)."""
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+        engine.compile_string("fn f = lambda(int a) -> int: a + 1\nint r = f(3)", silent=True)
 
 
 # ---------------------------------------------------------------------------
-# Return type annotation: ``TYPE fn NAME = lambda: EXPR``
-# (Declaration-side return type annotation — replaces old ``-> TYPE`` expr form)
+# Return type annotation: ``fn NAME = lambda -> TYPE: EXPR``
+# (Expression-side return type annotation — D2, replaces ``TYPE fn NAME = lambda: EXPR``)
 # ---------------------------------------------------------------------------
 
 class TestFnReturnsAnnotation:
-    """Declaration-side return type annotation via ``TYPE fn name = lambda: EXPR``."""
+    """Expression-side return type annotation via ``fn name = lambda -> TYPE: EXPR``."""
 
     def test_no_param_lambda_returns_int_compiles(self):
-        """`int fn f = lambda: EXPR` resolves `int r = f()` at compile time."""
+        """`fn f = lambda -> int: EXPR` resolves `int r = f()` at compile time."""
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         engine.compile_string("""
-int fn f = lambda: 21 * 2
+fn f = lambda -> int: 21 * 2
 int r = f()
 """, silent=True)
 
     def test_no_param_lambda_returns_int_runtime(self):
         code = """
-int fn f = lambda: 21 * 2
+fn f = lambda -> int: 21 * 2
 int r = f()
 print((str)r)
 """
@@ -264,13 +275,13 @@ print((str)r)
     def test_param_lambda_returns_int_compiles(self):
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         engine.compile_string("""
-int fn add = lambda(int a, int b): a + b
+fn add = lambda(int a, int b) -> int: a + b
 int r = add(1, 2)
 """, silent=True)
 
     def test_param_lambda_returns_int_runtime(self):
         code = """
-int fn add = lambda(int a, int b): a + b
+fn add = lambda(int a, int b) -> int: a + b
 int r = add(10, 32)
 print((str)r)
 """
@@ -279,7 +290,7 @@ print((str)r)
     def test_snapshot_returns_int_freezes_free_var(self):
         code = """
 int base = 10
-int fn f = snapshot: base + 5
+fn f = snapshot -> int: base + 5
 base = 999
 int r = f()
 print((str)r)
@@ -289,7 +300,7 @@ print((str)r)
     def test_snapshot_returns_int_with_params(self):
         code = """
 int scale = 3
-int fn f = snapshot(int n): n * scale
+fn f = snapshot(int n) -> int: n * scale
 scale = 100
 int r = f(7)
 print((str)r)
@@ -299,33 +310,33 @@ print((str)r)
 
     def test_returns_str_concat(self):
         code = """
-str fn greet = lambda(str name): "Hello, " + name + "!"
+fn greet = lambda(str name) -> str: "Hello, " + name + "!"
 str r = greet("World")
 print(r)
 """
         assert run_and_capture(code) == ["Hello, World!"]
 
     def test_type_checking_call_site(self):
-        """``int r = f()`` passes compile-time check when ``int fn f`` is declared."""
+        """``int r = f()`` passes compile-time check when ``fn f = lambda -> int`` is declared."""
         from core.kernel.issue import CompilerError
         engine_dir = os.path.dirname(os.path.abspath(__file__))
         # Without annotation → SEM_003 (auto → int mismatch)
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=engine_dir, auto_sniff=False).compile_string(
                 "fn f = lambda: 1 + 1\nint r = f()", silent=True)
-        # With declaration-side annotation → compiles OK
+        # With expression-side annotation → compiles OK
         IBCIEngine(root_dir=engine_dir, auto_sniff=False).compile_string(
-            "int fn f = lambda: 1 + 1\nint r = f()", silent=True)
+            "fn f = lambda -> int: 1 + 1\nint r = f()", silent=True)
 
     def test_factory_function_returning_typed_fn(self):
-        """``int fn f = make_adder()`` — factory result declared with return type."""
+        """``fn f = make_adder()`` — factory result used (full type propagation requires D3)."""
         code = """
 func make_adder(int b) -> fn:
-    int fn inner = lambda(int x): x + b
+    fn inner = lambda(int x) -> int: x + b
     return inner
 
-int fn a5 = make_adder(5)
-int r = a5(3)
+fn a5 = make_adder(5)
+auto r = a5(3)
 print((str)r)
 """
         assert run_and_capture(code) == ["8"]
@@ -362,41 +373,41 @@ print(r2)
 
 
 class TestFnLambdaBehaviorBodyReturnsAnnotation:
-    """Behavior-body lambdas with declaration-side ``TYPE fn`` return type annotation."""
+    """Behavior-body lambdas with expression-side ``-> TYPE`` return type annotation (D2)."""
 
     def test_behavior_lambda_returns_str_no_param(self):
-        """``str fn f = lambda: @~...~`` annotates expected LLM output type."""
+        """``fn f = lambda -> str: @~...~`` annotates expected LLM output type."""
         code = _ai_prefix() + """
-str fn f = lambda: @~MOCK:STR:hello~
+fn f = lambda -> str: @~MOCK:STR:hello~
 str r = f()
 print(r)
 """
         assert run_and_capture(code) == ["hello"]
 
     def test_behavior_lambda_returns_str_call_site_typed(self):
-        """`str fn f = lambda: @~...~` enables `str r = f()` without cast."""
+        """`fn f = lambda -> str: @~...~` enables `str r = f()` without cast."""
         from core.kernel.issue import CompilerError
         # Without annotation: `str r = f()` would be SEM_003
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
                 _ai_prefix() + "\nfn f = lambda: @~MOCK:STR:hi~\nstr r = f()", silent=True)
-        # With declaration-side annotation: compiles OK
+        # With expression-side annotation: compiles OK
         IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
-            _ai_prefix() + "\nstr fn f = lambda: @~MOCK:STR:hi~\nstr r = f()", silent=True)
+            _ai_prefix() + "\nfn f = lambda -> str: @~MOCK:STR:hi~\nstr r = f()", silent=True)
 
     def test_param_behavior_lambda_returns_str(self):
-        """Parametric behavior lambda with declaration-side ``str fn`` and prompt variable."""
+        """Parametric behavior lambda with expression-side ``-> str`` and prompt variable."""
         code = _ai_prefix() + """
-str fn greet = lambda(str name): @~MOCK:STR:hi-$name~
+fn greet = lambda(str name) -> str: @~MOCK:STR:hi-$name~
 str r = greet("alice")
 print(r)
 """
         assert run_and_capture(code) == ["hi-alice"]
 
     def test_snapshot_behavior_returns_str_freezes_intent(self):
-        """``str fn f = snapshot: @~...~`` freezes intent context at definition time."""
+        """``fn f = snapshot -> str: @~...~`` freezes intent context at definition time."""
         code = _ai_prefix() + """
-str fn f = snapshot: @~MOCK:STR:frozen~
+fn f = snapshot -> str: @~MOCK:STR:frozen~
 str r = f()
 print(r)
 """
@@ -428,15 +439,15 @@ print((str)f())
 """
         assert run_and_capture(code) == ["40", "80"]
 
-    # --- int fn f = lambda: EXPR (no params + declaration-side return type) ---
+    # --- fn f = lambda -> int: EXPR (no params + expression-side return type, D2) ---
 
-    def test_no_param_lambda_decl_return_type_compiles(self):
+    def test_no_param_lambda_expr_return_type_compiles(self):
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-        engine.compile_string("int fn f = lambda: 21 * 2\nint r = f()", silent=True)
+        engine.compile_string("fn f = lambda -> int: 21 * 2\nint r = f()", silent=True)
 
-    def test_no_param_lambda_decl_return_type_runtime(self):
+    def test_no_param_lambda_expr_return_type_runtime(self):
         code = """
-int fn f = lambda: 21 * 2
+fn f = lambda -> int: 21 * 2
 int r = f()
 print((str)r)
 """
@@ -456,15 +467,15 @@ print((str)r)
 """
         assert run_and_capture(code) == ["42"]
 
-    # --- int fn f = lambda(PARAMS): EXPR (params + declaration-side return type) ---
+    # --- fn f = lambda(PARAMS) -> int: EXPR (params + expression-side return type, D2) ---
 
-    def test_param_lambda_decl_return_type_compiles(self):
+    def test_param_lambda_expr_return_type_compiles(self):
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-        engine.compile_string("int fn mul = lambda(int a, int b): a * b\nint r = mul(6, 7)", silent=True)
+        engine.compile_string("fn mul = lambda(int a, int b) -> int: a * b\nint r = mul(6, 7)", silent=True)
 
-    def test_param_lambda_decl_return_type_runtime(self):
+    def test_param_lambda_expr_return_type_runtime(self):
         code = """
-int fn mul = lambda(int a, int b): a * b
+fn mul = lambda(int a, int b) -> int: a * b
 int r = mul(6, 7)
 print((str)r)
 """
@@ -482,12 +493,12 @@ print((str)r)
 """
         assert run_and_capture(code) == ["15"]
 
-    # --- int fn f = snapshot: EXPR (declaration-side return type) ---
+    # --- fn f = snapshot -> int: EXPR (expression-side return type, D2) ---
 
-    def test_snapshot_decl_return_type(self):
+    def test_snapshot_expr_return_type(self):
         code = """
 int n = 10
-int fn f = snapshot: n + 5
+fn f = snapshot -> int: n + 5
 n = 999
 int r = f()
 print((str)r)
@@ -506,24 +517,24 @@ print((str)r)
 """
         assert run_and_capture(code) == ["21"]
 
-    # --- int fn f = snapshot(PARAMS): EXPR (params + declaration-side return type) ---
+    # --- fn f = snapshot(PARAMS) -> int: EXPR (params + expression-side return type, D2) ---
 
-    def test_snapshot_param_decl_return_type_runtime(self):
+    def test_snapshot_param_expr_return_type_runtime(self):
         code = """
 int scale = 3
-int fn f = snapshot(int n): n * scale
+fn f = snapshot(int n) -> int: n * scale
 scale = 100
 int r = f(7)
 print((str)r)
 """
         assert run_and_capture(code) == ["21"]
 
-    # --- String body with colon ---
+    # --- String body with colon (expression-side return type) ---
 
     def test_snapshot_colon_string_concat(self):
         code = """
 str prefix = "hello"
-str fn f = snapshot: prefix + " world"
+fn f = snapshot -> str: prefix + " world"
 prefix = "bye"
 str r = f()
 print(r)
@@ -546,24 +557,22 @@ print(r)
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
                 "fn f = lambda(int n)(n + 1)", silent=True)
 
-    def test_old_returns_bracket_body_is_error(self):
-        """``lambda -> TYPE (EXPR)`` bracket body form is now a parse error."""
+    def test_decl_side_type_fn_is_error(self):
+        """``int fn f = lambda: EXPR`` declaration-side return type is now PAR_003 (D1)."""
         from core.kernel.issue import CompilerError
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
-                "fn f = lambda -> int (1 + 2)\nint r = f()", silent=True)
+                "int fn f = lambda: 1 + 2\nint r = f()", silent=True)
 
-    def test_expr_side_arrow_is_error(self):
-        """``fn f = lambda -> TYPE: EXPR`` expression-side return type is now a parse error."""
-        from core.kernel.issue import CompilerError
-        with pytest.raises(CompilerError):
-            IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
-                "fn f = lambda -> int: 1 + 2\nint r = f()", silent=True)
+    def test_expr_side_arrow_is_valid(self):
+        """``fn f = lambda -> int: EXPR`` expression-side return type is valid (D2)."""
+        IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
+            "fn f = lambda -> int: 1 + 2\nint r = f()", silent=True)
 
     def test_decl_side_returns_type_mismatch(self):
-        """Body type mismatch with declaration-side ``TYPE fn`` raises SEM_003."""
+        """Body type mismatch with expression-side ``-> TYPE`` raises SEM_003."""
         from core.kernel.issue import CompilerError
         with pytest.raises(CompilerError) as exc_info:
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
-                "str fn f = lambda(int a): a + 1", silent=True)
+                "fn f = lambda(int a) -> str: a + 1", silent=True)
         assert any(d.code == "SEM_003" for d in exc_info.value.diagnostics)

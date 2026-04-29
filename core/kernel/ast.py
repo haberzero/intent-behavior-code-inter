@@ -423,23 +423,30 @@ class IbBehaviorInstance(IbExpr):
 @dataclass(kw_only=True, eq=False)
 class IbLambdaExpr(IbExpr):
     """
-    参数化 lambda/snapshot 表达式（M1 fn 参数化语法引入）。
+    参数化 lambda/snapshot 表达式（M1 fn 参数化语法引入；D1/D2 返回类型迁移至表达式侧）。
 
-    表达式侧支持的形式（``:`` 为唯一 body 起始符）::
+    支持的全部形式（``:`` 为唯一 body 起始符）::
 
-        lambda: EXPR                       # 无参
-        lambda(PARAMS): EXPR               # 有参
-        snapshot: EXPR                     # 无参 snapshot
-        snapshot(PARAMS): EXPR             # 有参 snapshot
+        lambda: EXPR                            # 无参，返回类型推导
+        lambda -> TYPE: EXPR                    # 无参，显式返回类型
+        lambda(PARAMS): EXPR                    # 有参，返回类型推导
+        lambda(PARAMS) -> TYPE: EXPR            # 有参，显式返回类型
+        snapshot: EXPR                          # 无参 snapshot，返回类型推导
+        snapshot -> TYPE: EXPR                  # 无参 snapshot，显式返回类型
+        snapshot(PARAMS): EXPR                  # 有参 snapshot，返回类型推导
+        snapshot(PARAMS) -> TYPE: EXPR          # 有参 snapshot，显式返回类型
 
-    返回类型标注统一写在**声明侧**，不允许写在表达式侧::
-
-        int fn f = lambda: EXPR            # f() 返回 int
-        int fn f = lambda(PARAMS): EXPR    # 带参，f(...) 返回 int
-        tuple[int, str] fn p = make_fn()   # 工厂模式也支持
+    返回类型标注写在**表达式侧**（D2）：``fn f = lambda -> TYPE: EXPR``。
+    声明侧 ``TYPE fn f = lambda: EXPR`` 已废弃，产生 PAR_003 编译错误。
 
     其中 ``PARAMS`` 是与函数参数同构的 ``IbArg`` / ``IbTypeAnnotatedExpr`` 列表，
     ``EXPR`` 是任意 IBCI 表达式（含 ``IbBehaviorExpr``）。
+
+    字段
+    ----
+    * ``returns``：表达式侧返回类型标注节点（``IbName``/``IbSubscript`` 等），
+      由解析器填充（``None`` 表示返回类型待推导）；语义分析器通过
+      ``_resolve_type(node.returns)`` 获取 ``IbSpec``。
 
     语义
     ----
@@ -448,17 +455,16 @@ class IbLambdaExpr(IbExpr):
     * ``deferred_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
       对意图栈 fork。
 
-    返回类型不通过 IbLambdaExpr 自身字段携带：声明侧 ``TYPE fn NAME = lambda ...``
-    的 ``TYPE`` 由 ``visit_IbAssign`` 通过 ``_pending_fn_return_type`` 隐式通道
-    注入到 ``visit_IbLambdaExpr``（详见 ``semantic_analyzer.py``）；表达式侧
-    ``lambda -> TYPE: EXPR`` 已废弃（解析期产生 PAR_005）。
-
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
     运行时构造 ``IbBehavior``；否则构造 ``IbDeferred``。两者都接受参数列表。
     """
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
+    # D2：表达式侧返回类型标注节点（IbName/IbSubscript 等）。
+    # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
+    # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。
+    returns: Optional['IbExpr'] = None
     # C8/C14：编译期自由变量列表（由 Pass 4 语义分析器填充）。
     # 每项为 [name, sym_uid]，name 是变量名，sym_uid 是 Symbol.uid（作用域 UID + 名称）。
     # 序列化后进入 artifact node_data["free_vars"]，运行时 vm_handle_IbLambdaExpr
