@@ -1,15 +1,8 @@
 # IBC-Inter 已知限制（语言级）
 
-> 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"，
-> 不收录尚在跟进的临时 Bug。
->
-> **与顶层 `BUG_REPORTS.md` 的分工**：
-> | 文件 | 定位 | 内容风格 |
-> |------|------|----------|
-> | `BUG_REPORTS.md` | 短期问题登记簿；属于"未归档的现场记录" | 实测复现 + 临时规避 + 修复跟进 |
-> | `docs/KNOWN_LIMITS.md`（本文件） | 正式语言限制说明 | 设计意图、根源描述、推荐写法 |
->
-> **最后更新**：2026-04-27（明确与 `BUG_REPORTS.md` 的分工；为各条限制补充"根源"说明；移除已修复条目的 `del` 文档化；`fn` 强调后续改造计划；`@!` 单次性语义重申；690 个测试通过）
+> 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
+> 历史 Bug 修复记录已归档至 `docs/COMPLETED.md` §二十一。
+> **最后更新**：2026-04-29（合并 `BUG_REPORTS.md` 中的语言级限制条目：链式下标语法、类字段调用表达式默认值、子类 auto-init、引用语义、auto/fn/any 对比、容器多类型、已废弃语法；989 个测试通过）
 
 ---
 
@@ -269,3 +262,175 @@ print("结果: " + r)    # 输出："结果: uncertain"
 
 `IbString.__add__` 与 `StrAxiom.resolve_operation_type_name` 当前对 `llm_uncertain` 操作数做了
 显式放行（参见 `core/runtime/objects/builtins.py` / `core/kernel/axioms/primitives.py` 中的 TODO 注释）。
+
+---
+
+## 九、链式下标 `(expr)[index]` 语法不支持
+
+**严重级别**：低（可用临时变量规避）
+
+**根源**：解析器将 `(nested[0])` 中的括号识别为强制类型转换语法 `(TypeName)`，而非分组表达式，导致 `[1]` 无法正确解析。
+
+```ibci
+# ❌ PAR_001：Expect type name
+tuple nested = ((1, 2), (3, 4))
+print((str)(nested[0])[1])
+
+# ✅ 规避方案：用临时变量承接
+tuple inner = (tuple)nested[0]
+print((str)inner[1])
+```
+
+---
+
+## 十、类字段不支持调用表达式作为默认值
+
+类字段初始化表达式中，只有字面量常量（`int` / `str` / `bool` / `list[]` / `dict{}`）可靠工作。函数调用、构造器调用等动态表达式作为字段默认值均不可靠。
+
+**规避方案**：始终通过 `__init__` 构造函数进行动态字段初始化。
+
+---
+
+## 十一、子类 auto-init 不含父类字段
+
+**严重级别**：低（符合 Python 语义，但与 C++/Java 使用者直觉不符）
+
+当子类没有显式 `__init__`，编译器会自动生成一个 `__init__`，**仅接受当前类自身声明的字段**，不包含父类字段。
+
+```ibci
+class Animal:
+    str name
+
+class Dog(Animal):
+    str breed       # Dog 的 auto-init 只接受 breed，不接受 name
+
+Dog d = Dog("Husky")    # 只设置 breed；d.name = None
+```
+
+**规避方案**：在子类中显式定义 `__init__` 手动初始化父类字段，或在构造后赋值。
+
+**根源**：auto-init 生成逻辑（`interpreter.py:_hydrate_user_classes`）仅遍历当前类 `body` 中声明的字段。父类字段通过 `default_fields` 继承，但不加入构造函数参数。此设计与 Python 行为一致（子类不自动调用 `super().__init__`）。
+
+---
+
+## 十二、引用语义局限性
+
+IBCI 对所有复合对象（`list` / `dict` / 用户类实例）使用**共享引用**语义——与 Python 一致。
+
+### 12.1 赋值是引用复制
+
+```ibci
+list a = [1, 2, 3]
+list b = a          # b 与 a 指向同一个列表
+b.append(4)
+print((str)a.len()) # 输出 4
+```
+
+**规避方案**：手动构造副本（IBCI 暂未提供 `copy` / `deepcopy` 内建）：
+
+```ibci
+list b = []
+for int x in a:
+    b.append(x)
+```
+
+### 12.2 类实例字段的默认引用陷阱
+
+若多个实例共享同一个"默认"列表字段，修改一个实例的字段会影响其他实例。**始终在构造函数中初始化列表 / 字典字段**：
+
+```ibci
+class Stack:
+    list items
+    func __init__(self):
+        self.items = []  # 每个实例独立创建
+```
+
+### 12.3 `llmexcept` 快照不影响容器内容
+
+`llmexcept` 的方案A 深克隆 + 方案B `__snapshot__` 协议目前只快照"标量变量绑定 / 用户对象字段"。若快照前的变量持有列表，LLM 调用体内对该列表的 `append`/`remove` 等**就地修改**在 `retry` 后不会被还原。
+
+**规避方案**：不要在 `llmexcept` 保护块的 LLM 调用路径中就地修改容器；如需可回滚的容器状态，在 `llmexcept` 之前先做深复制（或为类实现 `__snapshot__` / `__restore__` 协议自行决定快照粒度）。
+
+### 12.4 `fn` 变量的可调用引用语义
+
+```ibci
+fn f = add          # f 持有 add 函数的引用
+fn g = f            # g 也引用同一个函数
+```
+
+函数本身是不可变的，因此 `fn` 变量的引用语义不会导致副作用问题。
+
+---
+
+## 十三、`auto` / `fn` / `any` 对比
+
+| 关键字 | 用途 | 类型推导时机 | 后续赋值限制 |
+|--------|------|------------|------------|
+| `auto x = expr` | 通用类型推导，锁定为首次赋值的实际类型 | 编译期 | 只能赋相同类型 |
+| `fn f = callable` | 可调用类型推导，RHS 必须是可调用的 | 编译期 | 保持可调用约束 |
+| `any x = expr` | 真正的动态类型，不锁定 | 运行时 | 任意类型 |
+| `x = expr`（裸赋值）| 隐式 `any` 语义（不推荐） | 运行时 | 任意类型 |
+
+> **注意**：没有类型标注的裸赋值（`x = expr`）编译器会将变量视为 `any` 类型。
+> 若需要将此变量用于有类型检查的上下文（如赋给 `int y`），**必须使用强制类型转换**：
+> ```ibci
+> x = 42
+> int y = (int)x    # 必须显式转换，不能直接赋值
+> ```
+
+---
+
+## 十四、容器多类型声明
+
+`list[int, str, list]` 语法允许声明一个可持有多种类型元素的列表。编译器规则：
+
+- **元素读取**（下标访问 / for 迭代）返回 `any` 类型。若需明确类型，必须显式转换：
+  ```ibci
+  list[int, str] mixed = [1, "hello"]
+  any val = mixed[0]
+  int n = (int)val      # 必须先取到 any，再强制转换
+  ```
+- **不允许** 通过 `auto` 直接承载容器元素取值赋值（编译期推断会失败）：
+  ```ibci
+  auto x = mixed[0]    # ❌ 不推荐
+  any x = mixed[0]     # ✅ 建议始终用 any 中转
+  int n = (int)x        # ✅ 再强制转换到目标类型
+  ```
+
+详细泛型容器问题见 [`GENERICS_CONTAINER_ISSUES.md`](../GENERICS_CONTAINER_ISSUES.md)。
+
+---
+
+## 十五、已废弃语法（产生硬编译错误）
+
+### `(Type) @~...~` 强制类型转换语法（PAR_010）
+
+```ibci
+# ❌ 已废弃，产生 PAR_010 编译错误
+int sum = (int) @~ 请计算 $a 和 $b 之和 ~
+
+# ✅ 正确写法：LHS 类型自动成为 LLM 输出格式约束
+int sum = @~ 请计算 $a 和 $b 之和 ~
+str mood = @~ 请判断颜色，回复颜色单词 ~
+```
+
+LHS 的变量声明类型会自动被传递给 LLM 作为输出格式提示，无需额外的类型转换语法。
+
+### 旧 fn / lambda 声明语法（PAR_005）
+
+```ibci
+# ❌ 全部产生 parse error
+int lambda f = expr           # 旧声明语法
+auto snapshot g = expr        # 旧声明语法
+fn lambda h = expr            # 旧声明语法
+lambda(EXPR)                  # 旧括号体形式
+lambda(PARAMS)(EXPR)          # 旧括号体形式
+fn f = lambda -> int: EXPR    # 表达式侧返回类型
+
+# ✅ 正确写法（M1 + fn declaration-side）
+fn f = lambda: EXPR
+int fn f = lambda: EXPR
+fn f = lambda(int x): EXPR
+int fn f = snapshot(int a, int b): EXPR
+```
+
