@@ -87,50 +87,41 @@
 
 ---
 
-### [C6] CSE-Exception 双层桥彻底消除（C5 的细化追踪）✅ PARTIAL DONE（2026-04-29）
+### [C6] CSE-Exception 双层桥彻底消除（C5 的细化追踪）✅ DONE（2026-04-29）
 
 **文件**：
 - `core/runtime/interpreter/interpreter.py:execute_module()` — 已改为直接捕获 `ControlSignalException`
 - `core/runtime/objects/kernel.py:IbUserFunction.call()` — 已改为直接捕获 `ControlSignalException`（保留 ReturnException 兜底供 vm=None fallback 路径）
 - `core/runtime/vm/vm_executor.py:run_body()` — 已删除 CSE→ReturnException/BreakException/ContinueException 转换桥
-- `core/runtime/vm/handlers.py:vm_handle_IbTry` — `except (ReturnException, BreakException, ContinueException): raise` 透传桥（待 C9 fallback 完全消除后删除）
-- `core/runtime/vm/handlers.py:vm_handle_IbCall` — `except ControlSignalException: raise` 透传桥（C8 fallback 已消除，待 C9 import 完全 CPS 化后一并清零）
+- `core/runtime/vm/handlers.py:vm_handle_IbTry` — ✅ `except (ReturnException, BreakException, ContinueException): raise` 透传桥已删除（C9 完成后所有 production 路径均 CPS 化）
+- `core/runtime/vm/handlers.py:vm_handle_IbCall` — ✅ `except ControlSignalException: raise` 透传桥已删除（C8/C9 fallback 全部消除）
+- `core/runtime/vm/handlers.py` 顶部导入 — ✅ `ReturnException/BreakException/ContinueException/ControlSignalException` 导入已清除
 
-**落地内容（Phase 1，2026-04-29）**：Signal→CSE→ReturnException 三层桥已缩减为 Signal→CSE 两层：
-1. `run_body()` 不再将 CSE 转换为 Python 原生异常，直接让 CSE 向调用方传播
-2. `IbUserFunction.call()` 直接捕获 `ControlSignalException`，`kind==RETURN` 即返回 `cse.value`
-3. `execute_module()` 直接捕获 `ControlSignalException` 并报错
+**落地内容（Phase 2，2026-04-29）**：
+1. `vm_handle_IbTry` body try-except 中移除 `except (ReturnException, BreakException, ContinueException): raise` 透传桥
+2. `vm_handle_IbCall` 中移除 `except ControlSignalException: raise` 透传桥
+3. handlers.py 顶部无用导入清除（ReturnException/BreakException/ContinueException/ControlSignalException）
 
-**剩余工作（待 C8/C9 fallback 完全消除后）**：
-- `vm_handle_IbTry` 和 `vm_handle_IbCall` 中的 `ReturnException/CSE` 透传桥
-- `ControlSignalException` 类本体（C5）彻底删除
-
-**前提**：剩余清理依赖 C9（import 完全 CPS 化）。C8 已在 Phase 3 完成。
+**剩余**：`ControlSignalException` 类本体（C5）及 `VMExecutor.run()` 顶层 Signal→CSE 包装仍保留（作为顶层边界兼容，测试有 `pytest.raises(ControlSignalException)` 依赖）。
 
 ---
 
-### [C7] `VMExecutor.assign_to_target()` 穿透到 `StmtHandler._assign_to_target()` 重写
+### [C7] `VMExecutor.assign_to_target()` 穿透到 `StmtHandler._assign_to_target()` 重写 ✅ DONE（2026-04-29）
 
 **文件**：
-- `core/runtime/vm/vm_executor.py:VMExecutor.assign_to_target()` L107–L122
-- `core/runtime/vm/handlers.py:vm_handle_IbAssign` / `vm_handle_IbFor` / `vm_handle_IbAugAssign` 等中的 `executor.assign_to_target()` 调用
+- `core/runtime/vm/handlers.py:_assign_name_target()` — 新增纯同步 IbName 赋值帮助函数
+- `core/runtime/vm/handlers.py:_vm_assign_to_target()` — 新增 CPS generator helper，支持所有目标类型
+- `core/runtime/vm/handlers.py:vm_handle_IbAssign` — `executor.assign_to_target()` 调用替换为 `yield from _vm_assign_to_target(...)`
+- `core/runtime/vm/handlers.py:vm_handle_IbFor` — loop 目标赋值替换为 `yield from _vm_assign_to_target(..., define_only=True)`
+- `core/runtime/vm/vm_executor.py:VMExecutor.assign_to_target()` — 标注为已废弃（兼容保留）
 
-**问题**：凡是遇到非简单 IbName 的赋值目标（`IbAttribute`、`IbSubscript`、`IbTuple` 解包），CPS handler 都委托给 `executor.assign_to_target()`，其内部通过 `interpreter.stmt_handler._assign_to_target()` 调用，后者对 attribute/subscript 使用 `self.visit(...)` **重新进入递归解释器**。这意味着：
+**落地内容**：
+1. `_assign_name_target()` 纯同步函数封装 IbName 作用域操作（sym_uid → set/define，global 语义，strict_mode 检查），与 `StmtHandler._assign_to_target` IbName 分支语义完全一致
+2. `_vm_assign_to_target()` generator function：IbName 调用同步帮助函数（无 yield）；IbTypeAnnotatedExpr `yield from` 递归（define_only=True）；IbAttribute `yield obj_uid` 后 `__setattr__`；IbSubscript `yield obj_uid` + `yield slice_uid` 后 `__setitem__`；IbTuple 解包后逐元素 `yield from` 递归
+3. `vm_handle_IbAssign` 中所有 `executor.assign_to_target()` 调用替换为 `yield from _vm_assign_to_target(...)`
+4. `vm_handle_IbFor` 中循环目标赋值替换为 `yield from _vm_assign_to_target(..., define_only=True)`，与 `StmtHandler.visit_IbFor` 语义一致
 
-```python
-obj.x = value       # IbAttribute 目标 → 递归调用 visit(obj_uid)
-items[0] = value    # IbSubscript 目标 → 递归调用 visit(obj_uid) + visit(slice_uid)
-a, b = pair         # IbTuple 解包 → 递归 visit
-```
-
-表达式已通过 CPS 求值，写回却回退递归——双层路径混用。
-
-**目标**：
-1. 把 `_assign_to_target` 中的 `IbAttribute`/`IbSubscript`/`IbTuple` 分支重写为 CPS 友好形式：由调用方提供已求值的 `obj`（通过 `yield`），handler 只做 `receive` 调用，不再通过 `visit()` 二次求值
-2. 具体地，把 `vm_handle_IbAssign` 中对复杂目标的处理从"委托给 `assign_to_target()`"升级为在 handler 内部 `yield` 目标表达式并自己完成写回
-3. 最终可以删除 `VMExecutor.assign_to_target()` 以及对 `interpreter.stmt_handler` 的反向耦合
-
-**注意**：`IbAugAssign` 中对 `IbAttribute` 的读-修改-写已有 CPS 实现（`old_val = yield target_uid` + `obj.receive("__setattr__", ...)`），可作为样本。
+**结果**：996 测试通过，0 退化
 
 ---
 
@@ -150,24 +141,17 @@ a, b = pair         # IbTuple 解包 → 递归 visit
 
 ---
 
-### [C9] `vm_handle_IbImport/IbImportFrom` fallback 升级为真正 CPS
+### [C9] `vm_handle_IbImport/IbImportFrom` fallback 升级为真正 CPS ✅ DONE（2026-04-29）
 
-**文件**：`core/runtime/vm/handlers.py:vm_handle_IbImport` L806–L813、`vm_handle_IbImportFrom` L816–L821
+**文件**：`core/runtime/vm/handlers.py:vm_handle_IbImport`、`vm_handle_IbImportFrom`
 
-**问题**：两个 handler 目前是"注册壳 + 完全 fallback"，不比直接从 dispatch 表移除有任何 CPS 价值：
+**落地内容**：
+1. `vm_handle_IbImport` 内联 `ImportHandler.visit_IbImport` 逻辑：遍历 alias 节点，调用 `sc.module_manager.import_module()` 再 `runtime_context.define_variable()` 绑定；无需递归 visit，`if False: yield` 满足调度协议，彻底删除 `executor.fallback_visit(node_uid)` 调用
+2. `vm_handle_IbImportFrom` 同理内联 `ImportHandler.visit_IbImportFrom` 逻辑：收集 names 列表后调用 `sc.module_manager.import_from()`；彻底删除 fallback
+3. `vm_handle_IbAssign` 中 `is_deferred` 路径的 `fallback_visit(value_uid)` 替换为 `yield value_uid`——`vm_handle_IbBehaviorExpr` 已完整实现 deferred 模式的 IbBehavior 包装，fallback 冗余
+4. handlers.py 中所有显式 `executor.fallback_visit()` 调用已全部清零
 
-```python
-def vm_handle_IbImport(executor, node_uid, node_data):
-    if False: yield
-    return executor.fallback_visit(node_uid)
-```
-
-根本原因：`ModuleManager.import_module()` 本身是同步调用，理论上不需要 yield；但 `ImportHandler.visit_IbImport` 内部调用了 `self.execution_context.visit()` 来处理 `as` 别名、`__init__` 模块初始化等，这些调用目前还是递归的。
-
-**目标**：
-1. 把 `ImportHandler.visit_IbImport()` 的逻辑剥离为不依赖递归 visit 的纯函数，直接操作 `module_manager` + `runtime_context.define_variable()`；
-2. `vm_handle_IbImport` 改为内联这段逻辑；删除 fallback；
-3. 使 import 语句在 VM 执行统计（`step_count`）和调度追踪中可见。
+**结果**：996 测试通过，0 退化
 
 ---
 
@@ -246,10 +230,11 @@ def vm_handle_IbImport(executor, node_uid, node_data):
 1. **第一阶段：轻量债务清理 PR（L1-L4 + C1-C4 + C10 + C13）** ✅ DONE（2026-04-29）— 详见上面各条 ✅ 标记。基线 949 → 949（0 退化）。
 2. **第二阶段：Phase 1 轻量债务清理（C6 partial + C12）** ✅ DONE（2026-04-29）— Signal→CSE→ReturnException 三层桥消除（run_body/execute_module/IbUserFunction.call）；ScopeImpl 私有字段访问封装（define_raw/is_cell_promoted）。基线 949 → 996（+47 新合规测试，0 退化）。
 3. **第三阶段：编译器深度清洁 Phase 1（C8 + C14）** ✅ DONE（2026-04-29）— `IbLambdaExpr.free_vars` 编译期侧表；`vm_handle_IbLambdaExpr/IbBehaviorInstance` fallback 消除；`cell_captured_symbols` 侧表；`_target_is_promoted_cell` 运行时扫描删除。基线 996 → 996（0 退化）。
-4. **暂缓**：C5、C6（剩余部分）、C7、C9、C11——C5/C6 剩余部分等待 C9（import 完全 CPS 化）完成后处理；C7/C9/C11 需要编译器改动或较大重构，按计划推进。
-4. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
-5. **测试基线**：M3d+M4+M5c+M6+Phase1债务清理后基线 **996**。
-6. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）、`docs/VM_SPEC.md`（VM 规范）、`tests/compliance/`（合规测试安全网）。
+4. **第四阶段：编译器深度清洁 Phase 2（C6 remainder + C7 + C9）** ✅ DONE（2026-04-29）— IbImport/IbImportFrom 完整内联 CPS；`_vm_assign_to_target` CPS generator helper 替代 `assign_to_target()` 递归穿透；IbTry/IbCall 异常透传桥删除；`fallback_visit()` 显式调用全部清零。基线 996 → 996（0 退化）。
+5. **暂缓**：C5、C11——C5（ControlSignalException 类本体删除）等待测试契约调整；C11（node_protection 侧表重构）触及编译器+序列化+运行时三层，作为单独重构 PR 执行。
+6. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
+7. **测试基线**：M3d+M4+M5c+M6+Phase1~4债务清理后基线 **996**。
+8. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）、`docs/VM_SPEC.md`（VM 规范）、`tests/compliance/`（合规测试安全网）。
 
 ---
 

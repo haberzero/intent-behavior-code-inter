@@ -105,10 +105,11 @@ class VMExecutor:
         return self._ec.visit(node_uid)
 
     def assign_to_target(self, target_uid: str, value: Any) -> None:
-        """委托给 ``StmtHandler._assign_to_target``（通过 Interpreter 间接路径）。
+        """已废弃——由 C7 CPS 重写替代（``_vm_assign_to_target`` generator helper）。
 
-        M3a 不重写赋值目标解析逻辑（属性/下标/元组解包），通过 Interpreter 的
-        既有 handler 完成。
+        handlers.py 内部不再调用此方法；保留仅供外部工具链或旧测试脚本的过渡期兼容。
+        M3a 早期版本通过 Interpreter 的 ``stmt_handler._assign_to_target`` 间接路径
+        完成赋值；C7 之后所有赋值目标均在 handler 内部以 ``yield from`` 方式 CPS 处理。
         """
         if self._interpreter is None:
             raise RuntimeError(
