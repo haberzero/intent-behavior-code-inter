@@ -516,11 +516,10 @@ class Interpreter:
             reset_current_frame(_token)
 
     def _get_vm_executor(self):
-        """M3d：延迟构造并返回单例 VMExecutor。
+        """延迟构造并返回单例 VMExecutor。
 
         VMExecutor 在 ``execute_module()`` 与 ``IbUserFunction.call()`` 中作为
-        主路径调度器使用；不支持的节点类型会自动回退到 ``Interpreter.visit()``
-        递归路径，保证向后兼容。
+        主路径调度器使用（覆盖全部 43 种 AST 节点类型）。
 
         C13 增强：构造完成后立即把引用写入 ``ExecutionContext.vm_executor``，
         使 ``IbUserFunction.call()`` 等持有 ExecutionContext 的代码不再需要
@@ -594,9 +593,6 @@ class Interpreter:
         except InterpreterError:
             raise
         except UnhandledSignal:
-            raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
-        except (ReturnException, BreakException, ContinueException):
-            # 兼容性保留：若 vm 未能拦截（极端边角情形），与上一行保持同语义。
             raise self._report_error("Control flow statement used outside of function or loop.", error_code=RUN_GENERIC_ERROR)
         finally:
             self.logical_stack.pop()

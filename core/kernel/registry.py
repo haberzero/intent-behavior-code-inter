@@ -172,10 +172,16 @@ class KernelRegistry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
-    def register_builtin_instance(self, name: str, instance: Any, token: Any = None):
+    def register_builtin_instance(self, name: str, instance: Any):
         """
         注册内置单例实例（如 IntentStack）。
-        内置实例在结构封印后仍然可以注册，但仅限初始化阶段。
+
+        此方法刻意不进行 token 校验：内置单例（如 IntentStack）依赖 IbClass 体系
+        就绪后才能创建，需要在结构封印之后的引导阶段末期注册，而 token 机制保护的
+        是封印前的结构性注册。该方法仅应由 builtin_initializer 在引导流程中调用，
+        调用窗口极短，不对外暴露。
+
+        封印后的保护由时序约束（结构封印时序）而非 token 提供。
         """
         if self._is_structure_sealed:
             raise PermissionError("Registry: Cannot register builtin instance after structure is sealed.")
@@ -400,4 +406,9 @@ class KernelRegistry:
         new_registry._host_service = self._host_service
         new_registry._stack_inspector = self._stack_inspector
         new_registry._state_reader = self._state_reader
+        # 拷贝内置单例字典结构，使子解释器能通过 get_builtin_instance() 找到单例。
+        # 子解释器在 Interpreter.__init__ 中会调用 set_runtime_context() 把自己的
+        # runtime_context 重新绑定到单例，因此两个解释器共享同一对象是安全的。
+        new_registry._builtin_instances = dict(self._builtin_instances)
+        # _int_cache 故意不拷贝：每个引擎实例独享小整数驻留缓存，彼此隔离。
         return new_registry

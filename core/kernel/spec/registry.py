@@ -365,6 +365,26 @@ class SpecRegistry:
         return axiom.get_operator_capability() if axiom else None
 
     def get_converter_cap(self, spec: IbSpec) -> Optional["ConverterCapability"]:
+        """Return the ConverterCapability for ``spec``, or None.
+
+        This bridge method exists to support **compile-time explicit-cast validation**:
+        when the semantic analyzer visits an ``IbCastExpr`` node (e.g. ``(int)x``),
+        it should call ``get_converter_cap(target_spec)?.can_convert_from(src_name)``
+        to verify the cast is legal at compile time and report SEM_XXX on invalid casts.
+
+        TODO (deferred): activate this check in
+        ``semantic_analyzer.py::_resolve_cast_expr()`` once that validation pass is
+        added.  Currently ``IbCastExpr`` validation is purely runtime
+        (``value.receive("cast_to", [target_class])``), so this method is defined
+        but not yet called.
+
+        Design note: ``can_convert_from(src)`` answers "can *this* target type accept
+        an explicit cast FROM src?".  This is intentionally distinct from
+        ``is_compatible(target)`` which answers "can *this* source type be
+        **implicitly assigned** to target?".  Both directions are needed:
+        - ``is_compatible``    → implicit assignment / subtype check (called by is_assignable)
+        - ``can_convert_from`` → explicit cast legality (to be called by cast checker)
+        """
         axiom = self.get_axiom(spec)
         return axiom.get_converter_capability() if axiom else None
 
@@ -630,10 +650,14 @@ class SpecRegistry:
 
         return None
 
-    def is_assignable(self, src: Optional[IbSpec], target: Optional[IbSpec]) -> bool:
+    def is_assignable(self, src: Optional[IbSpec], target: Optional[IbSpec],
+                       _visited: Optional[frozenset] = None) -> bool:
         """
         Check whether a value of type ``src`` can be assigned to a
         variable of type ``target``.
+
+        ``_visited`` is an internal cycle-guard set used when walking the
+        class inheritance chain; callers should never pass it explicitly.
         """
         if src is None or target is None:
             return False
@@ -677,11 +701,17 @@ class SpecRegistry:
         if target.is_nullable and src.name == "None":
             return True
 
-        # Class inheritance: walk src's parent chain
+        # Class inheritance: walk src's parent chain.
+        # _visited guards against malformed circular inheritance declarations.
         if isinstance(src, ClassSpec) and src.parent_name:
+            visit_key = f"{src.name}@{src.module_path or ''}"
+            visited = _visited or frozenset()
+            if visit_key in visited:
+                # Cycle detected in inheritance chain — stop traversal.
+                return False
             parent = self.resolve(src.parent_name, src.parent_module)
             if parent and parent is not src:
-                return self.is_assignable(parent, target)
+                return self.is_assignable(parent, target, visited | {visit_key})
 
         return False
 

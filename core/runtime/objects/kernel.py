@@ -3,7 +3,7 @@ from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.base.source_atomic import Location
-from core.runtime.exceptions import ReturnException, BreakException, ContinueException, RegistryIsolationError
+from core.runtime.exceptions import RegistryIsolationError
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.intent_logic import IntentRole
 from core.kernel.spec import IbSpec, FuncSpec, ClassSpec, ANY_SPEC
@@ -815,8 +815,8 @@ class IbUserFunction(IbFunction):
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
             
             body = node_data.get("body", [])
-            # M3d + C5 + C6：通过 VMExecutor 驱动函数体语句。
-            # C5 后，run_body() 以 UnhandledSignal 传播顶层控制信号；
+            # 通过 VMExecutor 驱动函数体语句（CPS 主路径）。
+            # run_body() 以 UnhandledSignal 传播顶层控制信号；
             # 由下方 except _CSE 消费；BREAK/CONTINUE 透传至调用者。
             #
             # C13：通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
@@ -829,7 +829,7 @@ class IbUserFunction(IbFunction):
             vm = self.context.vm_executor
 
             if vm is None:
-                # 无 VMExecutor 可用：保留原有递归路径
+                # 无 VMExecutor 可用：保留原有递归路径（仅限边角测试兜底）。
                 for stmt_uid in body:
                     self.context.visit(stmt_uid)
             else:
@@ -841,9 +841,6 @@ class IbUserFunction(IbFunction):
             if e.signal.kind is _CS.RETURN:
                 return e.signal.value
             raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者
-        except ReturnException as e:
-            # 兼容性保留：vm=None 递归路径仍可能抛出 ReturnException。
-            return e.value
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()

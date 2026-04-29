@@ -1,5 +1,5 @@
 """
-core.runtime.vm.vm_executor — VM 调度循环主类（M3a + M3b）。
+core.runtime.vm.vm_executor — VM 调度循环主类。
 
 调度协议
 --------
@@ -10,22 +10,19 @@ core.runtime.vm.vm_executor — VM 调度循环主类（M3a + M3b）。
      - 若生成器 ``yield child_uid``：基于 ``child_uid`` 创建新 VMTask 并压栈，
        下一轮调度新任务（由它产生 child 的求值结果）
      - 若生成器 ``StopIteration(value)``：弹栈
-        - 若 ``value`` 是 :class:`Signal` 数据对象（M3b 控制信号数据化）：
+        - 若 ``value`` 是 :class:`Signal` 数据对象（控制信号数据化）：
           视作控制流信号，沿帧栈向上数据化传递（``send(Signal)`` 给父帧）；
           父 handler 用 ``isinstance(res, Signal)`` 决定拦截或继续传播。
           若帧栈空仍持有未消费 Signal，以 :class:`UnhandledSignal` 形式
-          抛给调用者（C5）。
+          抛给调用者。
         - 否则把 value 通过 ``send`` 传给父帧
      - 若生成器 ``raise``：弹栈，沿帧栈向上 ``throw`` 给父帧的生成器；调度循环
        会持续向上传播，直到某帧的 ``except`` 子句捕获或栈空（向调用者抛出）
 
 3. 当帧栈空时，最后一个 ``send`` 的结果即为整体执行结果。
 
-主循环不使用 Python 递归。这是 M3a/M3b 的核心成果——为 M3c 的 LLM 流水线、
-DynamicHost 切片调度奠定调度层基础。
-
-未实现的节点类型自动回退到 ``execution_context.visit(uid)`` （递归路径），
-M3d 阶段才把全部节点纳入 CPS。
+主循环不使用 Python 递归。CPS dispatch table 覆盖全部 43 种 AST 节点类型；
+``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 以本执行器为主路径。
 """
 from __future__ import annotations
 from typing import Any, Optional
@@ -41,14 +38,13 @@ from core.runtime.vm.handlers import build_dispatch_table
 
 
 class VMExecutor:
-    """显式帧栈 CPS 调度执行器（M3a + M3b）。
+    """显式帧栈 CPS 调度执行器。
 
     构造参数:
         execution_context: 已配置的 :class:`ExecutionContextImpl`，提供节点池、
                            侧表、运行时上下文与对象工厂等服务。
-        interpreter: 可选 :class:`Interpreter` 引用；用于复用其 ``_assign_to_target``
-                     等高阶帮助方法（M3a 简化路径）。若为 None 则 ``assign_to_target``
-                     不可用。
+        interpreter: 可选 :class:`Interpreter` 引用；保留用于 ``assign_to_target``
+                     过渡期兼容（C7 之后已无实际调用，可传 None）。
     """
 
     def __init__(self, execution_context: Any, interpreter: Optional[Any] = None):
@@ -108,8 +104,7 @@ class VMExecutor:
         """已废弃——由 C7 CPS 重写替代（``_vm_assign_to_target`` generator helper）。
 
         handlers.py 内部不再调用此方法；保留仅供外部工具链或旧测试脚本的过渡期兼容。
-        M3a 早期版本通过 Interpreter 的 ``stmt_handler._assign_to_target`` 间接路径
-        完成赋值；C7 之后所有赋值目标均在 handler 内部以 ``yield from`` 方式 CPS 处理。
+        C7 之后所有赋值目标均在 handler 内部以 ``yield from`` 方式 CPS 处理。
         """
         if self._interpreter is None:
             raise RuntimeError(

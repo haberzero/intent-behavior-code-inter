@@ -703,17 +703,6 @@ class StmtHandler(BaseHandler):
         # 绑定到当前作用域 (作为常量类)
         return self.registry.get_none()
 
-    def visit_IbReturn(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        value_uid = node_data.get("value")
-        value = self.visit(value_uid) if value_uid else self.registry.get_none()
-        raise ReturnException(value)
-
-    def visit_IbBreak(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        raise BreakException()
-
-    def visit_IbContinue(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
-        raise ContinueException()
-
     def visit_IbRaise(self, node_uid: str, node_data: Mapping[str, Any]) -> IbObject:
         exc_uid = node_data.get("exc")
         exc_val = self.visit(exc_uid) if exc_uid else self.registry.get_none()
