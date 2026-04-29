@@ -516,8 +516,9 @@ def _target_is_promoted_cell(executor, target_uid: str) -> bool:
     通过 ``cell.get()`` 会读到陈旧值；同步到 cell 又会让 cell 持有非法
     LLMFuture。最稳妥的做法是退回同步路径。
 
-    BehaviorDependencyAnalyzer 当前不感知 cell 提升，因此该判断在运行
-    时进行。"""
+    C12：改用 ``scope.is_cell_promoted(sym_uid)`` 接口，不再直接访问
+    ``scope._cell_map`` 私有属性。BehaviorDependencyAnalyzer 当前不感知
+    cell 提升，因此该判断仍在运行时进行（C14 将来消除）。"""
     target_data = executor.ec.get_node_data(target_uid)
     if not target_data:
         return False
@@ -532,7 +533,7 @@ def _target_is_promoted_cell(executor, target_uid: str) -> bool:
     # 沿作用域链查找 cell（promote_to_cell 把 cell 注册到声明所在 scope）
     scope = rc.current_scope
     while scope is not None:
-        if hasattr(scope, "_cell_map") and sym_uid in scope._cell_map:
+        if scope.is_cell_promoted(sym_uid):
             return True
         scope = getattr(scope, "parent", None)
     return False
@@ -545,14 +546,11 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
     但写入的值是 ``LLMFuture``（非 ``IbObject``）。读取点（``vm_handle_IbName``）
     会在第一次访问时阻塞 resolve 并写回真实 ``IbObject``。
 
-    实现细节：``RuntimeContext.set_variable_by_uid`` / ``define_variable`` 走的
-    是 ``ScopeImpl.assign_by_uid`` / ``define`` 路径，会触发 ``_check_type`` 和
-    ``registry.box`` 把 ``LLMFuture`` 包装成普通 ``IbObject``——这与占位符语义
-    冲突。本函数直接操作底层 ``RuntimeSymbolImpl``（与 vm/handlers 同层），
-    保留原始 ``LLMFuture`` 引用直到被 resolve 写回。
+    C12：改用 ``scope.define_raw()`` 接口写入新符号，不再直接操作
+    ``scope._symbols`` / ``scope._uid_to_symbol`` 私有字段。已存在符号
+    的覆写（``sym.value = future``）仍通过 ``RuntimeSymbolImpl`` 公开属性进行，
+    这是有意的——``define_raw`` 仅用于首次定义路径。
     """
-    from core.runtime.interpreter.runtime_context import RuntimeSymbolImpl
-
     target_data = executor.ec.get_node_data(target_uid)
     if not target_data:
         return
@@ -583,17 +581,11 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
         # 该路径只覆盖未提升为 cell 的符号，因此跳过 cell 同步是安全的。
         return
 
-    # 2) 首次定义 → 直接构造 RuntimeSymbolImpl 写入 _uid_to_symbol/_symbols
+    # 2) 首次定义 → 通过 define_raw() 写入，避免直接操作私有字段（C12）
     declared_type = (
         executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
     )
-    new_sym = RuntimeSymbolImpl(
-        name=name, value=future, declared_type=declared_type, is_const=False
-    )
-    if name:
-        target_scope._symbols[name] = new_sym
-    if sym_uid:
-        target_scope._uid_to_symbol[sym_uid] = new_sym
+    target_scope.define_raw(name, future, uid=sym_uid, declared_type=declared_type)
 
 
 # ---------------------------------------------------------------------------
