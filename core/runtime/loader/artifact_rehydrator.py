@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, List
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.spec import IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
-from core.kernel.spec.specs import DeferredSpec, BehaviorSpec
+from core.kernel.spec.specs import DeferredSpec, BehaviorSpec, CallableSigSpec
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
@@ -94,6 +94,15 @@ class ArtifactRehydrator:
             "BehaviorSpec": lambda: factory.create_behavior(
                 value_type_name=data.get("value_type_name", "auto"),
                 deferred_mode=data.get("deferred_mode", "lambda"),
+            ),
+            # D3: callable signature spec — reconstruct CallableSigSpec with its
+            # param/return type name lists intact.
+            "CallableSigSpec": lambda: CallableSigSpec(
+                name="fn",
+                param_type_names=list(data.get("param_type_names", [])),
+                param_type_modules=[None] * len(data.get("param_type_names", [])),
+                return_type_name=data.get("return_type_name", "auto"),
+                is_user_defined=False,
             ),
         }
         

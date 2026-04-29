@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-28（M1 + M2 + M3a + M3b + M3c + M5a + M5b + M3d-prep 完成；926 个测试通过；fn/lambda/snapshot 语法定型，IbCell GC 根集合 + 词法作用域正式化，VM CPS 调度循环骨架 + 控制信号数据化 + IbLLMExceptionalStmt CPS handler 落地，CPS handler 覆盖扩展至 37 节点类型，DDG 编译期分析 + LLMScheduler/LLMFuture 就绪）
+> **最后更新**：2026-04-29
 
 ---
 
@@ -126,17 +126,24 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 4.3 lambda/snapshot 语法重构与语义完整化 [✅ COMPLETED — 2026-04-28]
+### 4.3 lambda/snapshot 语法重构与语义完整化 [✅ D1/D2 COMPLETED — 2026-04-29]
 
-**完成内容**（M1 + M2 + fn declaration-side 三阶段）：
-- ✅ 新 fn 声明语法：`TYPE fn NAME = lambda: EXPR` / `TYPE fn NAME = lambda(PARAMS): EXPR`（snapshot 同构）；`fn[TYPE]` → DeferredSpec
+**完成内容**（M1 + M2 + fn declaration-side 三阶段 + D1/D2）：
+- ✅ 新 fn 声明语法：`fn NAME = lambda: EXPR` / `fn NAME = lambda(PARAMS): EXPR`（snapshot 同构）；`fn[TYPE]` → DeferredSpec
 - ✅ 参数传递：`IbDeferred.call()` / `IbBehavior.call()` 支持参数列表
 - ✅ IbCell 机制（SC-3/SC-4）：lambda 自由变量通过共享 IbCell 引用，snapshot 通过独立 IbCell 值拷贝
 - ✅ M2 `ScopeImpl.promote_to_cell()` + `RuntimeContextImpl.collect_gc_roots()`，lambda 可自由作为 HOF 参数传递
-- ✅ 旧语法（`TYPE lambda NAME = EXPR`、括号体形式、表达式侧 `lambda -> TYPE: EXPR`）全部产生 parse error（`PAR_005`）
-- ✅ 829 个测试通过
+- ✅ D1（2026-04-29）：废弃声明侧返回类型 `TYPE fn NAME = lambda: EXPR` → 产生 `PAR_003`
+- ✅ D2（2026-04-29）：`IbLambdaExpr.returns` 字段；表达式侧 `lambda -> TYPE: EXPR` / `snapshot -> TYPE: EXPR` 合法化
+- ✅ `_pending_fn_return_type` 隐式通道已删除
+- ✅ 991 个测试通过（D1/D2 后基线）
 
-**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`
+**待实现**（D3，独立 PR）：
+- ⏳ `fn[(<typelist>) -> (<typelist>)]` 高阶函数参数 callable 签名标注
+- ⏳ 类型解析器 `_parse_fn_signature()` 专用路径 + `IbCallableType` AST 节点
+- ⏳ 语义层结构签名匹配（call site 按签名形状检查，见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md §D3`）
+
+**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`docs/FN_LAMBDA_SYNTAX_REDESIGN.md`、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`
 
 ---
 

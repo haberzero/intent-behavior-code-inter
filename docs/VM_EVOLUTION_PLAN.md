@@ -1,7 +1,7 @@
 # IBCI VM 演进总规划（Master Plan）
 
 > **文档性质**：本文档是全部 VM 相关工作的总纲。每一个 Milestone 对应一个独立的 PR，执行前后均保持测试基线绿色。  
-> **基准状态**（2026-04-29）：**989 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M3c + M3d + M4 + M5a + M5b + M5c + M6 已完成**；**编译器深度清洁 Phase 1–5（C5/C6/C7/C8/C9/C10/C11/C12/C13/C14）全部完成**（CPS dispatch table 覆盖 43 个 AST 节点类型；所有显式 `fallback_visit()` 调用归零；`_vm_assign_to_target()` CPS generator helper 替代 assign_to_target 递归穿透；`IbLambdaExpr.free_vars` 编译期填充；`cell_captured_symbols` 侧表；Signal→CSE 桥已收缩为单层边界兼容包装；`node_protection` 侧表与 `bypass_protection` 参数链已彻底删除）。  
+> **基准状态**（2026-04-29）：**1011 个测试通过**；Step 1–8 全部完成；**M1 + M2 + M3a + M3b + M3c + M3d + M4 + M5a + M5b + M5c + M6 已完成**；**编译器深度清洁 Phase 1–5（C5/C6/C7/C8/C9/C10/C11/C12/C13/C14）全部完成**（CPS dispatch table 覆盖 43 个 AST 节点类型；所有显式 `fallback_visit()` 调用归零；`_vm_assign_to_target()` CPS generator helper 替代 assign_to_target 递归穿透；`IbLambdaExpr.free_vars` 编译期填充；`cell_captured_symbols` 侧表；Signal→CSE 桥已收缩为单层边界兼容包装；`node_protection` 侧表与 `bypass_protection` 参数链已彻底删除）；**fn/lambda/snapshot 类型系统重设计 D1/D2/D3 全部完成**（声明侧 `TYPE fn NAME` 废弃为 PAR_003，表达式侧 `-> TYPE` 合法化，`fn[(...)→(...)]` callable 签名标注上线；20 个 D3 专项测试）。  
 > **剩余技术债**：**无**——所有 C1–C14 / L1–L4 条目已 ✅ DONE 并归档至 `docs/COMPLETED.md` §十七 / §十九 / §二十 / §二十一。`ControlSignalException` 类本体已彻底删除（仅余 `UnhandledSignal` 作为 VM 顶层未消费 Signal 的边界异常）。  
 > **奠基进展**（M1 前置）：`IbCell` 原语已先行落地（`core/runtime/objects/cell.py`，纯容器、身份语义、`trace_refs()` GC 钩子就绪），单元测试 18 个，无现有路径行为变化。  
 > **不阻塞规则**：每个 Milestone 在其前提 Milestone 合并后即可独立开工，不需要等待其他并行 Milestone。  

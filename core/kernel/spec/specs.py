@@ -215,6 +215,36 @@ class BehaviorSpec(DeferredSpec):
         return self._axiom_name or "behavior"
 
 
+@dataclass(eq=False)
+class CallableSigSpec(FuncSpec):
+    """
+    A callable signature constraint produced from a ``fn[(param_types) -> return_type]``
+    type annotation node (``IbCallableType``).
+
+    D3: used to enforce structural signature matching at compile time:
+    - Parameters typed ``fn[(int, str) -> bool]`` carry the full signature.
+    - Inside the function body, calls to such a parameter are structurally
+      checked (arg count + type compatibility).
+    - At ``fn f = EXPR`` declaration sites, the RHS callable's signature is
+      compared against the declared constraint.
+
+    Design notes
+    ------------
+    * ``name`` is always ``"fn"`` (inherited) so that ``is_dynamic("fn")`` in
+      the registry allows any callable on the RHS without blocking assignment.
+    * ``get_base_name()`` returns ``"callable_sig"`` so that the registry can
+      distinguish this from plain ``FuncSpec`` when needed for structural checks.
+    * ``isinstance(spec, FuncSpec)`` is True — ``get_call_cap()`` therefore
+      returns the sentinel ``_FUNC_SPEC_CALL_CAP`` automatically.
+    * ``resolve_return()`` uses ``return_type_name`` from ``FuncSpec``, giving
+      correct compile-time return type inference when calling a ``fn[...]``
+      parameter inside the function body.
+    """
+
+    def get_base_name(self) -> str:
+        return self._axiom_name or "callable_sig"
+
+
 @dataclass
 class LazySpec(ModuleSpec):
     """

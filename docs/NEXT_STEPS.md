@@ -3,7 +3,7 @@
 > 本文档只记录"接下来可以直接开工的任务"。  
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`，VM 架构长期设想见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-29（编译器深度清洁 Phase 1–5 全部完成；C5/C6/C7/C8/C9/C10/C11/C12/C13/C14 全部 ✅；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零；`node_protection` 侧表 + `ControlSignalException` 类全链路删除；**989 个测试通过**；**剩余 C/L 类技术债：无**；`fn` / `lambda` / `snapshot` 类型系统重设计决策已记录于 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md`，等待实现）
+> **最后更新**：2026-04-29（编译器深度清洁 Phase 1–5 全部完成；C5/C6/C7/C8/C9/C10/C11/C12/C13/C14 全部 ✅；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零；`node_protection` 侧表 + `ControlSignalException` 类全链路删除；**fn/lambda/snapshot 类型系统重设计 D1/D2/D3 已全部完成**（表达式侧 `-> TYPE` 合法化，声明侧 `TYPE fn NAME` 废弃为 PAR_003，`fn[(...)→(...)]` callable 签名标注上线）；**1011 个测试通过**；**剩余 C/L 类技术债：无**）
 
 ---
 
@@ -24,28 +24,17 @@
 
 ## 下一里程碑选项（按建议优先级）
 
-DEFERRED 类技术债已清零，可在以下方向中选择主线推进：
+DEFERRED 类技术债已清零；**fn/lambda/snapshot 类型系统重设计 Phase 1+2（D1/D2/D3）均已完成（1011 测试通过）**；
+可在以下方向中选择主线推进：
 
-### 选项 1：fn / lambda / snapshot 类型系统重设计（建议优先）
+### 选项 1：Semantic 用户面其他问题修复
 
-完整设计决策见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md`。两个独立 Phase：
-
-- **Phase 1（耦合，单 PR）**：
-  - `fn` 彻底等同于 `auto`，废除 `int fn f = lambda: EXPR` 声明侧类型注解形式
-  - `IbLambdaExpr` 增加 `returns` 字段；表达式侧 `lambda(...) -> TYPE: EXPR` 合法化
-  - 删除 PAR_005 拒绝逻辑 + `_pending_fn_return_type` 隐式通道
-- **Phase 2（独立 PR）**：
-  - `fn[(<typelist>)->(<typelist>)]` 高阶函数参数类型标注
-  - 类型解析器 `_parse_fn_signature()` + 语义层结构签名匹配
-
-### 选项 2：Semantic 用户面其他问题修复
-
-直接影响用户写 IBCI 代码的体验（与选项 1 并列推进）。涉及：
+直接影响用户写 IBCI 代码的体验。涉及：
 
 - **`try/except` 与 IBCI 错误模型对齐**：当前 `try/except/finally` 词法/语法接受但运行时不真正捕获非语言级异常（详见 `docs/KNOWN_LIMITS.md` 二）。需与 `llmexcept` 体系融合或重新设计。
 - **泛型类型推断改进**：详见 `GENERICS_CONTAINER_ISSUES.md`（下标访问不传播泛型参数、特化 axiom 方法引导不全、嵌套泛型推断缺失等 6 项）。
 
-### 选项 3：M7 可移植性目标语言后端
+### 选项 2：M7 可移植性目标语言后端
 
 在 M6（VM_SPEC + 32 compliance 测试）基础上，以另一宿主语言（Rust 或 Go）做最小子集 VM 参考实现。这是 IBC-Inter "标准语言"愿景的关键一步。
 
@@ -66,16 +55,13 @@ DEFERRED 类技术债已清零，可在以下方向中选择主线推进：
 ## 任务依赖图
 
 ```
-✅ Step 1–8 + M1–M6 + Phase 1–5（989 测试）
+✅ Step 1–8 + M1–M6 + Phase 1–5 + D1/D2/D3（1011 测试）
     │
-    ├── 选项 1：fn/lambda/snapshot 类型系统重设计（FN_LAMBDA_SYNTAX_REDESIGN.md）
-    │         ├── Phase 1：fn=auto + 表达式侧 -> TYPE + 删除 _pending_fn_return_type
-    │         └── Phase 2：fn[...] 高阶签名（独立 PR）
-    ├── 选项 2：Semantic 用户面其他问题修复（try/except、泛型）
-    ├── 选项 3：M7 可移植性目标语言后端
-    ├── 选项 4：TypeRef 重构（与下一代 VM 升级配合）
-    ├── 选项 5：Plugin 系统 Phase 3/4
-    └── 选项 6：LLMPermanentFailureError 传播语义
+    ├── 选项 1：Semantic 用户面其他问题修复（try/except、泛型）
+    ├── 选项 2：M7 可移植性目标语言后端
+    ├── 选项 3：TypeRef 重构（与下一代 VM 升级配合）
+    ├── 选项 4：Plugin 系统 Phase 3/4
+    └── 选项 5：LLMPermanentFailureError 传播语义
 ```
 
 ---
