@@ -973,3 +973,36 @@ llmexcept frame 检查是必须的——同步协议依赖 `runtime_context.set_
 
 ---
 
+
+## 十七、轻量代码债务清理（L1/L2 + C1/C2/C3/C4 + C10/C13）[✅ COMPLETED — 2026-04-29]
+
+> **背景**：M3d/M5c 完成后基线 949 测试通过；为给 M4（多 Interpreter 并发）扫清前置债务，将 `DEFERRED_CLEANUP.md` 中风险极低的 8 条以一个 PR 集中清理。所有改动都在已有代码框架内，无编译器改动。
+
+### 17.1 死代码与僵尸字段删除（C1 / L1）
+* **C1**：删除 `LLMExceptFrame._is_serializable()` —— 全仓库零调用点。
+* **L1**：删除 `IbLambdaExpr.returns` 字段；删除 `visit_IbLambdaExpr`（Pass 3）的 `node.returns` elif 回退；删除 Pass 2 Resolver 的 `node.returns is not None` 类型决议分支。声明侧返回类型完全经由 `_pending_fn_return_type` 隐式通道传递。
+*文件：`core/runtime/interpreter/llm_except_frame.py`、`core/kernel/ast.py`、`core/compiler/semantic/passes/{semantic_analyzer,resolver}.py`*
+
+### 17.2 兼容路径收紧（C2 / C3 / C4）
+* **C2**：`LLMExecutor.execute_behavior_expression` 中 `captured_intents` 旧路径分支替换为 `TypeError`；`IIbBehavior.captured_intents` 注释收紧为 `Optional[IbIntentContext]`；同步更新 `IbBehavior.serialize_for_debug` / `Interpreter.get_captured_intents` / `runtime_serializer` 的读取代码以适应 `None | IbIntentContext` 形态（之前假设可迭代）。
+* **C3**：经 `-W error::RuntimeWarning` 全套测试验证 fallback 不被合法路径触发；删除 `RuntimeWarning`；保留 `id(sym)` 派生 UID 兼容内核引导期 / 跨上下文同步路径，并增加 `assert name` 防御性断言；移除现已不需要的 `import warnings`。
+* **C4**：审计 `IbDeferred.body_uid is None` 路径——结论是该分支在合法编译路径下不可达（`is_deferred=True` 与 `value_node_type != IbBehaviorExpr` 互斥）；保留 `or self.node_uid` 作为防御性回退（不抛异常）以兼容潜在的程序化构造路径，并在调用点添加详细审计注释固化结论。
+
+### 17.3 M4 前置：函数调用 VM 路径直化（C13 / C10）
+* **C13**：在 `ExecutionContextImpl` 上新增 `vm_executor` 属性 + setter；`Interpreter._get_vm_executor()` 在首次构造 VMExecutor 时立即把引用写入 EC。`IbUserFunction.call()` 改为直接读取 `self.context.vm_executor` 调用 `vm.run_body(body)`，删除原三级 getattr 穿透查找链。**审计中发现**：原查找链在合法运行时永远走不到 VMExecutor 路径（ExecutionContextImpl 既无 `vm_executor` 也无 `_interpreter`），函数体始终走的是 `self.context.visit(stmt_uid)` 递归 fallback；C13 的修复让函数体首次真正经由 VM 路径执行——这正是 M4 多 Interpreter 并发所需要的"无 silent fallback"前提。
+* **C10**：新增 `VMExecutor.run_body(stmt_uids)` 共享方法，统一封装 (1) `IbLLMExceptionalStmt` 直接子节点跳过、(2) `node_protection` 重定向（由 `run()` 入口承担）、(3) `Signal → ReturnException/BreakException/ContinueException` 边界恢复。`execute_module()` 与 `IbUserFunction.call()` 现在共用一行 `vm.run_body(body)`，消除两处重复的 body 循环逻辑。同时修复了原 `IbUserFunction.call()` 中 `cse.kind` 的 dormant 错误（属性名应为 `cse.signal`）——该错误因函数体路径之前从未真正进入 VM 而未被发现。
+*文件：`core/runtime/interpreter/execution_context.py`、`core/runtime/interpreter/interpreter.py`、`core/runtime/objects/kernel.py`、`core/runtime/vm/vm_executor.py`*
+
+### 17.4 维护性改善（L2 + L3 / L4 注释）
+* **L2**：`RuntimeSymbolImpl` 新增 `is_builtin: bool` 字段；`Scope.define()` / `RuntimeContext.define_variable()` Protocol 与 impl 增加 `is_builtin` 参数；`IntrinsicManager.rebind()` 在注入 intrinsic 时传 `is_builtin=True`；`get_vars()` 改为按属性过滤而非硬编码 `("len","print","range","input","get_self_source")` 名单。
+* **L3**：在 `SemanticAnalyzer._pending_fn_return_type` 字段声明处补充设计决策注释——这是经过审慎选择的隐式通道（替代方案"节点字段"已在 L1 删除，"参数化访问者"会污染分发签名）；嵌套安全性由 `visit_IbAssign` 的 `try/finally save/restore` 保证。
+* **L4**：在 `_collect_free_refs` 通用展开循环处补充注释，说明启发式策略与 UID 编码下的低碰撞概率。
+*文件：`core/runtime/interpreter/runtime_context.py`、`core/runtime/interfaces.py`、`core/runtime/interpreter/intrinsics/__init__.py`、`core/compiler/semantic/passes/semantic_analyzer.py`、`core/runtime/interpreter/handlers/expr_handler.py`*
+
+### 17.5 测试基线
+949 → 949（0 退化）。
+
+### 17.6 暂缓项
+C5 / C6 / C7 / C8 / C9 / C11 / C12 / C14 按计划延后：C5/C6 等 ControlSignalException 彻底移除；C7/C8/C11/C14 等 M6 后统一处理（需编译器改动或较大重构）。
+
+---

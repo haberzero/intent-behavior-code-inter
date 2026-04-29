@@ -494,7 +494,17 @@ class ExprHandler(BaseHandler):
                 if inner_body:
                     stack.append((inner_body, excl | inner_param_uids))
                 continue
-            # 通用展开：将所有 list 字段中的字符串 uid 与字符串字段中合法 uid 视作子节点
+            # 通用展开：将所有 list 字段中的字符串 uid 与字符串字段中合法 uid 视作子节点。
+            #
+            # L4 注：这是一个启发式遍历策略——AST 节点的字段可能以多种语义出现
+            # （子节点 UID、字面量字符串、配置标记等）。判定 "字段值是字符串
+            # 且存在于 ``node_pool``" 即视作子节点 UID。**在 IBCI 当前的 UID
+            # 编码下（前 16 hex 字节的内容哈希 + ``node_`` 前缀，详见
+            # ``serialization/serializer.py``），任意非 UID 的字符串字面量恰好
+            # 与某个 node_pool key 碰撞的概率极低（< 2^-64）**，因此该启发式
+            # 策略在实践中不会误吞字面量字符串作为子节点。
+            # 若未来 UID 编码改用更短或非随机的格式，本启发式可能误判，应改用
+            # 显式的 AST 字段 schema（例如 dataclass annotated fields）。
             pool = self.execution_context.node_pool
             for k, v in data.items():
                 if k.startswith("_"):

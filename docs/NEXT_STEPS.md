@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-28（M3c IbLLMExceptionalStmt CPS 调度化 + M5b LLMScheduler/LLMFuture + M3d-prep 扩展 CPS handler 覆盖 22→37 节点；926 个测试通过；下一里程碑：M3d 主路径切换 / M5c dispatch-before-use 集成 / M4 多 Interpreter 并发）
+> **最后更新**：2026-04-29（轻量债务清理 PR 已合并：L1/L2/C1/C2/C3/C4/C10/C13；M3d/M5c 主线已纳入；949 个测试通过；下一里程碑：**M4 多 Interpreter 并发**）
 
 ---
 
@@ -121,11 +121,11 @@ class MyType:
 ## Step 10/11/12：后续里程碑
 
 - **M3c**：llmexcept retry + intent fork/restore 调度化（依赖 M3b ✅）✅ COMPLETED
-- **M3d**：Interpreter.visit() 主路径切换到 VMExecutor（依赖 M3c ✅）⏳ 主线下一步
-- **M4**：Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化，依赖 M3a ✅）⏳ 可并行
+- **M3d**：Interpreter.visit() 主路径切换到 VMExecutor（依赖 M3c ✅）✅ COMPLETED（M3d-prep 扩展 CPS handler；C13 修复 `IbUserFunction.call()` 中 VMExecutor 查找路径，使函数体首次真正经由 VM 路径执行）
+- **M4**：Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化，依赖 M3a ✅ + M3d ✅ + C10/C13 ✅）⏳ **当前主线下一步**
 - **M5b**：LLMScheduler（ThreadPoolExecutor + LLMFuture，依赖 M5a ✅）✅ COMPLETED
-- **M5c**：VM dispatch-before-use 集成（依赖 M5b ✅ + M3c ✅）⏳ 可并行
-- **M6**：可移植性参考实现 + 完整并发行为测试套件（依赖 M3d + M4 + M5c）
+- **M5c**：VM dispatch-before-use 集成（依赖 M5b ✅ + M3c ✅）✅ COMPLETED
+- **M6**：可移植性参考实现 + 完整并发行为测试套件（依赖 M3d ✅ + M4 + M5c ✅）
 
 详见 `docs/VM_EVOLUTION_PLAN.md` 与 `docs/PENDING_TASKS_VM.md`。
 
@@ -134,18 +134,14 @@ class MyType:
 ## 任务依赖图（精确版）
 
 ```
-Step 1–8 + M1 + M2 + M3a + M3b + M3c + M5a + M5b（已完成；905 测试通过）
+Step 1–8 + M1 + M2 + M3a + M3b + M3c + M3d + M5a + M5b + M5c + 轻量债务清理（已完成；949 测试通过）
     │
-    ├──→ M3d（主路径切换 + ReturnException 移除）⏳ 当前任务
-    │      │
-    │      └──→ M4（多 Interpreter 并发，依赖 M3a ✅，可在 M3d 之前并行启动）
-    │
-    ├──→ M5c（dispatch-before-use，依赖 M3c ✅ + M5b ✅）⏳ 可并行
-    │
-    └──→ M6（可移植性 + 合规测试套件，需 M3d + M4 + M5c）
+    └──→ M4（多 Interpreter 并发，依赖 M3a/M3d ✅，C10/C13 已清理）⏳ **当前主线**
+            │
+            └──→ M6（可移植性 + 合规测试套件）
 ```
 
-**当前优先路径**：M3d（主执行路径切换 + ReturnException 移除）为下一里程碑；M4（多 Interpreter 并发）和 M5c（dispatch-before-use 集成）可并行启动 → M6
+**当前优先路径**：**M4（多 Interpreter 并发）** 为下一里程碑——其前置债务（C10 body 循环统一、C13 VMExecutor 查找直接化）已在 2026-04-29 的轻量债务清理 PR 中完成。其它较大重构债务（C7/C8/C11/C14）按计划延后到 M6 后统一处理。
 
 ---
 
