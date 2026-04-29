@@ -65,6 +65,20 @@ class IHostPlugin(IbPlugin):
             return bool(result.get_value())
         return bool(result)
 
+    def spawn_isolated(self, path: str, policy: Dict[str, Any]) -> str:
+        """M4：在隔离后台线程中异步启动另一个 .ibci 脚本，返回 handle 字符串。"""
+        hs = self._host_service()
+        if not hs:
+            return ""
+        return hs.spawn_isolated(path, policy)
+
+    def collect(self, handle: str) -> dict:
+        """M4：阻塞等待 spawn_isolated 返回的 handle 执行完成，返回子环境导出的变量字典。"""
+        hs = self._host_service()
+        if not hs:
+            return {}
+        return hs.collect(handle)
+
     def get_source(self) -> str:
         """获取当前运行模块的源代码（元编程）。"""
         hs = self._host_service()

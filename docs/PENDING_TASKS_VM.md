@@ -565,12 +565,12 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 | **Step 7** | IExecutionFrame 接口归一 + LlmCallResultAxiom + IbLLMCallResult 接入 | Step 6 完成 | ✅ 完成 |
 | **Step 8-pre** | llmexcept 快照隔离语义落地（SEM_052 read-only 约束 + `_last_llm_result` per-snapshot 化 + 用户协议快照） | 独立 | ✅ 完成（2026-04-19） |
 | **Step 8** | 概念边界文档化（`interpreter.py`/`engine.py`/`service.py` 头部边界注释） | 独立 | ✅ 完成（2026-04-20） |
-| **Step 9** | VM CPS 调度循环（消除 Python 递归依赖，解锁第三层并发） | Step 7 完成 | ⏳ 待推进 |
-| **Step 10** | Layer 1 LLM 流水线（DDG 分析 + LLMScheduler + dispatch-before-use 集成） | Step 7 完成 | ⏳ 待推进 |
-| ├ **Step 10a** | DDG 编译器分析（behavior 节点标注 llm_deps + dispatch_eligible） | Step 7 完成 | ⏳ 待推进 |
-| ├ **Step 10b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 10a 完成 | ⏳ 待推进 |
-| └ **Step 10c** | VM dispatch-before-use 集成（`visit()` 感知 dispatch_eligible） | Step 10b + Step 9 完成 | ⏳ 待推进 |
-| **Step 11** | Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ⏳ 待推进 |
+| **Step 9** | VM CPS 调度循环（消除 Python 递归依赖，解锁第三层并发） | Step 7 完成 | ✅ 完成（M3a/b/c/d，2026-04-28） |
+| **Step 10** | Layer 1 LLM 流水线（DDG 分析 + LLMScheduler + dispatch-before-use 集成） | Step 7 完成 | ✅ 完成（M5a/b/c，2026-04-28/29） |
+| ├ **Step 10a** | DDG 编译器分析（behavior 节点标注 llm_deps + dispatch_eligible） | Step 7 完成 | ✅ 完成（M5a） |
+| ├ **Step 10b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 10a 完成 | ✅ 完成（M5b） |
+| └ **Step 10c** | VM dispatch-before-use 集成（`visit()` 感知 dispatch_eligible） | Step 10b + Step 9 完成 | ✅ 完成（M5c） |
+| **Step 11** | Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ✅ 完成（M4，2026-04-29） |
 | **Step 12** | 可移植性参考实现 + 完整并发行为测试套件 | Step 9 + Step 11 完成 | ⏳ 待推进 |
 
 ---

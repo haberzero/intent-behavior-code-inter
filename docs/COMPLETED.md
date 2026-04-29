@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-29（M3d 主路径切换 + M5c LLM dispatch-before-use；949 个测试通过）
+> **最后更新**：2026-04-29（M4 多 Interpreter 并发落地：ihost.spawn_isolated + ihost.collect；964 个测试通过）
 
 ---
 
@@ -1006,3 +1006,61 @@ llmexcept frame 检查是必须的——同步协议依赖 `runtime_context.set_
 C5 / C6 / C7 / C8 / C9 / C11 / C12 / C14 按计划延后：C5/C6 等 ControlSignalException 彻底移除；C7/C8/C11/C14 等 M6 后统一处理（需编译器改动或较大重构）。
 
 ---
+
+## 十八、M4 多 Interpreter 并发（Layer 2 执行隔离）[✅ 2026-04-29]
+
+> **前提**：M3a/M3b/M3c/M3d + M5a/M5b/M5c 已全部完成；C10/C13 前置债务已清理（949 测试通过）。
+
+### 18.1 设计目标
+
+实现 IBCI 三层并发模型中的 **第二层（执行隔离）**：允许 IBCI 程序并发启动多个完全独立的子 `Interpreter` 实例（每个子实例拥有独立的 `KernelRegistry`、`RuntimeContext`、`LLMScheduler`），通过显式 `collect()` 原语聚合结果，子环境不直接写主环境的 `RuntimeContext`。
+
+### 18.2 新增 API
+
+| 层级 | 方法 | 签名 | 语义 |
+|------|------|------|------|
+| IBCI 语言 | `ihost.spawn_isolated` | `(str, dict) → str` | 非阻塞：在后台线程启动子脚本，返回 handle |
+| IBCI 语言 | `ihost.collect` | `str → dict` | 阻塞：等待子脚本完成，返回其全局变量字典 |
+| Python/Engine | `IBCIEngine.request_spawn_isolated` | `(str, dict, dict?) → str` | Engine 层线程管理实现 |
+| Python/Engine | `IBCIEngine.request_collect` | `str → Dict[str, Any]` | Engine 层 join + 变量提取实现 |
+
+### 18.3 实现要点
+
+**`IBCIEngine`（`core/engine.py`）**：
+- 新增 `_spawned_tasks: Dict[str, Tuple[Thread, IBCIEngine, list]]` + `_spawned_tasks_lock`（`threading.Lock`）
+- `request_spawn_isolated()`：创建全新 `IBCIEngine` 子实例，在 daemon 线程中调用 `sub_engine.run()`，`exc_holder` list 捕获子线程异常；线程 start 后立即返回 `f"spawn_{uuid8}"`
+- `request_collect()`：线程 `join()`（阻塞），从 `_spawned_tasks` 消费并删除记录；子线程异常透传为 `RuntimeError`；从 `sub_engine.interpreter.runtime_context.global_scope` 提取用户变量，跳过 `is_builtin`、跳过函数/行为等不可序列化类型（`_SKIP_IB_TYPES`），通过 `val.to_native()` 转为 Python 原生值后返回
+
+**`HostService`（`core/runtime/host/service.py`）**：
+- `spawn_isolated(path, policy)` → 委托 `orchestrator.request_spawn_isolated()`
+- `collect(handle)` → 委托 `orchestrator.request_collect()`
+
+**`IHostPlugin`（`ibci_modules/ibci_ihost/core.py`）**：
+- 新增 `spawn_isolated(path, policy)` + `collect(handle)` 方法，通过 `_host_service()` 调用 `HostService`
+
+**`_spec.py`（`ibci_modules/ibci_ihost/_spec.py`）**：
+- `spawn_isolated: (str, dict) → str`
+- `collect: str → dict`
+
+**接口层（`core/runtime/interfaces.py`）**：
+- `IKernelOrchestrator` 协议新增 `request_spawn_isolated` + `request_collect`
+- `IHostService` 协议新增 `spawn_isolated` + `collect`
+
+### 18.4 安全约束
+
+- 子引擎在 daemon 线程运行，主进程退出时自动终止（不泄漏）
+- `_spawned_tasks_lock` 保护 dict 并发读写
+- 每个 handle 只能被 collect 一次，重复 collect 抛 `RuntimeError`
+- 子线程异常在 `collect()` 时以 `RuntimeError` 形式在主线程重新抛出
+- 子引擎的 `KernelRegistry` 通过 `auto_sniff=True` 独立初始化，与父引擎完全隔离（不共享 sealed 注册表）
+
+### 18.5 测试新增
+
+新建 `tests/e2e/test_e2e_m4_multi_interpreter.py`，15 个测试覆盖：
+- Engine 层直接 API（spawn/collect/错误传播/幂等保护/多顺序 spawn）
+- 并发正确性（两个子引擎确实并发；spawn 非阻塞验证）
+- IBCI 层 API（roundtrip/int 提取/handle 类型验证/两并发 spawn）
+- `run_isolated` 兼容性回归
+
+### 18.6 测试基线
+949 → 964（+15 M4 专项测试，0 退化）。
