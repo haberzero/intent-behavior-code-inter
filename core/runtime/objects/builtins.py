@@ -853,7 +853,7 @@ class IbBehavior(IbObject):
     def __init__(
         self,
         node_uid: str,
-        captured_intents: Union[List[Any], Any],
+        captured_intents: Optional[Any],  # Optional[IbIntentContext]
         ib_class: IbClass,
         expected_type: Optional[str] = None,
         call_intent: Optional[Any] = None,
@@ -867,6 +867,8 @@ class IbBehavior(IbObject):
         call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
         deferred_mode: 'lambda' | 'snapshot' | None (immediate)
         execution_context: 创建时的执行上下文引用（供 call() 使用）。
+        captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
+            模式 / dispatch_eager）。Step 6c/6d 之后不再支持 IntentNode 链表 / list。
 
         M1 参数化拓展（与 IbDeferred 同构）：
             * ``params_uids`` —— ``IbLambdaExpr`` 提供的参数节点 uid 列表；
@@ -911,10 +913,18 @@ class IbBehavior(IbObject):
         return f"<Behavior {self.node}>"
 
     def serialize_for_debug(self) -> Dict[str, Any]:
+        # captured_intents 现在是 None 或 IbIntentContext（非可迭代）
+        ci = self.captured_intents
+        if ci is None:
+            ci_repr: List[str] = []
+        elif hasattr(ci, "get_active_intents"):
+            ci_repr = [str(i) for i in ci.get_active_intents()]
+        else:
+            ci_repr = [str(ci)]
         return {
             "type": self.ib_class.name,
             "node_uid": self.node,
-            "captured_intents": [str(i) for i in self.captured_intents],
+            "captured_intents": ci_repr,
             "expected_type": self.expected_type
         }
 

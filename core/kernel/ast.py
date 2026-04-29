@@ -443,9 +443,11 @@ class IbLambdaExpr(IbExpr):
       调用处的意图栈生效。
     * ``deferred_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
       对意图栈 fork。
-    * ``returns``：保留字段（历史兼容），解析器不再设置它。
-      声明侧返回类型由 ``visit_IbAssign`` 通过 ``_pending_fn_return_type`` 注入到
-      ``visit_IbLambdaExpr``，不再经由本字段传递。
+
+    返回类型不通过 IbLambdaExpr 自身字段携带：声明侧 ``TYPE fn NAME = lambda ...``
+    的 ``TYPE`` 由 ``visit_IbAssign`` 通过 ``_pending_fn_return_type`` 隐式通道
+    注入到 ``visit_IbLambdaExpr``（详见 ``semantic_analyzer.py``）；表达式侧
+    ``lambda -> TYPE: EXPR`` 已废弃（解析期产生 PAR_005）。
 
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
     运行时构造 ``IbBehavior``；否则构造 ``IbDeferred``。两者都接受参数列表。
@@ -453,7 +455,6 @@ class IbLambdaExpr(IbExpr):
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
-    returns: Optional['IbASTNode'] = None  # 保留字段（历史兼容），解析器不再设置
 
     @property
     def creates_scope(self) -> bool:

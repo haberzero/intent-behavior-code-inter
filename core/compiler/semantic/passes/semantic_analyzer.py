@@ -1737,9 +1737,9 @@ class SemanticAnalyzer:
 
         策略
         ----
-        1. 确定 returns_type：优先读取 ``_pending_fn_return_type``（由 visit_IbAssign
-           在 ``TYPE fn NAME = lambda: ...`` 声明时注入），其次回退到已废弃的
-           ``node.returns`` 字段（语义等价于旧式 ``lambda -> TYPE: EXPR``）。
+        1. 确定 returns_type：来自 ``_pending_fn_return_type``（由 visit_IbAssign
+           在 ``TYPE fn NAME = lambda: ...`` 声明时注入）。历史的
+           ``IbLambdaExpr.returns`` 字段已删除（L1，2026-04-29）。
         2. 为参数列表与函数体打开新的 ``SymbolTable``（局部作用域），保证 body 内
            的 ``IbName`` 决议能将形参指向局部符号而非误捕外层同名变量。
         4. 形参解析为 ``VariableSymbol``，类型来自注解（缺省为 ``any``）。
@@ -1754,13 +1754,11 @@ class SemanticAnalyzer:
            的 BehaviorSpec/DeferredSpec（使 ``int fn f = lambda: ...`` 时
            ``int r = f()`` 能在编译期通过类型决议），否则返回通用 spec。
         """
-        # 1. 确定返回类型：声明侧注入优先，旧式 node.returns 字段次之
-        returns_type: Optional[IbSpec] = None
-        if self._pending_fn_return_type is not None:
-            returns_type = self._pending_fn_return_type
-        elif node.returns is not None:
-            # 保留对旧式 node.returns 的支持（例如旧缓存 AST 或程序化构造）
-            returns_type = self._resolve_type(node.returns)
+        # 1. 确定返回类型：来自声明侧 ``TYPE fn NAME = lambda ...`` 的 ``TYPE``，
+        #    通过 ``visit_IbAssign`` → ``_pending_fn_return_type`` 隐式通道传递。
+        #    历史的 ``IbLambdaExpr.returns`` 字段已删除（L1）；表达式侧
+        #    ``lambda -> TYPE: EXPR`` 在解析期即被拒绝（PAR_005）。
+        returns_type: Optional[IbSpec] = self._pending_fn_return_type
 
         # 3. 为 lambda 局部作用域打开新的符号表
         old_table = self.symbol_table

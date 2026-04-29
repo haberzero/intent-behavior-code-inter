@@ -137,7 +137,72 @@ class VMExecutor:
             # 不支持的根节点：直接走旧路径
             return self.fallback_visit(node_uid)
 
-        stack: list[VMTask] = [self._make_task(node_uid)]
+        return self._drive_loop([self._make_task(node_uid)])
+
+    def run_body(self, stmt_uids: Any) -> Any:
+        """C10：执行一个语句列表（模块或函数体），统一处理 ``node_protection``
+        重定向、``IbLLMExceptionalStmt`` 直接子节点跳过、以及顶层未消费控制
+        信号到 ``ReturnException`` / ``BreakException`` / ``ContinueException``
+        的边界恢复。
+
+        替代 ``Interpreter.execute_module()`` 与 ``IbUserFunction.call()`` 中
+        各自维护的内联 body 循环——既消除重复逻辑，又确保未来 M4 多 Interpreter
+        并发场景下两条路径保持一致。
+
+        参数:
+            stmt_uids: 语句 UID 序列（``IbModule.body`` / ``IbFunctionDef.body``）。
+
+        返回:
+            最后一条语句的求值结果；空 body 返回 ``IbNone``。
+
+        异常:
+            ``ReturnException`` / ``BreakException`` / ``ContinueException``：
+                顶层未消费的控制信号被恢复为既有 Python 异常，使调用方的边界
+                处理（``except ReturnException`` 提取返回值；模块顶层报错"控制流
+                出现在函数/循环外"）继续生效。
+        """
+        # 局部 import 避免与 vm.task 之间的潜在循环依赖
+        from core.runtime.vm.task import (
+            ControlSignal as _CS,
+            ControlSignalException as _CSE,
+        )
+        from core.runtime.exceptions import (
+            ReturnException as _RE,
+            BreakException as _BE,
+            ContinueException as _CE,
+        )
+
+        result = self.registry.get_none()
+        for stmt_uid in stmt_uids or ():
+            stmt_data = self._ec.get_node_data(stmt_uid)
+            if stmt_data and stmt_data.get("_type") == "IbLLMExceptionalStmt":
+                # IbLLMExceptionalStmt 直接出现在 body 中：由其 target 的
+                # node_protection 重定向驱动，这里直接跳过。
+                continue
+            try:
+                result = self.run(stmt_uid)
+            except _CSE as cse:
+                # 顶层未消费的控制信号（来自 fallback 路径或主路径未捕获）
+                # ControlSignalException 的属性是 ``signal``（不是 ``kind``）。
+                if cse.signal is _CS.RETURN:
+                    raise _RE(cse.value)
+                if cse.signal is _CS.BREAK:
+                    raise _BE()
+                if cse.signal is _CS.CONTINUE:
+                    raise _CE()
+                raise
+        return result
+
+    # ------------------------------------------------------------------
+    # 内部：调度循环主体（被 run() / future 入口共享）
+    # ------------------------------------------------------------------
+
+    def _drive_loop(self, stack: list) -> Any:
+        """主调度循环本体；接受预填充的栈，返回最终结果。
+
+        独立成方法让 ``run()`` 和将来其他入口（例如 ``run_body``-内联化）
+        共享同一段循环代码，避免漂移。
+        """
         # (value, exception) — 互斥；下一次循环将传递给栈顶任务
         pending_value: Any = None
         pending_exception: Optional[BaseException] = None

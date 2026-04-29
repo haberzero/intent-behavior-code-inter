@@ -33,6 +33,7 @@ class RuntimeSymbol(Protocol):
     declared_type: Any
     current_type: Any
     is_const: bool
+    is_builtin: bool  # L2：内置函数（intrinsic）符号标志，由 IntrinsicManager 注入
 
 class SymbolView(Protocol):
     """只读符号视图接口"""
@@ -42,7 +43,7 @@ class SymbolView(Protocol):
 
 class Scope(Protocol):
     """运行时作用域接口"""
-    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None: ...
+    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None: ...
     def assign(self, name: str, value: Any) -> bool: ...
     def get(self, name: str) -> Any: ...
     def get_symbol(self, name: str) -> Optional[RuntimeSymbol]: ...
@@ -60,7 +61,7 @@ class RuntimeContext(Protocol):
     """解释器运行时上下文，管理作用域和意图栈"""
     def enter_scope(self) -> None: ...
     def exit_scope(self) -> None: ...
-    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None: ...
+    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None: ...
     def set_variable(self, name: str, value: Any) -> None: ...
     def get_variable(self, name: str) -> Any: ...
     def get_symbol(self, name: str) -> Optional[RuntimeSymbol]: ...
@@ -231,9 +232,16 @@ class IIbIntent(IIbObject, Protocol):
 
 @runtime_checkable
 class IIbBehavior(IIbObject, Protocol):
-    """延迟执行的行为对象协议 (~...~)"""
+    """延迟执行的行为对象协议 (~...~)
+
+    ``captured_intents``:
+      - ``None``：lambda 模式（调用时使用当前上下文意图栈）
+      - ``IbIntentContext`` 实例：snapshot 模式 / dispatch_eager（已 fork 的值快照）
+
+    历史的 IntentNode 链表 / 已展平 list 路径自 Step 6c/6d 起已废弃。
+    """
     node: str
-    captured_intents: Union[List[Any], Any] # 支持 IntentNode 或 列表
+    captured_intents: Optional[Any]  # Optional[IbIntentContext]; Any 避免循环导入
     expected_type: Optional[str]
 
 @runtime_checkable

@@ -18,6 +18,9 @@ from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
 from core.kernel.registry import KernelRegistry
 
+if TYPE_CHECKING:
+    from core.runtime.objects.intent_context import IbIntentContext
+
 class LLMExecutorImpl:
     """
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
@@ -524,7 +527,7 @@ class LLMExecutorImpl:
             except Exception:
                 pass
 
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional[Any] = None) -> LLMResult:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None) -> LLMResult:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
 
@@ -534,6 +537,12 @@ class LLMExecutorImpl:
         - success=False: 执行失败
 
         不再抛出 LLMUncertaintyError，所有不确定性通过 LLMResult 返回。
+
+        ``captured_intents`` 协议（自 Step 6c/6d 起收紧）：
+            - ``None``  → 使用当前 RuntimeContext 的活跃意图栈（lambda 模式）
+            - ``IbIntentContext`` 实例 → 已 fork 的意图值快照（snapshot 模式 / dispatch_eager）
+
+        其他类型一律视为契约违反并 raise TypeError。
         """
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
@@ -561,24 +570,21 @@ class LLMExecutorImpl:
         # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
         if captured_intents is not None:
             from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
-            if isinstance(captured_intents, _IbIntentContext):
-                # snapshot 捕获了 IbIntentContext.fork() 的完整值快照
-                active_list = captured_intents.get_active_intents()
-                all_intents = IntentResolver.resolve(
-                    active_intents=active_list,
-                    global_intents=captured_intents.get_global_intents(),
-                    context=context,
-                    execution_context=execution_context
+            if not isinstance(captured_intents, _IbIntentContext):
+                # 自 Step 6c/6d 起，所有生产者只产出 None 或 IbIntentContext。
+                # 历史的 IntentNode 链表 / 已展平 list 路径已无产生方；命中即为契约违反。
+                raise TypeError(
+                    f"execute_behavior_expression: captured_intents must be "
+                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
                 )
-            else:
-                # 兼容旧路径：IntentNode 链表（to_list）或已展平的列表
-                active_list = captured_intents.to_list() if hasattr(captured_intents, 'to_list') else captured_intents
-                all_intents = IntentResolver.resolve(
-                    active_intents=active_list,
-                    global_intents=context.get_global_intents(),
-                    context=context,
-                    execution_context=execution_context
-                )
+            # snapshot 捕获了 IbIntentContext.fork() 的完整值快照
+            active_list = captured_intents.get_active_intents()
+            all_intents = IntentResolver.resolve(
+                active_intents=active_list,
+                global_intents=captured_intents.get_global_intents(),
+                context=context,
+                execution_context=execution_context
+            )
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
 
