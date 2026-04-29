@@ -571,7 +571,7 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 | ├ **Step 10b** | LLMScheduler（ThreadPoolExecutor + LLMFuture + dispatch_eager/resolve） | Step 10a 完成 | ✅ 完成（M5b） |
 | └ **Step 10c** | VM dispatch-before-use 集成（`visit()` 感知 dispatch_eligible） | Step 10b + Step 9 完成 | ✅ 完成（M5c） |
 | **Step 11** | Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化 + collect） | Step 5 完成（独立） | ✅ 完成（M4，2026-04-29） |
-| **Step 12** | 可移植性参考实现 + 完整并发行为测试套件 | Step 9 + Step 11 完成 | ⏳ 待推进 |
+| **Step 12** | 可移植性参考实现 + 完整并发行为测试套件 | Step 9 + Step 11 完成 | ✅ 完成（M6，2026-04-29）`docs/VM_SPEC.md` + `tests/compliance/`（32 合规测试，C6/C12 轻量债务已清理） |
 
 ---
 

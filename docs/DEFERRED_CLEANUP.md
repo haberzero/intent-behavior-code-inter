@@ -1,12 +1,12 @@
 # 延迟清理任务清单
 
 > **建立时间**：2026-04-28  
-> **更新**：2026-04-29（轻量债务清理 PR 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；剩余条目延后到 M6 后统一处理）  
+> **更新**：2026-04-29（Phase 1 落地：L1/L2/C1/C2/C3/C4/C10/C13 标记为 ✅ DONE；C6/C12 在 M6 Phase 1 清理中完成；剩余 C5/C7/C8/C9/C11/C14 延后到编译器深度清洁阶段，现已有 M6 合规测试安全网）  
 > **来源**：从 `URGENT_ISSUES.md` 转入的低优先级维护性条目 + 2026-04-28/29 文档/代码一致性审查识别的"可彻底清理的兼容性回退"  
 > **属性**：以下任务均不影响正确性，目标是工程美观与可维护性  
 > **触发方式**：作为下一个独立的"代码债务清理 PR"一次性处理；不混入 M3b/M5a 等主线特性 PR
 
-> **测试基线**：本文件中所有任务必须保持 `python3 -m pytest tests/ -q` 测试基线不退化（**当前基线 949 passed**）。
+> **测试基线**：本文件中所有任务必须保持 `python3 -m pytest tests/ -q` 测试基线不退化（**当前基线 996 passed**）。
 
 ---
 
@@ -87,25 +87,25 @@
 
 ---
 
-### [C6] CSE-Exception 双层桥彻底消除（C5 的细化追踪）
+### [C6] CSE-Exception 双层桥彻底消除（C5 的细化追踪）✅ PARTIAL DONE（2026-04-29）
 
 **文件**：
-- `core/runtime/interpreter/interpreter.py:execute_module()` L591–L600（CSE → ReturnException/BreakException/ContinueException 还原桥）
-- `core/runtime/objects/kernel.py:IbUserFunction.call()` L851–L858（同上）
-- `core/runtime/vm/handlers.py:vm_handle_IbTry` L1301–L1303（`except (ReturnException, BreakException, ContinueException): raise` 透传桥）
-- `core/runtime/vm/handlers.py:vm_handle_IbCall` L260–L261（`except ControlSignalException: raise` 透传桥）
-- `core/runtime/vm/handlers.py` 顶部 imports（仍引入 `ReturnException/BreakException/ContinueException`）
+- `core/runtime/interpreter/interpreter.py:execute_module()` — 已改为直接捕获 `ControlSignalException`
+- `core/runtime/objects/kernel.py:IbUserFunction.call()` — 已改为直接捕获 `ControlSignalException`（保留 ReturnException 兜底供 vm=None fallback 路径）
+- `core/runtime/vm/vm_executor.py:run_body()` — 已删除 CSE→ReturnException/BreakException/ContinueException 转换桥
+- `core/runtime/vm/handlers.py:vm_handle_IbTry` L1301–L1303 — `except (ReturnException, BreakException, ContinueException): raise` 透传桥（待 C8/C9 fallback 完全消除后删除）
+- `core/runtime/vm/handlers.py:vm_handle_IbCall` L260–L261 — `except ControlSignalException: raise` 透传桥（待 C8 fallback 完全消除后删除）
 
-**问题**：M3d 已通过 VMExecutor 完全驱动函数体，内部 `return` 语句产生 `Signal(RETURN, value)`，经由 `ControlSignalException.from_signal()` 包装后抛给 `execute_module` / `IbUserFunction.call`，再转回 `ReturnException`，最后在 `IbUserFunction.call()` 外层 `except ReturnException` 消费。这是一个三层翻译：`Signal → CSE → ReturnException → return value`。完全可以直接捕获 `Signal`。
+**落地内容（Phase 1，2026-04-29）**：Signal→CSE→ReturnException 三层桥已缩减为 Signal→CSE 两层：
+1. `run_body()` 不再将 CSE 转换为 Python 原生异常，直接让 CSE 向调用方传播
+2. `IbUserFunction.call()` 直接捕获 `ControlSignalException`，`kind==RETURN` 即返回 `cse.value`
+3. `execute_module()` 直接捕获 `ControlSignalException` 并报错
 
-**目标**：
-1. `IbUserFunction.call()` 捕获 `ControlSignalException`，若 `kind==RETURN` 直接返回 `cse.value`，删除 CSE→ReturnException→except 三层转换
-2. `execute_module()` 同理：直接捕获 CSE，`kind==RETURN/BREAK/CONTINUE` 分别处理，删除转换桥
-3. `vm_handle_IbTry` 的 `except (ReturnException, BreakException, ContinueException): raise` 在 fallback 路径完全消除后删除
-4. `vm_handle_IbCall` 的 `except ControlSignalException: raise` 也只在 fallback 中有意义；fallback 消除后删除
-5. 最终目标与 C5 对齐：`ControlSignalException` 在整个代码库只剩顶层边界一个产生点和一个消费点，之后可整体删除
+**剩余工作（待 C8/C9 fallback 完全消除后）**：
+- `vm_handle_IbTry` 和 `vm_handle_IbCall` 中的 `ReturnException/CSE` 透传桥
+- `ControlSignalException` 类本体（C5）彻底删除
 
-**前提**：C6 = C5 的细化；在 C5 完成时一并处理。
+**前提**：剩余清理依赖 C8（IbLambdaExpr/IbBehaviorInstance 进入完整 CPS 路径）和 C9（import 完全 CPS 化）。
 
 ---
 
@@ -215,25 +215,18 @@ def vm_handle_IbImport(executor, node_uid, node_data):
 
 ---
 
-### [C12] `_assign_future_to_name_target()` 直接操作 `ScopeImpl` 私有属性
+### [C12] `_assign_future_to_name_target()` 直接操作 `ScopeImpl` 私有属性 ✅ DONE（2026-04-29）
 
-**文件**：`core/runtime/vm/handlers.py:_assign_future_to_name_target()` L541–L596
+**文件**：`core/runtime/vm/handlers.py:_assign_future_to_name_target()` 与 `_target_is_promoted_cell()`；`core/runtime/interpreter/runtime_context.py:ScopeImpl`；`core/runtime/interfaces.py:Scope`
 
-**问题**：M5c 的 dispatch-before-use 路径必须绕过 `ScopeImpl.define/assign` 的类型检查，直接把非 `IbObject` 的 `LLMFuture` 写入符号表。当前实现直接操作：
-
-```python
-target_scope._symbols[name] = new_sym      # 私有字段
-target_scope._uid_to_symbol[sym_uid] = new_sym  # 私有字段
-sym.value = future           # 绕过 _check_type
-sym.current_type = type(future)  # 写入非 IbObject 的类型
-```
-
-根本原因：`RuntimeContext` / `ScopeImpl` 接口的 `define_variable` / `set_variable_by_uid` 假定传入值是合法的 `IbObject`，没有"跳过类型检查的低级写入"操作。
-
-**目标**：
-1. 在 `ScopeImpl` / `RuntimeContext` 接口中增加 `define_raw(name, value, uid)` 方法（或 `define_variable(..., skip_type_check=True)`），供 VM 特殊路径使用
-2. `_assign_future_to_name_target` 改用该方法，不再直接操作 `_symbols` / `_uid_to_symbol` 私有字段
-3. 对 `_cell_map` 私有属性的 `hasattr` 探测（`_target_is_promoted_cell()`）同理：在 `ScopeImpl` 上增加 `is_cell_promoted(sym_uid: str) -> bool` 方法，把私有知识封装在 scope 内部
+**落地内容（Phase 1，2026-04-29）**：
+1. `ScopeImpl` 新增 `define_raw(name, value, uid, declared_type)` 方法：低级符号写入，绕过类型检查与 box 操作，供 VM LLMFuture 占位符写入使用
+2. `ScopeImpl` 新增 `is_cell_promoted(sym_uid)` 方法：封装 `_cell_map` 私有属性探测
+3. `Scope` Protocol（`core/runtime/interfaces.py`）新增对应方法签名（默认实现）
+4. `_assign_future_to_name_target()` 首次定义路径改用 `target_scope.define_raw()` 替代直接写 `_symbols`/`_uid_to_symbol`
+5. `_target_is_promoted_cell()` 改用 `scope.is_cell_promoted(sym_uid)` 替代 `hasattr(scope, "_cell_map") and sym_uid in scope._cell_map`
+6. 删除 handlers.py 顶部的 `from core.runtime.interpreter.runtime_context import RuntimeSymbolImpl` 导入（不再需要）
+7. 996 测试通过，0 退化
 
 ---
 
@@ -261,10 +254,11 @@ sym.current_type = type(future)  # 写入非 IbObject 的类型
 ## 四、PR 操作建议
 
 1. **第一阶段：轻量债务清理 PR（L1-L4 + C1-C4 + C10 + C13）** ✅ DONE（2026-04-29）— 详见上面各条 ✅ 标记。基线 949 → 949（0 退化）。
-2. **暂缓**：C5、C6、C7、C8、C9、C11、C12、C14——其中 C5/C6 等待 M3d 完整切换、ControlSignalException 被彻底移除后处理；C7/C8/C11/C14 需要编译器改动或较大重构，按计划在 M6 后统一处理。
-3. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
-4. **测试基线**：M3d+M5c+轻量清理后基线 **949**。
-5. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）。
+2. **第二阶段：Phase 1 轻量债务清理（C6 partial + C12）** ✅ DONE（2026-04-29）— Signal→CSE→ReturnException 三层桥消除（run_body/execute_module/IbUserFunction.call）；ScopeImpl 私有字段访问封装（define_raw/is_cell_promoted）。基线 949 → 996（+47 新合规测试，0 退化）。
+3. **暂缓**：C5、C6（剩余部分）、C7、C8、C9、C11、C14——C5/C6 剩余部分等待 C8（IbLambdaExpr/IbBehaviorInstance CPS 化）完成后处理；C7/C8/C11/C14 需要编译器改动或较大重构，按计划在 M6 安全网就绪后推进。
+4. **分阶段验证**：每完成一个条目立即跑 `python3 -m pytest tests/ -q --tb=short` 确认 0 退化。
+5. **测试基线**：M3d+M4+M5c+M6+Phase1债务清理后基线 **996**。
+6. **参考资料**：`URGENT_ISSUES.md`（修复历史归档）、`docs/COMPLETED.md`（每条变更对应的章节）、`docs/VM_SPEC.md`（VM 规范）、`tests/compliance/`（合规测试安全网）。
 
 ---
 

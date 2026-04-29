@@ -4,7 +4,7 @@
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`。  
 > VM 架构长期设想（含三层并发模型、llmexcept 危险悬案）见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-29（M4 多 Interpreter 并发落地：`ihost.spawn_isolated` + `ihost.collect` + 15 个专项测试；964 个测试通过；下一里程碑：**M6 可移植性参考实现**）
+> **最后更新**：2026-04-29（M6 可移植性参考实现落地：`docs/VM_SPEC.md` 正式规范 + `tests/compliance/` 32 个合规测试 + Phase 1 C6/C12 债务清理；996 个测试通过；下一里程碑：**编译器深度清洁 C7/C8/C9/C11/C14**）
 
 ---
 
@@ -125,18 +125,34 @@ class MyType:
 - **M4**：Layer 2 多 Interpreter 并发（DynamicHost.spawn 线程化，依赖 M3a ✅ + M3d ✅ + C10/C13 ✅）✅ **COMPLETED — 2026-04-29**
 - **M5b**：LLMScheduler（ThreadPoolExecutor + LLMFuture，依赖 M5a ✅）✅ COMPLETED
 - **M5c**：VM dispatch-before-use 集成（依赖 M5b ✅ + M3c ✅）✅ COMPLETED
-- **M6**：可移植性参考实现 + 完整并发行为测试套件（依赖 M3d ✅ + M4 + M5c ✅）
+- **M6**：可移植性参考实现 + 完整并发行为测试套件（依赖 M3d ✅ + M4 + M5c ✅）✅ **COMPLETED — 2026-04-29**（`docs/VM_SPEC.md` + `tests/compliance/` 32 合规测试 + Phase 1 C6/C12 轻量清理；996 测试通过）
 
 详见 `docs/VM_EVOLUTION_PLAN.md` 与 `docs/PENDING_TASKS_VM.md`。
+
+---
+
+## 下一主线：编译器深度清洁（C7/C8/C9/C11/C14）
+
+M6 安全网（996 测试 + `tests/compliance/` 合规套件）已就绪。建议按以下顺序推进编译器深度清洁：
+
+1. **C8（最高优先）**：`IbLambdaExpr` + `IbBehaviorInstance` CPS handler 全量实现（当前是"注册壳 + fallback"）。完成后才能真正兑现"消除 Python 递归依赖"的设计目标。
+2. **C7**：`VMExecutor.assign_to_target()` 穿透路径重写（赋值目标求值完全 CPS 化）。
+3. **C11**：`node_protection` 侧表驱动机制重构（AST 层面显式包装替代侧表间接关联）。
+4. **C14**：编译器 Pass 4 → Pass 5 `cell_captured_symbols` 侧表传递（消除运行时作用域链扫描）。
+5. **C5/C6 剩余**：`ControlSignalException` 类彻底删除（依赖 C8 fallback 完全消除）。
 
 ---
 
 ## 任务依赖图（精确版）
 
 ```
-Step 1–8 + M1 + M2 + M3a + M3b + M3c + M3d + M5a + M5b + M5c + M4 + 轻量债务清理（已完成；964 测试通过）
+Step 1–8 + M1 + M2 + M3a + M3b + M3c + M3d + M5a + M5b + M5c + M4 + M6 + Phase 1 C6/C12 轻量清理（已完成；996 测试通过）
     │
-    └──→ M6（可移植性 + 合规测试套件）⏳ **当前主线**
+    └──→ 编译器深度清洁（C7/C8/C9/C11/C14）⏳ **当前主线**
+         ├── C8：IbLambdaExpr/IbBehaviorInstance 完整 CPS（彻底消除 Python 递归依赖）
+         ├── C7：assign_to_target 穿透路径消除
+         ├── C11：node_protection 机制重构
+         └── C14：cell_captured_symbols 侧表传递
 ```
 
 **当前优先路径**：**M4（多 Interpreter 并发）✅ COMPLETED（2026-04-29）**。`ihost.spawn_isolated` + `ihost.collect` + Engine 层 `request_spawn_isolated`/`request_collect` 全链路落地；15 个 M4 专项测试通过；964 总测试通过（949 原有 + 15 新增）。下一里程碑：**M6（可移植性参考实现 + 完整并发行为测试套件）**。
