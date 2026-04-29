@@ -455,6 +455,11 @@ class IbLambdaExpr(IbExpr):
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
+    # C8/C14：编译期自由变量列表（由 Pass 4 语义分析器填充）。
+    # 每项为 [name, sym_uid]，name 是变量名，sym_uid 是 Symbol.uid（作用域 UID + 名称）。
+    # 序列化后进入 artifact node_data["free_vars"]，运行时 vm_handle_IbLambdaExpr
+    # 直接读取，无需在运行时走访 AST 收集自由变量。
+    free_vars: List = field(default_factory=list)
 
     @property
     def creates_scope(self) -> bool:
