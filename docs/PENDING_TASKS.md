@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-29
+> **最后更新**：2026-04-30（新增 §11.8–11.10：ExpressionAnalyzer ghost class、`_pending_intents` 信道、`visit_IbAssign` 复杂度）
 
 ---
 
@@ -379,6 +379,54 @@ func process():
 **建议**：改为 lookup-or-create——按 `f"{spec.name}[{','.join(arg_names)}]"` 作为键先查 `_specs`，命中则直接返回缓存值，否则创建后立刻注册。
 
 **文件**：`core/kernel/spec/registry.py`（`resolve_specialization()`）
+
+---
+
+### 11.8 ExpressionAnalyzer ghost class 清理 [PENDING]
+
+**问题**：`core/compiler/semantic/passes/expression_analyzer.py` 定义了 `ExpressionAnalyzer` 类，包含 `visit_IbBinOp`、`visit_IbName`、`visit_IbCall`、`visit_IbAttribute`（含 `if hasattr(self, 'analyzer')` 防御性代码，说明类未完成集成）等方法，但全仓库**无任何 import 或实例化**。这是一次向"将表达式类型推导从 `SemanticAnalyzer` 主类分离为委托类"的未完成重构的遗留产物。
+
+**选项**：
+1. **删除**：直接删除文件，零破坏（SemanticAnalyzer 自己已有完整 visit_* 实现）。
+2. **完成**：将 `SemanticAnalyzer` 中的所有表达式 visit_* 方法迁移到 `ExpressionAnalyzer`，使其成为真正的委托类，显著降低 SemanticAnalyzer 主类行数。工程量较大（~400 行迁移 + 依赖注入 + 测试）。
+
+**建议优先级**：先删除（选项 1），在需要大规模 semantic 重构时再考虑完成委托模式（选项 2）。
+
+**文件**：`core/compiler/semantic/passes/expression_analyzer.py`
+
+---
+
+### 11.9 `_pending_intents` 动态属性信道形式化 [PENDING]
+
+**问题**：`DeclarationComponent.parse_declaration()` 通过 `setattr(stmt, "_pending_intents", pending_intents)` 将消费的意图注释"涂抹"到 AST 节点上，再由 `SemanticAnalyzer` 在 Pass 过程中读取。这是一个 parser→semantic 的**隐式动态属性信道**，与已删除的 `_pending_fn_return_type` 同类问题：信道存在性对读取方不透明，AST 节点类型定义中无对应字段。
+
+**改善方向**：在对应 `IbStmt` 子类（或其公共基类）上添加 `pending_intents: List = field(default_factory=list)` 显式字段，消除 `setattr`/`getattr` 动态访问；或将其提升为编译器侧表中的一项。
+
+**搁置原因**：功能正常，无 Bug 风险；改动涉及 AST 定义 + parser + semantic，需注意序列化影响（`_pending_intents` 在序列化前应已被消费，不应进入 artifact）。
+
+**文件**：`core/compiler/parser/components/declaration.py`（`parse_declaration`）、`core/compiler/parser/core/component.py`（`consume_intents` helper）、`core/kernel/ast.py`（各 IbStmt 子类）
+
+---
+
+### 11.10 `SemanticAnalyzer.visit_IbAssign` 复杂度降低 [PENDING]
+
+**问题**：`visit_IbAssign` 是 `SemanticAnalyzer`（约 2100 行）中逻辑分支最多的单一方法，处理以下 8+ 种独立情形：
+1. `fn` 推导（callable 类型约束检查）
+2. `auto` 类型推导
+3. `any` 动态类型
+4. 显式类型标注（含泛型）
+5. `global` 作用域声明提升
+6. `llmexcept` body 只读约束（SEM_052）
+7. 行为表达式赋值给字段的特殊绕过（`SEM_003` 误报修复）
+8. 元组解包声明（tuple destructuring）
+
+这些分支的嵌套深度导致：新增任何赋值相关语义特性都必须触及此方法，且极易破坏既有分支。
+
+**改善方向**：按情形拆分为职责单一的私有方法（`_check_fn_assignment`、`_check_auto_assignment`、`_check_typed_assignment`、`_check_tuple_assignment` 等），`visit_IbAssign` 本体仅保留顶层分发逻辑（<30 行）。
+
+**搁置原因**：纯重构，无功能变更；需覆盖所有 assignment 路径的回归测试（当前测试覆盖较好，风险可控）。
+
+**文件**：`core/compiler/semantic/passes/semantic_analyzer.py`（`visit_IbAssign` 及相关私有方法）
 
 ---
 

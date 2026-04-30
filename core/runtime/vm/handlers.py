@@ -685,10 +685,8 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
             # 清除共享信号通道，防止上次结果污染本次判断
             executor.runtime_context.set_last_llm_result(None)
 
-            if executor.supports(target_uid):
-                last_target_value = yield target_uid
-            else:
-                last_target_value = executor.ec.visit(target_uid)
+            # P4：dispatch table 覆盖所有 43 个节点类型，else 分支为死代码已删除。
+            last_target_value = yield target_uid
 
             # 信号透传：target 内部产生控制流信号时立即向上传播
             if isinstance(last_target_value, Signal):

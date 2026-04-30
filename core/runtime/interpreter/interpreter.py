@@ -659,11 +659,13 @@ class Interpreter:
                 if not isinstance(val_info, IbDeferredField) or val_info.static_val is not None:
                     continue
                 
-                # 尝试通过 visit 动态评估复杂表达式 (如 1+2, "hello".upper())
-                # 关键修复：设置正确的模块上下文，确保符号查找正确
+                # 通过 VMExecutor（CPS 主路径）预求值复杂表达式 (如 1+2, "hello".upper())。
+                # 关键修复：设置正确的模块上下文，确保符号查找正确。
+                # P1：使用 _get_vm_executor().run() 代替旧递归 visit()，消除一处
+                # 双轨制锚点——预求值不再经过 Expression Eval Path。
                 self.current_module_name = val_info.module_name
                 try:
-                    evaluated = self.visit(val_info.val_uid)
+                    evaluated = self._get_vm_executor().run(val_info.val_uid)
                     val_info.static_val = evaluated
                 except Exception:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
