@@ -3,7 +3,7 @@
 > 本文档只记录"接下来可以直接开工的任务"。  
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`，VM 架构长期设想见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-29（编译器深度清洁全部落地；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 归零；`node_protection` 侧表全链路删除；fn/lambda/snapshot 类型系统重设计全部完成（`fn[(int,str)->bool]` callable 签名标注）；历史工作文件已归档至本文件；**1011 个测试通过**；**剩余技术债：无**）
+> **最后更新**：2026-04-30（在编译器全清洁基础上，新增 Handler/VM 层双轨路径分析；识别 ExpressionAnalyzer ghost class、`_pending_intents` 隐式信道、`visit_IbAssign` 复杂度、ExprHandler 运行时 AST 遍历等技术债；新增选项 6/7；**当前测试基线：1011 个测试通过**）
 
 ---
 
@@ -51,6 +51,35 @@
 
 `docs/PENDING_TASKS_VM.md`（失败传播） — 当前 LLM 重试耗尽后产生 `Uncertain`，但 permanent failure 与可恢复错误的语义边界、跨函数传播、与 `try/except` 的协同尚未完整规范。
 
+### 选项 6：Handler 层 Expression Eval Path 整理
+
+针对 Handler 层"双轨执行"（CPS Path + Expression Eval Path）残留的具体技术债，各子项独立可交付：
+
+- **H1（P1）：VM_SPEC.md 正式定名双轨路径**  
+  在 `docs/VM_SPEC.md` 中正式命名 `VM CPS Path` 和 `Expression Eval Path`，定义边界规则："哪类节点走哪条路径"。消除贡献者困惑，是所有 H2–H4 工作的架构前提。工程量：纯文档，1–2 小时。
+
+- **H2（P1）：ExprHandler.visit_IbLambdaExpr 迁移到 `free_vars` 字段**  
+  VM handler（`vm_handle_IbLambdaExpr`）已使用编译期 `free_vars` 字段，但 `ExprHandler.visit_IbLambdaExpr`（Expression Eval Path）仍在运行时调用 `_collect_free_refs()` 遍历 artifact dict。统一为读 `node_data["free_vars"]`，消除最后一处"运行时 AST 遍历"。详见 `docs/PENDING_TASKS_VM.md §十一.H2`。
+
+- **H3（P1）：StmtHandler.visit_IbFor 与 C11 llmexcept_handler 语义对齐**  
+  `vm_handle_IbFor` 已内联 `llmexcept_handler` 重试逻辑；`StmtHandler.visit_IbFor`（Expression Eval Path）缺失此逻辑。在类字段默认值预评估场景下若触发 for+llmexcept，旧路径会静默跳过重试语义。详见 `docs/PENDING_TASKS_VM.md §十一.H3`。
+
+- **H4（P2）：to_native() 跨层契约正式界定**  
+  `vm_handle_IbDict` / `vm_handle_IbSlice` 直接调用 `obj.to_native()`；这是 VM 层对"标量用作 Python 容器键或切片索引时必须可降解"的隐式契约。需在 VM_SPEC.md 中正式定义此"Object-to-native bridge contract"。
+
+### 选项 7：Semantic 代码健康三件套
+
+以下三项均独立可交付，与其他选项无前置依赖：
+
+- **H5（P1）：ExpressionAnalyzer ghost class 清理**  
+  `core/compiler/semantic/passes/expression_analyzer.py` 定义了 `ExpressionAnalyzer` 类，包含 `visit_IbBinOp`、`visit_IbName`、`visit_IbCall` 等方法，但全仓库无任何 import 或实例化。是一次未完成重构的遗留产物。可直接删除，或完成为 `SemanticAnalyzer` 的表达式类型推导委托类。详见 `docs/PENDING_TASKS.md §11.8`。
+
+- **H6（P2）：`_pending_intents` 动态属性信道形式化**  
+  `DeclarationComponent.parse_declaration()` 通过 `setattr(stmt, "_pending_intents", ...)` 将意图注释"涂抹"到 AST 节点，再由 `SemanticAnalyzer` 在 Pass 中读取。这是 parser→semantic 的隐式信道，与已删除的 `_pending_fn_return_type` 同类问题。可迁移为 AST 节点的显式字段或侧表。详见 `docs/PENDING_TASKS.md §11.9`。
+
+- **H7（P2）：`visit_IbAssign` 复杂度降低**  
+  `SemanticAnalyzer.visit_IbAssign` 是全文件中逻辑分支最多的单一方法（处理 fn 推导、auto 推导、global 作用域、llmexcept 只读约束、行为表达式特殊路径、元组解包等共 8+ 分支）。需拆分为职责单一的子函数以提高可维护性。详见 `docs/PENDING_TASKS.md §11.10`。
+
 ---
 
 ## 任务依赖图
@@ -62,7 +91,9 @@
     ├── 目标语言后端（Rust/Go 参考实现）
     ├── 类型引用重构（TypeRef，与下一代 VM 升级配合）
     ├── 插件系统完善（方法/类型模块语义、Scheduler 符号注入）
-    └── LLM 永久失败传播语义
+    ├── LLM 永久失败传播语义
+    ├── Handler 层 Expression Eval Path 整理（H1–H4，选项 6，各自独立）
+    └── Semantic 代码健康三件套（H5–H7，选项 7，各自独立）
 ```
 
 ---

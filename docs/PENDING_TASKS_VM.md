@@ -3,7 +3,8 @@
 > 本文档记录 IBCI 运行时向"真正虚拟机（VM）"演进的长期架构设想。  
 > 已完成的 llmexcept 快照隔离模型决议、意图栈公理化设计详见 `docs/ARCH_DETAILS.md`；已完成工作见 `docs/COMPLETED.md`。  
 > 这里记录的是**架构设想与待实现方向**，不阻塞近期工作。  
-> 近期任务见 `docs/NEXT_STEPS.md`；中长期任务见 `docs/PENDING_TASKS.md`。
+> 近期任务见 `docs/NEXT_STEPS.md`；中长期任务见 `docs/PENDING_TASKS.md`。  
+> **最后更新**：2026-04-30（新增 §十一：双轨执行模型技术债清单 H1–H4）
 
 ---
 
@@ -505,3 +506,83 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 ---
 
 *本文档记录长期架构设想。近期任务见 `docs/NEXT_STEPS.md`。*
+
+---
+
+## 十一、双轨执行模型技术债清单（2026-04-30 新增）
+
+> **背景**：M3 CPS 迁移后，Interpreter 存在两条执行路径并行活跃：
+> - **VM CPS Path**：`VMExecutor.run_body()` 驱动；处理模块顶层 + 函数体；Signal 数据化传播；43 CPS handlers 覆盖。
+> - **Expression Eval Path**：`Interpreter.visit()` + `_visitor_cache` 驱动；处理类字段默认值预评估（`_pre_evaluate_user_classes`）、lambda 自由变量捕获等子任务；控制流仍使用 Python 异常（`BreakException` / `ContinueException`）。
+>
+> 这一分工在 `HEALTH_AUDIT_2026_04_29.md 洞察1` 中已识别为"正常设计分工"。以下是该路径中已确认的具体技术债。
+
+---
+
+### H1：VM_SPEC.md 正式定名双轨路径 [PENDING，P1]
+
+**任务**：在 `docs/VM_SPEC.md` 中新增"执行路径分工"章节，正式定义：
+- **VM CPS Path**：使用 `VMExecutor.run_body()`；处理任何可能产生 Signal、跨函数边界、或参与 LLMScheduler 调度的节点；节点范围 = 当前 dispatch table 中的 43 个 handler。
+- **Expression Eval Path**：使用 `Interpreter.visit()` + `_visitor_cache`；处理同步纯计算子表达式（`IbConstant` / `IbName` / `IbBinOp` 等）以及需要在非主执行流上下文（如类字段预求值）中临时求值的节点；Python 异常用于局部控制流的使用在此路径中是合法的，不属于债务。
+
+**关键规则（需文档化）**：新增 AST 节点类型时，handler 应优先加入 CPS dispatch table（VM Path）；仅当节点必须在 Expression Eval Path 上下文中被求值（且无 Signal 语义）时，才同时在 `StmtHandler`/`ExprHandler` 中注册 visit_* 方法。
+
+**工程量**：纯文档，低风险。
+
+**文件**：`docs/VM_SPEC.md`
+
+---
+
+### H2：ExprHandler.visit_IbLambdaExpr 迁移到编译期 `free_vars` [PENDING，P1]
+
+**现状**：
+- **VM CPS Path** (`vm_handle_IbLambdaExpr`)：已使用编译期填充的 `node_data["free_vars"]`（`[[name, sym_uid], ...]`），无运行时 AST 遍历。
+- **Expression Eval Path** (`ExprHandler.visit_IbLambdaExpr`)：仍调用 `_collect_free_refs(body_uid, param_sym_uids)` 在运行时遍历 artifact dict，通过递归方式收集所有 `IbName` 节点的符号 UID。
+
+触发场景：lambda 表达式出现在类字段默认值中时（`_pre_evaluate_user_classes` 调用 `visit()`），走 Expression Eval Path，触发 `_collect_free_refs`。
+
+**目标**：统一读取 `node_data["free_vars"]`，与 VM 路径行为一致，消除最后一处"运行时 AST 内省"。
+
+**技术路径**：
+1. 在 `ExprHandler.visit_IbLambdaExpr` 中优先读取 `node_data.get("free_vars")`；若字段存在（新编译产物）则直接使用，跳过 `_collect_free_refs`。
+2. 保留 `_collect_free_refs` 作为旧 artifact 兼容 fallback（`if not free_vars: free_vars = list(self._collect_free_refs(body_uid, param_sym_uids))`），确保向后兼容性。
+3. `_collect_free_refs` 加注释说明其仅为兼容 fallback，计划在下一个 artifact format bump 时删除。
+
+**风险**：低。`free_vars` 字段自 C8 起（2026-04-28）已由 `semantic_analyzer.visit_IbLambdaExpr` 在 Pass 4 写入所有新编译产物，存在于全部当前 artifact 中。
+
+**文件**：`core/runtime/interpreter/handlers/expr_handler.py`（`visit_IbLambdaExpr` + `_collect_free_refs`）
+
+---
+
+### H3：StmtHandler.visit_IbFor 与 C11 llmexcept_handler 语义对齐 [PENDING，P1]
+
+**现状**：
+- **VM CPS Path** (`vm_handle_IbFor`)：C11（2026-04-29）已将 `IbFor.llmexcept_handler` 字段内联为 for 循环内的重试驱动逻辑。当目标变量为 LLM 行为表达式时，循环内联 llmexcept 帧 push/pop/retry 语义。
+- **Expression Eval Path** (`StmtHandler.visit_IbFor`)：无 `llmexcept_handler` 逻辑，完全忽略该字段。
+
+**风险场景**：用户在类字段默认值中定义含 llmexcept 的 for 循环（如 `list[str] defaults = [x for x in @~...~] `）。当 `_pre_evaluate_user_classes` 对该字段预求值时，走 Expression Eval Path，llmexcept 重试语义静默失效，LLM uncertain 结果不触发重试而直接产出空值。目前类字段支持的表达式复杂度受限（多为字面量或简单运算），此场景极低概率触发，但属于语义不一致点。
+
+**目标**：使 `StmtHandler.visit_IbFor` 在存在 `llmexcept_handler` 字段时，产出与 `vm_handle_IbFor` 一致的语义。
+
+**技术路径（两种选项）**：
+- **选项 A（治本）**：将 `StmtHandler.visit_IbFor` 的 llmexcept 处理逻辑与 `vm_handle_IbFor` 对齐，镜像其 push/pop/retry 实现。工程量中等（约 50 行），需同步回归测试。
+- **选项 B（防御）**：在 `_pre_evaluate_user_classes` 中，发现预求值失败时静默跳过（已有 try/except 兜底），并在 IbFor+llmexcept_handler 场景下主动跳过预求值，转交运行时（VM CPS Path）处理。工程量小（~5 行），无语义风险。
+
+**建议**：优先选项 B（成本最低），同时在 `StmtHandler.visit_IbFor` 源码注释中说明 H3 债务的存在。
+
+**文件**：`core/runtime/interpreter/handlers/stmt_handler.py`（`visit_IbFor`）、`core/runtime/interpreter/interpreter.py`（`_pre_evaluate_user_classes`）
+
+---
+
+### H4：to_native() 跨层调用契约正式界定 [PENDING，P2]
+
+**现状**：VM handlers（`vm_handle_IbDict`、`vm_handle_IbSlice`）在组装 Python dict 键、slice 索引等场景下直接调用 `obj.to_native()`。约 142 处 `to_native()` 调用分布于 `core/runtime/` 各层。
+
+**架构意义**：`to_native()` 是 IBCI 对象模型与 Python 宿主实现的**正式降级接口**，代表"此处语义需要回归 Python 原生类型"。当前这一接口是隐式约定，无正式文档。
+
+**目标**：在 `docs/VM_SPEC.md` 或 `docs/ARCHITECTURE_PRINCIPLES.md` 中正式定义：
+> "**Object-to-native bridge contract**：VM 层在以下场景下允许调用 `obj.to_native()` 将 IbObject 降级为 Python 原生类型：(1) 作为 Python dict 键；(2) 作为 Python slice 参数；(3) 作为系统 I/O（print、文件操作）的输入；(4) 参与 Python 比较运算（`is`/`==`/`<` 等）时的右操作数拆箱。任何超出上述场景的 `to_native()` 调用均属于 Python 宿主依赖，应在可移植性评估中标记。"
+
+**工程量**：纯文档，低风险。
+
+**文件**：`docs/VM_SPEC.md`（新增章节）、可选：`core/runtime/vm/handlers.py`（在相关 `to_native()` 调用处添加内联注释引用此契约）
