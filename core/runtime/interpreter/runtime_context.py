@@ -26,7 +26,7 @@ class RuntimeSymbolImpl:
         # 时设置；``get_vars()`` 使用本标志过滤掉运行时调试不应显示的特权符号，
         # 替代历史的硬编码名单 (``"len", "print", "range", ...``)。
         self.is_builtin = is_builtin
-        # M2 (SC-3): 当变量被内层 lambda 捕获时，提升为 Cell 变量；
+        # 当变量被内层 lambda 捕获时，提升为 Cell 变量；
         # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
         self.cell: Optional[Any] = None  # Optional[IbCell]
 
@@ -34,7 +34,7 @@ class ScopeImpl:
     def __init__(self, parent: Optional['Scope'] = None, registry: Optional[Registry] = None):
         self._symbols: Dict[str, RuntimeSymbol] = {}
         self._uid_to_symbol: Dict[str, RuntimeSymbol] = {} # 基于 Symbol UID 的直接映射
-        # M2 (SC-3/GC-2): sym_uid → IbCell 映射，仅包含已提升为 Cell 变量的条目。
+        # sym_uid → IbCell 映射，仅包含已提升为 Cell 变量的条目。
         self._cell_map: Dict[str, Any] = {}  # Dict[str, IbCell]
         self._parent = parent
         # 如果没有传入 registry，则从父作用域继承
@@ -127,7 +127,7 @@ class ScopeImpl:
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
-            # M2 (SC-3): Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
+            # Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
             # lambda 闭包在下次调用时读到最新值。
             if symbol.cell is not None:
                 symbol.cell.set(boxed_value)
@@ -149,7 +149,7 @@ class ScopeImpl:
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
-            # M2 (SC-3): Cell 变量赋值时同步更新共享 IbCell。
+            # Cell 变量赋值时同步更新共享 IbCell。
             if symbol.cell is not None:
                 symbol.cell.set(boxed_value)
             return True
@@ -194,7 +194,7 @@ class ScopeImpl:
         return dict(self._symbols)
 
     # ------------------------------------------------------------------
-    # M2 (SC-3 / SC-4 / GC-2): Cell 变量支持
+    # Cell 变量支持
     # ------------------------------------------------------------------
 
     def promote_to_cell(self, sym_uid: str) -> Optional[Any]:

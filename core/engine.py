@@ -51,7 +51,7 @@ from core.runtime.interfaces import IsolationLevel
 
 from core.base.enums import RegistrationState
 
-# M4：collect() 时跳过的 IBCI 类型名集合（函数/行为/延迟对象等不可序列化为原生 Python 值）
+# collect() 时跳过的 IBCI 类型名集合（函数/行为/延迟对象等不可序列化为原生 Python 值）
 _COLLECT_SKIP_TYPES: frozenset = frozenset({
     "fn", "lambda", "snapshot", "behavior", "deferred", "callable", "void",
 })
@@ -124,7 +124,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         
         self.interpreter: Optional[Interpreter] = None
 
-        # M4：多 Interpreter 并发任务表（handle → (thread, sub_engine, exc_holder)）
+        # 多 Interpreter 并发任务表（handle → (thread, sub_engine, exc_holder)）
         # 每个 spawn_isolated 在此字典中注册一条记录；collect 消费并删除它。
         self._spawned_tasks: Dict[str, Tuple[threading.Thread, 'IBCIEngine', list]] = {}
         self._spawned_tasks_lock = threading.Lock()

@@ -106,7 +106,7 @@ class BehaviorDependencyAnalyzer:
             for sym in self._iter_target_symbols(tgt):
                 if sym is not None:
                     self._symbol_to_behavior_def[id(sym)] = rhs
-                    # C14：cell 捕获变量 → 禁止 dispatch-before-use
+                    # cell 捕获变量 → 禁止 dispatch-before-use
                     if (
                         sym.uid
                         and sym.uid in self.side_table.cell_captured_symbols

@@ -196,7 +196,7 @@ class IbFor(IbStmt):
     iter: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
-    # C11/P1：条件驱动 for 循环的 llmexcept handler。
+    # 条件驱动 for 循环的 llmexcept handler。
     # vm_handle_IbFor 直接内联重试逻辑（不再使用已删除的 node_protection 侧表）。
     # 正则 for 循环该字段为 None。
     llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
@@ -391,7 +391,7 @@ class IbFilteredExpr(IbExpr):
 class IbBehaviorExpr(IbExpr):
     segments: List[Union[str, IbExpr]]
     tag: str = ""
-    # M5a (DDG 编译期分析)：当本 IbBehaviorExpr 求值依赖其他 behavior 节点的
+    # 编译期 DDG 分析：当本 IbBehaviorExpr 求值依赖其他 behavior 节点的
     # 结果时，按 AST 顺序记录这些依赖节点的 ``IbBehaviorExpr`` 对象（语义阶段
     # 写入；序列化时通过侧表/UID 自动转化）。``dispatch_eligible`` 表示本节点
     # 是否可在 LLM 调度阶段被独立 dispatch（True：可并行；False：含未解析依赖、
@@ -465,7 +465,7 @@ class IbLambdaExpr(IbExpr):
     # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
     # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。
     returns: Optional['IbExpr'] = None
-    # C8/C14：编译期自由变量列表（由 Pass 4 语义分析器填充）。
+    # 编译期自由变量列表（由 Pass 4 语义分析器填充）。
     # 每项为 [name, sym_uid]，name 是变量名，sym_uid 是 Symbol.uid（作用域 UID + 名称）。
     # 序列化后进入 artifact node_data["free_vars"]，运行时 vm_handle_IbLambdaExpr
     # 直接读取，无需在运行时走访 AST 收集自由变量。
