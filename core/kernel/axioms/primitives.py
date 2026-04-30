@@ -813,6 +813,143 @@ class ExceptionAxiom(BaseAxiom, ConverterCapability):
 
 
 # ------------------------------------------------------------------ #
+# LLM Exception hierarchy                                             #
+# ------------------------------------------------------------------ #
+
+class LLMErrorAxiom(BaseAxiom, ConverterCapability):
+    """Base axiom for all LLM-originated exceptions.
+
+    LLMError IS-A Exception, so ``except Exception as e:`` can catch it.
+    Fields: message (str), raw_response (str).
+    """
+    @property
+    def name(self) -> str:
+        return "LLMError"
+
+    def get_converter_capability(self): return self
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "Exception"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "message":      MemberSpec(name="message",      kind="field", type_name="str"),
+            "raw_response": MemberSpec(name="raw_response", kind="field", type_name="str"),
+            "cast_to":      _m("cast_to", params=["any"], ret="any"),
+        }
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return source_type_name in ("str", "LLMError")
+
+    def is_compatible(self, other_name: str) -> bool:
+        # LLMError is compatible with itself and the base Exception type.
+        return other_name in ("Exception", "LLMError")
+
+
+class LLMParseErrorAxiom(BaseAxiom, ConverterCapability):
+    """Raised when an unprotected LLM assignment's __from_prompt__ fails.
+
+    Fields: message (str), raw_response (str), type_name (str — expected type).
+    """
+    @property
+    def name(self) -> str:
+        return "LLMParseError"
+
+    def get_converter_capability(self): return self
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "LLMError"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "message":      MemberSpec(name="message",      kind="field", type_name="str"),
+            "raw_response": MemberSpec(name="raw_response", kind="field", type_name="str"),
+            "type_name":    MemberSpec(name="type_name",    kind="field", type_name="str"),
+            "cast_to":      _m("cast_to", params=["any"], ret="any"),
+        }
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return source_type_name in ("str", "LLMParseError")
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name in ("Exception", "LLMError", "LLMParseError")
+
+
+class LLMRetryExhaustedErrorAxiom(BaseAxiom, ConverterCapability):
+    """Raised when a llmexcept-protected assignment exhausts all retries.
+
+    Fields: message (str), raw_response (str), max_retry (int).
+    """
+    @property
+    def name(self) -> str:
+        return "LLMRetryExhaustedError"
+
+    def get_converter_capability(self): return self
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "LLMError"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "message":      MemberSpec(name="message",      kind="field", type_name="str"),
+            "raw_response": MemberSpec(name="raw_response", kind="field", type_name="str"),
+            "max_retry":    MemberSpec(name="max_retry",    kind="field", type_name="int"),
+            "cast_to":      _m("cast_to", params=["any"], ret="any"),
+        }
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return source_type_name in ("str", "LLMRetryExhaustedError")
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name in ("Exception", "LLMError", "LLMRetryExhaustedError")
+
+
+class LLMCallErrorAxiom(BaseAxiom, ConverterCapability):
+    """Raised when the LLM provider itself fails (network error, timeout, etc.).
+
+    Fields: message (str), raw_response (str), provider_error (str).
+    """
+    @property
+    def name(self) -> str:
+        return "LLMCallError"
+
+    def get_converter_capability(self): return self
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "LLMError"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "message":        MemberSpec(name="message",        kind="field", type_name="str"),
+            "raw_response":   MemberSpec(name="raw_response",   kind="field", type_name="str"),
+            "provider_error": MemberSpec(name="provider_error", kind="field", type_name="str"),
+            "cast_to":        _m("cast_to", params=["any"], ret="any"),
+        }
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return source_type_name in ("str", "LLMCallError")
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name in ("Exception", "LLMError", "LLMCallError")
+
+
+# ------------------------------------------------------------------ #
 # BoundMethod                                                         #
 # ------------------------------------------------------------------ #
 
@@ -1332,6 +1469,10 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(TupleAxiom())
     registry.register(DictAxiom())
     registry.register(ExceptionAxiom())
+    registry.register(LLMErrorAxiom())
+    registry.register(LLMParseErrorAxiom())
+    registry.register(LLMRetryExhaustedErrorAxiom())
+    registry.register(LLMCallErrorAxiom())
     registry.register(BoundMethodAxiom())
     registry.register(NoneAxiom())
     registry.register(SliceAxiom())

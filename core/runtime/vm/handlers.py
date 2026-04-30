@@ -57,6 +57,7 @@ from core.runtime.objects.kernel import (
     IbUserFunction,
     IbLLMFunction,
     IbClass,
+    IbLLMUncertain,
 )
 from core.runtime.exceptions import (
     ThrownException,
@@ -109,6 +110,17 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
         else:
             # service_context 不可用时回退到 LLMFuture.get（仍阻塞，结果等价）
             resolved = val.get(executor.registry)
+        # 若 Future 解析出不确定值（LLM parse failure），根据是否在 llmexcept
+        # 保护帧内决定处理方式：有帧则沿用 Uncertain 哨兵（llmexcept 机制接管），
+        # 无帧则抛出 LLMParseError（无自愈机会，语义同情形 B）。
+        if isinstance(resolved, IbLLMUncertain):
+            if executor.runtime_context.get_current_llm_except_frame() is None:
+                error = executor.registry.make_llm_parse_error(
+                    "LLM output could not be parsed",
+                    raw_response="",
+                    type_name="unknown",
+                )
+                raise ThrownException(error)
         # 写回，避免后续读取再次 resolve（且每个 Future 只能 resolve 一次）。
         # skip_type_check=True：写回是缓存优化，解析结果（如不确定性的 IbNone）
         # 无需满足目标变量的类型约束——真正的类型校验在首次赋值时已经完成。
@@ -525,7 +537,18 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     last = executor.runtime_context.get_last_llm_result()
     if last and not last.is_certain:
-        value = executor.registry.get_llm_uncertain()
+        # 检查是否在 llmexcept 保护帧内
+        if executor.runtime_context.get_current_llm_except_frame() is not None:
+            # 在保护帧内：赋值 Uncertain 哨兵，llmexcept 机制负责重试
+            value = executor.registry.get_llm_uncertain()
+        else:
+            # 无保护帧：无法自愈，抛出真正的 LLMParseError
+            error = executor.registry.make_llm_parse_error(
+                last.retry_hint or "LLM output could not be parsed",
+                raw_response=last.raw_response or "",
+                type_name="unknown",
+            )
+            raise ThrownException(error)
 
     # 所有目标类型均通过 CPS helper 处理
     for target_uid in node_data.get("targets", []):
@@ -785,9 +808,15 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
                 if isinstance(body_res, Signal):
                     return body_res
 
-            # 递增重试计数；若耗尽则退出
+            # 递增重试计数；若耗尽则抛出 LLMRetryExhaustedError
             if not frame.increment_retry():
-                break
+                error = executor.registry.make_llm_retry_exhausted_error(
+                    f"LLM call retry exhausted after {max_retry} attempt(s); "
+                    f"no certain result was produced",
+                    max_retry=max_retry,
+                    raw_response=getattr(result, "raw_response", "") or "",
+                )
+                raise ThrownException(error)
 
     finally:
         # 无论正常结束、信号传播还是异常，帧都必须弹出
@@ -1435,10 +1464,22 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                     if frame.should_retry and frame.increment_retry():
                         continue  # 重试条件求值
                     else:
-                        return executor.registry.get_none()  # 退出循环
+                        # 重试耗尽：抛出 LLMRetryExhaustedError
+                        error = executor.registry.make_llm_retry_exhausted_error(
+                            f"LLM condition retry exhausted after {max_retry} attempt(s); "
+                            f"no certain result was produced",
+                            max_retry=max_retry,
+                            raw_response=getattr(last_result, "raw_response", "") or "",
+                        )
+                        raise ThrownException(error)
                 else:
-                    # uncertain 且无 llmexcept handler：优雅退出循环
-                    return executor.registry.get_none()
+                    # uncertain 且无 llmexcept handler：抛出 LLMParseError
+                    error = executor.registry.make_llm_parse_error(
+                        getattr(last_result, "retry_hint", None) or "LLM condition output could not be parsed",
+                        raw_response=getattr(last_result, "raw_response", "") or "",
+                        type_name="bool",
+                    )
+                    raise ThrownException(error)
 
             if not executor.ec.is_truthy(condition):
                 break

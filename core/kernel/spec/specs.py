@@ -289,6 +289,17 @@ BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=
 DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
 EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=False)
 
+# LLM exception hierarchy — ClassSpec with parent_name for proper inheritance chain.
+# LLMError IS-A Exception; LLMParseError/LLMRetryExhaustedError/LLMCallError IS-A LLMError.
+LLM_ERROR_SPEC = ClassSpec(name="LLMError", is_nullable=True, is_user_defined=False,
+                            parent_name="Exception")
+LLM_PARSE_ERROR_SPEC = ClassSpec(name="LLMParseError", is_nullable=True, is_user_defined=False,
+                                  parent_name="LLMError")
+LLM_RETRY_EXHAUSTED_ERROR_SPEC = ClassSpec(name="LLMRetryExhaustedError", is_nullable=True,
+                                            is_user_defined=False, parent_name="LLMError")
+LLM_CALL_ERROR_SPEC = ClassSpec(name="LLMCallError", is_nullable=True, is_user_defined=False,
+                                 parent_name="LLMError")
+
 # fn — callable type inference marker (declaration-time keyword, like auto but for callables)
 # 不是一个独立的运行期类型：fn x = myFunc 实际上将 x 的 spec 推导为 myFunc 的具体 callable spec。
 FN_SPEC         = IbSpec(name="fn",          is_nullable=True,  is_user_defined=False)

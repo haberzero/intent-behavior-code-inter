@@ -38,6 +38,10 @@ from .specs import (
     MODULE_SPEC,
     ENUM_SPEC,
     LLM_CALL_RESULT_SPEC,
+    LLM_ERROR_SPEC,
+    LLM_PARSE_ERROR_SPEC,
+    LLM_RETRY_EXHAUSTED_ERROR_SPEC,
+    LLM_CALL_ERROR_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 
@@ -79,6 +83,10 @@ __all__ = [
     "MODULE_SPEC",
     "ENUM_SPEC",
     "LLM_CALL_RESULT_SPEC",
+    "LLM_ERROR_SPEC",
+    "LLM_PARSE_ERROR_SPEC",
+    "LLM_RETRY_EXHAUSTED_ERROR_SPEC",
+    "LLM_CALL_ERROR_SPEC",
     # Registry / factory
     "SpecRegistry",
     "SpecFactory",

@@ -149,27 +149,36 @@ print(result)
 
 class TestE2ELLMExcept:
     def test_llmexcept_with_mock_fail(self):
+        """llmexcept 处理器在每次重试前执行；重试耗尽后抛出 LLMRetryExhaustedError。"""
         code = ai_setup_code() + """
-str result = @~ MOCK:FAIL test ~
-llmexcept:
-    print("caught exception")
-    retry "please try again"
-
-print(result)
+try:
+    str result = @~ MOCK:FAIL test ~
+    llmexcept:
+        print("caught exception")
+        retry "please try again"
+except LLMRetryExhaustedError as e:
+    print("retry_exhausted_caught")
+    print(e.message)
 """
         lines = run_and_capture(code)
+        # handler body runs on each retry attempt before exhaustion
         assert "caught exception" in lines
+        # after exhaustion, LLMRetryExhaustedError is raised and caught
+        assert "retry_exhausted_caught" in lines
 
     def test_llmretry_syntax_sugar(self):
+        """llmretry 语法糖同样在重试耗尽后抛出 LLMRetryExhaustedError。"""
         code = ai_setup_code() + """
-str result = @~ MOCK:FAIL test ~
-llmretry "please try again"
-
-print(result)
+try:
+    str result = @~ MOCK:FAIL test ~
+    llmretry "please try again"
+except LLMRetryExhaustedError as e:
+    print("retry_exhausted_caught")
+print("after_catch")
 """
         lines = run_and_capture(code)
-        # Should complete without crash
-        assert len(lines) > 0
+        assert "retry_exhausted_caught" in lines
+        assert "after_catch" in lines
 
 
 # ---------------------------------------------------------------------------
@@ -411,24 +420,26 @@ print(b)
         # b 应正常被赋值
         assert "b_ok" in lines
 
-    def test_inner_llmexcept_exhausted_outer_sees_uncertain(self):
-        """内层 llmexcept 重试耗尽后，赋值为 IbLLMUncertain；
-        外层如果没有额外保护，后续代码应仍能正常执行（不崩溃）。
-
-        此测试验证：inner llmexcept 耗尽后程序不崩溃，并且
-        在 inner 之后的普通赋值（int counter = 0）不受污染。
+    def test_inner_llmexcept_exhausted_raises_retry_exhausted_error(self):
+        """内层 llmexcept 重试耗尽后抛出 LLMRetryExhaustedError；
+        外层 try/except 捕获后，后续普通赋值不受污染。
         """
         code = ai_setup_code() + """
-str result = @~ MOCK:FAIL exhaust_key ~
-llmexcept:
-    retry "retry1"
+try:
+    str result = @~ MOCK:FAIL exhaust_key ~
+    llmexcept:
+        retry "retry1"
+except LLMRetryExhaustedError as e:
+    print("exhausted_caught")
 
 int counter = 0
 counter = counter + 1
 print((str)counter)
 """
         lines = run_and_capture(code)
-        # counter 赋值不应被 UNCERTAIN 污染
+        # LLMRetryExhaustedError is raised and caught
+        assert "exhausted_caught" in lines
+        # counter assignment not contaminated after exception is handled
         assert "1" in lines
 
 
@@ -1068,3 +1079,106 @@ print("ok")
 """
         lines = run_and_capture(code)
         assert "ok" in lines
+
+
+# ---------------------------------------------------------------------------
+# 15. LLM exception hierarchy — E5 tests
+# ---------------------------------------------------------------------------
+
+class TestE2ELLMExceptionHierarchy:
+    """
+    端到端验证 LLM 异常体系：
+    - 无保护裸 LLM 赋值失败 → LLMParseError
+    - llmexcept 重试耗尽 → LLMRetryExhaustedError
+    - 异常可被 LLMError 基类捕获
+    - 异常可被顶层 Exception 基类捕获
+    - 异常 message 字段可访问
+    """
+
+    def test_unprotected_llm_fail_raises_llm_parse_error(self):
+        """无 llmexcept 保护的 LLM 赋值失败，使用变量时抛出 LLMParseError。"""
+        code = ai_setup_code() + """
+try:
+    str x = @~ MOCK:FAIL bare_fail ~
+    print(x)
+except LLMParseError as e:
+    print("llm_parse_error_caught")
+    print(e.message)
+print("after_catch")
+"""
+        lines = run_and_capture(code)
+        assert "llm_parse_error_caught" in lines
+        assert "after_catch" in lines
+
+    def test_llm_parse_error_catchable_by_llm_error_base(self):
+        """LLMParseError 可被其基类 LLMError 捕获。"""
+        code = ai_setup_code() + """
+try:
+    str x = @~ MOCK:FAIL base_catch ~
+    print(x)
+except LLMError as e:
+    print("llm_error_caught")
+print("done")
+"""
+        lines = run_and_capture(code)
+        assert "llm_error_caught" in lines
+        assert "done" in lines
+
+    def test_llm_error_catchable_by_exception_base_class(self):
+        """LLMRetryExhaustedError 可被顶层 Exception 基类捕获。"""
+        code = ai_setup_code() + """
+try:
+    str result = @~ MOCK:FAIL exception_catch ~
+    llmexcept:
+        retry "hint"
+except Exception as e:
+    print("base_exception_caught")
+print("done")
+"""
+        lines = run_and_capture(code)
+        assert "base_exception_caught" in lines
+        assert "done" in lines
+
+    def test_llm_retry_exhausted_error_message_field(self):
+        """LLMRetryExhaustedError 包含可读 message 和 max_retry 字段。"""
+        code = ai_setup_code() + """
+try:
+    str result = @~ MOCK:FAIL msg_field ~
+    llmexcept:
+        retry "hint"
+except LLMRetryExhaustedError as e:
+    print("caught")
+    print(e.message)
+"""
+        lines = run_and_capture(code)
+        assert "caught" in lines
+        # message should mention retry exhaustion
+        assert any("retry" in line.lower() for line in lines)
+
+    def test_llm_parse_error_leaves_scope_clean_after_catch(self):
+        """try/except LLMParseError 后，作用域内后续普通赋值不受污染。"""
+        code = ai_setup_code() + """
+int x = 0
+try:
+    str bad = @~ MOCK:FAIL scope_clean ~
+    print(bad)
+except LLMParseError as e:
+    x = 99
+int y = x + 1
+print((str)y)
+"""
+        lines = run_and_capture(code)
+        assert "100" in lines
+
+    def test_repair_succeeds_before_exhaustion(self):
+        """MOCK:REPAIR 第一次失败后第二次成功，不抛异常，正常打印结果。"""
+        code = ai_setup_code() + """
+str result = @~ MOCK:REPAIR repair_ok ~
+llmexcept:
+    retry "hint"
+print(result)
+"""
+        lines = run_and_capture(code)
+        # successful second attempt → prints the result string, no exception
+        assert len(lines) > 0
+        # no exception should propagate (test passes without pytest.raises)

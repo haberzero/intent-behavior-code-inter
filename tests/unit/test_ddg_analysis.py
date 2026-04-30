@@ -31,7 +31,9 @@ from core.compiler.semantic.passes.behavior_dependency_analyzer import (
 
 def make_engine(code: str):
     engine = IBCIEngine(root_dir=".", auto_sniff=False)
-    engine.run_string(code, output_callback=lambda t: None, silent=True)
+    # DDG analysis tests only inspect AST structure (ast_cache); execution is not
+    # required.  Using compile_string avoids runtime LLM call side-effects.
+    engine.compile_string(code, silent=True)
     return engine
 
 

@@ -100,9 +100,14 @@ class LLMFuture:
         """阻塞等待 Future 完成并返回 IbObject。若已完成则零开销。
 
         若后台线程抛出异常，该异常将在此处重新抛出。
+        若 LLM 调用结果不确定（is_uncertain=True），返回 ``registry.get_llm_uncertain()``
+        哨兵，由调用方（``vm_handle_IbName``）负责检测并抛出 ``LLMParseError``。
         """
         result: LLMResult = self.future.result()
-        if result is not None and result.value is not None:
-            return result.value
+        if result is not None:
+            if result.value is not None and not result.is_uncertain:
+                return result.value
+            if result.is_uncertain:
+                return registry.get_llm_uncertain()
         return registry.get_none()
 
