@@ -28,22 +28,25 @@ IbVM
 
 ---
 
-## 二、双栈问题（核心阻塞点）
+## 二、双栈问题（M3a–M3d 已解决）
 
-**现状**：`LogicalCallStack` 是调试用途的"影子栈"，真实调用栈是 Python 递归栈。  
-`interpreter.py` 里有一段注释自白：
+**历史回顾（保留作为架构演进记录）**：早期 `LogicalCallStack` 仅是调试用途的"影子栈"，真实调用栈是 Python 递归栈。`interpreter.py` 里曾有一段注释自白：
 
 ```python
 # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
 # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
 ```
 
-这意味着 IBCI 调用栈是 Python 递归栈的寄生体，而不是真正自主的调用栈。这导致：
-- 快照无法捕获"调用中间状态"（只能在安全点做快照）
-- 并发模型受制于 Python 线程栈深度
-- 函数调用状态（local scope、intent context）必须通过参数逐层传递，无法真正"自主执行"
+当时这意味着 IBCI 调用栈是 Python 递归栈的寄生体，而不是真正自主的调用栈，导致快照无法捕获"调用中间状态"、并发模型受制于 Python 线程栈深度、函数调用状态必须通过参数逐层传递。
 
-**根本解法**：把 `Interpreter.visit()` 从 Python 递归改为显式 CPS（Continuation-Passing Style）调度循环。但这是**最大代价的一步**，需要在层次 0、层次 1 完成之后才能安全推进。
+**当前状态（✅ 已完成）**：M3a–M3d（2026-04-28/29）已将 `Interpreter.visit()` 的主路径从 Python 递归改为显式 CPS（Continuation-Passing Style）调度循环：
+
+- 模块顶层执行：`Interpreter.execute_module()` 通过 `vm.run_body(body)` 驱动（见 `core/runtime/interpreter/interpreter.py:execute_module`）
+- 函数体执行：`IbUserFunction.call()` 通过 `self.context.vm_executor.run_body(body)` 驱动（见 `core/runtime/objects/kernel.py`）
+- CPS dispatch table 覆盖 43 个 AST 节点类型，所有显式 `fallback_visit()` 调用归零
+- 控制流：`Signal(kind, value)` 数据对象沿生成器返回值传播，`UnhandledSignal` 仅作为 VM 顶层未消费 Signal 的边界异常
+
+**剩余的 Python 同步路径**（可选优化项，非主线债务）：`IbUserFunction.call()` 内部的参数绑定与 scope push/pop 仍为同步 Python 调用；这些路径不参与 IBCI 控制流，不影响快照/并发的语义保证。详见 `docs/COMPLETED.md §十、§十一、§十三、§十六`。
 
 ---
 
@@ -99,14 +102,13 @@ def reset_current_frame(token) -> None: _current_frame.reset(token)
 
 ---
 
-### 层次 2：VM 调度循环（长期目标，不阻塞近期工作）
+### 层次 2：VM 调度循环 ✅ COMPLETED（M3a–M3d，2026-04-28/29）
 
 **目标**：将 `Interpreter.visit()` 从递归实现改为显式 CPS 调度循环，彻底消除对 Python 递归栈的依赖。
 
-完成后，`ihost.run_isolated()` 可以真正地"暂停一个执行中的帧、切换到另一个宿主上下文、然后恢复"——这才是完备的动态宿主机制。
+**完成情况**：M3a（CPS 骨架）+ M3b（控制信号数据化）+ M3c（llmexcept retry 调度化）+ M3d（主执行路径切换至 VMExecutor）全部落地。`execute_module()` 与 `IbUserFunction.call()` 均通过 `VMExecutor.run_body()` 驱动；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零。详见 `docs/COMPLETED.md §十、§十一、§十三、§十五、§十六`。
 
-**前提条件**：层次 0 + 层次 1 完成（✅ 均已具备）。  
-**触发时机**：递归栈深度限制成为实际生产问题时，或开始支持真正的协程语义时。
+**剩余可选优化（非主线债务）**：`IbUserFunction.call()` 内部参数绑定/scope push/pop 仍为同步 Python 调用。该路径不参与 IBCI 控制流，对快照/并发语义无影响。如未来需要真正的协程语义（暂停-恢复-切换执行帧），可考虑将其也下沉到 CPS 主循环。
 
 ---
 
@@ -206,9 +208,11 @@ print(c)                  // 解引用 Future_C
 
 ---
 
-### 5.5 实现第一层需要哪些 IR 和 VM 改动
+### 5.5 实现第一层的 IR 与 VM 改动 ✅ COMPLETED（M5a/M5b/M5c，2026-04-28/29）
 
-**编译器侧：数据依赖图（DDG）提取**
+**完成情况**：DDG 编译期分析（M5a）+ LLMScheduler/LLMFuture（M5b）+ VM dispatch-before-use 集成（M5c）全部落地。详见 `docs/COMPLETED.md §十二、§十四、§十六`。下文保留为**架构演进史 + 设计意图说明**，便于跨实现移植时（如 M7 Rust/Go 后端）参考。
+
+**编译器侧：数据依赖图（DDG）提取**（已落地）
 
 当前 artifact dict 是纯控制流树（AST 节点树），没有数据流信息。要支持 LLM 流水线，需要在编译阶段提取每个 `IbBehaviorExpr` 节点的数据依赖集合：
 
@@ -254,7 +258,7 @@ VM 的 `visit()` 循环：
 2. 遇到变量使用点（变量的值来自一个已 dispatch 的 Future）→ 调用 `resolve()`，阻塞直到结果就绪
 3. 遇到 `dispatch_eligible=False` 的 behavior 节点 → 先 `resolve()` 其依赖，再 `dispatch_eager()`，再等待
 
-**这是一个"数据流 VM"而不是"控制流 VM"。** 当前 IBCI 是纯控制流 VM（tree-walker）。LLM 流水线要求引入数据流调度能力。这是一次真正的 VM 执行模型升级，不是小改动。
+**这是一次真正的 VM 执行模型升级，不是小改动。** ✅ 已落地：当前 IBCI 已具备数据流调度能力（DDG + LLMScheduler + dispatch-before-use 三件套均在 `core/runtime/vm/handlers.py` / `core/compiler/semantic/passes/behavior_dependency_analyzer.py` / `core/runtime/llm/scheduler.py` 中可见）。
 
 ---
 
@@ -436,7 +440,7 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 **公理 SC-4（自由变量捕获）**：在嵌套函数/lambda 被创建时，其所有自由变量的 `IbCell` 引用被复制进该函数对象的 `closure` 字典。此后该函数对象持有这些 `IbCell` 的引用，无论外层作用域是否仍然活跃。
 
-> 现状：SC-1 已通过 `ScopeImpl._parent` 链实现 ✅。SC-2/SC-3/SC-4（IbCell 机制）⏳ **待实现**：当前 lambda/snapshot 的自由变量通过直接的 scope 引用实现，尚未引入独立的 Cell 堆对象（见 §10.6 工程任务）。
+> 现状：SC-1 已通过 `ScopeImpl._parent` 链实现 ✅。SC-2/SC-3/SC-4（IbCell 机制）✅ **已落地（M1/M2，2026-04-28）**：lambda/snapshot 的自由变量通过 `IbCell` 共享值容器（`core/runtime/objects/cell.py`）+ `closure: Dict[sym_uid, (name, IbCell)]` 字段实现；`IbLambdaExpr.free_vars` 编译期填充。详见 `docs/COMPLETED.md §六、§七`。
 
 ---
 
@@ -450,7 +454,7 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 **公理 LT-4（IntentContext 的生命周期）**：`IbIntentContext` 通过 `fork()` 实现隔离。每次函数调用 `fork()` 一个新的 `IbIntentContext`，该 context 的生命周期与函数调用的持续时间绑定，函数返回后恢复调用者的 context。`snapshot` 持有的 `frozen_intent_ctx` 的生命周期与 snapshot 对象绑定。
 
-> 现状：LT-1 已通过 `ScopeImpl` 的 enter/exit 机制实现 ✅。LT-4 已通过 `fork()/restore` 机制实现 ✅。LT-2/LT-3 的 Cell 自主生命周期 ⏳ **待实现**（依赖 SC-3 IbCell 机制）。
+> 现状：LT-1 已通过 `ScopeImpl` 的 enter/exit 机制实现 ✅。LT-4 已通过 `fork()/restore` 机制实现 ✅。LT-2/LT-3 的 Cell 自主生命周期 ✅ **已落地（M2，2026-04-28）**：随 SC-3 IbCell 机制一并实现，`IbCell.trace_refs()` GC 钩子已就绪，参与 `RuntimeContextImpl.collect_gc_roots()`。详见 `docs/COMPLETED.md §七`。
 
 ---
 
@@ -487,19 +491,16 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ---
 
-### 10.6 工程任务：IbCell 机制落地 [⏳ 部分推进中，Step 13]
+### 10.6 工程任务：IbCell 机制落地 [✅ COMPLETED — M1/M2，2026-04-28]
 
-> **前提**：fn 参数化 lambda/snapshot 新语法（Step 12.5，见 `docs/NEXT_STEPS.md`）完成后，Cell 机制方能正式与闭包集成；但作为基础原语的 `IbCell` 类型可独立先行落地。
+**完成情况**：
 
-**任务描述**：实现 `IbCell` 堆对象以支持词法闭包的正确生命周期管理：
+1. **`IbCell` 类型**（`core/runtime/objects/cell.py`）：✅ 已落地。提供 `get()/set()/is_empty()/trace_refs()`，采用身份语义（基于 `id`），不继承 `IbObject`，纯 VM 内部容器。单元测试位于 `tests/runtime/test_ib_cell.py`（18 用例）。
+2. **语义分析器 Cell 变量分析**：✅ 已落地（M1）。`IbLambdaExpr.free_vars` 字段编译期填充；`cell_captured_symbols` 侧表标识被内层捕获的符号。
+3. **代码生成/运行时**：✅ 已落地（M1/M2）。Cell 变量通过 `ScopeImpl.promote_to_cell()` 提升；闭包对象创建时将对应 `IbCell` 引用写入 `closure: Dict[sym_uid, (name, IbCell)]` 字典。
+4. **GC 根集合更新**：✅ 已落地（M2）。`RuntimeContextImpl.collect_gc_roots()` 收集所有活跃 fn 对象的 `closure` 字典中的 Cell 值；`IbCell.trace_refs()` 提供 GC 扫描钩子。
 
-1. **新增 `IbCell` 类型**（`core/runtime/objects/cell.py`）：持有 `value: IbObject`，独立于 ScopeImpl 生命周期存在。  
-   **[✅ 已落地]**：`IbCell` 原语已实现，提供 `get()/set()/is_empty()/trace_refs()`，采用身份语义（基于 `id`），不继承 `IbObject`，纯 VM 内部容器。单元测试位于 `tests/runtime/test_ib_cell.py`（18 用例）。后续 fn 集成与 GC 根扫描可直接依赖该类型，无需重塑容器形态。
-2. **语义分析器 Cell 变量分析**：识别函数体内哪些变量被内层函数捕获，标注为 Cell 变量。⏳ 待 M1 实施
-3. **代码生成/运行时**：Cell 变量在栈帧创建时分配为 `IbCell` 对象；被捕获的函数对象在创建时将对应 `IbCell` 引用写入 `closure` 字典。⏳ 待 M1 实施
-4. **GC 根集合更新**：将所有活跃 fn 对象的 `closure` 字典中的 Cell 值加入 GC 根集合扫描路径。⏳ 待 M2 实施（`IbCell.trace_refs()` 钩子已就绪）
-
-**搁置原因**：当前 lambda 不支持参数传递，自由变量直接通过 captured_scope 引用读取；此机制在无参数场景下功能正确，但不满足 LT-2 的 Cell 生命周期语义。需在 Step 12.5（新 fn 语法）后重写。第 1 步（原语本身）作为 M1/M2 的奠基已先行完成。
+详见 `docs/COMPLETED.md §六（M1）、§七（M2）`。
 
 ---
 

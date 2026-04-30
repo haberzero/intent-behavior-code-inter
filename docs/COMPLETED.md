@@ -433,6 +433,8 @@ Python `tuple` 原先被错误装箱为 `IbList`。全栈引入 `TupleSpec` + `T
 
 ## 八、fn 声明侧返回类型语法演进 [✅ COMPLETED — 2026-04-28]
 
+> **⚠️ 注**：本节记录的方向已被 §二十二 D1（2026-04-29）反转。当前规则：声明侧 `TYPE fn NAME = lambda: EXPR` 产生 PAR_003，表达式侧 `lambda -> TYPE: EXPR` / `snapshot -> TYPE: EXPR` 合法。本节保留作为演进史记录。
+
 **前提**：M2（已具备）  
 **测试基线**：780 个测试通过（较 M2 前 776 增加 4 个）
 
@@ -1271,3 +1273,113 @@ M6 的核心目标是在主线功能（M1–M5c + M4）全部稳定后，建立*
 | C13  | `IbUserFunction.call()` 通过多级 `getattr` 脆弱查找 VMExecutor → 显式注入 | §20.3 |
 | C14  | `BehaviorDependencyAnalyzer` 不感知 IbCell 提升 → `cell_captured_symbols` 侧表 | §20.1 |
 
+
+---
+
+## §二十二：fn/lambda/snapshot 类型系统重设计 D1/D2/D3 — 2026-04-29
+
+> 反转 §八 方向：将 fn/lambda/snapshot 的返回类型标注从**声明侧**重新迁回**表达式侧**，并新增 `fn[(...)→(...)]` callable 签名标注用于高阶函数参数。  
+> 设计决策完整记录见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md`（D1–D6）。
+
+**测试基线演进**：989（Phase 5 完成后）→ 991（D1/D2 完成后）→ 1011（D3 完成后，新增 20 个 callable 签名专项测试）。
+
+### 22.1 D1：废除声明侧 `TYPE fn NAME = lambda: EXPR` 形式（2026-04-29）
+
+**动机**：§八 当时引入的"返回类型写在声明侧"路径需要通过编译器内部隐式通道 `_pending_fn_return_type`（`semantic_analyzer.py:75`）将类型从声明左侧传递给 `visit_IbLambdaExpr`。这违背 `fn` 的"callable 类型推导关键字"定位——`fn` 不应携带任何输出类型职责。
+
+**变更**：
+
+| 形式 | 旧（§八，已废弃）| 新（D1） |
+|------|----------------|---------|
+| 带返回类型的 lambda 声明 | `int fn f = lambda: EXPR` | `fn f = lambda -> int: EXPR` |
+| 带返回类型的 snapshot 声明 | `str fn f = snapshot(int n): EXPR` | `fn f = snapshot(int n) -> str: EXPR` |
+
+声明侧 `TYPE fn NAME = ...` 形式产生 **PAR_003** 编译错误（含迁移提示）。
+
+### 22.2 D2：表达式侧 `-> TYPE` 标注合法化（2026-04-29，与 D1 同 PR）
+
+**变更**：
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/kernel/ast.py` | `IbLambdaExpr.returns` 字段重新启用（D1/D2 之前为 §八 兼容字段，解析器不写入）；解析器现写入实际返回类型节点 |
+| `core/compiler/parser/components/expression.py` | `lambda_expr` / `snapshot_expr` 重新接受 `-> TYPE`；移除原 PAR_005 拒绝逻辑 |
+| `core/compiler/parser/components/declaration.py` | 删除 `TYPE fn NAME` 三词识别路径；改为对该形式产生 PAR_003 |
+| `core/compiler/parser/components/recognizer.py` | 删除 `TYPE fn NAME` 三处 lookahead 路径 |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | 删除 `_pending_fn_return_type` 隐式上下文通道；`visit_IbLambdaExpr` 直接读取 `IbLambdaExpr.returns` |
+| `tests/e2e/test_e2e_fn_lambda_syntax.py` | 测试用例从 §八 声明侧形式回滚至表达式侧 `-> TYPE` 形式 |
+
+**8 种合法形式**（lambda/snapshot 对称）：
+
+| 形式 | 语法 |
+|------|------|
+| 无参，无返回类型标注 | `fn f = lambda: EXPR` |
+| 无参，有返回类型标注 | `fn f = lambda -> TYPE: EXPR` |
+| 带参，无返回类型标注 | `fn f = lambda(PARAMS): EXPR` |
+| 带参，有返回类型标注 | `fn f = lambda(PARAMS) -> TYPE: EXPR` |
+| 无参 snapshot | `fn f = snapshot: EXPR` |
+| 无参 snapshot，有返回类型 | `fn f = snapshot -> TYPE: EXPR` |
+| 带参 snapshot | `fn f = snapshot(PARAMS): EXPR` |
+| 带参 snapshot，有返回类型 | `fn f = snapshot(PARAMS) -> TYPE: EXPR` |
+
+### 22.3 D3：`fn[(input)→(output)]` callable 签名标注（2026-04-29，独立 PR）
+
+**动机**：高阶函数参数需要在编译期对 callable 签名进行结构匹配。裸 `fn` 只能表达"任意可调用"，无法表达"接受 `(int, str) -> bool` 形状的 callable"。
+
+**新增语法**：
+
+```ibci
+# 入参类型标注：约束传入的 callable 必须匹配签名
+func apply(fn[(int, str) -> bool] predicate, int x, str s) -> bool:
+    return predicate(x, s)
+
+# 无参 callable
+func run_deferred(fn[() -> int] task) -> int:
+    return task()
+
+# 返回值也可以是带签名的 fn
+func make_adder(int n) -> fn[(int) -> int]:
+    fn adder = lambda(int x) -> int: x + n
+    return adder
+```
+
+**裸 `fn` vs `fn[...]` 区分**：
+- `fn NAME = EXPR`（变量声明位置）：推导任意可调用类型，不约束签名
+- `fn[(...)->(...)]`（类型标注位置：参数类型 / 返回类型 / `auto`/`fn` 覆盖类型）：结构签名约束
+
+**变更**：
+
+| 文件 | 改动性质 |
+|------|---------|
+| `core/kernel/ast.py` | 新增 `IbCallableType(IbExpr)` AST 节点（参数类型列表 + 返回类型列表） |
+| `core/kernel/spec/specs.py` | 新增 `CallableSigSpec(FuncSpec)`；承载结构签名匹配逻辑 |
+| `core/compiler/parser/components/type_def.py` | 新增 `_try_parse_callable_sig` / `_parse_fn_signature`；`fn[...]` 走类型解析路径，与变量声明 `fn NAME` 路径不交叉 |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | 新增 `_check_callable_sig_match`：声明侧/call-site 结构签名匹配（参数数量 + 各位置类型 assignability + 返回类型 assignability） |
+| `core/kernel/spec/registry.py` | `resolve_specialization` 不影响 `fn[...]`（路径独立） |
+| `tests/compiler/test_d3_callable_sig.py` | 新增 20 个 callable 签名专项测试 |
+
+### 22.4 测试与基线
+
+```
+python3 -m pytest tests/ -q --tb=short
+989 passed → 991 passed (D1/D2) → 1011 passed (D3)
+```
+
+`tests/compiler/test_d3_callable_sig.py` 覆盖：
+- `fn[() -> int]` 无参 callable 接收
+- `fn[(int) -> int]` / `fn[(int, str) -> bool]` 多参 callable 接收
+- 参数数量不匹配 / 类型不匹配 → SEM_003
+- 返回类型 covariant 检查
+- `fn[...]` 作为 `func` 返回类型
+- lambda/snapshot/普通函数引用三类 callable 实参均可匹配
+- 嵌套 callable 签名（`fn[(fn[(int)->int]) -> int]`）
+
+### 22.5 与 §八 的关系
+
+§八（声明侧 fn 类型语法演进）的方向已被本节 D1 反转。回顾：§八 出于"返回类型对工厂模式同样有效"的考量将类型移至声明侧，但代价是引入了隐式通道 `_pending_fn_return_type`，并将 `fn` 与"输出类型"耦合。D1 重新审视后认为：
+
+- "工厂模式有效" 这一论据被表达式侧的 `-> TYPE` 标注同样满足（lambda/snapshot 表达式总是显式形态，可直接标注）
+- `_pending_fn_return_type` 通道是隐式上下文，违背"显式优于隐式"原则
+- `fn` 应保持"callable 推导哨兵"的纯净定位（与 `auto` 对称）
+
+D3 的 `fn[...]` 进一步把高阶函数参数所需的"签名约束"从"`fn` 关键字"上分离出来，使两者职责彻底正交：变量声明用裸 `fn`；类型标注用 `fn[...]`。

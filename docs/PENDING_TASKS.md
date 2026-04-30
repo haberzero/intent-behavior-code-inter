@@ -397,7 +397,7 @@ func process():
 
 ---
 
-### 10.2 engine.py / service.py "vibe" 妥协标注 [P3 - 部分已修复]
+### 11.2 engine.py / service.py "vibe" 妥协标注 [P3 - 部分已修复]
 **问题**：多处被标注为"智能体快速 vibe 实现，未经严格审查"：
 - ~~`engine.py:136`：强制向 service_context 回写 orchestrator（双向引用注入）~~ **[已修复]**：改用 `ServiceContextImpl.set_orchestrator()` 标准注入方法（见 COMPLETED.md §4.16）
 - ~~`interpreter.py:229`：`kwargs.get('orchestrator', ...)` 却没有 `**kwargs` 参数~~ **[已修复]**（见 COMPLETED.md §4.16）

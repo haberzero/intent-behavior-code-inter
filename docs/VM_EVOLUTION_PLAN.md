@@ -11,36 +11,37 @@
 
 ## 一、当前架构现状（代码层事实）
 
-### 1.1 解释器执行模型
+### 1.1 解释器执行模型 ✅ M3a–M3d 已切换主路径至 VMExecutor
 
-`core/runtime/interpreter/interpreter.py` 的 `visit()` 方法（第 755 行）是一个纯 **Python 递归 tree-walker**：
+`Interpreter.execute_module()` 与 `IbUserFunction.call()` 当前均通过 **VMExecutor.run_body()** 驱动 CPS 调度循环执行（`core/runtime/interpreter/interpreter.py` + `core/runtime/objects/kernel.py`）。CPS dispatch table 覆盖 43 个 AST 节点类型，所有显式 `fallback_visit()` 调用归零，控制流通过 `Signal(kind, value)` 数据对象沿生成器返回值传播。
 
 ```
-visit(node_uid)
-  └─ _visitor_cache[node_type](node_uid, node_data)   # 分发到 Handler
-       └─ visit(child_uid)   # 递归
-            └─ ...
+execute_module(uid)
+  └─ vm.run_body(body)              # CPS 主路径
+       └─ for stmt in body:
+            generator = handler(stmt)
+            for signal in generator:    # CPS 调度循环
+                ...
 ```
 
-控制流全部依赖 Python 异常机制：
+控制流不再依赖 Python 异常传播（C5 落地后 `ControlSignalException` 类已彻底删除，仅余 `UnhandledSignal` 作为 VM 顶层未消费 Signal 的边界异常）：
 
-| IBCI 控制流 | Python 实现 | 代码位置 |
-|-------------|-------------|----------|
-| `return v` | `raise ReturnException(v)` | `stmt_handler.py:709` |
-| `break` | `raise BreakException()` | `stmt_handler.py:714` |
-| `continue` | `raise ContinueException()` | `stmt_handler.py:717` |
-| `raise e` | `raise ThrownException(e)` | `stmt_handler.py:720` |
-| llmexcept retry | Python try/except + `LLMExceptFrame.restore_snapshot()` | `stmt_handler.py:555–648` |
+| IBCI 控制流 | 当前实现 | 代码位置 |
+|-------------|----------|----------|
+| `return v` / `break` / `continue` | `Signal(kind, value)` 沿生成器返回值传播 | `core/runtime/vm/task.py:Signal` |
+| `raise e` | `Signal(THROW, exc)` | 同上 |
+| llmexcept retry | `vm_handle_IbLLMExceptionalStmt` 内 CPS 循环 + `LLMExceptFrame.restore_snapshot()` | `handlers.py` |
 
-`LogicalCallStack`（`call_stack.py`）只是 **调试影子栈**，真实调用栈是 Python 递归栈。注释自白（`interpreter.py` 第 14 行）：
-> "每一层 IBCI 调用大约消耗 4 层 Python 栈帧；必须确保 max_call_stack * 4 < sys.getrecursionlimit()"
+**剩余 Python 同步路径（非主线债务）**：`IbUserFunction.call()` 内部的参数绑定与 scope push/pop 仍为同步 Python 调用；该路径不参与 IBCI 控制流，对快照/并发语义无影响。早期注释自白（"每一层 IBCI 调用约 4 层 Python 栈帧"）反映的是 M3 之前的状态，当前主路径已不再受递归栈深度直接限制。
 
 ### 1.2 作用域与闭包现状
 
 - `ScopeImpl._parent` 链已实现词法嵌套（公理 SC-1 ✅）
 - `IbDeferred`/`IbBehavior` 的自由变量（M2 后）通过 `ScopeImpl.promote_to_cell()` 提升为共享 IbCell，lambda/snapshot 统一通过 `closure: Dict[sym_uid, (name, IbCell)]` 访问  
   → 公理 SC-3/SC-4 **已实现**（M2 ✅）
-- `fn`/`lambda`/`snapshot` 支持参数传递（M1 ✅）；`TYPE fn NAME = lambda: EXPR` 声明侧返回类型标注已落地
+- `fn`/`lambda`/`snapshot` 支持参数传递（M1 ✅）
+- D1/D2（2026-04-29）：声明侧 `TYPE fn NAME = lambda: EXPR` 已废弃（产生 PAR_003），表达式侧 `fn f = lambda -> TYPE: EXPR` / `snapshot -> TYPE: EXPR` 合法化
+- D3（2026-04-29）：`fn[(int,str)->bool]` callable 签名标注全链路落地（`IbCallableType` AST 节点 + `CallableSigSpec(FuncSpec)` + 解析器/语义匹配）
 - lambda 闭包对象可自由作为高阶函数参数传递（M2 ✅）
 
 ### 1.3 意图上下文现状
@@ -110,12 +111,20 @@ python3 -m pytest tests/ -q --tb=short   # 1011 passed（2026-04-29，D1/D2/D3 f
 
 | Milestone | 内容 | COMPLETED.md 章节 |
 |-----------|------|------------------|
-| M1 | fn 参数化 lambda/snapshot 新语法 + IbCell 基础 | §五、§七b |
-| M2 | IbCell GC 根集合 + 词法作用域正式化 | §七a |
-| M3a–M3d | CPS 调度循环骨架 → 主路径切换至 VMExecutor | §十、§十一、§十二 |
-| M4 | Layer 2 多 Interpreter 并发 | §十三 |
-| M5a–M5c | DDG 编译器分析 + LLMScheduler + dispatch-before-use | §十四、§十五 |
-| M6 | 可移植性参考实现 + 合规测试套件 + 编译器深度清洁 Phase 1–5 | §十六 |
-| D1/D2/D3 | fn/lambda/snapshot 类型系统重设计 | §二十二 |
+| M1 | fn 参数化 lambda/snapshot 新语法 + IbCell 基础 | §六 |
+| M2 | IbCell GC 根集合 + 词法作用域正式化 | §七 |
+| M3a | CPS 调度循环骨架 | §十 |
+| M3b | 控制信号数据化 (Signal) | §十一 |
+| M5a | DDG 编译期分析（BehaviorDependencyAnalyzer） | §十二 |
+| M3c | IbLLMExceptionalStmt CPS 调度化 | §十三 |
+| M5b | LLMScheduler / LLMFuture | §十四 |
+| M3d-prep | 扩展 CPS handler 覆盖 | §十五 |
+| M3d + M5c | 主路径切换 + LLM dispatch-before-use | §十六 |
+| 轻量代码债务清理（L1/L2 + C1/C2/C3/C4 + C10/C13） | — | §十七 |
+| M4 | Layer 2 多 Interpreter 并发 | §十八 |
+| M6 + Phase 1 | 可移植性参考实现 + 合规测试套件 + 轻量债务清理 | §十九 |
+| 编译器深度清洁 Phase 2–5（C5–C14） | CPS 全链路 + node_protection 侧表删除 | §二十 |
+| URGENT_ISSUES / BUG_REPORTS / DEFERRED_CLEANUP 历史归档 | — | §二十一 |
+| D1/D2/D3 | fn/lambda/snapshot 类型系统重设计（声明侧→表达式侧反转 + callable 签名） | §二十二 |
 
 **下一步方向**：见 `docs/NEXT_STEPS.md`；中长期待实现任务见 `docs/PENDING_TASKS.md` 与 `docs/PENDING_TASKS_VM.md`（VM 架构长期设想）。
