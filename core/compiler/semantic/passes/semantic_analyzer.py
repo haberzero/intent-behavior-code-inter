@@ -258,7 +258,7 @@ class SemanticAnalyzer:
                             "'@~...~' as the loop condition.",
                             stmt, code="SEM_050"
                         )
-                    # C11/P1: 将 llmexcept handler 直接挂载到 IbFor.llmexcept_handler；
+                    # 将 llmexcept handler 直接挂载到 IbFor.llmexcept_handler；
                     # 显式保持 stmt.target = None（区别于正则情形）；
                     # IbLLMExceptionalStmt 不加入 body，IbFor 是 body 中的唯一主体。
                     stmt.target = None
@@ -276,7 +276,7 @@ class SemanticAnalyzer:
                             f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
                             stmt, code="SEM_050"
                         )
-                    # C11: 正则情形——IbLLMExceptionalStmt 替换 prev_stmt 成为
+                    # 正则情形——IbLLMExceptionalStmt 替换 prev_stmt 成为
                     # body 中的唯一条目；target 字段直接引用 prev_stmt node。
                     stmt.target = prev_stmt
                     new_body.pop()  # 弹出已入队的 prev_stmt
@@ -539,7 +539,7 @@ class SemanticAnalyzer:
         symbol_table.symbols，需排除 body 内直接声明（有类型标注）的变量，
         以避免误报 body-local 变量的 SEM_052。
         """
-        # C11: 先访问 target（正则情形为 IbAssign；条件 for 情形为 IbFor）
+        # 先访问 target（正则情形为 IbAssign；条件 for 情形为 IbFor）
         if node.target is not None:
             self.visit(node.target)
 
@@ -1325,7 +1325,7 @@ class SemanticAnalyzer:
         for stmt in node.body:
             self.visit(stmt)
 
-        # C11/P1: 条件驱动 for 情形——IbLLMExceptionalStmt 不在 body 中，
+        # 条件驱动 for 情形——IbLLMExceptionalStmt 不在 body 中，
         # 但其 handler body 的符号绑定必须在此显式触发。
         # 通过 node.llmexcept_handler 直接引用（C11/P3 已删除 node_protection 侧表）。
         if node.target is None and node.llmexcept_handler is not None:
@@ -1901,7 +1901,7 @@ class SemanticAnalyzer:
             self.current_class = saved_class
             self.symbol_table = old_table
 
-        # C8/C14：编译期自由变量分析。
+        # 编译期自由变量分析。
         # 在 symbol_table 已恢复为外层作用域后执行，确保 side_table 中所有
         # body 内 IbName 的 sym_uid 均已由 Pass 4 绑定完毕。
         # 结果写入 node.free_vars（序列化到 artifact），并将 lambda 模式捕获的

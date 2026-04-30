@@ -364,10 +364,9 @@ class LLMExceptFrame:
     def reset_for_retry(self) -> None:
         """
         重置状态以准备下一次重试。
-        
-        TODO [优先级: 中]:
-            - 考虑清除 last_error 以便追踪重试历史
-            - 考虑保留最后几次错误的记录
+
+        设计注：当前清除 last_error 是有意的——每次重试是独立尝试，不跨重试积累错误历史。
+        若需保留多次重试的错误记录，参见 docs/PENDING_TASKS.md §十一（L1）。
         """
         self.last_error = None
         self.last_llm_response = None
@@ -409,10 +408,8 @@ class LLMExceptFrameStack:
     用于管理嵌套的 llmexcept 块。
     在复杂场景下，可能会有多层嵌套的 llmexcept，
     帧栈确保每个层级都有独立的现场状态。
-    
-    TODO [优先级: 低]:
-        - 考虑添加最大嵌套深度限制
-        - 考虑添加调试用的帧历史记录
+
+    当前无最大嵌套深度限制；如需添加，参见 docs/PENDING_TASKS.md §十一（L1）。
     """
     
     def __init__(self):

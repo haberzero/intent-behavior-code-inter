@@ -169,7 +169,7 @@ class IExecutionFrame(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# VM 调度循环协议（M3a 骨架；M3b/M3c/M3d 将逐步扩展）
+# VM 调度循环协议（M3a–M3d + Phase 1–5 全部完成；CPS 是主路径）
 # ---------------------------------------------------------------------------
 
 @runtime_checkable
@@ -180,7 +180,7 @@ class IVMTask(Protocol):
     ``node_uid`` 标识当前帧对应的 AST 节点；``generator`` 是按 yield 协议表达的
     协程，节点之间通过 ``yield child_uid`` 让出控制权。
 
-    M3a 阶段实现位于 ``core.runtime.vm.task.VMTask``；该协议仅声明对外可观测属性。
+    实现位于 ``core.runtime.vm.task.VMTask``；该协议仅声明对外可观测属性。
     """
     node_uid: str
     generator: Any
@@ -193,11 +193,18 @@ class IVMExecutor(Protocol):
     职责
     ----
     * 显式帧栈管理：以非 Python 递归的方式驱动 IBCI AST 求值
-    * 控制流信号传播：在帧栈上传播 ``ControlSignal``（M3a 通过异常，M3b 数据化）
-    * 与既有 ``Interpreter.visit()`` 并行：未实现节点回退到 ``fallback_visit``
+    * 控制流信号传播：在帧栈上通过 ``Signal(kind, value)`` 数据对象传播控制流
+    * 43 种 AST 节点类型均有 CPS handler（M3a–M3d + Phase 1–5 全部完成）
 
-    M3a 阶段实现位于 ``core.runtime.vm.vm_executor.VMExecutor``。
-    M3d 阶段会把 ``Interpreter.visit()`` 主路径改为本协议驱动。
+    **CPS 路径（主路径）**：所有产生 Signal、跨函数边界或参与 LLMScheduler 调度的
+    节点均走 CPS dispatch table（``VMExecutor``）。
+
+    **Expression Eval 路径（辅助路径）**：``IbName`` / ``IbBinOp`` / ``IbConstant``
+    等纯计算子表达式在 ``@~...~`` 模板内插与 ``LLMExceptFrame`` 重试 driver 中仍走
+    旧递归 ``visit()``；这是设计内的分工，不是技术债。
+
+    实现位于 ``core.runtime.vm.vm_executor.VMExecutor``。
+    ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 均以本协议为主路径。
     """
 
     def supports(self, node_uid: str) -> bool:

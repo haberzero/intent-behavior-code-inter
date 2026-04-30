@@ -45,7 +45,7 @@ class LLMExecutorImpl:
         self.last_call_info: Mapping[str, Any] = {} # 记录最后一次 LLM 调用信息
         self._expected_type_stack: List[str] = []
 
-        # M5b：LLMScheduler 状态
+        # LLMScheduler 状态
         self._max_workers: int = max_workers
         self._thread_pool: Optional[_ThreadPoolExecutor] = None
         self._pending_futures: Dict[str, LLMFuture] = {}  # node_uid → LLMFuture
@@ -453,7 +453,7 @@ class LLMExecutorImpl:
         )
 
     # ---------------------------------------------------------------------------
-    # M5b：LLMScheduler — dispatch_eager / resolve / 线程池管理
+    # LLMScheduler — dispatch_eager / resolve / 线程池管理
     # ---------------------------------------------------------------------------
 
     def _get_thread_pool(self) -> _ThreadPoolExecutor:

@@ -2,7 +2,7 @@
 
 > **文档性质**：本文档是 IBCI 虚拟机的**正式规范层定义**，与 Python 宿主实现隔离。  
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。  
-> **基准状态**（2026-04-29）：Python 宿主实现（`core/`）全部符合本规范；989 测试通过。  
+> **基准状态**（2026-04-29）：Python 宿主实现（`core/`）全部符合本规范；1011 测试通过（D1/D2/D3 fn/lambda callable 签名标注全链路落地后）。  
 > **关联文档**：`docs/VM_EVOLUTION_PLAN.md`（里程碑演进规划）、`docs/PENDING_TASKS_VM.md`（详细设计与任务清单）。
 
 ---

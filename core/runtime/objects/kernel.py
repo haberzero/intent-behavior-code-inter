@@ -819,7 +819,7 @@ class IbUserFunction(IbFunction):
             # run_body() 以 UnhandledSignal 传播顶层控制信号；
             # 由下方 except _CSE 消费；BREAK/CONTINUE 透传至调用者。
             #
-            # C13：通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
+            # 通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
             # Interpreter 在首个 ``execute_module()`` 调用时即已通过 ``_get_vm_executor()``
             # 把引用注入到 ExecutionContext，因此函数调用阶段必然可用。如未就绪
             # （例如由直接构造 IbUserFunction 的边角测试触发），保留递归 fallback。
@@ -837,7 +837,7 @@ class IbUserFunction(IbFunction):
 
             return ib_none
         except _CSE as e:
-            # C5/C6：捕获 UnhandledSignal，按信号类型处理。
+            # 捕获 UnhandledSignal，按信号类型处理。
             if e.signal.kind is _CS.RETURN:
                 return e.signal.value
             raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者

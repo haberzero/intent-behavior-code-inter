@@ -1,10 +1,9 @@
 # fn / lambda / snapshot 类型系统重设计决策记录
 
-> 本文档记录 2026-04-29 设计讨论会形成的完整语法重设计决策。  
-> **Phase 1（D1+D2）已于 2026-04-29 完成落地。**  
-> **Phase 2（D3）已于 2026-04-29 完成落地。**  
+> 本文档记录 2026-04-29 设计讨论会形成的完整语法重设计决策（D1–D6）。  
+> **全部决策已于 2026-04-29 实施完毕**（D1/D2 Phase 1，D3 Phase 2）；实现细节见 `docs/COMPLETED.md §五/§六/§七`。
 >
-> **最后更新**：2026-04-29（Phase 1 D1/D2 + Phase 2 D3 全部落地）
+> **最后更新**：2026-04-29
 
 ---
 
@@ -41,9 +40,7 @@ fn h = lambda: @~ compute ~            # 推导 h 的类型 = DeferredSpec(auto,
 fn s = snapshot(str name) -> str: name # 推导 s 的类型 = DeferredSpec(str, snapshot)
 ```
 
-**废弃**：`int fn f = lambda: EXPR`（声明侧带返回类型的 fn 形式）。
-
-此形式在新语法落地后产生 PAR_003 编译错误。
+**废弃**：`int fn f = lambda: EXPR`（声明侧带返回类型的 fn 形式）产生 PAR_003 编译错误。
 
 ---
 
@@ -72,17 +69,6 @@ snapshot(<param_type_list>) -> <return_type> : <expr>
 - `lambda` 和 `snapshot` **只允许单一返回值**（返回类型位置只写一个类型名）。
 - 用 `fn f = ...` 接收时，`f` 的类型完全由表达式侧推导，左值只需写 `fn`。
 - 对于普通 `func` 函数定义，多值返回通过 `tuple` 实现（不受此限制），可调用类实例同理。
-
-**实现变更清单**：
-- ✅ `IbLambdaExpr.returns: Optional[IbExpr]` 字段（由解析器填充）
-- ✅ `lambda_expr()` 中 `-> TYPE` 消费逻辑（无参/有参两分支）
-- ✅ 删除 PAR_005 对 `->` 的拒绝逻辑
-- ✅ 删除 `_pending_fn_return_type` 隐式通道
-- ✅ `visit_IbLambdaExpr` 从 `node.returns` 读取返回类型
-- ✅ `declaration.py` 对 `TYPE fn NAME = ...` 形式发出 PAR_003
-- ✅ 所有相关测试更新（989→991 通过）
-- ✅ `IBCI_SYNTAX_REFERENCE.md` §7.4 / §5 更新
-- ✅ `KNOWN_LIMITS.md` §三 更新（移除"强烈不建议使用"警告）
 
 ---
 
@@ -158,57 +144,13 @@ callable signature 专用节点）在语义分析阶段明确区分。
 |------|---------|------|
 | **模块级向前引用**（函数 A 调用文件中位置更靠后的函数 B） | ✅ 已支持（Pass 1 在 Pass 4 前收集所有模块级符号） | 无需变更 |
 | **局部变量向前引用**（函数体内使用尚未赋值的局部变量） | ❌ 不支持 | 维持不支持（无需求） |
-| **跨文件向前引用**（循环依赖模块间的编译期类型检查） | ⚠️ 部分：`LazySpec` 占位，运行时解析 | 可选扩展：基于 `scheduler.py` 现有依赖图做"全工程两轮扫描"（先收集所有模块 Pass 1，再统一 Pass 2），技术可行性无疑问，工程代价中等，**暂不列入近期目标** |
+| **跨文件向前引用**（循环依赖模块间的编译期类型检查） | ⚠️ 部分：`LazySpec` 占位，运行时解析 | 可选扩展：基于 `scheduler.py` 现有依赖图做"全工程两轮扫描"，**暂不列入近期目标** |
 
 ---
 
-## 三、与当前代码库的对照（变更清单）
+## 三、实施顺序与完成状态
 
-### D3 已完成（2026-04-29）
-
-| 位置 | 变更 | 状态 |
-|------|------|------|
-| `core/kernel/ast.py` | 新增 `IbCallableType(param_types, return_type)` AST 节点 | ✅ |
-| `core/kernel/spec/specs.py` | 新增 `CallableSigSpec(FuncSpec)` 类型描述符 | ✅ |
-| `core/kernel/spec/__init__.py` | 导出 `CallableSigSpec` | ✅ |
-| `core/compiler/parser/components/type_def.py` | `_try_parse_callable_sig()` + `_parse_fn_signature()` 专用路径 | ✅ |
-| `core/compiler/parser/components/declaration.py` | `elif explicit_fn:` 分支支持 `fn[...]` 签名形式 | ✅ |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | `_resolve_type(IbCallableType)` → `CallableSigSpec` | ✅ |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | `visit_IbCall()` D3 结构签名匹配（arg count + type） | ✅ |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | `visit_IbAssign()` 声明侧签名结构匹配（`_check_callable_sig_match()`） | ✅ |
-| `core/compiler/serialization/serializer.py` | `CallableSigSpec` 序列化（param_type_names / return_type_name） | ✅ |
-| `core/runtime/loader/artifact_rehydrator.py` | `CallableSigSpec` 重水化 | ✅ |
-| `tests/compiler/test_d3_callable_sig.py` | 20 个测试（parse / 类型推导 / 结构匹配 / E2E） | ✅ |
-| `docs/FN_LAMBDA_SYNTAX_REDESIGN.md` | 本文档 D3 节标注为已落地 | ✅ |
-| `docs/NEXT_STEPS.md` | 更新测试基线 991 → 1011；D3 标注为完成 | ✅ |
-
-### D1/D2 已完成（2026-04-29）
-
-| 位置 | 变更 | 状态 |
-|------|------|------|
-| `core/compiler/semantic/passes/semantic_analyzer.py` | 删除 `_pending_fn_return_type` 字段及全部存取逻辑 | ✅ |
-| `core/compiler/parser/components/expression.py` | 删除 PAR_005 对 `->` 的拒绝逻辑；新增 `-> TYPE` 解析 | ✅ |
-| `core/compiler/parser/components/declaration.py` | `int fn f = ...` 形式改为 PAR_003 错误 | ✅ |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | `visit_IbAssign` 删除 `DeferredSpec(value_type_name≠auto)` 注入逻辑 | ✅ |
-| `core/kernel/ast.py:IbLambdaExpr` | 新增 `returns: Optional[IbExpr] = None` 字段 | ✅ |
-| `core/compiler/semantic/passes/semantic_analyzer.py:visit_IbLambdaExpr` | 从 `node.returns` 读取返回类型 | ✅ |
-| `core/compiler/semantic/passes/resolver.py:visit_IbLambdaExpr` | 更新 visit `node.returns` | ✅ |
-| `docs/IBCI_SYNTAX_REFERENCE.md` | 更新 §5/§7.4 语法描述 | ✅ |
-| `docs/KNOWN_LIMITS.md` | 更新 §三（移除"强烈不建议使用"警告） | ✅ |
-
-### D3 待实现（独立 PR）
-
-| 位置 | 内容 |
-|------|------|
-| `core/compiler/parser/components/type_def.py:parse_type_annotation()` | `fn[...]` callable 签名解析专用路径 `_parse_fn_signature()` |
-| `core/kernel/ast.py` | 新增 `IbCallableType` 节点（或复用 `IbSubscript` + 语义标记）用于携带 callable 签名约束 |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | call site 结构签名匹配逻辑（按签名形状检查，而非 FuncSpec 名字） |
-
----
-
-## 四、实施顺序（建议）
-
-D1、D2 是**耦合变更**，必须在同一 PR 中完成，原因：废除 `int fn f = ...` 后，原先唯一的
+D1、D2 是**耦合变更**，必须在同一 PR 中完成：废除 `int fn f = ...` 后，原先唯一的
 返回类型声明路径消失，必须同时开放表达式侧 `-> TYPE` 才能维持功能完整性。
 
 D3（`fn[...]` 高阶签名）与 D1/D2 **相互独立**，可单独 PR。
@@ -226,22 +168,7 @@ D5: 维持现有强制显式路线（无代码变更需要）
 D6: 跨文件向前引用暂不列入近期目标
 ```
 
----
+测试基线：989 → 991（D1/D2）→ 1011（D3，新增 20 个 callable 签名专项测试）。
 
-## 五、测试影响
+*全部实现细节（涉及文件清单、变更表、测试清单）见 `docs/COMPLETED.md §五/§六/§七`。*
 
-Phase 1 已完成同步更新（2026-04-29）：
-- 所有使用 `int fn f = lambda: ...` / `int fn f = snapshot: ...` 形式的测试用例已更新
-  为新的 `fn f = lambda -> int: ...` / `fn f = snapshot -> int: ...` 形式。
-- PAR_005 触发的负向测试已更新：旧的 `lambda -> TYPE:` 形式现在合法（D2）；
-  新的非法形式 `int fn f = lambda: ...` 产生 PAR_003。
-- 测试基线：989 → 991（新增 2 个正向测试用例）。
-
-Phase 2 已同步新增（2026-04-29，D3 落地）：
-- `fn[(int)->int]` 参数类型标注的解析单元测试。
-- 高阶函数签名不匹配的负向语义测试（SEM_003/SEM_005）。
-- 测试基线：991 → 1011（新增 20 个 D3 测试用例）。
-
----
-
-*Phase 1（D1/D2）已于 2026-04-29 落地；Phase 2（D3）已于 2026-04-29 落地。*

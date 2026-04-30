@@ -721,7 +721,7 @@ class IbDeferred(IbObject):
         self.deferred_mode = deferred_mode
         self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
-        # M1: parametric/closure 字段。无参/无闭包路径下保持向后兼容（默认 None/空）。
+        # parametric/closure 字段，无参/无闭包路径下默认 None/空。
         self.params_uids: List[str] = list(params_uids) if params_uids else []
         self.body_uid: Optional[str] = body_uid
         self.closure: Dict[str, Any] = dict(closure) if closure else {}
@@ -788,15 +788,7 @@ class IbDeferred(IbObject):
                         sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
                         rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
-            # 2) 评估目标节点：M1 参数化路径走 body_uid，否则走 node_uid（与历史一致）。
-            #
-            # C4 审计（2026-04-29）：经审查，``body_uid is None`` 路径在 M1 之后
-            # 仅理论上由 ``stmt_handler.visit_IbAssign`` 中"is_deferred=True 且
-            # value_node_type != IbBehaviorExpr"分支构造，而 ``node_is_deferred``
-            # 侧表的唯一写入点（``expression_analyzer.visit_IbBehaviorExpr``）
-            # 限定写入 IbBehaviorExpr 节点；两个条件互斥，故该分支在合法编译
-            # 路径下不可达。保留 ``or self.node_uid`` 作为防御性回退（不抛异常），
-            # 以兼容潜在的程序化构造路径（artifact 反序列化、测试 harness 等）。
+            # 2) 评估目标节点：参数化路径走 body_uid，否则走 node_uid（防御性回退）。
             target_uid = self.body_uid if self.body_uid else self.node_uid
             result = self._execution_context.visit(target_uid)
         finally:
@@ -812,8 +804,7 @@ class IbDeferred(IbObject):
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         if self._cache is not None:
             return self._cache.to_native()
-        # M4 修复（URGENT_ISSUES）：未执行时静默返回 self（IBCI 运行时对象），
-        # 调用方期望 Python 原生值——产生类型混淆。改为显式抛错。
+        # 未执行时显式抛错（避免调用方获得类型混淆的 IBCI 运行时对象）。
         raise RuntimeError(
             f"IbDeferred '{self.node_uid}' has not been executed; "
             f"call .call(receiver, args) first before to_native()."
@@ -878,7 +869,7 @@ class IbBehavior(IbObject):
         captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
             模式 / dispatch_eager）。Step 6c/6d 之后不再支持 IntentNode 链表 / list。
 
-        M1 参数化拓展（与 IbDeferred 同构）：
+        参数化调用支持（与 IbDeferred 同构）：
             * ``params_uids`` —— ``IbLambdaExpr`` 提供的参数节点 uid 列表；
               当 ``IbLambdaExpr`` 的 body 是 ``IbBehaviorExpr`` 时，``call()``
               在子作用域中绑定参数后再调用 LLM 执行器。注意：``node_uid``
@@ -896,7 +887,7 @@ class IbBehavior(IbObject):
         self.deferred_mode = deferred_mode
         self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
-        # M1 参数化拓展
+        # 参数化调用支持
         self.params_uids: List[str] = list(params_uids) if params_uids else []
         self.closure: Dict[str, Any] = dict(closure) if closure else {}
 
@@ -906,8 +897,7 @@ class IbBehavior(IbObject):
 
     def to_native(self) -> Any:
         if self._cache: return self._cache.to_native()
-        # M4 修复（URGENT_ISSUES）：未执行时静默返回 self 会让调用方拿到 IBCI 运行时
-        # 对象而非原生值，后续无声地产生类型混淆。改为显式抛错。
+        # 未执行时显式抛错（避免调用方获得类型混淆的 IBCI 运行时对象）。
         raise RuntimeError(
             f"IbBehavior '{self.node}' has not been executed; "
             f"call via LLM executor (or .call(receiver, args)) first before to_native()."

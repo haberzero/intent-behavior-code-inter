@@ -43,8 +43,7 @@ class VMExecutor:
     构造参数:
         execution_context: 已配置的 :class:`ExecutionContextImpl`，提供节点池、
                            侧表、运行时上下文与对象工厂等服务。
-        interpreter: 可选 :class:`Interpreter` 引用；保留用于 ``assign_to_target``
-                     过渡期兼容（C7 之后已无实际调用，可传 None）。
+        interpreter: 可选 :class:`Interpreter` 引用；当前未使用，可传 None。
     """
 
     def __init__(self, execution_context: Any, interpreter: Optional[Any] = None):
@@ -195,7 +194,7 @@ class VMExecutor:
             except StopIteration as si:
                 stack.pop()
                 ret_value = si.value
-                # M3b：StopIteration.value 若是 Signal，作为控制流数据沿栈传递
+                # StopIteration.value 若是 Signal，作为控制流数据沿栈传递
                 if isinstance(ret_value, Signal):
                     pending_value = ret_value
                 else:
@@ -204,8 +203,7 @@ class VMExecutor:
                     )
                 continue
             except UnhandledSignal as use:
-                # C5：fallback 路径产生的 UnhandledSignal（旧路径 ControlSignalException
-                # 已由 C6 清除；此分支仅兜底）：弹栈并向上传递
+                # fallback 路径产生的 UnhandledSignal：转为 pending_exception 沿栈传递
                 stack.pop()
                 pending_exception = use
                 continue
@@ -236,7 +234,7 @@ class VMExecutor:
         # 栈空：处理最终结果
         if pending_exception is not None:
             raise pending_exception
-        # C5：未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
+        # 未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
         if isinstance(pending_value, Signal):
             raise UnhandledSignal(pending_value)
         return pending_value if pending_value is not None else self.registry.get_none()

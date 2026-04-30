@@ -431,6 +431,44 @@ int w = h(3)                          # 6
 
 延迟执行的完整语法见 §7.4。
 
+### 5.6 `fn[(...)->(...)]` 高阶函数 callable 签名标注（D3）
+
+裸 `fn` 用于变量声明位置时表示"推导任意可调用类型，不约束签名"；当需要在**类型标注位置**对 callable 进行结构签名约束时（如高阶函数参数、返回类型、`auto`/`fn` 覆盖类型），使用 `fn[(<input_types>) -> (<output_types>)]` 形式。
+
+```ibci
+# 接受 (int, str) -> bool 的 callable 作为参数
+func apply(fn[(int, str) -> bool] predicate, int x, str s) -> bool:
+    return predicate(x, s)
+
+# 无参 callable
+func run_deferred(fn[() -> int] task) -> int:
+    return task()
+
+# 返回值也可以是带签名的 fn
+func make_adder(int n) -> fn[(int) -> int]:
+    fn adder = lambda(int x) -> int: x + n
+    return adder
+
+# 接受任意可调用（不约束签名）—— 裸 fn
+func call_any(fn f) -> auto:
+    return f()
+```
+
+**裸 `fn` vs `fn[...]`**：
+
+| 形式 | 出现位置 | 含义 |
+|------|---------|------|
+| `fn NAME = EXPR` | 变量声明 | 推导任意可调用类型；不约束签名 |
+| `fn[(...)->(...)]` | 类型标注位置（参数 / 返回类型 / `auto`/`fn` 覆盖类型） | 结构签名约束（参数数量 + 各位置类型 + 返回类型） |
+
+**匹配规则**：
+- 参数数量必须严格相等
+- 各位置参数类型必须 assignable（含子类型协变）
+- 返回类型必须 assignable
+- 实参可以是普通函数引用、lambda 闭包、snapshot 延迟对象、可调用类实例
+
+> **历史背景**：D3（2026-04-29）落地。设计动机详见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md §D3`，落地记录见 `docs/COMPLETED.md §二十二`。
+
 ---
 
 ## 6. 面向对象

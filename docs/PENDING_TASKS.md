@@ -26,17 +26,6 @@
 
 ## 二、公理化相关
 
-### 2.1 Intent 完整公理化 [✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- 新建 `core/kernel/axioms/intent.py`：`IntentAxiom`（`is_class()=True`，完整 vtable 声明）
-- `IbIntent` 添加 `@register_ib_type("Intent")` 装饰器及三个公共方法：`get_content()`、`get_tag()`、`get_mode()`
-- `register_core_axioms()` 注册 `IntentAxiom()`
-- `INTENT_SPEC = ClassSpec(name="Intent", ...)` 加入 `specs.py` 并注册到 `create_default_spec_registry()`，使 `_bootstrap_axiom_methods()` 在 `SpecRegistry` 初始化阶段即填充 `Intent` 成员表
-- `builtin_initializer.py` 显式导入 `IbIntent`，确保 `@register_ib_type("Intent")` 在公理自动化绑定循环之前执行
-- 517 个测试全部通过
-
----
 
 ### 2.2 Intent Stack 不可变性约束 [PENDING]
 **任务**：实现 Intent Stack 不可变性约束。
@@ -110,6 +99,40 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
+### 3.4 泛型参数传播（下标访问类型推断）[PENDING]
+
+**任务**：`ListAxiom`、`DictAxiom` 的 `__getitem__` 返回类型应通过泛型参数动态推导（而非硬编码 `any`）。
+
+**影响**：`list[int]` 类型变量下标访问后返回类型为 `any` 而非 `int`，类型安全性降低。详见 `docs/KNOWN_LIMITS.md §16.1`。
+
+---
+
+### 3.5 泛型协变规则 [PENDING]
+
+**任务**：建立 `list[T]` isa `list`、`list[T]` isa `list[U]`（当 T isa U 时）的类型兼容规则，实现 `SpecRegistry.is_assignable` 的泛型协变/不变逻辑。
+
+**影响**：混合赋值（`list[int] x = …; list y = x`）可能触发 SEM_003。详见 `docs/KNOWN_LIMITS.md §16.6`。
+
+---
+
+### 3.6 嵌套泛型推断 [PENDING]
+
+**任务**：扩展语义分析器的下标类型推断，支持链式下标对嵌套泛型（如 `list[list[int]]`）的逐层解包。详见 `docs/KNOWN_LIMITS.md §16.3`。
+
+---
+
+### 3.7 泛型特化 axiom 自动引导 [PENDING]
+
+**任务**：`SpecRegistry.resolve_specialization()` 应自动完整地为新特化 spec 绑定所有 axiom 方法，消除现有手动补偿逻辑的覆盖不完整问题。与 `docs/OPEN_ISSUES.md OI-4`（`resolve_specialization` 无缓存）同步修复。
+
+---
+
+### 3.8 `tuple` 元素类型标注 [PENDING]
+
+**任务**：考虑支持 `tuple[T1, T2, ...]` 语法，为固定结构的多值返回提供类型安全。当前元组元素访问始终返回 `any`。详见 `docs/KNOWN_LIMITS.md §16.5`。
+
+---
+
 ## 四、语法功能
 
 ### 4.1 (str n) @~ ... ~ 语法完善 [PENDING]
@@ -126,24 +149,32 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 4.3 lambda/snapshot 语法重构与语义完整化 [✅ D1/D2 COMPLETED — 2026-04-29]
 
-**完成内容**（M1 + M2 + fn declaration-side 三阶段 + D1/D2）：
-- ✅ 新 fn 声明语法：`fn NAME = lambda: EXPR` / `fn NAME = lambda(PARAMS): EXPR`（snapshot 同构）；`fn[TYPE]` → DeferredSpec
-- ✅ 参数传递：`IbDeferred.call()` / `IbBehavior.call()` 支持参数列表
-- ✅ IbCell 机制（SC-3/SC-4）：lambda 自由变量通过共享 IbCell 引用，snapshot 通过独立 IbCell 值拷贝
-- ✅ M2 `ScopeImpl.promote_to_cell()` + `RuntimeContextImpl.collect_gc_roots()`，lambda 可自由作为 HOF 参数传递
-- ✅ D1（2026-04-29）：废弃声明侧返回类型 `TYPE fn NAME = lambda: EXPR` → 产生 `PAR_003`
-- ✅ D2（2026-04-29）：`IbLambdaExpr.returns` 字段；表达式侧 `lambda -> TYPE: EXPR` / `snapshot -> TYPE: EXPR` 合法化
-- ✅ `_pending_fn_return_type` 隐式通道已删除
-- ✅ 991 个测试通过（D1/D2 后基线）
+### 4.4 fn/callable 类型系统后续改进 [PENDING]
 
-**待实现**（D3，独立 PR）：
-- ⏳ `fn[(<typelist>) -> (<typelist>)]` 高阶函数参数 callable 签名标注
-- ⏳ 类型解析器 `_parse_fn_signature()` 专用路径 + `IbCallableType` AST 节点
-- ⏳ 语义层结构签名匹配（call site 按签名形状检查，见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md §D3`）
+以下项目是 `fn` / callable / lambda 类型系统在 fn 类型系统重设计落地后的已知后续工作。详细设计背景见 `docs/FUNC_DESIGN_NOTES.md`，当前限制见 `docs/KNOWN_LIMITS.md §三`。
 
-**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`docs/FN_LAMBDA_SYNTAX_REDESIGN.md`、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`
+#### 4.4.1 `func[sig]` 泛型类型标注
+
+支持带签名约束的 `func` 类型（参数签名编译期验证）：
+```ibci
+func apply_typed(func[int -> int] fn, int x) -> int:
+    return fn(x)
+```
+
+#### 4.4.2 轻量泛型 `<T>`
+
+支持泛型高阶函数类型传播，使 `fn` 签名能在调用链中真正传递类型。
+
+#### 4.4.3 高阶函数编译期类型推断
+
+引入泛型参数使 `auto` 返回类型能通过 `func` 型参数传递（当前退化为 `any`）。
+
+#### 4.4.4 lambda / snapshot 剩余语义缺陷
+
+- **类型签名传播弱**：`fn f = lambda(int x): EXPR` 中 `f` 的类型推断不传播参数/返回签名
+- **递归 lambda 不支持**：lambda 无法引用自身
+- **`snapshot` 线程安全**：snapshot 首次调用后缓存，多解释器并发引入后存在潜在竞态，目前依赖使用约定
 
 ---
 
@@ -175,23 +206,6 @@ str result = process_with_custom_ctx(my_ctx)
 
 ---
 
-### 5.2 函数内部屏蔽全局意图栈的精细控制 [✅ COMPLETED — 2026-04-19]
-
-**已实现（2026-04-19）**：
-- `intent_context.clear_inherited()` — 清空当前作用域从调用者继承的持久意图栈（✅ 已实现）
-- `intent_context.use(ctx)` — 用指定 intent_context 实例替换当前作用域的意图上下文（✅ 已实现）
-- `intent_context.get_current()` — 获取当前作用域意图上下文的快照副本（✅ 已实现）
-
-**函数调用粒度的屏蔽**：
-- 每次函数调用 fork 调用者意图上下文（拷贝传递），函数内操作不泄漏（✅ 已实现）
-- 函数体内写 `intent_context.clear_inherited()` 清空继承的意图栈（✅ 已实现）
-- **`@!` 不修饰函数调用**（明确的设计决策：`@!` 只修饰 LLM 行为表达式 `@~...~`）
-
-**待实现（未来工作）**：
-- **编译期 `@` 约束在函数调用时的静态检查**：目前 fork 是运行时行为；未来可在语义分析阶段对 `@` 作用域提前标注
-- `@clear` 关键字语法糖（作为 `intent_context.clear_inherited()` 的简写，属于语法糖，非必需）
-
----
 
 ### 5.3 intent_context 作为函数参数类型 [PENDING]
 
@@ -278,16 +292,13 @@ func process():
 
 ## 九、插件系统
 
-### 9.1 显式引入原则完整实现 [Phase 1 ✅ / Phase 2 ✅ / Phase 3-4 PENDING]
-**任务**：严格实现"必须显式 import 才能使用"原则，彻底消除 `discover_all()` 无条件全局注册。
+### 插件显式引入完整实现
 
-**Phase 1 ✅ 已完成**：`__ibcext_metadata__()` 的 `"kind"` 字段区分 `"method_module"`（工具插件，需显式 import）与 `"type_module"`（内置类型扩展）；`Prelude._init_defaults()` 按 `is_user_defined` 过滤，所有方法插件（`ai`、`math`、`json` 等）不预注入为全局内置符号——用户代码中使用 `ai.xxx` 而未 `import ai` 时，语义分析器会报 "undefined variable" 错误。
+**任务**：严格实现"必须显式 import 才能使用"原则（基础实现已完成：`kind` 字段区分 `method_module`/`type_module`；`Engine._ensure_plugins_discovered()` 懒加载，首次 `compile()`/`check()` 时执行一次插件发现）。
 
-**Phase 2 ✅ 已完成（最小实现）**：`discover_all()` 不再在 `Engine.__init__()` 无条件调用。改由 `Engine._ensure_plugins_discovered()` 懒加载：仅在首次 `compile()` / `check()` 调用时执行一次。`Engine.__init__()` 阶段只创建空 `HostInterface()`，不触发任何插件发现。
-
-**Phase 3 PENDING**：明确区分"方法模块"（提供函数调用）和"类型模块"（提供原生类型），完善 `kind` 字段语义。
-
-**Phase 4 PENDING**：Scheduler 符号注入逻辑，标记外部模块符号（区分内置符号与 import 注入符号）。
+**待实现**：
+- 明确区分"方法模块"（提供函数调用）和"类型模块"（提供原生类型），完善 `kind` 字段语义规范。
+- Scheduler 符号注入逻辑，标记外部模块符号（区分内置符号与 import 注入符号）。
 
 **文件**：`core/engine.py`（`_ensure_plugins_discovered`）、`core/compiler/semantic/passes/prelude.py`、所有插件 `_spec.py`
 
@@ -309,37 +320,18 @@ func process():
 
 ---
 
-### 10.2 llmexcept body 内外部变量写入约束（SEM_052）[✅ COMPLETED — 2026-04-19]
 
-**完成内容**：
-- `core/base/diagnostics/codes.py`：新增 `SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"`
-- `semantic_analyzer.py`：添加 `_llmexcept_outer_scope_names: Optional[frozenset]` 字段；
-  `visit_IbLLMExceptionalStmt` 进入 body 前通过 `_collect_llmexcept_body_declared_names()` 区分
-  body-local 新声明变量与外部作用域变量，并设置外部作用域快照；`visit_IbAssign` 在检测到对外部作用域变量的任何赋值时发出 SEM_052。
-- `tests/compiler/test_compiler_pipeline.py`：新增 `TestLLMExceptBodyReadOnly`（6 个测试）覆盖各场景。
-- 610 个测试全部通过。
-
----
-
-### 10.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- `stmt_handler.py`：`visit_IbLLMExceptionalStmt` 中读取 `result` 后立即清零共享字段，并将 `frame.last_result = result` 作为 per-snapshot 权威存储；去除了依赖 `frame.should_retry` 的条件性清零（改为无条件清零）；删除了 `finally` 块中"将 result 恢复回 `_last_llm_result`"的兼容性代码。
-- `ibci_idbg/core.py`：`last_result()` 和 `last_llm()` 均改为"优先从活跃帧读取，无帧时回退共享字段"的帧优先模式；`retry_stack()` 替换 `last_llm_response`（始终为 None）为 `last_result` 帧私有字段详情。
-- 610 个测试全部通过。
-
----
 
 ## 十一、代码健康（审计遗留）
 
-### 11.1 意图标签解析迁移到 Lexer [P2 / PENDING]
+### 11.1 意图标签解析迁移到 Lexer
 **问题**：`statement.py:278` 的 `#tag` 解析使用 inline `import re` + 正则表达式在 parser 层处理，属于词法层职责被推后到语法层。未来对 tag 做语义分析（如检查 `@- #tag` 中 tag 是否已定义）时会比较困难。
 
 **文件**：`core/compiler/parser/components/statement.py`（约第 278-289 行）
 
 ---
 
-### 10.2 engine.py / service.py "vibe" 妥协标注 [P3 - 部分已修复]
+### 11.2 engine.py / service.py "vibe" 妥协标注（部分已修复）
 **问题**：多处被标注为"智能体快速 vibe 实现，未经严格审查"：
 - ~~`engine.py:136`：强制向 service_context 回写 orchestrator（双向引用注入）~~ **[已修复]**：改用 `ServiceContextImpl.set_orchestrator()` 标准注入方法（见 COMPLETED.md §4.16）
 - ~~`interpreter.py:229`：`kwargs.get('orchestrator', ...)` 却没有 `**kwargs` 参数~~ **[已修复]**（见 COMPLETED.md §4.16）
@@ -351,40 +343,46 @@ func process():
 
 ---
 
-### 11.3 instance_id 默认值碰撞风险 [P3 / PENDING]
+### 11.3 instance_id 默认值碰撞风险
 **问题**：`interpreter.py:108` `instance_id: str = "main"` 默认值可能导致多解释器实例 ID 碰撞。当前有 `instance_id or f"inst_{id(self)}"` fallback 保护，但 `"main"` 作为默认值仍是潜在隐患。
 
 **文件**：`core/runtime/interpreter/interpreter.py`
 
 ---
 
+### 11.4 LLMExceptFrame 重试历史追踪
+**问题**：`reset_for_retry()` 在每次重试时清除 `last_error`，目前重试历史不保留。若需要在 llmexcept body 内查询历次重试的错误摘要（用于更精细的提示词调整），需要给 `LLMExceptFrame` 添加 `error_history: List` 字段，并在 `reset_for_retry()` 中追加而非清除。
+
+**文件**：`core/runtime/interpreter/llm_except_frame.py`（`reset_for_retry()` + `LLMExceptFrame`）
+
+---
+
+### 11.5 LLMExceptFrameStack 最大嵌套深度
+**问题**：当前 `LLMExceptFrameStack` 无最大嵌套深度检查。深度嵌套的 llmexcept 块（如循环内多层 llmexcept）在极端情况下可能无界增长。通常不会触发，但防御性限制有益于可观测性。
+
+**文件**：`core/runtime/interpreter/llm_except_frame.py`（`LLMExceptFrameStack.push()`）
+
+---
+
+### 11.6 ibci_idbg 暴露 side_table 接口
+**问题**：`ibci_modules/ibci_idbg/core.py:267` 有 `# TODO: 需要内核暴露 side_table 接口后实现`，是 idbg 模块的能力缺口——调试器无法直接访问编译器侧表（`node_to_symbol`、`node_to_type` 等），限制了调试信息的精度。
+
+**建议**：通过 `KernelRegistry` 或 `IExecutionContext` 新增 `get_side_table(key, uid)` 公共接口，使 idbg 无需持有内部 `execution_context` 引用即可访问。
+
+**文件**：`ibci_modules/ibci_idbg/core.py`、`core/runtime/interfaces.py`（扩展接口）
+
+---
+
+### 11.7 SpecRegistry.resolve_specialization 无缓存
+**问题**：每次 `list[int]` / `dict[str,int]` 等参数化类型解析都创建新的 spec 对象，不写回 `_specs` 缓存（`core/kernel/spec/registry.py`）。同一泛型实例化在一个程序里出现 N 次，就会有 N 个不相等的 spec 对象实例，内存持续增长，同时 axiom 方法 bootstrap 重复执行。
+
+**建议**：改为 lookup-or-create——按 `f"{spec.name}[{','.join(arg_names)}]"` 作为键先查 `_specs`，命中则直接返回缓存值，否则创建后立刻注册。
+
+**文件**：`core/kernel/spec/registry.py`（`resolve_specialization()`）
+
+---
+
 ## 十二、远期架构目标
-
-### 12.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
-**状态**：已完整落地（见 `docs/COMPLETED.md` § 4.12）。`ibci_ihost` 和 `ibci_idbg` 已改为通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`get_stack_inspector()`、`get_state_reader()`）访问服务。用户可见接口（`ihost.run_isolated()` 等）保持不变。517 个测试通过。
-
-### 12.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
-
-**状态说明**：已完整修复（PR-A）。
-
-根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
-
-**全部修复内容**：
-- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
-- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
-- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
-- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
-- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
-- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
-- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
-- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
-
----
-
-### 12.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
-**状态**：已完成（见 `docs/COMPLETED.md`，Step 5 完整路径：5a IExecutionFrame Protocol + 5b ContextVar 帧注册表）。`IbUserFunction.call()` 已通过 `get_current_frame()` 自主获取执行帧，不再依赖外部传入的 context 参数。
-
----
 
 ### 12.3 host.run_isolated() 返回值改进 [VISION]
 **当前**：返回简化布尔值。**目标**：多返回值/元组解包语法完整实现后，改为 `tuple(exit_code: int, result: str|dict)`。

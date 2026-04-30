@@ -1,120 +1,9 @@
 # IBCI VM 架构长期设想与路线图
 
 > 本文档记录 IBCI 运行时向"真正虚拟机（VM）"演进的长期架构设想。  
-> 内容来源：2026-04-18 架构讨论（VM建模 / 三层并发建模 / 意图栈公理化 / 实例模型边界）；2026-04-19 补充 llmexcept 并发语义决议；2026-04-19 升级为快照隔离模型（更优的语义设计）；2026-04-19 Steps 5/6 全部落地（IExecutionFrame + ContextVar + IbIntentContext + IntentContextAxiom + RuntimeContextImpl 迁移）。  
-> 这里记录的是**设想和目标**，不是当前任务，不阻塞近期工作。  
-> 近期任务见 `docs/NEXT_STEPS.md`；已完成工作见 `docs/COMPLETED.md`。
-
----
-
-## ✅ 已决议：llmexcept 快照隔离模型
-
-> **状态：已从初期防守性"dispatch_eligible=false 限制"演进为更优的"快照隔离模型"。结论记录如下，不再是悬案。**
-
-### 模型概述：快照隔离（Snapshot Isolation）
-
-llmexcept 的核心语义是**快照隔离模型**：
-
-> **每一个 LLM 语句执行，无论串行还是并行，本身都在一个独立的临时快照状态中运行。进入快照时与外部环境隔离；成功则将结果 commit 到目标变量（单赋值）；失败无法自愈则向外层传播异常。llmexcept 是附着于对应 LLM 节点的"快照内错误处理策略"，仅能读取外部变量（只读），仅能写入 retry-scoped 特殊变量（如 `retry_hint`）。**
-
-这一模型与并发无关——并发安全性是快照语义的自然推论，而非外加约束。
-
-对比旧方案（初期防守决策）与新模型：
-
-| 维度 | 旧决策（dispatch_eligible=false 限制） | 新模型（快照隔离） |
-|------|--------------------------------------|-----------------|
-| **出发点** | 防守性：避免并发场景的竞争条件 | 语义设计：定义正确的执行语义 |
-| **适用范围** | 仅串行节点（dispatch_eligible=false） | 所有 LLM 节点（快照隔离保证安全） |
-| **用户感知** | 用户须理解 dispatch_eligible 概念 | 用户只需知道"llmexcept 保护对应 LLM 语句" |
-| **并发安全** | 通过限制使用范围实现 | 通过语义正确性自然保证 |
-
-### 快照内的变量访问约束
-
-```
-LLM 语句执行流程（快照模型）:
-
-ENTER SNAPSHOT
-  ├── 创建 LLMExceptFrame（保存 vars/intent_ctx/loop_ctx/retry_hint）
-  ├── 执行 LLM 调用
-  │     ├── 成功（is_certain=True）→ COMMIT（写入目标变量）→ EXIT SNAPSHOT
-  │     └── 失败（is_uncertain=True）→ 执行 llmexcept body
-  │             │
-  │             ├── 允许：读取外部变量（只读）
-  │             ├── 允许：写入 retry-scoped 变量（retry_hint 等）
-  │             └── 禁止：写入快照外的外部变量
-  │
-  └── 重试次数耗尽 → 向外传播异常（PROPAGATE）
-```
-
-**约束说明**：
-
-| 操作 | 当前状态 | 目标状态 |
-|------|--------|--------|
-| 读取外部变量 | 允许（fast path：直接读快照时值）| ✅ |
-| 写入 `retry_hint` | 允许（retry-scoped，不 commit 到外部）| ✅ |
-| 写入普通外部变量 | ~~未加限制（仅靠 restore_snapshot 回滚）~~ → **已产生 SEM_052 编译期错误** ✅ | ✅ |
-| 快照失败后传播异常 | 目前仅 break + 返回最后值 | 应抛出明确异常 |
-
-### 三个历史危机的消解方式（更新版）
-
-| 危机 | 消解方式 |
-|------|---------|
-| **危机一（并发 Future 取消）** | 快照模型下，llmexcept body 在快照内执行，不感知外部 Future；并发 Future 的失败由 `LLMFuture` 机制独立处理 |
-| **危机二（IntentContext 快照冲突）** | `LLMExceptFrame` 已使用 `intent_context.fork()` 做值快照（Step 6d 完成）✅ |
-| **危机三（retry 原子性）** | 每次 retry 使用快照时刻的变量值，`restore_snapshot()` 确保一致性；快照隔离使原子性成立 ✅ |
-
-### 代码现状验证
-
-- `LLMExceptFrame.save_context()` 保存完整快照（vars + intent_ctx.fork() + loop_ctx + retry_hint）✅
-- `LLMExceptFrame.restore_snapshot()` 在每次 retry 前恢复快照 ✅
-- `intent_context.fork()` 在快照进入时创建独立意图上下文 ✅
-- `loop_resume` 支持 for 循环从断点处 retry 恢复 ✅
-- `_last_llm_result` ~~仍在 `RuntimeContextImpl` 上（共享字段）~~ → **已迁移为 per-snapshot（§9.3）**：读取后立即清零共享字段，帧私有 `frame.last_result` 为权威来源 ✅
-- llmexcept body 内的写操作 ~~无编译期约束~~ → **已实现 SEM_052 编译期错误（§9.2）** ✅
-
-### 待落地工程工作
-
-1. ~~**SEM 约束（§9.2）**：llmexcept body 内向外部变量的写操作产生编译期错误~~ → **已完成** ✅
-2. ~~**`_last_llm_result` 迁移（§9.3）**：将该字段从 `RuntimeContextImpl`（共享）移入 `LLMExceptFrame`（per-snapshot）~~ → **已完成** ✅
-3. ~~**用户自定义对象深克隆（§9.4，方案A）**：`_try_deep_clone` 支持 plain IbObject 实例~~ → **已完成** ✅
-4. ~~**用户协议快照（§9.5，方案B）**：`__snapshot__` / `__restore__` vtable 协议~~ → **已完成** ✅
-5. **编译器 DDG 分析**（Step 10a，独立任务）：标注 behavior 节点的 `dispatch_eligible` 字段
-6. **失败传播语义**：重试耗尽时从 `break+返回最后值` 改为抛出明确的 `LLMPermanentFailureError`，由外层处理器接管
-
----
-
-### llmexcept 快照策略三方案总结（已完成：方案A + 方案B）
-
-| 方案 | 机制 | 状态 | 适用场景 |
-|------|------|------|---------|
-| **方案A（自动深克隆）** | `LLMExceptFrame._try_deep_clone()` 递归克隆用户 IbObject 实例、IbList、IbTuple、IbDict；循环引用通过 `memo` dict 安全处理 | ✅ **已落地** | 通用场景；无需用户干预；含函数引用的字段自动跳过 |
-| **方案B（用户协议）** | 用户在 IBCI 类中定义 `func __snapshot__(self)` 和 `func __restore__(self, state)`；运行时在快照时调用前者，retry 前调用后者原地恢复 | ✅ **已落地** | 用户需要精确控制快照粒度（如只保存关键字段）；含不可克隆字段（如嵌套函数引用）的复杂对象 |
-| **方案C（外部序列化）** | 用户通过 `func __to_json__(self)` / `func __from_json__(str json_str)` 将对象状态序列化为 JSON；支持跨进程持久化快照 | ⏳ **VM 阶段任务** | 跨 retry 持久化；VM 级并发模型（Step 11）；支持分布式 LLM 调用恢复 |
-
-**方案B 用户代码约定**：
-```ibci
-class Config:
-    str mode
-    int attempts
-
-    # __snapshot__ 返回值可以是任意类型（int、str、tuple、dict 等）
-    func __snapshot__(self) -> int:
-        return self.attempts   # 只保存关键字段
-
-    # __restore__ 接收 __snapshot__ 的返回值，类型需与之一致
-    func __restore__(self, int saved):
-        self.attempts = saved
-```
-
-**优先级规则**：
-- 若类定义了 `__snapshot__`：方案B 生效；`__restore__` 未定义时为最佳努力（不报错，不恢复）
-- 若类未定义 `__snapshot__`：自动回退到方案A（`_try_deep_clone`）
-- `__snapshot__` 调用抛出异常时：自动降级到方案A
-
-**方案C 路线（待定）**：
-适合 VM 阶段的并发模型。当 LLM 调用在独立线程/协程中并发执行时，快照需要支持跨线程序列化与恢复，此时 JSON 快照（方案C）比内存克隆（方案A）或原地恢复（方案B）更适合。具体设计待 Step 9（VM CPS 调度循环）完成后再推进。
-
----
+> 已完成的 llmexcept 快照隔离模型决议、意图栈公理化设计详见 `docs/ARCH_DETAILS.md`；已完成工作见 `docs/COMPLETED.md`。  
+> 这里记录的是**架构设想与待实现方向**，不阻塞近期工作。  
+> 近期任务见 `docs/NEXT_STEPS.md`；中长期任务见 `docs/PENDING_TASKS.md`。
 
 ---
 
@@ -139,22 +28,25 @@ IbVM
 
 ---
 
-## 二、双栈问题（核心阻塞点）
+## 二、双栈问题（M3a–M3d 已解决）
 
-**现状**：`LogicalCallStack` 是调试用途的"影子栈"，真实调用栈是 Python 递归栈。  
-`interpreter.py` 里有一段注释自白：
+**历史回顾（保留作为架构演进记录）**：早期 `LogicalCallStack` 仅是调试用途的"影子栈"，真实调用栈是 Python 递归栈。`interpreter.py` 里曾有一段注释自白：
 
 ```python
 # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
 # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
 ```
 
-这意味着 IBCI 调用栈是 Python 递归栈的寄生体，而不是真正自主的调用栈。这导致：
-- 快照无法捕获"调用中间状态"（只能在安全点做快照）
-- 并发模型受制于 Python 线程栈深度
-- 函数调用状态（local scope、intent context）必须通过参数逐层传递，无法真正"自主执行"
+当时这意味着 IBCI 调用栈是 Python 递归栈的寄生体，而不是真正自主的调用栈，导致快照无法捕获"调用中间状态"、并发模型受制于 Python 线程栈深度、函数调用状态必须通过参数逐层传递。
 
-**根本解法**：把 `Interpreter.visit()` 从 Python 递归改为显式 CPS（Continuation-Passing Style）调度循环。但这是**最大代价的一步**，需要在层次 0、层次 1 完成之后才能安全推进。
+**当前状态（✅ 已完成）**：M3a–M3d（2026-04-28/29）已将 `Interpreter.visit()` 的主路径从 Python 递归改为显式 CPS（Continuation-Passing Style）调度循环：
+
+- 模块顶层执行：`Interpreter.execute_module()` 通过 `vm.run_body(body)` 驱动（见 `core/runtime/interpreter/interpreter.py:execute_module`）
+- 函数体执行：`IbUserFunction.call()` 通过 `self.context.vm_executor.run_body(body)` 驱动（见 `core/runtime/objects/kernel.py`）
+- CPS dispatch table 覆盖 43 个 AST 节点类型，所有显式 `fallback_visit()` 调用归零
+- 控制流：`Signal(kind, value)` 数据对象沿生成器返回值传播，`UnhandledSignal` 仅作为 VM 顶层未消费 Signal 的边界异常
+
+**剩余的 Python 同步路径**（可选优化项，非主线债务）：`IbUserFunction.call()` 内部的参数绑定与 scope push/pop 仍为同步 Python 调用；这些路径不参与 IBCI 控制流，不影响快照/并发的语义保证。详见 `docs/COMPLETED.md §十、§十一、§十三、§十六`。
 
 ---
 
@@ -210,83 +102,16 @@ def reset_current_frame(token) -> None: _current_frame.reset(token)
 
 ---
 
-### 层次 2：VM 调度循环（长期目标，不阻塞近期工作）
+### 层次 2：VM 调度循环 ✅ COMPLETED（M3a–M3d，2026-04-28/29）
 
 **目标**：将 `Interpreter.visit()` 从递归实现改为显式 CPS 调度循环，彻底消除对 Python 递归栈的依赖。
 
-完成后，`ihost.run_isolated()` 可以真正地"暂停一个执行中的帧、切换到另一个宿主上下文、然后恢复"——这才是完备的动态宿主机制。
+**完成情况**：M3a（CPS 骨架）+ M3b（控制信号数据化）+ M3c（llmexcept retry 调度化）+ M3d（主执行路径切换至 VMExecutor）全部落地。`execute_module()` 与 `IbUserFunction.call()` 均通过 `VMExecutor.run_body()` 驱动；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零。详见 `docs/COMPLETED.md §十、§十一、§十三、§十五、§十六`。
 
-**前提条件**：层次 0 + 层次 1 完成（✅ 均已具备）。  
-**触发时机**：递归栈深度限制成为实际生产问题时，或开始支持真正的协程语义时。
-
----
-
-## ✅ 四、意图栈公理化（IbIntentContext）— COMPLETED（Steps 6a–6d）
-
-> **状态：Step 6 全部完成。以下记录设计目标的原始描述与当前实现状态的对应关系，供架构参考。**
-
-### 4.1 问题描述（历史背景）
-
-Step 6 之前，意图栈是 `RuntimeContextImpl` 中的四个独立全局字段：`_intent_top`、`_pending_smear_intents`、`_pending_override_intent`、`_global_intents`。这导致：
-- 函数内部修改意图栈，会影响外部（全局共享）
-- 函数内部 `@+ intent` 没有帧隔离语义
-- 跨模块调用时，意图栈无规范
-
-**根本原因**：意图栈被当作"专用寄存器组"而非公理体系中的对象。
-
-### 4.2 设计目标与实现结果
-
-将意图栈本身实例化为 `IbIntentContext`，成为公理体系中的一个类型：
-
-```
-IbIntentContext（意图上下文）✅ 已实现
-├── _intent_top: IntentNode          持久意图（@+）的不可变链表
-├── _smear_queue: List[IbIntent]     一次性意图（@）的消费队列
-├── _override: Optional[IbIntent]    排他意图（@!）的单次覆盖槽
-└── _global_intents: List[IbIntent]  全局意图（Engine 级）
-```
-
-**关键语义（当前实现）**：
-
-| 操作 | 当前实现状态 |
-|------|-------------|
-| 进入 llmexcept 快照 | `LLMExceptFrame` 调用 `intent_context.fork()` 保存值快照 ✅ |
-| `@+ x` 操作 | 修改当前 `_intent_ctx`，通过 `RuntimeContextImpl` 委托接口调用 ✅ |
-| 快照恢复（retry） | `restore_snapshot()` 恢复 `_intent_ctx` 引用 ✅ |
-| 函数调用帧级隔离 | ✅ **已实现**：`IbUserFunction.call()` 和 `IbLLMFunction.call()` 在函数入口处 `fork()` 调用者的 `_intent_ctx`，返回时恢复原引用（kernel.py:693-763, 814-881） |
-| 显式 `f(intent_ctx=ctx)` | 语言层暂未支持 |
-
-> **说明**：函数调用时的帧级意图隔离已通过 `IbUserFunction.call()` 和 `IbLLMFunction.call()` 中的 fork/restore 机制实现（2026-04-19，§9.4）。函数内的 `@+`/`@-` 操作不会泄漏给调用者。llmexcept 快照同样通过 `fork()` 安全隔离。
-
-### 4.3 公理层表示（已完成）
-
-`IntentContextAxiom`（`core/kernel/axioms/intent_context.py`）已注册为正式 Axiom：
-
-```
-IntentContextAxiom  ✅ 已实现（core/kernel/axioms/intent_context.py）
-└── is_class = True（IBCI 用户可通过 `intent_context()` 显式实例化，§9.5 OOP MVP）
-```
-
-`IntentAxiom`（`core/kernel/axioms/intent.py`）已注册，`is_class=True`，公开 `get_content()`、`get_tag()`、`get_mode()` 三个方法。
-
-### 4.4 与 IExecutionFrame 的关系（当前状态）
-
-`RuntimeContextImpl` 通过 `_intent_ctx: IbIntentContext` 字段持有意图上下文，并暴露 `fork_intent_snapshot()` 方法供 `LLMExceptFrame` 调用。
-
-函数调用时的 fork/restore 已在 `IbUserFunction.call()` 和 `IbLLMFunction.call()` 中实现（§9.4）。未来 VM 调度循环（层次 2）可进一步将此机制与帧生命周期自动绑定。
-
-### 4.5 现有代码的映射关系
-
-| Step 6 之前的字段 | Step 6 之后的位置 |
-|---|---|
-| `RuntimeContextImpl._intent_top` | `RuntimeContextImpl._intent_ctx._intent_top` |
-| `RuntimeContextImpl._pending_smear_intents` | `RuntimeContextImpl._intent_ctx._smear_queue` |
-| `RuntimeContextImpl._pending_override_intent` | `RuntimeContextImpl._intent_ctx._override` |
-| `RuntimeContextImpl._global_intents` | `RuntimeContextImpl._intent_ctx._global_intents` |
-
-所有外部调用接口（`push_intent()`、`add_smear_intent()` 等）保持不变，内部委托给 `_intent_ctx`。
+**剩余可选优化（非主线债务）**：`IbUserFunction.call()` 内部参数绑定/scope push/pop 仍为同步 Python 调用。该路径不参与 IBCI 控制流，对快照/并发语义无影响。如未来需要真正的协程语义（暂停-恢复-切换执行帧），可考虑将其也下沉到 CPS 主循环。
 
 ---
+
 
 ## 五、三层并发模型（核心：轻量 LLM 流水线）
 
@@ -383,9 +208,11 @@ print(c)                  // 解引用 Future_C
 
 ---
 
-### 5.5 实现第一层需要哪些 IR 和 VM 改动
+### 5.5 实现第一层的 IR 与 VM 改动 ✅ COMPLETED（M5a/M5b/M5c，2026-04-28/29）
 
-**编译器侧：数据依赖图（DDG）提取**
+**完成情况**：DDG 编译期分析（M5a）+ LLMScheduler/LLMFuture（M5b）+ VM dispatch-before-use 集成（M5c）全部落地。详见 `docs/COMPLETED.md §十二、§十四、§十六`。下文保留为**架构演进史 + 设计意图说明**，便于跨实现移植时（如 M7 Rust/Go 后端）参考。
+
+**编译器侧：数据依赖图（DDG）提取**（已落地）
 
 当前 artifact dict 是纯控制流树（AST 节点树），没有数据流信息。要支持 LLM 流水线，需要在编译阶段提取每个 `IbBehaviorExpr` 节点的数据依赖集合：
 
@@ -431,7 +258,7 @@ VM 的 `visit()` 循环：
 2. 遇到变量使用点（变量的值来自一个已 dispatch 的 Future）→ 调用 `resolve()`，阻塞直到结果就绪
 3. 遇到 `dispatch_eligible=False` 的 behavior 节点 → 先 `resolve()` 其依赖，再 `dispatch_eager()`，再等待
 
-**这是一个"数据流 VM"而不是"控制流 VM"。** 当前 IBCI 是纯控制流 VM（tree-walker）。LLM 流水线要求引入数据流调度能力。这是一次真正的 VM 执行模型升级，不是小改动。
+**这是一次真正的 VM 执行模型升级，不是小改动。** ✅ 已落地：当前 IBCI 已具备数据流调度能力（DDG + LLMScheduler + dispatch-before-use 三件套均在 `core/runtime/vm/handlers.py` / `core/compiler/semantic/passes/behavior_dependency_analyzer.py` / `core/runtime/llm/scheduler.py` 中可见）。
 
 ---
 
@@ -613,7 +440,7 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 **公理 SC-4（自由变量捕获）**：在嵌套函数/lambda 被创建时，其所有自由变量的 `IbCell` 引用被复制进该函数对象的 `closure` 字典。此后该函数对象持有这些 `IbCell` 的引用，无论外层作用域是否仍然活跃。
 
-> 现状：SC-1 已通过 `ScopeImpl._parent` 链实现 ✅。SC-2/SC-3/SC-4（IbCell 机制）⏳ **待实现**：当前 lambda/snapshot 的自由变量通过直接的 scope 引用实现，尚未引入独立的 Cell 堆对象（见 §10.6 工程任务）。
+> 现状：SC-1 已通过 `ScopeImpl._parent` 链实现 ✅。SC-2/SC-3/SC-4（IbCell 机制）✅ **已落地（M1/M2，2026-04-28）**：lambda/snapshot 的自由变量通过 `IbCell` 共享值容器（`core/runtime/objects/cell.py`）+ `closure: Dict[sym_uid, (name, IbCell)]` 字段实现；`IbLambdaExpr.free_vars` 编译期填充。详见 `docs/COMPLETED.md §六、§七`。
 
 ---
 
@@ -627,7 +454,7 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 **公理 LT-4（IntentContext 的生命周期）**：`IbIntentContext` 通过 `fork()` 实现隔离。每次函数调用 `fork()` 一个新的 `IbIntentContext`，该 context 的生命周期与函数调用的持续时间绑定，函数返回后恢复调用者的 context。`snapshot` 持有的 `frozen_intent_ctx` 的生命周期与 snapshot 对象绑定。
 
-> 现状：LT-1 已通过 `ScopeImpl` 的 enter/exit 机制实现 ✅。LT-4 已通过 `fork()/restore` 机制实现 ✅。LT-2/LT-3 的 Cell 自主生命周期 ⏳ **待实现**（依赖 SC-3 IbCell 机制）。
+> 现状：LT-1 已通过 `ScopeImpl` 的 enter/exit 机制实现 ✅。LT-4 已通过 `fork()/restore` 机制实现 ✅。LT-2/LT-3 的 Cell 自主生命周期 ✅ **已落地（M2，2026-04-28）**：随 SC-3 IbCell 机制一并实现，`IbCell.trace_refs()` GC 钩子已就绪，参与 `RuntimeContextImpl.collect_gc_roots()`。详见 `docs/COMPLETED.md §七`。
 
 ---
 
@@ -664,19 +491,16 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ---
 
-### 10.6 工程任务：IbCell 机制落地 [⏳ 部分推进中，Step 13]
+### 10.6 工程任务：IbCell 机制落地 [✅ COMPLETED — M1/M2，2026-04-28]
 
-> **前提**：fn 参数化 lambda/snapshot 新语法（Step 12.5，见 `docs/NEXT_STEPS.md`）完成后，Cell 机制方能正式与闭包集成；但作为基础原语的 `IbCell` 类型可独立先行落地。
+**完成情况**：
 
-**任务描述**：实现 `IbCell` 堆对象以支持词法闭包的正确生命周期管理：
+1. **`IbCell` 类型**（`core/runtime/objects/cell.py`）：✅ 已落地。提供 `get()/set()/is_empty()/trace_refs()`，采用身份语义（基于 `id`），不继承 `IbObject`，纯 VM 内部容器。单元测试位于 `tests/runtime/test_ib_cell.py`（18 用例）。
+2. **语义分析器 Cell 变量分析**：✅ 已落地（M1）。`IbLambdaExpr.free_vars` 字段编译期填充；`cell_captured_symbols` 侧表标识被内层捕获的符号。
+3. **代码生成/运行时**：✅ 已落地（M1/M2）。Cell 变量通过 `ScopeImpl.promote_to_cell()` 提升；闭包对象创建时将对应 `IbCell` 引用写入 `closure: Dict[sym_uid, (name, IbCell)]` 字典。
+4. **GC 根集合更新**：✅ 已落地（M2）。`RuntimeContextImpl.collect_gc_roots()` 收集所有活跃 fn 对象的 `closure` 字典中的 Cell 值；`IbCell.trace_refs()` 提供 GC 扫描钩子。
 
-1. **新增 `IbCell` 类型**（`core/runtime/objects/cell.py`）：持有 `value: IbObject`，独立于 ScopeImpl 生命周期存在。  
-   **[✅ 已落地]**：`IbCell` 原语已实现，提供 `get()/set()/is_empty()/trace_refs()`，采用身份语义（基于 `id`），不继承 `IbObject`，纯 VM 内部容器。单元测试位于 `tests/runtime/test_ib_cell.py`（18 用例）。后续 fn 集成与 GC 根扫描可直接依赖该类型，无需重塑容器形态。
-2. **语义分析器 Cell 变量分析**：识别函数体内哪些变量被内层函数捕获，标注为 Cell 变量。⏳ 待 M1 实施
-3. **代码生成/运行时**：Cell 变量在栈帧创建时分配为 `IbCell` 对象；被捕获的函数对象在创建时将对应 `IbCell` 引用写入 `closure` 字典。⏳ 待 M1 实施
-4. **GC 根集合更新**：将所有活跃 fn 对象的 `closure` 字典中的 Cell 值加入 GC 根集合扫描路径。⏳ 待 M2 实施（`IbCell.trace_refs()` 钩子已就绪）
-
-**搁置原因**：当前 lambda 不支持参数传递，自由变量直接通过 captured_scope 引用读取；此机制在无参数场景下功能正确，但不满足 LT-2 的 Cell 生命周期语义。需在 Step 12.5（新 fn 语法）后重写。第 1 步（原语本身）作为 M1/M2 的奠基已先行完成。
+详见 `docs/COMPLETED.md §六（M1）、§七（M2）`。
 
 ---
 

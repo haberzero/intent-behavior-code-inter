@@ -343,7 +343,7 @@ class Interpreter:
         self._visitor_cache: Dict[str, Callable] = {}
         self._register_handlers([self] + handlers)
 
-        # M3d：VMExecutor 主路径——延迟初始化
+        # VMExecutor 主路径——延迟初始化
         # （ExecutionContext / Handlers 必须先就绪；首个 execute_module() 调用时
         # 通过 ``_get_vm_executor()`` 实例化）
         self._vm_executor: Optional[Any] = None
@@ -531,7 +531,7 @@ class Interpreter:
             self._vm_executor = VMExecutor(
                 self._execution_context, interpreter=self
             )
-            # C13：把 VMExecutor 直接绑定到 ExecutionContext，供下游调用方
+            # 把 VMExecutor 直接绑定到 ExecutionContext，供下游调用方
             # 通过 ``self.context.vm_executor`` 直接获取。
             self._execution_context.vm_executor = self._vm_executor
         return self._vm_executor
@@ -583,8 +583,7 @@ class Interpreter:
 
         try:
             # 模块主体是语句 UID 列表
-            # M3d + C10 + C6 + C11：通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的
-            # CPS 执行。C5 后 ``run_body`` 以 UnhandledSignal 传播顶层控制流。
+            # 通过 ``VMExecutor.run_body()`` 统一驱动顶层语句的 CPS 执行。
             vm = self._get_vm_executor()
             body = module_data.get("body", [])
             result = vm.run_body(body)

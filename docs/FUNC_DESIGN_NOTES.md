@@ -1,6 +1,6 @@
 # IBCI 高阶函数 / 可调用类型 设计笔记
 
-> **最后更新（2026-04-29）**：清理早期设计讨论；当前内容反映 M1/M2 落地后的事实。
+> **最后更新（2026-04-29）**：清理早期设计讨论；当前内容反映 M1/M2/D1/D2/D3 落地后的事实。
 
 ---
 
@@ -41,40 +41,9 @@ int result = my_fn(5)   # ✅ 调用 adder.__call__(5)
 
 详见 `docs/KNOWN_LIMITS.md` 三 —— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。这是 `docs/NEXT_STEPS.md` 选项 1（Semantic 用户面修复）的核心议题。
 
----
-
-## 2. 未来设计方向
-
-### 2.1 `func[sig]` 泛型类型标注（P2）
-
-支持带签名约束的 `func` 类型，使参数签名可在编译期验证：
-
-```ibci
-func apply_typed(func[int -> int] fn, int x) -> int:
-    return fn(x)
-```
-
-### 2.2 轻量泛型 `<T>`（P3）
-
-支持泛型高阶函数类型传播。
-
-### 2.3 高阶函数的编译期类型推断
-
-当 `auto` 作为函数返回类型时，对于通过 `func` 类型参数调用：
-
-```ibci
-func apply(func fn, int x) -> auto:
-    return fn(x)   # 编译期无法确定 fn 的返回类型，auto 退化为 any
-```
-
-需要引入泛型参数（类似 TypeScript 的 `<T>`）才能实现真正的类型传递。
-
-### 2.4 lambda / snapshot 的剩余缺陷
-
-1. **类型签名丢失**：`int fn f = lambda(int x): EXPR` 调用 `f(x)` 时参数数量在编译期可被验证，但参数类型至今仍较弱（`fn` 类型推断不传播签名）。
-2. **递归 lambda**：lambda 无法引用自身（无自我引用语法）。
-3. **`snapshot` 的线程安全**：snapshot 首次调用后缓存；M4 引入并发后存在潜在竞态，目前未有专门保护，依赖"snapshot 通常无副作用"的使用约定。
+后续改进方向（`func[sig]` 泛型标注、轻量泛型 `<T>`、高阶函数类型推断、lambda 剩余缺陷）详见 `docs/PENDING_TASKS.md §4.4`。
 
 ---
 
 *历史多版本设计讨论已合并到上述精简版。详细演化记录见 `docs/COMPLETED.md` §六（M1）/ §七（M2）/ §八（fn declaration-side 语法）。*
+

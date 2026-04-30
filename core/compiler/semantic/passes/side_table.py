@@ -19,7 +19,7 @@ class SideTableManager:
         self.node_is_deferred: Dict[Any, bool] = {}
         self.node_deferred_mode: Dict[Any, str] = {}
         self.node_to_loc: Dict[Any, Any] = {}
-        # C14：lambda 捕获分析（Pass 4）填充。
+        # lambda 捕获分析（Pass 4）填充。
         # 包含"被至少一个 lambda 捕获为自由变量"的所有符号 UID。
         # BehaviorDependencyAnalyzer（Pass 5）用此集合将这些变量对应的
         # IbBehaviorExpr 标记为 dispatch_eligible=False，避免 LLMFuture

@@ -46,7 +46,7 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
-        # C13：VMExecutor 直接引用（由 Interpreter 在构造完成后注入）。
+        # VMExecutor 直接引用（由 Interpreter 在构造完成后注入）。
         # 替代 IbUserFunction.call() 中通过 self.context._interpreter._get_vm_executor()
         # 三级 getattr 的脆弱查找路径。M4 多 Interpreter 并发场景下，每个执行上下文
         # 必须通过此属性直接获得对应的 VMExecutor，避免静默 fallback。
