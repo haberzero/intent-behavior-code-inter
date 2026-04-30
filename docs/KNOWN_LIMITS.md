@@ -398,7 +398,7 @@ fn g = f            # g 也引用同一个函数
   int n = (int)x        # ✅ 再强制转换到目标类型
   ```
 
-详细泛型容器问题见 [`GENERICS_CONTAINER_ISSUES.md`](GENERICS_CONTAINER_ISSUES.md)。
+详细泛型容器限制与改进方向见本文件 §十六 及 `docs/PENDING_TASKS.md §三`。
 
 ---
 
@@ -441,3 +441,33 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 `D1`（2026-04-29）废弃了声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式（产生 PAR_003），
 改为在表达式侧通过 `-> TYPE` 标注（`D2`）。
 
+
+---
+
+## 十六、泛型与容器类型限制
+
+当前泛型实现是浅层的、不完整的，存在以下已知设计限制。改进方向见 `docs/PENDING_TASKS.md §三`。
+
+### 16.1 下标访问的类型推断返回 `any`
+
+`list[int]` 类型变量通过下标访问时，返回类型推断为 `any` 而非 `int`。`ListAxiom.__getitem__` 的返回类型硬编码为 `any`，泛型参数未传播到下标运算结果。
+
+### 16.2 泛型特化的 axiom 方法引导不完整
+
+动态创建的泛型特化（如 `list[str]`）在 `SpecRegistry.resolve_specialization()` 中有手动调用 `_bootstrap_axiom_methods` 的补偿逻辑，但覆盖不完整，边界情况下部分 axiom 方法在特化类型上可能不可用。另见 `docs/OPEN_ISSUES.md OI-4`（`resolve_specialization` 无缓存问题）。
+
+### 16.3 嵌套容器的链式下标类型推断缺失
+
+对嵌套容器（如 `list[list[int]]`）进行链式下标访问时，内层访问结果的类型无法推断（返回 `any`）。语义分析阶段不追踪泛型参数的逐层传播。
+
+### 16.4 `dict` 键类型在下标访问时不校验
+
+`dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
+
+### 16.5 `tuple` 无元素类型标注
+
+`tuple` 不支持 `tuple[int, str]` 形式的元素类型标注。元素访问始终返回 `any`，无法进行元素级类型检查。
+
+### 16.6 泛型实例赋值兼容性规则不完整
+
+`list[int]` 与 `list` 的赋值兼容性（协变/不变规则）未通过公理明确定义，混合赋值可能触发 SEM_003 或运行时错误。`SpecRegistry.is_assignable` 的泛型协变/不变规则尚未实现。

@@ -110,6 +110,40 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
+### 3.4 泛型参数传播（下标访问类型推断）[PENDING]
+
+**任务**：`ListAxiom`、`DictAxiom` 的 `__getitem__` 返回类型应通过泛型参数动态推导（而非硬编码 `any`）。
+
+**影响**：`list[int]` 类型变量下标访问后返回类型为 `any` 而非 `int`，类型安全性降低。详见 `docs/KNOWN_LIMITS.md §16.1`。
+
+---
+
+### 3.5 泛型协变规则 [PENDING]
+
+**任务**：建立 `list[T]` isa `list`、`list[T]` isa `list[U]`（当 T isa U 时）的类型兼容规则，实现 `SpecRegistry.is_assignable` 的泛型协变/不变逻辑。
+
+**影响**：混合赋值（`list[int] x = …; list y = x`）可能触发 SEM_003。详见 `docs/KNOWN_LIMITS.md §16.6`。
+
+---
+
+### 3.6 嵌套泛型推断 [PENDING]
+
+**任务**：扩展语义分析器的下标类型推断，支持链式下标对嵌套泛型（如 `list[list[int]]`）的逐层解包。详见 `docs/KNOWN_LIMITS.md §16.3`。
+
+---
+
+### 3.7 泛型特化 axiom 自动引导 [PENDING]
+
+**任务**：`SpecRegistry.resolve_specialization()` 应自动完整地为新特化 spec 绑定所有 axiom 方法，消除现有手动补偿逻辑的覆盖不完整问题。与 `docs/OPEN_ISSUES.md OI-4`（`resolve_specialization` 无缓存）同步修复。
+
+---
+
+### 3.8 `tuple` 元素类型标注 [PENDING]
+
+**任务**：考虑支持 `tuple[T1, T2, ...]` 语法，为固定结构的多值返回提供类型安全。当前元组元素访问始终返回 `any`。详见 `docs/KNOWN_LIMITS.md §16.5`。
+
+---
+
 ## 四、语法功能
 
 ### 4.1 (str n) @~ ... ~ 语法完善 [PENDING]
@@ -139,7 +173,35 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 - ✅ D3（2026-04-29）：`fn[(int,str)->bool]` callable 签名标注全链路落地；`IbCallableType` AST 节点 + `CallableSigSpec(FuncSpec)`；`_try_parse_callable_sig`/`_parse_fn_signature` 解析器；声明侧/call-site 结构签名匹配；20 个专项测试通过
 - ✅ 1011 个测试通过（D3 后基线）
 
-**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`docs/FN_LAMBDA_SYNTAX_REDESIGN.md`、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`、`tests/compiler/test_d3_callable_sig.py`
+**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/FN_LAMBDA_SYNTAX_REDESIGN.md`（设计决策记录）、`tests/compiler/test_d3_callable_sig.py`
+
+---
+
+### 4.4 fn/callable 类型系统后续改进 [PENDING]
+
+以下项目是 `fn` / callable / lambda 类型系统在 D1/D2/D3 落地后的已知后续工作。详细设计背景见 `docs/FUNC_DESIGN_NOTES.md`，当前限制见 `docs/KNOWN_LIMITS.md §三`。
+
+#### 4.4.1 `func[sig]` 泛型类型标注（P2）
+
+支持带签名约束的 `func` 类型（参数签名编译期验证）：
+```ibci
+func apply_typed(func[int -> int] fn, int x) -> int:
+    return fn(x)
+```
+
+#### 4.4.2 轻量泛型 `<T>`（P3）
+
+支持泛型高阶函数类型传播，使 `fn` 签名能在调用链中真正传递类型。
+
+#### 4.4.3 高阶函数编译期类型推断
+
+引入泛型参数使 `auto` 返回类型能通过 `func` 型参数传递（当前退化为 `any`）。
+
+#### 4.4.4 lambda / snapshot 剩余语义缺陷
+
+- **类型签名传播弱**：`fn f = lambda(int x): EXPR` 中 `f` 的类型推断不传播参数/返回签名
+- **递归 lambda 不支持**：lambda 无法引用自身
+- **`snapshot` 线程安全**：snapshot 首次调用后缓存，M4 引入并发后存在潜在竞态，目前依赖使用约定
 
 ---
 
@@ -387,32 +449,6 @@ func process():
 ---
 
 ## 十二、远期架构目标
-
-### 12.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
-**状态**：已完整落地（见 `docs/COMPLETED.md` § 4.12）。`ibci_ihost` 和 `ibci_idbg` 已改为通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`get_stack_inspector()`、`get_state_reader()`）访问服务。用户可见接口（`ihost.run_isolated()` 等）保持不变。517 个测试通过。
-
-### 12.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
-
-**状态说明**：已完整修复（PR-A）。
-
-根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
-
-**全部修复内容**：
-- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
-- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
-- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
-- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
-- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
-- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
-- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
-- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
-
----
-
-### 12.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
-**状态**：已完成（见 `docs/COMPLETED.md`，Step 5 完整路径：5a IExecutionFrame Protocol + 5b ContextVar 帧注册表）。`IbUserFunction.call()` 已通过 `get_current_frame()` 自主获取执行帧，不再依赖外部传入的 context 参数。
-
----
 
 ### 12.3 host.run_isolated() 返回值改进 [VISION]
 **当前**：返回简化布尔值。**目标**：多返回值/元组解包语法完整实现后，改为 `tuple(exit_code: int, result: str|dict)`。

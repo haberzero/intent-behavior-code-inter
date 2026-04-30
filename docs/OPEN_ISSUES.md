@@ -65,7 +65,7 @@ IBCI 的 `try/except` 错误模型尚未与 `llmexcept` / LLM 不确定性体系
 **问题描述**：
 每次参数化类型解析（如 `list[int]`、`dict[str,int]`）都创建新的 spec 对象实例，不写回 `_specs` 缓存。同一类型在程序中出现 N 次则有 N 个不相等的 spec 对象，axiom 方法 bootstrap 也重复执行。
 
-**影响**：大型程序内存持续增长；依赖 `is` 比较的优化失效；与 `docs/GENERICS_CONTAINER_ISSUES.md §2` 耦合。
+**影响**：大型程序内存持续增长；依赖 `is` 比较的优化失效；与 `docs/KNOWN_LIMITS.md §16.2` 和 `docs/PENDING_TASKS.md §3.7` 耦合。
 
 **建议方案**：改为 lookup-or-create，创建后立即 `self.register(result)`。
 

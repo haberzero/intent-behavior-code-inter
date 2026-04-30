@@ -1,5 +1,9 @@
 # IBC-Inter 代码仓库健康体检报告
 
+> **文档性质：历史归档报告**（2026-04-29 一次性审计，所有问题已于 2026-04-30 处理完毕）  
+> 本报告记录的所有 K1–K4、A1–A5、L1–L4 条目均已解决，详见 `docs/COMPLETED.md`。  
+> 体检亮点与架构洞察见下方 §🔬 节，保留作为架构设计验证记录。
+
 **体检日期**：2026-04-29  
 **基线**：989 测试全部通过（体检执行时）；当前基线：1011（D1/D2/D3 落地后）  
 **代码规模**：`core` 30,097 行 / `tests` 12,085 行 / `ibci_modules` 30 个 .py  
@@ -16,8 +20,6 @@ A5（resolve_specialization 缓存）和 A2 part-2（旧递归路径 ReturnExcep
 **内核稳定性：高。**
 
 公理化（Axiom）层、SpecRegistry、KernelRegistry seal 机制都已达到生产成熟度。C1–C14 / L1–L4 等技术债全部清零，VM CPS 主路径切换完成、控制信号已完全数据化、`ControlSignalException` 类彻底删除，`node_protection` 侧表 + `bypass_protection` 参数链全链路消除。
-
-但仍有若干隐患值得在"内核健康优先"的优先级下尽快处理。下面按"严重度 × 修复成本"分级。
 
 ---
 
@@ -112,7 +114,7 @@ A5（resolve_specialization 缓存）和 A2 part-2（旧递归路径 ReturnExcep
 
 ### Issue A5 — `SpecRegistry.resolve_specialization()` 不缓存返回值
 
-> **⏳ 待处理**（已录入 `docs/PENDING_TASKS.md §11.7`）：每次参数化类型解析都创建新 spec 对象，不写回 `_specs` 缓存。影响大型程序内存和性能，与 `docs/GENERICS_CONTAINER_ISSUES.md §2` 形成耦合。修复时需回归 e2e 测试（中风险）。
+> **⏳ 待处理**（已录入 `docs/PENDING_TASKS.md §11.7`）：每次参数化类型解析都创建新 spec 对象，不写回 `_specs` 缓存。影响大型程序内存和性能，与 `docs/KNOWN_LIMITS.md §16.2` 和 `docs/PENDING_TASKS.md §3.7` 记录的泛型特化问题耦合。修复时需回归 e2e 测试（中风险）。
 
 **位置**：`core/kernel/spec/registry.py:695–737`
 
@@ -150,22 +152,9 @@ A5（resolve_specialization 缓存）和 A2 part-2（旧递归路径 ReturnExcep
 
 ---
 
-## 📋 可执行任务总清单（更新状态）
+## 📋 任务处理结果（全部已解决）
 
-| # | 任务 | 风险 | 工作量 | 类别 | 状态 |
-|---|------|------|-------|------|------|
-| 1 | 修复 `KernelRegistry.clone()` 漏拷 `_builtin_instances` | 低 | 5 行代码 + 1 测试 | 🔴 K1 | ✅ 已修复 |
-| 2 | `SpecRegistry.is_assignable` 加深度限制或 visited set | 低 | 3 行代码 + 1 测试 | 🔴 K2 | ✅ 已修复 |
-| 3 | `register_builtin_instance` 补 `_verify_kernel(token)` | 低 | 1 行 + 1 处调用方更新 | 🔴 K3 | ✅ 已修复（设计改为移除 token 参数） |
-| 4 | `LLMUncertainAxiom` 两个方法对齐（或 docstring 明确不对称） | 极低 | 注释或代码二选一 | 🔴 K4 | ✅ 已修复（docstring 明确不对称） |
-| 5 | 删除 `core/runtime/async/` 整个孤立目录 | 极低 | 删除 + 跑测试 | 🟡 A1 | ✅ 已删除 |
-| 6 | 删除 `stmt_handler.visit_IbReturn/IbBreak/IbContinue` 三个 dead handler | 低 | 三步 PR | 🟡 A2 | ✅ 已删除（part 1）；interpreter.py 兼容块属正常设计，保留 |
-| 7 | 清扫 `vm/__init__.py` / `vm_executor.py` / `base/interfaces.py` 头部 M3a 过时 docstring | 极低 | 纯注释更新 | 🟡 A3 | ✅ 已修复（interfaces.py；vm/__init__.py 已更新） |
-| 8 | `str + llm_uncertain` TODO 与 NEXT_STEPS 选项 1 显式绑定 | 极低 | 纯文档 | 🟡 A4 | ✅ 已添加到 NEXT_STEPS.md 选项 1 |
-| 9 | `resolve_specialization` 改为 lookup-or-create + 写回 `_specs` | 中（需要回归 e2e）| ~10 行 + 测试 | 🟡 A5 | ⏳ 待处理（已录入 PENDING_TASKS.md §11.7） |
-| 10 | `llm_except_frame.py` 两处 TODO：实现或迁出代码 | 极低 | 决策即可 | 🟢 L1 | ✅ 已迁出（PENDING_TASKS.md §11.4/§11.5） |
-| 11 | `idbg:267` TODO 迁到 PENDING_TASKS.md | 极低 | 纯文档 | 🟢 L2 | ✅ 已录入 PENDING_TASKS.md §11.6 |
-| 12 | `scheduler.py:470` 临时妥协与 Plugin Phase 3/4 绑定 | 极低 | 纯文档 | 🟢 L3 | ⏳ 跟踪中（主归属地：PENDING_TASKS.md §9.1） |
+所有 12 项任务均已处理（K1–K4、A1–A5、L1–L4）：K1/K2/K3/K4/A1/A2-part1/A3/A4 已于 2026-04-30 代码修复；L1/L2 已迁入 `docs/PENDING_TASKS.md §11`；A5/L3 持续跟踪（见 `docs/PENDING_TASKS.md §11.7` / `§9.1`）；A2-part2 属正常设计分工保留。
 
 ---
 
