@@ -383,14 +383,26 @@ class ExprHandler(BaseHandler):
         body_data = self.execution_context.get_node_data(body_uid) if body_uid else None
         body_is_behavior = bool(body_data) and body_data.get("_type") == "IbBehaviorExpr"
 
-        # 形参符号 UID 集合：用于把"形参引用"从"自由变量引用"中剔除
+        # H2：优先使用编译期填充的 free_vars 字段（C8 起 semantic_analyzer 已写入所有产物）。
+        # 若字段缺失（旧 artifact 兼容），回退到运行时 AST 遍历（_collect_free_refs）。
+        free_vars_compiled = node_data.get("free_vars")  # [[name, sym_uid], ...]
+        # 形参符号 UID 集合：用于把"形参引用"从"自由变量引用"中剔除（仅 fallback 路径使用）
         param_sym_uids = self._collect_param_sym_uids(params_uids)
 
         closure: Dict[str, Any] = {}
         if body_uid:
             from core.runtime.objects.cell import IbCell
             current_scope = self.runtime_context.current_scope
-            for name, sym_uid in self._collect_free_refs(body_uid, param_sym_uids):
+
+            if free_vars_compiled:
+                # 编译期路径（主路径）：直接读取已分析的自由变量列表，无运行时 AST 遍历
+                free_refs = [(name, sym_uid) for name, sym_uid in free_vars_compiled]
+            else:
+                # 兼容旧 artifact 的 fallback：运行时遍历 AST（_collect_free_refs）
+                # 此路径仅在 artifact 不含 free_vars 字段时触发（pre-C8 artifact）
+                free_refs = self._collect_free_refs(body_uid, param_sym_uids)
+
+            for name, sym_uid in free_refs:
                 if sym_uid in closure:
                     continue
                 if deferred_mode == "snapshot":
