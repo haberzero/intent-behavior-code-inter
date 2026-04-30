@@ -5,7 +5,7 @@ from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
-from core.kernel.spec.specs import DeferredSpec
+from core.kernel.spec.specs import DeferredSpec, CallableSigSpec
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -180,6 +180,11 @@ class FlatSerializer(BaseFlatSerializer):
         if isinstance(t, DeferredSpec):
             type_data["value_type_name"] = t.value_type_name
             type_data["deferred_mode"] = t.deferred_mode
+
+        # Persist CallableSigSpec param/return signature for structural checking.
+        if isinstance(t, CallableSigSpec):
+            type_data["param_type_names"] = list(t.param_type_names)
+            type_data["return_type_name"] = t.return_type_name
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()

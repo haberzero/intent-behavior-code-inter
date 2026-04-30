@@ -15,6 +15,7 @@ from .specs import (
     DeferredSpec,
     BoundMethodSpec,
     ModuleSpec,
+    CallableSigSpec,
     LazySpec,
     # Built-in prototype constants
     INT_SPEC,
@@ -55,6 +56,7 @@ __all__ = [
     "DeferredSpec",
     "BoundMethodSpec",
     "ModuleSpec",
+    "CallableSigSpec",
     "LazySpec",
     # Built-in constants
     "INT_SPEC",

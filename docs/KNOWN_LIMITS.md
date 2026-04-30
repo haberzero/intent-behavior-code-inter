@@ -417,21 +417,27 @@ str mood = @~ 请判断颜色，回复颜色单词 ~
 
 LHS 的变量声明类型会自动被传递给 LLM 作为输出格式提示，无需额外的类型转换语法。
 
-### 旧 fn / lambda 声明语法（PAR_005）
+### 旧 fn / lambda 声明语法（PAR_003 / D1/D2 废弃）
 
 ```ibci
 # ❌ 全部产生 parse error
-int lambda f = expr           # 旧声明语法
-auto snapshot g = expr        # 旧声明语法
-fn lambda h = expr            # 旧声明语法
-lambda(EXPR)                  # 旧括号体形式
-lambda(PARAMS)(EXPR)          # 旧括号体形式
-fn f = lambda -> int: EXPR    # 表达式侧返回类型
+int lambda f = expr           # 旧声明语法（PAR_001）
+auto snapshot g = expr        # 旧声明语法（PAR_001）
+fn lambda h = expr            # 旧括号体形式（PAR_001）
+lambda(EXPR)                  # 旧括号体形式（PAR_001）
+lambda(PARAMS)(EXPR)          # 旧括号体形式（PAR_001）
+int fn f = lambda: EXPR       # 声明侧返回类型（PAR_003，D1 废弃）
+int fn f = snapshot(int a, int b): EXPR  # 声明侧返回类型（PAR_003，D1 废弃）
 
-# ✅ 正确写法（M1 + fn declaration-side）
-fn f = lambda: EXPR
-int fn f = lambda: EXPR
-fn f = lambda(int x): EXPR
-int fn f = snapshot(int a, int b): EXPR
+# ✅ 正确写法（D1/D2：返回类型标注写在表达式侧）
+fn f = lambda: EXPR                          # 无参，返回类型推导
+fn f = lambda -> int: EXPR                   # 无参，显式返回类型（D2）
+fn f = lambda(int x): EXPR                  # 有参，返回类型推导
+fn f = lambda(int x) -> int: EXPR           # 有参，显式返回类型（D2）
+fn f = snapshot -> int: EXPR                # snapshot，显式返回类型（D2）
+fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 ```
+
+`D1`（2026-04-29）废弃了声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式（产生 PAR_003），
+改为在表达式侧通过 `-> TYPE` 标注（`D2`）。
 

@@ -110,7 +110,16 @@ class DeclarationComponent(BaseComponent):
         elif explicit_fn:
             # 'fn' keyword already consumed — callable type inference
             type_token = self.stream.previous()
-            type_annotation = self._loc(ast.IbName(id=ID_FN, ctx='Load'), type_token)
+            # D3: check for fn[(...)→(...)] callable signature form before
+            # defaulting to bare fn type annotation.
+            if self.stream.check(TokenType.LBRACKET):
+                callable_sig = self.type_def._try_parse_callable_sig(type_token)
+                if callable_sig is not None:
+                    type_annotation = callable_sig
+                else:
+                    type_annotation = self._loc(ast.IbName(id=ID_FN, ctx='Load'), type_token)
+            else:
+                type_annotation = self._loc(ast.IbName(id=ID_FN, ctx='Load'), type_token)
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name after 'fn'.")
         else:
             # Parse type annotation: int x = 1  OR  int fn f = lambda: ...

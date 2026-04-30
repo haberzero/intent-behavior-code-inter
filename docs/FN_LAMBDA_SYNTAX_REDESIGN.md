@@ -2,9 +2,9 @@
 
 > 本文档记录 2026-04-29 设计讨论会形成的完整语法重设计决策。  
 > **Phase 1（D1+D2）已于 2026-04-29 完成落地。**  
-> Phase 2（D3）等待未来 PR 落地。  
+> **Phase 2（D3）已于 2026-04-29 完成落地。**  
 >
-> **最后更新**：2026-04-29（Phase 1 D1/D2 落地）
+> **最后更新**：2026-04-29（Phase 1 D1/D2 + Phase 2 D3 全部落地）
 
 ---
 
@@ -86,7 +86,7 @@ snapshot(<param_type_list>) -> <return_type> : <expr>
 
 ---
 
-### D3：`fn[(...)->(...)]` 用于高阶函数参数的 callable 签名标注
+### D3：`fn[(...)->(...)]` 用于高阶函数参数的 callable 签名标注 ✅ 已落地
 
 **决策**：当 `fn` 出现在**参数类型标注位置**（即 `func` 参数声明、`auto`/`fn` 变量声明的类型
 注解覆盖位置）时，采用方括号书写 callable 签名约束：
@@ -164,6 +164,24 @@ callable signature 专用节点）在语义分析阶段明确区分。
 
 ## 三、与当前代码库的对照（变更清单）
 
+### D3 已完成（2026-04-29）
+
+| 位置 | 变更 | 状态 |
+|------|------|------|
+| `core/kernel/ast.py` | 新增 `IbCallableType(param_types, return_type)` AST 节点 | ✅ |
+| `core/kernel/spec/specs.py` | 新增 `CallableSigSpec(FuncSpec)` 类型描述符 | ✅ |
+| `core/kernel/spec/__init__.py` | 导出 `CallableSigSpec` | ✅ |
+| `core/compiler/parser/components/type_def.py` | `_try_parse_callable_sig()` + `_parse_fn_signature()` 专用路径 | ✅ |
+| `core/compiler/parser/components/declaration.py` | `elif explicit_fn:` 分支支持 `fn[...]` 签名形式 | ✅ |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | `_resolve_type(IbCallableType)` → `CallableSigSpec` | ✅ |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | `visit_IbCall()` D3 结构签名匹配（arg count + type） | ✅ |
+| `core/compiler/semantic/passes/semantic_analyzer.py` | `visit_IbAssign()` 声明侧签名结构匹配（`_check_callable_sig_match()`） | ✅ |
+| `core/compiler/serialization/serializer.py` | `CallableSigSpec` 序列化（param_type_names / return_type_name） | ✅ |
+| `core/runtime/loader/artifact_rehydrator.py` | `CallableSigSpec` 重水化 | ✅ |
+| `tests/compiler/test_d3_callable_sig.py` | 20 个测试（parse / 类型推导 / 结构匹配 / E2E） | ✅ |
+| `docs/FN_LAMBDA_SYNTAX_REDESIGN.md` | 本文档 D3 节标注为已落地 | ✅ |
+| `docs/NEXT_STEPS.md` | 更新测试基线 991 → 1011；D3 标注为完成 | ✅ |
+
 ### D1/D2 已完成（2026-04-29）
 
 | 位置 | 变更 | 状态 |
@@ -200,7 +218,7 @@ Phase 1（耦合，一个 PR）：✅ 已完成 2026-04-29
     └── D1: 删除 int fn f = ... 形式 + _pending_fn_return_type
     └── D2: IbLambdaExpr.returns + 表达式侧 -> TYPE + 移除 PAR_005
 
-Phase 2（独立 PR）：
+Phase 2（独立 PR）：✅ 已完成 2026-04-29
     └── D3: fn[...] callable 签名解析 + 语义层结构匹配
 
 D4: 结论（无代码变更需要）
@@ -219,10 +237,11 @@ Phase 1 已完成同步更新（2026-04-29）：
   新的非法形式 `int fn f = lambda: ...` 产生 PAR_003。
 - 测试基线：989 → 991（新增 2 个正向测试用例）。
 
-Phase 2 应同步新增：
+Phase 2 已同步新增（2026-04-29，D3 落地）：
 - `fn[(int)->int]` 参数类型标注的解析单元测试。
-- 高阶函数签名不匹配的负向语义测试（SEM_005 扩展或新错误码）。
+- 高阶函数签名不匹配的负向语义测试（SEM_003/SEM_005）。
+- 测试基线：991 → 1011（新增 20 个 D3 测试用例）。
 
 ---
 
-*Phase 1 已于 2026-04-29 落地。Phase 2（D3）等待后续 PR。*
+*Phase 1（D1/D2）已于 2026-04-29 落地；Phase 2（D3）已于 2026-04-29 落地。*

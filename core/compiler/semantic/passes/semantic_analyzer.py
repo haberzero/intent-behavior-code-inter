@@ -400,9 +400,79 @@ class SemanticAnalyzer:
         # 允许某些辅助节点（如 arg, alias）被跳过
         if isinstance(node, (ast.IbArg, ast.IbAlias)):
             return self._any_desc
+        # IbCallableType 是类型标注节点，不会被 VM 调度执行；在 Pass 4 类型
+        # 上下文外部偶尔被 generic_visit 到时，静默返回 any（类型已由
+        # _resolve_type 处理完毕，不需要二次访问）。
+        if isinstance(node, ast.IbCallableType):
+            return self._any_desc
             
         self.error(f"Internal compiler error: Unhandled AST node type '{node.__class__.__name__}'", node, code="INTERNAL_ERROR")
         return self._any_desc
+
+    # ---------------------------------------------------------------------- #
+    # D3: Callable signature structural matching helper                      #
+    # ---------------------------------------------------------------------- #
+
+    def _check_callable_sig_match(
+        self,
+        sig: 'FuncSpec',
+        actual: 'FuncSpec',
+        node: ast.IbASTNode,
+    ) -> None:
+        """
+        Best-effort structural compatibility check between a ``CallableSigSpec``
+        constraint and a concrete ``FuncSpec``.
+
+        Called from ``visit_IbAssign`` when::
+
+            fn[(int, str) -> bool] f = some_function
+
+        to validate that ``some_function`` has a compatible parameter list and
+        return type.  Only fires when *both* sides carry known concrete types;
+        dynamic (``any`` / ``auto``) values are always accepted silently.
+        """
+        from core.kernel.spec.specs import CallableSigSpec as _CSS
+        expected_params = sig.param_type_names or []
+        actual_params = actual.param_type_names or []
+
+        # Param count check
+        if len(actual_params) != len(expected_params):
+            self.error(
+                f"Callable signature mismatch: expected {len(expected_params)} "
+                f"parameter(s) {tuple(expected_params)}, "
+                f"but the callable has {len(actual_params)} parameter(s) {tuple(actual_params)}.",
+                node, code="SEM_003",
+            )
+            return
+
+        # Per-parameter type compatibility
+        for i, (exp_name, act_name) in enumerate(zip(expected_params, actual_params)):
+            exp_spec = self.registry.resolve(exp_name)
+            act_spec = self.registry.resolve(act_name)
+            if (exp_spec and act_spec
+                    and not self.registry.is_dynamic(exp_spec)
+                    and not self.registry.is_dynamic(act_spec)
+                    and not self.registry.is_assignable(act_spec, exp_spec)):
+                hint = self.registry.get_diff_hint(act_spec, exp_spec)
+                self.error(
+                    f"Callable signature mismatch: parameter {i + 1} expects "
+                    f"'{exp_name}', but the callable declares '{act_name}'.",
+                    node, code="SEM_003", hint=hint,
+                )
+
+        # Return type compatibility
+        exp_ret = self.registry.resolve(sig.return_type_name)
+        act_ret = self.registry.resolve(actual.return_type_name)
+        if (exp_ret and act_ret
+                and not self.registry.is_dynamic(exp_ret)
+                and not self.registry.is_dynamic(act_ret)
+                and not self.registry.is_assignable(act_ret, exp_ret)):
+            hint = self.registry.get_diff_hint(act_ret, exp_ret)
+            self.error(
+                f"Callable signature mismatch: return type expects "
+                f"'{sig.return_type_name}', but the callable returns '{actual.return_type_name}'.",
+                node, code="SEM_003", hint=hint,
+            )
 
     def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000", hint: Optional[str] = None):
         if code == "INT_001":
@@ -1019,6 +1089,13 @@ class SemanticAnalyzer:
                                 node, code="SEM_003"
                             )
                             target_type = self.registry.resolve("callable") or self._any_desc
+
+                        # D3: if declared_type is a CallableSigSpec (fn[(...)→(...)]),
+                        # perform structural signature matching when the RHS has a
+                        # known concrete callable signature.
+                        from core.kernel.spec.specs import CallableSigSpec as _CSS
+                        if isinstance(declared_type, _CSS) and isinstance(val_type, FuncSpec):
+                            self._check_callable_sig_match(declared_type, val_type, node)
                     # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
                     elif self.registry.is_dynamic(declared_type):
                         if declared_type.name == "any":
@@ -1704,6 +1781,29 @@ class SemanticAnalyzer:
         if not call_trait:
             self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             return self._any_desc
+
+        # D3: structural signature matching for CallableSigSpec (fn[(...)→(...)] parameters).
+        # When the callee type carries an explicit signature constraint, validate
+        # arg count and argument types at the call site.
+        from core.kernel.spec.specs import CallableSigSpec as _CSS
+        if isinstance(func_type, _CSS):
+            expected_names = func_type.param_type_names or []
+            if len(arg_types) != len(expected_names):
+                self.error(
+                    f"Callable expected {len(expected_names)} argument(s), "
+                    f"but got {len(arg_types)}.",
+                    node, code="SEM_005",
+                )
+            else:
+                for i, (exp_name, actual_type) in enumerate(zip(expected_names, arg_types)):
+                    exp_spec = self.registry.resolve(exp_name)
+                    if exp_spec and not self.registry.is_assignable(actual_type, exp_spec):
+                        hint = self.registry.get_diff_hint(actual_type, exp_spec)
+                        self.error(
+                            f"Argument {i + 1} type mismatch: expected '{exp_name}', "
+                            f"but got '{actual_type.name}'.",
+                            node, code="SEM_003", hint=hint,
+                        )
             
         # 2. 贯彻"一切皆对象"：询问类型对象调用后的返回结果
         res = self.registry.resolve_return(func_type, arg_types)
@@ -1943,6 +2043,24 @@ class SemanticAnalyzer:
                 self.error(f"Unknown type '{node.id}'", node, code="SEM_001")
             return self._any_desc
             
+        elif isinstance(node, ast.IbCallableType):
+            # D3: callable signature constraint fn[(param_types) -> return_type]
+            from core.kernel.spec.specs import CallableSigSpec as _CSS
+            param_specs = [self._resolve_type(pt, safe=safe) for pt in node.param_types]
+            ret_spec = (
+                self._resolve_type(node.return_type, safe=safe)
+                if node.return_type is not None
+                else self._auto_desc
+            )
+            return _CSS(
+                name="fn",
+                param_type_names=[p.name for p in param_specs],
+                param_type_modules=[getattr(p, 'module_path', None) for p in param_specs],
+                return_type_name=ret_spec.name,
+                return_type_module=getattr(ret_spec, 'module_path', None),
+                is_user_defined=False,
+            )
+
         elif isinstance(node, ast.IbSubscript):
             # 处理泛型标注 (e.g., list[int], dict[str, int])
             base_type = self._resolve_type(node.value, safe=safe)

@@ -479,6 +479,34 @@ class IbLambdaExpr(IbExpr):
 # --- Helpers ---
 
 @dataclass(kw_only=True, eq=False)
+class IbCallableType(IbExpr):
+    """
+    Callable signature type annotation produced by the parser when
+    ``fn[...]`` appears in a type-annotation context and the subscript
+    content follows the callable signature form ``(type_list) -> type``.
+
+    D3: supports ``fn[(param_types) -> return_type]`` syntax for HOF parameter
+    type annotations and variable declaration type overrides.
+
+    Examples::
+
+        fn[(int, str) -> bool]    # (int, str) → bool callable
+        fn[() -> int]             # no-arg, returns int
+        fn[(int) -> int]          # single param, returns int
+
+    Fields
+    ------
+    param_types : List[IbExpr]
+        Type annotation nodes for each parameter (empty list for ``()``).
+    return_type : Optional[IbExpr]
+        Return type annotation node; ``None`` is treated as ``auto``.
+    """
+    param_types: List['IbExpr'] = field(default_factory=list)
+    return_type: Optional['IbExpr'] = None
+
+
+
+@dataclass(kw_only=True, eq=False)
 class IbArg(IbASTNode):
     arg: str
 
