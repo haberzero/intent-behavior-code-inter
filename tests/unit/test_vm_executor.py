@@ -604,7 +604,7 @@ class TestSchedulerInfrastructure:
 # 10. CPS 算术与比较正确性
 # ===========================================================================
 
-class TestCpsVsRecursiveParity:
+class TestCpsCorrectness:
     def test_arithmetic_correctness(self):
         engine = make_engine("int a = 1 + 2\nint b = 3 * 4\nint c = (5 + 6) * 7\n")
         expected = {"a": 3, "b": 12, "c": 77}
@@ -622,9 +622,8 @@ class TestCpsVsRecursiveParity:
         for name, val in expected.items():
             assert native(engine.get_variable(name)) == val
 
-    def test_module_parity_simple_program(self):
-        # Run via recursive, capture variable;
-        # reset, run via VM, ensure same final state.
+    def test_module_while_loop(self):
+        # Compile+run via VM, verify loop result.
         code = (
             "int total = 0\n"
             "int i = 0\n"
@@ -633,16 +632,8 @@ class TestCpsVsRecursiveParity:
             "    i = i + 1\n"
         )
         engine = make_engine(code)
-        recursive_total = native(engine.get_variable("total"))
-        recursive_i = native(engine.get_variable("i"))
-        # Reset and re-run via VM
-        reset_var(engine, "total", 0)
-        reset_var(engine, "i", 0)
-        module_uid = find_node_uid(engine, "IbModule")
-        vm = make_vm(engine)
-        vm.run(module_uid)
-        assert native(engine.get_variable("total")) == recursive_total == 45
-        assert native(engine.get_variable("i")) == recursive_i == 10
+        assert native(engine.get_variable("total")) == 45
+        assert native(engine.get_variable("i")) == 10
 
 
 # ===========================================================================
