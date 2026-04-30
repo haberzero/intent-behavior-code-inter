@@ -398,7 +398,7 @@ fn g = f            # g 也引用同一个函数
   int n = (int)x        # ✅ 再强制转换到目标类型
   ```
 
-详细泛型容器问题见 [`GENERICS_CONTAINER_ISSUES.md`](../GENERICS_CONTAINER_ISSUES.md)。
+详细泛型容器问题见 [`GENERICS_CONTAINER_ISSUES.md`](GENERICS_CONTAINER_ISSUES.md)。
 
 ---
 

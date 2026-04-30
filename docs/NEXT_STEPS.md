@@ -33,7 +33,7 @@ DEFERRED 类技术债已清零；**fn/lambda/snapshot 类型系统重设计 Phas
 
 - **`try/except` 与 IBCI 错误模型对齐**：当前 `try/except/finally` 词法/语法接受但运行时不真正捕获非语言级异常（详见 `docs/KNOWN_LIMITS.md` 二）。需与 `llmexcept` 体系融合或重新设计。
   - 关联交付项：`core/runtime/objects/builtins.py:326` 和 `core/kernel/axioms/primitives.py:400` 中对 `str + llm_uncertain` 的显式放行 `# TODO(future)` 注释——这两处过渡期妥协在 try/except 修复落地后应一并收紧。
-- **泛型类型推断改进**：详见 `GENERICS_CONTAINER_ISSUES.md`（下标访问不传播泛型参数、特化 axiom 方法引导不全、嵌套泛型推断缺失等 6 项）。
+- **泛型类型推断改进**：详见 `docs/GENERICS_CONTAINER_ISSUES.md`（下标访问不传播泛型参数、特化 axiom 方法引导不全、嵌套泛型推断缺失等 6 项）。
 
 ### 选项 2：M7 可移植性目标语言后端
 
