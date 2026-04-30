@@ -104,19 +104,13 @@ class VMExecutor:
     def assign_to_target(self, target_uid: str, value: Any) -> None:
         """已废弃——由 C7 CPS 重写替代（``_vm_assign_to_target`` generator helper）。
 
-        handlers.py 内部不再调用此方法；保留仅供外部工具链或旧测试脚本的过渡期兼容。
-        C7 之后所有赋值目标均在 handler 内部以 ``yield from`` 方式 CPS 处理。
+        P5 后：StmtHandler 已删除，此方法不可再使用。调用此方法将抛出 RuntimeError。
+        handlers.py 内部不再调用此方法；保留仅供触发器式错误提示。
         """
-        if self._interpreter is None:
-            raise RuntimeError(
-                "VMExecutor.assign_to_target requires interpreter reference; "
-                "construct VMExecutor(ec, interpreter=...)"
-            )
-        # Interpreter 在初始化期间把 stmt_handler 暴露为属性。
-        stmt_handler = getattr(self._interpreter, "stmt_handler", None)
-        if stmt_handler is None:
-            raise RuntimeError("VMExecutor: interpreter.stmt_handler not initialized")
-        stmt_handler._assign_to_target(target_uid, value)
+        raise RuntimeError(
+            "VMExecutor.assign_to_target() is removed (P5). "
+            "Use _vm_assign_to_target() CPS generator helper in handlers.py instead."
+        )
 
     # ------------------------------------------------------------------
     # 主调度循环

@@ -231,12 +231,16 @@ def _vm_call_deferred(executor, func, args):
     """
     from core.runtime.objects.cell import IbCell
 
-    # snapshot 无参缓存命中：立即返回，不需要任何 yield
+    # snapshot 无参缓存命中：立即返回，不需要任何 yield。
+    # 注意：`if False: yield` 是 Python 的惯用写法，确保此函数在缓存命中的早返回路径下
+    # 依然被 Python 解析为 generator function（因为函数其他分支含有 `yield target_uid`）。
+    # 去掉此标记也可行（函数已是 generator），此处保留是为了让读者一眼看出早返回分支
+    # 也属于同一 generator 上下文，不会意外切换语义。
     if (func.deferred_mode == "snapshot"
             and func._cache is not None
             and not func.params_uids):
         if False:
-            yield  # pragma: no cover — 强制 generator function
+            yield  # pragma: no cover
         return func._cache
 
     rt_context = executor.runtime_context

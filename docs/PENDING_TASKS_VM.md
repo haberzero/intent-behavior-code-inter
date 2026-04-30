@@ -521,9 +521,9 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 > 1. `interpreter.py:_pre_evaluate_user_classes` → `self.visit()`（**P1 ✅ 已完成**）
 > 2. `vm/handlers.py:vm_handle_IbLLMExceptionalStmt` `else: ec.visit()`（**P4 ✅ 已完成**）
 > 3. `expr_handler.py:visit_IbLambdaExpr` → `_collect_free_refs()` 运行时遍历（**H2 ✅ 已完成**）
-> 4. `builtins.py:IbDeferred.call()` → `self._execution_context.visit(target_uid)`（**P2 PENDING**）
-> 5. `intent.py:IbIntent.resolve()` + `llm_executor.py:_build_prompt()` → `ec.visit(segment)`（**P3 PENDING**）
-> 6. `vm_executor.py:dispatch loop` → `ec.visit(child_uid)` fallback（**P4b PENDING**，在 P2+P3 完成后可删除）
+> 4. `builtins.py:IbDeferred.call()` → `self._execution_context.visit(target_uid)`（**P2 ✅ 已完成**）
+> 5. `intent.py:IbIntent.resolve()` + `llm_executor.py:_build_prompt()` → `ec.visit(segment)`（**P3 ✅ 已完成**）
+> 6. `vm_executor.py:dispatch loop` → `ec.visit(child_uid)` fallback（**P4b ✅ 已完成**）
 
 ---
 
@@ -560,105 +560,90 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 
 ---
 
-### P2：`IbDeferred.call()` CPS 化 [**PENDING，工程量：中，风险：中**]
+### P2：`IbDeferred.call()` CPS 化 ✅ **已完成（2026-04-30）**
 
-**现状**：`core/runtime/objects/builtins.py:IbDeferred.call()` 持有 `_execution_context` 引用，调用 `self._execution_context.visit(target_uid)` 执行 lambda/snapshot 体。这是旧路径最重要的剩余入口。
+**变更**：`core/runtime/vm/handlers.py`
+- 新增 `_vm_call_deferred()` generator helper：CPS 内联执行 lambda/snapshot 体
+- `vm_handle_IbCall` 新增 `isinstance(func, IbDeferred)` 分支，调用 `yield from _vm_call_deferred(executor, func, args)`
+- `IbDeferred.call()` 路径仍保留（向后兼容），但 VM 路径不再调用 `ec.visit(target_uid)`
 
-**目标**：当 VM 遇到调用 `IbDeferred` 的 `IbCall` 节点时，不调用 `func.call()`，而是直接 CPS 内联执行 lambda/snapshot 体。
+**关键改进**：
+- lambda/snapshot 体的 RETURN/BREAK/CONTINUE 通过 Signal 数据对象传播，不再依赖 Python 异常
+- snapshot 无参缓存逻辑与 `IbDeferred.call()` 对齐
 
-**技术路径**：
-1. `vm/handlers.py:vm_handle_IbCall` 新增 `isinstance(func, IbDeferred)` 分支：
-   - push scope，按 `params_uids` 绑定参数
-   - `yield func.body_uid` ← CPS 调度 lambda/snapshot 体
-   - 处理 `Signal.RETURN` 作为函数返回值，pop scope
-2. 删除 `IbDeferred._execution_context` 字段（不再需要持有 EC 引用）
-3. 删除 `builtins.py:793` 的 `ec.visit()` 调用
-
-**关键依赖**：P2 完成后，`IbDeferred.call()` 不再回调旧路径。lambda/snapshot 的 Signal 传播语义首次真正与 VM CPS 一致（break/continue/return 在 lambda 内通过 Signal 而非 Python 异常传播）。
-
-**文件**：`core/runtime/vm/handlers.py`、`core/runtime/objects/builtins.py`
+**测试**：1011 通过（无退化）。
 
 ---
 
-### P3：提示词 segment 求值内联到 VM CPS [**PENDING，工程量：中，风险：低**]
+### P3：提示词 segment 求值内联到 VM CPS ✅ **已完成（2026-04-30）**
 
-**现状**：`core/runtime/objects/intent.py:IbIntent.resolve()` 和 `core/runtime/interpreter/llm_executor.py:_build_prompt()` 对 `node_` 前缀 UID 调用 `ec.visit(segment)` 求值。这两条路径的底层均经过旧 visit 路径。
+**变更**：`core/runtime/interpreter/llm_executor.py`、`core/runtime/objects/intent.py`
+- `_evaluate_segments()` 中 `node_` 前缀 UID 从 `ec.visit()` 改为 `vm_executor.run()` 路径
+- `IbIntent.resolve_content()` 同步更新
+- 修复 `vm_handle_IbName` LLMFuture write-back 的类型检查问题（`skip_type_check=True`）
 
-**目标**：将 segment 求值从 llm_executor 回调改为在 `vm_handle_IbBehaviorExpr` 内部以 `yield segment_uid` CPS 方式完成，消除 `IbIntent`/`LLMExecutorImpl` 对 `ec.visit()` 的依赖。
+**副作用修复**：`ScopeImpl.assign_by_uid` / `RuntimeContextImpl.set_variable_by_uid` 新增 `skip_type_check` 参数，用于 LLMFuture 解析后的回写（回写是优化性操作，不应受变量类型约束限制）。
 
-**技术路径**：
-1. `vm/handlers.py:vm_handle_IbBehaviorExpr` 内，对 `node_` 前缀 segment 改用 `val = yield seg` 替换当前委托给 llm_executor 的求值
-2. `LLMExecutorImpl._build_prompt()` 改为接受"已求值的 segment 值列表"而非包含 UID 的原始 segments
-3. `IbIntent.resolve()` 中 `ec.visit(segment)` 路径同步删除
-
-**文件**：`core/runtime/vm/handlers.py`、`core/runtime/interpreter/llm_executor.py`、`core/runtime/objects/intent.py`
+**测试**：1011 通过（无退化）。
 
 ---
 
-### P4b：`vm_executor.py` dispatch loop fallback 删除 [**PENDING，依赖 P2+P3**]
+### P4b：`vm_executor.py` dispatch loop fallback 删除 ✅ **已完成（2026-04-30）**
 
-**现状**：`core/runtime/vm/vm_executor.py:227` dispatch loop 内有 `pending_value = self._ec.visit(child_uid)` fallback，处理 dispatch table 外的节点（理论上不再触发，但尚未删除）。
+**变更**：`core/runtime/vm/vm_executor.py`
+- `run()` 中 `if not self.supports(node_uid): return self.fallback_visit(node_uid)` 改为 `raise RuntimeError(...)`
+- `_drive_loop()` 中 `else: ec.visit(child_uid)` fallback 改为 `raise RuntimeError(...)`
+- `fallback_visit()` 标记为废弃，不再被内部调度循环调用
 
-**前提**：P2+P3 完成后，所有 `ec.visit()` 入口均已消除；此时可安全删除该 fallback，并将 `fallback_visit()` 方法标记为 `@deprecated` → 最终删除。
-
-**文件**：`core/runtime/vm/vm_executor.py`
+**测试**：1011 通过（无退化）。
 
 ---
 
-### P5：删除旧 Handler 类 [**PENDING，依赖 P2+P3+P4b**]
-
-**现状**：`core/runtime/interpreter/handlers/` 1337 行（StmtHandler 708 行 + ExprHandler 517 行 + ImportHandler 34 行 + BaseHandler 78 行），38 个 visit_* 方法。
-
-**前提**：P2/P3/P4b 完成后，以下调用链中所有到旧 handler 的入口均已消除：
-- `_pre_evaluate_user_classes`（P1 ✅）
-- `vm_handle_IbLLMExceptionalStmt` else（P4 ✅）
-- `IbDeferred.call()` → `ec.visit()`（P2）
-- `IbIntent`/`LLMExecutorImpl` → `ec.visit()`（P3）
-- dispatch loop fallback（P4b）
+### P5：删除旧 Handler 类 ✅ **已完成（2026-04-30）**
 
 **变更**：
-- 删除 `core/runtime/interpreter/handlers/` 目录（4 个文件，1337 行）
-- 删除 `rt_scheduler.py:293-295` 的工厂注册（`StmtHandler`/`ExprHandler`/`ImportHandler`）
-- 删除 `interpreter.py` 中 `_visitor_cache`、`_register_handlers()`、`visit()`、`generic_visit()` 约 80 行
-- 删除 `interpreter.py` 中 `call_stack_depth` 计数器
+- 删除 `core/runtime/interpreter/handlers/` 目录（4 个文件：`base_handler.py`、`stmt_handler.py`、`expr_handler.py`、`import_handler.py`，共 ~1337 行）
+- 删除 `rt_scheduler.py` 中 StmtHandler/ExprHandler/ImportHandler 工厂注册（3 行）
+- `interpreter.py` 删除 `_visitor_cache`、`_register_handlers()`、`generic_visit()`、handler 初始化代码、`_is_scope_defining()`；`visit()` 改为 VMExecutor.run() 透明包装
+- `vm_executor.py:assign_to_target()` 改为抛出 RuntimeError（StmtHandler 已删除）
 
 **净效果**：约 −1400 行死代码。
 
----
-
-### P6：删除 Python 异常控制流类 [**PENDING，依赖 P5**]
-
-**现状**：`core/runtime/exceptions.py` 中 `ReturnException`/`BreakException`/`ContinueException` 三个 Python 异常类（约 15 行），以及所有 handler 中的 `except (ReturnException, BreakException, ContinueException)` 分支（P5 删除时已随 handler 类一起消失）。
-
-**变更**：
-- 删除 `ReturnException`/`BreakException`/`ContinueException` 类定义
-- `ThrownException` 保留（VM CPS 路径的 `vm_handle_IbRaise` + `vm_handle_IbTry` 仍使用）
-
-**架构意义**：Python 异常从此只用于"真正的运行时错误"（`InterpreterError`），不再承担 IBCI 控制流语义。`Signal` 数据对象是唯一的 IBCI 控制流载体。
+**测试**：1011 通过（无退化）。
 
 ---
 
-### P7：目录与文件结构重组 [**PENDING，依赖 P5**]
+### P6：删除 Python 异常控制流类 ✅ **已完成（2026-04-30）**
 
 **变更**：
-- `core/runtime/interpreter/handlers/` 目录已删除（P5 完成后目录变空）
-- `core/runtime/interpreter/interpreter.py` 经 P5 瘦身后（约 −200 行），职责变为纯协调器（execute_module、module_manager、STAGE 1-5 初始化），不再持有任何 visit 相关逻辑
-- `core/runtime/vm/handlers.py` 成为唯一的 AST→执行映射文件；可选按节点类别拆分为 `vm/expr_handlers.py` + `vm/stmt_handlers.py`（可选，不强制）
+- 删除 `core/runtime/exceptions.py` 中 `ReturnException`、`BreakException`、`ContinueException` 三个类定义
+- 删除 `runtime_context.py` 中这三个类的导入
+- 删除 `interpreter.py` 中这三个类的导入
+
+**架构意义**：Python 异常从此只用于"真正的运行时错误"（`InterpreterError`）。`Signal` 数据对象是唯一的 IBCI 控制流载体。`ThrownException` 保留（VM CPS 路径的 `vm_handle_IbRaise` + `vm_handle_IbTry` 仍使用）。
+
+**测试**：1011 通过（无退化）。
+
+---
+
+### P7：目录与文件结构重组 ✅ **已完成（2026-04-30）**
 
 **最终架构**：
 ```
 core/runtime/
 ├── vm/
-│   ├── handlers.py        ← 唯一的 AST → 执行 映射（43+ handlers）
-│   ├── vm_executor.py     ← CPS 调度循环（无 fallback_visit）
+│   ├── handlers.py        ← 唯一的 AST → 执行 映射（43+ CPS handlers）
+│   ├── vm_executor.py     ← CPS 调度循环（无 fallback_visit 调用）
 │   └── task.py            ← Signal/UnhandledSignal（控制流数据对象）
 ├── interpreter/
-│   └── interpreter.py     ← 纯协调器（execute_module, STAGE 1-5, 无 visit()）
+│   └── interpreter.py     ← 纯协调器（execute_module, STAGE 1-5, visit→VM 委托）
 ├── objects/
-│   ├── kernel.py          ← IbUserFunction.call() 仍是 call-site，内部只调 vm.run_body()
-│   └── builtins.py        ← IbDeferred 无 _execution_context 字段（P2 后）
-└── exceptions.py          ← 只剩 ThrownException + 业务异常
+│   ├── kernel.py          ← IbUserFunction.call() 调用 vm.run_body()
+│   └── builtins.py        ← IbDeferred（vm_handle_IbCall 走 _vm_call_deferred CPS 路径）
+└── exceptions.py          ← 只剩 ThrownException + 基础架构异常
 ```
+
+**双轨彻底消灭**：P1~P7 全部完成后，整个解释器与 Python 底层递归 + 异常控制流完全解耦。VMExecutor CPS 调度循环是唯一的执行入口，Signal 数据对象是唯一的控制流载体。
 
 ---
 
@@ -669,13 +654,15 @@ P1 ✅ → (降低旧路径触发频率，孤立 IbDeferred 为最主要锚点)
 P4 ✅ → (vm_handle_IbLLMExceptionalStmt 完全 CPS 化)
 H2 ✅ → (Expression Eval Path 消除最后一处运行时 AST 遍历)
     │
-    ├── P2（IbDeferred CPS 化）← 最重要的剩余步骤，独立可交付
-    ├── P3（提示词 segment 内联）← 与 P2 可并行
+    ├── P2 ✅（IbDeferred CPS 化）
+    ├── P3 ✅（提示词 segment 内联）
     │
-    └── P4b（dispatch loop fallback 删除）← 依赖 P2+P3
+    └── P4b ✅（dispatch loop fallback 删除）
         │
-        └── P5（旧 handler 类删除，−1400 行）← 依赖 P4b
+        └── P5 ✅（旧 handler 类删除，−1400 行）
             │
-            ├── P6（Python 异常控制流类删除）
-            └── P7（文件结构重组）
+            ├── P6 ✅（Python 异常控制流类删除）
+            └── P7 ✅（文件结构重组 + 文档更新）
 ```
+
+**P1~P7 全部完成（2026-04-30）**：双轨彻底消灭。
