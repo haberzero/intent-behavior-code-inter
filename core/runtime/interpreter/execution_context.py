@@ -13,11 +13,12 @@ class ExecutionContextImpl:
     运行时执行上下文的具体实现。
     它作为纯状态容器，持有 node_pool、栈和运行时上下文的引用。
     同时，它持有指向 Interpreter 逻辑的回调函数，以实现物理层面的逻辑与数据分离。
+    所有 AST 节点求值均通过 vm_executor（VMExecutor CPS 调度循环）完成；
+    不存在 visit() 回调路径。
     """
     def __init__(self,
                  registry: Any,
                  factory: Any,
-                 visit_callback: Any,
                  get_node_data_callback: Any,
                  get_side_table_callback: Any,
                  push_stack_callback: Any,
@@ -53,7 +54,6 @@ class ExecutionContextImpl:
         self._vm_executor: Optional[Any] = None
         
         # Logic Callbacks
-        self._visit_callback = visit_callback
         self._get_node_data_callback = get_node_data_callback
         self._get_side_table_callback = get_side_table_callback
         self._push_stack_callback = push_stack_callback
@@ -174,9 +174,6 @@ class ExecutionContextImpl:
     @strict_mode.setter
     def strict_mode(self, value: bool):
         self._strict_mode = value
-
-    def visit(self, node_uid: str, module_name: Optional[str] = None) -> 'IbObject':
-        return self._visit_callback(node_uid, module_name=module_name)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         return self._get_node_data_callback(node_uid)

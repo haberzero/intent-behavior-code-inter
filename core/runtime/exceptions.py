@@ -1,14 +1,5 @@
 from typing import Any
 
-class ReturnException(Exception):
-    def __init__(self, value: Any):
-        self.value = value
-
-class BreakException(Exception):
-    pass
-
-class ContinueException(Exception):
-    pass
 
 class StageTransitionError(Exception):
     """违反注册生命周期顺序或访问未就绪阶段"""

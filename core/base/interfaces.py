@@ -194,14 +194,7 @@ class IVMExecutor(Protocol):
     ----
     * 显式帧栈管理：以非 Python 递归的方式驱动 IBCI AST 求值
     * 控制流信号传播：在帧栈上通过 ``Signal(kind, value)`` 数据对象传播控制流
-    * 43 种 AST 节点类型均有 CPS handler（M3a–M3d + Phase 1–5 全部完成）
-
-    **CPS 路径（主路径）**：所有产生 Signal、跨函数边界或参与 LLMScheduler 调度的
-    节点均走 CPS dispatch table（``VMExecutor``）。
-
-    **Expression Eval 路径（辅助路径）**：``IbName`` / ``IbBinOp`` / ``IbConstant``
-    等纯计算子表达式在 ``@~...~`` 模板内插与 ``LLMExceptFrame`` 重试 driver 中仍走
-    旧递归 ``visit()``；这是设计内的分工，不是技术债。
+    * 43 种 AST 节点类型均有 CPS handler（M3a–M3d + Phase 1–7 全部完成）
 
     实现位于 ``core.runtime.vm.vm_executor.VMExecutor``。
     ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 均以本协议为主路径。
@@ -213,8 +206,4 @@ class IVMExecutor(Protocol):
 
     def run(self, node_uid: str) -> Any:
         """执行 ``node_uid`` 子树并返回 IbObject 结果。"""
-        ...
-
-    def fallback_visit(self, node_uid: str) -> Any:
-        """对未实现节点回退到原递归 visit() 路径。"""
         ...

@@ -17,8 +17,6 @@ handler 形参：
     ``executor`` —— :class:`VMExecutor` 实例，提供 ``ec`` / ``runtime_context``
                     / ``registry`` / ``service_context`` 等访问入口
 
-handler 内可调用 ``executor.fallback_visit(uid)`` 同步求值未实现的节点子树。
-
 **多语句容器的信号检查约定**：
 ``IbModule`` / ``IbIf`` / ``IbWhile`` 这类包含子语句序列的 handler，每次
 ``yield stmt_uid`` 后必须检查返回值是否为 ``Signal``：循环 handler 自行
@@ -53,7 +51,7 @@ from core.runtime.interpreter.constants import (
     UNARY_OP_MAPPING,
     AST_OP_MAP,
 )
-from core.runtime.objects.builtins import IbBehavior
+from core.runtime.objects.builtins import IbBehavior, IbDeferred
 from core.runtime.objects.kernel import (
     IbObject,
     IbUserFunction,
@@ -111,8 +109,10 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
         else:
             # service_context 不可用时回退到 LLMFuture.get（仍阻塞，结果等价）
             resolved = val.get(executor.registry)
-        # 写回，避免后续读取再次 resolve（且每个 Future 只能 resolve 一次）
-        executor.runtime_context.set_variable_by_uid(sym_uid, resolved)
+        # 写回，避免后续读取再次 resolve（且每个 Future 只能 resolve 一次）。
+        # skip_type_check=True：写回是缓存优化，解析结果（如不确定性的 IbNone）
+        # 无需满足目标变量的类型约束——真正的类型校验在首次赋值时已经完成。
+        executor.runtime_context.set_variable_by_uid(sym_uid, resolved, skip_type_check=True)
         val = resolved
     return val
 
@@ -217,14 +217,90 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
     return final_res
 
 
+def _vm_call_deferred(executor, func, args):
+    """CPS 内联执行 IbDeferred（lambda/snapshot）调用。
+
+    将原来 ``IbDeferred.call()`` 中的 ``ec.visit(target_uid)`` 替换为
+    ``yield target_uid``，使 lambda/snapshot 体完全在 VM CPS 循环中执行。
+    控制流信号（RETURN/BREAK/CONTINUE）通过 Signal 数据对象传播，不再依赖
+    Python 异常。
+
+    P2：消灭最后一处显式 ``ec.visit()`` 入口（来自 IbDeferred.call()）。
+    """
+    from core.runtime.objects.cell import IbCell
+
+    # snapshot 无参缓存命中：立即返回，不需要任何 yield。
+    # 注意：`if False: yield` 是 Python 的惯用写法，确保此函数在缓存命中的早返回路径下
+    # 依然被 Python 解析为 generator function（因为函数其他分支含有 `yield target_uid`）。
+    # 去掉此标记也可行（函数已是 generator），此处保留是为了让读者一眼看出早返回分支
+    # 也属于同一 generator 上下文，不会意外切换语义。
+    if (func.deferred_mode == "snapshot"
+            and func._cache is not None
+            and not func.params_uids):
+        if False:
+            yield  # pragma: no cover
+        return func._cache
+
+    rt_context = executor.runtime_context
+    needs_subscope = bool(func.params_uids) or bool(func.closure)
+    if needs_subscope:
+        rt_context.enter_scope()
+    try:
+        # 绑定闭包 cell（SC-4：lambda/snapshot 两种模式均通过 closure 字典）
+        for sym_uid, (name, cell) in func.closure.items():
+            if isinstance(cell, IbCell):
+                if not cell.is_empty():
+                    rt_context.define_variable(name, cell.get(), uid=sym_uid)
+            else:
+                rt_context.define_variable(name, cell, uid=sym_uid)
+
+        # 绑定形参（与 IbUserFunction.call 同构：处理 IbTypeAnnotatedExpr 包装）
+        for i, arg_uid in enumerate(func.params_uids):
+            arg_data = executor.ec.get_node_data(arg_uid)
+            actual_arg_uid = arg_uid
+            actual_arg_data = arg_data
+            if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                actual_arg_uid = arg_data.get("target")
+                actual_arg_data = executor.ec.get_node_data(actual_arg_uid)
+            arg_name = (actual_arg_data or {}).get("arg")
+            if arg_name and i < len(args):
+                sym_uid = executor.ec.get_side_table("node_to_symbol", actual_arg_uid)
+                rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+
+        # CPS 执行函数体
+        target_uid = func.body_uid if func.body_uid else func.node_uid
+        result = yield target_uid
+
+        # 处理控制流信号：RETURN → 提取值；BREAK/CONTINUE/THROW → 透传给上层
+        if isinstance(result, Signal):
+            if result.kind is ControlSignal.RETURN:
+                result = result.value
+            else:
+                return result  # finally 会负责 exit_scope
+    finally:
+        if needs_subscope:
+            rt_context.exit_scope()
+
+    # snapshot 无参缓存写入（首次求值后缓存）
+    if func.deferred_mode == "snapshot" and not func.params_uids:
+        func._cache = result
+
+    return result
+
+
 def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """函数调用：调用方对象的 ``call()`` 内部仍走递归实现，
-    但参数与函数表达式本身的求值通过 CPS 完成。
+    """函数调用：CPS 求值函数对象和实参；IbDeferred 完全内联 CPS 执行，
+    其他 callable 仍通过 call() 同步完成。
     """
     func = yield node_data.get("func")
     args = []
     for a_uid in node_data.get("args", []):
         args.append((yield a_uid))
+
+    # P2：IbDeferred（lambda/snapshot）完全 CPS 内联，不再调用 ec.visit()
+    if isinstance(func, IbDeferred):
+        result = yield from _vm_call_deferred(executor, func, args)
+        return result
 
     try:
         if hasattr(func, "call"):

@@ -19,14 +19,9 @@ class RuntimeObjectFactory(IObjectFactory):
     """
     def __init__(self, registry: KernelRegistry):
         self._registry = registry
-        self._handler_factories: List[Callable] = []
         self._llm_executor_factory: Optional[Callable] = None
 
     # --- IoC 注册接口 ---
-
-    def register_handler_factory(self, factory: Callable) -> None:
-        """注册语句/表达式处理器的构造工厂"""
-        self._handler_factories.append(factory)
 
     def register_llm_executor_factory(self, factory: Callable) -> None:
         """注册 LLM 执行器的构造工厂"""
@@ -77,10 +72,6 @@ class RuntimeObjectFactory(IObjectFactory):
         return RuntimeSymbolImpl(name=name, value=value, declared_type=declared_type, is_const=is_const)
 
     # --- 逻辑组件创建 (IoC 实现) ---
-
-    def create_handlers(self, service_context: Any, execution_context: Any) -> List[Any]:
-        """动态创建已注册的所有处理器，无物理硬编码引用"""
-        return [f(service_context, execution_context) for f in self._handler_factories]
 
     def create_llm_executor(self, service_context: Any, execution_context: Any) -> Any:
         """动态创建已注册的 LLM 执行器"""

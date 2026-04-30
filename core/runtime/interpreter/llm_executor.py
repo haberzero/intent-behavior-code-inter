@@ -237,7 +237,10 @@ class LLMExecutorImpl:
 
             if isinstance(segment, str):
                 if segment.startswith("node_"):
-                    val = execution_context.visit(segment)
+                    vm = execution_context.vm_executor
+                    if vm is None:
+                        raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
+                    val = vm.run(segment)
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
                     elif hasattr(val, 'to_native'):
@@ -252,7 +255,10 @@ class LLMExecutorImpl:
                 
                 # 只有当变量名是函数参数时才进行替换
                 if param_names and var_name in param_names:
-                    val = execution_context.visit(segment)
+                    vm = execution_context.vm_executor
+                    if vm is None:
+                        raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
+                    val = vm.run(segment)
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
                     elif hasattr(val, 'to_native'):
