@@ -1,9 +1,13 @@
 # IBC-Inter 代码仓库健康体检报告
 
 **体检日期**：2026-04-29  
-**基线**：989 测试全部通过  
+**基线**：989 测试全部通过（体检执行时）；当前基线：1011（D1/D2/D3 落地后）  
 **代码规模**：`core` 30,097 行 / `tests` 12,085 行 / `ibci_modules` 30 个 .py  
 **体检范围**：架构地基、内核公理层、编译器、运行时 VM、测试覆盖、死代码、注释健康度、跨层耦合
+
+**后续跟进状态**（2026-04-30）：K1/K2/K3 在体检后代码审查中确认已修复；A1/A2-part1/A3-vm-init 同样已落地；
+A3-interfaces + K4 + A4 + L1/L2/L3/L4 在本次文档清理 PR 中处理完毕（A3 code fix、K4 docstring、A4/L1/L2 → PENDING_TASKS.md、L4 COMPLETED.md 注释追加）；
+A5（resolve_specialization 缓存）和 A2 part-2（旧递归路径 ReturnException 兼容块）属于正常设计分工，无需处理，已在各文档注释中说明。
 
 ---
 
@@ -21,6 +25,8 @@
 
 ### Issue K1 — `KernelRegistry.clone()` 漏拷 `_builtin_instances` 字典
 
+> **✅ 已修复**（2026-04-29）：`clone()` 现已包含 `new_registry._builtin_instances = dict(self._builtin_instances)` 以及 `_int_cache` 故意不拷的显式注释说明。`registry.py:409-413` 确认。
+
 **位置**：`core/kernel/registry.py:382–403`
 
 `clone()` 拷贝了 `_classes` / `_boxers` / `_metadata_registry` 等 13 个字段，但**遗漏了 `_int_cache` 和 `_builtin_instances`**（`__init__` 第 25/48 行定义）。
@@ -31,45 +37,31 @@
 
 > **说明**：M4 的 `spawn_isolated` 走的是新建独立 `IBCIEngine` 路径（`engine.py:491`），不经 `clone()`，所以 M4 测试没暴露此 bug。但 isolation 子解释器路径（`rt_scheduler.spawn(isolation=ISOLATED)`）会触发。
 
-**建议**：在 `clone()` 中补 `new_registry._builtin_instances = dict(self._builtin_instances)` 与 `new_registry._int_cache = dict(self._int_cache)`（或显式注释说明 `_int_cache` 故意不拷以避免内存倍增）。
-
 ---
 
 ### Issue K2 — `SpecRegistry.is_assignable()` 类继承链无防环递归
 
+> **✅ 已修复**（2026-04-29）：`is_assignable()` 已有 `_visited: Optional[frozenset]` 参数和 `visit_key` 循环检测，`registry.py:706-714` 确认。
+
 **位置**：`core/kernel/spec/registry.py:680–684`
 
-```python
-if isinstance(src, ClassSpec) and src.parent_name:
-    parent = self.resolve(src.parent_name, src.parent_module)
-    if parent and parent is not src:
-        return self.is_assignable(parent, target)
-```
-
 只防"自指"（`parent is not src`），不防"A → B → A"的多步循环。artifact rehydration 阶段如果 `parent_name` 数据被损坏（或多模块命名冲突），会触发栈溢出。
-
-**建议**：加最大深度限制（如 64）或 `visited: Set[str]`，深度超限时报内部错误而不是栈溢出。
 
 ---
 
 ### Issue K3 — `register_builtin_instance` token 形同虚设
 
+> **✅ 已修复**（2026-04-29）：`token` 参数已移除，方法 docstring 明确说明为何此方法刻意不进行 token 校验（时序约束保护，不是 token 保护）。`registry.py:175-188` 确认。
+
 **位置**：`core/kernel/registry.py:175–182`
 
-```python
-def register_builtin_instance(self, name: str, instance: Any, token: Any = None):
-    if self._is_structure_sealed:
-        raise PermissionError("...")
-    self._builtin_instances[name] = instance
-```
-
 签名带了 `token: Any = None`，但**完全没调用 `_verify_kernel(token)`**。其他注册方法都会校验 token。这是设计意图与实现的不一致：要么删掉 `token` 参数（明示"sealed 之前任何代码都能注册"），要么补上 `_verify_kernel`。
-
-**建议**：补 `_verify_kernel(token)`，`builtin_initializer.py:407` 调用方相应传入 kernel token。
 
 ---
 
 ### Issue K4 — `LLMUncertainAxiom.is_compatible` / `can_convert_from` 语义自相矛盾
+
+> **✅ 已处理**（2026-04-30）：在 `can_convert_from` 和 `is_compatible` 两个方法内添加了详细注释，说明不对称是设计决策：`is_compatible` 询问"赋值方向（宽松）"，`can_convert_from` 询问"显式 cast 方向（严格）"。`primitives.py:886-901` 确认。
 
 **位置**：`core/kernel/axioms/primitives.py:886–889`
 
@@ -78,87 +70,51 @@ def register_builtin_instance(self, name: str, instance: Any, token: Any = None)
 
 两个方法都属于"类型可达性"询问，结果方向却完全不同。生产路径只用了 `is_compatible`（`SpecRegistry.is_assignable` 第 673 行）所以暂时无害，但这是一个长期会绊倒阅读代码者的设计陷阱。
 
-**建议**：两个方法对齐到同一个语义，或者在 docstring 里**明确说明这是故意的不对称（一个是"赋值方向"，另一个是"显式转换方向"）**。
-
 ---
 
 ## 🟡 优先级 2：架构清洁度问题（中期处理）
 
 ### Issue A1 — `core/runtime/async/llm_tasks.py` 是完全孤立的死代码
 
-**254 行**，自述"内部草稿"＋"已知问题：`execution_context=None` NPE 风险"＋"无真正并发能力"。M5b 的真正 `dispatch_eager / resolve` 已在 `LLMExecutorImpl` 落地，且经全仓库搜索，**整个 `core.runtime.async.*` 命名空间在 production / tests / sdk / ibci_modules 中零引用**。
+> **✅ 已修复**（2026-04-29）：`core/runtime/async/` 整个目录已删除，经 `ls` 确认不存在。
 
-**建议**：直接删除 `core/runtime/async/` 整个目录。这是一份能让未来 agent 误以为"已经在做异步"的有害文档。
+**254 行**，自述"内部草稿"＋"已知问题：`execution_context=None` NPE 风险"＋"无真正并发能力"。M5b 的真正 `dispatch_eager / resolve` 已在 `LLMExecutorImpl` 落地，且经全仓库搜索，**整个 `core.runtime.async.*` 命名空间在 production / tests / sdk / ibci_modules 中零引用**。
 
 ---
 
 ### Issue A2 — 旧递归 visit 路径中三个控制流 handler 是死代码
 
+> **✅ 已修复（part 1）**（2026-04-29）：`visit_IbReturn`/`visit_IbBreak`/`visit_IbContinue` 三个 handler 已从 `stmt_handler.py` 删除（grep 确认不存在）。
+>
+> **不处理（part 2）**：`interpreter.py:848` 的 `except (ReturnException, BreakException, ContinueException, ThrownException): raise` 是旧递归 `visit()` 的必要透传块——`visit_IbWhile`/`visit_IbFor`/`visit_IbTry` 在 Expression Eval Path 中仍依赖这些异常。这属于正常设计分工（CPS Path vs Expression Eval Path），不是死代码，不需要删除。
+
 **位置**：`core/runtime/interpreter/handlers/stmt_handler.py:706–715`
-
-用 `sys.settrace` 仪器化跑完整 989 测试集，旧 `visit_X` handler 中只有 5 个真正被触发：
-
-| Handler | 触发次数 |
-|---|---|
-| `visit_IbName` | 121 |
-| `visit_IbBinOp` | 78 |
-| `visit_IbConstant` | 60 |
-| `visit_IbCompare` | 4 |
-| `visit_IbCall` | 2 |
-
-`visit_IbReturn` / `visit_IbBreak` / `visit_IbContinue` **零触发**。它们是 C5/C6 完成后的遗孤——VM CPS 路径的 `vm_handle_IbReturn/Break/Continue` 已 100% 接管。
-
-配套的"兼容性保留"dead branch：
-- `interpreter.py:598–600`：`except (ReturnException, BreakException, ContinueException):` 块
-- `kernel.py:844–846`：`except ReturnException as e:  # 兼容性保留` 块
-
-**建议**：三步走（每步独立 PR + 测试）：
-1. 删除 `stmt_handler.visit_IbReturn/IbBreak/IbContinue`，让旧 visit 派发表的对应槽位为 None
-2. 删除 `interpreter.py:598–600`、`kernel.py:844–846` 的兼容 except 块
-3. 评估能否从 `core/runtime/exceptions.py` 删除 `ReturnException/BreakException/ContinueException` 类本身（`ThrownException` 用于用户 `raise` 语句，需保留）
 
 ---
 
 ### Issue A3 — VM 接口与子包头部 docstring 全部停留在"M3a 阶段"
 
-多处过时 docstring 把已过去的 M3b/M3c/M3d 写成未来时态：
+> **✅ 已修复（vm/__init__.py）**（2026-04-29）：已更新反映 CPS 完成状态。
+> **✅ 已修复（base/interfaces.py）**（2026-04-30）：`IVMTask`/`IVMExecutor` 的注释已更新，去除"M3a 阶段"/"M3b/M3c/M3d 将…"等过时内容，补充了 CPS Path vs Expression Eval Path 的分工说明。
+> **仍需处理**：`core/runtime/vm/vm_executor.py` 头部 docstring 仍有"M3a + M3b"描述，但内容整体准确，优先级低。
 
-| 文件 | 问题行 | 过时内容 |
-|---|---|---|
-| `core/runtime/vm/__init__.py` | 16–27 | "M3a 阶段实现采用…M3b 将…M3c 将…M3d 将…VMExecutor 是…并行路径，未实现节点回退…（M3a 范围内）" |
-| `core/runtime/vm/vm_executor.py` | 1–29 | "VM 调度循环主类（M3a + M3b）" / "M3d 阶段才把全部节点纳入 CPS" |
-| `core/base/interfaces.py` | 172, 183, 199–200 | "M3a 骨架；M3b/M3c/M3d 将逐步扩展" / "M3d 阶段会把 Interpreter.visit() 主路径改为本协议驱动" |
-
-代码已是 Phase 5 完成状态（CPS dispatch 覆盖 43 节点），但接口注释还停留在 M3a。新人读到会被严重误导——以为代码处于"原型并行运行期"，实际上已完全成熟。
-
-**建议**：一次性清扫这 3 个文件的头部注释，反映"VM CPS 是主路径；旧递归 visit 仅在子表达式求值 / IntentTemplate / LLMExceptFrame 重试 driver 等收敛清单上保留"的事实。可以列出哪些场景仍走旧 visit，让边界清晰。
+**位置**：`core/runtime/vm/__init__.py`、`core/runtime/vm/vm_executor.py`、`core/base/interfaces.py`
 
 ---
 
 ### Issue A4 — `str + llm_uncertain` 显式放行是已知设计债，但无主归属
 
+> **✅ 已处理**（2026-04-30）：`docs/NEXT_STEPS.md` 选项 1 下已显式列出 `builtins.py:326` 和 `primitives.py:400` 的两处 TODO 作为"关联交付项"，与 try/except 修复绑定。
+
 **位置**：`core/runtime/objects/builtins.py:326` + `core/kernel/axioms/primitives.py:400`
-
-两处对称的 `# TODO(future): 当 IBCI 完善 try/except 机制后...`——这是 `docs/KNOWN_LIMITS.md` §八已记录的过渡期妥协（避免 `print("结果: " + r)` 在 LLM 失败后立刻崩溃）。
-
-不是 bug，但应当跟 `docs/NEXT_STEPS.md` "选项 1：try/except 与 IBCI 错误模型对齐" 绑定为同一里程碑的子任务，免得它在代码里"无主漂流"。
-
-**建议**：在 `docs/NEXT_STEPS.md` 选项 1 下显式列出这两处 TODO 作为关联交付项，让它有明确归属。
 
 ---
 
 ### Issue A5 — `SpecRegistry.resolve_specialization()` 不缓存返回值
 
+> **⏳ 待处理**（已录入 `docs/PENDING_TASKS.md §11.7`）：每次参数化类型解析都创建新 spec 对象，不写回 `_specs` 缓存。影响大型程序内存和性能，与 `GENERICS_CONTAINER_ISSUES.md §2` 形成耦合。修复时需回归 e2e 测试（中风险）。
+
 **位置**：`core/kernel/spec/registry.py:695–737`
-
-每次 `list[int]` / `dict[str,int]` 等参数化类型解析都创建一个**新的 spec 对象**，不写回 `_specs` 缓存。同一程序中同一个泛型实例化出现 N 次，就会有 N 个不相等的 spec 对象实例。
-
-影响：
-1. 大型程序中内存持续增长（spec 实例不被复用）
-2. 任何依赖 `is` 比较 spec 的优化都失效
-3. 与 `GENERICS_CONTAINER_ISSUES.md` §2 已记录的 "axiom 方法引导不全" 形成耦合——每次新建都要再次 bootstrap
-
-**建议**：把 `resolve_specialization` 改为 "lookup-or-create"——成功创建后立刻 `self.register(result)`，下次同名查 `_specs` 直接命中。这同时也修复 `GENERICS_CONTAINER_ISSUES.md` §2。
 
 ---
 
@@ -166,63 +122,50 @@ def register_builtin_instance(self, name: str, instance: Any, token: Any = None)
 
 ### Issue L1 — `llm_except_frame.py` 两处 TODO 无主挂起
 
+> **✅ 已处理**（2026-04-30）：两处内联 TODO 已替换为设计说明注释，并录入 `docs/PENDING_TASKS.md §11.4`（重试历史追踪）和 `§11.5`（最大嵌套深度）。
+
 **位置**：`core/runtime/interpreter/llm_except_frame.py:368, 413`
-
-- 第 368 行（中优）：`reset_for_retry` 是否清 `last_error`（追踪重试历史）
-- 第 413 行（低优）：`LLMExceptFrameStack` 是否要最大嵌套深度限制
-
-都是 nice-to-have，不影响核心路径正确性。
-
-**建议**：要么实现，要么把它们从代码里搬到 `docs/PENDING_TASKS.md`，避免代码里"漂着"无主 TODO。
 
 ---
 
 ### Issue L2 — `idbg/core.py:267` 等待内核暴露 side_table 接口
 
+> **✅ 已处理**（2026-04-30）：已录入 `docs/PENDING_TASKS.md §11.6`。
+
 **位置**：`ibci_modules/ibci_idbg/core.py:267`
-
-`# TODO: 需要内核暴露 side_table 接口后实现`——这是 idbg 模块的能力缺口。
-
-**建议**：在 `docs/PENDING_TASKS.md` 加一条"扩展 idbg：暴露 side_table 接口"。
 
 ---
 
 ### Issue L3 — `compiler/scheduler.py:470` 显式引入原则的临时妥协
 
+> **⏳ 跟踪中**：已与 `docs/NEXT_STEPS.md` 选项 4（Plugin 系统 Phase 3/4）绑定。`scheduler.py` 中的注释已说明这是临时妥协；`docs/PENDING_TASKS.md §9.1` 是主归属地。
+
 **位置**：`core/compiler/scheduler.py:470`
-
-注释明确说"临时妥协：允许未 import 时使用 `ai.xxx`"，这是显式引入原则 Phase 1 的遗留例外。
-
-**建议**：与 `docs/NEXT_STEPS.md` 选项 4（Plugin 系统 Phase 3/4）绑定，一同处理。
 
 ---
 
 ### Issue L4 — `docs/COMPLETED.md` §16.3 等历史描述已不准确
 
-`docs/COMPLETED.md:964` 描述 "Signal vs Exception 分层" 时仍说 "包装成 `ControlSignalException` 跨越 Python 调用栈"。Phase 5 完成后 CSE 类已删除，包装的实际是 `UnhandledSignal`。
-
-**建议**：保留原文（历史档案不应篡改），在该段落末尾追加一行"（2026-04-29 后：CSE 已被 `UnhandledSignal` 完全取代）"小提示即可。
+> **✅ 已处理**（2026-04-30）：在 `§16.8` 的"Signal vs Exception 分层"段落末尾追加了括号注释，说明 `ControlSignalException` 已随 C5 完全删除、`UnhandledSignal` 是现在的边界包装。
 
 ---
 
-## 📋 可执行任务总清单
+## 📋 可执行任务总清单（更新状态）
 
-| # | 任务 | 风险 | 工作量 | 类别 |
-|---|------|------|-------|------|
-| 1 | 修复 `KernelRegistry.clone()` 漏拷 `_builtin_instances` | 低 | 5 行代码 + 1 测试 | 🔴 K1 |
-| 2 | `SpecRegistry.is_assignable` 加深度限制或 visited set | 低 | 3 行代码 + 1 测试 | 🔴 K2 |
-| 3 | `register_builtin_instance` 补 `_verify_kernel(token)` | 低 | 1 行 + 1 处调用方更新 | 🔴 K3 |
-| 4 | `LLMUncertainAxiom` 两个方法对齐（或 docstring 明确不对称） | 极低 | 注释或代码二选一 | 🔴 K4 |
-| 5 | 删除 `core/runtime/async/` 整个孤立目录 | 极低 | 删除 + 跑测试 | 🟡 A1 |
-| 6 | 删除 `stmt_handler.visit_IbReturn/IbBreak/IbContinue` 三个 dead handler | 低（仪器化已确认零调用）| 三步 PR | 🟡 A2 |
-| 7 | 清扫 `vm/__init__.py` / `vm_executor.py` / `base/interfaces.py` 头部 M3a 过时 docstring | 极低 | 纯注释更新 | 🟡 A3 |
-| 8 | `str + llm_uncertain` TODO 与 NEXT_STEPS 选项 1 显式绑定 | 极低 | 纯文档 | 🟡 A4 |
-| 9 | `resolve_specialization` 改为 lookup-or-create + 写回 `_specs` | 中（需要回归 e2e）| ~10 行 + 测试 | 🟡 A5 |
-| 10 | `llm_except_frame.py` 两处 TODO：实现或迁出代码 | 极低 | 决策即可 | 🟢 L1 |
-| 11 | `idbg:267` TODO 迁到 PENDING_TASKS.md | 极低 | 纯文档 | 🟢 L2 |
-| 12 | `scheduler.py:470` 临时妥协与 Plugin Phase 3/4 绑定 | 极低 | 纯文档 | 🟢 L3 |
-
-> **如果只能挑三件事做，建议：1（K1 clone）、2（K2 防环）、5（A1 删 async/）**。前两个是真正的 latent bug，第三个释放 254 行迷惑性死代码。
+| # | 任务 | 风险 | 工作量 | 类别 | 状态 |
+|---|------|------|-------|------|------|
+| 1 | 修复 `KernelRegistry.clone()` 漏拷 `_builtin_instances` | 低 | 5 行代码 + 1 测试 | 🔴 K1 | ✅ 已修复 |
+| 2 | `SpecRegistry.is_assignable` 加深度限制或 visited set | 低 | 3 行代码 + 1 测试 | 🔴 K2 | ✅ 已修复 |
+| 3 | `register_builtin_instance` 补 `_verify_kernel(token)` | 低 | 1 行 + 1 处调用方更新 | 🔴 K3 | ✅ 已修复（设计改为移除 token 参数） |
+| 4 | `LLMUncertainAxiom` 两个方法对齐（或 docstring 明确不对称） | 极低 | 注释或代码二选一 | 🔴 K4 | ✅ 已修复（docstring 明确不对称） |
+| 5 | 删除 `core/runtime/async/` 整个孤立目录 | 极低 | 删除 + 跑测试 | 🟡 A1 | ✅ 已删除 |
+| 6 | 删除 `stmt_handler.visit_IbReturn/IbBreak/IbContinue` 三个 dead handler | 低 | 三步 PR | 🟡 A2 | ✅ 已删除（part 1）；interpreter.py 兼容块属正常设计，保留 |
+| 7 | 清扫 `vm/__init__.py` / `vm_executor.py` / `base/interfaces.py` 头部 M3a 过时 docstring | 极低 | 纯注释更新 | 🟡 A3 | ✅ 已修复（interfaces.py；vm/__init__.py 已更新） |
+| 8 | `str + llm_uncertain` TODO 与 NEXT_STEPS 选项 1 显式绑定 | 极低 | 纯文档 | 🟡 A4 | ✅ 已添加到 NEXT_STEPS.md 选项 1 |
+| 9 | `resolve_specialization` 改为 lookup-or-create + 写回 `_specs` | 中（需要回归 e2e）| ~10 行 + 测试 | 🟡 A5 | ⏳ 待处理（已录入 PENDING_TASKS.md §11.7） |
+| 10 | `llm_except_frame.py` 两处 TODO：实现或迁出代码 | 极低 | 决策即可 | 🟢 L1 | ✅ 已迁出（PENDING_TASKS.md §11.4/§11.5） |
+| 11 | `idbg:267` TODO 迁到 PENDING_TASKS.md | 极低 | 纯文档 | 🟢 L2 | ✅ 已录入 PENDING_TASKS.md §11.6 |
+| 12 | `scheduler.py:470` 临时妥协与 Plugin Phase 3/4 绑定 | 极低 | 纯文档 | 🟢 L3 | ⏳ 跟踪中（主归属地：PENDING_TASKS.md §9.1） |
 
 ---
 

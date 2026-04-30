@@ -126,9 +126,9 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 4.3 lambda/snapshot 语法重构与语义完整化 [✅ D1/D2 COMPLETED — 2026-04-29]
+### 4.3 lambda/snapshot 语法重构与语义完整化 [✅ D1/D2/D3 全部 COMPLETED — 2026-04-29]
 
-**完成内容**（M1 + M2 + fn declaration-side 三阶段 + D1/D2）：
+**完成内容**（M1 + M2 + fn declaration-side 三阶段 + D1/D2/D3）：
 - ✅ 新 fn 声明语法：`fn NAME = lambda: EXPR` / `fn NAME = lambda(PARAMS): EXPR`（snapshot 同构）；`fn[TYPE]` → DeferredSpec
 - ✅ 参数传递：`IbDeferred.call()` / `IbBehavior.call()` 支持参数列表
 - ✅ IbCell 机制（SC-3/SC-4）：lambda 自由变量通过共享 IbCell 引用，snapshot 通过独立 IbCell 值拷贝
@@ -136,14 +136,10 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 - ✅ D1（2026-04-29）：废弃声明侧返回类型 `TYPE fn NAME = lambda: EXPR` → 产生 `PAR_003`
 - ✅ D2（2026-04-29）：`IbLambdaExpr.returns` 字段；表达式侧 `lambda -> TYPE: EXPR` / `snapshot -> TYPE: EXPR` 合法化
 - ✅ `_pending_fn_return_type` 隐式通道已删除
-- ✅ 991 个测试通过（D1/D2 后基线）
+- ✅ D3（2026-04-29）：`fn[(int,str)->bool]` callable 签名标注全链路落地；`IbCallableType` AST 节点 + `CallableSigSpec(FuncSpec)`；`_try_parse_callable_sig`/`_parse_fn_signature` 解析器；声明侧/call-site 结构签名匹配；20 个专项测试通过
+- ✅ 1011 个测试通过（D3 后基线）
 
-**待实现**（D3，独立 PR）：
-- ⏳ `fn[(<typelist>) -> (<typelist>)]` 高阶函数参数 callable 签名标注
-- ⏳ 类型解析器 `_parse_fn_signature()` 专用路径 + `IbCallableType` AST 节点
-- ⏳ 语义层结构签名匹配（call site 按签名形状检查，见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md §D3`）
-
-**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`docs/FN_LAMBDA_SYNTAX_REDESIGN.md`、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`
+**详见**：`docs/COMPLETED.md §五/§六/§七`、`docs/VM_EVOLUTION_PLAN.md` M1/M2、`docs/FN_LAMBDA_SYNTAX_REDESIGN.md`、`tests/e2e/test_e2e_fn_lambda_syntax.py`、`tests/e2e/test_e2e_m2_higher_order.py`、`tests/compiler/test_d3_callable_sig.py`
 
 ---
 
@@ -355,6 +351,38 @@ func process():
 **问题**：`interpreter.py:108` `instance_id: str = "main"` 默认值可能导致多解释器实例 ID 碰撞。当前有 `instance_id or f"inst_{id(self)}"` fallback 保护，但 `"main"` 作为默认值仍是潜在隐患。
 
 **文件**：`core/runtime/interpreter/interpreter.py`
+
+---
+
+### 11.4 LLMExceptFrame 重试历史追踪 [P3 / PENDING]
+**问题**：`reset_for_retry()` 在每次重试时清除 `last_error`，目前重试历史不保留。若需要在 llmexcept body 内查询历次重试的错误摘要（用于更精细的提示词调整），需要给 `LLMExceptFrame` 添加 `error_history: List` 字段，并在 `reset_for_retry()` 中追加而非清除。
+
+**文件**：`core/runtime/interpreter/llm_except_frame.py`（`reset_for_retry()` + `LLMExceptFrame`）
+
+---
+
+### 11.5 LLMExceptFrameStack 最大嵌套深度 [P4 / PENDING]
+**问题**：当前 `LLMExceptFrameStack` 无最大嵌套深度检查。深度嵌套的 llmexcept 块（如循环内多层 llmexcept）在极端情况下可能无界增长。通常不会触发，但防御性限制有益于可观测性。
+
+**文件**：`core/runtime/interpreter/llm_except_frame.py`（`LLMExceptFrameStack.push()`）
+
+---
+
+### 11.6 ibci_idbg 暴露 side_table 接口 [P3 / PENDING]
+**问题**：`ibci_modules/ibci_idbg/core.py:267` 有 `# TODO: 需要内核暴露 side_table 接口后实现`，是 idbg 模块的能力缺口——调试器无法直接访问编译器侧表（`node_to_symbol`、`node_to_type` 等），限制了调试信息的精度。
+
+**建议**：通过 `KernelRegistry` 或 `IExecutionContext` 新增 `get_side_table(key, uid)` 公共接口，使 idbg 无需持有内部 `execution_context` 引用即可访问。
+
+**文件**：`ibci_modules/ibci_idbg/core.py`、`core/runtime/interfaces.py`（扩展接口）
+
+---
+
+### 11.7 SpecRegistry.resolve_specialization 无缓存 [P3 / PENDING]
+**问题**：每次 `list[int]` / `dict[str,int]` 等参数化类型解析都创建新的 spec 对象，不写回 `_specs` 缓存（`core/kernel/spec/registry.py`）。同一泛型实例化在一个程序里出现 N 次，就会有 N 个不相等的 spec 对象实例，内存持续增长，同时 axiom 方法 bootstrap 重复执行。
+
+**建议**：改为 lookup-or-create——按 `f"{spec.name}[{','.join(arg_names)}]"` 作为键先查 `_specs`，命中则直接返回缓存值，否则创建后立刻注册。
+
+**文件**：`core/kernel/spec/registry.py`（`resolve_specialization()`）
 
 ---
 

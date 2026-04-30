@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-29（编译器深度清洁 Phase 1–5 全部落地：C5/C6/C7/C8/C9/C10/C11/C12/C13/C14 完成；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零；`node_protection` 侧表 + `bypass_protection` 参数链 + `_apply_protection_redirect()` + `ControlSignalException` 类全链路删除；`docs/DEFERRED_CLEANUP.md` 与 `URGENT_ISSUES.md` 与 `BUG_REPORTS.md` 已合并归档至本文件并删除原文件；**989 个测试通过**）
+> **最后更新**：2026-04-29（编译器深度清洁 Phase 1–5 全部落地：C5/C6/C7/C8/C9/C10/C11/C12/C13/C14 完成；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 显式调用归零；`node_protection` 侧表 + `bypass_protection` 参数链 + `_apply_protection_redirect()` + `ControlSignalException` 类全链路删除；`docs/DEFERRED_CLEANUP.md` 与 `URGENT_ISSUES.md` 与 `BUG_REPORTS.md` 已合并归档至本文件并删除原文件；fn/lambda/snapshot 类型系统重设计 D1/D2/D3 全部完成（`fn[(int,str)->bool]` callable 签名标注上线）；**1011 个测试通过**）
 
 ---
 
@@ -962,6 +962,7 @@ llmexcept frame 检查是必须的——同步协议依赖 `runtime_context.set_
 ### 16.8 设计要点
 
 * **Signal vs Exception 分层**：CPS 内部一律用 `Signal(kind, value)` 数据流传播 RETURN/BREAK/CONTINUE；只在 VMExecutor.run() 出口处把未消费的 Signal 包装成 `ControlSignalException` 跨越 Python 调用栈到达 `execute_module` / `IbUserFunction.call`，再由这两处转回原始 `ReturnException` / `BreakException` / `ContinueException` 让既有的边界检查工作。该 ExceptionBridge 保留至 DEFERRED_CLEANUP C5。
+  （2026-04-29 后：`ControlSignalException` 类已随 C5 彻底删除；未消费 Signal 包装为 `UnhandledSignal` 传给调用方；`ReturnException`/`BreakException`/`ContinueException` 仍由旧递归路径的 `visit_IbWhile`/`visit_IbFor`/`visit_IbTry` 使用，属于 Expression Eval Path 的正常设计分工，非技术债。）
 * **保护重定向单点化**：M3c 时由各容器 handler 各自实现 `_resolve_stmt_uid`；M3d 把这一职责上提到 VMExecutor 调度循环统一处理，所有 yield child_uid 自动获得保护语义，handler 内不必关心。
 * **dispatch 决策保守**：仅在能严格判定"目标是简单赋值、无 deferred、无 llmexcept 保护"的场景启用 M5c 派发；任何不确定情况都退回同步路径，保证语义不退化。
 * **未变动**：`ReturnException` 类、`ControlSignalException` 类继续保留作为边界封装。`Interpreter.visit()` 仍是 fallback 路径——VMExecutor 不支持的节点类型会回退到这里，同时模块外部接口（如解释器嵌入测试用例）不受影响。

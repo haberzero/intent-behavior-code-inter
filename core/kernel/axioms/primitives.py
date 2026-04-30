@@ -884,10 +884,20 @@ class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
         }
 
     def can_convert_from(self, source_type_name: str) -> bool:
+        # 显式类型转换方向：只允许 llm_uncertain → llm_uncertain（同类转换）。
+        # 注意：这与 is_compatible 的方向故意不对称——is_compatible 询问的是
+        # "llm_uncertain 值能否赋给 other 类型的槽"（宽松，True），而
+        # can_convert_from 询问的是"other 类型的值能否显式 cast 成 llm_uncertain"
+        # （严格，仅自身）。生产路径仅使用 is_compatible；can_convert_from 在
+        # 显式 cast_to 调用时触发。
         return source_type_name == "llm_uncertain"
 
     def is_compatible(self, other_name: str) -> bool:
-        # llm_uncertain 可以被赋值给任何类型的变量（宽松兼容）
+        # 赋值方向：llm_uncertain 值可被赋给任何类型的变量（宽松策略）。
+        # 理由：LLM 重试耗尽后产生 Uncertain 哨兵对象；若不允许赋给声明类型，
+        # 用户代码中 `int x = @~...~` 在不确定性结果下会立即报类型错误，
+        # 而 IBCI 的设计理念是"允许持续执行，由用户通过 if/while 主动检测
+        # is_uncertain()"。此处故意宽松；与 can_convert_from 不对称是设计决策。
         return True
 
     def can_return_from_isolated(self) -> bool:
