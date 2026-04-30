@@ -394,11 +394,16 @@ class IbClass(IbObject):
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
-                        # 确保在定义该字段的模块上下文中进行求值
-                        evaluated = context.visit(val_info.val_uid, module_name=val_info.module_name)
+                        vm = context.vm_executor
+                        if vm is None:
+                            raise RuntimeError("IbClass.instantiate: vm_executor not available")
+                        old_module = context.current_module_name
+                        context.current_module_name = val_info.module_name
+                        try:
+                            evaluated = vm.run(val_info.val_uid)
+                        finally:
+                            context.current_module_name = old_module
                         instance.fields[name] = evaluated
-                        # 如果是简单的纯函数或常量表达式，可以缓存到类描述符中
-                        # 这里我们激进一点，只要成功求值就缓存，除非用户显式要求 JIT
                         val_info.static_val = evaluated
                     except Exception:
                         instance.fields[name] = self.registry.get_none()
@@ -818,22 +823,16 @@ class IbUserFunction(IbFunction):
             # 通过 VMExecutor 驱动函数体语句（CPS 主路径）。
             # run_body() 以 UnhandledSignal 传播顶层控制信号；
             # 由下方 except _CSE 消费；BREAK/CONTINUE 透传至调用者。
-            #
-            # 通过 ``self.context.vm_executor`` 直接获取 VMExecutor。
-            # Interpreter 在首个 ``execute_module()`` 调用时即已通过 ``_get_vm_executor()``
-            # 把引用注入到 ExecutionContext，因此函数调用阶段必然可用。如未就绪
-            # （例如由直接构造 IbUserFunction 的边角测试触发），保留递归 fallback。
             from core.runtime.vm.task import (
                 ControlSignal as _CS, UnhandledSignal as _CSE,
             )
             vm = self.context.vm_executor
-
             if vm is None:
-                # 无 VMExecutor 可用：保留原有递归路径（仅限边角测试兜底）。
-                for stmt_uid in body:
-                    self.context.visit(stmt_uid)
-            else:
-                vm.run_body(body)
+                raise RuntimeError(
+                    "IbUserFunction.call(): vm_executor not available on ExecutionContext. "
+                    "Ensure Interpreter.execute_module() has been called before invoking user functions."
+                )
+            vm.run_body(body)
 
             return ib_none
         except _CSE as e:

@@ -751,6 +751,13 @@ class IbDeferred(IbObject):
                 "Ensure engine._prepare_interpreter() has completed before invoking a deferred expression."
             )
 
+        vm = self._execution_context.vm_executor
+        if vm is None:
+            raise RuntimeError(
+                f"IbDeferred '{self.node_uid}': vm_executor not available. "
+                "Ensure Interpreter.execute_module() has been called first."
+            )
+
         rt_context = self._execution_context.runtime_context
         pushed_scope = False
 
@@ -790,7 +797,7 @@ class IbDeferred(IbObject):
 
             # 2) 评估目标节点：参数化路径走 body_uid，否则走 node_uid（防御性回退）。
             target_uid = self.body_uid if self.body_uid else self.node_uid
-            result = self._execution_context.visit(target_uid)
+            result = vm.run(target_uid)
         finally:
             if pushed_scope:
                 rt_context.exit_scope()

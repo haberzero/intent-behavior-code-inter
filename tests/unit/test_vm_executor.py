@@ -17,7 +17,7 @@ M3a — VMExecutor (CPS Scheduling Loop) 骨架测试。
     * 语句  ：IbModule, IbPass, IbExprStmt, IbAssign, IbIf, IbWhile,
               IbReturn, IbBreak, IbContinue
     * 数据类：VMTask, VMTaskResult, ControlSignal, UnhandledSignal
-    * 调度  ：fallback_visit, supports, step_count
+    * 调度  ：supports, step_count, run_body
 """
 import os
 import pytest
@@ -572,11 +572,11 @@ class TestSchedulerInfrastructure:
         # At least 4 steps (2 binops + 3 constants worth of advances + StopIteration)
         assert after - before >= 4
 
-    def test_fallback_visit_returns_value(self):
+    def test_run_constant_returns_value(self):
         engine = make_engine("int x = 1")
-        binop_uid_or_const = find_node_uid(engine, "IbConstant", lambda u, d: d.get("value") == 1)
+        const_uid = find_node_uid(engine, "IbConstant", lambda u, d: d.get("value") == 1)
         vm = make_vm(engine)
-        result = vm.fallback_visit(binop_uid_or_const)
+        result = vm.run(const_uid)
         assert native(result) == 1
 
     def test_run_with_none_returns_none(self):
@@ -586,7 +586,7 @@ class TestSchedulerInfrastructure:
         # Returns IbNone
         assert result is not None
 
-    def test_run_unsupported_root_falls_back(self):
+    def test_run_cast_expr(self):
         engine = make_engine("str s = (str)42")
         cast_uid = None
         for uid, data in engine.interpreter.node_pool.items():
@@ -601,30 +601,26 @@ class TestSchedulerInfrastructure:
 
 
 # ===========================================================================
-# 10. 端到端 CPS-vs-递归一致性
+# 10. CPS 算术与比较正确性
 # ===========================================================================
 
 class TestCpsVsRecursiveParity:
-    def test_arithmetic_parity(self):
-        engine = make_engine("int x = 0")
-        # Build several expressions and compare results
+    def test_arithmetic_correctness(self):
         engine = make_engine("int a = 1 + 2\nint b = 3 * 4\nint c = (5 + 6) * 7\n")
-        for binop_uid in find_all_node_uids(engine, "IbBinOp"):
-            vm = make_vm(engine)
-            cps_val = vm.run(binop_uid)
-            recursive_val = engine.interpreter.visit(binop_uid)
-            assert native(cps_val) == native(recursive_val)
+        expected = {"a": 3, "b": 12, "c": 77}
+        for name, val in expected.items():
+            assert native(engine.get_variable(name)) == val
 
-    def test_compare_parity(self):
+    def test_compare_correctness(self):
         engine = make_engine(
             "bool a = 1 < 2\n"
             "bool b = 5 == 5\n"
             "bool c = 7 != 8\n"
             "bool d = 3 >= 3\n"
         )
-        for cmp_uid in find_all_node_uids(engine, "IbCompare"):
-            vm = make_vm(engine)
-            assert native(vm.run(cmp_uid)) == native(engine.interpreter.visit(cmp_uid))
+        expected = {"a": True, "b": True, "c": True, "d": True}
+        for name, val in expected.items():
+            assert native(engine.get_variable(name)) == val
 
     def test_module_parity_simple_program(self):
         # Run via recursive, capture variable;

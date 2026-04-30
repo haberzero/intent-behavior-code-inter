@@ -46,17 +46,15 @@ class IbIntent(IbObject):
         )
 
     def resolve_content(self, context: RuntimeContext, execution_context: Any = None) -> str:
-        """
-        解析意图内容。
-        不再反向回调 LLMExecutor，而是直接利用 IExecutionContext 的 visit 能力进行自评估。
-        """
+        """解析意图内容，对 node_ UID 片段通过 VMExecutor CPS 路径求值。"""
         if self.segments and execution_context:
             content_parts = []
             for segment in self.segments:
                 if isinstance(segment, str) and segment.startswith("node_"):
-                    # P3：通过 VMExecutor CPS 路径求值，消除对 ec.visit() 的依赖
-                    _vm = getattr(execution_context, 'vm_executor', None)
-                    val = _vm.run(segment) if _vm is not None else execution_context.visit(segment)
+                    vm = execution_context.vm_executor
+                    if vm is None:
+                        raise RuntimeError("IbIntent.resolve_content: vm_executor not available")
+                    val = vm.run(segment)
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
                     elif hasattr(val, 'to_native'):

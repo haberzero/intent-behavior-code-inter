@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import sys
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 
@@ -11,39 +10,31 @@ from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 # Interpreter 是单个 IBCI 执行会话的隔离单元。
 # 职责：接受已编译的 Artifact，在独立的运行时上下文中执行它，并返回结果。
 #
-# P5/P7 后架构：
-# - 旧 StmtHandler / ExprHandler / ImportHandler 分片类已删除（−1337 行）
-# - visit() 方法不再持有分发逻辑，仅作 VMExecutor.run() 的向后兼容包装
-# - VMExecutor（core/runtime/vm/vm_executor.py）是唯一的 CPS 调度循环
-# - handlers.py（core/runtime/vm/handlers.py）是唯一的 AST→执行映射
-# - ReturnException / BreakException / ContinueException 已删除（P6）；
-#   IBCI 控制流完全通过 Signal 数据对象传播，不再依赖 Python 异常
-#
-# 最终文件结构：
+# 最终文件结构（P2-P7 全部完成后）：
 # core/runtime/
 # ├── vm/
 # │   ├── handlers.py       ← 唯一 AST → 执行映射（43+ CPS handlers）
-# │   ├── vm_executor.py    ← CPS 调度循环（无 fallback_visit 调用）
+# │   ├── vm_executor.py    ← CPS 调度循环（无 fallback_visit，无 assign_to_target）
 # │   └── task.py           ← Signal / UnhandledSignal（控制流数据对象）
 # ├── interpreter/
-# │   └── interpreter.py    ← 纯协调器（execute_module, STAGE 1-5, visit→VM 委托）
+# │   └── interpreter.py    ← 纯协调器（execute_module, STAGE 1-5 初始化）
 # ├── objects/
 # │   ├── kernel.py         ← IbUserFunction.call() 调用 vm.run_body()
-# │   └── builtins.py       ← IbDeferred（_execution_context 仅作遗留兼容）
+# │   └── builtins.py       ← IbDeferred.call() 调用 vm.run()
 # └── exceptions.py         ← 只剩 ThrownException + 基础架构异常
+#
+# 不存在任何向后兼容包装层或遗留 visit() 路径。
+# VMExecutor CPS 调度循环是唯一的执行入口。
+# Signal 数据对象是唯一的 IBCI 控制流载体。
 # =============================================================================
 from core.kernel import ast as ast
 from core.kernel.issue import (
     InterpreterError, Severity
 )
-from core.runtime.exceptions import (
-    ThrownException
-)
 from core.runtime.host.isolation_policy import IsolationPolicy
 from core.base.source_atomic import Location
 from core.base.diagnostics.codes import (
-    RUN_GENERIC_ERROR, RUN_TYPE_MISMATCH, RUN_UNDEFINED_VARIABLE,
-    RUN_LIMIT_EXCEEDED, RUN_CALL_ERROR, RUN_ATTRIBUTE_ERROR
+    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED
 )
 from core.runtime.interfaces import (
     Interpreter as InterpreterInterface,
@@ -69,13 +60,11 @@ from core.runtime.interpreter.intrinsics import IntrinsicManager
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
-from core.runtime.interpreter.constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 from core.base.enums import RegistrationState
 from core.runtime.vm.task import UnhandledSignal
-from .llm_result import LLMResult
 
 
 class Interpreter:
@@ -84,7 +73,7 @@ class Interpreter:
     彻底转向基于 IbObject 的统一对象模型。
     """
     def get_call_stack_depth(self) -> int:
-        return self.call_stack_depth
+        return self.logical_stack.depth if self.logical_stack else 0
 
     def get_active_intents(self) -> List[str]:
         return [i.content for i in self.runtime_context.get_active_intents()]
@@ -181,7 +170,6 @@ class Interpreter:
         self._execution_context = ExecutionContextImpl(
             registry=self._registry,
             factory=object_factory,
-            visit_callback=self.visit,
             get_node_data_callback=self.get_node_data,
             get_side_table_callback=self.get_side_table,
             push_stack_callback=self.push_stack,
@@ -319,25 +307,12 @@ class Interpreter:
             self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
                 "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.")
 
-        # 运行限制必须在 _pre_evaluate_user_classes() 之前初始化，
-        # 因为 visit() 在预评估中会访问 instruction_count / max_instructions 等字段。
+        # 运行限制初始化
         self.max_instructions = max_instructions
         self.instruction_count = 0
         self.strict_mode = strict_mode
 
-        # 递归深度安全校验
-        # 每一层 IBCI 调用大约消耗 4 层 Python 栈帧
-        # 必须确保 max_call_stack * 4 < sys.getrecursionlimit() 以免进程崩溃
-        python_limit = sys.getrecursionlimit()
-        safe_limit = (python_limit - 100) // 4 # 留出 100 帧给宿主系统
-        if max_call_stack > safe_limit:
-            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
-                f"Warning: max_call_stack {max_call_stack} is unsafe for Python limit {python_limit}. "
-                f"Auto-adjusting to safe limit {safe_limit}")
-            max_call_stack = safe_limit
-
         self.max_call_stack = max_call_stack
-        self.call_stack_depth = 0
         self._execution_context.logical_stack = LogicalCallStack(max_depth=max_call_stack)
 
         # 4. 设置上下文（含内置变量）
@@ -448,9 +423,7 @@ class Interpreter:
         return {
             "artifact": self.artifact_dict,
             "instruction_count": self.instruction_count,
-            "call_stack_depth": self.call_stack_depth,
             "current_module_name": self.current_module_name,
-            # 注意：Context 状态通常由外部单独管理，此处仅记录引用
         }
 
     def restore_state(self, state: Mapping[str, Any]):
@@ -464,7 +437,6 @@ class Interpreter:
         self.type_pool = pools.get("types", {})
         
         self.instruction_count = state["instruction_count"]
-        self.call_stack_depth = state["call_stack_depth"]
         self.current_module_name = state["current_module_name"]
 
     def setup_context(self, context: RuntimeContext, force: bool = False):
@@ -782,43 +754,6 @@ class Interpreter:
             line=loc_data.get("line", 0),
             column=loc_data.get("column", 0)
         )
-
-    def visit(self, node_uid: Union[str, Any], module_name: Optional[str] = None) -> IbObject:
-        """AST 节点求值入口（P5 后：VMExecutor.run() 的向后兼容包装层）。
-
-        P5 前：此方法持有 _visitor_cache 与 Handler 分发逻辑。
-        P5 后：分发逻辑完全迁移至 VMExecutor CPS dispatch table；本方法仅作
-        向后兼容桥接，确保通过 execution_context.visit() 调用此方法的遗留代码
-        （如 IbDeferred.call()、IbClass.instantiate()）继续正常工作。
-        """
-        if node_uid is None:
-            return self.registry.get_none()
-
-        # 处理非字符串 uid（IbASTNode 对象或原始 Python 字面量）
-        if not isinstance(node_uid, str):
-            if hasattr(node_uid, 'uid'):
-                node_uid = node_uid.uid
-            else:
-                if isinstance(node_uid, (int, float, bool, dict)):
-                    return self.registry.box(self._resolve_value(node_uid))
-                return self.registry.get_none()
-
-        old_module = self.current_module_name
-        if module_name and module_name != old_module:
-            self.current_module_name = module_name
-        try:
-            return self._get_vm_executor().run(node_uid)
-        finally:
-            self.current_module_name = old_module
-
-    def _is_scope_defining(self, node_type: str, node_data: Optional[Mapping[str, Any]] = None) -> bool:
-        """判断 AST 节点是否具有独立逻辑作用域。完全元数据驱动。"""
-        # 优先检查节点数据中是否带有分析器生成的标记
-        if node_data and node_data.get("_is_scope"):
-            return True
-        return False
-
-    # --- 访问方法实现 ---
 
     def is_truthy(self, value: IbObject) -> bool:
         """UTS: 使用 to_bool 协议判断真值"""

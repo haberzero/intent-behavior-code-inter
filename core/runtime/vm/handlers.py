@@ -17,8 +17,6 @@ handler 形参：
     ``executor`` —— :class:`VMExecutor` 实例，提供 ``ec`` / ``runtime_context``
                     / ``registry`` / ``service_context`` 等访问入口
 
-handler 内可调用 ``executor.fallback_visit(uid)`` 同步求值未实现的节点子树。
-
 **多语句容器的信号检查约定**：
 ``IbModule`` / ``IbIf`` / ``IbWhile`` 这类包含子语句序列的 handler，每次
 ``yield stmt_uid`` 后必须检查返回值是否为 ``Signal``：循环 handler 自行

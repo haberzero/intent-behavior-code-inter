@@ -92,26 +92,6 @@ class VMExecutor:
             return False
         return node_data.get("_type") in self._dispatch
 
-    def fallback_visit(self, node_uid: str) -> Any:
-        """旧递归 ``visit()`` 回退路径。
-
-        **已废弃（P4b）**：P2/P3/P4/P4b 完成后，所有 ``ec.visit()`` 入口均已消除，
-        此方法不再被内部调度循环或 handler 调用。保留仅供外部遗留代码的过渡期兼容，
-        P5 阶段将随旧 handler 类一并删除。
-        """
-        return self._ec.visit(node_uid)
-
-    def assign_to_target(self, target_uid: str, value: Any) -> None:
-        """已废弃——由 C7 CPS 重写替代（``_vm_assign_to_target`` generator helper）。
-
-        P5 后：StmtHandler 已删除，此方法不可再使用。调用此方法将抛出 RuntimeError。
-        handlers.py 内部不再调用此方法；保留仅供触发器式错误提示。
-        """
-        raise RuntimeError(
-            "VMExecutor.assign_to_target() is removed (P5). "
-            "Use _vm_assign_to_target() CPS generator helper in handlers.py instead."
-        )
-
     # ------------------------------------------------------------------
     # 主调度循环
     # ------------------------------------------------------------------
