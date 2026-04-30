@@ -54,8 +54,9 @@ class IbIntent(IbObject):
             content_parts = []
             for segment in self.segments:
                 if isinstance(segment, str) and segment.startswith("node_"):
-                    # 动态节点插值：通过执行上下文网关进行求值
-                    val = execution_context.visit(segment)
+                    # P3：通过 VMExecutor CPS 路径求值，消除对 ec.visit() 的依赖
+                    _vm = getattr(execution_context, 'vm_executor', None)
+                    val = _vm.run(segment) if _vm is not None else execution_context.visit(segment)
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
                     elif hasattr(val, 'to_native'):

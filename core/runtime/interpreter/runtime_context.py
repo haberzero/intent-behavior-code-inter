@@ -136,7 +136,7 @@ class ScopeImpl:
             return self._parent.assign(name, value)
         return False
 
-    def assign_by_uid(self, uid: str, value: Any) -> bool:
+    def assign_by_uid(self, uid: str, value: Any, skip_type_check: bool = False) -> bool:
         """基于 UID 的赋值"""
         boxed_value = self._registry.box(value)
         if uid in self._uid_to_symbol:
@@ -144,8 +144,9 @@ class ScopeImpl:
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
             
-            # 运行时类型校验
-            self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
+            # 运行时类型校验（skip_type_check=True 用于内部缓存写回，如 LLMFuture 解析后的回写）
+            if not skip_type_check:
+                self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
@@ -154,7 +155,7 @@ class ScopeImpl:
                 symbol.cell.set(boxed_value)
             return True
         if self._parent and hasattr(self._parent, 'assign_by_uid'):
-            return self._parent.assign_by_uid(uid, value)
+            return self._parent.assign_by_uid(uid, value, skip_type_check=skip_type_check)
         return False
 
     def get(self, name: str) -> Any:
@@ -594,9 +595,9 @@ class RuntimeContextImpl(RuntimeContext):
         if not self._current_scope.assign(name, value):
             raise InterpreterError(f"Variable '{name}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def set_variable_by_uid(self, uid: str, value: Any) -> None:
+    def set_variable_by_uid(self, uid: str, value: Any, skip_type_check: bool = False) -> None:
         """基于 UID 赋值"""
-        if not self._current_scope.assign_by_uid(uid, value):
+        if not self._current_scope.assign_by_uid(uid, value, skip_type_check=skip_type_check):
             raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:

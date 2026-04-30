@@ -93,9 +93,11 @@ class VMExecutor:
         return node_data.get("_type") in self._dispatch
 
     def fallback_visit(self, node_uid: str) -> Any:
-        """对未实现的节点回退到原递归 ``visit()`` 路径。
+        """旧递归 ``visit()`` 回退路径。
 
-        在 generator handler 内部直接调用即可（同步返回结果）。
+        **已废弃（P4b）**：P2/P3/P4/P4b 完成后，所有 ``ec.visit()`` 入口均已消除，
+        此方法不再被内部调度循环或 handler 调用。保留仅供外部遗留代码的过渡期兼容，
+        P5 阶段将随旧 handler 类一并删除。
         """
         return self._ec.visit(node_uid)
 
@@ -128,8 +130,14 @@ class VMExecutor:
         if node_uid is None:
             return self.registry.get_none()
         if not self.supports(node_uid):
-            # 不支持的根节点：直接走旧路径
-            return self.fallback_visit(node_uid)
+            # P4b：所有 AST 节点类型均已有 CPS handler；到达此处意味着节点类型
+            # 不在 dispatch table（新增节点未实现 handler，或 artifact 损坏）。
+            node_data = self._ec.get_node_data(node_uid) if isinstance(node_uid, str) else None
+            node_type = (node_data.get("_type") if node_data else None) or repr(node_uid)
+            raise RuntimeError(
+                f"VMExecutor: No CPS handler for root node type {node_type!r} "
+                f"(uid={node_uid!r}). Add vm_handle_{node_type} to core/runtime/vm/handlers.py."
+            )
 
         return self._drive_loop([self._make_task(node_uid)])
 
@@ -203,7 +211,8 @@ class VMExecutor:
                     )
                 continue
             except UnhandledSignal as use:
-                # fallback 路径产生的 UnhandledSignal：转为 pending_exception 沿栈传递
+                # IbUserFunction.call() 等通过 vm.run_body() 执行函数体，
+                # 若内部 BREAK/CONTINUE 逃逸出函数体，以 UnhandledSignal 透传。
                 stack.pop()
                 pending_exception = use
                 continue
@@ -222,14 +231,15 @@ class VMExecutor:
             if isinstance(child_uid, str) and self.supports(child_uid):
                 stack.append(self._make_task(child_uid))
             else:
-                # 不支持的子节点：通过 fallback 同步求值，把结果送回父生成器
-                try:
-                    pending_value = self._ec.visit(child_uid)
-                except UnhandledSignal as use:
-                    # fallback 路径产生的 UnhandledSignal：转为 pending_exception 沿栈传递
-                    pending_exception = use
-                except Exception as e:
-                    pending_exception = e
+                # P4b：dispatch table 覆盖所有 43 个 AST 节点类型；到达此处
+                # 意味着 handler yield 了一个未知节点 uid（artifact 损坏或新
+                # 增了未实现 handler 的节点）。
+                node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None
+                node_type = (node_data.get("_type") if node_data else None) or repr(child_uid)
+                raise RuntimeError(
+                    f"VMExecutor: No CPS handler for node type {node_type!r} "
+                    f"(uid={child_uid!r}). Add vm_handle_{node_type} to core/runtime/vm/handlers.py."
+                )
 
         # 栈空：处理最终结果
         if pending_exception is not None:
