@@ -402,9 +402,8 @@ class ExprHandler(BaseHandler):
                     if val is not None:
                         closure[sym_uid] = (name, IbCell(val))
                     else:
-                        # M3 修复（URGENT_ISSUES）：UID 查找失败时之前会静默跳过，
-                        # 导致后续调用 snapshot 时缺失变量、抛出难以定位的 "UID not found"
-                        # 错误。改为发出 debug 跟踪警告，便于排查。
+                        # UID 查找失败时发出 debug 跟踪警告，便于排查缺失变量问题。
+                        # 静默跳过会导致后续调用 snapshot 时抛出难以定位的 "UID not found" 错误。
                         self.debugger.trace(
                             CoreModule.INTERPRETER, DebugLevel.BASIC,
                             f"snapshot closure capture failed: free var "

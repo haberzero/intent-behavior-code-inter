@@ -72,8 +72,7 @@ class StmtHandler(BaseHandler):
                 # 此处总是清除（无条件），消除对 frame.should_retry 状态的依赖。
                 self.runtime_context.set_last_llm_result(None)
 
-                # C11/P3：node_protection 侧表已删除（C11 完成）；
-                # llmexcept handler 通过 target 字段直接引用 prev_stmt，
+                # llmexcept handler 通过 IbLLMExceptionalStmt.target 字段直接引用 prev_stmt，
                 # vm_handle_IbLLMExceptionalStmt 显式 yield target_uid 驱动执行。
                 last_target_value = self.execution_context.visit(target_uid)
 
