@@ -1822,7 +1822,26 @@ class SemanticAnalyzer:
             else:
                 self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
             return self._any_desc
-            
+
+        # G2: note-level warning when a specialized container write method receives a
+        # type that does not match the element type.  This is a convenience hint —
+        # it is non-blocking and does not prevent compilation.
+        from core.kernel.spec.specs import FuncSpec as _FuncSpec
+        if isinstance(func_type, _FuncSpec) and func_type.param_type_names:
+            for i, (expected_name, actual_type) in enumerate(
+                zip(func_type.param_type_names, arg_types)
+            ):
+                if expected_name == "any":
+                    continue
+                exp_spec = self.registry.resolve(expected_name)
+                if exp_spec and not self.registry.is_assignable(actual_type, exp_spec):
+                    hint = self.registry.get_diff_hint(actual_type, exp_spec)
+                    self.warn(
+                        f"Argument {i + 1} type mismatch: expected '{expected_name}', "
+                        f"got '{actual_type.name}'",
+                        node, code="SEM_081", hint=hint,
+                    )
+
         return res
 
     def visit_IbBehaviorExpr(self, node: ast.IbBehaviorExpr) -> IbSpec:

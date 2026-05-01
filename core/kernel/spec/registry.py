@@ -35,6 +35,7 @@ from .specs import (
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
+    LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
 )
 
 if TYPE_CHECKING:
@@ -624,11 +625,34 @@ class SpecRegistry:
                     ):
                         effective_return = spec.value_type_name
                         effective_return_module = getattr(spec, "value_type_module", None)
+
+                # G2: specialize write-method parameter types for list[T].
+                # append(item: any) → append(item: T)
+                # insert(idx: int, item: any) → insert(idx: int, item: T)
+                # __setitem__(idx: int, value: any) → __setitem__(idx: int, value: T)
+                effective_params = list(member.param_type_names)
+                # Ensure parallel module list has the same length (may be shorter than names).
+                raw_modules: List[Optional[str]] = list(member.param_type_modules)
+                while len(raw_modules) < len(effective_params):
+                    raw_modules.append(None)
+                effective_param_modules = raw_modules
+                if (
+                    isinstance(spec, ListSpec)
+                    and attr_name in ("append", "insert", "__setitem__")
+                    and getattr(spec, "element_type_name", "any") != "any"
+                    and not getattr(spec, "allowed_element_type_names", None)
+                ):
+                    elem = spec.element_type_name
+                    elem_mod = getattr(spec, "element_type_module", None)
+                    # last param is always the element (value/item)
+                    if effective_params:
+                        effective_params[-1] = elem
+                        effective_param_modules[-1] = elem_mod
                 return FuncSpec(
                     name=attr_name,
                     is_user_defined=spec.is_user_defined,
-                    param_type_names=list(member.param_type_names),
-                    param_type_modules=list(member.param_type_modules),
+                    param_type_names=effective_params,
+                    param_type_modules=effective_param_modules,
                     return_type_name=effective_return,
                     return_type_module=effective_return_module,
                     is_llm=member.is_llm(),
@@ -741,10 +765,27 @@ class SpecRegistry:
                 value_type_name=value_type.name,
                 value_type_module=getattr(value_type, 'module_path', None),
             )
+
+        # G1: early-cache hit — avoid allocating a temporary spec when the
+        # specialisation is already registered (e.g. repeated list[int] refs).
+        if arg_specs:
+            arg_names = [a.get_base_name() for a in arg_specs]
+            if len(arg_names) == 1:
+                candidate_key = f"{spec.name}[{arg_names[0]}]"
+            else:
+                sorted_names = sorted(arg_names)
+                candidate_key = f"{spec.name}[{','.join(sorted_names)}]"
+            cached = self.resolve(candidate_key)
+            if cached is not None:
+                return cached
+
         axiom = self.get_axiom(spec)
         if axiom and hasattr(axiom, "resolve_specialization_by_names"):
-            arg_names = [a.get_base_name() for a in arg_specs]
-            result = axiom.resolve_specialization_by_names(self, arg_names)
+            if not arg_specs:
+                arg_names_inner: List[str] = []
+            else:
+                arg_names_inner = arg_names  # already computed above
+            result = axiom.resolve_specialization_by_names(self, arg_names_inner)
             if result is not None:
                 # Bootstrap axiom methods for the newly registered specialised spec.
                 # _bootstrap_axiom_methods() ran at init time before this spec existed,
@@ -844,6 +885,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
         CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
         BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC, LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
+        LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
     ):
         reg.register(proto)
 

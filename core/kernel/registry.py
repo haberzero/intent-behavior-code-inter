@@ -385,6 +385,46 @@ class KernelRegistry:
             return bool(obj.value)
         return True
 
+    def make_llm_parse_error(self, message: str, raw_response: str = "", type_name: str = "") -> Any:
+        """Construct an LLMParseError IbObject with the given fields."""
+        cls = self.get_class("LLMParseError")
+        if not cls:
+            # Fallback to base Exception if LLMParseError not yet registered
+            cls = self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"]      = self.box(message)
+        instance.fields["raw_response"] = self.box(raw_response)
+        instance.fields["type_name"]    = self.box(type_name)
+        return instance
+
+    def make_llm_retry_exhausted_error(self, message: str, max_retry: int = 0, raw_response: str = "") -> Any:
+        """Construct an LLMRetryExhaustedError IbObject with the given fields."""
+        cls = self.get_class("LLMRetryExhaustedError")
+        if not cls:
+            cls = self.get_class("LLMError") or self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"]      = self.box(message)
+        instance.fields["raw_response"] = self.box(raw_response)
+        instance.fields["max_retry"]    = self.box(max_retry)
+        return instance
+
+    def make_llm_call_error(self, message: str, provider_error: str = "", raw_response: str = "") -> Any:
+        """Construct an LLMCallError IbObject with the given fields."""
+        cls = self.get_class("LLMCallError")
+        if not cls:
+            cls = self.get_class("LLMError") or self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"]        = self.box(message)
+        instance.fields["raw_response"]   = self.box(raw_response)
+        instance.fields["provider_error"] = self.box(provider_error)
+        return instance
+
     def clone(self) -> 'KernelRegistry':
         """
         创建 KernelRegistry 的浅克隆。
