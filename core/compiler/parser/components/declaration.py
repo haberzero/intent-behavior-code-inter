@@ -38,10 +38,6 @@ class DeclarationComponent(BaseComponent):
 
     def parse_declaration(self) -> Optional[ast.IbStmt]:
         role = SyntaxRecognizer.get_role(self.stream)
-        
-        # 提前消费待处理意图注释，准备进行侧表涂抹关联
-        # 无论是什么类型的语句，都应该在这里消费意图，防止遗留到子节点
-        pending_intents = self.context.consume_intents()
 
         stmt = None
         if role == SyntaxRole.LLM_EXCEPT:
@@ -65,10 +61,6 @@ class DeclarationComponent(BaseComponent):
         else:
             stmt = self.statement.parse_statement()
         
-        if pending_intents and stmt is not None:
-            # 涂抹式关联：暂存在节点对象上，由 SemanticAnalyzer 转入侧表，实现 AST 扁平化
-            setattr(stmt, "_pending_intents", pending_intents)
-            
         return stmt
 
     def variable_declaration(self, explicit_auto: bool = False, explicit_fn: bool = False) -> ast.IbAssign:
