@@ -619,7 +619,12 @@ class SpecRegistry:
                 effective_return = member.return_type_name
                 effective_return_module = member.return_type_module
 
-                if isinstance(spec, ListSpec) and not getattr(spec, "allowed_element_type_names", None):
+                if (
+                    isinstance(spec, ListSpec)
+                    # Multi-type lists (list[int,str,...]) have allowed_element_type_names set and
+                    # use element_type="any" intentionally — skip G3 specialization for them.
+                    and not getattr(spec, "allowed_element_type_names", None)
+                ):
                     elem = getattr(spec, "element_type_name", "any")
                     if elem != "any" and attr_name in ("pop", "__getitem__"):
                         effective_return = elem
@@ -633,9 +638,10 @@ class SpecRegistry:
                         effective_return_module = getattr(spec, "value_type_module", None)
                     elif attr_name == "values" and val != "any":
                         # G3: dict[K,V].values() → list[V]
+                        # Eagerly register list[V] if not yet in registry so that
+                        # resolve_return (called by visit_IbCall) can find it by name.
                         list_v_name = f"list[{val}]"
                         if not self.resolve(list_v_name):
-                            # Eagerly register list[V] so resolve_return can find it
                             list_base = self.resolve("list")
                             elem_spec = self.resolve(val) or self.resolve("any")
                             if list_base and elem_spec:
