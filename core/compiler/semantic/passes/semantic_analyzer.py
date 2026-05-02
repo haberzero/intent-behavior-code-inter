@@ -943,242 +943,284 @@ class SemanticAnalyzer:
         return self._void_desc
 
     def visit_IbAssign(self, node: ast.IbAssign):
-        # 预先计算右值类型
         val_type = self.visit(node.value) if node.value else self._any_desc
+        self._check_void_assign(node, val_type)
 
-        # Design 3 修复：编译期检测 void 函数返回值赋值
-        # 当右值类型为 void 时（如调用无返回值函数），赋值无意义，发出编译错误
-        if node.value and val_type is self._void_desc:
-            # 只在右值是函数调用时报错（避免误报其他 void 表达式如语句块）
-            if isinstance(node.value, ast.IbCall):
-                func_name = ""
-                if isinstance(node.value.func, ast.IbName):
-                    func_name = node.value.func.id
-                elif isinstance(node.value.func, ast.IbAttribute):
-                    func_name = f"...{node.value.func.attr}"
-                self.error(
-                    f"Cannot assign result of void function '{func_name}()' to a variable. "
-                    f"The function does not return a value.",
-                    node, code="SEM_003"
-                )
-        
-        # 2. 提取所有赋值目标中的变量名
-        assigned_names = SymbolExtractor.get_assigned_names(node)
-        
-        # 3. 遍历所有 target 节点进行语义检查
         for target_node in node.targets:
-            var_name = None
-            declared_type = None
-            sym = None
-            actual_target = target_node
-            
-            if isinstance(target_node, ast.IbTypeAnnotatedExpr):
-                declared_type = self._resolve_type(target_node.annotation)
-                if isinstance(target_node.target, ast.IbName):
-                    var_name = target_node.target.id
-            elif isinstance(target_node, ast.IbName):
-                var_name = target_node.id
-            elif isinstance(target_node, (ast.IbAttribute, ast.IbSubscript)):
-                # 处理属性赋值 (obj.x = 1) 或 下标赋值 (list[0] = 1)
-                # 递归调用 visit 来决议目标位置的类型
-                target_type = self.visit(target_node)
-                # Bug 修复：行为表达式赋值给字段/下标时，val_type 是 behavior（来自
-                # visit_IbBehaviorExpr 的返回值），与字段的具体类型不兼容，会产生误报
-                # SEM_003。正确处理：绑定字段的期望类型给行为表达式（供 LLM executor
-                # 的 _get_expected_type_hint 使用），跳过 behavior→target 的类型兼容检查。
-                if isinstance(node.value, ast.IbBehaviorExpr):
-                    if target_type and not self.registry.is_dynamic(target_type):
-                        self.side_table.bind_type(node.value, target_type)
-                    self.side_table.set_deferred(node.value, False)
-                    continue
-                # 检查类型兼容性
-                if not self.registry.is_assignable(val_type, target_type):
-                    hint = self.registry.get_diff_hint(val_type, target_type)
-                    self.error(f"Cannot assign '{val_type.name}' to '{target_type.name}'", node, code="SEM_003", hint=hint)
+            var_name, declared_type = self._resolve_target_name_and_type(target_node)
+
+            if isinstance(target_node, (ast.IbAttribute, ast.IbSubscript)):
+                self._handle_attr_subscript_target(node, target_node, val_type)
                 continue
-            elif isinstance(target_node, ast.IbTuple):
-                # 元组解包：(int x, int y) = (10, 20)
-                # 逐个定义元组内的变量
-                for elt in target_node.elts:
-                    if isinstance(elt, ast.IbTypeAnnotatedExpr):
-                        elt_type = self._resolve_type(elt.annotation)
-                        if isinstance(elt.target, (ast.IbName, ast.IbArg)):
-                            elt_name = elt.target.id if isinstance(elt.target, ast.IbName) else elt.target.arg
-                            elt_sym = self._define_var(elt_name, elt_type, elt, allow_overwrite=True)
-                            self.side_table.bind_symbol(elt, elt_sym)
-                            self.side_table.bind_type(elt, elt_sym.spec)
-                            if isinstance(elt.target, ast.IbName):
-                                self.side_table.bind_symbol(elt.target, elt_sym)
-                                self.side_table.bind_type(elt.target, elt_sym.spec)
-                    elif isinstance(elt, ast.IbName):
-                        elt_sym = self.symbol_table.resolve(elt.id)
-                        if elt_sym:
-                            self.side_table.bind_symbol(elt, elt_sym)
+            if isinstance(target_node, ast.IbTuple):
+                self._handle_tuple_unpack_target(target_node)
                 continue
-            
+
             if var_name:
-                # §9.2: llmexcept body read-only 约束
-                # 如果当前位于 llmexcept body 内，禁止对外部作用域变量的任何赋值（含重声明）。
-                # 允许：在 body 内声明全新的局部变量（该名称在外部作用域不存在）。
-                # 禁止：对快照进入前已存在的外部变量的一切写入（无论是否带类型标注）。
-                if (self._llmexcept_outer_scope_names is not None
-                        and var_name in self._llmexcept_outer_scope_names):
-                    self.error(
-                        f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
-                        f"writes to outer-scope variables break snapshot isolation. "
-                        f"Use 'retry \"hint\"' to provide correction guidance instead.",
-                        node, code="SEM_052"
-                    )
-
-                # global 声明：如果变量已声明为 global，将赋值绑定到全局作用域的符号，
-                # 不在本地作用域中创建新符号。
+                self._check_llmexcept_readonly(node, var_name)
+                actual_target = target_node
                 if var_name in self.symbol_table.global_refs:
-                    global_scope = self.symbol_table.get_global_scope()
-                    global_sym = global_scope.symbols.get(var_name)
-                    if global_sym:
-                        self.side_table.bind_symbol(actual_target, global_sym)
-                        self.side_table.bind_type(target_node, global_sym.spec)
-                        if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
-                            self.side_table.bind_symbol(target_node.target, global_sym)
-                            self.side_table.bind_type(target_node.target, global_sym.spec)
+                    self._bind_global_ref(target_node, actual_target, var_name)
                     continue
-
-                # 决议最终目标类型 (Inference Policy)
-                sym = self.symbol_table.symbols.get(var_name)
-                
-                if declared_type:
-                    # 0. fn 声明：可调用类型推导，类似 auto 但要求 RHS 是可调用的。
-                    #    fn f = myFunc  → f 持有 myFunc 的具体 callable spec (FuncSpec 等)
-                    #    fn f = 42      → SEM_003 (42 不可调用)
-                    if declared_type.name == "fn":
-                        if isinstance(val_type, ClassSpec):
-                            # ClassSpec 分两种情况：
-                            # (a) 类名引用（构造器）：fn f = Dog → 始终允许
-                            # (b) 类实例引用：fn f = dog_instance → 需要类定义了 __call__
-                            is_constructor_ref = (
-                                isinstance(node.value, ast.IbName) and
-                                self.symbol_table.resolve(node.value.id) is not None and
-                                self.symbol_table.resolve(node.value.id).kind == SymbolKind.CLASS
-                            )
-                            if is_constructor_ref:
-                                # fn f = Dog — f 持有构造器引用，始终有效
-                                target_type = val_type
-                            elif '__call__' in val_type.members:
-                                # fn f = callable_instance — 类定义了 __call__，有效
-                                target_type = val_type
-                            else:
-                                self.error(
-                                    f"'fn' requires a callable on the right-hand side. "
-                                    f"Type '{val_type.name}' does not define a '__call__' method. "
-                                    f"Add 'func __call__(self, ...)' to '{val_type.name}' "
-                                    f"to make its instances callable via 'fn'.",
-                                    node, code="SEM_003"
-                                )
-                                target_type = self.registry.resolve("callable") or self._any_desc
-                        elif self.registry.is_callable(val_type):
-                            # FuncSpec / deferred / behavior / bound_method 等
-                            target_type = val_type
-                        elif self.registry.is_dynamic(val_type):
-                            # 右值是 any/auto：保守推导为 callable
-                            target_type = self.registry.resolve("callable") or self._any_desc
-                        else:
-                            self.error(
-                                f"'fn' requires a callable on the right-hand side, "
-                                f"but got '{val_type.name}'. "
-                                f"Use 'fn f = myFunction' or 'fn f = myLambda'.",
-                                node, code="SEM_003"
-                            )
-                            target_type = self.registry.resolve("callable") or self._any_desc
-
-                        # D3: if declared_type is a CallableSigSpec (fn[(...)→(...)]),
-                        # perform structural signature matching when the RHS has a
-                        # known concrete callable signature.
-                        from core.kernel.spec.specs import CallableSigSpec as _CSS
-                        if isinstance(declared_type, _CSS) and isinstance(val_type, FuncSpec):
-                            self._check_callable_sig_match(declared_type, val_type, node)
-                    # 1. 有显式标注：优先尊重标注，除非标注是动态的 (auto/any)
-                    elif self.registry.is_dynamic(declared_type):
-                        if declared_type.name == "any":
-                            # `any` 是真正的动态类型：变量的 spec 永久保持为 any，
-                            # 不因首次赋值的实际类型而窄化，允许后续赋值为任意类型。
-                            target_type = self._any_desc
-                        else:
-                            # `auto`：从首次赋值的实际类型推断并锁定 spec。
-                            # 特殊情况：即时行为表达式（@~...~，非延迟模式）的 LLM 输出
-                            # 天然是字符串，不应推断为 behavior spec（behavior 是延迟对象的
-                            # 类型标记，而非 LLM 输出类型）。
-                            target_type = self._str_desc if self.registry.is_behavior(val_type) else val_type
-                    else:
-                        target_type = declared_type
-                    
-                    # [SEM_002] 检查是否在当前作用域重复声明
-                    if var_name in self.symbol_table.symbols:
-                        existing = self.symbol_table.symbols[var_name]
-                        # 允许同一个节点在 Pass 3 更新它在 Pass 1 定义的符号类型
-                        if existing.def_node is not node:
-                            self.error(f"Variable '{var_name}' is already defined in this scope", node, code="SEM_002")
-                    
-                    # 定义或更新符号
-                    sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
-                else:
-                    # 2. 无标注：对首次定义的变量使用 any 语义（不绑定到右值类型）。
-                    # 明确的类型推导（锁定到具体类型）只能通过显式类型标注或 auto 关键字实现。
-                    # any 例外：sym.spec 已为 any 时保持不变，允许后续任意类型赋值。
-                    spec_is_any = sym is not None and sym.spec is not None and sym.spec.name == "any"
-                    if not sym:
-                        # 首次定义，无类型标注 → any 语义
-                        sym = self._define_var(var_name, self._any_desc, node, allow_overwrite=False)
-                    elif self.registry.is_dynamic(sym.spec or self._any_desc) and not spec_is_any:
-                        # 现有符号是动态类型（auto），重新推导（保留旧行为）
-                        sym = self._define_var(var_name, val_type, node, allow_overwrite=True)
-                
+                sym = self._infer_and_define_symbol(node, var_name, declared_type, val_type)
                 if sym:
-                    self.side_table.bind_symbol(actual_target, sym)
-                    self.side_table.bind_type(target_node, sym.spec)
-                    if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
-                        self.side_table.bind_symbol(target_node.target, sym)
-                        self.side_table.bind_type(target_node.target, sym.spec)
-                    
-                    # 检查是否是行为描述表达式（裸 @~...~）
-                    inner_behavior_expr = None
-                    if isinstance(node.value, ast.IbBehaviorExpr):
-                        inner_behavior_expr = node.value
-                    elif isinstance(node.value, ast.IbCastExpr) and isinstance(node.value.value, ast.IbBehaviorExpr):
-                        # (Type)@~...~ 已废弃，解析器会发出 PAR_010 错误。
-                        # 防御性兜底：如果此路径被到达，也在语义层报错。
-                        self.error(
-                            "Cast expression '(Type) @~...~' is no longer supported. "
-                            "Use 'TYPE fn varname = lambda: @~...~' or 'TYPE fn varname = snapshot: @~...~' instead.",
-                            node, code="SEM_DEPRECATED"
-                        )
-
-                    if inner_behavior_expr:
-                        # 即时上下文：behavior 表达式立即执行
-                        self.side_table.set_deferred(inner_behavior_expr, False)
-                        # 从赋值目标 sym.spec 获取类型，传递给 IbBehaviorExpr 以构建正确的提示词
-                        if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
-                            self.side_table.bind_type(inner_behavior_expr, sym.spec)
-                            val_type = sym.spec
-                        else:
-                            val_type = self._str_desc
-                    
-                    if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
-                        # fn / typed-fn 声明：已在相应分支报告了错误，跳过重复检查
-                        from core.kernel.spec.specs import DeferredSpec as _DS
-                        is_fn_decl = declared_type and (
-                            declared_type.name == "fn" or isinstance(declared_type, _DS)
-                        )
-                        if not is_fn_decl:
-                            hint = self.registry.get_diff_hint(val_type, sym.spec)
-                            self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
+                    val_type = self._bind_symbol_to_side_table(
+                        node, target_node, actual_target, sym, declared_type, val_type
+                    )
             else:
-                # 处理属性或下标赋值 (e.g., p.val = 1)
                 target_type = self.visit(target_node)
                 if target_type and not self.registry.is_assignable(val_type, target_type):
                     hint = self.registry.get_diff_hint(val_type, target_type)
                     self.error(f"Type mismatch: Cannot assign '{val_type.name}' to target of type '{target_type.name}'", node, code="SEM_003", hint=hint)
-        
+
         return self._void_desc
+
+    def _check_void_assign(self, node: ast.IbAssign, val_type: IbSpec) -> None:
+        """Design 3 修复：编译期检测 void 函数返回值赋值（SEM_003）。"""
+        if node.value and val_type is self._void_desc and isinstance(node.value, ast.IbCall):
+            func_name = ""
+            if isinstance(node.value.func, ast.IbName):
+                func_name = node.value.func.id
+            elif isinstance(node.value.func, ast.IbAttribute):
+                func_name = f"...{node.value.func.attr}"
+            self.error(
+                f"Cannot assign result of void function '{func_name}()' to a variable. "
+                f"The function does not return a value.",
+                node, code="SEM_003"
+            )
+
+    def _resolve_target_name_and_type(self, target_node: ast.IbASTNode):
+        """从赋值目标节点提取 var_name 和 declared_type。"""
+        var_name = None
+        declared_type = None
+        if isinstance(target_node, ast.IbTypeAnnotatedExpr):
+            declared_type = self._resolve_type(target_node.annotation)
+            if isinstance(target_node.target, ast.IbName):
+                var_name = target_node.target.id
+        elif isinstance(target_node, ast.IbName):
+            var_name = target_node.id
+        return var_name, declared_type
+
+    def _handle_attr_subscript_target(
+        self, node: ast.IbAssign, target_node: ast.IbASTNode, val_type: IbSpec
+    ) -> None:
+        """处理属性赋值 (obj.x = 1) 或下标赋值 (list[0] = 1)。
+
+        行为表达式赋值给字段/下标时，val_type 是 behavior（来自 visit_IbBehaviorExpr
+        的返回值），与字段的具体类型不兼容，会产生误报 SEM_003。正确处理：绑定字段的
+        期望类型给行为表达式（供 LLM executor 的 _get_expected_type_hint 使用），
+        跳过 behavior→target 的类型兼容检查。
+        """
+        target_type = self.visit(target_node)
+        if isinstance(node.value, ast.IbBehaviorExpr):
+            if target_type and not self.registry.is_dynamic(target_type):
+                self.side_table.bind_type(node.value, target_type)
+            self.side_table.set_deferred(node.value, False)
+            return
+        if not self.registry.is_assignable(val_type, target_type):
+            hint = self.registry.get_diff_hint(val_type, target_type)
+            self.error(f"Cannot assign '{val_type.name}' to '{target_type.name}'", node, code="SEM_003", hint=hint)
+
+    def _handle_tuple_unpack_target(self, target_node: ast.IbTuple) -> None:
+        """元组解包：(int x, int y) = (10, 20)，逐个定义元组内的变量。"""
+        for elt in target_node.elts:
+            if isinstance(elt, ast.IbTypeAnnotatedExpr):
+                elt_type = self._resolve_type(elt.annotation)
+                if isinstance(elt.target, (ast.IbName, ast.IbArg)):
+                    elt_name = elt.target.id if isinstance(elt.target, ast.IbName) else elt.target.arg
+                    elt_sym = self._define_var(elt_name, elt_type, elt, allow_overwrite=True)
+                    self.side_table.bind_symbol(elt, elt_sym)
+                    self.side_table.bind_type(elt, elt_sym.spec)
+                    if isinstance(elt.target, ast.IbName):
+                        self.side_table.bind_symbol(elt.target, elt_sym)
+                        self.side_table.bind_type(elt.target, elt_sym.spec)
+            elif isinstance(elt, ast.IbName):
+                elt_sym = self.symbol_table.resolve(elt.id)
+                if elt_sym:
+                    self.side_table.bind_symbol(elt, elt_sym)
+
+    def _check_llmexcept_readonly(self, node: ast.IbAssign, var_name: str) -> None:
+        """§9.2: llmexcept body read-only 约束（SEM_052）。
+
+        如果当前位于 llmexcept body 内，禁止对外部作用域变量的任何赋值（含重声明）。
+        允许在 body 内声明全新的局部变量；禁止写入快照进入前已存在的外部变量。
+        """
+        if (self._llmexcept_outer_scope_names is not None
+                and var_name in self._llmexcept_outer_scope_names):
+            self.error(
+                f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
+                f"writes to outer-scope variables break snapshot isolation. "
+                f"Use 'retry \"hint\"' to provide correction guidance instead.",
+                node, code="SEM_052"
+            )
+
+    def _bind_global_ref(
+        self, target_node: ast.IbASTNode, actual_target: ast.IbASTNode, var_name: str
+    ) -> None:
+        """global 声明：将赋值绑定到全局作用域的符号，不在本地作用域创建新符号。"""
+        global_scope = self.symbol_table.get_global_scope()
+        global_sym = global_scope.symbols.get(var_name)
+        if global_sym:
+            self.side_table.bind_symbol(actual_target, global_sym)
+            self.side_table.bind_type(target_node, global_sym.spec)
+            if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
+                self.side_table.bind_symbol(target_node.target, global_sym)
+                self.side_table.bind_type(target_node.target, global_sym.spec)
+
+    def _infer_and_define_symbol(
+        self,
+        node: ast.IbAssign,
+        var_name: str,
+        declared_type: Optional[IbSpec],
+        val_type: IbSpec,
+    ) -> Optional[Any]:
+        """决议目标类型（Inference Policy）并定义/更新符号。
+
+        优先级：fn 推导 → 显式标注 → auto 推导 → 无标注 any 语义。
+        """
+        sym = self.symbol_table.symbols.get(var_name)
+
+        if declared_type:
+            target_type = self._infer_target_type_from_declared(node, declared_type, val_type)
+
+            # [SEM_002] 重复声明检查
+            if var_name in self.symbol_table.symbols:
+                existing = self.symbol_table.symbols[var_name]
+                if existing.def_node is not node:
+                    self.error(f"Variable '{var_name}' is already defined in this scope", node, code="SEM_002")
+
+            sym = self._define_var(var_name, target_type, node, allow_overwrite=True)
+        else:
+            # 无标注：首次定义 → any 语义；现有动态（auto）符号 → 重新推导。
+            spec_is_any = sym is not None and sym.spec is not None and sym.spec.name == "any"
+            if not sym:
+                sym = self._define_var(var_name, self._any_desc, node, allow_overwrite=False)
+            elif self.registry.is_dynamic(sym.spec or self._any_desc) and not spec_is_any:
+                sym = self._define_var(var_name, val_type, node, allow_overwrite=True)
+
+        return sym
+
+    def _infer_target_type_from_declared(
+        self,
+        node: ast.IbAssign,
+        declared_type: IbSpec,
+        val_type: IbSpec,
+    ) -> IbSpec:
+        """根据声明类型推导目标类型（fn / auto / any / 显式）。"""
+        if declared_type.name == "fn":
+            return self._infer_fn_type(node, declared_type, val_type)
+
+        if self.registry.is_dynamic(declared_type):
+            if declared_type.name == "any":
+                # `any`：变量 spec 永久保持为 any，不因首次赋值类型窄化。
+                return self._any_desc
+            # `auto`：从首次赋值的实际类型推断并锁定。
+            # 即时行为表达式的 LLM 输出天然是字符串，不应推断为 behavior spec。
+            return self._str_desc if self.registry.is_behavior(val_type) else val_type
+
+        return declared_type
+
+    def _infer_fn_type(
+        self,
+        node: ast.IbAssign,
+        declared_type: IbSpec,
+        val_type: IbSpec,
+    ) -> IbSpec:
+        """fn 声明：可调用类型推导（类似 auto 但要求 RHS 是可调用的）。
+
+        fn f = myFunc  → f 持有 myFunc 的具体 callable spec
+        fn f = 42      → SEM_003（42 不可调用）
+        """
+        if isinstance(val_type, ClassSpec):
+            # (a) 类名引用（构造器）：fn f = Dog → 始终允许
+            is_constructor_ref = (
+                isinstance(node.value, ast.IbName) and
+                self.symbol_table.resolve(node.value.id) is not None and
+                self.symbol_table.resolve(node.value.id).kind == SymbolKind.CLASS
+            )
+            if is_constructor_ref:
+                target_type = val_type
+            elif '__call__' in val_type.members:
+                # (b) 类实例引用，且类定义了 __call__
+                target_type = val_type
+            else:
+                self.error(
+                    f"'fn' requires a callable on the right-hand side. "
+                    f"Type '{val_type.name}' does not define a '__call__' method. "
+                    f"Add 'func __call__(self, ...)' to '{val_type.name}' "
+                    f"to make its instances callable via 'fn'.",
+                    node, code="SEM_003"
+                )
+                target_type = self.registry.resolve("callable") or self._any_desc
+        elif self.registry.is_callable(val_type):
+            target_type = val_type
+        elif self.registry.is_dynamic(val_type):
+            target_type = self.registry.resolve("callable") or self._any_desc
+        else:
+            self.error(
+                f"'fn' requires a callable on the right-hand side, "
+                f"but got '{val_type.name}'. "
+                f"Use 'fn f = myFunction' or 'fn f = myLambda'.",
+                node, code="SEM_003"
+            )
+            target_type = self.registry.resolve("callable") or self._any_desc
+
+        # D3: fn[(...)→(...)] 签名标注时，检查结构签名匹配
+        from core.kernel.spec.specs import CallableSigSpec as _CSS
+        if isinstance(declared_type, _CSS) and isinstance(val_type, FuncSpec):
+            self._check_callable_sig_match(declared_type, val_type, node)
+
+        return target_type
+
+    def _bind_symbol_to_side_table(
+        self,
+        node: ast.IbAssign,
+        target_node: ast.IbASTNode,
+        actual_target: ast.IbASTNode,
+        sym: Any,
+        declared_type: Optional[IbSpec],
+        val_type: IbSpec,
+    ) -> IbSpec:
+        """将符号绑定到侧表，处理行为表达式即时上下文，并做最终类型兼容检查。
+
+        返回（可能更新后的）val_type，供调用方做后续类型检查。
+        """
+        self.side_table.bind_symbol(actual_target, sym)
+        self.side_table.bind_type(target_node, sym.spec)
+        if isinstance(target_node, ast.IbTypeAnnotatedExpr) and isinstance(target_node.target, ast.IbName):
+            self.side_table.bind_symbol(target_node.target, sym)
+            self.side_table.bind_type(target_node.target, sym.spec)
+
+        # 行为表达式即时上下文：@~...~（非延迟模式）
+        inner_behavior_expr = None
+        if isinstance(node.value, ast.IbBehaviorExpr):
+            inner_behavior_expr = node.value
+        elif isinstance(node.value, ast.IbCastExpr) and isinstance(node.value.value, ast.IbBehaviorExpr):
+            # (Type)@~...~ 已废弃，解析器会发出 PAR_010 错误，语义层防御性兜底
+            self.error(
+                "Cast expression '(Type) @~...~' is no longer supported. "
+                "Use 'TYPE fn varname = lambda: @~...~' or 'TYPE fn varname = snapshot: @~...~' instead.",
+                node, code="SEM_DEPRECATED"
+            )
+
+        if inner_behavior_expr:
+            self.side_table.set_deferred(inner_behavior_expr, False)
+            if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
+                self.side_table.bind_type(inner_behavior_expr, sym.spec)
+                val_type = sym.spec
+            else:
+                val_type = self._str_desc
+
+        if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
+            from core.kernel.spec.specs import DeferredSpec as _DS
+            is_fn_decl = declared_type and (
+                declared_type.name == "fn" or isinstance(declared_type, _DS)
+            )
+            if not is_fn_decl:
+                hint = self.registry.get_diff_hint(val_type, sym.spec)
+                self.error(f"Type mismatch: Cannot assign '{val_type.name}' to '{sym.spec.name}'", node, code="SEM_003", hint=hint)
+
+        return val_type
 
     def visit_IbIf(self, node: ast.IbIf):
         test_type = self.visit(node.test)
