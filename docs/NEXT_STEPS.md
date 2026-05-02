@@ -3,7 +3,7 @@
 > 本文档只记录"接下来可以直接开工的任务"。  
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`，VM 架构长期设想见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-04-30（双轨消除路线图 P1-P7 落地：P1/P4/H2 零风险任务已完成；选项 6/7 替换为 P1-P7 完整路线图；**当前测试基线：1011 个测试通过**）
+> **最后更新**：2026-05-02（双轨消除路线图 P1-P7 **全部完成**；LLM 异常层次 E1-E5 实现；**当前测试基线：1028 个测试通过**）
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## 下一里程碑选项（按建议优先级）
 
-技术债已全部清零；**fn/lambda/snapshot 类型系统重设计均已完成（1011 测试通过）**；
+技术债已全部清零；**fn/lambda/snapshot 类型系统重设计均已完成（1028 测试通过）**；
 可在以下方向中选择主线推进：
 
 ### 选项 1：Semantic 用户面其他问题修复
@@ -51,24 +51,22 @@
 
 `docs/PENDING_TASKS_VM.md`（失败传播） — 当前 LLM 重试耗尽后产生 `Uncertain`，但 permanent failure 与可恢复错误的语义边界、跨函数传播、与 `try/except` 的协同尚未完整规范。
 
-### 选项 6：双轨制彻底消灭（P1-P7）
+### ~~选项 6：双轨制彻底消灭（P1-P7）~~ ✅ **全部完成（2026-04-30）**
 
 **背景**：M3 CPS 迁移后存在两条执行路径——VM CPS Path（目标）和 Expression Eval Path（旧路径，待消灭）。旧路径依赖 `Interpreter.visit()` + Python 递归 + Python 异常控制流（`ReturnException`/`BreakException`/`ContinueException`），与 Python 底层深度耦合。完整路线图见 `docs/PENDING_TASKS_VM.md §十一`。
 
-**已完成（2026-04-30）**：
-- ✅ **P1**：`_pre_evaluate_user_classes` → `_get_vm_executor().run()`（1 行改动）
-- ✅ **P4**：`vm_handle_IbLLMExceptionalStmt` else fallback → 直接 `yield target_uid`（2 行改动）
+**全部完成（2026-04-30）**：
+- ✅ **P1**：`_pre_evaluate_user_classes` → `_get_vm_executor().run()`
+- ✅ **P4**：`vm_handle_IbLLMExceptionalStmt` else fallback → 直接 `yield target_uid`
 - ✅ **H2**：`ExprHandler.visit_IbLambdaExpr` 迁移到编译期 `free_vars`（运行时 AST 遍历消除）
+- ✅ **P2**：`IbDeferred.call()` CPS 化（`_execution_context` 字段删除）
+- ✅ **P3**：提示词 segment 求值内联到 `vm_handle_IbBehaviorExpr`
+- ✅ **P4b**：dispatch loop fallback 删除
+- ✅ **P5**：旧 Handler 类删除（−1400 行）
+- ✅ **P6**：`ReturnException`/`BreakException`/`ContinueException` 删除；`Signal` 是唯一控制流载体
+- ✅ **P7**：文件结构重组；`handlers/` 目录删除
 
-**下一步（按优先级）**：
-
-- **P2（最重要）：`IbDeferred.call()` CPS 化**  
-  `core/runtime/objects/builtins.py:IbDeferred.call()` 是旧路径最主要的剩余入口（`ec.visit(target_uid)` 驱动 lambda/snapshot 体执行）。迁移到 `vm/handlers.py:vm_handle_IbCall` 中 CPS 内联 lambda/snapshot 体，删除 `IbDeferred._execution_context` 字段。工程量：约 60 行，风险中等，测试全覆盖。
-
-- **P3：提示词 segment 求值内联**  
-  `intent.py:IbIntent.resolve()` 和 `llm_executor.py:_build_prompt()` 中对 `node_` 前缀 UID 的 `ec.visit(segment)` 调用，迁移到 `vm_handle_IbBehaviorExpr` 内部 `yield seg`。工程量：约 40 行，风险低，与 P2 可并行。
-
-- **P4b → P5 → P6 → P7（在 P2+P3 完成后）**：删除 dispatch loop fallback → 删除旧 handler 类（−1400 行）→ 删除 Python 异常控制流类 → 文件结构重组。详见 `docs/PENDING_TASKS_VM.md §十一`。
+双轨彻底消灭：VMExecutor CPS 调度循环是唯一执行入口。
 
 ### 选项 7：Semantic 代码健康三件套
 
@@ -88,20 +86,17 @@
 ## 任务依赖图
 
 ```
-✅ 核心公理化 + VM 主路径 + 多解释器并发 + LLM 流水线 + 编译器深度清洁 + fn 类型系统重设计（1011 测试）
+✅ 核心公理化 + VM 主路径 + 多解释器并发 + LLM 流水线 + 编译器深度清洁 + fn 类型系统重设计（1028 测试）
 ✅ P1（_pre_evaluate → VMExecutor）+ P4（IbLLMExceptionalStmt fallback 删除）+ H2（free_vars 迁移）
+✅ P2（IbDeferred CPS 化）+ P3（提示词 segment 内联）
+✅ P4b（dispatch loop fallback 删除）→ P5（旧 handler 类删除，−1400 行）→ P6（Python 异常控制流类删除）→ P7（目录重组）
+✅ E1-E5：LLM 异常层次（LLMError/LLMParseError/LLMRetryExhaustedError/LLMCallError）
     │
     ├── 用户面语义修复（try/except、泛型）
     ├── 目标语言后端（Rust/Go 参考实现）
     ├── 类型引用重构（TypeRef，与下一代 VM 升级配合）
     ├── 插件系统完善（方法/类型模块语义、Scheduler 符号注入）
     ├── LLM 永久失败传播语义
-    ├── 双轨制消灭主线（选项 6）：
-    │     P2（IbDeferred CPS 化）← 最重要下一步
-    │     P3（提示词 segment 内联）← 可与 P2 并行
-    │     P4b → P5（−1400 行旧 handler）← 依赖 P2+P3
-    │     P6（删除 Python 异常控制流类）← 依赖 P5
-    │     P7（目录重组）← 依赖 P5
     └── Semantic 代码健康（选项 7，H5–H7，各自独立）
 ```
 
