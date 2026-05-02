@@ -7,10 +7,11 @@ class IExecutionContext(Protocol):
     """
     运行时执行上下文数据协议。
     作为 Interpreter 与底层组件（Kernel/Foundation）解耦的桥梁。
-    它仅包含执行所需的只读数据池、栈内省能力以及求值入口。
+    它仅包含执行所需的只读数据池、栈内省能力以及辅助查询方法。
 
     此接口定义在 kernel 层，作为架构核心抽象。
     runtime 层实现具体类并实现此接口。
+    求值入口为 VMExecutor.run()；此 Protocol 不包含 visit() 方法（已于 P2-P7 双轨消灭后删除）。
     """
     @property
     def node_pool(self) -> Mapping[str, Any]: ...
@@ -50,8 +51,6 @@ class IExecutionContext(Protocol):
 
     @property
     def strict_mode(self) -> bool: ...
-
-    def visit(self, node_uid: str, module_name: Optional[str] = None) -> Any: ...
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]: ...
 
