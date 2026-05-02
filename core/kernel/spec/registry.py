@@ -603,28 +603,55 @@ class SpecRegistry:
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):
-                # For specialized generic containers, override the return type of methods
-                # that are documented as returning the element/value type.
-                # ListSpec[T].pop() → T   (axiom declares "any" as a placeholder)
-                # DictSpec[K,V].pop(key) → V
+                # G2/G3: For specialized generic containers, override the return type of
+                # methods that return the element/value type.
+                # Override is applied regardless of the axiom's declared return type —
+                # specialization is based on the container's runtime type parameter.
+                #
+                # ListSpec[T]:
+                #   pop()         → T  (was "any")
+                #   __getitem__() → T  (was "any", G3)
+                # DictSpec[K,V]:
+                #   pop(key)  → V  (was "any")
+                #   get(key)  → V  (was "any", G3)
+                #   values()  → list[V]  (was bare "list", G3)
+                #   keys()    → list[K]  (was bare "list", G3)
                 effective_return = member.return_type_name
                 effective_return_module = member.return_type_module
-                if member.return_type_name == "any":
-                    if (
-                        isinstance(spec, ListSpec)
-                        and attr_name == "pop"
-                        and getattr(spec, "element_type_name", "any") != "any"
-                        and not getattr(spec, "allowed_element_type_names", None)
-                    ):
-                        effective_return = spec.element_type_name
+
+                if isinstance(spec, ListSpec) and not getattr(spec, "allowed_element_type_names", None):
+                    elem = getattr(spec, "element_type_name", "any")
+                    if elem != "any" and attr_name in ("pop", "__getitem__"):
+                        effective_return = elem
                         effective_return_module = getattr(spec, "element_type_module", None)
-                    elif (
-                        isinstance(spec, DictSpec)
-                        and attr_name == "pop"
-                        and getattr(spec, "value_type_name", "any") != "any"
-                    ):
-                        effective_return = spec.value_type_name
+                elif isinstance(spec, DictSpec):
+                    val = getattr(spec, "value_type_name", "any")
+                    key = getattr(spec, "key_type_name", "any")
+                    if attr_name in ("pop", "get") and val != "any":
+                        # G3: dict[K,V].get(key) → V  (same as pop)
+                        effective_return = val
                         effective_return_module = getattr(spec, "value_type_module", None)
+                    elif attr_name == "values" and val != "any":
+                        # G3: dict[K,V].values() → list[V]
+                        list_v_name = f"list[{val}]"
+                        if not self.resolve(list_v_name):
+                            # Eagerly register list[V] so resolve_return can find it
+                            list_base = self.resolve("list")
+                            elem_spec = self.resolve(val) or self.resolve("any")
+                            if list_base and elem_spec:
+                                self.resolve_specialization(list_base, [elem_spec])
+                        effective_return = list_v_name
+                        effective_return_module = None
+                    elif attr_name == "keys" and key != "any":
+                        # G3: dict[K,V].keys() → list[K]
+                        list_k_name = f"list[{key}]"
+                        if not self.resolve(list_k_name):
+                            list_base = self.resolve("list")
+                            key_spec = self.resolve(key) or self.resolve("any")
+                            if list_base and key_spec:
+                                self.resolve_specialization(list_base, [key_spec])
+                        effective_return = list_k_name
+                        effective_return_module = None
 
                 # G2: specialize write-method parameter types for list[T].
                 # append(item: any) → append(item: T)
@@ -768,8 +795,10 @@ class SpecRegistry:
 
         # G1: early-cache hit — avoid allocating a temporary spec when the
         # specialisation is already registered (e.g. repeated list[int] refs).
+        # Use spec.name (full name with type params) rather than get_base_name()
+        # so that nested generics like list[list[int]] key correctly.
         if arg_specs:
-            arg_names = [a.get_base_name() for a in arg_specs]
+            arg_names = [a.name for a in arg_specs]
             if len(arg_names) == 1:
                 candidate_key = f"{spec.name}[{arg_names[0]}]"
             else:

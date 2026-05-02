@@ -17,7 +17,7 @@ from core.runtime.host.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
-    DEP_MODULE_NOT_FOUND
+    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT
 )
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
@@ -460,22 +460,22 @@ class Scheduler(ICompilerService):
                                 curr_mod = next_mod_sym.spec
                     else:
                         # 普通导入或带别名导入
-                        # [临时方案] 检查是否已存在同名符号
-                        # [Future] 严格遵循显式引入原则：外部模块符号不预注入
                         existing = analyzer.symbol_table.resolve(local_name)
                         if existing:
-                            # 情况1：已存在 MODULE 符号（可能是 Prelude 预注入的外部模块）
                             if existing.kind == SymbolKind.MODULE:
-                                # 跳过重复注入
-                                # 这符合"显式引入"原则的临时妥协：允许未 import 时使用 ai.xxx
+                                # 同名 MODULE 符号已存在（同一模块被重复导入）——幂等跳过即可。
                                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                     f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
                             else:
-                                # 情况2：已存在用户定义的符号（CLASS, FUNCTION 等）
-                                # 外部模块的 import 应该被忽略或给出警告
-                                # 因为用户可能意图使用自己定义的符号
-                                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC,
-                                    f"[import] Symbol '{local_name}' conflicts with an existing {existing.kind.name} symbol in '{file_path}'. Import silently ignored.")
+                                # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突（§9.2）。
+                                # 用户自有符号优先；发出 SEM_009 WARNING 提示用户检查命名。
+                                file_tracker.warning(
+                                    f"Import '{local_name}' conflicts with an already-defined "
+                                    f"{existing.kind.name.lower()} symbol of the same name. "
+                                    f"The import is ignored; the locally-defined symbol takes precedence.",
+                                    location=Location(file_path=file_path, line=imp.lineno, column=1),
+                                    code=SEM_IMPORT_CONFLICT,
+                                )
                         else:
                             mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
                             analyzer.symbol_table.define(mod_sym)
@@ -484,8 +484,7 @@ class Scheduler(ICompilerService):
                     # 2. 处理 from mod import a, b as c, *
                     for alias in imp.names:
                         if alias.name == '*':
-                            # 注入所有导出的符号
-                            # [临时方案] 检查是否已存在同名符号
+                            # 注入所有导出的符号；跳过已存在同名符号（幂等）
                             for name, sym in s_mod_type.exported_scope.symbols.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
@@ -499,11 +498,20 @@ class Scheduler(ICompilerService):
                             target_sym = s_mod_type.exported_scope.resolve(alias.name)
                             if target_sym:
                                 local_name = alias.asname if alias.asname else alias.name
-                                # [临时方案] 检查是否已存在同名符号
                                 existing = analyzer.symbol_table.resolve(local_name)
                                 if existing:
-                                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
+                                    # 用户定义的符号与 from-import 名冲突（§9.2）。
+                                    if existing.kind != SymbolKind.MODULE:
+                                        file_tracker.warning(
+                                            f"'from {imp.module_name} import {alias.name}' conflicts with an already-defined "
+                                            f"{existing.kind.name.lower()} symbol '{local_name}'. "
+                                            f"The import is ignored; the locally-defined symbol takes precedence.",
+                                            location=Location(file_path=file_path, line=imp.lineno, column=1),
+                                            code=SEM_IMPORT_CONFLICT,
+                                        )
+                                    else:
+                                        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                            f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
                                     # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
