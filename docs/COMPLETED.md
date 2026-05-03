@@ -1393,3 +1393,48 @@ python3 -m pytest tests/ -q --tb=short
 - `fn` 应保持"callable 推导哨兵"的纯净定位（与 `auto` 对称）
 
 D3 的 `fn[...]` 进一步把高阶函数参数所需的"签名约束"从"`fn` 关键字"上分离出来，使两者职责彻底正交：变量声明用裸 `fn`；类型标注用 `fn[...]`。
+
+
+---
+
+## 二十三、H5-H7 代码健康三件套 + 插件系统 §9 完善 + 泛型推断 G3（2026-05-02）
+
+### 23.1 H7：`visit_IbAssign` 复杂度降低（已完成于之前重构，本次确认）
+
+`SemanticAnalyzer.visit_IbAssign` 已拆分为 10+ 职责单一的私有子函数。主方法约 32 行，
+逻辑委托给：`_check_void_assign`、`_resolve_target_name_and_type`、
+`_handle_attr_subscript_target`、`_handle_tuple_unpack_target`、
+`_check_llmexcept_readonly`、`_bind_global_ref`、`_infer_and_define_symbol`、
+`_infer_target_type_from_declared`、`_infer_fn_type`、`_bind_symbol_to_side_table`。
+
+H5（ExpressionAnalyzer 清理）和 H6（`_pending_intents` 删除）均已在 2026-05-02 的
+前序提交中完成。
+
+### 23.2 插件系统 §9 完善
+
+| 改动 | 详情 |
+|------|------|
+| `core/base/diagnostics/codes.py` | 新增 `SEM_IMPORT_CONFLICT = "SEM_009"` |
+| `core/compiler/scheduler.py` | 删除全部 `[临时方案]` 注释；import 与用户定义符号冲突时发出 SEM_009 WARNING（取代静默忽略）；FROM_IMPORT 冲突同样检测 |
+
+**OI-3 状态**：✅ 已关闭（`Prelude` 的 `is_user_defined` 过滤器已阻止插件预注入；
+`[临时方案]` 路径已清除）。
+
+### 23.3 泛型推断 G3
+
+| 改动 | 详情 |
+|------|------|
+| `core/kernel/spec/registry.py` | `resolve_member`：G3 覆盖 — list[T].__getitem__→T；dict[K,V].get→V；dict[K,V].values→list[V]；dict[K,V].keys→list[K]（移除旧 `if ret=="any"` 条件，改为独立分支处理 values/keys） |
+| `core/kernel/spec/registry.py` | `resolve_specialization` G1 fix：`arg_names` 改用 `a.name`（完整名称）而非 `a.get_base_name()`，修复嵌套泛型 `list[list[int]]` 的 key 计算错误 |
+| `tests/compiler/test_g3_generics.py` | 新增 21 个 G3 专项测试（list getitem、dict get/values/keys、协变、嵌套泛型） |
+
+**已解决的 KNOWN_LIMITS**：§16.1（下标推断）、§16.2（axiom 引导）、§16.3（嵌套泛型）、§16.6（协变）。
+
+**OI-4 状态**：✅ 已关闭（G1 + G3 修复覆盖原 OI-4 描述的缓存问题）。
+
+### 23.4 测试基线
+
+```
+python3 -m pytest tests/ -q --tb=short
+1028 passed (H6 前基线) → 1049 passed (G3 + 21 新测试)
+```

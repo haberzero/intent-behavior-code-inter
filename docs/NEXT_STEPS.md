@@ -3,7 +3,7 @@
 > 本文档只记录"接下来可以直接开工的任务"。  
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`，VM 架构长期设想见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-05-02（双轨消除路线图 P1-P7 **全部完成**；LLM 异常层次 E1-E5 实现；**当前测试基线：1028 个测试通过**）
+> **最后更新**：2026-05-02（H5-H7 代码健康三件套 **全部完成**；插件系统 §9 OI-3 修复 + SEM_009 WARNING 落地；泛型推断 G3 改进（list `__getitem__`、dict `get/values/keys` 特化、嵌套泛型修复）；**当前测试基线：1049 个测试通过**）
 
 ---
 
@@ -68,18 +68,13 @@
 
 双轨彻底消灭：VMExecutor CPS 调度循环是唯一执行入口。
 
-### 选项 7：Semantic 代码健康三件套
+### ~~选项 7：Semantic 代码健康三件套~~ ✅ **全部完成（2026-05-02）**
 
-以下三项均独立可交付，与其他选项无前置依赖：
+以下三项均已完成：
 
-- **H5（P1）：ExpressionAnalyzer ghost class 清理**  
-  `core/compiler/semantic/passes/expression_analyzer.py` 定义了 `ExpressionAnalyzer` 类，包含 `visit_IbBinOp`、`visit_IbName`、`visit_IbCall` 等方法，但全仓库无任何 import 或实例化。是一次未完成重构的遗留产物。可直接删除，或完成为 `SemanticAnalyzer` 的表达式类型推导委托类。详见 `docs/PENDING_TASKS.md §11.8`。
-
-- **H6（P2）：`_pending_intents` 动态属性信道形式化**  
-  `DeclarationComponent.parse_declaration()` 通过 `setattr(stmt, "_pending_intents", ...)` 将意图注释"涂抹"到 AST 节点，再由 `SemanticAnalyzer` 在 Pass 中读取。这是 parser→semantic 的隐式信道，与已删除的 `_pending_fn_return_type` 同类问题。可迁移为 AST 节点的显式字段或侧表。详见 `docs/PENDING_TASKS.md §11.9`。
-
-- **H7（P2）：`visit_IbAssign` 复杂度降低**  
-  `SemanticAnalyzer.visit_IbAssign` 是全文件中逻辑分支最多的单一方法（处理 fn 推导、auto 推导、global 作用域、llmexcept 只读约束、行为表达式特殊路径、元组解包等共 8+ 分支）。需拆分为职责单一的子函数以提高可维护性。详见 `docs/PENDING_TASKS.md §11.10`。
+- ✅ **H5（P1）：ExpressionAnalyzer ghost class 清理** — `expression_analyzer.py` 及所有无效引用已删除（2026-05-02）。
+- ✅ **H6（P2）：`_pending_intents` 动态属性信道形式化** — `_pending_intents` 幽灵管道（旧意图涂抹模型残留）已完全删除（2026-05-02）。
+- ✅ **H7（P2）：`visit_IbAssign` 复杂度降低** — `visit_IbAssign` 已拆分为 10+ 职责单一的私有子函数（`_check_void_assign`、`_resolve_target_name_and_type`、`_handle_attr_subscript_target`、`_handle_tuple_unpack_target`、`_check_llmexcept_readonly`、`_bind_global_ref`、`_infer_and_define_symbol`、`_infer_target_type_from_declared`、`_infer_fn_type`、`_bind_symbol_to_side_table` 等），主方法约 32 行（2026-05-02）。
 
 ---
 
@@ -91,13 +86,14 @@
 ✅ P2（IbDeferred CPS 化）+ P3（提示词 segment 内联）
 ✅ P4b（dispatch loop fallback 删除）→ P5（旧 handler 类删除，−1400 行）→ P6（Python 异常控制流类删除）→ P7（目录重组）
 ✅ E1-E5：LLM 异常层次（LLMError/LLMParseError/LLMRetryExhaustedError/LLMCallError）
+✅ H5-H7：Semantic 代码健康三件套（ExpressionAnalyzer 清理、_pending_intents 删除、visit_IbAssign 拆分）
+✅ 插件系统（§9）：OI-3 修复（显式引入已执行，SEM_009 import 冲突 WARNING 新增）
+✅ 泛型推断 G3：resolve_member 特化（list[T].__getitem__→T，dict[K,V].get/values/keys 特化，嵌套泛型 list[list[T]] 修复）
     │
-    ├── 用户面语义修复（try/except、泛型）
+    ├── 用户面语义修复（try/except、泛型进一步完善）
     ├── 目标语言后端（Rust/Go 参考实现）
     ├── 类型引用重构（TypeRef，与下一代 VM 升级配合）
-    ├── 插件系统完善（方法/类型模块语义、Scheduler 符号注入）
-    ├── LLM 永久失败传播语义
-    └── Semantic 代码健康（选项 7，H5–H7，各自独立）
+    └── LLM 永久失败传播语义
 ```
 
 ---

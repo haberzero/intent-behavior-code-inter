@@ -41,35 +41,30 @@ IBCI 的 `try/except` 错误模型尚未与 `llmexcept` / LLM 不确定性体系
 
 ## 二、编译器待修复项
 
-### OI-3：外部模块符号预注入临时妥协
+### ~~OI-3：外部模块符号预注入临时妥协~~ ✅ **已解决（2026-05-02）**
 
-**文件**：`core/compiler/scheduler.py:463–470`
+**文件**：`core/compiler/scheduler.py`（已清理）
 
-**问题描述**：
-当用户未显式 `import ai` 时，系统通过 Prelude 预注入允许使用 `ai.xxx`，违反了显式引入原则。这是 Plugin 系统 Phase 2 遗留的临时妥协：检测到同名 MODULE 符号时静默跳过，而非报 `未导入` 错误。
+**解决方案**：
+1. `Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器已阻止插件模块预注入——无 `import` 时访问插件符号会触发正常的 `SEM_001 Unknown variable` 报错。
+2. `scheduler.py` 中的 `[临时方案]` 注释已全部清除。
+3. 新增 `SEM_009 SEM_IMPORT_CONFLICT` 诊断代码（`codes.py`）——当 `import X` 与用户定义的同名符号冲突时，编译器现在发出 WARNING 而非静默跳过。
 
-**风险**：用户可以在未写 `import ai` 的情况下使用外部模块符号，行为与语言显式引入语义不一致。
-
-**解锁条件**：Plugin 系统 Phase 3/4（Scheduler 符号注入逻辑标记外部模块符号，语义分析层区分"预注入"与"显式导入"）。
-
-**文档跟踪**：`docs/PENDING_TASKS.md §9.1`；`docs/NEXT_STEPS.md` 选项 4
+**文档跟踪**：`docs/COMPLETED.md §二十三`
 
 ---
 
 ## 三、内核/规格层待优化项
 
-### OI-4：`SpecRegistry.resolve_specialization()` 无缓存
+### ~~OI-4：`SpecRegistry.resolve_specialization()` 无缓存~~ ✅ **已解决（2026-05-02 G3）**
 
-**文件**：`core/kernel/spec/registry.py:695–737`（`resolve_specialization()` 方法）
+**文件**：`core/kernel/spec/registry.py`（G1/G3 已修复）
 
-**问题描述**：
-每次参数化类型解析（如 `list[int]`、`dict[str,int]`）都创建新的 spec 对象实例，不写回 `_specs` 缓存。同一类型在程序中出现 N 次则有 N 个不相等的 spec 对象，axiom 方法 bootstrap 也重复执行。
+**解决方案**：
+1. G1（2026-05-02）：`resolve_specialization` 加入 early-cache hit 逻辑——注册后的特化类型通过 `self.resolve(candidate_key)` 快速命中，不再重复创建。
+2. G3（2026-05-02）：`candidate_key` 改用 `a.name`（完整名称）而非 `a.get_base_name()`，嵌套泛型 `list[list[int]]` 可正确缓存和命中。
 
-**影响**：大型程序内存持续增长；依赖 `is` 比较的优化失效；与 `docs/KNOWN_LIMITS.md §16.2` 和 `docs/PENDING_TASKS.md §3.7` 耦合。
-
-**建议方案**：改为 lookup-or-create，创建后立即 `self.register(result)`。
-
-**文档跟踪**：`docs/PENDING_TASKS.md §11.7`
+**文档跟踪**：`docs/COMPLETED.md §二十三`
 
 ---
 

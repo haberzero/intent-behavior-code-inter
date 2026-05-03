@@ -442,19 +442,19 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ## 十六、泛型与容器类型限制
 
-当前泛型实现是浅层的、不完整的，存在以下已知设计限制。改进方向见 `docs/PENDING_TASKS.md §三`。
+当前泛型实现仍有部分限制（G1/G2/G3 改进后已解决多项）。改进方向见 `docs/PENDING_TASKS.md §三`。
 
-### 16.1 下标访问的类型推断返回 `any`
+### ~~16.1 下标访问的类型推断返回 `any`~~ ✅ 已解决（G1/G3）
 
-`list[int]` 类型变量通过下标访问时，返回类型推断为 `any` 而非 `int`。`ListAxiom.__getitem__` 的返回类型硬编码为 `any`，泛型参数未传播到下标运算结果。
+`list[int]` 下标访问（`[]` 运算符）现在通过 `registry.resolve_subscript()` 正确返回元素类型 `int`，而非 `any`。`list[T].__getitem__` 方法成员亦通过 G3 改进返回 `T`（详见 `docs/COMPLETED.md §二十三`）。
 
-### 16.2 泛型特化的 axiom 方法引导不完整
+### ~~16.2 泛型特化的 axiom 方法引导不完整~~ ✅ 已解决（G1/G2/G3）
 
-动态创建的泛型特化（如 `list[str]`）在 `SpecRegistry.resolve_specialization()` 中有手动调用 `_bootstrap_axiom_methods` 的补偿逻辑，但覆盖不完整，边界情况下部分 axiom 方法在特化类型上可能不可用。另见 `docs/OPEN_ISSUES.md OI-4`（`resolve_specialization` 无缓存问题）。
+`resolve_specialization()` 已在 G1 加入 early-cache hit 逻辑，G3 修复了嵌套泛型的 key 计算（使用 `spec.name` 而非 `get_base_name()`）。OI-4 已关闭，详见 `docs/OPEN_ISSUES.md`。
 
-### 16.3 嵌套容器的链式下标类型推断缺失
+### ~~16.3 嵌套容器的链式下标类型推断缺失~~ ✅ 已解决（G3）
 
-对嵌套容器（如 `list[list[int]]`）进行链式下标访问时，内层访问结果的类型无法推断（返回 `any`）。语义分析阶段不追踪泛型参数的逐层传播。
+`list[list[int]][0]` 现在正确返回 `list[int]` 类型，`list[list[int]][0][0]` 正确返回 `int`。修复方案：`resolve_specialization` 使用 `arg.name` 而非 `arg.get_base_name()` 确保嵌套键 `"list[list[int]]"` 而非 `"list[list]"`。
 
 ### 16.4 `dict` 键类型在下标访问时不校验
 
@@ -464,6 +464,6 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 `tuple` 不支持 `tuple[int, str]` 形式的元素类型标注。元素访问始终返回 `any`，无法进行元素级类型检查。
 
-### 16.6 泛型实例赋值兼容性规则不完整
+### ~~16.6 泛型实例赋值兼容性规则不完整~~ ✅ 已解决（G3 / axiom covariance）
 
-`list[int]` 与 `list` 的赋值兼容性（协变/不变规则）未通过公理明确定义，混合赋值可能触发 SEM_003 或运行时错误。`SpecRegistry.is_assignable` 的泛型协变/不变规则尚未实现。
+`list[int]` 与 `list` 的赋值兼容性通过 `ListAxiom.is_compatible("list")` 实现（`is_compatible` 返回 True）。`list[int] x; list y = x` 不再触发 SEM_003。详见 `tests/compiler/test_g3_generics.py::TestG3Covariance`。
