@@ -2,7 +2,9 @@
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
 > 历史 Bug 修复记录已归档至 `docs/COMPLETED.md` §二十一。
-> **最后更新**：2026-04-29（合并 `BUG_REPORTS.md` 中的语言级限制条目：链式下标语法、类字段调用表达式默认值、子类 auto-init、引用语义、auto/fn/any 对比、容器多类型、已废弃语法；989 个测试通过）
+> **最后更新**：2026-05-06（§二 重写：`try`/`except`/`raise`/`finally` 已可用，仅记录
+> `except X as e:` 中 e 的类型不会窄化为捕获子类的限制；`EXCEPTION_SPEC` 由 `IbSpec` 升级为
+> `ClassSpec`，解锁用户自定义 `class MyError(Exception):`；1056 个测试通过）
 
 ---
 
@@ -40,31 +42,58 @@ func my_func():
 
 ---
 
-## 二、`try` / `except` 语法
+## 二、`try` / `except` 中的 `as e` 类型窄化局限
 
 **限制说明**
 
-当前 `try` / `except` / `finally` 语法自身存在设计问题，**强烈不建议使用**，将在未来版本中完善。
+`try` / `except` / `raise` / `finally` 异常机制本身**已可用**（包括内置异常层次 `Exception → LLMError → {LLMParseError, LLMRetryExhaustedError, LLMCallError}` 与用户自定义子类）。
+当前唯一的语言级限制是：在 `except X as e:` 子句中，绑定变量 `e` 的成员解析按 `Exception` 基类公理进行，**不会自动窄化为捕获时的具体子类**。
+
+因此，`e` 上能直接访问的成员只有 `Exception` 基类（及内置 axiom 上声明）的字段——典型即 `e.message`。
+若需访问**用户自定义子类新增的字段**，必须先用 `(MyError)e` 强制类型转换。
 
 **根源**
 
-`try`/`except` 是早期为兼容传统语言习惯而保留的关键字，但 IBCI 的核心健壮性叙事是
-"LLM 不确定性 → `llmexcept` 快照隔离"。`try`/`except` 自身的异常类型层级、`raise` 语义、
-`finally` 资源释放路径在当前解释器实现中并未与 `LLMExceptFrame` / `IbLLMCallResult` 对齐——
-词法 / 解析层接受 `try`/`except`/`raise`/`finally`，运行时按顺序执行各分支，但**不会真正捕获**
-非语言级的运行时异常。后续会与"unification with `llmexcept`"或"完整 try/except 重构"一并落地。
+语义分析器的 `except as` 绑定 `e` 的 spec 为静态可见的基类公理（`ExceptionAxiom`），而非
+`except` 子句声明的捕获类型。axiom 体系下 `resolve_member` 也只在基类公理上查找，不会向用户
+ClassSpec 的子类成员表回退。要消除该限制，需要在 `except as` 节点的 spec 绑定阶段使用捕获
+类型而非基类，并让 `resolve_member` 沿 ClassSpec 继承链回退。
+
+**行为**
 
 ```ibci
-# ⚠️ 强烈不建议使用——存在设计问题，行为可能不符合预期
+class MyError(Exception):
+    str detail
+    func __init__(self, str msg, str detail):
+        self.message = msg
+        self.detail = detail
+
 try:
-    ...
-except SomeException as e:
-    ...
-finally:
-    ...
+    raise MyError("oops", "deep-context")
+except MyError as e:
+    print(e.message)        # ✅ 基类字段：可直接访问
+    print(e.detail)         # ❌ SEM_001：Type 'Exception' has no member 'detail'
 ```
 
-如需处理 LLM 不确定性结果，请优先使用专为此场景设计的 `llmexcept` 语法。
+**规避方案**
+
+在 except 体内先做一次显式强转：
+
+```ibci
+except MyError as e:
+    MyError me = (MyError)e
+    print(me.message)
+    print(me.detail)        # ✅ 通过强转后访问子类字段
+```
+
+**补充说明**
+
+- 异常的**控制流匹配**（哪个 `except` 分支被命中、是否被基类捕获）不受此限制影响 —— 完全按运行时实际类型沿继承链匹配。
+- 内置异常层次的所有字段（`message` / `raw_response` / `provider_error`）由各自 axiom 显式声明，
+  在对应 `except` 子句中可直接访问；详见 `IBCI_SYNTAX_REFERENCE.md §4.6.1`。
+- 处理 LLM 调用不确定性请优先使用 `llmexcept` —— 它专为"提示词修复 + 自动 retry"设计。
+  `try/except LLMError` 是**互补**机制，用于在 retry 耗尽（`LLMRetryExhaustedError`）或
+  无 `llmexcept` 保护（`LLMParseError`）时做兜底。
 
 ---
 

@@ -16,11 +16,12 @@
 - `core/kernel/axioms/primitives.py:400`（编译期类型检查）
 
 **问题描述**：
-IBCI 的 `try/except` 错误模型尚未与 `llmexcept` / LLM 不确定性体系完整对齐。在此之前，允许 `str + llm_uncertain` 隐式拼接（将 Uncertain 视作字符串 `"uncertain"`）以避免常见调试路径（`"prefix: " + str_var`）在 LLM 失败时崩溃。
+为避免常见调试路径（`"prefix: " + str_var`）在 LLM 失败时崩溃，当前允许 `str + llm_uncertain` 隐式拼接（将 Uncertain 视作字符串 `"uncertain"`）。
+注：异常体系（E1-E5）已在 2026-04-30 与 `llmexcept` 对齐 —— retry 耗尽抛 `LLMRetryExhaustedError`，无保护裸赋值的后续读取抛 `LLMParseError`，但本节涉及的 `+` 隐式拼接的过渡兼容仍保留以避免破坏现有调试代码。
 
 **风险**：`str + llm_uncertain` 不报错，不确定性结果可能无声地流入用户可见字符串，掩盖实际 LLM 失败。
 
-**解锁条件**：`try/except` 与 IBCI 错误模型对齐完成后，这两处应改为抛出类型错误。
+**解锁条件**：用户代码统一以 `is_uncertain(r)` 显式判断 + `try except LLMParseError` 捕获后，本兼容层可移除并改为类型错误。
 
 **文档跟踪**：`docs/NEXT_STEPS.md` 选项 1 — 关联交付项；`docs/KNOWN_LIMITS.md §VIII`
 
@@ -92,4 +93,39 @@ IBCI 的 `try/except` 错误模型尚未与 `llmexcept` / LLM 不确定性体系
 
 ---
 
-*最后更新：2026-04-30*
+### OI-7：`LLMCallError` 已注册但 VM 不自动抛出
+
+**文件**：
+- `core/kernel/axioms/primitives.py:LLMCallErrorAxiom`（公理已注册）
+- `core/kernel/spec/specs.py:LLM_CALL_ERROR_SPEC`（spec 已注册）
+- `core/kernel/registry.py:make_llm_call_error`（工厂方法已实现）
+- `core/runtime/interpreter/llm_executor.py:_call_llm`（**应抛出未抛出处**）
+
+**问题描述**：
+`LLMCallError` 是 E1-E5 异常体系（2026-04-30）设计中区分"LLM provider 层硬失败"
+（认证错误、网络错误、HTTP 4xx/5xx）与"内容解析失败"（`LLMParseError`）的类型，
+含独立字段 `provider_error`。基础设施完备，IBCI 用户可手动 `raise LLMCallError(...)` 并被
+`except LLMCallError`/`except LLMError`/`except Exception` 正确捕获（参见
+`tests/e2e/test_e2e_ai_mock.py::TestE2EUserDefinedException::test_llm_call_error_user_raise_and_catch`）。
+
+但 `llm_executor._call_llm()` 当前对所有 provider 层 Python 异常一律 `str(e)` 后转为
+`error_msg`，进而走"不确定 → 重试"路径，**从未由 VM 自动抛出 `LLMCallError`**。
+
+**影响**：
+永久性失败（如 401 认证错误）会被白白消耗重试次数后以 `LLMRetryExhaustedError` 收尾，
+而非语义上更准确的 `LLMCallError`。用户层无法在 `except` 分支中区分"LLM 内容不靠谱"与
+"LLM provider 服务不可用"。
+
+**两条可选解决方向**（任选其一以消除"设计有意图但代码无触发路径"的暧昧状态）：
+1. **接入触发路径**：在 `_call_llm` 中按 Python 异常类型分类——永久性错误（如认证、配额）
+   直接 `raise ThrownException(registry.make_llm_call_error(...))` 跳过重试；瞬时网络错误
+   保持现有"转 uncertain → 重试"路径。
+2. **裁剪为用户层类型**：保持当前实现，明确 `LLMCallError` 是**仅供用户手动 raise** 的语义类型
+   （类似业务用 `class AppError(Exception):` 自定义异常的预定义版本），并在
+   `IBCI_SYNTAX_REFERENCE.md §4.6.1` 已加注说明。
+
+**文档跟踪**：`docs/IBCI_SYNTAX_REFERENCE.md §4.6.1`、`docs/PENDING_TASKS.md`（待入条目）
+
+---
+
+*最后更新：2026-05-06*
