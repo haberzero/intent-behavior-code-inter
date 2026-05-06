@@ -234,12 +234,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         return_type_name="str"
     ), token)
 
-    registry.register_function("is_uncertain", factory.create_func(
-        "is_uncertain",
-        param_type_names=["any"],
-        return_type_name="bool"
-    ), token)
-
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)

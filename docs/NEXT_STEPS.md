@@ -3,7 +3,7 @@
 > 本文档只记录"接下来可以直接开工的任务"。  
 > 中长期任务见 `docs/PENDING_TASKS.md`，已完成工作见 `docs/COMPLETED.md`，VM 架构长期设想见 `docs/PENDING_TASKS_VM.md`。
 >
-> **最后更新**：2026-05-06（用户自定义异常落地；try/except 机制完整可用；**当前测试基线：1056 个测试通过**；选项2（目标语言后端）降为低优先级；TypeRef 重构（选项3）升为高优先级近期主线）
+> **最后更新**：2026-05-06（用户自定义异常落地；except 类型窄化完成；LLMCallError 接入；is_uncertain 从用户 API 移除；**当前测试基线：1056 个测试通过**；TypeRef 重构（选项3）为高优先级近期主线）
 
 ---
 
@@ -32,7 +32,7 @@
 
 直接影响用户写 IBCI 代码的体验。涉及：
 
-- **`except X as e:` 类型窄化**（近期可交付）：当前捕获变量 `e` 的编译期类型固定为 `Exception`，访问子类专属字段需 `(X)e` 强转。修复位于 `visit_IbExceptHandler`，工程量小。详见 `docs/PENDING_TASKS.md §3.9`。
+- ~~**`except X as e:` 类型窄化**（近期可交付）~~ ✅ **已完成（2026-05-06）**：`visit_IbExceptHandler` 现在正确捕获 `self.visit(node.type)` 返回值，单一 ClassSpec 异常类型直接用于窄化捕获变量类型。
 - **泛型类型推断进一步改进**：详见 `docs/KNOWN_LIMITS.md §十六`（剩余约 2 项：`tuple` 元素类型标注 §16.5、`dict` value 类型推断完善）。
 - **OI-1 `str + llm_uncertain` 隐式拼接清理**：在 `llmexcept` + dispatch-before-use 路径确认不再触发后，可收紧为类型错误。详见 `docs/OPEN_ISSUES.md OI-1`。
 
@@ -48,9 +48,10 @@
 
 `docs/PENDING_TASKS.md`（插件显式引入）：明确"方法模块"vs"类型模块"语义；Scheduler 符号注入逻辑标记外部模块符号。
 
-### 选项 5：LLMCallError 触发路径决策
+### ~~选项 5：LLMCallError 触发路径决策~~ ✅ **已完成（2026-05-06）**
 
-`docs/PENDING_TASKS.md §10.2`（OI-7）— 决策 `LLMCallError` 最终定位：接入 provider 层永久性失败触发路径，或明确其为"仅供用户 raise 的预定义类型"。两个方向都可接受，需做出明确决定消除歧义。
+`_call_llm()` 中所有 provider 层异常现已 `raise ThrownException(LLMCallError)`，跳过 llmexcept retry。
+用户使用 `try except LLMCallError` 处理网络/鉴权问题。详见 `PENDING_TASKS.md §10.2`、`OPEN_ISSUES.md OI-7`。
 
 ### ~~选项 6：双轨制彻底消灭（P1-P7）~~ ✅ **全部完成（2026-04-30）**
 

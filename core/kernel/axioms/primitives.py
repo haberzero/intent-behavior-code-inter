@@ -984,13 +984,24 @@ class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
     """
     公理：llm_uncertain 类型。
 
-    语义：
-    - LLM 调用因重试耗尽而无法产生确定结果时，目标变量被赋值为此类型的单例。
+    [内部机制 — IBCI 用户不可见]
+
+    语义（内核层）：
+    - llmexcept 保护帧内，LLM 调用无法产生确定结果时，目标变量被赋值为此类型的单例
+      （IbLLMUncertain 哨兵）。这是 VM 内部的快照/重试通信令牌，不应泄漏到用户代码。
+    - llmexcept 块外：uncertain 状态不会出现（infra 失败 → LLMCallError；内容失败
+      → LLMParseError/LLMRetryExhaustedError），对外完全不可见。
     - 布尔上下文中为假（is_truthy → False）。
     - 可以赋值给任何类型的变量（is_compatible 宽松策略）。
     - __to_prompt__ 返回 "uncertain"；cast_to str 返回 "uncertain"。
-    - 不抛出异常，不进入异常体系——用户应通过 is_uncertain() 或 if/while 逻辑主动检测。
-    - 支持 == 和 != 运算符（与 Uncertain 字面量比较时特别有用）。
+    - 支持 == 和 != 运算符（与 Uncertain 字面量比较，供内核测试使用）。
+
+    NOTE [未来演进路线 — 低优先级 PENDING]:
+    - 用户自定义 UncertainResult：允许 __from_prompt__ 返回一个继承自 IbLLMUncertain
+      的对象，携带自定义的失败上下文（如置信度分数、失败原因分类）。
+    - 零参数 is_uncertain()：在 llmexcept handler 内查询当前执行帧状态的 API，
+      替代当前"块内必然 uncertain"的隐式假设，为用户提供更精细的上下文感知。
+    - 上述扩展需配合 VM 信号/中断/异步机制（PENDING_TASKS §十四）一并设计。
     """
 
     @property
@@ -1031,10 +1042,10 @@ class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
 
     def is_compatible(self, other_name: str) -> bool:
         # 赋值方向：llm_uncertain 值可被赋给任何类型的变量（宽松策略）。
-        # 理由：LLM 重试耗尽后产生 Uncertain 哨兵对象；若不允许赋给声明类型，
-        # 用户代码中 `int x = @~...~` 在不确定性结果下会立即报类型错误，
-        # 而 IBCI 的设计理念是"允许持续执行，由用户通过 if/while 主动检测
-        # is_uncertain()"。此处故意宽松；与 can_convert_from 不对称是设计决策。
+        # 理由：llmexcept 重试循环期间产生 Uncertain 哨兵对象；若不允许赋给声明类型，
+        # `int x = @~...~` 在 llmexcept 保护帧内会立即报类型错误，而哨兵的存在
+        # 仅是 VM 内部通信机制（下一次 restore_snapshot + retry 后会被真实值替换）。
+        # 此处故意宽松；与 can_convert_from 不对称是设计决策。
         return True
 
     def can_return_from_isolated(self) -> bool:

@@ -13,6 +13,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent import IbIntent
 from core.runtime.objects.builtins import IbBehavior
+from core.runtime.exceptions import ThrownException
 
 from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
@@ -160,14 +161,7 @@ class LLMExecutorImpl:
                 sys_prompt += f"\n\n{type_prompt}"
 
         # 5. 调用底层模型
-        raw_res, error_msg = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
-
-        # 如果调用失败
-        if error_msg:
-            return LLMResult.uncertain_result(
-                raw_response="",
-                retry_hint=f"LLM 调用失败: {error_msg}"
-            )
+        raw_res, _ = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
         # 处理 MOCK:REPAIR 特殊标记
         if raw_res == "__MOCK_REPAIR__":
@@ -618,14 +612,7 @@ class LLMExecutorImpl:
             sys_prompt += intent_block
 
         # 5. 调用底层模型
-        response, error_msg = self._call_llm(sys_prompt, content, node_uid)
-
-        # 6. 处理调用失败
-        if error_msg:
-            return LLMResult.uncertain_result(
-                raw_response="",
-                retry_hint=f"LLM 调用失败: {error_msg}"
-            )
+        response, _ = self._call_llm(sys_prompt, content, node_uid)
 
         # 6.1 处理 MOCK:REPAIR 特殊标记
         if response == "__MOCK_REPAIR__":
@@ -731,7 +718,10 @@ class LLMExecutorImpl:
             return result.value
         return self.registry.get_none()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> Tuple[Optional[str], Optional[str]]:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> Tuple[str, None]:
+        """底层 LLM 调用。成功时返回 (response_str, None)。
+        失败时不再返回 error_msg，而是直接 raise ThrownException(LLMCallError)。
+        """
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
@@ -750,9 +740,21 @@ class LLMExecutorImpl:
                 self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
                 return response, None
             except Exception as e:
-                self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"LLM call failed: {e}")
-                print(f"\n[AI 拦截器] 发现 AI 服务连接异常: {str(e)}")
-                return None, str(e)
+                # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
+                # 此类错误与 LLM 输出内容无关，llmexcept retry 对其无效，因此
+                # 直接抛出 ThrownException，跳过 llmexcept 重试循环，
+                # 让外层 try/except LLMCallError（或 LLMError/Exception）捕获。
+                #
+                # NOTE [未来演进 — VM 信号/中断机制]:
+                # 当前方案依赖用户在外层书写 try/except LLMCallError。
+                # 未来 IBCI VM 计划提供类操作系统的信号机制（见 PENDING_TASKS §十四），
+                # 允许用户在语言层面注册基础设施错误处理回调，无需侵入业务逻辑代码。
+                self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"LLM call failed (infra): {e}")
+                error_obj = self.registry.make_llm_call_error(
+                    message=str(e),
+                    provider_error=str(e),
+                )
+                raise ThrownException(error_obj) from e
 
         # 如果没有回调，说明配置缺失，抛出错误
         raise InterpreterError(

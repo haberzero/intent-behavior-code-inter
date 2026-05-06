@@ -59,10 +59,12 @@ dict[str,str]      # string→string 字典
 
 ```ibci
 None        # 空值（首字母大写）
-Uncertain   # LLM 调用无法确定时产生的特殊值（首字母大写）
 ```
 
-`Uncertain` 在布尔上下文中为假。`(str)Uncertain` 返回 `"uncertain"`。
+`None` 在布尔上下文中为假。`(str)None` 返回 `"None"`。
+
+> `Uncertain` 是 IBCI 内核内部的 LLM 不确定性哨兵，不是用户可编程的公开值。
+> LLM 失败处理请使用 `llmexcept` / `try except LLMCallError` / `try except LLMRetryExhaustedError`。
 
 ### 1.4 类型转换
 
@@ -204,10 +206,9 @@ bool b3 = "key" in {"key": 1}     # True（字典键检测）
 ```ibci
 bool b1 = x is None          # x 是否为 None
 bool b2 = x is not None      # x 是否不为 None
-bool b3 = x is Uncertain     # x 是否为 LLM 不确定值
 ```
 
-与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 和 `Uncertain` 字面量，`is` 使用类型检测而非实例身份。
+与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 字面量，`is` 使用类型检测而非实例身份。
 
 
 ## 4. 控制流
@@ -431,15 +432,14 @@ except AppError as e:
     print(e.message)        # 能由父类 except 捕获
 ```
 
-> ⚠️ **已知限制**（参见 `KNOWN_LIMITS.md §二`）：`except X as e:` 中 `e` 的成员目前按 `Exception` 基类公理解析，
-> 访问子类**新增字段**需要先用 `(MyError)e` 强制类型转换：
+> ✅ **类型窄化已支持（2026-05-06）**：`except X as e:` 中 `e` 的编译期类型现在正确窄化为 `X`，
+> 可直接访问子类专属字段，无需 `(X)e` 强转：
 >
 > ```ibci
 > try:
 >     raise NetworkError("conn refused", 503)
 > except NetworkError as e:
->     NetworkError ne = (NetworkError)e
->     print((str)ne.code)   # 必须先强转才能访问 .code
+>     print((str)e.code)   # ✅ 直接访问 .code
 > ```
 >
 > 直接访问基类字段（如 `e.message`）不受此限制影响。
@@ -1006,8 +1006,9 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 
 > 历史说明：在更早的版本中，重试耗尽会将目标变量置为 `Uncertain` 而非抛出异常；当前版本统一改为
 > 抛出 `LLMRetryExhaustedError`，使 LLM 失败与一般运行时异常走同一处理通道。
-> 对于**无 `llmexcept` 保护**的裸 LLM 赋值，失败时会将目标变量置为 `Uncertain`，并在该变量被
-> 后续读取时抛出 `LLMParseError`（行为见 §4.6 / `KNOWN_LIMITS.md §五`）。
+> 对于**无 `llmexcept` 保护**的裸 LLM 赋值，内容解析失败时 VM 内部会临时产生 `Uncertain` 哨兵，
+> 并在该变量被后续读取时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）则立即抛出
+> `LLMCallError`（行为见 §4.6）。`Uncertain` 哨兵是 VM 内部信号，用户代码无需处理。
 
 `llmexcept` 体内**禁止写入外部变量**（编译期 `SEM_052` 错误）：
 
@@ -1173,7 +1174,6 @@ str serialized = json.stringify(parsed)
 | `print(value)` | 输出值（支持任意类型） |
 | `range(n)` | 生成 `[0, n)` 整数序列 |
 | `range(start, end)` | 生成 `[start, end)` 整数序列 |
-| `is_uncertain(value)` | 检测值是否为 `Uncertain` |
 | `len(container)` | 获取容器长度（列表/字符串/字典） |
 
 ### 12.2 str 方法

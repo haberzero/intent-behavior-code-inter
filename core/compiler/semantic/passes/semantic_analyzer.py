@@ -1396,17 +1396,26 @@ class SemanticAnalyzer:
         return self._void_desc
 
     def visit_IbExceptHandler(self, node: ast.IbExceptHandler):
+        resolved_exc_type = None
         if node.type:
-            self.visit(node.type)
-            
-        # 获取 Exception 类型描述符
+            resolved_exc_type = self.visit(node.type)
+
+        # 获取 Exception 基础类型描述符（回退值）
         exc_type = self.prelude.get_builtin_types().get("Exception", self._any_desc)
-        
+
+        # 类型窄化：若 handler 指定了单一 ClassSpec 类型（如 except LLMParseError as e:），
+        # 则将捕获变量的编译期类型窄化为该类型，而非固定为 Exception。
+        # 安全回退情况：
+        #   - None（裸 except:）→ 使用 Exception（见上）
+        #   - TupleSpec（except (A, B) as e:）→ 不是 ClassSpec，回退 Exception
+        #   - 未知符号（visit 返回 any/None）→ 不是 ClassSpec，回退 Exception
+        if isinstance(resolved_exc_type, ClassSpec):
+            exc_type = resolved_exc_type
+
         for var_name, target in SymbolExtractor.get_assigned_names(node):
             # 检查是否已在 Pass 2.5 预扫描中定义
             sym = self.symbol_table.symbols.get(var_name)
             if not sym or self.registry.is_dynamic(sym.spec or self._any_desc):
-                # [Strict Exception] 异常变量默认为 Exception 类型，而非 Any
                 sym = self._define_var(var_name, exc_type, node, allow_overwrite=(sym is not None))
             
             if sym:

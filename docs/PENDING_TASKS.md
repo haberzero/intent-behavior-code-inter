@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-06（G3 / H5 / H6 / H7 / OI-4 已完成项归档至 COMPLETED.md；新增 §3.9 类型窄化任务；TypeRef §13 标注为高优先级；llmexcept vs try/except 设计说明补充至 §十）
+> **最后更新**：2026-05-06（G3 / H5 / H6 / H7 / OI-4 已完成项归档至 COMPLETED.md；§3.9 类型窄化已完成；§10.2 LLMCallError 接入已完成；新增 §十四 VM 信号/中断/异步机制 VISION；TypeRef §13 标注为高优先级）
 
 ---
 
@@ -123,20 +123,15 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 3.9 `except X as e:` 类型窄化 [PENDING]
+### ~~3.9 `except X as e:` 类型窄化~~ ✅ **已完成（2026-05-06）**
 
-**任务**：在语义分析器 `visit_IbExceptHandler` 中，将 `except X as e:` 捕获变量 `e` 的编译期类型从固定的 `Exception` 窄化为 `X`（捕获类型）。
+**实现**：`visit_IbExceptHandler` 现在捕获 `self.visit(node.type)` 的返回值；若为 `ClassSpec`，
+则直接用于窄化捕获变量的类型，无需 `(X)e` 强转。
+- 单类型 `except LLMParseError as e:` → `e` 类型为 `LLMParseError` ✅
+- 元组类型 `except (A, B) as e:` → visit 返回 TupleSpec（不是 ClassSpec），安全回退 Exception ✅
+- 裸 `except:` → node.type 为 None，回退 Exception ✅
 
-**当前状态**：`e` 始终被声明为 `Exception` 类型，访问 `X` 专属字段需通过 `(X)e` 显式强转（详见 `KNOWN_LIMITS.md §二`）。
-
-**实现方向**：
-1. `visit_IbExceptHandler` 中 `self.visit(node.type)` 已返回解析后的 spec；当前该返回值被丢弃，直接使用 `Exception` spec。
-2. 修复：将 `self.visit(node.type)` 的返回值作为 `exc_type`，回退到 `Exception` 仅当 `node.type is None`（裸 `except:`）。
-3. 复杂情形：`except (A, B) as e:` 中 `e` 类型为公共父类（通常是 `Exception` 或 `LLMError`），需检测 tuple 类型并回退为最近公共祖先 spec。
-
-**影响文件**：`core/compiler/semantic/passes/semantic_analyzer.py`（`visit_IbExceptHandler`，约 1398 行）。
-
-**工程量**：小（核心修改约 5 行），tuple-except 的公共父类推导略复杂（可先支持单类型，tuple 类型保持 `Exception` 回退）。
+**影响文件**：`core/compiler/semantic/passes/semantic_analyzer.py`（`visit_IbExceptHandler`）。
 
 ---
 
@@ -357,26 +352,18 @@ except LLMRetryExhaustedError as e:
 
 ---
 
-### 10.2 LLMCallError 触发路径接入或裁剪 [PENDING]
-**任务**：决策并落地 `LLMCallError` 的最终定位（详见 `OPEN_ISSUES.md OI-7`）。
+### ~~10.2 LLMCallError 触发路径接入~~ ✅ **已完成（2026-05-06）**
 
-**背景**：E1-E5（2026-04-30）注册了完整的 `LLMCallError` 公理 / spec / 工厂方法，含独立字段
-`provider_error`，但 `llm_executor._call_llm()` 中并无任何代码路径调用 `make_llm_call_error()` 自动抛出。
-所有 provider 层 Python 异常一律 `str(e)` 后转为 `error_msg`，进入"不确定 → llmexcept 重试"通道。
-后果：永久性失败（如 401 认证、配额耗尽）会消耗完所有 retry 后以 `LLMRetryExhaustedError` 收尾，
-而非语义更准确的 `LLMCallError`，且 `provider_error` 字段无机会被填充。
+**决策**：选择方向 1（接入触发路径），全量接入，不做永久/瞬时分类。
 
-**两个候选方向**：
-1. **接入触发路径**：在 `_call_llm` 中按 Python 异常类型分类——永久性错误直接
-   `raise ThrownException(registry.make_llm_call_error(message=..., provider_error=...))` 跳过 retry；
-   瞬时网络错误保持现有路径。需要建立"哪些异常视为永久性"的分类策略（按 provider SDK 异常类型 / HTTP 状态码）。
-2. **裁剪为用户层类型**：保持 `LLMCallError` 仅供用户手动 raise，明确其语义为"业务层用于上报 provider 失败的预定义异常类型"。
-   这种情况下，应在 `IBCI_SYNTAX_REFERENCE.md §4.6.1` 注释（已加注：当前 VM 不自动抛出）的基础上保留现状。
+**实现**：`llm_executor._call_llm()` 中所有 provider 层 Python 异常现在直接
+`raise ThrownException(registry.make_llm_call_error(message=..., provider_error=...))` 跳过 llmexcept retry。
 
-**文件**：
-- `core/runtime/interpreter/llm_executor.py`（`_call_llm`，触发点）
-- `core/kernel/registry.py`（`make_llm_call_error`，工厂已就位）
-- `core/kernel/axioms/primitives.py`（`LLMCallErrorAxiom`，公理已就位）
+**设计理由**：provider 层任何异常（包括瞬时网络错误）都与 LLM 输出内容无关，llmexcept
+retry 对其无效（无论重试多少次都无法修复网络不通或 API Key 失效的问题），因此跳过 retry
+在语义上是正确的。用户在外层 `try except LLMCallError` 中处理，职责分离清晰。
+
+**文档跟踪**：`OPEN_ISSUES.md OI-7`（已关闭）
 
 ---
 
@@ -535,6 +522,54 @@ class TypeRef:
 - 成本极高，应在下一代架构升级时引入，不宜打补丁式渐进
 
 **当前状态**：方案 A（`get_base_name()` + `get_base_spec()`）已落地，为 TypeRef 重构保留接口兼容性。TypeRef 重构是下一代 VM 和类型系统主线的基础性工程，**优先级：高**（VM 完善 + 类型系统深化的主线前提）。
+
+---
+
+## 十四、VM 信号 / 中断 / 异步机制 [VISION]
+
+### 14.1 设计目标
+
+**背景与动机**：
+当前 IBCI VM 仅提供两层控制流：`Signal`（RETURN/BREAK/CONTINUE）同步控制流，以及
+`ThrownException` 异常驱动的错误处理。对于 LLM provider 基础设施错误（网络失败、鉴权
+失效、配额耗尽），目前用户需要在外层书写 `try except LLMCallError`，语义上可行但不够优雅。
+
+**长期愿景**：将 IBCI VM 发展为类操作系统的执行环境，提供以下机制：
+
+| 机制 | 类比 | 描述 |
+|------|------|------|
+| 信号处理（Signal Handler） | Unix `signal(2)` | 在语言层注册基础设施事件回调 |
+| 系统中断（Interrupt） | 硬件中断向量表 | VM 内部关键事件的全局响应点 |
+| 异步任务（Async/Await） | 操作系统调度器 | 协程/并发原语与 LLM 流水线集成 |
+| 多线程协作 | POSIX threads | 与 spawn_isolated 等多线程机制协同 |
+
+### 14.2 信号机制草案
+
+```ibci
+# 用户注册基础设施错误信号处理器（语法草案，尚未实现）
+@on_signal(LLMCallError)
+func handle_llm_infra_error(LLMCallError err) -> str:
+    # 可以返回 fallback 响应字符串，或 re-raise
+    return "服务暂时不可用，请稍后重试"
+
+# 业务代码无需显式 try/except 处理基础设施问题
+str result = @~ 生成内容 ~
+```
+
+### 14.3 实施前提与优先级
+
+**当前状态**：
+- VM Signal 数据类型（`Signal(kind, value)`）已存在，覆盖 RETURN/BREAK/CONTINUE/THROW。
+- CPS 调度循环（`VMExecutor.run()`）已具备扩展 Signal.kind 的能力。
+- 函数注解（`@annotation`）语法尚未实现。
+
+**实施前提**：
+1. TypeRef 重构（§十三）完成后，类型系统可精确表达 `@on_signal(LLMCallError)` 中的类型引用。
+2. 函数注解（decorator）语法设计与实现（编译器 + VM 两层）。
+3. VM CPS 调度循环扩展：识别 `Signal.INFRA_ERROR` 并路由到注册的 handler。
+4. 与 `spawn_isolated` / `ihost` 多解释器机制的线程安全集成设计。
+
+**优先级**：低（长期 VISION）。当前推荐用户使用 `try except LLMCallError` 处理基础设施问题。
 
 ---
 
