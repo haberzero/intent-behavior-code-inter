@@ -2,7 +2,7 @@
 
 > 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-30（新增 §11.8–11.10：ExpressionAnalyzer ghost class、`_pending_intents` 信道、`visit_IbAssign` 复杂度）
+> **最后更新**：2026-05-06（G3 / H5 / H6 / H7 / OI-4 已完成项归档至 COMPLETED.md；新增 §3.9 类型窄化任务；TypeRef §13 标注为高优先级；llmexcept vs try/except 设计说明补充至 §十）
 
 ---
 
@@ -99,35 +99,46 @@ class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多
 
 ---
 
-### 3.4 泛型参数传播（下标访问类型推断）[PENDING]
+### 3.4 泛型参数传播（下标访问类型推断）✅ **已完成（2026-05-02 G3）**
 
-**任务**：`ListAxiom`、`DictAxiom` 的 `__getitem__` 返回类型应通过泛型参数动态推导（而非硬编码 `any`）。
-
-**影响**：`list[int]` 类型变量下标访问后返回类型为 `any` 而非 `int`，类型安全性降低。详见 `docs/KNOWN_LIMITS.md §16.1`。
+`resolve_member` 已特化 `list[T].__getitem__→T`；`resolve_subscript` 对 `ListSpec`/`DictSpec` 直接读取 `element_type_name`/`value_type_name`。详见 `docs/COMPLETED.md §23.3`。
 
 ---
 
-### 3.5 泛型协变规则 [PENDING]
+### 3.5 泛型协变规则 ✅ **已完成（2026-05-02 G3）**
 
-**任务**：建立 `list[T]` isa `list`、`list[T]` isa `list[U]`（当 T isa U 时）的类型兼容规则，实现 `SpecRegistry.is_assignable` 的泛型协变/不变逻辑。
-
-**影响**：混合赋值（`list[int] x = …; list y = x`）可能触发 SEM_003。详见 `docs/KNOWN_LIMITS.md §16.6`。
+`SpecRegistry.is_assignable` 中 `list[T]` isa `list` 的协变逻辑已落地（通过 `get_base_name()` 统一能力查询路径）。详见 `docs/COMPLETED.md §23.3`。
 
 ---
 
-### 3.6 嵌套泛型推断 [PENDING]
+### 3.6 嵌套泛型推断 ✅ **已完成（2026-05-02 G3）**
 
-**任务**：扩展语义分析器的下标类型推断，支持链式下标对嵌套泛型（如 `list[list[int]]`）的逐层解包。详见 `docs/KNOWN_LIMITS.md §16.3`。
-
----
-
-### 3.7 泛型特化 axiom 自动引导 [PENDING]
-
-**任务**：`SpecRegistry.resolve_specialization()` 应自动完整地为新特化 spec 绑定所有 axiom 方法，消除现有手动补偿逻辑的覆盖不完整问题。与 `docs/OPEN_ISSUES.md OI-4`（`resolve_specialization` 无缓存）同步修复。
+`resolve_specialization` 改用 `a.name`（完整名称）修复 `list[list[int]]` 缓存键计算错误。详见 `docs/COMPLETED.md §23.3`。
 
 ---
 
-### 3.8 `tuple` 元素类型标注 [PENDING]
+### 3.7 泛型特化 axiom 自动引导 ✅ **已完成（2026-05-02 G1/G3，OI-4 关闭）**
+
+`resolve_specialization` 加入 early-cache hit 逻辑；G3 修复 `candidate_key` 计算。详见 `docs/COMPLETED.md §23.3`，`docs/OPEN_ISSUES.md OI-4`。
+
+---
+
+### 3.9 `except X as e:` 类型窄化 [PENDING]
+
+**任务**：在语义分析器 `visit_IbExceptHandler` 中，将 `except X as e:` 捕获变量 `e` 的编译期类型从固定的 `Exception` 窄化为 `X`（捕获类型）。
+
+**当前状态**：`e` 始终被声明为 `Exception` 类型，访问 `X` 专属字段需通过 `(X)e` 显式强转（详见 `KNOWN_LIMITS.md §二`）。
+
+**实现方向**：
+1. `visit_IbExceptHandler` 中 `self.visit(node.type)` 已返回解析后的 spec；当前该返回值被丢弃，直接使用 `Exception` spec。
+2. 修复：将 `self.visit(node.type)` 的返回值作为 `exc_type`，回退到 `Exception` 仅当 `node.type is None`（裸 `except:`）。
+3. 复杂情形：`except (A, B) as e:` 中 `e` 类型为公共父类（通常是 `Exception` 或 `LLMError`），需检测 tuple 类型并回退为最近公共祖先 spec。
+
+**影响文件**：`core/compiler/semantic/passes/semantic_analyzer.py`（`visit_IbExceptHandler`，约 1398 行）。
+
+**工程量**：小（核心修改约 5 行），tuple-except 的公共父类推导略复杂（可先支持单类型，tuple 类型保持 `Exception` 回退）。
+
+---
 
 **任务**：考虑支持 `tuple[T1, T2, ...]` 语法，为固定结构的多值返回提供类型安全。当前元组元素访问始终返回 `any`。详见 `docs/KNOWN_LIMITS.md §16.5`。
 
@@ -313,6 +324,32 @@ func process():
 
 ## 十、llmexcept / retry 机制后续
 
+### 10.0 llmexcept 与 try/except 的设计区别（架构说明）
+
+**`llmexcept`（影子执行驱动模式）**：
+- **不是异常驱动**：LLM 不确定性通过 `last_llm_result` 信号通道（`LLMResult.is_uncertain` 标志位）传递，不抛出任何 Python 异常。
+- **快照-恢复模型**：`LLMExceptFrame` 在进入保护块时保存变量/意图栈/循环上下文快照，每次 retry 前自动 `restore_snapshot()`，保证 LLM 看到一致的输入状态。
+- **重试循环**：`should_continue_retrying()` 驱动 while 循环；`retry "hint"` 语句设置 `frame.should_retry = True`；重试耗尽时抛出 `ThrownException(LLMRetryExhaustedError)`。
+- **设计用途**：专为 LLM 模糊性（输出解析失败）设计，提供状态回滚 + 提示词优化 + 有限重试的完整语义。
+
+**`try/except`（异常驱动模式）**：
+- **标准异常捕获**：`ThrownException`（包装 IBCI 异常对象）通过 generator `try/except` 在 `vm_handle_IbTry` 中捕获。
+- **无快照、无重试**：body 执行一次；匹配的 `except` handler 接管；没有状态回滚机制。
+- **设计用途**：用于捕获明确语义的异常（包括 `LLMRetryExhaustedError`、`LLMParseError`、用户自定义异常、`raise` 显式抛出）；与 Python try/except 语义完全对齐。
+
+**两者组合使用（典型模式）**：
+```ibci
+try:
+    str r = @~ 生成摘要 ~ llmexcept "请输出纯文本":
+        retry "格式要求: 不要使用 Markdown"
+except LLMRetryExhaustedError as e:
+    str r = "（摘要生成失败）"
+```
+- `llmexcept` 处理 LLM 不确定性（内层，有重试）
+- `try/except` 捕获 retry 耗尽后的 `LLMRetryExhaustedError`（外层，最终兜底）
+
+---
+
 ### 10.1 重试策略配置扩展 [PENDING]
 **任务**：在固定次数重试（`ai.set_retry(n)`）基础上，支持指数退避（Exponential Backoff）和条件重试（基于错误类型）。
 
@@ -396,60 +433,27 @@ func process():
 
 ---
 
-### 11.7 SpecRegistry.resolve_specialization 无缓存
-**问题**：每次 `list[int]` / `dict[str,int]` 等参数化类型解析都创建新的 spec 对象，不写回 `_specs` 缓存（`core/kernel/spec/registry.py`）。同一泛型实例化在一个程序里出现 N 次，就会有 N 个不相等的 spec 对象实例，内存持续增长，同时 axiom 方法 bootstrap 重复执行。
+### 11.7 SpecRegistry.resolve_specialization 无缓存 ✅ **已完成（2026-05-02 G1/G3，OI-4 关闭）**
 
-**建议**：改为 lookup-or-create——按 `f"{spec.name}[{','.join(arg_names)}]"` 作为键先查 `_specs`，命中则直接返回缓存值，否则创建后立刻注册。
-
-**文件**：`core/kernel/spec/registry.py`（`resolve_specialization()`）
+详见 `docs/COMPLETED.md §23.3`，`docs/OPEN_ISSUES.md OI-4`。
 
 ---
 
-### 11.8 ExpressionAnalyzer ghost class 清理 [PENDING]
+### 11.8 ExpressionAnalyzer ghost class 清理 ✅ **已完成（2026-05-02 H5）**
 
-**问题**：`core/compiler/semantic/passes/expression_analyzer.py` 定义了 `ExpressionAnalyzer` 类，包含 `visit_IbBinOp`、`visit_IbName`、`visit_IbCall`、`visit_IbAttribute`（含 `if hasattr(self, 'analyzer')` 防御性代码，说明类未完成集成）等方法，但全仓库**无任何 import 或实例化**。这是一次向"将表达式类型推导从 `SemanticAnalyzer` 主类分离为委托类"的未完成重构的遗留产物。
-
-**选项**：
-1. **删除**：直接删除文件，零破坏（SemanticAnalyzer 自己已有完整 visit_* 实现）。
-2. **完成**：将 `SemanticAnalyzer` 中的所有表达式 visit_* 方法迁移到 `ExpressionAnalyzer`，使其成为真正的委托类，显著降低 SemanticAnalyzer 主类行数。工程量较大（~400 行迁移 + 依赖注入 + 测试）。
-
-**建议优先级**：先删除（选项 1），在需要大规模 semantic 重构时再考虑完成委托模式（选项 2）。
-
-**文件**：`core/compiler/semantic/passes/expression_analyzer.py`
+`expression_analyzer.py` 及全部引用已删除。详见 `docs/COMPLETED.md §二十二（H5）`。
 
 ---
 
-### 11.9 `_pending_intents` 动态属性信道形式化 [PENDING]
+### 11.9 `_pending_intents` 动态属性信道形式化 ✅ **已完成（2026-05-02 H6）**
 
-**问题**：`DeclarationComponent.parse_declaration()` 通过 `setattr(stmt, "_pending_intents", pending_intents)` 将消费的意图注释"涂抹"到 AST 节点上，再由 `SemanticAnalyzer` 在 Pass 过程中读取。这是一个 parser→semantic 的**隐式动态属性信道**，与已删除的 `_pending_fn_return_type` 同类问题：信道存在性对读取方不透明，AST 节点类型定义中无对应字段。
-
-**改善方向**：在对应 `IbStmt` 子类（或其公共基类）上添加 `pending_intents: List = field(default_factory=list)` 显式字段，消除 `setattr`/`getattr` 动态访问；或将其提升为编译器侧表中的一项。
-
-**搁置原因**：功能正常，无 Bug 风险；改动涉及 AST 定义 + parser + semantic，需注意序列化影响（`_pending_intents` 在序列化前应已被消费，不应进入 artifact）。
-
-**文件**：`core/compiler/parser/components/declaration.py`（`parse_declaration`）、`core/compiler/parser/core/component.py`（`consume_intents` helper）、`core/kernel/ast.py`（各 IbStmt 子类）
+`_pending_intents` 幽灵管道已完全删除（`context.py / component.py / declaration.py`）。详见 `docs/COMPLETED.md §二十二（H6）`。
 
 ---
 
-### 11.10 `SemanticAnalyzer.visit_IbAssign` 复杂度降低 [PENDING]
+### 11.10 `SemanticAnalyzer.visit_IbAssign` 复杂度降低 ✅ **已完成（2026-05-02 H7）**
 
-**问题**：`visit_IbAssign` 是 `SemanticAnalyzer`（约 2100 行）中逻辑分支最多的单一方法，处理以下 8+ 种独立情形：
-1. `fn` 推导（callable 类型约束检查）
-2. `auto` 类型推导
-3. `any` 动态类型
-4. 显式类型标注（含泛型）
-5. `global` 作用域声明提升
-6. `llmexcept` body 只读约束（SEM_052）
-7. 行为表达式赋值给字段的特殊绕过（`SEM_003` 误报修复）
-8. 元组解包声明（tuple destructuring）
-
-这些分支的嵌套深度导致：新增任何赋值相关语义特性都必须触及此方法，且极易破坏既有分支。
-
-**改善方向**：按情形拆分为职责单一的私有方法（`_check_fn_assignment`、`_check_auto_assignment`、`_check_typed_assignment`、`_check_tuple_assignment` 等），`visit_IbAssign` 本体仅保留顶层分发逻辑（<30 行）。
-
-**搁置原因**：纯重构，无功能变更；需覆盖所有 assignment 路径的回归测试（当前测试覆盖较好，风险可控）。
-
-**文件**：`core/compiler/semantic/passes/semantic_analyzer.py`（`visit_IbAssign` 及相关私有方法）
+`visit_IbAssign` 已拆分为 10+ 职责单一私有子函数，主方法约 32 行。详见 `docs/COMPLETED.md §二十二（H7）`。
 
 ---
 
@@ -469,7 +473,7 @@ func process():
 
 ---
 
-## 十三、类型系统长期演进（TypeRef 重构）
+## 十三、类型系统长期演进（TypeRef 重构）【高优先级】
 
 ### 13.1 类型系统现状分析 [VISION]
 
@@ -530,7 +534,7 @@ class TypeRef:
 - 需要修改所有 spec 字段（`FuncSpec`, `ListSpec`, `DictSpec`, `MemberSpec` 等）和序列化层
 - 成本极高，应在下一代架构升级时引入，不宜打补丁式渐进
 
-**当前状态**：方案 A（`get_base_name()` + `get_base_spec()`）已落地，为 TypeRef 重构保留接口兼容性。TypeRef 本体在 VM 阶段一并处理。
+**当前状态**：方案 A（`get_base_name()` + `get_base_spec()`）已落地，为 TypeRef 重构保留接口兼容性。TypeRef 重构是下一代 VM 和类型系统主线的基础性工程，**优先级：高**（VM 完善 + 类型系统深化的主线前提）。
 
 ---
 
