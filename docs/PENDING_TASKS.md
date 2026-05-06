@@ -320,6 +320,29 @@ func process():
 
 ---
 
+### 10.2 LLMCallError 触发路径接入或裁剪 [PENDING]
+**任务**：决策并落地 `LLMCallError` 的最终定位（详见 `OPEN_ISSUES.md OI-7`）。
+
+**背景**：E1-E5（2026-04-30）注册了完整的 `LLMCallError` 公理 / spec / 工厂方法，含独立字段
+`provider_error`，但 `llm_executor._call_llm()` 中并无任何代码路径调用 `make_llm_call_error()` 自动抛出。
+所有 provider 层 Python 异常一律 `str(e)` 后转为 `error_msg`，进入"不确定 → llmexcept 重试"通道。
+后果：永久性失败（如 401 认证、配额耗尽）会消耗完所有 retry 后以 `LLMRetryExhaustedError` 收尾，
+而非语义更准确的 `LLMCallError`，且 `provider_error` 字段无机会被填充。
+
+**两个候选方向**：
+1. **接入触发路径**：在 `_call_llm` 中按 Python 异常类型分类——永久性错误直接
+   `raise ThrownException(registry.make_llm_call_error(message=..., provider_error=...))` 跳过 retry；
+   瞬时网络错误保持现有路径。需要建立"哪些异常视为永久性"的分类策略（按 provider SDK 异常类型 / HTTP 状态码）。
+2. **裁剪为用户层类型**：保持 `LLMCallError` 仅供用户手动 raise，明确其语义为"业务层用于上报 provider 失败的预定义异常类型"。
+   这种情况下，应在 `IBCI_SYNTAX_REFERENCE.md §4.6.1` 注释（已加注：当前 VM 不自动抛出）的基础上保留现状。
+
+**文件**：
+- `core/runtime/interpreter/llm_executor.py`（`_call_llm`，触发点）
+- `core/kernel/registry.py`（`make_llm_call_error`，工厂已就位）
+- `core/kernel/axioms/primitives.py`（`LLMCallErrorAxiom`，公理已就位）
+
+---
+
 
 
 ## 十一、代码健康（审计遗留）

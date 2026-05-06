@@ -287,10 +287,11 @@ SLICE_SPEC  = IbSpec(name="slice",  is_nullable=False, is_user_defined=False)
 CALLABLE_SPEC   = IbSpec(name="callable",    is_nullable=True,  is_user_defined=False)
 BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=False)
 DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
-EXCEPTION_SPEC  = IbSpec(name="Exception",   is_nullable=True,  is_user_defined=False)
+EXCEPTION_SPEC  = ClassSpec(name="Exception", is_nullable=True, is_user_defined=False)
 
 # LLM exception hierarchy — ClassSpec with parent_name for proper inheritance chain.
 # LLMError IS-A Exception; LLMParseError/LLMRetryExhaustedError/LLMCallError IS-A LLMError.
+# Exception itself is also a ClassSpec so user code can write `class MyError(Exception):`.
 LLM_ERROR_SPEC = ClassSpec(name="LLMError", is_nullable=True, is_user_defined=False,
                             parent_name="Exception")
 LLM_PARSE_ERROR_SPEC = ClassSpec(name="LLMParseError", is_nullable=True, is_user_defined=False,

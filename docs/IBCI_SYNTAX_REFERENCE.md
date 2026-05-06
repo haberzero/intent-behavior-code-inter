@@ -325,16 +325,124 @@ switch c:
         print("其它")
 ```
 
-### 4.6 try / except
+### 4.6 try / except / raise / finally
 
-> ⚠️ **Known Limit (docs/KNOWN_LIMITS.md §二)**：`try`/`except` 存在已知设计问题，**强烈不建议使用**。处理 LLM 不确定性请用 `llmexcept`（见第 10 节）。
+IBCI 提供与传统命令式语言一致的 `try` / `except` / `raise` / `finally` 异常机制，用于处理"显式抛出的语言级异常"。
+处理 LLM 调用的不确定性请使用 `llmexcept`（见第 10 节）—— 二者**互补**而非竞争：
+
+| 场景 | 推荐机制 |
+|------|----------|
+| LLM 输出无法解析、需要重试调整提示词 | `llmexcept` / `llmretry` |
+| 业务逻辑显式 `raise` 出来的错误 | `try` / `except` |
+| LLM 重试耗尽后的兜底处理 | `try except LLMRetryExhaustedError` |
+| 在没有 `llmexcept` 保护时的 LLM 失败兜底 | `try except LLMParseError` |
+
+#### 基本语法
 
 ```ibci
 try:
-    int x = int("not a number")
+    int x = (int)"not a number"        # 强转失败会抛出运行时异常
 except Exception as e:
     print("捕获到异常")
+    print(e.message)
+finally:
+    print("总是执行")
 ```
+
+#### 显式 raise
+
+```ibci
+func divide(int a, int b) -> int:
+    if b == 0:
+        raise Exception("division by zero")
+    return a / b
+
+try:
+    int q = divide(10, 0)
+except Exception as e:
+    print(e.message)
+```
+
+#### 内置异常类型层次
+
+IBCI 内置以下异常类型（详见 §4.6.1）：
+
+```
+Exception
+  └── LLMError
+        ├── LLMParseError            # LLM 输出无法解析为目标类型
+        ├── LLMRetryExhaustedError   # llmexcept 重试次数耗尽
+        └── LLMCallError             # LLM provider 层硬失败（用户层可手动 raise；当前版本 VM 不自动抛出）
+```
+
+`except` 按继承链匹配：`except Exception` 可捕获其下所有派生异常；`except LLMError` 可同时捕获三个具体 LLM 错误。
+
+```ibci
+# 精确匹配
+try:
+    str x = @~ MOCK:FAIL bad_parse ~
+    print(x)
+except LLMParseError as e:
+    print("解析失败：" + e.message)
+
+# 基类匹配
+try:
+    str result = @~ MOCK:FAIL exhausted ~
+    llmexcept:
+        retry "只返回数字"
+except LLMError as e:
+    print("LLM 出问题：" + e.message)
+
+# 顶层兜底
+try:
+    str x = @~ MOCK:FAIL anything ~
+except Exception as e:
+    print("意外失败：" + e.message)
+```
+
+#### 4.6.1 内置异常类型字段
+
+| 类型 | 字段 | 含义 |
+|------|------|------|
+| `Exception` | `message: str` | 错误描述文本 |
+| `LLMError` | `message: str`, `raw_response: str` | LLM 失败时返回的原始内容（如有） |
+| `LLMParseError` | `message: str`, `raw_response: str` | 内容字段同 `LLMError`；语义为"LLM 输出无法解析为目标类型" |
+| `LLMRetryExhaustedError` | `message: str`, `raw_response: str` | 内容字段同 `LLMError`；`message` 含 `retry` 关键字 |
+| `LLMCallError` | `message: str`, `raw_response: str`, `provider_error: str` | 比 `LLMError` 多 `provider_error`（HTTP 状态、网络错误等）；当前仅供用户手动 raise，VM 不自动抛出 |
+
+#### 4.6.2 用户自定义异常
+
+继承 `Exception` 或任意内置 LLM 异常类型即可定义自定义异常：
+
+```ibci
+class AppError(Exception):
+    func __init__(self, str msg):
+        self.message = msg
+
+class NetworkError(AppError):
+    int code
+    func __init__(self, str msg, int code):
+        self.message = msg
+        self.code = code
+
+try:
+    raise NetworkError("connection refused", 503)
+except AppError as e:
+    print(e.message)        # 能由父类 except 捕获
+```
+
+> ⚠️ **已知限制**（参见 `KNOWN_LIMITS.md §二`）：`except X as e:` 中 `e` 的成员目前按 `Exception` 基类公理解析，
+> 访问子类**新增字段**需要先用 `(MyError)e` 强制类型转换：
+>
+> ```ibci
+> try:
+>     raise NetworkError("conn refused", 503)
+> except NetworkError as e:
+>     NetworkError ne = (NetworkError)e
+>     print((str)ne.code)   # 必须先强转才能访问 .code
+> ```
+>
+> 直接访问基类字段（如 `e.message`）不受此限制影响。
 
 ---
 
@@ -894,7 +1002,12 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 - 进入 LLM 语句执行时，创建当前变量/意图上下文/循环状态的快照
 - LLM 调用成功 → 结果 commit 到目标变量，退出快照
 - LLM 调用失败 → 执行 `llmexcept` 体，然后从快照恢复状态并 retry
-- 重试耗尽 → 目标变量设为 `Uncertain`
+- 重试耗尽 → 抛出 `LLMRetryExhaustedError`（`LLMError` 的子类，可被 `try except` 捕获，详见 §4.6）
+
+> 历史说明：在更早的版本中，重试耗尽会将目标变量置为 `Uncertain` 而非抛出异常；当前版本统一改为
+> 抛出 `LLMRetryExhaustedError`，使 LLM 失败与一般运行时异常走同一处理通道。
+> 对于**无 `llmexcept` 保护**的裸 LLM 赋值，失败时会将目标变量置为 `Uncertain`，并在该变量被
+> 后续读取时抛出 `LLMParseError`（行为见 §4.6 / `KNOWN_LIMITS.md §五`）。
 
 `llmexcept` 体内**禁止写入外部变量**（编译期 `SEM_052` 错误）：
 
