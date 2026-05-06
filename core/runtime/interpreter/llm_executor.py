@@ -2,7 +2,7 @@ import re
 import json
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from types import SimpleNamespace
-from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, Tuple, TYPE_CHECKING
+from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, TYPE_CHECKING
 from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext, InterOp, Registry, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
 
@@ -161,7 +161,7 @@ class LLMExecutorImpl:
                 sys_prompt += f"\n\n{type_prompt}"
 
         # 5. 调用底层模型
-        raw_res, _ = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
+        raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
         # 处理 MOCK:REPAIR 特殊标记
         if raw_res == "__MOCK_REPAIR__":
@@ -612,7 +612,7 @@ class LLMExecutorImpl:
             sys_prompt += intent_block
 
         # 5. 调用底层模型
-        response, _ = self._call_llm(sys_prompt, content, node_uid)
+        response = self._call_llm(sys_prompt, content, node_uid)
 
         # 6.1 处理 MOCK:REPAIR 特殊标记
         if response == "__MOCK_REPAIR__":
@@ -718,9 +718,9 @@ class LLMExecutorImpl:
             return result.value
         return self.registry.get_none()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> Tuple[str, None]:
-        """底层 LLM 调用。成功时返回 (response_str, None)。
-        失败时不再返回 error_msg，而是直接 raise ThrownException(LLMCallError)。
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> str:
+        """底层 LLM 调用。成功时返回 response 字符串。
+        失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
         """
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
@@ -738,7 +738,7 @@ class LLMExecutorImpl:
                 response = self.llm_callback(sys_prompt, user_prompt)
                 self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
                 self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
-                return response, None
+                return response
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
                 # 此类错误与 LLM 输出内容无关，llmexcept retry 对其无效，因此
