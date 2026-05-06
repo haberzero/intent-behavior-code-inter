@@ -1,7 +1,7 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-04-29（编译器深度清洁全部落地；CPS dispatch table 覆盖 43 节点；`fallback_visit()` 归零；`node_protection` 侧表全链路删除；fn/lambda/snapshot 类型系统重设计全部完成（`fn[(int,str)->bool]` callable 签名标注）；历史工作文件已归档至本文件；**1011 个测试通过**）
+> **最后更新**：2026-05-06（用户自定义异常体系落地；`try/except/raise/finally` 机制完整可用；EXCEPTION_SPEC 升级为 ClassSpec；TestE2EUserDefinedException 7 个新测试全通过；**1056 个测试通过**）
 
 ---
 
@@ -1438,3 +1438,47 @@ H5（ExpressionAnalyzer 清理）和 H6（`_pending_intents` 删除）均已在 
 python3 -m pytest tests/ -q --tb=short
 1028 passed (H6 前基线) → 1049 passed (G3 + 21 新测试)
 ```
+
+---
+
+## 二十四、用户自定义异常体系落地 + try/except 完整可用（2026-05-06）
+
+### 24.1 EXCEPTION_SPEC 升级为 ClassSpec
+
+`Exception` 内置类型从 `IbSpec` 升级为 `ClassSpec(name="Exception", parent_name=None)`，使其进入 IBCI 的类继承链，支持用户编写 `class MyError(Exception):` 自定义异常类型。
+
+| 改动 | 详情 |
+|------|------|
+| `core/kernel/spec/specs.py:290` | `EXCEPTION_SPEC = ClassSpec(name="Exception", ...)` — 升级为 ClassSpec |
+| `core/kernel/axioms/primitives.py` | LLM 异常层次（LLMError/LLMParseError/LLMRetryExhaustedError/LLMCallError）全部已为 ClassSpec，均 `parent_name="LLMError"` 或 `"Exception"` |
+
+### 24.2 try/except/raise/finally 机制完整可用确认
+
+`vm_handle_IbTry` 已完整实现（`core/runtime/vm/handlers.py:1585-1690`），覆盖：
+- body 中 stmt 通过 `yield` CPS 执行
+- `ThrownException` + 通用 Python 异常均由 generator 的 try/except 捕获
+- except 处理器类型匹配通过 `ib_class.is_assignable_to(expected_type)` 实现继承链匹配
+- else 仅在 body 正常结束（无 Signal、无异常）时执行
+- finally 在所有路径（正常/Signal/异常）上均执行
+
+用户可通过 `try/except` 捕获 `LLMRetryExhaustedError`（retry 耗尽）、`LLMParseError`（LLM 输出无法解析）、用户自定义异常等。
+
+### 24.3 已知限制（保留）
+
+`except X as e:` 中 `e` 的编译期类型固定为 `Exception`（不窄化至 `X`）。访问 `X` 专属字段需通过 `(X)e` 显式强转。详见 `docs/KNOWN_LIMITS.md §二`。
+
+### 24.4 测试基线
+
+```
+python3 -m pytest tests/ -q --tb=short
+1049 passed (2026-05-02) → 1056 passed (2026-05-06, +7 TestE2EUserDefinedException)
+```
+
+新增测试覆盖（`tests/e2e/test_e2e_ai_mock.py::TestE2EUserDefinedException`）：
+- `test_user_exception_subclass_basic_raise_and_catch` — 基本 raise/catch
+- `test_user_exception_subclass_caught_by_exception_base` — 父类 except 捕获子类实例
+- `test_user_exception_two_level_inheritance` — 两层继承链匹配
+- `test_user_subclass_of_llm_error` — 继承 LLMError 的用户类
+- `test_user_exception_extra_field_via_cast_workaround` — 子类专属字段通过 cast 访问
+- `test_user_exception_does_not_match_unrelated_class` — 不相关类不误匹配
+- `test_llm_call_error_user_raise_and_catch` — 用户手动 raise LLMCallError

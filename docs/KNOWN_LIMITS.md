@@ -2,9 +2,7 @@
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
 > 历史 Bug 修复记录已归档至 `docs/COMPLETED.md` §二十一。
-> **最后更新**：2026-05-06（§二 重写：`try`/`except`/`raise`/`finally` 已可用，仅记录
-> `except X as e:` 中 e 的类型不会窄化为捕获子类的限制；`EXCEPTION_SPEC` 由 `IbSpec` 升级为
-> `ClassSpec`，解锁用户自定义 `class MyError(Exception):`；1056 个测试通过）
+> **最后更新**：2026-05-06（§二 重写：`try`/`except`/`raise`/`finally` 已可用；`except X as e:` 类型窄化已修复（e 类型窄化为捕获子类）；`EXCEPTION_SPEC` 由 `IbSpec` 升级为 `ClassSpec`，解锁用户自定义 `class MyError(Exception):`；1056 个测试通过）
 
 ---
 
@@ -42,24 +40,11 @@ func my_func():
 
 ---
 
-## 二、`try` / `except` 中的 `as e` 类型窄化局限
+## ~~二、`try` / `except` 中的 `as e` 类型窄化局限~~ ✅ **已修复（2026-05-06）**
 
-**限制说明**
+`try` / `except` / `raise` / `finally` 异常机制**已可用**（包括内置异常层次 `Exception → LLMError → {LLMParseError, LLMRetryExhaustedError, LLMCallError}` 与用户自定义子类）。
 
-`try` / `except` / `raise` / `finally` 异常机制本身**已可用**（包括内置异常层次 `Exception → LLMError → {LLMParseError, LLMRetryExhaustedError, LLMCallError}` 与用户自定义子类）。
-当前唯一的语言级限制是：在 `except X as e:` 子句中，绑定变量 `e` 的成员解析按 `Exception` 基类公理进行，**不会自动窄化为捕获时的具体子类**。
-
-因此，`e` 上能直接访问的成员只有 `Exception` 基类（及内置 axiom 上声明）的字段——典型即 `e.message`。
-若需访问**用户自定义子类新增的字段**，必须先用 `(MyError)e` 强制类型转换。
-
-**根源**
-
-语义分析器的 `except as` 绑定 `e` 的 spec 为静态可见的基类公理（`ExceptionAxiom`），而非
-`except` 子句声明的捕获类型。axiom 体系下 `resolve_member` 也只在基类公理上查找，不会向用户
-ClassSpec 的子类成员表回退。要消除该限制，需要在 `except as` 节点的 spec 绑定阶段使用捕获
-类型而非基类，并让 `resolve_member` 沿 ClassSpec 继承链回退。
-
-**行为**
+**类型窄化现已支持**：`except X as e:` 绑定变量 `e` 的编译期类型现在正确窄化为 `X`（捕获类型），无需 `(X)e` 强转即可访问子类专属字段。
 
 ```ibci
 class MyError(Exception):
@@ -71,29 +56,11 @@ class MyError(Exception):
 try:
     raise MyError("oops", "deep-context")
 except MyError as e:
-    print(e.message)        # ✅ 基类字段：可直接访问
-    print(e.detail)         # ❌ SEM_001：Type 'Exception' has no member 'detail'
+    print(e.message)        # ✅ 基类字段
+    print(e.detail)         # ✅ 子类字段（类型窄化后可直接访问）
 ```
 
-**规避方案**
-
-在 except 体内先做一次显式强转：
-
-```ibci
-except MyError as e:
-    MyError me = (MyError)e
-    print(me.message)
-    print(me.detail)        # ✅ 通过强转后访问子类字段
-```
-
-**补充说明**
-
-- 异常的**控制流匹配**（哪个 `except` 分支被命中、是否被基类捕获）不受此限制影响 —— 完全按运行时实际类型沿继承链匹配。
-- 内置异常层次的所有字段（`message` / `raw_response` / `provider_error`）由各自 axiom 显式声明，
-  在对应 `except` 子句中可直接访问；详见 `IBCI_SYNTAX_REFERENCE.md §4.6.1`。
-- 处理 LLM 调用不确定性请优先使用 `llmexcept` —— 它专为"提示词修复 + 自动 retry"设计。
-  `try/except LLMError` 是**互补**机制，用于在 retry 耗尽（`LLMRetryExhaustedError`）或
-  无 `llmexcept` 保护（`LLMParseError`）时做兜底。
+**元组异常** `except (A, B) as e:` 中 `e` 仍为 `Exception` 类型（安全回退），可通过 `(A)e` 或 `(B)e` 强转访问具体子类字段。
 
 ---
 
@@ -166,54 +133,22 @@ switch c:
 
 ---
 
-## 五、`Uncertain` 字面量与 `is_uncertain()` 函数
+## 五、`Uncertain` 内部哨兵值（用户不可见）
 
-### 5.1 `Uncertain` 字面量
+`Uncertain`（`IbLLMUncertain`）是 IBCI 内核的**内部机制**，不是用户可编程接口。
 
-`Uncertain` 是全局可见的特殊字面量（与 `None` 保持命名一致），表示 LLM 调用因重试耗尽而无法得到确定结果时产生的特殊值。
+**设计语义**：
+- `llmexcept` 保护帧内，LLM 调用无法产生确定结果时，VM 在重试循环期间会将目标变量
+  临时赋值为 `Uncertain` 哨兵。这是 VM 快照/重试通信令牌，在下一次 `restore_snapshot + retry`
+  后会被真实值替换。
+- `llmexcept` 块外：uncertain 状态不会出现——infra 失败（网络/鉴权）→ `LLMCallError`；
+  内容解析失败 → `LLMParseError`；重试耗尽 → `LLMRetryExhaustedError`。
 
-```ibci
-# Uncertain 字面量用法
-auto x = Uncertain
+**用户代码无需处理 uncertain**：
+- `llmexcept` 块内处于重试循环，用户只需书写 `retry "hint"` 语句，无需显式检测 Uncertain。
+- `is_uncertain()` 内置函数已从用户 API 移除。`Uncertain` 字面量也不应出现在正常业务代码中。
 
-# 布尔上下文中为假
-if x:
-    print("不会执行")
-else:
-    print("Uncertain 是假值")
-
-# 强制转换为字符串得到 "uncertain"
-print((str)x)    # 输出: uncertain
-```
-
-### 5.2 `is_uncertain(r)` 内置函数
-
-提供专用内置函数 `is_uncertain(r)` 用于检测一个值是否为 `Uncertain`：
-
-```ibci
-auto result = Uncertain
-if is_uncertain(result):
-    print("结果不确定")
-
-# 与 None 的区别
-auto n = None
-print(is_uncertain(n))       # False —— None 不是 Uncertain
-print(is_uncertain(Uncertain)) # True
-```
-
-### 5.3 与 `None` 的区别
-
-| 特性 | `None` | `Uncertain` |
-|------|--------|-------------|
-| 语义 | 空值/无值 | LLM 调用结果不确定 |
-| 布尔值 | 假 | 假 |
-| `(str)` 强转 | `"None"` | `"uncertain"` |
-| 检测函数 | 无专用函数（用 `== None` 比较） | `is_uncertain(r)` |
-| 来源 | 手动赋值或函数无返回 | LLM 调用重试耗尽后自动赋值 |
-
-### 5.4 暂不支持的用法
-
-当前版本**不提供** `r.is_uncertain()` 实例方法形式，请统一使用全局函数 `is_uncertain(r)`。
+处理 LLM 失败的正确方式见 §五（llmexcept）和 §4.6（异常体系）。
 
 ---
 
@@ -280,9 +215,8 @@ print("结果: " + r)    # 输出："结果: uncertain"
 
 **未来计划**
 
-后续解释器架构升级（引入更完善的 except / 不确定性异常机制）后，本行为将被禁止：`str + Uncertain`
-将不再隐式 coerce，相关错误路径将由统一的 `try/except`（或与之等价的不确定性异常处理器）接管。
-届时 `Uncertain` 必须由 `is_uncertain(r)` 显式判断后再处理。
+后续 `Uncertain` 内部哨兵完全不可见后，本行为将被禁止：`str + Uncertain`
+将不再隐式 coerce，相关错误路径将由统一的 `try/except` 接管。
 
 **根源**
 
