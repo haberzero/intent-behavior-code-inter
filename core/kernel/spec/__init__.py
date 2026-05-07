@@ -4,8 +4,9 @@ core/kernel/spec/__init__.py
 Public API for the spec layer.
 """
 
-from .base import IbSpec
+from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
+from .type_ref import TypeRef
 from .specs import (
     FuncSpec,
     ClassSpec,
@@ -13,6 +14,7 @@ from .specs import (
     TupleSpec,
     DictSpec,
     DeferredSpec,
+    OptionalSpec,
     BoundMethodSpec,
     ModuleSpec,
     CallableSigSpec,
@@ -30,6 +32,7 @@ from .specs import (
     CALLABLE_SPEC,
     BEHAVIOR_SPEC,
     DEFERRED_SPEC,
+    OPTIONAL_SPEC,
     EXCEPTION_SPEC,
     BOUND_METHOD_SPEC,
     LIST_SPEC,
@@ -48,9 +51,13 @@ from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 __all__ = [
     # Base
     "IbSpec",
+    "TypeDef",
+    "TypeKind",
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",
+    # TypeRef
+    "TypeRef",
     # Concrete spec kinds
     "FuncSpec",
     "ClassSpec",
@@ -58,6 +65,7 @@ __all__ = [
     "TupleSpec",
     "DictSpec",
     "DeferredSpec",
+    "OptionalSpec",
     "BoundMethodSpec",
     "ModuleSpec",
     "CallableSigSpec",
@@ -75,6 +83,7 @@ __all__ = [
     "CALLABLE_SPEC",
     "BEHAVIOR_SPEC",
     "DEFERRED_SPEC",
+    "OPTIONAL_SPEC",
     "EXCEPTION_SPEC",
     "BOUND_METHOD_SPEC",
     "LIST_SPEC",

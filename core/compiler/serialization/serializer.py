@@ -5,7 +5,8 @@ from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
-from core.kernel.spec.specs import DeferredSpec, CallableSigSpec
+from core.kernel.spec.specs import DeferredSpec, CallableSigSpec, OptionalSpec
+from core.kernel.spec.base import TypeKind
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -167,7 +168,7 @@ class FlatSerializer(BaseFlatSerializer):
         
         type_data = {
             "uid": uid,
-            "kind": t.__class__.__name__,
+            "kind": t.kind,
             "name": t.name,
             "module_path": t.module_path,
             "is_nullable": t.is_nullable,
@@ -177,14 +178,19 @@ class FlatSerializer(BaseFlatSerializer):
         # Persist scalar fields for DeferredSpec / BehaviorSpec so the runtime
         # rehydrator can reconstruct the proper subclass (and get_base_name()
         # will return "deferred" / "behavior" instead of "deferred[str]").
-        if isinstance(t, DeferredSpec):
-            type_data["value_type_name"] = t.value_type_name
-            type_data["deferred_mode"] = t.deferred_mode
+        if t.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value):
+            type_data["value_type_name"] = getattr(t, "value_type_name", "auto")
+            type_data["deferred_mode"] = getattr(t, "deferred_mode", "lambda")
+
+        # Persist OptionalSpec inner-type scalar fields for artifact rehydration.
+        if t.kind == TypeKind.OPTIONAL.value:
+            type_data["wrapped_type_name"] = getattr(t, "wrapped_type_name", "any")
+            type_data["wrapped_type_module"] = getattr(t, "wrapped_type_module", None)
 
         # Persist CallableSigSpec param/return signature for structural checking.
-        if isinstance(t, CallableSigSpec):
-            type_data["param_type_names"] = list(t.param_type_names)
-            type_data["return_type_name"] = t.return_type_name
+        if t.kind == TypeKind.CALLABLE_SIG.value:
+            type_data["param_type_names"] = list(getattr(t, "param_type_names", []))
+            type_data["return_type_name"] = getattr(t, "return_type_name", "auto")
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()
@@ -196,7 +202,7 @@ class FlatSerializer(BaseFlatSerializer):
                 type_data[f"{key}_uid"] = self._collect_type(val)
         
         # 使用 is_class() 代替 isinstance 检查
-        if t.is_class():
+        if t.kind == TypeKind.CLASS.value:
             # 这里的字段是字符串，直接存储
             type_data["parent_name"] = getattr(t, "parent_name", None)
             type_data["parent_module"] = getattr(t, "parent_module", None)

@@ -66,6 +66,21 @@ None        # 空值（首字母大写）
 > `Uncertain` 是 IBCI 内核内部的 LLM 不确定性哨兵，不是用户可编程的公开值。
 > LLM 失败处理请使用 `llmexcept` / `try except LLMCallError` / `try except LLMRetryExhaustedError`。
 
+### 1.3.1 Optional[T] 空安全
+
+```ibci
+Optional[int] maybe_a = None
+Optional[int] maybe_b = 1
+int a = maybe_a.or_else(0)     # 返回 int
+int b = maybe_b.unwrap()       # 返回 int
+bool ok = maybe_b.is_some()
+```
+
+- `Optional[T]` 接受 `T`、`None`、`Optional[T]`。
+- 非 `Optional` 类型不接受 `None`。
+- `or_else(default)` 的 `default` 与返回值类型均为 `T`。
+- `unwrap()` 返回 `T`（若运行时值为 `None`，语义错误由运行时处理）。
+
 ### 1.4 类型转换
 
 强制类型转换使用 `(Type)expr` 语法：

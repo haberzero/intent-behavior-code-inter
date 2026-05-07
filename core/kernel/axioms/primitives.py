@@ -1081,6 +1081,39 @@ class NoneAxiom(BaseAxiom, ConverterCapability):
 
 
 # ------------------------------------------------------------------ #
+# Optional                                                            #
+# ------------------------------------------------------------------ #
+
+class OptionalAxiom(BaseAxiom):
+    @property
+    def name(self) -> str:
+        return "Optional"
+
+    def get_call_capability(self): return None
+    def get_iter_capability(self): return None
+    def get_subscript_capability(self): return None
+    def get_operator_capability(self): return None
+    def get_converter_capability(self): return None
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "unwrap": _m("unwrap", ret="any"),
+            "or_else": _m("or_else", params=["any"], ret="any"),
+            "is_some": _m("is_some", ret="bool"),
+        }
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "Optional" or other_name.startswith("Optional[")
+
+    def resolve_specialization_by_names(
+        self, registry: Any, arg_names: List[str]
+    ) -> Optional[Any]:
+        wrapped = arg_names[0] if arg_names else "any"
+        spec = registry.factory.create_optional(wrapped_type_name=wrapped)
+        return registry.register(spec)
+
+
+# ------------------------------------------------------------------ #
 # slice                                                               #
 # ------------------------------------------------------------------ #
 
@@ -1486,6 +1519,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(LLMCallErrorAxiom())
     registry.register(BoundMethodAxiom())
     registry.register(NoneAxiom())
+    registry.register(OptionalAxiom())
     registry.register(SliceAxiom())
     registry.register(EnumAxiom())
 

@@ -330,6 +330,8 @@ print(r)
 
     def test_factory_function_returning_typed_fn(self):
         """``fn f = make_adder()`` — factory result used (full type propagation requires D3)."""
+        # [TODO] 保持失败：fn 工厂返回值的高阶签名传播尚未在当前类型系统阶段闭环。
+        # 该能力应在后续 fn/callable 统一建模路线（TypeRef/TypeDef/Axiom）中实现。
         code = """
 func make_adder(int b) -> fn:
     fn inner = lambda(int x) -> int: x + b

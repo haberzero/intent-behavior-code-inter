@@ -5,6 +5,7 @@ from core.kernel.spec import (
     INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC,
     VOID_SPEC, ANY_SPEC, AUTO_SPEC,
 )
+from core.kernel.spec.base import TypeKind
 
 
 class Prelude:
@@ -42,7 +43,7 @@ class Prelude:
             # explicitly imported by ibci code — they must NOT be pre-registered as
             # builtin symbols here (that would make every plugin visible in every file
             # without an import statement).
-            if isinstance(spec, FuncSpec):
+            if spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 self.builtin_functions[name] = spec
             elif spec_reg.is_module_spec(spec):
                 if not getattr(spec, 'is_user_defined', True):

@@ -5,7 +5,7 @@ import inspect
 import importlib.util
 from typing import Dict, List, Optional, Any
 from core.runtime.host.host_interface import HostInterface
-from core.kernel.spec import ModuleSpec, MethodMemberSpec, MemberSpec
+from core.kernel.spec import ModuleSpec, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
 from core.base.enums import RegistrationState
 
 
@@ -122,7 +122,7 @@ class ModuleDiscoveryService:
                 vtable = mod.__ibcext_vtable__()
 
                 # 协议2：深度嵌入模块直接返回 ModuleSpec
-                if isinstance(vtable, ModuleSpec):
+                if isinstance(vtable, IbSpec) and vtable.kind == TypeKind.MODULE.value:
                     vtable.name = raw_name
                     # 方法插件必须显式 import 才可用，不预注入为全局内置符号
                     if plugin_kind == "method_module":
@@ -172,7 +172,7 @@ class ModuleDiscoveryService:
             module_path_val = None
             name_val = raw_name
 
-        spec = ModuleSpec(name=name_val, module_path=module_path_val)
+        spec = ModuleSpec(name=name_val, kind=TypeKind.MODULE.value, module_path=module_path_val)
 
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():

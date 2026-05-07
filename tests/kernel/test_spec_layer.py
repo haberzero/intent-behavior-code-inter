@@ -20,9 +20,11 @@ Coverage:
 import pytest
 from core.kernel.spec import (
     IbSpec, FuncSpec, ClassSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec,
+    OptionalSpec, OPTIONAL_SPEC,
     INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
 )
 from core.kernel.spec.registry import SpecRegistry, SpecFactory, create_default_spec_registry
+from core.kernel.spec.base import TypeKind
 from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.axioms.primitives import register_core_axioms
 from core.kernel.factory import create_default_registry
@@ -95,7 +97,7 @@ class TestIbSpecBase:
         assert ds.value_type_name == "int"
 
     def test_module_spec_axiom_name(self):
-        ms = ModuleSpec(name="mymod")
+        ms = ModuleSpec(name="mymod", kind=TypeKind.MODULE.value)
         # get_base_name() returns the axiom lookup key ('module' for ModuleSpec),
         # not the instance name.  The instance name is accessed via .name.
         assert ms.name == "mymod"
@@ -115,6 +117,10 @@ class TestIbSpecBase:
         assert isinstance(ANY_SPEC, IbSpec)
         assert INT_SPEC.name == "int"
         assert ANY_SPEC.name == "any"
+
+    def test_constants_have_typedef_kinds(self):
+        assert INT_SPEC.kind == TypeKind.PRIMITIVE.value
+        assert OPTIONAL_SPEC.kind == TypeKind.OPTIONAL.value
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +165,12 @@ class TestSpecFactory:
         assert isinstance(ds, DictSpec)
         assert ds.key_type_name == "str"
         assert ds.value_type_name == "int"
+
+    def test_create_optional(self, factory: SpecFactory):
+        opt = factory.create_optional("int")
+        assert isinstance(opt, OptionalSpec)
+        assert opt.name == "Optional[int]"
+        assert opt.wrapped_type_name == "int"
 
     def test_create_module(self, factory: SpecFactory):
         ms = factory.create_module("mymod")
@@ -383,6 +395,50 @@ class TestAssignability:
         void_s = spec_reg.resolve("void")
         any_s = spec_reg.resolve("any")
         assert spec_reg.is_assignable(void_s, any_s) is True
+
+    def test_none_not_assignable_to_plain_int(self, spec_reg: SpecRegistry):
+        none_s = spec_reg.resolve("None")
+        int_s = spec_reg.resolve("int")
+        assert spec_reg.is_assignable(none_s, int_s) is False
+
+    def test_plain_int_not_assignable_to_none(self, spec_reg: SpecRegistry):
+        int_s = spec_reg.resolve("int")
+        none_s = spec_reg.resolve("None")
+        assert spec_reg.is_assignable(int_s, none_s) is False
+
+    def test_none_assignable_to_optional_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        none_s = spec_reg.resolve("None")
+        assert optional_int is not None
+        assert spec_reg.is_assignable(none_s, optional_int) is True
+
+    def test_int_assignable_to_optional_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        assert optional_int is not None
+        assert spec_reg.is_assignable(int_s, optional_int) is True
+
+    def test_optional_int_not_assignable_to_plain_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        assert optional_int is not None
+        assert spec_reg.is_assignable(optional_int, int_s) is False
+
+    def test_optional_int_assignable_to_optional_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        assert optional_int is not None
+        assert spec_reg.is_assignable(optional_int, optional_int) is True
+
+    def test_legacy_nullable_flag_does_not_allow_none_assignment(self, spec_reg: SpecRegistry):
+        none_s = spec_reg.resolve("None")
+        legacy_nullable_int = IbSpec(name="int", is_nullable=True, is_user_defined=False)
+        assert spec_reg.is_assignable(none_s, legacy_nullable_int) is False
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
+from core.kernel.spec.base import TypeKind
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
@@ -59,7 +60,7 @@ class ContractValidator:
 
             # 寻找父类中同名成员
             parent_member_spec = self.registry.resolve_member(parent, name)
-            if parent_member_spec and isinstance(parent_member_spec, FuncSpec):
+            if parent_member_spec and parent_member_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 self._check_method_compatibility_by_name(cls_desc, name, member, parent_member_spec)
 
         # 2. 检查公理契约 (Axiom Contract)
@@ -69,12 +70,12 @@ class ContractValidator:
             for name, axiom_sig in axiom_methods.items():
                 member = cls_desc.members.get(name)
                 if member and isinstance(member, MemberSpec) and member.is_method():
-                    if isinstance(axiom_sig, FuncSpec):
+                    if axiom_sig.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                         self._check_method_compatibility_by_name(cls_desc, name, member, axiom_sig)
 
     def _validate_function(self, func_desc: IbSpec):
         """审计全局函数的合法性 (水合完整性校验)"""
-        if not isinstance(func_desc, FuncSpec):
+        if func_desc.kind not in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             return
         # Check all parameters and return value are not None (i.e. proper name strings)
         for i, p in enumerate(func_desc.param_type_names):

@@ -384,7 +384,9 @@ class TestBehaviorSpecReturnTypeInference:
         reg = create_default_registry()
         ds = reg.factory.create_deferred(value_type_name="int", deferred_mode="lambda")
         assert isinstance(ds, DeferredSpec)
-        assert not isinstance(ds, BehaviorSpec)
+        # [TODO] M3 单一 TypeDef 迁移后，DeferredSpec/BehaviorSpec 均为 TypeDef 别名，
+        # 不再通过 isinstance 区分，语义区分应由 kind/get_base_name 驱动。
+        assert ds.kind != "behavior"
         assert ds.get_base_name() == "deferred"
         assert ds.value_type_name == "int"
         assert ds.name == "deferred[int]"

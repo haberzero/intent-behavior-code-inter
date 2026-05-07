@@ -27,7 +27,7 @@ from core.base.interfaces import (
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec, LazySpec
+from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec, LazySpec, TypeKind
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
@@ -435,7 +435,11 @@ class Scheduler(ICompilerService):
                         # 构造嵌套模块结构
                         root_sym = analyzer.symbol_table.resolve(root_name)
                         # 使用 is_module() 代替 isinstance
-                        if not root_sym or not root_sym.spec or not isinstance(root_sym.spec, ModuleSpec):
+                        if (
+                            not root_sym
+                            or not root_sym.spec
+                            or root_sym.spec.kind != TypeKind.MODULE.value
+                        ):
                             # 使用工厂创建
                             root_mod_type = self.registry.factory.create_primitive("module")
                             root_mod_type.name = root_name
@@ -452,7 +456,11 @@ class Scheduler(ICompilerService):
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
                                 # 使用 is_module() 代替 isinstance
-                                if not next_mod_sym or not next_mod_sym.spec or not isinstance(next_mod_sym.spec, ModuleSpec):
+                                if (
+                                    not next_mod_sym
+                                    or not next_mod_sym.spec
+                                    or next_mod_sym.spec.kind != TypeKind.MODULE.value
+                                ):
                                     next_mod_type = self.registry.factory.create_primitive("module")
                                     next_mod_type.name = part_name
                                     next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_mod_type)

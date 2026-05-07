@@ -18,8 +18,8 @@
 
 ## 1. 总体里程碑
 
-- [ ] **M1：TypeRef 引入（兼容阶段）**
-- [ ] **M2：Optional[T] 与空安全落地**
+- [x] **M1：TypeRef 引入（兼容阶段）** — 完成（2026-05-07）
+- [x] **M2：Optional[T] 与空安全落地** — 完成（2026-05-07）
 - [ ] **M3：TypeDef 单一化（替代多 Spec）**
 - [ ] **M4：运行时值模型单一化（IbValue）**
 - [ ] **M5：Axiom 接口统一化**
@@ -28,42 +28,65 @@
 
 ## 2. 详细任务分解
 
-### M1：TypeRef 引入（兼容阶段）
+### M1：TypeRef 引入（兼容阶段）— ✅ 完成
 
-- [ ] 新增 `TypeRef` 数据结构（不可变、可哈希、支持递归泛型参数）。
-- [ ] 在类型解析链路中引入 `TypeRef`，先以桥接方式兼容旧 `name/module` 字段。
-- [ ] 将函数返回类型、成员类型、容器元素类型的字符串引用逐步映射到 `TypeRef`。
-- [ ] 更新编译器 side table 与符号表接口，使其可同时读取旧表示与 `TypeRef`。
-- [ ] 为跨模块类型引用补齐统一表达与解析路径。
-- [ ] 补充最小回归测试：嵌套泛型、跨模块返回类型、成员访问类型传播。
+- [x] 新增 `TypeRef` 数据结构（不可变、可哈希、支持递归泛型参数）。
+  - 位置：`core/kernel/spec/type_ref.py`
+  - 字段：`head: str`, `args: tuple[TypeRef,...]`, `module: Optional[str]`
+  - 派生属性：`canonical_name`, `qualified_name`
+  - 工厂：`TypeRef.of()`, `TypeRef.generic()`, `TypeRef.from_spec()`（桥接旧 Spec）
+  - 工具：`substitute(mapping)` 用于泛型形参替换
+- [x] 在类型解析链路中引入 `TypeRef`，以桥接方式兼容旧 `name/module` 字段。
+  - `IbSpec.type_ref` 属性（base.py）
+  - `FuncSpec.return_type_ref`, `FuncSpec.param_type_refs`（specs.py）
+  - `ClassSpec.parent_type_ref`（specs.py）
+  - `ListSpec.element_type_ref`（specs.py）
+  - `TupleSpec.element_type_ref`（specs.py）
+  - `DictSpec.key_type_ref`, `DictSpec.value_type_ref`（specs.py）
+  - `DeferredSpec.value_type_ref`（specs.py）
+  - `MemberSpec.type_ref`（member.py）
+  - `MethodMemberSpec.return_type_ref`, `MethodMemberSpec.param_type_refs`（member.py）
+- [x] 将函数返回类型、成员类型、容器元素类型的字符串引用逐步映射到 `TypeRef`。
+- [x] 更新编译器 side table 与符号表接口，使其可同时读取旧表示与 `TypeRef`。
+  - `SpecRegistry.resolve_typeref(ref: TypeRef)` 新增（registry.py）
+- [x] 为跨模块类型引用补齐统一表达与解析路径。
+  - `TypeRef.of(name, module)` 标准化跨模块引用
+  - `resolve_typeref()` 先尝试带模块限定符，再回落到裸名
+- [x] 补充最小回归测试：嵌套泛型、跨模块返回类型、成员访问类型传播。
+  - 测试文件：`tests/kernel/test_typeref.py`（103 个测试用例）
 
 **M1 DoD**
-- [ ] 编译器和解释器均可读取 `TypeRef`。
-- [ ] 现有功能行为不变，测试基线保持通过。
+- [x] 编译器和解释器均可读取 `TypeRef`。
+- [x] 现有功能行为不变，测试基线保持通过（1056 → 1159，+103 新测试）。
 
 ### M2：Optional[T] 与空安全落地
 
-- [ ] 引入 `Optional[T]` 作为标准可空表达。
-- [ ] 移除/冻结旧 `nullable` 布尔语义入口，改为类型层显式表达。
-- [ ] 调整赋值检查：非 Optional 类型禁止接收 `None`。
-- [ ] 提供 Optional 基础能力（如 `or_else` / `unwrap` 等）及语义文档。
-- [ ] 完成语义分析器中的可空性检查迁移。
+- [x] 引入 `Optional[T]` 的首批类型表示与注册表特化入口。
+  - `OptionalSpec` 新增：`wrapped_type_name` / `wrapped_type_module`
+  - `SpecFactory.create_optional()` 新增
+  - `OptionalAxiom` 新增并注册到 `AxiomRegistry`
+  - `SpecRegistry.resolve_specialization(Optional, [T])` / `resolve_typeref(Optional[T])` 已可用
+- [x] 移除/冻结旧 `nullable` 布尔语义入口，改为类型层显式表达。
+  - 兼容说明：`is_nullable` 字段保留为迁移期数据字段，但不再参与 `is_assignable` 的可空判定。
+- [x] 调整赋值检查首批规则：非 Optional 类型禁止接收 `None`；`Optional[T]` 接受 `T` / `None` / `Optional[T]`。
+- [x] 提供 Optional 基础能力（如 `or_else` / `unwrap` 等）及语义文档。
+- [x] 完成语义分析器中的可空性检查迁移。
 
 **M2 DoD**
-- [ ] 可空逻辑仅由 `Optional[T]` 驱动。
-- [ ] 空安全相关用例完整覆盖。
+- [x] 可空逻辑仅由 `Optional[T]` 驱动。
+- [x] 空安全相关用例完整覆盖。
 
 ### M3：TypeDef 单一化（替代多 Spec）
 
-- [ ] 设计并落地统一 `TypeDef`（以 `kind` 区分语义类别）。
+- [x] 设计并落地统一 `TypeDef`（以 `kind` 区分语义类别）。
 - [ ] 将旧多 Spec 结构迁移到 `TypeDef` 统一表示。
-- [ ] 重写注册表查询入口：统一返回 `TypeDef`。
-- [ ] 清理 `isinstance(SpecX)` 分支，改为 `kind` + 通用字段路径。
-- [ ] 更新序列化/反序列化协议到单一结构。
+- [x] 重写注册表查询入口：统一返回 `TypeDef` 兼容结构（`kind` 驱动）。
+- [x] 清理关键路径 `isinstance(SpecX)` 分支，改为 `kind` + 通用字段路径。
+- [x] 更新序列化/反序列化协议到单一结构（统一使用 `kind` 协议）。
 
 **M3 DoD**
 - [ ] Spec 体系逻辑等价迁移完成。
-- [ ] 关键路径不再依赖旧 Spec 子类判断。
+- [x] 关键路径不再依赖旧 Spec 子类判断（SpecRegistry/serializer/rehydrator/语义核心 pass）。
 
 ### M4：运行时值模型单一化（IbValue）
 
@@ -86,6 +109,26 @@
 **M5 DoD**
 - [ ] Axiom 成为唯一类型行为入口。
 - [ ] 旧 capability 兼容层按计划下线。
+
+### M3→M5 补充：`fn` / `lambda` / `snapshot` 可调用实例统一路线
+
+- [ ] 将“deferred（延迟求值）”从主类型概念中退出，统一为“可调用实例（callable instance）”语义。
+- [ ] 明确 `lambda` / `snapshot` 仅作为**右值表达式包装关键字**，不再作为左值声明语义。
+- [ ] 统一 `fn` 左值关键字语义：
+  - [ ] 作为可调用实例推导入口（类似 `auto`，但限定 callable）
+  - [ ] 作为高阶函数类型标注入口（参数/返回签名约束）
+- [ ] 在 TypeRef/TypeDef 中补齐 callable 实例结构表达，避免 `fn` 哨兵路径导致返回类型退化为 `void`。
+- [ ] 在 Axiom 层统一 callable 分发：普通函数、`lambda`、`snapshot`、行为体 callable 走同一调用协议。
+- [ ] 固化 `lambda` vs `snapshot` 差异语义：
+  - [ ] `lambda`：引用捕获（读最新值）
+  - [ ] `snapshot`：值拷贝捕获（冻结定义时值）
+  - [ ] 二者在意图栈作用域上的差异由统一 callable 语义承载，而非 deferred 子体系承载
+- [ ] 迁移完成前，保留 fn 相关失败用例并以 [TODO] 标注路线依赖，禁止补丁式绕过。
+
+**补充 DoD**
+- [ ] `fn` 高阶参数/返回值调用链可稳定推导返回类型，不再出现 `void` 回退。
+- [ ] 测试与文档不再将 `lambda` / `snapshot` 描述为“延迟调用”，而是“可调用实例构造”。
+- [ ] `deferred` 仅可作为兼容层术语（若保留），不再作为主语义建模中心。
 
 ---
 

@@ -17,7 +17,10 @@ MemberSpec          — base (field or alias)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .type_ref import TypeRef
 
 
 @dataclass
@@ -42,6 +45,14 @@ class MemberSpec:
     def is_llm(self) -> bool:
         return self.kind == "llm_method"
 
+    # [INFO] TypeRef compatibility ------------------------------------
+
+    @property
+    def type_ref(self) -> "TypeRef":
+        """TypeRef for this member's declared type."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.type_name, self.type_module)
+
 
 @dataclass
 class MethodMemberSpec(MemberSpec):
@@ -61,3 +72,20 @@ class MethodMemberSpec(MemberSpec):
 
     return_type_name: str = "void"
     return_type_module: Optional[str] = None
+
+    # [INFO] TypeRef compatibility ------------------------------------
+
+    @property
+    def return_type_ref(self) -> "TypeRef":
+        """TypeRef for the declared return type."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.return_type_name, self.return_type_module)
+
+    @property
+    def param_type_refs(self) -> "tuple[TypeRef, ...]":
+        """Tuple of TypeRefs for declared parameter types."""
+        from .type_ref import TypeRef
+        mods = list(self.param_type_modules)
+        while len(mods) < len(self.param_type_names):
+            mods.append(None)
+        return tuple(TypeRef.of(n, m) for n, m in zip(self.param_type_names, mods))

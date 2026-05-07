@@ -12,7 +12,7 @@ from core.runtime.interfaces import IExecutionContext
 from core.base.interfaces import IStateReader, ISymbolView, IIntentManager
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
-from core.kernel.spec import MethodMemberSpec
+from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
 from core.kernel.symbols import FunctionSymbol
 
 class ModuleLoader(IModuleLoader):
@@ -41,8 +41,7 @@ class ModuleLoader(IModuleLoader):
 
         # 从元数据注册表解析 (元数据来源于 _spec.py)
         metadata = context.interop.metadata.resolve(module_name)
-        from core.kernel.spec import ModuleSpec
-        if not metadata or not isinstance(metadata, ModuleSpec):
+        if not isinstance(metadata, IbSpec) or metadata.kind != TypeKind.MODULE.value:
             raise InterpreterError(f"Plugin Protocol Error: Module '{module_name}' metadata not found. "
                                    f"Ensure _spec.py exists and declares __ibcext_vtable__.")
 
