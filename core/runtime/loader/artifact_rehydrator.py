@@ -17,20 +17,7 @@ class ArtifactRehydrator:
     """
     类型重水化器：将序列化后的 type_pool 还原为运行时的 IbSpec 对象树。
     """
-    _LEGACY_KIND_TOKENS = {
-        "ListMetadata",
-        "DictMetadata",
-        "FunctionMetadata",
-        "ClassMetadata",
-        "BoundMethodMetadata",
-        "ModuleMetadata",
-        "DeferredSpec",
-        "BehaviorSpec",
-        "CallableSigSpec",
-        "OptionalSpec",
-        "IbSpec",
-        "TypeDescriptor",
-    }
+    _SUPPORTED_KINDS = {k.value for k in TypeKind}
 
     def __init__(self, type_pool: Dict[str, Any], registry: SpecRegistry):
         self.type_pool = type_pool
@@ -147,16 +134,9 @@ class ArtifactRehydrator:
 
     def _resolve_kind(self, data: Dict[str, Any], uid: str) -> str:
         kind = data.get("kind", TypeKind.PRIMITIVE.value)
-        legacy_kind = data.get("legacy_kind")
-
-        if legacy_kind:
+        if kind not in self._SUPPORTED_KINDS:
             raise ValueError(
-                f"Artifact type '{uid}' uses deprecated legacy_kind='{legacy_kind}'. "
-                "Use canonical TypeKind string values."
-            )
-        if kind in self._LEGACY_KIND_TOKENS:
-            raise ValueError(
-                f"Artifact type '{uid}' uses deprecated legacy kind token '{kind}'. "
+                f"Artifact type '{uid}' has unsupported kind '{kind}'. "
                 "Use canonical TypeKind string values."
             )
         return kind
