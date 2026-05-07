@@ -396,6 +396,11 @@ class TestAssignability:
         int_s = spec_reg.resolve("int")
         assert spec_reg.is_assignable(none_s, int_s) is False
 
+    def test_plain_int_not_assignable_to_none(self, spec_reg: SpecRegistry):
+        int_s = spec_reg.resolve("int")
+        none_s = spec_reg.resolve("None")
+        assert spec_reg.is_assignable(int_s, none_s) is False
+
     def test_none_assignable_to_optional_int(self, spec_reg: SpecRegistry):
         optional_base = spec_reg.resolve("Optional")
         int_s = spec_reg.resolve("int")

@@ -168,7 +168,6 @@ class ArtifactRehydrator:
         elif isinstance(spec, OptionalSpec):
             spec.wrapped_type_name = data.get("wrapped_type_name", spec.wrapped_type_name)
             spec.wrapped_type_module = data.get("wrapped_type_module", spec.wrapped_type_module)
-            spec.name = f"Optional[{spec.wrapped_type_name}]"
         elif isinstance(spec, ClassSpec):
             spec.parent_name = data.get("parent_name")
             spec.parent_module = data.get("parent_module")
