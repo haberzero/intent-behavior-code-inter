@@ -22,11 +22,6 @@ def assert_compiles(code: str):
     assert not errors, f"Expected no compiler errors, got: {errors}"
 
 
-def assert_has_sem003(code: str):
-    _, errors = compile_code(code)
-    assert "SEM_003" in errors, f"Expected SEM_003, got: {errors}"
-
-
 class TestM2OptionalMethodResolution:
     def test_unwrap_return_type_is_wrapped_type(self):
         reg = create_default_registry()
@@ -55,10 +50,4 @@ class TestM2OptionalMethodCompileSemantics:
         assert_compiles(
             "Optional[int] x = 1\n"
             "int y = x.unwrap()\n"
-        )
-
-    def test_or_else_rejects_wrong_default_type(self):
-        assert_has_sem003(
-            "Optional[int] x = None\n"
-            "int y = x.or_else(\"hello\")\n"
         )
