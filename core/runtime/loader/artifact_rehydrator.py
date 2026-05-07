@@ -1,11 +1,16 @@
 from typing import Dict, Any, Optional, List
 from core.kernel.spec.registry import SpecRegistry
-from core.kernel.spec import IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
-from core.kernel.spec.specs import DeferredSpec, BehaviorSpec, CallableSigSpec
+from core.kernel.spec import (
+    IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
+)
+from core.kernel.spec.specs import DeferredSpec, BehaviorSpec, CallableSigSpec, OptionalSpec
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
-BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "any", "auto", "fn", "callable", "list", "dict", "behavior", "None", "llm_uncertain"]
+BUILTIN_TYPES = [
+    "int", "str", "float", "bool", "void", "any", "auto", "fn", "callable",
+    "list", "dict", "behavior", "Optional", "None", "llm_uncertain"
+]
 
 class ArtifactRehydrator:
     """
@@ -104,6 +109,10 @@ class ArtifactRehydrator:
                 return_type_name=data.get("return_type_name", "auto"),
                 is_user_defined=False,
             ),
+            "OptionalSpec": lambda: factory.create_optional(
+                wrapped_type_name=data.get("wrapped_type_name", "any"),
+                wrapped_type_module=data.get("wrapped_type_module"),
+            ),
         }
         
         if name in BUILTIN_TYPES and kind == "TypeDescriptor":
@@ -156,6 +165,10 @@ class ArtifactRehydrator:
             # BehaviorSpec is a subclass of DeferredSpec so this branch covers both.
             spec.value_type_name = data.get("value_type_name", spec.value_type_name)
             spec.deferred_mode = data.get("deferred_mode", spec.deferred_mode)
+        elif isinstance(spec, OptionalSpec):
+            spec.wrapped_type_name = data.get("wrapped_type_name", spec.wrapped_type_name)
+            spec.wrapped_type_module = data.get("wrapped_type_module", spec.wrapped_type_module)
+            spec.name = f"Optional[{spec.wrapped_type_name}]"
         elif isinstance(spec, ClassSpec):
             spec.parent_name = data.get("parent_name")
             spec.parent_module = data.get("parent_module")
