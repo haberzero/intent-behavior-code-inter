@@ -78,15 +78,15 @@
 
 ### M3：TypeDef 单一化（替代多 Spec）
 
-- [ ] 设计并落地统一 `TypeDef`（以 `kind` 区分语义类别）。
+- [x] 设计并落地统一 `TypeDef`（以 `kind` 区分语义类别）。
 - [ ] 将旧多 Spec 结构迁移到 `TypeDef` 统一表示。
-- [ ] 重写注册表查询入口：统一返回 `TypeDef`。
-- [ ] 清理 `isinstance(SpecX)` 分支，改为 `kind` + 通用字段路径。
-- [ ] 更新序列化/反序列化协议到单一结构。
+- [x] 重写注册表查询入口：统一返回 `TypeDef` 兼容结构（`kind` 驱动）。
+- [x] 清理关键路径 `isinstance(SpecX)` 分支，改为 `kind` + 通用字段路径。
+- [x] 更新序列化/反序列化协议到单一结构（新增 `kind` 协议并兼容旧 `legacy_kind`）。
 
 **M3 DoD**
 - [ ] Spec 体系逻辑等价迁移完成。
-- [ ] 关键路径不再依赖旧 Spec 子类判断。
+- [x] 关键路径不再依赖旧 Spec 子类判断（SpecRegistry/serializer/rehydrator/语义核心 pass）。
 
 ### M4：运行时值模型单一化（IbValue）
 

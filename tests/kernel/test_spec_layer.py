@@ -24,6 +24,7 @@ from core.kernel.spec import (
     INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
 )
 from core.kernel.spec.registry import SpecRegistry, SpecFactory, create_default_spec_registry
+from core.kernel.spec.base import TypeKind
 from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.axioms.primitives import register_core_axioms
 from core.kernel.factory import create_default_registry
@@ -116,6 +117,10 @@ class TestIbSpecBase:
         assert isinstance(ANY_SPEC, IbSpec)
         assert INT_SPEC.name == "int"
         assert ANY_SPEC.name == "any"
+
+    def test_constants_have_typedef_kinds(self):
+        assert INT_SPEC.kind == TypeKind.PRIMITIVE.value
+        assert OPTIONAL_SPEC.kind == TypeKind.OPTIONAL.value
 
 
 # ---------------------------------------------------------------------------

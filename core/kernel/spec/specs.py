@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
 
-from .base import IbSpec
+from .base import IbSpec, TypeDef, TypeKind
 
 if TYPE_CHECKING:
     from .type_ref import TypeRef
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 # ------------------------------------------------------------------ #
 
 @dataclass(eq=False)
-class FuncSpec(IbSpec):
+class FuncSpec(TypeDef):
     """
     Describes a function / callable type.
 
@@ -48,6 +48,7 @@ class FuncSpec(IbSpec):
     """
 
     is_user_defined: bool = False
+    kind: str = field(default=TypeKind.FUNCTION.value, init=False)
 
     # Parallel lists; index i → param type
     param_type_names: List[str] = field(default_factory=list)
@@ -77,7 +78,7 @@ class FuncSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class ClassSpec(IbSpec):
+class ClassSpec(TypeDef):
     """
     Describes a class type.
 
@@ -85,6 +86,7 @@ class ClassSpec(IbSpec):
     Resolve via ``SpecRegistry.resolve(parent_name, parent_module)``.
     """
 
+    kind: str = field(default=TypeKind.CLASS.value, init=False)
     parent_name: Optional[str] = None
     parent_module: Optional[str] = None
 
@@ -100,7 +102,7 @@ class ClassSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class ListSpec(IbSpec):
+class ListSpec(TypeDef):
     """
     Describes a generic list type.
 
@@ -112,6 +114,7 @@ class ListSpec(IbSpec):
     the list only accepts elements of the declared types.
     """
 
+    kind: str = field(default=TypeKind.LIST.value, init=False)
     element_type_name: str = "any"
     element_type_module: Optional[str] = None
     # Multi-type element names (empty = single-type or bare list)
@@ -134,12 +137,13 @@ class ListSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class TupleSpec(IbSpec):
+class TupleSpec(TypeDef):
     """
     Describes an immutable, fixed-length tuple type: tuple[element_type].
     Unlike ListSpec, tuples are heterogeneous and immutable at runtime.
     """
 
+    kind: str = field(default=TypeKind.TUPLE.value, init=False)
     element_type_name: str = "any"
     element_type_module: Optional[str] = None
 
@@ -156,11 +160,12 @@ class TupleSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class DictSpec(IbSpec):
+class DictSpec(TypeDef):
     """
     Describes a generic dict type: dict[key_type, value_type].
     """
 
+    kind: str = field(default=TypeKind.DICT.value, init=False)
     key_type_name: str = "any"
     key_type_module: Optional[str] = None
     value_type_name: str = "any"
@@ -185,7 +190,7 @@ class DictSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class OptionalSpec(IbSpec):
+class OptionalSpec(TypeDef):
     """
     Describes an explicit optional type: ``Optional[T]``.
 
@@ -193,6 +198,7 @@ class OptionalSpec(IbSpec):
     represented at the type level rather than inferred from ``is_nullable``.
     """
 
+    kind: str = field(default=TypeKind.OPTIONAL.value, init=False)
     wrapped_type_name: str = "any"
     wrapped_type_module: Optional[str] = None
 
@@ -209,12 +215,13 @@ class OptionalSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class BoundMethodSpec(IbSpec):
+class BoundMethodSpec(TypeDef):
     """
     Describes a bound method (receiver type + original function spec).
     Synthesised at runtime; rarely needs explicit registration.
     """
 
+    kind: str = field(default=TypeKind.BOUND_METHOD.value, init=False)
     receiver_type_name: str = ""
     receiver_type_module: Optional[str] = None
     func_spec_name: str = ""
@@ -224,11 +231,12 @@ class BoundMethodSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class ModuleSpec(IbSpec):
+class ModuleSpec(TypeDef):
     """
     Describes a module (a namespace of exported members).
     """
 
+    kind: str = field(default=TypeKind.MODULE.value, init=False)
     required_capabilities: List[str] = field(default_factory=list)
 
     def get_base_name(self) -> str:
@@ -236,7 +244,7 @@ class ModuleSpec(IbSpec):
 
 
 @dataclass(eq=False)
-class DeferredSpec(IbSpec):
+class DeferredSpec(TypeDef):
     """
     Describes a deferred (lambda/snapshot) expression type.
 
@@ -256,6 +264,7 @@ class DeferredSpec(IbSpec):
         'lambda' (re-evaluates with fresh context) or 'snapshot' (frozen context).
     """
 
+    kind: str = field(default=TypeKind.DEFERRED.value, init=False)
     value_type_name: str = "auto"
     value_type_module: Optional[str] = None
     deferred_mode: str = "lambda"
@@ -303,6 +312,8 @@ class BehaviorSpec(DeferredSpec):
       because ``BehaviorAxiom.is_compatible("behavior")`` returns True.
     """
 
+    kind: str = field(default=TypeKind.BEHAVIOR.value, init=False)
+
     def get_base_name(self) -> str:
         return self._axiom_name or "behavior"
 
@@ -333,6 +344,8 @@ class CallableSigSpec(FuncSpec):
       parameter inside the function body.
     """
 
+    kind: str = field(default=TypeKind.CALLABLE_SIG.value, init=False)
+
     def get_base_name(self) -> str:
         return self._axiom_name or "callable_sig"
 
@@ -354,6 +367,7 @@ class LazySpec(ModuleSpec):
     layer side-effect free.
     """
 
+    kind: str = field(default=TypeKind.LAZY.value, init=False)
     is_lazy: bool = field(default=True, init=False, repr=False)
 
     def get_base_name(self) -> str:
@@ -366,18 +380,18 @@ class LazySpec(ModuleSpec):
 # These are *not* registered specs — they are prototypes.
 # SpecRegistry.register() will clone them on first registration.
 
-INT_SPEC    = IbSpec(name="int",    is_nullable=False, is_user_defined=False)
-FLOAT_SPEC  = IbSpec(name="float",  is_nullable=False, is_user_defined=False)
-STR_SPEC    = IbSpec(name="str",    is_nullable=False, is_user_defined=False)
-BOOL_SPEC   = IbSpec(name="bool",   is_nullable=False, is_user_defined=False)
-VOID_SPEC   = IbSpec(name="void",   is_nullable=False, is_user_defined=False)
-ANY_SPEC    = IbSpec(name="any",    is_nullable=True,  is_user_defined=False)
-AUTO_SPEC   = IbSpec(name="auto",   is_nullable=True,  is_user_defined=False)
-NONE_SPEC   = IbSpec(name="None",   is_nullable=True,  is_user_defined=False)
-SLICE_SPEC  = IbSpec(name="slice",  is_nullable=False, is_user_defined=False)
+INT_SPEC    = TypeDef(name="int",    kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
+FLOAT_SPEC  = TypeDef(name="float",  kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
+STR_SPEC    = TypeDef(name="str",    kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
+BOOL_SPEC   = TypeDef(name="bool",   kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
+VOID_SPEC   = TypeDef(name="void",   kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
+ANY_SPEC    = TypeDef(name="any",    kind=TypeKind.PRIMITIVE.value, is_nullable=True,  is_user_defined=False)
+AUTO_SPEC   = TypeDef(name="auto",   kind=TypeKind.PRIMITIVE.value, is_nullable=True,  is_user_defined=False)
+NONE_SPEC   = TypeDef(name="None",   kind=TypeKind.PRIMITIVE.value, is_nullable=True,  is_user_defined=False)
+SLICE_SPEC  = TypeDef(name="slice",  kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
 
-CALLABLE_SPEC   = IbSpec(name="callable",    is_nullable=True,  is_user_defined=False)
-BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=False)
+CALLABLE_SPEC   = TypeDef(name="callable", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False)
+BEHAVIOR_SPEC   = TypeDef(name="behavior", kind=TypeKind.BEHAVIOR.value, is_nullable=True,  is_user_defined=False)
 DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
 OPTIONAL_SPEC   = OptionalSpec(name="Optional", is_nullable=True, is_user_defined=False)
 EXCEPTION_SPEC  = ClassSpec(name="Exception", is_nullable=True, is_user_defined=False)
@@ -396,14 +410,14 @@ LLM_CALL_ERROR_SPEC = ClassSpec(name="LLMCallError", is_nullable=True, is_user_d
 
 # fn — callable type inference marker (declaration-time keyword, like auto but for callables)
 # 不是一个独立的运行期类型：fn x = myFunc 实际上将 x 的 spec 推导为 myFunc 的具体 callable spec。
-FN_SPEC         = IbSpec(name="fn",          is_nullable=True,  is_user_defined=False)
+FN_SPEC         = TypeDef(name="fn", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False)
 
 # LLM 调用结果类型规格 — IbLLMCallResult 的公理化描述符
-LLM_CALL_RESULT_SPEC = IbSpec(name="llm_call_result", is_nullable=True, is_user_defined=False)
+LLM_CALL_RESULT_SPEC = TypeDef(name="llm_call_result", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False)
 
 # LLM 不确定结果类型规格 — IbLLMUncertain 的公理化描述符
 # 当 LLM 调用重试耗尽时，目标变量被赋值为此类型的单例（而非抛出异常）。
-LLM_UNCERTAIN_SPEC = IbSpec(name="llm_uncertain", is_nullable=True, is_user_defined=False)
+LLM_UNCERTAIN_SPEC = TypeDef(name="llm_uncertain", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False)
 
 BOUND_METHOD_SPEC = BoundMethodSpec(name="bound_method", is_nullable=True, is_user_defined=False)
 LIST_SPEC         = ListSpec(name="list",   is_nullable=True,  is_user_defined=False)

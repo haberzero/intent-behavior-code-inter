@@ -4,7 +4,7 @@ core/kernel/spec/__init__.py
 Public API for the spec layer.
 """
 
-from .base import IbSpec
+from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
 from .type_ref import TypeRef
 from .specs import (
@@ -51,6 +51,8 @@ from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 __all__ = [
     # Base
     "IbSpec",
+    "TypeDef",
+    "TypeKind",
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",

@@ -9,6 +9,7 @@ from core.kernel.symbols import (
     SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol
 )
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec
+from core.kernel.spec.base import TypeKind
 
 from .prelude import Prelude
 from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
@@ -628,7 +629,7 @@ class SemanticAnalyzer:
             
         old_class = self.current_class
         # 使用 is_class() 判定，消除对 ClassSpec 的直接依赖
-        if isinstance(sym.spec, ClassSpec):
+        if sym.spec and sym.spec.kind == TypeKind.CLASS.value:
             # 内部仍需类型转换为 ClassSpec 以支持 members 访问，但判定逻辑已公理化
             self.current_class = sym.spec
         else:
@@ -806,7 +807,7 @@ class SemanticAnalyzer:
                 # `writable` and `sym` are already in scope from above.
                 if writable:
                     writable.update_signature(param_types, inferred)
-                elif sym.spec and isinstance(sym.spec, FuncSpec):
+                elif sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                     sym.spec.return_type_name = inferred.name
 
             elif ret_type is not self._void_desc:
@@ -832,7 +833,7 @@ class SemanticAnalyzer:
         if saved_class and node.name in saved_class.members:
             from core.kernel.spec.member import MethodMemberSpec as _MethodMemberSpec
             m = saved_class.members[node.name]
-            if isinstance(m, _MethodMemberSpec) and isinstance(sym.spec, FuncSpec):
+            if isinstance(m, _MethodMemberSpec) and sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 # 跳过 self（类方法的第一个参数）
                 user_params = param_types[1:] if saved_class else param_types
                 m.param_type_names = [p.name for p in user_params]
@@ -1131,7 +1132,7 @@ class SemanticAnalyzer:
         fn f = myFunc  → f 持有 myFunc 的具体 callable spec
         fn f = 42      → SEM_003（42 不可调用）
         """
-        if isinstance(val_type, ClassSpec):
+        if val_type.kind == TypeKind.CLASS.value:
             # (a) 类名引用（构造器）：fn f = Dog → 始终允许
             is_constructor_ref = (
                 isinstance(node.value, ast.IbName) and
@@ -1167,7 +1168,7 @@ class SemanticAnalyzer:
 
         # D3: fn[(...)→(...)] 签名标注时，检查结构签名匹配
         from core.kernel.spec.specs import CallableSigSpec as _CSS
-        if isinstance(declared_type, _CSS) and isinstance(val_type, FuncSpec):
+        if isinstance(declared_type, _CSS) and val_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             self._check_callable_sig_match(declared_type, val_type, node)
 
         return target_type
@@ -1301,12 +1302,11 @@ class SemanticAnalyzer:
             if self.registry.is_behavior(iter_type):
                 element_type = self._any_desc 
             else:
-                from core.kernel.spec.specs import ClassSpec as _ClassSpec
                 iter_cap = self.registry.get_iter_cap(iter_type)
                 # __iter__ 协议：用户类若定义了 __iter__ 方法，视为可迭代
                 has_iter_method = (
                     iter_cap is None
-                    and isinstance(iter_type, _ClassSpec)
+                    and iter_type.kind == TypeKind.CLASS.value
                     and self.registry.resolve_member(iter_type, "__iter__") is not None
                 )
                 if iter_cap:
@@ -1409,7 +1409,7 @@ class SemanticAnalyzer:
         #   - None（裸 except:）→ 使用 Exception（见上）
         #   - TupleSpec（except (A, B) as e:）→ 不是 ClassSpec，回退 Exception
         #   - 未知符号（visit 返回 any/None）→ 不是 ClassSpec，回退 Exception
-        if isinstance(resolved_exc_type, ClassSpec):
+        if resolved_exc_type and resolved_exc_type.kind == TypeKind.CLASS.value:
             exc_type = resolved_exc_type
 
         for var_name, target in SymbolExtractor.get_assigned_names(node):
@@ -1819,12 +1819,12 @@ class SemanticAnalyzer:
         # 当 fn f = instance_with_call 时，f 的类型是 ClassSpec（如 Adder）。
         # 调用 f(args) 时应通过 __call__ 方法推断返回类型，而非构造器语义（返回 ClassSpec 自身）。
         # 仅在 node.func 是变量引用（非类名引用）且该变量类型是带 __call__ 的 ClassSpec 时生效。
-        if isinstance(func_type, ClassSpec) and isinstance(node.func, ast.IbName):
+        if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.symbol_table.resolve(node.func.id)
             if sym and not sym.is_type and '__call__' in func_type.members:
                 from core.kernel.spec import FuncSpec as _FuncSpec
                 call_spec = self.registry.resolve_member(func_type, '__call__')
-                if call_spec and isinstance(call_spec, _FuncSpec):
+                if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                     return self.registry.resolve(call_spec.return_type_name) or self._any_desc
         
         # 1. 检查是否可调用 (使用 Trait 契约)
@@ -1837,7 +1837,7 @@ class SemanticAnalyzer:
         # When the callee type carries an explicit signature constraint, validate
         # arg count and argument types at the call site.
         from core.kernel.spec.specs import CallableSigSpec as _CSS
-        if isinstance(func_type, _CSS):
+        if func_type.kind == TypeKind.CALLABLE_SIG.value:
             expected_names = func_type.param_type_names or []
             if len(arg_types) != len(expected_names):
                 self.error(
@@ -1878,9 +1878,10 @@ class SemanticAnalyzer:
         # type that does not match the element type.  This is a convenience hint —
         # it is non-blocking and does not prevent compilation.
         from core.kernel.spec.specs import FuncSpec as _FuncSpec
-        if isinstance(func_type, _FuncSpec) and func_type.param_type_names:
+        param_type_names = getattr(func_type, "param_type_names", [])
+        if func_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value) and param_type_names:
             for i, (expected_name, actual_type) in enumerate(
-                zip(func_type.param_type_names, arg_types)
+                zip(param_type_names, arg_types)
             ):
                 if expected_name == "any":
                     continue

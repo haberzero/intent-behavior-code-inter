@@ -4,6 +4,7 @@ from core.kernel.spec import (
     IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
 )
 from core.kernel.spec.specs import DeferredSpec, BehaviorSpec, CallableSigSpec, OptionalSpec
+from core.kernel.spec.base import TypeKind
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
@@ -51,7 +52,7 @@ class ArtifactRehydrator:
         classes = []
         for uid in self.type_pool:
             spec = self._fill_descriptor(uid)
-            if isinstance(spec, ClassSpec):
+            if spec and spec.kind == TypeKind.CLASS.value:
                 classes.append(spec)
         
         return classes
@@ -75,7 +76,8 @@ class ArtifactRehydrator:
             return self.memo[uid]
             
         data = self.type_pool[uid]
-        kind = data.get("kind", "TypeDescriptor")
+        kind = data.get("kind", TypeKind.PRIMITIVE.value)
+        legacy_kind = data.get("legacy_kind")
         name = data.get("name", "")
         is_user_defined = data.get("is_user_defined", False)
         
@@ -83,39 +85,56 @@ class ArtifactRehydrator:
         
         # 映射驱动的 Shell 创建
         shell_creators = {
-            "ListMetadata": lambda: ListSpec(name="list", is_user_defined=False),
-            "DictMetadata": lambda: DictSpec(name="dict", is_user_defined=False),
-            "FunctionMetadata": lambda: FuncSpec(name=name or "callable", is_user_defined=False),
-            "ClassMetadata": lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
-            "BoundMethodMetadata": lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
-            "ModuleMetadata": lambda: ModuleSpec(name=name, is_user_defined=False),
-            # Typed deferred / behavior specs — reconstruct the proper subclass so
-            # that get_base_name() returns "deferred" / "behavior" (not "deferred[str]"),
-            # allowing SpecRegistry.is_assignable() to resolve the correct axiom.
-            "DeferredSpec": lambda: factory.create_deferred(
-                value_type_name=data.get("value_type_name", "auto"),
-                deferred_mode=data.get("deferred_mode", "lambda"),
-            ),
-            "BehaviorSpec": lambda: factory.create_behavior(
-                value_type_name=data.get("value_type_name", "auto"),
-                deferred_mode=data.get("deferred_mode", "lambda"),
-            ),
-            # D3: callable signature spec — reconstruct CallableSigSpec with its
-            # param/return type name lists intact.
-            "CallableSigSpec": lambda: CallableSigSpec(
+            TypeKind.LIST.value: lambda: ListSpec(name="list", is_user_defined=False),
+            TypeKind.DICT.value: lambda: DictSpec(name="dict", is_user_defined=False),
+            TypeKind.FUNCTION.value: lambda: FuncSpec(name=name or "callable", is_user_defined=False),
+            TypeKind.CALLABLE_SIG.value: lambda: CallableSigSpec(
                 name="fn",
                 param_type_names=list(data.get("param_type_names", [])),
                 param_type_modules=[None] * len(data.get("param_type_names", [])),
                 return_type_name=data.get("return_type_name", "auto"),
                 is_user_defined=False,
             ),
-            "OptionalSpec": lambda: factory.create_optional(
+            TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
+            TypeKind.BOUND_METHOD.value: lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
+            TypeKind.MODULE.value: lambda: ModuleSpec(name=name, is_user_defined=False),
+            # Typed deferred / behavior specs — reconstruct the proper subclass so
+            # that get_base_name() returns "deferred" / "behavior" (not "deferred[str]"),
+            # allowing SpecRegistry.is_assignable() to resolve the correct axiom.
+            TypeKind.DEFERRED.value: lambda: factory.create_deferred(
+                value_type_name=data.get("value_type_name", "auto"),
+                deferred_mode=data.get("deferred_mode", "lambda"),
+            ),
+            TypeKind.BEHAVIOR.value: lambda: factory.create_behavior(
+                value_type_name=data.get("value_type_name", "auto"),
+                deferred_mode=data.get("deferred_mode", "lambda"),
+            ),
+            TypeKind.OPTIONAL.value: lambda: factory.create_optional(
                 wrapped_type_name=data.get("wrapped_type_name", "any"),
                 wrapped_type_module=data.get("wrapped_type_module"),
             ),
         }
-        
-        if name in BUILTIN_TYPES and kind == "TypeDescriptor":
+
+        # Backward compatibility with legacy serialized class-name kinds.
+        legacy_to_kind = {
+            "ListMetadata": TypeKind.LIST.value,
+            "DictMetadata": TypeKind.DICT.value,
+            "FunctionMetadata": TypeKind.FUNCTION.value,
+            "ClassMetadata": TypeKind.CLASS.value,
+            "BoundMethodMetadata": TypeKind.BOUND_METHOD.value,
+            "ModuleMetadata": TypeKind.MODULE.value,
+            "DeferredSpec": TypeKind.DEFERRED.value,
+            "BehaviorSpec": TypeKind.BEHAVIOR.value,
+            "CallableSigSpec": TypeKind.CALLABLE_SIG.value,
+            "OptionalSpec": TypeKind.OPTIONAL.value,
+            "IbSpec": TypeKind.PRIMITIVE.value,
+            "TypeDescriptor": TypeKind.PRIMITIVE.value,
+        }
+        kind = legacy_to_kind.get(kind, kind)
+        if legacy_kind:
+            kind = legacy_to_kind.get(legacy_kind, kind)
+
+        if name in BUILTIN_TYPES and kind == TypeKind.PRIMITIVE.value:
             spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
             creator = shell_creators.get(kind)
@@ -139,12 +158,12 @@ class ArtifactRehydrator:
             
         data = self.type_pool[uid]
         
-        if isinstance(spec, ListSpec):
+        if spec.kind == TypeKind.LIST.value:
             elem = self.hydrate(data.get("element_type_uid"))
             if elem:
                 spec.element_type_name = elem.name
                 spec.name = f"list[{elem.name}]"
-        elif isinstance(spec, DictSpec):
+        elif spec.kind == TypeKind.DICT.value:
             key = self.hydrate(data.get("key_type_uid"))
             val = self.hydrate(data.get("value_type_uid"))
             if key:
@@ -152,7 +171,7 @@ class ArtifactRehydrator:
             if val:
                 spec.value_type_name = val.name
             spec.name = f"dict[{spec.key_type_name},{spec.value_type_name}]"
-        elif isinstance(spec, FuncSpec):
+        elif spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             param_uids = data.get("param_types_uids", [])
             spec.param_type_names = [
                 s.name for uid in param_uids
@@ -160,15 +179,15 @@ class ArtifactRehydrator:
             ]
             ret = self.hydrate(data.get("return_type_uid"))
             spec.return_type_name = ret.name if ret else "void"
-        elif isinstance(spec, DeferredSpec):
+        elif spec.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value):
             # Restore scalar fields for DeferredSpec / BehaviorSpec.
             # BehaviorSpec is a subclass of DeferredSpec so this branch covers both.
-            spec.value_type_name = data.get("value_type_name", spec.value_type_name)
-            spec.deferred_mode = data.get("deferred_mode", spec.deferred_mode)
-        elif isinstance(spec, OptionalSpec):
+            spec.value_type_name = data.get("value_type_name", getattr(spec, "value_type_name", "auto"))
+            spec.deferred_mode = data.get("deferred_mode", getattr(spec, "deferred_mode", "lambda"))
+        elif spec.kind == TypeKind.OPTIONAL.value:
             spec.wrapped_type_name = data.get("wrapped_type_name", spec.wrapped_type_name)
             spec.wrapped_type_module = data.get("wrapped_type_module", spec.wrapped_type_module)
-        elif isinstance(spec, ClassSpec):
+        elif spec.kind == TypeKind.CLASS.value:
             spec.parent_name = data.get("parent_name")
             spec.parent_module = data.get("parent_module")
             

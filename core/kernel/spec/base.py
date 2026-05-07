@@ -16,11 +16,28 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .member import MemberSpec
     from .type_ref import TypeRef
+
+
+class TypeKind(str, Enum):
+    PRIMITIVE = "primitive"
+    FUNCTION = "function"
+    CLASS = "class"
+    LIST = "list"
+    TUPLE = "tuple"
+    DICT = "dict"
+    OPTIONAL = "optional"
+    BOUND_METHOD = "bound_method"
+    MODULE = "module"
+    DEFERRED = "deferred"
+    BEHAVIOR = "behavior"
+    CALLABLE_SIG = "callable_sig"
+    LAZY = "lazy"
 
 
 @dataclass(eq=False)
@@ -48,6 +65,7 @@ class IbSpec:
 
     name: str = ""
     module_path: Optional[str] = None
+    kind: str = TypeKind.PRIMITIVE.value
     is_nullable: bool = True
     is_user_defined: bool = True
 
@@ -93,8 +111,11 @@ class IbSpec:
 
     def is_class(self) -> bool:
         """Return True if this spec describes a class type."""
-        from .specs import ClassSpec
-        return isinstance(self, ClassSpec)
+        return self.kind == TypeKind.CLASS.value
+
+    def is_kind(self, *kinds: str) -> bool:
+        """Return True if spec.kind matches one of provided kinds."""
+        return self.kind in kinds
 
     # ------------------------------------------------------------------ #
     # [INFO] TypeRef compatibility                                         #
@@ -139,3 +160,14 @@ class IbSpec:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name!r})"
+
+
+@dataclass(eq=False)
+class TypeDef(IbSpec):
+    """
+    Unified type-definition data model.
+
+    Compatibility note:
+    Existing concrete *Spec classes are currently thin semantic variants on
+    top of this single shape; dispatch should prefer `kind` over isinstance.
+    """
