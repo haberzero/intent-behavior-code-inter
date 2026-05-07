@@ -172,7 +172,7 @@ class ModuleDiscoveryService:
             module_path_val = None
             name_val = raw_name
 
-        spec = ModuleSpec(name=name_val, module_path=module_path_val)
+        spec = ModuleSpec(name=name_val, kind=TypeKind.MODULE.value, module_path=module_path_val)
 
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():
