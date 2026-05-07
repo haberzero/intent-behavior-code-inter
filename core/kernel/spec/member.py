@@ -45,11 +45,11 @@ class MemberSpec:
     def is_llm(self) -> bool:
         return self.kind == "llm_method"
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def type_ref(self) -> "TypeRef":
-        """TypeRef for this member's declared type (M1 bridge)."""
+        """TypeRef for this member's declared type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.type_name, self.type_module)
 
@@ -73,17 +73,17 @@ class MethodMemberSpec(MemberSpec):
     return_type_name: str = "void"
     return_type_module: Optional[str] = None
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def return_type_ref(self) -> "TypeRef":
-        """TypeRef for the declared return type (M1 bridge)."""
+        """TypeRef for the declared return type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.return_type_name, self.return_type_module)
 
     @property
     def param_type_refs(self) -> "tuple[TypeRef, ...]":
-        """Tuple of TypeRefs for declared parameter types (M1 bridge)."""
+        """Tuple of TypeRefs for declared parameter types."""
         from .type_ref import TypeRef
         mods = list(self.param_type_modules)
         while len(mods) < len(self.param_type_names):

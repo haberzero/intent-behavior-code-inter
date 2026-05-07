@@ -97,7 +97,7 @@ class IbSpec:
         return isinstance(self, ClassSpec)
 
     # ------------------------------------------------------------------ #
-    # M1 TypeRef bridge                                                    #
+    # [INFO] TypeRef compatibility                                         #
     # ------------------------------------------------------------------ #
 
     @property
@@ -105,7 +105,7 @@ class IbSpec:
         """
         Return a TypeRef representing this spec's type identity.
 
-        M1 bridge: constructs a TypeRef from the existing name/module_path
+        [INFO] Builds a TypeRef from the existing name/module_path
         fields (and, for generic specs, from the element/key/value type
         fields).  The returned TypeRef is structurally equivalent to what
         the new type system would hold natively.

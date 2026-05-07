@@ -1,7 +1,7 @@
 """
 tests/kernel/test_typeref.py
 
-M1 TypeRef 回归测试。
+TypeRef 回归测试。
 
 覆盖范围：
   1. TypeRef 基础构造（非泛型、泛型、含模块限定）
@@ -30,7 +30,7 @@ import pytest
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec import (
     IbSpec,
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec,
+    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, OptionalSpec,
     MemberSpec, MethodMemberSpec,
     INT_SPEC, STR_SPEC, ANY_SPEC,
 )
@@ -296,6 +296,12 @@ class TestFromSpec:
         assert r.head == "behavior"
         assert r.args[0].head == "str"
 
+    def test_optional_spec_typed(self):
+        spec = OptionalSpec(name="Optional[int]", wrapped_type_name="int")
+        r = TypeRef.from_spec(spec)
+        assert r.head == "Optional"
+        assert r.args[0].head == "int"
+
 
 # ---------------------------------------------------------------------------
 # 8. substitute()
@@ -520,6 +526,12 @@ class TestDeferredSpecBridge:
         assert spec.value_type_ref == TypeRef("str")
 
 
+class TestOptionalSpecBridge:
+    def test_wrapped_type_ref(self):
+        spec = OptionalSpec(name="Optional[int]", wrapped_type_name="int")
+        assert spec.wrapped_type_ref == TypeRef("int")
+
+
 # ---------------------------------------------------------------------------
 # 16. MemberSpec.type_ref
 # ---------------------------------------------------------------------------
@@ -638,6 +650,15 @@ class TestSpecRegistryResolveTypeRef:
         found = spec_reg.resolve_typeref(r)
         assert found is not None
         assert found.name == "RemoteClass"
+
+    def test_resolve_optional_specialization(self, spec_reg):
+        optional_base = spec_reg.resolve("Optional")
+        int_spec = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_spec])
+        assert optional_int is not None
+        found = spec_reg.resolve_typeref(TypeRef.generic("Optional", TypeRef.of("int")))
+        assert found is not None
+        assert found.name == "Optional[int]"
 
 
 # ---------------------------------------------------------------------------

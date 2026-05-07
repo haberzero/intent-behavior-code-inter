@@ -58,17 +58,17 @@ class FuncSpec(IbSpec):
 
     is_llm: bool = False
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def return_type_ref(self) -> "TypeRef":
-        """TypeRef for the declared return type (M1 bridge)."""
+        """TypeRef for the declared return type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.return_type_name, self.return_type_module)
 
     @property
     def param_type_refs(self) -> "tuple[TypeRef, ...]":
-        """Tuple of TypeRefs for declared parameter types (M1 bridge)."""
+        """Tuple of TypeRefs for declared parameter types."""
         from .type_ref import TypeRef
         mods = list(self.param_type_modules)
         while len(mods) < len(self.param_type_names):
@@ -88,11 +88,11 @@ class ClassSpec(IbSpec):
     parent_name: Optional[str] = None
     parent_module: Optional[str] = None
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def parent_type_ref(self) -> "Optional[TypeRef]":
-        """TypeRef for the parent class, or None if no explicit parent (M1 bridge)."""
+        """TypeRef for the parent class, or None if no explicit parent."""
         if self.parent_name is None:
             return None
         from .type_ref import TypeRef
@@ -124,11 +124,11 @@ class ListSpec(IbSpec):
     def get_base_name(self) -> str:
         return self._axiom_name or "list"
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def element_type_ref(self) -> "TypeRef":
-        """TypeRef for the element type (M1 bridge)."""
+        """TypeRef for the element type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.element_type_name, self.element_type_module)
 
@@ -146,11 +146,11 @@ class TupleSpec(IbSpec):
     def get_base_name(self) -> str:
         return self._axiom_name or "tuple"
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def element_type_ref(self) -> "TypeRef":
-        """TypeRef for the element type (M1 bridge)."""
+        """TypeRef for the element type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.element_type_name, self.element_type_module)
 
@@ -169,19 +169,43 @@ class DictSpec(IbSpec):
     def get_base_name(self) -> str:
         return self._axiom_name or "dict"
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def key_type_ref(self) -> "TypeRef":
-        """TypeRef for the key type (M1 bridge)."""
+        """TypeRef for the key type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.key_type_name, self.key_type_module)
 
     @property
     def value_type_ref(self) -> "TypeRef":
-        """TypeRef for the value type (M1 bridge)."""
+        """TypeRef for the value type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.value_type_name, self.value_type_module)
+
+
+@dataclass(eq=False)
+class OptionalSpec(IbSpec):
+    """
+    Describes an explicit optional type: ``Optional[T]``.
+
+    This is the first step of the null-safety migration: nullability is
+    represented at the type level rather than inferred from ``is_nullable``.
+    """
+
+    wrapped_type_name: str = "any"
+    wrapped_type_module: Optional[str] = None
+
+    def get_base_name(self) -> str:
+        return self._axiom_name or "Optional"
+
+    # [INFO] TypeRef compatibility ------------------------------------
+
+    @property
+    def wrapped_type_ref(self) -> "TypeRef":
+        """TypeRef for the wrapped inner type."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.wrapped_type_name, self.wrapped_type_module)
 
 
 @dataclass(eq=False)
@@ -239,11 +263,11 @@ class DeferredSpec(IbSpec):
     def get_base_name(self) -> str:
         return self._axiom_name or "deferred"
 
-    # M1 TypeRef bridge ------------------------------------------------
+    # [INFO] TypeRef compatibility ------------------------------------
 
     @property
     def value_type_ref(self) -> "TypeRef":
-        """TypeRef for the wrapped expression's result type (M1 bridge)."""
+        """TypeRef for the wrapped expression's result type."""
         from .type_ref import TypeRef
         return TypeRef.of(self.value_type_name, self.value_type_module)
 
@@ -355,6 +379,7 @@ SLICE_SPEC  = IbSpec(name="slice",  is_nullable=False, is_user_defined=False)
 CALLABLE_SPEC   = IbSpec(name="callable",    is_nullable=True,  is_user_defined=False)
 BEHAVIOR_SPEC   = IbSpec(name="behavior",    is_nullable=True,  is_user_defined=False)
 DEFERRED_SPEC   = DeferredSpec(name="deferred", is_nullable=True, is_user_defined=False)
+OPTIONAL_SPEC   = OptionalSpec(name="Optional", is_nullable=True, is_user_defined=False)
 EXCEPTION_SPEC  = ClassSpec(name="Exception", is_nullable=True, is_user_defined=False)
 
 # LLM exception hierarchy — ClassSpec with parent_name for proper inheritance chain.

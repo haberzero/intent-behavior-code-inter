@@ -61,9 +61,13 @@
 
 ### M2：Optional[T] 与空安全落地
 
-- [ ] 引入 `Optional[T]` 作为标准可空表达。
+- [x] 引入 `Optional[T]` 的首批类型表示与注册表特化入口。
+  - `OptionalSpec` 新增：`wrapped_type_name` / `wrapped_type_module`
+  - `SpecFactory.create_optional()` 新增
+  - `OptionalAxiom` 新增并注册到 `AxiomRegistry`
+  - `SpecRegistry.resolve_specialization(Optional, [T])` / `resolve_typeref(Optional[T])` 已可用
 - [ ] 移除/冻结旧 `nullable` 布尔语义入口，改为类型层显式表达。
-- [ ] 调整赋值检查：非 Optional 类型禁止接收 `None`。
+- [x] 调整赋值检查首批规则：非 Optional 类型禁止接收 `None`；`Optional[T]` 接受 `T` / `None` / `Optional[T]`。
 - [ ] 提供 Optional 基础能力（如 `or_else` / `unwrap` 等）及语义文档。
 - [ ] 完成语义分析器中的可空性检查迁移。
 

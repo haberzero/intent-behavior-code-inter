@@ -14,6 +14,7 @@ from .specs import (
     TupleSpec,
     DictSpec,
     DeferredSpec,
+    OptionalSpec,
     BoundMethodSpec,
     ModuleSpec,
     CallableSigSpec,
@@ -31,6 +32,7 @@ from .specs import (
     CALLABLE_SPEC,
     BEHAVIOR_SPEC,
     DEFERRED_SPEC,
+    OPTIONAL_SPEC,
     EXCEPTION_SPEC,
     BOUND_METHOD_SPEC,
     LIST_SPEC,
@@ -52,7 +54,7 @@ __all__ = [
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",
-    # TypeRef (M1 new)
+    # TypeRef
     "TypeRef",
     # Concrete spec kinds
     "FuncSpec",
@@ -61,6 +63,7 @@ __all__ = [
     "TupleSpec",
     "DictSpec",
     "DeferredSpec",
+    "OptionalSpec",
     "BoundMethodSpec",
     "ModuleSpec",
     "CallableSigSpec",
@@ -78,6 +81,7 @@ __all__ = [
     "CALLABLE_SPEC",
     "BEHAVIOR_SPEC",
     "DEFERRED_SPEC",
+    "OPTIONAL_SPEC",
     "EXCEPTION_SPEC",
     "BOUND_METHOD_SPEC",
     "LIST_SPEC",

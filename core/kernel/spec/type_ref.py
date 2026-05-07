@@ -1,7 +1,7 @@
 """
 core/kernel/spec/type_ref.py
 
-TypeRef — 类型系统的"地址"层（M1 新增）。
+TypeRef — 类型系统的"地址"层。
 
 TypeRef 是纯不可变值，代表对一个类型的引用。它只持有类型的"地址"
 （名字 + 泛型实参 + 模块限定），不包含任何成员信息或运行逻辑。
@@ -12,7 +12,7 @@ TypeRef 是纯不可变值，代表对一个类型的引用。它只持有类型
   - 不依赖注册表：构造 TypeRef 无需任何全局状态
   - 可序列化：纯数据，无函数引用
 
-M1 兼容策略：
+[INFO] 兼容策略：
   - TypeRef 与现有 IbSpec 体系并存，不替换
   - from_name() / from_spec() 提供从旧表示到 TypeRef 的桥接
   - IbSpec / MemberSpec 上的 .type_ref 属性通过本模块构造 TypeRef
@@ -110,7 +110,7 @@ class TypeRef:
         """
         桥接方法：从现有 IbSpec 构造对应的 TypeRef。
 
-        M1 兼容层：利用各子类上的类型名字段构造结构化 TypeRef。
+        [INFO] 兼容层：利用各子类上的类型名字段构造结构化 TypeRef。
         不导入 IbSpec 子类（避免循环），通过 get_base_name() 和
         hasattr 检测字段。
         """
@@ -163,6 +163,16 @@ class TypeRef:
                     module=spec.module_path,
                 )
             return cls(head=base, args=(), module=spec.module_path)
+
+        # OptionalSpec: wrapped_type_name
+        if base == "Optional" and hasattr(spec, "wrapped_type_name"):
+            wrapped_name = getattr(spec, "wrapped_type_name", "any")
+            wrapped_mod = getattr(spec, "wrapped_type_module", None)
+            return cls(
+                head="Optional",
+                args=(cls.of(wrapped_name, wrapped_mod),),
+                module=spec.module_path,
+            )
 
         # Default: 使用 spec.name（包含已编码的类型名，如 "list[int]"）
         # 但 head 应该是干净的基础名，对于已编码的泛型名字使用 base

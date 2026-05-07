@@ -20,6 +20,7 @@ Coverage:
 import pytest
 from core.kernel.spec import (
     IbSpec, FuncSpec, ClassSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec,
+    OptionalSpec, OPTIONAL_SPEC,
     INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
 )
 from core.kernel.spec.registry import SpecRegistry, SpecFactory, create_default_spec_registry
@@ -159,6 +160,12 @@ class TestSpecFactory:
         assert isinstance(ds, DictSpec)
         assert ds.key_type_name == "str"
         assert ds.value_type_name == "int"
+
+    def test_create_optional(self, factory: SpecFactory):
+        opt = factory.create_optional("int")
+        assert isinstance(opt, OptionalSpec)
+        assert opt.name == "Optional[int]"
+        assert opt.wrapped_type_name == "int"
 
     def test_create_module(self, factory: SpecFactory):
         ms = factory.create_module("mymod")
@@ -383,6 +390,40 @@ class TestAssignability:
         void_s = spec_reg.resolve("void")
         any_s = spec_reg.resolve("any")
         assert spec_reg.is_assignable(void_s, any_s) is True
+
+    def test_none_not_assignable_to_plain_int(self, spec_reg: SpecRegistry):
+        none_s = spec_reg.resolve("None")
+        int_s = spec_reg.resolve("int")
+        assert spec_reg.is_assignable(none_s, int_s) is False
+
+    def test_none_assignable_to_optional_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        none_s = spec_reg.resolve("None")
+        assert optional_int is not None
+        assert spec_reg.is_assignable(none_s, optional_int) is True
+
+    def test_int_assignable_to_optional_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        assert optional_int is not None
+        assert spec_reg.is_assignable(int_s, optional_int) is True
+
+    def test_optional_int_not_assignable_to_plain_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        assert optional_int is not None
+        assert spec_reg.is_assignable(optional_int, int_s) is False
+
+    def test_optional_int_assignable_to_optional_int(self, spec_reg: SpecRegistry):
+        optional_base = spec_reg.resolve("Optional")
+        int_s = spec_reg.resolve("int")
+        optional_int = spec_reg.resolve_specialization(optional_base, [int_s])
+        assert optional_int is not None
+        assert spec_reg.is_assignable(optional_int, optional_int) is True
 
 
 # ---------------------------------------------------------------------------

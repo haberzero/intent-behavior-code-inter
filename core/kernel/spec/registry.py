@@ -30,9 +30,9 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, BoundMethodSpec, ModuleSpec, LazySpec,
+    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, OptionalSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
-    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
+    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, OPTIONAL_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
     LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
@@ -227,6 +227,21 @@ class SpecFactory:
             deferred_mode=deferred_mode,
         )
 
+    def create_optional(
+        self,
+        wrapped_type_name: str = "any",
+        wrapped_type_module: Optional[str] = None,
+    ) -> OptionalSpec:
+        """Create an Optional[T] spec."""
+        name = f"Optional[{wrapped_type_name}]"
+        return OptionalSpec(
+            name=name,
+            is_nullable=True,
+            is_user_defined=False,
+            wrapped_type_name=wrapped_type_name,
+            wrapped_type_module=wrapped_type_module,
+        )
+
     def create_behavior(
         self,
         value_type_name: str = "auto",
@@ -329,7 +344,7 @@ class SpecRegistry:
 
     def resolve_typeref(self, ref: "TypeRef") -> Optional[IbSpec]:
         """
-        Look up a spec by TypeRef (M1 bridge entry point).
+        Look up a spec by TypeRef compatibility entry point.
 
         For non-generic TypeRefs this delegates to ``resolve(head, module)``.
         For generic TypeRefs (e.g. list[int]) it first attempts to look up
@@ -751,6 +766,18 @@ class SpecRegistry:
                 return True
             return False
 
+        if isinstance(target, OptionalSpec):
+            inner_target = self.resolve(target.wrapped_type_name, target.wrapped_type_module) or self.resolve("any")
+            if src.name == "None":
+                return True
+            if isinstance(src, OptionalSpec):
+                inner_src = self.resolve(src.wrapped_type_name, src.wrapped_type_module) or self.resolve("any")
+                return self.is_assignable(inner_src, inner_target, _visited)
+            return self.is_assignable(src, inner_target, _visited)
+
+        if isinstance(src, OptionalSpec):
+            return False
+
         if src.name == target.name and src.module_path == target.module_path:
             return True
 
@@ -768,14 +795,10 @@ class SpecRegistry:
                 # Single-type target, multi-type source: relaxed — allow
                 return True
 
-        # Axiom-driven compatibility (e.g. bool isa int, None isa nullable)
+        # Axiom-driven compatibility (e.g. bool isa int)
         # Pass the full target name so axioms can handle typed variants like "deferred[int]".
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
         if src_axiom and src_axiom.is_compatible(target.name):
-            return True
-
-        # Nullable target accepts None
-        if target.is_nullable and src.name == "None":
             return True
 
         # Class inheritance: walk src's parent chain.
@@ -818,6 +841,13 @@ class SpecRegistry:
                 value_type_name=value_type.name,
                 value_type_module=getattr(value_type, 'module_path', None),
             )
+
+        if spec.name == "Optional" and arg_specs:
+            value_type = arg_specs[0]
+            return self.register(self.factory.create_optional(
+                wrapped_type_name=value_type.name,
+                wrapped_type_module=getattr(value_type, "module_path", None),
+            ))
 
         # G1: early-cache hit — avoid allocating a temporary spec when the
         # specialisation is already registered (e.g. repeated list[int] refs).
@@ -936,9 +966,9 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
 
     for proto in (
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
-        ANY_SPEC, AUTO_SPEC, FN_SPEC, NONE_SPEC, SLICE_SPEC,
-        CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
-        BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
+         ANY_SPEC, AUTO_SPEC, FN_SPEC, NONE_SPEC, SLICE_SPEC,
+         CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
+         OPTIONAL_SPEC, BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC, LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
         LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
     ):
