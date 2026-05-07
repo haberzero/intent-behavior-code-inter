@@ -174,9 +174,9 @@ class TypeRef:
                 module=spec.module_path,
             )
 
-        # Default: 使用 spec.name（包含已编码的类型名，如 "list[int]"）
-        # 但 head 应该是干净的基础名，对于已编码的泛型名字使用 base
-        return cls(head=spec.name, args=(), module=spec.module_path)
+        # [INFO] Default fallback uses the base name to avoid embedding
+        # encoded generic brackets such as "list[int]" into the head field.
+        return cls(head=base, args=(), module=spec.module_path)
 
     # -------------------------------------------------------------- #
     # Substitution (for generic instantiation)                         #
