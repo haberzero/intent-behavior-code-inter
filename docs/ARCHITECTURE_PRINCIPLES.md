@@ -235,7 +235,7 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
 | **IbSpec** | 所有类型描述符的基类 | `kernel/spec/base.py` |
-| **FuncSpec / ClassSpec / ListSpec / TupleSpec / DictSpec 等** | 具体类型描述符 | `kernel/spec/specs.py` |
+| **TypeDef（统一类型定义）+ 兼容别名（FuncSpec/ClassSpec/ListSpec...）** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
 | **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry.py` |
 | **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry.py` |
 | **MemberSpec / MethodMemberSpec** | 模块成员描述符 | `kernel/spec/member.py` |
