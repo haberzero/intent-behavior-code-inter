@@ -6,6 +6,7 @@ Public API for the spec layer.
 
 from .base import IbSpec
 from .member import MemberSpec, MethodMemberSpec
+from .type_ref import TypeRef
 from .specs import (
     FuncSpec,
     ClassSpec,
@@ -51,6 +52,8 @@ __all__ = [
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",
+    # TypeRef (M1 new)
+    "TypeRef",
     # Concrete spec kinds
     "FuncSpec",
     "ClassSpec",

@@ -20,6 +20,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .member import MemberSpec
+    from .type_ref import TypeRef
 
 
 @dataclass(eq=False)
@@ -94,6 +95,26 @@ class IbSpec:
         """Return True if this spec describes a class type."""
         from .specs import ClassSpec
         return isinstance(self, ClassSpec)
+
+    # ------------------------------------------------------------------ #
+    # M1 TypeRef bridge                                                    #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def type_ref(self) -> "TypeRef":
+        """
+        Return a TypeRef representing this spec's type identity.
+
+        M1 bridge: constructs a TypeRef from the existing name/module_path
+        fields (and, for generic specs, from the element/key/value type
+        fields).  The returned TypeRef is structurally equivalent to what
+        the new type system would hold natively.
+
+        This property is read-only and non-caching — TypeRef is cheap to
+        construct (frozen dataclass, no registry access required).
+        """
+        from .type_ref import TypeRef
+        return TypeRef.from_spec(self)
 
     # ------------------------------------------------------------------ #
     # Cloning                                                              #

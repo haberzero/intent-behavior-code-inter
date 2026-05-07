@@ -25,9 +25,12 @@ building the SpecFactory's default registry.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from .base import IbSpec
+
+if TYPE_CHECKING:
+    from .type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
@@ -55,6 +58,23 @@ class FuncSpec(IbSpec):
 
     is_llm: bool = False
 
+    # M1 TypeRef bridge ------------------------------------------------
+
+    @property
+    def return_type_ref(self) -> "TypeRef":
+        """TypeRef for the declared return type (M1 bridge)."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.return_type_name, self.return_type_module)
+
+    @property
+    def param_type_refs(self) -> "tuple[TypeRef, ...]":
+        """Tuple of TypeRefs for declared parameter types (M1 bridge)."""
+        from .type_ref import TypeRef
+        mods = list(self.param_type_modules)
+        while len(mods) < len(self.param_type_names):
+            mods.append(None)
+        return tuple(TypeRef.of(n, m) for n, m in zip(self.param_type_names, mods))
+
 
 @dataclass(eq=False)
 class ClassSpec(IbSpec):
@@ -67,6 +87,16 @@ class ClassSpec(IbSpec):
 
     parent_name: Optional[str] = None
     parent_module: Optional[str] = None
+
+    # M1 TypeRef bridge ------------------------------------------------
+
+    @property
+    def parent_type_ref(self) -> "Optional[TypeRef]":
+        """TypeRef for the parent class, or None if no explicit parent (M1 bridge)."""
+        if self.parent_name is None:
+            return None
+        from .type_ref import TypeRef
+        return TypeRef.of(self.parent_name, self.parent_module)
 
 
 @dataclass(eq=False)
@@ -94,6 +124,14 @@ class ListSpec(IbSpec):
     def get_base_name(self) -> str:
         return self._axiom_name or "list"
 
+    # M1 TypeRef bridge ------------------------------------------------
+
+    @property
+    def element_type_ref(self) -> "TypeRef":
+        """TypeRef for the element type (M1 bridge)."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.element_type_name, self.element_type_module)
+
 
 @dataclass(eq=False)
 class TupleSpec(IbSpec):
@@ -107,6 +145,14 @@ class TupleSpec(IbSpec):
 
     def get_base_name(self) -> str:
         return self._axiom_name or "tuple"
+
+    # M1 TypeRef bridge ------------------------------------------------
+
+    @property
+    def element_type_ref(self) -> "TypeRef":
+        """TypeRef for the element type (M1 bridge)."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.element_type_name, self.element_type_module)
 
 
 @dataclass(eq=False)
@@ -122,6 +168,20 @@ class DictSpec(IbSpec):
 
     def get_base_name(self) -> str:
         return self._axiom_name or "dict"
+
+    # M1 TypeRef bridge ------------------------------------------------
+
+    @property
+    def key_type_ref(self) -> "TypeRef":
+        """TypeRef for the key type (M1 bridge)."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.key_type_name, self.key_type_module)
+
+    @property
+    def value_type_ref(self) -> "TypeRef":
+        """TypeRef for the value type (M1 bridge)."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.value_type_name, self.value_type_module)
 
 
 @dataclass(eq=False)
@@ -178,6 +238,14 @@ class DeferredSpec(IbSpec):
 
     def get_base_name(self) -> str:
         return self._axiom_name or "deferred"
+
+    # M1 TypeRef bridge ------------------------------------------------
+
+    @property
+    def value_type_ref(self) -> "TypeRef":
+        """TypeRef for the wrapped expression's result type (M1 bridge)."""
+        from .type_ref import TypeRef
+        return TypeRef.of(self.value_type_name, self.value_type_module)
 
 
 @dataclass(eq=False)

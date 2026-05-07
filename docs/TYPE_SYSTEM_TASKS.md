@@ -18,7 +18,7 @@
 
 ## 1. 总体里程碑
 
-- [ ] **M1：TypeRef 引入（兼容阶段）**
+- [x] **M1：TypeRef 引入（兼容阶段）** — 完成（2026-05-07）
 - [ ] **M2：Optional[T] 与空安全落地**
 - [ ] **M3：TypeDef 单一化（替代多 Spec）**
 - [ ] **M4：运行时值模型单一化（IbValue）**
@@ -28,18 +28,36 @@
 
 ## 2. 详细任务分解
 
-### M1：TypeRef 引入（兼容阶段）
+### M1：TypeRef 引入（兼容阶段）— ✅ 完成
 
-- [ ] 新增 `TypeRef` 数据结构（不可变、可哈希、支持递归泛型参数）。
-- [ ] 在类型解析链路中引入 `TypeRef`，先以桥接方式兼容旧 `name/module` 字段。
-- [ ] 将函数返回类型、成员类型、容器元素类型的字符串引用逐步映射到 `TypeRef`。
-- [ ] 更新编译器 side table 与符号表接口，使其可同时读取旧表示与 `TypeRef`。
-- [ ] 为跨模块类型引用补齐统一表达与解析路径。
-- [ ] 补充最小回归测试：嵌套泛型、跨模块返回类型、成员访问类型传播。
+- [x] 新增 `TypeRef` 数据结构（不可变、可哈希、支持递归泛型参数）。
+  - 位置：`core/kernel/spec/type_ref.py`
+  - 字段：`head: str`, `args: tuple[TypeRef,...]`, `module: Optional[str]`
+  - 派生属性：`canonical_name`, `qualified_name`
+  - 工厂：`TypeRef.of()`, `TypeRef.generic()`, `TypeRef.from_spec()`（桥接旧 Spec）
+  - 工具：`substitute(mapping)` 用于泛型形参替换
+- [x] 在类型解析链路中引入 `TypeRef`，以桥接方式兼容旧 `name/module` 字段。
+  - `IbSpec.type_ref` 属性（base.py）
+  - `FuncSpec.return_type_ref`, `FuncSpec.param_type_refs`（specs.py）
+  - `ClassSpec.parent_type_ref`（specs.py）
+  - `ListSpec.element_type_ref`（specs.py）
+  - `TupleSpec.element_type_ref`（specs.py）
+  - `DictSpec.key_type_ref`, `DictSpec.value_type_ref`（specs.py）
+  - `DeferredSpec.value_type_ref`（specs.py）
+  - `MemberSpec.type_ref`（member.py）
+  - `MethodMemberSpec.return_type_ref`, `MethodMemberSpec.param_type_refs`（member.py）
+- [x] 将函数返回类型、成员类型、容器元素类型的字符串引用逐步映射到 `TypeRef`。
+- [x] 更新编译器 side table 与符号表接口，使其可同时读取旧表示与 `TypeRef`。
+  - `SpecRegistry.resolve_typeref(ref: TypeRef)` 新增（registry.py）
+- [x] 为跨模块类型引用补齐统一表达与解析路径。
+  - `TypeRef.of(name, module)` 标准化跨模块引用
+  - `resolve_typeref()` 先尝试带模块限定符，再回落到裸名
+- [x] 补充最小回归测试：嵌套泛型、跨模块返回类型、成员访问类型传播。
+  - 测试文件：`tests/kernel/test_typeref.py`（103 个测试用例）
 
 **M1 DoD**
-- [ ] 编译器和解释器均可读取 `TypeRef`。
-- [ ] 现有功能行为不变，测试基线保持通过。
+- [x] 编译器和解释器均可读取 `TypeRef`。
+- [x] 现有功能行为不变，测试基线保持通过（1056 → 1159，+103 新测试）。
 
 ### M2：Optional[T] 与空安全落地
 

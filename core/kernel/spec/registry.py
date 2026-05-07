@@ -46,6 +46,7 @@ if TYPE_CHECKING:
         FromPromptCapability, IlmoutputHintCapability,
         ParserCapability,
     )
+    from .type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
@@ -325,6 +326,25 @@ class SpecRegistry:
             if spec:
                 return spec
         return self._specs.get(name)
+
+    def resolve_typeref(self, ref: "TypeRef") -> Optional[IbSpec]:
+        """
+        Look up a spec by TypeRef (M1 bridge entry point).
+
+        For non-generic TypeRefs this delegates to ``resolve(head, module)``.
+        For generic TypeRefs (e.g. list[int]) it first attempts to look up
+        the fully-encoded canonical name, then falls back to the base type.
+
+        This method is the primary resolution path for new code that already
+        holds a TypeRef and needs an IbSpec for capability queries.
+        """
+        if ref.args:
+            # Try canonical name first (e.g. "list[int]", "dict[str,int]")
+            result = self.resolve(ref.canonical_name, ref.module)
+            if result is not None:
+                return result
+        # Fall back to bare head name (works for non-generic and base-type lookup)
+        return self.resolve(ref.head, ref.module)
 
     @property
     def all_specs(self) -> Dict[str, IbSpec]:
