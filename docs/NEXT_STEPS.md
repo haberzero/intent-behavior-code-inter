@@ -21,12 +21,14 @@
 - [ ] M3：TypeDef 单一化（替代多 Spec，进行中：TypeDef/TypeKind + kind 分派主路径已落地；全量 1181 passed）
 - [ ] M4：运行时值模型单一化（IbValue）
 - [ ] M5：Axiom 接口统一化
+- [ ] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线（弃用 deferred 主概念）
 
 #### 当前执行要求
 
 - [ ] 每个里程碑完成后同步更新本文件进度。
 - [ ] 每个里程碑完成后同步测试基线与风险状态。
 - [ ] 低优先级事项不进入本文件，只在 pending 跟踪。
+- [ ] fn 相关已知失败用例保持失败并带 [TODO] 注释，等待 callable-instance 路线落地后统一收口。
 
 ---
 
