@@ -95,9 +95,11 @@ class SpecFactory:
         return_type_module: Optional[str] = None,
         is_user_defined: bool = False,
         is_llm: bool = False,
-    ) -> FuncSpec:
-        return FuncSpec(
+    ) -> "TypeDef":
+        from .base import TypeDef
+        return TypeDef(
             name=name,
+            kind=TypeKind.FUNCTION.value,
             is_nullable=True,
             is_user_defined=is_user_defined,
             param_type_names=list(param_type_names or []),
@@ -114,9 +116,11 @@ class SpecFactory:
         parent_name: Optional[str] = None,
         parent_module: Optional[str] = None,
         is_user_defined: bool = True,
-    ) -> ClassSpec:
-        return ClassSpec(
+    ) -> "TypeDef":
+        from .base import TypeDef
+        return TypeDef(
             name=name,
+            kind=TypeKind.CLASS.value,
             module_path=module,
             is_nullable=True,
             is_user_defined=is_user_defined,
@@ -129,17 +133,14 @@ class SpecFactory:
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
         allowed_element_type_names: Optional[list] = None,
-    ) -> ListSpec:
+    ) -> "TypeDef":
+        from .base import TypeDef
         if allowed_element_type_names:
-            # Multi-type list: list[int, str, list]
-            # Names are sorted to produce a canonical spec name so that list[int,str]
-            # and list[str,int] resolve to the same registered spec entry. The original
-            # declaration order is preserved in allowed_element_type_names for informational
-            # purposes, but the canonical name (used as the registry key) is order-independent.
             sorted_names = sorted(allowed_element_type_names)
             name = f"list[{','.join(sorted_names)}]"
-            return ListSpec(
+            return TypeDef(
                 name=name,
+                kind=TypeKind.LIST.value,
                 is_nullable=True,
                 is_user_defined=False,
                 element_type_name="any",
@@ -147,8 +148,9 @@ class SpecFactory:
                 allowed_element_type_names=list(allowed_element_type_names),
             )
         name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
-        return ListSpec(
+        return TypeDef(
             name=name,
+            kind=TypeKind.LIST.value,
             is_nullable=True,
             is_user_defined=False,
             element_type_name=element_type_name,
@@ -161,10 +163,12 @@ class SpecFactory:
         value_type_name: str = "any",
         key_type_module: Optional[str] = None,
         value_type_module: Optional[str] = None,
-    ) -> DictSpec:
+    ) -> "TypeDef":
+        from .base import TypeDef
         name = f"dict[{key_type_name},{value_type_name}]"
-        return DictSpec(
+        return TypeDef(
             name=name,
+            kind=TypeKind.DICT.value,
             is_nullable=True,
             is_user_defined=False,
             key_type_name=key_type_name,
@@ -177,10 +181,12 @@ class SpecFactory:
         self,
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
-    ) -> TupleSpec:
+    ) -> "TypeDef":
+        from .base import TypeDef
         name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
-        return TupleSpec(
+        return TypeDef(
             name=name,
+            kind=TypeKind.TUPLE.value,
             is_nullable=True,
             is_user_defined=False,
             element_type_name=element_type_name,
@@ -192,9 +198,11 @@ class SpecFactory:
         receiver_type_name: str,
         func_spec_name: str,
         receiver_type_module: Optional[str] = None,
-    ) -> BoundMethodSpec:
-        return BoundMethodSpec(
+    ) -> "TypeDef":
+        from .base import TypeDef
+        return TypeDef(
             name="bound_method",
+            kind=TypeKind.BOUND_METHOD.value,
             is_nullable=True,
             is_user_defined=False,
             receiver_type_name=receiver_type_name,
@@ -202,9 +210,11 @@ class SpecFactory:
             func_spec_name=func_spec_name,
         )
 
-    def create_module(self, name: str, module: Optional[str] = None) -> ModuleSpec:
-        return ModuleSpec(
+    def create_module(self, name: str, module: Optional[str] = None) -> "TypeDef":
+        from .base import TypeDef
+        return TypeDef(
             name=name,
+            kind=TypeKind.MODULE.value,
             module_path=module,
             is_nullable=False,
             is_user_defined=False,
@@ -215,11 +225,13 @@ class SpecFactory:
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
         deferred_mode: str = "lambda",
-    ) -> DeferredSpec:
-        """Create a DeferredSpec describing a deferred (lambda/snapshot) expression."""
+    ) -> "TypeDef":
+        """Create a TypeDef describing a deferred (lambda/snapshot) expression."""
+        from .base import TypeDef
         name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
-        return DeferredSpec(
+        return TypeDef(
             name=name,
+            kind=TypeKind.DEFERRED.value,
             is_nullable=True,
             is_user_defined=False,
             value_type_name=value_type_name,
@@ -231,11 +243,13 @@ class SpecFactory:
         self,
         wrapped_type_name: str = "any",
         wrapped_type_module: Optional[str] = None,
-    ) -> OptionalSpec:
+    ) -> "TypeDef":
         """Create an Optional[T] spec."""
+        from .base import TypeDef
         name = f"Optional[{wrapped_type_name}]"
-        return OptionalSpec(
+        return TypeDef(
             name=name,
+            kind=TypeKind.OPTIONAL.value,
             is_nullable=True,
             is_user_defined=False,
             wrapped_type_name=wrapped_type_name,
@@ -247,9 +261,9 @@ class SpecFactory:
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
         deferred_mode: str = "lambda",
-    ) -> BehaviorSpec:
+    ) -> "TypeDef":
         """
-        Create a ``BehaviorSpec`` for a typed ``@~...~`` deferred behavior expression.
+        Create a ``TypeDef`` for a typed ``@~...~`` deferred behavior expression.
 
         ``value_type_name`` is the LLM output type declared by the user (e.g. "int",
         "str").  When it is ``"auto"`` the compiler cannot infer the return type at
@@ -260,9 +274,11 @@ class SpecFactory:
             # int lambda f = @~...~  →  create_behavior(value_type_name="int")
             factory.create_behavior(value_type_name="int", deferred_mode="lambda")
         """
+        from .base import TypeDef
         name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
-        return BehaviorSpec(
+        return TypeDef(
             name=name,
+            kind=TypeKind.BEHAVIOR.value,
             is_nullable=True,
             is_user_defined=False,
             value_type_name=value_type_name,
@@ -384,7 +400,7 @@ class SpecRegistry:
         # FuncSpec and BoundMethodSpec are inherently callable — resolve_return handles them.
         if spec.kind in (TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value):
             return _FUNC_SPEC_CALL_CAP
-        if spec.kind == TypeKind.FUNCTION.value and hasattr(spec, "return_type_name"):
+        if spec.kind == TypeKind.FUNCTION.value:
             return _FUNC_SPEC_CALL_CAP
         # ClassSpec is callable (constructor)
         if spec.kind == TypeKind.CLASS.value:
@@ -548,8 +564,7 @@ class SpecRegistry:
         # ClassSpec called as constructor returns an instance of itself
         if spec.kind == TypeKind.CLASS.value:
             return spec
-        # Typed DeferredSpec / BehaviorSpec: carry the expected value type explicitly.
-        # BehaviorSpec is a subclass of DeferredSpec, so this branch covers both.
+        # Typed deferred / behavior: carry the expected value type explicitly.
         value_type_name = getattr(spec, "value_type_name", None)
         value_type_module = getattr(spec, "value_type_module", None)
         if spec.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value) and value_type_name not in ("auto", "any", None, ""):
@@ -735,8 +750,10 @@ class SpecRegistry:
                         # Optional[T].or_else(default) expects default of type T.
                         effective_params[0] = wrapped
                         effective_param_modules[0] = wrapped_mod
-                return FuncSpec(
+                from .base import TypeDef
+                return TypeDef(
                     name=attr_name,
+                    kind=TypeKind.FUNCTION.value,
                     is_user_defined=spec.is_user_defined,
                     param_type_names=effective_params,
                     param_type_modules=effective_param_modules,
@@ -946,13 +963,13 @@ class SpecRegistry:
             return self.resolve("None")
         return None
 
-    def get_all_modules(self) -> Dict[str, "ModuleSpec"]:
+    def get_all_modules(self) -> Dict[str, IbSpec]:
         return {k: v for k, v in self._specs.items() if v.kind == TypeKind.MODULE.value}
 
-    def get_all_funcs(self) -> Dict[str, "FuncSpec"]:
+    def get_all_funcs(self) -> Dict[str, IbSpec]:
         return {k: v for k, v in self._specs.items() if v.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value)}
 
-    def get_all_classes(self) -> Dict[str, "ClassSpec"]:
+    def get_all_classes(self) -> Dict[str, IbSpec]:
         return {k: v for k, v in self._specs.items() if v.kind == TypeKind.CLASS.value}
 
     @property

@@ -97,7 +97,7 @@ class TestIbSpecBase:
         assert ds.value_type_name == "int"
 
     def test_module_spec_axiom_name(self):
-        ms = ModuleSpec(name="mymod")
+        ms = ModuleSpec(name="mymod", kind=TypeKind.MODULE.value)
         # get_base_name() returns the axiom lookup key ('module' for ModuleSpec),
         # not the instance name.  The instance name is accessed via .name.
         assert ms.name == "mymod"

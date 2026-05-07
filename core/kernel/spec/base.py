@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import ClassVar, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .member import MemberSpec
@@ -167,7 +167,110 @@ class TypeDef(IbSpec):
     """
     Unified type-definition data model.
 
-    Compatibility note:
-    Existing concrete *Spec classes are currently thin semantic variants on
-    top of this single shape; dispatch should prefer `kind` over isinstance.
+    All former concrete *Spec subclasses (FuncSpec, ClassSpec, ListSpec, …) are
+    now aliases for this single class.  Dispatch on the ``kind`` field rather than
+    ``isinstance``.
     """
+
+    # -- FuncSpec / CallableSigSpec fields --------------------------------
+    param_type_names: List[str] = field(default_factory=list)
+    param_type_modules: List[Optional[str]] = field(default_factory=list)
+    return_type_name: str = "void"
+    return_type_module: Optional[str] = None
+    is_llm: bool = False
+
+    # -- ClassSpec fields -------------------------------------------------
+    parent_name: Optional[str] = None
+    parent_module: Optional[str] = None
+
+    # -- ListSpec / TupleSpec fields --------------------------------------
+    element_type_name: str = "any"
+    element_type_module: Optional[str] = None
+    allowed_element_type_names: List[str] = field(default_factory=list)
+
+    # -- DictSpec fields --------------------------------------------------
+    key_type_name: str = "any"
+    key_type_module: Optional[str] = None
+
+    # -- DictSpec / DeferredSpec / BehaviorSpec fields (unified) ----------
+    value_type_name: str = "any"
+    value_type_module: Optional[str] = None
+
+    # -- OptionalSpec fields ----------------------------------------------
+    wrapped_type_name: str = "any"
+    wrapped_type_module: Optional[str] = None
+
+    # -- BoundMethodSpec fields -------------------------------------------
+    receiver_type_name: str = ""
+    receiver_type_module: Optional[str] = None
+    func_spec_name: str = ""
+
+    # -- DeferredSpec / BehaviorSpec fields -------------------------------
+    deferred_mode: str = "lambda"
+
+    # -- ModuleSpec fields ------------------------------------------------
+    required_capabilities: List[str] = field(default_factory=list)
+
+    # -- Kind → base-name mapping (used by get_base_name) ----------------
+    _KIND_BASE_NAMES: ClassVar[Dict[str, str]] = {}
+
+    def get_base_name(self) -> str:
+        if self._axiom_name:
+            return self._axiom_name
+        return TypeDef._KIND_BASE_NAMES.get(self.kind, self.name)
+
+    # -- TypeRef bridge properties ----------------------------------------
+
+    @property
+    def return_type_ref(self) -> "TypeRef":
+        from .type_ref import TypeRef
+        return TypeRef.of(self.return_type_name, self.return_type_module)
+
+    @property
+    def param_type_refs(self) -> "tuple[TypeRef, ...]":
+        from .type_ref import TypeRef
+        mods = list(self.param_type_modules)
+        while len(mods) < len(self.param_type_names):
+            mods.append(None)
+        return tuple(TypeRef.of(n, m) for n, m in zip(self.param_type_names, mods))
+
+    @property
+    def parent_type_ref(self) -> "Optional[TypeRef]":
+        if self.parent_name is None:
+            return None
+        from .type_ref import TypeRef
+        return TypeRef.of(self.parent_name, self.parent_module)
+
+    @property
+    def element_type_ref(self) -> "TypeRef":
+        from .type_ref import TypeRef
+        return TypeRef.of(self.element_type_name, self.element_type_module)
+
+    @property
+    def key_type_ref(self) -> "TypeRef":
+        from .type_ref import TypeRef
+        return TypeRef.of(self.key_type_name, self.key_type_module)
+
+    @property
+    def value_type_ref(self) -> "TypeRef":
+        from .type_ref import TypeRef
+        return TypeRef.of(self.value_type_name, self.value_type_module)
+
+    @property
+    def wrapped_type_ref(self) -> "TypeRef":
+        from .type_ref import TypeRef
+        return TypeRef.of(self.wrapped_type_name, self.wrapped_type_module)
+
+
+TypeDef._KIND_BASE_NAMES = {
+    TypeKind.LIST.value:          "list",
+    TypeKind.TUPLE.value:         "tuple",
+    TypeKind.DICT.value:          "dict",
+    TypeKind.OPTIONAL.value:      "Optional",
+    TypeKind.BOUND_METHOD.value:  "bound_method",
+    TypeKind.MODULE.value:        "module",
+    TypeKind.DEFERRED.value:      "deferred",
+    TypeKind.BEHAVIOR.value:      "behavior",
+    TypeKind.CALLABLE_SIG.value:  "callable_sig",
+    TypeKind.LAZY.value:          "module",
+}

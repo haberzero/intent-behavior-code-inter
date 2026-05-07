@@ -1168,7 +1168,7 @@ class SemanticAnalyzer:
 
         # D3: fn[(...)→(...)] 签名标注时，检查结构签名匹配
         from core.kernel.spec.specs import CallableSigSpec as _CSS
-        if isinstance(declared_type, _CSS) and val_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+        if declared_type is not None and declared_type.kind == TypeKind.CALLABLE_SIG.value and val_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             self._check_callable_sig_match(declared_type, val_type, node)
 
         return target_type
@@ -1215,7 +1215,7 @@ class SemanticAnalyzer:
         if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
             from core.kernel.spec.specs import DeferredSpec as _DS
             is_fn_decl = declared_type and (
-                declared_type.name == "fn" or isinstance(declared_type, _DS)
+                declared_type.name == "fn" or (declared_type.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value))
             )
             if not is_fn_decl:
                 hint = self.registry.get_diff_hint(val_type, sym.spec)
@@ -2125,6 +2125,7 @@ class SemanticAnalyzer:
             )
             return _CSS(
                 name="fn",
+                kind=TypeKind.CALLABLE_SIG.value,
                 param_type_names=[p.name for p in param_specs],
                 param_type_modules=[getattr(p, 'module_path', None) for p in param_specs],
                 return_type_name=ret_spec.name,

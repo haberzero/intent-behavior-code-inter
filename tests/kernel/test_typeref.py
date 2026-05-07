@@ -35,6 +35,7 @@ from core.kernel.spec import (
     INT_SPEC, STR_SPEC, ANY_SPEC,
 )
 from core.kernel.spec.specs import BehaviorSpec
+from core.kernel.spec.base import TypeKind
 from core.kernel.spec.registry import SpecRegistry, create_default_spec_registry
 from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.axioms.primitives import register_core_axioms
@@ -251,7 +252,7 @@ class TestFromSpec:
 
     def test_list_spec_typed(self):
         from core.kernel.spec.specs import ListSpec
-        spec = ListSpec(name="list[int]", element_type_name="int")
+        spec = ListSpec(name="list[int]", element_type_name="int", kind=TypeKind.LIST.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "list"
         assert len(r.args) == 1
@@ -259,7 +260,7 @@ class TestFromSpec:
 
     def test_dict_spec(self):
         from core.kernel.spec.specs import DictSpec
-        spec = DictSpec(name="dict[str,int]", key_type_name="str", value_type_name="int")
+        spec = DictSpec(name="dict[str,int]", key_type_name="str", value_type_name="int", kind=TypeKind.DICT.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "dict"
         assert r.args[0].head == "str"
@@ -267,7 +268,7 @@ class TestFromSpec:
 
     def test_tuple_spec_typed(self):
         from core.kernel.spec.specs import TupleSpec
-        spec = TupleSpec(name="tuple[str]", element_type_name="str")
+        spec = TupleSpec(name="tuple[str]", element_type_name="str", kind=TypeKind.TUPLE.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "tuple"
         assert r.args[0].head == "str"
@@ -279,7 +280,7 @@ class TestFromSpec:
         assert r.module == "mymod"
 
     def test_deferred_spec_typed(self):
-        spec = DeferredSpec(name="deferred[int]", value_type_name="int")
+        spec = DeferredSpec(name="deferred[int]", value_type_name="int", kind=TypeKind.DEFERRED.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "deferred"
         assert r.args[0].head == "int"
@@ -291,13 +292,13 @@ class TestFromSpec:
         assert r.args == ()
 
     def test_behavior_spec_typed(self):
-        spec = BehaviorSpec(name="behavior[str]", value_type_name="str")
+        spec = BehaviorSpec(name="behavior[str]", value_type_name="str", kind=TypeKind.BEHAVIOR.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "behavior"
         assert r.args[0].head == "str"
 
     def test_optional_spec_typed(self):
-        spec = OptionalSpec(name="Optional[int]", wrapped_type_name="int")
+        spec = OptionalSpec(name="Optional[int]", wrapped_type_name="int", kind=TypeKind.OPTIONAL.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "Optional"
         assert r.args[0].head == "int"
@@ -406,7 +407,7 @@ class TestIbSpecBridge:
         assert r.module == "mod"
 
     def test_list_spec_typed_type_ref(self):
-        spec = ListSpec(name="list[int]", element_type_name="int")
+        spec = ListSpec(name="list[int]", element_type_name="int", kind=TypeKind.LIST.value)
         r = spec.type_ref
         assert r.head == "list"
         assert r.args == (TypeRef("int"),)
