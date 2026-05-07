@@ -71,20 +71,20 @@ class TestM2OptionalArtifactRehydrator:
     def test_legacy_kind_field_rejected_by_default(self):
         registry = create_default_registry()
         type_pool = {
-            "type_root.int": {
-                "uid": "type_root.int",
-                "kind": "primitive",
-                "legacy_kind": "IbSpec",
-                "name": "int",
+            "type_root.MyType": {
+                "uid": "type_root.MyType",
+                "kind": "class",
+                "legacy_kind": "ClassMetadata",
+                "name": "MyType",
                 "module_path": None,
-                "is_nullable": False,
-                "is_user_defined": False,
+                "is_nullable": True,
+                "is_user_defined": True,
             }
         }
 
         rehydrator = ArtifactRehydrator(type_pool=type_pool, registry=registry)
         with pytest.raises(ValueError, match="deprecated legacy_kind"):
-            rehydrator.hydrate("type_root.int")
+            rehydrator.hydrate("type_root.MyType")
 
     def test_hydrate_optional_specialization_new_kind_protocol(self):
         registry = create_default_registry()
