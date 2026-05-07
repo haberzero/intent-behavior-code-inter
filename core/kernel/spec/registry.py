@@ -716,6 +716,16 @@ class SpecRegistry:
                     if effective_params:
                         effective_params[-1] = elem
                         effective_param_modules[-1] = elem_mod
+                elif isinstance(spec, OptionalSpec):
+                    wrapped = getattr(spec, "wrapped_type_name", "any")
+                    wrapped_mod = getattr(spec, "wrapped_type_module", None)
+                    if wrapped != "any" and attr_name in ("unwrap", "or_else"):
+                        effective_return = wrapped
+                        effective_return_module = wrapped_mod
+                    if wrapped != "any" and attr_name == "or_else" and effective_params:
+                        # Optional[T].or_else(default) expects default of type T.
+                        effective_params[0] = wrapped
+                        effective_param_modules[0] = wrapped_mod
                 return FuncSpec(
                     name=attr_name,
                     is_user_defined=spec.is_user_defined,
@@ -844,10 +854,17 @@ class SpecRegistry:
 
         if spec.name == "Optional" and arg_specs:
             value_type = arg_specs[0]
-            return self.register(self.factory.create_optional(
+            result = self.register(self.factory.create_optional(
                 wrapped_type_name=value_type.name,
                 wrapped_type_module=getattr(value_type, "module_path", None),
             ))
+            # Keep Optional[T] behavior consistent with other specialized specs.
+            optional_axiom = self._axiom_registry.get_axiom("Optional")
+            if optional_axiom:
+                method_specs = optional_axiom.get_method_specs()
+                for m_name, m_spec in method_specs.items():
+                    result.members.setdefault(m_name, m_spec)
+            return result
 
         # G1: early-cache hit — avoid allocating a temporary spec when the
         # specialisation is already registered (e.g. repeated list[int] refs).

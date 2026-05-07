@@ -17,7 +17,7 @@
 #### 进度管控
 
 - [x] M1：TypeRef 引入（兼容阶段）— 完成（2026-05-07，+103 tests，总 1159 passed）
-- [ ] M2：Optional[T] 与空安全落地（已启动：OptionalSpec + assignability 首批落地）
+- [x] M2：Optional[T] 与空安全落地（完成 2026-05-07：OptionalSpec + assignability + artifact rehydration + Optional 方法语义收口；全量 1179 passed）
 - [ ] M3：TypeDef 单一化（替代多 Spec）
 - [ ] M4：运行时值模型单一化（IbValue）
 - [ ] M5：Axiom 接口统一化

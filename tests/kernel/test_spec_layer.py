@@ -430,6 +430,11 @@ class TestAssignability:
         assert optional_int is not None
         assert spec_reg.is_assignable(optional_int, optional_int) is True
 
+    def test_legacy_nullable_flag_does_not_allow_none_assignment(self, spec_reg: SpecRegistry):
+        none_s = spec_reg.resolve("None")
+        legacy_nullable_int = IbSpec(name="int", is_nullable=True, is_user_defined=False)
+        assert spec_reg.is_assignable(none_s, legacy_nullable_int) is False
+
 
 # ---------------------------------------------------------------------------
 # 7. Integration: create_default_registry (factory module)

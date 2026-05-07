@@ -19,7 +19,7 @@
 ## 1. 总体里程碑
 
 - [x] **M1：TypeRef 引入（兼容阶段）** — 完成（2026-05-07）
-- [ ] **M2：Optional[T] 与空安全落地**
+- [x] **M2：Optional[T] 与空安全落地** — 完成（2026-05-07）
 - [ ] **M3：TypeDef 单一化（替代多 Spec）**
 - [ ] **M4：运行时值模型单一化（IbValue）**
 - [ ] **M5：Axiom 接口统一化**
@@ -66,14 +66,15 @@
   - `SpecFactory.create_optional()` 新增
   - `OptionalAxiom` 新增并注册到 `AxiomRegistry`
   - `SpecRegistry.resolve_specialization(Optional, [T])` / `resolve_typeref(Optional[T])` 已可用
-- [ ] 移除/冻结旧 `nullable` 布尔语义入口，改为类型层显式表达。
+- [x] 移除/冻结旧 `nullable` 布尔语义入口，改为类型层显式表达。
+  - 兼容说明：`is_nullable` 字段保留为迁移期数据字段，但不再参与 `is_assignable` 的可空判定。
 - [x] 调整赋值检查首批规则：非 Optional 类型禁止接收 `None`；`Optional[T]` 接受 `T` / `None` / `Optional[T]`。
-- [ ] 提供 Optional 基础能力（如 `or_else` / `unwrap` 等）及语义文档。
-- [ ] 完成语义分析器中的可空性检查迁移。
+- [x] 提供 Optional 基础能力（如 `or_else` / `unwrap` 等）及语义文档。
+- [x] 完成语义分析器中的可空性检查迁移。
 
 **M2 DoD**
-- [ ] 可空逻辑仅由 `Optional[T]` 驱动。
-- [ ] 空安全相关用例完整覆盖。
+- [x] 可空逻辑仅由 `Optional[T]` 驱动。
+- [x] 空安全相关用例完整覆盖。
 
 ### M3：TypeDef 单一化（替代多 Spec）
 
