@@ -17,10 +17,26 @@ class ArtifactRehydrator:
     """
     类型重水化器：将序列化后的 type_pool 还原为运行时的 IbSpec 对象树。
     """
-    def __init__(self, type_pool: Dict[str, Any], registry: SpecRegistry):
+    _LEGACY_TO_KIND = {
+        "ListMetadata": TypeKind.LIST.value,
+        "DictMetadata": TypeKind.DICT.value,
+        "FunctionMetadata": TypeKind.FUNCTION.value,
+        "ClassMetadata": TypeKind.CLASS.value,
+        "BoundMethodMetadata": TypeKind.BOUND_METHOD.value,
+        "ModuleMetadata": TypeKind.MODULE.value,
+        "DeferredSpec": TypeKind.DEFERRED.value,
+        "BehaviorSpec": TypeKind.BEHAVIOR.value,
+        "CallableSigSpec": TypeKind.CALLABLE_SIG.value,
+        "OptionalSpec": TypeKind.OPTIONAL.value,
+        "IbSpec": TypeKind.PRIMITIVE.value,
+        "TypeDescriptor": TypeKind.PRIMITIVE.value,
+    }
+
+    def __init__(self, type_pool: Dict[str, Any], registry: SpecRegistry, enable_legacy_kind_compat: bool = False):
         self.type_pool = type_pool
         self.registry = registry
         self.memo: Dict[str, IbSpec] = {}
+        self.enable_legacy_kind_compat = enable_legacy_kind_compat
         
         # 预注册内置基础描述符，防止重复创建
         self._init_builtins()
@@ -76,8 +92,7 @@ class ArtifactRehydrator:
             return self.memo[uid]
             
         data = self.type_pool[uid]
-        kind = data.get("kind", TypeKind.PRIMITIVE.value)
-        legacy_kind = data.get("legacy_kind")
+        kind = self._resolve_kind(data, uid)
         name = data.get("name", "")
         is_user_defined = data.get("is_user_defined", False)
         
@@ -115,25 +130,6 @@ class ArtifactRehydrator:
             ),
         }
 
-        # Backward compatibility with legacy serialized class-name kinds.
-        legacy_to_kind = {
-            "ListMetadata": TypeKind.LIST.value,
-            "DictMetadata": TypeKind.DICT.value,
-            "FunctionMetadata": TypeKind.FUNCTION.value,
-            "ClassMetadata": TypeKind.CLASS.value,
-            "BoundMethodMetadata": TypeKind.BOUND_METHOD.value,
-            "ModuleMetadata": TypeKind.MODULE.value,
-            "DeferredSpec": TypeKind.DEFERRED.value,
-            "BehaviorSpec": TypeKind.BEHAVIOR.value,
-            "CallableSigSpec": TypeKind.CALLABLE_SIG.value,
-            "OptionalSpec": TypeKind.OPTIONAL.value,
-            "IbSpec": TypeKind.PRIMITIVE.value,
-            "TypeDescriptor": TypeKind.PRIMITIVE.value,
-        }
-        kind = legacy_to_kind.get(kind, kind)
-        if legacy_kind:
-            kind = legacy_to_kind.get(legacy_kind, kind)
-
         if name in BUILTIN_TYPES and kind == TypeKind.PRIMITIVE.value:
             spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
@@ -149,6 +145,28 @@ class ArtifactRehydrator:
             
         self.memo[uid] = spec
         return spec
+
+    def _resolve_kind(self, data: Dict[str, Any], uid: str) -> str:
+        kind = data.get("kind", TypeKind.PRIMITIVE.value)
+        legacy_kind = data.get("legacy_kind")
+
+        if self.enable_legacy_kind_compat:
+            kind = self._LEGACY_TO_KIND.get(kind, kind)
+            if legacy_kind:
+                kind = self._LEGACY_TO_KIND.get(legacy_kind, kind)
+            return kind
+
+        if legacy_kind:
+            raise ValueError(
+                f"Artifact type '{uid}' uses deprecated legacy_kind='{legacy_kind}'. "
+                f"Enable legacy compatibility explicitly to load old artifacts."
+            )
+        if kind in self._LEGACY_TO_KIND:
+            raise ValueError(
+                f"Artifact type '{uid}' uses deprecated legacy kind token '{kind}'. "
+                "Use canonical TypeKind string values."
+            )
+        return kind
 
     def _fill_descriptor(self, uid: str) -> Optional[IbSpec]:
         """填充 spec 的详细字段 (Phase 2)"""

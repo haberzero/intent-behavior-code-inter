@@ -6,7 +6,7 @@ from core.base.source_atomic import Location
 from core.runtime.exceptions import RegistryIsolationError
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.intent_logic import IntentRole
-from core.kernel.spec import IbSpec, FuncSpec, ClassSpec, ANY_SPEC
+from core.kernel.spec import IbSpec, ANY_SPEC, TypeKind
 
 if TYPE_CHECKING:
     from core.kernel import ast as ast
@@ -417,7 +417,7 @@ class IbClass(IbObject):
         if init_method:
             # 契约一致性校验：校验 __init__ 参数数量
             # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
-            if init_method.spec and isinstance(init_method.spec, FuncSpec):
+            if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 expected_count = len(init_method.spec.param_type_names)
                 if len(args) != expected_count:
                     raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")

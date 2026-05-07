@@ -169,7 +169,6 @@ class FlatSerializer(BaseFlatSerializer):
         type_data = {
             "uid": uid,
             "kind": t.kind,
-            "legacy_kind": t.__class__.__name__,
             "name": t.name,
             "module_path": t.module_path,
             "is_nullable": t.is_nullable,
