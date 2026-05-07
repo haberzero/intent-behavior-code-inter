@@ -137,7 +137,7 @@ class ArtifactRehydrator:
         if kind not in self._SUPPORTED_KINDS:
             raise ValueError(
                 f"Artifact type '{uid}' has unsupported kind '{kind}'. "
-                "Use canonical TypeKind string values."
+                f"Supported kinds: {', '.join(sorted(self._SUPPORTED_KINDS))}."
             )
         return kind
 
