@@ -1,36 +1,36 @@
-# IBC-Inter 近期优先任务
+# IBC-Inter 下一步（当前最高优先级）
 
-> 本文档只记录当前可直接开工且必须优先执行的任务进度。  
-> 低优先级事项统一转入 `docs/PENDING_TASKS.md`。
-
-> **最后更新**：2026-05-08（M5 Axiom 接口统一化已落地；类型系统主线全部里程碑完成；运行时值类型实现层彻底收口）
-
----
-
-## 类型系统演进与重构（已完成主线）【已收口】
-
-- 架构原文（完整）：`docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
-- 专项任务清单：`docs/TYPE_SYSTEM_TASKS.md`
-
-#### 进度管控
-
-- [x] M1：TypeRef 引入（兼容阶段）— 完成（2026-05-07，+103 tests，总 1159 passed）
-- [x] M2：Optional[T] 与空安全落地（完成 2026-05-07：OptionalSpec + assignability + artifact rehydration + Optional 方法语义收口；全量 1179 passed）
-- [x] M3：TypeDef 单一化（完成 2026-05-08：所有扁平 `*_name`/`*_module` 字段全面 TypeRef 化，无残留；测试基线 1182 passed）
-- [x] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线 — 完成（2026-05-08：`TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`，`deferred_mode` 概念彻底删除并重命名为 `capture_mode`，全栈一致）
-- [x] M4：运行时值模型单一化（IbValue）— 完成（2026-05-08：`IbValue(type_ref, payload, fields, meta)` 已成为运行时值公共承载层；现有 `IbInteger/IbList/IbBehavior/...` 退化为兼容包装层，装箱与运行时对象结构统一）
-- [x] M5：Axiom 接口统一化 — 完成（2026-05-08：单一 `TypeAxiom` 协议替代旧 9 个 Capability 子协议；具体公理通过 `has_*_cap` 类属性声明能力；`SpecRegistry.get_X_cap()` 统一返回公理或 spec；删除 `_FUNC_SPEC_CALL_CAP` 哨兵与 `WritableTrait` 不可达路径；测试基线 1184 passed）
-
-#### 类型系统主线状态
-
-类型系统专项五大里程碑（M1–M5）全部完成，运行时值实现层亦已收口，无未结主线项。
-
-- `SpecFactory` 方法（`create_func` / `create_class` 等）以 `*_name` / `*_module` 字符串为外部构造 API，内部统一将其转换为 TypeRef 后填入 TypeDef 字段；TypeDef 本身只持有 TypeRef 类型字段，不接受字符串 kwargs。
+> 仅保留**当前可直接开工**且需要优先推进的事项。
+> 已完成事项请见 `docs/COMPLETED.md`；历史细节见 `docs/HISTORY_LOG.md`。
+>
+> 最后更新：2026-05-08
 
 ---
 
-## 低优先级任务处理规则
+## P0：Intent / Behavior / VM 收敛主线
 
-- 所有非类型系统任务统一视为低优先级。
-- 低优先级任务统一维护在 `docs/PENDING_TASKS.md`。
-- 本文件不再展开低优先级任务细节。
+### 1) 意图注释体系与 `intent_context` 体系收敛
+- 明确 `@ / @! / @+ / @-` 与 `intent_context` 对象 API 的最终分工。
+- 评估并推进“语法糖 -> 对象 API”可收敛路径，减少双轨语义维护成本。
+- 清理 `IntentStack` 遗留接口的定位与生命周期（保留/下线/仅兼容层）。
+
+### 2) callable-instance 语义统一与术语收敛
+- 继续收敛“延迟求值（deferred）”历史术语，统一到 callable-instance 语义。
+- 对齐 `lambda` / `snapshot`：
+  - `lambda`：调用时读取当前生效上下文（含意图栈）
+  - `snapshot`：创建时冻结上下文快照（含意图栈）
+- 审查核心代码中的历史命名与注释，避免旧路线词汇误导。
+
+### 3) `fn` 关键字在高阶函数场景的类型表达增强
+- 评估并增强 `fn[(...)->(...)]` 在泛型与高阶函数中的表达与推导稳定性。
+- 优先覆盖“参数/返回均为 callable-instance”的组合路径与边界错误提示。
+
+### 4) `llm_uncertain` 与字符串真值/拼接策略收敛
+- 审查运行时与公理层中 `str + llm_uncertain` 过渡兼容策略。
+- 明确从“过渡期兼容”迁移到“异常/显式处理”路径的落地条件与步骤。
+
+---
+
+## 说明
+- 类型系统 M1–M5 主线已完成，不再作为当前 P0 主线。
+- 当前 P0 聚焦：Intent / Behavior / VM / callable-instance 语义收敛。
