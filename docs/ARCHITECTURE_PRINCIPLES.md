@@ -192,7 +192,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 ### 5.2 公理与类型系统集成
 
 - IbSpec（`core/kernel/spec/`）是唯一的类型描述符系统，旧的 `TypeDescriptor` / `AxiomHydrator` 已不存在
-- 公理通过 `AxiomRegistry` 查询，Capability（CallCapability、OperatorCapability 等）由公理直接实现
+- 公理通过 `AxiomRegistry` 查询，各类型能力通过公理的 `has_*_cap` 类属性声明，统一由 `TypeAxiom` 接口实现
 - 所有类型引用在公理层均以**纯字符串类型名**传递，消除公理层对 spec 层的直接依赖
 - `SpecRegistry` 负责将公理返回的类型名字符串解析为对应的 `IbSpec` 对象
 
@@ -207,7 +207,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 | 场景 | 说明 |
 |------|------|
 | **IbSpec 基类能力访问器** | 返回 None 表示"未知"，子类有义务重写 |
-| **FuncSpec 返回类型解析** | 公理优先，静态签名作为编译期后备（双轨制） |
+| **TypeDef 返回类型解析** | 公理优先，静态 TypeRef 签名作为编译期后备（双轨制） |
 | **LazySpec 正常情况** | 占位符模式，已解析时返回真实 IbSpec |
 
 #### 禁止的 Fallback：妥协性历史兼容
