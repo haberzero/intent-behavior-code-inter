@@ -19,9 +19,17 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import ClassVar, Dict, List, Optional, TYPE_CHECKING
 
+from .type_ref import TypeRef as _TypeRef
+
 if TYPE_CHECKING:
     from .member import MemberSpec
     from .type_ref import TypeRef
+
+
+# Sentinel TypeRef used as default for type fields that have not been set.
+# "any" is the universal top type and is used by the existing flat-string
+# defaults (``element_type_name = "any"`` etc.).
+_ANY_REF = _TypeRef.of("any")
 
 
 class TypeKind(str, Enum):
@@ -179,39 +187,38 @@ class TypeDef(IbSpec):
     All former concrete *Spec subclasses (FuncSpec, ClassSpec, ListSpec, …) are
     now aliases for this single class.  Dispatch on the ``kind`` field rather than
     ``isinstance``.
+
+    Storage model
+    -------------
+    Type-reference fields are stored as :class:`TypeRef` (frozen, hashable,
+    structurally recursive).  Legacy flat ``*_name`` / ``*_module`` accessors
+    are exposed as read-only ``@property`` derivations from the underlying
+    TypeRef storage; they exist to keep call-sites compiling during the
+    migration to a fully TypeRef-based API.  Direct attribute writes
+    (``spec.return_type_name = "int"``) are no longer supported — write through
+    the TypeRef field instead (``spec.return_type = TypeRef.of("int")``).
     """
 
-    # -- FuncSpec / CallableSigSpec fields --------------------------------
-    param_type_names: List[str] = field(default_factory=list)
-    param_type_modules: List[Optional[str]] = field(default_factory=list)
-    return_type_name: str = "void"
-    return_type_module: Optional[str] = None
+    # -- Function-like signature (FUNCTION + BOUND_METHOD + CALLABLE_INSTANCE
+    #    + CALLABLE_SIG kinds use these). ---------------------------------
+    param_types: List["TypeRef"] = field(default_factory=list)
+    return_type: "TypeRef" = field(default_factory=lambda: _ANY_REF.replace_head("void"))
     is_llm: bool = False
 
-    # -- ClassSpec fields -------------------------------------------------
-    parent_name: Optional[str] = None
-    parent_module: Optional[str] = None
+    # -- Class inheritance (CLASS kind) -----------------------------------
+    parent_type: Optional["TypeRef"] = None
 
-    # -- ListSpec / TupleSpec fields --------------------------------------
-    element_type_name: str = "any"
-    element_type_module: Optional[str] = None
-    allowed_element_type_names: List[str] = field(default_factory=list)
+    # -- Container element / key / value types (LIST / TUPLE / DICT) -----
+    element_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
+    allowed_element_types: List["TypeRef"] = field(default_factory=list)
+    key_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
+    value_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
 
-    # -- DictSpec fields --------------------------------------------------
-    key_type_name: str = "any"
-    key_type_module: Optional[str] = None
+    # -- Optional[T] (OPTIONAL kind) -------------------------------------
+    wrapped_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
 
-    # -- DictSpec / DeferredSpec / BehaviorSpec fields (unified) ----------
-    value_type_name: str = "any"
-    value_type_module: Optional[str] = None
-
-    # -- OptionalSpec fields ----------------------------------------------
-    wrapped_type_name: str = "any"
-    wrapped_type_module: Optional[str] = None
-
-    # -- BoundMethodSpec fields -------------------------------------------
-    receiver_type_name: str = ""
-    receiver_type_module: Optional[str] = None
+    # -- Bound method receiver (BOUND_METHOD kind) -----------------------
+    receiver_type: "TypeRef" = field(default_factory=lambda: _ANY_REF.replace_head(""))
     func_spec_name: str = ""
 
     # -- ModuleSpec fields ------------------------------------------------
@@ -225,47 +232,214 @@ class TypeDef(IbSpec):
             return self._axiom_name
         return TypeDef._KIND_BASE_NAMES.get(self.kind, self.name)
 
-    # -- TypeRef bridge properties ----------------------------------------
+    # ------------------------------------------------------------------ #
+    # Constructor compatibility shim                                      #
+    # ------------------------------------------------------------------ #
+    # The dataclass ``__init__`` only accepts the new TypeRef-based kwargs
+    # (``param_types``, ``return_type``, ``element_type`` …).  Many existing
+    # call-sites pass legacy flat-string kwargs (``return_type_name="int"``,
+    # ``param_type_modules=[None]`` …).  We override ``__init__`` to accept
+    # both forms transparently: legacy strings are converted to TypeRef
+    # values before delegating to the dataclass-generated init.
+    #
+    # Once all call-sites have been migrated to the structured kwargs,
+    # this shim can be deleted with no behavioural change.
+
+    _LEGACY_KWARG_TO_FIELD: ClassVar[Dict[str, str]] = {
+        "return_type_name":        "return_type",
+        "return_type_module":      "return_type",
+        "parent_name":             "parent_type",
+        "parent_module":           "parent_type",
+        "element_type_name":       "element_type",
+        "element_type_module":     "element_type",
+        "key_type_name":           "key_type",
+        "key_type_module":         "key_type",
+        "value_type_name":         "value_type",
+        "value_type_module":       "value_type",
+        "wrapped_type_name":       "wrapped_type",
+        "wrapped_type_module":     "wrapped_type",
+        "receiver_type_name":      "receiver_type",
+        "receiver_type_module":    "receiver_type",
+        "param_type_names":        "param_types",
+        "param_type_modules":      "param_types",
+        "allowed_element_type_names": "allowed_element_types",
+    }
+
+    # NOTE: ``__init__`` is intentionally NOT defined here so that ``@dataclass``
+    # generates the full structured-kwargs constructor.  After class creation
+    # we capture the generated ``__init__`` as ``__dataclass_init__`` and then
+    # replace ``TypeDef.__init__`` with a thin wrapper that first normalises
+    # legacy ``*_name`` / ``*_module`` kwargs into TypeRef-typed kwargs.
+    # See the module-level reassignment below the class.
+
+    @staticmethod
+    def _normalise_legacy_kwargs(kwargs: Dict[str, "object"]) -> Dict[str, "object"]:
+        """Translate legacy flat-string kwargs into TypeRef-typed kwargs.
+
+        Pairs ``X_name`` / ``X_module`` collapse into a single ``X`` TypeRef.
+        Parallel lists ``param_type_names`` / ``param_type_modules`` collapse
+        into ``param_types``.  ``parent_name=None`` becomes ``parent_type=None``.
+        Already-TypeRef kwargs pass through unchanged.
+        """
+        from .type_ref import TypeRef
+
+        out: Dict[str, object] = dict(kwargs)
+
+        # Scalar pairs --------------------------------------------------
+        scalar_pairs = (
+            ("return_type",   "return_type_name",   "return_type_module",   "void"),
+            ("element_type",  "element_type_name",  "element_type_module",  "any"),
+            ("key_type",      "key_type_name",      "key_type_module",      "any"),
+            ("value_type",    "value_type_name",    "value_type_module",    "any"),
+            ("wrapped_type",  "wrapped_type_name",  "wrapped_type_module",  "any"),
+            ("receiver_type", "receiver_type_name", "receiver_type_module", ""),
+        )
+        for new_field, name_kw, mod_kw, default_head in scalar_pairs:
+            if new_field in out:
+                # Caller already supplied the structured field; ignore any
+                # legacy companions (they would be redundant).
+                out.pop(name_kw, None)
+                out.pop(mod_kw, None)
+                continue
+            if name_kw in out or mod_kw in out:
+                head = out.pop(name_kw, default_head)
+                module = out.pop(mod_kw, None)
+                out[new_field] = TypeRef.of(head, module)
+
+        # Parent (nullable) --------------------------------------------
+        if "parent_type" not in out and ("parent_name" in out or "parent_module" in out):
+            head = out.pop("parent_name", None)
+            module = out.pop("parent_module", None)
+            out["parent_type"] = TypeRef.of(head, module) if head else None
+
+        # Parallel lists ------------------------------------------------
+        if "param_types" not in out and ("param_type_names" in out or "param_type_modules" in out):
+            names = list(out.pop("param_type_names", []) or [])
+            mods = list(out.pop("param_type_modules", []) or [])
+            while len(mods) < len(names):
+                mods.append(None)
+            out["param_types"] = [TypeRef.of(n, m) for n, m in zip(names, mods)]
+        else:
+            # Drop any orphan parallel-list kwargs even when the structured
+            # field is supplied (they are redundant and would otherwise
+            # raise TypeError on the dataclass init).
+            out.pop("param_type_names", None)
+            out.pop("param_type_modules", None)
+
+        if "allowed_element_types" not in out and "allowed_element_type_names" in out:
+            names = list(out.pop("allowed_element_type_names") or [])
+            out["allowed_element_types"] = [TypeRef.of(n) for n in names]
+
+        return out
+
+    # ------------------------------------------------------------------ #
+    # Legacy flat-name accessors                                          #
+    # ------------------------------------------------------------------ #
+    # These ``*_name`` / ``*_module`` properties expose the TypeRef storage
+    # under the legacy field names.  They are read-only — assignments must
+    # target the underlying TypeRef field directly.  Once all readers have
+    # migrated to ``.return_type``/``.element_type``/etc. these properties
+    # can be deleted with no further consumer changes.
+
+    @property
+    def param_type_names(self) -> List[str]:
+        return [t.head for t in self.param_types]
+
+    @property
+    def param_type_modules(self) -> List[Optional[str]]:
+        return [t.module for t in self.param_types]
+
+    @property
+    def return_type_name(self) -> str:
+        return self.return_type.head
+
+    @property
+    def return_type_module(self) -> Optional[str]:
+        return self.return_type.module
+
+    @property
+    def parent_name(self) -> Optional[str]:
+        return self.parent_type.head if self.parent_type is not None else None
+
+    @property
+    def parent_module(self) -> Optional[str]:
+        return self.parent_type.module if self.parent_type is not None else None
+
+    @property
+    def element_type_name(self) -> str:
+        return self.element_type.head
+
+    @property
+    def element_type_module(self) -> Optional[str]:
+        return self.element_type.module
+
+    @property
+    def allowed_element_type_names(self) -> List[str]:
+        return [t.head for t in self.allowed_element_types]
+
+    @property
+    def key_type_name(self) -> str:
+        return self.key_type.head
+
+    @property
+    def key_type_module(self) -> Optional[str]:
+        return self.key_type.module
+
+    @property
+    def value_type_name(self) -> str:
+        return self.value_type.head
+
+    @property
+    def value_type_module(self) -> Optional[str]:
+        return self.value_type.module
+
+    @property
+    def wrapped_type_name(self) -> str:
+        return self.wrapped_type.head
+
+    @property
+    def wrapped_type_module(self) -> Optional[str]:
+        return self.wrapped_type.module
+
+    @property
+    def receiver_type_name(self) -> str:
+        return self.receiver_type.head
+
+    @property
+    def receiver_type_module(self) -> Optional[str]:
+        return self.receiver_type.module
+
+    # ------------------------------------------------------------------ #
+    # Structured TypeRef accessors (clean API)                            #
+    # ------------------------------------------------------------------ #
 
     @property
     def return_type_ref(self) -> "TypeRef":
-        from .type_ref import TypeRef
-        return TypeRef.of(self.return_type_name, self.return_type_module)
+        return self.return_type
 
     @property
     def param_type_refs(self) -> "tuple[TypeRef, ...]":
-        from .type_ref import TypeRef
-        mods = list(self.param_type_modules)
-        while len(mods) < len(self.param_type_names):
-            mods.append(None)
-        return tuple(TypeRef.of(n, m) for n, m in zip(self.param_type_names, mods))
+        return tuple(self.param_types)
 
     @property
     def parent_type_ref(self) -> "Optional[TypeRef]":
-        if self.parent_name is None:
-            return None
-        from .type_ref import TypeRef
-        return TypeRef.of(self.parent_name, self.parent_module)
+        return self.parent_type
 
     @property
     def element_type_ref(self) -> "TypeRef":
-        from .type_ref import TypeRef
-        return TypeRef.of(self.element_type_name, self.element_type_module)
+        return self.element_type
 
     @property
     def key_type_ref(self) -> "TypeRef":
-        from .type_ref import TypeRef
-        return TypeRef.of(self.key_type_name, self.key_type_module)
+        return self.key_type
 
     @property
     def value_type_ref(self) -> "TypeRef":
-        from .type_ref import TypeRef
-        return TypeRef.of(self.value_type_name, self.value_type_module)
+        return self.value_type
 
     @property
     def wrapped_type_ref(self) -> "TypeRef":
-        from .type_ref import TypeRef
-        return TypeRef.of(self.wrapped_type_name, self.wrapped_type_module)
+        return self.wrapped_type
 
 
 TypeDef._KIND_BASE_NAMES = {
@@ -283,3 +457,17 @@ TypeDef._KIND_BASE_NAMES = {
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
 }
+
+# Capture the dataclass-generated ``__init__`` so the override above can
+# delegate to it after legacy-kwarg normalisation.  The override on the class
+# body intentionally shadowed the dataclass auto-init at class creation, which
+# is why we re-bind it here.
+TypeDef.__dataclass_init__ = TypeDef.__init__  # type: ignore[attr-defined]
+
+
+def _typedef_init_with_legacy_kwargs(self, *args, **kwargs):  # noqa: D401
+    kwargs = TypeDef._normalise_legacy_kwargs(kwargs)
+    TypeDef.__dataclass_init__(self, *args, **kwargs)  # type: ignore[attr-defined]
+
+
+TypeDef.__init__ = _typedef_init_with_legacy_kwargs  # type: ignore[assignment]

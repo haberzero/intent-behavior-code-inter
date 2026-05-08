@@ -10,6 +10,7 @@ from core.kernel.symbols import (
 )
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec
 from core.kernel.spec.base import TypeKind
+from core.kernel.spec.type_ref import TypeRef
 
 from .prelude import Prelude
 from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
@@ -808,7 +809,7 @@ class SemanticAnalyzer:
                 if writable:
                     writable.update_signature(param_types, inferred)
                 elif sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                    sym.spec.return_type_name = inferred.name
+                    sym.spec.return_type = TypeRef.of(inferred.name, getattr(inferred, "module_path", None))
 
             elif ret_type is not self._void_desc:
                 # Non-void non-auto function: warn if not all paths return

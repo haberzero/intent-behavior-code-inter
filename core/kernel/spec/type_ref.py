@@ -105,6 +105,15 @@ class TypeRef:
         """
         return cls(head=head, args=args, module=module)
 
+    def replace_head(self, head: str) -> "TypeRef":
+        """Return a copy of this TypeRef with ``head`` replaced.
+
+        Used internally to materialise default sentinels with non-default
+        head names (e.g. ``_ANY_REF.replace_head("void")`` for the
+        ``return_type`` default).  Args/module are preserved.
+        """
+        return TypeRef(head=head, args=self.args, module=self.module)
+
     @classmethod
     def from_spec(cls, spec: "IbSpec") -> "TypeRef":
         """

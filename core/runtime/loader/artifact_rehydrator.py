@@ -5,6 +5,7 @@ from core.kernel.spec import (
 )
 from core.kernel.spec.specs import DeferredSpec, BehaviorSpec, CallableSigSpec, OptionalSpec
 from core.kernel.spec.base import TypeKind
+from core.kernel.spec.type_ref import TypeRef
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
@@ -151,36 +152,39 @@ class ArtifactRehydrator:
         if spec.kind == TypeKind.LIST.value:
             elem = self.hydrate(data.get("element_type_uid"))
             if elem:
-                spec.element_type_name = elem.name
+                spec.element_type = TypeRef.of(elem.name, elem.module_path)
                 spec.name = f"list[{elem.name}]"
         elif spec.kind == TypeKind.DICT.value:
             key = self.hydrate(data.get("key_type_uid"))
             val = self.hydrate(data.get("value_type_uid"))
             if key:
-                spec.key_type_name = key.name
+                spec.key_type = TypeRef.of(key.name, key.module_path)
             if val:
-                spec.value_type_name = val.name
-            spec.name = f"dict[{spec.key_type_name},{spec.value_type_name}]"
+                spec.value_type = TypeRef.of(val.name, val.module_path)
+            spec.name = f"dict[{spec.key_type.head},{spec.value_type.head}]"
         elif spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             param_uids = data.get("param_types_uids", [])
-            spec.param_type_names = [
-                s.name for uid in param_uids
+            spec.param_types = [
+                TypeRef.of(s.name, s.module_path) for uid in param_uids
                 if (s := self.hydrate(uid)) is not None
             ]
             ret = self.hydrate(data.get("return_type_uid"))
-            spec.return_type_name = ret.name if ret else "void"
+            spec.return_type = TypeRef.of(ret.name, ret.module_path) if ret else TypeRef.of("void")
         elif spec.kind == TypeKind.CALLABLE_INSTANCE.value:
-            # Restore scalar fields for callable-instance specs (deferred[T] / behavior[T]).
+            # Restore the value type for callable-instance specs (deferred[T] / behavior[T]).
             # ``capture_mode`` is intentionally NOT restored at the type level: it
             # belongs to the runtime value (IbDeferred/IbBehavior) and to the AST
             # node (IbLambdaExpr), both of which are serialized through their own
             # channels.
-            spec.value_type_name = data.get("value_type_name", getattr(spec, "value_type_name", "auto"))
+            v_name = data.get("value_type_name", spec.value_type.head)
+            spec.value_type = TypeRef.of(v_name)
         elif spec.kind == TypeKind.OPTIONAL.value:
-            spec.wrapped_type_name = data.get("wrapped_type_name", spec.wrapped_type_name)
-            spec.wrapped_type_module = data.get("wrapped_type_module", spec.wrapped_type_module)
+            w_name = data.get("wrapped_type_name", spec.wrapped_type.head)
+            w_mod = data.get("wrapped_type_module", spec.wrapped_type.module)
+            spec.wrapped_type = TypeRef.of(w_name, w_mod)
         elif spec.kind == TypeKind.CLASS.value:
-            spec.parent_name = data.get("parent_name")
-            spec.parent_module = data.get("parent_module")
-            
+            p_name = data.get("parent_name")
+            p_mod = data.get("parent_module")
+            spec.parent_type = TypeRef.of(p_name, p_mod) if p_name else None
+
         return spec
