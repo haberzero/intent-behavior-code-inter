@@ -1508,7 +1508,7 @@ python3 -m pytest tests/ -q --tb=short
 
 ### 25.3 M3：TypeDef 单一化 + callable-instance 路线（完成）
 
-- 旧多 `*Spec` 结构已收敛为单一 `TypeDef`，`FuncSpec/ClassSpec/ListSpec/...` 保留为兼容别名。
+- 旧多 `*Spec` 结构已**完全**收敛为单一 `TypeDef`；旧 `*Spec` 子类与别名已**彻底删除**，代码中不存在任何兼容别名。
 - in-memory 模型中所有关系字段统一改为 `TypeRef`：`return_type / parent_type / element_type / key_type / value_type / wrapped_type / receiver_type / param_types / allowed_element_types`。
 - `TypeKind.DEFERRED` 与 `TypeKind.BEHAVIOR` 已合并为 `TypeKind.CALLABLE_INSTANCE`。
 - `capture_mode` 明确为**值层语义**，不再存放于 `TypeDef`。
@@ -1521,6 +1521,6 @@ python3 -m pytest tests/ -q --tb=short
 
 ### 25.5 当前状态
 
-- **已完成**：M1 / M2 / M3 / M4
-- **未完成**：M5（Axiom 接口统一化）
+- **已完成**：M1 / M2 / M3 / M4 / M5（2026-05-08）
+- **未完成**：—（无）
 - **测试基线**：`python -m pytest tests/ -q --tb=short` → **1184 passed**

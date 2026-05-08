@@ -21,13 +21,24 @@ class ModuleDiscoveryService:
     def discover_all(self, registry: Optional[Any] = None) -> HostInterface:
         """
         扫描所有搜索路径，加载所有发现的模块 spec。
+
+        ``registry`` 必须是已完成 STAGE_3_PLUGIN_METADATA 初始化的 KernelRegistry，
+        以确保 HostInterface 与引擎共享同一 SpecRegistry 实例（消除元数据双轨）。
+        仅在无 registry 的孤立测试场景下允许省略。
         """
         if registry:
             registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
             metadata_registry = registry.get_metadata_registry()
+            if metadata_registry is None:
+                raise ValueError(
+                    "discover_all(): registry.get_metadata_registry() returned None. "
+                    "Ensure initialize_builtin_classes() has been called before discover_all()."
+                )
+            host = HostInterface(external_registry=metadata_registry)
         else:
-            metadata_registry = None
-        host = HostInterface(external_registry=metadata_registry) if metadata_registry else HostInterface()
+            # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
+            # 主引擎路径必须传入 registry 以确保注册表共享。
+            host = HostInterface()
         discovered_modules = set()
 
         for path in self.search_paths:

@@ -25,7 +25,7 @@
 
 类型系统专项五大里程碑（M1–M5）全部完成，无未结主线项。后续若需进一步降权清理：
 
-- 运行时旧值类（`IbInteger` / `IbList` / `IbBehavior` 等）目前作为 `IbValue` 子类的兼容包装层保留，未来可按需进一步收敛为纯函数构造器；优先级低，不阻塞主线。
+- 运行时旧值类（`IbInteger` / `IbList` / `IbBehavior` 等）目前作为 `IbValue` 子类的兼容包装层保留，正在收敛（**优先级：中**）：已将 `isinstance(obj, IbXxx)` 分派替换为 `obj.ib_class.name` 检查，工厂新增 `create_tuple` / `create_dict`；类名本身保留供内部行为实现，不再作为对外接口。
 - `SpecFactory` 方法（`create_func` / `create_class` 等）以 `*_name` / `*_module` 字符串为外部构造 API，内部统一将其转换为 TypeRef 后填入 TypeDef 字段；TypeDef 本身只持有 TypeRef 类型字段，不接受字符串 kwargs。
 
 ---

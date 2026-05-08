@@ -40,11 +40,10 @@ Status: Active
 
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
-from core.runtime.objects.kernel import IbObject, IbNone
+from core.runtime.objects.kernel import IbObject, IbValue, IbNone
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.runtime_context import RuntimeContextImpl, RuntimeSymbol
-    from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict
 
 
 @dataclass
@@ -153,13 +152,14 @@ class LLMExceptFrame:
         - 如果 `__snapshot__` 调用出现异常，自动降级到方案A
 
         **方案A（自动深克隆，回退）**：
-        - IbNone, IbInteger, IbFloat, IbString（不可变原语，直接共享引用）
-        - IbList, IbTuple, IbDict（递归深克隆所有元素/值）
+        - None 及标量类型（int/float/str/bool）—— 不可变原语，直接共享引用
+        - list/tuple —— 递归深克隆所有元素
+        - dict —— 递归深克隆所有键值对
         - 用户自定义 IbObject（递归克隆所有字段，无法克隆的字段跳过）
 
         **不可快照的类型（跳过）**：
-        - IbFunction / IbNativeFunction / IbBehavior（可调用对象）
-        - IbNativeObject（Python 原生封装）
+        - fn / behavior / deferred（可调用对象）
+        - NativeObject（Python 原生封装）
         """
         self.saved_vars = {}
         self.saved_protocol_states = {}
@@ -190,14 +190,13 @@ class LLMExceptFrame:
         """
         尝试深克隆一个 IbObject 实例（用于 llmexcept 快照）。
 
-        对不可变原语（IbNone/IbInteger/IbFloat/IbString）返回原对象（无需复制）。
-        对容器（IbList/IbTuple/IbDict）递归克隆所有元素/值。
+        对不可变原语（None 及 int/float/str/bool 类型）返回原对象（无需复制）。
+        对容器（list/tuple/dict）递归克隆所有元素/值。
         对用户自定义 IbObject 实例递归克隆所有字段。
         对函数/行为/原生对象等不可克隆类型返回 None（调用方跳过该变量）。
 
         memo 字典用于环形引用检测与去重。
         """
-        from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple
         from core.runtime.objects.kernel import IbObject as KernelIbObject
 
         if memo is None:
@@ -207,30 +206,30 @@ class LLMExceptFrame:
         if val_id in memo:
             return memo[val_id]
 
-        # 不可变原语：引用共享即可
-        if isinstance(val, (IbNone, IbInteger, IbFloat, IbString)):
+        # 不可变原语（None 及标量类型）：引用共享即可，无需复制
+        if isinstance(val, IbNone) or (isinstance(val, IbValue) and val.ib_class.name in ("int", "float", "str", "bool")):
             return val
 
-        # IbList / IbTuple：递归克隆 elements
-        if isinstance(val, (IbList, IbTuple)):
+        # list / tuple：递归克隆 elements
+        if isinstance(val, IbValue) and val.ib_class.name in ("list", "tuple"):
             # 占位符：处理自引用列表
             new_elements: list = []
-            placeholder = val.__class__(new_elements, val.ib_class)
+            placeholder = type(val)(new_elements, val.ib_class)
             memo[val_id] = placeholder
             for elem in val.elements:
                 cloned_elem = self._try_deep_clone(elem, memo)
                 if cloned_elem is None:
                     return None  # 容器中有无法克隆的元素，放弃整个容器
                 new_elements.append(cloned_elem)
-            if isinstance(val, IbTuple):
+            if val.ib_class.name == "tuple":
                 # IbTuple.elements 为 tuple（不可变），需重新赋值
                 placeholder.elements = tuple(new_elements)
             return placeholder
 
-        # IbDict：递归克隆所有键值对
-        if isinstance(val, IbDict):
+        # dict：递归克隆所有键值对
+        if isinstance(val, IbValue) and val.ib_class.name == "dict":
             new_fields: dict = {}
-            placeholder_dict = IbDict(new_fields, val.ib_class)
+            placeholder_dict = type(val)(new_fields, val.ib_class)
             memo[val_id] = placeholder_dict
             for k, v in val.fields.items():
                 cloned_v = self._try_deep_clone(v, memo)

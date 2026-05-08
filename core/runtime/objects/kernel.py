@@ -472,14 +472,13 @@ class IbClass(IbObject):
         for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
-                    # 优先使用预评估好的快照，但可变容器（IbList/IbDict）必须每次创建新实例，
+                    # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
                     # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
-                    from core.runtime.objects.builtins import IbList, IbDict
                     sv = val_info.static_val
-                    if isinstance(sv, IbList):
-                        instance.fields[name] = IbList(list(sv.elements), sv.ib_class)
-                    elif isinstance(sv, IbDict):
-                        instance.fields[name] = IbDict(dict(sv.fields), sv.ib_class)
+                    if isinstance(sv, IbValue) and sv.ib_class.name == "list":
+                        instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
+                    elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
+                        instance.fields[name] = type(sv)(dict(sv.fields), sv.ib_class)
                     else:
                         instance.fields[name] = sv
                 elif val_info.val_uid and context:

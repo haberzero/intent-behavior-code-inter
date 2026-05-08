@@ -4,7 +4,6 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
-from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple, IbBehavior, IbDeferred
 from core.runtime.interpreter.runtime_context import IntentNode
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -141,7 +140,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             if getattr(obj, "meta", None):
                 data["value_meta"] = dict(obj.meta)
         
-        # 根据子类类型进行差异化序列化
+        # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
+        cls_name = obj.ib_class.name
         if isinstance(obj, IbNone):
             data["_type"] = "none"
 
@@ -163,19 +163,19 @@ class RuntimeSerializer(BaseFlatSerializer):
             except:
                 data["py_value"] = f"<Non-Serializable: {repr(val)}>"
                 
-        elif isinstance(obj, (IbInteger, IbFloat, IbString)):
+        elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
             data["_type"] = "primitive"
             data["value"] = self._process_value(obj.to_native())
             
-        elif isinstance(obj, IbList):
+        elif isinstance(obj, IbValue) and cls_name == "list":
             data["_type"] = "list"
             data["elements"] = [self._process_value(e) for e in obj.elements]
 
-        elif isinstance(obj, IbTuple):
+        elif isinstance(obj, IbValue) and cls_name == "tuple":
             data["_type"] = "tuple"
             data["elements"] = [self._process_value(e) for e in obj.elements]
             
-        elif isinstance(obj, IbDict):
+        elif isinstance(obj, IbValue) and cls_name == "dict":
             data["_type"] = "dict"
             data["fields"] = {str(k): self._process_value(v) for k, v in obj.fields.items()}
             
@@ -189,7 +189,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["receiver_uid"] = self._collect_instance(obj.receiver)
             data["method_uid"] = self._collect_instance(obj.method)
 
-        elif isinstance(obj, IbBehavior):
+        elif isinstance(obj, IbValue) and cls_name == "behavior":
             data["_type"] = "behavior"
             data["node_uid"] = obj.node
             # captured_intents 协议（Step 6c/6d 之后）：None 或 IbIntentContext。
@@ -206,7 +206,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)
 
-        elif isinstance(obj, IbDeferred):
+        elif isinstance(obj, IbValue) and cls_name == "deferred":
             data["_type"] = "deferred"
             data["node_uid"] = obj.node_uid
             data["capture_mode"] = obj.capture_mode
@@ -371,13 +371,12 @@ class RuntimeDeserializer:
         elif _type == "tuple":
             # Cache an empty IbTuple first to break potential circular references,
             # then fill elements (mirroring the cache-before-recurse pattern used for IbList).
-            obj = IbTuple((), ib_class)
+            obj = self.factory.create_tuple(())
             self.instance_cache[uid] = obj
             obj.elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
             
         elif _type == "dict":
-            # IbDict 尚未有标准工厂方法，暂用 Registry
-            obj = IbDict({}, ib_class)
+            obj = self.factory.create_dict({})
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
             
