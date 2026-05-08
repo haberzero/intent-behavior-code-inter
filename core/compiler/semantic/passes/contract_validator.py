@@ -34,10 +34,10 @@ class ContractValidator:
 
     def _validate_class(self, cls_desc: ClassSpec):
         """审计单个类的契约一致性"""
-        # Resolve parent via registry using parent_name/parent_module fields on ClassSpec
+        # Resolve parent via registry using parent_type field on ClassSpec
         parent = None
-        if hasattr(cls_desc, 'parent_name') and cls_desc.parent_name:
-            parent = self.registry.resolve(cls_desc.parent_name, cls_desc.parent_module)
+        if getattr(cls_desc, 'parent_type', None) is not None:
+            parent = self.registry.resolve_typeref(cls_desc.parent_type)
 
         if not parent or not self.registry.is_class_spec(parent):
             return

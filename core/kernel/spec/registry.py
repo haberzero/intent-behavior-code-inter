@@ -859,13 +859,13 @@ class SpecRegistry:
 
         # Class inheritance: walk src's parent chain.
         # _visited guards against malformed circular inheritance declarations.
-        if src.kind == TypeKind.CLASS.value and src.parent_name:
+        if src.kind == TypeKind.CLASS.value and src.parent_type is not None:
             visit_key = f"{src.name}@{src.module_path or ''}"
             visited = _visited or frozenset()
             if visit_key in visited:
                 # Cycle detected in inheritance chain — stop traversal.
                 return False
-            parent = self.resolve(src.parent_name, src.parent_module)
+            parent = self.resolve_typeref(src.parent_type)
             if parent and parent is not src:
                 return self.is_assignable(parent, target, visited | {visit_key})
 

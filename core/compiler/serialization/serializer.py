@@ -184,18 +184,21 @@ class FlatSerializer(BaseFlatSerializer):
         # (IbDeferred/IbBehavior) and on the AST node, both of which round-trip
         # through their own channels.
         if t.kind == TypeKind.CALLABLE_INSTANCE.value:
-            type_data["value_type_name"] = getattr(t, "value_type_name", "auto")
+            v_ref = getattr(t, "value_type", None)
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "auto"
             type_data["axiom_name"] = t.get_base_name()
 
         # Persist OptionalSpec inner-type scalar fields for artifact rehydration.
         if t.kind == TypeKind.OPTIONAL.value:
-            type_data["wrapped_type_name"] = getattr(t, "wrapped_type_name", "any")
-            type_data["wrapped_type_module"] = getattr(t, "wrapped_type_module", None)
+            w_ref = getattr(t, "wrapped_type", None)
+            type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
+            type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
         # Persist CallableSigSpec param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
-            type_data["param_type_names"] = list(getattr(t, "param_type_names", []))
-            type_data["return_type_name"] = getattr(t, "return_type_name", "auto")
+            type_data["param_type_names"] = [p.head for p in getattr(t, "param_types", [])]
+            ret_ref = getattr(t, "return_type", None)
+            type_data["return_type_name"] = ret_ref.head if ret_ref is not None else "auto"
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()
@@ -208,9 +211,10 @@ class FlatSerializer(BaseFlatSerializer):
         
         # 使用 is_class() 代替 isinstance 检查
         if t.kind == TypeKind.CLASS.value:
-            # 这里的字段是字符串，直接存储
-            type_data["parent_name"] = getattr(t, "parent_name", None)
-            type_data["parent_module"] = getattr(t, "parent_module", None)
+            # 父类引用：从 parent_type TypeRef 提取扁平名供反序列化使用
+            p_ref = getattr(t, "parent_type", None)
+            type_data["parent_name"] = p_ref.head if p_ref is not None else None
+            type_data["parent_module"] = p_ref.module if p_ref is not None else None
             
         # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来

@@ -344,6 +344,17 @@ class TypeDef(IbSpec):
     # than the equivalent TypeRef-based form) and because mass-migrating
     # every iteration / comparison site is a separate refactor.
 
+    # ------------------------------------------------------------------ #
+    # List-typed convenience views                                        #
+    # ------------------------------------------------------------------ #
+    # These properties return plain-string views over the TypeRef storage
+    # for ergonomic iteration / comparison.  They are kept (rather than
+    # mass-migrating every iteration site) because they are genuinely
+    # convenient — e.g. ``len(spec.param_type_names)`` is much shorter
+    # than the equivalent TypeRef-based form.  The corresponding scalar
+    # ``*_name`` / ``*_module`` properties have been removed; use
+    # ``spec.return_type.head`` / ``spec.parent_type`` etc. directly.
+
     @property
     def param_type_names(self) -> List[str]:
         return [t.head for t in self.param_types]
@@ -351,18 +362,6 @@ class TypeDef(IbSpec):
     @property
     def param_type_modules(self) -> List[Optional[str]]:
         return [t.module for t in self.param_types]
-
-    @property
-    def parent_name(self) -> Optional[str]:
-        return self.parent_type.head if self.parent_type is not None else None
-
-    @property
-    def parent_module(self) -> Optional[str]:
-        return self.parent_type.module if self.parent_type is not None else None
-
-    @property
-    def allowed_element_type_names(self) -> List[str]:
-        return [t.head for t in self.allowed_element_types]
 
     # ------------------------------------------------------------------ #
     # Structured TypeRef accessors (clean API)                            #

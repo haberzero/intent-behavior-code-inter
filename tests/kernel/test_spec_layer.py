@@ -83,7 +83,7 @@ class TestIbSpecBase:
     def test_class_spec_attributes(self):
         cls = ClassSpec(name="Dog", parent_name="Object")
         assert cls.name == "Dog"
-        assert cls.parent_name == "Object"
+        assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
     def test_list_spec_attributes(self):
@@ -148,12 +148,12 @@ class TestSpecFactory:
     def test_create_class(self, factory: SpecFactory):
         cls = factory.create_class("Cat", parent_name="Object")
         assert isinstance(cls, ClassSpec)
-        assert cls.parent_name == "Object"
+        assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
     def test_create_class_no_parent(self, factory: SpecFactory):
         cls = factory.create_class("Base")
-        assert cls.parent_name is None
+        assert cls.parent_type is None
 
     def test_create_list(self, factory: SpecFactory):
         ls = factory.create_list("str")

@@ -740,8 +740,8 @@ class SemanticAnalyzer:
             # 类型：如果父类存在则为父类类型（ClassSpec），否则为 any。
             # super 符号使用固定 UID "builtin:super"，与运行时 IbSuperProxy 注入一致。
             parent_spec = None
-            if saved_class.parent_name:
-                parent_spec = self.registry.resolve(saved_class.parent_name)
+            if saved_class.parent_type is not None:
+                parent_spec = self.registry.resolve_typeref(saved_class.parent_type)
             super_type = parent_spec if parent_spec else self._any_desc
             super_sym = symbols.VariableSymbol(
                 name="super",
