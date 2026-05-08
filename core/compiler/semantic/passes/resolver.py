@@ -2,7 +2,7 @@ from typing import List, Optional, Any, TYPE_CHECKING
 from core.kernel import ast as ast
 from core.kernel import symbols
 from core.kernel.symbols import SymbolTable, TypeSymbol, FunctionSymbol
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ModuleSpec
+from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.type_ref import TypeRef
 
@@ -18,7 +18,7 @@ class TypeResolver:
     def __init__(self, symbol_table: SymbolTable, semantic_analyzer: 'SemanticAnalyzer'):
         self.symbol_table = symbol_table
         self.analyzer = semantic_analyzer
-        self.current_class_descriptor: Optional[ClassSpec] = None
+        self.current_class_descriptor: Optional[TypeDef] = None
 
     def resolve(self, node: ast.IbASTNode):
         self.visit(node)
@@ -95,7 +95,7 @@ class TypeResolver:
                 if not parent_desc:
                     self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
-        # 2. 创建 ClassSpec 并绑定到符号
+        # 2. 创建 TypeDef 并绑定到符号
         # 使用工厂创建以确保驻留
         descriptor = self.analyzer.registry.factory.create_class(
             name=node.name, 
@@ -136,7 +136,7 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 使用工厂创建 FuncSpec 以确保驻留
+        # 使用工厂创建 TypeDef 以确保驻留
         func_desc = self.analyzer.registry.factory.create_func(
             name=node.name,
             param_type_names=[p.name for p in param_types],
@@ -173,7 +173,7 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 使用工厂创建 FuncSpec 以确保驻留
+        # 使用工厂创建 TypeDef 以确保驻留
         func_desc = self.analyzer.registry.factory.create_func(
             name=node.name,
             param_type_names=[p.name for p in param_types],
@@ -244,7 +244,7 @@ class TypeResolver:
           ``SemanticAnalyzer.visit_IbLambdaExpr`` 中处理）。
         * body：递归 visit；其类型作为 lambda 的返回类型。
         * lambda 自身解析为 ``callable``——具体形参/返回类型由 SemanticAnalyzer
-          的 ``visit_IbLambdaExpr`` 在 Pass 3 进一步细化为 ``FuncSpec``。
+          的 ``visit_IbLambdaExpr`` 在 Pass 3 进一步细化为 ``TypeDef``。
         """
         for arg_node in node.params:
             if isinstance(arg_node, ast.IbTypeAnnotatedExpr):

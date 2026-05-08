@@ -17,7 +17,7 @@ from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.axioms.primitives import register_core_axioms
 from core.kernel.axioms.protocols import TypeAxiom
 from core.kernel.spec.registry import create_default_spec_registry, SpecRegistry
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec
+from core.kernel.spec import IbSpec, TypeDef
 
 
 # ---------------------------------------------------------------------------

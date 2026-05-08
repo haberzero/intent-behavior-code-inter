@@ -19,9 +19,16 @@ Coverage:
 
 import pytest
 from core.kernel.spec import (
-    IbSpec, FuncSpec, ClassSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec,
-    OptionalSpec, OPTIONAL_SPEC,
-    INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC,
+    IbSpec,
+    TypeDef,
+    OPTIONAL_SPEC,
+    INT_SPEC,
+    STR_SPEC,
+    FLOAT_SPEC,
+    BOOL_SPEC,
+    VOID_SPEC,
+    ANY_SPEC,
+    AUTO_SPEC,
 )
 from core.kernel.spec.registry import SpecRegistry, SpecFactory, create_default_spec_registry
 from core.kernel.spec.base import TypeKind
@@ -71,7 +78,7 @@ class TestIbSpecBase:
         assert s.get_base_name() == "MyType"
 
     def test_func_spec_attributes(self):
-        fn = FuncSpec(
+        fn = TypeDef(
             name="add",
             param_type_names=["int", "int"],
             return_type_name="int",
@@ -81,30 +88,30 @@ class TestIbSpecBase:
         assert fn.is_llm is False
 
     def test_class_spec_attributes(self):
-        cls = ClassSpec(name="Dog", parent_name="Object")
+        cls = TypeDef(name="Dog", parent_name="Object")
         assert cls.name == "Dog"
         assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
     def test_list_spec_attributes(self):
-        ls = ListSpec(name="list", element_type_name="str")
+        ls = TypeDef(name="list", element_type_name="str")
         assert ls.element_type.head == "str"
         assert "str" in repr(ls)
 
     def test_dict_spec_attributes(self):
-        ds = DictSpec(name="dict", key_type_name="str", value_type_name="int")
+        ds = TypeDef(name="dict", key_type_name="str", value_type_name="int")
         assert ds.key_type.head == "str"
         assert ds.value_type.head == "int"
 
     def test_module_spec_axiom_name(self):
-        ms = ModuleSpec(name="mymod", kind=TypeKind.MODULE.value)
-        # get_base_name() returns the axiom lookup key ('module' for ModuleSpec),
+        ms = TypeDef(name="mymod", kind=TypeKind.MODULE.value)
+        # get_base_name() returns the axiom lookup key ('module' for TypeDef),
         # not the instance name.  The instance name is accessed via .name.
         assert ms.name == "mymod"
         assert ms.get_base_name() == "module"  # axiom key is always 'module'
 
     def test_bound_method_spec(self):
-        bm = BoundMethodSpec(
+        bm = TypeDef(
             name="bound_method",
             receiver_type_name="str",
             func_spec_name="callable",
@@ -135,7 +142,7 @@ class TestSpecFactory:
 
     def test_create_func_defaults(self, factory: SpecFactory):
         fn = factory.create_func("greet")
-        assert isinstance(fn, FuncSpec)
+        assert isinstance(fn, TypeDef)
         assert fn.return_type.head == "void"
         assert fn.param_type_names == []
 
@@ -147,7 +154,7 @@ class TestSpecFactory:
 
     def test_create_class(self, factory: SpecFactory):
         cls = factory.create_class("Cat", parent_name="Object")
-        assert isinstance(cls, ClassSpec)
+        assert isinstance(cls, TypeDef)
         assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
@@ -157,29 +164,29 @@ class TestSpecFactory:
 
     def test_create_list(self, factory: SpecFactory):
         ls = factory.create_list("str")
-        assert isinstance(ls, ListSpec)
+        assert isinstance(ls, TypeDef)
         assert ls.element_type.head == "str"
 
     def test_create_dict(self, factory: SpecFactory):
         ds = factory.create_dict("str", "int")
-        assert isinstance(ds, DictSpec)
+        assert isinstance(ds, TypeDef)
         assert ds.key_type.head == "str"
         assert ds.value_type.head == "int"
 
     def test_create_optional(self, factory: SpecFactory):
         opt = factory.create_optional("int")
-        assert isinstance(opt, OptionalSpec)
+        assert isinstance(opt, TypeDef)
         assert opt.name == "Optional[int]"
         assert opt.wrapped_type.head == "int"
 
     def test_create_module(self, factory: SpecFactory):
         ms = factory.create_module("mymod")
-        assert isinstance(ms, ModuleSpec)
+        assert isinstance(ms, TypeDef)
         assert ms.name == "mymod"
 
     def test_create_bound_method(self, factory: SpecFactory):
         bm = factory.create_bound_method("str", "callable")
-        assert isinstance(bm, BoundMethodSpec)
+        assert isinstance(bm, TypeDef)
         assert bm.receiver_type.head == "str"
 
 
@@ -197,12 +204,12 @@ class TestSpecRegistryResolve:
     def test_resolve_list_and_dict(self, spec_reg: SpecRegistry):
         ls = spec_reg.resolve("list")
         ds = spec_reg.resolve("dict")
-        assert isinstance(ls, ListSpec)
-        assert isinstance(ds, DictSpec)
+        assert isinstance(ls, TypeDef)
+        assert isinstance(ds, TypeDef)
 
     def test_resolve_module(self, spec_reg: SpecRegistry):
         ms = spec_reg.resolve("module")
-        assert isinstance(ms, ModuleSpec)
+        assert isinstance(ms, TypeDef)
 
     def test_resolve_unknown_returns_none(self, spec_reg: SpecRegistry):
         assert spec_reg.resolve("definitely_not_a_type") is None
@@ -215,7 +222,7 @@ class TestSpecRegistryResolve:
         assert found.name == "Parrot"
 
     def test_register_with_module_path(self, spec_reg: SpecRegistry):
-        cls = ClassSpec(name="Widget", module_path="ui.components")
+        cls = TypeDef(name="Widget", module_path="ui.components")
         spec_reg.register(cls)
         found = spec_reg.resolve("Widget", module="ui.components")
         assert found is not None
@@ -308,7 +315,7 @@ class TestCapabilityQueries:
     def test_callable_is_callable(self, spec_reg: SpecRegistry):
         callable_s = spec_reg.resolve("callable")
         assert callable_s is not None
-        # callable has a call_cap via its axiom or is FuncSpec
+        # callable has a call_cap via its axiom or is TypeDef
         cap = spec_reg.get_call_cap(callable_s)
         callable_by_cap = cap is not None
         callable_by_type = spec_reg.is_callable(callable_s)

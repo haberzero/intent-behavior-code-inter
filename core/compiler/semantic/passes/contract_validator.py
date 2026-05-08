@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec
+from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.base import TypeKind
 from core.compiler.diagnostics.issue_tracker import IssueTracker
@@ -32,9 +32,9 @@ class ContractValidator:
             elif self.registry.get_call_cap(desc):
                 self._validate_function(desc)
 
-    def _validate_class(self, cls_desc: ClassSpec):
+    def _validate_class(self, cls_desc: TypeDef):
         """审计单个类的契约一致性"""
-        # Resolve parent via registry using parent_type field on ClassSpec
+        # Resolve parent via registry using parent_type field on TypeDef
         parent = None
         if getattr(cls_desc, 'parent_type', None) is not None:
             parent = self.registry.resolve_typeref(cls_desc.parent_type)
@@ -92,8 +92,8 @@ class ContractValidator:
                 line=0, column=0, code="SEM_002"
             )
 
-    def _check_method_compatibility_by_name(self, cls_desc: ClassSpec, name: str,
-                                             member: MemberSpec, super_sig: FuncSpec):
+    def _check_method_compatibility_by_name(self, cls_desc: TypeDef, name: str,
+                                             member: MemberSpec, super_sig: TypeDef):
         """校验方法子类型化规则：参数逆变，返回值协变"""
         if not isinstance(member, MethodMemberSpec):
             return

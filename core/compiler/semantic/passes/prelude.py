@@ -1,9 +1,15 @@
 from typing import Dict, Optional, List, Any
 
 from core.kernel.spec import (
-    IbSpec, FuncSpec, ModuleSpec,
-    INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC,
-    VOID_SPEC, ANY_SPEC, AUTO_SPEC,
+    IbSpec,
+    TypeDef,
+    INT_SPEC,
+    STR_SPEC,
+    FLOAT_SPEC,
+    BOOL_SPEC,
+    VOID_SPEC,
+    ANY_SPEC,
+    AUTO_SPEC,
 )
 from core.kernel.spec.base import TypeKind
 
@@ -18,7 +24,7 @@ class Prelude:
         self,
         registry: Optional[Any] = None,
     ):
-        self.builtin_functions: Dict[str, FuncSpec] = {}
+        self.builtin_functions: Dict[str, TypeDef] = {}
         self.builtin_modules: Dict[str, IbSpec] = {}
         self.builtin_types: Dict[str, IbSpec] = {}
         self.builtin_variables: Dict[str, IbSpec] = {}
@@ -38,8 +44,8 @@ class Prelude:
         for name, spec in spec_reg.all_specs.items():
             if "." in name:
                 continue
-            # Only FuncSpec instances are builtin functions; all other specs are types.
-            # ModuleSpec with is_user_defined=True are plugin modules that must be
+            # Only TypeDef instances are builtin functions; all other specs are types.
+            # TypeDef with is_user_defined=True are plugin modules that must be
             # explicitly imported by ibci code — they must NOT be pre-registered as
             # builtin symbols here (that would make every plugin visible in every file
             # without an import statement).
@@ -90,7 +96,7 @@ class Prelude:
         )
         self.builtin_functions[name] = spec
 
-    def get_builtins(self) -> Dict[str, FuncSpec]:
+    def get_builtins(self) -> Dict[str, TypeDef]:
         return dict(self.builtin_functions)
 
     def get_builtin_types(self) -> Dict[str, IbSpec]:

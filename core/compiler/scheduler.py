@@ -27,7 +27,7 @@ from core.base.interfaces import (
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec, LazySpec, TypeKind
+from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
@@ -373,7 +373,7 @@ class Scheduler(ICompilerService):
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
-            # 这样 LazySpec 才能在解析时找到目标，即使当前模块还未分析完
+            # 这样 TypeDef 才能在解析时找到目标，即使当前模块还未分析完
             pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
             
@@ -400,10 +400,10 @@ class Scheduler(ICompilerService):
                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
                     
-                    # 统一使用 LazySpec 解决循环依赖问题
+                    # 统一使用 TypeDef 解决循环依赖问题
                     # 无论该模块是否已编译，都先注入 Lazy 描述符，
                     # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
-                    s_mod_type = LazySpec(name=imp_mod_name)
+                    s_mod_type = TypeDef(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
                 elif imp.module_name in self.host_interface._module_metadata_map:
                     s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
@@ -541,7 +541,7 @@ class Scheduler(ICompilerService):
             result = analyzer.analyze(ast_node)
             
             # 语义分析完成后，更新注册表中的元数据成员
-            # 这确保了 LazySpec 在解析时能看到完整的符号表
+            # 这确保了 TypeDef 在解析时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:
                 # 过滤掉非导出的符号（如内部变量）可以在这里做，目前默认全量导出

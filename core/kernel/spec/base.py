@@ -135,26 +135,6 @@ class IbSpec:
         return self.kind in kinds
 
     # ------------------------------------------------------------------ #
-    # [INFO] TypeRef compatibility                                         #
-    # ------------------------------------------------------------------ #
-
-    @property
-    def type_ref(self) -> "TypeRef":
-        """
-        Return a TypeRef representing this spec's type identity.
-
-        [INFO] Builds a TypeRef from the existing name/module_path
-        fields (and, for generic specs, from the element/key/value type
-        fields).  The returned TypeRef is structurally equivalent to what
-        the new type system would hold natively.
-
-        This property is read-only and non-caching — TypeRef is cheap to
-        construct (frozen dataclass, no registry access required).
-        """
-        from .type_ref import TypeRef
-        return TypeRef.from_spec(self)
-
-    # ------------------------------------------------------------------ #
     # Cloning                                                              #
     # ------------------------------------------------------------------ #
 
@@ -184,9 +164,10 @@ class TypeDef(IbSpec):
     """
     Unified type-definition data model.
 
-    All former concrete *Spec subclasses (FuncSpec, ClassSpec, ListSpec, …) are
-    now aliases for this single class.  Dispatch on the ``kind`` field rather than
-    ``isinstance``.
+    All former concrete *Spec subclasses (function / class / list / dict / tuple
+    / optional / bound_method / module / callable_instance / callable_sig /
+    lazy) are now folded into this single class — dispatch on the ``kind``
+    field rather than ``isinstance``.
 
     Storage model
     -------------
@@ -221,7 +202,7 @@ class TypeDef(IbSpec):
     receiver_type: "TypeRef" = field(default_factory=lambda: _ANY_REF.replace_head(""))
     func_spec_name: str = ""
 
-    # -- ModuleSpec fields ------------------------------------------------
+    # -- TypeDef fields ------------------------------------------------
     required_capabilities: List[str] = field(default_factory=list)
 
     # -- Kind → base-name mapping (used by get_base_name) ----------------
@@ -362,38 +343,6 @@ class TypeDef(IbSpec):
     @property
     def param_type_modules(self) -> List[Optional[str]]:
         return [t.module for t in self.param_types]
-
-    # ------------------------------------------------------------------ #
-    # Structured TypeRef accessors (clean API)                            #
-    # ------------------------------------------------------------------ #
-
-    @property
-    def return_type_ref(self) -> "TypeRef":
-        return self.return_type
-
-    @property
-    def param_type_refs(self) -> "tuple[TypeRef, ...]":
-        return tuple(self.param_types)
-
-    @property
-    def parent_type_ref(self) -> "Optional[TypeRef]":
-        return self.parent_type
-
-    @property
-    def element_type_ref(self) -> "TypeRef":
-        return self.element_type
-
-    @property
-    def key_type_ref(self) -> "TypeRef":
-        return self.key_type
-
-    @property
-    def value_type_ref(self) -> "TypeRef":
-        return self.value_type
-
-    @property
-    def wrapped_type_ref(self) -> "TypeRef":
-        return self.wrapped_type
 
 
 TypeDef._KIND_BASE_NAMES = {

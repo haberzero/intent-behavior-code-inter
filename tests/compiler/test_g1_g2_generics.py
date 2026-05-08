@@ -8,8 +8,9 @@ import pytest
 from core.engine import IBCIEngine
 from core.kernel.spec import (
     SpecRegistry,
-    ListSpec,
-    INT_SPEC, STR_SPEC,
+    TypeDef,
+    INT_SPEC,
+    STR_SPEC,
 )
 from core.kernel.factory import create_default_registry
 
@@ -80,7 +81,7 @@ class TestG2ListWriteMethodSpecialization:
         """list[int].append should have param type 'int', not 'any'."""
         reg = make_spec_registry()
         list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
-        assert isinstance(list_spec, ListSpec)
+        assert isinstance(list_spec, TypeDef)
 
         append_spec = reg.resolve_member(list_spec, "append")
         assert append_spec is not None

@@ -126,10 +126,9 @@ class MethodMemberSpec(MemberSpec):
             head = return_type_name if return_type_name is not None else "void"
             self.return_type = TypeRef.of(head, return_type_module)
 
-    # Legacy list-typed accessor retained for ergonomics
-    # (e.g. ``len(member.param_type_names)``).  Scalar ``return_type_name`` /
-    # ``return_type_module`` accessors are intentionally *not* defined — use
-    # ``member.return_type.head`` / ``member.return_type.module`` directly.
+    # Convenience views over TypeRef storage retained because they are
+    # genuinely useful (``len(member.param_type_names)`` reads cleaner than
+    # ``len(member.param_types)`` though equivalent; both are fine).
     @property
     def param_type_names(self) -> List[str]:
         return [t.head for t in self.param_types]
@@ -137,13 +136,3 @@ class MethodMemberSpec(MemberSpec):
     @property
     def param_type_modules(self) -> List[Optional[str]]:
         return [t.module for t in self.param_types]
-
-    # Structured accessors retained for callers that prefer the
-    # ``.X_ref`` style.
-    @property
-    def return_type_ref(self) -> TypeRef:
-        return self.return_type
-
-    @property
-    def param_type_refs(self) -> "tuple[TypeRef, ...]":
-        return tuple(self.param_types)

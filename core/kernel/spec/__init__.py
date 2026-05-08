@@ -8,17 +8,6 @@ from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
 from .type_ref import TypeRef
 from .specs import (
-    FuncSpec,
-    ClassSpec,
-    ListSpec,
-    TupleSpec,
-    DictSpec,
-    DeferredSpec,
-    OptionalSpec,
-    BoundMethodSpec,
-    ModuleSpec,
-    CallableSigSpec,
-    LazySpec,
     # Built-in prototype constants
     INT_SPEC,
     FLOAT_SPEC,
@@ -58,18 +47,6 @@ __all__ = [
     "MethodMemberSpec",
     # TypeRef
     "TypeRef",
-    # Concrete spec kinds
-    "FuncSpec",
-    "ClassSpec",
-    "ListSpec",
-    "TupleSpec",
-    "DictSpec",
-    "DeferredSpec",
-    "OptionalSpec",
-    "BoundMethodSpec",
-    "ModuleSpec",
-    "CallableSigSpec",
-    "LazySpec",
     # Built-in constants
     "INT_SPEC",
     "FLOAT_SPEC",

@@ -1175,7 +1175,7 @@ class CallableAxiom(BaseAxiom):
 
     * is_dynamic() = False —— callable 是具体类型，不是 "any" 的妥协。
     * has_call_cap = True；resolve_return_type_name 返回 "auto"——编译期返回类型
-      取决于具体的 FuncSpec/IbDeferred/IbBehavior。
+      取决于具体的 TypeDef/IbDeferred/IbBehavior。
 
     is_compatible(target) 语义：source 能否被赋值给 target 类型的变量。
     callable 只能赋值给 callable 槽；子类型（deferred、behavior、bound_method）

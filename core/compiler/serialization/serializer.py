@@ -4,8 +4,8 @@ import json
 from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
-from core.kernel.spec.specs import DeferredSpec, CallableSigSpec, OptionalSpec
+from core.kernel.spec import IbSpec, TypeDef
+from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
@@ -188,13 +188,13 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "auto"
             type_data["axiom_name"] = t.get_base_name()
 
-        # Persist OptionalSpec inner-type scalar fields for artifact rehydration.
+        # Persist TypeDef inner-type scalar fields for artifact rehydration.
         if t.kind == TypeKind.OPTIONAL.value:
             w_ref = getattr(t, "wrapped_type", None)
             type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
-        # Persist CallableSigSpec param/return signature for structural checking.
+        # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
             type_data["param_type_names"] = [p.head for p in getattr(t, "param_types", [])]
             ret_ref = getattr(t, "return_type", None)

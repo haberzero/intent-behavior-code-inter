@@ -2,7 +2,7 @@ from typing import Optional, Any, List, Tuple, TYPE_CHECKING
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
-from core.kernel.spec import IbSpec, ClassSpec
+from core.kernel.spec import IbSpec, TypeDef
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer

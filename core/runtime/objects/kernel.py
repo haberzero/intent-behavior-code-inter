@@ -203,10 +203,12 @@ class IbValue(IbObject):
         super().__init__(ib_class)
         if fields is not None:
             self.fields = fields
-        spec = getattr(ib_class, "spec", None)
-        self.type_ref = type_ref if type_ref is not None else (
-            spec.type_ref if spec is not None and hasattr(spec, "type_ref") else None
-        )
+        if type_ref is not None:
+            self.type_ref = type_ref
+        else:
+            from core.kernel.spec.type_ref import TypeRef as _TypeRef
+            spec = getattr(ib_class, "spec", None)
+            self.type_ref = _TypeRef.from_spec(spec) if spec is not None else None
         self.payload = payload
         self.meta = dict(meta) if meta is not None else {}
 
@@ -630,7 +632,7 @@ class IbBoundMethod(IbFunction):
 
     @property
     def spec(self) -> Optional[IbSpec]:
-        """Synthesise a BoundMethodSpec for this bound method."""
+        """Synthesise a TypeDef for this bound method."""
         spec_reg = self.ib_class.registry.get_metadata_registry()
         if spec_reg:
             r_name = self.receiver.ib_class.name if self.receiver else ""

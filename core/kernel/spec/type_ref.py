@@ -125,7 +125,7 @@ class TypeRef:
         """
         base = spec.get_base_name()
 
-        # ListSpec: element_type
+        # TypeDef: element_type
         if base == "list" and hasattr(spec, "element_type"):
             elem_ref = getattr(spec, "element_type", None)
             if elem_ref is not None and elem_ref.head != "any":
@@ -136,7 +136,7 @@ class TypeRef:
                 )
             return cls(head="list", args=(), module=spec.module_path)
 
-        # TupleSpec: element_type
+        # TypeDef: element_type
         if base == "tuple" and hasattr(spec, "element_type"):
             elem_ref = getattr(spec, "element_type", None)
             if elem_ref is not None and elem_ref.head != "any":
@@ -147,7 +147,7 @@ class TypeRef:
                 )
             return cls(head="tuple", args=(), module=spec.module_path)
 
-        # DictSpec: key_type + value_type
+        # TypeDef: key_type + value_type
         if base == "dict" and hasattr(spec, "key_type"):
             key_ref = getattr(spec, "key_type", cls.of("any"))
             val_ref = getattr(spec, "value_type", cls.of("any"))
@@ -157,7 +157,7 @@ class TypeRef:
                 module=spec.module_path,
             )
 
-        # DeferredSpec / BehaviorSpec: value_type
+        # TypeDef / TypeDef: value_type
         if base in ("deferred", "behavior") and hasattr(spec, "value_type"):
             val_ref = getattr(spec, "value_type", None)
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
@@ -168,7 +168,7 @@ class TypeRef:
                 )
             return cls(head=base, args=(), module=spec.module_path)
 
-        # OptionalSpec: wrapped_type
+        # TypeDef: wrapped_type
         if base == "Optional" and hasattr(spec, "wrapped_type"):
             wrapped_ref = getattr(spec, "wrapped_type", cls.of("any"))
             return cls(

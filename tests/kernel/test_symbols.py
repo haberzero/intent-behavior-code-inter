@@ -20,7 +20,7 @@ from core.kernel.symbols import (
     FunctionSymbol, TypeSymbol, VariableSymbol, IntentSymbol,
     SymbolTable, SymbolFactory,
 )
-from core.kernel.spec import FuncSpec, ClassSpec, ModuleSpec, IbSpec
+from core.kernel.spec import TypeDef, IbSpec
 from core.kernel.factory import create_default_registry
 
 

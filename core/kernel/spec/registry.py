@@ -27,10 +27,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from .base import IbSpec, TypeKind
+from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, OptionalSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, OPTIONAL_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
@@ -548,11 +547,11 @@ class SpecRegistry:
         """
         Infer the return type when ``spec`` is called with ``arg_specs``.
 
-        For FuncSpec (user-defined / axiom-bootstrapped functions) the
+        For TypeDef (user-defined / axiom-bootstrapped functions) the
         return type is explicit.  For dynamic callables the axiom is
         consulted.
 
-        DeferredSpec / BehaviorSpec with a concrete ``value_type_name``
+        TypeDef / TypeDef with a concrete ``value_type_name``
         (i.e. not ``"auto"`` / ``"any"``) return the declared value type
         directly, enabling compile-time type inference at call sites:
 
@@ -563,7 +562,7 @@ class SpecRegistry:
             ret_ref = getattr(spec, "return_type", None)
             if ret_ref is not None and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")
-        # ClassSpec called as constructor returns an instance of itself
+        # TypeDef called as constructor returns an instance of itself
         if spec.kind == TypeKind.CLASS.value:
             return spec
         # Typed deferred / behavior: carry the expected value type explicitly.
@@ -643,7 +642,7 @@ class SpecRegistry:
         Resolve the type of an attribute / method on ``spec``.
 
         Searches own members first, then the parent class chain.
-        For ``LazySpec`` placeholders the real spec is looked up first so
+        For ``TypeDef`` placeholders the real spec is looked up first so
         that cross-file imports resolve correctly during semantic analysis.
         """
         # Transparently resolve lazy placeholders created by the scheduler.
@@ -661,10 +660,10 @@ class SpecRegistry:
                 # Override is applied regardless of the axiom's declared return type —
                 # specialization is based on the container's runtime type parameter.
                 #
-                # ListSpec[T]:
+                # TypeDef[T]:
                 #   pop()         → T  (was "any")
                 #   __getitem__() → T  (was "any", G3)
-                # DictSpec[K,V]:
+                # TypeDef[K,V]:
                 #   pop(key)  → V  (was "any")
                 #   get(key)  → V  (was "any", G3)
                 #   values()  → list[V]  (was bare "list", G3)
@@ -792,7 +791,7 @@ class SpecRegistry:
             if self.is_dynamic(target):
                 return True
             # A dynamic callable (fn / auto) can be assigned to any callable slot,
-            # including typed DeferredSpec/BehaviorSpec (e.g. `fn f = make_adder()`).
+            # including typed TypeDef/TypeDef (e.g. `fn f = make_adder()`).
             if self.is_callable(target):
                 return True
             return False
@@ -862,10 +861,10 @@ class SpecRegistry:
 
         Special case: ``fn[TYPE]`` — internal subscript for expression-side return-type inference.
         ``fn f = lambda -> int: EXPR`` causes the semantic analyser to build a
-        ``DeferredSpec(value_type_name="int")`` via this path.  This enables
+        ``TypeDef(value_type_name="int")`` via this path.  This enables
         call-site inference: ``int r = f()`` compiles without SEM_003.
         """
-        # Special case: fn[RETURN_TYPE] → DeferredSpec(value_type_name=RETURN_TYPE)
+        # Special case: fn[RETURN_TYPE] → TypeDef(value_type_name=RETURN_TYPE)
         if spec.name == "fn" and arg_specs:
             value_type = arg_specs[0]
             return self.factory.create_deferred(

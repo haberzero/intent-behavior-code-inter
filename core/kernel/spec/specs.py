@@ -1,11 +1,11 @@
 """
 core/kernel/spec/specs.py
 
-Built-in spec prototype constants and backward-compatible aliases.
+Built-in spec prototype constants.
 
 All concrete *Spec subclasses have been unified into ``TypeDef``.
-The names below are simple aliases kept for import compatibility;
-dispatch should use the ``kind`` field rather than ``isinstance``.
+Use ``TypeDef`` directly when constructing or type-annotating specs;
+dispatch on the ``kind`` field rather than ``isinstance``.
 """
 
 from __future__ import annotations
@@ -41,9 +41,9 @@ DEFERRED_SPEC   = TypeDef(name="deferred", kind=TypeKind.CALLABLE_INSTANCE.value
 OPTIONAL_SPEC   = TypeDef(name="Optional", kind=TypeKind.OPTIONAL.value, is_nullable=True,  is_user_defined=False)
 EXCEPTION_SPEC  = TypeDef(name="Exception", kind=TypeKind.CLASS.value,   is_nullable=True,  is_user_defined=False)
 
-# LLM exception hierarchy — ClassSpec with parent_name for proper inheritance chain.
+# LLM exception hierarchy — TypeDef(kind=CLASS) with parent_name for proper inheritance chain.
 # LLMError IS-A Exception; LLMParseError/LLMRetryExhaustedError/LLMCallError IS-A LLMError.
-# Exception itself is also a ClassSpec so user code can write `class MyError(Exception):`.
+# Exception itself is also a class spec so user code can write `class MyError(Exception):`.
 LLM_ERROR_SPEC = TypeDef(name="LLMError", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
                           parent_name="Exception")
 LLM_PARSE_ERROR_SPEC = TypeDef(name="LLMParseError", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
@@ -82,23 +82,3 @@ INTENT_SPEC = TypeDef(name="Intent", kind=TypeKind.CLASS.value, is_nullable=True
 INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
                                parent_name="Object")
 
-
-# ------------------------------------------------------------------ #
-# Backward-compatible class aliases                                    #
-# ------------------------------------------------------------------ #
-# All former concrete subclasses now resolve to TypeDef.
-# Existing code that imports these names continues to work;
-# isinstance checks succeed for any TypeDef instance.
-
-FuncSpec        = TypeDef
-ClassSpec       = TypeDef
-ListSpec        = TypeDef
-TupleSpec       = TypeDef
-DictSpec        = TypeDef
-OptionalSpec    = TypeDef
-BoundMethodSpec = TypeDef
-ModuleSpec      = TypeDef
-DeferredSpec    = TypeDef
-BehaviorSpec    = TypeDef
-CallableSigSpec = TypeDef
-LazySpec        = TypeDef

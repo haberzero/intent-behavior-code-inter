@@ -1,9 +1,10 @@
 from typing import Dict, Any, Optional, List
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.spec import (
-    IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
+    IbSpec,
+    TypeDef,
 )
-from core.kernel.spec.specs import DeferredSpec, BehaviorSpec, CallableSigSpec, OptionalSpec
+from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.base.enums import RegistrationState
@@ -39,10 +40,10 @@ class ArtifactRehydrator:
                         self.memo[uid] = desc
                         break
 
-    def hydrate_all(self, registry: Optional[Any] = None) -> List[ClassSpec]:
+    def hydrate_all(self, registry: Optional[Any] = None) -> List[TypeDef]:
         """
         水化池中所有类型。采用两阶段加载：先创建所有 Shell，再填充详细信息。
-        返回所有被成功水化的 ClassSpec。
+        返回所有被成功水化的 TypeDef。
         """
         if registry:
              registry.verify_level(RegistrationState.STAGE_5_HYDRATION.value)
@@ -87,10 +88,10 @@ class ArtifactRehydrator:
         
         # 映射驱动的 Shell 创建
         shell_creators = {
-            TypeKind.LIST.value: lambda: ListSpec(name="list", is_user_defined=False),
-            TypeKind.DICT.value: lambda: DictSpec(name="dict", is_user_defined=False),
-            TypeKind.FUNCTION.value: lambda: FuncSpec(name=name or "callable", is_user_defined=False),
-            TypeKind.CALLABLE_SIG.value: lambda: CallableSigSpec(
+            TypeKind.LIST.value: lambda: TypeDef(name="list", is_user_defined=False),
+            TypeKind.DICT.value: lambda: TypeDef(name="dict", is_user_defined=False),
+            TypeKind.FUNCTION.value: lambda: TypeDef(name=name or "callable", is_user_defined=False),
+            TypeKind.CALLABLE_SIG.value: lambda: TypeDef(
                 name="fn",
                 param_type_names=list(data.get("param_type_names", [])),
                 param_type_modules=[None] * len(data.get("param_type_names", [])),
@@ -98,8 +99,8 @@ class ArtifactRehydrator:
                 is_user_defined=False,
             ),
             TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
-            TypeKind.BOUND_METHOD.value: lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
-            TypeKind.MODULE.value: lambda: ModuleSpec(name=name, is_user_defined=False),
+            TypeKind.BOUND_METHOD.value: lambda: TypeDef(name="bound_method", is_user_defined=False),
+            TypeKind.MODULE.value: lambda: TypeDef(name=name, is_user_defined=False),
             # Callable-instance specs ("deferred[T]" / "behavior[T]") — reconstruct
             # the proper variant so that get_base_name() routes to the matching
             # axiom ("deferred" / "behavior").  The axiom selection key is the

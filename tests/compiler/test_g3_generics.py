@@ -16,7 +16,7 @@ Covers:
 import pytest
 from core.engine import IBCIEngine
 from core.kernel.factory import create_default_registry
-from core.kernel.spec import ListSpec, DictSpec
+from core.kernel.spec import TypeDef
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +63,7 @@ class TestG3ListGetitem:
         """list[int].__getitem__ method spec should return 'int', not 'any'."""
         reg = make_registry()
         list_int = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
-        assert isinstance(list_int, ListSpec)
+        assert isinstance(list_int, TypeDef)
 
         getitem_spec = reg.resolve_member(list_int, "__getitem__")
         assert getitem_spec is not None
@@ -127,7 +127,7 @@ class TestG3DictGet:
         dict_si = reg.resolve_specialization(
             reg.resolve("dict"), [reg.resolve("str"), reg.resolve("int")]
         )
-        assert isinstance(dict_si, DictSpec)
+        assert isinstance(dict_si, TypeDef)
 
         get_spec = reg.resolve_member(dict_si, "get")
         assert get_spec is not None
@@ -259,7 +259,7 @@ class TestG3NestedGenerics:
         reg = make_registry()
         list_int = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
         list_list_int = reg.resolve_specialization(reg.resolve("list"), [list_int])
-        assert isinstance(list_list_int, ListSpec)
+        assert isinstance(list_list_int, TypeDef)
         assert list_list_int.element_type.head == "list[int]"
 
         result = reg.resolve_subscript(list_list_int, reg.resolve("int"))

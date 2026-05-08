@@ -8,7 +8,7 @@ from core.kernel import symbols
 from core.kernel.symbols import (
     SymbolTable, SymbolKind, TypeSymbol, FunctionSymbol, VariableSymbol
 )
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec
+from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 
@@ -49,7 +49,7 @@ class SemanticAnalyzer:
         self._deferred_desc = self.registry.resolve("deferred")
 
         self.current_return_type: Optional[IbSpec] = None
-        self.current_class: Optional[ClassSpec] = None
+        self.current_class: Optional[TypeDef] = None
         self.in_behavior_expr = False
 
         # When inside an `-> auto` function, accumulates all observed return types.
@@ -417,13 +417,13 @@ class SemanticAnalyzer:
 
     def _check_callable_sig_match(
         self,
-        sig: 'FuncSpec',
-        actual: 'FuncSpec',
+        sig: 'TypeDef',
+        actual: 'TypeDef',
         node: ast.IbASTNode,
     ) -> None:
         """
-        Best-effort structural compatibility check between a ``CallableSigSpec``
-        constraint and a concrete ``FuncSpec``.
+        Best-effort structural compatibility check between a ``TypeDef``
+        constraint and a concrete ``TypeDef``.
 
         Called from ``visit_IbAssign`` when::
 
@@ -433,7 +433,7 @@ class SemanticAnalyzer:
         return type.  Only fires when *both* sides carry known concrete types;
         dynamic (``any`` / ``auto``) values are always accepted silently.
         """
-        from core.kernel.spec.specs import CallableSigSpec as _CSS
+        from core.kernel.spec.specs import TypeDef as _CSS
         expected_params = sig.param_type_names or []
         actual_params = actual.param_type_names or []
 
@@ -629,9 +629,9 @@ class SemanticAnalyzer:
             self.symbol_table = sym.owned_scope
             
         old_class = self.current_class
-        # 使用 is_class() 判定，消除对 ClassSpec 的直接依赖
+        # 使用 is_class() 判定，消除对 TypeDef 的直接依赖
         if sym.spec and sym.spec.kind == TypeKind.CLASS.value:
-            # 内部仍需类型转换为 ClassSpec 以支持 members 访问，但判定逻辑已公理化
+            # 内部仍需类型转换为 TypeDef 以支持 members 访问，但判定逻辑已公理化
             self.current_class = sym.spec
         else:
             self.current_class = None # Should not happen
@@ -697,9 +697,9 @@ class SemanticAnalyzer:
         # 没有返回类型标注时默认 auto（编译期推断），而非 void
         ret_type = self._resolve_type(node.returns) if node.returns else self._auto_desc
         
-        # 函数 spec 元数据回填：直接重建 FuncSpec 携带分析得到的签名。
+        # 函数 spec 元数据回填：直接重建 TypeDef 携带分析得到的签名。
         # 对顶层函数 Pass 2 已正确设置 spec，此处为幂等操作；对嵌套函数则
-        # 修复 Known Limit 2 — 它们的 FuncSpec 未被 Pass 2 (TypeResolver) 处理。
+        # 修复 Known Limit 2 — 它们的 TypeDef 未被 Pass 2 (TypeResolver) 处理。
         updated_spec = self.registry.factory.create_func(
             name=node.name,
             param_type_names=[p.name for p in param_types],
@@ -729,7 +729,7 @@ class SemanticAnalyzer:
             self._define_var("self", saved_class, node)
             
             # super() 支持：在类方法作用域内注入 super 符号。
-            # 类型：如果父类存在则为父类类型（ClassSpec），否则为 any。
+            # 类型：如果父类存在则为父类类型（TypeDef），否则为 any。
             # super 符号使用固定 UID "builtin:super"，与运行时 IbSuperProxy 注入一致。
             parent_spec = None
             if saved_class.parent_type is not None:
@@ -817,7 +817,7 @@ class SemanticAnalyzer:
         # [Pass 2 backfill] 将解析后的方法签名回填到类成员表的 MethodMemberSpec 中。
         # 在 Pass 1（Collector）中，MethodMemberSpec 只记录方法名和占位类型，
         # 返回类型和参数类型为默认值（"void"/"[]"）。
-        # Pass 2 结束后，sym.spec（FuncSpec）携带了正确签名，可以回填。
+        # Pass 2 结束后，sym.spec（TypeDef）携带了正确签名，可以回填。
         # 这使得 resolve_member('__call__') 能够返回正确的方法签名，
         # 从而支持 fn 变量持有可调用类实例后的准确调用返回类型推断。
         if saved_class and node.name in saved_class.members:
@@ -1156,7 +1156,7 @@ class SemanticAnalyzer:
             target_type = self.registry.resolve("callable") or self._any_desc
 
         # D3: fn[(...)→(...)] 签名标注时，检查结构签名匹配
-        from core.kernel.spec.specs import CallableSigSpec as _CSS
+        from core.kernel.spec.specs import TypeDef as _CSS
         if declared_type is not None and declared_type.kind == TypeKind.CALLABLE_SIG.value and val_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             self._check_callable_sig_match(declared_type, val_type, node)
 
@@ -1202,7 +1202,7 @@ class SemanticAnalyzer:
                 val_type = self._str_desc
 
         if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
-            from core.kernel.spec.specs import DeferredSpec as _DS
+            from core.kernel.spec.specs import TypeDef as _DS
             is_fn_decl = declared_type and (
                 declared_type.name == "fn" or (declared_type.kind in (TypeKind.CALLABLE_INSTANCE.value,))
             )
@@ -1392,12 +1392,12 @@ class SemanticAnalyzer:
         # 获取 Exception 基础类型描述符（回退值）
         exc_type = self.prelude.get_builtin_types().get("Exception", self._any_desc)
 
-        # 类型窄化：若 handler 指定了单一 ClassSpec 类型（如 except LLMParseError as e:），
+        # 类型窄化：若 handler 指定了单一 TypeDef 类型（如 except LLMParseError as e:），
         # 则将捕获变量的编译期类型窄化为该类型，而非固定为 Exception。
         # 安全回退情况：
         #   - None（裸 except:）→ 使用 Exception（见上）
-        #   - TupleSpec（except (A, B) as e:）→ 不是 ClassSpec，回退 Exception
-        #   - 未知符号（visit 返回 any/None）→ 不是 ClassSpec，回退 Exception
+        #   - TypeDef（except (A, B) as e:）→ 不是 TypeDef，回退 Exception
+        #   - 未知符号（visit 返回 any/None）→ 不是 TypeDef，回退 Exception
         if resolved_exc_type and resolved_exc_type.kind == TypeKind.CLASS.value:
             exc_type = resolved_exc_type
 
@@ -1645,7 +1645,7 @@ class SemanticAnalyzer:
             for elt in node.elts[1:]:
                 self.visit(elt)
         
-        # [Axiom-Driven] 使用 Factory 创建 ListSpec
+        # [Axiom-Driven] 使用 Factory 创建 TypeDef
         # 严格模式：直接使用 Registry 工厂，并进行即时注册以注入公理
         desc = self.registry.factory.create_list(element_type.name if element_type else "any")
         self.registry.register(desc)
@@ -1665,7 +1665,7 @@ class SemanticAnalyzer:
             for val in node.values[1:]:
                 self.visit(val)
                 
-        # [Axiom-Driven] 使用 Factory 创建 DictSpec
+        # [Axiom-Driven] 使用 Factory 创建 TypeDef
         # 严格模式：直接使用 Registry 工厂并注册
         desc = self.registry.factory.create_dict(key_type.name if key_type else "any", val_type.name if val_type else "any")
         self.registry.register(desc)
@@ -1805,13 +1805,13 @@ class SemanticAnalyzer:
                 return func_type
         
         # 0b. 变量持有可调用类实例的特殊处理：
-        # 当 fn f = instance_with_call 时，f 的类型是 ClassSpec（如 Adder）。
-        # 调用 f(args) 时应通过 __call__ 方法推断返回类型，而非构造器语义（返回 ClassSpec 自身）。
-        # 仅在 node.func 是变量引用（非类名引用）且该变量类型是带 __call__ 的 ClassSpec 时生效。
+        # 当 fn f = instance_with_call 时，f 的类型是 TypeDef（如 Adder）。
+        # 调用 f(args) 时应通过 __call__ 方法推断返回类型，而非构造器语义（返回 TypeDef 自身）。
+        # 仅在 node.func 是变量引用（非类名引用）且该变量类型是带 __call__ 的 TypeDef 时生效。
         if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.symbol_table.resolve(node.func.id)
             if sym and not sym.is_type and '__call__' in func_type.members:
-                from core.kernel.spec import FuncSpec as _FuncSpec
+                from core.kernel.spec import TypeDef as _FuncSpec
                 call_spec = self.registry.resolve_member(func_type, '__call__')
                 if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                     return self.registry.resolve(call_spec.return_type.head) or self._any_desc
@@ -1822,10 +1822,10 @@ class SemanticAnalyzer:
             self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             return self._any_desc
 
-        # D3: structural signature matching for CallableSigSpec (fn[(...)→(...)] parameters).
+        # D3: structural signature matching for TypeDef (fn[(...)→(...)] parameters).
         # When the callee type carries an explicit signature constraint, validate
         # arg count and argument types at the call site.
-        from core.kernel.spec.specs import CallableSigSpec as _CSS
+        from core.kernel.spec.specs import TypeDef as _CSS
         if func_type.kind == TypeKind.CALLABLE_SIG.value:
             expected_names = func_type.param_type_names or []
             if len(arg_types) != len(expected_names):
@@ -1855,7 +1855,7 @@ class SemanticAnalyzer:
         # G2: note-level warning when a specialized container write method receives a
         # type that does not match the element type.  This is a convenience hint —
         # it is non-blocking and does not prevent compilation.
-        from core.kernel.spec.specs import FuncSpec as _FuncSpec
+        from core.kernel.spec.specs import TypeDef as _FuncSpec
         param_type_names = getattr(func_type, "param_type_names", [])
         if func_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value) and param_type_names:
             for i, (expected_name, actual_type) in enumerate(
@@ -1905,7 +1905,7 @@ class SemanticAnalyzer:
         7. 若 body 是非行为表达式且 returns_type 存在，检查 body 类型与 returns_type
            类型的兼容性（编译期类型校验）。
         8. lambda 表达式自身的 spec：若 returns_type 携带具体类型则返回带 value_type
-           的 BehaviorSpec/DeferredSpec（使 ``fn f = lambda -> int: EXPR`` 时
+           的 TypeDef/TypeDef（使 ``fn f = lambda -> int: EXPR`` 时
            ``int r = f()`` 能在编译期通过类型决议），否则返回通用 spec。
         """
         # 1. 确定返回类型：来自表达式侧 ``-> TYPE`` 标注（node.returns）。
@@ -2091,7 +2091,7 @@ class SemanticAnalyzer:
             
         elif isinstance(node, ast.IbCallableType):
             # D3: callable signature constraint fn[(param_types) -> return_type]
-            from core.kernel.spec.specs import CallableSigSpec as _CSS
+            from core.kernel.spec.specs import TypeDef as _CSS
             param_specs = [self._resolve_type(pt, safe=safe) for pt in node.param_types]
             ret_spec = (
                 self._resolve_type(node.return_type, safe=safe)

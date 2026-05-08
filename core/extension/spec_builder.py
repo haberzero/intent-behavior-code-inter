@@ -1,17 +1,25 @@
 from typing import List, Optional, Union
 
 from core.kernel.spec import (
-    IbSpec, ModuleSpec, ClassSpec, FuncSpec,
-    MethodMemberSpec, MemberSpec,
-    INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC,
-    VOID_SPEC, ANY_SPEC, LIST_SPEC, DICT_SPEC,
+    IbSpec,
+    TypeDef,
+    MethodMemberSpec,
+    MemberSpec,
+    INT_SPEC,
+    FLOAT_SPEC,
+    STR_SPEC,
+    BOOL_SPEC,
+    VOID_SPEC,
+    ANY_SPEC,
+    LIST_SPEC,
+    DICT_SPEC,
 )
 
 
 class ClassSpecBuilder:
     """用于构建类元数据的子构建器"""
     def __init__(self, name: str, parent: Optional[str] = None):
-        self.spec = ClassSpec(name=name, parent_name=parent, is_user_defined=False)
+        self.spec = TypeDef(name=name, parent_name=parent, is_user_defined=False)
 
     def field(self, name: str, type: Union[str, IbSpec] = "any") -> 'ClassSpecBuilder':
         type_name = type if isinstance(type, str) else type.name
@@ -50,7 +58,7 @@ class SpecBuilder:
 
     def __init__(self, name: str):
         self.name = name
-        self._spec = ModuleSpec(name=name, is_user_defined=False)
+        self._spec = TypeDef(name=name, is_user_defined=False)
         self._current_class_builder: Optional[ClassSpecBuilder] = None
 
     def _resolve_type_name(self, t: Union[str, IbSpec]) -> str:
@@ -100,6 +108,6 @@ class SpecBuilder:
             self._current_class_builder.method(name, params, returns)
         return self
 
-    def build(self) -> ModuleSpec:
-        """构建并返回 ModuleSpec"""
+    def build(self) -> TypeDef:
+        """构建并返回 TypeDef"""
         return self._spec
