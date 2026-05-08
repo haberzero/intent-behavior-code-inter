@@ -163,7 +163,7 @@ class TestBehaviorSpecReturnTypeInference:
         reg = create_default_registry()
         bs = reg.factory.create_behavior(value_type_name="int")
         assert isinstance(bs, BehaviorSpec)
-        assert bs.value_type_name == "int"
+        assert bs.value_type.head == "int"
         # capture_mode is a property of the runtime *value* (IbBehavior),
         # not of the type spec — see TypeKind.CALLABLE_INSTANCE docstring.
         assert bs.get_base_name() == "behavior"
@@ -224,7 +224,7 @@ class TestBehaviorSpecReturnTypeInference:
         # 不再通过 isinstance 区分，语义区分应由 kind/get_base_name 驱动。
         assert ds.kind != "behavior"
         assert ds.get_base_name() == "deferred"
-        assert ds.value_type_name == "int"
+        assert ds.value_type.head == "int"
         assert ds.name == "deferred[int]"
 
     def test_deferred_spec_resolve_return(self):

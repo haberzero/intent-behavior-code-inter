@@ -113,7 +113,7 @@ class TestG2ListWriteMethodSpecialization:
         list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
         pop_spec = reg.resolve_member(list_spec, "pop")
         assert pop_spec is not None
-        assert pop_spec.return_type_name == "int"
+        assert pop_spec.return_type.head == "int"
 
     def test_unspecialized_list_append_stays_any(self):
         """Plain list (element_type=any) append keeps 'any' param."""

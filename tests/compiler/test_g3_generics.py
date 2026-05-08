@@ -67,8 +67,8 @@ class TestG3ListGetitem:
 
         getitem_spec = reg.resolve_member(list_int, "__getitem__")
         assert getitem_spec is not None
-        assert getitem_spec.return_type_name == "int", (
-            f"Expected 'int', got '{getitem_spec.return_type_name}'"
+        assert getitem_spec.return_type.head == "int", (
+            f"Expected 'int', got '{getitem_spec.return_type.head}'"
         )
 
     def test_getitem_return_type_for_str_list(self):
@@ -77,7 +77,7 @@ class TestG3ListGetitem:
         list_str = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("str")])
         getitem_spec = reg.resolve_member(list_str, "__getitem__")
         assert getitem_spec is not None
-        assert getitem_spec.return_type_name == "str"
+        assert getitem_spec.return_type.head == "str"
 
     def test_unspecialized_list_getitem_stays_any(self):
         """Plain list (element_type=any) __getitem__ keeps 'any' return."""
@@ -85,7 +85,7 @@ class TestG3ListGetitem:
         list_spec = reg.resolve("list")
         getitem_spec = reg.resolve_member(list_spec, "__getitem__")
         assert getitem_spec is not None
-        assert getitem_spec.return_type_name == "any"
+        assert getitem_spec.return_type.head == "any"
 
     def test_subscript_operator_returns_element_type(self):
         """list[int] subscript via [] operator returns int at compile time (no SEM_003)."""
@@ -131,8 +131,8 @@ class TestG3DictGet:
 
         get_spec = reg.resolve_member(dict_si, "get")
         assert get_spec is not None
-        assert get_spec.return_type_name == "int", (
-            f"Expected 'int', got '{get_spec.return_type_name}'"
+        assert get_spec.return_type.head == "int", (
+            f"Expected 'int', got '{get_spec.return_type.head}'"
         )
 
     def test_get_return_type_for_str_value(self):
@@ -143,7 +143,7 @@ class TestG3DictGet:
         )
         get_spec = reg.resolve_member(dict_is, "get")
         assert get_spec is not None
-        assert get_spec.return_type_name == "str"
+        assert get_spec.return_type.head == "str"
 
     def test_unspecialized_dict_get_stays_any(self):
         """Plain dict.get() keeps 'any' return type."""
@@ -151,7 +151,7 @@ class TestG3DictGet:
         dict_spec = reg.resolve("dict")
         get_spec = reg.resolve_member(dict_spec, "get")
         assert get_spec is not None
-        assert get_spec.return_type_name == "any"
+        assert get_spec.return_type.head == "any"
 
     def test_dict_subscript_returns_value_type(self):
         """dict[str,int] subscript returns int at compile time."""
@@ -176,8 +176,8 @@ class TestG3DictValuesKeys:
         )
         values_spec = reg.resolve_member(dict_si, "values")
         assert values_spec is not None
-        assert values_spec.return_type_name == "list[int]", (
-            f"Expected 'list[int]', got '{values_spec.return_type_name}'"
+        assert values_spec.return_type.head == "list[int]", (
+            f"Expected 'list[int]', got '{values_spec.return_type.head}'"
         )
 
     def test_keys_return_type_is_list_of_key_type(self):
@@ -188,8 +188,8 @@ class TestG3DictValuesKeys:
         )
         keys_spec = reg.resolve_member(dict_si, "keys")
         assert keys_spec is not None
-        assert keys_spec.return_type_name == "list[str]", (
-            f"Expected 'list[str]', got '{keys_spec.return_type_name}'"
+        assert keys_spec.return_type.head == "list[str]", (
+            f"Expected 'list[str]', got '{keys_spec.return_type.head}'"
         )
 
     def test_unspecialized_dict_values_stays_list(self):
@@ -198,7 +198,7 @@ class TestG3DictValuesKeys:
         dict_spec = reg.resolve("dict")
         values_spec = reg.resolve_member(dict_spec, "values")
         assert values_spec is not None
-        assert values_spec.return_type_name == "list"
+        assert values_spec.return_type.head == "list"
 
     def test_values_list_spec_is_registered(self):
         """After resolving dict[str,int].values(), list[int] should be in registry."""
@@ -260,7 +260,7 @@ class TestG3NestedGenerics:
         list_int = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
         list_list_int = reg.resolve_specialization(reg.resolve("list"), [list_int])
         assert isinstance(list_list_int, ListSpec)
-        assert list_list_int.element_type_name == "list[int]"
+        assert list_list_int.element_type.head == "list[int]"
 
         result = reg.resolve_subscript(list_list_int, reg.resolve("int"))
         assert result is not None

@@ -463,8 +463,8 @@ class SemanticAnalyzer:
                 )
 
         # Return type compatibility
-        exp_ret = self.registry.resolve(sig.return_type_name)
-        act_ret = self.registry.resolve(actual.return_type_name)
+        exp_ret = self.registry.resolve(sig.return_type.head)
+        act_ret = self.registry.resolve(actual.return_type.head)
         if (exp_ret and act_ret
                 and not self.registry.is_dynamic(exp_ret)
                 and not self.registry.is_dynamic(act_ret)
@@ -472,7 +472,7 @@ class SemanticAnalyzer:
             hint = self.registry.get_diff_hint(act_ret, exp_ret)
             self.error(
                 f"Callable signature mismatch: return type expects "
-                f"'{sig.return_type_name}', but the callable returns '{actual.return_type_name}'.",
+                f"'{sig.return_type.head}', but the callable returns '{actual.return_type.head}'.",
                 node, code="SEM_003", hint=hint,
             )
 
@@ -837,8 +837,8 @@ class SemanticAnalyzer:
             if isinstance(m, _MethodMemberSpec) and sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 # 跳过 self（类方法的第一个参数）
                 user_params = param_types[1:] if saved_class else param_types
-                m.param_type_names = [p.name for p in user_params]
-                m.return_type_name = sym.spec.return_type_name
+                m.param_types = [TypeRef.of(p.name, getattr(p, "module_path", None)) for p in user_params]
+                m.return_type = sym.spec.return_type
 
         return self._void_desc
 
@@ -1826,7 +1826,7 @@ class SemanticAnalyzer:
                 from core.kernel.spec import FuncSpec as _FuncSpec
                 call_spec = self.registry.resolve_member(func_type, '__call__')
                 if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                    return self.registry.resolve(call_spec.return_type_name) or self._any_desc
+                    return self.registry.resolve(call_spec.return_type.head) or self._any_desc
         
         # 1. 检查是否可调用 (使用 Trait 契约)
         call_trait = self.registry.get_call_cap(func_type)

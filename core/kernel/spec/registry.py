@@ -577,18 +577,17 @@ class SpecRegistry:
             int result = f()   # resolves to int, no SEM_003
         """
         if spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-            return_type_name = getattr(spec, "return_type_name", None)
-            return_type_module = getattr(spec, "return_type_module", None)
-            if return_type_name:
-                return self.resolve(return_type_name, return_type_module) or self.resolve("any")
+            ret_ref = getattr(spec, "return_type", None)
+            if ret_ref is not None and ret_ref.head:
+                return self.resolve_typeref(ret_ref) or self.resolve("any")
         # ClassSpec called as constructor returns an instance of itself
         if spec.kind == TypeKind.CLASS.value:
             return spec
         # Typed deferred / behavior: carry the expected value type explicitly.
-        value_type_name = getattr(spec, "value_type_name", None)
-        value_type_module = getattr(spec, "value_type_module", None)
-        if spec.kind in (TypeKind.CALLABLE_INSTANCE.value,) and value_type_name not in ("auto", "any", None, ""):
-            return self.resolve(value_type_name, value_type_module) or self.resolve("auto")
+        if spec.kind == TypeKind.CALLABLE_INSTANCE.value:
+            v_ref = getattr(spec, "value_type", None)
+            if v_ref is not None and v_ref.head not in ("auto", "any", "", None):
+                return self.resolve_typeref(v_ref) or self.resolve("auto")
         axiom = self.get_axiom(spec)
         if axiom:
             cap = axiom.get_call_capability()
@@ -631,7 +630,7 @@ class SpecRegistry:
             # Multi-type list: element access returns any (user must cast explicitly)
             if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_type_names', None):
                 return self.resolve("any")
-            return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
+            return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom:
             cap = axiom.get_iter_capability()
@@ -652,9 +651,9 @@ class SpecRegistry:
                 # Multi-type list: subscript access returns any
                 if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_type_names', None):
                     return self.resolve("any")
-                return self.resolve(spec.element_type_name, spec.element_type_module) or self.resolve("any")
+                return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         if spec.kind == TypeKind.DICT.value:
-            return self.resolve(spec.value_type_name, spec.value_type_module) or self.resolve("any")
+            return self.resolve(spec.value_type.head, spec.value_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom:
             cap = axiom.get_subscript_capability()
@@ -695,26 +694,26 @@ class SpecRegistry:
                 #   get(key)  → V  (was "any", G3)
                 #   values()  → list[V]  (was bare "list", G3)
                 #   keys()    → list[K]  (was bare "list", G3)
-                effective_return = member.return_type_name
-                effective_return_module = member.return_type_module
+                effective_return = member.return_type.head
+                effective_return_module = member.return_type.module
 
                 if (
                     spec.kind == TypeKind.LIST.value
-                    # Multi-type lists (list[int,str,...]) have allowed_element_type_names set and
+                    # Multi-type lists (list[int,str,...]) have allowed_element_types set and
                     # use element_type="any" intentionally — skip G3 specialization for them.
-                    and not getattr(spec, "allowed_element_type_names", None)
+                    and not spec.allowed_element_types
                 ):
-                    elem = getattr(spec, "element_type_name", "any")
+                    elem = spec.element_type.head
                     if elem != "any" and attr_name in ("pop", "__getitem__"):
                         effective_return = elem
-                        effective_return_module = getattr(spec, "element_type_module", None)
+                        effective_return_module = spec.element_type.module
                 elif spec.kind == TypeKind.DICT.value:
-                    val = getattr(spec, "value_type_name", "any")
-                    key = getattr(spec, "key_type_name", "any")
+                    val = spec.value_type.head
+                    key = spec.key_type.head
                     if attr_name in ("pop", "get") and val != "any":
                         # G3: dict[K,V].get(key) → V  (same as pop)
                         effective_return = val
-                        effective_return_module = getattr(spec, "value_type_module", None)
+                        effective_return_module = spec.value_type.module
                     elif attr_name == "values" and val != "any":
                         # G3: dict[K,V].values() → list[V]
                         # Eagerly register list[V] if not yet in registry so that
@@ -751,18 +750,18 @@ class SpecRegistry:
                 if (
                     spec.kind == TypeKind.LIST.value
                     and attr_name in ("append", "insert", "__setitem__")
-                    and getattr(spec, "element_type_name", "any") != "any"
-                    and not getattr(spec, "allowed_element_type_names", None)
+                    and spec.element_type.head != "any"
+                    and not spec.allowed_element_types
                 ):
-                    elem = spec.element_type_name
-                    elem_mod = getattr(spec, "element_type_module", None)
+                    elem = spec.element_type.head
+                    elem_mod = spec.element_type.module
                     # last param is always the element (value/item)
                     if effective_params:
                         effective_params[-1] = elem
                         effective_param_modules[-1] = elem_mod
                 elif spec.kind == TypeKind.OPTIONAL.value:
-                    wrapped = getattr(spec, "wrapped_type_name", "any")
-                    wrapped_mod = getattr(spec, "wrapped_type_module", None)
+                    wrapped = spec.wrapped_type.head
+                    wrapped_mod = spec.wrapped_type.module
                     if wrapped != "any" and attr_name in ("unwrap", "or_else"):
                         effective_return = wrapped
                         effective_return_module = wrapped_mod
@@ -782,13 +781,14 @@ class SpecRegistry:
                     is_llm=member.is_llm(),
                 )
             # Enum variant access: return the enum class type itself
-            if spec.kind == TypeKind.CLASS.value and spec.parent_name == "Enum" and spec.is_user_defined:
+            if (spec.kind == TypeKind.CLASS.value and spec.parent_type is not None
+                    and spec.parent_type.head == "Enum" and spec.is_user_defined):
                 return spec
-            return self.resolve(member.type_name, member.type_module) or self.resolve("any")
+            return self.resolve_typeref(member.type_ref) or self.resolve("any")
 
         # Walk parent chain for class specs
-        if spec.kind == TypeKind.CLASS.value and spec.parent_name:
-            parent = self.resolve(spec.parent_name, spec.parent_module)
+        if spec.kind == TypeKind.CLASS.value and spec.parent_type is not None:
+            parent = self.resolve_typeref(spec.parent_type)
             if parent and parent is not spec:
                 return self.resolve_member(parent, attr_name)
 
@@ -823,11 +823,11 @@ class SpecRegistry:
             return False
 
         if target.kind == TypeKind.OPTIONAL.value:
-            inner_target = self.resolve(target.wrapped_type_name, target.wrapped_type_module) or self.resolve("any")
+            inner_target = self.resolve(target.wrapped_type.head, target.wrapped_type.module) or self.resolve("any")
             if src.name == "None":
                 return True
             if src.kind == TypeKind.OPTIONAL.value:
-                inner_src = self.resolve(src.wrapped_type_name, src.wrapped_type_module) or self.resolve("any")
+                inner_src = self.resolve(src.wrapped_type.head, src.wrapped_type.module) or self.resolve("any")
                 return self.is_assignable(inner_src, inner_target, _visited)
             return self.is_assignable(src, inner_target, _visited)
 
@@ -843,7 +843,7 @@ class SpecRegistry:
             tgt_allowed = getattr(target, 'allowed_element_type_names', None) or []
             if src_allowed or tgt_allowed:
                 # If target is bare list, accept any list variant
-                if not tgt_allowed and target.element_type_name == "any":
+                if not tgt_allowed and target.element_type.head == "any":
                     return True
                 # If target has allowed types, source must have same or subset
                 if tgt_allowed and src_allowed:

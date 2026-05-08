@@ -333,13 +333,16 @@ class TypeDef(IbSpec):
         return out
 
     # ------------------------------------------------------------------ #
-    # Legacy flat-name accessors                                          #
     # ------------------------------------------------------------------ #
-    # These ``*_name`` / ``*_module`` properties expose the TypeRef storage
-    # under the legacy field names.  They are read-only — assignments must
-    # target the underlying TypeRef field directly.  Once all readers have
-    # migrated to ``.return_type``/``.element_type``/etc. these properties
-    # can be deleted with no further consumer changes.
+    # Legacy list / Optional accessors                                    #
+    # ------------------------------------------------------------------ #
+    # These properties expose the TypeRef storage as plain-string lists or
+    # nullable strings.  The scalar ``*_name``/``*_module`` properties have
+    # been removed; use ``spec.return_type.head`` / ``spec.element_type.module``
+    # etc. directly.  The list / Optional accessors remain because they are
+    # genuinely convenient (e.g. ``len(spec.param_type_names)`` is shorter
+    # than the equivalent TypeRef-based form) and because mass-migrating
+    # every iteration / comparison site is a separate refactor.
 
     @property
     def param_type_names(self) -> List[str]:
@@ -350,14 +353,6 @@ class TypeDef(IbSpec):
         return [t.module for t in self.param_types]
 
     @property
-    def return_type_name(self) -> str:
-        return self.return_type.head
-
-    @property
-    def return_type_module(self) -> Optional[str]:
-        return self.return_type.module
-
-    @property
     def parent_name(self) -> Optional[str]:
         return self.parent_type.head if self.parent_type is not None else None
 
@@ -366,48 +361,8 @@ class TypeDef(IbSpec):
         return self.parent_type.module if self.parent_type is not None else None
 
     @property
-    def element_type_name(self) -> str:
-        return self.element_type.head
-
-    @property
-    def element_type_module(self) -> Optional[str]:
-        return self.element_type.module
-
-    @property
     def allowed_element_type_names(self) -> List[str]:
         return [t.head for t in self.allowed_element_types]
-
-    @property
-    def key_type_name(self) -> str:
-        return self.key_type.head
-
-    @property
-    def key_type_module(self) -> Optional[str]:
-        return self.key_type.module
-
-    @property
-    def value_type_name(self) -> str:
-        return self.value_type.head
-
-    @property
-    def value_type_module(self) -> Optional[str]:
-        return self.value_type.module
-
-    @property
-    def wrapped_type_name(self) -> str:
-        return self.wrapped_type.head
-
-    @property
-    def wrapped_type_module(self) -> Optional[str]:
-        return self.wrapped_type.module
-
-    @property
-    def receiver_type_name(self) -> str:
-        return self.receiver_type.head
-
-    @property
-    def receiver_type_module(self) -> Optional[str]:
-        return self.receiver_type.module
 
     # ------------------------------------------------------------------ #
     # Structured TypeRef accessors (clean API)                            #

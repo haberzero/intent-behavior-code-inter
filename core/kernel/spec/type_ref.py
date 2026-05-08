@@ -119,67 +119,61 @@ class TypeRef:
         """
         桥接方法：从现有 IbSpec 构造对应的 TypeRef。
 
-        [INFO] 兼容层：利用各子类上的类型名字段构造结构化 TypeRef。
-        不导入 IbSpec 子类（避免循环），通过 get_base_name() 和
-        hasattr 检测字段。
+        [INFO] 通过 IbSpec 上的 TypeRef 字段（``element_type``/``key_type``/
+        ``value_type``/``wrapped_type``）直接构造结构化 TypeRef。
+        不导入 IbSpec 子类（避免循环），通过 ``get_base_name()`` 分派。
         """
         base = spec.get_base_name()
 
-        # ListSpec: element_type_name
-        if base == "list" and hasattr(spec, "element_type_name"):
-            elem_name: str = getattr(spec, "element_type_name", "any")
-            elem_mod: Optional[str] = getattr(spec, "element_type_module", None)
-            if elem_name != "any":
+        # ListSpec: element_type
+        if base == "list" and hasattr(spec, "element_type"):
+            elem_ref = getattr(spec, "element_type", None)
+            if elem_ref is not None and elem_ref.head != "any":
                 return cls(
                     head="list",
-                    args=(cls.of(elem_name, elem_mod),),
+                    args=(elem_ref,),
                     module=spec.module_path,
                 )
             return cls(head="list", args=(), module=spec.module_path)
 
-        # TupleSpec: element_type_name
-        if base == "tuple" and hasattr(spec, "element_type_name"):
-            elem_name = getattr(spec, "element_type_name", "any")
-            elem_mod = getattr(spec, "element_type_module", None)
-            if elem_name != "any":
+        # TupleSpec: element_type
+        if base == "tuple" and hasattr(spec, "element_type"):
+            elem_ref = getattr(spec, "element_type", None)
+            if elem_ref is not None and elem_ref.head != "any":
                 return cls(
                     head="tuple",
-                    args=(cls.of(elem_name, elem_mod),),
+                    args=(elem_ref,),
                     module=spec.module_path,
                 )
             return cls(head="tuple", args=(), module=spec.module_path)
 
-        # DictSpec: key_type_name + value_type_name
-        if base == "dict" and hasattr(spec, "key_type_name"):
-            key_name: str = getattr(spec, "key_type_name", "any")
-            key_mod: Optional[str] = getattr(spec, "key_type_module", None)
-            val_name: str = getattr(spec, "value_type_name", "any")
-            val_mod: Optional[str] = getattr(spec, "value_type_module", None)
+        # DictSpec: key_type + value_type
+        if base == "dict" and hasattr(spec, "key_type"):
+            key_ref = getattr(spec, "key_type", cls.of("any"))
+            val_ref = getattr(spec, "value_type", cls.of("any"))
             return cls(
                 head="dict",
-                args=(cls.of(key_name, key_mod), cls.of(val_name, val_mod)),
+                args=(key_ref, val_ref),
                 module=spec.module_path,
             )
 
-        # DeferredSpec / BehaviorSpec: value_type_name
-        if base in ("deferred", "behavior") and hasattr(spec, "value_type_name"):
-            val_name = getattr(spec, "value_type_name", "auto")
-            val_mod = getattr(spec, "value_type_module", None)
-            if val_name not in ("auto", "any", None, ""):
+        # DeferredSpec / BehaviorSpec: value_type
+        if base in ("deferred", "behavior") and hasattr(spec, "value_type"):
+            val_ref = getattr(spec, "value_type", None)
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
                 return cls(
                     head=base,
-                    args=(cls.of(val_name, val_mod),),
+                    args=(val_ref,),
                     module=spec.module_path,
                 )
             return cls(head=base, args=(), module=spec.module_path)
 
-        # OptionalSpec: wrapped_type_name
-        if base == "Optional" and hasattr(spec, "wrapped_type_name"):
-            wrapped_name = getattr(spec, "wrapped_type_name", "any")
-            wrapped_mod = getattr(spec, "wrapped_type_module", None)
+        # OptionalSpec: wrapped_type
+        if base == "Optional" and hasattr(spec, "wrapped_type"):
+            wrapped_ref = getattr(spec, "wrapped_type", cls.of("any"))
             return cls(
                 head="Optional",
-                args=(cls.of(wrapped_name, wrapped_mod),),
+                args=(wrapped_ref,),
                 module=spec.module_path,
             )
 

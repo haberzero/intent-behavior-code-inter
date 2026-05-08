@@ -85,7 +85,7 @@ class ContractValidator:
                     line=0, column=0, code="SEM_002"
                 )
 
-        if func_desc.return_type_name is None:
+        if func_desc.return_type.head is None:
             self.issue_tracker.report_error(
                 f"Contract Violation: Global function '{func_desc.name}' has unhydrated return type.",
                 file_path="<metadata>",
