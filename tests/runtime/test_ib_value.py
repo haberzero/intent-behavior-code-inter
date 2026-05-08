@@ -10,7 +10,7 @@ import pytest
 
 from core.engine import IBCIEngine
 from core.runtime.factory import RuntimeObjectFactory
-from core.runtime.objects.builtins import IbBehavior, IbDeferred, IbList
+from core.runtime.objects.builtins import IbBehavior, IbFnCallable, IbList
 from core.runtime.objects.kernel import IbValue
 
 
@@ -47,17 +47,17 @@ def test_boxed_primitives_and_containers_are_ibvalue_backed(registry):
 def test_runtime_factory_callable_instances_are_ibvalue_backed(registry):
     factory = RuntimeObjectFactory(registry)
 
-    deferred = factory.create_deferred("node:deferred", capture_mode="snapshot")
+    fn_callable = factory.create_fn_callable("node:fn_callable", capture_mode="snapshot")
     behavior = factory.create_behavior("node:behavior", captured_intents=None, capture_mode="lambda")
 
-    assert isinstance(deferred, IbDeferred)
+    assert isinstance(fn_callable, IbFnCallable)
     assert isinstance(behavior, IbBehavior)
-    assert isinstance(deferred, IbValue)
+    assert isinstance(fn_callable, IbValue)
     assert isinstance(behavior, IbValue)
 
-    assert deferred.type_ref.head == "deferred"
-    assert deferred.payload == "node:deferred"
-    assert deferred.meta["capture_mode"] == "snapshot"
+    assert fn_callable.type_ref.head == "fn_callable"
+    assert fn_callable.payload == "node:fn_callable"
+    assert fn_callable.meta["capture_mode"] == "snapshot"
 
     assert behavior.type_ref.head == "behavior"
     assert behavior.payload == "node:behavior"

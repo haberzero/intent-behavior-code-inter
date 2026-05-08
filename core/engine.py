@@ -51,9 +51,9 @@ from core.runtime.interfaces import IsolationLevel
 
 from core.base.enums import RegistrationState
 
-# collect() 时跳过的 IBCI 类型名集合（函数/行为/延迟对象等不可序列化为原生 Python 值）
+# collect() 时跳过的 IBCI 类型名集合（函数/行为/可调用实例等不可序列化为原生 Python 值）
 _COLLECT_SKIP_TYPES: frozenset = frozenset({
-    "fn", "lambda", "snapshot", "behavior", "deferred", "callable", "void",
+    "fn", "lambda", "snapshot", "behavior", "fn_callable", "callable", "void",
 })
 
 class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
@@ -163,8 +163,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         )
         
         # Post-construction wiring: inject orchestrator and output_callback into ServiceContext.
-        # This is intentional deferred injection — Engine is the orchestrator, but it can only
-        # inject itself after the interpreter is fully constructed.
+        # Engine is the orchestrator but can only inject itself after the interpreter is fully
+        # constructed, so this wiring happens here rather than in __init__.
         if hasattr(self.interpreter, 'service_context'):
             self.interpreter.service_context.set_orchestrator(self)
             if output_callback is not None:

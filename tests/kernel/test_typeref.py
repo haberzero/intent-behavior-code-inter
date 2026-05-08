@@ -282,16 +282,16 @@ class TestFromSpec:
         assert r.head == "MyClass"
         assert r.module == "mymod"
 
-    def test_deferred_spec_typed(self):
-        spec = TypeDef(name="deferred[int]", kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="deferred", value_type=TypeRef.of("int"))
+    def test_fn_callable_spec_typed(self):
+        spec = TypeDef(name="fn_callable[int]", kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="fn_callable", value_type=TypeRef.of("int"))
         r = TypeRef.from_spec(spec)
-        assert r.head == "deferred"
+        assert r.head == "fn_callable"
         assert r.args[0].head == "int"
 
-    def test_deferred_spec_untyped(self):
-        spec = TypeDef(name="deferred", kind=TypeKind.CALLABLE_INSTANCE.value, value_type=TypeRef.of("auto"))
+    def test_fn_callable_spec_untyped(self):
+        spec = TypeDef(name="fn_callable", kind=TypeKind.CALLABLE_INSTANCE.value, value_type=TypeRef.of("auto"))
         r = TypeRef.from_spec(spec)
-        assert r.head == "deferred"
+        assert r.head == "fn_callable"
         assert r.args == ()
 
     def test_behavior_spec_typed(self):
@@ -487,13 +487,13 @@ class TestContainerSpecBridge:
 # 15. TypeDef.value_type
 # ---------------------------------------------------------------------------
 
-class TestDeferredSpecBridge:
+class TestFnCallableSpecBridge:
     def test_value_type_ref_typed(self):
-        spec = TypeDef(name="deferred[int]", value_type=TypeRef.of("int"))
+        spec = TypeDef(name="fn_callable[int]", value_type=TypeRef.of("int"))
         assert spec.value_type == TypeRef("int")
 
     def test_value_type_ref_auto(self):
-        spec = TypeDef(name="deferred", value_type=TypeRef.of("auto"))
+        spec = TypeDef(name="fn_callable", value_type=TypeRef.of("auto"))
         assert spec.value_type == TypeRef("auto")
 
     def test_behavior_spec_value_type_ref(self):

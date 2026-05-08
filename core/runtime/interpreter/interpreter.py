@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 # │   └── interpreter.py    ← 纯协调器（execute_module, STAGE 1-5 初始化）
 # ├── objects/
 # │   ├── kernel.py         ← IbUserFunction.call() 调用 vm.run_body()
-# │   └── builtins.py       ← IbDeferred.call() 调用 vm.run()
+# │   └── builtins.py       ← IbFnCallable.call() 调用 vm.run()
 # └── exceptions.py         ← 只剩 ThrownException + 基础架构异常
 #
 # 不存在任何向后兼容包装层或遗留 visit() 路径。
@@ -47,7 +47,7 @@ from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
-from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField, IbValue
+from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbClassField, IbValue
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.host_interface import HostInterface
@@ -622,7 +622,7 @@ class Interpreter:
             
             # 遍历所有默认字段并尝试预求值
             for field_name, val_info in ib_class.default_fields.items():
-                if not isinstance(val_info, IbDeferredField) or val_info.static_val is not None:
+                if not isinstance(val_info, IbClassField) or val_info.static_val is not None:
                     continue
                 
                 # 通过 VMExecutor（CPS 主路径）预求值复杂表达式 (如 1+2, "hello".upper())。
@@ -674,7 +674,7 @@ class Interpreter:
                     declared_type = self._resolve_type_from_symbol(sym_uid)
                     ib_class.register_method(stmt_data["name"], IbLLMFunction(stmt_uid, self._execution_context, spec=declared_type))
                 elif stmt_data["_type"] == "IbAssign":
-                    # 使用 IbDeferredField 统一管理
+                    # 使用 IbClassField 统一管理
                     val_uid = stmt_data.get("value")
                     for target_uid in stmt_data.get("targets", []):
                         target_name = self._extract_name_id(target_uid)
@@ -684,7 +684,7 @@ class Interpreter:
                             if val_data and val_data["_type"] == "IbConstant":
                                 static_val = self.registry.box(self._resolve_value(val_data.get("value")))
                             
-                            ib_class.default_fields[target_name] = IbDeferredField(
+                            ib_class.default_fields[target_name] = IbClassField(
                                 val_uid=val_uid, 
                                 static_val=static_val, 
                                 module_name=module_name

@@ -206,8 +206,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)
 
-        elif isinstance(obj, IbValue) and cls_name == "deferred":
-            data["_type"] = "deferred"
+        elif isinstance(obj, IbValue) and cls_name == "fn_callable":
+            data["_type"] = "fn_callable"
             data["node_uid"] = obj.node_uid
             data["capture_mode"] = obj.capture_mode
             

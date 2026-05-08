@@ -691,29 +691,29 @@ class IbDict(IbValue):
         native_key = key.to_native() if isinstance(key, IbObject) else key
         return self.fields[native_key]
 
-@register_ib_type("deferred")
-class IbDeferred(IbValue):
+@register_ib_type("fn_callable")
+class IbFnCallable(IbValue):
     """
-    通用延迟表达式对象。
+    普通可调用实例对象（fn_callable）。
 
-    ``lambda`` / ``snapshot`` 修饰的任意表达式都会被包装为 IbDeferred。
-    调用时重新执行被延迟的 AST 节点（lambda 模式）或返回捕获的快照值
+    ``lambda`` / ``snapshot`` 修饰的任意表达式都会被包装为 IbFnCallable。
+    调用时重新执行捕获的 AST 节点（lambda 模式）或返回捕获的快照值
     （snapshot 模式）。
 
     公理化设计
     ----------
-    * IbDeferred 在创建时捕获 ``execution_context`` 引用。
-    * ``call()`` 重新访问被延迟的 AST 节点以完成求值。
+    * IbFnCallable 在创建时捕获 ``execution_context`` 引用。
+    * ``call()`` 重新访问捕获的 AST 节点以完成求值。
     * capture_mode='lambda'   —— 每次调用重新求值
     * capture_mode='snapshot' —— 首次调用时求值并缓存
 
-    继承链：IbDeferred → IbObject (axiom: deferred → callable → Object)
+    继承链：IbFnCallable → IbObject (axiom: fn_callable → callable → Object)
 
     M1 参数化拓展
     -------------
     * ``params_uids``  —— 来自 ``IbLambdaExpr`` 的参数节点 uid 列表，调用时按位
       绑定到本地作用域（与 ``IbUserFunction`` 同构）。
-    * ``body_uid``     —— 当 deferred 由 ``IbLambdaExpr`` 创建时，此为 lambda
+    * ``body_uid``     —— 当 fn_callable 由 ``IbLambdaExpr`` 创建时，此为 lambda
       函数体表达式 uid；``call()`` 会评估该 uid 而不是 ``node_uid``。
     * ``closure``      —— Dict[sym_uid, (name, IbCell)]。lambda/snapshot 两种模式
       均通过此字典访问自由变量（公理 SC-3/SC-4）。snapshot 模式存储定义时刻的值
@@ -769,16 +769,16 @@ class IbDeferred(IbValue):
 
         if self._execution_context is None:
             raise RuntimeError(
-                f"IbDeferred '{self.node_uid}': execution_context is None. "
-                "This typically occurs when the deferred expression was deserialized "
+                f"IbFnCallable '{self.node_uid}': execution_context is None. "
+                "This typically occurs when the fn_callable expression was deserialized "
                 "without a live interpreter, or when the factory failed to inject the context. "
-                "Ensure engine._prepare_interpreter() has completed before invoking a deferred expression."
+                "Ensure engine._prepare_interpreter() has completed before invoking a fn_callable expression."
             )
 
         vm = self._execution_context.vm_executor
         if vm is None:
             raise RuntimeError(
-                f"IbDeferred '{self.node_uid}': vm_executor not available. "
+                f"IbFnCallable '{self.node_uid}': vm_executor not available. "
                 "Ensure Interpreter.execute_module() has been called first."
             )
 
@@ -837,14 +837,14 @@ class IbDeferred(IbValue):
             return self._cache.to_native()
         # 未执行时显式抛错（避免调用方获得类型混淆的 IBCI 运行时对象）。
         raise RuntimeError(
-            f"IbDeferred '{self.node_uid}' has not been executed; "
+            f"IbFnCallable '{self.node_uid}' has not been executed; "
             f"call .call(receiver, args) first before to_native()."
         )
 
     def __to_prompt__(self) -> str:
         if self._cache is not None:
             return self._cache.__to_prompt__()
-        return f"<Deferred {self.node_uid}>"
+        return f"<FnCallable {self.node_uid}>"
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         if self._cache is not None:
@@ -856,29 +856,29 @@ class IbDeferred(IbValue):
         if message == "__call__":
             return self.call(self.ib_class.registry.get_none(), args)
 
-        raise RuntimeError(f"Deferred '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
+        raise RuntimeError(f"FnCallable '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
 
     def __repr__(self):
         mode = self.capture_mode or "immediate"
-        return f"<Deferred({mode}) {self.node_uid}>"
+        return f"<FnCallable({mode}) {self.node_uid}>"
 
 
 @register_ib_type("behavior")
 class IbBehavior(IbValue):
     """
-    延迟执行的 LLM 行为对象 (~...~)。
+    LLM 行为可调用实例对象。
 
     公理化设计原则
     --------------
-    IbBehavior 是 deferred 家族中针对 LLM 行为表达式的特化。
-    继承链：behavior → deferred → callable → Object
+    IbBehavior 是 fn_callable 家族中针对 LLM 行为表达式的特化。
+    继承链：behavior → fn_callable → callable → Object
 
     * 行为对象在创建时捕获 ``execution_context`` 引用（与 IbUserFunction 同构）。
     * ``call()`` 通过 ``ib_class.registry.get_llm_executor().invoke_behavior()``
       完成自主执行，不再依赖外部的 ``_execute_behavior`` 路由。
     * BaseHandler 中的 ``_execute_behavior`` 方法已删除。
-    * 与 IbDeferred 的区别：IbBehavior 延迟的是 LLM 调用（需要意图栈），
-      IbDeferred 延迟的是普通表达式求值（纯 AST 重访）。
+    * 与 IbFnCallable 的区别：IbBehavior 执行的是 LLM 调用（需要意图栈），
+      IbFnCallable 执行的是普通表达式（纯 AST 重访）。
     """
     def __init__(
         self,
@@ -900,7 +900,7 @@ class IbBehavior(IbValue):
         captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
             模式 / dispatch_eager）。Step 6c/6d 之后不再支持 IntentNode 链表 / list。
 
-        参数化调用支持（与 IbDeferred 同构）：
+        参数化调用支持（与 IbFnCallable 同构）：
             * ``params_uids`` —— ``IbLambdaExpr`` 提供的参数节点 uid 列表；
               当 ``IbLambdaExpr`` 的 body 是 ``IbBehaviorExpr`` 时，``call()``
               在子作用域中绑定参数后再调用 LLM 执行器。注意：``node_uid``

@@ -7,7 +7,26 @@
 
 ---
 
-## 类型系统演进与重构（已完成主线）【已收口】
+## `deferred` 概念全量清理（✅ 已完成 2026-05-08）
+
+> 参见：`docs/DEFERRED_REMOVAL_PLAN.md`（已包含完整决策与阶段划分）
+
+所有命名替换已落地。IBCI 核心代码中不再出现任何与"延迟求值/deferred"相关的命名、字符串或变量名。
+
+**命名映射**（`deferred` → `fn_callable`）：
+
+| 旧名称 | 新名称 |
+|--------|--------|
+| `deferred` 类型 | `fn_callable` |
+| `IbDeferred` | `IbFnCallable` |
+| `DeferredAxiom` | `FnCallableAxiom` |
+| `DEFERRED_SPEC` | `FN_CALLABLE_SPEC` |
+| `create_deferred()` | `create_fn_callable()` |
+| `IbDeferredField` | `IbClassField` |
+
+---
+
+
 
 - 架构原文（完整）：`docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
 - 专项任务清单：`docs/TYPE_SYSTEM_TASKS.md`

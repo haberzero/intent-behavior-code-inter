@@ -1017,8 +1017,8 @@ print(r)
 func accept_any(any x):
     print("called")
 
-fn deferred_val = snapshot: 42
-accept_any(deferred_val)
+fn fn_callable_val = snapshot: 42
+accept_any(fn_callable_val)
 print("ok")
 """
         lines = run_and_capture(code)

@@ -95,7 +95,7 @@ class TestParallelDispatch:
 # ===========================================================================
 
 class TestDispatchSkipped:
-    """dispatch 不应破坏既有保护边界（llmexcept、deferred、复合目标）。"""
+    """dispatch 不应破坏既有保护边界（llmexcept、fn_callable、复合目标）。"""
 
     def test_assignment_inside_llmexcept_uses_synchronous_path(self):
         """llmexcept 保护下的 ``str x = @~ ... ~`` 必须走同步路径，
@@ -113,8 +113,8 @@ class TestDispatchSkipped:
         # 这里关键是：执行不抛错，且没有遗留 future。
         assert len(executor._pending_futures) == 0
 
-    def test_deferred_behavior_not_dispatched(self):
-        """``fn`` 声明的 deferred behavior expression 不应被立刻 dispatch。"""
+    def test_fn_callable_behavior_not_dispatched(self):
+        """``fn`` 声明的 fn_callable behavior expression 不应被立刻 dispatch。"""
         # fn 声明侧语法：
         # fn f = lambda: @~ MOCK:STR:lazy ~
         # 此时 RHS 是 lambda 包装；不会经过 IbAssign(IbBehaviorExpr) 直派发。

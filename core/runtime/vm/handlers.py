@@ -229,15 +229,13 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
     return final_res
 
 
-def _vm_call_deferred(executor, func, args):
-    """CPS 内联执行 IbDeferred（lambda/snapshot）调用。
+def _vm_call_fn_callable(executor, func, args):
+    """CPS 内联执行 IbFnCallable（lambda/snapshot）调用。
 
-    将原来 ``IbDeferred.call()`` 中的 ``ec.visit(target_uid)`` 替换为
+    将原来 ``IbFnCallable.call()`` 中的 ``ec.visit(target_uid)`` 替换为
     ``yield target_uid``，使 lambda/snapshot 体完全在 VM CPS 循环中执行。
     控制流信号（RETURN/BREAK/CONTINUE）通过 Signal 数据对象传播，不再依赖
     Python 异常。
-
-    P2：消灭最后一处显式 ``ec.visit()`` 入口（来自 IbDeferred.call()）。
     """
     from core.runtime.objects.cell import IbCell
 
@@ -301,7 +299,7 @@ def _vm_call_deferred(executor, func, args):
 
 
 def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """函数调用：CPS 求值函数对象和实参；IbDeferred 完全内联 CPS 执行，
+    """函数调用：CPS 求值函数对象和实参；IbFnCallable 完全内联 CPS 执行，
     其他 callable 仍通过 call() 同步完成。
     """
     func = yield node_data.get("func")
@@ -309,9 +307,9 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     for a_uid in node_data.get("args", []):
         args.append((yield a_uid))
 
-    # P2：IbDeferred（lambda/snapshot）完全 CPS 内联，不再调用 ec.visit()
-    if isinstance(func, IbValue) and func.ib_class.name == "deferred":
-        result = yield from _vm_call_deferred(executor, func, args)
+    # IbFnCallable（lambda/snapshot）完全 CPS 内联
+    if isinstance(func, IbValue) and func.ib_class.name == "fn_callable":
+        result = yield from _vm_call_fn_callable(executor, func, args)
         return result
 
     try:
@@ -454,7 +452,7 @@ def vm_handle_IbContinue(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     """赋值语句完整 CPS 实现。
 
-    当 RHS 为 ``IbBehaviorExpr`` 且其 ``dispatch_eligible=True``、非 deferred
+    当 RHS 为 ``IbBehaviorExpr`` 且其 ``dispatch_eligible=True``、非 fn_callable
     时，调用 ``LLMScheduler.dispatch_eager`` 立即提交后台 LLM 调用，得到
     ``LLMFuture`` 占位符并直接绑定到目标变量；后续在使用点（``IbName``）解析。
     这是 LLM 数据流流水线的核心机制：相邻独立 LLM 表达式可并发执行，时序近似
@@ -465,7 +463,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     ``StmtHandler._assign_to_target`` 递归路径。
 
     is_callable_instance 路径改用 ``yield value_uid``——``vm_handle_IbBehaviorExpr``
-    已完整实现 deferred 模式的 IbBehavior 包装，无需 fallback_visit。
+    已完整实现 fn_callable 模式的 IbBehavior 包装，无需 fallback_visit。
     """
     executor.runtime_context.set_last_llm_result(None)
     value_uid = node_data.get("value")
@@ -531,7 +529,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             return executor.registry.get_none()
         # 兜底：让下面的同步路径继续执行（极少触发）
 
-    # is_callable_instance 路径：vm_handle_IbBehaviorExpr 已完整实现 deferred 模式
+    # is_callable_instance 路径：vm_handle_IbBehaviorExpr 已完整实现 fn_callable 模式
     # 的 IbBehavior 包装，故无需 fallback_visit——直接 yield 走 CPS 调度。
     value = yield value_uid
 
@@ -1185,7 +1183,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     """LLM 行为描述行（``@~ ... ~``）。
 
     与 ExprHandler.visit_IbBehaviorExpr 同语义：
-    * 若被标记为 deferred，根据 ``capture_mode`` 创建 ``IbBehavior`` 包装
+    * 若被标记为 fn_callable，根据 ``capture_mode`` 创建 ``IbBehavior`` 包装
       （snapshot 捕获意图栈快照，lambda 不捕获）。
     * 否则直接同步执行 LLM 调用，把 ``LLMResult`` 写入
       ``runtime_context.set_last_llm_result``，返回 ``result.value``。
@@ -1292,7 +1290,7 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
 
 
 def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """lambda / snapshot 表达式：构造 ``IbDeferred`` 或 ``IbBehavior``（M2 SC-3/SC-4）。
+    """lambda / snapshot 表达式：构造 ``IbFnCallable`` 或 ``IbBehavior``（M2 SC-3/SC-4）。
 
     改用编译期填充的 ``node_data["free_vars"]``（``[[name, sym_uid], ...]``）
     代替运行时 AST 走访（``_collect_free_refs``），消除 fallback 路径。
@@ -1350,7 +1348,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
             closure=closure,
         )
 
-    return executor.service_context.object_factory.create_deferred(
+    return executor.service_context.object_factory.create_fn_callable(
         node_uid,
         capture_mode=capture_mode,
         execution_context=executor.ec,

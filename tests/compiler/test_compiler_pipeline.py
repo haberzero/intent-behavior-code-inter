@@ -232,15 +232,15 @@ int x = (int) @~ what is 1+1 ~
         with pytest.raises(CompilerError):
             engine.compile_string(code, silent=True)
 
-    def test_behavior_lambda_deferred(self, engine):
-        """fn varname = lambda -> TYPE: @~...~ 创建延迟执行的 behavior 对象。"""
+    def test_behavior_lambda_fn_callable(self, engine):
+        """fn varname = lambda -> TYPE: @~...~ 创建可调用的 behavior 对象。"""
         code = """import ai
 fn my_behavior = lambda -> int: @~ what is 1+1 ~
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
-    def test_behavior_snapshot_deferred(self, engine):
+    def test_behavior_snapshot_fn_callable(self, engine):
         """fn varname = snapshot -> TYPE: @~...~ 创建捕获意图快照的 behavior 对象。"""
         code = """import ai
 fn my_snap = snapshot -> str: @~ say hello ~

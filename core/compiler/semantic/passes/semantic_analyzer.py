@@ -46,7 +46,7 @@ class SemanticAnalyzer:
         self._int_desc = self.registry.resolve("int")
         self._str_desc = self.registry.resolve("str")
         self._behavior_desc = self.registry.resolve("behavior")
-        self._deferred_desc = self.registry.resolve("deferred")
+        self._fn_callable_desc = self.registry.resolve("fn_callable")
 
         self.current_return_type: Optional[IbSpec] = None
         self.current_class: Optional[TypeDef] = None
@@ -844,7 +844,7 @@ class SemanticAnalyzer:
         # [P3 FIX] LLM 函数默认返回 str 而非 void
         # 注意：这里的 "str" 语义是"文本接收"（LLM 生成的内容），而非纯字符串类型
         # [Future Evolution] 未来演进方向：
-        # 1. ReceiveMode 枚举统一处理 IMMEDIATE/DEFERRED/CLASS_CAST 上下文
+        # 1. ReceiveMode 枚举统一处理 IMMEDIATE/EAGER/CLASS_CAST 上下文
         # 2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
         # 3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
         
@@ -1993,11 +1993,11 @@ class SemanticAnalyzer:
             return self._behavior_desc
         else:
             if has_concrete_returns:
-                return self.registry.factory.create_deferred(
+                return self.registry.factory.create_fn_callable(
                     value_type_name=returns_type.name,
                     value_type_module=getattr(returns_type, 'module_path', None),
                 )
-            return self._deferred_desc
+            return self._fn_callable_desc
 
     def _collect_free_var_refs_ast(
         self, body_node: Optional['ast.IbASTNode'], param_sym_uids: set

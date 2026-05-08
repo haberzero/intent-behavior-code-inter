@@ -101,15 +101,15 @@
 - [x] `TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`
 - [x] `TypeDef.deferred_mode` 字段彻底删除（capture mode 不属于类型层语义）
 - [x] 全局重命名：`deferred_mode` → `capture_mode`、`is_deferred` → `is_callable_instance`、`set_deferred` → `set_callable_instance`、`node_is_deferred` → `node_is_callable_instance`、`node_deferred_mode` → `node_capture_mode`
-- [x] 序列化通道：`type_data["axiom_name"]` 取代旧 `type_data["capture_mode"]`，反序列化通过 axiom name (`"deferred"` / `"behavior"`) 还原原始公理路由
+- [x] 序列化通道：`type_data["axiom_name"]` 取代旧 `type_data["capture_mode"]`，反序列化通过 axiom name (`"fn_callable"` / `"behavior"`) 还原原始公理路由
 - [x] AST、运行时值、blueprint、side table、registry API 全栈一致
 
-**注**：运行时值类 `IbDeferred` / `IbBehavior` 仍保留为独立 Python 类（M4 范畴）。
+**注**：运行时值类 `IbFnCallable` / `IbBehavior` 是独立 Python 类（M4 范畴）。
 
 ### M4：运行时值模型单一化（IbValue）
 
 - [x] 引入统一 `IbValue(type_ref, fields, payload, meta)` 模型。
-- [x] 将内置值对象族迁移到 `IbValue` 承载模式（`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbDeferred` / `IbBehavior` 统一转为 `IbValue` 子体系）。
+- [x] 将内置值对象族迁移到 `IbValue` 承载模式（`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbFnCallable` / `IbBehavior` 统一转为 `IbValue` 子体系）。
 - [x] 运行时装箱产物统一具备 `type_ref + payload + fields + meta` 四元结构；旧类名保留为兼容包装层，避免一次性打断现有执行路径与测试。
 - [x] 运行时序列化 / 调试 /值访问路径已切换到 `IbValue` 中心模型。
 
@@ -138,7 +138,7 @@
 
 ### M3→M5 补充：`fn` / `lambda` / `snapshot` 可调用实例统一路线
 
-- [x] 将“deferred（延迟求值）”从主类型概念中退出，统一为“可调用实例（callable instance）”语义。
+- [x] 将"deferred（延迟求值）"从主类型概念中彻底移除，统一为"可调用实例（callable instance）"语义（`fn_callable`）。
 - [x] 明确 `lambda` / `snapshot` 仅作为**右值表达式包装关键字**，不再作为左值声明语义。
 - [x] 统一 `fn` 左值关键字语义：
   - [x] 作为可调用实例推导入口（类似 `auto`，但限定 callable）
@@ -148,13 +148,13 @@
 - [x] 固化 `lambda` vs `snapshot` 差异语义：
   - [x] `lambda`：引用捕获（读最新值）
   - [x] `snapshot`：值拷贝捕获（冻结定义时值）
-  - [x] 二者在意图栈作用域上的差异由统一 callable 语义承载，而非 deferred 子体系承载
+  - [x] 二者在意图栈作用域上的差异由统一 callable 语义承载（`fn_callable`/`behavior`）
 - [x] callable-instance 路线已收口，原 `fn` 失败用例约束不再适用。
 
 **补充 DoD**
 - [x] `fn` 高阶参数/返回值调用链可稳定推导返回类型，不再出现 `void` 回退。
 - [x] 测试与主文档已切换到“可调用实例构造”表述；历史归档文档保留旧术语并显式标记为历史记录。
-- [x] `deferred` 仅作为兼容层术语保留，不再作为主语义建模中心。
+- [x] `deferred` 概念已从整个代码库中彻底删除，以 `fn_callable` 替代。
 
 ---
 

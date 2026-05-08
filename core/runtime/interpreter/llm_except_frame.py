@@ -158,7 +158,7 @@ class LLMExceptFrame:
         - 用户自定义 IbObject（递归克隆所有字段，无法克隆的字段跳过）
 
         **不可快照的类型（跳过）**：
-        - fn / behavior / deferred（可调用对象）
+        - fn / behavior / fn_callable（可调用对象）
         - NativeObject（Python 原生封装）
         """
         self.saved_vars = {}

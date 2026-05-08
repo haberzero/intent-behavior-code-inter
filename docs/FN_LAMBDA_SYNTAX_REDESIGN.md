@@ -89,7 +89,7 @@ func apply(fn[(int, str) -> bool] predicate, int x, str s) -> bool:
     return predicate(x, s)
 
 # 无参、返回 int 的 callable
-func run_deferred(fn[() -> int] task) -> int:
+func run_callable(fn[() -> int] task) -> int:
     return task()
 
 # 接受任意 callable（不约束签名）
