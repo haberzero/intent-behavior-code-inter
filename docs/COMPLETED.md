@@ -375,7 +375,7 @@ Intent 类型全栈公理化：新增 `IntentAxiom`（`is_class()=True`，完整
 | | `TestFnLambdaParams` | 带参数 lambda/snapshot；参数传递 |
 | | `TestFnLambdaClosures` | lambda 闭包读最新值；snapshot 闭包冻结值 |
 | | `TestFnSnapshotIntentIsolation` | snapshot 意图隔离；lambda 意图敏感 |
-| | `TestFnLambdaBackwardCompat` | 旧语法断言 parse error（不兼容） |
+| | `TestFnLambdaInvalidDeclarationSyntax` | 旧语法断言 parse error（不兼容） |
 | | `TestFnLambdaErrors` | 旧括号体语法 parse error；lambda 不可作参数 |
 | `tests/e2e/test_e2e_deferred.py` | — | deferred 调用、fn 持有 lambda 引用 |
 | `tests/e2e/test_e2e_ai_mock.py` | — | lambda/snapshot + behavior 表达式；deferred 传参 |
@@ -827,7 +827,7 @@ class LLMFuture:
 * `TestDispatchEager`（3 测试）：返回 LLMFuture / 非阻塞 / 存入 _pending_futures
 * `TestResolve`（4 测试）：返回 IbObject / 消费后清除 / 未知 uid 抛错 / 二次 resolve 抛错
 * `TestThreadPoolLazyInit`（3 测试）：dispatch 前为 None / dispatch 后非 None / 同一实例
-* `TestBackwardCompat`（1 测试）：execute_behavior_expression 仍正常工作
+* `TestStableAPIContract`（1 测试）：execute_behavior_expression 仍正常工作
 
 ### 14.5 后续
 

@@ -531,7 +531,7 @@ class TestModuleAndStatements:
 
 
 # ===========================================================================
-# 9. 调度器特性：supports / fallback_visit / step_count
+# 9. 调度器特性：supports / step_count
 # ===========================================================================
 
 class TestSchedulerInfrastructure:
@@ -543,7 +543,7 @@ class TestSchedulerInfrastructure:
 
     def test_supports_unknown_node(self):
         # M3d 完成后所有 IBCI AST 节点类型都纳入调度表；通过注入一个未实现的
-        # 伪节点类型来验证 supports() 的兜底逻辑（_dispatch 查表 miss → False）。
+        # 伪节点类型来验证 supports() 的 miss 逻辑（_dispatch 查表 miss → False）。
         engine = make_engine("int x = 1")
         fake_uid = "fake_unsupported_uid_for_testing"
         engine.interpreter.node_pool[fake_uid] = {

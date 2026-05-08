@@ -22,7 +22,7 @@ Python 异常。``LLMExceptFrame`` retry 循环通过 ``vm_handle_IbFor`` 内联
 
 CPS dispatch table 覆盖全部 43 种 AST 节点类型（M3a–M3d + Phase 1–4 完成），
 ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 均以本执行器
-为主路径。原有递归路径仅作为极端边角情形的兜底保留（如 vm=None 的边角测试）。
+为主路径。主调度循环不再依赖递归访问路径。
 """
 from core.runtime.vm.task import (
     VMTask,

@@ -193,7 +193,7 @@ class Bootstrapper:
         if boxer_func:
             return boxer_func(registry, val, memo)
 
-        # 2. Callable 与 Native 对象兜底
+        # 2. Callable 与 Native 对象映射路径
         if callable(val):
             # 获取 None 类或 Object 类
             callable_class = self.get_class("callable") or self.get_class("Object")

@@ -177,7 +177,7 @@ class RuntimeSchedulerImpl:
         instance_id = self._main_instance_id
         if not instance_id or instance_id not in self.instances:
             # 如果尚未 spawn，则报错。顶层执行应由 Engine 调用 spawn 后触发。
-            # 目前为了兼容 Engine.execute，我们假设实例已在 _prepare_interpreter 中创建
+            # 这里沿用 Engine.execute 的当前调用约定：实例已在 _prepare_interpreter 中创建。
             interpreter = getattr(self.service_context, 'interpreter', None)
         else:
             interpreter = self.instances[instance_id]

@@ -71,7 +71,7 @@ class ILLMProvider(Protocol):
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
-    """提供对内核 LLM 执行器的内省能力（向后兼容接口）"""
+    """提供对内核 LLM 执行器的内省能力。"""
     def get_last_call_info(self) -> Dict[str, Any]: ...
 
 
