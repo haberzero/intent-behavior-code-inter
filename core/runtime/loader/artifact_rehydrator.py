@@ -100,15 +100,15 @@ class ArtifactRehydrator:
             TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
             TypeKind.BOUND_METHOD.value: lambda: TypeDef(name="bound_method", is_user_defined=False),
             TypeKind.MODULE.value: lambda: TypeDef(name=name, is_user_defined=False),
-            # Callable-instance specs ("deferred[T]" / "behavior[T]") — reconstruct
+            # Callable-instance specs ("fn_callable[T]" / "behavior[T]") — reconstruct
             # the proper variant so that get_base_name() routes to the matching
-            # axiom ("deferred" / "behavior").  The axiom selection key is the
+            # axiom ("fn_callable" / "behavior").  The axiom selection key is the
             # axiom name embedded in the serialized data, falling back to the
             # spec's own name prefix.
             TypeKind.CALLABLE_INSTANCE.value: lambda: (
                 factory.create_behavior(value_type_name=data.get("value_type_name", "auto"))
                 if (data.get("axiom_name") or name).startswith("behavior")
-                else factory.create_deferred(value_type_name=data.get("value_type_name", "auto"))
+                else factory.create_fn_callable(value_type_name=data.get("value_type_name", "auto"))
             ),
             TypeKind.OPTIONAL.value: lambda: factory.create_optional(
                 wrapped_type_name=data.get("wrapped_type_name", "any"),
@@ -171,9 +171,9 @@ class ArtifactRehydrator:
             ret = self.hydrate(data.get("return_type_uid"))
             spec.return_type = TypeRef.of(ret.name, ret.module_path) if ret else TypeRef.of("void")
         elif spec.kind == TypeKind.CALLABLE_INSTANCE.value:
-            # Restore the value type for callable-instance specs (deferred[T] / behavior[T]).
+            # Restore the value type for callable-instance specs (fn_callable[T] / behavior[T]).
             # ``capture_mode`` is intentionally NOT restored at the type level: it
-            # belongs to the runtime value (IbDeferred/IbBehavior) and to the AST
+            # belongs to the runtime value (IbFnCallable/IbBehavior) and to the AST
             # node (IbLambdaExpr), both of which are serialized through their own
             # channels.
             v_name = data.get("value_type_name", spec.value_type.head)

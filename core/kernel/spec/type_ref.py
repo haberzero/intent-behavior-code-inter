@@ -158,7 +158,7 @@ class TypeRef:
             )
 
         # TypeDef / TypeDef: value_type
-        if base in ("deferred", "behavior") and hasattr(spec, "value_type"):
+        if base in ("fn_callable", "behavior") and hasattr(spec, "value_type"):
             val_ref = getattr(spec, "value_type", None)
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
                 return cls(

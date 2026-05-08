@@ -32,7 +32,7 @@ from .member import MemberSpec, MethodMemberSpec
 from .type_ref import TypeRef
 from .specs import (
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
-    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, OPTIONAL_SPEC, EXCEPTION_SPEC,
+    NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, FN_CALLABLE_SPEC, OPTIONAL_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
     LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
@@ -182,29 +182,29 @@ class SpecFactory:
             is_user_defined=False,
         )
 
-    def create_deferred(
+    def create_fn_callable(
         self,
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        """Create a TypeDef describing a deferred (lambda/snapshot) expression.
+        """Create a TypeDef describing a fn_callable (lambda/snapshot) expression.
 
         Capture mode (``lambda`` vs ``snapshot``) is a property of the *value*
-        (``IbDeferred.capture_mode``) and of the creating AST node
+        (``IbFnCallable.capture_mode``) and of the creating AST node
         (``IbLambdaExpr.capture_mode``); it is intentionally NOT stored on the
         type spec.
         """
-        deferred_name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
+        fn_callable_name = f"fn_callable[{value_type_name}]" if value_type_name != "auto" else "fn_callable"
         spec = TypeDef(
-            name=deferred_name,
+            name=fn_callable_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
-        # Route axiom dispatch to the "deferred" axiom even for parameterised
-        # specs like "deferred[int]".
-        spec._axiom_name = "deferred"
+        # Route axiom dispatch to the "fn_callable" axiom even for parameterised
+        # specs like "fn_callable[int]".
+        spec._axiom_name = "fn_callable"
         return spec
 
     def create_optional(
@@ -227,7 +227,7 @@ class SpecFactory:
         value_type_module: Optional[str] = None,
     ) -> "TypeDef":
         """
-        Create a ``TypeDef`` for a typed ``@~...~`` deferred behavior expression.
+        Create a ``TypeDef`` for a typed ``@~...~`` behavior expression.
 
         ``value_type_name`` is the LLM output type declared by the user (e.g. "int",
         "str").  When it is ``"auto"`` the compiler cannot infer the return type at
@@ -413,7 +413,7 @@ class SpecRegistry:
         This is intentionally distinct from ``is_compatible(target)`` which
         is the source-side query for *implicit* assignment compatibility.
 
-        TODO (deferred): activate this in
+        TODO: activate this in
         ``semantic_analyzer.py::_resolve_cast_expr()`` once compile-time
         cast validation is added.  Currently ``IbCastExpr`` validation is
         purely runtime via ``value.receive("cast_to", [target_class])``.
@@ -445,13 +445,13 @@ class SpecRegistry:
         return self.get_call_cap(spec) is not None
 
     def is_callable_instance(self, spec: Optional[IbSpec]) -> bool:
-        """True when spec represents a callable instance (deferred / behavior).
+        """True when spec represents a callable instance (fn_callable / behavior).
 
         Callable instances are values produced by ``lambda``/``snapshot``
         expressions or by ``@~...~`` LLM behaviors.  At the type level they all
         share ``TypeKind.CALLABLE_INSTANCE``; the runtime distinguishes regular
-        deferred-expression evaluation from LLM behavior invocation via the
-        spec's axiom name (``"deferred"`` vs ``"behavior"``) and via the value's
+        fn_callable expression execution from LLM behavior invocation via the
+        spec's axiom name (``"fn_callable"`` vs ``"behavior"``) and via the value's
         payload type.
         """
         if spec is None:
@@ -547,7 +547,7 @@ class SpecRegistry:
         # TypeDef called as constructor returns an instance of itself
         if spec.kind == TypeKind.CLASS.value:
             return spec
-        # Typed deferred / behavior: carry the expected value type explicitly.
+        # Typed fn_callable / behavior: carry the expected value type explicitly.
         if spec.kind == TypeKind.CALLABLE_INSTANCE.value:
             v_ref = getattr(spec, "value_type", None)
             if v_ref is not None and v_ref.head not in ("auto", "any", "", None):
@@ -802,7 +802,7 @@ class SpecRegistry:
                 return True
 
         # Axiom-driven compatibility (e.g. bool isa int)
-        # Pass the full target name so axioms can handle typed variants like "deferred[int]".
+        # Pass the full target name so axioms can handle typed variants like "fn_callable[int]".
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
         if src_axiom and src_axiom.is_compatible(target.name):
             return True
@@ -843,7 +843,7 @@ class SpecRegistry:
         # Special case: fn[RETURN_TYPE] → TypeDef(value_type_name=RETURN_TYPE)
         if spec.name == "fn" and arg_specs:
             value_type = arg_specs[0]
-            return self.factory.create_deferred(
+            return self.factory.create_fn_callable(
                 value_type_name=value_type.name,
                 value_type_module=getattr(value_type, 'module_path', None),
             )
@@ -975,7 +975,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> SpecRegistr
     for proto in (
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
         ANY_SPEC, AUTO_SPEC, FN_SPEC, NONE_SPEC, SLICE_SPEC,
-        CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, EXCEPTION_SPEC,
+        CALLABLE_SPEC, BEHAVIOR_SPEC, FN_CALLABLE_SPEC, EXCEPTION_SPEC,
         OPTIONAL_SPEC, BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC, LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
         LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,

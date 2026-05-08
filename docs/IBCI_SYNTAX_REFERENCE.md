@@ -565,7 +565,7 @@ func apply(fn[(int, str) -> bool] predicate, int x, str s) -> bool:
     return predicate(x, s)
 
 # 无参 callable
-func run_deferred(fn[() -> int] task) -> int:
+func run_callable(fn[() -> int] task) -> int:
     return task()
 
 # 返回值也可以是带签名的 fn

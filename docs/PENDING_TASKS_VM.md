@@ -563,8 +563,8 @@ IBCI 的第一层并发（LLM 流水线）需要选择底层并发机制：
 ### P2：`IbDeferred.call()` CPS 化 ✅ **已完成（2026-04-30）**
 
 **变更**：`core/runtime/vm/handlers.py`
-- 新增 `_vm_call_deferred()` generator helper：CPS 内联执行 lambda/snapshot 体
-- `vm_handle_IbCall` 新增 `isinstance(func, IbDeferred)` 分支，调用 `yield from _vm_call_deferred(executor, func, args)`
+- 新增 `_vm_call_fn_callable()` generator helper：CPS 内联执行 lambda/snapshot 体
+- `vm_handle_IbCall` 新增 `isinstance(func, IbFnCallable)` 分支，调用 `yield from _vm_call_fn_callable(executor, func, args)`
 - `IbDeferred.call()` 路径仍保留（向后兼容），但 VM 路径不再调用 `ec.visit(target_uid)`
 
 **关键改进**：
@@ -639,7 +639,7 @@ core/runtime/
 │   └── interpreter.py     ← 纯协调器（execute_module, STAGE 1-5, visit→VM 委托）
 ├── objects/
 │   ├── kernel.py          ← IbUserFunction.call() 调用 vm.run_body()
-│   └── builtins.py        ← IbDeferred（vm_handle_IbCall 走 _vm_call_deferred CPS 路径）
+│   └── builtins.py        ← IbFnCallable（vm_handle_IbCall 走 _vm_call_fn_callable CPS 路径）
 └── exceptions.py          ← 只剩 ThrownException + 基础架构异常
 ```
 

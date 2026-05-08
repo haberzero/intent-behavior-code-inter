@@ -559,7 +559,7 @@ func make_translator():
 
 本节规则的完整实现依赖于 `docs/NEXT_STEPS.md` Step 12.5 中定义的 `fn` 参数化 lambda/snapshot 新语法。新语法引入参数传递机制后，意图与自由变量的捕获行为需要与 `IbCell` 机制（`docs/PENDING_TASKS_VM.md` §10.6）协同工作。
 
-旧语法（`TYPE lambda NAME = EXPR`）将被新语法替代，相关测试已暂时注释（见 `tests/e2e/test_e2e_deferred.py`）。
+相关测试见 `tests/e2e/test_e2e_fn_callable.py`。
 
 ---
 

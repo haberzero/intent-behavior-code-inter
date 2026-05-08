@@ -455,7 +455,7 @@ class IbLambdaExpr(IbExpr):
       对意图栈 fork。
 
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
-    运行时构造 ``IbBehavior``；否则构造 ``IbDeferred``。两者都接受参数列表。
+    运行时构造 ``IbBehavior``；否则构造 ``IbFnCallable``。两者都接受参数列表。
     """
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None

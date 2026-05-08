@@ -42,14 +42,14 @@ class TypeKind(str, Enum):
     OPTIONAL = "optional"
     BOUND_METHOD = "bound_method"
     MODULE = "module"
-    # CALLABLE_INSTANCE unifies the former DEFERRED + BEHAVIOR kinds.
-    # A callable instance is a typed value created by `lambda`/`snapshot` (deferred
+    # CALLABLE_INSTANCE unifies the former FN_CALLABLE + BEHAVIOR kinds.
+    # A callable instance is a typed value created by `lambda`/`snapshot` (fn_callable
     # expression) or by `@~...~` (LLM behavior).  At the TYPE level both share the
     # same kind; the runtime dispatch differentiation (regular AST re-evaluation
     # vs LLM invocation) is encoded by the spec's ``name``/``_axiom_name``
-    # ("deferred" vs "behavior") and by the runtime value's payload.
+    # ("fn_callable" vs "behavior") and by the runtime value's payload.
     # The capture mode (lambda vs snapshot) is a property of the VALUE
-    # (``IbDeferred.capture_mode`` / ``IbBehavior.capture_mode``) and of the
+    # (``IbFnCallable.capture_mode`` / ``IbBehavior.capture_mode``) and of the
     # creating AST node (``IbLambdaExpr.capture_mode``); it is NOT a property of
     # the type.
     CALLABLE_INSTANCE = "callable_instance"
@@ -219,10 +219,10 @@ TypeDef._KIND_BASE_NAMES = {
     TypeKind.BOUND_METHOD.value:  "bound_method",
     TypeKind.MODULE.value:        "module",
     # NOTE: TypeKind.CALLABLE_INSTANCE is intentionally NOT mapped here.
-    # Callable-instance prototypes ("deferred"/"behavior") rely on either the
+    # Callable-instance prototypes ("fn_callable"/"behavior") rely on either the
     # spec's own ``name`` (for unparameterised prototypes) or on the
     # ``_axiom_name`` override (for parameterised variants like
-    # ``deferred[int]``) to dispatch to the correct axiom.
+    # ``fn_callable[int]``) to dispatch to the correct axiom.
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
 }

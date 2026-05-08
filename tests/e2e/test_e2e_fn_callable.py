@@ -1,10 +1,10 @@
 """
-tests/e2e/test_e2e_deferred.py
+tests/e2e/test_e2e_fn_callable.py
 
-End-to-end tests for the universal deferred expression system (lambda/snapshot).
+End-to-end tests for the fn_callable expression system (lambda/snapshot).
 
 Coverage:
-  - Axiom layer: TypeDef, DeferredAxiom, CallableAxiom type hierarchy
+  - Axiom layer: TypeDef, FnCallableAxiom, CallableAxiom type hierarchy
   - TypeDef compile-time return type inference (axiom level)
   - auto immediate behavior expression type inference
   - behavior expression assignment to object fields
@@ -26,17 +26,17 @@ def run_and_capture(code: str):
 
 
 # ---------------------------------------------------------------------------
-# 1. Axiom layer: TypeDef, DeferredAxiom, CallableAxiom
+# 1. Axiom layer: TypeDef, FnCallableAxiom, CallableAxiom
 # ---------------------------------------------------------------------------
 
-class TestDeferredAxiomLayer:
-    def test_deferred_spec_exists(self):
+class TestFnCallableAxiomLayer:
+    def test_fn_callable_spec_exists(self):
         """TypeDef should be registered in the spec registry."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        spec = reg.resolve("deferred")
+        spec = reg.resolve("fn_callable")
         assert spec is not None
-        assert spec.name == "deferred"
+        assert spec.name == "fn_callable"
 
     def test_callable_axiom_not_dynamic(self):
         """CallableAxiom should NOT be dynamic (replaces DynamicAxiom)."""
@@ -48,29 +48,29 @@ class TestDeferredAxiomLayer:
         assert axiom is not None
         assert not axiom.is_dynamic()
 
-    def test_deferred_axiom_not_dynamic(self):
-        """DeferredAxiom should NOT be dynamic."""
+    def test_fn_callable_axiom_not_dynamic(self):
+        """FnCallableAxiom should NOT be dynamic."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        spec = reg.resolve("deferred")
+        spec = reg.resolve("fn_callable")
         axiom = reg.get_axiom(spec)
         assert axiom is not None
         assert not axiom.is_dynamic()
 
-    def test_behavior_parent_is_deferred(self):
-        """BehaviorAxiom's parent should be 'deferred', not 'Object'."""
+    def test_behavior_parent_is_fn_callable(self):
+        """BehaviorAxiom's parent should be 'fn_callable', not 'Object'."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
         spec = reg.resolve("behavior")
         axiom = reg.get_axiom(spec)
         assert axiom is not None
-        assert axiom.get_parent_axiom_name() == "deferred"
+        assert axiom.get_parent_axiom_name() == "fn_callable"
 
-    def test_deferred_parent_is_callable(self):
-        """DeferredAxiom's parent should be 'callable'."""
+    def test_fn_callable_parent_is_callable(self):
+        """FnCallableAxiom's parent should be 'callable'."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        spec = reg.resolve("deferred")
+        spec = reg.resolve("fn_callable")
         axiom = reg.get_axiom(spec)
         assert axiom is not None
         assert axiom.get_parent_axiom_name() == "callable"
@@ -84,11 +84,11 @@ class TestDeferredAxiomLayer:
         assert axiom is not None
         assert axiom.get_parent_axiom_name() == "Object"
 
-    def test_deferred_has_call_capability(self):
-        """DeferredAxiom should provide CallCapability."""
+    def test_fn_callable_has_call_capability(self):
+        """FnCallableAxiom should provide CallCapability."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        spec = reg.resolve("deferred")
+        spec = reg.resolve("fn_callable")
         cap = reg.get_call_cap(spec)
         assert cap is not None
 
@@ -100,36 +100,36 @@ class TestDeferredAxiomLayer:
         cap = reg.get_call_cap(spec)
         assert cap is not None
 
-    def test_behavior_compatible_with_deferred(self):
-        """BehaviorAxiom should be compatible with 'deferred' and 'callable'."""
+    def test_behavior_compatible_with_fn_callable(self):
+        """BehaviorAxiom should be compatible with 'fn_callable' and 'callable'."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
         spec = reg.resolve("behavior")
         axiom = reg.get_axiom(spec)
-        assert axiom.is_compatible("deferred")
+        assert axiom.is_compatible("fn_callable")
         assert axiom.is_compatible("callable")
         assert axiom.is_compatible("behavior")
 
-    def test_deferred_compatible_with_callable(self):
-        """DeferredAxiom should be compatible with 'callable' and 'deferred' (upward only).
+    def test_fn_callable_compatible_with_callable(self):
+        """FnCallableAxiom should be compatible with 'callable' and 'fn_callable' (upward only).
         
         is_compatible(target) means "can I be assigned to a variable of type target".
-        deferred IS-A callable, so deferred can go into callable/deferred slots.
-        behavior is a sub-type of deferred — deferred cannot go into a behavior slot.
+        fn_callable IS-A callable, so fn_callable can go into callable/fn_callable slots.
+        behavior is a sub-type of fn_callable — fn_callable cannot go into a behavior slot.
         """
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        spec = reg.resolve("deferred")
+        spec = reg.resolve("fn_callable")
         axiom = reg.get_axiom(spec)
         assert axiom.is_compatible("callable")
-        assert axiom.is_compatible("deferred")
-        # behavior is a sub-type of deferred — deferred cannot be assigned to behavior slot
+        assert axiom.is_compatible("fn_callable")
+        # behavior is a sub-type of fn_callable — fn_callable cannot be assigned to behavior slot
         assert not axiom.is_compatible("behavior")
 
     def test_callable_not_compatible_with_subtypes(self):
         """CallableAxiom can only be assigned to a callable slot, not to sub-type slots.
         
-        Sub-types (deferred, behavior, bound_method) declare upward compatibility through
+        Sub-types (fn_callable, behavior, bound_method) declare upward compatibility through
         their own is_compatible(), not through callable declaring downward compatibility.
         """
         from core.kernel.factory import create_default_registry
@@ -137,7 +137,7 @@ class TestDeferredAxiomLayer:
         spec = reg.resolve("callable")
         axiom = reg.get_axiom(spec)
         assert axiom.is_compatible("callable")
-        assert not axiom.is_compatible("deferred")
+        assert not axiom.is_compatible("fn_callable")
         assert not axiom.is_compatible("behavior")
         assert not axiom.is_compatible("bound_method")
 
@@ -213,25 +213,25 @@ class TestBehaviorSpecReturnTypeInference:
         # "auto" is dynamic — resolve_return falls back to axiom path which returns "auto"
         assert ret is not None
 
-    def test_deferred_spec_creation(self):
-        """SpecFactory.create_deferred() creates TypeDef with correct get_base_name()."""
+    def test_fn_callable_spec_creation(self):
+        """SpecFactory.create_fn_callable() creates TypeDef with correct get_base_name()."""
         from core.kernel.factory import create_default_registry
         from core.kernel.spec.specs import TypeDef
         reg = create_default_registry()
-        ds = reg.factory.create_deferred(value_type_name="int")
+        ds = reg.factory.create_fn_callable(value_type_name="int")
         assert isinstance(ds, TypeDef)
         # [TODO] M3 单一 TypeDef 迁移后，TypeDef/TypeDef 均为 TypeDef 别名，
         # 不再通过 isinstance 区分，语义区分应由 kind/get_base_name 驱动。
         assert ds.kind != "behavior"
-        assert ds.get_base_name() == "deferred"
+        assert ds.get_base_name() == "fn_callable"
         assert ds.value_type.head == "int"
-        assert ds.name == "deferred[int]"
+        assert ds.name == "fn_callable[int]"
 
-    def test_deferred_spec_resolve_return(self):
+    def test_fn_callable_spec_resolve_return(self):
         """resolve_return on TypeDef(value_type_name='int') returns int spec."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        ds = reg.factory.create_deferred(value_type_name="int")
+        ds = reg.factory.create_fn_callable(value_type_name="int")
         ret = reg.resolve_return(ds, [])
         assert ret is not None
         assert ret.name == "int"
@@ -244,7 +244,7 @@ class TestBehaviorSpecReturnTypeInference:
 class TestAutoImmediateBehaviorInference:
     """
     Regression tests for: auto r = @~...~ should infer 'str' (the natural LLM
-    output type), not a deferred-object type.
+    output type), not a fn_callable-object type.
     """
 
     def test_auto_immediate_behavior_infers_str_at_runtime(self):
@@ -269,16 +269,16 @@ print(greeting)
         assert "hello world" in lines
 
     def test_auto_immediate_behavior_print_is_str_not_behavior_repr(self):
-        """auto r = @~MOCK:INT:42~ ; print must not show 'behavior' or 'deferred'."""
+        """auto r = @~MOCK:INT:42~ ; print must not show 'behavior' or 'fn_callable'."""
         code = """import ai
 ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 auto r = @~MOCK:INT:42~
 print(r)
 """
         lines = run_and_capture(code)
-        # Must contain the actual value, not a behavior/deferred repr
+        # Must contain the actual value, not a behavior/fn_callable repr
         assert any(ln.strip() == "42" for ln in lines), f"Expected '42' in {lines}"
-        assert all("behavior" not in ln.lower() and "deferred" not in ln.lower() for ln in lines)
+        assert all("behavior" not in ln.lower() and "fn_callable" not in ln.lower() for ln in lines)
 
 
 # ---------------------------------------------------------------------------
@@ -352,8 +352,8 @@ print((str)f())
         lines = run_and_capture(code)
         assert "15" in lines
 
-    def test_fn_lambda_declares_deferred_callable(self):
-        """fn f = lambda: expr; f is a deferred callable."""
+    def test_fn_lambda_declares_fn_callable(self):
+        """fn f = lambda: expr; f is a fn_callable."""
         code = """int x = 3
 fn f = lambda: x * 2
 print((str)f())

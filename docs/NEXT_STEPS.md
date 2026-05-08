@@ -7,7 +7,31 @@
 
 ---
 
-## 类型系统演进与重构（已完成主线）【已收口】
+## `deferred` 概念全量清理（✅ 已完成 2026-05-08）
+
+所有命名替换已落地。IBCI 核心代码中不再出现任何与"延迟求值/deferred"相关的命名、字符串或变量名。
+
+**2026-05-08 二次复核结论**：
+- `lambda` / `snapshot` 是 IBCI 的基础表达式包装机制，不是 behavior 专属；
+- parser 在表达式位置统一构建 `IbLambdaExpr`，body 可为任意表达式；
+- semantic pass 按 body 类型分流：普通表达式 → `fn_callable`，`IbBehaviorExpr` → `behavior`；
+- VM 运行时按同一 `IbLambdaExpr` 路径构造 `IbFnCallable` 或 `IbBehavior`；
+- e2e 覆盖了普通逻辑表达式的 lambda/snapshot（非 behavior 专属路径）。
+
+**命名映射**（`deferred` → `fn_callable`）：
+
+| 旧名称 | 新名称 |
+|--------|--------|
+| `deferred` 类型 | `fn_callable` |
+| `IbDeferred` | `IbFnCallable` |
+| `DeferredAxiom` | `FnCallableAxiom` |
+| `DEFERRED_SPEC` | `FN_CALLABLE_SPEC` |
+| `create_deferred()` | `create_fn_callable()` |
+| `IbDeferredField` | `IbClassField` |
+
+---
+
+
 
 - 架构原文（完整）：`docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
 - 专项任务清单：`docs/TYPE_SYSTEM_TASKS.md`

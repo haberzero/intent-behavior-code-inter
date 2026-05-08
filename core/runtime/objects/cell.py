@@ -26,7 +26,7 @@ IbCell —— 词法闭包 Cell 变量的独立堆容器。
 * 提供 ``trace_refs()`` 钩子供未来 GC 根集合扫描使用 (公理 GC-2)。
 
 本模块为 M1 (fn 新语法 + IbCell 集成) 与 M2 (GC 根集合) 提供基础原语；
-本身不引用任何 ``ScopeImpl`` / ``IbDeferred`` / ``IbBehavior``，保持纯粹。
+本身不引用任何 ``ScopeImpl`` / ``IbFnCallable`` / ``IbBehavior``，保持纯粹。
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ from core.kernel.registry import KernelRegistry
 # 这些导入需要指向它们的新物理位置
 from core.runtime.interpreter.runtime_context import ScopeImpl, RuntimeContextImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbModule, IbNativeObject
-from core.runtime.objects.builtins import IbBehavior, IbDeferred, IbList, IbTuple, IbDict
+from core.runtime.objects.builtins import IbBehavior, IbFnCallable, IbList, IbTuple, IbDict
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 
 class RuntimeObjectFactory(IObjectFactory):
@@ -41,9 +41,9 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, capture_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
         return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, closure=closure)
 
-    def create_deferred(self, node_uid: str, capture_mode: str = "lambda", execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, body_uid: Optional[str] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
-        """Create a universal deferred expression object (for non-behavior lambda/snapshot)."""
-        return IbDeferred(node_uid, ib_class=self._registry.get_class("deferred"), capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, body_uid=body_uid, closure=closure)
+    def create_fn_callable(self, node_uid: str, capture_mode: str = "lambda", execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, body_uid: Optional[str] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
+        """Create a fn_callable expression object (for non-behavior lambda/snapshot)."""
+        return IbFnCallable(node_uid, ib_class=self._registry.get_class("fn_callable"), capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, body_uid=body_uid, closure=closure)
 
     def create_list(self, elements: List[IIbObject]) -> IIbList:
         return IbList(elements, ib_class=self._registry.get_class("list"))

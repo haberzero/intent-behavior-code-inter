@@ -175,13 +175,13 @@ class FlatSerializer(BaseFlatSerializer):
             "is_user_defined": t.is_user_defined,
         }
 
-        # Persist scalar fields for callable-instance specs (deferred[T] / behavior[T])
+        # Persist scalar fields for callable-instance specs (fn_callable[T] / behavior[T])
         # so the runtime rehydrator can reconstruct the proper variant.
-        # ``axiom_name`` carries the "deferred" / "behavior" axiom dispatch key,
+        # ``axiom_name`` carries the "fn_callable" / "behavior" axiom dispatch key,
         # which is needed to disambiguate the two variants now that they share
         # ``TypeKind.CALLABLE_INSTANCE``.
         # ``capture_mode`` is NOT persisted here — it lives on the runtime value
-        # (IbDeferred/IbBehavior) and on the AST node, both of which round-trip
+        # (IbFnCallable/IbBehavior) and on the AST node, both of which round-trip
         # through their own channels.
         if t.kind == TypeKind.CALLABLE_INSTANCE.value:
             v_ref = getattr(t, "value_type", None)

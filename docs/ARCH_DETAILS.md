@@ -385,7 +385,7 @@ Engine.__init__()
 | `RuntimeSerializer._collect_instance()` | 序列化 `call_intent` 字段（非 None 时） |
 | `RuntimeDeserializer._get_instance()` | 反序列化时恢复 `call_intent` |
 
-**背景**：旧实现中，当 `@! "intent text"` 修饰的 behavior 表达式遇到 `is_deferred=True` 时，`call_intent` 未被传入 `create_behavior()`，导致排他意图在延迟执行时丢失。
+**背景**：旧实现中，当 `@! "intent text"` 修饰的 behavior 表达式遇到非立即执行路径时，`call_intent` 未被传入 `create_behavior()`，导致排他意图在执行时丢失。
 
 ### 12.2 vtable callable 签名自动提取
 
@@ -509,21 +509,21 @@ Object（根）
   ├─ llm_call_result (LlmCallResultAxiom)         — LLM 调用结果类型（Step 7）
   └─ callable       (CallableAxiom, is_dynamic=False) — 可调用对象的公理父类型
        ├─ bound_method  (BoundMethodAxiom) — 已绑定接收者的方法
-       └─ deferred  (DeferredAxiom) — 延迟执行的通用表达式
-            └─ behavior  (BehaviorAxiom) — 延迟执行的 LLM 行为表达式（特化）
+       ├─ fn_callable   (FnCallableAxiom) — 普通可调用实例（lambda/snapshot 产生）
+       └─ behavior      (BehaviorAxiom) — LLM 行为可调用实例（fn_callable 特化）
 ```
 
 **说明**：此层次是 IBCI 类型系统（公理层）的声明，与 Python 实现类的继承无关。
-`IbDeferred` 与 `IbBehavior` 都直接继承自 `IbObject`——两者执行机制（AST 重访 vs LLM 调用）完全不同，
+`IbFnCallable` 与 `IbBehavior` 都直接继承自 `IbObject`——两者执行机制（AST 重访 vs LLM 调用）完全不同，
 不共享 Python 实现，仅共享 IBCI 类型系统中的父子关系。
 
 ### 7.2 `is_compatible()` 方向原则
 
 | source | 可赋值的目标类型 |
 |--------|---------------|
-| behavior | behavior、deferred、callable |
-| deferred | deferred、callable |
+| behavior | behavior、fn_callable、callable |
+| fn_callable | fn_callable、callable |
 | callable | callable（仅自身） |
 | bound_method | bound_method、callable |
 
-子类型向上兼容、父类型不向下兼容；`callable→deferred`、`deferred→behavior` 等反向赋值均为非法。
+子类型向上兼容、父类型不向下兼容；`callable→fn_callable`、`fn_callable→behavior` 等反向赋值均为非法。

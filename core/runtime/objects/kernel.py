@@ -181,7 +181,7 @@ class IbValue(IbObject):
     - ``meta``: extra runtime metadata for specialized values
 
     Concrete value types (``IbInteger``, ``IbString``, ``IbList``,
-    ``IbDict``, ``IbDeferred``, ``IbBehavior``, …) inherit from ``IbValue``
+    ``IbDict``, ``IbFnCallable``, ``IbBehavior``, …) inherit from ``IbValue``
     and each carry their domain-specific behaviour (interning, native
     conversions, list operations, callable execution logic, …).  They are
     permanent type-implementation classes, not compatibility shims.
@@ -193,7 +193,7 @@ class IbValue(IbObject):
       ``payload`` and expose it via an ``elements`` property.
     - Dict stores its mapping via ``IbObject.fields`` (and mirrors it in
       ``payload``).
-    - Callable instances (deferred / behavior) store the target node UID in
+    - Callable instances (fn_callable / behavior) store the target node UID in
       ``payload`` and runtime state in ``meta``.
     """
     __slots__ = ('type_ref', 'payload', 'meta')
@@ -388,15 +388,15 @@ class IbModule(IbObject):
     def __repr__(self):
         return f"<Module '{self.name}'>"
 
-class IbDeferredField:
-    """延迟字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
+class IbClassField:
+    """类字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
     def __init__(self, val_uid: str, static_val: Optional[IbObject] = None, module_name: Optional[str] = None):
         self.val_uid = val_uid
         self.static_val = static_val
         self.module_name = module_name
 
     def __repr__(self):
-        return f"<DeferredField {self.val_uid} (static={self.static_val})>"
+        return f"<ClassField {self.val_uid} (static={self.static_val})>"
 
 @register_ib_type("Type")
 @register_ib_type("Class")
@@ -477,7 +477,7 @@ class IbClass(IbObject):
         
         # 延迟执行字段初始化 (Item 2.1 Audit)
         for name, val_info in all_default_fields.items():
-            if isinstance(val_info, IbDeferredField):
+            if isinstance(val_info, IbClassField):
                 if val_info.static_val is not None:
                     # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
                     # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
@@ -509,7 +509,7 @@ class IbClass(IbObject):
                 else:
                     instance.fields[name] = self.registry.get_none()
             else:
-                # [Active Defense] 仅支持 IbDeferredField，确保字段初始化的一致性
+                # [Active Defense] 仅支持 IbClassField，确保字段初始化的一致性
                 instance.fields[name] = val_info
         
         init_method = self.lookup_method('__init__')
@@ -852,7 +852,7 @@ class IbUserFunction(IbFunction):
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
         from core.runtime.frame import get_current_frame as _get_frame
-        from core.runtime.objects.builtins import IbDeferred, IbBehavior
+        from core.runtime.objects.builtins import IbFnCallable, IbBehavior
         from core.base.diagnostics.codes import RUN_CALL_ERROR
         _frame = _get_frame()
         rt_context = _frame if _frame is not None else self.context.runtime_context
