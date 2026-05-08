@@ -47,9 +47,7 @@ from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
-from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField
-from core.kernel.spec import IbSpec as Type, TypeDef as ListType, ANY_SPEC as ANY_TYPE
-from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
+from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField, IbValue
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.host_interface import HostInterface
@@ -87,7 +85,7 @@ class Interpreter:
         ``obj.captured_intents`` 现在协议为 ``None`` 或 ``IbIntentContext`` 实例
         （Step 6c/6d 之后；详见 ``core.runtime.objects.builtins.IbBehavior``）。
         """
-        if not isinstance(obj, IbBehavior):
+        if not (isinstance(obj, IbValue) and obj.ib_class.name == "behavior"):
             return []
         ci = obj.captured_intents
         if ci is None:

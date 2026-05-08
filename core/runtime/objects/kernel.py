@@ -180,14 +180,21 @@ class IbValue(IbObject):
     - ``fields``: object-style instance fields when the value has them
     - ``meta``: extra runtime metadata for specialized values
 
-    Container-like values may intentionally alias ``payload`` with an existing
-    mutable attribute (for example ``IbDict.fields``) when that attribute is
-    the canonical storage location for that value class.
+    Concrete value types (``IbInteger``, ``IbString``, ``IbList``,
+    ``IbDict``, ``IbDeferred``, ``IbBehavior``, …) inherit from ``IbValue``
+    and each carry their domain-specific behaviour (interning, native
+    conversions, list operations, callable execution logic, …).  They are
+    permanent type-implementation classes, not compatibility shims.
 
-    Concrete value subclasses (``IbInteger``, ``IbString``, ``IbList``,
-    ``IbDict``, ``IbDeferred``, ``IbBehavior``) provide type-specific runtime
-    behaviour (interning, native conversion helpers, capture-mode tracking, …)
-    on top of this storage model.
+    Storage conventions:
+    - Scalar types (int / float / str / bool) store their native value in
+      ``payload``; the inherited ``value`` property provides a named alias.
+    - Sequence types (list / tuple) store their element collection in
+      ``payload`` and expose it via an ``elements`` property.
+    - Dict stores its mapping via ``IbObject.fields`` (and mirrors it in
+      ``payload``).
+    - Callable instances (deferred / behavior) store the target node UID in
+      ``payload`` and runtime state in ``meta``.
     """
     __slots__ = ('type_ref', 'payload', 'meta')
 
