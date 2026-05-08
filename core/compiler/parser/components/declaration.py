@@ -114,19 +114,19 @@ class DeclarationComponent(BaseComponent):
                 type_annotation = self._loc(ast.IbName(id=ID_FN, ctx='Load'), type_token)
             name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name after 'fn'.")
         else:
-            # Parse type annotation: int x = 1  OR  int fn f = lambda: ...
+            # Parse type annotation: int x = 1, str name = "hi", etc.
             start_token = self.stream.peek()
             type_annotation = self.type_def.parse_type_annotation()
             type_token = start_token
 
-            # Reject 'RETURN_TYPE fn NAME' pattern (D1: declaration-side return type is deprecated):
-            # e.g. `int fn f = lambda: ...` or `tuple[int, str] fn parser = make_parser()`
-            # Use expression-side syntax instead: `fn f = lambda -> int: ...`
+            # Reject 'RETURN_TYPE fn NAME' pattern: declaration-side return type is not supported.
+            # Use expression-side syntax: `fn NAME = lambda -> TYPE: EXPR`
+            # For example: `fn f = lambda -> int: 1 + 1` or `fn f = lambda(int a) -> str: "hi"`.
             if self.stream.match(TokenType.FN):
                 fn_token = self.stream.previous()
                 raise self.stream.error(
                     fn_token,
-                    "Declaration-side return type annotation 'TYPE fn NAME = ...' is no longer supported. "
+                    "Declaration-side return type annotation 'TYPE fn NAME = ...' is not supported. "
                     "Use expression-side syntax instead: 'fn NAME = lambda -> TYPE: EXPR'. "
                     "For example: 'fn f = lambda -> int: 1 + 1' or 'fn f = lambda(int a) -> str: \"hi\"'.",
                     code="PAR_003",

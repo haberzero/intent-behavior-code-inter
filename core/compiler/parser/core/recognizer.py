@@ -148,7 +148,8 @@ class SyntaxRecognizer:
         if next_t.type == TokenType.IDENTIFIER:
             return True
             
-        # 2b. Heuristic check: '... ID lambda/snapshot/fn ID' (e.g., 'int fn f', 'int lambda x')
+        # 2b. Heuristic check: '... ID lambda/snapshot/fn ID'
+        # Covers `int fn f` (caught as PAR_003), `TYPE lambda x` (caught by declaration path), etc.
         if next_t.type in (TokenType.LAMBDA, TokenType.SNAPSHOT, TokenType.FN):
             return True
             

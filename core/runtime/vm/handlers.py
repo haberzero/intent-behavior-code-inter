@@ -1237,8 +1237,9 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
 
 
 def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``(Type) @~ ... ~`` 隐式实例化（废弃语法 PAR_010，保留运行时路径）。
+    """``(Type) @~ ... ~`` 强制转换语法（PAR_010）的运行时路径。
 
+    解析器不再生成此节点类型；此 handler 作为防御性兜底保留。
     segments 为字面字符串与 ext_ref dicts，不含子表达式 UID，故无需 yield。
     逻辑与 ExprHandler.visit_IbBehaviorInstance 完全对应，但走 VM 路径。
     """

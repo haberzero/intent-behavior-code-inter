@@ -423,7 +423,7 @@ class IbBehaviorInstance(IbExpr):
 @dataclass(kw_only=True, eq=False)
 class IbLambdaExpr(IbExpr):
     """
-    参数化 lambda/snapshot 表达式（M1 fn 参数化语法引入；D1/D2 返回类型迁移至表达式侧）。
+    参数化 lambda/snapshot 表达式。
 
     支持的全部形式（``:`` 为唯一 body 起始符）::
 
@@ -436,8 +436,7 @@ class IbLambdaExpr(IbExpr):
         snapshot(PARAMS): EXPR                  # 有参 snapshot，返回类型推导
         snapshot(PARAMS) -> TYPE: EXPR          # 有参 snapshot，显式返回类型
 
-    返回类型标注写在**表达式侧**（D2）：``fn f = lambda -> TYPE: EXPR``。
-    声明侧 ``TYPE fn f = lambda: EXPR`` 已废弃，产生 PAR_003 编译错误。
+    返回类型标注写在**表达式侧**：``fn f = lambda -> TYPE: EXPR``。
 
     其中 ``PARAMS`` 是与函数参数同构的 ``IbArg`` / ``IbTypeAnnotatedExpr`` 列表，
     ``EXPR`` 是任意 IBCI 表达式（含 ``IbBehaviorExpr``）。
