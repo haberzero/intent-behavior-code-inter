@@ -588,7 +588,7 @@ class SpecRegistry:
         """Infer the element type of an iterable."""
         if spec.kind in (TypeKind.LIST.value, TypeKind.TUPLE.value):
             # Multi-type list: element access returns any (user must cast explicitly)
-            if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_type_names', None):
+            if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_types', None):
                 return self.resolve("any")
             return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
@@ -607,7 +607,7 @@ class SpecRegistry:
         if spec.kind in (TypeKind.LIST.value, TypeKind.TUPLE.value):
             if key_spec.get_base_name() == "int":
                 # Multi-type list: subscript access returns any
-                if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_type_names', None):
+                if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_types', None):
                     return self.resolve("any")
                 return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         if spec.kind == TypeKind.DICT.value:
@@ -789,15 +789,15 @@ class SpecRegistry:
 
         # Multi-type list compatibility: list[int,str] is assignable to list or list[int,str]
         if src.kind == TypeKind.LIST.value and target.kind == TypeKind.LIST.value:
-            src_allowed = getattr(src, 'allowed_element_type_names', None) or []
-            tgt_allowed = getattr(target, 'allowed_element_type_names', None) or []
+            src_allowed = getattr(src, 'allowed_element_types', None) or []
+            tgt_allowed = getattr(target, 'allowed_element_types', None) or []
             if src_allowed or tgt_allowed:
                 # If target is bare list, accept any list variant
                 if not tgt_allowed and target.element_type.head == "any":
                     return True
                 # If target has allowed types, source must have same or subset
                 if tgt_allowed and src_allowed:
-                    return set(src_allowed) == set(tgt_allowed)
+                    return {t.head for t in src_allowed} == {t.head for t in tgt_allowed}
                 # Single-type target, multi-type source: relaxed — allow
                 return True
 

@@ -1808,7 +1808,6 @@ class SemanticAnalyzer:
         if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.symbol_table.resolve(node.func.id)
             if sym and not sym.is_type and '__call__' in func_type.members:
-                from core.kernel.spec import TypeDef as _FuncSpec
                 call_spec = self.registry.resolve_member(func_type, '__call__')
                 if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                     return self.registry.resolve(call_spec.return_type.head) or self._any_desc
