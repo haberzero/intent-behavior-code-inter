@@ -207,10 +207,8 @@ if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
 
 ```
 core/kernel/spec/
-├── base.py       → IbSpec 基类（所有类型描述符的公共基础）
-├── specs.py      → 具体 Spec 子类
-│                   FuncSpec / ClassSpec / ListSpec / TupleSpec
-│                   DictSpec / BoundMethodSpec / ModuleSpec / LazySpec
+├── base.py       → IbSpec 基类 + TypeDef 统一类型模型 + TypeKind
+├── specs.py      → 内置类型原型与兼容别名（FuncSpec/ClassSpec/... 均映射到 TypeDef）
 ├── registry.py   → SpecRegistry（核心门面）+ SpecFactory（工厂）
 └── member.py     → MemberSpec / MethodMemberSpec
 ```
@@ -223,7 +221,7 @@ core/kernel/spec/
 |------|------|
 | `is_assignable(src, target)` | 类型兼容性检查，通过公理系统实现 |
 | `resolve(name)` | 按名字查找 Spec |
-| `get_call_cap(spec)` | 获取可调用能力，FuncSpec/BoundMethodSpec 返回 `_FUNC_SPEC_CALL_CAP` 哨兵 |
+| `get_call_cap(spec)` | 获取可调用能力，Function/BoundMethod/Class 等走 kind 分派并在必要时返回 `_FUNC_SPEC_CALL_CAP` 哨兵 |
 | `resolve_iter_element(spec)` | 获取迭代元素类型（ListSpec/TupleSpec） |
 | `resolve_subscript(spec, key_spec)` | 下标访问返回类型 |
 | `get_metadata_registry()` | 获取 MetadataRegistry（公理 Capability 查询入口） |

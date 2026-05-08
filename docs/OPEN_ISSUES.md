@@ -23,7 +23,7 @@
 
 **解锁条件**：`llmexcept` 机制稳定后，可收紧为类型错误。
 
-**文档跟踪**：`docs/NEXT_STEPS.md` 选项 1 — 关联交付项；`docs/KNOWN_LIMITS.md §VIII`
+**文档跟踪**：`docs/NEXT_STEPS.md`（类型系统主线）；`docs/KNOWN_LIMITS.md §VIII`
 
 ---
 
@@ -36,7 +36,7 @@
 
 **解锁条件**：在 `IExecutionContext` 或 `IStateReader` 协议中新增 `get_side_table(key, uid)` 公共接口。
 
-**文档跟踪**：`docs/PENDING_TASKS.md §11.6`
+**文档跟踪**：`docs/PENDING_TASKS.md §9.6`
 
 ---
 
@@ -78,7 +78,7 @@
 **问题描述**：
 每次重试时 `reset_for_retry()` 会清除 `last_error`，重试历史不保留。若需在 llmexcept body 内访问历次重试的错误摘要（用于更精细的提示词调整），需要给 `LLMExceptFrame` 添加 `error_history: List` 字段。
 
-**文档跟踪**：`docs/PENDING_TASKS.md §11.4`
+**文档跟踪**：`docs/PENDING_TASKS.md §9.4`
 
 ---
 
@@ -89,7 +89,7 @@
 **问题描述**：
 当前无最大嵌套深度检查。深度嵌套的 llmexcept 块（如循环内多层 llmexcept）在极端情况下可能无界增长。
 
-**文档跟踪**：`docs/PENDING_TASKS.md §11.5`
+**文档跟踪**：`docs/PENDING_TASKS.md §9.5`
 
 ---
 
@@ -107,9 +107,9 @@
 - Provider 层失败（网络错误、鉴权失败等）与 LLM 输出内容无关，retry 对其无效，语义上不属于
   `llmexcept` 的保护范围。
 - 用户代码应在外层 `try except LLMCallError` 中处理基础设施问题。
-- 未来 VM 信号/中断机制（PENDING_TASKS §十四）将提供更优雅的语言层面处理方案。
+- 未来 VM 信号/中断机制（`docs/PENDING_TASKS.md §10.3`）将提供更优雅的语言层面处理方案。
 
-**文档跟踪**：`docs/PENDING_TASKS.md §10.2`（已标记 DONE）
+**文档跟踪**：`docs/COMPLETED.md §二十四`（已完成）
 
 ---
 

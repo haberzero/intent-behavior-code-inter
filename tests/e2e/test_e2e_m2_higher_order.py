@@ -48,8 +48,7 @@ print((str)result)
         assert run_and_capture(code) == ["10"]
 
     def test_lambda_passed_and_called_multiple_times(self):
-        # [TODO] 保持失败：fn 形参在高阶调用链中的返回签名推导尚未完成统一，
-        # 当前不做补丁式修复，等待后续类型系统 fn/callable 路线收口。
+        # [INFO] fn 形参在高阶调用链中应可稳定传播可调用返回类型。
         code = """func apply_twice(fn f, int val) -> auto:
     auto r1 = f(val)
     auto r2 = f((int)r1)
@@ -95,8 +94,7 @@ print((str)r)
 
     def test_multiple_lambdas_passed(self):
         """同时传入多个不同的 lambda 对象。"""
-        # [TODO] 保持失败：多个 fn 形参组合调用的签名传播仍依赖未收口路径，
-        # 需在 fn 作为高阶类型标注的统一语义落地后再修复。
+        # [INFO] 多个 fn 形参组合调用时应保持签名传播一致。
         code = """func compose(fn f, fn g, int val) -> auto:
     auto tmp = g(val)
     return f((int)tmp)

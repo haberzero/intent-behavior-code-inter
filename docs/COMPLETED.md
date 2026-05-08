@@ -1463,9 +1463,11 @@ python3 -m pytest tests/ -q --tb=short
 
 用户可通过 `try/except` 捕获 `LLMRetryExhaustedError`（retry 耗尽）、`LLMParseError`（LLM 输出无法解析）、用户自定义异常等。
 
-### 24.3 已知限制（保留）
+### 24.3 异常变量类型窄化现状
 
-`except X as e:` 中 `e` 的编译期类型固定为 `Exception`（不窄化至 `X`）。访问 `X` 专属字段需通过 `(X)e` 显式强转。详见 `docs/KNOWN_LIMITS.md §二`。
+`except X as e:` 在单一捕获类型场景下，`e` 的编译期类型已窄化为 `X`，可直接访问 `X` 的成员。  
+`except (A, B) as e:` 仍回退为 `Exception`，若需访问子类专属字段，仍需显式强转。  
+详见 `docs/KNOWN_LIMITS.md §二`。
 
 ### 24.4 测试基线
 
