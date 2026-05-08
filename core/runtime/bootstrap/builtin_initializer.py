@@ -364,6 +364,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         res = IbList([], reg.get_class("list"))
         memo[id(val)] = res
         res.elements = [reg.box(i, memo) for i in val]
+        # M4: ``payload`` intentionally aliases the canonical mutable element list.
         res.payload = res.elements
         return res
 
@@ -378,6 +379,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         res = IbDict({}, reg.get_class("dict"))
         memo[id(val)] = res
         res.fields = {k: reg.box(v, memo) for k, v in val.items()}
+        # M4: ``payload`` intentionally aliases the canonical mutable mapping.
         res.payload = res.fields
         return res
         

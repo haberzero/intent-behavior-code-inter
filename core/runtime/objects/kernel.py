@@ -192,7 +192,7 @@ class IbValue(IbObject):
         ib_class: 'IbClass',
         payload: Any = None,
         *,
-        fields: Optional[Mapping[str, Any]] = None,
+        fields: Optional[Dict[str, Any]] = None,
         type_ref: Optional[Any] = None,
         meta: Optional[Dict[str, Any]] = None,
     ):
