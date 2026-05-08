@@ -689,8 +689,8 @@ class IbDeferred(IbObject):
     ----------
     * IbDeferred 在创建时捕获 ``execution_context`` 引用。
     * ``call()`` 重新访问被延迟的 AST 节点以完成求值。
-    * deferred_mode='lambda'   —— 每次调用重新求值
-    * deferred_mode='snapshot' —— 首次调用时求值并缓存
+    * capture_mode='lambda'   —— 每次调用重新求值
+    * capture_mode='snapshot' —— 首次调用时求值并缓存
 
     继承链：IbDeferred → IbObject (axiom: deferred → callable → Object)
 
@@ -710,7 +710,7 @@ class IbDeferred(IbObject):
         self,
         node_uid: str,
         ib_class: IbClass,
-        deferred_mode: str = "lambda",
+        capture_mode: str = "lambda",
         execution_context: Optional[Any] = None,
         params_uids: Optional[List[str]] = None,
         body_uid: Optional[str] = None,
@@ -718,7 +718,7 @@ class IbDeferred(IbObject):
     ):
         super().__init__(ib_class)
         self.node_uid = node_uid
-        self.deferred_mode = deferred_mode
+        self.capture_mode = capture_mode
         self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
         # parametric/closure 字段，无参/无闭包路径下默认 None/空。
@@ -738,7 +738,7 @@ class IbDeferred(IbObject):
         """
         # snapshot 缓存仅适用于"无参"路径——有参 snapshot 每次调用应使用相同的
         # 冻结闭包 + 不同的实参重新求值，缓存单一返回值会破坏正确性。
-        if (self.deferred_mode == "snapshot"
+        if (self.capture_mode == "snapshot"
                 and self._cache is not None
                 and not self.params_uids):
             return self._cache
@@ -803,7 +803,7 @@ class IbDeferred(IbObject):
                 rt_context.exit_scope()
 
         # 缓存：仅"无参 snapshot"缓存返回值（对应历史无参延迟语义）。
-        if self.deferred_mode == "snapshot" and not self.params_uids:
+        if self.capture_mode == "snapshot" and not self.params_uids:
             self._cache = result
 
         return result
@@ -835,7 +835,7 @@ class IbDeferred(IbObject):
         raise RuntimeError(f"Deferred '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
 
     def __repr__(self):
-        mode = self.deferred_mode or "immediate"
+        mode = self.capture_mode or "immediate"
         return f"<Deferred({mode}) {self.node_uid}>"
 
 
@@ -863,7 +863,7 @@ class IbBehavior(IbObject):
         ib_class: IbClass,
         expected_type: Optional[str] = None,
         call_intent: Optional[Any] = None,
-        deferred_mode: Optional[str] = None,
+        capture_mode: Optional[str] = None,
         execution_context: Optional[Any] = None,
         params_uids: Optional[List[str]] = None,
         closure: Optional[Dict[str, Any]] = None,
@@ -871,7 +871,7 @@ class IbBehavior(IbObject):
         """
         IbBehavior 是纯粹的数据描述符与自主执行单元。
         call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
-        deferred_mode: 'lambda' | 'snapshot' | None (immediate)
+        capture_mode: 'lambda' | 'snapshot' | None (immediate)
         execution_context: 创建时的执行上下文引用（供 call() 使用）。
         captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
             模式 / dispatch_eager）。Step 6c/6d 之后不再支持 IntentNode 链表 / list。
@@ -891,7 +891,7 @@ class IbBehavior(IbObject):
         self.captured_intents = captured_intents
         self.expected_type = expected_type
         self.call_intent = call_intent
-        self.deferred_mode = deferred_mode
+        self.capture_mode = capture_mode
         self._execution_context = execution_context
         self._cache: Optional[IbObject] = None
         # 参数化调用支持

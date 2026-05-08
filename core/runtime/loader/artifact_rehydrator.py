@@ -99,16 +99,15 @@ class ArtifactRehydrator:
             TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
             TypeKind.BOUND_METHOD.value: lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
             TypeKind.MODULE.value: lambda: ModuleSpec(name=name, is_user_defined=False),
-            # Typed deferred / behavior specs — reconstruct the proper subclass so
-            # that get_base_name() returns "deferred" / "behavior" (not "deferred[str]"),
-            # allowing SpecRegistry.is_assignable() to resolve the correct axiom.
-            TypeKind.DEFERRED.value: lambda: factory.create_deferred(
-                value_type_name=data.get("value_type_name", "auto"),
-                deferred_mode=data.get("deferred_mode", "lambda"),
-            ),
-            TypeKind.BEHAVIOR.value: lambda: factory.create_behavior(
-                value_type_name=data.get("value_type_name", "auto"),
-                deferred_mode=data.get("deferred_mode", "lambda"),
+            # Callable-instance specs ("deferred[T]" / "behavior[T]") — reconstruct
+            # the proper variant so that get_base_name() routes to the matching
+            # axiom ("deferred" / "behavior").  The axiom selection key is the
+            # axiom name embedded in the serialized data, falling back to the
+            # spec's own name prefix.
+            TypeKind.CALLABLE_INSTANCE.value: lambda: (
+                factory.create_behavior(value_type_name=data.get("value_type_name", "auto"))
+                if (data.get("axiom_name") or name).startswith("behavior")
+                else factory.create_deferred(value_type_name=data.get("value_type_name", "auto"))
             ),
             TypeKind.OPTIONAL.value: lambda: factory.create_optional(
                 wrapped_type_name=data.get("wrapped_type_name", "any"),
@@ -170,11 +169,13 @@ class ArtifactRehydrator:
             ]
             ret = self.hydrate(data.get("return_type_uid"))
             spec.return_type_name = ret.name if ret else "void"
-        elif spec.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value):
-            # Restore scalar fields for DeferredSpec / BehaviorSpec.
-            # BehaviorSpec is a subclass of DeferredSpec so this branch covers both.
+        elif spec.kind == TypeKind.CALLABLE_INSTANCE.value:
+            # Restore scalar fields for callable-instance specs (deferred[T] / behavior[T]).
+            # ``capture_mode`` is intentionally NOT restored at the type level: it
+            # belongs to the runtime value (IbDeferred/IbBehavior) and to the AST
+            # node (IbLambdaExpr), both of which are serialized through their own
+            # channels.
             spec.value_type_name = data.get("value_type_name", getattr(spec, "value_type_name", "auto"))
-            spec.deferred_mode = data.get("deferred_mode", getattr(spec, "deferred_mode", "lambda"))
         elif spec.kind == TypeKind.OPTIONAL.value:
             spec.wrapped_type_name = data.get("wrapped_type_name", spec.wrapped_type_name)
             spec.wrapped_type_module = data.get("wrapped_type_module", spec.wrapped_type_module)

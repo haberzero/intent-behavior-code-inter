@@ -246,7 +246,7 @@ def _vm_call_deferred(executor, func, args):
     # 依然被 Python 解析为 generator function（因为函数其他分支含有 `yield target_uid`）。
     # 去掉此标记也可行（函数已是 generator），此处保留是为了让读者一眼看出早返回分支
     # 也属于同一 generator 上下文，不会意外切换语义。
-    if (func.deferred_mode == "snapshot"
+    if (func.capture_mode == "snapshot"
             and func._cache is not None
             and not func.params_uids):
         if False:
@@ -294,7 +294,7 @@ def _vm_call_deferred(executor, func, args):
             rt_context.exit_scope()
 
     # snapshot 无参缓存写入（首次求值后缓存）
-    if func.deferred_mode == "snapshot" and not func.params_uids:
+    if func.capture_mode == "snapshot" and not func.params_uids:
         func._cache = result
 
     return result
@@ -464,19 +464,19 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     IbTuple 解包）均通过 CPS ``_vm_assign_to_target`` 处理，不再穿透到
     ``StmtHandler._assign_to_target`` 递归路径。
 
-    is_deferred 路径改用 ``yield value_uid``——``vm_handle_IbBehaviorExpr``
+    is_callable_instance 路径改用 ``yield value_uid``——``vm_handle_IbBehaviorExpr``
     已完整实现 deferred 模式的 IbBehavior 包装，无需 fallback_visit。
     """
     executor.runtime_context.set_last_llm_result(None)
     value_uid = node_data.get("value")
 
-    is_deferred = False
+    is_callable_instance = False
     if value_uid:
-        is_deferred = bool(executor.ec.get_side_table("node_is_deferred", value_uid))
+        is_callable_instance = bool(executor.ec.get_side_table("node_is_callable_instance", value_uid))
 
     # 识别 dispatch-before-use 路径
     dispatched_future: Optional[LLMFuture] = None
-    if value_uid and not is_deferred:
+    if value_uid and not is_callable_instance:
         value_node_data = executor.ec.get_node_data(value_uid)
         if (
             value_node_data
@@ -531,7 +531,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             return executor.registry.get_none()
         # 兜底：让下面的同步路径继续执行（极少触发）
 
-    # is_deferred 路径：vm_handle_IbBehaviorExpr 已完整实现 deferred 模式
+    # is_callable_instance 路径：vm_handle_IbBehaviorExpr 已完整实现 deferred 模式
     # 的 IbBehavior 包装，故无需 fallback_visit——直接 yield 走 CPS 调度。
     value = yield value_uid
 
@@ -1187,7 +1187,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     """LLM 行为描述行（``@~ ... ~``）。
 
     与 ExprHandler.visit_IbBehaviorExpr 同语义：
-    * 若被标记为 deferred，根据 ``deferred_mode`` 创建 ``IbBehavior`` 包装
+    * 若被标记为 deferred，根据 ``capture_mode`` 创建 ``IbBehavior`` 包装
       （snapshot 捕获意图栈快照，lambda 不捕获）。
     * 否则直接同步执行 LLM 调用，把 ``LLMResult`` 写入
       ``runtime_context.set_last_llm_result``，返回 ``result.value``。
@@ -1198,7 +1198,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     """
     if False:
         yield
-    is_deferred = executor.ec.get_side_table("node_is_deferred", node_uid)
+    is_callable_instance = executor.ec.get_side_table("node_is_callable_instance", node_uid)
 
     intent_uid = node_data.get("intent")
     call_intent: Optional[IbIntent] = None
@@ -1211,10 +1211,10 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
 
     sc = executor.service_context
 
-    if is_deferred:
-        deferred_mode = executor.ec.get_side_table("node_deferred_mode", node_uid)
+    if is_callable_instance:
+        capture_mode = executor.ec.get_side_table("node_capture_mode", node_uid)
         captured_intents = (
-            None if deferred_mode == "lambda"
+            None if capture_mode == "lambda"
             else executor.runtime_context.fork_intent_snapshot()
         )
         return sc.object_factory.create_behavior(
@@ -1222,7 +1222,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
             captured_intents,
             expected_type=executor.ec.get_side_table("node_to_type", node_uid),
             call_intent=call_intent,
-            deferred_mode=deferred_mode,
+            capture_mode=capture_mode,
             execution_context=executor.ec,
         )
 
@@ -1309,7 +1309,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
     from core.runtime.objects.cell import IbCell
     params_uids: List[str] = list(node_data.get("params") or [])
     body_uid = node_data.get("body")
-    deferred_mode = node_data.get("deferred_mode") or "lambda"
+    capture_mode = node_data.get("capture_mode") or "lambda"
     free_vars = node_data.get("free_vars") or []  # [[name, sym_uid], ...]
 
     body_data = executor.ec.get_node_data(body_uid) if body_uid else None
@@ -1322,7 +1322,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
         for name, sym_uid in free_vars:
             if sym_uid in closure:
                 continue
-            if deferred_mode == "snapshot":
+            if capture_mode == "snapshot":
                 # snapshot 模式：定义时刻的值拷贝（IbCell 独立副本，SC-3）
                 try:
                     val = current_scope.get_by_uid(sym_uid)
@@ -1338,7 +1338,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
 
     if body_is_behavior:
         captured_intents = (
-            None if deferred_mode == "lambda"
+            None if capture_mode == "lambda"
             else executor.runtime_context.fork_intent_snapshot()
         )
         expected_type = executor.ec.get_side_table("node_to_type", body_uid)
@@ -1346,7 +1346,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
             body_uid,
             captured_intents,
             expected_type=expected_type,
-            deferred_mode=deferred_mode,
+            capture_mode=capture_mode,
             execution_context=executor.ec,
             params_uids=params_uids,
             closure=closure,
@@ -1354,7 +1354,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
 
     return executor.service_context.object_factory.create_deferred(
         node_uid,
-        deferred_mode=deferred_mode,
+        capture_mode=capture_mode,
         execution_context=executor.ec,
         params_uids=params_uids,
         body_uid=body_uid,

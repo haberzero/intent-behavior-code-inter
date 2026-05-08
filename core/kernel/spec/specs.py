@@ -36,8 +36,8 @@ NONE_SPEC   = TypeDef(name="None",   kind=TypeKind.PRIMITIVE.value, is_nullable=
 SLICE_SPEC  = TypeDef(name="slice",  kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
 
 CALLABLE_SPEC   = TypeDef(name="callable", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type_name="auto")
-BEHAVIOR_SPEC   = TypeDef(name="behavior", kind=TypeKind.BEHAVIOR.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
-DEFERRED_SPEC   = TypeDef(name="deferred", kind=TypeKind.DEFERRED.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
+BEHAVIOR_SPEC   = TypeDef(name="behavior", kind=TypeKind.CALLABLE_INSTANCE.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
+DEFERRED_SPEC   = TypeDef(name="deferred", kind=TypeKind.CALLABLE_INSTANCE.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
 OPTIONAL_SPEC   = TypeDef(name="Optional", kind=TypeKind.OPTIONAL.value, is_nullable=True,  is_user_defined=False)
 EXCEPTION_SPEC  = TypeDef(name="Exception", kind=TypeKind.CLASS.value,   is_nullable=True,  is_user_defined=False)
 

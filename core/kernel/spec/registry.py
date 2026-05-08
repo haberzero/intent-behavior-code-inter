@@ -224,20 +224,28 @@ class SpecFactory:
         self,
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
-        deferred_mode: str = "lambda",
     ) -> "TypeDef":
-        """Create a TypeDef describing a deferred (lambda/snapshot) expression."""
+        """Create a TypeDef describing a deferred (lambda/snapshot) expression.
+
+        Capture mode (``lambda`` vs ``snapshot``) is a property of the *value*
+        (``IbDeferred.capture_mode``) and of the creating AST node
+        (``IbLambdaExpr.capture_mode``); it is intentionally NOT stored on the
+        type spec.
+        """
         from .base import TypeDef
         name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
-        return TypeDef(
+        spec = TypeDef(
             name=name,
-            kind=TypeKind.DEFERRED.value,
+            kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
             value_type_name=value_type_name,
             value_type_module=value_type_module,
-            deferred_mode=deferred_mode,
         )
+        # Route axiom dispatch to the "deferred" axiom even for parameterised
+        # specs like "deferred[int]".
+        spec._axiom_name = "deferred"
+        return spec
 
     def create_optional(
         self,
@@ -260,7 +268,6 @@ class SpecFactory:
         self,
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
-        deferred_mode: str = "lambda",
     ) -> "TypeDef":
         """
         Create a ``TypeDef`` for a typed ``@~...~`` deferred behavior expression.
@@ -269,22 +276,28 @@ class SpecFactory:
         "str").  When it is ``"auto"`` the compiler cannot infer the return type at
         call sites (same behaviour as before this feature was introduced).
 
+        Capture mode (``lambda`` vs ``snapshot``) lives on the *value*
+        (``IbBehavior.capture_mode``), not on the type.
+
         Example::
 
             # fn f = lambda -> int: @~...~  →  create_behavior(value_type_name="int")
-            factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+            factory.create_behavior(value_type_name="int")
         """
         from .base import TypeDef
         name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
-        return TypeDef(
+        spec = TypeDef(
             name=name,
-            kind=TypeKind.BEHAVIOR.value,
+            kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
             value_type_name=value_type_name,
             value_type_module=value_type_module,
-            deferred_mode=deferred_mode,
         )
+        # Route axiom dispatch to the "behavior" axiom even for parameterised
+        # specs like "behavior[int]".
+        spec._axiom_name = "behavior"
+        return spec
 
 
 # ------------------------------------------------------------------ #
@@ -467,18 +480,25 @@ class SpecRegistry:
             return True
         return self.get_call_cap(spec) is not None
 
-    def is_behavior(self, spec: Optional[IbSpec]) -> bool:
-        """True when spec represents a deferred behavior (lambda/snapshot)."""
-        if spec is None:
-            return False
-        return spec.get_base_name() == "behavior"
+    def is_callable_instance(self, spec: Optional[IbSpec]) -> bool:
+        """True when spec represents a callable instance (deferred / behavior).
 
-    def is_deferred(self, spec: Optional[IbSpec]) -> bool:
-        """True when spec represents a deferred expression (lambda/snapshot)."""
+        Callable instances are values produced by ``lambda``/``snapshot``
+        expressions or by ``@~...~`` LLM behaviors.  At the type level they all
+        share ``TypeKind.CALLABLE_INSTANCE``; the runtime distinguishes regular
+        deferred-expression evaluation from LLM behavior invocation via the
+        spec's axiom name (``"deferred"`` vs ``"behavior"``) and via the value's
+        payload type.
+        """
         if spec is None:
             return False
-        base = spec.get_base_name()
-        return base in ("deferred", "behavior")
+        return spec.kind == TypeKind.CALLABLE_INSTANCE.value
+
+    def is_behavior(self, spec: Optional[IbSpec]) -> bool:
+        """True when spec is a callable instance dispatched to the LLM behavior axiom."""
+        if spec is None:
+            return False
+        return spec.kind == TypeKind.CALLABLE_INSTANCE.value and spec.get_base_name() == "behavior"
 
     def is_dynamic(self, spec: Optional[IbSpec]) -> bool:
         """True for any/auto and any axiom that declares itself dynamic."""
@@ -567,7 +587,7 @@ class SpecRegistry:
         # Typed deferred / behavior: carry the expected value type explicitly.
         value_type_name = getattr(spec, "value_type_name", None)
         value_type_module = getattr(spec, "value_type_module", None)
-        if spec.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value) and value_type_name not in ("auto", "any", None, ""):
+        if spec.kind in (TypeKind.CALLABLE_INSTANCE.value,) and value_type_name not in ("auto", "any", None, ""):
             return self.resolve(value_type_name, value_type_module) or self.resolve("auto")
         axiom = self.get_axiom(spec)
         if axiom:

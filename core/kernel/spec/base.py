@@ -34,8 +34,17 @@ class TypeKind(str, Enum):
     OPTIONAL = "optional"
     BOUND_METHOD = "bound_method"
     MODULE = "module"
-    DEFERRED = "deferred"
-    BEHAVIOR = "behavior"
+    # CALLABLE_INSTANCE unifies the former DEFERRED + BEHAVIOR kinds.
+    # A callable instance is a typed value created by `lambda`/`snapshot` (deferred
+    # expression) or by `@~...~` (LLM behavior).  At the TYPE level both share the
+    # same kind; the runtime dispatch differentiation (regular AST re-evaluation
+    # vs LLM invocation) is encoded by the spec's ``name``/``_axiom_name``
+    # ("deferred" vs "behavior") and by the runtime value's payload.
+    # The capture mode (lambda vs snapshot) is a property of the VALUE
+    # (``IbDeferred.capture_mode`` / ``IbBehavior.capture_mode``) and of the
+    # creating AST node (``IbLambdaExpr.capture_mode``); it is NOT a property of
+    # the type.
+    CALLABLE_INSTANCE = "callable_instance"
     CALLABLE_SIG = "callable_sig"
     LAZY = "lazy"
 
@@ -205,9 +214,6 @@ class TypeDef(IbSpec):
     receiver_type_module: Optional[str] = None
     func_spec_name: str = ""
 
-    # -- DeferredSpec / BehaviorSpec fields -------------------------------
-    deferred_mode: str = "lambda"
-
     # -- ModuleSpec fields ------------------------------------------------
     required_capabilities: List[str] = field(default_factory=list)
 
@@ -269,8 +275,11 @@ TypeDef._KIND_BASE_NAMES = {
     TypeKind.OPTIONAL.value:      "Optional",
     TypeKind.BOUND_METHOD.value:  "bound_method",
     TypeKind.MODULE.value:        "module",
-    TypeKind.DEFERRED.value:      "deferred",
-    TypeKind.BEHAVIOR.value:      "behavior",
+    # NOTE: TypeKind.CALLABLE_INSTANCE is intentionally NOT mapped here.
+    # Callable-instance prototypes ("deferred"/"behavior") rely on either the
+    # spec's own ``name`` (for unparameterised prototypes) or on the
+    # ``_axiom_name`` override (for parameterised variants like
+    # ``deferred[int]``) to dispatch to the correct axiom.
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
 }

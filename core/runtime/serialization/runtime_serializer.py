@@ -204,7 +204,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbDeferred):
             data["_type"] = "deferred"
             data["node_uid"] = obj.node_uid
-            data["deferred_mode"] = obj.deferred_mode
+            data["capture_mode"] = obj.capture_mode
             
         else:
             # 普通用户定义对象
