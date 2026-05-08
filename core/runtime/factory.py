@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List, Mapping, Callable
+from typing import Any, Dict, Optional, List, Tuple, Sequence, Mapping, Callable, Union
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent, RuntimeContext, RuntimeSymbol
 )
@@ -7,7 +7,7 @@ from core.kernel.registry import KernelRegistry
 # 这些导入需要指向它们的新物理位置
 from core.runtime.interpreter.runtime_context import ScopeImpl, RuntimeContextImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbModule, IbNativeObject
-from core.runtime.objects.builtins import IbBehavior, IbDeferred, IbList
+from core.runtime.objects.builtins import IbBehavior, IbDeferred, IbList, IbTuple, IbDict
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 
 class RuntimeObjectFactory(IObjectFactory):
@@ -47,6 +47,15 @@ class RuntimeObjectFactory(IObjectFactory):
 
     def create_list(self, elements: List[IIbObject]) -> IIbList:
         return IbList(elements, ib_class=self._registry.get_class("list"))
+
+    def create_tuple(self, elements: Union[Tuple[IIbObject, ...], Sequence[IIbObject]]) -> IIbObject:
+        """Create an IbTuple from a tuple or sequence of IbObject elements."""
+        tup = elements if isinstance(elements, tuple) else tuple(elements)
+        return IbTuple(tup, ib_class=self._registry.get_class("tuple"))
+
+    def create_dict(self, fields: Dict[str, IIbObject]) -> IIbObject:
+        """Create an IbDict from a dict of IbObject values."""
+        return IbDict(dict(fields), ib_class=self._registry.get_class("dict"))
 
     def create_intent(self, content: str = "", mode: Any = None, tag: Optional[str] = None, role: Any = None) -> IIbIntent:
         return IbIntent(

@@ -3,7 +3,7 @@
 > 本文档仅记录低优先级事项。  
 > 高优先级类型系统主线不在此处维护，统一见 `docs/NEXT_STEPS.md` 与 `docs/TYPE_SYSTEM_TASKS.md`。
 
-> **最后更新**：2026-05-07（低优先级任务归并；类型系统相关项已从 pending 移出）
+> **最后更新**：2026-05-08（§6.2 MetadataRegistry 双轨已解决）
 
 ---
 
@@ -64,7 +64,11 @@
 ## 六、架构与基础设施
 
 ### 6.1 ImmutableArtifact `__deepcopy__` [PENDING]
-### 6.2 MetadataRegistry 双轨统一 [PENDING]
+### 6.2 MetadataRegistry 双轨统一 [已解决]
+
+主引擎路径（`discover_all(registry)` + `HostInterface(external_registry=...)`）已于 2026-05-08 统一为单一 SpecRegistry 实例。
+`discover_all()` 现在若传入 registry 但其 `get_metadata_registry()` 返回 None，会主动抛出 `ValueError` 以防止静默双轨。
+孤立使用（无 registry）时仍会创建独立实例，但主引擎路径不再受影响。
 
 ---
 

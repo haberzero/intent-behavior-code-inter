@@ -6,7 +6,7 @@
 > **最后更新**：2026-05-08
 >
 > 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./ARCH_DETAILS.md)。
-> 当前类型系统状态：`TypeRef` + `TypeDef` + `CALLABLE_INSTANCE` + `IbValue` 已落地；剩余主线为 M5（Axiom 接口统一化）。
+> 当前类型系统状态：`TypeRef` + `TypeDef` + `CALLABLE_INSTANCE` + `IbValue` + `TypeAxiom` 已落地；类型系统主线 M1–M5 全部完成（2026-05-08）。
 
 ---
 
@@ -236,14 +236,14 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
 | **IbSpec** | 所有类型描述符的基类 | `kernel/spec/base.py` |
-| **TypeDef（统一类型定义）+ 兼容别名（FuncSpec/ClassSpec/ListSpec...）** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
+| **TypeDef（统一类型定义；旧 *Spec 子类与别名已彻底删除）** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
 | **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry.py` |
 | **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry.py` |
 | **MemberSpec / MethodMemberSpec** | 模块成员描述符 | `kernel/spec/member.py` |
 
 `Symbol` 只保留 `.spec` 字段（`IbSpec` 类型），不存在 `.descriptor` 属性或任何兼容 shim。
 
-关于 MetadataRegistry（公理 Capability 查询入口）以及 MetadataRegistry 双轨问题，详见 ARCH_DETAILS.md。
+关于 MetadataRegistry（公理 Capability 查询入口）以及双轨问题解决详情，详见 ARCH_DETAILS.md §10。
 
 ---
 

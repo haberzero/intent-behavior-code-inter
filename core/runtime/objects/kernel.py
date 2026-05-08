@@ -180,14 +180,21 @@ class IbValue(IbObject):
     - ``fields``: object-style instance fields when the value has them
     - ``meta``: extra runtime metadata for specialized values
 
-    Container-like values may intentionally alias ``payload`` with an existing
-    mutable attribute (for example ``IbDict.fields``) when that attribute is
-    the canonical storage location for that value class.
+    Concrete value types (``IbInteger``, ``IbString``, ``IbList``,
+    ``IbDict``, ``IbDeferred``, ``IbBehavior``, …) inherit from ``IbValue``
+    and each carry their domain-specific behaviour (interning, native
+    conversions, list operations, callable execution logic, …).  They are
+    permanent type-implementation classes, not compatibility shims.
 
-    Concrete value subclasses (``IbInteger``, ``IbString``, ``IbList``,
-    ``IbDict``, ``IbDeferred``, ``IbBehavior``) provide type-specific runtime
-    behaviour (interning, native conversion helpers, capture-mode tracking, …)
-    on top of this storage model.
+    Storage conventions:
+    - Scalar types (int / float / str / bool) store their native value in
+      ``payload``; the inherited ``value`` property provides a named alias.
+    - Sequence types (list / tuple) store their element collection in
+      ``payload`` and expose it via an ``elements`` property.
+    - Dict stores its mapping via ``IbObject.fields`` (and mirrors it in
+      ``payload``).
+    - Callable instances (deferred / behavior) store the target node UID in
+      ``payload`` and runtime state in ``meta``.
     """
     __slots__ = ('type_ref', 'payload', 'meta')
 
@@ -472,14 +479,15 @@ class IbClass(IbObject):
         for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbDeferredField):
                 if val_info.static_val is not None:
-                    # 优先使用预评估好的快照，但可变容器（IbList/IbDict）必须每次创建新实例，
+                    # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
                     # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
-                    from core.runtime.objects.builtins import IbList, IbDict
                     sv = val_info.static_val
-                    if isinstance(sv, IbList):
-                        instance.fields[name] = IbList(list(sv.elements), sv.ib_class)
-                    elif isinstance(sv, IbDict):
-                        instance.fields[name] = IbDict(dict(sv.fields), sv.ib_class)
+                    # 可变容器（list/dict）需每次创建新实例以避免共享——
+                    # 使用 type(sv)(...) 保持多态性，无需引入具体类名。
+                    if isinstance(sv, IbValue) and sv.ib_class.name == "list":
+                        instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
+                    elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
+                        instance.fields[name] = type(sv)(dict(sv.fields), sv.ib_class)
                     else:
                         instance.fields[name] = sv
                 elif val_info.val_uid and context:

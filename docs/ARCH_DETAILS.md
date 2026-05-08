@@ -210,7 +210,7 @@ if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
 ```
 core/kernel/spec/
 ├── base.py       → IbSpec 基类 + TypeDef 统一类型模型 + TypeKind
-├── specs.py      → 内置类型原型与兼容别名（FuncSpec/ClassSpec/... 均映射到 TypeDef）
+├── specs.py      → 内置类型原型常量（INT_SPEC、FLOAT_SPEC、STR_SPEC 等）
 ├── registry.py   → SpecRegistry（核心门面）+ SpecFactory（工厂）
 └── member.py     → MemberSpec / MethodMemberSpec
 ```
@@ -320,24 +320,23 @@ class IbStatefulPlugin(ABC):
 
 ---
 
-## 十、MetadataRegistry 双轨并行（历史遗留）
+## 十、MetadataRegistry 双轨并行（已解决）
 
-当前架构中 MetadataRegistry 存在两个并行实例：
+主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例（2026-05-08）：
 
 ```
 Engine.__init__()
     │
     ├── KernelRegistry() + initialize_builtin_classes()
-    │       └──→ MetadataRegistry (轨A) → 内置类型/函数的公理 Capability
+    │       └──→ SpecRegistry（唯一实例）
     │
-    └── discover_all()
-            └──→ HostInterface()
-                    └──→ MetadataRegistry (轨B) → 插件元数据
+    └── _ensure_plugins_discovered() → discover_all(self.registry)
+                └──→ HostInterface(external_registry=SpecRegistry)
+                        └──→ HostInterface.metadata = 同一 SpecRegistry 实例 ✅
 ```
 
-两轨相互独立，不共享实例。不影响当前功能（两条查询路径分别服务编译期类型检查和运行时 LLM 输出解析），但在复杂场景下存在元数据不一致的潜在风险。
-
-长期修复方向：实现 `.ibc_meta` 文件机制，将编译阶段的元数据获取与运行时实例解耦（见 PENDING_TASKS.md）。
+`discover_all()` 必须传入已初始化的 `KernelRegistry`；若未传入 registry（仅限孤立测试场景），
+`HostInterface()` 会创建独立 SpecRegistry 实例，但主引擎路径不会走此分支。
 
 ---
 

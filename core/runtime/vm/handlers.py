@@ -51,9 +51,9 @@ from core.runtime.interpreter.constants import (
     UNARY_OP_MAPPING,
     AST_OP_MAP,
 )
-from core.runtime.objects.builtins import IbBehavior, IbDeferred
 from core.runtime.objects.kernel import (
     IbObject,
+    IbValue,
     IbUserFunction,
     IbLLMFunction,
     IbClass,
@@ -310,7 +310,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         args.append((yield a_uid))
 
     # P2：IbDeferred（lambda/snapshot）完全 CPS 内联，不再调用 ec.visit()
-    if isinstance(func, IbDeferred):
+    if isinstance(func, IbValue) and func.ib_class.name == "deferred":
         result = yield from _vm_call_deferred(executor, func, args)
         return result
 
@@ -369,7 +369,7 @@ def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 表达式求值理论上不产生控制信号；若子节点意外携带信号上来，
         # 仍按数据透传给父帧处理而不是当场丢弃。
         return res
-    if isinstance(res, IbBehavior):
+    if isinstance(res, IbValue) and res.ib_class.name == "behavior":
         # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor），M3a 不重写
         return res.call(executor.registry.get_none(), [])
     return res
@@ -700,9 +700,7 @@ def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: boo
         obj.receive("__setitem__", [slice_obj, value])
 
     elif t == "IbTuple":
-        from core.runtime.objects.builtins import IbList
-        from core.runtime.objects.builtins import IbTuple as IbTupleObj
-        if isinstance(value, (IbList, IbTupleObj)):
+        if isinstance(value, IbValue) and value.ib_class.name in ("list", "tuple"):
             vals = list(value.elements)
         else:
             try:

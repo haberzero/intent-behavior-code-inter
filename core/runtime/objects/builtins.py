@@ -13,11 +13,10 @@ class IbInteger(IbValue):
     实现小整数驻留 (Interning) 以优化性能。
     现在驻留缓存已移动到 Registry 实例中，实现引擎隔离。
     """
-    __slots__ = ('value',)
-    
+    __slots__ = ()
+
     def __init__(self, value: int, ib_class: IbClass):
         super().__init__(ib_class, payload=value)
-        self.value = value
 
     @classmethod
     def from_native(cls, value: int, ib_class: IbClass) -> 'IbInteger':
@@ -92,11 +91,10 @@ class IbBool(IbValue):
     """
     包装 Python 原生 bool 的 IBC 对象。
     """
-    __slots__ = ('value',)
+    __slots__ = ()
 
     def __init__(self, value: bool, ib_class: IbClass):
         super().__init__(ib_class, payload=value)
-        self.value = value
 
     def to_native(self, memo=None) -> bool:
         return self.value
@@ -122,11 +120,10 @@ class IbFloat(IbValue):
     """
     包装 Python 原生 float 的 IBC 对象。
     """
-    __slots__ = ('value',)
+    __slots__ = ()
 
     def __init__(self, value: float, ib_class: IbClass):
         super().__init__(ib_class, payload=value)
-        self.value = value
 
     def to_native(self, memo=None) -> float:
         return self.value
@@ -168,11 +165,10 @@ class IbString(IbValue):
     """
     包装 Python 原生 str 的 IBC 对象。
     """
-    __slots__ = ('value',)
+    __slots__ = ()
 
     def __init__(self, value: str, ib_class: IbClass):
         super().__init__(ib_class, payload=value)
-        self.value = value
 
     def to_native(self, memo=None) -> str:
         return self.value
@@ -376,12 +372,20 @@ class IbException(IbValue):
 class IbList(IbValue):
     """
     包装 Python 原生 list 的 IBC 对象。
+    ``elements`` 是 ``payload`` 的具名视图；通过 property 保持两者自动同步。
     """
-    __slots__ = ('elements',)
+    __slots__ = ()
 
     def __init__(self, elements: List[IbObject], ib_class: IbClass):
         super().__init__(ib_class, payload=elements)
-        self.elements = elements
+
+    @property
+    def elements(self):
+        return self.payload
+
+    @elements.setter
+    def elements(self, val):
+        self.payload = val
 
     def to_native(self, memo=None) -> List[Any]:
         if memo is None: memo = {}
@@ -509,12 +513,20 @@ class IbTuple(IbValue):
     """
     包装 Python 原生 tuple 的 IBC 对象。
     与 IbList 的关键区别：不可变（没有 append/pop/sort/clear/__setitem__）。
+    ``elements`` 是 ``payload`` 的具名视图；通过 property 保持两者自动同步。
     """
-    __slots__ = ('elements',)
+    __slots__ = ()
 
     def __init__(self, elements: tuple, ib_class: IbClass):
         super().__init__(ib_class, payload=elements)
-        self.elements = elements  # tuple of IbObject
+
+    @property
+    def elements(self):
+        return self.payload
+
+    @elements.setter
+    def elements(self, val):
+        self.payload = val
 
     def to_native(self, memo=None) -> tuple:
         if memo is None: memo = {}

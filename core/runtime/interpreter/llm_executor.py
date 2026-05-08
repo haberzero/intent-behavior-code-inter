@@ -10,9 +10,8 @@ from core.kernel.issue import InterpreterError
 from core.runtime.interpreter.llm_result import LLMResult, LLMFuture
 from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
-from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel import IbObject, IbValue
 from core.runtime.objects.intent import IbIntent
-from core.runtime.objects.builtins import IbBehavior
 from core.runtime.exceptions import ThrownException
 
 from core.kernel.intent_logic import IntentMode, IntentRole
@@ -658,7 +657,7 @@ class LLMExecutorImpl:
 
         返回 LLMResult。
         """
-        if not isinstance(behavior, IbBehavior):
+        if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
              return LLMResult.success_result(value=behavior)
 
         if behavior._cache is not None:

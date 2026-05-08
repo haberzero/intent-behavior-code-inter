@@ -26,9 +26,9 @@ if TYPE_CHECKING:
     from .type_ref import TypeRef
 
 
-# Sentinel TypeRef used as default for type fields that have not been set.
-# "any" is the universal top type and is used by the existing flat-string
-# defaults (``element_type_name = "any"`` etc.).
+# Sentinel TypeRef used as a default placeholder for optional type fields
+# that have not been explicitly set.
+# "any" is the universal top type used when no specific type constraint is declared.
 _ANY_REF = _TypeRef.of("any")
 
 
