@@ -168,6 +168,84 @@ class IbObject:
     def __repr__(self):
         return f"<{self.ib_class.name} object at {hex(id(self))}>"
 
+
+class IbValue(IbObject):
+    """
+    M4: unified runtime value carrier.
+
+    ``IbValue`` centralizes the data shape shared by all user-visible runtime
+    values:
+    - ``type_ref``: structured runtime type identity
+    - ``payload``: native payload / container payload / callable payload
+    - ``fields``: object-style instance fields when the value has them
+    - ``meta``: extra runtime metadata for specialized values
+
+    Existing concrete value classes (``IbInteger``, ``IbList``, ``IbBehavior``,
+    etc.) now act as compatibility shims over this storage model so older call
+    sites can keep using their established attribute names while the runtime
+    progressively converges on a single value representation.
+    """
+    __slots__ = ('type_ref', 'payload', 'meta')
+
+    def __init__(
+        self,
+        ib_class: 'IbClass',
+        payload: Any = None,
+        *,
+        fields: Optional[Mapping[str, Any]] = None,
+        type_ref: Optional[Any] = None,
+        meta: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(ib_class)
+        if fields is not None:
+            self.fields = fields
+        spec = getattr(ib_class, "spec", None)
+        self.type_ref = type_ref if type_ref is not None else (
+            spec.type_ref if spec is not None and hasattr(spec, "type_ref") else None
+        )
+        self.payload = payload
+        self.meta = dict(meta) if meta is not None else {}
+
+    @property
+    def value(self) -> Any:
+        return self.payload
+
+    @value.setter
+    def value(self, new_value: Any) -> None:
+        self.payload = new_value
+
+    def get_type_name(self) -> str:
+        if self.type_ref is not None and hasattr(self.type_ref, "head"):
+            return self.type_ref.head
+        return self.ib_class.name
+
+    def is_type(self, *names: str) -> bool:
+        return self.get_type_name() in names or self.ib_class.name in names
+
+    def get_meta(self, key: str, default: Any = None) -> Any:
+        return self.meta.get(key, default)
+
+    def set_meta(self, key: str, value: Any) -> None:
+        self.meta[key] = value
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        return self.payload
+
+    def serialize_for_debug(self) -> Mapping[str, Any]:
+        data: Dict[str, Any] = {"type": self.get_type_name(), "payload": self.payload}
+        if self.fields:
+            data["fields"] = {
+                k: (v.serialize_for_debug() if isinstance(v, IbObject) else v)
+                for k, v in self.fields.items()
+            }
+        if self.meta:
+            data["meta"] = dict(self.meta)
+        return data
+
+    def __repr__(self):
+        return f"<{self.get_type_name()} value payload={self.payload!r}>"
+
+
 class IbNativeObject(IbObject):
     """
     包装 Python 原生对象的 IBC 对象。
@@ -595,13 +673,13 @@ class IbSuperProxy(IbObject):
         return f"<super: <class '{parent_name}'>, <{self._receiver.ib_class.name} object>>"
 
 
-class IbNone(IbObject):
+class IbNone(IbValue):
     """
     IBC-Inter 的空对象 (None)。
     现在通过 Registry 获取单例。
     """
     def __init__(self, ib_class: 'IbClass'):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=None)
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         if message == '__eq__':
@@ -637,7 +715,7 @@ class IbNone(IbObject):
 
 
 @register_ib_type("llm_uncertain")
-class IbLLMUncertain(IbObject):
+class IbLLMUncertain(IbValue):
     """
     表示 LLM 调用重试耗尽后仍无法得到确定结果的特殊值。
 
@@ -651,7 +729,7 @@ class IbLLMUncertain(IbObject):
     - 不进入异常体系——用户通过 if/while 逻辑主动检测
     """
     def __init__(self, ib_class: 'IbClass'):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=None)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return None
@@ -678,7 +756,7 @@ class IbLLMUncertain(IbObject):
 
 
 @register_ib_type("llm_call_result")
-class IbLLMCallResult(IbObject):
+class IbLLMCallResult(IbValue):
     """
     LLM 调用结果的结构化类型。
 
@@ -702,7 +780,15 @@ class IbLLMCallResult(IbObject):
     """
     def __init__(self, ib_class: 'IbClass', is_certain: bool, value: Optional['IbObject'] = None,
                  raw_response: str = "", retry_hint: str = ""):
-        super().__init__(ib_class)
+        super().__init__(
+            ib_class,
+            payload=value,
+            meta={
+                "is_certain": is_certain,
+                "raw_response": raw_response,
+                "retry_hint": retry_hint,
+            },
+        )
         self.is_certain = is_certain
         self.result_value = value
         self.raw_response = raw_response

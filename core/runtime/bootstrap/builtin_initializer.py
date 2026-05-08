@@ -364,6 +364,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         res = IbList([], reg.get_class("list"))
         memo[id(val)] = res
         res.elements = [reg.box(i, memo) for i in val]
+        res.payload = res.elements
         return res
 
     def _box_tuple(reg, val, memo):
@@ -377,6 +378,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         res = IbDict({}, reg.get_class("dict"))
         memo[id(val)] = res
         res.fields = {k: reg.box(v, memo) for k, v in val.items()}
+        res.payload = res.fields
         return res
         
     registry.register_boxer(list, _box_list, token)

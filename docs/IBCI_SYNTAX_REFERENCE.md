@@ -3,7 +3,7 @@
 > **说明**：本文档覆盖 IBC-Inter (IBCI) 所有当前支持的语法特性，包括已知限制的标注。
 > 语言设计限制的详细说明见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-04-29
+> **最后更新**：2026-05-08
 
 ---
 
@@ -173,14 +173,15 @@ print((str)counter)    # 1
 | `+` | 加法 / 字符串拼接 / 列表拼接 | int, float, str, list |
 | `-` | 减法 | int, float |
 | `*` | 乘法 / 字符串重复 / 列表重复 | int, float, str×int, list×int |
-| `/` | 除法（结果为 float） | int, float |
+| `/` | 除法（`int/int` 为地板除；涉及 `float` 时为浮点除法） | int, float |
 | `//` | 整除 | int, float |
 | `%` | 取模 | int, float |
 
 ```ibci
 int a = 10 + 3       # 13
-float b = 7.0 / 2    # 3.5（除法总返回 float）
-int c = 7 // 2       # 3（整除）
+int b = 7 / 2        # 3（int/int 按地板除处理）
+float c = 7.0 / 2    # 3.5（涉及 float 时为浮点除法）
+int d = 7 // 2       # 3（显式整除）
 str s = "ab" * 3     # "ababab"
 list[int] l = [1,2] * 3   # [1,2,1,2,1,2]
 ```

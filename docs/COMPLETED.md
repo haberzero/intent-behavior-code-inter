@@ -1,7 +1,10 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-05-06（用户自定义异常体系落地；`try/except/raise/finally` 机制完整可用；EXCEPTION_SPEC 升级为 ClassSpec；TestE2EUserDefinedException 7 个新测试全通过；**1056 个测试通过**）
+> **最后更新**：2026-05-08（类型系统 M1–M4 全部落地；测试基线 **1184 passed**）
+>
+> **阅读说明**：本文件是**演进归档**，旧章节会保留当时的术语、基线和阶段性结论。  
+> 当前真实状态请以 `docs/NEXT_STEPS.md` 与 `docs/TYPE_SYSTEM_TASKS.md` 为准；若归档正文中出现 `deferred_mode`、`DeferredSpec`、旧测试基线等表述，应按对应章节的历史时间点理解，而不是按当前实现理解。
 
 ---
 
@@ -1484,3 +1487,40 @@ python3 -m pytest tests/ -q --tb=short
 - `test_user_exception_extra_field_via_cast_workaround` — 子类专属字段通过 cast 访问
 - `test_user_exception_does_not_match_unrelated_class` — 不相关类不误匹配
 - `test_llm_call_error_user_raise_and_catch` — 用户手动 raise LLMCallError
+
+---
+
+## 二十五、类型系统主线 M1–M4 收口（2026-05-07 ~ 2026-05-08）
+
+> 本节记录当前代码库最近一轮类型系统主线收口结果；它覆盖 `docs/NEXT_STEPS.md` 与 `docs/TYPE_SYSTEM_TASKS.md` 中已勾选完成的 M1–M4。
+
+### 25.1 M1：TypeRef 引入（完成）
+
+- `core/kernel/spec/type_ref.py` 新增 `TypeRef(head, args, module)` 结构化类型引用。
+- `IbSpec.type_ref` / `MemberSpec.type_ref` / `MethodMemberSpec.return_type` / `param_types` 全链路落地。
+- `SpecRegistry.resolve_typeref()` 与跨模块 `TypeRef.of(name, module)` 路径打通。
+
+### 25.2 M2：Optional[T] 与空安全（完成）
+
+- `Optional[T]` 成为唯一的可空建模入口。
+- `SpecRegistry.is_assignable()` 与 artifact rehydration 已切换到 `Optional[T]` 语义。
+- `Optional.unwrap()` / `or_else()` 返回类型与参数类型收口到 `T`。
+
+### 25.3 M3：TypeDef 单一化 + callable-instance 路线（完成）
+
+- 旧多 `*Spec` 结构已收敛为单一 `TypeDef`，`FuncSpec/ClassSpec/ListSpec/...` 保留为兼容别名。
+- in-memory 模型中所有关系字段统一改为 `TypeRef`：`return_type / parent_type / element_type / key_type / value_type / wrapped_type / receiver_type / param_types / allowed_element_types`。
+- `TypeKind.DEFERRED` 与 `TypeKind.BEHAVIOR` 已合并为 `TypeKind.CALLABLE_INSTANCE`。
+- `capture_mode` 明确为**值层语义**，不再存放于 `TypeDef`。
+
+### 25.4 M4：IbValue 单值模型（完成）
+
+- 新增 `IbValue(type_ref, payload, fields, meta)` 作为运行时值的统一公共承载层（`core/runtime/objects/kernel.py`）。
+- `IbInteger` / `IbBool` / `IbFloat` / `IbString` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbDeferred` / `IbBehavior` 全部转入 `IbValue` 子体系。
+- 现有类名保留为**兼容包装层**，以避免一次性打断 VM、序列化、插件与测试路径；但共享的运行时数据布局已经统一。
+
+### 25.5 当前状态
+
+- **已完成**：M1 / M2 / M3 / M4
+- **未完成**：M5（Axiom 接口统一化）
+- **测试基线**：`python -m pytest tests/ -q --tb=short` → **1184 passed**
