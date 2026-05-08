@@ -180,6 +180,10 @@ class IbValue(IbObject):
     - ``fields``: object-style instance fields when the value has them
     - ``meta``: extra runtime metadata for specialized values
 
+    Container-like values may intentionally alias ``payload`` with an existing
+    mutable compatibility attribute (for example ``IbDict.fields``) when that
+    attribute is already the canonical storage location in legacy call sites.
+
     Existing concrete value classes (``IbInteger``, ``IbList``, ``IbBehavior``,
     etc.) now act as compatibility shims over this storage model so older call
     sites can keep using their established attribute names while the runtime

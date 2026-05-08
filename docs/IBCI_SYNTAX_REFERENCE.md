@@ -173,8 +173,8 @@ print((str)counter)    # 1
 | `+` | 加法 / 字符串拼接 / 列表拼接 | int, float, str, list |
 | `-` | 减法 | int, float |
 | `*` | 乘法 / 字符串重复 / 列表重复 | int, float, str×int, list×int |
-| `/` | 除法（`int/int` 为地板除；涉及 `float` 时为浮点除法） | int, float |
-| `//` | 整除 | int, float |
+| `/` | 除法：**在 IBCI 中，`int/int` 也执行地板除**；若任一操作数为 `float`，则执行浮点除法 | int, float |
+| `//` | 显式整除（与 `int/int` 的 `/` 一致，但在源码中更直观） | int, float |
 | `%` | 取模 | int, float |
 
 ```ibci
