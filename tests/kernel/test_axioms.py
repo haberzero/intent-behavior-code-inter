@@ -6,9 +6,7 @@ Unit tests for core/kernel/axioms/ layer.
 Coverage:
   - AxiomRegistry: register, get_axiom, list_axioms
   - register_core_axioms: all expected primitives present
-  - Per-axiom: get_method_specs, get_operator_capability,
-               get_call_capability, get_iter_capability,
-               get_subscript_capability, is_compatible
+  - Per-axiom: get_method_specs, has_*_cap capability flags, is_compatible
   - EnumAxiom: instance-level isolation (no cross-instance leakage)
   - SpecRegistry delegation: get_axiom, get_operator_cap, get_call_cap,
                              get_iter_cap, get_subscript_cap
@@ -93,23 +91,19 @@ class TestAxiomMethodSpecs:
 class TestOperatorCapability:
     def test_int_has_operator_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("int")
-        cap = ax.get_operator_capability()
-        assert cap is not None
+        assert ax.has_operator_cap is True
 
     def test_float_has_operator_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("float")
-        cap = ax.get_operator_capability()
-        assert cap is not None
+        assert ax.has_operator_cap is True
 
     def test_bool_has_operator_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("bool")
-        cap = ax.get_operator_capability()
-        assert cap is not None
+        assert ax.has_operator_cap is True
 
     def test_str_has_operator_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("str")
-        cap = ax.get_operator_capability()
-        assert cap is not None
+        assert ax.has_operator_cap is True
 
     def test_void_no_operator_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("void")
@@ -117,10 +111,10 @@ class TestOperatorCapability:
         # void is not dynamic — it has a concrete, non-permissive axiom
         assert ax.is_dynamic() is False
         # void has no capabilities
-        assert ax.get_operator_capability() is None
-        assert ax.get_call_capability() is None
-        assert ax.get_iter_capability() is None
-        assert ax.get_subscript_capability() is None
+        assert ax.has_operator_cap is False
+        assert ax.has_call_cap is False
+        assert ax.has_iter_cap is False
+        assert ax.has_subscript_cap is False
 
     def test_void_compatible_only_with_void(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("void")
@@ -137,13 +131,11 @@ class TestOperatorCapability:
 class TestCallCapability:
     def test_callable_has_call_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("callable")
-        cap = ax.get_call_capability()
-        assert cap is not None
+        assert ax.has_call_cap is True
 
     def test_int_no_call_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("int")
-        cap = ax.get_call_capability()
-        assert cap is None
+        assert ax.has_call_cap is False
 
 
 # ---------------------------------------------------------------------------
@@ -153,19 +145,16 @@ class TestCallCapability:
 class TestIterCapability:
     def test_list_has_iter_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("list")
-        cap = ax.get_iter_capability()
-        assert cap is not None
+        assert ax.has_iter_cap is True
 
     def test_int_no_iter_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("int")
-        cap = ax.get_iter_capability()
-        assert cap is None
+        assert ax.has_iter_cap is False
 
     def test_str_has_iter_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("str")
-        cap = ax.get_iter_capability()
         # Strings are iterable in IBC
-        assert cap is not None
+        assert ax.has_iter_cap is True
 
 
 # ---------------------------------------------------------------------------
@@ -175,18 +164,15 @@ class TestIterCapability:
 class TestSubscriptCapability:
     def test_list_has_subscript_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("list")
-        cap = ax.get_subscript_capability()
-        assert cap is not None
+        assert ax.has_subscript_cap is True
 
     def test_dict_has_subscript_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("dict")
-        cap = ax.get_subscript_capability()
-        assert cap is not None
+        assert ax.has_subscript_cap is True
 
     def test_int_no_subscript_cap(self, ax_reg: AxiomRegistry):
         ax = ax_reg.get_axiom("int")
-        cap = ax.get_subscript_capability()
-        assert cap is None
+        assert ax.has_subscript_cap is False
 
 
 # ---------------------------------------------------------------------------

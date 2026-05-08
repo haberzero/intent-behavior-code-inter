@@ -697,24 +697,16 @@ class SemanticAnalyzer:
         # 没有返回类型标注时默认 auto（编译期推断），而非 void
         ret_type = self._resolve_type(node.returns) if node.returns else self._auto_desc
         
-        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
-        call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
-        writable = call_trait.get_writable_trait() if call_trait else None
-
-        if writable:
-            # 安全回填分析得到的参数与返回类型
-            writable.update_signature(param_types, ret_type)
-        else:
-            # Known Limit 2 修复：嵌套函数的 FuncSpec 未被 Pass 2 (TypeResolver) 处理，
-            # 此时直接创建携带正确签名的 FuncSpec 并替换符号的 spec。
-            # 对于顶层函数，Pass 2 已正确设置 spec，此处为幂等操作。
-            updated_spec = self.registry.factory.create_func(
-                name=node.name,
-                param_type_names=[p.name for p in param_types],
-                return_type_name=ret_type.name if ret_type else "void"
-            )
-            updated_spec.is_user_defined = True
-            sym.spec = updated_spec
+        # 函数 spec 元数据回填：直接重建 FuncSpec 携带分析得到的签名。
+        # 对顶层函数 Pass 2 已正确设置 spec，此处为幂等操作；对嵌套函数则
+        # 修复 Known Limit 2 — 它们的 FuncSpec 未被 Pass 2 (TypeResolver) 处理。
+        updated_spec = self.registry.factory.create_func(
+            name=node.name,
+            param_type_names=[p.name for p in param_types],
+            return_type_name=ret_type.name if ret_type else "void"
+        )
+        updated_spec.is_user_defined = True
+        sym.spec = updated_spec
             
         # 进入局部作用域
         old_table = self.symbol_table
@@ -804,11 +796,8 @@ class SemanticAnalyzer:
                     )
                     inferred = self._any_desc
 
-                # Backfill the inferred type into the function spec.
-                # `writable` and `sym` are already in scope from above.
-                if writable:
-                    writable.update_signature(param_types, inferred)
-                elif sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+                # Backfill the inferred return type into the function spec.
+                if sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                     sym.spec.return_type = TypeRef.of(inferred.name, getattr(inferred, "module_path", None))
 
             elif ret_type is not self._void_desc:
@@ -861,13 +850,12 @@ class SemanticAnalyzer:
         # 2. ParserCapability.get_llm_prompt_fragment() 注入系统提示词
         # 3. TypeAxiom.get_return_type_hint() 提供类型特定的返回提示
         
-        # 使用 WritableTrait 更新元数据，消除对实现类的直接依赖
-        call_trait = self.registry.get_call_cap(sym.spec or self._any_desc)
-        writable = call_trait.get_writable_trait() if call_trait else None
-        
-        if writable:
-            # 安全回填分析得到的参数与返回类型
-            writable.update_signature(param_types, ret_type)
+        # 函数 spec 元数据回填（与 visit_IbFunctionDef 对称）。
+        if sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+            sym.spec.return_type = TypeRef.of(ret_type.name, getattr(ret_type, "module_path", None))
+            sym.spec.param_types = [
+                TypeRef.of(p.name, getattr(p, "module_path", None)) for p in param_types
+            ]
             
         # 进入局部作用域以校验提示词中的占位符
         old_table = self.symbol_table
@@ -1861,18 +1849,7 @@ class SemanticAnalyzer:
         res = self.registry.resolve_return(func_type, arg_types)
         
         if not res:
-            # 通过 Trait 提取签名信息进行诊断
-            if call_trait and hasattr(call_trait, 'param_types'):
-                param_types = call_trait.param_types
-                if len(arg_types) != len(param_types):
-                    self.error(f"Function expected {len(param_types)} arguments, but got {len(arg_types)}", node, code="SEM_005")
-                else:
-                    for i, (expected, actual) in enumerate(zip(param_types, arg_types)):
-                        if not self.registry.is_assignable(actual, expected):
-                            hint = self.registry.get_diff_hint(actual, expected)
-                            self.error(f"Argument {i+1} type mismatch: expected '{expected.name}', but got '{actual.name}'", node, code="SEM_003", hint=hint)
-            else:
-                self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
+            self.error(f"Invalid call to '{func_type.name}'", node, code="SEM_003")
             return self._any_desc
 
         # G2: note-level warning when a specialized container write method receives a

@@ -3,29 +3,30 @@ core/kernel/axioms/primitives.py
 
 Concrete axiom implementations for all built-in IBCI types.
 
-Key changes from the old version
----------------------------------
-* NO imports from core.kernel.types or core.kernel.spec.
-* All type references in capability methods are plain strings.
-* ``get_method_specs()`` returns Dict[str, MethodMemberSpec] instead of
-  Dict[str, FunctionMetadata] — MethodMemberSpec is imported from
-  core.kernel.spec.member (pure data, no circular risk).
-* EnumAxiom._enum_index_registry is now an instance dict (not a class dict),
-  eliminating the cross-engine global-state bug.
+Post-M5 design
+--------------
+* Single inheritance from ``BaseAxiom``.  The legacy multi-inheritance with
+  per-capability Protocol classes (``CallCapability``, ``IterCapability``…)
+  has been removed — all capability methods now live directly on the
+  unified ``TypeAxiom`` interface.
+* Each concrete axiom declares the capabilities it implements via
+  ``has_*_cap`` class attributes.  ``BaseAxiom`` defaults all of them to
+  ``False`` and provides safe no-op defaults for every capability method.
+* No imports from ``core.kernel.types`` / ``core.kernel.spec``.  All type
+  references in capability methods are plain strings.
+* ``get_method_specs()`` returns ``Dict[str, MethodMemberSpec]`` —
+  ``MemberSpec`` / ``MethodMemberSpec`` are pure data, no circular risk.
+* ``EnumAxiom._enum_index_registry`` is an instance dict (eliminating the
+  pre-M5 cross-engine global-state bug).
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 import re
-import json
 
 from core.runtime.support.fuzzy_json import FuzzyJsonParser
-from core.kernel.axioms.protocols import (
-    TypeAxiom, CallCapability, IterCapability, SubscriptCapability,
-    OperatorCapability, ConverterCapability, ParserCapability,
-    FromPromptCapability, IlmoutputHintCapability,
-)
+from core.kernel.axioms.protocols import TypeAxiom
 from core.kernel.spec.member import MethodMemberSpec, MemberSpec
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
@@ -58,15 +59,64 @@ def _m(
 # Base axiom                                                          #
 # ------------------------------------------------------------------ #
 
-class BaseAxiom(TypeAxiom):
-    """Default implementations for axiom methods."""
+class BaseAxiom:
+    """
+    Default implementations for the unified TypeAxiom interface.
 
+    Concrete axioms override the ``has_*_cap`` flags they support and
+    the corresponding capability methods.  Unset capabilities surface
+    as ``False`` flags + safe no-op method bodies so callers can rely on
+    the flags as a single source of truth.
+    """
+
+    # ---- Capability flags (default: not capable) ------------------- #
+    has_call_cap: bool = False
+    has_iter_cap: bool = False
+    has_subscript_cap: bool = False
+    has_operator_cap: bool = False
+    has_converter_cap: bool = False
+    has_parser_cap: bool = False
+    has_from_prompt_cap: bool = False
+    has_output_hint_cap: bool = False
+    has_llm_call_cap: bool = False
+
+    # ---- Method / operator specs ----------------------------------- #
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {}
 
     def get_operators(self) -> Dict[str, str]:
         return {}
 
+    # ---- Capability methods (no-op defaults) ----------------------- #
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        return None
+
+    def get_element_type_name(self) -> str:
+        return "any"
+
+    def resolve_item_type_name(self, key_type_name: str) -> Optional[str]:
+        return None
+
+    def resolve_operation_type_name(
+        self, op: str, other_name: Optional[str]
+    ) -> Optional[str]:
+        return None
+
+    def can_convert_from(self, source_type_name: str) -> bool:
+        return False
+
+    def parse_value(self, raw_value: str) -> Any:
+        return raw_value
+
+    def from_prompt(
+        self, raw_response: str, spec: Optional["IbSpec"] = None
+    ) -> Tuple[bool, Any]:
+        return (False, "axiom does not support from_prompt")
+
+    def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
+        return ""
+
+    # ---- Type characteristics -------------------------------------- #
     def is_dynamic(self) -> bool:
         return False
 
@@ -82,41 +132,30 @@ class BaseAxiom(TypeAxiom):
     def get_parent_axiom_name(self) -> Optional[str]:
         return "Object"
 
-    def get_writable_trait(self):
-        return None
-
     def can_return_from_isolated(self) -> bool:
         return False
-
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]:
-        return None
-
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]:
-        return None
 
     def get_diff_hint(self, other_name: str) -> Optional[str]:
         return None
 
-    def get_llm_call_capability(self) -> Optional['LLMCallCapability']:
-        return None
 
-class IntAxiom(
-    BaseAxiom, OperatorCapability, ConverterCapability,
-    ParserCapability, FromPromptCapability, IlmoutputHintCapability,
-):
+# ------------------------------------------------------------------ #
+# int                                                                 #
+# ------------------------------------------------------------------ #
+
+class IntAxiom(BaseAxiom):
+    has_operator_cap = True
+    has_converter_cap = True
+    has_parser_cap = True
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+
     @property
     def name(self) -> str:
         return "int"
 
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def can_return_from_isolated(self) -> bool: return True
+    def can_return_from_isolated(self) -> bool:
+        return True
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -183,23 +222,19 @@ class IntAxiom(
 # float                                                               #
 # ------------------------------------------------------------------ #
 
-class FloatAxiom(
-    BaseAxiom, OperatorCapability, ConverterCapability,
-    ParserCapability, FromPromptCapability, IlmoutputHintCapability,
-):
+class FloatAxiom(BaseAxiom):
+    has_operator_cap = True
+    has_converter_cap = True
+    has_parser_cap = True
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+
     @property
     def name(self) -> str:
         return "float"
 
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def can_return_from_isolated(self) -> bool: return True
+    def can_return_from_isolated(self) -> bool:
+        return True
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -260,24 +295,22 @@ class FloatAxiom(
 # bool                                                                #
 # ------------------------------------------------------------------ #
 
-class BoolAxiom(
-    BaseAxiom, OperatorCapability, ConverterCapability,
-    ParserCapability, FromPromptCapability, IlmoutputHintCapability,
-):
+class BoolAxiom(BaseAxiom):
+    has_operator_cap = True
+    has_converter_cap = True
+    has_parser_cap = True
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+
     @property
     def name(self) -> str:
         return "bool"
 
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def can_return_from_isolated(self) -> bool: return True
-    def get_parent_axiom_name(self) -> Optional[str]: return "int"
+    def can_return_from_isolated(self) -> bool:
+        return True
+
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "int"
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -339,23 +372,19 @@ class BoolAxiom(
 # str                                                                 #
 # ------------------------------------------------------------------ #
 
-class StrAxiom(
-    BaseAxiom, OperatorCapability, IterCapability, SubscriptCapability,
-    ParserCapability, FromPromptCapability,
-):
+class StrAxiom(BaseAxiom):
+    has_operator_cap = True
+    has_iter_cap = True
+    has_subscript_cap = True
+    has_parser_cap = True
+    has_from_prompt_cap = True
+
     @property
     def name(self) -> str:
         return "str"
 
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
-    def get_iter_capability(self) -> Optional[IterCapability]: return self
-    def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self): return None  # str: LLM output is naturally str, no extra hint needed
-    def get_call_capability(self): return None
-    def get_converter_capability(self): return None
-    def can_return_from_isolated(self) -> bool: return True
+    def can_return_from_isolated(self) -> bool:
+        return True
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -363,7 +392,6 @@ class StrAxiom(
             "upper":      _m("upper",      ret="str"),
             "lower":      _m("lower",      ret="str"),
             "strip":      _m("strip",      ret="str"),
-            # IBCI-style aliases for strip/upper/lower
             "trim":       _m("trim",       ret="str"),
             "to_upper":   _m("to_upper",   ret="str"),
             "to_lower":   _m("to_lower",   ret="str"),
@@ -436,23 +464,18 @@ class StrAxiom(
 # list                                                                #
 # ------------------------------------------------------------------ #
 
-class ListAxiom(
-    BaseAxiom, IterCapability, SubscriptCapability,
-    OperatorCapability, ParserCapability, ConverterCapability,
-    FromPromptCapability, IlmoutputHintCapability,
-):
+class ListAxiom(BaseAxiom):
+    has_iter_cap = True
+    has_subscript_cap = True
+    has_operator_cap = True
+    has_parser_cap = True
+    has_converter_cap = True
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+
     @property
     def name(self) -> str:
         return "list"
-
-    def get_iter_capability(self) -> Optional[IterCapability]: return self
-    def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_call_capability(self): return None
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -519,11 +542,9 @@ class ListAxiom(
         self, registry: Any, arg_names: List[str]
     ) -> Optional[Any]:
         if len(arg_names) == 1:
-            # Single-type: list[int]
             elem = arg_names[0]
             spec = registry.factory.create_list(element_type_name=elem)
         else:
-            # Multi-type: list[int, str, list] — element access returns any
             spec = registry.factory.create_list(allowed_element_type_names=arg_names)
         return registry.register(spec)
 
@@ -532,23 +553,18 @@ class ListAxiom(
 # dict                                                                #
 # ------------------------------------------------------------------ #
 
-class DictAxiom(
-    BaseAxiom, IterCapability, SubscriptCapability,
-    OperatorCapability, ParserCapability, ConverterCapability,
-    FromPromptCapability, IlmoutputHintCapability,
-):
+class DictAxiom(BaseAxiom):
+    has_iter_cap = True
+    has_subscript_cap = True
+    has_operator_cap = True
+    has_parser_cap = True
+    has_converter_cap = True
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+
     @property
     def name(self) -> str:
         return "dict"
-
-    def get_iter_capability(self) -> Optional[IterCapability]: return self
-    def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_call_capability(self): return None
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -614,11 +630,7 @@ class DictAxiom(
 # tuple (immutable, fixed-length, heterogeneous)                      #
 # ------------------------------------------------------------------ #
 
-class TupleAxiom(
-    BaseAxiom, IterCapability, SubscriptCapability,
-    OperatorCapability, ParserCapability, ConverterCapability,
-    FromPromptCapability, IlmoutputHintCapability,
-):
+class TupleAxiom(BaseAxiom):
     """
     元组公理：不可变、定长、异构集合。
     与 ListAxiom 的关键区别：
@@ -626,18 +638,17 @@ class TupleAxiom(
     - 支持 cast_to list (向列表转换)
     """
 
+    has_iter_cap = True
+    has_subscript_cap = True
+    has_operator_cap = True
+    has_parser_cap = True
+    has_converter_cap = True
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+
     @property
     def name(self) -> str:
         return "tuple"
-
-    def get_iter_capability(self) -> Optional[IterCapability]: return self
-    def get_subscript_capability(self) -> Optional[SubscriptCapability]: return self
-    def get_parser_capability(self) -> Optional[ParserCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_call_capability(self): return None
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
 
     def get_operators(self) -> Dict[str, str]:
         return {"not": "__not__"}
@@ -647,7 +658,6 @@ class TupleAxiom(
             "len":         _m("len",                                 ret="int"),
             "cast_to":     _m("cast_to",     params=["any"],        ret="any"),
             "__getitem__": _m("__getitem__", params=["int"],         ret="any"),
-            # 注意：没有 __setitem__ / append / pop / sort / clear → 不可变
         }
 
     def get_element_type_name(self) -> str:
@@ -704,44 +714,31 @@ class VoidAxiom(BaseAxiom):
 
     void 不是 any 的别名，也不是 None 的别名——它是一个独立的一等公民类型，
     用于标注"此函数不返回任何值"的语义约束。
-    * is_dynamic() = False —— void 是具体类型，不再使用 DynamicAxiom 妥协。
+    * is_dynamic() = False —— void 是具体类型。
     * 无任何能力（不可调用、不可迭代、不可下标、不可运算）。
-    * is_compatible 仅接受 "void" 自身——void 值不可赋值给任何其他类型。
-    * get_parent_axiom_name() = "Object"。
+    * is_compatible 仅接受 "void" 自身。
     """
 
     @property
     def name(self) -> str:
         return "void"
 
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
-    def get_converter_capability(self): return None
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
-
-    def is_dynamic(self) -> bool:
-        return False
-
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "void"
 
-    def get_parent_axiom_name(self) -> Optional[str]:
-        return "Object"
-
 
 # ------------------------------------------------------------------ #
-# Dynamic (any / auto)                                                #
+# Dynamic (any / auto / fn)                                            #
 # ------------------------------------------------------------------ #
 
-class DynamicAxiom(
-    BaseAxiom, CallCapability, IterCapability,
-    SubscriptCapability, OperatorCapability, ParserCapability,
-):
+class DynamicAxiom(BaseAxiom):
     """Top-type axiom: accepts and returns anything."""
+
+    has_call_cap = True
+    has_iter_cap = True
+    has_subscript_cap = True
+    has_operator_cap = True
+    has_parser_cap = True
 
     def __init__(self, type_name: str):
         self._name = type_name
@@ -749,16 +746,6 @@ class DynamicAxiom(
     @property
     def name(self) -> str:
         return self._name
-
-    def get_call_capability(self): return self
-    def get_iter_capability(self): return self
-    def get_subscript_capability(self): return self
-    def get_operator_capability(self): return self
-    def get_converter_capability(self): return None
-    def get_parser_capability(self): return self
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
 
     def is_dynamic(self) -> bool:
         return True
@@ -786,16 +773,12 @@ class DynamicAxiom(
 # Exception                                                           #
 # ------------------------------------------------------------------ #
 
-class ExceptionAxiom(BaseAxiom, ConverterCapability):
+class ExceptionAxiom(BaseAxiom):
+    has_converter_cap = True
+
     @property
     def name(self) -> str:
         return "Exception"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -816,21 +799,18 @@ class ExceptionAxiom(BaseAxiom, ConverterCapability):
 # LLM Exception hierarchy                                             #
 # ------------------------------------------------------------------ #
 
-class LLMErrorAxiom(BaseAxiom, ConverterCapability):
+class LLMErrorAxiom(BaseAxiom):
     """Base axiom for all LLM-originated exceptions.
 
     LLMError IS-A Exception, so ``except Exception as e:`` can catch it.
     Fields: message (str), raw_response (str).
     """
+
+    has_converter_cap = True
+
     @property
     def name(self) -> str:
         return "LLMError"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "Exception"
@@ -846,24 +826,20 @@ class LLMErrorAxiom(BaseAxiom, ConverterCapability):
         return source_type_name in ("str", "LLMError")
 
     def is_compatible(self, other_name: str) -> bool:
-        # LLMError is compatible with itself and the base Exception type.
         return other_name in ("Exception", "LLMError")
 
 
-class LLMParseErrorAxiom(BaseAxiom, ConverterCapability):
+class LLMParseErrorAxiom(BaseAxiom):
     """Raised when an unprotected LLM assignment's __from_prompt__ fails.
 
     Fields: message (str), raw_response (str), type_name (str — expected type).
     """
+
+    has_converter_cap = True
+
     @property
     def name(self) -> str:
         return "LLMParseError"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "LLMError"
@@ -883,20 +859,17 @@ class LLMParseErrorAxiom(BaseAxiom, ConverterCapability):
         return other_name in ("Exception", "LLMError", "LLMParseError")
 
 
-class LLMRetryExhaustedErrorAxiom(BaseAxiom, ConverterCapability):
+class LLMRetryExhaustedErrorAxiom(BaseAxiom):
     """Raised when a llmexcept-protected assignment exhausts all retries.
 
     Fields: message (str), raw_response (str), max_retry (int).
     """
+
+    has_converter_cap = True
+
     @property
     def name(self) -> str:
         return "LLMRetryExhaustedError"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "LLMError"
@@ -916,20 +889,17 @@ class LLMRetryExhaustedErrorAxiom(BaseAxiom, ConverterCapability):
         return other_name in ("Exception", "LLMError", "LLMRetryExhaustedError")
 
 
-class LLMCallErrorAxiom(BaseAxiom, ConverterCapability):
+class LLMCallErrorAxiom(BaseAxiom):
     """Raised when the LLM provider itself fails (network error, timeout, etc.).
 
     Fields: message (str), raw_response (str), provider_error (str).
     """
+
+    has_converter_cap = True
+
     @property
     def name(self) -> str:
         return "LLMCallError"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "LLMError"
@@ -953,26 +923,21 @@ class LLMCallErrorAxiom(BaseAxiom, ConverterCapability):
 # BoundMethod                                                         #
 # ------------------------------------------------------------------ #
 
-class BoundMethodAxiom(BaseAxiom, CallCapability):
+class BoundMethodAxiom(BaseAxiom):
+    has_call_cap = True
+
     @property
     def name(self) -> str:
         return "bound_method"
 
-    def get_call_capability(self): return self
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
-    def get_converter_capability(self): return None
-    def get_parent_axiom_name(self) -> Optional[str]: return "callable"
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return "callable"
 
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
         return "any"
 
     def is_compatible(self, other_name: str) -> bool:
-        # bound_method IS-A callable：可以赋值给 bound_method 或 callable 槽。
+        # bound_method IS-A callable.
         return other_name in ("bound_method", "callable")
 
 
@@ -980,7 +945,7 @@ class BoundMethodAxiom(BaseAxiom, CallCapability):
 # LLMUncertain                                                        #
 # ------------------------------------------------------------------ #
 
-class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
+class LLMUncertainAxiom(BaseAxiom):
     """
     公理：llm_uncertain 类型。
 
@@ -994,25 +959,18 @@ class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
     - 布尔上下文中为假（is_truthy → False）。
     - 可以赋值给任何类型的变量（is_compatible 宽松策略）。
     - __to_prompt__ 返回 "uncertain"；cast_to str 返回 "uncertain"。
-    - 支持 == 和 != 运算符（与 Uncertain 字面量比较，供内核测试使用）。
+    - 支持 == 和 != 运算符。
 
     NOTE [未来演进路线 — 低优先级 PENDING]:
-    - 用户自定义 UncertainResult：允许 __from_prompt__ 返回一个继承自 IbLLMUncertain
-      的对象，携带自定义的失败上下文（如置信度分数、失败原因分类）。
-    - 零参数 is_uncertain()：在 llmexcept handler 内查询当前执行帧状态的 API，
-      替代当前"块内必然 uncertain"的隐式假设，为用户提供更精细的上下文感知。
-    - 上述扩展需配合 VM 信号/中断/异步机制（PENDING_TASKS §十四）一并设计。
+    - 用户自定义 UncertainResult；零参数 is_uncertain()；详见 PENDING_TASKS §十四。
     """
+
+    has_operator_cap = True
+    has_converter_cap = True
 
     @property
     def name(self) -> str:
         return "llm_uncertain"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self) -> Optional[OperatorCapability]: return self
 
     def get_operators(self) -> Dict[str, str]:
         return {"==": "__eq__", "!=": "__ne__"}
@@ -1033,19 +991,10 @@ class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
 
     def can_convert_from(self, source_type_name: str) -> bool:
         # 显式类型转换方向：只允许 llm_uncertain → llm_uncertain（同类转换）。
-        # 注意：这与 is_compatible 的方向故意不对称——is_compatible 询问的是
-        # "llm_uncertain 值能否赋给 other 类型的槽"（宽松，True），而
-        # can_convert_from 询问的是"other 类型的值能否显式 cast 成 llm_uncertain"
-        # （严格，仅自身）。生产路径仅使用 is_compatible；can_convert_from 在
-        # 显式 cast_to 调用时触发。
         return source_type_name == "llm_uncertain"
 
     def is_compatible(self, other_name: str) -> bool:
         # 赋值方向：llm_uncertain 值可被赋给任何类型的变量（宽松策略）。
-        # 理由：llmexcept 重试循环期间产生 Uncertain 哨兵对象；若不允许赋给声明类型，
-        # `int x = @~...~` 在 llmexcept 保护帧内会立即报类型错误，而哨兵的存在
-        # 仅是 VM 内部通信机制（下一次 restore_snapshot + retry 后会被真实值替换）。
-        # 此处故意宽松；与 can_convert_from 不对称是设计决策。
         return True
 
     def can_return_from_isolated(self) -> bool:
@@ -1056,16 +1005,12 @@ class LLMUncertainAxiom(BaseAxiom, OperatorCapability, ConverterCapability):
 # None                                                                #
 # ------------------------------------------------------------------ #
 
-class NoneAxiom(BaseAxiom, ConverterCapability):
+class NoneAxiom(BaseAxiom):
+    has_converter_cap = True
+
     @property
     def name(self) -> str:
         return "None"
-
-    def get_converter_capability(self): return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -1088,12 +1033,6 @@ class OptionalAxiom(BaseAxiom):
     @property
     def name(self) -> str:
         return "Optional"
-
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
-    def get_converter_capability(self): return None
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
@@ -1122,12 +1061,6 @@ class SliceAxiom(BaseAxiom):
     def name(self) -> str:
         return "slice"
 
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
-    def get_converter_capability(self): return None
-
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "slice"
 
@@ -1136,22 +1069,22 @@ class SliceAxiom(BaseAxiom):
 # enum                                                                #
 # ------------------------------------------------------------------ #
 
-class EnumAxiom(
-    BaseAxiom, FromPromptCapability,
-    IlmoutputHintCapability, ConverterCapability,
-):
+class EnumAxiom(BaseAxiom):
     """
     Axiom for user-defined Enum classes.
 
     Design notes
     ------------
-    * ``_enum_index_registry`` is now an **instance** dict, not a class dict.
-      This fixes the cross-engine global-state bug from the old version.
+    * ``_enum_index_registry`` is an instance dict (not class-level) to
+      eliminate the cross-engine global-state bug from the pre-M3 design.
     * All type parameters use string names (no IbSpec objects required).
     """
 
+    has_from_prompt_cap = True
+    has_output_hint_cap = True
+    has_converter_cap = True
+
     def __init__(self) -> None:
-        # Instance-level cache: enum_class_name → {member_name: member_name}
         self._enum_index_registry: Dict[str, Dict[str, str]] = {}
 
     @property
@@ -1161,17 +1094,8 @@ class EnumAxiom(
     def is_class(self) -> bool:
         return True
 
-    def get_from_prompt_capability(self) -> Optional[FromPromptCapability]: return self
-    def get_llmoutput_hint_capability(self) -> Optional[IlmoutputHintCapability]: return self
-    def get_converter_capability(self) -> Optional[ConverterCapability]: return self
-    def get_call_capability(self): return None
-    def get_iter_capability(self): return None
-    def get_subscript_capability(self): return None
-    def get_operator_capability(self): return None
-    def get_parent_axiom_name(self) -> Optional[str]: return None
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
+    def get_parent_axiom_name(self) -> Optional[str]:
+        return None
 
     def can_convert_from(self, source_type_name: str) -> bool:
         return source_type_name == "str"
@@ -1245,117 +1169,59 @@ class EnumAxiom(
 # callable                                                             #
 # ------------------------------------------------------------------ #
 
-class CallableAxiom(BaseAxiom, CallCapability):
+class CallableAxiom(BaseAxiom):
     """
     公理：callable 类型。
 
-    替代原来的 DynamicAxiom("callable")，成为函数/可调用对象的正式公理。
     * is_dynamic() = False —— callable 是具体类型，不是 "any" 的妥协。
-    * CallCapability 返回 "auto" —— 编译期返回类型取决于具体的 FuncSpec。
+    * has_call_cap = True；resolve_return_type_name 返回 "auto"——编译期返回类型
+      取决于具体的 FuncSpec/IbDeferred/IbBehavior。
 
     is_compatible(target) 语义：source 能否被赋值给 target 类型的变量。
     callable 只能赋值给 callable 槽；子类型（deferred、behavior、bound_method）
-    通过自身的 is_compatible() 声明向上兼容父类型，而非父类型向下兼容子类型。
+    通过自身的 is_compatible() 声明向上兼容父类型。
     """
+
+    has_call_cap = True
 
     @property
     def name(self) -> str:
         return "callable"
 
-    def get_call_capability(self) -> Optional[CallCapability]:
-        return self
-
-    def get_iter_capability(self):
-        return None
-
-    def get_subscript_capability(self):
-        return None
-
-    def get_operator_capability(self):
-        return None
-
-    def get_converter_capability(self):
-        return None
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
-
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
         return "auto"
 
-    def is_dynamic(self) -> bool:
-        return False
-
     def is_compatible(self, other_name: str) -> bool:
-        # callable 只能赋值给 callable 槽。
-        # 子类型（deferred、behavior、bound_method）通过自身的 is_compatible() 声明
-        # 向上兼容性，不需要父类型反向列出所有子类型。
         return other_name == "callable"
-
-    def get_parent_axiom_name(self) -> Optional[str]:
-        return "Object"
 
 
 # ------------------------------------------------------------------ #
 # deferred                                                             #
 # ------------------------------------------------------------------ #
 
-class DeferredCallCapability(CallCapability):
-    """
-    CallCapability for deferred expression objects.
-
-    At compile time the concrete return type depends on the wrapped expression.
-    We return ``"auto"`` so that the SpecRegistry propagates a dynamic result
-    type; at runtime ``IbDeferred.call()`` evaluates the expression and returns
-    the actual value.
-    """
-    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
-        return "auto"
-
-
-class DeferredAxiom(BaseAxiom, DeferredCallCapability):
+class DeferredAxiom(BaseAxiom):
     """
     公理：deferred 类型（通用延迟表达式）。
 
     lambda/snapshot 不再仅限于 @~...~ 行为表达式——任何表达式都可以被延迟。
-    * 不是 DynamicAxiom —— deferred 是一个具体的一等公民类型，非 any 妥协。
-    * 实现 CallCapability —— deferred 对象可被调用（触发延迟表达式求值）。
-    * is_dynamic() = False —— 严格类型系统：deferred 只能赋值给 deferred 或 callable。
-    * 编译期返回类型为 "auto"；运行期由 IbDeferred.call() 执行实际表达式并返回结果。
+    * 不是 DynamicAxiom —— deferred 是一个具体的一等公民类型。
+    * has_call_cap —— deferred 对象可被调用（触发延迟表达式求值）。
+    * is_dynamic() = False。
+    * 编译期返回类型为 "auto"；运行期由 IbDeferred.call() 求值。
 
-    is_compatible 方向：deferred IS-A callable，因此可以赋值给 callable 或 deferred 槽。
-    behavior 是 deferred 的子类型，不能反向将 deferred 赋给 behavior 槽。
+    is_compatible 方向：deferred IS-A callable。
     """
+
+    has_call_cap = True
 
     @property
     def name(self) -> str:
         return "deferred"
 
-    def get_call_capability(self) -> Optional[DeferredCallCapability]:
-        return self
-
-    def get_iter_capability(self):
-        return None
-
-    def get_subscript_capability(self):
-        return None
-
-    def get_operator_capability(self):
-        return None
-
-    def get_converter_capability(self):
-        return None
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
-
-    def is_dynamic(self) -> bool:
-        return False
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        return "auto"
 
     def is_compatible(self, other_name: str) -> bool:
-        # deferred IS-A callable：可以赋值给 deferred 或 callable 槽。
-        # 同时接受带 value_type 的 deferred[TYPE] 槽（声明侧 TYPE fn 语法）。
-        # behavior 是 deferred 的子类型，不可反向赋值——deferred 值不能赋给 behavior 槽。
         return (
             other_name in ("deferred", "callable")
             or other_name.startswith("deferred[")
@@ -1369,71 +1235,29 @@ class DeferredAxiom(BaseAxiom, DeferredCallCapability):
 # behavior                                                            #
 # ------------------------------------------------------------------ #
 
-class LLMCallCapability:
-    """
-    LLM 调用能力标记。
-
-    声明"此类型可以发起 LLM 调用"的能力标记，供编译期 DDG（数据依赖图）
-    分析识别 behavior 节点，而不需要 isinstance 判断。
-
-    这是一个纯声明标记——不包含执行逻辑。
-    执行逻辑仍由 LLMExecutorImpl 负责。
-    """
-    pass
-
-
-class BehaviorCallCapability(CallCapability):
-    """
-    CallCapability for behavior objects.
-
-    At compile time the concrete return type is not known (it lives on the
-    IbBehavior instance as ``expected_type``).  We therefore return ``"auto"``
-    so that the SpecRegistry propagates a dynamic result type, which is then
-    resolved to the actual type at runtime by IbBehavior.call().
-    """
-    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
-        return "auto"
-
-
-class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
+class BehaviorAxiom(BaseAxiom):
     """
     公理：behavior 类型（LLM 行为表达式的延迟对象）。
 
     behavior 是 deferred 的特化子类型——它延迟的不是普通表达式，而是 LLM 行为描述。
-    * 不是 DynamicAxiom —— behavior 是一个具体的一等公民类型，非 any 妥协。
-    * 实现 CallCapability —— behavior 对象可被调用（触发 LLM 执行）。
-    * is_dynamic() = False —— 严格类型系统：behavior 只能赋值给 behavior 或 deferred。
+    * 不是 DynamicAxiom —— behavior 是一个具体的一等公民类型。
+    * has_call_cap —— behavior 对象可被调用（触发 LLM 执行）。
+    * has_llm_call_cap —— 编译期 DDG 通过此能力识别 behavior 节点（无需 isinstance）。
     * 编译期返回类型为 "auto"；运行期由 IbBehavior.call() 根据 expected_type 解析真实类型。
     * 继承链：behavior → deferred → callable → Object
     """
+
+    has_call_cap = True
+    has_llm_call_cap = True
 
     @property
     def name(self) -> str:
         return "behavior"
 
-    def get_call_capability(self) -> Optional[BehaviorCallCapability]:
-        return self
-
-    def get_iter_capability(self):
-        return None
-
-    def get_subscript_capability(self):
-        return None
-
-    def get_operator_capability(self):
-        return None
-
-    def get_converter_capability(self):
-        return None
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
-        return {}
-
-    def is_dynamic(self) -> bool:
-        return False
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        return "auto"
 
     def is_compatible(self, other_name: str) -> bool:
-        # behavior IS-A deferred IS-A callable；同时接受 deferred[TYPE] / behavior[TYPE] 槽。
         return (
             other_name in ("behavior", "deferred", "callable")
             or other_name.startswith("deferred[")
@@ -1443,22 +1267,16 @@ class BehaviorAxiom(BaseAxiom, BehaviorCallCapability):
     def get_parent_axiom_name(self) -> Optional[str]:
         return "deferred"
 
-    def get_llm_call_capability(self) -> Optional['LLMCallCapability']:
-        """
-        返回 LLM 调用能力标记。
-        编译期 DDG 分析通过此能力识别 behavior 节点（无需 isinstance）。
-        """
-        return LLMCallCapability()
 
-
-
+# ------------------------------------------------------------------ #
+# llm_call_result                                                      #
+# ------------------------------------------------------------------ #
 
 class LlmCallResultAxiom(BaseAxiom):
     """
     LLM 调用结果的类型公理。
 
-    IbLLMCallResult 是 llmexcept 保护块的结果容器类型，持有 LLM 调用的
-    确定性状态、返回值、原始响应和重试提示词。
+    IbLLMCallResult 是 llmexcept 保护块的结果容器类型。
 
     Capabilities：
     - 无 operator / converter / parser capability（不参与常规类型运算）
@@ -1469,38 +1287,8 @@ class LlmCallResultAxiom(BaseAxiom):
     def name(self) -> str:
         return "llm_call_result"
 
-    def is_dynamic(self) -> bool:
-        return False
-
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "llm_call_result"
-
-    def get_parent_axiom_name(self) -> Optional[str]:
-        return "Object"
-
-    def get_call_capability(self):
-        return None
-
-    def get_operator_capability(self):
-        return None
-
-    def get_converter_capability(self):
-        return None
-
-    def get_iter_capability(self):
-        return None
-
-    def get_subscript_capability(self):
-        return None
-
-    def get_parser_capability(self):
-        return None
-
-    def get_from_prompt_capability(self):
-        return None
-
-    def get_llmoutput_hint_capability(self):
-        return None
 
 
 def register_core_axioms(registry: "AxiomRegistry") -> None:
@@ -1525,7 +1313,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
 
     registry.register(DynamicAxiom("any"))
     registry.register(DynamicAxiom("auto"))
-    registry.register(DynamicAxiom("fn"))   # fn is a callable-inference sentinel treated as dynamic at registration
+    registry.register(DynamicAxiom("fn"))
     registry.register(CallableAxiom())
     registry.register(VoidAxiom())
     registry.register(DeferredAxiom())

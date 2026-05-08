@@ -40,39 +40,13 @@ from .specs import (
 
 if TYPE_CHECKING:
     from core.kernel.axioms.registry import AxiomRegistry
-    from core.kernel.axioms.protocols import (
-        CallCapability, IterCapability, SubscriptCapability,
-        OperatorCapability, ConverterCapability,
-        FromPromptCapability, IlmoutputHintCapability,
-        ParserCapability,
-    )
+    from core.kernel.axioms.protocols import TypeAxiom
     from .type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
 # SpecFactory                                                          #
 # ------------------------------------------------------------------ #
-
-class _FuncSpecCallCapability:
-    """
-    Sentinel ``CallCapability`` for ``FuncSpec`` and ``BoundMethodSpec`` instances.
-
-    These specs ARE inherently callable (they carry their own parameter and return
-    type information).  ``SpecRegistry.resolve_return()`` handles the actual
-    return-type inference; this object satisfies the boolean "is callable?" check
-    and provides stubs for other capability methods used by the semantic analyser.
-    """
-    def resolve_return_type_name(self, arg_type_names: list) -> None:
-        return None  # Handled by SpecRegistry.resolve_return(FuncSpec, ...)
-
-    def get_writable_trait(self):
-        return None
-
-    def get_parser_capability(self):
-        return None
-
-
-_FUNC_SPEC_CALL_CAP = _FuncSpecCallCapability()
 
 
 class SpecFactory:
@@ -398,76 +372,85 @@ class SpecRegistry:
         return self._axiom_registry
 
     # ---------------------------------------------------------- #
-    # Capability access (replaces spec.get_xxx_trait())          #
+    # Capability access (unified post-M5)                        #
     # ---------------------------------------------------------- #
+    #
+    # All capability accessors return the axiom itself when the axiom
+    # declares the corresponding ``has_*_cap`` flag, else ``None``.
+    # This preserves the truthy-check idiom used throughout the compiler
+    # and runtime ( ``if cap: cap.method()`` ) while collapsing the
+    # legacy per-capability Protocol classes into a single TypeAxiom
+    # interface.
+    #
+    # For ``get_call_cap``, structural callables (FUNCTION / BOUND_METHOD /
+    # CALLABLE_SIG / CLASS) carry their own callability and return ``True``
+    # as a non-None marker; ``resolve_return()`` handles the actual return
+    # type inference for these structural specs.
 
-    def get_axiom(self, spec: Optional[IbSpec]) -> Any:
+    def get_axiom(self, spec: Optional[IbSpec]) -> Optional["TypeAxiom"]:
         """Return the axiom for this spec, or None."""
         if spec is None:
             return None
         return self._axiom_registry.get_axiom(spec.get_base_name())
 
-    def get_call_cap(self, spec: Optional[IbSpec]) -> Optional["CallCapability"]:
+    def get_call_cap(self, spec: Optional[IbSpec]) -> Optional["TypeAxiom"]:
         if spec is None:
             return None
-        # FuncSpec and BoundMethodSpec are inherently callable — resolve_return handles them.
-        if spec.kind in (TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value):
-            return _FUNC_SPEC_CALL_CAP
-        if spec.kind == TypeKind.FUNCTION.value:
-            return _FUNC_SPEC_CALL_CAP
-        # ClassSpec is callable (constructor)
-        if spec.kind == TypeKind.CLASS.value:
-            return _FUNC_SPEC_CALL_CAP
+        # Structural callables carry their signature directly on the spec —
+        # ``resolve_return()`` handles return-type inference for them.
+        # We return the axiom (if any) so callers can still query other
+        # capability methods; if no axiom exists we fall back to a truthy
+        # marker (the spec itself) to satisfy ``if call_trait:`` checks.
+        if spec.kind in (
+            TypeKind.FUNCTION.value,
+            TypeKind.BOUND_METHOD.value,
+            TypeKind.CALLABLE_SIG.value,
+            TypeKind.CLASS.value,
+        ):
+            axiom = self.get_axiom(spec)
+            return axiom if (axiom and axiom.has_call_cap) else spec
         axiom = self.get_axiom(spec)
-        return axiom.get_call_capability() if axiom else None
+        return axiom if (axiom and axiom.has_call_cap) else None
 
-    def get_iter_cap(self, spec: IbSpec) -> Optional["IterCapability"]:
+    def get_iter_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_iter_capability() if axiom else None
+        return axiom if (axiom and axiom.has_iter_cap) else None
 
-    def get_subscript_cap(self, spec: IbSpec) -> Optional["SubscriptCapability"]:
+    def get_subscript_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_subscript_capability() if axiom else None
+        return axiom if (axiom and axiom.has_subscript_cap) else None
 
-    def get_operator_cap(self, spec: IbSpec) -> Optional["OperatorCapability"]:
+    def get_operator_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_operator_capability() if axiom else None
+        return axiom if (axiom and axiom.has_operator_cap) else None
 
-    def get_converter_cap(self, spec: IbSpec) -> Optional["ConverterCapability"]:
-        """Return the ConverterCapability for ``spec``, or None.
+    def get_converter_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
+        """Return the converter capability for ``spec``, or None.
 
-        This bridge method exists to support **compile-time explicit-cast validation**:
-        when the semantic analyzer visits an ``IbCastExpr`` node (e.g. ``(int)x``),
-        it should call ``get_converter_cap(target_spec)?.can_convert_from(src_name)``
-        to verify the cast is legal at compile time and report SEM_XXX on invalid casts.
+        ``can_convert_from(src)`` answers "can *this* target type accept an
+        explicit cast FROM src?" — the target-side query for explicit casts.
+        This is intentionally distinct from ``is_compatible(target)`` which
+        is the source-side query for *implicit* assignment compatibility.
 
-        TODO (deferred): activate this check in
-        ``semantic_analyzer.py::_resolve_cast_expr()`` once that validation pass is
-        added.  Currently ``IbCastExpr`` validation is purely runtime
-        (``value.receive("cast_to", [target_class])``), so this method is defined
-        but not yet called.
-
-        Design note: ``can_convert_from(src)`` answers "can *this* target type accept
-        an explicit cast FROM src?".  This is intentionally distinct from
-        ``is_compatible(target)`` which answers "can *this* source type be
-        **implicitly assigned** to target?".  Both directions are needed:
-        - ``is_compatible``    → implicit assignment / subtype check (called by is_assignable)
-        - ``can_convert_from`` → explicit cast legality (to be called by cast checker)
+        TODO (deferred): activate this in
+        ``semantic_analyzer.py::_resolve_cast_expr()`` once compile-time
+        cast validation is added.  Currently ``IbCastExpr`` validation is
+        purely runtime via ``value.receive("cast_to", [target_class])``.
         """
         axiom = self.get_axiom(spec)
-        return axiom.get_converter_capability() if axiom else None
+        return axiom if (axiom and axiom.has_converter_cap) else None
 
-    def get_parser_cap(self, spec: IbSpec) -> Optional["ParserCapability"]:
+    def get_parser_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_parser_capability() if axiom else None
+        return axiom if (axiom and axiom.has_parser_cap) else None
 
-    def get_from_prompt_cap(self, spec: IbSpec) -> Optional["FromPromptCapability"]:
+    def get_from_prompt_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_from_prompt_capability() if axiom else None
+        return axiom if (axiom and axiom.has_from_prompt_cap) else None
 
-    def get_llm_output_hint_cap(self, spec: IbSpec) -> Optional["IlmoutputHintCapability"]:
+    def get_llm_output_hint_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_llmoutput_hint_capability() if axiom else None
+        return axiom if (axiom and axiom.has_output_hint_cap) else None
 
     # ---------------------------------------------------------- #
     # Derived capability helpers                                 #
@@ -589,13 +572,11 @@ class SpecRegistry:
             if v_ref is not None and v_ref.head not in ("auto", "any", "", None):
                 return self.resolve_typeref(v_ref) or self.resolve("auto")
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_call_capability()
-            if cap:
-                arg_names = [a.get_base_name() for a in arg_specs]
-                ret_name = cap.resolve_return_type_name(arg_names)
-                if ret_name:
-                    return self.resolve(ret_name) or self.resolve("any")
+        if axiom and axiom.has_call_cap:
+            arg_names = [a.get_base_name() for a in arg_specs]
+            ret_name = axiom.resolve_return_type_name(arg_names)
+            if ret_name:
+                return self.resolve(ret_name) or self.resolve("any")
         return None
 
     def resolve_op(
@@ -606,13 +587,11 @@ class SpecRegistry:
     ) -> Optional[IbSpec]:
         """Infer the result type for a binary operator."""
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_operator_capability()
-            if cap:
-                other_name = other.get_base_name() if other else None
-                ret_name = cap.resolve_operation_type_name(op, other_name)
-                if ret_name:
-                    return self.resolve(ret_name) or self.resolve("any")
+        if axiom and axiom.has_operator_cap:
+            other_name = other.get_base_name() if other else None
+            ret_name = axiom.resolve_operation_type_name(op, other_name)
+            if ret_name:
+                return self.resolve(ret_name) or self.resolve("any")
         # None 比较：任何类型均可与 None 用 == 或 != 比较，返回 bool
         if op in ("==", "!=") and (spec.name == "None" or (other and other.name == "None")):
             return self.resolve("bool")
@@ -632,12 +611,10 @@ class SpecRegistry:
                 return self.resolve("any")
             return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_iter_capability()
-            if cap:
-                elem_name = cap.get_element_type_name()
-                if elem_name:
-                    return self.resolve(elem_name) or self.resolve("any")
+        if axiom and axiom.has_iter_cap:
+            elem_name = axiom.get_element_type_name()
+            if elem_name:
+                return self.resolve(elem_name) or self.resolve("any")
         return None
 
     def resolve_subscript(
@@ -655,12 +632,10 @@ class SpecRegistry:
         if spec.kind == TypeKind.DICT.value:
             return self.resolve(spec.value_type.head, spec.value_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_subscript_capability()
-            if cap:
-                item_name = cap.resolve_item_type_name(key_spec.get_base_name())
-                if item_name:
-                    return self.resolve(item_name) or self.resolve("any")
+        if axiom and axiom.has_subscript_cap:
+            item_name = axiom.resolve_item_type_name(key_spec.get_base_name())
+            if item_name:
+                return self.resolve(item_name) or self.resolve("any")
         return None
 
     def resolve_member(self, spec: IbSpec, attr_name: str) -> Optional[IbSpec]:
