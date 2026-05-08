@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List, Mapping, Callable
+from typing import Any, Dict, Optional, List, Tuple, Sequence, Mapping, Callable, Union
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent, RuntimeContext, RuntimeSymbol
 )
@@ -48,8 +48,8 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_list(self, elements: List[IIbObject]) -> IIbList:
         return IbList(elements, ib_class=self._registry.get_class("list"))
 
-    def create_tuple(self, elements) -> IIbObject:
-        """Create an IbTuple from a sequence of IbObject elements."""
+    def create_tuple(self, elements: Union[Tuple[IIbObject, ...], Sequence[IIbObject]]) -> IIbObject:
+        """Create an IbTuple from a tuple or sequence of IbObject elements."""
         tup = elements if isinstance(elements, tuple) else tuple(elements)
         return IbTuple(tup, ib_class=self._registry.get_class("tuple"))
 

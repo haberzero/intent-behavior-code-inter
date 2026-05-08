@@ -376,6 +376,8 @@ class RuntimeDeserializer:
             obj.elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
             
         elif _type == "dict":
+            # Cache an empty IbDict first to break potential circular references,
+            # then fill fields (mirroring the cache-before-recurse pattern used for IbList/IbTuple).
             obj = self.factory.create_dict({})
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}

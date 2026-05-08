@@ -475,6 +475,8 @@ class IbClass(IbObject):
                     # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
                     # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
                     sv = val_info.static_val
+                    # 可变容器（list/dict）需每次创建新实例以避免共享——
+                    # 使用 type(sv)(...) 保持多态性，无需引入具体类名。
                     if isinstance(sv, IbValue) and sv.ib_class.name == "list":
                         instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
                     elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
