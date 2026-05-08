@@ -566,7 +566,7 @@ class IbDict(IbValue):
     """
     包装 Python 原生 dict 的 IBC 对象。
 
-    M4 约定：``payload`` 与 ``fields`` 指向同一个底层映射。
+    M4 约定: ``payload`` 与 ``fields`` 指向同一个底层映射。
     ``fields`` 保持对象系统现有的消息/属性访问兼容面，``payload`` 则让
     该值同时满足统一 ``IbValue`` 承载层的结构约定。
     """
