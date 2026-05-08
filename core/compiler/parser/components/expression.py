@@ -122,8 +122,7 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
 
         # Parameterized lambda / snapshot expressions (M1)
-        # 仅在表达式位置生效；旧的 `TYPE lambda NAME = EXPR` 形式由 declaration parser
-        # 在变量声明位置消费 LAMBDA/SNAPSHOT token，不会触达此 prefix handler。
+        # 在表达式位置消费 LAMBDA/SNAPSHOT token，构建 IbLambdaExpr。
         self.register(TokenType.LAMBDA, self.lambda_expr, None, IbPrecedence.LOWEST)
         self.register(TokenType.SNAPSHOT, self.lambda_expr, None, IbPrecedence.LOWEST)
 
@@ -192,8 +191,8 @@ class ExpressionComponent(BaseComponent):
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
                         
-                        # [DEPRECATED] (Type) @~...~ 语法已废弃，发出硬错误。
-                        # 正确写法：TYPE fn varname = lambda: @~...~ 或 TYPE fn varname = snapshot: @~...~
+                        # (Type) @~...~ 语法不再支持，发出硬错误。
+                        # 正确写法：fn varname = lambda -> TYPE: @~...~ 或 fn varname = snapshot -> TYPE: @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
                             _behavior_cast_detected = True
                             raise ParseControlFlowError()
@@ -207,7 +206,7 @@ class ExpressionComponent(BaseComponent):
                 raise self.stream.error(
                     self.stream.peek(),
                     "Cast expression '(Type) @~...~' is no longer supported. "
-                    "Use 'TYPE fn varname = lambda: @~...~' or 'TYPE fn varname = snapshot: @~...~' instead.",
+                    "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                     code="PAR_010"
                 )
             
@@ -466,16 +465,20 @@ class ExpressionComponent(BaseComponent):
 
         全部支持的形式（``:`` 为唯一 body 起始符）::
 
-            lambda: EXPR                         — 无参
-            lambda(PARAMS): EXPR                 — 有参
+            lambda: EXPR                         — 无参，返回类型推导
+            lambda -> TYPE: EXPR                 — 无参，显式返回类型
+            lambda(PARAMS): EXPR                 — 有参，返回类型推导
+            lambda(PARAMS) -> TYPE: EXPR         — 有参，显式返回类型
             snapshot: EXPR                       — snapshot 完全对称
+            snapshot -> TYPE: EXPR
             snapshot(PARAMS): EXPR
+            snapshot(PARAMS) -> TYPE: EXPR
 
-        返回类型标注**必须**写在声明侧，不允许写在表达式侧::
+        返回类型标注**写在表达式侧**（``-> TYPE``）::
 
-            int fn f = lambda: EXPR              — 声明 f 返回 int
-            int fn f = lambda(PARAMS): EXPR      — 声明 f 带参且返回 int
-            tuple[int, str] fn p = make_parser() — 从工厂获取时也可标注
+            fn f = lambda -> int: EXPR           — 声明 f 返回 int
+            fn f = lambda(int x) -> int: EXPR    — 声明 f 有参且返回 int
+            fn p = make_parser()                 — 从工厂获取时类型由 fn 推导
 
         body 是单一表达式，解析优先级为 LOWEST，在当前 token 行结束
         （NEWLINE/EOF）时自然终止（由 parse_expression 处理）。

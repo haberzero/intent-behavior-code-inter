@@ -366,8 +366,8 @@ def vm_handle_IbModule(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     res = yield node_data.get("value")
     if isinstance(res, Signal):
-        # 表达式求值理论上不产生控制信号；但若子节点（如嵌套语句块的 fallback
-        # 路径）意外携带信号上来，仍按数据透传给父帧处理而不是当场丢弃。
+        # 表达式求值理论上不产生控制信号；若子节点意外携带信号上来，
+        # 仍按数据透传给父帧处理而不是当场丢弃。
         return res
     if isinstance(res, IbBehavior):
         # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor），M3a 不重写
@@ -1237,8 +1237,9 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
 
 
 def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``(Type) @~ ... ~`` 隐式实例化（废弃语法 PAR_010，保留运行时路径）。
+    """``(Type) @~ ... ~`` 强制转换语法（PAR_010）的运行时路径。
 
+    解析器不再生成此节点类型；此 handler 作为防御性兜底保留。
     segments 为字面字符串与 ext_ref dicts，不含子表达式 UID，故无需 yield。
     逻辑与 ExprHandler.visit_IbBehaviorInstance 完全对应，但走 VM 路径。
     """

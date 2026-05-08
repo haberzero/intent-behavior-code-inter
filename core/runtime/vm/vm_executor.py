@@ -243,7 +243,7 @@ class VMExecutor:
         return VMTask(node_uid=node_uid, generator=gen)
 
     def _make_const_task(self, node_uid: str, value: Any) -> VMTask:
-        """把一个已知值包装成立即完成的任务（仅供未知节点 fallback）。"""
+        """把一个已知值包装成立即完成的任务（用于缺失节点数据场景）。"""
         def _gen():
             return value
             yield  # pragma: no cover

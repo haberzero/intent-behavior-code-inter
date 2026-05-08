@@ -23,8 +23,7 @@ class ContractValidator:
         if self.debugger:
             self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, "Starting Global Contract Validation (STAGE 7)...")
 
-        # Use all_descriptors (alias for all_specs on SpecRegistry)
-        all_descs = self.registry.all_descriptors if hasattr(self.registry, 'all_descriptors') else {}
+        all_descs = self.registry.all_specs
         for desc in all_descs.values():
             # 1. 审计类契约
             if self.registry.is_class_spec(desc):

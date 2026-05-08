@@ -1,5 +1,5 @@
 """
-End-to-end tests for the parametric ``fn = lambda(...) / snapshot(...)`` syntax (M1).
+End-to-end tests for the parametric ``fn = lambda(...) / snapshot(...)`` syntax.
 
 Coverage:
   - No-param lambda: ``fn f = lambda: EXPR`` defers and re-evaluates each call
@@ -13,14 +13,12 @@ Coverage:
   - Nested lambdas: inner-param shadowing outer free vars
   - Behavior-body lambdas: ``fn f = lambda: @~...~`` produces a behavior with
     captured intents/closure
-  - Backward compatibility: legacy ``TYPE lambda NAME = EXPR`` still errors
+  - Error cases: invalid syntax forms produce the expected compile errors
 
-Syntax rules (D1/D2):
+Syntax rules:
   - ``:`` is the only valid body-start delimiter.
-  - Old parenthesis-only body forms are no longer supported.
-  - Return type annotation must appear on the EXPRESSION side:
-    ``fn name = lambda -> TYPE: EXPR``  (not ``TYPE fn name = lambda: EXPR``).
-  - Declaration-side return type (``TYPE fn name = lambda: EXPR``) is now PAR_003.
+  - Return type annotation appears on the expression side:
+    ``fn name = lambda -> TYPE: EXPR``
 """
 
 import os
@@ -180,18 +178,18 @@ print((str)outer(7))
         assert run_and_capture(code) == ["14"]
 
 
-class TestFnLambdaBackwardCompat:
-    """Legacy ``TYPE lambda NAME = EXPR`` syntax is no longer supported."""
+class TestFnLambdaInvalidDeclarationSyntax:
+    """Invalid declaration-side syntax forms produce compile errors."""
 
-    def test_legacy_int_lambda_is_error(self):
-        """Old ``int lambda NAME = EXPR`` declaration syntax is a parse error."""
+    def test_type_lambda_decl_is_error(self):
+        """``int lambda f = EXPR`` declaration syntax is a parse error."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
             engine.compile_string("int x = 3\nint lambda f = x * 2", silent=True)
 
-    def test_legacy_auto_lambda_is_error(self):
-        """Old ``auto lambda NAME = EXPR`` declaration syntax is a parse error."""
+    def test_auto_lambda_decl_is_error(self):
+        """``auto lambda g = EXPR`` declaration syntax is a parse error."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
@@ -224,33 +222,32 @@ class TestFnLambdaErrors:
         assert any(d.code == "SEM_003" for d in exc_info.value.diagnostics)
 
     def test_decl_side_type_fn_is_error(self):
-        """Old ``int fn f = lambda: EXPR`` declaration-side return type is now PAR_003."""
+        """``int fn f = lambda: EXPR`` declaration-side return type is PAR_003."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
             engine.compile_string("int fn f = lambda: 1 + 1", silent=True)
 
     def test_decl_side_type_fn_params_is_error(self):
-        """Old ``int fn add = lambda(int a, int b): a+b`` declaration-side form is PAR_003."""
+        """``int fn add = lambda(int a, int b): a+b`` declaration-side form is PAR_003."""
         from core.kernel.issue import CompilerError
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         with pytest.raises(CompilerError):
             engine.compile_string("int fn add = lambda(int a, int b): a + b", silent=True)
 
     def test_lambda_exprside_arrow_compiles(self):
-        """``fn f = lambda -> int: EXPR`` expression-side annotation is now valid (D2)."""
+        """``fn f = lambda -> int: EXPR`` expression-side annotation is valid."""
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         engine.compile_string("fn f = lambda -> int: 1 + 1\nint r = f()", silent=True)
 
     def test_lambda_exprside_arrow_params_compiles(self):
-        """``fn f = lambda(PARAMS) -> int: EXPR`` expression-side annotation is now valid (D2)."""
+        """``fn f = lambda(PARAMS) -> int: EXPR`` expression-side annotation is valid."""
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
         engine.compile_string("fn f = lambda(int a) -> int: a + 1\nint r = f(3)", silent=True)
 
 
 # ---------------------------------------------------------------------------
 # Return type annotation: ``fn NAME = lambda -> TYPE: EXPR``
-# (Expression-side return type annotation — D2, replaces ``TYPE fn NAME = lambda: EXPR``)
 # ---------------------------------------------------------------------------
 
 class TestFnReturnsAnnotation:
@@ -542,35 +539,35 @@ print(r)
 """
         assert run_and_capture(code) == ["hello world"]
 
-    # --- Backward compat: old parenthesis forms are now parse errors ---
+    # --- Invalid bracket-only body forms ---
 
-    def test_old_no_param_bracket_body_is_error(self):
-        """``lambda(EXPR)`` no-param bracket-only body form is now a parse error."""
+    def test_no_param_bracket_body_is_error(self):
+        """``lambda(EXPR)`` bracket-only body form is a parse error."""
         from core.kernel.issue import CompilerError
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
                 "fn f = lambda(1 + 2)", silent=True)
 
-    def test_old_param_bracket_body_is_error(self):
-        """``lambda(PARAMS)(EXPR)`` bracket body form is now a parse error."""
+    def test_param_bracket_body_is_error(self):
+        """``lambda(PARAMS)(EXPR)`` bracket body form is a parse error."""
         from core.kernel.issue import CompilerError
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
                 "fn f = lambda(int n)(n + 1)", silent=True)
 
     def test_decl_side_type_fn_is_error(self):
-        """``int fn f = lambda: EXPR`` declaration-side return type is now PAR_003 (D1)."""
+        """``int fn f = lambda: EXPR`` declaration-side return type is PAR_003."""
         from core.kernel.issue import CompilerError
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
                 "int fn f = lambda: 1 + 2\nint r = f()", silent=True)
 
     def test_expr_side_arrow_is_valid(self):
-        """``fn f = lambda -> int: EXPR`` expression-side return type is valid (D2)."""
+        """``fn f = lambda -> int: EXPR`` expression-side return type is valid."""
         IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
             "fn f = lambda -> int: 1 + 2\nint r = f()", silent=True)
 
-    def test_decl_side_returns_type_mismatch(self):
+    def test_return_type_mismatch_raises_sem_003(self):
         """Body type mismatch with expression-side ``-> TYPE`` raises SEM_003."""
         from core.kernel.issue import CompilerError
         with pytest.raises(CompilerError) as exc_info:

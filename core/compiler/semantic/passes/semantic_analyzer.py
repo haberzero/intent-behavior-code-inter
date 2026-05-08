@@ -1200,7 +1200,7 @@ class SemanticAnalyzer:
             # (Type)@~...~ 已废弃，解析器会发出 PAR_010 错误，语义层防御性兜底
             self.error(
                 "Cast expression '(Type) @~...~' is no longer supported. "
-                "Use 'TYPE fn varname = lambda: @~...~' or 'TYPE fn varname = snapshot: @~...~' instead.",
+                "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                 node, code="SEM_DEPRECATED"
             )
 
@@ -1257,12 +1257,12 @@ class SemanticAnalyzer:
 
     def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> IbSpec:
         """
-        [DEPRECATED] IbBehaviorInstance 对应的 (Type) @~...~ 语法已废弃 (PAR_010)。
-        该节点不再由解析器产生。此访问者仅作防御性兜底，正常情况下不会被调用。
+        IbBehaviorInstance 对应已移除的 (Type) @~...~ 语法（PAR_010）。
+        解析器不再产生此节点；此访问者仅作运行时防御性兜底。
         """
         self.error(
             "Cast expression '(Type) @~...~' is no longer supported. "
-            "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+            "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
             node, code="SEM_DEPRECATED"
         )
         return self._any_desc
@@ -1909,13 +1909,13 @@ class SemanticAnalyzer:
 
     def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr) -> IbSpec:
         """
-        参数化 lambda/snapshot 表达式（M1；D1/D2 返回类型迁移至表达式侧）的语义分析。
+        参数化 lambda/snapshot 表达式的语义分析。
 
         策略
         ----
         1. 确定 returns_type：来自 ``node.returns``（由解析器在表达式侧 ``-> TYPE``
-           处填充，例如 ``fn f = lambda -> int: EXPR``）。D1/D2 落地前使用的
-           ``_pending_fn_return_type`` 隐式通道已删除（2026-04-29）。
+           处填充，例如 ``fn f = lambda -> int: EXPR``）；未标注时为 ``None``，
+           语义层自动推导。
         2. 为参数列表与函数体打开新的 ``SymbolTable``（局部作用域），保证 body 内
            的 ``IbName`` 决议能将形参指向局部符号而非误捕外层同名变量。
         4. 形参解析为 ``VariableSymbol``，类型来自注解（缺省为 ``any``）。
@@ -1931,7 +1931,6 @@ class SemanticAnalyzer:
            ``int r = f()`` 能在编译期通过类型决议），否则返回通用 spec。
         """
         # 1. 确定返回类型：来自表达式侧 ``-> TYPE`` 标注（node.returns）。
-        #    ``_pending_fn_return_type`` 隐式通道已删除（D1/D2，2026-04-29）。
         returns_type: Optional[IbSpec] = (
             self._resolve_type(node.returns, safe=True) if node.returns is not None else None
         )

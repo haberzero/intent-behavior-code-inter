@@ -271,7 +271,7 @@ class SpecFactory:
 
         Example::
 
-            # int lambda f = @~...~  →  create_behavior(value_type_name="int")
+            # fn f = lambda -> int: @~...~  →  create_behavior(value_type_name="int")
             factory.create_behavior(value_type_name="int", deferred_mode="lambda")
         """
         from .base import TypeDef
@@ -553,7 +553,7 @@ class SpecRegistry:
         (i.e. not ``"auto"`` / ``"any"``) return the declared value type
         directly, enabling compile-time type inference at call sites:
 
-            int lambda f = @~ compute something ~
+            fn f = lambda -> int: @~ compute something ~
             int result = f()   # resolves to int, no SEM_003
         """
         if spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
@@ -797,7 +797,7 @@ class SpecRegistry:
             if self.is_dynamic(target):
                 return True
             # A dynamic callable (fn / auto) can be assigned to any callable slot,
-            # including typed DeferredSpec/BehaviorSpec (e.g. `int fn f = make_adder()`).
+            # including typed DeferredSpec/BehaviorSpec (e.g. `fn f = make_adder()`).
             if self.is_callable(target):
                 return True
             return False
@@ -865,9 +865,9 @@ class SpecRegistry:
     ) -> Optional[IbSpec]:
         """Resolve a generic type specialisation, e.g. list[int].
 
-        Special case: ``fn[TYPE]`` — declaration-side return-type annotation.
-        ``int fn f = lambda: EXPR`` builds ``IbSubscript(fn, int)`` which
-        resolves here as ``DeferredSpec(value_type_name="int")``.  This enables
+        Special case: ``fn[TYPE]`` — internal subscript for expression-side return-type inference.
+        ``fn f = lambda -> int: EXPR`` causes the semantic analyser to build a
+        ``DeferredSpec(value_type_name="int")`` via this path.  This enables
         call-site inference: ``int r = f()`` compiles without SEM_003.
         """
         # Special case: fn[RETURN_TYPE] → DeferredSpec(value_type_name=RETURN_TYPE)
@@ -975,11 +975,6 @@ class SpecRegistry:
     @property
     def all_specs(self) -> Dict[str, IbSpec]:  # type: ignore[override]
         return dict(self._specs)
-
-    @property
-    def all_descriptors(self) -> Dict[str, IbSpec]:
-        """Alias for all_specs for backward compatibility with ContractValidator."""
-        return self.all_specs
 
     def get_metadata_registry(self) -> "SpecRegistry":
         """Return self. Allows ContractValidator to receive the registry."""

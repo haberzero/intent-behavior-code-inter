@@ -12,7 +12,7 @@ M5b — LLMScheduler / LLMFuture 单元测试。
 4. 错误路径：resolve 未知 uid 抛 RuntimeError
 5. 并发性：多个 dispatch_eager 调用并发执行
 6. 线程池惰性初始化
-7. 向后兼容：``execute_behavior_expression`` 仍可正常工作
+7. 稳定 API 合约：``execute_behavior_expression`` 仍可正常工作
 """
 import concurrent.futures
 import threading
@@ -286,10 +286,10 @@ class TestThreadPoolLazyInit:
 
 
 # ===========================================================================
-# 5. 向后兼容
+# 5. 稳定 API 合约
 # ===========================================================================
 
-class TestBackwardCompat:
+class TestStableAPIContract:
     def test_execute_behavior_expression_still_works(self):
         """M5b 修改后，execute_behavior_expression() 仍应正常返回 LLMResult。"""
         engine = make_engine(ai_setup() + "str x = @~ MOCK:STR:compat_test ~\n")
