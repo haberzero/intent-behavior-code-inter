@@ -1,10 +1,10 @@
 # IBC-Inter 工程演进记录（已完成工作归档）
 
 > 精炼记录各阶段已完成的代码与架构演进，时间线从早期向当前推进。
-> **最后更新**：2026-05-08（类型系统 M1–M4 全部落地；测试基线 **1184 passed**）
+> **最后更新**：2026-05-08（类型系统 M1–M5 全部完成收口；测试基线 **1180 passed**）
 >
 > **阅读说明**：本文件是**演进归档**，旧章节会保留当时的术语、基线和阶段性结论。  
-> 当前真实状态请以 `docs/NEXT_STEPS.md` 与 `docs/TYPE_SYSTEM_TASKS.md` 为准；若归档正文中出现 `deferred_mode`、`DeferredSpec`、旧测试基线等表述，应按对应章节的历史时间点理解，而不是按当前实现理解。
+> 当前真实状态请以 `docs/NEXT_STEPS.md`、`docs/TYPE_SYSTEM_TASKS.md`、`docs/TYPE_SYSTEM_DESIGN.md` 与 `docs/VM_INTERPRETER_DESIGN.md` 为准；若归档正文中出现 `deferred_mode`、`DeferredSpec`、旧测试基线等表述，应按对应章节的历史时间点理解，而不是按当前实现理解。
 
 ---
 
@@ -1524,3 +1524,68 @@ python3 -m pytest tests/ -q --tb=short
 - **已完成**：M1 / M2 / M3 / M4 / M5（2026-05-08）
 - **未完成**：—（无）
 - **测试基线**：`python -m pytest tests/ -q --tb=short` → **1184 passed**
+
+---
+
+## 二十六、类型系统 M5：Axiom 接口统一化（2026-05-08）
+
+> 本节记录 M5 的完整实施内容，构成类型系统五大里程碑的收官章节。
+
+### 26.1 背景与动机
+
+M1–M4 完成后，类型行为的分发仍通过九个独立的 Capability 子协议分散实现：`CallCapability`、`IterCapability`、`SubscriptCapability`、`OperatorCapability`、`ConverterCapability`、`ParserCapability`、`FromPromptCapability`、`IlmoutputHintCapability`、`WritableTrait`。每个公理需要多重继承各个 mixin，并写大量 `get_X_capability(): return self` 样板方法。`SpecRegistry.get_X_cap()` 内部充斥着分散的 `isinstance` 检查。
+
+M5 目标：以单一 `TypeAxiom` Protocol 统一全部 Capability 接口，使能力声明变为简单的类属性布尔标志。
+
+### 26.2 核心变更
+
+#### 26.2.1 单一 TypeAxiom Protocol（`core/kernel/axioms/protocols.py`）
+
+```python
+class TypeAxiom(Protocol):
+    """单一公理协议——替代旧 9 个 Capability 子协议"""
+    has_call_cap:        bool  # 可调用（func/lambda/snapshot/behavior）
+    has_iter_cap:        bool  # 可迭代（list/tuple/str）
+    has_subscript_cap:   bool  # 可下标访问（list/tuple/str/dict）
+    has_operator_cap:    bool  # 算术/比较运算符（int/float/str/bool）
+    has_parser_cap:      bool  # from_prompt 解析（需要 LLM 类型转换的原子类型）
+    has_from_prompt_cap: bool  # 自定义 from_prompt 路径
+    has_converter_cap:   bool  # 类型转换（cast_to / to_bool）
+    has_output_hint_cap: bool  # LLM 提示词输出格式说明
+```
+
+#### 26.2.2 BaseAxiom 提供安全默认（`core/kernel/axioms/protocols.py`）
+
+```python
+class BaseAxiom:
+    has_call_cap = False
+    has_iter_cap = False
+    has_subscript_cap = False
+    has_operator_cap = False
+    has_parser_cap = False
+    has_from_prompt_cap = False
+    has_converter_cap = False
+    has_output_hint_cap = False
+```
+
+具体公理只需声明 `has_X_cap = True`，不再多重继承 mixin 也不再写 `return self` 样板。
+
+#### 26.2.3 SpecRegistry 统一接口（`core/kernel/spec/registry.py`）
+
+`get_X_cap(spec)` 方法统一逻辑：
+- 若 spec 为结构化可调用（`FUNCTION / BOUND_METHOD / CLASS` 等），直接返回 spec 作 truthy 标记
+- 若 spec 为公理支持对应 `has_X_cap = True`，返回公理本身
+- 否则返回 `None`
+
+调用方 `if cap: cap.method()` 习惯不变，无需修改所有调用点。
+
+#### 26.2.4 删除哨兵与不可达路径
+
+- 删除 `_FUNC_SPEC_CALL_CAP` 哨兵类（函数 spec 调用能力回填全走 `factory.create_func()`）
+- 删除 `WritableTrait` 不可达回填路径
+
+### 26.3 结果
+
+- 净删减约 400 行旧粘合代码
+- 测试基线：**1184 passed**（M5 完成后），维持稳定后降至 **1180 passed**（少量测试清理）
+- 所有 `TypeKind.CALLABLE_INSTANCE` 相关分发统一经 `has_call_cap` 协议路由

@@ -1,8 +1,9 @@
 # IBCI 类型系统：从零开始的全新架构设计
 
 > **实现状态说明（2026-05-08）**  
-> 本文档是类型系统重构的架构原文。当前代码已完成 **M1–M4**：`TypeRef`、`TypeDef`、`Optional[T]`、`CALLABLE_INSTANCE` 路线，以及以 `IbValue` 为中心的运行时值承载层均已落地。  
-> 尚未完成的是 **M5（Axiom 接口统一化）**。当前进度以 `docs/NEXT_STEPS.md` 与 `docs/TYPE_SYSTEM_TASKS.md` 为准；本文保留“设计原文 + 迁移目标”性质。
+> 本文档是类型系统重构的架构原文。当前代码已**全部完成 M1–M5**：`TypeRef`、`TypeDef`、`Optional[T]`、`CALLABLE_INSTANCE` 路线、以 `IbValue` 为中心的运行时值承载层，以及单一 `TypeAxiom` Protocol 接口统一化均已落地。  
+> 历史演进过程见 `docs/COMPLETED.md §二十五/§二十六`；当前架构设计权威说明见 `docs/TYPE_SYSTEM_DESIGN.md`；当前代码状态以 `docs/TYPE_SYSTEM_TASKS.md`（全勾选）为准。  
+> 本文保留"设计原文 + 第一性原理推演"的思想参考价值，读者可据此理解整个类型系统的设计初衷。
 
 下面我把自己当作一个被新项目聘请的语言架构师，假定你是产品负责人。我**不会**引用现有 IBCI 代码中的任何具体类名或字段，而是从语言设计的第一性原理推演出整个体系，最后再给你一张"它如何落到 Python 实现"的具体地图。
 
