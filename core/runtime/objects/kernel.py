@@ -229,6 +229,13 @@ class IbValue(IbObject):
         self.meta[key] = value
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        """
+        Return the raw payload for scalar / already-native values.
+
+        Container-like subclasses override this to recursively unwrap nested
+        ``IbObject`` / ``IbValue`` members while preserving memoized cycle
+        handling.
+        """
         return self.payload
 
     def serialize_for_debug(self) -> Mapping[str, Any]:
