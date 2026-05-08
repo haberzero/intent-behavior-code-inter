@@ -3,7 +3,7 @@ import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
-from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
+from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
 from core.runtime.interpreter.runtime_context import IntentNode
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -142,7 +142,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         
         # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
         cls_name = obj.ib_class.name
-        if isinstance(obj, IbNone):
+        if isinstance(obj, IbValue) and cls_name == "None":
             data["_type"] = "none"
 
         elif isinstance(obj, IbNativeFunction):
