@@ -18,10 +18,10 @@
 
 - [x] M1：TypeRef 引入（兼容阶段）— 完成（2026-05-07，+103 tests，总 1159 passed）
 - [x] M2：Optional[T] 与空安全落地（完成 2026-05-07：OptionalSpec + assignability + artifact rehydration + Optional 方法语义收口；全量 1179 passed）
-- [ ] M3：TypeDef 单一化（替代多 Spec，进行中：TypeDef/TypeKind + kind 分派主路径已落地；全量 1181 passed）
-- [ ] M4：运行时值模型单一化（IbValue）
+- [x] M3：TypeDef 单一化（完成 2026-05-08：所有扁平 `*_name`/`*_module` 字段全面 TypeRef 化，无残留；测试基线 1182 passed）
+- [x] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线 — 完成（2026-05-08：`TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`，`deferred_mode` 概念彻底删除并重命名为 `capture_mode`，全栈一致）
+- [ ] M4：运行时值模型单一化（IbValue）— 待启动（独立大型重构：约 9 个 Ib 值类，44+ 处 isinstance 分派，运算符重载需经 axiom 路由）
 - [ ] M5：Axiom 接口统一化
-- [ ] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线（弃用 deferred 主概念）
 
 #### 当前执行要求
 

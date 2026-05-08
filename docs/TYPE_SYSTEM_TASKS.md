@@ -20,7 +20,7 @@
 
 - [x] **M1：TypeRef 引入（兼容阶段）** — 完成（2026-05-07）
 - [x] **M2：Optional[T] 与空安全落地** — 完成（2026-05-07）
-- [ ] **M3：TypeDef 单一化（替代多 Spec）**
+- [x] **M3：TypeDef 单一化（替代多 Spec）** — 完成（2026-05-08）
 - [ ] **M4：运行时值模型单一化（IbValue）**
 - [ ] **M5：Axiom 接口统一化**
 
@@ -76,17 +76,35 @@
 - [x] 可空逻辑仅由 `Optional[T]` 驱动。
 - [x] 空安全相关用例完整覆盖。
 
-### M3：TypeDef 单一化（替代多 Spec）
+### M3：TypeDef 单一化（替代多 Spec）— ✅ 完成（2026-05-08）
 
 - [x] 设计并落地统一 `TypeDef`（以 `kind` 区分语义类别）。
-- [ ] 将旧多 Spec 结构迁移到 `TypeDef` 统一表示。
+- [x] 将旧多 Spec 结构迁移到 `TypeDef` 统一表示。
 - [x] 重写注册表查询入口：统一返回 `TypeDef` 兼容结构（`kind` 驱动）。
 - [x] 清理关键路径 `isinstance(SpecX)` 分支，改为 `kind` + 通用字段路径。
 - [x] 更新序列化/反序列化协议到单一结构（统一使用 `kind` 协议）。
+- [x] **彻底字段命名清洗（2026-05-08）**：
+  - 所有扁平 `*_name` / `*_module` 字符串对字段全部下沉为单一 `TypeRef` 字段
+  - `param_types: List[TypeRef]`、`return_type / parent_type / element_type / key_type / value_type / wrapped_type / receiver_type: TypeRef`、`allowed_element_types: List[TypeRef]`
+  - 标量便利 @property 全部删除（`return_type_name/_module`、`element_type_name/_module`、`key_type_name/_module`、`value_type_name/_module`、`wrapped_type_name/_module`、`receiver_type_name/_module`、`MemberSpec.type_name/_module`、`parent_name/_module`、`allowed_element_type_names`）
+  - 47+ 处读取点全部迁移到 `.X.head` / `.X.module` / TypeRef 直接访问
+  - 序列化 / 反序列化协议保留 `parent_name` / `parent_module` / `return_type_name` 作为**线协议字段**（写盘格式），但 in-memory 模型纯 TypeRef
+  - 仅保留 `param_type_names` / `param_type_modules` 作为列表迭代便利视图（无标量等价物，纯只读派生）
 
 **M3 DoD**
-- [ ] Spec 体系逻辑等价迁移完成。
-- [x] 关键路径不再依赖旧 Spec 子类判断（SpecRegistry/serializer/rehydrator/语义核心 pass）。
+- [x] Spec 体系逻辑等价迁移完成。
+- [x] 关键路径不再依赖旧 Spec 子类判断。
+- [x] In-memory 字段命名彻底清洗，无双重表示残留。
+
+### M3→M5 补充：callable-instance 路线 — ✅ 完成（2026-05-08）
+
+- [x] `TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`
+- [x] `TypeDef.deferred_mode` 字段彻底删除（capture mode 不属于类型层语义）
+- [x] 全局重命名：`deferred_mode` → `capture_mode`、`is_deferred` → `is_callable_instance`、`set_deferred` → `set_callable_instance`、`node_is_deferred` → `node_is_callable_instance`、`node_deferred_mode` → `node_capture_mode`
+- [x] 序列化通道：`type_data["axiom_name"]` 取代旧 `type_data["capture_mode"]`，反序列化通过 axiom name (`"deferred"` / `"behavior"`) 还原原始公理路由
+- [x] AST、运行时值、blueprint、side table、registry API 全栈一致
+
+**注**：运行时值类 `IbDeferred` / `IbBehavior` 仍保留为独立 Python 类（M4 范畴）。
 
 ### M4：运行时值模型单一化（IbValue）
 
