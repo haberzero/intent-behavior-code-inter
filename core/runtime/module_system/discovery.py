@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Any
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
 from core.base.enums import RegistrationState
+from core.kernel.spec.type_ref import TypeRef
 
 
 class ModuleDiscoveryService:
@@ -189,17 +190,13 @@ class ModuleDiscoveryService:
             member = MethodMemberSpec(
                 name=func_name,
                 kind="method",
-                type_name=return_type,
-                param_type_names=list(param_types),
-                param_type_modules=[None] * len(param_types),
-                return_type_name=return_type,
-            )
+                type_ref=TypeRef.of(return_type), return_type=TypeRef.of(return_type), param_types=[TypeRef.of(p) for p in param_types])
             spec.members[func_name] = member
 
         variables = vtable.get("variables", {})
         for var_name, var_type in variables.items():
             type_name = var_type if isinstance(var_type, str) else "any"
-            spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_name=type_name)
+            spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_ref=TypeRef.of(type_name))
 
         return spec
 

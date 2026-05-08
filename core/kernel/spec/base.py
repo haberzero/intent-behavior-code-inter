@@ -214,125 +214,10 @@ class TypeDef(IbSpec):
         return TypeDef._KIND_BASE_NAMES.get(self.kind, self.name)
 
     # ------------------------------------------------------------------ #
-    # Constructor compatibility shim                                      #
-    # ------------------------------------------------------------------ #
-    # The dataclass ``__init__`` only accepts the new TypeRef-based kwargs
-    # (``param_types``, ``return_type``, ``element_type`` …).  Many existing
-    # call-sites pass legacy flat-string kwargs (``return_type_name="int"``,
-    # ``param_type_modules=[None]`` …).  We override ``__init__`` to accept
-    # both forms transparently: legacy strings are converted to TypeRef
-    # values before delegating to the dataclass-generated init.
-    #
-    # Once all call-sites have been migrated to the structured kwargs,
-    # this shim can be deleted with no behavioural change.
-
-    _LEGACY_KWARG_TO_FIELD: ClassVar[Dict[str, str]] = {
-        "return_type_name":        "return_type",
-        "return_type_module":      "return_type",
-        "parent_name":             "parent_type",
-        "parent_module":           "parent_type",
-        "element_type_name":       "element_type",
-        "element_type_module":     "element_type",
-        "key_type_name":           "key_type",
-        "key_type_module":         "key_type",
-        "value_type_name":         "value_type",
-        "value_type_module":       "value_type",
-        "wrapped_type_name":       "wrapped_type",
-        "wrapped_type_module":     "wrapped_type",
-        "receiver_type_name":      "receiver_type",
-        "receiver_type_module":    "receiver_type",
-        "param_type_names":        "param_types",
-        "param_type_modules":      "param_types",
-        "allowed_element_type_names": "allowed_element_types",
-    }
-
-    # NOTE: ``__init__`` is intentionally NOT defined here so that ``@dataclass``
-    # generates the full structured-kwargs constructor.  After class creation
-    # we capture the generated ``__init__`` as ``__dataclass_init__`` and then
-    # replace ``TypeDef.__init__`` with a thin wrapper that first normalises
-    # legacy ``*_name`` / ``*_module`` kwargs into TypeRef-typed kwargs.
-    # See the module-level reassignment below the class.
-
-    @staticmethod
-    def _normalise_legacy_kwargs(kwargs: Dict[str, "object"]) -> Dict[str, "object"]:
-        """Translate legacy flat-string kwargs into TypeRef-typed kwargs.
-
-        Pairs ``X_name`` / ``X_module`` collapse into a single ``X`` TypeRef.
-        Parallel lists ``param_type_names`` / ``param_type_modules`` collapse
-        into ``param_types``.  ``parent_name=None`` becomes ``parent_type=None``.
-        Already-TypeRef kwargs pass through unchanged.
-        """
-        from .type_ref import TypeRef
-
-        out: Dict[str, object] = dict(kwargs)
-
-        # Scalar pairs --------------------------------------------------
-        scalar_pairs = (
-            ("return_type",   "return_type_name",   "return_type_module",   "void"),
-            ("element_type",  "element_type_name",  "element_type_module",  "any"),
-            ("key_type",      "key_type_name",      "key_type_module",      "any"),
-            ("value_type",    "value_type_name",    "value_type_module",    "any"),
-            ("wrapped_type",  "wrapped_type_name",  "wrapped_type_module",  "any"),
-            ("receiver_type", "receiver_type_name", "receiver_type_module", ""),
-        )
-        for new_field, name_kw, mod_kw, default_head in scalar_pairs:
-            if new_field in out:
-                # Caller already supplied the structured field; ignore any
-                # legacy companions (they would be redundant).
-                out.pop(name_kw, None)
-                out.pop(mod_kw, None)
-                continue
-            if name_kw in out or mod_kw in out:
-                head = out.pop(name_kw, default_head)
-                module = out.pop(mod_kw, None)
-                out[new_field] = TypeRef.of(head, module)
-
-        # Parent (nullable) --------------------------------------------
-        if "parent_type" not in out and ("parent_name" in out or "parent_module" in out):
-            head = out.pop("parent_name", None)
-            module = out.pop("parent_module", None)
-            out["parent_type"] = TypeRef.of(head, module) if head else None
-
-        # Parallel lists ------------------------------------------------
-        if "param_types" not in out and ("param_type_names" in out or "param_type_modules" in out):
-            names = list(out.pop("param_type_names", []) or [])
-            mods = list(out.pop("param_type_modules", []) or [])
-            while len(mods) < len(names):
-                mods.append(None)
-            out["param_types"] = [TypeRef.of(n, m) for n, m in zip(names, mods)]
-        else:
-            # Drop any orphan parallel-list kwargs even when the structured
-            # field is supplied (they are redundant and would otherwise
-            # raise TypeError on the dataclass init).
-            out.pop("param_type_names", None)
-            out.pop("param_type_modules", None)
-
-        if "allowed_element_types" not in out and "allowed_element_type_names" in out:
-            names = list(out.pop("allowed_element_type_names") or [])
-            out["allowed_element_types"] = [TypeRef.of(n) for n in names]
-
-        return out
-
-    # ------------------------------------------------------------------ #
-    # ------------------------------------------------------------------ #
-    # Legacy list / Optional accessors                                    #
-    # ------------------------------------------------------------------ #
-    # These properties expose the TypeRef storage as plain-string lists or
-    # nullable strings.  The scalar ``*_name``/``*_module`` properties have
-    # been removed; use ``spec.return_type.head`` / ``spec.element_type.module``
-    # etc. directly.  The list / Optional accessors remain because they are
-    # genuinely convenient (e.g. ``len(spec.param_type_names)`` is shorter
-    # than the equivalent TypeRef-based form) and because mass-migrating
-    # every iteration / comparison site is a separate refactor.
-
-    # ------------------------------------------------------------------ #
     # List-typed convenience views                                        #
     # ------------------------------------------------------------------ #
     # These properties return plain-string views over the TypeRef storage
-    # for ergonomic iteration / comparison.  They are kept (rather than
-    # mass-migrating every iteration site) because they are genuinely
-    # convenient — e.g. ``len(spec.param_type_names)`` is much shorter
-    # than the equivalent TypeRef-based form.  The corresponding scalar
+    # for ergonomic iteration / comparison.  The corresponding scalar
     # ``*_name`` / ``*_module`` properties have been removed; use
     # ``spec.return_type.head`` / ``spec.parent_type`` etc. directly.
 
@@ -360,17 +245,3 @@ TypeDef._KIND_BASE_NAMES = {
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
 }
-
-# Capture the dataclass-generated ``__init__`` so the override above can
-# delegate to it after legacy-kwarg normalisation.  The override on the class
-# body intentionally shadowed the dataclass auto-init at class creation, which
-# is why we re-bind it here.
-TypeDef.__dataclass_init__ = TypeDef.__init__  # type: ignore[attr-defined]
-
-
-def _typedef_init_with_legacy_kwargs(self, *args, **kwargs):  # noqa: D401
-    kwargs = TypeDef._normalise_legacy_kwargs(kwargs)
-    TypeDef.__dataclass_init__(self, *args, **kwargs)  # type: ignore[attr-defined]
-
-
-TypeDef.__init__ = _typedef_init_with_legacy_kwargs  # type: ignore[assignment]

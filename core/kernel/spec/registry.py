@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
+from .type_ref import TypeRef
 from .specs import (
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, OPTIONAL_SPEC, EXCEPTION_SPEC,
@@ -36,11 +37,11 @@ from .specs import (
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
     LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
 )
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from core.kernel.axioms.registry import AxiomRegistry
     from core.kernel.axioms.protocols import TypeAxiom
-    from .type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
@@ -69,17 +70,18 @@ class SpecFactory:
         is_user_defined: bool = False,
         is_llm: bool = False,
     ) -> "TypeDef":
-        from .base import TypeDef
+        names = list(param_type_names or [])
+        mods = list(param_type_modules or [])
+        while len(mods) < len(names):
+            mods.append(None)
         return TypeDef(
             name=name,
             kind=TypeKind.FUNCTION.value,
             is_nullable=True,
             is_user_defined=is_user_defined,
-            param_type_names=list(param_type_names or []),
-            param_type_modules=list(param_type_modules or []),
-            return_type_name=return_type_name,
-            return_type_module=return_type_module,
             is_llm=is_llm,
+            return_type=TypeRef.of(return_type_name, return_type_module),
+            param_types=[TypeRef.of(n, m) for n, m in zip(names, mods)],
         )
 
     def create_class(
@@ -90,15 +92,14 @@ class SpecFactory:
         parent_module: Optional[str] = None,
         is_user_defined: bool = True,
     ) -> "TypeDef":
-        from .base import TypeDef
+        parent_type = TypeRef.of(parent_name, parent_module) if parent_name else None
         return TypeDef(
             name=name,
             kind=TypeKind.CLASS.value,
             module_path=module,
             is_nullable=True,
             is_user_defined=is_user_defined,
-            parent_name=parent_name,
-            parent_module=parent_module,
+            parent_type=parent_type,
         )
 
     def create_list(
@@ -107,27 +108,24 @@ class SpecFactory:
         element_type_module: Optional[str] = None,
         allowed_element_type_names: Optional[list] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
         if allowed_element_type_names:
             sorted_names = sorted(allowed_element_type_names)
-            name = f"list[{','.join(sorted_names)}]"
+            list_name = f"list[{','.join(sorted_names)}]"
             return TypeDef(
-                name=name,
+                name=list_name,
                 kind=TypeKind.LIST.value,
                 is_nullable=True,
                 is_user_defined=False,
-                element_type_name="any",
-                element_type_module=None,
-                allowed_element_type_names=list(allowed_element_type_names),
+                element_type=TypeRef.of("any"),
+                allowed_element_types=[TypeRef.of(n) for n in allowed_element_type_names],
             )
-        name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
+        list_name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
         return TypeDef(
-            name=name,
+            name=list_name,
             kind=TypeKind.LIST.value,
             is_nullable=True,
             is_user_defined=False,
-            element_type_name=element_type_name,
-            element_type_module=element_type_module,
+            element_type=TypeRef.of(element_type_name, element_type_module),
         )
 
     def create_dict(
@@ -137,17 +135,13 @@ class SpecFactory:
         key_type_module: Optional[str] = None,
         value_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
-        name = f"dict[{key_type_name},{value_type_name}]"
         return TypeDef(
-            name=name,
+            name=f"dict[{key_type_name},{value_type_name}]",
             kind=TypeKind.DICT.value,
             is_nullable=True,
             is_user_defined=False,
-            key_type_name=key_type_name,
-            key_type_module=key_type_module,
-            value_type_name=value_type_name,
-            value_type_module=value_type_module,
+            key_type=TypeRef.of(key_type_name, key_type_module),
+            value_type=TypeRef.of(value_type_name, value_type_module),
         )
 
     def create_tuple(
@@ -155,15 +149,13 @@ class SpecFactory:
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
-        name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
+        tuple_name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
         return TypeDef(
-            name=name,
+            name=tuple_name,
             kind=TypeKind.TUPLE.value,
             is_nullable=True,
             is_user_defined=False,
-            element_type_name=element_type_name,
-            element_type_module=element_type_module,
+            element_type=TypeRef.of(element_type_name, element_type_module),
         )
 
     def create_bound_method(
@@ -172,19 +164,16 @@ class SpecFactory:
         func_spec_name: str,
         receiver_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
         return TypeDef(
             name="bound_method",
             kind=TypeKind.BOUND_METHOD.value,
             is_nullable=True,
             is_user_defined=False,
-            receiver_type_name=receiver_type_name,
-            receiver_type_module=receiver_type_module,
             func_spec_name=func_spec_name,
+            receiver_type=TypeRef.of(receiver_type_name, receiver_type_module),
         )
 
     def create_module(self, name: str, module: Optional[str] = None) -> "TypeDef":
-        from .base import TypeDef
         return TypeDef(
             name=name,
             kind=TypeKind.MODULE.value,
@@ -205,15 +194,13 @@ class SpecFactory:
         (``IbLambdaExpr.capture_mode``); it is intentionally NOT stored on the
         type spec.
         """
-        from .base import TypeDef
-        name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
+        deferred_name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
         spec = TypeDef(
-            name=name,
+            name=deferred_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
-            value_type_name=value_type_name,
-            value_type_module=value_type_module,
+            value_type=TypeRef.of(value_type_name, value_type_module),
         )
         # Route axiom dispatch to the "deferred" axiom even for parameterised
         # specs like "deferred[int]".
@@ -226,15 +213,12 @@ class SpecFactory:
         wrapped_type_module: Optional[str] = None,
     ) -> "TypeDef":
         """Create an Optional[T] spec."""
-        from .base import TypeDef
-        name = f"Optional[{wrapped_type_name}]"
         return TypeDef(
-            name=name,
+            name=f"Optional[{wrapped_type_name}]",
             kind=TypeKind.OPTIONAL.value,
             is_nullable=True,
             is_user_defined=False,
-            wrapped_type_name=wrapped_type_name,
-            wrapped_type_module=wrapped_type_module,
+            wrapped_type=TypeRef.of(wrapped_type_name, wrapped_type_module),
         )
 
     def create_behavior(
@@ -257,15 +241,13 @@ class SpecFactory:
             # fn f = lambda -> int: @~...~  →  create_behavior(value_type_name="int")
             factory.create_behavior(value_type_name="int")
         """
-        from .base import TypeDef
-        name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
+        beh_name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
         spec = TypeDef(
-            name=name,
+            name=beh_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
-            value_type_name=value_type_name,
-            value_type_module=value_type_module,
+            value_type=TypeRef.of(value_type_name, value_type_module),
         )
         # Route axiom dispatch to the "behavior" axiom even for parameterised
         # specs like "behavior[int]".
@@ -748,11 +730,9 @@ class SpecRegistry:
                     name=attr_name,
                     kind=TypeKind.FUNCTION.value,
                     is_user_defined=spec.is_user_defined,
-                    param_type_names=effective_params,
-                    param_type_modules=effective_param_modules,
-                    return_type_name=effective_return,
-                    return_type_module=effective_return_module,
                     is_llm=member.is_llm(),
+                    return_type=TypeRef.of(effective_return, effective_return_module),
+                    param_types=[TypeRef.of(n, m) for n, m in zip(effective_params, effective_param_modules)],
                 )
             # Enum variant access: return the enum class type itself
             if (spec.kind == TypeKind.CLASS.value and spec.parent_type is not None

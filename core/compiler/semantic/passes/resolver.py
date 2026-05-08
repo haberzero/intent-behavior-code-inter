@@ -149,9 +149,8 @@ class TypeResolver:
             self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
                 kind="method",
-                param_type_names=[p.name for p in param_types],
-                param_type_modules=[p.module_path for p in param_types],
-                return_type_name=ret_type.name,
+                return_type=TypeRef.of(ret_type.name),
+                param_types=[TypeRef.of(p.name, p.module_path) for p in param_types],
             )
             
         # 绑定到符号
@@ -187,9 +186,8 @@ class TypeResolver:
             self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
                 kind="llm_method",
-                param_type_names=[p.name for p in param_types],
-                param_type_modules=[p.module_path for p in param_types],
-                return_type_name=ret_type.name,
+                return_type=TypeRef.of(ret_type.name),
+                param_types=[TypeRef.of(p.name, p.module_path) for p in param_types],
             )
 
         sym = self.symbol_table.resolve(node.name)
@@ -210,8 +208,7 @@ class TypeResolver:
                         self.current_class_descriptor.members[name] = MemberSpec(
                             name=name,
                             kind="field",
-                            type_name=declared_type.name,
-                        )
+                            type_ref=TypeRef.of(declared_type.name))
 
                     sym = self.symbol_table.resolve(name)
                     if sym and sym.is_variable:

@@ -30,6 +30,7 @@ from core.kernel.axioms.protocols import TypeAxiom
 from core.kernel.spec.member import MethodMemberSpec, MemberSpec
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -50,9 +51,7 @@ def _m(
     return MethodMemberSpec(
         name=name,
         kind="llm_method" if is_llm else "method",
-        param_type_names=params or [],
-        return_type_name=ret,
-    )
+        return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []])
 
 
 # ------------------------------------------------------------------ #
@@ -784,7 +783,7 @@ class ExceptionAxiom(BaseAxiom):
         return {
             # message 作为字段（field）声明，语义分析器 resolve_member 返回 str 类型，
             # 运行时通过 __getattr__ → fields['message'] 直接取出字符串值。
-            "message": MemberSpec(name="message", kind="field", type_name="str"),
+            "message": MemberSpec(name="message", kind="field", type_ref=TypeRef.of("str")),
             "cast_to": _m("cast_to", params=["any"], ret="any"),
         }
 
@@ -817,8 +816,8 @@ class LLMErrorAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "message":      MemberSpec(name="message",      kind="field", type_name="str"),
-            "raw_response": MemberSpec(name="raw_response", kind="field", type_name="str"),
+            "message":      MemberSpec(name="message",      kind="field", type_ref=TypeRef.of("str")),
+            "raw_response": MemberSpec(name="raw_response", kind="field", type_ref=TypeRef.of("str")),
             "cast_to":      _m("cast_to", params=["any"], ret="any"),
         }
 
@@ -846,9 +845,9 @@ class LLMParseErrorAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "message":      MemberSpec(name="message",      kind="field", type_name="str"),
-            "raw_response": MemberSpec(name="raw_response", kind="field", type_name="str"),
-            "type_name":    MemberSpec(name="type_name",    kind="field", type_name="str"),
+            "message":      MemberSpec(name="message",      kind="field", type_ref=TypeRef.of("str")),
+            "raw_response": MemberSpec(name="raw_response", kind="field", type_ref=TypeRef.of("str")),
+            "type_name":    MemberSpec(name="type_name",    kind="field", type_ref=TypeRef.of("str")),
             "cast_to":      _m("cast_to", params=["any"], ret="any"),
         }
 
@@ -876,9 +875,9 @@ class LLMRetryExhaustedErrorAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "message":      MemberSpec(name="message",      kind="field", type_name="str"),
-            "raw_response": MemberSpec(name="raw_response", kind="field", type_name="str"),
-            "max_retry":    MemberSpec(name="max_retry",    kind="field", type_name="int"),
+            "message":      MemberSpec(name="message",      kind="field", type_ref=TypeRef.of("str")),
+            "raw_response": MemberSpec(name="raw_response", kind="field", type_ref=TypeRef.of("str")),
+            "max_retry":    MemberSpec(name="max_retry",    kind="field", type_ref=TypeRef.of("int")),
             "cast_to":      _m("cast_to", params=["any"], ret="any"),
         }
 
@@ -906,9 +905,9 @@ class LLMCallErrorAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "message":        MemberSpec(name="message",        kind="field", type_name="str"),
-            "raw_response":   MemberSpec(name="raw_response",   kind="field", type_name="str"),
-            "provider_error": MemberSpec(name="provider_error", kind="field", type_name="str"),
+            "message":        MemberSpec(name="message",        kind="field", type_ref=TypeRef.of("str")),
+            "raw_response":   MemberSpec(name="raw_response",   kind="field", type_ref=TypeRef.of("str")),
+            "provider_error": MemberSpec(name="provider_error", kind="field", type_ref=TypeRef.of("str")),
             "cast_to":        _m("cast_to", params=["any"], ret="any"),
         }
 

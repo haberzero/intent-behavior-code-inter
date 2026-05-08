@@ -433,7 +433,6 @@ class SemanticAnalyzer:
         return type.  Only fires when *both* sides carry known concrete types;
         dynamic (``any`` / ``auto``) values are always accepted silently.
         """
-        from core.kernel.spec.specs import TypeDef as _CSS
         expected_params = sig.param_type_names or []
         actual_params = actual.param_type_names or []
 
@@ -672,8 +671,7 @@ class SemanticAnalyzer:
                 self.current_class.members[name] = MemberSpec(
                     name=name,
                     kind="field",
-                    type_name=sym.spec.name if sym.spec else "any",
-                )
+                    type_ref=TypeRef.of(sym.spec.name if sym.spec else "any"))
 
             # 记录侧表映射
             self.side_table.bind_symbol(node, sym)
@@ -1156,7 +1154,6 @@ class SemanticAnalyzer:
             target_type = self.registry.resolve("callable") or self._any_desc
 
         # D3: fn[(...)→(...)] 签名标注时，检查结构签名匹配
-        from core.kernel.spec.specs import TypeDef as _CSS
         if declared_type is not None and declared_type.kind == TypeKind.CALLABLE_SIG.value and val_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             self._check_callable_sig_match(declared_type, val_type, node)
 
@@ -1825,7 +1822,6 @@ class SemanticAnalyzer:
         # D3: structural signature matching for TypeDef (fn[(...)→(...)] parameters).
         # When the callee type carries an explicit signature constraint, validate
         # arg count and argument types at the call site.
-        from core.kernel.spec.specs import TypeDef as _CSS
         if func_type.kind == TypeKind.CALLABLE_SIG.value:
             expected_names = func_type.param_type_names or []
             if len(arg_types) != len(expected_names):
@@ -2091,20 +2087,19 @@ class SemanticAnalyzer:
             
         elif isinstance(node, ast.IbCallableType):
             # D3: callable signature constraint fn[(param_types) -> return_type]
-            from core.kernel.spec.specs import TypeDef as _CSS
+            from core.kernel.spec.base import TypeDef
+            from core.kernel.spec.type_ref import TypeRef
             param_specs = [self._resolve_type(pt, safe=safe) for pt in node.param_types]
             ret_spec = (
                 self._resolve_type(node.return_type, safe=safe)
                 if node.return_type is not None
                 else self._auto_desc
             )
-            return _CSS(
+            return TypeDef(
                 name="fn",
                 kind=TypeKind.CALLABLE_SIG.value,
-                param_type_names=[p.name for p in param_specs],
-                param_type_modules=[getattr(p, 'module_path', None) for p in param_specs],
-                return_type_name=ret_spec.name,
-                return_type_module=getattr(ret_spec, 'module_path', None),
+                param_types=[TypeRef.of(p.name, getattr(p, 'module_path', None)) for p in param_specs],
+                return_type=TypeRef.of(ret_spec.name, getattr(ret_spec, 'module_path', None)),
                 is_user_defined=False,
             )
 

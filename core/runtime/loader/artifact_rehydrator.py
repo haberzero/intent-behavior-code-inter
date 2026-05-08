@@ -93,10 +93,9 @@ class ArtifactRehydrator:
             TypeKind.FUNCTION.value: lambda: TypeDef(name=name or "callable", is_user_defined=False),
             TypeKind.CALLABLE_SIG.value: lambda: TypeDef(
                 name="fn",
-                param_type_names=list(data.get("param_type_names", [])),
-                param_type_modules=[None] * len(data.get("param_type_names", [])),
-                return_type_name=data.get("return_type_name", "auto"),
                 is_user_defined=False,
+                return_type=TypeRef.of(data.get("return_type_name", "auto")),
+                param_types=[TypeRef.of(p) for p in data.get("param_type_names", [])],
             ),
             TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
             TypeKind.BOUND_METHOD.value: lambda: TypeDef(name="bound_method", is_user_defined=False),

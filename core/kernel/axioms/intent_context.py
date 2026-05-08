@@ -16,6 +16,7 @@ IbIntentContext 是将意图栈从 RuntimeContextImpl 的私有字段群提升�
 from __future__ import annotations
 
 from typing import Dict, List, Optional
+from core.kernel.spec.type_ref import TypeRef
 
 
 def _m(name: str, params: Optional[List[str]] = None, ret: str = "void"):
@@ -23,9 +24,7 @@ def _m(name: str, params: Optional[List[str]] = None, ret: str = "void"):
     return MethodMemberSpec(
         name=name,
         kind="method",
-        param_type_names=params or [],
-        return_type_name=ret,
-    )
+        return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []])
 
 
 class IntentContextAxiom:

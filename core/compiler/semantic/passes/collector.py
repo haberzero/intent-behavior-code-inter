@@ -3,6 +3,7 @@ from core.compiler.common.diagnostics import DiagnosticReporter
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
 from core.kernel.spec import IbSpec, TypeDef
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -89,15 +90,13 @@ class SymbolCollector:
                     self.analyzer.current_class.members[sym.name] = MethodMemberSpec(
                         name=sym.name,
                         kind=llm_kind,
-                        type_name=sym.spec.name if sym.spec else "any",
-                    )
+                        type_ref=TypeRef.of(sym.spec.name if sym.spec else "any"))
                 else:
                     from core.kernel.spec.member import MemberSpec
                     self.analyzer.current_class.members[sym.name] = MemberSpec(
                         name=sym.name,
                         kind="field",
-                        type_name=sym.spec.name if sym.spec else "any",
-                    )
+                        type_ref=TypeRef.of(sym.spec.name if sym.spec else "any"))
                 
         except ValueError as e:
             if self.issue_tracker:

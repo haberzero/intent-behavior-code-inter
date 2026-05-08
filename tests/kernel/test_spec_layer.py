@@ -35,6 +35,7 @@ from core.kernel.spec.base import TypeKind
 from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.axioms.primitives import register_core_axioms
 from core.kernel.factory import create_default_registry
+from core.kernel.spec.type_ref import TypeRef
 
 
 # ---------------------------------------------------------------------------
@@ -80,26 +81,24 @@ class TestIbSpecBase:
     def test_func_spec_attributes(self):
         fn = TypeDef(
             name="add",
-            param_type_names=["int", "int"],
-            return_type_name="int",
-        )
+            return_type=TypeRef.of("int"), param_types=[TypeRef.of("int"), TypeRef.of("int")])
         assert fn.param_type_names == ["int", "int"]
         assert fn.return_type.head == "int"
         assert fn.is_llm is False
 
     def test_class_spec_attributes(self):
-        cls = TypeDef(name="Dog", parent_name="Object")
+        cls = TypeDef(name="Dog", parent_type=TypeRef.of("Object"))
         assert cls.name == "Dog"
         assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
     def test_list_spec_attributes(self):
-        ls = TypeDef(name="list", element_type_name="str")
+        ls = TypeDef(name="list", element_type=TypeRef.of("str"))
         assert ls.element_type.head == "str"
         assert "str" in repr(ls)
 
     def test_dict_spec_attributes(self):
-        ds = TypeDef(name="dict", key_type_name="str", value_type_name="int")
+        ds = TypeDef(name="dict", key_type=TypeRef.of("str"), value_type=TypeRef.of("int"))
         assert ds.key_type.head == "str"
         assert ds.value_type.head == "int"
 
@@ -113,9 +112,8 @@ class TestIbSpecBase:
     def test_bound_method_spec(self):
         bm = TypeDef(
             name="bound_method",
-            receiver_type_name="str",
             func_spec_name="callable",
-        )
+        receiver_type=TypeRef.of("str"))
         assert bm.receiver_type.head == "str"
         assert bm.func_spec_name == "callable"
 
