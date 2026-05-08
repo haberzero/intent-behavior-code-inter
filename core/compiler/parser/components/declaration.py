@@ -127,7 +127,7 @@ class DeclarationComponent(BaseComponent):
                 raise self.stream.error(
                     fn_token,
                     "Declaration-side return type annotation 'TYPE fn NAME = ...' is not supported. "
-                    "Use expression-side syntax instead: 'fn NAME = lambda -> TYPE: EXPR'. "
+                    "Return types must be specified on the expression side: 'fn NAME = lambda -> TYPE: EXPR'. "
                     "For example: 'fn f = lambda -> int: 1 + 1' or 'fn f = lambda(int a) -> str: \"hi\"'.",
                     code="PAR_003",
                 )

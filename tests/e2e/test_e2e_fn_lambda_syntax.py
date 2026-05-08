@@ -178,7 +178,7 @@ print((str)outer(7))
         assert run_and_capture(code) == ["14"]
 
 
-class TestFnLambdaInvalidSyntax:
+class TestFnLambdaInvalidDeclarationSyntax:
     """Invalid declaration-side syntax forms produce compile errors."""
 
     def test_type_lambda_decl_is_error(self):
