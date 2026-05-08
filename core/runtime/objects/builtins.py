@@ -1,5 +1,5 @@
 from typing import Any, List, Dict, Optional, Callable, Union
-from .kernel import IbObject, IbClass, IbNativeFunction, IbNone
+from .kernel import IbObject, IbValue, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.issue import InterpreterError
@@ -7,7 +7,7 @@ from core.kernel.issue import InterpreterError
 from .ib_type_mapping import register_ib_type
 
 @register_ib_type("int")
-class IbInteger(IbObject):
+class IbInteger(IbValue):
     """
     包装 Python 原生 int 的 IBC 对象。
     实现小整数驻留 (Interning) 以优化性能。
@@ -16,7 +16,7 @@ class IbInteger(IbObject):
     __slots__ = ('value',)
     
     def __init__(self, value: int, ib_class: IbClass):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=value)
         self.value = value
 
     @classmethod
@@ -88,14 +88,14 @@ class IbInteger(IbObject):
         return not self.__eq__(other)
 
 @register_ib_type("bool")
-class IbBool(IbObject):
+class IbBool(IbValue):
     """
     包装 Python 原生 bool 的 IBC 对象。
     """
     __slots__ = ('value',)
 
     def __init__(self, value: bool, ib_class: IbClass):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=value)
         self.value = value
 
     def to_native(self, memo=None) -> bool:
@@ -118,14 +118,14 @@ class IbBool(IbObject):
         return self.value
 
 @register_ib_type("float")
-class IbFloat(IbObject):
+class IbFloat(IbValue):
     """
     包装 Python 原生 float 的 IBC 对象。
     """
     __slots__ = ('value',)
 
     def __init__(self, value: float, ib_class: IbClass):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=value)
         self.value = value
 
     def to_native(self, memo=None) -> float:
@@ -164,14 +164,14 @@ class IbFloat(IbObject):
     def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 
 @register_ib_type("str")
-class IbString(IbObject):
+class IbString(IbValue):
     """
     包装 Python 原生 str 的 IBC 对象。
     """
     __slots__ = ('value',)
 
     def __init__(self, value: str, ib_class: IbClass):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=value)
         self.value = value
 
     def to_native(self, memo=None) -> str:
@@ -356,7 +356,7 @@ class IbString(IbObject):
     def __ne__(self, other: IbObject) -> bool: return self.value != other.to_native()
 
 @register_ib_type("Exception")
-class IbException(IbObject):
+class IbException(IbValue):
     """Exception 类型的运行时实现"""
     
     def message(self) -> IbObject:
@@ -373,14 +373,14 @@ class IbException(IbObject):
         return self
 
 @register_ib_type("list")
-class IbList(IbObject):
+class IbList(IbValue):
     """
     包装 Python 原生 list 的 IBC 对象。
     """
     __slots__ = ('elements',)
 
     def __init__(self, elements: List[IbObject], ib_class: IbClass):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=elements)
         self.elements = elements
 
     def to_native(self, memo=None) -> List[Any]:
@@ -505,7 +505,7 @@ class IbList(IbObject):
         return self.elements * n
 
 @register_ib_type("tuple")
-class IbTuple(IbObject):
+class IbTuple(IbValue):
     """
     包装 Python 原生 tuple 的 IBC 对象。
     与 IbList 的关键区别：不可变（没有 append/pop/sort/clear/__setitem__）。
@@ -513,7 +513,7 @@ class IbTuple(IbObject):
     __slots__ = ('elements',)
 
     def __init__(self, elements: tuple, ib_class: IbClass):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=elements)
         self.elements = elements  # tuple of IbObject
 
     def to_native(self, memo=None) -> tuple:
@@ -562,13 +562,16 @@ class IbTuple(IbObject):
             raise InterpreterError(f"IndexError: tuple index out of range: {idx}")
 
 @register_ib_type("dict")
-class IbDict(IbObject):
+class IbDict(IbValue):
     """
     包装 Python 原生 dict 的 IBC 对象。
+
+    M4 约定: ``payload`` 与 ``fields`` 指向同一个底层映射。
+    ``fields`` 保持对象系统现有的消息/属性访问兼容面，``payload`` 则让
+    该值同时满足统一 ``IbValue`` 承载层的结构约定。
     """
     def __init__(self, fields: Dict[str, IbObject], ib_class: IbClass):
-        super().__init__(ib_class)
-        self.fields = fields
+        super().__init__(ib_class, payload=fields, fields=fields)
 
     def to_native(self, memo=None) -> Dict[str, Any]:
         if memo is None: memo = {}
@@ -677,7 +680,7 @@ class IbDict(IbObject):
         return self.fields[native_key]
 
 @register_ib_type("deferred")
-class IbDeferred(IbObject):
+class IbDeferred(IbValue):
     """
     通用延迟表达式对象。
 
@@ -716,7 +719,16 @@ class IbDeferred(IbObject):
         body_uid: Optional[str] = None,
         closure: Optional[Dict[str, Any]] = None,
     ):
-        super().__init__(ib_class)
+        super().__init__(
+            ib_class,
+            payload=node_uid,
+            meta={
+                "capture_mode": capture_mode,
+                "params_uids": list(params_uids) if params_uids else [],
+                "body_uid": body_uid,
+                "closure": dict(closure) if closure else {},
+            },
+        )
         self.node_uid = node_uid
         self.capture_mode = capture_mode
         self._execution_context = execution_context
@@ -840,7 +852,7 @@ class IbDeferred(IbObject):
 
 
 @register_ib_type("behavior")
-class IbBehavior(IbObject):
+class IbBehavior(IbValue):
     """
     延迟执行的 LLM 行为对象 (~...~)。
 
@@ -886,7 +898,18 @@ class IbBehavior(IbObject):
               变量值快照；调用时安装到本地作用域，使 prompt 中的变量引用
               读取定义时的值。
         """
-        super().__init__(ib_class)
+        super().__init__(
+            ib_class,
+            payload=node_uid,
+            meta={
+                "captured_intents": captured_intents,
+                "expected_type": expected_type,
+                "call_intent": call_intent,
+                "capture_mode": capture_mode,
+                "params_uids": list(params_uids) if params_uids else [],
+                "closure": dict(closure) if closure else {},
+            },
+        )
         self.node = node_uid
         self.captured_intents = captured_intents
         self.expected_type = expected_type

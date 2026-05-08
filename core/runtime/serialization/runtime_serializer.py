@@ -3,7 +3,7 @@ import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
-from core.runtime.objects.kernel import IbObject, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
+from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod, IbNone
 from core.runtime.objects.builtins import IbInteger, IbFloat, IbString, IbList, IbDict, IbTuple, IbBehavior, IbDeferred
 from core.runtime.interpreter.runtime_context import IntentNode
 
@@ -135,6 +135,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             "uid": uid,
             "class_name": obj.ib_class.name,
         }
+        if isinstance(obj, IbValue):
+            type_ref = getattr(obj, "type_ref", None)
+            data["type_ref"] = str(type_ref) if type_ref is not None else None
+            if getattr(obj, "meta", None):
+                data["value_meta"] = dict(obj.meta)
         
         # 根据子类类型进行差异化序列化
         if isinstance(obj, IbNone):

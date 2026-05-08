@@ -2,7 +2,7 @@
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
 > 历史 Bug 修复记录已归档至 `docs/COMPLETED.md` §二十一。
-> **最后更新**：2026-05-06（§二 重写：`try`/`except`/`raise`/`finally` 已可用；`except X as e:` 类型窄化已修复（e 类型窄化为捕获子类）；`EXCEPTION_SPEC` 由 `IbSpec` 升级为 `ClassSpec`，解锁用户自定义 `class MyError(Exception):`；1056 个测试通过）
+> **最后更新**：2026-05-08（类型系统 M1–M4 已完成；当前测试基线 1184 passed）
 
 ---
 

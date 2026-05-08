@@ -35,9 +35,9 @@
 
 ```ibci
 fn f = myFunc                          # 推导 f 的类型 = myFunc 的 FuncSpec
-fn g = lambda(int x) -> int: x + 1    # 推导 g 的类型 = DeferredSpec(int, lambda)
-fn h = lambda: @~ compute ~            # 推导 h 的类型 = DeferredSpec(auto, lambda)
-fn s = snapshot(str name) -> str: name # 推导 s 的类型 = DeferredSpec(str, snapshot)
+fn g = lambda(int x) -> int: x + 1    # 推导 g 的类型 = callable-instance[int]（capture_mode=lambda）
+fn h = lambda: @~ compute ~            # 推导 h 的类型 = callable-instance[auto]（behavior 路由）
+fn s = snapshot(str name) -> str: name # 推导 s 的类型 = callable-instance[str]（capture_mode=snapshot）
 ```
 
 **废弃**：`int fn f = lambda: EXPR`（声明侧带返回类型的 fn 形式）产生 PAR_003 编译错误。
@@ -119,7 +119,7 @@ func make_adder(int n) -> fn[(int) -> int]:
 - `fn[...] PARAM_NAME`（出现在 `func` 参数列表内）→ 类型解析器路径，产生 callable 签名约束节点。
 
 语义层面区分依据：
-- 变量声明 `fn f = ...` → 符号表中 `f` 持有推导得到的具体 `FuncSpec` 或 `DeferredSpec`。
+- 变量声明 `fn f = ...` → 符号表中 `f` 持有推导得到的具体 `FuncSpec` 或 `TypeKind.CALLABLE_INSTANCE` 对应的 `TypeDef`。
 - 类型标注 `fn[(int)->int]` → 产生 callable 签名约束（结构化匹配），不对应具体 spec 名。
 
 两者通过 AST 节点形状（`IbName("fn")` vs `IbSubscript(IbName("fn"), ...)` + 新增
@@ -171,4 +171,3 @@ D6: 跨文件向前引用暂不列入近期目标
 测试基线：989 → 991（D1/D2）→ 1011（D3，新增 20 个 callable 签名专项测试）。
 
 *全部实现细节（涉及文件清单、变更表、测试清单）见 `docs/COMPLETED.md §五/§六/§七`。*
-

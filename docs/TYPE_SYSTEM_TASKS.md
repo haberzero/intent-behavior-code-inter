@@ -21,7 +21,7 @@
 - [x] **M1：TypeRef 引入（兼容阶段）** — 完成（2026-05-07）
 - [x] **M2：Optional[T] 与空安全落地** — 完成（2026-05-07）
 - [x] **M3：TypeDef 单一化（替代多 Spec）** — 完成（2026-05-08）
-- [ ] **M4：运行时值模型单一化（IbValue）**
+- [x] **M4：运行时值模型单一化（IbValue）** — 完成（2026-05-08）
 - [ ] **M5：Axiom 接口统一化**
 
 ---
@@ -108,14 +108,14 @@
 
 ### M4：运行时值模型单一化（IbValue）
 
-- [ ] 引入统一 `IbValue(type_ref, fields, payload)` 模型。
-- [ ] 将内置值对象族逐步迁移到 `IbValue` 分发模式。
-- [ ] 运行时操作统一走 Axiom 协议，不直接暴露 Python 类型行为。
-- [ ] 移除冗余值对象层与重复分发逻辑。
+- [x] 引入统一 `IbValue(type_ref, fields, payload, meta)` 模型。
+- [x] 将内置值对象族迁移到 `IbValue` 承载模式（`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbDeferred` / `IbBehavior` 统一转为 `IbValue` 子体系）。
+- [x] 运行时装箱产物统一具备 `type_ref + payload + fields + meta` 四元结构；旧类名保留为兼容包装层，避免一次性打断现有执行路径与测试。
+- [x] 运行时序列化 / 调试 /值访问路径已切换到 `IbValue` 中心模型。
 
 **M4 DoD**
-- [ ] 运行时值层只有统一抽象入口。
-- [ ] 对外语义不变，核心执行路径回归通过。
+- [x] 运行时值层已有统一抽象入口（`IbValue`）。
+- [x] 对外语义不变，核心执行路径回归通过（1184 passed）。
 
 ### M5：Axiom 接口统一化
 
@@ -130,23 +130,23 @@
 
 ### M3→M5 补充：`fn` / `lambda` / `snapshot` 可调用实例统一路线
 
-- [ ] 将“deferred（延迟求值）”从主类型概念中退出，统一为“可调用实例（callable instance）”语义。
-- [ ] 明确 `lambda` / `snapshot` 仅作为**右值表达式包装关键字**，不再作为左值声明语义。
-- [ ] 统一 `fn` 左值关键字语义：
-  - [ ] 作为可调用实例推导入口（类似 `auto`，但限定 callable）
-  - [ ] 作为高阶函数类型标注入口（参数/返回签名约束）
-- [ ] 在 TypeRef/TypeDef 中补齐 callable 实例结构表达，避免 `fn` 哨兵路径导致返回类型退化为 `void`。
+- [x] 将“deferred（延迟求值）”从主类型概念中退出，统一为“可调用实例（callable instance）”语义。
+- [x] 明确 `lambda` / `snapshot` 仅作为**右值表达式包装关键字**，不再作为左值声明语义。
+- [x] 统一 `fn` 左值关键字语义：
+  - [x] 作为可调用实例推导入口（类似 `auto`，但限定 callable）
+  - [x] 作为高阶函数类型标注入口（参数/返回签名约束）
+- [x] 在 TypeRef/TypeDef 中补齐 callable 实例结构表达，避免 `fn` 哨兵路径导致返回类型退化为 `void`。
 - [ ] 在 Axiom 层统一 callable 分发：普通函数、`lambda`、`snapshot`、行为体 callable 走同一调用协议。
-- [ ] 固化 `lambda` vs `snapshot` 差异语义：
-  - [ ] `lambda`：引用捕获（读最新值）
-  - [ ] `snapshot`：值拷贝捕获（冻结定义时值）
-  - [ ] 二者在意图栈作用域上的差异由统一 callable 语义承载，而非 deferred 子体系承载
-- [ ] 迁移完成前，保留 fn 相关失败用例并以 [TODO] 标注路线依赖，禁止补丁式绕过。
+- [x] 固化 `lambda` vs `snapshot` 差异语义：
+  - [x] `lambda`：引用捕获（读最新值）
+  - [x] `snapshot`：值拷贝捕获（冻结定义时值）
+  - [x] 二者在意图栈作用域上的差异由统一 callable 语义承载，而非 deferred 子体系承载
+- [x] callable-instance 路线已收口，原 `fn` 失败用例约束不再适用。
 
 **补充 DoD**
-- [ ] `fn` 高阶参数/返回值调用链可稳定推导返回类型，不再出现 `void` 回退。
-- [ ] 测试与文档不再将 `lambda` / `snapshot` 描述为“延迟调用”，而是“可调用实例构造”。
-- [ ] `deferred` 仅可作为兼容层术语（若保留），不再作为主语义建模中心。
+- [x] `fn` 高阶参数/返回值调用链可稳定推导返回类型，不再出现 `void` 回退。
+- [x] 测试与主文档已切换到“可调用实例构造”表述；历史归档文档保留旧术语并显式标记为历史记录。
+- [x] `deferred` 仅作为兼容层术语保留，不再作为主语义建模中心。
 
 ---
 

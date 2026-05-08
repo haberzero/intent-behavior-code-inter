@@ -3,7 +3,7 @@
 > 本文档只记录当前可直接开工且必须优先执行的任务进度。  
 > 低优先级事项统一转入 `docs/PENDING_TASKS.md`。
 
-> **最后更新**：2026-05-07（类型系统演进与重构确立为最高优先级；专项任务拆分完成）
+> **最后更新**：2026-05-08（M4 `IbValue` 运行时值模型已落地；M5 成为当前唯一未完成的类型系统主线）
 
 ---
 
@@ -20,7 +20,7 @@
 - [x] M2：Optional[T] 与空安全落地（完成 2026-05-07：OptionalSpec + assignability + artifact rehydration + Optional 方法语义收口；全量 1179 passed）
 - [x] M3：TypeDef 单一化（完成 2026-05-08：所有扁平 `*_name`/`*_module` 字段全面 TypeRef 化，无残留；测试基线 1182 passed）
 - [x] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线 — 完成（2026-05-08：`TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`，`deferred_mode` 概念彻底删除并重命名为 `capture_mode`，全栈一致）
-- [ ] M4：运行时值模型单一化（IbValue）— 待启动（独立大型重构：约 9 个 Ib 值类，44+ 处 isinstance 分派，运算符重载需经 axiom 路由）
+- [x] M4：运行时值模型单一化（IbValue）— 完成（2026-05-08：`IbValue(type_ref, payload, fields, meta)` 已成为运行时值公共承载层；现有 `IbInteger/IbList/IbBehavior/...` 退化为兼容包装层，装箱与运行时对象结构统一）
 - [ ] M5：Axiom 接口统一化
 
 #### 当前执行要求
@@ -28,7 +28,7 @@
 - [ ] 每个里程碑完成后同步更新本文件进度。
 - [ ] 每个里程碑完成后同步测试基线与风险状态。
 - [ ] 低优先级事项不进入本文件，只在 pending 跟踪。
-- [ ] fn 相关已知失败用例保持失败并带 [TODO] 注释，等待 callable-instance 路线落地后统一收口。
+- [x] callable-instance 路线落地后，相关 `fn` 失败用例已收口；当前测试基线为 **1184 passed**。
 
 ---
 

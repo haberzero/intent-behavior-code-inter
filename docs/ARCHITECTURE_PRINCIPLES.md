@@ -3,9 +3,10 @@
 > 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
 > 供未来参与 IBC-Inter 项目的智能体和开发者进行架构对齐使用。
 >
-> **最后更新**：2026-04-17
+> **最后更新**：2026-05-08
 >
 > 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./ARCH_DETAILS.md)。
+> 当前类型系统状态：`TypeRef` + `TypeDef` + `CALLABLE_INSTANCE` + `IbValue` 已落地；剩余主线为 M5（Axiom 接口统一化）。
 
 ---
 
@@ -438,8 +439,8 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 **关键保证**：
 | 保证 | 说明 |
 |------|------|
-| **静态类型检查保留** | 编译器通过 .ibc_meta 文件获取完整的 TypeDescriptor 信息 |
-| **扁平流生成保留** | FlatSerializer 依赖 TypeDescriptor.get_references()，与发现机制无关 |
+| **静态类型检查保留** | 编译器通过 `core/kernel/spec/` 中的 `TypeDef` / `TypeRef` 体系获取完整类型信息 |
+| **扁平流生成保留** | FlatSerializer 依赖 `IbSpec.get_references()` / `TypeDef` 统一字段，不依赖旧 `TypeDescriptor` 体系 |
 | **运行时零侵入** | 插件不需要 import ibcext 就能被发现和加载 |
 | **二进制兼容** | 只要有 Python 解释器，运行时发现正常工作 |
 
