@@ -9,9 +9,14 @@
 
 ## `deferred` 概念全量清理（✅ 已完成 2026-05-08）
 
-> 参见：`docs/DEFERRED_REMOVAL_PLAN.md`（已包含完整决策与阶段划分）
-
 所有命名替换已落地。IBCI 核心代码中不再出现任何与"延迟求值/deferred"相关的命名、字符串或变量名。
+
+**2026-05-08 二次复核结论**：
+- `lambda` / `snapshot` 是 IBCI 的基础表达式包装机制，不是 behavior 专属；
+- parser 在表达式位置统一构建 `IbLambdaExpr`，body 可为任意表达式；
+- semantic pass 按 body 类型分流：普通表达式 → `fn_callable`，`IbBehaviorExpr` → `behavior`；
+- VM 运行时按同一 `IbLambdaExpr` 路径构造 `IbFnCallable` 或 `IbBehavior`；
+- e2e 覆盖了普通逻辑表达式的 lambda/snapshot（非 behavior 专属路径）。
 
 **命名映射**（`deferred` → `fn_callable`）：
 
