@@ -484,7 +484,7 @@ class ExpressionComponent(BaseComponent):
         （NEWLINE/EOF）时自然终止（由 parse_expression 处理）。
         """
         keyword_token = self.stream.previous()
-        deferred_mode = "lambda" if keyword_token.type == TokenType.LAMBDA else "snapshot"
+        capture_mode = "lambda" if keyword_token.type == TokenType.LAMBDA else "snapshot"
 
         params: List[ast.IbASTNode] = []
         returns_node: Optional[ast.IbExpr] = None
@@ -499,7 +499,7 @@ class ExpressionComponent(BaseComponent):
             returns_node = type_parser.parse_type_annotation()
             self.stream.consume(
                 TokenType.COLON,
-                f"Expect ':' after return type annotation in '{deferred_mode}' expression.",
+                f"Expect ':' after return type annotation in '{capture_mode}' expression.",
             )
             body = self.parse_expression(IbPrecedence.LOWEST)
 
@@ -514,13 +514,13 @@ class ExpressionComponent(BaseComponent):
             if not self._lambda_lookahead_is_param_form():
                 raise self.stream.error(
                     self.stream.peek(),
-                    f"Expect ':' after '{deferred_mode}' parameter list, or ':' directly after '{deferred_mode}' keyword. "
-                    f"Parenthesis-only body forms are not supported; use '{deferred_mode}: EXPR' or '{deferred_mode}(PARAMS): EXPR'.",
+                    f"Expect ':' after '{capture_mode}' parameter list, or ':' directly after '{capture_mode}' keyword. "
+                    f"Parenthesis-only body forms are not supported; use '{capture_mode}: EXPR' or '{capture_mode}(PARAMS): EXPR'.",
                     code="PAR_002",
                 )
 
             # 解析参数列表
-            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{deferred_mode}' keyword.")
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{capture_mode}' keyword.")
             decl = self.context.declaration_parser
             if decl is None:
                 raise self.stream.error(
@@ -529,7 +529,7 @@ class ExpressionComponent(BaseComponent):
                     code="PAR_002",
                 )
             params = decl.parameters()
-            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{deferred_mode}' parameter list.")
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{capture_mode}' parameter list.")
 
             # D2：表达式侧 `-> TYPE` 合法化（有参形式）
             if self.stream.check(TokenType.ARROW):
@@ -537,17 +537,17 @@ class ExpressionComponent(BaseComponent):
                 returns_node = type_parser.parse_type_annotation()
 
             # Body 必须以 ':' 起始
-            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{deferred_mode}' body expression.")
+            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{capture_mode}' body expression.")
             body = self.parse_expression(IbPrecedence.LOWEST)
 
         else:
             raise self.stream.error(
                 self.stream.peek(),
-                f"Expect ':' or '(' after '{deferred_mode}' keyword in expression position.",
+                f"Expect ':' or '(' after '{capture_mode}' keyword in expression position.",
                 code="PAR_002",
             )
 
-        node = ast.IbLambdaExpr(params=params, body=body, deferred_mode=deferred_mode, returns=returns_node)
+        node = ast.IbLambdaExpr(params=params, body=body, capture_mode=capture_mode, returns=returns_node)
         return self._loc(node, keyword_token, self.stream.previous())
 
     def _lambda_lookahead_is_param_form(self) -> bool:

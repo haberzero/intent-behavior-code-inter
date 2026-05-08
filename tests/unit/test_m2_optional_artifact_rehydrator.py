@@ -87,4 +87,4 @@ class TestM2OptionalArtifactRehydrator:
 
         assert isinstance(spec, OptionalSpec)
         assert spec.kind == "optional"
-        assert spec.wrapped_type_name == "int"
+        assert spec.wrapped_type.head == "int"

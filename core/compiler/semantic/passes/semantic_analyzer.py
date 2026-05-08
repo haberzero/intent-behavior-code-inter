@@ -10,6 +10,7 @@ from core.kernel.symbols import (
 )
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ListSpec, DictSpec, ModuleSpec, BoundMethodSpec
 from core.kernel.spec.base import TypeKind
+from core.kernel.spec.type_ref import TypeRef
 
 from .prelude import Prelude
 from .collector import SymbolCollector, LocalSymbolCollector, SymbolExtractor
@@ -152,8 +153,8 @@ class SemanticAnalyzer:
                 symbol_table=self.symbol_table,
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
-                node_is_deferred=self.side_table.node_is_deferred,
-                node_deferred_mode=self.side_table.node_deferred_mode,
+                node_is_callable_instance=self.side_table.node_is_callable_instance,
+                node_capture_mode=self.side_table.node_capture_mode,
                 node_to_loc=self.side_table.node_to_loc,
             )
         finally:
@@ -462,8 +463,8 @@ class SemanticAnalyzer:
                 )
 
         # Return type compatibility
-        exp_ret = self.registry.resolve(sig.return_type_name)
-        act_ret = self.registry.resolve(actual.return_type_name)
+        exp_ret = self.registry.resolve(sig.return_type.head)
+        act_ret = self.registry.resolve(actual.return_type.head)
         if (exp_ret and act_ret
                 and not self.registry.is_dynamic(exp_ret)
                 and not self.registry.is_dynamic(act_ret)
@@ -471,7 +472,7 @@ class SemanticAnalyzer:
             hint = self.registry.get_diff_hint(act_ret, exp_ret)
             self.error(
                 f"Callable signature mismatch: return type expects "
-                f"'{sig.return_type_name}', but the callable returns '{actual.return_type_name}'.",
+                f"'{sig.return_type.head}', but the callable returns '{actual.return_type.head}'.",
                 node, code="SEM_003", hint=hint,
             )
 
@@ -739,8 +740,8 @@ class SemanticAnalyzer:
             # 类型：如果父类存在则为父类类型（ClassSpec），否则为 any。
             # super 符号使用固定 UID "builtin:super"，与运行时 IbSuperProxy 注入一致。
             parent_spec = None
-            if saved_class.parent_name:
-                parent_spec = self.registry.resolve(saved_class.parent_name)
+            if saved_class.parent_type is not None:
+                parent_spec = self.registry.resolve_typeref(saved_class.parent_type)
             super_type = parent_spec if parent_spec else self._any_desc
             super_sym = symbols.VariableSymbol(
                 name="super",
@@ -808,7 +809,7 @@ class SemanticAnalyzer:
                 if writable:
                     writable.update_signature(param_types, inferred)
                 elif sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                    sym.spec.return_type_name = inferred.name
+                    sym.spec.return_type = TypeRef.of(inferred.name, getattr(inferred, "module_path", None))
 
             elif ret_type is not self._void_desc:
                 # Non-void non-auto function: warn if not all paths return
@@ -836,8 +837,8 @@ class SemanticAnalyzer:
             if isinstance(m, _MethodMemberSpec) and sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 # 跳过 self（类方法的第一个参数）
                 user_params = param_types[1:] if saved_class else param_types
-                m.param_type_names = [p.name for p in user_params]
-                m.return_type_name = sym.spec.return_type_name
+                m.param_types = [TypeRef.of(p.name, getattr(p, "module_path", None)) for p in user_params]
+                m.return_type = sym.spec.return_type
 
         return self._void_desc
 
@@ -1016,7 +1017,7 @@ class SemanticAnalyzer:
         if isinstance(node.value, ast.IbBehaviorExpr):
             if target_type and not self.registry.is_dynamic(target_type):
                 self.side_table.bind_type(node.value, target_type)
-            self.side_table.set_deferred(node.value, False)
+            self.side_table.set_callable_instance(node.value, False)
             return
         if not self.registry.is_assignable(val_type, target_type):
             hint = self.registry.get_diff_hint(val_type, target_type)
@@ -1205,7 +1206,7 @@ class SemanticAnalyzer:
             )
 
         if inner_behavior_expr:
-            self.side_table.set_deferred(inner_behavior_expr, False)
+            self.side_table.set_callable_instance(inner_behavior_expr, False)
             if sym and sym.spec and not self.registry.is_dynamic(sym.spec or self._any_desc):
                 self.side_table.bind_type(inner_behavior_expr, sym.spec)
                 val_type = sym.spec
@@ -1215,7 +1216,7 @@ class SemanticAnalyzer:
         if node.value is not None and not self.registry.is_assignable(val_type, sym.spec):
             from core.kernel.spec.specs import DeferredSpec as _DS
             is_fn_decl = declared_type and (
-                declared_type.name == "fn" or (declared_type.kind in (TypeKind.DEFERRED.value, TypeKind.BEHAVIOR.value))
+                declared_type.name == "fn" or (declared_type.kind in (TypeKind.CALLABLE_INSTANCE.value,))
             )
             if not is_fn_decl:
                 hint = self.registry.get_diff_hint(val_type, sym.spec)
@@ -1825,7 +1826,7 @@ class SemanticAnalyzer:
                 from core.kernel.spec import FuncSpec as _FuncSpec
                 call_spec = self.registry.resolve_member(func_type, '__call__')
                 if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                    return self.registry.resolve(call_spec.return_type_name) or self._any_desc
+                    return self.registry.resolve(call_spec.return_type.head) or self._any_desc
         
         # 1. 检查是否可调用 (使用 Trait 契约)
         call_trait = self.registry.get_call_cap(func_type)
@@ -1937,7 +1938,7 @@ class SemanticAnalyzer:
 
         # 3. 为 lambda 局部作用域打开新的符号表
         old_table = self.symbol_table
-        local_scope = SymbolTable(parent=old_table, name=f"<lambda:{node.deferred_mode}>")
+        local_scope = SymbolTable(parent=old_table, name=f"<lambda:{node.capture_mode}>")
         self.symbol_table = local_scope
 
         # 临时清除 current_class，避免把 lambda 形参登记为类成员
@@ -1978,7 +1979,7 @@ class SemanticAnalyzer:
         # sym_uid 加入 side_table.cell_captured_symbols（供 Pass 5 BDA 使用）。
         free_var_refs = self._collect_free_var_refs_ast(node.body, param_sym_uids)
         node.free_vars = [[name, sym_uid] for name, sym_uid in free_var_refs]
-        if node.deferred_mode == "lambda":
+        if node.capture_mode == "lambda":
             # lambda 模式：自由变量通过共享 IbCell 捕获（SC-4）。
             # 将这些 sym_uid 注册为 cell_captured_symbols，让 Pass 5 把对应
             # 赋值语句中的 behavior 表达式标记为 dispatch_eligible=False。
@@ -2016,7 +2017,6 @@ class SemanticAnalyzer:
                 return self.registry.factory.create_behavior(
                     value_type_name=returns_type.name,
                     value_type_module=getattr(returns_type, 'module_path', None),
-                    deferred_mode=node.deferred_mode,
                 )
             return self._behavior_desc
         else:
@@ -2024,7 +2024,6 @@ class SemanticAnalyzer:
                 return self.registry.factory.create_deferred(
                     value_type_name=returns_type.name,
                     value_type_module=getattr(returns_type, 'module_path', None),
-                    deferred_mode=node.deferred_mode,
                 )
             return self._deferred_desc
 

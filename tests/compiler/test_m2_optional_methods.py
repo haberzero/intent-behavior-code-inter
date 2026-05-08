@@ -28,14 +28,14 @@ class TestM2OptionalMethodResolution:
         optional_int = reg.resolve_specialization(reg.resolve("Optional"), [reg.resolve("int")])
         unwrap_spec = reg.resolve_member(optional_int, "unwrap")
         assert unwrap_spec is not None
-        assert unwrap_spec.return_type_name == "int"
+        assert unwrap_spec.return_type.head == "int"
 
     def test_or_else_signature_is_specialized(self):
         reg = create_default_registry()
         optional_int = reg.resolve_specialization(reg.resolve("Optional"), [reg.resolve("int")])
         or_else_spec = reg.resolve_member(optional_int, "or_else")
         assert or_else_spec is not None
-        assert or_else_spec.return_type_name == "int"
+        assert or_else_spec.return_type.head == "int"
         assert or_else_spec.param_type_names == ["int"]
 
 

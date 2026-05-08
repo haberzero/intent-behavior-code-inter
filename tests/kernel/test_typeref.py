@@ -280,19 +280,22 @@ class TestFromSpec:
         assert r.module == "mymod"
 
     def test_deferred_spec_typed(self):
-        spec = DeferredSpec(name="deferred[int]", value_type_name="int", kind=TypeKind.DEFERRED.value)
+        spec = DeferredSpec(name="deferred[int]", value_type_name="int",
+                            kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="deferred")
         r = TypeRef.from_spec(spec)
         assert r.head == "deferred"
         assert r.args[0].head == "int"
 
     def test_deferred_spec_untyped(self):
-        spec = DeferredSpec(name="deferred", value_type_name="auto")
+        spec = DeferredSpec(name="deferred", value_type_name="auto",
+                            kind=TypeKind.CALLABLE_INSTANCE.value)
         r = TypeRef.from_spec(spec)
         assert r.head == "deferred"
         assert r.args == ()
 
     def test_behavior_spec_typed(self):
-        spec = BehaviorSpec(name="behavior[str]", value_type_name="str", kind=TypeKind.BEHAVIOR.value)
+        spec = BehaviorSpec(name="behavior[str]", value_type_name="str",
+                            kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="behavior")
         r = TypeRef.from_spec(spec)
         assert r.head == "behavior"
         assert r.args[0].head == "str"

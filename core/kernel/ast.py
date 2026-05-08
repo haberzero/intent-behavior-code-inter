@@ -182,7 +182,7 @@ class IbReturn(IbStmt):
 class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
-    deferred_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
+    capture_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):
@@ -417,7 +417,7 @@ class IbBehaviorInstance(IbExpr):
     """
     segments: List[Union[str, IbExpr]]  # 原始行为描述片段
     target_type_name: str = ""           # 目标类型名称（如 "Mood"）
-    is_deferred: bool = False           # 是否延迟执行
+    is_callable_instance: bool = False           # 是否延迟执行
 
 
 @dataclass(kw_only=True, eq=False)
@@ -449,9 +449,9 @@ class IbLambdaExpr(IbExpr):
 
     语义
     ----
-    * ``deferred_mode == 'lambda'``：自由变量 cell 共享捕获，每次调用 deref 最新值；
+    * ``capture_mode == 'lambda'``：自由变量 cell 共享捕获，每次调用 deref 最新值；
       调用处的意图栈生效。
-    * ``deferred_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
+    * ``capture_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
       对意图栈 fork。
 
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
@@ -459,7 +459,7 @@ class IbLambdaExpr(IbExpr):
     """
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
-    deferred_mode: str = 'lambda'  # 'lambda' | 'snapshot'
+    capture_mode: str = 'lambda'  # 'lambda' | 'snapshot'
     # D2：表达式侧返回类型标注节点（IbName/IbSubscript 等）。
     # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
     # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。

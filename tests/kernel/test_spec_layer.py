@@ -77,24 +77,24 @@ class TestIbSpecBase:
             return_type_name="int",
         )
         assert fn.param_type_names == ["int", "int"]
-        assert fn.return_type_name == "int"
+        assert fn.return_type.head == "int"
         assert fn.is_llm is False
 
     def test_class_spec_attributes(self):
         cls = ClassSpec(name="Dog", parent_name="Object")
         assert cls.name == "Dog"
-        assert cls.parent_name == "Object"
+        assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
     def test_list_spec_attributes(self):
         ls = ListSpec(name="list", element_type_name="str")
-        assert ls.element_type_name == "str"
+        assert ls.element_type.head == "str"
         assert "str" in repr(ls)
 
     def test_dict_spec_attributes(self):
         ds = DictSpec(name="dict", key_type_name="str", value_type_name="int")
-        assert ds.key_type_name == "str"
-        assert ds.value_type_name == "int"
+        assert ds.key_type.head == "str"
+        assert ds.value_type.head == "int"
 
     def test_module_spec_axiom_name(self):
         ms = ModuleSpec(name="mymod", kind=TypeKind.MODULE.value)
@@ -109,7 +109,7 @@ class TestIbSpecBase:
             receiver_type_name="str",
             func_spec_name="callable",
         )
-        assert bm.receiver_type_name == "str"
+        assert bm.receiver_type.head == "str"
         assert bm.func_spec_name == "callable"
 
     def test_constants_are_correct_types(self):
@@ -136,41 +136,41 @@ class TestSpecFactory:
     def test_create_func_defaults(self, factory: SpecFactory):
         fn = factory.create_func("greet")
         assert isinstance(fn, FuncSpec)
-        assert fn.return_type_name == "void"
+        assert fn.return_type.head == "void"
         assert fn.param_type_names == []
 
     def test_create_func_full(self, factory: SpecFactory):
         fn = factory.create_func("add", ["int", "int"], return_type_name="int")
         assert fn.param_type_names == ["int", "int"]
-        assert fn.return_type_name == "int"
+        assert fn.return_type.head == "int"
         assert fn.name == "add"
 
     def test_create_class(self, factory: SpecFactory):
         cls = factory.create_class("Cat", parent_name="Object")
         assert isinstance(cls, ClassSpec)
-        assert cls.parent_name == "Object"
+        assert cls.parent_type is not None and cls.parent_type.head == "Object"
         assert cls.is_user_defined is True
 
     def test_create_class_no_parent(self, factory: SpecFactory):
         cls = factory.create_class("Base")
-        assert cls.parent_name is None
+        assert cls.parent_type is None
 
     def test_create_list(self, factory: SpecFactory):
         ls = factory.create_list("str")
         assert isinstance(ls, ListSpec)
-        assert ls.element_type_name == "str"
+        assert ls.element_type.head == "str"
 
     def test_create_dict(self, factory: SpecFactory):
         ds = factory.create_dict("str", "int")
         assert isinstance(ds, DictSpec)
-        assert ds.key_type_name == "str"
-        assert ds.value_type_name == "int"
+        assert ds.key_type.head == "str"
+        assert ds.value_type.head == "int"
 
     def test_create_optional(self, factory: SpecFactory):
         opt = factory.create_optional("int")
         assert isinstance(opt, OptionalSpec)
         assert opt.name == "Optional[int]"
-        assert opt.wrapped_type_name == "int"
+        assert opt.wrapped_type.head == "int"
 
     def test_create_module(self, factory: SpecFactory):
         ms = factory.create_module("mymod")
@@ -180,7 +180,7 @@ class TestSpecFactory:
     def test_create_bound_method(self, factory: SpecFactory):
         bm = factory.create_bound_method("str", "callable")
         assert isinstance(bm, BoundMethodSpec)
-        assert bm.receiver_type_name == "str"
+        assert bm.receiver_type.head == "str"
 
 
 # ---------------------------------------------------------------------------

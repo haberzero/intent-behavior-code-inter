@@ -161,10 +161,11 @@ class TestBehaviorSpecReturnTypeInference:
         from core.kernel.factory import create_default_registry
         from core.kernel.spec.specs import BehaviorSpec
         reg = create_default_registry()
-        bs = reg.factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+        bs = reg.factory.create_behavior(value_type_name="int")
         assert isinstance(bs, BehaviorSpec)
-        assert bs.value_type_name == "int"
-        assert bs.deferred_mode == "lambda"
+        assert bs.value_type.head == "int"
+        # capture_mode is a property of the runtime *value* (IbBehavior),
+        # not of the type spec — see TypeKind.CALLABLE_INSTANCE docstring.
         assert bs.get_base_name() == "behavior"
         assert bs.name == "behavior[int]"
 
@@ -173,7 +174,7 @@ class TestBehaviorSpecReturnTypeInference:
         from core.kernel.factory import create_default_registry
         from core.kernel.spec.specs import BehaviorSpec
         reg = create_default_registry()
-        bs = reg.factory.create_behavior(value_type_name="auto", deferred_mode="lambda")
+        bs = reg.factory.create_behavior(value_type_name="auto")
         assert isinstance(bs, BehaviorSpec)
         assert bs.name == "behavior"
 
@@ -189,7 +190,7 @@ class TestBehaviorSpecReturnTypeInference:
         """resolve_return on BehaviorSpec(value_type_name='int') returns int spec."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        bs = reg.factory.create_behavior(value_type_name="int", deferred_mode="lambda")
+        bs = reg.factory.create_behavior(value_type_name="int")
         ret = reg.resolve_return(bs, [])
         assert ret is not None
         assert ret.name == "int"
@@ -198,7 +199,7 @@ class TestBehaviorSpecReturnTypeInference:
         """resolve_return on BehaviorSpec(value_type_name='str') returns str spec."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        bs = reg.factory.create_behavior(value_type_name="str", deferred_mode="lambda")
+        bs = reg.factory.create_behavior(value_type_name="str")
         ret = reg.resolve_return(bs, [])
         assert ret is not None
         assert ret.name == "str"
@@ -217,20 +218,20 @@ class TestBehaviorSpecReturnTypeInference:
         from core.kernel.factory import create_default_registry
         from core.kernel.spec.specs import DeferredSpec, BehaviorSpec
         reg = create_default_registry()
-        ds = reg.factory.create_deferred(value_type_name="int", deferred_mode="lambda")
+        ds = reg.factory.create_deferred(value_type_name="int")
         assert isinstance(ds, DeferredSpec)
         # [TODO] M3 单一 TypeDef 迁移后，DeferredSpec/BehaviorSpec 均为 TypeDef 别名，
         # 不再通过 isinstance 区分，语义区分应由 kind/get_base_name 驱动。
         assert ds.kind != "behavior"
         assert ds.get_base_name() == "deferred"
-        assert ds.value_type_name == "int"
+        assert ds.value_type.head == "int"
         assert ds.name == "deferred[int]"
 
     def test_deferred_spec_resolve_return(self):
         """resolve_return on DeferredSpec(value_type_name='int') returns int spec."""
         from core.kernel.factory import create_default_registry
         reg = create_default_registry()
-        ds = reg.factory.create_deferred(value_type_name="int", deferred_mode="lambda")
+        ds = reg.factory.create_deferred(value_type_name="int")
         ret = reg.resolve_return(ds, [])
         assert ret is not None
         assert ret.name == "int"

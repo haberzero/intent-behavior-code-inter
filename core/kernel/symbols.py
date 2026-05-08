@@ -88,7 +88,7 @@ class FunctionSymbol(Symbol):
     @property
     def return_type_name(self) -> str:
         if self.spec and self.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-            return self.spec.return_type_name
+            return self.spec.return_type.head
         return "any"
 
     @property

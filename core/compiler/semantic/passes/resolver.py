@@ -4,6 +4,7 @@ from core.kernel import symbols
 from core.kernel.symbols import SymbolTable, TypeSymbol, FunctionSymbol
 from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ModuleSpec
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -101,7 +102,7 @@ class TypeResolver:
             parent_name=node.parent
         )
         if parent_desc:
-             descriptor.parent_name = parent_desc.name
+             descriptor.parent_type = TypeRef.of(parent_desc.name, getattr(parent_desc, "module_path", None))
         
         # 注册到注册表，以便后续继承解析能找到它
         # 必须使用返回的已注册克隆，否则成员信息只写入本地对象，
