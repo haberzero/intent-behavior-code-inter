@@ -2,7 +2,7 @@ from typing import Dict, Optional, Any
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
-from core.kernel.spec import IbSpec, ClassSpec
+from core.kernel.spec import IbSpec, TypeDef
 
 class Bootstrapper:
     """

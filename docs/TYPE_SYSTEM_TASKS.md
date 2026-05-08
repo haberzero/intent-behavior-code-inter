@@ -119,14 +119,22 @@
 
 ### M5：Axiom 接口统一化
 
-- [ ] 将现有分散 capability 协议收敛到统一 Axiom 接口。
-- [ ] 编译期类型推断与运行期行为分发共享同一 Axiom 注册入口。
-- [ ] 清理重复 capability 粘合代码，保留必要扩展点。
-- [ ] 完善 Axiom 文档：编译期职责、运行时职责、LLM 协议职责。
+- [x] 将现有分散 capability 协议收敛到统一 Axiom 接口。
+- [x] 编译期类型推断与运行期行为分发共享同一 Axiom 注册入口。
+- [x] 清理重复 capability 粘合代码，保留必要扩展点。
+- [x] 完善 Axiom 文档：编译期职责、运行时职责、LLM 协议职责。
 
 **M5 DoD**
-- [ ] Axiom 成为唯一类型行为入口。
-- [ ] 旧 capability 兼容层按计划下线。
+- [x] Axiom 成为唯一类型行为入口。
+- [x] 旧 capability 兼容层按计划下线。
+
+**M5 收口要点（2026-05-08）**
+
+- 单一 `TypeAxiom` Protocol 替代旧 `CallCapability` / `IterCapability` / `SubscriptCapability` / `OperatorCapability` / `ConverterCapability` / `ParserCapability` / `FromPromptCapability` / `IlmoutputHintCapability` / `WritableTrait` 九个协议子类。
+- 公理通过 `has_*_cap` 类属性声明能力，`BaseAxiom` 提供安全 no-op 默认。具体公理不再多重继承能力 mixin，亦不再写 `get_X_capability(): return self` 样板。
+- `SpecRegistry.get_X_cap(spec)` 在公理声明对应能力时返回公理本身（结构性可调用 `FuncSpec` / `BoundMethodSpec` / `ClassSpec` 时返回 spec 自身作 truthy marker），否则返回 `None`，保持调用方 `if cap: cap.method()` 习惯。
+- 删除 `_FUNC_SPEC_CALL_CAP` 哨兵类与 `WritableTrait` 不可达回填路径，函数 spec 元数据回填全部走 `factory.create_func()`。
+- 测试基线维持 1184 passed；净删减约 400 行旧粘合代码。
 
 ### M3→M5 补充：`fn` / `lambda` / `snapshot` 可调用实例统一路线
 
@@ -136,7 +144,7 @@
   - [x] 作为可调用实例推导入口（类似 `auto`，但限定 callable）
   - [x] 作为高阶函数类型标注入口（参数/返回签名约束）
 - [x] 在 TypeRef/TypeDef 中补齐 callable 实例结构表达，避免 `fn` 哨兵路径导致返回类型退化为 `void`。
-- [ ] 在 Axiom 层统一 callable 分发：普通函数、`lambda`、`snapshot`、行为体 callable 走同一调用协议。
+- [x] **`fn` callable 实例统一调用分发（M3→M5 补充）** — Axiom 层统一 callable 分发：`FuncSpec` / `lambda` / `snapshot` / `behavior` 全部走 `TypeAxiom` + `has_call_cap` 协议。
 - [x] 固化 `lambda` vs `snapshot` 差异语义：
   - [x] `lambda`：引用捕获（读最新值）
   - [x] `snapshot`：值拷贝捕获（冻结定义时值）

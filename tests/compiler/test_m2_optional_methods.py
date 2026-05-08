@@ -36,7 +36,7 @@ class TestM2OptionalMethodResolution:
         or_else_spec = reg.resolve_member(optional_int, "or_else")
         assert or_else_spec is not None
         assert or_else_spec.return_type.head == "int"
-        assert or_else_spec.param_type_names == ["int"]
+        assert [t.head for t in or_else_spec.param_types] == ["int"]
 
 
 class TestM2OptionalMethodCompileSemantics:

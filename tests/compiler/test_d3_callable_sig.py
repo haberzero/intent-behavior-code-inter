@@ -3,9 +3,9 @@ D3: fn[(param_types) -> return_type] callable signature annotation tests.
 
 Covers:
   - Parse: fn[(int, str) -> bool], fn[() -> int], fn[(int) -> int]
-  - Semantic: CallableSigSpec produced from IbCallableType
+  - Semantic: TypeDef produced from IbCallableType
   - Return-type inference: calling a fn[...] param inside function body
-  - Structural arg-type check at call site (CallableSigSpec parameter)
+  - Structural arg-type check at call site (TypeDef parameter)
   - Structural sig mismatch at declaration site
   - End-to-end: HOF with fn[(int) -> int] parameter executes correctly
   - Return type fn[...]: function returning a callable

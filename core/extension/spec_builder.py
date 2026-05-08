@@ -1,21 +1,30 @@
 from typing import List, Optional, Union
 
 from core.kernel.spec import (
-    IbSpec, ModuleSpec, ClassSpec, FuncSpec,
-    MethodMemberSpec, MemberSpec,
-    INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC,
-    VOID_SPEC, ANY_SPEC, LIST_SPEC, DICT_SPEC,
+    IbSpec,
+    TypeDef,
+    MethodMemberSpec,
+    MemberSpec,
+    INT_SPEC,
+    FLOAT_SPEC,
+    STR_SPEC,
+    BOOL_SPEC,
+    VOID_SPEC,
+    ANY_SPEC,
+    LIST_SPEC,
+    DICT_SPEC,
 )
+from core.kernel.spec.type_ref import TypeRef
 
 
 class ClassSpecBuilder:
     """用于构建类元数据的子构建器"""
     def __init__(self, name: str, parent: Optional[str] = None):
-        self.spec = ClassSpec(name=name, parent_name=parent, is_user_defined=False)
+        self.spec = TypeDef(name=name, is_user_defined=False, parent_type=TypeRef.of(parent))
 
     def field(self, name: str, type: Union[str, IbSpec] = "any") -> 'ClassSpecBuilder':
         type_name = type if isinstance(type, str) else type.name
-        self.spec.members[name] = MemberSpec(name=name, kind="field", type_name=type_name)
+        self.spec.members[name] = MemberSpec(name=name, kind="field", type_ref=TypeRef.of(type_name))
         return self
 
     def method(self, name: str, params: Optional[List[Union[str, IbSpec]]] = None, returns: Union[str, IbSpec] = "void") -> 'ClassSpecBuilder':
@@ -24,10 +33,7 @@ class ClassSpecBuilder:
         self.spec.members[name] = MethodMemberSpec(
             name=name,
             kind="method",
-            param_type_names=param_names,
-            param_type_modules=[None] * len(param_names),
-            return_type_name=ret_name,
-        )
+            return_type=TypeRef.of(ret_name), param_types=[TypeRef.of(p) for p in param_names])
         return self
 
 
@@ -50,7 +56,7 @@ class SpecBuilder:
 
     def __init__(self, name: str):
         self.name = name
-        self._spec = ModuleSpec(name=name, is_user_defined=False)
+        self._spec = TypeDef(name=name, is_user_defined=False)
         self._current_class_builder: Optional[ClassSpecBuilder] = None
 
     def _resolve_type_name(self, t: Union[str, IbSpec]) -> str:
@@ -66,16 +72,13 @@ class SpecBuilder:
         self._spec.members[name] = MethodMemberSpec(
             name=name,
             kind="method",
-            param_type_names=param_names,
-            param_type_modules=[None] * len(param_names),
-            return_type_name=ret_name,
-        )
+            return_type=TypeRef.of(ret_name), param_types=[TypeRef.of(p) for p in param_names])
         return self
 
     def auto(self, name: str, type: Union[str, IbSpec] = "any") -> 'SpecBuilder':
         """声明一个全局变量"""
         type_name = self._resolve_type_name(type)
-        self._spec.members[name] = MemberSpec(name=name, kind="field", type_name=type_name)
+        self._spec.members[name] = MemberSpec(name=name, kind="field", type_ref=TypeRef.of(type_name))
         return self
 
     def cls(self, name: str, parent: Union[str, None] = None) -> 'SpecBuilder':
@@ -84,8 +87,7 @@ class SpecBuilder:
         self._current_class_builder = ClassSpecBuilder(name, parent_name)
         self._spec.members[name] = MemberSpec(
             name=name, kind="field",
-            type_name=name,
-        )
+            type_ref=TypeRef.of(name))
         return self
 
     def field(self, name: str, type: Union[str, IbSpec] = "any") -> 'SpecBuilder':
@@ -100,6 +102,6 @@ class SpecBuilder:
             self._current_class_builder.method(name, params, returns)
         return self
 
-    def build(self) -> ModuleSpec:
-        """构建并返回 ModuleSpec"""
+    def build(self) -> TypeDef:
+        """构建并返回 TypeDef"""
         return self._spec

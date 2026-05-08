@@ -1192,7 +1192,7 @@ class TestE2EUserDefinedException:
     """
     端到端验证用户可继承内置 `Exception` 体系定义自定义异常。
 
-    背景：在 `EXCEPTION_SPEC` 由 `IbSpec` 升级为 `ClassSpec` 之前，
+    背景：在 `EXCEPTION_SPEC` 由 `IbSpec` 升级为 `TypeDef` 之前，
     `class MyError(Exception):` 会在语义分析阶段报 SEM_001
     （"Base class 'Exception' is not defined or not a class"）。
     本测试组锁定升级后的可用能力，并以注释形式标注一个已知

@@ -3,13 +3,11 @@
 > 本文档只记录当前可直接开工且必须优先执行的任务进度。  
 > 低优先级事项统一转入 `docs/PENDING_TASKS.md`。
 
-> **最后更新**：2026-05-08（M4 `IbValue` 运行时值模型已落地；M5 成为当前唯一未完成的类型系统主线）
+> **最后更新**：2026-05-08（M5 Axiom 接口统一化已落地；类型系统主线全部里程碑完成）
 
 ---
 
-## 当前唯一最高优先级主线
-
-### 类型系统演进与重构（立即执行）【P0】
+## 类型系统演进与重构（已完成主线）【已收口】
 
 - 架构原文（完整）：`docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
 - 专项任务清单：`docs/TYPE_SYSTEM_TASKS.md`
@@ -21,14 +19,14 @@
 - [x] M3：TypeDef 单一化（完成 2026-05-08：所有扁平 `*_name`/`*_module` 字段全面 TypeRef 化，无残留；测试基线 1182 passed）
 - [x] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线 — 完成（2026-05-08：`TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`，`deferred_mode` 概念彻底删除并重命名为 `capture_mode`，全栈一致）
 - [x] M4：运行时值模型单一化（IbValue）— 完成（2026-05-08：`IbValue(type_ref, payload, fields, meta)` 已成为运行时值公共承载层；现有 `IbInteger/IbList/IbBehavior/...` 退化为兼容包装层，装箱与运行时对象结构统一）
-- [ ] M5：Axiom 接口统一化
+- [x] M5：Axiom 接口统一化 — 完成（2026-05-08：单一 `TypeAxiom` 协议替代旧 9 个 Capability 子协议；具体公理通过 `has_*_cap` 类属性声明能力；`SpecRegistry.get_X_cap()` 统一返回公理或 spec；删除 `_FUNC_SPEC_CALL_CAP` 哨兵与 `WritableTrait` 不可达路径；测试基线 1184 passed）
 
-#### 当前执行要求
+#### 类型系统主线状态
 
-- [ ] 每个里程碑完成后同步更新本文件进度。
-- [ ] 每个里程碑完成后同步测试基线与风险状态。
-- [ ] 低优先级事项不进入本文件，只在 pending 跟踪。
-- [x] callable-instance 路线落地后，相关 `fn` 失败用例已收口；当前测试基线为 **1184 passed**。
+类型系统专项五大里程碑（M1–M5）全部完成，无未结主线项。后续若需进一步降权清理：
+
+- 运行时旧值类（`IbInteger` / `IbList` / `IbBehavior` 等）目前作为 `IbValue` 子类的兼容包装层保留，未来可按需进一步收敛为纯函数构造器；优先级低，不阻塞主线。
+- `TypeDef` 接受的 `*_name` / `*_module` 字符串 kwargs 与 TypeRef-化结构 kwargs 双轨并存，作为 spec layer 主要 API；`_normalise_legacy_kwargs` 归一层维持双轨可用，未来若需统一可作为独立小型重构。
 
 ---
 

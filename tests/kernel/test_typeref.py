@@ -14,14 +14,14 @@ TypeRef 回归测试。
   8. substitute() 泛型替换
   9. is_generic() / is_builtin() / with_module()
   10. IbSpec.type_ref 桥接属性
-  11. FuncSpec.return_type_ref / param_type_refs
-  12. ClassSpec.parent_type_ref
-  13. ListSpec.element_type_ref
-  14. TupleSpec.element_type_ref
-  15. DictSpec.key_type_ref / value_type_ref
-  16. DeferredSpec.value_type_ref
+  11. TypeDef.return_type / param_type_refs
+  12. TypeDef.parent_type
+  13. TypeDef.element_type
+  14. TypeDef.element_type
+  15. TypeDef.key_type / value_type_ref
+  16. TypeDef.value_type
   17. MemberSpec.type_ref
-  18. MethodMemberSpec.return_type_ref / param_type_refs
+  18. MethodMemberSpec.return_type / param_type_refs
   19. SpecRegistry.resolve_typeref()（含泛型、跨模块）
   20. TypeRef 相等与哈希一致性（等值对象哈希相同）
 """
@@ -30,11 +30,14 @@ import pytest
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec import (
     IbSpec,
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, OptionalSpec,
-    MemberSpec, MethodMemberSpec,
-    INT_SPEC, STR_SPEC, ANY_SPEC,
+    TypeDef,
+    MemberSpec,
+    MethodMemberSpec,
+    INT_SPEC,
+    STR_SPEC,
+    ANY_SPEC,
 )
-from core.kernel.spec.specs import BehaviorSpec
+from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.registry import SpecRegistry, create_default_spec_registry
 from core.kernel.axioms.registry import AxiomRegistry
@@ -251,57 +254,54 @@ class TestFromSpec:
         assert r.args == ()
 
     def test_list_spec_typed(self):
-        from core.kernel.spec.specs import ListSpec
-        spec = ListSpec(name="list[int]", element_type_name="int", kind=TypeKind.LIST.value)
+        from core.kernel.spec.specs import TypeDef
+        spec = TypeDef(name="list[int]", kind=TypeKind.LIST.value, element_type=TypeRef.of("int"))
         r = TypeRef.from_spec(spec)
         assert r.head == "list"
         assert len(r.args) == 1
         assert r.args[0].head == "int"
 
     def test_dict_spec(self):
-        from core.kernel.spec.specs import DictSpec
-        spec = DictSpec(name="dict[str,int]", key_type_name="str", value_type_name="int", kind=TypeKind.DICT.value)
+        from core.kernel.spec.specs import TypeDef
+        spec = TypeDef(name="dict[str,int]", kind=TypeKind.DICT.value, key_type=TypeRef.of("str"), value_type=TypeRef.of("int"))
         r = TypeRef.from_spec(spec)
         assert r.head == "dict"
         assert r.args[0].head == "str"
         assert r.args[1].head == "int"
 
     def test_tuple_spec_typed(self):
-        from core.kernel.spec.specs import TupleSpec
-        spec = TupleSpec(name="tuple[str]", element_type_name="str", kind=TypeKind.TUPLE.value)
+        from core.kernel.spec.specs import TypeDef
+        spec = TypeDef(name="tuple[str]", kind=TypeKind.TUPLE.value, element_type=TypeRef.of("str"))
         r = TypeRef.from_spec(spec)
         assert r.head == "tuple"
         assert r.args[0].head == "str"
 
     def test_class_spec(self):
-        spec = ClassSpec(name="MyClass", module_path="mymod")
+        spec = TypeDef(name="MyClass", module_path="mymod")
         r = TypeRef.from_spec(spec)
         assert r.head == "MyClass"
         assert r.module == "mymod"
 
     def test_deferred_spec_typed(self):
-        spec = DeferredSpec(name="deferred[int]", value_type_name="int",
-                            kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="deferred")
+        spec = TypeDef(name="deferred[int]", kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="deferred", value_type=TypeRef.of("int"))
         r = TypeRef.from_spec(spec)
         assert r.head == "deferred"
         assert r.args[0].head == "int"
 
     def test_deferred_spec_untyped(self):
-        spec = DeferredSpec(name="deferred", value_type_name="auto",
-                            kind=TypeKind.CALLABLE_INSTANCE.value)
+        spec = TypeDef(name="deferred", kind=TypeKind.CALLABLE_INSTANCE.value, value_type=TypeRef.of("auto"))
         r = TypeRef.from_spec(spec)
         assert r.head == "deferred"
         assert r.args == ()
 
     def test_behavior_spec_typed(self):
-        spec = BehaviorSpec(name="behavior[str]", value_type_name="str",
-                            kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="behavior")
+        spec = TypeDef(name="behavior[str]", kind=TypeKind.CALLABLE_INSTANCE.value, _axiom_name="behavior", value_type=TypeRef.of("str"))
         r = TypeRef.from_spec(spec)
         assert r.head == "behavior"
         assert r.args[0].head == "str"
 
     def test_optional_spec_typed(self):
-        spec = OptionalSpec(name="Optional[int]", wrapped_type_name="int", kind=TypeKind.OPTIONAL.value)
+        spec = TypeDef(name="Optional[int]", kind=TypeKind.OPTIONAL.value, wrapped_type=TypeRef.of("int"))
         r = TypeRef.from_spec(spec)
         assert r.head == "Optional"
         assert r.args[0].head == "int"
@@ -393,147 +393,118 @@ class TestHelpers:
 
 
 # ---------------------------------------------------------------------------
-# 10. IbSpec.type_ref 桥接属性
+# 10. (removed) IbSpec.type_ref bridge — compat property has been deleted.
+#     Use ``TypeRef.from_spec(spec)`` directly when a TypeRef is needed.
 # ---------------------------------------------------------------------------
-
-class TestIbSpecBridge:
-    def test_primitive_type_ref(self):
-        from core.kernel.spec import INT_SPEC
-        r = INT_SPEC.type_ref
-        assert isinstance(r, TypeRef)
-        assert r.head == "int"
-
-    def test_class_spec_type_ref(self):
-        spec = ClassSpec(name="MyClass", module_path="mod")
-        r = spec.type_ref
-        assert r.head == "MyClass"
-        assert r.module == "mod"
-
-    def test_list_spec_typed_type_ref(self):
-        spec = ListSpec(name="list[int]", element_type_name="int", kind=TypeKind.LIST.value)
-        r = spec.type_ref
-        assert r.head == "list"
-        assert r.args == (TypeRef("int"),)
-
-    def test_dict_spec_type_ref(self):
-        spec = DictSpec(name="dict[str,int]", key_type_name="str", value_type_name="int")
-        r = spec.type_ref
-        assert r.canonical_name == "dict[str,int]"
 
 
 # ---------------------------------------------------------------------------
-# 11. FuncSpec.return_type_ref / param_type_refs
+# 11. TypeDef.return_type / param_type_refs
 # ---------------------------------------------------------------------------
 
 class TestFuncSpecBridge:
     def test_return_type_ref_simple(self):
-        spec = FuncSpec(name="f", return_type_name="int")
-        assert spec.return_type_ref == TypeRef("int")
+        spec = TypeDef(name="f", return_type=TypeRef.of("int"))
+        assert spec.return_type == TypeRef("int")
 
     def test_return_type_ref_with_module(self):
-        spec = FuncSpec(name="f", return_type_name="MyClass", return_type_module="mod")
-        assert spec.return_type_ref == TypeRef.of("MyClass", "mod")
+        spec = TypeDef(name="f", return_type=TypeRef.of("MyClass", "mod"))
+        assert spec.return_type == TypeRef.of("MyClass", "mod")
 
     def test_param_type_refs_empty(self):
-        spec = FuncSpec(name="f")
-        assert spec.param_type_refs == ()
+        spec = TypeDef(name="f")
+        assert spec.param_types == []
 
     def test_param_type_refs_basic(self):
-        spec = FuncSpec(
+        spec = TypeDef(
             name="f",
-            param_type_names=["int", "str"],
-            param_type_modules=[None, None],
-        )
-        refs = spec.param_type_refs
-        assert refs == (TypeRef("int"), TypeRef("str"))
+            param_types=[TypeRef.of("int", None), TypeRef.of("str", None)])
+        refs = spec.param_types
+        assert refs == [TypeRef("int"), TypeRef("str")]
 
     def test_param_type_refs_with_module(self):
-        spec = FuncSpec(
+        spec = TypeDef(
             name="f",
-            param_type_names=["Foo"],
-            param_type_modules=["mymod"],
-        )
-        refs = spec.param_type_refs
+            param_types=[TypeRef.of("Foo", "mymod")])
+        refs = spec.param_types
         assert refs[0] == TypeRef.of("Foo", "mymod")
 
     def test_param_type_refs_shorter_modules(self):
         # modules list shorter than names list — should pad with None
-        spec = FuncSpec(
+        spec = TypeDef(
             name="f",
-            param_type_names=["int", "str", "bool"],
-            param_type_modules=[],
-        )
-        refs = spec.param_type_refs
+            param_types=[TypeRef.of("int"), TypeRef.of("str"), TypeRef.of("bool")])
+        refs = spec.param_types
         assert len(refs) == 3
         assert all(r.module is None for r in refs)
 
 
 # ---------------------------------------------------------------------------
-# 12. ClassSpec.parent_type_ref
+# 12. TypeDef.parent_type
 # ---------------------------------------------------------------------------
 
 class TestClassSpecBridge:
     def test_parent_type_ref_with_parent(self):
-        spec = ClassSpec(name="Dog", parent_name="Animal")
-        assert spec.parent_type_ref == TypeRef("Animal")
+        spec = TypeDef(name="Dog", parent_type=TypeRef.of("Animal"))
+        assert spec.parent_type == TypeRef("Animal")
 
     def test_parent_type_ref_with_module(self):
-        spec = ClassSpec(name="Sub", parent_name="Base", parent_module="base_mod")
-        assert spec.parent_type_ref == TypeRef.of("Base", "base_mod")
+        spec = TypeDef(name="Sub", parent_type=TypeRef.of("Base", "base_mod"))
+        assert spec.parent_type == TypeRef.of("Base", "base_mod")
 
     def test_parent_type_ref_none_when_no_parent(self):
-        spec = ClassSpec(name="Root")
-        assert spec.parent_type_ref is None
+        spec = TypeDef(name="Root")
+        assert spec.parent_type is None
 
 
 # ---------------------------------------------------------------------------
-# 13 / 14. ListSpec.element_type_ref / TupleSpec.element_type_ref
+# 13 / 14. TypeDef.element_type / TypeDef.element_type
 # ---------------------------------------------------------------------------
 
 class TestContainerSpecBridge:
     def test_list_element_type_ref(self):
-        spec = ListSpec(name="list[int]", element_type_name="int")
-        assert spec.element_type_ref == TypeRef("int")
+        spec = TypeDef(name="list[int]", element_type=TypeRef.of("int"))
+        assert spec.element_type == TypeRef("int")
 
     def test_list_element_type_ref_any(self):
         from core.kernel.spec import LIST_SPEC
-        assert LIST_SPEC.element_type_ref == TypeRef("any")
+        assert LIST_SPEC.element_type == TypeRef("any")
 
     def test_tuple_element_type_ref(self):
-        spec = TupleSpec(name="tuple[str]", element_type_name="str")
-        assert spec.element_type_ref == TypeRef("str")
+        spec = TypeDef(name="tuple[str]", element_type=TypeRef.of("str"))
+        assert spec.element_type == TypeRef("str")
 
     def test_dict_key_type_ref(self):
-        spec = DictSpec(name="dict[str,int]", key_type_name="str", value_type_name="int")
-        assert spec.key_type_ref == TypeRef("str")
+        spec = TypeDef(name="dict[str,int]", key_type=TypeRef.of("str"), value_type=TypeRef.of("int"))
+        assert spec.key_type == TypeRef("str")
 
     def test_dict_value_type_ref(self):
-        spec = DictSpec(name="dict[str,int]", key_type_name="str", value_type_name="int")
-        assert spec.value_type_ref == TypeRef("int")
+        spec = TypeDef(name="dict[str,int]", key_type=TypeRef.of("str"), value_type=TypeRef.of("int"))
+        assert spec.value_type == TypeRef("int")
 
 
 # ---------------------------------------------------------------------------
-# 15. DeferredSpec.value_type_ref
+# 15. TypeDef.value_type
 # ---------------------------------------------------------------------------
 
 class TestDeferredSpecBridge:
     def test_value_type_ref_typed(self):
-        spec = DeferredSpec(name="deferred[int]", value_type_name="int")
-        assert spec.value_type_ref == TypeRef("int")
+        spec = TypeDef(name="deferred[int]", value_type=TypeRef.of("int"))
+        assert spec.value_type == TypeRef("int")
 
     def test_value_type_ref_auto(self):
-        spec = DeferredSpec(name="deferred", value_type_name="auto")
-        assert spec.value_type_ref == TypeRef("auto")
+        spec = TypeDef(name="deferred", value_type=TypeRef.of("auto"))
+        assert spec.value_type == TypeRef("auto")
 
     def test_behavior_spec_value_type_ref(self):
-        spec = BehaviorSpec(name="behavior[str]", value_type_name="str")
-        assert spec.value_type_ref == TypeRef("str")
+        spec = TypeDef(name="behavior[str]", value_type=TypeRef.of("str"))
+        assert spec.value_type == TypeRef("str")
 
 
 class TestOptionalSpecBridge:
     def test_wrapped_type_ref(self):
-        spec = OptionalSpec(name="Optional[int]", wrapped_type_name="int")
-        assert spec.wrapped_type_ref == TypeRef("int")
+        spec = TypeDef(name="Optional[int]", wrapped_type=TypeRef.of("int"))
+        assert spec.wrapped_type == TypeRef("int")
 
 
 # ---------------------------------------------------------------------------
@@ -542,11 +513,11 @@ class TestOptionalSpecBridge:
 
 class TestMemberSpecBridge:
     def test_field_type_ref(self):
-        m = MemberSpec(name="age", kind="field", type_name="int")
+        m = MemberSpec(name="age", kind="field", type_ref=TypeRef.of("int"))
         assert m.type_ref == TypeRef("int")
 
     def test_field_type_ref_with_module(self):
-        m = MemberSpec(name="obj", kind="field", type_name="MyClass", type_module="mod")
+        m = MemberSpec(name="obj", kind="field", type_ref=TypeRef.of("MyClass", "mod"))
         assert m.type_ref == TypeRef.of("MyClass", "mod")
 
     def test_default_type_ref_is_any(self):
@@ -555,37 +526,33 @@ class TestMemberSpecBridge:
 
 
 # ---------------------------------------------------------------------------
-# 17. MethodMemberSpec.return_type_ref / param_type_refs
+# 17. MethodMemberSpec.return_type / param_type_refs
 # ---------------------------------------------------------------------------
 
 class TestMethodMemberSpecBridge:
     def test_return_type_ref(self):
-        m = MethodMemberSpec(name="greet", return_type_name="str")
-        assert m.return_type_ref == TypeRef("str")
+        m = MethodMemberSpec(name="greet", return_type=TypeRef.of("str"))
+        assert m.return_type == TypeRef("str")
 
     def test_return_type_ref_void(self):
         m = MethodMemberSpec(name="do_nothing")
-        assert m.return_type_ref == TypeRef("void")
+        assert m.return_type == TypeRef("void")
 
     def test_param_type_refs_basic(self):
         m = MethodMemberSpec(
             name="add",
-            param_type_names=["int", "int"],
-            param_type_modules=[None, None],
-        )
-        assert m.param_type_refs == (TypeRef("int"), TypeRef("int"))
+            param_types=[TypeRef.of("int", None), TypeRef.of("int", None)])
+        assert m.param_types == [TypeRef("int"), TypeRef("int")]
 
     def test_param_type_refs_empty(self):
         m = MethodMemberSpec(name="get_value")
-        assert m.param_type_refs == ()
+        assert m.param_types == []
 
     def test_param_type_refs_with_module(self):
         m = MethodMemberSpec(
             name="process",
-            param_type_names=["Request"],
-            param_type_modules=["http"],
-        )
-        refs = m.param_type_refs
+            param_types=[TypeRef.of("Request", "http")])
+        refs = m.param_types
         assert refs[0] == TypeRef.of("Request", "http")
 
 

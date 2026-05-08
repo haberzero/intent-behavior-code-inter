@@ -2,7 +2,7 @@ import pytest
 
 from core.kernel.factory import create_default_registry
 from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
-from core.kernel.spec.specs import OptionalSpec
+from core.kernel.spec.specs import TypeDef
 
 
 class TestM2OptionalArtifactRehydrator:
@@ -19,7 +19,7 @@ class TestM2OptionalArtifactRehydrator:
             },
             "type_root.Optional[int]": {
                 "uid": "type_root.Optional[int]",
-                "kind": "OptionalSpec",
+                "kind": "TypeDef",
                 "name": "Optional[int]",
                 "module_path": None,
                 "is_nullable": True,
@@ -85,6 +85,6 @@ class TestM2OptionalArtifactRehydrator:
         rehydrator = ArtifactRehydrator(type_pool=type_pool, registry=registry)
         spec = rehydrator.hydrate("type_root.Optional[int]")
 
-        assert isinstance(spec, OptionalSpec)
+        assert isinstance(spec, TypeDef)
         assert spec.kind == "optional"
         assert spec.wrapped_type.head == "int"

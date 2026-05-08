@@ -20,7 +20,7 @@ from core.kernel.symbols import (
     FunctionSymbol, TypeSymbol, VariableSymbol, IntentSymbol,
     SymbolTable, SymbolFactory,
 )
-from core.kernel.spec import FuncSpec, ClassSpec, ModuleSpec, IbSpec
+from core.kernel.spec import TypeDef, IbSpec
 from core.kernel.factory import create_default_registry
 
 
@@ -49,8 +49,8 @@ class TestSymbolBasic:
         sym = FunctionSymbol(name="add", kind=SymbolKind.FUNCTION, spec=fn_spec)
         assert sym.is_function
         assert not sym.is_type
-        assert sym.return_type_name == "int"
-        assert sym.param_type_names == ["int", "int"]
+        assert sym.spec.return_type.head == "int"
+        assert [t.head for t in sym.spec.param_types] == ["int", "int"]
 
     def test_type_symbol(self, reg):
         cls_spec = reg.factory.create_class("Dog")

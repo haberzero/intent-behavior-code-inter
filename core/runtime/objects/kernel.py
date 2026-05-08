@@ -181,13 +181,13 @@ class IbValue(IbObject):
     - ``meta``: extra runtime metadata for specialized values
 
     Container-like values may intentionally alias ``payload`` with an existing
-    mutable compatibility attribute (for example ``IbDict.fields``) when that
-    attribute is already the canonical storage location in legacy call sites.
+    mutable attribute (for example ``IbDict.fields``) when that attribute is
+    the canonical storage location for that value class.
 
-    Existing concrete value classes (``IbInteger``, ``IbList``, ``IbBehavior``,
-    etc.) now act as compatibility shims over this storage model so older call
-    sites can keep using their established attribute names while the runtime
-    progressively converges on a single value representation.
+    Concrete value subclasses (``IbInteger``, ``IbString``, ``IbList``,
+    ``IbDict``, ``IbDeferred``, ``IbBehavior``) provide type-specific runtime
+    behaviour (interning, native conversion helpers, capture-mode tracking, …)
+    on top of this storage model.
     """
     __slots__ = ('type_ref', 'payload', 'meta')
 
@@ -203,10 +203,12 @@ class IbValue(IbObject):
         super().__init__(ib_class)
         if fields is not None:
             self.fields = fields
-        spec = getattr(ib_class, "spec", None)
-        self.type_ref = type_ref if type_ref is not None else (
-            spec.type_ref if spec is not None and hasattr(spec, "type_ref") else None
-        )
+        if type_ref is not None:
+            self.type_ref = type_ref
+        else:
+            from core.kernel.spec.type_ref import TypeRef as _TypeRef
+            spec = getattr(ib_class, "spec", None)
+            self.type_ref = _TypeRef.from_spec(spec) if spec is not None else None
         self.payload = payload
         self.meta = dict(meta) if meta is not None else {}
 
@@ -507,7 +509,7 @@ class IbClass(IbObject):
             # 契约一致性校验：校验 __init__ 参数数量
             # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
             if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                expected_count = len(init_method.spec.param_type_names)
+                expected_count = len(init_method.spec.param_types)
                 if len(args) != expected_count:
                     raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
             
@@ -630,7 +632,7 @@ class IbBoundMethod(IbFunction):
 
     @property
     def spec(self) -> Optional[IbSpec]:
-        """Synthesise a BoundMethodSpec for this bound method."""
+        """Synthesise a TypeDef for this bound method."""
         spec_reg = self.ib_class.registry.get_metadata_registry()
         if spec_reg:
             r_name = self.receiver.ib_class.name if self.receiver else ""

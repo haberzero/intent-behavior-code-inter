@@ -7,8 +7,15 @@ from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import (
-    IbSpec, FuncSpec, ClassSpec, MethodMemberSpec,
-    INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC
+    IbSpec,
+    TypeDef,
+    MethodMemberSpec,
+    INT_SPEC,
+    STR_SPEC,
+    FLOAT_SPEC,
+    BOOL_SPEC,
+    VOID_SPEC,
+    ANY_SPEC,
 )
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.factory import create_default_registry

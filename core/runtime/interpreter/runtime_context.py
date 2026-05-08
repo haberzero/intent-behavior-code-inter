@@ -56,8 +56,8 @@ class ScopeImpl:
         if isinstance(value, IbLLMUncertain):
             return
 
-        # 特殊处理：函数对象赋值给 FuncSpec 类型时直接放行
-        # (callable 类型可以赋值给任意 FuncSpec 声明)
+        # 特殊处理：函数对象赋值给 TypeDef 类型时直接放行
+        # (callable 类型可以赋值给任意 TypeDef 声明)
         if (
             isinstance(declared_type, IbSpec)
             and declared_type.kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value)

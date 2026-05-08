@@ -1,11 +1,11 @@
 """
 core/kernel/spec/specs.py
 
-Built-in spec prototype constants and backward-compatible aliases.
+Built-in spec prototype constants.
 
 All concrete *Spec subclasses have been unified into ``TypeDef``.
-The names below are simple aliases kept for import compatibility;
-dispatch should use the ``kind`` field rather than ``isinstance``.
+Use ``TypeDef`` directly when constructing or type-annotating specs;
+dispatch on the ``kind`` field rather than ``isinstance``.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
 
 from .base import IbSpec, TypeDef, TypeKind
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from .type_ref import TypeRef
@@ -35,27 +36,27 @@ AUTO_SPEC   = TypeDef(name="auto",   kind=TypeKind.PRIMITIVE.value, is_nullable=
 NONE_SPEC   = TypeDef(name="None",   kind=TypeKind.PRIMITIVE.value, is_nullable=True,  is_user_defined=False)
 SLICE_SPEC  = TypeDef(name="slice",  kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
 
-CALLABLE_SPEC   = TypeDef(name="callable", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type_name="auto")
-BEHAVIOR_SPEC   = TypeDef(name="behavior", kind=TypeKind.CALLABLE_INSTANCE.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
-DEFERRED_SPEC   = TypeDef(name="deferred", kind=TypeKind.CALLABLE_INSTANCE.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
+CALLABLE_SPEC   = TypeDef(name="callable", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type=TypeRef.of("auto"))
+BEHAVIOR_SPEC   = TypeDef(name="behavior", kind=TypeKind.CALLABLE_INSTANCE.value, is_nullable=True,  is_user_defined=False, value_type=TypeRef.of("auto"))
+DEFERRED_SPEC   = TypeDef(name="deferred", kind=TypeKind.CALLABLE_INSTANCE.value, is_nullable=True,  is_user_defined=False, value_type=TypeRef.of("auto"))
 OPTIONAL_SPEC   = TypeDef(name="Optional", kind=TypeKind.OPTIONAL.value, is_nullable=True,  is_user_defined=False)
 EXCEPTION_SPEC  = TypeDef(name="Exception", kind=TypeKind.CLASS.value,   is_nullable=True,  is_user_defined=False)
 
-# LLM exception hierarchy — ClassSpec with parent_name for proper inheritance chain.
+# LLM exception hierarchy — TypeDef(kind=CLASS) with parent_name for proper inheritance chain.
 # LLMError IS-A Exception; LLMParseError/LLMRetryExhaustedError/LLMCallError IS-A LLMError.
-# Exception itself is also a ClassSpec so user code can write `class MyError(Exception):`.
+# Exception itself is also a class spec so user code can write `class MyError(Exception):`.
 LLM_ERROR_SPEC = TypeDef(name="LLMError", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
-                          parent_name="Exception")
+                          parent_type=TypeRef.of("Exception"))
 LLM_PARSE_ERROR_SPEC = TypeDef(name="LLMParseError", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
-                                parent_name="LLMError")
+                                parent_type=TypeRef.of("LLMError"))
 LLM_RETRY_EXHAUSTED_ERROR_SPEC = TypeDef(name="LLMRetryExhaustedError", kind=TypeKind.CLASS.value, is_nullable=True,
-                                          is_user_defined=False, parent_name="LLMError")
+                                          is_user_defined=False, parent_type=TypeRef.of("LLMError"))
 LLM_CALL_ERROR_SPEC = TypeDef(name="LLMCallError", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
-                               parent_name="LLMError")
+                               parent_type=TypeRef.of("LLMError"))
 
 # fn — callable type inference marker (declaration-time keyword, like auto but for callables)
 # 不是一个独立的运行期类型：fn x = myFunc 实际上将 x 的 spec 推导为 myFunc 的具体 callable spec。
-FN_SPEC         = TypeDef(name="fn", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type_name="auto")
+FN_SPEC         = TypeDef(name="fn", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type=TypeRef.of("auto"))
 
 # LLM 调用结果类型规格 — IbLLMCallResult 的公理化描述符
 LLM_CALL_RESULT_SPEC = TypeDef(name="llm_call_result", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False)
@@ -71,34 +72,14 @@ DICT_SPEC         = TypeDef(name="dict",   kind=TypeKind.DICT.value,   is_nullab
 MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, is_nullable=False, is_user_defined=False)
 
 ENUM_SPEC = TypeDef(name="Enum", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
-                    parent_name="Object")
+                    parent_type=TypeRef.of("Object"))
 ENUM_SPEC._axiom_name = "enum"
 
 # Intent 意图对象类型规格 — IbIntent 的公理化描述符
 INTENT_SPEC = TypeDef(name="Intent", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
-                      parent_name="Object")
+                      parent_type=TypeRef.of("Object"))
 
 # intent_context 意图上下文类型规格 — IbIntentContext 的公理化描述符（is_class=True）
 INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
-                               parent_name="Object")
+                               parent_type=TypeRef.of("Object"))
 
-
-# ------------------------------------------------------------------ #
-# Backward-compatible class aliases                                    #
-# ------------------------------------------------------------------ #
-# All former concrete subclasses now resolve to TypeDef.
-# Existing code that imports these names continues to work;
-# isinstance checks succeed for any TypeDef instance.
-
-FuncSpec        = TypeDef
-ClassSpec       = TypeDef
-ListSpec        = TypeDef
-TupleSpec       = TypeDef
-DictSpec        = TypeDef
-OptionalSpec    = TypeDef
-BoundMethodSpec = TypeDef
-ModuleSpec      = TypeDef
-DeferredSpec    = TypeDef
-BehaviorSpec    = TypeDef
-CallableSigSpec = TypeDef
-LazySpec        = TypeDef

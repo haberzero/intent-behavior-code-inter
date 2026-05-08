@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.kernel.spec import ModuleSpec, FuncSpec
+    from core.kernel.spec import TypeDef
     from core.kernel.spec.registry import SpecRegistry
     from core.kernel.axioms.registry import AxiomRegistry
 
@@ -40,11 +40,11 @@ class HostInterface:
             self.metadata = create_default_registry()
 
         self.runtime = HostModuleRegistry()
-        self._module_metadata_map: Dict[str, 'ModuleSpec'] = {}
+        self._module_metadata_map: Dict[str, 'TypeDef'] = {}
         self._discovery_map: Dict[str, str] = {}  # Mapping: discovery_name -> module_name
         self._reverse_discovery_map: Dict[str, str] = {}  # Mapping: module_name -> discovery_name
 
-    def register_module(self, name: str, implementation: Any, metadata: Optional['ModuleSpec'] = None, discovery_name: Optional[str] = None):
+    def register_module(self, name: str, implementation: Any, metadata: Optional['TypeDef'] = None, discovery_name: Optional[str] = None):
         """
         同时注册元数据和实现。
 
@@ -59,8 +59,8 @@ class HostInterface:
             self._module_metadata_map[name] = metadata
             self.metadata.register(metadata)
         else:
-            from core.kernel.spec import ModuleSpec
-            self.metadata.register(ModuleSpec(name=name))
+            from core.kernel.spec import TypeDef
+            self.metadata.register(TypeDef(name=name))
 
     def get_module_by_discovery_name(self, discovery_name: str) -> Optional[str]:
         """根据物理发现名称查找已注册的模块名称"""
@@ -70,7 +70,7 @@ class HostInterface:
         """根据逻辑模块名查找物理发现名称"""
         return self._reverse_discovery_map.get(module_name)
 
-    def register_global_function(self, name: str, implementation: Any, metadata: 'FuncSpec'):
+    def register_global_function(self, name: str, implementation: Any, metadata: 'TypeDef'):
         self.runtime.register(name, implementation)
         self.metadata.register(metadata)
 

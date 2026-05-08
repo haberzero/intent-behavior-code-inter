@@ -27,52 +27,26 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from .base import IbSpec, TypeKind
+from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
+from .type_ref import TypeRef
 from .specs import (
-    FuncSpec, ClassSpec, ListSpec, TupleSpec, DictSpec, DeferredSpec, BehaviorSpec, OptionalSpec, BoundMethodSpec, ModuleSpec, LazySpec,
     INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC, ANY_SPEC, AUTO_SPEC, FN_SPEC,
     NONE_SPEC, SLICE_SPEC, CALLABLE_SPEC, BEHAVIOR_SPEC, DEFERRED_SPEC, OPTIONAL_SPEC, EXCEPTION_SPEC,
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
     LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
 )
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from core.kernel.axioms.registry import AxiomRegistry
-    from core.kernel.axioms.protocols import (
-        CallCapability, IterCapability, SubscriptCapability,
-        OperatorCapability, ConverterCapability,
-        FromPromptCapability, IlmoutputHintCapability,
-        ParserCapability,
-    )
-    from .type_ref import TypeRef
+    from core.kernel.axioms.protocols import TypeAxiom
 
 
 # ------------------------------------------------------------------ #
 # SpecFactory                                                          #
 # ------------------------------------------------------------------ #
-
-class _FuncSpecCallCapability:
-    """
-    Sentinel ``CallCapability`` for ``FuncSpec`` and ``BoundMethodSpec`` instances.
-
-    These specs ARE inherently callable (they carry their own parameter and return
-    type information).  ``SpecRegistry.resolve_return()`` handles the actual
-    return-type inference; this object satisfies the boolean "is callable?" check
-    and provides stubs for other capability methods used by the semantic analyser.
-    """
-    def resolve_return_type_name(self, arg_type_names: list) -> None:
-        return None  # Handled by SpecRegistry.resolve_return(FuncSpec, ...)
-
-    def get_writable_trait(self):
-        return None
-
-    def get_parser_capability(self):
-        return None
-
-
-_FUNC_SPEC_CALL_CAP = _FuncSpecCallCapability()
 
 
 class SpecFactory:
@@ -96,17 +70,18 @@ class SpecFactory:
         is_user_defined: bool = False,
         is_llm: bool = False,
     ) -> "TypeDef":
-        from .base import TypeDef
+        names = list(param_type_names or [])
+        mods = list(param_type_modules or [])
+        while len(mods) < len(names):
+            mods.append(None)
         return TypeDef(
             name=name,
             kind=TypeKind.FUNCTION.value,
             is_nullable=True,
             is_user_defined=is_user_defined,
-            param_type_names=list(param_type_names or []),
-            param_type_modules=list(param_type_modules or []),
-            return_type_name=return_type_name,
-            return_type_module=return_type_module,
             is_llm=is_llm,
+            return_type=TypeRef.of(return_type_name, return_type_module),
+            param_types=[TypeRef.of(n, m) for n, m in zip(names, mods)],
         )
 
     def create_class(
@@ -117,15 +92,14 @@ class SpecFactory:
         parent_module: Optional[str] = None,
         is_user_defined: bool = True,
     ) -> "TypeDef":
-        from .base import TypeDef
+        parent_type = TypeRef.of(parent_name, parent_module) if parent_name else None
         return TypeDef(
             name=name,
             kind=TypeKind.CLASS.value,
             module_path=module,
             is_nullable=True,
             is_user_defined=is_user_defined,
-            parent_name=parent_name,
-            parent_module=parent_module,
+            parent_type=parent_type,
         )
 
     def create_list(
@@ -134,27 +108,24 @@ class SpecFactory:
         element_type_module: Optional[str] = None,
         allowed_element_type_names: Optional[list] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
         if allowed_element_type_names:
             sorted_names = sorted(allowed_element_type_names)
-            name = f"list[{','.join(sorted_names)}]"
+            list_name = f"list[{','.join(sorted_names)}]"
             return TypeDef(
-                name=name,
+                name=list_name,
                 kind=TypeKind.LIST.value,
                 is_nullable=True,
                 is_user_defined=False,
-                element_type_name="any",
-                element_type_module=None,
-                allowed_element_type_names=list(allowed_element_type_names),
+                element_type=TypeRef.of("any"),
+                allowed_element_types=[TypeRef.of(n) for n in allowed_element_type_names],
             )
-        name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
+        list_name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
         return TypeDef(
-            name=name,
+            name=list_name,
             kind=TypeKind.LIST.value,
             is_nullable=True,
             is_user_defined=False,
-            element_type_name=element_type_name,
-            element_type_module=element_type_module,
+            element_type=TypeRef.of(element_type_name, element_type_module),
         )
 
     def create_dict(
@@ -164,17 +135,13 @@ class SpecFactory:
         key_type_module: Optional[str] = None,
         value_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
-        name = f"dict[{key_type_name},{value_type_name}]"
         return TypeDef(
-            name=name,
+            name=f"dict[{key_type_name},{value_type_name}]",
             kind=TypeKind.DICT.value,
             is_nullable=True,
             is_user_defined=False,
-            key_type_name=key_type_name,
-            key_type_module=key_type_module,
-            value_type_name=value_type_name,
-            value_type_module=value_type_module,
+            key_type=TypeRef.of(key_type_name, key_type_module),
+            value_type=TypeRef.of(value_type_name, value_type_module),
         )
 
     def create_tuple(
@@ -182,15 +149,13 @@ class SpecFactory:
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
-        name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
+        tuple_name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
         return TypeDef(
-            name=name,
+            name=tuple_name,
             kind=TypeKind.TUPLE.value,
             is_nullable=True,
             is_user_defined=False,
-            element_type_name=element_type_name,
-            element_type_module=element_type_module,
+            element_type=TypeRef.of(element_type_name, element_type_module),
         )
 
     def create_bound_method(
@@ -199,19 +164,16 @@ class SpecFactory:
         func_spec_name: str,
         receiver_type_module: Optional[str] = None,
     ) -> "TypeDef":
-        from .base import TypeDef
         return TypeDef(
             name="bound_method",
             kind=TypeKind.BOUND_METHOD.value,
             is_nullable=True,
             is_user_defined=False,
-            receiver_type_name=receiver_type_name,
-            receiver_type_module=receiver_type_module,
             func_spec_name=func_spec_name,
+            receiver_type=TypeRef.of(receiver_type_name, receiver_type_module),
         )
 
     def create_module(self, name: str, module: Optional[str] = None) -> "TypeDef":
-        from .base import TypeDef
         return TypeDef(
             name=name,
             kind=TypeKind.MODULE.value,
@@ -232,15 +194,13 @@ class SpecFactory:
         (``IbLambdaExpr.capture_mode``); it is intentionally NOT stored on the
         type spec.
         """
-        from .base import TypeDef
-        name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
+        deferred_name = f"deferred[{value_type_name}]" if value_type_name != "auto" else "deferred"
         spec = TypeDef(
-            name=name,
+            name=deferred_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
-            value_type_name=value_type_name,
-            value_type_module=value_type_module,
+            value_type=TypeRef.of(value_type_name, value_type_module),
         )
         # Route axiom dispatch to the "deferred" axiom even for parameterised
         # specs like "deferred[int]".
@@ -253,15 +213,12 @@ class SpecFactory:
         wrapped_type_module: Optional[str] = None,
     ) -> "TypeDef":
         """Create an Optional[T] spec."""
-        from .base import TypeDef
-        name = f"Optional[{wrapped_type_name}]"
         return TypeDef(
-            name=name,
+            name=f"Optional[{wrapped_type_name}]",
             kind=TypeKind.OPTIONAL.value,
             is_nullable=True,
             is_user_defined=False,
-            wrapped_type_name=wrapped_type_name,
-            wrapped_type_module=wrapped_type_module,
+            wrapped_type=TypeRef.of(wrapped_type_name, wrapped_type_module),
         )
 
     def create_behavior(
@@ -284,15 +241,13 @@ class SpecFactory:
             # fn f = lambda -> int: @~...~  →  create_behavior(value_type_name="int")
             factory.create_behavior(value_type_name="int")
         """
-        from .base import TypeDef
-        name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
+        beh_name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
         spec = TypeDef(
-            name=name,
+            name=beh_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
             is_user_defined=False,
-            value_type_name=value_type_name,
-            value_type_module=value_type_module,
+            value_type=TypeRef.of(value_type_name, value_type_module),
         )
         # Route axiom dispatch to the "behavior" axiom even for parameterised
         # specs like "behavior[int]".
@@ -398,76 +353,85 @@ class SpecRegistry:
         return self._axiom_registry
 
     # ---------------------------------------------------------- #
-    # Capability access (replaces spec.get_xxx_trait())          #
+    # Capability access (unified post-M5)                        #
     # ---------------------------------------------------------- #
+    #
+    # All capability accessors return the axiom itself when the axiom
+    # declares the corresponding ``has_*_cap`` flag, else ``None``.
+    # This preserves the truthy-check idiom used throughout the compiler
+    # and runtime ( ``if cap: cap.method()`` ) while collapsing the
+    # legacy per-capability Protocol classes into a single TypeAxiom
+    # interface.
+    #
+    # For ``get_call_cap``, structural callables (FUNCTION / BOUND_METHOD /
+    # CALLABLE_SIG / CLASS) carry their own callability and return ``True``
+    # as a non-None marker; ``resolve_return()`` handles the actual return
+    # type inference for these structural specs.
 
-    def get_axiom(self, spec: Optional[IbSpec]) -> Any:
+    def get_axiom(self, spec: Optional[IbSpec]) -> Optional["TypeAxiom"]:
         """Return the axiom for this spec, or None."""
         if spec is None:
             return None
         return self._axiom_registry.get_axiom(spec.get_base_name())
 
-    def get_call_cap(self, spec: Optional[IbSpec]) -> Optional["CallCapability"]:
+    def get_call_cap(self, spec: Optional[IbSpec]) -> Optional["TypeAxiom"]:
         if spec is None:
             return None
-        # FuncSpec and BoundMethodSpec are inherently callable — resolve_return handles them.
-        if spec.kind in (TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value):
-            return _FUNC_SPEC_CALL_CAP
-        if spec.kind == TypeKind.FUNCTION.value:
-            return _FUNC_SPEC_CALL_CAP
-        # ClassSpec is callable (constructor)
-        if spec.kind == TypeKind.CLASS.value:
-            return _FUNC_SPEC_CALL_CAP
+        # Structural callables carry their signature directly on the spec —
+        # ``resolve_return()`` handles return-type inference for them.
+        # We return the axiom (if any) so callers can still query other
+        # capability methods; if no axiom exists we fall back to a truthy
+        # marker (the spec itself) to satisfy ``if call_trait:`` checks.
+        if spec.kind in (
+            TypeKind.FUNCTION.value,
+            TypeKind.BOUND_METHOD.value,
+            TypeKind.CALLABLE_SIG.value,
+            TypeKind.CLASS.value,
+        ):
+            axiom = self.get_axiom(spec)
+            return axiom if (axiom and axiom.has_call_cap) else spec
         axiom = self.get_axiom(spec)
-        return axiom.get_call_capability() if axiom else None
+        return axiom if (axiom and axiom.has_call_cap) else None
 
-    def get_iter_cap(self, spec: IbSpec) -> Optional["IterCapability"]:
+    def get_iter_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_iter_capability() if axiom else None
+        return axiom if (axiom and axiom.has_iter_cap) else None
 
-    def get_subscript_cap(self, spec: IbSpec) -> Optional["SubscriptCapability"]:
+    def get_subscript_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_subscript_capability() if axiom else None
+        return axiom if (axiom and axiom.has_subscript_cap) else None
 
-    def get_operator_cap(self, spec: IbSpec) -> Optional["OperatorCapability"]:
+    def get_operator_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_operator_capability() if axiom else None
+        return axiom if (axiom and axiom.has_operator_cap) else None
 
-    def get_converter_cap(self, spec: IbSpec) -> Optional["ConverterCapability"]:
-        """Return the ConverterCapability for ``spec``, or None.
+    def get_converter_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
+        """Return the converter capability for ``spec``, or None.
 
-        This bridge method exists to support **compile-time explicit-cast validation**:
-        when the semantic analyzer visits an ``IbCastExpr`` node (e.g. ``(int)x``),
-        it should call ``get_converter_cap(target_spec)?.can_convert_from(src_name)``
-        to verify the cast is legal at compile time and report SEM_XXX on invalid casts.
+        ``can_convert_from(src)`` answers "can *this* target type accept an
+        explicit cast FROM src?" — the target-side query for explicit casts.
+        This is intentionally distinct from ``is_compatible(target)`` which
+        is the source-side query for *implicit* assignment compatibility.
 
-        TODO (deferred): activate this check in
-        ``semantic_analyzer.py::_resolve_cast_expr()`` once that validation pass is
-        added.  Currently ``IbCastExpr`` validation is purely runtime
-        (``value.receive("cast_to", [target_class])``), so this method is defined
-        but not yet called.
-
-        Design note: ``can_convert_from(src)`` answers "can *this* target type accept
-        an explicit cast FROM src?".  This is intentionally distinct from
-        ``is_compatible(target)`` which answers "can *this* source type be
-        **implicitly assigned** to target?".  Both directions are needed:
-        - ``is_compatible``    → implicit assignment / subtype check (called by is_assignable)
-        - ``can_convert_from`` → explicit cast legality (to be called by cast checker)
+        TODO (deferred): activate this in
+        ``semantic_analyzer.py::_resolve_cast_expr()`` once compile-time
+        cast validation is added.  Currently ``IbCastExpr`` validation is
+        purely runtime via ``value.receive("cast_to", [target_class])``.
         """
         axiom = self.get_axiom(spec)
-        return axiom.get_converter_capability() if axiom else None
+        return axiom if (axiom and axiom.has_converter_cap) else None
 
-    def get_parser_cap(self, spec: IbSpec) -> Optional["ParserCapability"]:
+    def get_parser_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_parser_capability() if axiom else None
+        return axiom if (axiom and axiom.has_parser_cap) else None
 
-    def get_from_prompt_cap(self, spec: IbSpec) -> Optional["FromPromptCapability"]:
+    def get_from_prompt_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_from_prompt_capability() if axiom else None
+        return axiom if (axiom and axiom.has_from_prompt_cap) else None
 
-    def get_llm_output_hint_cap(self, spec: IbSpec) -> Optional["IlmoutputHintCapability"]:
+    def get_llm_output_hint_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         axiom = self.get_axiom(spec)
-        return axiom.get_llmoutput_hint_capability() if axiom else None
+        return axiom if (axiom and axiom.has_output_hint_cap) else None
 
     # ---------------------------------------------------------- #
     # Derived capability helpers                                 #
@@ -565,11 +529,11 @@ class SpecRegistry:
         """
         Infer the return type when ``spec`` is called with ``arg_specs``.
 
-        For FuncSpec (user-defined / axiom-bootstrapped functions) the
+        For TypeDef (user-defined / axiom-bootstrapped functions) the
         return type is explicit.  For dynamic callables the axiom is
         consulted.
 
-        DeferredSpec / BehaviorSpec with a concrete ``value_type_name``
+        TypeDef / TypeDef with a concrete ``value_type_name``
         (i.e. not ``"auto"`` / ``"any"``) return the declared value type
         directly, enabling compile-time type inference at call sites:
 
@@ -580,7 +544,7 @@ class SpecRegistry:
             ret_ref = getattr(spec, "return_type", None)
             if ret_ref is not None and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")
-        # ClassSpec called as constructor returns an instance of itself
+        # TypeDef called as constructor returns an instance of itself
         if spec.kind == TypeKind.CLASS.value:
             return spec
         # Typed deferred / behavior: carry the expected value type explicitly.
@@ -589,13 +553,11 @@ class SpecRegistry:
             if v_ref is not None and v_ref.head not in ("auto", "any", "", None):
                 return self.resolve_typeref(v_ref) or self.resolve("auto")
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_call_capability()
-            if cap:
-                arg_names = [a.get_base_name() for a in arg_specs]
-                ret_name = cap.resolve_return_type_name(arg_names)
-                if ret_name:
-                    return self.resolve(ret_name) or self.resolve("any")
+        if axiom and axiom.has_call_cap:
+            arg_names = [a.get_base_name() for a in arg_specs]
+            ret_name = axiom.resolve_return_type_name(arg_names)
+            if ret_name:
+                return self.resolve(ret_name) or self.resolve("any")
         return None
 
     def resolve_op(
@@ -606,13 +568,11 @@ class SpecRegistry:
     ) -> Optional[IbSpec]:
         """Infer the result type for a binary operator."""
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_operator_capability()
-            if cap:
-                other_name = other.get_base_name() if other else None
-                ret_name = cap.resolve_operation_type_name(op, other_name)
-                if ret_name:
-                    return self.resolve(ret_name) or self.resolve("any")
+        if axiom and axiom.has_operator_cap:
+            other_name = other.get_base_name() if other else None
+            ret_name = axiom.resolve_operation_type_name(op, other_name)
+            if ret_name:
+                return self.resolve(ret_name) or self.resolve("any")
         # None 比较：任何类型均可与 None 用 == 或 != 比较，返回 bool
         if op in ("==", "!=") and (spec.name == "None" or (other and other.name == "None")):
             return self.resolve("bool")
@@ -632,12 +592,10 @@ class SpecRegistry:
                 return self.resolve("any")
             return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_iter_capability()
-            if cap:
-                elem_name = cap.get_element_type_name()
-                if elem_name:
-                    return self.resolve(elem_name) or self.resolve("any")
+        if axiom and axiom.has_iter_cap:
+            elem_name = axiom.get_element_type_name()
+            if elem_name:
+                return self.resolve(elem_name) or self.resolve("any")
         return None
 
     def resolve_subscript(
@@ -655,12 +613,10 @@ class SpecRegistry:
         if spec.kind == TypeKind.DICT.value:
             return self.resolve(spec.value_type.head, spec.value_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
-        if axiom:
-            cap = axiom.get_subscript_capability()
-            if cap:
-                item_name = cap.resolve_item_type_name(key_spec.get_base_name())
-                if item_name:
-                    return self.resolve(item_name) or self.resolve("any")
+        if axiom and axiom.has_subscript_cap:
+            item_name = axiom.resolve_item_type_name(key_spec.get_base_name())
+            if item_name:
+                return self.resolve(item_name) or self.resolve("any")
         return None
 
     def resolve_member(self, spec: IbSpec, attr_name: str) -> Optional[IbSpec]:
@@ -668,7 +624,7 @@ class SpecRegistry:
         Resolve the type of an attribute / method on ``spec``.
 
         Searches own members first, then the parent class chain.
-        For ``LazySpec`` placeholders the real spec is looked up first so
+        For ``TypeDef`` placeholders the real spec is looked up first so
         that cross-file imports resolve correctly during semantic analysis.
         """
         # Transparently resolve lazy placeholders created by the scheduler.
@@ -686,10 +642,10 @@ class SpecRegistry:
                 # Override is applied regardless of the axiom's declared return type —
                 # specialization is based on the container's runtime type parameter.
                 #
-                # ListSpec[T]:
+                # TypeDef[T]:
                 #   pop()         → T  (was "any")
                 #   __getitem__() → T  (was "any", G3)
-                # DictSpec[K,V]:
+                # TypeDef[K,V]:
                 #   pop(key)  → V  (was "any")
                 #   get(key)  → V  (was "any", G3)
                 #   values()  → list[V]  (was bare "list", G3)
@@ -741,12 +697,8 @@ class SpecRegistry:
                 # append(item: any) → append(item: T)
                 # insert(idx: int, item: any) → insert(idx: int, item: T)
                 # __setitem__(idx: int, value: any) → __setitem__(idx: int, value: T)
-                effective_params = list(member.param_type_names)
-                # Ensure parallel module list has the same length (may be shorter than names).
-                raw_modules: List[Optional[str]] = list(member.param_type_modules)
-                while len(raw_modules) < len(effective_params):
-                    raw_modules.append(None)
-                effective_param_modules = raw_modules
+                effective_params = [t.head for t in member.param_types]
+                effective_param_modules: List[Optional[str]] = [t.module for t in member.param_types]
                 if (
                     spec.kind == TypeKind.LIST.value
                     and attr_name in ("append", "insert", "__setitem__")
@@ -774,11 +726,9 @@ class SpecRegistry:
                     name=attr_name,
                     kind=TypeKind.FUNCTION.value,
                     is_user_defined=spec.is_user_defined,
-                    param_type_names=effective_params,
-                    param_type_modules=effective_param_modules,
-                    return_type_name=effective_return,
-                    return_type_module=effective_return_module,
                     is_llm=member.is_llm(),
+                    return_type=TypeRef.of(effective_return, effective_return_module),
+                    param_types=[TypeRef.of(n, m) for n, m in zip(effective_params, effective_param_modules)],
                 )
             # Enum variant access: return the enum class type itself
             if (spec.kind == TypeKind.CLASS.value and spec.parent_type is not None
@@ -817,7 +767,7 @@ class SpecRegistry:
             if self.is_dynamic(target):
                 return True
             # A dynamic callable (fn / auto) can be assigned to any callable slot,
-            # including typed DeferredSpec/BehaviorSpec (e.g. `fn f = make_adder()`).
+            # including typed TypeDef/TypeDef (e.g. `fn f = make_adder()`).
             if self.is_callable(target):
                 return True
             return False
@@ -887,10 +837,10 @@ class SpecRegistry:
 
         Special case: ``fn[TYPE]`` — internal subscript for expression-side return-type inference.
         ``fn f = lambda -> int: EXPR`` causes the semantic analyser to build a
-        ``DeferredSpec(value_type_name="int")`` via this path.  This enables
+        ``TypeDef(value_type_name="int")`` via this path.  This enables
         call-site inference: ``int r = f()`` compiles without SEM_003.
         """
-        # Special case: fn[RETURN_TYPE] → DeferredSpec(value_type_name=RETURN_TYPE)
+        # Special case: fn[RETURN_TYPE] → TypeDef(value_type_name=RETURN_TYPE)
         if spec.name == "fn" and arg_specs:
             value_type = arg_specs[0]
             return self.factory.create_deferred(

@@ -5,8 +5,9 @@ import inspect
 import importlib.util
 from typing import Dict, List, Optional, Any
 from core.runtime.host.host_interface import HostInterface
-from core.kernel.spec import ModuleSpec, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
+from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
 from core.base.enums import RegistrationState
+from core.kernel.spec.type_ref import TypeRef
 
 
 class ModuleDiscoveryService:
@@ -77,15 +78,15 @@ class ModuleDiscoveryService:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(metadata_snapshot, f, indent=2, ensure_ascii=False)
 
-    def _load_spec(self, module_name: str, spec_path: str) -> Optional[ModuleSpec]:
+    def _load_spec(self, module_name: str, spec_path: str) -> Optional[TypeDef]:
         """
         动态加载 _spec.py，完整实现协议。
 
         支持两种协议：
         1. 标准组件（字典格式）：__ibcext_vtable__() 返回 {"functions": {...}, "variables": {...}}
            - 纯字典，不导入内核代码
-           - discovery 内部将字典转换为 ModuleSpec
-        2. 深度嵌入模块：__ibcext_vtable__() 直接返回 ModuleSpec 实例
+           - discovery 内部将字典转换为 TypeDef
+        2. 深度嵌入模块：__ibcext_vtable__() 直接返回 TypeDef 实例
 
         这确保 IBC-Inter 内核完全独立于 Python 反射机制。
         """
@@ -121,7 +122,7 @@ class ModuleDiscoveryService:
             try:
                 vtable = mod.__ibcext_vtable__()
 
-                # 协议2：深度嵌入模块直接返回 ModuleSpec
+                # 协议2：深度嵌入模块直接返回 TypeDef
                 if isinstance(vtable, IbSpec) and vtable.kind == TypeKind.MODULE.value:
                     vtable.name = raw_name
                     # 方法插件必须显式 import 才可用，不预注入为全局内置符号
@@ -142,9 +143,9 @@ class ModuleDiscoveryService:
 
         return None
 
-    def _build_spec_from_dict(self, raw_name: str, vtable: Dict[str, Any]) -> ModuleSpec:
+    def _build_spec_from_dict(self, raw_name: str, vtable: Dict[str, Any]) -> TypeDef:
         """
-        从字典格式元数据构建 ModuleSpec。
+        从字典格式元数据构建 TypeDef。
 
         支持两种函数描述格式：
         1. 显式字典：{"param_types": ["str", "int"], "return_type": "float"}
@@ -172,7 +173,7 @@ class ModuleDiscoveryService:
             module_path_val = None
             name_val = raw_name
 
-        spec = ModuleSpec(name=name_val, kind=TypeKind.MODULE.value, module_path=module_path_val)
+        spec = TypeDef(name=name_val, kind=TypeKind.MODULE.value, module_path=module_path_val)
 
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():
@@ -189,17 +190,13 @@ class ModuleDiscoveryService:
             member = MethodMemberSpec(
                 name=func_name,
                 kind="method",
-                type_name=return_type,
-                param_type_names=list(param_types),
-                param_type_modules=[None] * len(param_types),
-                return_type_name=return_type,
-            )
+                type_ref=TypeRef.of(return_type), return_type=TypeRef.of(return_type), param_types=[TypeRef.of(p) for p in param_types])
             spec.members[func_name] = member
 
         variables = vtable.get("variables", {})
         for var_name, var_type in variables.items():
             type_name = var_type if isinstance(var_type, str) else "any"
-            spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_name=type_name)
+            spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_ref=TypeRef.of(type_name))
 
         return spec
 

@@ -48,7 +48,7 @@ from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbDeferredField
-from core.kernel.spec import IbSpec as Type, ListSpec as ListType, DictSpec as DictType, ANY_SPEC as ANY_TYPE
+from core.kernel.spec import IbSpec as Type, TypeDef as ListType, ANY_SPEC as ANY_TYPE
 from core.runtime.objects.builtins import IbInteger, IbString, IbList, IbNone, IbBehavior
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 from core.kernel.registry import KernelRegistry
