@@ -35,7 +35,7 @@ AUTO_SPEC   = TypeDef(name="auto",   kind=TypeKind.PRIMITIVE.value, is_nullable=
 NONE_SPEC   = TypeDef(name="None",   kind=TypeKind.PRIMITIVE.value, is_nullable=True,  is_user_defined=False)
 SLICE_SPEC  = TypeDef(name="slice",  kind=TypeKind.PRIMITIVE.value, is_nullable=False, is_user_defined=False)
 
-CALLABLE_SPEC   = TypeDef(name="callable", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False)
+CALLABLE_SPEC   = TypeDef(name="callable", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type_name="auto")
 BEHAVIOR_SPEC   = TypeDef(name="behavior", kind=TypeKind.BEHAVIOR.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
 DEFERRED_SPEC   = TypeDef(name="deferred", kind=TypeKind.DEFERRED.value, is_nullable=True,  is_user_defined=False, value_type_name="auto")
 OPTIONAL_SPEC   = TypeDef(name="Optional", kind=TypeKind.OPTIONAL.value, is_nullable=True,  is_user_defined=False)
@@ -55,7 +55,7 @@ LLM_CALL_ERROR_SPEC = TypeDef(name="LLMCallError", kind=TypeKind.CLASS.value, is
 
 # fn — callable type inference marker (declaration-time keyword, like auto but for callables)
 # 不是一个独立的运行期类型：fn x = myFunc 实际上将 x 的 spec 推导为 myFunc 的具体 callable spec。
-FN_SPEC         = TypeDef(name="fn", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False)
+FN_SPEC         = TypeDef(name="fn", kind=TypeKind.FUNCTION.value, is_nullable=True,  is_user_defined=False, return_type_name="auto")
 
 # LLM 调用结果类型规格 — IbLLMCallResult 的公理化描述符
 LLM_CALL_RESULT_SPEC = TypeDef(name="llm_call_result", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False)
