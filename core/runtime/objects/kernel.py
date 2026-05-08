@@ -181,13 +181,13 @@ class IbValue(IbObject):
     - ``meta``: extra runtime metadata for specialized values
 
     Container-like values may intentionally alias ``payload`` with an existing
-    mutable compatibility attribute (for example ``IbDict.fields``) when that
-    attribute is already the canonical storage location in legacy call sites.
+    mutable attribute (for example ``IbDict.fields``) when that attribute is
+    the canonical storage location for that value class.
 
-    Existing concrete value classes (``IbInteger``, ``IbList``, ``IbBehavior``,
-    etc.) now act as compatibility shims over this storage model so older call
-    sites can keep using their established attribute names while the runtime
-    progressively converges on a single value representation.
+    Concrete value subclasses (``IbInteger``, ``IbString``, ``IbList``,
+    ``IbDict``, ``IbDeferred``, ``IbBehavior``) provide type-specific runtime
+    behaviour (interning, native conversion helpers, capture-mode tracking, …)
+    on top of this storage model.
     """
     __slots__ = ('type_ref', 'payload', 'meta')
 
@@ -509,7 +509,7 @@ class IbClass(IbObject):
             # 契约一致性校验：校验 __init__ 参数数量
             # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
             if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                expected_count = len(init_method.spec.param_type_names)
+                expected_count = len(init_method.spec.param_types)
                 if len(args) != expected_count:
                     raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
             

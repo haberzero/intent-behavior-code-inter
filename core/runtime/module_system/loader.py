@@ -50,9 +50,8 @@ class ModuleLoader(IModuleLoader):
 
         # 遍历元数据中声明的所有成员 (源自 _spec.py)
         for spec_name, spec_member in metadata.members.items():
-            # Determine if this member is a callable (new MethodMemberSpec or old Symbol/descriptor compat)
             is_callable_member = isinstance(spec_member, MethodMemberSpec)
-            param_count = len(spec_member.param_type_names) if is_callable_member else 0
+            param_count = len(spec_member.param_types) if is_callable_member else 0
 
 
             # 1. 处理函数/方法

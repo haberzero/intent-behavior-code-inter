@@ -433,8 +433,8 @@ class SemanticAnalyzer:
         return type.  Only fires when *both* sides carry known concrete types;
         dynamic (``any`` / ``auto``) values are always accepted silently.
         """
-        expected_params = sig.param_type_names or []
-        actual_params = actual.param_type_names or []
+        expected_params = [t.head for t in (sig.param_types or [])]
+        actual_params = [t.head for t in (actual.param_types or [])]
 
         # Param count check
         if len(actual_params) != len(expected_params):
@@ -1823,7 +1823,7 @@ class SemanticAnalyzer:
         # When the callee type carries an explicit signature constraint, validate
         # arg count and argument types at the call site.
         if func_type.kind == TypeKind.CALLABLE_SIG.value:
-            expected_names = func_type.param_type_names or []
+            expected_names = [t.head for t in (func_type.param_types or [])]
             if len(arg_types) != len(expected_names):
                 self.error(
                     f"Callable expected {len(expected_names)} argument(s), "
@@ -1851,8 +1851,8 @@ class SemanticAnalyzer:
         # G2: note-level warning when a specialized container write method receives a
         # type that does not match the element type.  This is a convenience hint —
         # it is non-blocking and does not prevent compilation.
-        from core.kernel.spec.specs import TypeDef as _FuncSpec
-        param_type_names = getattr(func_type, "param_type_names", [])
+        param_types = getattr(func_type, "param_types", []) or []
+        param_type_names = [t.head for t in param_types]
         if func_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value) and param_type_names:
             for i, (expected_name, actual_type) in enumerate(
                 zip(param_type_names, arg_types)

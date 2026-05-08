@@ -172,12 +172,9 @@ class TypeDef(IbSpec):
     Storage model
     -------------
     Type-reference fields are stored as :class:`TypeRef` (frozen, hashable,
-    structurally recursive).  Legacy flat ``*_name`` / ``*_module`` accessors
-    are exposed as read-only ``@property`` derivations from the underlying
-    TypeRef storage; they exist to keep call-sites compiling during the
-    migration to a fully TypeRef-based API.  Direct attribute writes
-    (``spec.return_type_name = "int"``) are no longer supported — write through
-    the TypeRef field instead (``spec.return_type = TypeRef.of("int")``).
+    structurally recursive).  All access goes through the TypeRef API
+    (``spec.return_type.head``, ``[t.head for t in spec.param_types]``, …);
+    there are no legacy flat-string accessors.
     """
 
     # -- Function-like signature (FUNCTION + BOUND_METHOD + CALLABLE_INSTANCE
@@ -212,22 +209,6 @@ class TypeDef(IbSpec):
         if self._axiom_name:
             return self._axiom_name
         return TypeDef._KIND_BASE_NAMES.get(self.kind, self.name)
-
-    # ------------------------------------------------------------------ #
-    # List-typed convenience views                                        #
-    # ------------------------------------------------------------------ #
-    # These properties return plain-string views over the TypeRef storage
-    # for ergonomic iteration / comparison.  The corresponding scalar
-    # ``*_name`` / ``*_module`` properties have been removed; use
-    # ``spec.return_type.head`` / ``spec.parent_type`` etc. directly.
-
-    @property
-    def param_type_names(self) -> List[str]:
-        return [t.head for t in self.param_types]
-
-    @property
-    def param_type_modules(self) -> List[Optional[str]]:
-        return [t.module for t in self.param_types]
 
 
 TypeDef._KIND_BASE_NAMES = {

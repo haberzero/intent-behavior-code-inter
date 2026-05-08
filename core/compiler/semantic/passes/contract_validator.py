@@ -77,8 +77,8 @@ class ContractValidator:
         if func_desc.kind not in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             return
         # Check all parameters and return value are not None (i.e. proper name strings)
-        for i, p in enumerate(func_desc.param_type_names):
-            if p is None:
+        for i, p in enumerate(func_desc.param_types):
+            if p.head is None:
                 self.issue_tracker.report_error(
                     f"Contract Violation: Global function '{func_desc.name}' has unhydrated parameter type at index {i}.",
                     file_path="<metadata>",
@@ -98,8 +98,8 @@ class ContractValidator:
         if not isinstance(member, MethodMemberSpec):
             return
 
-        sub_params = member.param_type_names
-        super_params = super_sig.param_type_names
+        sub_params = member.param_types
+        super_params = super_sig.param_types
 
         if len(sub_params) != len(super_params):
             self.issue_tracker.report_error(

@@ -82,7 +82,7 @@ class TestIbSpecBase:
         fn = TypeDef(
             name="add",
             return_type=TypeRef.of("int"), param_types=[TypeRef.of("int"), TypeRef.of("int")])
-        assert fn.param_type_names == ["int", "int"]
+        assert [t.head for t in fn.param_types] == ["int", "int"]
         assert fn.return_type.head == "int"
         assert fn.is_llm is False
 
@@ -142,11 +142,11 @@ class TestSpecFactory:
         fn = factory.create_func("greet")
         assert isinstance(fn, TypeDef)
         assert fn.return_type.head == "void"
-        assert fn.param_type_names == []
+        assert [t.head for t in fn.param_types] == []
 
     def test_create_func_full(self, factory: SpecFactory):
         fn = factory.create_func("add", ["int", "int"], return_type_name="int")
-        assert fn.param_type_names == ["int", "int"]
+        assert [t.head for t in fn.param_types] == ["int", "int"]
         assert fn.return_type.head == "int"
         assert fn.name == "add"
 

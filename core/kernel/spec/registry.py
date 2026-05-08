@@ -697,12 +697,8 @@ class SpecRegistry:
                 # append(item: any) → append(item: T)
                 # insert(idx: int, item: any) → insert(idx: int, item: T)
                 # __setitem__(idx: int, value: any) → __setitem__(idx: int, value: T)
-                effective_params = list(member.param_type_names)
-                # Ensure parallel module list has the same length (may be shorter than names).
-                raw_modules: List[Optional[str]] = list(member.param_type_modules)
-                while len(raw_modules) < len(effective_params):
-                    raw_modules.append(None)
-                effective_param_modules = raw_modules
+                effective_params = [t.head for t in member.param_types]
+                effective_param_modules: List[Optional[str]] = [t.module for t in member.param_types]
                 if (
                     spec.kind == TypeKind.LIST.value
                     and attr_name in ("append", "insert", "__setitem__")

@@ -85,8 +85,8 @@ class TestG2ListWriteMethodSpecialization:
 
         append_spec = reg.resolve_member(list_spec, "append")
         assert append_spec is not None
-        assert append_spec.param_type_names == ["int"], (
-            f"Expected ['int'], got {append_spec.param_type_names}"
+        assert [t.head for t in append_spec.param_types] == ["int"], (
+            f"Expected ['int'], got {[t.head for t in append_spec.param_types]}"
         )
 
     def test_insert_last_param_specialized(self):
@@ -95,8 +95,8 @@ class TestG2ListWriteMethodSpecialization:
         list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("str")])
         insert_spec = reg.resolve_member(list_spec, "insert")
         assert insert_spec is not None
-        assert insert_spec.param_type_names[-1] == "str", (
-            f"Expected last param 'str', got {insert_spec.param_type_names}"
+        assert [t.head for t in insert_spec.param_types][-1] == "str", (
+            f"Expected last param 'str', got {[t.head for t in insert_spec.param_types]}"
         )
 
     def test_setitem_last_param_specialized(self):
@@ -106,7 +106,7 @@ class TestG2ListWriteMethodSpecialization:
         list_spec = reg.resolve_specialization(reg.resolve("list"), [float_spec])
         setitem_spec = reg.resolve_member(list_spec, "__setitem__")
         assert setitem_spec is not None
-        assert setitem_spec.param_type_names[-1] == "float"
+        assert [t.head for t in setitem_spec.param_types][-1] == "float"
 
     def test_pop_return_type_still_specialized(self):
         """G2 does not regress G1-era pop return type specialization."""
@@ -122,7 +122,7 @@ class TestG2ListWriteMethodSpecialization:
         list_spec = reg.resolve("list")
         append_spec = reg.resolve_member(list_spec, "append")
         assert append_spec is not None
-        assert "any" in append_spec.param_type_names
+        assert "any" in [t.head for t in append_spec.param_types]
 
     def test_correct_type_append_no_warning(self):
         """list[int].append(42) compiles cleanly without warnings."""

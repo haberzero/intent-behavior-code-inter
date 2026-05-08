@@ -65,14 +65,3 @@ class MethodMemberSpec(MemberSpec):
     kind: str = "method"
     param_types: List[TypeRef] = field(default_factory=list)
     return_type: TypeRef = field(default_factory=lambda: _VOID_REF)
-
-    # Convenience views over TypeRef storage retained because they are
-    # genuinely useful (``len(member.param_type_names)`` reads cleaner than
-    # ``len(member.param_types)`` though equivalent; both are fine).
-    @property
-    def param_type_names(self) -> List[str]:
-        return [t.head for t in self.param_types]
-
-    @property
-    def param_type_modules(self) -> List[Optional[str]]:
-        return [t.module for t in self.param_types]
