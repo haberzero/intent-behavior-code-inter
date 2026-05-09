@@ -1,60 +1,44 @@
-# IBC-Inter 近期优先任务
+# NEXT_STEPS — 当前最紧要项
 
-> 本文档只记录当前可直接开工且必须优先执行的任务进度。  
-> 低优先级事项统一转入 `docs/PENDING_TASKS.md`。
-
-> **最后更新**：2026-05-08（M5 Axiom 接口统一化已落地；类型系统主线全部里程碑完成；运行时值类型实现层彻底收口）
-
----
-
-## `deferred` 概念全量清理（✅ 已完成 2026-05-08）
-
-所有命名替换已落地。IBCI 核心代码中不再出现任何与"延迟求值/deferred"相关的命名、字符串或变量名。
-
-**2026-05-08 二次复核结论**：
-- `lambda` / `snapshot` 是 IBCI 的基础表达式包装机制，不是 behavior 专属；
-- parser 在表达式位置统一构建 `IbLambdaExpr`，body 可为任意表达式；
-- semantic pass 按 body 类型分流：普通表达式 → `fn_callable`，`IbBehaviorExpr` → `behavior`；
-- VM 运行时按同一 `IbLambdaExpr` 路径构造 `IbFnCallable` 或 `IbBehavior`；
-- e2e 覆盖了普通逻辑表达式的 lambda/snapshot（非 behavior 专属路径）。
-
-**命名映射**（`deferred` → `fn_callable`）：
-
-| 旧名称 | 新名称 |
-|--------|--------|
-| `deferred` 类型 | `fn_callable` |
-| `IbDeferred` | `IbFnCallable` |
-| `DeferredAxiom` | `FnCallableAxiom` |
-| `DEFERRED_SPEC` | `FN_CALLABLE_SPEC` |
-| `create_deferred()` | `create_fn_callable()` |
-| `IbDeferredField` | `IbClassField` |
+> 本文档**只**记录当前周期内最紧要、可立即开工的下一步。
+> 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
+>
+> **最后更新**：2026-05-09
 
 ---
 
+## 主线
 
+类型系统 M1–M5 与 VM CPS 主线全部完成，当前**无开放的 P0 主线任务**。
 
-- 架构原文（完整）：`docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
-- 专项任务清单：`docs/TYPE_SYSTEM_TASKS.md`
+下一阶段优先项（按优先级排序，任选其一开工）：
 
-#### 进度管控
+### NS-1 [P1]　LLM 调用路径合并入 CPS 调度循环
+- 范围：`IbBehavior.call()` / `IbLLMFunction.call()` / `vm_handle_IbExprStmt` 中的 behavior 同步分支。
+- 目标：所有 LLM 调用通过 VMExecutor yield 协议进入主循环，使 LLM 帧受 VM 调度管理（快照、并发、调试可观察性）。
+- 代码依据：
+  - `core/runtime/objects/builtins.py:971`（`IbBehavior.call`）
+  - `core/runtime/objects/kernel.py:985`（`IbLLMFunction.call`）
+  - `core/runtime/vm/handlers.py:372-374`（`IbExprStmt` 同步分支）
 
-- [x] M1：TypeRef 引入（兼容阶段）— 完成（2026-05-07，+103 tests，总 1159 passed）
-- [x] M2：Optional[T] 与空安全落地（完成 2026-05-07：OptionalSpec + assignability + artifact rehydration + Optional 方法语义收口；全量 1179 passed）
-- [x] M3：TypeDef 单一化（完成 2026-05-08：所有扁平 `*_name`/`*_module` 字段全面 TypeRef 化，无残留；测试基线 1182 passed）
-- [x] M3→M5 补充：fn/lambda/snapshot 统一为 callable-instance 路线 — 完成（2026-05-08：`TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 合并为 `TypeKind.CALLABLE_INSTANCE`，`deferred_mode` 概念彻底删除并重命名为 `capture_mode`，全栈一致）
-- [x] M4：运行时值模型单一化（IbValue）— 完成（2026-05-08：`IbValue(type_ref, payload, fields, meta)` 已成为运行时值公共承载层；现有 `IbInteger/IbList/IbBehavior/...` 退化为兼容包装层，装箱与运行时对象结构统一）
-- [x] M5：Axiom 接口统一化 — 完成（2026-05-08：单一 `TypeAxiom` 协议替代旧 9 个 Capability 子协议；具体公理通过 `has_*_cap` 类属性声明能力；`SpecRegistry.get_X_cap()` 统一返回公理或 spec；删除 `_FUNC_SPEC_CALL_CAP` 哨兵与 `WritableTrait` 不可达路径；测试基线 1184 passed）
+### NS-2 [P1]　intent 系统 OOP 化收口
+- 范围：`intent_context` 实例作为函数参数 / 函数参数类型 / 函数作用域默认上下文。
+- 目标：消除"语法路径 vs OOP 路径"双轨断裂。
+- 代码依据：
+  - 语法路径：`core/runtime/vm/handlers.py:1128-1172`
+  - OOP 路径：`core/runtime/objects/intent_context.py`
 
-#### 类型系统主线状态
+### NS-3 [P1]　lambda/snapshot 跨帧 `_execution_context` 边界
+- 范围：通过 `.call()` 方法走非 CPS 路径调用闭包时，`_execution_context.runtime_context` 是定义时刻而非调用时刻。
+- 目标：与"调用时刻意图栈"语义对齐；通常通过 NS-1 的合并方案一并消除。
+- 代码依据：`core/runtime/objects/builtins.py:724-751,928-934`
 
-类型系统专项五大里程碑（M1–M5）全部完成，运行时值实现层亦已收口，无未结主线项。
-
-- `SpecFactory` 方法（`create_func` / `create_class` 等）以 `*_name` / `*_module` 字符串为外部构造 API，内部统一将其转换为 TypeRef 后填入 TypeDef 字段；TypeDef 本身只持有 TypeRef 类型字段，不接受字符串 kwargs。
+> 三项均与 LLM/CPS 边界相关，建议合为一个工作流程（NS-1 → NS-3 → NS-2）。
 
 ---
 
-## 低优先级任务处理规则
+## 工作规则
 
-- 所有非类型系统任务统一视为低优先级。
-- 低优先级任务统一维护在 `docs/PENDING_TASKS.md`。
-- 本文件不再展开低优先级任务细节。
+- 同一时刻只主推一项 NS-x；其余项保留待选。
+- 每项完成后，把摘要追加到 `docs/COMPLETED.md`（极简时间线），并把对应条目从本文件移除。
+- 出现新的紧要项时，按"先评估优先级、再决定是否替换 NS-x"原则操作。

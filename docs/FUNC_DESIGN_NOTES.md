@@ -45,5 +45,5 @@ int result = my_fn(5)   # ✅ 调用 adder.__call__(5)
 
 ---
 
-*历史多版本设计讨论已合并到上述精简版。详细演化记录见 `docs/COMPLETED.md` §六（M1）/ §七（M2）/ §八（fn declaration-side 语法）。*
+*历史多版本设计讨论已合并到上述精简版。详细演化记录见 `docs/COMPLETED.md`（M1 / M2 / fn declaration-side 语法 / D1–D6）。*
 
