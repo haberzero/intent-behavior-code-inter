@@ -221,4 +221,117 @@ func get_reply() -> str:
 
 行为表达式的目标类型同时决定了注入给 LLM 的输出格式约束（通过 `__outputhint_prompt__`）以及 LLM 返回值的解析方式（通过 `__from_prompt__`）。将其绑定到明确的左值类型可以保证语义清晰、无歧义，而不是将执行语义与函数签名隐式耦合。
 
+---
+
+## 八、链式下标 `(expr)[index]` 语法不支持
+
+**限制说明**
+
+不支持对括号分组表达式直接进行下标访问：
+
+```ibci
+tuple nested = ((1, 2), (3, 4))
+print((str)(nested[0])[1])   # ❌ PAR_001：解析器将 (nested[0]) 识别为强制类型转换语法
+```
+
+**根因**：解析器将括号内的表达式优先识别为 `(TypeName)` 类型转换语法，导致后续 `[1]` 无法正确解析。
+
+**规避方案**：引入临时变量：
+
+```ibci
+tuple inner = (tuple)nested[0]
+print((str)inner[1])    # ✅ 正常工作
+```
+
+---
+
+## 九、类字段仅字面量常量默认值可靠
+
+**限制说明**
+
+类字段初始化时，仅 `int`/`str`/`bool`/`float` 字面量常量和空字面量（`[]`、`{}`）作为默认值可靠工作。函数调用、构造器调用等动态表达式作为字段默认值的行为不可靠。
+
+```ibci
+class Config:
+    int version = 1        # ✅ 正常
+    str name = "IBCI"      # ✅ 正常
+    list items = []        # ✅ 正常（已修复 Bug #1）
+    int size = compute()   # ⚠️ 不可靠，建议在 __init__ 中初始化
+```
+
+**规避方案**：通过 `__init__` 构造函数进行动态字段初始化：
+
+```ibci
+class Stack:
+    list items
+
+    func __init__(self):
+        self.items = []    # ✅ 每个实例独立创建
+```
+
+---
+
+## 十、子类 auto-init 不含父类字段
+
+**限制说明**
+
+当子类没有显式 `__init__`，编译器自动生成的 `__init__`**仅接受当前类自身声明的字段**，不包含父类字段。父类字段在实例化时保持为 `None`（未初始化）。
+
+```ibci
+class Animal:
+    str name
+
+class Dog(Animal):
+    str breed        # Dog 的 auto-init 只接受 breed，不接受 name
+
+Dog d = Dog("Husky")    # 只设置 breed；d.name = None（未初始化）
+print(d.name)           # 输出 None
+```
+
+**规避方案**：在子类中显式定义 `__init__`，手动初始化父类字段：
+
+```ibci
+class Dog(Animal):
+    str breed
+
+    func __init__(self, str dog_name, str dog_breed):
+        self.name = dog_name
+        self.breed = dog_breed
+```
+
+此行为与 Python 一致（子类不自动调用 `super().__init__`）。
+
+---
+
+## 十一、引用语义：复合对象共享引用
+
+**说明**
+
+IBCI 对所有复合对象（`list`、`dict`、用户类实例）使用**共享引用**语义（与 Python 一致）。
+
+### 11.1 赋值是引用复制，不是值复制
+
+```ibci
+list a = [1, 2, 3]
+list b = a          # b 与 a 指向同一个列表对象
+b.append(4)
+print((str)a.len()) # 输出 4，不是 3
+```
+
+**规避方案**：手动构造副本：
+
+```ibci
+list a = [1, 2, 3]
+list b = []
+for int x in a:
+    b.append(x)
+```
+
+### 11.2 `llmexcept` 快照隔离不自动还原容器内容
+
+`llmexcept` 的 `__snapshot__`/`__restore__` 协议快照并恢复变量绑定（变量名→对象的映射），但不自动还原容器的**内部元素**。若 LLM 调用体内对容器执行 `append`/`remove` 等就地修改，retry 后这些修改不会被还原。
+
+**规避方案**：不要在 `llmexcept` 保护块的 LLM 调用路径中就地修改容器；若需可回滚的容器状态，可实现 `__snapshot__`/`__restore__` 用户协议（见 §九）。
+
+
 
