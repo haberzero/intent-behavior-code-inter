@@ -6,7 +6,7 @@
 >
 > **最后更新**：2026-05-08（补充当前类型系统状态说明；保留历史分阶段细节以便追溯）
 >
-> **说明**：本文包含若干历史分阶段细节。若与当前代码状态冲突，请优先以 `docs/NEXT_STEPS.md`、`docs/TYPE_SYSTEM_TASKS.md` 以及对应源码实现为准。
+> **说明**：本文包含若干历史分阶段细节。若与当前代码状态冲突，请优先以 `docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/NEXT_STEPS.md` 以及对应源码实现为准。
 
 ---
 
@@ -497,7 +497,7 @@ class IbBehavior(IbObject, IIbBehavior):
 
 ## 七、公理类型层次（参考）
 
-> 此节归档自原 `AXIOM_OOP_ANALYSIS.md` §一。AXIOM_OOP_ANALYSIS.md 文件已删除，内容拆分到 `docs/COMPLETED.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/PENDING_TASKS_VM.md` 与本文件。
+> 此节归档自原 `AXIOM_OOP_ANALYSIS.md` §一。AXIOM_OOP_ANALYSIS.md 文件已删除，内容拆分到 `docs/COMPLETED.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/VM_AND_INTERPRETER_DESIGN.md` 与本文件。
 
 ### 7.1 完整公理类型层次（声明视角）
 

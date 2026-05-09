@@ -591,7 +591,7 @@ func call_any(fn f) -> auto:
 - 返回类型必须 assignable
 - 实参可以是普通函数引用、lambda 闭包、snapshot 延迟对象、可调用类实例
 
-> **历史背景**：D3（2026-04-29）落地。设计动机详见 `docs/FN_LAMBDA_SYNTAX_REDESIGN.md §D3`，落地记录见 `docs/COMPLETED.md §二十二`。
+> **历史背景**：D3（2026-04-29）落地。落地记录见 `docs/COMPLETED.md`；当前规范见 `docs/TYPE_SYSTEM_DESIGN.md §7`。
 
 ---
 

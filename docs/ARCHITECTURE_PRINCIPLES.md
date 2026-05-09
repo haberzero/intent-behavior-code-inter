@@ -562,7 +562,7 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
 
 **问题描述**：若用户定义与已导入插件同名的 class/variable，Pass 1 符号收集阶段会与 Scheduler 注入的模块符号冲突。
 
-**临时方案**：在符号表中区分 MODULE 符号和 CLASS 符号。**长期方案**：严格遵循显式引入原则，外部模块符号不预注入到编译时符号表（详见 PENDING_TASKS.md 章节九）。
+**临时方案**：在符号表中区分 MODULE 符号和 CLASS 符号。**长期方案**：严格遵循显式引入原则，外部模块符号不预注入到编译时符号表（详见 `docs/PENDING_TASKS.md`）。
 
 **涉及文件**：`core/compiler/scheduler.py`（`_inject_plugin_symbols` 中有若干 `[临时方案]` 注释）
 

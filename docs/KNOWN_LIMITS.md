@@ -1,7 +1,7 @@
 # IBC-Inter 已知限制（语言级）
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
-> 历史 Bug 修复记录已归档至 `docs/COMPLETED.md` §二十一。
+> 历史 Bug 修复记录已归档至 `docs/COMPLETED.md`。
 > **最后更新**：2026-05-08（类型系统 M1–M4 已完成；当前测试基线 1184 passed）
 
 ---
@@ -357,7 +357,7 @@ fn g = f            # g 也引用同一个函数
   int n = (int)x        # ✅ 再强制转换到目标类型
   ```
 
-详细泛型容器限制与改进方向见本文件 §十六 及 `docs/PENDING_TASKS.md §三`。
+详细泛型容器限制与改进方向见本文件 §十六。
 
 ---
 
@@ -405,11 +405,11 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ## 十六、泛型与容器类型限制
 
-当前泛型实现仍有部分限制（G1/G2/G3 改进后已解决多项）。改进方向见 `docs/PENDING_TASKS.md §三`。
+当前泛型实现仍有部分限制（G1/G2/G3 改进后已解决多项）。
 
 ### ~~16.1 下标访问的类型推断返回 `any`~~ ✅ 已解决（G1/G3）
 
-`list[int]` 下标访问（`[]` 运算符）现在通过 `registry.resolve_subscript()` 正确返回元素类型 `int`，而非 `any`。`list[T].__getitem__` 方法成员亦通过 G3 改进返回 `T`（详见 `docs/COMPLETED.md §二十三`）。
+`list[int]` 下标访问（`[]` 运算符）现在通过 `registry.resolve_subscript()` 正确返回元素类型 `int`，而非 `any`。`list[T].__getitem__` 方法成员亦通过 G3 改进返回 `T`（详见 `docs/COMPLETED.md`）。
 
 ### ~~16.2 泛型特化的 axiom 方法引导不完整~~ ✅ 已解决（G1/G2/G3）
 
