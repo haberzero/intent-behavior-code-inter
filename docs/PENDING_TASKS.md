@@ -26,22 +26,10 @@
 
 ## 二、公理化相关
 
-### 2.1 Intent 完整公理化 [✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- 新建 `core/kernel/axioms/intent.py`：`IntentAxiom`（`is_class()=True`，完整 vtable 声明）
-- `IbIntent` 添加 `@register_ib_type("Intent")` 装饰器及三个公共方法：`get_content()`、`get_tag()`、`get_mode()`
-- `register_core_axioms()` 注册 `IntentAxiom()`
-- `INTENT_SPEC = ClassSpec(name="Intent", ...)` 加入 `specs.py` 并注册到 `create_default_spec_registry()`，使 `_bootstrap_axiom_methods()` 在 `SpecRegistry` 初始化阶段即填充 `Intent` 成员表
-- `builtin_initializer.py` 显式导入 `IbIntent`，确保 `@register_ib_type("Intent")` 在公理自动化绑定循环之前执行
-- 517 个测试全部通过
-
----
-
-### 2.2 Intent Stack 不可变性约束 [PENDING]
+### 2.1 Intent Stack 不可变性约束 [PENDING]
 **任务**：实现 Intent Stack 不可变性约束。
 
-**搁置原因**：依赖 Intent 公理化完成；Intent Stack 语义尚有待澄清的设计要点。
+**搁置原因**：依赖 Intent 公理化完成（✅ 已完成）；Intent Stack 语义尚有待澄清的设计要点。
 
 ---
 
@@ -170,25 +158,7 @@ str result = process_with_custom_ctx(my_ctx)
 
 ---
 
-### 5.2 函数内部屏蔽全局意图栈的精细控制 [✅ COMPLETED — 2026-04-19]
-
-**已实现（2026-04-19）**：
-- `intent_context.clear_inherited()` — 清空当前作用域从调用者继承的持久意图栈（✅ 已实现）
-- `intent_context.use(ctx)` — 用指定 intent_context 实例替换当前作用域的意图上下文（✅ 已实现）
-- `intent_context.get_current()` — 获取当前作用域意图上下文的快照副本（✅ 已实现）
-
-**函数调用粒度的屏蔽**：
-- 每次函数调用 fork 调用者意图上下文（拷贝传递），函数内操作不泄漏（✅ 已实现）
-- 函数体内写 `intent_context.clear_inherited()` 清空继承的意图栈（✅ 已实现）
-- **`@!` 不修饰函数调用**（明确的设计决策：`@!` 只修饰 LLM 行为表达式 `@~...~`）
-
-**待实现（未来工作）**：
-- **编译期 `@` 约束在函数调用时的静态检查**：目前 fork 是运行时行为；未来可在语义分析阶段对 `@` 作用域提前标注
-- `@clear` 关键字语法糖（作为 `intent_context.clear_inherited()` 的简写，属于语法糖，非必需）
-
----
-
-### 5.3 intent_context 作为函数参数类型 [PENDING]
+### 5.2 intent_context 作为函数参数类型 [PENDING]
 
 **需求**：函数可以声明 `intent_context` 类型的参数，允许调用者传入自定义意图上下文对象，函数内直接操作该对象（push/pop/etc.），影响此次调用下的 LLM 行为。
 
@@ -304,27 +274,6 @@ func process():
 
 ---
 
-### 10.2 llmexcept body 内外部变量写入约束（SEM_052）[✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- `core/base/diagnostics/codes.py`：新增 `SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"`
-- `semantic_analyzer.py`：添加 `_llmexcept_outer_scope_names: Optional[frozenset]` 字段；
-  `visit_IbLLMExceptionalStmt` 进入 body 前通过 `_collect_llmexcept_body_declared_names()` 区分
-  body-local 新声明变量与外部作用域变量，并设置外部作用域快照；`visit_IbAssign` 在检测到对外部作用域变量的任何赋值时发出 SEM_052。
-- `tests/compiler/test_compiler_pipeline.py`：新增 `TestLLMExceptBodyReadOnly`（6 个测试）覆盖各场景。
-- 610 个测试全部通过。
-
----
-
-### 10.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- `stmt_handler.py`：`visit_IbLLMExceptionalStmt` 中读取 `result` 后立即清零共享字段，并将 `frame.last_result = result` 作为 per-snapshot 权威存储；去除了依赖 `frame.should_retry` 的条件性清零（改为无条件清零）；删除了 `finally` 块中"将 result 恢复回 `_last_llm_result`"的兼容性代码。
-- `ibci_idbg/core.py`：`last_result()` 和 `last_llm()` 均改为"优先从活跃帧读取，无帧时回退共享字段"的帧优先模式；`retry_stack()` 替换 `last_llm_response`（始终为 None）为 `last_result` 帧私有字段详情。
-- 610 个测试全部通过。
-
----
-
 ## 十一、代码健康（审计遗留）
 
 ### 11.1 意图标签解析迁移到 Lexer [P2 / PENDING]
@@ -334,10 +283,8 @@ func process():
 
 ---
 
-### 10.2 engine.py / service.py "vibe" 妥协标注 [P3 - 部分已修复]
-**问题**：多处被标注为"智能体快速 vibe 实现，未经严格审查"：
-- ~~`engine.py:136`：强制向 service_context 回写 orchestrator（双向引用注入）~~ **[已修复]**：改用 `ServiceContextImpl.set_orchestrator()` 标准注入方法（见 COMPLETED.md §4.16）
-- ~~`interpreter.py:229`：`kwargs.get('orchestrator', ...)` 却没有 `**kwargs` 参数~~ **[已修复]**（见 COMPLETED.md §4.16）
+### 11.2 engine.py / service.py "vibe" 妥协标注 [P3 / PENDING]
+**问题**：以下标注为"智能体快速 vibe 实现，未经严格审查"的遗留标记仍存在：
 - `service.py:173`：`host_run()` 返回值简化为布尔值，隐藏实际结果（等待多返回值语法完善后修复，见 §11.3）
 - `rt_scheduler.py:40-44`：`_resolve_builtin_path()` 使用 `ibci_modules.__file__` 动态发现路径（合理但可用常量替代，低优先级）
 - `scheduler.py:81`：`compile_to_artifact_dict()` 方法设计合理性存疑
@@ -355,38 +302,12 @@ func process():
 
 ## 十二、远期架构目标
 
-### 12.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
-**状态**：已完整落地（见 `docs/COMPLETED.md` § 4.12）。`ibci_ihost` 和 `ibci_idbg` 已改为通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`get_stack_inspector()`、`get_state_reader()`）访问服务。用户可见接口（`ihost.run_isolated()` 等）保持不变。517 个测试通过。
-
-### 12.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
-
-**状态说明**：已完整修复（PR-A）。
-
-根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
-
-**全部修复内容**：
-- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
-- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
-- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
-- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
-- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
-- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
-- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
-- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
-
----
-
-### 12.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
-**状态**：已完成（见 `docs/COMPLETED.md`，Step 5 完整路径：5a IExecutionFrame Protocol + 5b ContextVar 帧注册表）。`IbUserFunction.call()` 已通过 `get_current_frame()` 自主获取执行帧，不再依赖外部传入的 context 参数。
-
----
-
-### 12.3 host.run_isolated() 返回值改进 [VISION]
+### 12.1 host.run_isolated() 返回值改进 [VISION]
 **当前**：返回简化布尔值。**目标**：多返回值/元组解包语法完整实现后，改为 `tuple(exit_code: int, result: str|dict)`。
 
 ---
 
-### 12.4 ReceiveMode 枚举演进 [VISION]
+### 12.2 ReceiveMode 枚举演进 [VISION]
 **当前**：`deferred_mode: str` 侧表（`'lambda'`/`'snapshot'`/`None`）。**目标**：迁移至 `ReceiveMode(IMMEDIATE / LAMBDA / SNAPSHOT)` 枚举，替代字符串，支持更严格的类型约束。
 
 ---

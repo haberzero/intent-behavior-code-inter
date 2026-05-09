@@ -110,14 +110,14 @@ BEGIN TRANSACTION                     LLM 语句进入执行
 END TRANSACTION
 ```
 
-**快照内的变量访问规则**（语义规范，当前部分落地）：
+**快照内的变量访问规则**（语义规范，已全部落地）：
 
 | 操作 | 规范 | 当前状态 |
 |------|------|--------|
 | 读取外部变量 | 允许（读到快照时刻值） | ✅ 已实现 |
 | 写入 `retry_hint` | 允许（retry-scoped，不 commit 外部）| ✅ 已实现 |
-| 写入普通外部变量 | **禁止**，应产生 SEM_xxx 编译期错误 | ⚠️ 未加限制（`restore_snapshot` 提供运行时回滚但无编译期保障）|
-| 快照失败后传播 | 应抛出 `LLMPermanentFailureError` | ⚠️ 当前 `break` + 返回最后值 |
+| 写入普通外部变量 | **禁止**，产生 `SEM_052` 编译期错误 | ✅ 已实现（`_llmexcept_outer_scope_names` + `visit_IbAssign` 检查）|
+| 快照失败后传播 | 应抛出 `LLMPermanentFailureError` | ⏳ 当前 `break` + 返回最后值（PENDING）|
 
 **为什么快照模型使 llmexcept 与并发无关**：
 - 每个 LLM 语句（无论串行还是并行 dispatch）都进入独立快照，与其他语句的执行状态完全隔离
@@ -128,10 +128,9 @@ END TRANSACTION
 - `LLMExceptFrame.save_context()` → 保存 vars/intent_ctx/loop_ctx/retry_hint 的完整快照
 - `LLMExceptFrame.restore_snapshot()` → 每次 retry 前恢复快照，使 LLM 看到一致的输入状态
 - `intent_context.fork()` → 意图上下文值快照（Step 6d 落地）
-
-**尚未落地的快照完整性约束**（见 PENDING_TASKS.md §9.2、§9.3）：
-- 编译期 read-only 约束（SEM 错误）
-- `_last_llm_result` 从 `RuntimeContextImpl`（全局共享）迁移到 `LLMExceptFrame`（per-snapshot）
+- `SEM_052` 编译期 read-only 约束 → llmexcept body 内向外部变量赋值为编译错误（Step 8-pre §9.2 落地）
+- `_last_llm_result` per-snapshot 化 → `LLMExceptFrame.last_result` 为权威来源，读取后立即清零共享字段（Step 8-pre §9.3 落地）
+- 用户对象深克隆快照（方案A）+ 用户协议快照（方案B）均已落地（Step 8-pre §9.4/§9.5）
 
 ---
 

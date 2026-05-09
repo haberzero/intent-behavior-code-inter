@@ -141,10 +141,11 @@ Step 4b（完成）
     │                                 │
     │                                 └──→ Step 7（LlmCallResultAxiom + IbLLMCallResult 接入）[✅ 完成]
     │
-    └──→ Step 8（文档化，随时可做）
+    └──→ Step 8（文档化，随时可做）[✅ 完成]
+         Step 8-pre（快照隔离完整落地）[✅ 完成]
 ```
 
-**下一优先路径**：Step 8（架构边界文档化，随时可做）→ Step 9（CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）
+**下一优先路径**：Step 9（CPS 调度循环）→ Step 10（LLM 流水线）→ Step 11（多解释器并发）
 
 ---
 
