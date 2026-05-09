@@ -131,7 +131,7 @@ END TRANSACTION
 - `LLMExceptFrame.restore_snapshot()` → 每次 retry 前恢复快照，使 LLM 看到一致的输入状态
 - `intent_context.fork()` → 意图上下文值快照（Step 6d 落地）
 
-**尚未落地的快照完整性约束**（见 PENDING_TASKS.md §9.2、§9.3）：
+**尚未落地的快照完整性约束**（见 `docs/PENDING_TASKS.md`）：
 - 编译期 read-only 约束（SEM 错误）
 - `_last_llm_result` 从 `RuntimeContextImpl`（全局共享）迁移到 `LLMExceptFrame`（per-snapshot）
 

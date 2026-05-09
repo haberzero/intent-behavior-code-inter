@@ -161,7 +161,7 @@ core/runtime/objects/intent_context.py
 core/kernel/axioms/intent_context.py
 └── IntentContextAxiom                      # 公理层表示（is_class=True，可实例化）
     ├── 方法：fork, resolve, push, pop, merge, clear
-    └── INTENT_CONTEXT_SPEC = ClassSpec("intent_context")
+    └── INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)
 ```
 
 **`IntentNode` 链表结构**：持久意图栈通过不可变链表实现结构共享：
@@ -369,7 +369,7 @@ intent_context.use(ctx)            # 等价于 ctx.use(ctx)
 intent_context saved = intent_context.get_current()
 ```
 
-**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = ClassSpec(name="intent_context")`，所有方法在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
+**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)`，所有方法在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
 
 ---
 
@@ -555,7 +555,7 @@ func make_translator():
 
 ---
 
-### 9.7 与新 fn 语法的关系（⏳ 待语法完成后重新验证）
+### 9.7 与新 fn 语法的关系
 
 本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法（D1/D2，已落地于 2026-04-29，详见 `docs/COMPLETED.md`）。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/VM_AND_INTERPRETER_DESIGN.md §4`。
 
@@ -572,7 +572,7 @@ func make_translator():
 | `core/kernel/intent_logic.py` | 意图模式定义（`IntentMode`、`IntentRole`） |
 | `core/kernel/axioms/intent.py` | `IntentAxiom`（公理层，`is_class=True`） |
 | `core/kernel/axioms/intent_context.py` | `IntentContextAxiom`（公理层，`is_class=True`） |
-| `core/kernel/spec/specs.py` | `INTENT_CONTEXT_SPEC = ClassSpec("intent_context")` |
+| `core/kernel/spec/specs.py` | `INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)` |
 | `core/runtime/objects/intent.py` | `IbIntent` 运行时对象 |
 | `core/runtime/objects/intent_context.py` | `IbIntentContext` 运行时对象（Python 层，不可实例化为 IbObject） |
 | `core/runtime/objects/intent_stack.py` | `IbIntentStack`（遗留接口层，提供 `push/pop/clear` 等 IBCI 可调用方法） |
