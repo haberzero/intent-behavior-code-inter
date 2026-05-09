@@ -532,16 +532,9 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 > 以下问题已在代码中发现，将在后续版本中修复。详细技术背景见 ARCH_DETAILS.md。
 
-### A.1 MetadataRegistry 双轨问题
+### ~~A.1 MetadataRegistry 双轨问题~~ ✅ **已解决（2026-05-08）**
 
-**问题描述**：
-- `KernelRegistry.get_metadata_registry()` 在 builtin 初始化时创建（轨A）
-- `HostInterface.metadata` 在 discover_all 时创建（轨B）
-- 两轨使用同名 `MetadataRegistry` 类，但实例不同，相互独立
-
-**根因**：架构演进中的设计妥协，builtin 类型系统和插件系统分别发展后未及时统一。
-
-**修复方向**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
+主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例：`discover_all(registry)` 将引擎的 `SpecRegistry` 传入 `HostInterface`，`HostInterface.metadata` 与 `KernelRegistry._metadata_registry` 同源，不存在两轨分离问题。详见 `docs/ARCH_DETAILS.md §十`。
 
 ### A.2 HOST 插件游离问题
 
@@ -558,15 +551,11 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
                (ModuleDiscovery)   (插件实现)
 ```
 
-### A.3 符号去重：import 与用户定义同名冲突
+### ~~A.3 符号去重：import 与用户定义同名冲突~~ ✅ **已解决（2026-05-02）**
 
-**问题描述**：若用户定义与已导入插件同名的 class/variable，Pass 1 符号收集阶段会与 Scheduler 注入的模块符号冲突。
-
-**临时方案**：在符号表中区分 MODULE 符号和 CLASS 符号。**长期方案**：严格遵循显式引入原则，外部模块符号不预注入到编译时符号表（详见 `docs/PENDING_TASKS.md`）。
-
-**涉及文件**：`core/compiler/scheduler.py`（`_inject_plugin_symbols` 中有若干 `[临时方案]` 注释）
+`Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器阻止了插件模块的预注入——未 `import` 时访问插件符号会触发正常的 `SEM_001 Unknown variable` 报错。`scheduler.py` 中的所有 `[临时方案]` 注释已全部清除；新增 `SEM_009 SEM_IMPORT_CONFLICT` 诊断码，当 `import X` 与用户定义的同名符号冲突时，编译器发出 WARNING 而非静默跳过。详见 `docs/COMPLETED.md`。
 
 ---
 
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
-*最后更新：2026-04-17*
+*最后更新：2026-05-09*

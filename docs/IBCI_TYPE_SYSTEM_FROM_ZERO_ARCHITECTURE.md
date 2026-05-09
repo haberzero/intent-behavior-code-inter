@@ -1,7 +1,7 @@
 # IBCI 类型系统：从零开始的全新架构设计
 
-> **实现状态说明（2026-05-08）**  
-> 本文档是类型系统重构的架构原文。当前代码已完成 **M1–M4**：`TypeRef`、`TypeDef`、`Optional[T]`、`CALLABLE_INSTANCE` 路线，以及以 `IbValue` 为中心的运行时值承载层均已落地。  
+> **实现状态说明（2026-05-09）**  
+> 本文档是类型系统重构的架构原文。当前代码已完成 **M1–M5**（全部里程碑）：`TypeRef`、`TypeDef`、`Optional[T]`、`CALLABLE_INSTANCE` 路线，以及以 `IbValue` 为中心的运行时值承载层，Axiom 接口统一化均已落地。  
 > 类型系统主线 M1–M5 已全部完成（2026-05-08）。本文保留"设计原文 + 迁移目标"性质，记录当时的架构推演与设计动机。
 > 与当前代码对齐的正式设计文档见 `docs/TYPE_SYSTEM_DESIGN.md`；时间线归档见 `docs/COMPLETED.md`。
 

@@ -389,7 +389,7 @@ Exception
   └── LLMError
         ├── LLMParseError            # LLM 输出无法解析为目标类型
         ├── LLMRetryExhaustedError   # llmexcept 重试次数耗尽
-        └── LLMCallError             # LLM provider 层硬失败（用户层可手动 raise；当前版本 VM 不自动抛出）
+        └── LLMCallError             # LLM provider 层硬失败（网络/鉴权等；VM 自动抛出，跳过 llmexcept retry）
 ```
 
 `except` 按继承链匹配：`except Exception` 可捕获其下所有派生异常；`except LLMError` 可同时捕获三个具体 LLM 错误。
@@ -425,7 +425,7 @@ except Exception as e:
 | `LLMError` | `message: str`, `raw_response: str` | LLM 失败时返回的原始内容（如有） |
 | `LLMParseError` | `message: str`, `raw_response: str` | 内容字段同 `LLMError`；语义为"LLM 输出无法解析为目标类型" |
 | `LLMRetryExhaustedError` | `message: str`, `raw_response: str` | 内容字段同 `LLMError`；`message` 含 `retry` 关键字 |
-| `LLMCallError` | `message: str`, `raw_response: str`, `provider_error: str` | 比 `LLMError` 多 `provider_error`（HTTP 状态、网络错误等）；当前仅供用户手动 raise，VM 不自动抛出 |
+| `LLMCallError` | `message: str`, `raw_response: str`, `provider_error: str` | 比 `LLMError` 多 `provider_error`（HTTP 状态、网络错误等）；VM 在 provider 层失败时自动抛出，直接跳过 llmexcept retry；用户也可手动 `raise LLMCallError(...)` |
 
 #### 4.6.2 用户自定义异常
 
