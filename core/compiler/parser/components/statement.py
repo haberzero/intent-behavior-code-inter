@@ -273,21 +273,12 @@ class StatementComponent(BaseComponent):
             return ast.IbIntentInfo(mode=mode, content="", segments=[], tag=None, pop_top=True)
         
         while not self.stream.check(TokenType.COLON) and not self.stream.check(TokenType.NEWLINE) and not self.stream.is_at_end():
-            if self.stream.match(TokenType.RAW_TEXT):
+            if self.stream.match(TokenType.TAG):
+                # Intent tag annotation emitted by the lexer — only produced when '#tag'
+                # appears before any other content token in the intent.
+                tag = self.stream.previous().value
+            elif self.stream.match(TokenType.RAW_TEXT):
                 val = self.stream.previous().value
-                # 解析意图标签 #tag（当前在 parser 层用正则处理，
-                # 应迁移到 Lexer 层，见 PENDING_TASKS.md §10.1）
-                if tag is None and not segments:
-                    val_stripped = val.lstrip()
-                    if val_stripped.startswith("#"):
-                        import re
-                        match = re.match(r"^#([a-zA-Z0-9_]+)\s*", val_stripped)
-                        if match:
-                            tag = match.group(1)
-                            remaining = val[match.end():].lstrip()
-                            if remaining:
-                                segments.append(remaining)
-                            continue
                 segments.append(val)
             elif self.stream.match(TokenType.STRING):
                 val = self.stream.previous().value

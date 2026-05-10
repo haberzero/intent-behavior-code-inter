@@ -6,37 +6,24 @@
 
 ---
 
-## 一、函数返回类型注释：不支持 `-> None`
+## ~~一、函数返回类型注释：不支持 `-> None`~~ ✅ **已实现（2026-05-10）**
 
-**限制说明**
+`-> None` 返回类型注释现已受到完整支持。`None` 与 `void` 的语义区别：
 
-函数声明中的返回类型注释（`-> <type>`）目前**不支持** `None` 作为返回类型。
-
-**根源**
-
-`None` 是词法层面的保留关键字（`TokenType.NONE`），类型注释解析器（`TypeComponent.parse_type_annotation`）只接受标识符（IDENTIFIER）、`auto` 和 `fn` 三种形式，无法识别 `None` 关键字作为类型名。要支持 `-> None` 需在 type annotation 解析路径中显式接受 `NONE` token。
-
-**行为**
+- **`void`**：函数不产生任何值，调用结果不可赋值。
+- **`None`**：函数显式返回 `None` 类型的值，可以被赋值给 `any` 类型的变量或 `Optional[T]` 参数。
 
 ```ibci
-# ❌ 当前会引发解析错误 (PAR_001)
-func my_func() -> None:
-    print("hello")
+func greet(str name) -> None:
+    print("Hello, " + name)        # ✅ 允许：隐式 None 返回
+
+func maybe(bool flag) -> None:
+    if flag:
+        return None                # ✅ 显式 return None
+    return                         # ✅ 裸 return 在 -> None 函数中合法（隐式 None）
 ```
 
-**建议替代方案**
-
-使用 `void` 作为"无返回值"的显式类型注释：
-
-```ibci
-# ✅ 正确用法 —— 显式声明无返回值
-func my_func() -> void:
-    print("hello")
-
-# ✅ 也可以省略返回类型注释（省略时默认使用 auto，编译器自动推断）
-func my_func():
-    print("hello")
-```
+> **实现说明**：`None` 是词法层面的保留关键字（`TokenType.NONE`），解析器类型标注组件（`TypeComponent.parse_type_annotation`）现已显式接受该关键字，并将其解析为名为 `"None"` 的类型名节点，与预置类型表中的 `NONE_SPEC` 对应。
 
 ---
 
@@ -129,7 +116,7 @@ switch c:
 - **仅支持 `str` 类型成员**：枚举成员的底层值目前只能声明为 `str` 类型。`int` 等其他类型成员在未来版本中支持。
 - **不支持枚举迭代**：当前无法对枚举类的所有成员进行遍历（如 `for v in Color:`）。
 - **不支持枚举数量/序数查询**：`len(Color)`、成员序号等功能暂不支持。
-- **LLM 集成**：`Enum` 类型已具备 `IlmoutputHintCapability`，LLM 函数可以直接输出枚举成员名称并自动解析为对应枚举值。
+- **LLM 集成**：`Enum` 类型已具备 `has_output_hint_cap = True` 能力，LLM 函数可以直接输出枚举成员名称并自动解析为对应枚举值。
 
 ---
 

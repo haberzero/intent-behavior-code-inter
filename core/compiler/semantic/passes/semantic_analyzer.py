@@ -798,8 +798,10 @@ class SemanticAnalyzer:
                 if sym.spec and sym.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                     sym.spec.return_type = TypeRef.of(inferred.name, getattr(inferred, "module_path", None))
 
-            elif ret_type is not self._void_desc:
-                # Non-void non-auto function: warn if not all paths return
+            elif ret_type is not self._void_desc and ret_type.name != "None":
+                # Non-void non-None non-auto function: warn if not all paths return.
+                # '-> None' functions allow implicit None return (no explicit return needed),
+                # mirroring Python semantics where None is the implicit return value.
                 if not self._all_paths_return(node.body):
                     self.warn(
                         f"Not all code paths in function '{node.name}' return a value.",
@@ -926,7 +928,8 @@ class SemanticAnalyzer:
             if self._auto_return_types is not None:
                 # bare `return` in an auto function contributes void
                 self._auto_return_types.append(self._void_desc)
-            elif self.current_return_type and self.current_return_type != self._void_desc:
+            elif self.current_return_type and self.current_return_type != self._void_desc and self.current_return_type.name != "None":
+                # bare `return` in a '-> None' function is valid (implicit None return)
                 self.error(f"Invalid return type: expected '{self.current_return_type.name}', got 'void'", node, code="SEM_003")
         return self._void_desc
 
