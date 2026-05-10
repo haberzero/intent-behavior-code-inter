@@ -11,7 +11,7 @@
 
 ### PT-1.1　llmexcept 快照恢复 `merge()` vs 直接替换语义对齐 [P2]
 - 现状：`llm_except_frame.py:270` 调用 `intent_context.merge(saved_intent_ctx)`；
-  `INTENT_SYSTEM_DESIGN.md §4.6` 描述为 `runtime_context._intent_ctx = saved.fork()`（替换）。
+  `INTENT_SYSTEM_DESIGN.md §四（4.6 LLMExceptFrame 中的意图快照）` 描述为 `runtime_context._intent_ctx = saved.fork()`（替换）。
 - 阻塞原因：在 NS-1 把 LLM 路径合并入 CPS 后，意图栈 fork/restore 的实现位置可能整体下沉，届时一并对齐更安全。
 
 ### PT-1.2　LLMExceptFrame 重试历史追踪 [P2]

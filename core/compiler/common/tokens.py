@@ -113,6 +113,7 @@ class TokenType(Enum):
     # 行为与提示词
     BEHAVIOR_MARKER = auto()
     INTENT = auto()
+    TAG = auto()           # 意图标签 #tag_name（仅在 IN_INTENT 状态下产生）
     RAW_TEXT = auto()
     VAR_REF = auto()
     EMBEDDED_PARAM = auto()

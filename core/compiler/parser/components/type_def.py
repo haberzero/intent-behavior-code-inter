@@ -40,6 +40,14 @@ class TypeComponent(BaseComponent):
                 if callable_sig is not None:
                     return callable_sig
                 # Not a callable sig — fall through to the generic subscript path.
+        elif self.stream.match(TokenType.NONE):
+            # Allow 'None' as a return-type annotation: func f() -> None:
+            # 'None' is a reserved keyword (TokenType.NONE), so it cannot be parsed
+            # as a plain IDENTIFIER.  The semantics differ from 'void':
+            #   void  — function produces no value (unassignable)
+            #   None  — function explicitly returns the None value (assignable to any/Optional[T])
+            name_token = self.stream.previous()
+            base_type = self._loc(ast.IbName(id="None", ctx='Load'), name_token)
         else:
             raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
 
