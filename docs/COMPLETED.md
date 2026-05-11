@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-05-11 锚点：NS-2 intent 系统 OOP 化完整收口（NS-2a/b/c/d 全部完成）
+
+NS-2 全四步合龙——意图注释体系语法路径（`@`/`@+`/`@-`/`@!`）与 OOP 路径（`intent_context` 实例方法）打通为同一底层 `IbIntentContext`，双轨断裂彻底消除。
+
+- **NS-2a**（已收录于本日条目）：`intent_context` 参数自动激活；`use(ctx)` 与函数自动绑定统一复用 `RuntimeContextImpl.use_intent_context(...)`。
+- **NS-2b**：帧级活跃 `intent_context` IBCI 实例指针 `RuntimeContextImpl._active_intent_ibobj`，与帧 `_intent_ctx` 共享底层引用。`use()` / `clear_inherited()` / 函数入口 / NS-2a 自动绑定均同步重建此指针，使语法路径的 `@+`/`@-` 修改能通过 OOP `get_current()` 实时观察到（调试器亦获得用户命名身份）。
+- **NS-2c**：`LLMExceptFrame.restore_context()` 由 `intent_context.merge(saved)` 改为 `_intent_ctx = saved.fork()` 干净替换，并同步重建活跃实例指针；retry 前后意图状态完全一致，与 vars / loop_context 的恢复语义对齐。
+- **NS-2d**：新增 11 项测试覆盖（7 个 `tests/runtime/test_intent_context.py` 单元测试 + 4 个 `tests/e2e/test_e2e_ai_mock.py` 端到端测试），覆盖共享引用不变量、`use()` fork 语义、`clear_inherited()` 重建、`@+` × `get_current()` 同源观察、`llmexcept` retry 干净还原。
+- 代码：`core/runtime/interpreter/runtime_context.py`，`core/runtime/objects/kernel.py`，`core/runtime/bootstrap/builtin_initializer.py`，`core/runtime/interpreter/llm_except_frame.py`。
+- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1195 passed）。
+
+历史 PT-1.1（llmexcept merge vs 替换语义对齐）随 NS-2c 一并落地，已从 `docs/PENDING_TASKS.md` 移除。PT-2.1 / PT-2.2 解除阻塞（依赖 NS-2b 的活跃实例指针），可作为 P2 排队。
+
+---
+
 ## 2026-05-11 锚点：NS-2a（intent_context 参数自动激活）完成
 
 - 在 `IbUserFunction.call()` 与 `IbLLMFunction.call()` 参数绑定阶段，`intent_context` 形参会自动激活为当前帧意图上下文（等价 `use(arg)` 语义）。

@@ -912,8 +912,17 @@ class IbUserFunction(IbFunction):
         #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
         from core.runtime.objects.intent_context import IbIntentContext
         old_intent_ctx = rt_context._intent_ctx
+        # NS-2b：函数调用进入时，子帧获得一个匿名活跃指针（共享 fork 后 _ctx 引用）。
+        # 子帧默认未选择命名意图策略；若参数被标注为 ``intent_context`` 类型，
+        # 后续参数自动绑定阶段（``use_intent_context``）会覆盖该匿名指针。
+        old_active_ibobj = rt_context.get_active_intent_ibobj()
         child_ctx = old_intent_ctx.fork()
         rt_context._intent_ctx = child_ctx
+        intent_context_class = self.context.registry.get_class("intent_context")
+        if intent_context_class is not None:
+            rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            rt_context.set_active_intent_ibobj(None)
 
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
@@ -1002,6 +1011,8 @@ class IbUserFunction(IbFunction):
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
             rt_context._intent_ctx = old_intent_ctx
+            # NS-2b：恢复调用者的活跃实例指针。
+            rt_context.set_active_intent_ibobj(old_active_ibobj)
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 
@@ -1055,8 +1066,15 @@ class IbLLMFunction(IbFunction):
         # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
         # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
         old_intent_ctx = rt_context._intent_ctx
+        # NS-2b：与 IbUserFunction.call 对称，进入 LLM 函数时为子帧建立匿名活跃指针。
+        old_active_ibobj = rt_context.get_active_intent_ibobj()
         child_ctx = old_intent_ctx.fork()
         rt_context._intent_ctx = child_ctx
+        intent_context_class = self.context.registry.get_class("intent_context")
+        if intent_context_class is not None:
+            rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            rt_context.set_active_intent_ibobj(None)
 
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
@@ -1125,6 +1143,8 @@ class IbLLMFunction(IbFunction):
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
             rt_context._intent_ctx = old_intent_ctx
+            # NS-2b：恢复调用者的活跃实例指针。
+            rt_context.set_active_intent_ibobj(old_active_ibobj)
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 

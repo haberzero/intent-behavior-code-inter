@@ -89,6 +89,10 @@ class LLMExceptFrame:
     # 上下文快照
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
     saved_intent_ctx: Any = field(default=None, repr=False)    # IbIntentContext 快照
+    # NS-2c：retry 时需要同时还原帧级活跃 intent_context IBCI 实例指针，
+    # 否则 llmexcept body 内部对意图策略的切换（``use(ctx)``/``clear_inherited()``）
+    # 在 retry 后仍会"残留"于活跃指针，造成与 ``_intent_ctx`` 的双轨断裂。
+    saved_active_intent_ibobj: Any = field(default=None, repr=False)
     saved_loop_context: Optional[Dict[str, int]] = None
 
     # 循环迭代器断点恢复索引
@@ -128,6 +132,9 @@ class LLMExceptFrame:
         self._save_vars_snapshot(runtime_context)
 
         self.saved_intent_ctx = runtime_context.intent_context.fork()
+        # NS-2c：同时快照活跃实例指针，restore 时一并还原。
+        if hasattr(runtime_context, "get_active_intent_ibobj"):
+            self.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
         if hasattr(runtime_context, '_loop_stack') and runtime_context._loop_stack:
             # 深拷贝 dict 对象，确保保存的快照与运行时 _loop_stack 完全独立，
@@ -260,14 +267,39 @@ class LLMExceptFrame:
 
         恢复以下状态:
         - 变量（只恢复已存在的变量）
-        - 意图上下文（通过 IbIntentContext.merge() 原子恢复）
+        - 意图上下文（NS-2c：直接以快照的 fork 副本替换 ``_intent_ctx``，并同步
+          重建活跃 intent_context IBCI 实例指针使其与新 ``_intent_ctx`` 共享引用）
         - 循环上下文
         - retry_hint
+
+        NS-2c 说明：
+            原实现使用 ``intent_context.merge(saved)``，会将 retry body 内
+            对全局/排他/涂抹槽的修改"叠加"到恢复结果上；新实现采用
+            ``_intent_ctx = saved.fork()`` 替换语义，保证 retry 看到的是
+            llmexcept 进入时刻完全一致的意图快照，与 vars/loop_context 的恢复
+            语义对齐（均为干净还原）。同时活跃实例指针被重建：若原帧持有
+            命名策略，则同步指向新底层；若原帧匿名，则建立新的匿名封装。
         """
         self._restore_vars(runtime_context)
 
         if self.saved_intent_ctx is not None:
-            runtime_context.intent_context.merge(self.saved_intent_ctx)
+            # NS-2c：直接以快照 fork 替换 ``_intent_ctx``（取代 ``merge()``）。
+            forked = self.saved_intent_ctx.fork()
+            runtime_context._intent_ctx = forked
+            # 同步重建活跃实例指针：保留命名身份（ib_class），但 _ctx 指向新底层。
+            if hasattr(runtime_context, "_set_active_intent_ibobj_for_current_ctx"):
+                intent_context_class = None
+                saved_ibobj = self.saved_active_intent_ibobj
+                if saved_ibobj is not None and hasattr(saved_ibobj, "ib_class"):
+                    intent_context_class = saved_ibobj.ib_class
+                else:
+                    registry = getattr(runtime_context, "_registry", None)
+                    if registry is not None and hasattr(registry, "get_class"):
+                        intent_context_class = registry.get_class("intent_context")
+                if intent_context_class is not None:
+                    runtime_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+                else:
+                    runtime_context.set_active_intent_ibobj(None)
 
         if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:
             runtime_context._loop_stack = self.saved_loop_context.get('iterators', [])

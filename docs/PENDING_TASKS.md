@@ -9,11 +9,7 @@
 
 ## 一、待 NS-1（LLM 调用路径合并入 CPS）落地后才能继续
 
-### PT-1.1　llmexcept 快照恢复 `merge()` vs 直接替换语义对齐 [P2]
-- 现状：`llm_except_frame.py:270` 调用 `intent_context.merge(saved_intent_ctx)`；
-  `INTENT_SYSTEM_DESIGN.md §四（4.6 LLMExceptFrame 中的意图快照）` 描述为 `runtime_context._intent_ctx = saved.fork()`（替换）。
-- 阻塞原因：在 NS-1 把 LLM 路径合并入 CPS 后，意图栈 fork/restore 的实现位置可能整体下沉，届时一并对齐更安全。
-- 关联：NS-2c 的具体改动即为本项的代码落地；NS-1 稳定后可直接开工。
+> 历史 PT-1.1（llmexcept 快照恢复 merge vs 替换语义）已随 NS-2c 一并落地（`core/runtime/interpreter/llm_except_frame.py`），不再阻塞。
 
 ### PT-1.2　LLMExceptFrame 重试历史追踪 [P2]
 - 现状：`reset_for_retry()` 清除 `last_error`，重试历史不保留。
@@ -25,24 +21,22 @@
 
 ---
 
-## 二、待 NS-2（intent OOP 化收口）落地后才能继续
+## 二、NS-2（intent OOP 化收口）已完成，以下项目阻塞解除，等待排期
 
-### PT-2.1　intent_context 高级 OOP 场景 [VISION → P2]
+### PT-2.1　intent_context 高级 OOP 场景 [P2]
 
-**依赖**：NS-2b（帧级活跃 intent 实例化）落地后开工。
+**前置条件**：NS-2b（已完成，2026-05-11）。可开工。
 
 **目标场景**：
 - 把 `IbIntentContext` 实例注入 behavior 表达式的动态变量替换路径（`@~ $ctx_content ~` 中的 `ctx_content` 来自 `intent_context` 对象）。
 - 多 `intent_context` 实例的组合合并：`ctx_a.merge(ctx_b)` 产生新上下文，传入 behavior 前作为 `use()` 参数。
 - `intent_context` 作为类字段持久化（跨调用保存意图策略），配合 `__save__`/`__restore__` 协议参与 llmexcept 快照-恢复。
 
-**为何阻塞**：必须先确保 NS-2b 的帧级活跃对象指针存在，才能在 behavior 注入路径里稳定解引用到"当前活跃 intent_context"。
-
 ### PT-2.2　IbIntentContext 快照参与序列化/反序列化 [P3]
 
-**依赖**：NS-2b 完成后。
+**前置条件**：NS-2b（已完成，2026-05-11）。可开工。
 
-**目标**：在 `core/runtime/serialization/runtime_serializer.py` 中纳入 `IbIntentContext` 的序列化支持，使意图栈状态可随程序状态一并持久化，供调试器断点场景还原完整运行时（当前意图上下文对调试器不可见）。
+**目标**：在 `core/runtime/serialization/runtime_serializer.py` 中纳入 `IbIntentContext` 的序列化支持，使意图栈状态可随程序状态一并持久化，供调试器断点场景还原完整运行时（当前意图上下文对调试器不可见）。借助 NS-2b 的 `_active_intent_ibobj` 指针，调试器现已可观察"当前帧正在使用哪个用户命名的意图策略对象"，序列化时需把活跃指针与底层 `IbIntentContext` 一并落盘。
 
 ---
 
@@ -61,3 +55,4 @@
 - 不引入静态类型检查器作为解释器前置强依赖。
 - 不以牺牲运行时可观测性换取短期性能优化。
 - 不为优化同一程序内独立 LLM 调用而创建多 Interpreter（这是 L1 流水线的职责）。
+

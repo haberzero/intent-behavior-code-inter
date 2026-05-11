@@ -273,13 +273,26 @@ visit_IbLLMExceptionalStmt
 | **IC-2 restore 还原** | 函数返回时恢复调用者 context |
 | **IC-3 llmexcept snapshot** | retry 时通过 `LLMExceptFrame` 完整恢复意图栈快照 |
 
-### 7.2 OOP 化与语法路径
+### 7.2 OOP 化与语法路径（NS-2 完整收口，2026-05-11）
 
-意图系统提供**双路径**：
-- 语法路径：`@`/`@!`/`@+`/`@-` → `vm_handle_IbIntentAnnotation` / `IbIntentStackOperation` → `runtime_context._intent_ctx`；
-- OOP 路径：`intent_context.get_current()` / `.push()` / `.pop()` / `.fork()` → `IbIntentContext` 实例。
+意图系统提供**双路径**，二者在帧级别打通为同一底层 `IbIntentContext`：
 
-两路径操作同一底层 `_intent_ctx`，但代码逻辑独立。完整 OOP 化（实例作为参数、函数默认 ctx 等）尚未完成（见 `docs/PENDING_TASKS.md §四`）。
+- **语法路径**：`@`/`@!`/`@+`/`@-` → `vm_handle_IbIntentAnnotation` / `IbIntentStackOperation` → `runtime_context._intent_ctx`
+- **OOP 路径**：`intent_context.get_current()` / `.push()` / `.pop()` / `.fork()` / `.use()` → 当前帧活跃实例的 `IbIntentContext`
+
+**核心不变量（NS-2b）**：`_active_intent_ibobj.fields['_ctx'] is runtime_context._intent_ctx`——活跃 IBCI 实例与帧底层 Python 对象共享引用，因此两路径对当前帧的操作互可观察。
+
+**关键 API**：
+
+| 操作 | 维护点 |
+|------|--------|
+| `intent_context.use(ctx)` | fork 源对象 `_ctx`，重建活跃指针（共享引用） |
+| `intent_context.clear_inherited()` | 清空持久栈，建立新的匿名活跃指针 |
+| 函数调用进入 | 子帧 fork 调用者意图，建立匿名活跃指针；返回时恢复 |
+| `intent_context` 参数自动激活（NS-2a） | 内部复用 `use_intent_context` 入口 |
+| `LLMExceptFrame` retry（NS-2c）| 以 `saved.fork()` 替换 `_intent_ctx`，同步重建活跃指针 |
+
+完整 OOP 化（参数 / 默认 ctx / behavior 动态注入 / 序列化）后续扩展见 `docs/PENDING_TASKS.md §二`。
 
 ### 7.3 完整设计
 
