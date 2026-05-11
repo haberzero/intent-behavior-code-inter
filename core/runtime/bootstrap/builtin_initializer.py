@@ -534,18 +534,11 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             """
             from core.runtime.frame import get_current_frame
             frame = get_current_frame()
-            if frame is None or not hasattr(frame, '_intent_ctx'):
+            if frame is None or not hasattr(frame, 'use_intent_context'):
                 return registry.get_none()
             if not args:
                 return registry.get_none()
-            other = args[0]
-            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
-            if other_ctx is not None:
-                # fork 保证不共享引用，当前作用域对意图的修改不回流到 ctx
-                forked = other_ctx.fork()
-                # 保留全局意图（全局意图由 Engine 注入，不属于调用者/被调用者关系）
-                forked._global_intents = frame._intent_ctx._global_intents
-                frame._intent_ctx = forked
+            frame.use_intent_context(args[0])
             return registry.get_none()
 
         def _ic_get_current(receiver, *args):

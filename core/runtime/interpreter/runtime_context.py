@@ -661,6 +661,26 @@ class RuntimeContextImpl(RuntimeContext):
         """当前帧的意图上下文（直接持有的 IbIntentContext 实例）。"""
         return self._intent_ctx
 
+    def use_intent_context(self, intent_ctx_obj: Any) -> bool:
+        """
+        以指定 intent_context IBCI 实例替换当前帧意图上下文（fork 拷贝语义）。
+
+        行为与 intent_context.use(ctx) 对齐：
+        - 使用 ctx._ctx 的 fork 副本，避免引用共享
+        - 保留当前帧的全局意图（Engine 级注入）
+        """
+        if intent_ctx_obj is None or not hasattr(intent_ctx_obj, "fields"):
+            return False
+        if self._intent_ctx is None or not hasattr(self._intent_ctx, "get_global_intents"):
+            return False
+        other_ctx = intent_ctx_obj.fields.get("_ctx")
+        if other_ctx is None or not hasattr(other_ctx, "fork"):
+            return False
+        forked = other_ctx.fork()
+        forked.set_global_intents(self._intent_ctx.get_global_intents())
+        self._intent_ctx = forked
+        return True
+
     def restore_active_intents(self, intents: Union[List[IbIntent], Optional['IntentNode']]) -> None:
         """
         恢复活跃意图栈。支持直接设置 IntentNode (结构共享) 或 扁平列表重建。

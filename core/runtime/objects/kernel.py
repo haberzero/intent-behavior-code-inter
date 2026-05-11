@@ -15,6 +15,52 @@ if TYPE_CHECKING:
 
 from .ib_type_mapping import register_ib_type
 
+
+def _is_intent_context_param(ec: 'IExecutionContext', param_uid: str, param_data: Dict[str, Any]) -> bool:
+    """
+    Return True when a parameter node is annotated as `intent_context`.
+    """
+    def _is_intent_context_spec(spec: Any) -> bool:
+        if spec is None:
+            return False
+        name = getattr(spec, "name", None)
+        base_name = spec.get_base_name() if hasattr(spec, "get_base_name") else name
+        return base_name == "intent_context" or name == "intent_context"
+
+    # 1) Prefer semantic side-table type info: it is produced after full Pass-4
+    #    type resolution and is more stable than runtime node shape fallbacks.
+    direct_spec = ec.get_side_table("node_to_type", param_uid)
+    if _is_intent_context_spec(direct_spec):
+        return True
+
+    # 2) Compatibility fallback for IbTypeAnnotatedExpr-wrapped target binding
+    if not isinstance(param_data, dict):
+        return False
+    if param_data.get("_type") == "IbTypeAnnotatedExpr":
+        target_uid = param_data.get("target")
+        target_spec = ec.get_side_table("node_to_type", target_uid)
+        if _is_intent_context_spec(target_spec):
+            return True
+        annotation_uid = param_data.get("annotation")
+        annotation_data = ec.get_node_data(annotation_uid) if annotation_uid else None
+        if annotation_data:
+            ann_type = annotation_data.get("_type")
+            if ann_type == "IbName":
+                return annotation_data.get("id") == "intent_context"
+            if ann_type == "IbAttribute":
+                return annotation_data.get("attr") == "intent_context"
+    return False
+
+
+def _should_activate_intent_context_arg(arg_value: Any, is_intent_ctx_param: bool) -> bool:
+    if is_intent_ctx_param:
+        return True
+    return (
+        isinstance(arg_value, IbObject)
+        and hasattr(arg_value, "fields")
+        and arg_value.fields.get("_ctx") is not None
+    )
+
 @register_ib_type("any")
 @register_ib_type("auto")
 @register_ib_type("callable")
@@ -912,9 +958,10 @@ class IbUserFunction(IbFunction):
                 if self.owner_class and self.owner_class.parent:
                     super_proxy = IbSuperProxy(receiver, self.owner_class.parent)
                     rt_context.define_variable("super", super_proxy, uid="builtin:super")
-                
+
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
+                is_intent_ctx_param = _is_intent_context_param(self.context, arg_uid, arg_data)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
@@ -923,13 +970,16 @@ class IbUserFunction(IbFunction):
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
+                    arg_value = args[i]
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                    if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
+                        rt_context.use_intent_context(arg_value)
             
             body = node_data.get("body", [])
-            # 通过 VMExecutor 驱动函数体语句（CPS 主路径）。
-            # run_body() 以 UnhandledSignal 传播顶层控制信号；
-            # 由下方 except _CSE 消费；BREAK/CONTINUE 透传至调用者。
+            # Drive function body execution via VMExecutor (CPS main path).
+            # run_body() propagates top-level control signals via UnhandledSignal.
+            # Signals are consumed by except _CSE below; BREAK/CONTINUE are re-thrown.
             from core.runtime.vm.task import (
                 ControlSignal as _CS, UnhandledSignal as _CSE,
             )
@@ -1037,8 +1087,10 @@ class IbLLMFunction(IbFunction):
             )
             
             params_uids = node_data.get("args", [])
+
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
+                is_intent_ctx_param = _is_intent_context_param(self.context, arg_uid, arg_data)
                 # 处理类型标注包装
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
@@ -1048,8 +1100,11 @@ class IbLLMFunction(IbFunction):
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
+                    arg_value = args[i]
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                    if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
+                        rt_context.use_intent_context(arg_value)
             
             # 解析呼叫级意图（函数头上的意图），暂存供 invoke_llm_function 消费
             intent_uid = node_data.get("intent")

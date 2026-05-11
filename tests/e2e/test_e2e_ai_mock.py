@@ -970,6 +970,51 @@ print(result)
         lines = run_and_capture(code)
         assert "55" in lines
 
+    def test_intent_context_param_auto_binds_active_context(self):
+        """
+        NS-2a: entering `func foo(intent_context ctx)` should auto-activate `ctx`
+        as the current frame intent context source.
+        """
+        code = """
+@+ "caller intent"
+intent_context ctx = intent_context()
+ctx.push("ctx base")
+
+func inspect(intent_context p) -> any:
+    @+ "inner from func"
+    intent_context current = intent_context.get_current()
+    return current.resolve()
+
+any resolved = inspect(ctx)
+print((str)resolved)
+"""
+        lines = run_and_capture(code)
+        assert len(lines) == 1
+        assert "ctx base" in lines[0]
+        assert "inner from func" in lines[0]
+        assert "caller intent" not in lines[0]
+
+    def test_intent_context_param_does_not_leak_inner_changes(self):
+        """
+        NS-2a: auto-binding must preserve fork semantics; inner `@+` changes
+        must not flow back to the argument context object.
+        """
+        code = """
+intent_context ctx = intent_context()
+ctx.push("ctx base")
+
+func mutate(intent_context p):
+    @+ "inner from func"
+    return
+
+mutate(ctx)
+print((str)ctx.resolve())
+"""
+        lines = run_and_capture(code)
+        assert len(lines) == 1
+        assert "ctx base" in lines[0]
+        assert "inner from func" not in lines[0]
+
 
 # ---------------------------------------------------------------------------
 # 17. Lambda-as-argument restriction (runtime check)
