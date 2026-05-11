@@ -518,10 +518,16 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             清空当前函数作用域从调用者继承的持久意图栈。
             调用后，当前作用域的 @+ 意图（即 _intent_top 链表）被重置为空。
             函数内部的 @+ 操作从干净的起点开始，不受调用者意图干扰。
+
+            复用 ``RuntimeContextImpl.clear_inherited_intents()``，
+            同时重建活跃实例指针（共享 _ctx 引用），使 OOP 路径与语法路径保持同源。
             """
             from core.runtime.frame import get_current_frame
             frame = get_current_frame()
-            if frame is not None and hasattr(frame, '_intent_ctx'):
+            if frame is not None and hasattr(frame, 'clear_inherited_intents'):
+                frame.clear_inherited_intents()
+            elif frame is not None and hasattr(frame, '_intent_ctx'):
+                # 防御性回退：旧帧实现没有新方法时仍能清空持久栈
                 frame._intent_ctx.set_intent_top(None)
             return registry.get_none()
 
@@ -531,6 +537,9 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             以给定的 intent_context 实例替换当前作用域的意图上下文。
             等效于：当前作用域的意图栈 = fork(ctx)（不是引用，是拷贝）。
             调用后，当前作用域所有 LLM 调用看到的意图完全来自 ctx 的内容。
+
+            ``use_intent_context`` 会同步更新帧级活跃实例指针，
+            使后续 ``@+``/``@-`` 与 OOP 操作落在同一底层 IbIntentContext 上。
             """
             from core.runtime.frame import get_current_frame
             frame = get_current_frame()
@@ -546,10 +555,22 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             intent_context.get_current()
             返回当前作用域正在生效的意图上下文的快照（fork 副本）。
             返回值是一个新的 intent_context 实例，可检查、可保存，不影响当前作用域。
+
+            优先 fork 帧活跃实例指针 ``_active_intent_ibobj``——
+            该指针的 ``_ctx`` 与帧的 ``_intent_ctx`` 共享引用，因此其 fork
+            等价于 ``_intent_ctx.fork()``，但保留了"用户命名身份"的可观察性
+            （调试器可由此追踪当前帧正在使用的策略对象身份）。
             """
             from core.runtime.frame import get_current_frame
             frame = get_current_frame()
             new_instance = IbObject(intent_context_class)
+            if frame is not None and hasattr(frame, 'get_active_intent_ibobj'):
+                active = frame.get_active_intent_ibobj()
+                if active is not None and hasattr(active, 'fields'):
+                    active_ctx = active.fields.get('_ctx')
+                    if active_ctx is not None and hasattr(active_ctx, 'fork'):
+                        new_instance.fields['_ctx'] = active_ctx.fork()
+                        return new_instance
             if frame is not None and hasattr(frame, '_intent_ctx'):
                 new_instance.fields['_ctx'] = frame._intent_ctx.fork()
             else:

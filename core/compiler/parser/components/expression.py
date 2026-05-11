@@ -121,7 +121,7 @@ class ExpressionComponent(BaseComponent):
         # Variable Reference
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
 
-        # Parameterized lambda / snapshot expressions (M1)
+        # Parameterized lambda / snapshot expressions
         # 在表达式位置消费 LAMBDA/SNAPSHOT token，构建 IbLambdaExpr。
         self.register(TokenType.LAMBDA, self.lambda_expr, None, IbPrecedence.LOWEST)
         self.register(TokenType.SNAPSHOT, self.lambda_expr, None, IbPrecedence.LOWEST)

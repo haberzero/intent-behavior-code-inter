@@ -1,5 +1,5 @@
 """
-core.compiler.semantic.passes.behavior_dependency_analyzer — M5a DDG 分析。
+core.compiler.semantic.passes.behavior_dependency_analyzer — DDG 分析。
 
 设计目标
 --------
@@ -19,7 +19,7 @@ core.compiler.semantic.passes.behavior_dependency_analyzer — M5a DDG 分析。
 
 实现注意
 --------
-* M5a 不构建跨函数的全局依赖图——只在 **同一个函数体 / 模块顶层**
+* 本分析器不构建跨函数的全局依赖图——只在 **同一个函数体 / 模块顶层**
   范围内追溯；跨函数调用产生的 behavior 依赖目前保守视为 None
   （未来可扩展）。
 * 仅在语义分析整个流水线 **最后一步** 运行，依赖前序 Pass 已经在
@@ -233,7 +233,7 @@ class BehaviorDependencyAnalyzer:
     def _iter_children(self, node: Any):
         """yield AST 子节点（不展开 list / tuple 内非 AST 元素）。
 
-        **不**追踪 ``IbBehaviorExpr.llm_deps`` —— 那是 M5a 自己写入的元数据，
+        **不**追踪 ``IbBehaviorExpr.llm_deps`` —— 那是本分析器自己写入的元数据，
         递归到它会造成自循环。
         """
         if not isinstance(node, ast.IbASTNode):

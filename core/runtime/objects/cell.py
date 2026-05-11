@@ -25,7 +25,7 @@ IbCell —— 词法闭包 Cell 变量的独立堆容器。
   共享 cell 必须通过共享同一个 ``IbCell`` 实例实现，这是闭包共享语义的前提。
 * 提供 ``trace_refs()`` 钩子供未来 GC 根集合扫描使用 (公理 GC-2)。
 
-本模块为 M1 (fn 新语法 + IbCell 集成) 与 M2 (GC 根集合) 提供基础原语；
+本模块为 fn 新语法（IbCell 集成）与 GC 根集合（公理 GC-2）提供基础原语；
 本身不引用任何 ``ScopeImpl`` / ``IbFnCallable`` / ``IbBehavior``，保持纯粹。
 """
 
@@ -54,7 +54,7 @@ class IbCell:
     多个闭包可共享同一 ``IbCell`` 引用以实现"对同一变量的共享读写"语义
     (公理 SC-3 / SC-4)。
 
-    示例 (典型用法，Step 12.5 / M1 集成后)::
+    示例 (典型用法)::
 
         n_cell = IbCell(box_int(10))
         # 内层 lambda 持有 n_cell 引用 (closure["n"] = n_cell)
@@ -117,7 +117,7 @@ class IbCell:
         return self._value is _EMPTY
 
     # ------------------------------------------------------------------
-    # GC 钩子 (M2 将依赖此方法构造根集合追踪图，公理 GC-2)
+    # GC 钩子（供追踪式 GC 根集合扫描使用，公理 GC-2）
     # ------------------------------------------------------------------
 
     def trace_refs(self) -> Iterator[Any]:

@@ -353,7 +353,7 @@ class SpecRegistry:
         return self._axiom_registry
 
     # ---------------------------------------------------------- #
-    # Capability access (unified post-M5)                        #
+    # Capability access                                          #
     # ---------------------------------------------------------- #
     #
     # All capability accessors return the axiom itself when the axiom

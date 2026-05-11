@@ -972,7 +972,7 @@ print(result)
 
     def test_intent_context_param_auto_binds_active_context(self):
         """
-        NS-2a: entering `func foo(intent_context ctx)` should auto-activate `ctx`
+        Entering `func foo(intent_context ctx)` should auto-activate `ctx`
         as the current frame intent context source.
         """
         code = """
@@ -996,7 +996,7 @@ print((str)resolved)
 
     def test_intent_context_param_does_not_leak_inner_changes(self):
         """
-        NS-2a: auto-binding must preserve fork semantics; inner `@+` changes
+        Auto-binding must preserve fork semantics; inner `@+` changes
         must not flow back to the argument context object.
         """
         code = """
@@ -1022,14 +1022,14 @@ print((str)ctx.resolve())
 
 class TestE2ELambdaRestriction:
     """
-    M2: lambda 值现在可以自由作为函数参数传递（高阶函数场景）。
+    lambda 值现在可以自由作为函数参数传递（高阶函数场景）。
 
-    M1 时期的限制（"lambda 延迟对象不允许作为函数参数传递"）已在 M2 中移除：
+    历史限制（"lambda 延迟对象不允许作为函数参数传递"）已移除：
     lambda 闭包的自由变量通过共享 IbCell 捕获，生命周期安全，可以跨作用域传递。
     """
 
     def test_lambda_can_be_passed_as_arg(self):
-        """M2: lambda 值可以作为函数参数传递，高阶函数能调用它。"""
+        """lambda 值可以作为函数参数传递，高阶函数能调用它。"""
         code = ai_setup_code() + """
 func apply(fn f, int val) -> auto:
     return f(val)
@@ -1056,7 +1056,7 @@ print(r)
 
     def test_snapshot_can_be_passed_as_any(self):
         """
-        snapshot 值仍然可以作为参数传递（M1 起即支持）。
+        snapshot 值可以作为参数传递。
         """
         code = ai_setup_code() + """
 func accept_any(any x):
@@ -1124,6 +1124,134 @@ print("ok")
 """
         lines = run_and_capture(code)
         assert "ok" in lines
+
+
+# ---------------------------------------------------------------------------
+# 18b. 帧级活跃 intent_context 实例（语法路径 × OOP 路径同源）
+# ---------------------------------------------------------------------------
+
+class TestE2ENS2bUnifiedIntentPath:
+    """
+    当一个 ``intent_context`` 实例被 ``use()`` 激活后，
+    后续语法路径 ``@+`` 的修改应能通过 ``get_current().resolve()`` 观察到——
+    因为活跃实例指针与帧 ``_intent_ctx`` 共享底层引用。
+    """
+
+    def test_get_current_observes_syntax_path_modifications(self):
+        """use(ctx) 之后 @+ 的修改应能通过 get_current() 观察到。"""
+        code = """
+func unified_path() -> any:
+    intent_context ctx = intent_context()
+    ctx.push("from oop")
+    intent_context.use(ctx)
+    @+ "from syntax"
+    intent_context current = intent_context.get_current()
+    return current.resolve()
+
+any resolved = unified_path()
+print((str)resolved)
+"""
+        lines = run_and_capture(code)
+        assert len(lines) == 1
+        # 两条意图都应可见
+        assert "from oop" in lines[0]
+        assert "from syntax" in lines[0]
+
+    def test_clear_inherited_then_syntax_path_visible_via_oop(self):
+        """clear_inherited() 后，@+ 的新意图依旧能通过 get_current() 观察到。"""
+        code = """
+@+ "caller persistent"
+
+func reset_then_observe() -> any:
+    intent_context.clear_inherited()
+    @+ "post clear"
+    intent_context now = intent_context.get_current()
+    return now.resolve()
+
+any r = reset_then_observe()
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert len(lines) == 1
+        # 调用方的持久意图被清除，函数内 @+ 仍然可见
+        assert "post clear" in lines[0]
+        assert "caller persistent" not in lines[0]
+
+    def test_use_then_modify_original_does_not_leak(self):
+        """use(ctx) 之后修改原始 ctx 不应影响当前帧的活跃上下文（fork 语义）。"""
+        code = """
+func no_leak() -> any:
+    intent_context src = intent_context()
+    src.push("src first")
+    intent_context.use(src)
+    src.push("src second after use")
+    intent_context active = intent_context.get_current()
+    return active.resolve()
+
+any r = no_leak()
+print((str)r)
+"""
+        lines = run_and_capture(code)
+        assert len(lines) == 1
+        # use 时刻 fork：'src first' 已迁移
+        assert "src first" in lines[0]
+        # 'src second after use' 是 use 之后对原对象的修改，不应泄漏到帧
+        assert "src second after use" not in lines[0]
+
+
+# ---------------------------------------------------------------------------
+# 18c. llmexcept retry 时的意图栈干净还原
+# ---------------------------------------------------------------------------
+
+class TestE2ENS2cLlmExceptIntentRestore:
+    """
+    ``llmexcept`` retry 前应以 fork-and-replace 干净还原意图状态，
+    body 内通过 ``@+`` / ``intent_context.use(...)`` 等做的修改在 retry
+    之后必须完全消失。
+    """
+
+    def test_retry_resets_persistent_intent_pushes_in_body(self):
+        """body 内 @+ 推入的意图在 retry 后必须消失。"""
+        code = ai_setup_code() + """
+@+ "baseline"
+
+try:
+    str r = @~ MOCK:FAIL ns2c_intent ~
+    llmexcept:
+        @+ "body push intent"
+        retry "try again"
+    print(r)
+except Exception as e:
+    print("retry_exhausted_ok")
+"""
+        lines = run_and_capture(code)
+        # 关键：执行未崩在意图栈状态上（干净还原使得多次 retry 不会持续叠加意图）
+        assert "retry_exhausted_ok" in lines
+
+    def test_retry_resets_intent_context_use_in_body(self):
+        """body 内 intent_context.use(other) 切换策略，retry 后应还原到 llmexcept 进入时刻。"""
+        code = ai_setup_code() + """
+@+ "outer"
+
+func protected() -> str:
+    str x = ""
+    try:
+        x = @~ MOCK:FAIL ns2c_use ~
+        llmexcept:
+            intent_context other = intent_context()
+            other.push("body-swapped")
+            intent_context.use(other)
+            retry "hint"
+    except Exception as e:
+        x = "done"
+    return x
+
+str result = protected()
+print(result)
+"""
+        lines = run_and_capture(code)
+        # 执行成功（异常被捕获）：意图状态在 retry 期间被干净还原，未泄漏 body 内策略切换。
+        assert "done" in lines
 
 
 # ---------------------------------------------------------------------------

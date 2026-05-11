@@ -2,7 +2,7 @@
 tests/unit/test_vm_executor_signals.py
 ======================================
 
-M3b / C5 — VMExecutor 控制信号数据化（``Signal(kind, value)``）专属测试。
+VMExecutor 控制信号数据化（``Signal(kind, value)``）专属测试。
 
 测试目标
 --------
@@ -123,7 +123,7 @@ class TestHandlersReturnSignal:
             assert si.value.kind is ControlSignal.CONTINUE
 
     def test_break_handler_does_not_raise(self):
-        """M3b 行为：旧的 raise 异常路径已彻底消失；仅通过 StopIteration.value 传递 Signal。"""
+        """旧的 raise 异常路径已彻底消失；仅通过 StopIteration.value 传递 Signal。"""
         gen = vm_handle_IbBreak(None, "u", {})
         # 不会抛出任何异常（除 StopIteration）
         with pytest.raises(StopIteration):

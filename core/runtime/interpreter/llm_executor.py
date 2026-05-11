@@ -26,7 +26,7 @@ class LLMExecutorImpl:
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
      采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
 
-    M5b 扩展：新增 ``dispatch_eager`` / ``resolve`` 接口（LLMScheduler 能力），
+    新增 ``dispatch_eager`` / ``resolve`` 接口（LLMScheduler 能力），
     内部持有 ``ThreadPoolExecutor`` 以支持 behavior 表达式的并发 LLM 调用。
     """
     def __init__(self, 
@@ -467,7 +467,7 @@ class LLMExecutorImpl:
         execution_context: IExecutionContext,
         intent_ctx: Optional[Any] = None,
     ) -> LLMFuture:
-        """M5b：立即将 LLM 调用提交到线程池，返回 ``LLMFuture``（非阻塞）。
+        """立即将 LLM 调用提交到线程池，返回 ``LLMFuture``（非阻塞）。
 
         在 ``dispatch_eligible=True`` 且数据依赖已满足时，由 VM 调度器调用。
         在 dispatch 时刻捕获 prompt 内容与意图上下文，后台线程中发起实际调用。
@@ -492,9 +492,9 @@ class LLMExecutorImpl:
         return llm_future
 
     def resolve(self, node_uid: str) -> IbObject:
-        """M5b：阻塞等待 ``node_uid`` 对应的 ``LLMFuture`` 完成，返回 ``IbObject``。
+        """阻塞等待 ``node_uid`` 对应的 ``LLMFuture`` 完成，返回 ``IbObject``。
 
-        在变量使用点检测到对应 ``LLMFuture`` 时由 VM 调度器调用（M5c 集成）。
+        在变量使用点检测到对应 ``LLMFuture`` 时由 VM 调度器调用。
 
         若 ``dispatch_eager`` 尚未被调用，或对应 Future 已被 resolve 消费，
         则抛出 ``RuntimeError``。
@@ -537,7 +537,7 @@ class LLMExecutorImpl:
 
         不再抛出 LLMUncertaintyError，所有不确定性通过 LLMResult 返回。
 
-        ``captured_intents`` 协议（自 Step 6c/6d 起收紧）：
+        ``captured_intents`` 协议：
             - ``None``  → 使用当前 RuntimeContext 的活跃意图栈（lambda 模式）
             - ``IbIntentContext`` 实例 → 已 fork 的意图值快照（snapshot 模式 / dispatch_eager）
 
@@ -570,7 +570,7 @@ class LLMExecutorImpl:
         if captured_intents is not None:
             from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
             if not isinstance(captured_intents, _IbIntentContext):
-                # 自 Step 6c/6d 起，所有生产者只产出 None 或 IbIntentContext。
+                # 所有生产者只产出 None 或 IbIntentContext。
                 # 历史的 IntentNode 链表 / 已展平 list 路径已无产生方；命中即为契约违反。
                 raise TypeError(
                     f"execute_behavior_expression: captured_intents must be "

@@ -108,7 +108,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
-        # 2. 延迟插件发现（Phase 2 显式引入原则）：
+        # 2. 延迟插件发现（显式引入原则）：
         #    在首次编译/静态检查时才调用 discover_all()，而非在 Engine 初始化时无条件加载。
         #    这确保插件元数据只在真正需要（编译）时才注入 MetadataRegistry，
         #    使"必须 import ai 才能使用"的语义清晰度在 Engine 生命周期内保持一致。
@@ -256,11 +256,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         确保插件元数据已加载到 host_interface（懒加载，只在首次编译/检查时触发）。
 
-        Phase 2 显式引入原则：discover_all() 不在 Engine.__init__() 中无条件调用，
+        显式引入原则：discover_all() 不在 Engine.__init__() 中无条件调用，
         而是延迟到首次编译时才执行。这确保：
         1. 仅创建 Engine 实例而不编译时，不触发任何插件发现。
         2. Scheduler 在编译开始前获得完整的 host_interface（含所有插件元数据）。
-        3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Phase 1 的 Prelude 过滤保证）。
+        3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Prelude 过滤保证）。
         """
         if not self._plugins_discovered:
             self.host_interface = self.discovery_service.discover_all(self.registry)
@@ -343,7 +343,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
         """
-        # 懒加载插件元数据（Phase 2 显式引入原则）
+        # 懒加载插件元数据（显式引入原则）
         self._ensure_plugins_discovered()
 
         if not hasattr(self, '_entry_file'):
@@ -416,7 +416,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         仅对项目进行静态检查（编译和语义分析）。
         """
-        # 懒加载插件元数据（Phase 2 显式引入原则）
+        # 懒加载插件元数据（显式引入原则）
         self._ensure_plugins_discovered()
 
         abs_entry = os.path.abspath(entry_file)
@@ -479,11 +479,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], initial_vars: Optional[Dict[str, Any]] = None) -> str:
         """
-        [IKernelOrchestrator] M4：非阻塞版本的隔离执行系统调用。
+        [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
         在后台线程中启动全新的 Engine 实例；立即返回 handle 字符串。
         调用方随后通过 request_collect(handle) 阻塞等待结果。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"M4 request_spawn_isolated -> {entry_path}")
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_spawn_isolated -> {entry_path}")
 
         abs_path = os.path.abspath(entry_path)
         sub_root_dir = os.path.dirname(abs_path)
@@ -510,16 +510,16 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         with self._spawned_tasks_lock:
             self._spawned_tasks[handle] = (thread, sub_engine, exc_holder)
 
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"M4 spawned handle={handle}")
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"spawned handle={handle}")
         return handle
 
     def request_collect(self, handle: str) -> Dict[str, Any]:
         """
-        [IKernelOrchestrator] M4：阻塞等待 spawn handle 对应的子执行完成。
+        [IKernelOrchestrator] 阻塞等待 spawn handle 对应的子执行完成。
         线程 join 后提取子环境的全局变量（排除内置符号和不可序列化值），
         以 Python dict 形式返回，由 HostService 层装箱为 IbDict 传回 IBCI。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"M4 request_collect handle={handle}")
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_collect handle={handle}")
 
         with self._spawned_tasks_lock:
             task = self._spawned_tasks.get(handle)
@@ -563,5 +563,5 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     pass
 
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                            f"M4 collect({handle!r}) extracted {len(result)} variable(s): {list(result)}")
+                            f"collect({handle!r}) extracted {len(result)} variable(s): {list(result)}")
         return result

@@ -400,7 +400,7 @@ class IbBehaviorExpr(IbExpr):
     # 默认值的语义：
     # * ``llm_deps == []`` ：本 behavior 无 LLM 依赖（只引用普通变量）
     # * ``dispatch_eligible == True`` ：可独立调度（无依赖或依赖图无环时由
-    #   M5a 在分析后保留；分析未运行时也按 True 默认，与现有行为一致）
+    #   依赖分析在后保留；分析未运行时也按 True 默认，与现有行为一致）
     llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)
     dispatch_eligible: bool = True
 

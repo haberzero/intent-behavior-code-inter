@@ -83,7 +83,7 @@ class Interpreter:
         """ 获取指定对象（如 Behavior）捕获的意图栈内容。
 
         ``obj.captured_intents`` 现在协议为 ``None`` 或 ``IbIntentContext`` 实例
-        （Step 6c/6d 之后；详见 ``core.runtime.objects.builtins.IbBehavior``）。
+        （详见 ``core.runtime.objects.builtins.IbBehavior``）。
         """
         if not (isinstance(obj, IbValue) and obj.ib_class.name == "behavior"):
             return []
@@ -316,7 +316,7 @@ class Interpreter:
         # 4. 设置上下文（含内置变量）
         self.setup_context(self.runtime_context)
 
-        # [Phase 4] IntentStack 与 runtime_context 关联
+        # IntentStack 与 runtime_context 关联
         intent_stack = self.registry.get_builtin_instance("IntentStack")
         if intent_stack and hasattr(intent_stack, 'set_runtime_context'):
             intent_stack.set_runtime_context(self.runtime_context)

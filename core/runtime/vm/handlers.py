@@ -368,7 +368,7 @@ def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 仍按数据透传给父帧处理而不是当场丢弃。
         return res
     if isinstance(res, IbValue) and res.ib_class.name == "behavior":
-        # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor），M3a 不重写
+        # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor）
         return res.call(executor.registry.get_none(), [])
     return res
 
@@ -1290,7 +1290,7 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
 
 
 def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """lambda / snapshot 表达式：构造 ``IbFnCallable`` 或 ``IbBehavior``（M2 SC-3/SC-4）。
+    """lambda / snapshot 表达式：构造 ``IbFnCallable`` 或 ``IbBehavior``（公理 SC-3/SC-4）。
 
     改用编译期填充的 ``node_data["free_vars"]``（``[[name, sym_uid], ...]``）
     代替运行时 AST 走访（``_collect_free_refs``），消除 fallback 路径。

@@ -2,7 +2,7 @@
 tests/unit/test_vm_executor.py
 ==============================
 
-M3a — VMExecutor (CPS Scheduling Loop) 骨架测试。
+VMExecutor (CPS Scheduling Loop) 骨架测试。
 
 测试策略
 --------
@@ -11,7 +11,7 @@ M3a — VMExecutor (CPS Scheduling Loop) 骨架测试。
 * 通过 :class:`VMExecutor` （而非递归 ``visit()``）重新执行该节点子树，
   断言结果或副作用与既有解释器语义一致。
 
-覆盖范围（M3a 实现的节点类型）：
+覆盖范围（实现的节点类型）：
     * 表达式：IbConstant, IbName, IbBinOp, IbUnaryOp, IbBoolOp, IbCompare,
               IbIfExp, IbCall, IbAttribute, IbSubscript, IbTuple, IbListExpr
     * 语句  ：IbModule, IbPass, IbExprStmt, IbAssign, IbIf, IbWhile,
@@ -542,7 +542,7 @@ class TestSchedulerInfrastructure:
         assert vm.supports(binop_uid) is True
 
     def test_supports_unknown_node(self):
-        # M3d 完成后所有 IBCI AST 节点类型都纳入调度表；通过注入一个未实现的
+        # 所有 IBCI AST 节点类型都纳入调度表；通过注入一个未实现的
         # 伪节点类型来验证 supports() 的 miss 逻辑（_dispatch 查表 miss → False）。
         engine = make_engine("int x = 1")
         fake_uid = "fake_unsupported_uid_for_testing"

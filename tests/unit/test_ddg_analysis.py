@@ -2,7 +2,7 @@
 tests/unit/test_ddg_analysis.py
 ================================
 
-M5a — BehaviorDependencyAnalyzer 单元测试。
+BehaviorDependencyAnalyzer 单元测试。
 
 覆盖范围：
 1. 无依赖：纯字面量 / 普通变量 → llm_deps == []
@@ -52,7 +52,7 @@ def all_behavior_exprs(engine):
             return
         for name, value in vars(node).items():
             if name == "llm_deps":
-                continue  # 跳过 M5a 元数据，避免循环
+                continue  # 跳过 llm_deps 元数据，避免循环
             if isinstance(value, ast.IbASTNode):
                 walk(value)
             elif isinstance(value, list):

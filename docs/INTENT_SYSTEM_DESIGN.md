@@ -286,15 +286,26 @@ class IntentResolver:
 
 ### 4.6 LLMExceptFrame 中的意图快照
 
-`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照：
+`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照；每次 retry 前以 fork 副本**直接替换** `_intent_ctx`（NS-2c 落地）：
 
 ```python
 # LLMExceptFrame.save_context()
 frame.saved_intent_ctx = runtime_context.fork_intent_snapshot()  # → _intent_ctx.fork()
+# NS-2b：同时快照帧活跃 intent_context IBCI 实例指针
+frame.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
 # LLMExceptFrame.restore_snapshot()（每次 retry 前调用）
-runtime_context._intent_ctx = frame.saved_intent_ctx.fork()  # 恢复到快照时刻
+# NS-2c：fork-and-replace（取代旧的 merge() 叠加语义）
+runtime_context._intent_ctx = frame.saved_intent_ctx.fork()
+# 同步重建活跃实例指针：保留命名身份（ib_class），但 _ctx 指向新底层
+runtime_context._set_active_intent_ibobj_for_current_ctx(<intent_context class>)
 ```
+
+**为何采用 fork-and-replace 而非 merge**：
+
+- merge 会保留 retry body 在快照之后对意图状态（持久栈/smear 队列/override 槽）的修改，造成"叠加恢复"——与 vars / loop_context 的"干净还原"语义不一致。
+- fork-and-replace 保证 retry 看到的意图状态与 llmexcept 进入时刻完全一致。
+- 活跃实例指针被重建：若原帧持有命名策略，则同步指向新底层 `IbIntentContext`；若原帧匿名，则建立新的匿名封装。底层共享引用不变量（`_active_intent_ibobj.fields['_ctx'] is _intent_ctx`）始终维持。
 
 ### 4.7 snapshot 行为表达式的意图捕获
 
@@ -370,6 +381,29 @@ intent_context saved = intent_context.get_current()
 ```
 
 **实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)`，所有方法在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
+
+### 6.1 帧级活跃实例指针（NS-2b 落地，2026-05-11）
+
+`RuntimeContextImpl` 持有 `_active_intent_ibobj: Optional[IbObject]` 指针，指向当前帧"正在使用"的 `intent_context` IBCI 对象（用户命名身份）。
+
+**核心不变量**：当 `_active_intent_ibobj` 非 None 时，
+```
+_active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork 副本
+```
+
+这是消除"双轨断裂"的关键设计：语法路径（`@+`/`@-`/`@`/`@!`）直接修改 `_intent_ctx`；OOP 路径（在活跃实例上调用 `push()` 等）修改的是同一底层 Python 对象。两路操作互可观察。
+
+**维护点（任一发生即同步更新指针）**：
+
+| 触发点 | 行为 |
+|--------|------|
+| `intent_context.use(ctx)` / `use_intent_context(ibobj)` | fork 源对象 `_ctx`，构造新封装并设为活跃指针（共享 fork 后引用） |
+| `intent_context.clear_inherited()` / `clear_inherited_intents()` | 清空持久栈，建立新的匿名封装为活跃指针 |
+| `IbUserFunction.call()` / `IbLLMFunction.call()` 函数入口 | 子帧 fork 调用者 `_intent_ctx`，建立新的匿名活跃指针；函数返回时恢复调用者指针 |
+| NS-2a 自动绑定（参数为 `intent_context` 类型）| 内部走 `use_intent_context(arg)`，同样重建活跃指针 |
+| `LLMExceptFrame.restore_context()`（NS-2c）| 以 `saved.fork()` 重建 `_intent_ctx`，并以 `saved_active_intent_ibobj.ib_class` 重建新封装 |
+
+**对调试器/工具的价值**：调试器可通过 `get_active_intent_ibobj()` 直接观察"当前帧正在使用哪个用户命名的策略对象"，而不是面对一个匿名 Python 对象。`get_current()` 因此返回的是活跃指针的 fork（保留命名身份的可观察性），但因共享引用，其内容等价于 `_intent_ctx.fork()`。
 
 ---
 

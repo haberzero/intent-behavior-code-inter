@@ -23,7 +23,7 @@ class RuntimeSymbolImpl:
         self.declared_type = declared_type
         self.current_type = type(value) if value is not None else None
         self.is_const = is_const
-        # L2：内置函数（intrinsic）标志位，由 IntrinsicManager 在注入 print/len/range/...
+        # 内置函数（intrinsic）标志位，由 IntrinsicManager 在注入 print/len/range/...
         # 时设置；``get_vars()`` 使用本标志过滤掉运行时调试不应显示的特权符号，
         # 替代历史的硬编码名单 (``"len", "print", "range", ...``)。
         self.is_builtin = is_builtin
@@ -69,7 +69,7 @@ class ScopeImpl:
         if isinstance(declared_type, IbSpec) and declared_type.kind == TypeKind.CLASS.value and declared_type.is_user_defined:
             return
             
-        # [Phase 3.3] 强契约：运行时类型校验
+        # 强契约：运行时类型校验
         if not hasattr(value, 'ib_class'):
             value = self._registry.box(value)
 
@@ -239,7 +239,7 @@ class ScopeImpl:
     def is_cell_promoted(self, sym_uid: str) -> bool:
         """判断 sym_uid 对应的符号是否已提升为 Cell 变量（C12 封装替代私有 _cell_map 探测）。
 
-        供 VMExecutor M5c 护栏（``_target_is_promoted_cell``）使用：
+        供 VMExecutor 护栏（``_target_is_promoted_cell``）使用：
         不再直接访问 ``scope._cell_map``，通过本方法保持 ScopeImpl 内部封装。
         """
         return sym_uid in self._cell_map
@@ -247,7 +247,7 @@ class ScopeImpl:
     def define_raw(self, name: Optional[str], value: Any, uid: Optional[str] = None, declared_type: Any = None) -> 'RuntimeSymbolImpl':
         """低级符号写入：绕过类型检查与 box 操作（VM 特殊路径专用，C12）。
 
-        仅供 VMExecutor 的 ``LLMFuture`` 占位符写入使用（M5c dispatch-before-use）。
+        仅供 VMExecutor 的 ``LLMFuture`` 占位符写入使用（dispatch-before-use）。
         普通变量定义应使用 :meth:`define`；本方法不进行类型校验，不调用 ``registry.box``，
         也不触发 Cell 同步（LLMFuture 不是合法 ``IbObject``，不应进入 cell.set）。
 
@@ -328,15 +328,34 @@ class RuntimeContextImpl(RuntimeContext):
         self._loop_stack: List[Dict[str, int]] = []
         self._retry_hint: Optional[str] = None # 运行时重试提示词
 
-        # 意图上下文（Step 6c 完整迁移）：
+        # 意图上下文：
         # 持久意图栈、涂抹意图队列、排他意图槽、全局意图全部统一持有在此对象中。
         from core.runtime.objects.intent_context import IbIntentContext
         self._intent_ctx: IbIntentContext = IbIntentContext()
 
+        # 帧级活跃 intent_context IBCI 实例指针
+        # ----------------------------------------------------------------
+        # 指向当前帧"正在使用"的 intent_context IBCI 对象（用户命名身份）。
+        # 不变量：当 ``_active_intent_ibobj`` 非 None 时，
+        #   ``_active_intent_ibobj.fields['_ctx'] is self._intent_ctx``
+        # 共享引用而非 fork 副本，确保语法路径 (`@+`/`@-`) 与 OOP 路径
+        # （``intent_context`` 方法调用）在当前活跃实例上操作的是同一底层 IbIntentContext。
+        #
+        # 维护点（任一发生即更新此指针）：
+        #   - ``use_intent_context(ibobj)``  → 设置为新的封装实例（共享 _ctx 引用）
+        #   - ``clear_inherited_intents()``  → 设置为新的匿名封装（清空持久栈）
+        #   - 函数调用进入时（fork 调用方）→ 重置为 None（子帧未选择策略）
+        #
+        # 设计目的：使调试器能够直接观察"当前帧正在使用哪个用户命名的意图策略对象"，
+        # 而不是面对一个匿名 Python 对象。``get_current()`` 返回该指针的 fork，
+        # 既保留用户对象身份语义，又确保 fork 语义不泄漏。
+        from core.runtime.objects.kernel import IbObject  # noqa: F401
+        self._active_intent_ibobj: Optional['IbObject'] = None
+
         # [LLMExceptFrame] LLM 异常重试帧栈
         self._llm_except_frames: List['LLMExceptFrame'] = []
 
-        # [IbLLMCallResult] 最后一个 LLM 执行结果（Step 7b）
+        # [IbLLMCallResult] 最后一个 LLM 执行结果
         # 已升级为 IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
         self._last_llm_result: Optional[Any] = None
 
@@ -367,7 +386,7 @@ class RuntimeContextImpl(RuntimeContext):
         设置最后一个 LLM 执行结果。
 
         接受 LLMResult（Python dataclass）或 IbLLMCallResult（IBCI 对象）。
-        LLMResult 会被自动转换为 IbLLMCallResult 后存储（Step 7b）。
+        LLMResult 会被自动转换为 IbLLMCallResult 后存储。
         """
         if result is None:
             self._last_llm_result = None
@@ -528,7 +547,7 @@ class RuntimeContextImpl(RuntimeContext):
                         continue
                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
                         continue
-                    # L2：通过 RuntimeSymbolImpl.is_builtin 标志过滤内置函数（intrinsic），
+                    # 通过 RuntimeSymbolImpl.is_builtin 标志过滤内置函数（intrinsic），
                     # 替代历史的硬编码名单 ("len", "print", "range", "input", "get_self_source")。
                     # 内置函数仅供 IBCI 代码调用，不应在调试器变量面板中暴露给用户。
                     if getattr(symbol, "is_builtin", False):
@@ -668,6 +687,13 @@ class RuntimeContextImpl(RuntimeContext):
         行为与 intent_context.use(ctx) 对齐：
         - 使用 ctx._ctx 的 fork 副本，避免引用共享
         - 保留当前帧的全局意图（Engine 级注入）
+
+        在替换底层 IbIntentContext 的同时，重建当前帧的
+        ``_active_intent_ibobj`` 指针——它持有一个**新的** intent_context IBCI
+        包装对象，其 ``fields['_ctx']`` 与帧的 ``_intent_ctx`` 共享引用。
+        因此后续语法路径（``@+``/``@-``）与 OOP 路径（``active.push(...)``）
+        操作的是同一底层 IbIntentContext，而原始实参 ``intent_ctx_obj``
+        因 fork 语义不会受到泄漏影响。
         """
         if intent_ctx_obj is None or not hasattr(intent_ctx_obj, "fields"):
             return False
@@ -679,7 +705,59 @@ class RuntimeContextImpl(RuntimeContext):
         forked = other_ctx.fork()
         forked.set_global_intents(self._intent_ctx.get_global_intents())
         self._intent_ctx = forked
+        # 同步更新活跃实例指针，使其封装与 _intent_ctx 共享引用。
+        self._set_active_intent_ibobj_for_current_ctx(intent_ctx_obj.ib_class)
         return True
+
+    # ------------------------------------------------------------------ #
+    # active intent_context IBCI handle                                   #
+    # ------------------------------------------------------------------ #
+
+    def _set_active_intent_ibobj_for_current_ctx(self, ib_class: Any) -> None:
+        """
+        构造一个新的 ``intent_context`` IBCI 封装对象，其 ``_ctx`` 与
+        当前帧的 ``self._intent_ctx`` 共享引用，并将其登记为活跃实例指针。
+
+        共享引用不变量：当用户在该封装上调用 ``push()`` 时，
+        修改的就是帧的 ``_intent_ctx``；反之 ``@+`` 修改的也是该封装的 ``_ctx``。
+        """
+        from core.runtime.objects.kernel import IbObject
+        wrapper = IbObject(ib_class)
+        wrapper.fields['_ctx'] = self._intent_ctx
+        self._active_intent_ibobj = wrapper
+
+    def get_active_intent_ibobj(self) -> Optional[Any]:
+        """返回当前帧活跃的 intent_context IBCI 实例指针（可能为 None）。"""
+        return self._active_intent_ibobj
+
+    def set_active_intent_ibobj(self, ibobj: Optional[Any]) -> None:
+        """
+        直接设置活跃实例指针。
+
+        调用方约定：
+        - 传入 ``None`` 时表示当前帧没有命名策略（匿名意图状态）。
+        - 传入 ``IbObject`` 时，调用方需保证 ``ibobj.fields['_ctx'] is self._intent_ctx``
+          才能维持共享引用不变量。
+        """
+        self._active_intent_ibobj = ibobj
+
+    def clear_inherited_intents(self) -> None:
+        """
+        清空当前帧从调用者继承的持久意图栈。
+
+        与 ``intent_context.clear_inherited()`` IBCI API 一致：
+        - 重置 ``_intent_ctx`` 的持久意图栈为空
+        - 重建 ``_active_intent_ibobj`` 为新的匿名封装（共享 _ctx 引用），
+          表示当前帧重置为干净的匿名意图状态
+
+        全局意图和涂抹/排他槽位**不**被清除（仅清空持久 ``@+`` 栈）。
+        """
+        self._intent_ctx.set_intent_top(None)
+        intent_context_class = self._registry.get_class("intent_context")
+        if intent_context_class is not None:
+            self._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            self._active_intent_ibobj = None
 
     def restore_active_intents(self, intents: Union[List[IbIntent], Optional['IntentNode']]) -> None:
         """

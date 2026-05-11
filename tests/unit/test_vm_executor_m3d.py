@@ -2,15 +2,14 @@
 tests/unit/test_vm_executor_m3d.py
 ==================================
 
-M3d — 主路径切换测试。
+主路径切换测试。
 
 覆盖：
 
-* M3d 新增的 6 个 CPS handler：
+* 新增的 6 个 CPS handler：
     - 表达式：IbBehaviorExpr, IbBehaviorInstance, IbLambdaExpr
     - 控制流：IbFor, IbTry, IbRetry
-* Interpreter.execute_module() 与 IbUserFunction.call() 已切换至
-  VMExecutor 主路径（M3d 出口契约）
+* Interpreter.execute_module() 与 IbUserFunction.call() 已切换至 VMExecutor 主路径
 
 策略：编译合法 IBCI 程序、对相关节点单独通过 VMExecutor.run() 驱动，
 断言行为与递归 visit() 一致。
@@ -57,7 +56,7 @@ def native(obj):
 
 
 # ===========================================================================
-# Dispatch table coverage — M3d adds 6 entries (total 44)
+# Dispatch table coverage — 6 entries (total 44)
 # ===========================================================================
 
 class TestM3dDispatchCoverage:
@@ -74,7 +73,7 @@ class TestM3dDispatchCoverage:
             assert node_type in dispatch, f"missing handler for {node_type}"
 
     def test_dispatch_total_count(self):
-        # 22 (M3a) + 1 (M3c IbLLMExceptionalStmt) + 14 (M3d-prep) + 6 (M3d) = 43
+        # 22 + 1 (IbLLMExceptionalStmt) + 14 (prep) + 6 = 43
         # IbExceptHandler / IbCase / IbIntentInfo 等子节点由父 handler 直接
         # 解构处理，未独立注册到 dispatch 表。
         dispatch = build_dispatch_table()

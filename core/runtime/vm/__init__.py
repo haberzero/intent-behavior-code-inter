@@ -20,7 +20,7 @@ IBCI AST 求值的主执行引擎，基于 Python 生成器实现的 trampoline 
 控制流（return/break/continue）通过 :class:`Signal` 数据对象沿帧栈传递，不依赖
 Python 异常。``LLMExceptFrame`` retry 循环通过 ``vm_handle_IbFor`` 内联实现。
 
-CPS dispatch table 覆盖全部 43 种 AST 节点类型（M3a–M3d + Phase 1–4 完成），
+CPS dispatch table 覆盖全部 43 种 AST 节点类型，
 ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 均以本执行器
 为主路径。主调度循环不再依赖递归访问路径。
 """
