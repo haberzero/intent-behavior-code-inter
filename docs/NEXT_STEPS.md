@@ -11,6 +11,8 @@
 
 类型系统 M1–M5、VM CPS 主线与 intent 系统 OOP 化（NS-2 全部 4 步）已全部完成，当前**无开放的 P0 主线任务**。
 
+交叉核验结论：真正的下一步仍是 **NS-1**（先把 `IbBehavior.call()` / `IbLLMFunction.call()` / `IbExprStmt` 的同步旁路并入 CPS），**NS-3** 继续作为与 NS-1 强耦合的后续收口项。
+
 下一阶段优先项（按优先级排序，任选其一开工）：
 
 ### NS-1 [P1]　LLM 调用路径合并入 CPS 调度循环

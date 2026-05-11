@@ -396,8 +396,10 @@ visit_IbLLMExceptionalStmt
 
 - **P1**：`IbBehavior.call()` / `IbLLMFunction.call()` 走同步 Python 调用，未进入 CPS 循环；
 - **P1**：`lambda`/`snapshot` 跨帧 / 跨线程 `_execution_context` 边界（`builtins.py:730,930`）；
-- **P1**：意图系统语法路径与 OOP 路径双轨（共享底层但逻辑独立）；
-- **P2**：llmexcept 快照恢复 `merge()` vs 直接替换语义对齐。
+- **P2**：`LLMExceptFrame` 重试历史追踪（`reset_for_retry()` 会清空 `last_error`，不保留历史）；
+- **P3**：`LLMExceptFrameStack` 最大嵌套深度限制；
+- **P2**：`intent_context` 高级 OOP 场景（PT-2.1，已解除阻塞待排期）；
+- **P3**：`IbIntentContext` 序列化/反序列化接入（PT-2.2，已解除阻塞待排期）。
 
 ---
 
