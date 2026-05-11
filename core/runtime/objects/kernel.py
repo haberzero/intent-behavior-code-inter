@@ -912,9 +912,26 @@ class IbUserFunction(IbFunction):
                 if self.owner_class and self.owner_class.parent:
                     super_proxy = IbSuperProxy(receiver, self.owner_class.parent)
                     rt_context.define_variable("super", super_proxy, uid="builtin:super")
-                
+
+            def _is_intent_context_param(param_data: Dict[str, Any]) -> bool:
+                if param_data.get("_type") != "IbTypeAnnotatedExpr":
+                    return False
+                annotation_uid = param_data.get("annotation")
+                if not annotation_uid:
+                    return False
+                annotation_data = self.context.get_node_data(annotation_uid)
+                if not annotation_data:
+                    return False
+                ann_type = annotation_data.get("_type")
+                if ann_type == "IbName":
+                    return annotation_data.get("id") == "intent_context"
+                if ann_type == "IbAttribute":
+                    return annotation_data.get("attr") == "intent_context"
+                return False
+
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
+                is_intent_ctx_param = _is_intent_context_param(arg_data)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
@@ -923,8 +940,16 @@ class IbUserFunction(IbFunction):
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
+                    arg_value = args[i]
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                    if (
+                        is_intent_ctx_param
+                        and isinstance(arg_value, IbObject)
+                        and arg_value.ib_class is not None
+                        and arg_value.ib_class.name == "intent_context"
+                    ):
+                        rt_context.use_intent_context(arg_value)
             
             body = node_data.get("body", [])
             # 通过 VMExecutor 驱动函数体语句（CPS 主路径）。
@@ -1037,8 +1062,26 @@ class IbLLMFunction(IbFunction):
             )
             
             params_uids = node_data.get("args", [])
+
+            def _is_intent_context_param(param_data: Dict[str, Any]) -> bool:
+                if param_data.get("_type") != "IbTypeAnnotatedExpr":
+                    return False
+                annotation_uid = param_data.get("annotation")
+                if not annotation_uid:
+                    return False
+                annotation_data = self.context.get_node_data(annotation_uid)
+                if not annotation_data:
+                    return False
+                ann_type = annotation_data.get("_type")
+                if ann_type == "IbName":
+                    return annotation_data.get("id") == "intent_context"
+                if ann_type == "IbAttribute":
+                    return annotation_data.get("attr") == "intent_context"
+                return False
+
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
+                is_intent_ctx_param = _is_intent_context_param(arg_data)
                 # 处理类型标注包装
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
@@ -1048,8 +1091,16 @@ class IbLLMFunction(IbFunction):
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
+                    arg_value = args[i]
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                    if (
+                        is_intent_ctx_param
+                        and isinstance(arg_value, IbObject)
+                        and arg_value.ib_class is not None
+                        and arg_value.ib_class.name == "intent_context"
+                    ):
+                        rt_context.use_intent_context(arg_value)
             
             # 解析呼叫级意图（函数头上的意图），暂存供 invoke_llm_function 消费
             intent_uid = node_data.get("intent")
