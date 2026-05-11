@@ -53,6 +53,9 @@ class VMExecutor:
         # 调度计数：所有 yield/StopIteration 步骤的累计；用于诊断与未来限速。
         self.step_count: int = 0
         self.max_steps: int = 0  # 0 == unlimited
+        # 当前正在运行的帧栈引用；仅在 _drive_loop 主循环活跃时非 None。
+        # 通过 frame_stack_depth 属性暴露，供调试器 / NS-1 测试观察 CPS 栈深度。
+        self._current_stack: Optional[list] = None
 
     # ------------------------------------------------------------------
     # Service accessors
@@ -70,6 +73,16 @@ class VMExecutor:
     @property
     def registry(self) -> Any:
         return self._ec.registry
+
+    @property
+    def frame_stack_depth(self) -> int:
+        """当前 CPS 帧栈深度。
+
+        仅在主调度循环 ``_drive_loop`` 活跃期间非零。供调试器 / 测试观察
+        正在执行的 VMTask 帧层级（NS-1：``_vm_invoke_behavior`` /
+        ``_vm_invoke_llm_function`` yield 后，本属性应 ≥ 2）。
+        """
+        return len(self._current_stack) if self._current_stack is not None else 0
 
     @property
     def service_context(self) -> Any:
@@ -150,7 +163,20 @@ class VMExecutor:
 
         独立成方法让 ``run()`` 和将来其他入口（例如 ``run_body``-内联化）
         共享同一段循环代码，避免漂移。
+
+        本方法负责把 ``stack`` 临时绑定到 ``self._current_stack`` 上，使
+        ``frame_stack_depth`` 属性能从外部观察到 CPS 栈深度；嵌套
+        ``_drive_loop`` 调用（例如 ``vm.run`` 重入）通过保存/恢复保持外层
+        视图一致。实际循环体在 ``_drive_loop_body``。
         """
+        prev_stack = self._current_stack
+        self._current_stack = stack
+        try:
+            return self._drive_loop_body(stack)
+        finally:
+            self._current_stack = prev_stack
+
+    def _drive_loop_body(self, stack: list) -> Any:
         # (value, exception) — 互斥；下一次循环将传递给栈顶任务
         pending_value: Any = None
         pending_exception: Optional[BaseException] = None

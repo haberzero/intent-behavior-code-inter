@@ -217,7 +217,7 @@ VM 行为：
            → runtime_context.set_last_llm_result(result)
 ```
 
-> 当前已知局限：`IbBehavior.call()` / `IbLLMFunction.call()` 通过 `executor.invoke_behavior` / `invoke_llm_function` 走的是同步 Python 调用，不在 CPS 循环内。这是 P1 项，详见 `docs/NEXT_STEPS.md` NS-1。
+> 当前 LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers.py` 中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。详见 `docs/COMPLETED.md` NS-1 锚点。
 
 ---
 
@@ -380,7 +380,7 @@ visit_IbLLMExceptionalStmt
 
 ---
 
-## §12 当前状态（2026-05-08 锚点）
+## §12 当前状态（2026-05-11 锚点）
 
 | 主线 | 状态 |
 |------|------|
@@ -390,16 +390,17 @@ visit_IbLLMExceptionalStmt
 | M4（多 Interpreter 隔离） | ✅ 完成 |
 | M6（合规测试套件） | ✅ 完成 |
 | Phase 1–5 编译器深度清洁（C5–C14） | ✅ 完成 |
+| NS-1（LLM 调用路径合并入 CPS 调度循环） | ✅ 完成（2026-05-11） |
 | L3 语言级协程 / yield | ⏳ 远期愿景 |
 
 **已知开放议题**（详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md`）：
 
-- **P1**：`IbBehavior.call()` / `IbLLMFunction.call()` 走同步 Python 调用，未进入 CPS 循环；
-- **P1**：`lambda`/`snapshot` 跨帧 / 跨线程 `_execution_context` 边界（`builtins.py:730,930`）；
+- **P2**：`lambda`/`snapshot` 跨帧 / 跨线程 `_execution_context` 边界（`builtins.py:724-751,928-934`，原 NS-3）；
 - **P2**：`LLMExceptFrame` 重试历史追踪（`reset_for_retry()` 会清空 `last_error`，不保留历史）；
 - **P3**：`LLMExceptFrameStack` 最大嵌套深度限制；
 - **P2**：`intent_context` 高级 OOP 场景（PT-2.1，已解除阻塞待排期）；
 - **P3**：`IbIntentContext` 序列化/反序列化接入（PT-2.2，已解除阻塞待排期）。
+- **follow-up**：`LLMExecutorImpl._evaluate_segments` 中 `vm.run(segment)` 嵌套求值尚未 CPS 化，主路径影响小，留作后续单独评估。
 
 ---
 

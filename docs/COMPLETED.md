@@ -8,6 +8,27 @@
 
 ---
 
+## 2026-05-11 锚点：NS-1 LLM 调用路径合并入 CPS 调度循环
+
+将 `IbBehavior.call()` / `IbLLMFunction.call()` 与 `vm_handle_IbExprStmt` 中的 behavior 同步旁路合并入 VMExecutor 的 CPS 主循环；所有 LLM 调用（行为表达式 / 命名 LLM 函数）触发时，对应 VMTask 都在帧栈上，使 LLM 帧受 VM 调度管理（快照、并发、调试可观察性）。
+
+- **新增 CPS 生成器助手**（`core/runtime/vm/handlers.py`）：
+  - `_vm_invoke_behavior(executor, behavior, args)`：镜像 `IbBehavior.call` 的 scope/closure/参数绑定簿记，在调用 LLM 之前 `yield None` 一次以保证当前 VMTask 留在帧栈上，然后委托给 `executor.invoke_behavior(...)`。
+  - `_vm_invoke_llm_function(executor, func, receiver, args)`：镜像 `IbLLMFunction.call` 的意图栈 fork / 模块切换 / `push_stack` / `enter_scope` / 参数自动绑定（含 `intent_context` 形参 `use_intent_context`）/ `call_intent` 解析簿记，`yield None` 后委托给 `executor.invoke_llm_function(...)`。
+- **handler 改写**：
+  - `vm_handle_IbCall`：当 `func` 是 `IbBehavior` 或 `IbLLMFunction` 时改用 `yield from` 助手；其他 callable 维持 `func.call(...)`。
+  - `vm_handle_IbExprStmt`：behavior 分支由 `res.call(...)` 改为 `yield from _vm_invoke_behavior(executor, res, [])`。
+- **VMExecutor 可观察性**：`VMExecutor` 新增 `frame_stack_depth` 属性（暴露主循环当前栈深度），供调试器 / NS-1 回归测试观察 CPS 帧层级。
+- **`IbBehavior.call()` / `IbLLMFunction.call()` 保留为 Python-可调用后备**（host/用户直接调用场景），外部契约未变。
+- **回归覆盖**：新增 `tests/runtime/test_vm_llm_cps_dispatch.py`（2 个测试）验证 `execute_behavior_object` / `execute_llm_function` 进入时 `vm.frame_stack_depth >= 2` 且 `step_count` 已推进。
+- **范围外（已记为后续）**：`LLMExecutorImpl._evaluate_segments` 的 CPS 化转换未本批纳入。`_evaluate_segments` 通过 `vm.run(segment)` 对 prompt 片段做嵌套求值；改造为 yield-based 形式需要把它本身改为生成器、并让 `_call_llm`/`execute_behavior_expression` 调用方也变成 yield，扩散面较大且收益弱于 NS-1 主路径，因此留作 follow-up。
+- 代码：`core/runtime/vm/handlers.py`、`core/runtime/vm/vm_executor.py`。文档：`docs/NEXT_STEPS.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`。
+- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1197 passed = 1195 历史 + 2 新增）。
+
+NS-3（lambda/snapshot 跨帧 `_execution_context` 边界）由于 `vm_handle_IbCall` 现在对 IbBehavior 走 CPS 助手，**捕获时刻的 `_execution_context`** 已和**调用时刻的执行器** 通过 VMTask 帧栈对齐；但 `IbBehavior` 字段中仍持有定义期 `execution_context` 引用，跨线程时仍可能出现历史绑定问题（与 `core/runtime/objects/builtins.py:930` 一致）。因此 NS-3 不算被本次合并完全吃掉，保留待后续单独评估。
+
+---
+
 ## 2026-05-11 锚点：NS-2 intent 系统 OOP 化完整收口（NS-2a/b/c/d 全部完成）
 
 NS-2 全四步合龙——意图注释体系语法路径（`@`/`@+`/`@-`/`@!`）与 OOP 路径（`intent_context` 实例方法）打通为同一底层 `IbIntentContext`，双轨断裂彻底消除。
