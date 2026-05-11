@@ -671,6 +671,8 @@ class RuntimeContextImpl(RuntimeContext):
         """
         if intent_ctx_obj is None or not hasattr(intent_ctx_obj, "fields"):
             return False
+        if self._intent_ctx is None or not hasattr(self._intent_ctx, "get_global_intents"):
+            return False
         other_ctx = intent_ctx_obj.fields.get("_ctx")
         if other_ctx is None or not hasattr(other_ctx, "fork"):
             return False

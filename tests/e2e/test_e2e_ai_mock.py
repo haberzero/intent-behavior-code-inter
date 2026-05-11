@@ -972,7 +972,8 @@ print(result)
 
     def test_intent_context_param_auto_binds_active_context(self):
         """
-        NS-2a: `func foo(intent_context ctx)` 进入函数后应自动以 ctx 作为当前帧意图上下文来源。
+        NS-2a: entering `func foo(intent_context ctx)` should auto-activate `ctx`
+        as the current frame intent context source.
         """
         code = """
 @+ "caller intent"
@@ -995,7 +996,8 @@ print((str)resolved)
 
     def test_intent_context_param_does_not_leak_inner_changes(self):
         """
-        NS-2a: 自动绑定后仍应保持 fork 语义，函数内 @+ 不回流修改实参对象。
+        NS-2a: auto-binding must preserve fork semantics; inner `@+` changes
+        must not flow back to the argument context object.
         """
         code = """
 intent_context ctx = intent_context()
