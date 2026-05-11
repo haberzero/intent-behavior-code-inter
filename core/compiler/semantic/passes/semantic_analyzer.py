@@ -131,7 +131,7 @@ class SemanticAnalyzer:
             self.visit(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
 
-            # Pass 5 (M5a): IbBehaviorExpr LLM 依赖图分析（DDG）
+            # Pass 5: IbBehaviorExpr LLM 依赖图分析（DDG）
             # 仅在前序 Pass 无错误时才运行，避免因部分绑定缺失产生噪音误差。
             if not self.issue_tracker.has_errors():
                 self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 5: Behavior dependency analysis (DDG)...")
@@ -2138,7 +2138,7 @@ class SemanticAnalyzer:
         return self._any_desc
 
     def _validate_integrity(self, root: ast.IbASTNode):
-        """[Phase 5] 语义完整性自检：确保所有引用节点都已绑定到侧表"""
+        """语义完整性自检：确保所有引用节点都已绑定到侧表"""
         self.debugger.trace(CoreModule.SEMANTIC, DebugLevel.DETAIL, "Performing semantic integrity self-check...")
         
         missing_bindings = []

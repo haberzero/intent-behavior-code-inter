@@ -3,8 +3,8 @@ core/kernel/axioms/primitives.py
 
 Concrete axiom implementations for all built-in IBCI types.
 
-Post-M5 design
---------------
+Design
+------
 * Single inheritance from ``BaseAxiom``.  The legacy multi-inheritance with
   per-capability Protocol classes (``CallCapability``, ``IterCapability``…)
   has been removed — all capability methods now live directly on the
@@ -17,7 +17,7 @@ Post-M5 design
 * ``get_method_specs()`` returns ``Dict[str, MethodMemberSpec]`` —
   ``MemberSpec`` / ``MethodMemberSpec`` are pure data, no circular risk.
 * ``EnumAxiom._enum_index_registry`` is an instance dict (eliminating the
-  pre-M5 cross-engine global-state bug).
+  cross-engine global-state bug).
 """
 
 from __future__ import annotations
@@ -1075,7 +1075,7 @@ class EnumAxiom(BaseAxiom):
     Design notes
     ------------
     * ``_enum_index_registry`` is an instance dict (not class-level) to
-      eliminate the cross-engine global-state bug from the pre-M3 design.
+      eliminate the cross-engine global-state bug from the original design.
     * All type parameters use string names (no IbSpec objects required).
     """
 

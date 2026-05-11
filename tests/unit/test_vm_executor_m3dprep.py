@@ -2,7 +2,7 @@
 tests/unit/test_vm_executor_m3dprep.py
 ======================================
 
-M3d-prep — 扩展 CPS handler 覆盖测试。
+扩展 CPS handler 覆盖测试。
 
 覆盖的新 handler（在 build_dispatch_table 中新增的 14 个条目）：
     * 表达式：IbDict, IbSlice, IbCastExpr, IbFilteredExpr

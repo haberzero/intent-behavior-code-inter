@@ -1,10 +1,10 @@
 """
 core/kernel/axioms/protocols.py
 
-Unified TypeAxiom interface — single capability surface (M5).
+Unified TypeAxiom interface — single capability surface.
 
-Design (post-M5 unification)
-----------------------------
+Design
+------
 All capability methods live directly on ``TypeAxiom``.  The previous family
 of separate ``CallCapability`` / ``IterCapability`` / ... protocol classes
 has been collapsed into a single interface.  Each axiom declares the

@@ -167,12 +167,12 @@ class TestLambdaCapturedIntents:
 
 
 # ---------------------------------------------------------------------------
-# NS-2b: 帧级活跃 intent_context IBCI 实例指针
+# 帧级活跃 intent_context IBCI 实例指针
 # ---------------------------------------------------------------------------
 
 class TestNS2bActiveIntentIbobj:
     """
-    NS-2b：``RuntimeContextImpl._active_intent_ibobj`` 指针语义。
+    ``RuntimeContextImpl._active_intent_ibobj`` 指针语义。
 
     核心不变量：
     - 初始状态指针为 None（裸 RuntimeContext，无命名策略）
@@ -257,12 +257,12 @@ class TestNS2bActiveIntentIbobj:
 
 
 # ---------------------------------------------------------------------------
-# NS-2c: LLMExceptFrame 意图恢复采用 fork-and-replace 而非 merge
+# LLMExceptFrame 意图恢复采用 fork-and-replace 而非 merge
 # ---------------------------------------------------------------------------
 
 class TestNS2cLlmExceptIntentRestore:
     """
-    NS-2c：``LLMExceptFrame.restore_context()`` 应以 ``_intent_ctx = saved.fork()``
+    ``LLMExceptFrame.restore_context()`` 应以 ``_intent_ctx = saved.fork()``
     直接替换底层 IbIntentContext，而不是 ``merge()`` 叠加（旧行为）。
 
     关键差异：

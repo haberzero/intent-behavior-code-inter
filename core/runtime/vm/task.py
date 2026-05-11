@@ -12,9 +12,9 @@ VMTaskResult
 * SUSPEND(child_uid)  —— 任务挂起，等待子节点求值完成
 * SIGNAL(signal,val)  —— 触发控制流信号（return/break/continue/throw）
 
-Signal 控制信号语义（M3b 起）
-----------------------------
-M3b 的核心改动：控制流不再依赖 Python 异常跨帧传播，而是用
+Signal 控制信号语义
+------------------
+控制流不再依赖 Python 异常跨帧传播，而是用
 :class:`Signal` 数据对象作为生成器协程的 **返回值**
 （即 ``StopIteration.value``）显式传递。调度循环识别 ``Signal`` 类型
 的任务结果，沿帧栈数据化向上传递（通过 ``gen.send(Signal)``），由
@@ -41,7 +41,7 @@ class ControlSignal(Enum):
 
 @dataclass(frozen=True)
 class Signal:
-    """显式控制流信号数据对象（M3b）。
+    """显式控制流信号数据对象。
 
     handler 通过 ``return Signal(kind, value)`` 让任务以 Signal 作为
     ``StopIteration.value`` 结束；调度循环识别后把 Signal 作为
@@ -49,7 +49,7 @@ class Signal:
     用 ``isinstance(res, Signal)`` 判断是否为信号并自行处理：
 
     * 循环 handler 拦截 BREAK/CONTINUE
-    * 函数 handler（M3c/M3d 启用）拦截 RETURN
+    * 函数 handler 拦截 RETURN
     * 其他 handler 通过 ``return res`` 透传
 
     使用 frozen 数据类：因为 Signal 在帧间作为不可变值流转，避免误改。
@@ -84,9 +84,8 @@ class UnhandledSignal(Exception):
 class VMTaskResult:
     """调度结果数据对象。
 
-    M3a 中作为标记类型供文档与未来 M3b 复用；M3b 起 SIGNAL 形态由
-    :class:`Signal` 数据对象在生成器返回值中直接承担，本数据类仍保
-    留作为公开类型标签（含 ``DONE`` / ``SUSPEND`` / ``SIGNAL``）。
+    SIGNAL 形态由 :class:`Signal` 数据对象在生成器返回值中直接承担，
+    本数据类作为公开类型标签（含 ``DONE`` / ``SUSPEND`` / ``SIGNAL``）。
     """
     kind: str  # "done" | "suspend" | "signal"
     value: Any = None
@@ -128,6 +127,6 @@ class VMTask:
     """
     node_uid: str
     generator: Any = None
-    # task-local 元数据；M3a 暂未启用（保留供 M3b/M3c 扩展，例如 LLMExceptTask 的
+    # task-local 元数据（保留供扩展，例如 LLMExceptTask 的
     # snapshot 字段、FunctionCallFrame 的 expected_signal 字段等）。
     locals: dict = field(default_factory=dict)

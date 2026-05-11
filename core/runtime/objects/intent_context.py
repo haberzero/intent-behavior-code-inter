@@ -28,7 +28,7 @@ class IbIntentContext:
     """
     意图上下文运行时对象。
 
-    内部结构（镜像 RuntimeContextImpl 当前实现，方便 Step 6c 迁移）：
+    内部结构：
     - _intent_top: Optional[IntentNode]     持久意图栈顶节点（不可变链表，结构共享）
     - _smear_queue: List[IbIntent]          一次性涂抹意图队列（@ 语义）
     - _override: Optional[IbIntent]         排他意图槽（@! 语义）

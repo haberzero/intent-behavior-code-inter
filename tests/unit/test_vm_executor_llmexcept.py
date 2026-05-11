@@ -2,7 +2,7 @@
 tests/unit/test_vm_executor_llmexcept.py
 =========================================
 
-M3c / C11 — VMExecutor ``IbLLMExceptionalStmt`` CPS handler 专项测试。
+VMExecutor ``IbLLMExceptionalStmt`` CPS handler 专项测试。
 
 覆盖范围
 --------
@@ -183,7 +183,7 @@ class TestCPSExecution:
         assert native(n_val) == 42
 
     def test_cps_supports_llmexcept(self):
-        """VMExecutor.supports() 应对 IbLLMExceptionalStmt 返回 True（M3c）。"""
+        """VMExecutor.supports() 应对 IbLLMExceptionalStmt 返回 True。"""
         code = ai_setup() + "str x = @~ MOCK:STR:ok ~\nllmexcept:\n    retry\n"
         engine = make_engine(code)
         vm = make_vm(engine)

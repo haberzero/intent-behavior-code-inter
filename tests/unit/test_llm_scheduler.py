@@ -2,7 +2,7 @@
 tests/unit/test_llm_scheduler.py
 ==================================
 
-M5b — LLMScheduler / LLMFuture 单元测试。
+LLMScheduler / LLMFuture 单元测试。
 
 覆盖范围
 --------
@@ -183,7 +183,7 @@ class TestDispatchEager:
         executor = interp.service_context.llm_executor
         node_uid = find_behavior_expr_uid(engine)
 
-        # M5c：engine.run_string 已对赋值的 RHS 触发了 dispatch_eager；
+        # engine.run_string 已对赋值的 RHS 触发了 dispatch_eager；
         # 清空残留以独立验证 dispatch_eager() 自身的写入行为。
         executor._pending_futures.clear()
         assert node_uid not in executor._pending_futures
@@ -291,7 +291,7 @@ class TestThreadPoolLazyInit:
 
 class TestStableAPIContract:
     def test_execute_behavior_expression_still_works(self):
-        """M5b 修改后，execute_behavior_expression() 仍应正常返回 LLMResult。"""
+        """execute_behavior_expression() 仍应正常返回 LLMResult。"""
         engine = make_engine(ai_setup() + "str x = @~ MOCK:STR:compat_test ~\n")
         interp = engine.interpreter
         executor = interp.service_context.llm_executor

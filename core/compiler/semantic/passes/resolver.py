@@ -233,7 +233,7 @@ class TypeResolver:
 
     def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr):
         """
-        参数化 lambda/snapshot 表达式（M1）的类型决议。
+        参数化 lambda/snapshot 表达式的类型决议。
 
         规则：
         * 参数：visit 各参数的类型标注（用于完整性，结果不直接消费）。

@@ -1,7 +1,7 @@
 """
 tests/runtime/test_ib_value.py
 
-Regression tests for the M4 ``IbValue`` runtime value model.
+Regression tests for the ``IbValue`` runtime value model.
 """
 
 import os

@@ -153,7 +153,7 @@ class IExecutionFrame(Protocol):
     - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
     - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
     - get_last_llm_result()   —— LLM 结果寄存器
-    - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照（Step 6 实现）
+    - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照
     """
     @property
     def current_scope(self) -> Any: ...
@@ -169,7 +169,7 @@ class IExecutionFrame(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# VM 调度循环协议（M3a–M3d + Phase 1–5 全部完成；CPS 是主路径）
+# VM 调度循环协议（CPS 是主路径）
 # ---------------------------------------------------------------------------
 
 @runtime_checkable
@@ -194,7 +194,7 @@ class IVMExecutor(Protocol):
     ----
     * 显式帧栈管理：以非 Python 递归的方式驱动 IBCI AST 求值
     * 控制流信号传播：在帧栈上通过 ``Signal(kind, value)`` 数据对象传播控制流
-    * 43 种 AST 节点类型均有 CPS handler（M3a–M3d + Phase 1–7 全部完成）
+    * 43 种 AST 节点类型均有 CPS handler
 
     实现位于 ``core.runtime.vm.vm_executor.VMExecutor``。
     ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 均以本协议为主路径。

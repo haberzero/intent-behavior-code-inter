@@ -187,7 +187,7 @@ class HostService(IHostService):
 
     def spawn_isolated(self, path: str, policy: Dict[str, Any]) -> str:
         """
-        M4：非阻塞隔离执行。通过内核协调器在后台线程中启动子引擎，立即返回 handle。
+        非阻塞隔离执行。通过内核协调器在后台线程中启动子引擎，立即返回 handle。
         调用方随后通过 collect(handle) 等待完成并取回结果变量。
         """
         if not self.orchestrator:
@@ -198,7 +198,7 @@ class HostService(IHostService):
 
     def collect(self, handle: str) -> Dict[str, Any]:
         """
-        M4：阻塞等待 spawn_isolated 对应的子执行完成，返回子环境导出的全局变量字典。
+        阻塞等待 spawn_isolated 对应的子执行完成，返回子环境导出的全局变量字典。
         handle 消费后失效；重复 collect 同一 handle 将抛出 RuntimeError。
         """
         if not self.orchestrator:

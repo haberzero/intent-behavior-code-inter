@@ -33,7 +33,7 @@ class RuntimeSymbol(Protocol):
     declared_type: Any
     current_type: Any
     is_const: bool
-    is_builtin: bool  # L2：内置函数（intrinsic）符号标志，由 IntrinsicManager 注入
+    is_builtin: bool  # 内置函数（intrinsic）符号标志，由 IntrinsicManager 注入
 
 class SymbolView(Protocol):
     """只读符号视图接口"""
@@ -255,7 +255,7 @@ class IIbBehavior(IIbObject, Protocol):
       - ``None``：lambda 模式（调用时使用当前上下文意图栈）
       - ``IbIntentContext`` 实例：snapshot 模式 / dispatch_eager（已 fork 的值快照）
 
-    历史的 IntentNode 链表 / 已展平 list 路径自 Step 6c/6d 起已废弃。
+    历史的 IntentNode 链表 / 已展平 list 路径已废弃。
     """
     node: str
     captured_intents: Optional[Any]  # Optional[IbIntentContext]; Any 避免循环导入

@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_llm_pipeline.py
 ==================================
 
-M5c — LLM dispatch-before-use E2E 流水线测试。
+LLM dispatch-before-use E2E 流水线测试。
 
 覆盖：
 

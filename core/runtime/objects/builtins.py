@@ -578,7 +578,7 @@ class IbDict(IbValue):
     """
     包装 Python 原生 dict 的 IBC 对象。
 
-    M4 约定: ``payload`` 与 ``fields`` 指向同一个底层映射。
+    约定: ``payload`` 与 ``fields`` 指向同一个底层映射。
     ``fields`` 保持对象系统现有的消息/属性访问兼容面，``payload`` 则让
     该值同时满足统一 ``IbValue`` 承载层的结构约定。
     """
@@ -709,8 +709,8 @@ class IbFnCallable(IbValue):
 
     继承链：IbFnCallable → IbObject (axiom: fn_callable → callable → Object)
 
-    M1 参数化拓展
-    -------------
+    参数化拓展
+    ----------
     * ``params_uids``  —— 来自 ``IbLambdaExpr`` 的参数节点 uid 列表，调用时按位
       绑定到本地作用域（与 ``IbUserFunction`` 同构）。
     * ``body_uid``     —— 当 fn_callable 由 ``IbLambdaExpr`` 创建时，此为 lambda
@@ -718,7 +718,7 @@ class IbFnCallable(IbValue):
     * ``closure``      —— Dict[sym_uid, (name, IbCell)]。lambda/snapshot 两种模式
       均通过此字典访问自由变量（公理 SC-3/SC-4）。snapshot 模式存储定义时刻的值
       拷贝（独立 IbCell），lambda 模式存储共享 IbCell 引用——调用时 cell.get()
-      返回调用时刻的最新值（M2 语义，``captured_scope`` 路径已于 M2 彻底删除）。
+      返回调用时刻的最新值（``captured_scope`` 路径已删除）。
     """
 
     def __init__(
@@ -787,12 +787,12 @@ class IbFnCallable(IbValue):
 
         try:
             # 1) 若有参或有闭包，进入子作用域以承载 params 与 closure cells。
-            #    M2 (SC-4)：lambda/snapshot 两种模式均通过 closure 字典访问自由变量；
+            #    lambda/snapshot 两种模式均通过 closure 字典访问自由变量；
             #    closure 形如 Dict[sym_uid, (name, IbCell)]——按 UID 重新登记是必须
             #    的：runtime IbName 解析走 UID 路径，仅按名字定义会被父链同名符号
             #    的 UID 命中给截胡。
             #    snapshot 模式：cell.get() = 定义时刻的冻结值；
-            #    lambda 模式（M2）：cell.get() = 调用时刻的最新值（共享 IbCell）。
+            #    lambda 模式：cell.get() = 调用时刻的最新值（共享 IbCell）。
             needs_subscope = bool(self.params_uids) or bool(self.closure)
             if needs_subscope:
                 rt_context.enter_scope()
@@ -898,7 +898,7 @@ class IbBehavior(IbValue):
         capture_mode: 'lambda' | 'snapshot' | None (immediate)
         execution_context: 创建时的执行上下文引用（供 call() 使用）。
         captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
-            模式 / dispatch_eager）。Step 6c/6d 之后不再支持 IntentNode 链表 / list。
+            模式 / dispatch_eager）。不再支持 IntentNode 链表 / list。
 
         参数化调用支持（与 IbFnCallable 同构）：
             * ``params_uids`` —— ``IbLambdaExpr`` 提供的参数节点 uid 列表；
@@ -980,7 +980,7 @@ class IbBehavior(IbValue):
            - 将 LLMResult 写入 RuntimeContext 供 llmexcept 使用。
         3. 返回解析后的 IbObject。
 
-        M1 参数化路径：当 ``params_uids`` / ``body_uid`` / ``closure`` 任一非空时，
+        参数化路径：当 ``params_uids`` / ``body_uid`` / ``closure`` 任一非空时，
         进入临时子作用域并绑定参数与闭包 cell，再委托给 executor。executor
         在 prompt 解析阶段查找 ``$name`` 时即可读取到已绑定的值。
         """

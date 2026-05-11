@@ -122,7 +122,7 @@ class VMExecutor:
         原来的 target），直接 run() 即可，无需特殊跳过逻辑。
 
         替代 ``Interpreter.execute_module()`` 与 ``IbUserFunction.call()`` 中
-        各自维护的内联 body 循环——既消除重复逻辑，又确保 M4 多 Interpreter
+        各自维护的内联 body 循环——既消除重复逻辑，又确保多 Interpreter
         并发场景下两条路径保持一致。
 
         参数:

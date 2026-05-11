@@ -972,7 +972,7 @@ print(result)
 
     def test_intent_context_param_auto_binds_active_context(self):
         """
-        NS-2a: entering `func foo(intent_context ctx)` should auto-activate `ctx`
+        Entering `func foo(intent_context ctx)` should auto-activate `ctx`
         as the current frame intent context source.
         """
         code = """
@@ -996,7 +996,7 @@ print((str)resolved)
 
     def test_intent_context_param_does_not_leak_inner_changes(self):
         """
-        NS-2a: auto-binding must preserve fork semantics; inner `@+` changes
+        Auto-binding must preserve fork semantics; inner `@+` changes
         must not flow back to the argument context object.
         """
         code = """
@@ -1022,14 +1022,14 @@ print((str)ctx.resolve())
 
 class TestE2ELambdaRestriction:
     """
-    M2: lambda 值现在可以自由作为函数参数传递（高阶函数场景）。
+    lambda 值现在可以自由作为函数参数传递（高阶函数场景）。
 
-    M1 时期的限制（"lambda 延迟对象不允许作为函数参数传递"）已在 M2 中移除：
+    历史限制（"lambda 延迟对象不允许作为函数参数传递"）已移除：
     lambda 闭包的自由变量通过共享 IbCell 捕获，生命周期安全，可以跨作用域传递。
     """
 
     def test_lambda_can_be_passed_as_arg(self):
-        """M2: lambda 值可以作为函数参数传递，高阶函数能调用它。"""
+        """lambda 值可以作为函数参数传递，高阶函数能调用它。"""
         code = ai_setup_code() + """
 func apply(fn f, int val) -> auto:
     return f(val)
@@ -1056,7 +1056,7 @@ print(r)
 
     def test_snapshot_can_be_passed_as_any(self):
         """
-        snapshot 值仍然可以作为参数传递（M1 起即支持）。
+        snapshot 值可以作为参数传递。
         """
         code = ai_setup_code() + """
 func accept_any(any x):
@@ -1127,12 +1127,12 @@ print("ok")
 
 
 # ---------------------------------------------------------------------------
-# 18b. NS-2b: 帧级活跃 intent_context 实例（语法路径 × OOP 路径同源）
+# 18b. 帧级活跃 intent_context 实例（语法路径 × OOP 路径同源）
 # ---------------------------------------------------------------------------
 
 class TestE2ENS2bUnifiedIntentPath:
     """
-    NS-2b：当一个 ``intent_context`` 实例被 ``use()`` 激活后，
+    当一个 ``intent_context`` 实例被 ``use()`` 激活后，
     后续语法路径 ``@+`` 的修改应能通过 ``get_current().resolve()`` 观察到——
     因为活跃实例指针与帧 ``_intent_ctx`` 共享底层引用。
     """
@@ -1200,12 +1200,12 @@ print((str)r)
 
 
 # ---------------------------------------------------------------------------
-# 18c. NS-2c: llmexcept retry 时的意图栈干净还原
+# 18c. llmexcept retry 时的意图栈干净还原
 # ---------------------------------------------------------------------------
 
 class TestE2ENS2cLlmExceptIntentRestore:
     """
-    NS-2c：``llmexcept`` retry 前应以 fork-and-replace 干净还原意图状态，
+    ``llmexcept`` retry 前应以 fork-and-replace 干净还原意图状态，
     body 内通过 ``@+`` / ``intent_context.use(...)`` 等做的修改在 retry
     之后必须完全消失。
     """
@@ -1225,7 +1225,7 @@ except Exception as e:
     print("retry_exhausted_ok")
 """
         lines = run_and_capture(code)
-        # 关键：执行未崩在意图栈状态上（NS-2c 干净还原使得多次 retry 不会持续叠加意图）
+        # 关键：执行未崩在意图栈状态上（干净还原使得多次 retry 不会持续叠加意图）
         assert "retry_exhausted_ok" in lines
 
     def test_retry_resets_intent_context_use_in_body(self):
