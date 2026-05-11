@@ -58,7 +58,10 @@ from core.runtime.objects.kernel import (
     IbLLMFunction,
     IbClass,
     IbLLMUncertain,
+    _is_intent_context_param,
+    _should_activate_intent_context_arg,
 )
+from core.base.source_atomic import Location
 from core.runtime.exceptions import (
     ThrownException,
 )
@@ -298,6 +301,165 @@ def _vm_call_fn_callable(executor, func, args):
     return result
 
 
+def _vm_invoke_behavior(executor, behavior, args):
+    """CPS-friendly counterpart of :meth:`IbBehavior.call`.
+
+    Mirrors the bookkeeping in ``IbBehavior.call`` (scope/closure binding +
+    parametric arg binding) but yields once **before** the synchronous LLM
+    invocation so the VMTask running this helper is guaranteed to be on the
+    frame stack at LLM execute time — giving "LLM 帧受 VM 调度管理" the
+    practical snapshot / debug-visibility guarantee called for by NS-1.
+    """
+    from core.runtime.objects.cell import IbCell
+
+    llm_exec = behavior.ib_class.registry.get_llm_executor()
+    if llm_exec is None:
+        raise RuntimeError(
+            f"IbBehavior '{behavior.node}': LLM executor not registered in KernelRegistry. "
+            "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
+        )
+
+    needs_subscope = bool(behavior.params_uids) or bool(behavior.closure)
+    if not needs_subscope:
+        # Yield once so the current task is observable on the VM frame stack
+        # while the (still synchronous) LLM call is in flight.
+        yield None
+        return llm_exec.invoke_behavior(behavior, behavior._execution_context)
+
+    if behavior._execution_context is None:
+        raise RuntimeError(
+            f"IbBehavior '{behavior.node}': execution_context is None for parametric behavior."
+        )
+
+    behavior._cache = None
+    rt_context = behavior._execution_context.runtime_context
+    rt_context.enter_scope()
+    try:
+        for sym_uid, (name, cell) in behavior.closure.items():
+            if isinstance(cell, IbCell):
+                if not cell.is_empty():
+                    rt_context.define_variable(name, cell.get(), uid=sym_uid)
+            else:
+                rt_context.define_variable(name, cell, uid=sym_uid)
+
+        for i, arg_uid in enumerate(behavior.params_uids):
+            arg_data = behavior._execution_context.get_node_data(arg_uid)
+            actual_arg_uid = arg_uid
+            actual_arg_data = arg_data
+            if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                actual_arg_uid = arg_data.get("target")
+                actual_arg_data = behavior._execution_context.get_node_data(actual_arg_uid)
+            arg_name = (actual_arg_data or {}).get("arg")
+            if arg_name and i < len(args):
+                sym_uid = behavior._execution_context.get_side_table(
+                    "node_to_symbol", actual_arg_uid
+                )
+                rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+
+        yield None
+        return llm_exec.invoke_behavior(behavior, behavior._execution_context)
+    finally:
+        rt_context.exit_scope()
+
+
+def _vm_invoke_llm_function(executor, func, receiver, args):
+    """CPS-friendly counterpart of :meth:`IbLLMFunction.call`.
+
+    Performs the same intent-context fork / module switch / scope enter /
+    push_stack / argument auto-binding bookkeeping as ``IbLLMFunction.call``,
+    yields once before the LLM HTTP invocation so the VMTask is on the frame
+    stack at execute time, then delegates to ``executor.invoke_llm_function``.
+    """
+    llm_exec = func.ib_class.registry.get_llm_executor()
+    if llm_exec is None:
+        raise RuntimeError(
+            f"IbLLMFunction '{func.node_uid}': LLM executor not registered in KernelRegistry. "
+            "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
+        )
+
+    rt_context = func.context.runtime_context
+    old_module = func.context.current_module_name
+    old_scope = rt_context.current_scope
+
+    old_intent_ctx = rt_context._intent_ctx
+    old_active_ibobj = rt_context.get_active_intent_ibobj()
+    child_ctx = old_intent_ctx.fork()
+    rt_context._intent_ctx = child_ctx
+    intent_context_class = func.context.registry.get_class("intent_context")
+    if intent_context_class is not None:
+        rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+    else:
+        rt_context.set_active_intent_ibobj(None)
+
+    if func.module_name and func.module_name != old_module:
+        func.context.current_module_name = func.module_name
+        try:
+            mod_inst = func.context.module_manager.import_module(
+                func.module_name, func.context
+            )
+            rt_context.current_scope = mod_inst.scope
+        except Exception:
+            pass
+
+    try:
+        node_data = func.context.get_node_data(func.node_uid)
+        rt_context.enter_scope()
+
+        loc_data = func.context.get_side_table("node_to_loc", func.node_uid)
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0),
+            )
+
+        func.context.push_stack(
+            name=node_data.get("name", "llm_anonymous"),
+            location=loc,
+            is_user_function=True,
+        )
+
+        params_uids = node_data.get("args", [])
+        for i, arg_uid in enumerate(params_uids):
+            arg_data = func.context.get_node_data(arg_uid)
+            is_intent_ctx_param = _is_intent_context_param(func.context, arg_uid, arg_data)
+            actual_arg_uid = arg_uid
+            actual_arg_data = arg_data
+            if arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                actual_arg_uid = arg_data.get("target")
+                actual_arg_data = func.context.get_node_data(actual_arg_uid)
+
+            arg_name = actual_arg_data.get("arg")
+            if i < len(args):
+                arg_value = args[i]
+                sym_uid = func.context.get_side_table("node_to_symbol", actual_arg_uid)
+                rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
+                    rt_context.use_intent_context(arg_value)
+
+        intent_uid = node_data.get("intent")
+        func._pending_call_intent = None
+        if intent_uid:
+            intent_data = func.context.get_node_data(intent_uid)
+            func._pending_call_intent = func.context.factory.create_intent_from_node(
+                intent_uid,
+                intent_data,
+                role=IntentRole.SMEAR,
+            )
+
+        yield None
+        return llm_exec.invoke_llm_function(func, func.context)
+    finally:
+        func._pending_call_intent = None
+        func.context.pop_stack()
+        rt_context.exit_scope()
+        rt_context._intent_ctx = old_intent_ctx
+        rt_context.set_active_intent_ibobj(old_active_ibobj)
+        func.context.current_module_name = old_module
+        rt_context.current_scope = old_scope
+
+
 def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     """函数调用：CPS 求值函数对象和实参；IbFnCallable 完全内联 CPS 执行，
     其他 callable 仍通过 call() 同步完成。
@@ -310,6 +472,16 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     # IbFnCallable（lambda/snapshot）完全 CPS 内联
     if isinstance(func, IbValue) and func.ib_class.name == "fn_callable":
         result = yield from _vm_call_fn_callable(executor, func, args)
+        return result
+
+    # IbBehavior / IbLLMFunction: CPS 内联以使 LLM 帧受 VM 调度管理（NS-1）。
+    if isinstance(func, IbValue) and func.ib_class.name == "behavior":
+        result = yield from _vm_invoke_behavior(executor, func, args)
+        return result
+    if isinstance(func, IbLLMFunction):
+        result = yield from _vm_invoke_llm_function(
+            executor, func, executor.registry.get_none(), args
+        )
         return result
 
     try:
@@ -368,8 +540,10 @@ def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 仍按数据透传给父帧处理而不是当场丢弃。
         return res
     if isinstance(res, IbValue) and res.ib_class.name == "behavior":
-        # IbBehavior 的 call() 仍走原实现（通过 LLMExecutor）
-        return res.call(executor.registry.get_none(), [])
+        # NS-1: drive IbBehavior call through the CPS helper so the
+        # behavior's frame is on the VM stack while the LLM executor runs.
+        result = yield from _vm_invoke_behavior(executor, res, [])
+        return result
     return res
 
 

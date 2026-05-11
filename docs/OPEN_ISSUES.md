@@ -23,7 +23,7 @@
 
 **解锁条件**：`llmexcept` 机制稳定后，可收紧为类型错误。
 
-**文档跟踪**：`docs/NEXT_STEPS.md`；`docs/KNOWN_LIMITS.md`
+**文档跟踪**：`docs/KNOWN_LIMITS.md`
 
 ---
 
@@ -113,4 +113,4 @@
 
 ---
 
-*最后更新：2026-05-09*
+*最后更新：2026-05-11*
