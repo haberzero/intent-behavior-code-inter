@@ -8,6 +8,24 @@
 
 ---
 
+## 2026-05-11 锚点：lambda / snapshot 语义按用户澄清最终对齐
+
+按用户澄清的最终设计（"lambda 不拷贝任何内容；snapshot 提供完全的深克隆，作为完全无状态且可重入的可调用实例存在"）收口 lambda / snapshot：
+
+- **lambda**：保持现状——自由变量经共享 `IbCell` 引用，调用时 deref 当前最新值；意图栈调用时现读（`captured_intents=None`）；**不拷贝任何内容**。
+- **snapshot 深克隆**：抽取通用 `core/runtime/objects/deep_clone.py::try_deep_clone`（沿用 `LLMExceptFrame._try_deep_clone` 的语义实现），`LLMExceptFrame` 改为委托调用；`vm_handle_IbLambdaExpr` 在 snapshot 分支下**定义时**对每个自由变量做 `try_deep_clone` 形成只读种子（不再用 `IbCell` 浅包装——旧实现仅复制 cell 容器，内层可变对象引用仍泄漏）。
+- **snapshot 调用时再克隆**：`_vm_call_fn_callable` / `_vm_invoke_behavior` / `IbFnCallable.call` / `IbBehavior.call` 在 snapshot 分支下**每次调用前**对种子再做一次 `try_deep_clone` 注入子作用域，使每次调用得到种子的私有副本——同一 snapshot 多次/并发调用之间彼此独立。
+- **删除 snapshot 结果缓存**：
+  - `IbFnCallable._cache` 字段及全部相关分支（`call` 短路、`to_native` / `__to_prompt__` / `receive` 缓存路径）整体删除——`IbFnCallable` 仅服务 lambda/snapshot，两种模式都不应缓存。
+  - `_vm_call_fn_callable` 的无参 snapshot cache 短路 / 写入整体删除。
+  - `IbBehavior._cache`：保留给 immediate 行为对象（`capture_mode is None`，值语义的"求值一次后复用"），但在 `IbBehavior.call` / `_vm_invoke_behavior` 进入 lambda/snapshot 路径时强制清零；`execute_behavior_object` 的 cache 读写也用 `capture_mode is None` 闸门，避免对 lambda/snapshot 路径污染。
+- **回归覆盖**：新增 `tests/e2e/test_e2e_snapshot_semantics.py`（9 个测试）覆盖定义时深克隆隔离（list/dict/参数化）、调用间重入独立性（list/dict/参数化）、无缓存外层种子不被污染、lambda 引用语义对照。同步刷新 `tests/e2e/test_e2e_fn_lambda_syntax.py` 的过时"caches"描述。
+- **文档收敛**：`core/runtime/objects/cell.py` LT-3、`core/kernel/ast.py` `IbLambdaExpr` 语义注释、`docs/TYPE_SYSTEM_DESIGN.md §7.4`、`docs/VM_AND_INTERPRETER_DESIGN.md §4.3`、`docs/VM_SPEC.md §2.4 GC-2`、`docs/INTENT_SYSTEM_DESIGN.md §9.1` 全部刷新为新语义。
+- 代码：`core/runtime/objects/deep_clone.py`（新）、`core/runtime/objects/builtins.py`、`core/runtime/vm/handlers.py`、`core/runtime/interpreter/llm_executor.py`、`core/runtime/interpreter/llm_except_frame.py`。
+- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1206 passed = 1197 历史 + 9 新增）。
+
+---
+
 ## 2026-05-11 锚点：NS-1 LLM 调用路径合并入 CPS 调度循环
 
 将 `IbBehavior.call()` / `IbLLMFunction.call()` 与 `vm_handle_IbExprStmt` 中的 behavior 同步旁路合并入 VMExecutor 的 CPS 主循环；所有 LLM 调用（行为表达式 / 命名 LLM 函数）触发时，对应 VMTask 都在帧栈上，使 LLM 帧受 VM 调度管理（快照、并发、调试可观察性）。

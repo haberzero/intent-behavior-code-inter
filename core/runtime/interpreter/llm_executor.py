@@ -656,11 +656,17 @@ class LLMExecutorImpl:
         环境（意图栈）已由 Interpreter/Handler 在调用前准备就绪。
 
         返回 LLMResult。
+
+        缓存策略：``_cache`` 仅对 **immediate** 行为对象（``capture_mode is None``）有意义——
+        那是值语义的「求值一次后复用」对象。对 lambda / snapshot 模式而言，每次调用
+        都必须是独立的 LLM 推理（这是 lambda 「读现场」与 snapshot 「无状态可重入」
+        语义的共同要求），因此跳过缓存读写。
         """
         if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
              return LLMResult.success_result(value=behavior)
 
-        if behavior._cache is not None:
+        cache_enabled = getattr(behavior, "capture_mode", None) is None
+        if cache_enabled and behavior._cache is not None:
             return LLMResult.success_result(value=behavior._cache)
 
         # 1. 处理预期类型注入
@@ -673,7 +679,8 @@ class LLMExecutorImpl:
             # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
             # 传入行为对象捕获的意图栈
             result = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
-            behavior._cache = result.value if result else None
+            if cache_enabled:
+                behavior._cache = result.value if result else None
             return result
         finally:
             # 3. 环境恢复 (类型栈)

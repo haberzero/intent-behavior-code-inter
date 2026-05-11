@@ -697,15 +697,17 @@ class IbFnCallable(IbValue):
     普通可调用实例对象（fn_callable）。
 
     ``lambda`` / ``snapshot`` 修饰的任意表达式都会被包装为 IbFnCallable。
-    调用时重新执行捕获的 AST 节点（lambda 模式）或返回捕获的快照值
-    （snapshot 模式）。
+    调用时重新执行捕获的 AST 节点。
 
     公理化设计
     ----------
     * IbFnCallable 在创建时捕获 ``execution_context`` 引用。
     * ``call()`` 重新访问捕获的 AST 节点以完成求值。
-    * capture_mode='lambda'   —— 每次调用重新求值
-    * capture_mode='snapshot' —— 首次调用时求值并缓存
+    * capture_mode='lambda'   —— 每次调用使用当前作用域 / 当前活跃意图栈，
+      自由变量经由共享 ``IbCell`` 引用——不拷贝任何内容。
+    * capture_mode='snapshot' —— 定义时所有自由变量已被深克隆为只读种子；
+      每次调用前对种子再做一次深克隆作为本次调用的私有副本——snapshot 是
+      **无状态、可重入**的可调用实例，多次调用之间彼此独立，绝不缓存结果。
 
     继承链：IbFnCallable → IbObject (axiom: fn_callable → callable → Object)
 
@@ -715,10 +717,8 @@ class IbFnCallable(IbValue):
       绑定到本地作用域（与 ``IbUserFunction`` 同构）。
     * ``body_uid``     —— 当 fn_callable 由 ``IbLambdaExpr`` 创建时，此为 lambda
       函数体表达式 uid；``call()`` 会评估该 uid 而不是 ``node_uid``。
-    * ``closure``      —— Dict[sym_uid, (name, IbCell)]。lambda/snapshot 两种模式
-      均通过此字典访问自由变量（公理 SC-3/SC-4）。snapshot 模式存储定义时刻的值
-      拷贝（独立 IbCell），lambda 模式存储共享 IbCell 引用——调用时 cell.get()
-      返回调用时刻的最新值（``captured_scope`` 路径已删除）。
+    * ``closure``      —— Dict[sym_uid, (name, slot)]。slot 类型由 capture_mode 决定：
+      lambda 为共享 ``IbCell``，snapshot 为深克隆后的 IbObject 种子。
     """
 
     def __init__(
@@ -744,7 +744,6 @@ class IbFnCallable(IbValue):
         self.node_uid = node_uid
         self.capture_mode = capture_mode
         self._execution_context = execution_context
-        self._cache: Optional[IbObject] = None
         # parametric/closure 字段，无参/无闭包路径下默认 None/空。
         self.params_uids: List[str] = list(params_uids) if params_uids else []
         self.body_uid: Optional[str] = body_uid
@@ -752,21 +751,14 @@ class IbFnCallable(IbValue):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """
-        调用延迟表达式：重新执行被延迟的 AST 节点。
+        调用 lambda / snapshot：重新执行被延迟的 AST 节点。
 
-        - lambda 模式：每次调用都重新求值（使用当前上下文）
-        - snapshot 模式：首次调用求值并缓存，后续调用返回缓存
+        - lambda 模式：每次调用都重新求值（使用当前上下文，自由变量共享 IbCell）。
+        - snapshot 模式：每次调用都重新求值，闭包种子按次再克隆——无缓存，可重入。
 
         当存在参数（``params_uids`` 非空）或闭包（``closure`` 非空）时，进入
-        独立的子作用域并在其中绑定参数与闭包 cell；调用结束后自动退出。
+        独立的子作用域并在其中绑定参数与闭包；调用结束后自动退出。
         """
-        # snapshot 缓存仅适用于"无参"路径——有参 snapshot 每次调用应使用相同的
-        # 冻结闭包 + 不同的实参重新求值，缓存单一返回值会破坏正确性。
-        if (self.capture_mode == "snapshot"
-                and self._cache is not None
-                and not self.params_uids):
-            return self._cache
-
         if self._execution_context is None:
             raise RuntimeError(
                 f"IbFnCallable '{self.node_uid}': execution_context is None. "
@@ -787,24 +779,27 @@ class IbFnCallable(IbValue):
 
         try:
             # 1) 若有参或有闭包，进入子作用域以承载 params 与 closure cells。
-            #    lambda/snapshot 两种模式均通过 closure 字典访问自由变量；
-            #    closure 形如 Dict[sym_uid, (name, IbCell)]——按 UID 重新登记是必须
-            #    的：runtime IbName 解析走 UID 路径，仅按名字定义会被父链同名符号
-            #    的 UID 命中给截胡。
-            #    snapshot 模式：cell.get() = 定义时刻的冻结值；
-            #    lambda 模式：cell.get() = 调用时刻的最新值（共享 IbCell）。
+            #    lambda：通过共享 IbCell 读取调用时最新值；
+            #    snapshot：对种子再次深克隆，作为本次调用的私有副本。
             needs_subscope = bool(self.params_uids) or bool(self.closure)
             if needs_subscope:
                 rt_context.enter_scope()
                 pushed_scope = True
 
                 from core.runtime.objects.cell import IbCell
-                for sym_uid, (name, cell) in self.closure.items():
-                    if isinstance(cell, IbCell):
-                        if not cell.is_empty():
-                            rt_context.define_variable(name, cell.get(), uid=sym_uid)
+                from core.runtime.objects.deep_clone import try_deep_clone
+                is_snapshot = self.capture_mode == "snapshot"
+                for sym_uid, (name, slot) in self.closure.items():
+                    if is_snapshot:
+                        fresh = try_deep_clone(slot) if slot is not None else None
+                        value = fresh if fresh is not None else slot
+                        if value is not None:
+                            rt_context.define_variable(name, value, uid=sym_uid)
+                    elif isinstance(slot, IbCell):
+                        if not slot.is_empty():
+                            rt_context.define_variable(name, slot.get(), uid=sym_uid)
                     else:
-                        rt_context.define_variable(name, cell, uid=sym_uid)
+                        rt_context.define_variable(name, slot, uid=sym_uid)
 
                 # 绑定形参：与 IbUserFunction.call 同构地处理 IbTypeAnnotatedExpr 包装。
                 for i, arg_uid in enumerate(self.params_uids):
@@ -826,30 +821,19 @@ class IbFnCallable(IbValue):
             if pushed_scope:
                 rt_context.exit_scope()
 
-        # 缓存：仅"无参 snapshot"缓存返回值（对应历史无参延迟语义）。
-        if self.capture_mode == "snapshot" and not self.params_uids:
-            self._cache = result
-
         return result
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
-        if self._cache is not None:
-            return self._cache.to_native()
-        # 未执行时显式抛错（避免调用方获得类型混淆的 IBCI 运行时对象）。
+        # fn_callable 不在执行外暴露值——未执行时显式抛错。
         raise RuntimeError(
             f"IbFnCallable '{self.node_uid}' has not been executed; "
             f"call .call(receiver, args) first before to_native()."
         )
 
     def __to_prompt__(self) -> str:
-        if self._cache is not None:
-            return self._cache.__to_prompt__()
         return f"<FnCallable {self.node_uid}>"
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
-        if self._cache is not None:
-            return self._cache.receive(message, args)
-
         if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
             return self.ib_class.registry.box(str(self))
 
@@ -991,6 +975,12 @@ class IbBehavior(IbValue):
                 "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
             )
 
+        # lambda / snapshot 模式：每次调用都应是独立的 LLM 推理；先清除可能存在的
+        # 上次结果缓存，避免 execute_behavior_object 早期短路返回旧值。
+        # immediate 模式（capture_mode is None）保留缓存：那是值语义的"求值一次"对象。
+        if self.capture_mode in ("snapshot", "lambda"):
+            self._cache = None
+
         needs_subscope = bool(self.params_uids) or bool(self.closure)
         if not needs_subscope:
             return executor.invoke_behavior(self, self._execution_context)
@@ -1000,20 +990,23 @@ class IbBehavior(IbValue):
                 f"IbBehavior '{self.node}': execution_context is None for parametric behavior."
             )
 
-        # 参数化路径：每次调用都应是独立的 LLM 推理（实参不同 → 提示词不同），
-        # 因此先清除上一次执行残留的 _cache，避免 execute_behavior_object 的早期短路。
-        self._cache = None
-
         rt_context = self._execution_context.runtime_context
         rt_context.enter_scope()
         try:
             from core.runtime.objects.cell import IbCell
-            for sym_uid, (name, cell) in self.closure.items():
-                if isinstance(cell, IbCell):
-                    if not cell.is_empty():
-                        rt_context.define_variable(name, cell.get(), uid=sym_uid)
+            from core.runtime.objects.deep_clone import try_deep_clone
+            is_snapshot = self.capture_mode == "snapshot"
+            for sym_uid, (name, slot) in self.closure.items():
+                if is_snapshot:
+                    fresh = try_deep_clone(slot) if slot is not None else None
+                    value = fresh if fresh is not None else slot
+                    if value is not None:
+                        rt_context.define_variable(name, value, uid=sym_uid)
+                elif isinstance(slot, IbCell):
+                    if not slot.is_empty():
+                        rt_context.define_variable(name, slot.get(), uid=sym_uid)
                 else:
-                    rt_context.define_variable(name, cell, uid=sym_uid)
+                    rt_context.define_variable(name, slot, uid=sym_uid)
 
             for i, arg_uid in enumerate(self.params_uids):
                 arg_data = self._execution_context.get_node_data(arg_uid)
