@@ -40,19 +40,8 @@ from core.kernel.spec import (
 from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.registry import SpecRegistry, create_default_spec_registry
-from core.kernel.axioms.registry import AxiomRegistry
-from core.kernel.axioms.primitives import register_core_axioms
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def spec_reg() -> SpecRegistry:
-    ax = AxiomRegistry()
-    register_core_axioms(ax)
-    return create_default_spec_registry(ax)
+# ``spec_reg`` fixture 由 tests/kernel/conftest.py 提供。
 
 
 # ---------------------------------------------------------------------------

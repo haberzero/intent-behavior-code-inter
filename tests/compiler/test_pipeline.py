@@ -1,5 +1,5 @@
 """
-tests/compiler/test_compiler_pipeline.py
+tests/compiler/test_pipeline.py
 
 Unit tests for the full compiler pipeline: Lexer → Parser → SemanticAnalyzer.
 

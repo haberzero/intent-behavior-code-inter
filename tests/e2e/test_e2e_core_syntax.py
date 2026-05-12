@@ -1,5 +1,5 @@
 """
-tests/e2e/test_e2e_basic.py
+tests/e2e/test_e2e_core_syntax.py
 
 End-to-end tests for basic IBCI programs via IBCIEngine.run_string().
 These tests verify the full pipeline: compile → execute → output.

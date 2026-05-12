@@ -1,8 +1,8 @@
 """
-tests/e2e/test_e2e_m4_multi_interpreter.py
-===========================================
+tests/e2e/test_e2e_multi_interpreter.py
+=======================================
 
-M4 — 多 Interpreter 并发（Layer 2 执行隔离）E2E 测试。
+多 Interpreter 并发（Layer 2 执行隔离）E2E 测试。
 
 覆盖：
 

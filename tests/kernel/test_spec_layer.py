@@ -38,25 +38,8 @@ from core.kernel.factory import create_default_registry
 from core.kernel.spec.type_ref import TypeRef
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def axiom_registry() -> AxiomRegistry:
-    ax = AxiomRegistry()
-    register_core_axioms(ax)
-    return ax
-
-
-@pytest.fixture(scope="module")
-def spec_reg(axiom_registry: AxiomRegistry) -> SpecRegistry:
-    return create_default_spec_registry(axiom_registry)
-
-
-@pytest.fixture(scope="module")
-def factory(spec_reg: SpecRegistry) -> SpecFactory:
-    return spec_reg.factory
+# ``axiom_registry`` / ``spec_reg`` / ``factory`` fixtures 由
+# tests/kernel/conftest.py 提供。
 
 
 # ---------------------------------------------------------------------------

@@ -20,20 +20,7 @@ from core.kernel.spec.registry import create_default_spec_registry, SpecRegistry
 from core.kernel.spec import IbSpec, TypeDef
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def ax_reg() -> AxiomRegistry:
-    ax = AxiomRegistry()
-    register_core_axioms(ax)
-    return ax
-
-
-@pytest.fixture(scope="module")
-def spec_reg(ax_reg: AxiomRegistry) -> SpecRegistry:
-    return create_default_spec_registry(ax_reg)
+# ``ax_reg`` / ``spec_reg`` fixtures 由 tests/kernel/conftest.py 提供。
 
 
 # ---------------------------------------------------------------------------
