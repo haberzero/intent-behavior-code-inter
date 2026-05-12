@@ -124,9 +124,8 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
                     type_name="unknown",
                 )
                 raise ThrownException(error)
-        # 写回，避免后续读取再次 resolve（且每个 Future 只能 resolve 一次）。
-        # skip_type_check=True：写回是缓存优化，解析结果（如不确定性的 IbNone）
-        # 无需满足目标变量的类型约束——真正的类型校验在首次赋值时已经完成。
+        # 写回，避免后续读取再次 resolve
+        # skip_type_check=True：写回是缓存优化，类型校验在首次赋值时完成
         executor.runtime_context.set_variable_by_uid(sym_uid, resolved, skip_type_check=True)
         val = resolved
     return val

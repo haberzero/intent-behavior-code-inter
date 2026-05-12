@@ -44,7 +44,6 @@ class RuntimeSerializer(BaseFlatSerializer):
                 self.external_assets.update(execution_context.asset_pool)
 
         # 完整 IbIntentContext + 活跃 intent_context IBCI 指针。
-        # ``intent_ctx_uid`` 是权威字段；``intent_stack`` 保留为向后兼容。
         full_intent_ctx_uid = None
         try:
             intent_ctx = getattr(context, "_intent_ctx", None)
@@ -69,9 +68,9 @@ class RuntimeSerializer(BaseFlatSerializer):
             "version": "2.1",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": self._process_value(context.intent_stack),  # 向后兼容
-            "intent_ctx_uid": full_intent_ctx_uid,                       # 权威字段
-            "active_intent_ibobj_uid": active_intent_ibobj_uid,           # 活跃指针
+            "intent_stack": self._process_value(context.intent_stack),
+            "intent_ctx_uid": full_intent_ctx_uid,
+            "active_intent_ibobj_uid": active_intent_ibobj_uid,
             "intent_exclusive_depth": getattr(context, "intent_exclusive_depth", 0),
             "pools": pools
         }
@@ -276,12 +275,10 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["capture_mode"] = obj.capture_mode
 
         elif cls_name == "intent_context":
-            # ``intent_context`` IBCI 封装实例 — 序列化 ``_ctx`` 字段为
-            # 单独的 native intent_context 池条目。
+            # ``intent_context`` IBCI 封装实例序列化
             data["_type"] = "intent_context"
             ctx = obj.fields.get("_ctx") if hasattr(obj, "fields") else None
             data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
-            # 其他用户附加字段也保留（罕见但允许）
             extra_fields = {
                 k: self._process_value(v)
                 for k, v in (obj.fields or {}).items()
@@ -291,8 +288,7 @@ class RuntimeSerializer(BaseFlatSerializer):
                 data["fields"] = extra_fields
 
         elif isinstance(obj, IbIntent):
-            # ``IbIntent`` 使用 ``__slots__`` 而非 ``fields`` 字典存放状态。
-            # 这里显式落盘核心属性。
+            # ``IbIntent`` 使用 ``__slots__`` 存放状态
             data["_type"] = "intent"
             data["content"] = obj.content
             data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
@@ -300,7 +296,6 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
             data["source_uid"] = obj.source_uid
             data["pop_top"] = obj.pop_top
-            # ``segments`` 通常仅在编译期使用；保留为原始引用列表以最大限度兼容。
             if obj.segments:
                 data["segments"] = [self._process_value(s) for s in obj.segments]
 
@@ -352,22 +347,17 @@ class RuntimeDeserializer:
         if hasattr(context, '_current_scope'):
             setattr(context, '_current_scope', current_scope)
 
-        # 优先使用新格式 ``intent_ctx_uid``（含 smear / override / global / stack 全部字段）。
-        # 旧格式仅有 ``intent_stack``（active 持久栈快照）保持回退兼容。
         intent_ctx_uid = data.get("intent_ctx_uid")
         if intent_ctx_uid:
             restored_ctx = self._get_intent_context(intent_ctx_uid)
             if restored_ctx is not None and hasattr(context, "_intent_ctx"):
-                # 整体替换帧的 _intent_ctx
                 context._intent_ctx = restored_ctx
-            # 活跃 intent_context IBCI 指针恢复
             active_uid = data.get("active_intent_ibobj_uid")
             if active_uid and hasattr(context, "set_active_intent_ibobj"):
                 active_obj = self._get_instance(active_uid)
-                # 确保共享引用不变量：active._ctx is context._intent_ctx
+                # 确保共享引用不变量
                 if active_obj is not None and hasattr(active_obj, "fields"):
                     if active_obj.fields.get("_ctx") is not getattr(context, "_intent_ctx", None):
-                        # 反序列化分支可能因池入口先后顺序导致不同身份；强制对齐。
                         active_obj.fields["_ctx"] = context._intent_ctx
                     context.set_active_intent_ibobj(active_obj)
         else:

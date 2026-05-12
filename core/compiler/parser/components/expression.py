@@ -184,10 +184,8 @@ class ExpressionComponent(BaseComponent):
             cast_node: Optional[ast.IbExpr] = None
 
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
-            # 关键：try/except 必须包在 with 外侧，否则 ParseControlFlowError
-            # 在 with 内被捕获 → with 正常退出 → success=True → temp_tracker
-            # 合并 → 推测期间产生的 PAR_xxx 误报会泄漏到真实 issue_tracker
-            # （这正是历史上 (expr)[index] 链式下标语法报错的根因）。
+            # try/except 必须包在 with 外侧，否则 ParseControlFlowError
+            # 在 with 内被捕获会导致 temp_tracker 合并到 issue_tracker。
             try:
                 with self.stream.speculate():
                     # 尝试以前瞻方式解析类型标注
@@ -202,8 +200,8 @@ class ExpressionComponent(BaseComponent):
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
 
-                        # (Type) @~...~ 语法不再支持，发出硬错误。
-                        # 正确写法：fn varname = lambda -> TYPE: @~...~ 或 fn varname = snapshot -> TYPE: @~...~
+                        # (Type) @~...~ 语法不支持，发出错误。
+                        # 正确写法：fn varname = lambda -> TYPE: @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
                             _behavior_cast_detected = True
                             raise ParseControlFlowError()
@@ -212,7 +210,7 @@ class ExpressionComponent(BaseComponent):
                         # 以保证 PCFE 失败路径与成功路径走同一套出口机制。
                         cast_node = self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
                     else:
-                        # 类型标注解析成功但未匹配到 RPAREN —— 不是 cast，触发回退
+                        # 类型标注解析成功但未匹配到 RPAREN，非 cast 语法
                         raise ParseControlFlowError()
             except ParseControlFlowError:
                 cast_node = None
