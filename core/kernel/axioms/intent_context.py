@@ -58,10 +58,12 @@ class IntentContextAxiom:
             "push": _m("push", params=["any"], ret="void"),
             "pop": _m("pop", ret="any"),
             "merge": _m("merge", params=["intent_context"], ret="void"),
+            "combine": _m("combine", params=["intent_context"], ret="void"),
             "clear": _m("clear", ret="void"),
             "clear_inherited": _m("clear_inherited", ret="void"),
             "use": _m("use", params=["intent_context"], ret="void"),
             "get_current": _m("get_current", ret="intent_context"),
+            "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
 
     def get_operators(self) -> Dict[str, str]:
