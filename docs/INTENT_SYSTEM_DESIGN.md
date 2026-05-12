@@ -509,7 +509,7 @@ func func_with_custom_ctx():
 
 > **状态**：本节规范于 2026-04-27 架构讨论中形成，是 `lambda`/`snapshot` 与意图栈交互的**正式语义定义**。  
 > 现有部分实现（`snapshot` 的意图快照捕获、函数调用 `fork` 隔离）已与本规范对齐；  
-> 需要新 `fn` 参数化语法（`docs/NEXT_STEPS.md` Step 12.5）完成后进行全面验证和更新。  
+> 其余扩展将按主线优先级在 `docs/NEXT_STEPS.md` / `docs/PENDING_TASKS.md` 滚动更新。  
 > 规则编号（IT-1 等）是本规范的正式引用标识。
 
 ---

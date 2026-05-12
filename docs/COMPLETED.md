@@ -8,6 +8,43 @@
 
 ---
 
+## 2026-05-12 锚点：PT-1.2 / PT-1.3 / PT-3.3（idbg）收口
+
+三项工作按"llmexcept 可追踪性 + 防御性深度限制 + 调试器可观测性"主线一并落地，回归测试通过：`1239 passed`（在 1232 基线之上新增 7 个测试）。
+
+### PT-1.2：LLMExceptFrame 重试历史追踪
+
+- `LLMExceptFrame` 新增 `error_history` 字段（结构化记录 `retry_count/error_type/error_message/response`）。
+- `set_error()` 追加历史记录；`reset_for_retry()` 仅清理当前错误态，不清空历史。
+- `get_retry_info()` 新增 `error_history_count` 与 `error_history` 输出，供调试器/日志直接消费。
+
+### PT-1.3：LLMExceptFrameStack 最大嵌套深度限制
+
+- `LLMExceptFrameStack` 新增 `max_depth`（默认 128）与溢出检查，超限抛 `RuntimeError`。
+- 主运行路径同步施加约束：`RuntimeContextImpl.push_llm_except_frame()` 入栈时检查 `_llm_except_max_depth`，避免仅工具类生效而主路径旁路。
+
+### PT-3.3：idbg 改进（打印输出 + protection_map）
+
+- `idbg.protection_map()` 由空实现改为真实映射构建：
+  - `IbLLMExceptionalStmt.target -> handler_uid`
+  - `IbFor.llmexcept_handler`（含 `IbFilteredExpr` 解包）条件节点 -> handler_uid
+- 新增打印入口：`show_retry_stack()` / `show_env()` / `show_protection_map()`；`show_all()` 扩展为聚合打印 vars/intents/retry/env/protection/prompt/result。
+- `ibci_modules/ibci_idbg/_spec.py` 补齐导出方法：`print_vars`、`protection_map`、`show_retry_stack`、`show_protection_map`、`show_env`。
+
+### 测试
+
+- 新增 `tests/runtime/test_llm_except_frame_enhancements.py`（4 个测试）：
+  - 错误历史保留
+  - `get_retry_info` 历史输出
+  - `LLMExceptFrameStack` 深度限制
+  - `RuntimeContext` 主路径深度限制
+- 新增 `tests/runtime/test_idbg_plugin.py`（3 个测试）：
+  - vtable 导出校验
+  - protection_map 映射构建
+  - `show_protection_map()` 打印输出
+
+---
+
 ## 2026-05-12 锚点：NS-3 / PT-2.1 / PT-2.2 / `_evaluate_segments` CPS 化 一并收口
 
 四项配套工作按"调用现场优先 / 段求值入帧 / 意图上下文身份贯通"主线一并落地，全部 1232 个测试通过（基线 1206 + 26 新增）。

@@ -17,15 +17,20 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     方法虚表 - 返回原生 IBC-Inter 元数据声明
 
     vars: void -> dict (获取当前作用域变量)
+    print_vars: void -> void (打印当前作用域变量)
     last_llm: void -> dict (获取上次 LLM 调用信息)
     show_last_prompt: void -> void (打印上次 LLM 完整提示词)
     show_last_result: void -> void (打印上次 LLM 原始输出结果)
     show_all: void -> void (打印上次 LLM 完整信息)
     last_result: void -> dict (获取上次 LLM 执行结果)
     retry_stack: void -> list (获取当前重试帧栈)
+    show_retry_stack: void -> void (打印当前重试帧栈)
+    protection_map: void -> dict (获取 llmexcept 保护映射)
+    show_protection_map: void -> void (打印 llmexcept 保护映射)
     intents: void -> list (获取详细意图栈)
     show_intents: void -> void (打印意图栈到控制台)
     env: void -> dict (获取环境变量)
+    show_env: void -> void (打印环境变量)
     fields: any -> dict (检查对象的字段)
     """
     return {
@@ -33,6 +38,10 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "vars": {
                 "param_types": [],
                 "return_type": "dict"
+            },
+            "print_vars": {
+                "param_types": [],
+                "return_type": "void"
             },
             "last_llm": {
                 "param_types": [],
@@ -58,6 +67,18 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 "param_types": [],
                 "return_type": "list"
             },
+            "show_retry_stack": {
+                "param_types": [],
+                "return_type": "void"
+            },
+            "protection_map": {
+                "param_types": [],
+                "return_type": "dict"
+            },
+            "show_protection_map": {
+                "param_types": [],
+                "return_type": "void"
+            },
             "intents": {
                 "param_types": [],
                 "return_type": "list"
@@ -69,6 +90,10 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "env": {
                 "param_types": [],
                 "return_type": "dict"
+            },
+            "show_env": {
+                "param_types": [],
+                "return_type": "void"
             },
             "fields": {
                 "param_types": ["any"],

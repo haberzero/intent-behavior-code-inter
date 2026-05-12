@@ -354,6 +354,8 @@ class RuntimeContextImpl(RuntimeContext):
 
         # [LLMExceptFrame] LLM 异常重试帧栈
         self._llm_except_frames: List['LLMExceptFrame'] = []
+        # 最大 llmexcept 嵌套深度限制（PT-1.3）
+        self._llm_except_max_depth: int = 128
 
         # [IbLLMCallResult] 最后一个 LLM 执行结果
         # 已升级为 IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
@@ -419,6 +421,10 @@ class RuntimeContextImpl(RuntimeContext):
         将新的 LLMExceptFrame 入栈。
         用于 llmexcept 语句执行前保存现场。
         """
+        if len(self._llm_except_frames) >= self._llm_except_max_depth:
+            raise RuntimeError(
+                f"LLMExceptFrame stack overflow: max depth {self._llm_except_max_depth} exceeded"
+            )
         self._llm_except_frames.append(frame)
 
     def pop_llm_except_frame(self) -> Optional['LLMExceptFrame']:

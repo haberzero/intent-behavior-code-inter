@@ -48,6 +48,10 @@ class IDbgPlugin(IbPlugin):
         """通过 CapabilityRegistry 获取 LLM Provider（由 ibci_ai 注册）。"""
         return self._cap_registry.get("llm_provider") if self._cap_registry else None
 
+    def _execution_context(self) -> Optional[Any]:
+        """通过 KernelRegistry 获取 IExecutionContext 实例。"""
+        return self._kr.get_execution_context() if self._kr else None
+
     # ------------------------------------------------------------------
     # 公开接口
     # ------------------------------------------------------------------
@@ -206,6 +210,16 @@ class IDbgPlugin(IbPlugin):
 
     def show_all(self):
         """直接打印最近一次 LLM 调用的完整信息（提示词+结果）"""
+        self.print_vars()
+        print()
+        self.show_intents()
+        print()
+        self.show_retry_stack()
+        print()
+        self.show_env()
+        print()
+        self.show_protection_map()
+        print()
         self.show_last_prompt()
         print()
         self.show_last_result()
@@ -263,9 +277,90 @@ class IDbgPlugin(IbPlugin):
         return result
 
     def protection_map(self) -> Dict[str, str]:
-        """获取节点保护表 (Shadow Execution Side Table)"""
-        # TODO: 需要内核暴露 side_table 接口后实现
-        return {}
+        """获取节点保护映射（被保护节点 UID -> llmexcept handler UID）。"""
+        ec = self._execution_context()
+        if not ec:
+            return {}
+
+        node_pool = getattr(ec, "node_pool", None)
+        if not node_pool:
+            return {}
+
+        protection_mapping: Dict[str, str] = {}
+
+        # 调试态一次性 O(n) 扫描：node_pool 常驻内存且 protection_map 非热路径调用。
+        for node_uid, node in node_pool.items():
+            if not isinstance(node, dict):
+                continue
+            node_type = node.get("_type")
+
+            # 1) 直接 llmexcept 语句：handler(target=...)
+            if node_type == "IbLLMExceptionalStmt":
+                target_uid = node.get("target")
+                if isinstance(target_uid, str) and target_uid:
+                    protection_mapping[target_uid] = node_uid
+                continue
+
+            # 2) 条件 for 的 llmexcept 内联保护：for 节点持有 llmexcept_handler 字段
+            if node_type == "IbFor":
+                handler_uid = node.get("llmexcept_handler")
+                iter_uid = node.get("iter")
+                has_handler_uid = isinstance(handler_uid, str) and bool(handler_uid)
+                has_iter_uid = isinstance(iter_uid, str) and bool(iter_uid)
+                if not (has_handler_uid and has_iter_uid):
+                    continue
+                # 若 iter 是 IbFilteredExpr，真实受保护条件是其 expr
+                actual_target_uid = iter_uid
+                iter_node = node_pool.get(iter_uid)
+                if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
+                    expr_uid = iter_node.get("expr")
+                    if isinstance(expr_uid, str) and expr_uid:
+                        actual_target_uid = expr_uid
+                protection_mapping[actual_target_uid] = handler_uid
+
+        return protection_mapping
+
+    def show_retry_stack(self):
+        """直接打印当前 llmexcept 重试帧栈。"""
+        print("[IDBG] 重试帧栈:")
+        stack = self.retry_stack()
+        if not stack:
+            print("  (空)")
+            return
+        for idx, entry in enumerate(stack):
+            print(
+                f"  [{idx}] target={entry.get('target')} "
+                f"type={entry.get('type')} "
+                f"retry={entry.get('retry')}/{entry.get('max_retry')} "
+                f"fallback={entry.get('is_fallback')}"
+            )
+            lr = entry.get("last_result")
+            if lr:
+                print(
+                    f"       last_result: certain={lr.get('is_certain')} "
+                    f"retry_hint={lr.get('retry_hint')} "
+                    f"raw={lr.get('raw_response')}"
+                )
+
+    def show_env(self):
+        """直接打印当前运行环境信息。"""
+        print("[IDBG] 运行环境:")
+        env_info = self.env()
+        if not env_info:
+            print("  (无可用信息)")
+            return
+        for k, v in env_info.items():
+            print(f"  {k}: {v}")
+
+    def show_protection_map(self):
+        """直接打印节点保护映射。"""
+        print("[IDBG] llmexcept 保护映射:")
+        mapping = self.protection_map()
+        if not mapping:
+            print("  (空)")
+            return
+        for target_uid, handler_uid in mapping.items():
+            print(f"  {target_uid} -> {handler_uid}")
 
     def intents(self) -> list:
         """获取当前活跃的意图栈详情"""

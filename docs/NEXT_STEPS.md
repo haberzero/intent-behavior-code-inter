@@ -9,12 +9,9 @@
 
 ## 主线
 
-类型系统 M1–M5、VM CPS 主线、intent 系统 OOP 化（NS-2 全部 4 步）、LLM 调用路径合并入 CPS 调度循环（NS-1）、lambda/snapshot/behavior 跨帧 EC 边界（NS-3）、intent_context 高级 OOP 场景（PT-2.1）、IbIntentContext 序列化/反序列化（PT-2.2）以及 `_evaluate_segments` CPS 化均已完成，当前**无开放的 P0/P1/P2 主线任务**。
+类型系统 M1–M5、VM CPS 主线、intent 系统 OOP 化（NS-2 全部 4 步）、LLM 调用路径合并入 CPS 调度循环（NS-1）、lambda/snapshot/behavior 跨帧 EC 边界（NS-3）、intent_context 高级 OOP 场景（PT-2.1）、IbIntentContext 序列化/反序列化（PT-2.2）、`_evaluate_segments` CPS 化、PT-1.2（llmexcept 错误历史）、PT-1.3（llmexcept 嵌套深度限制）以及 PT-3.3（`idbg.protection_map()`）均已完成，当前**无开放的 P0/P1/P2/P3 主线任务**。
 
-下一阶段优先项（按优先级排序，任选其一开工）：
-
-- **PT-1.2 [P2]** `LLMExceptFrame` 重试历史追踪（`reset_for_retry()` 会清空 `last_error`，不保留历史；详见 `docs/PENDING_TASKS.md`）。
-- **PT-1.3 [P3]** `LLMExceptFrameStack` 最大嵌套深度限制（与 PT-1.2 一并设计）。
+下一阶段优先项：暂无新增紧急项；如出现新需求，按优先级即时补入本文件。
 
 ---
 

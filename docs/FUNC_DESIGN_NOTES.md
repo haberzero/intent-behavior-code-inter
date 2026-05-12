@@ -39,11 +39,10 @@ int result = my_fn(5)   # ✅ 调用 adder.__call__(5)
 
 ### 已知 `fn` 限制
 
-详见 `docs/KNOWN_LIMITS.md` 三 —— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。这是 `docs/NEXT_STEPS.md` NS-2（intent 系统 OOP 化收口）相关议题的前置工程。
+详见 `docs/KNOWN_LIMITS.md` 三 —— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。
 
-后续改进方向（`func[sig]` 泛型标注、轻量泛型 `<T>`、高阶函数类型推断、lambda 剩余缺陷）详见 `docs/PENDING_TASKS.md §二`。
+后续改进方向（`func[sig]` 泛型标注、轻量泛型 `<T>`、高阶函数类型推断、lambda 剩余缺陷）将按主线优先级在 `docs/NEXT_STEPS.md` / `docs/PENDING_TASKS.md` 中滚动维护。
 
 ---
 
 *历史多版本设计讨论已合并到上述精简版。详细演化记录见 `docs/COMPLETED.md`（M1 / M2 / fn declaration-side 语法 / D1–D6）。*
-

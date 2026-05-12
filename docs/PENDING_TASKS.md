@@ -7,19 +7,9 @@
 
 ---
 
-## 一、待 NS-1（LLM 调用路径合并入 CPS）落地后才能继续
+## 一、llmexcept 相关后续（PT-1.x）— 已完成
 
-> 历史 PT-1.1（llmexcept 快照恢复 merge vs 替换语义）已随 NS-2c 一并落地（`core/runtime/interpreter/llm_except_frame.py`），不再阻塞。
-
-### PT-1.2　LLMExceptFrame 重试历史追踪 [P2]
-- 现状：`reset_for_retry()` 清除 `last_error`，重试历史不保留。
-- 阻塞原因：先稳定 NS-1 的 LLM 帧管理路径，再决定 retry 历史的承载位置（运行时 vs 调试器侧）。
-
-### PT-1.3　LLMExceptFrameStack 最大嵌套深度限制 [P3]
-- 现状：无最大嵌套深度检查。
-- 阻塞原因：与 PT-1.2 一并设计。
-
----
+> 历史 PT-1.1（llmexcept 快照恢复 merge vs 替换语义）已随 NS-2c 落地；PT-1.2 / PT-1.3 已于 2026-05-12 一并完成，详见 `docs/COMPLETED.md` 同日锚点。
 
 ## 二、NS-2（intent OOP 化收口）相关 — 已全部完成
 
@@ -31,9 +21,7 @@
 
 ### PT-3.1　host.run_isolated() 返回值改进 [VISION]
 ### PT-3.2　ReceiveMode 枚举演进 [VISION]
-### PT-3.3　ibci_idbg.protection_map() 完整实现 [P3]
-- 阻塞原因：要求 `IExecutionContext` 暴露 side_table 只读接口，与 VM 协程化设计一并落地。
-- 当前位置：`ibci_modules/ibci_idbg/core.py:267`。
+### ~~PT-3.3　ibci_idbg.protection_map() 完整实现 [P3]~~ ✅ 已完成（2026-05-12）
 
 ---
 

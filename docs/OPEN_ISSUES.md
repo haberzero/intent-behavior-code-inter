@@ -27,16 +27,17 @@
 
 ---
 
-### OI-2：`ibci_idbg.protection_map()` 未实现
+### ~~OI-2：`ibci_idbg.protection_map()` 未实现~~ ✅ **已解决（2026-05-12）**
 
-**文件**：`ibci_modules/ibci_idbg/core.py:267`
+**文件**：`ibci_modules/ibci_idbg/core.py`
 
-**问题描述**：
-调试器模块 `ibci_idbg` 的 `protection_map()` 方法当前返回空字典，因为内核尚未暴露 side_table 的只读接口。该方法本应返回节点保护表（供调试器可视化 llmexcept 保护范围）。
+**解决方案**：
+`idbg.protection_map()` 现基于当前 `ExecutionContext.node_pool` 构建保护映射：
+- `IbLLMExceptionalStmt.target -> handler_uid`
+- `IbFor.llmexcept_handler` 路径下（含 `IbFilteredExpr`）的条件节点 -> handler_uid  
+并新增 `show_protection_map()` 打印入口。
 
-**解锁条件**：在 `IExecutionContext` 或 `IStateReader` 协议中新增 `get_side_table(key, uid)` 公共接口。
-
-**文档跟踪**：`docs/PENDING_TASKS.md` PT-3.3
+**文档跟踪**：`docs/COMPLETED.md`（2026-05-12 PT-3.3 锚点）
 
 ---
 
@@ -71,25 +72,25 @@
 
 ## 四、设计层待跟进项
 
-### OI-5：LLMExceptFrame 重试历史追踪
+### ~~OI-5：LLMExceptFrame 重试历史追踪~~ ✅ **已解决（2026-05-12）**
 
 **文件**：`core/runtime/interpreter/llm_except_frame.py`（`reset_for_retry()` / `LLMExceptFrame`）
 
-**问题描述**：
-每次重试时 `reset_for_retry()` 会清除 `last_error`，重试历史不保留。若需在 llmexcept body 内访问历次重试的错误摘要（用于更精细的提示词调整），需要给 `LLMExceptFrame` 添加 `error_history: List` 字段。
+**解决方案**：
+`LLMExceptFrame` 新增 `error_history`，`set_error()` 按重试顺序追加结构化错误记录；`reset_for_retry()` 清理当前错误态但保留历史；`get_retry_info()` 暴露 `error_history_count/error_history`。
 
-**文档跟踪**：`docs/PENDING_TASKS.md` PT-1.2
+**文档跟踪**：`docs/COMPLETED.md`（2026-05-12 PT-1.2 锚点）
 
 ---
 
-### OI-6：LLMExceptFrameStack 最大嵌套深度
+### ~~OI-6：LLMExceptFrameStack 最大嵌套深度~~ ✅ **已解决（2026-05-12）**
 
 **文件**：`core/runtime/interpreter/llm_except_frame.py`（`LLMExceptFrameStack.push()`）
 
-**问题描述**：
-当前无最大嵌套深度检查。深度嵌套的 llmexcept 块（如循环内多层 llmexcept）在极端情况下可能无界增长。
+**解决方案**：
+为 `LLMExceptFrameStack` 增加 `max_depth` 与溢出检查；并在 `RuntimeContextImpl.push_llm_except_frame()` 入栈处同步施加深度上限，保证主运行路径生效。
 
-**文档跟踪**：`docs/PENDING_TASKS.md` PT-1.3
+**文档跟踪**：`docs/COMPLETED.md`（2026-05-12 PT-1.3 锚点）
 
 ---
 
@@ -113,4 +114,4 @@
 
 ---
 
-*最后更新：2026-05-11*
+*最后更新：2026-05-12*
