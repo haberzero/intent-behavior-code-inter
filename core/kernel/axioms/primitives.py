@@ -698,8 +698,8 @@ class TupleAxiom(BaseAxiom):
     def resolve_specialization_by_names(
         self, registry: Any, arg_names: List[str]
     ) -> Optional[Any]:
-        # NS-7：元素数 ≥ 2 时走位置元素类型路径（`tuple[T1, T2, ...]`），
-        # 元素数 ≤ 1 时退化为单类型/无标注的传统路径。
+        # 元素数 ≥ 2 时走位置元素类型路径（`tuple[T1, T2, ...]`），
+        # 元素数 ≤ 1 时退化为单类型路径。
         if len(arg_names) >= 2:
             spec = registry.factory.create_tuple(positional_element_type_names=list(arg_names))
         else:

@@ -150,9 +150,9 @@ class SpecFactory:
         element_type_module: Optional[str] = None,
         positional_element_type_names: Optional[list] = None,
     ) -> "TypeDef":
-        # NS-7: 位置元素类型路径（`tuple[T1, T2, ...]`，元素数 ≥ 2）。
+        # 位置元素类型路径（`tuple[T1, T2, ...]`，元素数 ≥ 2）。
         # 与单类型路径 `tuple[T]` 互斥；前者使用 ``positional_element_types``，
-        # 后者保持 ``element_type`` 单字段以与既有运行时/序列化行为兼容。
+        # 后者保持 ``element_type`` 单字段。
         if positional_element_type_names and len(positional_element_type_names) >= 2:
             # 保持位置顺序：tuple[int, str] ≠ tuple[str, int]
             tuple_name = f"tuple[{','.join(positional_element_type_names)}]"
@@ -877,19 +877,12 @@ class SpecRegistry:
                     result.members.setdefault(m_name, m_spec)
             return result
 
-        # G1: early-cache hit — avoid allocating a temporary spec when the
-        # specialisation is already registered (e.g. repeated list[int] refs).
-        # Use spec.name (full name with type params) rather than get_base_name()
-        # so that nested generics like list[list[int]] key correctly.
+        # G1: early-cache hit — 避免为已注册的特化类型分配临时 spec。
+        # 使用 spec.name（含类型参数的完整名称）而非 get_base_name()，
+        # 以便嵌套泛型如 list[list[int]] 正确构建缓存键。
         #
-        # NS-7 correctness fix: never sort arg_names when forming the cache
-        # key.  Position-significant specialisations (tuple[T1,T2], dict[K,V])
-        # would otherwise collide — e.g. ``tuple[str,int]`` and ``tuple[int,str]``
-        # both sorted to the same key, causing the second lookup to wrongly
-        # return the first registered spec.  Unordered cases (list[A,B,...] union)
-        # may experience a slightly lower cache hit rate when callers vary
-        # argument order, but ``register()`` still dedups by spec.name, so
-        # correctness is preserved.
+        # 关键修正：缓存键构建时不对 arg_names 排序。
+        # 位置敏感的特化类型（tuple[T1,T2]、dict[K,V]）会因排序而冲突。
         if arg_specs:
             arg_names = [a.name for a in arg_specs]
             candidate_key = f"{spec.name}[{','.join(arg_names)}]"

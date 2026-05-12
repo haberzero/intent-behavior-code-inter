@@ -338,8 +338,7 @@ class IbNativeObject(IbObject):
         # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:
             attr = self.vtable[message]
-            # 所有的 Proxy VTable 都已经由 ModuleLoader 完成了自动装箱转换
-            # 直接调用并返回 IbObject
+            # Proxy VTable 由 ModuleLoader 完成自动装箱转换
             return attr(*args)
 
         # 2. 处理 __getattr__ 协议 (属性/方法获取)

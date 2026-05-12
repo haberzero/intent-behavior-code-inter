@@ -27,16 +27,15 @@ _current_frame: ContextVar[Optional["IExecutionFrame"]] = ContextVar(
 
 # 当前 IBCI 执行上下文（ExecutionContext）寄存器。
 #
-# NS-3 引入：``IbBehavior`` / ``IbFnCallable`` 在定义时捕获 ``_execution_context``
+# ``IbBehavior`` / ``IbFnCallable`` 在定义时捕获 ``_execution_context``
 # 字段；跨 Interpreter / 跨线程场景下，定义时刻的 EC 可能与调用时刻的 EC
-# 不一致（如多 Interpreter 的 L1 流水线，或反序列化后的 EC 已失效）。
+# 不一致。
 #
 # 设计语义：
-#   - lambda / snapshot / immediate behavior 的"调用机制"（VM、节点池、副表）
-#     总是取**调用现场**的 EC。
-#   - 定义时刻的 ``_execution_context`` 字段降级为"回退源"——仅当当前没有
-#     活跃 EC（即在 Interpreter 执行循环之外被调用，例如外部 host 工具直接
-#     调用一个反序列化的 callable）时才使用。
+#   - lambda / snapshot / immediate behavior 的调用机制（VM、节点池、副表）
+#     总是取调用现场的 EC。
+#   - 定义时刻的 ``_execution_context`` 字段作为回退源，仅当当前没有
+#     活跃 EC 时使用。
 #
 # Interpreter.run() / execute_module() / vm.run() 在入口处设置此变量。
 _current_execution_context: ContextVar[Optional["IExecutionContext"]] = ContextVar(
@@ -63,10 +62,10 @@ def reset_current_frame(token) -> None:
 
 
 def get_current_execution_context() -> Optional["IExecutionContext"]:
-    """获取当前线程/协程的执行上下文（NS-3）。
+    """获取当前线程/协程的执行上下文。
 
     在 Interpreter 执行循环之外调用返回 None。``IbBehavior.call`` /
-    ``IbFnCallable.call`` 应优先使用本函数返回值，仅在为 None 时回退到
+    ``IbFnCallable.call`` 应优先使用本函数返回值，为 None 时使用
     定义时刻捕获的 ``_execution_context`` 字段。
     """
     return _current_execution_context.get()

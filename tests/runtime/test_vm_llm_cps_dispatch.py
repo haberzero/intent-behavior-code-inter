@@ -61,9 +61,7 @@ class TestNS1LLMCpsDispatch:
         finally:
             LLMExecutorImpl.execute_behavior_object_cps = original
 
-        # NS-1 guarantee: VM frame stack is non-empty (>= 2 frames: at least
-        # the IbCall driver task plus the _vm_invoke_behavior task) when the
-        # LLM executor fires.
+        # VM 帧栈保证非空（至少 2 帧：IbCall driver 任务加 _vm_invoke_behavior 任务）
         assert observations.get("depth", 0) >= 2, (
             f"Expected VM frame stack depth >= 2 inside execute_behavior_object_cps, "
             f"got {observations.get('depth')}"

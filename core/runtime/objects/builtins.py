@@ -319,12 +319,7 @@ class IbString(IbValue):
 
     # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any:
-        # NS-4 收紧：当右操作数为 llm_uncertain 哨兵时，直接通过
-        # ThrownException(LLMParseError) 走 try/except 体系，
-        # 不再隐式 coerce 为字符串 "uncertain"。
-        # 在 llmexcept 保护帧外，正常的 LLM 不确定性已经在赋值点抛出
-        # LLMParseError；此处覆盖的是 llmexcept body 内仍能观察到的
-        # uncertain 哨兵被误参与字符串拼接的情形。
+        # 右操作数为 llm_uncertain 时抛出 LLMParseError
         if other.ib_class.name == "llm_uncertain":
             from core.runtime.exceptions import ThrownException
             registry = self.ib_class.registry
@@ -615,14 +610,11 @@ class IbDict(IbValue):
         return f"Dict({self.fields})"
 
     def keys(self) -> IbObject:
-        # 返回 IbList 包装的原生 key 列表
-        # 注意：这里的 key 已经是原生类型（通常是 str）
-        # 我们需要将其装箱
+        # key 已经是原生类型（通常是 str），需要装箱
         native_keys = list(self.fields.keys())
         return self.ib_class.registry.box(native_keys)
 
     def values(self) -> IbObject:
-        # 返回 IbList 包装的值列表
         return self.ib_class.registry.box(list(self.fields.values()))
 
     def items(self) -> IbObject:
@@ -769,11 +761,10 @@ class IbFnCallable(IbValue):
         当存在参数（``params_uids`` 非空）或闭包（``closure`` 非空）时，进入
         独立的子作用域并在其中绑定参数与闭包；调用结束后自动退出。
 
-        NS-3：EC 解析优先级 —— 调用现场 ContextVar > 定义时刻字段 ``_execution_context``。
+        EC 解析优先级：调用现场 ContextVar > 定义时刻字段 ``_execution_context``。
         VM CPS 主路径不走本方法；本方法仅为同步后备（外部 host / 反序列化后调用）。
         """
-        # NS-3: prefer call-site EC (ContextVar) over the definition-time
-        # snapshot stored in ``self._execution_context``.
+        # 调用现场 EC 优先于定义时刻快照
         from core.runtime.frame import get_current_execution_context
         ec = get_current_execution_context() or self._execution_context
         if ec is None:
@@ -994,7 +985,7 @@ class IbBehavior(IbValue):
                 "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
             )
 
-        # NS-3: prefer call-site EC (ContextVar) over the definition-time field.
+        # 调用现场 EC 优先于定义时刻字段
         from core.runtime.frame import get_current_execution_context
         ec = get_current_execution_context() or self._execution_context
 
