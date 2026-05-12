@@ -188,27 +188,15 @@ func get_reply() -> str:
 
 ---
 
-## 八、`str + Uncertain` 拼接：过渡期允许，未来将禁止
+## ~~八、`str + Uncertain` 拼接：过渡期允许~~ ✅ 已禁止（NS-4，2026-05-12）
 
-**当前行为（过渡期）**
+历史过渡期允许的 `str + llm_uncertain` 隐式拼接已收紧：
 
-`str` 类型变量在运行时持有 `Uncertain`（例如 `llmretry` 重试耗尽后）时，与字符串的 `+` 拼接被允许，且 `Uncertain` 被视作字符串 `"uncertain"` 参与拼接。这是为了避免 `print("结果: " + r)` 这类常见调试模式在 LLM 失败后立刻 RUNTIME_ERROR 的"安静崩溃"路径。
+- 编译期：`StrAxiom.resolve_operation_type_name("+", "llm_uncertain")` 不再返回 `"str"`，走常规 SEM_003 类型检查路径。
+- 运行期：`IbString.__add__` 检测到右操作数为 `llm_uncertain` 哨兵时，抛 `ThrownException(LLMParseError)`，由 `try/except LLMParseError`（或更外层的 `LLMError`/`Exception`）接管。
+- 用户若需观察 uncertain 值仍可使用显式转换 `(str)uncertain_var`（得到字符串 `"uncertain"`）。
 
-```ibci
-# ✅ 当前过渡期允许
-str r = @~ MOCK:FAIL ~ llmretry "..."
-print("结果: " + r)    # 输出："结果: uncertain"
-```
-
-**未来计划**
-
-后续 `Uncertain` 内部哨兵完全不可见后，本行为将被禁止：`str + Uncertain`
-将不再隐式 coerce，相关错误路径将由统一的 `try/except` 接管。
-
-**根源**
-
-`IbString.__add__` 与 `StrAxiom.resolve_operation_type_name` 当前对 `llm_uncertain` 操作数做了
-显式放行（参见 `core/runtime/objects/builtins.py` / `core/kernel/axioms/primitives.py` 中的 TODO 注释）。
+详情参考 `docs/COMPLETED.md` 2026-05-12 NS-4 锚点。
 
 ---
 

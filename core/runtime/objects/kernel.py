@@ -664,6 +664,12 @@ class IbNativeFunction(IbFunction):
         except Exception as e:
             if isinstance(e, InterpreterError):
                 raise
+            # ThrownException 是用户代码主动抛出的语言级异常（如
+            # LLMParseError 等），必须穿透原生函数边界，由 IbTry / 顶层
+            # try-except 体系处理；不可被包装为 InterpreterError。
+            from core.runtime.exceptions import ThrownException
+            if isinstance(e, ThrownException):
+                raise
             raise InterpreterError(f"Native function '{self._name}' failed: {e}")
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':

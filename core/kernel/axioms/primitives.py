@@ -424,12 +424,9 @@ class StrAxiom(BaseAxiom):
         if op == "+":
             if other_name == "str":
                 return "str"
-            # TODO(future): 当 IBCI 完善 try/except 机制后，此处对 llm_uncertain
-            # 的隐式拼接将被禁止，由统一的不确定性异常处理路径接管。
-            # 现阶段为避免静默崩溃打断常见的 `"prefix: " + str_var` 调试路径，
-            # 编译期允许 str + llm_uncertain，运行时将 Uncertain 视为 "uncertain"。
-            if other_name == "llm_uncertain":
-                return "str"
+            # 历史过渡分支（`str + llm_uncertain` → "str"）已收紧（NS-4）。
+            # 现在静态出现 `llm_uncertain` 操作数时按 SEM_003 处理，
+            # 与运行期 `IbString.__add__` 抛 LLMParseError 的策略保持一致。
         if op == "*":
             if other_name in ("int", "any"):
                 return "str"

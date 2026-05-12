@@ -17,45 +17,7 @@
 
 ## NS-4　收紧 `str + llm_uncertain` 隐式拼接（OI-1 收口）
 
-**优先级**：P2（解锁条件已具备）
-
-### 当前事实状态
-
-- 编译期：`core/kernel/axioms/primitives.py:424-432` 中 `StrAxiom.resolve_operation_type_name` 对 `op == "+"` 且 `other_name == "llm_uncertain"` 显式返回 `"str"`，绕过 SEM_003。
-- 运行期：`core/runtime/objects/builtins.py:321-330` 的 `IbString.__add__` 把 `IbLLMUncertain` 操作数转写为字符串 `"uncertain"` 后参与拼接，不抛错。
-- 两处均带匹配的 `TODO(future)` 注释，注明"当 IBCI 完善 try/except 机制后…由统一的不确定性异常处理路径接管"。
-- 解锁条件已具备：`try`/`except`/`raise`/`finally` 机制（`Exception → LLMError → {LLMParseError, LLMRetryExhaustedError, LLMCallError}`）已在 2026-04-30 与 llmexcept 体系对齐（`KNOWN_LIMITS.md §二`、`COMPLETED.md` OI-7 锚点）。
-
-### Uncertain 的真实泄漏面（核查后归纳）
-
-1. **`llmexcept` 保护帧内**（`core/runtime/vm/handlers.py:732-737`）：当 `last_llm_result.is_certain == False` 且 `get_current_llm_except_frame() is not None`，赋值目标变量被写入 `registry.get_llm_uncertain()` 单例（哨兵），等待 `restore_snapshot + retry` 覆盖。这是 Uncertain 唯一存活窗口。
-2. **`llmexcept` 块外**（`vm/handlers.py:738-745`、`handlers.py:118-126`、`handlers.py:1682-1689`）：同样的 `is_certain == False` 信号直接构造 `LLMParseError` 通过 `ThrownException` 抛出；Uncertain 不会落地到变量。
-3. **重试耗尽**（`vm/handlers.py:1003-1011`、`handlers.py:1670-1681`）：直接抛 `LLMRetryExhaustedError`。
-4. **provider 层失败**（`llm_executor.py:993-1003`）：直接抛 `LLMCallError`。
-5. **结论**：Uncertain 只在 retry 循环内对目标变量短暂可见；llmexcept body 中读取该变量 = 用户主动观察哨兵。`IbLLMUncertain.is_compatible` 返回 True（`primitives.py:995-997`），允许其被写入任何类型槽位，是哨兵语义的必要约束。
-
-### 收紧后的协作合约（与 llmexcept / try-except）
-
-| 场景 | 现有行为 | 收紧后行为 |
-|------|--------|--------|
-| llmexcept body 内 `print("got: " + maybe_var)` | 输出 `"got: uncertain"`，retry 不可见 | 抛 `LLMParseError` 立即逃出 body；用户若需观察请在 body 内自行 `try`/`except LLMParseError` |
-| llmexcept body 内 `retry "hint"` 后继续重试 | 正常 | 正常（推荐路径，不读 uncertain 变量） |
-| 外层 catch `LLMRetryExhaustedError` 后访问遗留 uncertain 变量 | `"prefix: " + r` 输出 `"prefix: uncertain"` | 抛 `LLMParseError`；用户应在 catch 分支重新赋值或仅记录异常 |
-| `(str)uncertain_var` 显式转换 | 走 `IbLLMUncertain.cast_to`，得到 `"uncertain"` | 维持不变（显式转换是用户明确意图） |
-
-### 技术路径
-
-1. **编译期**：删除 `StrAxiom.resolve_operation_type_name` 中的 `if other_name == "llm_uncertain": return "str"` 分支与 TODO 注释；不另设新 SEM 码，沿用 SEM_003 现有错误信息。注意：此分支仅在源码出现 `llm_uncertain` 静态类型时触发（极罕见），主要是规整公理。
-2. **运行期**：把 `IbString.__add__` 的 `if other.ib_class.name == "llm_uncertain"` 分支替换为 `raise ThrownException(self.ib_class.registry.make_llm_parse_error("string concatenation with uncertain LLM result", ...))`；保留 `'str'` 路径不变。
-3. **测试**：
-   - 新增 `tests/runtime/test_uncertain_str_concat_prohibition.py`：用 `MOCK:FAIL` 在 llmexcept body 内做 `+` 拼接，断言 `LLMParseError` 抛出；并断言 `(str)uncertain` 显式转换仍可用。
-   - 全量回归 `python -m pytest tests/ -q --tb=short`：审计并修正现有测试中 `"prefix: " + uncertain_var` 模式（若有），改为 `(str)uncertain_var` 显式转换或异常路径。
-4. **文档**：删除 `KNOWN_LIMITS.md §八` 的"过渡期允许"小节；从 `OPEN_ISSUES.md` 移除 OI-1；在 `COMPLETED.md` 追加 NS-4 锚点。
-
-### 风险
-
-- 既有测试可能依赖隐式拼接；需要逐个审视并选择"显式转换"或"显式 try/except"路线。
-- 不影响 lexer/parser，不影响 AST 序列化。
+✅ **已完成（2026-05-12）** — 详见 `docs/COMPLETED.md` 2026-05-12 NS-4 锚点。
 
 ---
 

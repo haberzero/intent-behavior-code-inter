@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-05-12 锚点：NS-4 / NS-6 / NS-7（语言级语法/类型清理）
+
+三项 NEXT_STEPS 一并收口，回归测试通过。基线 1239 → 1242 → ... (持续推进中)。
+
+### NS-4：收紧 `str + llm_uncertain` 隐式拼接
+
+- **编译期**：`StrAxiom.resolve_operation_type_name` 移除 `llm_uncertain` 放行分支；编译期出现该静态类型组合时按常规 SEM_003 处理。
+- **运行期**：`IbString.__add__` 检测到 `llm_uncertain` 哨兵时抛 `ThrownException(LLMParseError)`，由 `try/except LLMParseError` 接管；不再隐式 coerce 为 `"uncertain"` 字符串。
+- **基础设施**：`IbNativeFunction.call` 显式让 `ThrownException` 穿透原生函数边界，避免被包装成 `InterpreterError`，保证 LLMParseError 等语言级异常能传到 `IbTry` 处理器。
+- **用户保留路径**：`(str)uncertain_var` 显式转换仍返回 `"uncertain"` 字符串；`uncertain == Uncertain` 比较与 retry 流程未受影响。
+- **测试**：新增 `tests/runtime/test_uncertain_str_concat_prohibition.py`（3 用例：try-except 捕获、显式 cast 保留、公理直接询问）。
+- **文档**：删除 `KNOWN_LIMITS.md §八`、收口 `OPEN_ISSUES.md OI-1`。
+
+---
+
 ## 2026-05-12 锚点：PT-1.2 / PT-1.3 / PT-3.3（idbg）收口
 
 三项工作按"llmexcept 可追踪性 + 防御性深度限制 + 调试器可观测性"主线一并落地，回归测试通过：`1239 passed`（在 1232 基线之上新增 7 个测试）。
