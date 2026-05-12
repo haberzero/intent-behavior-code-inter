@@ -21,6 +21,14 @@
 - **测试**：新增 `tests/runtime/test_uncertain_str_concat_prohibition.py`（3 用例：try-except 捕获、显式 cast 保留、公理直接询问）。
 - **文档**：删除 `KNOWN_LIMITS.md §八`、收口 `OPEN_ISSUES.md OI-1`。
 
+### NS-6：链式下标 `(expr)[index]` 语法消歧
+
+- **根因修复**：`expression.py:grouping()` 推测块内部的 `ParseControlFlowError` 不再被块内 try/except 吞掉，改由 `with` 外侧的 try/except 接管，避免 speculate 失败时 temp_tracker 被合并（这是历史 PAR_001 误报的根因，也是 `KNOWN_LIMITS §九` 的物理来源）。
+- **NS-6 启发规则**：speculate 成功解析出类型节点为 `IbSubscript` 且 RPAREN 之后紧跟 `[` 时，立刻触发 PCFE 回退到分组表达式路径，让 `(value[idx])[idx]` 形态自然走链式下标。
+- **回归保护**：`(list[int])arr` / `(int)x` 等正常 cast 不受影响。
+- **测试**：新增 `tests/compiler/test_chain_subscript.py`（5 用例：tuple/list/dict 链式下标 + 泛型 cast 与基本 cast 不被误伤）。
+- **文档**：删除 `KNOWN_LIMITS.md §九`。
+
 ---
 
 ## 2026-05-12 锚点：PT-1.2 / PT-1.3 / PT-3.3（idbg）收口

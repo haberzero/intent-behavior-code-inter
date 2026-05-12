@@ -79,41 +79,7 @@
 
 ## NS-6　链式下标 `(expr)[index]` 语法消歧
 
-**优先级**：P3（有明确临时变量规避方案，但语法洁净度欠佳）
-
-### 当前事实状态
-
-- 触发文件：`core/compiler/parser/components/expression.py:175-218` 的 `grouping()` 与 `core/compiler/parser/components/type_def.py:31-69`。
-- 根因（事实核查）：`grouping()` 见 `LPAREN`+`IDENTIFIER` 进入推测式前瞻；`type_parser.parse_type_annotation()` 把 `nested[0]` 合法地解析为 `IbSubscript(IbName, IbConstant)`（泛型 `Type[arg]` 语法形态），随后看到 `)` 即提交为 `IbCastExpr`，后续 `[1]` 当作 cast 值的子表达式解析，报 PAR_001 或语义错。
-- 现状：`KNOWN_LIMITS.md §九` 将其登记为低优先级限制，给出"用临时变量承接"规避方案。
-
-### 候选技术路径（核查后筛选）
-
-| 方案 | 思路 | 副作用 |
-|------|------|--------|
-| A. 符号表感知回退 | 在 grouping 中查 symbol_table 判断 `nested` 是否是已知类型 | parser 当前不持有 symbol_table；架构层穿透 |
-| B. 禁止 cast target 含下标 | 拒绝 `(list[int])x` 形态 cast | 损失合法的泛型 cast 写法 |
-| C. RPAREN 之后的 next-token 启发 | 若 RPAREN 之后立即是 `[` 且 cast value 路径不会以 `[` 开头 → 视为 grouping | 仅影响 `(X)[...]` 这一对组合；`(int)[1,2,3]`（cast list 字面量）极少使用，可接受 |
-| D. 引入新 cast 语法（如 `as`） | 彻底消歧 | 与 `try/except as e` 冲突；需大改 |
-| E. 维持现状 | 文档限制 + 临时变量 | 无 |
-
-**推荐**：方案 C（最局部、影响面最小）。逻辑要点：
-- speculate 区块成功解析出 `type_node` 并匹配到 `RPAREN`、且 `type_node` 自身**含下标语法**（`IbSubscript`）时，再 peek 一个 token：
-  - 若下一个 token 为 `LBRACKET` → 几乎必然是 `(var[idx])[idx]` 的链式下标，restore checkpoint 走分组表达式路径。
-  - 若下一个 token 为 `LBRACE` 同理（链式 dict/method 调用形态）。
-  - 其他情况（IDENT/常量/UNARY 操作符…）维持当前 cast 路径。
-
-### 技术路径
-
-1. 在 `expression.py:190-200` 命中 `RPAREN` 之后、构造 `IbCastExpr` 之前，新增 `peek` 检查：
-   - 若 `type_node` 是 `IbSubscript` 且当前 `peek().type == TokenType.LBRACKET` → `raise ParseControlFlowError()` 触发回退。
-2. 不影响 `(IDENT)expr` 与 `(IDENT.attr)expr` 这类非下标 cast。
-3. **测试**：新增 `tests/compiler/test_chain_subscript.py`：`tuple nested = ((1,2),(3,4)); print((nested[0])[1])` 应能编译并打印 `2`；同时保留一个 `(list[int])arr` cast 测试确保未误伤。
-4. **文档**：删除 `KNOWN_LIMITS.md §九`；在 `COMPLETED.md` 追加 NS-6 锚点。
-
-### 风险
-
-- 若现有测试套件中存在 `(SomeGeneric[arg])[index]` 这种"cast 后立即下标"用例（看似冷门但不绝对），会被错误识别为 grouping。需 grep 现有测试与示例脚本核查。
+✅ **已完成（2026-05-12）** — 详见 `docs/COMPLETED.md` 2026-05-12 NS-6 锚点。
 
 ---
 

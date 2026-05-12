@@ -200,21 +200,15 @@ func get_reply() -> str:
 
 ---
 
-## 九、链式下标 `(expr)[index]` 语法不支持
+## ~~九、链式下标 `(expr)[index]` 语法不支持~~ ✅ 已支持（NS-6，2026-05-12）
 
-**严重级别**：低（可用临时变量规避）
+历史 `(nested[0])[1]` 形式被解析器误判为 `(Type)value` 形式的 cast，已修复：
 
-**根源**：解析器将 `(nested[0])` 中的括号识别为强制类型转换语法 `(TypeName)`，而非分组表达式，导致 `[1]` 无法正确解析。
+- `expression.py:grouping()` 推测块内部的 `ParseControlFlowError` 改由 `with` 外侧的 `try/except` 接管，确保 speculate 失败时 `success=False`、temp_tracker 不被合并（这是历史 PAR_001 误报的根因）；
+- 当类型节点本身是 `IbSubscript` 且 RPAREN 之后紧跟 `[` 时，立刻触发 PCFE 回退到分组表达式路径；
+- 泛型 cast `(list[int])arr` 等非链式下标用法不受影响。
 
-```ibci
-# ❌ PAR_001：Expect type name
-tuple nested = ((1, 2), (3, 4))
-print((str)(nested[0])[1])
-
-# ✅ 规避方案：用临时变量承接
-tuple inner = (tuple)nested[0]
-print((str)inner[1])
-```
+详情参考 `docs/COMPLETED.md` 2026-05-12 NS-6 锚点。
 
 ---
 
