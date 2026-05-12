@@ -288,30 +288,32 @@ class IDbgPlugin(IbPlugin):
 
         protection_mapping: Dict[str, str] = {}
 
-        # 1) 直接 llmexcept 语句：handler(target=...)
-        for handler_uid, node in node_pool.items():
-            if not isinstance(node, dict) or node.get("_type") != "IbLLMExceptionalStmt":
+        for node_uid, node in node_pool.items():
+            if not isinstance(node, dict):
                 continue
-            target_uid = node.get("target")
-            if isinstance(target_uid, str) and target_uid:
-                protection_mapping[target_uid] = handler_uid
+            node_type = node.get("_type")
 
-        # 2) 条件 for 的 llmexcept 内联保护：for 节点持有 llmexcept_handler 字段
-        for for_uid, node in node_pool.items():
-            if not isinstance(node, dict) or node.get("_type") != "IbFor":
+            # 1) 直接 llmexcept 语句：handler(target=...)
+            if node_type == "IbLLMExceptionalStmt":
+                target_uid = node.get("target")
+                if isinstance(target_uid, str) and target_uid:
+                    protection_mapping[target_uid] = node_uid
                 continue
-            handler_uid = node.get("llmexcept_handler")
-            iter_uid = node.get("iter")
-            if not (isinstance(handler_uid, str) and handler_uid and isinstance(iter_uid, str) and iter_uid):
-                continue
-            # 若 iter 是 IbFilteredExpr，真实受保护条件是其 expr
-            actual_target_uid = iter_uid
-            iter_node = node_pool.get(iter_uid)
-            if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
-                expr_uid = iter_node.get("expr")
-                if isinstance(expr_uid, str) and expr_uid:
-                    actual_target_uid = expr_uid
-            protection_mapping[actual_target_uid] = handler_uid
+
+            # 2) 条件 for 的 llmexcept 内联保护：for 节点持有 llmexcept_handler 字段
+            if node_type == "IbFor":
+                handler_uid = node.get("llmexcept_handler")
+                iter_uid = node.get("iter")
+                if not (isinstance(handler_uid, str) and handler_uid and isinstance(iter_uid, str) and iter_uid):
+                    continue
+                # 若 iter 是 IbFilteredExpr，真实受保护条件是其 expr
+                actual_target_uid = iter_uid
+                iter_node = node_pool.get(iter_uid)
+                if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
+                    expr_uid = iter_node.get("expr")
+                    if isinstance(expr_uid, str) and expr_uid:
+                        actual_target_uid = expr_uid
+                protection_mapping[actual_target_uid] = handler_uid
 
         return protection_mapping
 
