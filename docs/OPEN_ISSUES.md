@@ -9,21 +9,18 @@
 
 ## 一、运行时语义待修复项
 
-### OI-1：`str + llm_uncertain` 隐式拼接过渡兼容（2处）
+### ~~OI-1：`str + llm_uncertain` 隐式拼接过渡兼容（2处）~~ ✅ **已解决（2026-05-12，NS-4）**
 
 **文件**：
-- `core/runtime/objects/builtins.py:326`（运行时）
-- `core/kernel/axioms/primitives.py:400`（编译期类型检查）
+- `core/runtime/objects/builtins.py:IbString.__add__`（运行时）
+- `core/kernel/axioms/primitives.py:StrAxiom.resolve_operation_type_name`（编译期）
 
-**问题描述**：
-为避免常见调试路径（`"prefix: " + str_var`）在 LLM 失败时崩溃，当前允许 `str + llm_uncertain` 隐式拼接（将 Uncertain 视作字符串 `"uncertain"`）。
-注：异常体系（E1-E5）已在 2026-04-30 与 `llmexcept` 对齐 —— retry 耗尽抛 `LLMRetryExhaustedError`，无保护裸赋值的后续读取抛 `LLMParseError`，provider 层失败直接抛 `LLMCallError`，但本节涉及的 `+` 隐式拼接的过渡兼容仍保留以避免破坏现有调试代码。
+**解决方案**：
+- 编译期：`StrAxiom.resolve_operation_type_name` 移除 `llm_uncertain` 放行分支；走常规 SEM_003 类型检查。
+- 运行期：`IbString.__add__` 检测到 `llm_uncertain` 哨兵时直接 `raise ThrownException(LLMParseError)`；同时 `IbNativeFunction.call` 增设 `ThrownException` 直通，保证语言级异常穿透原生函数边界。
+- 用户的合法观察路径保留为 `(str)uncertain_var` 显式 cast。
 
-**风险**：`str + llm_uncertain` 不报错，不确定性结果可能无声地流入用户可见字符串，掩盖实际 LLM 失败。
-
-**解锁条件**：`llmexcept` 机制稳定后，可收紧为类型错误。
-
-**文档跟踪**：`docs/KNOWN_LIMITS.md`
+**文档跟踪**：`docs/COMPLETED.md`（2026-05-12 NS-4 锚点）
 
 ---
 

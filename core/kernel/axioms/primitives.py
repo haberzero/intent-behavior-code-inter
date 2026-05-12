@@ -424,12 +424,9 @@ class StrAxiom(BaseAxiom):
         if op == "+":
             if other_name == "str":
                 return "str"
-            # TODO(future): 当 IBCI 完善 try/except 机制后，此处对 llm_uncertain
-            # 的隐式拼接将被禁止，由统一的不确定性异常处理路径接管。
-            # 现阶段为避免静默崩溃打断常见的 `"prefix: " + str_var` 调试路径，
-            # 编译期允许 str + llm_uncertain，运行时将 Uncertain 视为 "uncertain"。
-            if other_name == "llm_uncertain":
-                return "str"
+            # 历史过渡分支（`str + llm_uncertain` → "str"）已收紧（NS-4）。
+            # 现在静态出现 `llm_uncertain` 操作数时按 SEM_003 处理，
+            # 与运行期 `IbString.__add__` 抛 LLMParseError 的策略保持一致。
         if op == "*":
             if other_name in ("int", "any"):
                 return "str"
@@ -693,13 +690,21 @@ class TupleAxiom(BaseAxiom):
         return "请返回一个 JSON 数组（将作为元组处理），如: [1, 2, 3]，不要包含任何其他文字"
 
     def is_compatible(self, other_name: str) -> bool:
+        # 基础协变：所有特化 tuple[*] 都可赋值给裸 tuple；同名 spec 兼容。
+        # 注意：不同位置元素的 tuple 之间默认不互相兼容（与 list[int]/list[str]
+        # 不互兼容的方向一致，由 SpecRegistry 的 covariance 路径细化处理）。
         return other_name in ("tuple",) or other_name.startswith("tuple[")
 
     def resolve_specialization_by_names(
         self, registry: Any, arg_names: List[str]
     ) -> Optional[Any]:
-        elem = arg_names[0] if arg_names else "any"
-        spec = registry.factory.create_tuple(element_type_name=elem)
+        # NS-7：元素数 ≥ 2 时走位置元素类型路径（`tuple[T1, T2, ...]`），
+        # 元素数 ≤ 1 时退化为单类型/无标注的传统路径。
+        if len(arg_names) >= 2:
+            spec = registry.factory.create_tuple(positional_element_type_names=list(arg_names))
+        else:
+            elem = arg_names[0] if arg_names else "any"
+            spec = registry.factory.create_tuple(element_type_name=elem)
         return registry.register(spec)
 
 

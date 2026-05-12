@@ -189,6 +189,12 @@ class TypeDef(IbSpec):
     # -- Container element / key / value types (LIST / TUPLE / DICT) -----
     element_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
     allowed_element_types: List["TypeRef"] = field(default_factory=list)
+    # NS-7: 元组的位置元素类型（`tuple[T1, T2, ...]`）。
+    # 与 ``allowed_element_types``（list 的 set-like 多类型 union）正交：
+    # ``positional_element_types`` 是按位置异构的、定长有序列表，仅 TUPLE kind
+    # 在元素数 ≥ 2 时使用；单类型元组 ``tuple[T]`` 仍走 ``element_type`` 单字段
+    # 以保持向后兼容。
+    positional_element_types: List["TypeRef"] = field(default_factory=list)
     key_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
     value_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)
 

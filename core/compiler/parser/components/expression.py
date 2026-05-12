@@ -181,26 +181,48 @@ class ExpressionComponent(BaseComponent):
         if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO):
             checkpoint = self.stream.get_checkpoint()
             _behavior_cast_detected = False
+            cast_node: Optional[ast.IbExpr] = None
 
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
-            with self.stream.speculate():
-                try:
+            # 关键：try/except 必须包在 with 外侧，否则 ParseControlFlowError
+            # 在 with 内被捕获 → with 正常退出 → success=True → temp_tracker
+            # 合并 → 推测期间产生的 PAR_xxx 误报会泄漏到真实 issue_tracker
+            # （这正是历史上 (expr)[index] 链式下标语法报错的根因，NS-6 一并修复）。
+            try:
+                with self.stream.speculate():
                     # 尝试以前瞻方式解析类型标注
                     type_node = self.context.type_parser.parse_type_annotation()
                     if self.stream.match(TokenType.RPAREN):
+                        # NS-6 链式下标消歧：
+                        # 当 type_node 自身含下标（IbSubscript，形如 `nested[0]`、
+                        # `list[int]`）且 RPAREN 之后紧跟 `[` 时，几乎必然是
+                        # `(value[idx])[idx]` 这种链式下标，而非 `(GenericType)value`
+                        # 形式的 cast——后者的 cast 值不会以 `[` 起始。
+                        # 触发回退，让分组表达式路径接管。
+                        if isinstance(type_node, ast.IbSubscript) and self.stream.check(TokenType.LBRACKET):
+                            raise ParseControlFlowError()
+
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
-                        
+
                         # (Type) @~...~ 语法不再支持，发出硬错误。
                         # 正确写法：fn varname = lambda -> TYPE: @~...~ 或 fn varname = snapshot -> TYPE: @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
                             _behavior_cast_detected = True
                             raise ParseControlFlowError()
-                        
-                        return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
-                except ParseControlFlowError:
-                    pass
-            
+
+                        # 缓存结果，with 正常退出后再 return；不在 with 内 return，
+                        # 以保证 PCFE 失败路径与成功路径走同一套出口机制。
+                        cast_node = self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
+                    else:
+                        # 类型标注解析成功但未匹配到 RPAREN —— 不是 cast，触发回退
+                        raise ParseControlFlowError()
+            except ParseControlFlowError:
+                cast_node = None
+
+            if cast_node is not None:
+                return cast_node
+
             # 在 speculate 上下文外发出硬错误，确保记录到真实的 issue_tracker
             if _behavior_cast_detected:
                 raise self.stream.error(
@@ -209,7 +231,7 @@ class ExpressionComponent(BaseComponent):
                     "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                     code="PAR_010"
                 )
-            
+
             # 路径回退：若非 Cast，则回退到检查点按普通分组表达式解析
             self.stream.restore_checkpoint(checkpoint)
 

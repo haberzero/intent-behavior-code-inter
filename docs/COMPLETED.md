@@ -8,6 +8,39 @@
 
 ---
 
+## 2026-05-12 锚点：NS-4 / NS-6 / NS-7（语言级语法/类型清理）
+
+三项 NEXT_STEPS 一并收口，回归测试通过。基线 1239 → 1242 → ... (持续推进中)。
+
+### NS-4：收紧 `str + llm_uncertain` 隐式拼接
+
+- **编译期**：`StrAxiom.resolve_operation_type_name` 移除 `llm_uncertain` 放行分支；编译期出现该静态类型组合时按常规 SEM_003 处理。
+- **运行期**：`IbString.__add__` 检测到 `llm_uncertain` 哨兵时抛 `ThrownException(LLMParseError)`，由 `try/except LLMParseError` 接管；不再隐式 coerce 为 `"uncertain"` 字符串。
+- **基础设施**：`IbNativeFunction.call` 显式让 `ThrownException` 穿透原生函数边界，避免被包装成 `InterpreterError`，保证 LLMParseError 等语言级异常能传到 `IbTry` 处理器。
+- **用户保留路径**：`(str)uncertain_var` 显式转换仍返回 `"uncertain"` 字符串；`uncertain == Uncertain` 比较与 retry 流程未受影响。
+- **测试**：新增 `tests/runtime/test_uncertain_str_concat_prohibition.py`（3 用例：try-except 捕获、显式 cast 保留、公理直接询问）。
+- **文档**：删除 `KNOWN_LIMITS.md §八`、收口 `OPEN_ISSUES.md OI-1`。
+
+### NS-6：链式下标 `(expr)[index]` 语法消歧
+
+- **根因修复**：`expression.py:grouping()` 推测块内部的 `ParseControlFlowError` 不再被块内 try/except 吞掉，改由 `with` 外侧的 try/except 接管，避免 speculate 失败时 temp_tracker 被合并（这是历史 PAR_001 误报的根因，也是 `KNOWN_LIMITS §九` 的物理来源）。
+- **NS-6 启发规则**：speculate 成功解析出类型节点为 `IbSubscript` 且 RPAREN 之后紧跟 `[` 时，立刻触发 PCFE 回退到分组表达式路径，让 `(value[idx])[idx]` 形态自然走链式下标。
+- **回归保护**：`(list[int])arr` / `(int)x` 等正常 cast 不受影响。
+- **测试**：新增 `tests/compiler/test_chain_subscript.py`（5 用例：tuple/list/dict 链式下标 + 泛型 cast 与基本 cast 不被误伤）。
+- **文档**：删除 `KNOWN_LIMITS.md §九`。
+
+### NS-7：`tuple[T1, T2, ...]` 位置元素类型标注
+
+- **TypeDef 扩展**：新增 `positional_element_types: List[TypeRef]`，与 `LIST.allowed_element_types`（set-like union）正交，仅 TUPLE kind 在元素数 ≥ 2 时使用；单类型元组 `tuple[T]` 维持 `element_type` 单字段路径，向后兼容。
+- **SpecFactory.create_tuple**：新增 `positional_element_type_names` 形参；多元素时生成 `tuple[T1,T2,...]` 名称（顺序敏感，不 sort）。
+- **TupleAxiom.resolve_specialization_by_names**：元素数 ≥ 2 走位置路径。
+- **SpecRegistry.resolve_specialization 早缓存修复**：candidate_key 不再 sort 多参数列表，避免 `tuple[int,str]` 与 `tuple[str,int]` 因排序键碰撞被误命中（这一缓存键 bug 对 dict[K,V] 等位置敏感 spec 也潜在影响，一并修复；list 等 union 容器仍正确，仅可能略有缓存未命中代价）。
+- **SemanticAnalyzer.visit_IbSubscript**：当 value_type 是带位置元素的 tuple 且 slice 是字面量 int 常量时，精确返回对应位置类型；越界或变量索引回退到通用 `resolve_subscript` 路径。
+- **测试**：新增 `tests/compiler/test_tuple_positional_types.py`（12 用例：位置推断、目标类型不匹配 SEM_003、fallback、协变、顺序敏感、单类型回退、factory 直接 API）。
+- **文档**：`KNOWN_LIMITS.md §16.5` 标记 NS-7 已完成。
+
+---
+
 ## 2026-05-12 锚点：PT-1.2 / PT-1.3 / PT-3.3（idbg）收口
 
 三项工作按"llmexcept 可追踪性 + 防御性深度限制 + 调试器可观测性"主线一并落地，回归测试通过：`1239 passed`（在 1232 基线之上新增 7 个测试）。

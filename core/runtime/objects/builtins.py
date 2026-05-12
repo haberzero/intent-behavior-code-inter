@@ -319,12 +319,22 @@ class IbString(IbValue):
 
     # ---  自动化运算符绑定支持 ---
     def __add__(self, other: IbObject) -> Any:
-        # TODO(future): 当 IBCI 完善 try/except 机制后，此处对 llm_uncertain 的
-        # 隐式拼接将被禁止，并改由统一的不确定性异常处理路径接管。
-        # 现阶段为避免静默崩溃打断常见的 `"prefix: " + str_var` 调试路径，
-        # 暂时允许将 Uncertain 视作 "uncertain" 字符串参与拼接。
+        # NS-4 收紧：当右操作数为 llm_uncertain 哨兵时，直接通过
+        # ThrownException(LLMParseError) 走 try/except 体系，
+        # 不再隐式 coerce 为字符串 "uncertain"。
+        # 在 llmexcept 保护帧外，正常的 LLM 不确定性已经在赋值点抛出
+        # LLMParseError；此处覆盖的是 llmexcept body 内仍能观察到的
+        # uncertain 哨兵被误参与字符串拼接的情形。
         if other.ib_class.name == "llm_uncertain":
-            return self.value + "uncertain"
+            from core.runtime.exceptions import ThrownException
+            registry = self.ib_class.registry
+            error = registry.make_llm_parse_error(
+                "string concatenation with uncertain LLM result is not allowed; "
+                "use explicit `(str)uncertain_var` cast or handle the value via try/except LLMParseError",
+                raw_response="",
+                type_name="str",
+            )
+            raise ThrownException(error)
         if other.ib_class.name != "str":
              raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
         return self.value + other.to_native()

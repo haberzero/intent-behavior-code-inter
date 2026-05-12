@@ -148,7 +148,22 @@ class SpecFactory:
         self,
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
+        positional_element_type_names: Optional[list] = None,
     ) -> "TypeDef":
+        # NS-7: 位置元素类型路径（`tuple[T1, T2, ...]`，元素数 ≥ 2）。
+        # 与单类型路径 `tuple[T]` 互斥；前者使用 ``positional_element_types``，
+        # 后者保持 ``element_type`` 单字段以与既有运行时/序列化行为兼容。
+        if positional_element_type_names and len(positional_element_type_names) >= 2:
+            # 保持位置顺序：tuple[int, str] ≠ tuple[str, int]
+            tuple_name = f"tuple[{','.join(positional_element_type_names)}]"
+            return TypeDef(
+                name=tuple_name,
+                kind=TypeKind.TUPLE.value,
+                is_nullable=True,
+                is_user_defined=False,
+                element_type=TypeRef.of("any"),
+                positional_element_types=[TypeRef.of(n) for n in positional_element_type_names],
+            )
         tuple_name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
         return TypeDef(
             name=tuple_name,
@@ -866,13 +881,18 @@ class SpecRegistry:
         # specialisation is already registered (e.g. repeated list[int] refs).
         # Use spec.name (full name with type params) rather than get_base_name()
         # so that nested generics like list[list[int]] key correctly.
+        #
+        # NS-7 correctness fix: never sort arg_names when forming the cache
+        # key.  Position-significant specialisations (tuple[T1,T2], dict[K,V])
+        # would otherwise collide — e.g. ``tuple[str,int]`` and ``tuple[int,str]``
+        # both sorted to the same key, causing the second lookup to wrongly
+        # return the first registered spec.  Unordered cases (list[A,B,...] union)
+        # may experience a slightly lower cache hit rate when callers vary
+        # argument order, but ``register()`` still dedups by spec.name, so
+        # correctness is preserved.
         if arg_specs:
             arg_names = [a.name for a in arg_specs]
-            if len(arg_names) == 1:
-                candidate_key = f"{spec.name}[{arg_names[0]}]"
-            else:
-                sorted_names = sorted(arg_names)
-                candidate_key = f"{spec.name}[{','.join(sorted_names)}]"
+            candidate_key = f"{spec.name}[{','.join(arg_names)}]"
             cached = self.resolve(candidate_key)
             if cached is not None:
                 return cached

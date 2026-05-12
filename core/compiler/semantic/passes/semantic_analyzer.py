@@ -1681,6 +1681,24 @@ class SemanticAnalyzer:
             self.error(f"Type '{value_type.name}' is not subscriptable", node, code="SEM_003")
             return self._any_desc
 
+        # NS-7: 元组的位置元素类型精确推断。
+        # 当 value_type 是带位置元素类型的 tuple（`tuple[T1, T2, ...]`），
+        # 且 slice 是字面量 int 常量、索引在范围内时，直接返回对应位置类型。
+        # 其余路径（变量索引、负索引、越界）维持 fallback 行为，回到下方的
+        # 通用 `resolve_subscript` 路径——返回 `element_type` 或 `any`。
+        if (value_type.kind == TypeKind.TUPLE.value
+                and getattr(value_type, "positional_element_types", None)
+                and isinstance(node.slice, ast.IbConstant)
+                and isinstance(node.slice.value, int)
+                and not isinstance(node.slice.value, bool)):
+            idx = node.slice.value
+            positional = value_type.positional_element_types
+            if 0 <= idx < len(positional):
+                pos_ref = positional[idx]
+                resolved = self.registry.resolve(pos_ref.head, pos_ref.module)
+                if resolved is not None:
+                    return resolved
+
         res = self.registry.resolve_subscript(value_type, key_type)
         if not res:
             # 特殊处理：如果是 list 且 key 是 int，返回其 element_type

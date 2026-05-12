@@ -188,45 +188,27 @@ func get_reply() -> str:
 
 ---
 
-## 八、`str + Uncertain` 拼接：过渡期允许，未来将禁止
+## ~~八、`str + Uncertain` 拼接：过渡期允许~~ ✅ 已禁止（NS-4，2026-05-12）
 
-**当前行为（过渡期）**
+历史过渡期允许的 `str + llm_uncertain` 隐式拼接已收紧：
 
-`str` 类型变量在运行时持有 `Uncertain`（例如 `llmretry` 重试耗尽后）时，与字符串的 `+` 拼接被允许，且 `Uncertain` 被视作字符串 `"uncertain"` 参与拼接。这是为了避免 `print("结果: " + r)` 这类常见调试模式在 LLM 失败后立刻 RUNTIME_ERROR 的"安静崩溃"路径。
+- 编译期：`StrAxiom.resolve_operation_type_name("+", "llm_uncertain")` 不再返回 `"str"`，走常规 SEM_003 类型检查路径。
+- 运行期：`IbString.__add__` 检测到右操作数为 `llm_uncertain` 哨兵时，抛 `ThrownException(LLMParseError)`，由 `try/except LLMParseError`（或更外层的 `LLMError`/`Exception`）接管。
+- 用户若需观察 uncertain 值仍可使用显式转换 `(str)uncertain_var`（得到字符串 `"uncertain"`）。
 
-```ibci
-# ✅ 当前过渡期允许
-str r = @~ MOCK:FAIL ~ llmretry "..."
-print("结果: " + r)    # 输出："结果: uncertain"
-```
-
-**未来计划**
-
-后续 `Uncertain` 内部哨兵完全不可见后，本行为将被禁止：`str + Uncertain`
-将不再隐式 coerce，相关错误路径将由统一的 `try/except` 接管。
-
-**根源**
-
-`IbString.__add__` 与 `StrAxiom.resolve_operation_type_name` 当前对 `llm_uncertain` 操作数做了
-显式放行（参见 `core/runtime/objects/builtins.py` / `core/kernel/axioms/primitives.py` 中的 TODO 注释）。
+详情参考 `docs/COMPLETED.md` 2026-05-12 NS-4 锚点。
 
 ---
 
-## 九、链式下标 `(expr)[index]` 语法不支持
+## ~~九、链式下标 `(expr)[index]` 语法不支持~~ ✅ 已支持（NS-6，2026-05-12）
 
-**严重级别**：低（可用临时变量规避）
+历史 `(nested[0])[1]` 形式被解析器误判为 `(Type)value` 形式的 cast，已修复：
 
-**根源**：解析器将 `(nested[0])` 中的括号识别为强制类型转换语法 `(TypeName)`，而非分组表达式，导致 `[1]` 无法正确解析。
+- `expression.py:grouping()` 推测块内部的 `ParseControlFlowError` 改由 `with` 外侧的 `try/except` 接管，确保 speculate 失败时 `success=False`、temp_tracker 不被合并（这是历史 PAR_001 误报的根因）；
+- 当类型节点本身是 `IbSubscript` 且 RPAREN 之后紧跟 `[` 时，立刻触发 PCFE 回退到分组表达式路径；
+- 泛型 cast `(list[int])arr` 等非链式下标用法不受影响。
 
-```ibci
-# ❌ PAR_001：Expect type name
-tuple nested = ((1, 2), (3, 4))
-print((str)(nested[0])[1])
-
-# ✅ 规避方案：用临时变量承接
-tuple inner = (tuple)nested[0]
-print((str)inner[1])
-```
+详情参考 `docs/COMPLETED.md` 2026-05-12 NS-6 锚点。
 
 ---
 
@@ -410,9 +392,15 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### 16.5 `tuple` 无元素类型标注
+### ~~16.5 `tuple` 无元素类型标注~~ ✅ 已解决（NS-7，2026-05-12）
 
-`tuple` 不支持 `tuple[int, str]` 形式的元素类型标注。元素访问始终返回 `any`，无法进行元素级类型检查。
+`tuple` 现在支持 `tuple[T1, T2, ...]` 的位置元素类型标注：
+- 字面量 int 下标访问时返回精确的位置类型（`tuple[int, str]` 的 `t[0]` 是 `int`，`t[1]` 是 `str`）；
+- 变量索引或越界访问回退到 `any`，与 `dict` 的非校验路径对称；
+- `tuple[A, B]` 仍可赋值给裸 `tuple`；不同位置组合 spec 互相不兼容；
+- `tuple[T]` 单类型路径保留 `element_type` 单字段语义，向后兼容。
+
+实现：`TypeDef.positional_element_types`（与 `LIST.allowed_element_types` 平行）、`SpecFactory.create_tuple(positional_element_type_names=...)`、`SemanticAnalyzer.visit_IbSubscript` 中识别字面量 int 索引并精确推断。`SpecRegistry.resolve_specialization` 的早缓存键不再 sort 多参数列表，保证 `tuple[int,str]` 与 `tuple[str,int]` 不再误共用同一缓存项。
 
 ### ~~16.6 泛型实例赋值兼容性规则不完整~~ ✅ 已解决（G3 / axiom covariance）
 
