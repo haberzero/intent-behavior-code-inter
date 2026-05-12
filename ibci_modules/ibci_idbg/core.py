@@ -288,6 +288,7 @@ class IDbgPlugin(IbPlugin):
 
         protection_mapping: Dict[str, str] = {}
 
+        # 调试态一次性 O(n) 扫描：node_pool 常驻内存且 protection_map 非热路径调用。
         for node_uid, node in node_pool.items():
             if not isinstance(node, dict):
                 continue
