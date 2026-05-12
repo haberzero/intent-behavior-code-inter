@@ -304,7 +304,9 @@ class IDbgPlugin(IbPlugin):
             if node_type == "IbFor":
                 handler_uid = node.get("llmexcept_handler")
                 iter_uid = node.get("iter")
-                if not (isinstance(handler_uid, str) and handler_uid and isinstance(iter_uid, str) and iter_uid):
+                has_handler_uid = isinstance(handler_uid, str) and bool(handler_uid)
+                has_iter_uid = isinstance(iter_uid, str) and bool(iter_uid)
+                if not (has_handler_uid and has_iter_uid):
                     continue
                 # 若 iter 是 IbFilteredExpr，真实受保护条件是其 expr
                 actual_target_uid = iter_uid

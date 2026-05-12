@@ -400,9 +400,9 @@ class LLMExceptFrameStack:
     帧栈确保每个层级都有独立的现场状态。
 
     支持最大嵌套深度限制，防止异常情况下的无界增长。
+    默认最大深度为 128：足够覆盖深层业务嵌套，同时抑制异常路径的栈爆炸风险。
     """
     
-    # 默认 128：足够覆盖深层业务嵌套，同时可防止异常路径中的无界增长。
     DEFAULT_MAX_DEPTH = 128
 
     def __init__(self, max_depth: int = DEFAULT_MAX_DEPTH):
