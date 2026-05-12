@@ -13,8 +13,11 @@ IbCell —— 词法闭包 Cell 变量的独立堆容器。
   的引用，无论外层作用域是否仍然活跃。
 * LT-2 (Cell 延长生命周期): ``IbCell`` 的生命周期由所有引用它的 closure 字典
   决定，与原 ``ScopeImpl`` 解耦。
-* LT-3 (snapshot 自包含性): snapshot 类型的 fn 对象通过持有自己的 ``IbCell``
-  副本（值拷贝）实现自包含。
+* LT-3 (snapshot 自包含性): snapshot 类型的 fn 对象通过对自由变量做**深克隆**
+  实现自包含——闭包槽位直接持有定义时刻深克隆出来的种子值（不再用 ``IbCell``
+  包装，参见 ``vm_handle_IbLambdaExpr`` 的 snapshot 分支）。``IbCell`` 仅服务
+  于 **lambda** 的共享引用语义。每次 snapshot 调用前会再次深克隆种子，从而
+  让 snapshot 作为完全无状态、可重入的可调用实例存在。
 
 设计要点
 --------

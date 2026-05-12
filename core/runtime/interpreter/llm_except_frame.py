@@ -197,69 +197,11 @@ class LLMExceptFrame:
         """
         尝试深克隆一个 IbObject 实例（用于 llmexcept 快照）。
 
-        对不可变原语（None 及 int/float/str/bool 类型）返回原对象（无需复制）。
-        对容器（list/tuple/dict）递归克隆所有元素/值。
-        对用户自定义 IbObject 实例递归克隆所有字段。
-        对函数/行为/原生对象等不可克隆类型返回 None（调用方跳过该变量）。
-
-        memo 字典用于环形引用检测与去重。
+        实际逻辑下沉到 ``core.runtime.objects.deep_clone.try_deep_clone``，
+        与 snapshot lambda 路径共用同一深克隆实现。
         """
-        from core.runtime.objects.kernel import IbObject as KernelIbObject
-
-        if memo is None:
-            memo = {}
-
-        val_id = id(val)
-        if val_id in memo:
-            return memo[val_id]
-
-        # 不可变原语（None 及标量类型）：引用共享即可，无需复制
-        if isinstance(val, IbNone) or (isinstance(val, IbValue) and val.ib_class.name in ("int", "float", "str", "bool")):
-            return val
-
-        # list / tuple：递归克隆 elements
-        if isinstance(val, IbValue) and val.ib_class.name in ("list", "tuple"):
-            # 占位符：处理自引用列表
-            new_elements: list = []
-            placeholder = type(val)(new_elements, val.ib_class)
-            memo[val_id] = placeholder
-            for elem in val.elements:
-                cloned_elem = self._try_deep_clone(elem, memo)
-                if cloned_elem is None:
-                    return None  # 容器中有无法克隆的元素，放弃整个容器
-                new_elements.append(cloned_elem)
-            if val.ib_class.name == "tuple":
-                # IbTuple.elements 为 tuple（不可变），需重新赋值
-                placeholder.elements = tuple(new_elements)
-            return placeholder
-
-        # dict：递归克隆所有键值对
-        if isinstance(val, IbValue) and val.ib_class.name == "dict":
-            new_fields: dict = {}
-            placeholder_dict = type(val)(new_fields, val.ib_class)
-            memo[val_id] = placeholder_dict
-            for k, v in val.fields.items():
-                cloned_v = self._try_deep_clone(v, memo)
-                if cloned_v is None:
-                    return None  # 值无法克隆，放弃整个 dict
-                new_fields[k] = cloned_v
-            return placeholder_dict
-
-        # 用户自定义 IbObject 实例（type 严格为 KernelIbObject，不含内置子类）
-        if type(val) is KernelIbObject:
-            new_obj = KernelIbObject.__new__(KernelIbObject)
-            new_obj.ib_class = val.ib_class
-            new_obj.fields = {}
-            memo[val_id] = new_obj
-            for fname, fval in val.fields.items():
-                cloned_fval = self._try_deep_clone(fval, memo)
-                if cloned_fval is not None:
-                    new_obj.fields[fname] = cloned_fval
-                # 无法克隆的字段（如内嵌函数引用）直接跳过：恢复时保留原值
-            return new_obj
-
-        # 其他类型（函数、行为、原生对象等）：不可克隆
-        return None
+        from core.runtime.objects.deep_clone import try_deep_clone
+        return try_deep_clone(val, memo)
 
     def restore_context(self, runtime_context: 'RuntimeContextImpl') -> None:
         """

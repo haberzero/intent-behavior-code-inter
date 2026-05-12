@@ -4,11 +4,14 @@ End-to-end tests for the parametric ``fn = lambda(...) / snapshot(...)`` syntax.
 Coverage:
   - No-param lambda: ``fn f = lambda: EXPR`` defers and re-evaluates each call
   - Parametric lambda: ``fn f = lambda(PARAMS): EXPR`` accepts arguments
-  - No-param snapshot: ``fn f = snapshot: EXPR`` evaluates once and caches
-  - Parametric snapshot: each call re-runs body, but free variables are frozen
+  - No-param snapshot: ``fn f = snapshot: EXPR`` re-evaluates each call but with
+    deep-cloned, frozen free variables (stateless / reentrant — no result caching)
+  - Parametric snapshot: each call re-runs body, free variables are deep-cloned
+    seeds re-cloned per call
   - Closure semantics:
-      * lambda mode reads latest value of free vars at call time
-      * snapshot mode freezes values at definition time (IbCell-backed)
+      * lambda mode reads latest value of free vars at call time (shared IbCell)
+      * snapshot mode captures a deep-cloned seed at definition time and clones
+        it again on every call (snapshot is fully stateless / reentrant)
   - Factory pattern: returning a snapshot lambda from a function captures locals
   - Nested lambdas: inner-param shadowing outer free vars
   - Behavior-body lambdas: ``fn f = lambda: @~...~`` produces a behavior with
@@ -106,9 +109,9 @@ print((str)f(10))
 
 
 class TestFnNoParamSnapshot:
-    """``fn f = snapshot: EXPR``: evaluates once at first call, caches result."""
+    """``fn f = snapshot: EXPR``: each call re-runs body with deep-cloned frozen free vars."""
 
-    def test_caches_value(self):
+    def test_freezes_free_var(self):
         code = """int x = 5
 fn snap = snapshot: x * 2
 print((str)snap())
@@ -116,14 +119,16 @@ x = 999
 print((str)snap())
 """
         lines = run_and_capture(code)
-        # snapshot caches: first call freezes 10, second returns the cache
+        # snapshot 在定义时把 x 深克隆为只读种子（int 是不可变原语 → 共享引用）；
+        # 外层 x = 999 不会污染种子，两次 snap() 均读到种子的 5 → 10。
         assert lines == ["10", "10"]
 
 
 class TestFnParametricSnapshot:
     """
     ``fn f = snapshot(PARAMS): EXPR``: arguments are bound on each call,
-    but free variables are captured (frozen via IbCell) at definition time.
+    but free variables are deep-cloned at definition time and re-cloned per call
+    (no result caching — snapshot is fully stateless / reentrant).
     """
 
     def test_freezes_free_var(self):

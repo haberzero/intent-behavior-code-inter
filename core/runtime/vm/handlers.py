@@ -239,33 +239,37 @@ def _vm_call_fn_callable(executor, func, args):
     ``yield target_uid``，使 lambda/snapshot 体完全在 VM CPS 循环中执行。
     控制流信号（RETURN/BREAK/CONTINUE）通过 Signal 数据对象传播，不再依赖
     Python 异常。
+
+    snapshot 语义（reentrant / stateless）：
+        snapshot 在定义时把所有自由变量深克隆为只读「种子」（见
+        ``vm_handle_IbLambdaExpr``）。每次调用进入子作用域时，对种子再做一次
+        深克隆作为本次调用的私有副本——即便函数体内部就地修改这些变量，
+        也不会污染其它调用，从而保证并发与重入安全。snapshot 不缓存结果。
     """
     from core.runtime.objects.cell import IbCell
-
-    # snapshot 无参缓存命中：立即返回，不需要任何 yield。
-    # 注意：`if False: yield` 是 Python 的惯用写法，确保此函数在缓存命中的早返回路径下
-    # 依然被 Python 解析为 generator function（因为函数其他分支含有 `yield target_uid`）。
-    # 去掉此标记也可行（函数已是 generator），此处保留是为了让读者一眼看出早返回分支
-    # 也属于同一 generator 上下文，不会意外切换语义。
-    if (func.capture_mode == "snapshot"
-            and func._cache is not None
-            and not func.params_uids):
-        if False:
-            yield  # pragma: no cover
-        return func._cache
+    from core.runtime.objects.deep_clone import try_deep_clone
 
     rt_context = executor.runtime_context
     needs_subscope = bool(func.params_uids) or bool(func.closure)
     if needs_subscope:
         rt_context.enter_scope()
     try:
-        # 绑定闭包 cell（SC-4：lambda/snapshot 两种模式均通过 closure 字典）
-        for sym_uid, (name, cell) in func.closure.items():
-            if isinstance(cell, IbCell):
-                if not cell.is_empty():
-                    rt_context.define_variable(name, cell.get(), uid=sym_uid)
+        # 绑定闭包：lambda 走共享 IbCell，snapshot 走每次调用的独立深克隆。
+        is_snapshot = func.capture_mode == "snapshot"
+        for sym_uid, (name, slot) in func.closure.items():
+            if is_snapshot:
+                # snapshot：种子已是定义时刻的深克隆，调用时再克隆一份注入子作用域，
+                # 保证函数体内的就地修改不会跨调用泄漏。
+                fresh = try_deep_clone(slot) if slot is not None else None
+                value = fresh if fresh is not None else slot
+                if value is not None:
+                    rt_context.define_variable(name, value, uid=sym_uid)
+            elif isinstance(slot, IbCell):
+                # lambda：共享 cell，调用时 deref 读最新值
+                if not slot.is_empty():
+                    rt_context.define_variable(name, slot.get(), uid=sym_uid)
             else:
-                rt_context.define_variable(name, cell, uid=sym_uid)
+                rt_context.define_variable(name, slot, uid=sym_uid)
 
         # 绑定形参（与 IbUserFunction.call 同构：处理 IbTypeAnnotatedExpr 包装）
         for i, arg_uid in enumerate(func.params_uids):
@@ -294,10 +298,6 @@ def _vm_call_fn_callable(executor, func, args):
         if needs_subscope:
             rt_context.exit_scope()
 
-    # snapshot 无参缓存写入（首次求值后缓存）
-    if func.capture_mode == "snapshot" and not func.params_uids:
-        func._cache = result
-
     return result
 
 
@@ -309,8 +309,13 @@ def _vm_invoke_behavior(executor, behavior, args):
     invocation so the VMTask running this helper is guaranteed to be on the
     frame stack at LLM execute time — giving "LLM 帧受 VM 调度管理" the
     practical snapshot / debug-visibility guarantee called for by NS-1.
+
+    snapshot 行为体（``capture_mode == 'snapshot'``）：
+        每次调用前清除 ``_cache`` 并在子作用域内对自由变量做一次额外深克隆，
+        与 ``_vm_call_fn_callable`` 路径一致——snapshot 是无状态、可重入的。
     """
     from core.runtime.objects.cell import IbCell
+    from core.runtime.objects.deep_clone import try_deep_clone
 
     llm_exec = behavior.ib_class.registry.get_llm_executor()
     if llm_exec is None:
@@ -318,6 +323,13 @@ def _vm_invoke_behavior(executor, behavior, args):
             f"IbBehavior '{behavior.node}': LLM executor not registered in KernelRegistry. "
             "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
         )
+
+    is_snapshot = behavior.capture_mode == "snapshot"
+    is_lambda = behavior.capture_mode == "lambda"
+    # lambda / snapshot 模式下严禁缓存上次结果：每次调用都应触发 LLM 推理。
+    # immediate 模式（capture_mode is None）保留 _cache 短路（值语义对象）。
+    if is_snapshot or is_lambda:
+        behavior._cache = None
 
     needs_subscope = bool(behavior.params_uids) or bool(behavior.closure)
     if not needs_subscope:
@@ -331,16 +343,20 @@ def _vm_invoke_behavior(executor, behavior, args):
             f"IbBehavior '{behavior.node}': execution_context is None for parametric behavior."
         )
 
-    behavior._cache = None
     rt_context = behavior._execution_context.runtime_context
     rt_context.enter_scope()
     try:
-        for sym_uid, (name, cell) in behavior.closure.items():
-            if isinstance(cell, IbCell):
-                if not cell.is_empty():
-                    rt_context.define_variable(name, cell.get(), uid=sym_uid)
+        for sym_uid, (name, slot) in behavior.closure.items():
+            if is_snapshot:
+                fresh = try_deep_clone(slot) if slot is not None else None
+                value = fresh if fresh is not None else slot
+                if value is not None:
+                    rt_context.define_variable(name, value, uid=sym_uid)
+            elif isinstance(slot, IbCell):
+                if not slot.is_empty():
+                    rt_context.define_variable(name, slot.get(), uid=sym_uid)
             else:
-                rt_context.define_variable(name, cell, uid=sym_uid)
+                rt_context.define_variable(name, slot, uid=sym_uid)
 
         for i, arg_uid in enumerate(behavior.params_uids):
             arg_data = behavior._execution_context.get_node_data(arg_uid)
@@ -1466,10 +1482,17 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
 def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     """lambda / snapshot 表达式：构造 ``IbFnCallable`` 或 ``IbBehavior``（公理 SC-3/SC-4）。
 
-    改用编译期填充的 ``node_data["free_vars"]``（``[[name, sym_uid], ...]``）
-    代替运行时 AST 走访（``_collect_free_refs``），消除 fallback 路径。
-    ``free_vars`` 由 ``semantic_analyzer.visit_IbLambdaExpr`` 在 Pass 4 末尾写入
-    ``IbLambdaExpr.free_vars`` 字段，序列化后进入 artifact node_data。
+    自由变量列表 ``free_vars`` 由 ``semantic_analyzer.visit_IbLambdaExpr`` 在 Pass 4
+    末尾写入并序列化到 artifact node_data，运行时无需再走访 AST。
+
+    闭包语义
+    --------
+    * **lambda**：自由变量通过共享 ``IbCell`` 捕获（SC-4）。调用时 deref 当前最新值，
+      不拷贝任何内容；外层后续对该变量的赋值/突变在调用时可见。
+    * **snapshot**：定义时对每个自由变量做**深克隆**作为只读「种子」存入 closure。
+      调用路径（``_vm_call_fn_callable`` / ``_vm_invoke_behavior``）会在每次调用前
+      对种子再做一次深克隆，作为该次调用的私有副本注入子作用域——确保 snapshot
+      作为**无状态、可重入**的可调用实例存在，多次调用之间彼此独立。
 
     body 节点在 lambda 被调用时才执行，此处无需 yield——handler 为 generator
     function（``if False: yield``）满足 VMExecutor 调度协议。
@@ -1477,6 +1500,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
     if False:
         yield
     from core.runtime.objects.cell import IbCell
+    from core.runtime.objects.deep_clone import try_deep_clone
     params_uids: List[str] = list(node_data.get("params") or [])
     body_uid = node_data.get("body")
     capture_mode = node_data.get("capture_mode") or "lambda"
@@ -1485,7 +1509,10 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
     body_data = executor.ec.get_node_data(body_uid) if body_uid else None
     body_is_behavior = bool(body_data) and body_data.get("_type") == "IbBehaviorExpr"
 
-    # 根据编译期收集的自由变量列表构建 closure，无需走访 AST。
+    # 根据编译期收集的自由变量列表构建 closure。
+    # closure[sym_uid] = (name, slot) 其中 slot 的类型由 capture_mode 决定：
+    #   - lambda   → IbCell（共享引用，调用时读最新值）
+    #   - snapshot → 深克隆后的 IbObject 种子（不可被外层突变影响）
     closure: Dict[str, Any] = {}
     if free_vars:
         current_scope = executor.runtime_context.current_scope
@@ -1493,15 +1520,18 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
             if sym_uid in closure:
                 continue
             if capture_mode == "snapshot":
-                # snapshot 模式：定义时刻的值拷贝（IbCell 独立副本，SC-3）
+                # snapshot：定义时刻对自由变量做一次深克隆，作为只读种子。
+                # 不可克隆的值（如函数引用）退回保留原引用——这类对象本身就是
+                # 不可变身份对象，不存在「外部突变泄漏」风险。
                 try:
                     val = current_scope.get_by_uid(sym_uid)
                 except (KeyError, AttributeError):
                     val = None
                 if val is not None:
-                    closure[sym_uid] = (name, IbCell(val))
+                    frozen = try_deep_clone(val)
+                    closure[sym_uid] = (name, frozen if frozen is not None else val)
             else:
-                # lambda 模式：共享引用（promote_to_cell 返回 None 表示全局变量，SC-4）
+                # lambda：共享 IbCell（promote_to_cell 返回 None 表示全局变量，SC-4）
                 cell = current_scope.promote_to_cell(sym_uid)
                 if cell is not None:
                     closure[sym_uid] = (name, cell)

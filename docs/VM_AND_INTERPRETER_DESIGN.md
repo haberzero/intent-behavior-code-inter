@@ -147,7 +147,7 @@ class IExecutionFrame(Protocol):
 ### 4.3 lambda vs snapshot
 
 - **lambda**（引用捕获）：通过 `current_scope.promote_to_cell(sym_uid)` 共享 `IbCell`；调用时 `cell.get()` 读最新值；`captured_intents=None`，运行时取调用方意图栈。
-- **snapshot**（值捕获）：定义时刻深拷贝到独立 `IbCell`（冻结值）；`captured_intents = runtime_context.fork_intent_snapshot()`（定义时刻意图栈快照）。
+- **snapshot**（值捕获，无状态可重入）：定义时刻对所有自由变量做深克隆（`try_deep_clone`）形成只读种子；每次调用前再次对种子深克隆注入子作用域；`captured_intents = runtime_context.fork_intent_snapshot()`（定义时刻意图栈快照）。snapshot 不缓存任何结果——除调用时实参以外的所有内容都按值冻结，每次调用都是独立的求值。
 
 ### 4.4 cell 捕获 × dispatch_eligible
 

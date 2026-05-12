@@ -451,8 +451,9 @@ class IbLambdaExpr(IbExpr):
     ----
     * ``capture_mode == 'lambda'``：自由变量 cell 共享捕获，每次调用 deref 最新值；
       调用处的意图栈生效。
-    * ``capture_mode == 'snapshot'``：定义时对自由变量值拷贝（IbCell 独立副本），
-      对意图栈 fork。
+    * ``capture_mode == 'snapshot'``：定义时对自由变量做**深克隆**形成只读种子；
+      每次调用前再次对种子深克隆并注入子作用域，使 snapshot 作为完全无状态、
+      可重入的可调用实例存在；意图栈也在定义时 fork 并冻结。
 
     AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
     运行时构造 ``IbBehavior``；否则构造 ``IbFnCallable``。两者都接受参数列表。

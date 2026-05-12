@@ -328,7 +328,7 @@ class IbValue(IbObject):
 
 不属于类型层语义，属于值层属性：
 - `lambda`：引用语义。自由变量通过 `ScopeImpl.promote_to_cell()` 升为共享 `IbCell`，调用时读最新值。
-- `snapshot`：值语义。定义时刻深拷贝值到独立 `IbCell`，并对意图栈 `fork_intent_snapshot()`。
+- `snapshot`：值语义。定义时刻对所有自由变量做深克隆形成只读种子，并对意图栈 `fork_intent_snapshot()`。每次调用前再次对种子深克隆注入子作用域——snapshot 不缓存任何结果，是完全无状态且可重入的可调用实例。
 
 ---
 

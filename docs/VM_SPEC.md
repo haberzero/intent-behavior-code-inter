@@ -85,7 +85,7 @@ while frame_stack:
 
 **公理 GC-1（追踪式 GC）**：IBCI 规定使用追踪式 GC（Tracing GC），不依赖引用计数；允许循环引用。
 
-**公理 GC-2（根集合）**：GC 根集合 = 全局作用域符号值 ∪ 活跃调用栈帧局部变量 ∪ 所有活跃 fn 对象的 `closure` 字典中的 Cell 值 ∪ 所有活跃 snapshot 对象持有的 `frozen_intent_ctx`。
+**公理 GC-2（根集合）**：GC 根集合 = 全局作用域符号值 ∪ 活跃调用栈帧局部变量 ∪ 所有活跃 fn 对象的 `closure` 字典中的 Cell 值（lambda 模式）或冻结种子（snapshot 模式）∪ 所有活跃 snapshot 对象持有的 `frozen_intent_ctx`。
 
 **公理 GC-3（回收条件）**：对象当且仅当从根集合不可达时可被回收，不依赖 Python 的引用计数机制。
 
