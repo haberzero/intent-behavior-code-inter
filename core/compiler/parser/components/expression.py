@@ -187,18 +187,15 @@ class ExpressionComponent(BaseComponent):
             # 关键：try/except 必须包在 with 外侧，否则 ParseControlFlowError
             # 在 with 内被捕获 → with 正常退出 → success=True → temp_tracker
             # 合并 → 推测期间产生的 PAR_xxx 误报会泄漏到真实 issue_tracker
-            # （这正是历史上 (expr)[index] 链式下标语法报错的根因，NS-6 一并修复）。
+            # （这正是历史上 (expr)[index] 链式下标语法报错的根因）。
             try:
                 with self.stream.speculate():
                     # 尝试以前瞻方式解析类型标注
                     type_node = self.context.type_parser.parse_type_annotation()
                     if self.stream.match(TokenType.RPAREN):
-                        # NS-6 链式下标消歧：
-                        # 当 type_node 自身含下标（IbSubscript，形如 `nested[0]`、
-                        # `list[int]`）且 RPAREN 之后紧跟 `[` 时，几乎必然是
-                        # `(value[idx])[idx]` 这种链式下标，而非 `(GenericType)value`
-                        # 形式的 cast——后者的 cast 值不会以 `[` 起始。
-                        # 触发回退，让分组表达式路径接管。
+                        # 链式下标消歧：
+                        # 当 type_node 自身含下标（IbSubscript）且 RPAREN 之后紧跟 `[` 时，
+                        # 几乎必然是链式下标而非 cast。触发回退。
                         if isinstance(type_node, ast.IbSubscript) and self.stream.check(TokenType.LBRACKET):
                             raise ParseControlFlowError()
 

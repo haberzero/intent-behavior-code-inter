@@ -335,7 +335,7 @@ def _vm_invoke_behavior(executor, behavior, args):
     if is_snapshot or is_lambda:
         behavior._cache = None
 
-    # NS-3: 调用现场 EC 优先。
+    # 调用现场 EC 优先
     ec = executor.ec
     rt_context = ec.runtime_context
 
@@ -562,8 +562,7 @@ def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 仍按数据透传给父帧处理而不是当场丢弃。
         return res
     if isinstance(res, IbValue) and res.ib_class.name == "behavior":
-        # NS-1: drive IbBehavior call through the CPS helper so the
-        # behavior's frame is on the VM stack while the LLM executor runs.
+        # IbBehavior 调用通过 CPS 执行，确保 behavior 帧在 VM 栈上
         result = yield from _vm_invoke_behavior(executor, res, [])
         return result
     return res
