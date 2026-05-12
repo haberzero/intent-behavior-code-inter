@@ -4,9 +4,9 @@
 > 这些内容已在代码中稳定落地，但因过于具体而不适合放入总体架构说明。
 > 供开发者深入理解各模块实现时参考。
 >
-> **最后更新**：2026-05-08（补充当前类型系统状态说明；保留历史分阶段细节以便追溯）
+> **最后更新**：2026-05-12（按当次事实核查补入 PT-1.2 / PT-1.3 字段、纠正 §1.6 中已过期表述、规整历史小节编号）
 >
-> **说明**：本文包含若干历史分阶段细节。若与当前代码状态冲突，请优先以 `docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/NEXT_STEPS.md` 以及对应源码实现为准。
+> **说明**：本文包含若干历史分阶段细节。若与当前代码状态冲突，请优先以 `docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/NEXT_STEPS.md` 以及对应源码实现为准。文末"§十三 公理化里程碑"与"§十四 公理类型层次"为 2026-04-17 历史归档，仅用于追溯设计决策由来；当前编号系统已收口为 §一..§十一 + §十二（vtable 自动签名）+ 历史归档 §十三/§十四。
 
 ---
 
@@ -75,12 +75,15 @@ visit_IbLLMExceptionalStmt
 | `loop_resume` | for 循环断点恢复映射（`节点UID → 迭代索引`，`restore_context` 故意不重置） |
 | `max_retry` | 最大重试次数，从 `llm_provider.get_retry()` 读取 |
 | `last_result` | 最后一次 LLM 调用的 `LLMResult`（供 llmexcept body 查询） |
+| `error_history` | 按 retry 顺序追加的结构化错误记录（`retry_count` / `error_type` / `error_message` / `response`）— PT-1.2 引入；`set_error()` 追加，`reset_for_retry()` 仅清理当前错误态而不清空历史 |
 
 不参与快照的类型（设计决定）：IbFunction、IbBehavior、IbNativeObject 等引用类型。
 
 `IbTuple` 已在 `_is_serializable()` 中与 `IbList` 并列处理，元素递归序列化。
 
-`LLMExceptFrameStack` 管理嵌套的 llmexcept 块，支持多层嵌套场景（当前阶段主要使用单层）。
+`LLMExceptFrameStack` 管理嵌套的 llmexcept 块。PT-1.3（2026-05-12）已为其增设 `max_depth`（默认 128）与溢出检查，超限抛 `RuntimeError`；`RuntimeContextImpl.push_llm_except_frame()` 入栈处同步施加上限，保证主运行路径与工具类视图一致。
+
+`get_retry_info()` 同步暴露 `error_history_count` / `error_history` 字段，供调试器（`ibci_idbg`）与日志直接消费。
 
 ### 1.5 max_retry 配置穿透
 
@@ -118,8 +121,8 @@ END TRANSACTION
 |------|------|--------|
 | 读取外部变量 | 允许（读到快照时刻值） | ✅ 已实现 |
 | 写入 `retry_hint` | 允许（retry-scoped，不 commit 外部）| ✅ 已实现 |
-| 写入普通外部变量 | **禁止**，应产生 SEM_xxx 编译期错误 | ⚠️ 未加限制（`restore_snapshot` 提供运行时回滚但无编译期保障）|
-| 快照失败后传播 | 应抛出 `LLMPermanentFailureError` | ⚠️ 当前 `break` + 返回最后值 |
+| 写入普通外部变量 | **禁止**，应产生 SEM_xxx 编译期错误 | ⚠️ 未加限制（`restore_snapshot` 提供运行时回滚但无编译期保障；见 `KNOWN_LIMITS §十二.3`）|
+| 快照失败后传播 | 应抛出统一的 LLM 错误对象 | ✅ 已实现：retry 耗尽 → `LLMRetryExhaustedError`；无保护裸赋值 → `LLMParseError`；provider 层失败 → `LLMCallError`（详见 `KNOWN_LIMITS §二`、`COMPLETED.md` OI-7 锚点）|
 
 **为什么快照模型使 llmexcept 与并发无关**：
 - 每个 LLM 语句（无论串行还是并行 dispatch）都进入独立快照，与其他语句的执行状态完全隔离
@@ -129,11 +132,13 @@ END TRANSACTION
 **已落地的快照基础设施**（代码现状）：
 - `LLMExceptFrame.save_context()` → 保存 vars/intent_ctx/loop_ctx/retry_hint 的完整快照
 - `LLMExceptFrame.restore_snapshot()` → 每次 retry 前恢复快照，使 LLM 看到一致的输入状态
-- `intent_context.fork()` → 意图上下文值快照（Step 6d 落地）
+- `intent_context.fork()` → 意图上下文值快照（NS-2c 落地后改为 fork-and-replace 而非 merge）
+- `LLMExceptFrame.error_history` → PT-1.2 引入的重试错误追踪
+- `LLMExceptFrameStack.max_depth` → PT-1.3 引入的嵌套深度上限（默认 128，主运行路径同步施加）
 
-**尚未落地的快照完整性约束**（见 `docs/NEXT_STEPS.md` / `docs/PENDING_TASKS.md`）：
-- 编译期 read-only 约束（SEM 错误）
-- `_last_llm_result` 从 `RuntimeContextImpl`（全局共享）迁移到 `LLMExceptFrame`（per-snapshot）
+**仍未落地的快照完整性约束**（仅剩一项；其余条目已闭合）：
+- 编译期 read-only 约束（SEM 错误）：禁止 llmexcept 块的 LLM 调用路径中对外部变量进行**就地修改**（如 `list.append` / `dict[k] = v`）。当前仅文档级告诫（`KNOWN_LIMITS §十二.3`），无编译期保障。
+  - 历史曾登记的"`_last_llm_result` 从 `RuntimeContextImpl`（全局共享）迁移到 `LLMExceptFrame`（per-snapshot）"已被推翻：当前架构有意保留共享通道并通过"读后立即 `set_last_llm_result(None)`"消费（`vm/handlers.py:986-988` 等多处）缩短生命周期至快照内通信，与 retry/llmexcept 的语义实测一致。本条不再视为遗留约束。
 
 ---
 
@@ -256,12 +261,18 @@ if isinstance(value, (IbList, IbTupleObj)):
 
 ## 六、IbLLMUncertain 哨兵对象
 
-`IbLLMUncertain`（`core/runtime/objects/kernel.py`）是 `IbObject` 的子类，用作"LLM 调用结果不确定"时的变量赋值占位符：
+`IbLLMUncertain`（`core/runtime/objects/kernel.py`）是 `IbObject` 的子类，用作 llmexcept 保护帧内"LLM 调用结果不确定"时的变量赋值占位符。
 
-- 当 `visit_IbAssign` 检测到 `last_llm_result.is_uncertain=True` 时，将目标变量赋值为 `IbLLMUncertain`（而非跳过赋值，保证变量已定义）
-- `IbLLMUncertain` 在布尔上下文中返回 `False`，支持 `(type) uncertain_val` 强制类型转换
-- 若 llmexcept 块重试成功，该变量被正确的 LLM 结果覆盖
-- 若重试耗尽，变量保持 `IbLLMUncertain` 状态，后续操作会产生类型错误（当前错误提示有待改进）
+**当前真实行为**（核查 `core/runtime/vm/handlers.py:732-745` 与 `core/kernel/axioms/primitives.py:947-1005`）：
+
+- **保护帧内**：`vm_handle_IbAssign` 检测到 `last_llm_result.is_certain=False` 且当前存在 llmexcept 保护帧时，将目标变量赋值为 `IbLLMUncertain` 单例。llmexcept 主控循环随后会执行 `restore_snapshot` + retry，下一轮成功时哨兵被真实值覆盖。
+- **保护帧外**：同一信号路径**不再**写入哨兵，而是直接 `raise ThrownException(LLMParseError)`（`handlers.py:738-745`、`handlers.py:118-126`、`handlers.py:1682-1689`）。Uncertain 不会泄漏到无保护代码。
+- **retry 耗尽**：抛 `LLMRetryExhaustedError`；外层 `try/except` 可捕获。
+- **provider 层失败**：抛 `LLMCallError`（OI-7 已闭合）。
+
+`IbLLMUncertain.is_compatible` 返回 True（`primitives.py:995-997`），允许哨兵被写入任何类型槽位——这是 retry 循环内"变量已定义、待覆盖"语义的必要约束，不应理解为"用户可以让 uncertain 进入业务路径"。
+
+历史过渡兼容 `str + Uncertain` 隐式拼接当前仍在 `IbString.__add__` 和 `StrAxiom.resolve_operation_type_name` 中保留（详见 `KNOWN_LIMITS.md §八`、`OPEN_ISSUES.md OI-1`、`NEXT_STEPS.md NS-4`）。
 
 单例在 `initialize_builtin_classes()` 中通过 `registry.register_llm_uncertain()` 注册，运行时通过 `registry.get_llm_uncertain()` 访问。
 
@@ -366,8 +377,6 @@ Engine.__init__()
 
 ---
 
-*本文档为 IBC-Inter 重要架构细节备份，记录已稳定落地的设计决策。*
-
 ## 十二、IbBehavior.call_intent 与 vtable callable 签名自动提取
 
 ### 12.1 IbBehavior.call_intent 字段
@@ -406,14 +415,18 @@ Engine.__init__()
 - 无注解 → `"any"`
 - 返回类型无注解 → `"any"`（使用 `inspect.Signature.empty` 判断，注意与 `inspect.Parameter.empty` 的区别）
 
-
 ---
 
-## 六、公理化 / 万物皆对象框架（2026-04-17 重大里程碑）
+# 历史归档
+
+> 以下小节为 2026-04-17 公理化里程碑前后的阶段性设计说明，**仅作追溯参考**。
+> 对应能力已稳定多版，当前实现以源码与正文 §一..§十二 为准；如下表述与现状不一致以代码为准。
+
+## 十三、公理化 / 万物皆对象框架（2026-04-17 重大里程碑 — 历史归档）
 
 本章记录 PR `copilot/ibc-inter-design-review` 完成的全局架构变更——IBC-Inter 公理化体系的核心阻塞点已被彻底突破。
 
-### 6.1 IILLMExecutor 接口 + KernelRegistry 注入（Step 1）
+### 13.1 IILLMExecutor 接口 + KernelRegistry 注入（Step 1）
 
 **问题根因**：`IbBehavior` 是 IBC-Inter 对象（有 `IbClass`、有 Spec），但执行时需要 `LLMExecutor`。由于 `LLMExecutor` 在 `ServiceContext` 层，`IbBehavior.call()` 无法在不产生架构穿透的情况下合法取得它，因此只能抛 `RuntimeError`，实际执行权交给 handler 层的 `_execute_behavior()` 旁路。
 
@@ -450,7 +463,7 @@ core/engine.py  (_prepare_interpreter, 末尾)
 - 注入时机：`_prepare_interpreter()` 末尾（封印完成之后），因此 `register_llm_executor()` 免封印检查
 - `clone()` 传播引用，确保子解释器也能访问 executor
 
-### 6.2 BehaviorAxiom（Step 2）
+### 13.2 BehaviorAxiom（Step 2）
 
 `BehaviorAxiom` 替换了 `DynamicAxiom("behavior")`，`behavior` 从此是具体的一等公民类型。`BehaviorAxiom` 继承 `BaseAxiom`，通过 `has_call_cap = True` 声明可调用能力，`resolve_return_type_name` 返回 `"auto"`（编译期延迟；运行期由 `IbBehavior.call()` 按 expected_type 解析）。
 
@@ -462,7 +475,7 @@ is_assignable(behavior, str) → False   ✅（严格）
 is_assignable(behavior, behavior) → True ✅
 ```
 
-### 6.3 IbBehavior 公理化重构（Step 2）
+### 13.3 IbBehavior 公理化重构（Step 2）
 
 `IbBehavior` 从被动数据描述符演进为**自主执行单元**，与 `IbUserFunction` 同构。
 
@@ -495,11 +508,11 @@ class IbBehavior(IbObject, IIbBehavior):
 
 ---
 
-## 七、公理类型层次（参考）
+## 十四、公理类型层次（2026-04-17 历史归档 / 参考）
 
 > 此节归档自原 `AXIOM_OOP_ANALYSIS.md` §一。AXIOM_OOP_ANALYSIS.md 文件已删除，内容拆分到 `docs/COMPLETED.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/VM_AND_INTERPRETER_DESIGN.md` 与本文件。
 
-### 7.1 完整公理类型层次（声明视角）
+### 14.1 完整公理类型层次（声明视角）
 
 ```
 Object（根）
@@ -517,7 +530,7 @@ Object（根）
 `IbFnCallable` 与 `IbBehavior` 都直接继承自 `IbObject`——两者执行机制（AST 重访 vs LLM 调用）完全不同，
 不共享 Python 实现，仅共享 IBCI 类型系统中的父子关系。
 
-### 7.2 `is_compatible()` 方向原则
+### 14.2 `is_compatible()` 方向原则
 
 | source | 可赋值的目标类型 |
 |--------|---------------|
@@ -527,3 +540,9 @@ Object（根）
 | bound_method | bound_method、callable |
 
 子类型向上兼容、父类型不向下兼容；`callable→fn_callable`、`fn_callable→behavior` 等反向赋值均为非法。
+
+
+---
+
+*本文档为 IBC-Inter 重要架构细节备份，记录已稳定落地的设计决策。*
+*正文 §一..§十二 为当前真实状态；§十三 / §十四 为历史归档，仅供追溯。*

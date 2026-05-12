@@ -3,21 +3,195 @@
 > 本文档**只**记录当前周期内最紧要、可立即开工的下一步。
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-12
+> **最后更新**：2026-05-12（基于事实核查补入 4 项语言收尾项；编号沿用 NS-4..NS-7）
 
 ---
 
-## 主线
+## 主线完成情况
 
-类型系统 M1–M5、VM CPS 主线、intent 系统 OOP 化（NS-2 全部 4 步）、LLM 调用路径合并入 CPS 调度循环（NS-1）、lambda/snapshot/behavior 跨帧 EC 边界（NS-3）、intent_context 高级 OOP 场景（PT-2.1）、IbIntentContext 序列化/反序列化（PT-2.2）、`_evaluate_segments` CPS 化、PT-1.2（llmexcept 错误历史）、PT-1.3（llmexcept 嵌套深度限制）以及 PT-3.3（`idbg.protection_map()`）均已完成，当前**无开放的 P0/P1/P2/P3 主线任务**。
+类型系统 M1–M5、VM CPS 主线、intent 系统 OOP 化（NS-2 全部 4 步）、LLM 调用路径合并入 CPS 调度循环（NS-1）、lambda/snapshot/behavior 跨帧 EC 边界（NS-3）、intent_context 高级 OOP 场景（PT-2.1）、IbIntentContext 序列化/反序列化（PT-2.2）、`_evaluate_segments` CPS 化、PT-1.2（llmexcept 错误历史）、PT-1.3（llmexcept 嵌套深度限制）以及 PT-3.3（`idbg.protection_map()`）均已完成。**当前主线（VM / Intent / llmexcept / 类型系统骨架）无开放的 P0/P1 任务**。
 
-下一阶段优先项：暂无新增紧急项；如出现新需求，按优先级即时补入本文件。
+新提出的下一阶段语言收尾项见下：均经过当次事实核查后落定技术路线，仅缺工时；可按优先级依次主推。
+
+---
+
+## NS-4　收紧 `str + llm_uncertain` 隐式拼接（OI-1 收口）
+
+**优先级**：P2（解锁条件已具备）
+
+### 当前事实状态
+
+- 编译期：`core/kernel/axioms/primitives.py:424-432` 中 `StrAxiom.resolve_operation_type_name` 对 `op == "+"` 且 `other_name == "llm_uncertain"` 显式返回 `"str"`，绕过 SEM_003。
+- 运行期：`core/runtime/objects/builtins.py:321-330` 的 `IbString.__add__` 把 `IbLLMUncertain` 操作数转写为字符串 `"uncertain"` 后参与拼接，不抛错。
+- 两处均带匹配的 `TODO(future)` 注释，注明"当 IBCI 完善 try/except 机制后…由统一的不确定性异常处理路径接管"。
+- 解锁条件已具备：`try`/`except`/`raise`/`finally` 机制（`Exception → LLMError → {LLMParseError, LLMRetryExhaustedError, LLMCallError}`）已在 2026-04-30 与 llmexcept 体系对齐（`KNOWN_LIMITS.md §二`、`COMPLETED.md` OI-7 锚点）。
+
+### Uncertain 的真实泄漏面（核查后归纳）
+
+1. **`llmexcept` 保护帧内**（`core/runtime/vm/handlers.py:732-737`）：当 `last_llm_result.is_certain == False` 且 `get_current_llm_except_frame() is not None`，赋值目标变量被写入 `registry.get_llm_uncertain()` 单例（哨兵），等待 `restore_snapshot + retry` 覆盖。这是 Uncertain 唯一存活窗口。
+2. **`llmexcept` 块外**（`vm/handlers.py:738-745`、`handlers.py:118-126`、`handlers.py:1682-1689`）：同样的 `is_certain == False` 信号直接构造 `LLMParseError` 通过 `ThrownException` 抛出；Uncertain 不会落地到变量。
+3. **重试耗尽**（`vm/handlers.py:1003-1011`、`handlers.py:1670-1681`）：直接抛 `LLMRetryExhaustedError`。
+4. **provider 层失败**（`llm_executor.py:993-1003`）：直接抛 `LLMCallError`。
+5. **结论**：Uncertain 只在 retry 循环内对目标变量短暂可见；llmexcept body 中读取该变量 = 用户主动观察哨兵。`IbLLMUncertain.is_compatible` 返回 True（`primitives.py:995-997`），允许其被写入任何类型槽位，是哨兵语义的必要约束。
+
+### 收紧后的协作合约（与 llmexcept / try-except）
+
+| 场景 | 现有行为 | 收紧后行为 |
+|------|--------|--------|
+| llmexcept body 内 `print("got: " + maybe_var)` | 输出 `"got: uncertain"`，retry 不可见 | 抛 `LLMParseError` 立即逃出 body；用户若需观察请在 body 内自行 `try`/`except LLMParseError` |
+| llmexcept body 内 `retry "hint"` 后继续重试 | 正常 | 正常（推荐路径，不读 uncertain 变量） |
+| 外层 catch `LLMRetryExhaustedError` 后访问遗留 uncertain 变量 | `"prefix: " + r` 输出 `"prefix: uncertain"` | 抛 `LLMParseError`；用户应在 catch 分支重新赋值或仅记录异常 |
+| `(str)uncertain_var` 显式转换 | 走 `IbLLMUncertain.cast_to`，得到 `"uncertain"` | 维持不变（显式转换是用户明确意图） |
+
+### 技术路径
+
+1. **编译期**：删除 `StrAxiom.resolve_operation_type_name` 中的 `if other_name == "llm_uncertain": return "str"` 分支与 TODO 注释；不另设新 SEM 码，沿用 SEM_003 现有错误信息。注意：此分支仅在源码出现 `llm_uncertain` 静态类型时触发（极罕见），主要是规整公理。
+2. **运行期**：把 `IbString.__add__` 的 `if other.ib_class.name == "llm_uncertain"` 分支替换为 `raise ThrownException(self.ib_class.registry.make_llm_parse_error("string concatenation with uncertain LLM result", ...))`；保留 `'str'` 路径不变。
+3. **测试**：
+   - 新增 `tests/runtime/test_uncertain_str_concat_prohibition.py`：用 `MOCK:FAIL` 在 llmexcept body 内做 `+` 拼接，断言 `LLMParseError` 抛出；并断言 `(str)uncertain` 显式转换仍可用。
+   - 全量回归 `python -m pytest tests/ -q --tb=short`：审计并修正现有测试中 `"prefix: " + uncertain_var` 模式（若有），改为 `(str)uncertain_var` 显式转换或异常路径。
+4. **文档**：删除 `KNOWN_LIMITS.md §八` 的"过渡期允许"小节；从 `OPEN_ISSUES.md` 移除 OI-1；在 `COMPLETED.md` 追加 NS-4 锚点。
+
+### 风险
+
+- 既有测试可能依赖隐式拼接；需要逐个审视并选择"显式转换"或"显式 try/except"路线。
+- 不影响 lexer/parser，不影响 AST 序列化。
+
+---
+
+## NS-5　编译期类型转换检查（激活 `can_convert_from`）
+
+**优先级**：P3
+
+### 当前事实状态
+
+- `core/compiler/semantic/passes/semantic_analyzer.py:1704-1712` 的 `visit_IbCastExpr` 仅 `self.visit(node.value)`（不使用 source 类型），随即把目标类型作为节点类型回填到 side_table。所有 cast 校验都推迟到运行时 `value.receive("cast_to", [target_class])`。
+- `core/kernel/spec/registry.py:411-422` 的 `get_converter_cap()` 已实现并存在显式 TODO："activate this in `semantic_analyzer.py::_resolve_cast_expr()` once compile-time cast validation is added."
+- 各 axiom 的 `can_convert_from` 在 `core/kernel/axioms/primitives.py` 中以**目标类型视角**给出："target 能否接受来自 src 的显式 cast？"。
+- 与 `is_compatible`（赋值兼容性，源类型视角）正交，不可混用。
+
+### 真实可接受的转换矩阵（核查所得）
+
+| 目标 axiom | `can_convert_from(src)` 接受集 | 备注 |
+|-----------|---------------------------|------|
+| Int | str, float, bool, int | — |
+| Float | str, int, bool, float | — |
+| Bool | **任意**（`return True`） | 一切都可 truthy 测试 |
+| Str | （需核查 379-460 行） | — |
+| List | 仅 list | 严格 |
+| Dict | （598 行） | — |
+| Tuple | （675 行） | — |
+| Exception | **任意** | 异常包装兼容性 |
+| LLMError 子类 | str + 自身 | 允许 str→错误对象 |
+| LLMUncertain | 仅 llm_uncertain | 哨兵自封闭 |
+| Enum（用户自定义类） | 仅 str | LLM from_prompt 协议要求 |
+| BaseAxiom 默认 | 全部 False | 用户类、callable 系列等 |
+
+### 落地难点（必须先解决）
+
+1. **用户类的 cast 矩阵**：用户定义的 `MyClass`/子类未走 axiom 路径，`BaseAxiom.can_convert_from` 默认 False。但 `(BaseClass)derived_var`、`(DerivedClass)base_var` 等 OOP cast 用例很常见。需要在 `visit_IbCastExpr` 中**短路**：source/target 任一为用户类时，按继承链 IS-A 判定，不走 axiom。
+2. **`any` 兜底**：source 或 target 名为 `any` 时一律放行（与运行时 `cast_to "any"` 一致）。
+3. **`auto` / `void` / `Optional[T]`**：需要明确策略——`auto` 在变量声明阶段已绑定具体类型；`void` 不可作为 source/target；`Optional[T]` cast 视为 `T` 的兼容形式。
+4. **`is_compatible` vs `can_convert_from` 不重合**：例如 `(int)bool_var` 在 `can_convert_from` 接受集中（"bool"∈int 接受集），但 `bool→int` 的 `is_compatible` 关系也是赋值兼容（隐式可行）。这意味着即使禁用显式 cast，赋值路径仍能完成，不会丢功能。
+5. **测试套件回归**：`tests/compiler` 与 `tests/e2e` 中可能存在依赖运行时宽松 cast 的用例，需逐一审视。
+
+### 技术路径
+
+1. **新增 SEM 码**：建议 `SEM_011 SEM_CAST_INVALID`（`core/base/codes.py`），错误信息附带建议（"use `(any)x` and then receive…"）。
+2. **`visit_IbCastExpr` 改造**（`semantic_analyzer.py:1704`）：
+   - 拿到 `source_type = self.visit(node.value)`。
+   - 若 source / target 任一为 `any` → 通过。
+   - 若两者均为用户类且存在 IS-A 关系（任一方向） → 通过。
+   - 否则调 `self.registry.get_converter_cap(target_type)`：返回 None ⇒ 报错（"type has no converter capability"）；返回 axiom ⇒ 检查 `axiom.can_convert_from(source_type.get_base_name())`，False 时报 SEM_011。
+3. **`can_convert_from` 局部修正**（须先于 step 2 落地）：
+   - 把 `IbException.can_convert_from(...)` 收紧（不再"任意接受"），改为 IS-A Exception 子类即可。运行时 `IbException.cast_to(target="str")` 行为不变。
+   - 把 `BoolAxiom.can_convert_from(...)` 维持"任意"（truthy 测试是底层公理）。
+4. **测试**：新增 `tests/compiler/test_compile_time_cast.py` 覆盖：原始类型矩阵、用户类继承、`any` 兜底、错误样本。
+
+### 风险
+
+- 行为破坏面较大；建议先在 dev branch 跑 `pytest tests/ -q --tb=short`，按失败用例反推 `can_convert_from` 是否应放宽，谨慎调整。
+- `cast_to "any"` 通用 escape hatch 必须保持开放，避免阻断现有"动态对象"模式。
+
+---
+
+## NS-6　链式下标 `(expr)[index]` 语法消歧
+
+**优先级**：P3（有明确临时变量规避方案，但语法洁净度欠佳）
+
+### 当前事实状态
+
+- 触发文件：`core/compiler/parser/components/expression.py:175-218` 的 `grouping()` 与 `core/compiler/parser/components/type_def.py:31-69`。
+- 根因（事实核查）：`grouping()` 见 `LPAREN`+`IDENTIFIER` 进入推测式前瞻；`type_parser.parse_type_annotation()` 把 `nested[0]` 合法地解析为 `IbSubscript(IbName, IbConstant)`（泛型 `Type[arg]` 语法形态），随后看到 `)` 即提交为 `IbCastExpr`，后续 `[1]` 当作 cast 值的子表达式解析，报 PAR_001 或语义错。
+- 现状：`KNOWN_LIMITS.md §九` 将其登记为低优先级限制，给出"用临时变量承接"规避方案。
+
+### 候选技术路径（核查后筛选）
+
+| 方案 | 思路 | 副作用 |
+|------|------|--------|
+| A. 符号表感知回退 | 在 grouping 中查 symbol_table 判断 `nested` 是否是已知类型 | parser 当前不持有 symbol_table；架构层穿透 |
+| B. 禁止 cast target 含下标 | 拒绝 `(list[int])x` 形态 cast | 损失合法的泛型 cast 写法 |
+| C. RPAREN 之后的 next-token 启发 | 若 RPAREN 之后立即是 `[` 且 cast value 路径不会以 `[` 开头 → 视为 grouping | 仅影响 `(X)[...]` 这一对组合；`(int)[1,2,3]`（cast list 字面量）极少使用，可接受 |
+| D. 引入新 cast 语法（如 `as`） | 彻底消歧 | 与 `try/except as e` 冲突；需大改 |
+| E. 维持现状 | 文档限制 + 临时变量 | 无 |
+
+**推荐**：方案 C（最局部、影响面最小）。逻辑要点：
+- speculate 区块成功解析出 `type_node` 并匹配到 `RPAREN`、且 `type_node` 自身**含下标语法**（`IbSubscript`）时，再 peek 一个 token：
+  - 若下一个 token 为 `LBRACKET` → 几乎必然是 `(var[idx])[idx]` 的链式下标，restore checkpoint 走分组表达式路径。
+  - 若下一个 token 为 `LBRACE` 同理（链式 dict/method 调用形态）。
+  - 其他情况（IDENT/常量/UNARY 操作符…）维持当前 cast 路径。
+
+### 技术路径
+
+1. 在 `expression.py:190-200` 命中 `RPAREN` 之后、构造 `IbCastExpr` 之前，新增 `peek` 检查：
+   - 若 `type_node` 是 `IbSubscript` 且当前 `peek().type == TokenType.LBRACKET` → `raise ParseControlFlowError()` 触发回退。
+2. 不影响 `(IDENT)expr` 与 `(IDENT.attr)expr` 这类非下标 cast。
+3. **测试**：新增 `tests/compiler/test_chain_subscript.py`：`tuple nested = ((1,2),(3,4)); print((nested[0])[1])` 应能编译并打印 `2`；同时保留一个 `(list[int])arr` cast 测试确保未误伤。
+4. **文档**：删除 `KNOWN_LIMITS.md §九`；在 `COMPLETED.md` 追加 NS-6 锚点。
+
+### 风险
+
+- 若现有测试套件中存在 `(SomeGeneric[arg])[index]` 这种"cast 后立即下标"用例（看似冷门但不绝对），会被错误识别为 grouping。需 grep 现有测试与示例脚本核查。
+
+---
+
+## NS-7　`tuple[T1, T2, ...]` 位置元素类型标注
+
+**优先级**：P3
+
+### 当前事实状态
+
+- 公理层：`core/kernel/axioms/primitives.py:632-708` 的 `TupleAxiom` 已实现下标/迭代/比较能力，但 `get_element_type_name()`/`resolve_item_type_name(...)` 当前都返回 `"any"`，且**没有** `resolve_specialization_by_names()`（与 `ListAxiom.resolve_specialization_by_names` 形成对照）。
+- 类型描述：`core/kernel/spec/base.py:35` 的 `TypeKind` 已含 `TUPLE`；`TypeDef` 已有 `element_type` 但只能承载单一类型（与 list 同构），无法表示 `(int, str)` 的位置异构。
+- 文档：`KNOWN_LIMITS.md §16.5` 标记为开放限制。
+
+### 技术路径
+
+1. **TypeDef 扩展**（`core/kernel/spec/base.py`）：为 `TUPLE` kind 增设 `positional_element_types: Optional[List[TypeRef]]` 字段；保持向后兼容（缺省时维持 `"any"` 单元素行为）。
+2. **TupleAxiom 扩展**：
+   - 新增 `resolve_specialization_by_names(registry, arg_names)`，长度 ≥ 2 时生成位置类型的特化 spec。
+   - 改写 `resolve_item_type_name(key_type_name, key_value=None)`（或新增带字面量信息的 overload）：若 key 是字面量 int 且 `0 <= idx < len(positional)`，返回对应位置类型；否则降级返回 `"any"`。
+3. **Semantic analyzer**：在 `visit_IbSubscript` 中识别 `tuple_spec` + 字面量 int key，调上述新方法做精确推断；非字面量 key 沿用 `"any"`。
+4. **`is_compatible`**：`tuple[int, str]` 可赋值给 `tuple`；不同位置类型组合默认不兼容（与 `list[int]` ↔ `list[str]` 对称）。
+5. **运行时**：`IbTuple` 不需要改动（已经持有 Python tuple）；位置类型仅做编译期检查。
+6. **解包**：保持 `IbList`/`IbTuple` 双轨解包；解包目标类型推断可受益于新精度，需在 `stmt_handler._assign_to_target` 之外的 type-binding 路径补一条 spec 化分支。
+7. **测试**：`tests/compiler/test_tuple_positional_types.py` 覆盖：
+   - `tuple[int, str] t = (1, "x"); int a = t[0]; str b = t[1]`
+   - `tuple[int, str] t = ("oops", 1)` 应触发 SEM_003
+   - 元组解包目标类型推断
+8. **文档**：从 `KNOWN_LIMITS.md §16.5` 移除（或改为"已实现"小节）；`COMPLETED.md` 追加 NS-7 锚点。
+
+### 风险
+
+- 与 `list[int, str, list]`（多类型 union 容器，`KNOWN_LIMITS §十四`）的语法相似，需在 parser/spec 层确认它们走的是不同分支：list 使用 `allowed_element_type_names` 列表，tuple 应使用 `positional_element_types` 列表。
+- 跨模块影响：序列化（`serialization/spec_serializer`）需要识别新字段。
 
 ---
 
 ## 工作规则
 
 - 同一时刻只主推一项 NS-x；其余项保留待选。
+- NS-4 / NS-5 改动公理层公约或语义错误集，需在分支早期跑 `python -m pytest tests/ -q --tb=short` 评估破坏面。
 - 每项完成后，把摘要追加到 `docs/COMPLETED.md`（极简时间线），并把对应条目从本文件移除。
 - 出现新的紧要项时，按"先评估优先级、再决定是否替换 NS-x"原则操作。
 
