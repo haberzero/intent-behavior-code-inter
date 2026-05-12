@@ -41,7 +41,7 @@ class TestNS3CallsiteExecutionContext:
         observations = {}
 
         from core.runtime.interpreter.llm_executor import LLMExecutorImpl
-        original = LLMExecutorImpl.execute_behavior_object
+        original = LLMExecutorImpl.execute_behavior_object_cps
 
         def probe(self, behavior, execution_context):
             # Stamp the behavior's stored field with a sentinel so we can
@@ -53,9 +53,9 @@ class TestNS3CallsiteExecutionContext:
             observations["passed_ec_has_vm"] = (
                 getattr(execution_context, "vm_executor", None) is not None
             )
-            return original(self, behavior, execution_context)
+            return (yield from original(self, behavior, execution_context))
 
-        LLMExecutorImpl.execute_behavior_object = probe
+        LLMExecutorImpl.execute_behavior_object_cps = probe
         try:
             engine.run_string(
                 _ai_prefix() + (
@@ -66,7 +66,7 @@ class TestNS3CallsiteExecutionContext:
                 silent=True,
             )
         finally:
-            LLMExecutorImpl.execute_behavior_object = original
+            LLMExecutorImpl.execute_behavior_object_cps = original
 
         # In the single-Interpreter happy path, ``executor.ec`` and the
         # stored field should refer to the same EC (they were the same at

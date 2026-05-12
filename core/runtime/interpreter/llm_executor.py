@@ -211,17 +211,49 @@ class LLMExecutorImpl:
         return param_names
 
     def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> str:
-        """
-        评估结构化提示词片段。
+        """同步版段求值（兼容入口）。
 
-         增强的变量替换逻辑：
-        - 只有当变量名是 llm 函数参数时，才会进行变量替换
-        - 其他 $变量名 会被作为普通文本处理
+        实现委托给 ``_evaluate_segments_cps`` 生成器；当 ``vm_executor`` 可用时，
+        通过 ``vm.run(uid)`` 对 yield 出的子节点求值。该路径用于：
+        - ``dispatch_eager`` 在后台线程中的同步求值
+        - 不经 VM 调度的旧测试路径
+
+        CPS 主路径（由 VM handler 触发的 invoke_*）改用 ``_evaluate_segments_cps``
+        + ``yield from``，使段求值作为子任务嵌入到外层 VM 帧栈，而非启动一个
+        独立的 ``_drive_loop``，从而正确反映 ``frame_stack_depth``。
+        """
+        gen = self._evaluate_segments_cps(segments, execution_context, param_names)
+        vm = execution_context.vm_executor if execution_context is not None else None
+        sent = None
+        try:
+            while True:
+                child = gen.send(sent) if sent is not None else next(gen)
+                if child is None:
+                    sent = None
+                    continue
+                if vm is None:
+                    raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
+                sent = vm.run(child)
+        except StopIteration as si:
+            return si.value or ""
+
+    def _evaluate_segments_cps(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None):
+        """CPS 版段求值（生成器）。
+
+        ``yield`` 出待求值的子节点 UID，调用方负责把求值结果通过 ``send`` 注回；
+        最终用 ``return`` 返回拼接后的字符串。语义与 :meth:`_evaluate_segments`
+        完全一致；唯一区别是把"调用 vm.run"替换为"yield 节点 UID"，让外层 VM
+        调度循环把段求值作为子任务接管。
+
+        设计目的：
+        - 消除 `_evaluate_segments` 通过 ``vm.run`` 重入 ``_drive_loop`` 的"同步
+          旁路"，使段求值真正纳入 CPS 帧栈。
+        - 维持 lambda/snapshot/behavior 在段求值期间的栈可观察性与可暂停语义。
         """
         if not segments:
             return ""
 
-        content_parts = []
+        content_parts: List[str] = []
         for segment in segments:
             if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
                 val = execution_context.resolve_value(segment)
@@ -230,10 +262,7 @@ class LLMExecutorImpl:
 
             if isinstance(segment, str):
                 if segment.startswith("node_"):
-                    vm = execution_context.vm_executor
-                    if vm is None:
-                        raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
-                    val = vm.run(segment)
+                    val = yield segment
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
                     elif hasattr(val, 'to_native'):
@@ -245,13 +274,10 @@ class LLMExecutorImpl:
             elif hasattr(segment, 'id'):
                 # IbName 节点（变量引用）
                 var_name = segment.id
-                
+
                 # 只有当变量名是函数参数时才进行替换
                 if param_names and var_name in param_names:
-                    vm = execution_context.vm_executor
-                    if vm is None:
-                        raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
-                    val = vm.run(segment)
+                    val = yield segment
                     if hasattr(val, '__to_prompt__'):
                         content_parts.append(val.__to_prompt__())
                     elif hasattr(val, 'to_native'):
@@ -720,6 +746,224 @@ class LLMExecutorImpl:
         if execution_context is not None:
             execution_context.runtime_context.set_last_llm_result(result)
         # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
+        if result is not None and result.value is not None:
+            return result.value
+        return self.registry.get_none()
+
+    # ------------------------------------------------------------------ #
+    # CPS-friendly generator variants                                    #
+    # ------------------------------------------------------------------ #
+    #
+    # 这些 ``*_cps`` 生成器把段求值阶段（``_evaluate_segments_cps``）通过
+    # ``yield from`` 嵌入 VM 调度循环。语义与同步版本完全一致，唯一区别是
+    # prompt 段中的子节点（``node_*`` 或 IbName）通过 yield 交给外层 VM 帧栈
+    # 求值，而不是再启动一次 ``_drive_loop``。
+    #
+    # 调用约定：调用方需要 ``yield from`` 这些方法，最终值通过 ``return``
+    # 携带（``StopIteration.value``）。LLM HTTP 请求本身仍是同步的——这是
+    # 当前架构下的下一步演进点（详见 ``_call_llm`` 内部注释）。
+    # ------------------------------------------------------------------ #
+
+    def execute_llm_function_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None):
+        """CPS 版 :meth:`execute_llm_function`；逻辑等价，段求值通过 yield from。"""
+        node_data = execution_context.get_node_data(node_uid)
+        context = execution_context.runtime_context
+
+        name = node_data.get("name", "unknown")
+        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{name}'")
+
+        sys_prompt_segments = node_data.get("sys_prompt")
+        user_prompt_segments = node_data.get("user_prompt")
+
+        param_names = self._get_function_param_names(node_data, execution_context)
+
+        sys_prompt = yield from self._evaluate_segments_cps(sys_prompt_segments, execution_context, param_names)
+        user_prompt = yield from self._evaluate_segments_cps(user_prompt_segments, execution_context, param_names)
+
+        merged_intents = context.get_resolved_prompt_intents(execution_context)
+        if merged_intents:
+            intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
+            sys_prompt += intent_block
+
+        retry_hint_segments = None
+        current_retry_hint = context.retry_hint
+        if current_retry_hint:
+            retry_hint_segments = [current_retry_hint]
+        else:
+            retry_hint_segments = node_data.get("retry_hint")
+
+        if retry_hint_segments:
+            retry_hint_text = yield from self._evaluate_segments_cps(retry_hint_segments, execution_context, param_names)
+            sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
+
+        context.retry_hint = None
+
+        type_name = "str"
+        returns_uid = node_data.get("returns")
+        if returns_uid:
+            returns_data = execution_context.get_node_data(returns_uid)
+            if returns_data and returns_data["_type"] == "IbName":
+                type_name = returns_data.get("id", "str")
+
+        if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
+            type_prompt = self.llm_callback.get_return_type_prompt(type_name)
+            if type_prompt:
+                sys_prompt += f"\n\n{type_prompt}"
+
+        raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
+
+        if raw_res == "__MOCK_REPAIR__":
+            return LLMResult.uncertain_result(
+                raw_response="__MOCK_REPAIR__",
+                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+            )
+
+        if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            return LLMResult.uncertain_result(
+                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            )
+
+        self.last_call_info = {
+            "sys_prompt": sys_prompt,
+            "user_prompt": user_prompt,
+            "response": raw_res,
+            "raw_response": raw_res,
+            "merged_intents": merged_intents
+        }
+        return self._parse_result(raw_res, type_name, node_uid)
+
+    def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None):
+        """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。"""
+        node_data = execution_context.get_node_data(node_uid)
+        context = execution_context.runtime_context
+
+        content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
+
+        provider = self.llm_callback
+        auto_intent = True
+        if provider and hasattr(provider, "_config"):
+            auto_intent = provider._config.get("auto_intent_injection", True)
+
+        if not auto_intent:
+            if call_intent:
+                content_str = call_intent.resolve_content(context, execution_context)
+                return LLMResult.success_result(
+                    value=self.registry.box(content_str),
+                    raw_response=content_str
+                )
+
+        if captured_intents is not None:
+            from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
+            if not isinstance(captured_intents, _IbIntentContext):
+                raise TypeError(
+                    f"execute_behavior_expression_cps: captured_intents must be "
+                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
+                )
+            active_list = captured_intents.get_active_intents()
+            all_intents = IntentResolver.resolve(
+                active_intents=active_list,
+                global_intents=captured_intents.get_global_intents(),
+                context=context,
+                execution_context=execution_context
+            )
+        else:
+            all_intents = context.get_resolved_prompt_intents(execution_context)
+
+        llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
+
+        sys_prompt = "你是一个意图行为代码执行器。"
+
+        if llmoutput_hint:
+            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
+
+        current_retry_hint = context.retry_hint
+        context.retry_hint = None
+        if provider and not current_retry_hint and hasattr(provider, "_retry_hint"):
+            current_retry_hint = provider._retry_hint
+
+        if current_retry_hint:
+            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
+
+        if all_intents:
+            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
+            sys_prompt += intent_block
+
+        response = self._call_llm(sys_prompt, content, node_uid)
+
+        if response == "__MOCK_REPAIR__":
+            return LLMResult.uncertain_result(
+                raw_response="__MOCK_REPAIR__",
+                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+            )
+
+        if response == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            return LLMResult.uncertain_result(
+                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            )
+
+        self.last_call_info = {
+            "sys_prompt": sys_prompt,
+            "user_prompt": content,
+            "response": response,
+            "raw_response": response,
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
+            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+            "merged_intents": all_intents
+        }
+
+        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
+        if type_hint:
+            return self._parse_result(response, type_hint, node_uid)
+
+        return LLMResult.success_result(
+            value=self.registry.box(response),
+            raw_response=response
+        )
+
+    def execute_behavior_object_cps(self, behavior: IbObject, execution_context: IExecutionContext):
+        """CPS 版 :meth:`execute_behavior_object`；委托给 execute_behavior_expression_cps。"""
+        if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
+            return LLMResult.success_result(value=behavior)
+
+        cache_enabled = getattr(behavior, "capture_mode", None) is None
+        if cache_enabled and behavior._cache is not None:
+            return LLMResult.success_result(value=behavior._cache)
+
+        type_pushed = False
+        if behavior.expected_type:
+            self.push_expected_type(behavior.expected_type)
+            type_pushed = True
+
+        try:
+            result = yield from self.execute_behavior_expression_cps(
+                behavior.node, execution_context, captured_intents=behavior.captured_intents
+            )
+            if cache_enabled:
+                behavior._cache = result.value if result else None
+            return result
+        finally:
+            if type_pushed:
+                self.pop_expected_type()
+
+    def invoke_behavior_cps(self, behavior: IbObject, execution_context: IExecutionContext):
+        """CPS 版 :meth:`invoke_behavior`；段求值嵌入外层 VM 帧栈。"""
+        result = yield from self.execute_behavior_object_cps(behavior, execution_context)
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        if result is not None and result.value is not None:
+            return result.value
+        return self.registry.get_none()
+
+    def invoke_llm_function_cps(self, func: IbObject, execution_context: IExecutionContext):
+        """CPS 版 :meth:`invoke_llm_function`；段求值嵌入外层 VM 帧栈。"""
+        call_intent = getattr(func, '_pending_call_intent', None)
+        result = yield from self.execute_llm_function_cps(
+            func.node_uid, execution_context, call_intent=call_intent
+        )
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
         if result is not None and result.value is not None:
             return result.value
         return self.registry.get_none()

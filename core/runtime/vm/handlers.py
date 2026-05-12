@@ -341,10 +341,12 @@ def _vm_invoke_behavior(executor, behavior, args):
 
     needs_subscope = bool(behavior.params_uids) or bool(behavior.closure)
     if not needs_subscope:
-        # Yield once so the current task is observable on the VM frame stack
-        # while the (still synchronous) LLM call is in flight.
-        yield None
-        return llm_exec.invoke_behavior(behavior, ec)
+        # Segment evaluation is now driven via ``yield from`` inside
+        # ``invoke_behavior_cps`` → the prompt-segment sub-tasks are properly
+        # nested on the outer VM frame stack rather than spawning a separate
+        # ``_drive_loop``. See ``_evaluate_segments_cps`` for the rationale.
+        result = yield from llm_exec.invoke_behavior_cps(behavior, ec)
+        return result
 
     rt_context.enter_scope()
     try:
@@ -375,7 +377,8 @@ def _vm_invoke_behavior(executor, behavior, args):
                 rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
         yield None
-        return llm_exec.invoke_behavior(behavior, ec)
+        result = yield from llm_exec.invoke_behavior_cps(behavior, ec)
+        return result
     finally:
         rt_context.exit_scope()
 
@@ -467,7 +470,8 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
             )
 
         yield None
-        return llm_exec.invoke_llm_function(func, func.context)
+        result = yield from llm_exec.invoke_llm_function_cps(func, func.context)
+        return result
     finally:
         func._pending_call_intent = None
         func.context.pop_stack()

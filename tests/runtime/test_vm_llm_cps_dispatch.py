@@ -35,17 +35,18 @@ class TestNS1LLMCpsDispatch:
 
         observations = {}
 
-        # Patch the LLM executor's execute_behavior_object to snapshot VM state.
+        # Patch the LLM executor's execute_behavior_object_cps (CPS variant
+        # used by the VM handler path post-CPS-ification of _evaluate_segments).
         from core.runtime.interpreter.llm_executor import LLMExecutorImpl
-        original = LLMExecutorImpl.execute_behavior_object
+        original = LLMExecutorImpl.execute_behavior_object_cps
 
         def probe(self, behavior, execution_context):
             vm = execution_context.vm_executor
             observations["depth"] = vm.frame_stack_depth
             observations["step_count_at_call"] = vm.step_count
-            return original(self, behavior, execution_context)
+            return (yield from original(self, behavior, execution_context))
 
-        LLMExecutorImpl.execute_behavior_object = probe
+        LLMExecutorImpl.execute_behavior_object_cps = probe
         try:
             # ``fn b = lambda: @~...~`` makes ``b`` an IbBehavior; calling it
             # goes through IbCall → _vm_invoke_behavior (NS-1 path).
@@ -58,13 +59,13 @@ class TestNS1LLMCpsDispatch:
                 silent=True,
             )
         finally:
-            LLMExecutorImpl.execute_behavior_object = original
+            LLMExecutorImpl.execute_behavior_object_cps = original
 
         # NS-1 guarantee: VM frame stack is non-empty (>= 2 frames: at least
         # the IbCall driver task plus the _vm_invoke_behavior task) when the
         # LLM executor fires.
         assert observations.get("depth", 0) >= 2, (
-            f"Expected VM frame stack depth >= 2 inside execute_behavior_object, "
+            f"Expected VM frame stack depth >= 2 inside execute_behavior_object_cps, "
             f"got {observations.get('depth')}"
         )
         # And the helper advanced the scheduler.
@@ -76,15 +77,15 @@ class TestNS1LLMCpsDispatch:
         observations = {}
 
         from core.runtime.interpreter.llm_executor import LLMExecutorImpl
-        original = LLMExecutorImpl.execute_llm_function
+        original = LLMExecutorImpl.execute_llm_function_cps
 
         def probe(self, node_uid, execution_context, call_intent=None):
             vm = execution_context.vm_executor
             observations["depth"] = vm.frame_stack_depth
             observations["step_count_at_call"] = vm.step_count
-            return original(self, node_uid, execution_context, call_intent=call_intent)
+            return (yield from original(self, node_uid, execution_context, call_intent=call_intent))
 
-        LLMExecutorImpl.execute_llm_function = probe
+        LLMExecutorImpl.execute_llm_function_cps = probe
         try:
             engine.run_string(
                 _ai_prefix() + (
@@ -101,10 +102,10 @@ class TestNS1LLMCpsDispatch:
                 silent=True,
             )
         finally:
-            LLMExecutorImpl.execute_llm_function = original
+            LLMExecutorImpl.execute_llm_function_cps = original
 
         assert observations.get("depth", 0) >= 2, (
-            f"Expected VM frame stack depth >= 2 inside execute_llm_function, "
+            f"Expected VM frame stack depth >= 2 inside execute_llm_function_cps, "
             f"got {observations.get('depth')}"
         )
         assert observations.get("step_count_at_call", 0) > 0
