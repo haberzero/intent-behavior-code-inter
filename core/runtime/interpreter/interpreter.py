@@ -461,8 +461,12 @@ class Interpreter:
 
     def run(self) -> IbObject:
         """从入口模块开始执行完整的项目"""
-        from core.runtime.frame import set_current_frame, reset_current_frame
+        from core.runtime.frame import (
+            set_current_frame, reset_current_frame,
+            set_current_execution_context, reset_current_execution_context,
+        )
         _token = set_current_frame(self.runtime_context)
+        _ec_token = set_current_execution_context(self._execution_context)
         try:
             if not self.entry_module:
                 return self.registry.get_none()
@@ -479,6 +483,7 @@ class Interpreter:
                 traceback.print_exc()
             raise e
         finally:
+            reset_current_execution_context(_ec_token)
             reset_current_frame(_token)
 
     def _get_vm_executor(self):
@@ -504,8 +509,12 @@ class Interpreter:
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
-        from core.runtime.frame import set_current_frame, reset_current_frame
+        from core.runtime.frame import (
+            set_current_frame, reset_current_frame,
+            set_current_execution_context, reset_current_execution_context,
+        )
         _frame_token = set_current_frame(self.runtime_context)
+        _ec_token = set_current_execution_context(self._execution_context)
 
         old_module = self.current_module_name
         self.current_module_name = module_name
@@ -563,6 +572,7 @@ class Interpreter:
             self.logical_stack.pop()
             self.runtime_context = old_context
             self.current_module_name = old_module
+            reset_current_execution_context(_ec_token)
             reset_current_frame(_frame_token)
 
     def _report_error(self, message: str, node_uid: Optional[str] = None, error_code: Optional[str] = None) -> InterpreterError:

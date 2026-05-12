@@ -313,6 +313,10 @@ def _vm_invoke_behavior(executor, behavior, args):
     snapshot 行为体（``capture_mode == 'snapshot'``）：
         每次调用前清除 ``_cache`` 并在子作用域内对自由变量做一次额外深克隆，
         与 ``_vm_call_fn_callable`` 路径一致——snapshot 是无状态、可重入的。
+
+    NS-3：始终使用**调用现场**的 ``executor.ec`` 作为执行机制（VM、节点池、
+    runtime_context）；``behavior._execution_context`` 字段仅在跨 Interpreter
+    的同步后备路径中作为兜底使用，CPS 主路径完全无视该字段。
     """
     from core.runtime.objects.cell import IbCell
     from core.runtime.objects.deep_clone import try_deep_clone
@@ -331,19 +335,17 @@ def _vm_invoke_behavior(executor, behavior, args):
     if is_snapshot or is_lambda:
         behavior._cache = None
 
+    # NS-3: 调用现场 EC 优先。
+    ec = executor.ec
+    rt_context = ec.runtime_context
+
     needs_subscope = bool(behavior.params_uids) or bool(behavior.closure)
     if not needs_subscope:
         # Yield once so the current task is observable on the VM frame stack
         # while the (still synchronous) LLM call is in flight.
         yield None
-        return llm_exec.invoke_behavior(behavior, behavior._execution_context)
+        return llm_exec.invoke_behavior(behavior, ec)
 
-    if behavior._execution_context is None:
-        raise RuntimeError(
-            f"IbBehavior '{behavior.node}': execution_context is None for parametric behavior."
-        )
-
-    rt_context = behavior._execution_context.runtime_context
     rt_context.enter_scope()
     try:
         for sym_uid, (name, slot) in behavior.closure.items():
@@ -359,21 +361,21 @@ def _vm_invoke_behavior(executor, behavior, args):
                 rt_context.define_variable(name, slot, uid=sym_uid)
 
         for i, arg_uid in enumerate(behavior.params_uids):
-            arg_data = behavior._execution_context.get_node_data(arg_uid)
+            arg_data = ec.get_node_data(arg_uid)
             actual_arg_uid = arg_uid
             actual_arg_data = arg_data
             if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
                 actual_arg_uid = arg_data.get("target")
-                actual_arg_data = behavior._execution_context.get_node_data(actual_arg_uid)
+                actual_arg_data = ec.get_node_data(actual_arg_uid)
             arg_name = (actual_arg_data or {}).get("arg")
             if arg_name and i < len(args):
-                sym_uid = behavior._execution_context.get_side_table(
+                sym_uid = ec.get_side_table(
                     "node_to_symbol", actual_arg_uid
                 )
                 rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
         yield None
-        return llm_exec.invoke_behavior(behavior, behavior._execution_context)
+        return llm_exec.invoke_behavior(behavior, ec)
     finally:
         rt_context.exit_scope()
 
