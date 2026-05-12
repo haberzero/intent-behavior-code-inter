@@ -111,7 +111,7 @@ class LLMExceptFrame:
     last_error: Optional[Exception] = None
     last_llm_response: Optional[str] = None
     last_result: Optional[Any] = None  # LLMResult 对象
-    # 重试错误历史（按发生顺序追加）
+    # 重试错误历史，按发生顺序追加。
     # 每项结构：
     #   {
     #       "retry_count": int,

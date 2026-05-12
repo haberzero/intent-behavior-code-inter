@@ -1,3 +1,5 @@
+import pytest
+
 from core.engine import IBCIEngine
 from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
 
@@ -36,7 +38,7 @@ class TestLlmExceptDepthLimit:
 
         try:
             stack.push(LLMExceptFrame(target_uid="c", node_type="IbExprStmt"))
-            assert False, "Expected RuntimeError for frame stack overflow"
+            pytest.fail("Expected RuntimeError for frame stack overflow")
         except RuntimeError as e:
             assert "max depth 2 exceeded" in str(e)
 
@@ -51,6 +53,6 @@ class TestLlmExceptDepthLimit:
 
         try:
             ctx.push_llm_except_frame(LLMExceptFrame(target_uid="c", node_type="IbExprStmt"))
-            assert False, "Expected RuntimeError for runtime-context llmexcept depth overflow"
+            pytest.fail("Expected RuntimeError for runtime-context llmexcept depth overflow")
         except RuntimeError as e:
             assert "max depth 2 exceeded" in str(e)

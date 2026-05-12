@@ -286,7 +286,7 @@ class IDbgPlugin(IbPlugin):
         if not node_pool:
             return {}
 
-        mapping: Dict[str, str] = {}
+        protection_mapping: Dict[str, str] = {}
 
         # 1) 直接 llmexcept 语句：handler(target=...)
         for handler_uid, node in node_pool.items():
@@ -294,7 +294,7 @@ class IDbgPlugin(IbPlugin):
                 continue
             target_uid = node.get("target")
             if isinstance(target_uid, str) and target_uid:
-                mapping[target_uid] = handler_uid
+                protection_mapping[target_uid] = handler_uid
 
         # 2) 条件 for 的 llmexcept 内联保护：for 节点持有 llmexcept_handler 字段
         for for_uid, node in node_pool.items():
@@ -311,9 +311,9 @@ class IDbgPlugin(IbPlugin):
                 expr_uid = iter_node.get("expr")
                 if isinstance(expr_uid, str) and expr_uid:
                     actual_target_uid = expr_uid
-            mapping[actual_target_uid] = handler_uid
+            protection_mapping[actual_target_uid] = handler_uid
 
-        return mapping
+        return protection_mapping
 
     def show_retry_stack(self):
         """直接打印当前 llmexcept 重试帧栈。"""
