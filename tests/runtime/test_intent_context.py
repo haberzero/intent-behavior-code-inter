@@ -42,6 +42,14 @@ def make_intent(registry, content: str, mode: IntentMode = IntentMode.APPEND, ro
     )
 
 
+@pytest.fixture(scope="module")
+def intent_class(registry):
+    """Module-scope ``Intent`` class — shared by merged PT-2.1 / PT-2.2 tests."""
+    return registry.get_class("Intent")
+
+
+
+
 # ---------------------------------------------------------------------------
 # add_smear_intent / get_resolved_prompt_intents
 # ---------------------------------------------------------------------------
@@ -344,3 +352,432 @@ class TestNS2cLlmExceptIntentRestore:
         # "other strategy" 在 restore 后不存在
         contents = [i.content for i in ctx.get_active_intents()]
         assert "other strategy" not in contents
+
+
+################################################################################
+# MERGED: PT-2.1 Intent Context OOP (combine / to_prompt / deep_clone)
+# Source: tests/runtime/test_pt21_intent_context_oop.py
+################################################################################
+
+# Additional imports for PT-2.2 (serialization) merged section
+from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.serialization.runtime_serializer import (
+    RuntimeSerializer, RuntimeDeserializer,
+)
+
+
+class TestCombineSemantics:
+    def test_combine_appends_other_persistent_stack(self, intent_class):
+        a = IbIntentContext()
+        a.push(_intent("A1", intent_class))
+        a.push(_intent("A2", intent_class))  # bottom→top: [A1, A2]
+
+        b = IbIntentContext()
+        b.push(_intent("B1", intent_class))
+        b.push(_intent("B2", intent_class))  # bottom→top: [B1, B2]
+
+        a.combine(b)
+        # Bottom→top after combine: A stays at bottom, B appended on top.
+        active = [i.content for i in a.get_active_intents()]
+        assert active == ["A1", "A2", "B1", "B2"]
+
+    def test_combine_smear_queue_appended(self, intent_class):
+        a = IbIntentContext()
+        a.add_smear(_intent("AS", intent_class))
+        b = IbIntentContext()
+        b.add_smear(_intent("BS", intent_class))
+        a.combine(b)
+        assert [i.content for i in a._smear_queue] == ["AS", "BS"]
+
+    def test_combine_override_other_wins_when_set(self, intent_class):
+        a = IbIntentContext()
+        a.set_override(_intent("A_OV", intent_class))
+        b = IbIntentContext()
+        b.set_override(_intent("B_OV", intent_class))
+        a.combine(b)
+        assert a._override.content == "B_OV"
+
+    def test_combine_override_keeps_self_when_other_unset(self, intent_class):
+        a = IbIntentContext()
+        a.set_override(_intent("A_OV", intent_class))
+        b = IbIntentContext()  # no override
+        a.combine(b)
+        assert a._override.content == "A_OV"
+
+    def test_merge_vs_combine_semantics_differ(self, intent_class):
+        """merge = REPLACE; combine = ADDITIVE — explicit regression."""
+        a1 = IbIntentContext()
+        a1.push(_intent("A", intent_class))
+        b = IbIntentContext()
+        b.push(_intent("B", intent_class))
+        a1.merge(b)
+        # After merge: a1 only contains b's intents
+        assert [i.content for i in a1.get_active_intents()] == ["B"]
+
+        a2 = IbIntentContext()
+        a2.push(_intent("A", intent_class))
+        b2 = IbIntentContext()
+        b2.push(_intent("B", intent_class))
+        a2.combine(b2)
+        # After combine: bottom→top = [A, B] (B appended on top).
+        assert [i.content for i in a2.get_active_intents()] == ["A", "B"]
+
+
+class TestToPromptRendering:
+    def test_to_prompt_empty(self):
+        ctx = IbIntentContext()
+        assert ctx.to_prompt() == ""
+
+    def test_to_prompt_lists_active_intents(self, intent_class):
+        ctx = IbIntentContext()
+        ctx.push(_intent("用中文回复", intent_class))
+        ctx.push(_intent("保持简洁", intent_class))
+        out = ctx.to_prompt()
+        assert "意图上下文" in out
+        assert "用中文回复" in out
+        assert "保持简洁" in out
+        # Stack-bottom should be listed before stack-top.
+        assert out.index("用中文回复") < out.index("保持简洁")
+
+    def test_to_prompt_includes_smear_and_override(self, intent_class):
+        ctx = IbIntentContext()
+        ctx.add_smear(_intent("once", intent_class))
+        ctx.set_override(_intent("must", intent_class))
+        out = ctx.to_prompt()
+        assert "once" in out
+        assert "must" in out
+
+
+class TestDeepCloneIntentContext:
+    def test_try_deep_clone_forks_intent_context(self, intent_class):
+        from core.runtime.objects.deep_clone import try_deep_clone
+
+        original = IbIntentContext()
+        original.push(_intent("orig", intent_class))
+        cloned = try_deep_clone(original)
+        assert cloned is not None
+        assert cloned is not original
+        assert isinstance(cloned, IbIntentContext)
+        # Independent: mutating clone does NOT affect original.
+        cloned.push(_intent("added", intent_class))
+        assert [i.content for i in original.get_active_intents()] == ["orig"]
+        # bottom→top: [orig, added] in the clone (added pushed on top of orig).
+        assert [i.content for i in cloned.get_active_intents()] == [
+            "orig", "added",
+        ]
+
+
+class TestIBCIIntegration:
+    """End-to-end via IBCI script: `combine`, `__to_prompt__` accessible from IBCI."""
+
+    @pytest.fixture
+    def engine(self):
+        return IBCIEngine(
+            root_dir=os.path.dirname(os.path.abspath(__file__)),
+            auto_sniff=False,
+        )
+
+    def test_ibci_combine_works(self, engine):
+        # ctx_a has "意图A"; combine ctx_b which has "意图B"; combined.resolve()
+        # should produce both contents.
+        captured = {}
+
+        def out_cb(text):
+            captured.setdefault("lines", []).append(text)
+
+        # Use intent_context directly in IBCI.
+        engine.run_string(
+            'import ai\n'
+            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'intent_context a = intent_context()\n'
+            'a.push("意图A")\n'
+            'intent_context b = intent_context()\n'
+            'b.push("意图B")\n'
+            'a.combine(b)\n'
+            'any r = a.resolve()\n'
+            'print(r)\n',
+            output_callback=out_cb,
+            silent=True,
+        )
+        joined = "\n".join(captured.get("lines", []))
+        assert "意图A" in joined
+        assert "意图B" in joined
+
+    def test_ibci_to_prompt_via_str_cast(self, engine):
+        """``(str)ctx`` should trigger __to_prompt__ rendering."""
+        captured = {}
+
+        def out_cb(text):
+            captured.setdefault("lines", []).append(text)
+
+        engine.run_string(
+            'import ai\n'
+            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'intent_context c = intent_context()\n'
+            'c.push("用中文回复")\n'
+            'str s = (str)c\n'
+            'print(s)\n',
+            output_callback=out_cb,
+            silent=True,
+        )
+        joined = "\n".join(captured.get("lines", []))
+        assert "用中文回复" in joined
+        assert "意图上下文" in joined
+
+
+class TestIntentContextAsClassField:
+    """PT-2.1(c): intent_context as a persistent class field that participates in
+    llmexcept snapshot/restore via auto deep_clone."""
+
+    def test_class_field_isolated_clone(self, intent_class):
+        """When a user class has an intent_context field, deep_clone produces an
+        independent fork — mutations after clone don't bleed across.
+        """
+        from core.runtime.objects.deep_clone import try_deep_clone
+        from core.runtime.objects.kernel import IbObject, IbClass
+
+        # Build a minimal user IbClass with an intent_context-bearing field.
+        engine = IBCIEngine(
+            root_dir=os.path.dirname(os.path.abspath(__file__)),
+            auto_sniff=False,
+        )
+        registry = engine.registry
+        user_class = IbClass(name="Holder", registry=registry)
+        holder = IbObject(user_class)
+        ctx = IbIntentContext()
+        ctx.push(_intent("policy:strict", intent_class))
+        holder.fields["policy"] = ctx
+
+        cloned_holder = try_deep_clone(holder)
+        assert cloned_holder is not None
+        cloned_ctx = cloned_holder.fields["policy"]
+        assert cloned_ctx is not ctx, (
+            "intent_context field must be forked, not aliased, when class instance "
+            "is deep-cloned for llmexcept snapshot"
+        )
+        # Mutating clone leaves the original snapshot intact.
+        cloned_ctx.push(_intent("retry_extra", intent_class))
+        assert [i.content for i in ctx.get_active_intents()] == ["policy:strict"]
+        # bottom→top after push: ["policy:strict", "retry_extra"]
+        assert [i.content for i in cloned_ctx.get_active_intents()] == [
+            "policy:strict", "retry_extra",
+        ]
+
+
+################################################################################
+# MERGED: PT-2.2 Intent Context Serialization (round-trip / backwards compat)
+# Source: tests/runtime/test_pt22_intent_context_serialization.py
+################################################################################
+
+@pytest.fixture(scope="module")
+def _ser_engine():
+    e = IBCIEngine(
+        root_dir=os.path.dirname(os.path.abspath(__file__)),
+        auto_sniff=False,
+    )
+    # Bootstrap a minimal interpreter (without `ai` module to avoid pre-existing
+    # IbModule native-scope serialization gap which is orthogonal to PT-2.2).
+    e.run_string('int _bootstrap = 1\n', output_callback=lambda _t: None, silent=True)
+    return e
+
+
+@pytest.fixture(scope="module")
+def _ser_obj_factory(_ser_engine):
+    return _ser_engine.object_factory
+
+
+@pytest.fixture(scope="module")
+def _ser_intent_class(_ser_engine):
+    return _ser_engine.registry.get_class("Intent")
+
+
+def _intent(content, intent_class, mode=IntentMode.APPEND):
+    return IbIntent(
+        ib_class=intent_class,
+        content=content,
+        mode=mode,
+        role=IntentRole.STACK,
+        tag=None,
+    )
+
+
+class TestIntentContextNativeRoundTrip:
+    def test_collect_intent_context_emits_native_entry(self, _ser_engine, _ser_intent_class):
+        ic = IbIntentContext()
+        ic.push(_intent("p1", _ser_intent_class))
+        ic.push(_intent("p2", _ser_intent_class))
+        ic.add_smear(_intent("s1", _ser_intent_class))
+        ic.set_override(_intent("ovr", _ser_intent_class))
+
+        ser = RuntimeSerializer(_ser_engine.registry)
+        uid = ser._collect_intent_context(ic)
+        assert uid.startswith("intentctx_")
+        data = ser.instance_pool[uid]
+        assert data["_type"] == "intent_context_native"
+        assert data["intent_top_uid"] is not None
+        assert len(data["smear_queue"]) == 1
+        assert data["override"] is not None
+
+    def test_round_trip_preserves_all_four_slots(self, _ser_engine, _ser_intent_class, _ser_obj_factory):
+        ic = IbIntentContext()
+        ic.push(_intent("persistent1", _ser_intent_class))
+        ic.push(_intent("persistent2", _ser_intent_class))
+        ic.add_smear(_intent("smear1", _ser_intent_class))
+        ic.set_override(_intent("ovr1", _ser_intent_class))
+
+        # Serialize → deserialize.
+        ser = RuntimeSerializer(_ser_engine.registry)
+        uid = ser._collect_intent_context(ic)
+        snapshot = {
+            "version": "2.1",
+            "pools": {
+                "instances": ser.instance_pool,
+                "intents": ser.intent_pool,
+                "runtime_scopes": {},
+                "types": ser.type_pool,
+                "assets": ser.external_assets,
+            },
+        }
+        deser = RuntimeDeserializer(_ser_engine.registry, factory=_ser_obj_factory)
+        deser.instance_pool = snapshot["pools"]["instances"]
+        deser.intent_pool = snapshot["pools"]["intents"]
+        deser.runtime_scope_pool = {}
+        deser.type_pool = snapshot["pools"]["types"]
+        deser.asset_pool = {}
+        deser.node_pool = {}
+        deser.symbol_pool = {}
+        deser.scope_pool = {}
+
+        restored = deser._get_intent_context(uid)
+        assert restored is not None
+        assert restored is not ic  # Distinct instance.
+
+        # Persistent stack contents preserved (bottom→top order).
+        active = [i.content for i in restored.get_active_intents()]
+        assert active == ["persistent1", "persistent2"]
+        # Smear queue preserved.
+        assert [i.content for i in restored._smear_queue] == ["smear1"]
+        # Override preserved.
+        assert restored._override is not None
+        assert restored._override.content == "ovr1"
+
+    def test_shared_identity_preserved(self, _ser_engine, _ser_intent_class):
+        """If the same IbIntentContext is referenced from two places, the
+        round-trip must reproduce the shared identity (single Python object).
+        """
+        ic = IbIntentContext()
+        ic.push(_intent("shared", _ser_intent_class))
+
+        ser = RuntimeSerializer(_ser_engine.registry)
+        uid1 = ser._collect_intent_context(ic)
+        uid2 = ser._collect_intent_context(ic)  # second call: same uid via memo
+        assert uid1 == uid2
+
+
+class TestSerializeContextWithIntentContext:
+    def _build_ctx(self, _ser_engine):
+        """Build a minimal RuntimeContextImpl bypassing module imports to avoid
+        pre-existing issues with native module scope serialization."""
+        from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+        return RuntimeContextImpl(registry=_ser_engine.registry)
+
+    def test_serialize_context_includes_full_intent_ctx(self, _ser_engine, _ser_intent_class):
+        ctx = self._build_ctx(_ser_engine)
+        ctx._intent_ctx.push(_intent("P", _ser_intent_class))
+        ctx._intent_ctx.add_smear(_intent("S", _ser_intent_class))
+        ctx._intent_ctx.set_override(_intent("O", _ser_intent_class))
+
+        ser = RuntimeSerializer(_ser_engine.registry)
+        snapshot = ser.serialize_context(ctx, include_static=False)
+        assert "intent_ctx_uid" in snapshot
+        assert snapshot["intent_ctx_uid"] is not None
+        assert snapshot["intent_ctx_uid"].startswith("intentctx_")
+        # Legacy field still present for back-compat.
+        assert "intent_stack" in snapshot
+        # Native entry exists in the pool.
+        native = snapshot["pools"]["instances"].get(snapshot["intent_ctx_uid"])
+        assert native is not None
+        assert native["_type"] == "intent_context_native"
+        assert len(native["smear_queue"]) == 1
+        assert native["override"] is not None
+
+    def test_round_trip_restores_smear_and_override(self, _ser_engine, _ser_intent_class, _ser_obj_factory):
+        ctx = self._build_ctx(_ser_engine)
+        ctx._intent_ctx.push(_intent("P", _ser_intent_class))
+        ctx._intent_ctx.add_smear(_intent("S", _ser_intent_class))
+        ctx._intent_ctx.set_override(_intent("O", _ser_intent_class))
+
+        ser = RuntimeSerializer(_ser_engine.registry)
+        snapshot = ser.serialize_context(ctx, include_static=False)
+
+        deser = RuntimeDeserializer(_ser_engine.registry, factory=_ser_obj_factory)
+        restored_ctx = deser.deserialize_context(snapshot)
+
+        rsmear = restored_ctx._intent_ctx._smear_queue
+        rover = restored_ctx._intent_ctx._override
+        ractive = restored_ctx._intent_ctx.get_active_intents()
+        assert [i.content for i in rsmear] == ["S"], (
+            f"smear queue should be preserved across round-trip; got {[i.content for i in rsmear]}"
+        )
+        assert rover is not None and rover.content == "O", (
+            "override should be preserved across round-trip"
+        )
+        assert [i.content for i in ractive] == ["P"], (
+            "persistent stack should be preserved across round-trip"
+        )
+
+
+class TestIntentContextWrapperSerialization:
+    def test_wrapper_instance_round_trip(self, _ser_engine, _ser_intent_class, _ser_obj_factory):
+        """``intent_context`` IBCI wrapper round-trips, preserving _ctx identity."""
+        # Create an intent_context wrapper via the runtime.
+        from core.runtime.objects.kernel import IbObject
+        ic_class = _ser_engine.registry.get_class("intent_context")
+        wrapper = IbObject(ic_class)
+        inner = IbIntentContext()
+        inner.push(_intent("wrapped", _ser_intent_class))
+        wrapper.fields["_ctx"] = inner
+
+        ser = RuntimeSerializer(_ser_engine.registry)
+        uid = ser._collect_instance(wrapper)
+        data = ser.instance_pool[uid]
+        assert data["_type"] == "intent_context"
+        assert data.get("ctx_uid") is not None
+
+        # Deserialize.
+        deser = RuntimeDeserializer(_ser_engine.registry, factory=_ser_obj_factory)
+        deser.instance_pool = ser.instance_pool
+        deser.intent_pool = ser.intent_pool
+        deser.runtime_scope_pool = {}
+        deser.type_pool = ser.type_pool
+        deser.asset_pool = {}
+        deser.node_pool = {}
+        deser.symbol_pool = {}
+        deser.scope_pool = {}
+
+        restored = deser._get_instance(uid)
+        assert restored is not None
+        assert restored.ib_class.name == "intent_context"
+        restored_ctx = restored.fields.get("_ctx")
+        assert restored_ctx is not None
+        assert [i.content for i in restored_ctx.get_active_intents()] == ["wrapped"]
+
+
+class TestBackwardCompatLegacyFormat:
+    def test_legacy_intent_stack_only_format(self, _ser_engine, _ser_intent_class, _ser_obj_factory):
+        """Old snapshots (only `intent_stack`, no `intent_ctx_uid`) still load."""
+        from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+        ctx = RuntimeContextImpl(registry=_ser_engine.registry)
+        ctx._intent_ctx.push(_intent("legacy", _ser_intent_class))
+
+        ser = RuntimeSerializer(_ser_engine.registry)
+        snapshot = ser.serialize_context(ctx, include_static=False)
+        # Simulate legacy: strip the new fields.
+        snapshot.pop("intent_ctx_uid", None)
+        snapshot.pop("active_intent_ibobj_uid", None)
+        snapshot["version"] = "2.0"
+
+        deser = RuntimeDeserializer(_ser_engine.registry, factory=_ser_obj_factory)
+        restored_ctx = deser.deserialize_context(snapshot)
+        active = restored_ctx._intent_ctx.get_active_intents()
+        assert [i.content for i in active] == ["legacy"]

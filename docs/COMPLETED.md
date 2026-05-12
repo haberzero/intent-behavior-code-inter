@@ -8,6 +8,37 @@
 
 ---
 
+---
+
+## 2026-05-12 锚点：tests 重构（15 步全部完成）
+
+`docs/TESTS_REORGANIZATION_TASK.md` 描述的测试目录重构全程完成；基线 **1259 passed → 1259 passed**，重构期间任一 step 的 Δ 测试数 = 0，**无任何断言被删除**（仅重组 / 改名 / 换 helper 来源）。
+
+- **Step 1**：建立 `tests/conftest.py`（统一 helper / fixture 入口）+ `tests/README.md`（分层职责说明 + 维护守则索引）。
+- **Step 2**：`tests/kernel/conftest.py` 提供 `ax_reg` / `axiom_registry` / `spec_reg` / `factory` 共享 fixture，去除 4 处本地副本。
+- **Step 3**：`tests/compliance/conftest.py` 提供 `compliance_root` / `make_compliance_engine` / `run_compliance_code`，供 3 个合规测试文件按需消费。
+- **Step 4**：VM CPS 五合一 —— `unit/test_vm_executor.py` + `_m3d` + `_m3dprep` + `_signals` + `_llmexcept` → `tests/runtime/test_vm_executor.py`（1741 行 / 122 tests）；统一 imports；`TestDispatchTableRegistration` 重命名为 `*Extended` / `*LLMExcept` 以解除冲突。
+- **Step 5**：VM↔LLM 流水线四合一 —— `test_vm_llm_cps_dispatch` + `test_evaluate_segments_cps` + `test_ns3_callsite_ec` + `unit/test_llm_scheduler` → `tests/runtime/test_vm_llm_pipeline.py`（26 tests）。
+- **Step 6**：Intent 三合一 —— `test_intent_context` + `test_pt21_intent_context_oop` + `test_pt22_intent_context_serialization` → `tests/runtime/test_intent_context.py`（37 tests）；PT-2.2 fixtures 重命名为 `_ser_*` 以避免与共享 `intent_class` fixture 冲突。
+- **Step 7**：llmexcept 合并 —— `test_llm_except_frame_enhancements` + `test_uncertain_str_concat_prohibition` → `tests/runtime/test_llmexcept.py`（7 tests）；CPS handler 部分已在 Step 4 并入 `test_vm_executor.py`。
+- **Step 8**：编译器类型标注五合一 —— `test_m2_optional_methods` + `_null_safety` + `test_d3_callable_sig` + `test_tuple_positional_types` + `unit/test_m2_optional_artifact_rehydrator` → `tests/compiler/test_type_annotations.py`（43 tests）。
+- **Step 9**：编译器泛型/下标合并 —— `test_g1_g2_generics` + `test_g3_generics` → `tests/compiler/test_generics.py`（22 tests）；`test_chain_subscript` → `test_subscript_typing.py`（15 tests）。
+- **Step 10**：e2e 高阶函数四合一 —— `test_e2e_fn_callable` + `test_e2e_fn_lambda_syntax` + `test_e2e_snapshot_semantics` + `test_e2e_m2_higher_order` → `tests/e2e/test_e2e_higher_order.py`（112 tests）。
+- **Step 11**：`test_e2e_ai_mock.py`（1510 行 / 22 测试类）拆解为 4 个主题文件：`test_e2e_llm_basic.py`（7 类）/ `test_e2e_llmexcept.py`（7 类）/ `test_e2e_intent.py`（6 类）/ `test_e2e_exceptions.py`（2 类）。类名去除 NS-2b / NS-2c 前缀。
+- **Step 12**：`test_e2e_advanced.py` 8 类拆主题分发 —— `TestE2ETupleUnpack` → `test_e2e_tuple_unpack.py`；其余 7 类 → `test_e2e_core_syntax.py`（`TestE2EStringMethods` 与既有同名类冲突，重命名为 `TestE2EStringMethodsAdvanced`）。同期完成的改名（去里程碑代号）：`test_idbg_plugin.py` → `test_idbg.py`；`test_compiler_pipeline.py` → `test_pipeline.py`；`test_e2e_basic.py` → `test_e2e_core_syntax.py`；`test_e2e_m4_multi_interpreter.py` → `test_e2e_multi_interpreter.py`。
+- **Step 13**：`tests/unit/` 撤销 —— 剩余 `test_ddg_analysis.py` 平移到 `tests/runtime/`；`__init__.py` 删除。
+- **Step 14**：`tests/COVERAGE_MAP.md` 产出（语言概念 → 测试入口的索引表）；所有 `test_*.py` 文件入表。
+- **Step 15**：本锚点；`docs/TESTS_REORGANIZATION_TASK.md` §0 顶部加 ✅ 完成标记。
+
+完成判据全部满足：
+- `tests/conftest.py` / `tests/kernel/conftest.py` / `tests/compliance/conftest.py` 存在并提供统一 helper / fixture。
+- `tests/` 下不再有以里程碑代号（NS- / PT- / M[0-9] / G[0-9] / D[0-9] / C[0-9]）开头的文件名或类名。
+- `tests/COVERAGE_MAP.md` 存在并涵盖全部 `test_*.py`。
+- `tests/README.md` 存在并链接本任务控制文档与 COVERAGE_MAP。
+- 基线回归 `python -m pytest tests/ -q --tb=short` 全绿 1259 tests，每步 Δ = 0。
+
+---
+
 ## 2026-05-12 锚点：NS-4 / NS-6 / NS-7（语言级语法/类型清理）
 
 三项 NEXT_STEPS 一并收口，回归测试通过。基线 1239 → 1242 → ... (持续推进中)。

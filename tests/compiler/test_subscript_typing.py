@@ -1,5 +1,5 @@
 """
-tests/compiler/test_chain_subscript.py
+tests/compiler/test_subscript_typing.py
 ========================================
 
 NS-6 链式下标 `(expr)[index]` 语法消歧。

@@ -1,3 +1,4 @@
+"""tests/runtime/test_idbg.py — idbg 插件单元测试（pure Python，不需要 IBCI 引擎）。"""
 from ibci_modules.ibci_idbg._spec import __ibcext_vtable__
 from ibci_modules.ibci_idbg.core import IDbgPlugin
 
