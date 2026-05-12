@@ -1146,17 +1146,21 @@ str root   = isys.project_root()  # 项目根目录
 import idbg
 
 int x = 42
-idbg.vars()              # 打印当前作用域所有变量及其值
-idbg.print_vars()        # 同 vars()，别名
+idbg.vars()              # 返回当前作用域所有变量及其值（dict）
+idbg.print_vars()        # 打印当前作用域所有变量
 idbg.last_llm()          # 返回最后一次 LLM 调用的详细信息（dict）
 idbg.last_result()       # 返回最后一次 LLM 调用的结果对象
 idbg.show_last_prompt()  # 打印最后一次 LLM 调用的提示词
 idbg.show_last_result()  # 打印最后一次 LLM 调用的结果
 idbg.show_all()          # 打印变量、最后结果等全部调试信息
 idbg.retry_stack()       # 返回当前 llmexcept 重试栈
+idbg.show_retry_stack()  # 打印当前 llmexcept 重试栈
+idbg.protection_map()    # 返回 llmexcept 保护映射（target_uid -> handler_uid）
+idbg.show_protection_map() # 打印 llmexcept 保护映射
 idbg.intents()           # 返回当前意图栈列表
 idbg.show_intents()      # 打印当前意图栈
 idbg.env()               # 返回当前运行环境信息
+idbg.show_env()          # 打印当前运行环境信息
 idbg.fields(obj)         # 返回对象所有字段
 ```
 

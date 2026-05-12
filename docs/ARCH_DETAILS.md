@@ -131,7 +131,7 @@ END TRANSACTION
 - `LLMExceptFrame.restore_snapshot()` → 每次 retry 前恢复快照，使 LLM 看到一致的输入状态
 - `intent_context.fork()` → 意图上下文值快照（Step 6d 落地）
 
-**尚未落地的快照完整性约束**（见 `docs/PENDING_TASKS.md`）：
+**尚未落地的快照完整性约束**（见 `docs/NEXT_STEPS.md` / `docs/PENDING_TASKS.md`）：
 - 编译期 read-only 约束（SEM 错误）
 - `_last_llm_result` 从 `RuntimeContextImpl`（全局共享）迁移到 `LLMExceptFrame`（per-snapshot）
 
@@ -342,7 +342,7 @@ Engine.__init__()
 
 ## 十一、已知代码健康问题（2026-04-17 深度审计）
 
-以下为深度分析时发现的遗留问题，已修复的条目已标注；仍待处理的条目详见 PENDING_TASKS.md 第十一章。
+以下为深度分析时发现的遗留问题，已修复的条目已标注；仍待处理的条目详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md` 当前条目。
 
 ### 11.1 IbTuple 未纳入快照和序列化 ✅ 已修复
 

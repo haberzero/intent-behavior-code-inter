@@ -111,6 +111,15 @@ class LLMExceptFrame:
     last_error: Optional[Exception] = None
     last_llm_response: Optional[str] = None
     last_result: Optional[Any] = None  # LLMResult 对象
+    # 重试错误历史（按发生顺序追加）
+    # 每项结构：
+    #   {
+    #       "retry_count": int,
+    #       "error_type": str,
+    #       "error_message": str,
+    #       "response": Optional[str],
+    #   }
+    error_history: List[Dict[str, Any]] = field(default_factory=list)
     
     # 状态标志
     is_in_fallback: bool = False
@@ -333,13 +342,19 @@ class LLMExceptFrame:
         """
         self.last_error = error
         self.last_llm_response = response
+        self.error_history.append({
+            "retry_count": self.retry_count,
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "response": response,
+        })
     
     def reset_for_retry(self) -> None:
         """
         重置状态以准备下一次重试。
 
-        设计注：当前清除 last_error 是有意的——每次重试是独立尝试，不跨重试积累错误历史。
-        若需保留多次重试的错误记录，参见 docs/PENDING_TASKS.md §十一（L1）。
+        设计注：会清除 ``last_error``/``last_llm_response``（当前尝试状态），
+        但保留 ``error_history`` 作为跨重试可追踪历史。
         """
         self.last_error = None
         self.last_llm_response = None
@@ -363,6 +378,8 @@ class LLMExceptFrame:
             'has_error': self.last_error is not None,
             'error_type': type(self.last_error).__name__ if self.last_error else None,
             'error_message': str(self.last_error) if self.last_error else None,
+            'error_history_count': len(self.error_history),
+            'error_history': list(self.error_history),
         }
     
     def __repr__(self) -> str:
@@ -382,14 +399,21 @@ class LLMExceptFrameStack:
     在复杂场景下，可能会有多层嵌套的 llmexcept，
     帧栈确保每个层级都有独立的现场状态。
 
-    当前无最大嵌套深度限制；如需添加，参见 docs/PENDING_TASKS.md §十一（L1）。
+    支持最大嵌套深度限制，防止异常情况下的无界增长。
     """
     
-    def __init__(self):
+    DEFAULT_MAX_DEPTH = 128
+
+    def __init__(self, max_depth: int = DEFAULT_MAX_DEPTH):
         self._frames: List[LLMExceptFrame] = []
+        self._max_depth = max_depth
     
     def push(self, frame: LLMExceptFrame) -> None:
         """压入一个新帧"""
+        if len(self._frames) >= self._max_depth:
+            raise RuntimeError(
+                f"LLMExceptFrameStack overflow: max depth {self._max_depth} exceeded"
+            )
         self._frames.append(frame)
     
     def pop(self) -> Optional[LLMExceptFrame]:
@@ -411,6 +435,11 @@ class LLMExceptFrameStack:
     def size(self) -> int:
         """返回栈的大小"""
         return len(self._frames)
+
+    @property
+    def max_depth(self) -> int:
+        """返回帧栈允许的最大嵌套深度"""
+        return self._max_depth
     
     def clear(self) -> None:
         """清空栈"""

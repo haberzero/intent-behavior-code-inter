@@ -292,7 +292,7 @@ visit_IbLLMExceptionalStmt
 | `intent_context` 参数自动激活（NS-2a） | 内部复用 `use_intent_context` 入口 |
 | `LLMExceptFrame` retry（NS-2c）| 以 `saved.fork()` 替换 `_intent_ctx`，同步重建活跃指针 |
 
-完整 OOP 化（参数 / 默认 ctx / behavior 动态注入 / 序列化）后续扩展见 `docs/PENDING_TASKS.md §二`。
+完整 OOP 化（参数 / 默认 ctx / behavior 动态注入 / 序列化）已完成，详见 `docs/COMPLETED.md` 2026-05-12 锚点。
 
 ### 7.3 完整设计
 
@@ -380,7 +380,7 @@ visit_IbLLMExceptionalStmt
 
 ---
 
-## §12 当前状态（2026-05-11 锚点）
+## §12 当前状态（2026-05-12 锚点）
 
 | 主线 | 状态 |
 |------|------|
@@ -395,12 +395,14 @@ visit_IbLLMExceptionalStmt
 | PT-2.1（intent_context 高级 OOP 场景） | ✅ 完成（2026-05-12） |
 | PT-2.2（IbIntentContext 序列化/反序列化） | ✅ 完成（2026-05-12） |
 | `_evaluate_segments` CPS 化 | ✅ 完成（2026-05-12） |
+| PT-1.2（LLMExceptFrame 重试错误历史） | ✅ 完成（2026-05-12） |
+| PT-1.3（LLMExceptFrameStack 深度限制） | ✅ 完成（2026-05-12） |
+| PT-3.3（idbg.protection_map） | ✅ 完成（2026-05-12） |
 | L3 语言级协程 / yield | ⏳ 远期愿景 |
 
 **已知开放议题**（详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md`）：
 
-- **P2**：`LLMExceptFrame` 重试历史追踪（`reset_for_retry()` 会清空 `last_error`，不保留历史）；
-- **P3**：`LLMExceptFrameStack` 最大嵌套深度限制。
+- 目前无新增 P0/P1/P2/P3 主线开放议题；仅保留 L3 协程化方向的远期愿景项。
 
 ---
 
