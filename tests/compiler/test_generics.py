@@ -1,37 +1,56 @@
 """
-tests/compiler/test_g3_generics.py
+tests/compiler/test_generics.py
+================================
 
-G3: Generic type inference improvements — resolve_member return-type specialization
+泛型类型综合测试（合并自 2 个历史文件）：
 
-Covers:
-  - list[T].__getitem__(int) → T  (was always "any" before G3)
-  - dict[K,V].get(key) → V       (was always "any" before G3)
-  - dict[K,V].values() → list[V] (was bare "list" before G3)
-  - dict[K,V].keys()   → list[K] (was bare "list" before G3)
-  - list[int][0] → int (subscript operator path, verified working since G1/G2)
-  - dict[str,int]["key"] → int   (subscript operator path)
-  - list[int] assignable to list  (covariance via ListAxiom.is_compatible)
-  - Nested generic: list[list[int]][0] → list[int]
+* G1: ``resolve_specialization`` 早缓存
+* G2: ``list[T]`` 写方法参数类型 specialization + note 级 warning
+  （原 ``test_g1_g2_generics.py``）
+* G3: ``list[T].__getitem__(int)`` / ``dict[K,V].get`` / ``.values`` / ``.keys`` 返回类型
+  specialization；list[int] 协变；嵌套泛型
+  （原 ``test_g3_generics.py``）
+
+详见 docs/TESTS_REORGANIZATION_TASK.md Step 9。
 """
 import pytest
+
 from core.engine import IBCIEngine
 from core.kernel.factory import create_default_registry
-from core.kernel.spec import TypeDef
+from core.kernel.spec import (
+    SpecRegistry,
+    TypeDef,
+    INT_SPEC,
+    STR_SPEC,
+)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 共享 helper（G1/G2 风格：compile_code 返回 errors 集合）
 # ---------------------------------------------------------------------------
+
+def make_spec_registry() -> SpecRegistry:
+    """Create a fully initialized SpecRegistry with all built-in axioms registered."""
+    return create_default_registry()
+
 
 def make_registry():
     return create_default_registry()
 
 
-def compile_code(code: str):
-    """Compile IBCI source and return (artifact, issue_tracker).
+def run_code(code: str):
+    """Compile + run IBCI code; return output lines."""
+    lines = []
+    engine = IBCIEngine(root_dir=".", auto_sniff=False)
+    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
+    return lines
 
-    If compilation raises CompilerError, returns (None, issue_tracker) so that
-    callers can still inspect the diagnostics.
+
+def compile_code(code: str):
+    """Compile only; return (artifact_or_None, issue_tracker).
+
+    Unified signature shared by both G1/G2 and G3 test classes — matches
+    the historical helpers in both original files.
     """
     from core.kernel.issue import CompilerError
     engine = IBCIEngine(root_dir=".", auto_sniff=False)
@@ -42,20 +61,150 @@ def compile_code(code: str):
     return artifact, engine.scheduler.issue_tracker
 
 
-def run_code(code: str):
-    """Compile + run IBCI source; return captured output lines."""
-    lines = []
-    engine = IBCIEngine(root_dir=".", auto_sniff=False)
-    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
-    return lines
+# ---------------------------------------------------------------------------
+# G3-specific helper（aliases for backward-compatible naming inside g3 body）
+# ---------------------------------------------------------------------------
+
+def _g3_compile_code(code: str):
+    return compile_code(code)
 
 
-def sem_errors(issue_tracker):
+def _g3_run_code(code: str):
+    return run_code(code)
+
+
+def _g3_sem_errors(issue_tracker):
     return [d for d in issue_tracker.diagnostics if d.severity.name == "ERROR"]
 
 
+################################################################################
+# MERGED: G1/G2 generics — early cache + write-method specialization
+# Source: tests/compiler/test_g1_g2_generics.py
+################################################################################
+
+class TestG1SpecializationCache:
+    def test_second_call_returns_same_object(self):
+        """resolve_specialization hit → returns same registered spec on second call."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve("list")
+        int_spec = reg.resolve("int")
+
+        first = reg.resolve_specialization(list_spec, [int_spec])
+        second = reg.resolve_specialization(list_spec, [int_spec])
+        assert first is second, "G1: second specialization call should return cached object"
+
+    def test_cache_is_distinct_per_element_type(self):
+        """list[int] and list[str] are distinct cached specs."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve("list")
+        int_spec = reg.resolve("int")
+        str_spec = reg.resolve("str")
+
+        list_int = reg.resolve_specialization(list_spec, [int_spec])
+        list_str = reg.resolve_specialization(list_spec, [str_spec])
+        assert list_int is not list_str
+
+    def test_resolve_finds_cached_spec_by_name(self):
+        """After first specialization, reg.resolve('list[int]') returns the same spec."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve("list")
+        int_spec = reg.resolve("int")
+
+        created = reg.resolve_specialization(list_spec, [int_spec])
+        looked_up = reg.resolve("list[int]")
+        assert created is looked_up
+
+
 # ===========================================================================
-# G3: list[T].__getitem__ return-type specialization
+# G2: list[T] write method parameter specialization
+# ===========================================================================
+
+class TestG2ListWriteMethodSpecialization:
+    def test_append_param_specialized_to_element_type(self):
+        """list[int].append should have param type 'int', not 'any'."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
+        assert isinstance(list_spec, TypeDef)
+
+        append_spec = reg.resolve_member(list_spec, "append")
+        assert append_spec is not None
+        assert [t.head for t in append_spec.param_types] == ["int"], (
+            f"Expected ['int'], got {[t.head for t in append_spec.param_types]}"
+        )
+
+    def test_insert_last_param_specialized(self):
+        """list[str].insert should have param types ['int', 'str']."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("str")])
+        insert_spec = reg.resolve_member(list_spec, "insert")
+        assert insert_spec is not None
+        assert [t.head for t in insert_spec.param_types][-1] == "str", (
+            f"Expected last param 'str', got {[t.head for t in insert_spec.param_types]}"
+        )
+
+    def test_setitem_last_param_specialized(self):
+        """list[float].__setitem__ should have value param 'float'."""
+        reg = make_spec_registry()
+        float_spec = reg.resolve("float")
+        list_spec = reg.resolve_specialization(reg.resolve("list"), [float_spec])
+        setitem_spec = reg.resolve_member(list_spec, "__setitem__")
+        assert setitem_spec is not None
+        assert [t.head for t in setitem_spec.param_types][-1] == "float"
+
+    def test_pop_return_type_still_specialized(self):
+        """G2 does not regress G1-era pop return type specialization."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
+        pop_spec = reg.resolve_member(list_spec, "pop")
+        assert pop_spec is not None
+        assert pop_spec.return_type.head == "int"
+
+    def test_unspecialized_list_append_stays_any(self):
+        """Plain list (element_type=any) append keeps 'any' param."""
+        reg = make_spec_registry()
+        list_spec = reg.resolve("list")
+        append_spec = reg.resolve_member(list_spec, "append")
+        assert append_spec is not None
+        assert "any" in [t.head for t in append_spec.param_types]
+
+    def test_correct_type_append_no_warning(self):
+        """list[int].append(42) compiles cleanly without warnings."""
+        _, issue_tracker = compile_code(
+            "list[int] nums = [1, 2]\n"
+            "nums.append(3)\n"
+        )
+        warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_081"]
+        assert len(warnings) == 0, f"Unexpected G2 warnings: {warnings}"
+
+    def test_wrong_type_append_produces_warning_not_error(self):
+        """list[int].append('x') produces a SEM_081 warning, not a compile error."""
+        artifact, issue_tracker = compile_code(
+            "list[int] nums = []\n"
+            "nums.append(\"hello\")\n"
+        )
+        # Compilation should succeed (no hard errors about this mismatch)
+        errors = [d for d in issue_tracker.diagnostics
+                  if d.severity.name == "ERROR" and d.code == "SEM_081"]
+        assert len(errors) == 0, f"G2 mismatch should be a warning, not an error: {errors}"
+        # The warning should be present
+        warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_081"]
+        assert len(warnings) > 0, "Expected a SEM_081 warning for int-list append with str"
+
+    def test_correct_append_runs_and_produces_output(self):
+        """list[int] append with correct type runs correctly end-to-end."""
+        lines = run_code(
+            "list[int] nums = [1, 2]\n"
+            "nums.append(3)\n"
+            "print(nums)\n"
+        )
+        assert len(lines) > 0
+
+
+################################################################################
+# MERGED: G3 generics — getitem/get/values/keys/covariance/nested
+# Source: tests/compiler/test_g3_generics.py
+################################################################################
+
 # ===========================================================================
 
 class TestG3ListGetitem:
@@ -89,16 +238,16 @@ class TestG3ListGetitem:
 
     def test_subscript_operator_returns_element_type(self):
         """list[int] subscript via [] operator returns int at compile time (no SEM_003)."""
-        _, issue_tracker = compile_code(
+        _, issue_tracker = _g3_compile_code(
             "list[int] nums = [1, 2, 3]\n"
             "int x = nums[0]\n"
         )
-        errors = sem_errors(issue_tracker)
+        errors = _g3_sem_errors(issue_tracker)
         assert len(errors) == 0, f"Unexpected errors: {errors}"
 
     def test_subscript_operator_wrong_type_is_caught(self):
         """list[int] subscript result assigned to str should be SEM_003."""
-        _, issue_tracker = compile_code(
+        _, issue_tracker = _g3_compile_code(
             "list[int] nums = [10, 20]\n"
             "str s = nums[0]\n"
         )
@@ -108,7 +257,7 @@ class TestG3ListGetitem:
 
     def test_subscript_e2e_returns_correct_value(self):
         """list[int] subscript runs correctly and returns the element."""
-        lines = run_code(
+        lines = _g3_run_code(
             "list[int] nums = [10, 20, 30]\n"
             "int x = nums[1]\n"
             "print(x)\n"
@@ -155,11 +304,11 @@ class TestG3DictGet:
 
     def test_dict_subscript_returns_value_type(self):
         """dict[str,int] subscript returns int at compile time."""
-        _, issue_tracker = compile_code(
+        _, issue_tracker = _g3_compile_code(
             'dict[str,int] scores = {"a": 1}\n'
             "int v = scores[\"a\"]\n"
         )
-        errors = sem_errors(issue_tracker)
+        errors = _g3_sem_errors(issue_tracker)
         assert len(errors) == 0, f"Unexpected errors: {errors}"
 
 
@@ -240,7 +389,7 @@ class TestG3Covariance:
 
     def test_compile_list_typed_to_bare_list_no_error(self):
         """Assigning list[int] to a bare list variable should compile without SEM_003."""
-        _, issue_tracker = compile_code(
+        _, issue_tracker = _g3_compile_code(
             "list[int] nums = [1, 2, 3]\n"
             "list bare = nums\n"
         )
@@ -268,17 +417,17 @@ class TestG3NestedGenerics:
 
     def test_nested_list_compile_no_error(self):
         """list[list[int]] declaration and double-subscript compiles without errors."""
-        _, issue_tracker = compile_code(
+        _, issue_tracker = _g3_compile_code(
             "list[list[int]] nested = [[1, 2], [3, 4]]\n"
             "list[int] row = nested[0]\n"
             "int val = row[0]\n"
         )
-        errors = sem_errors(issue_tracker)
+        errors = _g3_sem_errors(issue_tracker)
         assert len(errors) == 0, f"Unexpected errors: {errors}"
 
     def test_nested_list_e2e(self):
         """list[list[int]] access works end-to-end."""
-        lines = run_code(
+        lines = _g3_run_code(
             "list[list[int]] nested = [[10, 20], [30, 40]]\n"
             "list[int] row = nested[1]\n"
             "int val = row[0]\n"
