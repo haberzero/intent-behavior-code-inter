@@ -140,3 +140,29 @@ print(a)
 """
         with pytest.raises(Exception):
             run_and_capture(code)
+
+
+################################################################################
+# MERGED (from tests/e2e/test_e2e_advanced.py — Step 12)
+################################################################################
+
+
+class TestE2ETupleUnpack:
+    def test_tuple_unpack_basic(self):
+        code = """(int x, int y) = (10, 20)
+print((str)x)
+print((str)y)
+"""
+        lines = run_and_capture(code)
+        assert "10" in lines
+        assert "20" in lines
+
+    def test_tuple_in_for(self):
+        code = """list pairs = [[1, 2], [3, 4]]
+for (int a, int b) in pairs:
+    int sum = a + b
+    print((str)sum)
+"""
+        lines = run_and_capture(code)
+        assert "3" in lines
+        assert "7" in lines
