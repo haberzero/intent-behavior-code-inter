@@ -758,23 +758,29 @@ class IbFnCallable(IbValue):
 
         当存在参数（``params_uids`` 非空）或闭包（``closure`` 非空）时，进入
         独立的子作用域并在其中绑定参数与闭包；调用结束后自动退出。
+
+        NS-3：EC 解析优先级 —— 调用现场 ContextVar > 定义时刻字段 ``_execution_context``。
+        VM CPS 主路径不走本方法；本方法仅为同步后备（外部 host / 反序列化后调用）。
         """
-        if self._execution_context is None:
+        # NS-3: prefer call-site EC (ContextVar) over the definition-time
+        # snapshot stored in ``self._execution_context``.
+        from core.runtime.frame import get_current_execution_context
+        ec = get_current_execution_context() or self._execution_context
+        if ec is None:
             raise RuntimeError(
-                f"IbFnCallable '{self.node_uid}': execution_context is None. "
-                "This typically occurs when the fn_callable expression was deserialized "
-                "without a live interpreter, or when the factory failed to inject the context. "
-                "Ensure engine._prepare_interpreter() has completed before invoking a fn_callable expression."
+                f"IbFnCallable '{self.node_uid}': no execution_context available "
+                "(neither call-site ContextVar nor definition-time field). "
+                "Ensure this callable is invoked from within an active Interpreter."
             )
 
-        vm = self._execution_context.vm_executor
+        vm = ec.vm_executor
         if vm is None:
             raise RuntimeError(
                 f"IbFnCallable '{self.node_uid}': vm_executor not available. "
                 "Ensure Interpreter.execute_module() has been called first."
             )
 
-        rt_context = self._execution_context.runtime_context
+        rt_context = ec.runtime_context
         pushed_scope = False
 
         try:
@@ -803,15 +809,15 @@ class IbFnCallable(IbValue):
 
                 # 绑定形参：与 IbUserFunction.call 同构地处理 IbTypeAnnotatedExpr 包装。
                 for i, arg_uid in enumerate(self.params_uids):
-                    arg_data = self._execution_context.get_node_data(arg_uid)
+                    arg_data = ec.get_node_data(arg_uid)
                     actual_arg_uid = arg_uid
                     actual_arg_data = arg_data
                     if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
                         actual_arg_uid = arg_data.get("target")
-                        actual_arg_data = self._execution_context.get_node_data(actual_arg_uid)
+                        actual_arg_data = ec.get_node_data(actual_arg_uid)
                     arg_name = (actual_arg_data or {}).get("arg")
                     if arg_name and i < len(args):
-                        sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
+                        sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
                         rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
             # 2) 评估目标节点：参数化路径走 body_uid，否则走 node_uid（防御性回退）。
@@ -967,6 +973,9 @@ class IbBehavior(IbValue):
         参数化路径：当 ``params_uids`` / ``body_uid`` / ``closure`` 任一非空时，
         进入临时子作用域并绑定参数与闭包 cell，再委托给 executor。executor
         在 prompt 解析阶段查找 ``$name`` 时即可读取到已绑定的值。
+
+        NS-3：EC 解析优先级 —— 调用现场 ContextVar > 定义时刻字段。
+        VM CPS 主路径（``_vm_invoke_behavior``）不走本方法；本方法仅为同步后备。
         """
         executor = self.ib_class.registry.get_llm_executor()
         if executor is None:
@@ -974,6 +983,10 @@ class IbBehavior(IbValue):
                 f"IbBehavior '{self.node}': LLM executor not registered in KernelRegistry. "
                 "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
             )
+
+        # NS-3: prefer call-site EC (ContextVar) over the definition-time field.
+        from core.runtime.frame import get_current_execution_context
+        ec = get_current_execution_context() or self._execution_context
 
         # lambda / snapshot 模式：每次调用都应是独立的 LLM 推理；先清除可能存在的
         # 上次结果缓存，避免 execute_behavior_object 早期短路返回旧值。
@@ -983,14 +996,15 @@ class IbBehavior(IbValue):
 
         needs_subscope = bool(self.params_uids) or bool(self.closure)
         if not needs_subscope:
-            return executor.invoke_behavior(self, self._execution_context)
+            return executor.invoke_behavior(self, ec)
 
-        if self._execution_context is None:
+        if ec is None:
             raise RuntimeError(
-                f"IbBehavior '{self.node}': execution_context is None for parametric behavior."
+                f"IbBehavior '{self.node}': no execution_context available for parametric behavior "
+                "(neither call-site ContextVar nor definition-time field)."
             )
 
-        rt_context = self._execution_context.runtime_context
+        rt_context = ec.runtime_context
         rt_context.enter_scope()
         try:
             from core.runtime.objects.cell import IbCell
@@ -1009,18 +1023,18 @@ class IbBehavior(IbValue):
                     rt_context.define_variable(name, slot, uid=sym_uid)
 
             for i, arg_uid in enumerate(self.params_uids):
-                arg_data = self._execution_context.get_node_data(arg_uid)
+                arg_data = ec.get_node_data(arg_uid)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
                     actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self._execution_context.get_node_data(actual_arg_uid)
+                    actual_arg_data = ec.get_node_data(actual_arg_uid)
                 arg_name = (actual_arg_data or {}).get("arg")
                 if arg_name and i < len(args):
-                    sym_uid = self._execution_context.get_side_table("node_to_symbol", actual_arg_uid)
+                    sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
                     rt_context.define_variable(arg_name, args[i], uid=sym_uid)
 
-            return executor.invoke_behavior(self, self._execution_context)
+            return executor.invoke_behavior(self, ec)
         finally:
             rt_context.exit_scope()
 

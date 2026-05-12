@@ -73,6 +73,18 @@ def try_deep_clone(
             new_fields[k] = cloned_v
         return placeholder_dict
 
+    # ``IbIntentContext`` Python 值（``intent_context`` 实例的 ``_ctx`` 字段）：
+    # 调用 ``fork()`` 得到值快照。PT-2.1：使 ``intent_context`` 作为类字段
+    # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义——retry body 内对
+    # ctx 的修改不会污染保存的快照。
+    #
+    # 用鸭子类型（``hasattr(val, "fork")`` + ``hasattr(val, "get_active_intents")``）
+    # 而非 ``isinstance(IbIntentContext)`` 以避免循环依赖。
+    if hasattr(val, "fork") and hasattr(val, "get_active_intents") and hasattr(val, "set_intent_top"):
+        forked = val.fork()
+        memo[val_id] = forked
+        return forked
+
     # 用户自定义 IbObject 实例（type 严格为 KernelIbObject，不含内置子类）
     if type(val) is KernelIbObject:
         new_obj = KernelIbObject.__new__(KernelIbObject)

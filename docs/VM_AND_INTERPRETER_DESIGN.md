@@ -391,16 +391,16 @@ visit_IbLLMExceptionalStmt
 | M6（合规测试套件） | ✅ 完成 |
 | Phase 1–5 编译器深度清洁（C5–C14） | ✅ 完成 |
 | NS-1（LLM 调用路径合并入 CPS 调度循环） | ✅ 完成（2026-05-11） |
+| NS-3（lambda/snapshot/behavior 调用现场 EC 优先） | ✅ 完成（2026-05-12） |
+| PT-2.1（intent_context 高级 OOP 场景） | ✅ 完成（2026-05-12） |
+| PT-2.2（IbIntentContext 序列化/反序列化） | ✅ 完成（2026-05-12） |
+| `_evaluate_segments` CPS 化 | ✅ 完成（2026-05-12） |
 | L3 语言级协程 / yield | ⏳ 远期愿景 |
 
 **已知开放议题**（详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md`）：
 
-- **P2**：`lambda`/`snapshot` 跨帧 / 跨线程 `_execution_context` 边界（`builtins.py:724-751,928-934`，原 NS-3）；
 - **P2**：`LLMExceptFrame` 重试历史追踪（`reset_for_retry()` 会清空 `last_error`，不保留历史）；
-- **P3**：`LLMExceptFrameStack` 最大嵌套深度限制；
-- **P2**：`intent_context` 高级 OOP 场景（PT-2.1，已解除阻塞待排期）；
-- **P3**：`IbIntentContext` 序列化/反序列化接入（PT-2.2，已解除阻塞待排期）。
-- **follow-up**：`LLMExecutorImpl._evaluate_segments` 中 `vm.run(segment)` 嵌套求值尚未 CPS 化，主路径影响小，留作后续单独评估。
+- **P3**：`LLMExceptFrameStack` 最大嵌套深度限制。
 
 ---
 

@@ -483,13 +483,38 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
                 ctx.set_intent_top(None)
             return registry.get_none()
 
+        def _ic_combine(receiver, *args):
+            """ctx.combine(other)：将另一个 intent_context 的状态**叠加**到 self（加法式合并）。
+
+            与 ``merge``（替换语义）的区别：``combine`` 保留 self 原有意图，把 ``other``
+            的持久意图栈追加压入栈顶，smear_queue 追加，override 取 other 的。
+            参见 :meth:`IbIntentContext.combine`。
+            """
+            ctx = receiver.fields.get('_ctx')
+            if not ctx or not args:
+                return registry.get_none()
+            other = args[0]
+            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
+            if other_ctx is not None and hasattr(ctx, 'combine'):
+                ctx.combine(other_ctx)
+            return registry.get_none()
+
+        def _ic_to_prompt(receiver, *args):
+            """ctx.__to_prompt__()：渲染为 LLM 提示词友好文本（供 `$ctx` 段插值）。"""
+            ctx = receiver.fields.get('_ctx')
+            if ctx is None or not hasattr(ctx, 'to_prompt'):
+                return registry.box("")
+            return registry.box(ctx.to_prompt())
+
         _reg_native(intent_context_class, '__init__', _ic_init, unbox=False)
         _reg_native(intent_context_class, 'push', _ic_push, unbox=False)
         _reg_native(intent_context_class, 'pop', _ic_pop, unbox=False)
         _reg_native(intent_context_class, 'fork', _ic_fork, unbox=False)
         _reg_native(intent_context_class, 'resolve', _ic_resolve, unbox=False)
         _reg_native(intent_context_class, 'merge', _ic_merge, unbox=False)
+        _reg_native(intent_context_class, 'combine', _ic_combine, unbox=False)
         _reg_native(intent_context_class, 'clear', _ic_clear, unbox=False)
+        _reg_native(intent_context_class, '__to_prompt__', _ic_to_prompt, unbox=False)
 
         # --- 作用域控制方法（可在类上或实例上调用，均操作当前帧的意图上下文）---
         #

@@ -5,6 +5,8 @@ from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
 from core.runtime.interpreter.runtime_context import IntentNode
+from core.runtime.objects.intent import IbIntent
+from core.kernel.intent_logic import IntentMode, IntentRole
 
 class RuntimeSerializer(BaseFlatSerializer):
     """
@@ -40,13 +42,38 @@ class RuntimeSerializer(BaseFlatSerializer):
             # 合并现有的资产池
             if hasattr(execution_context, 'asset_pool'):
                 self.external_assets.update(execution_context.asset_pool)
-            
+
+        # PT-2.2: 完整 IbIntentContext + 活跃 intent_context IBCI 指针。
+        # ``intent_ctx_uid`` 是新的权威字段；``intent_stack`` 保留为向后兼容
+        # 但语义已被 ``intent_ctx_uid`` 全覆盖（含 smear / override / global）。
+        full_intent_ctx_uid = None
+        try:
+            intent_ctx = getattr(context, "_intent_ctx", None)
+            if intent_ctx is not None:
+                full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
+        except Exception:
+            full_intent_ctx_uid = None
+
+        active_intent_ibobj_uid = None
+        try:
+            active = (
+                context.get_active_intent_ibobj()
+                if hasattr(context, "get_active_intent_ibobj")
+                else None
+            )
+            if active is not None:
+                active_intent_ibobj_uid = self._collect_instance(active)
+        except Exception:
+            active_intent_ibobj_uid = None
+
         return {
-            "version": "2.0",
+            "version": "2.1",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": self._process_value(context.intent_stack), # 改为拓扑序列化
-            "intent_exclusive_depth": context.intent_exclusive_depth,
+            "intent_stack": self._process_value(context.intent_stack),  # 向后兼容
+            "intent_ctx_uid": full_intent_ctx_uid,                       # PT-2.2 权威字段
+            "active_intent_ibobj_uid": active_intent_ibobj_uid,           # PT-2.2 活跃指针
+            "intent_exclusive_depth": getattr(context, "intent_exclusive_depth", 0),
             "pools": pools
         }
 
@@ -119,8 +146,48 @@ class RuntimeSerializer(BaseFlatSerializer):
         if hasattr(value, 'intent') and hasattr(value, 'parent') and hasattr(value, 'to_list'):
             return self._collect_intent_node(value)
 
+        # PT-2.2: 拓扑序列化 IbIntentContext Python 值（``intent_context`` IBCI
+        # 实例的 ``_ctx`` 字段，或 RuntimeContext 持有的 ``_intent_ctx``）。
+        # 鸭子类型：避免循环依赖。
+        if (
+            hasattr(value, "get_intent_top")
+            and hasattr(value, "get_active_intents")
+            and hasattr(value, "fork")
+            and hasattr(value, "_smear_queue")
+        ):
+            return self._collect_intent_context(value)
+
         # 处理基本 Python 类型 (Fallback)
         return super()._process_value(value)
+
+    def _collect_intent_context(self, ic: Any) -> str:
+        """PT-2.2: 序列化完整的 ``IbIntentContext`` Python 对象。
+
+        保留全部 4 个槽位：``_intent_top`` (持久栈) / ``_smear_queue`` (涂抹队列) /
+        ``_override`` (排他槽) / ``_global_intents`` (Engine 级注入)。
+        通过 Python id memo 维持身份共享——多个 ``intent_context`` IBCI 实例
+        若共享同一底层 ``_ctx``（NS-2b 不变量），反序列化后仍共享同一对象。
+        """
+        ic_id = id(ic)
+        if ic_id in self.memo:
+            return self.memo[ic_id]
+
+        uid = f"intentctx_{uuid.uuid4().hex[:16]}"
+        self.memo[ic_id] = uid
+
+        intent_top = ic.get_intent_top()
+        data = {
+            "uid": uid,
+            "intent_top_uid": self._collect_intent_node(intent_top) if intent_top is not None else None,
+            "smear_queue": [self._process_value(i) for i in ic._smear_queue],
+            "override": self._process_value(ic._override) if ic._override is not None else None,
+            "global_intents": [self._process_value(i) for i in ic._global_intents],
+        }
+        # 复用 instance_pool 作为统一对象池；以 ``_type == "intent_context_native"``
+        # 区分于 IBCI ``intent_context`` 封装实例。
+        data["_type"] = "intent_context_native"
+        self.instance_pool[uid] = data
+        return uid
 
     def _collect_instance(self, obj: IbObject) -> str:
         obj_id = id(obj)
@@ -210,12 +277,43 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["_type"] = "fn_callable"
             data["node_uid"] = obj.node_uid
             data["capture_mode"] = obj.capture_mode
-            
+
+        elif cls_name == "intent_context":
+            # PT-2.2: ``intent_context`` IBCI 封装实例 — 序列化 ``_ctx`` 字段为
+            # 单独的 native intent_context 池条目；活跃指针不变量在反序列化时
+            # 由 ``deserialize_context`` 的活跃指针恢复路径维护。
+            data["_type"] = "intent_context"
+            ctx = obj.fields.get("_ctx") if hasattr(obj, "fields") else None
+            data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
+            # 其他用户附加字段也保留（罕见但允许）
+            extra_fields = {
+                k: self._process_value(v)
+                for k, v in (obj.fields or {}).items()
+                if k != "_ctx"
+            }
+            if extra_fields:
+                data["fields"] = extra_fields
+
+        elif isinstance(obj, IbIntent):
+            # PT-2.2: ``IbIntent`` 使用 ``__slots__`` (content/mode/tag/role/...) 而非
+            # ``fields`` 字典存放状态；通用 ``_type == "object"`` 分支会丢失这些字段。
+            # 这里显式落盘核心属性，与 ``_get_instance`` 的对应反序列化分支配合。
+            data["_type"] = "intent"
+            data["content"] = obj.content
+            data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
+            data["tag"] = obj.tag
+            data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
+            data["source_uid"] = obj.source_uid
+            data["pop_top"] = obj.pop_top
+            # ``segments`` 通常仅在编译期使用；保留为原始引用列表以最大限度兼容。
+            if obj.segments:
+                data["segments"] = [self._process_value(s) for s in obj.segments]
+
         else:
             # 普通用户定义对象
             data["_type"] = "object"
             data["fields"] = {k: self._process_value(v) for k, v in obj.fields.items()}
-            
+
         self.instance_pool[uid] = data
         return uid
 
@@ -229,6 +327,7 @@ class RuntimeDeserializer:
         self.instance_cache: Dict[str, IbObject] = {}
         self.scope_cache: Dict[str, Scope] = {}
         self.intent_cache: Dict[str, IntentNode] = {} # 意图节点缓存
+        self.intent_ctx_cache: Dict[str, Any] = {}    # PT-2.2: IbIntentContext 缓存
         self.asset_pool: Dict[str, str] = {} 
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
@@ -257,26 +356,78 @@ class RuntimeDeserializer:
         # 使用反射设置私有属性，保持接口纯净
         if hasattr(context, '_current_scope'):
             setattr(context, '_current_scope', current_scope)
-            
-        if "global_intents" in data:
-            # 恢复全局意图 (通常是 IbIntent 实例)
-            ctx_global = context.get_global_intents()
-            ctx_global.clear()
-            for i_data in data["global_intents"]:
-                 ctx_global.append(self._deserialize_value(i_data))
-        
-        # 恢复意图栈 (拓扑结构)
-        intent_stack_raw = data.get("intent_stack")
-        active_intents = self._deserialize_value(intent_stack_raw)
-        
-        # 恢复活跃意图栈
-        if hasattr(context, 'restore_active_intents'):
-            getattr(context, 'restore_active_intents')(active_intents)
-        
+
+        # PT-2.2: 优先使用新格式 ``intent_ctx_uid``（含 smear / override / global / stack 全部字段）。
+        # 旧格式仅有 ``intent_stack``（active 持久栈快照）保持回退兼容。
+        intent_ctx_uid = data.get("intent_ctx_uid")
+        if intent_ctx_uid:
+            restored_ctx = self._get_intent_context(intent_ctx_uid)
+            if restored_ctx is not None and hasattr(context, "_intent_ctx"):
+                # 整体替换帧的 _intent_ctx：含 smear / override / global / stack。
+                context._intent_ctx = restored_ctx
+            # 活跃 intent_context IBCI 指针恢复（共享引用不变量在 _get_instance
+            # 的 ``intent_context`` 分支里通过 ctx_uid 复用 intent_ctx_cache 保证）。
+            active_uid = data.get("active_intent_ibobj_uid")
+            if active_uid and hasattr(context, "set_active_intent_ibobj"):
+                active_obj = self._get_instance(active_uid)
+                # 确保共享引用不变量：active._ctx is context._intent_ctx
+                if active_obj is not None and hasattr(active_obj, "fields"):
+                    if active_obj.fields.get("_ctx") is not getattr(context, "_intent_ctx", None):
+                        # 反序列化分支可能因池入口先后顺序导致不同身份；强制对齐。
+                        active_obj.fields["_ctx"] = context._intent_ctx
+                    context.set_active_intent_ibobj(active_obj)
+        else:
+            if "global_intents" in data:
+                # 恢复全局意图 (通常是 IbIntent 实例)
+                ctx_global = context.get_global_intents()
+                ctx_global.clear()
+                for i_data in data["global_intents"]:
+                    ctx_global.append(self._deserialize_value(i_data))
+
+            # 恢复意图栈 (拓扑结构)
+            intent_stack_raw = data.get("intent_stack")
+            active_intents = self._deserialize_value(intent_stack_raw)
+
+            # 恢复活跃意图栈
+            if hasattr(context, 'restore_active_intents'):
+                getattr(context, 'restore_active_intents')(active_intents)
+
         if hasattr(context, '_intent_exclusive_depth'):
             setattr(context, '_intent_exclusive_depth', data.get("intent_exclusive_depth", 0))
-        
+
         return context
+
+    def _get_intent_context(self, uid: str) -> Any:
+        """PT-2.2: 从池中重建 IbIntentContext Python 对象（共享身份）。"""
+        if uid in self.intent_ctx_cache:
+            return self.intent_ctx_cache[uid]
+        data = self.instance_pool.get(uid)
+        if data is None or data.get("_type") != "intent_context_native":
+            return None
+        from core.runtime.objects.intent_context import IbIntentContext
+        ic = IbIntentContext()
+        # 先入缓存以打断潜在的循环引用（理论上 IbIntentContext 不形成 cycle，
+        # 但为防御未来扩展而保持模式一致）。
+        self.intent_ctx_cache[uid] = ic
+        # 持久栈
+        top_uid = data.get("intent_top_uid")
+        if top_uid:
+            ic.set_intent_top(self._get_intent_node(top_uid))
+        # smear_queue
+        for sv in data.get("smear_queue", []) or []:
+            iv = self._deserialize_value(sv)
+            if iv is not None:
+                ic._smear_queue.append(iv)
+        # override
+        ov = data.get("override")
+        if ov is not None:
+            ic._override = self._deserialize_value(ov)
+        # global_intents
+        for gv in data.get("global_intents", []) or []:
+            iv = self._deserialize_value(gv)
+            if iv is not None:
+                ic._global_intents.append(iv)
+        return ic
 
     def _get_intent_node(self, uid: str) -> IntentNode:
         """ 从池中重建 IntentNode 链表节点，保留结构共享"""
@@ -333,8 +484,10 @@ class RuntimeDeserializer:
         if isinstance(val, str):
             if val.startswith("inst_"):
                 return self._get_instance(val)
-            if val.startswith("intent_"):
+            if val.startswith("intent_") and not val.startswith("intentctx_"):
                 return self._get_intent_node(val)
+            if val.startswith("intentctx_"):
+                return self._get_intent_context(val)
             
         if isinstance(val, dict) and val.get("_type") == "ext_ref":
             uid = val.get("uid")
@@ -349,12 +502,17 @@ class RuntimeDeserializer:
             return self.instance_cache[uid]
             
         data = self.instance_pool[uid]
-        cls_name = data["class_name"]
-        ib_class = self.registry.get_class(cls_name)
+        cls_name = data["class_name"] if "class_name" in data else None
+        ib_class = self.registry.get_class(cls_name) if cls_name else None
         
         obj = None
         _type = data.get("_type")
-        
+
+        if _type == "intent_context_native":
+            # 该条目不是 IbObject 实例，由 ``_get_intent_context`` 处理。
+            # 调用方误以 inst_ 前缀来到这里时，回退到 native 路径。
+            return self._get_intent_context(uid)
+
         if _type == "none":
             obj = self.registry.get_none()
             self.instance_cache[uid] = obj
@@ -416,7 +574,42 @@ class RuntimeDeserializer:
             call_intent = self._deserialize_value(call_intent_raw) if call_intent_raw is not None else None
             obj = self.factory.create_behavior(data["node_uid"], captured, data.get("expected_type"), call_intent=call_intent)
             self.instance_cache[uid] = obj
-            
+
+        elif _type == "intent_context":
+            # PT-2.2: ``intent_context`` IBCI 封装实例 — 先入缓存（打断潜在循环），
+            # 再恢复 ``_ctx`` 字段为对应的 native IbIntentContext（共享身份）。
+            obj = IbObject(ib_class)
+            self.instance_cache[uid] = obj
+            ctx_uid = data.get("ctx_uid")
+            if ctx_uid:
+                obj.fields["_ctx"] = self._get_intent_context(ctx_uid)
+            for k, v in (data.get("fields") or {}).items():
+                obj.fields[k] = self._deserialize_value(v)
+
+        elif _type == "intent":
+            # PT-2.2: ``IbIntent`` 反序列化分支。
+            try:
+                mode = IntentMode(data.get("mode", "+"))
+            except Exception:
+                mode = IntentMode.APPEND
+            try:
+                role = IntentRole(data.get("role", "block"))
+            except Exception:
+                role = IntentRole.BLOCK
+            segments_raw = data.get("segments") or []
+            segments = [self._deserialize_value(s) for s in segments_raw]
+            obj = IbIntent(
+                ib_class=ib_class,
+                content=data.get("content", ""),
+                segments=segments,
+                mode=mode,
+                tag=data.get("tag"),
+                source_uid=data.get("source_uid"),
+                role=role,
+                pop_top=data.get("pop_top", False),
+            )
+            self.instance_cache[uid] = obj
+
         else:
             obj = IbObject(ib_class)
             self.instance_cache[uid] = obj
