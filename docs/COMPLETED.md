@@ -4,7 +4,52 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-11
+> **最后更新**：2026-05-12
+
+---
+
+## 2026-05-12 锚点：NS-3 / PT-2.1 / PT-2.2 / `_evaluate_segments` CPS 化 一并收口
+
+四项配套工作按"调用现场优先 / 段求值入帧 / 意图上下文身份贯通"主线一并落地，全部 1232 个测试通过（基线 1206 + 26 新增）。
+
+### NS-3：lambda / snapshot / behavior 跨帧 `_execution_context` 边界
+
+**设计澄清**：lambda 的语义是"调用现场" — 自由变量、意图栈、执行机制（VM、节点池、runtime_context）均取**调用时刻**的值；snapshot 的语义是"定义时冻结自由变量与意图，但执行机制仍是调用现场"；immediate behavior 是一次性的，定义时刻与调用时刻 EC 等价。统一结论：`_execution_context` **字段仅作定义时回退**，CPS 主路径与同步后备路径都必须优先使用调用现场的 EC。
+
+- **CPS 主路径**：`_vm_invoke_behavior` 一律使用 `executor.ec`（VM 当前 EC），完全忽略 `behavior._execution_context` 字段（`core/runtime/vm/handlers.py:_vm_invoke_behavior`）。
+- **同步后备路径**：新增 `core/runtime/frame.py::_current_execution_context` ContextVar；`Interpreter.run` / `execute_module` 入口处 `set` / `reset`，`IbBehavior.call` / `IbFnCallable.call` 在缺少显式 EC 时优先读取 ContextVar，仅在 ContextVar 与字段都缺失时报错。
+- **测试**：`tests/runtime/test_ns3_callsite_ec.py`（3 个测试，含跨 Interpreter 验证）。
+
+### PT-2.1：intent_context 高级 OOP 场景
+
+- **`IbIntentContext.combine(other)`**：与既有 `merge`（替换语义）互补，提供加法式合并（追加 intent_top / smear / global，遇 override 取后者）；IBCI 端通过 `IntentContextAxiom.get_method_specs` 暴露。
+- **`IbIntentContext.__to_prompt__()` / `to_prompt()`**：渲染当前活跃意图列表（intent_top + smear + override），让 `(str)ctx` 与 prompt 段插值 `@~ ... $ctx ... ~` 返回结构化文本。
+- **`try_deep_clone` 识别 `IbIntentContext`**：调用 `IbIntentContext.fork()` 取代默认浅拷贝；使 intent_context 作为类字段时 llmexcept 快照 / 恢复获得正确独立副本（与 NS-2c 的 fork-and-replace 链路对齐）。
+- **测试**：`tests/runtime/test_pt21_intent_context_oop.py`（12 个测试）。
+
+### PT-2.2：IbIntentContext 序列化 / 反序列化
+
+- **完整 4 槽位序列化**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top` / `smear_queue` / `override` / `global_intents`，取代旧的仅 `intent_stack` 平铺方案；通过 `id(ic) → uid` 备忘表保留共享身份。
+- **`IbIntent` 显式分支**：通用 object 分支会丢失 `__slots__` 中的 `content` / `mode` / `tag` / `role` / `pop_top` / `source_uid`；新增 `_type: "intent"` 专用编解码（`core/runtime/serialization/runtime_serializer.py`）。
+- **`intent_context` 封装实例**：`_type: "intent_context"` 分支保留 `_ctx` 字段对应的 native UID 引用，反序列化时恢复"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"共享身份不变量（NS-2b 协议）。
+- **`serialize_context`**：纳入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`；保留 `intent_stack` 字段用于向后兼容遗留快照。
+- **`deserialize_context`**：优先读新格式；活跃指针恢复时强制 `_ctx is rt_ctx._intent_ctx`。
+- **`serialize_context.intent_exclusive_depth`** 改为容错（`getattr(..., 0)`），使无 `IStateProvider` 完整实现的精简 `RuntimeContextImpl` 也可序列化。
+- **测试**：`tests/runtime/test_pt22_intent_context_serialization.py`（7 个测试，含 round-trip / 共享身份 / wrapper / 向后兼容遗留格式）。
+
+### `_evaluate_segments` CPS 化
+
+- **新增 `_evaluate_segments_cps`**：把 `vm.run(seg)` 替换为 `yield seg`，让 prompt 段中的子节点求值成为外层 VM 帧栈的子任务，而非启动一次新的 `_drive_loop`。
+- **新增 `*_cps` 公理化变体**：`execute_behavior_expression_cps` / `execute_behavior_object_cps` / `execute_llm_function_cps` / `invoke_behavior_cps` / `invoke_llm_function_cps`，把 `_evaluate_segments` 调用替换为 `yield from _evaluate_segments_cps`，其它逻辑与同步版完全等价。
+- **VM handler 切换**：`_vm_invoke_behavior` / `_vm_invoke_llm_function` 改用 `yield from invoke_*_cps`，消除 `_drive_loop` 重入。
+- **同步 `_evaluate_segments` 保留**：作为 `dispatch_eager` 后台线程路径的兼容入口，内部委托给生成器并通过 `vm.run` 驱动；保证非 CPS 调用方语义不变。
+- **测试**：`tests/runtime/test_evaluate_segments_cps.py`（4 个测试，含 frame_stack_depth ≥ 1 的嵌套深度验证）；同步刷新 `test_vm_llm_cps_dispatch.py` / `test_ns3_callsite_ec.py` 探针为 `*_cps` 变体。
+
+### 累计影响
+- 修改文件：`core/runtime/frame.py`（新增 ContextVar）、`core/runtime/interpreter/interpreter.py`、`core/runtime/objects/builtins.py`、`core/runtime/objects/deep_clone.py`、`core/runtime/objects/intent_context.py`、`core/runtime/vm/handlers.py`、`core/runtime/interpreter/llm_executor.py`、`core/runtime/serialization/runtime_serializer.py`、`core/runtime/bootstrap/builtin_initializer.py`、`core/kernel/axioms/intent_context.py`。
+- 新增测试：4 套（NS-3 / PT-2.1 / PT-2.2 / segments CPS），共 26 个测试。
+- 文档刷新：本文件、`docs/NEXT_STEPS.md`、`docs/PENDING_TASKS.md`、`docs/VM_AND_INTERPRETER_DESIGN.md §12`。
+- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1232 passed = 1206 历史 + 26 新增）。
 
 ---
 

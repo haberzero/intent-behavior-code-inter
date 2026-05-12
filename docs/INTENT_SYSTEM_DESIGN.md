@@ -405,6 +405,19 @@ _active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork
 
 **对调试器/工具的价值**：调试器可通过 `get_active_intent_ibobj()` 直接观察"当前帧正在使用哪个用户命名的策略对象"，而不是面对一个匿名 Python 对象。`get_current()` 因此返回的是活跃指针的 fork（保留命名身份的可观察性），但因共享引用，其内容等价于 `_intent_ctx.fork()`。
 
+### 6.2 prompt 段插值与 `combine` / `__to_prompt__`（PT-2.1 落地，2026-05-12）
+
+- **`combine(other)`**：与替换语义的 `merge` 互补，提供加法式合并 — 追加 `intent_top` / `smear` / `global_intents`，遇 override 取后者。适合"基础策略 + 局部增量"的拼接场景。
+- **`__to_prompt__()`**：把当前活跃意图列表（intent_top + smear + override）按"- {content}\n"行渲染，使 `(str)ctx` 与 `@~ ... $ctx ... ~` prompt 段插值得到结构化文本，无需调用者手动 `resolve()`。
+- **`try_deep_clone` 识别 `IbIntentContext`**：调用 `IbIntentContext.fork()` 取代默认浅拷贝；这使得 `intent_context` 作为类字段时，llmexcept 快照/恢复（NS-2c）链路得到正确独立副本，与 fork-and-replace 协议一致。
+
+### 6.3 序列化 / 反序列化（PT-2.2 落地，2026-05-12）
+
+- **完整 4 槽位**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top` / `smear_queue` / `override` / `global_intents`；旧的仅 `intent_stack` 平铺方案被取代但保留为遗留读取路径。
+- **共享身份**：通过 `id(ic) → uid` 备忘表保留多处引用同一 `IbIntentContext` 的身份；反序列化端的 `_get_intent_context` 也用 cache 还原"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"不变量。
+- **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 content/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性。
+- **`serialize_context`**：写入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`，调试器断点场景可还原完整意图上下文（含活跃指针身份）。
+
 ---
 
 ## 七、调试工具
