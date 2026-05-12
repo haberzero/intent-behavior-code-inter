@@ -392,9 +392,15 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### 16.5 `tuple` 无元素类型标注
+### ~~16.5 `tuple` 无元素类型标注~~ ✅ 已解决（NS-7，2026-05-12）
 
-`tuple` 不支持 `tuple[int, str]` 形式的元素类型标注。元素访问始终返回 `any`，无法进行元素级类型检查。
+`tuple` 现在支持 `tuple[T1, T2, ...]` 的位置元素类型标注：
+- 字面量 int 下标访问时返回精确的位置类型（`tuple[int, str]` 的 `t[0]` 是 `int`，`t[1]` 是 `str`）；
+- 变量索引或越界访问回退到 `any`，与 `dict` 的非校验路径对称；
+- `tuple[A, B]` 仍可赋值给裸 `tuple`；不同位置组合 spec 互相不兼容；
+- `tuple[T]` 单类型路径保留 `element_type` 单字段语义，向后兼容。
+
+实现：`TypeDef.positional_element_types`（与 `LIST.allowed_element_types` 平行）、`SpecFactory.create_tuple(positional_element_type_names=...)`、`SemanticAnalyzer.visit_IbSubscript` 中识别字面量 int 索引并精确推断。`SpecRegistry.resolve_specialization` 的早缓存键不再 sort 多参数列表，保证 `tuple[int,str]` 与 `tuple[str,int]` 不再误共用同一缓存项。
 
 ### ~~16.6 泛型实例赋值兼容性规则不完整~~ ✅ 已解决（G3 / axiom covariance）
 

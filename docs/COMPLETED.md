@@ -29,6 +29,16 @@
 - **测试**：新增 `tests/compiler/test_chain_subscript.py`（5 用例：tuple/list/dict 链式下标 + 泛型 cast 与基本 cast 不被误伤）。
 - **文档**：删除 `KNOWN_LIMITS.md §九`。
 
+### NS-7：`tuple[T1, T2, ...]` 位置元素类型标注
+
+- **TypeDef 扩展**：新增 `positional_element_types: List[TypeRef]`，与 `LIST.allowed_element_types`（set-like union）正交，仅 TUPLE kind 在元素数 ≥ 2 时使用；单类型元组 `tuple[T]` 维持 `element_type` 单字段路径，向后兼容。
+- **SpecFactory.create_tuple**：新增 `positional_element_type_names` 形参；多元素时生成 `tuple[T1,T2,...]` 名称（顺序敏感，不 sort）。
+- **TupleAxiom.resolve_specialization_by_names**：元素数 ≥ 2 走位置路径。
+- **SpecRegistry.resolve_specialization 早缓存修复**：candidate_key 不再 sort 多参数列表，避免 `tuple[int,str]` 与 `tuple[str,int]` 因排序键碰撞被误命中（这一缓存键 bug 对 dict[K,V] 等位置敏感 spec 也潜在影响，一并修复；list 等 union 容器仍正确，仅可能略有缓存未命中代价）。
+- **SemanticAnalyzer.visit_IbSubscript**：当 value_type 是带位置元素的 tuple 且 slice 是字面量 int 常量时，精确返回对应位置类型；越界或变量索引回退到通用 `resolve_subscript` 路径。
+- **测试**：新增 `tests/compiler/test_tuple_positional_types.py`（12 用例：位置推断、目标类型不匹配 SEM_003、fallback、协变、顺序敏感、单类型回退、factory 直接 API）。
+- **文档**：`KNOWN_LIMITS.md §16.5` 标记 NS-7 已完成。
+
 ---
 
 ## 2026-05-12 锚点：PT-1.2 / PT-1.3 / PT-3.3（idbg）收口

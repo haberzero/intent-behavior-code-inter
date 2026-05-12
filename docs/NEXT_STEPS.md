@@ -85,34 +85,7 @@
 
 ## NS-7　`tuple[T1, T2, ...]` 位置元素类型标注
 
-**优先级**：P3
-
-### 当前事实状态
-
-- 公理层：`core/kernel/axioms/primitives.py:632-708` 的 `TupleAxiom` 已实现下标/迭代/比较能力，但 `get_element_type_name()`/`resolve_item_type_name(...)` 当前都返回 `"any"`，且**没有** `resolve_specialization_by_names()`（与 `ListAxiom.resolve_specialization_by_names` 形成对照）。
-- 类型描述：`core/kernel/spec/base.py:35` 的 `TypeKind` 已含 `TUPLE`；`TypeDef` 已有 `element_type` 但只能承载单一类型（与 list 同构），无法表示 `(int, str)` 的位置异构。
-- 文档：`KNOWN_LIMITS.md §16.5` 标记为开放限制。
-
-### 技术路径
-
-1. **TypeDef 扩展**（`core/kernel/spec/base.py`）：为 `TUPLE` kind 增设 `positional_element_types: Optional[List[TypeRef]]` 字段；保持向后兼容（缺省时维持 `"any"` 单元素行为）。
-2. **TupleAxiom 扩展**：
-   - 新增 `resolve_specialization_by_names(registry, arg_names)`，长度 ≥ 2 时生成位置类型的特化 spec。
-   - 改写 `resolve_item_type_name(key_type_name, key_value=None)`（或新增带字面量信息的 overload）：若 key 是字面量 int 且 `0 <= idx < len(positional)`，返回对应位置类型；否则降级返回 `"any"`。
-3. **Semantic analyzer**：在 `visit_IbSubscript` 中识别 `tuple_spec` + 字面量 int key，调上述新方法做精确推断；非字面量 key 沿用 `"any"`。
-4. **`is_compatible`**：`tuple[int, str]` 可赋值给 `tuple`；不同位置类型组合默认不兼容（与 `list[int]` ↔ `list[str]` 对称）。
-5. **运行时**：`IbTuple` 不需要改动（已经持有 Python tuple）；位置类型仅做编译期检查。
-6. **解包**：保持 `IbList`/`IbTuple` 双轨解包；解包目标类型推断可受益于新精度，需在 `stmt_handler._assign_to_target` 之外的 type-binding 路径补一条 spec 化分支。
-7. **测试**：`tests/compiler/test_tuple_positional_types.py` 覆盖：
-   - `tuple[int, str] t = (1, "x"); int a = t[0]; str b = t[1]`
-   - `tuple[int, str] t = ("oops", 1)` 应触发 SEM_003
-   - 元组解包目标类型推断
-8. **文档**：从 `KNOWN_LIMITS.md §16.5` 移除（或改为"已实现"小节）；`COMPLETED.md` 追加 NS-7 锚点。
-
-### 风险
-
-- 与 `list[int, str, list]`（多类型 union 容器，`KNOWN_LIMITS §十四`）的语法相似，需在 parser/spec 层确认它们走的是不同分支：list 使用 `allowed_element_type_names` 列表，tuple 应使用 `positional_element_types` 列表。
-- 跨模块影响：序列化（`serialization/spec_serializer`）需要识别新字段。
+✅ **已完成（2026-05-12）** — 详见 `docs/COMPLETED.md` 2026-05-12 NS-7 锚点。
 
 ---
 

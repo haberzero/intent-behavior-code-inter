@@ -690,13 +690,21 @@ class TupleAxiom(BaseAxiom):
         return "请返回一个 JSON 数组（将作为元组处理），如: [1, 2, 3]，不要包含任何其他文字"
 
     def is_compatible(self, other_name: str) -> bool:
+        # 基础协变：所有特化 tuple[*] 都可赋值给裸 tuple；同名 spec 兼容。
+        # 注意：不同位置元素的 tuple 之间默认不互相兼容（与 list[int]/list[str]
+        # 不互兼容的方向一致，由 SpecRegistry 的 covariance 路径细化处理）。
         return other_name in ("tuple",) or other_name.startswith("tuple[")
 
     def resolve_specialization_by_names(
         self, registry: Any, arg_names: List[str]
     ) -> Optional[Any]:
-        elem = arg_names[0] if arg_names else "any"
-        spec = registry.factory.create_tuple(element_type_name=elem)
+        # NS-7：元素数 ≥ 2 时走位置元素类型路径（`tuple[T1, T2, ...]`），
+        # 元素数 ≤ 1 时退化为单类型/无标注的传统路径。
+        if len(arg_names) >= 2:
+            spec = registry.factory.create_tuple(positional_element_type_names=list(arg_names))
+        else:
+            elem = arg_names[0] if arg_names else "any"
+            spec = registry.factory.create_tuple(element_type_name=elem)
         return registry.register(spec)
 
 
