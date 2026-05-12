@@ -610,14 +610,11 @@ class IbDict(IbValue):
         return f"Dict({self.fields})"
 
     def keys(self) -> IbObject:
-        # 返回 IbList 包装的原生 key 列表
-        # 注意：这里的 key 已经是原生类型（通常是 str）
-        # 我们需要将其装箱
+        # key 已经是原生类型（通常是 str），需要装箱
         native_keys = list(self.fields.keys())
         return self.ib_class.registry.box(native_keys)
 
     def values(self) -> IbObject:
-        # 返回 IbList 包装的值列表
         return self.ib_class.registry.box(list(self.fields.values()))
 
     def items(self) -> IbObject:
