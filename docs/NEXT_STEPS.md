@@ -20,7 +20,7 @@
 **Phase 1 任务清单**（约 50-60 小时）:
 1. ✅ 清理标准库局部导入（已完成）
 2. ✅ 简化 LLM 结果解析逻辑（已完成，2026-05-13）
-3. 🔧 拆分 semantic_analyzer.py（40-50 小时）
+3. 🔧 拆分 semantic_analyzer.py（详见 `SEMANTIC_REFACTORING_PLAN.md`，55-65 小时）
 
 ---
 

@@ -186,28 +186,35 @@ pytest ibci_modules/ibci_json/tests/ -v
 
 ## 重构详细方案
 
-### 方案 1: 拆分 semantic_analyzer.py（P0，40-50h）
+### 方案 1: 拆分 semantic_analyzer.py（P0，55-65h）
 
 **当前状态**: 2,192 行，82 个方法
 
-**拆分目标**:
-```
-core/compiler/semantic/passes/
-├── semantic_analyzer.py        (保留 300-400 行)
-│   └── SemanticAnalyzer (协调器)
-├── intent_binding_pass.py      (新建 300-400 行)
-├── behavior_detection_pass.py  (新建 200-300 行)
-├── contract_validation_pass.py (新建 200-300 行)
-└── error_reporter.py           (新建 150-200 行)
-```
+**完整设计方案见**: `docs/SEMANTIC_REFACTORING_PLAN.md`
 
-**步骤**:
-1. 创建 Pass 基类和接口
-2. 提取 IntentBindingPass
-3. 提取 BehaviorDetectionPass
-4. 提取 ContractValidationPass
-5. 提取 SemanticErrorReporter
-6. 重构主类为协调器
+**核心策略**:
+- 基于静态类型系统的简化架构（不需要约束求解系统）
+- 6 个独立的 Pass（符号收集、符号解析、类型检查、绑定分析、行为依赖、完整性检查）
+- 不可变上下文 + Error-as-Data 模式
+- UID-based 元数据存储（可序列化）
+
+**Phase 1 已完成**（10h，2026-05-13）:
+- ✅ 基础设施搭建（9 个文件，857 行代码）
+- ✅ SemanticContext, PassResult, MetadataStore
+- ✅ BasePass 抽象基类
+
+**Phase 2 待完成**（35-45h）:
+- SymbolCollectionPass (8-10h)
+- SymbolResolutionPass (6-8h)
+- TypeCheckingPass (15-20h)
+- BindingAnalysisPass (8-10h)
+- BehaviorDependencyPass (4-6h)
+- IntegrityCheckPass (2-3h)
+- 管道协调器 (2-3h)
+
+**Phase 3 待完成**（10h）:
+- 并行验证（V1 vs V2）
+- 集成测试
 
 **验证**: `pytest tests/compiler/test_semantic*.py tests/contracts/ -v`
 
