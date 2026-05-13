@@ -119,10 +119,10 @@ END TRANSACTION
 
 | 操作 | 规范 | 当前状态 |
 |------|------|--------|
-| 读取外部变量 | 允许（读到快照时刻值） | ✅ 已实现 |
-| 写入 `retry_hint` | 允许（retry-scoped，不 commit 外部）| ✅ 已实现 |
-| 写入普通外部变量 | **禁止**，应产生 SEM_xxx 编译期错误 | ⚠️ 未加限制（`restore_snapshot` 提供运行时回滚但无编译期保障；见 `KNOWN_LIMITS §十二.3`）|
-| 快照失败后传播 | 应抛出统一的 LLM 错误对象 | ✅ 已实现：retry 耗尽 → `LLMRetryExhaustedError`；无保护裸赋值 → `LLMParseError`；provider 层失败 → `LLMCallError`（详见 `KNOWN_LIMITS §二`、`COMPLETED.md` OI-7 锚点）|
+| 读取外部变量 | 允许（读到快照时刻值） | 已实现 |
+| 写入 `retry_hint` | 允许（retry-scoped，不 commit 外部）| 已实现 |
+| 写入普通外部变量 | **禁止**，应产生 SEM_xxx 编译期错误 | 未加限制（`restore_snapshot` 提供运行时回滚但无编译期保障；见 `KNOWN_LIMITS §十二.3`）|
+| 快照失败后传播 | 应抛出统一的 LLM 错误对象 | 已实现：retry 耗尽 → `LLMRetryExhaustedError`；无保护裸赋值 → `LLMParseError`；provider 层失败 → `LLMCallError`（详见 `KNOWN_LIMITS §二`、`COMPLETED.md` OI-7 锚点）|
 
 **为什么快照模型使 llmexcept 与并发无关**：
 - 每个 LLM 语句（无论串行还是并行 dispatch）都进入独立快照，与其他语句的执行状态完全隔离
@@ -343,7 +343,7 @@ Engine.__init__()
     │
     └── _ensure_plugins_discovered() → discover_all(self.registry)
                 └──→ HostInterface(external_registry=SpecRegistry)
-                        └──→ HostInterface.metadata = 同一 SpecRegistry 实例 ✅
+                        └──→ HostInterface.metadata = 同一 SpecRegistry 实例（已统一）
 ```
 
 `discover_all()` 必须传入已初始化的 `KernelRegistry`；若未传入 registry（仅限孤立测试场景），
@@ -355,21 +355,21 @@ Engine.__init__()
 
 以下为深度分析时发现的遗留问题，已修复的条目已标注；仍待处理的条目详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md` 当前条目。
 
-### 11.1 IbTuple 未纳入快照和序列化 ✅ 已修复
+### 11.1 IbTuple 未纳入快照和序列化（已修复）
 
 `llm_except_frame.py` 的 `_is_serializable()` 和 `runtime_serializer.py` 的 `_collect_instance()` / `_get_instance()` 均已补充 `IbTuple` 分支（cache-before-recurse 模式，与 IbList 对称）。
 
-### 11.2 ibci_file 的 core 依赖与"非侵入"定义存在轻微偏差 ✅ 已修正
+### 11.2 ibci_file 的 core 依赖与"非侵入"定义存在轻微偏差（已修正）
 
 `ibci_file/core.py` 导入 `from core.runtime.path import IbPath` 并通过 `capabilities.execution_context.resolve_path()` 进行路径解析，而文档将 `ibci_file` 归类为非侵入式插件。`IbPath` 是纯数据类（`@dataclass(frozen=True)`），无解释器状态依赖，属于可接受的工具类导入。
 
 **已修正**：`ibcext.py` 注释和 `ARCHITECTURE_PRINCIPLES.md` 插件表格已新增"非侵入式（轻量依赖）"分类，将 `ibci_file` 单独列出并注明原因。
 
-### 11.3 scheduler.py 中的 [临时方案] 符号冲突静默处理 ✅ 已修复
+### 11.3 scheduler.py 中的临时方案符号冲突静默处理（已修复）
 
 `_inject_plugin_symbols` 方法中多处符号冲突检查从 `pass` 静默跳过升级为 `self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL/BASIC, ...)` 调用，调试模式下冲突可见。
 
-### 11.4 collector.py / runtime_context.py / interop.py 技术债务 ✅ 已修复
+### 11.4 collector.py / runtime_context.py / interop.py 技术债务（已修复）
 
 - `collector.py:200`：删除 `"llm_fallback"` 无效属性遍历
 - `runtime_context.py`：清理 5 处过期 TODO 注释
@@ -469,10 +469,10 @@ core/engine.py  (_prepare_interpreter, 末尾)
 
 **类型系统验证**：
 ```
-is_dynamic(behavior_spec)    → False   ✅（不再是 any）
-is_behavior(behavior_spec)   → True    ✅
-is_assignable(behavior, str) → False   ✅（严格）
-is_assignable(behavior, behavior) → True ✅
+is_dynamic(behavior_spec)    → False   （不再是 any）
+is_behavior(behavior_spec)   → True    （已支持）
+is_assignable(behavior, str) → False   （严格）
+is_assignable(behavior, behavior) → True（已支持）
 ```
 
 ### 13.3 IbBehavior 公理化重构（Step 2）

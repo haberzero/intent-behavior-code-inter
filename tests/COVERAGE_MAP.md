@@ -4,18 +4,26 @@
 > **新增测试时必须先在本表找到对应概念的文件；如不存在，先在此表新增一行 + 说明，再创建文件。**
 > 详见 `docs/TESTS_REORGANIZATION_TASK.md` §5 与 `tests/README.md` 的维护守则。
 >
-> 最后更新：2026-05-12（重构完成版）— 基线 1259 tests。
+> 最后更新：2026-05-13（Phase 2 完成）— 测试体系契约化。
 
 ---
 
-## 类型系统（Kernel 层）
+## 契约测试（核心语义不变量）
 
 | 概念 | 测试入口 |
 |------|----------|
-| TypeRef 构造 / 解析 | `tests/kernel/test_typeref.py` |
-| Spec 注册表（``SpecRegistry``）| `tests/kernel/test_spec_layer.py` |
-| Axiom（``IntAxiom`` / ``StrAxiom`` / ``ListAxiom`` 等）| `tests/kernel/test_axioms.py` |
-| Symbol 表（``SymbolTable`` / ``SymbolEntry``）| `tests/kernel/test_symbols.py` |
+| 类型系统不变量（Optional/泛型/cast/tuple位置类型） | `tests/contracts/test_type_invariants.py` |
+| 执行模型公理（CPS/信号/帧栈/递归保证） | `tests/contracts/test_execution_model.py` |
+| 作用域语义（Cell/lambda/snapshot/词法作用域） | `tests/contracts/test_scope_semantics.py` |
+| Intent传播/优先级/恢复/作用域隔离 | `tests/contracts/test_intent_propagation.py` |
+| llmexcept保证（异常捕获/重试/历史/深度） | `tests/contracts/test_llmexcept_guarantees.py` |
+| LLM集成（MOCK/行为表达式/LLM函数/分发） | `tests/contracts/test_llm_integration.py` |
+| 异常传播语义（try/except/finally） | `tests/contracts/test_exception_semantics.py` |
+| 集合操作语义（list/dict/str索引/切片/变更） | `tests/contracts/test_collection_semantics.py` |
+
+## 类型系统（Kernel 层已删除，转由契约测试覆盖）
+
+注：Kernel层白盒测试已删除，类型系统不变量由`tests/contracts/test_type_invariants.py`覆盖。
 
 ## 类型标注（编译期）
 
@@ -34,36 +42,37 @@
 | Lexer | `tests/compiler/test_lexer.py` |
 | Pipeline 整体（compile_string / 各 Pass 集成）| `tests/compiler/test_pipeline.py` |
 
-## VM / 解释器（运行时核心）
+## VM / 解释器（运行时核心已删除，转由契约测试覆盖）
+
+注：VM handler白盒测试已删除，执行模型公理由`tests/contracts/test_execution_model.py`覆盖。
 
 | 概念 | 测试入口 |
 |------|----------|
-| VM CPS 全部 handler / Signal / dispatch table / 主路径切换 / ``IbLLMExceptionalStmt`` handler | `tests/runtime/test_vm_executor.py` |
-| VM ↔ LLM 集成（CPS 调度 / dispatch_eager / segments / lambda·snapshot·behavior 调用现场 EC 优先 / ``LLMScheduler`` + ``LLMFuture``）| `tests/runtime/test_vm_llm_pipeline.py` |
 | DDG（数据依赖图）编译期分析 | `tests/runtime/test_ddg_analysis.py` |
 
 ## 作用域 / 闭包 / 对象层
 
+注：IbCell/IbValue白盒测试已删除，作用域语义由`tests/contracts/test_scope_semantics.py`覆盖。
+
 | 概念 | 测试入口 |
 |------|----------|
-| ``IbCell`` + ``promote_to_cell`` | `tests/runtime/test_ib_cell.py` |
-| ``IbValue`` 包装层 | `tests/runtime/test_ib_value.py` |
 | lambda / snapshot / behavior 语义（e2e）| `tests/e2e/test_e2e_higher_order.py` |
 | 内存模型（公理 SC-3/4、LT-2/3）| `tests/compliance/test_memory_model.py` |
 
 ## 意图系统
 
+注：Intent白盒测试已删除，Intent传播不变量由`tests/contracts/test_intent_propagation.py`覆盖。
+
 | 概念 | 测试入口 |
 |------|----------|
-| Intent 语义（smear / override / persist / 活跃 ibobj 指针 / OOP combine / to_prompt / deep_clone / 序列化 round-trip）| `tests/runtime/test_intent_context.py` |
 | 意图 e2e（注释 / scope 隔离 / lambda 交互 / 统一路径 / retry 还原）| `tests/e2e/test_e2e_intent.py` |
 
 ## llmexcept
 
+注：llmexcept白盒测试已删除，llmexcept保证由`tests/contracts/test_llmexcept_guarantees.py`覆盖。
+
 | 概念 | 测试入口 |
 |------|----------|
-| ``LLMExceptFrame`` 数据结构 + error_history + 深度限制 + ``str + llm_uncertain`` 隐式拼接禁止 | `tests/runtime/test_llmexcept.py` |
-| ``IbLLMExceptionalStmt`` CPS handler 注册 / 帧生命周期 / 主路径执行 | `tests/runtime/test_vm_executor.py` |
 | e2e 行为（基本 / 嵌套 / for 循环 / 条件驱动 / 用户对象 __snapshot__ 协议）| `tests/e2e/test_e2e_llmexcept.py` |
 
 ## 异常体系
@@ -76,7 +85,7 @@
 
 | 概念 | 测试入口 |
 |------|----------|
-| 变量 / 算术 / 字符串 / 布尔 / 类型 cast / 重赋值 / 列表方法 / dict 方法 / in 运算符 / 三元运算符 / global / is 运算符 / 嵌套作用域 / 复杂综合程序 | `tests/e2e/test_e2e_core_syntax.py` |
+| 变量 / 算术 / 字符串 / 布尔 / 类型 cast / 重赋值 / 列表方法 / dict 方法 / in 运算符 / 三元运算符 / global / is 运算符 / 嵌套作用域 / 复杂综合程序（注：已删除，基础语法由契约测试覆盖） | — |
 | 控制流（if/while/for/switch/break/continue）| `tests/e2e/test_e2e_control_flow.py` |
 | 函数 / 默认参 / 参数绑定 | `tests/e2e/test_e2e_functions.py` |
 | 类 / 继承 / 方法 / 字段 | `tests/e2e/test_e2e_classes.py` |
@@ -109,9 +118,10 @@
 
 | 层 | conftest |
 |----|----------|
-| 全局（所有 `tests/`）| `tests/conftest.py` — `run_ibci` / `compile_ibci` / `compile_or_errors` / `make_vm` / `find_node[_uid(s)]` / `native` / `AI_MOCK_PREFIX` / `engine` / `engine_session` / `ctx` / `intent_class` / `intent_context_class` |
-| Kernel | `tests/kernel/conftest.py` — `ax_reg` / `axiom_registry` / `spec_reg` / `factory` |
+| 全局（所有 `tests/`）| `tests/conftest.py` — `run_ibci` / `compile_ibci` / `compile_or_errors` / `make_vm` / `find_node` / `native` / `AI_MOCK_PREFIX` / `engine` / `engine_session` |
+| Kernel | `tests/kernel/conftest.py` — 已删除 |
 | Compliance | `tests/compliance/conftest.py` — `compliance_root` / `make_compliance_engine` / `run_compliance_code` |
+| Fixtures | `tests/fixtures/` — 可复用IBCI代码样本（type_system/control_flow/llm） |
 
 **严禁在测试文件中重复定义这些 helper / fixture。** 详见 `tests/README.md`。
 

@@ -161,11 +161,11 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 | 依赖方向 | 是否允许 | 说明 |
 |----------|----------|------|
-| kernel → base | ✅ 允许 | kernel 可使用 base 的原子概念 |
-| compiler → kernel | ✅ 允许 | 编译器依赖核心语言概念 |
-| runtime → kernel | ✅ 允许 | 运行时依赖核心语言概念 |
-| kernel → runtime | ❌ 禁止 | 架构穿透严格禁止 |
-| runtime → compiler | ❌ 禁止 | 运行时不应依赖编译器 |
+| kernel → base | 允许 | kernel 可使用 base 的原子概念 |
+| compiler → kernel | 允许 | 编译器依赖核心语言概念 |
+| runtime → kernel | 允许 | 运行时依赖核心语言概念 |
+| kernel → runtime | 禁止 | 架构穿透严格禁止 |
+| runtime → compiler | 禁止 | 运行时不应依赖编译器 |
 
 ### 4.2 架构穿透严格禁止
 
@@ -386,9 +386,9 @@ def __ibcext_vtable__():
 
 | 打包场景 | 兼容性 | 说明 |
 |----------|--------|------|
-| **PyInstaller 打包** | ✅ 完全兼容 | Python 解释器完整保留 |
-| **Nuitka 打包** | ✅ 完全兼容 | 反射机制正常工作 |
-| **未来语法迁移** | ✅ 完全兼容 | Python 作为胶水层保留 |
+| **PyInstaller 打包** | 完全兼容 | Python 解释器完整保留 |
+| **Nuitka 打包** | 完全兼容 | 反射机制正常工作 |
+| **未来语法迁移** | 完全兼容 | Python 作为胶水层保留 |
 
 **核心保障**：只要保留完整的 Python 解释器，所有 `__attr__` 反射机制、`importlib`、`dir()` 等都能正常工作。
 
@@ -532,7 +532,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 > 以下问题已在代码中发现，将在后续版本中修复。详细技术背景见 ARCH_DETAILS.md。
 
-### ~~A.1 MetadataRegistry 双轨问题~~ ✅ **已解决（2026-05-08）**
+### A.1 MetadataRegistry 双轨问题（已解决，2026-05-08）
 
 主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例：`discover_all(registry)` 将引擎的 `SpecRegistry` 传入 `HostInterface`，`HostInterface.metadata` 与 `KernelRegistry._metadata_registry` 同源，不存在两轨分离问题。详见 `docs/ARCH_DETAILS.md §十`。
 
@@ -551,7 +551,7 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
                (ModuleDiscovery)   (插件实现)
 ```
 
-### ~~A.3 符号去重：import 与用户定义同名冲突~~ ✅ **已解决（2026-05-02）**
+### A.3 符号去重：import 与用户定义同名冲突（已解决，2026-05-02）
 
 `Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器阻止了插件模块的预注入——未 `import` 时访问插件符号会触发正常的 `SEM_001 Unknown variable` 报错。`scheduler.py` 中的所有 `[临时方案]` 注释已全部清除；新增 `SEM_009 SEM_IMPORT_CONFLICT` 诊断码，当 `import X` 与用户定义的同名符号冲突时，编译器发出 WARNING 而非静默跳过。详见 `docs/COMPLETED.md`。
 

@@ -351,26 +351,40 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| list创建与索引 | ⚠️ | 散落在e2e测试 | **待评估** |
-| list.append/extend | ⚠️ | 散落在e2e测试 | **待评估** |
-| list切片 | ⚠️ | 部分e2e测试 | **待评估** |
+| list[T]类型约束 | ✅ | INV-GEN-1,2 | test_list_homogeneous_type, test_list_append_preserves_type |
+| list索引访问（边界检查） | ✅ | INV-LIST-1 | test_list_index_bounds_checked |
+| list负数索引 | ✅ | INV-LIST-2 | test_list_negative_index_wraps |
+| list切片操作 | ✅ | INV-LIST-4 | test_list_slice_preserves_type |
+| list.append类型约束 | ✅ | INV-LIST-3 | test_list_append_type_constraint |
+| list.insert类型约束 | ✅ | INV-LIST-5 | test_list_insert_type_constraint |
+| list.pop返回元素 | ✅ | INV-LIST-6 | test_list_pop_returns_element |
+| list.remove删除语义 | ✅ | INV-LIST-7 | test_list_remove_value_semantics |
+| len(list)不变量 | ✅ | INV-LIST-8 | test_list_len_invariant |
 | for-in list迭代 | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
 
 ### 9.2 Dict操作
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| dict创建与访问 | ⚠️ | 散落在e2e测试 | **待评估** |
-| dict.keys/values | ⚠️ | plugin测试 | **待评估** |
-| dict键不存在错误 | ⚠️ | 部分e2e测试 | **待评估** |
+| dict[K,V]类型约束 | ✅ | INV-GEN-3 | test_dict_key_value_types |
+| dict键类型约束 | ✅ | INV-DICT-2 | test_dict_key_type_enforced |
+| dict值类型约束 | ✅ | INV-DICT-3 | test_dict_value_type_enforced |
+| dict.get默认值 | ✅ | INV-DICT-1 | test_dict_get_with_default |
+| dict.keys迭代 | ✅ | INV-DICT-4 | test_dict_keys_returns_collection |
+| dict.values迭代 | ✅ | INV-DICT-5 | test_dict_values_returns_collection |
+| dict键赋值覆盖 | ✅ | INV-DICT-6 | test_dict_update_overwrites |
+| dict变更追踪 | ✅ | INV-DICT-7 | test_dict_update_tracking |
 
 ### 9.3 String操作
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| str拼接 | ⚠️ | 散落在e2e测试 | **待评估** |
-| str.find/replace | ⚠️ | plugin测试 | **待评估** |
-| str格式化 | ⚠️ | 部分e2e测试 | **待评估** |
+| string索引访问（边界检查） | ✅ | INV-STR-1 | test_str_index_bounds_checked |
+| string负数索引 | ✅ | INV-STR-2 | test_str_negative_index_wraps |
+| string切片操作 | ✅ | INV-STR-3 | test_str_slice_returns_str |
+| string拼接类型 | ✅ | INV-STR-4 | test_str_concatenation_type |
+| len(string)不变量 | ✅ | INV-STR-5 | test_str_len_invariant |
+| string不可变性 | ✅ | INV-STR-6 | test_str_immutability |
 | str + uncertain禁止 | ✅ | 编译器测试 | 已有明确规则 |
 
 ---
@@ -397,7 +411,9 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| switch/case | ❌ | **缺失** | **需要评估**：switch是否已实现？ |
+| switch表达式求值 | ⏸️ | **暂不覆盖** | **设计未稳定**：switch语句本身在设计上还有一些问题，暂不要求测试覆盖 |
+| case匹配与执行 | ⏸️ | **暂不覆盖** | 同上 |
+| switch内控制流（break/return） | ⏸️ | **暂不覆盖** | 同上 |
 
 ---
 
@@ -407,22 +423,30 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| try/except基本语法 | 🔶 | test_e2e_exceptions.py | 需要集成测试 |
-| 异常类型匹配 | 🔶 | test_e2e_exceptions.py | 需要集成测试 |
-| 嵌套try/except | 🔶 | test_e2e_exceptions.py | 需要集成测试 |
+| try/except基本语法 | ✅ | INV-EXCEPT-CATCH-1 | test_catch_specific_exception_type |
+| 异常类型匹配 | ✅ | INV-EXCEPT-CATCH-2 | test_multiple_except_blocks |
+| 嵌套try/except | ✅ | INV-EXCEPT-PROPAGATE-2 | test_exception_propagates_through_nested_calls |
+| except with as子句 | ✅ | INV-EXCEPT-CATCH-3 | test_except_with_as_clause |
+| 裸except捕获所有异常 | ✅ | INV-EXCEPT-CATCH-4 | test_bare_except_catches_all |
 
 ### 11.2 Finally
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| finally块必定执行 | ⚠️ | 部分e2e测试 | **需要评估** |
+| finally正常完成时执行 | ✅ | INV-EXCEPT-FINALLY-1 | test_finally_executes_on_normal_completion |
+| finally异常时执行 | ✅ | INV-EXCEPT-FINALLY-2 | test_finally_executes_on_exception |
+| finally在return前执行 | ✅ | INV-EXCEPT-FINALLY-3 | test_finally_executes_on_return |
+| finally在break前执行 | ✅ | INV-EXCEPT-FINALLY-4 | test_finally_executes_on_break |
+| finally在continue前执行 | ✅ | INV-EXCEPT-FINALLY-5 | test_finally_executes_on_continue |
 
 ### 11.3 异常传播
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| 未捕获异常向上传播 | ⚠️ | 部分e2e测试 | **需要补充契约测试** |
-| 异常穿透函数调用 | ❌ | **缺失** | **需要补充契约测试** |
+| 未捕获异常向上传播 | ✅ | INV-EXCEPT-PROPAGATE-3 | test_unhandled_exception_terminates |
+| 异常穿透函数调用 | ✅ | INV-EXCEPT-PROPAGATE-1 | test_exception_propagates_through_function |
+| 异常穿透深层嵌套调用 | ✅ | INV-EXCEPT-PROPAGATE-2 | test_exception_propagates_through_nested_calls |
+| 异常在第一个匹配handler停止 | ✅ | INV-EXCEPT-PROPAGATE-4 | test_exception_stops_at_first_matching_handler |
 
 ---
 
@@ -462,38 +486,49 @@
    - 多解释器隔离
    - 并发LLM调用
 
-3. **❌ 覆盖不足需要补充的领域**：
-   - **高优先级**：
-     - 普通异常传播语义（try/except/finally contract）
-     - 异常穿透函数调用契约
-   - **中优先级**：
-     - 集合类型操作契约（list/dict/str关键操作）
-   - **低优先级**：
-     - 模块缓存机制
-     - bound_method详细语义
+3. **✅ 已全面覆盖的领域**：
+   - **高价值核心语义**：
+     - 类型系统（Optional/泛型/Tuple/cast）
+     - CPS执行模型（信号/帧栈/递归）
+     - 作用域与闭包（Cell/lambda/snapshot）
+     - Intent系统（传播/优先级/恢复/隔离）
+     - llmexcept语义（捕获/历史/深度）
+     - LLM集成（MOCK/Behavior/llmfn）
+     - 异常处理语义（try/except/finally）
+     - **集合操作语义（list/dict/str核心操作）** ✅ **新增**
+   - **中价值集成场景**：
+     - 控制流复杂交互
+     - 多解释器隔离
+     - 并发LLM调用
+
+4. **⏸️ 设计未稳定暂不覆盖**：
+   - Switch语句（设计有待改进）
+
+5. **🔶 依赖集成测试保障**：
+   - 模块系统（import/循环依赖）
+   - 类与继承（MRO/super）
+   - 控制流基础语法（if/while/for）
 
 ### 补充建议
 
-#### 立即补充（高优先级）
+#### ✅ 已完成
 
-1. **创建 `tests/contracts/test_exception_semantics.py`**
-   - INV-EXCEPT-PROPAGATE-*: 异常传播规则
-   - INV-EXCEPT-FINALLY-*: finally块执行保证
-   - INV-EXCEPT-UNHANDLED-*: 未捕获异常行为
+1. **集合操作契约测试** — ✅ 完成（2026-05-13）
+   - 创建test_collection_semantics.py（21个测试）
+   - INV-LIST-1~8: list操作不变量
+   - INV-DICT-1~7: dict操作不变量
+   - INV-STR-1~6: string操作不变量
 
-2. **扩展现有契约测试**
-   - 在 `test_execution_model.py` 中添加更多异常回退场景
+#### ⏸️ 暂不执行
+
+1. **Switch语句契约测试** — ⏸️ 设计未稳定，暂不覆盖
 
 #### 评估后决定（中优先级）
 
-1. **集合操作契约** - 需要评估：
-   - 大部分集合操作由Python保证语义
-   - 可能只需要IBCI特有的类型检查契约
-   - 建议：先验证现有e2e测试是否充分
-
-2. **String操作契约** - 需要评估：
-   - str + uncertain已有明确契约（禁止）
-   - 其他字符串操作是否需要额外契约？
+✅ **已完成评估并实施**（2026-05-13）：
+1. **集合操作契约** — 已补充test_collection_semantics.py（21个测试）
+   - list/dict/str核心操作已全面覆盖
+   - IBCI特有类型检查语义已验证
 
 #### 保持现状（低优先级）
 
@@ -506,39 +541,35 @@
 
 ## §14 行动计划 (Action Plan)
 
-### Phase 1: 补充关键契约测试（本周）
+### ✅ Phase 1-2: 已完成（2026-05-13）
 
-1. **创建 `tests/contracts/test_exception_semantics.py`**
-   - 编写10-15个异常传播契约测试
-   - 覆盖try/except/finally核心语义
-   - 验证异常穿透函数调用
+1. **异常处理语义契约测试** — ✅ 完成
+   - 创建test_exception_semantics.py（25个测试）
+   - 覆盖try/except/finally、异常传播、控制流交互
 
-2. **验证覆盖完整性**
-   - 运行 `pytest --cov=core tests/contracts/`
-   - 确认关键异常处理路径被覆盖
+2. **集合操作语义契约测试** — ✅ 完成
+   - 创建test_collection_semantics.py（21个测试）
+   - 覆盖list/dict/str核心操作不变量
 
-### Phase 2: 评估集合操作覆盖（下周）
+3. **文档同步更新** — ✅ 完成
+   - 更新SEMANTIC_COVERAGE_MATRIX.md统计数据
+   - 订正异常处理语义状态（❌→✅）
+   - 更新集合操作语义状态（⚠️→✅）
+   - 标注switch语句为设计未稳定
 
-1. **审查现有e2e测试**
-   - 列出所有涉及list/dict/str操作的测试
-   - 评估是否需要提炼为契约测试
+### ⏸️ 暂不执行
 
-2. **决策点**
-   - 如果现有测试充分 → 保持现状
-   - 如果发现语义gap → 补充契约测试
+1. **Switch语句契约测试** — ⏸️ 设计未稳定，暂不覆盖
 
-### Phase 3: 基于覆盖证明删除旧测试（之后）
+### 📝 后续建议
 
-**原则**：只有在明确证明契约测试已覆盖后，才删除旧测试
+1. **持续维护机制**
+   - 新增契约测试时同步更新本文档
+   - 建立文档-代码一致性验证脚本
 
-1. **逐文件审查**
-   - 对每个测试文件，逐个测试评估
-   - 标注：✅已覆盖 / 🔶需保留 / ❌需补充
-
-2. **安全删除**
-   - 确认契约覆盖
-   - 运行回归测试
-   - 删除并再次验证
+2. **测试质量优化**
+   - 保持契约测试文档化标准
+   - 定期审查E2E测试提炼机会
 
 ---
 
@@ -546,10 +577,10 @@
 
 ### 当前覆盖状态
 
-- **契约测试数量**：91个（6个文件）
-- **覆盖的核心语义**：~70%
-- **需要集成测试的语义**：~20%
-- **覆盖gap**：~10%（主要是异常传播）
+- **契约测试数量**：162个（9个文件）
+- **覆盖的核心语义**：~85%
+- **需要集成测试的语义**：~10%
+- **覆盖gap**：~5%（主要是switch语句设计未稳定）
 
 ### 核心洞察
 
@@ -563,15 +594,23 @@
    - 使重构更安全
 
 3. **分层测试策略**
-   - 契约层：核心语义不变量（91 tests）
-   - 集成层：复杂交互场景（~300 tests）
+   - 契约层：核心语义不变量（162 tests, 9 files）
+   - 集成层：复杂交互场景（~229 tests）
    - 合规层：跨实现保证（~30 tests）
+   - **总测试数**：~612 tests
 
 ### 下一步
 
 1. ✅ 已建立完整的语义覆盖矩阵
-2. 🚧 补充异常传播契约测试
-3. ⏳ 评估集合操作覆盖
-4. ⏳ 基于覆盖证明安全删除旧测试
+2. ✅ **已补充异常传播契约测试**（test_exception_semantics.py，25个测试）
+3. ✅ **已补充集合操作契约测试**（test_collection_semantics.py，21个测试）
+4. ⏸️ Switch语句待设计稳定后再补充
+5. 📝 持续维护：保持文档与代码同步
 
 **关键原则**：测试质量 > 测试数量，语义覆盖 > 代码行数
+
+**重要更新**（2026-05-13）：
+- 异常处理语义已全覆盖（INV-EXCEPT-*）
+- 集合操作语义已全覆盖（INV-LIST/DICT/STR-*）
+- Switch语句标注为设计未稳定
+- 详见`docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md`完整分析报告

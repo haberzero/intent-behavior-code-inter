@@ -405,3 +405,23 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 ### ~~16.6 泛型实例赋值兼容性规则不完整~~ ✅ 已解决（G3 / axiom covariance）
 
 `list[int]` 与 `list` 的赋值兼容性通过 `ListAxiom.is_compatible("list")` 实现（`is_compatible` 返回 True）。`list[int] x; list y = x` 不再触发 SEM_003。详见 `tests/compiler/test_g3_generics.py::TestG3Covariance`。
+
+---
+
+## 十七、Switch 语句设计未稳定
+
+**当前状态**：`switch`/`case` 语法的 AST 节点已实现（`core/kernel/ast.py:217 class IbSwitch`），但语义设计存在待改进问题。
+
+**已知问题**：
+- case 匹配语义不完整（值比较、类型匹配、模式匹配的边界不清晰）
+- default 语句的兜底行为需要明确定义
+- switch 内控制流（break/continue/return）与其他控制流的一致性待验证
+- 与 if/elif/else 的语义差异与使用场景未充分区分
+
+**当前建议**：暂不在生产代码中使用 `switch`/`case` 语句，优先使用 `if`/`elif`/`else` 实现条件分支逻辑。
+
+**测试覆盖**：暂无契约测试（INV-SWITCH-*），待语义设计稳定后补充。详见 `docs/SEMANTIC_COVERAGE_MATRIX.md §10.3`。
+
+---
+
+*最后更新：2026-05-13（添加 Switch 语句设计未稳定说明）*

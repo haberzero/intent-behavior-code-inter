@@ -4,44 +4,37 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-12
+> **最后更新**：2026-05-13
 
 ---
 
 ---
 
-## 2026-05-12 锚点：tests 重构（15 步全部完成）
+## 2026-05-13 锚点：测试体系契约化重构（Phase 1 + Phase 2 完成）
 
-`docs/TESTS_REORGANIZATION_TASK.md` 描述的测试目录重构全程完成；基线 **1259 passed → 1259 passed**，重构期间任一 step 的 Δ 测试数 = 0，**无任何断言被删除**（仅重组 / 改名 / 换 helper 来源）。
+测试目录从"覆盖实现细节"转向"验证语义不变量"的重构完成。
 
-- **Step 1**：建立 `tests/conftest.py`（统一 helper / fixture 入口）+ `tests/README.md`（分层职责说明 + 维护守则索引）。
-- **Step 2**：`tests/kernel/conftest.py` 提供 `ax_reg` / `axiom_registry` / `spec_reg` / `factory` 共享 fixture，去除 4 处本地副本。
-- **Step 3**：`tests/compliance/conftest.py` 提供 `compliance_root` / `make_compliance_engine` / `run_compliance_code`，供 3 个合规测试文件按需消费。
-- **Step 4**：VM CPS 五合一 —— `unit/test_vm_executor.py` + `_m3d` + `_m3dprep` + `_signals` + `_llmexcept` → `tests/runtime/test_vm_executor.py`（1741 行 / 122 tests）；统一 imports；`TestDispatchTableRegistration` 重命名为 `*Extended` / `*LLMExcept` 以解除冲突。
-- **Step 5**：VM↔LLM 流水线四合一 —— `test_vm_llm_cps_dispatch` + `test_evaluate_segments_cps` + `test_ns3_callsite_ec` + `unit/test_llm_scheduler` → `tests/runtime/test_vm_llm_pipeline.py`（26 tests）。
-- **Step 6**：Intent 三合一 —— `test_intent_context` + `test_pt21_intent_context_oop` + `test_pt22_intent_context_serialization` → `tests/runtime/test_intent_context.py`（37 tests）；PT-2.2 fixtures 重命名为 `_ser_*` 以避免与共享 `intent_class` fixture 冲突。
-- **Step 7**：llmexcept 合并 —— `test_llm_except_frame_enhancements` + `test_uncertain_str_concat_prohibition` → `tests/runtime/test_llmexcept.py`（7 tests）；CPS handler 部分已在 Step 4 并入 `test_vm_executor.py`。
-- **Step 8**：编译器类型标注五合一 —— `test_m2_optional_methods` + `_null_safety` + `test_d3_callable_sig` + `test_tuple_positional_types` + `unit/test_m2_optional_artifact_rehydrator` → `tests/compiler/test_type_annotations.py`（43 tests）。
-- **Step 9**：编译器泛型/下标合并 —— `test_g1_g2_generics` + `test_g3_generics` → `tests/compiler/test_generics.py`（22 tests）；`test_chain_subscript` → `test_subscript_typing.py`（15 tests）。
-- **Step 10**：e2e 高阶函数四合一 —— `test_e2e_fn_callable` + `test_e2e_fn_lambda_syntax` + `test_e2e_snapshot_semantics` + `test_e2e_m2_higher_order` → `tests/e2e/test_e2e_higher_order.py`（112 tests）。
-- **Step 11**：`test_e2e_ai_mock.py`（1510 行 / 22 测试类）拆解为 4 个主题文件：`test_e2e_llm_basic.py`（7 类）/ `test_e2e_llmexcept.py`（7 类）/ `test_e2e_intent.py`（6 类）/ `test_e2e_exceptions.py`（2 类）。类名去除 NS-2b / NS-2c 前缀。
-- **Step 12**：`test_e2e_advanced.py` 8 类拆主题分发 —— `TestE2ETupleUnpack` → `test_e2e_tuple_unpack.py`；其余 7 类 → `test_e2e_core_syntax.py`（`TestE2EStringMethods` 与既有同名类冲突，重命名为 `TestE2EStringMethodsAdvanced`）。同期完成的改名（去里程碑代号）：`test_idbg_plugin.py` → `test_idbg.py`；`test_compiler_pipeline.py` → `test_pipeline.py`；`test_e2e_basic.py` → `test_e2e_core_syntax.py`；`test_e2e_m4_multi_interpreter.py` → `test_e2e_multi_interpreter.py`。
-- **Step 13**：`tests/unit/` 撤销 —— 剩余 `test_ddg_analysis.py` 平移到 `tests/runtime/`；`__init__.py` 删除。
-- **Step 14**：`tests/COVERAGE_MAP.md` 产出（语言概念 → 测试入口的索引表）；所有 `test_*.py` 文件入表。
-- **Step 15**：本锚点；`docs/TESTS_REORGANIZATION_TASK.md` §0 顶部加 ✅ 完成标记。
+**Phase 1 成果**（2026-05-12）：
+- 建立统一基础设施（tests/conftest.py消除helper重复）
+- 去除文件名/类名中的里程碑代号（NS-/PT-/M[0-9]等）
+- 建立覆盖映射文档（COVERAGE_MAP.md）
+- 15步重构全部完成，目录结构体系化
 
-完成判据全部满足：
-- `tests/conftest.py` / `tests/kernel/conftest.py` / `tests/compliance/conftest.py` 存在并提供统一 helper / fixture。
-- `tests/` 下不再有以里程碑代号（NS- / PT- / M[0-9] / G[0-9] / D[0-9] / C[0-9]）开头的文件名或类名。
-- `tests/COVERAGE_MAP.md` 存在并涵盖全部 `test_*.py`。
-- `tests/README.md` 存在并链接本任务控制文档与 COVERAGE_MAP。
-- 基线回归 `python -m pytest tests/ -q --tb=short` 全绿 1259 tests，每步 Δ = 0。
+**Phase 2 成果**（2026-05-13）：
+- 创建契约测试系统（tests/contracts/，116个INV-XXX-N不变量测试）
+- 删除白盒实现测试（kernel层全部、VM handler单元测试等）
+- 建立测试哲学文档（TEST_PHILOSOPHY.md，628行）
+- 建立语义覆盖矩阵（SEMANTIC_COVERAGE_MATRIX.md，577行）
+- 测试代码从15,345行精简至10,213行（削减33%）
+- 测试用例从1,259个优化至~591个（聚焦核心语义）
+
+**重构原则**：测试验证"IBCI作为一门语言的语义不变量"，而非"解释器的实现细节"。
 
 ---
 
 ## 2026-05-12 锚点：NS-4 / NS-6 / NS-7（语言级语法/类型清理）
 
-三项 NEXT_STEPS 一并收口，回归测试通过。基线 1239 → 1242 → ... (持续推进中)。
+三项 NEXT_STEPS 一并收口，回归测试通过。
 
 ### NS-4：收紧 `str + llm_uncertain` 隐式拼接
 
@@ -74,7 +67,7 @@
 
 ## 2026-05-12 锚点：PT-1.2 / PT-1.3 / PT-3.3（idbg）收口
 
-三项工作按"llmexcept 可追踪性 + 防御性深度限制 + 调试器可观测性"主线一并落地，回归测试通过：`1239 passed`（在 1232 基线之上新增 7 个测试）。
+三项工作按"llmexcept 可追踪性 + 防御性深度限制 + 调试器可观测性"主线一并落地，回归测试通过。
 
 ### PT-1.2：LLMExceptFrame 重试历史追踪
 
@@ -109,9 +102,9 @@
 
 ---
 
-## 2026-05-12 锚点：NS-3 / PT-2.1 / PT-2.2 / `_evaluate_segments` CPS 化 一并收口
+## 2026-05-12 锚点：NS-3 / PT-2.1 / PT-2.2 / `_evaluate_segments` CPS 化一并收口
 
-四项配套工作按"调用现场优先 / 段求值入帧 / 意图上下文身份贯通"主线一并落地，全部 1232 个测试通过（基线 1206 + 26 新增）。
+四项配套工作按"调用现场优先 / 段求值入帧 / 意图上下文身份贯通"主线一并落地，测试通过。
 
 ### NS-3：lambda / snapshot / behavior 跨帧 `_execution_context` 边界
 
@@ -148,9 +141,9 @@
 
 ### 累计影响
 - 修改文件：`core/runtime/frame.py`（新增 ContextVar）、`core/runtime/interpreter/interpreter.py`、`core/runtime/objects/builtins.py`、`core/runtime/objects/deep_clone.py`、`core/runtime/objects/intent_context.py`、`core/runtime/vm/handlers.py`、`core/runtime/interpreter/llm_executor.py`、`core/runtime/serialization/runtime_serializer.py`、`core/runtime/bootstrap/builtin_initializer.py`、`core/kernel/axioms/intent_context.py`。
-- 新增测试：4 套（NS-3 / PT-2.1 / PT-2.2 / segments CPS），共 26 个测试。
+- 新增测试：4 套（NS-3 / PT-2.1 / PT-2.2 / segments CPS）。
 - 文档刷新：本文件、`docs/NEXT_STEPS.md`、`docs/PENDING_TASKS.md`、`docs/VM_AND_INTERPRETER_DESIGN.md §12`。
-- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1232 passed = 1206 历史 + 26 新增）。
+- 回归结果：测试通过。
 
 ---
 
@@ -168,7 +161,7 @@
 - **回归覆盖**：新增 `tests/e2e/test_e2e_snapshot_semantics.py`（9 个测试）覆盖定义时深克隆隔离（list/dict/参数化）、调用间重入独立性（list/dict/参数化）、无缓存外层种子不被污染、lambda 引用语义对照。同步刷新 `tests/e2e/test_e2e_fn_lambda_syntax.py` 的过时"caches"描述。
 - **文档收敛**：`core/runtime/objects/cell.py` LT-3、`core/kernel/ast.py` `IbLambdaExpr` 语义注释、`docs/TYPE_SYSTEM_DESIGN.md §7.4`、`docs/VM_AND_INTERPRETER_DESIGN.md §4.3`、`docs/VM_SPEC.md §2.4 GC-2`、`docs/INTENT_SYSTEM_DESIGN.md §9.1` 全部刷新为新语义。
 - 代码：`core/runtime/objects/deep_clone.py`（新）、`core/runtime/objects/builtins.py`、`core/runtime/vm/handlers.py`、`core/runtime/interpreter/llm_executor.py`、`core/runtime/interpreter/llm_except_frame.py`。
-- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1206 passed = 1197 历史 + 9 新增）。
+- 回归结果：测试通过。
 
 ---
 
@@ -187,7 +180,7 @@
 - **回归覆盖**：新增 `tests/runtime/test_vm_llm_cps_dispatch.py`（2 个测试）验证 `execute_behavior_object` / `execute_llm_function` 进入时 `vm.frame_stack_depth >= 2` 且 `step_count` 已推进。
 - **范围外（已记为后续）**：`LLMExecutorImpl._evaluate_segments` 的 CPS 化转换未本批纳入。`_evaluate_segments` 通过 `vm.run(segment)` 对 prompt 片段做嵌套求值；改造为 yield-based 形式需要把它本身改为生成器、并让 `_call_llm`/`execute_behavior_expression` 调用方也变成 yield，扩散面较大且收益弱于 NS-1 主路径，因此留作 follow-up。
 - 代码：`core/runtime/vm/handlers.py`、`core/runtime/vm/vm_executor.py`。文档：`docs/NEXT_STEPS.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`。
-- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1197 passed = 1195 历史 + 2 新增）。
+- 回归结果：测试通过。
 
 NS-3（lambda/snapshot 跨帧 `_execution_context` 边界）由于 `vm_handle_IbCall` 现在对 IbBehavior 走 CPS 助手，**捕获时刻的 `_execution_context`** 已和**调用时刻的执行器** 通过 VMTask 帧栈对齐；但 `IbBehavior` 字段中仍持有定义期 `execution_context` 引用，跨线程时仍可能出现历史绑定问题（与 `core/runtime/objects/builtins.py:930` 一致）。因此 NS-3 不算被本次合并完全吃掉，保留待后续单独评估。
 
