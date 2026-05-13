@@ -60,10 +60,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
-    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
+    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None, use_semantic_v2: bool = False):
         self.registry = KernelRegistry()
         # STAGE 1 & 2 handled inside initialize_builtin_classes
         self._kernel_token = initialize_builtin_classes(self.registry)
+
+        # semantic_v2 configuration
+        self.use_semantic_v2 = use_semantic_v2
 
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.issue_tracker = IssueTracker()
@@ -117,7 +120,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._plugins_discovered = False
 
         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
-        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
+        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry(), use_semantic_v2=self.use_semantic_v2)
         
         # 初始化运行时调度器
         self.rt_scheduler = RuntimeSchedulerImpl(None) # 此时 ServiceContext 尚未就绪，将在后续注入
