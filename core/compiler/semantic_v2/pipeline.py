@@ -123,6 +123,7 @@ def create_semantic_pipeline() -> SemanticPipeline:
     from .passes.type_checking_pass import TypeCheckingPass
     from .passes.binding_analysis_pass import BindingAnalysisPass
     from .passes.behavior_dependency_pass import BehaviorDependencyPass
+    from .passes.integrity_check_pass import IntegrityCheckPass
 
     passes = [
         SymbolCollectionPass(),
@@ -130,8 +131,7 @@ def create_semantic_pipeline() -> SemanticPipeline:
         TypeCheckingPass(),
         BindingAnalysisPass(),
         BehaviorDependencyPass(),
-        # TODO: 添加最后一个 Pass
-        # IntegrityCheckPass(),
+        IntegrityCheckPass(),
     ]
 
     return SemanticPipeline(passes)

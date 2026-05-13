@@ -6,6 +6,7 @@ from .symbol_resolution_pass import SymbolResolutionPass
 from .type_checking_pass import TypeCheckingPass
 from .binding_analysis_pass import BindingAnalysisPass
 from .behavior_dependency_pass import BehaviorDependencyPass
+from .integrity_check_pass import IntegrityCheckPass
 
 __all__ = [
     'BasePass',
@@ -13,5 +14,6 @@ __all__ = [
     'SymbolResolutionPass',
     'TypeCheckingPass',
     'BindingAnalysisPass',
-    'BehaviorDependencyPass'
+    'BehaviorDependencyPass',
+    'IntegrityCheckPass'
 ]
