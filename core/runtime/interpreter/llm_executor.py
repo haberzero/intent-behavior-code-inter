@@ -17,6 +17,7 @@ from core.runtime.exceptions import ThrownException
 from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
 from core.kernel.registry import KernelRegistry
+from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
 
 if TYPE_CHECKING:
     from core.runtime.objects.intent_context import IbIntentContext
@@ -50,9 +51,14 @@ class LLMExecutorImpl:
         self._thread_pool: Optional[_ThreadPoolExecutor] = None
         self._pending_futures: Dict[str, LLMFuture] = {}  # node_uid → LLMFuture
 
+        # LLM Result Parser (lazy initialized after hydration)
+        self._result_parser: Optional[LLMResultParser] = None
+
     def hydrate(self, service_context: ServiceContext):
         """ 水化依赖，由解释器在服务准备就绪后调用"""
         self._service_context = service_context
+        # Initialize the result parser after hydration
+        self._result_parser = LLMResultParser(self.registry, self.debugger)
 
     @property
     def service_context(self) -> ServiceContext:
@@ -364,118 +370,26 @@ class LLMExecutorImpl:
         return None
 
     def _parse_result(self, raw_res: str, type_name: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> LLMResult:
-        # 兼容 UID 格式的 type_name (来自序列化后的 AST 节点字段)
-        # 转换 'type_root.str' -> 'str', 'type_pkg.cls' -> 'pkg.cls'
-        if type_name and type_name.startswith("type_"):
-            type_name = type_name[5:]
-            if type_name.startswith("root."):
-                type_name = type_name[5:]
+        """
+        Parse LLM result using the chain of responsibility pattern.
 
-        meta_reg = self.registry.get_metadata_registry()
-        descriptor = None
-        if meta_reg:
-            descriptor = meta_reg.resolve(type_name)
-            # Bug #2 修复：当 type_name 含有泛型参数（如 "dict[any,any]"）时，
-            # SpecRegistry 中以基础名（如 "dict"）注册，resolve 会失败。
-            # 剥离泛型参数后重试，使 DictAxiom 等 Axiom 能够被正确找到。
-            if descriptor is None and type_name and '[' in type_name:
-                base_name = type_name.split('[')[0]
-                descriptor = meta_reg.resolve(base_name)
-            if descriptor:
-                from_prompt_cap = meta_reg.get_from_prompt_cap(descriptor)
-                if from_prompt_cap:
-                    success, result = from_prompt_cap.from_prompt(raw_res, descriptor)
-                    if success:
-                        return LLMResult.success_result(
-                            value=self.registry.box(result),
-                            raw_response=raw_res
-                        )
-                    else:
-                        return LLMResult.uncertain_result(
-                            raw_response=raw_res,
-                            retry_hint=result
-                        )
+        This method delegates to LLMResultParser which applies parsing strategies
+        in order: Axiom → VTable → Default.
 
-                parser = meta_reg.get_parser_cap(descriptor)
-                if parser:
-                    try:
-                        val = parser.parse_value(raw_res)
-                        return LLMResult.success_result(
-                            value=self.registry.box(val),
-                            raw_response=raw_res
-                        )
-                    except Exception as e:
-                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"Failed to parse LLM response via Axiom for type '{type_name}': {str(e)}")
-                        return LLMResult.uncertain_result(
-                            raw_response=raw_res,
-                            retry_hint=f"LLM 返回值类型转换失败：期望 {type_name}。详细: {str(e)}"
-                        )
+        Args:
+            raw_res: Raw LLM response string
+            type_name: Expected type name
+            node_uid: Node unique identifier
+            execution_context: Optional execution context
 
-        # Axiom 路径无匹配，尝试用户自定义类 vtable 的 __from_prompt__ 方法。
-        # 用户在 IBCI 类中定义 func __from_prompt__(str raw) -> (bool, any)，
-        # 由此实现自定义的 LLM 输出解析逻辑。
-        # 调用语义：类方法（以 IbClass 对象为 receiver，不需要 self 实例）。
-        #
-        # Design 2 改进：__from_prompt__ 返回值自动装箱
-        # - (true, <class_instance>) → 直接使用实例（原始行为）
-        # - (true, <basic_value>) → 自动构造类实例，将 basic_value 设为第一个字段
-        # - (false, <hint_string>) → 不确定性，进入 retry 路径
-        ib_class = self.registry.get_class(type_name) if type_name else None
-        if ib_class:
-            method = ib_class.lookup_method('__from_prompt__')
-            if method:
-                try:
-                    raw_arg = self.registry.box(raw_res)
-                    result_obj = method.call(ib_class, [raw_arg])
-                    # 约定返回值为 tuple (bool, any)：
-                    #   elements[0] 为成功标志（truthy/falsy），
-                    #   elements[1] 为解析后的值（成功时）或错误提示（失败时）
-                    if hasattr(result_obj, 'elements') and len(result_obj.elements) >= 2:
-                        success_val = result_obj.elements[0]
-                        parsed_val = result_obj.elements[1]
-                        success_native = success_val.to_native() if hasattr(success_val, 'to_native') else bool(success_val)
-                        if success_native:
-                            # Design 2：如果返回值不是目标类的实例，自动装箱
-                            # 判断 parsed_val 是否已经是目标类的实例
-                            is_instance_of_target = (
-                                hasattr(parsed_val, 'ib_class') and 
-                                parsed_val.ib_class is ib_class
-                            )
-                            if not is_instance_of_target:
-                                # 自动装箱：构造类实例，将 parsed_val 设为第一个字段
-                                # 如果类有 __init__ 接受一个参数，尝试调用
-                                try:
-                                    auto_instance = ib_class.instantiate([parsed_val], context=execution_context)
-                                    parsed_val = auto_instance
-                                except Exception:
-                                    # 如果构造失败（参数不匹配），尝试设为第一个字段
-                                    try:
-                                        auto_instance = ib_class.instantiate([], context=execution_context)
-                                        if ib_class.default_fields:
-                                            first_field = next(iter(ib_class.default_fields))
-                                            auto_instance.fields[first_field] = parsed_val
-                                        parsed_val = auto_instance
-                                    except Exception:
-                                        pass  # 保留原始 parsed_val
-                            
-                            return LLMResult.success_result(
-                                value=parsed_val,
-                                raw_response=raw_res
-                            )
-                        else:
-                            hint = parsed_val.to_native() if hasattr(parsed_val, 'to_native') else str(parsed_val)
-                            return LLMResult.uncertain_result(
-                                raw_response=raw_res,
-                                retry_hint=str(hint)
-                            )
-                except Exception as e:
-                    self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,
-                        f"vtable __from_prompt__ failed for '{type_name}': {e}")
+        Returns:
+            LLMResult with parsed value or uncertainty
+        """
+        if not self._result_parser:
+            # Fallback if parser not initialized (shouldn't happen after hydration)
+            self._result_parser = LLMResultParser(self.registry, self.debugger)
 
-        return LLMResult.success_result(
-            value=self.registry.box(raw_res),
-            raw_response=raw_res
-        )
+        return self._result_parser.parse_result(raw_res, type_name, node_uid, execution_context)
 
     # ---------------------------------------------------------------------------
     # LLMScheduler — dispatch_eager / resolve / 线程池管理
