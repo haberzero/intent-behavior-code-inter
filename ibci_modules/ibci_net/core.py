@@ -11,7 +11,14 @@ IBCI Net 网络请求插件实现。非侵入层插件，零内核依赖。
 - set_timeout/set_default_headers：会话级配置
 - set_bearer_token/set_basic_auth：身份认证配置
 """
+import base64
 from typing import Dict, Any, Optional, List
+
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
 
 
 class NetLib:
@@ -39,7 +46,6 @@ class NetLib:
 
     def set_basic_auth(self, username: str, password: str) -> None:
         """设置 Basic Auth 认证头。"""
-        import base64
         credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
         self._default_headers["Authorization"] = f"Basic {credentials}"
 
@@ -59,116 +65,107 @@ class NetLib:
 
     def get(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
         """发送 GET 请求，返回响应文本。"""
+        if not HAS_REQUESTS:
+            return f"[MOCK GET] {url}"
         try:
-            import requests
             resp = requests.get(url, headers=self._merge_headers(headers),
                                 timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except ImportError:
-            return f"[MOCK GET] {url}"
         except Exception as e:
             raise RuntimeError(f"Network GET failed: {e}")
 
     def get_json(self, url: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """发送 GET 请求，自动解析 JSON 响应为 dict。"""
+        if not HAS_REQUESTS:
+            return {"mock": "get_json", "url": url}
         try:
-            import requests
             resp = requests.get(url, headers=self._merge_headers(headers),
                                 timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.json()
-        except ImportError:
-            return {"mock": "get_json", "url": url}
         except Exception as e:
             raise RuntimeError(f"Network GET_JSON failed: {e}")
 
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> str:
         """发送 POST 请求（JSON body），返回响应文本。"""
+        if not HAS_REQUESTS:
+            return f"[MOCK POST] {url}"
         try:
-            import requests
             resp = requests.post(url, json=body, headers=self._merge_headers(headers),
                                  timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except ImportError:
-            return f"[MOCK POST] {url}"
         except Exception as e:
             raise RuntimeError(f"Network POST failed: {e}")
 
     def post_json(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """发送 POST 请求（JSON body），自动解析 JSON 响应为 dict。"""
+        if not HAS_REQUESTS:
+            return {"mock": "post_json", "url": url}
         try:
-            import requests
             resp = requests.post(url, json=body, headers=self._merge_headers(headers),
                                  timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.json()
-        except ImportError:
-            return {"mock": "post_json", "url": url}
         except Exception as e:
             raise RuntimeError(f"Network POST_JSON failed: {e}")
 
     def post_form(self, url: str, data: Dict[str, str], headers: Optional[Dict[str, str]] = None) -> str:
         """发送 POST 表单请求（application/x-www-form-urlencoded），返回响应文本。"""
+        if not HAS_REQUESTS:
+            return f"[MOCK POST_FORM] {url}"
         try:
-            import requests
             resp = requests.post(url, data=data, headers=self._merge_headers(headers),
                                  timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except ImportError:
-            return f"[MOCK POST_FORM] {url}"
         except Exception as e:
             raise RuntimeError(f"Network POST_FORM failed: {e}")
 
     def put(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> str:
         """发送 PUT 请求（JSON body），返回响应文本。"""
+        if not HAS_REQUESTS:
+            return f"[MOCK PUT] {url}"
         try:
-            import requests
             resp = requests.put(url, json=body, headers=self._merge_headers(headers),
                                 timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except ImportError:
-            return f"[MOCK PUT] {url}"
         except Exception as e:
             raise RuntimeError(f"Network PUT failed: {e}")
 
     def delete(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
         """发送 DELETE 请求，返回响应文本。"""
+        if not HAS_REQUESTS:
+            return f"[MOCK DELETE] {url}"
         try:
-            import requests
             resp = requests.delete(url, headers=self._merge_headers(headers),
                                    timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except ImportError:
-            return f"[MOCK DELETE] {url}"
         except Exception as e:
             raise RuntimeError(f"Network DELETE failed: {e}")
 
     def head(self, url: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """发送 HEAD 请求，返回响应头 dict。"""
+        if not HAS_REQUESTS:
+            return {"X-Mock": "head", "X-Url": url}
         try:
-            import requests
             resp = requests.head(url, headers=self._merge_headers(headers),
                                  timeout=self._timeout, verify=False)
             return dict(resp.headers)
-        except ImportError:
-            return {"X-Mock": "head", "X-Url": url}
         except Exception as e:
             raise RuntimeError(f"Network HEAD failed: {e}")
 
     def get_status_code(self, url: str) -> int:
         """发送 GET 请求，仅返回 HTTP 状态码。"""
+        if not HAS_REQUESTS:
+            return 200
         try:
-            import requests
             resp = requests.get(url, headers=self._merge_headers(),
                                 timeout=self._timeout, verify=False, allow_redirects=False)
             return resp.status_code
-        except ImportError:
-            return 200
         except Exception as e:
             raise RuntimeError(f"Network status check failed: {e}")
 

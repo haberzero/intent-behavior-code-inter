@@ -18,6 +18,8 @@ tests/compiler/test_type_annotations.py
 详见 docs/TESTS_REORGANIZATION_TASK.md Step 8。
 """
 import os
+from core.kernel.spec.registry import SpecFactory
+from core.kernel.spec.base import TypeKind
 import pytest
 
 from core.engine import IBCIEngine
@@ -500,9 +502,6 @@ print(a)
 class TestSpecFactoryCreateTuple:
     def test_create_tuple_with_positional_types(self):
         """factory.create_tuple(positional_element_type_names=[...]) 生成位置类型 spec。"""
-        from core.kernel.spec.registry import SpecFactory
-        from core.kernel.spec.base import TypeKind
-
         factory = SpecFactory()
         spec = factory.create_tuple(positional_element_type_names=["int", "str"])
         assert spec.kind == TypeKind.TUPLE.value
@@ -513,8 +512,6 @@ class TestSpecFactoryCreateTuple:
 
     def test_create_tuple_order_preserved_in_name(self):
         """位置元素的顺序必须体现在 spec.name 中（不要 sort）。"""
-        from core.kernel.spec.registry import SpecFactory
-
         factory = SpecFactory()
         s1 = factory.create_tuple(positional_element_type_names=["int", "str"])
         s2 = factory.create_tuple(positional_element_type_names=["str", "int"])
@@ -524,8 +521,6 @@ class TestSpecFactoryCreateTuple:
 
     def test_create_tuple_single_falls_back_to_element_type(self):
         """单元素时退回 element_type 单字段，不填 positional_element_types。"""
-        from core.kernel.spec.registry import SpecFactory
-
         factory = SpecFactory()
         spec = factory.create_tuple(element_type_name="int")
         assert spec.name == "tuple[int]"
