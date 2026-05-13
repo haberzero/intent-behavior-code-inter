@@ -3,11 +3,15 @@ Pass 5: Behavior Dependency Pass
 
 职责：分析 Behavior 表达式的 LLM 依赖关系
 输入：Context with all bindings
-输出：Context with dependency metadata
+输出：AST nodes with llm_deps and dispatch_eligible fields updated
+
+设计原则：
+- 依赖信息是程序结构的一部分，直接写入 AST 节点（遵循 V1 设计）
+- llm_deps 和 dispatch_eligible 是 AST 固有属性，会被序列化器持久化
+- 不使用 MetadataStore 存储这些信息（避免重复和同步问题）
 """
 
-from dataclasses import replace
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Set
 
 from core.kernel import ast
 
@@ -20,29 +24,27 @@ class BehaviorDependencyPass(BasePass):
     """行为依赖分析 Pass（Pass 5）
 
     分析 Behavior 表达式之间的依赖关系：
-    - 构建 LLM 依赖图
+    - 构建 LLM 依赖图（写入 node.llm_deps）
     - 检测循环依赖
-    - 标记是否可并行调度
+    - 标记是否可并行调度（写入 node.dispatch_eligible）
     """
 
     def __init__(self):
         super().__init__("BehaviorDependencyPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行行为依赖分析 Pass"""
+        """运行行为依赖分析 Pass
+
+        分析结果直接写入 AST 节点的 llm_deps 和 dispatch_eligible 字段。
+        这遵循 V1 的正确设计：依赖信息是程序结构的一部分，应该持久化到 AST。
+        """
         analyzer = BehaviorDependencyAnalyzer(context)
         analyzer.analyze()
 
-        # 更新元数据
-        new_metadata = context.metadata
-        for node_uid, deps in analyzer.behavior_dependencies.items():
-            if 'behavior_dependencies' not in new_metadata.behavior_metadata:
-                new_metadata.behavior_metadata['behavior_dependencies'] = {}
-            new_metadata.behavior_metadata['behavior_dependencies'][node_uid] = deps
+        # 分析器已经将结果写入 AST 节点
+        # 无需修改 metadata，因为 llm_deps 和 dispatch_eligible 是 AST 固有属性
 
-        new_context = replace(context, metadata=new_metadata)
-
-        return PassResult.ok(new_context, diagnostics=analyzer.diagnostics)
+        return PassResult.ok(context, diagnostics=analyzer.diagnostics)
 
 
 class BehaviorDependencyAnalyzer:
@@ -51,19 +53,16 @@ class BehaviorDependencyAnalyzer:
     分析每个 IbBehaviorExpr 的依赖：
     - 扫描 segments 中的插值变量
     - 追溯变量定义来源
-    - 如果来源是另一个 IbBehaviorExpr，记录依赖
+    - 如果来源是另一个 IbBehaviorExpr，记录依赖（写入 node.llm_deps）
     """
 
     def __init__(self, context: SemanticContext):
         self.context = context
         self.diagnostics: List[Diagnostic] = []
 
-        # 行为依赖：node_uid -> {'deps': [uid], 'dispatch_eligible': bool}
-        self.behavior_dependencies: Dict[str, Dict[str, Any]] = {}
-
-        # 变量到行为表达式的映射（用于追溯）
-        # symbol_name -> behavior_node_uid
-        self.symbol_to_behavior: Dict[str, str] = {}
+        # 变量到行为表达式节点的映射（用于追溯）
+        # symbol_name -> IbBehaviorExpr node
+        self.symbol_to_behavior: dict[str, ast.IbBehaviorExpr] = {}
 
     def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
         """记录错误诊断"""
@@ -78,23 +77,21 @@ class BehaviorDependencyAnalyzer:
     def analyze(self):
         """分析行为依赖"""
         self._analyze_node(self.context.ast)
-        # 第二轮：检测循环依赖
-        self._detect_cycles()
+        # 第二轮：检测循环依赖并标记 dispatch_eligible
+        self._detect_cycles(self.context.ast)
 
     def _analyze_node(self, node: ast.IbASTNode):
-        """递归分析节点"""
+        """递归分析节点，建立依赖关系"""
         if isinstance(node, ast.IbAssign):
             # 先分析右侧
             self._analyze_node(node.value)
-            # 注册赋值
-            if isinstance(node.value, ast.IbBehaviorExpr):
-                behavior_uid = getattr(node.value, 'uid', None)
-                if behavior_uid:
-                    # 记录变量到行为表达式的映射
-                    for target in node.targets:
-                        var_name = self._get_var_name(target)
-                        if var_name:
-                            self.symbol_to_behavior[var_name] = behavior_uid
+            # 注册赋值：如果右侧是 Behavior 表达式，记录映射
+            if isinstance(node, ast.IbBehaviorExpr):
+                # 记录变量到行为表达式的映射
+                for target in node.targets:
+                    var_name = self._get_var_name(target)
+                    if var_name:
+                        self.symbol_to_behavior[var_name] = node.value
 
         elif isinstance(node, ast.IbBehaviorExpr):
             self._analyze_behavior_expr(node)
@@ -111,13 +108,10 @@ class BehaviorDependencyAnalyzer:
                     self._analyze_node(child)
 
     def _analyze_behavior_expr(self, node: ast.IbBehaviorExpr):
-        """分析单个 Behavior 表达式的依赖"""
-        node_uid = getattr(node, 'uid', None)
-        if not node_uid:
-            return
-
-        # 收集依赖的行为表达式
-        deps = set()
+        """分析单个 Behavior 表达式的依赖，直接写入 node.llm_deps"""
+        # 收集依赖的行为表达式节点
+        deps: List[ast.IbBehaviorExpr] = []
+        seen: Set[int] = set()  # 使用 id() 去重
 
         # 扫描 segments 中的插值表达式
         for segment in node.segments:
@@ -127,14 +121,15 @@ class BehaviorDependencyAnalyzer:
                 for var_name in referenced_vars:
                     # 如果变量来自另一个行为表达式，记录依赖
                     if var_name in self.symbol_to_behavior:
-                        dep_uid = self.symbol_to_behavior[var_name]
-                        deps.add(dep_uid)
+                        dep_node = self.symbol_to_behavior[var_name]
+                        if id(dep_node) not in seen:
+                            deps.append(dep_node)
+                            seen.add(id(dep_node))
 
-        # 记录依赖
-        self.behavior_dependencies[node_uid] = {
-            'deps': list(deps),
-            'dispatch_eligible': True  # 默认可调度，后续检测循环时修改
-        }
+        # ✅ 直接写入 AST 节点（V1 的正确设计）
+        node.llm_deps = deps
+        # 默认可调度，循环检测时会修改
+        node.dispatch_eligible = True
 
     def _collect_referenced_vars(self, node: ast.IbASTNode) -> Set[str]:
         """收集节点中引用的所有变量"""
@@ -163,26 +158,46 @@ class BehaviorDependencyAnalyzer:
                 return target.target.id
         return None
 
-    def _detect_cycles(self):
+    def _detect_cycles(self, root: ast.IbASTNode):
         """检测循环依赖并标记不可并行调度"""
-        # 对每个行为表达式检测是否存在循环
-        for node_uid in self.behavior_dependencies:
-            if self._has_cycle(node_uid, set()):
-                self.behavior_dependencies[node_uid]['dispatch_eligible'] = False
+        # 遍历所有 Behavior 表达式节点
+        behavior_nodes = self._collect_behavior_nodes(root)
 
-    def _has_cycle(self, node_uid: str, visited: Set[str]) -> bool:
-        """检测从 node_uid 开始是否存在循环"""
-        if node_uid in visited:
+        for node in behavior_nodes:
+            if self._has_cycle(node, set()):
+                # ✅ 直接修改 AST 节点
+                node.dispatch_eligible = False
+
+    def _collect_behavior_nodes(self, node: ast.IbASTNode) -> List[ast.IbBehaviorExpr]:
+        """收集所有 Behavior 表达式节点"""
+        nodes = []
+
+        if isinstance(node, ast.IbBehaviorExpr):
+            nodes.append(node)
+
+        for attr in vars(node):
+            child = getattr(node, attr)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode):
+                        nodes.extend(self._collect_behavior_nodes(item))
+            elif isinstance(child, ast.IbASTNode):
+                nodes.extend(self._collect_behavior_nodes(child))
+
+        return nodes
+
+    def _has_cycle(self, node: ast.IbBehaviorExpr, visited: Set[int]) -> bool:
+        """检测从 node 开始是否存在循环（使用节点对象 id）"""
+        node_id = id(node)
+
+        if node_id in visited:
             return True
 
-        if node_uid not in self.behavior_dependencies:
-            return False
+        visited.add(node_id)
 
-        visited.add(node_uid)
-
-        deps = self.behavior_dependencies[node_uid]['deps']
-        for dep_uid in deps:
-            if self._has_cycle(dep_uid, visited.copy()):
+        # 检查所有依赖
+        for dep in node.llm_deps:
+            if self._has_cycle(dep, visited.copy()):
                 return True
 
         return False

@@ -4,6 +4,11 @@ Pass 6: Integrity Check Pass
 职责：完整性检查，验证所有节点都有必要的绑定
 输入：Context with all passes completed
 输出：Final diagnostics
+
+设计原则：
+- 只检查编译器生成的绑定（symbol_bindings, type_bindings）
+- 不检查 AST 固有属性（如 llm_deps, dispatch_eligible）
+- AST 固有属性由各 Pass 直接写入，不需要完整性验证
 """
 
 from typing import List, Set
@@ -22,6 +27,9 @@ class IntegrityCheckPass(BasePass):
     - 检查所有引用节点都有符号绑定
     - 检查所有表达式节点都有类型绑定
     - 检查符号表的完整性
+    
+    不检查：
+    - AST 固有属性（llm_deps, dispatch_eligible）- 这些由 Pass 5 直接写入
     """
 
     def __init__(self):
@@ -82,7 +90,7 @@ class IntegrityChecker:
         # 3. 检查类型绑定完整性
         self._check_type_bindings()
 
-        # 4. 检查元数据一致性
+        # 4. 检查元数据一致性（仅检查编译器生成的绑定）
         self._check_metadata_consistency()
 
     def _collect_nodes(self, node: ast.IbASTNode):
@@ -162,12 +170,13 @@ class IntegrityChecker:
             )
 
     def _check_metadata_consistency(self):
-        """检查元数据的一致性"""
+        """检查元数据的一致性（仅检查编译器生成的绑定）"""
         # 检查符号表与符号绑定的一致性
         self._check_symbol_table_consistency()
 
-        # 检查行为依赖的一致性
-        self._check_behavior_dependency_consistency()
+        # 注意：不检查 behavior 依赖的一致性
+        # 原因：llm_deps 和 dispatch_eligible 是 AST 固有属性，
+        # 由 Pass 5 直接写入 AST 节点，不需要验证一致性
 
     def _check_symbol_table_consistency(self):
         """检查符号表的一致性"""
@@ -175,20 +184,5 @@ class IntegrityChecker:
         for symbol_name, symbol in self.context.symbol_table.current.symbols.items():
             if hasattr(symbol, 'node_uid') and symbol.node_uid:
                 # 符号应该有对应的定义节点
-                if symbol.node_uid not in self.context.metadata.symbol_bindings.values():
-                    # 这是符号定义，不是引用，所以不会在 symbol_bindings 中
-                    pass
-
-    def _check_behavior_dependency_consistency(self):
-        """检查行为依赖的一致性"""
-        behavior_deps = self.context.metadata.behavior_metadata.get('behavior_dependencies', {})
-
-        for node_uid, dep_info in behavior_deps.items():
-            # 检查依赖的行为表达式是否存在
-            for dep_uid in dep_info.get('deps', []):
-                if dep_uid not in behavior_deps:
-                    self.warning(
-                        f"Behavior node {node_uid} depends on non-existent behavior {dep_uid}",
-                        node_uid=node_uid,
-                        code="INTEGRITY_003"
-                    )
+                # 注意：符号定义不在 symbol_bindings 中（那里存的是引用）
+                pass
