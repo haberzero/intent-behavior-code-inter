@@ -10,7 +10,7 @@ from dataclasses import replace
 from typing import Optional, List, Dict, Any
 
 from core.kernel import ast
-from core.kernel.symbols import Symbol, SymbolTable, SymbolKind
+from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
@@ -153,8 +153,25 @@ class SymbolResolver:
         # 进入函数作用域
         self.push_scope(func_scope)
         try:
-            # 处理参数（暂时简化，不创建符号）
+            # 处理参数 - 添加到函数作用域
             for arg in node.args:
+                # arg can be IbArg or IbTypeAnnotatedExpr(target=IbArg, annotation=...)
+                param_name = None
+                if isinstance(arg, ast.IbTypeAnnotatedExpr) and isinstance(arg.target, ast.IbArg):
+                    param_name = arg.target.arg
+                elif isinstance(arg, ast.IbArg):
+                    param_name = arg.arg
+
+                if param_name:
+                    # Define parameter as variable symbol in function scope
+                    param_sym = VariableSymbol(
+                        name=param_name,
+                        kind=SymbolKind.VARIABLE,
+                        spec=None  # Type will be resolved in type checking pass
+                    )
+                    func_scope.define(param_sym)
+
+                # Visit for type resolution
                 self.visit(arg)
 
             # 处理函数体
@@ -171,8 +188,25 @@ class SymbolResolver:
         # 进入函数作用域
         self.push_scope(func_scope)
         try:
-            # 处理参数
+            # 处理参数 - 添加到函数作用域
             for arg in node.args:
+                # arg can be IbArg or IbTypeAnnotatedExpr(target=IbArg, annotation=...)
+                param_name = None
+                if isinstance(arg, ast.IbTypeAnnotatedExpr) and isinstance(arg.target, ast.IbArg):
+                    param_name = arg.target.arg
+                elif isinstance(arg, ast.IbArg):
+                    param_name = arg.arg
+
+                if param_name:
+                    # Define parameter as variable symbol in function scope
+                    param_sym = VariableSymbol(
+                        name=param_name,
+                        kind=SymbolKind.VARIABLE,
+                        spec=None  # Type will be resolved in type checking pass
+                    )
+                    func_scope.define(param_sym)
+
+                # Visit for type resolution
                 self.visit(arg)
 
             # 处理函数体（segments）
@@ -287,8 +321,25 @@ class SymbolResolver:
 
         self.push_scope(lambda_scope)
         try:
-            # 处理参数
+            # 处理参数 - 添加到lambda作用域
             for arg in node.args:
+                # arg can be IbArg or IbTypeAnnotatedExpr(target=IbArg, annotation=...)
+                param_name = None
+                if isinstance(arg, ast.IbTypeAnnotatedExpr) and isinstance(arg.target, ast.IbArg):
+                    param_name = arg.target.arg
+                elif isinstance(arg, ast.IbArg):
+                    param_name = arg.arg
+
+                if param_name:
+                    # Define parameter as variable symbol in lambda scope
+                    param_sym = VariableSymbol(
+                        name=param_name,
+                        kind=SymbolKind.VARIABLE,
+                        spec=None  # Type will be resolved in type checking pass
+                    )
+                    lambda_scope.define(param_sym)
+
+                # Visit for type resolution
                 self.visit(arg)
 
             # 处理 body
