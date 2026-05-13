@@ -397,7 +397,9 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| switch/case | ❌ | **缺失** | **需要评估**：switch是否已实现？ |
+| switch表达式求值 | ❌ | **缺失** | **需要补充**：switch已实现（IbSwitch存在），需INV-SWITCH-*测试 |
+| case匹配与执行 | ❌ | **缺失** | **需要补充**：INV-SWITCH-*契约测试 |
+| switch内控制流（break/return） | ❌ | **缺失** | **需要补充**：INV-SWITCH-*契约测试 |
 
 ---
 
@@ -407,22 +409,30 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| try/except基本语法 | 🔶 | test_e2e_exceptions.py | 需要集成测试 |
-| 异常类型匹配 | 🔶 | test_e2e_exceptions.py | 需要集成测试 |
-| 嵌套try/except | 🔶 | test_e2e_exceptions.py | 需要集成测试 |
+| try/except基本语法 | ✅ | INV-EXCEPT-CATCH-1 | test_catch_specific_exception_type |
+| 异常类型匹配 | ✅ | INV-EXCEPT-CATCH-2 | test_multiple_except_blocks |
+| 嵌套try/except | ✅ | INV-EXCEPT-PROPAGATE-2 | test_exception_propagates_through_nested_calls |
+| except with as子句 | ✅ | INV-EXCEPT-CATCH-3 | test_except_with_as_clause |
+| 裸except捕获所有异常 | ✅ | INV-EXCEPT-CATCH-4 | test_bare_except_catches_all |
 
 ### 11.2 Finally
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| finally块必定执行 | ⚠️ | 部分e2e测试 | **需要评估** |
+| finally正常完成时执行 | ✅ | INV-EXCEPT-FINALLY-1 | test_finally_executes_on_normal_completion |
+| finally异常时执行 | ✅ | INV-EXCEPT-FINALLY-2 | test_finally_executes_on_exception |
+| finally在return前执行 | ✅ | INV-EXCEPT-FINALLY-3 | test_finally_executes_on_return |
+| finally在break前执行 | ✅ | INV-EXCEPT-FINALLY-4 | test_finally_executes_on_break |
+| finally在continue前执行 | ✅ | INV-EXCEPT-FINALLY-5 | test_finally_executes_on_continue |
 
 ### 11.3 异常传播
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| 未捕获异常向上传播 | ⚠️ | 部分e2e测试 | **需要补充契约测试** |
-| 异常穿透函数调用 | ❌ | **缺失** | **需要补充契约测试** |
+| 未捕获异常向上传播 | ✅ | INV-EXCEPT-PROPAGATE-3 | test_unhandled_exception_terminates |
+| 异常穿透函数调用 | ✅ | INV-EXCEPT-PROPAGATE-1 | test_exception_propagates_through_function |
+| 异常穿透深层嵌套调用 | ✅ | INV-EXCEPT-PROPAGATE-2 | test_exception_propagates_through_nested_calls |
+| 异常在第一个匹配handler停止 | ✅ | INV-EXCEPT-PROPAGATE-4 | test_exception_stops_at_first_matching_handler |
 
 ---
 
@@ -464,10 +474,9 @@
 
 3. **❌ 覆盖不足需要补充的领域**：
    - **高优先级**：
-     - 普通异常传播语义（try/except/finally contract）
-     - 异常穿透函数调用契约
+     - Switch语句契约测试（INV-SWITCH-*）
    - **中优先级**：
-     - 集合类型操作契约（list/dict/str关键操作）
+     - 集合类型操作契约（list/dict/str关键操作） — 需评估E2E测试是否充分
    - **低优先级**：
      - 模块缓存机制
      - bound_method详细语义
@@ -476,13 +485,12 @@
 
 #### 立即补充（高优先级）
 
-1. **创建 `tests/contracts/test_exception_semantics.py`**
-   - INV-EXCEPT-PROPAGATE-*: 异常传播规则
-   - INV-EXCEPT-FINALLY-*: finally块执行保证
-   - INV-EXCEPT-UNHANDLED-*: 未捕获异常行为
-
-2. **扩展现有契约测试**
-   - 在 `test_execution_model.py` 中添加更多异常回退场景
+1. **创建 Switch语句契约测试**
+   - INV-SWITCH-1: switch表达式求值一次
+   - INV-SWITCH-2: case匹配后执行对应块
+   - INV-SWITCH-3: default块作为兜底
+   - INV-SWITCH-4: switch内控制流（break/continue/return）
+   - INV-SWITCH-5: 嵌套switch独立性
 
 #### 评估后决定（中优先级）
 
@@ -506,16 +514,19 @@
 
 ## §14 行动计划 (Action Plan)
 
-### Phase 1: 补充关键契约测试（本周）
+### Phase 1: 补充Switch契约测试（本周）
 
-1. **创建 `tests/contracts/test_exception_semantics.py`**
-   - 编写10-15个异常传播契约测试
-   - 覆盖try/except/finally核心语义
-   - 验证异常穿透函数调用
+1. **核查E2E覆盖**
+   - 审查`tests/e2e/test_e2e_control_flow.py`中switch测试
+   - 确认集成测试是否充分
 
-2. **验证覆盖完整性**
-   - 运行 `pytest --cov=core tests/contracts/`
-   - 确认关键异常处理路径被覆盖
+2. **创建契约测试（如需要）**
+   - 在`tests/contracts/`中创建INV-SWITCH-*测试
+   - 覆盖switch核心语义（表达式求值、case匹配、控制流交互）
+
+3. **验证覆盖完整性**
+   - 运行 `pytest tests/contracts/`
+   - 确认switch核心路径被覆盖
 
 ### Phase 2: 评估集合操作覆盖（下周）
 
@@ -546,10 +557,10 @@
 
 ### 当前覆盖状态
 
-- **契约测试数量**：91个（6个文件）
-- **覆盖的核心语义**：~70%
-- **需要集成测试的语义**：~20%
-- **覆盖gap**：~10%（主要是异常传播）
+- **契约测试数量**：141个（8个文件）
+- **覆盖的核心语义**：~80%
+- **需要集成测试的语义**：~15%
+- **覆盖gap**：~5%（主要是switch语句）
 
 ### 核心洞察
 
@@ -563,15 +574,19 @@
    - 使重构更安全
 
 3. **分层测试策略**
-   - 契约层：核心语义不变量（91 tests）
-   - 集成层：复杂交互场景（~300 tests）
+   - 契约层：核心语义不变量（141 tests, 8 files）
+   - 集成层：复杂交互场景（~229 tests）
    - 合规层：跨实现保证（~30 tests）
+   - **总测试数**：~591 tests
 
 ### 下一步
 
 1. ✅ 已建立完整的语义覆盖矩阵
-2. 🚧 补充异常传播契约测试
-3. ⏳ 评估集合操作覆盖
-4. ⏳ 基于覆盖证明安全删除旧测试
+2. ✅ **已补充异常传播契约测试**（test_exception_semantics.py，25个测试）
+3. 🚧 补充Switch语句契约测试
+4. ⏳ 评估集合操作覆盖
+5. ⏳ 基于覆盖证明安全删除旧测试
 
 **关键原则**：测试质量 > 测试数量，语义覆盖 > 代码行数
+
+**重要更新**（2026-05-13）：异常处理语义已全覆盖（INV-EXCEPT-*），矩阵已同步更新。详见`docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md`完整分析报告。
