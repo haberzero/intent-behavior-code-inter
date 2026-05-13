@@ -159,12 +159,12 @@ pytest ibci_modules/ibci_json/tests/ -v
 **任务列表**:
 1. ✅ 清理所有标准库局部导入（2-3 小时）
 2. ✅ 整合 intent_context.py 重复导入（1-2 小时）
-3. 🔧 LLM 结果解析优化（12-15 小时）
+3. ✅ LLM 结果解析优化（12-15 小时）— 已完成（2026-05-13）
 4. 🔧 semantic_analyzer.py 拆分（40-50 小时）
 
 **交付物**:
 - ✅ 局部导入清理完成（10 → 0）
-- 🔧 一个关键嵌套逻辑优化完成
+- ✅ LLM 结果解析优化完成（责任链模式，-86 行）
 - 🔧 semantic_analyzer.py 拆分进行中
 
 ### Phase 2: 核心重构（90-120 小时）
@@ -229,19 +229,30 @@ core/runtime/vm/handlers/
 
 **验证**: `pytest tests/runtime/ tests/e2e/ -v`
 
-### 方案 3: 优化 LLM 解析回退逻辑（P0，12-15h）
+### 方案 3: 优化 LLM 解析回退逻辑（P0，12-15h）✅ 已完成
 
-**位置**: llm_executor.py:366-478
+**位置**: llm_executor.py:366-478 → llm_parsing_strategy.py
 
 **问题**: 多重回退链（Axiom → Parser → VTable → Default）
 
 **解决方案**: 责任链模式
 
-```python
-class ParsingStrategy:
-    def can_handle(self, raw_res, descriptor): ...
-    def parse(self, raw_res, descriptor): ...
+**完成日期**: 2026-05-13
 
+**成果**:
+- 创建 `llm_parsing_strategy.py` (331 行)
+- 实现 4 个类：
+  - `ParsingStrategy` (抽象基类)
+  - `AxiomParsingStrategy` (Axiom 类型系统解析)
+  - `VTableParsingStrategy` (用户自定义 __from_prompt__)
+  - `DefaultParsingStrategy` (默认字符串回退)
+  - `LLMResultParser` (责任链协调器)
+- llm_executor.py: 1016 → 930 行 (-86 行, -8.5%)
+- 消除深层嵌套，每个策略单一职责
+- 提升可测试性和扩展性
+
+**原代码示例**:
+```python
 class LLMResultParser:
     def __init__(self):
         self.strategies = [
@@ -260,8 +271,6 @@ class LLMResultParser:
                     continue
         return LLMResult.uncertain_result(...)
 ```
-
-**验证**: `pytest tests/runtime/test_llm*.py -v`
 
 ### 方案 4: 提取 LLMEXCEPT 状态机（P0，10-12h）
 
@@ -361,11 +370,11 @@ pytest tests/e2e/ -v
 
 | 指标 | 当前 | Phase 1 目标 | 最终目标 |
 |------|------|-------------|----------|
-| 文件 >1000 行 | 8 | 6 (-2) | 0 (-8) |
+| 文件 >1000 行 | 8 → 7 ✅ | 6 (-2) | 0 (-8) |
 | 类 >500 行 | 15 | 13 (-2) | <5 (-10+) |
-| 函数 >100 行 | 26 | 22 (-4) | <15 (-11+) |
-| 嵌套深度 >8 层 | 5 | 3 (-2) | 0 (-5) |
-| 非必要局部导入 | 10 | 0 (-10) ✅ | 0 |
+| 函数 >100 行 | 26 → 25 ✅ | 22 (-4) | <15 (-11+) |
+| 嵌套深度 >8 层 | 5 → 4 ✅ | 3 (-2) | 0 (-5) |
+| 非必要局部导入 | 10 → 0 ✅ | 0 (-10) ✅ | 0 |
 
 ### 可维护性指标
 
