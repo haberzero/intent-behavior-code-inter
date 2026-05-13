@@ -3,31 +3,39 @@
 > 本文档**只**记录当前周期内最紧要、可立即开工的下一步。
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-13（🎉 semantic_v2 已成为默认！V1→V2迁移Phase 1&2完成）
+> **最后更新**：2026-05-13（🎉 V1→V2迁移完成！V1已完全移除）
 
 ---
 
-## 🎉 重大进展：V2已成为默认语义分析器！
+## 🎉 重大成就：V1→V2迁移完成！
 
-**状态**: ✅ V2默认启用 → ✅ CompilationResult兼容性修复 → ✅ V1废弃标记完成 → ⏸️ 测试验证进行中
+**状态**: ✅ 所有5个阶段完成 → ✅ V1完全移除 → ✅ semantic_v2重命名为semantic
 
-semantic_v2 **现在是 IBCI 的默认语义分析器**！所有新代码编译自动使用V2。V1已标记为DEPRECATED，仅作为紧急回退选项保留。
+V1语义分析器已完全移除，V2（现在的semantic）是唯一的实现！
 
-### 已完成的里程碑工作（2026-05-13）
+### 已完成的所有迁移工作（2026-05-13）
 
-**✅ Phase 1: 默认启用V2**
-- ✅ 修改Engine默认 `use_semantic_v2=True`
-- ✅ V2成为所有新代码的默认选择
-- ✅ V1保留作为回退选项（`use_semantic_v2=False`）
+**✅ Phase 1-3: 架构改进（消除兼容层）**
+- ✅ 将CompilationResult从object-based改为UID-based
+- ✅ 重写engine_integration.py（删除~80行转换代码）
+- ✅ 简化serializer.py（删除~30行重映射代码）
+- ✅ 消除了荒谬的circular conversion: V2 UID → V1 Object → UID
 
-**✅ Phase 2: 关键兼容性修复**
-- ✅ 🔴 修复Critical Issue: CompilationResult结构不匹配
-  - 重写adapter输出V1兼容的CompilationResult
-  - 实现UID→Node映射（V2用UID，V1用object引用）
-  - 添加side_table属性到adapter
-- ✅ 标记V1为DEPRECATED
-  - 在semantic_analyzer.py顶部添加废弃警告
-  - 在scheduler.py标记V1为fallback only
-  - 创建详细的V1→V2迁移指南
+**✅ Phase 4: V1完全移除**
+- ✅ 删除6个V1文件（共3,202行）:
+  - semantic_analyzer.py (107KB, 2,192行)
+  - behavior_dependency_analyzer.py
+  - collector.py, resolver.py
+  - scope_manager.py, side_table.py
+- ✅ 更新scheduler.py移除V1导入和条件逻辑
+- ✅ 更新engine.py移除use_semantic_v2参数
+- ✅ 废弃resolve_semantics()方法
+
+**✅ Phase 5: 重命名和规范化**
+- ✅ semantic_v2/ → semantic/
+- ✅ SemanticV2Adapter → SemanticAdapter
+- ✅ run_semantic_v2() → run_semantic_analysis()
+- ✅ 更新所有import语句
+- ✅ 更新测试目录结构
 
 **详见**: `docs/V1_TO_V2_MIGRATION_GUIDE.md`
