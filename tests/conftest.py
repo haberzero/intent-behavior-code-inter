@@ -28,6 +28,8 @@ Helpers（普通函数，可 import 也可由 fixture ``helpers`` 暴露）
 - ``run_ibci(code, *, prefix="", ai=False, root_dir=None) -> List[str]``
 - ``compile_ibci(code, *, root_dir=None) -> CompilationArtifact``
 - ``compile_or_errors(code, *, root_dir=None) -> Tuple[Artifact|None, Set[str]]``
+- ``expect_compile_error(code, error_code, *, root_dir=None)`` — 期望编译失败
+- ``expect_runtime_error(code, error_pattern, *, prefix="", ai=False, root_dir=None)`` — 期望运行时失败
 - ``make_vm(engine) -> VMExecutor``
 - ``find_node(engine, node_type, *, predicate=None) -> Tuple[uid, data]``
 - ``find_nodes(engine, node_type, *, predicate=None) -> List[Tuple[uid, data]]``
@@ -118,6 +120,70 @@ def compile_or_errors(code: str, *, root_dir: Optional[str] = None) -> Tuple[Any
         return engine.compile_string(code, silent=True), set()
     except CompilerError as e:
         return None, {d.code for d in e.diagnostics}
+
+
+def expect_compile_error(code: str, error_code: str, *, root_dir: Optional[str] = None):
+    """期望编译失败并匹配特定错误码；如果成功编译或错误码不匹配则抛 AssertionError。
+
+    Parameters
+    ----------
+    code       : IBCI 源代码
+    error_code : 期望的错误码（如 "SEM_001", "PAR_042"）
+    root_dir   : 自定义 root_dir；默认 ``tests/`` 根
+
+    Example
+    -------
+    expect_compile_error("int x = None", "SEM_023")  # Optional 类型错误
+    """
+    artifact, errors = compile_or_errors(code, root_dir=root_dir)
+    assert artifact is None, f"Expected compilation to fail, but succeeded"
+    assert error_code in errors, (
+        f"Expected error code {error_code}, but got: {errors}"
+    )
+
+
+def expect_runtime_error(
+    code: str,
+    error_pattern: str,
+    *,
+    prefix: str = "",
+    ai: bool = False,
+    root_dir: Optional[str] = None,
+):
+    """期望运行时失败并匹配异常信息模式；如果成功执行则抛 AssertionError。
+
+    Parameters
+    ----------
+    code          : IBCI 源代码
+    error_pattern : 期望的异常信息子串或正则模式
+    prefix        : 在 ``code`` 之前自动拼接的额外前缀
+    ai            : 是否在最前面自动拼接 ``AI_MOCK_PREFIX``
+    root_dir      : 自定义 root_dir；默认 ``tests/`` 根
+
+    Example
+    -------
+    expect_runtime_error("Optional[int] x = None\nprint(x.get())", "None")
+    """
+    from core.engine import IBCIEngine
+    import re
+
+    full = (AI_MOCK_PREFIX if ai else "") + prefix + code
+    engine = IBCIEngine(root_dir=root_dir or _default_root(), auto_sniff=False)
+
+    try:
+        lines: List[str] = []
+        engine.run_string(full, output_callback=lambda t: lines.append(str(t)), silent=True)
+        raise AssertionError(f"Expected runtime error matching '{error_pattern}', but execution succeeded")
+    except Exception as e:
+        # 跳过 AssertionError（那是我们自己抛的）
+        if isinstance(e, AssertionError):
+            raise
+        # 验证异常信息匹配
+        error_msg = str(e)
+        if error_pattern not in error_msg and not re.search(error_pattern, error_msg):
+            raise AssertionError(
+                f"Expected error matching '{error_pattern}', but got: {error_msg}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +358,8 @@ def helpers():
         run_ibci = staticmethod(run_ibci)
         compile_ibci = staticmethod(compile_ibci)
         compile_or_errors = staticmethod(compile_or_errors)
+        expect_compile_error = staticmethod(expect_compile_error)
+        expect_runtime_error = staticmethod(expect_runtime_error)
         make_vm = staticmethod(make_vm)
         find_node = staticmethod(find_node)
         find_nodes = staticmethod(find_nodes)
