@@ -8,9 +8,9 @@
 
 ---
 
-## 2026-05-13 锚点：代码库健康度全面审计
+## 2026-05-13 锚点：代码库健康度全面审计与局部导入清理
 
-完成对 IBCI 代码库的全方位深度审计，识别代码健康度问题并制定重构计划。
+完成对 IBCI 代码库的全方位深度审计，识别代码健康度问题并制定重构计划。同时立即清理了所有非必要的局部导入。
 
 **审计范围**：
 - 229 个 Python 源文件（44,329 行代码）
@@ -23,18 +23,23 @@
 - 15 个类超过 500 行（严重）
 - 26 个函数超过 100 行（需拆分）
 - 7 处深层嵌套逻辑（需优化）
-- 10 个非必要局部导入（可清理）
+- 10 个非必要局部导入（已清理 ✅）
 - 28 个架构性局部导入（合理，打破循环依赖）
 
 **交付物**：
-- `CODEBASE_AUDIT_REPORT.md`（完整审计报告）
-- `docs/REFACTORING_PRIORITY_PLAN.md`（重构优先行动计划）
-- 更新 `docs/NEXT_STEPS.md`（添加重构优先级提醒）
+- `docs/CODE_HEALTH_REFACTORING.md`（统一的审计与重构指南）
 
 **重构计划概要**：
-- Phase 1（Week 1-2）：快速胜利 - 局部导入清理、LLM 解析优化、semantic_analyzer.py 拆分
+- Phase 1（Week 1-2）：快速胜利 - 局部导入清理 ✅、LLM 解析优化、semantic_analyzer.py 拆分
 - Phase 2（Week 3-5）：核心重构 - handlers.py 模块化、For 循环优化、primitives.py 拆分
 - Phase 3（Week 6-8）：补充重构 - llm_executor.py、kernel.py 拆分，剩余逻辑优化
+
+**局部导入清理完成** ✅：
+- `ibci_net/core.py`: 移动 requests, base64 至文件顶部（9+ 处清理）
+- `ibci_json/core.py`: 移动 copy 至文件顶部
+- `ibci_sdk/check.py`: 移动 sys 至文件顶部
+- `tests/compiler/test_lexer.py`: 移动 TokenType 至文件顶部
+- `tests/compiler/test_type_annotations.py`: 移动 SpecFactory, TypeKind 至文件顶部
 
 **预估工作量**：150-200 开发小时，跨 6-8 周
 

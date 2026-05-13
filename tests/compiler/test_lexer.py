@@ -15,6 +15,7 @@ Coverage:
 
 import pytest
 from core.compiler.lexer.lexer import Lexer
+from core.compiler.common.tokens import TokenType
 
 
 def tokenize(code: str):
@@ -173,7 +174,6 @@ else:
 """
         tokens = tokenize(code)
         types = [t for t, _ in tokens]
-        from core.compiler.common.tokens import TokenType
         assert TokenType.INDENT in types
         assert TokenType.DEDENT in types
 
