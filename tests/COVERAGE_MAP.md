@@ -19,6 +19,7 @@
 | llmexcept保证（异常捕获/重试/历史/深度） | `tests/contracts/test_llmexcept_guarantees.py` |
 | LLM集成（MOCK/行为表达式/LLM函数/分发） | `tests/contracts/test_llm_integration.py` |
 | 异常传播语义（try/except/finally） | `tests/contracts/test_exception_semantics.py` |
+| 集合操作语义（list/dict/str索引/切片/变更） | `tests/contracts/test_collection_semantics.py` |
 
 ## 类型系统（Kernel 层已删除，转由契约测试覆盖）
 
