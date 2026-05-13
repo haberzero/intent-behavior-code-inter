@@ -6,7 +6,7 @@ from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer  # V1 - DEPRECATED, kept for fallback only
+from core.compiler.semantic_v2.engine_integration import SemanticV2Adapter
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
@@ -37,7 +37,7 @@ class Scheduler(ICompilerService):
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None, use_semantic_v2: bool = False):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
         self.root_dir = os.path.realpath(root_dir)
         self.source_manager = SourceManager()
         self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)
@@ -45,7 +45,6 @@ class Scheduler(ICompilerService):
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
         self.registry = registry # 注册表实例，用于类型同步
-        self.use_semantic_v2 = use_semantic_v2  # semantic_v2 feature flag
         
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}
@@ -372,19 +371,15 @@ class Scheduler(ICompilerService):
             
             # 3. Semantic Analysis
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
-            
+
             # 在分析前预注册空的 ModuleMetadata 到注册表
             # 这样 TypeDef 才能在解析时找到目标，即使当前模块还未分析完
             pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
 
-            # Choose semantic analyzer version based on configuration
-            if self.use_semantic_v2:
-                from core.compiler.semantic_v2.engine_integration import SemanticV2Adapter
-                analyzer = SemanticV2Adapter(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
-            else:
-                analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
-            
+            # V2 is now the only semantic analyzer
+            analyzer = SemanticV2Adapter(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
+
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():
                 if isinstance(val, Symbol):

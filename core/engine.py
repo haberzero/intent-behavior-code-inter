@@ -33,7 +33,6 @@ from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classe
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic.passes.contract_validator import ContractValidator
 from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
@@ -60,13 +59,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
-    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None, use_semantic_v2: bool = True):
+    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None):
         self.registry = KernelRegistry()
         # STAGE 1 & 2 handled inside initialize_builtin_classes
         self._kernel_token = initialize_builtin_classes(self.registry)
-
-        # semantic_v2 configuration - NOW DEFAULT TO TRUE
-        self.use_semantic_v2 = use_semantic_v2
 
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.issue_tracker = IssueTracker()
@@ -120,7 +116,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._plugins_discovered = False
 
         # [Strict Registry] Scheduler/SemanticAnalyzer require MetadataRegistry, not the container Registry
-        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry(), use_semantic_v2=self.use_semantic_v2)
+        self.scheduler = Scheduler(self.root_dir, host_interface=self.host_interface, debugger=self.debugger, issue_tracker=self.issue_tracker, registry=self.registry.get_metadata_registry())
         
         # 初始化运行时调度器
         self.rt_scheduler = RuntimeSchedulerImpl(None) # 此时 ServiceContext 尚未就绪，将在后续注入
@@ -437,21 +433,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):
         """
-         暴露分段语义分析接口，允许观察中间产物。
-        按顺序运行 Pass 1 (Collector), Pass 2 (Resolver), Pass 3 (Analyzer)。
+         暴露分段语义分析接口（已废弃，V1已移除）。
+        该方法保留仅为兼容性，但不再使用V1语义分析器。
         """
-        if analyzer is None:
-            # 构造分析器
-            analyzer = SemanticAnalyzer(
-                issue_tracker=self.issue_tracker, 
-                registry=self.registry.get_metadata_registry(),
-                debugger=self.debugger
-            )
-        
-        # 内部执行完整的 3-Pass 分析流
-        analyzer.analyze(module, raise_on_error=raise_on_error)
-        
-        return analyzer
+        raise NotImplementedError("resolve_semantics is deprecated. V1 semantic analyzer has been removed. Use V2 pipeline directly.")
 
     def request_isolated_run(self, entry_path: str, policy: Dict[str, Any], initial_vars: Optional[Dict[str, Any]] = None) -> bool:
         """
