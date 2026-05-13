@@ -36,7 +36,7 @@ Comparison with Semantic V1
 
 from .context import SemanticContext, ContextBuilder
 from .result import PassResult, Diagnostic, DiagnosticLevel
-from .pipeline import SemanticPipeline
+from .pipeline import SemanticPipeline, create_semantic_pipeline
 
 __all__ = [
     'SemanticContext',
@@ -45,4 +45,5 @@ __all__ = [
     'Diagnostic',
     'DiagnosticLevel',
     'SemanticPipeline',
+    'create_semantic_pipeline',
 ]
