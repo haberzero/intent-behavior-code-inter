@@ -322,7 +322,7 @@ class TestE2EClassEquality:
     """Tests for == / != on user-defined class instances (P0 bug fix)."""
 
     def test_identity_equality_same_reference(self):
-        """o1 == o1 should be true (same reference)."""
+        """o1 == o1 should be True (same reference)."""
         code = """class Obj:
     int x
     func __init__(self, int v):
@@ -336,7 +336,7 @@ print((str)same)
         assert "True" in lines
 
     def test_identity_equality_different_instances(self):
-        """o1 == o2 (different instances, same value) should be false."""
+        """o1 == o2 (different instances, same value) should be False."""
         code = """class Obj:
     int x
     func __init__(self, int v):
@@ -351,7 +351,7 @@ print((str)different)
         assert "False" in lines
 
     def test_equality_assigned_reference(self):
-        """o3 = o1; o3 == o1 should be true."""
+        """o3 = o1; o3 == o1 should be True."""
         code = """class Obj:
     int x
     func __init__(self, int v):
@@ -366,7 +366,7 @@ print((str)same_ref)
         assert "True" in lines
 
     def test_not_equal_different_instances(self):
-        """o1 != o2 (different instances) should be true."""
+        """o1 != o2 (different instances) should be True."""
         code = """class Obj:
     int x
     func __init__(self, int v):

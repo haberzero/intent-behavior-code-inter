@@ -22,6 +22,7 @@ import importlib
 import importlib.util
 import inspect
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -231,7 +232,6 @@ def _load_module(name: str, path: str, extra_sys_paths: Optional[List[str]] = No
     对 __init__.py（含相对导入的包），使用 importlib.import_module() 方式加载。
     对独立文件（如 _spec.py），使用 spec_from_file_location 方式加载。
     """
-    import sys
     added = []
     try:
         if extra_sys_paths:

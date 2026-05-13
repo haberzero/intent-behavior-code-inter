@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
-from .spec import IbSpec, FuncSpec, ClassSpec, ModuleSpec
+from .spec import IbSpec
+from .spec.base import TypeKind
 
 
 # --- Symbol System ---
@@ -83,18 +84,6 @@ class TypeSymbol(Symbol):
 @dataclass
 class FunctionSymbol(Symbol):
     """A function (regular or LLM)."""
-
-    @property
-    def return_type_name(self) -> str:
-        if isinstance(self.spec, FuncSpec):
-            return self.spec.return_type_name
-        return "any"
-
-    @property
-    def param_type_names(self) -> List[str]:
-        if isinstance(self.spec, FuncSpec):
-            return list(self.spec.param_type_names)
-        return []
 
 
 @dataclass
@@ -193,12 +182,11 @@ class SymbolFactory:
 
     @staticmethod
     def create_from_spec(name: str, spec: IbSpec) -> 'Symbol':
-        from core.kernel.spec import FuncSpec, ClassSpec, ModuleSpec
-        if isinstance(spec, FuncSpec):
+        if spec.kind == TypeKind.FUNCTION.value:
             return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=spec)
-        if isinstance(spec, ClassSpec):
+        if spec.kind == TypeKind.CLASS.value:
             return TypeSymbol(name=name, kind=SymbolKind.CLASS, spec=spec)
-        if isinstance(spec, ModuleSpec):
+        if spec.kind == TypeKind.MODULE.value:
             return VariableSymbol(name=name, kind=SymbolKind.MODULE, spec=spec)
         return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec)
 

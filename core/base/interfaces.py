@@ -11,6 +11,8 @@ __all__ = [
     "IILLMExecutor",
     "IIntentManager",
     "IExecutionFrame",
+    "IVMTask",
+    "IVMExecutor",
 ]
 
 @runtime_checkable
@@ -69,7 +71,7 @@ class ILLMProvider(Protocol):
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
-    """提供对内核 LLM 执行器的内省能力（向后兼容接口）"""
+    """提供对内核 LLM 执行器的内省能力。"""
     def get_last_call_info(self) -> Dict[str, Any]: ...
 
 
@@ -151,7 +153,7 @@ class IExecutionFrame(Protocol):
     - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
     - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
     - get_last_llm_result()   —— LLM 结果寄存器
-    - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照（Step 6 实现）
+    - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照
     """
     @property
     def current_scope(self) -> Any: ...
@@ -164,3 +166,44 @@ class IExecutionFrame(Protocol):
     def get_last_llm_result(self) -> Optional[Any]: ...
 
     def fork_intent_snapshot(self) -> Any: ...
+
+
+# ---------------------------------------------------------------------------
+# VM 调度循环协议（CPS 是主路径）
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class IVMTask(Protocol):
+    """VM 调度单元协议（公理 VM-T1）。
+
+    每个 VMTask 包装一个生成器协程，形态等价于 CPU 寄存器组：
+    ``node_uid`` 标识当前帧对应的 AST 节点；``generator`` 是按 yield 协议表达的
+    协程，节点之间通过 ``yield child_uid`` 让出控制权。
+
+    实现位于 ``core.runtime.vm.task.VMTask``；该协议仅声明对外可观测属性。
+    """
+    node_uid: str
+    generator: Any
+
+
+@runtime_checkable
+class IVMExecutor(Protocol):
+    """VM 调度循环协议（公理 VM-S1）。
+
+    职责
+    ----
+    * 显式帧栈管理：以非 Python 递归的方式驱动 IBCI AST 求值
+    * 控制流信号传播：在帧栈上通过 ``Signal(kind, value)`` 数据对象传播控制流
+    * 43 种 AST 节点类型均有 CPS handler
+
+    实现位于 ``core.runtime.vm.vm_executor.VMExecutor``。
+    ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 均以本协议为主路径。
+    """
+
+    def supports(self, node_uid: str) -> bool:
+        """判断节点是否有 CPS 处理器。"""
+        ...
+
+    def run(self, node_uid: str) -> Any:
+        """执行 ``node_uid`` 子树并返回 IbObject 结果。"""
+        ...

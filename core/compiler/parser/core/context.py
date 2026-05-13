@@ -1,11 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.parser.core.token_stream import TokenStream
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.runtime.host.host_interface import HostInterface
-
-from core.kernel import ast as ast
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -27,8 +25,6 @@ class ParserContext:
     host_interface: Optional[HostInterface] = None
     metadata: Optional[Any] = None # MetadataRegistry
     package_name: str = ""
-    pending_intents: List[ast.IbIntentInfo] = field(default_factory=list)
-    
     # Component references (injected after initialization)
     expression_parser: Optional['ExpressionComponent'] = None
     statement_parser: Optional['StatementComponent'] = None
@@ -36,16 +32,6 @@ class ParserContext:
     type_parser: Optional['TypeComponent'] = None
     import_parser: Optional['ImportComponent'] = None
     
-    def push_intent(self, intent: ast.IbIntentInfo):
-        """Add a pending intent comment for the next statement."""
-        self.pending_intents.append(intent)
-        
-    def consume_intents(self) -> List[ast.IbIntentInfo]:
-        """Consume all pending intents and clear the list."""
-        intents = self.pending_intents
-        self.pending_intents = []
-        return intents
-
     def __post_init__(self):
         if self.module_cache is None:
             self.module_cache = {}

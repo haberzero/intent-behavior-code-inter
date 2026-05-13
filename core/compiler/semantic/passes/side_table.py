@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.kernel.spec import IbSpec
@@ -16,14 +16,15 @@ class SideTableManager:
     def __init__(self):
         self.node_to_symbol: Dict[Any, Symbol] = {}
         self.node_to_type: Dict[Any, 'IbSpec'] = {}
-        self.node_is_deferred: Dict[Any, bool] = {}
-        self.node_deferred_mode: Dict[Any, str] = {}
+        self.node_is_callable_instance: Dict[Any, bool] = {}
+        self.node_capture_mode: Dict[Any, str] = {}
         self.node_to_loc: Dict[Any, Any] = {}
-        self.node_protection: Dict[Any, Any] = {}
-
-    def bind_protection(self, target_node: Any, handler_node: Any) -> None:
-        """建立保护关系侧表"""
-        self.node_protection[target_node] = handler_node
+        # lambda 捕获分析（Pass 4）填充。
+        # 包含"被至少一个 lambda 捕获为自由变量"的所有符号 UID。
+        # BehaviorDependencyAnalyzer（Pass 5）用此集合将这些变量对应的
+        # IbBehaviorExpr 标记为 dispatch_eligible=False，避免 LLMFuture
+        # 占位符被写入 IbCell（IbCell 只能持有合法 IbObject，不能持有 LLMFuture）。
+        self.cell_captured_symbols: Set[str] = set()
 
     def bind_symbol(self, node: Any, sym: Symbol) -> None:
         self.node_to_symbol[node] = sym
@@ -31,17 +32,17 @@ class SideTableManager:
     def bind_type(self, node: Any, type_desc: 'IbSpec') -> None:
         self.node_to_type[node] = type_desc
 
-    def set_deferred(self, node: Any, is_deferred: bool = True) -> None:
-        self.node_is_deferred[node] = is_deferred
+    def set_callable_instance(self, node: Any, is_callable_instance: bool = True) -> None:
+        self.node_is_callable_instance[node] = is_callable_instance
 
-    def set_deferred_mode(self, node: Any, mode: str) -> None:
-        self.node_deferred_mode[node] = mode
+    def set_capture_mode(self, node: Any, mode: str) -> None:
+        self.node_capture_mode[node] = mode
 
-    def get_deferred_mode(self, node: Any) -> Optional[str]:
-        return self.node_deferred_mode.get(node)
+    def get_capture_mode(self, node: Any) -> Optional[str]:
+        return self.node_capture_mode.get(node)
 
-    def is_deferred(self, node: Any) -> bool:
-        return self.node_is_deferred.get(node, False)
+    def is_callable_instance(self, node: Any) -> bool:
+        return self.node_is_callable_instance.get(node, False)
 
     def bind_location(self, node: Any, loc: Any) -> None:
         self.node_to_loc[node] = loc
@@ -58,7 +59,7 @@ class SideTableManager:
     def clear(self) -> None:
         self.node_to_symbol.clear()
         self.node_to_type.clear()
-        self.node_is_deferred.clear()
-        self.node_deferred_mode.clear()
+        self.node_is_callable_instance.clear()
+        self.node_capture_mode.clear()
         self.node_to_loc.clear()
-        self.node_protection.clear()
+        self.cell_captured_symbols.clear()

@@ -2,11 +2,12 @@ from __future__ import annotations
 from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.base.source_atomic import Location
-from core.runtime.exceptions import BreakException, ContinueException, ReturnException, StageTransitionError, RegistryIsolationError, ThrownException
+from core.runtime.exceptions import StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATCH
 from core.kernel.registry import KernelRegistry
 from core.kernel.spec import IbSpec
+from core.kernel.spec.base import TypeKind
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule, IbObject
@@ -16,17 +17,26 @@ if TYPE_CHECKING:
     from core.runtime.interpreter.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
-    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False):
+    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_builtin: bool = False):
         self.name = name
         self.value = value
         self.declared_type = declared_type
         self.current_type = type(value) if value is not None else None
         self.is_const = is_const
+        # 内置函数（intrinsic）标志位，由 IntrinsicManager 在注入 print/len/range/...
+        # 时设置；``get_vars()`` 使用本标志过滤掉运行时调试不应显示的特权符号，
+        # 替代历史的硬编码名单 (``"len", "print", "range", ...``)。
+        self.is_builtin = is_builtin
+        # 当变量被内层 lambda 捕获时，提升为 Cell 变量；
+        # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
+        self.cell: Optional[Any] = None  # Optional[IbCell]
 
 class ScopeImpl:
     def __init__(self, parent: Optional['Scope'] = None, registry: Optional[Registry] = None):
         self._symbols: Dict[str, RuntimeSymbol] = {}
         self._uid_to_symbol: Dict[str, RuntimeSymbol] = {} # 基于 Symbol UID 的直接映射
+        # sym_uid → IbCell 映射，仅包含已提升为 Cell 变量的条目。
+        self._cell_map: Dict[str, Any] = {}  # Dict[str, IbCell]
         self._parent = parent
         # 如果没有传入 registry，则从父作用域继承
         if registry:
@@ -46,17 +56,20 @@ class ScopeImpl:
         if isinstance(value, IbLLMUncertain):
             return
 
-        # 特殊处理：函数对象赋值给 FuncSpec 类型时直接放行
-        # (callable 类型可以赋值给任意 FuncSpec 声明)
-        from core.kernel.spec.specs import FuncSpec, BoundMethodSpec, ClassSpec
-        if isinstance(declared_type, (FuncSpec, BoundMethodSpec)) and isinstance(value, IbFunction):
+        # 特殊处理：函数对象赋值给 TypeDef 类型时直接放行
+        # (callable 类型可以赋值给任意 TypeDef 声明)
+        if (
+            isinstance(declared_type, IbSpec)
+            and declared_type.kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value)
+            and isinstance(value, IbFunction)
+        ):
             return
 
         # 用户定义类（含枚举）的赋值由编译器在语义分析阶段验证，运行时跳过类型检查
-        if isinstance(declared_type, ClassSpec) and declared_type.is_user_defined:
+        if isinstance(declared_type, IbSpec) and declared_type.kind == TypeKind.CLASS.value and declared_type.is_user_defined:
             return
             
-        # [Phase 3.3] 强契约：运行时类型校验
+        # 强契约：运行时类型校验
         if not hasattr(value, 'ib_class'):
             value = self._registry.box(value)
 
@@ -75,7 +88,7 @@ class ScopeImpl:
                     error_code=RUN_TYPE_MISMATCH
                 )
 
-    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
+    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
         
@@ -87,17 +100,23 @@ class ScopeImpl:
             if uid in self._uid_to_symbol and self._uid_to_symbol[uid].is_const:
                 raise InterpreterError(f"Cannot redefine constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
 
-        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const)
+        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const, is_builtin=is_builtin)
         if name:
             self._symbols[name] = sym
         if uid:
             self._uid_to_symbol[uid] = sym
         else:
-            import hashlib
-            content_repr = f"{name}:{type(boxed_value).__name__}"
-            if hasattr(boxed_value, 'value'):
-                content_repr += f":{boxed_value.value!r}"
-            fallback_uid = f"rt_{hashlib.sha256(content_repr.encode()).hexdigest()[:12]}"
+            # 合法编译路径下语义分析始终提供 UID。剩余的无 UID 调用仅来自
+            # 内核引导期 / 跨上下文同步路径（``RuntimeContextImpl.sync_state``、
+            # ``HostService`` plugin 恢复等），它们持有可信的 ``name`` 但无符号
+            # UID。此处使用 ``id(sym)`` 派生唯一 UID，不再发出 RuntimeWarning：
+            # 经 -W error::RuntimeWarning 全测试套件验证（949 测试），常规执行
+            # 路径下此分支永不命中。如新代码引入此路径请显式传入 ``uid``。
+            assert name, (
+                "ScopeImpl.define(): caller must provide either uid or name; "
+                "both missing indicates a bootstrap bug."
+            )
+            fallback_uid = f"rt_{id(sym):x}"
             self._uid_to_symbol[fallback_uid] = sym
 
     def assign(self, name: str, value: Any) -> bool:
@@ -112,12 +131,16 @@ class ScopeImpl:
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
+            # Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
+            # lambda 闭包在下次调用时读到最新值。
+            if symbol.cell is not None:
+                symbol.cell.set(boxed_value)
             return True
         if self._parent:
             return self._parent.assign(name, value)
         return False
 
-    def assign_by_uid(self, uid: str, value: Any) -> bool:
+    def assign_by_uid(self, uid: str, value: Any, skip_type_check: bool = False) -> bool:
         """基于 UID 的赋值"""
         boxed_value = self._registry.box(value)
         if uid in self._uid_to_symbol:
@@ -125,14 +148,18 @@ class ScopeImpl:
             if symbol.is_const:
                 raise InterpreterError(f"Cannot reassign constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
             
-            # 运行时类型校验
-            self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
+            # 运行时类型校验（skip_type_check=True 用于内部缓存写回，如 LLMFuture 解析后的回写）
+            if not skip_type_check:
+                self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
             
             symbol.value = boxed_value
             symbol.current_type = type(boxed_value)
+            # Cell 变量赋值时同步更新共享 IbCell。
+            if symbol.cell is not None:
+                symbol.cell.set(boxed_value)
             return True
         if self._parent and hasattr(self._parent, 'assign_by_uid'):
-            return self._parent.assign_by_uid(uid, value)
+            return self._parent.assign_by_uid(uid, value, skip_type_check=skip_type_check)
         return False
 
     def get(self, name: str) -> Any:
@@ -170,6 +197,86 @@ class ScopeImpl:
     def get_all_symbols(self) -> Dict[str, RuntimeSymbol]:
         """返回当前作用域的所有符号（不包含父作用域）"""
         return dict(self._symbols)
+
+    # ------------------------------------------------------------------
+    # Cell 变量支持
+    # ------------------------------------------------------------------
+
+    def promote_to_cell(self, sym_uid: str) -> Optional[Any]:
+        """
+        将符号提升为 Cell 变量（公理 SC-3）。
+
+        规则：
+        - 若该 UID 在当前作用域的 _cell_map 中已有 IbCell，直接返回共享引用（幂等）。
+        - 若该 UID 对应的符号在本作用域中且本作用域非全局（parent 非 None），
+          创建 IbCell(current_value)，写入 symbol.cell 与 _cell_map，返回该 IbCell。
+        - 全局作用域（parent 为 None）的变量不提升——它们始终可达，IbCell 无必要。
+        - 若本作用域没有该 UID，向上查找父作用域递归处理（SC-4 向外层捕获）。
+
+        返回：IbCell 引用，或 None（变量不存在 / 属于全局作用域不需要提升）。
+        """
+        from core.runtime.objects.cell import IbCell
+        if sym_uid in self._cell_map:
+            return self._cell_map[sym_uid]
+        if sym_uid in self._uid_to_symbol:
+            # 全局作用域（顶层）的变量永远可达，不提升
+            if self._parent is None:
+                return None
+            sym = self._uid_to_symbol[sym_uid]
+            if sym.cell is not None:
+                # 符号已有 cell（e.g. 通过 name-map 已提升），复用
+                self._cell_map[sym_uid] = sym.cell
+                return sym.cell
+            cell = IbCell(sym.value)
+            sym.cell = cell
+            self._cell_map[sym_uid] = cell
+            return cell
+        # 向上查找
+        if self._parent and hasattr(self._parent, 'promote_to_cell'):
+            return self._parent.promote_to_cell(sym_uid)
+        return None
+
+    def is_cell_promoted(self, sym_uid: str) -> bool:
+        """判断 sym_uid 对应的符号是否已提升为 Cell 变量（C12 封装替代私有 _cell_map 探测）。
+
+        供 VMExecutor 护栏（``_target_is_promoted_cell``）使用：
+        不再直接访问 ``scope._cell_map``，通过本方法保持 ScopeImpl 内部封装。
+        """
+        return sym_uid in self._cell_map
+
+    def define_raw(self, name: Optional[str], value: Any, uid: Optional[str] = None, declared_type: Any = None) -> 'RuntimeSymbolImpl':
+        """低级符号写入：绕过类型检查与 box 操作（VM 特殊路径专用，C12）。
+
+        仅供 VMExecutor 的 ``LLMFuture`` 占位符写入使用（dispatch-before-use）。
+        普通变量定义应使用 :meth:`define`；本方法不进行类型校验，不调用 ``registry.box``，
+        也不触发 Cell 同步（LLMFuture 不是合法 ``IbObject``，不应进入 cell.set）。
+
+        参数:
+            name: 变量名（可为 None，但 name 和 uid 至少须提供其一）
+            value: 原始值（通常为 ``LLMFuture`` 占位符）
+            uid: 符号 UID（可为 None，此时以 name 生成回退 UID）
+            declared_type: 可选的类型标注（来自编译器侧表，仅记录不校验）
+
+        返回:
+            新建或覆写的 :class:`RuntimeSymbolImpl` 实例。
+        """
+        new_sym = RuntimeSymbolImpl(
+            name=name or "", value=value, declared_type=declared_type, is_const=False
+        )
+        if name:
+            self._symbols[name] = new_sym
+        if uid:
+            self._uid_to_symbol[uid] = new_sym
+        elif name:
+            # 无 UID 时以对象 id 生成回退键（仅此特殊路径，不影响常规符号表）
+            self._uid_to_symbol[f"rt_{id(new_sym):x}"] = new_sym
+        return new_sym
+
+    def iter_cells(self):
+        """
+        枚举本作用域（不递归父）的所有 IbCell（公理 GC-2 根集合扫描入口）。
+        """
+        return iter(self._cell_map.values())
 
 class SymbolViewImpl:
     """[Active Defense] 只读符号表视图实现"""
@@ -221,15 +328,36 @@ class RuntimeContextImpl(RuntimeContext):
         self._loop_stack: List[Dict[str, int]] = []
         self._retry_hint: Optional[str] = None # 运行时重试提示词
 
-        # 意图上下文（Step 6c 完整迁移）：
+        # 意图上下文：
         # 持久意图栈、涂抹意图队列、排他意图槽、全局意图全部统一持有在此对象中。
         from core.runtime.objects.intent_context import IbIntentContext
         self._intent_ctx: IbIntentContext = IbIntentContext()
 
+        # 帧级活跃 intent_context IBCI 实例指针
+        # ----------------------------------------------------------------
+        # 指向当前帧"正在使用"的 intent_context IBCI 对象（用户命名身份）。
+        # 不变量：当 ``_active_intent_ibobj`` 非 None 时，
+        #   ``_active_intent_ibobj.fields['_ctx'] is self._intent_ctx``
+        # 共享引用而非 fork 副本，确保语法路径 (`@+`/`@-`) 与 OOP 路径
+        # （``intent_context`` 方法调用）在当前活跃实例上操作的是同一底层 IbIntentContext。
+        #
+        # 维护点（任一发生即更新此指针）：
+        #   - ``use_intent_context(ibobj)``  → 设置为新的封装实例（共享 _ctx 引用）
+        #   - ``clear_inherited_intents()``  → 设置为新的匿名封装（清空持久栈）
+        #   - 函数调用进入时（fork 调用方）→ 重置为 None（子帧未选择策略）
+        #
+        # 设计目的：使调试器能够直接观察"当前帧正在使用哪个用户命名的意图策略对象"，
+        # 而不是面对一个匿名 Python 对象。``get_current()`` 返回该指针的 fork，
+        # 既保留用户对象身份语义，又确保 fork 语义不泄漏。
+        from core.runtime.objects.kernel import IbObject  # noqa: F401
+        self._active_intent_ibobj: Optional['IbObject'] = None
+
         # [LLMExceptFrame] LLM 异常重试帧栈
         self._llm_except_frames: List['LLMExceptFrame'] = []
+        # 最大 llmexcept 嵌套深度限制（PT-1.3）
+        self._llm_except_max_depth: int = 128
 
-        # [IbLLMCallResult] 最后一个 LLM 执行结果（Step 7b）
+        # [IbLLMCallResult] 最后一个 LLM 执行结果
         # 已升级为 IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
         self._last_llm_result: Optional[Any] = None
 
@@ -260,7 +388,7 @@ class RuntimeContextImpl(RuntimeContext):
         设置最后一个 LLM 执行结果。
 
         接受 LLMResult（Python dataclass）或 IbLLMCallResult（IBCI 对象）。
-        LLMResult 会被自动转换为 IbLLMCallResult 后存储（Step 7b）。
+        LLMResult 会被自动转换为 IbLLMCallResult 后存储。
         """
         if result is None:
             self._last_llm_result = None
@@ -293,6 +421,10 @@ class RuntimeContextImpl(RuntimeContext):
         将新的 LLMExceptFrame 入栈。
         用于 llmexcept 语句执行前保存现场。
         """
+        if len(self._llm_except_frames) >= self._llm_except_max_depth:
+            raise RuntimeError(
+                f"LLMExceptFrame stack overflow: max depth {self._llm_except_max_depth} exceeded"
+            )
         self._llm_except_frames.append(frame)
 
     def pop_llm_except_frame(self) -> Optional['LLMExceptFrame']:
@@ -421,8 +553,10 @@ class RuntimeContextImpl(RuntimeContext):
                         continue
                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
                         continue
-                    # 额外过滤掉全局内置函数 (如 len, print)，以允许方法调用 (如 v.len())
-                    if symbol.is_const and name in ("len", "print", "range", "input", "get_self_source"):
+                    # 通过 RuntimeSymbolImpl.is_builtin 标志过滤内置函数（intrinsic），
+                    # 替代历史的硬编码名单 ("len", "print", "range", "input", "get_self_source")。
+                    # 内置函数仅供 IBCI 代码调用，不应在调试器变量面板中暴露给用户。
+                    if getattr(symbol, "is_builtin", False):
                         continue
                     res[name] = val
             scope = scope.parent
@@ -490,13 +624,13 @@ class RuntimeContextImpl(RuntimeContext):
         if not self._current_scope.assign(name, value):
             raise InterpreterError(f"Variable '{name}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def set_variable_by_uid(self, uid: str, value: Any) -> None:
+    def set_variable_by_uid(self, uid: str, value: Any, skip_type_check: bool = False) -> None:
         """基于 UID 赋值"""
-        if not self._current_scope.assign_by_uid(uid, value):
+        if not self._current_scope.assign_by_uid(uid, value, skip_type_check=skip_type_check):
             raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False) -> None:
-        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force)
+    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:
+        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force, is_builtin=is_builtin)
 
     def define_variable_at_global(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
         """在全局作用域中定义变量（用于 global 语句创建新全局变量）。"""
@@ -551,6 +685,85 @@ class RuntimeContextImpl(RuntimeContext):
     def intent_context(self) -> 'IbIntentContext':
         """当前帧的意图上下文（直接持有的 IbIntentContext 实例）。"""
         return self._intent_ctx
+
+    def use_intent_context(self, intent_ctx_obj: Any) -> bool:
+        """
+        以指定 intent_context IBCI 实例替换当前帧意图上下文（fork 拷贝语义）。
+
+        行为与 intent_context.use(ctx) 对齐：
+        - 使用 ctx._ctx 的 fork 副本，避免引用共享
+        - 保留当前帧的全局意图（Engine 级注入）
+
+        在替换底层 IbIntentContext 的同时，重建当前帧的
+        ``_active_intent_ibobj`` 指针——它持有一个**新的** intent_context IBCI
+        包装对象，其 ``fields['_ctx']`` 与帧的 ``_intent_ctx`` 共享引用。
+        因此后续语法路径（``@+``/``@-``）与 OOP 路径（``active.push(...)``）
+        操作的是同一底层 IbIntentContext，而原始实参 ``intent_ctx_obj``
+        因 fork 语义不会受到泄漏影响。
+        """
+        if intent_ctx_obj is None or not hasattr(intent_ctx_obj, "fields"):
+            return False
+        if self._intent_ctx is None or not hasattr(self._intent_ctx, "get_global_intents"):
+            return False
+        other_ctx = intent_ctx_obj.fields.get("_ctx")
+        if other_ctx is None or not hasattr(other_ctx, "fork"):
+            return False
+        forked = other_ctx.fork()
+        forked.set_global_intents(self._intent_ctx.get_global_intents())
+        self._intent_ctx = forked
+        # 同步更新活跃实例指针，使其封装与 _intent_ctx 共享引用。
+        self._set_active_intent_ibobj_for_current_ctx(intent_ctx_obj.ib_class)
+        return True
+
+    # ------------------------------------------------------------------ #
+    # active intent_context IBCI handle                                   #
+    # ------------------------------------------------------------------ #
+
+    def _set_active_intent_ibobj_for_current_ctx(self, ib_class: Any) -> None:
+        """
+        构造一个新的 ``intent_context`` IBCI 封装对象，其 ``_ctx`` 与
+        当前帧的 ``self._intent_ctx`` 共享引用，并将其登记为活跃实例指针。
+
+        共享引用不变量：当用户在该封装上调用 ``push()`` 时，
+        修改的就是帧的 ``_intent_ctx``；反之 ``@+`` 修改的也是该封装的 ``_ctx``。
+        """
+        from core.runtime.objects.kernel import IbObject
+        wrapper = IbObject(ib_class)
+        wrapper.fields['_ctx'] = self._intent_ctx
+        self._active_intent_ibobj = wrapper
+
+    def get_active_intent_ibobj(self) -> Optional[Any]:
+        """返回当前帧活跃的 intent_context IBCI 实例指针（可能为 None）。"""
+        return self._active_intent_ibobj
+
+    def set_active_intent_ibobj(self, ibobj: Optional[Any]) -> None:
+        """
+        直接设置活跃实例指针。
+
+        调用方约定：
+        - 传入 ``None`` 时表示当前帧没有命名策略（匿名意图状态）。
+        - 传入 ``IbObject`` 时，调用方需保证 ``ibobj.fields['_ctx'] is self._intent_ctx``
+          才能维持共享引用不变量。
+        """
+        self._active_intent_ibobj = ibobj
+
+    def clear_inherited_intents(self) -> None:
+        """
+        清空当前帧从调用者继承的持久意图栈。
+
+        与 ``intent_context.clear_inherited()`` IBCI API 一致：
+        - 重置 ``_intent_ctx`` 的持久意图栈为空
+        - 重建 ``_active_intent_ibobj`` 为新的匿名封装（共享 _ctx 引用），
+          表示当前帧重置为干净的匿名意图状态
+
+        全局意图和涂抹/排他槽位**不**被清除（仅清空持久 ``@+`` 栈）。
+        """
+        self._intent_ctx.set_intent_top(None)
+        intent_context_class = self._registry.get_class("intent_context")
+        if intent_context_class is not None:
+            self._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            self._active_intent_ibobj = None
 
     def restore_active_intents(self, intents: Union[List[IbIntent], Optional['IntentNode']]) -> None:
         """
@@ -618,6 +831,31 @@ class RuntimeContextImpl(RuntimeContext):
     @property
     def global_scope(self) -> Scope:
         return self._global_scope
+
+    def collect_gc_roots(self):
+        """
+        枚举 GC 根集合中的所有 IbObject（公理 GC-2）。
+
+        根集合 = 当前作用域链中所有符号值 ∪ 所有活跃 Cell 的持有对象。
+
+        返回一个生成器，逐一 yield IbObject。
+
+        注意
+        ----
+        本方法是 IBCI 规范层 GC-2 的接口落地。Python 宿主依赖 CPython 引用计数，
+        不需要手动 GC；此方法主要用于调试、合规测试以及未来非 Python 宿主迁移。
+        """
+        scope = self._current_scope
+        while scope is not None:
+            # 1. 所有符号值
+            for sym in scope.get_all_symbols().values():
+                if sym.value is not None:
+                    yield sym.value
+            # 2. Cell 变量：通过 Scope 协议方法 iter_cells() 枚举本作用域的所有 IbCell。
+            #    Scope 协议提供默认空迭代器实现，因此无需 hasattr 检查。
+            for cell in scope.iter_cells():
+                yield from cell.trace_refs()
+            scope = scope.parent
 
     def get_symbol_view(self) -> SymbolView:
         return SymbolViewImpl(self)

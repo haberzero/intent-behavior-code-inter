@@ -12,7 +12,7 @@ from core.runtime.interfaces import IExecutionContext
 from core.base.interfaces import IStateReader, ISymbolView, IIntentManager
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
-from core.kernel.spec import MethodMemberSpec
+from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
 from core.kernel.symbols import FunctionSymbol
 
 class ModuleLoader(IModuleLoader):
@@ -41,8 +41,7 @@ class ModuleLoader(IModuleLoader):
 
         # 从元数据注册表解析 (元数据来源于 _spec.py)
         metadata = context.interop.metadata.resolve(module_name)
-        from core.kernel.spec import ModuleSpec
-        if not metadata or not isinstance(metadata, ModuleSpec):
+        if not isinstance(metadata, IbSpec) or metadata.kind != TypeKind.MODULE.value:
             raise InterpreterError(f"Plugin Protocol Error: Module '{module_name}' metadata not found. "
                                    f"Ensure _spec.py exists and declares __ibcext_vtable__.")
 
@@ -51,9 +50,8 @@ class ModuleLoader(IModuleLoader):
 
         # 遍历元数据中声明的所有成员 (源自 _spec.py)
         for spec_name, spec_member in metadata.members.items():
-            # Determine if this member is a callable (new MethodMemberSpec or old Symbol/descriptor compat)
             is_callable_member = isinstance(spec_member, MethodMemberSpec)
-            param_count = len(spec_member.param_type_names) if is_callable_member else 0
+            param_count = len(spec_member.param_types) if is_callable_member else 0
 
 
             # 1. 处理函数/方法

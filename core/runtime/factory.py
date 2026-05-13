@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List, Mapping, Callable
+from typing import Any, Dict, Optional, List, Tuple, Sequence, Mapping, Callable, Union
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent, RuntimeContext, RuntimeSymbol
 )
@@ -7,7 +7,7 @@ from core.kernel.registry import KernelRegistry
 # 这些导入需要指向它们的新物理位置
 from core.runtime.interpreter.runtime_context import ScopeImpl, RuntimeContextImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbModule, IbNativeObject
-from core.runtime.objects.builtins import IbBehavior, IbDeferred, IbList
+from core.runtime.objects.builtins import IbBehavior, IbFnCallable, IbList, IbTuple, IbDict
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 
 class RuntimeObjectFactory(IObjectFactory):
@@ -19,14 +19,9 @@ class RuntimeObjectFactory(IObjectFactory):
     """
     def __init__(self, registry: KernelRegistry):
         self._registry = registry
-        self._handler_factories: List[Callable] = []
         self._llm_executor_factory: Optional[Callable] = None
 
     # --- IoC 注册接口 ---
-
-    def register_handler_factory(self, factory: Callable) -> None:
-        """注册语句/表达式处理器的构造工厂"""
-        self._handler_factories.append(factory)
 
     def register_llm_executor_factory(self, factory: Callable) -> None:
         """注册 LLM 执行器的构造工厂"""
@@ -43,15 +38,24 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_native_object(self, py_obj: Any, ib_class: IIbClass, vtable: Optional[Dict[str, Any]] = None) -> IIbObject:
         return IbNativeObject(py_obj, ib_class, vtable=vtable)
 
-    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, deferred_mode: Optional[str] = None, execution_context: Optional[Any] = None) -> Any:
-        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, deferred_mode=deferred_mode, execution_context=execution_context)
+    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, capture_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
+        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, closure=closure)
 
-    def create_deferred(self, node_uid: str, deferred_mode: str = "lambda", execution_context: Optional[Any] = None, captured_scope: Optional[Any] = None) -> Any:
-        """Create a universal deferred expression object (for non-behavior lambda/snapshot)."""
-        return IbDeferred(node_uid, ib_class=self._registry.get_class("deferred"), deferred_mode=deferred_mode, execution_context=execution_context, captured_scope=captured_scope)
+    def create_fn_callable(self, node_uid: str, capture_mode: str = "lambda", execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, body_uid: Optional[str] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
+        """Create a fn_callable expression object (for non-behavior lambda/snapshot)."""
+        return IbFnCallable(node_uid, ib_class=self._registry.get_class("fn_callable"), capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, body_uid=body_uid, closure=closure)
 
     def create_list(self, elements: List[IIbObject]) -> IIbList:
         return IbList(elements, ib_class=self._registry.get_class("list"))
+
+    def create_tuple(self, elements: Union[Tuple[IIbObject, ...], Sequence[IIbObject]]) -> IIbObject:
+        """Create an IbTuple from a tuple or sequence of IbObject elements."""
+        tup = elements if isinstance(elements, tuple) else tuple(elements)
+        return IbTuple(tup, ib_class=self._registry.get_class("tuple"))
+
+    def create_dict(self, fields: Dict[str, IIbObject]) -> IIbObject:
+        """Create an IbDict from a dict of IbObject values."""
+        return IbDict(dict(fields), ib_class=self._registry.get_class("dict"))
 
     def create_intent(self, content: str = "", mode: Any = None, tag: Optional[str] = None, role: Any = None) -> IIbIntent:
         return IbIntent(
@@ -77,10 +81,6 @@ class RuntimeObjectFactory(IObjectFactory):
         return RuntimeSymbolImpl(name=name, value=value, declared_type=declared_type, is_const=is_const)
 
     # --- 逻辑组件创建 (IoC 实现) ---
-
-    def create_handlers(self, service_context: Any, execution_context: Any) -> List[Any]:
-        """动态创建已注册的所有处理器，无物理硬编码引用"""
-        return [f(service_context, execution_context) for f in self._handler_factories]
 
     def create_llm_executor(self, service_context: Any, execution_context: Any) -> Any:
         """动态创建已注册的 LLM 执行器"""

@@ -18,6 +18,11 @@ class CoreTokenScanner:
         self.continuation_mode = False
         self.current_line_has_llm_def = False
         
+        # IN_INTENT state: track whether any content token has been emitted yet.
+        # Used to decide whether '#tag' at the current position is a tag annotation
+        # (only valid before any content) or literal '#' text.
+        self._intent_has_content = False
+        
         # String State
         self.is_raw_string = False
         self.quote_char = None
@@ -47,7 +52,7 @@ class CoreTokenScanner:
             'retry': TokenType.RETRY,
             '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
             '__llmretry__': TokenType.LLM_RETRY_HINT,
-            'true': TokenType.TRUE, 'false': TokenType.FALSE
+            'True': TokenType.TRUE, 'False': TokenType.FALSE
         }
 
     @property
@@ -73,18 +78,20 @@ class CoreTokenScanner:
             self.paren_level,
             self.is_raw_string,
             self.quote_char,
-            self.current_string_val
+            self.current_string_val,
+            self._intent_has_content,
         )
 
     def restore_snapshot(self, snapshot: tuple, tokens: List[Token], original_token_count: int):
         """恢复扫描器逻辑快照并回滚 Token 列表"""
-        stream_snap, stack_snap, paren, raw, quote, s_val = snapshot
+        stream_snap, stack_snap, paren, raw, quote, s_val, intent_content = snapshot
         self.scanner.restore_snapshot(stream_snap)
         self.state_stack = list(stack_snap)
         self.paren_level = paren
         self.is_raw_string = raw
         self.quote_char = quote
         self.current_string_val = s_val
+        self._intent_has_content = intent_content
         
         # 回滚 Token 列表
         if len(tokens) > original_token_count:
@@ -277,6 +284,7 @@ class CoreTokenScanner:
             else:
                 # Regular Intent Comment or Modified Intent
                 self.push_state(SubState.IN_INTENT)
+                self._intent_has_content = False  # reset for each new intent
                 # Include @ in the value so parser knows it's an intent marker
                 tokens.append(self.scanner.create_token(TokenType.INTENT, "@" + mode))
                 return False
@@ -570,22 +578,43 @@ class CoreTokenScanner:
         # 意图模式下的 $ 可能是自然语言，也可能是插值变量
         if char == '$':
             if self.try_scan(tokens, self._scan_var_ref_with_access):
+                self._intent_has_content = True
                 return
             # 尝试失败则作为普通文本
             char = self.scanner.advance()
             tokens.append(Token(TokenType.RAW_TEXT, char, self.scanner.line, self.scanner.col))
+            self._intent_has_content = True
             return
 
-        # 3. String Literals (Quoted)
+        # 3. Intent Tag annotation: #tag_name
+        # Only valid before any content token has been emitted in the current intent.
+        # '#' followed by a letter/underscore (not a digit) — distinguishes from '#1' in text.
+        if char == '#' and not self._intent_has_content:
+            next_char = self.scanner.peek(1)
+            if next_char and (next_char.isalpha() or next_char == '_'):
+                self.scanner.advance()  # consume '#'
+                tag_name = ""
+                while not self.scanner.is_at_end():
+                    c = self.scanner.peek()
+                    if c.isalnum() or c == '_':
+                        tag_name += self.scanner.advance()
+                    else:
+                        break
+                tokens.append(Token(TokenType.TAG, tag_name, self.scanner.line, self.scanner.col))
+                self._intent_has_content = True
+                return
+
+        # 4. String Literals (Quoted)
         if char == '"' or char == "'":
             # 进入字符串子模式
             self.push_state(SubState.IN_STRING)
             self.quote_char = self.scanner.advance() # consume quote
             self.current_string_val = ""
             self.is_raw_string = False
+            self._intent_has_content = True
             return
 
-        # 4. Raw Text
+        # 5. Raw Text
         text = ""
         while not self.scanner.is_at_end():
             peek_char = self.scanner.peek()
@@ -598,6 +627,7 @@ class CoreTokenScanner:
         
         if text:
             tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+            self._intent_has_content = True
 
     def _scan_var_ref_with_access(self, tokens: List[Token]):
         """辅助方法：同时扫描变量引用和可能的复杂路径访问"""

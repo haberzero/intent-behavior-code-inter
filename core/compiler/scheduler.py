@@ -17,7 +17,7 @@ from core.runtime.host.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
-    DEP_MODULE_NOT_FOUND
+    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT
 )
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
@@ -27,7 +27,7 @@ from core.base.interfaces import (
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
-from core.kernel.spec import ModuleSpec as ModuleMetadata, IbSpec, LazySpec
+from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
 # from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
 
 class Scheduler(ICompilerService):
@@ -373,7 +373,7 @@ class Scheduler(ICompilerService):
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
-            # 这样 LazySpec 才能在解析时找到目标，即使当前模块还未分析完
+            # 这样 TypeDef 才能在解析时找到目标，即使当前模块还未分析完
             pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
             
@@ -400,10 +400,10 @@ class Scheduler(ICompilerService):
                     rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
                     
-                    # 统一使用 LazySpec 解决循环依赖问题
+                    # 统一使用 TypeDef 解决循环依赖问题
                     # 无论该模块是否已编译，都先注入 Lazy 描述符，
                     # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
-                    s_mod_type = LazySpec(name=imp_mod_name)
+                    s_mod_type = TypeDef(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
                 elif imp.module_name in self.host_interface._module_metadata_map:
                     s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
@@ -435,7 +435,11 @@ class Scheduler(ICompilerService):
                         # 构造嵌套模块结构
                         root_sym = analyzer.symbol_table.resolve(root_name)
                         # 使用 is_module() 代替 isinstance
-                        if not root_sym or not root_sym.spec or not isinstance(root_sym.spec, ModuleSpec):
+                        if (
+                            not root_sym
+                            or not root_sym.spec
+                            or root_sym.spec.kind != TypeKind.MODULE.value
+                        ):
                             # 使用工厂创建
                             root_mod_type = self.registry.factory.create_primitive("module")
                             root_mod_type.name = root_name
@@ -452,7 +456,11 @@ class Scheduler(ICompilerService):
                             else:
                                 next_mod_sym = curr_mod.exported_scope.resolve(part_name)
                                 # 使用 is_module() 代替 isinstance
-                                if not next_mod_sym or not next_mod_sym.spec or not isinstance(next_mod_sym.spec, ModuleSpec):
+                                if (
+                                    not next_mod_sym
+                                    or not next_mod_sym.spec
+                                    or next_mod_sym.spec.kind != TypeKind.MODULE.value
+                                ):
                                     next_mod_type = self.registry.factory.create_primitive("module")
                                     next_mod_type.name = part_name
                                     next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_mod_type)
@@ -460,22 +468,22 @@ class Scheduler(ICompilerService):
                                 curr_mod = next_mod_sym.spec
                     else:
                         # 普通导入或带别名导入
-                        # [临时方案] 检查是否已存在同名符号
-                        # [Future] 严格遵循显式引入原则：外部模块符号不预注入
                         existing = analyzer.symbol_table.resolve(local_name)
                         if existing:
-                            # 情况1：已存在 MODULE 符号（可能是 Prelude 预注入的外部模块）
                             if existing.kind == SymbolKind.MODULE:
-                                # 跳过重复注入
-                                # 这符合"显式引入"原则的临时妥协：允许未 import 时使用 ai.xxx
+                                # 同名 MODULE 符号已存在（同一模块被重复导入）——幂等跳过即可。
                                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                     f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
                             else:
-                                # 情况2：已存在用户定义的符号（CLASS, FUNCTION 等）
-                                # 外部模块的 import 应该被忽略或给出警告
-                                # 因为用户可能意图使用自己定义的符号
-                                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC,
-                                    f"[import] Symbol '{local_name}' conflicts with an existing {existing.kind.name} symbol in '{file_path}'. Import silently ignored.")
+                                # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突（§9.2）。
+                                # 用户自有符号优先；发出 SEM_009 WARNING 提示用户检查命名。
+                                file_tracker.warning(
+                                    f"Import '{local_name}' conflicts with an already-defined "
+                                    f"{existing.kind.name.lower()} symbol of the same name. "
+                                    f"The import is ignored; the locally-defined symbol takes precedence.",
+                                    location=Location(file_path=file_path, line=imp.lineno, column=1),
+                                    code=SEM_IMPORT_CONFLICT,
+                                )
                         else:
                             mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
                             analyzer.symbol_table.define(mod_sym)
@@ -484,8 +492,7 @@ class Scheduler(ICompilerService):
                     # 2. 处理 from mod import a, b as c, *
                     for alias in imp.names:
                         if alias.name == '*':
-                            # 注入所有导出的符号
-                            # [临时方案] 检查是否已存在同名符号
+                            # 注入所有导出的符号；跳过已存在同名符号（幂等）
                             for name, sym in s_mod_type.exported_scope.symbols.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
@@ -499,11 +506,20 @@ class Scheduler(ICompilerService):
                             target_sym = s_mod_type.exported_scope.resolve(alias.name)
                             if target_sym:
                                 local_name = alias.asname if alias.asname else alias.name
-                                # [临时方案] 检查是否已存在同名符号
                                 existing = analyzer.symbol_table.resolve(local_name)
                                 if existing:
-                                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
+                                    # 用户定义的符号与 from-import 名冲突（§9.2）。
+                                    if existing.kind != SymbolKind.MODULE:
+                                        file_tracker.warning(
+                                            f"'from {imp.module_name} import {alias.name}' conflicts with an already-defined "
+                                            f"{existing.kind.name.lower()} symbol '{local_name}'. "
+                                            f"The import is ignored; the locally-defined symbol takes precedence.",
+                                            location=Location(file_path=file_path, line=imp.lineno, column=1),
+                                            code=SEM_IMPORT_CONFLICT,
+                                        )
+                                    else:
+                                        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                            f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
                                     # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
@@ -525,7 +541,7 @@ class Scheduler(ICompilerService):
             result = analyzer.analyze(ast_node)
             
             # 语义分析完成后，更新注册表中的元数据成员
-            # 这确保了 LazySpec 在解析时能看到完整的符号表
+            # 这确保了 TypeDef 在解析时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:
                 # 过滤掉非导出的符号（如内部变量）可以在这里做，目前默认全量导出

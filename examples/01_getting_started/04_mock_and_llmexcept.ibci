@@ -87,7 +87,7 @@ print("恢复结果: " + result4)
 
 print("\n=== 4. MOCK:LIST / MOCK:DICT 正确格式 ===\n")
 
-# MOCK:LIST:[...] → list 类型可直接接收（Bug #2 不影响 list）
+# MOCK:LIST:[...] → list 类型可直接接收
 list fruits = @~ MOCK:LIST:["apple","banana","cherry"] ~
 print("MOCK:LIST 返回的 list 长度: " + (str)fruits.len())
 int fi = 0
@@ -95,10 +95,10 @@ while fi < fruits.len():
     print("  fruits[" + (str)fi + "] = " + (str)fruits[fi])
     fi = fi + 1
 
-# MOCK:DICT → 已知 Bug #2：dict 类型变量接收 LLM 输出会产生类型错误
-# 临时规避：使用 str 接收，原始字符串仍可查看
-str raw_dict = @~ MOCK:DICT:{"name":"Alice","age":30} ~
-print("MOCK:DICT 原始字符串: " + raw_dict)
+# MOCK:DICT → dict 类型可直接接收（早期版本曾存在类型错误，现已修复）
+dict person = @~ MOCK:DICT:{"name":"Alice","age":30} ~
+print("MOCK:DICT name = " + (str)person["name"])
+print("MOCK:DICT age  = " + (str)person["age"])
 
 # 通过 idbg 确认 LLM 调用详情（中间变量探查）
 any last4 = idbg.last_llm()

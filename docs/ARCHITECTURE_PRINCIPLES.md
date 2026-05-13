@@ -3,9 +3,10 @@
 > 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
 > 供未来参与 IBC-Inter 项目的智能体和开发者进行架构对齐使用。
 >
-> **最后更新**：2026-04-17
+> **最后更新**：2026-05-08
 >
 > 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./ARCH_DETAILS.md)。
+> 当前类型系统状态：`TypeRef` + `TypeDef` + `CALLABLE_INSTANCE` + `IbValue` + `TypeAxiom` 已落地；类型系统主线 M1–M5 全部完成（2026-05-08）。
 
 ---
 
@@ -160,11 +161,11 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 | 依赖方向 | 是否允许 | 说明 |
 |----------|----------|------|
-| kernel → base | ✅ 允许 | kernel 可使用 base 的原子概念 |
-| compiler → kernel | ✅ 允许 | 编译器依赖核心语言概念 |
-| runtime → kernel | ✅ 允许 | 运行时依赖核心语言概念 |
-| kernel → runtime | ❌ 禁止 | 架构穿透严格禁止 |
-| runtime → compiler | ❌ 禁止 | 运行时不应依赖编译器 |
+| kernel → base | 允许 | kernel 可使用 base 的原子概念 |
+| compiler → kernel | 允许 | 编译器依赖核心语言概念 |
+| runtime → kernel | 允许 | 运行时依赖核心语言概念 |
+| kernel → runtime | 禁止 | 架构穿透严格禁止 |
+| runtime → compiler | 禁止 | 运行时不应依赖编译器 |
 
 ### 4.2 架构穿透严格禁止
 
@@ -191,7 +192,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 ### 5.2 公理与类型系统集成
 
 - IbSpec（`core/kernel/spec/`）是唯一的类型描述符系统，旧的 `TypeDescriptor` / `AxiomHydrator` 已不存在
-- 公理通过 `AxiomRegistry` 查询，Capability（CallCapability、OperatorCapability 等）由公理直接实现
+- 公理通过 `AxiomRegistry` 查询，各类型能力通过公理的 `has_*_cap` 类属性声明，统一由 `TypeAxiom` 接口实现
 - 所有类型引用在公理层均以**纯字符串类型名**传递，消除公理层对 spec 层的直接依赖
 - `SpecRegistry` 负责将公理返回的类型名字符串解析为对应的 `IbSpec` 对象
 
@@ -206,7 +207,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 | 场景 | 说明 |
 |------|------|
 | **IbSpec 基类能力访问器** | 返回 None 表示"未知"，子类有义务重写 |
-| **FuncSpec 返回类型解析** | 公理优先，静态签名作为编译期后备（双轨制） |
+| **TypeDef 返回类型解析** | 公理优先，静态 TypeRef 签名作为编译期后备（双轨制） |
 | **LazySpec 正常情况** | 占位符模式，已解析时返回真实 IbSpec |
 
 #### 禁止的 Fallback：妥协性历史兼容
@@ -235,14 +236,14 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
 | **IbSpec** | 所有类型描述符的基类 | `kernel/spec/base.py` |
-| **FuncSpec / ClassSpec / ListSpec / TupleSpec / DictSpec 等** | 具体类型描述符 | `kernel/spec/specs.py` |
+| **TypeDef（统一类型定义；旧 *Spec 子类与别名已彻底删除）** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
 | **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry.py` |
 | **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry.py` |
 | **MemberSpec / MethodMemberSpec** | 模块成员描述符 | `kernel/spec/member.py` |
 
 `Symbol` 只保留 `.spec` 字段（`IbSpec` 类型），不存在 `.descriptor` 属性或任何兼容 shim。
 
-关于 MetadataRegistry（公理 Capability 查询入口）以及 MetadataRegistry 双轨问题，详见 ARCH_DETAILS.md。
+关于 MetadataRegistry（公理 Capability 查询入口）以及双轨问题解决详情，详见 ARCH_DETAILS.md §10。
 
 ---
 
@@ -385,9 +386,9 @@ def __ibcext_vtable__():
 
 | 打包场景 | 兼容性 | 说明 |
 |----------|--------|------|
-| **PyInstaller 打包** | ✅ 完全兼容 | Python 解释器完整保留 |
-| **Nuitka 打包** | ✅ 完全兼容 | 反射机制正常工作 |
-| **未来语法迁移** | ✅ 完全兼容 | Python 作为胶水层保留 |
+| **PyInstaller 打包** | 完全兼容 | Python 解释器完整保留 |
+| **Nuitka 打包** | 完全兼容 | 反射机制正常工作 |
+| **未来语法迁移** | 完全兼容 | Python 作为胶水层保留 |
 
 **核心保障**：只要保留完整的 Python 解释器，所有 `__attr__` 反射机制、`importlib`、`dir()` 等都能正常工作。
 
@@ -438,8 +439,8 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 **关键保证**：
 | 保证 | 说明 |
 |------|------|
-| **静态类型检查保留** | 编译器通过 .ibc_meta 文件获取完整的 TypeDescriptor 信息 |
-| **扁平流生成保留** | FlatSerializer 依赖 TypeDescriptor.get_references()，与发现机制无关 |
+| **静态类型检查保留** | 编译器通过 `core/kernel/spec/` 中的 `TypeDef` / `TypeRef` 体系获取完整类型信息 |
+| **扁平流生成保留** | FlatSerializer 依赖 `IbSpec.get_references()` / `TypeDef` 统一字段，不依赖旧 `TypeDescriptor` 体系 |
 | **运行时零侵入** | 插件不需要 import ibcext 就能被发现和加载 |
 | **二进制兼容** | 只要有 Python 解释器，运行时发现正常工作 |
 
@@ -531,16 +532,9 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 > 以下问题已在代码中发现，将在后续版本中修复。详细技术背景见 ARCH_DETAILS.md。
 
-### A.1 MetadataRegistry 双轨问题
+### A.1 MetadataRegistry 双轨问题（已解决，2026-05-08）
 
-**问题描述**：
-- `KernelRegistry.get_metadata_registry()` 在 builtin 初始化时创建（轨A）
-- `HostInterface.metadata` 在 discover_all 时创建（轨B）
-- 两轨使用同名 `MetadataRegistry` 类，但实例不同，相互独立
-
-**根因**：架构演进中的设计妥协，builtin 类型系统和插件系统分别发展后未及时统一。
-
-**修复方向**：实现 `.ibc_meta` 文件机制，compiler 通过文件获取元数据而非通过 HostInterface 间接访问。
+主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例：`discover_all(registry)` 将引擎的 `SpecRegistry` 传入 `HostInterface`，`HostInterface.metadata` 与 `KernelRegistry._metadata_registry` 同源，不存在两轨分离问题。详见 `docs/ARCH_DETAILS.md §十`。
 
 ### A.2 HOST 插件游离问题
 
@@ -557,15 +551,11 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
                (ModuleDiscovery)   (插件实现)
 ```
 
-### A.3 符号去重：import 与用户定义同名冲突
+### A.3 符号去重：import 与用户定义同名冲突（已解决，2026-05-02）
 
-**问题描述**：若用户定义与已导入插件同名的 class/variable，Pass 1 符号收集阶段会与 Scheduler 注入的模块符号冲突。
-
-**临时方案**：在符号表中区分 MODULE 符号和 CLASS 符号。**长期方案**：严格遵循显式引入原则，外部模块符号不预注入到编译时符号表（详见 PENDING_TASKS.md 章节九）。
-
-**涉及文件**：`core/compiler/scheduler.py`（`_inject_plugin_symbols` 中有若干 `[临时方案]` 注释）
+`Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器阻止了插件模块的预注入——未 `import` 时访问插件符号会触发正常的 `SEM_001 Unknown variable` 报错。`scheduler.py` 中的所有 `[临时方案]` 注释已全部清除；新增 `SEM_009 SEM_IMPORT_CONFLICT` 诊断码，当 `import X` 与用户定义的同名符号冲突时，编译器发出 WARNING 而非静默跳过。详见 `docs/COMPLETED.md`。
 
 ---
 
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
-*最后更新：2026-04-17*
+*最后更新：2026-05-09*

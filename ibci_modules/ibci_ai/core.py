@@ -477,29 +477,44 @@ class AIPlugin(IbStatefulPlugin):
                 mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
                 
                 if mock_type == "INT":
-                    return str(int(mock_value))
+                    # Strip any trailing key/label (first word only is the value)
+                    int_val = mock_value.split()[0] if mock_value.split() else mock_value
+                    return str(int(int_val))
                 elif mock_type == "STR":
-                    # Strip surrounding matched quotes (added by behavior-expression parser)
+                    # Strip surrounding matched quotes (added by behavior-expression parser),
+                    # then strip any trailing key/label (text after the first whitespace).
                     if len(mock_value) >= 2 and (
-                        (mock_value[0] == '"' and mock_value[-1] == '"') or
-                        (mock_value[0] == "'" and mock_value[-1] == "'")
+                        (mock_value[0] == '"' and '"' in mock_value[1:]) or
+                        (mock_value[0] == "'" and "'" in mock_value[1:])
                     ):
-                        return mock_value[1:-1]
-                    return mock_value
+                        q = mock_value[0]
+                        close = mock_value.index(q, 1)
+                        return mock_value[1:close]
+                    # Unquoted: value is everything up to the first whitespace
+                    str_val = mock_value.split()[0] if mock_value.split() else mock_value
+                    return str_val
                 elif mock_type == "FLOAT":
-                    return str(float(mock_value))
+                    # Strip any trailing key/label
+                    float_val = mock_value.split()[0] if mock_value.split() else mock_value
+                    return str(float(float_val))
                 elif mock_type == "BOOL":
-                    return "1" if mock_value == "TRUE" else "0"
+                    # Strip any trailing key/label; comparison remains uppercase-only
+                    bool_val = mock_value.split()[0] if mock_value.split() else mock_value
+                    return "1" if bool_val == "TRUE" else "0"
                 elif mock_type == "LIST":
-                    # If value already has surrounding brackets, return as-is
-                    if mock_value.startswith('[') and mock_value.endswith(']'):
-                        return mock_value
-                    return f"[{mock_value}]"
+                    # Value must start with '['; strip trailing key after the closing ']'
+                    if mock_value.startswith('['):
+                        close = mock_value.find(']')
+                        if close != -1:
+                            return mock_value[:close + 1]
+                    return f"[{mock_value.split()[0] if mock_value.split() else mock_value}]"
                 elif mock_type == "DICT":
-                    # If value already has surrounding braces, return as-is
-                    if mock_value.startswith('{') and mock_value.endswith('}'):
-                        return mock_value
-                    return "{" + mock_value + "}"
+                    # Value must start with '{'; strip trailing key after the closing '}'
+                    if mock_value.startswith('{'):
+                        close = mock_value.find('}')
+                        if close != -1:
+                            return mock_value[:close + 1]
+                    return "{" + (mock_value.split()[0] if mock_value.split() else mock_value) + "}"
                 elif mock_type == "REPAIR":
                     # Extended MOCK:REPAIR syntax with a fallback directive.
                     # Format: MOCK:REPAIR:<FALLBACK_MOCK_DIRECTIVE>

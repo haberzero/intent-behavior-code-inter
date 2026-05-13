@@ -44,5 +44,8 @@ RUN_LIMIT_EXCEEDED = "RUN_008"
 RUN_LLM_ERROR = "RUN_009"
 RUN_PERMISSION_ERROR = "RUN_010"
 
+# Import / module resolution warnings (SEM_009)
+SEM_IMPORT_CONFLICT = "SEM_009"
+
 # llmexcept / snapshot isolation (SEM_05x)
 SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"

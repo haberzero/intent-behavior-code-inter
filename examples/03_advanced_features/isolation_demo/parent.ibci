@@ -14,9 +14,9 @@ print("PARENT Config Model: " + (str)cfg["model"])
 print("\nLaunching CHILD in isolation...")
 # 指定策略：独立 Registry, 不继承变量
 dict policy = {
-    "isolated": true,
-    "registry_isolation": true,
-    "inherit_variables": false
+    "isolated": True,
+    "registry_isolation": True,
+    "inherit_variables": False
 }
 # 使用绝对路径（需要确保路径正确）
 ihost.run_isolated("examples/03_advanced_features/isolation_demo/sub_project/child.ibci", policy)

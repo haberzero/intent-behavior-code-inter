@@ -3,10 +3,10 @@ from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.base.source_atomic import Location
-from core.runtime.exceptions import ReturnException, RegistryIsolationError
+from core.runtime.exceptions import RegistryIsolationError
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.intent_logic import IntentRole
-from core.kernel.spec import IbSpec, FuncSpec, ClassSpec, ANY_SPEC
+from core.kernel.spec import IbSpec, ANY_SPEC, TypeKind
 
 if TYPE_CHECKING:
     from core.kernel import ast as ast
@@ -14,6 +14,52 @@ if TYPE_CHECKING:
     from core.runtime.interpreter.interpreter import Interpreter
 
 from .ib_type_mapping import register_ib_type
+
+
+def _is_intent_context_param(ec: 'IExecutionContext', param_uid: str, param_data: Dict[str, Any]) -> bool:
+    """
+    Return True when a parameter node is annotated as `intent_context`.
+    """
+    def _is_intent_context_spec(spec: Any) -> bool:
+        if spec is None:
+            return False
+        name = getattr(spec, "name", None)
+        base_name = spec.get_base_name() if hasattr(spec, "get_base_name") else name
+        return base_name == "intent_context" or name == "intent_context"
+
+    # 1) Prefer semantic side-table type info: it is produced after full Pass-4
+    #    type resolution and is more stable than runtime node shape fallbacks.
+    direct_spec = ec.get_side_table("node_to_type", param_uid)
+    if _is_intent_context_spec(direct_spec):
+        return True
+
+    # 2) Compatibility fallback for IbTypeAnnotatedExpr-wrapped target binding
+    if not isinstance(param_data, dict):
+        return False
+    if param_data.get("_type") == "IbTypeAnnotatedExpr":
+        target_uid = param_data.get("target")
+        target_spec = ec.get_side_table("node_to_type", target_uid)
+        if _is_intent_context_spec(target_spec):
+            return True
+        annotation_uid = param_data.get("annotation")
+        annotation_data = ec.get_node_data(annotation_uid) if annotation_uid else None
+        if annotation_data:
+            ann_type = annotation_data.get("_type")
+            if ann_type == "IbName":
+                return annotation_data.get("id") == "intent_context"
+            if ann_type == "IbAttribute":
+                return annotation_data.get("attr") == "intent_context"
+    return False
+
+
+def _should_activate_intent_context_arg(arg_value: Any, is_intent_ctx_param: bool) -> bool:
+    if is_intent_ctx_param:
+        return True
+    return (
+        isinstance(arg_value, IbObject)
+        and hasattr(arg_value, "fields")
+        and arg_value.fields.get("_ctx") is not None
+    )
 
 @register_ib_type("any")
 @register_ib_type("auto")
@@ -168,6 +214,104 @@ class IbObject:
     def __repr__(self):
         return f"<{self.ib_class.name} object at {hex(id(self))}>"
 
+
+class IbValue(IbObject):
+    """
+    Unified runtime value carrier.
+
+    ``IbValue`` centralizes the data shape shared by all user-visible runtime
+    values:
+    - ``type_ref``: structured runtime type identity
+    - ``payload``: native payload / container payload / callable payload
+    - ``fields``: object-style instance fields when the value has them
+    - ``meta``: extra runtime metadata for specialized values
+
+    Concrete value types (``IbInteger``, ``IbString``, ``IbList``,
+    ``IbDict``, ``IbFnCallable``, ``IbBehavior``, …) inherit from ``IbValue``
+    and each carry their domain-specific behaviour (interning, native
+    conversions, list operations, callable execution logic, …).  They are
+    permanent type-implementation classes, not compatibility shims.
+
+    Storage conventions:
+    - Scalar types (int / float / str / bool) store their native value in
+      ``payload``; the inherited ``value`` property provides a named alias.
+    - Sequence types (list / tuple) store their element collection in
+      ``payload`` and expose it via an ``elements`` property.
+    - Dict stores its mapping via ``IbObject.fields`` (and mirrors it in
+      ``payload``).
+    - Callable instances (fn_callable / behavior) store the target node UID in
+      ``payload`` and runtime state in ``meta``.
+    """
+    __slots__ = ('type_ref', 'payload', 'meta')
+
+    def __init__(
+        self,
+        ib_class: 'IbClass',
+        payload: Any = None,
+        *,
+        fields: Optional[Dict[str, Any]] = None,
+        type_ref: Optional[Any] = None,
+        meta: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(ib_class)
+        if fields is not None:
+            self.fields = fields
+        if type_ref is not None:
+            self.type_ref = type_ref
+        else:
+            from core.kernel.spec.type_ref import TypeRef as _TypeRef
+            spec = getattr(ib_class, "spec", None)
+            self.type_ref = _TypeRef.from_spec(spec) if spec is not None else None
+        self.payload = payload
+        self.meta = dict(meta) if meta is not None else {}
+
+    @property
+    def value(self) -> Any:
+        return self.payload
+
+    @value.setter
+    def value(self, new_value: Any) -> None:
+        self.payload = new_value
+
+    def get_type_name(self) -> str:
+        if self.type_ref is not None and hasattr(self.type_ref, "head"):
+            return self.type_ref.head
+        return self.ib_class.name
+
+    def is_type(self, *names: str) -> bool:
+        return self.get_type_name() in names or self.ib_class.name in names
+
+    def get_meta(self, key: str, default: Any = None) -> Any:
+        return self.meta.get(key, default)
+
+    def set_meta(self, key: str, value: Any) -> None:
+        self.meta[key] = value
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        """
+        Return the raw payload for scalar / already-native values.
+
+        Container-like subclasses override this to recursively unwrap nested
+        ``IbObject`` / ``IbValue`` members while preserving memoized cycle
+        handling.
+        """
+        return self.payload
+
+    def serialize_for_debug(self) -> Mapping[str, Any]:
+        data: Dict[str, Any] = {"type": self.get_type_name(), "payload": self.payload}
+        if self.fields:
+            data["fields"] = {
+                k: (v.serialize_for_debug() if isinstance(v, IbObject) else v)
+                for k, v in self.fields.items()
+            }
+        if self.meta:
+            data["meta"] = dict(self.meta)
+        return data
+
+    def __repr__(self):
+        return f"<{self.get_type_name()} value payload={self.payload!r}>"
+
+
 class IbNativeObject(IbObject):
     """
     包装 Python 原生对象的 IBC 对象。
@@ -194,8 +338,7 @@ class IbNativeObject(IbObject):
         # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:
             attr = self.vtable[message]
-            # 所有的 Proxy VTable 都已经由 ModuleLoader 完成了自动装箱转换
-            # 直接调用并返回 IbObject
+            # Proxy VTable 由 ModuleLoader 完成自动装箱转换
             return attr(*args)
 
         # 2. 处理 __getattr__ 协议 (属性/方法获取)
@@ -290,15 +433,15 @@ class IbModule(IbObject):
     def __repr__(self):
         return f"<Module '{self.name}'>"
 
-class IbDeferredField:
-    """延迟字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
+class IbClassField:
+    """类字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
     def __init__(self, val_uid: str, static_val: Optional[IbObject] = None, module_name: Optional[str] = None):
         self.val_uid = val_uid
         self.static_val = static_val
         self.module_name = module_name
 
     def __repr__(self):
-        return f"<DeferredField {self.val_uid} (static={self.static_val})>"
+        return f"<ClassField {self.val_uid} (static={self.static_val})>"
 
 @register_ib_type("Type")
 @register_ib_type("Class")
@@ -379,41 +522,47 @@ class IbClass(IbObject):
         
         # 延迟执行字段初始化 (Item 2.1 Audit)
         for name, val_info in all_default_fields.items():
-            if isinstance(val_info, IbDeferredField):
+            if isinstance(val_info, IbClassField):
                 if val_info.static_val is not None:
-                    # 优先使用预评估好的快照，但可变容器（IbList/IbDict）必须每次创建新实例，
+                    # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
                     # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
-                    from core.runtime.objects.builtins import IbList, IbDict
                     sv = val_info.static_val
-                    if isinstance(sv, IbList):
-                        instance.fields[name] = IbList(list(sv.elements), sv.ib_class)
-                    elif isinstance(sv, IbDict):
-                        instance.fields[name] = IbDict(dict(sv.fields), sv.ib_class)
+                    # 可变容器（list/dict）需每次创建新实例以避免共享——
+                    # 使用 type(sv)(...) 保持多态性，无需引入具体类名。
+                    if isinstance(sv, IbValue) and sv.ib_class.name == "list":
+                        instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
+                    elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
+                        instance.fields[name] = type(sv)(dict(sv.fields), sv.ib_class)
                     else:
                         instance.fields[name] = sv
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
-                        # 确保在定义该字段的模块上下文中进行求值
-                        evaluated = context.visit(val_info.val_uid, module_name=val_info.module_name)
+                        vm = context.vm_executor
+                        if vm is None:
+                            raise RuntimeError("IbClass.instantiate: vm_executor not available")
+                        old_module = context.current_module_name
+                        context.current_module_name = val_info.module_name
+                        try:
+                            evaluated = vm.run(val_info.val_uid)
+                        finally:
+                            context.current_module_name = old_module
                         instance.fields[name] = evaluated
-                        # 如果是简单的纯函数或常量表达式，可以缓存到类描述符中
-                        # 这里我们激进一点，只要成功求值就缓存，除非用户显式要求 JIT
                         val_info.static_val = evaluated
                     except Exception:
                         instance.fields[name] = self.registry.get_none()
                 else:
                     instance.fields[name] = self.registry.get_none()
             else:
-                # [Active Defense] 仅支持 IbDeferredField，确保字段初始化的一致性
+                # [Active Defense] 仅支持 IbClassField，确保字段初始化的一致性
                 instance.fields[name] = val_info
         
         init_method = self.lookup_method('__init__')
         if init_method:
             # 契约一致性校验：校验 __init__ 参数数量
             # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
-            if init_method.spec and isinstance(init_method.spec, FuncSpec):
-                expected_count = len(init_method.spec.param_type_names)
+            if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+                expected_count = len(init_method.spec.param_types)
                 if len(args) != expected_count:
                     raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
             
@@ -514,6 +663,12 @@ class IbNativeFunction(IbFunction):
         except Exception as e:
             if isinstance(e, InterpreterError):
                 raise
+            # ThrownException 是用户代码主动抛出的语言级异常（如
+            # LLMParseError 等），必须穿透原生函数边界，由 IbTry / 顶层
+            # try-except 体系处理；不可被包装为 InterpreterError。
+            from core.runtime.exceptions import ThrownException
+            if isinstance(e, ThrownException):
+                raise
             raise InterpreterError(f"Native function '{self._name}' failed: {e}")
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
@@ -536,7 +691,7 @@ class IbBoundMethod(IbFunction):
 
     @property
     def spec(self) -> Optional[IbSpec]:
-        """Synthesise a BoundMethodSpec for this bound method."""
+        """Synthesise a TypeDef for this bound method."""
         spec_reg = self.ib_class.registry.get_metadata_registry()
         if spec_reg:
             r_name = self.receiver.ib_class.name if self.receiver else ""
@@ -590,13 +745,13 @@ class IbSuperProxy(IbObject):
         return f"<super: <class '{parent_name}'>, <{self._receiver.ib_class.name} object>>"
 
 
-class IbNone(IbObject):
+class IbNone(IbValue):
     """
     IBC-Inter 的空对象 (None)。
     现在通过 Registry 获取单例。
     """
     def __init__(self, ib_class: 'IbClass'):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=None)
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         if message == '__eq__':
@@ -632,7 +787,7 @@ class IbNone(IbObject):
 
 
 @register_ib_type("llm_uncertain")
-class IbLLMUncertain(IbObject):
+class IbLLMUncertain(IbValue):
     """
     表示 LLM 调用重试耗尽后仍无法得到确定结果的特殊值。
 
@@ -646,7 +801,7 @@ class IbLLMUncertain(IbObject):
     - 不进入异常体系——用户通过 if/while 逻辑主动检测
     """
     def __init__(self, ib_class: 'IbClass'):
-        super().__init__(ib_class)
+        super().__init__(ib_class, payload=None)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return None
@@ -673,7 +828,7 @@ class IbLLMUncertain(IbObject):
 
 
 @register_ib_type("llm_call_result")
-class IbLLMCallResult(IbObject):
+class IbLLMCallResult(IbValue):
     """
     LLM 调用结果的结构化类型。
 
@@ -697,7 +852,15 @@ class IbLLMCallResult(IbObject):
     """
     def __init__(self, ib_class: 'IbClass', is_certain: bool, value: Optional['IbObject'] = None,
                  raw_response: str = "", retry_hint: str = ""):
-        super().__init__(ib_class)
+        super().__init__(
+            ib_class,
+            payload=value,
+            meta={
+                "is_certain": is_certain,
+                "raw_response": raw_response,
+                "retry_hint": retry_hint,
+            },
+        )
         self.is_certain = is_certain
         self.result_value = value
         self.raw_response = raw_response
@@ -740,23 +903,12 @@ class IbUserFunction(IbFunction):
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
         from core.runtime.frame import get_current_frame as _get_frame
-        from core.runtime.objects.builtins import IbDeferred, IbBehavior
+        from core.runtime.objects.builtins import IbFnCallable, IbBehavior
         from core.base.diagnostics.codes import RUN_CALL_ERROR
         _frame = _get_frame()
         rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
         old_scope = rt_context.current_scope
-
-        # --- lambda 参数传递约束 ---
-        # lambda 延迟对象不允许作为函数参数传递（语义约束）。
-        # snapshot 不受此限制。
-        for arg in args:
-            if isinstance(arg, (IbDeferred, IbBehavior)) and getattr(arg, 'deferred_mode', None) == 'lambda':
-                raise InterpreterError(
-                    "TypeError: lambda 延迟对象不允许作为函数参数传递。"
-                    " 如需跨作用域传递延迟值，请使用 snapshot 关键字。",
-                    error_code=RUN_CALL_ERROR
-                )
 
         # --- 意图栈作用域隔離（拷贝传递语义）---
         # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
@@ -765,8 +917,17 @@ class IbUserFunction(IbFunction):
         #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
         from core.runtime.objects.intent_context import IbIntentContext
         old_intent_ctx = rt_context._intent_ctx
+        # 函数调用进入时，子帧获得一个匿名活跃指针（共享 fork 后 _ctx 引用）。
+        # 子帧默认未选择命名意图策略；若参数被标注为 ``intent_context`` 类型，
+        # 后续参数自动绑定阶段（``use_intent_context``）会覆盖该匿名指针。
+        old_active_ibobj = rt_context.get_active_intent_ibobj()
         child_ctx = old_intent_ctx.fork()
         rt_context._intent_ctx = child_ctx
+        intent_context_class = self.context.registry.get_class("intent_context")
+        if intent_context_class is not None:
+            rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            rt_context.set_active_intent_ibobj(None)
 
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
@@ -811,9 +972,10 @@ class IbUserFunction(IbFunction):
                 if self.owner_class and self.owner_class.parent:
                     super_proxy = IbSuperProxy(receiver, self.owner_class.parent)
                     rt_context.define_variable("super", super_proxy, uid="builtin:super")
-                
+
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
+                is_intent_ctx_param = _is_intent_context_param(self.context, arg_uid, arg_data)
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
                 if arg_data.get("_type") == "IbTypeAnnotatedExpr":
@@ -822,21 +984,40 @@ class IbUserFunction(IbFunction):
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
+                    arg_value = args[i]
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                    if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
+                        rt_context.use_intent_context(arg_value)
             
             body = node_data.get("body", [])
-            for stmt_uid in body:
-                self.context.visit(stmt_uid)
-                
+            # Drive function body execution via VMExecutor (CPS main path).
+            # run_body() propagates top-level control signals via UnhandledSignal.
+            # Signals are consumed by except _CSE below; BREAK/CONTINUE are re-thrown.
+            from core.runtime.vm.task import (
+                ControlSignal as _CS, UnhandledSignal as _CSE,
+            )
+            vm = self.context.vm_executor
+            if vm is None:
+                raise RuntimeError(
+                    "IbUserFunction.call(): vm_executor not available on ExecutionContext. "
+                    "Ensure Interpreter.execute_module() has been called before invoking user functions."
+                )
+            vm.run_body(body)
+
             return ib_none
-        except ReturnException as e:
-            return e.value
+        except _CSE as e:
+            # 捕获 UnhandledSignal，按信号类型处理。
+            if e.signal.kind is _CS.RETURN:
+                return e.signal.value
+            raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者
         finally:
             self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
             rt_context._intent_ctx = old_intent_ctx
+            # 恢复调用者的活跃实例指针。
+            rt_context.set_active_intent_ibobj(old_active_ibobj)
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 
@@ -890,8 +1071,15 @@ class IbLLMFunction(IbFunction):
         # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
         # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
         old_intent_ctx = rt_context._intent_ctx
+        # 与 IbUserFunction.call 对称，进入 LLM 函数时为子帧建立匿名活跃指针。
+        old_active_ibobj = rt_context.get_active_intent_ibobj()
         child_ctx = old_intent_ctx.fork()
         rt_context._intent_ctx = child_ctx
+        intent_context_class = self.context.registry.get_class("intent_context")
+        if intent_context_class is not None:
+            rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            rt_context.set_active_intent_ibobj(None)
 
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
@@ -922,8 +1110,10 @@ class IbLLMFunction(IbFunction):
             )
             
             params_uids = node_data.get("args", [])
+
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)
+                is_intent_ctx_param = _is_intent_context_param(self.context, arg_uid, arg_data)
                 # 处理类型标注包装
                 actual_arg_uid = arg_uid
                 actual_arg_data = arg_data
@@ -933,8 +1123,11 @@ class IbLLMFunction(IbFunction):
                 
                 arg_name = actual_arg_data.get("arg")
                 if i < len(args):
+                    arg_value = args[i]
                     sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                    if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
+                        rt_context.use_intent_context(arg_value)
             
             # 解析呼叫级意图（函数头上的意图），暂存供 invoke_llm_function 消费
             intent_uid = node_data.get("intent")
@@ -955,6 +1148,8 @@ class IbLLMFunction(IbFunction):
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
             rt_context._intent_ctx = old_intent_ctx
+            # 恢复调用者的活跃实例指针。
+            rt_context.set_active_intent_ibobj(old_active_ibobj)
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 

@@ -13,11 +13,12 @@ class ExecutionContextImpl:
     运行时执行上下文的具体实现。
     它作为纯状态容器，持有 node_pool、栈和运行时上下文的引用。
     同时，它持有指向 Interpreter 逻辑的回调函数，以实现物理层面的逻辑与数据分离。
+    所有 AST 节点求值均通过 vm_executor（VMExecutor CPS 调度循环）完成；
+    不存在 visit() 回调路径。
     """
     def __init__(self,
                  registry: Any,
                  factory: Any,
-                 visit_callback: Any,
                  get_node_data_callback: Any,
                  get_side_table_callback: Any,
                  push_stack_callback: Any,
@@ -46,9 +47,13 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
+        # VMExecutor 直接引用（由 Interpreter 在构造完成后注入）。
+        # 替代 IbUserFunction.call() 中通过 self.context._interpreter._get_vm_executor()
+        # 三级 getattr 的脆弱查找路径。多 Interpreter 并发场景下，每个执行上下文
+        # 必须通过此属性直接获得对应的 VMExecutor，避免静默 fallback。
+        self._vm_executor: Optional[Any] = None
         
         # Logic Callbacks
-        self._visit_callback = visit_callback
         self._get_node_data_callback = get_node_data_callback
         self._get_side_table_callback = get_side_table_callback
         self._push_stack_callback = push_stack_callback
@@ -121,6 +126,24 @@ class ExecutionContextImpl:
         return self
 
     @property
+    def vm_executor(self) -> Any:
+        """C13：当前 ExecutionContext 关联的 VMExecutor（由 Interpreter 注入）。
+
+        当 IbUserFunction.call() 等代码需要驱动函数体语句的 CPS 执行时，应通过
+        本属性获取 VMExecutor，而不是穿透到 ``self._interpreter`` 上调用
+        ``_get_vm_executor()``。多 Interpreter 并发场景下，每个 ExecutionContext
+        关联其专属 VMExecutor，避免线程间相互查找的 race condition。
+
+        若 Interpreter 尚未完成 VMExecutor 注入，返回 ``None``；调用方需要
+        显式处理（不应静默降级到递归路径）。
+        """
+        return self._vm_executor
+
+    @vm_executor.setter
+    def vm_executor(self, value: Any) -> None:
+        self._vm_executor = value
+
+    @property
     def registry(self) -> Any:
         return self._registry
 
@@ -151,9 +174,6 @@ class ExecutionContextImpl:
     @strict_mode.setter
     def strict_mode(self, value: bool):
         self._strict_mode = value
-
-    def visit(self, node_uid: str, module_name: Optional[str] = None, bypass_protection: bool = False) -> 'IbObject':
-        return self._visit_callback(node_uid, module_name=module_name, bypass_protection=bypass_protection)
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
         return self._get_node_data_callback(node_uid)

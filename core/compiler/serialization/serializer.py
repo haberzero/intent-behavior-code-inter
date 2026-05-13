@@ -4,8 +4,9 @@ import json
 from enum import Enum
 from core.kernel import ast as ast
 from core.kernel.symbols import Symbol, SymbolTable
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, BoundMethodSpec, ListSpec, DictSpec
-from core.kernel.spec.specs import DeferredSpec
+from core.kernel.spec import IbSpec, TypeDef
+from core.kernel.spec.specs import TypeDef
+from core.kernel.spec.base import TypeKind
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 
@@ -70,27 +71,21 @@ class FlatSerializer(BaseFlatSerializer):
             type_uid = self._collect_type(type_obj)
             remaped_node_to_type[node_uid] = type_uid
 
-        remaped_node_is_deferred = {}
-        for node, val in result.node_is_deferred.items():
+        remaped_node_is_callable_instance = {}
+        for node, val in result.node_is_callable_instance.items():
             node_uid = self._collect_node(node)
-            remaped_node_is_deferred[node_uid] = val
+            remaped_node_is_callable_instance[node_uid] = val
 
         remaped_node_to_loc = {}
         for node, loc in result.node_to_loc.items():
             node_uid = self._collect_node(node)
             remaped_node_to_loc[node_uid] = loc
 
-        remaped_node_protection = {}
-        for node, handler in result.node_protection.items():
-            node_uid = self._collect_node(node)
-            handler_uid = self._collect_node(handler)
-            remaped_node_protection[node_uid] = handler_uid
-
-        remaped_node_deferred_mode = {}
-        for node, mode in result.node_deferred_mode.items():
+        remaped_node_capture_mode = {}
+        for node, mode in result.node_capture_mode.items():
             node_uid = self._collect_node(node)
             if node_uid:
-                remaped_node_deferred_mode[node_uid] = mode
+                remaped_node_capture_mode[node_uid] = mode
 
         return {
             "root_node_uid": root_node_uid,
@@ -98,10 +93,9 @@ class FlatSerializer(BaseFlatSerializer):
             "side_tables": {
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,
-                "node_is_deferred": remaped_node_is_deferred,
+                "node_is_callable_instance": remaped_node_is_callable_instance,
                 "node_to_loc": remaped_node_to_loc,
-                "node_protection": remaped_node_protection,
-                "node_deferred_mode": remaped_node_deferred_mode
+                "node_capture_mode": remaped_node_capture_mode
             },
             "pools": {
                 "nodes": self.node_pool,
@@ -174,19 +168,37 @@ class FlatSerializer(BaseFlatSerializer):
         
         type_data = {
             "uid": uid,
-            "kind": t.__class__.__name__,
+            "kind": t.kind,
             "name": t.name,
             "module_path": t.module_path,
             "is_nullable": t.is_nullable,
             "is_user_defined": t.is_user_defined,
         }
 
-        # Persist scalar fields for DeferredSpec / BehaviorSpec so the runtime
-        # rehydrator can reconstruct the proper subclass (and get_base_name()
-        # will return "deferred" / "behavior" instead of "deferred[str]").
-        if isinstance(t, DeferredSpec):
-            type_data["value_type_name"] = t.value_type_name
-            type_data["deferred_mode"] = t.deferred_mode
+        # Persist scalar fields for callable-instance specs (fn_callable[T] / behavior[T])
+        # so the runtime rehydrator can reconstruct the proper variant.
+        # ``axiom_name`` carries the "fn_callable" / "behavior" axiom dispatch key,
+        # which is needed to disambiguate the two variants now that they share
+        # ``TypeKind.CALLABLE_INSTANCE``.
+        # ``capture_mode`` is NOT persisted here — it lives on the runtime value
+        # (IbFnCallable/IbBehavior) and on the AST node, both of which round-trip
+        # through their own channels.
+        if t.kind == TypeKind.CALLABLE_INSTANCE.value:
+            v_ref = getattr(t, "value_type", None)
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "auto"
+            type_data["axiom_name"] = t.get_base_name()
+
+        # Persist TypeDef inner-type scalar fields for artifact rehydration.
+        if t.kind == TypeKind.OPTIONAL.value:
+            w_ref = getattr(t, "wrapped_type", None)
+            type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
+            type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
+
+        # Persist TypeDef param/return signature for structural checking.
+        if t.kind == TypeKind.CALLABLE_SIG.value:
+            type_data["param_type_names"] = [p.head for p in getattr(t, "param_types", [])]
+            ret_ref = getattr(t, "return_type", None)
+            type_data["return_type_name"] = ret_ref.head if ret_ref is not None else "auto"
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()
@@ -198,10 +210,11 @@ class FlatSerializer(BaseFlatSerializer):
                 type_data[f"{key}_uid"] = self._collect_type(val)
         
         # 使用 is_class() 代替 isinstance 检查
-        if t.is_class():
-            # 这里的字段是字符串，直接存储
-            type_data["parent_name"] = getattr(t, "parent_name", None)
-            type_data["parent_module"] = getattr(t, "parent_module", None)
+        if t.kind == TypeKind.CLASS.value:
+            # 父类引用：从 parent_type TypeRef 提取扁平名供反序列化使用
+            p_ref = getattr(t, "parent_type", None)
+            type_data["parent_name"] = p_ref.head if p_ref is not None else None
+            type_data["parent_module"] = p_ref.module if p_ref is not None else None
             
         # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来

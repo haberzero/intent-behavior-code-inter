@@ -4,18 +4,10 @@ core/kernel/spec/__init__.py
 Public API for the spec layer.
 """
 
-from .base import IbSpec
+from .base import IbSpec, TypeDef, TypeKind
 from .member import MemberSpec, MethodMemberSpec
+from .type_ref import TypeRef
 from .specs import (
-    FuncSpec,
-    ClassSpec,
-    ListSpec,
-    TupleSpec,
-    DictSpec,
-    DeferredSpec,
-    BoundMethodSpec,
-    ModuleSpec,
-    LazySpec,
     # Built-in prototype constants
     INT_SPEC,
     FLOAT_SPEC,
@@ -28,7 +20,8 @@ from .specs import (
     SLICE_SPEC,
     CALLABLE_SPEC,
     BEHAVIOR_SPEC,
-    DEFERRED_SPEC,
+    FN_CALLABLE_SPEC,
+    OPTIONAL_SPEC,
     EXCEPTION_SPEC,
     BOUND_METHOD_SPEC,
     LIST_SPEC,
@@ -37,25 +30,23 @@ from .specs import (
     MODULE_SPEC,
     ENUM_SPEC,
     LLM_CALL_RESULT_SPEC,
+    LLM_ERROR_SPEC,
+    LLM_PARSE_ERROR_SPEC,
+    LLM_RETRY_EXHAUSTED_ERROR_SPEC,
+    LLM_CALL_ERROR_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 
 __all__ = [
     # Base
     "IbSpec",
+    "TypeDef",
+    "TypeKind",
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",
-    # Concrete spec kinds
-    "FuncSpec",
-    "ClassSpec",
-    "ListSpec",
-    "TupleSpec",
-    "DictSpec",
-    "DeferredSpec",
-    "BoundMethodSpec",
-    "ModuleSpec",
-    "LazySpec",
+    # TypeRef
+    "TypeRef",
     # Built-in constants
     "INT_SPEC",
     "FLOAT_SPEC",
@@ -68,7 +59,8 @@ __all__ = [
     "SLICE_SPEC",
     "CALLABLE_SPEC",
     "BEHAVIOR_SPEC",
-    "DEFERRED_SPEC",
+    "FN_CALLABLE_SPEC",
+    "OPTIONAL_SPEC",
     "EXCEPTION_SPEC",
     "BOUND_METHOD_SPEC",
     "LIST_SPEC",
@@ -77,6 +69,10 @@ __all__ = [
     "MODULE_SPEC",
     "ENUM_SPEC",
     "LLM_CALL_RESULT_SPEC",
+    "LLM_ERROR_SPEC",
+    "LLM_PARSE_ERROR_SPEC",
+    "LLM_RETRY_EXHAUSTED_ERROR_SPEC",
+    "LLM_CALL_ERROR_SPEC",
     # Registry / factory
     "SpecRegistry",
     "SpecFactory",

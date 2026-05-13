@@ -11,6 +11,7 @@ IBCI JSON 序列化/操作插件实现。非侵入层插件，零内核依赖。
 - pretty：美化输出
 - __to_prompt__：模块参与 __prompt__ 协议，描述自身
 """
+import copy
 import json
 from typing import Any, Dict, List, Optional
 
@@ -97,7 +98,6 @@ class JSONLib:
         按点分路径写入嵌套值，返回修改后的新 dict（不修改原 obj）。
         路径中途的节点若不存在则自动创建为 dict。
         """
-        import copy
         result = copy.deepcopy(obj)
         parts = path.split(".")
         current = result

@@ -28,7 +28,7 @@ class IbIntentContext:
     """
     意图上下文运行时对象。
 
-    内部结构（镜像 RuntimeContextImpl 当前实现，方便 Step 6c 迁移）：
+    内部结构：
     - _intent_top: Optional[IntentNode]     持久意图栈顶节点（不可变链表，结构共享）
     - _smear_queue: List[IbIntent]          一次性涂抹意图队列（@ 语义）
     - _override: Optional[IbIntent]         排他意图槽（@! 语义）
@@ -124,12 +124,48 @@ class IbIntentContext:
 
     def merge(self, snapshot: "IbIntentContext") -> None:
         """
-        将快照的意图状态合并回当前上下文（retry 恢复路径）。
-        这是 LLMExceptFrame.restore_context() 的正确实现方式。
+        将快照的意图状态**替换**式合并回当前上下文（retry 恢复路径）。
+
+        语义：**REPLACE** — 调用后 self 的 ``_intent_top`` / ``_smear_queue``
+        / ``_override`` 与 ``snapshot`` 完全一致（全局意图保持不变）。
+        这是 LLMExceptFrame restore 历史路径与 ``intent_context.merge(other)``
+        OOP API 共享的实现：均为"用 other 内容覆盖 self"。
+
+        要做加法式合并（保留 self 已有意图，再叠加 other 的意图）请使用
+        :meth:`combine`。
         """
         self._intent_top = snapshot._intent_top
         self._smear_queue = list(snapshot._smear_queue)
         self._override = snapshot._override
+
+    def combine(self, other: "IbIntentContext") -> None:
+        """
+        将 ``other`` 的意图状态**叠加**到当前上下文（加法式合并）。
+
+        语义：**ADDITIVE** — self 的持久意图栈在保留原有内容的基础上，将
+        ``other`` 的持久意图栈按栈底→栈顶顺序追加压入；smear_queue 追加；
+        override 取 other 的（若 other 未设置则保留 self 原值）。全局意图
+        不参与合并（属 Engine 级数据）。
+
+        典型场景（PT-2.1 多 intent_context 组合）::
+
+            intent_context base = intent_context.get_current()
+            intent_context extra = intent_context()
+            extra.push("额外意图")
+            base.combine(extra)           # base 同时拥有原意图与 extra 的意图
+            intent_context.use(base)      # 采纳为当前帧活跃上下文
+        """
+        from core.runtime.interpreter.runtime_context import IntentNode
+        # 持久栈：``other.get_active_intents()`` 返回 other 栈底→栈顶；按此顺序
+        # 依次压入 self 栈顶，使 other 的栈顶最终成为合并后栈的新栈顶。
+        # 新 IntentNode 链没有缓存，无需手动失效。
+        for intent in other.get_active_intents():
+            self._intent_top = IntentNode(intent, self._intent_top)
+        # smear_queue：追加
+        self._smear_queue.extend(other._smear_queue)
+        # override：other 的 override 覆盖 self（若有）
+        if other._override is not None:
+            self._override = other._override
 
     def set_global_intents(self, intents: List[Any]) -> None:
         self._global_intents = list(intents)
@@ -208,6 +244,49 @@ class IbIntentContext:
         for intent in reversed(intents):
             self._intent_top = IntentNode(intent, self._intent_top)
         return True
+
+    # ------------------------------------------------------------------ #
+    # Prompt rendering & cloning                                          #
+    # ------------------------------------------------------------------ #
+
+    def to_prompt(self) -> str:
+        """渲染当前意图上下文为 LLM 提示词友好的多行文本。
+
+        用于 PT-2.1：把 ``intent_context`` 实例注入到 behavior 表达式的
+        ``@~ ... $ctx ... ~`` 动态变量替换路径。提示词内容形如：
+
+            意图上下文：
+              1. 用中文回复
+              2. 保持简洁
+
+        无任何活跃意图时返回空字符串，避免在提示词中产生噪声标题。
+        """
+        lines: List[str] = []
+        # 全局意图（Engine 级注入）— 优先级最低，先列
+        for intent in self._global_intents:
+            content = getattr(intent, "content", None) or str(intent)
+            lines.append(content)
+        # 持久意图栈：``get_active_intents()`` 返回栈底→栈顶顺序；
+        # 直接拼接即按"先压入先列出"的稳定顺序输出。
+        for intent in self.get_active_intents():
+            content = getattr(intent, "content", None) or str(intent)
+            lines.append(content)
+        # 涂抹与排他独立列出（一次性效果）
+        for intent in self._smear_queue:
+            content = getattr(intent, "content", None) or str(intent)
+            lines.append(content)
+        if self._override is not None:
+            content = getattr(self._override, "content", None) or str(self._override)
+            lines.append(content)
+
+        if not lines:
+            return ""
+        body = "\n".join(f"  {i+1}. {ln}" for i, ln in enumerate(lines))
+        return "意图上下文：\n" + body
+
+    def __to_prompt__(self) -> str:
+        """Pythonic 对齐：与 IbObject.__to_prompt__ 协议同名，供 LLM 拼装层调用。"""
+        return self.to_prompt()
 
     # ------------------------------------------------------------------ #
     # Convenience                                                          #

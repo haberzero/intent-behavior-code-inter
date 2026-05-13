@@ -182,7 +182,7 @@ class IbReturn(IbStmt):
 class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
-    deferred_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
+    capture_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):
@@ -196,6 +196,10 @@ class IbFor(IbStmt):
     iter: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    # 条件驱动 for 循环的 llmexcept handler。
+    # vm_handle_IbFor 直接内联重试逻辑（不再使用已删除的 node_protection 侧表）。
+    # 正则 for 循环该字段为 None。
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbWhile(IbStmt):
@@ -284,7 +288,7 @@ class IbLLMExceptionalStmt(IbStmt):
     statement
     llmexcept retry "hint"
     """
-    target: IbStmt
+    target: Optional[IbStmt]
     body: List[IbStmt] = field(default_factory=list)
 
 # --- Expressions ---
@@ -387,6 +391,18 @@ class IbFilteredExpr(IbExpr):
 class IbBehaviorExpr(IbExpr):
     segments: List[Union[str, IbExpr]]
     tag: str = ""
+    # 编译期 DDG 分析：当本 IbBehaviorExpr 求值依赖其他 behavior 节点的
+    # 结果时，按 AST 顺序记录这些依赖节点的 ``IbBehaviorExpr`` 对象（语义阶段
+    # 写入；序列化时通过侧表/UID 自动转化）。``dispatch_eligible`` 表示本节点
+    # 是否可在 LLM 调度阶段被独立 dispatch（True：可并行；False：含未解析依赖、
+    # 必须等上游完成后再求值）。
+    #
+    # 默认值的语义：
+    # * ``llm_deps == []`` ：本 behavior 无 LLM 依赖（只引用普通变量）
+    # * ``dispatch_eligible == True`` ：可独立调度（无依赖或依赖图无环时由
+    #   依赖分析在后保留；分析未运行时也按 True 默认，与现有行为一致）
+    llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)
+    dispatch_eligible: bool = True
 
 @dataclass(kw_only=True, eq=False)
 class IbBehaviorInstance(IbExpr):
@@ -401,9 +417,94 @@ class IbBehaviorInstance(IbExpr):
     """
     segments: List[Union[str, IbExpr]]  # 原始行为描述片段
     target_type_name: str = ""           # 目标类型名称（如 "Mood"）
-    is_deferred: bool = False           # 是否延迟执行
+    is_callable_instance: bool = False           # 是否延迟执行
+
+
+@dataclass(kw_only=True, eq=False)
+class IbLambdaExpr(IbExpr):
+    """
+    参数化 lambda/snapshot 表达式。
+
+    支持的全部形式（``:`` 为唯一 body 起始符）::
+
+        lambda: EXPR                            # 无参，返回类型推导
+        lambda -> TYPE: EXPR                    # 无参，显式返回类型
+        lambda(PARAMS): EXPR                    # 有参，返回类型推导
+        lambda(PARAMS) -> TYPE: EXPR            # 有参，显式返回类型
+        snapshot: EXPR                          # 无参 snapshot，返回类型推导
+        snapshot -> TYPE: EXPR                  # 无参 snapshot，显式返回类型
+        snapshot(PARAMS): EXPR                  # 有参 snapshot，返回类型推导
+        snapshot(PARAMS) -> TYPE: EXPR          # 有参 snapshot，显式返回类型
+
+    返回类型标注写在**表达式侧**：``fn f = lambda -> TYPE: EXPR``。
+
+    其中 ``PARAMS`` 是与函数参数同构的 ``IbArg`` / ``IbTypeAnnotatedExpr`` 列表，
+    ``EXPR`` 是任意 IBCI 表达式（含 ``IbBehaviorExpr``）。
+
+    字段
+    ----
+    * ``returns``：表达式侧返回类型标注节点（``IbName``/``IbSubscript`` 等），
+      由解析器填充（``None`` 表示返回类型待推导）；语义分析器通过
+      ``_resolve_type(node.returns)`` 获取 ``IbSpec``。
+
+    语义
+    ----
+    * ``capture_mode == 'lambda'``：自由变量 cell 共享捕获，每次调用 deref 最新值；
+      调用处的意图栈生效。
+    * ``capture_mode == 'snapshot'``：定义时对自由变量做**深克隆**形成只读种子；
+      每次调用前再次对种子深克隆并注入子作用域，使 snapshot 作为完全无状态、
+      可重入的可调用实例存在；意图栈也在定义时 fork 并冻结。
+
+    AST 形态独立于 ``IbBehaviorExpr``：当 ``body`` 本身是 ``IbBehaviorExpr`` 时，
+    运行时构造 ``IbBehavior``；否则构造 ``IbFnCallable``。两者都接受参数列表。
+    """
+    params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
+    body: Optional[IbExpr] = None
+    capture_mode: str = 'lambda'  # 'lambda' | 'snapshot'
+    # D2：表达式侧返回类型标注节点（IbName/IbSubscript 等）。
+    # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
+    # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。
+    returns: Optional['IbExpr'] = None
+    # 编译期自由变量列表（由 Pass 4 语义分析器填充）。
+    # 每项为 [name, sym_uid]，name 是变量名，sym_uid 是 Symbol.uid（作用域 UID + 名称）。
+    # 序列化后进入 artifact node_data["free_vars"]，运行时 vm_handle_IbLambdaExpr
+    # 直接读取，无需在运行时走访 AST 收集自由变量。
+    free_vars: List = field(default_factory=list)
+
+    @property
+    def creates_scope(self) -> bool:
+        # lambda/snapshot 体内的 params 与 body 形成新的词法作用域。
+        return True
 
 # --- Helpers ---
+
+@dataclass(kw_only=True, eq=False)
+class IbCallableType(IbExpr):
+    """
+    Callable signature type annotation produced by the parser when
+    ``fn[...]`` appears in a type-annotation context and the subscript
+    content follows the callable signature form ``(type_list) -> type``.
+
+    D3: supports ``fn[(param_types) -> return_type]`` syntax for HOF parameter
+    type annotations and variable declaration type overrides.
+
+    Examples::
+
+        fn[(int, str) -> bool]    # (int, str) → bool callable
+        fn[() -> int]             # no-arg, returns int
+        fn[(int) -> int]          # single param, returns int
+
+    Fields
+    ------
+    param_types : List[IbExpr]
+        Type annotation nodes for each parameter (empty list for ``()``).
+    return_type : Optional[IbExpr]
+        Return type annotation node; ``None`` is treated as ``auto``.
+    """
+    param_types: List['IbExpr'] = field(default_factory=list)
+    return_type: Optional['IbExpr'] = None
+
+
 
 @dataclass(kw_only=True, eq=False)
 class IbArg(IbASTNode):

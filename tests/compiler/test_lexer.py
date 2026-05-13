@@ -15,6 +15,7 @@ Coverage:
 
 import pytest
 from core.compiler.lexer.lexer import Lexer
+from core.compiler.common.tokens import TokenType
 
 
 def tokenize(code: str):
@@ -166,14 +167,13 @@ print(x)
         assert "print" in values
 
     def test_if_else_indentation(self):
-        code = """if true:
+        code = """if True:
     print("yes")
 else:
     print("no")
 """
         tokens = tokenize(code)
         types = [t for t, _ in tokens]
-        from core.compiler.common.tokens import TokenType
         assert TokenType.INDENT in types
         assert TokenType.DEDENT in types
 

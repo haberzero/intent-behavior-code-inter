@@ -1,463 +1,126 @@
-# IBC-Inter 待实现任务清单
+# PENDING_TASKS — 阻塞 / 待前置任务
 
-> 记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。
+> 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
+> 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-04-27（文档与代码一致性审计；global 语句、is/is not 运算符完成；690 个测试通过）
+> **最后更新**：2026-05-13（测试体系契约化完成）
 
 ---
 
-## 一、动态宿主（DynamicHost）相关
+## 一、llmexcept 相关后续（PT-1.x）— 已全部完成
 
-### 1.1 子解释器插件注册 [PENDING]
-**任务**：允许子解释器独立注册自己的插件。
+> PT-1.1~PT-1.3 已于 2026-05-12 完成，详见 `docs/COMPLETED.md`。
 
-**搁置原因**：当前阶段不允许子解释器独立注册插件，所有插件应从主解释器继承。
+## 二、NS-2（intent OOP 化收口）相关 — 已全部完成
 
-**未来方案**：定义插件注册接口、实现运行时插件加载机制、添加隔离策略配置项。
-
----
-
-### 1.2 HOST 插件 breakpoint 接口 [PENDING]
-**任务**：为 HOST 插件添加 breakpoint 相关接口（现场保存/恢复/回溯，非 GDB 式断点）。
-
-**搁置原因**：DynamicHost 当前最小目标不含断点功能，需先完成内核稳定工作。
+> PT-2.1 / PT-2.2 已于 2026-05-12 完成，详见 `docs/COMPLETED.md`。
 
 ---
 
-## 二、公理化相关
+## 三、待 VM 信号 / 中断 / 异步机制（L3 协程）成熟后才能继续
 
-### 2.1 Intent 完整公理化 [✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- 新建 `core/kernel/axioms/intent.py`：`IntentAxiom`（`is_class()=True`，完整 vtable 声明）
-- `IbIntent` 添加 `@register_ib_type("Intent")` 装饰器及三个公共方法：`get_content()`、`get_tag()`、`get_mode()`
-- `register_core_axioms()` 注册 `IntentAxiom()`
-- `INTENT_SPEC = ClassSpec(name="Intent", ...)` 加入 `specs.py` 并注册到 `create_default_spec_registry()`，使 `_bootstrap_axiom_methods()` 在 `SpecRegistry` 初始化阶段即填充 `Intent` 成员表
-- `builtin_initializer.py` 显式导入 `IbIntent`，确保 `@register_ib_type("Intent")` 在公理自动化绑定循环之前执行
-- 517 个测试全部通过
+### PT-3.1　host.run_isolated() 返回值改进 [VISION]
+### PT-3.2　ReceiveMode 枚举演进 [VISION]
 
 ---
 
-### 2.2 Intent Stack 不可变性约束 [PENDING]
-**任务**：实现 Intent Stack 不可变性约束。
+## 四、语言级语义/语法收尾（暂搁置；基于真实代码事实）
 
-**搁置原因**：依赖 Intent 公理化完成；Intent Stack 语义尚有待澄清的设计要点。
+> 本节三项均经过事实核查。每项均给出"现阶段真实代码状态 + 未来演进思路"，确保文档不误导后续开发者。
 
----
+### PT-4.1　Enum 类型系统的"非 str 成员"与迭代/序数能力 [VISION]
 
-### 2.3 符号同步深拷贝 [PENDING]
-**任务**：修复 `_sync_variables_from()` 直接传递 symbol 引用的问题。
+**现阶段真实代码状态**
 
-**搁置原因**：变量继承已禁用（`inherit_variables=False`），当前不触发。**位置**：`interpreter.py:93-99`
+- 公理：`core/kernel/axioms/primitives.py:1071-1164` 的 `EnumAxiom`。
+  - `has_from_prompt_cap = True` / `has_output_hint_cap = True` / `has_converter_cap = True`。
+  - `_get_enum_index_map(spec)` 遍历 `spec.members`，**过滤掉 `_` 开头字段与内建方法名**后建立 `{name → name}` 映射；映射本身**不携带成员声明类型**——它把成员"名字本身"当作字符串值返回给 LLM。
+  - `can_convert_from(src) == (src == "str")`：只允许 `(MyEnum)str_var` 显式 cast；`(MyEnum)int_var` 不被接受（编译期未启用时仅运行期路径生效）。
+  - `from_prompt(...)` 把 LLM 返回值大写化后在 index 中查表，命中即返回 `val_str`（仍是字符串）；未命中返回 `(False, retry_hint)` 走 llmexcept 重试。
+  - `__outputhint_prompt__` 仅列出成员名，**不附带底层值**。
+- 运行时：`core/runtime/objects/enum.py` 的 `IbEnumValue` / `IbEnum` / `IbEnumAdapter`，所有比较都退化到 `name` 字符串等价（大小写不敏感的 `IbEnumValue.__eq__`、`IbEnum.__eq__`）。`IbEnumAdapter.cast_to("int")` 根据成员**在类成员表中的迭代序号**返回索引（非声明值）。
+- 内置类：`core/runtime/bootstrap/builtin_initializer.py:155-204` 注册 `Enum` 基类（继承 `Object`），并把对应 `EnumAxiom` 注入；用户写 `class Color(Enum)` 即继承该基类。
+- 字段持有方式：用户写 `str RED = "RED"` 会被通常的类字段路径采纳；`Color.RED` 实际取出的是 `IbString("RED")`（不是 `IbEnumValue`）。"枚举身份"目前**完全由字符串等价模拟**。
+- 已知限制（同步登记在 `KNOWN_LIMITS.md §四`）：
+  - 仅支持 `str` 成员（写 `int RED = 1` 时 `EnumAxiom.from_prompt` 仍按名字字符串匹配，与底层 `1` 不一致；`Color.RED` 取出是 `IbInteger(1)`，与 `IbEnumValue` 等价路径失联）。
+  - 不支持 `for v in Color:` 迭代。
+  - 不支持 `len(Color)` 或成员序数显式查询（运行时 `cast_to("int")` 内部走的是迭代序号，但无 IBCI 端入口）。
 
----
+**未来演进思路（不构成承诺）**
 
-### 2.4 ParserCapability LLM 提示词片段扩展 [PENDING]
-**任务**：扩展 `ParserCapability` 接口，添加 `get_llm_prompt_fragment()` 方法，替代 `ibci_ai` 中硬编码的 `_return_type_prompts`，使每个 Axiom 能自主声明其对应的 LLM 输出格式提示词。
+- 给 `EnumAxiom._get_enum_index_map` 升级为携带"成员名 → (声明类型, 值)"的映射；`__outputhint_prompt__` 改为同时呈现名与底层值，from_prompt 同时接受名字或字面值。
+- 为 `Enum` 基类注册 `__iter__` / `__len__` / `members()` 方法（在 `builtin_initializer.py` 中按 `EnumAxiom._get_enum_index_map` 派生）。
+- 重写 `Color.RED` 访问路径，使其返回 `IbEnumAdapter` 包装而非原始 `IbString`/`IbInteger`，统一身份与比较语义。
 
-**涉及文件**：`core/kernel/axioms/protocols.py`、`core/kernel/axioms/primitives.py`、`core/runtime/interpreter/llm_executor.py`
+**为什么搁置**
 
----
-
-### 2.5 Axiom Capability 内部委托对象模式重构 [FUTURE / INDEPENDENT]
-
-**任务**：将 `primitives.py` 中所有 Axiom 类从"自身实现 Capability Protocol"的多继承模式，改为"持有内部 Capability 委托对象"的委托模式（`DeferredCallCapability` / `BehaviorCallCapability` 已采用此独立类模式）。
-
-**目标模式**：
-```python
-class _IntOperatorCapability:           # 独立私有类
-    def resolve_operation_type_name(self, op, other): ...
-
-class IntAxiom(BaseAxiom):              # 只继承 BaseAxiom，无 Protocol 多继承
-    _op_cap = _IntOperatorCapability()
-    def get_operator_capability(self): return self._op_cap
-```
-
-**完成效果**：所有 14 个 Axiom 类 MRO 退化为单继承；`primitives.py` 中 48 处 Protocol 多继承链条全部消除；对外 API 零破坏（调用方通过 `get_xxx_capability()` 访问）。
-
-**工程量**：需新增约 40-50 个私有 Capability 类，约为 Impl 类 Protocol 清理工作的 3-4 倍。需同步拆分 `primitives.py`（届时约 2000+ 行）。
-
-**搁置原因**：无对应 Bug；Capability Protocol 均无 `@runtime_checkable` 修饰，不存在 Python 3.12 isinstance 风险；为纯架构美观性改进，现阶段无触发必要性。
-
-**建议触发时机**：`primitives.py` 因内容增加需强制拆分文件时，或 Capability 逻辑出现跨 Axiom 复用需求时。
-
-**涉及文件**：`core/kernel/axioms/primitives.py`
+- 与 LLM 输出约定耦合：把底层值写入 prompt 提示词需要重新审视用户期望（"reply with RED" vs "reply with 1"）。
+- 与"成员迭代"相关的设计需要 VM 端为 `Enum` 类型实例化静态迭代器，触及内置类型注册顺序与 lazy-init 路径。
+- 现有 str 成员能力对绝大多数 LLM 集成已足够；先收口语言收尾项（NS-4..NS-7）。
 
 ---
 
-## 三、类型系统
+### PT-4.2　可调用类实例（`__call__` 协议）的类型推断与副作用一致性 [VISION]
 
-### 3.1 禁止 auto 向明确类型隐式赋值 [PENDING]
-**任务**：实现 auto 类型约束机制，禁止 auto 向明确类型隐式赋值。
+**现阶段真实代码状态**
 
-**搁置原因**：最低优先级，允许当前瑕疵存在。**方向**：在语义分析器的类型检查阶段加强约束。
+- 语义识别：`core/compiler/semantic/passes/semantic_analyzer.py:1129-1145, 1804-1825`。
+  - `visit_IbCall` 时若 `val_type.members` 含 `__call__`，沿 `registry.resolve_member(func_type, '__call__')` 推断返回类型（line 1813-1825）。
+  - 编译期允许"类实例当函数用"，并在 missing `__call__` 时输出建议性错误（"Add 'func __call__(self, ...)' to ..."）。
+- 运行时分发：
+  - `core/runtime/objects/kernel.py:580-587, 733`：`IbClass.receive("__call__")` 走实例化；`IbObject.receive("__call__")` 通过 vtable 查找用户实例方法。
+  - `core/runtime/vm/handlers.py:512`：`vm_handle_IbCall` 在通用路径上对任意 `func` 都派发 `func.receive("__call__", args)`，因此 `obj()` 在 VM 主路径上是受支持的。
+- side_table：`core/compiler/semantic/passes/side_table.py:35,45` 通过 `set_callable_instance` / `is_callable_instance` 标注节点是否走 callable-instance 调度路径；`vm/handlers.py:1393-1483` 据此分发。
+- 已知限制（同步登记在 `KNOWN_LIMITS.md §三`）："不建议使用"——`fn` 类型推断对 `__call__` 协议与闭包捕获、意图栈副作用的若干交叉路径存在不一致；当可调用类实例内部触发 `@~...~` 或意图栈相关副作用时，类型推断与运行时分发之间的错位可能产生静默错误。
+- 真实存在的灰区（核查所得）：
+  1. `__call__` 内部 `@~...~` 行为表达式：其意图栈 / 行为执行上下文以"调用现场"为准（NS-3 已校准），但 `__call__` 是实例方法，`self.intent_context` 字段与调用现场 `intent_context` 是否合并需要更显式的合同。
+  2. 类内 `__call__` 推断返回类型时：`resolve_member(func_type, '__call__')` 走 `MethodMemberSpec.ret`；若用户写 `auto` 或省略返回类型，目前回落到 `auto`，未与调用站的左值类型协商，可能与"显式返回类型才安全"的 `KNOWN_LIMITS §七`（行为表达式不能直接用于 return）的设计原则相违背。
+  3. `is_compatible(fn_callable)` 视角：可调用实例的 spec 是 `TypeKind.CLASS`（其类是 `TypeKind.CLASS`），与 `fn_callable` 公理不在同一兼容轴；写 `fn f = obj`（`obj` 是带 `__call__` 的类实例）的语义未被显式涵盖，主路径有可能落入 `auto` 兜底。
 
----
+**未来演进思路（不构成承诺）**
 
-### 3.2 ib_type_mapping 完善 [PENDING]
-**任务**：完善 `runtime/objects/ib_type_mapping.py` 的类型映射实现（当前 `_IB_TYPE_TO_CLASS` 为空字典）。
+- 在 `MethodMemberSpec` 上为 `__call__` 增设"is_callable_proxy"标记，让类型系统对持有此方法的类自动认作 `callable` 子型。
+- 显式规定 `__call__` 内 `@~...~` 的 intent_context 合并规则（参考 NS-2c 的 fork-and-replace 思路），并补全测试。
+- 评估是否要求 `__call__` 的返回类型必须显式声明（与 NS-2c 对行为表达式的同类约束对齐）。
 
-**搁置原因**：不影响核心功能，优先级低。
+**为什么搁置**
 
----
-
-### 3.3 BooleanCapability 接口 [PENDING]
-**任务**：在语义分析器的条件驱动 for 循环类型校验中（`semantic_analyzer.py` 约第 853 行），引入 `BooleanCapability` 接口，替代现有的 `is_dynamic() or is_behavior() or iter_type.name == "bool"` 特例判断。
-
-**当前状态**：该分支逻辑直接 `pass`，无实质约束；现有条件足以覆盖已知场景。
-
-**搁置原因**：不影响当前功能正确性；需要在 `core/kernel/axioms/protocols.py` 中新增 `BooleanCapability` 协议并在所有布尔类型 Axiom 中实现。
-
----
-
-## 四、语法功能
-
-### 4.1 (str n) @~ ... ~ 语法完善 [PENDING]
-**任务**：验证并完善 callable 闭包参数传递语法，明确其设计语义。
-
-**搁置原因**：手册描述的语法需确认完整实现，闭包参数传递机制需更明确的设计。
+- 触及类型系统兼容性轴（class ↔ callable 系列），改动面跨 axiom / spec / semantic / vm 四层。
+- 用户目前可用"普通方法 + lambda 包装"作为可调用实例的替代方案，规避成本低。
 
 ---
 
-### 4.2 llmretry 后缀语法澄清 [PENDING]
-**任务**：明确 llmretry 后缀的当前实现状态与文档描述是否一致。
+### PT-4.3　语言级协程（L3）[VISION]
 
-**搁置原因**：当前实现为声明式 llmexcept + retry，手册描述的单行后缀语法已被重构。
+**现阶段真实代码状态**
 
----
+- VM 层基础设施：
+  - `core/runtime/vm/task.py:34` 的 `ControlSignal(Enum)` 已定义控制流信号类型（break/continue/return/llm_uncertain 等）；`Signal` 类承载信号在帧栈中向上传播。
+  - `core/runtime/vm/vm_executor.py` 与 `vm/handlers.py` 已统一走 CPS 风格的 `yield` 调度循环（NS-1 / segments CPS 化），`frame_stack_depth` 已暴露给观测层（`COMPLETED.md` 2026-05-11 NS-1 锚点）。
+  - 当前 VM 是单任务调度器：一次 `vm.run(uid)` 起一个根任务，没有挂起/恢复其他任务的能力。
+- 语言层面：
+  - 没有 `async` / `await` / `yield` / `coroutine` 关键字；`core/compiler/lexer/core_scanner.py:28-51` 的 KEYWORDS 表未含相关 token。
+  - 没有"任务对象""协程对象"作为一等公民类型；`callable` 公理及子类（fn_callable / behavior / bound_method）只覆盖同步调用。
+  - 现有"并发"语义仅限 `ai.dispatch_eager(...)` 后台线程提交 LLM 请求（`llm_executor.py` 与 `vm/handlers.py:700-725` 的 `dispatched_future` 路径），主调用线程通过 `LLMFuture.get()` / `vm_handle_IbName` 解引用阻塞等待——这是"异步 LLM"而非"协程"。
+- 设计文档：`docs/VM_AND_INTERPRETER_DESIGN.md §5.1` 把"L3 信号 / 中断 / 异步"作为远期愿景层；`PENDING_TASKS §三`（PT-3.1 / PT-3.2）已显式声明阻塞条件——这些条目"待 VM 信号 / 中断 / 异步机制（L3 协程）成熟后才能继续"。
+- `docs/COMPLETED.md` 历次 NS-x 锚点记录的 CPS 化、`_evaluate_segments` 入帧等改动，**目标是把"递归 visit"全部搬到 VM 帧栈**——这是协程化的前置（统一中断点），但本身并不构成协程语言层面。
 
-### 4.3 lambda 语义约束完整化 [PARTIAL ✅ / PENDING]
+**未来演进思路（不构成承诺）**
 
-**已实现（2026-04-19）**：
-- `lambda` 延迟对象不允许作为函数参数传递（运行时 `RUN_CALL_ERROR`，见 `kernel.py` `IbUserFunction.call()`）
-- `lambda` 不允许被作为参数传递进任何函数调用
+- 在 VM 层增设多任务调度队列（基于现有 `frame_stack` 的多实例化），允许 `Signal.YIELD` 之类的语义把当前帧切下并把控制权交还给调度器。
+- 设计语言层关键字（如 `yield value` 或 IBCI 风格的 `defer` / `await`），需要与现有 `@~...~`、`llmexcept`、`try/except`、`intent_context` 的快照模型仔细对齐——尤其是协程暂停时如何快照意图栈与 llmexcept 帧栈。
+- 优先级低：当前 LLM 工作负载下，`dispatch_eager` 已覆盖最主要的"异步等待"需求。
 
-**待实现（未来工作）**：
-- **编译期检查**：将上述约束提升到语义分析阶段（当前为运行时错误）
-- **工厂约束**：lambda 不允许被"工厂函数"制造后作为实例传递出定义作用域
-- **存储约束**：lambda 值不允许赋给跨作用域变量（如全局变量、类字段）
-- **明确 `snapshot` 的对比语义**：`snapshot` 捕获定义位置的意图栈快照，可被作为参数传递和跨作用域传递
+**为什么搁置**
 
-**搁置原因**：编译期 DDG 分析尚未实现（§5 编译器 DDG 分析），lambda 存储约束需要逃逸分析支持。
-
----
-
-## 五、intent_context 完整 OOP 化（已记录，待跟进）
-
-> MVP 已落地（2026-04-19）：`intent_context` 可实例化，支持 `push/pop/fork/resolve/merge/clear` 方法。以下为用户明确要求的、尚未实现的完整功能。
-
-### 5.1 将 intent_context 实例作为函数调用参数传递 [PARTIAL ✅ / PENDING]
-
-**已实现（2026-04-19）**：用户可以将 `intent_context` 实例作为**普通参数**传递给函数，然后在函数内部调用 `intent_context.use(ctx)` 将其设置为当前作用域的意图上下文：
-
-```ibci
-func process_with_custom_ctx(intent_context ctx):
-    intent_context.use(ctx)    # 用传入的上下文替换当前作用域（fork 拷贝，不共享引用）
-    str r = @~ MOCK ~          # 只见 ctx 中的意图
-    return r
-
-intent_context my_ctx = intent_context()
-my_ctx.push("简洁明了")
-str result = process_with_custom_ctx(my_ctx)
-```
-
-**待实现（未来工作）**：
-- **隐式绑定语法**：函数声明中以特殊方式声明 `intent_context` 参数，运行时自动将其绑定到当前帧的 `_intent_ctx`（而非用户手动调用 `use(ctx)`）
-- **语法糖**：调用方 `my_func(@ctx my_ctx_var)` 使 `my_ctx_var` 自动成为函数作用域的意图上下文（无需函数体内显式 `use()`）
-- **运行时绑定路径**：若有显式 `intent_context` 实参，则替换为该实参所包装的 `IbIntentContext`，而非 fork 调用者上下文
-
-**搁置原因**：需要编译器和语义分析器支持意图上下文参数的自动绑定；当前通过 `intent_context.use(ctx)` 已可手动实现等效效果，此任务为语法层的简化。
+- 牵涉到调度器架构、关键字系统、快照协议三个独立维度的协同变更，单次 PR 难以收口。
+- 与 NS-4..NS-7 等语言收尾项相比，缺乏明确的用户需求来源。
+- PT-3.1 / PT-3.2 显式以此为前置——只要 L3 不动，它们也不能动。
 
 ---
 
-### 5.2 函数内部屏蔽全局意图栈的精细控制 [✅ COMPLETED — 2026-04-19]
-
-**已实现（2026-04-19）**：
-- `intent_context.clear_inherited()` — 清空当前作用域从调用者继承的持久意图栈（✅ 已实现）
-- `intent_context.use(ctx)` — 用指定 intent_context 实例替换当前作用域的意图上下文（✅ 已实现）
-- `intent_context.get_current()` — 获取当前作用域意图上下文的快照副本（✅ 已实现）
-
-**函数调用粒度的屏蔽**：
-- 每次函数调用 fork 调用者意图上下文（拷贝传递），函数内操作不泄漏（✅ 已实现）
-- 函数体内写 `intent_context.clear_inherited()` 清空继承的意图栈（✅ 已实现）
-- **`@!` 不修饰函数调用**（明确的设计决策：`@!` 只修饰 LLM 行为表达式 `@~...~`）
-
-**待实现（未来工作）**：
-- **编译期 `@` 约束在函数调用时的静态检查**：目前 fork 是运行时行为；未来可在语义分析阶段对 `@` 作用域提前标注
-- `@clear` 关键字语法糖（作为 `intent_context.clear_inherited()` 的简写，属于语法糖，非必需）
-
----
-
-### 5.3 intent_context 作为函数参数类型 [PENDING]
-
-**需求**：函数可以声明 `intent_context` 类型的参数，允许调用者传入自定义意图上下文对象，函数内直接操作该对象（push/pop/etc.），影响此次调用下的 LLM 行为。
-
-```ibci
-func generate_text(intent_context ctx, str prompt) -> str:
-    ctx.push("保持简洁")
-    str result = @~ $prompt ~
-    return result
-```
-
-**搁置原因**：需要语义分析器对 intent_context 参数的特殊处理：绑定参数到当前帧的 `_intent_ctx`；与 5.1 协同设计。
-
----
-
-### 5.4 intent_context 显式作为函数作用域默认上下文 [PENDING]
-
-**需求**：在函数体内可以显式声明一个 `intent_context` 变量作为"本函数的意图上下文"，所有 `@+`/`@-` 操作作用在该变量上，而非隐式的 `rt_context._intent_ctx`。
-
-```ibci
-func process():
-    intent_context my_ctx = intent_context()
-    # 以下 @+ 操作作用在 my_ctx 上（而非隐式上下文）
-    @+ "格式要求"  # → my_ctx.push(...)
-    str r = @~ MOCK:test ~
-```
-
-**搁置原因**：这需要对意图操作的作用目标（隐式 vs 显式）进行语法区分，属于较大的语言设计变更。
-
----
-
-### 5.5 更复杂的意图上下文操作 [VISION]
-
-**需求（远期）**：
-- intent_context 实例之间的合并策略（`merge_with_priority()`, `intersect()`, `diff()`）
-- intent_context 的序列化 / 反序列化（JSON 快照，用于跨进程/持久化场景）
-- intent_context 的"冻结"（freeze）模式：创建后不可修改，适合在多个函数间共享
-
----
-
-## 六、其他功能
-
-### 6.1 LLM 输出持久化 [PENDING]
-**任务**：AI 插件支持将 LLM 输出保存到文件。
-
-**搁置原因**：与 IssueTracker 持久化机制配合，属于扩展性功能。
-
----
-
-### 6.2 子解释器变量深拷贝隔离 [PENDING]
-**任务**：实现 `RuntimeContext.inject_variable()` 方法（变量继承已禁用，当前不触发）。
-
----
-
-## 七、明确排除的设计
-
-| 排除项 | 理由 |
-|--------|------|
-| 进程级隔离 | 实例级隔离已足够 |
-| 核心级 IPC | 通过外部 file 插件实现 |
-| GDB 式断点 | DynamicHost 断点是现场保存/恢复/回溯 |
-| hot_reload_pools | 违反解释器不修改代码原则 |
-| generate_and_run | 动态生成 IBCI 应由显式 IBCI 生成器完成 |
-| `LLMExecutorImpl` 作为可替换插件 | 它是语言语义的一部分；provider 可配置，执行接口不可替换 |
-
----
-
-## 八、架构与基础设施
-
-### 8.1 ImmutableArtifact `__deepcopy__` [PENDING]
-**任务**：添加 `__deepcopy__` 方法（不可变对象，深拷贝返回自身）。
-
-**搁置原因**：当前行为可接受，不影响核心功能。
-
----
-
-### 8.2 MetadataRegistry 双轨统一 [PENDING]
-**任务**：解决 `Engine.__init__()` 初始化的 MetadataRegistry（轨 A，内置类型公理）与 `HostInterface` 各自创建的实例（轨 B，插件元数据）并行问题。
-
-**搁置原因**：两轨各有各的查询路径，当前不影响功能。
-
----
-
-## 九、插件系统
-
-### 9.1 显式引入原则完整实现 [Phase 1 ✅ / Phase 2 ✅ / Phase 3-4 PENDING]
-**任务**：严格实现"必须显式 import 才能使用"原则，彻底消除 `discover_all()` 无条件全局注册。
-
-**Phase 1 ✅ 已完成**：`__ibcext_metadata__()` 的 `"kind"` 字段区分 `"method_module"`（工具插件，需显式 import）与 `"type_module"`（内置类型扩展）；`Prelude._init_defaults()` 按 `is_user_defined` 过滤，所有方法插件（`ai`、`math`、`json` 等）不预注入为全局内置符号——用户代码中使用 `ai.xxx` 而未 `import ai` 时，语义分析器会报 "undefined variable" 错误。
-
-**Phase 2 ✅ 已完成（最小实现）**：`discover_all()` 不再在 `Engine.__init__()` 无条件调用。改由 `Engine._ensure_plugins_discovered()` 懒加载：仅在首次 `compile()` / `check()` 调用时执行一次。`Engine.__init__()` 阶段只创建空 `HostInterface()`，不触发任何插件发现。
-
-**Phase 3 PENDING**：明确区分"方法模块"（提供函数调用）和"类型模块"（提供原生类型），完善 `kind` 字段语义。
-
-**Phase 4 PENDING**：Scheduler 符号注入逻辑，标记外部模块符号（区分内置符号与 import 注入符号）。
-
-**文件**：`core/engine.py`（`_ensure_plugins_discovered`）、`core/compiler/semantic/passes/prelude.py`、所有插件 `_spec.py`
-
----
-
-### 9.2 模块符号去重机制 [PENDING]
-**任务**：解决外部模块符号（`import ai` 注入 MODULE 符号 `"ai"`）与用户定义符号（`class ai`）的命名冲突问题。
-
-**根因**：`import ai` 在 Pass 1 之前注入 MODULE 符号，与用户 `class ai` 在 Pass 1 中收集的 CLASS 符号冲突。
-
----
-
-## 十、llmexcept / retry 机制后续
-
-### 10.1 重试策略配置扩展 [PENDING]
-**任务**：在固定次数重试（`ai.set_retry(n)`）基础上，支持指数退避（Exponential Backoff）和条件重试（基于错误类型）。
-
-**文件**：`ibci_modules/ibci_ai/core.py`、`core/runtime/interpreter/handlers/stmt_handler.py`
-
----
-
-### 10.2 llmexcept body 内外部变量写入约束（SEM_052）[✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- `core/base/diagnostics/codes.py`：新增 `SEM_LLMEXCEPT_BODY_WRITE = "SEM_052"`
-- `semantic_analyzer.py`：添加 `_llmexcept_outer_scope_names: Optional[frozenset]` 字段；
-  `visit_IbLLMExceptionalStmt` 进入 body 前通过 `_collect_llmexcept_body_declared_names()` 区分
-  body-local 新声明变量与外部作用域变量，并设置外部作用域快照；`visit_IbAssign` 在检测到对外部作用域变量的任何赋值时发出 SEM_052。
-- `tests/compiler/test_compiler_pipeline.py`：新增 `TestLLMExceptBodyReadOnly`（6 个测试）覆盖各场景。
-- 610 个测试全部通过。
-
----
-
-### 10.3 `_last_llm_result` 从 RuntimeContext 迁移到 LLMExceptFrame [✅ COMPLETED — 2026-04-19]
-
-**完成内容**：
-- `stmt_handler.py`：`visit_IbLLMExceptionalStmt` 中读取 `result` 后立即清零共享字段，并将 `frame.last_result = result` 作为 per-snapshot 权威存储；去除了依赖 `frame.should_retry` 的条件性清零（改为无条件清零）；删除了 `finally` 块中"将 result 恢复回 `_last_llm_result`"的兼容性代码。
-- `ibci_idbg/core.py`：`last_result()` 和 `last_llm()` 均改为"优先从活跃帧读取，无帧时回退共享字段"的帧优先模式；`retry_stack()` 替换 `last_llm_response`（始终为 None）为 `last_result` 帧私有字段详情。
-- 610 个测试全部通过。
-
----
-
-## 十一、代码健康（审计遗留）
-
-### 11.1 意图标签解析迁移到 Lexer [P2 / PENDING]
-**问题**：`statement.py:278` 的 `#tag` 解析使用 inline `import re` + 正则表达式在 parser 层处理，属于词法层职责被推后到语法层。未来对 tag 做语义分析（如检查 `@- #tag` 中 tag 是否已定义）时会比较困难。
-
-**文件**：`core/compiler/parser/components/statement.py`（约第 278-289 行）
-
----
-
-### 10.2 engine.py / service.py "vibe" 妥协标注 [P3 - 部分已修复]
-**问题**：多处被标注为"智能体快速 vibe 实现，未经严格审查"：
-- ~~`engine.py:136`：强制向 service_context 回写 orchestrator（双向引用注入）~~ **[已修复]**：改用 `ServiceContextImpl.set_orchestrator()` 标准注入方法（见 COMPLETED.md §4.16）
-- ~~`interpreter.py:229`：`kwargs.get('orchestrator', ...)` 却没有 `**kwargs` 参数~~ **[已修复]**（见 COMPLETED.md §4.16）
-- `service.py:173`：`host_run()` 返回值简化为布尔值，隐藏实际结果（等待多返回值语法完善后修复，见 §11.3）
-- `rt_scheduler.py:40-44`：`_resolve_builtin_path()` 使用 `ibci_modules.__file__` 动态发现路径（合理但可用常量替代，低优先级）
-- `scheduler.py:81`：`compile_to_artifact_dict()` 方法设计合理性存疑
-
-**文件**：`core/runtime/host/service.py`、`core/runtime/rt_scheduler.py`、`core/compiler/scheduler.py`
-
----
-
-### 11.3 instance_id 默认值碰撞风险 [P3 / PENDING]
-**问题**：`interpreter.py:108` `instance_id: str = "main"` 默认值可能导致多解释器实例 ID 碰撞。当前有 `instance_id or f"inst_{id(self)}"` fallback 保护，但 `"main"` 作为默认值仍是潜在隐患。
-
-**文件**：`core/runtime/interpreter/interpreter.py`
-
----
-
-## 十二、远期架构目标
-
-### 12.1 ibci_ihost / ibci_idbg 标准化重构（Step 4b）[COMPLETED]
-**状态**：已完整落地（见 `docs/COMPLETED.md` § 4.12）。`ibci_ihost` 和 `ibci_idbg` 已改为通过 `KernelRegistry` 的稳定钩子接口（`get_host_service()`、`get_stack_inspector()`、`get_state_reader()`）访问服务。用户可见接口（`ihost.run_isolated()` 等）保持不变。517 个测试通过。
-
-### 12.9 OOP × Protocol 边界清理 (P1) [COMPLETED]
-
-**状态说明**：已完整修复（PR-A）。
-
-根本问题：`IIbObject` Protocol 中存在 `@property def descriptor` 幽灵字段，在 Python 3.12 的 `@runtime_checkable` 机制下，该字段导致 `IbObject` 无法结构满足 `IIibObject`，进而引发 `IbBehavior`/`IbIntent`/`AIPlugin` 等被迫显式继承 Protocol 类的补丁链条，以及 5 处 Protocol isinstance 调用、2 处死代码/遗留兼容检查。
-
-**全部修复内容**：
-- `core/runtime/interfaces.py`：删除 `IIibObject.descriptor` 幽灵字段
-- `core/runtime/objects/builtins.py`：`IbBehavior(IbObject, IIibBehavior)` → `IbBehavior(IbObject)`
-- `core/runtime/objects/intent.py`：`IbIntent(IbObject, IntentProtocol)` → `IbIntent(IbObject)`
-- `ibci_modules/ibci_ai/core.py`：`AIPlugin(ILLMProvider, IbStatefulPlugin)` → `AIPlugin(IbStatefulPlugin)`
-- `stmt_handler.py`/`interpreter.py`/`service.py`/`llm_executor.py`：5 处 Protocol isinstance → 具体实现类 isinstance
-- `llm_executor.py`：`_get_llmoutput_hint` 死代码路径修复为 `meta_reg.resolve(type_name)`
-- `loader.py`：删除 `isinstance(context.llm_executor, ILLMExecutor)` 遗留兼容检查
-- 6 处死 import 全部清理（`expr_handler.py`、`base_handler.py`、`runtime_context.py`、`ibci_idbg/core.py`）
-
----
-
-### 12.2 IbFunction.call() 去除 context 参数依赖（Step 5）[COMPLETED]
-**状态**：已完成（见 `docs/COMPLETED.md`，Step 5 完整路径：5a IExecutionFrame Protocol + 5b ContextVar 帧注册表）。`IbUserFunction.call()` 已通过 `get_current_frame()` 自主获取执行帧，不再依赖外部传入的 context 参数。
-
----
-
-### 12.3 host.run_isolated() 返回值改进 [VISION]
-**当前**：返回简化布尔值。**目标**：多返回值/元组解包语法完整实现后，改为 `tuple(exit_code: int, result: str|dict)`。
-
----
-
-### 12.4 ReceiveMode 枚举演进 [VISION]
-**当前**：`deferred_mode: str` 侧表（`'lambda'`/`'snapshot'`/`None`）。**目标**：迁移至 `ReceiveMode(IMMEDIATE / LAMBDA / SNAPSHOT)` 枚举，替代字符串，支持更严格的类型约束。
-
----
-
-*本文档记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。*
-
----
-
-## 十三、类型系统长期演进（TypeRef 重构）
-
-### 13.1 类型系统现状分析 [VISION]
-
-**背景**：当前 `IbSpec.name` 字段同时承担了两个职责：
-1. **注册表键**（唯一标识，含泛型参数），如 `"list[int]"`、`"dict[str,int]"`
-2. **语义分类标签**（类型族归属），如 `"list"`、`"dict"`
-
-泛型出现后这两个职责产生冲突：`"list[int]".name == "list[int]"` 而非 `"list"`，导致所有直接比较 `.name` 的语义检查对泛型失效（典型案例：`in`/`not in` 运算符的容器类型检查）。
-
-**近期补丁方案（已实施，方案 A）**：
-- 所有语义分类检查统一使用 `spec.get_base_name()` 而非 `spec.name`
-- 新增 `SpecRegistry.get_base_spec(spec)` 工具方法，将泛型专化 spec 解析回基础 spec
-- 约定：`.name` 仅用于 registry key 和 error message；`.get_base_name()` 用于能力查询和语义分类；`isinstance(spec, ListSpec/DictSpec/...)` 用于结构性能力判断
-
-**需要被修复的散布调用点**（已知）：
-- `visit_IbCompare`：`.name not in ("str","list","dict","tuple","any")` → 已修复 → `get_base_name()`
-- `visit_IbFor`：`iter_type.name != "bool"` → 已修复 → `get_base_name()`
-- 其他 `.name` 比较：仅用于 error message 显示，可保留
-
-### 13.2 长期目标：引入 TypeRef 统一类型引用 [VISION]
-
-**设计目标**：实现以下所有"类型内容"的逻辑正交性和设计统一性：
-
-| 类型维度 | 当前表示 | TypeRef 目标表示 |
-|---------|---------|----------------|
-| 变量本身的类型 | `sym.spec: IbSpec` | `sym.type_ref: TypeRef` |
-| 函数返回值类型 | `FuncSpec.return_type_name: str` | `FuncSpec.return_type: TypeRef` |
-| 泛型容器自身类型 | `ListSpec.name = "list[int]"` | `TypeRef(base="list", args=[TypeRef("int")])` |
-| 泛型容器元素类型 | `ListSpec.element_type_name: str` | `TypeRef.args[0]` |
-| 泛型容器嵌套类型 | 无法表达 | `TypeRef(args=[TypeRef(args=[...])])` |
-| 泛型下标成员类型 | `resolve_subscript()` 返回字符串 | `TypeRef.args[0]` |
-| 类成员类型 | `MemberSpec.type_name: str` | `MemberSpec.type_ref: TypeRef` |
-| 迭代器元素类型 | `resolve_iter_element()` 返回字符串 | `TypeRef.args[0]` |
-| 表达式类型 | side_table `node_to_type: IbSpec` | side_table `node_to_type: TypeRef` |
-
-**建议的 TypeRef 设计**：
-```python
-@dataclass(frozen=True)
-class TypeRef:
-    base_name: str                          # "list", "dict", "int"
-    args: Tuple["TypeRef", ...] = ()        # 泛型参数
-    module: Optional[str] = None
-    nullable: bool = False
-
-    @property
-    def canonical_name(self) -> str:        # 注册表键，兼容 IbSpec.name
-        if self.args:
-            return f"{self.base_name}[{','.join(a.canonical_name for a in self.args)}]"
-        return self.base_name
-
-    @property
-    def family_name(self) -> str:           # 语义分类，等价于 get_base_name()
-        return self.base_name
-```
-
-**实施前提**：
-- 需与 VM/CPS 调度循环重构一并规划（架构层二）
-- 需要修改所有 spec 字段（`FuncSpec`, `ListSpec`, `DictSpec`, `MemberSpec` 等）和序列化层
-- 成本极高，应在下一代架构升级时引入，不宜打补丁式渐进
-
-**当前状态**：方案 A（`get_base_name()` + `get_base_spec()`）已落地，为 TypeRef 重构保留接口兼容性。TypeRef 本体在 VM 阶段一并处理。
-
----
-
-*本文档记录中长期未来工作。近期任务见 `docs/NEXT_STEPS.md`，已完成工作见 `docs/COMPLETED.md`。*
+## 五、明确排除的方向
+
+- 不引入静态类型检查器作为解释器前置强依赖。
+- 不以牺牲运行时可观测性换取短期性能优化。
+- 不为优化同一程序内独立 LLM 调用而创建多 Interpreter（这是 L1 流水线的职责）。

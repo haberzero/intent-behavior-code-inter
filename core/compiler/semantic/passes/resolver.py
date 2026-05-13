@@ -2,8 +2,9 @@ from typing import List, Optional, Any, TYPE_CHECKING
 from core.kernel import ast as ast
 from core.kernel import symbols
 from core.kernel.symbols import SymbolTable, TypeSymbol, FunctionSymbol
-from core.kernel.spec import IbSpec, ClassSpec, FuncSpec, ModuleSpec
+from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from .semantic_analyzer import SemanticAnalyzer
@@ -17,7 +18,7 @@ class TypeResolver:
     def __init__(self, symbol_table: SymbolTable, semantic_analyzer: 'SemanticAnalyzer'):
         self.symbol_table = symbol_table
         self.analyzer = semantic_analyzer
-        self.current_class_descriptor: Optional[ClassSpec] = None
+        self.current_class_descriptor: Optional[TypeDef] = None
 
     def resolve(self, node: ast.IbASTNode):
         self.visit(node)
@@ -94,14 +95,14 @@ class TypeResolver:
                 if not parent_desc:
                     self.analyzer.error(f"Base class '{node.parent}' is not defined or not a class", node, code="SEM_001")
         
-        # 2. 创建 ClassSpec 并绑定到符号
+        # 2. 创建 TypeDef 并绑定到符号
         # 使用工厂创建以确保驻留
         descriptor = self.analyzer.registry.factory.create_class(
             name=node.name, 
             parent_name=node.parent
         )
         if parent_desc:
-             descriptor.parent_name = parent_desc.name
+             descriptor.parent_type = TypeRef.of(parent_desc.name, getattr(parent_desc, "module_path", None))
         
         # 注册到注册表，以便后续继承解析能找到它
         # 必须使用返回的已注册克隆，否则成员信息只写入本地对象，
@@ -135,7 +136,7 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 使用工厂创建 FuncSpec 以确保驻留
+        # 使用工厂创建 TypeDef 以确保驻留
         func_desc = self.analyzer.registry.factory.create_func(
             name=node.name,
             param_type_names=[p.name for p in param_types],
@@ -148,9 +149,8 @@ class TypeResolver:
             self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
                 kind="method",
-                param_type_names=[p.name for p in param_types],
-                param_type_modules=[p.module_path for p in param_types],
-                return_type_name=ret_type.name,
+                return_type=TypeRef.of(ret_type.name),
+                param_types=[TypeRef.of(p.name, p.module_path) for p in param_types],
             )
             
         # 绑定到符号
@@ -172,7 +172,7 @@ class TypeResolver:
                 arg_type = self.analyzer._resolve_type(arg_node.annotation)
             param_types.append(arg_type)
             
-        # 使用工厂创建 FuncSpec 以确保驻留
+        # 使用工厂创建 TypeDef 以确保驻留
         func_desc = self.analyzer.registry.factory.create_func(
             name=node.name,
             param_type_names=[p.name for p in param_types],
@@ -185,11 +185,9 @@ class TypeResolver:
             # 同步到 spec 的成员表中，使用正规的 MethodMemberSpec
             self.current_class_descriptor.members[node.name] = MethodMemberSpec(
                 name=node.name,
-                kind="method",
-                param_type_names=[p.name for p in param_types],
-                param_type_modules=[p.module_path for p in param_types],
-                return_type_name=ret_type.name,
-                llm=True,
+                kind="llm_method",
+                return_type=TypeRef.of(ret_type.name),
+                param_types=[TypeRef.of(p.name, p.module_path) for p in param_types],
             )
 
         sym = self.symbol_table.resolve(node.name)
@@ -210,8 +208,7 @@ class TypeResolver:
                         self.current_class_descriptor.members[name] = MemberSpec(
                             name=name,
                             kind="field",
-                            type_name=declared_type.name,
-                        )
+                            type_ref=TypeRef.of(declared_type.name))
 
                     sym = self.symbol_table.resolve(name)
                     if sym and sym.is_variable:
@@ -233,3 +230,29 @@ class TypeResolver:
         默认返回字符串类型。
         """
         return self.analyzer._str_desc
+
+    def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr):
+        """
+        参数化 lambda/snapshot 表达式的类型决议。
+
+        规则：
+        * 参数：visit 各参数的类型标注（用于完整性，结果不直接消费）。
+        * returns：若存在，visit 返回类型标注节点（完整性；实际决议在 Pass 3 的
+          ``SemanticAnalyzer.visit_IbLambdaExpr`` 中处理）。
+        * body：递归 visit；其类型作为 lambda 的返回类型。
+        * lambda 自身解析为 ``callable``——具体形参/返回类型由 SemanticAnalyzer
+          的 ``visit_IbLambdaExpr`` 在 Pass 3 进一步细化为 ``TypeDef``。
+        """
+        for arg_node in node.params:
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+                # 解析以注册类型；返回值在此阶段无需保留
+                self.analyzer._resolve_type(arg_node.annotation, safe=True)
+        # D2：node.returns 携带表达式侧返回类型标注；Pass 2 仅做完整性 visit，
+        # 实际决议在 Pass 3（SemanticAnalyzer.visit_IbLambdaExpr）中完成。
+        if node.returns is not None:
+            self.analyzer._resolve_type(node.returns, safe=True)
+        # 走访 body 以触发其内部的类型决议（类型来自 generic_visit 的副作用）
+        if node.body is not None:
+            self.visit(node.body)
+        # lambda 表达式自身视为 callable（与 ``fn`` 同构）
+        return self.analyzer.prelude.get_builtin_types().get("callable") or self.analyzer._any_desc

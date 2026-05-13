@@ -15,9 +15,6 @@ from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.host.service import HostService
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
-from core.runtime.interpreter.handlers.stmt_handler import StmtHandler
-from core.runtime.interpreter.handlers.expr_handler import ExprHandler
-from core.runtime.interpreter.handlers.import_handler import ImportHandler
 from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
@@ -180,7 +177,7 @@ class RuntimeSchedulerImpl:
         instance_id = self._main_instance_id
         if not instance_id or instance_id not in self.instances:
             # 如果尚未 spawn，则报错。顶层执行应由 Engine 调用 spawn 后触发。
-            # 目前为了兼容 Engine.execute，我们假设实例已在 _prepare_interpreter 中创建
+            # 这里沿用 Engine.execute 的当前调用约定：实例已在 _prepare_interpreter 中创建。
             interpreter = getattr(self.service_context, 'interpreter', None)
         else:
             interpreter = self.instances[instance_id]
@@ -289,10 +286,8 @@ class RuntimeSchedulerImpl:
 
     def _configure_factory(self, factory: Any):
         """ 配置工厂的 IoC 注册表。从 Engine 迁移而来。"""
-        # 1. 注册逻辑处理器 (Handlers)
-        factory.register_handler_factory(lambda sc, ec: StmtHandler(sc, ec))
-        factory.register_handler_factory(lambda sc, ec: ExprHandler(sc, ec))
-        factory.register_handler_factory(lambda sc, ec: ImportHandler(sc, ec))
+        # P5：旧 Handler 类（StmtHandler/ExprHandler/ImportHandler）已删除；
+        # VMExecutor CPS dispatch table 是唯一的 AST→执行映射，无需注册。
         
-        # 2. 注册 LLM 执行器
+        # 注册 LLM 执行器
         factory.register_llm_executor_factory(lambda sc, ec: LLMExecutorImpl(sc, ec))

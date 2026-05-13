@@ -3,7 +3,9 @@ import importlib.util
 import tempfile
 import traceback
 import copy
-from typing import Optional, Dict, Any, List
+import threading
+import uuid
+from typing import Optional, Dict, Any, List, Tuple
 
 # =============================================================================
 # 架构边界说明：Engine = 组装者，不参与执行
@@ -48,6 +50,11 @@ from core.runtime.interfaces import IsolationLevel
 
 
 from core.base.enums import RegistrationState
+
+# collect() 时跳过的 IBCI 类型名集合（函数/行为/可调用实例等不可序列化为原生 Python 值）
+_COLLECT_SKIP_TYPES: frozenset = frozenset({
+    "fn", "lambda", "snapshot", "behavior", "fn_callable", "callable", "void",
+})
 
 class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
@@ -101,7 +108,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 初始化并配置运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
-        # 2. 延迟插件发现（Phase 2 显式引入原则）：
+        # 2. 延迟插件发现（显式引入原则）：
         #    在首次编译/静态检查时才调用 discover_all()，而非在 Engine 初始化时无条件加载。
         #    这确保插件元数据只在真正需要（编译）时才注入 MetadataRegistry，
         #    使"必须 import ai 才能使用"的语义清晰度在 Engine 生命周期内保持一致。
@@ -116,6 +123,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.rt_scheduler = RuntimeSchedulerImpl(None) # 此时 ServiceContext 尚未就绪，将在后续注入
         
         self.interpreter: Optional[Interpreter] = None
+
+        # 多 Interpreter 并发任务表（handle → (thread, sub_engine, exc_holder)）
+        # 每个 spawn_isolated 在此字典中注册一条记录；collect 消费并删除它。
+        self._spawned_tasks: Dict[str, Tuple[threading.Thread, 'IBCIEngine', list]] = {}
+        self._spawned_tasks_lock = threading.Lock()
 
     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False, entry_file: str = None, entry_dir: str = None) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
@@ -151,8 +163,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         )
         
         # Post-construction wiring: inject orchestrator and output_callback into ServiceContext.
-        # This is intentional deferred injection — Engine is the orchestrator, but it can only
-        # inject itself after the interpreter is fully constructed.
+        # Engine is the orchestrator but can only inject itself after the interpreter is fully
+        # constructed, so this wiring happens here rather than in __init__.
         if hasattr(self.interpreter, 'service_context'):
             self.interpreter.service_context.set_orchestrator(self)
             if output_callback is not None:
@@ -244,11 +256,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         确保插件元数据已加载到 host_interface（懒加载，只在首次编译/检查时触发）。
 
-        Phase 2 显式引入原则：discover_all() 不在 Engine.__init__() 中无条件调用，
+        显式引入原则：discover_all() 不在 Engine.__init__() 中无条件调用，
         而是延迟到首次编译时才执行。这确保：
         1. 仅创建 Engine 实例而不编译时，不触发任何插件发现。
         2. Scheduler 在编译开始前获得完整的 host_interface（含所有插件元数据）。
-        3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Phase 1 的 Prelude 过滤保证）。
+        3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Prelude 过滤保证）。
         """
         if not self._plugins_discovered:
             self.host_interface = self.discovery_service.discover_all(self.registry)
@@ -331,7 +343,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
         """
-        # 懒加载插件元数据（Phase 2 显式引入原则）
+        # 懒加载插件元数据（显式引入原则）
         self._ensure_plugins_discovered()
 
         if not hasattr(self, '_entry_file'):
@@ -404,7 +416,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         仅对项目进行静态检查（编译和语义分析）。
         """
-        # 懒加载插件元数据（Phase 2 显式引入原则）
+        # 懒加载插件元数据（显式引入原则）
         self._ensure_plugins_discovered()
 
         abs_entry = os.path.abspath(entry_file)
@@ -464,3 +476,92 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         success = sub_engine.run(abs_path, variables=initial_vars)
         
         return success
+
+    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], initial_vars: Optional[Dict[str, Any]] = None) -> str:
+        """
+        [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
+        在后台线程中启动全新的 Engine 实例；立即返回 handle 字符串。
+        调用方随后通过 request_collect(handle) 阻塞等待结果。
+        """
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_spawn_isolated -> {entry_path}")
+
+        abs_path = os.path.abspath(entry_path)
+        sub_root_dir = os.path.dirname(abs_path)
+
+        sub_engine = IBCIEngine(
+            root_dir=sub_root_dir,
+            auto_sniff=True,
+            core_debug_config=self.debugger.config
+        )
+
+        # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出
+        exc_holder: list = [None]
+
+        def _run_child():
+            try:
+                sub_engine.run(abs_path, variables=initial_vars, silent=True)
+            except Exception as e:
+                exc_holder[0] = e
+
+        thread = threading.Thread(target=_run_child, daemon=True, name=f"ibci-spawn-{abs_path}")
+        thread.start()
+
+        handle = f"spawn_{uuid.uuid4().hex[:16]}"
+        with self._spawned_tasks_lock:
+            self._spawned_tasks[handle] = (thread, sub_engine, exc_holder)
+
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"spawned handle={handle}")
+        return handle
+
+    def request_collect(self, handle: str) -> Dict[str, Any]:
+        """
+        [IKernelOrchestrator] 阻塞等待 spawn handle 对应的子执行完成。
+        线程 join 后提取子环境的全局变量（排除内置符号和不可序列化值），
+        以 Python dict 形式返回，由 HostService 层装箱为 IbDict 传回 IBCI。
+        """
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_collect handle={handle}")
+
+        with self._spawned_tasks_lock:
+            task = self._spawned_tasks.get(handle)
+        if task is None:
+            raise RuntimeError(f"Unknown spawn handle: {handle!r}. "
+                               "The handle may have already been collected or never spawned.")
+
+        thread, sub_engine, exc_holder = task
+        thread.join()  # 阻塞直到子线程结束
+
+        # 消费后清理，防止重复 collect
+        with self._spawned_tasks_lock:
+            self._spawned_tasks.pop(handle, None)
+
+        # 子线程异常透传至父环境
+        if exc_holder[0] is not None:
+            raise RuntimeError(
+                f"Isolated execution ({handle!r}) raised an exception: {exc_holder[0]}"
+            ) from exc_holder[0]
+
+        # 从子引擎全局作用域提取用户变量（原生 Python 值）
+        # 排除内置/不可序列化对象（函数、行为、插件模块等）
+        result: Dict[str, Any] = {}
+
+        if sub_engine.interpreter and sub_engine.interpreter.runtime_context:
+            all_syms = sub_engine.interpreter.runtime_context.global_scope.get_all_symbols()
+            for name, sym in all_syms.items():
+                if sym.is_builtin:
+                    continue
+                val = sym.value
+                if val is None:
+                    continue
+                try:
+                    type_name = val.ib_class.name
+                    if type_name in _COLLECT_SKIP_TYPES:
+                        continue
+                    native = val.to_native()
+                    result[name] = native
+                except Exception:
+                    # 跳过无法转为原生值的对象（未执行的延迟值、循环引用等）
+                    pass
+
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                            f"collect({handle!r}) extracted {len(result)} variable(s): {list(result)}")
+        return result

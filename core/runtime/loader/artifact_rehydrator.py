@@ -1,16 +1,26 @@
 from typing import Dict, Any, Optional, List
 from core.kernel.spec.registry import SpecRegistry
-from core.kernel.spec import IbSpec, ClassSpec, ListSpec, DictSpec, FuncSpec, BoundMethodSpec, ModuleSpec
-from core.kernel.spec.specs import DeferredSpec, BehaviorSpec
+from core.kernel.spec import (
+    IbSpec,
+    TypeDef,
+)
+from core.kernel.spec.specs import TypeDef
+from core.kernel.spec.base import TypeKind
+from core.kernel.spec.type_ref import TypeRef
 from core.base.enums import RegistrationState
 
 # 统一内置原始类型列表，确保水化阶段一致性
-BUILTIN_TYPES = ["int", "str", "float", "bool", "void", "any", "auto", "fn", "callable", "list", "dict", "behavior", "None", "llm_uncertain"]
+BUILTIN_TYPES = [
+    "int", "str", "float", "bool", "void", "any", "auto", "fn", "callable",
+    "list", "dict", "behavior", "Optional", "None", "llm_uncertain"
+]
 
 class ArtifactRehydrator:
     """
     类型重水化器：将序列化后的 type_pool 还原为运行时的 IbSpec 对象树。
     """
+    _SUPPORTED_KINDS = {k.value for k in TypeKind}
+
     def __init__(self, type_pool: Dict[str, Any], registry: SpecRegistry):
         self.type_pool = type_pool
         self.registry = registry
@@ -30,10 +40,10 @@ class ArtifactRehydrator:
                         self.memo[uid] = desc
                         break
 
-    def hydrate_all(self, registry: Optional[Any] = None) -> List[ClassSpec]:
+    def hydrate_all(self, registry: Optional[Any] = None) -> List[TypeDef]:
         """
         水化池中所有类型。采用两阶段加载：先创建所有 Shell，再填充详细信息。
-        返回所有被成功水化的 ClassSpec。
+        返回所有被成功水化的 TypeDef。
         """
         if registry:
              registry.verify_level(RegistrationState.STAGE_5_HYDRATION.value)
@@ -46,7 +56,7 @@ class ArtifactRehydrator:
         classes = []
         for uid in self.type_pool:
             spec = self._fill_descriptor(uid)
-            if isinstance(spec, ClassSpec):
+            if spec and spec.kind == TypeKind.CLASS.value:
                 classes.append(spec)
         
         return classes
@@ -70,7 +80,7 @@ class ArtifactRehydrator:
             return self.memo[uid]
             
         data = self.type_pool[uid]
-        kind = data.get("kind", "TypeDescriptor")
+        kind = self._resolve_kind(data, uid)
         name = data.get("name", "")
         is_user_defined = data.get("is_user_defined", False)
         
@@ -78,26 +88,35 @@ class ArtifactRehydrator:
         
         # 映射驱动的 Shell 创建
         shell_creators = {
-            "ListMetadata": lambda: ListSpec(name="list", is_user_defined=False),
-            "DictMetadata": lambda: DictSpec(name="dict", is_user_defined=False),
-            "FunctionMetadata": lambda: FuncSpec(name=name or "callable", is_user_defined=False),
-            "ClassMetadata": lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
-            "BoundMethodMetadata": lambda: BoundMethodSpec(name="bound_method", is_user_defined=False),
-            "ModuleMetadata": lambda: ModuleSpec(name=name, is_user_defined=False),
-            # Typed deferred / behavior specs — reconstruct the proper subclass so
-            # that get_base_name() returns "deferred" / "behavior" (not "deferred[str]"),
-            # allowing SpecRegistry.is_assignable() to resolve the correct axiom.
-            "DeferredSpec": lambda: factory.create_deferred(
-                value_type_name=data.get("value_type_name", "auto"),
-                deferred_mode=data.get("deferred_mode", "lambda"),
+            TypeKind.LIST.value: lambda: TypeDef(name="list", is_user_defined=False),
+            TypeKind.DICT.value: lambda: TypeDef(name="dict", is_user_defined=False),
+            TypeKind.FUNCTION.value: lambda: TypeDef(name=name or "callable", is_user_defined=False),
+            TypeKind.CALLABLE_SIG.value: lambda: TypeDef(
+                name="fn",
+                is_user_defined=False,
+                return_type=TypeRef.of(data.get("return_type_name", "auto")),
+                param_types=[TypeRef.of(p) for p in data.get("param_type_names", [])],
             ),
-            "BehaviorSpec": lambda: factory.create_behavior(
-                value_type_name=data.get("value_type_name", "auto"),
-                deferred_mode=data.get("deferred_mode", "lambda"),
+            TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
+            TypeKind.BOUND_METHOD.value: lambda: TypeDef(name="bound_method", is_user_defined=False),
+            TypeKind.MODULE.value: lambda: TypeDef(name=name, is_user_defined=False),
+            # Callable-instance specs ("fn_callable[T]" / "behavior[T]") — reconstruct
+            # the proper variant so that get_base_name() routes to the matching
+            # axiom ("fn_callable" / "behavior").  The axiom selection key is the
+            # axiom name embedded in the serialized data, falling back to the
+            # spec's own name prefix.
+            TypeKind.CALLABLE_INSTANCE.value: lambda: (
+                factory.create_behavior(value_type_name=data.get("value_type_name", "auto"))
+                if (data.get("axiom_name") or name).startswith("behavior")
+                else factory.create_fn_callable(value_type_name=data.get("value_type_name", "auto"))
+            ),
+            TypeKind.OPTIONAL.value: lambda: factory.create_optional(
+                wrapped_type_name=data.get("wrapped_type_name", "any"),
+                wrapped_type_module=data.get("wrapped_type_module"),
             ),
         }
-        
-        if name in BUILTIN_TYPES and kind == "TypeDescriptor":
+
+        if name in BUILTIN_TYPES and kind == TypeKind.PRIMITIVE.value:
             spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
             creator = shell_creators.get(kind)
@@ -113,6 +132,15 @@ class ArtifactRehydrator:
         self.memo[uid] = spec
         return spec
 
+    def _resolve_kind(self, data: Dict[str, Any], uid: str) -> str:
+        kind = data.get("kind", TypeKind.PRIMITIVE.value)
+        if kind not in self._SUPPORTED_KINDS:
+            raise ValueError(
+                f"Artifact type '{uid}' has unsupported kind '{kind}'. "
+                f"Supported kinds: {', '.join(sorted(self._SUPPORTED_KINDS))}."
+            )
+        return kind
+
     def _fill_descriptor(self, uid: str) -> Optional[IbSpec]:
         """填充 spec 的详细字段 (Phase 2)"""
         spec = self.memo.get(uid)
@@ -121,34 +149,42 @@ class ArtifactRehydrator:
             
         data = self.type_pool[uid]
         
-        if isinstance(spec, ListSpec):
+        if spec.kind == TypeKind.LIST.value:
             elem = self.hydrate(data.get("element_type_uid"))
             if elem:
-                spec.element_type_name = elem.name
+                spec.element_type = TypeRef.of(elem.name, elem.module_path)
                 spec.name = f"list[{elem.name}]"
-        elif isinstance(spec, DictSpec):
+        elif spec.kind == TypeKind.DICT.value:
             key = self.hydrate(data.get("key_type_uid"))
             val = self.hydrate(data.get("value_type_uid"))
             if key:
-                spec.key_type_name = key.name
+                spec.key_type = TypeRef.of(key.name, key.module_path)
             if val:
-                spec.value_type_name = val.name
-            spec.name = f"dict[{spec.key_type_name},{spec.value_type_name}]"
-        elif isinstance(spec, FuncSpec):
+                spec.value_type = TypeRef.of(val.name, val.module_path)
+            spec.name = f"dict[{spec.key_type.head},{spec.value_type.head}]"
+        elif spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             param_uids = data.get("param_types_uids", [])
-            spec.param_type_names = [
-                s.name for uid in param_uids
+            spec.param_types = [
+                TypeRef.of(s.name, s.module_path) for uid in param_uids
                 if (s := self.hydrate(uid)) is not None
             ]
             ret = self.hydrate(data.get("return_type_uid"))
-            spec.return_type_name = ret.name if ret else "void"
-        elif isinstance(spec, DeferredSpec):
-            # Restore scalar fields for DeferredSpec / BehaviorSpec.
-            # BehaviorSpec is a subclass of DeferredSpec so this branch covers both.
-            spec.value_type_name = data.get("value_type_name", spec.value_type_name)
-            spec.deferred_mode = data.get("deferred_mode", spec.deferred_mode)
-        elif isinstance(spec, ClassSpec):
-            spec.parent_name = data.get("parent_name")
-            spec.parent_module = data.get("parent_module")
-            
+            spec.return_type = TypeRef.of(ret.name, ret.module_path) if ret else TypeRef.of("void")
+        elif spec.kind == TypeKind.CALLABLE_INSTANCE.value:
+            # Restore the value type for callable-instance specs (fn_callable[T] / behavior[T]).
+            # ``capture_mode`` is intentionally NOT restored at the type level: it
+            # belongs to the runtime value (IbFnCallable/IbBehavior) and to the AST
+            # node (IbLambdaExpr), both of which are serialized through their own
+            # channels.
+            v_name = data.get("value_type_name", spec.value_type.head)
+            spec.value_type = TypeRef.of(v_name)
+        elif spec.kind == TypeKind.OPTIONAL.value:
+            w_name = data.get("wrapped_type_name", spec.wrapped_type.head)
+            w_mod = data.get("wrapped_type_module", spec.wrapped_type.module)
+            spec.wrapped_type = TypeRef.of(w_name, w_mod)
+        elif spec.kind == TypeKind.CLASS.value:
+            p_name = data.get("parent_name")
+            p_mod = data.get("parent_module")
+            spec.parent_type = TypeRef.of(p_name, p_mod) if p_name else None
+
         return spec

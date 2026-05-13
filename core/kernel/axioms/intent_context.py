@@ -6,7 +6,7 @@ IntentContextAxiom: 意图上下文类型的公理定义。
 IbIntentContext 是将意图栈从 RuntimeContextImpl 的私有字段群提升为
 公理体系中独立一等公民类型的关键步骤。
 
-Capability 槽位：
+方法槽位：
 - fork()   → 返回当前上下文的不可变值快照（dispatch 时刻绑定）
 - resolve()→ 返回当前有效意图字符串列表（供 LLMExecutor 组装提示词）
 - push()   → 压入意图（@+ 语义，只修改当前帧，不影响父帧）
@@ -15,88 +15,69 @@ Capability 槽位：
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, TYPE_CHECKING
-
-from core.kernel.axioms.protocols import TypeAxiom, CallCapability
-from core.kernel.spec.member import MethodMemberSpec
-
-if TYPE_CHECKING:
-    from core.kernel.axioms.registry import AxiomRegistry
+from typing import Dict, List, Optional
+from core.kernel.spec.type_ref import TypeRef
 
 
-def _m(name: str, params: Optional[List[str]] = None, ret: str = "void") -> MethodMemberSpec:
+def _m(name: str, params: Optional[List[str]] = None, ret: str = "void"):
+    from core.kernel.spec.member import MethodMemberSpec
     return MethodMemberSpec(
         name=name,
         kind="method",
-        param_type_names=params or [],
-        return_type_name=ret,
-    )
+        return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []])
 
 
-class IntentContextAxiom(TypeAxiom):
+class IntentContextAxiom:
     """
     公理：intent_context 类型。
 
     * is_dynamic() = False — intent_context 是具体类型，不是 any 妥协。
-    * 无 CallCapability — 意图上下文不是可调用对象。
+    * 无任何 capability — 意图上下文不是可调用对象。
     * is_compatible 仅接受 "intent_context" 自身。
     * get_parent_axiom_name() = "Object"。
     """
+
+    has_call_cap = False
+    has_iter_cap = False
+    has_subscript_cap = False
+    has_operator_cap = False
+    has_converter_cap = False
+    has_parser_cap = False
+    has_from_prompt_cap = False
+    has_output_hint_cap = False
+    has_llm_call_cap = False
 
     @property
     def name(self) -> str:
         return "intent_context"
 
-    def get_call_capability(self):
-        return None
-
-    def get_iter_capability(self):
-        return None
-
-    def get_subscript_capability(self):
-        return None
-
-    def get_operator_capability(self):
-        return None
-
-    def get_converter_capability(self):
-        return None
-
-    def get_parser_capability(self):
-        return None
-
-    def get_from_prompt_capability(self):
-        return None
-
-    def get_llmoutput_hint_capability(self):
-        return None
-
-    def get_writable_trait(self):
-        return None
-
-    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+    def get_method_specs(self):
         return {
-            # --- 实例方法（在 intent_context 实例上调用）---
             "fork": _m("fork", ret="intent_context"),
             "resolve": _m("resolve", ret="any"),
             "push": _m("push", params=["any"], ret="void"),
             "pop": _m("pop", ret="any"),
             "merge": _m("merge", params=["intent_context"], ret="void"),
+            "combine": _m("combine", params=["intent_context"], ret="void"),
             "clear": _m("clear", ret="void"),
-            # --- 作用域控制方法（也可在 intent_context 类型或实例上调用）---
-            # clear_inherited(): 清空当前函数作用域从调用者继承的持久意图栈。
-            #   函数体内调用后，后续 LLM 调用不再受调用者 @+ 意图影响。
             "clear_inherited": _m("clear_inherited", ret="void"),
-            # use(ctx): 以给定 intent_context 实例的内容替换当前作用域的意图上下文。
-            #   调用者的意图栈被完全替换为 ctx 的 fork（拷贝，不共享引用）。
             "use": _m("use", params=["intent_context"], ret="void"),
-            # get_current(): 返回当前作用域正在生效的意图上下文的快照（fork）。
-            #   返回值是一个新的 intent_context 实例，可供后续检查或保存。
             "get_current": _m("get_current", ret="intent_context"),
+            "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
 
     def get_operators(self) -> Dict[str, str]:
         return {}
+
+    # ---- No-op defaults for capability methods --------------------- #
+    def resolve_return_type_name(self, arg_type_names): return None
+    def get_element_type_name(self) -> str: return "any"
+    def resolve_item_type_name(self, key_type_name): return None
+    def resolve_operation_type_name(self, op, other_name): return None
+    def can_convert_from(self, source_type_name): return False
+    def parse_value(self, raw_value): return raw_value
+    def from_prompt(self, raw_response, spec=None): return (False, "intent_context does not support from_prompt")
+    def __outputhint_prompt__(self, spec=None) -> str: return ""
 
     def is_dynamic(self) -> bool:
         return False

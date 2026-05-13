@@ -74,7 +74,7 @@ class ArtifactLoader:
             last_count = len(remaining)
             still_remaining = []
             for cls_desc in remaining:
-                parent_name = cls_desc.parent_name or "Object"
+                parent_name = (cls_desc.parent_type.head if cls_desc.parent_type else None) or "Object"
                 
                 # [Enum Hook] 检查父类是否已在 _classes 中注册
                 # 如果父类已存在（如 Enum），则直接创建子类
@@ -111,7 +111,7 @@ class ArtifactLoader:
         if remaining:
             # 继承链断裂属于致命错误 (Item 2.2 Audit)
             # 必须在加载阶段拦截，严禁进入运行时。
-            missing = [f"{c.name} (extends {c.parent_name or 'Object'})" for c in remaining]
+            missing = [f"{c.name} (extends {(c.parent_type.head if c.parent_type else None) or 'Object'})" for c in remaining]
             raise RegistryIsolationError(f"Linker Error: Broken inheritance chain for classes: {', '.join(missing)}. "
                                        f"Ensure all parent classes are defined and no circular inheritance exists.")
 

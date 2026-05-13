@@ -2,7 +2,7 @@
 
 > 本文档描述 IBC-Inter 意图注释系统的架构设计和实现细节。
 
-**更新日期**：2026-04-23
+**更新日期**：2026-05-08
 
 ---
 
@@ -161,7 +161,7 @@ core/runtime/objects/intent_context.py
 core/kernel/axioms/intent_context.py
 └── IntentContextAxiom                      # 公理层表示（is_class=True，可实例化）
     ├── 方法：fork, resolve, push, pop, merge, clear
-    └── INTENT_CONTEXT_SPEC = ClassSpec("intent_context")
+    └── INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)
 ```
 
 **`IntentNode` 链表结构**：持久意图栈通过不可变链表实现结构共享：
@@ -286,26 +286,37 @@ class IntentResolver:
 
 ### 4.6 LLMExceptFrame 中的意图快照
 
-`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照：
+`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照；每次 retry 前以 fork 副本**直接替换** `_intent_ctx`（NS-2c 落地）：
 
 ```python
 # LLMExceptFrame.save_context()
 frame.saved_intent_ctx = runtime_context.fork_intent_snapshot()  # → _intent_ctx.fork()
+# NS-2b：同时快照帧活跃 intent_context IBCI 实例指针
+frame.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
 # LLMExceptFrame.restore_snapshot()（每次 retry 前调用）
-runtime_context._intent_ctx = frame.saved_intent_ctx.fork()  # 恢复到快照时刻
+# NS-2c：fork-and-replace（取代旧的 merge() 叠加语义）
+runtime_context._intent_ctx = frame.saved_intent_ctx.fork()
+# 同步重建活跃实例指针：保留命名身份（ib_class），但 _ctx 指向新底层
+runtime_context._set_active_intent_ibobj_for_current_ctx(<intent_context class>)
 ```
+
+**为何采用 fork-and-replace 而非 merge**：
+
+- merge 会保留 retry body 在快照之后对意图状态（持久栈/smear 队列/override 槽）的修改，造成"叠加恢复"——与 vars / loop_context 的"干净还原"语义不一致。
+- fork-and-replace 保证 retry 看到的意图状态与 llmexcept 进入时刻完全一致。
+- 活跃实例指针被重建：若原帧持有命名策略，则同步指向新底层 `IbIntentContext`；若原帧匿名，则建立新的匿名封装。底层共享引用不变量（`_active_intent_ibobj.fields['_ctx'] is _intent_ctx`）始终维持。
 
 ### 4.7 snapshot 行为表达式的意图捕获
 
-`snapshot` 关键字修饰的行为表达式（`int snapshot x = @~...~`）在创建时捕获调用位置意图栈的完整值快照：
+`snapshot` 关键字修饰的行为表达式（例如 `fn x = snapshot: @~...~`）在创建时捕获调用位置意图栈的完整值快照：
 
 ```python
-# expr_handler.py
-deferred_mode = self.get_side_table("node_deferred_mode", node_uid)
+# vm/handlers.py / runtime factory
+capture_mode = self.get_side_table("node_capture_mode", node_uid)
 # snapshot 语义：捕获当前作用域正在生效的意图栈的值快照（IbIntentContext.fork()）
 # lambda 语义：不捕获意图状态，每次调用时使用调用位置的当前意图栈
-captured_intents = None if deferred_mode == "lambda" else self.runtime_context.fork_intent_snapshot()
+captured_intents = None if capture_mode == "lambda" else self.runtime_context.fork_intent_snapshot()
 ```
 
 ---
@@ -369,7 +380,43 @@ intent_context.use(ctx)            # 等价于 ctx.use(ctx)
 intent_context saved = intent_context.get_current()
 ```
 
-**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = ClassSpec(name="intent_context")`，所有方法在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
+**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)`，所有方法在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
+
+### 6.1 帧级活跃实例指针（NS-2b 落地，2026-05-11）
+
+`RuntimeContextImpl` 持有 `_active_intent_ibobj: Optional[IbObject]` 指针，指向当前帧"正在使用"的 `intent_context` IBCI 对象（用户命名身份）。
+
+**核心不变量**：当 `_active_intent_ibobj` 非 None 时，
+```
+_active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork 副本
+```
+
+这是消除"双轨断裂"的关键设计：语法路径（`@+`/`@-`/`@`/`@!`）直接修改 `_intent_ctx`；OOP 路径（在活跃实例上调用 `push()` 等）修改的是同一底层 Python 对象。两路操作互可观察。
+
+**维护点（任一发生即同步更新指针）**：
+
+| 触发点 | 行为 |
+|--------|------|
+| `intent_context.use(ctx)` / `use_intent_context(ibobj)` | fork 源对象 `_ctx`，构造新封装并设为活跃指针（共享 fork 后引用） |
+| `intent_context.clear_inherited()` / `clear_inherited_intents()` | 清空持久栈，建立新的匿名封装为活跃指针 |
+| `IbUserFunction.call()` / `IbLLMFunction.call()` 函数入口 | 子帧 fork 调用者 `_intent_ctx`，建立新的匿名活跃指针；函数返回时恢复调用者指针 |
+| NS-2a 自动绑定（参数为 `intent_context` 类型）| 内部走 `use_intent_context(arg)`，同样重建活跃指针 |
+| `LLMExceptFrame.restore_context()`（NS-2c）| 以 `saved.fork()` 重建 `_intent_ctx`，并以 `saved_active_intent_ibobj.ib_class` 重建新封装 |
+
+**对调试器/工具的价值**：调试器可通过 `get_active_intent_ibobj()` 直接观察"当前帧正在使用哪个用户命名的策略对象"，而不是面对一个匿名 Python 对象。`get_current()` 因此返回的是活跃指针的 fork（保留命名身份的可观察性），但因共享引用，其内容等价于 `_intent_ctx.fork()`。
+
+### 6.2 prompt 段插值与 `combine` / `__to_prompt__`（PT-2.1 落地，2026-05-12）
+
+- **`combine(other)`**：与替换语义的 `merge` 互补，提供加法式合并 — 追加 `intent_top` / `smear` / `global_intents`，遇 override 取后者。适合"基础策略 + 局部增量"的拼接场景。
+- **`__to_prompt__()`**：把当前活跃意图列表（intent_top + smear + override）按"- {content}\n"行渲染，使 `(str)ctx` 与 `@~ ... $ctx ... ~` prompt 段插值得到结构化文本，无需调用者手动 `resolve()`。
+- **`try_deep_clone` 识别 `IbIntentContext`**：调用 `IbIntentContext.fork()` 取代默认浅拷贝；这使得 `intent_context` 作为类字段时，llmexcept 快照/恢复（NS-2c）链路得到正确独立副本，与 fork-and-replace 协议一致。
+
+### 6.3 序列化 / 反序列化（PT-2.2 落地，2026-05-12）
+
+- **完整 4 槽位**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top` / `smear_queue` / `override` / `global_intents`；旧的仅 `intent_stack` 平铺方案被取代但保留为遗留读取路径。
+- **共享身份**：通过 `id(ic) → uid` 备忘表保留多处引用同一 `IbIntentContext` 的身份；反序列化端的 `_get_intent_context` 也用 cache 还原"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"不变量。
+- **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 content/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性。
+- **`serialize_context`**：写入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`，调试器断点场景可还原完整意图上下文（含活跃指针身份）。
 
 ---
 
@@ -458,7 +505,112 @@ func func_with_custom_ctx():
 
 ---
 
-## 九、文件清单
+## 九、延迟执行对象与意图栈的交互规则 [⏳ 规范已定义，待正式执行]
+
+> **状态**：本节规范于 2026-04-27 架构讨论中形成，是 `lambda`/`snapshot` 与意图栈交互的**正式语义定义**。  
+> 现有部分实现（`snapshot` 的意图快照捕获、函数调用 `fork` 隔离）已与本规范对齐；  
+> 其余扩展将按主线优先级在 `docs/NEXT_STEPS.md` / `docs/PENDING_TASKS.md` 滚动更新。  
+> 规则编号（IT-1 等）是本规范的正式引用标识。
+
+---
+
+### 9.1 三类延迟对象的意图栈行为对比
+
+| | 自由变量（普通） | 意图上下文 |
+|---|---|---|
+| **snapshot** | 定义时深克隆冻结，调用时再克隆为私有副本，无结果缓存 | 定义时 `fork()`，绝对免疫调用处意图 |
+| **lambda** | 定义时 cell 捕获，调用时 deref 最新值 | 调用时现读，完全敏感于调用处意图 |
+| **嵌套 func** | 定义时 cell 捕获（同 lambda） | 调用时 `fork()` 调用处（同普通函数） |
+
+---
+
+### 9.2 意图传播规则（IT Rules）
+
+**Rule IT-1（意图传播规则）**：普通函数调用时总是 `fork()` 调用处的意图上下文，形成独立副本，无论函数是在哪里定义的。
+
+**Rule IT-2（意图冻结规则）**：`snapshot` 对象在创建时记录意图快照（`fork_intent_snapshot()`），调用时**绕过 IT-1**，使用冻结快照。调用处的持久意图栈、`@` smear 意图、`@!` 排他意图**完全忽略**。
+
+**Rule IT-3（高阶函数透明规则）**：当函数 F 调用传入参数 `g`（类型为 `fn`），`g` 所看到的意图上下文取决于 `g` 的模式：
+- 若 `g` 是 `lambda`（或嵌套 `func`）：看到 F 调用 `g` 时 F 的意图 fork 副本（调用处意图敏感）
+- 若 `g` 是 `snapshot`：完全忽略，使用冻结快照
+
+**Rule IT-4（意图冻结完整性规则）**：`snapshot` 对象一旦创建，其冻结的 `IbIntentContext` 快照不可修改。任何在 `snapshot` 对象外部对意图栈的修改（`@+`/`@-`/`@!`/`@`）对其均无效。
+
+---
+
+### 9.3 snapshot 的"确定无状态、确定可重入"保证
+
+`snapshot` 的设计目标是成为 IBCI 中唯一一种**行为纯函数**：相同的调用参数在任何位置、任何意图上下文下都产生相同的 LLM 行为。
+
+**实现要求（当前实现）**：
+- `IbBehavior.call()` 在 `capture_mode == 'snapshot'` 时，executor 使用 `captured_intents`（冻结快照）而非调用处的 `runtime_context._intent_ctx`
+- 执行器必须**主动跳过**消费 `runtime_context._intent_ctx` 中的 smear 队列和 override 槽（不应消费调用处的 `@` 意图）
+- 当前实现：`IbBehavior.__init__` 接受 `captured_intents` 参数，`capture_mode='snapshot'` 时注入 ✅；对调用时 smear/override 的进一步约束仍需持续验证
+
+---
+
+### 9.4 lambda 的调用处意图完全敏感保证
+
+`lambda` 的设计目标是：每次调用时，看到并消费调用处的完整活跃意图上下文。
+
+**行为契约**：
+- 使用调用处的完整活跃意图上下文（持久栈 + 全局意图）
+- 调用处的 `@` smear → **被消费**（正常流程）
+- 调用处的 `@!` 排他意图 → **被消费**（正常流程）
+- 定义处的意图栈 → **完全丢弃**（`lambda` 的 `captured_intents` 应为空或 None）
+
+**实现要求（当前实现）**：
+- `IbBehavior(capture_mode='lambda')` 在 `captured_intents` 字段存储 `None`
+- 每次调用时从 `runtime_context._intent_ctx` 现读
+
+---
+
+### 9.5 嵌套函数的意图作用域
+
+嵌套 `func` 的意图行为与 `lambda` 相同（IT-1）：
+
+- 定义时不捕获任何意图上下文
+- 调用时 `fork()` 调用处的意图上下文
+- 嵌套函数内的 `@+`/`@-` 操作在函数的 fork 副本上生效，不泄漏给调用者
+
+**嵌套函数被传出后的意图行为**：当嵌套函数被传出并在另一个意图上下文中调用时，它看到的是**调用处的意图栈**（IT-1），而不是定义处的意图栈。这是预期行为。
+
+如果用户想要"捕获定义处意图的嵌套行为"，应在函数体内显式使用 `snapshot`：
+
+```ibci
+func make_translator():
+    @+ 正式口吻
+    fn str translate = snapshot(str text)(@~ 翻译 $text ~)  # 捕获"正式口吻"意图
+    @-                                                       # 弹出，不影响 translate 的快照
+    return translate                                         # translate 永远使用"正式口吻"
+```
+
+---
+
+### 9.6 完整语义矩阵（供实现参考）
+
+```
+┌──────────────┬──────────────────────────────┬────────────────────────────────┐
+│              │ 持久意图栈（@+ 累积）           │ 一次性意图（@ smear / @! 排他） │
+├──────────────┼──────────────────────────────┼────────────────────────────────┤
+│ snapshot     │ 使用定义时 fork 的快照         │ 完全忽略（不消费调用处意图）      │
+│ lambda       │ 使用调用时 fork 的副本         │ 正常消费（调用处 smear/override）│
+│ 嵌套 func    │ 使用调用时 fork 的副本         │ 正常消费（同普通函数调用）        │
+│ 普通函数     │ 使用调用时 fork 的副本         │ 正常消费（同普通函数调用）        │
+└──────────────┴──────────────────────────────┴────────────────────────────────┘
+```
+
+---
+
+### 9.7 与新 fn 语法的关系
+
+本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法（D1/D2，已落地于 2026-04-29，详见 `docs/COMPLETED.md`）。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/VM_AND_INTERPRETER_DESIGN.md §4`。
+
+相关测试见 `tests/e2e/test_e2e_fn_callable.py`。
+
+---
+
+## 十、文件清单
 
 | 文件 | 说明 |
 |------|------|
@@ -467,7 +619,7 @@ func func_with_custom_ctx():
 | `core/kernel/intent_logic.py` | 意图模式定义（`IntentMode`、`IntentRole`） |
 | `core/kernel/axioms/intent.py` | `IntentAxiom`（公理层，`is_class=True`） |
 | `core/kernel/axioms/intent_context.py` | `IntentContextAxiom`（公理层，`is_class=True`） |
-| `core/kernel/spec/specs.py` | `INTENT_CONTEXT_SPEC = ClassSpec("intent_context")` |
+| `core/kernel/spec/specs.py` | `INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)` |
 | `core/runtime/objects/intent.py` | `IbIntent` 运行时对象 |
 | `core/runtime/objects/intent_context.py` | `IbIntentContext` 运行时对象（Python 层，不可实例化为 IbObject） |
 | `core/runtime/objects/intent_stack.py` | `IbIntentStack`（遗留接口层，提供 `push/pop/clear` 等 IBCI 可调用方法） |

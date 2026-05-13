@@ -17,11 +17,29 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.base.interfaces import IExecutionFrame
+    from core.runtime.interfaces import IExecutionContext
 
 # 当前 IBCI 执行帧寄存器。
 # Interpreter.run() / execute_module() 在入口处设置，IbUserFunction.call() 读取。
 _current_frame: ContextVar[Optional["IExecutionFrame"]] = ContextVar(
     "ibci_current_frame", default=None
+)
+
+# 当前 IBCI 执行上下文（ExecutionContext）寄存器。
+#
+# ``IbBehavior`` / ``IbFnCallable`` 在定义时捕获 ``_execution_context``
+# 字段；跨 Interpreter / 跨线程场景下，定义时刻的 EC 可能与调用时刻的 EC
+# 不一致。
+#
+# 设计语义：
+#   - lambda / snapshot / immediate behavior 的调用机制（VM、节点池、副表）
+#     总是取调用现场的 EC。
+#   - 定义时刻的 ``_execution_context`` 字段作为回退源，仅当当前没有
+#     活跃 EC 时使用。
+#
+# Interpreter.run() / execute_module() / vm.run() 在入口处设置此变量。
+_current_execution_context: ContextVar[Optional["IExecutionContext"]] = ContextVar(
+    "ibci_current_execution_context", default=None
 )
 
 
@@ -41,3 +59,26 @@ def set_current_frame(frame: "IExecutionFrame"):
 def reset_current_frame(token) -> None:
     """重置执行帧到 token 时刻的状态。"""
     _current_frame.reset(token)
+
+
+def get_current_execution_context() -> Optional["IExecutionContext"]:
+    """获取当前线程/协程的执行上下文。
+
+    在 Interpreter 执行循环之外调用返回 None。``IbBehavior.call`` /
+    ``IbFnCallable.call`` 应优先使用本函数返回值，为 None 时使用
+    定义时刻捕获的 ``_execution_context`` 字段。
+    """
+    return _current_execution_context.get()
+
+
+def set_current_execution_context(ec: "IExecutionContext"):
+    """设置当前执行上下文，返回 Token（用于 reset）。
+
+    调用方约定与 ``set_current_frame`` 对称，应在 ``finally`` 中 reset。
+    """
+    return _current_execution_context.set(ec)
+
+
+def reset_current_execution_context(token) -> None:
+    """重置执行上下文到 token 时刻的状态。"""
+    _current_execution_context.reset(token)

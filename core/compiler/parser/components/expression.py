@@ -6,6 +6,13 @@ from core.compiler.parser.core.syntax import IbPrecedence, IbParseRule
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import ID_SELF, OP_MAP
 
+# 表达式位置 ``lambda(...) (...)`` 与 ``lambda(...)`` 形式消歧的前瞻上限。
+# 取 1024 是源代码中单个 lambda 参数列表 + 函数体表达式 token 数的保守上界
+# （典型 lambda 表达式不超过几十 token）；超出该上限的写法在实际代码中极
+# 罕见，回退为 "无参形式" 不会引入二义性——后续 parse_expression 仍会按表
+# 达式语法继续消费，错误会以 PAR_002 形式正常报告。
+_MAX_LAMBDA_LOOKAHEAD_TOKENS = 1024
+
 class ExpressionComponent(BaseComponent):
     def __init__(self, context):
         super().__init__(context)
@@ -94,17 +101,30 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.AND, None, self.logical, IbPrecedence.AND)
         self.register(TokenType.OR, None, self.logical, IbPrecedence.OR)
         
-        # Ternary operator: condition ? body : orelse
+        # Ternary operators:
+        #   - C-style:      condition ? body : orelse
+        #   - Python-style: body if condition else orelse
+        # Both register at ASSIGNMENT precedence (just above LOWEST). When `if`
+        # appears as a Pratt infix in an expression context, it parses as the
+        # Python-style ternary; statement-level `if`/`for ... if filter:` is
+        # unaffected because those callers parse expressions at ASSIGNMENT
+        # precedence (so IF infix is not picked up).
         self.register(TokenType.QUESTION, None, self.ternary, IbPrecedence.ASSIGNMENT)
+        self.register(TokenType.IF, None, self.if_else_ternary, IbPrecedence.ASSIGNMENT)
         
         # Calls and Attributes
         self.register(TokenType.DOT, None, self.dot, IbPrecedence.CALL)
         
         # Behavior
         self.register(TokenType.BEHAVIOR_MARKER, self.behavior_expression, None, IbPrecedence.LOWEST)
-        
+
         # Variable Reference
         self.register(TokenType.VAR_REF, self.var_ref_expr, None, IbPrecedence.LOWEST)
+
+        # Parameterized lambda / snapshot expressions
+        # 在表达式位置消费 LAMBDA/SNAPSHOT token，构建 IbLambdaExpr。
+        self.register(TokenType.LAMBDA, self.lambda_expr, None, IbPrecedence.LOWEST)
+        self.register(TokenType.SNAPSHOT, self.lambda_expr, None, IbPrecedence.LOWEST)
 
     # --- Pratt Parser Handlers ---
 
@@ -161,35 +181,52 @@ class ExpressionComponent(BaseComponent):
         if self.stream.peek().type in (TokenType.IDENTIFIER, TokenType.AUTO):
             checkpoint = self.stream.get_checkpoint()
             _behavior_cast_detected = False
+            cast_node: Optional[ast.IbExpr] = None
 
             # 开启静默前瞻模式，防止类型解析失败产生误导性的语法错误报告。
-            with self.stream.speculate():
-                try:
+            # try/except 必须包在 with 外侧，否则 ParseControlFlowError
+            # 在 with 内被捕获会导致 temp_tracker 合并到 issue_tracker。
+            try:
+                with self.stream.speculate():
                     # 尝试以前瞻方式解析类型标注
                     type_node = self.context.type_parser.parse_type_annotation()
                     if self.stream.match(TokenType.RPAREN):
+                        # 链式下标消歧：
+                        # 当 type_node 自身含下标（IbSubscript）且 RPAREN 之后紧跟 `[` 时，
+                        # 几乎必然是链式下标而非 cast。触发回退。
+                        if isinstance(type_node, ast.IbSubscript) and self.stream.check(TokenType.LBRACKET):
+                            raise ParseControlFlowError()
+
                         # 确认为类型转换 (Cast) 语法路径
                         value = self.parse_precedence(IbPrecedence.UNARY)
-                        
-                        # [DEPRECATED] (Type) @~...~ 语法已废弃，发出硬错误。
-                        # 正确写法：int lambda varname = @~...~ 或 int snapshot varname = @~...~
+
+                        # (Type) @~...~ 语法不支持，发出错误。
+                        # 正确写法：fn varname = lambda -> TYPE: @~...~
                         if isinstance(value, ast.IbBehaviorExpr):
                             _behavior_cast_detected = True
                             raise ParseControlFlowError()
-                        
-                        return self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
-                except ParseControlFlowError:
-                    pass
-            
+
+                        # 缓存结果，with 正常退出后再 return；不在 with 内 return，
+                        # 以保证 PCFE 失败路径与成功路径走同一套出口机制。
+                        cast_node = self._loc(ast.IbCastExpr(type_annotation=type_node, value=value), type_node)
+                    else:
+                        # 类型标注解析成功但未匹配到 RPAREN，非 cast 语法
+                        raise ParseControlFlowError()
+            except ParseControlFlowError:
+                cast_node = None
+
+            if cast_node is not None:
+                return cast_node
+
             # 在 speculate 上下文外发出硬错误，确保记录到真实的 issue_tracker
             if _behavior_cast_detected:
                 raise self.stream.error(
                     self.stream.peek(),
                     "Cast expression '(Type) @~...~' is no longer supported. "
-                    "Use 'int lambda varname = @~...~' or 'int snapshot varname = @~...~' instead.",
+                    "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                     code="PAR_010"
                 )
-            
+
             # 路径回退：若非 Cast，则回退到检查点按普通分组表达式解析
             self.stream.restore_checkpoint(checkpoint)
 
@@ -278,7 +315,7 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbBoolOp(op=op, values=[left, right]), left, right)
 
     def ternary(self, left: ast.IbExpr) -> ast.IbExpr:
-        """三元运算符：condition ? body : orelse"""
+        """C 风格三元运算符：condition ? body : orelse"""
         question_token = self.stream.previous()
         # 解析真值分支（在 COLON 之前停止，因为 COLON 无 infix 规则，优先级为 LOWEST）
         body = self.parse_expression(IbPrecedence.LOWEST)
@@ -286,6 +323,27 @@ class ExpressionComponent(BaseComponent):
         # 解析假值分支（右结合：再次从 LOWEST 开始，可嵌套三元）
         orelse = self.parse_expression(IbPrecedence.LOWEST)
         return self._loc(ast.IbIfExp(test=left, body=body, orelse=orelse), left, orelse)
+
+    def if_else_ternary(self, left: ast.IbExpr) -> ast.IbExpr:
+        """Python 风格三元运算符：body if condition else orelse
+
+        左值 `left` 已被预先解析为 body。本方法消费 `if cond else orelse` 部分。
+        与 C 风格 `?:` 等价；解析为同一 IbIfExp AST 节点。
+
+        注意：调用者（for-loop 的 iter 表达式）需以 ASSIGNMENT 优先级调用
+        parse_expression 以避免误吞作为过滤器关键字的 `if`。
+        """
+        if_token = self.stream.previous()
+        # 解析条件，停在 ELSE 之前。由于 ELSE 没有 infix 规则，
+        # 用 LOWEST 即可（与 `?:` 中 body 的处理一致）。
+        cond = self.parse_expression(IbPrecedence.LOWEST)
+        self.stream.consume(
+            TokenType.ELSE,
+            "Expect 'else' in ternary expression 'body if cond else orelse'.",
+        )
+        # 假值分支：右结合，允许嵌套（再次从 LOWEST 开始）。
+        orelse = self.parse_expression(IbPrecedence.LOWEST)
+        return self._loc(ast.IbIfExp(test=cond, body=left, orelse=orelse), left, orelse)
 
     def in_binary(self, left: ast.IbExpr) -> ast.IbExpr:
         """成员检测运算符：elem in container"""
@@ -417,6 +475,123 @@ class ExpressionComponent(BaseComponent):
         self.stream.consume(TokenType.BEHAVIOR_MARKER, "Expect closing '~'.")
         
         return self._loc(ast.IbBehaviorExpr(segments=segments, tag=tag), start_token)
+
+    def lambda_expr(self) -> ast.IbExpr:
+        """
+        参数化 lambda/snapshot 表达式。
+
+        全部支持的形式（``:`` 为唯一 body 起始符）::
+
+            lambda: EXPR                         — 无参，返回类型推导
+            lambda -> TYPE: EXPR                 — 无参，显式返回类型
+            lambda(PARAMS): EXPR                 — 有参，返回类型推导
+            lambda(PARAMS) -> TYPE: EXPR         — 有参，显式返回类型
+            snapshot: EXPR                       — snapshot 完全对称
+            snapshot -> TYPE: EXPR
+            snapshot(PARAMS): EXPR
+            snapshot(PARAMS) -> TYPE: EXPR
+
+        返回类型标注**写在表达式侧**（``-> TYPE``）::
+
+            fn f = lambda -> int: EXPR           — 声明 f 返回 int
+            fn f = lambda(int x) -> int: EXPR    — 声明 f 有参且返回 int
+            fn p = make_parser()                 — 从工厂获取时类型由 fn 推导
+
+        body 是单一表达式，解析优先级为 LOWEST，在当前 token 行结束
+        （NEWLINE/EOF）时自然终止（由 parse_expression 处理）。
+        """
+        keyword_token = self.stream.previous()
+        capture_mode = "lambda" if keyword_token.type == TokenType.LAMBDA else "snapshot"
+
+        params: List[ast.IbASTNode] = []
+        returns_node: Optional[ast.IbExpr] = None
+        type_parser = self.context.type_parser
+
+        # ------------------------------------------------------------------ #
+        # 1. 无参：`lambda: EXPR` / `lambda -> TYPE: EXPR`                   #
+        # ------------------------------------------------------------------ #
+        if self.stream.check(TokenType.ARROW):
+            # D2：表达式侧 `-> TYPE` 合法化
+            self.stream.advance()  # consume '->'
+            returns_node = type_parser.parse_type_annotation()
+            self.stream.consume(
+                TokenType.COLON,
+                f"Expect ':' after return type annotation in '{capture_mode}' expression.",
+            )
+            body = self.parse_expression(IbPrecedence.LOWEST)
+
+        elif self.stream.check(TokenType.COLON):
+            self.stream.advance()  # consume ':'
+            body = self.parse_expression(IbPrecedence.LOWEST)
+
+        # ------------------------------------------------------------------ #
+        # 2. 括号开头：有参形式 `lambda(PARAMS): EXPR`                        #
+        # ------------------------------------------------------------------ #
+        elif self.stream.check(TokenType.LPAREN):
+            if not self._lambda_lookahead_is_param_form():
+                raise self.stream.error(
+                    self.stream.peek(),
+                    f"Expect ':' after '{capture_mode}' parameter list, or ':' directly after '{capture_mode}' keyword. "
+                    f"Parenthesis-only body forms are not supported; use '{capture_mode}: EXPR' or '{capture_mode}(PARAMS): EXPR'.",
+                    code="PAR_002",
+                )
+
+            # 解析参数列表
+            self.stream.consume(TokenType.LPAREN, f"Expect '(' after '{capture_mode}' keyword.")
+            decl = self.context.declaration_parser
+            if decl is None:
+                raise self.stream.error(
+                    keyword_token,
+                    "Internal: declaration parser not wired; cannot parse lambda parameters.",
+                    code="PAR_002",
+                )
+            params = decl.parameters()
+            self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{capture_mode}' parameter list.")
+
+            # D2：表达式侧 `-> TYPE` 合法化（有参形式）
+            if self.stream.check(TokenType.ARROW):
+                self.stream.advance()  # consume '->'
+                returns_node = type_parser.parse_type_annotation()
+
+            # Body 必须以 ':' 起始
+            self.stream.consume(TokenType.COLON, f"Expect ':' to introduce '{capture_mode}' body expression.")
+            body = self.parse_expression(IbPrecedence.LOWEST)
+
+        else:
+            raise self.stream.error(
+                self.stream.peek(),
+                f"Expect ':' or '(' after '{capture_mode}' keyword in expression position.",
+                code="PAR_002",
+            )
+
+        node = ast.IbLambdaExpr(params=params, body=body, capture_mode=capture_mode, returns=returns_node)
+        return self._loc(node, keyword_token, self.stream.previous())
+
+    def _lambda_lookahead_is_param_form(self) -> bool:
+        """
+        前瞻判断 ``lambda(...): ...`` 形式。
+
+        此时 stream 已消费 ``lambda``/``snapshot`` 关键字，且当前 peek(0) 为 LPAREN。
+        在 token 流上做平衡括号扫描；若第一个 RPAREN 之后紧接的 token 为
+        COLON（``:``）或 ARROW（``->`` — 仅用于前瞻识别；ARROW 会在后续步骤被拒绝并报错），
+        则视为有参形式（参数列表形式）。
+        扫描严格只读，不修改 stream 位置。
+        """
+        depth = 0
+        offset = 0
+        while offset < _MAX_LAMBDA_LOOKAHEAD_TOKENS:
+            t = self.stream.peek(offset)
+            if t.type == TokenType.EOF or t.type == TokenType.NEWLINE:
+                return False
+            if t.type == TokenType.LPAREN:
+                depth += 1
+            elif t.type == TokenType.RPAREN:
+                depth -= 1
+                if depth == 0:
+                    next_t = self.stream.peek(offset + 1)
+                    return next_t.type in (TokenType.ARROW, TokenType.COLON)
+            offset += 1
+        return False
 
     def _parse_complex_access(self, var_name: str, var_token) -> ast.IbExpr:
         """Helper to parse complex access like $obj.attr[0] after a $var_ref."""
