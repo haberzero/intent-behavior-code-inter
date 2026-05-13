@@ -376,7 +376,7 @@ class LambdaCaptureAnalyzer:
         # 验证自由变量在外部作用域中存在
         captured_vars = set()
         for var_name in free_vars:
-            sym = self.current_scope.lookup(var_name)
+            sym = self.current_scope.symbols.get(var_name)
             if sym:
                 captured_vars.add(var_name)
 

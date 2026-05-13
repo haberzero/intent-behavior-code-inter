@@ -104,7 +104,7 @@ class SymbolResolver:
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""
-        return self.current_scope.lookup(name)
+        return self.current_scope.symbols.get(name)
 
     def bind_symbol(self, node: ast.IbASTNode, symbol: Symbol):
         """绑定符号到节点"""

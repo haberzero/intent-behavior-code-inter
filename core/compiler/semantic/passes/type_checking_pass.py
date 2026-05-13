@@ -135,7 +135,7 @@ class TypeCheckingVisitor:
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""
-        return self.current_scope.lookup(name)
+        return self.current_scope.symbols.get(name)
 
     def is_assignable(self, source: IbSpec, target: IbSpec) -> bool:
         """检查源类型是否可以赋给目标类型"""

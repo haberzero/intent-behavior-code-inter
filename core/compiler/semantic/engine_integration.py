@@ -141,7 +141,7 @@ class SemanticAdapter:
             self.registry,
             self.module_name,
             self.issue_tracker,
-            predefined_symbols={name: sym for name, sym in self.symbol_table._symbols.items()}
+            predefined_symbols={name: sym for name, sym in self.symbol_table.symbols.items()}
         )
 
         # Update symbol table from result
