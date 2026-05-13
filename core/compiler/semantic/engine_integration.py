@@ -59,13 +59,11 @@ def run_semantic_analysis(
     # Convert V2 diagnostics to issue tracker format
     for diagnostic in result.diagnostics:
         severity = _convert_diagnostic_level(diagnostic.level)
-        issue_tracker.add(
-            Diagnostic(
-                message=diagnostic.message,
-                location=None,
-                severity=severity,
-                code=diagnostic.code
-            )
+        issue_tracker.report(
+            severity=severity,
+            code=diagnostic.code,
+            message=diagnostic.message,
+            location=None
         )
 
     # Create UID-based CompilationResult - NO CONVERSION NEEDED!
