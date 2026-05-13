@@ -701,24 +701,47 @@ tests/
 
 #### Phase 2.3：删除冗余测试（Week 4）
 
-**Step 2.3.1**：删除实现细节测试
+**Step 2.3.1**：删除实现细节测试 ✅ 完成（2026-05-13）
 - 删除所有 `find_node_uid` / `node_pool` 相关测试
 - 删除所有 VM handler 单元测试
 - 删除所有编译器 Pass 白盒测试
 
-**Step 2.3.2**：合并重复测试
+**实际成果**：
+- ✅ 删除 6 个文件，共 493 tests：
+  - test_e2e_core_syntax.py (-128): 微观语法测试
+  - test_vm_executor.py (-122): 白盒 VM 测试
+  - test_kernel/test_typeref.py (-102): TypeRef 实现测试
+  - test_kernel/test_spec_layer.py (-81): Spec 层实现测试
+  - test_kernel/test_axioms.py (-34): 公理层级测试
+  - test_kernel/test_symbols.py (-26): 符号表测试
+- ✅ 精简 2 个文件，共 128 tests：
+  - test_e2e_higher_order.py: 112 → 62 (-50): 删除 axiom 测试，保留闭包/snapshot 语义
+  - test_plugin_implementations.py: 98 → 20 (-78): 转换为烟雾测试（每插件 3-5 个测试）
+- **总削减：621 tests (-49%)**
+- **1,259 → 638 tests 估算**（实际需验证）
+
+**Step 2.3.2**：合并重复测试与进一步削减（🚧 进行中）
 - 识别语义相同的测试并只保留最简洁版本
 - 删除微观测试（字面量常量 / 单个 AST 节点）
+- 参数化相似测试以减少数量
 
-**Step 2.3.3**：迁移历史 Bug 回归测试
+**待完成（Phase 2.3 Step 2）**：
+需要额外削减 ~268 tests 以达到 300-400 目标（详见 `docs/PHASE_2_TEST_DELETION_STRATEGY.md`）：
+- 删除 runtime 实现测试文件 (-96 tests)
+- 精简 E2E 测试文件 (-78 tests)
+- 削减 compiler 测试 (-47 tests)
+- 其他精简 (-47 tests)
+
+**Step 2.3.3**：迁移历史 Bug 回归测试（待完成）
 - 创建 `tests/regression/test_known_issues.py`
 - 将所有历史 Bug 的最小复现集中到此文件
 - 按 GitHub issue 编号索引
 
 **完成标准**：
-- ✅ 删除 `tests/kernel/` / `tests/runtime/` / `tests/compiler/` 大部分文件
-- ✅ 保留 `tests/compliance/` 不变
-- ✅ `tests/regression/` 存在且包含所有关键回归测试
+- ✅ 已删除 `tests/kernel/` 4 个文件（全部）
+- 🚧 部分删除 `tests/runtime/` 文件（需进一步削减）
+- ⏳ 保留 `tests/compliance/` 不变
+- ⏳ `tests/regression/` 待创建
 
 #### Phase 2.4：创建示例层与文档（Week 5）
 
