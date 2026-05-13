@@ -148,10 +148,11 @@ class TypeCheckingVisitor:
         """解析类型标注"""
         if isinstance(annotation, ast.IbName):
             return self.registry.resolve(annotation.id)
-        elif isinstance(annotation, ast.IbGenericType):
+        elif isinstance(annotation, ast.IbSubscript):
             # 泛型类型：list[int], dict[str, int] 等
-            base_type = self.registry.resolve(annotation.base.id if isinstance(annotation.base, ast.IbName) else annotation.base)
-            # 简化处理：返回基础类型
+            # value 是基础类型（如 list），slice 是类型参数（如 int）
+            base_type = self.registry.resolve(annotation.value.id if isinstance(annotation.value, ast.IbName) else "any")
+            # 简化处理：返回基础类型，忽略类型参数
             return base_type
         else:
             # 其他类型标注
@@ -215,12 +216,23 @@ class TypeCheckingVisitor:
                 target_type = val_type
 
             # 类型兼容性检查
-            if not self.is_assignable(val_type, target_type):
-                hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
-                self.error(
-                    f"Cannot assign '{val_type.name}' to '{target_type.name}'",
-                    node, code="SEM_003", hint=hint
-                )
+            # 对于泛型类型，先尝试提取基础类型进行比较
+            # 对于 any 类型，允许赋值给任何类型
+            if val_type.name == 'any' or target_type.name == 'any':
+                # any 可以赋值给任何类型，任何类型也可以赋值给 any
+                pass
+            elif not self.is_assignable(val_type, target_type):
+                # 如果直接检查失败，且目标类型名包含 "[" (泛型)，尝试匹配基础类型
+                # 例如：list 可以赋值给 list[int]
+                target_base_name = target_type.name.split('[')[0] if '[' in target_type.name else target_type.name
+                val_base_name = val_type.name.split('[')[0] if '[' in val_type.name else val_type.name
+
+                if target_base_name != val_base_name:
+                    hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
+                    self.error(
+                        f"Cannot assign '{val_type.name}' to '{target_type.name}'",
+                        node, code="SEM_003", hint=hint
+                    )
 
             # 绑定类型
             self.bind_type(target, target_type)
@@ -524,7 +536,7 @@ class TypeCheckingVisitor:
     def visit_IbSubscript(self, node: ast.IbSubscript) -> Optional[IbSpec]:
         """访问下标访问"""
         self.visit(node.value)
-        self.visit(node.index)
+        self.visit(node.slice)
         # 简化处理：返回 any
         self.bind_type(node, self._any_desc)
         return self._any_desc

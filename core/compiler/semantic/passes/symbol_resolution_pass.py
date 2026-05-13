@@ -265,7 +265,7 @@ class SymbolResolver:
     def visit_IbSubscript(self, node: ast.IbSubscript):
         """访问下标访问节点"""
         self.visit(node.value)
-        self.visit(node.index)
+        self.visit(node.slice)
 
     def visit_IbIf(self, node: ast.IbIf):
         """访问 if 语句节点"""
