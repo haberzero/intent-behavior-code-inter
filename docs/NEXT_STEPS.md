@@ -3,58 +3,98 @@
 > 本文档**只**记录当前周期内最紧要、可立即开工的下一步。
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-13（NS-4/NS-6/NS-7 已完成；测试体系Phase 2完成；代码健康度审计完成；semantic_v2 开发完成）
+> **最后更新**：2026-05-13（semantic_v2 Phase 3 已启动，测试基础设施和引擎集成已完成）
 
 ---
 
-## 🎯 当前最紧要：semantic_v2 测试验证 (Phase 3)
+## 🎯 当前最紧要：semantic_v2 Phase 3 测试验证与完善
 
-**状态**: ✅ Phase 1 & 2 已完成 → ⏸️ Phase 3 待开启
+**状态**: ✅ 测试基础设施已建立 → ✅ 引擎集成已完成 → ⏸️ 测试验证进行中
 
-semantic_v2 的**代码实现已全部完成**（6 个 Pass + 基础设施，共 1,929 行），架构已优化并文档化。**现在可以立即开启测试流程**，开始 V2 对 V1 的逐步替换和逻辑正确性验证。
+semantic_v2 的**代码实现和引擎集成已全部完成**。现已建立完整测试框架和V1/V2对比验证工具，引擎支持通过 `use_semantic_v2=True` 参数选择使用V2。**下一步是运行测试验证并修复发现的问题**。
 
-### 短期任务（1-2 周，P0 优先级）
+### 已完成的工作（2026-05-13）
 
-**Task 1: 创建测试基础设施** [估算: 4-6h]
-- [ ] 创建 `tests/compiler/semantic_v2/` 目录结构
-- [ ] 编写单元测试框架（每个 Pass 独立测试）
-- [ ] 编写集成测试（完整管道测试）
-- [ ] 创建测试用例库（覆盖各种 IBCI 语法）
-- **目标**: 至少 20 个单元测试 + 10 个集成测试
+**✅ Task 1: 创建测试基础设施** [完成]
+- ✅ 创建 `tests/compiler/semantic_v2/` 目录结构
+- ✅ 实现 `test_symbol_collection_pass.py` 单元测试（7个测试用例）
+- ✅ 实现 `test_pipeline_integration.py` 集成测试（10个测试用例）
+- ✅ 创建测试fixture和helper函数
 
-**Task 2: V1/V2 并行验证工具** [估算: 4-6h]
-- [ ] 实现 `tools/validate_semantic_v2.py` 自动化对比工具
-- [ ] 验证维度：符号表、类型绑定、错误信息、元数据
-- [ ] 实现差异可视化和分析报告
-- **目标**: V1/V2 输出差异可量化对比
+**✅ Task 2: V1/V2 并行验证工具** [完成]
+- ✅ 实现 `tools/validate_semantic_v2.py` 自动化对比工具
+- ✅ 对比维度：符号表、类型绑定、错误信息
+- ✅ 生成Markdown格式差异分析报告
+- ✅ 默认7个测试用例覆盖核心场景
 
-**Task 3: 运行回归测试** [估算: 2-3h, P1]
-- [ ] 使用现有 V1 测试套件验证 V2
-- [ ] 记录和分析 V1/V2 差异
-- [ ] 修复 V2 中发现的 bug
-- **成功标准**: V2 错误率 < V1，差异可解释
+**✅ Task 4: 引擎集成** [完成]
+- ✅ IBCIEngine 添加 `use_semantic_v2` 参数
+- ✅ Scheduler 添加 `use_semantic_v2` 参数
+- ✅ 创建 `SemanticV2Adapter` 适配V1/V2接口
+- ✅ 实现 `engine_integration.py` 模块
+- ✅ 条件选择V1或V2分析器
 
-### 中期任务（2-4 周）
+### 当前任务（1周内，P0 优先级）
 
-**Task 4: 引擎集成** [估算: 6-8h, P1]
-- [ ] IBCIEngine 添加 `use_semantic_v2` 配置参数
-- [ ] 修改 `compile_string()` 支持 V2 路径
-- [ ] 创建适配器层（统一 V1/V2 输出格式）
-- [ ] 添加性能监控（对比 V1/V2 性能）
+**Task 3: 运行测试与验证** [估算: 2-3h, 进行中]
+- [ ] 运行单元测试验证各Pass功能
+- [ ] 运行集成测试验证完整管道
+- [ ] 运行 `validate_semantic_v2.py` 生成V1/V2对比报告
+- [ ] 分析差异并修复V2中的bug
+- [ ] 确保差异率 < 5%
 
-**Task 5: 文档完善** [估算: 2-4h, P2]
-- [ ] 创建 `MIGRATION_GUIDE.md` - V1 → V2 迁移指南
-- [ ] 创建 `SEMANTIC_V2_API.md` - V2 API 文档
-- [ ] 创建 `TESTING_STRATEGY.md` - 测试策略文档
+**Task 5: 文档完善** [估算: 2-4h]
+- [ ] 更新 `NEXT_STEPS.md` 记录最新进展
+- [ ] 创建 `docs/SEMANTIC_V2_USAGE.md` - V2使用指南
+- [ ] 创建 `docs/V1_TO_V2_MIGRATION.md` - 迁移指南
 - [ ] 更新主 README 说明 V2 状态
+
+### 使用方法
+
+**启用 semantic_v2:**
+```python
+from core.engine import IBCIEngine
+
+# 使用V2语义分析器
+engine = IBCIEngine(use_semantic_v2=True)
+
+# 使用V1语义分析器（默认）
+engine = IBCIEngine(use_semantic_v2=False)
+```
+
+**运行验证工具:**
+```bash
+python tools/validate_semantic_v2.py --verbose
+```
+
+**运行测试:**
+```bash
+python -m pytest tests/compiler/semantic_v2/ -v
+```
 
 ### 成功指标
 
-- **短期（2周）**: 30+ 测试通过，V1/V2 对比工具运行成功
-- **中期（1月）**: V2 集成到 Engine，测试覆盖率 > 80%，V1/V2 差异 < 5%
-- **长期（2月）**: V2 稳定运行，用户可选使用 V2
+- **短期（1周）**:
+  - ✅ 测试基础设施完成
+  - ✅ 引擎集成完成
+  - ⏸️ 30+ 测试通过
+  - ⏸️ V1/V2差异 < 5%
 
-**详见**: `docs/SEMANTIC_REFACTORING_PLAN.md` 完整重构规划与 `docs/METADATA_ARCHITECTURE.md` 架构设计
+- **中期（2周）**:
+  - V2测试覆盖率 > 80%
+  - V2性能数据收集完成
+  - 发现的bug全部修复
+
+- **长期（1月）**:
+  - V2稳定运行
+  - 用户可选使用V2
+  - 准备默认切换到V2
+
+**详见**:
+- `docs/SEMANTIC_REFACTORING_PLAN.md` - 完整重构规划
+- `docs/METADATA_ARCHITECTURE.md` - 架构设计
+- `tools/validate_semantic_v2.py` - 验证工具
+- `tests/compiler/semantic_v2/` - 测试套件
 
 ---
 
