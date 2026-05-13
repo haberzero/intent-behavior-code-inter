@@ -502,4 +502,299 @@ tests/
 
 ---
 
-*最后更新：2026-05-12（首版 + 完成标记 ✅）*
+## §11 Phase 2 根本性重构（2026-05-13 启动）
+
+### 11.1 Phase 1 的局限性评估
+
+Phase 1（15 步）完成了**目录结构调整**与**文件合并**，取得以下成果：
+- ✅ 删除了 `tests/unit/` 目录
+- ✅ 去除文件名中的里程碑代号（NS-/PT-/M[0-9] 等）
+- ✅ 建立了 `tests/conftest.py` 基础设施
+- ✅ 巨型文件拆分（`test_e2e_ai_mock.py` 1510 行 → 4 个主题文件）
+- ✅ 创建了 `tests/COVERAGE_MAP.md` 索引
+
+**但未解决根本问题**：
+
+1. **测试规模失控**：
+   - 15,345 行测试代码 vs 30,120 行核心实现（测试占比 51%）
+   - 1,259 个测试用例分散在 309 个测试类中
+   - 单个文件最大 1,734 行（`test_vm_executor.py`）
+
+2. **Helper 重复未消除**：
+   - 9 个文件仍定义 `make_engine`
+   - 12 个文件仍定义 `run_and_capture`
+   - 大量文件未使用 `conftest.py` 统一基础设施
+
+3. **测试粒度过细**：
+   - 测试关注**微观实现细节**而非**语言语义不变量**
+   - 示例：单独测试 `test_int_constant` / `test_binop_addition` 等字面量操作
+
+4. **实现耦合过深**：
+   - Runtime 层测试直接访问 `interpreter.node_pool` / `find_node_uid`
+   - 测试需要理解编译器内部数据结构（node_uid / side_table）
+   - 任何内部重构都会破坏大量测试
+
+### 11.2 Phase 2 目标：从"覆盖实现"到"验证契约"
+
+#### 核心理念转变
+
+**Phase 1 思维**（已过时）：
+- 为每个 AST 节点写 handler 测试
+- 为每个编译器 Pass 写细节验证
+- 覆盖每个代码分支
+
+**Phase 2 思维**（新范式）：
+- **只测试对外可观察的语义不变量**
+- **通过属性测试（Property-Based Testing）而非具体样本**
+- **分层测试，各层职责清晰，避免白盒耦合**
+
+#### IBCI 的核心价值主张（测试重点）
+
+IBCI **不是**：
+- ❌ 通用编程语言（有 Python）
+- ❌ 性能优化目标（解释器即可）
+- ❌ 复杂语法展示（语法是 Python 子集）
+
+IBCI **是**：
+- ✅ **混合执行实验平台**：确定性代码 + LLM 不确定性推理融合
+- ✅ **意图驱动范式**：通过 `@` 注释动态增强上下文
+- ✅ **AI 容错控制流**：`llmexcept` / `retry` 处理 LLM 输出不稳定性
+- ✅ **快照语义**：`snapshot` 实现无状态可重入行为
+
+#### 核心不变量映射（测试优先级）
+
+| 层级 | 核心不变量 | 测试方式 |
+|------|----------|---------|
+| **类型系统** | Optional[T] 空安全 / 泛型协变 / tuple 位置类型 / cast 合法性 | 参数化契约测试 |
+| **执行模型** | CPS 无递归 / 控制流数据化 / Signal 透传与拦截 | 公理验证测试 |
+| **作用域** | Cell 共享语义 / lambda 引用捕获 / snapshot 值捕获 + 深克隆 | 语义不变量测试 |
+| **Intent** | smear/override/persist 优先级 / 跨帧传播 / retry 还原 | 状态机测试 |
+| **llmexcept** | 错误历史追踪 / 深度限制 / retry 循环不变量 | 边界条件测试 |
+| **LLM 集成** | MOCK 协议 / dispatch / future / DDG 顺序保证 | 集成契约测试 |
+
+### 11.3 新测试体系架构
+
+```
+tests/
+├── conftest.py                      # 统一基础设施（强制使用）
+├── fixtures/                        # 可复用的测试 fixture（IBCI 代码片段库）
+│   ├── type_system_samples.py       # 类型系统样本：泛型/Optional/cast
+│   ├── control_flow_samples.py      # 控制流样本：if/for/while/switch
+│   ├── llm_samples.py               # LLM 样本：behavior/llmexcept/intent
+│   └── edge_cases.py                # 边界条件样本
+│
+├── contracts/                       # 契约测试（核心，300-400 tests）
+│   ├── test_type_invariants.py      # 类型系统不变量
+│   ├── test_execution_model.py      # 执行模型公理（CPS/Signal/Frame）
+│   ├── test_scope_semantics.py      # 作用域语义（Cell/lambda/snapshot）
+│   ├── test_intent_propagation.py   # 意图系统不变量
+│   ├── test_llmexcept_guarantees.py # llmexcept 保证
+│   └── test_llm_integration.py      # LLM 集成契约
+│
+├── compliance/                      # 公开 API 黑盒合规（保留现状）
+│   ├── test_concurrent_llm.py
+│   ├── test_execution_isolation.py
+│   └── test_memory_model.py
+│
+├── regression/                      # 历史 Bug 回归（精简保留）
+│   └── test_known_issues.py         # 所有历史 Bug 的最小复现
+│
+└── examples/                        # 示例程序端到端（文档化测试）
+    ├── test_calculator.py           # 简单计算器
+    ├── test_chat_agent.py           # 对话代理（LLM）
+    ├── test_data_pipeline.py        # 数据流水线
+    └── test_concurrent_tasks.py     # 并发任务
+```
+
+**关键决策**：
+- **删除** `kernel/` / `compiler/` / `runtime/` / `e2e/` 旧结构（80% 的测试）
+- **创建** `contracts/` 层聚焦语义不变量
+- **创建** `fixtures/` 层提供可复用样本
+- **精简** `regression/` 只保留不可被 contract 覆盖的历史 Bug
+
+### 11.4 测试规模目标与削减策略
+
+| 当前层级 | 当前规模 | 目标规模 | 削减策略 |
+|----------|---------|---------|---------|
+| Kernel 层 | ~500 行 | **删除** | 类型系统不变量已被 contracts/test_type_invariants.py 覆盖 |
+| Compiler 层 | ~3000 行 | **500 行** | 只保留类型推断契约测试，删除 Pass 白盒测试 |
+| Runtime（VM） | ~4000 行 | **删除** | CPS 公理已被 contracts/test_execution_model.py 覆盖 |
+| Runtime（Intent） | ~800 行 | **200 行** | 合并到 contracts/test_intent_propagation.py |
+| Runtime（llmexcept） | ~500 行 | **150 行** | 合并到 contracts/test_llmexcept_guarantees.py |
+| E2E | ~6000 行 | **2000 行** | 保留核心语义样本，删除重复边界测试 |
+| Compliance | ~500 行 | **保持** | 公开 API 契约必须完整 |
+| Regression | 0 行（散落） | **500 行** | 集中所有历史 Bug 最小复现 |
+| Examples | 0 行 | **300 行** | 新增：文档化示例程序 |
+| **总计** | **15,345 行** | **≤4,000 行** | **削减 74%** |
+
+**量化指标**：
+
+| 指标 | 当前 | 目标 | 改善 |
+|------|-----|------|------|
+| 测试代码行数 | 15,345 | ≤ 4,000 | **-74%** |
+| 测试用例数 | 1,259 | 300-400 | **-68%** |
+| 测试类数 | 309 | ≈ 40 | **-87%** |
+| 平均测试长度 | 12 行 | 15-20 行 | **提升可读性** |
+| Helper 重复定义 | 21 处 | 0 | **-100%** |
+| 文件数 | 54 | ≈ 20 | **-63%** |
+
+### 11.5 实施路线图
+
+#### Phase 2.1：建立新基础设施（Week 1）
+
+**Step 2.1.1**：创建 `tests/fixtures/` 目录与样本库
+- 提取现有测试中的 IBCI 代码样本（按主题分类）
+- 提供 pytest fixture 接口
+- 目标：100-200 个可复用样本
+
+**Step 2.1.2**：强化 `tests/conftest.py`
+- 新增统一 API：`run_ibci` / `expect_compile_error` / `expect_runtime_error`
+- 删除所有测试文件中的本地 helper 定义
+- 验证：grep 检查无本地 helper
+
+**Step 2.1.3**：建立 CI 强制检查
+- 创建 `tests/meta/test_no_duplicate_helpers.py`
+- 禁止本地定义 `make_engine` / `run_and_capture` / `ai_setup` 等
+- 集成到 CI 流水线
+
+**完成标准**：
+- ✅ `tests/fixtures/` 存在且包含 100+ 样本
+- ✅ 所有测试文件使用 `conftest.py` 统一 API
+- ✅ CI 门禁通过（无 helper 重复）
+
+#### Phase 2.2：创建 contracts/ 层（Week 2-3）
+
+**Step 2.2.1**：从设计文档提取不变量
+- 阅读 `docs/VM_AND_INTERPRETER_DESIGN.md` / `IBCI_SPEC.md`
+- 为每个公理编写 1-3 个契约测试
+- 目标：50-80 个核心不变量测试
+
+**Step 2.2.2**：识别高价值 e2e 测试并迁移
+- 从现有 1,259 个测试中筛选 **100-150 个代表性样本**
+- 标准：覆盖真实使用场景 + 触发多子系统交互
+- 重写为契约风格（5-15 行 IBCI 代码）
+
+**Step 2.2.3**：参数化测试重构
+- 示例：10 个类似测试 → 1 个 `@pytest.mark.parametrize` 测试
+- 目标：将测试数从 1,259 → 300-400
+
+**完成标准**：
+- ✅ `tests/contracts/` 6 个文件存在
+- ✅ 总计 300-400 个契约测试
+- ✅ 所有测试通过（`pytest tests/contracts/ -v`）
+
+#### Phase 2.3：删除冗余测试（Week 4）
+
+**Step 2.3.1**：删除实现细节测试
+- 删除所有 `find_node_uid` / `node_pool` 相关测试
+- 删除所有 VM handler 单元测试
+- 删除所有编译器 Pass 白盒测试
+
+**Step 2.3.2**：合并重复测试
+- 识别语义相同的测试并只保留最简洁版本
+- 删除微观测试（字面量常量 / 单个 AST 节点）
+
+**Step 2.3.3**：迁移历史 Bug 回归测试
+- 创建 `tests/regression/test_known_issues.py`
+- 将所有历史 Bug 的最小复现集中到此文件
+- 按 GitHub issue 编号索引
+
+**完成标准**：
+- ✅ 删除 `tests/kernel/` / `tests/runtime/` / `tests/compiler/` 大部分文件
+- ✅ 保留 `tests/compliance/` 不变
+- ✅ `tests/regression/` 存在且包含所有关键回归测试
+
+#### Phase 2.4：创建示例层与文档（Week 5）
+
+**Step 2.4.1**：创建 `tests/examples/` 文档化测试
+- 编写 4-6 个完整示例程序（计算器 / 聊天代理 / 数据流水线等）
+- 每个示例 50-100 行 IBCI 代码
+- 双重目的：测试 + 文档
+
+**Step 2.4.2**：回归验证
+- 运行新测试套件：`pytest tests/ -v --tb=short`
+- 目标：300-400 个测试全绿
+- 覆盖率分析：`pytest --cov=core tests/`
+
+**Step 2.4.3**：更新文档
+- 更新 `tests/README.md`：新测试哲学 + 编写指南
+- 创建 `docs/TEST_PHILOSOPHY.md`：长期测试战略
+- 本文档添加 Phase 2 完成标记
+
+**完成标准**：
+- ✅ 测试套件 < 5,000 行且全绿
+- ✅ 覆盖率不降低（关键路径 > 85%）
+- ✅ 文档完整且与代码同步
+
+### 11.6 风险缓解策略
+
+#### 风险 1：删除测试后可能遗漏边界条件
+
+**缓解措施**：
+1. **分阶段删除**：先创建新测试，验证覆盖率不降，再删旧测试
+2. **Git 保护**：每批删除前打 tag，随时可回滚
+3. **Code Review**：每批删除需 2 人复查
+4. **覆盖率监控**：CI 强制覆盖率不降低
+
+#### 风险 2：强制使用 conftest 的执行难度
+
+**执行策略**：
+1. **CI 门禁**：`test_meta_no_duplicate_helpers.py` 必须通过
+2. **Pre-commit Hook**：本地提交时自动检查
+3. **文档强调**：`tests/README.md` 首段红字警告
+4. **自动化工具**：提供脚本批量替换本地 helper
+
+#### 风险 3：团队协作冲突
+
+**协调规则**：
+1. **暂停新测试提交**（Phase 2.1-2.3 期间，约 4 周）
+2. **每周同步会议**：展示进度 + 识别风险
+3. **沟通渠道**：专用 Slack 频道 #test-refactor
+4. **完成标准公示**：明确定义 "Done" 标准
+
+### 11.7 预期成果与验收标准
+
+#### 量化成果
+
+- ✅ 测试代码从 15,345 行削减到 ≤ 4,000 行（**-74%**）
+- ✅ 测试用例从 1,259 个精简到 300-400 个（**-68%**）
+- ✅ 测试类从 309 个减少到 ≈ 40 个（**-87%**）
+- ✅ Helper 重复定义从 21 处消除到 0（**-100%**）
+- ✅ 测试运行时间 < 60 秒（优化后）
+
+#### 质量成果
+
+- ✅ **测试即文档**：每个 contract 测试清晰表达一个语义不变量
+- ✅ **维护性**：修改内部实现不破坏测试（解耦白盒依赖）
+- ✅ **可理解性**：新贡献者 1 天内理解测试体系
+- ✅ **扩展性**：新增语言特性只需添加 1-3 个 contract 测试
+
+#### 验收标准
+
+**必须满足**：
+1. ✅ 测试套件总行数 ≤ 5,000 行
+2. ✅ 所有测试通过（`pytest tests/ -v`）
+3. ✅ 覆盖率不降低（核心路径 ≥ 85%）
+4. ✅ 无 helper 重复定义（CI 检查通过）
+5. ✅ 文档完整（`TEST_PHILOSOPHY.md` / 更新 `tests/README.md`）
+
+**可选加分**：
+- ⭐ 测试运行时间 < 30 秒
+- ⭐ 参数化测试覆盖率 > 50%
+- ⭐ 示例程序可作为教程使用
+
+### 11.8 长期愿景
+
+Phase 2 完成后，IBCI 测试体系将达到：
+
+1. **战略一致性**：测试验证语言设计文档中的公理，而非实现细节
+2. **最小化原则**：每个测试验证一个核心不变量，避免冗余
+3. **文档化特性**：测试本身就是语言特性的可执行规范
+4. **持续进化**：新特性通过契约测试自然融入体系
+
+**核心信念**：
+> **测试应验证"IBCI 作为一门语言的语义不变量"，而非"解释器的实现细节"。**
+
+---
+
+*最后更新：2026-05-13（Phase 2 启动）*
