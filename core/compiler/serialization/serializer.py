@@ -53,49 +53,22 @@ class FlatSerializer(BaseFlatSerializer):
         }
 
     def serialize_result(self, result: CompilationResult) -> Dict[str, Any]:
-        """将 CompilationResult 转换为扁平化字典"""
+        """将 CompilationResult 转换为扁平化字典（V2: 直接使用UID）"""
         # 1. 首先处理核心入口 (会触发递归收集)
         root_scope_uid = self._collect_scope(result.symbol_table)
         root_node_uid = self._collect_node(result.module_ast)
 
-        # 2. 重新映射侧表 (支持跨模块符号懒加载)
-        remaped_node_to_symbol = {}
-        for node, sym in result.node_to_symbol.items():
-            node_uid = self._collect_node(node)
-            sym_uid = self._collect_symbol(sym)
-            remaped_node_to_symbol[node_uid] = sym_uid
-
-        remaped_node_to_type = {}
-        for node, type_obj in result.node_to_type.items():
-            node_uid = self._collect_node(node)
-            type_uid = self._collect_type(type_obj)
-            remaped_node_to_type[node_uid] = type_uid
-
-        remaped_node_is_callable_instance = {}
-        for node, val in result.node_is_callable_instance.items():
-            node_uid = self._collect_node(node)
-            remaped_node_is_callable_instance[node_uid] = val
-
-        remaped_node_to_loc = {}
-        for node, loc in result.node_to_loc.items():
-            node_uid = self._collect_node(node)
-            remaped_node_to_loc[node_uid] = loc
-
-        remaped_node_capture_mode = {}
-        for node, mode in result.node_capture_mode.items():
-            node_uid = self._collect_node(node)
-            if node_uid:
-                remaped_node_capture_mode[node_uid] = mode
-
+        # 2. V2改进：side_tables已经是UID-based，直接使用！
+        # 不再需要object→UID转换，删除了~30行转换代码
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
             "side_tables": {
-                "node_to_symbol": remaped_node_to_symbol,
-                "node_to_type": remaped_node_to_type,
-                "node_is_callable_instance": remaped_node_is_callable_instance,
-                "node_to_loc": remaped_node_to_loc,
-                "node_capture_mode": remaped_node_capture_mode
+                "node_to_symbol": result.node_to_symbol,  # Already UID→UID
+                "node_to_type": result.node_to_type,  # Already UID→UID
+                "node_is_callable_instance": result.node_is_callable_instance,  # Already UID→bool
+                "node_to_loc": result.node_to_loc,  # Already UID→loc
+                "node_capture_mode": result.node_capture_mode  # Already UID→mode
             },
             "pools": {
                 "nodes": self.node_pool,
