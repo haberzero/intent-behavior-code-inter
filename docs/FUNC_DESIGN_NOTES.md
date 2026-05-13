@@ -27,8 +27,8 @@ class Adder:
         return self.base + x
 
 Adder adder = Adder(10)
-fn my_fn = adder        # ✅ 推断为 Adder 类型（具备 __call__）
-int result = my_fn(5)   # ✅ 调用 adder.__call__(5)
+fn my_fn = adder        # 推断为 Adder 类型（具备 __call__）
+int result = my_fn(5)   # 调用 adder.__call__(5)
 ```
 
 没有定义 `__call__` 的类实例不能被 `fn` 承载（SEM_003 编译错误）。

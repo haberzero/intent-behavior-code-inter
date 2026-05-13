@@ -448,7 +448,7 @@ except AppError as e:
     print(e.message)        # 能由父类 except 捕获
 ```
 
-> ✅ **类型窄化已支持（2026-05-06）**：`except X as e:` 中 `e` 的编译期类型现在正确窄化为 `X`，
+> **类型窄化已支持（2026-05-06）**：`except X as e:` 中 `e` 的编译期类型现在正确窄化为 `X`，
 > 可直接访问子类专属字段，无需 `(X)e` 强转：
 >
 > ```ibci
@@ -521,14 +521,14 @@ func maybe_get(bool flag) -> None:
 
 ### 5.2 行为表达式与 return 的约束
 
-> ⚠️ **Known Limit (docs/KNOWN_LIMITS.md §七)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_003` 编译错误。
+> **Known Limit (docs/KNOWN_LIMITS.md §七)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_003` 编译错误。
 
 ```ibci
-# ❌ 错误：不允许在 return 中直接使用行为表达式
+# 错误：不允许在 return 中直接使用行为表达式
 func get_reply() -> str:
     return @~ 给我一句话 ~
 
-# ✅ 正确：先赋值给有类型的局部变量
+# 正确：先赋值给有类型的局部变量
 func get_reply() -> str:
     str reply = @~ 给我一句话 ~
     return reply
@@ -709,7 +709,7 @@ if s == Status.RUNNING:
     print("正在运行")
 ```
 
-> ⚠️ **Known Limit (docs/KNOWN_LIMITS.md §四)**：
+> **Known Limit (docs/KNOWN_LIMITS.md §四)**：
 > - 枚举成员目前仅支持 `str` 类型。
 > - 不支持枚举迭代和数量查询。
 
@@ -813,7 +813,7 @@ int s = add(3, 4)
 - 定义时**不捕获**任何意图上下文
 - 调用时使用调用处的持久意图栈（`@+` 累积）和一次性意图（`@` smear）
 - 作为高阶函数参数传出后，调用时使用的仍是**调用点**的意图栈（不是定义处）
-- ✅ `lambda` 延迟对象可以自由作为高阶函数参数传递（M2 落地后限制已移除）
+- `lambda` 延迟对象可以自由作为高阶函数参数传递（M2 落地后限制已移除）
 
 #### snapshot
 
@@ -866,8 +866,8 @@ fn make_pair = lambda(int n, str s) -> tuple[int,str]: (n, s)
 
 **已废弃的声明侧返回类型语法**（产生 PAR_003 编译错误）：
 ```ibci
-int fn f = lambda: EXPR            # ❌ PAR_003：声明侧返回类型已废弃（D1）
-str fn f = lambda(PARAMS): EXPR    # ❌ PAR_003
+int fn f = lambda: EXPR            # PAR_003：声明侧返回类型已废弃（D1）
+str fn f = lambda(PARAMS): EXPR    # PAR_003
 ```
 
 #### 意图模式对比
@@ -1052,7 +1052,7 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 int x = 1
 int result = @~ 计算结果 ~
 llmexcept:
-    x = 2            # ❌ SEM_052：禁止在 llmexcept 中写入外部变量
+    x = 2            # SEM_052：禁止在 llmexcept 中写入外部变量
     retry "重试"
 ```
 
@@ -1081,7 +1081,7 @@ class Config:
 **`import` 语句必须出现在模块文件的顶部**，在任何非 import 语句之前。不允许在函数、类、条件块或循环体内部使用 `import`。
 
 ```ibci
-# ✅ 正确：import 在文件顶部
+# 正确：import 在文件顶部
 import ai
 import json
 
@@ -1091,7 +1091,7 @@ func main():
 ```
 
 ```ibci
-# ❌ 错误：import 不能出现在函数内或其他语句后面
+# 错误：import 不能出现在函数内或其他语句后面
 int x = 10
 import ai    # PAR_002 编译错误
 
@@ -1164,7 +1164,7 @@ idbg.show_env()          # 打印当前运行环境信息
 idbg.fields(obj)         # 返回对象所有字段
 ```
 
-> **⚠️ 已知限制**：`idbg.inspect(x)` 和 `idbg.dump_intent_stack()` 在当前版本中**未实现**，调用会产生运行时错误。
+> **已知限制**：`idbg.inspect(x)` 和 `idbg.dump_intent_stack()` 在当前版本中**未实现**，调用会产生运行时错误。
 > 请使用 `idbg.vars()` 代替 `idbg.inspect()`，使用 `idbg.show_intents()` 代替 `idbg.dump_intent_stack()`。
 
 ### 11.6 ihost 动态宿主
