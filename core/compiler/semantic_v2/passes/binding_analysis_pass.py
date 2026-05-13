@@ -299,7 +299,7 @@ class LambdaCaptureAnalyzer:
 
     def __init__(self, context: SemanticContext):
         self.context = context
-        self.symbol_table = context.symbol_table.table
+        self.symbol_table = context.symbol_table.current
         self.diagnostics: List[Diagnostic] = []
         self.lambda_captures: Dict[str, Set[str]] = {}
 

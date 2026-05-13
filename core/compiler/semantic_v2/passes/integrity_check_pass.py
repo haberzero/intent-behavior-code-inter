@@ -172,7 +172,7 @@ class IntegrityChecker:
     def _check_symbol_table_consistency(self):
         """检查符号表的一致性"""
         # 验证符号表中的符号都有对应的节点
-        for symbol_name, symbol in self.context.symbol_table.table.symbols.items():
+        for symbol_name, symbol in self.context.symbol_table.current.symbols.items():
             if hasattr(symbol, 'node_uid') and symbol.node_uid:
                 # 符号应该有对应的定义节点
                 if symbol.node_uid not in self.context.metadata.symbol_bindings.values():

@@ -41,11 +41,10 @@ class TypeCheckingPass(BasePass):
         for node_uid, type_spec in visitor.type_bindings.items():
             new_metadata.type_bindings[node_uid] = type_spec
 
-        # 更新 type_environment 中累积的返回类型
-        new_type_env = context.type_environment
-        new_type_env.auto_return_types = visitor.auto_return_types
+        # TypeEnvironment is updated through visitor operations
+        # No need to explicitly update it here
 
-        new_context = replace(context, metadata=new_metadata, type_environment=new_type_env)
+        new_context = replace(context, metadata=new_metadata)
 
         return PassResult.ok(new_context, diagnostics=visitor.diagnostics)
 
@@ -55,7 +54,7 @@ class TypeCheckingVisitor:
 
     def __init__(self, context: SemanticContext):
         self.context = context
-        self.symbol_table = context.symbol_table.table
+        self.symbol_table = context.symbol_table.current
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
 
@@ -74,14 +73,14 @@ class TypeCheckingVisitor:
         self.current_class: Optional[IbSpec] = None
 
         # 常用类型描述符
-        self._any_desc = self.registry.lookup("any")
-        self._void_desc = self.registry.lookup("void")
-        self._behavior_desc = self.registry.lookup("behavior")
-        self._int_desc = self.registry.lookup("int")
-        self._float_desc = self.registry.lookup("float")
-        self._str_desc = self.registry.lookup("str")
-        self._bool_desc = self.registry.lookup("bool")
-        self._none_desc = self.registry.lookup("None")
+        self._any_desc = self.registry.resolve("any")
+        self._void_desc = self.registry.resolve("void")
+        self._behavior_desc = self.registry.resolve("behavior")
+        self._int_desc = self.registry.resolve("int")
+        self._float_desc = self.registry.resolve("float")
+        self._str_desc = self.registry.resolve("str")
+        self._bool_desc = self.registry.resolve("bool")
+        self._none_desc = self.registry.resolve("None")
 
     @property
     def current_scope(self) -> SymbolTable:
@@ -147,10 +146,10 @@ class TypeCheckingVisitor:
     def _resolve_type(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
         """解析类型标注"""
         if isinstance(annotation, ast.IbName):
-            return self.registry.lookup(annotation.id)
+            return self.registry.resolve(annotation.id)
         elif isinstance(annotation, ast.IbGenericType):
             # 泛型类型：list[int], dict[str, int] 等
-            base_type = self.registry.lookup(annotation.base.id if isinstance(annotation.base, ast.IbName) else annotation.base)
+            base_type = self.registry.resolve(annotation.base.id if isinstance(annotation.base, ast.IbName) else annotation.base)
             # 简化处理：返回基础类型
             return base_type
         else:
@@ -422,7 +421,7 @@ class TypeCheckingVisitor:
         for elt in node.elts:
             self.visit(elt)
         # 简化处理：返回 list 类型
-        list_type = self.registry.lookup("list")
+        list_type = self.registry.resolve("list")
         self.bind_type(node, list_type)
         return list_type
 
@@ -431,7 +430,7 @@ class TypeCheckingVisitor:
         for key, value in zip(node.keys, node.values):
             self.visit(key)
             self.visit(value)
-        dict_type = self.registry.lookup("dict")
+        dict_type = self.registry.resolve("dict")
         self.bind_type(node, dict_type)
         return dict_type
 
@@ -439,7 +438,7 @@ class TypeCheckingVisitor:
         """访问元组字面量"""
         for elt in node.elts:
             self.visit(elt)
-        tuple_type = self.registry.lookup("tuple")
+        tuple_type = self.registry.resolve("tuple")
         self.bind_type(node, tuple_type)
         return tuple_type
 
@@ -504,7 +503,7 @@ class TypeCheckingVisitor:
             member_spec = self.registry.resolve_member(obj_type, node.attr)
             if member_spec and hasattr(member_spec, 'type_ref'):
                 # 解析 type_ref
-                member_type = self.registry.lookup(member_spec.type_ref.name if hasattr(member_spec.type_ref, 'name') else str(member_spec.type_ref))
+                member_type = self.registry.resolve(member_spec.type_ref.name if hasattr(member_spec.type_ref, 'name') else str(member_spec.type_ref))
                 self.bind_type(node, member_type)
                 return member_type
 
@@ -535,7 +534,7 @@ class TypeCheckingVisitor:
             self.pop_scope()
 
         # 返回 callable 类型
-        callable_type = self.registry.lookup("fn_callable")
+        callable_type = self.registry.resolve("fn_callable")
         self.bind_type(node, callable_type)
         return callable_type
 

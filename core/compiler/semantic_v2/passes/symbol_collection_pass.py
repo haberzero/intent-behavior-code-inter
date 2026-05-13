@@ -68,11 +68,9 @@ class SymbolCollectionPass(BasePass):
         visitor = SymbolCollector(context)
         visitor.visit(context.ast)
 
-        # 更新 context 中的 symbol_table
-        new_symbol_table = context.symbol_table.with_table(visitor.symbol_table)
-        new_context = context.with_symbol_table(new_symbol_table)
-
-        return PassResult.ok(new_context, diagnostics=visitor.diagnostics)
+        # 符号表已在 visitor 中原地修改（SymbolTableContext 设计）
+        # 无需更新 context，直接返回
+        return PassResult.ok(context, diagnostics=visitor.diagnostics)
 
 
 class SymbolCollector:
@@ -80,7 +78,7 @@ class SymbolCollector:
 
     def __init__(self, context: SemanticContext):
         self.context = context
-        self.symbol_table = context.symbol_table.table
+        self.symbol_table = context.symbol_table.current
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
 
@@ -88,7 +86,7 @@ class SymbolCollector:
         self.current_class: Optional[IbSpec] = None
 
         # 临时使用 registry 的 _any_desc
-        self._any_desc = context.registry.lookup("any")
+        self._any_desc = context.registry.resolve("any")
 
     def visit(self, node: ast.IbASTNode):
         """访问节点的分派方法"""

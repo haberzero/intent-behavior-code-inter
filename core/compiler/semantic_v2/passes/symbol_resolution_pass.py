@@ -51,7 +51,7 @@ class SymbolResolver:
 
     def __init__(self, context: SemanticContext):
         self.context = context
-        self.symbol_table = context.symbol_table.table
+        self.symbol_table = context.symbol_table.current
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
 
