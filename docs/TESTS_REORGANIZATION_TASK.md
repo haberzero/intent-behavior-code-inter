@@ -664,10 +664,26 @@ tests/
 
 #### Phase 2.2：创建 contracts/ 层（Week 2-3）
 
-**Step 2.2.1**：从设计文档提取不变量
+**Step 2.2.1**：从设计文档提取不变量 ✅ 完成（2026-05-13）
 - 阅读 `docs/VM_AND_INTERPRETER_DESIGN.md` / `IBCI_SPEC.md`
 - 为每个公理编写 1-3 个契约测试
 - 目标：50-80 个核心不变量测试
+
+**实际成果**：
+- ✅ 创建 6 个核心契约测试文件（`tests/contracts/`）：
+  - `test_type_invariants.py` - 14 tests（Optional/泛型/cast/tuple类型不变量）
+  - `test_execution_model.py` - 19 tests（CPS/信号传播/帧栈/递归保证）
+  - `test_scope_semantics.py` - 12 tests（Cell共享引用/lambda/snapshot/词法作用域）
+  - `test_intent_propagation.py` - 14 tests（Intent传播/优先级/恢复/作用域隔离）
+  - `test_llmexcept_guarantees.py` - 17 tests（异常捕获/重试/错误历史/深度限制）
+  - `test_llm_integration.py` - 15 tests（MOCK协议/行为表达式/LLM函数/分发）
+- ✅ 总计：**91 个契约测试**（覆盖所有核心不变量）
+- ✅ 测试风格统一：
+  - INV-XXX-N 编号体系
+  - 最小化 IBCI 代码（5-15 行）
+  - 黑盒断言（无 node_pool/side_table 访问）
+  - 参数化测试提高效率
+- ✅ 所有文件 Python 语法验证通过
 
 **Step 2.2.2**：识别高价值 e2e 测试并迁移
 - 从现有 1,259 个测试中筛选 **100-150 个代表性样本**
