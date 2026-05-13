@@ -60,6 +60,9 @@ class SymbolCollectionPass(BasePass):
     - 全局变量（IbAssign with type annotation）
     """
 
+    def __init__(self):
+        super().__init__("SymbolCollectionPass")
+
     def run(self, context: SemanticContext) -> PassResult:
         """运行符号收集 Pass"""
         visitor = SymbolCollector(context)

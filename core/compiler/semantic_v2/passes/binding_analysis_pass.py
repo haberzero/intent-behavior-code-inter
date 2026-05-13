@@ -26,6 +26,9 @@ class BindingAnalysisPass(BasePass):
     3. LambdaCaptureAnalyzer - Lambda/Snapshot 捕获分析
     """
 
+    def __init__(self):
+        super().__init__("BindingAnalysisPass")
+
     def run(self, context: SemanticContext) -> PassResult:
         """运行绑定分析 Pass"""
         all_diagnostics = []

@@ -25,6 +25,9 @@ class BehaviorDependencyPass(BasePass):
     - 标记是否可并行调度
     """
 
+    def __init__(self):
+        super().__init__("BehaviorDependencyPass")
+
     def run(self, context: SemanticContext) -> PassResult:
         """运行行为依赖分析 Pass"""
         analyzer = BehaviorDependencyAnalyzer(context)

@@ -100,8 +100,8 @@ def test_symbol_collection_pass_class_def():
 def test_symbol_collection_pass_variable_assign():
     """测试变量赋值的符号收集"""
     # 创建赋值语句
-    name_node = ast.IbName(id="x")
-    value_node = ast.IbInteger(value=42)
+    name_node = ast.IbName(id="x", ctx="store")
+    value_node = ast.IbConstant(value=42)
     assign = ast.IbAssign(targets=[name_node], value=value_node)
     module = ast.IbModule(body=[assign])
     context = create_test_context(module)

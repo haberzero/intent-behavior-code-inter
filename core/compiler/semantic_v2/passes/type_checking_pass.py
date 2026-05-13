@@ -28,6 +28,9 @@ class TypeCheckingPass(BasePass):
     - 类型兼容性检查 (SEM_003)
     """
 
+    def __init__(self):
+        super().__init__("TypeCheckingPass")
+
     def run(self, context: SemanticContext) -> PassResult:
         """运行类型检查 Pass"""
         visitor = TypeCheckingVisitor(context)
@@ -402,32 +405,19 @@ class TypeCheckingVisitor:
         # 未定义符号在 Pass 2 已报错，这里返回 any
         return self._any_desc
 
-    def visit_IbInteger(self, node: ast.IbInteger) -> Optional[IbSpec]:
-        """访问整数字面量"""
-        self.bind_type(node, self._int_desc)
-        return self._int_desc
+    def visit_IbConstant(self, node: ast.IbConstant) -> Optional[IbSpec]:
+        """访问常量字面量（int, float, str, bool, None）"""
+        # 使用 registry 根据值类型解析描述符
+        val = node.value
+        spec = self.registry.resolve_from_value(val)
+        if spec:
+            self.bind_type(node, spec)
+            return spec
+        # Fallback 到 any
+        self.bind_type(node, self._any_desc)
+        return self._any_desc
 
-    def visit_IbFloat(self, node: ast.IbFloat) -> Optional[IbSpec]:
-        """访问浮点数字面量"""
-        self.bind_type(node, self._float_desc)
-        return self._float_desc
-
-    def visit_IbString(self, node: ast.IbString) -> Optional[IbSpec]:
-        """访问字符串字面量"""
-        self.bind_type(node, self._str_desc)
-        return self._str_desc
-
-    def visit_IbBoolean(self, node: ast.IbBoolean) -> Optional[IbSpec]:
-        """访问布尔字面量"""
-        self.bind_type(node, self._bool_desc)
-        return self._bool_desc
-
-    def visit_IbNone(self, node: ast.IbNone) -> Optional[IbSpec]:
-        """访问 None 字面量"""
-        self.bind_type(node, self._none_desc)
-        return self._none_desc
-
-    def visit_IbList(self, node: ast.IbList) -> Optional[IbSpec]:
+    def visit_IbListExpr(self, node: ast.IbListExpr) -> Optional[IbSpec]:
         """访问列表字面量"""
         for elt in node.elts:
             self.visit(elt)

@@ -26,6 +26,9 @@ class SymbolResolutionPass(BasePass):
     - 函数调用（IbCall）
     """
 
+    def __init__(self):
+        super().__init__("SymbolResolutionPass")
+
     def run(self, context: SemanticContext) -> PassResult:
         """运行符号解析 Pass"""
         visitor = SymbolResolver(context)
@@ -302,22 +305,11 @@ class SymbolResolver:
                 self.visit(segment)
 
     # 字面量节点不需要符号解析
-    def visit_IbInteger(self, node: ast.IbInteger):
+    def visit_IbConstant(self, node: ast.IbConstant):
+        """访问常量字面量（int, float, str, bool, None）"""
         pass
 
-    def visit_IbFloat(self, node: ast.IbFloat):
-        pass
-
-    def visit_IbString(self, node: ast.IbString):
-        pass
-
-    def visit_IbBoolean(self, node: ast.IbBoolean):
-        pass
-
-    def visit_IbNone(self, node: ast.IbNone):
-        pass
-
-    def visit_IbList(self, node: ast.IbList):
+    def visit_IbListExpr(self, node: ast.IbListExpr):
         """访问列表字面量"""
         for elt in node.elts:
             self.visit(elt)

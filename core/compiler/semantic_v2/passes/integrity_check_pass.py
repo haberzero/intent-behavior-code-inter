@@ -24,6 +24,9 @@ class IntegrityCheckPass(BasePass):
     - 检查符号表的完整性
     """
 
+    def __init__(self):
+        super().__init__("IntegrityCheckPass")
+
     def run(self, context: SemanticContext) -> PassResult:
         """运行完整性检查 Pass"""
         checker = IntegrityChecker(context)
@@ -110,12 +113,8 @@ class IntegrityChecker:
         """判断节点是否为表达式节点"""
         expression_types = (
             ast.IbName,
-            ast.IbInteger,
-            ast.IbFloat,
-            ast.IbString,
-            ast.IbBoolean,
-            ast.IbNone,
-            ast.IbList,
+            ast.IbConstant,
+            ast.IbListExpr,
             ast.IbDict,
             ast.IbTuple,
             ast.IbBinOp,
