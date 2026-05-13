@@ -6,7 +6,7 @@ from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
+from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer  # V1 - DEPRECATED, kept for fallback only
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager

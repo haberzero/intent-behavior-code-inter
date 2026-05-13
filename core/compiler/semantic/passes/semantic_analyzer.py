@@ -1,3 +1,6 @@
+# ⚠️ DEPRECATED: This file is deprecated as of 2026-05-13. Use semantic_v2 instead.
+# V1 is kept only as fallback. Default is now semantic_v2.
+
 from typing import Dict, Optional, List, Any
 from core.kernel import ast as ast
 from core.compiler.common.diagnostics import DiagnosticReporter
