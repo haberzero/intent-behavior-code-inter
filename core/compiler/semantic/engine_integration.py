@@ -1,22 +1,22 @@
 """
-semantic_v2 Engine Integration Module
+Semantic Analyzer Engine Integration Module
 
-Direct V2 integration - outputs UID-based CompilationResult without conversion layers.
+Pipeline-based semantic analysis - outputs UID-based CompilationResult.
 """
 
 from typing import Optional
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.compiler.semantic_v2.pipeline import create_semantic_pipeline
-from core.compiler.semantic_v2.context import SemanticContext
-from core.compiler.semantic_v2.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
-from core.compiler.semantic_v2.result import DiagnosticLevel
+from core.compiler.semantic.pipeline import create_semantic_pipeline
+from core.compiler.semantic.context import SemanticContext
+from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
+from core.compiler.semantic.result import DiagnosticLevel
 from core.kernel.issue import Diagnostic, Severity, CompilerError
 from core.kernel.blueprint import CompilationResult
 
 
-def run_semantic_v2(
+def run_semantic_analysis(
     ast_node: ast.IbModule,
     registry: 'KernelRegistry',
     module_name: str,
@@ -24,7 +24,7 @@ def run_semantic_v2(
     predefined_symbols: Optional[dict] = None
 ) -> CompilationResult:
     """
-    Run semantic_v2 pipeline on an AST node - direct UID-based output
+    Run semantic analysis pipeline on an AST node - direct UID-based output
 
     Args:
         ast_node: The AST module to analyze
@@ -98,7 +98,7 @@ def run_semantic_v2(
 
 
 def _convert_diagnostic_level(level: DiagnosticLevel) -> Severity:
-    """Convert semantic_v2 diagnostic level to Severity"""
+    """Convert diagnostic level to Severity"""
     if level == DiagnosticLevel.ERROR:
         return Severity.ERROR
     elif level == DiagnosticLevel.WARNING:
@@ -109,11 +109,11 @@ def _convert_diagnostic_level(level: DiagnosticLevel) -> Severity:
         return Severity.INFO
 
 
-class SemanticV2Adapter:
+class SemanticAdapter:
     """
-    Minimal adapter for V2 semantic analyzer
+    Adapter for pipeline-based semantic analyzer
 
-    Provides the same interface as V1 SemanticAnalyzer for drop-in replacement
+    Provides a simple interface for semantic analysis
     """
 
     def __init__(self, issue_tracker: IssueTracker, debugger=None, registry=None, module_name: str = ""):
@@ -126,7 +126,7 @@ class SemanticV2Adapter:
 
     def analyze(self, node: ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
         """
-        Analyze AST using semantic_v2 pipeline
+        Analyze AST using semantic analysis pipeline
 
         Args:
             node: AST node to analyze
@@ -135,8 +135,8 @@ class SemanticV2Adapter:
         Returns:
             CompilationResult: UID-based analysis result
         """
-        # Run V2 pipeline
-        result = run_semantic_v2(
+        # Run pipeline
+        result = run_semantic_analysis(
             node,
             self.registry,
             self.module_name,

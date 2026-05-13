@@ -6,7 +6,7 @@ from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic_v2.engine_integration import SemanticV2Adapter
+from core.compiler.semantic.engine_integration import SemanticAdapter
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
@@ -377,8 +377,8 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
 
-            # V2 is now the only semantic analyzer
-            analyzer = SemanticV2Adapter(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
+            # Pipeline-based semantic analyzer
+            analyzer = SemanticAdapter(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
 
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():

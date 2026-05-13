@@ -33,9 +33,9 @@ from core.kernel.spec import IbSpec
 from core.compiler.lexer.ibci_lexer import IBCILexer
 from core.compiler.parser.ibci_parser import IBCIParser
 from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
-from core.compiler.semantic_v2.pipeline import create_semantic_pipeline
-from core.compiler.semantic_v2.context import SemanticContext
-from core.compiler.semantic_v2.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
+from core.compiler.semantic.pipeline import create_semantic_pipeline
+from core.compiler.semantic.context import SemanticContext
+from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 
 

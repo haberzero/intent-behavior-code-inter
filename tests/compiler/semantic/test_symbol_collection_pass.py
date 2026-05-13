@@ -1,16 +1,16 @@
 """
 Unit tests for SymbolCollectionPass
 
-Tests the first pass of semantic_v2 pipeline: symbol collection
+Tests the first pass of semantic analyzer pipeline: symbol collection
 """
 
 import pytest
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind
 from core.kernel.registry import KernelRegistry
-from core.compiler.semantic_v2.passes.symbol_collection_pass import SymbolCollectionPass
-from core.compiler.semantic_v2.context import SemanticContext
-from core.compiler.semantic_v2.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
+from core.compiler.semantic.passes.symbol_collection_pass import SymbolCollectionPass
+from core.compiler.semantic.context import SemanticContext
+from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
 from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
 
 

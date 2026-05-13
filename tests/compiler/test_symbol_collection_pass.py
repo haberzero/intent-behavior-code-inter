@@ -6,9 +6,9 @@ import pytest
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind
 from core.kernel.spec.registry import SpecRegistry
-from core.compiler.semantic_v2.context import SemanticContext
-from core.compiler.semantic_v2.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
-from core.compiler.semantic_v2.passes.symbol_collection_pass import SymbolCollectionPass
+from core.compiler.semantic.context import SemanticContext
+from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
+from core.compiler.semantic.passes.symbol_collection_pass import SymbolCollectionPass
 
 
 def create_test_context(ast_node):
