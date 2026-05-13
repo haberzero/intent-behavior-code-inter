@@ -161,8 +161,9 @@ class LLMExceptBindingAnalyzer:
             return True
 
         # 递归检查子节点
-        for attr in vars(node):
-            child = getattr(node, attr)
+        for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+            if attr.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):
@@ -277,8 +278,9 @@ class IntentContextValidator:
         if isinstance(node, ast.IbBehaviorExpr):
             return True
 
-        for attr in vars(node):
-            child = getattr(node, attr)
+        for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+            if attr.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):
@@ -350,8 +352,9 @@ class LambdaCaptureAnalyzer:
 
         else:
             # 递归分析子节点
-            for attr in vars(node):
-                child = getattr(node, attr)
+            for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+                if attr.startswith('_'):
+                    continue
                 if isinstance(child, list):
                     for item in child:
                         if isinstance(item, ast.IbASTNode):
@@ -393,8 +396,9 @@ class LambdaCaptureAnalyzer:
             names.add(node.id)
         else:
             # 递归收集
-            for attr in vars(node):
-                child = getattr(node, attr)
+            for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+                if attr.startswith('_'):
+                    continue
                 if isinstance(child, list):
                     for item in child:
                         if isinstance(item, ast.IbASTNode):

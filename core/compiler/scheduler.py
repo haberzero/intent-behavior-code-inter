@@ -45,10 +45,14 @@ class Scheduler(ICompilerService):
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
         self.registry = registry # 注册表实例，用于类型同步
-        
+
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}
-        
+
+        # Populate built-in functions from registry
+        if self.registry:
+            self._populate_builtin_symbols()
+
         # Caches (Using OrderedDict for LRU behavior)
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
         self.ast_cache: OrderedDict[str, IbModule] = OrderedDict()   # Path -> AST
@@ -71,6 +75,29 @@ class Scheduler(ICompilerService):
         abs_path = os.path.realpath(file_path)
         self.allowed_files.add(abs_path)
         self.resolver.allow_file(abs_path)
+
+    def _populate_builtin_symbols(self):
+        """Populate predefined_symbols with built-in functions from registry."""
+        if not self.registry or not hasattr(self.registry, 'all_specs'):
+            return
+
+        # Add all built-in functions to predefined symbols
+        for name, spec in self.registry.all_specs.items():
+            # Skip qualified names (e.g., "module.function")
+            if '.' in name:
+                continue
+
+            # Only add functions and callable signatures
+            if spec.kind in ('function', 'callable_sig'):
+                # Create a FunctionSymbol for each built-in function
+                func_sym = FunctionSymbol(
+                    name=name,
+                    kind=SymbolKind.FUNCTION,
+                    def_node=None,  # Built-in functions don't have AST nodes
+                    spec=spec
+                )
+                self.predefined_symbols[name] = func_sym
+            # TODO: Add built-in variables if needed
 
     # --- ICompilerService Implementation ---
 

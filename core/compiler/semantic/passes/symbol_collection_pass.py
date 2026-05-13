@@ -96,8 +96,9 @@ class SymbolCollector:
 
     def generic_visit(self, node: ast.IbASTNode):
         """默认访问：递归访问所有子节点"""
-        for attr in vars(node):
-            child = getattr(node, attr)
+        for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+            if attr.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):

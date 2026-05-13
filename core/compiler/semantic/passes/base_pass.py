@@ -76,3 +76,28 @@ class BasePass(ABC):
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: {self.pass_name}>"
+
+    @staticmethod
+    def iter_child_nodes(node):
+        """
+        Safely iterate over child AST nodes.
+
+        Yields (attr_name, child_node) pairs for all AST node children.
+        Handles None values and non-dict objects gracefully.
+        """
+        if node is None or not hasattr(node, '__dict__'):
+            return
+
+        for attr_name, value in vars(node).items():
+            if attr_name.startswith('_'):
+                continue
+
+            # Import here to avoid circular dependency
+            from core.kernel import ast
+
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, ast.IbASTNode):
+                        yield (attr_name, item)
+            elif isinstance(value, ast.IbASTNode):
+                yield (attr_name, value)

@@ -83,8 +83,9 @@ class BehaviorDependencyAnalyzer:
     def _analyze_node(self, node: ast.IbASTNode):
         """递归分析节点，建立依赖关系"""
         if isinstance(node, ast.IbAssign):
-            # 先分析右侧
-            self._analyze_node(node.value)
+            # 先分析右侧（可能为None，如类字段声明）
+            if node.value is not None:
+                self._analyze_node(node.value)
             # 注册赋值：如果右侧是 Behavior 表达式，记录映射
             if isinstance(node, ast.IbBehaviorExpr):
                 # 记录变量到行为表达式的映射
@@ -97,15 +98,17 @@ class BehaviorDependencyAnalyzer:
             self._analyze_behavior_expr(node)
 
         else:
-            # 递归分析子节点
-            for attr in vars(node):
-                child = getattr(node, attr)
-                if isinstance(child, list):
-                    for item in child:
-                        if isinstance(item, ast.IbASTNode):
-                            self._analyze_node(item)
-                elif isinstance(child, ast.IbASTNode):
-                    self._analyze_node(child)
+            # 递归分析子节点（使用安全迭代）
+            if node is not None and hasattr(node, '__dict__'):
+                for attr, child in vars(node).items():
+                    if attr.startswith('_'):
+                        continue
+                    if isinstance(child, list):
+                        for item in child:
+                            if isinstance(item, ast.IbASTNode):
+                                self._analyze_node(item)
+                    elif isinstance(child, ast.IbASTNode):
+                        self._analyze_node(child)
 
     def _analyze_behavior_expr(self, node: ast.IbBehaviorExpr):
         """分析单个 Behavior 表达式的依赖，直接写入 node.llm_deps"""
@@ -138,8 +141,9 @@ class BehaviorDependencyAnalyzer:
         if isinstance(node, ast.IbName):
             vars_set.add(node.id)
         else:
-            for attr in vars(node):
-                child = getattr(node, attr)
+            for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+                if attr.startswith('_'):
+                    continue
                 if isinstance(child, list):
                     for item in child:
                         if isinstance(item, ast.IbASTNode):
@@ -175,8 +179,9 @@ class BehaviorDependencyAnalyzer:
         if isinstance(node, ast.IbBehaviorExpr):
             nodes.append(node)
 
-        for attr in vars(node):
-            child = getattr(node, attr)
+        for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+            if attr.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):

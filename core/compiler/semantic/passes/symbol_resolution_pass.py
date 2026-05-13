@@ -83,8 +83,20 @@ class SymbolResolver:
 
     def generic_visit(self, node: ast.IbASTNode):
         """默认访问：递归访问所有子节点"""
-        for attr in vars(node):
-            child = getattr(node, attr)
+        # Skip if node is None
+        if node is None:
+            return
+
+        # Use __dict__ for dataclass nodes, or iterate through known attributes
+        if hasattr(node, '__dict__'):
+            attrs = vars(node)
+        else:
+            # Fallback: just return for non-dict objects
+            return
+
+        for attr_name, child in attrs.items():
+            if attr_name.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):
@@ -103,8 +115,8 @@ class SymbolResolver:
         ))
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
-        """在当前作用域查找符号"""
-        return self.current_scope.symbols.get(name)
+        """在当前作用域及父作用域链中查找符号"""
+        return self.current_scope.resolve(name)
 
     def bind_symbol(self, node: ast.IbASTNode, symbol: Symbol):
         """绑定符号到节点"""
@@ -218,8 +230,9 @@ class SymbolResolver:
 
     def visit_IbAssign(self, node: ast.IbAssign):
         """访问赋值节点"""
-        # 先处理右侧表达式
-        self.visit(node.value)
+        # 先处理右侧表达式（可能为None，如类字段声明）
+        if node.value is not None:
+            self.visit(node.value)
 
         # 处理左侧目标
         for target in node.targets:

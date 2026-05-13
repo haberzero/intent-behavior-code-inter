@@ -104,8 +104,9 @@ class TypeCheckingVisitor:
 
     def generic_visit(self, node: ast.IbASTNode) -> Optional[IbSpec]:
         """默认访问：递归访问所有子节点，返回 any 类型"""
-        for attr in vars(node):
-            child = getattr(node, attr)
+        for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+            if attr.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):
@@ -166,10 +167,19 @@ class TypeCheckingVisitor:
 
     def visit_IbAssign(self, node: ast.IbAssign) -> Optional[IbSpec]:
         """访问赋值节点"""
-        # 先计算右侧表达式的类型
-        val_type = self.visit(node.value)
-        if not val_type:
-            val_type = self._any_desc
+        # 先计算右侧表达式的类型（可能为None，如类字段声明）
+        if node.value is not None:
+            val_type = self.visit(node.value)
+            if not val_type:
+                val_type = self._any_desc
+        else:
+            # 类字段声明（无初始化值）：不需要类型检查
+            # 只需要绑定声明的类型
+            for target in node.targets:
+                var_name, declared_type = self._resolve_target_name_and_type(target)
+                if var_name and declared_type:
+                    self.bind_type(target, declared_type)
+            return self._void_desc
 
         # 检查 void 赋值
         if val_type is self._void_desc and isinstance(node.value, ast.IbCall):

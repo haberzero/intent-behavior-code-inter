@@ -108,8 +108,9 @@ class IntegrityChecker:
                 self.expression_nodes.add(node_uid)
 
         # 递归处理子节点
-        for attr in vars(node):
-            child = getattr(node, attr)
+        for attr, child in (vars(node).items() if node and hasattr(node, '__dict__') else []):
+            if attr.startswith('_'):
+                continue
             if isinstance(child, list):
                 for item in child:
                     if isinstance(item, ast.IbASTNode):
