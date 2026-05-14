@@ -282,6 +282,16 @@ str x = @~ greet ~
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
+    def test_single_intent_before_regular_call_without_direct_llm(self, engine):
+        code = """import ai
+func pure() -> int:
+    return 1
+@ one-shot before regular call
+int x = pure()
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
 
 # ---------------------------------------------------------------------------
 # 9. Type casting

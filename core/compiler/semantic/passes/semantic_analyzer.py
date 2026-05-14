@@ -121,7 +121,7 @@ class SemanticAnalyzer:
             self._bind_llm_except(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
             
-            # Pass 3.5: 意图注释上下文验证 (@/@! 必须紧跟 LLM 调用)
+            # Pass 3.5: 意图注释上下文验证 (@/@! 必须紧跟下一条语句)
             self.debugger.enter_scope(CoreModule.SEMANTIC, "Pass 3.5: Validating intent annotation context...")
             self._validate_intent_annotation_context(node)
             self.debugger.exit_scope(CoreModule.SEMANTIC)
@@ -1486,12 +1486,12 @@ class SemanticAnalyzer:
         """
         Pass 3.5: 意图注释上下文验证。
 
-        检查 IbIntentAnnotation (@/@!) 必须紧跟**后面**的行为表达式。
+        检查 IbIntentAnnotation (@/@!) 必须紧跟**下一条可执行语句**。
         @+/@- (IbIntentStackOperation) 可以独立存在，无需检查。
 
         正确用法示例：
             @ 用简洁回复
-            result = @~打招呼~
+            result = some_call()
         """
         if isinstance(node, ast.IbModule):
             self._validate_intent_in_body(node.body)
@@ -1518,16 +1518,16 @@ class SemanticAnalyzer:
             if isinstance(stmt, ast.IbIntentAnnotation):
                 if i == len(body) - 1:
                     self.issue_tracker.error(
-                        f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
-                        f"This is the last statement with no following LLM call.",
+                        f"Intent annotation '@' must be followed by a statement. "
+                        f"This is the last statement in the block.",
                         stmt, code="SEM_060"
                     )
                 else:
                     next_stmt = body[i + 1]
-                    if not self._stmt_contains_behavior(next_stmt):
+                    if isinstance(next_stmt, ast.IbIntentAnnotation):
                         self.issue_tracker.error(
-                            f"Intent annotation '@' must be followed by a behavior expression '@~...~'. "
-                            f"Following statement is '{next_stmt.__class__.__name__}' which does not contain a behavior expression.",
+                            f"Intent annotation '@' cannot be followed by another one-shot intent annotation. "
+                            f"Attach only one one-shot annotation to the next executable statement.",
                             stmt, code="SEM_060"
                         )
 

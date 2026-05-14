@@ -97,6 +97,14 @@ class IbIntentContext:
         """添加一次性涂抹意图（@ 语义）。"""
         self._smear_queue.append(intent)
 
+    def discard_smear(self, intent: Any) -> bool:
+        """移除一条尚未被消费的涂抹意图（按对象身份匹配）。"""
+        for i, item in enumerate(self._smear_queue):
+            if item is intent:
+                del self._smear_queue[i]
+                return True
+        return False
+
     def consume_smear(self) -> List[Any]:
         """消费并清除所有涂抹意图。"""
         result = list(self._smear_queue)
@@ -106,6 +114,13 @@ class IbIntentContext:
     def set_override(self, intent: Any) -> None:
         """设置排他意图（@! 语义）。"""
         self._override = intent
+
+    def clear_override_if(self, intent: Any) -> bool:
+        """仅当当前 override 与给定对象同一引用时清除。"""
+        if self._override is intent:
+            self._override = None
+            return True
+        return False
 
     def consume_override(self) -> Optional[Any]:
         """消费并清除排他意图。"""

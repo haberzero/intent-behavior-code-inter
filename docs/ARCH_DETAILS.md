@@ -272,7 +272,7 @@ if isinstance(value, (IbList, IbTupleObj)):
 
 `IbLLMUncertain.is_compatible` 返回 True（`primitives.py:995-997`），允许哨兵被写入任何类型槽位——这是 retry 循环内"变量已定义、待覆盖"语义的必要约束，不应理解为"用户可以让 uncertain 进入业务路径"。
 
-历史过渡兼容 `str + Uncertain` 隐式拼接当前仍在 `IbString.__add__` 和 `StrAxiom.resolve_operation_type_name` 中保留（详见 `KNOWN_LIMITS.md §八`、`OPEN_ISSUES.md OI-1`、`NEXT_STEPS.md NS-4`）。
+历史过渡兼容 `str + Uncertain` 隐式拼接已在 NS-4（2026-05-12）收紧；详见 `KNOWN_LIMITS.md §八`、`COMPLETED.md` 2026-05-12 NS-4 锚点。
 
 单例在 `initialize_builtin_classes()` 中通过 `registry.register_llm_uncertain()` 注册，运行时通过 `registry.get_llm_uncertain()` 访问。
 

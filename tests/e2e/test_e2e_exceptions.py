@@ -267,3 +267,116 @@ except LLMError as e:
         assert "caught_call_error" in lines
         assert "provider down" in lines
         assert "wrong_branch" not in lines
+
+
+class TestExceptionAcrossFunctionBoundary:
+    """
+    H1 回归：用户异常跨函数调用边界类型/字段必须保留。
+
+    历史 bug：``core/runtime/vm/handlers.py::vm_handle_IbCall`` 的兜底
+    ``except Exception`` 把 ``ThrownException`` 包装成 Python ``RuntimeError``，
+    导致：
+      1) ``except <SpecificType>`` 不再匹配，调用方只能落到 ``except Exception``；
+      2) 用户字段（``e.message`` / 子类字段）被 wrapper 文本替换。
+
+    修复见 2026-05-14 PR；详见 docs/COMPLETED.md 同日锚点。
+    """
+
+    def test_user_exception_subclass_preserved_across_call_boundary(self):
+        """用户子类 ``MyError`` 在被调用函数体内 raise → caller 用
+        ``except MyError as e:`` 应能匹配；``e.message`` 是用户字段。"""
+        code = AI_MOCK_PREFIX + """
+class MyError(Exception):
+    func __init__(self, str msg):
+        self.message = msg
+
+func boom():
+    raise MyError("kaboom")
+
+try:
+    boom()
+except MyError as e:
+    print("caught_my_error")
+    print(e.message)
+except Exception as e:
+    print("downgraded_to_base")
+print("after")
+"""
+        lines = run_ibci(code)
+        assert "caught_my_error" in lines
+        assert "kaboom" in lines
+        assert "downgraded_to_base" not in lines
+        assert "after" in lines
+
+    def test_user_exception_extra_field_preserved_across_call_boundary(self):
+        """子类专属字段（``detail``）跨函数边界后仍可访问。"""
+        code = AI_MOCK_PREFIX + """
+class MyError(Exception):
+    str detail
+    func __init__(self, str msg, str detail):
+        self.message = msg
+        self.detail = detail
+
+func boom():
+    raise MyError("oops", "deep-ctx")
+
+try:
+    boom()
+except MyError as e:
+    print("caught")
+    print(e.message)
+    print(e.detail)
+"""
+        lines = run_ibci(code)
+        assert "caught" in lines
+        assert "oops" in lines
+        assert "deep-ctx" in lines
+
+    def test_llm_retry_exhausted_error_preserved_across_call_boundary(self):
+        """内置 ``LLMRetryExhaustedError`` 从函数内 ``llmexcept`` 耗尽抛出后，
+        被外层 caller 以专用类型捕获。"""
+        code = AI_MOCK_PREFIX + """
+func ask():
+    str result = @~ MOCK:FAIL retry_exhaust ~
+    llmexcept:
+        retry "please try again"
+
+try:
+    ask()
+except LLMRetryExhaustedError as e:
+    print("caught_retry_exhausted")
+except LLMError as e:
+    print("wrong_branch_llm_error")
+except Exception as e:
+    print("wrong_branch_exception")
+print("after")
+"""
+        lines = run_ibci(code)
+        assert "caught_retry_exhausted" in lines
+        assert "wrong_branch_llm_error" not in lines
+        assert "wrong_branch_exception" not in lines
+        assert "after" in lines
+
+    def test_user_exception_through_two_nested_call_frames(self):
+        """两层嵌套调用栈：raise → inner → outer → try。"""
+        code = AI_MOCK_PREFIX + """
+class MyError(Exception):
+    func __init__(self, str msg):
+        self.message = msg
+
+func inner():
+    raise MyError("from_inner")
+
+func outer():
+    inner()
+
+try:
+    outer()
+except MyError as e:
+    print("caught_at_top")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "caught_at_top" in lines
+        assert "from_inner" in lines
+

@@ -509,6 +509,11 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         if hasattr(func, "call"):
             return func.call(executor.registry.get_none(), args)
         return func.receive("__call__", args)
+    except ThrownException:
+        # 用户代码主动抛出的语言级异常必须穿透函数调用边界，由 IbTry / 顶层
+        # try-except 体系按 IBCI 类型匹配处理；不得包装成 Python RuntimeError，
+        # 否则会丢失 IBCI 异常类型（H1，详见 docs/COMPLETED.md 2026-05-14 锚点）。
+        raise
     except Exception as e:
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误
         raise RuntimeError(f"VM: Call failed: {e}") from e
@@ -544,13 +549,60 @@ def vm_handle_IbListExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
 # 语句节点
 # ---------------------------------------------------------------------------
 
+def build_one_shot_intent_from_annotation(
+    executor, stmt_data: Mapping[str, Any]
+) -> Optional[IbIntent]:
+    """从 ``IbIntentAnnotation`` 节点数据构建一次性意图对象。"""
+    intent_info_uid = stmt_data.get("intent")
+    if not intent_info_uid:
+        return None
+    intent_data = executor.ec.get_node_data(intent_info_uid)
+    if not intent_data:
+        return None
+    return executor.ec.factory.create_intent_from_node(
+        intent_info_uid, intent_data, role=IntentRole.SMEAR
+    )
+
+
+def _vm_execute_stmt_sequence(executor, stmt_uids: List[str]):
+    """
+    统一执行语句序列，并实现 ``@`` / ``@!`` 的"下一条语句绑定"生命周期。
+
+    语义：
+    - 读取到 ``IbIntentAnnotation`` 时，不立即执行节点；仅记录为 pending one-shot。
+    - 下一条真实语句开始前安装该 one-shot；语句结束后（无论是否出现 LLM 调用）清理残留。
+    - 语句返回 ``Signal`` 时立即透传给调用方。
+    """
+    last_result = executor.registry.get_none()
+    pending_one_shot: Optional[IbIntent] = None
+
+    for stmt_uid in stmt_uids or ():
+        node_data = executor.ec.get_node_data(stmt_uid) if stmt_uid else None
+        if node_data and node_data.get("_type") == "IbIntentAnnotation":
+            pending_one_shot = build_one_shot_intent_from_annotation(executor, node_data)
+            continue
+
+        if pending_one_shot is not None:
+            executor.runtime_context.activate_statement_one_shot_intent(pending_one_shot)
+
+        try:
+            last_result = yield stmt_uid
+        finally:
+            if pending_one_shot is not None:
+                executor.runtime_context.cleanup_statement_one_shot_intent(pending_one_shot)
+                pending_one_shot = None
+
+        if isinstance(last_result, Signal):
+            return last_result
+
+    return last_result
+
+
 def vm_handle_IbModule(executor, node_uid: str, node_data: Mapping[str, Any]):
-    result = executor.registry.get_none()
-    for stmt_uid in node_data.get("body", []):
-        result = yield stmt_uid
-        if isinstance(result, Signal):
-            # 顶层模块遇到信号：直接透传给调度器，让 run() 决定包装为 UnhandledSignal
-            return result
+    result = yield from _vm_execute_stmt_sequence(executor, node_data.get("body", []))
+    if isinstance(result, Signal):
+        # 顶层模块遇到信号：直接透传给调度器，让 run() 决定包装为 UnhandledSignal
+        return result
     return result
 
 
@@ -579,10 +631,9 @@ def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
     if last and not last.is_certain:
         return executor.registry.get_none()
     branch = node_data.get("body", []) if executor.ec.is_truthy(cond) else node_data.get("orelse", [])
-    for stmt_uid in branch:
-        res = yield stmt_uid
-        if isinstance(res, Signal):
-            return res
+    res = yield from _vm_execute_stmt_sequence(executor, branch)
+    if isinstance(res, Signal):
+        return res
     return executor.registry.get_none()
 
 
@@ -602,20 +653,14 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
             break
 
         # 执行循环体；任意 stmt 返回 Signal 时立即处理
-        consumed = None  # type: ControlSignal | None
-        for stmt_uid in body:
-            res = yield stmt_uid
-            if isinstance(res, Signal):
-                if res.kind is ControlSignal.BREAK:
-                    consumed = ControlSignal.BREAK
-                    break
-                if res.kind is ControlSignal.CONTINUE:
-                    consumed = ControlSignal.CONTINUE
-                    break
-                # RETURN / THROW：透传给上层（函数帧 / 顶层）
-                return res
-        if consumed is ControlSignal.BREAK:
-            break
+        res = yield from _vm_execute_stmt_sequence(executor, body)
+        if isinstance(res, Signal):
+            if res.kind is ControlSignal.BREAK:
+                break
+            if res.kind is ControlSignal.CONTINUE:
+                continue
+            # RETURN / THROW：透传给上层（函数帧 / 顶层）
+            return res
         # CONTINUE 或正常结束：进入下一轮循环
     return executor.registry.get_none()
 
@@ -993,10 +1038,9 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
             frame.last_result = result
             frame.should_retry = False  # 等待 body 中的 retry 语句重新设为 True
 
-            for stmt_uid in body_uids:
-                body_res = yield stmt_uid
-                if isinstance(body_res, Signal):
-                    return body_res
+            body_res = yield from _vm_execute_stmt_sequence(executor, body_uids)
+            if isinstance(body_res, Signal):
+                return body_res
 
             # 递增重试计数；若耗尽则抛出 LLMRetryExhaustedError
             if not frame.increment_retry():
@@ -1231,10 +1275,9 @@ def vm_handle_IbSwitch(executor, node_uid: str, node_data: Mapping[str, Any]):
                 matched = True
 
         if matched:
-            for stmt_uid in case_data.get("body", []):
-                res = yield stmt_uid
-                if isinstance(res, Signal):
-                    return res
+            res = yield from _vm_execute_stmt_sequence(executor, case_data.get("body", []))
+            if isinstance(res, Signal):
+                return res
             break
     return executor.registry.get_none()
 
@@ -1320,7 +1363,7 @@ def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
 # === 意图操作 ===
 
 def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``@`` / ``@!`` 单次意图涂抹：与 StmtHandler.visit_IbIntentAnnotation 同。"""
+    """``@`` / ``@!`` 单次意图注释节点的兼容执行路径。"""
     if False:
         yield
     intent_info_uid = node_data.get("intent")
@@ -1332,10 +1375,7 @@ def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str
     intent = executor.ec.factory.create_intent_from_node(
         intent_info_uid, intent_data, role=IntentRole.SMEAR
     )
-    if intent.is_override:
-        executor.runtime_context.set_pending_override_intent(intent)
-    else:
-        executor.runtime_context.add_smear_intent(intent)
+    executor.runtime_context.activate_statement_one_shot_intent(intent)
     return executor.registry.get_none()
 
 
@@ -1658,10 +1698,9 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                     frame.should_retry = False  # 等待 retry 语句显式设置
 
                     try:
-                        for handler_stmt_uid in handler_body_uids:
-                            handler_res = yield handler_stmt_uid
-                            if isinstance(handler_res, Signal):
-                                return handler_res
+                        handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)
+                        if isinstance(handler_res, Signal):
+                            return handler_res
                     finally:
                         executor.runtime_context.pop_llm_except_frame()
 
@@ -1695,19 +1734,13 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                 if not executor.ec.is_truthy(filter_val):
                     break
 
-            consumed: Optional[ControlSignal] = None
-            for stmt_uid in body:
-                res = yield stmt_uid
-                if isinstance(res, Signal):
-                    if res.kind is ControlSignal.BREAK:
-                        consumed = ControlSignal.BREAK
-                        break
-                    if res.kind is ControlSignal.CONTINUE:
-                        consumed = ControlSignal.CONTINUE
-                        break
-                    return res
-            if consumed is ControlSignal.BREAK:
-                break
+            res = yield from _vm_execute_stmt_sequence(executor, body)
+            if isinstance(res, Signal):
+                if res.kind is ControlSignal.BREAK:
+                    break
+                if res.kind is ControlSignal.CONTINUE:
+                    continue
+                return res
         return executor.registry.get_none()
 
     # ----- 标准 Foreach 循环 -----
@@ -1768,22 +1801,18 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                 rc.pop_loop_context()
                 continue
 
-        consumed = None
-        for stmt_uid in body:
-            res = yield stmt_uid
-            if isinstance(res, Signal):
-                if res.kind is ControlSignal.BREAK:
-                    consumed = ControlSignal.BREAK
-                    break
-                if res.kind is ControlSignal.CONTINUE:
-                    consumed = ControlSignal.CONTINUE
-                    break
+        res = yield from _vm_execute_stmt_sequence(executor, body)
+        if isinstance(res, Signal):
+            if res.kind is ControlSignal.BREAK:
                 rc.pop_loop_context()
-                return res
+                break
+            if res.kind is ControlSignal.CONTINUE:
+                rc.pop_loop_context()
+                continue
+            rc.pop_loop_context()
+            return res
 
         rc.pop_loop_context()
-        if consumed is ControlSignal.BREAK:
-            break
     return executor.registry.get_none()
 
 
@@ -1807,11 +1836,9 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
     handled_exc = False
 
     try:
-        for stmt_uid in body:
-            res = yield stmt_uid
-            if isinstance(res, Signal):
-                pending_signal = res
-                break
+        res = yield from _vm_execute_stmt_sequence(executor, body)
+        if isinstance(res, Signal):
+            pending_signal = res
     except ThrownException as te:
         raised_exc = te
     except Exception as e:
@@ -1856,11 +1883,9 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
                 executor.runtime_context.define_variable(name, error_obj, uid=sym_uid)
             # 执行处理体
             handler_body_signal: Optional[Signal] = None
-            for stmt_uid in handler_data.get("body", []):
-                res = yield stmt_uid
-                if isinstance(res, Signal):
-                    handler_body_signal = res
-                    break
+            res = yield from _vm_execute_stmt_sequence(executor, handler_data.get("body", []))
+            if isinstance(res, Signal):
+                handler_body_signal = res
             handled_exc = True
             if handler_body_signal is not None:
                 pending_signal = handler_body_signal
@@ -1868,27 +1893,23 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
 
         if not handled_exc:
             # 没有匹配的 handler：先跑 finally，再 re-raise
-            for stmt_uid in finalbody:
-                res = yield stmt_uid
-                if isinstance(res, Signal):
-                    # finally 中的信号优先级最高（覆盖原始异常，与原递归路径一致）
-                    return res
+            res = yield from _vm_execute_stmt_sequence(executor, finalbody)
+            if isinstance(res, Signal):
+                # finally 中的信号优先级最高（覆盖原始异常，与原递归路径一致）
+                return res
             raise raised_exc
     else:
         # 没有异常：执行 else（仅当 body 没有 signal 终止）
         if pending_signal is None:
-            for stmt_uid in orelse:
-                res = yield stmt_uid
-                if isinstance(res, Signal):
-                    pending_signal = res
-                    break
+            res = yield from _vm_execute_stmt_sequence(executor, orelse)
+            if isinstance(res, Signal):
+                pending_signal = res
 
     # finally：所有路径都要执行
-    for stmt_uid in finalbody:
-        res = yield stmt_uid
-        if isinstance(res, Signal):
-            # finally 中的 signal 覆盖任何 pending signal
-            return res
+    res = yield from _vm_execute_stmt_sequence(executor, finalbody)
+    if isinstance(res, Signal):
+        # finally 中的 signal 覆盖任何 pending signal
+        return res
 
     if pending_signal is not None:
         return pending_signal

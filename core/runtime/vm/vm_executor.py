@@ -34,8 +34,10 @@ from core.runtime.vm.task import (
     UnhandledSignal,
     Signal,
 )
-from core.runtime.vm.handlers import build_dispatch_table
-
+from core.runtime.vm.handlers import (
+    build_dispatch_table,
+    build_one_shot_intent_from_annotation,
+)
 
 class VMExecutor:
     """显式帧栈 CPS 调度执行器。
@@ -150,8 +152,23 @@ class VMExecutor:
                 ``execute_module``）直接捕获并按 ``e.signal.kind`` 分类处理。
         """
         result = self.registry.get_none()
+        pending_one_shot = None
+
         for stmt_uid in stmt_uids or ():
-            result = self.run(stmt_uid)
+            node_data = self._ec.get_node_data(stmt_uid) if stmt_uid else None
+            if node_data and node_data.get("_type") == "IbIntentAnnotation":
+                pending_one_shot = build_one_shot_intent_from_annotation(self, node_data)
+                continue
+
+            if pending_one_shot is not None:
+                self.runtime_context.activate_statement_one_shot_intent(pending_one_shot)
+
+            try:
+                result = self.run(stmt_uid)
+            finally:
+                if pending_one_shot is not None:
+                    self.runtime_context.cleanup_statement_one_shot_intent(pending_one_shot)
+                    pending_one_shot = None
         return result
 
     # ------------------------------------------------------------------
