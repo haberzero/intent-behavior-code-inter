@@ -179,7 +179,7 @@ class HostService(IHostService):
                         initial_vars[name] = val.get_value()
 
         # 发起系统调用，阻塞等待执行完成
-        abs_path = os.path.abspath(path)
+        abs_path = self._resolve_isolated_path(path)
         success = self.orchestrator.request_isolated_run(abs_path, policy, initial_vars)
         
         # 返回执行结果（当前简化为布尔值；多返回值改进见 PENDING_TASKS.md §10.2）
@@ -193,7 +193,7 @@ class HostService(IHostService):
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available. Spawned execution cannot be performed.")
 
-        abs_path = os.path.abspath(path)
+        abs_path = self._resolve_isolated_path(path)
         return self.orchestrator.request_spawn_isolated(abs_path, policy)
 
     def collect(self, handle: str) -> Dict[str, Any]:
@@ -205,6 +205,31 @@ class HostService(IHostService):
             raise RuntimeError("Kernel Orchestrator not available.")
 
         return self.orchestrator.request_collect(handle)
+
+    def _resolve_isolated_path(self, path: str) -> str:
+        """
+        把 ``ihost.run_isolated``/``spawn_isolated`` 传入的脚本路径解析为绝对路径。
+
+        - 绝对路径：直通（``os.path.abspath`` 进行规范化）。
+        - 相对路径：基于**当前执行脚本的入口目录** (``execution_context.get_entry_dir()``)
+          解析，与 ``file.read("./api_config.json")`` / ``isys.entry_dir()`` 保持一致；
+          仅当入口目录不可用时，才回退到 ``os.path.abspath`` 的 cwd 解析。
+
+        H3 修复（详见 docs/COMPLETED.md 2026-05-14 锚点）：历史实现统一走 ``os.path.abspath``，
+        相对 cwd 解析，与 ``file.read`` 的"相对入口目录"语义不一致，导致 README §5 与
+        ``examples/03_advanced_features/isolation_demo/parent.ibci`` 仅在 cwd 恰好为入口目录
+        时才能跑通。
+        """
+        if os.path.isabs(path):
+            return os.path.abspath(path)
+        entry_dir = None
+        try:
+            entry_dir = self.execution_context.get_entry_dir()
+        except Exception:
+            entry_dir = None
+        if entry_dir:
+            return os.path.abspath(os.path.join(entry_dir, path))
+        return os.path.abspath(path)
 
     def get_source(self) -> str:
         """元编程：获取当前运行模块的源代码"""

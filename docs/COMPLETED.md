@@ -4,7 +4,50 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-14（追加 2026-05-14 锚点"事实重核与文档诚实化"）
+> **最后更新**：2026-05-14（第二轮：追加 H1/H2/H3/H4 维修锚点）
+
+---
+
+## 2026-05-14 锚点（第二轮）：H1/H2/H3/H4 阶段性维修
+
+按 `docs/NEXT_STEPS.md` 第一阶段任务清单，一次性完成四个开放问题。`pytest tests/` 基线由 639 pass / 5 fail → **653 pass / 5 fail**（5 fail 即未受影响的 H5），新增 14 个回归用例。
+
+### H1 — 用户异常跨函数边界类型保留（P0）
+
+- **根因**：`core/runtime/vm/handlers.py::vm_handle_IbCall` 的兜底 `except Exception` 把 IBCI 层 `ThrownException` 包成 Python `RuntimeError`，丢失异常类型并把 `e.message` 改写为 wrapper 文本。
+- **修复**：让 `except ThrownException` 直通在通用 `except Exception` 之前；仅对真正的 Python 异常 wrap（与 `IbNativeFunction.call` 已采用的同款 pattern 一致，详见 2026-05-12 NS-4 锚点）。
+- **测试**：`tests/e2e/test_e2e_exceptions.py` 新增 `class TestExceptionAcrossFunctionBoundary`（4 用例）——用户子类、子类专属字段、内置 `LLMRetryExhaustedError` 跨函数边界、两层嵌套调用栈。
+- **文档**：`docs/KNOWN_LIMITS.md §二十三` 关闭。
+
+### H2 — `import` 必须居首：编译错误更可读（P1）
+
+- **根因**：scheduler 的 `parse_imports_only` 遇非 import token 直接 `break`，把后续 misplaced import 留给 semantic pass，结果只能报误导性的 `SEM_001 Module 'X' not found`。
+- **修复**：`parse_imports_only` 改为遇到非 import token 时把 `imports_allowed=False` 后继续扫描，misplaced import 命中既有的 `DEP_003 DEP_INVALID_IMPORT_POSITION`；`_report_invalid_import_pos` 错误信息更具体，并改用正确的错误码常量（旧代码用了 `"PAR_004"` 字面量，与常量定义不一致）。
+- **测试**：`tests/compiler/test_import_position.py`（8 用例）——正常顺序、错位、from-import、混合注释、无顶部 import 的 misplaced。
+- **文档**：`docs/KNOWN_LIMITS.md §二十四` 关闭。
+
+### H3 — `ihost.run_isolated(path)` 路径相对入口目录而非 cwd（P1）
+
+- **根因**：`HostService.run_isolated` / `spawn_isolated` 用 `os.path.abspath(path)`，等价相对 cwd 解析，与 `file.read("./api_config.json")`（基于 `isys.entry_dir()` / 入口文件目录）不一致。
+- **修复**：新增 `HostService._resolve_isolated_path(path)`：绝对路径直通；相对路径以 `execution_context.get_entry_dir()` 为锚解析；仅当入口目录不可用时才回退到 `os.path.abspath` 的 cwd 解析。两处调用点（`run_isolated`/`spawn_isolated`）统一走这个 helper。
+- **测试**：`tests/e2e/test_e2e_multi_interpreter.py::TestRunIsolatedPathRelativeToEntryDir`（2 用例）——cwd 与入口目录不同；绝对路径直通。
+- **文档**：`docs/KNOWN_LIMITS.md §二十五` 关闭。
+
+### H4 — `examples/01_getting_started/{01,02,03}` 零配置 mock fallback（P1）
+
+- **现状**：三个入门示例都通过 `file.read("./api_config.json")` 读取真实配置，缺该文件时 Python `FileNotFoundError` 抛出，用户首次试用即遇断点。
+- **修复**：三个示例的"配置 AI"段统一改为 `if file.exists("./api_config.json")` 检测——命中 → 走真实 API；未命中 → `print` 一句提示后切到 `ai.set_config("TESTONLY","TESTONLY","TESTONLY")` mock 模式，与 04/05/06 行为对齐。
+- **验证**：从 `/tmp/exrun`（非 examples 目录）启动 `python main.py run examples/01_getting_started/{01,02,03}.ibci`，全部端到端跑通。
+- **文档**：无需保留 KNOWN_LIMITS 条目（属于示例配置问题，非语言级限制）。
+
+### 验证
+
+```
+python -m pytest tests/ -q --tb=no --no-header
+# 653 passed, 9 skipped, 5 failed
+```
+
+5 fail 全部位于 `tests/compiler/test_symbol_collection_pass.py`（H5，未在本 PR 范围内）。
 
 ---
 

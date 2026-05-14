@@ -323,3 +323,79 @@ class TestRunIsolatedCompatibility:
             assert any("1" in line or "True" in line for line in out)
         finally:
             os.unlink(child)
+
+
+# ===========================================================================
+# 5. H3 回归：ihost 路径相对入口目录而非 cwd
+# ===========================================================================
+
+class TestRunIsolatedPathRelativeToEntryDir:
+    """H3：``ihost.run_isolated`` / ``spawn_isolated`` 的相对路径应基于
+    **调用脚本的入口目录**（与 ``file.read("./...")`` / ``isys.entry_dir()`` 一致），
+    而不是基于 cwd。详见 docs/COMPLETED.md 2026-05-14 锚点。"""
+
+    def test_run_isolated_relative_path_resolves_from_entry_dir(self, tmp_path, monkeypatch, capsys):
+        """parent 与 child 同目录；cwd 切到另一处。仍应能找到 child。"""
+        parent_dir = tmp_path / "isohome"
+        parent_dir.mkdir()
+        (parent_dir / "child.ibci").write_text(
+            'import ai\n'
+            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'print("child_ran")\n',
+            encoding="utf-8",
+        )
+        parent_path = parent_dir / "parent.ibci"
+        parent_path.write_text(
+            "import ihost\n"
+            'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
+            'bool ok = ihost.run_isolated("child.ibci", policy)\n'
+            'print("parent_done")\n',
+            encoding="utf-8",
+        )
+
+        # cwd 切到一个完全不同的目录
+        other_dir = tmp_path / "elsewhere"
+        other_dir.mkdir()
+        monkeypatch.chdir(other_dir)
+
+        parent_out: list = []
+        eng = IBCIEngine(root_dir=str(parent_dir), auto_sniff=False)
+        eng.run(str(parent_path), output_callback=lambda s: parent_out.append(str(s)), silent=True)
+        captured = capsys.readouterr()
+        assert "child_ran" in captured.out, (
+            f"child failed to run; captured stdout={captured.out!r}, parent_out={parent_out!r}"
+        )
+        assert "parent_done" in parent_out
+
+    def test_run_isolated_absolute_path_still_works(self, tmp_path, monkeypatch, capsys):
+        """绝对路径直通，不受 entry_dir 影响。"""
+        child_path = tmp_path / "absolute_child.ibci"
+        child_path.write_text(
+            'import ai\n'
+            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'print("abs_child_ran")\n',
+            encoding="utf-8",
+        )
+        parent_dir = tmp_path / "parents"
+        parent_dir.mkdir()
+        parent_path = parent_dir / "parent.ibci"
+        parent_path.write_text(
+            "import ihost\n"
+            'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
+            f'bool ok = ihost.run_isolated("{child_path}", policy)\n'
+            'print("parent_done")\n',
+            encoding="utf-8",
+        )
+
+        # cwd 切到第三个目录
+        other_dir = tmp_path / "third"
+        other_dir.mkdir()
+        monkeypatch.chdir(other_dir)
+
+        parent_out: list = []
+        eng = IBCIEngine(root_dir=str(parent_dir), auto_sniff=False)
+        eng.run(str(parent_path), output_callback=lambda s: parent_out.append(str(s)), silent=True)
+        captured = capsys.readouterr()
+        assert "abs_child_ran" in captured.out
+        assert "parent_done" in parent_out
+

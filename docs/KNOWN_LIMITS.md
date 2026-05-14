@@ -513,88 +513,22 @@ python -m pytest tests/meta/ -q --tb=no
 
 ---
 
-## 二十三、用户异常跨函数边界类型降级（H1，2026-05-14 新发现）
+## ~~二十三、用户异常跨函数边界类型降级（H1）~~ ✅ 已修复（2026-05-14 第二轮 PR）
 
-**严重级别**：高（这是当前主线中唯一一处真正破坏语言机制承诺的 bug，已登记为 P0）。
-
-**现象**：当用户自定义 `Exception` 子类 raise 在被调用的函数体内、捕获在 caller 的 `try/except` 中时：
-
-```ibci
-class MyError(Exception):
-    func __init__(self, str msg):
-        self.message = msg
-
-func boom():
-    raise MyError("kaboom")
-
-try:
-    boom()
-except MyError as e:                 # ❌ 不匹配
-    print("caught MyError:", e.message)
-except Exception as e:               # ✅ 进入这里
-    print("caught:", e.message)      # ❌ e.message = "VM: Call failed: <MyError object at 0x...>"
-```
-
-**根源**：`core/runtime/vm/handlers.py:508-514` 的 `vm_handle_IbCall` 兜底 `except Exception` 把 IBCI 层的 `ThrownException` 包裹器一并捕获并 wrap 成 Python `RuntimeError`，导致：
-
-1. 异常的 IBCI 具体类型（`MyError` / `LLMRetryExhaustedError` 等）丢失，`except <SpecificType> as e` 无法匹配；
-2. 用户字段（`e.message` / `e.detail` ...）被替换为 wrapper 字符串。
-
-顶层 raise（不经过函数调用边界）行为正常；`tests/e2e/test_e2e_exceptions.py` 当前 8 个 raise 用例**全部在顶层 try 内**，未覆盖跨调用栈的情况，因此长期未被发现。
-
-**规避方案**（在 H1 修复前）：
-
-- 把 raise 的位置上提至与 try 同一作用域；或
-- 在被调用函数内自行 try-except 完成处理，不依赖跨函数捕获。
-
-**修复跟踪**：见 `docs/NEXT_STEPS.md`「优先级 P0：异常跨函数边界类型降级（H1）」。
+**修复摘要**：`core/runtime/vm/handlers.py::vm_handle_IbCall` 现在在通用 `except Exception` 之前显式让 `ThrownException` 直通；只对真正的 Python 异常 wrap 成 `RuntimeError`。回归用例：`tests/e2e/test_e2e_exceptions.py::TestExceptionAcrossFunctionBoundary`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
 
 ---
 
-## 二十四、`import` 语句必须位于所有可执行语句之前（H2，2026-05-14 新发现）
+## ~~二十四、`import` 语句必须位于所有可执行语句之前（H2）~~ ✅ 已修复（2026-05-14 第二轮 PR）
 
-**严重级别**：中（功能上仅是语法约束；但当前编译器错误描述把"位置错误"误诊为"模块不存在"，会让用户去查模块安装/插件路径）。
-
-**现象**：
-
-```ibci
-import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-str x = "hello"
-print(x)
-import idbg              # ❌ 报错：SEM_001: Module 'idbg' not found or failed to load
-```
-
-实际上 `idbg` 模块完全存在并可加载——把同一行 `import idbg` 移到文件顶部即可正常工作。
-
-**根源**：编译器（`core/compiler/scheduler.py`）未在解析阶段强制 import 必须位于顶部；运行到非顶部 import 时，符号收集 pass 视该名为"未定义模块"，沿用通用 SEM_001 报错。
-
-**当前规避**：始终把所有 `import` 放在 `.ibci` 文件最顶部（在 `print` / 赋值 / 函数定义之前）。
-
-**修复跟踪**：见 `docs/NEXT_STEPS.md`「P1-B `import` 必须居首：编译错误更可读」。计划新增专用错误码 `IMP_001 IMPORT_MUST_BE_AT_TOP`。
+**修复摘要**：scheduler 的 `parse_imports_only` 改为遇非 import token 后继续扫描，misplaced import 命中既有的 `DEP_003 DEP_INVALID_IMPORT_POSITION`；错误信息明确指出"`import` 必须位于所有其它语句之前"。回归用例：`tests/compiler/test_import_position.py`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
 
 ---
 
-## 二十五、`ihost.run_isolated(path, policy)` 路径相对 cwd 而非入口文件目录（H3，2026-05-14 新发现）
+## ~~二十五、`ihost.run_isolated(path, policy)` 路径相对 cwd 而非入口文件目录（H3）~~ ✅ 已修复（2026-05-14 第二轮 PR）
 
-**严重级别**：中（影响 README §5 与 `examples/03_advanced_features/isolation_demo/parent.ibci` 的可移植性）。
-
-**现象**：在 `examples/03_advanced_features/isolation_demo/parent.ibci` 中写：
-
-```ibci
-ihost.run_isolated("child.ibci", policy)        # 相对路径
-```
-
-仅在用户从 `examples/03_advanced_features/isolation_demo/` 目录执行 `python main.py run parent.ibci` 时能找到 `child.ibci`；从 repo 根目录执行则报 `Error: Entry file not found: <cwd>/child.ibci`。
-
-**根源**：`core/runtime/host/service.py:182,196` 的 `run_isolated` / `spawn_isolated` 使用 `os.path.abspath(path)`，等价于"相对当前进程 cwd"。
-
-这与 `file.read("./api_config.json")`（基于 `ibci_isys.entry_dir()`，相对**入口脚本目录**）的语义**不一致**——用户在两个最相关的 API 之间会得到截然不同的路径解析结果。
-
-**当前规避**：传给 `ihost.run_isolated` 的路径要么是绝对路径，要么由 `isys.entry_dir()` + `"/child.ibci"` 拼接，要么确保 cwd = 入口脚本目录。
-
-**修复跟踪**：见 `docs/NEXT_STEPS.md`「P1-A `ihost.run_isolated(path, policy)` 路径解析与入口文件目录对齐（H3）」。
+**修复摘要**：`HostService` 新增 `_resolve_isolated_path`：绝对路径直通；相对路径以 `execution_context.get_entry_dir()` 为锚解析，与 `file.read("./...")` 语义一致。回归用例：`tests/e2e/test_e2e_multi_interpreter.py::TestRunIsolatedPathRelativeToEntryDir`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
 
 ---
 
-*最后更新：2026-05-14（事实重核：关闭 §二十二的失实条目；新增 §二十三 H1 / §二十四 H2 / §二十五 H3；Enum-from-LLM 已修复，相关旧 "Bug #3" 表述已从 example 05 移除）*
+*最后更新：2026-05-14 第二轮（关闭 §二十三 H1 / §二十四 H2 / §二十五 H3；事实重核：§二十二 仍为反例保留；Enum-from-LLM 已修复，相关旧 "Bug #3" 表述已从 example 05 移除）*
