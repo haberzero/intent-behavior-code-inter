@@ -381,6 +381,31 @@ class RuntimeContextImpl(RuntimeContext):
         """添加一次性涂抹意图（@）。"""
         self._intent_ctx.add_smear(intent)
 
+    def activate_statement_one_shot_intent(self, intent: IbIntent) -> None:
+        """
+        为"下一条语句"安装一次性意图。
+
+        - override：安装到 override 槽（优先级最高）
+        - smear：追加到 smear 队列（由后续 LLM 调用被动消费）
+        """
+        if intent.is_override:
+            self._intent_ctx.set_override(intent)
+        else:
+            self._intent_ctx.add_smear(intent)
+
+    def cleanup_statement_one_shot_intent(self, intent: IbIntent) -> None:
+        """
+        清理上一条语句绑定的一次性意图残留（若尚未被消费）。
+
+        语义：
+        - 若该 one-shot 已在语句执行期间被 LLM 消费，则此处 no-op。
+        - 若语句路径没有任何 LLM 调用，则主动清理，防止泄漏到后续语句。
+        """
+        if intent.is_override:
+            self._intent_ctx.clear_override_if(intent)
+        else:
+            self._intent_ctx.discard_smear(intent)
+
     # --- LLM Result 管理 ---
 
     def set_last_llm_result(self, result: Any) -> None:

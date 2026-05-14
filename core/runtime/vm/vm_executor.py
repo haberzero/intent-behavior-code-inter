@@ -35,6 +35,7 @@ from core.runtime.vm.task import (
     Signal,
 )
 from core.runtime.vm.handlers import build_dispatch_table
+from core.kernel.intent_logic import IntentRole
 
 
 class VMExecutor:
@@ -150,8 +151,29 @@ class VMExecutor:
                 ``execute_module``）直接捕获并按 ``e.signal.kind`` 分类处理。
         """
         result = self.registry.get_none()
+        pending_one_shot = None
+
         for stmt_uid in stmt_uids or ():
-            result = self.run(stmt_uid)
+            stmt_data = self._ec.get_node_data(stmt_uid) if stmt_uid else None
+            if stmt_data and stmt_data.get("_type") == "IbIntentAnnotation":
+                intent_info_uid = stmt_data.get("intent")
+                if intent_info_uid:
+                    intent_data = self._ec.get_node_data(intent_info_uid)
+                    if intent_data:
+                        pending_one_shot = self._ec.factory.create_intent_from_node(
+                            intent_info_uid, intent_data, role=IntentRole.SMEAR
+                        )
+                continue
+
+            if pending_one_shot is not None:
+                self.runtime_context.activate_statement_one_shot_intent(pending_one_shot)
+
+            try:
+                result = self.run(stmt_uid)
+            finally:
+                if pending_one_shot is not None:
+                    self.runtime_context.cleanup_statement_one_shot_intent(pending_one_shot)
+                    pending_one_shot = None
         return result
 
     # ------------------------------------------------------------------

@@ -26,7 +26,7 @@ class TestIntentPropagation:
     References:
     - IBCI_SYNTAX_REFERENCE.md §6 Intent System
     - docs/COMPLETED.md NS-2b/2c/2d
-    - tests/runtime/test_intent_context.py (legacy)
+    - tests/e2e/test_e2e_intent.py
     """
 
     def test_intent_propagates_to_nested_llm_call(self):
@@ -102,7 +102,17 @@ print(x)
 
     def test_remove_clears_intents(self):
         """INV-INTENT-PRIORITY-3: Remove mode clears matching intents."""
-        pytest.skip("PT-5.1: @- intent removal operator not implemented in IBCI")
+        code = """
+@+ "A"
+@+ "B"
+@-
+intent_context ctx = intent_context.get_current()
+print((str)ctx.resolve())
+"""
+        lines = run_ibci(code)
+        assert len(lines) == 1
+        assert "A" in lines[0]
+        assert "B" not in lines[0]
 
 
 # ===========================================================================
@@ -154,7 +164,7 @@ class TestIntentScopeIsolation:
     """Validate intent scope isolation.
 
     References:
-    - tests/e2e/test_e2e_intent.py (legacy)
+    - tests/e2e/test_e2e_intent.py
     """
 
     def test_function_intent_isolated(self):
@@ -183,9 +193,24 @@ print(y)
         # Both calls succeed, smear is cleared after first use
         assert run_ibci(code) == ["first", "second"]
 
-    def test_intent_in_lambda_captured(self):
-        """INV-INTENT-SCOPE-3: Intent context is captured around lambda definition."""
-        pytest.skip("PT-5.1: Intent annotation before lambda definition not recognized by SEM_060 (lambda body not introspected)")
+    def test_single_intent_on_regular_call_no_llm_path_does_not_leak(self):
+        """INV-INTENT-SCOPE-3: one-shot on regular call with no LLM path is cleaned per statement."""
+        code = """
+func pure_no_llm():
+    int x = 1
+    return
+
+@ no leak
+pure_no_llm()
+
+intent_context current = intent_context.get_current()
+str prompt_view = current.__to_prompt__()
+if prompt_view == "":
+    print("EMPTY")
+else:
+    print(prompt_view)
+"""
+        assert run_ibci(code) == ["EMPTY"]
 
 
 # ===========================================================================

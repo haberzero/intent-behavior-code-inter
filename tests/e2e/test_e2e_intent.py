@@ -64,6 +64,40 @@ print(result2)
         lines = run_ibci(code)
         assert "1" in lines
 
+    def test_single_intent_before_regular_function_call_propagates_to_nested_llm(self):
+        """@ 可修饰普通函数调用，函数内部的 LLM 调用可消费该 one-shot。"""
+        code = AI_MOCK_PREFIX + """
+func wrapper() -> str:
+    str r = @~ MOCK:STR:nested ~
+    return r
+
+@ single shot before regular call
+str r = wrapper()
+print(r)
+"""
+        lines = run_ibci(code)
+        assert lines == ["nested"]
+
+    def test_single_intent_before_no_llm_statement_is_cleaned_without_leak(self):
+        """若被修饰语句路径无 LLM 调用，one-shot 仍应在该语句结束后被清理。"""
+        code = """
+func pure_no_llm():
+    int x = 1
+    return
+
+@ one shot for no-llm path
+pure_no_llm()
+
+intent_context current = intent_context.get_current()
+str prompt_view = current.__to_prompt__()
+if prompt_view == "":
+    print("EMPTY")
+else:
+    print(prompt_view)
+"""
+        lines = run_ibci(code)
+        assert lines == ["EMPTY"]
+
     def test_incremental_intent(self):
         code = AI_MOCK_PREFIX + """
 @+ use formal language

@@ -32,8 +32,9 @@ python -m pytest tests/ -q --tb=no --no-header
 - **H3**（P1-A，`ihost.run_isolated` 路径解析）：已修。`HostService._resolve_isolated_path` 在路径相对时基于 `execution_context.get_entry_dir()` 解析，绝对路径直通。新增 `tests/e2e/test_e2e_multi_interpreter.py::TestRunIsolatedPathRelativeToEntryDir`（2 用例）。
 - **H4**（P1-C，零配置示例）：已修。`examples/01_getting_started/{01_hello_world,02_intent_demo,03_flow_control_and_behavior}.ibci` 现在用 `file.exists("./api_config.json")` 探测，缺失时自动切到 `ai.set_config("TESTONLY","TESTONLY","TESTONLY")` mock 模式。三个示例都已在零配置下端到端跑通。
 - **H6**（README typo）：上轮已修。
+- **Intent one-shot 语义重定义**（第三轮）：已完成。`@` / `@!` 现绑定"下一条语句执行窗口"（不再仅限直接 LLM 语句）；VM 侧已实现语句窗口开始安装、结束清理，保证无 LLM 路径不泄漏。覆盖更新：`tests/e2e/test_e2e_intent.py`、`tests/contracts/test_intent_propagation.py`、`tests/compiler/test_pipeline.py`。文档已同步到 `KNOWN_LIMITS` / `IBCI_SYNTAX_REFERENCE` / `INTENT_SYSTEM_DESIGN`。
 
-详见 `docs/COMPLETED.md` 2026-05-14 的两条锚点。
+详见 `docs/COMPLETED.md` 2026-05-14 的对应锚点。
 
 ---
 
