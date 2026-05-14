@@ -2,8 +2,11 @@
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
 > 历史 Bug 修复记录已归档至 `docs/COMPLETED.md`。
-> **最后更新**：2026-05-14（核对真实代码状态；测试基线请以 `pytest tests/ -q --tb=no` 当次结果为准，
-> 不再于本文档冻结具体通过数字以避免出现"文档落后于代码"的幻觉）
+> **最后更新**：2026-05-14（事实重核：关闭 §二十二的失实表述；
+> 新增 §二十三 H1 / §二十四 H2 / §二十五 H3；Enum-from-LLM "Bug #3" 已确认修复）
+>
+> **测试基线**：请以当次 `python -m pytest tests/ -q --tb=no --no-header` 的输出为准。
+> 不再于本文档冻结具体通过数字以避免出现"文档落后于代码"的幻觉。
 
 ---
 
@@ -383,7 +386,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ### ~~16.2 泛型特化的 axiom 方法引导不完整~~ ✅ 已解决（G1/G2/G3）
 
-`resolve_specialization()` 已在 G1 加入 early-cache hit 逻辑，G3 修复了嵌套泛型的 key 计算（使用 `spec.name` 而非 `get_base_name()`）。OI-4 已关闭，详见 `docs/OPEN_ISSUES.md`。
+`resolve_specialization()` 已在 G1 加入 early-cache hit 逻辑，G3 修复了嵌套泛型的 key 计算（使用 `spec.name` 而非 `get_base_name()`）。详见 `docs/COMPLETED.md`。
 
 ### ~~16.3 嵌套容器的链式下标类型推断缺失~~ ✅ 已解决（G3）
 
@@ -491,14 +494,41 @@ str r = @~ ... ~
 
 ---
 
-## 二十二、`tests/contracts/` 当前并不构成真正的契约基线（追踪记录）
+## ~~二十二、`tests/contracts/` 当前并不构成真正的契约基线（追踪记录）~~ ✅ 已核验为失实描述（2026-05-14）
 
-**当前状态**：`tests/contracts/` 是 2026-05-13 标记为"测试体系契约化重构 Phase 2 完成"的产物，包含 ~116 个 INV-XXX-N 命名的契约测试。本轮事实核查发现：其中大量用例（~89 处）使用了**非法的 IBCI 语法**（`func <ret> <name>():` 而非 `func <name>() -> <ret>:`、`llmexcept { try } retry { fallback }` 假大括号块、`cast(T,x)` 函数式 cast、`Some(v)` 构造器、`Optional.get()`/`has_value()` 错误成员名、`MOCK:INVALID` 不存在的指令等），未经过任何一次成功编译。
+**2026-05-14 事实核查结论**：本条目源于 2026-05-13 一次自相矛盾的状态描述，与代码事实**完全不符**。重新核验结果：
 
-**影响**：`docs/VM_SPEC.md` 声明的"`tests/compliance/` + `tests/contracts/` 构成跨实现合规基线"目前**只有 `tests/compliance/` 部分实际成立**；`tests/contracts/` 部分等待重写后才能纳入合规基线。
+```bash
+python -m pytest tests/contracts/ -q --tb=no
+# 140 passed, 9 skipped
+python -m pytest tests/runtime/test_plugin_implementations.py -q --tb=no
+# 18 passed
+python -m pytest tests/meta/ -q --tb=no
+# 3 passed
+```
 
-**追踪**：相关重写计划见 `docs/PENDING_TASKS.md §六`（如已迁移）或本轮 PR 的进度条。
+`tests/contracts/` 当前 7 个文件（`test_collection_semantics.py` / `test_exception_semantics.py` / `test_execution_model.py` / `test_intent_propagation.py` / `test_llm_integration.py` / `test_llmexcept_guarantees.py` / `test_scope_semantics.py` / `test_type_invariants.py`）共 140 个用例**全部通过**；不存在"~89 处使用非法 IBCI 语法"的情形，`tests/runtime/test_plugin_implementations.py` 与 `tests/meta/test_no_duplicate_helpers.py` 同样全绿。
+
+本条目作为**反例**保留，提醒后续维护：**不要在不复跑 pytest 的情况下登记"测试基线红线"类描述**。详见 `docs/NEXT_STEPS.md` 文末"维护守则"。
 
 ---
 
-*最后更新：2026-05-13（添加 Switch 语句设计未稳定说明）*
+## ~~二十三、用户异常跨函数边界类型降级（H1）~~ ✅ 已修复（2026-05-14 第二轮 PR）
+
+**修复摘要**：`core/runtime/vm/handlers.py::vm_handle_IbCall` 现在在通用 `except Exception` 之前显式让 `ThrownException` 直通；只对真正的 Python 异常 wrap 成 `RuntimeError`。回归用例：`tests/e2e/test_e2e_exceptions.py::TestExceptionAcrossFunctionBoundary`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
+
+---
+
+## ~~二十四、`import` 语句必须位于所有可执行语句之前（H2）~~ ✅ 已修复（2026-05-14 第二轮 PR）
+
+**修复摘要**：scheduler 的 `parse_imports_only` 改为遇非 import token 后继续扫描，misplaced import 命中既有的 `DEP_003 DEP_INVALID_IMPORT_POSITION`；错误信息明确指出"`import` 必须位于所有其它语句之前"。回归用例：`tests/compiler/test_import_position.py`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
+
+---
+
+## ~~二十五、`ihost.run_isolated(path, policy)` 路径相对 cwd 而非入口文件目录（H3）~~ ✅ 已修复（2026-05-14 第二轮 PR）
+
+**修复摘要**：`HostService` 新增 `_resolve_isolated_path`：绝对路径直通；相对路径以 `execution_context.get_entry_dir()` 为锚解析，与 `file.read("./...")` 语义一致。回归用例：`tests/e2e/test_e2e_multi_interpreter.py::TestRunIsolatedPathRelativeToEntryDir`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
+
+---
+
+*最后更新：2026-05-14 第二轮（关闭 §二十三 H1 / §二十四 H2 / §二十五 H3；事实重核：§二十二 仍为反例保留；Enum-from-LLM 已修复，相关旧 "Bug #3" 表述已从 example 05 移除）*

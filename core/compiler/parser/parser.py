@@ -96,8 +96,11 @@ class Parser:
     def parse_imports_only(self) -> List[ImportInfo]:
         """
         Only parse import statements at the beginning of the file.
-        Stops when non-import/non-whitespace tokens are encountered.
-        Used by Scheduler for dependency scanning.
+        Continues scanning past the first non-import token so that
+        misplaced imports later in the file are reported with a clear
+        ``DEP_INVALID_IMPORT_POSITION`` (DEP_003) error rather than a
+        misleading ``SEM_001 Module 'X' not found`` from the semantic
+        pass (see H2 / docs/COMPLETED.md 2026-05-14 anchor).
         """
         imports = []
         imports_allowed = True
@@ -158,8 +161,12 @@ class Parser:
                         self._skip_to_next_statement()
                 
                 else:
-                    # Non-import token: stop scanning imports
-                    break
+                    # Non-import token: we are past the import block.
+                    # Continue scanning so that imports placed *after*
+                    # other statements still produce the proper
+                    # DEP_INVALID_IMPORT_POSITION error.
+                    imports_allowed = False
+                    self._skip_to_next_statement()
         finally:
             pass
             
@@ -167,9 +174,10 @@ class Parser:
 
     def _report_invalid_import_pos(self, token: Token):
         self.context.issue_tracker.error(
-            "Import statements must be at the top of the file", 
+            "Import statements must appear at the top of the file, "
+            "before any other statement.",
             token,
-            code="PAR_004"
+            code=DEP_INVALID_IMPORT_POSITION,
         )
 
     def _skip_to_next_statement(self):

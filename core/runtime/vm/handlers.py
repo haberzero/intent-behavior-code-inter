@@ -509,6 +509,11 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         if hasattr(func, "call"):
             return func.call(executor.registry.get_none(), args)
         return func.receive("__call__", args)
+    except ThrownException:
+        # 用户代码主动抛出的语言级异常必须穿透函数调用边界，由 IbTry / 顶层
+        # try-except 体系按 IBCI 类型匹配处理；不得包装成 Python RuntimeError，
+        # 否则会丢失 IBCI 异常类型（H1，详见 docs/COMPLETED.md 2026-05-14 锚点）。
+        raise
     except Exception as e:
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误
         raise RuntimeError(f"VM: Call failed: {e}") from e

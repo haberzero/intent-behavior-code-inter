@@ -3,8 +3,8 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-14（基于全量事实核查；新增 PT-4.4/4.5/4.6/4.7 + PT-5.1 测试基线诚实化追踪）
-> **最后更新**：2026-05-13（semantic_v2 Phase 1 & 2 完成，Phase 3 测试验证中）
+> **最后更新**：2026-05-14（事实重核：删除 PT-5.1 中失实部分；
+> PT-SEM-1 等待 NEXT_STEPS H5 修复后才能开启）
 
 ---
 
@@ -231,18 +231,14 @@
 
 ---
 
-## 七、测试基线契约化（追踪记录）
+## 七、~~测试基线契约化（追踪记录）~~ ✅ 2026-05-14 事实重核：误报
 
-### PT-5.1　`tests/contracts/` 全量重写（部分在 NS 中 P0-A 处理）
+### ~~PT-5.1　`tests/contracts/` 全量重写~~
 
-**现阶段真实代码状态**（2026-05-14）
-- 2026-05-13 PR 标记的 "Phase 2 完成 + 测试基线 Full pass" 与代码真实状态**严重不符**：
-  - 88 个契约用例使用了非法 IBCI 语法或不存在的 MOCK 指令，未通过编译。
-  - 错误模式覆盖：`func <ret> <name>(...)`、`llmexcept { } retry { }` 假大括号块、`cast(T, x)` 函数式 cast、`Some(v)` Optional 构造器、`Optional.get()` / `.has_value()`、`MOCK:INVALID`、`@-` 不存在的意图操作、`(x := y)` 不存在的 walrus 运算符。
-- 当前 PR 已开始重写 `tests/contracts/*`，但仅覆盖 P0-A 的紧要部分。其余在后续 PR 处理。
+**2026-05-14 重新核验结论**：`tests/contracts/` 当前 7 个测试文件、共 **140 用例全部通过**；`tests/runtime/test_plugin_implementations.py` 18 用例全部通过；`tests/meta/test_no_duplicate_helpers.py` 3 用例全部通过。前述"~89 处使用非法 IBCI 语法 / 5 plugin 调用不存在 API / 25 处违反 helpers 约定"的描述**与代码事实完全不符**，属于陈旧的状态描述，本次清理删除。
 
-**追踪**：见 `docs/NEXT_STEPS.md` P0 任务清单。
+唯一真实存在的 pytest 失败位于 `tests/compiler/test_symbol_collection_pass.py`（5 个 `SpecRegistry()` 构造缺参数失败）；该项已登记为 `docs/NEXT_STEPS.md` 的 P0 任务 H5，**不在本 PENDING_TASKS 范围内**。
 
-> 历史小节"测试体系 Phase 2 完成"的部分声明请视为**带保留意见的已完成**——基线诚实化之后再决定如何在 `COMPLETED.md` 中归档。
+> 历史经验：每登记一条"测试基线红线"条目时，必须附"当次 pytest 命令 + 输出 + 日期"作为佐证。详见 `docs/NEXT_STEPS.md` 文末「维护守则」第 1 条。
 
 ---

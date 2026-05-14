@@ -17,16 +17,22 @@ import idbg
 
 print("\n=== AI 配置 ===\n")
 
-dict config = json.parse(file.read("./api_config.json"))
-dict default_model = (dict)config["default_model"]
+# 零配置 fallback：若 ./api_config.json 不存在，则切换到 TESTONLY mock 模式。
+str model_name = ""
+if file.exists("./api_config.json"):
+    dict config = json.parse(file.read("./api_config.json"))
+    dict default_model = (dict)config["default_model"]
+    ai.set_config(
+        (str)default_model["base_url"],
+        (str)default_model["api_key"],
+        (str)default_model["model"]
+    )
+    model_name = (str)default_model["model"]
+else:
+    print("未检测到 ./api_config.json，切换至 TESTONLY mock 模式。")
+    ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+    model_name = "TESTONLY"
 
-ai.set_config(
-    (str)default_model["base_url"],
-    (str)default_model["api_key"],
-    (str)default_model["model"]
-)
-
-str model_name = (str)default_model["model"]
 print("使用模型: " + model_name)
 
 # ============================================================
