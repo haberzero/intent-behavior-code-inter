@@ -31,12 +31,15 @@ print("使用 TESTONLY 模式启用 Mock")
 
 print("\n=== Mock 指令格式 ===\n")
 
-print("MOCK:TRUE [key]    - 返回 '1'")
-print("MOCK:FALSE [key]   - 返回 '0'")
-print("MOCK:FAIL [key]    - 返回模糊值，触发 llmexcept")
-print("MOCK:REPAIR [key]  - 首次模糊，第二次成功")
-print("MOCK:[...]         - 直接返回列表")
-print("MOCK:{...}         - 直接返回字典")
+print("MOCK:TRUE [key]            - 返回 '1'（bool 真）")
+print("MOCK:FALSE [key]           - 返回 '0'（bool 假）")
+print("MOCK:FAIL [key]            - 始终返回模糊值，触发 llmexcept（重试也无法成功，最终抛 LLMRetryExhaustedError）")
+print("MOCK:REPAIR [key]          - 首次模糊触发 llmexcept，第二次成功，默认返回 '1'")
+print("MOCK:INT:<v> / MOCK:STR:<v> / MOCK:FLOAT:<v> / MOCK:BOOL:TRUE/FALSE - 直接返回指定原始类型")
+print("MOCK:LIST:[...]            - 返回列表")
+print("MOCK:DICT:{...}            - 返回字典")
+print("MOCK:SEQ:[v1,v2,...] key   - 按序返回值；FAIL/TRUE/FALSE 可作哨兵成员")
+print("MOCK:REPAIR:<FALLBACK>     - 扩展 REPAIR：第二次按 FALLBACK 指令返回（如 MOCK:REPAIR:STR:repaired）")
 
 # ============================================================
 # 1. MOCK:TRUE / MOCK:FALSE
@@ -56,15 +59,22 @@ print("MOCK:FALSE 结果: " + result2)
 
 print("\n=== 2. MOCK:FAIL 触发 llmexcept ===\n")
 
-print("MOCK:FAIL 会返回模糊值，触发 llmexcept...")
+print("MOCK:FAIL 会返回模糊值，触发 llmexcept；")
+print("由于 MOCK:FAIL 在每次重试都失败，最终会以 LLMRetryExhaustedError 抛出，")
+print("需要用 try/except 兜底；这一段同时演示 llmexcept retry 与外层异常处理的协同。")
 
-int result3 = @~ MOCK:FAIL 请提取数字 ~
-llmexcept:
-    print("进入 llmexcept 处理块")
-    print("模拟失败后重试...")
-    retry "请只返回一个整数，如: 42"
+try:
+    int result3 = @~ MOCK:FAIL 请提取数字 ~
+    llmexcept:
+        print("进入 llmexcept 处理块")
+        print("模拟失败后重试...")
+        retry "请只返回一个整数，如: 42"
 
-print("提取结果: " + (str)result3)
+    # 当 MOCK 是 FAIL 时下面这行不可达；MOCK 被改成 REPAIR 或可成功的指令时才会执行。
+    print("提取结果: " + (str)result3)
+except LLMRetryExhaustedError as e:
+    print("llmexcept 重试耗尽，进入 try/except 兜底分支")
+    print("错误信息: " + e.message)
 
 # ============================================================
 # 3. MOCK:REPAIR 模拟恢复
@@ -115,15 +125,19 @@ print("使用 idbg.last_result() 获取详细的 LLM 响应信息...")
 str query = "hello"
 print("查询: " + query)
 
-str result7 = @~ MOCK:FAIL 请翻译 "$query" ~
-llmexcept:
-    any last_info = idbg.last_result()
-    print("进入 llmexcept 处理块")
-    print("idbg.last_result() raw_response: " + (str)last_info["raw_response"])
-    print("idbg.last_result() success:      " + (str)last_info["success"])
-    retry "请直接翻译为中文，不要其他文字"
+try:
+    str result7 = @~ MOCK:FAIL 请翻译 "$query" ~
+    llmexcept:
+        any last_info = idbg.last_result()
+        print("进入 llmexcept 处理块")
+        print("idbg.last_result() raw_response: " + (str)last_info["raw_response"])
+        print("idbg.last_result() success:      " + (str)last_info["success"])
+        retry "请直接翻译为中文，不要其他文字"
 
-print("翻译结果: " + (str)result7)
+    print("翻译结果: " + (str)result7)
+except LLMRetryExhaustedError as e:
+    print("llmexcept 重试耗尽（MOCK:FAIL 始终失败），由外层 try/except 兜底")
+    print("错误信息: " + e.message)
 
 # ============================================================
 # 6. llmretry 语法糖
@@ -131,15 +145,17 @@ print("翻译结果: " + (str)result7)
 
 print("\n=== 6. llmretry 语法糖 ===\n")
 
-# llmretry 是 llmexcept + retry 的单行语法糖
-# MOCK:FAIL 永远失败，所以 result8 最终为 None（重试耗尽）
-str result8 = @~ MOCK:FAIL 请回答问题 ~
-llmretry "请只回复一个中文词语"
+# llmretry 是 llmexcept + 单条 retry 的语法糖；与 §2 同理，MOCK:FAIL 必定耗尽，
+# 需要 try/except LLMRetryExhaustedError 兜底（早期版本会把 result 置为 None，
+# 现统一改为抛异常——详见 docs/IBCI_SYNTAX_REFERENCE.md §10.3 "历史说明"）。
+try:
+    str result8 = @~ MOCK:FAIL 请回答问题 ~
+    llmretry "请只回复一个中文词语"
+    print("结果: " + (str)result8)
+except LLMRetryExhaustedError as e:
+    print("llmretry 重试耗尽，被外层 try/except 捕获: " + e.message)
 
-# 注意：result8 可能为 None（MOCK:FAIL 下重试耗尽），使用 (str) 安全转换
-print("结果: " + (str)result8)
-
-# 对比：使用 MOCK:REPAIR 演示 llmretry 成功的情况
+# 对比：使用 MOCK:REPAIR 演示 llmretry 成功的情况（首次失败、重试成功）
 str result9 = @~ MOCK:REPAIR 修复演示 ~
 llmretry "重试提示"
 print("REPAIR 后结果（应为 1）: " + (str)result9)

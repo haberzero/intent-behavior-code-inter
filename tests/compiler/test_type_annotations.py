@@ -33,45 +33,27 @@ from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
 # 共享 helper（合并 5 个历史文件的本地副本）
 # ---------------------------------------------------------------------------
 
+from tests.conftest import run_ibci, compile_or_errors
+
+
 ROOT_DIR = "."
 
 
-def make_engine():
-    return IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-
-
-def compile_code(code: str):
-    """Compile *code*, return (artifact_or_None, error_codes)."""
-    engine = make_engine()
-    try:
-        artifact = engine.compile_string(code, silent=True)
-        return artifact, set()
-    except CompilerError as e:
-        return None, {d.code for d in e.diagnostics}
-
-
 def assert_compiles(code: str):
-    artifact, errors = compile_code(code)
+    artifact, errors = compile_or_errors(code)
     assert artifact is not None
     assert not errors, f"Expected no compiler errors, got: {errors}"
 
 
 def assert_has_sem003(code: str):
-    _, errors = compile_code(code)
+    _, errors = compile_or_errors(code)
     assert "SEM_003" in errors, f"Expected SEM_003, got: {errors}"
 
 
 def assert_error_codes(code: str, *expected_codes: str):
-    _, errors = compile_code(code)
+    _, errors = compile_or_errors(code)
     for code_val in expected_codes:
         assert code_val in errors, f"Expected error {code_val!r} but got: {errors}"
-
-
-def run_and_capture(code: str):
-    lines = []
-    engine = make_engine()
-    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
-    return lines
 
 
 # ---------- tuple positional helpers ----------
@@ -306,7 +288,7 @@ class TestD3E2E:
 
     def test_apply_double(self):
         """HOF apply(fn[(int) -> int], int) runs correctly."""
-        lines = run_and_capture("""func double(int n) -> int:
+        lines = run_ibci("""func double(int n) -> int:
     return n * 2
 
 func apply(fn[(int) -> int] f, int x) -> int:
@@ -319,7 +301,7 @@ print((str)result)
 
     def test_apply_with_lambda(self):
         """HOF apply(fn[(int) -> int], int) works with a lambda."""
-        lines = run_and_capture("""func apply(fn[(int) -> int] f, int x) -> int:
+        lines = run_ibci("""func apply(fn[(int) -> int] f, int x) -> int:
     return f(x)
 
 fn triple = lambda(int n) -> int: n * 3
@@ -330,7 +312,7 @@ print((str)result)
 
     def test_multi_param_predicate(self):
         """HOF check(fn[(int, int) -> bool], int, int) works."""
-        lines = run_and_capture("""func gt(int a, int b) -> bool:
+        lines = run_ibci("""func gt(int a, int b) -> bool:
     return a > b
 
 func check(fn[(int, int) -> bool] pred, int x, int y) -> bool:
@@ -345,7 +327,7 @@ print((str)r2)
 
     def test_no_params_fn_sig(self):
         """HOF with fn[() -> int] parameter works."""
-        lines = run_and_capture("""func get_ten() -> int:
+        lines = run_ibci("""func get_ten() -> int:
     return 10
 
 func call_it(fn[() -> int] f) -> int:
@@ -358,7 +340,7 @@ print((str)r)
 
     def test_fn_sig_variable_callable(self):
         """fn[(int) -> int] variable pointing to a function, then called."""
-        lines = run_and_capture("""func square(int n) -> int:
+        lines = run_ibci("""func square(int n) -> int:
     return n * n
 
 fn[(int) -> int] f = square

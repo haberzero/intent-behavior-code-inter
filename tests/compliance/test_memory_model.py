@@ -22,16 +22,10 @@ import os
 import pytest
 
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-def run_code(code: str):
-    lines: list = []
-    eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
-    eng.run_string(code, output_callback=lambda s: lines.append(str(s)), silent=True)
-    return lines
 
 
 # ===========================================================================
@@ -49,7 +43,7 @@ fn get_x = lambda: x
 x = 20
 print((str)(int)get_x())
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("20" in line for line in out), f"Expected '20', got {out}"
 
     def test_two_lambdas_share_same_cell_value(self):
@@ -64,7 +58,7 @@ int vb = (int)get_b()
 print((str)va)
 print((str)vb)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("42" in line for line in out), f"Expected '42' in {out}"
         count_42 = sum(1 for l in out if "42" in l)
         assert count_42 == 2, f"Expected both lambdas to return 42, got {out}"
@@ -79,7 +73,7 @@ a = 10
 int result = (int)sum_ab()
 print((str)result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("12" in line for line in out), f"Expected '12', got {out}"
 
 
@@ -99,7 +93,7 @@ x = 99
 int result = (int)frozen()
 print((str)result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("10" in line for line in out), f"Expected '10' (frozen), got {out}"
 
     def test_snapshot_and_lambda_differ_after_mutation(self):
@@ -114,7 +108,7 @@ int lam_result = (int)lam()
 print((str)snap_result)
 print((str)lam_result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("5" in line for line in out), f"Expected snapshot result 5, got {out}"
         assert any("100" in line for line in out), f"Expected lambda result 100, got {out}"
 
@@ -138,7 +132,7 @@ fn counter = make_counter(10)
 int result = (int)counter()
 print((str)result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("11" in line for line in out), f"Expected '11', got {out}"
 
     def test_closure_captures_correct_value_at_creation_time_for_snapshot(self):
@@ -152,7 +146,7 @@ fn s = make_snapshot(7)
 int result = (int)s()
 print((str)result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("7" in line for line in out), f"Expected '7', got {out}"
 
 
@@ -171,7 +165,7 @@ int y = x
 x = 100
 print((str)y)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("42" in line for line in out), f"Expected '42', got {out}"
 
     def test_str_assignment_is_independent(self):
@@ -182,7 +176,7 @@ str t = s
 s = "world"
 print(t)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("hello" in line for line in out), f"Expected 'hello', got {out}"
 
     def test_bool_assignment_is_independent(self):
@@ -196,7 +190,7 @@ if b:
 else:
     print("b_is_false")
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("b_is_true" in line for line in out), f"Expected 'b_is_true', got {out}"
 
 
@@ -217,7 +211,7 @@ fn double = lambda(int x): x * 2
 int result = (int)apply(double, 6)
 print((str)result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("12" in line for line in out), f"Expected '12', got {out}"
 
     def test_lambda_returned_from_function_callable(self):
@@ -231,5 +225,5 @@ fn add5 = make_adder(5)
 int result = (int)add5(3)
 print((str)result)
 """
-        out = run_code(code)
+        out = run_ibci(code)
         assert any("8" in line for line in out), f"Expected '8', got {out}"

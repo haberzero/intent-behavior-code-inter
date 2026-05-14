@@ -14,15 +14,9 @@ Coverage:
 import os
 import pytest
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci
 
 
-def run_and_capture(code: str):
-    lines = []
-    def callback(text):
-        lines.append(str(text))
-    engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-    engine.run_string(code, output_callback=callback, silent=True)
-    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +35,7 @@ class TestE2EClasses:
 Dog d = Dog("Rex", 5)
 print(d.bark())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Woof!" in lines
 
     def test_class_field_access(self):
@@ -53,7 +47,7 @@ Point p = Point(10, 20)
 print((str)p.x)
 print((str)p.y)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "10" in lines
         assert "20" in lines
 
@@ -68,7 +62,7 @@ Calculator c = Calculator(10)
 int result = c.add(5)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "15" in lines
 
 
@@ -85,7 +79,7 @@ class TestE2EEnums:
 
 print((str)Color.RED)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "RED" in lines
 
     def test_enum_comparison(self):
@@ -99,7 +93,7 @@ if s == Status.ACTIVE:
 else:
     print("not active")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "is active" in lines
 
     def test_switch_case(self):
@@ -117,7 +111,7 @@ switch c:
     default:
         print("other")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "blue" in lines
 
 
@@ -135,7 +129,7 @@ Counter b = Counter(10)
 print((str)a.count)
 print((str)b.count)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "0" in lines
         assert "10" in lines
 
@@ -156,7 +150,7 @@ class TestE2EExplicitInit:
 Greeter g = Greeter("World")
 print(g.name)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Hello, World" in lines
 
     def test_auto_init_positional(self):
@@ -169,7 +163,7 @@ Point p = Point(3, 7)
 print((str)p.x)
 print((str)p.y)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "3" in lines
         assert "7" in lines
 
@@ -187,7 +181,7 @@ Pair p = Pair(3, 4)
 print((str)p.a)
 print((str)p.b)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "6" in lines
         assert "8" in lines
 
@@ -204,7 +198,7 @@ print((str)b.value)
 b.init(1)
 print((str)b.value)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # constructor used auto-init (42), not func init
         assert "42" in lines
         # explicit call to init() method worked
@@ -235,7 +229,7 @@ Dog d = Dog("Rex", "Lab")
 print(d.name)
 print(d.breed)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Rex" in lines
         assert "Lab" in lines
 
@@ -257,7 +251,7 @@ class Dog(Animal):
 Dog d = Dog("Rex", "Lab")
 print(d.describe())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "I am Rex" in lines
 
     def test_child_overrides_parent_method(self):
@@ -279,7 +273,7 @@ Cat c = Cat("Kitty")
 print(c.speak())
 print(c.name)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Meow" in lines
         assert "Kitty" in lines
 
@@ -308,7 +302,7 @@ print((str)obj.x)
 print((str)obj.y)
 print((str)obj.z)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "1" in lines
         assert "2" in lines
         assert "3" in lines
@@ -332,7 +326,7 @@ Obj o1 = Obj(5)
 bool same = o1 == o1
 print((str)same)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "True" in lines
 
     def test_identity_equality_different_instances(self):
@@ -347,7 +341,7 @@ Obj o2 = Obj(5)
 bool different = o1 == o2
 print((str)different)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "False" in lines
 
     def test_equality_assigned_reference(self):
@@ -362,7 +356,7 @@ Obj o3 = o1
 bool same_ref = o3 == o1
 print((str)same_ref)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "True" in lines
 
     def test_not_equal_different_instances(self):
@@ -377,7 +371,7 @@ Obj o2 = Obj(5)
 bool ne = o1 != o2
 print((str)ne)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "True" in lines
 
     def test_equality_in_if_condition(self):
@@ -394,7 +388,7 @@ if a == b:
 else:
     print("different")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "same" in lines
 
     def test_equality_result_is_bool_not_int(self):
@@ -411,7 +405,7 @@ bool same_result = n1 == n1
 print((str)eq_result)
 print((str)same_result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "False" in lines
         assert "True" in lines
 
@@ -440,7 +434,7 @@ d.name = "Rex"
 Animal a = (Animal)d
 print(a.name)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Rex" in lines
 
     def test_upcast_method_dispatch_uses_child(self):
@@ -457,7 +451,7 @@ Dog d = Dog()
 Animal a = (Animal)d
 print(a.speak())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Woof!" in lines
 
     def test_upcast_same_type_noop(self):
@@ -470,7 +464,7 @@ a1.name = "Cat"
 Animal a2 = (Animal)a1
 print(a2.name)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "Cat" in lines
 
 
@@ -501,7 +495,7 @@ r.end = 4
 for any item in r:
     print((str)item)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "1" in lines
         assert "2" in lines
         assert "3" in lines

@@ -13,15 +13,9 @@ Coverage:
 import os
 import pytest
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci
 
 
-def run_and_capture(code: str):
-    lines = []
-    def callback(text):
-        lines.append(str(text))
-    engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
-    engine.run_string(code, output_callback=callback, silent=True)
-    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +28,7 @@ class TestE2EMathModule:
 float result = math.sqrt(16.0)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("4" in l for l in lines)
 
     def test_math_pow(self):
@@ -42,7 +36,7 @@ print((str)result)
 float result = math.pow(2.0, 10.0)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("1024" in l for l in lines)
 
     def test_math_abs(self):
@@ -50,7 +44,7 @@ print((str)result)
 float result = math.abs(-42.0)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("42" in l for l in lines)
 
     def test_math_floor_ceil(self):
@@ -60,7 +54,7 @@ int c = math.ceil(3.2)
 print((str)f)
 print((str)c)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "3" in lines
         assert "4" in lines
 
@@ -69,7 +63,7 @@ print((str)c)
 float p = math.pi
 print((str)p)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("3.14" in l for l in lines)
 
     def test_math_round(self):
@@ -77,7 +71,7 @@ print((str)p)
 float result = math.round(3.14159, 2)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("3.14" in l for l in lines)
 
 
@@ -91,7 +85,7 @@ class TestE2EJsonModule:
 dict d = json.parse("{\\\"name\\\": \\\"Alice\\\"}")
 print((str)d)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("Alice" in l for l in lines)
 
     def test_json_stringify(self):
@@ -100,7 +94,7 @@ dict d = {"key": "value"}
 str s = json.stringify(d)
 print(s)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("key" in l for l in lines)
 
     def test_json_keys(self):
@@ -109,7 +103,7 @@ dict d = {"a": 1, "b": 2}
 list k = json.keys(d)
 print((str)k)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("a" in l and "b" in l for l in lines)
 
     def test_json_merge(self):
@@ -119,7 +113,7 @@ dict b = {"y": 2}
 dict merged = json.merge(a, b)
 print((str)merged)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("x" in l and "y" in l for l in lines)
 
 
@@ -133,7 +127,7 @@ class TestE2ETimeModule:
 float t = time.now()
 print((str)t)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # Should be a positive number
         assert len(lines) > 0
         assert float(lines[0]) > 0
@@ -143,7 +137,7 @@ print((str)t)
 int t = time.now_ms()
 print((str)t)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) > 0
         assert int(lines[0]) > 0
 
@@ -160,7 +154,7 @@ dict rules = {"required": ["name"], "properties": {"name": {"type": "string"}, "
 bool valid = schema.validate(data, rules)
 print((str)valid)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("true" in l.lower() or "True" in l for l in lines)
 
     def test_schema_infer(self):
@@ -169,5 +163,5 @@ dict data = {"name": "Alice", "age": 30}
 dict inferred = schema.infer(data)
 print((str)inferred)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert any("string" in l or "integer" in l for l in lines)

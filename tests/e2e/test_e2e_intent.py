@@ -18,20 +18,10 @@ import os
 import pytest
 
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
-def run_and_capture(code: str):
-    lines = []
-    engine = IBCIEngine(
-        root_dir=os.path.dirname(os.path.abspath(__file__)),
-        auto_sniff=False,
-    )
-    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
-    return lines
 
-
-def ai_setup_code():
-    return 'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
 
 
 
@@ -39,31 +29,31 @@ def ai_setup_code():
 
 class TestE2EIntents:
     def test_single_intent(self):
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @ be concise
 str result = @~ MOCK:TRUE respond ~
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "1" in lines
 
     def test_single_intent_does_not_pollute_persistent_stack(self):
         """@ 是一次性意图，LLM 调用后不应残留在持久意图栈中。
         回归测试：验证第二次 LLM 调用能正常执行（若 @ 意图错误地永久入栈，
         第二次调用仍会携带该意图，虽然 MOCK 模式下不影响结果，但不应报错）。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @ be concise
 str result1 = @~ MOCK:TRUE first ~
 str result2 = @~ MOCK:TRUE second ~
 print(result1)
 print(result2)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines.count("1") >= 2, "Both calls should succeed after one-shot @ intent"
 
     def test_single_intent_does_not_affect_subsequent_call(self):
         """@ 消费后，后续 LLM 调用不应继承该意图（通过混合 @+ 和 @ 验证）。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ formal language
 @ first hint
 str result1 = @~ MOCK:TRUE first ~
@@ -71,60 +61,60 @@ str result2 = @~ MOCK:TRUE second ~
 print(result1)
 print(result2)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "1" in lines
 
     def test_incremental_intent(self):
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ use formal language
 @+ be brief
 str result = @~ MOCK:TRUE respond ~
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "1" in lines
 
     def test_remove_intent(self):
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ temporary intent
 @-
 str result = @~ MOCK:TRUE respond ~
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "1" in lines
 
     def test_at_plus_persists_after_llm_call(self):
         """@+ 是持久压栈，LLM 调用后意图仍有效，后续调用正常。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ use formal language
 str result1 = @~ MOCK:TRUE first ~
 str result2 = @~ MOCK:TRUE second ~
 print(result1)
 print(result2)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines.count("1") >= 2
 
     def test_lambda_behavior_uses_call_time_intents(self):
         """lambda 延迟行为应在调用时使用当前意图栈，而非定义时的空栈（回归验证）。
         注：直接赋值到具体类型（int/str）需 P2 编译器类型推断改进，当前通过 print() 调用验证。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ use formal language
 fn compute = lambda -> str: @~ MOCK:STR:hello ~
 @-
 print(compute())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "hello" in lines
 
     def test_lambda_behavior_basic(self):
         """lambda 延迟行为基本执行冒烟测试。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 fn compute = lambda -> str: @~ MOCK:STR:world ~
 print(compute())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "world" in lines
 
 
@@ -144,7 +134,7 @@ class TestE2EIntentScopeIsolation:
         @+ inside a function should not affect the caller's intent stack.
         After the function returns, the caller's intent stack is unchanged.
         """
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ "caller intent"
 
 func modify_intents():
@@ -156,7 +146,7 @@ modify_intents()
 str result = @~ MOCK:intent_isolation_test ~
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) >= 1  # runs without error
 
     def test_clear_inherited_removes_caller_intents(self):
@@ -165,7 +155,7 @@ print(result)
         intent stack inherited from the caller. After calling it, @+ inside the
         function starts from an empty stack.
         """
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ "caller persistent intent"
 
 func isolated_func() -> str:
@@ -176,7 +166,7 @@ func isolated_func() -> str:
 str result = isolated_func()
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "99" in lines  # function ran successfully with cleared intents
 
     def test_use_replaces_scope_intent_context(self):
@@ -184,7 +174,7 @@ print(result)
         intent_context.use(ctx) replaces the current scope's intent context
         with the given instance. The caller's persistent intents are replaced.
         """
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ "caller persistent intent"
 
 func process_with_custom_ctx() -> str:
@@ -197,7 +187,7 @@ func process_with_custom_ctx() -> str:
 str result = process_with_custom_ctx()
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "77" in lines
 
     def test_get_current_captures_scope_snapshot(self):
@@ -205,7 +195,7 @@ print(result)
         intent_context.get_current() returns a snapshot of the current scope's
         intent context. The snapshot is independent of subsequent modifications.
         """
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ "initial intent"
 
 func capture_and_modify() -> str:
@@ -217,7 +207,7 @@ func capture_and_modify() -> str:
 str result = capture_and_modify()
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "55" in lines
 
     def test_intent_context_param_auto_binds_active_context(self):
@@ -238,7 +228,7 @@ func inspect(intent_context p) -> any:
 any resolved = inspect(ctx)
 print((str)resolved)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) == 1
         assert "ctx base" in lines[0]
         assert "inner from func" in lines[0]
@@ -260,7 +250,7 @@ func mutate(intent_context p):
 mutate(ctx)
 print((str)ctx.resolve())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) == 1
         assert "ctx base" in lines[0]
         assert "inner from func" not in lines[0]
@@ -276,7 +266,7 @@ class TestE2ELambdaRestriction:
 
     def test_lambda_can_be_passed_as_arg(self):
         """lambda 值可以作为函数参数传递，高阶函数能调用它。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 func apply(fn f, int val) -> auto:
     return f(val)
 
@@ -284,12 +274,12 @@ fn double = lambda(int x): x * 2
 int result = (int)apply(double, 5)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["10"]
 
     def test_lambda_passed_as_any_and_called(self):
         """lambda 传入 any 参数，函数内可以正常调用。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 func call_it(fn f) -> str:
     return (str)f()
 
@@ -297,14 +287,14 @@ fn greet = lambda: "hello"
 str r = call_it(greet)
 print(r)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["hello"]
 
     def test_snapshot_can_be_passed_as_any(self):
         """
         snapshot 值可以作为参数传递。
         """
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 func accept_any(any x):
     print("called")
 
@@ -312,7 +302,7 @@ fn fn_callable_val = snapshot: 42
 accept_any(fn_callable_val)
 print("ok")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "ok" in lines
 
 
@@ -329,7 +319,7 @@ class TestE2EIntentContextOOP:
 intent_context ctx = intent_context()
 print("created")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "created" in lines
 
     def test_intent_context_push_and_clear(self):
@@ -340,7 +330,7 @@ ctx.push("hello")
 ctx.clear()
 print("ok")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "ok" in lines
 
     def test_intent_context_fork_returns_new_instance(self):
@@ -353,7 +343,7 @@ ctx2.push("fork intent")
 ctx.clear()
 print("ok")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "ok" in lines
 
     def test_intent_context_resolve(self):
@@ -364,7 +354,7 @@ ctx.push("my intent")
 any resolved = ctx.resolve()
 print("ok")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "ok" in lines
 
 
@@ -389,7 +379,7 @@ func unified_path() -> any:
 any resolved = unified_path()
 print((str)resolved)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) == 1
         # 两条意图都应可见
         assert "from oop" in lines[0]
@@ -409,7 +399,7 @@ func reset_then_observe() -> any:
 any r = reset_then_observe()
 print((str)r)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) == 1
         # 调用方的持久意图被清除，函数内 @+ 仍然可见
         assert "post clear" in lines[0]
@@ -429,7 +419,7 @@ func no_leak() -> any:
 any r = no_leak()
 print((str)r)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert len(lines) == 1
         # use 时刻 fork：'src first' 已迁移
         assert "src first" in lines[0]
@@ -446,7 +436,7 @@ class TestE2EIntentRetryRestore:
 
     def test_retry_resets_persistent_intent_pushes_in_body(self):
         """body 内 @+ 推入的意图在 retry 后必须消失。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ "baseline"
 
 try:
@@ -458,13 +448,13 @@ try:
 except Exception as e:
     print("retry_exhausted_ok")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # 关键：执行未崩在意图栈状态上（干净还原使得多次 retry 不会持续叠加意图）
         assert "retry_exhausted_ok" in lines
 
     def test_retry_resets_intent_context_use_in_body(self):
         """body 内 intent_context.use(other) 切换策略，retry 后应还原到 llmexcept 进入时刻。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 @+ "outer"
 
 func protected() -> str:
@@ -483,6 +473,6 @@ func protected() -> str:
 str result = protected()
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # 执行成功（异常被捕获）：意图状态在 retry 期间被干净还原，未泄漏 body 内策略切换。
         assert "done" in lines
