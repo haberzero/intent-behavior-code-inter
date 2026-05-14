@@ -3,6 +3,7 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
+> **最后更新**：2026-05-14（基于全量事实核查；新增 PT-4.4/4.5/4.6/4.7 + PT-5.1 测试基线诚实化追踪）
 > **最后更新**：2026-05-13（semantic_v2 Phase 1 & 2 完成，Phase 3 测试验证中）
 
 ---
@@ -156,3 +157,92 @@
 - 不引入静态类型检查器作为解释器前置强依赖。
 - 不以牺牲运行时可观测性换取短期性能优化。
 - 不为优化同一程序内独立 LLM 调用而创建多 Interpreter（这是 L1 流水线的职责）。
+
+---
+
+## 六、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
+
+以下条目来自本轮全量巡检；它们都不属于"已知 bug"，而是设计未覆盖的扩展面。除 PT-4.6 外，均**不阻塞**任何主线脚本能力，因此只登记到本文件不进入 NS。
+
+### PT-4.4　用户类的泛型类型参数 [VISION]
+
+**现阶段真实代码状态**
+- 词法：`core/compiler/lexer/core_scanner.py` KEYWORDS 中没有泛型相关 token。
+- AST：`core/kernel/ast.py:IbClassDef` 无 `type_params` 字段。
+- 语义：`semantic_analyzer.visit_IbClassDef` 解析时不接受 `class Box[T]:` 形态。
+- Spec/Registry：`core/kernel/spec/registry.py` 的 `resolve_specialization_by_names` 仅响应 axiom（list/dict/Optional/tuple）；用户 spec 不被询问。
+
+**未来演进思路（不构成承诺）**
+- 在 `IbClassDef` 上扩展 `type_params: List[str]`，词法/语法层为 `[` 后跟类型变量序列开新分支。
+- 语义层对类成员中出现的 `T` 进行延迟绑定；运行时仍以"erasure"为主（IBCI 不打算建立完整 HM 推断）。
+
+**为什么搁置**
+- 与现有 `any` 兜底 + axiom 内置泛型组合已可覆盖绝大多数业务用例；引入用户级泛型会撑大类型系统兼容性轴。
+
+---
+
+### PT-4.5　用户类的运算符重载（`__add__` / `__eq__` / `__lt__` ...）[VISION]
+
+**现阶段真实代码状态**
+- 内置 axiom（Integer / Float / Str / Bool / List / Dict 等）通过 `resolve_operation_type_name(op, other_name)` 给出 `+ - * / < <= > >= == !=` 的返回类型；`IbObject.receive(op, [other])` 由 axiom 派遣。
+- 用户类 `IbClass` 在 `core/runtime/objects/kernel.py` 中**没有** dunder 协议注册位；`==` 在用户类实例上退化到 `id()` 比较；`+` 在 `int + MyClass` 表达式上直接在编译期 SEM_003。
+- 现有 dunder 协议仅覆盖：`__init__` / `__call__` / `__to_prompt__` / `__from_prompt__` / `__outputhint_prompt__` / `__snapshot__` / `__restore__`（见 `IBCI_SYNTAX_REFERENCE.md §6`）。
+
+**未来演进思路（不构成承诺）**
+- 在 `IbClass.receive_axiom_op(op, other)` 中按"先看自身 dunder，再 fallback 到 axiom"分发。
+- 编译期 `semantic_analyzer.visit_IbBinOp` 增加对用户类操作数的分支：查找 `__add__` 等成员 → 推断返回类型。
+
+**为什么搁置**
+- 涉及类型系统兼容性轴 + 编译期方法分派两个独立维度。
+- 业务脚本主要使用 LLM + 容器，不强依赖运算符重载。
+
+---
+
+### PT-4.6　llmexcept 快照协议对接用户 `__snapshot__` / `__restore__` [DESIGN-DEBT]
+
+**现阶段真实代码状态**
+- `docs/IBCI_SYNTAX_REFERENCE.md §10.4` 描述："对于复杂对象，可以通过 `__snapshot__` / `__restore__` 协议控制快照粒度。"
+- 实际 `core/runtime/vm/handlers.py:vm_handle_IbLLMExceptionalStmt` 的快照逻辑仅对值类型与容器做深拷贝（`deep_clone`），**不会**调用用户类的 `__snapshot__` / `__restore__`。
+- 内置 axiom 的 `__snapshot__` / `__restore__` 也未注册成 `MethodMemberSpec`，编译期未参与类型系统。
+
+**未来演进思路（不构成承诺）**
+- 在 `IbObject` 上以"先 dunder、后 default"派发 `_snapshot()` / `_restore(state)`；handlers 中替换深拷贝路径。
+- 引入 `__snapshot__` / `__restore__` 的标准 `MethodMemberSpec`，在类型系统注册。
+
+**为什么搁置**
+- 触及 llmexcept 快照协议核心，是少数"会改变内核行为"的演进；必须先把 P0 测试基线诚实化，再评估。
+
+---
+
+### PT-4.7　DDG 并行调度真正接入 VM [DESIGN-DEBT]
+
+**现阶段真实代码状态**
+- 编译期：`BehaviorDependencyAnalyzer` Pass 5 已经为每个 `IbBehaviorExpr` 计算 `llm_deps` / `dispatch_eligible`。
+- 运行时：`core/runtime/interpreter/llm_executor.py` 与 `vm/handlers.py:vm_handle_IbBehaviorExpr` 当前**全部同步**执行；`LLMScheduler.dispatch_eager()` 路径未默认开启。
+- `docs/VM_SPEC.md §3.1-3.2` 的"公理 LLM-1/LLM-2/LLM-3"目前**只是规范声明**，没有合规测试覆盖（`tests/compliance/test_concurrent_llm.py` 仍用同步路径占位）。
+
+**未来演进思路（不构成承诺）**
+- 在 `vm_handle_IbBehaviorExpr` 中根据 `side_table.is_dispatch_eligible(node)` 走 `dispatch_eager` 分支，写 `LLMFuture` 占位符。
+- `vm_handle_IbName` 在读取 `LLMFuture` 时调 `.resolve()` 阻塞。
+- 重点验证：与 llmexcept 快照、Cell 变量、`@~...~` 意图栈消费的交互。
+
+**为什么搁置**
+- 收益高但风险高：错配快照 / future 解引用顺序会破坏 retry 隔离语义。建议在 PT-4.6 落定后再做。
+
+---
+
+## 七、测试基线契约化（追踪记录）
+
+### PT-5.1　`tests/contracts/` 全量重写（部分在 NS 中 P0-A 处理）
+
+**现阶段真实代码状态**（2026-05-14）
+- 2026-05-13 PR 标记的 "Phase 2 完成 + 测试基线 Full pass" 与代码真实状态**严重不符**：
+  - 88 个契约用例使用了非法 IBCI 语法或不存在的 MOCK 指令，未通过编译。
+  - 错误模式覆盖：`func <ret> <name>(...)`、`llmexcept { } retry { }` 假大括号块、`cast(T, x)` 函数式 cast、`Some(v)` Optional 构造器、`Optional.get()` / `.has_value()`、`MOCK:INVALID`、`@-` 不存在的意图操作、`(x := y)` 不存在的 walrus 运算符。
+- 当前 PR 已开始重写 `tests/contracts/*`，但仅覆盖 P0-A 的紧要部分。其余在后续 PR 处理。
+
+**追踪**：见 `docs/NEXT_STEPS.md` P0 任务清单。
+
+> 历史小节"测试体系 Phase 2 完成"的部分声明请视为**带保留意见的已完成**——基线诚实化之后再决定如何在 `COMPLETED.md` 中归档。
+
+---

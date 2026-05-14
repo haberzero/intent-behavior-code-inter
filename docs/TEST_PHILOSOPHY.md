@@ -353,7 +353,7 @@ def test_something():
 
 IBCI 的测试体系应该是 **语言规范的可执行定义**：
 
-- 设计文档（`IBCI_SPEC.md` / `VM_AND_INTERPRETER_DESIGN.md`）定义 **公理**
+- 设计文档（`IBCI_SYNTAX_REFERENCE.md` / `VM_AND_INTERPRETER_DESIGN.md`）定义 **公理**
 - Contract 测试验证 **公理的实现**
 - 两者必须保持同步
 
@@ -466,7 +466,7 @@ def test_optional_none_access_raises(self):
 
 ### 7.1 Optional 空安全测试（示范）
 
-**设计文档公理**（`IBCI_SPEC.md`）：
+**设计文档公理**（`IBCI_SYNTAX_REFERENCE.md`）：
 ```
 INV-OPT-1: 访问 None 的 Optional[T] 必须抛出运行时错误
 INV-OPT-2: Optional[T].get() 返回值类型为 T
@@ -571,7 +571,7 @@ class TestCPSInvariants:
 ### Q4: 新特性如何添加测试？
 
 **A**: 流程：
-1. 设计阶段：在 `IBCI_SPEC.md` 定义公理并分配编号（如 INV-XXX-N）
+1. 设计阶段：在 `IBCI_SYNTAX_REFERENCE.md` 定义公理并分配编号（如 INV-XXX-N）
 2. 实现前：编写 contract 测试（TDD 风格）
 3. 实现特性直到测试通过
 4. 更新 `docs/COMPLETED.md` 与 `tests/COVERAGE_MAP.md`
@@ -593,7 +593,7 @@ class TestCPSInvariants:
 - [`tests/README.md`](../tests/README.md)：测试目录维护守则
 - [`tests/COVERAGE_MAP.md`](../tests/COVERAGE_MAP.md)：概念 → 测试入口映射
 - [`docs/VM_AND_INTERPRETER_DESIGN.md`](./VM_AND_INTERPRETER_DESIGN.md)：执行模型公理
-- [`IBCI_SPEC.md`](../IBCI_SPEC.md)：语言规范
+- [`docs/IBCI_SYNTAX_REFERENCE.md`](./IBCI_SYNTAX_REFERENCE.md)：IBCI 完整语法参考（旧条目"IBCI_SPEC.md"已重命名）
 
 ### 外部参考
 

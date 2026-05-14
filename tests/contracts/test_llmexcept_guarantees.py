@@ -9,10 +9,17 @@ Validates:
 - INV-LLMEXCEPT-HISTORY-*: Error history tracking
 - INV-LLMEXCEPT-DEPTH-*: Frame depth limits
 - INV-LLMEXCEPT-UNCERTAIN-*: Uncertain value handling
+
+Note: IBCI llmexcept uses a colon-block "side-effect" form attached to a
+preceding behavior expression rather than a try/retry brace-block. MOCK
+directives drive deterministic outcomes:
+- MOCK:REPAIR[:TYPE:value]  → first call fails, second succeeds with value
+- MOCK:FAIL                  → all attempts fail (raises LLMRetryExhaustedError)
+- MOCK:STR:value (etc.)      → always succeeds with given value
 """
 
 import pytest
-from tests.conftest import run_ibci, expect_runtime_error, AI_MOCK_PREFIX
+from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
 # ===========================================================================
@@ -21,21 +28,14 @@ from tests.conftest import run_ibci, expect_runtime_error, AI_MOCK_PREFIX
 
 
 class TestLLMExceptCatch:
-    """Validate llmexcept catching and retry semantics.
-
-    References:
-    - IBCI_SPEC.md §7 Error Handling
-    - docs/VM_AND_INTERPRETER_DESIGN.md §6
-    """
+    """Validate llmexcept catching and retry semantics."""
 
     def test_llmexcept_catches_llm_error(self):
-        """INV-LLMEXCEPT-CATCH-1: llmexcept catches LLM errors."""
+        """INV-LLMEXCEPT-CATCH-1: llmexcept catches LLM errors and retries."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    str x = @~ MOCK:INVALID ~
-} retry {
-    str x = @~ MOCK:STR:fallback ~
-}
+str x = @~ MOCK:REPAIR:STR:fallback ~
+llmexcept:
+    retry "use fallback"
 print(x)
 """
         assert run_ibci(code) == ["fallback"]
@@ -43,49 +43,38 @@ print(x)
     def test_retry_executes_on_error(self):
         """INV-LLMEXCEPT-CATCH-2: retry block executes on error."""
         code = AI_MOCK_PREFIX + """
-int count = 0
-llmexcept {
-    count = count + 1
-    str x = @~ MOCK:INVALID ~
-} retry {
-    count = count + 1
-    str x = @~ MOCK:STR:ok ~
-}
-print(count)
+str x = @~ MOCK:REPAIR:STR:ok ~
+llmexcept:
+    print("retry_ran")
+    retry "again"
+print(x)
 """
-        assert run_ibci(code) == ["2"]
+        assert run_ibci(code) == ["retry_ran", "ok"]
 
     def test_no_error_skips_retry(self):
         """INV-LLMEXCEPT-CATCH-3: retry block skipped if no error."""
         code = AI_MOCK_PREFIX + """
-int count = 0
-llmexcept {
-    count = count + 1
-    str x = @~ MOCK:STR:success ~
-} retry {
-    count = count + 100
-    str x = @~ MOCK:STR:fallback ~
-}
-print(count)
+str x = @~ MOCK:STR:success ~
+llmexcept:
+    print("should_not_run")
+    retry "unused"
+print(x)
 """
-        # Only try block executed (count = 1, not 101)
-        assert run_ibci(code) == ["1"]
+        assert run_ibci(code) == ["success"]
 
     def test_nested_llmexcept_independent(self):
         """INV-LLMEXCEPT-CATCH-4: Nested llmexcept blocks are independent."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    llmexcept {
-        str x = @~ MOCK:INVALID inner ~
-    } retry {
-        str x = @~ MOCK:STR:inner_fallback ~
-    }
-    print(x)
-} retry {
-    print("outer_fallback")
-}
+str inner = @~ MOCK:REPAIR:STR:inner_fallback ~
+llmexcept:
+    retry "inner"
+str outer = @~ MOCK:STR:outer_ok ~
+llmexcept:
+    retry "outer"
+print(inner)
+print(outer)
 """
-        assert run_ibci(code) == ["inner_fallback"]
+        assert run_ibci(code) == ["inner_fallback", "outer_ok"]
 
 
 # ===========================================================================
@@ -94,39 +83,27 @@ llmexcept {
 
 
 class TestLLMExceptHistory:
-    """Validate error history tracking.
-
-    References:
-    - docs/COMPLETED.md PT-1.2 (2026-05-11)
-    - tests/runtime/test_llm_except_frame_enhancements.py (legacy)
-    """
+    """Validate error history tracking across retries."""
 
     def test_error_history_accumulates(self):
-        """INV-LLMEXCEPT-HISTORY-1: Error history accumulates across retries."""
+        """INV-LLMEXCEPT-HISTORY-1: Sequential failures recover via retries."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    str x = @~ MOCK:INVALID first ~
-} retry {
-    llmexcept {
-        str x = @~ MOCK:INVALID second ~
-    } retry {
-        str x = @~ MOCK:STR:final ~
-    }
-}
-print(x)
+str first = @~ MOCK:REPAIR:STR:first_ok ~
+llmexcept:
+    retry "first"
+str final = @~ MOCK:REPAIR:STR:final ~
+llmexcept:
+    retry "final"
+print(final)
 """
-        # Should succeed after multiple retries
         assert run_ibci(code) == ["final"]
 
     def test_error_history_accessible_in_retry(self):
-        """INV-LLMEXCEPT-HISTORY-2: Error history available in retry block."""
+        """INV-LLMEXCEPT-HISTORY-2: Retry hint guides recovery."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    str x = @~ MOCK:INVALID ~
-} retry {
-    # Retry block can access error context
-    str x = @~ MOCK:STR:recovered ~
-}
+str x = @~ MOCK:REPAIR:STR:recovered ~
+llmexcept:
+    retry "use error context"
 print(x)
 """
         assert run_ibci(code) == ["recovered"]
@@ -138,47 +115,36 @@ print(x)
 
 
 class TestLLMExceptDepth:
-    """Validate llmexcept frame depth limits.
-
-    References:
-    - docs/COMPLETED.md PT-1.3 (2026-05-11)
-    - core/runtime/interpreter/runtime_context.py depth enforcement
-    """
+    """Validate llmexcept frame depth limits."""
 
     def test_reasonable_depth_succeeds(self):
-        """INV-LLMEXCEPT-DEPTH-1: Reasonable llmexcept nesting succeeds."""
+        """INV-LLMEXCEPT-DEPTH-1: Multiple sequential llmexcept blocks succeed."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    llmexcept {
-        llmexcept {
-            str x = @~ MOCK:STR:deep ~
-        } retry {
-            str x = @~ MOCK:STR:fallback3 ~
-        }
-    } retry {
-        str x = @~ MOCK:STR:fallback2 ~
-    }
-} retry {
-    str x = @~ MOCK:STR:fallback1 ~
-}
-print(x)
+str a = @~ MOCK:REPAIR:STR:fa ~
+llmexcept:
+    retry "a"
+str b = @~ MOCK:REPAIR:STR:fb ~
+llmexcept:
+    retry "b"
+str c = @~ MOCK:STR:deep ~
+llmexcept:
+    retry "c"
+print(c)
 """
         assert run_ibci(code) == ["deep"]
 
-    def test_excessive_depth_prevented(self):
-        """INV-LLMEXCEPT-DEPTH-2: Excessive nesting depth is prevented."""
-        # Generate deeply nested llmexcept (beyond limit of 128)
-        # This test validates depth limit exists without triggering it
+    def test_exhausted_retries_raises(self):
+        """INV-LLMEXCEPT-DEPTH-2: Persistent failures raise LLMRetryExhaustedError."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    str x = @~ MOCK:STR:ok ~
-} retry {
-    str x = @~ MOCK:STR:fallback ~
-}
-print(x)
+try:
+    str x = @~ MOCK:FAIL ~
+    llmexcept:
+        retry "give up"
+    print(x)
+except LLMRetryExhaustedError as e:
+    print("exhausted")
 """
-        # Should succeed (we're testing that depth limits exist)
-        assert run_ibci(code) == ["ok"]
+        assert run_ibci(code) == ["exhausted"]
 
 
 # ===========================================================================
@@ -187,38 +153,27 @@ print(x)
 
 
 class TestLLMExceptUncertain:
-    """Validate uncertain value handling in llmexcept.
-
-    References:
-    - docs/COMPLETED.md NS-4 (2026-05-12)
-    - str + llm_uncertain prohibition
-    """
+    """Validate uncertain value handling in llmexcept."""
 
     def test_uncertain_value_isolated(self):
-        """INV-LLMEXCEPT-UNCERTAIN-1: Uncertain values are isolated."""
+        """INV-LLMEXCEPT-UNCERTAIN-1: Behavior values from retried call usable."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    auto x = @~ MOCK:STR:uncertain ~
-    print(x)
-} retry {
-    print("fallback")
-}
+str x = @~ MOCK:REPAIR:STR:uncertain ~
+llmexcept:
+    retry "isolate"
+print(x)
 """
-        result = run_ibci(code)
-        assert result  # Either prints uncertain or fallback
+        assert run_ibci(code) == ["uncertain"]
 
-    def test_str_plus_uncertain_forbidden(self):
-        """INV-LLMEXCEPT-UNCERTAIN-2: str + uncertain is forbidden."""
+    def test_str_plus_uncertain_concatenates(self):
+        """INV-LLMEXCEPT-UNCERTAIN-2: str concatenation with LLM result."""
         code = AI_MOCK_PREFIX + """
-str base = "prefix"
-auto uncertain = @~ MOCK:STR:data ~
-str result = base + uncertain
+str base = "prefix:"
+str data = @~ MOCK:STR:value ~
+str result = base + data
+print(result)
 """
-        # This should fail (NS-4: str + llm_uncertain forbidden)
-        # However, MOCK:STR:data returns str, not llm_uncertain
-        # So this actually succeeds. Real uncertain handling tested elsewhere
-        result = run_ibci(code)
-        assert result
+        assert run_ibci(code) == ["prefix:value"]
 
 
 # ===========================================================================
@@ -227,21 +182,15 @@ str result = base + uncertain
 
 
 class TestLLMExceptControlFlow:
-    """Validate llmexcept interaction with control flow.
-
-    References:
-    - tests/e2e/test_e2e_llmexcept.py (legacy)
-    """
+    """Validate llmexcept interaction with control flow."""
 
     def test_llmexcept_in_loop(self):
         """INV-LLMEXCEPT-FLOW-1: llmexcept works in loop iterations."""
         code = AI_MOCK_PREFIX + """
 for int i in range(2):
-    llmexcept {
-        str x = @~ MOCK:INVALID ~
-    } retry {
-        str x = @~ MOCK:STR:ok ~
-    }
+    str x = @~ MOCK:REPAIR:STR:ok ~
+    llmexcept:
+        retry "loop"
     print(x)
 """
         assert run_ibci(code) == ["ok", "ok"]
@@ -250,40 +199,34 @@ for int i in range(2):
         """INV-LLMEXCEPT-FLOW-2: llmexcept works in conditionals."""
         code = AI_MOCK_PREFIX + """
 if True:
-    llmexcept {
-        str x = @~ MOCK:INVALID ~
-    } retry {
-        str x = @~ MOCK:STR:recovered ~
-    }
+    str x = @~ MOCK:REPAIR:STR:recovered ~
+    llmexcept:
+        retry "if-branch"
     print(x)
 """
         assert run_ibci(code) == ["recovered"]
 
     def test_llmexcept_with_break(self):
-        """INV-LLMEXCEPT-FLOW-3: break works inside llmexcept."""
+        """INV-LLMEXCEPT-FLOW-3: break works in loop containing llmexcept."""
         code = AI_MOCK_PREFIX + """
 for int i in range(10):
-    llmexcept {
-        if i == 2:
-            break
-        str x = @~ MOCK:STR:data ~
-    } retry {
-        str x = @~ MOCK:STR:fallback ~
-    }
+    if i == 2:
+        break
+    str x = @~ MOCK:STR:data ~
+    llmexcept:
+        retry "loop"
 print("done")
 """
         assert run_ibci(code) == ["done"]
 
     def test_llmexcept_with_return(self):
-        """INV-LLMEXCEPT-FLOW-4: return works inside llmexcept."""
+        """INV-LLMEXCEPT-FLOW-4: return works in function with llmexcept."""
         code = AI_MOCK_PREFIX + """
-func auto test():
-    llmexcept {
-        str x = @~ MOCK:INVALID ~
-    } retry {
-        return "recovered"
-    }
-    return "unreachable"
+func test() -> str:
+    str x = @~ MOCK:REPAIR:STR:recovered ~
+    llmexcept:
+        retry "fn"
+    return x
 
 print(test())
 """
@@ -296,45 +239,35 @@ print(test())
 
 
 class TestLLMExceptScoping:
-    """Validate variable scoping in llmexcept blocks.
+    """Validate variable scoping around llmexcept blocks."""
 
-    References:
-    - IBCI_SPEC.md §7.3 llmexcept Scoping
-    """
-
-    def test_try_variable_accessible_in_retry(self):
-        """INV-LLMEXCEPT-SCOPE-1: Variables from try accessible in retry."""
+    def test_outer_variable_accessible_in_retry(self):
+        """INV-LLMEXCEPT-SCOPE-1: Outer variables accessible in retry block."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    int y = 42
-    str x = @~ MOCK:INVALID ~
-} retry {
+int y = 42
+str x = @~ MOCK:REPAIR:STR:ok ~
+llmexcept:
     print(y)
-    str x = @~ MOCK:STR:ok ~
-}
+    retry "uses y"
 """
         assert run_ibci(code) == ["42"]
 
-    def test_retry_variable_accessible_after_block(self):
-        """INV-LLMEXCEPT-SCOPE-2: Variables from retry accessible after."""
+    def test_target_variable_accessible_after_recovery(self):
+        """INV-LLMEXCEPT-SCOPE-2: Target variable holds recovered value."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    str x = @~ MOCK:INVALID ~
-} retry {
-    str x = @~ MOCK:STR:value ~
-}
+str x = @~ MOCK:REPAIR:STR:value ~
+llmexcept:
+    retry "go"
 print(x)
 """
         assert run_ibci(code) == ["value"]
 
-    def test_successful_try_variable_accessible_after(self):
-        """INV-LLMEXCEPT-SCOPE-3: Variables from successful try accessible."""
+    def test_successful_target_variable_accessible_after(self):
+        """INV-LLMEXCEPT-SCOPE-3: Variables from successful call accessible."""
         code = AI_MOCK_PREFIX + """
-llmexcept {
-    str x = @~ MOCK:STR:success ~
-} retry {
-    str x = @~ MOCK:STR:fallback ~
-}
+str x = @~ MOCK:STR:success ~
+llmexcept:
+    retry "unused"
 print(x)
 """
         assert run_ibci(code) == ["success"]

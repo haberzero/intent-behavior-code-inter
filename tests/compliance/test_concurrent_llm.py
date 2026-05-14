@@ -23,13 +23,9 @@ from core.engine import IBCIEngine
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def make_engine() -> IBCIEngine:
-    return IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
-
-
-def run_code(code: str):
+def _run_code(code: str):
     lines: list = []
-    eng = make_engine()
+    eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
     eng.run_string(code, output_callback=lambda s: lines.append(str(s)), silent=True)
     return eng, lines
 
@@ -55,7 +51,7 @@ class TestParallelDispatch:
             "print(x)\n"
             "print(y)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         assert any("alpha" in line for line in out), f"Expected 'alpha' in {out}"
         assert any("beta" in line for line in out), f"Expected 'beta' in {out}"
 
@@ -69,7 +65,7 @@ class TestParallelDispatch:
             "print(b)\n"
             "print(c)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         assert any("first" in line for line in out)
         assert any("second" in line for line in out)
         assert any("third" in line for line in out)
@@ -81,7 +77,7 @@ class TestParallelDispatch:
             "print(x)\n"
             "print(x)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         stable_lines = [l for l in out if "stable" in l]
         assert len(stable_lines) == 2, f"Expected 2 'stable' lines, got {out}"
 
@@ -91,7 +87,7 @@ class TestParallelDispatch:
             "int n = @~ MOCK:INT:42 ~\n"
             "print((str)n)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         assert any("42" in line for line in out), f"Expected '42' in {out}"
 
 
@@ -111,7 +107,7 @@ class TestDependentBehaviorSerialized:
             "print(x)\n"
             "print(y)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         assert any("hello" in line for line in out)
         assert any("world" in line for line in out)
 
@@ -124,7 +120,7 @@ class TestDependentBehaviorSerialized:
             "    print(item)\n"
             "    i = i + 1\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         item_lines = [l for l in out if "loop_item" in l]
         assert len(item_lines) == 3, f"Expected 3 'loop_item' lines, got {out}"
 
@@ -146,7 +142,7 @@ class TestOutOfOrderDeterminism:
             "print(second)\n"
             "print(third)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         # 过滤 AI 拦截器等非用户输出
         user_out = [l for l in out if any(x in l for x in ("AAA", "BBB", "CCC"))]
         assert len(user_out) == 3
@@ -164,7 +160,7 @@ class TestOutOfOrderDeterminism:
             "print(both)\n"
             "print((str)computed)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         assert any("llm_val" in line for line in out)
         assert any("5" in line for line in out)
 
@@ -184,5 +180,5 @@ class TestLlmExceptPathCorrectness:
             '    retry "try again"\n'
             "print(result)\n"
         )
-        _, out = run_code(code)
+        _, out = _run_code(code)
         assert any("protected_val" in line for line in out), f"Expected 'protected_val' in {out}"

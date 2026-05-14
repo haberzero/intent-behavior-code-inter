@@ -16,6 +16,7 @@ tests/compiler/test_generics.py
 import pytest
 
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci
 from core.kernel.factory import create_default_registry
 from core.kernel.spec import (
     SpecRegistry,
@@ -38,15 +39,7 @@ def make_registry():
     return create_default_registry()
 
 
-def run_code(code: str):
-    """Compile + run IBCI code; return output lines."""
-    lines = []
-    engine = IBCIEngine(root_dir=".", auto_sniff=False)
-    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
-    return lines
-
-
-def compile_code(code: str):
+def _compile_code(code: str):
     """Compile only; return (artifact_or_None, issue_tracker).
 
     Unified signature shared by both G1/G2 and G3 test classes — matches
@@ -66,11 +59,11 @@ def compile_code(code: str):
 # ---------------------------------------------------------------------------
 
 def _g3_compile_code(code: str):
-    return compile_code(code)
+    return _compile_code(code)
 
 
 def _g3_run_code(code: str):
-    return run_code(code)
+    return run_ibci(code, root_dir=".")
 
 
 def _g3_sem_errors(issue_tracker):
@@ -169,7 +162,7 @@ class TestG2ListWriteMethodSpecialization:
 
     def test_correct_type_append_no_warning(self):
         """list[int].append(42) compiles cleanly without warnings."""
-        _, issue_tracker = compile_code(
+        _, issue_tracker = _compile_code(
             "list[int] nums = [1, 2]\n"
             "nums.append(3)\n"
         )
@@ -178,7 +171,7 @@ class TestG2ListWriteMethodSpecialization:
 
     def test_wrong_type_append_produces_warning_not_error(self):
         """list[int].append('x') produces a SEM_081 warning, not a compile error."""
-        artifact, issue_tracker = compile_code(
+        artifact, issue_tracker = _compile_code(
             "list[int] nums = []\n"
             "nums.append(\"hello\")\n"
         )
@@ -192,7 +185,7 @@ class TestG2ListWriteMethodSpecialization:
 
     def test_correct_append_runs_and_produces_output(self):
         """list[int] append with correct type runs correctly end-to-end."""
-        lines = run_code(
+        lines = _g3_run_code(
             "list[int] nums = [1, 2]\n"
             "nums.append(3)\n"
             "print(nums)\n"

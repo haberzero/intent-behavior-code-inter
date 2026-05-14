@@ -2,7 +2,8 @@
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
 > 历史 Bug 修复记录已归档至 `docs/COMPLETED.md`。
-> **最后更新**：2026-05-12（当前测试基线 1239 passed）
+> **最后更新**：2026-05-14（核对真实代码状态；测试基线请以 `pytest tests/ -q --tb=no` 当次结果为准，
+> 不再于本文档冻结具体通过数字以避免出现"文档落后于代码"的幻觉）
 
 ---
 
@@ -421,6 +422,82 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 **当前建议**：暂不在生产代码中使用 `switch`/`case` 语句，优先使用 `if`/`elif`/`else` 实现条件分支逻辑。
 
 **测试覆盖**：暂无契约测试（INV-SWITCH-*），待语义设计稳定后补充。详见 `docs/SEMANTIC_COVERAGE_MATRIX.md §10.3`。
+
+---
+
+## 十八、`intent_context` 类静态调用的"静默无效"陷阱
+
+**当前状态**：`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py:421-517`）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
+
+**有效路径**：
+
+```ibci
+# 1) 用 @+ / @ / @! 语法直接写入"当前作用域"的意图栈（推荐）
+@+ "持久意图"
+str r = @~ ... ~
+
+# 2) 显式持有 ctx 实例，再用 use(ctx) 安装到当前作用域
+intent_context ctx = intent_context.get_current()   # 取当前快照（fork 副本）
+ctx.push("via API")
+intent_context.use(ctx)                              # ← 必须 use，否则上一步无效
+str r = @~ ... ~
+```
+
+**作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `builtin_initializer.py:519-538` 注释）。
+
+**根源**：意图栈在运行时归属"当前执行帧的 `_intent_ctx`"（ContextVar 隔离），而 `intent_context` 作为 IBCI 类对象暴露的 `push/pop/...` 方法签名要求一个 receiver；当 receiver 是类静态调用产生的临时对象时，操作落到一个"游离"的实例上。
+
+**未来演进思路（不构成承诺）**：编译期对 `intent_context.push(...)` / `pop()` / `merge(...)` 这类调用在"未先取 `get_current()`"的语境下给出 SEM 警告或错误（语义意图很可能是误用）。
+
+**测试覆盖**：暂无契约测试。
+
+---
+
+## 十九、`@` 意图注释的放置约束
+
+**当前状态**：以下三条规则由编译期 `SEM_060` 强制：
+
+1. `@`（smear，一次性涂抹）、`@+`（persist，压入持久栈）、`@!`（override，排他）后**必须紧跟一条包含行为表达式 `@~...~` 的语句**，中间不能有其它语句、`print`、变量赋值等。
+2. 单条行为表达式语句之前**至多只能有一个 `@`**；连续两个 `@` 会被 SEM_060 拒绝。允许"多个 `@+` 堆叠"和"一个 `@` + 一个 `@+`"等组合。
+3. `@-`（删除/否定意图）**不是合法语法**，词法层未定义；用户如果需要"清空意图栈"，请使用 `intent_context.clear()`（须先持有 ctx 实例）或 `intent_context.clear_inherited()`（作用于当前帧）。
+
+**根源**：意图注释设计为对"下一条行为"的修饰；放置规则保证编译期可以确定意图的归属节点。
+
+**未来演进思路（不构成承诺）**：暂无计划放宽放置规则。`@-` 的删除语义被认为与"栈式压入/排他"语义正交，应通过 `intent_context.clear()` / `clear_inherited()` API 表达。
+
+---
+
+## 二十、用户类相关能力差距（汇总记录，非主流场景的设计取向）
+
+以下是本轮事实核查中确认的、面向"用户自定义类"的能力差距。这些差距并非线上 bug，而是设计未覆盖；在大量"业务脚本 + LLM 协作"的真实用例中并非阻塞项，故先记录，不列入 NS。
+
+1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置 `list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` 全部走内置 axiom 的 `resolve_specialization_by_names` 路径，用户类型无对应入口。
+2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel.py` 的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
+3. **方法重写无签名兼容性检查**：`semantic_analyzer.visit_IbClassDef` 校验父类存在性，但不做 Liskov 子类型签名校验；子类可以静默"窄化"参数/拓宽返回。
+4. **`__snapshot__` / `__restore__` 用户协议在 llmexcept 路径里未被调用**：`docs/IBCI_SYNTAX_REFERENCE.md §10.4` 描述的"快照粒度自定义"目前**只是文档承诺**——`vm/handlers.py:vm_handle_IbLLMExceptionalStmt` 的快照逻辑只对内置可序列化类型做深拷贝，对用户类对象不会调用其 `__snapshot__` / `__restore__`。retry 失败时用户类对象内部 mutation 不会回滚（与 `KNOWN_LIMITS §五"llmexcept 不还原容器变更"`的现象同源，但根因更深）。
+5. **强转 cast 当前**全部**推迟到运行时**：`(T)x` 在编译期不做兼容性校验（NS-5 已在 backlog 但优先级 P3）。
+
+**未来演进思路（不构成承诺）**：以上 1/2/3/5 见 `docs/PENDING_TASKS.md §四`；4 因为牵动 llmexcept 快照协议核心，在该协议稳定 + 用户类一等公民化之后再评估。
+
+---
+
+## 二十一、DDG 分析已完成但并发调度未接通
+
+**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Pass 5）已经为每个 `IbBehaviorExpr` 计算 `llm_deps` / `dispatch_eligible` 字段（详见 `docs/VM_SPEC.md §3.1`），但运行时 `core/runtime/interpreter/llm_executor.py` 与 `vm/handlers.py` 仍按 AST 序串行执行——`dispatch_eligible=True` 的节点目前**不会**真正并发发起 LLM HTTP 调用，`LLMScheduler.dispatch_eager()` 路径未被默认启用。
+
+**根源**：并发分发会与现有 `llmexcept` 快照隔离、`@~...~` 的意图栈消费、`Cell` 变量赋值等语义产生跨切面副作用；接通需要补足"快照与 future 的交互合同"。
+
+**未来演进思路**：见 `docs/PENDING_TASKS.md §四 PT-4.7`。
+
+---
+
+## 二十二、`tests/contracts/` 当前并不构成真正的契约基线（追踪记录）
+
+**当前状态**：`tests/contracts/` 是 2026-05-13 标记为"测试体系契约化重构 Phase 2 完成"的产物，包含 ~116 个 INV-XXX-N 命名的契约测试。本轮事实核查发现：其中大量用例（~89 处）使用了**非法的 IBCI 语法**（`func <ret> <name>():` 而非 `func <name>() -> <ret>:`、`llmexcept { try } retry { fallback }` 假大括号块、`cast(T,x)` 函数式 cast、`Some(v)` 构造器、`Optional.get()`/`has_value()` 错误成员名、`MOCK:INVALID` 不存在的指令等），未经过任何一次成功编译。
+
+**影响**：`docs/VM_SPEC.md` 声明的"`tests/compliance/` + `tests/contracts/` 构成跨实现合规基线"目前**只有 `tests/compliance/` 部分实际成立**；`tests/contracts/` 部分等待重写后才能纳入合规基线。
+
+**追踪**：相关重写计划见 `docs/PENDING_TASKS.md §六`（如已迁移）或本轮 PR 的进度条。
 
 ---
 

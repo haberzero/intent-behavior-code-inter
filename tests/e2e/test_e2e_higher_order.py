@@ -20,20 +20,13 @@ import os
 import pytest
 
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
 # ---------------------------------------------------------------------------
 # 共享 helper（统一定义；旧 4 个文件本地副本去除）
 # ---------------------------------------------------------------------------
 
-def run_and_capture(code: str):
-    lines = []
-    engine = IBCIEngine(
-        root_dir=os.path.dirname(os.path.abspath(__file__)),
-        auto_sniff=False,
-    )
-    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
-    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +87,7 @@ fn f = add
 int result = f(3, 4)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "7" in lines
 
     def test_fn_holds_auto_lambda(self):
@@ -104,7 +97,7 @@ fn compute = lambda: x + 5
 fn f = compute
 print((str)f())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "15" in lines
 
     def test_fn_lambda_declares_fn_callable(self):
@@ -115,7 +108,7 @@ print((str)f())
 x = 10
 print((str)f())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "6" in lines
         assert "20" in lines
 
@@ -151,7 +144,7 @@ fn my_fn = adder
 int result = my_fn(5)
 print((str)result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "15" in lines
 
     def test_fn_holds_class_constructor(self):
@@ -165,7 +158,7 @@ Point p = ctor(3, 4)
 print((str)p.x)
 print((str)p.y)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "3" in lines
         assert "4" in lines
 
@@ -204,7 +197,7 @@ class TestFnNoParamLambda:
 fn f = lambda: x * 2
 print((str)f())
 """
-        assert "10" in run_and_capture(code)
+        assert "10" in run_ibci(code)
 
     def test_reads_latest_free_var(self):
         code = """int x = 5
@@ -213,7 +206,7 @@ print((str)f())
 x = 100
 print((str)f())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["10", "200"]
 
     def test_function_call_in_body(self):
@@ -224,7 +217,7 @@ fn f = lambda: double(7)
 print((str)f())
 print((str)f())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["14", "14"]
 
 
@@ -236,7 +229,7 @@ class TestFnParametricLambda:
 print((str)square(4))
 print((str)square(10))
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["16", "100"]
 
     def test_multi_params(self):
@@ -244,7 +237,7 @@ print((str)square(10))
 print((str)add(3, 4))
 print((str)add(10, 20))
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["7", "30"]
 
     def test_param_with_free_var(self):
@@ -255,7 +248,7 @@ print((str)shifted(5))
 base = 200
 print((str)shifted(5))
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # lambda mode → reads latest base each call
         assert lines == ["105", "205"]
 
@@ -265,7 +258,7 @@ print((str)shifted(5))
 fn f = lambda(int x): x + 1
 print((str)f(10))
 """
-        assert run_and_capture(code) == ["11"]
+        assert run_ibci(code) == ["11"]
 
 
 class TestFnNoParamSnapshot:
@@ -278,7 +271,7 @@ print((str)snap())
 x = 999
 print((str)snap())
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # snapshot 在定义时把 x 深克隆为只读种子（int 是不可变原语 → 共享引用）；
         # 外层 x = 999 不会污染种子，两次 snap() 均读到种子的 5 → 10。
         assert lines == ["10", "10"]
@@ -298,7 +291,7 @@ print((str)addbase(5))
 base = 999
 print((str)addbase(7))
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # base captured at 10; both calls see frozen value
         assert lines == ["15", "17"]
 
@@ -309,7 +302,7 @@ print((str)add(1, 2))
 print((str)add(10, 20))
 print((str)add(100, 200))
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["3", "30", "300"]
 
 
@@ -327,7 +320,7 @@ print((str)a5(3))
 print((str)a10(3))
 print((str)a5(100))
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert lines == ["8", "13", "105"]
 
 
@@ -340,7 +333,7 @@ fn outer = lambda(int x): x * 2
 print((str)outer(7))
 """
         # inner param x=7 shadows outer x=100
-        assert run_and_capture(code) == ["14"]
+        assert run_ibci(code) == ["14"]
 
 
 class TestFnLambdaInvalidDeclarationSyntax:
@@ -432,7 +425,7 @@ fn f = lambda -> int: 21 * 2
 int r = f()
 print((str)r)
 """
-        assert run_and_capture(code) == ["42"]
+        assert run_ibci(code) == ["42"]
 
     def test_param_lambda_returns_int_compiles(self):
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
@@ -447,7 +440,7 @@ fn add = lambda(int a, int b) -> int: a + b
 int r = add(10, 32)
 print((str)r)
 """
-        assert run_and_capture(code) == ["42"]
+        assert run_ibci(code) == ["42"]
 
     def test_snapshot_returns_int_freezes_free_var(self):
         code = """
@@ -457,7 +450,7 @@ base = 999
 int r = f()
 print((str)r)
 """
-        assert run_and_capture(code) == ["15"]
+        assert run_ibci(code) == ["15"]
 
     def test_snapshot_returns_int_with_params(self):
         code = """
@@ -468,7 +461,7 @@ int r = f(7)
 print((str)r)
 """
         # scale frozen at 3 at snapshot creation time → 7 * 3 = 21
-        assert run_and_capture(code) == ["21"]
+        assert run_ibci(code) == ["21"]
 
     def test_returns_str_concat(self):
         code = """
@@ -476,7 +469,7 @@ fn greet = lambda(str name) -> str: "Hello, " + name + "!"
 str r = greet("World")
 print(r)
 """
-        assert run_and_capture(code) == ["Hello, World!"]
+        assert run_ibci(code) == ["Hello, World!"]
 
     def test_type_checking_call_site(self):
         """``int r = f()`` passes compile-time check when ``fn f = lambda -> int`` is declared."""
@@ -502,7 +495,7 @@ fn a5 = make_adder(5)
 auto r = a5(3)
 print((str)r)
 """
-        assert run_and_capture(code) == ["8"]
+        assert run_ibci(code) == ["8"]
 
 
 # ---------------------------------------------------------------------------
@@ -510,29 +503,27 @@ print((str)r)
 # Uses MOCK mode so tests are deterministic.
 # ---------------------------------------------------------------------------
 
-def _ai_prefix() -> str:
-    return 'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
 
 
 class TestFnLambdaBehaviorBody:
     def test_no_param_behavior_lambda(self):
-        code = _ai_prefix() + """
+        code = AI_MOCK_PREFIX + """
 fn b = lambda: @~MOCK:STR:hello~
 str r = (str)b()
 print(r)
 """
-        assert run_and_capture(code) == ["hello"]
+        assert run_ibci(code) == ["hello"]
 
     def test_param_behavior_lambda_with_var_ref(self):
         """Param ``$who`` is bound on each call and interpolated into the prompt."""
-        code = _ai_prefix() + """
+        code = AI_MOCK_PREFIX + """
 fn greet = lambda(str who): @~MOCK:STR:hi-$who~
 str r1 = (str)greet("alice")
 print(r1)
 str r2 = (str)greet("bob")
 print(r2)
 """
-        assert run_and_capture(code) == ["hi-alice", "hi-bob"]
+        assert run_ibci(code) == ["hi-alice", "hi-bob"]
 
 
 class TestFnLambdaBehaviorBodyReturnsAnnotation:
@@ -540,12 +531,12 @@ class TestFnLambdaBehaviorBodyReturnsAnnotation:
 
     def test_behavior_lambda_returns_str_no_param(self):
         """``fn f = lambda -> str: @~...~`` annotates expected LLM output type."""
-        code = _ai_prefix() + """
+        code = AI_MOCK_PREFIX + """
 fn f = lambda -> str: @~MOCK:STR:hello~
 str r = f()
 print(r)
 """
-        assert run_and_capture(code) == ["hello"]
+        assert run_ibci(code) == ["hello"]
 
     def test_behavior_lambda_returns_str_call_site_typed(self):
         """`fn f = lambda -> str: @~...~` enables `str r = f()` without cast."""
@@ -553,28 +544,28 @@ print(r)
         # Without annotation: `str r = f()` would be SEM_003
         with pytest.raises(CompilerError):
             IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
-                _ai_prefix() + "\nfn f = lambda: @~MOCK:STR:hi~\nstr r = f()", silent=True)
+                AI_MOCK_PREFIX + "\nfn f = lambda: @~MOCK:STR:hi~\nstr r = f()", silent=True)
         # With expression-side annotation: compiles OK
         IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False).compile_string(
-            _ai_prefix() + "\nfn f = lambda -> str: @~MOCK:STR:hi~\nstr r = f()", silent=True)
+            AI_MOCK_PREFIX + "\nfn f = lambda -> str: @~MOCK:STR:hi~\nstr r = f()", silent=True)
 
     def test_param_behavior_lambda_returns_str(self):
         """Parametric behavior lambda with expression-side ``-> str`` and prompt variable."""
-        code = _ai_prefix() + """
+        code = AI_MOCK_PREFIX + """
 fn greet = lambda(str name) -> str: @~MOCK:STR:hi-$name~
 str r = greet("alice")
 print(r)
 """
-        assert run_and_capture(code) == ["hi-alice"]
+        assert run_ibci(code) == ["hi-alice"]
 
     def test_snapshot_behavior_returns_str_freezes_intent(self):
         """``fn f = snapshot -> str: @~...~`` freezes intent context at definition time."""
-        code = _ai_prefix() + """
+        code = AI_MOCK_PREFIX + """
 fn f = snapshot -> str: @~MOCK:STR:frozen~
 str r = f()
 print(r)
 """
-        assert run_and_capture(code) == ["frozen"]
+        assert run_ibci(code) == ["frozen"]
 
 
 # ---------------------------------------------------------------------------
@@ -591,7 +582,7 @@ class TestFnLambdaColonSyntax:
         engine.compile_string("fn f = lambda: 1 + 2", silent=True)
 
     def test_no_param_lambda_colon_runtime(self):
-        assert run_and_capture("fn f = lambda: 21 * 2\nprint((str)f())") == ["42"]
+        assert run_ibci("fn f = lambda: 21 * 2\nprint((str)f())") == ["42"]
 
     def test_no_param_lambda_colon_free_var(self):
         code = """int x = 10
@@ -600,7 +591,7 @@ print((str)f())
 x = 20
 print((str)f())
 """
-        assert run_and_capture(code) == ["40", "80"]
+        assert run_ibci(code) == ["40", "80"]
 
     # --- fn f = lambda -> int: EXPR (no params + expression-side return type, D2) ---
 
@@ -614,7 +605,7 @@ fn f = lambda -> int: 21 * 2
 int r = f()
 print((str)r)
 """
-        assert run_and_capture(code) == ["42"]
+        assert run_ibci(code) == ["42"]
 
     # --- lambda(PARAMS): EXPR (params, no return type) ---
 
@@ -628,7 +619,7 @@ fn add = lambda(int a, int b): a + b
 auto r = add(10, 32)
 print((str)r)
 """
-        assert run_and_capture(code) == ["42"]
+        assert run_ibci(code) == ["42"]
 
     # --- fn f = lambda(PARAMS) -> int: EXPR (params + expression-side return type, D2) ---
 
@@ -642,7 +633,7 @@ fn mul = lambda(int a, int b) -> int: a * b
 int r = mul(6, 7)
 print((str)r)
 """
-        assert run_and_capture(code) == ["42"]
+        assert run_ibci(code) == ["42"]
 
     # --- snapshot: EXPR (no params, free var frozen) ---
 
@@ -654,7 +645,7 @@ n = 999
 auto r = f()
 print((str)r)
 """
-        assert run_and_capture(code) == ["15"]
+        assert run_ibci(code) == ["15"]
 
     # --- fn f = snapshot -> int: EXPR (expression-side return type, D2) ---
 
@@ -666,7 +657,7 @@ n = 999
 int r = f()
 print((str)r)
 """
-        assert run_and_capture(code) == ["15"]
+        assert run_ibci(code) == ["15"]
 
     # --- snapshot(PARAMS): EXPR ---
 
@@ -678,7 +669,7 @@ scale = 100
 auto r = f(7)
 print((str)r)
 """
-        assert run_and_capture(code) == ["21"]
+        assert run_ibci(code) == ["21"]
 
     # --- fn f = snapshot(PARAMS) -> int: EXPR (params + expression-side return type, D2) ---
 
@@ -690,7 +681,7 @@ scale = 100
 int r = f(7)
 print((str)r)
 """
-        assert run_and_capture(code) == ["21"]
+        assert run_ibci(code) == ["21"]
 
     # --- String body with colon (expression-side return type) ---
 
@@ -702,7 +693,7 @@ prefix = "bye"
 str r = f()
 print(r)
 """
-        assert run_and_capture(code) == ["hello world"]
+        assert run_ibci(code) == ["hello world"]
 
     # --- Invalid bracket-only body forms ---
 
@@ -760,7 +751,7 @@ print((str)snap())
 """
         # 旧实现（IbCell 浅包装）会让 snap() 第二次返回 5；
         # 深克隆后 snap() 两次都返回 3。
-        assert run_and_capture(code) == ["3", "3"]
+        assert run_ibci(code) == ["3", "3"]
 
     def test_snapshot_isolates_dict_from_outer_mutation(self):
         """外层修改 dict 键值后，snapshot 看到的仍是定义时刻的状态。"""
@@ -770,7 +761,7 @@ print((str)snap())
 d["k"] = 999
 print((str)snap())
 """
-        assert run_and_capture(code) == ["1", "1"]
+        assert run_ibci(code) == ["1", "1"]
 
     def test_snapshot_with_param_isolates_list(self):
         """有参 snapshot：实参随调用变化，闭包 list 仍冻结。"""
@@ -782,7 +773,7 @@ base[0] = 777
 print((str)add_first(5))
 """
         # base[0] frozen at 10, so 10+5=15 both times.
-        assert run_and_capture(code) == ["15", "15"]
+        assert run_ibci(code) == ["15", "15"]
 
 
 # ---------------------------------------------------------------------------
@@ -806,7 +797,7 @@ print((str)snap())
 print((str)snap())
 """
         # 若闭包种子被共享，则 3、4、5；若每次重新克隆，则 3、3、3。
-        assert run_and_capture(code) == ["3", "3", "3"]
+        assert run_ibci(code) == ["3", "3", "3"]
 
     def test_snapshot_dict_mutation_isolation(self):
         """snapshot 体内修改闭包 dict 的键值；下次调用应仍读到种子原始值。"""
@@ -822,7 +813,7 @@ print((str)snap())
 print((str)snap())
 """
         # 每次都从种子开始：种子 n=0 → +1 → 1
-        assert run_and_capture(code) == ["1", "1", "1"]
+        assert run_ibci(code) == ["1", "1", "1"]
 
     def test_snapshot_with_params_reentrant(self):
         """有参 snapshot：闭包种子在调用间隔保持新鲜，调用之间互不干扰。"""
@@ -838,7 +829,7 @@ print((str)snap(7))
 print((str)snap(100))
 """
         # 种子 shared=[0]，每次都从 0 起加上 delta
-        assert run_and_capture(code) == ["5", "7", "100"]
+        assert run_ibci(code) == ["5", "7", "100"]
 
 
 # ---------------------------------------------------------------------------
@@ -872,7 +863,7 @@ print((str)seed.len())
 """
         # snap() 每次都从种子 [42] 深克隆 → 体内 *2 → 返回 84。
         # 外层 seed 始终保持 [42]。
-        assert run_and_capture(code) == ["84", "84", "42", "1"]
+        assert run_ibci(code) == ["84", "84", "42", "1"]
 
 
 # ---------------------------------------------------------------------------
@@ -892,7 +883,7 @@ xs.append(5)
 print((str)read())
 """
         # lambda 共享 cell → 第二次读到新长度。
-        assert run_and_capture(code) == ["3", "5"]
+        assert run_ibci(code) == ["3", "5"]
 
     def test_lambda_body_mutation_persists(self):
         """lambda 体内对闭包容器的突变应跨调用可见（共享 cell）。"""
@@ -906,7 +897,7 @@ print((str)push())
 print((str)push())
 print((str)push())
 """
-        assert run_and_capture(code) == ["1", "2", "3"]
+        assert run_ibci(code) == ["1", "2", "3"]
 
 
 ################################################################################
@@ -926,7 +917,7 @@ fn double = lambda(int x): x * 2
 int result = (int)apply(double, 5)
 print((str)result)
 """
-        assert run_and_capture(code) == ["10"]
+        assert run_ibci(code) == ["10"]
 
     def test_lambda_passed_and_called_multiple_times(self):
         # [INFO] fn 形参在高阶调用链中应可稳定传播可调用返回类型。
@@ -940,7 +931,7 @@ int result = (int)apply_twice(triple, 2)
 print((str)result)
 """
         # triple(2) = 6, triple(6) = 18
-        assert run_and_capture(code) == ["18"]
+        assert run_ibci(code) == ["18"]
 
     def test_lambda_with_free_var_passed_to_func(self):
         """lambda 持有自由变量，传入函数后调用时读取最新值（SC-4）。"""
@@ -957,7 +948,7 @@ int r2 = (int)apply(adder, 5)
 print((str)r2)
 """
         # base=10: 5+10=15; base=20: 5+20=25
-        assert run_and_capture(code) == ["15", "25"]
+        assert run_ibci(code) == ["15", "25"]
 
     def test_no_param_lambda_passed_to_func(self):
         """无参 lambda 传入函数后被调用。"""
@@ -971,7 +962,7 @@ counter = 42
 int r = (int)call_fn(get_counter)
 print((str)r)
 """
-        assert run_and_capture(code) == ["42"]
+        assert run_ibci(code) == ["42"]
 
     def test_multiple_lambdas_passed(self):
         """同时传入多个不同的 lambda 对象。"""
@@ -987,7 +978,7 @@ int r = (int)compose(add1, mul2, 5)
 print((str)r)
 """
         # mul2(5)=10, add1(10)=11
-        assert run_and_capture(code) == ["11"]
+        assert run_ibci(code) == ["11"]
 
     def test_lambda_returned_from_func_and_applied(self):
         """函数返回 lambda，高阶函数调用它。"""
@@ -1002,7 +993,7 @@ fn add5 = make_adder(5)
 int r = (int)apply(add5, 10)
 print((str)r)
 """
-        assert run_and_capture(code) == ["15"]
+        assert run_ibci(code) == ["15"]
 
     def test_lambda_as_str_higher_order(self):
         """lambda 处理字符串，传入高阶函数。"""
@@ -1013,7 +1004,7 @@ fn shout = lambda(str x): x + "!"
 str r = (str)transform(shout, "hello")
 print(r)
 """
-        assert run_and_capture(code) == ["hello!"]
+        assert run_ibci(code) == ["hello!"]
 
 
 # ---------------------------------------------------------------------------
@@ -1031,7 +1022,7 @@ print((str)f())
 x = 100
 print((str)f())
 """
-        assert run_and_capture(code) == ["10", "200"]
+        assert run_ibci(code) == ["10", "200"]
 
     def test_lambda_with_param_and_free_var_updated(self):
         code = """int base = 100
@@ -1040,7 +1031,7 @@ print((str)shifted(5))
 base = 200
 print((str)shifted(5))
 """
-        assert run_and_capture(code) == ["105", "205"]
+        assert run_ibci(code) == ["105", "205"]
 
     def test_two_lambdas_share_same_var(self):
         """两个 lambda 引用同一自由变量，均应看到最新值。"""
@@ -1055,7 +1046,7 @@ shared = 10
 print((str)reader())
 print((str)doubler())
 """
-        assert run_and_capture(code) == ["7", "14", "10", "20"]
+        assert run_ibci(code) == ["7", "14", "10", "20"]
 
 
 # ---------------------------------------------------------------------------
@@ -1073,7 +1064,7 @@ print((str)snap())
 x = 999
 print((str)snap())
 """
-        assert run_and_capture(code) == ["10", "10"]
+        assert run_ibci(code) == ["10", "10"]
 
     def test_snapshot_with_params_freezes_free(self):
         code = """int base = 10
@@ -1083,7 +1074,7 @@ base = 999
 print((str)addbase(7))
 """
         # base frozen at 10
-        assert run_and_capture(code) == ["15", "17"]
+        assert run_ibci(code) == ["15", "17"]
 
     def test_snapshot_factory_pattern(self):
         code = """func make_adder(int b) -> fn:
@@ -1096,7 +1087,7 @@ print((str)a5(3))
 print((str)a10(3))
 print((str)a5(100))
 """
-        assert run_and_capture(code) == ["8", "13", "105"]
+        assert run_ibci(code) == ["8", "13", "105"]
 
 
 # ---------------------------------------------------------------------------
@@ -1118,7 +1109,7 @@ fn hi = make_greeter("Hi")
 print(hello("Alice"))
 print(hi("Bob"))
 """
-        assert run_and_capture(code) == ["Hello, Alice", "Hi, Bob"]
+        assert run_ibci(code) == ["Hello, Alice", "Hi, Bob"]
 
     def test_lambda_factory_in_higher_order(self):
         """工厂返回的 lambda 直接传入高阶函数。"""
@@ -1134,7 +1125,7 @@ fn add7 = make_adder(7)
 print((str)(int)apply(add3, 10))
 print((str)(int)apply(add7, 10))
 """
-        assert run_and_capture(code) == ["13", "17"]
+        assert run_ibci(code) == ["13", "17"]
 
 
 # ---------------------------------------------------------------------------

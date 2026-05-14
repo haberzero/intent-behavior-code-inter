@@ -25,10 +25,6 @@ from core.engine import IBCIEngine
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def make_engine() -> IBCIEngine:
-    return IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
-
-
 def write_child(code: str) -> str:
     """将 IBCI 代码写入临时文件，返回绝对路径。"""
     f = tempfile.NamedTemporaryFile(
@@ -51,7 +47,7 @@ class TestVariableIsolation:
         child_code = 'str secret = "child_only"\n'
         child_path = write_child(child_code)
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child_path, {})
             child_vars = eng.request_collect(handle)
             # 子环境变量可从 collect 读取
@@ -69,7 +65,7 @@ class TestVariableIsolation:
         child_path = write_child(child_code)
         try:
             # 先在主环境定义一个变量
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             eng.run_string('str main_var = "main_value"\n', silent=True)
             # 子 Interpreter 正常运行，不受主环境变量影响
             handle = eng.request_spawn_isolated(child_path, {})
@@ -83,7 +79,7 @@ class TestVariableIsolation:
         child_a = write_child('str who = "A"\nint val = 1\n')
         child_b = write_child('str who = "B"\nint val = 2\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             ha = eng.request_spawn_isolated(child_a, {})
             hb = eng.request_spawn_isolated(child_b, {})
             ra = eng.request_collect(ha)
@@ -105,7 +101,7 @@ class TestCollectSemantics:
     def test_collect_returns_dict(self):
         child = write_child('int x = 42\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(h)
             assert isinstance(result, dict)
@@ -119,7 +115,7 @@ class TestCollectSemantics:
             'bool flag = True\n'
         )
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(h)
             assert result.get("s") == "hello"
@@ -134,7 +130,7 @@ class TestCollectSemantics:
             'dict[str, int] mapping = {"a": 1, "b": 2}\n'
         )
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(h)
             assert result.get("nums") == [1, 2, 3]
@@ -146,7 +142,7 @@ class TestCollectSemantics:
         """collect 不应返回内置函数（print/len/range 等）。"""
         child = write_child('int x = 1\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(h)
             assert "print" not in result
@@ -159,7 +155,7 @@ class TestCollectSemantics:
         """空脚本的 collect 应返回空字典（无用户变量）。"""
         child = write_child('')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(h)
             assert isinstance(result, dict)
@@ -180,7 +176,7 @@ class TestCollectConstraints:
         """对同一 handle 重复 collect 应抛出 RuntimeError（幂等性保护）。"""
         child = write_child('int x = 1\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             eng.request_collect(h)  # 第一次成功
             with pytest.raises(RuntimeError):
@@ -192,7 +188,7 @@ class TestCollectConstraints:
         """子 Interpreter 编译失败时，collect 应传播错误（RuntimeError 或 Exception）。"""
         child = write_child('THIS IS NOT VALID IBCI @@@@\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             with pytest.raises(Exception):
                 eng.request_collect(h)
@@ -203,7 +199,7 @@ class TestCollectConstraints:
         """spawn_isolated 应立即返回字符串 handle（不阻塞等待子 Interpreter 完成）。"""
         child = write_child('int x = 1\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
             assert isinstance(h, str) and len(h) > 0
             eng.request_collect(h)  # 等待完成，避免悬挂线程
