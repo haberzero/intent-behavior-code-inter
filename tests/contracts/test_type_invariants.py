@@ -24,7 +24,7 @@ class TestOptionalNullSafety:
     """Validate Optional[T] null safety guarantees.
 
     References:
-    - IBCI_SPEC.md §3.2 Optional Types
+    - IBCI_SYNTAX_REFERENCE.md §3.2 Optional Types
     - docs/TEST_PHILOSOPHY.md §7.1 Optional Example
     """
 
@@ -78,7 +78,7 @@ class TestGenericTypeInvariants:
     """Validate generic type constraints (list[T], dict[K,V]).
 
     References:
-    - IBCI_SPEC.md §3.3 Generic Types
+    - IBCI_SYNTAX_REFERENCE.md §3.3 Generic Types
     - docs/TESTS_REORGANIZATION_TASK.md §11.2
     """
 
@@ -130,7 +130,7 @@ class TestTypeCastInvariants:
     """Validate type casting correctness.
 
     References:
-    - IBCI_SPEC.md §3.6 Type Casting
+    - IBCI_SYNTAX_REFERENCE.md §3.6 Type Casting
     """
 
     @pytest.mark.parametrize("from_val,to_type,expected", [
@@ -216,7 +216,7 @@ class TestTypeInferenceInvariants:
     """Validate type inference correctness.
 
     References:
-    - IBCI_SPEC.md §3.1 Type Annotations
+    - IBCI_SYNTAX_REFERENCE.md §3.1 Type Annotations
     """
 
     @pytest.mark.parametrize("literal,expected_output", [

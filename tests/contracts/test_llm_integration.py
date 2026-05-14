@@ -68,7 +68,7 @@ class TestBehaviorExpression:
     """Validate behavior expression execution.
 
     References:
-    - IBCI_SPEC.md §5.1 Behavior Expressions
+    - IBCI_SYNTAX_REFERENCE.md §5.1 Behavior Expressions
     - docs/TEST_PHILOSOPHY.md
     """
 
@@ -116,7 +116,7 @@ class TestLLMFunction:
     """Validate LLM function semantics.
 
     References:
-    - IBCI_SPEC.md §5.2 LLM Functions
+    - IBCI_SYNTAX_REFERENCE.md §5.2 LLM Functions
     """
 
     def test_llm_function_definition_and_call(self):
@@ -161,7 +161,7 @@ class TestIntentWithLLM:
     """Validate intent context in LLM calls.
 
     References:
-    - IBCI_SPEC.md §6 Intent System
+    - IBCI_SYNTAX_REFERENCE.md §6 Intent System
     - tests/e2e/test_e2e_intent.py (legacy)
     """
 

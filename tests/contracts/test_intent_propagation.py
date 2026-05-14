@@ -24,7 +24,7 @@ class TestIntentPropagation:
     """Validate intent propagation across frames and scopes.
 
     References:
-    - IBCI_SPEC.md §6 Intent System
+    - IBCI_SYNTAX_REFERENCE.md §6 Intent System
     - docs/COMPLETED.md NS-2b/2c/2d
     - tests/runtime/test_intent_context.py (legacy)
     """
@@ -75,7 +75,7 @@ class TestIntentPriority:
     """Validate intent mode and role priority rules.
 
     References:
-    - IBCI_SPEC.md §6.2 Intent Modes
+    - IBCI_SYNTAX_REFERENCE.md §6.2 Intent Modes
     - docs/VM_AND_INTERPRETER_DESIGN.md §7
     """
 

@@ -177,7 +177,7 @@ class TestLexicalScoping:
     """Validate lexical scoping rules.
 
     References:
-    - IBCI_SPEC.md §2.3 Scoping
+    - IBCI_SYNTAX_REFERENCE.md §2.3 Scoping
     """
 
     def test_inner_scope_shadows_outer(self):

@@ -24,7 +24,7 @@ class TestLLMExceptCatch:
     """Validate llmexcept catching and retry semantics.
 
     References:
-    - IBCI_SPEC.md §7 Error Handling
+    - IBCI_SYNTAX_REFERENCE.md §7 Error Handling
     - docs/VM_AND_INTERPRETER_DESIGN.md §6
     """
 
@@ -299,7 +299,7 @@ class TestLLMExceptScoping:
     """Validate variable scoping in llmexcept blocks.
 
     References:
-    - IBCI_SPEC.md §7.3 llmexcept Scoping
+    - IBCI_SYNTAX_REFERENCE.md §7.3 llmexcept Scoping
     """
 
     def test_try_variable_accessible_in_retry(self):
