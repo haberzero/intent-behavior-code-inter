@@ -4,8 +4,7 @@
 # 本示例展示 IBCI 的 Enum 类型与 switch-case 语法：
 # 1. Enum 定义和直接使用（switch-case 正常工作）
 # 2. idbg 探查 Enum 变量的内部表示
-# 3. 已知 Bug #3：Enum 类型无法直接接收 LLM 输出
-#    → 临时规避方案：以 str 类型接收 LLM 输出后手动映射
+# 3. LLM 输出可直接赋值给 Enum 类型变量（2026-05-14 核验：已支持）
 
 import ai
 import idbg
@@ -66,16 +65,17 @@ print("sky == Color.BLUE: " + (str)is_blue)
 print("sky == Color.RED:  " + (str)is_red)
 
 # ============================================================
-# 4. MOCK 模式 + str 类型接收 LLM 输出（Bug #3 规避方案）
+# 4. LLM 输出 → Enum 类型变量（已支持，2026-05-14 核验）
 # ============================================================
 
-print("\n=== 4. LLM 输出 → Enum（规避 Bug #3）===")
-print("注意：已知 Bug #3：Enum 类型变量无法直接接收 LLM 输出（得到 None）")
-print("规避方案：以 str 类型接收，再手动映射到 Enum 分支")
+print("\n=== 4. LLM 输出 → Enum（直接赋值）===")
+print("说明：Enum 类型已实现完整的 __from_prompt__ / __outputhint_prompt__ 协议；")
+print("LLM 输出的成员名（大小写不敏感）会被自动解析为对应 Enum 值。")
 print("")
 
 # LLM 返回颜色字符串（MOCK 模式下用 MOCK:STR:BLUE 模拟）
-str llm_color_str = @~ MOCK:STR:BLUE ~
+# 直接以 Enum 类型变量接收
+Color llm_color = @~ MOCK:STR:BLUE ~
 
 # idbg 确认 LLM 调用的 user_prompt 和 response
 any last_info = idbg.last_llm()
@@ -83,19 +83,18 @@ print("idbg: user_prompt = " + (str)last_info["user_prompt"])
 print("idbg: response    = " + (str)last_info["response"])
 print("")
 
-print("LLM 返回的颜色字符串: '" + llm_color_str + "'")
+print("LLM 直接赋值给 Color 变量：llm_color == Color.BLUE? " + (str)(llm_color == Color.BLUE))
 
-# 手动映射字符串 → 行为分支
-if llm_color_str == "RED":
-    print("  → 识别为 RED")
-else:
-    if llm_color_str == "GREEN":
+# Enum 变量可直接用于 switch
+switch llm_color:
+    case Color.RED:
+        print("  → 识别为 RED")
+    case Color.GREEN:
         print("  → 识别为 GREEN")
-    else:
-        if llm_color_str == "BLUE":
-            print("  → 识别为 BLUE（规避方案成功！）")
-        else:
-            print("  → 未知颜色: " + llm_color_str)
+    case Color.BLUE:
+        print("  → 识别为 BLUE（直接赋值成功）")
+    default:
+        print("  → 未知颜色")
 
 # ============================================================
 # 5. MOCK:SEQ 模拟多次 LLM 调用

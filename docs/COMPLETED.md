@@ -4,7 +4,40 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-14（追加 2026-05-13 锚点的事实核查保留意见）
+> **最后更新**：2026-05-14（追加 2026-05-14 锚点"事实重核与文档诚实化"）
+
+---
+
+## 2026-05-14 锚点：事实重核与文档诚实化
+
+完成一次全量事实回顾与文档同步，纠正前序 PR 中的几处状态描述失实，并把本轮试用探查到的真实未知问题登记入 `KNOWN_LIMITS.md` 与 `NEXT_STEPS.md`。
+
+**事实重核结果**（基线命令：`python -m pytest tests/ -q --tb=no --no-header`）：
+
+- **测试基线**：639 passed / 9 skipped / 5 failed。
+- 唯一真实失败：`tests/compiler/test_symbol_collection_pass.py` 共 5 个用例，`SpecRegistry()` 构造缺新引入的必填参数 `axiom_registry`（已登记为 NEXT_STEPS P0 H5）。
+- `tests/contracts/` 140 passed / `tests/runtime/test_plugin_implementations.py` 18 passed / `tests/meta/` 3 passed —— 前次 NEXT_STEPS.md 中的"88 contracts 失败 / 5 plugin 失败 / 25 meta 违规"P0-A/B/C 描述**与事实完全不符**，已删除。
+- `examples/01_getting_started/04_mock_and_llmexcept.ibci` 完整跑完 7 个 section —— P0-D 描述同样失实，已删除。
+- Enum-from-LLM（旧 `KNOWN_LIMITS Bug #3`）实际已工作；`EnumAxiom` 在 `core/kernel/axioms/primitives.py:1071-1164` 完整实现 `has_from_prompt_cap` / `has_output_hint_cap` / `has_converter_cap`。已在 `examples/01_getting_started/05_enum_and_switch.ibci` 中删除"规避方案"段落，改为展示直接赋值用法。
+
+**本轮试用新发现的真实开放问题**（已写入 `docs/KNOWN_LIMITS.md` §二十三 / §二十四 / §二十五）：
+
+- **H1**：用户异常跨函数边界类型被 `vm_handle_IbCall:512` 兜底 wrap 成 Python `RuntimeError`，导致 `except <SpecificType>` 不再匹配、`e.message` 显示 wrapper 文本。已登记为 NEXT_STEPS P0。
+- **H2**：`import` 必须位于文件顶部；放在其它语句之后报"模块未找到"误导性错误。已登记为 NEXT_STEPS P1-B（建议新增 `IMP_001` 错误码）。
+- **H3**：`ihost.run_isolated(path, policy)` 使用 `os.path.abspath(path)`（相对 cwd），与 `file.read("./...")`（相对入口文件目录）语义不一致。已登记为 NEXT_STEPS P1-A。
+
+**文档同步动作**：
+
+- 删除 `docs/OPEN_ISSUES.md`（用户明示；后续以 `NEXT_STEPS.md` + `KNOWN_LIMITS.md` 为单一真理源）；清理 `docs/KNOWN_LIMITS.md` / `docs/ARCH_DETAILS.md` / `docs/COMPLETED.md` 中残留的 OPEN_ISSUES 反向引用。
+- 重写 `docs/NEXT_STEPS.md`：剔除幻觉性 P0-A..E，重排为 P0（H1 + H5） / P1（H3 + H2 + H4 + 已修 enum 文档收口 + 已修 README typo） / P2（semantic_v2 Phase 3 + intent_context push 警告 + NS-5 + idbg/MOCK:SEQ 复现）；文末新增"维护守则"6 条，专门针对智能体协作场景，要求"每次开新分支前必跑 pytest、不预设上一份文档数字"。
+- 更新 `docs/KNOWN_LIMITS.md`：关闭 §二十二（contracts 失实条目，作反例保留）；新增 §二十三/二十四/二十五。
+- 更新 `docs/PENDING_TASKS.md`：删除 PT-5.1 中失实表述，统一指向 NEXT_STEPS。
+- 修复 `README.md:103-105` 的 `true/false` 大小写（IBCI 字面量是 `True/False`），同时修正 `examples/01_getting_started/05_enum_and_switch.ibci` 教学逻辑使其反映"Enum 已可直接接收 LLM 输出"。
+
+**验证**：
+
+- `python -m pytest tests/ -q --tb=no --no-header` 重跑后基线未变（639 pass / 5 fail）。
+- 所有受影响示例（02、04、05）端到端 `python main.py run …` 通过。
 
 ---
 
@@ -113,7 +146,7 @@
 - **基础设施**：`IbNativeFunction.call` 显式让 `ThrownException` 穿透原生函数边界，避免被包装成 `InterpreterError`，保证 LLMParseError 等语言级异常能传到 `IbTry` 处理器。
 - **用户保留路径**：`(str)uncertain_var` 显式转换仍返回 `"uncertain"` 字符串；`uncertain == Uncertain` 比较与 retry 流程未受影响。
 - **测试**：新增 `tests/runtime/test_uncertain_str_concat_prohibition.py`（3 用例：try-except 捕获、显式 cast 保留、公理直接询问）。
-- **文档**：删除 `KNOWN_LIMITS.md §八`、收口 `OPEN_ISSUES.md OI-1`。
+- **文档**：删除 `KNOWN_LIMITS.md §八`、关闭 OI-1。
 
 ### NS-6：链式下标 `(expr)[index]` 语法消歧
 
@@ -364,4 +397,3 @@ NS-2 全四步合龙——意图注释体系语法路径（`@`/`@+`/`@-`/`@!`）
 - 意图系统：`docs/INTENT_SYSTEM_DESIGN.md`
 - 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
 - 当前已知限制：`docs/KNOWN_LIMITS.md`
-- 代码内 TODO 索引：`docs/OPEN_ISSUES.md`

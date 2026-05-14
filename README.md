@@ -100,9 +100,9 @@ for @~判定 $current_content 内容是否足够热情~:
 import ihost
 
 dict policy = {
-    "isolated": true,
-    "registry_isolation": true,
-    "inherit_variables": false
+    "isolated": True,
+    "registry_isolation": True,
+    "inherit_variables": False
 }
 
 ihost.run_isolated("child.ibci", policy)
