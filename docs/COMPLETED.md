@@ -4,7 +4,41 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-14（第二轮：追加 H1/H2/H3/H4 维修锚点）
+> **最后更新**：2026-05-14（第三轮：追加 one-shot 意图语义重定义锚点）
+
+---
+
+## 2026-05-14 锚点（第三轮）：one-shot 意图注释语义重定义与全链路收口
+
+完成 `@` / `@!` 从"仅直连 LLM 语句"到"下一条语句执行窗口"的语义升级，确保普通函数调用路径可用且无 LLM 路径不泄漏。
+
+- **编译期（SEM_060）**：`core/compiler/semantic/passes/semantic_analyzer.py`
+  - 放宽规则：`@` / `@!` 必须跟下一条可执行语句，不再要求该语句直接包含 `@~...~`。
+  - 保留防歧义约束：禁止连续两个 one-shot 注释（仍报 `SEM_060`）。
+- **运行期（语句窗口生命周期）**：`core/runtime/vm/handlers.py`
+  - 新增统一语句序列执行入口 `_vm_execute_stmt_sequence(...)`。
+  - `IbIntentAnnotation` 不再作为"立即全局生效"语句处理，而是绑定到下一条语句窗口：窗口开始前安装、窗口结束后清理残留。
+  - 该机制已接入 `IbModule` / `IbIf` / `IbWhile` / `IbFor` / `IbSwitch` / `IbTry` / `IbLLMExceptionalStmt` 的语句体执行路径。
+- **运行时辅助 API**：
+  - `core/runtime/interpreter/runtime_context.py` 新增
+    `activate_statement_one_shot_intent(...)` /
+    `cleanup_statement_one_shot_intent(...)`。
+  - `core/runtime/objects/intent_context.py` 新增
+    `discard_smear(...)` / `clear_override_if(...)`，用于 no-LLM 路径清理。
+- **测试**：
+  - `tests/e2e/test_e2e_intent.py` 新增：
+    1) `@` 修饰普通函数调用并传递到内部 LLM；
+    2) `@` 修饰无 LLM 语句路径后自动清理不泄漏。
+  - `tests/contracts/test_intent_propagation.py` 移除过时 skip：
+    - `@-` 移除能力改为真实断言；
+    - 新增 one-shot 在无 LLM 语句路径的无泄漏契约测试。
+  - `tests/compiler/test_pipeline.py` 新增编译期用例：
+    `@` 前置普通函数调用不再触发误判 `SEM_060`。
+- **文档同步**：
+  - `docs/KNOWN_LIMITS.md`：修正 §十九（去除过期约束与 `@-` 失实描述）。
+  - `docs/IBCI_SYNTAX_REFERENCE.md`：更新 9.1 约束为语句窗口语义并补充普通函数调用示例。
+  - `docs/INTENT_SYSTEM_DESIGN.md`：同步语法表、约束与 AST 语义描述。
+  - `docs/NEXT_STEPS.md`：补充本锚点完成说明。
 
 ---
 
