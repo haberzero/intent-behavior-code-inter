@@ -4,7 +4,7 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-14（第二轮：追加 H1/H2/H3/H4 维修锚点）
+> **最后更新**：2026-05-14（第三轮：追加 one-shot 意图语义重定义锚点）
 
 ---
 

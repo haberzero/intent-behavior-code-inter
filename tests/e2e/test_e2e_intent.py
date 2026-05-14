@@ -65,7 +65,7 @@ print(result2)
         assert "1" in lines
 
     def test_single_intent_before_regular_function_call_propagates_to_nested_llm(self):
-        """@ 可修饰普通函数调用，函数内部的 LLM 调用可消费该 one-shot。"""
+        """`@` can decorate a regular function call and be consumed by nested LLM calls."""
         code = AI_MOCK_PREFIX + """
 func wrapper() -> str:
     str r = @~ MOCK:STR:nested ~
@@ -79,7 +79,7 @@ print(r)
         assert lines == ["nested"]
 
     def test_single_intent_before_no_llm_statement_is_cleaned_without_leak(self):
-        """若被修饰语句路径无 LLM 调用，one-shot 仍应在该语句结束后被清理。"""
+        """If the decorated statement path has no LLM call, one-shot is still cleaned at statement end."""
         code = """
 func pure_no_llm():
     int x = 1

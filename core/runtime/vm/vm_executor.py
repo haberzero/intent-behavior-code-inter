@@ -34,9 +34,10 @@ from core.runtime.vm.task import (
     UnhandledSignal,
     Signal,
 )
-from core.runtime.vm.handlers import build_dispatch_table
-from core.kernel.intent_logic import IntentRole
-
+from core.runtime.vm.handlers import (
+    build_dispatch_table,
+    build_one_shot_intent_from_annotation,
+)
 
 class VMExecutor:
     """显式帧栈 CPS 调度执行器。
@@ -154,15 +155,9 @@ class VMExecutor:
         pending_one_shot = None
 
         for stmt_uid in stmt_uids or ():
-            stmt_data = self._ec.get_node_data(stmt_uid) if stmt_uid else None
-            if stmt_data and stmt_data.get("_type") == "IbIntentAnnotation":
-                intent_info_uid = stmt_data.get("intent")
-                if intent_info_uid:
-                    intent_data = self._ec.get_node_data(intent_info_uid)
-                    if intent_data:
-                        pending_one_shot = self._ec.factory.create_intent_from_node(
-                            intent_info_uid, intent_data, role=IntentRole.SMEAR
-                        )
+            node_data = self._ec.get_node_data(stmt_uid) if stmt_uid else None
+            if node_data and node_data.get("_type") == "IbIntentAnnotation":
+                pending_one_shot = build_one_shot_intent_from_annotation(self, node_data)
                 continue
 
             if pending_one_shot is not None:

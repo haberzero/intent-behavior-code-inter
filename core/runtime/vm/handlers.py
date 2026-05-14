@@ -549,7 +549,7 @@ def vm_handle_IbListExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
 # 语句节点
 # ---------------------------------------------------------------------------
 
-def _vm_build_one_shot_intent_from_annotation(
+def build_one_shot_intent_from_annotation(
     executor, stmt_data: Mapping[str, Any]
 ) -> Optional[IbIntent]:
     """从 ``IbIntentAnnotation`` 节点数据构建一次性意图对象。"""
@@ -577,9 +577,9 @@ def _vm_execute_stmt_sequence(executor, stmt_uids: List[str]):
     pending_one_shot: Optional[IbIntent] = None
 
     for stmt_uid in stmt_uids or ():
-        stmt_data = executor.ec.get_node_data(stmt_uid) if stmt_uid else None
-        if stmt_data and stmt_data.get("_type") == "IbIntentAnnotation":
-            pending_one_shot = _vm_build_one_shot_intent_from_annotation(executor, stmt_data)
+        node_data = executor.ec.get_node_data(stmt_uid) if stmt_uid else None
+        if node_data and node_data.get("_type") == "IbIntentAnnotation":
+            pending_one_shot = build_one_shot_intent_from_annotation(executor, node_data)
             continue
 
         if pending_one_shot is not None:
@@ -653,18 +653,14 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
             break
 
         # 执行循环体；任意 stmt 返回 Signal 时立即处理
-        consumed = None  # type: ControlSignal | None
         res = yield from _vm_execute_stmt_sequence(executor, body)
         if isinstance(res, Signal):
             if res.kind is ControlSignal.BREAK:
-                consumed = ControlSignal.BREAK
-            elif res.kind is ControlSignal.CONTINUE:
-                consumed = ControlSignal.CONTINUE
-            else:
-                # RETURN / THROW：透传给上层（函数帧 / 顶层）
-                return res
-        if consumed is ControlSignal.BREAK:
-            break
+                break
+            if res.kind is ControlSignal.CONTINUE:
+                continue
+            # RETURN / THROW：透传给上层（函数帧 / 顶层）
+            return res
         # CONTINUE 或正常结束：进入下一轮循环
     return executor.registry.get_none()
 
@@ -1738,17 +1734,13 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                 if not executor.ec.is_truthy(filter_val):
                     break
 
-            consumed: Optional[ControlSignal] = None
             res = yield from _vm_execute_stmt_sequence(executor, body)
             if isinstance(res, Signal):
                 if res.kind is ControlSignal.BREAK:
-                    consumed = ControlSignal.BREAK
-                elif res.kind is ControlSignal.CONTINUE:
-                    consumed = ControlSignal.CONTINUE
-                else:
-                    return res
-            if consumed is ControlSignal.BREAK:
-                break
+                    break
+                if res.kind is ControlSignal.CONTINUE:
+                    continue
+                return res
         return executor.registry.get_none()
 
     # ----- 标准 Foreach 循环 -----
@@ -1809,20 +1801,18 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                 rc.pop_loop_context()
                 continue
 
-        consumed = None
         res = yield from _vm_execute_stmt_sequence(executor, body)
         if isinstance(res, Signal):
             if res.kind is ControlSignal.BREAK:
-                consumed = ControlSignal.BREAK
-            elif res.kind is ControlSignal.CONTINUE:
-                consumed = ControlSignal.CONTINUE
-            else:
                 rc.pop_loop_context()
-                return res
+                break
+            if res.kind is ControlSignal.CONTINUE:
+                rc.pop_loop_context()
+                continue
+            rc.pop_loop_context()
+            return res
 
         rc.pop_loop_context()
-        if consumed is ControlSignal.BREAK:
-            break
     return executor.registry.get_none()
 
 
