@@ -13,20 +13,10 @@ import os
 import pytest
 
 from core.engine import IBCIEngine
+from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
-def run_and_capture(code: str):
-    lines = []
-    engine = IBCIEngine(
-        root_dir=os.path.dirname(os.path.abspath(__file__)),
-        auto_sniff=False,
-    )
-    engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
-    return lines
 
-
-def ai_setup_code():
-    return 'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
 
 
 
@@ -44,7 +34,7 @@ class TestE2ELLMExceptionHierarchy:
 
     def test_unprotected_llm_fail_raises_llm_parse_error(self):
         """无 llmexcept 保护的 LLM 赋值失败，使用变量时抛出 LLMParseError。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 try:
     str x = @~ MOCK:FAIL bare_fail ~
     print(x)
@@ -53,13 +43,13 @@ except LLMParseError as e:
     print(e.message)
 print("after_catch")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "llm_parse_error_caught" in lines
         assert "after_catch" in lines
 
     def test_llm_parse_error_catchable_by_llm_error_base(self):
         """LLMParseError 可被其基类 LLMError 捕获。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 try:
     str x = @~ MOCK:FAIL base_catch ~
     print(x)
@@ -67,13 +57,13 @@ except LLMError as e:
     print("llm_error_caught")
 print("done")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "llm_error_caught" in lines
         assert "done" in lines
 
     def test_llm_error_catchable_by_exception_base_class(self):
         """LLMRetryExhaustedError 可被顶层 Exception 基类捕获。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 try:
     str result = @~ MOCK:FAIL exception_catch ~
     llmexcept:
@@ -82,13 +72,13 @@ except Exception as e:
     print("base_exception_caught")
 print("done")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "base_exception_caught" in lines
         assert "done" in lines
 
     def test_llm_retry_exhausted_error_message_field(self):
         """LLMRetryExhaustedError 包含可读 message 和 max_retry 字段。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 try:
     str result = @~ MOCK:FAIL msg_field ~
     llmexcept:
@@ -97,14 +87,14 @@ except LLMRetryExhaustedError as e:
     print("caught")
     print(e.message)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "caught" in lines
         # message should mention retry exhaustion
         assert any("retry" in line.lower() for line in lines)
 
     def test_llm_parse_error_leaves_scope_clean_after_catch(self):
         """try/except LLMParseError 后，作用域内后续普通赋值不受污染。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 int x = 0
 try:
     str bad = @~ MOCK:FAIL scope_clean ~
@@ -114,18 +104,18 @@ except LLMParseError as e:
 int y = x + 1
 print((str)y)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "100" in lines
 
     def test_repair_succeeds_before_exhaustion(self):
         """MOCK:REPAIR 第一次失败后第二次成功，不抛异常，正常打印结果。"""
-        code = ai_setup_code() + """
+        code = AI_MOCK_PREFIX + """
 str result = @~ MOCK:REPAIR repair_ok ~
 llmexcept:
     retry "hint"
 print(result)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         # successful second attempt → prints the result string, no exception
         assert len(lines) > 0
 
@@ -156,7 +146,7 @@ except MyError as e:
     print(e.message)
 print("after_catch")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "caught_my_error" in lines
         assert "oops" in lines
         assert "after_catch" in lines
@@ -174,7 +164,7 @@ except Exception as e:
     print("caught_as_exception")
     print(e.message)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "caught_as_exception" in lines
         assert "base-catch" in lines
 
@@ -195,7 +185,7 @@ except AppError as e:
     print("caught_app_error")
     print(e.message)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "caught_app_error" in lines
         assert "conn refused" in lines
 
@@ -212,7 +202,7 @@ except LLMError as e:
     print("caught_llm_error")
     print(e.message)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "caught_llm_error" in lines
         assert "custom-llm" in lines
 
@@ -233,7 +223,7 @@ except MyError as e:
     print(me.message)
     print(me.detail)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "oops" in lines
         assert "deep-context" in lines
 
@@ -256,7 +246,7 @@ except FooError as e:
     print("right_branch")
     print(e.message)
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "right_branch" in lines
         assert "foo-only" in lines
         assert "wrong_branch" not in lines
@@ -273,7 +263,7 @@ except LLMCallError as e:
 except LLMError as e:
     print("wrong_branch")
 """
-        lines = run_and_capture(code)
+        lines = run_ibci(code)
         assert "caught_call_error" in lines
         assert "provider down" in lines
         assert "wrong_branch" not in lines

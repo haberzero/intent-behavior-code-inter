@@ -23,7 +23,7 @@ class TestListOperationInvariants:
     """Validate list operation semantics.
 
     References:
-    - IBCI_SPEC.md §4 Built-in Collections
+    - IBCI_SYNTAX_REFERENCE.md §4 Built-in Collections
     - docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md §4.2
     """
 
@@ -120,7 +120,7 @@ class TestDictOperationInvariants:
     """Validate dict operation semantics.
 
     References:
-    - IBCI_SPEC.md §4 Built-in Collections
+    - IBCI_SYNTAX_REFERENCE.md §4 Built-in Collections
     - docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md §4.2
     """
 
@@ -206,7 +206,7 @@ class TestStringOperationInvariants:
     """Validate string operation semantics.
 
     References:
-    - IBCI_SPEC.md §4 Built-in Types
+    - IBCI_SYNTAX_REFERENCE.md §4 Built-in Types
     """
 
     def test_str_index_bounds_checked(self):

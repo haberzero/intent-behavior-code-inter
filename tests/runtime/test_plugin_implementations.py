@@ -132,24 +132,35 @@ class TestSchemaPlugin:
         return SchemaLib()
 
     def test_validate_success(self, schema_lib):
-        """Smoke test: validate() accepts valid data"""
-        schema = {"type": "str", "required": True}
-        result = schema_lib.validate("hello", schema)
-        assert result is True
+        """Smoke test: validate() accepts valid data (JSON-Schema-subset dict input)."""
+        schema = {
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer", "min": 0},
+            },
+        }
+        assert schema_lib.validate({"name": "Alice", "age": 30}, schema) is True
 
     def test_validate_failure(self, schema_lib):
-        """Smoke test: validate() rejects invalid data"""
-        schema = {"type": "int", "required": True}
-        result = schema_lib.validate("not an int", schema)
-        assert result is False
+        """Smoke test: validate() rejects invalid data (type mismatch + missing required)."""
+        schema = {
+            "required": ["age"],
+            "properties": {"age": {"type": "integer"}},
+        }
+        # Missing required field
+        assert schema_lib.validate({"name": "Bob"}, schema) is False
+        # Wrong type
+        assert schema_lib.validate({"age": "thirty"}, schema) is False
 
     def test_required_fields(self, schema_lib):
-        """Smoke test: required_fields() extracts field names"""
+        """Smoke test: required_fields() extracts the JSON-Schema 'required' list."""
         schema = {
-            "fields": {
-                "name": {"type": "str", "required": True},
-                "age": {"type": "int", "required": False}
-            }
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
+            },
         }
         result = schema_lib.required_fields(schema)
         assert "name" in result
@@ -166,18 +177,22 @@ class TestNetPlugin:
         from ibci_modules.ibci_net.core import NetLib
         return NetLib()
 
-    def test_set_and_get_base_url(self, net_lib):
-        """Smoke test: set_base_url() and get_base_url() work"""
-        net_lib.set_base_url("https://api.example.com")
-        assert net_lib.get_base_url() == "https://api.example.com"
-
-    def test_set_and_get_timeout(self, net_lib):
-        """Smoke test: set_timeout() and get_timeout() work"""
+    def test_set_timeout(self, net_lib):
+        """Smoke test: set_timeout() updates the internal timeout field."""
         net_lib.set_timeout(30)
-        assert net_lib.get_timeout() == 30
+        assert net_lib._timeout == 30
 
-    def test_set_header(self, net_lib):
-        """Smoke test: set_header() stores headers"""
-        net_lib.set_header("Authorization", "Bearer token")
-        headers = net_lib.get_headers()
-        assert headers.get("Authorization") == "Bearer token"
+    def test_set_default_headers(self, net_lib):
+        """Smoke test: set_default_headers() stores headers used in subsequent requests."""
+        net_lib.set_default_headers({"X-App": "ibci"})
+        merged = net_lib._merge_headers()
+        assert merged.get("X-App") == "ibci"
+
+    def test_set_bearer_token_and_clear(self, net_lib):
+        """Smoke test: bearer-token auth helper installs Authorization header; clear removes it."""
+        net_lib.set_bearer_token("abc123")
+        merged = net_lib._merge_headers()
+        assert merged.get("Authorization") == "Bearer abc123"
+        net_lib.clear_auth()
+        merged = net_lib._merge_headers()
+        assert "Authorization" not in merged

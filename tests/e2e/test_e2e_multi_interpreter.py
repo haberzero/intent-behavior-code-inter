@@ -35,10 +35,6 @@ _SCHEDULING_JITTER_SECONDS = 0.5
 _MAX_SPAWN_BLOCKING_SECONDS = 5.0
 
 
-def make_engine() -> IBCIEngine:
-    return IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
-
-
 def _write_child(code: str) -> str:
     """将 IBCI 代码写入临时文件，返回绝对路径。"""
     f = tempfile.NamedTemporaryFile(
@@ -59,7 +55,7 @@ class TestEngineLayerAPI:
     def test_spawn_returns_handle_string(self):
         child = _write_child('str result = "hello"\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child, {})
             assert isinstance(handle, str)
             assert handle.startswith("spawn_")
@@ -74,7 +70,7 @@ class TestEngineLayerAPI:
             'int count = 42\n'
         )
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(handle)
             assert result.get("greeting") == "world"
@@ -86,7 +82,7 @@ class TestEngineLayerAPI:
         """内置符号（print、len 等）不应出现在 collect 结果中。"""
         child = _write_child('str x = "value"\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(handle)
             assert "print" not in result
@@ -101,7 +97,7 @@ class TestEngineLayerAPI:
             'dict info = {"key": "val"}\n'
         )
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(handle)
             assert result.get("nums") == [1, 2, 3]
@@ -113,7 +109,7 @@ class TestEngineLayerAPI:
         """同一 handle 不能被 collect 两次。"""
         child = _write_child('str x = "once"\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child, {})
             eng.request_collect(handle)
             with pytest.raises(RuntimeError, match="Unknown spawn handle"):
@@ -125,7 +121,7 @@ class TestEngineLayerAPI:
         """子引擎编译错误应在 collect 时以 RuntimeError 形式传播。"""
         child = _write_child("INVALID IBCI CODE @@@@\n")
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             handle = eng.request_spawn_isolated(child, {})
             with pytest.raises(RuntimeError):
                 eng.request_collect(handle)
@@ -133,7 +129,7 @@ class TestEngineLayerAPI:
             os.unlink(child)
 
     def test_unknown_handle_raises(self):
-        eng = make_engine()
+        eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
         with pytest.raises(RuntimeError, match="Unknown spawn handle"):
             eng.request_collect("spawn_deadbeef")
 
@@ -142,7 +138,7 @@ class TestEngineLayerAPI:
         child_a = _write_child('str label = "alpha"\n')
         child_b = _write_child('str label = "beta"\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             ha = eng.request_spawn_isolated(child_a, {})
             hb = eng.request_spawn_isolated(child_b, {})
             ra = eng.request_collect(ha)
@@ -172,7 +168,7 @@ class TestConcurrency:
         child_a = _write_child(child_code)
         child_b = _write_child(child_code)
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
 
             # 串行基准：两次顺序 spawn/collect
             t0 = time.monotonic()
@@ -210,7 +206,7 @@ class TestConcurrency:
         """
         child = _write_child('str result = "nonblock"\n')
         try:
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             t0 = time.monotonic()
             handle = eng.request_spawn_isolated(child, {})
             t_spawn = time.monotonic() - t0
@@ -235,7 +231,7 @@ class TestIBCILayerAPI:
 
     def _run_capture(self, code: str):
         out: list = []
-        eng = make_engine()
+        eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
         eng.run_string(code, output_callback=lambda s: out.append(str(s)), silent=True)
         return eng, out
 
@@ -322,7 +318,7 @@ class TestRunIsolatedCompatibility:
                 "print((str)ok)\n"
             )
             out: list = []
-            eng = make_engine()
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             eng.run_string(code, output_callback=lambda s: out.append(str(s)), silent=True)
             assert any("1" in line or "True" in line for line in out)
         finally:

@@ -4,7 +4,7 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-13
+> **最后更新**：2026-05-14（追加 2026-05-13 锚点的事实核查保留意见）
 
 ---
 
@@ -45,7 +45,7 @@
 
 ---
 
-## 2026-05-13 锚点：测试体系契约化重构（Phase 1 + Phase 2 完成）
+## 2026-05-13 锚点：测试体系契约化重构（Phase 1 + Phase 2 ⚠ Phase 2 有保留意见）
 
 测试目录从"覆盖实现细节"转向"验证语义不变量"的重构完成。
 
@@ -64,6 +64,8 @@
 - 测试用例从1,259个优化至~591个（聚焦核心语义）
 
 **重构原则**：测试验证"IBCI作为一门语言的语义不变量"，而非"解释器的实现细节"。
+
+> **⚠ 2026-05-14 修订说明**：本条目原写有"测试基线 Full pass / 1239 passed"，经事实核查后**该结论无法支撑**。`tests/contracts/` 中约 88 个用例使用了非法 IBCI 语法（详见 `docs/PENDING_TASKS.md §七 PT-5.1`），不曾真正通过任何一次成功的编译。Phase 1 的目录重构 / helper 统一基础设施部分仍然有效，但 Phase 2 的"116 个 INV-XXX-N 不变量测试"中可执行的部分远少于 116。后续以 PT-5.1 为追踪条目逐步重写，重写完成后再决定如何重写本归档。
 
 ---
 
@@ -230,7 +232,7 @@ NS-2 全四步合龙——意图注释体系语法路径（`@`/`@+`/`@-`/`@!`）
 - **NS-2c**：`LLMExceptFrame.restore_context()` 由 `intent_context.merge(saved)` 改为 `_intent_ctx = saved.fork()` 干净替换，并同步重建活跃实例指针；retry 前后意图状态完全一致，与 vars / loop_context 的恢复语义对齐。
 - **NS-2d**：新增 11 项测试覆盖（7 个 `tests/runtime/test_intent_context.py` 单元测试 + 4 个 `tests/e2e/test_e2e_ai_mock.py` 端到端测试），覆盖共享引用不变量、`use()` fork 语义、`clear_inherited()` 重建、`@+` × `get_current()` 同源观察、`llmexcept` retry 干净还原。
 - 代码：`core/runtime/interpreter/runtime_context.py`，`core/runtime/objects/kernel.py`，`core/runtime/bootstrap/builtin_initializer.py`，`core/runtime/interpreter/llm_except_frame.py`。
-- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1195 passed）。
+- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（条目当时记录的具体通过数为 1195；该数字未在后续 PR 重新校验，请以当次实际运行结果为准）。
 
 历史 PT-1.1（llmexcept merge vs 替换语义对齐）随 NS-2c 一并落地，已从 `docs/PENDING_TASKS.md` 移除。PT-2.1 / PT-2.2 解除阻塞（依赖 NS-2b 的活跃实例指针），可作为 P2 排队。
 
@@ -241,7 +243,7 @@ NS-2 全四步合龙——意图注释体系语法路径（`@`/`@+`/`@-`/`@!`）
 - 在 `IbUserFunction.call()` 与 `IbLLMFunction.call()` 参数绑定阶段，`intent_context` 形参会自动激活为当前帧意图上下文（等价 `use(arg)` 语义）。
 - 新增统一运行时入口 `RuntimeContextImpl.use_intent_context(...)`，并让 `intent_context.use(ctx)` 复用该入口，消除双轨分叉。
 - 新增 e2e 覆盖：验证自动绑定生效、以及函数内 `@+` 修改不泄漏回调用方/实参上下文。
-- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（1182 passed）。
+- 回归结果：`python -m pytest tests/ -q --tb=short` 通过（条目当时记录的具体通过数为 1182；该数字未在后续 PR 重新校验，请以当次实际运行结果为准）。
 
 ---
 

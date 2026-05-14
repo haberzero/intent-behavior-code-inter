@@ -15,6 +15,21 @@ import pytest
 from tests.conftest import run_ibci, expect_runtime_error
 
 
+# Built-in exception subclasses are not pre-registered; user code must define them.
+# IBCI exposes only `Exception` and the LLM-specific subclasses
+# (LLMError, LLMParseError, LLMRetryExhaustedError, LLMCallError).
+EXC_PRELUDE = """
+class ValueError(Exception):
+    pass
+class TypeError(Exception):
+    pass
+class RuntimeError(Exception):
+    pass
+class IndexError(Exception):
+    pass
+"""
+
+
 # ===========================================================================
 # Exception Propagation (INV-EXCEPT-PROPAGATE-*)
 # ===========================================================================
@@ -31,10 +46,10 @@ class TestExceptionPropagation:
     def test_exception_propagates_through_function(self):
         """INV-EXCEPT-PROPAGATE-1: Exceptions propagate through function calls."""
         code = """
-func auto inner():
+func inner() -> auto:
     raise Exception("inner error")
 
-func auto outer():
+func outer() -> auto:
     inner()
 
 try:
@@ -42,18 +57,18 @@ try:
 except Exception as e:
     print("caught")
 """
-        assert run_ibci(code) == ["caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught"]
 
     def test_exception_propagates_through_nested_calls(self):
         """INV-EXCEPT-PROPAGATE-2: Exceptions propagate through deeply nested calls."""
         code = """
-func auto level3():
+func level3() -> auto:
     raise Exception("deep error")
 
-func auto level2():
+func level2() -> auto:
     level3()
 
-func auto level1():
+func level1() -> auto:
     level2()
 
 try:
@@ -61,7 +76,7 @@ try:
 except Exception as e:
     print("caught at top")
 """
-        assert run_ibci(code) == ["caught at top"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught at top"]
 
     def test_unhandled_exception_terminates(self):
         """INV-EXCEPT-PROPAGATE-3: Unhandled exceptions terminate execution."""
@@ -69,7 +84,7 @@ except Exception as e:
 raise Exception("unhandled")
 print("unreachable")
 """
-        expect_runtime_error(code, "unhandled")
+        expect_runtime_error(EXC_PRELUDE + code, "Exception")
 
     def test_exception_stops_at_first_matching_handler(self):
         """INV-EXCEPT-PROPAGATE-4: Exception stops at first matching except block."""
@@ -82,7 +97,7 @@ try:
 except ValueError:
     print("outer")
 """
-        assert run_ibci(code) == ["outer"]
+        assert run_ibci(EXC_PRELUDE + code) == ["outer"]
 
 
 # ===========================================================================
@@ -107,7 +122,7 @@ finally:
     print("finally")
 print("after")
 """
-        assert run_ibci(code) == ["try", "finally", "after"]
+        assert run_ibci(EXC_PRELUDE + code) == ["try", "finally", "after"]
 
     def test_finally_executes_on_exception(self):
         """INV-EXCEPT-FINALLY-2: Finally executes when exception is raised."""
@@ -120,12 +135,12 @@ try:
 except Exception:
     print("caught")
 """
-        assert run_ibci(code) == ["finally", "caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["finally", "caught"]
 
     def test_finally_executes_on_return(self):
         """INV-EXCEPT-FINALLY-3: Finally executes before function returns."""
         code = """
-func auto test():
+func test() -> auto:
     try:
         return "result"
     finally:
@@ -134,7 +149,7 @@ func auto test():
 auto result = test()
 print(result)
 """
-        assert run_ibci(code) == ["finally", "result"]
+        assert run_ibci(EXC_PRELUDE + code) == ["finally", "result"]
 
     def test_finally_executes_on_break(self):
         """INV-EXCEPT-FINALLY-4: Finally executes before loop break."""
@@ -148,7 +163,7 @@ for int i in range(3):
         print("finally")
 print("done")
 """
-        assert run_ibci(code) == ["0", "finally", "finally", "done"]
+        assert run_ibci(EXC_PRELUDE + code) == ["0", "finally", "finally", "done"]
 
     def test_finally_executes_on_continue(self):
         """INV-EXCEPT-FINALLY-5: Finally executes before loop continue."""
@@ -161,7 +176,7 @@ for int i in range(3):
     finally:
         print("finally")
 """
-        assert run_ibci(code) == ["0", "finally", "finally", "2", "finally"]
+        assert run_ibci(EXC_PRELUDE + code) == ["0", "finally", "finally", "2", "finally"]
 
 
 # ===========================================================================
@@ -184,7 +199,7 @@ try:
 except ValueError as e:
     print("caught ValueError")
 """
-        assert run_ibci(code) == ["caught ValueError"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught ValueError"]
 
     def test_multiple_except_blocks(self):
         """INV-EXCEPT-CATCH-2: Multiple except blocks match in order."""
@@ -198,7 +213,7 @@ except TypeError:
 except Exception:
     print("Exception")
 """
-        assert run_ibci(code) == ["TypeError"]
+        assert run_ibci(EXC_PRELUDE + code) == ["TypeError"]
 
     def test_except_with_as_clause(self):
         """INV-EXCEPT-CATCH-3: 'as' clause binds exception to variable."""
@@ -209,7 +224,7 @@ except ValueError as e:
     print("caught")
 """
         # Note: We just verify the exception was caught, not the message content
-        assert run_ibci(code) == ["caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught"]
 
     def test_bare_except_catches_all(self):
         """INV-EXCEPT-CATCH-4: Bare except catches all exceptions."""
@@ -219,7 +234,7 @@ try:
 except:
     print("caught all")
 """
-        assert run_ibci(code) == ["caught all"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught all"]
 
     def test_exception_type_not_matched(self):
         """INV-EXCEPT-CATCH-5: Non-matching except doesn't catch exception."""
@@ -229,7 +244,7 @@ try:
 except TypeError:
     print("not reached")
 """
-        expect_runtime_error(code, "ValueError")
+        expect_runtime_error(EXC_PRELUDE + code, "ValueError")
 
 
 # ===========================================================================
@@ -247,13 +262,13 @@ class TestUnhandledExceptions:
     def test_unhandled_exception_in_function(self):
         """INV-EXCEPT-UNHANDLED-1: Unhandled exception in function terminates."""
         code = """
-func auto test():
+func test() -> auto:
     raise Exception("unhandled")
     return "unreachable"
 
 test()
 """
-        expect_runtime_error(code, "unhandled")
+        expect_runtime_error(EXC_PRELUDE + code, "Exception")
 
     def test_unhandled_exception_in_nested_try(self):
         """INV-EXCEPT-UNHANDLED-2: Exception not caught by inner try propagates."""
@@ -266,7 +281,7 @@ try:
 except ValueError:
     print("caught in outer")
 """
-        assert run_ibci(code) == ["caught in outer"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught in outer"]
 
     def test_exception_in_except_block(self):
         """INV-EXCEPT-UNHANDLED-3: Exception in except block propagates."""
@@ -279,7 +294,7 @@ try:
 except TypeError:
     print("caught new exception")
 """
-        assert run_ibci(code) == ["caught new exception"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught new exception"]
 
     def test_exception_in_finally_block(self):
         """INV-EXCEPT-UNHANDLED-4: Exception in finally block replaces original."""
@@ -292,7 +307,7 @@ try:
 except TypeError:
     print("caught finally exception")
 """
-        assert run_ibci(code) == ["caught finally exception"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught finally exception"]
 
 
 # ===========================================================================
@@ -318,7 +333,7 @@ try:
 except Exception:
     print("caught")
 """
-        assert run_ibci(code) == ["0", "1", "caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["0", "1", "caught"]
 
     def test_exception_in_conditional(self):
         """INV-EXCEPT-FLOW-2: Exception in conditional branch propagates."""
@@ -330,12 +345,12 @@ try:
 except Exception:
     print("caught")
 """
-        assert run_ibci(code) == ["caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught"]
 
     def test_return_in_except_block(self):
         """INV-EXCEPT-FLOW-3: Return in except block exits function."""
         code = """
-func auto test():
+func test() -> auto:
     try:
         raise Exception("error")
     except Exception:
@@ -344,7 +359,7 @@ func auto test():
 
 print(test())
 """
-        assert run_ibci(code) == ["handled"]
+        assert run_ibci(EXC_PRELUDE + code) == ["handled"]
 
     def test_break_in_except_block(self):
         """INV-EXCEPT-FLOW-4: Break in except block exits loop."""
@@ -358,7 +373,7 @@ for int i in range(5):
         break
 print("done")
 """
-        assert run_ibci(code) == ["0", "1", "done"]
+        assert run_ibci(EXC_PRELUDE + code) == ["0", "1", "done"]
 
 
 # ===========================================================================
@@ -381,7 +396,7 @@ try:
 except ValueError as e:
     print("caught")
 """
-        assert run_ibci(code) == ["caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["caught"]
 
     def test_exception_variable_scoped_to_block(self):
         """INV-EXCEPT-SCOPE-2: Exception variable not accessible after except."""
@@ -393,7 +408,7 @@ except ValueError as e:
 # Variable 'e' should not be accessible here
 print("after")
 """
-        assert run_ibci(code) == ["in block", "after"]
+        assert run_ibci(EXC_PRELUDE + code) == ["in block", "after"]
 
     def test_nested_exception_handlers_independent(self):
         """INV-EXCEPT-SCOPE-3: Nested exception handlers have independent bindings."""
@@ -407,4 +422,4 @@ try:
 except TypeError as e:
     print("outer caught")
 """
-        assert run_ibci(code) == ["inner caught", "outer caught"]
+        assert run_ibci(EXC_PRELUDE + code) == ["inner caught", "outer caught"]
