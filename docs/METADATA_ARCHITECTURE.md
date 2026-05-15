@@ -467,5 +467,68 @@ class IbASTNode:
 
 ---
 
-**文档维护者**: Claude Sonnet 4.5  
-**最后更新**: 2026-05-13
+**文档维护者**: Claude Sonnet 4.5
+**最后更新**: 2026-05-15（追加"附录 B：2026-05-15 回顾性事实核查的关键订正"；
+修正 §3.2 中关于侧表字段的描述，删除已确认为"双写"的两条字段）
+
+---
+
+## 附录 B：2026-05-15 回顾性事实核查的关键订正
+
+> 完整报告见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。本附录将与本文（METADATA_ARCHITECTURE）冲突的部分一次性收口。
+
+### B.1 关于 §3.2 SideTableManager 的当前真实字段
+
+§3.2 列举的 `node_is_callable_instance` 与 `node_capture_mode` 是**双写真相**的产物——这两份信息同时存在于 AST 字段（`IbBehaviorInstance.is_callable_instance`、`IbAssign.capture_mode` / `IbLambdaExpr.capture_mode`）与侧表中，运行时 VM 实际是从侧表读取的（`core/runtime/vm/handlers.py:710-712, 1431, 1445`）。这违反了本文第八章"反模式警告"的第一条："不要将 AST 固有属性复制到 MetadataStore/侧表"。
+
+**结论**：这两条侧表字段计划删除（NEXT_STEPS 下一步 P0 任务"双写真相收敛"），VM 直接读取 AST 字段。删除后侧表只保留：
+- `node_to_symbol`（C2，编译期对象身份索引；序列化时统一展平为 UID）
+- `node_to_type`（C3，同上）
+- `node_to_loc`（仅诊断用）
+- `cell_captured_symbols`（UID 集合，跨边界字段；保留）
+
+### B.2 关于 §6 MetadataStore 字段定位的修订
+
+v2 `MetadataStore` 当前实现含 6 个字段：`symbol_bindings`、`type_bindings`、`callable_instances`、`capture_modes`、`cell_captured_symbols`、`annotations`。其中：
+
+- `callable_instances` / `capture_modes`：**AST 字段副本**，应当删除（同 §B.1）。
+- `annotations`：**通用口袋字段**，会被滥用为"再加一份保险"的便捷出口，应当删除。
+- `cell_captured_symbols`：**保留**（确实是跨 Pass 传递的 UID 集合，无 AST 对应字段）。
+
+同时 v2 `BindingAnalysisPass.run()` 写入了三个 `MetadataStore` 未声明的字段：`llmexcept_bindings`、`intent_annotations`、`behavior_metadata`——这三个字段**不应当被声明**。正确做法：
+
+- `llmexcept_bindings`：直接写回 AST（`IbLLMExceptionalStmt.target` / `IbFor.llmexcept_handler`，两个并存的 AST 通道，见下 §B.3）。
+- `intent_annotations`：写回 AST 或写回 `symbol_bindings`/`type_bindings`。
+- `behavior_metadata`：拆解成具体字段（dispatch_eligible / llm_deps）写回 AST，**避免通用口袋**。
+
+### B.3 关于 llmexcept 的 AST 双通道绑定（必须明文记录）
+
+`IbLLMExceptionalStmt` 在 parser 阶段 `target=None`；语义阶段 `_bind_llm_except`（`core/compiler/semantic/passes/semantic_analyzer.py:235-285`）按情形分两路写入：
+
+- **正则情形**（assign / if / return / while 等含 `@~...~` 的语句）：`IbLLMExceptionalStmt` 在 body 中**替换**前一句，`stmt.target = prev_stmt`。
+- **条件驱动 for 循环情形**：`IbLLMExceptionalStmt` **不**进入 body，而是挂在 `IbFor.llmexcept_handler` 字段，`stmt.target` 保持 None。
+
+这是历史上"侧表 → AST 字段"反向迁移（删除旧 `node_protection` 侧表，C11/P3）的最终形态。**v2 重构必须同时处理这两条 AST 通道**，不可以只读其中一个。
+
+### B.4 关于 `TypeEnvironment` 字段的修订
+
+v2 `TypeEnvironment` 当前含 `constraints` / `generic_instances` / `auto_return_accumulator` 三个字段。前两者来源于 Python 流派"约束求解 + 泛型实例化"思维，**不符合 IBCI 静态强类型 + auto 单次锁定的设计承诺**，应当在被写入前删除。仅保留 `auto_return_accumulator`，这是 `-> auto` 函数实现的唯一合法瞬态。
+
+### B.5 关于 §4.3 UID 生成策略的两个潜在地雷（待整改）
+
+- **类型 UID 冲突**：`type_{module}.{name}` 对结构化 `CALLABLE_SIG` 名字均为 "callable" 或匿名，会塌成同一 UID。当前未爆是因为 fn 推断少；D3（HOF 参数签名匹配）开始落地时会成为故障源。**改法**：CALLABLE_SIG 的 UID 改为 `sig_<sha16(return_head + ','.join(param_heads))>`。
+- **节点内容哈希的"语义重影"**：两个语法相同但语义不同的节点（如不同作用域的两个 `IbName("x")`）会被哈希到同一 UID，被侧表共用同一份绑定。当前能跑是因为 semantic 阶段用 `id()` 写、序列化前不重复；**只要哈希恰好相同就会塌**。改法见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.3.2。
+
+### B.6 关于 "MetadataStore.bind 返回新 store" 的反模式
+
+v2 当前实现采用 `{**self.symbol_bindings, k: v}` 拷整张字典模式（在 `metadata_store.py` 中）。节点上千就是 O(n²) 开销。改法：bind 改为 mutable in-place 更新，但**只允许从 Pass 内部调用**——这等价于 v1 的 SideTableManager 的成熟方案。"不可变 Context" 的设计承诺**不需要落到 MetadataStore 内部字典级别**。
+
+### B.7 反模式警告的扩充（取代 §8.3）
+
+在第八章"反模式警告"的基础上追加：
+
+❌ **不要**给 MetadataStore 新增 `behavior_metadata` / `annotations` 这种通用口袋字段——它会立刻被滥用，把侧表的债换个名字续命。
+❌ **不要**让 `TypeEnvironment` 演化出"按节点-约束键"的字段——这是元数据膨胀的种子。
+❌ **不要**忽略 llmexcept 的两条 AST 通道（`stmt.target` 与 `IbFor.llmexcept_handler`）——v2 必须同时处理。
+❌ **不要**重复存放"捕获模式"和"callable 实例标志"——AST 字段已是真相，删侧表副本。
+
