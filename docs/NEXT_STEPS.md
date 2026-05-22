@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`；架构演进方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 >
-> **最后更新**：2026-05-22（P1 全套完成——文档收口 + 设计原则补全 + visitor 补齐 + TypeResolutionPass + llmexcept body 重写）
+> **最后更新**：2026-05-22（P2-A 基础设施完成：SemanticAnalyzerV2 入口 + scheduler wiring + parity tests）
 
 ---
 
@@ -14,66 +14,83 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-22 实测结果**：`697 passed, 7 skipped, 0 failed`。
-（原 673 + 24 新增 P1 测试；0 失败）
+**2026-05-22 实测结果**：`715 passed, 7 skipped, 0 failed`。
+（原 697 + 18 新增 parity tests；0 失败）
 
 ---
 
-## ⚠️ 当前 P0/P1：完成（无阻塞项）
+## ⚠️ P2-A v2 替换基础设施：已完成
 
-三个前序 P0 和全部 P1 已在 2026-05-22 全部完成：
+v2 pipeline 已具备直接替换 v1 的基础条件：
 
-1. ✅ **H5 测试基线恢复**
-2. ✅ **双写真相收敛**
-3. ✅ **v2 阻塞 bug + MetadataStore/TypeEnvironment 字段收敛**
-4. ✅ **P1-A 文档与 v2 自我矛盾收口**
-5. ✅ **P1-B 核心 IBCI 设计原则补全**（auto 锁定 / any 永久 / -> auto 统一 / resolve_op）
-6. ✅ **P1-C AST 节点 visitor 补齐**（17 个新 visitor）
-7. ✅ **P1-E 独立 TypeResolutionPass**
-8. ✅ **P1-F 复刻 _bind_llm_except 到 v2**（双通道 body 重写）
-9. ✅ **P1-D 序列化层加固**（评估完成，无阻塞）
+1. ✅ **MetadataStore 对齐**：使用 node-object-identity 作为键（与 v1 SideTableManager 完全一致）
+2. ✅ **SemanticAnalyzerV2 入口**：`analyze() → CompilationResult` 接口与 v1 完全兼容
+3. ✅ **adapter.py**：`PassResult → CompilationResult` 桥接（无 fallback）
+4. ✅ **scheduler.py 集成**：`use_v2=True` 标志直接切换到 v2 pipeline
+5. ✅ **18 parity tests**：验证结构、符号收集、引用解析、llmexcept 绑定
 
 ---
 
-## ⏭ 下一个 P0 候选（提升自 P2）
+## ⏭ 当前 P0：v2 功能补全 → 全量替换 v1
 
-以下为按优先级排列的候选 P0 项。根据项目节奏选取一个或多个推进：
+v2 pipeline 基础设施就位，接下来的核心任务是**补全 v2 各 Pass 的功能覆盖**，使其达到 v1 的等效输出水平，然后直接删除 v1。
 
-### P2-A v2 Shadow 模式与 parity 测试
+### P0-NEXT-1 SymbolResolutionPass 作用域正确性
 
-- [ ] `scheduler` 加 `run_v2_shadow=False` 开关；启用时 v1 跑完后让 v2 跑同一份 AST。
-- [ ] 新增 `tests/compiler/test_v2_v1_parity.py`：断言"v2 在 shadow 模式下产出的错误码集合 ⊆ v1 产出的错误码集合"，并对一组 fixture 比对关键产物（type/symbol/llm_deps）一致。允许 v2 漏报但禁止误报。
+v2 的 SymbolResolutionPass 当前不处理函数参数作用域（进入函数时不 push scope），导致函数体内的参数引用报 SEM_001 undefined。
+
+- [ ] 实现 `visit_IbFunctionDef`/`visit_IbLLMFunctionDef` 中的 push_scope + 参数注册
+- [ ] 实现 `visit_IbClassDef` 中的作用域管理
+- [ ] 实现 `visit_IbFor`/`visit_IbWhile` 中的循环变量作用域
+- [ ] 验证：相同程序通过 v1 和 v2 产出相同的 symbol_table 内容
+
+### P0-NEXT-2 TypeCheckingPass 完整绑定
+
+TypeCheckingPass 需要对所有表达式节点进行类型推断并写入 `node_to_type`。
+
+- [ ] 确保 `visit_IbAssign` 正确推断赋值值的类型并绑定到节点
+- [ ] 确保 `visit_IbCall` 推断返回类型
+- [ ] 确保 `visit_IbBehaviorExpr` 绑定 behavior type
+- [ ] 验证：v2 的 `node_to_type` 条目数接近 v1
+
+### P0-NEXT-3 Location 绑定（node_to_loc）
+
+v2 当前不产出 `node_to_loc`（v1 在 Pass 3.5 中填充）。
+
+- [ ] 在适当 Pass（建议 IntegrityCheckPass 或专门 LocationBindingPass）中遍历所有 AST 节点写入 location 信息
+- [ ] 验证序列化器能正确消费 v2 产出的 node_to_loc
+
+### P0-NEXT-4 全量 parity 验证 + v1 删除
+
+- [ ] 在 scheduler 中设 `use_v2=True` 为默认值，跑全量 pytest
+- [ ] 修复所有 parity 差异
+- [ ] 删除 `core/compiler/semantic/passes/semantic_analyzer.py`（v1）
+- [ ] 删除 `use_v2` flag，v2 成为唯一路径
+
+---
+
+## P2 候选（降级为背景项）
 
 ### P2-B `intent_context.push()` 静默无效陷阱编译期警告
 
 `intent_context.push("X")` 在没有 `use(ctx)` 时是 no-op（详见 `docs/KNOWN_LIMITS.md §十八`），编译期不告警；用户极易踩坑。
-**动作**：在 `semantic_analyzer` 中对 `IbCall(method='push'|'pop'|'merge'|'combine'|'clear')` 且 receiver 为类静态调用（非局部 `intent_context` 变量）的形态发出 SEM 警告。低风险，单点改动。
+**动作**：在 TypeCheckingPass 中对相关形态发出 SEM 警告。
 
 ### P2-C NS-5 编译期类型转换检查（激活 `can_convert_from`）
 
-技术路径已记录；保留为低优先背景项。实施前需先评估对 `tests/` 套件的破坏面，再决定动手。
-
-### P2-D 已知设计取向项（参考性低优先）
-
-- 嵌套 llmexcept 内 retry 计数器的"每次外层 retry 是否重置"语义在 `docs/INTENT_SYSTEM_DESIGN.md` / `docs/ARCH_DETAILS.md` 明文锁定。
-- `@-` 在按内容/标签移除不存在意图时的 no-op 行为在 `docs/INTENT_SYSTEM_DESIGN.md §4.4` 明文锁定。
-- `__to_prompt__` 在容器嵌套（list/dict 内含用户对象）插值时的递归展开规则在 `docs/IBCI_SYNTAX_REFERENCE.md §6 / §10` 写出契约。
+技术路径已记录；保留为低优先背景项。
 
 ### P1-B 遗留细化（可选）
 
-以下 P1-B 子项已有基础框架但可进一步完善：
-- [ ] `llm_uncertain` 标记与消解规则（需要确定 LLM 返回值不确定性标记何时引入、何时消解）
-- [ ] 函数参数类型匹配 / `fn` 推断 / `CALLABLE_SIG` 结构匹配（D3 完整实现）
-
-### P1-Z idbg.last_llm() 与 MOCK:SEQ 时序一致性核查（H7）
+- [ ] `llm_uncertain` 标记与消解规则
+- [ ] `CALLABLE_SIG` 结构匹配（D3 完整实现）
 
 ---
 
-## P3 候选（远景，暂搁置；详见 PENDING_TASKS）
+## P3 候选（远景；详见 PENDING_TASKS）
 
-- v2 切换 + v1 删除（前提：P2-A parity 稳定 ≥ 2 个周期）。
 - 二层 IR 路线（结构 IR + 执行 IR），见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.5。
-- 公理 + 元数据 LLVM 化（命名、可丢弃、带版本的 `!metadata` 系统）。
+- 公理 + 元数据 LLVM 化。
 
 ---
 
