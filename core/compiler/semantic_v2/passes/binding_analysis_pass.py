@@ -50,9 +50,15 @@ class BindingAnalysisPass(BasePass):
 
         # Lambda captures → cell_captured_symbols in MetadataStore
         new_metadata = context.metadata
-        for node_uid, captures in lambda_analyzer.lambda_captures.items():
-            for sym_uid in captures:
-                new_metadata.add_cell_captured_symbol(sym_uid)
+        for node, captures in lambda_analyzer.lambda_captures.items():
+            for var_name in captures:
+                # Resolve the variable name to get its symbol UID
+                sym = context.symbol_table.resolve(var_name)
+                if sym and hasattr(sym, 'uid') and sym.uid:
+                    new_metadata.add_cell_captured_symbol(sym.uid)
+                else:
+                    # Fallback: use variable name as identifier
+                    new_metadata.add_cell_captured_symbol(var_name)
 
         new_context = replace(context, metadata=new_metadata)
 
@@ -182,13 +188,11 @@ class LLMExceptBindingAnalyzer:
                 if stmt.body:
                     stmt.body = self._rewrite_body(stmt.body)
 
-                # 记录绑定
-                node_uid = getattr(stmt, 'uid', None)
-                if node_uid:
-                    self.llmexcept_bindings[node_uid] = {
-                        'target_uid': getattr(stmt.target, 'uid', None) if stmt.target else None,
-                        'has_behavior': True
-                    }
+                # 记录绑定（使用节点对象作为键）
+                self.llmexcept_bindings[stmt] = {
+                    'target': stmt.target,
+                    'has_behavior': True
+                }
             else:
                 new_body.append(stmt)
                 # 递归处理子节点
@@ -229,7 +233,7 @@ class IntentContextValidator:
     def __init__(self, context: SemanticContext):
         self.context = context
         self.diagnostics: List[Diagnostic] = []
-        self.intent_annotations: Dict[str, Any] = {}
+        self.intent_annotations: Dict[Any, Any] = {}
 
     def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
         """记录错误诊断"""
@@ -290,13 +294,11 @@ class IntentContextValidator:
                                 code="SEM_050"
                             )
 
-                # 记录注解
-                node_uid = getattr(stmt, 'uid', None)
-                if node_uid:
-                    self.intent_annotations[node_uid] = {
-                        'mode': intent_mode,
-                        'content': stmt.intent.content if hasattr(stmt, 'intent') else None
-                    }
+                # 记录注解（使用节点对象作为键）
+                self.intent_annotations[stmt] = {
+                    'mode': intent_mode,
+                    'content': stmt.intent.content if hasattr(stmt, 'intent') else None
+                }
 
             # 递归验证
             self._validate_node(stmt)
@@ -424,10 +426,9 @@ class LambdaCaptureAnalyzer:
             if sym:
                 captured_vars.add(var_name)
 
-        # 记录捕获
-        node_uid = getattr(node, 'uid', None)
-        if node_uid:
-            self.lambda_captures[node_uid] = captured_vars
+        # 记录捕获（使用节点对象作为键）
+        if captured_vars:
+            self.lambda_captures[node] = captured_vars
 
     def _collect_referenced_names(self, node: ast.IbASTNode) -> Set[str]:
         """收集节点中引用的所有名称"""

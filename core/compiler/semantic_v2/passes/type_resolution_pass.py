@@ -43,10 +43,10 @@ class TypeResolutionPass(BasePass):
         resolver = TypeAnnotationResolver(context)
         resolver.resolve(context.ast)
 
-        # 更新 metadata 中的类型绑定（仅标注节点的解析结果）
+        # 更新 metadata 中的类型绑定（node object → IbSpec）
         new_metadata = context.metadata
-        for node_uid, type_spec in resolver.resolved_types.items():
-            new_metadata.type_bindings[node_uid] = type_spec
+        for node, type_spec in resolver.resolved_types.items():
+            new_metadata.bind_type(node, type_spec)
 
         new_context = replace(context, metadata=new_metadata)
         return PassResult.ok(new_context, diagnostics=resolver.diagnostics)
@@ -62,7 +62,7 @@ class TypeAnnotationResolver:
         self.context = context
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
-        self.resolved_types: Dict[str, IbSpec] = {}
+        self.resolved_types: Dict[Any, IbSpec] = {}
 
         # 常用类型描述符缓存
         self._any_desc = self.registry.resolve("any")
@@ -148,9 +148,8 @@ class TypeAnnotationResolver:
         # 解析返回类型
         if node.returns:
             ret_spec = self.resolve_type_annotation(node.returns)
-            node_uid = getattr(node.returns, 'uid', None)
-            if node_uid and ret_spec:
-                self.resolved_types[node_uid] = ret_spec
+            if ret_spec:
+                self.resolved_types[node.returns] = ret_spec
 
         # 递归处理函数体
         for stmt in node.body:
@@ -162,9 +161,8 @@ class TypeAnnotationResolver:
             self.resolve(arg)
         if node.returns:
             ret_spec = self.resolve_type_annotation(node.returns)
-            node_uid = getattr(node.returns, 'uid', None)
-            if node_uid and ret_spec:
-                self.resolved_types[node_uid] = ret_spec
+            if ret_spec:
+                self.resolved_types[node.returns] = ret_spec
 
     def resolve_IbClassDef(self, node: ast.IbClassDef):
         """解析类定义"""
@@ -176,9 +174,8 @@ class TypeAnnotationResolver:
         for target in node.targets:
             if isinstance(target, ast.IbTypeAnnotatedExpr):
                 type_spec = self.resolve_type_annotation(target.annotation)
-                node_uid = getattr(target.annotation, 'uid', None)
-                if node_uid and type_spec:
-                    self.resolved_types[node_uid] = type_spec
+                if type_spec:
+                    self.resolved_types[target.annotation] = type_spec
         # 递归处理值表达式
         if node.value:
             self.resolve(node.value)
@@ -186,15 +183,13 @@ class TypeAnnotationResolver:
     def resolve_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """解析类型标注表达式"""
         type_spec = self.resolve_type_annotation(node.annotation)
-        node_uid = getattr(node.annotation, 'uid', None)
-        if node_uid and type_spec:
-            self.resolved_types[node_uid] = type_spec
+        if type_spec:
+            self.resolved_types[node.annotation] = type_spec
         self.resolve(node.target)
 
     def resolve_IbCastExpr(self, node: ast.IbCastExpr):
         """解析类型转换表达式"""
         type_spec = self.resolve_type_annotation(node.type_annotation)
-        node_uid = getattr(node.type_annotation, 'uid', None)
-        if node_uid and type_spec:
-            self.resolved_types[node_uid] = type_spec
+        if type_spec:
+            self.resolved_types[node.type_annotation] = type_spec
         self.resolve(node.value)

@@ -82,6 +82,9 @@ class BehaviorDependencyAnalyzer:
 
     def _analyze_node(self, node: ast.IbASTNode):
         """递归分析节点，建立依赖关系"""
+        if node is None:
+            return
+
         if isinstance(node, ast.IbAssign):
             # 先分析右侧
             self._analyze_node(node.value)

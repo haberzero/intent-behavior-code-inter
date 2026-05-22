@@ -36,10 +36,10 @@ class TypeCheckingPass(BasePass):
         visitor = TypeCheckingVisitor(context)
         visitor.visit(context.ast)
 
-        # 更新 metadata 中的类型绑定
+        # 更新 metadata 中的类型绑定（node object → IbSpec）
         new_metadata = context.metadata
-        for node_uid, type_spec in visitor.type_bindings.items():
-            new_metadata.type_bindings[node_uid] = type_spec
+        for node, type_spec in visitor.type_bindings.items():
+            new_metadata.bind_type(node, type_spec)
 
         # TypeEnvironment is updated through visitor operations
         # No need to explicitly update it here
@@ -58,8 +58,8 @@ class TypeCheckingVisitor:
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
 
-        # 类型绑定：node_uid -> IbSpec
-        self.type_bindings: Dict[str, IbSpec] = {}
+        # 类型绑定：node object -> IbSpec（使用对象身份作为键）
+        self.type_bindings: Dict[Any, IbSpec] = {}
 
         # 作用域栈（用于处理嵌套作用域）
         self.scope_stack: List[SymbolTable] = [self.symbol_table]
@@ -98,6 +98,8 @@ class TypeCheckingVisitor:
 
     def visit(self, node: ast.IbASTNode) -> Optional[IbSpec]:
         """访问节点的分派方法，返回节点的类型"""
+        if node is None:
+            return None
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
@@ -128,10 +130,9 @@ class TypeCheckingVisitor:
         ))
 
     def bind_type(self, node: ast.IbASTNode, type_spec: IbSpec):
-        """绑定类型到节点"""
-        node_uid = getattr(node, 'uid', None)
-        if node_uid and type_spec:
-            self.type_bindings[node_uid] = type_spec
+        """绑定类型到节点（使用节点对象作为键）"""
+        if node and type_spec:
+            self.type_bindings[node] = type_spec
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""

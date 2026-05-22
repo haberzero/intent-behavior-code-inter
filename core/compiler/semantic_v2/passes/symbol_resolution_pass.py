@@ -34,12 +34,10 @@ class SymbolResolutionPass(BasePass):
         visitor = SymbolResolver(context)
         visitor.visit(context.ast)
 
-        # 更新 metadata 中的符号绑定
-        new_bindings = visitor.symbol_bindings
+        # 更新 metadata 中的符号绑定（node object → Symbol）
         new_metadata = context.metadata
-        # 直接更新 symbol_bindings
-        for node_uid, symbol in new_bindings.items():
-            new_metadata.symbol_bindings[node_uid] = symbol
+        for node, symbol in visitor.symbol_bindings.items():
+            new_metadata.bind_symbol(node, symbol)
 
         new_context = context.with_metadata(new_metadata)
 
@@ -55,8 +53,8 @@ class SymbolResolver:
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
 
-        # 符号绑定：node_uid -> Symbol
-        self.symbol_bindings: Dict[str, Symbol] = {}
+        # 符号绑定：node object -> Symbol（使用对象身份作为键）
+        self.symbol_bindings: Dict[Any, Symbol] = {}
 
         # 作用域栈（用于处理嵌套作用域）
         self.scope_stack: List[SymbolTable] = [self.symbol_table]
@@ -77,6 +75,8 @@ class SymbolResolver:
 
     def visit(self, node: ast.IbASTNode):
         """访问节点的分派方法"""
+        if node is None:
+            return
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
@@ -107,10 +107,9 @@ class SymbolResolver:
         return self.current_scope.resolve(name)
 
     def bind_symbol(self, node: ast.IbASTNode, symbol: Symbol):
-        """绑定符号到节点"""
-        node_uid = getattr(node, 'uid', None)
-        if node_uid:
-            self.symbol_bindings[node_uid] = symbol
+        """绑定符号到节点（使用节点对象作为键）"""
+        if node and symbol:
+            self.symbol_bindings[node] = symbol
 
     def visit_IbModule(self, node: ast.IbModule):
         """访问模块节点"""
