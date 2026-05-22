@@ -16,8 +16,6 @@ class SideTableManager:
     def __init__(self):
         self.node_to_symbol: Dict[Any, Symbol] = {}
         self.node_to_type: Dict[Any, 'IbSpec'] = {}
-        self.node_is_callable_instance: Dict[Any, bool] = {}
-        self.node_capture_mode: Dict[Any, str] = {}
         self.node_to_loc: Dict[Any, Any] = {}
         # lambda 捕获分析（Pass 4）填充。
         # 包含"被至少一个 lambda 捕获为自由变量"的所有符号 UID。
@@ -33,16 +31,26 @@ class SideTableManager:
         self.node_to_type[node] = type_desc
 
     def set_callable_instance(self, node: Any, is_callable_instance: bool = True) -> None:
-        self.node_is_callable_instance[node] = is_callable_instance
+        """Write is_callable_instance directly onto the AST node field.
+        
+        Previously stored in a side table; now the canonical location is
+        `IbBehaviorInstance.is_callable_instance` (AST field).
+        """
+        node.is_callable_instance = is_callable_instance
 
     def set_capture_mode(self, node: Any, mode: str) -> None:
-        self.node_capture_mode[node] = mode
+        """Write capture_mode directly onto the AST node field.
+        
+        Previously stored in a side table; now the canonical location is
+        `IbAssign.capture_mode` / `IbLambdaExpr.capture_mode` (AST field).
+        """
+        node.capture_mode = mode
 
     def get_capture_mode(self, node: Any) -> Optional[str]:
-        return self.node_capture_mode.get(node)
+        return getattr(node, 'capture_mode', None)
 
     def is_callable_instance(self, node: Any) -> bool:
-        return self.node_is_callable_instance.get(node, False)
+        return getattr(node, 'is_callable_instance', False)
 
     def bind_location(self, node: Any, loc: Any) -> None:
         self.node_to_loc[node] = loc
@@ -59,7 +67,5 @@ class SideTableManager:
     def clear(self) -> None:
         self.node_to_symbol.clear()
         self.node_to_type.clear()
-        self.node_is_callable_instance.clear()
-        self.node_capture_mode.clear()
         self.node_to_loc.clear()
         self.cell_captured_symbols.clear()

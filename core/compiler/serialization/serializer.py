@@ -71,21 +71,10 @@ class FlatSerializer(BaseFlatSerializer):
             type_uid = self._collect_type(type_obj)
             remaped_node_to_type[node_uid] = type_uid
 
-        remaped_node_is_callable_instance = {}
-        for node, val in result.node_is_callable_instance.items():
-            node_uid = self._collect_node(node)
-            remaped_node_is_callable_instance[node_uid] = val
-
         remaped_node_to_loc = {}
         for node, loc in result.node_to_loc.items():
             node_uid = self._collect_node(node)
             remaped_node_to_loc[node_uid] = loc
-
-        remaped_node_capture_mode = {}
-        for node, mode in result.node_capture_mode.items():
-            node_uid = self._collect_node(node)
-            if node_uid:
-                remaped_node_capture_mode[node_uid] = mode
 
         return {
             "root_node_uid": root_node_uid,
@@ -93,9 +82,7 @@ class FlatSerializer(BaseFlatSerializer):
             "side_tables": {
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,
-                "node_is_callable_instance": remaped_node_is_callable_instance,
-                "node_to_loc": remaped_node_to_loc,
-                "node_capture_mode": remaped_node_capture_mode
+                "node_to_loc": remaped_node_to_loc
             },
             "pools": {
                 "nodes": self.node_pool,
