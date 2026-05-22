@@ -709,7 +709,8 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     is_callable_instance = False
     if value_uid:
-        is_callable_instance = bool(executor.ec.get_side_table("node_is_callable_instance", value_uid))
+        value_node_data = executor.ec.get_node_data(value_uid)
+        is_callable_instance = bool(value_node_data.get("is_callable_instance")) if value_node_data else False
 
     # 识别 dispatch-before-use 路径
     dispatched_future: Optional[LLMFuture] = None
@@ -1428,7 +1429,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     """
     if False:
         yield
-    is_callable_instance = executor.ec.get_side_table("node_is_callable_instance", node_uid)
+    is_callable_instance = node_data.get("is_callable_instance")
 
     intent_uid = node_data.get("intent")
     call_intent: Optional[IbIntent] = None
@@ -1442,7 +1443,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     sc = executor.service_context
 
     if is_callable_instance:
-        capture_mode = executor.ec.get_side_table("node_capture_mode", node_uid)
+        capture_mode = node_data.get("capture_mode")
         captured_intents = (
             None if capture_mode == "lambda"
             else executor.runtime_context.fork_intent_snapshot()

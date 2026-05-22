@@ -6,6 +6,7 @@ import pytest
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind
 from core.kernel.spec.registry import SpecRegistry
+from core.kernel.axioms.registry import AxiomRegistry
 from core.compiler.semantic_v2.context import SemanticContext
 from core.compiler.semantic_v2.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
 from core.compiler.semantic_v2.passes.symbol_collection_pass import SymbolCollectionPass
@@ -13,14 +14,15 @@ from core.compiler.semantic_v2.passes.symbol_collection_pass import SymbolCollec
 
 def create_test_context(ast_node):
     """创建测试上下文"""
-    registry = SpecRegistry()
+    axiom_reg = AxiomRegistry()
+    registry = SpecRegistry(axiom_reg)
     symbol_table = SymbolTable()
 
     context = SemanticContext(
         ast=ast_node,
         registry=registry,
         module_name="test_module",
-        symbol_table=SymbolTableContext(table=symbol_table),
+        symbol_table=SymbolTableContext(current=symbol_table),
         type_environment=TypeEnvironment(),
         metadata=MetadataStore()
     )
@@ -63,7 +65,7 @@ def test_symbol_collection_pass_function_def():
     assert len(result.diagnostics) == 0
 
     # 验证符号表
-    symbol_table = result.context.symbol_table.table
+    symbol_table = result.context.symbol_table.current
     assert "test_func" in symbol_table.symbols
     sym = symbol_table.symbols["test_func"]
     assert sym.kind == SymbolKind.FUNCTION
@@ -90,7 +92,7 @@ def test_symbol_collection_pass_class_def():
     assert len(result.diagnostics) == 0
 
     # 验证符号表
-    symbol_table = result.context.symbol_table.table
+    symbol_table = result.context.symbol_table.current
     assert "TestClass" in symbol_table.symbols
     sym = symbol_table.symbols["TestClass"]
     assert sym.kind == SymbolKind.CLASS
@@ -115,7 +117,7 @@ def test_symbol_collection_pass_variable_assign():
     assert len(result.diagnostics) == 0
 
     # 验证符号表
-    symbol_table = result.context.symbol_table.table
+    symbol_table = result.context.symbol_table.current
     assert "x" in symbol_table.symbols
     sym = symbol_table.symbols["x"]
     assert sym.kind == SymbolKind.VARIABLE

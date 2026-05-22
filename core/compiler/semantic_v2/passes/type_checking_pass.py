@@ -135,7 +135,7 @@ class TypeCheckingVisitor:
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""
-        return self.current_scope.lookup(name)
+        return self.current_scope.resolve(name)
 
     def is_assignable(self, source: IbSpec, target: IbSpec) -> bool:
         """检查源类型是否可以赋给目标类型"""
@@ -486,8 +486,8 @@ class TypeCheckingVisitor:
             self.visit(arg)
 
         # 推断返回类型
-        if func_type and hasattr(func_type, 'ret'):
-            return_type = func_type.ret
+        if func_type and hasattr(func_type, 'return_type'):
+            return_type = func_type.return_type
         else:
             return_type = self._any_desc
 

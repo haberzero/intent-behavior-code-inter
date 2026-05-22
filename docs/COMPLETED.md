@@ -4,8 +4,33 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-15（追加：2026-05-15 回顾性事实核查与一体两面演进报告归档；
-> PT-4.6 事实订正：llmexcept 用户 `__snapshot__`/`__restore__` 协议已实施）
+> **最后更新**：2026-05-22（追加：三个 P0 完成——H5 测试恢复 + 双写真相收敛 + v2 静默 bug 修复/字段收敛）
+
+---
+
+## 2026-05-22 锚点：三个 P0 任务完成（semantic_v2 基线恢复与架构收敛）
+
+完成三项 P0 级别工作，semantic_v2 骨架达到"无静默 bug + 无双写冗余 + 无错误字段引用"的稳定状态。
+
+- **P0-H5 测试基线恢复**：
+  - 修 `test_symbol_collection_pass.py`：`SpecRegistry(AxiomRegistry())`、`SymbolTableContext(current=...)`、`.symbol_table.current`。
+  - 测试结果从 `658 passed, 7 skipped, 5 failed` → `663 passed, 7 skipped, 0 failed`。
+- **P0-双写真相收敛**：
+  - 删除 `SideTableManager.node_is_callable_instance` / `node_capture_mode`（改为直接写 AST 字段）。
+  - 同步清理 `CompilationResult`、`FlatSerializer`。
+  - VM `handlers.py` 改从 `node_data` 读取 `is_callable_instance` / `capture_mode`。
+  - 新增 `tests/contracts/test_no_redundant_side_tables.py` 契约测试。
+- **P0-v2 阻塞 bug + MetadataStore/TypeEnvironment 字段收敛**：
+  - 修 `behavior_dependency_pass.py`：`isinstance(node, IbBehaviorExpr)` → `isinstance(node.value, IbBehaviorExpr)`
+  - 修 `type_checking_pass.py`：`func_type.ret` → `func_type.return_type`
+  - 修 `binding_analysis_pass.py`：`stmt.op/text` → `stmt.intent.mode/content`；`node.args` → `node.params`；`self.current_scope.lookup` → `.resolve`；删除写入不存在 MetadataStore 字段的代码
+  - 修 `symbol_resolution_pass.py`：`self.current_scope.lookup` → `.resolve`
+  - 修 `SymbolTableContext.resolve_local`：`.lookup` → `.symbols.get`
+  - `ContextBuilder.build()` 注入 builtin prelude（复用 v1 Prelude 类）
+  - `MetadataStore` 删除 `callable_instances`/`capture_modes`/`annotations`，保留 `symbol_bindings`/`type_bindings`/`loc_bindings`/`cell_captured_symbols`；bind 操作改 mutable in-place
+  - `TypeEnvironment` 删除 `constraints`/`generic_instances`
+  - 新增 10 个回归测试于 `tests/compiler/semantic_v2/`
+- **最终基线**：`673 passed, 7 skipped, 0 failed`。
 
 ---
 

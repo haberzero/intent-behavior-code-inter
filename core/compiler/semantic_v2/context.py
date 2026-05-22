@@ -165,11 +165,30 @@ class ContextBuilder:
         from .metadata.symbol_table import SymbolTableContext
         from .metadata.type_environment import TypeEnvironment
         from .metadata.metadata_store import MetadataStore
+        from core.compiler.semantic.passes.prelude import Prelude
 
         # Initialize empty state
         symbol_table = SymbolTableContext.create_root(self.module_name)
         type_environment = TypeEnvironment.create_empty()
         metadata = MetadataStore.create_empty()
+
+        # Inject builtin prelude symbols into the root symbol table
+        prelude = Prelude(registry=self.registry)
+        from core.kernel.symbols import VariableSymbol, FunctionSymbol, TypeSymbol, SymbolKind
+        for name, spec in prelude.get_builtin_types().items():
+            if getattr(spec, 'is_user_defined', False):
+                continue
+            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, spec=spec, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            symbol_table.current.define(sym)
+        for name, spec in prelude.get_builtins().items():
+            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=spec, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            symbol_table.current.define(sym)
+        for name, spec in prelude.get_builtin_modules().items():
+            sym = VariableSymbol(name=name, kind=SymbolKind.MODULE, spec=spec, uid=f"builtin:{name}", metadata={"is_builtin": True})
+            symbol_table.current.define(sym)
+        for name, spec in prelude.get_builtin_variables().items():
+            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec, uid=f"builtin:{name}", is_const=True, metadata={"is_builtin": True})
+            symbol_table.current.define(sym)
 
         return SemanticContext(
             ast=self.ast,

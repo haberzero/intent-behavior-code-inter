@@ -153,8 +153,6 @@ class SemanticAnalyzer:
                 symbol_table=self.symbol_table,
                 node_to_symbol=self.side_table.node_to_symbol,
                 node_to_type=self.side_table.node_to_type,
-                node_is_callable_instance=self.side_table.node_is_callable_instance,
-                node_capture_mode=self.side_table.node_capture_mode,
                 node_to_loc=self.side_table.node_to_loc,
             )
         finally:

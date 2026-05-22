@@ -7,6 +7,12 @@ Key insight from V1 limitations:
 - V2 uses string UIDs, enabling serialization and cross-process sharing
 
 Design principle: All metadata is keyed by node UID, not object reference.
+
+2026-05-15 立场对齐:
+- MetadataStore 只承载 C2/C3 绑定（symbol_bindings / type_bindings / loc_bindings）
+- callable_instances / capture_modes / annotations 已删除（AST 字段承载）
+- cell_captured_symbols 保留（无 AST 对应字段）
+- bind 操作改为 mutable in-place（删除 O(n²) 拷字典反模式）
 """
 
 from typing import Dict, Optional, Any, Set
@@ -18,111 +24,44 @@ class MetadataStore:
     """
     UID-based metadata storage for AST nodes.
 
-    Replaces V1's side_table.py which used object identity.
-
-    Advantages over V1:
-    - Serializable (UIDs are strings)
-    - Works across process boundaries
-    - Survives AST reconstruction
-    - No memory leaks from holding node references
+    After 2026-05-15 convergence:
+    - symbol_bindings: Node UID → Symbol (C2 binding)
+    - type_bindings: Node UID → Type specification (C2 binding)
+    - loc_bindings: Node UID → Location info (C3 binding)
+    - cell_captured_symbols: Symbol UIDs captured by lambdas (no AST field equivalent)
     """
-    # Node UID → Symbol binding
+    # Node UID → Symbol binding (C2)
     symbol_bindings: Dict[str, Any] = field(default_factory=dict)
 
-    # Node UID → Type specification
+    # Node UID → Type specification (C2)
     type_bindings: Dict[str, Any] = field(default_factory=dict)
 
-    # Node UID → Whether it's a callable instance
-    callable_instances: Set[str] = field(default_factory=set)
-
-    # Node UID → Capture mode for lambda variables
-    capture_modes: Dict[str, str] = field(default_factory=dict)
+    # Node UID → Location info (C3)
+    loc_bindings: Dict[str, Any] = field(default_factory=dict)
 
     # Set of symbol UIDs captured by lambdas as cells
     cell_captured_symbols: Set[str] = field(default_factory=set)
-
-    # Additional annotations (extensible)
-    annotations: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def create_empty(cls) -> 'MetadataStore':
         """Create an empty metadata store"""
         return cls()
 
-    def bind_symbol(self, node_uid: str, symbol: Any) -> 'MetadataStore':
-        """Bind a symbol to a node (returns new store)"""
-        new_bindings = {**self.symbol_bindings, node_uid: symbol}
-        return MetadataStore(
-            symbol_bindings=new_bindings,
-            type_bindings=self.type_bindings,
-            callable_instances=self.callable_instances,
-            capture_modes=self.capture_modes,
-            cell_captured_symbols=self.cell_captured_symbols,
-            annotations=self.annotations
-        )
+    def bind_symbol(self, node_uid: str, symbol: Any) -> None:
+        """Bind a symbol to a node (mutable in-place)"""
+        self.symbol_bindings[node_uid] = symbol
 
-    def bind_type(self, node_uid: str, type_spec: Any) -> 'MetadataStore':
-        """Bind a type to a node (returns new store)"""
-        new_bindings = {**self.type_bindings, node_uid: type_spec}
-        return MetadataStore(
-            symbol_bindings=self.symbol_bindings,
-            type_bindings=new_bindings,
-            callable_instances=self.callable_instances,
-            capture_modes=self.capture_modes,
-            cell_captured_symbols=self.cell_captured_symbols,
-            annotations=self.annotations
-        )
+    def bind_type(self, node_uid: str, type_spec: Any) -> None:
+        """Bind a type to a node (mutable in-place)"""
+        self.type_bindings[node_uid] = type_spec
 
-    def mark_callable_instance(self, node_uid: str) -> 'MetadataStore':
-        """Mark a node as a callable instance (returns new store)"""
-        new_callables = self.callable_instances | {node_uid}
-        return MetadataStore(
-            symbol_bindings=self.symbol_bindings,
-            type_bindings=self.type_bindings,
-            callable_instances=new_callables,
-            capture_modes=self.capture_modes,
-            cell_captured_symbols=self.cell_captured_symbols,
-            annotations=self.annotations
-        )
+    def bind_location(self, node_uid: str, loc: Any) -> None:
+        """Bind a location to a node (mutable in-place)"""
+        self.loc_bindings[node_uid] = loc
 
-    def set_capture_mode(self, node_uid: str, mode: str) -> 'MetadataStore':
-        """Set capture mode for a lambda variable (returns new store)"""
-        new_modes = {**self.capture_modes, node_uid: mode}
-        return MetadataStore(
-            symbol_bindings=self.symbol_bindings,
-            type_bindings=self.type_bindings,
-            callable_instances=self.callable_instances,
-            capture_modes=new_modes,
-            cell_captured_symbols=self.cell_captured_symbols,
-            annotations=self.annotations
-        )
-
-    def add_cell_captured_symbol(self, symbol_uid: str) -> 'MetadataStore':
-        """Add a symbol to the cell-captured set (returns new store)"""
-        new_cells = self.cell_captured_symbols | {symbol_uid}
-        return MetadataStore(
-            symbol_bindings=self.symbol_bindings,
-            type_bindings=self.type_bindings,
-            callable_instances=self.callable_instances,
-            capture_modes=self.capture_modes,
-            cell_captured_symbols=new_cells,
-            annotations=self.annotations
-        )
-
-    def annotate(self, node_uid: str, key: str, value: Any) -> 'MetadataStore':
-        """Add arbitrary annotation to a node (returns new store)"""
-        new_annotations = {**self.annotations}
-        if node_uid not in new_annotations:
-            new_annotations[node_uid] = {}
-        new_annotations[node_uid] = {**new_annotations[node_uid], key: value}
-        return MetadataStore(
-            symbol_bindings=self.symbol_bindings,
-            type_bindings=self.type_bindings,
-            callable_instances=self.callable_instances,
-            capture_modes=self.capture_modes,
-            cell_captured_symbols=self.cell_captured_symbols,
-            annotations=new_annotations
-        )
+    def add_cell_captured_symbol(self, symbol_uid: str) -> None:
+        """Add a symbol to the cell-captured set (mutable in-place)"""
+        self.cell_captured_symbols.add(symbol_uid)
 
     def get_symbol(self, node_uid: str) -> Optional[Any]:
         """Get symbol binding for a node"""
@@ -132,21 +71,13 @@ class MetadataStore:
         """Get type binding for a node"""
         return self.type_bindings.get(node_uid)
 
-    def is_callable_instance(self, node_uid: str) -> bool:
-        """Check if node is marked as callable instance"""
-        return node_uid in self.callable_instances
-
-    def get_capture_mode(self, node_uid: str) -> Optional[str]:
-        """Get capture mode for a node"""
-        return self.capture_modes.get(node_uid)
+    def get_location(self, node_uid: str) -> Optional[Any]:
+        """Get location binding for a node"""
+        return self.loc_bindings.get(node_uid)
 
     def is_cell_captured(self, symbol_uid: str) -> bool:
         """Check if symbol is cell-captured"""
         return symbol_uid in self.cell_captured_symbols
-
-    def get_annotation(self, node_uid: str, key: str, default: Any = None) -> Any:
-        """Get arbitrary annotation"""
-        return self.annotations.get(node_uid, {}).get(key, default)
 
     def merge(self, other: 'MetadataStore') -> 'MetadataStore':
         """
@@ -154,22 +85,19 @@ class MetadataStore:
 
         Used when exiting scopes to propagate metadata from child to parent.
         """
-        return MetadataStore(
+        merged = MetadataStore(
             symbol_bindings={**self.symbol_bindings, **other.symbol_bindings},
             type_bindings={**self.type_bindings, **other.type_bindings},
-            callable_instances=self.callable_instances | other.callable_instances,
-            capture_modes={**self.capture_modes, **other.capture_modes},
+            loc_bindings={**self.loc_bindings, **other.loc_bindings},
             cell_captured_symbols=self.cell_captured_symbols | other.cell_captured_symbols,
-            annotations={**self.annotations, **other.annotations}
         )
+        return merged
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
             'symbol_count': len(self.symbol_bindings),
             'type_count': len(self.type_bindings),
-            'callable_instances': list(self.callable_instances),
-            'capture_modes': self.capture_modes,
+            'loc_count': len(self.loc_bindings),
             'cell_captured_count': len(self.cell_captured_symbols),
-            'annotation_count': len(self.annotations)
         }
