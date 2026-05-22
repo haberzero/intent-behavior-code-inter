@@ -29,6 +29,7 @@
 - [Phase 2: 核心分析器实现](#phase-2-核心分析器实现)
 - [Phase 3: 验证与集成](#phase-3-验证与集成)
 - [实施计划](#实施计划)
+- [附录：结构性产物（C1）字段清单](#附录结构性产物c1字段清单)
 
 ---
 
@@ -82,19 +83,19 @@ class SemanticAnalyzer:  # 2,192 行，82 个方法
 - 难以测试（无法独立测试各个阶段）
 - 难以扩展（添加新分析需要修改核心类）
 
-#### 问题 2: 对象身份侧表 ⚠️ **中等**
+#### 问题 2: 双写真相与对象身份耦合 ⚠️ **中等**
 
 **现象**：
 ```python
 class SideTableManager:
-    self.node_to_symbol: Dict[Any, Symbol] = {}  # 使用 Python id()
+    self.node_to_symbol: Dict[Any, Symbol] = {}  # 编译期仍使用 Python id()
     self.node_to_type: Dict[Any, 'IbSpec'] = {}
 ```
 
 **问题**：
-- 依赖 Python 对象的 `id()`，序列化后失效
-- 无法跨进程共享
-- 不支持增量编译缓存
+- 真正的问题不是"侧表存在"本身，而是同一语义事实若同时写入 AST / 侧表 / MetadataStore，会形成"双写真相"
+- `id()` 作为编译期键会让这部分实现难以直接序列化、跨进程共享或用于增量缓存
+- v2 的目标应是：结构性产物收敛到 AST 单一真相，侧表 / MetadataStore 只保留合法的 C2/C3 绑定
 
 #### 问题 3: 多阶段耦合 ⚠️ **中等**
 
@@ -256,18 +257,17 @@ class SemanticContext:
 ```python
 @dataclass
 class MetadataStore:
-    """UID-based 元数据存储（可序列化）"""
-    symbol_bindings: Dict[str, Any]  # node_uid → Symbol
-    type_bindings: Dict[str, Any]    # node_uid → Type
-    llmexcept_bindings: Dict[str, Any]
-    intent_annotations: Dict[str, Any]
-    behavior_metadata: Dict[str, Any]
+    """UID-based 元数据存储（仅承载 C2/C3 绑定）"""
+    symbol_bindings: Dict[str, Any]       # node_uid → Symbol
+    type_bindings: Dict[str, Any]         # node_uid → Type
+    loc_bindings: Dict[str, Any]          # node_uid → Location
+    cell_captured_symbols: Set[str]       # captured Symbol UID 集合
 ```
 
 **关键改进**：
-- 使用字符串 UID 而非 Python `id()`
-- 可序列化、可跨进程、可缓存
-- 不依赖 Python 对象生命周期
+- 消除"双写真相"：结构性产物留在 AST，MetadataStore 只保留 C2/C3 绑定
+- 补完核心 IBCI 设计原则的落位边界：AST 承载结构性语义，MetadataStore 承载绑定元数据
+- UID 键控仍带来可序列化、可跨进程、可缓存的绑定表示
 
 #### Pass 基础设施
 
@@ -789,3 +789,19 @@ def validate_semantic_v2():
 **生成时间**: 2026-05-13
 **作者**: Claude Sonnet 4.5
 **状态**: 规划中，等待用户确认
+
+---
+
+## 附录：结构性产物（C1）字段清单
+
+以下结构性产物属于 AST 单一真相，必须直接挂在节点字段上，而不是复制到 MetadataStore 或侧表副本：
+
+- `IbBehaviorExpr.llm_deps: List[IbBehaviorExpr]` - LLM 依赖列表
+- `IbBehaviorExpr.dispatch_eligible: bool` - 是否可并行调度
+- `IbLambdaExpr.free_vars: List` - 自由变量列表
+- `IbLambdaExpr.capture_mode: str` - 捕获模式（`'lambda'|'snapshot'`）
+- `IbAssign.capture_mode: Optional[str]` - 赋值捕获模式
+- `IbBehaviorInstance.is_callable_instance: bool` - 是否延迟执行
+- `IbBehaviorInstance.target_type_name: str` - 目标类型名称
+- `IbLLMExceptionalStmt.target: Optional[IbStmt]` - 正则情形被保护语句
+- `IbFor.llmexcept_handler: Optional[IbLLMExceptionalStmt]` - 条件 for 循环的 llmexcept handler

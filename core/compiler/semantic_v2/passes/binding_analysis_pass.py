@@ -83,15 +83,20 @@ class LLMExceptBindingAnalyzer:
         ))
 
     def analyze(self):
-        """分析 llmexcept 绑定"""
+        """P1-F: 分析 llmexcept 绑定 — 显式做 body 重写（pop + replace）
+
+        两条通道并存：
+        - 正则情形：stmt.target = prev_stmt（llmexcept 替换 prev_stmt 成为 body 中唯一条目）
+        - 条件 for 循环：prev_stmt.llmexcept_handler = stmt（stmt.target 保持 None）
+        """
         self._analyze_node(self.context.ast)
 
     def _analyze_node(self, node: ast.IbASTNode):
         """递归分析节点"""
         if isinstance(node, ast.IbModule):
-            self._analyze_body(node.body)
+            node.body = self._rewrite_body(node.body)
         elif isinstance(node, ast.IbFunctionDef):
-            self._analyze_body(node.body)
+            node.body = self._rewrite_body(node.body)
         elif isinstance(node, ast.IbLLMFunctionDef):
             # LLM 函数内部不需要 llmexcept（整个函数就是行为）
             pass
@@ -100,52 +105,98 @@ class LLMExceptBindingAnalyzer:
                 self._analyze_node(stmt)
         elif isinstance(node, (ast.IbFor, ast.IbWhile, ast.IbIf)):
             # 递归进入控制流容器
-            if hasattr(node, 'body'):
-                self._analyze_body(node.body)
-            if hasattr(node, 'orelse'):
-                self._analyze_body(node.orelse)
+            if hasattr(node, 'body') and node.body:
+                node.body = self._rewrite_body(node.body)
+            if hasattr(node, 'orelse') and node.orelse:
+                node.orelse = self._rewrite_body(node.orelse)
         elif isinstance(node, ast.IbTry):
-            self._analyze_body(node.body)
+            node.body = self._rewrite_body(node.body)
             for handler in node.handlers:
-                if hasattr(handler, 'body'):
-                    self._analyze_body(handler.body)
-            self._analyze_body(node.orelse)
-            self._analyze_body(node.finalbody)
+                if hasattr(handler, 'body') and handler.body:
+                    handler.body = self._rewrite_body(handler.body)
+            if node.orelse:
+                node.orelse = self._rewrite_body(node.orelse)
+            if node.finalbody:
+                node.finalbody = self._rewrite_body(node.finalbody)
+        elif isinstance(node, ast.IbSwitch):
+            for case in node.cases:
+                if case.body:
+                    case.body = self._rewrite_body(case.body)
+        elif isinstance(node, ast.IbLLMExceptionalStmt):
+            # 递归处理 llmexcept body
+            if node.body:
+                node.body = self._rewrite_body(node.body)
 
-    def _analyze_body(self, body: List[ast.IbASTNode]):
-        """分析语句块中的 llmexcept"""
+    def _rewrite_body(self, body: List[ast.IbASTNode]) -> List[ast.IbASTNode]:
+        """P1-F: 重写语句块 — 实现 v1 的 _bind_llm_except body 重写逻辑"""
         if not body:
-            return
+            return body
 
-        for i, stmt in enumerate(body):
+        new_body = []
+        i = 0
+        while i < len(body):
+            stmt = body[i]
+
             if isinstance(stmt, ast.IbLLMExceptionalStmt):
-                # 验证 llmexcept 的 target
-                if stmt.target:
-                    # 检查 target 是否包含行为表达式
-                    has_behavior = self._contains_behavior_expr(stmt.target)
-                    if not has_behavior:
-                        self.error(
-                            "llmexcept must be associated with a statement containing behavior expression (@~...~)",
-                            stmt,
-                            code="SEM_040"
-                        )
-
-                    # 记录绑定
-                    node_uid = getattr(stmt, 'uid', None)
-                    if node_uid:
-                        self.llmexcept_bindings[node_uid] = {
-                            'target_uid': getattr(stmt.target, 'uid', None),
-                            'has_behavior': has_behavior
-                        }
-                else:
+                if not new_body:
                     self.error(
-                        "llmexcept statement has no target",
-                        stmt,
-                        code="SEM_040"
+                        "llmexcept must follow a statement, but no previous statement found.",
+                        stmt, code="SEM_051"
                     )
+                    i += 1
+                    continue
 
-            # 递归分析嵌套节点
-            self._analyze_node(stmt)
+                prev_stmt = new_body[-1]
+
+                # 条件驱动 for 循环的特殊处理
+                if isinstance(prev_stmt, ast.IbFor) and prev_stmt.target is None:
+                    cond_expr = prev_stmt.iter
+                    if not self._contains_behavior_expr(cond_expr):
+                        self.error(
+                            "llmexcept following a condition-driven 'for' loop requires a behavior expression "
+                            "'@~...~' as the loop condition.",
+                            stmt, code="SEM_050"
+                        )
+                    # 条件 for 循环：挂载到 IbFor.llmexcept_handler
+                    stmt.target = None
+                    prev_stmt.llmexcept_handler = stmt
+                    # 递归处理 llmexcept body
+                    if stmt.body:
+                        stmt.body = self._rewrite_body(stmt.body)
+                    i += 1
+                    continue
+                else:
+                    # 正则情形：检查前一个语句是否包含行为描述
+                    if not self._contains_behavior_expr(prev_stmt):
+                        self.error(
+                            f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
+                            f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
+                            stmt, code="SEM_050"
+                        )
+                    # 正则情形：stmt.target = prev_stmt; pop prev_stmt from body
+                    stmt.target = prev_stmt
+                    new_body.pop()
+                    new_body.append(stmt)
+
+                # 递归处理 llmexcept body
+                if stmt.body:
+                    stmt.body = self._rewrite_body(stmt.body)
+
+                # 记录绑定
+                node_uid = getattr(stmt, 'uid', None)
+                if node_uid:
+                    self.llmexcept_bindings[node_uid] = {
+                        'target_uid': getattr(stmt.target, 'uid', None) if stmt.target else None,
+                        'has_behavior': True
+                    }
+            else:
+                new_body.append(stmt)
+                # 递归处理子节点
+                self._analyze_node(stmt)
+
+            i += 1
+
+        return new_body
 
     def _contains_behavior_expr(self, node: ast.IbASTNode) -> bool:
         """检查节点是否包含行为表达式"""

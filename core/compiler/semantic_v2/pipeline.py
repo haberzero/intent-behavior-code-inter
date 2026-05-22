@@ -117,9 +117,19 @@ def create_semantic_pipeline() -> SemanticPipeline:
 
     Returns:
         SemanticPipeline: 包含所有标准 Pass 的管道
+
+    Pass 顺序：
+    1. SymbolCollectionPass - 收集所有符号定义
+    2. SymbolResolutionPass - 解析所有符号引用
+    3. TypeResolutionPass - 解析类型标注 (P1-E)
+    4. TypeCheckingPass - 类型检查和推断 (P1-B: auto/any/resolve_op)
+    5. BindingAnalysisPass - 绑定分析 (P1-F: llmexcept body 重写)
+    6. BehaviorDependencyPass - 行为依赖分析
+    7. IntegrityCheckPass - 完整性检查
     """
     from .passes.symbol_collection_pass import SymbolCollectionPass
     from .passes.symbol_resolution_pass import SymbolResolutionPass
+    from .passes.type_resolution_pass import TypeResolutionPass
     from .passes.type_checking_pass import TypeCheckingPass
     from .passes.binding_analysis_pass import BindingAnalysisPass
     from .passes.behavior_dependency_pass import BehaviorDependencyPass
@@ -128,6 +138,7 @@ def create_semantic_pipeline() -> SemanticPipeline:
     passes = [
         SymbolCollectionPass(),
         SymbolResolutionPass(),
+        TypeResolutionPass(),
         TypeCheckingPass(),
         BindingAnalysisPass(),
         BehaviorDependencyPass(),

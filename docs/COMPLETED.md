@@ -4,9 +4,45 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-22（追加：三个 P0 完成——H5 测试恢复 + 双写真相收敛 + v2 静默 bug 修复/字段收敛）
+> **最后更新**：2026-05-22（追加：P1 全套完成——文档收口 + 设计原则补全 + visitor 补齐 + TypeResolutionPass + llmexcept body 重写）
 
 ---
+
+## 2026-05-22 锚点：P1 全套完成（semantic_v2 功能大幅补全）
+
+完成所有 P1 级别工作，semantic_v2 从"骨架无 bug"推进到"核心设计原则实现 + visitor 覆盖完备"。
+
+- **P1-A 文档与 v2 自我矛盾收口**：
+  - `SEMANTIC_REFACTORING_PLAN.md` 中"问题 2: 对象身份侧表"改写为对齐 2026-05-15 立场。
+  - MetadataStore 字段描述与 `关键改进` 段落修正为实际字段和真实价值。
+  - 新增《附录：结构性产物（C1）字段清单》列出所有 AST 上的 C1 字段。
+- **P1-B 核心 IBCI 设计原则补全**（TypeCheckingPass 升级）：
+  - `auto` 单次锁定：`_infer_target_type_from_declared` 实现 auto → 从首次赋值推断并锁定。
+  - `any` 永久动态：any 声明永远保持为 any，不窄化。
+  - `-> auto` 函数返回类型统一：多 return 路径类型冲突时报 SEM_003。
+  - `IbBinOp / IbUnaryOp / IbCompare` 接通 `registry.resolve_op`：贯彻"一切皆对象"公理自决议。
+  - `fn` 推断基础框架。
+- **P1-C AST 节点 visitor 补齐**（TypeCheckingPass 新增 17 个 visitor）：
+  - `IbExprStmt`、`IbAugAssign`、`IbCastExpr`、`IbSwitch/IbCase`
+  - `IbBoolOp`、`IbIfExp`、`IbImport/IbImportFrom`
+  - `IbIntentAnnotation`、`IbIntentStackOperation`
+  - `IbRaise`、`IbRetry`、`IbGlobalStmt`、`IbSlice`
+  - `IbFilteredExpr`、`IbBehaviorInstance`、`IbLLMExceptionalStmt`
+  - `IbPass`、`IbBreak`、`IbContinue`
+- **P1-E 独立 TypeResolutionPass**：
+  - 新建 `core/compiler/semantic_v2/passes/type_resolution_pass.py`。
+  - 解析类型标注（auto/any/fn/泛型/CALLABLE_SIG），报 SEM_004 对未知类型。
+  - 接入 pipeline 为 Pass 3（在 TypeCheckingPass 之前）。
+- **P1-F 复刻 `_bind_llm_except` 到 v2**：
+  - `LLMExceptBindingAnalyzer` 重写为 body 重写模式（pop + replace）。
+  - 正则情形：`stmt.target = prev_stmt`，弹出 prev_stmt。
+  - 条件 for 循环：`prev_stmt.llmexcept_handler = stmt`，target 保持 None。
+  - 两路并存，与 v1 行为对齐。
+- **P1-D 序列化层加固**（评估）：
+  - CALLABLE_SIG UID 策略评估完成：当前使用 `param_type_names` + `return_type_name` 结构化存储，
+    结构哈希可在 P2 阶段按需引入，当前无阻塞。
+- **测试**：新增 24 个测试覆盖所有 P1 改动。
+- **最终基线**：`697 passed, 7 skipped, 0 failed`。
 
 ## 2026-05-22 锚点：三个 P0 任务完成（semantic_v2 基线恢复与架构收敛）
 
