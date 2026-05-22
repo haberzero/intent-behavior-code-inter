@@ -48,19 +48,11 @@ class BindingAnalysisPass(BasePass):
         lambda_analyzer.analyze()
         all_diagnostics.extend(lambda_analyzer.diagnostics)
 
-        # 合并元数据
+        # Lambda captures → cell_captured_symbols in MetadataStore
         new_metadata = context.metadata
-        # LLMExcept 绑定
-        for node_uid, binding in llmexcept_analyzer.llmexcept_bindings.items():
-            new_metadata.llmexcept_bindings[node_uid] = binding
-        # Intent 注解
-        for node_uid, annotation in intent_validator.intent_annotations.items():
-            new_metadata.intent_annotations[node_uid] = annotation
-        # Lambda 捕获
         for node_uid, captures in lambda_analyzer.lambda_captures.items():
-            if 'lambda_captures' not in new_metadata.behavior_metadata:
-                new_metadata.behavior_metadata['lambda_captures'] = {}
-            new_metadata.behavior_metadata['lambda_captures'][node_uid] = captures
+            for sym_uid in captures:
+                new_metadata.add_cell_captured_symbol(sym_uid)
 
         new_context = replace(context, metadata=new_metadata)
 
@@ -234,14 +226,15 @@ class IntentContextValidator:
         for i, stmt in enumerate(body):
             if isinstance(stmt, ast.IbIntentAnnotation):
                 # @ 或 @! 注解必须紧跟行为表达式
-                if stmt.op in ("push", "replace"):
+                intent_mode = stmt.intent.mode if hasattr(stmt, 'intent') else None
+                if intent_mode in ("push", "replace"):
                     # 检查下一个语句
                     if i + 1 < len(body):
                         next_stmt = body[i + 1]
                         has_behavior = self._statement_contains_behavior(next_stmt)
                         if not has_behavior:
                             self.error(
-                                f"Intent annotation '{stmt.op}' must be followed by a statement with behavior expression",
+                                f"Intent annotation '{intent_mode}' must be followed by a statement with behavior expression",
                                 stmt,
                                 code="SEM_050"
                             )
@@ -250,8 +243,8 @@ class IntentContextValidator:
                 node_uid = getattr(stmt, 'uid', None)
                 if node_uid:
                     self.intent_annotations[node_uid] = {
-                        'op': stmt.op,
-                        'text': stmt.text if hasattr(stmt, 'text') else None
+                        'mode': intent_mode,
+                        'content': stmt.intent.content if hasattr(stmt, 'intent') else None
                     }
 
             # 递归验证
@@ -366,7 +359,7 @@ class LambdaCaptureAnalyzer:
 
         # 收集 lambda 参数名
         param_names = set()
-        for arg in node.args:
+        for arg in node.params:
             if isinstance(arg, ast.IbArg):
                 param_names.add(arg.arg)
 
@@ -376,7 +369,7 @@ class LambdaCaptureAnalyzer:
         # 验证自由变量在外部作用域中存在
         captured_vars = set()
         for var_name in free_vars:
-            sym = self.current_scope.lookup(var_name)
+            sym = self.current_scope.resolve(var_name)
             if sym:
                 captured_vars.add(var_name)
 

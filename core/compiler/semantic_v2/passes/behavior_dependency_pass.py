@@ -86,7 +86,7 @@ class BehaviorDependencyAnalyzer:
             # 先分析右侧
             self._analyze_node(node.value)
             # 注册赋值：如果右侧是 Behavior 表达式，记录映射
-            if isinstance(node, ast.IbBehaviorExpr):
+            if isinstance(node.value, ast.IbBehaviorExpr):
                 # 记录变量到行为表达式的映射
                 for target in node.targets:
                     var_name = self._get_var_name(target)

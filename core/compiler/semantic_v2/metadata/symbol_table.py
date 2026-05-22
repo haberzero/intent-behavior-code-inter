@@ -79,7 +79,7 @@ class SymbolTableContext:
 
     def resolve_local(self, name: str) -> Optional[Symbol]:
         """Resolve a symbol only in current scope"""
-        return self.current.lookup(name)
+        return self.current.symbols.get(name)
 
     def get_scope_depth(self) -> int:
         """Get current scope depth"""

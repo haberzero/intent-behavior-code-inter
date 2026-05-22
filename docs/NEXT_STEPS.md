@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`；架构演进方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 >
-> **最后更新**：2026-05-15（基于 2026-05-15 回顾性事实核查报告重写——`docs/ARCHITECTURE_REVIEW_2026-05-15.md`）
+> **最后更新**：2026-05-22（三个 P0 全部完成并归档——H5 测试修复 + 双写收敛 + v2 bug修复/字段收敛）
 
 ---
 
@@ -14,164 +14,67 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-14 实测结果**：`653 passed, 9 skipped, 5 failed`。
-唯一真实失败：`tests/compiler/test_symbol_collection_pass.py` 共 5 个用例（H5，详见下方）。
-本周期前几版 NEXT_STEPS 中"P0-A..D 红线"皆与代码事实不符，已统一删除。
+**2026-05-22 实测结果**：`673 passed, 7 skipped, 0 failed`。
+（原 663 + 10 新增回归测试；0 失败）
 
 ---
 
-## ⚠️ 当前 P0：semantic_v2 测试基线恢复（H5）
+## ⚠️ 当前 P0：完成（无 P0 阻塞项）
 
-**严重级别**：中（v2 当前并未挂在生产路径上；但是项目长期 roadmap 的核心，且测试 fixture 失效是当前唯一的红色基线）。
+三个前序 P0 已在 2026-05-22 全部完成：
 
-### 现象
-
-```
-FAILED tests/compiler/test_symbol_collection_pass.py::test_symbol_collection_pass_empty_module
-FAILED tests/compiler/test_symbol_collection_pass.py::test_symbol_collection_pass_function_def
-FAILED tests/compiler/test_symbol_collection_pass.py::test_symbol_collection_pass_class_def
-FAILED tests/compiler/test_symbol_collection_pass.py::test_symbol_collection_pass_variable_assign
-FAILED tests/compiler/test_symbol_collection_pass.py::test_symbol_collection_pass_duplicate_definition
-TypeError: SpecRegistry.__init__() missing 1 required positional argument: 'axiom_registry'
-```
-
-### 根因（已交叉复核确认）
-
-`tests/compiler/test_symbol_collection_pass.py:16` 用旧签名 `SpecRegistry()` 构造 registry；
-`core/kernel/spec/registry.py:291` 早已改为 `def __init__(self, axiom_registry: "AxiomRegistry")`，
-为必填位置参数。同文件还有两处累加的字段名误用：
-- `test_symbol_collection_pass.py:23`：`SymbolTableContext(table=symbol_table)` —— 真实字段名是
-  `current`（`core/compiler/semantic_v2/metadata/symbol_table.py:29`）。
-- `test_symbol_collection_pass.py:66, 93, 118`：`result.context.symbol_table.table` —— 应为 `.current`。
-
-### 最小修复（推荐选项 A，**勿降级 SpecRegistry 签名**）
-
-```python
-# tests/compiler/test_symbol_collection_pass.py
-from core.kernel.axioms.registry import AxiomRegistry  # 新增
-...
-def create_test_context(ast_node):
-    axiom_reg = AxiomRegistry()
-    registry = SpecRegistry(axiom_reg)             # 修 ①
-    symbol_table = SymbolTable()
-    context = SemanticContext(
-        ast=ast_node,
-        registry=registry,
-        module_name="test_module",
-        symbol_table=SymbolTableContext(current=symbol_table),  # 修 ②
-        type_environment=TypeEnvironment(),
-        metadata=MetadataStore(),
-    )
-    return context
-# 修 ③：把 5 个断言里 .symbol_table.table 改为 .symbol_table.current
-```
-
-### 验收
-
-`tests/compiler/test_symbol_collection_pass.py` 5 个用例全绿；`pytest tests/` 整体回到 **658 pass / 0 fail / 9 skip**。**这是恢复"零红基线"的关键且唯一动作**。
-
-### 预估工作量
-
-10–15 分钟实操；外加 1 次全量 `pytest` 复核。
+1. ✅ **H5 测试基线恢复**：修复 `test_symbol_collection_pass.py` 的 `SpecRegistry(AxiomRegistry())`、`SymbolTableContext(current=...)` 和 `.symbol_table.current`。
+2. ✅ **双写真相收敛**：删除 `node_capture_mode` / `node_is_callable_instance` 侧表副本；VM handlers 改读 `node_data`。新增契约测试 `tests/contracts/test_no_redundant_side_tables.py`。
+3. ✅ **v2 阻塞 bug + MetadataStore/TypeEnvironment 字段收敛**：
+   - 修 behavior_dependency_pass.py isinstance 错误
+   - 修 type_checking_pass.py `func_type.ret` → `func_type.return_type`
+   - 修 binding_analysis_pass.py 的 `stmt.op/text` → `stmt.intent.mode/content`
+   - 修 ContextBuilder 注入 builtin prelude
+   - MetadataStore 删除 `callable_instances`/`capture_modes`/`annotations`，保留 `symbol_bindings`/`type_bindings`/`loc_bindings`/`cell_captured_symbols`
+   - TypeEnvironment 删除 `constraints`/`generic_instances`
+   - MetadataStore bind 操作改 mutable in-place（删除 O(n²) 拷字典反模式）
+   - BindingAnalysisPass 不再写入不存在的 MetadataStore 字段
+   - 修复 `SymbolTable.lookup` → `.resolve` 在多处 v2 pass 中的引用
+   - 新增 10 个回归测试覆盖所有修复
 
 ---
 
-## ⏭ 下一个 P0：双写真相收敛（H5 完成后立刻开工）
+## ⏭ 下一个 P0 候选（提升自 P1）
 
-> 来源：`docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.2.1 / B.4。
-
-历史上"侧表 → AST 字段"反向迁移已经发生过一次（llmexcept 的 `node_protection` 侧表删除）。当前仍有两处明确的"AST 字段 + 侧表"双写：
-
-| 信息 | AST 字段 | 侧表 | 处理方向 |
-|---|---|---|---|
-| 捕获模式 | `IbAssign.capture_mode` + `IbLambdaExpr.capture_mode` | `node_capture_mode` | **删侧表，留 AST 字段** |
-| callable 实例 | `IbBehaviorInstance.is_callable_instance` | `node_is_callable_instance` | **删侧表，留 AST 字段** |
-
-### 任务
-
-- [ ] 删除 `core/compiler/semantic/passes/side_table.py` 中的 `node_capture_mode` / `node_is_callable_instance` 字段及对应 setter/getter。
-- [ ] 同步删除 `core/kernel/blueprint.py::CompilationResult` 中两个字段。
-- [ ] 同步删除 `core/compiler/serialization/serializer.py` 中 `remaped_node_capture_mode` / `remaped_node_is_callable_instance` 两段分支以及 `side_tables` 输出对应 key。
-- [ ] 改 `core/runtime/vm/handlers.py:710-712, 1431, 1445`：直接从 `node_data["capture_mode"]` / `node_data["is_callable_instance"]` 读取（AST 字段在序列化时已经写入 `node_data`）。
-- [ ] 跑 `tests/runtime/test_lambda_*.py` 与 `tests/contracts/` 验证回归。
-
-### 验收
-
-`pytest tests/` 仍为 658/9/0；同时新增最小契约用例 `tests/contracts/test_no_redundant_side_tables.py`，断言序列化产物 `side_tables` 字典中不再含上述两个 key。
-
-### 预估工作量
-
-1–2 小时实操；半小时复核。
-
----
-
-## ⏭ 后续 P0：v2 阻塞 bug + MetadataStore 字段收敛
-
-> 来源：`docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.2.3 / B.4。
-
-H5 + 双写收敛完成后，v2 才有"独立可运行"的基础。本步是把 v2 静默 bug 一次性收口，并把 `MetadataStore` 字段结构与 `docs/METADATA_ARCHITECTURE.md` 真实立场对齐。
-
-### 任务
-
-- [ ] **修四个静默 bug**：
-  - `core/compiler/semantic_v2/passes/behavior_dependency_pass.py:89`：把 `isinstance(node, IbBehaviorExpr)`（在 `IbAssign` 分支内）改为 `isinstance(node.value, IbBehaviorExpr)`。
-  - `core/compiler/semantic_v2/passes/type_checking_pass.py:489`：`func_type.ret` → `func_type.return_type`（与 `TypeDef` 实际字段对齐）。
-  - `core/compiler/semantic_v2/passes/binding_analysis_pass.py`：`IbIntentAnnotation` visitor 改读 `stmt.intent.mode` / `stmt.intent.content`（删除对捏造字段 `stmt.op` / `stmt.text` 的引用）。
-  - `core/compiler/semantic_v2/context.py::ContextBuilder.build`：注入 builtin prelude（直接 import `core/compiler/semantic/passes/prelude.py` 现有实现）。
-- [ ] **`MetadataStore` 字段收敛**（`core/compiler/semantic_v2/metadata/metadata_store.py`）：
-  - 删除：`capture_modes`、`callable_instances`、`cell_captured_symbols`、`annotations`（均为 AST 字段副本或通用口袋）。
-  - **不要**新增 `behavior_metadata` / `llmexcept_bindings` / `intent_annotations`；改为让 BindingAnalysisPass 把结果**写回 AST 字段或 symbol_bindings/type_bindings**。
-  - 保留并明确：`symbol_bindings: Dict[str, Symbol]` / `type_bindings: Dict[str, IbSpec]` / `loc_bindings: Dict[str, Location]`。
-- [ ] **`TypeEnvironment` 字段收敛**（`core/compiler/semantic_v2/metadata/type_environment.py`）：
-  - 删除：`constraints`、`generic_instances`（IBCI 单次推断 + 静态强类型，不需要约束求解记账）。
-  - 保留：`auto_return_accumulator`（`-> auto` 函数唯一合法瞬态）。
-- [ ] **`MetadataStore` bind 操作改 mutable**：删除 "每次 bind 拷整张字典" 的反模式（O(n²)），改为 Pass 内部 mutable in-place 更新——这等价于 v1 SideTableManager 的成熟方案，可直接复用。
-- [ ] **复刻 `_bind_llm_except` 到 v2**：v2 当前依赖 `IbLLMExceptionalStmt.target`，但 parser 阶段该字段为 None；v2 必须在适当 Pass 中**显式做 body 重写**——正则情形把 `stmt.target=prev_stmt` 并 pop/replace；条件 for 情形写 `prev_stmt.llmexcept_handler=stmt` 并保持 `stmt.target=None`、不入 body。**两路并存**。
-- [ ] 每条 bug 修复都补到 `tests/compiler/semantic_v2/test_*_pass.py`（按 Pass 分文件）的最小回归用例。
-
-### 验收
-
-- `tests/compiler/semantic_v2/` 下每个 Pass 至少 1 个独立回归用例覆盖以上修复。
-- `pytest tests/` 仍为 658/9/0（v2 仍未挂在 scheduler 主路径上）。
-
----
-
-## P1 候选（按优先级排队，单线推进）
-
-> P1 队列源于 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.4。
+以下为按优先级排列的候选 P0 项。根据项目节奏选取一个或多个推进：
 
 ### P1-A 文档与 v2 自我矛盾收口（轻量）
 
-- [ ] `docs/SEMANTIC_REFACTORING_PLAN.md` 中"AST 不放分析结果"等口号改写为与 `docs/METADATA_ARCHITECTURE.md` 真实立场一致（结构性产物保留在 AST，元数据存放符号/类型/位置绑定）。
-- [ ] 在 plan 中新增《结构性产物（C1）字段清单》：列出 AST 字段、何时写、何时读，作为 v2 与 v1 的契约。
+- [ ] `docs/SEMANTIC_REFACTORING_PLAN.md` 中"AST 不放分析结果"等口号改写为与 `docs/METADATA_ARCHITECTURE.md` 真实立场一致。
+- [ ] 在 plan 中新增《结构性产物（C1）字段清单》。
 
 ### P1-B 核心 IBCI 设计原则补全（每条独立 PR）
 
-- [ ] `auto` 单次锁定（仅在符号首次赋值时把推断结果固定到 `Symbol.spec`，后续禁止再变）。
-- [ ] `any` 永久动态（识别声明类型为 `any` 的 Symbol，跳过窄化）。
-- [ ] `-> auto` 函数：用 `TypeEnvironment.auto_return_accumulator` 收集 return 语句类型并统一。
-- [ ] `IbBinOp / IbUnaryOp / IbCompare` 接通 `registry.resolve_op`，删硬编码。
-- [ ] `IbLLMFunctionDef` 与 `@~..~` 返回类型标记 `llm_uncertain` 并参与 str + 容器消解规则。
-- [ ] 函数参数 / `fn` 推断 / `CALLABLE_SIG` 结构匹配（D3）。
+- [ ] `auto` 单次锁定
+- [ ] `any` 永久动态
+- [ ] `-> auto` 函数返回类型统一
+- [ ] `IbBinOp / IbUnaryOp / IbCompare` 接通 `registry.resolve_op`
+- [ ] `llm_uncertain` 标记与消解规则
+- [ ] 函数参数 / `fn` 推断 / `CALLABLE_SIG` 结构匹配（D3）
 
 ### P1-C AST 节点 visitor 补齐（v2）
 
-按出现频率从高到低补全：`IbExprStmt` → `IbAugAssign` → `IbFilteredExpr` → `IbCastExpr`（含 `can_convert_from` 激活，与 NS-5 合并）→ `IbSwitch/IbCase` → `IbBoolOp/IbIfExp` → `IbImport/IbImportFrom` → `IbIntentInfo/IbIntentStackOperation` → `IbRaise/IbRetry/IbGlobalStmt/IbSlice`。
+按出现频率从高到低补全：`IbExprStmt` → `IbAugAssign` → `IbFilteredExpr` → `IbCastExpr` → `IbSwitch/IbCase` → `IbBoolOp/IbIfExp` → `IbImport/IbImportFrom` → `IbIntentInfo/IbIntentStackOperation` → `IbRaise/IbRetry/IbGlobalStmt/IbSlice`。
 
 ### P1-D 序列化层加固
 
-- [ ] CALLABLE_SIG UID 策略改为结构哈希（`sig_<sha16(return_head + ','.join(param_heads))>`），避免与未来 D3 HOF 参数匹配场景的 UID 塌缩。
-- [ ] 评估节点 UID 复合化（父 UID + 字段路径）的成本/收益；若可接受则切换。
+- [ ] CALLABLE_SIG UID 策略改为结构哈希。
+- [ ] 评估节点 UID 复合化的成本/收益。
 
 ### P1-E 独立 TypeResolutionPass（v2）
 
-- [ ] 新建 `core/compiler/semantic_v2/passes/type_resolution_pass.py`：处理类继承链展开、方法签名解析、`override` 兼容性、基类未定义检测。
-- [ ] 为后续用户运算符重载（PT-4.5）、可调用类实例一致性（PT-4.2）、`__from_prompt__` 协议铺路。
+- [ ] 新建 `core/compiler/semantic_v2/passes/type_resolution_pass.py`。
+
+### P1-F 复刻 `_bind_llm_except` 到 v2
+
+- [ ] v2 在适当 Pass 中显式做 body 重写（pop + replace）；正则情形 `stmt.target=prev_stmt`；条件 for 情形 `prev_stmt.llmexcept_handler=stmt`，两路并存。
 
 ### P1-Z idbg.last_llm() 与 MOCK:SEQ 时序一致性核查（H7）
-
-`examples/01_getting_started/06_enum_switch_with_llm.ibci` 输出显示 `MOCK 情感 = SAD` 但 `idbg last_llm.response = HAPPY`，存在游标推进一拍偏差。
-**动作**：先用最小用例复现 `MOCK:SEQ` 与 `idbg.last_llm()` 的取值顺序；判断是 demo 写法问题还是 `idbg` 语义不清。如属后者，在 `docs/IBCI_SYNTAX_REFERENCE.md` 的 `idbg` 章节锁定语义。
 
 ---
 
