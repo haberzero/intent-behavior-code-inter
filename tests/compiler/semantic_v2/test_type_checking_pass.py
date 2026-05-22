@@ -30,5 +30,5 @@ def test_type_checking_func_call_uses_return_type(spec_registry):
     context = make_context(module, spec_registry)
     # TypeCheckingPass should not crash on func_type.return_type access
     result = TypeCheckingPass().run(context)
-    # Just verify it doesn't throw AttributeError('ret')
-    assert result.success or len(result.diagnostics) >= 0  # pass ran without crash
+    # Just verify it doesn't throw AttributeError('ret') — pass ran without crash
+    assert result is not None

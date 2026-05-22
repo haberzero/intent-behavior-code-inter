@@ -28,7 +28,7 @@ def test_binding_analysis_intent_annotation_no_crash(spec_registry):
     result = BindingAnalysisPass().run(context)
 
     # Should not crash with AttributeError on 'op' or 'text'
-    assert result.success or len(result.diagnostics) >= 0
+    assert result is not None
 
 
 def test_binding_analysis_no_metadata_field_error(spec_registry):
