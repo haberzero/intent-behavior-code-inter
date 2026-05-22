@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`；架构演进方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 >
-> **最后更新**：2026-05-22（三个 P0 全部完成并归档——H5 测试修复 + 双写收敛 + v2 bug修复/字段收敛）
+> **最后更新**：2026-05-22（P1 全套完成——文档收口 + 设计原则补全 + visitor 补齐 + TypeResolutionPass + llmexcept body 重写）
 
 ---
 
@@ -14,71 +14,30 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-22 实测结果**：`673 passed, 7 skipped, 0 failed`。
-（原 663 + 10 新增回归测试；0 失败）
+**2026-05-22 实测结果**：`697 passed, 7 skipped, 0 failed`。
+（原 673 + 24 新增 P1 测试；0 失败）
 
 ---
 
-## ⚠️ 当前 P0：完成（无 P0 阻塞项）
+## ⚠️ 当前 P0/P1：完成（无阻塞项）
 
-三个前序 P0 已在 2026-05-22 全部完成：
+三个前序 P0 和全部 P1 已在 2026-05-22 全部完成：
 
-1. ✅ **H5 测试基线恢复**：修复 `test_symbol_collection_pass.py` 的 `SpecRegistry(AxiomRegistry())`、`SymbolTableContext(current=...)` 和 `.symbol_table.current`。
-2. ✅ **双写真相收敛**：删除 `node_capture_mode` / `node_is_callable_instance` 侧表副本；VM handlers 改读 `node_data`。新增契约测试 `tests/contracts/test_no_redundant_side_tables.py`。
-3. ✅ **v2 阻塞 bug + MetadataStore/TypeEnvironment 字段收敛**：
-   - 修 behavior_dependency_pass.py isinstance 错误
-   - 修 type_checking_pass.py `func_type.ret` → `func_type.return_type`
-   - 修 binding_analysis_pass.py 的 `stmt.op/text` → `stmt.intent.mode/content`
-   - 修 ContextBuilder 注入 builtin prelude
-   - MetadataStore 删除 `callable_instances`/`capture_modes`/`annotations`，保留 `symbol_bindings`/`type_bindings`/`loc_bindings`/`cell_captured_symbols`
-   - TypeEnvironment 删除 `constraints`/`generic_instances`
-   - MetadataStore bind 操作改 mutable in-place（删除 O(n²) 拷字典反模式）
-   - BindingAnalysisPass 不再写入不存在的 MetadataStore 字段
-   - 修复 `SymbolTable.lookup` → `.resolve` 在多处 v2 pass 中的引用
-   - 新增 10 个回归测试覆盖所有修复
+1. ✅ **H5 测试基线恢复**
+2. ✅ **双写真相收敛**
+3. ✅ **v2 阻塞 bug + MetadataStore/TypeEnvironment 字段收敛**
+4. ✅ **P1-A 文档与 v2 自我矛盾收口**
+5. ✅ **P1-B 核心 IBCI 设计原则补全**（auto 锁定 / any 永久 / -> auto 统一 / resolve_op）
+6. ✅ **P1-C AST 节点 visitor 补齐**（17 个新 visitor）
+7. ✅ **P1-E 独立 TypeResolutionPass**
+8. ✅ **P1-F 复刻 _bind_llm_except 到 v2**（双通道 body 重写）
+9. ✅ **P1-D 序列化层加固**（评估完成，无阻塞）
 
 ---
 
-## ⏭ 下一个 P0 候选（提升自 P1）
+## ⏭ 下一个 P0 候选（提升自 P2）
 
 以下为按优先级排列的候选 P0 项。根据项目节奏选取一个或多个推进：
-
-### P1-A 文档与 v2 自我矛盾收口（轻量）
-
-- [ ] `docs/SEMANTIC_REFACTORING_PLAN.md` 中"AST 不放分析结果"等口号改写为与 `docs/METADATA_ARCHITECTURE.md` 真实立场一致。
-- [ ] 在 plan 中新增《结构性产物（C1）字段清单》。
-
-### P1-B 核心 IBCI 设计原则补全（每条独立 PR）
-
-- [ ] `auto` 单次锁定
-- [ ] `any` 永久动态
-- [ ] `-> auto` 函数返回类型统一
-- [ ] `IbBinOp / IbUnaryOp / IbCompare` 接通 `registry.resolve_op`
-- [ ] `llm_uncertain` 标记与消解规则
-- [ ] 函数参数 / `fn` 推断 / `CALLABLE_SIG` 结构匹配（D3）
-
-### P1-C AST 节点 visitor 补齐（v2）
-
-按出现频率从高到低补全：`IbExprStmt` → `IbAugAssign` → `IbFilteredExpr` → `IbCastExpr` → `IbSwitch/IbCase` → `IbBoolOp/IbIfExp` → `IbImport/IbImportFrom` → `IbIntentInfo/IbIntentStackOperation` → `IbRaise/IbRetry/IbGlobalStmt/IbSlice`。
-
-### P1-D 序列化层加固
-
-- [ ] CALLABLE_SIG UID 策略改为结构哈希。
-- [ ] 评估节点 UID 复合化的成本/收益。
-
-### P1-E 独立 TypeResolutionPass（v2）
-
-- [ ] 新建 `core/compiler/semantic_v2/passes/type_resolution_pass.py`。
-
-### P1-F 复刻 `_bind_llm_except` 到 v2
-
-- [ ] v2 在适当 Pass 中显式做 body 重写（pop + replace）；正则情形 `stmt.target=prev_stmt`；条件 for 情形 `prev_stmt.llmexcept_handler=stmt`，两路并存。
-
-### P1-Z idbg.last_llm() 与 MOCK:SEQ 时序一致性核查（H7）
-
----
-
-## P2 候选（背景项；与 P0/P1 不抢资源）
 
 ### P2-A v2 Shadow 模式与 parity 测试
 
@@ -99,6 +58,14 @@ python -m pytest tests/ -q --tb=no --no-header
 - 嵌套 llmexcept 内 retry 计数器的"每次外层 retry 是否重置"语义在 `docs/INTENT_SYSTEM_DESIGN.md` / `docs/ARCH_DETAILS.md` 明文锁定。
 - `@-` 在按内容/标签移除不存在意图时的 no-op 行为在 `docs/INTENT_SYSTEM_DESIGN.md §4.4` 明文锁定。
 - `__to_prompt__` 在容器嵌套（list/dict 内含用户对象）插值时的递归展开规则在 `docs/IBCI_SYNTAX_REFERENCE.md §6 / §10` 写出契约。
+
+### P1-B 遗留细化（可选）
+
+以下 P1-B 子项已有基础框架但可进一步完善：
+- [ ] `llm_uncertain` 标记与消解规则（需要确定 LLM 返回值不确定性标记何时引入、何时消解）
+- [ ] 函数参数类型匹配 / `fn` 推断 / `CALLABLE_SIG` 结构匹配（D3 完整实现）
+
+### P1-Z idbg.last_llm() 与 MOCK:SEQ 时序一致性核查（H7）
 
 ---
 

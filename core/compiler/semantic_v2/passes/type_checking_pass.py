@@ -186,7 +186,7 @@ class TypeCheckingVisitor:
         return self._void_desc
 
     def _handle_assign_target(self, node: ast.IbAssign, target: ast.IbASTNode, val_type: IbSpec):
-        """处理单个赋值目标"""
+        """处理单个赋值目标 — P1-B: auto 单次锁定 / any 永久动态"""
         # 提取变量名和声明类型
         var_name, declared_type = self._resolve_target_name_and_type(target)
 
@@ -195,8 +195,8 @@ class TypeCheckingVisitor:
             sym = self.lookup_symbol(var_name)
 
             if declared_type:
-                # 有类型标注：固定类型
-                target_type = declared_type
+                # P1-B: 类型推断策略
+                target_type = self._infer_target_type_from_declared(declared_type, val_type)
             elif sym and sym.spec:
                 # 已存在的符号：使用现有类型
                 target_type = sym.spec
@@ -251,6 +251,31 @@ class TypeCheckingVisitor:
             var_name = target.id
 
         return var_name, declared_type
+
+    def _infer_target_type_from_declared(self, declared_type: IbSpec, val_type: IbSpec) -> IbSpec:
+        """P1-B: 根据声明类型推导目标类型（auto 锁定 / any 永久 / fn 推断）。
+
+        - `any`：变量 spec 永久保持为 any，不因首次赋值类型窄化。
+        - `auto`：从首次赋值的实际类型推断并锁定。行为表达式的 LLM 输出天然是字符串。
+        - `fn`：可调用类型推导。
+        - 其他：使用显式声明类型。
+        """
+        if declared_type.name == "fn":
+            # fn 声明：从 val_type 推导 callable spec
+            fn_callable_desc = self.registry.resolve("fn_callable")
+            return fn_callable_desc if fn_callable_desc else val_type
+
+        if hasattr(self.registry, 'is_dynamic') and self.registry.is_dynamic(declared_type):
+            if declared_type.name == "any":
+                # `any`：变量 spec 永久保持为 any，不因首次赋值类型窄化。
+                return self._any_desc
+            # `auto`：从首次赋值的实际类型推断并锁定。
+            # 即时行为表达式的 LLM 输出天然是字符串，不应推断为 behavior spec。
+            if hasattr(self.registry, 'is_behavior') and self.registry.is_behavior(val_type):
+                return self._str_desc
+            return val_type
+
+        return declared_type
 
     def visit_IbIf(self, node: ast.IbIf) -> Optional[IbSpec]:
         """访问 if 语句"""
@@ -359,11 +384,26 @@ class TypeCheckingVisitor:
             for stmt in node.body:
                 self.visit(stmt)
 
-            # 如果是 auto 返回，推断返回类型
+            # P1-B: -> auto 函数返回类型统一
             if is_auto_return and self.auto_return_types:
-                # 简化处理：取第一个返回类型
-                inferred_return = self.auto_return_types[0] if self.auto_return_types else self._void_desc
-                # TODO: 更新符号的返回类型
+                # 推断返回类型：所有 return 路径的类型统一
+                unique = list({s.name: s for s in self.auto_return_types if s}.values())
+                if len(unique) == 1:
+                    inferred_return = unique[0]
+                elif len(unique) == 0:
+                    inferred_return = self._void_desc
+                else:
+                    # 多返回类型冲突：退回到 any 并记录诊断
+                    self.error(
+                        f"Function '{node.name}' is declared '-> auto' but returns conflicting types: "
+                        f"{', '.join(t.name for t in unique)}",
+                        node, code="SEM_003"
+                    )
+                    inferred_return = self._any_desc
+                # 更新符号的返回类型
+                sym = self.lookup_symbol(node.name)
+                if sym and sym.spec and hasattr(sym.spec, 'return_type'):
+                    sym.spec.return_type = inferred_return
 
         finally:
             self.pop_scope()
@@ -443,36 +483,57 @@ class TypeCheckingVisitor:
         return tuple_type
 
     def visit_IbBinOp(self, node: ast.IbBinOp) -> Optional[IbSpec]:
-        """访问二元运算"""
+        """访问二元运算 — P1-B: 接通 registry.resolve_op"""
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
 
-        # 简化推断：数值运算
-        if left_type in (self._int_desc, self._float_desc) and right_type in (self._int_desc, self._float_desc):
-            # 如果任一为 float，结果为 float
-            result_type = self._float_desc if (left_type == self._float_desc or right_type == self._float_desc) else self._int_desc
-        elif left_type == self._str_desc or right_type == self._str_desc:
-            # 字符串运算
-            result_type = self._str_desc
-        else:
-            result_type = self._any_desc
+        # 贯彻"一切皆对象"：调用左操作数的公理自决议方法
+        result_type = self.registry.resolve_op(left_type, node.op, right_type) if left_type else None
+        if not result_type:
+            # Fallback: 基础数值推断
+            if left_type in (self._int_desc, self._float_desc) and right_type in (self._int_desc, self._float_desc):
+                result_type = self._float_desc if (left_type == self._float_desc or right_type == self._float_desc) else self._int_desc
+            elif left_type == self._str_desc or right_type == self._str_desc:
+                result_type = self._str_desc
+            else:
+                self.error(
+                    f"Binary operator '{node.op}' not supported for types "
+                    f"'{left_type.name if left_type else 'unknown'}' and "
+                    f"'{right_type.name if right_type else 'unknown'}'",
+                    node, code="SEM_003"
+                )
+                result_type = self._any_desc
 
         self.bind_type(node, result_type)
         return result_type
 
     def visit_IbUnaryOp(self, node: ast.IbUnaryOp) -> Optional[IbSpec]:
-        """访问一元运算"""
+        """访问一元运算 — P1-B: 接通 registry.resolve_op"""
         operand_type = self.visit(node.operand)
-        # 简化处理：一元运算保持操作数类型
-        self.bind_type(node, operand_type)
-        return operand_type
+
+        # 贯彻"一切皆对象"：调用操作数的自决议方法 (other=None 表示一元运算)
+        result_type = self.registry.resolve_op(operand_type, node.op, None) if operand_type else None
+        if not result_type:
+            # Fallback: 保持操作数类型
+            result_type = operand_type or self._any_desc
+
+        self.bind_type(node, result_type)
+        return result_type
 
     def visit_IbCompare(self, node: ast.IbCompare) -> Optional[IbSpec]:
-        """访问比较运算"""
-        self.visit(node.left)
+        """访问比较运算 — P1-B: 接通 registry.resolve_op"""
+        left_type = self.visit(node.left)
         for comparator in node.comparators:
             self.visit(comparator)
-        # 比较运算返回 bool
+
+        # 比较运算通过 resolve_op 确认合法性（大部分返回 bool）
+        if left_type and node.ops:
+            result_type = self.registry.resolve_op(left_type, node.ops[0], None)
+            if result_type:
+                self.bind_type(node, result_type)
+                return result_type
+
+        # 默认比较返回 bool
         self.bind_type(node, self._bool_desc)
         return self._bool_desc
 
@@ -526,10 +587,10 @@ class TypeCheckingVisitor:
 
         self.push_scope(lambda_scope)
         try:
-            for arg in node.args:
+            for arg in node.params:
                 self.visit(arg)
-            for stmt in node.body:
-                self.visit(stmt)
+            if node.body:
+                self.visit(node.body)
         finally:
             self.pop_scope()
 
@@ -553,3 +614,149 @@ class TypeCheckingVisitor:
         declared_type = self._resolve_type(node.annotation)
         self.bind_type(node, declared_type)
         return declared_type
+
+    # ========== P1-C: 补齐的 AST 节点 visitor ==========
+
+    def visit_IbExprStmt(self, node: ast.IbExprStmt) -> Optional[IbSpec]:
+        """访问表达式语句"""
+        return self.visit(node.value)
+
+    def visit_IbAugAssign(self, node: ast.IbAugAssign) -> Optional[IbSpec]:
+        """访问增量赋值 (e.g., x += 1)"""
+        target_type = self.visit(node.target)
+        val_type = self.visit(node.value)
+
+        # 通过 resolve_op 检查操作合法性
+        if target_type:
+            result_type = self.registry.resolve_op(target_type, node.op, val_type)
+            if not result_type:
+                self.error(
+                    f"Augmented assignment operator '{node.op}' not supported for type '{target_type.name}'",
+                    node, code="SEM_003"
+                )
+        return None
+
+    def visit_IbCastExpr(self, node: ast.IbCastExpr) -> Optional[IbSpec]:
+        """访问类型转换表达式 (e.g., (int) expr)"""
+        self.visit(node.value)
+        cast_type = self._resolve_type(node.type_annotation)
+        self.bind_type(node, cast_type)
+        return cast_type
+
+    def visit_IbSwitch(self, node: ast.IbSwitch) -> Optional[IbSpec]:
+        """访问 switch 语句"""
+        self.visit(node.test)
+        for case in node.cases:
+            self.visit(case)
+        return None
+
+    def visit_IbCase(self, node: ast.IbCase) -> Optional[IbSpec]:
+        """访问 switch case"""
+        if node.pattern:
+            self.visit(node.pattern)
+        for stmt in node.body:
+            self.visit(stmt)
+        return None
+
+    def visit_IbBoolOp(self, node: ast.IbBoolOp) -> Optional[IbSpec]:
+        """访问布尔运算 (and/or)"""
+        for val in node.values:
+            self.visit(val)
+        self.bind_type(node, self._bool_desc)
+        return self._bool_desc
+
+    def visit_IbIfExp(self, node: ast.IbIfExp) -> Optional[IbSpec]:
+        """访问条件表达式 (x if cond else y)"""
+        self.visit(node.test)
+        body_type = self.visit(node.body)
+        orelse_type = self.visit(node.orelse)
+        # 两分支类型一致则返回该类型，否则返回 any
+        if body_type and orelse_type and body_type.name == orelse_type.name:
+            result_type = body_type
+        else:
+            result_type = self._any_desc
+        self.bind_type(node, result_type)
+        return result_type
+
+    def visit_IbImport(self, node: ast.IbImport) -> Optional[IbSpec]:
+        """访问 import 语句"""
+        return None
+
+    def visit_IbImportFrom(self, node: ast.IbImportFrom) -> Optional[IbSpec]:
+        """访问 from ... import 语句"""
+        return None
+
+    def visit_IbIntentAnnotation(self, node: ast.IbIntentAnnotation) -> Optional[IbSpec]:
+        """访问意图注释 (@ / @!)"""
+        return None
+
+    def visit_IbIntentStackOperation(self, node: ast.IbIntentStackOperation) -> Optional[IbSpec]:
+        """访问意图栈操作 (@+ / @-)"""
+        return None
+
+    def visit_IbRaise(self, node: ast.IbRaise) -> Optional[IbSpec]:
+        """访问 raise 语句"""
+        if node.exc:
+            self.visit(node.exc)
+        return None
+
+    def visit_IbRetry(self, node: ast.IbRetry) -> Optional[IbSpec]:
+        """访问 retry 语句"""
+        if node.hint:
+            self.visit(node.hint)
+        return None
+
+    def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt) -> Optional[IbSpec]:
+        """访问 global 语句"""
+        return None
+
+    def visit_IbSlice(self, node: ast.IbSlice) -> Optional[IbSpec]:
+        """访问切片"""
+        if node.lower:
+            self.visit(node.lower)
+        if node.upper:
+            self.visit(node.upper)
+        if node.step:
+            self.visit(node.step)
+        return None
+
+    def visit_IbFilteredExpr(self, node: ast.IbFilteredExpr) -> Optional[IbSpec]:
+        """访问带过滤条件的表达式"""
+        expr_type = self.visit(node.expr)
+        self.visit(node.filter)
+        self.bind_type(node, expr_type)
+        return expr_type
+
+    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> Optional[IbSpec]:
+        """访问行为实例化表达式"""
+        for segment in node.segments:
+            if isinstance(segment, ast.IbASTNode):
+                self.visit(segment)
+        # 返回目标类型
+        if node.target_type_name:
+            target_type = self.registry.resolve(node.target_type_name)
+            if target_type:
+                self.bind_type(node, target_type)
+                return target_type
+        self.bind_type(node, self._any_desc)
+        return self._any_desc
+
+    def visit_IbLLMExceptionalStmt(self, node: ast.IbLLMExceptionalStmt) -> Optional[IbSpec]:
+        """访问 llmexcept 语句"""
+        if node.target:
+            self.visit(node.target)
+        for stmt in node.body:
+            self.visit(stmt)
+        return None
+
+    def visit_IbPass(self, node: ast.IbPass) -> Optional[IbSpec]:
+        """访问 pass 语句"""
+        return None
+
+    def visit_IbBreak(self, node: ast.IbBreak) -> Optional[IbSpec]:
+        """访问 break 语句"""
+        return None
+
+    def visit_IbContinue(self, node: ast.IbContinue) -> Optional[IbSpec]:
+        """访问 continue 语句"""
+        return None
