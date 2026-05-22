@@ -1,10 +1,29 @@
 # COMPLETED — 极简时间线归档
 
 > 本文档以**极简时间线**记录主线工作的完成节点。
-> 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
+> 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-14（第三轮：追加 one-shot 意图语义重定义锚点）
+> **最后更新**：2026-05-15（追加：2026-05-15 回顾性事实核查与一体两面演进报告归档；
+> PT-4.6 事实订正：llmexcept 用户 `__snapshot__`/`__restore__` 协议已实施）
+
+---
+
+## 2026-05-15 锚点：回顾性事实核查与一体两面演进报告
+
+针对项目所有者关于 llmexcept 演进史（曾用 `node_protection` 侧表挂载、最终回退到 AST 字段直接存储）以及"现有 AST/侧表大多由智能体产生、人类难以独立把控"的诉求，完成一次全链路回顾性分析，产出"一体两面"两份报告（宏观 + 技术细节），并对若干旧分析结论做事实订正。
+
+- **新增**：`docs/ARCHITECTURE_REVIEW_2026-05-15.md`——完整保留两份报告原文（不做总结/精炼）。
+- **关键订正**：
+  - llmexcept AST 绑定为**双通道**（正则情形 `stmt.target=prev_stmt`；条件 for 情形 `prev_stmt.llmexcept_handler=stmt`），并非单一字段。
+  - "侧表是 v1 的设计缺陷"这一表述不准确——序列化产物中侧表已是 `Dict[str,str]`（UID→UID），id() 仅是编译期内部细节。
+  - 真正的设计债是**双写真相**：`capture_mode`（3 处副本）/ `is_callable_instance`（双处副本）。
+- **PT-4.6 事实订正**：`llmexcept` 用户 `__snapshot__` / `__restore__` 协议**已实施**（`core/runtime/interpreter/llm_except_frame.py:189-197, 285-297, 299-304`；`core/runtime/objects/deep_clone.py:50-74`），不是待办；`PENDING_TASKS.md` 中相关条目已归档。
+- **文档同步**：
+  - `docs/NEXT_STEPS.md`：重写为"当前 P0 = H5 → 双写收敛 → v2 阻塞 bug + MetadataStore 字段收敛"的单线推进；P1 队列调整。
+  - `docs/PENDING_TASKS.md`：归档 PT-4.6；修复重复编号"六、"；PT-SEM-1 / PT-SEM-2 前置条件更新；新增 PT-SEM-3（二层 IR 路线，远期）；"明确排除的方向"追加"禁止双写真相"与"禁止约束求解风格类型推断"两条。
+  - `docs/METADATA_ARCHITECTURE.md`：追加附录 B 收口与本次报告的冲突——侧表字段清单、MetadataStore 字段定位、llmexcept 双通道、TypeEnvironment 字段、UID 生成两条潜在地雷、bind 反模式、扩充反模式警告。
+  - `docs/SEMANTIC_REFACTORING_PLAN.md`：开头新增 2026-05-15 立场段，覆盖原文档与新立场冲突的措辞（"AST 不放分析结果" → "AST 是唯一可序列化真相"；"MetadataStore 取代侧表" → "MetadataStore 只承载 C2/C3 绑定"；TypeEnvironment 删除约束字段；llmexcept 双通道明文化；不可变承诺不下沉到字典级）。
 
 ---
 

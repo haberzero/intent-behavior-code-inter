@@ -1,9 +1,22 @@
 # IBCI Semantic Analyzer 重构计划
 
 **创建日期**: 2026-05-13
-**最后更新**: 2026-05-13
-**状态**: 规划中
+**最后更新**: 2026-05-15（与 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 立场对齐：MetadataStore 字段收敛、删除"AST 不放分析结果"误导口号、明确 llmexcept 双通道绑定）
+**状态**: 规划中（v2 当前未挂到 scheduler；具体下一步见 `docs/NEXT_STEPS.md`）
 **优先级**: P0（高优先级架构改进）
+
+---
+
+> **2026-05-15 立场更新（必读，覆盖本文档其余段落中可能与之冲突的描述）**
+>
+> 1. **AST 是唯一可序列化的真相**。结构性产物（`llm_deps`、`dispatch_eligible`、`free_vars`、`llmexcept_handler`、`IbLLMExceptionalStmt.target`、`capture_mode`、`is_callable_instance`、`target_type_name` 等）**必须**写在 AST 字段上。**不**写到 MetadataStore；**不**写到侧表的副本。
+> 2. **MetadataStore 不取代侧表，它只承载 C2/C3 绑定**。`symbol_bindings: Dict[node_uid, Symbol]` / `type_bindings: Dict[node_uid, IbSpec]` / `loc_bindings: Dict[node_uid, Location]` 是合法字段；`callable_instances` / `capture_modes` / `annotations` 必须删除；`cell_captured_symbols` 保留（无 AST 对应字段）。
+> 3. **TypeEnvironment 不引入约束求解**。删除 `constraints` / `generic_instances`，仅保留 `auto_return_accumulator`。
+> 4. **llmexcept 在 AST 上有两条并存通道**：正则情形写 `IbLLMExceptionalStmt.target=prev_stmt`；条件 for 循环写 `IbFor.llmexcept_handler=stmt`。v2 必须在适当 Pass 中显式做 body 重写（pop + replace），不能依赖 parser 的初值。
+> 5. **不可变 Context 的承诺不下沉到 MetadataStore 内部字典级别**。bind 操作允许 mutable in-place，但调用面只允许在 Pass 内部——避免 `{**self.x, k: v}` 拷字典的 O(n²) 反模式。
+> 6. **侧表本身不是 v1 的"设计缺陷"**——序列化产物中侧表已经是 5 张 `Dict[str, str]`（UID→UID），id() 仅是编译期内部细节。v2 真正的价值是收敛"双写真相"和补完核心 IBCI 设计原则（auto 锁定、any 永久、llm_uncertain、公理调度、行为依赖、意图窗口、llmexcept 双通道），而不是搬迁 id() → UID。
+>
+> 完整说明见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.2 / B.4。本文档下方 Phase 1 / Phase 2 / Phase 3 的旧措辞中若与上述立场冲突，**以本节为准**。
 
 ---
 

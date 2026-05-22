@@ -1,18 +1,23 @@
 # PENDING_TASKS — 阻塞 / 待前置任务
 
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
-> 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
+> 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`；
+> 架构演进总体方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 >
-> **最后更新**：2026-05-14（事实重核：删除 PT-5.1 中失实部分；
-> PT-SEM-1 等待 NEXT_STEPS H5 修复后才能开启）
+> **最后更新**：2026-05-15（事实重核：PT-4.6 已实施归档；删除重复编号"六、"段；
+> PT-SEM-1 等待 NEXT_STEPS H5 修复 + 双写收敛 + v2 MetadataStore 字段收敛后才能开启）
 
 ---
 
-## 一、semantic_v2 后续任务（等 Phase 3 测试验证完成）
+## 一、semantic_v2 后续任务（等 NEXT_STEPS 主线推进完成）
 
 ### PT-SEM-1　semantic_v2 生产就绪化 [P2]
 
-**前置条件**: Phase 3 测试验证通过，V2 稳定运行 > 2 周
+**前置条件**:
+- NEXT_STEPS H5 测试基线恢复
+- NEXT_STEPS "双写真相收敛" 完成（删除 `node_capture_mode` / `node_is_callable_instance` 侧表副本）
+- NEXT_STEPS "v2 阻塞 bug + MetadataStore 字段收敛" 完成
+- v2 shadow 模式建立（NEXT_STEPS P2-A）并稳定运行 > 2 周
 
 **任务内容**:
 - 性能优化（如有必要，基于实际性能对比数据）
@@ -25,28 +30,38 @@
 ### PT-SEM-2　semantic_v2 完全替换 V1 [P3]
 
 **前置条件**:
-- V2 稳定运行 > 1 个月
-- V2 测试覆盖率 > V1
+- PT-SEM-1 完成
+- V2 与 V1 在 shadow 模式下 parity 测试 100% 对齐 ≥ 2 个周期
+- V2 测试覆盖率 ≥ V1
 - V2 无已知严重 bug
-- 用户反馈正面
 
 **任务内容**:
-1. 将 V2 设为默认（`use_semantic_v2=True`）
+1. 将 V2 设为默认（scheduler 切到 v2 / v1 deprecate）
 2. 保留 V1 作为回退选项（1-2 个版本）
 3. 废弃 V1 代码（`core/compiler/semantic/passes/semantic_analyzer.py`）
-4. 清理技术债务
+4. 合并 `CompilationResult` 字段（v1 五张侧表 → v2 MetadataStore 三张核心绑定）
+5. 清理技术债务（包括 `core/kernel/blueprint.py` 字段精简）
 
 **预估工作量**: 10-15 小时
 
+### PT-SEM-3　二层 IR 路线评估 [VISION]
+
+**前置条件**: PT-SEM-2 完成，v2 单 IR 流水线稳定运行 ≥ 1 个月。
+
+**任务内容**:
+- 评估是否要把"AST 规整阶段"（llmexcept 重排、intent 注解附着等）从 Semantic 中剥离出来，产出独立的"结构 IR"。
+- Semantic 在结构 IR 上做分析；序列化器输出"执行 IR"。
+- 详见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.5。
+
+**为什么搁置**: 当前 IBCI 体量下尚不必做；只有当行为依赖图/intent 分析继续扩展（LLM 调用计费/调度优化等）才会成为必经之路。
+
 ---
 
-## 二、llmexcept 相关后续（PT-1.x）— 已全部完成
+## 二、~~llmexcept 相关后续 (PT-1.x)~~ — 已全部归档至 COMPLETED.md
 
-> PT-1.1~PT-1.3 已于 2026-05-12 完成，详见 `docs/COMPLETED.md`。
+## 三、~~NS-2 (intent OOP 化收口) 相关~~ — 已全部归档至 COMPLETED.md
 
-## 三、NS-2（intent OOP 化收口）相关 — 已全部完成
-
-> PT-2.1 / PT-2.2 已于 2026-05-12 完成，详见 `docs/COMPLETED.md`。
+> PT-1.1~PT-1.3 / PT-2.1 / PT-2.2 / PT-4.6 已完成，详见 `docs/COMPLETED.md`。本节仅作占位提示，禁止在此追加新条目。
 
 ---
 
@@ -157,10 +172,12 @@
 - 不引入静态类型检查器作为解释器前置强依赖。
 - 不以牺牲运行时可观测性换取短期性能优化。
 - 不为优化同一程序内独立 LLM 调用而创建多 Interpreter（这是 L1 流水线的职责）。
+- **不允许同一份语义事实在 AST 字段 + 侧表 + MetadataStore 中出现多份副本**（"双写真相"）。新增 AST 字段或侧表项前必须先在 `docs/METADATA_ARCHITECTURE.md` 与 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 中查证；C1 结构性产物落 AST，C2/C3 节点→符号/类型绑定落侧表/MetadataStore，C4 瞬态留 Pass 内部局部变量，三类容器互不重叠。
+- **不引入约束求解风格的类型推断**——v2 的 `TypeEnvironment.constraints` / `generic_instances` 字段都属于此类诱因，应在写入前删除。IBCI 的类型推断是"单次锁定 + 公理调度"。
 
 ---
 
-## 六、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
+## 七、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
 
 以下条目来自本轮全量巡检；它们都不属于"已知 bug"，而是设计未覆盖的扩展面。除 PT-4.6 外，均**不阻塞**任何主线脚本能力，因此只登记到本文件不进入 NS。
 
@@ -198,19 +215,13 @@
 
 ---
 
-### PT-4.6　llmexcept 快照协议对接用户 `__snapshot__` / `__restore__` [DESIGN-DEBT]
+### ~~PT-4.6　llmexcept 快照协议对接用户 `__snapshot__` / `__restore__`~~ ✅ 已实施
 
-**现阶段真实代码状态**
-- `docs/IBCI_SYNTAX_REFERENCE.md §10.4` 描述："对于复杂对象，可以通过 `__snapshot__` / `__restore__` 协议控制快照粒度。"
-- 实际 `core/runtime/vm/handlers.py:vm_handle_IbLLMExceptionalStmt` 的快照逻辑仅对值类型与容器做深拷贝（`deep_clone`），**不会**调用用户类的 `__snapshot__` / `__restore__`。
-- 内置 axiom 的 `__snapshot__` / `__restore__` 也未注册成 `MethodMemberSpec`，编译期未参与类型系统。
+**2026-05-15 事实核查**：核查 `core/runtime/interpreter/llm_except_frame.py:189-197, 285-297, 299-304` 与 `core/runtime/objects/deep_clone.py:50-74`——llmexcept 已实现用户 `__snapshot__` / `__restore__` 协议与容器深拷贝恢复路径；本条原描述（"实际 vm_handle_IbLLMExceptionalStmt 仅对值类型与容器做深拷贝，不会调用用户类 __snapshot__"）与当前代码事实不符，已归档。
 
-**未来演进思路（不构成承诺）**
-- 在 `IbObject` 上以"先 dunder、后 default"派发 `_snapshot()` / `_restore(state)`；handlers 中替换深拷贝路径。
-- 引入 `__snapshot__` / `__restore__` 的标准 `MethodMemberSpec`，在类型系统注册。
-
-**为什么搁置**
-- 触及 llmexcept 快照协议核心，是少数"会改变内核行为"的演进；必须先把 P0 测试基线诚实化，再评估。
+**后续待办**：
+- `docs/IBCI_SYNTAX_REFERENCE.md §10.4` 与 `docs/KNOWN_LIMITS.md` 中相关限制描述是滞后的，需在下一轮文档同步中更新（与本条配套）。
+- `__snapshot__` / `__restore__` 作为 `MethodMemberSpec` 正式注册到类型系统这一独立子项仍属 [VISION]，归并入 PT-4.5（运算符重载）/ PT-SEM-1 后续策划。
 
 ---
 
@@ -231,14 +242,8 @@
 
 ---
 
-## 七、~~测试基线契约化（追踪记录）~~ ✅ 2026-05-14 事实重核：误报
+## 八、~~PT-5.1 测试基线契约化（追踪记录）~~ — 已确认为误报，归档至 COMPLETED.md 的"维护守则"形成历史
 
-### ~~PT-5.1　`tests/contracts/` 全量重写~~
-
-**2026-05-14 重新核验结论**：`tests/contracts/` 当前 7 个测试文件、共 **140 用例全部通过**；`tests/runtime/test_plugin_implementations.py` 18 用例全部通过；`tests/meta/test_no_duplicate_helpers.py` 3 用例全部通过。前述"~89 处使用非法 IBCI 语法 / 5 plugin 调用不存在 API / 25 处违反 helpers 约定"的描述**与代码事实完全不符**，属于陈旧的状态描述，本次清理删除。
-
-唯一真实存在的 pytest 失败位于 `tests/compiler/test_symbol_collection_pass.py`（5 个 `SpecRegistry()` 构造缺参数失败）；该项已登记为 `docs/NEXT_STEPS.md` 的 P0 任务 H5，**不在本 PENDING_TASKS 范围内**。
-
-> 历史经验：每登记一条"测试基线红线"条目时，必须附"当次 pytest 命令 + 输出 + 日期"作为佐证。详见 `docs/NEXT_STEPS.md` 文末「维护守则」第 1 条。
+> 2026-05-14 重新核验结论已写入 `docs/COMPLETED.md`；本节仅作占位提示，禁止在此追加新条目。
 
 ---
