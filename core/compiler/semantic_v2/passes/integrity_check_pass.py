@@ -11,13 +11,50 @@ Pass 6: Integrity Check Pass
 - AST 固有属性由各 Pass 直接写入，不需要完整性验证
 """
 
-from typing import List, Set
+from typing import List, Set, Dict, Any
 
 from core.kernel import ast
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
+
+
+class LocationBinder:
+    """Traverse all AST nodes and bind location info to metadata.
+
+    Mirrors v1 semantic_analyzer.visit() which calls
+    side_table.bind_location(node, {...}) for every visited node.
+    """
+
+    def __init__(self, context: SemanticContext):
+        self.context = context
+        self.bindings: Dict[Any, Dict[str, Any]] = {}
+        self._file_path = getattr(context, 'module_name', '<unknown>')
+
+    def bind_all(self, node: ast.IbASTNode):
+        """Recursively bind location for all nodes."""
+        if node is None:
+            return
+        self._bind_node(node)
+        for attr in vars(node):
+            child = getattr(node, attr)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode):
+                        self.bind_all(item)
+            elif isinstance(child, ast.IbASTNode):
+                self.bind_all(child)
+
+    def _bind_node(self, node: ast.IbASTNode):
+        """Bind location info for a single node."""
+        lineno = getattr(node, 'lineno', 0)
+        col_offset = getattr(node, 'col_offset', 0)
+        self.bindings[node] = {
+            "file_path": self._file_path,
+            "line": lineno,
+            "column": col_offset,
+        }
 
 
 class IntegrityCheckPass(BasePass):
@@ -37,11 +74,23 @@ class IntegrityCheckPass(BasePass):
 
     def run(self, context: SemanticContext) -> PassResult:
         """运行完整性检查 Pass"""
-        checker = IntegrityChecker(context)
+        # 1. Populate node_to_loc for all AST nodes (mirrors v1 Pass 3.5)
+        loc_binder = LocationBinder(context)
+        loc_binder.bind_all(context.ast)
+
+        # Update metadata with location bindings
+        new_metadata = context.metadata
+        for node, loc in loc_binder.bindings.items():
+            new_metadata.bind_location(node, loc)
+
+        from dataclasses import replace
+        new_context = replace(context, metadata=new_metadata)
+
+        # 2. Run integrity checks
+        checker = IntegrityChecker(new_context)
         checker.check()
 
-        # 完整性检查不修改上下文，只产生诊断信息
-        return PassResult.ok(context, diagnostics=checker.diagnostics)
+        return PassResult.ok(new_context, diagnostics=checker.diagnostics)
 
 
 class IntegrityChecker:
