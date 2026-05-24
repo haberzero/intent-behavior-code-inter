@@ -231,16 +231,32 @@ class SymbolCollector:
         for name, target in SymbolExtractor.get_assigned_names(node):
             # 避免重复定义
             if name not in self.symbol_table.symbols:
+                # 尝试从类型标注解析 spec
+                spec = self._any_desc
+                if isinstance(target, ast.IbTypeAnnotatedExpr) and target.annotation:
+                    resolved = self._resolve_annotation(target.annotation)
+                    if resolved:
+                        spec = resolved
                 sym = VariableSymbol(
                     name=name,
                     kind=SymbolKind.VARIABLE,
                     def_node=node,
-                    spec=self._any_desc
+                    spec=spec
                 )
                 self._define(sym, target)
 
         # 递归扫描（处理嵌套结构）
         self.generic_visit(node)
+
+    def _resolve_annotation(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
+        """Resolve a type annotation to an IbSpec (best-effort at collection time)."""
+        if isinstance(annotation, ast.IbName):
+            return self.registry.resolve(annotation.id)
+        elif hasattr(ast, 'IbGenericType') and isinstance(annotation, ast.IbGenericType):
+            base_name = annotation.base.id if isinstance(annotation.base, ast.IbName) else None
+            if base_name:
+                return self.registry.resolve(base_name)
+        return None
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """访问带类型标注的表达式"""

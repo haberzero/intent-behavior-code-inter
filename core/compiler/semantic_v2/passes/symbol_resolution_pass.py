@@ -211,9 +211,12 @@ class SymbolResolver:
         try:
             self._register_params(node.args, func_scope)
 
-            for segment in node.segments:
-                if isinstance(segment, ast.IbASTNode):
-                    self.visit(segment)
+            # LLM 函数的提示词段落（sys_prompt / user_prompt / retry_hint）
+            for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
+                if prompt_list:
+                    for segment in prompt_list:
+                        if isinstance(segment, ast.IbASTNode):
+                            self.visit(segment)
         finally:
             self.pop_scope()
 
@@ -253,7 +256,7 @@ class SymbolResolver:
     def visit_IbSubscript(self, node: ast.IbSubscript):
         """访问下标访问节点"""
         self.visit(node.value)
-        self.visit(node.index)
+        self.visit(node.slice)
 
     def visit_IbIf(self, node: ast.IbIf):
         """访问 if 语句节点"""

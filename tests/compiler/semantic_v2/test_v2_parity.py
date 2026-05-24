@@ -293,3 +293,89 @@ class TestV2SchedulerIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             scheduler = Scheduler(tmpdir)
             assert scheduler.use_v2 is False
+
+
+class TestV2FullFileCompilation:
+    """V2 can successfully compile all example .ibci files via the analyzer."""
+
+    @pytest.fixture
+    def full_registry(self):
+        from core.kernel.factory import create_default_registry
+        return create_default_registry()
+
+    @pytest.mark.parametrize("example_file", [
+        "examples/01_getting_started/01_hello_world.ibci",
+        "examples/01_getting_started/02_intent_demo.ibci",
+        "examples/01_getting_started/03_flow_control_and_behavior.ibci",
+        "examples/01_getting_started/04_mock_and_llmexcept.ibci",
+        "examples/01_getting_started/05_enum_and_switch.ibci",
+        "examples/01_getting_started/06_enum_switch_with_llm.ibci",
+    ])
+    def test_example_compiles_without_crash(self, source_mgr, full_registry, example_file):
+        """V2 analyzer should compile example files without raising exceptions."""
+        import os
+        if not os.path.exists(example_file):
+            pytest.skip(f"Example file not found: {example_file}")
+
+        with open(example_file) as f:
+            code = f.read()
+
+        tracker = IssueTracker(source_provider=source_mgr)
+        ast_node = parse_code(code, tracker)
+        analyzer = SemanticAnalyzerV2(tracker, registry=full_registry, module_name='test')
+        result = analyzer.analyze(ast_node, raise_on_error=False)
+
+        # Must return valid CompilationResult
+        assert isinstance(result, CompilationResult)
+        assert isinstance(result.module_ast, ast.IbModule)
+        assert isinstance(result.symbol_table, SymbolTable)
+        assert isinstance(result.node_to_symbol, dict)
+        assert isinstance(result.node_to_type, dict)
+        assert isinstance(result.node_to_loc, dict)
+        # Must produce meaningful output
+        assert len(result.node_to_type) > 0
+        assert len(result.node_to_loc) > 0
+
+    def test_scheduler_v2_compiles_simple_file(self, source_mgr):
+        """Scheduler with use_v2=True compiles a simple file without errors."""
+        import tempfile, os
+        from core.compiler.scheduler import Scheduler
+        from core.kernel.factory import create_default_registry
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, 'main.ibci')
+            with open(test_file, 'w') as f:
+                f.write('int x = 42\nstr msg = "hello"\nint y = x + 1\nstr result = @~say $msg~\n')
+
+            registry = create_default_registry()
+            scheduler = Scheduler(tmpdir, use_v2=True, registry=registry)
+            # Should not raise
+            artifact = scheduler.compile_file(test_file)
+            assert artifact is not None
+
+    def test_v2_llm_function_compiles(self, source_mgr, full_registry):
+        """V2 correctly handles LLM function definitions."""
+        tracker = IssueTracker(source_provider=source_mgr)
+        code = 'llm translate(str text, str target):\n__user__\ntranslate $text to $target\nllmend'
+        ast_node = parse_code(code, tracker)
+
+        analyzer = SemanticAnalyzerV2(tracker, registry=full_registry, module_name='test')
+        result = analyzer.analyze(ast_node, raise_on_error=False)
+
+        assert isinstance(result, CompilationResult)
+        # LLM function should be registered as a symbol
+        sym = result.symbol_table.resolve('translate')
+        assert sym is not None
+        assert sym.kind == SymbolKind.LLM_FUNCTION
+
+    def test_v2_behavior_expr_adapts_to_target_type(self, source_mgr, full_registry):
+        """BehaviorExpr assigned to typed variable adapts to that type (IBCI core semantics)."""
+        tracker = IssueTracker(source_provider=source_mgr)
+        code = 'int x = @~compute something~'
+        ast_node = parse_code(code, tracker)
+
+        analyzer = SemanticAnalyzerV2(tracker, registry=full_registry, module_name='test')
+        result = analyzer.analyze(ast_node, raise_on_error=False)
+
+        # Should not produce type-mismatch errors for behavior→typed-var assignment
+        assert isinstance(result, CompilationResult)

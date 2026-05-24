@@ -155,7 +155,7 @@ class TestTypeCheckingPopulation:
         assert bound_type.name == "str"
 
     def test_behavior_expr_gets_type_binding(self, registry):
-        """BehaviorExpr should be bound to 'behavior' type."""
+        """BehaviorExpr assigned to 'str' variable should adapt to 'str' type (IBCI core semantics)."""
         module = ast.IbModule(body=[
             ast.IbAssign(
                 targets=[ast.IbTypeAnnotatedExpr(
@@ -169,7 +169,8 @@ class TestTypeCheckingPopulation:
         behavior_node = module.body[0].value
         bound_type = result.context.metadata.node_to_type.get(behavior_node)
         assert bound_type is not None, "BehaviorExpr should have a type binding"
-        assert bound_type.name == "behavior"
+        # BehaviorExpr adapts to receiver's type (str in this case)
+        assert bound_type.name == "str"
 
     def test_node_to_type_count_nonzero(self, registry):
         """A non-trivial program should have multiple type bindings."""

@@ -142,6 +142,12 @@ class TypeCheckingVisitor:
         """检查源类型是否可以赋给目标类型"""
         if not source or not target:
             return True
+        # Guard: resolve TypeRef to actual IbSpec if needed
+        from core.kernel.spec import TypeRef
+        if isinstance(source, TypeRef):
+            source = self.registry.resolve(source.head) or self._any_desc
+        if isinstance(target, TypeRef):
+            target = self.registry.resolve(target.head) or self._any_desc
         return self.registry.is_assignable(source, target)
 
     def _resolve_type(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
@@ -188,6 +194,12 @@ class TypeCheckingVisitor:
 
     def _handle_assign_target(self, node: ast.IbAssign, target: ast.IbASTNode, val_type: IbSpec):
         """处理单个赋值目标 — P1-B: auto 单次锁定 / any 永久动态"""
+        from core.kernel.spec import TypeRef
+
+        # Resolve TypeRef → IbSpec early to avoid downstream crashes
+        if isinstance(val_type, TypeRef):
+            val_type = self.registry.resolve(val_type.head) or self._any_desc
+
         # 提取变量名和声明类型
         var_name, declared_type = self._resolve_target_name_and_type(target)
 
@@ -196,20 +208,39 @@ class TypeCheckingVisitor:
             sym = self.lookup_symbol(var_name)
 
             if declared_type:
+                # Resolve declared_type if it's a TypeRef
+                if isinstance(declared_type, TypeRef):
+                    declared_type = self.registry.resolve(declared_type.head) or self._any_desc
                 # P1-B: 类型推断策略
                 target_type = self._infer_target_type_from_declared(declared_type, val_type)
             elif sym and sym.spec:
                 # 已存在的符号：使用现有类型
-                target_type = sym.spec
+                spec = sym.spec
+                if isinstance(spec, TypeRef):
+                    spec = self.registry.resolve(spec.head) or self._any_desc
+                target_type = spec
             else:
                 # 首次定义无类型标注：推断类型
                 target_type = val_type
 
+            # BehaviorExpr 特殊处理：行为表达式适配接收者类型
+            # 这是 IBCI 核心语义 — @~...~ 的结果类型由左值决定
+            if isinstance(node.value, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
+                if target_type and not self.registry.is_dynamic(target_type):
+                    # 行为表达式结果适配目标类型
+                    self.bind_type(node.value, target_type)
+                    val_type = target_type
+                else:
+                    # 动态类型或无类型：默认 str
+                    val_type = self._str_desc
+
             # 类型兼容性检查
             if not self.is_assignable(val_type, target_type):
+                src_name = getattr(val_type, 'name', str(val_type))
+                tgt_name = getattr(target_type, 'name', str(target_type))
                 hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
                 self.error(
-                    f"Cannot assign '{val_type.name}' to '{target_type.name}'",
+                    f"Cannot assign '{src_name}' to '{tgt_name}'",
                     node, code="SEM_003", hint=hint
                 )
 
@@ -230,7 +261,7 @@ class TypeCheckingVisitor:
             if target_type and not self.is_assignable(val_type, target_type):
                 hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
                 self.error(
-                    f"Cannot assign '{val_type.name}' to '{target_type.name}'",
+                    f"Cannot assign '{getattr(val_type, 'name', str(val_type))}' to '{getattr(target_type, 'name', str(target_type))}'",
                     node, code="SEM_003", hint=hint
                 )
 
@@ -425,9 +456,12 @@ class TypeCheckingVisitor:
         try:
             for arg in node.args:
                 self.visit(arg)
-            for segment in node.segments:
-                if isinstance(segment, ast.IbASTNode):
-                    self.visit(segment)
+            # LLM 函数的提示词段落（sys_prompt / user_prompt / retry_hint）
+            for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
+                if prompt_list:
+                    for segment in prompt_list:
+                        if isinstance(segment, ast.IbASTNode):
+                            self.visit(segment)
         finally:
             self.pop_scope()
             self.in_function_def = old_in_function
@@ -438,10 +472,15 @@ class TypeCheckingVisitor:
 
     def visit_IbName(self, node: ast.IbName) -> Optional[IbSpec]:
         """访问名称引用"""
+        from core.kernel.spec import TypeRef
         sym = self.lookup_symbol(node.id)
         if sym and sym.spec:
-            self.bind_type(node, sym.spec)
-            return sym.spec
+            spec = sym.spec
+            # Resolve TypeRef → IbSpec
+            if isinstance(spec, TypeRef):
+                spec = self.registry.resolve(spec.head) or self._any_desc
+            self.bind_type(node, spec)
+            return spec
         # 未定义符号在 Pass 2 已报错，这里返回 any
         return self._any_desc
 
@@ -576,7 +615,7 @@ class TypeCheckingVisitor:
     def visit_IbSubscript(self, node: ast.IbSubscript) -> Optional[IbSpec]:
         """访问下标访问"""
         self.visit(node.value)
-        self.visit(node.index)
+        self.visit(node.slice)
         # 简化处理：返回 any
         self.bind_type(node, self._any_desc)
         return self._any_desc
