@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
+from core.kernel.spec.type_ref import TypeRef
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
@@ -143,7 +144,6 @@ class TypeCheckingVisitor:
         if not source or not target:
             return True
         # Guard: resolve TypeRef to actual IbSpec if needed
-        from core.kernel.spec import TypeRef
         if isinstance(source, TypeRef):
             source = self.registry.resolve(source.head) or self._any_desc
         if isinstance(target, TypeRef):
@@ -194,7 +194,6 @@ class TypeCheckingVisitor:
 
     def _handle_assign_target(self, node: ast.IbAssign, target: ast.IbASTNode, val_type: IbSpec):
         """处理单个赋值目标 — P1-B: auto 单次锁定 / any 永久动态"""
-        from core.kernel.spec import TypeRef
 
         # Resolve TypeRef → IbSpec early to avoid downstream crashes
         if isinstance(val_type, TypeRef):
@@ -472,7 +471,6 @@ class TypeCheckingVisitor:
 
     def visit_IbName(self, node: ast.IbName) -> Optional[IbSpec]:
         """访问名称引用"""
-        from core.kernel.spec import TypeRef
         sym = self.lookup_symbol(node.id)
         if sym and sym.spec:
             spec = sym.spec

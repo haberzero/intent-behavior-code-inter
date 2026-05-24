@@ -14,8 +14,8 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-24 实测结果**：`725 passed, 7 skipped, 0 failed`。
-（原 715 + 10 新增 v2 fix 验证 tests；0 失败）
+**2026-05-24 实测结果**：`734 passed, 7 skipped, 0 failed`。
+（原 715 + 10 v2 fix tests + 9 v2 parity tests；全量 .ibci 文件通过 v2 编译）
 
 ---
 
