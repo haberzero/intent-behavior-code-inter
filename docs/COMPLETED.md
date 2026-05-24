@@ -4,7 +4,29 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-22（追加：P1 全套完成——文档收口 + 设计原则补全 + visitor 补齐 + TypeResolutionPass + llmexcept body 重写）
+> **最后更新**：2026-05-24（追加：TypeCheckingPass 三项 parity 修复 + 文档一致性修正）
+
+---
+
+## 2026-05-24 锚点：TypeCheckingPass parity 修复 + 文档一致性修正
+
+修复 v2 TypeCheckingPass 三项关键 parity 差距，消除合法程序被 v2 拒绝编译的误报；同步修正文档状态。
+
+- **visit_IbCall 返回类型推断**：
+  - 从简单 `hasattr(func_type, 'return_type')` 升级为使用 `registry.get_call_cap()` + `registry.resolve_return(func_type, arg_types)`，对齐 v1 完整逻辑。
+  - 新增内置类型构造函数特殊处理、可调用类实例 `__call__` 分支。
+- **visit_IbFunctionDef 参数类型解析**：
+  - 从 `_register_params` 一律注册 `any` 改为解析参数的类型标注（`IbTypeAnnotatedExpr.annotation`）。
+  - 使用 `factory.create_func()` 回填函数 spec 签名（param_types + return_type），与 v1 对齐。
+- **is_assignable dynamic 类型跳过**：
+  - 当源或目标为 dynamic（any/auto）时跳过兼容性检查，对齐 v1 模式。
+  - 修复 `int x = any_var` 形态的 SEM_003 误报。
+- **_resolve_type 修复**：替换不存在的 `ast.IbGenericType` 为 `ast.IbSubscript`。
+- **文档修正**：
+  - `PENDING_TASKS.md`：删除已废弃的 shadow 模式前置条件，PT-SEM-1/2 重写对齐直接替换路线。
+  - `NEXT_STEPS.md`：P0-NEXT-2 状态修正，标注 visit_IbCall/visit_IbFunctionDef/is_assignable 具体修复。
+  - 更新日期标注至 2026-05-24。
+- **测试基线**：`734 passed, 7 skipped, 0 failed`（无回归）。
 
 ---
 
