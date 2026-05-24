@@ -1,42 +1,34 @@
 """
-Semantic Analyzer V2 - Radical Decoupled Refactoring
-
-This is a complete reimplementation of the semantic analysis system using
-a clean pipeline-filter architecture. It runs in parallel with the existing
-semantic analyzer to enable comparison and validation.
+Semantic Analyzer V2 — 全量替换 v1 的语义分析系统
 
 Architecture
 ------------
-- Pipeline-Filter: Each analysis pass is independent and composable
-- Immutable Data Flow: Context is immutable, passes return new contexts
-- Errors as Data: All errors are collected, analysis continues when possible
-- UID-based Metadata: Metadata keyed by node UID, not Python object identity
-- Observable: Rich diagnostics and tracing throughout
+- Pipeline-Filter: 7 个独立 Pass 顺序执行
+- Node-Object-Keyed Metadata: 使用 Python 对象身份作为字典键，与序列化器对齐
+- Errors as Data: 诊断信息作为数据收集，不中断分析流程
+- Scheduler 兼容: 通过 SemanticAnalyzerV2.analyze() 产出 CompilationResult
 
-Design Goals
-------------
-1. Identify limitations and hidden issues in the current design
-2. Enable better testability (each pass can be tested independently)
-3. Support extensibility (easy to add new analysis passes)
-4. Improve maintainability (clear separation of concerns)
-5. Enable optimization (immutable design supports parallelization)
+Pass Pipeline
+-------------
+1. SymbolCollectionPass — 收集符号定义
+2. SymbolResolutionPass — 解析符号引用
+3. TypeResolutionPass   — 解析类型标注
+4. TypeCheckingPass     — 类型检查与推断
+5. BindingAnalysisPass  — llmexcept 绑定 + intent 验证 + lambda 捕获
+6. BehaviorDependencyPass — Behavior 表达式依赖图
+7. IntegrityCheckPass   — 完整性校验
 
-Comparison with Semantic V1
----------------------------
-| Aspect | V1 (Current) | V2 (New) |
-|--------|--------------|----------|
-| Architecture | God Class + Visitor | Pipeline + Visitor |
-| State Management | Mutable instance vars | Immutable context |
-| Error Handling | Exceptions + partial results | Result type, all errors collected |
-| Metadata Storage | Object-id based side tables | UID-based metadata store |
-| Pass Coordination | Monolithic analyze() | Explicit pipeline |
-| Testability | Hard (tightly coupled) | Easy (independent passes) |
-| Extensibility | Hard (modify one large file) | Easy (add new pass) |
+Usage
+-----
+    from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
+    analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='main')
+    result = analyzer.analyze(ast_node)  # → CompilationResult
 """
 
 from .context import SemanticContext, ContextBuilder
 from .result import PassResult, Diagnostic, DiagnosticLevel
 from .pipeline import SemanticPipeline, create_semantic_pipeline
+from .analyzer import SemanticAnalyzerV2
 
 __all__ = [
     'SemanticContext',
@@ -46,4 +38,5 @@ __all__ = [
     'DiagnosticLevel',
     'SemanticPipeline',
     'create_semantic_pipeline',
+    'SemanticAnalyzerV2',
 ]

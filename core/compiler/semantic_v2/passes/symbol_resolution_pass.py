@@ -34,12 +34,10 @@ class SymbolResolutionPass(BasePass):
         visitor = SymbolResolver(context)
         visitor.visit(context.ast)
 
-        # 更新 metadata 中的符号绑定
-        new_bindings = visitor.symbol_bindings
+        # 更新 metadata 中的符号绑定（node object → Symbol）
         new_metadata = context.metadata
-        # 直接更新 symbol_bindings
-        for node_uid, symbol in new_bindings.items():
-            new_metadata.symbol_bindings[node_uid] = symbol
+        for node, symbol in visitor.symbol_bindings.items():
+            new_metadata.bind_symbol(node, symbol)
 
         new_context = context.with_metadata(new_metadata)
 
@@ -55,8 +53,8 @@ class SymbolResolver:
         self.registry = context.registry
         self.diagnostics: List[Diagnostic] = []
 
-        # 符号绑定：node_uid -> Symbol
-        self.symbol_bindings: Dict[str, Symbol] = {}
+        # 符号绑定：node object -> Symbol（使用对象身份作为键）
+        self.symbol_bindings: Dict[Any, Symbol] = {}
 
         # 作用域栈（用于处理嵌套作用域）
         self.scope_stack: List[SymbolTable] = [self.symbol_table]
@@ -77,6 +75,8 @@ class SymbolResolver:
 
     def visit(self, node: ast.IbASTNode):
         """访问节点的分派方法"""
+        if node is None:
+            return
         method_name = f'visit_{node.__class__.__name__}'
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
@@ -107,10 +107,9 @@ class SymbolResolver:
         return self.current_scope.resolve(name)
 
     def bind_symbol(self, node: ast.IbASTNode, symbol: Symbol):
-        """绑定符号到节点"""
-        node_uid = getattr(node, 'uid', None)
-        if node_uid:
-            self.symbol_bindings[node_uid] = symbol
+        """绑定符号到节点（使用节点对象作为键）"""
+        if node and symbol:
+            self.symbol_bindings[node] = symbol
 
     def visit_IbModule(self, node: ast.IbModule):
         """访问模块节点"""
@@ -145,19 +144,51 @@ class SymbolResolver:
             for stmt in node.body:
                 self.visit(stmt)
 
+    def _register_params(self, args: list, scope: SymbolTable):
+        """将函数参数注册为局部符号。"""
+        from core.kernel.symbols import VariableSymbol, SymbolKind
+
+        for arg_node in args:
+            arg_name = self._extract_arg_name(arg_node)
+            if arg_name:
+                param_sym = VariableSymbol(
+                    name=arg_name,
+                    kind=SymbolKind.VARIABLE,
+                    def_node=arg_node,
+                    spec=self.registry.resolve("any"),
+                )
+                scope.define(param_sym)
+
+    @staticmethod
+    def _extract_arg_name(arg_node: ast.IbASTNode) -> Optional[str]:
+        """从参数节点提取参数名。"""
+        if isinstance(arg_node, ast.IbArg):
+            return arg_node.arg
+        elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+            if isinstance(arg_node.target, ast.IbArg):
+                return arg_node.target.arg
+            elif isinstance(arg_node.target, ast.IbName):
+                return arg_node.target.id
+        return None
+
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         """访问函数定义节点"""
         # 创建函数作用域
         func_scope = SymbolTable(parent=self.current_scope, name=node.name)
 
+        # 绑定函数符号到节点
+        func_sym = self.lookup_symbol(node.name)
+        if func_sym:
+            self.bind_symbol(node, func_sym)
+            if hasattr(func_sym, 'owned_scope'):
+                func_sym.owned_scope = func_scope
+
         # 进入函数作用域
         self.push_scope(func_scope)
         try:
-            # 处理参数（暂时简化，不创建符号）
-            for arg in node.args:
-                self.visit(arg)
+            self._register_params(node.args, func_scope)
+            self._prescan_body_locals(node.body, func_scope)
 
-            # 处理函数体
             for stmt in node.body:
                 self.visit(stmt)
         finally:
@@ -168,14 +199,18 @@ class SymbolResolver:
         # 创建函数作用域
         func_scope = SymbolTable(parent=self.current_scope, name=node.name)
 
+        # 绑定函数符号到节点
+        func_sym = self.lookup_symbol(node.name)
+        if func_sym:
+            self.bind_symbol(node, func_sym)
+            if hasattr(func_sym, 'owned_scope'):
+                func_sym.owned_scope = func_scope
+
         # 进入函数作用域
         self.push_scope(func_scope)
         try:
-            # 处理参数
-            for arg in node.args:
-                self.visit(arg)
+            self._register_params(node.args, func_scope)
 
-            # 处理函数体（segments）
             for segment in node.segments:
                 if isinstance(segment, ast.IbASTNode):
                     self.visit(segment)
@@ -324,3 +359,44 @@ class SymbolResolver:
         """访问元组字面量"""
         for elt in node.elts:
             self.visit(elt)
+
+    # ========== 辅助方法 ==========
+
+    def _prescan_body_locals(self, body: list, scope: SymbolTable):
+        """预扫描函数体，将赋值目标预注册为局部变量。
+
+        这与 v1 的 Pass 2.5 预扫描逻辑对应：确保函数体内的变量
+        在被引用时已经有定义（避免 SEM_001 误报）。
+        """
+        from core.kernel.symbols import VariableSymbol, SymbolKind
+        from .symbol_collection_pass import SymbolExtractor
+
+        for stmt in body:
+            if isinstance(stmt, ast.IbAssign):
+                for name, target in SymbolExtractor.get_assigned_names(stmt):
+                    if name not in scope.symbols:
+                        sym = VariableSymbol(
+                            name=name,
+                            kind=SymbolKind.VARIABLE,
+                            def_node=stmt,
+                            spec=self.registry.resolve("any"),
+                        )
+                        scope.define(sym)
+            elif isinstance(stmt, ast.IbFor):
+                # for 循环变量
+                if stmt.target:
+                    if isinstance(stmt.target, ast.IbName):
+                        name = stmt.target.id
+                        if name not in scope.symbols:
+                            sym = VariableSymbol(
+                                name=name,
+                                kind=SymbolKind.VARIABLE,
+                                def_node=stmt,
+                                spec=self.registry.resolve("any"),
+                            )
+                            scope.define(sym)
+            # 递归进入 if/for/while body
+            if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
+                self._prescan_body_locals(getattr(stmt, 'body'), scope)
+            if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
+                self._prescan_body_locals(getattr(stmt, 'orelse'), scope)
