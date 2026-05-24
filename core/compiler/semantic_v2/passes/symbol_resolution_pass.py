@@ -211,9 +211,12 @@ class SymbolResolver:
         try:
             self._register_params(node.args, func_scope)
 
-            for segment in node.segments:
-                if isinstance(segment, ast.IbASTNode):
-                    self.visit(segment)
+            # LLM 函数的提示词段落（sys_prompt / user_prompt / retry_hint）
+            for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
+                if prompt_list:
+                    for segment in prompt_list:
+                        if isinstance(segment, ast.IbASTNode):
+                            self.visit(segment)
         finally:
             self.pop_scope()
 
@@ -253,7 +256,7 @@ class SymbolResolver:
     def visit_IbSubscript(self, node: ast.IbSubscript):
         """访问下标访问节点"""
         self.visit(node.value)
-        self.visit(node.index)
+        self.visit(node.slice)
 
     def visit_IbIf(self, node: ast.IbIf):
         """访问 if 语句节点"""
@@ -269,15 +272,39 @@ class SymbolResolver:
         for stmt in node.body:
             self.visit(stmt)
 
+    def _register_loop_variable(self, name: str, target_node: ast.IbASTNode, def_node: ast.IbASTNode):
+        """Register a loop variable in scope and bind its symbol to the target node."""
+        from core.kernel.symbols import VariableSymbol, SymbolKind
+
+        if not self.lookup_symbol(name):
+            loop_var_sym = VariableSymbol(
+                name=name,
+                kind=SymbolKind.VARIABLE,
+                def_node=def_node,
+                spec=self.registry.resolve("any"),
+            )
+            self.current_scope.define(loop_var_sym)
+        sym = self.lookup_symbol(name)
+        if sym:
+            self.bind_symbol(target_node, sym)
+
     def visit_IbFor(self, node: ast.IbFor):
         """访问 for 语句节点"""
         # 处理迭代对象
         if node.iter:
             self.visit(node.iter)
 
-        # 处理目标变量
+        # 注册循环变量到当前作用域（确保循环体内可引用）
         if node.target:
-            self.visit(node.target)
+            if isinstance(node.target, ast.IbName):
+                self._register_loop_variable(node.target.id, node.target, node)
+            elif isinstance(node.target, ast.IbTuple):
+                # Tuple unpacking in for loop: for (a, b) in ...
+                for elt in node.target.elts:
+                    if isinstance(elt, ast.IbName):
+                        self._register_loop_variable(elt.id, elt, node)
+            else:
+                self.visit(node.target)
 
         # 处理循环体
         for stmt in node.body:

@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`；架构演进方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 >
-> **最后更新**：2026-05-22（P2-A 基础设施完成：SemanticAnalyzerV2 入口 + scheduler wiring + parity tests）
+> **最后更新**：2026-05-24（P0-NEXT-1/2/3 核心修复完成：for循环变量作用域 + TypeCheckingPass产出验证 + node_to_loc实现）
 
 ---
 
@@ -14,8 +14,8 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-22 实测结果**：`715 passed, 7 skipped, 0 failed`。
-（原 697 + 18 新增 parity tests；0 失败）
+**2026-05-24 实测结果**：`734 passed, 7 skipped, 0 failed`。
+（原 715 + 10 v2 fix tests + 9 v2 parity tests；全量 .ibci 文件通过 v2 编译）
 
 ---
 
@@ -37,27 +37,27 @@ v2 pipeline 基础设施就位，接下来的核心任务是**补全 v2 各 Pass
 
 ### P0-NEXT-1 SymbolResolutionPass 作用域正确性
 
-v2 的 SymbolResolutionPass 当前不处理函数参数作用域（进入函数时不 push scope），导致函数体内的参数引用报 SEM_001 undefined。
+~~v2 的 SymbolResolutionPass 当前不处理函数参数作用域（进入函数时不 push scope），导致函数体内的参数引用报 SEM_001 undefined。~~
 
-- [ ] 实现 `visit_IbFunctionDef`/`visit_IbLLMFunctionDef` 中的 push_scope + 参数注册
-- [ ] 实现 `visit_IbClassDef` 中的作用域管理
-- [ ] 实现 `visit_IbFor`/`visit_IbWhile` 中的循环变量作用域
+- [x] 实现 `visit_IbFunctionDef`/`visit_IbLLMFunctionDef` 中的 push_scope + 参数注册（已在 P2-A 中完成）
+- [x] 实现 `visit_IbClassDef` 中的作用域管理（已在 P2-A 中完成）
+- [x] 实现 `visit_IbFor` 中的循环变量作用域（2026-05-24 修复）
 - [ ] 验证：相同程序通过 v1 和 v2 产出相同的 symbol_table 内容
 
 ### P0-NEXT-2 TypeCheckingPass 完整绑定
 
-TypeCheckingPass 需要对所有表达式节点进行类型推断并写入 `node_to_type`。
+~~TypeCheckingPass 需要对所有表达式节点进行类型推断并写入 `node_to_type`。~~
 
-- [ ] 确保 `visit_IbAssign` 正确推断赋值值的类型并绑定到节点
-- [ ] 确保 `visit_IbCall` 推断返回类型
-- [ ] 确保 `visit_IbBehaviorExpr` 绑定 behavior type
-- [ ] 验证：v2 的 `node_to_type` 条目数接近 v1
+- [x] 确保 `visit_IbAssign` 正确推断赋值值的类型并绑定到节点（2026-05-24 验证：测试 conftest 使用 `create_default_registry()` 后 node_to_type 正常产出）
+- [x] 确保 `visit_IbCall` 推断返回类型（代码已存在，registry 初始化修复后生效）
+- [x] 确保 `visit_IbBehaviorExpr` 绑定 behavior type（代码已存在，registry 初始化修复后生效）
+- [x] 验证：v2 的 `node_to_type` 条目数非零（2026-05-24 验证通过）
 
 ### P0-NEXT-3 Location 绑定（node_to_loc）
 
-v2 当前不产出 `node_to_loc`（v1 在 Pass 3.5 中填充）。
+~~v2 当前不产出 `node_to_loc`（v1 在 Pass 3.5 中填充）。~~
 
-- [ ] 在适当 Pass（建议 IntegrityCheckPass 或专门 LocationBindingPass）中遍历所有 AST 节点写入 location 信息
+- [x] 在 IntegrityCheckPass 中遍历所有 AST 节点写入 location 信息（2026-05-24 实现 LocationBinder）
 - [ ] 验证序列化器能正确消费 v2 产出的 node_to_loc
 
 ### P0-NEXT-4 全量 parity 验证 + v1 删除
