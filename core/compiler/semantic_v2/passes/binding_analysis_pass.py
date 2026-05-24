@@ -71,12 +71,15 @@ class LLMExceptBindingAnalyzer:
     验证 llmexcept 语句的合法性：
     - llmexcept 必须关联到包含行为表达式的语句
     - 检查 llmexcept target 的合法性
+    - §9.2 read-only 约束：llmexcept body 内禁止对外部作用域变量赋值（SEM_052）
     """
 
     def __init__(self, context: SemanticContext):
         self.context = context
         self.diagnostics: List[Diagnostic] = []
         self.llmexcept_bindings: Dict[str, Any] = {}
+        # §9.2: 当前 llmexcept body 外部作用域变量名集合（非 None 时表示正在分析 body 内部）
+        self._llmexcept_outer_scope_names: Optional[frozenset] = None
 
     def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
         """记录错误诊断"""
@@ -169,6 +172,8 @@ class LLMExceptBindingAnalyzer:
                     # 递归处理 llmexcept body
                     if stmt.body:
                         stmt.body = self._rewrite_body(stmt.body)
+                        # §9.2: 验证 body 内的 read-only 约束
+                        self._validate_readonly_body(stmt.body)
                     i += 1
                     continue
                 else:
@@ -187,6 +192,8 @@ class LLMExceptBindingAnalyzer:
                 # 递归处理 llmexcept body
                 if stmt.body:
                     stmt.body = self._rewrite_body(stmt.body)
+                    # §9.2: 验证 body 内的 read-only 约束
+                    self._validate_readonly_body(stmt.body)
 
                 # 记录绑定（使用节点对象作为键）
                 self.llmexcept_bindings[stmt] = {
@@ -220,6 +227,89 @@ class LLMExceptBindingAnalyzer:
                     return True
 
         return False
+
+    # ===== §9.2: llmexcept body read-only 约束 =====
+
+    def _validate_readonly_body(self, body: List[ast.IbASTNode]):
+        """§9.2: 验证 llmexcept body 内的 read-only 约束（SEM_052）。
+
+        逻辑对齐 v1 SemanticAnalyzer._check_llmexcept_readonly:
+        - 捕获进入 body 前的外部作用域变量名集合
+        - 排除 body 内声明的 body-local 变量（避免误报）
+        - body 内任何对外部作用域变量的赋值产生 SEM_052 错误
+        """
+        # 收集当前作用域所有变量名
+        current_scope = self.context.symbol_table.current
+        all_scope_names = frozenset(current_scope.symbols.keys()) if current_scope else frozenset()
+
+        # 收集 body 直接层级声明的变量名（body-local）
+        body_declared_names = self._collect_body_declared_names(body)
+
+        # 外部作用域变量 = 进入 body 前的所有变量 - body 内新声明的变量
+        outer_scope_names = all_scope_names - body_declared_names
+
+        # 检查 body 内的赋值
+        self._check_assignments_readonly(body, outer_scope_names)
+
+    def _collect_body_declared_names(self, body: List[ast.IbASTNode]) -> frozenset:
+        """收集 llmexcept body 直接层级中真正新声明的变量名。
+
+        对齐 v1 的 _collect_llmexcept_body_declared_names：
+        仅当赋值有类型标注（IbTypeAnnotatedExpr）时，视为新的 body-local 声明。
+        """
+        result: set = set()
+        for stmt in body:
+            if isinstance(stmt, ast.IbAssign):
+                for target in stmt.targets:
+                    if (isinstance(target, ast.IbTypeAnnotatedExpr)
+                            and isinstance(target.target, ast.IbName)):
+                        name = target.target.id
+                        # 检查该变量是否在外部作用域已定义
+                        current_scope = self.context.symbol_table.current
+                        if current_scope:
+                            existing = current_scope.symbols.get(name)
+                            # 仅当 existing 的 def_node 指向本 stmt 时，才是 body-local 新声明
+                            if existing is not None and existing.def_node is stmt:
+                                result.add(name)
+                            elif existing is None:
+                                # 外部未定义 → body-local 新变量
+                                result.add(name)
+        return frozenset(result)
+
+    def _check_assignments_readonly(self, body: List[ast.IbASTNode], outer_scope_names: frozenset):
+        """递归检查 body 内的赋值是否违反 read-only 约束。"""
+        for stmt in body:
+            if isinstance(stmt, ast.IbAssign):
+                for target in stmt.targets:
+                    var_name = self._extract_assign_target_name(target)
+                    if var_name and var_name in outer_scope_names:
+                        self.error(
+                            f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
+                            f"writes to outer-scope variables break snapshot isolation. "
+                            f"Use 'retry \"hint\"' to provide correction guidance instead.",
+                            stmt, code="SEM_052"
+                        )
+
+            # 递归检查嵌套结构
+            if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
+                self._check_assignments_readonly(stmt.body, outer_scope_names)
+            if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
+                self._check_assignments_readonly(stmt.orelse, outer_scope_names)
+            if hasattr(stmt, 'handlers') and isinstance(getattr(stmt, 'handlers'), list):
+                for handler in stmt.handlers:
+                    if hasattr(handler, 'body') and isinstance(handler.body, list):
+                        self._check_assignments_readonly(handler.body, outer_scope_names)
+            if hasattr(stmt, 'finalbody') and isinstance(getattr(stmt, 'finalbody'), list):
+                self._check_assignments_readonly(stmt.finalbody, outer_scope_names)
+
+    def _extract_assign_target_name(self, target: ast.IbASTNode) -> Optional[str]:
+        """从赋值目标提取变量名。"""
+        if isinstance(target, ast.IbName):
+            return target.id
+        elif isinstance(target, ast.IbTypeAnnotatedExpr):
+            if isinstance(target.target, ast.IbName):
+                return target.target.id
+        return None
 
 
 class IntentContextValidator:
