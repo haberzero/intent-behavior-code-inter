@@ -4,11 +4,28 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-24（追加：TypeCheckingPass 三项 parity 修复 + 文档一致性修正）
+> **最后更新**：2026-05-24（追加：SEM_052 实现 + node_to_symbol 100% parity + v1/v2 对比测试套件）
 
 ---
 
-## 2026-05-24 锚点：TypeCheckingPass parity 修复 + 文档一致性修正
+## 2026-05-24 锚点 B：v2 全面 parity 达成
+
+三项关键修复使 v2 在简单程序上达到与 v1 **100% 输出 parity**：
+
+- **SEM_052 read-only 约束实现**（BindingAnalysisPass）：
+  - llmexcept body 内禁止对外部作用域变量赋值，对齐 v1 §9.2 快照隔离语义。
+  - `_validate_readonly_body` + `_collect_body_declared_names` + `_check_assignments_readonly`。
+- **node_to_symbol 100% parity**（SymbolResolutionPass）：
+  - `visit_IbAssign` 现在将 `IbAssign` 和 `IbTypeAnnotatedExpr` 也绑定到符号，对齐 v1 `_bind_symbol_to_side_table` 的三节点绑定模式。
+  - 修复前 v2 仅绑定 `IbName`（约 v1 的 40%），修复后达到 100%。
+- **v1/v2 对比测试套件**（`test_v1_v2_comparison.py`，26 tests）：
+  - 相同代码分别通过 v1 和 v2 编译，对比符号表、类型绑定、位置绑定、错误检测。
+  - 验证 v2 不产生 v1 不产生的误报（false errors），且收集相同的用户符号。
+- **测试基线**：`761 passed, 8 skipped, 0 failed`。
+
+---
+
+## 2026-05-24 锚点 A：TypeCheckingPass parity 修复 + 文档一致性修正
 
 修复 v2 TypeCheckingPass 三项关键 parity 差距，消除合法程序被 v2 拒绝编译的误报；同步修正文档状态。
 
