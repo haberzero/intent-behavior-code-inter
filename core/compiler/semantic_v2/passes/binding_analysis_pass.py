@@ -467,8 +467,9 @@ class LambdaCaptureAnalyzer:
                 self._analyze_node(stmt)
 
         elif isinstance(node, ast.IbFunctionDef):
-            # 进入函数作用域
+            # 进入函数作用域，注册参数以便 lambda 捕获分析能找到它们
             func_scope = SymbolTable(parent=self.current_scope, name=node.name)
+            self._register_func_params(node.args, func_scope)
             self.push_scope(func_scope)
             try:
                 for stmt in node.body:
@@ -496,29 +497,69 @@ class LambdaCaptureAnalyzer:
                     self._analyze_node(child)
 
     def _analyze_lambda(self, node: ast.IbLambdaExpr):
-        """分析 Lambda 表达式的捕获"""
-        # 收集 lambda 内部引用的所有名称
-        referenced_names = self._collect_referenced_names(node)
+        """分析 Lambda 表达式的捕获，并填充 node.free_vars。
 
-        # 收集 lambda 参数名
+        使用 SymbolResolutionPass 产生的 node_to_symbol 绑定来确定自由变量，
+        而非依赖 scope.resolve（后者无法访问外层函数的局部变量）。
+        """
+        # 收集 lambda body 中所有 IbName 节点
+        body_names = self._collect_name_nodes(node.body) if node.body else []
+
+        # 收集 lambda 参数名（这些不是自由变量）
         param_names = set()
         for arg in node.params:
             if isinstance(arg, ast.IbArg):
                 param_names.add(arg.arg)
+            elif isinstance(arg, ast.IbTypeAnnotatedExpr):
+                target = arg.target
+                if isinstance(target, ast.IbArg):
+                    param_names.add(target.arg)
+                elif isinstance(target, ast.IbName):
+                    param_names.add(target.id)
 
-        # 自由变量 = 引用的名称 - 参数名
-        free_vars = referenced_names - param_names
-
-        # 验证自由变量在外部作用域中存在
+        # 通过 node_to_symbol 确定自由变量
+        node_to_symbol = self.context.metadata.node_to_symbol
         captured_vars = set()
-        for var_name in free_vars:
-            sym = self.current_scope.resolve(var_name)
-            if sym:
-                captured_vars.add(var_name)
+        free_var_refs = []
+        seen_names = set()
 
-        # 记录捕获（使用节点对象作为键）
+        for name_node in body_names:
+            var_name = name_node.id
+            if var_name in param_names or var_name in seen_names:
+                continue
+            seen_names.add(var_name)
+
+            sym = node_to_symbol.get(name_node)
+            if sym and hasattr(sym, 'uid') and sym.uid:
+                # 排除 builtin 和全局符号（不需要闭包捕获）
+                if sym.uid.startswith("builtin:"):
+                    continue
+                # 检查是否是外层作用域的变量（非当前 lambda 内部）
+                captured_vars.add(var_name)
+                free_var_refs.append([var_name, sym.uid])
+
+        # 写入 AST 节点（序列化后进入 artifact node_data["free_vars"]）
+        node.free_vars = free_var_refs
+
+        # 记录捕获（使用节点对象作为键，供 cell_captured_symbols 使用）
         if captured_vars:
             self.lambda_captures[node] = captured_vars
+
+    def _collect_name_nodes(self, node: ast.IbASTNode) -> list:
+        """收集 AST 子树中所有 IbName 节点。"""
+        result = []
+        if isinstance(node, ast.IbName):
+            result.append(node)
+        elif isinstance(node, ast.IbASTNode):
+            for attr in vars(node):
+                child = getattr(node, attr)
+                if isinstance(child, list):
+                    for item in child:
+                        if isinstance(item, ast.IbASTNode):
+                            result.extend(self._collect_name_nodes(item))
+                elif isinstance(child, ast.IbASTNode):
+                    result.extend(self._collect_name_nodes(child))
+        return result
 
     def _collect_referenced_names(self, node: ast.IbASTNode) -> Set[str]:
         """收集节点中引用的所有名称"""
@@ -538,3 +579,28 @@ class LambdaCaptureAnalyzer:
                     names.update(self._collect_referenced_names(child))
 
         return names
+
+    @staticmethod
+    def _register_func_params(args: list, scope: SymbolTable):
+        """将函数参数注册到作用域中（用于 lambda 捕获分析时能够识别外层参数）。"""
+        from core.kernel.symbols import VariableSymbol, SymbolKind
+        from core.kernel.spec.registry import SpecRegistry
+
+        for arg_node in args:
+            name = None
+            if isinstance(arg_node, ast.IbArg):
+                name = arg_node.arg
+            elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+                target = arg_node.target
+                if isinstance(target, ast.IbArg):
+                    name = target.arg
+                elif isinstance(target, ast.IbName):
+                    name = target.id
+            if name and name not in scope.symbols:
+                sym = VariableSymbol(
+                    name=name,
+                    kind=SymbolKind.VARIABLE,
+                    def_node=arg_node,
+                    spec=None,
+                )
+                scope.define(sym)

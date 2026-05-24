@@ -317,6 +317,9 @@ class TypeCheckingVisitor:
     def visit_IbIf(self, node: ast.IbIf) -> Optional[IbSpec]:
         """访问 if 语句"""
         self.visit(node.test)
+        # if @~...~: 中的行为表达式应被解析为 bool 类型
+        if isinstance(node.test, ast.IbBehaviorExpr):
+            self.bind_type(node.test, self.registry.resolve("bool"))
         for stmt in node.body:
             self.visit(stmt)
         for stmt in node.orelse:
@@ -326,6 +329,9 @@ class TypeCheckingVisitor:
     def visit_IbWhile(self, node: ast.IbWhile) -> Optional[IbSpec]:
         """访问 while 语句"""
         self.visit(node.test)
+        # while @~...~: 中的行为表达式应被解析为 bool 类型
+        if isinstance(node.test, ast.IbBehaviorExpr):
+            self.bind_type(node.test, self.registry.resolve("bool"))
         for stmt in node.body:
             self.visit(stmt)
         return None
@@ -334,6 +340,10 @@ class TypeCheckingVisitor:
         """访问 for 语句"""
         if node.iter:
             self.visit(node.iter)
+            # 条件驱动循环中的行为表达式应被解析为 bool 类型
+            # (v1 parity: semantic_analyzer.py:1273-1274)
+            if isinstance(node.iter, ast.IbBehaviorExpr):
+                self.bind_type(node.iter, self.registry.resolve("bool"))
         if node.target:
             self.visit(node.target)
         for stmt in node.body:
@@ -582,6 +592,11 @@ class TypeCheckingVisitor:
         """访问二元运算 — P1-B: 接通 registry.resolve_op"""
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
+
+        # any 类型与任何操作兼容（v1 permissive semantics）
+        if left_type == self._any_desc or right_type == self._any_desc:
+            self.bind_type(node, self._any_desc)
+            return self._any_desc
 
         # 贯彻"一切皆对象"：调用左操作数的公理自决议方法
         result_type = self.registry.resolve_op(left_type, node.op, right_type) if left_type else None

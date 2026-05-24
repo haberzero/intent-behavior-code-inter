@@ -59,6 +59,9 @@ class SymbolResolver:
         # 作用域栈（用于处理嵌套作用域）
         self.scope_stack: List[SymbolTable] = [self.symbol_table]
 
+        # 当前所在类的符号（用于注入 self）
+        self.current_class_symbol: Optional[Symbol] = None
+
     @property
     def current_scope(self) -> SymbolTable:
         """当前作用域"""
@@ -131,18 +134,27 @@ class SymbolResolver:
         """访问类定义节点"""
         # 查找类符号
         sym = self.lookup_symbol(node.name)
-        if sym and hasattr(sym, 'owned_scope') and sym.owned_scope:
-            # 进入类作用域
-            self.push_scope(sym.owned_scope)
-            try:
+        if sym:
+            # 绑定 IbClassDef 节点到符号（vm_handle_IbClassDef 通过 node_to_symbol 查找）
+            self.bind_symbol(node, sym)
+            saved_class = self.current_class_symbol
+            self.current_class_symbol = sym
+            if hasattr(sym, 'owned_scope') and sym.owned_scope:
+                # 进入类作用域
+                self.push_scope(sym.owned_scope)
+                try:
+                    for stmt in node.body:
+                        self.visit(stmt)
+                finally:
+                    self.pop_scope()
+            else:
                 for stmt in node.body:
                     self.visit(stmt)
-            finally:
-                self.pop_scope()
-        else:
-            # 没有作用域信息，只处理 body
-            for stmt in node.body:
-                self.visit(stmt)
+            self.current_class_symbol = saved_class
+            return
+        # 没有符号信息，只处理 body
+        for stmt in node.body:
+            self.visit(stmt)
 
     def _register_params(self, args: list, scope: SymbolTable):
         """将函数参数注册为局部符号，并绑定 IbArg 节点到 node_to_symbol。"""
@@ -187,13 +199,28 @@ class SymbolResolver:
         # 绑定函数符号到节点
         func_sym = self.lookup_symbol(node.name)
         if func_sym:
-            self.bind_symbol(node, func_sym)
             if hasattr(func_sym, 'owned_scope'):
                 func_sym.owned_scope = func_scope
 
         # 进入函数作用域
         self.push_scope(func_scope)
         try:
+            # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
+            # v1 parity: node_to_symbol[func_def_node] = self_symbol（runtime 通过此获取 self UID）
+            if self.current_class_symbol:
+                from core.kernel.symbols import VariableSymbol, SymbolKind
+                self_sym = VariableSymbol(
+                    name="self",
+                    kind=SymbolKind.VARIABLE,
+                    def_node=node,
+                    spec=self.current_class_symbol.spec if hasattr(self.current_class_symbol, 'spec') else self.registry.resolve("any"),
+                )
+                func_scope.define(self_sym)
+                # IbFunctionDef 节点绑定到 self 符号（runtime kernel.py:965 依赖此映射）
+                self.bind_symbol(node, self_sym)
+            elif func_sym:
+                self.bind_symbol(node, func_sym)
+
             self._register_params(node.args, func_scope)
             self._prescan_body_locals(node.body, func_scope)
 
@@ -370,7 +397,8 @@ class SymbolResolver:
         if node.type:
             self.visit(node.type)
 
-        # 注册 `as e` 捕获变量到当前作用域
+        # 注册 `as e` 捕获变量到当前作用域，并绑定 handler 节点到符号
+        # (runtime vm_handle_IbTry:1883 通过 node_to_symbol[handler_uid] 获取 sym_uid)
         if node.name:
             from core.kernel.symbols import VariableSymbol, SymbolKind
             existing = self.lookup_symbol(node.name)
@@ -382,6 +410,9 @@ class SymbolResolver:
                     spec=self.registry.resolve("any"),
                 )
                 self.current_scope.define(exc_sym)
+                self.bind_symbol(node, exc_sym)
+            else:
+                self.bind_symbol(node, existing)
 
         for stmt in node.body:
             self.visit(stmt)
@@ -487,6 +518,17 @@ class SymbolResolver:
                             spec=self.registry.resolve("any"),
                         )
                         scope.define(sym)
+            elif isinstance(stmt, ast.IbFunctionDef):
+                # 嵌套函数定义：在当前作用域注册函数名
+                name = stmt.name
+                if name and name not in scope.symbols:
+                    sym = VariableSymbol(
+                        name=name,
+                        kind=SymbolKind.VARIABLE,
+                        def_node=stmt,
+                        spec=self.registry.resolve("fn"),
+                    )
+                    scope.define(sym)
             elif isinstance(stmt, ast.IbFor):
                 # for 循环变量
                 if stmt.target:
