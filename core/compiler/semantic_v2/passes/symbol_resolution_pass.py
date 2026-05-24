@@ -221,13 +221,36 @@ class SymbolResolver:
             self.pop_scope()
 
     def visit_IbAssign(self, node: ast.IbAssign):
-        """访问赋值节点"""
+        """访问赋值节点 — 对齐 v1：绑定 IbAssign 和 IbTypeAnnotatedExpr 到目标符号"""
         # 先处理右侧表达式
         self.visit(node.value)
 
         # 处理左侧目标
         for target in node.targets:
             self.visit(target)
+
+            # 对齐 v1 _bind_symbol_to_side_table：将 IbAssign 和 IbTypeAnnotatedExpr 也绑定到符号
+            var_name = self._extract_target_name(target)
+            if var_name:
+                sym = self.lookup_symbol(var_name)
+                if sym:
+                    # 绑定 IbAssign 节点 → symbol
+                    self.bind_symbol(node, sym)
+                    # 绑定 IbTypeAnnotatedExpr 节点 → symbol（如果 target 是带类型的）
+                    if isinstance(target, ast.IbTypeAnnotatedExpr):
+                        self.bind_symbol(target, sym)
+
+    @staticmethod
+    def _extract_target_name(target) -> Optional[str]:
+        """从赋值目标提取变量名。"""
+        if isinstance(target, ast.IbName):
+            return target.id
+        elif isinstance(target, ast.IbTypeAnnotatedExpr):
+            if isinstance(target.target, ast.IbName):
+                return target.target.id
+            elif isinstance(target.target, ast.IbArg):
+                return target.target.arg
+        return None
 
     def visit_IbBinOp(self, node: ast.IbBinOp):
         """访问二元运算节点"""
