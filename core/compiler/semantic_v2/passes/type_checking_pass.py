@@ -298,9 +298,8 @@ class TypeCheckingVisitor:
         - 其他：使用显式声明类型。
         """
         if declared_type.name == "fn":
-            # fn 声明：从 val_type 推导 callable spec
-            fn_callable_desc = self.registry.resolve("fn_callable")
-            return fn_callable_desc if fn_callable_desc else val_type
+            # fn 声明：fn 是动态可调用类型，接受任何可调用值（v1 permissive semantics）
+            return val_type
 
         if hasattr(self.registry, 'is_dynamic') and self.registry.is_dynamic(declared_type):
             if declared_type.name == "any":
