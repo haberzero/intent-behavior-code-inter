@@ -285,14 +285,14 @@ class TestV2SchedulerIntegration:
             scheduler = Scheduler(tmpdir, use_v2=True)
             assert scheduler.use_v2 is True
 
-    def test_scheduler_default_is_v1(self):
-        """Default behavior uses v1 (backward compatible)."""
+    def test_scheduler_default_is_v2(self):
+        """Default behavior uses v2 (v1 replacement complete)."""
         import tempfile
         from core.compiler.scheduler import Scheduler
 
         with tempfile.TemporaryDirectory() as tmpdir:
             scheduler = Scheduler(tmpdir)
-            assert scheduler.use_v2 is False
+            assert scheduler.use_v2 is True
 
 
 class TestV2FullFileCompilation:
