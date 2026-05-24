@@ -4,7 +4,29 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-24（追加：SEM_052 实现 + node_to_symbol 100% parity + v1/v2 对比测试套件）
+> **最后更新**：2026-05-24（追加：P0-NEXT-4 逐步替换完成，use_v2=True 默认模式）
+
+---
+
+## 2026-05-24 锚点 C：P0-NEXT-4 v2 默认启用 + 12 项 parity 修复
+
+将 `use_v2=True` 设为默认后，逐步修复所有**运行时**和**编译路径**差异，达成完整 runtime parity：
+
+- **SymbolResolutionPass 新增 6 项绑定**：
+  - IbImport/IbImportFrom alias 节点绑定
+  - IbClassDef 节点绑定 + self/super 隐式注入
+  - IbExceptHandler 节点绑定 (as e)
+  - IbArg 节点绑定（函数参数）
+  - IbLambdaExpr params 字段名修正
+  - 嵌套 IbFunctionDef 预注册
+- **TypeCheckingPass 3 项覆写**：
+  - BehaviorExpr → bool 在 if/while/for 条件位
+  - BinOp any 操作数容许性
+  - fn 声明接受任何 callable 值
+- **BindingAnalysisPass lambda 捕获修复**：
+  - free_vars 使用 node_to_symbol 绑定（替代不可靠的 scope.resolve）
+  - 正确填充 AST node.free_vars 供序列化
+- **测试基线**：`744 passed, 8 skipped, 17 failed`（17 项均为 P1 TypeCheckingPass 静态诊断未实现，不影响运行时正确性）。
 
 ---
 
