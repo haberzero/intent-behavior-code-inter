@@ -4,8 +4,7 @@
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`；
 > 架构演进总体方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 >
-> **最后更新**：2026-05-15（事实重核：PT-4.6 已实施归档；删除重复编号"六、"段；
-> PT-SEM-1 等待 NEXT_STEPS H5 修复 + 双写收敛 + v2 MetadataStore 字段收敛后才能开启）
+> **最后更新**：2026-05-24（对齐直接替换路线：删除 shadow 模式前置条件；PT-SEM-1/2 重写为反映当前进度）
 
 ---
 
@@ -14,10 +13,7 @@
 ### PT-SEM-1　semantic_v2 生产就绪化 [P2]
 
 **前置条件**:
-- NEXT_STEPS H5 测试基线恢复
-- NEXT_STEPS "双写真相收敛" 完成（删除 `node_capture_mode` / `node_is_callable_instance` 侧表副本）
-- NEXT_STEPS "v2 阻塞 bug + MetadataStore 字段收敛" 完成
-- v2 shadow 模式建立（NEXT_STEPS P2-A）并稳定运行 > 2 周
+- NEXT_STEPS P0-NEXT-4 完成（v2 设为默认，全量 parity 验证通过，v1 删除）
 
 **任务内容**:
 - 性能优化（如有必要，基于实际性能对比数据）
@@ -27,20 +23,16 @@
 
 **预估工作量**: 15-20 小时
 
-### PT-SEM-2　semantic_v2 完全替换 V1 [P3]
+### PT-SEM-2　semantic_v2 后续清理 [P3]
 
 **前置条件**:
 - PT-SEM-1 完成
-- V2 与 V1 在 shadow 模式下 parity 测试 100% 对齐 ≥ 2 个周期
-- V2 测试覆盖率 ≥ V1
-- V2 无已知严重 bug
+- V2 作为唯一路径稳定运行 ≥ 1 个月
 
 **任务内容**:
-1. 将 V2 设为默认（scheduler 切到 v2 / v1 deprecate）
-2. 保留 V1 作为回退选项（1-2 个版本）
-3. 废弃 V1 代码（`core/compiler/semantic/passes/semantic_analyzer.py`）
-4. 合并 `CompilationResult` 字段（v1 五张侧表 → v2 MetadataStore 三张核心绑定）
-5. 清理技术债务（包括 `core/kernel/blueprint.py` 字段精简）
+1. 合并 `CompilationResult` 字段（v1 五张侧表 → v2 MetadataStore 三张核心绑定）
+2. 清理技术债务（包括 `core/kernel/blueprint.py` 字段精简）
+3. 移除所有 v1 兼容路径残留
 
 **预估工作量**: 10-15 小时
 

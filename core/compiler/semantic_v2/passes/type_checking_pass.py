@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
+from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
@@ -140,7 +141,7 @@ class TypeCheckingVisitor:
         return self.current_scope.resolve(name)
 
     def is_assignable(self, source: IbSpec, target: IbSpec) -> bool:
-        """检查源类型是否可以赋给目标类型"""
+        """检查源类型是否可以赋给目标类型（对齐 v1：dynamic 类型跳过检查）"""
         if not source or not target:
             return True
         # Guard: resolve TypeRef to actual IbSpec if needed
@@ -148,17 +149,22 @@ class TypeCheckingVisitor:
             source = self.registry.resolve(source.head) or self._any_desc
         if isinstance(target, TypeRef):
             target = self.registry.resolve(target.head) or self._any_desc
+        # 与 v1 对齐：当源或目标为 dynamic（any/auto）时，跳过兼容性检查
+        if self.registry.is_dynamic(source) or self.registry.is_dynamic(target):
+            return True
         return self.registry.is_assignable(source, target)
 
     def _resolve_type(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
         """解析类型标注"""
+        if annotation is None:
+            return self._any_desc
         if isinstance(annotation, ast.IbName):
-            return self.registry.resolve(annotation.id)
-        elif isinstance(annotation, ast.IbGenericType):
+            return self.registry.resolve(annotation.id) or self._any_desc
+        elif isinstance(annotation, ast.IbSubscript):
             # 泛型类型：list[int], dict[str, int] 等
-            base_type = self.registry.resolve(annotation.base.id if isinstance(annotation.base, ast.IbName) else annotation.base)
-            # 简化处理：返回基础类型
-            return base_type
+            if isinstance(annotation.value, ast.IbName):
+                return self.registry.resolve(annotation.value.id) or self._any_desc
+            return self._any_desc
         else:
             # 其他类型标注
             return self._any_desc
@@ -389,14 +395,45 @@ class TypeCheckingVisitor:
         return None
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef) -> Optional[IbSpec]:
-        """访问函数定义"""
-        # 创建函数作用域
-        func_scope = SymbolTable(parent=self.current_scope, name=node.name)
+        """访问函数定义 — 对齐 v1：解析参数类型标注，回填 spec，参数以正确类型注册"""
+        # 查找函数符号
+        sym = self.lookup_symbol(node.name)
 
-        # 检查是否是 -> auto 函数
+        # 解析参数类型标注（与 v1 visit_IbFunctionDef 对齐）
+        param_types = []
+        for arg_node in node.args:
+            if isinstance(arg_node, ast.IbTypeAnnotatedExpr) and arg_node.annotation:
+                arg_type = self._resolve_type(arg_node.annotation) or self._any_desc
+            else:
+                arg_type = self._any_desc
+            param_types.append(arg_type)
+
+        # 如果在类定义中，插入 self 类型
+        if self.in_class_def and self.current_class:
+            param_types.insert(0, self.current_class)
+
+        # 解析返回类型标注
+        ret_type = self._resolve_type(node.returns) if node.returns else self._any_desc
         is_auto_return = (node.returns and
                          isinstance(node.returns, ast.IbName) and
                          node.returns.id == "auto")
+
+        # 回填函数 spec（与 v1 对齐：用 factory.create_func 重建 TypeDef 携带签名）
+        if sym and sym.spec and self.registry:
+            param_type_names = [(p.name if p else "any") for p in param_types]
+            ret_type_name = ret_type.name if ret_type else "void"
+            updated_spec = self.registry.factory.create_func(
+                name=node.name,
+                param_type_names=param_type_names,
+                return_type_name=ret_type_name
+            )
+            updated_spec.is_user_defined = True
+            sym.spec = updated_spec
+
+        # 创建函数作用域
+        func_scope = SymbolTable(parent=self.current_scope, name=node.name)
+        if sym and hasattr(sym, 'owned_scope'):
+            sym.owned_scope = func_scope
 
         old_in_function = self.in_function_def
         old_auto_returns = self.auto_return_types
@@ -407,9 +444,20 @@ class TypeCheckingVisitor:
 
         self.push_scope(func_scope)
         try:
-            # 处理参数
-            for arg in node.args:
-                self.visit(arg)
+            # 注册参数到函数作用域（使用解析后的类型，非 any）
+            for i, arg_node in enumerate(node.args):
+                arg_name = self._extract_arg_name(arg_node)
+                # 类方法有 self 偏移
+                sig_idx = i + 1 if (self.in_class_def and self.current_class) else i
+                arg_type = param_types[sig_idx] if sig_idx < len(param_types) else self._any_desc
+                if arg_name:
+                    param_sym = VariableSymbol(
+                        name=arg_name,
+                        kind=SymbolKind.VARIABLE,
+                        def_node=arg_node,
+                        spec=arg_type,
+                    )
+                    func_scope.define(param_sym)
 
             # 处理函数体
             for stmt in node.body:
@@ -417,14 +465,12 @@ class TypeCheckingVisitor:
 
             # P1-B: -> auto 函数返回类型统一
             if is_auto_return and self.auto_return_types:
-                # 推断返回类型：所有 return 路径的类型统一
                 unique = list({s.name: s for s in self.auto_return_types if s}.values())
                 if len(unique) == 1:
                     inferred_return = unique[0]
                 elif len(unique) == 0:
                     inferred_return = self._void_desc
                 else:
-                    # 多返回类型冲突：退回到 any 并记录诊断
                     self.error(
                         f"Function '{node.name}' is declared '-> auto' but returns conflicting types: "
                         f"{', '.join(t.name for t in unique)}",
@@ -432,15 +478,27 @@ class TypeCheckingVisitor:
                     )
                     inferred_return = self._any_desc
                 # 更新符号的返回类型
-                sym = self.lookup_symbol(node.name)
                 if sym and sym.spec and hasattr(sym.spec, 'return_type'):
-                    sym.spec.return_type = inferred_return
+                    from core.kernel.spec.type_ref import TypeRef as TR
+                    sym.spec.return_type = TR.of(inferred_return.name, getattr(inferred_return, "module_path", None))
 
         finally:
             self.pop_scope()
             self.in_function_def = old_in_function
             self.auto_return_types = old_auto_returns
 
+        return None
+
+    @staticmethod
+    def _extract_arg_name(arg_node) -> Optional[str]:
+        """从参数节点提取参数名。"""
+        if isinstance(arg_node, ast.IbArg):
+            return arg_node.arg
+        elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+            if isinstance(arg_node.target, ast.IbArg):
+                return arg_node.target.arg
+            elif isinstance(arg_node.target, ast.IbName):
+                return arg_node.target.id
         return None
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef) -> Optional[IbSpec]:
@@ -576,22 +634,59 @@ class TypeCheckingVisitor:
         return self._bool_desc
 
     def visit_IbCall(self, node: ast.IbCall) -> Optional[IbSpec]:
-        """访问函数调用"""
+        """访问函数调用 — 对齐 v1 逻辑：使用 registry.resolve_return() 推断返回类型"""
         # 处理被调用对象
         func_type = self.visit(node.func)
 
-        # 处理参数
-        for arg in node.args:
-            self.visit(arg)
+        # 处理参数并收集类型
+        arg_types = [self.visit(arg) for arg in node.args]
 
-        # 推断返回类型
-        if func_type and hasattr(func_type, 'return_type'):
-            return_type = func_type.return_type
-        else:
-            return_type = self._any_desc
+        if not func_type:
+            self.bind_type(node, self._any_desc)
+            return self._any_desc
 
-        self.bind_type(node, return_type)
-        return return_type
+        # 0. 内置类型构造函数特殊处理（与 v1 对齐）
+        if not self.registry.get_call_cap(func_type):
+            type_name = func_type.name
+            if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict', 'Exception'):
+                self.bind_type(node, func_type)
+                return func_type
+
+        # 0b. 可调用类实例：变量持有带 __call__ 的类实例（与 v1 对齐）
+        if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
+            sym = self.lookup_symbol(node.func.id)
+            if sym and not getattr(sym, 'is_type', True) and '__call__' in (func_type.members or {}):
+                call_spec = self.registry.resolve_member(func_type, '__call__')
+                if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+                    ret = self.registry.resolve(call_spec.return_type.head) if hasattr(call_spec, 'return_type') and call_spec.return_type else self._any_desc
+                    self.bind_type(node, ret)
+                    return ret
+
+        # 1. 检查是否可调用
+        call_trait = self.registry.get_call_cap(func_type)
+        if not call_trait:
+            self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
+            self.bind_type(node, self._any_desc)
+            return self._any_desc
+
+        # 2. 使用 registry.resolve_return() 推断返回类型（一切皆对象）
+        res = self.registry.resolve_return(func_type, arg_types or [])
+
+        if not res:
+            # Fallback：尝试从 spec 上的 return_type 属性直接读取
+            ret_ref = getattr(func_type, 'return_type', None)
+            if ret_ref is not None:
+                if isinstance(ret_ref, TypeRef):
+                    res = self.registry.resolve(ret_ref.head) or self._any_desc
+                elif hasattr(ret_ref, 'head') and ret_ref.head:
+                    res = self.registry.resolve(ret_ref.head) or self._any_desc
+                else:
+                    res = self._any_desc
+            else:
+                res = self._any_desc
+
+        self.bind_type(node, res)
+        return res
 
     def visit_IbAttribute(self, node: ast.IbAttribute) -> Optional[IbSpec]:
         """访问属性访问"""

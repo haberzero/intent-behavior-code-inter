@@ -4,7 +4,46 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-22（追加：P1 全套完成——文档收口 + 设计原则补全 + visitor 补齐 + TypeResolutionPass + llmexcept body 重写）
+> **最后更新**：2026-05-24（追加：SEM_052 实现 + node_to_symbol 100% parity + v1/v2 对比测试套件）
+
+---
+
+## 2026-05-24 锚点 B：v2 全面 parity 达成
+
+三项关键修复使 v2 在简单程序上达到与 v1 **100% 输出 parity**：
+
+- **SEM_052 read-only 约束实现**（BindingAnalysisPass）：
+  - llmexcept body 内禁止对外部作用域变量赋值，对齐 v1 §9.2 快照隔离语义。
+  - `_validate_readonly_body` + `_collect_body_declared_names` + `_check_assignments_readonly`。
+- **node_to_symbol 100% parity**（SymbolResolutionPass）：
+  - `visit_IbAssign` 现在将 `IbAssign` 和 `IbTypeAnnotatedExpr` 也绑定到符号，对齐 v1 `_bind_symbol_to_side_table` 的三节点绑定模式。
+  - 修复前 v2 仅绑定 `IbName`（约 v1 的 40%），修复后达到 100%。
+- **v1/v2 对比测试套件**（`test_v1_v2_comparison.py`，26 tests）：
+  - 相同代码分别通过 v1 和 v2 编译，对比符号表、类型绑定、位置绑定、错误检测。
+  - 验证 v2 不产生 v1 不产生的误报（false errors），且收集相同的用户符号。
+- **测试基线**：`761 passed, 8 skipped, 0 failed`。
+
+---
+
+## 2026-05-24 锚点 A：TypeCheckingPass parity 修复 + 文档一致性修正
+
+修复 v2 TypeCheckingPass 三项关键 parity 差距，消除合法程序被 v2 拒绝编译的误报；同步修正文档状态。
+
+- **visit_IbCall 返回类型推断**：
+  - 从简单 `hasattr(func_type, 'return_type')` 升级为使用 `registry.get_call_cap()` + `registry.resolve_return(func_type, arg_types)`，对齐 v1 完整逻辑。
+  - 新增内置类型构造函数特殊处理、可调用类实例 `__call__` 分支。
+- **visit_IbFunctionDef 参数类型解析**：
+  - 从 `_register_params` 一律注册 `any` 改为解析参数的类型标注（`IbTypeAnnotatedExpr.annotation`）。
+  - 使用 `factory.create_func()` 回填函数 spec 签名（param_types + return_type），与 v1 对齐。
+- **is_assignable dynamic 类型跳过**：
+  - 当源或目标为 dynamic（any/auto）时跳过兼容性检查，对齐 v1 模式。
+  - 修复 `int x = any_var` 形态的 SEM_003 误报。
+- **_resolve_type 修复**：替换不存在的 `ast.IbGenericType` 为 `ast.IbSubscript`。
+- **文档修正**：
+  - `PENDING_TASKS.md`：删除已废弃的 shadow 模式前置条件，PT-SEM-1/2 重写对齐直接替换路线。
+  - `NEXT_STEPS.md`：P0-NEXT-2 状态修正，标注 visit_IbCall/visit_IbFunctionDef/is_assignable 具体修复。
+  - 更新日期标注至 2026-05-24。
+- **测试基线**：`734 passed, 7 skipped, 0 failed`（无回归）。
 
 ---
 
