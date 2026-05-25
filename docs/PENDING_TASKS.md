@@ -19,26 +19,13 @@
 
 已归档至 `docs/COMPLETED.md`。ScopedVisitor 基类已创建并接入 3 个 visitor。
 
-### PT-ARCH-3　SpecRegistry.resolve_call_return() [Step 3]
+### ~~PT-ARCH-3　SpecRegistry.resolve_call_return() [Step 3]~~ ✅ 已完成
 
-**前置条件**: PT-ARCH-2 完成 ✅
-
-**技术细节**:
-- 当前 TypeCheckingPass.visit_IbCall 有 5 层 fallback（~100 行）：
-  1. get_call_cap → 内置构造器
-  2. __call__ 方法（可调用类实例）
-  3. resolve_return()
-  4. return_type 属性直读
-  5. fallback 到 any
-- 新方案：在 SpecRegistry 中提供 `resolve_call_return(callee_spec, arg_specs) -> IbSpec`
-- 统一处理：Class constructor / Structural callable / __call__ instance / Axiom-backed callable
-
-**影响面**: registry.py + type_checking_pass.py
-**对 runtime 的影响**: 无（编译期完成所有决议）
+已归档至 `docs/COMPLETED.md`。统一类型决议方法已创建，visit_IbCall 重构完成。
 
 ### PT-ARCH-4　7-Pass 归并为 4-Phase [Step 4]
 
-**前置条件**: PT-ARCH-3 完成
+**前置条件**: PT-ARCH-3 完成 ✅
 
 **技术细节**:
 - Phase 1: SymbolPhase（Pass 1 + Pass 2 合并，两趟扫描在同一 visitor 中）

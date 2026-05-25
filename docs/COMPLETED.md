@@ -4,7 +4,26 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-25（追加：PT-ARCH-1 + PT-ARCH-2 完成）
+> **最后更新**：2026-05-25（追加：PT-ARCH-3 完成）
+
+---
+
+## 2026-05-25 锚点 F：PT-ARCH-3 SpecRegistry.resolve_call_return() 统一类型决议
+
+完成 Semantic Pipeline 架构改进路线图 Step 3（772 passed, 7 skipped, 0 failures）：
+
+- **新增 `SpecRegistry.resolve_call_return(callee_spec, arg_specs)`**：
+  - 统一处理 FUNCTION/CALLABLE_SIG/CLASS/PRIMITIVE/LIST/DICT/CALLABLE_INSTANCE/BOUND_METHOD + axiom fallback
+  - 单一入口覆盖所有 callable 形态的返回类型推断
+- **新增 `SpecRegistry.resolve_callable_instance_return()`**：
+  - 专门处理 `__call__` 协议的返回类型解析
+  - 支持 `class_scope_lookup` 回调优先从语义 scope 获取最新 spec
+- **`resolve_return()` deprecated**：保留为委托到 `resolve_call_return()` 的兼容入口
+- **`TypeCheckingPass.visit_IbCall` 重构**：
+  - 从 5 层 ad-hoc fallback 重构为 3 段清晰结构
+  - callable-instance detection → callability check → unified resolve
+  - 参数类型检查逻辑（SEM_003/SEM_005/SEM_081）保持不变
+- 14 个新增单元测试：`tests/kernel/test_resolve_call_return.py`
 
 ---
 

@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-25 实测结果**：`758 passed, 7 skipped`（0 failures）。
+**2026-05-25 实测结果**：`772 passed, 7 skipped`（0 failures）。
 
 ---
 
@@ -36,12 +36,15 @@ python -m pytest tests/ -q --tb=no --no-header
 - 引入 `@contextmanager enter_scope()` 保证 scope 生命周期安全
 - 消除 ~60 行重复 scope_stack/push_scope/pop_scope 代码
 
-### Step 3（当前）：SpecRegistry.resolve_call_return() 统一类型决议
+### Step 3 ✅：SpecRegistry.resolve_call_return() 统一类型决议
 
-- 在 Registry 层提供单一入口处理所有 callable 形态的返回类型推断
-- 简化 TypeCheckingPass.visit_IbCall 从 ~100 行 5 层 fallback 降到 ~15 行
+- 新增 `resolve_call_return()` 方法：统一处理 FUNCTION/CALLABLE_SIG/CLASS/PRIMITIVE/LIST/DICT/CALLABLE_INSTANCE/BOUND_METHOD + axiom fallback
+- 新增 `resolve_callable_instance_return()` 方法：处理 `__call__` 协议
+- `visit_IbCall` 从 5 层 ad-hoc fallback 重构为 3 段清晰结构：callable-instance → callability-check → unified-resolve
+- `resolve_return()` 保留为 deprecated 委托到 `resolve_call_return()`
+- 14 个新增单元测试覆盖所有 callable 形态
 
-### Step 4（后续）：7-Pass 归并为 4-Phase
+### Step 4（当前）：7-Pass 归并为 4-Phase
 
 - Phase 1: SymbolPhase（Pass 1+2 合并，共享 scope stack）
 - Phase 2: TypePhase（Pass 3+4 合并，消除重复 _resolve_type）

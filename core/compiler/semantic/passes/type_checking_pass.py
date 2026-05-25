@@ -808,7 +808,7 @@ class TypeCheckingVisitor(ScopedVisitor):
         return self._bool_desc
 
     def visit_IbCall(self, node: ast.IbCall) -> Optional[IbSpec]:
-        """访问函数调用 — 使用 registry.resolve_return() 推断返回类型"""
+        """访问函数调用 — 使用 registry.resolve_call_return() 统一推断返回类型"""
         # 处理被调用对象
         func_type = self.visit(node.func)
 
@@ -819,40 +819,35 @@ class TypeCheckingVisitor(ScopedVisitor):
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # 0. 内置类型构造函数特殊处理
-        if not self.registry.get_call_cap(func_type):
-            type_name = func_type.name
-            if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict', 'Exception'):
-                self.bind_type(node, func_type)
-                return func_type
-
-        # 0b. 可调用类实例：变量持有带 __call__ 的类实例
+        # --- Callable class instance detection ---
+        # If func_type is CLASS but the name refers to an *instance* variable
+        # (not a type reference), route through __call__ protocol.
         if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.lookup_symbol(node.func.id)
             if sym and not getattr(sym, 'is_type', True) and '__call__' in (func_type.members or {}):
-                # 先尝试从类符号的 owned_scope 获取方法的实际 spec（已由 visit_IbFunctionDef 更新）
-                call_spec = None
-                class_sym = self.lookup_symbol(func_type.name)
-                if class_sym and hasattr(class_sym, 'owned_scope') and class_sym.owned_scope:
-                    method_sym = class_sym.owned_scope.resolve('__call__')
-                    if method_sym and method_sym.spec:
-                        call_spec = method_sym.spec
-                # Fallback 到 resolve_member
-                if not call_spec:
-                    call_spec = self.registry.resolve_member(func_type, '__call__')
-                if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                    ret = self.registry.resolve(call_spec.return_type.head) if hasattr(call_spec, 'return_type') and call_spec.return_type else self._any_desc
+                def scope_lookup(class_name: str, method_name: str) -> Optional[IbSpec]:
+                    class_sym = self.lookup_symbol(class_name)
+                    if class_sym and hasattr(class_sym, 'owned_scope') and class_sym.owned_scope:
+                        method_sym = class_sym.owned_scope.resolve(method_name)
+                        if method_sym and method_sym.spec:
+                            return method_sym.spec
+                    return None
+
+                ret = self.registry.resolve_callable_instance_return(
+                    func_type, arg_types, class_scope_lookup=scope_lookup
+                )
+                if ret:
                     self.bind_type(node, ret)
                     return ret
 
-        # 1. 检查是否可调用
+        # --- Callability check ---
         call_trait = self.registry.get_call_cap(func_type)
         if not call_trait:
             self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # D3: structural signature matching for CALLABLE_SIG parameters
+        # --- Argument checking for structural signatures (SEM_005 / SEM_003) ---
         if func_type.kind == TypeKind.CALLABLE_SIG.value:
             expected_names = [t.head for t in (getattr(func_type, 'param_types', None) or [])]
             if len(arg_types) != len(expected_names):
@@ -875,11 +870,11 @@ class TypeCheckingVisitor(ScopedVisitor):
                             node, code="SEM_003", hint=hint,
                         )
 
-        # 2. 使用 registry.resolve_return() 推断返回类型（一切皆对象）
-        res = self.registry.resolve_return(func_type, arg_types or [])
+        # --- Unified return type resolution ---
+        res = self.registry.resolve_call_return(func_type, arg_types or [])
 
         if not res:
-            # Fallback：尝试从 spec 上的 return_type 属性直接读取
+            # Last resort fallback: direct return_type attribute read
             ret_ref = getattr(func_type, 'return_type', None)
             if ret_ref is not None:
                 if isinstance(ret_ref, TypeRef):
@@ -891,7 +886,7 @@ class TypeCheckingVisitor(ScopedVisitor):
             else:
                 res = self._any_desc
 
-        # G2: SEM_081 warning for specialized container write methods (e.g., list[int].append(str))
+        # --- G2: SEM_081 warning for specialized container write methods ---
         param_types = getattr(func_type, "param_types", []) or []
         param_type_names = [t.head for t in param_types]
         if func_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value) and param_type_names:
