@@ -1,6 +1,7 @@
 """Semantic analysis passes"""
 
 from .base_pass import BasePass
+from .scoped_visitor import ScopedVisitor
 from .symbol_collection_pass import SymbolCollectionPass
 from .symbol_resolution_pass import SymbolResolutionPass
 from .type_checking_pass import TypeCheckingPass
@@ -10,6 +11,7 @@ from .integrity_check_pass import IntegrityCheckPass
 
 __all__ = [
     'BasePass',
+    'ScopedVisitor',
     'SymbolCollectionPass',
     'SymbolResolutionPass',
     'TypeCheckingPass',

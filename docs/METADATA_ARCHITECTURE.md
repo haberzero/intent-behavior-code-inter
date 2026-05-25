@@ -509,9 +509,9 @@ class IbASTNode:
 
 这是历史上"侧表 → AST 字段"反向迁移（删除旧 `node_protection` 侧表，C11/P3）的最终形态。**v2 重构必须同时处理这两条 AST 通道**，不可以只读其中一个。
 
-### B.4 关于 `TypeEnvironment` 字段的修订
+### B.4 关于 `TypeInferenceState` 字段的设计
 
-`TypeEnvironment` 当前含 `constraints` / `generic_instances` / `auto_return_accumulator` 三个字段。前两者来源于 Python 流派"约束求解 + 泛型实例化"思维，**不符合 IBCI 静态强类型 + auto 单次锁定的设计承诺**，应当在被写入前删除。仅保留 `auto_return_accumulator`，这是 `-> auto` 函数实现的唯一合法瞬态。
+`TypeInferenceState`（原 `TypeEnvironment`，alias 已彻底移除）仅含 `auto_return_accumulator`（tuple）和 `slots`（Dict[str, TypeSlot]）。不引入约束求解或泛型实例化字段——这不符合 IBCI "单次锁定 + 公理调度"的设计承诺。
 
 ### B.5 关于 §4.3 UID 生成策略的两个潜在地雷（待整改）
 
@@ -526,7 +526,7 @@ class IbASTNode:
 在第八章"反模式警告"的基础上追加：
 
 ❌ **不要**给 MetadataStore 新增 `behavior_metadata` / `annotations` 这种通用口袋字段——它会立刻被滥用，把侧表的债换个名字续命。
-❌ **不要**让 `TypeEnvironment` 演化出"按节点-约束键"的字段——这是元数据膨胀的种子。
+❌ **不要**让 `TypeInferenceState` 演化出"按节点-约束键"的字段——这是元数据膨胀的种子。
 ❌ **不要**忽略 llmexcept 的两条 AST 通道（`stmt.target` 与 `IbFor.llmexcept_handler`）——v2 必须同时处理。
 ❌ **不要**重复存放"捕获模式"和"callable 实例标志"——AST 字段已是真相，删侧表副本。
 

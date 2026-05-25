@@ -3,7 +3,7 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-25（新增 PT-ARCH-1~5 Semantic Pipeline 架构改进路线图）
+> **最后更新**：2026-05-25（PT-ARCH-1 + PT-ARCH-2 完成并归档，PT-ARCH-3 可开工）
 
 ---
 
@@ -11,37 +11,17 @@
 
 > 详见 `docs/NEXT_STEPS.md` P0 部分的步骤概览。本节记录完整技术细节与前置条件。
 
-### PT-ARCH-1　TypeEnvironment → TypeInferenceState [Step 1, IN PROGRESS]
+### ~~PT-ARCH-1　TypeEnvironment → TypeInferenceState [Step 1]~~ ✅ 已完成
 
-**前置条件**: 无（TypeEnvironment 当前零使用，纯替换）
+已归档至 `docs/COMPLETED.md`。TypeEnvironment alias 彻底移除，无向后兼容包袱。
 
-**技术细节**:
-- `TypeEnvironment.bindings` 从未被任何 pass 写入或读取（zero usage in passes）
-- `TypeEnvironment.auto_return_accumulator` 在 TypeCheckingPass 中由局部变量 `self.auto_return_types` 替代
-- 新 `TypeInferenceState` 设计：
-  - 保留 `auto_return_accumulator` 接口（保证 Context API 兼容性）
-  - 新增 `TypeSlot`：单次写入锁定点，为 `-> auto` 上下文传播与未来 `fn` 参数类型传播预留
-  - 不引入约束图或求解器
+### ~~PT-ARCH-2　ScopedVisitor 统一基类 [Step 2]~~ ✅ 已完成
 
-**影响面**: context.py + metadata/__init__.py + tests imports（~5 文件）
-**对 runtime 的影响**: 无（TypeEnvironment 从未被序列化到 CompilationResult）
-
-### PT-ARCH-2　ScopedVisitor 统一基类 [Step 2]
-
-**前置条件**: PT-ARCH-1 完成
-
-**技术细节**:
-- 当前 SymbolResolutionPass + TypeCheckingPass 各自维护 scope_stack / push_scope / pop_scope（~200 行重复）
-- SymbolCollectionPass 使用不同风格的手动 scope 管理（old_table = self.symbol_table）
-- 统一为 ScopedVisitor 基类 + `@contextmanager enter_scope(scope)` 模式
-- 收益：消除重复代码；scope 生命周期由 context manager 保证安全
-
-**影响面**: passes/*.py（4 个 pass 的 visitor 类继承关系变更）
-**对 runtime 的影响**: 无
+已归档至 `docs/COMPLETED.md`。ScopedVisitor 基类已创建并接入 3 个 visitor。
 
 ### PT-ARCH-3　SpecRegistry.resolve_call_return() [Step 3]
 
-**前置条件**: PT-ARCH-2 完成（visitor 统一后更容易重构 visit_IbCall）
+**前置条件**: PT-ARCH-2 完成 ✅
 
 **技术细节**:
 - 当前 TypeCheckingPass.visit_IbCall 有 5 层 fallback（~100 行）：

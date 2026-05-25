@@ -8,7 +8,7 @@ from core.kernel.symbols import SymbolTable, SymbolKind
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.axioms.registry import AxiomRegistry
 from core.compiler.semantic.context import SemanticContext
-from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
+from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeInferenceState
 from core.compiler.semantic.passes.symbol_collection_pass import SymbolCollectionPass
 
 
@@ -23,7 +23,7 @@ def create_test_context(ast_node):
         registry=registry,
         module_name="test_module",
         symbol_table=SymbolTableContext(current=symbol_table),
-        type_environment=TypeEnvironment(),
+        type_environment=TypeInferenceState(),
         metadata=MetadataStore()
     )
     return context

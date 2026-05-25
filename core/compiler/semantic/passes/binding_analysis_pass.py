@@ -15,6 +15,7 @@ from core.kernel.symbols import SymbolTable
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
+from .scoped_visitor import ScopedVisitor
 
 
 class BindingAnalysisPass(BasePass):
@@ -425,34 +426,15 @@ class IntentContextValidator:
         return False
 
 
-class LambdaCaptureAnalyzer:
+class LambdaCaptureAnalyzer(ScopedVisitor):
     """Lambda 捕获分析器
 
     分析 Lambda 和 Snapshot 表达式捕获的自由变量
     """
 
     def __init__(self, context: SemanticContext):
-        self.context = context
-        self.symbol_table = context.symbol_table.current
-        self.diagnostics: List[Diagnostic] = []
+        super().__init__(context)
         self.lambda_captures: Dict[str, Set[str]] = {}
-
-        # 作用域栈
-        self.scope_stack: List[SymbolTable] = [self.symbol_table]
-
-    @property
-    def current_scope(self) -> SymbolTable:
-        """当前作用域"""
-        return self.scope_stack[-1]
-
-    def push_scope(self, scope: SymbolTable):
-        """进入新作用域"""
-        self.scope_stack.append(scope)
-
-    def pop_scope(self):
-        """退出作用域"""
-        if len(self.scope_stack) > 1:
-            self.scope_stack.pop()
 
     def analyze(self):
         """分析 Lambda 捕获"""
@@ -468,12 +450,9 @@ class LambdaCaptureAnalyzer:
             # 进入函数作用域，注册参数以便 lambda 捕获分析能找到它们
             func_scope = SymbolTable(parent=self.current_scope, name=node.name)
             self._register_func_params(node.args, func_scope)
-            self.push_scope(func_scope)
-            try:
+            with self.enter_scope(func_scope):
                 for stmt in node.body:
                     self._analyze_node(stmt)
-            finally:
-                self.pop_scope()
 
         elif isinstance(node, ast.IbClassDef):
             for stmt in node.body:

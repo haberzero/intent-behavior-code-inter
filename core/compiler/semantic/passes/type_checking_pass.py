@@ -18,6 +18,7 @@ from core.kernel.spec.type_ref import TypeRef
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
+from .scoped_visitor import ScopedVisitor
 
 
 class TypeCheckingPass(BasePass):
@@ -51,20 +52,14 @@ class TypeCheckingPass(BasePass):
         return PassResult.ok(new_context, diagnostics=visitor.diagnostics)
 
 
-class TypeCheckingVisitor:
+class TypeCheckingVisitor(ScopedVisitor):
     """类型检查访问者"""
 
     def __init__(self, context: SemanticContext):
-        self.context = context
-        self.symbol_table = context.symbol_table.current
-        self.registry = context.registry
-        self.diagnostics: List[Diagnostic] = []
+        super().__init__(context)
 
         # 类型绑定：node object -> IbSpec（使用对象身份作为键）
         self.type_bindings: Dict[Any, IbSpec] = {}
-
-        # 作用域栈（用于处理嵌套作用域）
-        self.scope_stack: List[SymbolTable] = [self.symbol_table]
 
         # auto 返回类型累积（用于 -> auto 函数）
         self.auto_return_types: Optional[List[IbSpec]] = None
@@ -83,20 +78,6 @@ class TypeCheckingVisitor:
         self._str_desc = self.registry.resolve("str")
         self._bool_desc = self.registry.resolve("bool")
         self._none_desc = self.registry.resolve("None")
-
-    @property
-    def current_scope(self) -> SymbolTable:
-        """当前作用域"""
-        return self.scope_stack[-1]
-
-    def push_scope(self, scope: SymbolTable):
-        """进入新作用域"""
-        self.scope_stack.append(scope)
-
-    def pop_scope(self):
-        """退出作用域"""
-        if len(self.scope_stack) > 1:
-            self.scope_stack.pop()
 
     def visit(self, node: ast.IbASTNode) -> Optional[IbSpec]:
         """访问节点的分派方法，返回节点的类型"""

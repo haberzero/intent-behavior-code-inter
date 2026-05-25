@@ -4,7 +4,25 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-25（追加：P0-NEXT-5 TypeCheckingPass 静态诊断补全完成）
+> **最后更新**：2026-05-25（追加：PT-ARCH-1 + PT-ARCH-2 完成）
+
+---
+
+## 2026-05-25 锚点 E：PT-ARCH-1 + PT-ARCH-2 Semantic 架构重构
+
+完成 Semantic Pipeline 架构改进路线图的前两步（758 passed, 7 skipped, 0 failures）：
+
+- **PT-ARCH-1 TypeEnvironment → TypeInferenceState**：
+  - 彻底移除 `TypeEnvironment` alias（不保留向后兼容），所有引用迁移为 `TypeInferenceState`
+  - TypeInferenceState 含 `auto_return_accumulator`（tuple）+ `slots`（Dict[str, TypeSlot]）
+  - TypeSlot：单次写入锁定绑定点，为未来 fn 参数类型传播预留
+- **PT-ARCH-2 ScopedVisitor 统一基类**：
+  - 新建 `core/compiler/semantic/passes/scoped_visitor.py`
+  - 提供 scope_stack、current_scope、push_scope/pop_scope、`@contextmanager enter_scope()`
+  - 提供 visit() 分派、generic_visit 递归、error()/warning() 诊断辅助
+  - SymbolResolver、TypeCheckingVisitor、LambdaCaptureAnalyzer 继承 ScopedVisitor
+  - 消除 ~60 行重复 scope 管理代码
+  - 新增 10 个 ScopedVisitor 单元测试
 
 ---
 

@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-25（新增 P0 Semantic 架构改进 5 步路线图）
+> **最后更新**：2026-05-25（Step 1 + Step 2 完成，当前推进 Step 3）
 
 ---
 
@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-25 实测结果**：`735 passed, 7 skipped`（0 failures）。
+**2026-05-25 实测结果**：`758 passed, 7 skipped`（0 failures）。
 
 ---
 
@@ -23,21 +23,20 @@ python -m pytest tests/ -q --tb=no --no-header
 > 目标：使 IBCI 类型系统与语义分析架构更清晰、更易维护、更符合现代编译器设计理念。
 > 原则：不引入完整 HM/约束求解；保持"单次锁定 + 公理调度"核心哲学；但为未来高阶函数与类型传播留下受控扩展点。
 
-### Step 1（当前）：TypeEnvironment → TypeInferenceState
+### Step 1 ✅：TypeEnvironment → TypeInferenceState
 
-**风险**：最低（TypeEnvironment 当前完全未被任何 pass 使用，是空壳）
+- ~~删除死代码 `TypeEnvironment`~~ → 完成：TypeEnvironment alias 彻底移除，不保留向后兼容
+- TypeInferenceState 已引入：`auto_return_accumulator` + `TypeSlot` 单次锁定绑定点
+- 所有测试 imports 已迁移至 TypeInferenceState
 
-- 删除死代码 `TypeEnvironment`（bindings/accumulator 两字段零使用）
-- 引入 `TypeInferenceState`：仅保留 `auto_return_accumulator` 功能 + 新增 `TypeSlot` 受控延迟绑定点
-- `TypeSlot` 设计：单次写入锁定（不是 unification variable），为未来 `fn` 参数类型传播预留扩展
-- 更新 `SemanticContext`、测试 imports
+### Step 2 ✅：ScopedVisitor 基类 + context manager scope 管理
 
-### Step 2（后续）：ScopedVisitor 基类 + context manager scope 管理
-
-- 统一 4 个 pass 中重复的 scope_stack / push_scope / pop_scope 代码（~200 行重复消除）
+- 新建 `core/compiler/semantic/passes/scoped_visitor.py`
+- 统一 SymbolResolver、TypeCheckingVisitor、LambdaCaptureAnalyzer 三个 visitor 的 scope 管理
 - 引入 `@contextmanager enter_scope()` 保证 scope 生命周期安全
+- 消除 ~60 行重复 scope_stack/push_scope/pop_scope 代码
 
-### Step 3（后续）：SpecRegistry.resolve_call_return() 统一类型决议
+### Step 3（当前）：SpecRegistry.resolve_call_return() 统一类型决议
 
 - 在 Registry 层提供单一入口处理所有 callable 形态的返回类型推断
 - 简化 TypeCheckingPass.visit_IbCall 从 ~100 行 5 层 fallback 降到 ~15 行
