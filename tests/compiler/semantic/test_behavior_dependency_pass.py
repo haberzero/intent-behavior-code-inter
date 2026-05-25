@@ -7,7 +7,7 @@ inside the IbAssign branch.
 
 import pytest
 from core.kernel import ast
-from core.compiler.semantic_v2.passes.behavior_dependency_pass import BehaviorDependencyPass
+from core.compiler.semantic.passes.behavior_dependency_pass import BehaviorDependencyPass
 from .conftest import make_context
 
 

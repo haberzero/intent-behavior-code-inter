@@ -1,12 +1,11 @@
 """
-V2 Pipeline → CompilationResult Adapter
+Pipeline → CompilationResult Adapter
 
-将 semantic_v2 pipeline 的 PassResult 转换为 scheduler 期望的 CompilationResult。
-这是 v2 全量替换 v1 的核心桥接层。
+将 semantic pipeline 的 PassResult 转换为 scheduler 期望的 CompilationResult。
 
 设计原则：
-- 不引入任何 fallback 或兼容层——直接映射 v2 产物到 CompilationResult 接口
-- MetadataStore 使用 node object 作为键，与 v1 SideTableManager 完全对齐
+- 不引入任何 fallback 或兼容层——直接映射产物到 CompilationResult 接口
+- MetadataStore 使用 node object 作为键
 - 序列化器无需改动（FlatSerializer 已处理 object→UID 转换）
 """
 
@@ -25,17 +24,14 @@ def pass_result_to_compilation_result(
     issue_tracker: Optional[Any] = None
 ) -> CompilationResult:
     """
-    将 v2 pipeline 的 PassResult 转换为 CompilationResult。
+    将 pipeline 的 PassResult 转换为 CompilationResult。
 
     Args:
-        result: v2 pipeline 的最终输出
-        issue_tracker: 诊断收集器（可选），用于将 v2 diagnostics 注入到 v1 风格的错误报告系统
+        result: pipeline 的最终输出
+        issue_tracker: 诊断收集器（可选），用于将 diagnostics 注入到错误报告系统
 
     Returns:
-        CompilationResult: 与 v1 SemanticAnalyzer.analyze() 返回值完全一致的结构
-
-    Raises:
-        CompilationError: 当 v2 检测到致命错误时（如果 raise_on_error=True）
+        CompilationResult
     """
     context = result.context
     metadata = context.metadata
@@ -43,7 +39,7 @@ def pass_result_to_compilation_result(
     # 提取 module AST
     module_ast = context.ast if isinstance(context.ast, ibci_ast.IbModule) else None
 
-    # 提取 symbol table（v2 SymbolTableContext 持有的就是 v1 的 SymbolTable）
+    # 提取 symbol table
     symbol_table = context.symbol_table.current
 
     # MetadataStore 中的 node_to_* 字典已经是 node object keyed
@@ -66,7 +62,7 @@ def pass_result_to_compilation_result(
 
 
 def _inject_diagnostics(diagnostics: List, issue_tracker: Any) -> None:
-    """将 v2 Diagnostic 列表注入到 v1 风格的 IssueTracker。"""
+    """将 Diagnostic 列表注入到 IssueTracker。"""
     from core.kernel.issue import Severity
     from core.base.source_atomic import Location
 

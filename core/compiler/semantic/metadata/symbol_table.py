@@ -2,11 +2,7 @@
 Symbol Table Context
 
 Redesigned symbol table with better immutability and scope management.
-
-Key insights from V1:
-- V1 mixes SymbolTable (from kernel.symbols) with analyzer state
-- V2 wraps SymbolTable in an immutable context
-- Provides clearer scope stack semantics
+Wraps SymbolTable in an immutable context with clearer scope stack semantics.
 """
 
 from dataclasses import dataclass, field
@@ -21,10 +17,6 @@ class SymbolTableContext:
 
     Design principle: Symbol tables form a stack, each mutation creates
     a new context with updated stack.
-
-    Comparison with V1:
-    - V1: self.symbol_table is mutated directly
-    - V2: SymbolTableContext is immutable, push/pop create new contexts
     """
     current: SymbolTable
     scope_stack: tuple = field(default_factory=tuple)  # Stack of scope names
@@ -63,14 +55,10 @@ class SymbolTableContext:
         """
         Define a symbol in current scope (returns new context).
 
-        Note: This mutates the underlying SymbolTable (V1 behavior preserved).
-        For true immutability, would need to copy the entire table tree.
-
-        TODO: Consider implementing copy-on-write for full immutability.
+        Note: This mutates the underlying SymbolTable for pragmatic reasons.
         """
         self.current.define(symbol)
         # Return self since SymbolTable is mutated in place
-        # This is a pragmatic compromise for V1 compatibility
         return self
 
     def resolve(self, name: str) -> Optional[Symbol]:

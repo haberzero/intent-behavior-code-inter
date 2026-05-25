@@ -21,11 +21,7 @@ from .base_pass import BasePass
 
 
 class LocationBinder:
-    """Traverse all AST nodes and bind location info to metadata.
-
-    Mirrors v1 semantic_analyzer.visit() which calls
-    side_table.bind_location(node, {...}) for every visited node.
-    """
+    """Traverse all AST nodes and bind location info to metadata."""
 
     def __init__(self, context: SemanticContext):
         self.context = context
@@ -74,7 +70,7 @@ class IntegrityCheckPass(BasePass):
 
     def run(self, context: SemanticContext) -> PassResult:
         """运行完整性检查 Pass"""
-        # 1. Populate node_to_loc for all AST nodes (mirrors v1 Pass 3.5)
+        # 1. Populate node_to_loc for all AST nodes
         loc_binder = LocationBinder(context)
         loc_binder.bind_all(context.ast)
 

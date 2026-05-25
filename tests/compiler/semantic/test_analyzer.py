@@ -1,17 +1,15 @@
 """
-Parity Tests: V2 Pipeline vs V1 Compatibility
+Semantic Analyzer Integration Tests
 
-验证 v2 pipeline 通过 adapter 产出的 CompilationResult 满足下游消费者
+验证语义分析 pipeline 通过 adapter 产出的 CompilationResult 满足下游消费者
 （serializer、VM）的结构约束。
-
-这些测试确保 v2 能够完全替换 v1 而不需要任何 fallback。
 """
 
 import pytest
-from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
-from core.compiler.semantic_v2.pipeline import create_semantic_pipeline
-from core.compiler.semantic_v2.context import ContextBuilder
-from core.compiler.semantic_v2.metadata.metadata_store import MetadataStore
+from core.compiler.semantic.analyzer import SemanticAnalyzer
+from core.compiler.semantic.pipeline import create_semantic_pipeline
+from core.compiler.semantic.context import ContextBuilder
+from core.compiler.semantic.metadata.metadata_store import MetadataStore
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.blueprint import CompilationResult
@@ -41,16 +39,16 @@ def parse_code(code: str, tracker):
     return parser.parse()
 
 
-class TestV2ProducesCompilationResult:
-    """V2 analyzer produces a valid CompilationResult structure."""
+class TestProducesCompilationResult:
+    """Analyzer produces a valid CompilationResult structure."""
 
     def test_returns_compilation_result_type(self, source_mgr, registry):
-        """analyze() must return CompilationResult (same type as v1)."""
+        """analyze() must return CompilationResult (expected type)."""
         tracker = IssueTracker(source_provider=source_mgr)
         code = 'str x = "hello"'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert isinstance(result, CompilationResult)
@@ -61,7 +59,7 @@ class TestV2ProducesCompilationResult:
         code = 'int y = 1'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert isinstance(result.module_ast, ast.IbModule)
@@ -72,7 +70,7 @@ class TestV2ProducesCompilationResult:
         code = 'str name = "ibci"'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert isinstance(result.symbol_table, SymbolTable)
@@ -83,7 +81,7 @@ class TestV2ProducesCompilationResult:
         code = 'int z = 100'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert isinstance(result.node_to_symbol, dict)
@@ -96,7 +94,7 @@ class TestV2ProducesCompilationResult:
         code = 'str greeting = "hello"'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         for node_key in result.node_to_symbol.keys():
@@ -109,7 +107,7 @@ class TestV2ProducesCompilationResult:
         code = 'str greeting = "hello"'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         for sym in result.node_to_symbol.values():
@@ -117,8 +115,8 @@ class TestV2ProducesCompilationResult:
                 f"Expected Symbol value, got {type(sym).__name__}"
 
 
-class TestV2SymbolCollection:
-    """V2 correctly collects all top-level symbols."""
+class TestSymbolCollection:
+    """Correctly collects all top-level symbols."""
 
     def test_function_symbol_collected(self, source_mgr, registry):
         """Function definitions create FUNCTION symbols."""
@@ -128,7 +126,7 @@ func greet(str name) -> str:
     return "hello " + name
 '''
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         sym = result.symbol_table.resolve('greet')
@@ -140,7 +138,7 @@ func greet(str name) -> str:
         tracker = IssueTracker(source_provider=source_mgr)
         code = 'int count = 0'
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         sym = result.symbol_table.resolve('count')
@@ -156,7 +154,7 @@ class Point:
     int y
 '''
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         sym = result.symbol_table.resolve('Point')
@@ -174,7 +172,7 @@ str msg = "ready"
 int total = 0
 '''
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert result.symbol_table.resolve('add') is not None
@@ -182,8 +180,8 @@ int total = 0
         assert result.symbol_table.resolve('total') is not None
 
 
-class TestV2SymbolResolution:
-    """V2 correctly resolves symbol references into node_to_symbol."""
+class TestSymbolResolution:
+    """Correctly resolves symbol references into node_to_symbol."""
 
     def test_name_reference_bound(self, source_mgr, registry):
         """IbName nodes referencing defined symbols get bound."""
@@ -193,7 +191,7 @@ str x = "hello"
 str y = x
 '''
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         # Should have at least one symbol binding (the reference to 'x' in second assign)
@@ -204,8 +202,8 @@ str y = x
             assert isinstance(node, ast.IbASTNode)
 
 
-class TestV2LLMExceptBinding:
-    """V2 correctly performs llmexcept AST rewriting."""
+class TestLLMExceptBinding:
+    """Correctly performs llmexcept AST rewriting."""
 
     def test_llmexcept_sets_target(self, source_mgr, registry):
         """llmexcept stmt gets target set to prev_stmt after body rewrite."""
@@ -217,7 +215,7 @@ llmexcept:
     retry "be more specific"
 '''
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         # After llmexcept binding pass, the AST should have been rewritten
@@ -229,7 +227,7 @@ llmexcept:
                 break
 
 
-class TestV2MetadataStoreNodeObjectKeys:
+class TestMetadataStoreNodeObjectKeys:
     """MetadataStore uses node objects as keys (not UIDs)."""
 
     def test_metadata_store_bind_symbol_uses_node_object(self):
@@ -272,31 +270,22 @@ class TestV2MetadataStoreNodeObjectKeys:
             "IbASTNode should NOT have uid field; object identity is used"
 
 
-class TestV2SchedulerIntegration:
-    """V2 integrates with scheduler via use_v2=True flag."""
+class TestSchedulerIntegration:
+    """Semantic analyzer integrates correctly with scheduler."""
 
-    def test_scheduler_accepts_use_v2_flag(self):
-        """Scheduler constructor accepts use_v2 parameter."""
+    def test_scheduler_constructs(self):
+        """Scheduler constructor works without issues."""
         import tempfile
         from core.compiler.scheduler import Scheduler
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Should not raise
-            scheduler = Scheduler(tmpdir, use_v2=True)
-            assert scheduler.use_v2 is True
-
-    def test_scheduler_default_is_v2(self):
-        """Default behavior uses v2 (v1 replacement complete)."""
-        import tempfile
-        from core.compiler.scheduler import Scheduler
-
-        with tempfile.TemporaryDirectory() as tmpdir:
             scheduler = Scheduler(tmpdir)
-            assert scheduler.use_v2 is True
+            assert scheduler is not None
 
 
-class TestV2FullFileCompilation:
-    """V2 can successfully compile all example .ibci files via the analyzer."""
+class TestFullFileCompilation:
+    """Semantic analyzer compiles all example .ibci files."""
 
     @pytest.fixture
     def full_registry(self):
@@ -312,7 +301,7 @@ class TestV2FullFileCompilation:
         "examples/01_getting_started/06_enum_switch_with_llm.ibci",
     ])
     def test_example_compiles_without_crash(self, source_mgr, full_registry, example_file):
-        """V2 analyzer should compile example files without raising exceptions."""
+        """Analyzer should compile example files without raising exceptions."""
         import os
         if not os.path.exists(example_file):
             pytest.skip(f"Example file not found: {example_file}")
@@ -322,7 +311,7 @@ class TestV2FullFileCompilation:
 
         tracker = IssueTracker(source_provider=source_mgr)
         ast_node = parse_code(code, tracker)
-        analyzer = SemanticAnalyzerV2(tracker, registry=full_registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=full_registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         # Must return valid CompilationResult
@@ -336,8 +325,8 @@ class TestV2FullFileCompilation:
         assert len(result.node_to_type) > 0
         assert len(result.node_to_loc) > 0
 
-    def test_scheduler_v2_compiles_simple_file(self, source_mgr):
-        """Scheduler with use_v2=True compiles a simple file without errors."""
+    def test_scheduler_compiles_simple_file(self, source_mgr):
+        """Scheduler compiles a simple file without errors."""
         import tempfile, os
         from core.compiler.scheduler import Scheduler
         from core.kernel.factory import create_default_registry
@@ -348,18 +337,18 @@ class TestV2FullFileCompilation:
                 f.write('int x = 42\nstr msg = "hello"\nint y = x + 1\nstr result = @~say $msg~\n')
 
             registry = create_default_registry()
-            scheduler = Scheduler(tmpdir, use_v2=True, registry=registry)
+            scheduler = Scheduler(tmpdir, registry=registry)
             # Should not raise
             artifact = scheduler.compile_file(test_file)
             assert artifact is not None
 
-    def test_v2_llm_function_compiles(self, source_mgr, full_registry):
-        """V2 correctly handles LLM function definitions."""
+    def test_llm_function_compiles(self, source_mgr, full_registry):
+        """Correctly handles LLM function definitions."""
         tracker = IssueTracker(source_provider=source_mgr)
         code = 'llm translate(str text, str target):\n__user__\ntranslate $text to $target\nllmend'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=full_registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=full_registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert isinstance(result, CompilationResult)
@@ -368,13 +357,13 @@ class TestV2FullFileCompilation:
         assert sym is not None
         assert sym.kind == SymbolKind.LLM_FUNCTION
 
-    def test_v2_behavior_expr_adapts_to_target_type(self, source_mgr, full_registry):
+    def test_behavior_expr_adapts_to_target_type(self, source_mgr, full_registry):
         """BehaviorExpr assigned to typed variable adapts to that type (IBCI core semantics)."""
         tracker = IssueTracker(source_provider=source_mgr)
         code = 'int x = @~compute something~'
         ast_node = parse_code(code, tracker)
 
-        analyzer = SemanticAnalyzerV2(tracker, registry=full_registry, module_name='test')
+        analyzer = SemanticAnalyzer(tracker, registry=full_registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         # Should not produce type-mismatch errors for behavior→typed-var assignment

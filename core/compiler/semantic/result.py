@@ -92,10 +92,7 @@ class PassResult:
 
     Design: Functional programming pattern - passes don't mutate state,
     they return new contexts and accumulated diagnostics.
-
-    Key insight from V1 limitations:
-    - V1 throws exceptions on errors, losing subsequent analysis
-    - V2 collects all diagnostics, enables reporting all issues at once
+    All diagnostics are collected and reported together at the end.
     """
     context: 'SemanticContext'  # Updated context (may be the same if pass failed)
     metadata: Dict[str, Any]    # Pass-specific metadata (e.g., collected symbols)

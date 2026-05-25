@@ -1,49 +1,46 @@
 # PENDING_TASKS — 阻塞 / 待前置任务
 
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
-> 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`；
-> 架构演进总体方向见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
+> 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-24（对齐直接替换路线：删除 shadow 模式前置条件；PT-SEM-1/2 重写为反映当前进度）
+> **最后更新**：2026-05-25
 
 ---
 
-## 一、semantic_v2 后续任务（等 NEXT_STEPS 主线推进完成）
+## 一、Semantic 后续任务
 
-### PT-SEM-1　semantic_v2 生产就绪化 [P2]
+### PT-SEM-1　语义分析生产就绪化 [P2]
 
 **前置条件**:
-- NEXT_STEPS P0-NEXT-4 完成（v2 设为默认，全量 parity 验证通过，v1 删除）
+- Semantic pipeline 已作为唯一分析路径稳定运行
 
 **任务内容**:
 - 性能优化（如有必要，基于实际性能对比数据）
 - 错误信息优化（提升可读性和可操作性）
 - 调试工具（可视化符号表、类型绑定、依赖图）
-- CI/CD 集成（自动运行 V2 测试套件）
+- CI/CD 集成（自动运行语义分析测试套件）
 
 **预估工作量**: 15-20 小时
 
-### PT-SEM-2　semantic_v2 后续清理 [P3]
+### PT-SEM-2　Semantic 后续清理 [P3]
 
 **前置条件**:
 - PT-SEM-1 完成
-- V2 作为唯一路径稳定运行 ≥ 1 个月
+- Semantic pipeline 稳定运行 ≥ 1 个月
 
 **任务内容**:
-1. 合并 `CompilationResult` 字段（v1 五张侧表 → v2 MetadataStore 三张核心绑定）
+1. 精简 `CompilationResult` 字段（MetadataStore 三张核心绑定）
 2. 清理技术债务（包括 `core/kernel/blueprint.py` 字段精简）
-3. 移除所有 v1 兼容路径残留
 
 **预估工作量**: 10-15 小时
 
 ### PT-SEM-3　二层 IR 路线评估 [VISION]
 
-**前置条件**: PT-SEM-2 完成，v2 单 IR 流水线稳定运行 ≥ 1 个月。
+**前置条件**: PT-SEM-2 完成，单 IR 流水线稳定运行 ≥ 1 个月。
 
 **任务内容**:
 - 评估是否要把"AST 规整阶段"（llmexcept 重排、intent 注解附着等）从 Semantic 中剥离出来，产出独立的"结构 IR"。
 - Semantic 在结构 IR 上做分析；序列化器输出"执行 IR"。
-- 详见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.5。
 
 **为什么搁置**: 当前 IBCI 体量下尚不必做；只有当行为依赖图/intent 分析继续扩展（LLM 调用计费/调度优化等）才会成为必经之路。
 

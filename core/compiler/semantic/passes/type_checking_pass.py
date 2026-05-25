@@ -141,7 +141,7 @@ class TypeCheckingVisitor:
         return self.current_scope.resolve(name)
 
     def is_assignable(self, source: IbSpec, target: IbSpec) -> bool:
-        """检查源类型是否可以赋给目标类型（对齐 v1：dynamic 类型跳过检查）"""
+        """检查源类型是否可以赋给目标类型（dynamic 类型跳过检查）"""
         if not source or not target:
             return True
         # Guard: resolve TypeRef to actual IbSpec if needed
@@ -149,7 +149,7 @@ class TypeCheckingVisitor:
             source = self.registry.resolve(source.head) or self._any_desc
         if isinstance(target, TypeRef):
             target = self.registry.resolve(target.head) or self._any_desc
-        # 与 v1 对齐：当源或目标为 dynamic（any/auto）时，跳过兼容性检查
+        # 当源或目标为 dynamic（any/auto）时，跳过兼容性检查
         if self.registry.is_dynamic(source) or self.registry.is_dynamic(target):
             return True
         return self.registry.is_assignable(source, target)
@@ -238,7 +238,7 @@ class TypeCheckingVisitor:
         return self._void_desc
 
     def _handle_assign_target(self, node: ast.IbAssign, target: ast.IbASTNode, val_type: IbSpec):
-        """处理单个赋值目标 — P1-B: auto 单次锁定 / any 永久动态"""
+        """处理单个赋值目标：auto 单次锁定 / any 永久动态"""
         # Store current node for use by _infer_fn_type
         self._current_node = node
 
@@ -257,7 +257,7 @@ class TypeCheckingVisitor:
                 # Resolve declared_type if it's a TypeRef
                 if isinstance(declared_type, TypeRef):
                     declared_type = self.registry.resolve(declared_type.head) or self._any_desc
-                # P1-B: 类型推断策略
+                # 类型推断策略
                 target_type = self._infer_target_type_from_declared(declared_type, val_type)
             elif sym and sym.spec:
                 # 已存在的符号：使用现有类型
@@ -360,7 +360,7 @@ class TypeCheckingVisitor:
         return var_name, declared_type
 
     def _infer_target_type_from_declared(self, declared_type: IbSpec, val_type: IbSpec) -> IbSpec:
-        """P1-B: 根据声明类型推导目标类型（auto 锁定 / any 永久 / fn 推断）。
+        """根据声明类型推导目标类型（auto 锁定 / any 永久 / fn 推断）。
 
         - `any`：变量 spec 永久保持为 any，不因首次赋值类型窄化。
         - `auto`：从首次赋值的实际类型推断并锁定。行为表达式的 LLM 输出天然是字符串。
@@ -520,7 +520,6 @@ class TypeCheckingVisitor:
         if node.iter:
             self.visit(node.iter)
             # 条件驱动循环中的行为表达式应被解析为 bool 类型
-            # (v1 parity: semantic_analyzer.py:1273-1274)
             if isinstance(node.iter, ast.IbBehaviorExpr):
                 self.bind_type(node.iter, self.registry.resolve("bool"))
         if node.target:
@@ -584,11 +583,11 @@ class TypeCheckingVisitor:
         return None
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef) -> Optional[IbSpec]:
-        """访问函数定义 — 对齐 v1：解析参数类型标注，回填 spec，参数以正确类型注册"""
+        """访问函数定义 — 解析参数类型标注，回填 spec，参数以正确类型注册"""
         # 查找函数符号
         sym = self.lookup_symbol(node.name)
 
-        # 解析参数类型标注（与 v1 visit_IbFunctionDef 对齐）
+        # 解析参数类型标注
         param_types = []
         for arg_node in node.args:
             if isinstance(arg_node, ast.IbTypeAnnotatedExpr) and arg_node.annotation:
@@ -607,7 +606,7 @@ class TypeCheckingVisitor:
                          isinstance(node.returns, ast.IbName) and
                          node.returns.id == "auto")
 
-        # 回填函数 spec（与 v1 对齐：用 factory.create_func 重建 TypeDef 携带签名）
+        # 回填函数 spec（用 factory.create_func 重建 TypeDef 携带签名）
         if sym and sym.spec and self.registry:
             param_type_names = [(p.name if p else "any") for p in param_types]
             ret_type_name = ret_type.name if ret_type else "void"
@@ -652,7 +651,7 @@ class TypeCheckingVisitor:
             for stmt in node.body:
                 self.visit(stmt)
 
-            # P1-B: -> auto 函数返回类型统一
+            # -> auto 函数返回类型统一
             if is_auto_return and self.auto_return_types:
                 unique = list({s.name: s for s in self.auto_return_types if s}.values())
                 if len(unique) == 1:
@@ -768,11 +767,11 @@ class TypeCheckingVisitor:
         return tuple_type
 
     def visit_IbBinOp(self, node: ast.IbBinOp) -> Optional[IbSpec]:
-        """访问二元运算 — P1-B: 接通 registry.resolve_op"""
+        """访问二元运算"""
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
 
-        # any 类型与任何操作兼容（v1 permissive semantics）
+        # any 类型与任何操作兼容（permissive semantics）
         if left_type == self._any_desc or right_type == self._any_desc:
             self.bind_type(node, self._any_desc)
             return self._any_desc
@@ -798,7 +797,7 @@ class TypeCheckingVisitor:
         return result_type
 
     def visit_IbUnaryOp(self, node: ast.IbUnaryOp) -> Optional[IbSpec]:
-        """访问一元运算 — P1-B: 接通 registry.resolve_op"""
+        """访问一元运算"""
         operand_type = self.visit(node.operand)
 
         # 贯彻"一切皆对象"：调用操作数的自决议方法 (other=None 表示一元运算)
@@ -811,7 +810,7 @@ class TypeCheckingVisitor:
         return result_type
 
     def visit_IbCompare(self, node: ast.IbCompare) -> Optional[IbSpec]:
-        """访问比较运算 — P1-B: 接通 registry.resolve_op"""
+        """访问比较运算"""
         left_type = self.visit(node.left)
         for comparator in node.comparators:
             self.visit(comparator)
@@ -828,7 +827,7 @@ class TypeCheckingVisitor:
         return self._bool_desc
 
     def visit_IbCall(self, node: ast.IbCall) -> Optional[IbSpec]:
-        """访问函数调用 — 对齐 v1 逻辑：使用 registry.resolve_return() 推断返回类型"""
+        """访问函数调用 — 使用 registry.resolve_return() 推断返回类型"""
         # 处理被调用对象
         func_type = self.visit(node.func)
 
@@ -839,14 +838,14 @@ class TypeCheckingVisitor:
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # 0. 内置类型构造函数特殊处理（与 v1 对齐）
+        # 0. 内置类型构造函数特殊处理
         if not self.registry.get_call_cap(func_type):
             type_name = func_type.name
             if type_name in ('str', 'int', 'float', 'bool', 'list', 'dict', 'Exception'):
                 self.bind_type(node, func_type)
                 return func_type
 
-        # 0b. 可调用类实例：变量持有带 __call__ 的类实例（与 v1 对齐）
+        # 0b. 可调用类实例：变量持有带 __call__ 的类实例
         if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.lookup_symbol(node.func.id)
             if sym and not getattr(sym, 'is_type', True) and '__call__' in (func_type.members or {}):
@@ -968,7 +967,7 @@ class TypeCheckingVisitor:
         return self._any_desc
 
     def visit_IbSubscript(self, node: ast.IbSubscript) -> Optional[IbSpec]:
-        """访问下标访问 — 对齐 v1: tuple 位置类型 + list 元素类型推断"""
+        """访问下标访问 — tuple 位置类型 + list 元素类型推断"""
         value_type = self.visit(node.value)
         key_type = self.visit(node.slice)
 
@@ -976,7 +975,7 @@ class TypeCheckingVisitor:
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # 切片操作返回同类型容器（与 v1 对齐）
+        # 切片操作返回同类型容器
         if isinstance(node.slice, ast.IbSlice):
             self.bind_type(node, value_type)
             return value_type
@@ -1012,7 +1011,7 @@ class TypeCheckingVisitor:
         return result
 
     def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr) -> Optional[IbSpec]:
-        """访问 lambda 表达式 — 对齐 v1: 返回类型检查与 CALLABLE_SIG 传播"""
+        """访问 lambda 表达式 — 返回类型检查与 CALLABLE_SIG 传播"""
         # 1. 确定返回类型标注
         returns_type: Optional[IbSpec] = (
             self._resolve_type(node.returns) if getattr(node, 'returns', None) is not None else None
@@ -1112,7 +1111,7 @@ class TypeCheckingVisitor:
         self.bind_type(node, declared_type)
         return declared_type
 
-    # ========== P1-C: 补齐的 AST 节点 visitor ==========
+    # ========== 补齐的 AST 节点 visitor ==========
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt) -> Optional[IbSpec]:
         """访问表达式语句"""

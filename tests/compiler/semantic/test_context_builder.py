@@ -7,7 +7,7 @@ Covers fix: ContextBuilder.build() now injects builtin prelude symbols.
 import pytest
 from core.kernel import ast
 from core.kernel.factory import create_default_registry
-from core.compiler.semantic_v2.context import ContextBuilder
+from core.compiler.semantic.context import ContextBuilder
 
 
 def test_context_builder_injects_prelude():

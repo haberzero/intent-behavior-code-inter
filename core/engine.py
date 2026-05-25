@@ -33,7 +33,6 @@ from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classe
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic.passes.contract_validator import ContractValidator
 from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
@@ -434,18 +433,17 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):
         """
-         暴露分段语义分析接口，允许观察中间产物。
-        按顺序运行 Pass 1 (Collector), Pass 2 (Resolver), Pass 3 (Analyzer)。
+        暴露分段语义分析接口，允许观察中间产物。
         """
+        from core.compiler.semantic.analyzer import SemanticAnalyzer
         if analyzer is None:
-            # 构造分析器
             analyzer = SemanticAnalyzer(
                 issue_tracker=self.issue_tracker, 
                 registry=self.registry.get_metadata_registry(),
                 debugger=self.debugger
             )
         
-        # 内部执行完整的 3-Pass 分析流
+        # 执行完整的语义分析
         analyzer.analyze(module, raise_on_error=raise_on_error)
         
         return analyzer

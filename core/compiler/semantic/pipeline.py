@@ -121,9 +121,9 @@ def create_semantic_pipeline() -> SemanticPipeline:
     Pass 顺序：
     1. SymbolCollectionPass - 收集所有符号定义
     2. SymbolResolutionPass - 解析所有符号引用
-    3. TypeResolutionPass - 解析类型标注 (P1-E)
-    4. TypeCheckingPass - 类型检查和推断 (P1-B: auto/any/resolve_op)
-    5. BindingAnalysisPass - 绑定分析 (P1-F: llmexcept body 重写)
+    3. TypeResolutionPass - 解析类型标注
+    4. TypeCheckingPass - 类型检查和推断
+    5. BindingAnalysisPass - 绑定分析（llmexcept body 重写）
     6. BehaviorDependencyPass - 行为依赖分析
     7. IntegrityCheckPass - 完整性检查
     """

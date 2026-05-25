@@ -1,5 +1,5 @@
 """
-Tests for semantic_v2 known-issue fixes:
+Tests for semantic known-issue fixes:
 1. SymbolResolutionPass: for-loop target variable registration
 2. TypeCheckingPass: node_to_type population with proper registry
 3. IntegrityCheckPass: node_to_loc population
@@ -8,9 +8,9 @@ Tests for semantic_v2 known-issue fixes:
 import pytest
 from core.kernel import ast
 from core.kernel.factory import create_default_registry
-from core.compiler.semantic_v2.context import ContextBuilder
-from core.compiler.semantic_v2.pipeline import create_semantic_pipeline
-from core.compiler.semantic_v2.result import DiagnosticLevel
+from core.compiler.semantic.context import ContextBuilder
+from core.compiler.semantic.pipeline import create_semantic_pipeline
+from core.compiler.semantic.result import DiagnosticLevel
 
 
 @pytest.fixture

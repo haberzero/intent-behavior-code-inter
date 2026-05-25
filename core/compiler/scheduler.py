@@ -6,8 +6,7 @@ from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
-from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
+from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
@@ -29,24 +28,21 @@ from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
 from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
-# from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
-
 class Scheduler(ICompilerService):
     """
     Top-level scheduler for multi-file compilation.
-    Orchestrates Lexer, Parser, and SemanticAnalyzer.
+    Orchestrates Lexer, Parser, and Semantic Analyzer.
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None, use_v2: bool = True):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
         self.root_dir = os.path.realpath(root_dir)
         self.source_manager = SourceManager()
         self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
         self.debugger = debugger or core_debugger
-        self.registry = registry # 注册表实例，用于类型同步
-        self.use_v2 = use_v2  # True = 使用 v2 pipeline 替代 v1 SemanticAnalyzer
+        self.registry = registry
         
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}
@@ -379,10 +375,7 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
             
-            if self.use_v2:
-                analyzer = SemanticAnalyzerV2(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
-            else:
-                analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
+            analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():
@@ -393,9 +386,6 @@ class Scheduler(ICompilerService):
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Warning: Predefined symbol '{name}' is not a Symbol object, skipping.")
             
             # Inject imported modules
-            # [CLEANUP] Local imports removed and consolidated at top
-            # TypeBridge import removed as file does not exist
-            
             for imp in module_info.imports:
                 # 查找已编译的结果或外部元数据
                 s_mod_type = None
