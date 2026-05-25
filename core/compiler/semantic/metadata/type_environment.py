@@ -13,7 +13,7 @@ Design principles:
 """
 
 from dataclasses import dataclass, field, replace
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ class TypeInferenceState:
 
     # ---- TypeSlot management (new: deferred binding) ----
 
-    def create_slot(self, name: str) -> tuple:
+    def create_slot(self, name: str) -> Tuple['TypeInferenceState', TypeSlot]:
         """Create a named TypeSlot. Returns (new_state, slot).
 
         The slot starts pending and can be locked once.

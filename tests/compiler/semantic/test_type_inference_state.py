@@ -101,8 +101,9 @@ class TestTypeInferenceState:
 
     def test_immutability(self):
         """TypeInferenceState is frozen — no in-place mutation."""
+        import dataclasses
         state = TypeInferenceState.create_empty()
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             state.auto_return_accumulator = ("hack",)
 
 
