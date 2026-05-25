@@ -3,16 +3,9 @@ Type Resolution Pass (TypePhase sub-step 1)
 
 职责：解析类型标注，将 AST 中的类型名称字符串转换为 IbSpec 引用
 输入：Context with resolved symbols
-输出：Context with type annotations resolved
-
-设计原则：
-- 独立于 TypeCheckingPass（类型检查）——本 Pass 只做"名字→IbSpec"的解析
-- 为后续 TypeCheckingPass 提供已解析的类型标注
-- 处理 auto/any/fn 等动态类型标记
-- 处理泛型类型标注 (list[int], dict[str, int] 等)
+输出：PassOutput with type_bindings
 """
 
-from dataclasses import replace
 from typing import Optional, List, Dict, Any
 
 from core.kernel import ast

@@ -1,12 +1,11 @@
 """
 Symbol Resolution Pass (SymbolPhase sub-step 2)
 
-职责：解析所有符号引用，绑定到 metadata
+职责：解析所有符号引用
 输入：Context with symbol_table
-输出：Context with resolved symbol bindings
+输出：PassOutput with symbol_bindings
 """
 
-from dataclasses import replace
 from typing import Optional, List, Dict, Any
 
 from core.kernel import ast

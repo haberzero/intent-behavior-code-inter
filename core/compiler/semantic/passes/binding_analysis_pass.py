@@ -1,12 +1,11 @@
 """
 Binding Analysis Pass (BindingPhase sub-step 1)
 
-职责：各种绑定分析（LLMExcept、Intent、Lambda 捕获）
-输入：Context with type_bindings
-输出：Context with binding metadata
+职责：LLMExcept 绑定、Intent 上下文验证、Lambda 捕获分析
+输入：Context with type_bindings (via prior_symbol_bindings)
+输出：PassOutput with cell_captured_symbols
 """
 
-from dataclasses import replace
 from typing import Optional, List, Dict, Any, Set
 
 from core.kernel import ast

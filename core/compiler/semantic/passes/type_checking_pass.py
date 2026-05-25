@@ -1,12 +1,11 @@
 """
 Type Checking Pass (TypePhase sub-step 2)
 
-职责：类型检查和推断（简化的一次性推断，适配静态类型系统）
+职责：类型检查和推断
 输入：Context with resolved symbols
-输出：Context with type_bindings
+输出：PassOutput with type_bindings
 """
 
-from dataclasses import replace
 from typing import Optional, List, Dict, Any
 
 from core.kernel import ast

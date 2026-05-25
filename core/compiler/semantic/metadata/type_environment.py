@@ -2,13 +2,11 @@
 Type Inference State
 
 Managed inference state for the type checking pass.
-Replaces the former TypeEnvironment (which was never used by any pass).
 
 Design principles:
 - NOT a constraint solver — no unification, no constraint graph
-- Provides auto-return accumulation (existing capability preserved)
-- Introduces TypeSlot: single-write-once binding point for controlled
-  deferred resolution (-> auto contextual, fn parameter propagation future)
+- Provides auto-return accumulation
+- TypeSlot: single-write-once binding point for deferred resolution
 - Core IBCI philosophy: "single lock + axiom dispatch" — TypeSlot locks once
 """
 

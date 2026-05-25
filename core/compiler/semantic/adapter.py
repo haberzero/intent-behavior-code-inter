@@ -36,10 +36,6 @@ def pipeline_result_to_compilation_result(
     )
 
 
-# Keep legacy name as alias for backward compatibility within this module
-pass_result_to_compilation_result = pipeline_result_to_compilation_result
-
-
 def _inject_diagnostics(diagnostics: List, issue_tracker: Any) -> None:
     """将 Diagnostic 列表注入到 IssueTracker。"""
     from core.kernel.issue import Severity

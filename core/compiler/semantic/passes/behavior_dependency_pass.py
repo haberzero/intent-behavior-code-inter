@@ -3,12 +3,7 @@ Behavior Dependency Pass (BindingPhase sub-step 2)
 
 职责：分析 Behavior 表达式的 LLM 依赖关系
 输入：Context with all bindings
-输出：AST nodes with llm_deps and dispatch_eligible fields updated
-
-设计原则：
-- 依赖信息是程序结构的一部分，直接写入 AST 节点
-- llm_deps 和 dispatch_eligible 是 AST 固有属性，会被序列化器持久化
-- 不使用 MetadataStore 存储这些信息（避免重复和同步问题）
+输出：AST 节点的 llm_deps 和 dispatch_eligible 字段
 """
 
 from typing import Optional, List, Set

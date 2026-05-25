@@ -3,10 +3,9 @@ Symbol Collection Pass (SymbolPhase sub-step 1)
 
 职责：收集所有符号定义（类、函数、全局变量）
 输入：AST
-输出：Context with populated symbol_table
+输出：populated symbol_table（通过 SymbolTable 原地定义）
 """
 
-from dataclasses import replace
 from typing import Optional, List, Tuple
 
 from core.kernel import ast
