@@ -465,7 +465,7 @@ class IbLambdaExpr(IbExpr):
     # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
     # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。
     returns: Optional['IbExpr'] = None
-    # 编译期自由变量列表（由 Pass 4 语义分析器填充）。
+    # 编译期自由变量列表（由 BindingPhase 语义分析器填充）。
     # 每项为 [name, sym_uid]，name 是变量名，sym_uid 是 Symbol.uid（作用域 UID + 名称）。
     # 序列化后进入 artifact node_data["free_vars"]，运行时 vm_handle_IbLambdaExpr
     # 直接读取，无需在运行时走访 AST 收集自由变量。

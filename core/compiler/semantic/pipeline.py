@@ -66,83 +66,30 @@ class SemanticPipeline:
             success=overall_success
         )
 
-    def run_until_error(self, context: SemanticContext) -> PassResult:
-        """运行管道直到第一个错误
-
-        Args:
-            context: 输入上下文
-
-        Returns:
-            PassResult: 结果，包含到失败为止的所有诊断信息
-        """
-        current_context = context
-        all_diagnostics = []
-        all_metadata = {}
-
-        for i, pass_instance in enumerate(self.passes):
-            pass_name = pass_instance.__class__.__name__
-
-            # 运行 Pass
-            result = pass_instance.run(current_context)
-
-            # 收集诊断信息
-            all_diagnostics.extend(result.diagnostics)
-
-            # 合并元数据
-            all_metadata[f"pass_{i}_{pass_name}"] = result.metadata
-
-            # 如果失败，立即停止
-            if not result.success:
-                return PassResult(
-                    context=result.context,
-                    metadata=all_metadata,
-                    diagnostics=all_diagnostics,
-                    success=False
-                )
-
-            # 更新上下文
-            current_context = result.context
-
-        # 所有 Pass 都成功
-        return PassResult(
-            context=current_context,
-            metadata=all_metadata,
-            diagnostics=all_diagnostics,
-            success=True
-        )
 
 
 def create_semantic_pipeline() -> SemanticPipeline:
-    """创建标准的语义分析管道
+    """创建标准的语义分析管道（4-Phase 架构）
 
     Returns:
-        SemanticPipeline: 包含所有标准 Pass 的管道
+        SemanticPipeline: 包含所有标准 Phase 的管道
 
-    Pass 顺序：
-    1. SymbolCollectionPass - 收集所有符号定义
-    2. SymbolResolutionPass - 解析所有符号引用
-    3. TypeResolutionPass - 解析类型标注
-    4. TypeCheckingPass - 类型检查和推断
-    5. BindingAnalysisPass - 绑定分析（llmexcept body 重写）
-    6. BehaviorDependencyPass - 行为依赖分析
-    7. IntegrityCheckPass - 完整性检查
+    Phase 顺序：
+    1. SymbolPhase - 符号收集 + 符号解析（原 Pass 1+2）
+    2. TypePhase - 类型解析 + 类型检查/推断（原 Pass 2.5+3）
+    3. BindingPhase - 绑定分析 + 行为依赖分析（原 Pass 4+5）
+    4. IntegrityPhase - 完整性检查（原 Pass 6，独立）
     """
-    from .passes.symbol_collection_pass import SymbolCollectionPass
-    from .passes.symbol_resolution_pass import SymbolResolutionPass
-    from .passes.type_resolution_pass import TypeResolutionPass
-    from .passes.type_checking_pass import TypeCheckingPass
-    from .passes.binding_analysis_pass import BindingAnalysisPass
-    from .passes.behavior_dependency_pass import BehaviorDependencyPass
-    from .passes.integrity_check_pass import IntegrityCheckPass
+    from .passes.symbol_phase import SymbolPhase
+    from .passes.type_phase import TypePhase
+    from .passes.binding_phase import BindingPhase
+    from .passes.integrity_phase import IntegrityPhase
 
     passes = [
-        SymbolCollectionPass(),
-        SymbolResolutionPass(),
-        TypeResolutionPass(),
-        TypeCheckingPass(),
-        BindingAnalysisPass(),
-        BehaviorDependencyPass(),
-        IntegrityCheckPass(),
+        SymbolPhase(),
+        TypePhase(),
+        BindingPhase(),
+        IntegrityPhase(),
     ]
 
     return SemanticPipeline(passes)

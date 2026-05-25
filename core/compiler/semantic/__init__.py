@@ -3,20 +3,17 @@ Semantic Analyzer — IBCI 语义分析系统
 
 Architecture
 ------------
-- Pipeline-Filter: 7 个独立 Pass 顺序执行
+- 4-Phase Pipeline: 四阶段顺序执行（每阶段内部组合原子 Pass）
 - Node-Object-Keyed Metadata: 使用 Python 对象身份作为字典键，与序列化器对齐
 - Errors as Data: 诊断信息作为数据收集，不中断分析流程
 - Scheduler 兼容: 通过 SemanticAnalyzer.analyze() 产出 CompilationResult
 
-Pass Pipeline
--------------
-1. SymbolCollectionPass — 收集符号定义
-2. SymbolResolutionPass — 解析符号引用
-3. TypeResolutionPass   — 解析类型标注
-4. TypeCheckingPass     — 类型检查与推断
-5. BindingAnalysisPass  — llmexcept 绑定 + intent 验证 + lambda 捕获
-6. BehaviorDependencyPass — Behavior 表达式依赖图
-7. IntegrityCheckPass   — 完整性校验
+Phase Pipeline
+--------------
+1. SymbolPhase    — 符号收集 + 符号解析
+2. TypePhase      — 类型标注解析 + 类型检查/推断
+3. BindingPhase   — llmexcept 绑定 + intent 验证 + lambda 捕获 + 行为依赖分析
+4. IntegrityPhase — 完整性校验
 
 Usage
 -----

@@ -1,8 +1,8 @@
 """
-Pass 6: Integrity Check Pass
+Integrity Check Pass (IntegrityPhase)
 
 职责：完整性检查，验证所有节点都有必要的绑定
-输入：Context with all passes completed
+输入：Context with all phases completed
 输出：Final diagnostics
 
 设计原则：
@@ -54,7 +54,7 @@ class LocationBinder:
 
 
 class IntegrityCheckPass(BasePass):
-    """完整性检查 Pass（Pass 6）
+    """完整性检查 Pass（IntegrityPhase）
 
     验证语义分析的完整性：
     - 检查所有引用节点都有符号绑定
@@ -62,7 +62,7 @@ class IntegrityCheckPass(BasePass):
     - 检查符号表的完整性
     
     不检查：
-    - AST 固有属性（llm_deps, dispatch_eligible）- 这些由 Pass 5 直接写入
+    - AST 固有属性（llm_deps, dispatch_eligible）- 这些由 BehaviorDependencyPass 直接写入
     """
 
     def __init__(self):
@@ -221,7 +221,7 @@ class IntegrityChecker:
 
         # 注意：不检查 behavior 依赖的一致性
         # 原因：llm_deps 和 dispatch_eligible 是 AST 固有属性，
-        # 由 Pass 5 直接写入 AST 节点，不需要验证一致性
+        # 由 BehaviorDependencyPass 直接写入 AST 节点，不需要验证一致性
 
     def _check_symbol_table_consistency(self):
         """检查符号表的一致性"""

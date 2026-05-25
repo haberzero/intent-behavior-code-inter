@@ -3,7 +3,7 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-25（PT-ARCH-1 + PT-ARCH-2 完成并归档，PT-ARCH-3 可开工）
+> **最后更新**：2026-05-25（PT-ARCH-4 完成并归档，PT-ARCH-5 可开工）
 
 ---
 
@@ -23,19 +23,9 @@
 
 已归档至 `docs/COMPLETED.md`。统一类型决议方法已创建，visit_IbCall 重构完成。
 
-### PT-ARCH-4　7-Pass 归并为 4-Phase [Step 4]
+### ~~PT-ARCH-4　7-Pass 归并为 4-Phase [Step 4]~~ ✅ 已完成
 
-**前置条件**: PT-ARCH-3 完成 ✅
-
-**技术细节**:
-- Phase 1: SymbolPhase（Pass 1 + Pass 2 合并，两趟扫描在同一 visitor 中）
-- Phase 2: TypePhase（Pass 3 + Pass 4 合并，消除 TypeResolutionPass 独立存在的理由）
-- Phase 3: BindingPhase（Pass 5 + Pass 6 合并，一次 AST 遍历完成结构变换+依赖标注）
-- Phase 4: IntegrityPhase（独立，纯验证）
-- 代码量预估：~3312 行 → ~2550 行（减少 ~23%）
-
-**影响面**: passes/ 目录重组，pipeline.py 重写
-**对 runtime 的影响**: 无
+已归档至 `docs/COMPLETED.md`。4 个 Phase 文件已创建，pipeline 从 7-Pass 重构为 4-Phase。
 
 ### PT-ARCH-5　PassOutput + Immutable Pipeline [Step 5]
 

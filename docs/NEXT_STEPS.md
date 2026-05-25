@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-25（Step 1 + Step 2 完成，当前推进 Step 3）
+> **最后更新**：2026-05-25（Step 1~4 完成，当前推进 Step 5）
 
 ---
 
@@ -44,14 +44,16 @@ python -m pytest tests/ -q --tb=no --no-header
 - `resolve_return()` 已彻底移除（零调用方，无向后兼容负担）
 - 14 个新增单元测试覆盖所有 callable 形态
 
-### Step 4（当前）：7-Pass 归并为 4-Phase
+### Step 4 ✅：7-Pass 归并为 4-Phase
 
-- Phase 1: SymbolPhase（Pass 1+2 合并，共享 scope stack）
-- Phase 2: TypePhase（Pass 3+4 合并，消除重复 _resolve_type）
-- Phase 3: BindingPhase（Pass 5+6 合并，一次 traversal）
-- Phase 4: IntegrityPhase（保持独立）
+- 新建 SymbolPhase（Pass 1+2 合并，共享 scope stack）
+- 新建 TypePhase（Pass 2.5+3 合并，消除重复 _resolve_type）
+- 新建 BindingPhase（Pass 4+5 合并，一次调度）
+- 新建 IntegrityPhase（包装 IntegrityCheckPass，保持独立）
+- pipeline.py 从 7 个 Pass 实例化为 4 个 Phase
+- 原子 Pass 文件保留作为内部实现，Phase 为组合层
 
-### Step 5（后续）：PassOutput + Immutable Pipeline
+### Step 5（当前）：PassOutput + Immutable Pipeline
 
 - 每个 Phase 产出显式 `PassOutput`（不再 mutate context 内部容器）
 - Pipeline 负责 merge 多个 PassOutput 到最终 CompilationResult

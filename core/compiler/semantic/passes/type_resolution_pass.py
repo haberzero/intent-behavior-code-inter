@@ -1,5 +1,5 @@
 """
-Pass 2.5: Type Resolution Pass
+Type Resolution Pass (TypePhase sub-step 1)
 
 职责：解析类型标注，将 AST 中的类型名称字符串转换为 IbSpec 引用
 输入：Context with resolved symbols

@@ -1,5 +1,5 @@
 """
-Pass 4: Binding Analysis Pass
+Binding Analysis Pass (BindingPhase sub-step 1)
 
 职责：各种绑定分析（LLMExcept、Intent、Lambda 捕获）
 输入：Context with type_bindings
@@ -19,7 +19,7 @@ from .scoped_visitor import ScopedVisitor
 
 
 class BindingAnalysisPass(BasePass):
-    """绑定分析 Pass（Pass 4）
+    """绑定分析 Pass（BindingPhase sub-step 1）
 
     包含三个子分析器：
     1. LLMExceptBindingAnalyzer - llmexcept 绑定分析

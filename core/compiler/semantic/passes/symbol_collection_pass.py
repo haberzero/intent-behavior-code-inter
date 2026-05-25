@@ -1,5 +1,5 @@
 """
-Pass 1: Symbol Collection Pass
+Symbol Collection Pass (SymbolPhase sub-step 1)
 
 职责：收集所有符号定义（类、函数、全局变量）
 输入：AST
@@ -52,7 +52,7 @@ class SymbolExtractor:
 
 
 class SymbolCollectionPass(BasePass):
-    """符号收集 Pass（Pass 1）
+    """符号收集 Pass（SymbolPhase sub-step 1）
 
     收集顶层符号：
     - 类定义（IbClassDef）

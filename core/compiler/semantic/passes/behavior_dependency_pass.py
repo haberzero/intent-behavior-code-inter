@@ -1,5 +1,5 @@
 """
-Pass 5: Behavior Dependency Pass
+Behavior Dependency Pass (BindingPhase sub-step 2)
 
 职责：分析 Behavior 表达式的 LLM 依赖关系
 输入：Context with all bindings
@@ -21,7 +21,7 @@ from .base_pass import BasePass
 
 
 class BehaviorDependencyPass(BasePass):
-    """行为依赖分析 Pass（Pass 5）
+    """行为依赖分析 Pass（BindingPhase sub-step 2）
 
     分析 Behavior 表达式之间的依赖关系：
     - 构建 LLM 依赖图（写入 node.llm_deps）
