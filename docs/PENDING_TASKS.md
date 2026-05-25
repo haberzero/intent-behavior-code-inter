@@ -3,7 +3,7 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-25（PT-ARCH-4 完成并归档，PT-ARCH-5 可开工）
+> **最后更新**：2026-05-25（PT-ARCH-5 完成并归档；Semantic Pipeline 5-Step 路线图全部完成）
 
 ---
 
@@ -27,18 +27,9 @@
 
 已归档至 `docs/COMPLETED.md`。4 个 Phase 文件已创建，pipeline 从 7-Pass 重构为 4-Phase。
 
-### PT-ARCH-5　PassOutput + Immutable Pipeline [Step 5]
+### ~~PT-ARCH-5　PassOutput + Immutable Pipeline [Step 5]~~ ✅ 已完成
 
-**前置条件**: PT-ARCH-4 完成
-
-**技术细节**:
-- 当前妥协：Context frozen=True 但 MetadataStore 内部 dict 被 pass 直接 mutate
-- 新方案：每个 Phase 返回独立 PassOutput，Pipeline 负责 merge
-- Pass 之间依赖通过显式输入参数表达
-- 实现真正的函数式 context threading
-
-**影响面**: context.py + pipeline.py + 所有 phase（全面但渐进式）
-**对 runtime 的影响**: 无（CompilationResult 输出结构不变）
+已归档至 `docs/COMPLETED.md`。PassOutput frozen dataclass + Pipeline context threading + MetadataStore.from_outputs() 已到位。
 
 ---
 

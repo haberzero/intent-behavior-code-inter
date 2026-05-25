@@ -6,18 +6,26 @@ Type Checking Pass (TypePhase sub-step 2)
 输出：PassOutput with type_bindings
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, FrozenSet
 
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
+from core.kernel.spec.member import MethodMemberSpec
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 from .scoped_visitor import ScopedVisitor
+
+# Methods whose signatures are not constrained by parent class
+# (constructors and protocol methods may freely change signature).
+_OVERRIDE_SIGNATURE_FREE: FrozenSet[str] = frozenset({
+    "__init__", "__snapshot__", "__restore__",
+    "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
+})
 
 
 class TypeCheckingPass(BasePass):
@@ -650,6 +658,10 @@ class TypeCheckingVisitor(ScopedVisitor):
             self.in_function_def = old_in_function
             self.auto_return_types = old_auto_returns
 
+        # SEM_092: Method override signature compatibility check
+        if self.in_class_def and self.current_class and sym and sym.spec:
+            self._check_override_compatibility(node, sym.spec)
+
         return None
 
     @staticmethod
@@ -663,6 +675,111 @@ class TypeCheckingVisitor(ScopedVisitor):
             elif isinstance(arg_node.target, ast.IbName):
                 return arg_node.target.id
         return None
+
+    def _check_override_compatibility(self, node: ast.IbFunctionDef, child_spec: IbSpec):
+        """SEM_092: Check that overriding method's signature is compatible with parent.
+
+        Rules:
+        - Parameter count must match (including self).
+        - Parameter types must be compatible (parent param assignable to child param — contravariance).
+        - Return type must be compatible (child return assignable to parent return — covariance).
+        - __init__ and protocol methods are exempt.
+        """
+        method_name = node.name
+        if method_name in _OVERRIDE_SIGNATURE_FREE:
+            return
+
+        # Find parent class spec
+        parent_type_ref = getattr(self.current_class, 'parent_type', None)
+        if not parent_type_ref:
+            return
+        parent_class_name = parent_type_ref.head
+        if not parent_class_name:
+            return
+
+        # Look up parent class symbol to access its owned_scope (has refined specs)
+        parent_class_sym = self.lookup_symbol(parent_class_name)
+        if not parent_class_sym or not hasattr(parent_class_sym, 'owned_scope') or not parent_class_sym.owned_scope:
+            return
+
+        # Find same-named method in parent's scope
+        parent_method_sym = parent_class_sym.owned_scope.resolve(method_name)
+        if not parent_method_sym or not parent_method_sym.spec:
+            return  # Not an override, just a new method
+
+        parent_method_spec = parent_method_sym.spec
+        # Only check if parent method is callable (has param_types / return_type)
+        parent_params = getattr(parent_method_spec, 'param_types', None)
+        parent_return = getattr(parent_method_spec, 'return_type', None)
+        if parent_params is None:
+            return
+
+        child_params = getattr(child_spec, 'param_types', None) or []
+        child_return = getattr(child_spec, 'return_type', None)
+
+        # Compare parameter count (both include self as first param)
+        if len(child_params) != len(parent_params):
+            self.warn(
+                f"Method '{method_name}' overrides parent with "
+                f"{len(parent_params)} parameter(s), but defines "
+                f"{len(child_params)} parameter(s).",
+                node, code="SEM_092",
+                hint=f"Parent signature has {len(parent_params)} parameters (including self). "
+                     f"Ensure override matches the parent signature."
+            )
+            return  # Cannot check individual params if count differs
+
+        # Check parameter types (skip self at index 0)
+        for i in range(1, len(parent_params)):
+            parent_p = parent_params[i]
+            child_p = child_params[i] if i < len(child_params) else None
+
+            if not parent_p or not child_p:
+                continue
+            parent_p_head = parent_p.head if isinstance(parent_p, TypeRef) else getattr(parent_p, 'head', None)
+            child_p_head = child_p.head if isinstance(child_p, TypeRef) else getattr(child_p, 'head', None)
+
+            if not parent_p_head or not child_p_head:
+                continue
+            # Skip dynamic types
+            if parent_p_head in ("any", "auto") or child_p_head in ("any", "auto"):
+                continue
+
+            parent_p_spec = self.registry.resolve(parent_p_head)
+            child_p_spec = self.registry.resolve(child_p_head)
+            if not parent_p_spec or not child_p_spec:
+                continue
+
+            # Contravariance: parent param should be assignable to child param
+            # (child accepts at least what parent accepts)
+            # Simplified: for IBCI we check basic compatibility (either direction)
+            if (not self.registry.is_assignable(parent_p_spec, child_p_spec)
+                    and not self.registry.is_assignable(child_p_spec, parent_p_spec)):
+                self.warn(
+                    f"Method '{method_name}' parameter {i} type '{child_p_head}' "
+                    f"is incompatible with parent's '{parent_p_head}'.",
+                    node, code="SEM_092",
+                    hint=f"Override parameter types should be compatible with the parent method."
+                )
+
+        # Check return type (covariance: child return assignable to parent return)
+        if parent_return and child_return:
+            parent_r_head = parent_return.head if isinstance(parent_return, TypeRef) else getattr(parent_return, 'head', None)
+            child_r_head = child_return.head if isinstance(child_return, TypeRef) else getattr(child_return, 'head', None)
+
+            if (parent_r_head and child_r_head
+                    and parent_r_head not in ("any", "auto", "void")
+                    and child_r_head not in ("any", "auto", "void")):
+                parent_r_spec = self.registry.resolve(parent_r_head)
+                child_r_spec = self.registry.resolve(child_r_head)
+                if (parent_r_spec and child_r_spec
+                        and not self.registry.is_assignable(child_r_spec, parent_r_spec)):
+                    self.warn(
+                        f"Method '{method_name}' return type '{child_r_head}' "
+                        f"is incompatible with parent's '{parent_r_head}'.",
+                        node, code="SEM_092",
+                        hint=f"Override return type should be assignable to parent's return type."
+                    )
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef) -> Optional[IbSpec]:
         """访问 LLM 函数定义"""
@@ -824,6 +941,9 @@ class TypeCheckingVisitor(ScopedVisitor):
         # Detect intent_context.push() / pop() / ... called directly on the
         # class name without first obtaining an instance via get_current().
         self._check_intent_context_static_call(node)
+
+        # --- SEM_093: super() called outside class method ---
+        self._check_super_call_legality(node)
 
         # --- Callable class instance detection ---
         # If func_type is CLASS but the name refers to an *instance* variable
@@ -1285,4 +1405,42 @@ class TypeCheckingVisitor(ScopedVisitor):
                 f"Use 'intent_context ctx = intent_context.get_current()' first, "
                 f"then call 'ctx.{func.attr}(...)' followed by 'intent_context.use(ctx)'.",
                 node, code="SEM_090",
+            )
+
+    def _check_super_call_legality(self, node: ast.IbCall):
+        """SEM_093: Check that super() is only called inside a class method.
+
+        super() is only meaningful inside an instance method of a class that
+        has a parent class. Calling it elsewhere is an error.
+        """
+        func = node.func
+        if not isinstance(func, ast.IbName):
+            return
+        if func.id != "super":
+            return
+
+        # super() must be inside a class method
+        if not self.in_class_def or not self.current_class:
+            self.error(
+                "super() can only be used inside a class method.",
+                node, code="SEM_093",
+                hint="Move this call into a method of a class that has a parent class."
+            )
+            return
+
+        if not self.in_function_def:
+            self.error(
+                "super() can only be used inside a class method.",
+                node, code="SEM_093",
+                hint="super() must be called within a method body (func), not at class level."
+            )
+            return
+
+        # super() requires the class to have a parent
+        parent_type_ref = getattr(self.current_class, 'parent_type', None)
+        if not parent_type_ref:
+            self.warn(
+                f"super() used in class '{self.current_class.name}' which has no parent class.",
+                node, code="SEM_093",
+                hint="super() is meaningless in a class without inheritance."
             )
