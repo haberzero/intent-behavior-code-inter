@@ -2,7 +2,7 @@
 Semantic Analyzer — 编译器调度器入口
 
 提供统一的外部接口（analyze() → CompilationResult），
-内部使用 7-pass pipeline 实现。
+内部使用 4-phase pipeline 实现。
 
 用法:
     from core.compiler.semantic.analyzer import SemanticAnalyzer

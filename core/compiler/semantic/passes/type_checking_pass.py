@@ -1,5 +1,5 @@
 """
-Pass 3: Type Checking Pass
+Type Checking Pass (TypePhase sub-step 2)
 
 职责：类型检查和推断（简化的一次性推断，适配静态类型系统）
 输入：Context with resolved symbols
@@ -22,7 +22,7 @@ from .scoped_visitor import ScopedVisitor
 
 
 class TypeCheckingPass(BasePass):
-    """类型检查 Pass（Pass 3）
+    """类型检查 Pass（TypePhase sub-step 2）
 
     简化的类型检查和推断：
     - 一次性推断（不需要约束求解）
@@ -706,7 +706,7 @@ class TypeCheckingVisitor(ScopedVisitor):
                 spec = self.registry.resolve(spec.head) or self._any_desc
             self.bind_type(node, spec)
             return spec
-        # 未定义符号在 Pass 2 已报错，这里返回 any
+        # 未定义符号在 SymbolPhase 已报错，这里返回 any
         return self._any_desc
 
     def visit_IbConstant(self, node: ast.IbConstant) -> Optional[IbSpec]:

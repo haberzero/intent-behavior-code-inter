@@ -1,5 +1,5 @@
 """
-Pass 2: Symbol Resolution Pass
+Symbol Resolution Pass (SymbolPhase sub-step 2)
 
 职责：解析所有符号引用，绑定到 metadata
 输入：Context with symbol_table
@@ -19,7 +19,7 @@ from .scoped_visitor import ScopedVisitor
 
 
 class SymbolResolutionPass(BasePass):
-    """符号解析 Pass（Pass 2）
+    """符号解析 Pass（SymbolPhase sub-step 2）
 
     解析所有符号引用：
     - 名称引用（IbName）
@@ -372,7 +372,7 @@ class SymbolResolver(ScopedVisitor):
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """访问带类型标注的表达式"""
         self.visit(node.target)
-        # annotation 在 Pass 3 处理
+        # annotation 在 TypePhase 处理
 
     def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr):
         """访问 lambda 表达式节点"""
