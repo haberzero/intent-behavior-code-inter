@@ -7,7 +7,7 @@ from core.kernel.axioms.registry import AxiomRegistry
 from core.kernel.factory import create_default_registry
 from core.kernel.symbols import SymbolTable
 from core.compiler.semantic.context import SemanticContext, ContextBuilder
-from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeEnvironment
+from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeInferenceState
 
 
 @pytest.fixture

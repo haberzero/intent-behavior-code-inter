@@ -44,6 +44,11 @@ if TYPE_CHECKING:
     from core.kernel.axioms.protocols import TypeAxiom
 
 
+# Primitive types that can be used as constructors/casts (e.g., int("42"), str(x)).
+# These have PRIMITIVE kind but should return themselves when "called".
+_PRIMITIVE_CONSTRUCTORS = frozenset({'str', 'int', 'float', 'bool'})
+
+
 # ------------------------------------------------------------------ #
 # SpecFactory                                                          #
 # ------------------------------------------------------------------ #
@@ -285,7 +290,7 @@ class SpecRegistry:
 
         spec = registry.resolve("int")       # look up a type
         cap  = registry.get_call_cap(spec)   # query capability
-        ret  = registry.resolve_return(spec, [arg_spec])  # type inference
+        ret  = registry.resolve_call_return(spec, [arg_spec])  # unified type inference
     """
 
     def __init__(self, axiom_registry: "AxiomRegistry"):
@@ -380,8 +385,8 @@ class SpecRegistry:
     #
     # For ``get_call_cap``, structural callables (FUNCTION / BOUND_METHOD /
     # CALLABLE_SIG / CLASS) carry their own callability and return ``True``
-    # as a non-None marker; ``resolve_return()`` handles the actual return
-    # type inference for these structural specs.
+    # as a non-None marker; ``resolve_call_return()`` handles the actual
+    # return type inference for these structural specs.
 
     def get_axiom(self, spec: Optional[IbSpec]) -> Optional["TypeAxiom"]:
         """Return the axiom for this spec, or None."""
@@ -393,7 +398,7 @@ class SpecRegistry:
         if spec is None:
             return None
         # Structural callables carry their signature directly on the spec —
-        # ``resolve_return()`` handles return-type inference for them.
+        # ``resolve_call_return()`` handles return-type inference for them.
         # We return the axiom (if any) so callers can still query other
         # capability methods; if no axiom exists we fall back to a truthy
         # marker (the spec itself) to satisfy ``if call_trait:`` checks.
@@ -536,44 +541,160 @@ class SpecRegistry:
             return self.resolve(base_name) or spec
         return spec
 
-    def resolve_return(
+
+    def resolve_call_return(
         self,
-        spec: IbSpec,
+        callee_spec: IbSpec,
         arg_specs: List[IbSpec],
+        *,
+        class_scope_lookup: Optional[Any] = None,
     ) -> Optional[IbSpec]:
         """
-        Infer the return type when ``spec`` is called with ``arg_specs``.
+        Unified return-type resolution for ALL callable forms.
 
-        For TypeDef (user-defined / axiom-bootstrapped functions) the
-        return type is explicit.  For dynamic callables the axiom is
-        consulted.
+        This is the single entry point that handles:
+        1. Builtin type constructors (str/int/float/bool/list/dict/Exception) → returns itself
+        2. User-defined class constructors (TypeKind.CLASS) → returns itself
+        3. Callable class instances (__call__ protocol) → resolves __call__ return type
+        4. Structural callables (FUNCTION/CALLABLE_SIG) with explicit return_type
+        5. Typed callable instances (fn_callable/behavior with value_type)
+        6. Axiom-backed callables (axiom.resolve_return_type_name)
+        7. Fallback: spec.return_type attribute direct read
 
-        TypeDef / TypeDef with a concrete ``value_type_name``
-        (i.e. not ``"auto"`` / ``"any"``) return the declared value type
-        directly, enabling compile-time type inference at call sites:
+        Parameters
+        ----------
+        callee_spec : IbSpec
+            The type of the callee expression.
+        arg_specs : List[IbSpec]
+            Resolved types of each argument.
+        class_scope_lookup : callable, optional
+            A callback ``(class_name: str, method_name: str) -> Optional[IbSpec]``
+            for resolving method specs from class scopes (used by the semantic
+            pass to access owned_scope). If None, falls back to resolve_member.
 
-            fn f = lambda -> int: @~ compute something ~
-            int result = f()   # resolves to int, no SEM_003
+        Returns
+        -------
+        Optional[IbSpec]
+            The inferred return type, or None if the callee is not callable.
+            Returns ``resolve("any")`` as last resort for callable but
+            undetermined return types.
         """
-        if spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-            ret_ref = getattr(spec, "return_type", None)
+        if callee_spec is None:
+            return None
+
+        kind = callee_spec.kind
+
+        # --- Layer 1: Structural callables with explicit return_type ---
+        if kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+            ret_ref = getattr(callee_spec, "return_type", None)
             if ret_ref is not None and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")
-        # TypeDef called as constructor returns an instance of itself
-        if spec.kind == TypeKind.CLASS.value:
-            return spec
-        # Typed fn_callable / behavior: carry the expected value type explicitly.
-        if spec.kind == TypeKind.CALLABLE_INSTANCE.value:
-            v_ref = getattr(spec, "value_type", None)
+            # Function without explicit return type: axiom fallback
+            axiom = self.get_axiom(callee_spec)
+            if axiom and axiom.has_call_cap:
+                arg_names = [a.get_base_name() for a in arg_specs if a]
+                ret_name = axiom.resolve_return_type_name(arg_names)
+                if ret_name:
+                    return self.resolve(ret_name) or self.resolve("any")
+            return self.resolve("any")
+
+        # --- Layer 2: Class type (constructor or builtin type cast) ---
+        if kind == TypeKind.CLASS.value:
+            # Check for __call__ on class *instances* is handled by the caller
+            # via is_type detection; here CLASS always means "constructor call"
+            return callee_spec
+
+        # --- Layer 2b: Primitive/container type used as constructor/cast ---
+        # int(), str(), float(), bool() → returns itself
+        # list(), dict() → returns itself (container constructor)
+        if kind == TypeKind.PRIMITIVE.value:
+            if callee_spec.name in _PRIMITIVE_CONSTRUCTORS:
+                return callee_spec
+        if kind in (TypeKind.LIST.value, TypeKind.DICT.value):
+            return callee_spec
+
+        # --- Layer 3: Callable instance (fn_callable / behavior with value_type) ---
+        if kind == TypeKind.CALLABLE_INSTANCE.value:
+            v_ref = getattr(callee_spec, "value_type", None)
             if v_ref is not None and v_ref.head not in ("auto", "any", "", None):
-                return self.resolve_typeref(v_ref) or self.resolve("auto")
-        axiom = self.get_axiom(spec)
+                return self.resolve_typeref(v_ref) or self.resolve("any")
+            # Axiom fallback for untyped callable instances
+            axiom = self.get_axiom(callee_spec)
+            if axiom and axiom.has_call_cap:
+                arg_names = [a.get_base_name() for a in arg_specs if a]
+                ret_name = axiom.resolve_return_type_name(arg_names)
+                if ret_name:
+                    return self.resolve(ret_name) or self.resolve("any")
+            return self.resolve("any")
+
+        # --- Layer 4: Bound method ---
+        if kind == TypeKind.BOUND_METHOD.value:
+            ret_ref = getattr(callee_spec, "return_type", None)
+            if ret_ref is not None and ret_ref.head:
+                return self.resolve_typeref(ret_ref) or self.resolve("any")
+            return self.resolve("any")
+
+        # --- Layer 5: Axiom-backed callable (generic fallback) ---
+        axiom = self.get_axiom(callee_spec)
         if axiom and axiom.has_call_cap:
-            arg_names = [a.get_base_name() for a in arg_specs]
+            arg_names = [a.get_base_name() for a in arg_specs if a]
             ret_name = axiom.resolve_return_type_name(arg_names)
             if ret_name:
                 return self.resolve(ret_name) or self.resolve("any")
+
+        # Not callable
         return None
+
+    def resolve_callable_instance_return(
+        self,
+        callee_spec: IbSpec,
+        arg_specs: List[IbSpec],
+        *,
+        class_scope_lookup: Optional[Any] = None,
+    ) -> Optional[IbSpec]:
+        """
+        Resolve return type for a callable class instance (object with __call__).
+
+        This handles the case where a variable holds a class *instance* (not
+        the class itself) that defines __call__. The caller must determine
+        that the callee is an instance (not a type reference) before calling.
+
+        Parameters
+        ----------
+        callee_spec : IbSpec
+            The class spec of the instance's type.
+        class_scope_lookup : callable, optional
+            ``(class_name, method_name) -> Optional[IbSpec]`` for resolving
+            from the class's owned scope (preferred over resolve_member).
+
+        Returns
+        -------
+        Optional[IbSpec]
+            The return type of __call__, or None if no __call__ found.
+        """
+        if callee_spec is None or callee_spec.kind != TypeKind.CLASS.value:
+            return None
+
+        members = callee_spec.members or {}
+        if '__call__' not in members:
+            return None
+
+        # Try class_scope_lookup first (accesses live semantic scope)
+        call_spec = None
+        if class_scope_lookup:
+            call_spec = class_scope_lookup(callee_spec.name, '__call__')
+
+        # Fallback to resolve_member
+        if not call_spec:
+            call_spec = self.resolve_member(callee_spec, '__call__')
+
+        if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+            ret_ref = getattr(call_spec, 'return_type', None)
+            if ret_ref and ret_ref.head:
+                return self.resolve_typeref(ret_ref) or self.resolve("any")
+            return self.resolve("any")
+
+        return self.resolve("any")
 
     def resolve_op(
         self,

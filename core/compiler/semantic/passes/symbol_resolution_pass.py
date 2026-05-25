@@ -15,6 +15,7 @@ from core.kernel.symbols import Symbol, SymbolTable, SymbolKind
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
+from .scoped_visitor import ScopedVisitor
 
 
 class SymbolResolutionPass(BasePass):
@@ -44,66 +45,17 @@ class SymbolResolutionPass(BasePass):
         return PassResult.ok(new_context, diagnostics=visitor.diagnostics)
 
 
-class SymbolResolver:
+class SymbolResolver(ScopedVisitor):
     """符号解析访问者"""
 
     def __init__(self, context: SemanticContext):
-        self.context = context
-        self.symbol_table = context.symbol_table.current
-        self.registry = context.registry
-        self.diagnostics: List[Diagnostic] = []
+        super().__init__(context)
 
         # 符号绑定：node object -> Symbol（使用对象身份作为键）
         self.symbol_bindings: Dict[Any, Symbol] = {}
 
-        # 作用域栈（用于处理嵌套作用域）
-        self.scope_stack: List[SymbolTable] = [self.symbol_table]
-
         # 当前所在类的符号（用于注入 self）
         self.current_class_symbol: Optional[Symbol] = None
-
-    @property
-    def current_scope(self) -> SymbolTable:
-        """当前作用域"""
-        return self.scope_stack[-1]
-
-    def push_scope(self, scope: SymbolTable):
-        """进入新作用域"""
-        self.scope_stack.append(scope)
-
-    def pop_scope(self):
-        """退出作用域"""
-        if len(self.scope_stack) > 1:
-            self.scope_stack.pop()
-
-    def visit(self, node: ast.IbASTNode):
-        """访问节点的分派方法"""
-        if node is None:
-            return
-        method_name = f'visit_{node.__class__.__name__}'
-        visitor = getattr(self, method_name, self.generic_visit)
-        return visitor(node)
-
-    def generic_visit(self, node: ast.IbASTNode):
-        """默认访问：递归访问所有子节点"""
-        for attr in vars(node):
-            child = getattr(node, attr)
-            if isinstance(child, list):
-                for item in child:
-                    if isinstance(item, ast.IbASTNode):
-                        self.visit(item)
-            elif isinstance(child, ast.IbASTNode):
-                self.visit(child)
-
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
-        """记录错误诊断"""
-        node_uid = getattr(node, 'uid', None)
-        self.diagnostics.append(Diagnostic(
-            level=DiagnosticLevel.ERROR,
-            message=message,
-            code=code,
-            node_uid=node_uid
-        ))
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""

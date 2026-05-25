@@ -6,11 +6,10 @@ Validates:
 - TypeInferenceState auto-return accumulation
 - TypeSlot creation and resolution
 - TypeSlotConflict on double-lock with different types
-- Backward compatibility alias (TypeEnvironment = TypeInferenceState)
 """
 
 import pytest
-from core.compiler.semantic.metadata import TypeInferenceState, TypeEnvironment, TypeSlot, TypeSlotConflict
+from core.compiler.semantic.metadata import TypeInferenceState, TypeSlot, TypeSlotConflict
 
 
 class TestTypeSlot:
@@ -105,19 +104,3 @@ class TestTypeInferenceState:
         state = TypeInferenceState.create_empty()
         with pytest.raises(dataclasses.FrozenInstanceError):
             state.auto_return_accumulator = ("hack",)
-
-
-class TestBackwardCompatibility:
-    """TypeEnvironment alias still works for existing code."""
-
-    def test_alias_is_same_class(self):
-        assert TypeEnvironment is TypeInferenceState
-
-    def test_old_construction_pattern(self):
-        # This pattern is used in test_symbol_collection_pass.py
-        env = TypeEnvironment()
-        assert env.get_accumulated_returns() == []
-
-    def test_create_empty_works(self):
-        env = TypeEnvironment.create_empty()
-        assert isinstance(env, TypeInferenceState)

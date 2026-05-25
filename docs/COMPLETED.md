@@ -4,7 +4,44 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-25（追加：P0-NEXT-5 TypeCheckingPass 静态诊断补全完成）
+> **最后更新**：2026-05-25（追加：PT-ARCH-3 完成）
+
+---
+
+## 2026-05-25 锚点 F：PT-ARCH-3 SpecRegistry.resolve_call_return() 统一类型决议
+
+完成 Semantic Pipeline 架构改进路线图 Step 3（772 passed, 7 skipped, 0 failures）：
+
+- **新增 `SpecRegistry.resolve_call_return(callee_spec, arg_specs)`**：
+  - 统一处理 FUNCTION/CALLABLE_SIG/CLASS/PRIMITIVE/LIST/DICT/CALLABLE_INSTANCE/BOUND_METHOD + axiom fallback
+  - 单一入口覆盖所有 callable 形态的返回类型推断
+- **新增 `SpecRegistry.resolve_callable_instance_return()`**：
+  - 专门处理 `__call__` 协议的返回类型解析
+  - 支持 `class_scope_lookup` 回调优先从语义 scope 获取最新 spec
+- **`resolve_return()` 已移除**：零调用方，直接删除无向后兼容负担
+- **`TypeCheckingPass.visit_IbCall` 重构**：
+  - 从 5 层 ad-hoc fallback 重构为 3 段清晰结构
+  - callable-instance detection → callability check → unified resolve
+  - 参数类型检查逻辑（SEM_003/SEM_005/SEM_081）保持不变
+- 14 个新增单元测试：`tests/kernel/test_resolve_call_return.py`
+
+---
+
+## 2026-05-25 锚点 E：PT-ARCH-1 + PT-ARCH-2 Semantic 架构重构
+
+完成 Semantic Pipeline 架构改进路线图的前两步（758 passed, 7 skipped, 0 failures）：
+
+- **PT-ARCH-1 TypeEnvironment → TypeInferenceState**：
+  - 彻底移除 `TypeEnvironment` alias（不保留向后兼容），所有引用迁移为 `TypeInferenceState`
+  - TypeInferenceState 含 `auto_return_accumulator`（tuple）+ `slots`（Dict[str, TypeSlot]）
+  - TypeSlot：单次写入锁定绑定点，为未来 fn 参数类型传播预留
+- **PT-ARCH-2 ScopedVisitor 统一基类**：
+  - 新建 `core/compiler/semantic/passes/scoped_visitor.py`
+  - 提供 scope_stack、current_scope、push_scope/pop_scope、`@contextmanager enter_scope()`
+  - 提供 visit() 分派、generic_visit 递归、error()/warning() 诊断辅助
+  - SymbolResolver、TypeCheckingVisitor、LambdaCaptureAnalyzer 继承 ScopedVisitor
+  - 消除 ~60 行重复 scope 管理代码
+  - 新增 10 个 ScopedVisitor 单元测试
 
 ---
 

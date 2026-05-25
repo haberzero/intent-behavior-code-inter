@@ -140,8 +140,3 @@ class TypeInferenceState:
             'auto_returns': len(self.auto_return_accumulator),
             'slots': {name: slot.is_locked for name, slot in self.slots.items()},
         }
-
-
-# ---- Backward compatibility alias ----
-# TypeEnvironment was the old name; keep as alias during transition
-TypeEnvironment = TypeInferenceState
