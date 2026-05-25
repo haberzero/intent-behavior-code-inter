@@ -1,12 +1,11 @@
 """
 Binding Analysis Pass (BindingPhase sub-step 1)
 
-职责：各种绑定分析（LLMExcept、Intent、Lambda 捕获）
-输入：Context with type_bindings
-输出：Context with binding metadata
+职责：LLMExcept 绑定、Intent 上下文验证、Lambda 捕获分析
+输入：Context with type_bindings (via prior_symbol_bindings)
+输出：PassOutput with cell_captured_symbols
 """
 
-from dataclasses import replace
 from typing import Optional, List, Dict, Any, Set
 
 from core.kernel import ast
@@ -31,7 +30,7 @@ class BindingAnalysisPass(BasePass):
         super().__init__("BindingAnalysisPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行绑定分析 Pass"""
+        from ..result import PassOutput
         all_diagnostics = []
 
         # 1. LLMExcept 绑定分析
@@ -49,21 +48,22 @@ class BindingAnalysisPass(BasePass):
         lambda_analyzer.analyze()
         all_diagnostics.extend(lambda_analyzer.diagnostics)
 
-        # Lambda captures → cell_captured_symbols in MetadataStore
-        new_metadata = context.metadata
+        # Collect cell_captured_symbols from lambda captures
+        cell_captures = set()
         for node, captures in lambda_analyzer.lambda_captures.items():
             for var_name in captures:
-                # Resolve the variable name to get its symbol UID
                 sym = context.symbol_table.resolve(var_name)
                 if sym and hasattr(sym, 'uid') and sym.uid:
-                    new_metadata.add_cell_captured_symbol(sym.uid)
+                    cell_captures.add(sym.uid)
                 else:
-                    # Fallback: use variable name as identifier
-                    new_metadata.add_cell_captured_symbol(var_name)
+                    cell_captures.add(var_name)
 
-        new_context = replace(context, metadata=new_metadata)
-
-        return PassResult.ok(new_context, diagnostics=all_diagnostics)
+        output = PassOutput(
+            cell_captured_symbols=cell_captures,
+            diagnostics=all_diagnostics,
+            success=True,
+        )
+        return PassResult.ok(context, output=output)
 
 
 class LLMExceptBindingAnalyzer:
@@ -494,8 +494,8 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
                 elif isinstance(target, ast.IbName):
                     param_names.add(target.id)
 
-        # 通过 node_to_symbol 确定自由变量
-        node_to_symbol = self.context.metadata.node_to_symbol
+        # 通过 prior_symbol_bindings 确定自由变量
+        node_to_symbol = self.context.prior_symbol_bindings
         captured_vars = set()
         free_var_refs = []
         seen_names = set()

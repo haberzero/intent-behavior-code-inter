@@ -1,8 +1,8 @@
 """
 Semantic Analysis Context
 
-The context is an immutable container for all state needed during semantic
-analysis. Passes return new contexts rather than mutating state.
+Immutable container for all state needed during semantic analysis.
+Passes receive context as read-only input; bindings are returned via PassOutput.
 """
 
 from dataclasses import dataclass, replace, field
@@ -12,115 +12,79 @@ from core.kernel import ast as ibci_ast
 
 @dataclass(frozen=True)
 class SemanticContext:
-    """
-    Immutable semantic analysis context.
+    """Immutable semantic analysis context.
 
-    Design principle: All analysis state is explicit and immutable.
-    To "modify" context, create a new one with desired changes.
+    Carries references needed by passes (AST, registry, symbol_table).
+    Bindings flow out through PassOutput. Accumulated bindings from prior
+    phases are available via `prior_bindings` for cross-phase queries.
     """
-    # Core references (never change during analysis)
-    ast: ibci_ast.IbASTNode  # Root AST node being analyzed
-    registry: Any  # Type registry (from core.kernel.spec)
+    ast: ibci_ast.IbASTNode
+    registry: Any
     module_name: str
+    symbol_table: 'SymbolTableContext'
+    type_environment: 'TypeInferenceState'
 
-    # Mutable analysis state (passed through pipeline)
-    symbol_table: 'SymbolTableContext'  # Current symbol table
-    type_environment: 'TypeInferenceState'  # Type inference state (slots + auto-return)
-    metadata: 'MetadataStore'  # UID-based metadata
+    # Accumulated bindings from prior phases (read-only for current phase)
+    prior_symbol_bindings: Dict[Any, Any] = field(default_factory=dict)
+    prior_type_bindings: Dict[Any, Any] = field(default_factory=dict)
 
-    # Context stack for nested structures
+    # Nested structure context
     function_context: Optional['FunctionContext'] = None
     class_context: Optional['ClassContext'] = None
     loop_context: Optional['LoopContext'] = None
 
-    # Analysis flags (using dict for extensibility)
     flags: Dict[str, bool] = field(default_factory=dict)
 
-    # Parent context (for nested scopes)
-    parent_context: Optional['SemanticContext'] = None
-
     def with_symbol_table(self, new_table: 'SymbolTableContext') -> 'SemanticContext':
-        """Create new context with updated symbol table"""
         return replace(self, symbol_table=new_table)
 
     def with_type_environment(self, new_env: 'TypeInferenceState') -> 'SemanticContext':
-        """Create new context with updated type inference state"""
         return replace(self, type_environment=new_env)
 
-    def with_metadata(self, new_metadata: 'MetadataStore') -> 'SemanticContext':
-        """Create new context with updated metadata"""
-        return replace(self, metadata=new_metadata)
-
     def with_function_context(self, func_ctx: Optional['FunctionContext']) -> 'SemanticContext':
-        """Create new context entering/exiting a function"""
         return replace(self, function_context=func_ctx)
 
     def with_class_context(self, class_ctx: Optional['ClassContext']) -> 'SemanticContext':
-        """Create new context entering/exiting a class"""
         return replace(self, class_context=class_ctx)
 
     def with_loop_context(self, loop_ctx: Optional['LoopContext']) -> 'SemanticContext':
-        """Create new context entering/exiting a loop"""
         return replace(self, loop_context=loop_ctx)
 
     def with_flag(self, flag_name: str, value: bool) -> 'SemanticContext':
-        """Create new context with updated flag"""
         new_flags = {**self.flags, flag_name: value}
         return replace(self, flags=new_flags)
 
     def get_flag(self, flag_name: str, default: bool = False) -> bool:
-        """Get a flag value"""
         return self.flags.get(flag_name, default)
-
-    def enter_scope(self, scope_name: str) -> 'SemanticContext':
-        """Create new context with nested scope"""
-        new_table = self.symbol_table.push_scope(scope_name)
-        return self.with_symbol_table(new_table).replace_context(parent_context=self)
-
-    def exit_scope(self) -> 'SemanticContext':
-        """Return to parent context"""
-        if self.parent_context:
-            # Merge metadata from child scope back to parent
-            merged_metadata = self.parent_context.metadata.merge(self.metadata)
-            return self.parent_context.with_metadata(merged_metadata)
-        return self
-
-    def replace_context(self, **kwargs) -> 'SemanticContext':
-        """Generic context replacement (use with caution)"""
-        return replace(self, **kwargs)
 
 
 @dataclass(frozen=True)
 class FunctionContext:
     """Context for function analysis"""
     function_name: str
-    return_type: Any  # IbSpec - expected return type
+    return_type: Any
     is_llm_function: bool = False
     is_method: bool = False
-    auto_return_types: list = field(default_factory=list)  # For `-> auto` inference
+    auto_return_types: list = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class ClassContext:
     """Context for class analysis"""
     class_name: str
-    class_def: Any  # TypeDef
-    parent_class: Optional[Any] = None  # TypeDef
+    class_def: Any
+    parent_class: Optional[Any] = None
 
 
 @dataclass(frozen=True)
 class LoopContext:
-    """Context for loop analysis (for break/continue validation)"""
-    loop_type: str  # 'for', 'while'
+    """Context for loop analysis"""
+    loop_type: str
     has_llmexcept: bool = False
 
 
 class ContextBuilder:
-    """
-    Builder for creating initial semantic contexts.
-
-    Design pattern: Builder pattern for complex object construction.
-    """
+    """Builder for creating initial semantic contexts."""
 
     def __init__(self):
         self.ast: Optional[ibci_ast.IbASTNode] = None
@@ -140,24 +104,20 @@ class ContextBuilder:
         return self
 
     def build(self) -> SemanticContext:
-        """Build the initial semantic context"""
+        """Build the initial semantic context."""
         if not self.ast:
             raise ValueError("AST is required")
         if not self.registry:
             raise ValueError("Registry is required")
 
-        # Import here to avoid circular dependency
         from .metadata.symbol_table import SymbolTableContext
         from .metadata.type_environment import TypeInferenceState
-        from .metadata.metadata_store import MetadataStore
         from core.compiler.semantic.passes.prelude import Prelude
 
-        # Initialize empty state
         symbol_table = SymbolTableContext.create_root(self.module_name)
         type_environment = TypeInferenceState.create_empty()
-        metadata = MetadataStore.create_empty()
 
-        # Inject builtin prelude symbols into the root symbol table
+        # Inject builtin prelude symbols
         prelude = Prelude(registry=self.registry)
         from core.kernel.symbols import VariableSymbol, FunctionSymbol, TypeSymbol, SymbolKind
         for name, spec in prelude.get_builtin_types().items():
@@ -181,5 +141,4 @@ class ContextBuilder:
             module_name=self.module_name,
             symbol_table=symbol_table,
             type_environment=type_environment,
-            metadata=metadata,
         )

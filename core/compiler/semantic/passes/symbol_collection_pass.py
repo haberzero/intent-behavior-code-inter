@@ -3,10 +3,9 @@ Symbol Collection Pass (SymbolPhase sub-step 1)
 
 职责：收集所有符号定义（类、函数、全局变量）
 输入：AST
-输出：Context with populated symbol_table
+输出：populated symbol_table（通过 SymbolTable 原地定义）
 """
 
-from dataclasses import replace
 from typing import Optional, List, Tuple
 
 from core.kernel import ast
@@ -64,12 +63,8 @@ class SymbolCollectionPass(BasePass):
         super().__init__("SymbolCollectionPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行符号收集 Pass"""
         visitor = SymbolCollector(context)
         visitor.visit(context.ast)
-
-        # 符号表已在 visitor 中原地修改（SymbolTableContext 设计）
-        # 无需更新 context，直接返回
         return PassResult.ok(context, diagnostics=visitor.diagnostics)
 
 

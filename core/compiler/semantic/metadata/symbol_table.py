@@ -1,8 +1,7 @@
 """
 Symbol Table Context
 
-Redesigned symbol table with better immutability and scope management.
-Wraps SymbolTable in an immutable context with clearer scope stack semantics.
+Immutable wrapper around SymbolTable with explicit scope stack.
 """
 
 from dataclasses import dataclass, field

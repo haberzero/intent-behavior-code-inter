@@ -23,17 +23,19 @@ Usage
 """
 
 from .context import SemanticContext, ContextBuilder
-from .result import PassResult, Diagnostic, DiagnosticLevel
-from .pipeline import SemanticPipeline, create_semantic_pipeline
+from .result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
+from .pipeline import SemanticPipeline, PipelineResult, create_semantic_pipeline
 from .analyzer import SemanticAnalyzer
 
 __all__ = [
     'SemanticContext',
     'ContextBuilder',
     'PassResult',
+    'PassOutput',
     'Diagnostic',
     'DiagnosticLevel',
     'SemanticPipeline',
+    'PipelineResult',
     'create_semantic_pipeline',
     'SemanticAnalyzer',
 ]
