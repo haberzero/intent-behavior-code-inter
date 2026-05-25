@@ -6,14 +6,13 @@ Type Checking Pass (TypePhase sub-step 2)
 输出：PassOutput with type_bindings
 """
 
-from typing import Optional, List, Dict, Any, FrozenSet
+from typing import Optional, List, Dict, Any
 
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
-from core.kernel.spec.member import MethodMemberSpec
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
@@ -22,7 +21,7 @@ from .scoped_visitor import ScopedVisitor
 
 # Methods whose signatures are not constrained by parent class
 # (constructors and protocol methods may freely change signature).
-_OVERRIDE_SIGNATURE_FREE: FrozenSet[str] = frozenset({
+_OVERRIDE_SIGNATURE_FREE: frozenset = frozenset({
     "__init__", "__snapshot__", "__restore__",
     "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
 })
@@ -750,9 +749,9 @@ class TypeCheckingVisitor(ScopedVisitor):
             if not parent_p_spec or not child_p_spec:
                 continue
 
-            # Contravariance: parent param should be assignable to child param
-            # (child accepts at least what parent accepts)
-            # Simplified: for IBCI we check basic compatibility (either direction)
+            # Simplified compatibility: for IBCI we accept bidirectional assignability
+            # (not strict contravariance) since user-defined classes rarely use deep
+            # type hierarchies where variance rules matter.
             if (not self.registry.is_assignable(parent_p_spec, child_p_spec)
                     and not self.registry.is_assignable(child_p_spec, parent_p_spec)):
                 self.warn(

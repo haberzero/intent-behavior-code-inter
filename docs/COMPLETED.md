@@ -4,7 +4,27 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-25（追加：P2-B/C 完成 + Step 5 宣告完成）
+> **最后更新**：2026-05-25（追加：P2-D/E 完成 — SEM_092 + SEM_093）
+
+---
+
+## 2026-05-25 锚点 J：P2-D + P2-E OOP 编译期诊断增强
+
+完成两项面向对象继承相关的编译期检查（806 passed, 7 skipped, 0 failures）：
+
+- **P2-D SEM_092 — 方法重写签名兼容性检查**：
+  - 子类重写父类方法时检查：参数数量、参数类型兼容性（逆变）、返回类型兼容性（协变）
+  - `__init__` 及协议方法 (`__to_prompt__`/`__from_prompt__`/`__outputhint_prompt__`/`__snapshot__`/`__restore__`) 豁免
+  - 实现：`TypeCheckingPass._check_override_compatibility()`
+  - 通过 parent class symbol 的 `owned_scope` 获取已精化的方法签名（而非依赖 collection-time 的 MethodMemberSpec）
+- **P2-E SEM_093 — super() 调用合法性检查**：
+  - 在类方法外调用 `super()` → 编译错误
+  - 在无父类的类方法中调用 `super()` → 编译警告
+  - 实现：`TypeCheckingPass._check_super_call_legality()`
+- **文档修复**：
+  - `SEMANTIC_COVERAGE_MATRIX.md` §3.5：修正 INV-CONTEXT-1/2 从 ✅ 改为 ⚠️（测试实际为 SKIPPED）
+  - `PENDING_TASKS.md`：归档 PT-ARCH-5（此前错误标记为"可开工"，实际早已完成）
+- **17 个新增测试**：`tests/compiler/semantic/test_override_and_super.py`
 
 ---
 
