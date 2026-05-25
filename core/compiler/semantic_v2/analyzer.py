@@ -1,11 +1,8 @@
 """
-Semantic Analyzer V2 — 编译器调度器入口
+Semantic Analyzer — 编译器调度器入口
 
-提供与 v1 SemanticAnalyzer 相同的外部接口（analyze() → CompilationResult），
-内部使用 v2 的 7-pass pipeline 实现。
-
-这是 v2 全量替换 v1 的入口模块。scheduler 通过本类替换原有的:
-    from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
+提供统一的外部接口（analyze() → CompilationResult），
+内部使用 7-pass pipeline 实现。
 
 用法:
     from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
@@ -29,9 +26,9 @@ from .adapter import pass_result_to_compilation_result
 
 class SemanticAnalyzerV2:
     """
-    V2 语义分析器 — scheduler 兼容入口。
+    语义分析器 — scheduler 兼容入口。
 
-    对外接口与 v1 SemanticAnalyzer 完全一致：
+    对外接口：
     - __init__(issue_tracker, debugger, registry, module_name)
     - analyze(node) → CompilationResult
     - symbol_table: SymbolTable（供 scheduler 注入导入符号）
@@ -58,14 +55,12 @@ class SemanticAnalyzerV2:
         self.registry = registry
         self.module_name = module_name
 
-        # 与 v1 一致的公开接口：scheduler 通过此属性注入导入符号
+        # scheduler 通过此属性注入导入符号
         self.symbol_table = SymbolTable(parent=None, name=module_name)
 
     def analyze(self, node: ibci_ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
         """
         执行完整的语义分析，返回 CompilationResult。
-
-        接口与 v1 SemanticAnalyzer.analyze() 完全一致。
 
         Args:
             node: 待分析的 AST 根节点（通常是 IbModule）

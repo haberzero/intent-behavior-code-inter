@@ -6,7 +6,7 @@ Pass 5: Behavior Dependency Pass
 输出：AST nodes with llm_deps and dispatch_eligible fields updated
 
 设计原则：
-- 依赖信息是程序结构的一部分，直接写入 AST 节点（遵循 V1 设计）
+- 依赖信息是程序结构的一部分，直接写入 AST 节点
 - llm_deps 和 dispatch_eligible 是 AST 固有属性，会被序列化器持久化
 - 不使用 MetadataStore 存储这些信息（避免重复和同步问题）
 """
@@ -36,7 +36,7 @@ class BehaviorDependencyPass(BasePass):
         """运行行为依赖分析 Pass
 
         分析结果直接写入 AST 节点的 llm_deps 和 dispatch_eligible 字段。
-        这遵循 V1 的正确设计：依赖信息是程序结构的一部分，应该持久化到 AST。
+        依赖信息是程序结构的一部分，应该持久化到 AST。
         """
         analyzer = BehaviorDependencyAnalyzer(context)
         analyzer.analyze()
@@ -129,7 +129,7 @@ class BehaviorDependencyAnalyzer:
                             deps.append(dep_node)
                             seen.add(id(dep_node))
 
-        # ✅ 直接写入 AST 节点（V1 的正确设计）
+        # 直接写入 AST 节点
         node.llm_deps = deps
         # 默认可调度，循环检测时会修改
         node.dispatch_eligible = True

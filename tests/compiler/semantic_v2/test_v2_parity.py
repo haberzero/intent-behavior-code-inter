@@ -273,30 +273,21 @@ class TestV2MetadataStoreNodeObjectKeys:
 
 
 class TestV2SchedulerIntegration:
-    """V2 integrates with scheduler via use_v2=True flag."""
+    """Semantic analyzer integrates correctly with scheduler."""
 
-    def test_scheduler_accepts_use_v2_flag(self):
-        """Scheduler constructor accepts use_v2 parameter."""
+    def test_scheduler_constructs(self):
+        """Scheduler constructor works without issues."""
         import tempfile
         from core.compiler.scheduler import Scheduler
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Should not raise
-            scheduler = Scheduler(tmpdir, use_v2=True)
-            assert scheduler.use_v2 is True
-
-    def test_scheduler_default_is_v2(self):
-        """Default behavior uses v2 (v1 replacement complete)."""
-        import tempfile
-        from core.compiler.scheduler import Scheduler
-
-        with tempfile.TemporaryDirectory() as tmpdir:
             scheduler = Scheduler(tmpdir)
-            assert scheduler.use_v2 is True
+            assert scheduler is not None
 
 
 class TestV2FullFileCompilation:
-    """V2 can successfully compile all example .ibci files via the analyzer."""
+    """Semantic analyzer can successfully compile all example .ibci files."""
 
     @pytest.fixture
     def full_registry(self):
@@ -336,8 +327,8 @@ class TestV2FullFileCompilation:
         assert len(result.node_to_type) > 0
         assert len(result.node_to_loc) > 0
 
-    def test_scheduler_v2_compiles_simple_file(self, source_mgr):
-        """Scheduler with use_v2=True compiles a simple file without errors."""
+    def test_scheduler_compiles_simple_file(self, source_mgr):
+        """Scheduler compiles a simple file without errors."""
         import tempfile, os
         from core.compiler.scheduler import Scheduler
         from core.kernel.factory import create_default_registry
@@ -348,7 +339,7 @@ class TestV2FullFileCompilation:
                 f.write('int x = 42\nstr msg = "hello"\nint y = x + 1\nstr result = @~say $msg~\n')
 
             registry = create_default_registry()
-            scheduler = Scheduler(tmpdir, use_v2=True, registry=registry)
+            scheduler = Scheduler(tmpdir, registry=registry)
             # Should not raise
             artifact = scheduler.compile_file(test_file)
             assert artifact is not None

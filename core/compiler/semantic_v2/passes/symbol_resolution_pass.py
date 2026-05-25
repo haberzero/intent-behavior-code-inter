@@ -206,7 +206,7 @@ class SymbolResolver:
         self.push_scope(func_scope)
         try:
             # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
-            # v1 parity: node_to_symbol[func_def_node] = self_symbol（runtime 通过此获取 self UID）
+            # node_to_symbol[func_def_node] = self_symbol（runtime 通过此获取 self UID）
             if self.current_class_symbol:
                 from core.kernel.symbols import VariableSymbol, SymbolKind
                 self_sym = VariableSymbol(
@@ -256,7 +256,7 @@ class SymbolResolver:
             self.pop_scope()
 
     def visit_IbAssign(self, node: ast.IbAssign):
-        """访问赋值节点 — 对齐 v1：绑定 IbAssign 和 IbTypeAnnotatedExpr 到目标符号"""
+        """访问赋值节点 — 绑定 IbAssign 和 IbTypeAnnotatedExpr 到目标符号"""
         # 先处理右侧表达式
         self.visit(node.value)
 
@@ -264,7 +264,7 @@ class SymbolResolver:
         for target in node.targets:
             self.visit(target)
 
-            # 对齐 v1 _bind_symbol_to_side_table：将 IbAssign 和 IbTypeAnnotatedExpr 也绑定到符号
+            # 将 IbAssign 和 IbTypeAnnotatedExpr 也绑定到符号
             var_name = self._extract_target_name(target)
             if var_name:
                 sym = self.lookup_symbol(var_name)
@@ -501,8 +501,7 @@ class SymbolResolver:
     def _prescan_body_locals(self, body: list, scope: SymbolTable):
         """预扫描函数体，将赋值目标预注册为局部变量。
 
-        这与 v1 的 Pass 2.5 预扫描逻辑对应：确保函数体内的变量
-        在被引用时已经有定义（避免 SEM_001 误报）。
+        确保函数体内的变量在被引用时已经有定义（避免 SEM_001 误报）。
         """
         from core.kernel.symbols import VariableSymbol, SymbolKind
         from .symbol_collection_pass import SymbolExtractor

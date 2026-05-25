@@ -1,5 +1,5 @@
 """
-Semantic Analyzer V2 — 全量替换 v1 的语义分析系统
+Semantic Analyzer — IBCI 语义分析系统
 
 Architecture
 ------------

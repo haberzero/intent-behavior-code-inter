@@ -137,7 +137,7 @@ class LLMExceptBindingAnalyzer:
                 node.body = self._rewrite_body(node.body)
 
     def _rewrite_body(self, body: List[ast.IbASTNode]) -> List[ast.IbASTNode]:
-        """P1-F: 重写语句块 — 实现 v1 的 _bind_llm_except body 重写逻辑"""
+        """P1-F: 重写语句块 — 执行 llmexcept body 重写逻辑"""
         if not body:
             return body
 
@@ -233,7 +233,6 @@ class LLMExceptBindingAnalyzer:
     def _validate_readonly_body(self, body: List[ast.IbASTNode]):
         """§9.2: 验证 llmexcept body 内的 read-only 约束（SEM_052）。
 
-        逻辑对齐 v1 SemanticAnalyzer._check_llmexcept_readonly:
         - 捕获进入 body 前的外部作用域变量名集合
         - 排除 body 内声明的 body-local 变量（避免误报）
         - body 内任何对外部作用域变量的赋值产生 SEM_052 错误
@@ -254,7 +253,6 @@ class LLMExceptBindingAnalyzer:
     def _collect_body_declared_names(self, body: List[ast.IbASTNode]) -> frozenset:
         """收集 llmexcept body 直接层级中真正新声明的变量名。
 
-        对齐 v1 的 _collect_llmexcept_body_declared_names：
         仅当赋值有类型标注（IbTypeAnnotatedExpr）时，视为新的 body-local 声明。
         """
         result: set = set()

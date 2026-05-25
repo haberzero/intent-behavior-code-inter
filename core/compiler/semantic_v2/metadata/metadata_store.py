@@ -1,16 +1,15 @@
 """
 Node-Object-Keyed Metadata Storage
 
-设计决策（2026-05-22 全量替换 v1 准备）:
-- 编译期使用 Python 对象身份作为字典键（与 v1 SideTableManager 一致）。
+设计决策:
+- 编译期使用 Python 对象身份作为字典键。
 - 序列化器已有成熟的"对象键 → 确定性 UID"转换路径（FlatSerializer._collect_node）。
 - 不引入额外 UID 字段到 AST 节点；保持 AST dataclass 不变。
 
-2026-05-15 立场对齐:
-- MetadataStore 只承载 C2/C3 绑定（node_to_symbol / node_to_type / node_to_loc）
-- callable_instances / capture_modes / annotations 已删除（AST 字段承载）
+MetadataStore 只承载 C2/C3 绑定（node_to_symbol / node_to_type / node_to_loc）
+- callable_instances / capture_modes / annotations 由 AST 字段承载
 - cell_captured_symbols 保留（无 AST 对应字段）
-- bind 操作为 mutable in-place（删除 O(n²) 拷字典反模式）
+- bind 操作为 mutable in-place
 """
 
 from typing import Dict, Optional, Any, Set
@@ -22,10 +21,10 @@ class MetadataStore:
     """
     Node-object-keyed metadata storage for semantic analysis.
 
-    键为 AST 节点对象（Python object identity），与 v1 SideTableManager 接口对齐。
+    键为 AST 节点对象（Python object identity）。
     序列化阶段由 FlatSerializer 统一将对象键转换为确定性哈希 UID。
 
-    After 2026-05-15 convergence:
+    Fields:
     - node_to_symbol: Node object → Symbol (C2 binding)
     - node_to_type: Node object → Type specification (C2 binding)
     - node_to_loc: Node object → Location info (C3 binding)

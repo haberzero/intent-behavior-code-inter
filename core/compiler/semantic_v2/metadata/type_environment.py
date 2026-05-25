@@ -2,14 +2,7 @@
 Type Environment
 
 Manages type bindings and inference state during semantic analysis.
-
-Key insight from V1:
-- V1 scatters type state across multiple variables and side tables
-- V2 centralizes in TypeEnvironment
-
-2026-05-15 立场对齐:
-- 删除 constraints / generic_instances（IBCI 是单次推断 + 静态强类型，不需要约束求解）
-- 仅保留 bindings 和 auto_return_accumulator
+仅保留 bindings 和 auto_return_accumulator。
 """
 
 from dataclasses import dataclass, field

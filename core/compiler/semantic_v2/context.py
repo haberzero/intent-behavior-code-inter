@@ -3,11 +3,6 @@ Semantic Analysis Context
 
 The context is an immutable container for all state needed during semantic
 analysis. Passes return new contexts rather than mutating state.
-
-Key insight from V1 limitations:
-- V1 uses 13+ mutable instance variables, leading to hard-to-track state
-- V2 uses immutable context, making data flow explicit
-- Enables parallel analysis and easier debugging
 """
 
 from dataclasses import dataclass, replace, field
@@ -22,16 +17,6 @@ class SemanticContext:
 
     Design principle: All analysis state is explicit and immutable.
     To "modify" context, create a new one with desired changes.
-
-    Comparison with V1:
-    | V1 State Variable | V2 Location | Notes |
-    |-------------------|-------------|-------|
-    | self.symbol_table | context.symbol_table | Now explicit in context |
-    | self.current_return_type | context.function_context.return_type | Nested context |
-    | self.current_class | context.class_context.class_def | Nested context |
-    | self.in_behavior_expr | context.flags['in_behavior_expr'] | Flag dictionary |
-    | self._auto_return_types | context.type_inference_state | Separate state object |
-    | self.side_table | context.metadata | Unified metadata store |
     """
     # Core references (never change during analysis)
     ast: ibci_ast.IbASTNode  # Root AST node being analyzed

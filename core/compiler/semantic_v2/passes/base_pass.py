@@ -21,10 +21,7 @@ class BasePass(ABC):
     - Returns a PassResult with (possibly updated) context and diagnostics
     - Should not throw exceptions (use PassResult.fail instead)
     - Should be stateless (all state in context)
-
-    Comparison with V1:
-    - V1: All passes mixed into one class
-    - V2: Each pass is independent, testable unit
+    - Each pass is independent and testable
     """
 
     def __init__(self, pass_name: str):
