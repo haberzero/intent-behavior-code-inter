@@ -433,10 +433,9 @@ class SpecRegistry:
         This is intentionally distinct from ``is_compatible(target)`` which
         is the source-side query for *implicit* assignment compatibility.
 
-        TODO: activate this in
-        ``semantic_analyzer.py::_resolve_cast_expr()`` once compile-time
-        cast validation is added.  Currently ``IbCastExpr`` validation is
-        purely runtime via ``value.receive("cast_to", [target_class])``.
+        Used by TypeCheckingPass.visit_IbCastExpr for compile-time SEM_091
+        warnings.  Runtime ``IbCastExpr`` still validates via
+        ``value.receive("cast_to", [target_class])``.
         """
         axiom = self.get_axiom(spec)
         return axiom if (axiom and axiom.has_converter_cap) else None

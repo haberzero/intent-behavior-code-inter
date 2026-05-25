@@ -4,7 +4,35 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-25（追加：PT-ARCH-4 完成）
+> **最后更新**：2026-05-25（追加：P2-B/C 完成 + Step 5 宣告完成）
+
+---
+
+## 2026-05-25 锚点 I：P2-B + P2-C Semantic 静态诊断增强
+
+完成两项编译期诊断改进（789 passed, 7 skipped, 0 failures）：
+
+- **P2-B SEM_090 — intent_context 静默无效陷阱警告**：
+  - 检测 `intent_context.push/pop/fork/merge/combine/clear()` 在类对象上调用
+  - `get_current()`/`use()`/`clear_inherited()` 不触发（类上调用也生效）
+  - 实现：`TypeCheckingPass._check_intent_context_static_call()`
+  - 9 个新增测试（`tests/compiler/semantic/test_p2_warnings.py::TestIntentContextStaticCallWarning`）
+- **P2-C SEM_091 — 编译期 cast 转换合法性校验**：
+  - `visit_IbCastExpr` 激活 `registry.get_converter_cap(target).can_convert_from(source)`
+  - 目标公理明确拒绝时发出 SEM_091 warning（不阻断编译）
+  - 例如：`(int)list_var` → SEM_091；`(int)str_var` → 无警告
+  - 8 个新增测试（`tests/compiler/semantic/test_p2_warnings.py::TestCastValidationWarning`）
+
+---
+
+## 2026-05-25 锚点 H：PT-ARCH-5 Step 5 PassOutput + Immutable Pipeline 宣告完成
+
+经代码审计确认 Step 5 框架已完整到位：
+
+- `PassOutput` (frozen dataclass) 作为每个 Phase 的唯一输出载体
+- `Pipeline.run()` 通过 `prior_symbol_bindings`/`prior_type_bindings` 实现跨 Phase context threading
+- `MetadataStore.from_outputs(outputs)` 统一 merge 所有 Phase 产出
+- 务实折中记录：SymbolPhase 内部子步骤间共享可变 SymbolTable（标准编译器模式，非跨 Phase mutation）
 
 ---
 

@@ -450,9 +450,9 @@ str r = @~ ... ~
 
 **根源**：意图栈在运行时归属"当前执行帧的 `_intent_ctx`"（ContextVar 隔离），而 `intent_context` 作为 IBCI 类对象暴露的 `push/pop/...` 方法签名要求一个 receiver；当 receiver 是类静态调用产生的临时对象时，操作落到一个"游离"的实例上。
 
-**未来演进思路（不构成承诺）**：编译期对 `intent_context.push(...)` / `pop()` / `merge(...)` 这类调用在"未先取 `get_current()`"的语境下给出 SEM 警告或错误（语义意图很可能是误用）。
+**编译期防护（SEM_090）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_090 warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
-**测试覆盖**：暂无契约测试。
+**测试覆盖**：`tests/compiler/semantic/test_p2_warnings.py::TestIntentContextStaticCallWarning`（9 个测试）。
 
 ---
 
@@ -479,9 +479,9 @@ str r = @~ ... ~
 2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel.py` 的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
 3. **方法重写无签名兼容性检查**：`semantic_analyzer.visit_IbClassDef` 校验父类存在性，但不做 Liskov 子类型签名校验；子类可以静默"窄化"参数/拓宽返回。
 4. **`__snapshot__` / `__restore__` 用户协议在 llmexcept 路径里未被调用**：`docs/IBCI_SYNTAX_REFERENCE.md §10.4` 描述的"快照粒度自定义"目前**只是文档承诺**——`vm/handlers.py:vm_handle_IbLLMExceptionalStmt` 的快照逻辑只对内置可序列化类型做深拷贝，对用户类对象不会调用其 `__snapshot__` / `__restore__`。retry 失败时用户类对象内部 mutation 不会回滚（与 `KNOWN_LIMITS §五"llmexcept 不还原容器变更"`的现象同源，但根因更深）。
-5. **强转 cast 当前**全部**推迟到运行时**：`(T)x` 在编译期不做兼容性校验（NS-5 已在 backlog 但优先级 P3）。
+5. ~~**强转 cast 当前全部推迟到运行时**~~ **部分解决（SEM_091）**：`(T)x` 现在通过 `can_convert_from()` 公理方法在编译期进行合法性预检——当目标类型公理明确拒绝源类型时发出 SEM_091 warning。但这是 warning 而非 error：运行时仍保留最终判定权（用户自定义类的 cast 等场景）。测试覆盖：`tests/compiler/semantic/test_p2_warnings.py::TestCastValidationWarning`。
 
-**未来演进思路（不构成承诺）**：以上 1/2/3/5 见 `docs/PENDING_TASKS.md §四`；4 因为牵动 llmexcept 快照协议核心，在该协议稳定 + 用户类一等公民化之后再评估。
+**未来演进思路（不构成承诺）**：以上 1/2/3 见 `docs/PENDING_TASKS.md §四`；4 因为牵动 llmexcept 快照协议核心，在该协议稳定 + 用户类一等公民化之后再评估。
 
 ---
 

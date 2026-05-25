@@ -801,6 +801,13 @@ class TypeCheckingVisitor(ScopedVisitor):
         self.bind_type(node, self._bool_desc)
         return self._bool_desc
 
+    # Methods on intent_context that are no-op when called on the class object
+    # (as opposed to an instance obtained via get_current()).
+    # See docs/KNOWN_LIMITS.md §十八 for rationale.
+    _INTENT_CTX_INSTANCE_ONLY_METHODS = frozenset({
+        "push", "pop", "fork", "merge", "combine", "clear",
+    })
+
     def visit_IbCall(self, node: ast.IbCall) -> Optional[IbSpec]:
         """访问函数调用 — 使用 registry.resolve_call_return() 统一推断返回类型"""
         # 处理被调用对象
@@ -812,6 +819,11 @@ class TypeCheckingVisitor(ScopedVisitor):
         if not func_type:
             self.bind_type(node, self._any_desc)
             return self._any_desc
+
+        # --- P2-B: intent_context static call warning (SEM_090) ---
+        # Detect intent_context.push() / pop() / ... called directly on the
+        # class name without first obtaining an instance via get_current().
+        self._check_intent_context_static_call(node)
 
         # --- Callable class instance detection ---
         # If func_type is CLASS but the name refers to an *instance* variable
@@ -1103,9 +1115,28 @@ class TypeCheckingVisitor(ScopedVisitor):
         return None
 
     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> Optional[IbSpec]:
-        """访问类型转换表达式 (e.g., (int) expr)"""
-        self.visit(node.value)
+        """访问类型转换表达式 (e.g., (int) expr)
+
+        P2-C: 使用 can_convert_from 进行编译期 cast 校验。
+        当目标类型的公理明确拒绝从源类型转换时，发出 SEM_091 警告。
+        """
+        source_type = self.visit(node.value)
         cast_type = self._resolve_type(node.type_annotation)
+
+        # P2-C: compile-time cast validation via can_convert_from
+        if (source_type and cast_type
+                and not self.registry.is_dynamic(source_type)
+                and not self.registry.is_dynamic(cast_type)
+                and source_type.name != cast_type.name):
+            converter = self.registry.get_converter_cap(cast_type)
+            if converter and not converter.can_convert_from(source_type.name):
+                self.warn(
+                    f"Cast from '{source_type.name}' to '{cast_type.name}' "
+                    f"is not supported by the type's conversion rules. "
+                    f"This cast may fail at runtime.",
+                    node, code="SEM_091",
+                )
+
         self.bind_type(node, cast_type)
         return cast_type
 
@@ -1226,3 +1257,32 @@ class TypeCheckingVisitor(ScopedVisitor):
     def visit_IbContinue(self, node: ast.IbContinue) -> Optional[IbSpec]:
         """访问 continue 语句"""
         return None
+
+    # ========== P2-B / P2-C 辅助检查 ==========
+
+    def _check_intent_context_static_call(self, node: ast.IbCall):
+        """检查 intent_context.<method>() 是否在类级别调用（SEM_090）
+
+        intent_context.push() / pop() / fork() / merge() / combine() / clear()
+        在类对象上调用（而非实例）是无效的 no-op。正确用法是先通过
+        get_current() 获取实例，再调用实例方法。
+        """
+        func = node.func
+        if not isinstance(func, ast.IbAttribute):
+            return
+        if func.attr not in self._INTENT_CTX_INSTANCE_ONLY_METHODS:
+            return
+        # Check if the receiver is the class name "intent_context"
+        if not isinstance(func.value, ast.IbName):
+            return
+        if func.value.id != "intent_context":
+            return
+        # Verify the symbol is a TYPE (class), not an instance variable
+        sym = self.lookup_symbol("intent_context")
+        if sym and sym.kind == SymbolKind.CLASS:
+            self.warn(
+                f"'{func.attr}()' called on 'intent_context' class has no effect. "
+                f"Use 'intent_context ctx = intent_context.get_current()' first, "
+                f"then call 'ctx.{func.attr}(...)' followed by 'intent_context.use(ctx)'.",
+                node, code="SEM_090",
+            )
