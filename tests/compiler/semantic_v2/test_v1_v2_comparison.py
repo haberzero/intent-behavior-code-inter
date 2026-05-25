@@ -3,10 +3,16 @@ V1 vs V2 Side-by-Side Comparison Tests
 
 直接对比 v1 和 v2 在相同输入下的输出，验证 parity 完备性。
 这是决定是否可以设 use_v2=True 为默认值的关键测试。
+
+[V1-BACKUP] v1 已移入 backup，本模块整体跳过。
 """
 
 import pytest
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
+
+pytestmark = pytest.mark.skip(reason="[V1-BACKUP] v1 SemanticAnalyzer moved to _v1_backup, comparison tests disabled")
+
+# [V1-BACKUP] Original imports commented out:
+# from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.parser.parser import Parser

@@ -6,7 +6,7 @@ from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
+# [V1-BACKUP] from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
 from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
@@ -379,10 +379,8 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
             self.registry.register(pre_mod_meta)
             
-            if self.use_v2:
-                analyzer = SemanticAnalyzerV2(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
-            else:
-                analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
+            # [V1-BACKUP] v1 路径已移除，v2 是唯一路径
+            analyzer = SemanticAnalyzerV2(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():
