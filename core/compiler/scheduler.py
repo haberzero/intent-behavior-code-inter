@@ -38,7 +38,7 @@ class Scheduler(ICompilerService):
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None, use_v2: bool = False):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None, use_v2: bool = True):
         self.root_dir = os.path.realpath(root_dir)
         self.source_manager = SourceManager()
         self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)

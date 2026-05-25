@@ -4,7 +4,57 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-24（追加：SEM_052 实现 + node_to_symbol 100% parity + v1/v2 对比测试套件）
+> **最后更新**：2026-05-25（追加：P0-NEXT-5 TypeCheckingPass 静态诊断补全完成）
+
+---
+
+## 2026-05-25 锚点 D：P0-NEXT-5 TypeCheckingPass 静态诊断补全
+
+修复原 17 项 TypeCheckingPass 严格性差异测试全部通过（761 passed, 0 failures）：
+
+- **D3 fn 签名结构检查**：
+  - CALLABLE_SIG 参数数量不匹配 → SEM_005
+  - CALLABLE_SIG 参数/返回类型不匹配 → SEM_003
+  - fn class constructor 引用允许（SymbolKind.CLASS 判断）
+  - fn callable instance (__call__ 方法) 通过 owned_scope 查找实际返回类型
+- **Lambda 类型安全**：
+  - lambda body 类型与 `-> TYPE` 标注不匹配 → SEM_003
+  - lambda 参数注册到 lambda scope（与 visit_IbFunctionDef 对齐）
+  - 无 `-> TYPE` 的 fn_callable 调用赋给具体类型变量 → SEM_003
+- **泛型容器类型检查**：
+  - list[int].append(str) → SEM_081 warning（param_types 检查）
+  - list[int] subscript → 正确返回 element type
+- **Optional 类型安全**：
+  - _resolve_type 支持 IbSubscript 泛型标注 resolve_specialization
+  - Optional[int] → int 赋值拒绝（registry.is_assignable 正确返回 False）
+- **Tuple 位置类型精确推断**：
+  - tuple[T1,T2] 编译期位置索引类型推断
+  - slice 操作正确返回容器类型
+  - tuple 解包各元素使用 any（运行时赋值）
+- **sym.spec 传播**：声明类型特化后更新符号 spec（使 visit_IbName 读取正确类型）
+- **visit_IbAttribute**：优先返回有 kind 且有 param_types 的成员 spec
+
+---
+
+## 2026-05-24 锚点 C：P0-NEXT-4 v2 默认启用 + 12 项 parity 修复
+
+将 `use_v2=True` 设为默认后，逐步修复所有**运行时**和**编译路径**差异，达成完整 runtime parity：
+
+- **SymbolResolutionPass 新增 6 项绑定**：
+  - IbImport/IbImportFrom alias 节点绑定
+  - IbClassDef 节点绑定 + self/super 隐式注入
+  - IbExceptHandler 节点绑定 (as e)
+  - IbArg 节点绑定（函数参数）
+  - IbLambdaExpr params 字段名修正
+  - 嵌套 IbFunctionDef 预注册
+- **TypeCheckingPass 3 项覆写**：
+  - BehaviorExpr → bool 在 if/while/for 条件位
+  - BinOp any 操作数容许性
+  - fn 声明接受任何 callable 值
+- **BindingAnalysisPass lambda 捕获修复**：
+  - free_vars 使用 node_to_symbol 绑定（替代不可靠的 scope.resolve）
+  - 正确填充 AST node.free_vars 供序列化
+- **测试基线**：`744 passed, 8 skipped, 17 failed`（17 项均为 P1 TypeCheckingPass 静态诊断未实现，不影响运行时正确性）。
 
 ---
 

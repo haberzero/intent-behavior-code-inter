@@ -59,6 +59,9 @@ class SymbolResolver:
         # 作用域栈（用于处理嵌套作用域）
         self.scope_stack: List[SymbolTable] = [self.symbol_table]
 
+        # 当前所在类的符号（用于注入 self）
+        self.current_class_symbol: Optional[Symbol] = None
+
     @property
     def current_scope(self) -> SymbolTable:
         """当前作用域"""
@@ -131,21 +134,30 @@ class SymbolResolver:
         """访问类定义节点"""
         # 查找类符号
         sym = self.lookup_symbol(node.name)
-        if sym and hasattr(sym, 'owned_scope') and sym.owned_scope:
-            # 进入类作用域
-            self.push_scope(sym.owned_scope)
-            try:
+        if sym:
+            # 绑定 IbClassDef 节点到符号（vm_handle_IbClassDef 通过 node_to_symbol 查找）
+            self.bind_symbol(node, sym)
+            saved_class = self.current_class_symbol
+            self.current_class_symbol = sym
+            if hasattr(sym, 'owned_scope') and sym.owned_scope:
+                # 进入类作用域
+                self.push_scope(sym.owned_scope)
+                try:
+                    for stmt in node.body:
+                        self.visit(stmt)
+                finally:
+                    self.pop_scope()
+            else:
                 for stmt in node.body:
                     self.visit(stmt)
-            finally:
-                self.pop_scope()
-        else:
-            # 没有作用域信息，只处理 body
-            for stmt in node.body:
-                self.visit(stmt)
+            self.current_class_symbol = saved_class
+            return
+        # 没有符号信息，只处理 body
+        for stmt in node.body:
+            self.visit(stmt)
 
     def _register_params(self, args: list, scope: SymbolTable):
-        """将函数参数注册为局部符号。"""
+        """将函数参数注册为局部符号，并绑定 IbArg 节点到 node_to_symbol。"""
         from core.kernel.symbols import VariableSymbol, SymbolKind
 
         for arg_node in args:
@@ -158,6 +170,14 @@ class SymbolResolver:
                     spec=self.registry.resolve("any"),
                 )
                 scope.define(param_sym)
+
+                # 绑定 IbArg 节点到符号（vm_handle_IbCall 通过 node_to_symbol[arg_uid] 查找）
+                # 如果外层是 IbTypeAnnotatedExpr，runtime 会先解包到 target (IbArg)
+                if isinstance(arg_node, ast.IbArg):
+                    self.bind_symbol(arg_node, param_sym)
+                elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+                    if isinstance(arg_node.target, ast.IbArg):
+                        self.bind_symbol(arg_node.target, param_sym)
 
     @staticmethod
     def _extract_arg_name(arg_node: ast.IbASTNode) -> Optional[str]:
@@ -179,13 +199,28 @@ class SymbolResolver:
         # 绑定函数符号到节点
         func_sym = self.lookup_symbol(node.name)
         if func_sym:
-            self.bind_symbol(node, func_sym)
             if hasattr(func_sym, 'owned_scope'):
                 func_sym.owned_scope = func_scope
 
         # 进入函数作用域
         self.push_scope(func_scope)
         try:
+            # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
+            # v1 parity: node_to_symbol[func_def_node] = self_symbol（runtime 通过此获取 self UID）
+            if self.current_class_symbol:
+                from core.kernel.symbols import VariableSymbol, SymbolKind
+                self_sym = VariableSymbol(
+                    name="self",
+                    kind=SymbolKind.VARIABLE,
+                    def_node=node,
+                    spec=self.current_class_symbol.spec if hasattr(self.current_class_symbol, 'spec') else self.registry.resolve("any"),
+                )
+                func_scope.define(self_sym)
+                # IbFunctionDef 节点绑定到 self 符号（runtime kernel.py:965 依赖此映射）
+                self.bind_symbol(node, self_sym)
+            elif func_sym:
+                self.bind_symbol(node, func_sym)
+
             self._register_params(node.args, func_scope)
             self._prescan_body_locals(node.body, func_scope)
 
@@ -321,6 +356,11 @@ class SymbolResolver:
         if node.target:
             if isinstance(node.target, ast.IbName):
                 self._register_loop_variable(node.target.id, node.target, node)
+            elif isinstance(node.target, ast.IbTypeAnnotatedExpr):
+                # for int item in items: — target is IbTypeAnnotatedExpr
+                inner = node.target.target
+                if isinstance(inner, ast.IbName):
+                    self._register_loop_variable(inner.id, inner, node)
             elif isinstance(node.target, ast.IbTuple):
                 # Tuple unpacking in for loop: for (a, b) in ...
                 for elt in node.target.elts:
@@ -357,6 +397,23 @@ class SymbolResolver:
         if node.type:
             self.visit(node.type)
 
+        # 注册 `as e` 捕获变量到当前作用域，并绑定 handler 节点到符号
+        # (runtime vm_handle_IbTry:1883 通过 node_to_symbol[handler_uid] 获取 sym_uid)
+        if node.name:
+            from core.kernel.symbols import VariableSymbol, SymbolKind
+            existing = self.lookup_symbol(node.name)
+            if not existing:
+                exc_sym = VariableSymbol(
+                    name=node.name,
+                    kind=SymbolKind.VARIABLE,
+                    def_node=node,
+                    spec=self.registry.resolve("any"),
+                )
+                self.current_scope.define(exc_sym)
+                self.bind_symbol(node, exc_sym)
+            else:
+                self.bind_symbol(node, existing)
+
         for stmt in node.body:
             self.visit(stmt)
 
@@ -372,13 +429,12 @@ class SymbolResolver:
 
         self.push_scope(lambda_scope)
         try:
-            # 处理参数
-            for arg in node.args:
-                self.visit(arg)
+            # 注册参数并绑定 IbArg 节点
+            self._register_params(node.params, lambda_scope)
 
-            # 处理 body
-            for stmt in node.body:
-                self.visit(stmt)
+            # 处理 body（lambda body 是单个表达式，不是列表）
+            if node.body:
+                self.visit(node.body)
         finally:
             self.pop_scope()
 
@@ -388,6 +444,36 @@ class SymbolResolver:
         for segment in node.segments:
             if isinstance(segment, ast.IbASTNode):
                 self.visit(segment)
+
+    def visit_IbImport(self, node: ast.IbImport):
+        """访问 import 语句节点
+
+        将 IbAlias 节点绑定到 scheduler 预注入的符号，
+        以便 vm_handle_IbImport 能通过 node_to_symbol 获取正确的 UID。
+        """
+        for alias in node.names:
+            name = alias.asname or alias.name
+            sym = self.lookup_symbol(name)
+            if sym:
+                self.bind_symbol(alias, sym)
+            else:
+                self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
+
+    def visit_IbImportFrom(self, node: ast.IbImportFrom):
+        """访问 from ... import 语句节点
+
+        将每个 IbAlias 节点绑定到 scheduler 预注入的符号。
+        """
+        for alias in node.names:
+            if alias.name == '*':
+                # import * 由 Scheduler 处理符号注入，此处无需绑定
+                continue
+            name = alias.asname or alias.name
+            sym = self.lookup_symbol(name)
+            if sym:
+                self.bind_symbol(alias, sym)
+            else:
+                self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
 
     # 字面量节点不需要符号解析
     def visit_IbConstant(self, node: ast.IbConstant):
@@ -432,6 +518,17 @@ class SymbolResolver:
                             spec=self.registry.resolve("any"),
                         )
                         scope.define(sym)
+            elif isinstance(stmt, ast.IbFunctionDef):
+                # 嵌套函数定义：在当前作用域注册函数名
+                name = stmt.name
+                if name and name not in scope.symbols:
+                    sym = VariableSymbol(
+                        name=name,
+                        kind=SymbolKind.VARIABLE,
+                        def_node=stmt,
+                        spec=self.registry.resolve("fn"),
+                    )
+                    scope.define(sym)
             elif isinstance(stmt, ast.IbFor):
                 # for 循环变量
                 if stmt.target:
