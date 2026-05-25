@@ -97,9 +97,9 @@
 
 ---
 
-## 2026-05-22 锚点：P1 全套完成（semantic_v2 功能大幅补全）
+## 2026-05-22 锚点：P1 全套完成（semantic 功能大幅补全）
 
-完成所有 P1 级别工作，semantic_v2 从"骨架无 bug"推进到"核心设计原则实现 + visitor 覆盖完备"。
+完成所有 P1 级别工作，semantic 从"骨架无 bug"推进到"核心设计原则实现 + visitor 覆盖完备"。
 
 - **P1-A 文档与 v2 自我矛盾收口**：
   - `SEMANTIC_REFACTORING_PLAN.md` 中"问题 2: 对象身份侧表"改写为对齐 2026-05-15 立场。
@@ -119,7 +119,7 @@
   - `IbFilteredExpr`、`IbBehaviorInstance`、`IbLLMExceptionalStmt`
   - `IbPass`、`IbBreak`、`IbContinue`
 - **P1-E 独立 TypeResolutionPass**：
-  - 新建 `core/compiler/semantic_v2/passes/type_resolution_pass.py`。
+  - 新建 `core/compiler/semantic/passes/type_resolution_pass.py`。
   - 解析类型标注（auto/any/fn/泛型/CALLABLE_SIG），报 SEM_004 对未知类型。
   - 接入 pipeline 为 Pass 3（在 TypeCheckingPass 之前）。
 - **P1-F 复刻 `_bind_llm_except` 到 v2**：
@@ -133,9 +133,9 @@
 - **测试**：新增 24 个测试覆盖所有 P1 改动。
 - **最终基线**：`697 passed, 7 skipped, 0 failed`。
 
-## 2026-05-22 锚点：三个 P0 任务完成（semantic_v2 基线恢复与架构收敛）
+## 2026-05-22 锚点：三个 P0 任务完成（semantic 基线恢复与架构收敛）
 
-完成三项 P0 级别工作，semantic_v2 骨架达到"无静默 bug + 无双写冗余 + 无错误字段引用"的稳定状态。
+完成三项 P0 级别工作，semantic 骨架达到"无静默 bug + 无双写冗余 + 无错误字段引用"的稳定状态。
 
 - **P0-H5 测试基线恢复**：
   - 修 `test_symbol_collection_pass.py`：`SpecRegistry(AxiomRegistry())`、`SymbolTableContext(current=...)`、`.symbol_table.current`。
@@ -154,7 +154,7 @@
   - `ContextBuilder.build()` 注入 builtin prelude（复用 v1 Prelude 类）
   - `MetadataStore` 删除 `callable_instances`/`capture_modes`/`annotations`，保留 `symbol_bindings`/`type_bindings`/`loc_bindings`/`cell_captured_symbols`；bind 操作改 mutable in-place
   - `TypeEnvironment` 删除 `constraints`/`generic_instances`
-  - 新增 10 个回归测试于 `tests/compiler/semantic_v2/`
+  - 新增 10 个回归测试于 `tests/compiler/semantic/`
 - **最终基线**：`673 passed, 7 skipped, 0 failed`。
 
 ---
@@ -275,7 +275,7 @@ python -m pytest tests/ -q --tb=no --no-header
 **文档同步动作**：
 
 - 删除 `docs/OPEN_ISSUES.md`（用户明示；后续以 `NEXT_STEPS.md` + `KNOWN_LIMITS.md` 为单一真理源）；清理 `docs/KNOWN_LIMITS.md` / `docs/ARCH_DETAILS.md` / `docs/COMPLETED.md` 中残留的 OPEN_ISSUES 反向引用。
-- 重写 `docs/NEXT_STEPS.md`：剔除幻觉性 P0-A..E，重排为 P0（H1 + H5） / P1（H3 + H2 + H4 + 已修 enum 文档收口 + 已修 README typo） / P2（semantic_v2 Phase 3 + intent_context push 警告 + NS-5 + idbg/MOCK:SEQ 复现）；文末新增"维护守则"6 条，专门针对智能体协作场景，要求"每次开新分支前必跑 pytest、不预设上一份文档数字"。
+- 重写 `docs/NEXT_STEPS.md`：剔除幻觉性 P0-A..E，重排为 P0（H1 + H5） / P1（H3 + H2 + H4 + 已修 enum 文档收口 + 已修 README typo） / P2（semantic Phase 3 + intent_context push 警告 + NS-5 + idbg/MOCK:SEQ 复现）；文末新增"维护守则"6 条，专门针对智能体协作场景，要求"每次开新分支前必跑 pytest、不预设上一份文档数字"。
 - 更新 `docs/KNOWN_LIMITS.md`：关闭 §二十二（contracts 失实条目，作反例保留）；新增 §二十三/二十四/二十五。
 - 更新 `docs/PENDING_TASKS.md`：删除 PT-5.1 中失实表述，统一指向 NEXT_STEPS。
 - 修复 `README.md:103-105` 的 `true/false` 大小写（IBCI 字面量是 `True/False`），同时修正 `examples/01_getting_started/05_enum_and_switch.ibci` 教学逻辑使其反映"Enum 已可直接接收 LLM 输出"。

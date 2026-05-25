@@ -92,7 +92,7 @@ class LLMExceptBindingAnalyzer:
         ))
 
     def analyze(self):
-        """P1-F: 分析 llmexcept 绑定 — 显式做 body 重写（pop + replace）
+        """分析 llmexcept 绑定 — 显式做 body 重写（pop + replace）
 
         两条通道并存：
         - 正则情形：stmt.target = prev_stmt（llmexcept 替换 prev_stmt 成为 body 中唯一条目）
@@ -137,7 +137,7 @@ class LLMExceptBindingAnalyzer:
                 node.body = self._rewrite_body(node.body)
 
     def _rewrite_body(self, body: List[ast.IbASTNode]) -> List[ast.IbASTNode]:
-        """P1-F: 重写语句块 — 执行 llmexcept body 重写逻辑"""
+        """重写语句块 — 执行 llmexcept body 重写逻辑"""
         if not body:
             return body
 

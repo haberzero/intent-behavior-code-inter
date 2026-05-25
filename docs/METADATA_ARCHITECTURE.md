@@ -180,34 +180,34 @@ type_uid = f"type_{module_path}.{name}"
 
 ---
 
-## 五、V1 vs V2：设计对比
+## 五、设计决策：正确 vs 错误模式
 
-### 5.1 V1 的正确设计（应该保留）
+### 5.1 正确的设计模式
 
 ✅ **AST 节点包含依赖信息**
 ```python
-# V1: 正确 - 直接写入 AST
+# 正确 - 直接写入 AST
 node.llm_deps = [dep1, dep2]
 node.dispatch_eligible = True
 ```
 
 ✅ **侧表使用 id() 快速查询**
 ```python
-# V1: 正确 - 性能优先
+# 正确 - 性能优先
 side_table.node_to_symbol[node] = symbol  # 使用 id(node)
 ```
 
 ✅ **序列化器自动转换**
 ```python
-# V1: 正确 - 职责分离
+# 正确 - 职责分离
 serializer._collect_node(node)  # 自动 id() → UID
 ```
 
-### 5.2 V2 的过度设计（已修复）
+### 5.2 曾经的过度设计（已修复）
 
 ❌ **试图将 AST 固有属性移到 MetadataStore**
 ```python
-# V2 旧实现：错误 - 重复存储
+# 旧实现：错误 - 重复存储
 new_metadata.behavior_metadata['behavior_dependencies'][node_uid] = deps
 ```
 
@@ -216,9 +216,9 @@ new_metadata.behavior_metadata['behavior_dependencies'][node_uid] = deps
 2. 同步问题（需要保持两处一致）
 3. 序列化冲突（序列化器已经处理 AST）
 
-✅ **V2 修复后**
+✅ **修复后**
 ```python
-# V2 新实现：正确 - 直接写 AST
+# 正确 - 直接写 AST
 node.llm_deps = deps
 node.dispatch_eligible = True
 # 无需修改 metadata
@@ -436,7 +436,7 @@ class IbASTNode:
 ## 十、参考资料
 
 ### 10.1 相关文档
-- `SEMANTIC_REFACTORING_PLAN.md` - V2 重构计划
+
 - `TYPE_SYSTEM_ANALYSIS_REPORT.md` - 类型系统分析
 - `core/compiler/serialization/serializer.py` - 序列化实现
 
@@ -444,7 +444,7 @@ class IbASTNode:
 - AST 定义：`core/kernel/ast.py`
 - 侧表管理：`core/compiler/semantic/passes/side_table.py`
 - 序列化器：`core/compiler/serialization/serializer.py`
-- V2 Passes：`core/compiler/semantic_v2/passes/`
+- Semantic Passes：`core/compiler/semantic/passes/`
 
 ---
 
@@ -475,7 +475,6 @@ class IbASTNode:
 
 ## 附录 B：2026-05-15 回顾性事实核查的关键订正
 
-> 完整报告见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md`。本附录将与本文（METADATA_ARCHITECTURE）冲突的部分一次性收口。
 
 ### B.1 关于 §3.2 SideTableManager 的当前真实字段
 
@@ -489,13 +488,13 @@ class IbASTNode:
 
 ### B.2 关于 §6 MetadataStore 字段定位的修订
 
-v2 `MetadataStore` 当前实现含 6 个字段：`symbol_bindings`、`type_bindings`、`callable_instances`、`capture_modes`、`cell_captured_symbols`、`annotations`。其中：
+`MetadataStore` 当前实现含 6 个字段：`symbol_bindings`、`type_bindings`、`callable_instances`、`capture_modes`、`cell_captured_symbols`、`annotations`。其中：
 
 - `callable_instances` / `capture_modes`：**AST 字段副本**，应当删除（同 §B.1）。
 - `annotations`：**通用口袋字段**，会被滥用为"再加一份保险"的便捷出口，应当删除。
 - `cell_captured_symbols`：**保留**（确实是跨 Pass 传递的 UID 集合，无 AST 对应字段）。
 
-同时 v2 `BindingAnalysisPass.run()` 写入了三个 `MetadataStore` 未声明的字段：`llmexcept_bindings`、`intent_annotations`、`behavior_metadata`——这三个字段**不应当被声明**。正确做法：
+同时 `BindingAnalysisPass.run()` 写入了三个 `MetadataStore` 未声明的字段：`llmexcept_bindings`、`intent_annotations`、`behavior_metadata`——这三个字段**不应当被声明**。正确做法：
 
 - `llmexcept_bindings`：直接写回 AST（`IbLLMExceptionalStmt.target` / `IbFor.llmexcept_handler`，两个并存的 AST 通道，见下 §B.3）。
 - `intent_annotations`：写回 AST 或写回 `symbol_bindings`/`type_bindings`。
@@ -512,16 +511,15 @@ v2 `MetadataStore` 当前实现含 6 个字段：`symbol_bindings`、`type_bindi
 
 ### B.4 关于 `TypeEnvironment` 字段的修订
 
-v2 `TypeEnvironment` 当前含 `constraints` / `generic_instances` / `auto_return_accumulator` 三个字段。前两者来源于 Python 流派"约束求解 + 泛型实例化"思维，**不符合 IBCI 静态强类型 + auto 单次锁定的设计承诺**，应当在被写入前删除。仅保留 `auto_return_accumulator`，这是 `-> auto` 函数实现的唯一合法瞬态。
+`TypeEnvironment` 当前含 `constraints` / `generic_instances` / `auto_return_accumulator` 三个字段。前两者来源于 Python 流派"约束求解 + 泛型实例化"思维，**不符合 IBCI 静态强类型 + auto 单次锁定的设计承诺**，应当在被写入前删除。仅保留 `auto_return_accumulator`，这是 `-> auto` 函数实现的唯一合法瞬态。
 
 ### B.5 关于 §4.3 UID 生成策略的两个潜在地雷（待整改）
 
 - **类型 UID 冲突**：`type_{module}.{name}` 对结构化 `CALLABLE_SIG` 名字均为 "callable" 或匿名，会塌成同一 UID。当前未爆是因为 fn 推断少；D3（HOF 参数签名匹配）开始落地时会成为故障源。**改法**：CALLABLE_SIG 的 UID 改为 `sig_<sha16(return_head + ','.join(param_heads))>`。
-- **节点内容哈希的"语义重影"**：两个语法相同但语义不同的节点（如不同作用域的两个 `IbName("x")`）会被哈希到同一 UID，被侧表共用同一份绑定。当前能跑是因为 semantic 阶段用 `id()` 写、序列化前不重复；**只要哈希恰好相同就会塌**。改法见 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 报告 B 章节 B.3.2。
 
 ### B.6 关于 "MetadataStore.bind 返回新 store" 的反模式
 
-v2 当前实现采用 `{**self.symbol_bindings, k: v}` 拷整张字典模式（在 `metadata_store.py` 中）。节点上千就是 O(n²) 开销。改法：bind 改为 mutable in-place 更新，但**只允许从 Pass 内部调用**——这等价于 v1 的 SideTableManager 的成熟方案。"不可变 Context" 的设计承诺**不需要落到 MetadataStore 内部字典级别**。
+当前实现采用 `{**self.symbol_bindings, k: v}` 拷整张字典模式（在 `metadata_store.py` 中）。节点上千就是 O(n²) 开销。改法：bind 改为 mutable in-place 更新，但**只允许从 Pass 内部调用**——这等价于 v1 的 SideTableManager 的成熟方案。"不可变 Context" 的设计承诺**不需要落到 MetadataStore 内部字典级别**。
 
 ### B.7 反模式警告的扩充（取代 §8.3）
 

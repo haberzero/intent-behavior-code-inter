@@ -9,7 +9,7 @@ from core.kernel import ast
 from core.kernel.spec import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
-from core.compiler.semantic_v2.passes.type_checking_pass import TypeCheckingPass
+from core.compiler.semantic.passes.type_checking_pass import TypeCheckingPass
 from .conftest import make_context
 
 

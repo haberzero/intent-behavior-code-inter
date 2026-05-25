@@ -5,8 +5,8 @@ Semantic Analyzer — 编译器调度器入口
 内部使用 7-pass pipeline 实现。
 
 用法:
-    from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
-    analyzer = SemanticAnalyzerV2(issue_tracker, debugger=..., registry=..., module_name=...)
+    from core.compiler.semantic.analyzer import SemanticAnalyzer
+    analyzer = SemanticAnalyzer(issue_tracker, debugger=..., registry=..., module_name=...)
     # inject symbols into analyzer.symbol_table ...
     result = analyzer.analyze(ast_node)
 """
@@ -24,7 +24,7 @@ from .result import PassResult, DiagnosticLevel
 from .adapter import pass_result_to_compilation_result
 
 
-class SemanticAnalyzerV2:
+class SemanticAnalyzer:
     """
     语义分析器 — scheduler 兼容入口。
 
@@ -70,7 +70,7 @@ class SemanticAnalyzerV2:
             CompilationResult: 包含 module_ast, symbol_table, node_to_symbol,
                                node_to_type, node_to_loc
         """
-        self.debugger.enter_scope(CoreModule.SEMANTIC, "Starting semantic analysis (V2 pipeline)...")
+        self.debugger.enter_scope(CoreModule.SEMANTIC, "Starting semantic analysis...")
         try:
             # 构建初始上下文
             context = self._build_context(node)
@@ -94,7 +94,7 @@ class SemanticAnalyzerV2:
 
             self.debugger.trace(
                 CoreModule.SEMANTIC, DebugLevel.BASIC,
-                "Semantic analysis (V2) complete."
+                "Semantic analysis complete."
             )
 
             return compilation_result
@@ -103,9 +103,9 @@ class SemanticAnalyzerV2:
 
     def _build_context(self, node: ibci_ast.IbASTNode) -> SemanticContext:
         """
-        构建 v2 pipeline 的初始 SemanticContext。
+        构建 pipeline 的初始 SemanticContext。
 
-        将 scheduler 注入到 self.symbol_table 的符号全部迁移到 v2 上下文。
+        将 scheduler 注入到 self.symbol_table 的符号全部迁移到上下文。
         """
         context = (
             ContextBuilder()
@@ -115,8 +115,8 @@ class SemanticAnalyzerV2:
             .build()
         )
 
-        # 将 scheduler 预注入的符号（predefined + imports）同步到 v2 上下文的 symbol_table
-        # v2 ContextBuilder.build() 已注入 builtin prelude；
+        # 将 scheduler 预注入的符号（predefined + imports）同步到上下文的 symbol_table
+        # ContextBuilder.build() 已注入 builtin prelude；
         # 这里额外注入 scheduler 级别的符号（模块导入等）
         for name, sym in self.symbol_table.symbols.items():
             existing = context.symbol_table.resolve(name)

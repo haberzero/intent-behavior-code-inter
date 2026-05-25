@@ -9,7 +9,7 @@ Covers fixes:
 import pytest
 from core.kernel import ast
 from core.kernel.ast import IntentMode
-from core.compiler.semantic_v2.passes.binding_analysis_pass import BindingAnalysisPass
+from core.compiler.semantic.passes.binding_analysis_pass import BindingAnalysisPass
 from .conftest import make_context
 
 
@@ -76,7 +76,7 @@ class TestLLMExceptReadOnlyConstraint:
 
     def test_sem052_outer_scope_write_produces_error(self, spec_registry):
         """Writing to outer-scope variable in llmexcept body produces SEM_052."""
-        from core.compiler.semantic_v2.result import DiagnosticLevel
+        from core.compiler.semantic.result import DiagnosticLevel
 
         # 构造: x = @~something~  llmexcept: x = 1
         behavior = ast.IbBehaviorExpr(segments=["compute something"])

@@ -435,9 +435,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         暴露分段语义分析接口，允许观察中间产物。
         """
-        from core.compiler.semantic_v2.analyzer import SemanticAnalyzerV2
+        from core.compiler.semantic.analyzer import SemanticAnalyzer
         if analyzer is None:
-            analyzer = SemanticAnalyzerV2(
+            analyzer = SemanticAnalyzer(
                 issue_tracker=self.issue_tracker, 
                 registry=self.registry.get_metadata_registry(),
                 debugger=self.debugger

@@ -238,7 +238,7 @@ class TypeCheckingVisitor:
         return self._void_desc
 
     def _handle_assign_target(self, node: ast.IbAssign, target: ast.IbASTNode, val_type: IbSpec):
-        """处理单个赋值目标 — P1-B: auto 单次锁定 / any 永久动态"""
+        """处理单个赋值目标：auto 单次锁定 / any 永久动态"""
         # Store current node for use by _infer_fn_type
         self._current_node = node
 
@@ -257,7 +257,7 @@ class TypeCheckingVisitor:
                 # Resolve declared_type if it's a TypeRef
                 if isinstance(declared_type, TypeRef):
                     declared_type = self.registry.resolve(declared_type.head) or self._any_desc
-                # P1-B: 类型推断策略
+                # 类型推断策略
                 target_type = self._infer_target_type_from_declared(declared_type, val_type)
             elif sym and sym.spec:
                 # 已存在的符号：使用现有类型
@@ -360,7 +360,7 @@ class TypeCheckingVisitor:
         return var_name, declared_type
 
     def _infer_target_type_from_declared(self, declared_type: IbSpec, val_type: IbSpec) -> IbSpec:
-        """P1-B: 根据声明类型推导目标类型（auto 锁定 / any 永久 / fn 推断）。
+        """根据声明类型推导目标类型（auto 锁定 / any 永久 / fn 推断）。
 
         - `any`：变量 spec 永久保持为 any，不因首次赋值类型窄化。
         - `auto`：从首次赋值的实际类型推断并锁定。行为表达式的 LLM 输出天然是字符串。
@@ -651,7 +651,7 @@ class TypeCheckingVisitor:
             for stmt in node.body:
                 self.visit(stmt)
 
-            # P1-B: -> auto 函数返回类型统一
+            # -> auto 函数返回类型统一
             if is_auto_return and self.auto_return_types:
                 unique = list({s.name: s for s in self.auto_return_types if s}.values())
                 if len(unique) == 1:
@@ -767,7 +767,7 @@ class TypeCheckingVisitor:
         return tuple_type
 
     def visit_IbBinOp(self, node: ast.IbBinOp) -> Optional[IbSpec]:
-        """访问二元运算 — P1-B: 接通 registry.resolve_op"""
+        """访问二元运算"""
         left_type = self.visit(node.left)
         right_type = self.visit(node.right)
 
@@ -797,7 +797,7 @@ class TypeCheckingVisitor:
         return result_type
 
     def visit_IbUnaryOp(self, node: ast.IbUnaryOp) -> Optional[IbSpec]:
-        """访问一元运算 — P1-B: 接通 registry.resolve_op"""
+        """访问一元运算"""
         operand_type = self.visit(node.operand)
 
         # 贯彻"一切皆对象"：调用操作数的自决议方法 (other=None 表示一元运算)
@@ -810,7 +810,7 @@ class TypeCheckingVisitor:
         return result_type
 
     def visit_IbCompare(self, node: ast.IbCompare) -> Optional[IbSpec]:
-        """访问比较运算 — P1-B: 接通 registry.resolve_op"""
+        """访问比较运算"""
         left_type = self.visit(node.left)
         for comparator in node.comparators:
             self.visit(comparator)
@@ -1111,7 +1111,7 @@ class TypeCheckingVisitor:
         self.bind_type(node, declared_type)
         return declared_type
 
-    # ========== P1-C: 补齐的 AST 节点 visitor ==========
+    # ========== 补齐的 AST 节点 visitor ==========
 
     def visit_IbExprStmt(self, node: ast.IbExprStmt) -> Optional[IbSpec]:
         """访问表达式语句"""

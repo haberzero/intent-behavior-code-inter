@@ -1,18 +1,18 @@
-"""Tests for P1 semantic_v2 enhancements:
-- P1-B: auto lock, any permanent, -> auto unification, resolve_op
-- P1-C: AST node visitor coverage
-- P1-E: TypeResolutionPass
-- P1-F: llmexcept body rewrite (bind_llm_except)
+"""Tests for semantic type system features:
+- auto lock, any permanent, -> auto unification, resolve_op
+- AST node visitor coverage
+- TypeResolutionPass
+- llmexcept body rewrite (bind_llm_except)
 """
 
 import pytest
 from core.kernel import ast
 from core.kernel.factory import create_default_registry
-from core.compiler.semantic_v2.pipeline import create_semantic_pipeline
-from core.compiler.semantic_v2.context import ContextBuilder
-from core.compiler.semantic_v2.passes.type_resolution_pass import TypeResolutionPass
-from core.compiler.semantic_v2.passes.type_checking_pass import TypeCheckingPass
-from core.compiler.semantic_v2.passes.binding_analysis_pass import BindingAnalysisPass
+from core.compiler.semantic.pipeline import create_semantic_pipeline
+from core.compiler.semantic.context import ContextBuilder
+from core.compiler.semantic.passes.type_resolution_pass import TypeResolutionPass
+from core.compiler.semantic.passes.type_checking_pass import TypeCheckingPass
+from core.compiler.semantic.passes.binding_analysis_pass import BindingAnalysisPass
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def make_context(module, registry):
     return ContextBuilder().with_ast(module).with_registry(registry).with_module_name("test").build()
 
 
-# ========== P1-B: auto 单次锁定 ==========
+# ========== auto 单次锁定 ==========
 
 class TestAutoLock:
     def test_auto_infers_from_int(self, registry, pipeline):
@@ -63,7 +63,7 @@ class TestAutoLock:
         assert result.success
 
 
-# ========== P1-B: any 永久动态 ==========
+# ========== any 永久动态 ==========
 
 class TestAnyPermanent:
     def test_any_stays_any(self, registry, pipeline):
@@ -82,7 +82,7 @@ class TestAnyPermanent:
         assert result.success
 
 
-# ========== P1-B: resolve_op ==========
+# ========== resolve_op ==========
 
 class TestResolveOp:
     def test_binop_int_plus_int(self, registry, pipeline):
@@ -133,7 +133,7 @@ class TestResolveOp:
         assert result.success
 
 
-# ========== P1-B: -> auto 函数返回类型统一 ==========
+# ========== -> auto 函数返回类型统一 ==========
 
 class TestAutoReturn:
     def test_auto_return_single_type(self, registry, pipeline):
@@ -173,7 +173,7 @@ class TestAutoReturn:
         assert len(sem003) > 0
 
 
-# ========== P1-C: AST 节点 visitor 补齐 ==========
+# ========== AST 节点 visitor 覆盖 ==========
 
 class TestVisitorCoverage:
     def test_expr_stmt(self, registry, pipeline):
@@ -319,7 +319,7 @@ class TestVisitorCoverage:
         assert result.success
 
 
-# ========== P1-E: TypeResolutionPass ==========
+# ========== TypeResolutionPass ==========
 
 class TestTypeResolutionPass:
     def test_resolves_auto(self, registry):
@@ -356,7 +356,7 @@ class TestTypeResolutionPass:
         assert len(sem004) == 1
 
 
-# ========== P1-F: llmexcept body 重写 ==========
+# ========== llmexcept body 重写 ==========
 
 class TestLLMExceptRewrite:
     def test_regular_llmexcept_binds_to_prev_stmt(self, registry, pipeline):
