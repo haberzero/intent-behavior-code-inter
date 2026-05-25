@@ -33,14 +33,11 @@ class SemanticAnalyzer:
     - analyze(node) → CompilationResult
     - symbol_table: SymbolTable（供 scheduler 注入导入符号）
 
-    内部使用 7-pass pipeline:
-    1. SymbolCollectionPass
-    2. SymbolResolutionPass
-    3. TypeResolutionPass
-    4. TypeCheckingPass
-    5. BindingAnalysisPass
-    6. BehaviorDependencyPass
-    7. IntegrityCheckPass
+    内部使用 4-phase pipeline:
+    1. SymbolPhase（符号收集 + 符号解析）
+    2. TypePhase（类型解析 + 类型检查/推断）
+    3. BindingPhase（绑定分析 + 行为依赖分析）
+    4. IntegrityPhase（完整性检查）
     """
 
     def __init__(

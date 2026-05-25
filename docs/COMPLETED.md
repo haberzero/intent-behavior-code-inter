@@ -4,7 +4,22 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`、`docs/ARCHITECTURE_REVIEW_2026-05-15.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-25（追加：PT-ARCH-3 完成）
+> **最后更新**：2026-05-25（追加：PT-ARCH-4 完成）
+
+---
+
+## 2026-05-25 锚点 G：PT-ARCH-4 7-Pass 归并为 4-Phase
+
+完成 Semantic Pipeline 架构改进路线图 Step 4（772 passed, 7 skipped, 0 failures）：
+
+- **新建 4 个 Phase 文件**（`core/compiler/semantic/passes/`）：
+  - `symbol_phase.py`：SymbolPhase（组合 SymbolCollectionPass + SymbolResolutionPass）
+  - `type_phase.py`：TypePhase（组合 TypeResolutionPass + TypeCheckingPass）
+  - `binding_phase.py`：BindingPhase（组合 BindingAnalysisPass + BehaviorDependencyPass）
+  - `integrity_phase.py`：IntegrityPhase（包装 IntegrityCheckPass）
+- **`pipeline.py` 重写 `create_semantic_pipeline()`**：从 7 个 Pass 实例化为 4 个 Phase
+- **原子 Pass 文件保留**：作为 Phase 内部实现组件，保持可独立测试
+- **0 回归**：全量 772 测试通过
 
 ---
 

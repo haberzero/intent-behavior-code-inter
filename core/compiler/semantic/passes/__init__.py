@@ -8,6 +8,10 @@ from .type_checking_pass import TypeCheckingPass
 from .binding_analysis_pass import BindingAnalysisPass
 from .behavior_dependency_pass import BehaviorDependencyPass
 from .integrity_check_pass import IntegrityCheckPass
+from .symbol_phase import SymbolPhase
+from .type_phase import TypePhase
+from .binding_phase import BindingPhase
+from .integrity_phase import IntegrityPhase
 
 __all__ = [
     'BasePass',
@@ -17,5 +21,9 @@ __all__ = [
     'TypeCheckingPass',
     'BindingAnalysisPass',
     'BehaviorDependencyPass',
-    'IntegrityCheckPass'
+    'IntegrityCheckPass',
+    'SymbolPhase',
+    'TypePhase',
+    'BindingPhase',
+    'IntegrityPhase',
 ]
