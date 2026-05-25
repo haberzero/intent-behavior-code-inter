@@ -43,8 +43,8 @@ class TypeCheckingPass(BasePass):
         for node, type_spec in visitor.type_bindings.items():
             new_metadata.bind_type(node, type_spec)
 
-        # TypeEnvironment is updated through visitor operations
-        # No need to explicitly update it here
+        # TypeInferenceState: auto-return accumulation managed by visitor locally
+        # (TypeSlots available for future fn parameter propagation)
 
         new_context = replace(context, metadata=new_metadata)
 

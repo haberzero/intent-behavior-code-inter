@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-25（Semantic 清理完成：v1 删除、v2 命名移除、目录重组完毕）
+> **最后更新**：2026-05-25（新增 P0 Semantic 架构改进 5 步路线图）
 
 ---
 
@@ -18,9 +18,42 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## ⏭ 当前 P0：无紧要阻塞项
+## ⏭ 当前 P0：Semantic Pipeline 架构改进（5 步渐进式重构）
 
-Semantic pipeline 作为唯一分析路径已稳定运行。下一步可推进 `docs/PENDING_TASKS.md` 中的 PT-SEM-1（生产就绪化）。
+> 目标：使 IBCI 类型系统与语义分析架构更清晰、更易维护、更符合现代编译器设计理念。
+> 原则：不引入完整 HM/约束求解；保持"单次锁定 + 公理调度"核心哲学；但为未来高阶函数与类型传播留下受控扩展点。
+
+### Step 1（当前）：TypeEnvironment → TypeInferenceState
+
+**风险**：最低（TypeEnvironment 当前完全未被任何 pass 使用，是空壳）
+
+- 删除死代码 `TypeEnvironment`（bindings/accumulator 两字段零使用）
+- 引入 `TypeInferenceState`：仅保留 `auto_return_accumulator` 功能 + 新增 `TypeSlot` 受控延迟绑定点
+- `TypeSlot` 设计：单次写入锁定（不是 unification variable），为未来 `fn` 参数类型传播预留扩展
+- 更新 `SemanticContext`、测试 imports
+
+### Step 2（后续）：ScopedVisitor 基类 + context manager scope 管理
+
+- 统一 4 个 pass 中重复的 scope_stack / push_scope / pop_scope 代码（~200 行重复消除）
+- 引入 `@contextmanager enter_scope()` 保证 scope 生命周期安全
+
+### Step 3（后续）：SpecRegistry.resolve_call_return() 统一类型决议
+
+- 在 Registry 层提供单一入口处理所有 callable 形态的返回类型推断
+- 简化 TypeCheckingPass.visit_IbCall 从 ~100 行 5 层 fallback 降到 ~15 行
+
+### Step 4（后续）：7-Pass 归并为 4-Phase
+
+- Phase 1: SymbolPhase（Pass 1+2 合并，共享 scope stack）
+- Phase 2: TypePhase（Pass 3+4 合并，消除重复 _resolve_type）
+- Phase 3: BindingPhase（Pass 5+6 合并，一次 traversal）
+- Phase 4: IntegrityPhase（保持独立）
+
+### Step 5（后续）：PassOutput + Immutable Pipeline
+
+- 每个 Phase 产出显式 `PassOutput`（不再 mutate context 内部容器）
+- Pipeline 负责 merge 多个 PassOutput 到最终 CompilationResult
+- 实现真正的 context threading
 
 ---
 
