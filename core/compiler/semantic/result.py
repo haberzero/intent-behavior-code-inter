@@ -7,28 +7,20 @@ values that flow through the pipeline rather than being thrown as exceptions.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Any, Dict
-from core.kernel import ast as ibci_ast
+from typing import List, Optional, Any, Dict, Set
 
 
 class DiagnosticLevel(Enum):
     """Diagnostic severity levels"""
-    ERROR = "error"       # Prevents code generation
-    WARNING = "warning"   # Code may run but has issues
-    INFO = "info"         # Informational message
-    HINT = "hint"         # Suggestion for improvement
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+    HINT = "hint"
 
 
 @dataclass
 class Diagnostic:
-    """
-    A single diagnostic message (error, warning, etc.).
-
-    Design decisions:
-    - Immutable (frozen=True)
-    - Contains all information needed for display
-    - Can be serialized for IDE integration
-    """
+    """A single diagnostic message."""
     level: DiagnosticLevel
     message: str
     code: str  # e.g., "SEM_003"
@@ -41,22 +33,18 @@ class Diagnostic:
 
     @classmethod
     def error(cls, message: str, code: str = "SEM_000", **kwargs) -> 'Diagnostic':
-        """Create an error diagnostic"""
         return cls(level=DiagnosticLevel.ERROR, message=message, code=code, **kwargs)
 
     @classmethod
     def warning(cls, message: str, code: str = "SEM_000", **kwargs) -> 'Diagnostic':
-        """Create a warning diagnostic"""
         return cls(level=DiagnosticLevel.WARNING, message=message, code=code, **kwargs)
 
     @classmethod
     def info(cls, message: str, code: str = "SEM_000", **kwargs) -> 'Diagnostic':
-        """Create an info diagnostic"""
         return cls(level=DiagnosticLevel.INFO, message=message, code=code, **kwargs)
 
     @classmethod
     def from_exception(cls, exc: Exception, node_uid: Optional[str] = None) -> 'Diagnostic':
-        """Create an error diagnostic from an exception"""
         return cls(
             level=DiagnosticLevel.ERROR,
             message=str(exc),
@@ -72,7 +60,6 @@ class Diagnostic:
         return self.level == DiagnosticLevel.WARNING
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         return {
             'level': self.level.value,
             'message': self.message,
@@ -85,78 +72,85 @@ class Diagnostic:
         }
 
 
+@dataclass(frozen=True)
+class PassOutput:
+    """Immutable output produced by a single Phase.
+
+    Each Phase collects its bindings into a PassOutput. The Pipeline
+    merges all PassOutputs into the final MetadataStore without ever
+    mutating shared state during analysis.
+    """
+    symbol_bindings: Dict[Any, Any] = field(default_factory=dict)
+    type_bindings: Dict[Any, Any] = field(default_factory=dict)
+    location_bindings: Dict[Any, Any] = field(default_factory=dict)
+    cell_captured_symbols: Set[str] = field(default_factory=set)
+    diagnostics: List[Diagnostic] = field(default_factory=list)
+    success: bool = True
+
+    def has_errors(self) -> bool:
+        return any(d.is_error() for d in self.diagnostics)
+
+
 @dataclass
 class PassResult:
-    """
-    Result of executing a semantic analysis pass.
+    """Result of executing a semantic analysis pass.
 
-    Design: Functional programming pattern - passes don't mutate state,
-    they return new contexts and accumulated diagnostics.
-    All diagnostics are collected and reported together at the end.
+    Carries the (possibly updated) context and a PassOutput with
+    the bindings produced by that pass.
     """
-    context: 'SemanticContext'  # Updated context (may be the same if pass failed)
-    metadata: Dict[str, Any]    # Pass-specific metadata (e.g., collected symbols)
-    diagnostics: List[Diagnostic]
-    success: bool
+    context: 'SemanticContext'
+    output: PassOutput
     pass_name: str = "unknown"
 
+    # Legacy fields kept for internal Phase sub-step coordination
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def diagnostics(self) -> List[Diagnostic]:
+        return self.output.diagnostics
+
+    @property
+    def success(self) -> bool:
+        return self.output.success
+
     @classmethod
-    def ok(cls, context: 'SemanticContext', metadata: Optional[Dict[str, Any]] = None,
-           diagnostics: Optional[List[Diagnostic]] = None, pass_name: str = "unknown") -> 'PassResult':
-        """Create a successful result"""
+    def ok(cls, context: 'SemanticContext',
+           output: Optional[PassOutput] = None,
+           diagnostics: Optional[List[Diagnostic]] = None,
+           metadata: Optional[Dict[str, Any]] = None,
+           pass_name: str = "unknown") -> 'PassResult':
+        """Create a successful result."""
+        if output is None:
+            output = PassOutput(diagnostics=diagnostics or [], success=True)
         return cls(
             context=context,
+            output=output,
             metadata=metadata or {},
-            diagnostics=diagnostics or [],
-            success=True,
             pass_name=pass_name
         )
 
     @classmethod
     def fail(cls, context: 'SemanticContext', diagnostic: Diagnostic,
-             metadata: Optional[Dict[str, Any]] = None, pass_name: str = "unknown") -> 'PassResult':
-        """Create a failed result"""
+             metadata: Optional[Dict[str, Any]] = None,
+             pass_name: str = "unknown") -> 'PassResult':
+        """Create a failed result."""
+        output = PassOutput(diagnostics=[diagnostic], success=False)
         return cls(
             context=context,
+            output=output,
             metadata=metadata or {},
-            diagnostics=[diagnostic],
-            success=False,
             pass_name=pass_name
         )
 
     def has_errors(self) -> bool:
-        """Check if result contains any errors"""
-        return any(d.is_error() for d in self.diagnostics)
+        return self.output.has_errors()
 
     def has_warnings(self) -> bool:
-        """Check if result contains any warnings"""
-        return any(d.is_warning() for d in self.diagnostics)
-
-    def add_diagnostic(self, diagnostic: Diagnostic) -> 'PassResult':
-        """Add a diagnostic to this result (returns new result)"""
-        from dataclasses import replace
-        new_diagnostics = self.diagnostics + [diagnostic]
-        return replace(
-            self,
-            diagnostics=new_diagnostics,
-            success=self.success and not diagnostic.is_error()
-        )
-
-    def merge(self, other: 'PassResult') -> 'PassResult':
-        """Merge two results (for combining parallel analyses)"""
-        from dataclasses import replace
-        return replace(
-            self,
-            metadata={**self.metadata, **other.metadata},
-            diagnostics=self.diagnostics + other.diagnostics,
-            success=self.success and other.success
-        )
+        return any(d.is_warning() for d in self.output.diagnostics)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization"""
         return {
             'pass_name': self.pass_name,
             'success': self.success,
             'diagnostics': [d.to_dict() for d in self.diagnostics],
-            'metadata_keys': list(self.metadata.keys()),
         }

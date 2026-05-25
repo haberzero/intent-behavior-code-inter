@@ -35,21 +35,16 @@ class TypeCheckingPass(BasePass):
         super().__init__("TypeCheckingPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行类型检查 Pass"""
+        from ..result import PassOutput
         visitor = TypeCheckingVisitor(context)
         visitor.visit(context.ast)
 
-        # 更新 metadata 中的类型绑定（node object → IbSpec）
-        new_metadata = context.metadata
-        for node, type_spec in visitor.type_bindings.items():
-            new_metadata.bind_type(node, type_spec)
-
-        # TypeInferenceState: auto-return accumulation managed by visitor locally
-        # (TypeSlots available for future fn parameter propagation)
-
-        new_context = replace(context, metadata=new_metadata)
-
-        return PassResult.ok(new_context, diagnostics=visitor.diagnostics)
+        output = PassOutput(
+            type_bindings=dict(visitor.type_bindings),
+            diagnostics=visitor.diagnostics,
+            success=True,
+        )
+        return PassResult.ok(context, output=output)
 
 
 class TypeCheckingVisitor(ScopedVisitor):

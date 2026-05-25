@@ -64,12 +64,8 @@ class SymbolCollectionPass(BasePass):
         super().__init__("SymbolCollectionPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行符号收集 Pass"""
         visitor = SymbolCollector(context)
         visitor.visit(context.ast)
-
-        # 符号表已在 visitor 中原地修改（SymbolTableContext 设计）
-        # 无需更新 context，直接返回
         return PassResult.ok(context, diagnostics=visitor.diagnostics)
 
 

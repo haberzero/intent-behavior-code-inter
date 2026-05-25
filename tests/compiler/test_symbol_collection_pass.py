@@ -24,7 +24,6 @@ def create_test_context(ast_node):
         module_name="test_module",
         symbol_table=SymbolTableContext(current=symbol_table),
         type_environment=TypeInferenceState(),
-        metadata=MetadataStore()
     )
     return context
 

@@ -31,18 +31,16 @@ class SymbolResolutionPass(BasePass):
         super().__init__("SymbolResolutionPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行符号解析 Pass"""
+        from ..result import PassOutput
         visitor = SymbolResolver(context)
         visitor.visit(context.ast)
 
-        # 更新 metadata 中的符号绑定（node object → Symbol）
-        new_metadata = context.metadata
-        for node, symbol in visitor.symbol_bindings.items():
-            new_metadata.bind_symbol(node, symbol)
-
-        new_context = context.with_metadata(new_metadata)
-
-        return PassResult.ok(new_context, diagnostics=visitor.diagnostics)
+        output = PassOutput(
+            symbol_bindings=dict(visitor.symbol_bindings),
+            diagnostics=visitor.diagnostics,
+            success=True,
+        )
+        return PassResult.ok(context, output=output)
 
 
 class SymbolResolver(ScopedVisitor):

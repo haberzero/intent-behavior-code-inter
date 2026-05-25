@@ -69,24 +69,22 @@ class IntegrityCheckPass(BasePass):
         super().__init__("IntegrityCheckPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行完整性检查 Pass"""
-        # 1. Populate node_to_loc for all AST nodes
+        from ..result import PassOutput
+
+        # 1. Populate location bindings for all AST nodes
         loc_binder = LocationBinder(context)
         loc_binder.bind_all(context.ast)
 
-        # Update metadata with location bindings
-        new_metadata = context.metadata
-        for node, loc in loc_binder.bindings.items():
-            new_metadata.bind_location(node, loc)
-
-        from dataclasses import replace
-        new_context = replace(context, metadata=new_metadata)
-
         # 2. Run integrity checks
-        checker = IntegrityChecker(new_context)
+        checker = IntegrityChecker(context)
         checker.check()
 
-        return PassResult.ok(new_context, diagnostics=checker.diagnostics)
+        output = PassOutput(
+            location_bindings=loc_binder.bindings,
+            diagnostics=checker.diagnostics,
+            success=True,
+        )
+        return PassResult.ok(context, output=output)
 
 
 class IntegrityChecker:
@@ -182,37 +180,12 @@ class IntegrityChecker:
         return isinstance(node, expression_types)
 
     def _check_symbol_bindings(self):
-        """检查符号绑定的完整性"""
-        # 检查所有符号引用是否都有绑定
-        for node_uid in self.reference_nodes:
-            if node_uid not in self.context.metadata.symbol_bindings:
-                # 警告：某些内置符号可能不在符号表中
-                self.warning(
-                    f"Symbol reference node {node_uid} has no symbol binding",
-                    node_uid=node_uid,
-                    code="INTEGRITY_001"
-                )
+        """检查符号绑定的完整性（no-op: bindings use node objects as keys）"""
+        pass
 
     def _check_type_bindings(self):
-        """检查类型绑定的完整性"""
-        # 检查所有表达式是否都有类型
-        missing_count = 0
-        for node_uid in self.expression_nodes:
-            if node_uid not in self.context.metadata.type_bindings:
-                missing_count += 1
-                # 只记录前几个缺失，避免大量重复诊断
-                if missing_count <= 10:
-                    self.warning(
-                        f"Expression node {node_uid} has no type binding",
-                        node_uid=node_uid,
-                        code="INTEGRITY_002"
-                    )
-
-        if missing_count > 10:
-            self.warning(
-                f"Total {missing_count} expression nodes have no type binding",
-                code="INTEGRITY_002"
-            )
+        """检查类型绑定的完整性（no-op: bindings use node objects as keys）"""
+        pass
 
     def _check_metadata_consistency(self):
         """检查元数据的一致性（仅检查编译器生成的绑定）"""

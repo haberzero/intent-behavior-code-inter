@@ -39,17 +39,16 @@ class TypeResolutionPass(BasePass):
         super().__init__("TypeResolutionPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行类型解析 Pass"""
+        from ..result import PassOutput
         resolver = TypeAnnotationResolver(context)
         resolver.resolve(context.ast)
 
-        # 更新 metadata 中的类型绑定（node object → IbSpec）
-        new_metadata = context.metadata
-        for node, type_spec in resolver.resolved_types.items():
-            new_metadata.bind_type(node, type_spec)
-
-        new_context = replace(context, metadata=new_metadata)
-        return PassResult.ok(new_context, diagnostics=resolver.diagnostics)
+        output = PassOutput(
+            type_bindings=dict(resolver.resolved_types),
+            diagnostics=resolver.diagnostics,
+            success=True,
+        )
+        return PassResult.ok(context, output=output)
 
 
 class TypeAnnotationResolver:

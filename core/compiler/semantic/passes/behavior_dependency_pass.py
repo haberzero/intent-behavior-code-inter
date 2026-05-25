@@ -33,17 +33,9 @@ class BehaviorDependencyPass(BasePass):
         super().__init__("BehaviorDependencyPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        """运行行为依赖分析 Pass
-
-        分析结果直接写入 AST 节点的 llm_deps 和 dispatch_eligible 字段。
-        依赖信息是程序结构的一部分，应该持久化到 AST。
-        """
+        """分析结果直接写入 AST 节点的 llm_deps 和 dispatch_eligible 字段。"""
         analyzer = BehaviorDependencyAnalyzer(context)
         analyzer.analyze()
-
-        # 分析器已经将结果写入 AST 节点
-        # 无需修改 metadata，因为 llm_deps 和 dispatch_eligible 是 AST 固有属性
-
         return PassResult.ok(context, diagnostics=analyzer.diagnostics)
 
 

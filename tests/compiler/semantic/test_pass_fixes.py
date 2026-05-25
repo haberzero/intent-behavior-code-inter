@@ -83,7 +83,7 @@ class TestForLoopVariableScope:
         # The for-loop target node should be in node_to_symbol
         for_stmt = module.body[1]
         target_node = for_stmt.target
-        assert target_node in result.context.metadata.node_to_symbol
+        assert target_node in result.metadata.node_to_symbol
 
     def test_for_loop_tuple_unpack(self, registry):
         """Tuple unpacking in for-loop should register all variables."""
@@ -136,7 +136,7 @@ class TestTypeCheckingPopulation:
         result = run_pipeline(module, registry)
         # The constant node should have a type binding
         const_node = module.body[0].value
-        bound_type = result.context.metadata.node_to_type.get(const_node)
+        bound_type = result.metadata.node_to_type.get(const_node)
         assert bound_type is not None, "Constant 42 should have a type binding"
         assert bound_type.name == "int"
 
@@ -150,7 +150,7 @@ class TestTypeCheckingPopulation:
         ])
         result = run_pipeline(module, registry)
         const_node = module.body[0].value
-        bound_type = result.context.metadata.node_to_type.get(const_node)
+        bound_type = result.metadata.node_to_type.get(const_node)
         assert bound_type is not None, "String constant should have a type binding"
         assert bound_type.name == "str"
 
@@ -167,7 +167,7 @@ class TestTypeCheckingPopulation:
         ])
         result = run_pipeline(module, registry)
         behavior_node = module.body[0].value
-        bound_type = result.context.metadata.node_to_type.get(behavior_node)
+        bound_type = result.metadata.node_to_type.get(behavior_node)
         assert bound_type is not None, "BehaviorExpr should have a type binding"
         # BehaviorExpr adapts to receiver's type (str in this case)
         assert bound_type.name == "str"
@@ -199,8 +199,8 @@ class TestTypeCheckingPopulation:
             ),
         ])
         result = run_pipeline(module, registry)
-        assert len(result.context.metadata.node_to_type) >= 5, \
-            f"Expected >= 5 type bindings, got {len(result.context.metadata.node_to_type)}"
+        assert len(result.metadata.node_to_type) >= 5, \
+            f"Expected >= 5 type bindings, got {len(result.metadata.node_to_type)}"
 
 
 # ============================================================
@@ -220,7 +220,7 @@ class TestNodeToLocPopulation:
         ])
         result = run_pipeline(module, registry)
         # At minimum: IbModule, IbAssign, IbName, IbConstant = 4 nodes
-        assert len(result.context.metadata.node_to_loc) >= 4
+        assert len(result.metadata.node_to_loc) >= 4
 
     def test_location_has_expected_fields(self, registry):
         """Location bindings should contain file_path, line, column."""
@@ -232,7 +232,7 @@ class TestNodeToLocPopulation:
         ])
         result = run_pipeline(module, registry)
         # Pick any node and check structure
-        for node, loc in result.context.metadata.node_to_loc.items():
+        for node, loc in result.metadata.node_to_loc.items():
             assert "file_path" in loc
             assert "line" in loc
             assert "column" in loc
@@ -269,6 +269,6 @@ class TestNodeToLocPopulation:
             return c
 
         total_nodes = count_nodes(module)
-        loc_count = len(result.context.metadata.node_to_loc)
+        loc_count = len(result.metadata.node_to_loc)
         assert loc_count == total_nodes, \
             f"node_to_loc has {loc_count} entries but AST has {total_nodes} nodes"

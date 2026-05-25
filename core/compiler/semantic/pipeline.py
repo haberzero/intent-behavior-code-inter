@@ -1,84 +1,101 @@
 """
-Semantic Pipeline - 语义分析管道协调器
+Semantic Pipeline — 语义分析管道协调器
 
-协调多个 Pass 的执行，管理上下文传递和诊断收集
+协调 4 个 Phase 的执行，收集 PassOutput，最终合并为 MetadataStore。
 """
 
 from typing import List
-from .result import PassResult
+from .result import PassResult, PassOutput
 from .context import SemanticContext
+from .metadata.metadata_store import MetadataStore
 from .passes.base_pass import BasePass
 
 
 class SemanticPipeline:
     """语义分析管道
 
-    按顺序运行多个 Pass，传递上下文，收集所有诊断信息
+    按顺序运行多个 Phase，每个 Phase 产出 PassOutput。
+    Pipeline 在所有 Phase 完成后合并产物为最终 MetadataStore。
     """
 
     def __init__(self, passes: List[BasePass]):
-        """初始化管道
-
-        Args:
-            passes: Pass 列表，按执行顺序排列
-        """
         self.passes = passes
 
-    def run(self, context: SemanticContext) -> PassResult:
-        """运行管道中的所有 Pass
+    def run(self, context: SemanticContext) -> 'PipelineResult':
+        """运行管道中的所有 Phase，返回 PipelineResult。"""
+        from dataclasses import replace
 
-        Args:
-            context: 输入上下文
-
-        Returns:
-            PassResult: 最终结果，包含更新后的上下文和所有诊断信息
-        """
         current_context = context
-        all_diagnostics = []
-        all_metadata = {}
-        overall_success = True
+        outputs: List[PassOutput] = []
+        all_success = True
 
-        for i, pass_instance in enumerate(self.passes):
-            pass_name = pass_instance.__class__.__name__
+        # Accumulated bindings forwarded to subsequent phases
+        acc_symbol_bindings = {}
+        acc_type_bindings = {}
 
-            # 运行 Pass
+        for pass_instance in self.passes:
             result = pass_instance.run(current_context)
-
-            # 收集诊断信息
-            all_diagnostics.extend(result.diagnostics)
-
-            # 合并元数据
-            all_metadata[f"pass_{i}_{pass_name}"] = result.metadata
-
-            # 检查是否成功
-            if not result.success:
-                overall_success = False
-                # 即使失败也继续执行，收集更多错误信息
-
-            # 更新上下文（即使失败，也传递更新后的上下文）
+            outputs.append(result.output)
             current_context = result.context
+            if not result.success:
+                all_success = False
 
-        # 返回最终结果
-        return PassResult(
+            # Accumulate bindings from this phase
+            acc_symbol_bindings.update(result.output.symbol_bindings)
+            acc_type_bindings.update(result.output.type_bindings)
+
+            # Inject accumulated bindings into context for next phase
+            current_context = replace(
+                current_context,
+                prior_symbol_bindings=acc_symbol_bindings,
+                prior_type_bindings=acc_type_bindings,
+            )
+
+        # Merge all phase outputs into a single MetadataStore
+        metadata = MetadataStore.from_outputs(outputs)
+
+        return PipelineResult(
             context=current_context,
-            metadata=all_metadata,
-            diagnostics=all_diagnostics,
-            success=overall_success
+            metadata=metadata,
+            outputs=outputs,
+            success=all_success,
         )
 
+
+class PipelineResult:
+    """Final result of the semantic pipeline.
+
+    Carries the merged MetadataStore and aggregated diagnostics from all phases.
+    """
+
+    def __init__(self, context: SemanticContext, metadata: MetadataStore,
+                 outputs: List[PassOutput], success: bool):
+        self.context = context
+        self.metadata = metadata
+        self.outputs = outputs
+        self.success = success
+
+    @property
+    def diagnostics(self):
+        result = []
+        for out in self.outputs:
+            result.extend(out.diagnostics)
+        return result
+
+    @property
+    def has_errors(self):
+        from .result import DiagnosticLevel
+        return any(d.level == DiagnosticLevel.ERROR for d in self.diagnostics)
 
 
 def create_semantic_pipeline() -> SemanticPipeline:
     """创建标准的语义分析管道（4-Phase 架构）
 
-    Returns:
-        SemanticPipeline: 包含所有标准 Phase 的管道
-
     Phase 顺序：
-    1. SymbolPhase - 符号收集 + 符号解析（原 Pass 1+2）
-    2. TypePhase - 类型解析 + 类型检查/推断（原 Pass 2.5+3）
-    3. BindingPhase - 绑定分析 + 行为依赖分析（原 Pass 4+5）
-    4. IntegrityPhase - 完整性检查（原 Pass 6，独立）
+    1. SymbolPhase — 符号收集 + 符号解析
+    2. TypePhase — 类型解析 + 类型检查/推断
+    3. BindingPhase — 绑定分析 + 行为依赖分析
+    4. IntegrityPhase — 完整性检查
     """
     from .passes.symbol_phase import SymbolPhase
     from .passes.type_phase import TypePhase

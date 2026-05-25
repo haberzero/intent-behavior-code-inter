@@ -230,38 +230,35 @@ llmexcept:
 class TestMetadataStoreNodeObjectKeys:
     """MetadataStore uses node objects as keys (not UIDs)."""
 
-    def test_metadata_store_bind_symbol_uses_node_object(self):
-        """bind_symbol stores by node object identity."""
-        store = MetadataStore.create_empty()
+    def test_metadata_store_from_outputs_symbol_bindings(self):
+        """from_outputs correctly merges symbol_bindings."""
+        from core.compiler.semantic.result import PassOutput
         node = ast.IbName(id="x", ctx="Load")
-        store.bind_symbol(node, "fake_symbol")
-
+        output = PassOutput(symbol_bindings={node: "fake_symbol"})
+        store = MetadataStore.from_outputs([output])
         assert store.get_symbol(node) == "fake_symbol"
 
-    def test_metadata_store_bind_type_uses_node_object(self):
-        """bind_type stores by node object identity."""
-        store = MetadataStore.create_empty()
+    def test_metadata_store_from_outputs_type_bindings(self):
+        """from_outputs correctly merges type_bindings."""
+        from core.compiler.semantic.result import PassOutput
         node = ast.IbName(id="y", ctx="Load")
-        store.bind_type(node, "int_spec")
-
+        output = PassOutput(type_bindings={node: "int_spec"})
+        store = MetadataStore.from_outputs([output])
         assert store.get_type(node) == "int_spec"
 
-    def test_metadata_store_merge(self):
-        """merge combines two stores correctly."""
-        store1 = MetadataStore.create_empty()
-        store2 = MetadataStore.create_empty()
-
+    def test_metadata_store_from_outputs_merge_multiple(self):
+        """from_outputs merges multiple PassOutputs correctly."""
+        from core.compiler.semantic.result import PassOutput
         node1 = ast.IbName(id="a", ctx="Load")
         node2 = ast.IbName(id="b", ctx="Load")
 
-        store1.bind_symbol(node1, "sym_a")
-        store2.bind_symbol(node2, "sym_b")
-        store2.add_cell_captured_symbol("uid_1")
+        out1 = PassOutput(symbol_bindings={node1: "sym_a"})
+        out2 = PassOutput(symbol_bindings={node2: "sym_b"}, cell_captured_symbols={"uid_1"})
 
-        merged = store1.merge(store2)
-        assert merged.get_symbol(node1) == "sym_a"
-        assert merged.get_symbol(node2) == "sym_b"
-        assert "uid_1" in merged.cell_captured_symbols
+        store = MetadataStore.from_outputs([out1, out2])
+        assert store.get_symbol(node1) == "sym_a"
+        assert store.get_symbol(node2) == "sym_b"
+        assert "uid_1" in store.cell_captured_symbols
 
     def test_no_uid_field_on_ast_nodes(self):
         """AST nodes do NOT have .uid field - confirms design decision."""
