@@ -41,7 +41,7 @@ python -m pytest tests/ -q --tb=no --no-header
 - 新增 `resolve_call_return()` 方法：统一处理 FUNCTION/CALLABLE_SIG/CLASS/PRIMITIVE/LIST/DICT/CALLABLE_INSTANCE/BOUND_METHOD + axiom fallback
 - 新增 `resolve_callable_instance_return()` 方法：处理 `__call__` 协议
 - `visit_IbCall` 从 5 层 ad-hoc fallback 重构为 3 段清晰结构：callable-instance → callability-check → unified-resolve
-- `resolve_return()` 保留为 deprecated 委托到 `resolve_call_return()`
+- `resolve_return()` 已彻底移除（零调用方，无向后兼容负担）
 - 14 个新增单元测试覆盖所有 callable 形态
 
 ### Step 4（当前）：7-Pass 归并为 4-Phase

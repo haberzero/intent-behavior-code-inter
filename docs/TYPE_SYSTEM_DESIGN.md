@@ -145,7 +145,7 @@ class TypeDef(IbSpec):
 | `get_base_spec(spec)` | 取泛型特化的底 spec（`list[int]` → `list`） |
 | `get_axiom(spec)` | 桥接 AxiomRegistry，按 `spec.get_base_name()` / `_axiom_name` 查询 |
 | `get_call_cap` / `get_iter_cap` / `get_subscript_cap` / `get_operator_cap` | 能力门：返回公理（声明对应能力时）或 `None` |
-| `resolve_return(spec, args)` / `resolve_op` / `resolve_iter_element` / `resolve_subscript` | 编译期类型推断入口 |
+| `resolve_call_return(spec, args)` / `resolve_op` / `resolve_iter_element` / `resolve_subscript` | 编译期类型推断入口 |
 
 注册表持有的 spec 是原型的克隆，保证多引擎实例间状态隔离（`SpecRegistry.register` 内部 `clone()`）。
 
@@ -240,7 +240,7 @@ class TypeAxiom(Protocol):
 ```
 Pass 4/5 SemanticAnalyzer
   └── 表达式类型推断 / 调用返回类型 / 运算结果类型
-        └── SpecRegistry.resolve_return(spec, args)        — 函数 / callable_instance / class 构造
+        └── SpecRegistry.resolve_call_return(spec, args)   — 函数 / callable_instance / class 构造
         └── SpecRegistry.resolve_op(spec, op, other)       — 二元 / 一元运算
         └── SpecRegistry.resolve_iter_element(spec)        — for 元素类型
         └── SpecRegistry.resolve_subscript(spec, key_spec) — `obj[key]`

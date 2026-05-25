@@ -18,7 +18,7 @@
 - **新增 `SpecRegistry.resolve_callable_instance_return()`**：
   - 专门处理 `__call__` 协议的返回类型解析
   - 支持 `class_scope_lookup` 回调优先从语义 scope 获取最新 spec
-- **`resolve_return()` deprecated**：保留为委托到 `resolve_call_return()` 的兼容入口
+- **`resolve_return()` 已移除**：零调用方，直接删除无向后兼容负担
 - **`TypeCheckingPass.visit_IbCall` 重构**：
   - 从 5 层 ad-hoc fallback 重构为 3 段清晰结构
   - callable-instance detection → callability check → unified resolve

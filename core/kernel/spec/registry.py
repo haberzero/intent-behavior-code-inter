@@ -541,20 +541,6 @@ class SpecRegistry:
             return self.resolve(base_name) or spec
         return spec
 
-    def resolve_return(
-        self,
-        spec: IbSpec,
-        arg_specs: List[IbSpec],
-    ) -> Optional[IbSpec]:
-        """
-        Infer the return type when ``spec`` is called with ``arg_specs``.
-
-        .. deprecated::
-            Use ``resolve_call_return()`` instead, which handles all callable
-            forms (including __call__ protocol and builtin constructors) in a
-            single unified path.
-        """
-        return self.resolve_call_return(spec, arg_specs)
 
     def resolve_call_return(
         self,
