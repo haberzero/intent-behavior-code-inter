@@ -3,11 +3,89 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-25
+> **最后更新**：2026-05-25（新增 PT-ARCH-1~5 Semantic Pipeline 架构改进路线图）
 
 ---
 
-## 一、Semantic 后续任务
+## 一、Semantic Pipeline 架构改进（5 步路线图）
+
+> 详见 `docs/NEXT_STEPS.md` P0 部分的步骤概览。本节记录完整技术细节与前置条件。
+
+### PT-ARCH-1　TypeEnvironment → TypeInferenceState [Step 1, IN PROGRESS]
+
+**前置条件**: 无（TypeEnvironment 当前零使用，纯替换）
+
+**技术细节**:
+- `TypeEnvironment.bindings` 从未被任何 pass 写入或读取（zero usage in passes）
+- `TypeEnvironment.auto_return_accumulator` 在 TypeCheckingPass 中由局部变量 `self.auto_return_types` 替代
+- 新 `TypeInferenceState` 设计：
+  - 保留 `auto_return_accumulator` 接口（保证 Context API 兼容性）
+  - 新增 `TypeSlot`：单次写入锁定点，为 `-> auto` 上下文传播与未来 `fn` 参数类型传播预留
+  - 不引入约束图或求解器
+
+**影响面**: context.py + metadata/__init__.py + tests imports（~5 文件）
+**对 runtime 的影响**: 无（TypeEnvironment 从未被序列化到 CompilationResult）
+
+### PT-ARCH-2　ScopedVisitor 统一基类 [Step 2]
+
+**前置条件**: PT-ARCH-1 完成
+
+**技术细节**:
+- 当前 SymbolResolutionPass + TypeCheckingPass 各自维护 scope_stack / push_scope / pop_scope（~200 行重复）
+- SymbolCollectionPass 使用不同风格的手动 scope 管理（old_table = self.symbol_table）
+- 统一为 ScopedVisitor 基类 + `@contextmanager enter_scope(scope)` 模式
+- 收益：消除重复代码；scope 生命周期由 context manager 保证安全
+
+**影响面**: passes/*.py（4 个 pass 的 visitor 类继承关系变更）
+**对 runtime 的影响**: 无
+
+### PT-ARCH-3　SpecRegistry.resolve_call_return() [Step 3]
+
+**前置条件**: PT-ARCH-2 完成（visitor 统一后更容易重构 visit_IbCall）
+
+**技术细节**:
+- 当前 TypeCheckingPass.visit_IbCall 有 5 层 fallback（~100 行）：
+  1. get_call_cap → 内置构造器
+  2. __call__ 方法（可调用类实例）
+  3. resolve_return()
+  4. return_type 属性直读
+  5. fallback 到 any
+- 新方案：在 SpecRegistry 中提供 `resolve_call_return(callee_spec, arg_specs) -> IbSpec`
+- 统一处理：Class constructor / Structural callable / __call__ instance / Axiom-backed callable
+
+**影响面**: registry.py + type_checking_pass.py
+**对 runtime 的影响**: 无（编译期完成所有决议）
+
+### PT-ARCH-4　7-Pass 归并为 4-Phase [Step 4]
+
+**前置条件**: PT-ARCH-3 完成
+
+**技术细节**:
+- Phase 1: SymbolPhase（Pass 1 + Pass 2 合并，两趟扫描在同一 visitor 中）
+- Phase 2: TypePhase（Pass 3 + Pass 4 合并，消除 TypeResolutionPass 独立存在的理由）
+- Phase 3: BindingPhase（Pass 5 + Pass 6 合并，一次 AST 遍历完成结构变换+依赖标注）
+- Phase 4: IntegrityPhase（独立，纯验证）
+- 代码量预估：~3312 行 → ~2550 行（减少 ~23%）
+
+**影响面**: passes/ 目录重组，pipeline.py 重写
+**对 runtime 的影响**: 无
+
+### PT-ARCH-5　PassOutput + Immutable Pipeline [Step 5]
+
+**前置条件**: PT-ARCH-4 完成
+
+**技术细节**:
+- 当前妥协：Context frozen=True 但 MetadataStore 内部 dict 被 pass 直接 mutate
+- 新方案：每个 Phase 返回独立 PassOutput，Pipeline 负责 merge
+- Pass 之间依赖通过显式输入参数表达
+- 实现真正的函数式 context threading
+
+**影响面**: context.py + pipeline.py + 所有 phase（全面但渐进式）
+**对 runtime 的影响**: 无（CompilationResult 输出结构不变）
+
+---
+
+## 二、Semantic 后续任务（PT-SEM 系列降优先级）
 
 ### PT-SEM-1　语义分析生产就绪化 [P2]
 
@@ -46,22 +124,22 @@
 
 ---
 
-## 二、~~llmexcept 相关后续 (PT-1.x)~~ — 已全部归档至 COMPLETED.md
+## 三、~~llmexcept 相关后续 (PT-1.x)~~ — 已全部归档至 COMPLETED.md
 
-## 三、~~NS-2 (intent OOP 化收口) 相关~~ — 已全部归档至 COMPLETED.md
+## 四、~~NS-2 (intent OOP 化收口) 相关~~ — 已全部归档至 COMPLETED.md
 
 > PT-1.1~PT-1.3 / PT-2.1 / PT-2.2 / PT-4.6 已完成，详见 `docs/COMPLETED.md`。本节仅作占位提示，禁止在此追加新条目。
 
 ---
 
-## 四、待 VM 信号 / 中断 / 异步机制（L3 协程）成熟后才能继续
+## 五、待 VM 信号 / 中断 / 异步机制（L3 协程）成熟后才能继续
 
 ### PT-3.1　host.run_isolated() 返回值改进 [VISION]
 ### PT-3.2　ReceiveMode 枚举演进 [VISION]
 
 ---
 
-## 五、语言级语义/语法收尾（暂搁置；基于真实代码事实）
+## 六、语言级语义/语法收尾（暂搁置；基于真实代码事实）
 
 > 本节三项均经过事实核查。每项均给出"现阶段真实代码状态 + 未来演进思路"，确保文档不误导后续开发者。
 
@@ -156,17 +234,17 @@
 
 ---
 
-## 六、明确排除的方向
+## 七、明确排除的方向
 
 - 不引入静态类型检查器作为解释器前置强依赖。
 - 不以牺牲运行时可观测性换取短期性能优化。
 - 不为优化同一程序内独立 LLM 调用而创建多 Interpreter（这是 L1 流水线的职责）。
 - **不允许同一份语义事实在 AST 字段 + 侧表 + MetadataStore 中出现多份副本**（"双写真相"）。新增 AST 字段或侧表项前必须先在 `docs/METADATA_ARCHITECTURE.md` 与 `docs/ARCHITECTURE_REVIEW_2026-05-15.md` 中查证；C1 结构性产物落 AST，C2/C3 节点→符号/类型绑定落侧表/MetadataStore，C4 瞬态留 Pass 内部局部变量，三类容器互不重叠。
-- **不引入约束求解风格的类型推断**——v2 的 `TypeEnvironment.constraints` / `generic_instances` 字段都属于此类诱因，应在写入前删除。IBCI 的类型推断是"单次锁定 + 公理调度"。
+- **不引入完整的约束求解/HM 风格类型推断**——但允许从相关理念中汲取受控的设计思路（如 TypeSlot 单次锁定延迟绑定），为未来高阶函数类型传播预留扩展点。IBCI 的核心类型哲学仍是"单次锁定 + 公理调度"。
 
 ---
 
-## 七、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
+## 八、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
 
 以下条目来自本轮全量巡检；它们都不属于"已知 bug"，而是设计未覆盖的扩展面。除 PT-4.6 外，均**不阻塞**任何主线脚本能力，因此只登记到本文件不进入 NS。
 
@@ -231,7 +309,7 @@
 
 ---
 
-## 八、~~PT-5.1 测试基线契约化（追踪记录）~~ — 已确认为误报，归档至 COMPLETED.md 的"维护守则"形成历史
+## 九、~~PT-5.1 测试基线契约化（追踪记录）~~ — 已确认为误报，归档至 COMPLETED.md 的"维护守则"形成历史
 
 > 2026-05-14 重新核验结论已写入 `docs/COMPLETED.md`；本节仅作占位提示，禁止在此追加新条目。
 

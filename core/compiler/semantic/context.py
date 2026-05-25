@@ -25,7 +25,7 @@ class SemanticContext:
 
     # Mutable analysis state (passed through pipeline)
     symbol_table: 'SymbolTableContext'  # Current symbol table
-    type_environment: 'TypeEnvironment'  # Type bindings
+    type_environment: 'TypeInferenceState'  # Type inference state (slots + auto-return)
     metadata: 'MetadataStore'  # UID-based metadata
 
     # Context stack for nested structures
@@ -43,8 +43,8 @@ class SemanticContext:
         """Create new context with updated symbol table"""
         return replace(self, symbol_table=new_table)
 
-    def with_type_environment(self, new_env: 'TypeEnvironment') -> 'SemanticContext':
-        """Create new context with updated type environment"""
+    def with_type_environment(self, new_env: 'TypeInferenceState') -> 'SemanticContext':
+        """Create new context with updated type inference state"""
         return replace(self, type_environment=new_env)
 
     def with_metadata(self, new_metadata: 'MetadataStore') -> 'SemanticContext':
@@ -148,13 +148,13 @@ class ContextBuilder:
 
         # Import here to avoid circular dependency
         from .metadata.symbol_table import SymbolTableContext
-        from .metadata.type_environment import TypeEnvironment
+        from .metadata.type_environment import TypeInferenceState
         from .metadata.metadata_store import MetadataStore
         from core.compiler.semantic.passes.prelude import Prelude
 
         # Initialize empty state
         symbol_table = SymbolTableContext.create_root(self.module_name)
-        type_environment = TypeEnvironment.create_empty()
+        type_environment = TypeInferenceState.create_empty()
         metadata = MetadataStore.create_empty()
 
         # Inject builtin prelude symbols into the root symbol table
