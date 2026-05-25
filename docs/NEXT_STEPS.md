@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-25（Step 1~4 完成，当前推进 Step 5）
+> **最后更新**：2026-05-25（P0 全部完成，P2-B/C 完成）
 
 ---
 
@@ -14,11 +14,11 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-25 实测结果**：`772 passed, 7 skipped`（0 failures）。
+**2026-05-25 实测结果**：`789 passed, 7 skipped`（0 failures）。
 
 ---
 
-## ⏭ 当前 P0：Semantic Pipeline 架构改进（5 步渐进式重构）
+## ⏭ 当前 P0：Semantic Pipeline 架构改进（5 步渐进式重构）✅ 全部完成
 
 > 目标：使 IBCI 类型系统与语义分析架构更清晰、更易维护、更符合现代编译器设计理念。
 > 原则：不引入完整 HM/约束求解；保持"单次锁定 + 公理调度"核心哲学；但为未来高阶函数与类型传播留下受控扩展点。
@@ -53,24 +53,31 @@ python -m pytest tests/ -q --tb=no --no-header
 - pipeline.py 从 7 个 Pass 实例化为 4 个 Phase
 - 原子 Pass 文件保留作为内部实现，Phase 为组合层
 
-### Step 5（当前）：PassOutput + Immutable Pipeline
+### Step 5 ✅：PassOutput + Immutable Pipeline
 
-- 每个 Phase 产出显式 `PassOutput`（不再 mutate context 内部容器）
-- Pipeline 负责 merge 多个 PassOutput 到最终 CompilationResult
-- 实现真正的 context threading
+- ✅ 每个 Phase 产出显式 `PassOutput`（result.py 中 frozen dataclass）
+- ✅ Pipeline 负责 merge 多个 PassOutput 到最终 MetadataStore（`MetadataStore.from_outputs()`）
+- ✅ Context threading 通过 `prior_symbol_bindings` / `prior_type_bindings` 实现跨 Phase 数据传递
+- 务实折中：SymbolPhase 内部（Collection→Resolution 子步骤间）仍共享可变 SymbolTable，这是标准编译器设计（构建符号表→使用符号表），不属于跨 Phase 的 mutation
 
 ---
 
-## P2 候选（降级为背景项）
+## ⏭ 当前 P2：Semantic 静态诊断增强
 
-### P2-B `intent_context.push()` 静默无效陷阱编译期警告
+### P2-B ✅ `intent_context.push()` 静默无效陷阱编译期警告
 
-`intent_context.push("X")` 在没有 `use(ctx)` 时是 no-op（详见 `docs/KNOWN_LIMITS.md §十八`），编译期不告警；用户极易踩坑。
-**动作**：在 TypeCheckingPass 中对相关形态发出 SEM 警告。
+`intent_context.push("X")` 在没有 `use(ctx)` 时是 no-op（详见 `docs/KNOWN_LIMITS.md §十八`），编译期现在发出 SEM_090 警告。
+- 检测 `intent_context.push/pop/fork/merge/combine/clear()` 在类对象上调用
+- `get_current()`/`use()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）
+- 17 个新增测试覆盖
 
-### P2-C NS-5 编译期类型转换检查（激活 `can_convert_from`）
+### P2-C ✅ NS-5 编译期类型转换检查（激活 `can_convert_from`）
 
-技术路径已记录；保留为低优先背景项。
+`(TargetType)source_expr` 表达式现在使用目标类型的 `can_convert_from(source)` 公理方法进行编译期校验。
+- 当目标类型公理明确拒绝转换时发出 SEM_091 警告（非错误，因运行时仍可能有动态路径）
+- 例如：`(int)list_var` → SEM_091；`(int)str_var` → 无警告
+- 已有 `can_convert_from` 实现的 axiom：IntegerAxiom, FloatAxiom, BoolAxiom, StrAxiom, ListAxiom, DictAxiom, EnumAxiom 等
+- 8 个新增测试覆盖
 
 ---
 
