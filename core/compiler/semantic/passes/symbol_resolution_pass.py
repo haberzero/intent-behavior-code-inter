@@ -169,7 +169,10 @@ class SymbolResolver(ScopedVisitor):
                 self.bind_symbol(node, func_sym)
 
             self._register_params(node.args, func_scope)
-            self._prescan_body_locals(node.body, func_scope)
+
+            # 收集 nonlocal 声明的名称，这些不应被 prescan 注册为局部变量
+            nonlocal_names = self._collect_nonlocal_names(node.body)
+            self._prescan_body_locals(node.body, func_scope, nonlocal_names)
 
             for stmt in node.body:
                 self.visit(stmt)
@@ -441,18 +444,49 @@ class SymbolResolver(ScopedVisitor):
         for elt in node.elts:
             self.visit(elt)
 
+    def visit_IbNonlocalStmt(self, node: ast.IbNonlocalStmt):
+        """访问 nonlocal 声明节点。
+
+        验证 nonlocal 声明的名称确实存在于外层（父）作用域中。
+        将每个 nonlocal 名称绑定到外层作用域的符号，使后续 visit_IbName
+        能够正确解析到外层变量而非本地变量。
+        """
+        parent_scope = self.current_scope.parent if self.current_scope else None
+        for name in node.names:
+            if not parent_scope:
+                self.error(
+                    f"nonlocal declaration of '{name}' not allowed at module scope",
+                    node, code="SEM_060"
+                )
+                continue
+            # 在父作用域中查找符号
+            outer_sym = parent_scope.resolve(name)
+            if not outer_sym:
+                self.error(
+                    f"No binding for nonlocal '{name}' found in enclosing scope",
+                    node, code="SEM_061"
+                )
+                continue
+            # 将外层符号注册到当前作用域（不创建新符号，共享外层符号引用）
+            # 这确保本作用域内对该名称的引用解析到外层符号的 UID
+            if name not in self.current_scope.symbols:
+                self.current_scope.symbols[name] = outer_sym
+
     # ========== 辅助方法 ==========
 
-    def _prescan_body_locals(self, body: list, scope: SymbolTable):
+    def _prescan_body_locals(self, body: list, scope: SymbolTable, nonlocal_names: Optional[set] = None):
         """预扫描函数体，将赋值目标预注册为局部变量。
 
         确保函数体内的变量在被引用时已经有定义（避免 SEM_001 误报）。
+        nonlocal_names 中的变量名不会被注册为局部变量（它们引用外层作用域）。
         """
+        if nonlocal_names is None:
+            nonlocal_names = set()
 
         for stmt in body:
             if isinstance(stmt, ast.IbAssign):
                 for name, target in SymbolExtractor.get_assigned_names(stmt):
-                    if name not in scope.symbols:
+                    if name not in scope.symbols and name not in nonlocal_names:
                         sym = VariableSymbol(
                             name=name,
                             kind=SymbolKind.VARIABLE,
@@ -484,8 +518,21 @@ class SymbolResolver(ScopedVisitor):
                                 spec=self.registry.resolve("any"),
                             )
                             scope.define(sym)
-            # 递归进入 if/for/while body
-            if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
-                self._prescan_body_locals(getattr(stmt, 'body'), scope)
-            if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
-                self._prescan_body_locals(getattr(stmt, 'orelse'), scope)
+            # 递归进入 if/for/while body（不进入嵌套函数/类定义的 body）
+            if not isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
+                if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
+                    self._prescan_body_locals(getattr(stmt, 'body'), scope, nonlocal_names)
+                if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
+                    self._prescan_body_locals(getattr(stmt, 'orelse'), scope, nonlocal_names)
+
+    def _collect_nonlocal_names(self, body: list) -> set:
+        """从函数体中收集所有 nonlocal 声明的变量名。
+
+        仅扫描顶层语句（nonlocal 声明必须出现在函数体顶层，
+        不递归进入 if/for/while 等子块）。
+        """
+        names = set()
+        for stmt in body:
+            if isinstance(stmt, ast.IbNonlocalStmt):
+                names.update(stmt.names)
+        return names

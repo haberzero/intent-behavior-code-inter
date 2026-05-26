@@ -38,7 +38,7 @@ class CoreTokenScanner:
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
-            'auto': TokenType.AUTO, 'fn': TokenType.FN, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
+            'auto': TokenType.AUTO, 'fn': TokenType.FN, 'global': TokenType.GLOBAL, 'nonlocal': TokenType.NONLOCAL, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,

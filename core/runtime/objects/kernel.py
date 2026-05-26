@@ -897,6 +897,8 @@ class IbUserFunction(IbFunction):
         # 定义该方法的 IbClass（方法归属类）。用于 super() 支持。
         # 对于顶层函数，此字段为 None（不在类内）。
         self.owner_class: Optional['IbClass'] = owner_class
+        # nonlocal 闭包：{sym_uid: (name, IbCell)} — 由 vm_handle_IbFunctionDef 设置
+        self.closure: Optional[Dict[str, Any]] = None
 
     @property
     def spec(self) -> Optional[IbSpec]:
@@ -943,6 +945,17 @@ class IbUserFunction(IbFunction):
             params_uids = node_data.get("args", [])
             
             rt_context.enter_scope()
+
+            # 绑定 nonlocal 闭包变量（Cell 共享引用）
+            if self.closure:
+                from core.runtime.objects.cell import IbCell
+                for sym_uid, (var_name, cell) in self.closure.items():
+                    if isinstance(cell, IbCell) and not cell.is_empty():
+                        rt_context.define_variable(var_name, cell.get(), uid=sym_uid)
+                        # 将 Cell 引用附加到新创建的符号上，使赋值时能同步更新
+                        new_sym = rt_context.current_scope.get_symbol_by_uid(sym_uid)
+                        if new_sym is not None:
+                            new_sym.cell = cell
         
             loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
             loc = None

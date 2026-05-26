@@ -451,6 +451,8 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
             func_scope = SymbolTable(parent=self.current_scope, name=node.name)
             self._register_func_params(node.args, func_scope)
             with self.enter_scope(func_scope):
+                # 分析 nonlocal 声明：为包含 nonlocal 的函数填充 free_vars
+                self._analyze_function_nonlocal(node)
                 for stmt in node.body:
                     self._analyze_node(stmt)
 
@@ -579,3 +581,59 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
                     spec=None,
                 )
                 scope.define(sym)
+
+    def _analyze_function_nonlocal(self, node: ast.IbFunctionDef):
+        """分析函数中的 nonlocal 声明，填充 node.free_vars。
+
+        当函数包含 nonlocal 声明时，需要将 nonlocal 变量作为自由变量
+        记录到 free_vars 中，使得运行时 vm_handle_IbFunctionDef 能够
+        为这些变量建立 Cell 共享引用（类似 lambda 的闭包捕获机制）。
+        """
+        # 收集 nonlocal 声明的名称
+        nonlocal_names = set()
+        for stmt in node.body:
+            if isinstance(stmt, ast.IbNonlocalStmt):
+                nonlocal_names.update(stmt.names)
+
+        if not nonlocal_names:
+            return
+
+        # 使用 prior_symbol_bindings 查找各 nonlocal 名称的符号 UID
+        node_to_symbol = self.context.prior_symbol_bindings
+        free_var_refs = []
+        captured_vars = set()
+
+        # 从函数体中收集所有 IbName 节点，找到引用 nonlocal 变量的节点
+        body_names = []
+        for stmt in node.body:
+            body_names.extend(self._collect_name_nodes(stmt))
+
+        seen_names = set()
+        for name_node in body_names:
+            var_name = name_node.id
+            if var_name not in nonlocal_names or var_name in seen_names:
+                continue
+            seen_names.add(var_name)
+
+            sym = node_to_symbol.get(name_node)
+            if sym and hasattr(sym, 'uid') and sym.uid:
+                captured_vars.add(var_name)
+                free_var_refs.append([var_name, sym.uid])
+
+        # 如果通过 name node 没有找到所有 nonlocal 变量的绑定（可能在嵌套 if/for 中），
+        # 使用父作用域查找兜底
+        for name in nonlocal_names:
+            if name not in seen_names:
+                parent = self.current_scope.parent if self.current_scope else None
+                if parent:
+                    sym = parent.resolve(name)
+                    if sym and hasattr(sym, 'uid') and sym.uid:
+                        captured_vars.add(name)
+                        free_var_refs.append([name, sym.uid])
+
+        # 写入 AST 节点
+        node.free_vars = free_var_refs
+
+        # 记录捕获（用于 cell_captured_symbols 收集）
+        if captured_vars:
+            self.lambda_captures[node] = captured_vars

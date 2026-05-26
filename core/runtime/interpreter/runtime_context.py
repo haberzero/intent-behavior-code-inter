@@ -165,6 +165,9 @@ class ScopeImpl:
     def get(self, name: str) -> Any:
         symbol = self.get_symbol(name)
         if symbol:
+            # Cell 变量：始终从 Cell 读取最新值（nonlocal 写回后可能通过 Cell 更新）
+            if symbol.cell is not None and not symbol.cell.is_empty():
+                return symbol.cell.get()
             return symbol.value
         raise KeyError(name)
 
@@ -172,6 +175,9 @@ class ScopeImpl:
         """基于 UID 的获取"""
         symbol = self.get_symbol_by_uid(uid)
         if symbol:
+            # Cell 变量：始终从 Cell 读取最新值
+            if symbol.cell is not None and not symbol.cell.is_empty():
+                return symbol.cell.get()
             return symbol.value
         raise KeyError(uid)
 

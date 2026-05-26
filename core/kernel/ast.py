@@ -140,6 +140,7 @@ class IbFunctionDef(IbStmt):
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
     body: List[IbStmt]
     returns: Optional[IbExpr] = None
+    free_vars: List = field(default_factory=list)  # [[name, sym_uid], ...] nonlocal captures
     
     @property
     def creates_scope(self) -> bool:
@@ -172,6 +173,10 @@ class IbLLMFunctionDef(IbStmt):
 
 @dataclass(kw_only=True, eq=False)
 class IbGlobalStmt(IbStmt):
+    names: List[str]
+
+@dataclass(kw_only=True, eq=False)
+class IbNonlocalStmt(IbStmt):
     names: List[str]
 
 @dataclass(kw_only=True, eq=False)
