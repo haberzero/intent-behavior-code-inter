@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-26（P0-A/B 完成：4 项 skipped 测试解除，测试基线 810 passed / 3 skipped）
+> **最后更新**：2026-05-26（P0-A/B 完成：4 项 skipped 测试解除，测试基线 778 passed / 3 skipped）
 
 ---
 
@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-26 实测结果**：`810 passed, 3 skipped`（0 failures）。
+**2026-05-26 实测结果**：`778 passed, 3 skipped`（0 failures）。
 
 ---
 

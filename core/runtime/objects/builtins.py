@@ -4,7 +4,6 @@ from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.issue import InterpreterError
 from core.runtime.frame import get_current_execution_context
-from core.runtime.interpreter.llm_result import LLMResult
 from core.runtime.exceptions import ThrownException
 from core.runtime.objects.cell import IbCell
 from core.runtime.objects.deep_clone import try_deep_clone
@@ -194,6 +193,7 @@ class IbString(IbValue):
             
         # [Result Mode Refactor] 不再抛出 Python 异常。
         # 通过 Registry 获取当前执行上下文并设置不确定性结果。
+        from core.runtime.interpreter.llm_result import LLMResult  # 局部导入：打破 builtins ↔ interpreter 循环依赖
         execution_context = self.ib_class.registry.get_execution_context()
         if execution_context and execution_context.runtime_context:
             execution_context.runtime_context.set_last_llm_result(
@@ -220,6 +220,7 @@ class IbString(IbValue):
             
             if has_llm_frame:
                 # [Result Mode Refactor] 在 llmexcept 保护范围内，通过 LLMResult 信号不确定性
+                from core.runtime.interpreter.llm_result import LLMResult  # 局部导入：打破 builtins ↔ interpreter 循环依赖
                 execution_context.runtime_context.set_last_llm_result(
                     LLMResult.uncertain_result(
                         raw_response=self.value,
