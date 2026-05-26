@@ -9,12 +9,13 @@ Symbol Resolution Pass (SymbolPhase sub-step 2)
 from typing import Optional, List, Dict, Any
 
 from core.kernel import ast
-from core.kernel.symbols import Symbol, SymbolTable, SymbolKind
+from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 
-from ..result import PassResult, Diagnostic, DiagnosticLevel
+from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 from .scoped_visitor import ScopedVisitor
+from .symbol_collection_pass import SymbolExtractor
 
 
 class SymbolResolutionPass(BasePass):
@@ -30,7 +31,6 @@ class SymbolResolutionPass(BasePass):
         super().__init__("SymbolResolutionPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        from ..result import PassOutput
         visitor = SymbolResolver(context)
         visitor.visit(context.ast)
 
@@ -107,7 +107,6 @@ class SymbolResolver(ScopedVisitor):
 
     def _register_params(self, args: list, scope: SymbolTable):
         """将函数参数注册为局部符号，并绑定 IbArg 节点到 node_to_symbol。"""
-        from core.kernel.symbols import VariableSymbol, SymbolKind
 
         for arg_node in args:
             arg_name = self._extract_arg_name(arg_node)
@@ -157,7 +156,6 @@ class SymbolResolver(ScopedVisitor):
             # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
             # node_to_symbol[func_def_node] = self_symbol（runtime 通过此获取 self UID）
             if self.current_class_symbol:
-                from core.kernel.symbols import VariableSymbol, SymbolKind
                 self_sym = VariableSymbol(
                     name="self",
                     kind=SymbolKind.VARIABLE,
@@ -281,7 +279,6 @@ class SymbolResolver(ScopedVisitor):
 
     def _register_loop_variable(self, name: str, target_node: ast.IbASTNode, def_node: ast.IbASTNode):
         """Register a loop variable in scope and bind its symbol to the target node."""
-        from core.kernel.symbols import VariableSymbol, SymbolKind
 
         if not self.lookup_symbol(name):
             loop_var_sym = VariableSymbol(
@@ -349,7 +346,6 @@ class SymbolResolver(ScopedVisitor):
         # 注册 `as e` 捕获变量到当前作用域，并绑定 handler 节点到符号
         # (runtime vm_handle_IbTry:1883 通过 node_to_symbol[handler_uid] 获取 sym_uid)
         if node.name:
-            from core.kernel.symbols import VariableSymbol, SymbolKind
             existing = self.lookup_symbol(node.name)
             if not existing:
                 exc_sym = VariableSymbol(
@@ -452,8 +448,6 @@ class SymbolResolver(ScopedVisitor):
 
         确保函数体内的变量在被引用时已经有定义（避免 SEM_001 误报）。
         """
-        from core.kernel.symbols import VariableSymbol, SymbolKind
-        from .symbol_collection_pass import SymbolExtractor
 
         for stmt in body:
             if isinstance(stmt, ast.IbAssign):

@@ -18,9 +18,7 @@ from core.kernel.intent_logic import IntentMode, IntentRole
 from core.kernel.intent_resolver import IntentResolver
 from core.kernel.registry import KernelRegistry
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
-
-if TYPE_CHECKING:
-    from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.intent_context import IbIntentContext
 
 class LLMExecutorImpl:
     """
@@ -508,8 +506,7 @@ class LLMExecutorImpl:
         # 获取消解后的最终列表
         # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
         if captured_intents is not None:
-            from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
-            if not isinstance(captured_intents, _IbIntentContext):
+            if not isinstance(captured_intents, IbIntentContext):
                 # 所有生产者只产出 None 或 IbIntentContext。
                 # 历史的 IntentNode 链表 / 已展平 list 路径已无产生方；命中即为契约违反。
                 raise TypeError(
@@ -768,8 +765,7 @@ class LLMExecutorImpl:
                 )
 
         if captured_intents is not None:
-            from core.runtime.objects.intent_context import IbIntentContext as _IbIntentContext
-            if not isinstance(captured_intents, _IbIntentContext):
+            if not isinstance(captured_intents, IbIntentContext):
                 raise TypeError(
                     f"execute_behavior_expression_cps: captured_intents must be "
                     f"None or IbIntentContext, got {type(captured_intents).__name__}"

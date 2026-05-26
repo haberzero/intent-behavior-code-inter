@@ -8,6 +8,8 @@ from typing import Optional, Any, List
 
 from core.kernel import ast as ibci_ast
 from core.kernel.blueprint import CompilationResult
+from core.kernel.issue import Severity
+from core.base.source_atomic import Location
 
 from .pipeline import PipelineResult
 from .result import DiagnosticLevel
@@ -38,9 +40,6 @@ def pipeline_result_to_compilation_result(
 
 def _inject_diagnostics(diagnostics: List, issue_tracker: Any) -> None:
     """将 Diagnostic 列表注入到 IssueTracker。"""
-    from core.kernel.issue import Severity
-    from core.base.source_atomic import Location
-
     for diag in diagnostics:
         loc = Location(
             line=diag.line or 0,

@@ -15,6 +15,7 @@ from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
 from core.runtime.host.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.compiler.serialization.serializer import FlatSerializer
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
     DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT
@@ -79,7 +80,6 @@ class Scheduler(ICompilerService):
     def compile_to_artifact_dict(self, file_path: str) -> Dict[str, Any]:
         """ICompilerService: 编译文件并返回平铺化的字典产物，供解释器直接加载。"""
         artifact = self.compile_file(file_path)
-        from core.compiler.serialization.serializer import FlatSerializer
         return FlatSerializer().serialize_artifact(artifact)
 
     def resolve_module_path(self, module_name: str) -> Optional[str]:

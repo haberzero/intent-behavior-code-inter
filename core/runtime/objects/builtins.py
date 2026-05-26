@@ -3,6 +3,11 @@ from .kernel import IbObject, IbValue, IbClass, IbNativeFunction, IbNone
 from core.kernel.registry import KernelRegistry
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.issue import InterpreterError
+from core.runtime.frame import get_current_execution_context
+from core.runtime.interpreter.llm_result import LLMResult
+from core.runtime.exceptions import ThrownException
+from core.runtime.objects.cell import IbCell
+from core.runtime.objects.deep_clone import try_deep_clone
 
 from .ib_type_mapping import register_ib_type
 
@@ -191,7 +196,6 @@ class IbString(IbValue):
         # 通过 Registry 获取当前执行上下文并设置不确定性结果。
         execution_context = self.ib_class.registry.get_execution_context()
         if execution_context and execution_context.runtime_context:
-            from core.runtime.interpreter.llm_result import LLMResult
             execution_context.runtime_context.set_last_llm_result(
                 LLMResult.uncertain_result(
                     raw_response=self.value,
@@ -216,7 +220,6 @@ class IbString(IbValue):
             
             if has_llm_frame:
                 # [Result Mode Refactor] 在 llmexcept 保护范围内，通过 LLMResult 信号不确定性
-                from core.runtime.interpreter.llm_result import LLMResult
                 execution_context.runtime_context.set_last_llm_result(
                     LLMResult.uncertain_result(
                         raw_response=self.value,
@@ -321,7 +324,6 @@ class IbString(IbValue):
     def __add__(self, other: IbObject) -> Any:
         # 右操作数为 llm_uncertain 时抛出 LLMParseError
         if other.ib_class.name == "llm_uncertain":
-            from core.runtime.exceptions import ThrownException
             registry = self.ib_class.registry
             error = registry.make_llm_parse_error(
                 "string concatenation with uncertain LLM result is not allowed; "
@@ -765,7 +767,6 @@ class IbFnCallable(IbValue):
         VM CPS 主路径不走本方法；本方法仅为同步后备（外部 host / 反序列化后调用）。
         """
         # 调用现场 EC 优先于定义时刻快照
-        from core.runtime.frame import get_current_execution_context
         ec = get_current_execution_context() or self._execution_context
         if ec is None:
             raise RuntimeError(
@@ -793,8 +794,6 @@ class IbFnCallable(IbValue):
                 rt_context.enter_scope()
                 pushed_scope = True
 
-                from core.runtime.objects.cell import IbCell
-                from core.runtime.objects.deep_clone import try_deep_clone
                 is_snapshot = self.capture_mode == "snapshot"
                 for sym_uid, (name, slot) in self.closure.items():
                     if is_snapshot:
@@ -986,7 +985,6 @@ class IbBehavior(IbValue):
             )
 
         # 调用现场 EC 优先于定义时刻字段
-        from core.runtime.frame import get_current_execution_context
         ec = get_current_execution_context() or self._execution_context
 
         # lambda / snapshot 模式：每次调用都应是独立的 LLM 推理；先清除可能存在的
@@ -1008,8 +1006,6 @@ class IbBehavior(IbValue):
         rt_context = ec.runtime_context
         rt_context.enter_scope()
         try:
-            from core.runtime.objects.cell import IbCell
-            from core.runtime.objects.deep_clone import try_deep_clone
             is_snapshot = self.capture_mode == "snapshot"
             for sym_uid, (name, slot) in self.closure.items():
                 if is_snapshot:

@@ -8,6 +8,9 @@ Passes receive context as read-only input; bindings are returned via PassOutput.
 from dataclasses import dataclass, replace, field
 from typing import Optional, Any, Dict
 from core.kernel import ast as ibci_ast
+from core.kernel.symbols import VariableSymbol, FunctionSymbol, TypeSymbol, SymbolKind
+from core.compiler.semantic.metadata.symbol_table import SymbolTableContext
+from core.compiler.semantic.metadata.type_environment import TypeInferenceState
 
 
 @dataclass(frozen=True)
@@ -110,8 +113,7 @@ class ContextBuilder:
         if not self.registry:
             raise ValueError("Registry is required")
 
-        from .metadata.symbol_table import SymbolTableContext
-        from .metadata.type_environment import TypeInferenceState
+        # Local import to avoid circular: context → passes → base_pass → context
         from core.compiler.semantic.passes.prelude import Prelude
 
         symbol_table = SymbolTableContext.create_root(self.module_name)
@@ -119,7 +121,6 @@ class ContextBuilder:
 
         # Inject builtin prelude symbols
         prelude = Prelude(registry=self.registry)
-        from core.kernel.symbols import VariableSymbol, FunctionSymbol, TypeSymbol, SymbolKind
         for name, spec in prelude.get_builtin_types().items():
             if getattr(spec, 'is_user_defined', False):
                 continue

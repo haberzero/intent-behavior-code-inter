@@ -66,6 +66,9 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.runtime.objects.builtins import IbNone
+from core.runtime.objects.cell import IbCell
+from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.interpreter.llm_result import LLMFuture
 from core.kernel.issue import InterpreterError
 
@@ -183,8 +186,6 @@ def vm_handle_IbIfExp(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
     """比较运算（支持链式 + in / not in / is / is not）。"""
-    from core.runtime.objects.builtins import IbNone
-    from core.runtime.objects.kernel import IbLLMUncertain
 
     left = yield node_data.get("left")
     ops = node_data.get("ops", [])
@@ -245,8 +246,6 @@ def _vm_call_fn_callable(executor, func, args):
         深克隆作为本次调用的私有副本——即便函数体内部就地修改这些变量，
         也不会污染其它调用，从而保证并发与重入安全。snapshot 不缓存结果。
     """
-    from core.runtime.objects.cell import IbCell
-    from core.runtime.objects.deep_clone import try_deep_clone
 
     rt_context = executor.runtime_context
     needs_subscope = bool(func.params_uids) or bool(func.closure)
@@ -317,8 +316,6 @@ def _vm_invoke_behavior(executor, behavior, args):
     runtime_context）；``behavior._execution_context`` 字段仅在跨 Interpreter
     的同步后备路径中作为兜底使用，CPS 主路径完全无视该字段。
     """
-    from core.runtime.objects.cell import IbCell
-    from core.runtime.objects.deep_clone import try_deep_clone
 
     llm_exec = behavior.ib_class.registry.get_llm_executor()
     if llm_exec is None:
@@ -1476,7 +1473,6 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
     """
     if False:
         yield
-    from core.runtime.objects.intent import IbIntent, IntentMode
     segments = node_data.get("segments", [])
     target_type_name = node_data.get("target_type_name", "")
 
@@ -1544,8 +1540,6 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
     """
     if False:
         yield
-    from core.runtime.objects.cell import IbCell
-    from core.runtime.objects.deep_clone import try_deep_clone
     params_uids: List[str] = list(node_data.get("params") or [])
     body_uid = node_data.get("body")
     capture_mode = node_data.get("capture_mode") or "lambda"

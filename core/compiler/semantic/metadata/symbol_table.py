@@ -4,7 +4,7 @@ Symbol Table Context
 Immutable wrapper around SymbolTable with explicit scope stack.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional, Dict, List, Any
 from core.kernel.symbols import SymbolTable, Symbol
 
@@ -35,7 +35,6 @@ class SymbolTableContext:
         """
         child_table = SymbolTable(parent=self.current, name=scope_name)
         new_stack = self.scope_stack + (scope_name,)
-        from dataclasses import replace
         return replace(self, current=child_table, scope_stack=new_stack)
 
     def pop_scope(self) -> 'SymbolTableContext':
@@ -47,7 +46,6 @@ class SymbolTableContext:
         if not self.current.parent:
             raise ValueError("Cannot pop root scope")
         new_stack = self.scope_stack[:-1] if self.scope_stack else ()
-        from dataclasses import replace
         return replace(self, current=self.current.parent, scope_stack=new_stack)
 
     def define(self, symbol: Symbol) -> 'SymbolTableContext':

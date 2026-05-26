@@ -11,10 +11,10 @@ from typing import Optional, List, Dict, Any
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
-from core.kernel.spec.base import TypeKind
+from core.kernel.spec.base import TypeKind, TypeDef
 from core.kernel.spec.type_ref import TypeRef
 
-from ..result import PassResult, Diagnostic, DiagnosticLevel
+from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 from .scoped_visitor import ScopedVisitor
@@ -41,7 +41,6 @@ class TypeCheckingPass(BasePass):
         super().__init__("TypeCheckingPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        from ..result import PassOutput
         visitor = TypeCheckingVisitor(context)
         visitor.visit(context.ast)
 
@@ -157,7 +156,6 @@ class TypeCheckingVisitor(ScopedVisitor):
             return self.registry.resolve(annotation.id) or self._any_desc
         elif isinstance(annotation, ast.IbCallableType):
             # D3: callable signature constraint fn[(param_types) -> return_type]
-            from core.kernel.spec.base import TypeDef
             param_specs = [self._resolve_type(pt) for pt in annotation.param_types]
             ret_spec = (
                 self._resolve_type(annotation.return_type)
@@ -649,8 +647,7 @@ class TypeCheckingVisitor(ScopedVisitor):
                     inferred_return = self._any_desc
                 # 更新符号的返回类型
                 if sym and sym.spec and hasattr(sym.spec, 'return_type'):
-                    from core.kernel.spec.type_ref import TypeRef as TR
-                    sym.spec.return_type = TR.of(inferred_return.name, getattr(inferred_return, "module_path", None))
+                    sym.spec.return_type = TypeRef.of(inferred_return.name, getattr(inferred_return, "module_path", None))
 
         finally:
             self.pop_scope()

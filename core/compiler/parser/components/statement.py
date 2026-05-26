@@ -6,6 +6,7 @@ from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import IbPrecedence
 from core.compiler.parser.core.syntax import ID_AUTO, COMPOUND_OP_MAP
+from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -307,7 +308,6 @@ class StatementComponent(BaseComponent):
 
     def switch_statement(self) -> ast.IbStmt:
         """解析 switch-case 语句"""
-        from core.compiler.common.tokens import TokenType
         start_token = self.stream.previous()
 
         # 解析 switch 表达式
@@ -428,7 +428,6 @@ class StatementComponent(BaseComponent):
         
         # 支持带类型标注的循环目标 (e.g. for str name in names)
         # 或者元组声明 (e.g. for (int x, int y) in coords)
-        from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
         
         target_candidate = None
         if SyntaxRecognizer.get_role(self.stream) == SyntaxRole.VARIABLE_DECLARATION:

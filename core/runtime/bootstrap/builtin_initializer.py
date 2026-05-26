@@ -3,6 +3,8 @@ from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
 from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
 from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
+from ..objects.intent_stack import IbIntentStack
+from ..objects.intent_context import IbIntentContext
 from core.kernel.registry import KernelRegistry
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -19,6 +21,8 @@ from core.kernel.spec import (
 )
 from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.factory import create_default_registry
+from core.kernel.intent_logic import IntentMode, IntentRole
+from core.runtime.frame import get_current_frame
 from ..bootstrapper import Bootstrapper
 
 def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = True):
@@ -150,7 +154,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     
     # 在 runtime registry 中也创建 Enum 类（继承 Object）
     # 注意：Enum 的元数据描述符已在 factory.py 中通过 ENUM_DESCRIPTOR 正确注册
-    from core.runtime.objects.kernel import IbClass, IbNativeFunction
     object_class = ib_classes.get("Object")
     enum_class = IbClass(name="Enum", parent=object_class, registry=registry)
     
@@ -391,7 +394,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     registry.register_boxer(dict, _box_dict, token)
 
     # 5.5 注册 IntentStack 内置类（公理体系融入）
-    from core.runtime.objects.intent_stack import IbIntentStack
 
     intent_stack_class = bootstrapper.get_class("IntentStack")
     intent_stack_desc = metadata_registry.resolve("IntentStack")
@@ -414,9 +416,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     #   ctx.fork() → 新的 intent_context 实例（拷贝）
     intent_context_class = ib_classes.get("intent_context")
     if intent_context_class:
-        from core.runtime.objects.intent_context import IbIntentContext
-        from core.runtime.objects.intent import IbIntent
-        from core.kernel.intent_logic import IntentMode, IntentRole
 
         def _ic_init(receiver, *args):
             """intent_context() 构造函数：创建空意图上下文。"""
@@ -547,7 +546,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             复用 ``RuntimeContextImpl.clear_inherited_intents()``，
             同时重建活跃实例指针（共享 _ctx 引用），使 OOP 路径与语法路径保持同源。
             """
-            from core.runtime.frame import get_current_frame
             frame = get_current_frame()
             if frame is not None and hasattr(frame, 'clear_inherited_intents'):
                 frame.clear_inherited_intents()
@@ -566,7 +564,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             ``use_intent_context`` 会同步更新帧级活跃实例指针，
             使后续 ``@+``/``@-`` 与 OOP 操作落在同一底层 IbIntentContext 上。
             """
-            from core.runtime.frame import get_current_frame
             frame = get_current_frame()
             if frame is None or not hasattr(frame, 'use_intent_context'):
                 return registry.get_none()
@@ -586,7 +583,6 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
             等价于 ``_intent_ctx.fork()``，但保留了"用户命名身份"的可观察性
             （调试器可由此追踪当前帧正在使用的策略对象身份）。
             """
-            from core.runtime.frame import get_current_frame
             frame = get_current_frame()
             new_instance = IbObject(intent_context_class)
             if frame is not None and hasattr(frame, 'get_active_intent_ibobj'):
