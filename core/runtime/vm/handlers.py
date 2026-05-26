@@ -1147,6 +1147,19 @@ def vm_handle_IbGlobalStmt(executor, node_uid: str, node_data: Mapping[str, Any]
     return executor.registry.get_none()
 
 
+def vm_handle_IbNonlocalStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """nonlocal 声明是编译期语义，运行时无操作。
+
+    nonlocal 的语义效果在编译期通过 SymbolResolutionPass 完成：
+    - 阻止 _prescan_body_locals 为 nonlocal 名称创建局部符号
+    - 将外层作用域的符号引用注入当前作用域
+    运行时赋值操作通过符号 UID 解析自然穿透到外层作用域（Cell 提升机制）。
+    """
+    if False:
+        yield  # pragma: no cover — 强制 generator function
+    return executor.registry.get_none()
+
+
 def vm_handle_IbRaise(executor, node_uid: str, node_data: Mapping[str, Any]):
     """raise 语句：求值异常对象后抛出 ``ThrownException``。
 
@@ -1283,13 +1296,32 @@ def vm_handle_IbSwitch(executor, node_uid: str, node_data: Mapping[str, Any]):
 # === 定义类语句（不下钻 body 内子节点） ===
 
 def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """普通函数定义：在当前作用域绑定 IbUserFunction。"""
+    """普通函数定义：在当前作用域绑定 IbUserFunction。
+
+    当函数包含 nonlocal 声明时（free_vars 非空），构建 Cell 闭包
+    使得返回后的函数仍能读写外层变量（与 lambda 闭包机制对齐）。
+    """
     if False:
         yield
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
     func = IbUserFunction(node_uid, executor.ec, spec=declared_type)
     name = node_data.get("name")
+
+    # 如果函数有 nonlocal 自由变量，构建 Cell 闭包
+    free_vars = node_data.get("free_vars") or []
+    if free_vars:
+        closure: Dict[str, Any] = {}
+        current_scope = executor.runtime_context.current_scope
+        for var_name, var_sym_uid in free_vars:
+            if var_sym_uid in closure:
+                continue
+            cell = current_scope.promote_to_cell(var_sym_uid)
+            if cell is not None:
+                closure[var_sym_uid] = (var_name, cell)
+        if closure:
+            func.closure = closure
+
     executor.runtime_context.define_variable(
         name, func, declared_type=declared_type, uid=sym_uid
     )
@@ -1952,6 +1984,7 @@ def build_dispatch_table() -> dict:
         # 语句 handler 扩展
         "IbAugAssign": vm_handle_IbAugAssign,
         "IbGlobalStmt": vm_handle_IbGlobalStmt,
+        "IbNonlocalStmt": vm_handle_IbNonlocalStmt,
         "IbRaise": vm_handle_IbRaise,
         "IbImport": vm_handle_IbImport,
         "IbImportFrom": vm_handle_IbImportFrom,

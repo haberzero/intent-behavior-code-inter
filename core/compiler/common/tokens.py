@@ -28,6 +28,7 @@ class TokenType(Enum):
     AUTO = auto()
     FN = auto()          # fn keyword: callable type inference (like auto but for callables)
     GLOBAL = auto()
+    NONLOCAL = auto()
     PASS = auto()
     BREAK = auto()
     CONTINUE = auto()

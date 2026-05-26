@@ -38,6 +38,8 @@ class StatementComponent(BaseComponent):
             return self.return_statement()
         if self.stream.match(TokenType.GLOBAL):
             return self.global_statement()
+        if self.stream.match(TokenType.NONLOCAL):
+            return self.nonlocal_statement()
         if self.stream.match(TokenType.SWITCH):
             return self.switch_statement()
         if self.stream.match(TokenType.IF):
@@ -115,6 +117,17 @@ class StatementComponent(BaseComponent):
                 break
         self.stream.consume_end_of_statement("Expect newline after global declaration.")
         return self._loc(ast.IbGlobalStmt(names=names), start_token)
+
+    def nonlocal_statement(self) -> ast.IbNonlocalStmt:
+        start_token = self.stream.previous()
+        names = []
+        while True:
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name in nonlocal declaration.")
+            names.append(name_token.value)
+            if not self.stream.match(TokenType.COMMA):
+                break
+        self.stream.consume_end_of_statement("Expect newline after nonlocal declaration.")
+        return self._loc(ast.IbNonlocalStmt(names=names), start_token)
 
     def llm_except_statement(self) -> ast.IbLLMExceptionalStmt:
         """
