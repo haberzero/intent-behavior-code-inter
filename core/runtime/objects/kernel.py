@@ -950,8 +950,10 @@ class IbUserFunction(IbFunction):
             if self.closure:
                 from core.runtime.objects.cell import IbCell
                 for sym_uid, (var_name, cell) in self.closure.items():
-                    if isinstance(cell, IbCell) and not cell.is_empty():
-                        rt_context.define_variable(var_name, cell.get(), uid=sym_uid)
+                    if isinstance(cell, IbCell):
+                        # 即使 Cell 为空也需要绑定（内层函数可能先赋值再读取）
+                        initial_value = cell.get() if not cell.is_empty() else self.ib_class.registry.get_none()
+                        rt_context.define_variable(var_name, initial_value, uid=sym_uid)
                         # 将 Cell 引用附加到新创建的符号上，使赋值时能同步更新
                         new_sym = rt_context.current_scope.get_symbol_by_uid(sym_uid)
                         if new_sym is not None:

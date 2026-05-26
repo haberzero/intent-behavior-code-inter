@@ -528,8 +528,7 @@ class SymbolResolver(ScopedVisitor):
     def _collect_nonlocal_names(self, body: list) -> set:
         """从函数体中收集所有 nonlocal 声明的变量名。
 
-        仅扫描顶层语句（nonlocal 声明必须出现在函数体顶层，
-        不递归进入 if/for/while 等子块）。
+        扫描函数体顶层语句中的 IbNonlocalStmt 节点。
         """
         names = set()
         for stmt in body:
