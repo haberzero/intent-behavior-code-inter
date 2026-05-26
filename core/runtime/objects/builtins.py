@@ -177,58 +177,21 @@ class IbString(IbValue):
         return self.ib_class.registry.box(len(self.value))
 
     def to_bool(self) -> IbObject:
-        val = self.value.strip().lower()
-        # 强约束决策逻辑：
-        # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
-        # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
-        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发不确定性标志，以便 llmexcept 捕获
-        if val in ("1", "true", "yes", "on"):
-            return self.ib_class.registry.box(True)
-        if val in ("0", "false", "no", "off", "null", "none", ""):
-            return self.ib_class.registry.box(False)
-            
-        # [Result Mode Refactor] 不再抛出 Python 异常。
-        # 通过 Registry 获取当前执行上下文并设置不确定性结果。
-        execution_context = self.ib_class.registry.get_execution_context()
-        if execution_context and execution_context.runtime_context:
-            from core.runtime.interpreter.llm_result import LLMResult
-            execution_context.runtime_context.set_last_llm_result(
-                LLMResult.uncertain_result(
-                    raw_response=self.value,
-                    retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 '0' 或 '1'。"
-                )
-            )
-            
-        # 返回 none (或者 0)，解释器（如 visit_IbIf）会检查 last_llm_result.is_uncertain 并立即停止执行
-        return self.ib_class.registry.get_none()
+        # 字符串真值判定遵循 Python 语义：非空即真，空字符串为假。
+        # 与 vtable 注册的实现保持一致（builtin_initializer.py）。
+        return self.ib_class.registry.box(len(self.value) > 0)
 
     def cast_to(self, target_class: Any) -> IbObject:
+        # 显式 cast 是纯代码逻辑行为，与 LLM 无关，不走 uncertain 路径。
         target_desc = target_class.spec if hasattr(target_class, 'spec') else None
         try:
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
-            # 检查当前是否在 llmexcept 保护范围内
-            execution_context = self.ib_class.registry.get_execution_context()
-            has_llm_frame = False
-            if execution_context and execution_context.runtime_context:
-                has_llm_frame = bool(execution_context.runtime_context.get_current_llm_except_frame())
-            
-            if has_llm_frame:
-                # [Result Mode Refactor] 在 llmexcept 保护范围内，通过 LLMResult 信号不确定性
-                from core.runtime.interpreter.llm_result import LLMResult
-                execution_context.runtime_context.set_last_llm_result(
-                    LLMResult.uncertain_result(
-                        raw_response=self.value,
-                        retry_hint=f"类型强制转换失败: 将 '{self.value}' 转换为 {target_desc} 失败: {str(e)}"
-                    )
-                )
-                return self.ib_class.registry.get_none()
-            else:
-                # 在普通 try/except 范围内，抛出可捕获的异常
-                raise InterpreterError(
-                    f"TypeError: Cannot convert '{self.value}' to {target_desc.get_base_name() if target_desc and hasattr(target_desc, 'get_base_name') else 'target type'}: {str(e)}"
-                )
+            raise InterpreterError(
+                f"TypeError: Cannot convert '{self.value}' to "
+                f"{target_desc.get_base_name() if target_desc and hasattr(target_desc, 'get_base_name') else 'target type'}: {str(e)}"
+            )
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())

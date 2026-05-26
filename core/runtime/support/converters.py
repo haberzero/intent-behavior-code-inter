@@ -14,7 +14,8 @@ def _cast_string_to_native(val: str, target_desc: Any) -> Any:
     if axiom_name == "float":
         return float(val)
     if axiom_name == "bool":
-        return val.strip().lower() not in ("false", "0", "no", "none", "")
+        # 显式 cast (bool)"..." 遵循非空即真语义，与 to_bool 一致。
+        return len(val) > 0
     return val
 
 def _cast_numeric_to_native(val: Any, target_desc: Any) -> Any:
