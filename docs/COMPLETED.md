@@ -5,7 +5,18 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-26（P0-A/B 行为表达式一般化完成，文档同步清理）
+> **最后更新**：2026-05-26（P0-C nonlocal 实现完成 + 文档同步）
+
+---
+
+## 2026-05-26：P0-C `nonlocal` 关键字全链路实现完成
+
+测试基线：**790 passed, 2 skipped**（0 failures）。
+
+- **P0-C**：`nonlocal` 关键字完整实现——Lexer（`TokenType.NONLOCAL`）→ Parser（`IbNonlocalStmt`）→ SymbolResolutionPass（`_collect_nonlocal_names` + `_prescan_body_locals` 跳过 + `visit_IbNonlocalStmt` 外部绑定验证）→ BindingAnalysisPass（Cell 提升标记）→ VM（`vm_handle_IbFunctionDef` Cell 闭包构建 + 写回）
+- **错误诊断**：SEM_060（模块级 nonlocal 禁止）、SEM_061（外部作用域无此变量）
+- **测试**：`tests/compiler/semantic/test_nonlocal.py` 覆盖 11 个场景（简单写回、多变量、计数器模式、两层嵌套、返回闭包读/写、多闭包共享 Cell、错误诊断、lambda 交互）
+- **INV-CONTEXT-2 合约测试解除 SKIP**：使用 nonlocal 语法实现"多闭包独立帧"测试
 
 ---
 

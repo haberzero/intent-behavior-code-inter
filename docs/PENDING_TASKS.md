@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-26（深度核实原有条目有效性；恢复技术细节；修正 nonlocal 状态为"未实现"）
+> **最后更新**：2026-05-26（nonlocal 已完成归档至 COMPLETED；PT-SEM-1 提升至 NEXT_STEPS）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -13,49 +13,9 @@
 
 ---
 
-## 一、闭包写回语义 — `nonlocal` 关键字实现
+## 一、Semantic Pipeline 后续演进
 
-**编号**: PT-CLOSURE-1  
-**优先级**: P1（前置条件已满足，已被 `NEXT_STEPS.md` P0-C 提升为当前焦点）  
-**状态**: 设计方案已确定，待实施
-
-### 问题本质
-
-IBCI 的闭包目前只支持**只读捕获**：内部函数/lambda 可以通过 `IbCell`（`core/runtime/objects/cell.py`）读取外部变量的最新值，但**不能写回**。原因是 `SymbolCollectionPass` 会为函数体内任何赋值目标创建本地符号，覆盖外部同名变量。
-
-**代码验证**（2026-05-26）：
-- Cell 基础设施已完备：`IbCell` 类、`ScopeImpl.promote_to_cell()`、`vm_handle_IbLambdaExpr` 的 lambda 共享分支均正常工作
-- INV-LAMBDA-1/2（只读捕获）、INV-CONTEXT-1（返回 lambda 后 Cell 有效）测试全部通过
-- INV-CONTEXT-2（闭包写回）失败 → 这就是本条目要解决的问题
-
-### 推荐实现方案：`nonlocal` 关键字
-
-用户通过 `nonlocal count` 显式声明"此变量来自外层作用域"，编译器据此跳过本地符号创建，改为建立到外部符号的 Cell 写入通道。
-
-**全链路改动点**：
-
-| 层 | 文件 | 改动 |
-|----|------|------|
-| Lexer | `core/compiler/lexer/core_scanner.py` | 在 KEYWORDS 表新增 `"nonlocal"` |
-| Token | `core/compiler/common/tokens.py` | 新增 `TokenType.NONLOCAL` |
-| AST | `core/kernel/ast.py` | 新增 `IbNonlocalStmt(names: List[str])` 节点 |
-| Parser | `core/compiler/parser/components/statement.py` | 新增 `nonlocal_statement()` 解析规则 |
-| SymbolCollectionPass | `core/compiler/semantic/passes/symbol_collection_pass.py` | `_prescan_body_locals` 跳过 nonlocal 声明的名称 |
-| SymbolResolutionPass | `core/compiler/semantic/passes/symbol_resolution_pass.py` | `visit_IbNonlocalStmt` 验证外部绑定存在（否则 SEM_060/SEM_061） |
-| BindingAnalysisPass | `core/compiler/semantic/passes/binding_analysis_pass.py` | 标记 nonlocal 变量为 Cell 提升（write-back 模式） |
-| VM | `core/runtime/vm/handlers.py` | `vm_handle_IbFunctionDef` 对 free_vars 构建 Cell 闭包；`vm_handle_IbAssign` 对 nonlocal 变量写入 Cell |
-
-**为什么不选其他方案**：
-- 自动推断（Python 3 之前的行为）：违背 IBCI "显式优于隐式"设计原则，且在嵌套闭包中语义歧义风险高
-- 无 nonlocal、仅保持只读捕获：满足 lambda 场景但无法覆盖"命名内部函数修改外部状态"的正当需求
-
-**预估工作量**: 8-12 小时（词法/语法/语义/运行时全链路 + 回归测试）
-
----
-
-## 二、Semantic Pipeline 后续演进
-
-### PT-SEM-1　生产就绪化 [P2]
+### PT-SEM-1　生产就绪化 [P1 — 已提升至 NEXT_STEPS]
 
 **前置条件**: Semantic 4-Phase pipeline 已稳定运行 ✅（`create_semantic_pipeline()` 在 `core/compiler/semantic/pipeline.py:115-139`）
 
@@ -102,7 +62,7 @@ IBCI 的闭包目前只支持**只读捕获**：内部函数/lambda 可以通过
 
 ---
 
-## 三、VM 异步/协程层（L3）— 多项子任务共同阻塞
+## 二、VM 异步/协程层（L3）— 多项子任务共同阻塞
 
 ### 阻塞原因
 
@@ -132,7 +92,7 @@ L3 协程层需要 VM 从"单任务调度器"升级为"多任务挂起/恢复"�
 
 ---
 
-## 四、语言级能力扩展（暂搁置，经事实核查确认有效）
+## 三、语言级能力扩展（暂搁置，经事实核查确认有效）
 
 ### PT-4.1　Enum 非 str 成员 + 迭代能力 [VISION]
 
@@ -218,7 +178,7 @@ L3 协程层需要 VM 从"单任务调度器"升级为"多任务挂起/恢复"�
 
 ---
 
-## 五、设计原则与明确排除方向
+## 四、设计原则与明确排除方向
 
 > 以下原则经项目主要贡献者确认，作为架构决策的长期约束。
 
