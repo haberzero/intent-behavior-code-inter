@@ -7,13 +7,13 @@ IntentNode: 不可变意图链表节点，支持结构共享。
 """
 from __future__ import annotations
 
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional
 
 
 class IntentNode:
     """不可变意图节点，支持结构共享以优化内存"""
 
-    def __init__(self, intent: Union[Any, Any], parent: Optional['IntentNode'] = None):
+    def __init__(self, intent: Any, parent: Optional['IntentNode'] = None):
         self.intent = intent
         self.parent = parent
         self._cached_list: Optional[List[Any]] = None
