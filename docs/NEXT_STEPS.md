@@ -1,10 +1,10 @@
 # NEXT_STEPS — 当前最紧要项
 
 > 本文档**只**记录当前周期内最紧要、可立即开工的下一步。
-> 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
+> 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-26（P0-A/B 完成：4 项 skipped 测试解除，测试基线 778 passed / 3 skipped）
+> **最后更新**：2026-05-26（文档同步清理；当前焦点 = P0-C nonlocal 设计决策）
 
 ---
 
@@ -18,33 +18,7 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P0：行为表达式一般化 + 闭包问题收口
-
-> 以下为经实际代码验证后的任务分解，所有结论均有代码运行佐证（2026-05-26）。
-
-### P0-A ✅ 已完成：解除 3 项 SKIP 测试
-
-已验证底层实现到位并编写正式测试代码（提交于 2026-05-26）：
-
-| 测试 ID | 验证场景 | 状态 |
-|---------|---------|------|
-| **INV-BEHAVIOR-4** | `if @~ MOCK:INT:1 ~:` 行为表达式作为 if 条件 | ✅ 测试绿色 |
-| **INV-CONTEXT-1** | `make_adder(5)` 返回 lambda 后调用 `a5(3)` = 8 | ✅ 测试绿色 |
-| **INV-CELL-2** | 多个 lambda 读取同一外部变量，外部赋值后全部看到新值 | ✅ 测试绿色 |
-
-### P0-B ✅ 已完成：行为表达式参与二元运算（INV-BEHAVIOR-3）
-
-在 `TypeCheckingPass.visit_IbBinOp` 和 `visit_IbCompare` 中增加 behavior 操作数类型适配：
-- 若一侧为 `behavior` 类型，适配为另一侧具体类型（与 `visit_IbAssign` 中"左值驱动类型适配"机制对齐）
-- 双侧均为 behavior 退化为 `str`
-- 比较运算中 behavior 操作数适配后，整体返回 `bool`
-
-验证：`int y = x + @~ MOCK:INT:3 ~` 编译通过且运行正确（y=8）。
-
----
-
-
-### P0-C 闭包写回语义（INV-CONTEXT-2）[需语言设计决策]
+## P0-C 闭包写回语义（INV-CONTEXT-2）[需语言设计决策]
 
 **现状验证**（2026-05-26）：
 
@@ -74,7 +48,7 @@ IBCI 编译器将函数体内的赋值目标视为**本地变量声明**（Symbo
 - 用户心智模型清晰，Python 开发者零学习成本
 - 改动面可控：Lexer（新关键字）→ Parser（新语句）→ SymbolCollectionPass（标记外部绑定）→ 运行时（Cell 写回）
 
-**前置条件**：P0-A 完成后再启动，确保 Cell 基础设施验证充分。
+**前置条件**：P0-A/B 已完成 ✅，Cell 基础设施验证充分。可立即开工。
 
 **预估工作量**：8-12 小时（含词法/语法/语义/运行时全链路 + 测试）。
 
