@@ -200,7 +200,7 @@ class IbString(IbValue):
             execution_context.runtime_context.set_last_llm_result(
                 LLMResult.uncertain_result(
                     raw_response=self.value,
-                    retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 '0' 或 '1'。"
+                    retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 'true'/'false'/'yes'/'no'/'1'/'0'。"
                 )
             )
             return self.ib_class.registry.get_none()
