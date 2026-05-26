@@ -181,30 +181,32 @@ class IbString(IbValue):
         return self.ib_class.registry.box(len(self.value))
 
     def to_bool(self) -> IbObject:
-        val = self.value.strip().lower()
-        # 强约束决策逻辑：
-        # 1. 仅当显式为 "1", "true", "yes" 时为 True (1)
-        # 2. 仅当显式为 "0", "false", "no" 或空字符串时为 False (0)
-        # 3. 其余任何模糊回复（如 "maybe", "i think so"）均应触发不确定性标志，以便 llmexcept 捕获
-        if val in ("1", "true", "yes", "on"):
-            return self.ib_class.registry.box(True)
-        if val in ("0", "false", "no", "off", "null", "none", ""):
-            return self.ib_class.registry.box(False)
-            
-        # [Result Mode Refactor] 不再抛出 Python 异常。
-        # 通过 Registry 获取当前执行上下文并设置不确定性结果。
-        from core.runtime.interpreter.llm_result import LLMResult  # 局部导入：打破 builtins ↔ interpreter 循环依赖
+        # 判断是否在 llmexcept 保护帧内（即 LLM 调用上下文）
         execution_context = self.ib_class.registry.get_execution_context()
+        has_llm_frame = False
         if execution_context and execution_context.runtime_context:
+            has_llm_frame = bool(execution_context.runtime_context.get_current_llm_except_frame())
+
+        if has_llm_frame:
+            # LLM 上下文：严格匹配布尔语义，模糊值触发 uncertain 以便 llmexcept 重试
+            val = self.value.strip().lower()
+            if val in ("1", "true", "yes", "on"):
+                return self.ib_class.registry.box(True)
+            if val in ("0", "false", "no", "off", "null", "none", ""):
+                return self.ib_class.registry.box(False)
+
+            # 模糊回复（如 "maybe", "i think so"）触发不确定性标志
+            from core.runtime.interpreter.llm_result import LLMResult  # 局部导入：打破 builtins ↔ interpreter 循环依赖
             execution_context.runtime_context.set_last_llm_result(
                 LLMResult.uncertain_result(
                     raw_response=self.value,
                     retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 '0' 或 '1'。"
                 )
             )
-            
-        # 返回 none (或者 0)，解释器（如 visit_IbIf）会检查 last_llm_result.is_uncertain 并立即停止执行
-        return self.ib_class.registry.get_none()
+            return self.ib_class.registry.get_none()
+
+        # 常规代码路径：遵循 Python 语义，非空字符串为 True，空字符串为 False
+        return self.ib_class.registry.box(bool(self.value))
 
     def cast_to(self, target_class: Any) -> IbObject:
         target_desc = target_class.spec if hasattr(target_class, 'spec') else None
