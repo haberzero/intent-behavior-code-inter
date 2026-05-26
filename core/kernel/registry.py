@@ -374,11 +374,12 @@ class KernelRegistry:
         return value
 
     def is_truthy(self, obj: Any) -> bool:
-        """ 判定对象的真值 (Truthy)。通过 vtable 分发 to_bool，与 VM 主路径一致。"""
+        """ 判定对象的真值 (Truthy)。"""
         if obj is None or obj is self._none_instance:
             return False
-        if hasattr(obj, 'receive'):
-            res = obj.receive('to_bool', [])
+        if hasattr(obj, 'to_bool'):
+            res = obj.to_bool()
+            # to_bool 应该返回 IbInteger(0 或 1)
             return bool(res.value) if hasattr(res, 'value') else bool(res)
         if hasattr(obj, 'value'):
             return bool(obj.value)
