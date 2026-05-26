@@ -34,6 +34,7 @@ from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
 from core.compiler.semantic.passes.contract_validator import ContractValidator
+from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
@@ -46,6 +47,7 @@ from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.capability_registry import CapabilityRegistry
 from core.runtime.interfaces import IsolationLevel
+from core.extension.auto_discovery import AutoDiscoveryService
 
 
 from core.base.enums import RegistrationState
@@ -222,7 +224,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
          在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
         这确保自定义公理能在封印前注册到 AxiomRegistry。
         """
-        from core.extension.auto_discovery import AutoDiscoveryService
 
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
 
@@ -435,7 +436,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         暴露分段语义分析接口，允许观察中间产物。
         """
-        from core.compiler.semantic.analyzer import SemanticAnalyzer
         if analyzer is None:
             analyzer = SemanticAnalyzer(
                 issue_tracker=self.issue_tracker, 

@@ -41,6 +41,7 @@ Status: Active
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
+from core.runtime.objects.deep_clone import try_deep_clone
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.runtime_context import RuntimeContextImpl, RuntimeSymbol
@@ -181,13 +182,11 @@ class LLMExceptFrame:
         self.saved_protocol_states = {}
         scope = runtime_context.get_current_scope()
 
-        from core.runtime.objects.kernel import IbObject as KernelIbObject
-
         for name, symbol in scope.get_all_symbols().items():
             val = symbol.value
 
             # 方案B 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
-            if type(val) is KernelIbObject:
+            if type(val) is IbObject:
                 snapshot_method = val.ib_class.lookup_method('__snapshot__')
                 if snapshot_method:
                     try:
@@ -209,7 +208,6 @@ class LLMExceptFrame:
         实际逻辑下沉到 ``core.runtime.objects.deep_clone.try_deep_clone``，
         与 snapshot lambda 路径共用同一深克隆实现。
         """
-        from core.runtime.objects.deep_clone import try_deep_clone
         return try_deep_clone(val, memo)
 
     def restore_context(self, runtime_context: 'RuntimeContextImpl') -> None:

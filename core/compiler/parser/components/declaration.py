@@ -9,6 +9,7 @@ from core.compiler.parser.core.syntax import ID_AUTO, IbPrecedence
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
+from core.compiler.parser.components.type_def import ID_FN
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -73,7 +74,6 @@ class DeclarationComponent(BaseComponent):
         4. auto x: int = 1 (显式覆盖)
         5. (int x, int y) = (10, 20) (元组解包声明)
         """
-        from core.compiler.parser.components.type_def import ID_FN
         # Handle tuple destructuring declaration: (int x, int y) = expr
         if not explicit_auto and not explicit_fn and self.stream.check(TokenType.LPAREN):
             return self._tuple_variable_declaration()

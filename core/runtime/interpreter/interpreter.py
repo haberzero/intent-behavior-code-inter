@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import traceback
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 
@@ -58,6 +59,11 @@ from core.runtime.interpreter.intrinsics import IntrinsicManager
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
+from core.runtime.frame import (
+    set_current_frame, reset_current_frame,
+    set_current_execution_context, reset_current_execution_context,
+)
+from core.runtime.vm.vm_executor import VMExecutor
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
@@ -461,10 +467,6 @@ class Interpreter:
 
     def run(self) -> IbObject:
         """从入口模块开始执行完整的项目"""
-        from core.runtime.frame import (
-            set_current_frame, reset_current_frame,
-            set_current_execution_context, reset_current_execution_context,
-        )
         _token = set_current_frame(self.runtime_context)
         _ec_token = set_current_execution_context(self._execution_context)
         try:
@@ -479,7 +481,6 @@ class Interpreter:
             return result if result is not None else self.registry.get_none()
         except Exception as e:
             if not isinstance(e, InterpreterError):
-                import traceback
                 traceback.print_exc()
             raise e
         finally:
@@ -498,7 +499,6 @@ class Interpreter:
         三级穿透查找。
         """
         if self._vm_executor is None:
-            from core.runtime.vm.vm_executor import VMExecutor
             self._vm_executor = VMExecutor(
                 self._execution_context, interpreter=self
             )
@@ -509,10 +509,6 @@ class Interpreter:
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
         self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
-        from core.runtime.frame import (
-            set_current_frame, reset_current_frame,
-            set_current_execution_context, reset_current_execution_context,
-        )
         _frame_token = set_current_frame(self.runtime_context)
         _ec_token = set_current_execution_context(self._execution_context)
 
@@ -710,7 +706,6 @@ class Interpreter:
                 def _make_auto_init(fnames):
                     def _auto_init(self_obj, *args):
                         if len(args) != len(fnames):
-                            from core.kernel.issue import InterpreterError
                             raise InterpreterError(
                                 f"TypeError: {self_obj.ib_class.name}() expected {len(fnames)} argument(s), but got {len(args)}"
                             )
@@ -719,7 +714,6 @@ class Interpreter:
                         return self_obj.ib_class.registry.get_none()
                     return _auto_init
 
-                from core.runtime.objects.kernel import IbNativeFunction
                 auto_init_fn = IbNativeFunction(
                     _make_auto_init(field_names),
                     unbox_args=False,

@@ -4,8 +4,9 @@ from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
-from core.runtime.interpreter.runtime_context import IntentNode
+from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.intent_context import IbIntentContext
 from core.kernel.intent_logic import IntentMode, IntentRole
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -388,7 +389,6 @@ class RuntimeDeserializer:
         data = self.instance_pool.get(uid)
         if data is None or data.get("_type") != "intent_context_native":
             return None
-        from core.runtime.objects.intent_context import IbIntentContext
         ic = IbIntentContext()
         # 先入缓存以打断潜在的循环引用
         self.intent_ctx_cache[uid] = ic

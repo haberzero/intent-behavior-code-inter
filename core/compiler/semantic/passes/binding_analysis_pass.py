@@ -9,9 +9,10 @@ Binding Analysis Pass (BindingPhase sub-step 1)
 from typing import Optional, List, Dict, Any, Set
 
 from core.kernel import ast
-from core.kernel.symbols import SymbolTable
+from core.kernel.symbols import SymbolTable, VariableSymbol, SymbolKind
+from core.kernel.spec.registry import SpecRegistry
 
-from ..result import PassResult, Diagnostic, DiagnosticLevel
+from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 from .scoped_visitor import ScopedVisitor
@@ -30,7 +31,6 @@ class BindingAnalysisPass(BasePass):
         super().__init__("BindingAnalysisPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        from ..result import PassOutput
         all_diagnostics = []
 
         # 1. LLMExcept 绑定分析
@@ -560,8 +560,6 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
     @staticmethod
     def _register_func_params(args: list, scope: SymbolTable):
         """将函数参数注册到作用域中（用于 lambda 捕获分析时能够识别外层参数）。"""
-        from core.kernel.symbols import VariableSymbol, SymbolKind
-        from core.kernel.spec.registry import SpecRegistry
 
         for arg_node in args:
             name = None

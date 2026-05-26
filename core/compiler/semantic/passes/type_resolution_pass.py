@@ -12,7 +12,7 @@ from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind
 from core.kernel.spec import IbSpec
 
-from ..result import PassResult, Diagnostic, DiagnosticLevel
+from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 
@@ -32,7 +32,6 @@ class TypeResolutionPass(BasePass):
         super().__init__("TypeResolutionPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        from ..result import PassOutput
         resolver = TypeAnnotationResolver(context)
         resolver.resolve(context.ast)
 

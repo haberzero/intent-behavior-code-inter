@@ -18,9 +18,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
+from core.runtime.objects.intent_node import IntentNode
+
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject, IbClass
-    from core.runtime.interpreter.runtime_context import IntentNode
     from core.runtime.objects.intent import IbIntent, IntentMode
 
 
@@ -82,7 +83,6 @@ class IbIntentContext:
         压入持久意图（@+ 语义）。
         仅修改当前 IbIntentContext 实例，不影响父上下文。
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         self._intent_top = IntentNode(intent, self._intent_top)
 
     def pop(self) -> Optional[Any]:
@@ -170,7 +170,6 @@ class IbIntentContext:
             base.combine(extra)           # base 同时拥有原意图与 extra 的意图
             intent_context.use(base)      # 采纳为当前帧活跃上下文
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         # 持久栈：``other.get_active_intents()`` 返回 other 栈底→栈顶；按此顺序
         # 依次压入 self 栈顶，使 other 的栈顶最终成为合并后栈的新栈顶。
         # 新 IntentNode 链没有缓存，无需手动失效。
@@ -219,7 +218,6 @@ class IbIntentContext:
         通过重建不含目标节点的新链表来实现移除，保证结构共享安全
         （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         intents: List[Any] = []
         found = False
         current = self._intent_top
@@ -243,7 +241,6 @@ class IbIntentContext:
         通过重建不含目标节点的新链表来实现移除，保证结构共享安全
         （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         intents: List[Any] = []
         found = False
         current = self._intent_top

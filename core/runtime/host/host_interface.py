@@ -1,9 +1,9 @@
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from core.kernel.spec import TypeDef
-    from core.kernel.spec.registry import SpecRegistry
-    from core.kernel.axioms.registry import AxiomRegistry
+from core.kernel.spec import TypeDef
+from core.kernel.spec.registry import SpecRegistry
+from core.kernel.axioms.registry import AxiomRegistry
+from core.kernel.axioms.primitives import register_core_axioms
+from core.kernel.factory import create_default_registry
 
 
 class HostModuleRegistry:
@@ -28,23 +28,18 @@ class HostInterface:
     协调元数据注册和运行时实现注册。
     所有 HostInterface 实例必须绑定到带有 AxiomRegistry 的 SpecRegistry。
     """
-    def __init__(self, external_registry: Optional['SpecRegistry'] = None):
-        from core.kernel.spec.registry import SpecRegistry
-        from core.kernel.axioms.registry import AxiomRegistry
-        from core.kernel.axioms.primitives import register_core_axioms
-        from core.kernel.factory import create_default_registry
-
+    def __init__(self, external_registry: Optional[SpecRegistry] = None):
         if external_registry is not None:
-            self.metadata: 'SpecRegistry' = external_registry
+            self.metadata: SpecRegistry = external_registry
         else:
             self.metadata = create_default_registry()
 
         self.runtime = HostModuleRegistry()
-        self._module_metadata_map: Dict[str, 'TypeDef'] = {}
+        self._module_metadata_map: Dict[str, TypeDef] = {}
         self._discovery_map: Dict[str, str] = {}  # Mapping: discovery_name -> module_name
         self._reverse_discovery_map: Dict[str, str] = {}  # Mapping: module_name -> discovery_name
 
-    def register_module(self, name: str, implementation: Any, metadata: Optional['TypeDef'] = None, discovery_name: Optional[str] = None):
+    def register_module(self, name: str, implementation: Any, metadata: Optional[TypeDef] = None, discovery_name: Optional[str] = None):
         """
         同时注册元数据和实现。
 
@@ -59,7 +54,6 @@ class HostInterface:
             self._module_metadata_map[name] = metadata
             self.metadata.register(metadata)
         else:
-            from core.kernel.spec import TypeDef
             self.metadata.register(TypeDef(name=name))
 
     def get_module_by_discovery_name(self, discovery_name: str) -> Optional[str]:
@@ -70,7 +64,7 @@ class HostInterface:
         """根据逻辑模块名查找物理发现名称"""
         return self._reverse_discovery_map.get(module_name)
 
-    def register_global_function(self, name: str, implementation: Any, metadata: 'TypeDef'):
+    def register_global_function(self, name: str, implementation: Any, metadata: TypeDef):
         self.runtime.register(name, implementation)
         self.metadata.register(metadata)
 

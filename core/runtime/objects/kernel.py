@@ -5,8 +5,13 @@ from core.kernel.issue import InterpreterError
 from core.base.source_atomic import Location
 from core.runtime.exceptions import RegistryIsolationError
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.diagnostics.codes import RUN_CALL_ERROR
 from core.kernel.intent_logic import IntentRole
 from core.kernel.spec import IbSpec, ANY_SPEC, TypeKind
+from core.kernel.spec.type_ref import TypeRef as _TypeRef
+from core.runtime.frame import get_current_frame as _get_frame
+from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.exceptions import ThrownException
 
 if TYPE_CHECKING:
     from core.kernel import ast as ast
@@ -259,7 +264,6 @@ class IbValue(IbObject):
         if type_ref is not None:
             self.type_ref = type_ref
         else:
-            from core.kernel.spec.type_ref import TypeRef as _TypeRef
             spec = getattr(ib_class, "spec", None)
             self.type_ref = _TypeRef.from_spec(spec) if spec is not None else None
         self.payload = payload
@@ -666,7 +670,6 @@ class IbNativeFunction(IbFunction):
             # ThrownException 是用户代码主动抛出的语言级异常（如
             # LLMParseError 等），必须穿透原生函数边界，由 IbTry / 顶层
             # try-except 体系处理；不可被包装为 InterpreterError。
-            from core.runtime.exceptions import ThrownException
             if isinstance(e, ThrownException):
                 raise
             raise InterpreterError(f"Native function '{self._name}' failed: {e}")
@@ -902,9 +905,7 @@ class IbUserFunction(IbFunction):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
-        from core.runtime.frame import get_current_frame as _get_frame
         from core.runtime.objects.builtins import IbFnCallable, IbBehavior
-        from core.base.diagnostics.codes import RUN_CALL_ERROR
         _frame = _get_frame()
         rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
@@ -915,7 +916,6 @@ class IbUserFunction(IbFunction):
         # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：
         #   intent_context.clear_inherited()  — 清空继承来的持久意图栈
         #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
-        from core.runtime.objects.intent_context import IbIntentContext
         old_intent_ctx = rt_context._intent_ctx
         # 函数调用进入时，子帧获得一个匿名活跃指针（共享 fork 后 _ctx 引用）。
         # 子帧默认未选择命名意图策略；若参数被标注为 ``intent_context`` 类型，

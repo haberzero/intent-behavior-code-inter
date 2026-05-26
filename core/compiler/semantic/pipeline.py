@@ -4,11 +4,16 @@ Semantic Pipeline — 语义分析管道协调器
 协调 4 个 Phase 的执行，收集 PassOutput，最终合并为 MetadataStore。
 """
 
+from dataclasses import replace
 from typing import List
-from .result import PassResult, PassOutput
+from .result import PassResult, PassOutput, DiagnosticLevel
 from .context import SemanticContext
 from .metadata.metadata_store import MetadataStore
 from .passes.base_pass import BasePass
+from .passes.symbol_phase import SymbolPhase
+from .passes.type_phase import TypePhase
+from .passes.binding_phase import BindingPhase
+from .passes.integrity_phase import IntegrityPhase
 
 
 class SemanticPipeline:
@@ -23,7 +28,6 @@ class SemanticPipeline:
 
     def run(self, context: SemanticContext) -> 'PipelineResult':
         """运行管道中的所有 Phase，返回 PipelineResult。"""
-        from dataclasses import replace
 
         current_context = context
         outputs: List[PassOutput] = []
@@ -84,7 +88,6 @@ class PipelineResult:
 
     @property
     def has_errors(self):
-        from .result import DiagnosticLevel
         return any(d.level == DiagnosticLevel.ERROR for d in self.diagnostics)
 
 
@@ -97,10 +100,6 @@ def create_semantic_pipeline() -> SemanticPipeline:
     3. BindingPhase — 绑定分析 + 行为依赖分析
     4. IntegrityPhase — 完整性检查
     """
-    from .passes.symbol_phase import SymbolPhase
-    from .passes.type_phase import TypePhase
-    from .passes.binding_phase import BindingPhase
-    from .passes.integrity_phase import IntegrityPhase
 
     passes = [
         SymbolPhase(),

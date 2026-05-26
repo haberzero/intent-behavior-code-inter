@@ -10,11 +10,12 @@ from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.runtime.objects.kernel import IbClass, IbModule, IbObject
-
-if TYPE_CHECKING:
-    from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
-    from core.runtime.interpreter.llm_result import LLMResult
+from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction, IbLLMCallResult
+from core.runtime.objects.intent_node import IntentNode
+from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.cell import IbCell
+from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
+from core.runtime.interpreter.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_builtin: bool = False):
@@ -52,7 +53,6 @@ class ScopeImpl:
             return
 
         # 特殊处理：IbLLMUncertain 可以赋值给任何类型
-        from core.runtime.objects.kernel import IbLLMUncertain, IbFunction
         if isinstance(value, IbLLMUncertain):
             return
 
@@ -215,7 +215,6 @@ class ScopeImpl:
 
         返回：IbCell 引用，或 None（变量不存在 / 属于全局作用域不需要提升）。
         """
-        from core.runtime.objects.cell import IbCell
         if sym_uid in self._cell_map:
             return self._cell_map[sym_uid]
         if sym_uid in self._uid_to_symbol:
@@ -296,28 +295,6 @@ class SymbolViewImpl:
         except:
             return False
 
-class IntentNode:
-    """ 不可变意图节点，支持结构共享以优化内存"""
-    def __init__(self, intent: Union[IbIntent, Any], parent: Optional['IntentNode'] = None):
-        self.intent = intent
-        self.parent = parent
-        self._cached_list: Optional[List[IbIntent]] = None
-
-    def to_list(self) -> List[IbIntent]:
-        """展平为列表（带缓存）"""
-        if self._cached_list is not None:
-            return self._cached_list
-
-        res = []
-        curr = self
-        while curr:
-            res.append(curr.intent)
-            curr = curr.parent
-        # 由于是向上链接，展平后需要反转以保持从底到顶的顺序
-        res.reverse()
-        self._cached_list = res
-        return res
-
 class RuntimeContextImpl(RuntimeContext):
     def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):
         if not registry:
@@ -330,7 +307,6 @@ class RuntimeContextImpl(RuntimeContext):
 
         # 意图上下文：
         # 持久意图栈、涂抹意图队列、排他意图槽、全局意图全部统一持有在此对象中。
-        from core.runtime.objects.intent_context import IbIntentContext
         self._intent_ctx: IbIntentContext = IbIntentContext()
 
         # 帧级活跃 intent_context IBCI 实例指针
@@ -349,8 +325,7 @@ class RuntimeContextImpl(RuntimeContext):
         # 设计目的：使调试器能够直接观察"当前帧正在使用哪个用户命名的意图策略对象"，
         # 而不是面对一个匿名 Python 对象。``get_current()`` 返回该指针的 fork，
         # 既保留用户对象身份语义，又确保 fork 语义不泄漏。
-        from core.runtime.objects.kernel import IbObject  # noqa: F401
-        self._active_intent_ibobj: Optional['IbObject'] = None
+        self._active_intent_ibobj: Optional[IbObject] = None
 
         # [LLMExceptFrame] LLM 异常重试帧栈
         self._llm_except_frames: List['LLMExceptFrame'] = []
@@ -419,9 +394,7 @@ class RuntimeContextImpl(RuntimeContext):
             self._last_llm_result = None
             return
         # 如果是内部 LLMResult dataclass，转换为 IbLLMCallResult
-        from core.runtime.interpreter.llm_result import LLMResult
         if isinstance(result, LLMResult):
-            from core.runtime.objects.kernel import IbLLMCallResult
             ib_cls = self._registry.get_class("llm_call_result")
             if ib_cls is not None:
                 result = IbLLMCallResult(
@@ -486,7 +459,6 @@ class RuntimeContextImpl(RuntimeContext):
         3. 保存 loop 上下文
         4. 保存 retry_hint
         """
-        from core.runtime.interpreter.llm_except_frame import LLMExceptFrame
         frame = LLMExceptFrame(
             target_uid=target_uid,
             node_type=node_type,
@@ -752,7 +724,6 @@ class RuntimeContextImpl(RuntimeContext):
         共享引用不变量：当用户在该封装上调用 ``push()`` 时，
         修改的就是帧的 ``_intent_ctx``；反之 ``@+`` 修改的也是该封装的 ``_ctx``。
         """
-        from core.runtime.objects.kernel import IbObject
         wrapper = IbObject(ib_class)
         wrapper.fields['_ctx'] = self._intent_ctx
         self._active_intent_ibobj = wrapper

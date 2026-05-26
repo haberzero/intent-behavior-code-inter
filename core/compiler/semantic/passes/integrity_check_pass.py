@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 
 from core.kernel import ast
 
-from ..result import PassResult, Diagnostic
+from ..result import PassResult, PassOutput, Diagnostic
 from ..context import SemanticContext
 from .base_pass import BasePass
 
@@ -59,7 +59,6 @@ class IntegrityCheckPass(BasePass):
         super().__init__("IntegrityCheckPass")
 
     def run(self, context: SemanticContext) -> PassResult:
-        from ..result import PassOutput
 
         # Populate location bindings for all AST nodes
         loc_binder = LocationBinder(context)
