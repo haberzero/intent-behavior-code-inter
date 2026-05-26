@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`；
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-26（经代码验证：重新评估 7 个 skipped 测试，3 项确认已可通过、1 项需 semantic 增强、1 项需语言设计）
+> **最后更新**：2026-05-26（P0-A/B 完成：4 项 skipped 测试解除，测试基线 810 passed / 3 skipped）
 
 ---
 
@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-26 实测结果**：`806 passed, 7 skipped`（0 failures）。
+**2026-05-26 实测结果**：`810 passed, 3 skipped`（0 failures）。
 
 ---
 
@@ -22,54 +22,27 @@ python -m pytest tests/ -q --tb=no --no-header
 
 > 以下为经实际代码验证后的任务分解，所有结论均有代码运行佐证（2026-05-26）。
 
-### P0-A ✅ 可直接解除 SKIP 的测试（3 项）
+### P0-A ✅ 已完成：解除 3 项 SKIP 测试
 
-以下测试经 `run_ibci()` 实际运行验证，底层实现已到位，仅需编写正式测试代码并移除 `pytest.skip()`：
+已验证底层实现到位并编写正式测试代码（提交于 2026-05-26）：
 
-| 测试 ID | 验证场景 | 验证结果 |
-|---------|---------|---------|
-| **INV-BEHAVIOR-4** | `if @~ MOCK:INT:1 ~:` 行为表达式作为 if 条件 | ✅ 正确进入分支（Parser 已支持、Semantic 绑定 bool、VM 正确执行） |
-| **INV-CONTEXT-1** | `make_adder(5)` 返回 lambda 后调用 `a5(3)` = 8 | ✅ Cell 机制在帧退出后正确保留值（IbCell 生命周期独立于 ScopeImpl） |
-| **INV-CELL-2** | 多个 lambda 读取同一外部变量，外部赋值后全部看到新值 | ✅ `promote_to_cell` 幂等返回同一 IbCell，`assign()` 同步到 cell |
+| 测试 ID | 验证场景 | 状态 |
+|---------|---------|------|
+| **INV-BEHAVIOR-4** | `if @~ MOCK:INT:1 ~:` 行为表达式作为 if 条件 | ✅ 测试绿色 |
+| **INV-CONTEXT-1** | `make_adder(5)` 返回 lambda 后调用 `a5(3)` = 8 | ✅ 测试绿色 |
+| **INV-CELL-2** | 多个 lambda 读取同一外部变量，外部赋值后全部看到新值 | ✅ 测试绿色 |
 
-**工作量**：为每个测试编写正式断言代码（替换 `pytest.skip()`），确认测试绿色后提交。预计 1-2 小时。
+### P0-B ✅ 已完成：行为表达式参与二元运算（INV-BEHAVIOR-3）
 
-**注意事项**：
-- INV-BEHAVIOR-4 的 mock 协议需用 `MOCK:INT:1`（走 `from_prompt` 到 bool 的转换路径），不可用 `MOCK:BOOL:1`（该模式直接返回字符串 "1" 无法被 bool 公理正确解析）。
-- INV-CONTEXT-1 测试应验证 lambda 捕获函数参数（非全局变量）的场景。
-- INV-CELL-2 测试应验证多个 lambda 在同一作用域创建、外部赋值后全部读到最新值。
+在 `TypeCheckingPass.visit_IbBinOp` 和 `visit_IbCompare` 中增加 behavior 操作数类型适配：
+- 若一侧为 `behavior` 类型，适配为另一侧具体类型（与 `visit_IbAssign` 中"左值驱动类型适配"机制对齐）
+- 双侧均为 behavior 退化为 `str`
+- 比较运算中 behavior 操作数适配后，整体返回 `bool`
 
----
-
-### P0-B 行为表达式参与二元运算（INV-BEHAVIOR-3）[需 Semantic 增强]
-
-**现状**：Parser 已正确处理 `x + @~...~`（Pratt 解析器在 LOWEST 优先级允许 behavior expr 作为操作数），但 TypeCheckingPass 的 `visit_IbBinOp` 对 `int + behavior` 组合发出 SEM_003 错误。
-
-**根因**：`visit_IbBinOp` 通过 `registry.resolve_operation_type_name(op, left_type, right_type)` 查询操作返回类型，`behavior` 类型未注册任何算术操作能力。
-
-**解决方案（Semantic 层类型适配）**：
-
-在 `TypeCheckingPass.visit_IbBinOp` 中增加 behavior 操作数特殊路径：
-1. 若左操作数或右操作数为 `behavior` 类型，根据另一侧的具体类型推断 behavior 应产出的类型
-2. 将 behavior 节点的类型绑定 **适配** 为另一侧类型（复用已有的"左值驱动类型适配"机制）
-3. 整体表达式返回非 behavior 侧的类型
-
-**技术要点**：
-- 关键代码位置：`core/compiler/semantic/passes/type_checking_pass.py` 的 `visit_IbBinOp`
-- 复用模式：与 `visit_IbAssign` 中已有的 behavior 类型适配逻辑对齐（lines 254-264 的"行为表达式结果适配目标类型"）
-- 需处理双侧均为 behavior 的退化情况（默认 `str`）
-- 需处理比较运算符（`==`、`<` 等）：behavior 操作数适配为另一侧类型，表达式整体返回 `bool`
-
-**验证标准**：
-```ibci
-int x = 5
-int y = x + @~ MOCK:INT:3 ~   # 编译通过，y = 8
-bool b = x > @~ MOCK:INT:2 ~  # 编译通过，b = True
-```
-
-**预估工作量**：3-5 小时（含测试编写）。
+验证：`int y = x + @~ MOCK:INT:3 ~` 编译通过且运行正确（y=8）。
 
 ---
+
 
 ### P0-C 闭包写回语义（INV-CONTEXT-2）[需语言设计决策]
 

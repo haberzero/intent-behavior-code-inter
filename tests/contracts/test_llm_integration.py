@@ -90,11 +90,22 @@ print(x)
 
     def test_behavior_in_expression(self):
         """INV-BEHAVIOR-3: Behavior can be used in expressions."""
-        pytest.skip("PT-5.1: Behavior expressions inside arithmetic operations not yet supported (SEM_003)")
+        code = AI_MOCK_PREFIX + """
+int x = 5
+int y = x + @~ MOCK:INT:3 ~
+print(y)
+"""
+        assert run_ibci(code) == ["8"]
 
     def test_behavior_in_control_flow(self):
         """INV-BEHAVIOR-4: Behavior can be used in control flow."""
-        pytest.skip("PT-5.1: Behavior expressions inside if-conditions not yet supported (PAR_001)")
+        code = AI_MOCK_PREFIX + """
+if @~ MOCK:INT:1 ~:
+    print("branch_taken")
+else:
+    print("branch_skipped")
+"""
+        assert run_ibci(code) == ["branch_taken"]
 
 
 # ===========================================================================
