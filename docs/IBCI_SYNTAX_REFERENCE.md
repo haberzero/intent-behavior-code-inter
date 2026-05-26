@@ -162,6 +162,31 @@ print((str)counter)    # 1
 - 可以在 `global` 声明之后才定义全局变量（函数调用时变量已存在即可）。
 - `global x, y` 支持一次声明多个全局变量。
 
+### 2.7 nonlocal 变量
+
+`nonlocal` 语句用于在嵌套函数中**写回**外层函数作用域的变量。不使用 `nonlocal` 时，内部函数的赋值目标会被视为局部变量声明。
+
+```ibci
+func make_counter() -> fn:
+    int count = 0
+    func inc() -> int:
+        nonlocal count
+        count = count + 1
+        return count
+    return inc
+
+fn counter = make_counter()
+print(counter())    # 1
+print(counter())    # 2
+print(counter())    # 3
+```
+
+**说明：**
+- `nonlocal` 只能在嵌套函数内部使用，在模块级使用会产生 SEM_060 编译错误。
+- 声明的变量必须在外层作用域中已存在，否则产生 SEM_061 编译错误。
+- `nonlocal a, b` 支持一次声明多个外部变量。
+- nonlocal 变量通过 Cell 机制实现：多个闭包可以共享同一个 Cell，实现状态共享。
+
 ---
 
 ## 3. 运算符

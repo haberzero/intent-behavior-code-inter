@@ -331,7 +331,22 @@ print((str)r)
 
     def test_multiple_closures_independent_frames(self):
         """INV-CONTEXT-2: Multiple closures maintain independent frames."""
-        pytest.skip("PT-5.1: Closures returning inner counter function not supported (write-back semantics)")
+        code = """
+func make_counter(int start) -> fn:
+    int count = start
+    func inc() -> int:
+        nonlocal count
+        count = count + 1
+        return count
+    return inc
+
+fn c1 = make_counter(0)
+fn c2 = make_counter(10)
+print(c1())
+print(c1())
+print(c2())
+"""
+        assert run_ibci(code) == ["1", "2", "11"]
 
     def test_nested_closure_access_chain(self):
         """INV-CONTEXT-3: Nested closures access entire scope chain."""

@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-26（文档同步清理；当前焦点 = P0-C nonlocal 设计决策）
+> **最后更新**：2026-05-26（nonlocal 实现归档；当前焦点 = PT-SEM-1 生产就绪化）
 
 ---
 
@@ -14,43 +14,23 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-26 实测结果**：`778 passed, 3 skipped`（0 failures）。
+**2026-05-26 实测结果**：`790 passed, 2 skipped`（0 failures）。
 
 ---
 
-## P0-C 闭包写回语义（INV-CONTEXT-2）[需语言设计决策]
+## P1 候选：PT-SEM-1 Semantic Pipeline 生产就绪化
 
-**现状验证**（2026-05-26）：
+**前置条件**：Semantic 4-Phase pipeline 已稳定运行 ✅；nonlocal 完成后闭包语义全链路验证通过 ✅
 
-- **Lambda 只读捕获** ✅：lambda 体通过 Cell 读取外部变量最新值（INV-LAMBDA-1/2 通过）
-- **Lambda 返回后读取** ✅：函数返回 lambda 后，Cell 保持有效（INV-CONTEXT-1 通过）
-- **命名函数修改外部变量** ❌：在 `func inner()` 内执行 `outer_var = new_value` 失败
+**具体待做**：
+1. **错误信息优化**：当前 `SEM_xxx` 错误码附带的消息偏技术化，需转化为用户友好表述
+2. **诊断工具**：为符号表、类型绑定、行为依赖图提供可视化导出（JSON/dot 格式）
+3. **性能基准**：建立编译时间基准测试（针对 100+ 行脚本）
+4. **CI/CD 集成**：语义分析测试套件纳入 CI 流水线自动运行
 
-**根因分析**：
+**预估工作量**: 15-20 小时
 
-IBCI 编译器将函数体内的赋值目标视为**本地变量声明**（Symbol Collection Pass 在函数作用域内为所有赋值目标创建新符号）。当 `func inner()` 内部写 `count = count + 1` 时：
-1. SymbolCollectionPass 为 `inner` 作用域创建局部符号 `inner:count`
-2. SymbolResolutionPass 将 RHS 的 `count` 引用绑定到 `inner:count`（本地优先）
-3. 运行时：`inner:count` 从未被初始化 → RUN_003 "variable not defined"
-
-这与 Python 的行为一致（Python 同样需要 `nonlocal` 关键字）。IBCI 目前无此机制。
-
-**设计选项**：
-
-| 方案 | 描述 | 复杂度 | 与 IBCI 设计契合度 |
-|------|------|--------|-------------------|
-| A. `nonlocal` 关键字 | 显式声明 `nonlocal count`，告知编译器赋值目标为外部变量 | 中 | 高（Python 惯例，用户直觉明确） |
-| B. 自动推断 | 若外部作用域已有同名变量且本作用域无声明，赋值自动作用于外部 | 低 | 低（违背 IBCI "显式优于隐式" 原则） |
-| C. Cell 写入语法 | 提供 `outer.count = ...` 或其他显式访问外部变量的语法 | 高 | 中 |
-
-**建议**：方案 A（`nonlocal` 关键字），理由：
-- 与 IBCI "显式声明 > 隐式推断" 的设计哲学一致
-- 用户心智模型清晰，Python 开发者零学习成本
-- 改动面可控：Lexer（新关键字）→ Parser（新语句）→ SymbolCollectionPass（标记外部绑定）→ 运行时（Cell 写回）
-
-**前置条件**：P0-A/B 已完成 ✅，Cell 基础设施验证充分。可立即开工。
-
-**预估工作量**：8-12 小时（含词法/语法/语义/运行时全链路 + 测试）。
+> 注：本项由 PENDING_TASKS PT-SEM-1 提升。如有更紧迫需求出现，可替换。
 
 ---
 
