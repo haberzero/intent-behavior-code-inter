@@ -424,7 +424,7 @@ def test_optional_none_access_raises(self):
 
 **强制检查**：
 1. `tests/meta/test_no_duplicate_helpers.py` 必须通过（无 helper 重复）
-2. 测试总数不得低于基线（当前 300-400 个）
+2. 测试总数不得低于基线（当前 ~780 个）
 3. 覆盖率不降低（核心路径 ≥ 85%）
 4. 所有测试通过（`pytest tests/ -v`）
 
@@ -589,11 +589,11 @@ class TestCPSInvariants:
 
 ### 内部文档
 
-- [`docs/TESTS_REORGANIZATION_TASK.md`](./TESTS_REORGANIZATION_TASK.md)：重构任务控制文档
+- [`docs/TEST_PHILOSOPHY.md`](./TEST_PHILOSOPHY.md)：本文档（测试体系设计原则）
 - [`tests/README.md`](../tests/README.md)：测试目录维护守则
 - [`tests/COVERAGE_MAP.md`](../tests/COVERAGE_MAP.md)：概念 → 测试入口映射
 - [`docs/VM_AND_INTERPRETER_DESIGN.md`](./VM_AND_INTERPRETER_DESIGN.md)：执行模型公理
-- [`docs/IBCI_SYNTAX_REFERENCE.md`](./IBCI_SYNTAX_REFERENCE.md)：IBCI 完整语法参考（旧条目"IBCI_SPEC.md"已重命名）
+- [`docs/IBCI_SYNTAX_REFERENCE.md`](./IBCI_SYNTAX_REFERENCE.md)：IBCI 完整语法参考
 
 ### 外部参考
 
@@ -613,16 +613,16 @@ IBCI 测试体系的核心原则：
 4. **文档化**：测试即规范
 5. **可维护**：内部重构不破坏测试
 
-**Phase 2 目标**：
-- 测试代码从 15K 行削减到 ≤ 4K 行（**-74%**）
-- 测试从 1,259 个精简到 300-400 个（**-68%**）
-- 维护成本降低 **80%**
-- 测试可读性提升 **10x**
+**当前状态**（2026-05-26）：
+- 测试文件：41 个 `test_*.py`
+- 测试用例：781 collected / 778 passed / 3 skipped
+- 测试运行时间：~7s
+- 分层分布：contracts 150 / compiler 300 / e2e 205 / compliance 32 / kernel 14 / runtime 21 / sdk 56 / meta 3
 
 **长期愿景**：
 > IBCI 测试体系成为语言设计文档的**可执行规范**，验证核心不变量，而非追逐实现细节。
 
 ---
 
-*文档版本：1.0（2026-05-13）*
+*文档版本：1.1（2026-05-26 同步实际测试状态）*
 *维护者：IBCI 核心团队*

@@ -365,3 +365,38 @@ class TestFullFileCompilation:
 
         # Should not produce type-mismatch errors for behavior→typed-var assignment
         assert isinstance(result, CompilationResult)
+
+
+# ===========================================================================
+# ContextBuilder regression (merged from test_context_builder.py)
+# ===========================================================================
+
+
+class TestContextBuilder:
+    """ContextBuilder prelude injection and validation."""
+
+    def test_injects_prelude(self):
+        """ContextBuilder.build() should inject builtin types into symbol table."""
+        from core.kernel.factory import create_default_registry as _make_reg
+        module = ast.IbModule(body=[])
+        registry = _make_reg()
+
+        builder = ContextBuilder()
+        builder.with_ast(module).with_registry(registry).with_module_name("test")
+        context = builder.build()
+
+        sym_table = context.symbol_table.current
+        assert sym_table.resolve("int") is not None
+        assert sym_table.resolve("str") is not None
+        assert sym_table.resolve("bool") is not None
+        assert sym_table.resolve("float") is not None
+
+    def test_without_registry_fails(self):
+        """Without registry, build should fail."""
+        module = ast.IbModule(body=[])
+
+        builder = ContextBuilder()
+        builder.with_ast(module).with_module_name("test")
+
+        with pytest.raises(ValueError, match="Registry is required"):
+            builder.build()

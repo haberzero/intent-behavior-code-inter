@@ -2,12 +2,16 @@
 - auto lock, any permanent, -> auto unification, resolve_op
 - AST node visitor coverage
 - TypeResolutionPass
+- TypeCheckingPass (func call return_type field)
 - llmexcept body rewrite (bind_llm_except)
 """
 
 import pytest
 from core.kernel import ast
 from core.kernel.factory import create_default_registry
+from core.kernel.spec import TypeDef
+from core.kernel.spec.base import TypeKind
+from core.kernel.spec.type_ref import TypeRef
 from core.compiler.semantic.pipeline import create_semantic_pipeline
 from core.compiler.semantic.context import ContextBuilder
 from core.compiler.semantic.passes.type_resolution_pass import TypeResolutionPass
@@ -412,3 +416,25 @@ class TestLLMExceptRewrite:
         result = pipeline.run(ctx)
         sem051 = [d for d in result.diagnostics if d.code == "SEM_051"]
         assert len(sem051) > 0
+
+
+# ===========================================================================
+# TypeCheckingPass regression (merged from test_type_checking_pass.py)
+# ===========================================================================
+
+
+def test_type_checking_func_call_uses_return_type(registry, pipeline):
+    """Function call type inference should use return_type field, not ret."""
+    func_def = ast.IbFunctionDef(
+        name="greet",
+        args=[],
+        body=[],
+        returns="str"
+    )
+    func_name = ast.IbName(id="greet", ctx="load")
+    call = ast.IbCall(func=func_name, args=[], keywords=[])
+    module = ast.IbModule(body=[func_def, call])
+
+    context = make_context(module, registry)
+    result = TypeCheckingPass().run(context)
+    assert result is not None

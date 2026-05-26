@@ -1,15 +1,17 @@
 """
-Regression tests for BindingAnalysisPass (Pass 4).
+Regression tests for BindingAnalysisPass (Pass 4) and BehaviorDependencyPass (Pass 5).
 
 Covers fixes:
 - IntentContextValidator uses stmt.intent.mode/content instead of stmt.op/text
 - BindingAnalysisPass.run() no longer writes to non-existent MetadataStore fields
+- BehaviorDependencyPass isinstance(node.value, IbBehaviorExpr) fix
 """
 
 import pytest
 from core.kernel import ast
 from core.kernel.ast import IntentMode
 from core.compiler.semantic.passes.binding_analysis_pass import BindingAnalysisPass
+from core.compiler.semantic.passes.behavior_dependency_pass import BehaviorDependencyPass
 from .conftest import make_context
 
 
@@ -140,3 +142,60 @@ class TestLLMExceptReadOnlyConstraint:
         # 不应该有 SEM_052 错误
         sem052_diags = [d for d in result.diagnostics if d.code == "SEM_052"]
         assert len(sem052_diags) == 0
+
+
+# ===========================================================================
+# BehaviorDependencyPass (Pass 5) regression tests
+# (merged from test_behavior_dependency_pass.py)
+# ===========================================================================
+
+
+def test_behavior_dep_assigns_behavior_expr_to_symbol(spec_registry):
+    """Behavior expr assigned to variable should register in symbol_to_behavior map."""
+    behavior = ast.IbBehaviorExpr(segments=["做某事"])
+    name_target = ast.IbName(id="result", ctx="store")
+    assign = ast.IbAssign(targets=[name_target], value=behavior)
+    module = ast.IbModule(body=[assign])
+
+    context = make_context(module, spec_registry)
+    result = BehaviorDependencyPass().run(context)
+
+    assert result.success
+    assert hasattr(behavior, 'llm_deps')
+    assert behavior.dispatch_eligible is True
+
+
+def test_behavior_dep_non_behavior_assign_no_crash(spec_registry):
+    """Non-behavior assignment should not crash (regression for the isinstance bug)."""
+    const = ast.IbConstant(value=42)
+    name_target = ast.IbName(id="x", ctx="store")
+    assign = ast.IbAssign(targets=[name_target], value=const)
+    module = ast.IbModule(body=[assign])
+
+    context = make_context(module, spec_registry)
+    result = BehaviorDependencyPass().run(context)
+
+    assert result.success
+    assert len(result.diagnostics) == 0
+
+
+def test_behavior_dep_dependency_tracking(spec_registry):
+    """Behavior expr referencing var from another behavior should track dep."""
+    behavior_a = ast.IbBehaviorExpr(segments=["first"])
+    assign_a = ast.IbAssign(
+        targets=[ast.IbName(id="a", ctx="store")],
+        value=behavior_a
+    )
+    ref_a = ast.IbName(id="a", ctx="load")
+    behavior_b = ast.IbBehaviorExpr(segments=["use ", ref_a])
+    assign_b = ast.IbAssign(
+        targets=[ast.IbName(id="b", ctx="store")],
+        value=behavior_b
+    )
+    module = ast.IbModule(body=[assign_a, assign_b])
+
+    context = make_context(module, spec_registry)
+    result = BehaviorDependencyPass().run(context)
+
+    assert result.success
+    assert behavior_a in behavior_b.llm_deps
