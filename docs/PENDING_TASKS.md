@@ -3,7 +3,7 @@
 > 本文档**只**记录有明确前置条件、暂不能开工的事项；其余非阻塞低优先级想法不在此处维护。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-25（PT-ARCH-5 完成并归档；Semantic Pipeline 5-Step 路线图全部完成）
+> **最后更新**：2026-05-26（经代码验证重新分类 7 个 skipped 测试；新增 PT-CLOSURE-1 闭包写回设计）
 
 ---
 
@@ -33,7 +33,47 @@
 
 ---
 
-## 二、Semantic 后续任务（PT-SEM 系列降优先级）
+## 二、闭包写回语义（PT-CLOSURE 系列）
+
+### PT-CLOSURE-1　`nonlocal` 关键字支持 [P1，阻塞于 P0-A/B]
+
+**前置条件**:
+- P0-A（解除 3 项 SKIP 测试）完成，确认 Cell 基础设施稳定
+- P0-B（行为表达式二元运算）完成（可并行，非严格阻塞）
+
+**问题描述**（2026-05-26 代码验证）：
+
+IBCI 编译器将函数体内的赋值目标一律视为本地变量声明。当内部函数试图修改外部作用域变量时：
+```ibci
+func make_counter() -> list[fn]:
+    int count = 0
+    func inc() -> int:
+        count = count + 1   # ← 编译器创建 inc:count 局部符号，RUN_003
+        return count
+    ...
+```
+SymbolCollectionPass 在 `inc` 作用域创建新符号 `inc:count`，导致运行时未初始化错误。
+
+**解决方案（推荐方案 A：`nonlocal` 关键字）**：
+
+| 层 | 改动 |
+|----|------|
+| Lexer | 新增 `nonlocal` 关键字 token |
+| Parser | 新增 `IbNonlocalStmt(names: List[str])` AST 节点 |
+| SymbolCollectionPass | 遇到 `nonlocal x` 时，不为 `x` 创建本地符号，改为向上查找外部符号并建立引用 |
+| SymbolResolutionPass | 对已标记 nonlocal 的名称，解析到外部符号的 UID |
+| LambdaCaptureAnalyzer | 标记 nonlocal 变量为需要 Cell 提升（write-back） |
+| Runtime (vm_handle_IbAssign) | 对 nonlocal 标记的变量，赋值时写入 Cell（而非本地符号） |
+
+**预估工作量**: 8-12 小时
+
+**备选方案**：
+- 方案 B（自动推断）：违背 IBCI "显式 > 隐式" 设计原则，不推荐
+- 方案 C（无 nonlocal，仅通过 lambda 只读捕获覆盖场景）：保持现状，将 INV-CONTEXT-2 标记为设计限制
+
+---
+
+## 三、Semantic 后续任务（PT-SEM 系列降优先级）
 
 ### PT-SEM-1　语义分析生产就绪化 [P2]
 
@@ -72,22 +112,22 @@
 
 ---
 
-## 三、~~llmexcept 相关后续 (PT-1.x)~~ — 已全部归档至 COMPLETED.md
+## 四、~~llmexcept 相关后续 (PT-1.x)~~ — 已全部归档至 COMPLETED.md
 
-## 四、~~NS-2 (intent OOP 化收口) 相关~~ — 已全部归档至 COMPLETED.md
+## 五、~~NS-2 (intent OOP 化收口) 相关~~ — 已全部归档至 COMPLETED.md
 
 > PT-1.1~PT-1.3 / PT-2.1 / PT-2.2 / PT-4.6 已完成，详见 `docs/COMPLETED.md`。本节仅作占位提示，禁止在此追加新条目。
 
 ---
 
-## 五、待 VM 信号 / 中断 / 异步机制（L3 协程）成熟后才能继续
+## 六、待 VM 信号 / 中断 / 异步机制（L3 协程）成熟后才能继续
 
 ### PT-3.1　host.run_isolated() 返回值改进 [VISION]
 ### PT-3.2　ReceiveMode 枚举演进 [VISION]
 
 ---
 
-## 六、语言级语义/语法收尾（暂搁置；基于真实代码事实）
+## 七、语言级语义/语法收尾（暂搁置；基于真实代码事实）
 
 > 本节三项均经过事实核查。每项均给出"现阶段真实代码状态 + 未来演进思路"，确保文档不误导后续开发者。
 
@@ -182,7 +222,7 @@
 
 ---
 
-## 七、明确排除的方向
+## 八、明确排除的方向
 
 - 不引入静态类型检查器作为解释器前置强依赖。
 - 不以牺牲运行时可观测性换取短期性能优化。
@@ -192,7 +232,7 @@
 
 ---
 
-## 八、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
+## 九、面向用户类的能力差距 [VISION]（2026-05-14 事实核查新增）
 
 以下条目来自本轮全量巡检；它们都不属于"已知 bug"，而是设计未覆盖的扩展面。除 PT-4.6 外，均**不阻塞**任何主线脚本能力，因此只登记到本文件不进入 NS。
 
@@ -257,7 +297,7 @@
 
 ---
 
-## 九、~~PT-5.1 测试基线契约化（追踪记录）~~ — 已确认为误报，归档至 COMPLETED.md 的"维护守则"形成历史
+## 十、~~PT-5.1 测试基线契约化（追踪记录）~~ — 已确认为误报，归档至 COMPLETED.md 的"维护守则"形成历史
 
 > 2026-05-14 重新核验结论已写入 `docs/COMPLETED.md`；本节仅作占位提示，禁止在此追加新条目。
 

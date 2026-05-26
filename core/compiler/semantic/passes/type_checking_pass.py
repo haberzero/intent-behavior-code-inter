@@ -867,6 +867,35 @@ class TypeCheckingVisitor(ScopedVisitor):
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
+        # ── behavior 操作数适配 ──
+        # 行为表达式的结果类型由上下文决定（与 visit_IbAssign 中的适配逻辑对齐）。
+        # 当 behavior 出现在二元运算中，根据另一侧的具体类型进行适配。
+        left_is_behavior = (left_type == self._behavior_desc)
+        right_is_behavior = (right_type == self._behavior_desc)
+        if left_is_behavior or right_is_behavior:
+            if left_is_behavior and right_is_behavior:
+                # 双侧均为 behavior：退化为 str（与无类型标注赋值一致）
+                adapted = self._str_desc
+                self.bind_type(node.left, adapted)
+                self.bind_type(node.right, adapted)
+                result_type = adapted
+            elif left_is_behavior:
+                # 左侧 behavior 适配为右侧类型
+                self.bind_type(node.left, right_type)
+                left_type = right_type
+                result_type = self.registry.resolve_op(left_type, node.op, right_type)
+                if not result_type:
+                    result_type = right_type
+            else:
+                # 右侧 behavior 适配为左侧类型
+                self.bind_type(node.right, left_type)
+                right_type = left_type
+                result_type = self.registry.resolve_op(left_type, node.op, right_type)
+                if not result_type:
+                    result_type = left_type
+            self.bind_type(node, result_type)
+            return result_type
+
         # 贯彻"一切皆对象"：调用左操作数的公理自决议方法
         result_type = self.registry.resolve_op(left_type, node.op, right_type) if left_type else None
         if not result_type:
@@ -905,6 +934,22 @@ class TypeCheckingVisitor(ScopedVisitor):
         left_type = self.visit(node.left)
         for comparator in node.comparators:
             self.visit(comparator)
+
+        # ── behavior 操作数适配 ──
+        # 比较运算中 behavior 操作数适配为另一侧类型，整体返回 bool。
+        if left_type == self._behavior_desc:
+            # 左侧为 behavior：根据第一个 comparator 类型适配
+            if node.comparators:
+                comp_type = self.type_bindings.get(node.comparators[0])
+                if comp_type and comp_type != self._behavior_desc:
+                    self.bind_type(node.left, comp_type)
+        else:
+            # 检查 comparators 中的 behavior 并适配为左侧类型
+            if left_type:
+                for comparator in node.comparators:
+                    comp_type = self.type_bindings.get(comparator)
+                    if comp_type == self._behavior_desc:
+                        self.bind_type(comparator, left_type)
 
         # 比较运算通过 resolve_op 确认合法性（大部分返回 bool）
         if left_type and node.ops:

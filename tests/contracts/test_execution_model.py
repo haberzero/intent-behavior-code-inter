@@ -318,7 +318,16 @@ class TestFrameContextPropagation:
 
     def test_closure_captures_parent_frame(self):
         """INV-CONTEXT-1: Closures capture parent frame variables."""
-        pytest.skip("PT-5.1: Returning inner function as closure loses parent frame variable bindings")
+        code = """
+func make_adder(int b) -> fn:
+    fn inner = lambda(int x) -> int: x + b
+    return inner
+
+fn a5 = make_adder(5)
+auto r = a5(3)
+print((str)r)
+"""
+        assert run_ibci(code) == ["8"]
 
     def test_multiple_closures_independent_frames(self):
         """INV-CONTEXT-2: Multiple closures maintain independent frames."""

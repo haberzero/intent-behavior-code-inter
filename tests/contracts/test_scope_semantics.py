@@ -43,7 +43,16 @@ print(get_x())
 
     def test_multiple_closures_share_cell(self):
         """INV-CELL-2: Multiple closures sharing a variable see updates."""
-        pytest.skip("PT-5.1: Multiple closures over the same outer variable do not currently share mutations across calls")
+        code = """
+int x = 10
+fn f1 = lambda: x
+fn f2 = lambda: x
+x = 42
+print((str)f1())
+print((str)f2())
+"""
+        # Both lambdas share the same Cell for 'x'; after reassignment both see 42
+        assert run_ibci(code) == ["42", "42"]
 
 
 # ===========================================================================
