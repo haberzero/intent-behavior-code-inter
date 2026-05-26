@@ -147,8 +147,8 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| 闭包捕获父帧变量 | ✅ | INV-CONTEXT-1 | test_closure_captures_parent_frame |
-| 多个闭包独立帧 | ✅ | INV-CONTEXT-2 | test_multiple_closures_independent_frames |
+| 闭包捕获父帧变量 | ⚠️ | INV-CONTEXT-1 | test_closure_captures_parent_frame（**SKIPPED**: 返回内部闭包丢失父帧变量绑定） |
+| 多个闭包独立帧 | ⚠️ | INV-CONTEXT-2 | test_multiple_closures_independent_frames（**SKIPPED**: 闭包返回计数器函数不支持 write-back） |
 | 嵌套闭包访问链 | ✅ | INV-CONTEXT-3 | test_nested_closure_access_chain |
 
 ---
