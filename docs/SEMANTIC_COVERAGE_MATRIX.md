@@ -51,7 +51,7 @@
 |---------|---------|---------|------|
 | tuple[T1,T2] 位置类型 | ✅ | INV-TUPLE-1,2 | test_tuple_positional_types |
 | tuple下标类型推断 | ✅ | INV-TUPLE-3 | test_tuple_subscript_type |
-| tuple解包类型检查 | ⚠️ | test_e2e_tuple_unpack.py | **待评估**：是否需要契约测试？ |
+| tuple解包类型检查 | ⚠️ | — | 文件 `test_e2e_tuple_unpack.py` 已删除；**待评估**是否需要契约测试 |
 
 ### 1.5 类型转换语义
 
@@ -360,7 +360,7 @@
 | list.pop返回元素 | ✅ | INV-LIST-6 | test_list_pop_returns_element |
 | list.remove删除语义 | ✅ | INV-LIST-7 | test_list_remove_value_semantics |
 | len(list)不变量 | ✅ | INV-LIST-8 | test_list_len_invariant |
-| for-in list迭代 | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
+| for-in list迭代 | 🔶 | — | 文件 `test_e2e_control_flow.py` 已删除；需要补充集成测试 |
 
 ### 9.2 Dict操作
 
@@ -395,17 +395,17 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| if/elif/else | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
-| 嵌套if | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
+| if/elif/else | 🔶 | — | 文件 `test_e2e_control_flow.py` 已删除；需要补充集成测试 |
+| 嵌套if | 🔶 | — | 同上 |
 
 ### 10.2 循环
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| while循环 | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
-| for-in循环 | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
-| for...if过滤语法 | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
-| condition-driven for | 🔶 | test_e2e_control_flow.py | 需要集成测试 |
+| while循环 | 🔶 | — | 文件 `test_e2e_control_flow.py` 已删除；需要补充集成测试 |
+| for-in循环 | 🔶 | — | 同上 |
+| for...if过滤语法 | 🔶 | — | 同上 |
+| condition-driven for | 🔶 | — | 同上 |
 
 ### 10.3 Switch语句
 
