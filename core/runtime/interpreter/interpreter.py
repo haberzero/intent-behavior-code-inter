@@ -63,7 +63,6 @@ from core.runtime.frame import (
     set_current_frame, reset_current_frame,
     set_current_execution_context, reset_current_execution_context,
 )
-from core.runtime.vm.vm_executor import VMExecutor
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
@@ -499,6 +498,7 @@ class Interpreter:
         三级穿透查找。
         """
         if self._vm_executor is None:
+            from core.runtime.vm.vm_executor import VMExecutor  # 局部导入：打破 vm ↔ interpreter 循环依赖
             self._vm_executor = VMExecutor(
                 self._execution_context, interpreter=self
             )
