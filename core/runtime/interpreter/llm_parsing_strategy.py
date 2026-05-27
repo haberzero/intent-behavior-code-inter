@@ -177,7 +177,10 @@ class VTableParsingStrategy(ParsingStrategy):
 
     def parse(self, raw_res: str, type_name: str, node_uid: str,
               execution_context: Optional['IExecutionContext'] = None) -> Optional[LLMResult]:
-        """Parse using user-defined __from_prompt__ method."""
+        """Parse using user-defined __from_prompt__ method.
+
+        Enhanced: runs __validate_prompt__ pre-flight check if defined.
+        """
         ib_class = self.registry.get_class(type_name)
         if not ib_class:
             return None
@@ -185,6 +188,29 @@ class VTableParsingStrategy(ParsingStrategy):
         method = ib_class.lookup_method('__from_prompt__')
         if not method:
             return None
+
+        # --- __validate_prompt__ pre-flight (optional protocol) ---
+        validate_method = ib_class.lookup_method('__validate_prompt__')
+        if validate_method:
+            try:
+                raw_arg = self.registry.box(raw_res)
+                validate_result = validate_method.call(ib_class, [raw_arg])
+                if hasattr(validate_result, 'elements') and len(validate_result.elements) >= 2:
+                    is_valid = validate_result.elements[0]
+                    error_desc = validate_result.elements[1]
+                    is_valid_native = is_valid.to_native() if hasattr(is_valid, 'to_native') else bool(is_valid)
+                    if not is_valid_native:
+                        error_str = error_desc.to_native() if hasattr(error_desc, 'to_native') else str(error_desc)
+                        return LLMResult.uncertain_result(
+                            raw_response=raw_res,
+                            retry_hint=f"Validation failed: {error_str}"
+                        )
+            except Exception as e:
+                self.debugger.trace(
+                    CoreModule.LLM, DebugLevel.BASIC,
+                    f"__validate_prompt__ failed for '{type_name}': {e}"
+                )
+                # Validation failure is non-fatal — proceed to __from_prompt__
 
         try:
             raw_arg = self.registry.box(raw_res)

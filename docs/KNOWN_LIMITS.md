@@ -532,4 +532,59 @@ python -m pytest tests/meta/ -q --tb=no
 
 ---
 
-*最后更新：2026-05-14 第二轮（关闭 §二十三 H1 / §二十四 H2 / §二十五 H3；事实重核：§二十二 仍为反例保留；Enum-from-LLM 已修复，相关旧 "Bug #3" 表述已从 example 05 移除）*
+## 二十六、`__prompt__` 协议家族：增强改造后的已知问题与待决策项
+
+> **新增**：2026-05-27（__prompt__ 协议统一化改造期间发现）
+
+### 26.1 用户类 `__from_prompt__` 返回的实例字段无法正确访问
+
+**现象**：当用户自定义类实现 `__from_prompt__`，返回 `(True, instance)` 中的 instance 通过 `VTableParsingStrategy._auto_box_value` 路径处理后，实例的 `.field` 访问返回 `None` 而非实际赋值内容。
+
+**复现**：
+```ibci
+class MyType:
+    str value
+    func __init__(self):
+        self.value = ""
+    func __from_prompt__(str raw) -> tuple:
+        MyType m = MyType()
+        m.value = raw
+        return (True, m)
+
+MyType x = @~ MOCK:STR:hello ~
+print(x.value)   # 期望 "hello"，实际 "None"
+```
+
+**根因分析**：`VTableParsingStrategy` 的 auto-boxing 路径可能在 `__from_prompt__` 已返回正确实例的情况下仍尝试二次封装，或者 `is_instance_of_target` 判定失败导致 `_auto_box_value` 覆写了用户正确构造的实例。
+
+**待决策**：
+- 是否应该在 `__from_prompt__` 返回的对象类型已匹配目标类时，完全跳过 auto-boxing？
+- 是否需要强制要求 `__from_prompt__` 返回的第二元素必须是目标类的实例？
+
+### 26.2 `__validate_prompt__` 协议的执行时机语义
+
+**问题**：当 `__validate_prompt__` 在 `VTableParsingStrategy` 中执行时，它仅覆盖了通过用户类 vtable 路径解析的类型。对于 axiom 内置类型（`int`/`float`/`bool`/`str`/`list`/`dict`/`enum`），pre-flight 校验走的是 axiom 自身的 `from_prompt` 内部逻辑，不经过 `__validate_prompt__`。
+
+**待决策**：
+- 是否应该为内置类型也提供 `__validate_prompt__` 扩展点？（如允许用户通过"子类化内置类型"来注入 pre-flight 校验）
+- 当前设计是否足够——内置类型的 `from_prompt` 已含校验逻辑（返回 `(False, hint)` 时即触发 retry）？
+
+### 26.3 `__to_prompt__` 的异常处理静默化
+
+**问题**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，但内部 `try/except` 静默吞掉了 `__to_prompt__()` 的异常。如果用户实现的 `__to_prompt__` 抛出异常（如字段未初始化导致 AttributeError），调用者无感知——最终回退到 `str(val)` 或 `str(val.to_native())`。
+
+**待决策**：
+- 静默降级（当前行为）是否可接受？好处是 LLM 调用不因 prompt 序列化失败而中断；坏处是用户不知道自己的 `__to_prompt__` 实现有 bug。
+- 是否应该在 debug 模式下将静默异常升级为 warning 级诊断输出？
+
+### 26.4 协议签名校验（SEM_095）的强度选择
+
+**问题**：当前 `SEM_095` 是 warning 而非 error——用户可以声明签名不匹配协议约定的 `__from_prompt__`（如 0 个参数），编译仍通过。运行时如果 axiom 路径命中就不会调用 vtable，但如果确实调用到 vtable 则会在运行时失败。
+
+**待决策**：
+- 是否应该将 SEM_095 从 warning 提升为 error（阻止编译）？
+- 或保持 warning——鉴于协议方法签名本身属于 `_OVERRIDE_SIGNATURE_FREE`（允许自由修改签名以适配不同场景）？
+
+---
+
+*最后更新：2026-05-27（新增 §二十六 __prompt__ 协议增强改造发现的问题）*
