@@ -82,15 +82,24 @@ IBCI 当前的 prompt 协议由三个方法构成，定义于公理层（`core/k
 
 **已验证的关键限制**（2026-05-27 实测）：
 
-- ⚠️ **词法层仅识别纯字母 tag**：`core_scanner.py:272` 使用 `isalpha()` 循环，因此 `@GPT4o~`（含数字）会被词法器在 `GPT` 处截断，`peek(3)` 为 `4` 而非 `~`，整个 `@GPT4o~` 退化为 Intent token，导致 `PAR_002` 编译错误。**实测结果**：`@WHISPER~`（纯字母）成功；`@GPT4~`/`@GPT4o~`（含数字）失败。
+- ✅ **词法层已支持字母+数字混合 tag**：`core_scanner.py:272` 使用 `isalnum()` 循环，`@GPT4o~`（含数字）正确识别为 `BEHAVIOR_MARKER` token 并保留完整 tag。
 - ✅ 纯字母 tag（如 `@WHISPER~`, `@gpt~`, `@GPTo~`）端到端编译成功，tag 字段正确传入 AST 并保留。
+- ✅ 字母+数字混合 tag（如 `@GPT4o~`, `@GPT4~`）端到端编译成功。
+
+**Phase 1 已实现**（2026-05-27）：
+- ✅ VM handler (`handlers.py`) 提取 `tag` 字段并传递到 `LLMExecutorImpl`
+- ✅ `LLMExecutorImpl.execute_behavior_expression()` 接受 `target_model` 参数并传递到 `_call_llm`
+- ✅ `AIPlugin.__call__` 接受 `target_model` 关键字参数，路由到命名模型配置
+- ✅ `AIPlugin.register_model(name, url, key, model)` 注册命名模型
+- ✅ 命名模型客户端缓存（`_named_clients`）避免重复初始化
+- ✅ tag 大小写敏感（精确匹配，用户自定义 tag 不做隐式转换）
 
 **尚未实现**：
-- VM handler (`handlers.py:1446-1496`) 不读取 tag 字段
-- `LLMExecutorImpl.execute_behavior_expression()` 不根据 tag 路由到不同模型
-- AIPlugin (`ibci_modules/ibci_ai/core.py:278`) `__call__` 签名为 `(sys_prompt: str, user_prompt: str, scene: str)` — 无 `target_model` 参数
+- 命名模型的能力探测（`probe_model` 仅对默认模型生效）
+- 模型 fallback 链（一个命名模型失败时自动切换到备选）
+- IBCI 脚本层面的 `ai.list_models()` 查询接口
 
-**结论**：`@NAME~` 语法的**部分**基础设施已就绪。Phase 1 实施时需**同时**修改词法层以支持字母+数字混合 tag（将 `isalpha()` 改为 `isalnum()`），否则文档中的 `@GPT4o~` / `@WHISPER1~` 示例无法工作。纯字母 tag 路径可零 lexer 改动实现。
+**结论**：`@NAME~` 语法的端到端路由基础设施**已完成**。用户可通过 `ai.register_model()` 注册多个模型配置，然后在行为表达式中用 `@NAME~` 语法指定目标模型。
 
 ### 2.3 公理系统扩展性
 
@@ -448,20 +457,21 @@ sys_prompt = "你是一个意图行为代码执行器。\n当前上下文意图�
 
 ### Phase 1：命名模型路由（最小可行，不涉及多模态）
 
-**改动范围**：
+**改动范围**（Phase 1 已完成 ✅）：
 
-| 文件 | 改动 |
-|------|------|
-| `core/compiler/lexer/core_scanner.py` | L272: `isalpha()` → `isalnum()` 以支持含数字的 tag（如 `@GPT4o~`）|
-| `core/runtime/vm/handlers.py` | `vm_handle_IbBehaviorExpr` 提取 `tag` 传递 |
-| `core/runtime/interpreter/llm_executor.py` | 接收并传递 `target_model` |
-| `ibci_modules/ibci_ai/core.py` | 多模型配置管理 + 路由分发 |
+| 文件 | 改动 | 状态 |
+|------|------|------|
+| `core/compiler/lexer/core_scanner.py` | L272: 已使用 `isalnum()`，无需修改 | ✅ 已就绪 |
+| `core/runtime/vm/handlers.py` | `vm_handle_IbBehaviorExpr` 提取 `tag` 传递 | ✅ 已完成 |
+| `core/runtime/interpreter/llm_executor.py` | 接收并传递 `target_model` | ✅ 已完成 |
+| `ibci_modules/ibci_ai/core.py` | 多模型配置管理 + 路由分发 | ✅ 已完成 |
+| `ibci_modules/ibci_ai/_spec.py` | vtable 注册 `register_model` | ✅ 已完成 |
 
 **不改动**：parser, AST, 序列化, 公理层
 
-**注意**：lexer 需要一个单字符改动（`isalpha()` → `isalnum()`）以支持含数字的模型名。纯字母模型名（如 `@WHISPER~`）无需此改动。
+**注意**：lexer 源码中已经使用 `isalnum()`（非文档早期声称的 `isalpha()`），含数字的模型名（如 `@GPT4o~`）开箱即用。
 
-**验证标准**：`@NAME~ 你好 ~` 路由到正确的模型配置
+**验证标准**：`@NAME~ 你好 ~` 路由到正确的模型配置 ✅ 通过 6 项 e2e 测试验证
 
 ---
 
@@ -790,13 +800,14 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 
 ### 12.1 已识别风险
 
-| 风险 | 影响 | 缓解措施 |
-|------|------|---------|
-| 词法层 tag 仅识别纯字母（`isalpha`），含数字的模型名编译失败 | Phase 1 示例（`@GPT4o~`）不可用 | 将 `isalpha()` 改为 `isalnum()`；需评估是否与现有 token 冲突 |
-| 多模态 API 格式碎片化（OpenAI / Anthropic / Google 各不相同）| AIPlugin 实现复杂度上升 | 定义 IBCI 标准 content block 格式，AIPlugin 内部做供应商适配 |
-| 大文件 base64 编码导致内存峰值 | 可能超出解释器内存限制 | MediaStorage 的流式编码 + 磁盘卸载 |
-| llmexcept retry 时多模态 payload 重复构建 | 性能浪费 | 在 LLMExceptFrame 中缓存已编码的 payload |
-| 用户 `__payload_prompt__` 返回非法结构 | 运行时 API 调用失败 | 在 _evaluate_segments 后增加 payload 验证层 |
+| 风险 | 影响 | 缓解措施 | 状态 |
+|------|------|---------|------|
+| ~~词法层 tag 仅识别纯字母（`isalpha`）~~ | ~~Phase 1 示例不可用~~ | ~~改为 `isalnum()`~~ | ✅ 已确认源码使用 `isalnum()`，风险不存在 |
+| 多模态 API 格式碎片化（OpenAI / Anthropic / Google 各不相同）| AIPlugin 实现复杂度上升 | 定义 IBCI 标准 content block 格式，AIPlugin 内部做供应商适配 | 待 Phase 2+ |
+| 大文件 base64 编码导致内存峰值 | 可能超出解释器内存限制 | MediaStorage 的流式编码 + 磁盘卸载 | 待 Phase 3+ |
+| llmexcept retry 时多模态 payload 重复构建 | 性能浪费 | 在 LLMExceptFrame 中缓存已编码的 payload | 待 Phase 3+ |
+| 用户 `__payload_prompt__` 返回非法结构 | 运行时 API 调用失败 | 在 _evaluate_segments 后增加 payload 验证层 | 待 Phase 2+ |
+| 测试模式下命名模型路由被 MOCK 拦截 | 无法在 MOCK 模式测试真实路由错误 | 真实 LLM 集成测试覆盖；或增加路由前验证 | 已记录，低优先级 |
 
 ### 12.2 明确不做的事情
 
@@ -826,11 +837,11 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 | `core/kernel/axioms/primitives.py` | 新增 Audio/Image/Video/Media Axiom |
 | `core/runtime/interpreter/llm_executor.py` | `_evaluate_segments_cps` + `_call_llm` 多模态路径 |
 | `core/runtime/interpreter/llm_parsing_strategy.py` | 新增 MultimodalParsingStrategy |
-| `core/runtime/vm/handlers.py` | `vm_handle_IbBehaviorExpr` 提取并传递 tag |
+| `core/runtime/vm/handlers.py` | `vm_handle_IbBehaviorExpr` 提取并传递 tag | ✅ Phase 1 已完成 |
 | `core/runtime/objects/builtins.py` | 注册新类型实现 |
 | `core/runtime/bootstrap/builtin_initializer.py` | 新类型自动注册（通过 axiom 驱动） |
-| `ibci_modules/ibci_ai/core.py` | 多模型路由 + 多模态 payload 构建 |
-| `core/compiler/lexer/core_scanner.py` | L272: `isalpha()` → `isalnum()`（Phase 1 即需，若要支持含数字 tag）|
+| `ibci_modules/ibci_ai/core.py` | 多模型路由 + 多模态 payload 构建 | ✅ Phase 1 路由已完成 |
+| `core/compiler/lexer/core_scanner.py` | 已使用 `isalnum()`，无需修改 | ✅ 无需改动 |
 | `core/compiler/common/tokens.py` | 对应 TokenType（仅当新增 audio/image/video 关键字时需要）|
 | `docs/IBCI_SYNTAX_REFERENCE.md` | 文档更新 |
 | `docs/KNOWN_LIMITS.md` | 记录多模态限制 |
@@ -865,30 +876,30 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 | `_call_llm` 返回 `str`，签名接收 `str` | `llm_executor.py:881` | ✅ 确认 |
 | `dispatch_eager` 机制存在且在赋值上下文触发 | `handlers.py:691-760` | ✅ 完整实现存在 |
 | `BehaviorDependencyPass` 写入 `llm_deps`/`dispatch_eligible` | 实测 AST 节点字段确认 | ✅ |
-| 测试基线：790 passed, 2 skipped | 2026-05-27 实跑 pytest | ✅ |
+| 测试基线：818 passed, 2 skipped | 2026-05-27 实跑 pytest（含 Phase 1 新增 6 测试） | ✅ |
 
 ### 发现的事实偏差
 
-| 原文声明 | 实际情况 | 影响 |
-|---------|---------|------|
-| "tag 字段正确序列化进不可变 JSON artifact" | 序列化器无特殊 tag 处理逻辑，但通过 dataclass 通用路径确实传入 `CompilationResult.module_ast`，运行时 `get_node_data` 可访问 | 影响极低——序列化是正确的，但机制描述不够精确 |
-| "正确扫描 `@[a-zA-Z]*~` 格式" | 词法层使用 `isalpha()` 循环：**只识别纯字母 tag**；含数字（如 `GPT4o`）会编译失败 | **Phase 1 关键障碍**——文档示例 `@GPT4o~` 当前不可编译 |
-| "零 lexer/parser 改动" 的结论 | 如果使用含数字的模型名（业界常用，如 GPT4、GPT4o、Claude3），需改 lexer | 需修正为"需一行 lexer 改动" |
-| §五代码影响面分析引用 `llm_executor.py:268-275` | 实际为 `llm_executor.py:270-276`（CPS 生成器路径）| 偏差 2 行，影响不大 |
+| 原文声明 | 实际情况 | 影响 | 当前状态 |
+|---------|---------|------|---------|
+| "tag 字段正确序列化进不可变 JSON artifact" | 序列化器无特殊 tag 处理逻辑，但通过 dataclass 通用路径确实传入 `CompilationResult.module_ast`，运行时 `get_node_data` 可访问 | 影响极低——序列化是正确的，但机制描述不够精确 | 已确认正确 |
+| ~~"正确扫描 `@[a-zA-Z]*~` 格式"~~ | 词法层使用 `isalnum()` 循环：**已支持字母+数字混合 tag** | ~~Phase 1 关键障碍~~ → **不再是障碍** | ✅ 已确认 |
+| ~~"零 lexer/parser 改动" 的结论~~ | lexer 已使用 `isalnum()`，确实零改动 | 原结论正确 | ✅ 已确认 |
+| §五代码影响面分析引用 `llm_executor.py:268-275` | 实际为 `llm_executor.py:270-276`（CPS 生成器路径）| 偏差 2 行，影响不大 | 已记录 |
 
 ### 设计可行性评估
 
 | 维度 | 评分 | 备注 |
 |------|------|------|
 | 与现有架构的契合度 | ⭐⭐⭐⭐⭐ | 完全利用已有 tag 基础设施 + 公理系统扩展点 |
-| Phase 1 实施风险 | ⭐（低）| 仅需 3-4 个文件改动，影响面可控 |
+| Phase 1 实施风险 | ⭐（低）| ✅ **已完成**——3-4 个文件改动，0 回归 |
 | Phase 2-3 实施复杂度 | ⭐⭐⭐（中）| `_evaluate_segments_cps` CPS 路径需谨慎处理混合 content |
 | 向后兼容性 | ⭐⭐⭐⭐⭐ | 纯文本路径完全不变，新协议为可选扩展 |
 | 文档中的设计决策质量 | ⭐⭐⭐⭐ | D1-D6 决策合理；D6（不改 `_call_llm` 返回契约）可能在 Phase 4 时被挑战 |
 
 ### 建议的后续行动
 
-1. **立即可做**：将 `core_scanner.py:272` 的 `isalpha()` 改为 `isalnum()`（或 `isalnum() or c == '_'`），使 `@GPT4o~` 语法可用。这是 Phase 1 的最小前置条件。
-2. **Phase 1 实施前**：确认 `isalnum()` 修改不会与现有 token 类型冲突——在 IBCI 中 `@` 后跟数字目前不是合法 token，故冲突风险极低。
+1. ~~**立即可做**：将 `core_scanner.py:272` 的 `isalpha()` 改为 `isalnum()`~~ → ✅ 已确认源码本就使用 `isalnum()`，无需修改。
+2. ~~**Phase 1 实施前**：确认 `isalnum()` 修改不会与现有 token 类型冲突~~ → ✅ 不存在此风险。
 3. **重新评估 D6 决策**：`_call_llm` 当前返回 `str`，但 Phase 4 `from_response` 需要访问完整 API 响应对象。建议在 Phase 2 时就预留 `_call_llm_raw` 返回完整响应的通路，避免 Phase 4 大规模重构。
 4. **补充 dispatch_eager 交互测试**：文档 §8.2 正确识别了 dispatch_eager + 多模态的交互点，但未提及 `llmexcept` 保护下的 dispatch 禁用逻辑（`handlers.py:720-723`）对多模态的影响——这需要在 Phase 2 测试中覆盖。

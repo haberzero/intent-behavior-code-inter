@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-27 实测结果**：`812 passed, 2 skipped`（架构清理完成，全部通过）。
+**2026-05-27 实测结果**：`818 passed, 2 skipped`（架构清理 + Phase 1 命名模型路由完成，全部通过）。
 
 ---
 
@@ -49,11 +49,12 @@ python -m pytest tests/ -q --tb=no --no-header
 - [x] 移除 `llm_executor.py` 中所有 `hasattr(val, '__to_prompt__')` 直接调用
 - [x] 移除 `kernel.py:IbObject.receive()` 中的 `hasattr()` 检查和直接 Python 方法调用
 - [x] 移除 `intent.py` 中的 `hasattr(val, '__to_prompt__')` 直接调用
-- [ ] 建立协议方法注册表（`ProtocolMethodRegistry`）
-- [ ] 统一协议方法派发：所有协议方法通过 `receive()` 查找 vtable
-- [ ] 测试：确保 `__to_prompt__` / `__from_prompt__` / `__outputhint_prompt__` 在内置类型和用户类型上一致工作
+- [ ] 建立协议方法注册表（`ProtocolMethodRegistry`）— **降级为 P3 远景**
+- [ ] 统一协议方法派发：所有协议方法通过 `receive()` 查找 vtable — **降级为 P3 远景**
+- [ ] 测试：确保 `__to_prompt__` / `__from_prompt__` / `__outputhint_prompt__` 在内置类型和用户类型上一致工作 — **降级为 P3 远景**
 
-**进展**：已完成核心 hasattr() 消除（35dad7d）；所有 812 测试通过。
+**进展**：核心 hasattr() 消除已完成（35dad7d）；所有 812 测试通过。
+**状态说明**：P0-1 的核心目标（消除抽象泄漏）的最小可行部分已完成。`ProtocolMethodRegistry` 作为完整统一解决方案被降级到 P3 远景（目前 `receive()` 机制已能覆盖所有实际使用路径，注册表不是阻塞项）。
 
 ### P0-2：用户类运算符重载支持（预估 2-3 天）
 

@@ -25,6 +25,11 @@ class AIPlugin(IbStatefulPlugin):
             "auto_type_constraint": True,
             "auto_intent_injection": True
         }
+        # 命名模型注册表：用于 @NAME~ 语法的模型路由
+        # 格式: { "NAME": {"url": ..., "key": ..., "model": ..., "timeout": ...} }
+        self._model_registry: Dict[str, Dict[str, Any]] = {}
+        # 命名模型的已初始化客户端缓存
+        self._named_clients: Dict[str, Any] = {}
         self._return_type_prompts = {
             "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
             "float": "请仅返回一个浮点数作为回答，禁止包含任何其他解释文字。",
@@ -104,6 +109,66 @@ class AIPlugin(IbStatefulPlugin):
         # 如果切换了模型，重置探测状态
         self._model_capabilities["probed"] = False
         self._init_client()
+
+    def register_model(self, name: str, url: str, key: str, model: str, **kwargs) -> None:
+        """注册命名模型配置，用于 @NAME~ 语法的模型路由。
+
+        Args:
+            name: 模型标识名（对应 @NAME~ 中的 NAME，大小写敏感，必须与使用时完全一致）
+            url: API endpoint URL
+            key: API key
+            model: 模型名称
+            **kwargs: 其他可选配置（timeout 等）
+
+        Example (IBCI code):
+            ai.register_model("GPT4o", "https://api.openai.com/v1", "sk-...", "gpt-4o")
+            str answer = @GPT4o~ 请解释量子力学 ~
+        """
+        config = {
+            "url": url,
+            "key": key,
+            "model": model,
+            "timeout": kwargs.get("timeout", 30.0),
+        }
+        self._model_registry[name] = config
+        # 清除缓存的客户端以便下次使用时重新初始化
+        self._named_clients.pop(name, None)
+
+    def _get_named_client(self, name: str):
+        """获取或创建命名模型的 OpenAI 客户端。"""
+        if name in self._named_clients:
+            return self._named_clients[name]
+
+        config = self._model_registry.get(name)
+        if not config:
+            raise RuntimeError(
+                f"未注册的命名模型 '{name}'。请先使用 ai.register_model(\"{name}\", url, key, model) 注册。"
+            )
+
+        is_test_mode = (
+            config["url"] == "TESTONLY" or
+            os.environ.get("IBC_TEST_MODE") == "1"
+        )
+        if is_test_mode:
+            self._named_clients[name] = "MOCK_CLIENT"
+            return "MOCK_CLIENT"
+
+        try:
+            from openai import OpenAI
+            base_url = config["url"]
+            if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
+                base_url = f"{base_url.rstrip('/')}/v1"
+            client = OpenAI(
+                api_key=config["key"],
+                base_url=base_url,
+                timeout=config["timeout"]
+            )
+            self._named_clients[name] = client
+            return client
+        except ImportError:
+            raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
+        except Exception as e:
+            raise RuntimeError(f"命名模型 '{name}' 的 OpenAI 客户端初始化失败: {str(e)}")
 
     def has_api_key(self) -> bool:
         """检查是否已配置 API 密钥"""
@@ -275,7 +340,7 @@ class AIPlugin(IbStatefulPlugin):
             return res
         return []
 
-    def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
+    def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general", *, target_model: str = "") -> str:
         is_test_mode = (
             self._config["url"] == "TESTONLY" or
             os.environ.get("IBC_TEST_MODE") == "1"
@@ -296,15 +361,30 @@ class AIPlugin(IbStatefulPlugin):
             user_prompt += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
             
         if not is_test_mode:
-            if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                raise RuntimeError("LLM 运行配置缺失")
-            
-            # 优先使用预初始化的客户端 (单例复用)
-            if not self._client or self._client == "MOCK_CLIENT":
-                self._init_client()
-            
-            if not self._client or self._client == "MOCK_CLIENT":
-                raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
+            # 命名模型路由：@NAME~ 语法
+            if target_model:
+                if target_model not in self._model_registry:
+                    raise RuntimeError(
+                        f"未注册的命名模型 '{target_model}'。"
+                        f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
+                    )
+                named_config = self._model_registry[target_model]
+                active_client = self._get_named_client(target_model)
+                active_model = named_config["model"]
+            else:
+                # 默认模型路径
+                if not self._config["key"] or not self._config["url"] or not self._config["model"]:
+                    raise RuntimeError("LLM 运行配置缺失")
+
+                # 优先使用预初始化的客户端 (单例复用)
+                if not self._client or self._client == "MOCK_CLIENT":
+                    self._init_client()
+
+                if not self._client or self._client == "MOCK_CLIENT":
+                    raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
+
+                active_client = self._client
+                active_model = self._config["model"]
             
             # 决策场景下限制 max_tokens
             is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
@@ -328,8 +408,8 @@ class AIPlugin(IbStatefulPlugin):
                 enhanced_sys_prompt = sys_prompt
 
             try:
-                completion = self._client.chat.completions.create(
-                    model=self._config["model"],
+                completion = active_client.chat.completions.create(
+                    model=active_model,
                     messages=[
                         {"role": "system", "content": enhanced_sys_prompt},
                         {"role": "user", "content": user_prompt}
