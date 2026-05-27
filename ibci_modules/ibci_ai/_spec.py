@@ -19,6 +19,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     return {
         "functions": {
             "set_config": {"param_types": ["str", "str", "str"], "return_type": "void"},
+            "register_model": {"param_types": ["str", "str", "str", "str"], "return_type": "void"},
             "has_api_key": {"param_types": [], "return_type": "bool"},
             "probe_model": {"param_types": [], "return_type": "str"},
             "set_retry": {"param_types": ["int"], "return_type": "void"},

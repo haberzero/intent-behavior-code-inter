@@ -5,7 +5,27 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-26（P0-C nonlocal 实现完成 + 文档同步）
+> **最后更新**：2026-05-27（P0-3 统一初始化路径完成 + Phase 1 命名模型路由完成）
+
+---
+
+## 2026-05-27：Phase 1 命名模型路由实现完成
+
+测试基线：**818 passed, 2 skipped**（0 failures）。
+
+- **Phase 1**：`@NAME~` 语法端到端路由实现——VM handler 提取 `tag` 字段 → `LLMExecutorImpl` 接收 `target_model` 参数 → `AIPlugin.__call__` 路由到命名模型配置
+- **新 API**：`ai.register_model(name, url, key, model)` — 注册命名模型用于路由
+- **架构特性**：命名模型客户端缓存、tag 大小写不敏感（统一 UPPER）、后向兼容（空 tag 走默认路径）
+- **测试**：`tests/e2e/test_e2e_model_routing.py` 覆盖 6 个场景（默认路径、注册模型路由、字母数字 tag、MOCK 模式兼容、多模型并存、大小写不敏感）
+- **文档修正**：更正 `MULTIMODAL_BEHAVIOR_DESIGN.md` 中关于 `isalpha()` 的错误声明（实际源码使用 `isalnum()`），更新 Phase 1 状态为已完成
+
+## 2026-05-27：P0-3 统一初始化路径完成
+
+测试基线：**812 passed, 2 skipped**（0 failures）。
+
+- **P0-3**：实现 `_bind_operator_method()` 显式绑定运算符方法，消除技术债，架构对称性完成
+- 用户类与内置类运算符绑定机制差异已文档化
+- 编译期保证 + 运行期 `receive()` 统一派发
 
 ---
 

@@ -487,7 +487,7 @@ class LLMExecutorImpl:
             except Exception:
                 pass
 
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None) -> LLMResult:
+    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = "") -> LLMResult:
         """
         处理行为描述行 (即时、匿名的 LLM 调用)。
 
@@ -503,9 +503,17 @@ class LLMExecutorImpl:
             - ``IbIntentContext`` 实例 → 已 fork 的意图值快照（snapshot 模式 / dispatch_eager）
 
         其他类型一律视为契约违反并 raise TypeError。
+
+        ``target_model``：
+            - ``""``（空字符串）→ 使用默认模型配置（无 tag 的 @~ ... ~ 语法）
+            - 非空字符串 → 路由到命名模型配置（@NAME~ ... ~ 语法中的 NAME）
         """
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
+
+        # 如果未显式传递 target_model，从 node_data 中读取 tag 字段
+        if not target_model:
+            target_model = node_data.get("tag", "")
 
         # 1. 评估段式插值
         content = self._evaluate_segments(node_data.get("segments"), execution_context)
@@ -571,7 +579,7 @@ class LLMExecutorImpl:
             sys_prompt += intent_block
 
         # 5. 调用底层模型
-        response = self._call_llm(sys_prompt, content, node_uid)
+        response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
 
         # 6.1 处理 MOCK:REPAIR 特殊标记
         if response == "__MOCK_REPAIR__":
@@ -767,10 +775,14 @@ class LLMExecutorImpl:
         }
         return self._parse_result(raw_res, type_name, node_uid)
 
-    def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None):
+    def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。"""
         node_data = execution_context.get_node_data(node_uid)
         context = execution_context.runtime_context
+
+        # 如果未显式传递 target_model，从 node_data 中读取 tag 字段
+        if not target_model:
+            target_model = node_data.get("tag", "")
 
         content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
 
@@ -822,7 +834,7 @@ class LLMExecutorImpl:
             intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
             sys_prompt += intent_block
 
-        response = self._call_llm(sys_prompt, content, node_uid)
+        response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
 
         if response == "__MOCK_REPAIR__":
             return LLMResult.uncertain_result(
@@ -901,13 +913,18 @@ class LLMExecutorImpl:
             return result.value
         return self.registry.get_none()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None) -> str:
+    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None, target_model: str = "") -> str:
         """底层 LLM 调用。成功时返回 response 字符串。
         失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
+
+        ``target_model``：命名模型标识符，传递给 LLM provider 用于路由到特定模型配置。
+        空字符串表示使用默认模型。
         """
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
+        if target_model:
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Target model: {target_model}")
 
         context = execution_context.runtime_context if execution_context else None
         retry_hint = context.retry_hint if context else None
@@ -918,7 +935,7 @@ class LLMExecutorImpl:
                     self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {retry_hint}")
                     self.llm_callback.set_retry_hint(retry_hint)
 
-                response = self.llm_callback(sys_prompt, user_prompt)
+                response = self.llm_callback(sys_prompt, user_prompt, target_model=target_model)
                 self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
                 self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
                 return response

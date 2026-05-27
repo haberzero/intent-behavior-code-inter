@@ -1486,9 +1486,13 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
             execution_context=executor.ec,
         )
 
+    # 提取命名模型 tag（@NAME~ 语法）用于模型路由
+    target_model = node_data.get("tag", "")
+
     # 同步执行（fallback 共享同一 LLMExecutor）
     result = sc.llm_executor.execute_behavior_expression(
-        node_uid, executor.ec, call_intent=call_intent
+        node_uid, executor.ec, call_intent=call_intent,
+        target_model=target_model,
     )
     executor.runtime_context.set_last_llm_result(result)
     if result is not None and result.value is not None:
