@@ -2,60 +2,14 @@
 
 > 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
 > 历史 Bug 修复记录已归档至 `docs/COMPLETED.md`。
-> **最后更新**：2026-05-14（事实重核：关闭 §二十二的失实表述；
-> 新增 §二十三 H1 / §二十四 H2 / §二十五 H3；Enum-from-LLM "Bug #3" 已确认修复）
+> **最后更新**：2026-05-27（全面事实核查：移除已修复条目，修正过时描述，保留仍存在的限制）
 >
 > **测试基线**：请以当次 `python -m pytest tests/ -q --tb=no --no-header` 的输出为准。
 > 不再于本文档冻结具体通过数字以避免出现"文档落后于代码"的幻觉。
 
 ---
 
-## ~~一、函数返回类型注释：不支持 `-> None`~~ ✅ **已实现（2026-05-10）**
-
-`-> None` 返回类型注释现已受到完整支持。`None` 与 `void` 的语义区别：
-
-- **`void`**：函数不产生任何值，调用结果不可赋值。
-- **`None`**：函数显式返回 `None` 类型的值，可以被赋值给 `any` 类型的变量或 `Optional[T]` 参数。
-
-```ibci
-func greet(str name) -> None:
-    print("Hello, " + name)        # ✅ 允许：隐式 None 返回
-
-func maybe(bool flag) -> None:
-    if flag:
-        return None                # ✅ 显式 return None
-    return                         # ✅ 裸 return 在 -> None 函数中合法（隐式 None）
-```
-
-> **实现说明**：`None` 是词法层面的保留关键字（`TokenType.NONE`），解析器类型标注组件（`TypeComponent.parse_type_annotation`）现已显式接受该关键字，并将其解析为名为 `"None"` 的类型名节点，与预置类型表中的 `NONE_SPEC` 对应。
-
----
-
-## ~~二、`try` / `except` 中的 `as e` 类型窄化局限~~ ✅ **已修复（2026-05-06）**
-
-`try` / `except` / `raise` / `finally` 异常机制**已可用**（包括内置异常层次 `Exception → LLMError → {LLMParseError, LLMRetryExhaustedError, LLMCallError}` 与用户自定义子类）。
-
-**类型窄化现已支持**：`except X as e:` 绑定变量 `e` 的编译期类型现在正确窄化为 `X`（捕获类型），无需 `(X)e` 强转即可访问子类专属字段。
-
-```ibci
-class MyError(Exception):
-    str detail
-    func __init__(self, str msg, str detail):
-        self.message = msg
-        self.detail = detail
-
-try:
-    raise MyError("oops", "deep-context")
-except MyError as e:
-    print(e.message)        # ✅ 基类字段
-    print(e.detail)         # ✅ 子类字段（类型窄化后可直接访问）
-```
-
-**元组异常** `except (A, B) as e:` 中 `e` 仍为 `Exception` 类型（安全回退），可通过 `(A)e` 或 `(B)e` 强转访问具体子类字段。
-
----
-
-## 三、可调用类实例（`__call__` 协议）
+## 一、可调用类实例（`__call__` 协议）
 
 **限制说明**
 
@@ -76,11 +30,11 @@ obj()  # ⚠️ 可调用类实例的调用方式存在设计问题
 
 ---
 
-## 四、`Enum` 语法
+## 二、`Enum` 语法
 
 **支持状态**：当前版本已提供基础 `Enum` 支持，但存在以下使用约束需要注意。
 
-### 4.1 声明方式
+### 2.1 声明方式
 
 `Enum` 通过继承内置 `Enum` 类实现，成员字段必须显式声明类型（当前版本仅支持 `str` 类型的枚举成员）：
 
@@ -91,7 +45,7 @@ class Color(Enum):
     str BLUE  = "BLUE"
 ```
 
-### 4.2 访问与比较
+### 2.2 访问与比较
 
 枚举成员通过类名访问（`Color.RED`），支持 `==` / `!=` 比较：
 
@@ -115,7 +69,7 @@ switch c:
         print("other")
 ```
 
-### 4.3 当前限制
+### 2.3 当前限制
 
 - **仅支持 `str` 类型成员**：枚举成员的底层值目前只能声明为 `str` 类型。`int` 等其他类型成员在未来版本中支持。
 - **不支持枚举迭代**：当前无法对枚举类的所有成员进行遍历（如 `for v in Color:`）。
@@ -124,7 +78,7 @@ switch c:
 
 ---
 
-## 五、`Uncertain` 内部哨兵值（用户不可见）
+## 三、`Uncertain` 内部哨兵值（用户不可见）
 
 `Uncertain`（`IbLLMUncertain`）是 IBCI 内核的**内部机制**，不是用户可编程接口。
 
@@ -139,39 +93,14 @@ switch c:
 - `llmexcept` 块内处于重试循环，用户只需书写 `retry "hint"` 语句，无需显式检测 Uncertain。
 - `is_uncertain()` 内置函数已从用户 API 移除。`Uncertain` 字面量也不应出现在正常业务代码中。
 
-处理 LLM 失败的正确方式见 §五（llmexcept）和 §4.6（异常体系）。
-
 ---
 
-## 六、字符串比较运算符
-
-**支持状态**：当前版本已支持字符串的 `<`、`<=`、`>`、`>=` 词法顺序比较。
-
-```ibci
-bool r1 = "apple" < "banana"    # True（词法顺序）
-bool r2 = "zebra" > "alpha"     # True
-bool r3 = "abc" <= "abc"        # True
-bool r4 = "xyz" >= "abc"        # True
-```
-
-比较语义遵循 Unicode 码点顺序（等同于 Python `str` 的比较语义）。
-
----
-
-## 七、行为表达式不可直接用于 `return` 语句
+## 四、行为表达式不可直接用于 `return` 语句
 
 **限制说明**
 
 行为表达式（`@~ ... ~`）的输出类型和提示词约束由左值类型驱动（即赋值目标的类型）。
 在 `return` 语句中直接书写行为表达式时，由于无法从函数返回类型标注中以静态明确的方式推导出提示词约束，编译器**禁止**此写法，报 `SEM_003` 错误。
-
-**行为**
-
-```ibci
-# ❌ SEM_003：不允许在 return 中直接使用行为表达式
-func get_reply() -> str:
-    return @~ 给我一句话 ~
-```
 
 **正确用法**
 
@@ -188,43 +117,52 @@ func get_reply() -> str:
 
 行为表达式的目标类型同时决定了注入给 LLM 的输出格式约束（通过 `__outputhint_prompt__`）以及 LLM 返回值的解析方式（通过 `__from_prompt__`）。将其绑定到明确的左值类型可以保证语义清晰、无歧义，而不是将执行语义与函数签名隐式耦合。
 
+---
 
+## 五、引用语义局限性
+
+IBCI 对所有复合对象（`list` / `dict` / 用户类实例）使用**共享引用**语义——与 Python 一致。
+
+### 5.1 赋值是引用复制
+
+```ibci
+list a = [1, 2, 3]
+list b = a          # b 与 a 指向同一个列表
+b.append(4)
+print((str)a.len()) # 输出 4
+```
+
+**规避方案**：手动构造副本（IBCI 暂未提供 `copy` / `deepcopy` 内建）：
+
+```ibci
+list b = []
+for int x in a:
+    b.append(x)
+```
+
+### 5.2 类实例字段的默认引用陷阱
+
+若多个实例共享同一个"默认"列表字段，修改一个实例的字段会影响其他实例。**始终在构造函数中初始化列表 / 字典字段**：
+
+```ibci
+class Stack:
+    list items
+    func __init__(self):
+        self.items = []  # 每个实例独立创建
+```
+
+### 5.3 `fn` 变量的可调用引用语义
+
+```ibci
+fn f = add          # f 持有 add 函数的引用
+fn g = f            # g 也引用同一个函数
+```
+
+函数本身是不可变的，因此 `fn` 变量的引用语义不会导致副作用问题。
 
 ---
 
-## ~~八、`str + Uncertain` 拼接：过渡期允许~~ ✅ 已禁止（NS-4，2026-05-12）
-
-历史过渡期允许的 `str + llm_uncertain` 隐式拼接已收紧：
-
-- 编译期：`StrAxiom.resolve_operation_type_name("+", "llm_uncertain")` 不再返回 `"str"`，走常规 SEM_003 类型检查路径。
-- 运行期：`IbString.__add__` 检测到右操作数为 `llm_uncertain` 哨兵时，抛 `ThrownException(LLMParseError)`，由 `try/except LLMParseError`（或更外层的 `LLMError`/`Exception`）接管。
-- 用户若需观察 uncertain 值仍可使用显式转换 `(str)uncertain_var`（得到字符串 `"uncertain"`）。
-
-详情参考 `docs/COMPLETED.md` 2026-05-12 NS-4 锚点。
-
----
-
-## ~~九、链式下标 `(expr)[index]` 语法不支持~~ ✅ 已支持（NS-6，2026-05-12）
-
-历史 `(nested[0])[1]` 形式被解析器误判为 `(Type)value` 形式的 cast，已修复：
-
-- `expression.py:grouping()` 推测块内部的 `ParseControlFlowError` 改由 `with` 外侧的 `try/except` 接管，确保 speculate 失败时 `success=False`、temp_tracker 不被合并（这是历史 PAR_001 误报的根因）；
-- 当类型节点本身是 `IbSubscript` 且 RPAREN 之后紧跟 `[` 时，立刻触发 PCFE 回退到分组表达式路径；
-- 泛型 cast `(list[int])arr` 等非链式下标用法不受影响。
-
-详情参考 `docs/COMPLETED.md` 2026-05-12 NS-6 锚点。
-
----
-
-## 十、类字段不支持调用表达式作为默认值
-
-类字段初始化表达式中，只有字面量常量（`int` / `str` / `bool` / `list[]` / `dict{}`）可靠工作。函数调用、构造器调用等动态表达式作为字段默认值均不可靠。
-
-**规避方案**：始终通过 `__init__` 构造函数进行动态字段初始化。
-
----
-
-## 十一、子类 auto-init 不含父类字段
+## 六、子类 auto-init 不含父类字段
 
 **严重级别**：低（符合 Python 语义，但与 C++/Java 使用者直觉不符）
 
@@ -246,56 +184,7 @@ Dog d = Dog("Husky")    # 只设置 breed；d.name = None
 
 ---
 
-## 十二、引用语义局限性
-
-IBCI 对所有复合对象（`list` / `dict` / 用户类实例）使用**共享引用**语义——与 Python 一致。
-
-### 12.1 赋值是引用复制
-
-```ibci
-list a = [1, 2, 3]
-list b = a          # b 与 a 指向同一个列表
-b.append(4)
-print((str)a.len()) # 输出 4
-```
-
-**规避方案**：手动构造副本（IBCI 暂未提供 `copy` / `deepcopy` 内建）：
-
-```ibci
-list b = []
-for int x in a:
-    b.append(x)
-```
-
-### 12.2 类实例字段的默认引用陷阱
-
-若多个实例共享同一个"默认"列表字段，修改一个实例的字段会影响其他实例。**始终在构造函数中初始化列表 / 字典字段**：
-
-```ibci
-class Stack:
-    list items
-    func __init__(self):
-        self.items = []  # 每个实例独立创建
-```
-
-### 12.3 `llmexcept` 快照不影响容器内容
-
-`llmexcept` 的方案A 深克隆 + 方案B `__snapshot__` 协议目前只快照"标量变量绑定 / 用户对象字段"。若快照前的变量持有列表，LLM 调用体内对该列表的 `append`/`remove` 等**就地修改**在 `retry` 后不会被还原。
-
-**规避方案**：不要在 `llmexcept` 保护块的 LLM 调用路径中就地修改容器；如需可回滚的容器状态，在 `llmexcept` 之前先做深复制（或为类实现 `__snapshot__` / `__restore__` 协议自行决定快照粒度）。
-
-### 12.4 `fn` 变量的可调用引用语义
-
-```ibci
-fn f = add          # f 持有 add 函数的引用
-fn g = f            # g 也引用同一个函数
-```
-
-函数本身是不可变的，因此 `fn` 变量的引用语义不会导致副作用问题。
-
----
-
-## 十三、`auto` / `fn` / `any` 对比
+## 七、`auto` / `fn` / `any` 对比
 
 | 关键字 | 用途 | 类型推导时机 | 后续赋值限制 |
 |--------|------|------------|------------|
@@ -313,7 +202,7 @@ fn g = f            # g 也引用同一个函数
 
 ---
 
-## 十四、容器多类型声明
+## 八、容器多类型声明
 
 `list[int, str, list]` 语法允许声明一个可持有多种类型元素的列表。编译器规则：
 
@@ -330,11 +219,9 @@ fn g = f            # g 也引用同一个函数
   int n = (int)x        # ✅ 再强制转换到目标类型
   ```
 
-详细泛型容器限制与改进方向见本文件 §十六。
-
 ---
 
-## 十五、已废弃语法（产生硬编译错误）
+## 九、已废弃语法（产生硬编译错误）
 
 ### `(Type) @~...~` 强制类型转换语法（PAR_010）
 
@@ -373,48 +260,19 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 `D1`（2026-04-29）废弃了声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式（产生 PAR_003），
 改为在表达式侧通过 `-> TYPE` 标注（`D2`）。
 
-
 ---
 
-## 十六、泛型与容器类型限制
+## 十、泛型与容器类型限制
 
-当前泛型实现仍有部分限制（G1/G2/G3 改进后已解决多项）。
-
-### ~~16.1 下标访问的类型推断返回 `any`~~ ✅ 已解决（G1/G3）
-
-`list[int]` 下标访问（`[]` 运算符）现在通过 `registry.resolve_subscript()` 正确返回元素类型 `int`，而非 `any`。`list[T].__getitem__` 方法成员亦通过 G3 改进返回 `T`（详见 `docs/COMPLETED.md`）。
-
-### ~~16.2 泛型特化的 axiom 方法引导不完整~~ ✅ 已解决（G1/G2/G3）
-
-`resolve_specialization()` 已在 G1 加入 early-cache hit 逻辑，G3 修复了嵌套泛型的 key 计算（使用 `spec.name` 而非 `get_base_name()`）。详见 `docs/COMPLETED.md`。
-
-### ~~16.3 嵌套容器的链式下标类型推断缺失~~ ✅ 已解决（G3）
-
-`list[list[int]][0]` 现在正确返回 `list[int]` 类型，`list[list[int]][0][0]` 正确返回 `int`。修复方案：`resolve_specialization` 使用 `arg.name` 而非 `arg.get_base_name()` 确保嵌套键 `"list[list[int]]"` 而非 `"list[list]"`。
-
-### 16.4 `dict` 键类型在下标访问时不校验
+### 10.1 `dict` 键类型在下标访问时不校验
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### ~~16.5 `tuple` 无元素类型标注~~ ✅ 已解决（NS-7，2026-05-12）
-
-`tuple` 现在支持 `tuple[T1, T2, ...]` 的位置元素类型标注：
-- 字面量 int 下标访问时返回精确的位置类型（`tuple[int, str]` 的 `t[0]` 是 `int`，`t[1]` 是 `str`）；
-- 变量索引或越界访问回退到 `any`，与 `dict` 的非校验路径对称；
-- `tuple[A, B]` 仍可赋值给裸 `tuple`；不同位置组合 spec 互相不兼容；
-- `tuple[T]` 单类型路径保留 `element_type` 单字段语义，向后兼容。
-
-实现：`TypeDef.positional_element_types`（与 `LIST.allowed_element_types` 平行）、`SpecFactory.create_tuple(positional_element_type_names=...)`、`SemanticAnalyzer.visit_IbSubscript` 中识别字面量 int 索引并精确推断。`SpecRegistry.resolve_specialization` 的早缓存键不再 sort 多参数列表，保证 `tuple[int,str]` 与 `tuple[str,int]` 不再误共用同一缓存项。
-
-### ~~16.6 泛型实例赋值兼容性规则不完整~~ ✅ 已解决（G3 / axiom covariance）
-
-`list[int]` 与 `list` 的赋值兼容性通过 `ListAxiom.is_compatible("list")` 实现（`is_compatible` 返回 True）。`list[int] x; list y = x` 不再触发 SEM_003。详见 `tests/compiler/test_g3_generics.py::TestG3Covariance`。
-
 ---
 
-## 十七、Switch 语句设计未稳定
+## 十一、Switch 语句设计未稳定
 
-**当前状态**：`switch`/`case` 语法的 AST 节点已实现（`core/kernel/ast.py:217 class IbSwitch`），但语义设计存在待改进问题。
+**当前状态**：`switch`/`case` 语法的 AST 节点已实现（`core/kernel/ast.py:217 class IbSwitch`），基本功能可用（e2e 测试覆盖），但语义设计存在待改进问题。
 
 **已知问题**：
 - case 匹配语义不完整（值比较、类型匹配、模式匹配的边界不清晰）
@@ -424,11 +282,11 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 **当前建议**：暂不在生产代码中使用 `switch`/`case` 语句，优先使用 `if`/`elif`/`else` 实现条件分支逻辑。
 
-**测试覆盖**：暂无契约测试（INV-SWITCH-*），待语义设计稳定后补充。详见 `docs/SEMANTIC_COVERAGE_MATRIX.md §10.3`。
+**测试覆盖**：e2e 层有 `tests/e2e/test_e2e_classes.py::TestE2EEnums::test_switch_case`，但尚无契约测试（INV-SWITCH-*）。
 
 ---
 
-## 十八、`intent_context` 类静态调用的"静默无效"陷阱
+## 十二、`intent_context` 类静态调用的"静默无效"陷阱
 
 **当前状态**：`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py:421-517`）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
 
@@ -448,15 +306,13 @@ str r = @~ ... ~
 
 **作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `builtin_initializer.py:519-538` 注释）。
 
-**根源**：意图栈在运行时归属"当前执行帧的 `_intent_ctx`"（ContextVar 隔离），而 `intent_context` 作为 IBCI 类对象暴露的 `push/pop/...` 方法签名要求一个 receiver；当 receiver 是类静态调用产生的临时对象时，操作落到一个"游离"的实例上。
-
 **编译期防护（SEM_090）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_090 warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
 **测试覆盖**：`tests/compiler/semantic/test_p2_warnings.py::TestIntentContextStaticCallWarning`（9 个测试）。
 
 ---
 
-## 十九、`@` 意图注释的放置约束
+## 十三、`@` 意图注释的放置约束
 
 **当前状态**：以下规则由编译期 `SEM_060` 与 VM 语句调度共同保证：
 
@@ -467,25 +323,20 @@ str r = @~ ... ~
 
 **根源**：意图注释设计为对"下一条语句执行窗口"的修饰；该规则让编译期能确定 one-shot 的归属，同时让运行时在无 LLM 路径上也保持无泄漏的一致语义。
 
-**未来演进思路（不构成承诺）**：可进一步评估是否允许"一个语句窗口内的多 one-shot 合并策略"（当前明确拒绝，避免语义歧义）。
-
 ---
 
-## 二十、用户类相关能力差距（汇总记录，非主流场景的设计取向）
+## 十四、用户类相关能力差距
 
-以下是本轮事实核查中确认的、面向"用户自定义类"的能力差距。这些差距并非线上 bug，而是设计未覆盖；在大量"业务脚本 + LLM 协作"的真实用例中并非阻塞项，故先记录，不列入 NS。
+以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
 1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置 `list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` 全部走内置 axiom 的 `resolve_specialization_by_names` 路径，用户类型无对应入口。
 2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel.py` 的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
-3. ~~**方法重写无签名兼容性检查**~~ **已实现 SEM_092 warning（2026-05-27核查）**：`type_checking_pass.py:693` 的 `_check_override_compatibility` 方法在方法重写时检查参数数量、类型兼容性和返回类型协变性，生成 SEM_092 warning（非 error）。测试覆盖：`tests/compiler/semantic/test_override_and_super.py`。
-4. **`__snapshot__` / `__restore__` 用户协议在 llmexcept 路径里未被调用**：`docs/IBCI_SYNTAX_REFERENCE.md §10.4` 描述的"快照粒度自定义"目前**只是文档承诺**——`vm/handlers.py:vm_handle_IbLLMExceptionalStmt` 的快照逻辑只对内置可序列化类型做深拷贝，对用户类对象不会调用其 `__snapshot__` / `__restore__`。retry 失败时用户类对象内部 mutation 不会回滚（与 `KNOWN_LIMITS §五"llmexcept 不还原容器变更"`的现象同源，但根因更深）。
-5. ~~**强转 cast 当前全部推迟到运行时**~~ **部分解决（SEM_091）**：`(T)x` 现在通过 `can_convert_from()` 公理方法在编译期进行合法性预检——当目标类型公理明确拒绝源类型时发出 SEM_091 warning。但这是 warning 而非 error：运行时仍保留最终判定权（用户自定义类的 cast 等场景）。测试覆盖：`tests/compiler/semantic/test_p2_warnings.py::TestCastValidationWarning`。
 
-**未来演进思路（不构成承诺）**：以上 1/2 见 `docs/PENDING_TASKS.md §四`；4 因为牵动 llmexcept 快照协议核心，在该协议稳定 + 用户类一等公民化之后再评估。
+**未来演进思路（不构成承诺）**：以上见 `docs/PENDING_TASKS.md §四`。
 
 ---
 
-## 二十一、DDG 分析已完成但并发调度未接通
+## 十五、DDG 分析已完成但并发调度未接通
 
 **当前状态**：编译期 `BehaviorDependencyAnalyzer`（Pass 5）已经为每个 `IbBehaviorExpr` 计算 `llm_deps` / `dispatch_eligible` 字段（详见 `docs/VM_SPEC.md §3.1`），但运行时 `core/runtime/interpreter/llm_executor.py` 与 `vm/handlers.py` 仍按 AST 序串行执行——`dispatch_eligible=True` 的节点目前**不会**真正并发发起 LLM HTTP 调用，`LLMScheduler.dispatch_eager()` 路径未被默认启用。
 
@@ -495,81 +346,29 @@ str r = @~ ... ~
 
 ---
 
-## ~~二十二、`tests/contracts/` 当前并不构成真正的契约基线（追踪记录）~~ ✅ 已核验为失实描述（2026-05-14）
-
-**2026-05-14 事实核查结论**：本条目源于 2026-05-13 一次自相矛盾的状态描述，与代码事实**完全不符**。重新核验结果：
-
-```bash
-python -m pytest tests/contracts/ -q --tb=no
-# 140 passed, 9 skipped
-python -m pytest tests/runtime/test_plugin_implementations.py -q --tb=no
-# 18 passed
-python -m pytest tests/meta/ -q --tb=no
-# 3 passed
-```
-
-`tests/contracts/` 当前 7 个文件（`test_collection_semantics.py` / `test_exception_semantics.py` / `test_execution_model.py` / `test_intent_propagation.py` / `test_llm_integration.py` / `test_llmexcept_guarantees.py` / `test_scope_semantics.py` / `test_type_invariants.py`）共 140 个用例**全部通过**；不存在"~89 处使用非法 IBCI 语法"的情形，`tests/runtime/test_plugin_implementations.py` 与 `tests/meta/test_no_duplicate_helpers.py` 同样全绿。
-
-本条目作为**反例**保留，提醒后续维护：**不要在不复跑 pytest 的情况下登记"测试基线红线"类描述**。详见 `docs/NEXT_STEPS.md` 文末"维护守则"。
-
----
-
-## ~~二十三、用户异常跨函数边界类型降级（H1）~~ ✅ 已修复（2026-05-14 第二轮 PR）
-
-**修复摘要**：`core/runtime/vm/handlers.py::vm_handle_IbCall` 现在在通用 `except Exception` 之前显式让 `ThrownException` 直通；只对真正的 Python 异常 wrap 成 `RuntimeError`。回归用例：`tests/e2e/test_e2e_exceptions.py::TestExceptionAcrossFunctionBoundary`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
-
----
-
-## ~~二十四、`import` 语句必须位于所有可执行语句之前（H2）~~ ✅ 已修复（2026-05-14 第二轮 PR）
-
-**修复摘要**：scheduler 的 `parse_imports_only` 改为遇非 import token 后继续扫描，misplaced import 命中既有的 `DEP_003 DEP_INVALID_IMPORT_POSITION`；错误信息明确指出"`import` 必须位于所有其它语句之前"。回归用例：`tests/compiler/test_import_position.py`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
-
----
-
-## ~~二十五、`ihost.run_isolated(path, policy)` 路径相对 cwd 而非入口文件目录（H3）~~ ✅ 已修复（2026-05-14 第二轮 PR）
-
-**修复摘要**：`HostService` 新增 `_resolve_isolated_path`：绝对路径直通；相对路径以 `execution_context.get_entry_dir()` 为锚解析，与 `file.read("./...")` 语义一致。回归用例：`tests/e2e/test_e2e_multi_interpreter.py::TestRunIsolatedPathRelativeToEntryDir`。详见 `docs/COMPLETED.md` 2026-05-14 第二轮锚点。
-
----
-
-## 二十六、`__prompt__` 协议家族：增强改造后的已知问题与待决策项
+## 十六、`__prompt__` 协议家族：已知问题与待决策项
 
 > **新增**：2026-05-27（__prompt__ 协议统一化改造期间发现）
 
-### 26.1 用户类 `__from_prompt__` 返回的实例字段无法正确访问
+### 16.1 用户类 `__from_prompt__` 返回的实例字段访问风险
 
-**现象**：当用户自定义类实现 `__from_prompt__`，返回 `(True, instance)` 中的 instance 通过 `VTableParsingStrategy._auto_box_value` 路径处理后，实例的 `.field` 访问返回 `None` 而非实际赋值内容。
+**现象**：当用户自定义类实现 `__from_prompt__`，在特定条件下返回实例的 `.field` 访问可能返回 `None` 而非实际赋值内容。
 
-**复现**：
-```ibci
-class MyType:
-    str value
-    func __init__(self):
-        self.value = ""
-    func __from_prompt__(str raw) -> tuple:
-        MyType m = MyType()
-        m.value = raw
-        return (True, m)
-
-MyType x = @~ MOCK:STR:hello ~
-print(x.value)   # 期望 "hello"，实际 "None"
-```
-
-**根因分析**：`VTableParsingStrategy` 的 auto-boxing 路径可能在 `__from_prompt__` 已返回正确实例的情况下仍尝试二次封装，或者 `is_instance_of_target` 判定失败导致 `_auto_box_value` 覆写了用户正确构造的实例。
+**当前状态**：`VTableParsingStrategy` 已加入 `is_instance_of_target` 类身份检查——当 `__from_prompt__` 返回目标类的正确实例时跳过 auto-boxing。但若类身份比对失败（如跨模块加载导致类对象不同一），仍可能触发二次封装覆写字段。
 
 **待决策**：
 - 是否应该在 `__from_prompt__` 返回的对象类型已匹配目标类时，完全跳过 auto-boxing？
 - 是否需要强制要求 `__from_prompt__` 返回的第二元素必须是目标类的实例？
 
-### 26.2 `__validate_prompt__` 协议的执行时机语义
+### 16.2 `__validate_prompt__` 协议的执行时机语义
 
 **问题**：当 `__validate_prompt__` 在 `VTableParsingStrategy` 中执行时，它仅覆盖了通过用户类 vtable 路径解析的类型。对于 axiom 内置类型（`int`/`float`/`bool`/`str`/`list`/`dict`/`enum`），pre-flight 校验走的是 axiom 自身的 `from_prompt` 内部逻辑，不经过 `__validate_prompt__`。
 
 **待决策**：
-- 是否应该为内置类型也提供 `__validate_prompt__` 扩展点？（如允许用户通过"子类化内置类型"来注入 pre-flight 校验）
+- 是否应该为内置类型也提供 `__validate_prompt__` 扩展点？
 - 当前设计是否足够——内置类型的 `from_prompt` 已含校验逻辑（返回 `(False, hint)` 时即触发 retry）？
 
-### 26.3 `__to_prompt__` 的异常处理静默化
+### 16.3 `__to_prompt__` 的异常处理静默化
 
 **问题**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，但内部 `try/except` 静默吞掉了 `__to_prompt__()` 的异常。如果用户实现的 `__to_prompt__` 抛出异常（如字段未初始化导致 AttributeError），调用者无感知——最终回退到 `str(val)` 或 `str(val.to_native())`。
 
@@ -577,7 +376,7 @@ print(x.value)   # 期望 "hello"，实际 "None"
 - 静默降级（当前行为）是否可接受？好处是 LLM 调用不因 prompt 序列化失败而中断；坏处是用户不知道自己的 `__to_prompt__` 实现有 bug。
 - 是否应该在 debug 模式下将静默异常升级为 warning 级诊断输出？
 
-### 26.4 协议签名校验（SEM_095）的强度选择
+### 16.4 协议签名校验（SEM_095）的强度选择
 
 **问题**：当前 `SEM_095` 是 warning 而非 error——用户可以声明签名不匹配协议约定的 `__from_prompt__`（如 0 个参数），编译仍通过。运行时如果 axiom 路径命中就不会调用 vtable，但如果确实调用到 vtable 则会在运行时失败。
 
@@ -587,4 +386,4 @@ print(x.value)   # 期望 "hello"，实际 "None"
 
 ---
 
-*最后更新：2026-05-27（新增 §二十六 __prompt__ 协议增强改造发现的问题）*
+*最后更新：2026-05-27（全面事实核查与文档大扫除）*

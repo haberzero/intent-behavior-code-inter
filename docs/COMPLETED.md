@@ -5,7 +5,21 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-27（Phase 2 `__payload_prompt__` 协议完成）
+> **最后更新**：2026-05-27（BUG #A 修复 + KNOWN_LIMITS 文档大扫除）
+
+---
+
+## 2026-05-27：紧急 Bug 修复 + KNOWN_LIMITS 文档大扫除
+
+测试基线：**832 passed, 2 skipped**（0 failures）。
+
+- **BUG #A 修复**：统一 `if`/`while`/`for` 在 LLM 条件不确定时的语义——`vm_handle_IbIf` 和 `vm_handle_IbWhile` 原先静默吞掉 uncertain 条件（跳过分支/退出循环），现改为与 `vm_handle_IbFor` 一致，抛出 `LLMParseError`（由 `llmexcept` 接管或向用户报错）
+- **示例修复**：`examples/01_getting_started/03_flow_control_and_behavior.ibci` 改用 MOCK 指令确保零配置跑通
+- **示例修复**：`examples/03_advanced_features/isolation_demo/parent.ibci` 路径修正（`./sub_project/child.ibci`）
+- **KNOWN_LIMITS 文档大扫除**：
+  - 移除已修复条目（旧§1/§2/§6/§8/§9/§16.1-16.3/§16.5/§16.6/§22/§23/§24/§25）
+  - 修正过时描述：旧§12.3（容器快照已通过 deep_clone 正确还原）、旧§20.4（`__snapshot__`/`__restore__` 协议已实现）、旧§10（VMExecutor 已支持复杂表达式字段默认值）、旧§20.3/§20.5（SEM_092/SEM_091 已实现）
+  - 重新编号，精简至 16 节（从 26 节缩减）
 
 ---
 
