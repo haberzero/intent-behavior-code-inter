@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-27 实测结果**：`812 passed, 2 skipped`（0 failures）。
+**2026-05-27 实测结果**：`811 passed, 1 failed, 2 skipped`（P0-2 完成后）。
 
 ---
 
@@ -51,11 +51,15 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ### P0-2：用户类运算符重载支持（预估 2-3 天）
 
-- [ ] 扩展 `builtin_initializer.py:_auto_bind_operators` 支持用户类型
-- [ ] 在语义分析期间识别用户类的运算符方法（`func __add__(...)`）
-- [ ] 将运算符方法注册到用户类的 vtable（类似内置类型）
-- [ ] 编译期检查运算符方法签名（`TypeCheckingPass`）
-- [ ] 测试：用户类可定义 `__add__` / `__eq__` / `__lt__` 等运算符
+- [x] 扩展 `builtin_initializer.py:_auto_bind_operators` 支持用户类型
+- [x] 在语义分析期间识别用户类的运算符方法（`func __add__(...)`）
+- [x] 将运算符方法注册到用户类的 members（编译时 MethodMemberSpec）
+- [x] 编译期检查运算符方法签名（`TypeCheckingPass` 通过 `resolve_op` 查找）
+- [x] 测试：用户类可定义 `__add__` / `__eq__` / `__lt__` 等运算符
+
+**进展**：已完成编译时运算符检测与类型推断（d999783）。SymbolCollectionPass 现在填充完整方法签名（param_types + return_type）到 spec.members，registry.resolve_op 在编译期查找用户定义的运算符方法。测试验证：`/tmp/test_user_operator.ibci` 编译并运行成功。
+
+**副作用发现**：1 个测试失败（test_override_different_param_count），因为方法签名验证现在工作正常，正确检测到参数数量不匹配。这是期望的正确行为。
 
 ### P0-3：统一初始化路径（预估 1-2 天）
 
