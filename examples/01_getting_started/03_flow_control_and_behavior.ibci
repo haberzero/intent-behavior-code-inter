@@ -5,6 +5,10 @@
 # 1. if - 意图驱动的条件判断
 # 2. while - 意图驱动的条件循环
 # 3. for - 行为描述作为迭代条件
+#
+# 注：本示例使用 MOCK 指令确保零配置可跑通。
+# 实际使用中，行为表达式内可写自然语言（如 @~$text 是否积极？~），
+# 由 LLM 返回 bool 结果。
 
 import ai
 import file
@@ -44,7 +48,8 @@ print("\n=== 1. if 意图驱动条件判断 ===\n")
 str input_text = "今天天气真不错！"
 print("输入文本: " + input_text)
 
-if @~$input_text 是否包含积极情绪？~:
+# MOCK:TRUE 模拟 LLM 返回"是"，实际场景中写自然语言如 @~$input_text 是否包含积极情绪？~
+if @~MOCK:TRUE 情绪分析~:
     print("检测到积极情绪！")
     idbg.show_all()
 else:
@@ -60,19 +65,14 @@ print("\n=== 2. while 意图驱动条件循环 ===\n")
 str user_input = "开始"
 int loop_count = 0
 
+# MOCK:SEQ 按序返回：前两次 TRUE（继续循环），第三次 FALSE（退出）
 print("开始循环判断...")
-while @~$user_input 是否表示继续？~:
+while @~MOCK:SEQ:[TRUE,TRUE,FALSE] 是否继续~:
     loop_count = loop_count + 1
     print("循环第 " + (str)loop_count + " 次")
-
-    if loop_count >= 3:
-        print("达到最大循环次数，退出")
-        user_input = "停止"
-    else:
-        user_input = "继续"
     idbg.show_all()
 
-print("循环结束")
+print("循环结束，共循环 " + (str)loop_count + " 次")
 
 # ============================================================
 # 3. for with behavior expression - 行为描述作为迭代条件
@@ -83,12 +83,10 @@ print("\n=== 3. for + 行为描述迭代 ===\n")
 str continue_flag = "yes"
 int for_count = 0
 
-for @~$continue_flag 是否为 yes？~:
+# MOCK:SEQ 按序返回：前两次 TRUE（继续），第三次 FALSE（退出）
+for @~MOCK:SEQ:[TRUE,TRUE,FALSE] 继续循环？~:
     for_count = for_count + 1
     print("for 循环第 " + (str)for_count + " 次")
-
-    if for_count >= 2:
-        continue_flag = "no"
     idbg.show_all()
 
 print("for 循环结束，共执行 " + (str)for_count + " 次")
@@ -102,10 +100,11 @@ print("\n=== 4. 嵌套条件判断 ===\n")
 str content = "这是一个关于编程的教程"
 print("分析内容: " + content)
 
-if @~$content 是否包含技术相关关键词？~:
+# 外层返回 TRUE，内层返回 FALSE — 展示分支走 else 路径
+if @~MOCK:TRUE 技术关键词检测~:
     print("  -> 外层判断：包含技术关键词")
 
-    if @~$content 是否包含 Python 相关内容？~:
+    if @~MOCK:FALSE Python内容检测~:
         print("  -> 内层判断：包含 Python 内容")
         idbg.show_all()
     else:
