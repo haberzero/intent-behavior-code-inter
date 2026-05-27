@@ -41,7 +41,7 @@ print(result)
     def test_named_tag_alphanumeric(self):
         """含数字的 tag 也能正确工作（@GPT4o~ 语法）。"""
         code = AI_MOCK_PREFIX + """
-ai.register_model("GPT4O", "TESTONLY", "TESTONLY", "TESTONLY")
+ai.register_model("GPT4o", "TESTONLY", "TESTONLY", "TESTONLY")
 str result = @GPT4o~ MOCK:STR:numeric_tag ~
 print(result)
 """
@@ -72,12 +72,28 @@ print(r2)
         assert "fast_result" in lines
         assert "smart_result" in lines
 
-    def test_tag_case_insensitive(self):
-        """tag 大小写不敏感：@gpt~ 和 @GPT~ 路由到同一模型。"""
+    def test_tag_case_sensitive(self):
+        """tag 大小写敏感：@gpt~ 和 @GPT~ 是不同的模型标识。"""
         code = AI_MOCK_PREFIX + """
 ai.register_model("GPT", "TESTONLY", "TESTONLY", "TESTONLY")
-str result = @gpt~ MOCK:STR:case_test ~
+str result = @GPT~ MOCK:STR:case_test ~
 print(result)
 """
         lines = run_ibci(code)
         assert "case_test" in lines
+
+    def test_tag_case_sensitive_mismatch(self):
+        """tag 大小写不匹配时，在非 MOCK 模式下应报错（MOCK 模式拦截在路由之前）。"""
+        # 注册 "GPT" 但使用 "gpt"，在 MOCK 模式下不触发路由错误
+        # 此测试验证注册和使用的 tag 保持原始大小写
+        code = AI_MOCK_PREFIX + """
+ai.register_model("GPT", "TESTONLY", "TESTONLY", "TESTONLY")
+ai.register_model("gpt", "TESTONLY", "TESTONLY", "TESTONLY")
+str r1 = @GPT~ MOCK:STR:upper ~
+str r2 = @gpt~ MOCK:STR:lower ~
+print(r1)
+print(r2)
+"""
+        lines = run_ibci(code)
+        assert "upper" in lines
+        assert "lower" in lines

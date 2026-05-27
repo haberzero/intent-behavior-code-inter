@@ -114,7 +114,7 @@ class AIPlugin(IbStatefulPlugin):
         """注册命名模型配置，用于 @NAME~ 语法的模型路由。
 
         Args:
-            name: 模型标识名（对应 @NAME~ 中的 NAME，大小写不敏感）
+            name: 模型标识名（对应 @NAME~ 中的 NAME，大小写敏感，必须与使用时完全一致）
             url: API endpoint URL
             key: API key
             model: 模型名称
@@ -124,24 +124,22 @@ class AIPlugin(IbStatefulPlugin):
             ai.register_model("GPT4o", "https://api.openai.com/v1", "sk-...", "gpt-4o")
             str answer = @GPT4o~ 请解释量子力学 ~
         """
-        normalized_name = name.upper()
         config = {
             "url": url,
             "key": key,
             "model": model,
             "timeout": kwargs.get("timeout", 30.0),
         }
-        self._model_registry[normalized_name] = config
+        self._model_registry[name] = config
         # 清除缓存的客户端以便下次使用时重新初始化
-        self._named_clients.pop(normalized_name, None)
+        self._named_clients.pop(name, None)
 
     def _get_named_client(self, name: str):
         """获取或创建命名模型的 OpenAI 客户端。"""
-        normalized_name = name.upper()
-        if normalized_name in self._named_clients:
-            return self._named_clients[normalized_name]
+        if name in self._named_clients:
+            return self._named_clients[name]
 
-        config = self._model_registry.get(normalized_name)
+        config = self._model_registry.get(name)
         if not config:
             raise RuntimeError(
                 f"未注册的命名模型 '{name}'。请先使用 ai.register_model(\"{name}\", url, key, model) 注册。"
@@ -152,7 +150,7 @@ class AIPlugin(IbStatefulPlugin):
             os.environ.get("IBC_TEST_MODE") == "1"
         )
         if is_test_mode:
-            self._named_clients[normalized_name] = "MOCK_CLIENT"
+            self._named_clients[name] = "MOCK_CLIENT"
             return "MOCK_CLIENT"
 
         try:
@@ -165,7 +163,7 @@ class AIPlugin(IbStatefulPlugin):
                 base_url=base_url,
                 timeout=config["timeout"]
             )
-            self._named_clients[normalized_name] = client
+            self._named_clients[name] = client
             return client
         except ImportError:
             raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
@@ -365,14 +363,13 @@ class AIPlugin(IbStatefulPlugin):
         if not is_test_mode:
             # 命名模型路由：@NAME~ 语法
             if target_model:
-                normalized_name = target_model.upper()
-                if normalized_name not in self._model_registry:
+                if target_model not in self._model_registry:
                     raise RuntimeError(
                         f"未注册的命名模型 '{target_model}'。"
                         f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
                     )
-                named_config = self._model_registry[normalized_name]
-                active_client = self._get_named_client(normalized_name)
+                named_config = self._model_registry[target_model]
+                active_client = self._get_named_client(target_model)
                 active_model = named_config["model"]
             else:
                 # 默认模型路径
