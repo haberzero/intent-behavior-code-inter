@@ -119,7 +119,7 @@ class BaseAxiom:
     def __payload_prompt__(
         self, value: Any, spec: Optional["IbSpec"] = None
     ) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]:
-        """Multi-modal payload protocol — default returns None (fallback to __to_prompt__).
+        """Multi-modal payload protocol — default returns str(value) (text fallback).
 
         Concrete axioms for multi-modal types (audio/image/video) override this
         to return structured content blocks (dicts) for LLM API payloads.
