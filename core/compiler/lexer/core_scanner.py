@@ -269,7 +269,7 @@ class CoreTokenScanner:
             
             # Check for behavior marker: @~ or @tag~
             offset = 0
-            while self.scanner.peek(offset).isalpha():
+            while self.scanner.peek(offset).isalnum():
                 offset += 1
             
             if self.scanner.peek(offset) == '~' and mode == "":

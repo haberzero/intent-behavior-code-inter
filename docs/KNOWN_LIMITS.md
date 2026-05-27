@@ -477,11 +477,11 @@ str r = @~ ... ~
 
 1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置 `list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` 全部走内置 axiom 的 `resolve_specialization_by_names` 路径，用户类型无对应入口。
 2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel.py` 的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
-3. **方法重写无签名兼容性检查**：`semantic_analyzer.visit_IbClassDef` 校验父类存在性，但不做 Liskov 子类型签名校验；子类可以静默"窄化"参数/拓宽返回。
+3. ~~**方法重写无签名兼容性检查**~~ **已实现 SEM_092 warning（2026-05-27核查）**：`type_checking_pass.py:693` 的 `_check_override_compatibility` 方法在方法重写时检查参数数量、类型兼容性和返回类型协变性，生成 SEM_092 warning（非 error）。测试覆盖：`tests/compiler/semantic/test_override_and_super.py`。
 4. **`__snapshot__` / `__restore__` 用户协议在 llmexcept 路径里未被调用**：`docs/IBCI_SYNTAX_REFERENCE.md §10.4` 描述的"快照粒度自定义"目前**只是文档承诺**——`vm/handlers.py:vm_handle_IbLLMExceptionalStmt` 的快照逻辑只对内置可序列化类型做深拷贝，对用户类对象不会调用其 `__snapshot__` / `__restore__`。retry 失败时用户类对象内部 mutation 不会回滚（与 `KNOWN_LIMITS §五"llmexcept 不还原容器变更"`的现象同源，但根因更深）。
 5. ~~**强转 cast 当前全部推迟到运行时**~~ **部分解决（SEM_091）**：`(T)x` 现在通过 `can_convert_from()` 公理方法在编译期进行合法性预检——当目标类型公理明确拒绝源类型时发出 SEM_091 warning。但这是 warning 而非 error：运行时仍保留最终判定权（用户自定义类的 cast 等场景）。测试覆盖：`tests/compiler/semantic/test_p2_warnings.py::TestCastValidationWarning`。
 
-**未来演进思路（不构成承诺）**：以上 1/2/3 见 `docs/PENDING_TASKS.md §四`；4 因为牵动 llmexcept 快照协议核心，在该协议稳定 + 用户类一等公民化之后再评估。
+**未来演进思路（不构成承诺）**：以上 1/2 见 `docs/PENDING_TASKS.md §四`；4 因为牵动 llmexcept 快照协议核心，在该协议稳定 + 用户类一等公民化之后再评估。
 
 ---
 
