@@ -616,6 +616,17 @@ def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     return res
 
 
+def _raise_if_uncertain_condition(executor, last):
+    """Raise LLMParseError if LLM condition result is uncertain (shared by if/while/for)."""
+    if last and not last.is_certain:
+        error = executor.registry.make_llm_parse_error(
+            getattr(last, "retry_hint", None) or "LLM condition output could not be parsed",
+            raw_response=getattr(last, "raw_response", "") or "",
+            type_name="bool",
+        )
+        raise ThrownException(error)
+
+
 def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
     """条件分支（与 StmtHandler.visit_IbIf 同语义）。
 
@@ -625,14 +636,7 @@ def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
     executor.runtime_context.set_last_llm_result(None)
     cond = yield node_data.get("test")
     last = executor.runtime_context.get_last_llm_result()
-    if last and not last.is_certain:
-        # uncertain LLM 条件：与 for 语义对齐，抛出 LLMParseError
-        error = executor.registry.make_llm_parse_error(
-            getattr(last, "retry_hint", None) or "LLM condition output could not be parsed",
-            raw_response=getattr(last, "raw_response", "") or "",
-            type_name="bool",
-        )
-        raise ThrownException(error)
+    _raise_if_uncertain_condition(executor, last)
     branch = node_data.get("body", []) if executor.ec.is_truthy(cond) else node_data.get("orelse", [])
     res = yield from _vm_execute_stmt_sequence(executor, branch)
     if isinstance(res, Signal):
@@ -650,14 +654,7 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
         executor.runtime_context.set_last_llm_result(None)
         cond = yield test_uid
         last = executor.runtime_context.get_last_llm_result()
-        if last and not last.is_certain:
-            # uncertain LLM 条件：与 for 语义对齐，抛出 LLMParseError
-            error = executor.registry.make_llm_parse_error(
-                getattr(last, "retry_hint", None) or "LLM condition output could not be parsed",
-                raw_response=getattr(last, "raw_response", "") or "",
-                type_name="bool",
-            )
-            raise ThrownException(error)
+        _raise_if_uncertain_condition(executor, last)
         if not executor.ec.is_truthy(cond):
             break
 
