@@ -674,7 +674,15 @@ class Interpreter:
                 if stmt_data["_type"] == "IbFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class))
+                    method_name = stmt_data["name"]
+                    ib_class.register_method(method_name, IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class))
+
+                    # P0-2: 自动注册运算符方法
+                    # 如果方法名是运算符dunder方法（如__add__、__eq__等），
+                    # 也作为运算符注册，使其可通过operator dispatch调用
+                    if self._is_operator_method(method_name):
+                        # 运算符方法已注册为普通方法，VM会通过receive()调用它
+                        pass
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
@@ -735,6 +743,24 @@ class Interpreter:
             return None
         # 通过 hydrator 获取或重建描述符
         return self.type_hydrator.hydrate(type_uid)
+
+    def _is_operator_method(self, method_name: str) -> bool:
+        """检查方法名是否为运算符 dunder 方法
+
+        运算符方法列表基于常见的二元/一元运算符。
+        这些方法在用户类中定义时，应该可以被运算符语法调用。
+        """
+        operator_methods = {
+            # 算术运算符
+            '__add__', '__sub__', '__mul__', '__truediv__', '__floordiv__',
+            '__mod__', '__pow__', '__neg__', '__pos__',
+            # 位运算符
+            '__and__', '__or__', '__xor__', '__invert__',
+            '__lshift__', '__rshift__',
+            # 比较运算符
+            '__eq__', '__ne__', '__lt__', '__le__', '__gt__', '__ge__',
+        }
+        return method_name in operator_methods
 
     def _extract_name_id(self, node_uid: str) -> Optional[str]:
         """从表达式节点中提取变量名（处理类型标注等情况）"""

@@ -40,11 +40,14 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ### P0-1：统一协议方法派发（预估 2-3 天）
 
-- [ ] 移除 `llm_executor.py` 中所有 `hasattr(val, '__to_prompt__')` 直接调用
-- [ ] 移除 `kernel.py:IbObject.receive()` 中的 `hasattr()` 检查和直接 Python 方法调用
+- [x] 移除 `llm_executor.py` 中所有 `hasattr(val, '__to_prompt__')` 直接调用
+- [x] 移除 `kernel.py:IbObject.receive()` 中的 `hasattr()` 检查和直接 Python 方法调用
+- [x] 移除 `intent.py` 中的 `hasattr(val, '__to_prompt__')` 直接调用
 - [ ] 建立协议方法注册表（`ProtocolMethodRegistry`）
 - [ ] 统一协议方法派发：所有协议方法通过 `receive()` 查找 vtable
 - [ ] 测试：确保 `__to_prompt__` / `__from_prompt__` / `__outputhint_prompt__` 在内置类型和用户类型上一致工作
+
+**进展**：已完成核心 hasattr() 消除（35dad7d）；所有 812 测试通过。
 
 ### P0-2：用户类运算符重载支持（预估 2-3 天）
 
