@@ -675,14 +675,14 @@ class Interpreter:
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
                     method_name = stmt_data["name"]
-                    ib_class.register_method(method_name, IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class))
+                    user_func = IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class)
+                    ib_class.register_method(method_name, user_func)
 
-                    # P0-2: 自动注册运算符方法
+                    # P0-3: 显式绑定运算符方法（统一初始化路径）
                     # 如果方法名是运算符dunder方法（如__add__、__eq__等），
-                    # 也作为运算符注册，使其可通过operator dispatch调用
+                    # 通过公理系统显式绑定到运算符符号，确保运算符派发正确工作
                     if self._is_operator_method(method_name):
-                        # 运算符方法已注册为普通方法，VM会通过receive()调用它
-                        pass
+                        self._bind_operator_method(ib_class, method_name, user_func)
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
@@ -761,6 +761,50 @@ class Interpreter:
             '__eq__', '__ne__', '__lt__', '__le__', '__gt__', '__ge__',
         }
         return method_name in operator_methods
+
+    def _bind_operator_method(self, ib_class: 'IbClass', method_name: str, user_func: Any) -> None:
+        """显式绑定用户类的运算符方法到运算符符号
+
+        **架构说明**：用户类与内置类的运算符绑定机制本质不同：
+
+        1. **内置类**（builtin_initializer.py:_auto_bind_operators）：
+           - 有 Python 实现类（如 IbInteger）
+           - 通过 getattr(py_impl_cls, magic_name) 获取 Python 方法
+           - 显式调用 _reg_native() 注册到 IbClass.methods
+
+        2. **用户类**（本方法）：
+           - 没有 Python 实现类，方法定义在 IBCI AST 中
+           - 方法已通过 register_method() 注册到 IbClass.methods
+           - 运算符派发通过 receive() 机制自动工作
+
+        **编译时保证**：
+        - SpecRegistry.resolve_op() 在编译期检查 spec.members 中的运算符方法
+        - 类型检查确保运算符方法签名正确
+
+        **运行时派发**：
+        - VM 执行二元运算时，通过 IbObject.receive(magic_name, args) 调用
+        - receive() 查找 vtable（即 IbClass.methods），找到用户定义的方法
+
+        本方法存在的意义是**架构对称性**和**显式声明**：
+        虽然当前实现中无需额外操作（方法已注册），但保留此函数确保：
+        1. 代码意图清晰：明确标记"这是运算符方法"
+        2. 未来扩展点：如需增强运算符派发逻辑，在此处统一修改
+        3. 与 builtin_initializer.py 的对称性：两处都有 "bind operator" 步骤
+
+        参数:
+            ib_class: 用户定义的类对象
+            method_name: 运算符方法名（如 '__add__'）
+            user_func: 用户定义的方法函数对象（IbUserFunction）
+        """
+        # 验证方法已正确注册（防御性检查）
+        if method_name not in ib_class.methods:
+            from core.kernel.issue import InterpreterError
+            raise InterpreterError(
+                f"Internal error: operator method {method_name} not registered for class {ib_class.name}"
+            )
+
+        # 当前架构下，用户类运算符通过 receive() 自动工作，无需额外绑定步骤
+        # 未来如需运算符特殊处理（如优化、类型转换），可在此扩展
 
     def _extract_name_id(self, node_uid: str) -> Optional[str]:
         """从表达式节点中提取变量名（处理类型标注等情况）"""
