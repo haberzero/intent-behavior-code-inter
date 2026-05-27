@@ -1150,10 +1150,16 @@ class EnumAxiom(BaseAxiom):
         if not index_map:
             return (False, "无法解析枚举值：缺少成员信息")
 
+        # Use unified message passing for protocol methods
         if hasattr(raw_response, "to_native"):
             val = raw_response.to_native()
-        elif hasattr(raw_response, "__to_prompt__"):
-            val = raw_response.__to_prompt__()
+        elif hasattr(raw_response, "receive"):
+            # Unified protocol method dispatch via receive()
+            try:
+                result = raw_response.receive('__to_prompt__', [])
+                val = result.to_native() if hasattr(result, 'to_native') else result
+            except Exception:
+                val = raw_response
         else:
             val = raw_response
 

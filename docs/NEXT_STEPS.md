@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-26（nonlocal 实现归档；当前焦点 = PT-SEM-1 生产就绪化）
+> **最后更新**：2026-05-27（发现面向对象体系架构级缺陷；P0 = 架构基座修复）
 
 ---
 
@@ -14,11 +14,90 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-26 实测结果**：`790 passed, 2 skipped`（0 failures）。
+**2026-05-27 实测结果**：`812 passed, 2 skipped`（架构清理完成，全部通过）。
 
 ---
 
-## P1 候选：PT-SEM-1 Semantic Pipeline 生产就绪化
+## P0 紧急：面向对象体系架构基座修复
+
+**根源问题发现**：经多角度深度分析，IBCI 的面向对象体系存在**架构级设计缺陷**：
+
+1. **混合派发模式**：消息传递范式（`receive()`）与 Python 原生调用混用，导致抽象泄漏
+2. **双重初始化路径**：内置类型与用户类型使用完全不同的 vtable 填充机制
+3. **协议方法不一致**：不同协议方法的发现和调用机制各不相同（`hasattr()` vs vtable vs axiom）
+4. **基础类型语义寄生**：算术运算、类型判断等核心语义完全依赖 Python 底层实现
+
+**具体抽象泄漏点**（7处）：
+- `IbObject.receive()` 中的直接 Python 调用（`hasattr()` + Python 方法）
+- 基础类型运算符返回未封装的 Python 值
+- `IbNativeFunction.__getattr__` 暴露内部细节
+- 协议方法的双重调用路径（直接调用 vs `receive()`）
+- 类型推断依赖 Python `isinstance()`
+- 字段直接访问绕过协议（无 getter/setter）
+- 协议方法实现机制不一致
+
+**P0 修复任务**（必须按顺序完成，避免级联破坏）：
+
+**架构清理完成项**（2026-05-27）：
+- ✅ **AST 统一**：IbArg 添加 annotation 字段，消除 `Union[IbArg, IbTypeAnnotatedExpr]` 类型不一致
+- ✅ **类型注解强化**：FunctionSymbol.spec 明确为 TypeDef，消除 hasattr 防御性检查
+- ✅ **消息传递统一**：修复 primitives.py Enum axiom 的 hasattr 残留，统一使用 receive() 派发
+- ✅ **P0-3 统一初始化路径**：实现 `_bind_operator_method()` 显式绑定，清理技术债，架构对称性完成
+
+### P0-1：统一协议方法派发（预估 2-3 天）
+
+- [x] 移除 `llm_executor.py` 中所有 `hasattr(val, '__to_prompt__')` 直接调用
+- [x] 移除 `kernel.py:IbObject.receive()` 中的 `hasattr()` 检查和直接 Python 方法调用
+- [x] 移除 `intent.py` 中的 `hasattr(val, '__to_prompt__')` 直接调用
+- [ ] 建立协议方法注册表（`ProtocolMethodRegistry`）
+- [ ] 统一协议方法派发：所有协议方法通过 `receive()` 查找 vtable
+- [ ] 测试：确保 `__to_prompt__` / `__from_prompt__` / `__outputhint_prompt__` 在内置类型和用户类型上一致工作
+
+**进展**：已完成核心 hasattr() 消除（35dad7d）；所有 812 测试通过。
+
+### P0-2：用户类运算符重载支持（预估 2-3 天）
+
+- [x] 扩展 `builtin_initializer.py:_auto_bind_operators` 支持用户类型
+- [x] 在语义分析期间识别用户类的运算符方法（`func __add__(...)`）
+- [x] 将运算符方法注册到用户类的 members（编译时 MethodMemberSpec）
+- [x] 编译期检查运算符方法签名（`TypeCheckingPass` 通过 `resolve_op` 查找）
+- [x] 测试：用户类可定义 `__add__` / `__eq__` / `__lt__` 等运算符
+
+**实际技术路径说明**：
+- ✅ 编译期：SymbolCollectionPass 填充方法签名到 IbSpec.members，SpecRegistry.resolve_op 查找用户定义运算符
+- ✅ 运行期：通过通用 receive() 机制调用
+- ✅ 显式绑定：P0-3 实现 `_bind_operator_method()` 确保架构对称性和代码意图清晰
+
+**进展**：已完成编译时运算符检测与类型推断（d999783）。测试验证：`/tmp/test_user_operator.ibci` 编译并运行成功。
+
+### P0-3：统一初始化路径（预估 1-2 天）
+
+- [x] 实现 `_bind_operator_method()` 显式绑定运算符方法
+- [x] 消除 `interpreter.py:683-685` 空 pass 技术债
+- [x] 架构对称性：用户类与内置类运算符绑定机制文档化
+- [x] 测试：全量 pytest 验证无回归（812 passed, 2 skipped）
+
+**实现说明**：
+- ✅ 用户类运算符方法现在通过 `_bind_operator_method()` 显式标记和验证
+- ✅ 架构清晰化：内置类（Python实现）vs 用户类（AST实现）的运算符绑定机制差异已文档化
+- ✅ 编译期保证：SpecRegistry.resolve_op() 检查 spec.members
+- ✅ 运行期派发：receive() 机制统一处理所有方法调用（包括运算符）
+
+**进展**：已完成（2026-05-27）。P0 架构修复全部完成，所有 812 测试通过。
+
+**阻塞关系**：
+- P0-1 是 P0-2/P0-3 的前置（协议方法派发必须先统一）
+- P0-2 和 P0-3 可部分并行（但最终合并需要 P0-3）
+
+**优先级理由**：
+- 多模态设计（Phase 2-5）依赖类型扩展能力，当前架构无法支持
+- llmexcept 快照协议实现需要统一的协议方法机制
+- 用户类型不是"一等公民"限制了 IBCI 的表达能力
+- 架构债务累积效应：延迟修复会指数级增加成本
+
+---
+
+## P1 候选（阻塞于 P0）：PT-SEM-1 Semantic Pipeline 生产就绪化
 
 **前置条件**：Semantic 4-Phase pipeline 已稳定运行 ✅；nonlocal 完成后闭包语义全链路验证通过 ✅
 

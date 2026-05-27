@@ -575,7 +575,8 @@ class TypeCheckingVisitor(ScopedVisitor):
         # 解析参数类型标注
         param_types = []
         for arg_node in node.args:
-            if isinstance(arg_node, ast.IbTypeAnnotatedExpr) and arg_node.annotation:
+            # IbArg now has annotation field directly
+            if arg_node.annotation:
                 arg_type = self._resolve_type(arg_node.annotation) or self._any_desc
             else:
                 arg_type = self._any_desc
@@ -680,14 +681,9 @@ class TypeCheckingVisitor(ScopedVisitor):
 
     @staticmethod
     def _extract_arg_name(arg_node) -> Optional[str]:
-        """从参数节点提取参数名。"""
+        """从参数节点提取参数名。IbArg now has annotation field directly."""
         if isinstance(arg_node, ast.IbArg):
             return arg_node.arg
-        elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
-            if isinstance(arg_node.target, ast.IbArg):
-                return arg_node.target.arg
-            elif isinstance(arg_node.target, ast.IbName):
-                return arg_node.target.id
         return None
 
     def _check_override_compatibility(self, node: ast.IbFunctionDef, child_spec: IbSpec):
@@ -1186,16 +1182,13 @@ class TypeCheckingVisitor(ScopedVisitor):
             # 注册参数到 lambda 作用域（与 visit_IbFunctionDef 对齐）
             for arg_node in node.params:
                 arg_type = self._any_desc
-                name_node = arg_node
-                if isinstance(arg_node, ast.IbTypeAnnotatedExpr):
+                # IbArg now has annotation field directly
+                if arg_node.annotation:
                     arg_type = self._resolve_type(arg_node.annotation) or self._any_desc
-                    name_node = arg_node.target
 
                 arg_name = None
-                if isinstance(name_node, ast.IbArg):
-                    arg_name = name_node.arg
-                elif isinstance(name_node, ast.IbName):
-                    arg_name = name_node.id
+                if isinstance(arg_node, ast.IbArg):
+                    arg_name = arg_node.arg
 
                 if arg_name:
                     param_sym = VariableSymbol(

@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
 from .spec import IbSpec
-from .spec.base import TypeKind
+from .spec.base import TypeKind, TypeDef
 
 
 # --- Symbol System ---
@@ -83,7 +83,11 @@ class TypeSymbol(Symbol):
 
 @dataclass
 class FunctionSymbol(Symbol):
-    """A function (regular or LLM)."""
+    """A function (regular or LLM).
+
+    The spec field is always a TypeDef (function type descriptor).
+    """
+    spec: Optional['TypeDef'] = None  # TypeDef with function signature
 
 
 @dataclass

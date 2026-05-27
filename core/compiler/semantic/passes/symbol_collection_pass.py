@@ -119,11 +119,17 @@ class SymbolCollector:
             if self.current_class:
                 if sym.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION):
                     llm_kind = "llm_method" if sym.kind == SymbolKind.LLM_FUNCTION else "method"
-                    self.current_class.members[sym.name] = MethodMemberSpec(
+                    # P0-2: Store full method signature in members
+                    method_spec = MethodMemberSpec(
                         name=sym.name,
                         kind=llm_kind,
                         type_ref=TypeRef.of(sym.spec.name if sym.spec else "any")
                     )
+                    # Copy signature from TypeDef (FunctionSymbol.spec is always TypeDef)
+                    if sym.spec:
+                        method_spec.param_types = list(sym.spec.param_types)
+                        method_spec.return_type = sym.spec.return_type
+                    self.current_class.members[sym.name] = method_spec
                 else:
                     self.current_class.members[sym.name] = MemberSpec(
                         name=sym.name,
@@ -189,6 +195,22 @@ class SymbolCollector:
             return_type_name="any"
         )
         func_meta.is_user_defined = True
+
+        # P0-2: Extract parameter types and return type from AST and store in spec
+        param_type_refs = []
+        for arg in node.args:
+            # All args are now IbArg with optional annotation field
+            if arg.annotation:
+                param_type_refs.append(self._annotation_to_typeref(arg.annotation))
+            else:
+                param_type_refs.append(TypeRef.of("any"))
+
+        if param_type_refs:
+            func_meta.param_types = param_type_refs
+
+        if node.returns:
+            func_meta.return_type = self._annotation_to_typeref(node.returns)
+
         self.registry.register(func_meta)
 
         # 创建函数符号
@@ -252,6 +274,17 @@ class SymbolCollector:
             if base_name:
                 return self.registry.resolve(base_name)
         return None
+
+    def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:
+        """Convert an AST annotation node to a TypeRef (for P0-2 operator support)."""
+        if isinstance(annotation, ast.IbName):
+            return TypeRef.of(annotation.id)
+        elif hasattr(ast, 'IbGenericType') and isinstance(annotation, ast.IbGenericType):
+            base_name = annotation.base.id if isinstance(annotation.base, ast.IbName) else None
+            if base_name:
+                # For now, just use base name; full generic support is future work
+                return TypeRef.of(base_name)
+        return TypeRef.of("any")
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """访问带类型标注的表达式"""

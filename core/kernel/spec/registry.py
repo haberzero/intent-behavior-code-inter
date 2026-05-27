@@ -708,15 +708,40 @@ class SpecRegistry:
             ret_name = axiom.resolve_operation_type_name(op, other_name)
             if ret_name:
                 return self.resolve(ret_name) or self.resolve("any")
+
         # None 比较：任何类型均可与 None 用 == 或 != 比较，返回 bool
         if op in ("==", "!=") and (spec.name == "None" or (other and other.name == "None")):
             return self.resolve("bool")
+
         # User-defined class types support == and != by identity
         if spec.kind == TypeKind.CLASS.value and op in ("==", "!="):
             return self.resolve("bool")
+
         # All user-defined class instances support 'not' via IbObject.__not__ base implementation
         if spec.kind == TypeKind.CLASS.value and op == "not" and other is None:
             return self.resolve("bool")
+
+        # P0-2: Check if user-defined class has operator method in its members
+        if spec.kind == TypeKind.CLASS.value and spec.members:
+            # Map operator symbol to dunder method name
+            op_to_method = {
+                '+': '__add__', '-': '__sub__', '*': '__mul__',
+                '/': '__truediv__', '//': '__floordiv__', '%': '__mod__',
+                '**': '__pow__', '&': '__and__', '|': '__or__',
+                '^': '__xor__', '<<': '__lshift__', '>>': '__rshift__',
+                '<': '__lt__', '<=': '__le__', '>': '__gt__', '>=': '__ge__',
+                # Note: __eq__ and __ne__ already handled above
+            }
+            method_name = op_to_method.get(op)
+            if method_name and method_name in spec.members:
+                # User class has this operator method in its type definition
+                method_member = spec.members[method_name]
+                if method_member.is_method() and hasattr(method_member, 'return_type'):
+                    # Use the declared return type
+                    return self.resolve(method_member.return_type.head, method_member.return_type.module) or self.resolve("any")
+                # Default: assume operator returns same type as left operand
+                return spec
+
         return None
 
     def resolve_iter_element(self, spec: IbSpec) -> Optional[IbSpec]:
