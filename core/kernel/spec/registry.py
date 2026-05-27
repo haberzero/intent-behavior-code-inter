@@ -721,8 +721,8 @@ class SpecRegistry:
         if spec.kind == TypeKind.CLASS.value and op == "not" and other is None:
             return self.resolve("bool")
 
-        # P0-2: Check if user-defined class has operator method in its method specs
-        if spec.kind == TypeKind.CLASS.value and hasattr(spec, 'method_members'):
+        # P0-2: Check if user-defined class has operator method in its members
+        if spec.kind == TypeKind.CLASS.value and spec.members:
             # Map operator symbol to dunder method name
             op_to_method = {
                 '+': '__add__', '-': '__sub__', '*': '__mul__',
@@ -733,12 +733,12 @@ class SpecRegistry:
                 # Note: __eq__ and __ne__ already handled above
             }
             method_name = op_to_method.get(op)
-            if method_name and method_name in spec.method_members:
+            if method_name and method_name in spec.members:
                 # User class has this operator method in its type definition
-                method_spec = spec.method_members[method_name]
-                if method_spec.returns:
+                method_member = spec.members[method_name]
+                if method_member.is_method() and hasattr(method_member, 'return_type'):
                     # Use the declared return type
-                    return self.resolve(method_spec.returns.head, method_spec.returns.module) or self.resolve("any")
+                    return self.resolve(method_member.return_type.head, method_member.return_type.module) or self.resolve("any")
                 # Default: assume operator returns same type as left operand
                 return spec
 
