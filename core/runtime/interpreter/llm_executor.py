@@ -105,23 +105,32 @@ class LLMExecutorImpl:
         """Unified protocol-aware conversion of an IbObject to prompt string.
 
         Resolution order:
-        1. __to_prompt__() method (the canonical prompt protocol)
+        1. __to_prompt__() method via receive() (the canonical prompt protocol)
         2. to_native() fallback (primitive unwrapping)
         3. str() last resort
 
         This replaces scattered ``hasattr(val, '__to_prompt__')`` checks
-        throughout the prompt construction pipeline.
+        throughout the prompt construction pipeline, using unified vtable dispatch.
         """
-        if hasattr(val, '__to_prompt__'):
+        # Try __to_prompt__ through receive() (unified protocol dispatch)
+        if hasattr(val, 'receive'):
             try:
-                return val.__to_prompt__()
+                result = val.receive('__to_prompt__', [])
+                # Unwrap if result is an IbObject
+                if hasattr(result, 'to_native'):
+                    return str(result.to_native())
+                return str(result)
             except Exception:
                 pass
+
+        # Fallback to to_native() for primitives
         if hasattr(val, 'to_native'):
             try:
                 return str(val.to_native())
             except Exception:
                 pass
+
+        # Last resort: str()
         return str(val)
 
     def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> LLMResult:

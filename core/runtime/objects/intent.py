@@ -55,12 +55,19 @@ class IbIntent(IbObject):
                     if vm is None:
                         raise RuntimeError("IbIntent.resolve_content: vm_executor not available")
                     val = vm.run(segment)
-                    if hasattr(val, '__to_prompt__'):
-                        content_parts.append(val.__to_prompt__())
-                    elif hasattr(val, 'to_native'):
-                        content_parts.append(str(val.to_native()))
-                    else:
-                        content_parts.append(str(val))
+                    # 使用统一的协议方法调用（通过 receive）
+                    try:
+                        prompt_str = val.receive('__to_prompt__', [])
+                        if hasattr(prompt_str, 'to_native'):
+                            content_parts.append(str(prompt_str.to_native()))
+                        else:
+                            content_parts.append(str(prompt_str))
+                    except Exception:
+                        # Fallback: to_native()
+                        if hasattr(val, 'to_native'):
+                            content_parts.append(str(val.to_native()))
+                        else:
+                            content_parts.append(str(val))
                 else:
                     content_parts.append(str(segment))
             return "".join(content_parts).strip()

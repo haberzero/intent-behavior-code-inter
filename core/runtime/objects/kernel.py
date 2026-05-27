@@ -95,8 +95,14 @@ class IbObject:
             spec_reg = self.ib_class.registry.get_metadata_registry()
             if spec_reg and self.ib_class.spec:
                 call_cap = spec_reg.get_call_cap(self.ib_class.spec)
-                if call_cap and hasattr(self, 'call'):
-                    return self.call(self.ib_class.registry.get_none(), args)
+                if call_cap:
+                    # 查找 vtable 中的 call 方法（统一路径）
+                    call_method = self.ib_class.lookup_method('call')
+                    if call_method:
+                        return call_method.call(self, [self.ib_class.registry.get_none()] + args)
+                    # Fallback: 对于内置类型，可能直接有 Python 的 call 方法
+                    if hasattr(self, 'call'):
+                        return self.call(self.ib_class.registry.get_none(), args)
             
         if message == '__getattr__' and len(args) > 0:
             attr_name = args[0].to_native()
@@ -137,17 +143,18 @@ class IbObject:
             if isinstance(target_class, IbClass) and self.ib_class.is_assignable_to(target_class):
                 return self
 
-            # 如果对象自身有 cast_to 方法（特殊类型包装器），优先调用
-            if hasattr(self, 'cast_to'):
-                return self.cast_to(target_class)
-
-            # 尝试使用 __to_prompt__ 进行字符串转换
+            # 尝试使用 __to_prompt__ 进行字符串转换（通过 vtable 查找）
             if target_name in ("str", "any"):
-                try:
-                    prompt_result = self.__to_prompt__()
-                    return self.ib_class.registry.box(prompt_result)
-                except Exception:
-                    pass
+                to_prompt_method = self.ib_class.lookup_method('__to_prompt__')
+                if to_prompt_method:
+                    try:
+                        prompt_result = to_prompt_method.call(self, [])
+                        # Unwrap if it's an IbObject
+                        if hasattr(prompt_result, 'to_native'):
+                            prompt_result = prompt_result.to_native()
+                        return self.ib_class.registry.box(prompt_result)
+                    except Exception:
+                        pass
 
             # 无法执行类型转换，抛出明确错误
             raise InterpreterError(
