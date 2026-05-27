@@ -18,12 +18,17 @@ from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 from .scoped_visitor import ScopedVisitor
+from core.kernel.axioms.prompt_protocol import (
+    validate_prompt_protocol_signature,
+    is_prompt_protocol_method,
+)
 
 # Methods whose signatures are not constrained by parent class
 # (constructors and protocol methods may freely change signature).
 _OVERRIDE_SIGNATURE_FREE: frozenset = frozenset({
     "__init__", "__snapshot__", "__restore__",
     "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
+    "__validate_prompt__",
 })
 
 
@@ -657,6 +662,19 @@ class TypeCheckingVisitor(ScopedVisitor):
         # SEM_092: Method override signature compatibility check
         if self.in_class_def and self.current_class and sym and sym.spec:
             self._check_override_compatibility(node, sym.spec)
+
+        # SEM_095: Prompt protocol signature validation
+        if self.in_class_def and is_prompt_protocol_method(node.name):
+            # Count params excluding self
+            user_param_count = len(node.args)
+            ret_type_name = None
+            if node.returns and isinstance(node.returns, ast.IbName):
+                ret_type_name = node.returns.id
+            diagnostics = validate_prompt_protocol_signature(
+                node.name, user_param_count, ret_type_name
+            )
+            for diag_msg in diagnostics:
+                self.warn(diag_msg, node, code="SEM_095")
 
         return None
 

@@ -47,6 +47,7 @@ class ContractValidator:
         _SIGNATURE_FREE_METHODS = frozenset({
             "__init__", "__snapshot__", "__restore__",
             "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
+            "__validate_prompt__",
         })
         for name, member in cls_desc.members.items():
             # member is a MemberSpec/MethodMemberSpec (pure data, type stored as type_name string)

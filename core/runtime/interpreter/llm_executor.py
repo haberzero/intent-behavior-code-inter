@@ -100,6 +100,30 @@ class LLMExecutorImpl:
             
         return {}
 
+    @staticmethod
+    def _obj_to_prompt_str(val: Any) -> str:
+        """Unified protocol-aware conversion of an IbObject to prompt string.
+
+        Resolution order:
+        1. __to_prompt__() method (the canonical prompt protocol)
+        2. to_native() fallback (primitive unwrapping)
+        3. str() last resort
+
+        This replaces scattered ``hasattr(val, '__to_prompt__')`` checks
+        throughout the prompt construction pipeline.
+        """
+        if hasattr(val, '__to_prompt__'):
+            try:
+                return val.__to_prompt__()
+            except Exception:
+                pass
+        if hasattr(val, 'to_native'):
+            try:
+                return str(val.to_native())
+            except Exception:
+                pass
+        return str(val)
+
     def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> LLMResult:
         """
         [职责解耦] 仅处理 LLM 推理过程。
@@ -267,12 +291,7 @@ class LLMExecutorImpl:
             if isinstance(segment, str):
                 if segment.startswith("node_"):
                     val = yield segment
-                    if hasattr(val, '__to_prompt__'):
-                        content_parts.append(val.__to_prompt__())
-                    elif hasattr(val, 'to_native'):
-                        content_parts.append(str(val.to_native()))
-                    else:
-                        content_parts.append(str(val))
+                    content_parts.append(self._obj_to_prompt_str(val))
                 else:
                     content_parts.append(segment)
             elif hasattr(segment, 'id'):
@@ -282,12 +301,7 @@ class LLMExecutorImpl:
                 # 只有当变量名是函数参数时才进行替换
                 if param_names and var_name in param_names:
                     val = yield segment
-                    if hasattr(val, '__to_prompt__'):
-                        content_parts.append(val.__to_prompt__())
-                    elif hasattr(val, 'to_native'):
-                        content_parts.append(str(val.to_native()))
-                    else:
-                        content_parts.append(str(val))
+                    content_parts.append(self._obj_to_prompt_str(val))
                 else:
                     # 非函数参数的 $auto，作为普通文本处理（保持 $ 符号）
                     content_parts.append(f"${var_name}")
