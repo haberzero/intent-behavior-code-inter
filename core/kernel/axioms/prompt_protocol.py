@@ -156,7 +156,8 @@ def validate_prompt_protocol_signature(
                 f"Protocol '{method_name}' should return '{spec.return_type}', "
                 f"but '{declared_return_type}' declared."
             )
-        # tuple return type check is lenient — we don't enforce tuple subtyping
+        # For non-str return types (e.g. tuple), we are lenient — IBCI's type system
+        # does not yet support tuple element subtyping, so we skip strict checking.
 
     return diagnostics
 

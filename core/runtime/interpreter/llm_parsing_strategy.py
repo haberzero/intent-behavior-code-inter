@@ -210,7 +210,7 @@ class VTableParsingStrategy(ParsingStrategy):
                     CoreModule.LLM, DebugLevel.BASIC,
                     f"__validate_prompt__ failed for '{type_name}': {e}"
                 )
-                # Validation failure is non-fatal — proceed to __from_prompt__
+                # __validate_prompt__ exception is non-fatal — proceed to __from_prompt__
 
         try:
             raw_arg = self.registry.box(raw_res)

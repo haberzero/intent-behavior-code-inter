@@ -211,12 +211,12 @@ class TestValidatePromptRuntime:
     """Test __validate_prompt__ integration in LLM parsing pipeline."""
 
     def test_validate_prompt_rejects_bad_input(self):
-        """When __validate_prompt__ returns (False, msg), parsing returns uncertain.
+        """Verify that __validate_prompt__ + __from_prompt__ compiles and executes.
 
-        Note: This test validates the protocol infrastructure by checking that
-        a class with __validate_prompt__ + __from_prompt__ compiles and runs.
-        The MOCK system returns the raw string, and the type parsing chain is
-        invoked for user types when type inference identifies the target type.
+        This is a compile+run integration test; it confirms the type checking pass
+        accepts the protocol methods and that the program executes without error.
+        Full runtime validation behavior (uncertain result on failure) depends on
+        the LLM parsing chain which requires a real/mocked LLM target type context.
         """
         from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
