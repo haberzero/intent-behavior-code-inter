@@ -475,17 +475,34 @@ sys_prompt = "你是一个意图行为代码执行器。\n当前上下文意图�
 
 ---
 
-### Phase 2：`__payload_prompt__` 协议 + 多模态 payload 构建
+### Phase 2：`__payload_prompt__` 协议 + 多模态 payload 构建 ✅ 已完成
 
-**改动范围**：
+**状态**：已实现（2026-05-27）
+
+**实际改动范围**：
 
 | 文件 | 改动 |
 |------|------|
-| `core/kernel/axioms/protocols.py` | 新增 `has_payload_prompt_cap` + `__payload_prompt__` 签名 |
-| `core/runtime/interpreter/llm_executor.py` | `_evaluate_segments_cps` 支持结构化返回值；`_call_llm` 支持多部分 content |
-| `ibci_modules/ibci_ai/core.py` | `__call__` 支持 `content: [...]` 多部分 payload |
+| `core/kernel/axioms/protocols.py` | 新增 `has_payload_prompt_cap: bool` 标志 + `__payload_prompt__` 方法签名 |
+| `core/kernel/axioms/primitives.py` | `BaseAxiom` 添加 `has_payload_prompt_cap = False` 默认值 + `__payload_prompt__` 默认实现（回退到 str） |
+| `core/runtime/interpreter/llm_executor.py` | 新增 `_obj_to_payload()` 静态方法（receive 分发）；`_evaluate_segments_cps` 支持混合 content blocks 返回；`_call_llm` 签名扩展接受 `Union[str, List]` |
+| `ibci_modules/ibci_ai/core.py` | `__call__` 接受 `Union[str, List]` user_prompt；新增 `_flatten_content_parts()`、`_build_user_content()` 辅助方法；API 调用支持 OpenAI multimodal content blocks |
+| `tests/e2e/test_e2e_multimodal_payload.py`（新） | 13 个测试覆盖向后兼容、辅助方法、协议分发 |
 
-**不改动**：lexer, parser, AST, 现有类型的公理
+**不改动**（与设计一致）：lexer, parser, AST, 现有类型的公理
+
+**关键技术决策**：
+- D-P2-1：`_obj_to_payload()` 使用 `receive('__payload_prompt__', [])` 分发（非 hasattr），与 P0-1 模式一致
+- D-P2-2：`_evaluate_segments_cps` 返回值为 `str`（纯文本）或 `List[Union[str, dict]]`（多模态），通过 `isinstance` 检测决定路径
+- D-P2-3：相邻 str 片段在多模态路径中自动合并，减少 API payload 碎片
+- D-P2-4：AIPlugin MOCK 模式下多模态 content 展平为纯文本，保持测试基础设施不变
+- D-P2-5：`_build_user_content` 对空文本段做跳过处理，避免生成无意义 content block
+
+**已知技术债 / 待后续处理**：
+- 尚未实现 payload 验证层（§8.4 风险项：非法 `__payload_prompt__` 返回值可能导致 API 调用失败）
+- `_call_llm` 仍返回 `str`，Phase 4 `from_response` 路径需要访问完整 API 响应对象时需添加 `_call_llm_raw`
+- 尚无针对 `dispatch_eager` + 多模态交互的专项测试（llmexcept 保护场景）
+- Anthropic / Google API 的 content block 格式适配留待后续供应商抽象层实现
 
 ---
 

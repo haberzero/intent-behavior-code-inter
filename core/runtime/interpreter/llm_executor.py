@@ -133,6 +133,40 @@ class LLMExecutorImpl:
         # Last resort: str()
         return str(val)
 
+    @staticmethod
+    def _obj_to_payload(val: Any) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]:
+        """Protocol-aware conversion of an IbObject to payload content block.
+
+        Resolution order:
+        1. __payload_prompt__() via receive() — returns str, dict, or list of dicts
+        2. Fallback to _obj_to_prompt_str() (pure text)
+
+        When a value has __payload_prompt__ capability, it can return structured
+        content blocks for multi-modal LLM API payloads (e.g. image_url, input_audio).
+        If the value only supports __to_prompt__, falls back to plain text.
+        """
+        if hasattr(val, 'receive'):
+            # Try __payload_prompt__ first (multi-modal protocol)
+            try:
+                result = val.receive('__payload_prompt__', [])
+                if result is not None:
+                    # Unwrap IbObject wrappers
+                    if hasattr(result, 'to_native'):
+                        native = result.to_native()
+                        # dict or list of dicts → structured content block
+                        if isinstance(native, (dict, list)):
+                            return native
+                        return str(native)
+                    # Already a dict/list (raw return from user class)
+                    if isinstance(result, (dict, list)):
+                        return result
+                    return str(result)
+            except Exception:
+                pass
+
+        # Fallback to plain text via __to_prompt__
+        return LLMExecutorImpl._obj_to_prompt_str(val)
+
     def execute_llm_function(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> LLMResult:
         """
         [职责解耦] 仅处理 LLM 推理过程。
@@ -247,7 +281,7 @@ class LLMExecutorImpl:
                 param_names.add(actual_arg_data.get("arg", ""))
         return param_names
 
-    def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> str:
+    def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> Union[str, List[Union[str, Dict[str, Any]]]]:
         """同步版段求值（兼容入口）。
 
         实现委托给 ``_evaluate_segments_cps`` 生成器；当 ``vm_executor`` 可用时，
@@ -258,6 +292,10 @@ class LLMExecutorImpl:
         CPS 主路径（由 VM handler 触发的 invoke_*）改用 ``_evaluate_segments_cps``
         + ``yield from``，使段求值作为子任务嵌入到外层 VM 帧栈，而非启动一个
         独立的 ``_drive_loop``，从而正确反映 ``frame_stack_depth``。
+
+        返回值：
+        - str: 纯文本内容（向后兼容路径）
+        - List[Union[str, dict]]: 含多模态结构化 content blocks
         """
         gen = self._evaluate_segments_cps(segments, execution_context, param_names)
         vm = execution_context.vm_executor if execution_context is not None else None
@@ -286,11 +324,18 @@ class LLMExecutorImpl:
         - 消除 `_evaluate_segments` 通过 ``vm.run`` 重入 ``_drive_loop`` 的"同步
           旁路"，使段求值真正纳入 CPS 帧栈。
         - 维持 lambda/snapshot/behavior 在段求值期间的栈可观察性与可暂停语义。
+
+        返回值：
+        - 纯文本情况：返回拼接后的 str（向后兼容）
+        - 含多模态内容：返回 List[Union[str, dict]]（混合 content blocks）
+          调用方通过 isinstance 检查决定走纯文本路径还是多模态路径。
         """
         if not segments:
             return ""
 
-        content_parts: List[str] = []
+        content_parts: List[Any] = []  # Union[str, dict, List[dict]]
+        has_structured = False  # 是否包含非文本结构化内容
+
         for segment in segments:
             if isinstance(segment, Mapping) and segment.get("_type") == "ext_ref":
                 val = execution_context.resolve_value(segment)
@@ -300,7 +345,12 @@ class LLMExecutorImpl:
             if isinstance(segment, str):
                 if segment.startswith("node_"):
                     val = yield segment
-                    content_parts.append(self._obj_to_prompt_str(val))
+                    payload = self._obj_to_payload(val)
+                    if isinstance(payload, (dict, list)):
+                        has_structured = True
+                        content_parts.append(payload)
+                    else:
+                        content_parts.append(payload)
                 else:
                     content_parts.append(segment)
             elif hasattr(segment, 'id'):
@@ -310,13 +360,43 @@ class LLMExecutorImpl:
                 # 只有当变量名是函数参数时才进行替换
                 if param_names and var_name in param_names:
                     val = yield segment
-                    content_parts.append(self._obj_to_prompt_str(val))
+                    payload = self._obj_to_payload(val)
+                    if isinstance(payload, (dict, list)):
+                        has_structured = True
+                        content_parts.append(payload)
+                    else:
+                        content_parts.append(payload)
                 else:
                     # 非函数参数的 $auto，作为普通文本处理（保持 $ 符号）
                     content_parts.append(f"${var_name}")
             else:
                 content_parts.append(str(segment))
-        return "".join(content_parts)
+
+        # 向后兼容：全部为纯文本时返回拼接 str
+        if not has_structured:
+            return "".join(content_parts)
+
+        # 多模态路径：返回混合 content parts 列表
+        # 合并相邻 str 块以减少 API payload 碎片
+        merged: List[Union[str, Dict[str, Any]]] = []
+        text_buf: List[str] = []
+        for part in content_parts:
+            if isinstance(part, str):
+                text_buf.append(part)
+            elif isinstance(part, dict):
+                if text_buf:
+                    merged.append("".join(text_buf))
+                    text_buf = []
+                merged.append(part)
+            elif isinstance(part, list):
+                # List[dict] — multiple content blocks from one value
+                if text_buf:
+                    merged.append("".join(text_buf))
+                    text_buf = []
+                merged.extend(part)
+        if text_buf:
+            merged.append("".join(text_buf))
+        return merged
 
     def _get_llmoutput_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
         """获取 __outputhint_prompt__ 用于注入到提示词
@@ -913,16 +993,25 @@ class LLMExecutorImpl:
             return result.value
         return self.registry.get_none()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: str, node_uid: str, execution_context: Optional[IExecutionContext] = None, target_model: str = "") -> str:
+    def _call_llm(self, sys_prompt: str, user_prompt: Union[str, List[Union[str, Dict[str, Any]]]], node_uid: str, execution_context: Optional[IExecutionContext] = None, target_model: str = "") -> str:
         """底层 LLM 调用。成功时返回 response 字符串。
         失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
+
+        ``user_prompt``：
+            - str: 纯文本用户提示词（向后兼容路径）
+            - List[Union[str, dict]]: 含多模态结构化 content blocks（多模态路径）
+              列表中 str 元素为纯文本片段，dict 元素为结构化 content block
+              (e.g. {"type":"image_url","image_url":{"url":"data:..."}})
 
         ``target_model``：命名模型标识符，传递给 LLM provider 用于路由到特定模型配置。
         空字符串表示使用默认模型。
         """
         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
         self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
-        self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
+        if isinstance(user_prompt, str):
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
+        else:
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt (multimodal):", data=f"[{len(user_prompt)} content blocks]")
         if target_model:
             self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Target model: {target_model}")
 
