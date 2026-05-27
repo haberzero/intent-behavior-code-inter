@@ -626,7 +626,13 @@ def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
     cond = yield node_data.get("test")
     last = executor.runtime_context.get_last_llm_result()
     if last and not last.is_certain:
-        return executor.registry.get_none()
+        # uncertain LLM 条件：与 for 语义对齐，抛出 LLMParseError
+        error = executor.registry.make_llm_parse_error(
+            getattr(last, "retry_hint", None) or "LLM condition output could not be parsed",
+            raw_response=getattr(last, "raw_response", "") or "",
+            type_name="bool",
+        )
+        raise ThrownException(error)
     branch = node_data.get("body", []) if executor.ec.is_truthy(cond) else node_data.get("orelse", [])
     res = yield from _vm_execute_stmt_sequence(executor, branch)
     if isinstance(res, Signal):
@@ -645,7 +651,13 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
         cond = yield test_uid
         last = executor.runtime_context.get_last_llm_result()
         if last and not last.is_certain:
-            return executor.registry.get_none()
+            # uncertain LLM 条件：与 for 语义对齐，抛出 LLMParseError
+            error = executor.registry.make_llm_parse_error(
+                getattr(last, "retry_hint", None) or "LLM condition output could not be parsed",
+                raw_response=getattr(last, "raw_response", "") or "",
+                type_name="bool",
+            )
+            raise ThrownException(error)
         if not executor.ec.is_truthy(cond):
             break
 
