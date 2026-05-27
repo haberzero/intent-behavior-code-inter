@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
 
 
@@ -340,25 +340,29 @@ class AIPlugin(IbStatefulPlugin):
             return res
         return []
 
-    def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general", *, target_model: str = "") -> str:
+    def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", scene: str = "general", *, target_model: str = "") -> str:
         is_test_mode = (
             self._config["url"] == "TESTONLY" or
             os.environ.get("IBC_TEST_MODE") == "1"
         )
         
+        # 多模态内容：将 List 转换为纯文本用于 MOCK 或传递给 API
+        # 对于 MOCK 模式和纯文本路径，需要将 List 展平为 str
+        user_prompt_text = user_prompt if isinstance(user_prompt, str) else self._flatten_content_parts(user_prompt)
+
         # 统一对输入内容进行清洗
-        user_prompt = user_prompt.strip()
+        user_prompt_text = user_prompt_text.strip()
 
         # 在注入约束后缀前，先检查 Mock 指令
         if is_test_mode:
-            res = self._handle_mock_response(user_prompt, scene)
-            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
+            res = self._handle_mock_response(user_prompt_text, scene)
+            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt_text, "response": res, "scene": scene}
             return res
 
         # 强化决策场景的 User Prompt 约束
         scene_str = str(scene).lower()
         if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
-            user_prompt += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
+            user_prompt_text += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
             
         if not is_test_mode:
             # 命名模型路由：@NAME~ 语法
@@ -408,11 +412,13 @@ class AIPlugin(IbStatefulPlugin):
                 enhanced_sys_prompt = sys_prompt
 
             try:
+                # 构建 messages：支持纯文本和多模态两种路径
+                user_content = self._build_user_content(user_prompt, user_prompt_text)
                 completion = active_client.chat.completions.create(
                     model=active_model,
                     messages=[
                         {"role": "system", "content": enhanced_sys_prompt},
-                        {"role": "user", "content": user_prompt}
+                        {"role": "user", "content": user_content}
                     ],
                     max_tokens=decision_max_tokens if is_decision else 4096,
                     extra_body={
@@ -477,6 +483,51 @@ class AIPlugin(IbStatefulPlugin):
                 raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
         return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
+
+    @staticmethod
+    def _flatten_content_parts(parts: "List") -> str:
+        """将多模态 content parts 列表展平为纯文本表示。
+        
+        用于 MOCK 模式和需要纯文本回退的场景。
+        str 片段直接拼接，dict 片段用占位符表示。
+        """
+        text_parts = []
+        for part in parts:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict):
+                part_type = part.get("type", "unknown")
+                text_parts.append(f"[{part_type}]")
+            else:
+                text_parts.append(str(part))
+        return "".join(text_parts)
+
+    @staticmethod
+    def _build_user_content(user_prompt: "Union[str, List]", user_prompt_text: str) -> "Union[str, List[Dict[str, Any]]]":
+        """构建 OpenAI API messages 中的 user content 字段。
+        
+        - 纯文本路径：直接返回 user_prompt_text (str)
+        - 多模态路径：将 List[Union[str, dict]] 转换为 OpenAI multimodal content format
+          即 List[{"type": "text", "text": "..."} | {"type": "image_url", ...}]
+        """
+        if isinstance(user_prompt, str):
+            return user_prompt_text
+        
+        # 多模态路径：构建 OpenAI content blocks
+        content_blocks = []
+        for part in user_prompt:
+            if isinstance(part, str):
+                if part.strip():  # 跳过空文本块
+                    content_blocks.append({"type": "text", "text": part})
+            elif isinstance(part, dict):
+                # 已经是结构化 content block，直接传递
+                content_blocks.append(part)
+        
+        # 如果转换后为空（不应发生），回退到纯文本
+        if not content_blocks:
+            return user_prompt_text
+        
+        return content_blocks
 
     def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
         """

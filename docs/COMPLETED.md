@@ -5,9 +5,20 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-27（P0-3 统一初始化路径完成 + Phase 1 命名模型路由完成）
+> **最后更新**：2026-05-27（Phase 2 `__payload_prompt__` 协议完成）
 
 ---
+
+## 2026-05-27：Phase 2 `__payload_prompt__` 多模态 payload 协议实现完成
+
+测试基线：**832 passed, 2 skipped**（0 failures）。
+
+- **Phase 2**：多模态 payload 构建基础设施——`__payload_prompt__` 协议层 + `_obj_to_payload()` 分发 + `_evaluate_segments_cps` 混合 content blocks + AIPlugin 多模态 API 调用
+- **新协议**：`has_payload_prompt_cap` 标志 + `__payload_prompt__` 方法（TypeAxiom/BaseAxiom 层）
+- **新方法**：`LLMExecutorImpl._obj_to_payload()`、`AIPlugin._flatten_content_parts()`、`AIPlugin._build_user_content()`
+- **架构特性**：receive() 分发一致性、相邻 str 合并、纯文本路径零开销向后兼容、MOCK 模式展平处理
+- **测试**：`tests/e2e/test_e2e_multimodal_payload.py` 覆盖 13 个场景（向后兼容、辅助方法、协议分发）
+- **技术债记录**：payload 验证层待实现、`_call_llm_raw` 待 Phase 4、dispatch_eager 多模态交互测试待补充
 
 ## 2026-05-27：Phase 1 命名模型路由实现完成
 

@@ -28,7 +28,7 @@ idiom used throughout the compiler and runtime.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, Tuple, Union, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -69,6 +69,7 @@ class TypeAxiom(Protocol):
     has_parser_cap: bool
     has_from_prompt_cap: bool
     has_output_hint_cap: bool
+    has_payload_prompt_cap: bool
     has_llm_call_cap: bool
 
     # ---- Capability methods (default no-op in BaseAxiom) ------------ #
@@ -84,6 +85,9 @@ class TypeAxiom(Protocol):
         self, raw_response: str, spec: Optional["IbSpec"] = None
     ) -> Tuple[bool, Any]: ...
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str: ...
+    def __payload_prompt__(
+        self, value: Any, spec: Optional["IbSpec"] = None
+    ) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]: ...
 
     # ---- Method / operator specs ------------------------------------ #
     def get_method_specs(self) -> "Dict[str, MethodMemberSpec]":

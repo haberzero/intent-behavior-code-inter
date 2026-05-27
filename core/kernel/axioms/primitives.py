@@ -22,7 +22,7 @@ Design
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 import re
 
 from core.runtime.support.fuzzy_json import FuzzyJsonParser
@@ -77,6 +77,7 @@ class BaseAxiom:
     has_parser_cap: bool = False
     has_from_prompt_cap: bool = False
     has_output_hint_cap: bool = False
+    has_payload_prompt_cap: bool = False
     has_llm_call_cap: bool = False
 
     # ---- Method / operator specs ----------------------------------- #
@@ -114,6 +115,21 @@ class BaseAxiom:
 
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return ""
+
+    def __payload_prompt__(
+        self, value: Any, spec: Optional["IbSpec"] = None
+    ) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]:
+        """Multi-modal payload protocol — default returns str(value) (text fallback).
+
+        Concrete axioms for multi-modal types (audio/image/video) override this
+        to return structured content blocks (dicts) for LLM API payloads.
+
+        Return values:
+        - str: plain text (equivalent to __to_prompt__ behavior)
+        - dict: single structured content block (e.g. {"type":"image_url",...})
+        - List[dict]: multiple content blocks
+        """
+        return str(value)
 
     # ---- Type characteristics -------------------------------------- #
     def is_dynamic(self) -> bool:
