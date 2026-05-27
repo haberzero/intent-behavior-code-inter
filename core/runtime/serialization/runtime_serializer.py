@@ -161,8 +161,9 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _collect_intent_context(self, ic: Any) -> str:
         """序列化完整的 ``IbIntentContext`` Python 对象。
 
-        保留全部 4 个槽位：``_intent_top`` (持久栈) / ``_smear_queue`` (涂抹队列) /
-        ``_override`` (排他槽) / ``_global_intents`` (Engine 级注入)。
+        保留全部 6 个槽位：``_intent_top`` (持久栈) / ``_smear_queue`` (涂抹队列) /
+        ``_override`` (排他槽) / ``_global_intents`` (Engine 级注入) /
+        ``_inherited_smear`` (从父帧继承的涂抹) / ``_inherited_override`` (从父帧继承的排他)。
         通过 Python id memo 维持身份共享。
         """
         ic_id = id(ic)
@@ -179,6 +180,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             "smear_queue": [self._process_value(i) for i in ic._smear_queue],
             "override": self._process_value(ic._override) if ic._override is not None else None,
             "global_intents": [self._process_value(i) for i in ic._global_intents],
+            "inherited_smear": [self._process_value(i) for i in ic._inherited_smear],
+            "inherited_override": self._process_value(ic._inherited_override) if ic._inherited_override is not None else None,
         }
         # 复用 instance_pool 作为统一对象池；以 ``_type == "intent_context_native"``
         # 区分于 IBCI ``intent_context`` 封装实例。
@@ -410,6 +413,15 @@ class RuntimeDeserializer:
             iv = self._deserialize_value(gv)
             if iv is not None:
                 ic._global_intents.append(iv)
+        # inherited_smear
+        for sv in data.get("inherited_smear", []) or []:
+            iv = self._deserialize_value(sv)
+            if iv is not None:
+                ic._inherited_smear.append(iv)
+        # inherited_override
+        iov = data.get("inherited_override")
+        if iov is not None:
+            ic._inherited_override = self._deserialize_value(iov)
         return ic
 
     def _get_intent_node(self, uid: str) -> IntentNode:

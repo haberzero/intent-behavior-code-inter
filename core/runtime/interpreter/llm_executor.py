@@ -235,6 +235,15 @@ class LLMExecutorImpl:
 
         # 处理 MOCK:REPAIR 特殊标记
         if raw_res == "__MOCK_REPAIR__":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": user_prompt,
+                "response": "__MOCK_REPAIR__",
+                "raw_response": "__MOCK_REPAIR__",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": merged_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="__MOCK_REPAIR__",
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
@@ -242,6 +251,15 @@ class LLMExecutorImpl:
 
         # 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
         if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": user_prompt,
+                "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": merged_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
                 retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
@@ -253,6 +271,8 @@ class LLMExecutorImpl:
             "user_prompt": user_prompt,
             "response": raw_res,
             "raw_response": raw_res,
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
             "merged_intents": merged_intents
         }
 
@@ -663,6 +683,15 @@ class LLMExecutorImpl:
 
         # 6.1 处理 MOCK:REPAIR 特殊标记
         if response == "__MOCK_REPAIR__":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": content,
+                "response": "__MOCK_REPAIR__",
+                "raw_response": "__MOCK_REPAIR__",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": all_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="__MOCK_REPAIR__",
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
@@ -670,6 +699,15 @@ class LLMExecutorImpl:
 
         # 6.2 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
         if response == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": content,
+                "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": all_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
                 retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
@@ -681,7 +719,7 @@ class LLMExecutorImpl:
             "user_prompt": content,
             "response": response,
             "raw_response": response,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in active_list] if 'active_list' in dir() else [],
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
             "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
             "merged_intents": all_intents
         }
@@ -835,12 +873,30 @@ class LLMExecutorImpl:
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
         if raw_res == "__MOCK_REPAIR__":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": user_prompt,
+                "response": "__MOCK_REPAIR__",
+                "raw_response": "__MOCK_REPAIR__",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": merged_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="__MOCK_REPAIR__",
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
         if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": user_prompt,
+                "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": merged_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
                 retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
@@ -851,6 +907,8 @@ class LLMExecutorImpl:
             "user_prompt": user_prompt,
             "response": raw_res,
             "raw_response": raw_res,
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
             "merged_intents": merged_intents
         }
         return self._parse_result(raw_res, type_name, node_uid)
@@ -917,12 +975,30 @@ class LLMExecutorImpl:
         response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
 
         if response == "__MOCK_REPAIR__":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": content,
+                "response": "__MOCK_REPAIR__",
+                "raw_response": "__MOCK_REPAIR__",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": all_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="__MOCK_REPAIR__",
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
         if response == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+            self.last_call_info = {
+                "sys_prompt": sys_prompt,
+                "user_prompt": content,
+                "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
+                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
+                "merged_intents": all_intents
+            }
             return LLMResult.uncertain_result(
                 raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
                 retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
