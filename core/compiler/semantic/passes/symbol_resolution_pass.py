@@ -120,23 +120,15 @@ class SymbolResolver(ScopedVisitor):
                 scope.define(param_sym)
 
                 # 绑定 IbArg 节点到符号（vm_handle_IbCall 通过 node_to_symbol[arg_uid] 查找）
-                # 如果外层是 IbTypeAnnotatedExpr，runtime 会先解包到 target (IbArg)
+                # All args are now IbArg (no IbTypeAnnotatedExpr wrapper)
                 if isinstance(arg_node, ast.IbArg):
                     self.bind_symbol(arg_node, param_sym)
-                elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
-                    if isinstance(arg_node.target, ast.IbArg):
-                        self.bind_symbol(arg_node.target, param_sym)
 
     @staticmethod
     def _extract_arg_name(arg_node: ast.IbASTNode) -> Optional[str]:
-        """从参数节点提取参数名。"""
+        """从参数节点提取参数名。IbArg now has annotation field directly."""
         if isinstance(arg_node, ast.IbArg):
             return arg_node.arg
-        elif isinstance(arg_node, ast.IbTypeAnnotatedExpr):
-            if isinstance(arg_node.target, ast.IbArg):
-                return arg_node.target.arg
-            elif isinstance(arg_node.target, ast.IbName):
-                return arg_node.target.id
         return None
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):

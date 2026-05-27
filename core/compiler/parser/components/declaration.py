@@ -302,9 +302,7 @@ class DeclarationComponent(BaseComponent):
                 annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
 
-                param_node = self._loc(ast.IbArg(arg=name_token.value), name_token)
-                if annotation:
-                    param_node = self._loc(ast.IbTypeAnnotatedExpr(target=param_node, annotation=annotation), name_token)
+                param_node = self._loc(ast.IbArg(arg=name_token.value, annotation=annotation), name_token)
                 params.append(param_node)
 
                 if not self.stream.match(TokenType.COMMA):

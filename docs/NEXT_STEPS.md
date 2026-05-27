@@ -38,6 +38,11 @@ python -m pytest tests/ -q --tb=no --no-header
 
 **P0 修复任务**（必须按顺序完成，避免级联破坏）：
 
+**架构清理完成项**（2026-05-27）：
+- ✅ **AST 统一**：IbArg 添加 annotation 字段，消除 `Union[IbArg, IbTypeAnnotatedExpr]` 类型不一致
+- ✅ **类型注解强化**：FunctionSymbol.spec 明确为 TypeDef，消除 hasattr 防御性检查
+- ✅ **消息传递统一**：修复 primitives.py Enum axiom 的 hasattr 残留，统一使用 receive() 派发
+
 ### P0-1：统一协议方法派发（预估 2-3 天）
 
 - [x] 移除 `llm_executor.py` 中所有 `hasattr(val, '__to_prompt__')` 直接调用
@@ -57,7 +62,18 @@ python -m pytest tests/ -q --tb=no --no-header
 - [x] 编译期检查运算符方法签名（`TypeCheckingPass` 通过 `resolve_op` 查找）
 - [x] 测试：用户类可定义 `__add__` / `__eq__` / `__lt__` 等运算符
 
-**进展**：已完成编译时运算符检测与类型推断（d999783）。SymbolCollectionPass 现在填充完整方法签名（param_types + return_type）到 spec.members，registry.resolve_op 在编译期查找用户定义的运算符方法。测试验证：`/tmp/test_user_operator.ibci` 编译并运行成功。
+**实际技术路径说明**：
+- ✅ 编译期：SymbolCollectionPass 填充方法签名到 IbSpec.members，SpecRegistry.resolve_op 查找用户定义运算符
+- ✅ 运行期：通过通用 receive() 机制调用（无需修改 builtin_initializer.py）
+- ❌ 未实现：用户类运算符的**显式绑定**（当前依赖通用 receive() 派发）
+
+**已知技术债（必须在 P0-3 清理）**：
+- `interpreter.py:683-685` 存在空 pass 语句，注释表明"运算符方法已注册为普通方法，VM会通过receive()调用它"
+- **根本问题**：用户类运算符方法应该像内置类型一样，通过 `_bind_operator_method()` 显式绑定到运算符符号
+- **临时妥协**：当前依赖 VM 的通用 receive() 机制工作，但不如显式绑定清晰和高效
+- **修复路径**：P0-3 统一初始化时，参考 builtin_initializer.py 的 `_auto_bind_operators` 模式，为用户类实现等价的显式绑定逻辑
+
+**进展**：已完成编译时运算符检测与类型推断（d999783）。测试验证：`/tmp/test_user_operator.ibci` 编译并运行成功。
 
 **副作用发现**：1 个测试失败（test_override_different_param_count），因为方法签名验证现在工作正常，正确检测到参数数量不匹配。这是期望的正确行为。
 

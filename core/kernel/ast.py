@@ -514,6 +514,7 @@ class IbCallableType(IbExpr):
 @dataclass(kw_only=True, eq=False)
 class IbArg(IbASTNode):
     arg: str
+    annotation: Optional[IbExpr] = None  # Type annotation for the parameter
 
 
 @dataclass(kw_only=True, eq=False)

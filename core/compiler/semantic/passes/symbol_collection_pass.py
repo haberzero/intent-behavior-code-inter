@@ -125,8 +125,8 @@ class SymbolCollector:
                         kind=llm_kind,
                         type_ref=TypeRef.of(sym.spec.name if sym.spec else "any")
                     )
-                    # Copy signature from func_meta if available
-                    if sym.spec and hasattr(sym.spec, 'param_types'):
+                    # Copy signature from TypeDef (FunctionSymbol.spec is always TypeDef)
+                    if sym.spec:
                         method_spec.param_types = list(sym.spec.param_types)
                         method_spec.return_type = sym.spec.return_type
                     self.current_class.members[sym.name] = method_spec
@@ -199,10 +199,8 @@ class SymbolCollector:
         # P0-2: Extract parameter types and return type from AST and store in spec
         param_type_refs = []
         for arg in node.args:
-            # Handle IbArg or IbTypeAnnotatedExpr
-            if isinstance(arg, ast.IbTypeAnnotatedExpr) and arg.annotation:
-                param_type_refs.append(self._annotation_to_typeref(arg.annotation))
-            elif hasattr(arg, 'annotation') and arg.annotation:
+            # All args are now IbArg with optional annotation field
+            if arg.annotation:
                 param_type_refs.append(self._annotation_to_typeref(arg.annotation))
             else:
                 param_type_refs.append(TypeRef.of("any"))
