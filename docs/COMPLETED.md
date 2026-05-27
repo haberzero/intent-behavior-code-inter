@@ -15,8 +15,8 @@
 
 - **Phase 1**：`@NAME~` 语法端到端路由实现——VM handler 提取 `tag` 字段 → `LLMExecutorImpl` 接收 `target_model` 参数 → `AIPlugin.__call__` 路由到命名模型配置
 - **新 API**：`ai.register_model(name, url, key, model)` — 注册命名模型用于路由
-- **架构特性**：命名模型客户端缓存、tag 大小写不敏感（统一 UPPER）、后向兼容（空 tag 走默认路径）
-- **测试**：`tests/e2e/test_e2e_model_routing.py` 覆盖 6 个场景（默认路径、注册模型路由、字母数字 tag、MOCK 模式兼容、多模型并存、大小写不敏感）
+- **架构特性**：命名模型客户端缓存、tag 大小写敏感（精确匹配）、后向兼容（空 tag 走默认路径）
+- **测试**：`tests/e2e/test_e2e_model_routing.py` 覆盖 7 个场景（默认路径、注册模型路由、字母数字 tag、MOCK 模式兼容、多模型并存、大小写敏感、大小写区分注册）
 - **文档修正**：更正 `MULTIMODAL_BEHAVIOR_DESIGN.md` 中关于 `isalpha()` 的错误声明（实际源码使用 `isalnum()`），更新 Phase 1 状态为已完成
 
 ## 2026-05-27：P0-3 统一初始化路径完成

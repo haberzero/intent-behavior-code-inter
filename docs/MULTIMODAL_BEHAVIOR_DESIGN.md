@@ -92,7 +92,7 @@ IBCI 当前的 prompt 协议由三个方法构成，定义于公理层（`core/k
 - ✅ `AIPlugin.__call__` 接受 `target_model` 关键字参数，路由到命名模型配置
 - ✅ `AIPlugin.register_model(name, url, key, model)` 注册命名模型
 - ✅ 命名模型客户端缓存（`_named_clients`）避免重复初始化
-- ✅ tag 大小写不敏感（统一转 UPPER 查找）
+- ✅ tag 大小写敏感（精确匹配，用户自定义 tag 不做隐式转换）
 
 **尚未实现**：
 - 命名模型的能力探测（`probe_model` 仅对默认模型生效）
