@@ -7,29 +7,39 @@ LLM 异常处理现场帧 (LLMExceptFrame)。
 
 核心设计思想（快照隔离模型）:
 1. 状态化:   重试相关的所有状态都集中在一个帧对象中
-2. 快照隔离: 每次 LLM 语句执行进入独立快照（vars/intent_ctx/loop_ctx），retry 前
-             自动 restore_snapshot()，保证 LLM 始终看到一致的输入状态
+2. 快照隔离: 帧创建时保存一次快照（save_context），retry 时还原，保证
+             LLM 始终看到一致的输入状态
 3. 可追踪:   记录重试次数、最后 LLM 结果等调试信息
 
-使用方式（影子执行驱动，由 visit_IbLLMExceptionalStmt 主控）:
+快照/恢复调用规则:
+    - ``__snapshot__()``：帧创建时调用**一次**（save_context 内部）
+    - ``__restore__(state)``：**仅在 retry 时**调用，且**每轮 retry 恰好一次**。
+      首次迭代不调用（刚 save_context 完成，状态一致）。
+    - ``retry`` 语句本身**不**调用 restore_snapshot（只设置 should_retry 标志），
+      restore 统一由外层 while 循环顶部执行，消除冗余双重 restore。
+
+使用方式（影子执行驱动，由 vm_handle_IbLLMExceptionalStmt 主控）:
     # 1. 保存快照（save_llm_except_state 内部调用 frame.save_context()）
     frame = runtime_context.save_llm_except_state(target_uid, node_type, max_retry)
 
     # 2. 驱动循环
+    first_iteration = True
     while frame.should_continue_retrying():
-        frame.restore_snapshot(runtime_context)           # 恢复快照
-        runtime_context.set_last_llm_result(None)         # 清除上次信号
-        execution_context.visit(target_uid)               # 驱动 LLM 节点执行
+        if not first_iteration:
+            frame.restore_snapshot(runtime_context)     # retry 前恢复快照
+        first_iteration = False
+        runtime_context.set_last_llm_result(None)      # 清除上次信号
+        execution_context.visit(target_uid)            # 驱动 LLM 节点执行
 
         result = runtime_context.get_last_llm_result()
         if result is None or result.is_certain:
-            break                                          # 成功，commit 到目标变量
+            break                                       # 成功，commit 到目标变量
 
         # LLM 返回不确定（is_uncertain=True）
-        for stmt_uid in body_uids:                         # 执行 llmexcept body
-            visit(stmt_uid)
+        for stmt_uid in body_uids:                      # 执行 llmexcept body
+            visit(stmt_uid)                             # body 中 retry 设 should_retry=True
         if not frame.increment_retry():
-            break                                          # 重试耗尽
+            break                                       # 重试耗尽
 
     # 3. 清理
     runtime_context.pop_llm_except_frame()

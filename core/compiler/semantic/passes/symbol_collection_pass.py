@@ -148,9 +148,12 @@ class SymbolCollector:
     def visit_IbClassDef(self, node: ast.IbClassDef):
         """访问类定义节点"""
         # 1. 创建类元数据
+        # 所有用户类隐式继承 Object（与运行时 artifact_loader 的默认行为对齐）。
+        # Object 自身不设置父类以避免循环。
+        effective_parent = node.parent if node.parent else ("Object" if node.name != "Object" else None)
         cls_meta = self.registry.factory.create_class(
             name=node.name,
-            parent_name=node.parent
+            parent_name=effective_parent
         )
         cls_meta.is_user_defined = True
 

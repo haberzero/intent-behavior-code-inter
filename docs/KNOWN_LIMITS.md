@@ -178,7 +178,17 @@ class Dog(Animal):
 Dog d = Dog("Husky")    # 只设置 breed；d.name = None
 ```
 
-**规避方案**：在子类中显式定义 `__init__` 手动初始化父类字段，或在构造后赋值。
+**正确用法**：在子类中显式定义 `__init__` 并通过 `super().__init__(...)` 初始化父类字段：
+
+```ibci
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b):
+        super().__init__(n)
+        self.breed = b
+```
+
+> **注意**：`super()` 对所有 IBCI 用户类均有效——所有用户类隐式继承自 `Object` 基类（类似 Python 3）。即使没有显式写 `class Foo(Bar):`，`super()` 也可在方法内使用，此时它指向 `Object`。
 
 **根源**：auto-init 生成逻辑（`interpreter.py:_hydrate_user_classes`）仅遍历当前类 `body` 中声明的字段。父类字段通过 `default_fields` 继承，但不加入构造函数参数。此设计与 Python 行为一致（子类不自动调用 `super().__init__`）。
 

@@ -1462,8 +1462,9 @@ class TypeCheckingVisitor(ScopedVisitor):
     def _check_super_call_legality(self, node: ast.IbCall):
         """SEM_093: Check that super() is only called inside a class method.
 
-        super() is only meaningful inside an instance method of a class that
-        has a parent class. Calling it elsewhere is an error.
+        super() is only meaningful inside an instance method of a class.
+        All user classes implicitly inherit from Object, so super() is always
+        valid inside a class method.
         """
         func = node.func
         if not isinstance(func, ast.IbName):
@@ -1476,7 +1477,7 @@ class TypeCheckingVisitor(ScopedVisitor):
             self.error(
                 "super() can only be used inside a class method.",
                 node, code="SEM_093",
-                hint="Move this call into a method of a class that has a parent class."
+                hint="Move this call into a method of a class."
             )
             return
 
@@ -1487,12 +1488,3 @@ class TypeCheckingVisitor(ScopedVisitor):
                 hint="super() must be called within a method body (func), not at class level."
             )
             return
-
-        # super() requires the class to have a parent
-        parent_type_ref = getattr(self.current_class, 'parent_type', None)
-        if not parent_type_ref:
-            self.warn(
-                f"super() used in class '{self.current_class.name}' which has no parent class.",
-                node, code="SEM_093",
-                hint="super() is meaningless in a class without inheritance."
-            )

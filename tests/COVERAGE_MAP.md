@@ -35,6 +35,7 @@
 | SemanticAnalyzer 集成（4-Phase pipeline 端到端） | `tests/compiler/semantic/test_analyzer.py` |
 | BindingAnalysisPass / BehaviorDependencyPass | `tests/compiler/semantic/test_binding_analysis_pass.py` |
 | 方法覆写 / super 调用语义 | `tests/compiler/semantic/test_override_and_super.py` |
+| super() e2e 运行时分发（init / method / 多级继承） | `tests/e2e/test_e2e_classes.py::TestE2ESuperCall` |
 | Pass 2 警告（unused / shadow 等）| `tests/compiler/semantic/test_p2_warnings.py` |
 | 各 Pass 回归修复集 | `tests/compiler/semantic/test_pass_fixes.py` |
 | ScopedVisitor 基类 | `tests/compiler/semantic/test_scoped_visitor.py` |

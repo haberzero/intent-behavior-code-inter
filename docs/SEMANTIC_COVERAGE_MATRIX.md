@@ -334,7 +334,7 @@
 |---------|---------|---------|------|
 | 单继承 | 🔶 | test_e2e_classes.py | 需要集成测试 |
 | 方法覆盖 | 🔶 | test_e2e_classes.py | 需要集成测试 |
-| super调用 | 🔶 | test_e2e_classes.py | 需要集成测试 |
+| super调用 | ✅ | test_e2e_classes.py::TestE2ESuperCall | 6 个 e2e 测试覆盖 |
 
 ### 8.3 方法解析
 

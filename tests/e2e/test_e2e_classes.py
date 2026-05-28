@@ -500,3 +500,144 @@ for any item in r:
         assert "2" in lines
         assert "3" in lines
         assert "4" not in lines
+
+
+# ---------------------------------------------------------------------------
+# super() runtime dispatch
+# ---------------------------------------------------------------------------
+
+class TestE2ESuperCall:
+    """End-to-end tests for super() method dispatch in IBCI classes."""
+
+    def test_super_init_basic(self):
+        """super().__init__() calls parent constructor."""
+        code = """class Base:
+    int value
+    func __init__(self, int v):
+        self.value = v
+
+class Child(Base):
+    str name
+    func __init__(self, int v, str n):
+        super().__init__(v)
+        self.name = n
+
+Child c = Child(42, "hello")
+print(c.name)
+print((str)c.value)
+"""
+        lines = run_ibci(code)
+        assert "hello" in lines
+        assert "42" in lines
+
+    def test_super_method_call(self):
+        """super().method() dispatches to parent's method implementation."""
+        code = """class Base:
+    func greet(self) -> str:
+        return "Hello from Base"
+
+class Child(Base):
+    func greet(self) -> str:
+        return "Child: " + super().greet()
+
+Child c = Child()
+print(c.greet())
+"""
+        lines = run_ibci(code)
+        assert "Child: Hello from Base" in lines
+
+    def test_super_multi_level_inheritance(self):
+        """super() correctly chains through multiple inheritance levels."""
+        code = """class A:
+    int val
+    func __init__(self, int v):
+        self.val = v
+    func describe(self) -> str:
+        return "A:" + (str)self.val
+
+class B(A):
+    str label
+    func __init__(self, int v, str l):
+        super().__init__(v)
+        self.label = l
+    func describe(self) -> str:
+        return self.label + "/" + super().describe()
+
+class C(B):
+    func __init__(self, int v, str l):
+        super().__init__(v, l)
+    func describe(self) -> str:
+        return "C->" + super().describe()
+
+C obj = C(99, "test")
+print(obj.describe())
+print((str)obj.val)
+print(obj.label)
+"""
+        lines = run_ibci(code)
+        assert "C->test/A:99" in lines
+        assert "99" in lines
+        assert "test" in lines
+
+    def test_super_init_with_field_initialization(self):
+        """super().__init__ correctly initializes parent fields accessible on child."""
+        code = """class Animal:
+    str name
+    int age
+    func __init__(self, str n, int a):
+        self.name = n
+        self.age = a
+    func info(self) -> str:
+        return self.name + " age " + (str)self.age
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, int a, str b):
+        super().__init__(n, a)
+        self.breed = b
+    func info(self) -> str:
+        return super().info() + " breed " + self.breed
+
+Dog d = Dog("Rex", 3, "Labrador")
+print(d.info())
+"""
+        lines = run_ibci(code)
+        assert "Rex age 3 breed Labrador" in lines
+
+    def test_super_only_in_overridden_method(self):
+        """super() in a method that only exists in child (not override) still works
+        if called to invoke parent's different method."""
+        code = """class Base:
+    func base_method(self) -> str:
+        return "from_base"
+
+class Child(Base):
+    func child_method(self) -> str:
+        return "child+" + super().base_method()
+
+Child c = Child()
+print(c.child_method())
+"""
+        lines = run_ibci(code)
+        assert "child+from_base" in lines
+
+    def test_virtual_dispatch_preserved_with_super(self):
+        """After super() call, virtual dispatch for self still uses actual type."""
+        code = """class Base:
+    func name(self) -> str:
+        return "Base"
+    func greeting(self) -> str:
+        return "I am " + self.name()
+
+class Child(Base):
+    func name(self) -> str:
+        return "Child"
+    func greeting(self) -> str:
+        return super().greeting() + " (via super)"
+
+Child c = Child()
+print(c.greeting())
+"""
+        lines = run_ibci(code)
+        # self.name() inside Base.greeting() should resolve to Child.name() via virtual dispatch
+        assert "I am Child (via super)" in lines
