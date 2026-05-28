@@ -5,7 +5,21 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-27（BUG #A 修复 + KNOWN_LIMITS 文档大扫除）
+> **最后更新**：2026-05-28（super() 修复 + __restore__ 冗余消除）
+
+---
+
+## 2026-05-28：super() 修复 + __snapshot__/__restore__ 协议完善
+
+测试基线：**838 passed, 2 skipped**（0 failures）。
+
+- **super() SEM_001 修复**：`SymbolResolutionPass.visit_IbFunctionDef` 现在为类方法注入 `super` 符号（使用固定 UID `"builtin:super"` 与 runtime `IbSuperProxy` 注入对齐）。此前 `super()` 在编译期被标记为"未定义符号"，导致 `IBCI_SYNTAX_REFERENCE §6.4` 文档示例无法编译。
+- **__restore__ 冗余调用消除**：
+  - `vm_handle_IbRetry`：移除 `restore_snapshot` 调用——`retry` 语句现只设置 hint + `should_retry` 标志
+  - `vm_handle_IbLLMExceptionalStmt`：添加 `first_iteration` 守卫，首次迭代跳过 restore（刚 save_context 完成，状态一致）
+  - 效果：`__snapshot__` 恰好调用 1 次（帧创建），`__restore__` 恰好每轮 retry 调用 1 次（无冗余）
+- **super() e2e 测试**：新增 `TestE2ESuperCall` 测试类（6 个测试用例），覆盖 `super().__init__`、`super().method()`、多级继承、虚方法分发保持等场景
+- **文档更新**：KNOWN_LIMITS §六更新 `super()` 规避方案代码示例
 
 ---
 
