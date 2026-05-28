@@ -1019,9 +1019,13 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
 
     last_target_value = executor.registry.get_none()
     try:
+        first_iteration = True
         while frame.should_continue_retrying():
-            # 恢复快照（首次进入为 no-op，retry 时确保 LLM 看到一致输入）
-            frame.restore_snapshot(executor.runtime_context)
+            # 恢复快照：首次迭代跳过（刚刚 save_context 完成，状态一致）；
+            # 后续迭代在此处统一恢复，确保每次 LLM 看到一致的输入状态。
+            if not first_iteration:
+                frame.restore_snapshot(executor.runtime_context)
+            first_iteration = False
 
             # 清除共享信号通道，防止上次结果污染本次判断
             executor.runtime_context.set_last_llm_result(None)
@@ -1650,8 +1654,10 @@ def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``retry`` 语句：与 StmtHandler.visit_IbRetry 同语义。
 
     1. 求值可选的 retry hint，写入 ``runtime_context.retry_hint``
-    2. 通过 ``frame.restore_snapshot`` 恢复 llmexcept 帧的快照
-    3. 设置 ``frame.should_retry = True``，由外层 llmexcept handler 重新执行 target
+    2. 设置 ``frame.should_retry = True``，由外层 llmexcept handler 重新执行 target
+
+    注意：状态恢复（restore_snapshot）由外层 ``vm_handle_IbLLMExceptionalStmt``
+    在下一次迭代开始时统一执行，避免同一轮 retry 中出现冗余的双重 restore 调用。
     """
     hint_uid = node_data.get("hint")
     hint_val: Optional[str] = None
@@ -1661,7 +1667,6 @@ def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):
     executor.runtime_context.retry_hint = hint_val
     frame = executor.runtime_context.get_current_llm_except_frame()
     if frame is not None:
-        frame.restore_snapshot(executor.runtime_context)
         frame.should_retry = True
     return executor.registry.get_none()
 
