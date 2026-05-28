@@ -3,32 +3,36 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-05-26（nonlocal 已完成归档至 COMPLETED；PT-SEM-1 提升至 NEXT_STEPS）
+> **最后更新**：2026-05-28（调整优先级：多模态 Phase 3 为 P0；协程搁置并独立文档化；PT-SEM-1 降为 P2）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
 > - 标为 `[P2]`/`[P3]` 的条目：有明确前置链，需按序解锁
 > - 标为 `[VISION]` 的条目：远期愿景，当前无明确用户需求推动
 > - 标为 `[DESIGN-DEBT]` 的条目：已有部分基础设施但存在未解决的设计冲突
+> - 标为 `[SHELVED]` 的条目：明确搁置，有独立文档记录设计思路
 
 ---
 
 ## 一、Semantic Pipeline 后续演进
 
-### PT-SEM-1　生产就绪化 [P1 — 已提升至 NEXT_STEPS]
+### PT-SEM-1　生产就绪化 [P2 — 已在 NEXT_STEPS 中列为候选]
 
 **前置条件**: Semantic 4-Phase pipeline 已稳定运行 ✅（`create_semantic_pipeline()` 在 `core/compiler/semantic/pipeline.py:115-139`）
 
-**现状核查**（2026-05-26）：
+**现状核查**（2026-05-28）：
 - Pipeline 作为唯一编译期分析路径已稳定运行，无回退开关
 - 4 个 Phase（SymbolPhase → TypePhase → BindingPhase → IntegrityPhase）均有对应 Pass 子步骤
 - `PassOutput` frozen dataclass + `MetadataStore.from_outputs()` 合并产物路径已就绪
+- **多模态相关**：`TypeCheckingPass` 对多模态类型无特殊处理（by-design），`SymbolResolutionPass` 通过 registry 查询无需修改
 
 **具体待做**：
 1. **错误信息优化**：当前 `SEM_xxx` 错误码附带的消息偏技术化（"symbol not found in scope"），需转化为用户友好表述（"变量 'x' 在此位置尚未声明"）
 2. **诊断工具**：为符号表、类型绑定、行为依赖图提供可视化导出（JSON/dot 格式），便于开发者调试复杂脚本
 3. **性能基准**：建立编译时间基准测试（针对 100+ 行脚本），确保后续改动不引入回归
 4. **CI/CD 集成**：语义分析测试套件纳入 CI 流水线自动运行
+
+**优先级调整**：原为 P1，因多模态功能优先，降为 P2。待 Phase 3-4 完成后可提升。
 
 **预估工作量**: 15-20 小时
 
@@ -62,7 +66,11 @@
 
 ---
 
-## 二、VM 异步/协程层（L3）— 多项子任务共同阻塞
+## 二、VM 异步/协程层（L3）[SHELVED]
+
+> **独立设计文档**：`docs/COROUTINE_DESIGN_NOTES.md`
+> **搁置决策日期**：2026-05-28
+> **搁置原因**：当前优先完善多模态功能（Phase 3-5）；`dispatch_eager` + `LLMFuture` 已覆盖主要异步需求
 
 ### 阻塞原因
 
@@ -71,12 +79,6 @@ L3 协程层需要 VM 从"单任务调度器"升级为"多任务挂起/恢复"�
 2. **语言层关键字**：`async`/`await`/`yield` 均不在现有 KEYWORDS 表中；需设计语法与类型
 3. **快照协议对齐**：协程挂起时如何保存 intent_context 栈 + llmexcept 帧栈（当前 `try_deep_clone` 仅服务 llmexcept retry，不覆盖协程 yield 点）
 
-### 现有基础设施（已验证可复用）
-
-- CPS 风格 yield 调度循环（`vm_executor.py` / `handlers.py`）：所有语句执行已转为 VM 帧栈驱动，递归 visit 已消除 → 这是协程化的必要前置
-- `ControlSignal` enum（`core/runtime/vm/task.py:34`）：已定义 break/continue/return/llm_uncertain 信号类型；可扩展 YIELD
-- `dispatch_eager` + `LLMFuture`（`handlers.py:691-754`）：后台 LLM 请求 + 使用点阻塞解引用，已验证"异步提交 → 延迟解析"模式可行
-
 ### 被阻塞的子项
 
 | 编号 | 标题 | 依赖 L3 的原因 |
@@ -84,11 +86,9 @@ L3 协程层需要 VM 从"单任务调度器"升级为"多任务挂起/恢复"�
 | PT-3.1 | `host.run_isolated()` 返回值改进 | 当前返回 `IbObject`/`bool`，需要协程句柄才能实现"异步等待子脚本完成" |
 | PT-3.2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义支持流式接收模式 |
 
-### 为什么搁置
+### 恢复条件
 
-- `dispatch_eager` + `LLMFuture` 已覆盖最主要的异步 LLM 需求，用户无需显式写 async/await
-- 缺乏明确的用户需求来源——当前 IBCI 用户脚本都是线性流程 + LLM 调用
-- 单次 PR 无法收口（最少跨 lexer/parser/semantic/vm/runtime 五层改动 + 快照协议升级）
+详见 `docs/COROUTINE_DESIGN_NOTES.md §六`。核心前提：多模态 Phase 3-5 稳定后 + 出现明确用户需求。
 
 ---
 
@@ -131,9 +131,9 @@ L3 协程层需要 VM 从"单任务调度器"升级为"多任务挂起/恢复"�
 
 ---
 
-### PT-4.3　语言级协程 [VISION]
+### PT-4.3　语言级协程 [SHELVED]
 
-见 §三（L3 协程层）—— 本条是其语言层面表现形式。
+见 §二 + `docs/COROUTINE_DESIGN_NOTES.md`。明确搁置，待多模态稳定后再评估。
 
 ---
 

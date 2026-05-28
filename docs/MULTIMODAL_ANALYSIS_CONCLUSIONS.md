@@ -1,14 +1,21 @@
-# 多模态功能分析结论
+# 多模态功能分析结论 — 与现有设计文档的比对归并
 
 > **创建日期**：2026-05-28
-> **文档性质**：分析结论汇总，作为后续决策和实施的依据。
-> **关联文档**：`MULTIMODAL_BEHAVIOR_DESIGN.md`、`PENDING_TASKS.md`、`NEXT_STEPS.md`
+> **文档性质**：对 `MULTIMODAL_BEHAVIOR_DESIGN.md`（2026-05-26 创建）进行代码事实核查后的补充分析和归并建议。
+> **关联文档**：`MULTIMODAL_BEHAVIOR_DESIGN.md`（原始设计规划）、`COROUTINE_DESIGN_NOTES.md`（协程相关，已独立）
+> **待决**：本文档与原设计文档的归并方式，等待项目负责人决断。
 
 ---
 
-## 〇、优先级声明
+## 〇、文档关系说明
 
-**协程相关功能（L3 协程层、async/await/yield）暂时搁置**。当前优先完善、决策、定义多模态相关功能。协程层的设计记录保留在 `PENDING_TASKS.md §二`，待多模态功能稳定后再行推进。
+| 文档 | 创建时间 | 定位 | 当前状态 |
+|------|---------|------|---------|
+| `MULTIMODAL_BEHAVIOR_DESIGN.md` | 2026-05-26 | 完整设计规划（Phase 1-5） + 附录 B 事实核验 | Phase 1 ✅ Phase 2 ✅ 已更新 |
+| `MULTIMODAL_ANALYSIS_CONCLUSIONS.md`（本文档） | 2026-05-28 | 补充分析：semantic/CPS 缺陷、待决策项、归并建议 | 等待归并决断 |
+| `COROUTINE_DESIGN_NOTES.md` | 2026-05-28 | 协程/迭代器相关设计笔记（已独立拆分） | ⏸️ 搁置 |
+
+**归并建议**：本文档中与 `MULTIMODAL_BEHAVIOR_DESIGN.md` 重复的内容（§一~§五）建议合并入原文档对应章节；本文档独有的内容（§六 Semantic 缺陷、§七 CPS 缺陷、§八 待决策汇总）建议作为原文档新附录或独立保留。
 
 ---
 
@@ -275,19 +282,36 @@ invoke_behavior_cps:
 
 ---
 
-## 八、协程相关功能搁置记录
+## 八、与原设计文档的差异比对
 
-以下内容暂时搁置，待多模态功能（Phase 3-5）稳定后再行推进：
+### 8.1 原文档（`MULTIMODAL_BEHAVIOR_DESIGN.md`）已涵盖
 
-| 搁置项 | 原记录位置 | 搁置原因 |
-|--------|-----------|---------|
-| L3 协程层整体 | `PENDING_TASKS.md §二` | 需 VM 从单任务升级为多任务挂起/恢复架构，跨五层改动 |
-| `async`/`await`/`yield` 关键字 | `PENDING_TASKS.md §二` | 语法设计未定，lexer/parser/semantic/vm 联动 |
-| `Signal.YIELD` 挂起语义 | `PENDING_TASKS.md §二` | 与 intent/llmexcept 快照协议有交互 |
-| `host.run_isolated()` 异步返回 | `PENDING_TASKS.md PT-3.1` | 依赖协程句柄 |
-| `ReceiveMode` 流式接收 | `PENDING_TASKS.md PT-3.2` | 依赖 yield/resume 语义 |
+| 主题 | 原文档位置 | 本文档重复内容 |
+|------|-----------|--------------|
+| 载体类型定义（audio/image/video/media） | §四 | §一（完全重叠） |
+| `__payload_prompt__` 协议设计 | §三、§九 | §三.1（完全重叠） |
+| 调用模式和路由 | §五、§六 | §二（完全重叠） |
+| 承接器设计（media 容器 + 元组解包） | §四.2 | §四（完全重叠） |
+| 决策 D1-D6 | §十一 | 散布引用 |
+| Phase 1-5 实施路线 | §七 | §九"立即可做"部分 |
+| 风险与约束 | §十二 | 部分引用 |
 
-**注意**：`dispatch_eager` + `LLMFuture`（已实现）已覆盖最主要的异步 LLM 需求，用户无需显式写 async/await。协程层的搁置不影响当前多模态功能的推进。
+### 8.2 本文档的独有贡献（原文档未涵盖）
+
+| 主题 | 本文档位置 | 价值 |
+|------|-----------|------|
+| **Semantic 层缺陷分析** | §六 | 识别 TypeCheckingPass / BehaviorDependencyPass / SymbolResolutionPass 对多模态的具体影响 |
+| **CPS 生成器缺陷分析** | §七 | 识别 retry payload 重复构建、`_call_llm` 返回值限制、`invoke_behavior_cps` 接入点 |
+| **汇总的待决策清单** | §九"需要先决策再实施" | 从散落各处的待定项中提取出的统一决策列表 |
+| **代码事实核查（2026-05-28）** | §三.1 具体行号引用 | 确认 Phase 2 实现的精确代码位置 |
+
+### 8.3 归并建议
+
+**方案 A（推荐）**：保留原文档为主体设计文档，将本文档 §六、§七 的内容追加为原文档"附录 C：Semantic/CPS 层交互分析"。本文档降级为归档。
+
+**方案 B**：将两份文档完全合并为单一文档。缺点是会使原文档过于冗长（已有 923 行）。
+
+**等待您的决断。**
 
 ---
 
