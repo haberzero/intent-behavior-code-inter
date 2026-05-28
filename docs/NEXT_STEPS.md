@@ -4,7 +4,21 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-27（Phase 2 完成；下一步 = Phase 3 多模态内置类型）
+> **最后更新**：2026-05-28（super() 编译期/运行时对齐修复完成）
+
+---
+
+## ✅ 已完成：super() 编译期/运行时对齐修复
+
+**问题**：编译器对无显式父类的用户类不注入 `super` 符号，与运行时"所有用户类默认继承 Object"的行为不一致。
+
+**修复内容**：
+- `symbol_collection_pass.py`：用户类无显式父类时，默认 `parent_name="Object"`（Object 自身除外）
+- `type_checking_pass.py`：移除 SEM_093 对"无 parent 类"的 warning（所有用户类均有隐式 Object 父类）
+- `symbol_resolution_pass.py`：无需改动——`parent_type` 现在始终非空，`super` 符号自动注入所有用户类方法
+- 测试 & 文档同步更新
+
+**结果**：`super()` 现在对所有 IBCI 用户定义类有效，编译期与运行时行为完全对齐。
 
 ---
 
@@ -14,7 +28,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-05-27 实测结果**：`832 passed, 2 skipped`（Phase 2 `__payload_prompt__` 协议完成，全部通过）。
+**2026-05-28 实测结果**：`838 passed, 2 skipped`（super() 修复完成，全部通过）。
 
 ---
 

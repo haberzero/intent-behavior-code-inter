@@ -189,8 +189,8 @@ print((str)test())
         artifact, errors = compile_or_errors(code)
         assert "SEM_093" in errors
 
-    def test_super_in_class_without_parent_warning(self):
-        """super() in a class without parent should produce SEM_093 warning/error."""
+    def test_super_in_class_without_explicit_parent_is_valid(self):
+        """super() in a class without explicit parent is valid (implicit Object inheritance)."""
         code = """class Standalone:
     func test(self) -> str:
         super()
@@ -199,9 +199,9 @@ print((str)test())
 Standalone s = Standalone()
 print(s.test())
 """
-        # super() in a class without parent triggers SEM_093
+        # All user classes implicitly inherit Object, so super() is valid
         artifact, errors = compile_or_errors(code)
-        assert "SEM_093" in errors
+        assert "SEM_093" not in errors
 
 
 # ============================================================
