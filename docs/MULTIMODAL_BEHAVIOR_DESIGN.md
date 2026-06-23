@@ -920,3 +920,96 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 2. ~~**Phase 1 实施前**：确认 `isalnum()` 修改不会与现有 token 类型冲突~~ → ✅ 不存在此风险。
 3. **重新评估 D6 决策**：`_call_llm` 当前返回 `str`，但 Phase 4 `from_response` 需要访问完整 API 响应对象。建议在 Phase 2 时就预留 `_call_llm_raw` 返回完整响应的通路，避免 Phase 4 大规模重构。
 4. **补充 dispatch_eager 交互测试**：文档 §8.2 正确识别了 dispatch_eager + 多模态的交互点，但未提及 `llmexcept` 保护下的 dispatch 禁用逻辑（`handlers.py:720-723`）对多模态的影响——这需要在 Phase 2 测试中覆盖。
+
+---
+
+## 附录 C：Semantic / CPS 层交互分析（2026-05-28 补充）
+
+> **来源**：从 `MULTIMODAL_ANALYSIS_CONCLUSIONS.md` §六、§七、§九 归并（方案 A）。
+> **性质**：代码事实核查后的补充分析，识别编译管线与 CPS 生成器中与多模态相关的具体缺口。
+
+---
+
+### C.1 Semantic 层：TypeCheckingPass 对多模态类型的盲区
+
+**现状**：`TypeCheckingPass`（`type_checking_pass.py`）对 `IbBehaviorExpr` 已有特殊路径（L257-260, L314-315），但完全基于"行为表达式返回值类型 = 赋值目标类型"假设。
+
+**已识别的具体缺口**：
+
+1. **无多模态类型兼容性检查**：`audio x = @~ 你好 ~` — 若模型不支持音频输出，编译期无法发出 warning。
+2. **`media` 解包推断缺失**：`(str t, audio a) = @GPT4o~ ... ~` — 当前元组解包的类型检查路径不覆盖 behavior 返回值的模态分解。
+3. **`__payload_prompt__` 能力不参与编译期检查**：即使作为 warning 级别的提示也未实现。
+
+**设计立场**（与 §8.5 一致）：根据 IBCI "运行时为主" 的定位，这不是 bug 而是 by-design。可考虑在 `IntegrityCheckPass` 中增加 optional warning 级别提示。
+
+---
+
+### C.2 Semantic 层：BehaviorDependencyPass 对多模态的影响
+
+**现状**：`BehaviorDependencyPass`（`behavior_dependency_pass.py`）计算 `llm_deps` / `dispatch_eligible`，驱动 `dispatch_eager` 并行调度。
+
+**潜在问题**：
+- 多模态变量（`audio`/`image`）的 `__payload_prompt__()` 涉及 base64 编码，可能耗时较长。
+- 当前 `dispatch_eligible` 判定不考虑多模态 payload 构建的时间成本。
+- `dispatch_eager` + 多模态的交互尚无专项测试。
+
+**处置决定**：暂不改动 `BehaviorDependencyPass` 逻辑；多模态 payload 构建在 dispatch 时刻一并完成（与 §8.2 建议一致）。需补充专项测试（见 C.4）。
+
+---
+
+### C.3 Semantic 层：SymbolResolutionPass 对新类型的注册路径
+
+**结论**：`SymbolResolutionPass` 本身无需修改——它通过 `SpecRegistry` 查询类型名，新类型注册后自动可见。
+
+**两种注册路径的影响差异**：
+- **关键字路径**：需 lexer 添加 token → parser 识别类型声明 → `SymbolCollectionPass` 正确处理（改动面较广）。
+- **普通类名路径**：仅需在 `builtin_initializer` 中注册 → `SpecRegistry` 自动可见（改动面极小）。
+
+**待决策**（对应 NEXT_STEPS 中的 P0 决策项）：关键字 vs 类名的选择见 §C.5。
+
+---
+
+### C.4 CPS 生成器层：`_evaluate_segments_cps` 多模态路径的已知问题
+
+**已实现**（`llm_executor.py:335-419`）：支持混合 content blocks 返回。
+
+**已识别的具体问题**：
+
+1. **llmexcept retry 时多模态 payload 重复构建**：每次 retry 会重新执行 `_evaluate_segments_cps`，对大文件做重复 base64 编码。建议在 `LLMExceptFrame` 中缓存已编码的 payload（Phase 3+ 课题）。
+2. **`dispatch_eager` + 多模态交互无测试**：`handlers.py:720-723` 的 dispatch 禁用逻辑对多模态的影响未验证（Phase 3 新增测试）。
+
+---
+
+### C.5 CPS 生成器层：`_call_llm` 返回值限制与 Phase 4 接入点
+
+**现状**：`_call_llm` 返回 `str`，所有下游（`LLMResultParser`、`from_prompt`）基于此。
+
+**Phase 4 需要的改动**（`invoke_behavior_cps`，`llm_executor.py:925` 附近）：
+
+```
+invoke_behavior_cps:
+  content = yield from _evaluate_segments_cps(...)
+  if target_type has multimodal_response_cap:
+      raw_response = _call_llm_multimodal(...)  # 新路径，返回完整 API response
+      result = target_axiom.from_response(raw_response)
+  else:
+      text_response = _call_llm(...)            # 原路径，保持不变
+      result = LLMResultParser.parse(...)
+```
+
+**关于 D6 决策的再评估**：原决策（"不改 `_call_llm` 返回契约"）是正确的保守策略。但鉴于 Phase 4 必然需要完整 response 对象，**建议在 Phase 3 实施时就同步预留 `_call_llm_raw` 接口**，避免 Phase 4 发生大规模重构。
+
+---
+
+### C.6 汇总：需要先决策再实施的待定项
+
+以下各项在进入 Phase 3 实施前需要项目负责人明确决断：
+
+| 编号 | 决策点 | 选项 | 当前建议 |
+|------|--------|------|---------|
+| **DEC-1** | `audio`/`image`/`video`/`media` 作为**关键字**还是**普通类名** | 关键字（改 lexer） vs 类名（不改 lexer） | **关键字**（与 `str`/`int` 同级，但改动面较广） |
+| **DEC-2** | `media` 容器的属性访问模型 | 固定属性（`.text` / `.audio` / `.image`）vs 动态字典 | **固定属性**（可预测，可编译期检查）|
+| **DEC-3** | 文件 I/O API 的形态 | `file.read_audio(path)` vs `audio.from_file(path)` | **`file.read_audio`**（模块方法，与现有 `file` 模块一致）|
+| **DEC-4** | `from_response` 协议的接入点 | Phase 4 再改 vs Phase 3 同时预留 `_call_llm_raw` | **Phase 3 预留**（避免 Phase 4 重构）|
+| **DEC-5** | 多模态变量的 `__snapshot__` / `__restore__` 实现策略 | 路径引用（磁盘后端）vs 深拷贝（内存后端）| **路径引用**（与磁盘卸载设计一致）|
+| **DEC-6** | `MediaStorage` Phase 3 的存储范围 | 纯内存 vs 同时实现磁盘卸载 | **先纯内存**，Phase 5 再加磁盘卸载 |
