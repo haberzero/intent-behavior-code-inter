@@ -1,5 +1,6 @@
 import re
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any, List, Optional, Dict, Union, Callable, Mapping, Set, TYPE_CHECKING
@@ -48,6 +49,7 @@ class LLMExecutorImpl:
         self._max_workers: int = max_workers
         self._thread_pool: Optional[_ThreadPoolExecutor] = None
         self._pending_futures: Dict[str, LLMFuture] = {}  # node_uid → LLMFuture
+        self._pending_futures_lock = threading.Lock()  # 保护 _pending_futures 的并发访问
 
         # LLM Result Parser (lazy initialized after hydration)
         self._result_parser: Optional[LLMResultParser] = None
@@ -549,7 +551,8 @@ class LLMExecutorImpl:
 
         future = self._get_thread_pool().submit(_run)
         llm_future = LLMFuture(node_uid=node_uid, future=future)
-        self._pending_futures[node_uid] = llm_future
+        with self._pending_futures_lock:
+            self._pending_futures[node_uid] = llm_future
         return llm_future
 
     def resolve(self, node_uid: str) -> IbObject:
@@ -560,7 +563,8 @@ class LLMExecutorImpl:
         若 ``dispatch_eager`` 尚未被调用，或对应 Future 已被 resolve 消费，
         则抛出 ``RuntimeError``。
         """
-        llm_future = self._pending_futures.pop(node_uid, None)
+        with self._pending_futures_lock:
+            llm_future = self._pending_futures.pop(node_uid, None)
         if llm_future is None:
             raise RuntimeError(
                 f"LLMExecutorImpl.resolve: 节点 {node_uid!r} 没有待解析的 Future。"

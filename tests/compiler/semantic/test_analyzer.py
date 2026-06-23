@@ -303,7 +303,7 @@ class TestFullFileCompilation:
         if not os.path.exists(example_file):
             pytest.skip(f"Example file not found: {example_file}")
 
-        with open(example_file) as f:
+        with open(example_file, encoding='utf-8') as f:
             code = f.read()
 
         tracker = IssueTracker(source_provider=source_mgr)

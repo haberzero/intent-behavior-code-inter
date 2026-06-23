@@ -125,7 +125,7 @@ class Interpreter:
         current_scope = self.runtime_context.current_scope
         for name, symbol in parent_scope._symbols.items():
             if not name.startswith("__"):
-                current_scope.define(name, symbol.spec, is_const=symbol.is_const, force=True)
+                current_scope.define(name, symbol.value, declared_type=symbol.declared_type, is_const=symbol.is_const, force=True)
 
     def _sync_classes_from(self, parent_context: RuntimeContext):
         """ 从父上下文同步类定义"""

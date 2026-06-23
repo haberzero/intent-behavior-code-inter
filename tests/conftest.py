@@ -62,6 +62,21 @@ REPO_ROOT = os.path.dirname(TESTS_ROOT)
 
 
 # ---------------------------------------------------------------------------
+# pytest_configure — force temp directories under repo root
+# ---------------------------------------------------------------------------
+# Windows 跨盘场景：当系统 %TEMP% 与 repo 在不同盘符时，core/compiler/scheduler.py
+# 的 os.path.relpath 会抛 ValueError。此 hook 将 pytest 的 basetemp 强制设为
+# repo 下的 .tmp_pytest 目录，确保所有 tmp_path / tmp_path_factory fixture
+# 产生的临时文件都与 repo 同盘。
+# ---------------------------------------------------------------------------
+
+def pytest_configure(config):
+    basetemp = os.path.join(REPO_ROOT, ".tmp_pytest")
+    os.makedirs(basetemp, exist_ok=True)
+    config.option.basetemp = basetemp
+
+
+# ---------------------------------------------------------------------------
 # AI mock prefix — single source of truth
 # ---------------------------------------------------------------------------
 

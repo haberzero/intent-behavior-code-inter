@@ -944,8 +944,15 @@ class IbUserFunction(IbFunction):
             try:
                 mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
                 rt_context.current_scope = mod_inst.scope
-            except:
-                pass
+            except Exception as e:
+                core_debugger.trace(
+                    CoreModule.INTERPRETER, DebugLevel.BASIC,
+                    f"Failed to import module '{self.module_name}' for user function call: {e}"
+                )
+                raise InterpreterError(
+                    f"Failed to import module '{self.module_name}' for function call: {e}",
+                    error_code=RUN_CALL_ERROR
+                ) from e
 
         try:
             node_data = self.context.get_node_data(self.node_uid)
@@ -1109,8 +1116,15 @@ class IbLLMFunction(IbFunction):
             try:
                 mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
                 rt_context.current_scope = mod_inst.scope
-            except:
-                pass
+            except Exception as e:
+                core_debugger.trace(
+                    CoreModule.INTERPRETER, DebugLevel.BASIC,
+                    f"Failed to import module '{self.module_name}' for user function call: {e}"
+                )
+                raise InterpreterError(
+                    f"Failed to import module '{self.module_name}' for function call: {e}",
+                    error_code=RUN_CALL_ERROR
+                ) from e
 
         try:
             node_data = self.context.get_node_data(self.node_uid)

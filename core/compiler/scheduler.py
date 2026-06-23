@@ -10,6 +10,7 @@ from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
+from core.base.path_utils import safe_relpath
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
@@ -159,7 +160,7 @@ class Scheduler(ICompilerService):
                 continue
 
             # Determine module name
-            rel_path = os.path.relpath(file_path, self.root_dir)
+            rel_path = safe_relpath(file_path, self.root_dir)
             base_name = os.path.splitext(rel_path)[0]
             module_name = base_name.replace(os.sep, '.')
             self.module_name_to_path[module_name] = file_path
@@ -194,7 +195,7 @@ class Scheduler(ICompilerService):
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation successful.")
         
         # Set entry point
-        entry_rel = os.path.relpath(entry_file, self.root_dir)
+        entry_rel = safe_relpath(entry_file, self.root_dir)
         artifact.entry_module = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
         artifact.global_symbols = self.predefined_symbols
 
@@ -334,7 +335,7 @@ class Scheduler(ICompilerService):
             return 
 
         # Determine module name
-        rel_path = os.path.relpath(file_path, self.root_dir)
+        rel_path = safe_relpath(file_path, self.root_dir)
         base_name = os.path.splitext(rel_path)[0]
         module_name = base_name.replace(os.sep, '.')
         self.module_name_to_path[module_name] = file_path
@@ -392,7 +393,7 @@ class Scheduler(ICompilerService):
                 imp_res = None
                 
                 if imp.file_path:
-                    rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
+                    rel_imp_path = safe_relpath(imp.file_path, self.root_dir)
                     imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
                     
                     # 统一使用 TypeDef 解决循环依赖问题

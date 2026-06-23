@@ -45,6 +45,16 @@ def _write_child(code: str) -> str:
     return f.name
 
 
+def _ibci_path(path: str) -> str:
+    """将文件路径转换为可安全嵌入 IBCI 字符串字面量的形式。
+
+    IBCI 词法器在标准字符串中处理转义序列（如 ``\\t`` → TAB），
+    Windows 路径中的反斜杠会被错误解释。正斜杠在 Windows 的 Python
+    文件 API 中等价于反斜杠，因此统一转为正斜杠即可避免转义冲突。
+    """
+    return path.replace("\\", "/")
+
+
 # ===========================================================================
 # 1. Engine 层直接 API 测试
 # ===========================================================================
@@ -241,7 +251,7 @@ class TestIBCILayerAPI:
         try:
             code = (
                 "import ihost\n"
-                f'str handle = ihost.spawn_isolated("{child}", {{}})\n'
+                f'str handle = ihost.spawn_isolated("{_ibci_path(child)}", {{}})\n'
                 "dict results = ihost.collect(handle)\n"
                 'print(results["answer"])\n'
             )
@@ -255,7 +265,7 @@ class TestIBCILayerAPI:
         try:
             code = (
                 "import ihost\n"
-                f'str handle = ihost.spawn_isolated("{child}", {{}})\n'
+                f'str handle = ihost.spawn_isolated("{_ibci_path(child)}", {{}})\n'
                 "dict results = ihost.collect(handle)\n"
                 'print((str)results["score"])\n'
             )
@@ -270,7 +280,7 @@ class TestIBCILayerAPI:
         try:
             code = (
                 "import ihost\n"
-                f'str handle = ihost.spawn_isolated("{child}", {{}})\n'
+                f'str handle = ihost.spawn_isolated("{_ibci_path(child)}", {{}})\n'
                 "print(handle)\n"
                 "dict _ = ihost.collect(handle)\n"
             )
@@ -287,8 +297,8 @@ class TestIBCILayerAPI:
         try:
             code = (
                 "import ihost\n"
-                f'str ha = ihost.spawn_isolated("{child_a}", {{}})\n'
-                f'str hb = ihost.spawn_isolated("{child_b}", {{}})\n'
+                f'str ha = ihost.spawn_isolated("{_ibci_path(child_a)}", {{}})\n'
+                f'str hb = ihost.spawn_isolated("{_ibci_path(child_b)}", {{}})\n'
                 "dict ra = ihost.collect(ha)\n"
                 "dict rb = ihost.collect(hb)\n"
                 'print(ra["name"])\n'
@@ -314,7 +324,7 @@ class TestRunIsolatedCompatibility:
         try:
             code = (
                 "import ihost\n"
-                f'bool ok = ihost.run_isolated("{child}", {{}})\n'
+                f'bool ok = ihost.run_isolated("{_ibci_path(child)}", {{}})\n'
                 "print((str)ok)\n"
             )
             out: list = []
@@ -382,7 +392,7 @@ class TestRunIsolatedPathRelativeToEntryDir:
         parent_path.write_text(
             "import ihost\n"
             'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
-            f'bool ok = ihost.run_isolated("{child_path}", policy)\n'
+            f'bool ok = ihost.run_isolated("{_ibci_path(str(child_path))}", policy)\n'
             'print("parent_done")\n',
             encoding="utf-8",
         )

@@ -8,6 +8,7 @@ IBCI 项目根目录自动检测模块
 import os
 from typing import Optional, Tuple
 from pathlib import Path
+from core.base.path_utils import safe_relpath
 
 
 class ProjectDetector:
@@ -190,7 +191,7 @@ class ProjectDetector:
                 return f"Project root detected at entry directory: {project_root}"
             elif project_root != entry_dir:
                 # 在上级目录找到了标志性目录
-                rel_path = os.path.relpath(project_root, entry_dir)
+                rel_path = safe_relpath(project_root, entry_dir)
                 return f"Detected project root: {project_root} (found signature at {rel_path})"
             else:
                 return f"No project root detected. Using entry directory: {project_root}"
