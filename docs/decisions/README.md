@@ -72,3 +72,4 @@ What did we decide? (1-3 sentences)
 
 ### Infrastructure Decisions
 - [ADR-011: runtime/shared/ leaf package for cycle breaking](ADR-011-runtime-shared-package.md)
+- [ADR-012: Multimodal types as ordinary class names (DEC-1 resolution)](ADR-012-multimodal-types-as-class-names.md)
