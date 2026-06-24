@@ -87,6 +87,9 @@ class IbInteger(IbValue):
             return self.value == other.to_native()
         return False
 
+    def __hash__(self):
+        return hash(self.value)
+
     def __ne__(self, other):
         return not self.__eq__(other)
 

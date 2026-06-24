@@ -77,9 +77,6 @@ class ScopeImpl:
 
         # declared_type 是 IbSpec（来自编译器的类型标注）
         if isinstance(declared_type, IbSpec):
-            if val_spec:
-                if not value.ib_class.is_assignable_to(value.ib_class.registry.get_class(declared_type.name) if declared_type.name else None):
-                    pass  # runtime assignability checked below
             # Use class-level compatibility check
             spec_reg = value.ib_class.registry.get_metadata_registry()
             if spec_reg and val_spec and not spec_reg.is_assignable(val_spec, declared_type):
@@ -298,7 +295,7 @@ class SymbolViewImpl:
         try:
             self._context.get_symbol(name)
             return True
-        except:
+        except (KeyError, AttributeError):
             return False
 
 class RuntimeContextImpl(RuntimeContext):
