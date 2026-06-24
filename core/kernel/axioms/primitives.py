@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 import re
 
-from core.runtime.support.fuzzy_json import FuzzyJsonParser
+from core.base.support.fuzzy_json import FuzzyJsonParser
 from core.kernel.axioms.protocols import TypeAxiom
 from core.kernel.spec.member import MethodMemberSpec, MemberSpec
 from core.kernel.axioms.intent_context import IntentContextAxiom
