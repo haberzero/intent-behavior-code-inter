@@ -196,7 +196,9 @@ class LLMExceptFrame:
             val = symbol.value
 
             # 方案B 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
-            if type(val) is IbObject:
+            # isinstance（非 type() is）确保 IbObject 子类（如未来的 IbAudio/IbImage）也能匹配；
+            # 但需要 val.ib_class 存在才能查找方法
+            if isinstance(val, IbObject) and hasattr(val, 'ib_class') and val.ib_class:
                 snapshot_method = val.ib_class.lookup_method('__snapshot__')
                 if snapshot_method:
                     try:
