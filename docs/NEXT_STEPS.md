@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-24（P0+P1 全量完成，基线 886 passed；P2 ADR 制度与文档刷新升为当前最紧要）
+> **最后更新**：2026-06-24（P0+P1+P2-A/B 全量完成；基线 889 passed。Phase 3 多模态阻塞条件部分已通过 ADR-007~011 解除）
 
 ---
 
@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-06-24 实测结果**：`838 passed, 2 skipped`（P0 修复后，无需任何环境变量 workaround）
+**2026-06-24 实测结果**：`889 passed, 2 skipped`（P0+P1 修复后，无环境变量 workaround）
 
 > ✅ 基线已可信：P0 修复了 11 个失败（6 个编码 + 5 个路径转义）+ 跨盘硬化 + 2 个 Critical bug + 1 个并发竞争。
 > 2 个 skipped 为设计限制：`INV-LAMBDA-3`（无 walrus/lambda 体赋值）、`INV-SCOPE-1`（SEM_002 禁止 if-block 重声明）。
