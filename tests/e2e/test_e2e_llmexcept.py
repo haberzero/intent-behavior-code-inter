@@ -535,3 +535,66 @@ print((str)obj.value)
         lines = run_ibci(code)
         # obj.value unchanged, auto-clone fallback works correctly
         assert "99" in lines
+
+
+class TestE2EConditionUncertainBugA:
+    """
+    BUG #A 回归测试：if/while/for 在面对不确定 LLM 条件时应统一抛出 LLMParseError。
+
+    历史 bug：if/while 静默吞错（不执行分支体），而 for 正确抛错。
+    2026-05-27 统一为全部抛错。此测试确保 if-condition-uncertain 路径有回归保护。
+    """
+
+    def test_if_condition_uncertain_raises_llm_parse_error(self):
+        """if 条件行为表达式返回模糊值时应触发 llmexcept（而非静默跳过）。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    if @~ MOCK:FAIL uncertain if condition ~:
+        print("should_not_reach")
+    print("also_should_not_reach")
+except:
+    print("caught_uncertain_if")
+"""
+        lines = run_ibci(code)
+        assert "caught_uncertain_if" in lines
+        assert "should_not_reach" not in lines
+
+    def test_while_condition_uncertain_raises_llm_parse_error(self):
+        """while 条件行为表达式返回模糊值时应触发 llmexcept。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    while @~ MOCK:FAIL uncertain while condition ~:
+        print("should_not_reach")
+    print("also_should_not_reach")
+except:
+    print("caught_uncertain_while")
+"""
+        lines = run_ibci(code)
+        assert "caught_uncertain_while" in lines
+        assert "should_not_reach" not in lines
+
+    def test_if_and_while_uncertain_both_raise_consistently(self):
+        """if 和 while 条件不确定时应一致地抛出错误（BUG #A 正交性验证）。"""
+        # if 测试
+        code_if = AI_MOCK_PREFIX + """
+try:
+    if @~MOCK:FAIL~:
+        print("no")
+    print("also_no")
+except:
+    print("if_caught")
+"""
+        lines_if = run_ibci(code_if)
+        assert "if_caught" in lines_if
+
+        # while 测试
+        code_while = AI_MOCK_PREFIX + """
+try:
+    while @~MOCK:FAIL~:
+        print("no")
+    print("also_no")
+except:
+    print("while_caught")
+"""
+        lines_while = run_ibci(code_while)
+        assert "while_caught" in lines_while
