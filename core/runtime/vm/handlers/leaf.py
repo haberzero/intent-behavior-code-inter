@@ -19,6 +19,7 @@ from core.runtime.objects.kernel import (
 from core.runtime.exceptions import (
     ThrownException,
 )
+from core.kernel.issue import InterpreterError
 from core.runtime.objects.builtins import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.vm.handlers._shared import (
@@ -288,6 +289,10 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     """类型强转：与 ExprHandler.visit_IbCastExpr 同语义。
 
     若目标类型描述符或目标 IbClass 缺失，按既有保守语义直接返回原值。
+
+    LLM-aware: 当转换失败且处于 llmexcept 保护帧内时，通过 LLMResult 信号不确定性
+    以便 llmexcept 重试，而非直接抛出异常。此逻辑从 IbString.cast_to() 迁移至此，
+    因为 LLM 不确定性检测属于 VM handler 层职责，不应由原始包装层越层访问。
     """
     value = yield node_data.get("value")
     target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)
@@ -296,7 +301,21 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     target_class = executor.registry.get_class(target_descriptor.name)
     if not target_class:
         return value
-    return value.receive("cast_to", [target_class])
+    try:
+        return value.receive("cast_to", [target_class])
+    except (InterpreterError, Exception) as e:
+        rc = executor.runtime_context
+        if rc is not None and rc.get_current_llm_except_frame() is not None:
+            from core.runtime.shared.llm_result import LLMResult
+            raw_val = getattr(value, 'value', '') if hasattr(value, 'value') else str(value)
+            rc.set_last_llm_result(
+                LLMResult.uncertain_result(
+                    raw_response=raw_val,
+                    retry_hint=f"类型强制转换失败: {str(e)}"
+                )
+            )
+            return executor.registry.get_none()
+        raise
 
 
 def vm_handle_IbFilteredExpr(executor, node_uid: str, node_data: Mapping[str, Any]):

@@ -22,31 +22,8 @@ class IbString(IbValue):
         return self.ib_class.registry.box(len(self.value))
 
     def to_bool(self) -> IbObject:
-        # 判断是否在 llmexcept 保护帧内（即 LLM 调用上下文）
-        execution_context = self.ib_class.registry.get_execution_context()
-        has_llm_frame = False
-        if execution_context and execution_context.runtime_context:
-            has_llm_frame = bool(execution_context.runtime_context.get_current_llm_except_frame())
-
-        if has_llm_frame:
-            # LLM 上下文：严格匹配布尔语义，模糊值触发 uncertain 以便 llmexcept 重试
-            val = self.value.strip().lower()
-            if val in ("1", "true", "yes", "on"):
-                return self.ib_class.registry.box(True)
-            if val in ("0", "false", "no", "off", "null", "none", ""):
-                return self.ib_class.registry.box(False)
-
-            # 模糊回复（如 "maybe", "i think so"）触发不确定性标志
-            from core.runtime.shared.llm_result import LLMResult  # shared/ 叶子模块，无循环依赖
-            execution_context.runtime_context.set_last_llm_result(
-                LLMResult.uncertain_result(
-                    raw_response=self.value,
-                    retry_hint=f"模糊的布尔判定结果: '{self.value}'。期望 'true'/'false'/'yes'/'no'/'1'/'0'。"
-                )
-            )
-            return self.ib_class.registry.get_none()
-
-        # 常规代码路径：遵循 Python 语义，非空字符串为 True，空字符串为 False
+        # 纯 Python 语义：非空字符串为 True，空字符串为 False
+        # LLM 不确定性检测由 interpreter.is_truthy() 在使用点处理
         return self.ib_class.registry.box(bool(self.value))
 
     def cast_to(self, target_class: Any) -> IbObject:
@@ -55,27 +32,9 @@ class IbString(IbValue):
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
-            # 检查当前是否在 llmexcept 保护范围内
-            execution_context = self.ib_class.registry.get_execution_context()
-            has_llm_frame = False
-            if execution_context and execution_context.runtime_context:
-                has_llm_frame = bool(execution_context.runtime_context.get_current_llm_except_frame())
-            
-            if has_llm_frame:
-                # [Result Mode Refactor] 在 llmexcept 保护范围内，通过 LLMResult 信号不确定性
-                from core.runtime.shared.llm_result import LLMResult  # shared/ 叶子模块，无循环依赖
-                execution_context.runtime_context.set_last_llm_result(
-                    LLMResult.uncertain_result(
-                        raw_response=self.value,
-                        retry_hint=f"类型强制转换失败: 将 '{self.value}' 转换为 {target_desc} 失败: {str(e)}"
-                    )
-                )
-                return self.ib_class.registry.get_none()
-            else:
-                # 在普通 try/except 范围内，抛出可捕获的异常
-                raise InterpreterError(
-                    f"TypeError: Cannot convert '{self.value}' to {target_desc.get_base_name() if target_desc and hasattr(target_desc, 'get_base_name') else 'target type'}: {str(e)}"
-                )
+            raise InterpreterError(
+                f"TypeError: Cannot convert '{self.value}' to {target_desc.get_base_name() if target_desc and hasattr(target_desc, 'get_base_name') else 'target type'}: {str(e)}"
+            ) from e
 
     def upper(self) -> IbObject:
         return self.ib_class.registry.box(self.value.upper())

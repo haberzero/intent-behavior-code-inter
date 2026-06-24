@@ -828,6 +828,32 @@ class Interpreter:
         )
 
     def is_truthy(self, value: IbObject) -> bool:
-        """UTS: 使用 to_bool 协议判断真值"""
+        """UTS: 使用 to_bool 协议判断真值。
+
+        LLM-aware: 当字符串变量在 llmexcept 保护帧内被用于布尔判定时（如 ``if str_var:``），
+        执行严格的布尔语义匹配。模糊值（如 "maybe"）触发 uncertain 信号以便 llmexcept 重试。
+        此逻辑从 IbString.to_bool() 迁移至此，因为 LLM 不确定性检测属于解释器层职责，
+        不应由原始包装层越层访问 runtime_context。
+        """
+        # 先检查是否为字符串值在 llmexcept 帧内的模糊布尔判定
+        if hasattr(value, 'ib_class') and value.ib_class and value.ib_class.name == "str":
+            rc = self.runtime_context
+            if rc is not None and rc.get_current_llm_except_frame() is not None:
+                raw_val = value.to_native() if hasattr(value, 'to_native') else str(value)
+                val = raw_val.strip().lower() if isinstance(raw_val, str) else str(raw_val).strip().lower()
+                if val in ("1", "true", "yes", "on"):
+                    return True
+                if val in ("0", "false", "no", "off", "null", "none", ""):
+                    return False
+                # 模糊回复触发不确定性标志
+                from core.runtime.shared.llm_result import LLMResult
+                rc.set_last_llm_result(
+                    LLMResult.uncertain_result(
+                        raw_response=raw_val,
+                        retry_hint=f"模糊的布尔判定结果: '{raw_val}'。期望 'true'/'false'/'yes'/'no'/'1'/'0'。"
+                    )
+                )
+                return False
+
         res = value.receive('to_bool', [])
         return res.to_native() != 0
