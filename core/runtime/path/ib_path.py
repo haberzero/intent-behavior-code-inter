@@ -87,16 +87,25 @@ class IbPath:
         if not parts:
             return cls(_normalized="")
 
+        first_part = parts[0]
+        is_drive = len(first_part) >= 2 and first_part[1] == ":"
+        is_abs_unix = first_part.startswith(IbPath.SEPARATOR)
+
+        # 对盘符路径，跳过 first_part（盘符部分）再 join，避免双重添加
+        if is_drive:
+            remaining_parts = [p.strip(IbPath.SEPARATOR) for p in parts[1:] if p and p != "."]
+            normalized = IbPath.SEPARATOR.join(remaining_parts)
+            if not normalized:
+                return cls(_normalized=first_part[0:2] + IbPath.SEPARATOR)
+            return cls(_normalized=first_part[0:2] + IbPath.SEPARATOR + normalized)
+
         filtered_parts = [p.strip(IbPath.SEPARATOR) for p in parts if p and p != "."]
         normalized = IbPath.SEPARATOR.join(filtered_parts)
 
         if not normalized:
             return cls(_normalized="")
 
-        first_part = parts[0]
-        if len(first_part) >= 2 and first_part[1] == ":":
-            normalized = first_part[0:2] + IbPath.SEPARATOR + normalized
-        elif first_part.startswith(IbPath.SEPARATOR):
+        if is_abs_unix:
             normalized = IbPath.SEPARATOR + normalized
 
         return cls(_normalized=normalized)
@@ -138,7 +147,11 @@ class IbPath:
         if not self._normalized:
             return tuple()
         if len(self._normalized) >= 2 and self._normalized[1] == ":":
-            return tuple(self._normalized[2:].split(IbPath.SEPARATOR))
+            # Windows 盘符路径："C:/a/b" → 去掉 "C:" 后剩余 "/a/b"
+            remainder = self._normalized[2:]
+            if remainder.startswith(IbPath.SEPARATOR):
+                remainder = remainder[1:]
+            return tuple(remainder.split(IbPath.SEPARATOR)) if remainder else tuple()
         if self._normalized.startswith(IbPath.SEPARATOR):
             return tuple(self._normalized[1:].split(IbPath.SEPARATOR))
         return tuple(self._normalized.split(IbPath.SEPARATOR))
@@ -155,6 +168,8 @@ class IbPath:
         parts_list = list(self.parts)
         if len(parts_list) <= 1:
             if self.is_absolute:
+                if len(self._normalized) >= 2 and self._normalized[1] == ":":
+                    return IbPath(_normalized=self._normalized[0:2] + IbPath.SEPARATOR)
                 return IbPath(_normalized=IbPath.SEPARATOR)
             return None
 
@@ -162,6 +177,9 @@ class IbPath:
         if not parts_list:
             return IbPath(_normalized="")
 
+        if len(self._normalized) >= 2 and self._normalized[1] == ":":
+            drive = self._normalized[0:2]
+            return IbPath(_normalized=drive + IbPath.SEPARATOR + IbPath.SEPARATOR.join(parts_list))
         if self.is_absolute:
             return IbPath(_normalized=IbPath.SEPARATOR + IbPath.SEPARATOR.join(parts_list))
         return IbPath(_normalized=IbPath.SEPARATOR.join(parts_list))
@@ -237,6 +255,9 @@ class IbPath:
         if not parts_list:
             return IbPath(_normalized="")
 
+        if len(self._normalized) >= 2 and self._normalized[1] == ":":
+            drive = self._normalized[0:2]
+            return IbPath(_normalized=drive + IbPath.SEPARATOR + IbPath.SEPARATOR.join(parts_list))
         if self.is_absolute:
             return IbPath(_normalized=IbPath.SEPARATOR + IbPath.SEPARATOR.join(parts_list))
         return IbPath(_normalized=IbPath.SEPARATOR.join(parts_list))
@@ -248,6 +269,10 @@ class IbPath:
     def __repr__(self) -> str:
         """调试表示"""
         return f"IbPath('{self._normalized}')"
+
+    def __bool__(self) -> bool:
+        """真值判定：空路径为 False"""
+        return bool(self._normalized)
 
     def __eq__(self, other) -> bool:
         """相等比较"""
