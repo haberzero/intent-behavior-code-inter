@@ -1,4 +1,0 @@
-import ihost
-dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}
-bool ok = ihost.run_isolated("child.ibci", policy)
-print("parent_done")

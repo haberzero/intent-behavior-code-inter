@@ -1,3 +1,0 @@
-import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-print("child_ran")
