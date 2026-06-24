@@ -92,7 +92,9 @@ class Scheduler(ICompilerService):
         # Try resolving relative to root_dir
         try:
             return self.resolver.resolve(module_name, os.path.join(self.root_dir, "__init__.ibci"))
-        except:
+        except Exception as e:
+            core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                f"Module resolve failed for '{module_name}': {e}")
             return None
 
     def get_module_source(self, module_name: str) -> Optional[str]:

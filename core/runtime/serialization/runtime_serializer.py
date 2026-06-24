@@ -227,7 +227,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             try:
                 json.dumps(val)
                 data["py_value"] = val
-            except:
+            except (TypeError, ValueError):
                 data["py_value"] = f"<Non-Serializable: {repr(val)}>"
                 
         elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):

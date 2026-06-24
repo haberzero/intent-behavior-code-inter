@@ -56,7 +56,7 @@ class CoreDebugger:
         if env_config:
             try:
                 self.configure(json.loads(env_config))
-            except:
+            except (json.JSONDecodeError, TypeError, KeyError):
                 pass
 
     def reset(self):
@@ -136,7 +136,7 @@ class CoreDebugger:
                     data_lines = formatted_data.splitlines()
                     indented_data = "\n".join([f"{indent}  {line}" for line in data_lines])
                     output += f"\n{indent}DATA:\n{indented_data}"
-                except:
+                except Exception:
                     output += f" (Data: {str(data)})"
             
             if self.output_callback:
