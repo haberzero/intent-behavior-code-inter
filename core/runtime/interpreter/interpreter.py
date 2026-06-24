@@ -67,7 +67,7 @@ from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 from core.base.enums import RegistrationState
-from core.runtime.vm.task import UnhandledSignal
+from core.runtime.shared.signals import UnhandledSignal
 
 
 class Interpreter:

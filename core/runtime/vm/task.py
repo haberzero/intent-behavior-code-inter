@@ -24,60 +24,22 @@ Signal 控制信号语义
 :class:`UnhandledSignal` 是唯一的边界异常（C5）：仅在 ``VMExecutor.run()``
 帧栈空且仍持有未消费的 Signal 时抛出，调用方（IbUserFunction.call、
 execute_module）捕获后按 ``e.signal.kind`` 分类处理。
+
+注：``ControlSignal`` / ``Signal`` / ``UnhandledSignal`` 定义在
+``core/runtime/shared/signals.py`` 中，此处重新导出以保持 vm 包内
+``from core.runtime.vm.task import ControlSignal`` 的向后兼容。
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
-
-class ControlSignal(Enum):
-    """控制流信号枚举（公理 CF-1）。"""
-    RETURN = "return"
-    BREAK = "break"
-    CONTINUE = "continue"
-    THROW = "throw"
-
-
-@dataclass(frozen=True)
-class Signal:
-    """显式控制流信号数据对象。
-
-    handler 通过 ``return Signal(kind, value)`` 让任务以 Signal 作为
-    ``StopIteration.value`` 结束；调度循环识别后把 Signal 作为
-    ``gen.send(Signal)`` 的值传递给父帧的下一个 ``yield``。父 handler
-    用 ``isinstance(res, Signal)`` 判断是否为信号并自行处理：
-
-    * 循环 handler 拦截 BREAK/CONTINUE
-    * 函数 handler 拦截 RETURN
-    * 其他 handler 通过 ``return res`` 透传
-
-    使用 frozen 数据类：因为 Signal 在帧间作为不可变值流转，避免误改。
-    """
-    kind: ControlSignal
-    value: Any = None
-
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"Signal({self.kind.value}, {self.value!r})"
-
-
-class UnhandledSignal(Exception):
-    """VM 顶层未消费信号的边界异常（C5）。
-
-    ``VMExecutor.run()`` 在帧栈耗尽仍持有未消费 Signal 时以
-    ``raise UnhandledSignal(signal)`` 抛给调用者。
-
-    调用方通过 ``e.signal.kind`` 判断信号类型（ControlSignal 枚举），
-    通过 ``e.signal.value`` 获取关联值。
-
-    VM 内部不使用本异常跨帧传播；handler 必须使用 ``return Signal(...)``
-    数据形式触发信号。
-    """
-    __slots__ = ("signal",)
-
-    def __init__(self, signal: "Signal"):
-        super().__init__(f"UnhandledSignal({signal.kind.value})")
-        self.signal = signal
+# 控制流信号类型从 shared/ 叶子模块导入并重新导出，
+# 保持 vm 包内部 ``from core.runtime.vm.task import ControlSignal`` 可用。
+from core.runtime.shared.signals import (
+    ControlSignal,
+    Signal,
+    UnhandledSignal,
+)
 
 
 @dataclass

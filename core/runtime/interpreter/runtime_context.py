@@ -15,7 +15,7 @@ from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.cell import IbCell
 from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
-from core.runtime.interpreter.llm_result import LLMResult
+from core.runtime.shared.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_builtin: bool = False):

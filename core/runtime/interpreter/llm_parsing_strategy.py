@@ -11,7 +11,7 @@ Refactored from llm_executor.py:366-478 to improve maintainability and testabili
 
 from abc import ABC, abstractmethod
 from typing import Optional, Any, TYPE_CHECKING
-from core.runtime.interpreter.llm_result import LLMResult
+from core.runtime.shared.llm_result import LLMResult
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 
 if TYPE_CHECKING:

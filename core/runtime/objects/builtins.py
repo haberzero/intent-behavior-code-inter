@@ -196,7 +196,7 @@ class IbString(IbValue):
                 return self.ib_class.registry.box(False)
 
             # 模糊回复（如 "maybe", "i think so"）触发不确定性标志
-            from core.runtime.interpreter.llm_result import LLMResult  # 局部导入：打破 builtins ↔ interpreter 循环依赖
+            from core.runtime.shared.llm_result import LLMResult  # shared/ 叶子模块，无循环依赖
             execution_context.runtime_context.set_last_llm_result(
                 LLMResult.uncertain_result(
                     raw_response=self.value,
@@ -222,7 +222,7 @@ class IbString(IbValue):
             
             if has_llm_frame:
                 # [Result Mode Refactor] 在 llmexcept 保护范围内，通过 LLMResult 信号不确定性
-                from core.runtime.interpreter.llm_result import LLMResult  # 局部导入：打破 builtins ↔ interpreter 循环依赖
+                from core.runtime.shared.llm_result import LLMResult  # shared/ 叶子模块，无循环依赖
                 execution_context.runtime_context.set_last_llm_result(
                     LLMResult.uncertain_result(
                         raw_response=self.value,

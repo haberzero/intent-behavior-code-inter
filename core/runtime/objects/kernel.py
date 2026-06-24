@@ -1023,7 +1023,7 @@ class IbUserFunction(IbFunction):
             # Drive function body execution via VMExecutor (CPS main path).
             # run_body() propagates top-level control signals via UnhandledSignal.
             # Signals are consumed by except _CSE below; BREAK/CONTINUE are re-thrown.
-            from core.runtime.vm.task import (
+            from core.runtime.shared.signals import (
                 ControlSignal as _CS, UnhandledSignal as _CSE,
             )
             vm = self.context.vm_executor

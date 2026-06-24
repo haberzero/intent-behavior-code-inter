@@ -42,11 +42,11 @@ llmexcept_handler）显式建立，不再有侧表间接关联。
 from __future__ import annotations
 from typing import Any, Mapping, Optional, Dict, List, Set
 
-from core.runtime.vm.task import (
+from core.runtime.shared.signals import (
     ControlSignal,
     Signal,
 )
-from core.runtime.interpreter.constants import (
+from core.runtime.shared.op_constants import (
     OP_MAPPING,
     UNARY_OP_MAPPING,
     AST_OP_MAP,
@@ -69,7 +69,7 @@ from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.builtins import IbNone
 from core.runtime.objects.cell import IbCell
 from core.runtime.objects.deep_clone import try_deep_clone
-from core.runtime.interpreter.llm_result import LLMFuture
+from core.runtime.shared.llm_result import LLMFuture
 from core.kernel.issue import InterpreterError
 
 

@@ -8,7 +8,7 @@ from core.runtime.interfaces import LLMExecutor, RuntimeContext, ServiceContext,
 from core.base.interfaces import ILLMProvider, IssueTracker
 
 from core.kernel.issue import InterpreterError
-from core.runtime.interpreter.llm_result import LLMResult, LLMFuture
+from core.runtime.shared.llm_result import LLMResult, LLMFuture
 from core.base.diagnostics.codes import RUN_LLM_ERROR, RUN_GENERIC_ERROR
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.kernel import IbObject, IbValue
