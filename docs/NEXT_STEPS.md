@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-24（P0 全量完成，基线恢复绿色；P1 架构改善升为当前最紧要）
+> **最后更新**：2026-06-24（P0+P1 全量完成，基线 886 passed；P2 ADR 制度与文档刷新升为当前最紧要）
 
 ---
 
@@ -29,46 +29,10 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P1（当前最紧要）：架构健康修复 + 测试基础设施 + 文档修复
+## ✅ P1 已完成（2026-06-24）
 
-### P1-A 提取 `core/runtime/shared/` 打破 3 个 runtime 内循环
-- 移动 `interpreter/llm_result.py`（`LLMResult`/`LLMFuture`）→ `runtime/shared/llm_result.py`
-- 移动 `vm/task.py` 的 `Signal`/`ControlSignal`/`UnhandledSignal` → `runtime/shared/signal.py`
-- 移动 `interpreter/constants.py` → `runtime/shared/constants.py`
-- 收益：消除 `interpreter↔vm`、`objects↔interpreter`、`objects↔vm` 三个延迟导入掩盖的循环
-
-### P1-B 拆分 `HostInterface` → `ModuleMetadataProvider` + `HostModuleRegistry`
-- 文件：`core/runtime/host/host_interface.py` + `core/compiler/scheduler.py:16` + `core/compiler/parser/core/context.py:6,39`
-- 问题：编译器只需元数据部分却依赖整个 god object；`context.py:39` 自动实例化 `HostInterface()`
-- 修复：拆分接口，编译器只依赖 `ModuleMetadataProvider`；删除自动实例化
-
-### P1-C 移动 `fuzzy_json.py` → `core/base/support/`
-- 文件：`core/kernel/axioms/primitives.py:28` → `core/runtime/support/fuzzy_json.py`
-- 收益：恢复 "kernel 永不导入 runtime" 不变量（最便宜的架构修复）
-
-### P1-D 拆分 `handlers.py`（2023 行 → 7 个分类子模块）
-- 文件：`core/runtime/vm/handlers.py`
-- 方案：按节点类别拆为 `handlers/{leaf,control_flow,assignment,llmexcept,decls,intent_behavior,loops}.py` + 保留 `build_dispatch_table`
-
-### P1-E 加 `pytest.ini` + `.github/workflows/ci.yml` + `pytest-cov`
-- 当前：无任何 pytest 配置、无 CI workflow
-- 最低配置：`testpaths = tests`、`--strict-markers`、`--cov=core --cov-fail-under=70`
-
-### P1-F 加 `tests/meta/test_layering.py` 静态强制层级红线
-- 当前层级违反 3/5：`kernel/` 调 `run_ibci`、`compiler/` 系统性调 `run_ibci`（26+ 处）、`e2e/` 导入 `core.runtime.interpreter`
-- 同时迁移：`tests/compiler/semantic/test_override_and_super.py` + `test_nonlocal.py` → `tests/e2e/`
-
-### P1-G 加 `tests/runtime/test_mock_directives.py` 独立测试 MOCK
-- 当前：`_handle_mock_response` 被 ~hundreds 测试信任但从未独立测过
-
-### P1-H 标注 `AUDIT_REPORT_20260527.md` 5 个发现为已解决
-- 5 个 P0/P1 发现已于 2026-05-27 关闭，但审计文档未记录
-- 修复：每个发现加 "✅ Resolved 2026-05-27 — see COMPLETED.md"
-
-### P1-I 修复 2 个 hub 文档锚点传播
-- `KNOWN_LIMITS.md` 编号被 4 个文档引用（旧编号 → 新 §一..§十六）
-- `COMPLETED.md` 测试计数被 5 个文档引用
-- 修复 `TEST_PHILOSOPHY.md:618`、`AUDIT_REPORT_20260527.md`、`ARCH_DETAILS.md:275`、`FUNC_DESIGN_NOTES.md:42`、`HISTORY_LOG.md` 4 处旧编号
+> P1 全部 9 项已完成并提交。详见 `docs/worklogs/P1_ARCHITECTURE_HEALTH.md`。
+> 此处仅保留指针，不再展开细节（遵守单点真理规则 #6）。
 
 ---
 
