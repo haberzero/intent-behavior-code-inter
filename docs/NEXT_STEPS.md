@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-24（全量分析体检后重构：基线修复升至 P0，Phase 3 因决策矛盾阻塞降级）
+> **最后更新**：2026-06-24（P0 全量完成，基线恢复绿色；P1 架构改善升为当前最紧要）
 
 ---
 
@@ -14,63 +14,22 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-06-24 实测结果**：`827 passed, 11 failed, 2 skipped`（840 collected）
+**2026-06-24 实测结果**：`838 passed, 2 skipped`（P0 修复后，无需任何环境变量 workaround）
 
-> ⚠️ **基线说明**（本次全量分析发现，必须记录）：
-> - 文档此前声称的 "838 passed, 2 skipped" **无法复现**
-> - **11 个失败分两类**：
->   - 6 个环境性失败：`tests/compiler/semantic/test_analyzer.py:306` `open()` 缺 `encoding='utf-8'`，Windows GBK locale 下 `UnicodeDecodeError`
->   - 5 个真实回归：`tests/e2e/test_e2e_multi_interpreter.py` 中 `ihost.collect(handle)` 返回空 `Dict({})`，子环境变量未透传（`core/runtime/objects/kernel.py:682`）
-> - **跨盘环境陷阱**：`core/compiler/scheduler.py:162` `os.path.relpath` 跨盘抛 `ValueError`；当 `%TEMP%` 与 repo 不同盘时，默认环境会产生 **510 个假失败**。复跑基线时须确保 `TMP`/`TEMP` 与 repo 同盘。
-> - 2 个 skipped 为设计限制：`INV-LAMBDA-3`（无 walrus/lambda 体赋值）、`INV-SCOPE-1`（SEM_002 禁止 if-block 重声明）
+> ✅ 基线已可信：P0 修复了 11 个失败（6 个编码 + 5 个路径转义）+ 跨盘硬化 + 2 个 Critical bug + 1 个并发竞争。
+> 2 个 skipped 为设计限制：`INV-LAMBDA-3`（无 walrus/lambda 体赋值）、`INV-SCOPE-1`（SEM_002 禁止 if-block 重声明）。
+> 详见 `docs/worklogs/P0_BASELINE_RECOVERY.md`。
 
 ---
 
-## P0（当前最紧要）：基线修复 + Critical 代码 Bug 修复
+## ✅ P0 已完成（2026-06-24）
 
-> **升级原因**：本次全量分析发现基线不可复现 + 2 个 Critical 潜伏 bug + 1 个并发数据竞争。在基线恢复可信之前，**不建议启动 Phase 3 多模态实施**——否则在未验证的地基上盖楼。
-
-### P0-A 修复 11 个测试失败
-
-**P0-A-1 环境性失败（6 个）**
-- 文件：`tests/compiler/semantic/test_analyzer.py:306`
-- 问题：`with open(example_file) as f:` 缺 `encoding='utf-8'`
-- 修复：加 `encoding='utf-8'`
-
-**P0-A-2 真实回归（5 个）**
-- 文件：`tests/e2e/test_e2e_multi_interpreter.py`
-- 问题：`ihost.collect(handle)` 返回空 `Dict({})`，子环境变量（如 `int score = 100`）未透传
-- 涉及：`core/runtime/objects/kernel.py:682` + `core/runtime/host/service.py` + `core/runtime/serialization/`
-- 修复：调查 collect 数据通路，加 round-trip property test
-
-**P0-A-3 跨盘硬化**
-- 文件：`core/compiler/scheduler.py:162` + `tests/conftest.py`
-- 问题：`os.path.relpath` 跨盘 `ValueError`
-- 修复：加 `conftest.py` `tmp_path_factory` fixture 强制 temp 在 repo 盘；或修复 `scheduler.py:162` 处理跨盘
-
-### P0-B Critical 代码 Bug（2 项）
-
-**P0-B-1** `core/runtime/interpreter/interpreter.py:128`
-- 问题：`_sync_variables_from` 调用 `symbol.spec`，但 `RuntimeSymbolImpl` 无 `.spec` 属性（只有 `.declared_type`/`.current_type`）→ `AttributeError` 破坏 `IsolationPolicy(level="FULL", inherit_variables=True)`
-- 修复：改为 `symbol.declared_type`；加契约测试覆盖 FULL isolation
-
-**P0-B-2** `core/runtime/objects/kernel.py:947, :1112`
-- 问题：`IbUserFunction.call` / `IbLLMFunction.call` 裸 `except:` 吞掉 `import_module` 失败，函数体在调用者 scope 中运行
-- 修复：捕获 `InterpreterError`，通过 debugger 记录，明确传播
-
-### P0-C 并发数据竞争
-
-**P0-C-1** `core/runtime/interpreter/llm_executor.py:50, 552, 563`
-- 问题：`_pending_futures` 字典无锁，`dispatch_eager` 后台线程提交 + 主线程 `resolve` 消费 → 数据竞争
-- 修复：加 `threading.Lock` 或改用 `concurrent.futures.Future` 反查
-
-**预估工作量**：2-3 天
+> P0 全部 6 项已完成并提交（commit 72f59e6）。详见 `docs/COMPLETED.md` 和 `docs/worklogs/P0_BASELINE_RECOVERY.md`。
+> 此处仅保留指针，不再展开细节（遵守单点真理规则 #6）。
 
 ---
 
-## P1 候选：架构健康修复（高杠杆结构改善）
-
-> 来源：本次全量分析的架构健康度审查。详情见 `docs/PENDING_TASKS.md §五`。
+## P1（当前最紧要）：架构健康修复 + 测试基础设施 + 文档修复
 
 ### P1-A 提取 `core/runtime/shared/` 打破 3 个 runtime 内循环
 - 移动 `interpreter/llm_result.py`（`LLMResult`/`LLMFuture`）→ `runtime/shared/llm_result.py`
@@ -91,16 +50,9 @@ python -m pytest tests/ -q --tb=no --no-header
 - 文件：`core/runtime/vm/handlers.py`
 - 方案：按节点类别拆为 `handlers/{leaf,control_flow,assignment,llmexcept,decls,intent_behavior,loops}.py` + 保留 `build_dispatch_table`
 
-**预估工作量**：1-2 周
-
----
-
-## P1 候选：测试与 CI 基础设施
-
 ### P1-E 加 `pytest.ini` + `.github/workflows/ci.yml` + `pytest-cov`
 - 当前：无任何 pytest 配置、无 CI workflow
 - 最低配置：`testpaths = tests`、`--strict-markers`、`--cov=core --cov-fail-under=70`
-- slow/fast markers（`test_e2e_multi_interpreter.py` 并发时序断言应标 slow）
 
 ### P1-F 加 `tests/meta/test_layering.py` 静态强制层级红线
 - 当前层级违反 3/5：`kernel/` 调 `run_ibci`、`compiler/` 系统性调 `run_ibci`（26+ 处）、`e2e/` 导入 `core.runtime.interpreter`
@@ -108,24 +60,15 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ### P1-G 加 `tests/runtime/test_mock_directives.py` 独立测试 MOCK
 - 当前：`_handle_mock_response` 被 ~hundreds 测试信任但从未独立测过
-- `MOCK:TRUE`/`MOCK:FALSE` 永远返回 "1"/"0"，用它的测试无法覆盖 llmexcept 恢复路径
-
-**预估工作量**：3-5 天
-
----
-
-## P1 候选：文档健康修复
 
 ### P1-H 标注 `AUDIT_REPORT_20260527.md` 5 个发现为已解决
-- 5 个 P0/P1 发现已于 2026-05-27 关闭（见 `COMPLETED.md:30-36`），但审计文档未记录
-- 修复：每个发现加 "✅ Resolved 2026-05-27 — see COMPLETED.md"（~10 行编辑）
+- 5 个 P0/P1 发现已于 2026-05-27 关闭，但审计文档未记录
+- 修复：每个发现加 "✅ Resolved 2026-05-27 — see COMPLETED.md"
 
 ### P1-I 修复 2 个 hub 文档锚点传播
-- `KNOWN_LIMITS.md` 编号被 4 个文档引用（旧 §三/§八/§十九/§二十三/§二十四/§二十五/§二十六 → 新 §一..§十六）
-- `COMPLETED.md` 测试计数被 5 个文档引用（781/778/3、818/2、832/2 vs 当前 827/11/2）
-- 修复 `TEST_PHILOSOPHY.md:618`、`AUDIT_REPORT_20260527.md`（旧编号）、`ARCH_DETAILS.md:275`、`FUNC_DESIGN_NOTES.md:42`、`HISTORY_LOG.md` 4 处旧编号
-
-**预估工作量**：2-3 天
+- `KNOWN_LIMITS.md` 编号被 4 个文档引用（旧编号 → 新 §一..§十六）
+- `COMPLETED.md` 测试计数被 5 个文档引用
+- 修复 `TEST_PHILOSOPHY.md:618`、`AUDIT_REPORT_20260527.md`、`ARCH_DETAILS.md:275`、`FUNC_DESIGN_NOTES.md:42`、`HISTORY_LOG.md` 4 处旧编号
 
 ---
 
