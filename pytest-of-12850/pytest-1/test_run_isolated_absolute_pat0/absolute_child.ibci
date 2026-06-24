@@ -1,0 +1,3 @@
+import ai
+ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+print("abs_child_ran")

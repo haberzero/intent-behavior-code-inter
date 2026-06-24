@@ -69,7 +69,7 @@ class IbNativeFunction(IbFunction):
             # try-except 体系处理；不可被包装为 InterpreterError。
             if isinstance(e, ThrownException):
                 raise
-            raise InterpreterError(f"Native function '{self._name}' failed: {e}")
+            raise InterpreterError(f"Native function '{self._name}' failed: {e}") from e
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         if message == '__getattr__':

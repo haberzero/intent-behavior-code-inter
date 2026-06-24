@@ -150,4 +150,4 @@ class ModuleManagerImpl:
         except Exception as e:
             if isinstance(e, InterpreterError):
                 raise
-            raise InterpreterError(f"Module '{module_name}' not found or not registered.")
+            raise InterpreterError(f"Module '{module_name}' not found or not registered.") from e

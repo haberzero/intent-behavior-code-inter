@@ -224,4 +224,4 @@ class ModuleLoader(IModuleLoader):
                     
                 except Exception as e:
                     # 插件加载失败必须导致初始化中断，严禁静默失败
-                    raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}")
+                    raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}") from e

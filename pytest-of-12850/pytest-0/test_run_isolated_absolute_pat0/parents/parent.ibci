@@ -1,0 +1,4 @@
+import ihost
+dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}
+bool ok = ihost.run_isolated("D:\proj\intent-behavior-code-inter\pytest-of-12850\pytest-0\test_run_isolated_absolute_pat0\absolute_child.ibci", policy)
+print("parent_done")

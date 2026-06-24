@@ -239,7 +239,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                         try:
                             axiom_registry.register(axiom)
                         except Exception as e:
-                            pass
+                            self.debugger.trace(
+                                CoreModule.SCHEDULER, DebugLevel.BASIC,
+                                f"Failed to register axiom '{name}': {e}"
+                            )
 
         self.module_loader.load_and_register_all(service_context, execution_context)
 

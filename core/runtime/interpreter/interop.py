@@ -37,5 +37,5 @@ class InterOpImpl:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                raise InterpreterError(f"Error in external function: {str(e)}")
+                raise InterpreterError(f"Error in external function: {str(e)}") from e
         return wrapped

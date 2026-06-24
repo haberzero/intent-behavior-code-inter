@@ -3,6 +3,7 @@ from typing import Optional, Dict, Mapping, Any, List, TYPE_CHECKING
 from core.kernel.registry import KernelRegistry
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import IbSpec, TypeKind
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 from ..ib_type_mapping import register_ib_type
 from .base import IbObject, IbValue
@@ -127,7 +128,11 @@ class IbClass(IbObject):
                             context.current_module_name = old_module
                         instance.fields[name] = evaluated
                         val_info.static_val = evaluated
-                    except Exception:
+                    except Exception as e:
+                        core_debugger.trace(
+                            CoreModule.INTERPRETER, DebugLevel.BASIC,
+                            f"Field initializer for '{name}' failed: {e}"
+                        )
                         instance.fields[name] = self.registry.get_none()
                 else:
                     instance.fields[name] = self.registry.get_none()
