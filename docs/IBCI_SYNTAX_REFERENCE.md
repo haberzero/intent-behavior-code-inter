@@ -3,7 +3,7 @@
 > **说明**：本文档覆盖 IBC-Inter (IBCI) 所有当前支持的语法特性，包括已知限制的标注。
 > 语言设计限制的详细说明见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-05-08
+> **最后更新**：2026-06-24
 
 ---
 
@@ -748,6 +748,7 @@ if s == Status.RUNNING:
 | `__to_prompt__(self)` | 变量插值到 `@~ ... ~` 时 | 转为 LLM 提示词文本 |
 | `__from_prompt__(str raw)` | LLM 返回值解析时 | 从文本解析为当前类型实例 |
 | `__outputhint_prompt__(self)` | 类型作为 LLM 输出目标时 | 提示 LLM 期望的输出格式 |
+| `__payload_prompt__(self)` | 变量插值到多模态 `@~ ... ~` 时 | 返回结构化 content block（图像/音频等） |
 | `__snapshot__(self)` | llmexcept 快照进入时 | 返回用于恢复状态的快照值 |
 | `__restore__(self, state)` | llmexcept retry 前 | 从快照值恢复对象状态 |
 
@@ -902,6 +903,60 @@ str fn f = lambda(PARAMS): EXPR    # PAR_003
 | `lambda` | 延迟，调用时执行 | 调用时的意图栈（完全敏感） |
 | `snapshot` | 延迟，定义时冻结意图 | 定义时的意图栈快照（完全免疫调用处意图） |
 | 无关键字（即时） | 立即执行 | 执行时的意图栈 |
+
+### 7.5 命名模型路由（`@NAME~`）
+
+通过 `@` 后跟模型名称前缀，可以将行为表达式路由到指定的命名模型：
+
+```ibci
+import ai
+
+# 注册命名模型
+ai.register_model("WHISPER", "https://api.openai.com/v1", env("KEY"), "whisper-1")
+
+# 路由到命名模型
+str transcript = @WHISPER~ 识别这段音频的内容 ~
+
+# 无前缀的 @~ 使用默认模型
+str greeting = @~ 打个招呼 ~
+```
+
+**规则**：
+
+| 语法 | 行为 |
+|------|------|
+| `@~ ... ~` | 使用 `ai.set_config()` 配置的默认模型 |
+| `@NAME~ ... ~` | 使用 `ai.register_model("NAME", ...)` 注册的命名模型 |
+| 未注册的 `NAME` | 运行时错误（真实 LLM 模式下） |
+
+- 模型名称**区分大小写**（`@GPT4o~` 与 `@gpt4o~` 是不同的模型）
+- 模型名称支持字母+数字（如 `@GPT4o~`、`@WHISPER~`）
+- MOCK/TESTONLY 模式下，未注册的模型名称不会报错（MOCK 拦截在路由之前）
+
+### 7.6 多模态 payload 协议（`__payload_prompt__`）
+
+`__payload_prompt__` 是 `__to_prompt__` 的多模态增强版本，允许类返回结构化 content block 而非纯文本：
+
+```ibci
+class MedicalImage:
+    str path
+    str modality
+
+    func __init__(self, str path, str modality):
+        self.path = path
+        self.modality = modality
+
+    func __to_prompt__(self) -> str:
+        return "Medical " + self.modality + " image at " + self.path
+
+    func __payload_prompt__(self) -> dict:
+        str b64 = file.read_base64(self.path)
+        return {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}
+```
+
+**协议优先级**：当变量插值到行为表达式时，运行时优先调用 `__payload_prompt__`；若未定义则回退到 `__to_prompt__`。纯文本路径完全不受影响——只有当 content 中包含结构化 block 时才会切换为多模态 payload 模式。
+
+**向后兼容**：仅实现了 `__to_prompt__` 的类型行为不变；`__payload_prompt__` 是可选扩展，不替代现有协议。
 
 ---
 
