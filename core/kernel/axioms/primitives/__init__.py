@@ -51,6 +51,7 @@ from core.kernel.axioms.primitives.callable import (
     BoundMethodAxiom,
 )
 from core.kernel.axioms.primitives.enum import EnumAxiom
+from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.registry import register_core_axioms
@@ -89,6 +90,10 @@ __all__ = [
     "BoundMethodAxiom",
     # enum
     "EnumAxiom",
+    # media (multimodal)
+    "AudioAxiom",
+    "ImageAxiom",
+    "VideoAxiom",
     # imported axioms (re-exported for backward compatibility)
     "IntentContextAxiom",
     "IntentAxiom",

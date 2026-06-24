@@ -34,6 +34,7 @@ from core.kernel.axioms.primitives.callable import (
     BoundMethodAxiom,
 )
 from core.kernel.axioms.primitives.enum import EnumAxiom
+from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
 
@@ -60,6 +61,9 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(OptionalAxiom())
     registry.register(SliceAxiom())
     registry.register(EnumAxiom())
+    registry.register(AudioAxiom())
+    registry.register(ImageAxiom())
+    registry.register(VideoAxiom())
 
     registry.register(DynamicAxiom("any"))
     registry.register(DynamicAxiom("auto"))

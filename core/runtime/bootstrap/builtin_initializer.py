@@ -602,6 +602,30 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
         _reg_native(intent_context_class, 'use', _ic_use, unbox=False)
         _reg_native(intent_context_class, 'get_current', _ic_get_current, unbox=False)
 
+    # 5b. 多模态类型方法注册 (audio / image / video)
+    #
+    # Per ADR-012: 作为普通类名注册，通过 axiom → builtin_initializer 标准路径。
+    # Per ADR-007: Phase 3 使用纯内存 deep-copy snapshot。
+    #
+    # 注册 __to_prompt__（文本描述）和 __payload_prompt__（结构化 content block）。
+    # __payload_prompt__ 委托到 axiom 的方法，确保 base64 编码逻辑在公理层维护。
+    for _media_type_name in ("audio", "image", "video"):
+        _media_class = registry.get_class(_media_type_name)
+        if _media_class is not None:
+            _media_axiom = metadata_registry.get_axiom_registry().get_axiom(
+                metadata_registry.resolve(_media_type_name)
+            ) if metadata_registry else None
+
+            # __to_prompt__: 返回文本描述（供纯文本提示词路径使用）
+            _reg_native(_media_class, '__to_prompt__',
+                        lambda self: f"[{_media_type_name} data: {getattr(self.value, 'size', '?')} bytes]" if self.value else f"[empty {_media_type_name}]")
+
+            # __payload_prompt__: 委托到 axiom 的 __payload_prompt__ 方法
+            if _media_axiom and hasattr(_media_axiom, '__payload_prompt__'):
+                _axiom_ref = _media_axiom
+                _reg_native(_media_class, '__payload_prompt__',
+                            lambda self: _axiom_ref.__payload_prompt__(self), unbox=False)
+
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)
 
