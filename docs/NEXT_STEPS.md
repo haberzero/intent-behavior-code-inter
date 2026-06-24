@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-24（P0+P1+P2-A/B 全量完成；基线 889 passed。Phase 3 多模态阻塞条件部分已通过 ADR-007~011 解除）
+> **最后更新**：2026-06-24（全量分析体检 + P0/P1/P2 + 6 god module 拆分 + Phase 3 基础完成；基线 1011 passed）
 
 ---
 
@@ -14,77 +14,112 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-06-24 实测结果**：`889 passed, 2 skipped`（P0+P1 修复后，无环境变量 workaround）
+**2026-06-24 实测结果**：`1011 passed, 5 skipped`（0 failures，无环境变量 workaround）
 
-> ✅ 基线已可信：P0 修复了 11 个失败（6 个编码 + 5 个路径转义）+ 跨盘硬化 + 2 个 Critical bug + 1 个并发竞争。
-> 2 个 skipped 为设计限制：`INV-LAMBDA-3`（无 walrus/lambda 体赋值）、`INV-SCOPE-1`（SEM_002 禁止 if-block 重声明）。
-> 详见 `docs/worklogs/P0_BASELINE_RECOVERY.md`。
+> ✅ 基线可信。5 个 skipped：2 个设计限制（`INV-LAMBDA-3`/`INV-SCOPE-1`）+ 3 个层级元测试白名单（混合文件待拆分）。
 
 ---
 
-## ✅ P0 已完成（2026-06-24）
+## ✅ P0 / P1 / P2 已完成（2026-06-24）
 
-> P0 全部 6 项已完成并提交（commit 72f59e6）。详见 `docs/COMPLETED.md` 和 `docs/worklogs/P0_BASELINE_RECOVERY.md`。
-> 此处仅保留指针，不再展开细节（遵守单点真理规则 #6）。
-
----
-
-## ✅ P1 已完成（2026-06-24）
-
-> P1 全部 9 项已完成并提交。详见 `docs/worklogs/P1_ARCHITECTURE_HEALTH.md`。
-> 此处仅保留指针，不再展开细节（遵守单点真理规则 #6）。
+> 详见 `docs/COMPLETED.md` 2026-06-24 条目和 `docs/worklogs/` 下的 4 份工作日志。
+> 此处不再展开（遵守单点真理规则 #6）。
 
 ---
 
-## 阻塞中：Phase 3 — `audio` / `image` / `video` 内置类型
+## P0（当前最紧要）：Phase 3 多模态 — 用户面 I/O API + e2e 测试
 
-> ⚠️ **状态变更**：原 P0，本次全量分析后**降为阻塞**。
+> **前置条件全部满足**：ADR-007~012 解除全部决策阻塞；snapshot 分发 `isinstance` 修复已完成；audio/image/video axiom + 运行时类 + 注册路径已完成。
 
-**阻塞原因**：
-1. **决策矛盾未解决**：DEC-5（路径引用 snapshot）与 DEC-6（Phase 3 纯内存）互相矛盾；D4 示例（`ai.register_model("GPT4o", {dict})`）与实际 vtable 签名不兼容，无法编译；D6 与 DEC-4 同文档对立
-2. **DEC-5 可能根本不工作**：`llm_except_frame.py:199` 用 `type(val) is IbObject` 严格身份检查，若 `IbAudio` 是 `IbObject` 子类则 snapshot 分支不匹配 → 变量被静默跳过，不进入 snapshot
-3. **基线不可信**：在 P0 修复完成前，"0 回归"声明无法验证
+**已完成部分**：
+- ✅ `AudioAxiom`/`ImageAxiom`/`VideoAxiom`（`has_payload_prompt_cap`，`__payload_prompt__` 返回结构化 content block）
+- ✅ `MediaStorage`（Phase 3 纯内存，ADR-007）
+- ✅ `IbAudio`/`IbImage`/`IbVideo`（`@register_ib_type`，IbValue 子类）
+- ✅ 完整注册路径 + `builtin_initializer` 方法绑定
+- ✅ 36 个单元测试（公理能力 + payload prompt + 存储属性）
 
-**解除阻塞条件**：
-- P0 全部完成，基线恢复可信
-- DEC-1~6 决策矛盾解决（需建立 ADR，见 PENDING_TASKS §六）
-- DEC-5 snapshot 分发机制验证通过（`type(val) is IbObject` → `isinstance` 或 axiom-backed dunder）
-- D4 `register_model` vtable 与示例调用一致
+**待做**：
+1. **`ibci_file` 插件扩展**：添加 `read_audio(path)` / `read_image(path)` / `read_video(path)` 函数
+   - 文件：`ibci_modules/ibci_file/core.py` + `ibci_modules/ibci_file/_spec.py`
+   - 每个 `read_*` 读取文件字节 → 构造 `MediaStorage` → 通过 `registry` 装箱为 `IbAudio`/`IbImage`/`IbVideo`
+   - 需要访问 `registry` 以获取 `IbClass` 并构造对象（参考现有 `file.read` 的实现模式）
+2. **e2e 集成测试**：MOCK 模式下的多模态行为表达式
+   - 验证 `audio x = file.read_audio("test.wav")` 能编译并执行
+   - 验证 `@~ 识别 $x ~` 能正确构建多模态 payload（通过 MOCK 拦截验证 content block 结构）
+   - 验证 `__payload_prompt__` 被正确分发（而非 `__to_prompt__`）
+3. **IBCI 语法级使用验证**：确保以下代码在 MOCK 模式下端到端工作：
+   ```ibci
+   import file
+   import ai
+   ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+   audio recording = file.read_audio("test.wav")
+   str transcript = @~ MOCK:STR:transcript 识别 $recording ~
+   print(transcript)
+   ```
 
-**设计文档**：`docs/MULTIMODAL_BEHAVIOR_DESIGN.md` §七 Phase 3 + 附录 C §C.6 决策表
-
----
-
-## P2 候选：PT-SEM-1 Semantic Pipeline 生产就绪化
-
-> 注：本条目的完整规划见 `docs/PENDING_TASKS.md §一`（为遵守单点真理规则 #6，此处仅保留指针）。
-
-**前置条件**：Semantic 4-Phase pipeline 已稳定运行 ✅ + P0 基线修复完成
-
-**具体待做**：错误信息优化 / 诊断工具 / 性能基准 / CI/CD 集成
-
-**预估工作量**：15-20 小时
-
----
-
-## P2 候选：ADR 制度建立
-
-### P2-A 建立 `docs/decisions/` 目录
-- 当前：无任何正式 ADR
-- 先补 Top 10 历史 ADR（CPS VM 选型、Axiom vs 继承、7-Pass→4-Phase、llmexcept 影子执行、BUG #A 语义变更、dispatch_eager、tag 大小写、TypeSlot 单锁、协程搁置、intent fork-on-call）
-
-### P2-B 写 5 份紧急 ADR 解决决策矛盾
-- ADR-DEC-5/6：snapshot × storage 交互（记录 `type(val) is IbObject` 限制、media 类层次、temp 生命周期）
-- ADR-D4：`register_model` vtable 一致性（记录 modalities/endpoint/audio_config 字段、MOCK 不可绕过性）
-- ADR-D6：`_call_llm_raw` 引入（记录 MOCK 重构后果、caller 分支需求、Phase 4 推迟事实）
-- ADR-R5：per-model capability probing（记录非 chat 端点失败模式）
-- ADR-Baseline：测试基线可复现性（记录跨盘 relpath 限制、11 个 ever-failing 测试）
+**设计文档**：`docs/MULTIMODAL_BEHAVIOR_DESIGN.md` §七 Phase 3 + ADR-007~012
 
 **预估工作量**：3-5 天
 
 ---
 
-### 确认为设计决策（不修复）
+## P1 候选：PT-TEST-4 覆盖缺口填补（4/5 区域待补）
+
+> 已完成 1/5：`runtime/path/`（85 个测试 + 5 个 bug 修复）。
+
+**待做**（按优先级排序）：
+1. **`core/runtime/serialization/` round-trip 测试**（~6-8 个测试，中高复杂度）
+   - `serialize → deserialize == identity` 属性测试
+   - 零当前覆盖，回归风险高（影响 HostService save/load_state）
+2. **`core/engine.py` 生命周期测试**（~4-6 个测试，中高复杂度）
+   - 封印后重入抛 `PermissionError`、compile-then-execute、跨盘 isolated root
+3. **`core/runtime/objects/kernel/` `__getitem__` 契约**（~6-7 个测试，中复杂度）
+   - list/tuple/dict/str getitem 边界情况（负索引、缺键、type_ref 保持）
+4. **`core/runtime/host/service.py` collect 委托**（~2-3 个测试，中复杂度）
+   - 大部分路径已由 Engine 层 e2e 覆盖，仅 `HostService.collect` 无 orchestrator 委托分支未测
+
+**预估工作量**：~3 天
+
+---
+
+## P1 候选：PT-ARCH-7 Phase 4-5（剩余 10 处静默吞异常）
+
+> 已完成 Phase 1-3：7 处关键修复 + 4 处裸 except: 收窄。core/ 中零裸 except:。
+
+**剩余 10 处** `except Exception: pass`（全部有注释说明意图，属低-中风险）：
+- 6 处 fallback 链（`_prompt.py` × 3、`base.py` × 2、`_shared.py` × 1）—— 后续有默认行为，`pass` 是 fallback 触发
+- 3 处文档化的有意跳过（`engine.py` collect 跳过不可转换值、`interpreter.py` 预评估允许失败、`_scheduler.py` `__del__` 析构）
+- 1 处 `media.py` `_extract_media_storage` helper（新增代码）
+
+**修复方式**：纯日志添加（`debugger.trace`），无行为变更。可增量提交。
+
+**预估工作量**：~4 小时
+
+---
+
+## P2 候选：PT-ARCH-5 Group 3（CPS/non-CPS 薄提取）
+
+> Group 1+2 已完成。Group 3 剩余 5 对 sync/CPS 方法。
+
+**可做**：2 对薄 `invoke_*` 方法（各 7-18 行，委托到 `execute_*` + 相同后处理）→ 提取共享后处理 helper
+**推迟**：3 对 `execute_*` 方法（各 ~100 行，body 90% 相同但 segment evaluator 不同）→ 需先统一 `_evaluate_segments`/`_evaluate_segments_cps`
+
+**预估工作量**：薄提取 ~2h；完整统一 ~6h（推迟）
+
+---
+
+## P3 候选（远景；详见 PENDING_TASKS）
+
+- 多模态 Phase 4：`media` 全模态容器 + 响应解析
+- 多模态 Phase 5：磁盘卸载与生命周期管理
+- `isinstance()` 运行时类型检查
+- 二层 IR 路线
+- 用户级泛型 (`class Box[T]:`)
+- 协程层（搁置中，详见 `docs/COROUTINE_DESIGN_NOTES.md`）
+
+---
+
+## 确认为设计决策（不修复）
 
 | 测试 ID | 原因 | 处理 |
 |---------|------|------|
@@ -93,39 +128,24 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P3 候选（远景；详见 PENDING_TASKS）
-
-- 多模态 Phase 5 磁盘卸载与生命周期管理
-- `isinstance()` 运行时类型检查
-- 二层 IR 路线
-- 用户级泛型 (`class Box[T]:`)
-- 协程层（搁置中，详见 `docs/COROUTINE_DESIGN_NOTES.md`）
-- 拆分剩余 6 个 god modules（详见 PENDING_TASKS §五）
-- 折叠重复分支（详见 PENDING_TASKS §五）
-- 修复 17+ 处静默吞异常
-- 删除死代码（`IbStatelessPlugin`、3 个 orphan fixtures 等）
-
----
-
 ## 工作规则
 
-- **每次开新分支前**，先复跑 `python -m pytest tests/ -q --tb=no --no-header`，把当前 pass/fail 计数写在 PR 描述里，不预设上一份文档里的数字。
-- **跨盘环境注意**：若 repo 与 `%TEMP%` 不同盘，需先 `set TMP=<repo_dir>` / `set TEMP=<repo_dir>`，否则 `scheduler.py:162` 跨盘 `relpath` 会产生大量假失败。
+- **每次开新分支前**，先复跑 `python -m pytest tests/ -q --tb=no --no-header`，把当前 pass/fail 计数写在 PR 描述里。
+- **跨盘环境注意**：`conftest.py` 的 `pytest_configure` 已将 basetemp 设为 repo 下 `.tmp_pytest`，无需手动设置环境变量。
 - 同一时刻只主推一项 P0 任务（或一项 P1）；其余项保留待选。
 - 任何改动公理层公约或语义错误集的任务，需在分支早期跑全量 pytest 评估破坏面。
-- 每项完成后，把摘要追加到 `docs/COMPLETED.md`（极简时间线），并把对应条目从本文件移除。
-- 出现新的紧要项时，按"先评估优先级、再决定是否替换 P0"原则操作。
+- 每项完成后，把摘要追加到 `docs/COMPLETED.md`，并把对应条目从本文件移除。
 - **本文件不冻结具体测试通过数字**——任何"X 测试通过"的表述都必须附运行命令或日期锚点。
 
 ---
 
 ## 维护守则
 
-1. **先复跑、后下结论**。任何关于"测试基线红线"的表述，必须以"附完整 pytest 输出 + 日期 + 分支 + 环境条件（盘符/locale）"的方式说服读者；否则视为待核查。
+1. **先复跑、后下结论**。任何关于"测试基线红线"的表述，必须以"附完整 pytest 输出 + 日期 + 分支 + 环境条件"的方式说服读者。
 2. **不要相信"昨日完成"的总结**。`docs/COMPLETED.md` 的最新一两条锚点，必须能用一条具体 git 提交或一次具体 pytest 输出佐证。
-3. **示例必须可零配置跑通**。任何"用户跟着 README 复制粘贴"的代码块，必须在 mock 模式下端到端跑通；改动后必须 `python main.py run <示例>` 至少一次。
-4. **已知 bug 与已修 bug 之间要勤更**。每发现一个"文档说有但代码已修"的项目，立刻把文档同步更新；反向同理。
-5. **跨文件状态保持一致**。`README.md`、`docs/KNOWN_LIMITS.md`、`docs/IBCI_SYNTAX_REFERENCE.md`、`docs/METADATA_ARCHITECTURE.md` 之间对同一语法/限制/架构立场的描述必须用同一组事实；如不一致，以代码与最近一次 pytest 输出为准。
-6. **避免重复声明、单点真理**。一条已完成项写一次（在 `COMPLETED.md`），一条已知限制写一次（在 `KNOWN_LIMITS.md`），一条紧要项写一次（在 `NEXT_STEPS.md`），一条搁置项写一次（在 `PENDING_TASKS.md`）。出现"同一条目在多个文件中以不同状态出现"，立即合并。
-7. **新增 AST 字段或侧表前必须先在 `METADATA_ARCHITECTURE.md` 中查证**：禁止"AST 字段 + 侧表"双写真相（同一份语义事实只能有一处可序列化位置）。
-8. **重大架构决策必须写 ADR**。新增决策在 `docs/decisions/` 建对应 ADR 文件；已有非正式决策记录（如 `PHASE1_TECHNICAL_DECISIONS.md`）应逐步迁入 ADR 目录。
+3. **示例必须可零配置跑通**。任何"用户跟着 README 复制粘贴"的代码块，必须在 mock 模式下端到端跑通。
+4. **已知 bug 与已修 bug 之间要勤更**。
+5. **跨文件状态保持一致**。`README.md`、`docs/KNOWN_LIMITS.md`、`docs/IBCI_SYNTAX_REFERENCE.md`、`docs/METADATA_ARCHITECTURE.md` 之间对同一语法/限制/架构立场的描述必须用同一组事实。
+6. **避免重复声明、单点真理**。一条已完成项写一次（在 `COMPLETED.md`），一条已知限制写一次（在 `KNOWN_LIMITS.md`），一条紧要项写一次（在 `NEXT_STEPS.md`），一条搁置项写一次（在 `PENDING_TASKS.md`）。
+7. **新增 AST 字段或侧表前必须先在 `METADATA_ARCHITECTURE.md` 中查证**。
+8. **重大架构决策必须写 ADR**。新增决策在 `docs/decisions/` 建对应 ADR 文件。

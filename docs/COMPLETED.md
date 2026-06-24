@@ -5,11 +5,67 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-05-28（super() 修复 + __restore__ 冗余消除）
+> **最后更新**：2026-06-24（全量分析体检 + P0/P1/P2 + 6 god module 拆分 + Phase 3 多模态基础）
 
 ---
 
-## 2026-05-28：super() 修复 + __snapshot__/__restore__ 协议完善
+## 2026-06-24：全量分析体检 + 架构改善 + Phase 3 多模态基础
+
+测试基线：**1011 passed, 5 skipped**（0 failures）。工作日志见 `docs/worklogs/`。
+
+### P0 基线修复（commit 72f59e6）
+- 修复 11 个测试失败（6 个编码 + 5 个 Windows 路径转义）
+- 跨盘硬化：`safe_relpath()` + `pytest_configure` basetemp
+- 修复 `interpreter.py:128` `symbol.spec` → `declared_type`（Critical）
+- 修复 `kernel.py` 裸 `except:` → 正确错误传播（Critical）
+- 修复 `llm_executor.py` `_pending_futures` 无锁并发竞争
+
+### P1 架构健康修复（commits 55288e8~fa4c28d）
+- 提取 `core/runtime/shared/` 打破 3 个 runtime 内循环
+- 移动 `HostInterface` → `core/kernel/`（修复 compiler→runtime 反转）
+- 移动 `fuzzy_json.py` → `core/base/support/`（恢复 kernel 永不导入 runtime）
+- 拆分 `handlers.py`（2022 行 → 8 个子模块）
+- `pytest.ini` + GitHub Actions CI 矩阵
+- 层级元测试（31 个静态检查）+ 迁移 4 个违规文件
+- MOCK 指令独立测试（20 个）
+- 审计报告已解决标注 + Hub 文档锚点修复
+
+### 6 个 God Module 拆分（commits 87e9ffb~9be0984）
+- `type_checking_pass.py`（1490 行 → shell + 4 mixin）
+- `primitives.py`（1350 行 → 8 子模块 package）
+- `spec/registry.py`（1146 行 → 7 mixin package）
+- `llm_executor.py`（1132 行 → 5 mixin package）
+- `builtins.py`（1054 行 → 5 子模块 package）
+- `objects/kernel.py`（1196 行 → 7 子模块 package）
+
+### 代码质量改善（commits 78e5214~7fd085f）
+- LLM-error axiom 工厂折叠（4 类 → 共享基类 + 配置子类）
+- capability accessor 统一（6 getter → `_get_cap` 助手）
+- `IbString.to_bool/cast_to` 越层访问修复（LLM-aware 逻辑迁移到 interpreter/VM 层）
+- 裸 `except:` 全部收窄（core/ 中零裸 except:）
+- `from e` traceback 链恢复（4 处）
+- 关键日志添加（3 处：字段初始化/axiom 注册/模块导入）
+- 死代码清理：`IbStatelessPlugin` 删除 + `__hash__` 修复 + 死分支删除
+
+### Phase 3 多模态基础（commit 363fcd7）
+- `AudioAxiom`/`ImageAxiom`/`VideoAxiom`（`has_payload_prompt_cap`）
+- `MediaStorage`（Phase 3 纯内存，ADR-007）
+- `IbAudio`/`IbImage`/`IbVideo`（`@register_ib_type`，IbValue 子类）
+- 完整注册路径 + `builtin_initializer` 方法绑定
+- 36 个新测试
+
+### 路径测试 + bug 修复（commit 4cb4ef7）
+- 85 个路径单元测试覆盖 IbPath/PathResolver/PathValidator
+- 发现并修复 5 个 Windows 盘符处理 bug
+
+### ADR 制度（commits d6890d2~a219878）
+- `docs/decisions/` 目录 + ADR-007~012（6 份决策记录）
+- 解除 Phase 3 全部 6 个阻塞条件
+
+### 文档更新
+- `IBCI_SYNTAX_REFERENCE.md` 新增 `@NAME~` 路由（§7.5）+ `__payload_prompt__`（§7.6）
+- `AUDIT_REPORT_20260527.md` 已解决标注
+- `SEMANTIC_COVERAGE_MATRIX.md` + `VM_SPEC.md` 刷新
 
 测试基线：**838 passed, 2 skipped**（0 failures）。
 
