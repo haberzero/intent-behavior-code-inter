@@ -14,7 +14,7 @@ from core.base.path_utils import safe_relpath
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.compiler.serialization.serializer import FlatSerializer
 from core.base.diagnostics.codes import (
