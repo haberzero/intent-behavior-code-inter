@@ -613,11 +613,12 @@ IBCI 测试体系的核心原则：
 4. **文档化**：测试即规范
 5. **可维护**：内部重构不破坏测试
 
-**当前状态**（2026-05-26）：
-- 测试文件：41 个 `test_*.py`
-- 测试用例：781 collected / 778 passed / 3 skipped
-- 测试运行时间：~7s
-- 分层分布：contracts 150 / compiler 300 / e2e 205 / compliance 32 / kernel 14 / runtime 21 / sdk 56 / meta 3
+**当前状态**（2026-06-24 更新）：
+- 测试文件：49 个 `test_*.py`
+- 测试用例：866 passed / 5 skipped（含 3 个层级元测试 skip）
+- 测试运行时间：~6s
+- 运行命令：`python -m pytest tests/ -q --tb=short`
+- 注：测试数会随开发持续增长，请以实际 pytest 输出为准
 
 **长期愿景**：
 > IBCI 测试体系成为语言设计文档的**可执行规范**，验证核心不变量，而非追逐实现细节。

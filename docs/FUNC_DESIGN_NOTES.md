@@ -39,7 +39,7 @@ int result = my_fn(5)   # 调用 adder.__call__(5)
 
 ### 已知 `fn` 限制
 
-详见 `docs/KNOWN_LIMITS.md` 三 —— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。
+详见 `docs/KNOWN_LIMITS.md` §一（`__call__` 协议）和 §七（`auto` / `fn` / `any`）—— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。
 
 后续改进方向（`func[sig]` 泛型标注、轻量泛型 `<T>`、高阶函数类型推断、lambda 剩余缺陷）将按主线优先级在 `docs/NEXT_STEPS.md` / `docs/PENDING_TASKS.md` 中滚动维护。
 

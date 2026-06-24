@@ -28,7 +28,7 @@ llmexcept 机制经历了三个阶段的演进：
 - LLM 执行器不再抛出异常，改为通过 `LLMResult.is_uncertain` 标志位传递不确定性信号
 - `runtime_context.set_last_llm_result(result)` 将每次 LLM 调用的结果存入上下文，供外层轮询检查
 - `visit_IbAssign` 检测 `last_llm_result.is_uncertain`，若为 True 则将目标变量赋值为 `IbLLMUncertain` 哨兵对象（而非跳过赋值）
-- `visit_IbIf/While/For` 检测 `last_llm_result.is_uncertain`，若为 True 则立即返回空结果，不执行分支体
+- `visit_IbIf/While/For` 检测 `last_llm_result.is_uncertain`，若为 True 则抛出 `LLMParseError`（BUG #A 修复后统一行为，2026-05-27；此前 if/while 静默吞错而 for 抛错，属正交性缺陷）
 - 外层 `visit_IbLLMExceptionalStmt` 检测此标志，决定是否进入 llmexcept 块
 
 ### 1.3 完整执行流程

@@ -3,6 +3,11 @@
 **审计日期**：2026-05-27  
 **审计范围**：代码库全览、文档一致性核对、语法完整性与正交性验证、Mock 试用与边界探查
 
+> ✅ **后续跟踪（2026-06-24）**：本报告中的全部 P0/P1 发现已于 2026-05-27 关闭，
+> 详见 `docs/COMPLETED.md` 2026-05-27 锚点。以下各节发现处已标注关闭状态。
+> 报告中的 KNOWN_LIMITS 章节编号（§20.4/§21/§26 等）对应旧版编号，已于
+> 2026-05-27 重编为 §一..§十六（399 行），请以当前 `docs/KNOWN_LIMITS.md` 为准。
+
 ---
 
 ## 一、IBCI 是什么 — 设计思想确认
@@ -39,7 +44,7 @@
 
 ## 三、文档与代码不一致点 — 本次新发现
 
-### 🔴 不一致 #1：KNOWN_LIMITS §二十.4 已严重过时
+### 🔴 不一致 #1：KNOWN_LIMITS §二十.4 已严重过时 ~~（未关闭）~~ ✅ 已关闭 2026-05-27
 
 `KNOWN_LIMITS.md:481` 仍在声明：
 
@@ -51,7 +56,7 @@
 
 ---
 
-### 🔴 不一致 #2：`examples/03_advanced_features/isolation_demo/parent.ibci` 已无法跑通
+### 🔴 不一致 #2：`examples/03_advanced_features/isolation_demo/parent.ibci` 已无法跑通 ~~（未关闭）~~ ✅ 已关闭 2026-05-27
 
 **错误信息**：
 ```
@@ -73,7 +78,7 @@ ihost.run_isolated("examples/03_advanced_features/isolation_demo/sub_project/chi
 
 ## 四、未知 Bug 发现 — 本次审计的最重要产出
 
-### 🔴 BUG #A：控制流构造在面对不确定 LLM 条件时行为**严重不一致**
+### 🔴 BUG #A：控制流构造在面对不确定 LLM 条件时行为**严重不一致** ~~（未关闭）~~ ✅ 已关闭 2026-05-27
 
 通过对比三个 VM handler（`core/runtime/vm/handlers.py`）：
 
@@ -120,7 +125,7 @@ raise ThrownException(error)             # ← 正确抛错
 
 ---
 
-### 🟡 BUG #B：示例 03 的 bool LLM 调用未保护（即便 BUG #A 修复后仍崩溃）
+### 🟡 BUG #B：示例 03 的 bool LLM 调用未保护（即便 BUG #A 修复后仍崩溃） ~~（未关闭）~~ ✅ 已关闭 2026-05-27
 
 `examples/01_getting_started/03_flow_control_and_behavior.ibci` 三个 `@~...~` bool 调用都没有 `llmexcept` 保护，也没有 `# MOCK:` 指令。即便 BUG #A 统一了语义（全部抛错），此示例仍然崩溃。应同时为示例中的 LLM 条件调用添加 `# MOCK:` 指令或 `llmexcept` 保护，使其在零配置下可跑通。
 
