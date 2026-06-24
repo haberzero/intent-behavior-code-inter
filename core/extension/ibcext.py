@@ -45,8 +45,8 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 #
 # IBCI 断点/动态宿主机制要求每个插件声明自身的状态可恢复性：
 #
-# 【IbStatelessPlugin】
-#   - Mixin 标记：插件运行时无需持久化任何内部状态
+# 【无状态插件（默认）】
+#   - 插件不继承任何特殊基类即为"无状态"
 #   - HostService 在 save/restore 时跳过此类插件，只重新调用 setup()
 #   - 适合：ibci_math, ibci_json, ibci_time, ibci_schema, ibci_isys, ibci_file 等
 #
@@ -158,24 +158,6 @@ class IbPlugin(ABC):
     def get_exposed_capabilities(self) -> Dict[str, Any]:
         """获取已暴露的能力列表"""
         return dict(self._exposed_capabilities)
-
-
-class IbStatelessPlugin:
-    """
-    无状态插件标记 Mixin。
-
-    插件继承此类即声明："本插件运行时不持有任何跨断点的内部状态"。
-    HostService 在 snapshot/restore 时对此类插件仅重新调用 setup()，
-    无需保存/恢复任何额外数据。
-
-    适合：ibci_math, ibci_json, ibci_time, ibci_schema, ibci_isys, ibci_file 等
-    纯工具性、每次 setup 就能完整恢复的插件。
-
-    使用示例：
-        class MathLib(IbStatelessPlugin):
-            def setup(self, capabilities): ...
-    """
-    pass
 
 
 class IbStatefulPlugin(ABC):
