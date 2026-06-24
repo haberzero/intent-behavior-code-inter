@@ -1,6 +1,12 @@
 # IBCI语义覆盖矩阵（Semantic Coverage Matrix）
 > Created: 2026-05-13
+> Last updated: 2026-06-24（刷新测试计数与 skip 状态）
 > Purpose: 建立IBCI核心语义到测试覆盖的完整映射，确保测试体系的完整性
+
+> **2026-06-24 更新说明**：
+> - 测试文件数 41 → 49；测试用例 ~612 → 889 passed / 5 skipped
+> - INV-CONTEXT-1 / INV-CONTEXT-2 已于 2026-05-26 un-SKIP（nonlocal 实现）
+> - 运行命令：`python -m pytest tests/ -q --tb=short`
 
 ## 文档目标
 
