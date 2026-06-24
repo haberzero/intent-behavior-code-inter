@@ -31,6 +31,13 @@ class _CapabilityMixin:
     # as a non-None marker; ``resolve_call_return()`` handles the actual
     # return type inference for these structural specs.
 
+    def _get_cap(self, spec: Optional[IbSpec], flag_attr: str) -> Optional["TypeAxiom"]:
+        """Shared helper: return axiom if it has the named capability flag, else None."""
+        if spec is None:
+            return None
+        axiom = self.get_axiom(spec)
+        return axiom if (axiom and getattr(axiom, flag_attr)) else None
+
     def get_call_cap(self, spec: Optional[IbSpec]) -> Optional["TypeAxiom"]:
         if spec is None:
             return None
@@ -51,16 +58,13 @@ class _CapabilityMixin:
         return axiom if (axiom and axiom.has_call_cap) else None
 
     def get_iter_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_iter_cap) else None
+        return self._get_cap(spec, "has_iter_cap")
 
     def get_subscript_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_subscript_cap) else None
+        return self._get_cap(spec, "has_subscript_cap")
 
     def get_operator_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_operator_cap) else None
+        return self._get_cap(spec, "has_operator_cap")
 
     def get_converter_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
         """Return the converter capability for ``spec``, or None.
@@ -74,20 +78,16 @@ class _CapabilityMixin:
         warnings.  Runtime ``IbCastExpr`` still validates via
         ``value.receive("cast_to", [target_class])``.
         """
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_converter_cap) else None
+        return self._get_cap(spec, "has_converter_cap")
 
     def get_parser_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_parser_cap) else None
+        return self._get_cap(spec, "has_parser_cap")
 
     def get_from_prompt_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_from_prompt_cap) else None
+        return self._get_cap(spec, "has_from_prompt_cap")
 
     def get_llm_output_hint_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        axiom = self.get_axiom(spec)
-        return axiom if (axiom and axiom.has_output_hint_cap) else None
+        return self._get_cap(spec, "has_output_hint_cap")
 
     # ---------------------------------------------------------- #
     # Derived capability helpers                                 #
