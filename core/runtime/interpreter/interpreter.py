@@ -639,9 +639,9 @@ class Interpreter:
                 try:
                     evaluated = self._get_vm_executor().run(val_info.val_uid)
                     val_info.static_val = evaluated
-                except Exception:
+                except Exception as e:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
-                    pass
+                    self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"preeval failed for {getattr(val_info, 'name', '?')}, will retry at instantiate: {e!r}")
         
         # 恢复 issue_tracker 状态：预评估期间产生的任何错误都是误报
         self.issue_tracker._error_count = saved_error_count

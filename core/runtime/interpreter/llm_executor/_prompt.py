@@ -10,7 +10,7 @@ from typing import Any, List, Optional, Dict, Union, Mapping, Set
 from core.runtime.interfaces import IExecutionContext
 
 from core.runtime.shared.llm_result import LLMResult
-from core.base.diagnostics.debugger import CoreModule, DebugLevel
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
 
@@ -36,15 +36,15 @@ class _PromptMixin:
                 if hasattr(result, 'to_native'):
                     return str(result.to_native())
                 return str(result)
-            except Exception:
-                pass
+            except Exception as e:
+                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"__to_prompt__ dispatch failed, trying fallback: {e!r}")
 
         # Fallback to to_native() for primitives
         if hasattr(val, 'to_native'):
             try:
                 return str(val.to_native())
-            except Exception:
-                pass
+            except Exception as e:
+                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"to_native fallback failed, using str(): {e!r}")
 
         # Last resort: str()
         return str(val)
@@ -77,8 +77,8 @@ class _PromptMixin:
                     if isinstance(result, (dict, list)):
                         return result
                     return str(result)
-            except Exception:
-                pass
+            except Exception as e:
+                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"__payload_prompt__ dispatch failed, falling back to text: {e!r}")
 
         # Fallback to plain text via __to_prompt__
         return _PromptMixin._obj_to_prompt_str(val)

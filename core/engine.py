@@ -559,9 +559,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                         continue
                     native = val.to_native()
                     result[name] = native
-                except Exception:
+                except Exception as e:
                     # 跳过无法转为原生值的对象（未执行的延迟值、循环引用等）
-                    pass
+                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                        f"collect({handle!r}) skipped non-convertible variable '{name}': {e!r}")
 
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                             f"collect({handle!r}) extracted {len(result)} variable(s): {list(result)}")

@@ -96,8 +96,8 @@ class IbObject:
                         if hasattr(prompt_result, 'to_native'):
                             prompt_result = prompt_result.to_native()
                         return self.ib_class.registry.box(prompt_result)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"cast via __to_prompt__ failed for {self.ib_class.name}->{target_name}: {e!r}")
 
             # 无法执行类型转换，抛出明确错误
             raise InterpreterError(
@@ -128,8 +128,8 @@ class IbObject:
                 cap = spec_reg.get_from_prompt_cap(self.ib_class.spec)
                 if cap:
                     return cap.from_prompt(raw_response, self.ib_class.spec)
-        except Exception:
-            pass
+        except Exception as e:
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__from_prompt__ parse failed for {self.ib_class.name}: {e!r}")
         return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
 
     def __outputhint_prompt__(self) -> str:

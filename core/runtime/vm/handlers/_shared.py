@@ -7,6 +7,7 @@ core.runtime.vm.handlers._shared — 跨类别 CPS 辅助函数。
 from __future__ import annotations
 from typing import Any, Mapping, Optional, List
 
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.shared.signals import (
     ControlSignal,
     Signal,
@@ -209,8 +210,8 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
                 func.module_name, func.context
             )
             rt_context.current_scope = mod_inst.scope
-        except Exception:
-            pass
+        except Exception as e:
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"function-context module import '{func.module_name}' failed: {e!r}")
 
     try:
         node_data = func.context.get_node_data(func.node_uid)
@@ -431,7 +432,8 @@ def _assign_name_target(
                 rc.define_variable(name, value)
             else:
                 rc.set_variable(name, value)
-        except Exception:
+        except Exception as e:
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"set_variable '{name}' failed, falling back to define: {e!r}")
             rc.define_variable(name, value)
     else:
         raise RuntimeError(
@@ -487,7 +489,8 @@ def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: boo
                     vals = list(r.elements)
                 else:
                     vals = None
-            except Exception:
+            except Exception as e:
+                core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"unpack iterable extraction failed: {e!r}")
                 vals = None
             if vals is None:
                 raise RuntimeError(

@@ -24,6 +24,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.type_ref import TypeRef
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -193,6 +194,6 @@ def _extract_media_storage(value: Any) -> Optional[Any]:
             native = value.to_native()
             if hasattr(native, 'data') and hasattr(native, 'format'):
                 return native
-        except Exception:
-            pass
+        except Exception as e:
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"_extract_media_storage to_native fallback failed: {e!r}")
     return None
