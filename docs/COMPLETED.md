@@ -5,7 +5,27 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 getitem 契约覆盖完成）
+> **最后更新**：2026-06-25（PT-TEST-4 全部 5/5 完成，P0 收官）
+
+---
+
+## 2026-06-25：PT-TEST-4 全部完成（覆盖缺口填补 P0 收官）
+
+测试基线：**1057 passed, 5 skipped**（0 failures，本会话累计 1011 → 1057，+46 测试）。
+
+### area 4：`host/service.py` collect 委托
+- 新增 `tests/runtime/test_runtime_host_collect.py`（4 个测试）：无 orchestrator→`RuntimeError` 守护、委托 `request_collect` 返回结果、handle 原样透传、orchestrator 异常向上传播。完整 spawn→collect 流程已由 e2e 覆盖，此处补齐薄包装自身分支。
+
+### PT-TEST-4 收官汇总（5/5）
+| 区域 | 测试 | 发现 bug |
+|------|------|---------|
+| `runtime/path` | 85 | 5（Windows 盘符） |
+| `runtime/serialization` | 11 | 1（`define_variable` 协议混淆，反序列化此前完全不可用） |
+| `engine.py` 生命周期 | 7 | 0 |
+| `kernel/__getitem__` | 13 | 0（1 个不一致观察：dict 缺键 KeyError） |
+| `host/service collect` | 4 | 0 |
+
+> **方法学验证**：本会话证明"补覆盖缺口"的高价值在于暴露潜伏的回归级 bug——serialization 的反序列化此前从未可用（零测试是主因），Phase 3 注册三处断链亦由 e2e 暴露。
 
 ---
 

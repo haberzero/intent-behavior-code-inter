@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 getitem 契约覆盖完成；基线 1053 passed）
+> **最后更新**：2026-06-25（PT-TEST-4 全部 5/5 区域覆盖完成；基线 1057 passed）
 
 ---
 
@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-06-25 实测结果**：`1053 passed, 5 skipped`（0 failures，无环境变量 workaround）
+**2026-06-25 实测结果**：`1057 passed, 5 skipped`（0 failures，无环境变量 workaround）
 
 > ✅ 基线可信。5 个 skipped：2 个设计限制（`INV-LAMBDA-3`/`INV-SCOPE-1`）+ 3 个层级元测试白名单（混合文件待拆分）。
 
@@ -28,19 +28,15 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P0（当前最紧要）：PT-TEST-4 覆盖缺口填补（1/5 区域待补）
+## ✅ P0 已完成（2026-06-25）：PT-TEST-4 覆盖缺口填补（5/5 全部完成）
 
-> 已完成 4/5：`runtime/path/`（85 测试）+ `runtime/serialization/`（11 测试 + 1 bug 修复）+ `engine.py` 生命周期（7 测试）+ `kernel/__getitem__` 契约（13 测试）。详见 `docs/COMPLETED.md` 2026-06-25 条目。
-
-**待做**：
-1. **`core/runtime/host/service.py` collect 委托**（~2-3 个测试，中复杂度，低优先级）
-   - 大部分路径已由 Engine 层 e2e 覆盖，仅 `HostService.collect` 无 orchestrator 委托分支未测
-
-**预估工作量**：~2-3 小时
+> 详见 `docs/COMPLETED.md` 2026-06-25 条目。
+> 5 个区域：`runtime/path`（85 测试 + 5 bug）/ `serialization`（11 测试 + 1 bug）/ `engine` 生命周期（7 测试）/ `__getitem__` 契约（13 测试）/ `host/service collect` 委托（4 测试）。
+> **累计 +120 测试，修复 2 个潜伏回归级 bug**（反序列化协议混淆；Phase 3 注册三处断链另计）。
 
 ---
 
-## P1 候选：PT-ARCH-7 Phase 4-5（剩余 10 处静默吞异常）
+## P0（当前最紧要）：PT-ARCH-7 Phase 4-5（剩余 10 处静默吞异常）
 
 > 已完成 Phase 1-3：7 处关键修复 + 4 处裸 except: 收窄。core/ 中零裸 except:。
 
