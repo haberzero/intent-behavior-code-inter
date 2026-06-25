@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-24（全量分析体检 + P0/P1/P2 + 6 god module 拆分 + Phase 3 基础完成；基线 1011 passed）
+> **最后更新**：2026-06-25（Phase 3 多模态文件 I/O 完成 + 注册缺口修复；基线 1021 passed）
 
 ---
 
@@ -14,58 +14,23 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-06-24 实测结果**：`1011 passed, 5 skipped`（0 failures，无环境变量 workaround）
+**2026-06-25 实测结果**：`1021 passed, 5 skipped`（0 failures，无环境变量 workaround）
 
 > ✅ 基线可信。5 个 skipped：2 个设计限制（`INV-LAMBDA-3`/`INV-SCOPE-1`）+ 3 个层级元测试白名单（混合文件待拆分）。
 
 ---
 
-## ✅ P0 / P1 / P2 已完成（2026-06-24）
+## ✅ P0 已完成（2026-06-25）：Phase 3 多模态 — 用户面 I/O API + e2e 测试
 
-> 详见 `docs/COMPLETED.md` 2026-06-24 条目和 `docs/worklogs/` 下的 4 份工作日志。
-> 此处不再展开（遵守单点真理规则 #6）。
-
----
-
-## P0（当前最紧要）：Phase 3 多模态 — 用户面 I/O API + e2e 测试
-
-> **前置条件全部满足**：ADR-007~012 解除全部决策阻塞；snapshot 分发 `isinstance` 修复已完成；audio/image/video axiom + 运行时类 + 注册路径已完成。
-
-**已完成部分**：
-- ✅ `AudioAxiom`/`ImageAxiom`/`VideoAxiom`（`has_payload_prompt_cap`，`__payload_prompt__` 返回结构化 content block）
-- ✅ `MediaStorage`（Phase 3 纯内存，ADR-007）
-- ✅ `IbAudio`/`IbImage`/`IbVideo`（`@register_ib_type`，IbValue 子类）
-- ✅ 完整注册路径 + `builtin_initializer` 方法绑定
-- ✅ 36 个单元测试（公理能力 + payload prompt + 存储属性）
-
-**待做**：
-1. **`ibci_file` 插件扩展**：添加 `read_audio(path)` / `read_image(path)` / `read_video(path)` 函数
-   - 文件：`ibci_modules/ibci_file/core.py` + `ibci_modules/ibci_file/_spec.py`
-   - 每个 `read_*` 读取文件字节 → 构造 `MediaStorage` → 通过 `registry` 装箱为 `IbAudio`/`IbImage`/`IbVideo`
-   - 需要访问 `registry` 以获取 `IbClass` 并构造对象（参考现有 `file.read` 的实现模式）
-2. **e2e 集成测试**：MOCK 模式下的多模态行为表达式
-   - 验证 `audio x = file.read_audio("test.wav")` 能编译并执行
-   - 验证 `@~ 识别 $x ~` 能正确构建多模态 payload（通过 MOCK 拦截验证 content block 结构）
-   - 验证 `__payload_prompt__` 被正确分发（而非 `__to_prompt__`）
-3. **IBCI 语法级使用验证**：确保以下代码在 MOCK 模式下端到端工作：
-   ```ibci
-   import file
-   import ai
-   ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-   audio recording = file.read_audio("test.wav")
-   str transcript = @~ MOCK:STR:transcript 识别 $recording ~
-   print(transcript)
-   ```
-
-**设计文档**：`docs/MULTIMODAL_BEHAVIOR_DESIGN.md` §七 Phase 3 + ADR-007~012
-
-**预估工作量**：3-5 天
+> 详见 `docs/COMPLETED.md` 2026-06-25 条目。
+> 实际工时：~5 小时（实现 + e2e）+ ~2 小时（注册缺口排查与修复）。原"3-5 天"估时严重高估。
+> **重要发现**：e2e 测试暴露并修复了三处 Phase 3 注册断链（IbSpec 缺口 / get_axiom 调用错误 / 闭包晚绑定）—— 此前"注册路径已完成"的声称不实。
 
 ---
 
-## P1 候选：PT-TEST-4 覆盖缺口填补（4/5 区域待补）
+## P0（当前最紧要）：PT-TEST-4 覆盖缺口填补（4/5 区域待补）
 
-> 已完成 1/5：`runtime/path/`（85 个测试 + 5 个 bug 修复）。
+> 原 P1 候选提升为当前 P0。已完成 1/5：`runtime/path/`（85 测试 + 5 bug 修复）。
 
 **待做**（按优先级排序）：
 1. **`core/runtime/serialization/` round-trip 测试**（~6-8 个测试，中高复杂度）

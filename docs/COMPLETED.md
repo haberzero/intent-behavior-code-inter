@@ -5,7 +5,32 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-24（全量分析体检 + P0/P1/P2 + 6 god module 拆分 + Phase 3 多模态基础）
+> **最后更新**：2026-06-25（Phase 3 多模态文件 I/O 完成 + 注册缺口修复）
+
+---
+
+## 2026-06-25：Phase 3 多模态文件 I/O 完成 + 注册缺口修复
+
+测试基线：**1021 passed, 5 skipped**（0 failures）。
+
+### Phase 3 P0：file.read_audio/image/video
+- `ibci_file` 插件扩展：`read_audio`/`read_image`/`read_video`（读字节 → `MediaStorage` → 经 `kernel_registry.get_class()` 装箱为 `IbAudio`/`IbImage`/`IbVideo`）
+- `_spec.py` vtable 注册三函数（`return_type`: audio/image/video）；版本 2.3.0 → 2.4.0
+- 4 个 e2e 测试（`tests/e2e/test_e2e_multimodal_file_io.py`）：MOCK 模式下 `audio x = file.read_audio(...)` + `@~ ... $x ... ~` 端到端跑通
+
+### Phase 3 注册缺口修复（关键 bug，由 e2e 测试暴露）
+
+> 此前 `COMPLETED.md` 声称"完整注册路径 + builtin_initializer 方法绑定"已完成，实际存在三处断链，导致 `audio`/`image`/`video` 类型从未真正进入类型系统。
+
+1. **IbSpec 缺口**：axiom 已注册但对应 IbSpec 从未创建 → `metadata_registry.resolve("audio")=None` → `builtin_initializer` 静默跳过 IbClass 创建。
+   - 修复：`core/kernel/spec/specs.py` 新增 `AUDIO_SPEC`/`IMAGE_SPEC`/`VIDEO_SPEC`（CLASS kind，parent Object）；`_runtime.py` 注册元组 + `__init__.py` 导出。
+2. **`get_axiom` 调用错误**（`builtin_initializer.py` 媒体块）：直接把 IbSpec 传给 `AxiomRegistry.get_axiom`（期望字符串名）→ 永远返回 None → `__payload_prompt__` 从未注册。
+   - 修复：改用 `SpecRegistry.get_axiom(spec)`（内部经 `spec.get_base_name()` 取名）。
+3. **lambda 闭包晚绑定**（`builtin_initializer.py` 媒体块）：循环变量 `_media_type_name`/`_axiom_ref` 晚绑定到最后值 `"video"`，导致三种类型的 `__to_prompt__` 全显示 "video"、`__payload_prompt__` 全用 VideoAxiom。
+   - 修复：用默认参数 `tn=_type_name` / `ax=_axiom_ref` 在定义时绑定。
+
+### 测试
+- 5 个 runtime 层测试（`tests/runtime/test_runtime_multimodal_dispatch.py`）：真实媒体对象 `_obj_to_payload` 分发 + base64 round-trip + `__to_prompt__` 类型名回归（守护缺口 3）
 
 ---
 
