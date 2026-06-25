@@ -3,6 +3,12 @@
 > **日期**：2026-06-24
 > **分支**：unsafe-vibe-dev
 > **基线**：1011 passed, 5 skipped, 0 failed
+>
+> ⚠️ **后续会话（2026-06-25）已推进/修正本日志末尾的 Phase 3 状态表**：
+> - 表中"类型注册 ✅ 完成"**当时不实**——2026-06-25 发现并修复了三处注册断链（IbSpec 缺口 / get_axiom 误传 / 闭包晚绑定），详见 `docs/COMPLETED.md` 2026-06-25 与 `docs/worklogs/PHASE3_FILE_IO_AND_REGISTRATION_FIX.md`。
+> - 表中"⏳ 待做"的 file I/O / e2e / 语法级测试**均已完成**（`tests/e2e/test_e2e_multimodal_file_io.py`）。
+> - "剩余可推进项"表的 4 项**全部完成**（PT-ARCH-7、PT-ARCH-5 G3 见后续会话）。
+> - 当前基线 1057 passed。后续状态以 `docs/COMPLETED.md` / `docs/NEXT_STEPS.md` 为准（单点真理）。
 
 ---
 

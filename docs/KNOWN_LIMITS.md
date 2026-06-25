@@ -378,13 +378,11 @@ str r = @~ ... ~
 - 是否应该为内置类型也提供 `__validate_prompt__` 扩展点？
 - 当前设计是否足够——内置类型的 `from_prompt` 已含校验逻辑（返回 `(False, hint)` 时即触发 retry）？
 
-### 16.3 `__to_prompt__` 的异常处理静默化
+### 16.3 `__to_prompt__` 的异常处理（已加可观测性）
 
-**问题**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，但内部 `try/except` 静默吞掉了 `__to_prompt__()` 的异常。如果用户实现的 `__to_prompt__` 抛出异常（如字段未初始化导致 AttributeError），调用者无感知——最终回退到 `str(val)` 或 `str(val.to_native())`。
+**现状**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，内部 `try/except` 在 `__to_prompt__()` 抛异常时回退到 `str(val)` / `str(val.to_native())`。**降级行为保留**（LLM 调用不因 prompt 序列化失败而中断）。
 
-**待决策**：
-- 静默降级（当前行为）是否可接受？好处是 LLM 调用不因 prompt 序列化失败而中断；坏处是用户不知道自己的 `__to_prompt__` 实现有 bug。
-- 是否应该在 debug 模式下将静默异常升级为 warning 级诊断输出？
+**已改善（2026-06-25 PT-ARCH-7）**：原先的静默吞异常已改为 `core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, ...)` 日志——用户实现的 `__to_prompt__` 若抛异常（如字段未初始化的 AttributeError），开启调试（默认 NONE 级，零开销）即可观测，不再完全无感知。同样的处理已应用到 `__payload_prompt__` / `to_native` 回退链。
 
 ### 16.4 协议签名校验（SEM_095）的强度选择
 

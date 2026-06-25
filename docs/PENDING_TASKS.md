@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-06-24（全量分析体检后全面更新：移除已完成项，更新剩余项状态）
+> **最后更新**：2026-06-25（PT-ARCH-5 G3 薄提取 / PT-ARCH-10 审计 / PT-TEST-4 全部 5/5 / IbDict 统一 标记完成）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -17,7 +17,7 @@
 
 ## 一、Semantic Pipeline 后续演进
 
-### PT-SEM-1　生产就绪化 [P2 — 见 NEXT_STEPS P1 候选指针]
+### PT-SEM-1　生产就绪化 [P2]
 
 > 本条目的完整规划以此处为准；NEXT_STEPS 中仅保留指针（遵守单点真理规则）。
 
@@ -225,14 +225,16 @@
 ### [DONE] PT-TEST-5 BUG #A 回归测试 ✅
 ### [DONE] PT-TEST-9 IbString.to_bool 越层修复 ✅
 
-### PT-TEST-4　剩余 4 个覆盖缺口 [P1 — 见 NEXT_STEPS]
+### [DONE] PT-TEST-4　覆盖缺口填补 ✅（2026-06-25，5/5 全部完成）
 
-| # | 区域 | 测试数 | 复杂度 | 优先级 |
-|---|------|--------|--------|--------|
-| 1 | `runtime/serialization/` round-trip | 6-8 | 中高 | 高 |
-| 2 | `engine.py` 生命周期 | 4-6 | 中高 | 中高 |
-| 3 | `kernel/` `__getitem__` 契约 | 6-7 | 中 | 中 |
-| 4 | `host/service.py` collect 委托 | 2-3 | 中 | 低 |
+| # | 区域 | 测试数 | 状态 |
+|---|------|--------|------|
+| 1 | `runtime/serialization/` round-trip | 11 | ✅（+1 反序列化 bug 修复） |
+| 2 | `engine.py` 生命周期 | 7 | ✅ |
+| 3 | `kernel/__getitem__` 契约 | 13 | ✅（+ IbDict 错误统一） |
+| 4 | `host/service.py` collect 委托 | 4 | ✅ |
+| (Area 3) | `runtime/path/` | 85 | ✅（早前完成，+5 盘符 bug） |
+> 详见 `docs/COMPLETED.md` 2026-06-25 条目。本会话累计 +46 测试，暴露并修复 2 个潜伏回归 bug。
 
 ### PT-TEST-6　删除死 fixtures + 统一 MOCK 前缀 [P3]
 - 3 个 orphan fixtures 无测试导入
