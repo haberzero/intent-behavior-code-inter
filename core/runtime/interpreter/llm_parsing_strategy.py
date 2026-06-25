@@ -266,7 +266,8 @@ class VTableParsingStrategy(ParsingStrategy):
             # Try calling __init__ with the parsed value
             auto_instance = ib_class.instantiate([parsed_val], context=execution_context)
             return auto_instance
-        except Exception:
+        except Exception as e:
+            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"auto instantiate with value failed, trying empty+field: {e!r}")
             # Try creating empty instance and setting first field
             try:
                 auto_instance = ib_class.instantiate([], context=execution_context)
@@ -274,7 +275,8 @@ class VTableParsingStrategy(ParsingStrategy):
                     first_field = next(iter(ib_class.default_fields))
                     auto_instance.fields[first_field] = parsed_val
                 return auto_instance
-            except Exception:
+            except Exception as e2:
+                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"auto-boxing empty+field also failed, returning original value: {e2!r}")
                 # If auto-boxing fails, return original value
                 return parsed_val
 

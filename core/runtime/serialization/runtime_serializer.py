@@ -2,6 +2,7 @@ import json
 import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
 from core.runtime.objects.intent_node import IntentNode
@@ -50,7 +51,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             intent_ctx = getattr(context, "_intent_ctx", None)
             if intent_ctx is not None:
                 full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
-        except Exception:
+        except Exception as e:
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"serialize intent_context failed, skipping: {e!r}")
             full_intent_ctx_uid = None
 
         active_intent_ibobj_uid = None
@@ -62,7 +64,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             )
             if active is not None:
                 active_intent_ibobj_uid = self._collect_instance(active)
-        except Exception:
+        except Exception as e:
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"serialize active_intent_ibobj failed, skipping: {e!r}")
             active_intent_ibobj_uid = None
 
         return {
@@ -585,11 +588,13 @@ class RuntimeDeserializer:
             # ``IbIntent`` 反序列化分支
             try:
                 mode = IntentMode(data.get("mode", "+"))
-            except Exception:
+            except Exception as e:
+                core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"deserialize intent mode '{data.get('mode')}' invalid, defaulting APPEND: {e!r}")
                 mode = IntentMode.APPEND
             try:
                 role = IntentRole(data.get("role", "block"))
-            except Exception:
+            except Exception as e:
+                core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"deserialize intent role '{data.get('role')}' invalid, defaulting BLOCK: {e!r}")
                 role = IntentRole.BLOCK
             segments_raw = data.get("segments") or []
             segments = [self._deserialize_value(s) for s in segments_raw]

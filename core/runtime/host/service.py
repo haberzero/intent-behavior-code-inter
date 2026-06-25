@@ -17,6 +17,7 @@ from core.runtime.serialization.runtime_serializer import RuntimeSerializer, Run
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IExecutionContext, IKernelOrchestrator
 from core.runtime.host.host_interface import HostInterface
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
 from core.runtime.objects.kernel import IbObject
@@ -153,8 +154,8 @@ class HostService(IHostService):
                 if pkg and isinstance(pkg, IbStatefulPlugin) and "__save_error__" not in saved:
                     try:
                         pkg.restore_plugin_state(saved)
-                    except Exception:
-                        pass  # 恢复失败不中断整体流程
+                    except Exception as e:
+                        core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"restore_plugin_state failed for '{name}', skipping: {e!r}")
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
         """
@@ -225,7 +226,8 @@ class HostService(IHostService):
         entry_dir = None
         try:
             entry_dir = self.execution_context.get_entry_dir()
-        except Exception:
+        except Exception as e:
+            core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"get_entry_dir failed, falling back to cwd resolution: {e!r}")
             entry_dir = None
         if entry_dir:
             return os.path.abspath(os.path.join(entry_dir, path))

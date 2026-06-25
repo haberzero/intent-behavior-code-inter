@@ -1,6 +1,7 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.ib_type_mapping import register_ib_type
 from core.kernel.intent_logic import IntentMode, IntentRole
 
@@ -62,8 +63,9 @@ class IbIntent(IbObject):
                             content_parts.append(str(prompt_str.to_native()))
                         else:
                             content_parts.append(str(prompt_str))
-                    except Exception:
+                    except Exception as e:
                         # Fallback: to_native()
+                        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__to_prompt__ failed in intent resolution, falling back to to_native(): {e!r}")
                         if hasattr(val, 'to_native'):
                             content_parts.append(str(val.to_native()))
                         else:

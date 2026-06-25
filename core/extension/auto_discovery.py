@@ -14,6 +14,7 @@
 """
 import os
 import importlib
+from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
@@ -173,7 +174,8 @@ class AutoDiscoveryService:
         if spec.factory:
             try:
                 return spec.factory()
-            except Exception:
+            except Exception as e:
+                core_debugger.trace(CoreModule.GENERAL, DebugLevel.DETAIL, f"plugin factory failed, returning None: {e!r}")
                 return None
         return None
 
