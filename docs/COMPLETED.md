@@ -5,7 +5,29 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 全部 5/5 完成，P0 收官）
+> **最后更新**：2026-06-25（IbDict 错误类型统一 + PT-ARCH-7 Phase 4-5 完成）
+
+---
+
+## 2026-06-25：IbDict 错误类型统一 + PT-ARCH-7 静默吞异常治理
+
+测试基线：**1057 passed, 5 skipped**（0 failures，无行为回归）。
+
+### A. IbDict 错误类型统一（错误一致性修复）
+- `IbDict.__getitem__` 缺键由原始 `KeyError` 统一为 `InterpreterError("KeyError: '{k}'")`，与 IbList/Tuple/String 越界行为一致（也匹配 IbDict.pop 既有风格）。
+- **附带修复潜在 bug**：IbDict 存在**两个** `__getitem__` 定义（collections.py:278 与 :325），后者（无错误处理）覆盖前者。删除劣质重复版本，保留修复版。
+- 风险核查：全代码库无任何处专门 catch IbDict 的 KeyError（`module_manager:146` 的 `except (InterpreterError, KeyError)` 是变量查找路径，与 dict 下标无关）。
+
+### B. PT-ARCH-7 Phase 4-5：静默吞异常可观测化（11 处）
+- 将 11 处 `except Exception: pass` 收窄为 `except Exception as e: core_debugger.trace(...)`，纯日志、无行为变更（core_debugger 默认 NONE 级，零开销）：
+  - `_prompt.py` ×3（`__to_prompt__`/`to_native`/`__payload_prompt__` fallback 链）
+  - `objects/kernel/base.py` ×2（cast via `__to_prompt__` / `__from_prompt__` 解析）
+  - `vm/handlers/_shared.py` ×3（模块导入 / set_variable 回退 / unpack 提取）
+  - `engine.py` ×1（collect 跳过不可转换值）、`interpreter.py` ×1（预评估允许失败）、`media.py` ×1（`_extract_media_storage` to_native 回退）
+- `_scheduler.py __del__` 析构器**有意保持静默**（析构期日志是反模式，且可能在解释器关闭时自身失败）。
+
+### 发现（非本轮范围）
+- PT-ARCH-7 文档称"10 处"，实际 core/ 共 ~35 处 `except Exception:`。本轮处理了 11 处运行时有意图的吞异常；剩余 ~24 处多为编译层错误恢复（lexer/parser/resolver）或序列化可选路径，属另一类问题，建议作为独立审计项（见 PENDING_TASKS）。
 
 ---
 

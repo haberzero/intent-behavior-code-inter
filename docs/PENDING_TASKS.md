@@ -148,11 +148,17 @@
 
 ---
 
-### PT-ARCH-7　修复剩余 10 处静默吞异常 [P1 — 见 NEXT_STEPS]
+### [DONE] PT-ARCH-7　静默吞异常治理 ✅（2026-06-25）
+- Phase 1-3：7 处关键修复 + 4 处裸 except: 收窄（core/ 中零裸 except:）。
+- Phase 4-5：11 处 `except Exception: pass` → `core_debugger.trace` 可观测化（`_prompt.py`×3 / `base.py`×2 / `_shared.py`×3 / `engine.py` / `interpreter.py` / `media.py`）。`_scheduler.py __del__` 按惯例保持静默。
+- 附带：IbDict 缺键 `KeyError` → `InterpreterError` 统一 + 删除一处重复 `__getitem__`。
 
-**已完成**：Phase 1-3（7 处关键修复 + 4 处裸 except: 收窄）。core/ 中零裸 except:。
-**剩余**：10 处 `except Exception: pass`（全部有注释说明意图，属低风险）。
-**修复方式**：纯日志添加，无行为变更。
+### PT-ARCH-10　剩余 ~24 处 except Exception 审计 [P2 — 新增]
+> 来源：2026-06-25 PT-ARCH-7 治理时发现。文档曾称"10 处"，实际 core/ 共 ~35 处 `except Exception:`；PT-ARCH-7 处理了 11 处运行时有意图的，剩余多为：
+> - 编译层错误恢复（lexer/core_scanner、parser/type_def、parser/resolver、compiler/scheduler）
+> - 序列化可选路径（runtime_serializer ×4）、host/service rebind 回退（×2）
+> - llm_except_frame（×2）、intent、auto_discovery（×2）、llm_parsing_strategy（×2）、module_manager、enum、debugger
+> 多数有明确 fallback 语义，但需逐处确认是否有意 vs 漏网。低-中优先级。
 
 ---
 

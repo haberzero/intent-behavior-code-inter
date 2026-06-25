@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 全部 5/5 区域覆盖完成；基线 1057 passed）
+> **最后更新**：2026-06-25（PT-ARCH-7 治理 + IbDict 错误统一完成；即时 P0/P1 清空；基线 1057 passed）
 
 ---
 
@@ -36,24 +36,18 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P0（当前最紧要）：PT-ARCH-7 Phase 4-5（剩余 10 处静默吞异常）
+## ✅ P0 已完成（2026-06-25）：PT-ARCH-7 Phase 4-5 静默吞异常治理 + IbDict 错误统一
 
-> 已完成 Phase 1-3：7 处关键修复 + 4 处裸 except: 收窄。core/ 中零裸 except:。
-
-**剩余 10 处** `except Exception: pass`（全部有注释说明意图，属低-中风险）：
-- 6 处 fallback 链（`_prompt.py` × 3、`base.py` × 2、`_shared.py` × 1）—— 后续有默认行为，`pass` 是 fallback 触发
-- 3 处文档化的有意跳过（`engine.py` collect 跳过不可转换值、`interpreter.py` 预评估允许失败、`_scheduler.py` `__del__` 析构）
-- 1 处 `media.py` `_extract_media_storage` helper（新增代码）
-
-**修复方式**：纯日志添加（`debugger.trace`），无行为变更。可增量提交。
-
-**预估工作量**：~4 小时
+> 详见 `docs/COMPLETED.md` 2026-06-25 条目。
+> PT-ARCH-7：11 处 `except Exception: pass` → `core_debugger.trace` 可观测化（纯日志，无行为变更）；`_scheduler __del__` 按惯例保持静默。
+> IbDict：缺键 `KeyError` → `InterpreterError` 统一（附带删除一处重复 `__getitem__` 定义）。
+> **发现**：core/ 实际 ~35 处 `except Exception:`（文档曾称 10），剩余 ~24 处多为编译层错误恢复，已记入 PENDING_TASKS 作独立审计。
 
 ---
 
-## P2 候选：PT-ARCH-5 Group 3（CPS/non-CPS 薄提取）
+## P0（当前最紧要）：PT-ARCH-5 Group 3（CPS/non-CPS 薄提取）
 
-> Group 1+2 已完成。Group 3 剩余 5 对 sync/CPS 方法。
+> Group 1+2 已完成。Group 3 剩余 5 对 sync/CPS 方法。即时高优先项（Phase 3 / PT-TEST-4 / PT-ARCH-7）均已清空，此项从 P2 提升。
 
 **可做**：2 对薄 `invoke_*` 方法（各 7-18 行，委托到 `execute_*` + 相同后处理）→ 提取共享后处理 helper
 **推迟**：3 对 `execute_*` 方法（各 ~100 行，body 90% 相同但 segment evaluator 不同）→ 需先统一 `_evaluate_segments`/`_evaluate_segments_cps`
