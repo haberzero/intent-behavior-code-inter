@@ -5,7 +5,24 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（Phase 3 多模态文件 I/O 完成 + 注册缺口修复）
+> **最后更新**：2026-06-25（PT-TEST-4 serialization 覆盖完成 + 反序列化 bug 修复）
+
+---
+
+## 2026-06-25：PT-TEST-4 serialization round-trip 覆盖 + 反序列化 bug 修复
+
+测试基线：**1032 passed, 5 skipped**（0 failures，较上轮 +11）。
+
+### PT-TEST-4 area 1：`runtime/serialization/` round-trip 覆盖
+- 新增 `tests/runtime/test_runtime_serialization.py`（11 个测试）：
+  - 值保真 round-trip：primitive（int/float/str/bool）/ list / tuple / dict / 嵌套容器 / None / 空容器 / 混合多变量
+  - 结构契约：版本化 payload、factory 必需性、恢复上下文为独立深拷贝
+- 此前该模块**零覆盖**（消费者 HostService save/load_state、rt_scheduler isolation snapshot 无任何回归守护）
+
+### 反序列化 bug 修复（round-trip 测试暴露）
+- `RuntimeDeserializer._get_scope` 误用 `scope.define_variable(...)`（那是 `RuntimeContextImpl` 的方法），而 `ScopeImpl` 只有 `scope.define(...)` —— 协议混淆。
+- **影响**：`deserialize_context` 对任何含变量的上下文都抛 `AttributeError`，即反序列化**从未真正可用**。零测试是它能潜伏的原因。
+- 修复：`core/runtime/serialization/runtime_serializer.py` 改为 `scope.define(...)`（签名匹配）。
 
 ---
 
