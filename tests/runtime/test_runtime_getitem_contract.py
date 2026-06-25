@@ -60,14 +60,14 @@ class TestDictGetitem:
         assert d["a"].to_native() == 1
         assert d["b"].to_native() == 2
 
-    def test_missing_key_raises_key_error(self, engine_session):
-        """缺键抛 KeyError（实际行为）。
+    def test_missing_key_raises_interpreter_error(self, engine_session):
+        """缺键抛 InterpreterError（与 IbList/Tuple/String 越界一致）。
 
-        注意：这与 IbList/Tuple/String 越界抛 InterpreterError 不一致，
-        属潜在改进项；此处锁定当前实际行为以防意外回归。
+        历史：IbDict.__getitem__ 曾抛原始 KeyError，与兄弟类型不一致；
+        已统一为 InterpreterError（匹配 IbDict.pop 既有风格）。
         """
         d = _box(engine_session, {"a": 1})
-        with pytest.raises(KeyError):
+        with pytest.raises(InterpreterError, match="KeyError"):
             d["missing"]
 
 

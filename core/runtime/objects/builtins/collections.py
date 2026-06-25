@@ -277,7 +277,10 @@ class IbDict(IbValue):
 
     def __getitem__(self, key: Any) -> IbObject:
         k = key.to_native() if hasattr(key, 'to_native') else key
-        return self.fields[k]
+        try:
+            return self.fields[k]
+        except KeyError:
+            raise InterpreterError(f"KeyError: '{k}'")
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         k = key.to_native() if hasattr(key, 'to_native') else key
@@ -319,6 +322,3 @@ class IbDict(IbValue):
         native_key = key.to_native() if isinstance(key, IbObject) else key
         return native_key in self.fields
 
-    def __getitem__(self, key):
-        native_key = key.to_native() if isinstance(key, IbObject) else key
-        return self.fields[native_key]
