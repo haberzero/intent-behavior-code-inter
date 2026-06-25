@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-25（PT-ARCH-7 治理 + IbDict 错误统一完成；即时 P0/P1 清空；基线 1057 passed）
+> **最后更新**：2026-06-25（PT-ARCH-5 G3 + PT-ARCH-10 完成，即时技术债清空；下一主线 Phase 4；基线 1057 passed）
 
 ---
 
@@ -45,14 +45,27 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P0（当前最紧要）：PT-ARCH-5 Group 3（CPS/non-CPS 薄提取）
+## ✅ P0 已完成（2026-06-25）：PT-ARCH-5 G3 薄提取 + PT-ARCH-10 吞异常审计
 
-> Group 1+2 已完成。Group 3 剩余 5 对 sync/CPS 方法。即时高优先项（Phase 3 / PT-TEST-4 / PT-ARCH-7）均已清空，此项从 P2 提升。
+> 详见 `docs/COMPLETED.md` 2026-06-25 条目。
+> PT-ARCH-5 G3：提取 `_finalize_invoke_result`，4 个 `invoke_*` 后处理统一（深统一 3 对 `execute_*` 仍推迟）。
+> PT-ARCH-10：审计 ~35 处 `except Exception:`——12 处真静默补日志，~11 处确认非静默，~4 处编译层恢复保留。运行时层无漏网吞 bug。
+> **即时 P0/P1 与已知技术债全部清空**。下一主线：多模态 Phase 4。
 
-**可做**：2 对薄 `invoke_*` 方法（各 7-18 行，委托到 `execute_*` + 相同后处理）→ 提取共享后处理 helper
-**推迟**：3 对 `execute_*` 方法（各 ~100 行，body 90% 相同但 segment evaluator 不同）→ 需先统一 `_evaluate_segments`/`_evaluate_segments_cps`
+---
 
-**预估工作量**：薄提取 ~2h；完整统一 ~6h（推迟）
+## P0（当前最紧要）：多模态 Phase 4 — `media` 全模态容器 + 响应解析
+
+> 前置全部就绪：Phase 3（输入多模态）+ 注册链路 + payload 分发 + 测试守护已完成。即时技术债清空，按既定路线推进语言核心差异化能力。
+
+**待做**：
+1. `MediaAxiom`（`has_multimodal_response_cap`）+ `IbMedia` 运行时类（组合容器，固定属性 `.text/.audio/.image`，决策 DEC-2）+ IbSpec 注册（复用 Phase 3 的 axiom→spec 路径）
+2. `MultimodalParsingStrategy`（`llm_parsing_strategy.py`）—— 解析多部分 LLM 响应为 media 对象
+3. `llm_executor` 的 `from_response` 路径接入 + MOCK 模式 e2e
+
+**设计文档**：`docs/MULTIMODAL_BEHAVIOR_DESIGN.md` §4.2 + §七 Phase 4 + ADR-007~012
+**验证策略**：编译期 + MOCK 分发先落地（同 Phase 3 路径），真实多模态模型端到端验证留作手动
+**预估工作量**：~1-2 天（Phase 3 实际工时远低于原估，此项同法评估）
 
 ---
 

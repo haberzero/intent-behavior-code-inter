@@ -5,7 +5,29 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（IbDict 错误类型统一 + PT-ARCH-7 Phase 4-5 完成）
+> **最后更新**：2026-06-25（PT-ARCH-5 G3 薄提取 + PT-ARCH-10 吞异常审计完成，即时技术债清空）
+
+---
+
+## 2026-06-25：PT-ARCH-5 G3 薄提取 + PT-ARCH-10 吞异常审计
+
+测试基线：**1057 passed, 5 skipped**（0 failures，纯重构/日志，无行为变更）。
+
+### PT-ARCH-5 Group 3（薄提取）
+- 提取 `LLMExecutorCore._finalize_invoke_result(result, ec)` 共享后处理（回写 `last_llm_result` + None-safe 解包）。
+- 4 个 `invoke_*` 方法（`invoke_llm_function`/`_cps`、`invoke_behavior`/`_cps`）的近重复后处理统一委托，消除"改 sync 忘改 CPS"的漂移风险。
+- **深统一（3 对 `execute_*`）仍推迟**：需先统一 `_evaluate_segments`/`_cps`，~6h，风险较高。
+
+### PT-ARCH-10（剩余 except-Exception 审计）
+- 全量审计 core/ 的 ~35 处 `except Exception:`，分类如下：
+  - **12 处真静默 → 补 `core_debugger.trace` 日志**：`runtime_serializer`×4、`host/service`×2、`auto_discovery`×1、`llm_except_frame`×2、`intent`×1、`llm_parsing_strategy`×2
+  - **~11 处其实非静默**（已 re-raise / 已 debugger.trace / 已记录错误）——确认无隐藏 bug，无需动
+  - **~4 处编译层错误恢复**（lexer/parser/resolver 回溯）——故意控制流，保留
+  - **2 处良性**：`module_manager:88`（实际有 `raise`）、`io:27`（stdout 重配置 best-effort，在 print 路径不宜日志）
+- 审计结论：除编译层恢复外，**运行时层无一处是掩盖真实 bug 的漏网吞异常**。
+
+### 即时任务版图
+Phase 3 多模态、PT-TEST-4（5/5）、PT-ARCH-7、PT-ARCH-5 G3、PT-ARCH-10 全部完成。即时 P0/P1 与已知技术债清空，下一主线为多模态 Phase 4。
 
 ---
 

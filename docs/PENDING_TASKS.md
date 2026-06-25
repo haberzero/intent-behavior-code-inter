@@ -138,13 +138,9 @@
 ### [DONE] PT-ARCH-4 拆分 7 个 god modules ✅（全部 7 个已完成）
 ### [DONE] PT-ARCH-5 Group 1+2 折叠重复分支 ✅
 
-### PT-ARCH-5 Group 3　CPS/non-CPS 薄提取 [P2 — 见 NEXT_STEPS]
-
-**现状**：5 对 sync/CPS 方法存在于 `llm_executor/_llm_function.py` 和 `_behavior.py`。
-- 2 对薄 `invoke_*`（7-18 行）可提取共享后处理 helper
-- 3 对 `execute_*`（~100 行/对）需先统一 segment evaluator
-
-**为什么部分搁置**：3 对 `execute_*` 的完整统一涉及 `_evaluate_segments`/`_evaluate_segments_cps` 深层重构。
+### PT-ARCH-5 Group 3　CPS/non-CPS 薄提取 [部分 DONE — 薄提取 ✅ / 深统一推迟]
+- ✅ 薄提取（2026-06-25）：提取 `LLMExecutorCore._finalize_invoke_result`，4 个 `invoke_*` 后处理统一。
+- ⏳ 深统一（3 对 `execute_*`，~100 行/对）仍推迟：需先统一 `_evaluate_segments`/`_cps` 段求值器，~6h，风险较高。无用户需求推动时可继续推迟。
 
 ---
 
@@ -153,12 +149,9 @@
 - Phase 4-5：11 处 `except Exception: pass` → `core_debugger.trace` 可观测化（`_prompt.py`×3 / `base.py`×2 / `_shared.py`×3 / `engine.py` / `interpreter.py` / `media.py`）。`_scheduler.py __del__` 按惯例保持静默。
 - 附带：IbDict 缺键 `KeyError` → `InterpreterError` 统一 + 删除一处重复 `__getitem__`。
 
-### PT-ARCH-10　剩余 ~24 处 except Exception 审计 [P2 — 新增]
-> 来源：2026-06-25 PT-ARCH-7 治理时发现。文档曾称"10 处"，实际 core/ 共 ~35 处 `except Exception:`；PT-ARCH-7 处理了 11 处运行时有意图的，剩余多为：
-> - 编译层错误恢复（lexer/core_scanner、parser/type_def、parser/resolver、compiler/scheduler）
-> - 序列化可选路径（runtime_serializer ×4）、host/service rebind 回退（×2）
-> - llm_except_frame（×2）、intent、auto_discovery（×2）、llm_parsing_strategy（×2）、module_manager、enum、debugger
-> 多数有明确 fallback 语义，但需逐处确认是否有意 vs 漏网。低-中优先级。
+### [DONE] PT-ARCH-10　剩余 ~24 处 except Exception 审计 ✅（2026-06-25）
+- 审计 core/ 的 ~35 处 `except Exception:`：12 处真静默补日志（`runtime_serializer`×4 / `host/service`×2 / `auto_discovery`×1 / `llm_except_frame`×2 / `intent`×1 / `llm_parsing_strategy`×2）；~11 处确认非静默（已 re-raise/log/record）；~4 处编译层错误恢复保留；2 处良性（`module_manager:88` 有 raise、`io:27` stdout best-effort）。
+- **结论**：运行时层无一处掩盖真实 bug 的漏网吞异常。
 
 ---
 
