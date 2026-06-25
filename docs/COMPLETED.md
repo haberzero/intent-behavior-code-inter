@@ -5,7 +5,24 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 engine 生命周期覆盖完成）
+> **最后更新**：2026-06-25（PT-TEST-4 getitem 契约覆盖完成）
+
+---
+
+## 2026-06-25：PT-TEST-4 kernel/__getitem__ 契约覆盖
+
+测试基线：**1053 passed, 5 skipped**（0 failures，较上轮 +13）。
+
+### PT-TEST-4 area 3：容器/字符串 `__getitem__` 契约测试
+- 新增 `tests/runtime/test_runtime_getitem_contract.py`（13 个测试）：
+  - IbList：正/负索引、切片类型保持（list→list）、越界抛 `InterpreterError`
+  - IbTuple：索引、切片类型保持（tuple→tuple）
+  - IbDict：键访问、缺键行为、IbObject 键拆箱
+  - IbString：字符索引（返回 str）、切片（返回 str）、负索引、越界 `InterpreterError`
+  - IbObject 键路径（VM 实际传递 IbInteger/IbString，经 `to_native()` 拆箱）
+
+### 观察项（非本轮改动）
+- IbDict 缺键抛原始 `KeyError`，而 IbList/Tuple/String 越界抛 `InterpreterError` —— 错误类型不一致，属潜在改进项（已用测试锁定当前实际行为）。
 
 ---
 
