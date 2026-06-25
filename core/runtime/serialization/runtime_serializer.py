@@ -458,7 +458,7 @@ class RuntimeDeserializer:
         
         for name, sym_data in data.get("symbols", {}).items():
             sym = self._deserialize_symbol(sym_data)
-            scope.define_variable(name, sym.value, declared_type=sym.declared_type, is_const=sym.is_const)
+            scope.define(name, sym.value, declared_type=sym.declared_type, is_const=sym.is_const)
             
         for suid, sym_data in data.get("uid_to_symbol", {}).items():
             sym = self._deserialize_symbol(sym_data)
