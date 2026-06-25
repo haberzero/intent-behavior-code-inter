@@ -5,7 +5,24 @@
 > 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 serialization 覆盖完成 + 反序列化 bug 修复）
+> **最后更新**：2026-06-25（PT-TEST-4 engine 生命周期覆盖完成）
+
+---
+
+## 2026-06-25：PT-TEST-4 engine.py 生命周期覆盖
+
+测试基线：**1040 passed, 5 skipped**（0 failures，较上轮 +8）。
+
+### PT-TEST-4 area 2：`engine.py` 生命周期测试
+- 新增 `tests/e2e/test_e2e_engine_lifecycle.py`（7 个测试）：
+  - 新引擎未封印/无解释器（惰性初始化）
+  - `compile_string` 不封印（编译无 seal 副作用）
+  - `execute` 封印注册表（单次执行语义）
+  - **封印后重入 `execute` 抛 `PermissionError`**（NEXT_STEPS 指定的核心安全契约）
+  - `compile_string` → `execute` 分步流程产出输出
+  - `run_string` 单次运行后封印
+  - 多引擎实例隔离（A 封印不阻塞 B）
+- 此前该模块零覆盖（引擎的单次执行/封印契约无回归守护）
 
 ---
 

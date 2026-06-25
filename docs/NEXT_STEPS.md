@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-25（PT-TEST-4 serialization 覆盖完成 + 反序列化 bug 修复；基线 1032 passed）
+> **最后更新**：2026-06-25（PT-TEST-4 engine 生命周期覆盖完成；基线 1040 passed）
 
 ---
 
@@ -14,7 +14,7 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-06-25 实测结果**：`1032 passed, 5 skipped`（0 failures，无环境变量 workaround）
+**2026-06-25 实测结果**：`1040 passed, 5 skipped`（0 failures，无环境变量 workaround）
 
 > ✅ 基线可信。5 个 skipped：2 个设计限制（`INV-LAMBDA-3`/`INV-SCOPE-1`）+ 3 个层级元测试白名单（混合文件待拆分）。
 
@@ -28,19 +28,17 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-## P0（当前最紧要）：PT-TEST-4 覆盖缺口填补（3/5 区域待补）
+## P0（当前最紧要）：PT-TEST-4 覆盖缺口填补（2/5 区域待补）
 
-> 已完成 2/5：`runtime/path/`（85 测试 + 5 bug 修复）+ `runtime/serialization/`（11 round-trip 测试 + 1 反序列化 bug 修复，详见 `docs/COMPLETED.md` 2026-06-25 条目）。
+> 已完成 3/5：`runtime/path/`（85 测试）+ `runtime/serialization/`（11 round-trip 测试 + 1 反序列化 bug 修复）+ `engine.py` 生命周期（7 测试）。详见 `docs/COMPLETED.md` 2026-06-25 条目。
 
 **待做**（按优先级排序）：
-1. **`core/engine.py` 生命周期测试**（~4-6 个测试，中高复杂度）
-   - 封印后重入抛 `PermissionError`、compile-then-execute、跨盘 isolated root
-2. **`core/runtime/objects/kernel/` `__getitem__` 契约**（~6-7 个测试，中复杂度）
+1. **`core/runtime/objects/kernel/` `__getitem__` 契约**（~6-7 个测试，中复杂度）
    - list/tuple/dict/str getitem 边界情况（负索引、缺键、type_ref 保持）
-3. **`core/runtime/host/service.py` collect 委托**（~2-3 个测试，中复杂度）
+2. **`core/runtime/host/service.py` collect 委托**（~2-3 个测试，中复杂度）
    - 大部分路径已由 Engine 层 e2e 覆盖，仅 `HostService.collect` 无 orchestrator 委托分支未测
 
-**预估工作量**：~2 天
+**预估工作量**：~1 天
 
 ---
 
