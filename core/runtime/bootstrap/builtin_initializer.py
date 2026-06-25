@@ -612,19 +612,25 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     for _media_type_name in ("audio", "image", "video"):
         _media_class = registry.get_class(_media_type_name)
         if _media_class is not None:
-            _media_axiom = metadata_registry.get_axiom_registry().get_axiom(
+            # 注意：必须用 SpecRegistry.get_axiom(spec)（内部经 spec.get_base_name() 取名），
+            # 而非 AxiomRegistry.get_axiom(spec)（后者期望字符串名，传入 IbSpec 会返回 None）。
+            _media_axiom = metadata_registry.get_axiom(
                 metadata_registry.resolve(_media_type_name)
             ) if metadata_registry else None
 
+            # 绑定循环变量为默认参数，避免 lambda 晚绑定闭包 bug
+            # （否则三种类型都会引用循环结束后的最后一个值 "video"）。
+            _type_name = _media_type_name
+
             # __to_prompt__: 返回文本描述（供纯文本提示词路径使用）
             _reg_native(_media_class, '__to_prompt__',
-                        lambda self: f"[{_media_type_name} data: {getattr(self.value, 'size', '?')} bytes]" if self.value else f"[empty {_media_type_name}]")
+                        lambda self, tn=_type_name: f"[{tn} data: {getattr(self.value, 'size', '?')} bytes]" if self.value else f"[empty {tn}]")
 
             # __payload_prompt__: 委托到 axiom 的 __payload_prompt__ 方法
             if _media_axiom and hasattr(_media_axiom, '__payload_prompt__'):
                 _axiom_ref = _media_axiom
                 _reg_native(_media_class, '__payload_prompt__',
-                            lambda self: _axiom_ref.__payload_prompt__(self), unbox=False)
+                            lambda self, ax=_axiom_ref: ax.__payload_prompt__(self), unbox=False)
 
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)

@@ -83,3 +83,13 @@ INTENT_SPEC = TypeDef(name="Intent", kind=TypeKind.CLASS.value, is_nullable=True
 INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
                                parent_type=TypeRef.of("Object"))
 
+# 多模态类型规格 — IbAudio / IbImage / IbVideo 的公理化描述符
+# Per ADR-012: 作为普通类名注册（非关键字），继承 Object。
+# 方法成员（data/format/duration/cast_to 等）由 _bootstrap_axiom_methods 从公理自动填充。
+AUDIO_SPEC = TypeDef(name="audio", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
+                     parent_type=TypeRef.of("Object"))
+IMAGE_SPEC = TypeDef(name="image", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
+                     parent_type=TypeRef.of("Object"))
+VIDEO_SPEC = TypeDef(name="video", kind=TypeKind.CLASS.value, is_nullable=True, is_user_defined=False,
+                     parent_type=TypeRef.of("Object"))
+

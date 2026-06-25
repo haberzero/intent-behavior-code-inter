@@ -34,6 +34,9 @@ from .specs import (
     LLM_PARSE_ERROR_SPEC,
     LLM_RETRY_EXHAUSTED_ERROR_SPEC,
     LLM_CALL_ERROR_SPEC,
+    AUDIO_SPEC,
+    IMAGE_SPEC,
+    VIDEO_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 
@@ -73,6 +76,9 @@ __all__ = [
     "LLM_PARSE_ERROR_SPEC",
     "LLM_RETRY_EXHAUSTED_ERROR_SPEC",
     "LLM_CALL_ERROR_SPEC",
+    "AUDIO_SPEC",
+    "IMAGE_SPEC",
+    "VIDEO_SPEC",
     # Registry / factory
     "SpecRegistry",
     "SpecFactory",

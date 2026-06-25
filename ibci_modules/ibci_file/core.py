@@ -1,21 +1,26 @@
 """
 File 文件操作插件核心实现
-合并了基础文件操作和高级文件分析功能
+合并了基础文件操作、高级文件分析和多模态媒体读取功能。
 
 使用 ExecutionContext 的统一路径解析，与 Python 解耦。
 """
 import os
 import re
 from typing import List, Dict, Any
+
 from core.runtime.path import IbPath
+from core.runtime.objects.media_storage import MediaStorage
+from core.runtime.objects.media_types import IbAudio, IbImage, IbVideo
+from core.kernel.issue import InterpreterError
 
 
 class FileLib:
     """
-    File 插件核心类 (v2.5.0)
-    合并基础文件操作和高级文件分析功能：
+    File 插件核心类 (v2.6.0)
+    合并基础文件操作、高级文件分析和多模态媒体读取功能：
     - 基础操作: read, write, exists, remove
     - 高级分析: search_in_files, list_files_recursive, get_line_count, read_lines_range, get_file_size, find_todos
+    - 多模态媒体: read_audio, read_image, read_video (Phase 3)
 
     使用 ExecutionContext.resolve_path() 进行统一路径解析。
     所有相对路径都基于入口文件目录。
@@ -190,6 +195,46 @@ class FileLib:
             r"TODO[:\s]",
             [".py", ".ibci", ".c", ".cpp", ".js", ".ts", ".java", ".go", ".rs"]
         )
+
+    # === 多模态媒体读取 (Phase 3) ===
+
+    def _read_media_bytes(self, path: str):
+        """
+        读取媒体文件的原始字节，并从扩展名推导格式。
+
+        返回 ``(data, format)`` 元组：``data`` 为 ``bytes``，``format`` 为
+        去掉点号的小写扩展名（如 ``"wav"``、``"png"``、``"mp4"``）；
+        无扩展名时回退为 ``"bin"``。
+        """
+        res_path = self._resolve_path(path)
+        with open(res_path, "rb") as f:
+            data = f.read()
+        fmt = os.path.splitext(path)[1].lstrip(".").lower() or "bin"
+        return data, fmt
+
+    def _get_media_class(self, type_name: str):
+        """通过 kernel_registry 获取多模态类型的 IbClass。"""
+        ib_class = self.capabilities.kernel_registry.get_class(type_name)
+        if ib_class is None:
+            raise InterpreterError(
+                f"File plugin: multimedia type '{type_name}' is not registered."
+            )
+        return ib_class
+
+    def read_audio(self, path: str):
+        """读取音频文件并构造 ``audio`` 对象。"""
+        data, fmt = self._read_media_bytes(path)
+        return IbAudio(MediaStorage(data, fmt), self._get_media_class("audio"))
+
+    def read_image(self, path: str):
+        """读取图像文件并构造 ``image`` 对象。"""
+        data, fmt = self._read_media_bytes(path)
+        return IbImage(MediaStorage(data, fmt), self._get_media_class("image"))
+
+    def read_video(self, path: str):
+        """读取视频文件并构造 ``video`` 对象。"""
+        data, fmt = self._read_media_bytes(path)
+        return IbVideo(MediaStorage(data, fmt), self._get_media_class("video"))
 
 
 def create_implementation():
