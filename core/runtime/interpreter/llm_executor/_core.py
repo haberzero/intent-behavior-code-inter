@@ -129,6 +129,20 @@ class LLMExecutorCore:
 
         return {}
 
+    def _finalize_invoke_result(self, result: Any, execution_context: Optional[IExecutionContext]):
+        """``invoke_*`` 系列入口的共用后处理（sync 与 CPS 版语义完全一致）。
+
+        PT-ARCH-5 Group 3：消除 4 个 ``invoke_*`` 方法的近重复后处理。
+
+        1. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        2. None-safe 解包：``result.value`` 非空则返回，否则返回 None 单例。
+        """
+        if execution_context is not None:
+            execution_context.runtime_context.set_last_llm_result(result)
+        if result is not None and result.value is not None:
+            return result.value
+        return self.registry.get_none()
+
     def _call_llm(self, sys_prompt: str, user_prompt: Union[str, List[Union[str, Dict[str, Any]]]], node_uid: str, execution_context: Optional[IExecutionContext] = None, target_model: str = "") -> str:
         """底层 LLM 调用。成功时返回 response 字符串。
         失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。

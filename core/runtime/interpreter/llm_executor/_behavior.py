@@ -220,12 +220,7 @@ class _BehaviorMixin:
         3. 直接返回 IbObject，调用方无需了解 LLMResult 内部结构。
         """
         result = self.execute_behavior_object(behavior, execution_context)
-        if execution_context is not None:
-            execution_context.runtime_context.set_last_llm_result(result)
-        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
-        if result is not None and result.value is not None:
-            return result.value
-        return self.registry.get_none()
+        return self._finalize_invoke_result(result, execution_context)
 
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。"""
@@ -365,8 +360,4 @@ class _BehaviorMixin:
     def invoke_behavior_cps(self, behavior: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`invoke_behavior`；段求值嵌入外层 VM 帧栈。"""
         result = yield from self.execute_behavior_object_cps(behavior, execution_context)
-        if execution_context is not None:
-            execution_context.runtime_context.set_last_llm_result(result)
-        if result is not None and result.value is not None:
-            return result.value
-        return self.registry.get_none()
+        return self._finalize_invoke_result(result, execution_context)

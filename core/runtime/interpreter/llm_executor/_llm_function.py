@@ -146,12 +146,7 @@ class _LLMFunctionMixin:
         # call_intent 由 IbLLMFunction 在调用前已解析并暂存到 _pending_call_intent
         call_intent = getattr(func, '_pending_call_intent', None)
         result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
-        if execution_context is not None:
-            execution_context.runtime_context.set_last_llm_result(result)
-        # 使用 is not None 判断，避免将 IbBool(False)/IbInteger(0) 等假值误判为空
-        if result is not None and result.value is not None:
-            return result.value
-        return self.registry.get_none()
+        return self._finalize_invoke_result(result, execution_context)
 
     # ------------------------------------------------------------------ #
     # CPS-friendly generator variants                                    #
@@ -262,8 +257,4 @@ class _LLMFunctionMixin:
         result = yield from self.execute_llm_function_cps(
             func.node_uid, execution_context, call_intent=call_intent
         )
-        if execution_context is not None:
-            execution_context.runtime_context.set_last_llm_result(result)
-        if result is not None and result.value is not None:
-            return result.value
-        return self.registry.get_none()
+        return self._finalize_invoke_result(result, execution_context)
