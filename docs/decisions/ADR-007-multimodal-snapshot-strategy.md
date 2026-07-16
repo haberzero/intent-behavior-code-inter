@@ -1,7 +1,13 @@
 # ADR-007: Multimodal snapshot strategy (DEC-5/DEC-6 reconciliation)
 
 ## Status
-Accepted (2026-06-24)
+Accepted (2026-06-24) — **Partially superseded in spirit by ADR-014 / ADR-016**（2026-06-25）
+
+> 本 ADR 决策成立时基于"Phase 3 用 deep-copy / MediaStorage 纯内存，Phase 5 才上磁盘"的二阶段划分。
+> 该划分已被 ADR-016（所有 media 一律 disk-backed）+ ADR-014（media 为磁盘型 handle，砍 MemoryBacking）推翻：
+> handle 使快照天然便宜，原"二阶段"不再成立。本 ADR 的 isinstance bug 发现仍有历史价值，
+> 对应修复归属 `docs/PENDING_TASKS.md §九 PT-ARCH-17`（deep_clone `type(val) is` → `isinstance`）。
+> 多模态类型的 `__snapshot__`/`__restore__` 设计被 ADR-016 第 5 条"平行协议族"取代。
 
 ## Date
 2026-06-24

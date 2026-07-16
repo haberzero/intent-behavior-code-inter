@@ -636,7 +636,7 @@ func call_any(fn f) -> auto:
 - 返回类型必须 assignable
 - 实参可以是普通函数引用、lambda 闭包、snapshot 延迟对象、可调用类实例
 
-> **历史背景**：D3（2026-04-29）落地。落地记录见 `docs/COMPLETED.md`；当前规范见 `docs/TYPE_SYSTEM_DESIGN.md §7`。
+> **历史背景**：D3（2026-04-29）落地。落地记录见 `docs/COMPLETED.md`；当前规范见 `docs/design/TYPE_SYSTEM_DESIGN.md §7`。
 
 ---
 
@@ -835,7 +835,7 @@ fn add = lambda(int a, int b) -> int: a + b
 int s = add(3, 4)
 ```
 
-**lambda 意图语义**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9.4）：
+**lambda 意图语义**（完整规则见 `docs/design/INTENT_SYSTEM_DESIGN.md` §9.4）：
 - 定义时**不捕获**任何意图上下文
 - 调用时使用调用处的持久意图栈（`@+` 累积）和一次性意图（`@` smear）
 - 作为高阶函数参数传出后，调用时使用的仍是**调用点**的意图栈（不是定义处）
@@ -862,7 +862,7 @@ fn translate = snapshot(str text) -> str: @~ 翻译 $text ~
 str r = translate("hello")
 ```
 
-**snapshot 意图语义**（完整规则见 `docs/INTENT_SYSTEM_DESIGN.md` §9.3）：
+**snapshot 意图语义**（完整规则见 `docs/design/INTENT_SYSTEM_DESIGN.md` §9.3）：
 - 定义时 `fork()` 当时的完整意图上下文，存储为 `frozen_intent_ctx`
 - 调用时**绝对忽略**调用处的所有意图（持久栈、`@` smear、`@!` 排他）
 - `snapshot` 是 IBCI 中唯一"确定无状态、确定可重入"的延迟对象

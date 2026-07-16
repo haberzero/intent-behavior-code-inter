@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-06-25（PT-ARCH-5 G3 薄提取 / PT-ARCH-10 审计 / PT-TEST-4 全部 5/5 / IbDict 统一 标记完成）
+> **最后更新**：2026-07-13（**ADR-019 立项**：路径与插件模型重设计，取代 ADR-018 的 D1/D5/CWD 上界。原 PT-ARCH-19/20 逐文件:行清单吸收为历史档案，执行以 ADR-019 + NEXT_STEPS PT-ARCH-21 为准。基线 1106 passed / 7 skipped / 0 fail）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -12,6 +12,7 @@
 > - 标为 `[DESIGN-DEBT]` 的条目：已有部分基础设施但存在未解决的设计冲突
 > - 标为 `[SHELVED]` 的条目：明确搁置，有独立文档记录设计思路
 > - 标为 `[DONE]` 的条目：已完成，保留供追溯（将在下次清理时移除）
+> - 标为 `[GATED]` 的条目：被显式前置 gate 阻塞（见 `NEXT_STEPS.md` 工作模式定论）
 
 ---
 
@@ -45,7 +46,7 @@
 
 ## 二、VM 异步/协程层（L3）[SHELVED]
 
-> **独立设计文档**：`docs/COROUTINE_DESIGN_NOTES.md`
+> **独立设计文档**：`docs/design/COROUTINE_DESIGN_NOTES.md`
 > **搁置决策日期**：2026-05-28
 > **搁置原因**：当前优先完善多模态功能（Phase 3-5）
 
@@ -66,7 +67,7 @@
 | PT-3.2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义 |
 
 ### 恢复条件
-详见 `docs/COROUTINE_DESIGN_NOTES.md §六`。核心前提：多模态 Phase 3-5 稳定后 + 出现明确用户需求。
+详见 `docs/design/COROUTINE_DESIGN_NOTES.md §六`。核心前提：多模态 Phase 3-5 稳定后 + 出现明确用户需求。
 
 ---
 
@@ -86,7 +87,7 @@
 
 ### PT-4.3　语言级协程 [SHELVED]
 
-见 §二 + `docs/COROUTINE_DESIGN_NOTES.md`。
+见 §二 + `docs/design/COROUTINE_DESIGN_NOTES.md`。
 
 ---
 
@@ -246,3 +247,358 @@
 
 ### PT-TEST-8　修复测试命名违规 [P3]
 - 6 个 `TestM2*`/`TestD3*` 类名违反 `tests/README.md` 规范
+
+---
+
+## 九、media Phase 4 前置技术债（2026-06-25 三轮架构审计）
+
+> **背景**：2026-06-25 三轮架构审计（详见 `docs/COMPLETED.md` 当日条目）发现：当前 media 内存实现是"哑的"（两个潜伏 bug 致字节静默丢失）、路径系统严重碎片化、ADR-009 的分叉前提被证伪；第三轮确立了**变量存储模型**框架（ADR-016）；P0-1 完成后复审又发现路径模块层位置遗留违规（ADR-017）。
+> **治理决策**：ADR-013（修订，协议驱动分发）/ ADR-014（修订，磁盘型 handle，砍 MemoryBacking）/ ADR-015（路径统一为强制前置）/ **ADR-016（变量存储模型，上层治理）** / **ADR-017（路径模块层位置重构，最高优先级）**。
+> **工作模式**：受 `NEXT_STEPS.md ⛔ 工作模式定论` 约束——禁止 compat shim / 胶水 / tricky / 过程式硬编码分发；**潜伏 bug 不允许过渡修复**，必须随存储模型架构（PT-ARCH-17/18）统一修复。
+> **执行序列**：见 `NEXT_STEPS.md` 的 **PT-ARCH-21（ADR-019 路径与插件模型重设计）**。
+
+> ⚠️ **2026-07-13 重大重构**：经 5-agent 交叉验证 + 多轮研讨，本节原"路径统一"实为**模型重设计**。立 [ADR-019](decisions/ADR-019-path-and-plugin-model-redesign.md) 为正本。**下方 PT-ARCH-19/20 的逐文件:行清单已被 ADR-019 吸收**：
+> - **已完成且保留**：P0-A（SnapshotLayout BUG）、P0-B（3 能力测试）、D2（canonicalize_for_security 规范化）。
+> - **需回退/改造**：D1''（root 必填→可选）、C1（方案 B entry_file→合成 `__string_exec__.ibci`）。
+> - **机械清理项（P0-C~J + P0-L）**：转入 ADR-019 阶段 D（因组件本身要重构，先清理再重构=浪费）。
+> - **隔离语义**（D5/derive_isolated）：反转（子必须在父 proj_root 内），旧测试删除。
+> - **本节以下内容作为历史档案保留**（文件:行仍可参考），但**执行以 ADR-019 + NEXT_STEPS PT-ARCH-21 序列为准**。
+
+### 🔴 PT-ARCH-21　路径与插件模型重设计（ADR-019，最高优先级）
+
+> 正本：`docs/decisions/ADR-019-path-and-plugin-model-redesign.md`。实现序列（阶段 A 路径核心 / B 插件分离 / C 隔离修订 / D 机械清理）：见 `NEXT_STEPS.md` PT-ARCH-21。
+> 取代 ADR-018 的 D1/D5/CWD 上界/D4 穿透。取代下方原 PT-ARCH-19/20 的执行计划（保留为历史档案）。
+
+---
+
+### [历史档案] 以下为原 PT-ARCH-19/20 逐文件:行清单（已被 ADR-019 吸收，仅作参考）
+
+### 🔴 [重开-进行中] PT-ARCH-19　路径模块层位置重构（分层完成，统一未彻底 + 1 BUG）
+
+> 测试基线：1070 passed（但 3 新能力零测试覆盖，BUG 因此漏网）。
+> **2026-06-25 双轮交叉检验（8 subagent）重开**。分层搬迁与 realpath 收口达标，但"真正完全统一、无妥协"未达成，且引入 1 个实锤 BUG。
+> **下个 session 续作：按下方"逐文件:行清单"逐项处理，每项配测试，完成门槛为再次交叉检验通过。**
+
+**已达标（保留，勿动）**：3 层分工（base/kernel/runtime）；compiler→runtime 违规消除；realpath 收口至 `canonicalize_for_security`；3 新能力已建并被调用；base/source_manager 迁 IbPath。
+
+#### P0-A：SnapshotLayout BUG（必须立即修，已实证）
+- [ ] **`core/kernel/path/snapshot.py:23`** — `asset_dir_for`：`return save_path + ".assets"` → `IbPath.__add__` 是路径 join，产出 `state.json\.assets`（文件当目录），旧契约是 `state.json.assets`（同级）。**修法**：`return IbPath.from_native(save_path.to_native() + ".assets")`（字符串拼接，再包 IbPath）。
+  - **2026-07-13 5-agent 复核**：BUG 机制已逐行证实（`ib_path.py:289` `__add__` 委托 `join`，`.assets` 经 `_normalize` 不剥离前导点 → join 为子段）。
+  - **运行时影响（已证实）**：win32 首次 save_state 触发 `PermissionError`/`NotADirectoryError`；跨版本 load_state 静默丢 assets。BUG 漏网根因 = SnapshotLayout 零测试覆盖。
+  - `asset_file`（:28，`asset_dir / f"{uid}.txt"`，用 `__truediv__`）**已确认不受影响**——修 :23 后下游自愈。
+- [ ] **（剥离，非 P0-A 范围）uid 加固**：`snapshot.py:28` 的 `uid` 未校验，含 `/`/`..` 会路径穿越。当前 uid 是内部 hash 不可利用。**单列为后续 hardening 项**，不塞进 P0-A 止损（避免范围蔓延）。
+- [ ] **（订正误报）`resolver.py:137` 非 BUG**：`_probe_file(self, base_path: str)` 签名证明 `base_path` 为 str，`base_path + ext` 是字符串拼接（功能正确）。属 P0-H 迁移项（IbPath 化），**不并入 P0-A 止损**。
+
+#### P0-B：测试缺口（必须补，是 BUG 漏网原因）
+- [ ] **`tests/runtime/test_path.py`** — 补 `TestCanonicalizeForSecurity`（验证 realpath + IbPath 返回、相对输入、符号链接场景）。
+- [ ] **`tests/runtime/test_path.py`** — 补 `TestDeriveIsolated`（验证 (entry, root=dirname(entry)) 契约、无 parent 退化、与 `test_run_isolated_absolute_path_still_works` 语义一致）。
+- [ ] **`tests/runtime/test_path.py`** — 补 `TestSnapshotLayout`（验证 `asset_dir_for` 产出同级目录、`asset_file` 路径；**含修 BUG 后的回归断言**）。
+- [ ] **`tests/runtime/` 或 `tests/e2e/`** — 补 `save_state`/`load_state` 端到端（含 assets 外化，触发 SnapshotLayout，守护 BUG）。
+
+#### P0-C：PathContext 真正落地（D4，消灭空架子）
+- [ ] **`core/engine.py`**（`__init__` + `run()`）— 构造 `PathContext(entry_dir, project_root)`，存为 `self._path_ctx`；向下传递给 scheduler/resolver/permissions/interpreter。
+- [ ] **`core/compiler/scheduler.py:42-43`** — 接收 PathContext（或 `.project_root`），删除 `self._root_ib = canonicalize_for_security(...)` + `self.root_dir = ...` 私有派生。
+- [ ] **`core/compiler/parser/resolver/resolver.py:27-28`** — 同上。
+- [ ] **`core/runtime/interpreter/permissions.py:16-17`** — 同上（`self._root_path` 改从 PathContext 取）。
+
+#### P0-D：CHILDBOOT 双轨清除
+- [ ] **`core/runtime/rt_scheduler.py:68-70`** — 删除死代码内联备份 `root_dir = os.path.dirname(os.path.abspath(artifact))`（与 `PathContext.derive_isolated` 同公式；在 run_isolated/spawn_isolated 链路不可达；`dispatch()` 唯一潜在触发者零调用）。
+
+#### P0-E：check() 双轨统一
+- [ ] **`core/engine.py:438`** — `abs_entry = os.path.abspath(entry_file)` 改为 IbPath 规范化（与 `run()`:320 / `compile()`:363 一致），并登记 `_entry_file`/`_entry_dir`。
+
+#### P0-F：CWD 兜底移除（ADR-018 D1）
+- [ ] **`core/engine.py:74`** — `_root_src = root_dir if root_dir else os.getcwd()` 删除 CWD 分支；退化统一到 entry_dir（见 PT-ARCH-20 D1/D3）。
+- [ ] **`core/engine.py:71-73`** — 删除"CWD 兜底保留至……"过渡注释。
+
+#### P0-G：三重规范化链消除
+- [ ] **`core/compiler/scheduler.py:126`** — `entry_file = os.path.abspath(entry_file)` 删除（engine 上游已规范化，二次 abspath 冗余且引入 CWD 锚定）。
+
+#### P0-H：ModuleResolver SSOT 落实（内部构造层接 IbPath）
+- [ ] **`core/compiler/parser/resolver/resolver.py:4`** — `IbPath` 导入目前是死的；要么删除，要么在下方构造层真正使用（推荐后者）。
+- [ ] **`core/compiler/parser/resolver/resolver.py:77`** — `os.path.dirname(os.path.abspath(context_file))` → IbPath.from_native + parent。
+- [ ] **`core/compiler/parser/resolver/resolver.py:82`** — `base_dir = os.path.dirname(base_dir)` → `.parent`。
+- [ ] **`core/compiler/parser/resolver/resolver.py:87`** — `os.path.join(base_dir, rel_path)` → IbPath `/`。
+- [ ] **`core/compiler/parser/resolver/resolver.py:95`** — `os.path.join(self.root_dir, rel_path)` → IbPath `/`。
+- [ ] **`core/compiler/parser/resolver/resolver.py:143`** — `os.path.join(base_path, '__init__' + ext)` → IbPath 构造（消除字符串 `+ ext`）。
+
+#### P0-I：abspath 收口 + module_system/project_detector 接入新轨
+- [ ] **`core/project_detector.py:56,75,175`** — `os.path.abspath` → IbPath；全文 `os.path.join/dirname`（:57,81,87,92,116,121,143,148,153,155,176,183）接 IbPath。
+  - **2026-07-13 订正**：原清单误列 `:184`，实际 `:184` 是 `os.path.isdir`（FS 查询，合法边界，不动）。原"~14 处"实为 12 处 join/dirname + 3 处 abspath。
+- [ ] **`core/runtime/module_system/discovery.py:19`** — `[os.path.abspath(p) for p in search_paths]` → IbPath。
+- [ ] **`core/runtime/module_system/loader.py:24`** — 同上。
+- [ ] **`core/runtime/module_system/discovery.py:52,56,88,104,108`** + **`loader.py:185,190,197`** — os.path.join/dirname/basename 评估迁移（部分为 os.walk/sys.path 互操作边界，需逐处判断）。
+- [ ] **`core/compiler/scheduler.py:96`** — `os.path.join(self.root_dir, "__init__.ibci")` → IbPath `/`。
+
+#### P0-J：死代码清理
+- [ ] **`core/runtime/interpreter/permissions.py:1`** — 未用 `import os`（确认 canonicalize_for_security 后是否还需 os；若不需则删）。
+- [ ] **`core/runtime/interpreter/execution_context.py:1`** — 未用 `import os`。
+- [ ] **`core/runtime/interpreter/module_manager.py:6`** — 未用 `import os`。
+- [ ] **`core/runtime/interpreter/module_manager.py:43,49`** — 死字段 `self.root_dir`（默认 `"."`，CWD 模式；构造时接受但永不读取）。
+- [ ] **`core/runtime/interpreter/intrinsics/meta.py:2`** — 未用 `import os`。
+- [ ] **`core/extension/auto_discovery.py:18`** — 死导入 `from pathlib import Path`。
+- [ ] **`core/extension/auto_discovery.py:73,85,89`** — os.path 用法（与 BuiltinPaths 三轨混乱）。
+
+#### P0-K（附带，非路径，但违反全局"禁兼容层"标准）
+- [ ] **`core/runtime/interpreter/constants.py`** — 显式 `# 向后兼容垫片` 重导出。
+- [ ] **`core/runtime/interpreter/llm_result.py`** — 同。
+- [ ] **`core/runtime/host/host_interface.py`** — 同。
+- [ ] **`core/runtime/vm/task.py:28-30`** — "重新导出以保持向后兼容"。
+> **2026-07-13 决策**：此 4 处与路径无关，与 media Phase 4 无关。**从完成门槛 ⑥ 剥离**——不再作为 PT-ARCH-19 的通过条件（避免门槛含被搁置项导致自相矛盾）。单列为独立技术债 track，由负责人另行排期；不堵 P0-1 完成判定。
+
+#### P0-L：5-agent 完备性审计新增漏项（2026-07-13）
+
+> 对抗式完备性审计（rg 全仓扫描）发现原清单"零碎片化"声称不成立。以下为原 P0-A~K 漏列的路径碎片化，必须并入收尾。
+
+- [ ] **`ibci_modules/ibci_file/core.py`（整文件遗漏）** — 用户可见文件 API，含 `os.path.relpath`（:102,:127，与 canonical `safe_relpath` 平行实现）、`os.path.join`（:95）、`os.path.splitext`（:211）。**这是 IBCI 脚本可见的路径行为，优先级高于纯内部清理。**
+- [ ] **`core/runtime/interpreter/interpreter.py:1`** — 死 `import os`（body 零 `os.` 命中）。原 P0-J 漏列。
+- [ ] **`core/compiler/scheduler.py:13`** — 死 `IbPath`（`from core.kernel.path import IbPath, ...`，body 仅用 PathValidator/ModuleNameSpace/safe_relpath）。原 P0-H 只列了 resolver.py:4。
+- [ ] **`core/runtime/interpreter/permissions.py:5`** — 死 `IbPath`（body 仅用 PathValidator）。原 P0-H 漏列。
+- [ ] **`core/runtime/rt_scheduler.py:88`** — `plugins_path = os.path.join(root_dir, "plugins")`，**消费了 P0-D 要删的死 `root_dir`**。P0-D 删除前必须先处理此下游，否则断链。
+- [ ] **`ibci_sdk/check.py`** — 多处 `os.path`（:64,73-81,141,244-254）。文件头声明"不依赖 core.*"——需**显式排除或并入**（二选一，当前是沉默遗漏）。
+  - **✅ 2026-07-13 负责人裁决：显式排除**。`ibci_sdk` 是不介入 core 的独立工具；其 `os.path` 用法不视为路径碎片化。文档注明边界即可，不纳入清理。
+- [ ] **（P1，本轮推迟）`main.py:9`** — `os.path.dirname(os.path.abspath(__file__))` 装根（sys.path 注入），违反"BuiltinPaths 唯一 `__file__` 交互点"。注：此处运行于 engine 构造前，需评估能否经 BuiltinPaths 或显式排除。
+- [ ] **（P1，本轮推迟）`main.py:29`** — `os.path.splitext(os.path.basename(path))[0]` 模块名派生；`ModuleNameSpace` 声称集中化模块↔路径映射，此处是平行实现。
+- [ ] **（P1，本轮推迟）`core/runtime/module_system/discovery.py:109`** — `internal_name = f"ibci_{parent_dir}._spec"` 字符串构造模块名，绕过 ModuleNameSpace。原 P0-I 列了 :104,:108 漏了 :109。
+> **2026-07-13 优先级裁决**：P0-L 的 P0 项（`ibci_file/core.py`、`rt_scheduler.py:88`、3 处死 import）本轮做；P1 项（main.py × 2、discovery.py:109）推迟到 media Phase 4 前——不阻塞 P0-2/P0-3，且 main.py 预引擎操作风险较高需单独评估。
+> **完备性结论**：原清单对"compiler/runtime/kernel 8 文件"逐行准确（97.2%），但"零碎片化"声称在 repo 边界（`ibci_modules/`/`ibci_sdk/`/`main.py`）被证伪。P0-L 补全后方接近真正完备。
+
+---
+
+### 🔴 PT-ARCH-20　路径概念澄清与 project_root 统一 [P0 / ADR-018]
+
+> 2026-06-25 路径概念交叉检验（3 subagent）发现主侧 project_root 严重混淆。**5 项决策已由项目负责人确认，固化为 ADR-018**。下个 session 按 ADR-018 + 下方"逐文件:行清单"执行。
+> **2026-07-13 5-agent 补充**：发现 D1↔D5 逻辑空转 + 隐藏依赖（见下方"设计决策"与"依赖图"）。
+
+**5 路径概念健康度（收敛裁决）**：概念 4（child entry）/ 5（child project_root）🟢 健康，**无需改动**；概念 1（CWD）/ 2（main entry）/ 3（project_root）需按下文统一。
+
+#### ⚠️ 设计决策（D1/D5 开工前必须定，2026-07-13 新增）
+
+> **D1↔D5 逻辑空转（已识别）**：`run_string`/`compile_string` 用 tempfile，D1 让 `project_root` 退化为 `entry_dir`=tempdir；而 D5 说"子锚点默认改用 project_root（而非 tempdir）"——在 D5 自己的目标场景里 `project_root == tempdir`，**D5 自我抵消，实际啥也没改**。`run_string` 有 77 个调用点（含测试），非边角案例。
+
+**✅ 2026-07-13 负责人裁决（已定）**：
+- **采用方案 B（解耦 entry_dir 与 entry_file）**：`compile_string`/`run_string` 把 `entry_dir` 设为 **project_root**（有意义），`entry_file` 仍为 tempfile（源码所在）。`_resolve_isolated_path` 永远用 `entry_dir`，**无 if/else、无标志位**（符合工作模式定论第 4 条）。正常 `run(entry_file)`：`entry_dir = entry_file.parent`（§6.1 契约不变）。
+- **D1''（最严格显式 root）**：`root_dir` 成为 `IBCIEngine.__init__` 的**必填参数**（移除 `Optional[str] = None` 默认值与 CWD 兜底）。负责人指令"尽可能使用足够强制且明确的 root 配置"。
+- **可行性探查（2026-07-13，零改动只读）已通过**：
+  - `SourceManager`（`core/base/source/source_manager.py`）按 canonical file path 键化，**不依赖 entry_dir** → 方案 B 不破坏源码管理。✓
+  - `entry_dir` 流向：`engine._entry_dir`(:323/:367) → `execution_context._entry_dir`(:49/:170) → `get_entry_dir()`(:251) → `_resolve_isolated_path`(service.py:234) + `PathResolver`。可独立覆盖。✓
+  - **CWD 兜底（engine.py:74）实为死代码**：全仓 44 处 `IBCIEngine(` 调用**全部显式传 `root_dir=`**（含 main.py:129 经 `detect_project_root` 探测后传入）。**零调用方依赖 None→CWD 兜底**。→ D1'' 移除兜底**不破坏任何现存调用方**。
+  - **D1'' 溶解了 subagent 5 的"__init__ 重构"顾虑**：顾虑基于"root 延迟到 run()"假设；D1'' 让 root 在构造期就绑定，`__init__` 的 eager 消费（:95/:113/:128）天然兼容，无需重构 init 时序。
+
+**实现序列（D1'' + 方案 B 落地）**：
+1. **第一步（D1'' + D2 合并）**：`root_dir` 改必填；移除 CWD 兜底；规范经 `PathValidator.canonicalize_for_security`（D2：解 symlink，与 scheduler/resolver/permissions 同源）。
+2. **第二步（P0-C/D4 PathContext 落地，吸收方案 B）**：PathContext 承载 `entry_dir + project_root`；`run()` 构造 `(entry_dir=entry_file.parent, project_root=root)`，`compile_string`/`run_string` 构造 `(entry_dir=root, project_root=root)`。方案 B 因此天然实现（无 hack）。
+
+> 当前 D5 草案（`_entry_is_tempfile` 标志 + `if 标志: project_root else: entry_dir`）**作废**——方案 B 用 entry_dir 语义本身区分，无需标志。
+
+#### 依赖图（订正"并行"误导，2026-07-13 新增）
+
+原 `NEXT_STEPS.md` 把 P0-C~K + D1~D5 列为并行块，**隐藏了 2 条软依赖**：
+- **D1 ← D4（PathContext）**：D1 要求 `project_root` 延迟到 run() 确立（`engine.__init__` 当前在 :95/:113/:128 立即消费 root）。D4 的 PathContext 是承载该延迟 root 的自然位置。**D1-done-right 需 D4 先落地。**
+- **D5 ← {D1, D4}**：D5 读 `_entry_is_tempfile` 选锚点，依赖 D4 把 project_root 传到 `_resolve_isolated_path`，且依赖 D1 的 project_root 定义已定。
+- **P0-L `rt_scheduler.py:88` ← P0-D**：P0-D 删死 `root_dir` 前，必须先迁移 `:88` 的 `plugins_path` 消费点，否则断链。
+- **无硬循环依赖**；P0-A / P0-B 与 P0-C 系列无数据依赖，可真并行。
+
+#### D1：CWD 兜底移除（退化统一 entry_dir）
+- [ ] **`core/engine.py:74`** — 见 PT-ARCH-19 P0-F。
+- [ ] **`core/engine.py` `__init__`/`run()`** — project_root 的确立时机调整：entry_dir 在 run() 才知，故 engine 需在 run() 时（或 PathContext 构造时）确立 project_root；无 entry_dir 时显式报错（不再 CWD 兜底）。
+
+#### D2：project_root 规范化统一（解 symlink，与下游同源）
+- [ ] **`core/engine.py:75`** — `IbPath.from_native(_root_src).resolve_dot_segments()` 改为 `PathValidator.canonicalize_for_security(_root_src)`（解符号链接），使 engine.root_dir 与 scheduler/resolver/permissions 同源，消除 symlink 基准分裂。
+- [ ] 核查 **`ibci_modules/ibci_isys/core.py:62-67`** — `isys.project_root()` 返回 permission.root_dir（已 realpath）；D2 后与 engine.root_dir 一致（同步验证）。
+
+#### D3：静默退化消除
+- [ ] **`main.py:104-105,108-109`** — `hasattr(args,'verbose')` 守卫是死代码（`--verbose` 未注册）；改为注册 `--verbose` 或**无条件 stderr 警告**退化。
+- [ ] **`main.py:107`** — 退化目标 `os.path.dirname(os.path.abspath(args.file))` 保留（= entry_dir），但与 engine.py 统一（D1）。
+- [ ] **`main.py:43-86`** — argparse 配置注册 `--verbose`（若走该方案）。
+
+#### D4：PathContext 真正落地（同 PT-ARCH-19 P0-C）
+- 见 PT-ARCH-19 P0-C 的 4 处文件:行。
+
+#### D5：run_string 场景子 entry 锚点（默认 project_root + 预留用户覆盖接口）
+- [ ] **`core/engine.py:286-288`** — `run_string`/`compile_string` 创建 tempfile 处：增设标记 `_entry_is_tempfile = True`（或等价机制），标识此 entry 非用户语义文件。
+- [ ] **`core/runtime/host/service.py:234`** — `_resolve_isolated_path`：当父 entry 是 tempfile（`_entry_is_tempfile`）时，子 entry 相对解析的锚点**默认改用 project_root**（而非 tempfile dir）；正常文件场景保持父 entry_dir（H3 不变）。
+- [ ] **预留用户覆盖接口**：在 `ihost.run_isolated(path, policy)` 的 `policy` dict 增加 `sandbox_base`（或类似）字段；`_resolve_isolated_path` 读取之；`ibci_modules/ibci_ihost/core.py` + `_spec.py` vtable 同步暴露。即便 IBCI 动态命名参数机制不完善，先以 policy dict 字段形式留可用 hook。
+- [ ] **`ibci_modules/ibci_ihost/core.py`** + **`ibci_modules/ibci_ihost/_spec.py`** — run_isolated/spawn_isolated 签名增加 policy 字段透传。
+
+#### 概念 2（main entry）规范化一致性
+- [ ] **`core/engine.py:438`** — check() 统一（同 PT-ARCH-19 P0-E）。
+- [ ] **`core/engine.py:363-367`** — `compile()` 的 `if not hasattr(self,'_entry_file')` 守卫与 `run()` 不对称（run 无守卫会覆盖）；统一两者行为（要么都覆盖要么都不覆盖）。
+- [ ] **`core/engine.py:324`** — `abs_entry` 命名谎言（可能仍相对）；改名或确保绝对化。（**2026-07-13 订正**：原引 `:321` 实为 `self._entry_file = _entry_ib.to_native()`；`abs_entry = self._entry_file` 在 `:324`。）
+
+#### 隔离侧（概念 4/5）—— 无需改动（已健康）
+- child entry：`HostService._resolve_isolated_path`（service.py:234）经父 entry_dir 锚定的 PathResolver，H3 一致，有测试守护。
+- child project_root：`PathContext.derive_isolated`（context.py:63-85）集中化，刻意设计（=子入口目录），测试锁定。
+- 唯一清理项：`rt_scheduler.py:68-70` 死备份（PT-ARCH-19 P0-D）。
+
+#### 完成门槛（2026-07-13 机械化订正）
+> **订正原因**：旧门槛"零混淆/妥协/BUG"不可测量，且含被搁置项 P0-K（门槛⑥要求"零 compat 垫片含 P0-K"但动作是"负责人裁决"）——门槛含被搁置项即非真门槛。且新门槛用的仍是上次误判 DONE 的同一 subagent 机制，无结构性护栏。改为**机械可证伪断言**。
+
+**机械断言（全部必须为真，git bash / PowerShell 跑 rg）**：
+```bash
+# A. 编译层零 os.path 构造 + 零 CWD 锚定 + 零 runtime 反向依赖
+rg -c 'os\.path\.(abspath|getcwd)|os\.getcwd' core/compiler/ core/base/    # == 0
+rg -n 'from core\.runtime' core/compiler/ core/base/                        # 空
+# B. PathContext 成为唯一锚点：私有 root 字段清零
+rg -n '_root_ib|self\._root_path' core/compiler/ core/runtime/interpreter/   # 空
+rg -n 'os\.getcwd' core/                                                     # 空
+# C. 死 import 清零（每处 import os 必须有对应 os. 使用）
+rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpreter/execution_context.py core/runtime/interpreter/module_manager.py core/runtime/interpreter/interpreter.py core/runtime/interpreter/intrinsics/meta.py  # 期望均无死命中
+# D. 3 新能力覆盖率门槛（守护 BUG 漏网根因——上次 DONE 因零测试致 BUG 漏网）
+python -m pytest tests/runtime/test_path.py -k "Canonicalize or Derive or Snapshot"  # 每类 ≥1 命中且 pass
+python -m pytest tests/ -q --tb=no --no-header   # 0 failure（数字以当次为准）
+# E. SnapshotLayout BUG 回归（直接守护 P0-A）
+python -m pytest tests/runtime/test_path.py -k "Snapshot"                    # 含 asset_dir 同级断言
+```
+
+**非机械项（需人工确认，但不作为唯一门槛）**：
+- ① SnapshotLayout BUG 已修（由 E 守护）。
+- ② 5 概念清晰区分（概念 4/5 已健康勿动；1/2/3 由 A/B 间接守护）。
+- ③ D1/D5 设计决策已选定（方案 a 或 b），且 run_string 锚点行为已**文档化**（不再"伪装修了"）。
+- ⑥ P0-K 已**剥离**（见 P0-K 决策，独立 track，非本门槛）。
+
+> **门槛治理原则**：下次若再次误判 DONE，根因诊断应落在"哪个机械断言本应存在却缺失"，而非再加一轮 subagent。
+
+---
+
+#### PT-ARCH-19 历史计划详情（已完成的部分：分层搬迁）
+
+> **项目负责人 2026-06-25 指定为最高优先级**。修正 P0-1 的 premature DONE；gates P0-2。单点真理以 ADR-017 为准。
+
+**遗留问题（复审实锤）**：
+1. **compiler→runtime 违规**（2 处）：`core/compiler/scheduler.py:13` + `core/compiler/parser/resolver/resolver.py:4` import `core.runtime.path`。违反 `ARCHITECTURE_PRINCIPLES §4.1`（兄弟层互不依赖），与已修 HostInterface 同类。
+2. **P0-1 的 3 个"排除项"实为保留的碎片化**：
+   - `os.path.realpath` 在 scheduler/resolver/permissions **3 处独立调用**（应统一到 PathValidator 一处）。
+   - CHILDBOOT 派生内联在 engine（应集中到 PathContext）。
+   - save_state 的 `.assets` 布局内联（应集中到 SnapshotLayout）。
+   - **根因**：层位置错误（path 在 runtime）使加统一能力会加剧 compiler→runtime 违规，故 P0-1 回避了吸收。
+3. **base 例外**：`core/base/source/source_manager.py` 用 `os.path.abspath` ×4（CWD 锚定）。
+
+**方案（ADR-017 三层分工）**：
+```
+core/base/path/     【新】原子原语：IbPath（迁入）+ safe_relpath（迁入）
+core/kernel/path/   【新】IBCI 模型：PathResolver + PathValidator(+canonicalize_for_security)
+                                       + ModuleNameSpace + PathContext(+derive_isolated) + SnapshotLayout(新)
+core/runtime/path/  【保留】BuiltinPaths（import ibci_modules，不进 kernel）
+```
+
+**待做（按 ADR-017 执行序列）**：
+1. 建 `core/base/path/` + `core/kernel/path/`，搬迁 6 文件，更新 `__init__`。
+2. 更新全部消费者 import 路径（~10 处，机械；含 compiler 2 处违规站点）。
+3. 加 3 个新能力：
+   - `PathValidator.canonicalize_for_security(path) -> IbPath`（kernel/path/validator.py，全仓唯一 realpath）。
+   - `PathContext.derive_isolated(child_entry) -> PathContext`（kernel/path/context.py，CHILDBOOT 集中化，**语义保持**=子入口目录）。
+   - `SnapshotLayout`（kernel/path/snapshot.py，独立类，快照资产布局集中化）。
+4. 收尾：迁 `base/source_manager` 用 IbPath；scheduler/resolver/permissions 改调 canonicalize_for_security（消灭 realpath 3×）；engine 改调 derive_isolated；host/service 改调 SnapshotLayout。
+5. 每步全量 pytest（1070 passed/0 fail）；最终 grep 确认 compiler 层零 `from core.runtime` 导入。
+
+**四个能力决策**（项目负责人 2026-06-25 确认）：
+| # | 决策 |
+|---|------|
+| 1 | `canonicalize_for_security` 收口进 PathValidator（IbPath 保持纯字符串）—— 按判断进行 ✓ |
+| 2 | CHILDBOOT 语义保持（子入口目录），但策略集中化到 `derive_isolated`；未来显式 `policy["sandbox"]` 化留后续 ✓ |
+| 3 | SnapshotLayout 独立类 ✓ |
+| 4 | FS 查询（exists/isdir/isfile）不收口（保持边界）✓ |
+
+**预估工作量**：~1-2 天（行为不变，纯搬迁+加法，低风险）
+
+---
+
+### ⚠️ [DONE] PT-ARCH-11　路径系统统一（已完成；层位置修正由 PT-ARCH-19 完成）
+
+> 完整执行 ADR-015 的 10 点合并目标。测试基线：**1070 passed, 5 skipped**（0 failures，较统一前 +13 来自新增 canonical 测试）。
+> 2026-06-25 复审发现遗留 compiler→runtime 违规 + 3 个未吸收排除项，由 **PT-ARCH-19（ADR-017）完成修正**。两者共同构成 P0-1 的真正完成。
+
+**落地的 canonical 层**（`core/runtime/path/`）：
+- `PathResolver` 重写为 entry_dir 单锚点语义（§6.1 契约）；`ExecutionContextImpl.resolve_path` / `HostService._resolve_isolated_path` 均委托之——**PathResolver 成为唯一生产解析器**（ADR-015 第 2 点达成）。
+- 新建 `BuiltinPaths`（安装根计算一次，消灭 4 处 `__file__` 遍历）。
+- 新建 `ModuleNameSpace`（模块名↔路径映射，无 `os.sep`，消灭 6 处 `replace` 对）。
+- 新建 `PathContext`（entry_dir/project_root 锚点容器）。
+- `safe_relpath` 从 `core/base/path_utils.py` 迁入 path 包（`relpath.py`），原文件**已删除**。
+
+**消费者迁移**：engine.py（7 处）/ scheduler.py（MODNAME×4 + SANDBOX-DUP + CANON）/ compiler/resolver.py（同）/ permissions.py / rt_scheduler.py / auto_discovery.py / host/service.py（save_state IbPath 化 + _resolve_isolated_path 委托）/ project_detector.py（删 vestigial pathlib）/ ibci_file（删死 import）。**零残留 TODO(path-unify)**。
+
+**关键裁决**：
+- CHILDBOOT（子 host root = 子入口目录）经测试验证为**刻意的隔离设计，非 bug**——更新 ADR-015 第 7 点与 PT-ARCH-15。
+- `realpath` 在安全边界（scheduler/resolver/permissions）**保留**——符号链接解析是安全需求，非碎片化。
+- `save_state` 的 `"__EXTERNAL_FILE_REF__"` 哨兵属序列化格式债（PT-ARCH-13，media 重建时统一），**非路径碎片化**——正确 scoping 排除。
+
+**保留的合法 OS 边界操作**（非碎片化）：`os.path.exists/isdir/isfile/isabs/getmtime`（FS 查询）、`os.path.realpath`（符号链接解析）、`os.makedirs/open`（IO）。
+
+---
+
+### [DONE] PT-ARCH-14　HostService.save_state 路径处理 ✅（并入 PT-ARCH-11）
+
+**落地**：save_state 的路径操作已 IbPath 化（`os.path.abspath/dirname/join/+".assets"` → IbPath）。`"__EXTERNAL_FILE_REF__"` 哨兵保留为序列化格式债（PT-ARCH-13 范畴，非路径碎片化）。注：save_state 是宿主级特权操作，不经 PermissionManager 沙箱校验——这是有意设计，非安全缺口。
+
+---
+
+### [DONE] PT-DOC-12　IBCI_SPEC §6.1 路径语义修正 ✅（并入 PT-ARCH-11）
+
+**已修**（2026-06-25）：`IBCI_SPEC.md` §6.1 重写为区分**数据路径**（entry_dir 锚定，§6.1 契约）与**模块导入路径**（导入者目录锚定，Python 相对导入语义）。消除原"所有相对路径都基于入口目录"的虚假笼统声称。
+
+---
+
+### PT-ARCH-17　变量存储模型基础设施 [P0-2 / ADR-016]（核心新架构）
+
+> ADR-016 的实现。受工作模式定论约束——**全程协议驱动，零过程式 `if/else` 分发**。
+
+**待做**：
+1. 在 axiom/spec 体系引入 **`storage_model` 类型级属性**（取值 `memory-backed` / `disk-backed`）。内存型为默认（含全部现有内置类型与用户类），语义不变。
+2. 设计并确立**磁盘型协议族**（与 `__prompt__` 平行）的具体方法名与签名——治理惰性物化、基于路径的 payload 构建、基于路径的响应解析、路径引用的快照/序列化。具体方法名在本条设计期决定。`__prompt__` 族继续作为内存型协议，不泛化。
+3. 改造 `core/runtime/objects/deep_clone.py`：按存储模型分发——磁盘型对象拷贝路径引用（浅、廉价），内存型走既有路径。**此处一并完成 `:89` 的 `type(val) is KernelIbObject` → `isinstance(val, IbObject)` 修复**（ADR-007 未竟部分），并补 `IbValue`-with-payload 的处理分支（按存储模型分发，不硬编码字节处理）。
+4. 改造 `core/runtime/serialization/runtime_serializer.py` + `core/base/serialization.py`：按存储模型分发——磁盘型序列化路径引用；内存型既有路径不变。补 `BaseFlatSerializer._process_value` 缺失的处理能力（路径类型；bytes 仅在内存型 legacy 路径需要时考虑）。
+5. 改造响应解析分发（ADR-013 修订版）：`AxiomParsingStrategy.parse` 通过 `receive()` 委托给目标类型的协议方法，**不写 `if/else`、不查能力标志位**。`has_multimodal_response_cap` 等能力位若保留则仅作编译期/内省元数据，不参与运行时分发。
+6. executor / strategy / deep_clone / 序列化器**存储模型无关**——新增磁盘型类型不改这些层一行代码。
+
+**验证**：内存型路径字节级不变（全量 pytest 0 failure）；新增"磁盘型分发不命中内存型协议"守护测试；`has_multimodal_response_cap` 默认不声明 → 今日文本路径行为不变。
+
+**预估工作量**：~2-3 天
+
+---
+
+### PT-ARCH-18　media 重建为磁盘型 + 潜伏 bug 统一修复 [P0-3 / ADR-014]（含 PT-ARCH-12/13/16）
+
+> ADR-014 的实现。**潜伏 bug 在此随模型切换统一消解**——按项目负责人指令，不允许先行过渡修复。`MediaStorage` 整体淘汰。
+
+**待做**：
+1. 新建 `core/runtime/objects/media_backing.py`：`MediaBacking` 抽象 + `FileBacking` / `GeneratedBacking`（均持 `IbPath`，**无 MemoryBacking**）。
+2. 重写 `core/runtime/objects/media_types.py`：`IbAudio`/`IbImage`/`IbVideo` 改为磁盘型 handle（声明 `storage_model = disk-backed`，identity-object opt-out）。
+3. **删除** `core/runtime/objects/media_storage.py`（字节持有者，整体淘汰）；其单测替换为 handle 契约测试。
+4. 改 `core/kernel/axioms/primitives/media.py`：`__payload_prompt__` 从 backing **惰性物化**字节（按需从路径读，base64）。
+5. 改 `ibci_modules/ibci_file/core.py` 的 `read_audio`/`read_image`/`read_video`：返回 `FileBacking(resolved_path)`，**不立即读字节**（零拷贝）。
+6. 改 `core/runtime/bootstrap/builtin_initializer.py` 的 media 注册段（:605-634）：注册新的磁盘型协议族方法（PT-ARCH-17 确立的方法名）；**保留** `tn=`/`ax=` lambda 晚绑定修复。
+7. **潜伏 bug 统一修复**（不再独立先行）：
+   - **PT-ARCH-12（原潜伏 bug #1）**：`deep_clone.py:89` 的 isinstance + IbValue-payload 分支已在 PT-ARCH-17 落地；media 改为磁盘型后，handle 拷贝路径引用，原"静默跳过"不复存在。
+   - **PT-ARCH-13（原潜伏 bug #2）**：序列化器磁盘型分支已在 PT-ARCH-17 落地；media 改为序列化路径引用，原"字节静默丢失"不复存在。
+   - **PT-ARCH-16（原"统一响应解析基础设施"）**：协议驱动分发已在 PT-ARCH-17 落地；`MediaAxiom` 实现磁盘型响应协议即可，无需 `if/else`。
+
+**验证**：MOCK 模式 e2e（`file.read_audio` → handle → `@~ $x ~`）端到端跑通；snapshot/serialize round-trip 守护测试（专门覆盖过潜伏 bug 的路径）；media 在 llmexcept 重试下正确快照/恢复。
+
+**预估工作量**：~2-3 天
+
+---
+
+### [已折叠] PT-ARCH-12 / PT-ARCH-13 / PT-ARCH-16 → 并入 PT-ARCH-17/18
+
+> 经第三轮研讨，这三个原独立条目不再先行。它们随 PT-ARCH-17（存储模型分发）与 PT-ARCH-18（media 磁盘型重建）统一修复。
+> - PT-ARCH-12（`deep_clone.py:89` isinstance + IbValue-payload）→ PT-ARCH-17 step 3 + PT-ARCH-18 step 7。
+> - PT-ARCH-13（序列化器 media-payload + bytes）→ PT-ARCH-17 step 4 + PT-ARCH-18 step 7。
+> - PT-ARCH-16（统一响应解析基础设施）→ PT-ARCH-17 step 5（协议驱动分发）。
+>
+> **不允许过渡修复**（项目负责人明确指令）。在 PT-ARCH-17/18 完成前，media 在 snapshot/serialize 下"静默丢失"的现状作为已知限制保留（媒体目前仅 MOCK 可用、零生产路径 hit、零序列化测试覆盖，回归风险为理论性）。
+
+---
+
+### [GATED] media Phase 4 — MediaAxiom + IbMedia 全模态容器
+
+> **阻塞于**：PT-ARCH-11（路径统一）+ PT-ARCH-17（存储模型架构）+ PT-ARCH-18（media 重建）全部完成（即 `NEXT_STEPS.md` 的 P0-1/P0-2/P0-3 全部 done）。
+> **决策依据**：ADR-014（磁盘型 handle）+ ADR-016（存储模型）+ ADR-013（修订，协议驱动解析）。
+> 解锁后提升为 `NEXT_STEPS.md` 的 P0。详见 `NEXT_STEPS.md` 的 GATED 段。
+
+**剥离到独立后续（不纳入主线，结构不堵死）**：
+- 元组解包 `(str t, audio a) = @~...~`（D5）——需 TypeCheckingPass 解包推断 + CPS 多返回值；`IbMedia` 的 modality→payload 映射为其预留接入位。
+
+---
+
+

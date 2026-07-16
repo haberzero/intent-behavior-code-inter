@@ -377,9 +377,13 @@ class TestRunIsolatedPathRelativeToEntryDir:
         )
         assert "parent_done" in parent_out
 
-    def test_run_isolated_absolute_path_still_works(self, tmp_path, monkeypatch, capsys):
-        """绝对路径直通，不受 entry_dir 影响。"""
-        child_path = tmp_path / "absolute_child.ibci"
+    def test_run_isolated_child_outside_parent_root_now_rejected(self, tmp_path, monkeypatch, capsys):
+        """ADR-019 §5 隔离反转：子 entry 在父 project_root 外 → 拒绝（报错）。
+
+        取代旧 test_run_isolated_absolute_path_still_works（旧测试断言"绝对路径直通、子可越父 root"，
+        该语义已被 ADR-019 §5 反转——现阶段子脚本不得超出父 proj_root）。
+        """
+        child_path = tmp_path / "absolute_child.ibci"  # 在 parent_dir 之外
         child_path.write_text(
             'import ai\n'
             'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
@@ -402,10 +406,8 @@ class TestRunIsolatedPathRelativeToEntryDir:
         other_dir.mkdir()
         monkeypatch.chdir(other_dir)
 
-        parent_out: list = []
         eng = IBCIEngine(root_dir=str(parent_dir), auto_sniff=False)
-        eng.run(str(parent_path), output_callback=lambda s: parent_out.append(str(s)), silent=True)
-        captured = capsys.readouterr()
-        assert "abs_child_ran" in captured.out
-        assert "parent_done" in parent_out
+        # 子在父 root 外 → run_isolated 应使 parent 执行失败（隔离拒绝传播）
+        with pytest.raises(Exception):
+            eng.run(str(parent_path), silent=True)
 

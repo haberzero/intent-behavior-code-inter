@@ -8,7 +8,6 @@ import os
 import re
 from typing import List, Dict, Any
 
-from core.runtime.path import IbPath
 from core.runtime.objects.media_storage import MediaStorage
 from core.runtime.objects.media_types import IbAudio, IbImage, IbVideo
 from core.kernel.issue import InterpreterError

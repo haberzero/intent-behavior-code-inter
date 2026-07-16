@@ -1,6 +1,8 @@
 import os
 from typing import Optional
 
+from core.kernel.path import IbPath, PathValidator, ModuleNameSpace
+
 class ModuleResolveError(Exception):
     def __init__(self, module_name: str, importer_path: Optional[str] = None, message: Optional[str] = None):
         self.module_name = module_name
@@ -21,7 +23,9 @@ class ModuleResolver:
     Acts as the Single Source of Truth for path resolution.
     """
     def __init__(self, root_dir: str):
-        self.root_dir = os.path.realpath(root_dir)
+        # ADR-019 D2/Stage D：root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
+        self._project_root = IbPath.from_native(root_dir)
+        self.root_dir = root_dir
         # Extensions to probe, in order of preference
         self.extensions = ['.ibci', '.py', '']
         # Explicitly allowed files outside root (e.g. for run_string)
@@ -29,31 +33,23 @@ class ModuleResolver:
 
     def allow_file(self, file_path: str):
         """Explicitly allow a file outside root_dir."""
-        self.allowed_files.add(os.path.realpath(file_path))
+        self.allowed_files.add(PathValidator.canonicalize_for_security(file_path).to_native())
 
     def _check_path_security(self, path: str):
         """
         Ensure the path is within the project root directory.
         Prevents Path Traversal attacks.
         """
-        # Resolve symlinks to ensure we are checking the real location
-        abs_path = os.path.realpath(path)
-        
+        # 经 PathValidator 规范化（解符号链接）+ 沙箱判定，全仓统一。
+        abs_path_ib = PathValidator.canonicalize_for_security(path)
+        abs_path = abs_path_ib.to_native()
+
         # 1. Check if explicitly allowed
         if abs_path in self.allowed_files:
             return
-            
-        # 2. Check if within root
-        abs_root = self.root_dir # Already realpath
-        
-        # Use commonpath to correctly handle path separators and subdirectories
-        try:
-            common = os.path.commonpath([abs_root, abs_path])
-        except ValueError:
-            # Can happen on Windows if paths are on different drives
-            raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' is on a different drive than root '{self.root_dir}'")
-            
-        if common != abs_root:
+
+        # 2. is_within 沙箱检查（跨盘由内部返回 False 覆盖）。
+        if not PathValidator.is_within(self._project_root, abs_path_ib):
             raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")
 
     def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
@@ -78,24 +74,27 @@ class ModuleResolver:
             suffix = module_name[level:]
             
             # Start from the directory containing the importer file
-            current_dir = os.path.dirname(os.path.abspath(context_file))
-            
+            # ADR-019 Stage D：经 IbPath 规范化（替代散点 os.path.abspath/dirname——门槛 A 收口）。
+            current_dir = IbPath.from_native(context_file).resolve_dot_segments().parent
+            current_dir = current_dir.to_native() if current_dir is not None else ""
+
             # Go up (level - 1) times
             base_dir = current_dir
             for _ in range(level - 1):
-                base_dir = os.path.dirname(base_dir)
+                _parent = IbPath.from_native(base_dir).parent
+                base_dir = _parent.to_native() if _parent is not None else ""
                 
             # Construct relative path
             if suffix:
-                rel_path = suffix.replace('.', os.sep)
+                rel_path = ModuleNameSpace.module_to_relpath(suffix)
                 candidate_path = os.path.join(base_dir, rel_path)
             else:
                 # Import is just '..', e.g. from .. import X -> importing form __init__ of parent
                 candidate_path = base_dir
-                
+
         else:
             # Absolute import (from root)
-            rel_path = module_name.replace('.', os.sep)
+            rel_path = ModuleNameSpace.module_to_relpath(module_name)
             candidate_path = os.path.join(self.root_dir, rel_path)
             
         # Security Check

@@ -2,10 +2,230 @@
 
 > 本文档以**极简时间线**记录主线工作的完成节点。
 > 更早期的详细日志见 `docs/HISTORY_LOG.md`。
-> 设计与实现细节见对应正式文档：`docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/VM_SPEC.md`、`docs/ARCH_DETAILS.md`。
+> 设计与实现细节见对应正式文档：`docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/design/VM_SPEC.md`、`docs/design/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-ARCH-5 G3 薄提取 + PT-ARCH-10 吞异常审计完成，即时技术债清空）
+> **最后更新**：2026-06-25（PT-ARCH-19 重开 + ADR-018 路径概念模型确立；5 项决策确认；逐文件:行清单交接 session 切换）
+
+---
+
+## 2026-06-25：ADR-018 路径概念模型确立 + PT-ARCH-19 重开（无代码变更）
+
+> 5 路径概念交叉检验（3 subagent）+ 项目负责人决策。无代码改动；测试基线 1070 passed 不变。
+
+### 5 路径概念健康度（收敛）
+- 概念 1 CWD / 2 main entry / 3 project_root：需统一（混淆）。
+- 概念 4 child entry / 5 child project_root：健康，无需改动。
+
+### 5 项决策（项目负责人 2026-06-25 确认 → ADR-018）
+- **D1**：CWD 兜底移除；退化统一 entry_dir。
+- **D2**：engine.root_dir 也走 canonicalize_for_security（解 symlink），与下游同源。
+- **D3**：静默退化消除（注册 --verbose 或无条件警告）；main.py 与 engine.py 退化目标统一 entry_dir。
+- **D4**：PathContext 真正落地，替代 4 个私有 root 字段。
+- **D5**：run_string 场景子 entry 锚点默认 project_root（非 tempdir）；**预留用户可覆盖接口**（policy dict 字段，即便 IBCI 动态命名参数机制不完善先留 hook）。
+
+### 治理
+- 立 **ADR-018**（路径概念模型）。
+- PT-ARCH-19 由"DONE"改为**重开-进行中**（SnapshotLayout BUG + 统一未彻底）。
+- 新增 **PT-ARCH-20**（路径概念澄清与 project_root 统一）。
+- **逐文件:行清单**已嵌入 `PENDING_TASKS.md §九` PT-ARCH-19（P0-A~K）+ PT-ARCH-20（D1~D5），供 session 切换交接。
+- 第一优先：修 SnapshotLayout BUG + 补 3 新能力测试（止损）。
+
+### 反思（累积）
+本 session 两次过早宣称"完成"（P0-1、PT-ARCH-19）。根因：以"测试通过 + 能力存在"为完成标准，未验证能力正确性、统一彻底性、无妥协、测试覆盖。**今后以"交叉检验（subagent）通过"为完成门槛。**
+
+---
+
+## 2026-06-25：PT-ARCH-19 完成声明撤回 —— 双轮交叉检验发现真实未完成项（无代码变更）
+
+> 本条目是对上一条"PT-ARCH-19 完成"的诚实撤回。两轮交叉检验（第一轮 5 subagent：分层/碎片化/能力/行为/shim；第二轮 3 subagent：5 路径概念）证明统一未真正完成，且引入 1 个 BUG。测试基线 1070 passed 未变（无代码改动）。
+
+### 第一轮交叉检验（5 subagent）发现
+- **P0 BUG（实证）**：`SnapshotLayout.asset_dir_for`（snapshot.py:23）`save_path + ".assets"` 经 `IbPath.__add__`（路径 join）产出 `state.json\.assets`（文件当目录），而非旧契约 `state.json.assets`（同级）→ `save_state` 含资产时 `NotADirectoryError`。
+- **P0 测试缺口**：canonicalize_for_security / derive_isolated / SnapshotLayout 零单测；save_state/load_state 零 e2e（BUG 漏网原因）。
+- **未达标项**：PathContext 空架子（5 root_dir 字段仍在）/ CHILDBOOT 双轨（rt_scheduler:68-70）/ check() 双轨 / CWD 兜底自证过渡 / 三重规范化链 / ModuleResolver 违反 SSOT / abspath 未收口 / module_system+project_detector 未接入 / 死代码。
+- **达标项（保留）**：3 层分工合法；compiler→runtime 违规真消除；realpath 真单点；字符串拼接/replace 技巧清零。
+
+### 第二轮交叉检验（3 subagent）—— 5 路径概念健康度
+| 概念 | 裁决 |
+|------|------|
+| 1. CWD | 🟡 混淆——被当作 project_root 兜底 |
+| 2. main entry | 🟡 部分混淆——三入口规范化不一致 |
+| 3. project_root | 🔴 严重混淆——4 持有者 realpath 不统一；symlink 基准漂移；静默退化；双入口退化不一致 |
+| 4. child entry | 🟢 健康 |
+| 5. child project_root | 🟢 健康 |
+
+**核心病灶**：主 project_root 在不同运行姿势下取到 4 种不同值（显式/探测/CWD/entry_dir），未向用户披露。
+
+### 治理
+- PT-ARCH-19 由 DONE 改为**重开-进行中**（PENDING_TASKS §九）。
+- 新增 **PT-ARCH-20**（路径概念澄清与 project_root 统一），待 ADR-018。
+- P0-2（存储模型）继续后置。
+- 文档：NEXT_STEPS（PT-ARCH-19 重开、PT-ARCH-20 最高优先级）、PENDING_TASKS（PT-ARCH-19 重开 + PT-ARCH-20 完整）。
+
+### 反思
+两次过早宣称"完成"（P0-1、PT-ARCH-19），根因相同：用"测试通过 + 能力存在"作完成标准，未验证能力正确性、统一彻底性、无妥协、测试覆盖。交叉检验正是为抓这些——它成功了。后续以"交叉检验通过"为完成门槛。
+
+---
+
+## 2026-06-25：PT-ARCH-19 路径模块层位置重构完成（ADR-017）
+
+测试基线：**1070 passed, 5 skipped**（0 failures）。
+
+> 完成 ADR-017 / PT-ARCH-19。修正 P0-1（PT-ARCH-11）遗留的 compiler→runtime 层违规与 3 个未吸收排除项。P0-1 至此真正完成。
+
+### 落地
+
+- **3 层分工**（按抽象级别）：
+  - `core/base/path/`（新）：`IbPath` + `safe_relpath`（原子原语，任何层可用）。
+  - `core/kernel/path/`（新）：`PathResolver` + `PathValidator` + `ModuleNameSpace` + `PathContext` + `SnapshotLayout`（IBCI 路径模型，compiler/runtime 共用）。
+  - `core/runtime/path/`（保留）：仅 `BuiltinPaths`（安装发现，`import ibci_modules`，不进 kernel）。
+- **compiler→runtime 违规消除**：compiler 层零 `core.runtime` 导入（scheduler/resolver 改 import `core.kernel.path`）。与此前已修 HostInterface 同类违规，现全部清零。
+- **3 个新能力**（落地于最终位置）：
+  - `PathValidator.canonicalize_for_security(path) -> IbPath`：全仓唯一 `os.path.realpath` 调用点；scheduler/resolver/permissions 委托，消灭散点 realpath 重复。
+  - `PathContext.derive_isolated(child_entry) -> (entry, root)`：CHILDBOOT 派生集中化（语义保持=子入口目录，由测试验证的隔离设计）。
+  - `SnapshotLayout`（独立类）：快照资产布局集中化；`save_state`/`load_state` 委托。
+- **base 例外消除**：`source_manager` 改用 `base/path/IbPath`（消除 CWD 锚定的 `os.path.abspath`）。
+
+### 根因复盘
+P0-1 的 3 个"排除项"（realpath×3 / CHILDBOOT 内联 / 快照布局内联）的根因是路径模块错放在 runtime 层，使加统一能力会加剧 compiler→runtime 违规。下沉到 base/kernel 后，能力吸收不再受阻——这正是项目负责人识破的"整合失败"真实原因。
+
+### 产出文件
+- 新建 `core/base/path/__init__.py`、`core/kernel/path/{__init__,resolver,validator,modulename,context,snapshot}.py`。
+- 删除 `core/runtime/path/{ib_path,relpath,resolver,validator,modulename,context}.py`（搬至 base/kernel）。
+- 更新 ~10 消费者 import；3 处 realpath → canonicalize_for_security；engine CHILDBOOT → derive_isolated；host/service save/load → SnapshotLayout；base/source_manager → IbPath。
+- 文档：NEXT_STEPS（P0-1 真正完成、P0-2 进位）、PENDING_TASKS §九（PT-ARCH-19 DONE）。
+
+---
+
+## 2026-06-25：P0-1 复审修正 —— 路径模块层位置遗留违规（无代码变更，纯复审记录）
+
+测试基线：**1070 passed, 5 skipped**（0 failures；本轮无代码改动）。
+
+> 本条目是对 P0-1（PT-ARCH-11）"完成"状态的诚实修正。P0-1 表面工作完成（零残留 TODO、1070 passed），但复审发现遗留问题，真正的完成在 PT-ARCH-19 之后。
+
+### 复审发现
+
+1. **compiler→runtime 架构违规（2 处实锤）**：`core/compiler/scheduler.py:13` 与 `core/compiler/parser/resolver/resolver.py:4` import `core.runtime.path`。违反 `ARCHITECTURE_PRINCIPLES §4.1`（兄弟层互不依赖），与此前已修 HostInterface 违规同类。P0-1 迁移中把 compiler 接到 runtime.path，制造/延续了此违规。
+2. **P0-1 三处"排除项"实为保留的碎片化**（项目负责人识破）：
+   - `os.path.realpath` 在 scheduler/resolver/permissions 3 处独立调用（非"合法边界操作"）。
+   - CHILDBOOT 派生内联在 engine（非集中化）。
+   - save_state 的 `.assets` 布局内联（非集中化）。
+3. **根因**：路径模块层位置错误（在 runtime）使加统一能力（canonicalize_for_security / derive_isolated / SnapshotLayout）会加剧 compiler→runtime 违规，故 P0-1 回避了吸收——这是"整合失败"的真实原因。
+
+### 治理决策
+
+- 立 **ADR-017**（路径模块层位置重构 —— base/kernel/runtime 三层分工），**最高优先级**。
+- 新增 **PT-ARCH-19**（路径模块层位置重构），列为 `NEXT_STEPS.md` 最高优先级 P0，gates P0-2。
+- P0-1 的"DONE"修正为"功能完成，遗留违规见 PT-ARCH-19"。
+- 四个能力决策由项目负责人确认：canonicalize_for_security 收口 PathValidator / CHILDBOOT 语义保持但集中化到 derive_isolated / SnapshotLayout 独立类 / FS 查询不收口。
+
+### 产出文件
+
+- 新增 `docs/decisions/ADR-017-path-module-layering.md`（Accepted，最高优先级）。
+- 更新 `docs/decisions/README.md`（+ADR-017）。
+- 更新 `docs/NEXT_STEPS.md`（PT-ARCH-19 提为最高优先级 P0；P0-1 标注遗留违规；P0-2 后置）。
+- 更新 `docs/PENDING_TASKS.md`（§九 新增 PT-ARCH-19 完整计划；PT-ARCH-11 标注修正）。
+
+---
+
+## 2026-06-25：第三轮研讨 —— 变量存储模型提升（无代码变更，纯治理决策）
+
+测试基线：**1057 passed, 5 skipped**（0 failures；本轮无代码改动，基线维持）。
+
+> 本条目记录第三轮架构研讨结论：把"media 内存值 vs 磁盘引用"之争从实现细节提升为**类型级一等区分**，确立协议驱动分发框架。结论已固化为 ADR-016（新建）+ ADR-013/014 修订。
+
+### 触发问题
+
+项目负责人回归后，对前轮（第二轮）的两个具体设计提出质疑：
+1. 我在 P0-3 提出的 `if has_multimodal_response_cap: from_response else: from_prompt`（`AxiomParsingStrategy` 内的标志位分支）是否属于此前被否定的 bypass？
+2. 记忆中存在"高于 `__prompt__` 协议族的一层设计"，关于 LLM input/output，把全模态容器纳入协议管理、保留 `__prompt__` 作纯内存协议——要求核查其可靠性。
+
+### 核查结论
+
+1. **"Inter 层"命名溯源**：仅在 `AUDIT_REPORT_20260527.md §一` 出现，被定义为 `__prompt__` 协议族的同义词（四元结构的第四层）。**不存在**任何文档把它描述为"高于 `__prompt__`、按存储模型分发的元层"。项目负责人不认可此命名的出处（疑似过往智能体自造）。→ ADR-016 正式废弃该命名，采用"变量存储模型（Variable Storage Model）"。
+2. **P0-3 的 if/else 确属被禁止的形态**：虽优于 ADR-009 的 `execute_*` 分叉（已死），但仍是过程式硬编码判断，违反项目负责人"不在运行流程里硬编码过程式判断、基于协议驱动"的原则。→ ADR-013 修订，改协议驱动分发（`receive()` 委托）。
+3. **项目负责人确立了更强的架构立场**（4 条）：
+   - 类型显式分纯内存类 / 硬盘卸载类；**所有 media 一律硬盘卸载类**。
+   - 这种区分是**类型级一等区分**，基于路径系统建模，与内存类**平行**（不嵌套）。
+   - 分发**协议驱动**，零 `if/else` 标志位分支。
+   - 允许**整体淘汰** `MediaStorage`；潜伏 bug **不允许过渡修复**，须随存储模型架构统一修复。
+
+### 关键架构发现：潜伏 bug 与存储模型架构耦合
+
+原计划作为独立 P0-1 先行修复的两个潜伏 bug（`deep_clone.py:89` 严格身份判定 + 序列化器 payload 缺失），经分析**与存储模型决策深度耦合**：
+- 若按当前内存模型修（深拷贝字节 / 序列化字节），等 media 改为磁盘型后这段代码必被推翻——**过渡实现，违反工作模式定论**。
+- 正确路径：先完成存储模型架构（PT-ARCH-17），media 改为磁盘型 handle（PT-ARCH-18），此时 deep_clone/序列化器按存储模型分发，handle 拷贝/序列化路径引用——bug 在模型切换中**自然消解**。
+- 现实风险评估：media 目前仅 MOCK 可用、零生产路径 hit、零序列化测试覆盖 → 回归风险为理论性，可承受"延后统一修复"。
+
+### 产出文件
+
+- 新增 `docs/decisions/ADR-016-variable-storage-model.md`（Accepted，上层治理）：确立 `storage_model` 类型级属性（memory-backed / disk-backed）；磁盘型变量基于路径系统建模；协议驱动分发（零 `if/else`）；`__prompt__` 族保持为内存型协议；磁盘型获得平行协议族；制动 `MediaStorage` 整体淘汰；废弃"Inter 层"命名。
+- 修订 `docs/decisions/ADR-013-unified-response-parsing.md`：去除标志位 `if/else` 内部分支，改协议驱动分发；supersede ADR-009 的核心结论（单入口/单策略/无 execute_* 分叉）仍成立。
+- 重写 `docs/decisions/ADR-014-media-storage-handle-backing.md`：砍除 `MemoryBacking`；存储模型升为类型级（ADR-016）；制动 `MediaStorage` 整体淘汰；潜伏 bug 处置并入 PT-ARCH-18。
+- 更新 `docs/decisions/README.md`：新增 ADR-016；标注 ADR-013/014 已修订。
+- 重写 `docs/NEXT_STEPS.md`：新 P0 序列＝**P0-1 路径统一**（ADR-015）→ **P0-2 存储模型架构**（ADR-016，PT-ARCH-17）→ **P0-3 media 重建**（ADR-014，PT-ARCH-18，潜伏 bug 随之统一修复）；工作模式定论追加第 4 条（禁止过程式硬编码分发）与第 5 条（潜伏 bug 不允许过渡修复）。
+- 更新 `docs/PENDING_TASKS.md`：PT-ARCH-12/13/16 不再独立先行，折叠入 PT-ARCH-17/18；新增 PT-ARCH-17（存储模型基础设施）+ PT-ARCH-18（media 重建）；PT-ARCH-14/15/PT-DOC-12 重标为 P0-1 子项。
+
+### 工作模式定论补强
+
+`NEXT_STEPS.md ⛮ 工作模式定论` 追加两条：
+- 第 4 条：**禁止过程式硬编码分发**——分发只通过协议驱动（`receive()` / vtable）完成，不在运行流程写 `if 能力标志位` 分支（ADR-016 第 3 条）。
+- 第 5 条：**潜伏 bug 不允许过渡/简易修复**——必须在依赖它的架构完善后统一修复。
+
+---
+
+## 2026-06-25：media Phase 4 双轮架构审计（无代码变更，纯分析）
+
+测试基线：**1057 passed, 5 skipped**（0 failures；本轮无代码改动，基线维持）。
+
+> 本条目记录为 media Phase 4 铺垫的两轮系统级架构审计结论。结论已固化为 ADR-013/014/015 与 `PENDING_TASKS.md §九` 的前置技术债清单。**本轮未改任何代码**——所有发现归类为"待清债务"，受 `NEXT_STEPS.md ⛮ 工作模式定论` 约束分阶段清理。
+
+### 第一轮：Phase 4 media 设计的全方位系统级分析
+
+- 确认 Phase 3（输入侧 `__payload_prompt__`）已完成且扩展干净；Phase 4（输出侧 `from_response`）需新基础设施。
+- 定位 8 个 media 类型注册镜像点（axiom→spec→builtin_initializer）与 3 个 Phase 4 新增路由点。
+- 识别 5 个 Phase 3 已踩/文档标注的陷阱（lambda 晚绑定、两个 `get_axiom`、`receive()` 分发、`_finalize_invoke_result` 形状契约、MOCK 双重处理点）。
+
+### 第二轮：耦合架构深挖（路径 / 存储 / 解析）
+
+**关键发现 1 — 当前 media 内存实现是"哑的"（潜伏 bug）**：
+- `deep_clone.py:89` 仍 `type(val) is KernelIbObject`（ADR-007 修复只做了一半）→ llmexcept 重试时 media **静默跳过**。
+- `RuntimeSerializer._collect_instance` 无 `IbValue`-payload 分支 + `BaseFlatSerializer` 无 `bytes` 分支 → `save_state`/`load_state` 把 media 字节**静默丢失**，零测试覆盖。
+- 含义：选"内存值"还是"引用"不是"省不省成本"——今天两边都没正常工作，存储/快照/序列化管线**无论如何都得修**。
+
+**关键发现 2 — ADR-009 的分叉前提被证伪**：
+- ADR-009 称"目标类型在 `_call_llm` 调用时未知"——实测证伪：类型来自 AST（`node_data["returns"]` / side-table），`type_name` 已作为参数贯穿整个解析管线至 `AxiomParsingStrategy.parse`。
+- 因此路由判定**本就该在策略层**（唯一同时握有"原始响应 + 目标类型"的层）；在 `execute_*` 分叉是重复决策。
+- 结论：以 ADR-013（单一入口/单一策略/内部分支）supersede ADR-009；`_call_llm_multimodal` 不再引入；文本路径字节级零回归（能力位默认 `False`，今日无类型声明 multimodal cap）。
+
+**关键发现 3 — media 存储重框为来源感知的 handle/backing**：
+- 媒体来源异质：文件来源（字节已在磁盘，内存拷贝是浪费）vs LLM 生成（必须物化）。
+- 决定：media 变量为 handle（身份对象，`deep_clone` opt-out，序列化为描述符并在恢复期重解析——同 `IbNativeObject` 先例），底层 `MediaBacking` 抽象为 FileBacking / GeneratedBacking / MemoryBacking。字节惰性物化（`__payload_prompt__` 是唯一不可避免的开销）。
+- **关键耦合**：handle 可靠性 = 路径可靠性 → 路径统一成为强制前置（ADR-015）。
+
+**关键发现 4 — 路径碎片化量化**（Fragmentation Map）：
+- `PathResolver` 零生产调用（死代码，被手搓两层版取代）。
+- 5 种 "root"、3 套沙箱检查、4 处 `__file__` 遍历（3 种公式）、散在两文件的 `replace('.',os.sep)` 模块名↔路径耦合。
+- `HostService.save_state` 绕过沙箱（安全缺口）+ `.assets/` 字符串拼接 + `"__EXTERNAL_FILE_REF__"` 魔法哨兵。
+- 子 ihost root 绕过 `ProjectDetector`（`engine.py:462-463`）。
+- IBCI_SPEC §6.1"统一路径语义"对模块导入为假。
+
+### 产出文件
+
+- 新增 `docs/decisions/ADR-013-unified-response-parsing.md`（Accepted；supersede ADR-009）。
+- 新增 `docs/decisions/ADR-014-media-storage-handle-backing.md`（Accepted；阻塞于 ADR-015）。
+- 新增 `docs/decisions/ADR-015-path-system-unification-as-prerequisite.md`（Accepted；media 强制前置 gate）。
+- 更新 `docs/decisions/ADR-009-call-llm-raw.md`（Status → Superseded by ADR-013）。
+- 更新 `docs/decisions/README.md` 索引（+ Superseded 段、+ Phase 4 Media Foundation Decisions 段）。
+- 重写 `docs/NEXT_STEPS.md`（新 P0 阶段序列：P0-1 清债 / P0-2 路径统一 / P0-3 统一解析；media 改为 gated；置入"⛔ 工作模式定论"）。
+- 更新 `docs/PENDING_TASKS.md`（新增 §九 PT-ARCH-11~16 + PT-DOC-12 前置技术债）。
+
+### 工作模式定论（强制原则）
+
+> **扎实推进，禁止任何形式的快速实现 / 兼容层 / 胶水实现 / tricky 实现。**
+
+详见 `NEXT_STEPS.md ⛮ 工作模式定论`。本原则凌驾于一切"先出成果再还债"的提议之上；media Phase 4 被显式 gate 在 §九 债务清完之前。
 
 ---
 
@@ -338,11 +558,11 @@ Phase 3 多模态、PT-TEST-4（5/5）、PT-ARCH-7、PT-ARCH-5 G3、PT-ARCH-10 �
 
 ## 关联文档
 
-- 类型系统正式设计：`docs/TYPE_SYSTEM_DESIGN.md`
-- VM 与解释器正式设计：`docs/VM_AND_INTERPRETER_DESIGN.md`
-- VM 公理化规范：`docs/VM_SPEC.md`
-- 实现细节备份：`docs/ARCH_DETAILS.md`
-- 意图系统：`docs/INTENT_SYSTEM_DESIGN.md`
+- 类型系统正式设计：`docs/design/TYPE_SYSTEM_DESIGN.md`
+- VM 与解释器正式设计：`docs/design/VM_AND_INTERPRETER_DESIGN.md`
+- VM 公理化规范：`docs/design/VM_SPEC.md`
+- 实现细节备份：`docs/design/ARCH_DETAILS.md`
+- 意图系统：`docs/design/INTENT_SYSTEM_DESIGN.md`
 - 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
 - 当前已知限制：`docs/KNOWN_LIMITS.md`
 - 历史详细日志：`docs/HISTORY_LOG.md`

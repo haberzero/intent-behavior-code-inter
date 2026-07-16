@@ -1,7 +1,7 @@
 # `tests/` 目录维护规约
 
-> 本文档是 `tests/` 长期维护守则的**精简版**；完整的体系化重构计划、合并矩阵
-> 与执行步骤见 [`docs/TESTS_REORGANIZATION_TASK.md`](../docs/TESTS_REORGANIZATION_TASK.md)。
+> 本文档是 `tests/` 长期维护守则。测试体系设计原则见 [`docs/testing/TEST_PHILOSOPHY.md`](../docs/testing/TEST_PHILOSOPHY.md)；
+> 概念→测试入口映射见 [`tests/COVERAGE_MAP.md`](./COVERAGE_MAP.md)。
 
 ## 基础设施
 
@@ -48,7 +48,7 @@ python -m pytest tests/ -q --tb=short
 
 ## 新增测试时
 
-1. 先查 [`tests/COVERAGE_MAP.md`](./COVERAGE_MAP.md)（若尚未创建则参考 `docs/TESTS_REORGANIZATION_TASK.md` §5）找对应文件。
+1. 先查 [`tests/COVERAGE_MAP.md`](./COVERAGE_MAP.md) 找对应文件。
 2. 找不到对应文件 → 先在 COVERAGE_MAP 加一行 + 写理由 → 再建新文件。
 3. 严格遵守"分层职责"与"命名规约"。
 4. 用 `conftest.py` 的统一 helper / fixture，不要复刻。

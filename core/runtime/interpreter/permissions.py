@@ -1,8 +1,7 @@
-import os
 from typing import Optional
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.kernel import IbObject
-from core.runtime.path import IbPath, PathValidator
+from core.kernel.path import IbPath, PathValidator
 
 
 class PermissionManager:
@@ -12,9 +11,10 @@ class PermissionManager:
     使用 IBCI PathValidator 进行安全验证，完全独立于 Python os.path。
     """
     def __init__(self, root_dir: str):
-        self.root_dir = os.path.realpath(root_dir)
+        # ADR-019 D2/Stage D：root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
+        self._project_root = IbPath.from_native(root_dir)
+        self.root_dir = root_dir
         self._external_access_enabled = False
-        self._root_path = IbPath.from_native(self.root_dir)
 
     def enable_external_access(self):
         """
@@ -33,21 +33,19 @@ class PermissionManager:
         """
         Validates if the given path is allowed to be accessed.
 
-        使用 IBCI PathValidator 进行安全验证，完全独立于 Python os.path.commonpath()。
+        经 IBCI PathValidator 统一沙箱检查（全仓唯一沙箱实现）。
 
         参数:
             path: 要验证的路径（字符串）
             operation: 操作类型（用于错误信息）
         """
-        abs_path = os.path.realpath(path)
+        ib_path = PathValidator.canonicalize_for_security(path)
 
         if self._external_access_enabled:
             return
 
-        ib_path = IbPath.from_native(abs_path)
-
         is_valid, error_msg = PathValidator.validate(
-            ib_path, self._root_path, allow_external=False
+            ib_path, self._project_root, allow_external=False
         )
 
         if not is_valid:

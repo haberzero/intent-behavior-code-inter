@@ -424,7 +424,7 @@ def test_optional_none_access_raises(self):
 
 **强制检查**：
 1. `tests/meta/test_no_duplicate_helpers.py` 必须通过（无 helper 重复）
-2. 测试总数不得低于基线（当前 ~780 个）
+2. 测试总数不得低于基线（基线以 `docs/NEXT_STEPS.md` 顶部或 `docs/COMPLETED.md` 最新条目为准，不在此冻结数字）
 3. 覆盖率不降低（核心路径 ≥ 85%）
 4. 所有测试通过（`pytest tests/ -v`）
 
@@ -589,11 +589,11 @@ class TestCPSInvariants:
 
 ### 内部文档
 
-- [`docs/TEST_PHILOSOPHY.md`](./TEST_PHILOSOPHY.md)：本文档（测试体系设计原则）
-- [`tests/README.md`](../tests/README.md)：测试目录维护守则
-- [`tests/COVERAGE_MAP.md`](../tests/COVERAGE_MAP.md)：概念 → 测试入口映射
-- [`docs/VM_AND_INTERPRETER_DESIGN.md`](./VM_AND_INTERPRETER_DESIGN.md)：执行模型公理
-- [`docs/IBCI_SYNTAX_REFERENCE.md`](./IBCI_SYNTAX_REFERENCE.md)：IBCI 完整语法参考
+- [`docs/testing/TEST_PHILOSOPHY.md`](./TEST_PHILOSOPHY.md)：本文档（测试体系设计原则）
+- [`tests/README.md`](../../tests/README.md)：测试目录维护守则
+- [`tests/COVERAGE_MAP.md`](../../tests/COVERAGE_MAP.md)：概念 → 测试入口映射
+- [`docs/design/VM_AND_INTERPRETER_DESIGN.md`](../design/VM_AND_INTERPRETER_DESIGN.md)：执行模型公理
+- [`docs/IBCI_SYNTAX_REFERENCE.md`](../IBCI_SYNTAX_REFERENCE.md)：IBCI 完整语法参考
 
 ### 外部参考
 
@@ -613,17 +613,15 @@ IBCI 测试体系的核心原则：
 4. **文档化**：测试即规范
 5. **可维护**：内部重构不破坏测试
 
-**当前状态**（2026-06-24 更新）：
-- 测试文件：55 个 `test_*.py`
-- 测试用例：1011 passed / 5 skipped（含 3 个层级元测试 skip）
-- 测试运行时间：~6.5s
-- 运行命令：`python -m pytest tests/ -q --tb=short`
-- 注：测试数会随开发持续增长，请以实际 pytest 输出为准
+**当前状态**（2026-06-25 更新）：
+- 测试运行命令：`python -m pytest tests/ -q --tb=no --no-header`
+- 最近一次基线：1070 passed / 5 skipped（2026-06-25；含 2 个设计限制 skip + 3 个层级元测试 skip）
+- 注：测试数随开发持续增长，**请以实际 pytest 输出为准**，本文档不冻结具体数字。最新基线锚点见 `docs/NEXT_STEPS.md` 顶部或 `docs/COMPLETED.md` 最新条目。
 
 **长期愿景**：
 > IBCI 测试体系成为语言设计文档的**可执行规范**，验证核心不变量，而非追逐实现细节。
 
 ---
 
-*文档版本：1.1（2026-05-26 同步实际测试状态）*
+*文档版本：1.2（2026-06-25 文档体系整理：数字纪律化）*
 *维护者：IBCI 核心团队*

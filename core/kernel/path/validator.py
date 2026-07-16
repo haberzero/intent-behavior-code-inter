@@ -1,11 +1,16 @@
 """
 IBCI Path Validator - 路径安全验证器
 
-完全独立于 Python os.path.commonpath() 实现路径安全验证。
-提供沙箱边界检查和路径安全性验证。
+提供沙箱边界检查、路径安全性验证、以及 FS 感知的规范化（符号链接解析）。
+
+Per ADR-017：``canonicalize_for_security`` 是全仓**唯一**的 ``os.path.realpath``
+调用点（FS 感知规范化的集中位置）。IbPath 保持纯字符串/可序列化，
+FS 感知操作归本类（安全边界成员）。scheduler/resolver/permissions 三处历史
+各自调 realpath，现统一委托本方法。
 """
+import os
 from typing import Tuple
-from .ib_path import IbPath
+from core.base.path import IbPath
 
 
 class PathValidator:
@@ -160,3 +165,20 @@ class PathValidator:
         else:
             resolved = path.resolve_dot_segments()
             return resolved.parent if resolved.parent else resolved
+
+    @staticmethod
+    def canonicalize_for_security(path: str) -> IbPath:
+        """
+        FS 感知规范化：``os.path.realpath``（解析符号链接）+ IbPath 规范化。
+
+        **全仓唯一的 ``os.path.realpath`` 调用点**（per ADR-017）。
+        所有需要符号链接解析的安全边界（scheduler/resolver/permissions 的沙箱检查）
+        都应委托本方法，而非各自独立调 ``os.path.realpath``。
+
+        参数:
+            path: 原生路径字符串
+
+        返回:
+            IbPath: 规范化、符号链接已解析的绝对路径。
+        """
+        return IbPath.from_native(os.path.realpath(path))

@@ -4,7 +4,9 @@
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。  
 > **基准状态**（2026-04-29 / 更新于 2026-05-14）：Python 宿主实现（`core/`）在 `tests/compliance/` 套件下符合本规范；
 > **请注意**：`tests/contracts/` 的"Phase 2 完成"标记（2026-05-13）中包含的语法错误声明已过时；contracts 层测试在后续修复中已稳定。具体测试通过数请以当次 `python -m pytest tests/compliance/ -q` 输出为准。  
-> **关联文档**：`docs/VM_AND_INTERPRETER_DESIGN.md`（代码对齐版正式设计）、`docs/COMPLETED.md`（里程碑时间线）、`docs/ARCH_DETAILS.md`（实现细节备份）。
+> **关联文档**：`docs/design/VM_AND_INTERPRETER_DESIGN.md`（代码对齐版正式设计）、`docs/COMPLETED.md`（里程碑时间线）、`docs/design/ARCH_DETAILS.md`（实现细节备份）。
+>
+> **⚠️ 路径漂移说明（2026-06-25 整理）**：本规范层与 Python 宿主实现隔离；正文内偶尔出现的 `*.py` 路径中，`runtime/vm/handlers`、`runtime/objects/{builtins,kernel}`、`runtime/interpreter/llm_executor` 已重构为包（目录），请以实际代码为准。
 
 ---
 

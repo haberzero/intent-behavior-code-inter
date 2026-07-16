@@ -4,9 +4,12 @@
 > 这些内容已在代码中稳定落地，但因过于具体而不适合放入总体架构说明。
 > 供开发者深入理解各模块实现时参考。
 >
-> **最后更新**：2026-05-12（按当次事实核查补入 PT-1.2 / PT-1.3 字段、纠正 §1.6 中已过期表述、规整历史小节编号）
+> **最后更新**：2026-06-25（文档体系整理：补路径漂移说明；正文最晚引用为 2026-05-27）
 >
-> **说明**：本文包含若干历史分阶段细节。若与当前代码状态冲突，请优先以 `docs/TYPE_SYSTEM_DESIGN.md`、`docs/VM_AND_INTERPRETER_DESIGN.md`、`docs/NEXT_STEPS.md` 以及对应源码实现为准。文末"§十三 公理化里程碑"与"§十四 公理类型层次"为 2026-04-17 历史归档，仅用于追溯设计决策由来；当前编号系统已收口为 §一..§十一 + §十二（vtable 自动签名）+ 历史归档 §十三/§十四。
+> **说明**：本文包含若干历史分阶段细节。若与当前代码状态冲突，请优先以 `docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/NEXT_STEPS.md` 以及对应源码实现为准。文末"§十三 公理化里程碑"与"§十四 公理类型层次"为 2026-04-17 历史归档，仅用于追溯设计决策由来；当前编号系统已收口为 §一..§十一 + §十二（vtable 自动签名）+ 历史归档 §十三/§十四。
+>
+> **⚠️ 路径漂移说明（2026-06-25 整理）**：本文记录了多次重构的演进，正文含大量历史 `*.py:行号` 锚点。以下模块现已重构为**包**，旧行号锚点已失效，请以实际代码目录为准：
+> `kernel/spec/registry`、`kernel/axioms/primitives`、`runtime/objects/{builtins,kernel}`、`runtime/vm/handlers`、`runtime/interpreter/llm_executor`。旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除。
 
 ---
 
@@ -510,7 +513,7 @@ class IbBehavior(IbObject, IIbBehavior):
 
 ## 十四、公理类型层次（2026-04-17 历史归档 / 参考）
 
-> 此节归档自原 `AXIOM_OOP_ANALYSIS.md` §一。AXIOM_OOP_ANALYSIS.md 文件已删除，内容拆分到 `docs/COMPLETED.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/VM_AND_INTERPRETER_DESIGN.md` 与本文件。
+> 此节归档自原 `AXIOM_OOP_ANALYSIS.md` §一。AXIOM_OOP_ANALYSIS.md 文件已删除，内容拆分到 `docs/COMPLETED.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md` 与本文件。
 
 ### 14.1 完整公理类型层次（声明视角）
 

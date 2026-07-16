@@ -3,7 +3,6 @@ from core.runtime.objects.intent import IbIntent
 from core.runtime.module_system.loader import ModuleLoader
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.interfaces import RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
-import os
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.kernel import ast as ast
 from core.kernel.spec import TypeDef as ModuleType
@@ -39,14 +38,12 @@ class ModuleManagerImpl:
                  registry: KernelRegistry,
                  object_factory: IObjectFactory,
                  execute_module_callback: Callable,
-                 artifact: Optional['CompilationArtifact'] = None, 
-                 root_dir: str = "."):
+                 artifact: Optional['CompilationArtifact'] = None):
         self.interop = interop
         self.registry = registry
         self.object_factory = object_factory
         self.execute_module_callback = execute_module_callback
         self.artifact = artifact
-        self.root_dir = root_dir
         self._loaded_modules: Dict[str, ModuleInstance] = {}
 
     def import_module(self, module_name: str, execution_context: IExecutionContext) -> Any:

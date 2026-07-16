@@ -1,7 +1,12 @@
 # IBCI VM 与解释器架构（代码对齐版）
 
 > 本文档是 IBCI 运行时（VM + 解释器）的**正式架构设计文档**，与当前代码（`core/runtime/vm/`、`core/runtime/interpreter/`、`core/runtime/objects/`）严格对齐。
-> 公理化的可验证规范见 `docs/VM_SPEC.md`；实现细节备份见 `docs/ARCH_DETAILS.md`；历史演进时间线见 `docs/COMPLETED.md`。
+> 公理化的可验证规范见 `docs/design/VM_SPEC.md`；实现细节备份见 `docs/design/ARCH_DETAILS.md`；历史演进时间线见 `docs/COMPLETED.md`。
+>
+> **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
+> `runtime/vm/handlers`（`build_dispatch_table`→`handlers/dispatch.py`）、`runtime/objects/{builtins,kernel}`、
+> `runtime/interpreter/llm_executor`。旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除（现 `vm/handlers/` CPS 包）。
+> 当前主线状态见 `docs/NEXT_STEPS.md`（PT-ARCH-19/20 路径统一为最高优先级 P0）。
 
 ---
 
@@ -259,7 +264,7 @@ visit_IbLLMExceptionalStmt
 
 ### 6.4 完整规范
 
-详见 `docs/ARCH_DETAILS.md §一` 与 `docs/INTENT_SYSTEM_DESIGN.md §4.6`。
+详见 `docs/design/ARCH_DETAILS.md §一` 与 `docs/design/INTENT_SYSTEM_DESIGN.md §4.6`。
 
 ---
 
@@ -296,7 +301,7 @@ visit_IbLLMExceptionalStmt
 
 ### 7.3 完整设计
 
-详见 `docs/INTENT_SYSTEM_DESIGN.md`。
+详见 `docs/design/INTENT_SYSTEM_DESIGN.md`。
 
 ---
 
@@ -380,7 +385,9 @@ visit_IbLLMExceptionalStmt
 
 ---
 
-## §12 当前状态（2026-05-12 锚点）
+## §12 当前状态
+
+> 本节为 VM/解释器主线里程碑的**历史快照**。实时主线状态以 `docs/NEXT_STEPS.md` 为准。
 
 | 主线 | 状态 |
 |------|------|
@@ -398,20 +405,18 @@ visit_IbLLMExceptionalStmt
 | PT-1.2（LLMExceptFrame 重试错误历史） | ✅ 完成（2026-05-12） |
 | PT-1.3（LLMExceptFrameStack 深度限制） | ✅ 完成（2026-05-12） |
 | PT-3.3（idbg.protection_map） | ✅ 完成（2026-05-12） |
-| L3 语言级协程 / yield | ⏳ 远期愿景 |
+| L3 语言级协程 / yield | ⏳ 远期愿景（搁置，见 `docs/design/COROUTINE_DESIGN_NOTES.md`） |
 
-**已知开放议题**（详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md`）：
-
-- 目前无新增 P0/P1/P2/P3 主线开放议题；仅保留 L3 协程化方向的远期愿景项。
+**VM/解释器层面的开放议题**：本层无新增 P0/P1 议题。当前项目最高优先级 P0 是 **路径系统统一（PT-ARCH-19/20）** 与后续的**变量存储模型（ADR-016）+ media 重建（ADR-014）**——这些属于路径层与对象模型层，详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md §九`。
 
 ---
 
 ## §13 关联文档
 
-- VM 正式规范（公理化、合规测试）：`docs/VM_SPEC.md`
-- 类型系统设计（代码对齐版）：`docs/TYPE_SYSTEM_DESIGN.md`
+- VM 正式规范（公理化、合规测试）：`docs/design/VM_SPEC.md`
+- 类型系统设计（代码对齐版）：`docs/design/TYPE_SYSTEM_DESIGN.md`
 - 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
-- 实现细节备份（llmexcept / MOCK / 类型系统迁移历史等）：`docs/ARCH_DETAILS.md`
-- 意图系统设计：`docs/INTENT_SYSTEM_DESIGN.md`
+- 实现细节备份（llmexcept / MOCK / 类型系统迁移历史等）：`docs/design/ARCH_DETAILS.md`
+- 意图系统设计：`docs/design/INTENT_SYSTEM_DESIGN.md`
 - 已知语言限制：`docs/KNOWN_LIMITS.md`
 - 历史时间线：`docs/COMPLETED.md`

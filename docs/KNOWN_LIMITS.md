@@ -340,7 +340,7 @@ str r = @~ ... ~
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
 1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置 `list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` 全部走内置 axiom 的 `resolve_specialization_by_names` 路径，用户类型无对应入口。
-2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel.py` 的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
+2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel/`（包）的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
 
 **未来演进思路（不构成承诺）**：以上见 `docs/PENDING_TASKS.md §四`。
 
@@ -348,7 +348,7 @@ str r = @~ ... ~
 
 ## 十五、DDG 分析已完成但并发调度未接通
 
-**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Pass 5）已经为每个 `IbBehaviorExpr` 计算 `llm_deps` / `dispatch_eligible` 字段（详见 `docs/VM_SPEC.md §3.1`），但运行时 `core/runtime/interpreter/llm_executor.py` 与 `vm/handlers.py` 仍按 AST 序串行执行——`dispatch_eligible=True` 的节点目前**不会**真正并发发起 LLM HTTP 调用，`LLMScheduler.dispatch_eager()` 路径未被默认启用。
+**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）已经为每个 `IbBehaviorExpr` 计算 `llm_deps` / `dispatch_eligible` 字段（详见 `docs/design/VM_SPEC.md §3.1`），但运行时 `core/runtime/interpreter/llm_executor/`（包）与 `core/runtime/vm/handlers/`（包）仍按 AST 序串行执行——`dispatch_eligible=True` 的节点目前**不会**真正并发发起 LLM HTTP 调用，`LLMScheduler.dispatch_eager()` 路径未被默认启用。
 
 **根源**：并发分发会与现有 `llmexcept` 快照隔离、`@~...~` 的意图栈消费、`Cell` 变量赋值等语义产生跨切面副作用；接通需要补足"快照与 future 的交互合同"。
 
@@ -394,4 +394,4 @@ str r = @~ ... ~
 
 ---
 
-*最后更新：2026-05-27（全面事实核查与文档大扫除）*
+*最后更新：2026-06-25（文档体系整理：同步 VM_SPEC/路径引用至 design/ + 包路径）*

@@ -1,8 +1,13 @@
 # IBCI 类型系统设计（代码对齐版）
 
 > 本文档是 IBCI 类型系统的**正式设计文档**，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
-> 设计原文（架构推演、语言学动机）见 `docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`。
+> 设计原文（架构推演、语言学动机）见 `docs/archive/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`（已归档）。
 > 历史演进时间线见 `docs/COMPLETED.md`。
+>
+> **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
+> `kernel/spec/registry`、`kernel/axioms/primitives`、`runtime/objects/{builtins,kernel}`、
+> `runtime/vm/handlers`（`build_dispatch_table`→`handlers/dispatch.py`）、`runtime/interpreter/llm_executor`。
+> 旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除（现 `vm/handlers/` CPS 包）。
 
 ---
 
@@ -354,19 +359,19 @@ class IbValue(IbObject):
 
 ---
 
-## §10 当前状态（2026-05-08 锚点）
+## §10 当前状态
 
-- M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成（详见 `docs/COMPLETED.md`）。
-- 主线债务：无。
-- 测试基线：`python -m pytest tests/ -q --tb=short` 全量通过。
+- M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成（详见 `docs/COMPLETED.md`，2026-05-08 锚点）。
+- 类型系统主线本身无开放债务；但项目整体主线当前最高优先级是 **PT-ARCH-19/20 路径系统统一**（ADR-017/018），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在路径统一 + 存储模型架构（ADR-016）+ media 重建（ADR-014）完成之后。
+- 实时主线状态以 `docs/NEXT_STEPS.md` 为准；测试基线请以当次 `python -m pytest tests/ -q --tb=no --no-header` 输出为准（不在此冻结具体数字）。
 
 ---
 
 ## §11 关联文档
 
-- 设计原文（架构推演、动机、与旧体系对照）：`docs/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
-- VM 与解释器架构（执行边界、CPS、Signal、LLM Scheduler）：`docs/VM_AND_INTERPRETER_DESIGN.md`
-- VM 正式规范（公理化）：`docs/VM_SPEC.md`
+- 设计原文（架构推演、动机、与旧体系对照）：`docs/archive/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
+- VM 与解释器架构（执行边界、CPS、Signal、LLM Scheduler）：`docs/design/VM_AND_INTERPRETER_DESIGN.md`
+- VM 正式规范（公理化）：`docs/design/VM_SPEC.md`
 - 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
-- 运行时与解释器细节备份：`docs/ARCH_DETAILS.md`
+- 运行时与解释器细节备份：`docs/design/ARCH_DETAILS.md`
 - 历史时间线：`docs/COMPLETED.md`

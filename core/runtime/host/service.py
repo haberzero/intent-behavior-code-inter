@@ -52,42 +52,52 @@ class HostService(IHostService):
 
     def save_state(self, path: str):
         """深度序列化当前运行时上下文并保存到磁盘"""
+        # 路径经 IbPath 规范化；资产外化布局委托 SnapshotLayout（策略集中化）。
+        # 注：save_state 是宿主级特权操作（用户显式调用），不经 PermissionManager 沙箱校验——
+        # 这是有意设计（host op 应能写用户指定位置），非安全缺口。
+        # 注：assets 的 "__EXTERNAL_FILE_REF__" 哨兵是序列化格式约定，
+        # 属 PT-ARCH-13（media 重建时统一为路径感知序列化）。
+        from core.kernel.path import IbPath, SnapshotLayout
         self.sync() # 必须先同步
         data = self.snapshot()
-        
-        abs_path = os.path.abspath(path)
-        base_dir = os.path.dirname(abs_path)
+
+        save_path = IbPath.from_native(path).resolve_dot_segments()
+        abs_path = save_path.to_native()
+        base_dir = (save_path.parent.to_native() if save_path.parent else "")
         os.makedirs(base_dir, exist_ok=True)
-        
-        # 文本资产外部化持久化
+
+        # 文本资产外部化持久化（布局走 SnapshotLayout）
         assets = data["pools"].get("assets", {})
         if assets:
-            asset_dir = abs_path + ".assets"
-            os.makedirs(asset_dir, exist_ok=True)
+            asset_dir_path = SnapshotLayout.asset_dir_for(save_path)
+            os.makedirs(asset_dir_path.to_native(), exist_ok=True)
             for uid, content in assets.items():
-                asset_path = os.path.join(asset_dir, f"{uid}.txt")
+                asset_path = SnapshotLayout.asset_file(asset_dir_path, uid).to_native()
                 with open(asset_path, "w", encoding="utf-8") as af:
                     af.write(content)
-            data["pools"]["assets"] = {uid: f"__EXTERNAL_FILE_REF__" for uid in assets}
+            data["pools"]["assets"] = {uid: "__EXTERNAL_FILE_REF__" for uid in assets}
 
         with open(abs_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def load_state(self, path: str):
         """从磁盘加载快照并恢复当前现场"""
-        abs_path = os.path.abspath(path)
+        from core.kernel.path import IbPath, SnapshotLayout
+        save_path = IbPath.from_native(path).resolve_dot_segments()
+        abs_path = save_path.to_native()
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"State file not found: {abs_path}")
-            
+
         with open(abs_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            
-        # 恢复外部文本资产
-        asset_dir = abs_path + ".assets"
+
+        # 恢复外部文本资产（布局走 SnapshotLayout，与 save_state 一致）
+        asset_dir_path = SnapshotLayout.asset_dir_for(save_path)
+        asset_dir = asset_dir_path.to_native()
         if os.path.exists(asset_dir):
             assets = data["pools"].get("assets", {})
             for uid in assets:
-                asset_path = os.path.join(asset_dir, f"{uid}.txt")
+                asset_path = SnapshotLayout.asset_file(asset_dir_path, uid).to_native()
                 if os.path.exists(asset_path):
                     with open(asset_path, "r", encoding="utf-8") as af:
                         assets[uid] = af.read()
@@ -211,27 +221,22 @@ class HostService(IHostService):
         """
         把 ``ihost.run_isolated``/``spawn_isolated`` 传入的脚本路径解析为绝对路径。
 
-        - 绝对路径：直通（``os.path.abspath`` 进行规范化）。
-        - 相对路径：基于**当前执行脚本的入口目录** (``execution_context.get_entry_dir()``)
-          解析，与 ``file.read("./api_config.json")`` / ``isys.entry_dir()`` 保持一致；
-          仅当入口目录不可用时，才回退到 ``os.path.abspath`` 的 cwd 解析。
+        委托规范解析器 ``PathResolver``（entry_dir 单锚点，§6.1 契约），与
+        ``ExecutionContextImpl.resolve_path`` / ``file.read`` 的相对入口目录语义一致。
 
         H3 修复（详见 docs/COMPLETED.md 2026-05-14 锚点）：历史实现统一走 ``os.path.abspath``，
         相对 cwd 解析，与 ``file.read`` 的"相对入口目录"语义不一致，导致 README §5 与
         ``examples/03_advanced_features/isolation_demo/parent.ibci`` 仅在 cwd 恰好为入口目录
         时才能跑通。
         """
-        if os.path.isabs(path):
-            return os.path.abspath(path)
-        entry_dir = None
+        from core.kernel.path import PathResolver, IbPath
         try:
             entry_dir = self.execution_context.get_entry_dir()
         except Exception as e:
-            core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"get_entry_dir failed, falling back to cwd resolution: {e!r}")
+            core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"get_entry_dir failed: {e!r}")
             entry_dir = None
-        if entry_dir:
-            return os.path.abspath(os.path.join(entry_dir, path))
-        return os.path.abspath(path)
+        resolver = PathResolver(entry_dir=IbPath.from_native(entry_dir) if entry_dir else None)
+        return resolver.resolve(path).to_native()
 
     def get_source(self) -> str:
         """元编程：获取当前运行模块的源代码"""

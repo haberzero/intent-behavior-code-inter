@@ -1,7 +1,9 @@
 # ADR-009: _call_llm_raw introduction (D6/DEC-4 reconciliation)
 
 ## Status
-Accepted (2026-06-24)
+**Superseded by [ADR-013](ADR-013-unified-response-parsing.md)** (2026-06-25)
+
+ADR-013 证伪了本 ADR 的核心前提（"目标类型在 `_call_llm` 调用时未知"），并以"单一入口、单一策略、内部分支"取代了本 ADR 的分叉 `_call_llm_multimodal` 路径。以下原文仅作历史记录保留。`_call_llm_multimodal` 将不再引入。
 
 ## Date
 2026-06-24

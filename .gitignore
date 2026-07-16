@@ -25,3 +25,4 @@ diff_output_ibci_all.md
 .tmp_pytest/
 .tmp_run/
 pytest-of-*/
+ref/

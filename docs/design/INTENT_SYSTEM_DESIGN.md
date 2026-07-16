@@ -2,7 +2,12 @@
 
 > 本文档描述 IBC-Inter 意图注释系统的架构设计和实现细节。
 
-**更新日期**：2026-05-08
+**更新日期**：2026-06-25（文档体系整理：补路径漂移说明 + §十 文件清单修正）
+
+> **⚠️ 路径漂移说明**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
+> `runtime/vm/handlers`、`runtime/objects/kernel`、`runtime/interpreter/llm_executor`。
+> 旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除（现 `vm/handlers/` CPS 包）；
+> 旧 `compiler/semantic/passes/semantic_analyzer.py` 已重组为 `compiler/semantic/analyzer.py` + 4-Phase 流水线。
 
 ---
 
@@ -604,7 +609,7 @@ func make_translator():
 
 ### 9.7 与新 fn 语法的关系
 
-本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法（D1/D2，已落地于 2026-04-29，详见 `docs/COMPLETED.md`）。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/VM_AND_INTERPRETER_DESIGN.md §4`。
+本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法（D1/D2，已落地于 2026-04-29，详见 `docs/COMPLETED.md`）。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/design/VM_AND_INTERPRETER_DESIGN.md §4`。
 
 相关测试见 `tests/e2e/test_e2e_fn_callable.py`。
 
@@ -625,9 +630,9 @@ func make_translator():
 | `core/runtime/objects/intent_stack.py` | `IbIntentStack`（遗留接口层，提供 `push/pop/clear` 等 IBCI 可调用方法） |
 | `core/runtime/bootstrap/builtin_initializer.py` | `intent_context` 类原生方法绑定（`__init__/push/pop/fork/resolve/merge/clear`） |
 | `core/runtime/interpreter/runtime_context.py` | 运行时上下文（持有 `_intent_ctx: IbIntentContext`） |
-| `core/runtime/interpreter/handlers/stmt_handler.py` | 语句处理器（`visit_IbIntentAnnotation`、`visit_IbIntentStackOperation`） |
-| `core/runtime/interpreter/handlers/expr_handler.py` | `snapshot` 捕获 `fork_intent_snapshot()` 值快照 |
-| `core/runtime/interpreter/llm_executor.py` | LLM 执行器（调用 `get_resolved_prompt_intents()` 组装提示词） |
+| `core/runtime/vm/handlers/`（包） | CPS 语句/表达式处理（含意图注释与栈操作节点，如 `control_flow.py`） |
+| `core/runtime/vm/handlers/`（包） | `snapshot` 捕获 `fork_intent_snapshot()` 值快照（延迟行为处理） |
+| `core/runtime/interpreter/llm_executor/`（包） | LLM 执行器（调用 `get_resolved_prompt_intents()` 组装提示词） |
 | `core/runtime/interpreter/llm_except_frame.py` | LLM 异常帧（`save_context` 使用 `fork()` 保存意图快照） |
 | `core/runtime/objects/kernel.py` | `IbUserFunction`/`IbLLMFunction` fork/restore 意图上下文（拷贝传递语义）；lambda 参数约束 |
 | `core/compiler/semantic/passes/semantic_analyzer.py` | `@` 和 `@!` 语义校验：两者必须绑定下一条可执行语句（禁止连续 one-shot） |

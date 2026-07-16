@@ -1,9 +1,8 @@
-import os
 from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING, Callable
 from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
-from core.runtime.path import IbPath
+from core.kernel.path import IbPath, PathResolver
 
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
@@ -47,6 +46,10 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
+        # 规范路径解析器（entry_dir 单锚点，§6.1 契约的唯一实现）。
+        self._path_resolver = PathResolver(
+            entry_dir=IbPath.from_native(entry_dir) if entry_dir else None
+        )
         # VMExecutor 直接引用（由 Interpreter 在构造完成后注入）。
         # 替代 IbUserFunction.call() 中通过 self.context._interpreter._get_vm_executor()
         # 三级 getattr 的脆弱查找路径。多 Interpreter 并发场景下，每个执行上下文
@@ -250,20 +253,9 @@ class ExecutionContextImpl:
 
     def resolve_path(self, path: str) -> IbPath:
         """
-        所有相对路径的统一解析入口
+        所有相对路径的统一解析入口（委托 PathResolver，§6.1 契约的唯一实现）。
 
         所有相对路径都基于入口文件目录解析，确保无论在哪个 IBCI 文件中执行，
         相对路径都相对于入口文件目录。
         """
-        if not path:
-            return IbPath.from_native("")
-
-        ib_path = IbPath.from_native(path)
-
-        if ib_path.is_absolute:
-            return ib_path.resolve_dot_segments()
-
-        if self._entry_dir:
-            return (IbPath.from_native(self._entry_dir) / ib_path).resolve_dot_segments()
-
-        return ib_path
+        return self._path_resolver.resolve(path)

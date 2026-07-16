@@ -5,7 +5,7 @@
 >
 > **最后更新**：2026-05-08
 >
-> 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./ARCH_DETAILS.md)。
+> 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./design/ARCH_DETAILS.md)。
 > 当前类型系统状态：`TypeRef` + `TypeDef` + `CALLABLE_INSTANCE` + `IbValue` + `TypeAxiom` 已落地；类型系统主线 M1–M5 全部完成（2026-05-08）。
 
 ---
@@ -185,8 +185,8 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
 | **TypeAxiom** | 核心公理接口（capability 协议） | `axioms/protocols.py` |
-| **BaseAxiom** | 公理基类，提供默认实现 | `axioms/primitives.py` |
-| **IntAxiom/StrAxiom...** | 具体类型公理 | `axioms/primitives.py` |
+| **BaseAxiom** | 公理基类，提供默认实现 | `axioms/primitives/`（包） |
+| **IntAxiom/StrAxiom...** | 具体类型公理 | `axioms/primitives/`（包） |
 | **AxiomRegistry** | 公理注册表，按类型名索引公理实例 | `axioms/registry.py` |
 
 ### 5.2 公理与类型系统集成
@@ -237,8 +237,8 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 |------|------|----------|
 | **IbSpec** | 所有类型描述符的基类 | `kernel/spec/base.py` |
 | **TypeDef（统一类型定义；旧 *Spec 子类与别名已彻底删除）** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
-| **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry.py` |
-| **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry.py` |
+| **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry/`（包） |
+| **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry/`（包） |
 | **MemberSpec / MethodMemberSpec** | 模块成员描述符 | `kernel/spec/member.py` |
 
 `Symbol` 只保留 `.spec` 字段（`IbSpec` 类型），不存在 `.descriptor` 属性或任何兼容 shim。
@@ -472,7 +472,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 |------|------|------|
 | **ModuleDiscoveryService** | `module_system/discovery.py` | 扫描 ibci_modules/，通过 _spec.py 自动发现 |
 | **SpecBuilder / vtable** | `extension/spec_builder.py` 或 `_spec.py` | 声明式自动构建插件接口 |
-| **两阶段注册** | `kernel/spec/registry.py` | 占位阶段 + 填充阶段 + 公理注入 |
+| **两阶段注册** | `kernel/spec/registry/`（包） | 占位阶段 + 填充阶段 + 公理注入 |
 
 ---
 
@@ -502,18 +502,22 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 ## 附录：关键文件索引
 
+> **更新（2026-06-25）**：以下模块已重构为包（目录），路径以 `/` 结尾标注：
+> `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{builtins,kernel}/`、
+> `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。旧 visitor `interpreter/handlers/` 已删除。
+
 | 文件 | 重要性 | 说明 |
 |------|--------|------|
 | `core/engine.py` | 高 | IBCIEngine，解释器管理层，spawn_interpreter() |
 | `core/kernel/registry.py` | 高 | KernelRegistry，运行时对象工厂 |
-| `core/kernel/spec/registry.py` | 高 | SpecRegistry + SpecFactory，统一类型描述系统 |
+| `core/kernel/spec/registry/`（包） | 高 | SpecRegistry + SpecFactory，统一类型描述系统 |
 | `core/kernel/spec/specs.py` | 高 | 具体 IbSpec 子类及内置类型原型常量 |
-| `core/kernel/axioms/primitives.py` | 高 | 内置类型公理实现（register_core_axioms） |
+| `core/kernel/axioms/primitives/`（包） | 高 | 内置类型公理实现（register_core_axioms） |
 | `core/kernel/symbols.py` | 中 | Symbol 系统（Symbol.spec 唯一类型字段） |
 | `core/runtime/interpreter/execution_context.py` | 高 | ExecutionContextImpl |
-| `core/runtime/interpreter/llm_executor.py` | 高 | LLMExecutorImpl，LLM 调用与结果解析 |
+| `core/runtime/interpreter/llm_executor/`（包） | 高 | LLMExecutorImpl，LLM 调用与结果解析 |
 | `core/runtime/interpreter/llm_except_frame.py` | 高 | LLMExceptFrame，llmexcept 现场帧 |
-| `core/runtime/interpreter/handlers/stmt_handler.py` | 高 | 语句节点处理（含 visit_IbLLMExceptionalStmt） |
+| `core/runtime/vm/handlers/`（包） | 高 | CPS 语句/表达式节点处理（含 vm_handle_IbLLMExceptionalStmt） |
 | `core/runtime/host/service.py` | 高 | HostService，断点快照/恢复 |
 | `core/runtime/host/host_interface.py` | 高 | HostInterface，宿主环境接口注册器 |
 | `core/runtime/bootstrap/builtin_initializer.py` | 高 | 内置类型注册与装箱器 |
@@ -521,7 +525,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
 | `core/base/diagnostics/debugger.py` | 中 | CoreDebugger |
 | `core/runtime/module_system/discovery.py` | 高 | ModuleDiscoveryService，插件发现服务 |
-| `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin / IbStatelessPlugin |
+| `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin（IbStatelessPlugin 已删除） |
 | `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（LLM Provider 核心实现） |
 | `ibci_modules/ibci_ihost/core.py` | 中 | HOST 插件实现（核心级） |
 | `ibci_modules/ibci_idbg/core.py` | 中 | IDBG 调试插件实现 |
@@ -534,7 +538,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 ### A.1 MetadataRegistry 双轨问题（已解决，2026-05-08）
 
-主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例：`discover_all(registry)` 将引擎的 `SpecRegistry` 传入 `HostInterface`，`HostInterface.metadata` 与 `KernelRegistry._metadata_registry` 同源，不存在两轨分离问题。详见 `docs/ARCH_DETAILS.md §十`。
+主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例：`discover_all(registry)` 将引擎的 `SpecRegistry` 传入 `HostInterface`，`HostInterface.metadata` 与 `KernelRegistry._metadata_registry` 同源，不存在两轨分离问题。详见 `docs/design/ARCH_DETAILS.md §十`。
 
 ### A.2 HOST 插件游离问题
 

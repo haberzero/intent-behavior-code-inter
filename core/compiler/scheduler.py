@@ -10,7 +10,7 @@ from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
-from core.base.path_utils import safe_relpath
+from core.kernel.path import IbPath, PathValidator, ModuleNameSpace, safe_relpath
 from core.compiler.parser.resolver.resolver import ModuleResolver
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
@@ -38,7 +38,10 @@ class Scheduler(ICompilerService):
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
     def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
-        self.root_dir = os.path.realpath(root_dir)
+        # ADR-019 D2/Stage D：root_dir 已由 engine 经 canonicalize_for_security 规范化（单一 realpath 源），
+        # 消费者信任传入值，仅做 IbPath 类型包装（不再重复 realpath——幂等冗余）。
+        self._project_root = IbPath.from_native(root_dir)
+        self.root_dir = root_dir
         self.source_manager = SourceManager()
         self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)
         self.resolver = ModuleResolver(self.root_dir)
@@ -68,7 +71,7 @@ class Scheduler(ICompilerService):
 
     def allow_file(self, file_path: str):
         """Explicitly allow a file outside root_dir."""
-        abs_path = os.path.realpath(file_path)
+        abs_path = PathValidator.canonicalize_for_security(file_path).to_native()
         self.allowed_files.add(abs_path)
         self.resolver.allow_file(abs_path)
 
@@ -91,7 +94,7 @@ class Scheduler(ICompilerService):
         
         # Try resolving relative to root_dir
         try:
-            return self.resolver.resolve(module_name, os.path.join(self.root_dir, "__init__.ibci"))
+            return self.resolver.resolve(module_name, (IbPath.from_native(self.root_dir) / "__init__.ibci").to_native())
         except Exception as e:
             core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                 f"Module resolve failed for '{module_name}': {e}")
@@ -121,7 +124,9 @@ class Scheduler(ICompilerService):
         
         # 1. Scan Dependencies (Recursive)
         # We manually drive the scanning process here to control token caching
-        entry_file = os.path.abspath(entry_file)
+        # ADR-019 D1/Stage D：entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
+        # 替代散点 os.path.abspath（engine 上游已规范化，此处统一收口）。
+        entry_file = PathValidator.canonicalize_for_security(entry_file).to_native()
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 1: Scanning dependencies starting from {entry_file}")
         self._scan_and_cache(entry_file)
             
@@ -163,8 +168,7 @@ class Scheduler(ICompilerService):
 
             # Determine module name
             rel_path = safe_relpath(file_path, self.root_dir)
-            base_name = os.path.splitext(rel_path)[0]
-            module_name = base_name.replace(os.sep, '.')
+            module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
             self.module_name_to_path[module_name] = file_path
 
             # Check mtime or cache
@@ -198,7 +202,7 @@ class Scheduler(ICompilerService):
         
         # Set entry point
         entry_rel = safe_relpath(entry_file, self.root_dir)
-        artifact.entry_module = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
+        artifact.entry_module = ModuleNameSpace.relpath_to_module_name(entry_rel)
         artifact.global_symbols = self.predefined_symbols
 
         return artifact
@@ -238,16 +242,13 @@ class Scheduler(ICompilerService):
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Scanning: {current_path}")
             
             # Security Check: Ensure file is within root_dir or explicitly allowed
-            try:
-                abs_root = self.root_dir
-                abs_path = os.path.realpath(current_path)
-                if abs_path not in self.allowed_files and os.path.commonpath([abs_root, abs_path]) != abs_root:
+            # 统一沙箱检查走 PathValidator（canonicalize_for_security 解符号链接 + is_within 判定）。
+            abs_path_ib = PathValidator.canonicalize_for_security(current_path)
+            if abs_path_ib.to_native() not in self.allowed_files:
+                if not PathValidator.is_within(self._project_root, abs_path_ib):
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Security violation: Access denied for {current_path}")
                     self.issue_tracker.error(f"Security Error: Access denied for file outside root: {current_path}", code=DEP_SECURITY_ERROR)
                     continue
-            except ValueError:
-                 self.issue_tracker.error(f"Security Error: Access denied (drive mismatch): {current_path}", code=DEP_SECURITY_ERROR)
-                 continue
 
             # 1. Read Content & Lex (if not cached or outdated)
             try:
@@ -338,8 +339,7 @@ class Scheduler(ICompilerService):
 
         # Determine module name
         rel_path = safe_relpath(file_path, self.root_dir)
-        base_name = os.path.splitext(rel_path)[0]
-        module_name = base_name.replace(os.sep, '.')
+        module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
         self.module_name_to_path[module_name] = file_path
         
         # Get content
@@ -396,7 +396,7 @@ class Scheduler(ICompilerService):
                 
                 if imp.file_path:
                     rel_imp_path = safe_relpath(imp.file_path, self.root_dir)
-                    imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
+                    imp_mod_name = ModuleNameSpace.relpath_to_module_name(rel_imp_path)
                     
                     # 统一使用 TypeDef 解决循环依赖问题
                     # 无论该模块是否已编译，都先注入 Lazy 描述符，

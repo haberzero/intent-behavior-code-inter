@@ -1,11 +1,12 @@
 # IBCI语义覆盖矩阵（Semantic Coverage Matrix）
 > Created: 2026-05-13
-> Last updated: 2026-06-24（刷新测试计数与 skip 状态）
+> Last updated: 2026-06-25（文档体系整理：修 §3.5 矛盾、数字纪律化）
 > Purpose: 建立IBCI核心语义到测试覆盖的完整映射，确保测试体系的完整性
 
-> **2026-06-24 更新说明**：
-> - 测试文件数 41 → 55；测试用例 ~612 → 1011 passed / 5 skipped
-> - INV-CONTEXT-1 / INV-CONTEXT-2 已于 2026-05-26 un-SKIP（nonlocal 实现）
+> **2026-06-25 更新说明**：
+> - 修复 §3.5 内部矛盾：INV-CONTEXT-1/2 表体与头部声明对齐（2026-05-26 nonlocal 落地后已 un-SKIP）
+> - 数字纪律化：本文档不再冻结具体测试计数，统一以 `python -m pytest tests/ -q --tb=no --no-header` 实跑为准
+> - 最新基线锚点见 `docs/NEXT_STEPS.md` 顶部或 `docs/COMPLETED.md` 最新条目
 > - 运行命令：`python -m pytest tests/ -q --tb=short`
 
 ## 文档目标
@@ -153,8 +154,8 @@
 
 | 语义特性 | 覆盖状态 | 测试位置 | 备注 |
 |---------|---------|---------|------|
-| 闭包捕获父帧变量 | ⚠️ | INV-CONTEXT-1 | test_closure_captures_parent_frame（**SKIPPED**: 返回内部闭包丢失父帧变量绑定） |
-| 多个闭包独立帧 | ⚠️ | INV-CONTEXT-2 | test_multiple_closures_independent_frames（**SKIPPED**: 闭包返回计数器函数不支持 write-back） |
+| 闭包捕获父帧变量 | ✅ | INV-CONTEXT-1 | test_closure_captures_parent_frame（2026-05-26 nonlocal 落地后 un-SKIP） |
+| 多个闭包独立帧 | ✅ | INV-CONTEXT-2 | test_multiple_closures_independent_frames（2026-05-26 nonlocal + Cell 机制落地后 un-SKIP） |
 | 嵌套闭包访问链 | ✅ | INV-CONTEXT-3 | test_nested_closure_access_chain |
 
 ---
@@ -583,10 +584,13 @@
 
 ### 当前覆盖状态
 
-- **契约测试数量**：162个（9个文件）
+> **数字说明**：以下为 2026-05-13 的快照比例，仅用于反映覆盖结构。具体测试计数请以当次
+> `python -m pytest tests/ -q --tb=no --no-header` 输出为准（基线已大幅增长，参见 `docs/COMPLETED.md` 最新条目）。
+
+- **契约测试**：核心语义不变量层（具体文件/计数见 `tests/COVERAGE_MAP.md`）
 - **覆盖的核心语义**：~85%
 - **需要集成测试的语义**：~10%
-- **覆盖gap**：~5%（主要是switch语句设计未稳定）
+- **覆盖 gap**：~5%（主要是 switch 语句设计未稳定）
 
 ### 核心洞察
 
@@ -600,10 +604,10 @@
    - 使重构更安全
 
 3. **分层测试策略**
-   - 契约层：核心语义不变量（162 tests, 9 files）
-   - 集成层：复杂交互场景（~229 tests）
-   - 合规层：跨实现保证（~30 tests）
-   - **总测试数**：~612 tests
+   - 契约层：核心语义不变量
+   - 集成层：复杂交互场景
+   - 合规层：跨实现保证
+   - 总测试数：以当次 pytest 输出为准（不在此冻结数字，避免文档落后于代码）
 
 ### 下一步
 
@@ -619,4 +623,4 @@
 - 异常处理语义已全覆盖（INV-EXCEPT-*）
 - 集合操作语义已全覆盖（INV-LIST/DICT/STR-*）
 - Switch语句标注为设计未稳定
-- 详见`docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md`完整分析报告
+- 完整分析报告（原 `TEST_COVERAGE_ANALYSIS_2026_05_13.md`）已随文档体系整理归并，不再单独维护

@@ -7,8 +7,7 @@ IBCI 项目根目录自动检测模块
 """
 import os
 from typing import Optional, Tuple
-from pathlib import Path
-from core.base.path_utils import safe_relpath
+from core.kernel.path import safe_relpath
 
 
 class ProjectDetector:

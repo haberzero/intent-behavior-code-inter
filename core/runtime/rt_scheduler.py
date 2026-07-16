@@ -36,9 +36,9 @@ class RuntimeSchedulerImpl:
         self.debugger = service_context.debugger
 
     def _resolve_builtin_path(self) -> str:
-        """标准化内置模块路径发现逻辑（利用包的 __file__ 属性定位安装路径，标准 Python 惯用法）"""
-        import ibci_modules
-        return os.path.dirname(os.path.abspath(ibci_modules.__file__))
+        """内置模块目录：经 BuiltinPaths 服务统一计算（消灭散点 __file__ 遍历）。"""
+        from core.runtime.path import BuiltinPaths
+        return BuiltinPaths.builtin_modules_dir().to_native()
 
     def spawn(self, 
               artifact: Any, 

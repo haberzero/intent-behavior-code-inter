@@ -1,4 +1,3 @@
-import os
 import re
 import json
 import traceback
@@ -236,12 +235,11 @@ class Interpreter:
             
             # 初始化 ModuleManager，注入最小依赖与回调
             module_manager = module_manager or ModuleManagerImpl(
-                interop=interop, 
+                interop=interop,
                 registry=self.registry,
                 object_factory=object_factory,
                 execute_module_callback=self.execute_module,
                 artifact=self.artifact_dict,
-                root_dir=root_dir
             )
             
             # 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService

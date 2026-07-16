@@ -2,7 +2,16 @@
 
 > **文档性质**：架构分析与设计规划文档，供未来实施者参考。
 > **创建日期**：2026-05-26
-> **前置理解**：需先阅读 `docs/ARCHITECTURE_PRINCIPLES.md`、`docs/IBCI_SYNTAX_REFERENCE.md`（§7-9）、`core/kernel/axioms/primitives.py`（prompt 协议实现）。
+> **前置理解**：需先阅读 `docs/ARCHITECTURE_PRINCIPLES.md`、`docs/IBCI_SYNTAX_REFERENCE.md`（§7-9）、`core/kernel/axioms/primitives/`（prompt 协议实现，现为包）。
+>
+> **⚠️ 决策状态导航（2026-06-25 整理）**：本文档是多模态主线最完整的设计原文，但**部分具体决策已被后续 ADR 反转或重做**。阅读时请注意以下章节的现行效力：
+> - **§C.6 DEC-1**（audio/image/video/media 作为关键字）→ **已被 ADR-012 反转**：改为普通类名注册，不是 lexer 关键字。
+> - **§C.5 / §C.6 DEC-4 / D6 / `_call_llm_raw` / `_call_llm_multimodal`**（分叉调用路径）→ **已被 ADR-013 否决**：改为单一入口、单一策略、协议驱动分发（ADR-009 被 supersede）。
+> - **§2.2 / §5 命名模型能力探测（probe_model 仅默认模型）**→ **已被 ADR-010 解决**。
+> - **§5.2 / §6.1 / §10.1 register_model API 形态**→ **已被 ADR-008 规范化**。
+> - **§4.3 / §十二 MediaStorage + 10MB 阈值 + 磁盘卸载方案**→ **已被 ADR-014 / ADR-016 重新建模**：所有 media 一律 disk-backed handle，`MediaStorage` 整体淘汰，砍 MemoryBacking。
+> - §七 Phase 1/2 状态与背景一致（已完成）；Phase 3 已完成；Phase 4 当前为 gated（阻塞于路径统一 + 存储模型 + media 重建）。
+> - 附录 B 测试基线（818 passed）为历史快照，请以 `docs/COMPLETED.md` 最新条目为准。
 
 ---
 

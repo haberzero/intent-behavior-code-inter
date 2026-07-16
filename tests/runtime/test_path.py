@@ -10,9 +10,7 @@ IbPath / PathResolver / PathValidator 纯单元测试。
 此测试不依赖 IBCIEngine、不需要 mock LLM，是纯数据结构/逻辑测试。
 """
 import pytest
-from core.runtime.path.ib_path import IbPath
-from core.runtime.path.resolver import PathResolver
-from core.runtime.path.validator import PathValidator
+from core.kernel.path import IbPath, PathResolver, PathValidator, ModuleNameSpace, PathContext, SnapshotLayout
 
 
 # ===========================================================================
@@ -232,16 +230,16 @@ class TestIbPathComparison:
 
 
 # ===========================================================================
-# 6. PathResolver — 三层路径解析
+# 6. PathResolver — entry_dir 单锚点解析（ADR-015 D1）
 # ===========================================================================
 
 class TestPathResolver:
 
     @pytest.fixture
     def resolver(self):
-        project_root = IbPath.from_native("D:/project")
-        script_dir = IbPath.from_native("D:/project/scripts")
-        return PathResolver(project_root, script_dir)
+        # 新签名：PathResolver(entry_dir) —— 所有相对路径锚定于 entry_dir（§6.1 契约）
+        entry_dir = IbPath.from_native("D:/project/scripts")
+        return PathResolver(entry_dir)
 
     def test_resolve_absolute_path(self, resolver):
         result = resolver.resolve("D:/project/data/file.txt")
@@ -251,60 +249,125 @@ class TestPathResolver:
         result = resolver.resolve("/etc/passwd")
         assert str(result) == "/etc/passwd"
 
-    def test_resolve_script_relative_dot_slash(self, resolver):
+    def test_resolve_dot_slash_anchored_to_entry(self, resolver):
+        # ./ 相对路径锚定 entry_dir
         result = resolver.resolve("./helper.ibci")
         assert str(result) == "D:/project/scripts/helper.ibci"
 
-    def test_resolve_script_relative_double_dot(self, resolver):
+    def test_resolve_double_dot_anchored_to_entry(self, resolver):
+        # ../ 也锚定 entry_dir（不区分 ./ ../ 与普通相对——单锚点语义）
         result = resolver.resolve("../data/file.txt")
         assert str(result) == "D:/project/data/file.txt"
 
-    def test_resolve_script_relative_multi_double_dot(self, resolver):
+    def test_resolve_multi_double_dot(self, resolver):
         result = resolver.resolve("../data/../config/settings.json")
         assert str(result) == "D:/project/config/settings.json"
 
-    def test_resolve_project_relative(self, resolver):
+    def test_resolve_plain_relative_anchored_to_entry(self, resolver):
+        # 普通 relative（无 ./ 前缀）也锚定 entry_dir，而非 project_root
         result = resolver.resolve("data/file.txt")
-        assert str(result) == "D:/project/data/file.txt"
+        assert str(result) == "D:/project/scripts/data/file.txt"
 
     def test_resolve_empty(self, resolver):
         result = resolver.resolve("")
         assert str(result) == ""
 
     def test_resolve_cross_drive_absolute(self, resolver):
-        """绝对路径在不同盘符上应直通（不相对于项目根）。"""
+        """绝对路径跨盘直通。"""
         result = resolver.resolve("C:/other/file.txt")
         assert str(result) == "C:/other/file.txt"
 
-    def test_is_within_project_true(self, resolver):
-        p = IbPath.from_native("D:/project/sub/file.txt")
-        assert resolver.is_within_project(p)
+    def test_is_within_entry_true(self, resolver):
+        p = IbPath.from_native("D:/project/scripts/sub/file.txt")
+        assert resolver.is_within_entry(p)
 
-    def test_is_within_project_false_cross_drive(self, resolver):
-        """不同盘符的路径不在项目内。"""
+    def test_is_within_entry_false_cross_drive(self, resolver):
         p = IbPath.from_native("C:/other/file.txt")
-        assert not resolver.is_within_project(p)
+        assert not resolver.is_within_entry(p)
 
-    def test_make_relative_to_project_within(self, resolver):
-        p = IbPath.from_native("D:/project/sub/file.txt")
-        result = resolver.make_relative_to_project(p)
+    def test_make_relative_to_entry_within(self, resolver):
+        p = IbPath.from_native("D:/project/scripts/sub/file.txt")
+        result = resolver.make_relative_to_entry(p)
         assert str(result) == "sub/file.txt"
 
-    def test_make_relative_to_project_cross_drive(self, resolver):
-        """跨盘路径不在项目内，应返回原始路径。"""
+    def test_make_relative_to_entry_outside(self, resolver):
         p = IbPath.from_native("C:/other/file.txt")
-        result = resolver.make_relative_to_project(p)
-        assert str(result) == "C:/other/file.txt"
+        assert resolver.make_relative_to_entry(p) is None
 
-    def test_make_relative_to_script_within(self, resolver):
-        p = IbPath.from_native("D:/project/scripts/helper.ibci")
-        result = resolver.make_relative_to_script(p)
-        assert str(result) == "./helper.ibci"
+    def test_resolve_without_entry_dir(self):
+        """无 entry_dir 时，相对路径仅规范化、不锚定（不退回 CWD）。"""
+        r = PathResolver(entry_dir=None)
+        assert str(r.resolve("a/b/../c")) == "a/c"
+        assert str(r.resolve("/abs")) == "/abs"
 
-    def test_make_relative_to_script_outside(self, resolver):
-        p = IbPath.from_native("D:/project/data/file.txt")
-        result = resolver.make_relative_to_script(p)
-        assert result is None
+
+# ===========================================================================
+# 6b. ModuleNameSpace — 模块名 ↔ 相对路径映射（ADR-015 D4）
+# ===========================================================================
+
+class TestModuleNameSpace:
+
+    def test_relpath_to_module_name_with_ext(self):
+        assert ModuleNameSpace.relpath_to_module_name("pkg/sub/mod.ibci") == "pkg.sub.mod"
+
+    def test_relpath_to_module_name_without_ext(self):
+        assert ModuleNameSpace.relpath_to_module_name("pkg/sub/mod") == "pkg.sub.mod"
+
+    def test_relpath_to_module_name_single(self):
+        assert ModuleNameSpace.relpath_to_module_name("mod") == "mod"
+
+    def test_relpath_to_module_name_backslash(self):
+        assert ModuleNameSpace.relpath_to_module_name("pkg\\sub\\mod.py") == "pkg.sub.mod"
+
+    def test_relpath_to_module_name_empty(self):
+        assert ModuleNameSpace.relpath_to_module_name("") == ""
+
+    def test_module_to_relpath(self):
+        assert ModuleNameSpace.module_to_relpath("pkg.sub.mod") == "pkg/sub/mod"
+
+    def test_module_to_relpath_single(self):
+        assert ModuleNameSpace.module_to_relpath("mod") == "mod"
+
+    def test_module_to_relpath_empty(self):
+        assert ModuleNameSpace.module_to_relpath("") == ""
+
+    def test_round_trip(self):
+        assert ModuleNameSpace.module_to_relpath(
+            ModuleNameSpace.relpath_to_module_name("a/b/c.ibci")) == "a/b/c"
+
+
+# ===========================================================================
+# 6c. PathContext — 锚点容器（ADR-015 D5）
+# ===========================================================================
+
+class TestPathContext:
+
+    def test_from_native_basic(self):
+        ctx = PathContext.from_native("/a/b", "/a")
+        assert str(ctx.entry_dir) == "/a/b"
+        assert str(ctx.project_root) == "/a"
+
+    def test_from_native_project_root_defaults_to_entry(self):
+        ctx = PathContext.from_native("/a/b")
+        assert ctx.entry_dir == ctx.project_root
+
+    def test_resolver_is_entry_anchored(self):
+        ctx = PathContext.from_native("/a/b", "/a")
+        r = ctx.resolver()
+        assert str(r.resolve("x")) == "/a/b/x"
+
+    def test_immutable(self):
+        import dataclasses
+        ctx = PathContext.from_native("/a/b", "/a")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            ctx.entry_dir = IbPath.from_native("/c")
+
+    def test_with_entry_derives_new(self):
+        ctx = PathContext.from_native("/a/b", "/a")
+        ctx2 = ctx.with_entry("/a/c")
+        assert str(ctx2.entry_dir) == "/a/c"
+        assert str(ctx2.project_root) == "/a"  # project_root 不变
+
 
 
 # ===========================================================================
@@ -415,3 +478,178 @@ class TestPathValidator:
         ]
         ok, error, failed = PathValidator.validate_many(paths, root)
         assert not ok and len(failed) == 1
+
+
+# ===========================================================================
+# 8. PathValidator.canonicalize_for_security — FS 感知规范化（全仓唯一 realpath）
+# ===========================================================================
+# PT-ARCH-19 P0-B：3 新能力零测试覆盖是 BUG 漏网的根因。本节守护 canonicalize_for_security。
+# 契约（validator.py:170-184）：os.path.realpath + IbPath 规范化；返回 IbPath；绝对路径。
+
+class TestCanonicalizeForSecurity:
+
+    def test_returns_ibpath_instance(self):
+        result = PathValidator.canonicalize_for_security("D:/proj/file.ibci")
+        assert isinstance(result, IbPath)
+
+    def test_resolves_relative_to_absolute(self):
+        """相对输入必须被 realpath 解析为绝对路径。"""
+        result = PathValidator.canonicalize_for_security("some/relative/path")
+        assert result.is_absolute
+
+    def test_matches_os_path_realpath(self):
+        """返回值必须等价于 os.path.realpath（解符号链接），只是包成 IbPath。"""
+        import os
+        raw = "D:/proj/state.json"
+        result = PathValidator.canonicalize_for_security(raw)
+        assert result.to_native() == os.path.realpath(raw)
+
+    def test_forward_slash_normalization(self):
+        """反斜杠输入应被 IbPath 规范化为正斜杠（IbPath 内部表示）。"""
+        result = PathValidator.canonicalize_for_security("D:\\proj\\sub\\file.ibci")
+        assert "\\" not in str(result)
+
+    def test_idempotent_on_absolute(self):
+        """绝对路径二次规范化稳定（realpath 幂等）。"""
+        abs_in = "D:/proj/state.json"
+        once = PathValidator.canonicalize_for_security(abs_in)
+        twice = PathValidator.canonicalize_for_security(once.to_native())
+        assert once.to_native() == twice.to_native()
+
+    def test_dot_segments_resolved(self):
+        """含 . / .. 的路径应被 realpath 解析（FS 感知）。"""
+        result = PathValidator.canonicalize_for_security("D:/proj/../proj/./file.ibci")
+        import os
+        assert result.to_native() == os.path.realpath("D:/proj/../proj/./file.ibci")
+
+    @pytest.mark.skipif(
+        not __import__("os").name.startswith("nt"),
+        reason="Windows 符号链接需管理员权限；POSIX 由 test_dot_segments_resolved 间接覆盖 realpath",
+    )
+    def test_symlink_resolved_when_available(self, tmp_path):
+        """若可创建符号链接，realpath 必须解析到目标（守护 symlink 基准统一）。"""
+        import os
+        target = tmp_path / "real_target"
+        target.mkdir()
+        link = tmp_path / "link_to_target"
+        try:
+            os.symlink(str(target), str(link))
+        except (OSError, NotImplementedError):
+            pytest.skip("无法创建符号链接（权限不足）")
+        result = PathValidator.canonicalize_for_security(str(link))
+        assert result.to_native() == os.path.realpath(str(target))
+
+
+# ===========================================================================
+# 9. PathContext.derive_isolated — 子隔离上下文锚点派生（策略集中化）
+# ===========================================================================
+# PT-ARCH-19 P0-B：守护 derive_isolated。
+# 契约（context.py:63-85）：返回 (resolved_entry, child_root)；child_root = dirname(child_entry)；
+# 无 parent 时退化为 child_entry 本身；语义 = 子入口目录（隔离设计，由 test_run_isolated_absolute_path_still_works 锁定）。
+
+class TestDeriveIsolated:
+
+    def test_returns_two_tuple_of_str(self):
+        entry, root = PathContext.derive_isolated("D:/proj/child.ibci")
+        assert isinstance(entry, str) and isinstance(root, str)
+
+    def test_child_root_is_dirname_of_entry(self):
+        """子沙箱根 = 子入口所在目录（核心契约）。
+
+        to_native() 在 win32 返回反斜杠分隔符（OS 原生），比较时归一化为正斜杠。
+        """
+        entry, root = PathContext.derive_isolated("D:/proj/sub/child.ibci")
+        assert root.replace("\\", "/") == "D:/proj/sub"
+
+    def test_resolved_entry_has_resolved_dot_segments(self):
+        """返回的 entry 应已 resolve_dot_segments（消解 . / ..）。"""
+        entry, _ = PathContext.derive_isolated("D:/proj/sub/../sub/./child.ibci")
+        norm = entry.replace("\\", "/")
+        # 不应包含 . 或 .. 段
+        assert "/./" not in norm
+        assert "/../" not in norm
+
+    def test_no_parent_degrades_to_entry_itself(self):
+        """入口无 parent（根级）时，child_root 退化为入口本身（保证入口在沙箱内）。"""
+        entry, root = PathContext.derive_isolated("child_at_root.ibci")
+        assert root == entry
+
+    def test_absolute_path_still_works(self):
+        """绝对路径场景：与 test_run_isolated_absolute_path_still_works 的语义一致。"""
+        entry, root = PathContext.derive_isolated("/abs/path/child.ibci")
+        norm_entry = entry.replace("\\", "/")
+        assert norm_entry.startswith("/abs/path/")
+        assert root.replace("\\", "/") == "/abs/path"
+
+    def test_backslash_input_normalized_in_internal_repr(self):
+        """反斜杠输入经 IbPath 规范化——内部表示（str()）用正斜杠；to_native() 仍为 OS 原生。"""
+        entry, root = PathContext.derive_isolated("D:\\proj\\child.ibci")
+        # to_native 是 OS 原生（win32 反斜杠），但 IbPath 内部 str() 必须正斜杠
+        assert "\\" not in str(IbPath.from_native(entry))
+        assert "\\" not in str(IbPath.from_native(root))
+
+
+# ===========================================================================
+# 10. SnapshotLayout — 快照资产外化布局（P0-A BUG 回归守护）
+# ===========================================================================
+# PT-ARCH-19 P0-A：SnapshotLayout.asset_dir_for 的 `save_path + ".assets"` 经 IbPath.__add__
+# 变成路径 join（产出 state.json/.assets 子目录），旧契约是 state.json.assets（同级）。
+# 此 BUG 致 win32 save_state 触发 PermissionError/NotADirectoryError。本类是直接回归守护。
+
+class TestSnapshotLayout:
+
+    def test_asset_dir_for_returns_ibpath(self):
+        save = IbPath.from_native("D:/proj/state.json")
+        assert isinstance(SnapshotLayout.asset_dir_for(save), IbPath)
+
+    def test_asset_dir_for_produces_sibling_not_child(self):
+        """【P0-A 核心回归】asset_dir_for 必须产出同级目录，而非子目录。
+
+        旧 BUG：``save_path + ".assets"`` 经 IbPath.__add__（路径 join）产出
+        ``state.json/.assets``（子目录）。修复后须为 ``state.json.assets``（同级）。
+        """
+        save = IbPath.from_native("D:/proj/state.json")
+        asset_dir = SnapshotLayout.asset_dir_for(save)
+        native = asset_dir.to_native()
+        norm = native.replace("\\", "/")
+        # 同级契约：basename = state.json.assets
+        assert norm.endswith("state.json.assets")
+        # 反向断言（守护 BUG）：不得在 state.json 与 .assets 之间出现路径分隔符
+        assert "state.json/.assets" not in norm
+        assert "state.json\\.assets" not in native
+
+    def test_asset_dir_for_shares_parent_with_save_path(self):
+        """同级即同 parent：asset_dir.parent == save_path.parent。"""
+        save = IbPath.from_native("D:/proj/state.json")
+        asset_dir = SnapshotLayout.asset_dir_for(save)
+        assert str(asset_dir.parent) == str(save.parent)
+
+    def test_asset_dir_for_simple_name(self):
+        """无目录前缀的简单文件名场景。"""
+        save = IbPath.from_native("state.json")
+        asset_dir = SnapshotLayout.asset_dir_for(save)
+        assert asset_dir.to_native().replace("\\", "/") == "state.json.assets"
+
+    def test_asset_dir_for_extensionless_save_path(self):
+        """无扩展名的 save_path 也应拼接 .assets 为同级。"""
+        save = IbPath.from_native("D:/proj/runtime_state")
+        asset_dir = SnapshotLayout.asset_dir_for(save)
+        norm = asset_dir.to_native().replace("\\", "/")
+        assert norm.endswith("runtime_state.assets")
+        assert "runtime_state/.assets" not in norm
+
+    def test_asset_file_returns_child_of_asset_dir(self):
+        """asset_file(asset_dir, uid) 应为 asset_dir 的子文件（用 / 即 __truediv__）。"""
+        asset_dir = IbPath.from_native("D:/proj/state.json.assets")
+        f = SnapshotLayout.asset_file(asset_dir, "uid_abc")
+        norm = f.to_native().replace("\\", "/")
+        assert norm == "D:/proj/state.json.assets/uid_abc.txt"
+
+    def test_asset_file_inherits_fixed_asset_dir(self):
+        """asset_file 依赖 asset_dir_for 修正后自动自愈（下游不变）。"""
+        save = IbPath.from_native("D:/proj/state.json")
+        asset_dir = SnapshotLayout.asset_dir_for(save)
+        f = SnapshotLayout.asset_file(asset_dir, "uid1")
+        norm = f.to_native().replace("\\", "/")
+        # 资产文件落在同级 .assets 目录内
+        assert norm == "D:/proj/state.json.assets/uid1.txt"

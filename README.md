@@ -173,8 +173,18 @@ python main.py run test_target_proj/01_hello_world.ibci
 
 更多详情请参阅：
 
+- [文档中心导航与治理](docs/README.md)（**新加入者先读**：目录结构、阅读路径、治理纪律）
 - [IBC-Inter 语法手册](docs/IBCI_SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
 - [架构原则](docs/ARCHITECTURE_PRINCIPLES.md) (核心设计思路)
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
+- [当前任务进度](docs/NEXT_STEPS.md) / [完成时间线](docs/COMPLETED.md)
+
+### 运行测试
+
+```bash
+python -m pytest tests/ -q --tb=no --no-header
+```
+
+最新基线请以当次 pytest 输出为准（见 `docs/NEXT_STEPS.md` 顶部锚点）。
 
 ***

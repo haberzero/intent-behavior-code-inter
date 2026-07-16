@@ -1,5 +1,4 @@
 from typing import Any, List, Optional
-import os
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.interfaces import ServiceContext
 

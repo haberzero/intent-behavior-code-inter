@@ -14,17 +14,13 @@ alternatives considered, and consequences. Code shows *what* was built; an ADR e
 ADR-NNN-short-kebab-title.md
 ```
 
-Examples:
-- `ADR-001-cps-trampoline-vm-over-stack-vm.md`
-- `ADR-002-axiom-system-over-python-inheritance.md`
-
 ## Template
 
 ```markdown
 # ADR-NNN: Title
 
 ## Status
-Accepted | Superseded by ADR-XXX | Deprecated
+Accepted | Superseded by ADR-XXX | Revised | Deprecated
 
 ## Date
 YYYY-MM-DD
@@ -54,22 +50,32 @@ What did we decide? (1-3 sentences)
 
 ## Index
 
-### Historical Decisions (retroactive ADRs)
-- [ADR-001: CPS trampoline VM over stack-based VM](ADR-001-cps-trampoline-vm.md)
-- [ADR-002: Axiom system over Python inheritance](ADR-002-axiom-system-over-inheritance.md)
-- [ADR-003: 7-Pass to 4-Phase semantic pipeline consolidation](ADR-003-4-phase-pipeline.md)
-- [ADR-004: llmexcept shadow-execution over exception-throwing](ADR-004-llmexcept-shadow-execution.md)
-- [ADR-005: TypeSlot single-lock over HM-style type inference](ADR-005-typeslot-single-lock.md)
+> **关于编号 001~006**：ADR 制度于 2026-06-24（ADR-007 起）建立。001~006 对应的早期决策
+> （CPS trampoline VM、公理系统、4-Phase 流水线、llmexcept 影子执行、TypeSlot 单次锁定、
+> BUG #A 语义统一）发生在 ADR 制度建立之前，**未落盘为独立 ADR 文件**，其完整记录见
+> `docs/HISTORY_LOG.md` 与 `docs/COMPLETED.md`。本索引不再为它们保留断链条目。
 
-### Recent Decisions
-- [ADR-006: LLM condition uncertainty raises LLMParseError (BUG #A fix)](ADR-006-llm-parse-error-unification.md)
-
-### Pending Decisions (Phase 3 multimodal blockers)
-- [ADR-007: Multimodal snapshot strategy (DEC-5/DEC-6 reconciliation)](ADR-007-multimodal-snapshot-strategy.md)
+### Decided & Implemented
 - [ADR-008: register_model API shape (D4 vtable alignment)](ADR-008-register-model-api.md)
-- [ADR-009: _call_llm_raw introduction (D6/DEC-4 reconciliation)](ADR-009-call-llm-raw.md)
 - [ADR-010: Per-model capability probing (R5 endpoint strategy)](ADR-010-model-capability-probing.md)
-
-### Infrastructure Decisions
 - [ADR-011: runtime/shared/ leaf package for cycle breaking](ADR-011-runtime-shared-package.md)
 - [ADR-012: Multimodal types as ordinary class names (DEC-1 resolution)](ADR-012-multimodal-types-as-class-names.md)
+
+### Revised（已修订）
+- [ADR-013: 统一响应解析（supersedes ADR-009）](ADR-013-unified-response-parsing.md) — 单一入口/单策略；**已修订**：去除标志位 `if/else`，改协议驱动分发（受 ADR-016 治理）。
+- [ADR-014: media 存储为磁盘型 handle](ADR-014-media-storage-handle-backing.md) — FileBacking/GeneratedBacking；**已修订**：砍 MemoryBacking，存储模型升类型级，制动 MediaStorage 整体淘汰（受 ADR-016 治理）；阻塞于 ADR-015/016。
+
+### Superseded
+- [ADR-009: _call_llm_raw introduction (D6/DEC-4 reconciliation)](ADR-009-call-llm-raw.md) — **Superseded by ADR-013**（2026-06-25）：核心前提被证伪，分叉路径被统一解析取代。
+
+### Partially Superseded in Spirit
+- [ADR-007: Multimodal snapshot strategy (DEC-5/DEC-6 reconciliation)](ADR-007-multimodal-snapshot-strategy.md) — 决策成立时基于"Phase 3 深拷贝 / Phase 5 才上磁盘"的二阶段划分；**该划分已被 ADR-014/ADR-016 推翻**（所有 media 一律 disk-backed handle，快照天然便宜）。其 isinstance bug 发现仍有历史价值，对应修复归属 `docs/PENDING_TASKS.md §九 PT-ARCH-17`。
+
+### 路径系统统一主线（ADR-015~019，当前最高优先级）
+> 这些 ADR 是 media Phase 4 的强制前置 gate，**非** media 决策本身。
+
+- [ADR-015: 路径系统统一为强制前置](ADR-015-path-system-unification-as-prerequisite.md) — media-as-handle 与 Phase 4 的前置 gate。
+- [ADR-016: 变量存储模型 —— 类型级 memory/disk 区分 + 协议驱动分发](ADR-016-variable-storage-model.md) — **上层治理**：废弃"Inter 层"命名；确立 memory-backed / disk-backed 类型级区分；协议驱动分发；制动 MediaStorage 淘汰。ADR-013/014 据此修订。
+- [ADR-017: 路径模块层位置重构 —— base/kernel/runtime 三层分工](ADR-017-path-module-layering.md) — **最高优先级**：消除 compiler→runtime 违规；下沉路径模块（base 原子原语 / kernel IBCI 模型 / runtime 安装发现）；解锁 canonicalize_for_security / derive_isolated / SnapshotLayout。修正 P0-1 的 premature DONE。
+- [ADR-018: 路径概念模型 —— 5 概念形式化 + 统一原则](ADR-018-path-concept-model.md) — **Partially Superseded by ADR-019**（2026-07-13）：5 概念形式化（CWD/main entry/project_root/child entry/child project_root）仍有效；但 D1（root 必填）、D5（标志分发）、CWD 上界不变量、D4 PathContext 穿透被 ADR-019 取代。
+- [ADR-019: 路径与插件模型重设计 —— proj_root/plugin_path 分离 + 隔离语义修订](ADR-019-path-and-plugin-model-redesign.md) — **当前正本（2026-07-13）**：五概念分离（entry/proj_root/plugin_paths/CWD/builtin）；project_root 引擎级默认（=显式 OR entry_dir）；run_string 合成 entry `<proj_root>/__string_exec__.ibci`；plugin 优先级 builtin > global_plugin > plugin_paths > 嗅探 > 全局(预留)；隔离反转（子必须在父 proj_root 内）；plugin 只读特权；ibci.json 配置。取代 ADR-018 的 D1/D5/CWD 上界。
