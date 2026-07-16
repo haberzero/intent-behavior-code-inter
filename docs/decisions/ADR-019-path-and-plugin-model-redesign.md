@@ -117,12 +117,13 @@ PT-ARCH-19/20 路径统一推进中（经 5-agent 交叉验证 + 多轮负责人
 - ~~Gate A1 实为 1（resolver.py:77 残留 os.path.abspath）~~ → 已迁 IbPath，Gate A1 = 0。
 - ~~B1：run()/compile() 对 entry 仅词法 resolve_dot_segments，相对 entry 产出相对 entry_dir~~ → 改 canonicalize_for_security（与 check/project_root 同源）。
 - ~~B2：execute() 未经 compile 直调 → AttributeError~~ → 加 root-initialized 守卫，明确 InterpreterError。
+- ~~R1：is_within 在 win32 大小写不敏感 FS 上误判（沙箱不健全）~~ → PathValidator.is_within 改用 `os.path.normcase`（平台感知：win32 大小写不敏感，POSIX 不变）。
+- ~~G1：继承的 global_plugin 优先级被扁平化（降至 6）~~ → 父引擎单独透传 `inherited_global_plugin`，子 resolver 并入优先级 2（与自身 global_plugin 合并），保持 §3"global_plugin 不被普通优先级覆盖"。
 
 **已知限制（记录，非本轮阻断）：**
-- **R1（Windows 大小写）**：`PathValidator.is_within` 经字符串 `startswith`，在 win32（大小写不敏感 FS）上对异形大小写路径判定不健全。非 ADR-019 引入（既有），待权限系统统一处理。
-- **G1（继承的 global_plugin 优先级扁平化）**：子引擎继承的是父的**已扁平化** search_paths（builtin+global_plugin+plugin_paths+sniff 合并），父的 global_plugin 在子中降至优先级 6（低于子自身 plugin_paths）。若需严格保持 global_plugin 优先级，需父单独传 global_plugin 集合。本轮接受扁平化（§6"继承全部 plugin"的字面达成）；严格优先级留后续。
 - **R4（合成 entry 泄露到 isys.entry_path()）**：run_string 下 `isys.entry_path()` 返回 `<proj_root>/__string_exec__.ibci`（非真实文件）。用户可见但无害（与旧 tempfile 行为同属"不可复读"）。
 - **R1'（_load_plugins 公理发现面扩大）**：新 `_load_plugins` 用全 search_paths（旧仅 root/plugins）做公理发现——这是**修复**（ibci_modules 下公理旧被忽略），但可能在同名公理场景暴露此前被掩盖的注册冲突。
+- **SDK 测试套件 flaky（pre-existing，非 ADR-019 引入）**：`tests/sdk/test_check_plugin.py` 动态生成插件 spec 模块，偶发跨测试 import 污染导致 `test_param_count_mismatch` 等间歇失败（孤立重跑通过）。属插件/SDK 范畴，本轮不处理。
 
 **测试覆盖缺口（留后续，非阻断）：** plugin 发现仅 list 级测试，未 e2e 验证 `ibci.json` 配置路径的实际 `import` 解析（subagent 2 标 CRITICAL；builtin/sniff 路径由既有 test_plugin_implementations 覆盖，ibci.json 配置路径待补 e2e）。
 

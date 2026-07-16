@@ -268,6 +268,31 @@
 
 > 正本：`docs/decisions/ADR-019-path-and-plugin-model-redesign.md`。实现序列（阶段 A 路径核心 / B 插件分离 / C 隔离修订 / D 机械清理）：见 `NEXT_STEPS.md` PT-ARCH-21。
 > 取代 ADR-018 的 D1/D5/CWD 上界/D4 穿透。取代下方原 PT-ARCH-19/20 的执行计划（保留为历史档案）。
+> **2026-07-13 进度**：阶段 A/B/C/D 已实现并提交（`64cb49d`）。交叉验证发现的 R1/G1/B1/B2/Gate-A1 已修。以下为本轮**明确延后/预留**项（负责人指示：插件内部 path/os 待研讨后再处理）。
+
+#### PT-ARCH-21-FU：本轮延后 / 预留项（待后续处理）
+
+**[延后·待研讨] 插件内部 path/os 统一化**（负责人指示：暂不处理，待讨论）
+- [ ] `core/project_detector.py` — `get_plugin_paths`/`detect_project_root` 仍用 `os.path`（abspath×3 / dirname×3 / join×9 / FS 查询×11）。FS 查询（isdir/isfile）合法保留；path 构造可 IbPath 化。**属 plugin 嗅探内部，待研讨**。
+- [ ] `core/runtime/module_system/discovery.py` + `loader.py` — host 端 Python/importlib 插件加载边界，仍用 `os.path`（abspath/join/dirname/basename）。路径不进 IBCI 沙箱。**待研讨**。
+- [ ] `ibci_modules/ibci_file/core.py` — 用户可见文件 API，`os.path.relpath`（与 `safe_relpath` 平行）、`splitext`、`join`。**待研讨**。
+- [ ] `core/runtime/rt_scheduler.py:88` — `plugins_path = os.path.join(root_dir,"plugins")`（在隔离机制块内，`dispatch()` 零调用方为死代码，但属 plugin 发现逻辑）。**待研讨**。
+
+**[预留·本轮不实现] ADR-019 Open 项**
+- [ ] 全局 ibci.json 查找（global_plugin 的全局源）。
+- [ ] 全局 config 文件（plugin_paths 全局兜底）。
+- [ ] CWD 的实际使用（`engine._cwd` 已保存，待权限系统设计后启用）。
+- [ ] 隔离的外部 zone 配置（未来 policy 细粒度：允许特定子脚本读/运行指定外部位置）。
+- [ ] plugin_path 细粒度权限（本轮：只读特权 + 写禁；细粒度待权限系统）。
+
+**[覆盖缺口] 测试**（subagent 标 CRITICAL，本轮未补）
+- [ ] plugin 发现 e2e：`ibci.json` 配置的 plugin_paths/global_plugin 路径，实测 `import <plugin>` 能解析（当前仅 list 级测试；builtin/sniff 由 `test_plugin_implementations` 覆盖）。需造 fixture plugin 包。
+- [ ] 隔离继承 e2e：子脚本 `import` 仅父有的 plugin（C2 接线仅 list 级测）。
+
+**[已知限制·记录]**
+- R4：`isys.entry_path()` 在 run_string 下返回合成 `__string_exec__.ibci`（无害 cosmetic）。
+- R1'：`_load_plugins` 公理发现面扩大（修复，但可能暴露同名公理冲突）。
+- SDK 测试 flaky（pre-existing）：`tests/sdk/test_check_plugin.py` 动态生成插件 spec，偶发跨测试 import 污染。孤立重跑通过。属插件/SDK 范畴。
 
 ---
 

@@ -87,7 +87,7 @@ class ModuleResolver:
             # Construct relative path
             if suffix:
                 rel_path = ModuleNameSpace.module_to_relpath(suffix)
-                candidate_path = os.path.join(base_dir, rel_path)
+                candidate_path = (IbPath.from_native(base_dir) / rel_path).to_native() if base_dir else rel_path
             else:
                 # Import is just '..', e.g. from .. import X -> importing form __init__ of parent
                 candidate_path = base_dir
@@ -95,7 +95,7 @@ class ModuleResolver:
         else:
             # Absolute import (from root)
             rel_path = ModuleNameSpace.module_to_relpath(module_name)
-            candidate_path = os.path.join(self.root_dir, rel_path)
+            candidate_path = (IbPath.from_native(self.root_dir) / rel_path).to_native()
             
         # Security Check
         self._check_path_security(candidate_path)
@@ -143,7 +143,7 @@ class ModuleResolver:
                 
         # 2. Check package init: path/__init__.ibci
         for ext in self.extensions:
-            init_path = os.path.join(base_path, '__init__' + ext)
+            init_path = (IbPath.from_native(base_path) / ('__init__' + ext)).to_native()
             if os.path.isfile(init_path):
                 return init_path
                 

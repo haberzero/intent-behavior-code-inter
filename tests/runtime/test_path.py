@@ -395,6 +395,33 @@ class TestPathValidator:
     def test_is_within_false_empty(self):
         assert not PathValidator.is_within(IbPath.from_native(""), IbPath.from_native("/a"))
 
+    def test_is_within_case_sensitive_posix_only(self):
+        """R1 修复：大小写敏感平台（POSIX）下不同大小写 = 不在内部。"""
+        import os
+        parent = IbPath.from_native("/Project")
+        child = IbPath.from_native("/project/sub/file.txt")
+        if os.path.normcase("A") == "A":
+            # POSIX（大小写敏感）
+            assert not PathValidator.is_within(parent, child)
+
+    def test_is_within_case_insensitive_windows(self):
+        """R1 修复：大小写不敏感 FS（win32）下 is_within 应大小写不敏感（沙箱健全）。
+
+        旧 bug：startswith 大小写敏感 → /Proj/child 误判为不在 /proj 内 → 隔离误拒。
+        """
+        import os
+        parent = IbPath.from_native("D:/Project")
+        child = IbPath.from_native("D:/project/sub/file.txt")
+        if os.path.normcase("A") != "A":
+            # win32 等大小写不敏感平台
+            assert PathValidator.is_within(parent, child)
+
+    def test_is_within_no_false_prefix_match(self):
+        """R1 伴随：/foo 不应误包含 /foobar（尾分隔符保护）。"""
+        parent = IbPath.from_native("D:/foo")
+        child = IbPath.from_native("D:/foobar/x.txt")
+        assert not PathValidator.is_within(parent, child)
+
     def test_validate_valid(self):
         path = IbPath.from_native("D:/project/file.txt")
         root = IbPath.from_native("D:/project")

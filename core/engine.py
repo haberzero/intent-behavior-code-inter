@@ -64,7 +64,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
-    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None, inherited_plugin_paths: Optional[List[str]] = None):
+    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None, inherited_plugin_paths: Optional[List[str]] = None, inherited_global_plugin: Optional[List[str]] = None):
         """
         参数:
             root_dir: **可选**。项目根目录（沙箱边界）。
@@ -127,8 +127,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.auto_sniff = auto_sniff
         self.root_dir: Optional[str] = None
         self._plugin_search_paths: List[str] = []
-        # ADR-019 §6 C2：继承的父 plugin search_paths（隔离子引擎透传；resolver 附加于自身之后）。
+        # ADR-019 §6 C2/G1：继承的父 plugin search_paths（隔离子引擎透传）。
+        # 分两路透传以保持优先级：inherited_global_plugin（保持在优先级 2，不被普通 plugin 覆盖）；
+        # inherited_plugin_paths（作为兜底来源，优先级 6）。
         self._inherited_plugin_paths: List[str] = list(inherited_plugin_paths) if inherited_plugin_paths else []
+        self._inherited_global_plugin: List[str] = list(inherited_global_plugin) if inherited_global_plugin else []
+        self._global_plugin_paths: List[str] = []  # 自身解析出的 global_plugin（含继承），传给子引擎
         self.scheduler = None  # type: ignore[assignment]
         self.discovery_service = None  # type: ignore[assignment]
         self.module_loader = None  # type: ignore[assignment]
@@ -186,23 +190,34 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         3. **plugin_paths**（ibci.json 显式）；配置后嗅探**不触发**（explicit > implicit）
         4. **嗅探 project_root**（ProjectDetector，仅 plugin_paths 未配置时）
         5. 全局 config（**预留，本轮不实现**）
-        6. **继承的父 plugin**（隔离子引擎透传；附加于自身之后，作为兜底来源）
+        6. **继承的父 plugin_paths**（隔离子引擎透传；附加于自身之后，作为兜底来源）
+
+        G1 修复：继承的 **global_plugin** 单独透传，并入优先级 2（与自身 global_plugin 合并），
+        而非混入兜底的 inherited_plugin_paths（优先级 6）——保持 ADR-019 §3
+        "global_plugin 不被普通优先级覆盖" 在隔离子引擎中也成立。
 
         plugin_path 只读特权（ADR-019 §5）：可在 project_root 之外（模块加载为 loader 级特权操作，
         越界读取；脚本写入仍由 proj_root 沙箱约束——file.* 走 PermissionManager）。
         """
         config = IbciConfig.load(project_root)
-        global_plugin = IbciConfig.global_plugin(config, project_root)
+        own_global_plugin = IbciConfig.global_plugin(config, project_root)
         explicit_plugin_paths = IbciConfig.plugin_paths(config, project_root)
 
-        ordered: List[str] = [self._builtin_path]   # 1. builtin 最高
-        ordered.extend(global_plugin)               # 2. global_plugin 次之
+        # G1：global_plugin = 自身 + 继承（去重保序，保持在优先级 2）
+        global_plugin_merged: List[str] = []
+        for g in own_global_plugin + self._inherited_global_plugin:
+            if g not in global_plugin_merged:
+                global_plugin_merged.append(g)
+        self._global_plugin_paths = global_plugin_merged  # 供子引擎继承
+
+        ordered: List[str] = [self._builtin_path]            # 1. builtin 最高
+        ordered.extend(global_plugin_merged)                 # 2. global_plugin（自身+继承）
         if explicit_plugin_paths:
-            ordered.extend(explicit_plugin_paths)   # 3. 显式 plugin_paths（嗅探不触发）
+            ordered.extend(explicit_plugin_paths)            # 3. 显式 plugin_paths（嗅探不触发）
         elif self.auto_sniff:
             ordered.extend(ProjectDetector.get_plugin_paths(project_root))  # 4. 嗅探兜底
         # 5. 全局 config：预留
-        ordered.extend(self._inherited_plugin_paths)  # 6. 继承父 plugin（兜底来源）
+        ordered.extend(self._inherited_plugin_paths)         # 6. 继承的普通 plugin_paths（兜底）
 
         # 去重保序
         seen = set()
@@ -631,6 +646,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             auto_sniff=True,
             core_debug_config=self.debugger.config,  # 继承调试配置
             inherited_plugin_paths=self._plugin_search_paths,  # ADR-019 §6：继承父 plugin
+            inherited_global_plugin=self._global_plugin_paths,   # G1：global_plugin 单独透传保持优先级
         )
 
         # 3. 运行子项目
@@ -655,6 +671,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             auto_sniff=True,
             core_debug_config=self.debugger.config,
             inherited_plugin_paths=self._plugin_search_paths,  # ADR-019 §6：继承父 plugin
+            inherited_global_plugin=self._global_plugin_paths,   # G1：global_plugin 单独透传保持优先级
         )
 
         # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出

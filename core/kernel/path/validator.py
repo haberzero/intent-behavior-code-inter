@@ -24,9 +24,11 @@ class PathValidator:
     @staticmethod
     def is_within(parent: IbPath, child: IbPath) -> bool:
         """
-        检查 child 是否在 parent 内部
+        检查 child 是否在 parent 内部（沙箱边界判定的核心）。
 
-        这是 PathValidator 的核心方法，替代 Python 的 os.path.commonpath()。
+        平台感知大小写（R1 修复）：大小写不敏感 FS（win32 等）需用 ``os.path.normcase``
+        归一，否则 ``/Proj/child`` 会被误判为不在 ``/proj`` 内 → 沙箱误拒/漏判。
+        POSIX 上 normcase 为恒等，行为不变。
 
         参数:
             parent: 父路径（边界）
@@ -41,7 +43,14 @@ class PathValidator:
         if not parent.is_absolute or not child.is_absolute:
             return False
 
-        return child.startswith(parent)
+        # normcase：win32 小写化 + 转 \；POSIX 恒等。加尾分隔符避免 /foo 误含 /foobar。
+        parent_n = os.path.normcase(parent.to_native())
+        child_n = os.path.normcase(child.to_native())
+        if parent_n and not parent_n.endswith(os.sep):
+            parent_n += os.sep
+        if child_n and not child_n.endswith(os.sep):
+            child_n += os.sep
+        return child_n.startswith(parent_n)
 
     @staticmethod
     def validate(

@@ -289,6 +289,28 @@ class TestPluginSearchPathResolution:
         # 父的 parent_extra 应出现在子的 search_paths（继承，兜底来源）
         assert os.path.realpath(str(parent_extra)) in resolved
 
+    def test_inherited_global_plugin_keeps_priority(self, tmp_path):
+        """G1 修复：继承的 global_plugin 保持在优先级 2（排在子自身 plugin_paths 之前）。
+
+        旧 bug：继承的 global_plugin 被混入 inherited_plugin_paths（优先级 6），
+        低于子自身 plugin_paths（优先级 3）——违反 ADR-019 §3 "global_plugin 不被普通优先级覆盖"。
+        """
+        inh_gp = tmp_path / "inh_global"
+        inh_gp.mkdir()
+        own_pp = tmp_path / "own_pp"
+        own_pp.mkdir()
+        child_root = tmp_path / "child"
+        child_root.mkdir()
+        (child_root / "ibci.json").write_text(
+            json.dumps({"plugin_paths": [str(own_pp)]}), encoding="utf-8"
+        )
+        child = IBCIEngine(root_dir=str(child_root), auto_sniff=False,
+                           inherited_global_plugin=[str(inh_gp)])
+        resolved = child._resolve_plugin_search_paths(str(child_root))
+        inh_idx = next(i for i, p in enumerate(resolved) if "inh_global" in p)
+        own_idx = next(i for i, p in enumerate(resolved) if "own_pp" in p)
+        assert inh_idx < own_idx, "继承的 global_plugin 必须排在子自身 plugin_paths 之前"
+
 
 # ibci.json 测试需要 json
 import json  # noqa: E402

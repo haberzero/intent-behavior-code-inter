@@ -63,12 +63,7 @@ class RuntimeSchedulerImpl:
             self._configure_factory(obj_factory)
             
         root_dir = kwargs.get('root_dir')
-        
-        # 如果是隔离模式，必须确保 root_dir 已正确设置
-        if isolation != IsolationLevel.NONE and not root_dir:
-             if isinstance(artifact, str) and (os.path.isabs(artifact) or os.path.exists(artifact)):
-                 root_dir = os.path.dirname(os.path.abspath(artifact))
-        
+
         # 2. 处理隔离逻辑 (Registry, HostInterface, PluginLoader)
         effective_registry = kwargs.get('registry', sc.registry if sc else None)
         effective_host_interface = kwargs.get('host_interface')

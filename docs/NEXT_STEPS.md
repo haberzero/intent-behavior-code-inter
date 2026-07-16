@@ -32,11 +32,11 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-07-13 实测结果**：`1135 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
+**2026-07-13 实测结果**：`1139 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
 
-> **基线说明**：ADR-019 阶段 A/B/C/D 全部完成 + 4-subagent 交叉验证修复（B1 相对 entry canonicalize、B2 execute 守卫、Gate A1 resolver 迁移）。已知限制与覆盖缺口见 ADR-019 "交叉验证发现"段。
-> ⚠️ **基线锚点警示**：当前为**未提交 WIP**。从干净 `git checkout HEAD` 复跑将得到旧基线。
-> ✅ 7 个 skipped：2 设计限制 + 3 层级元测试 + 1 win32 symlink + 1（无新增预期删除）。
+> **基线说明**：ADR-019 阶段 A/B/C/D + 交叉验证修复（B1/B2/Gate-A1）+ R1（is_within 大小写）+ G1（global_plugin 继承优先级）全部完成。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九 PT-ARCH-21-FU。
+> ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非 ADR-019 引入）。non-SDK 套件稳定 0 failure。
+> ⚠️ **基线锚点警示**：当前为**未提交 WIP**（领先 origin）。
 
 ---
 
