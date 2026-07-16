@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-13（**ADR-019 立项**：路径与插件模型重设计——proj_root/plugin_path 分离 + 隔离反转 + 多阶段启动。经 5-agent 交叉验证 + 多轮研讨确认"路径统一"实为模型重设计。取代 ADR-018 的 D1/D5/CWD 上界。原 PT-ARCH-19/20 机械清理并入 ADR-019 阶段 D。D1''/C1 已完成部分需回退/改造。）
+> **最后更新**：2026-07-13（**PT-ARCH-23 立项**：内核原生化 + 磁盘型存储模型（ADR-020 + P0-2 + P0-3 协同里程碑），所有核心模块内核迁移同步执行。落地顺序 E→A→C→D→B 已认可。PT-ARCH-22 命名清理暂缓排期。ADR-019 实现已提交 `e1860fe`，基线 1139 passed。下一步详见 `PENDING_TASKS §PT-ARCH-23`。）
 
 ---
 

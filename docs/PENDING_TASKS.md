@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-07-13（**ADR-019 立项**：路径与插件模型重设计，取代 ADR-018 的 D1/D5/CWD 上界。原 PT-ARCH-19/20 逐文件:行清单吸收为历史档案，执行以 ADR-019 + NEXT_STEPS PT-ARCH-21 为准。基线 1106 passed / 7 skipped / 0 fail）
+> **最后更新**：2026-07-13（**PT-ARCH-23 立项**：内核原生化 + 磁盘型存储模型（ADR-020 + P0-2 + P0-3 协同里程碑），核心模块内核迁移同步执行，落地顺序 E→A→C→D→B 已认可。PT-ARCH-22 命名清理暂缓排期。ADR-019 实现已提交 `e1860fe`，基线 1139 passed。）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -292,7 +292,81 @@
 **[已知限制·记录]**
 - R4：`isys.entry_path()` 在 run_string 下返回合成 `__string_exec__.ibci`（无害 cosmetic）。
 - R1'：`_load_plugins` 公理发现面扩大（修复，但可能暴露同名公理冲突）。
-- SDK 测试 flaky（pre-existing）：`tests/sdk/test_check_plugin.py` 动态生成插件 spec，偶发跨测试 import 污染。孤立重跑通过。属插件/SDK 范畴。
+- **SDK 测试 flake（观察中，未复现）**：`tests/sdk/test_check_plugin.py` 在完整套件运行时**偶发**失败（不同次不同测试，如 `test_param_count_mismatch`）。调查结论：① `check_plugin` 声明且实现上**不依赖 core.\***（`ibci_sdk/check.py:19`，纯 importlib 反射），故 ADR-019 路径改动逻辑上不影响其校验；② 单独跑稳定（8/8）、压测 10 次稳定（0/10），仅编辑期快速连跑偶发——疑似 sys.path 操控竞态或 spawn 测试线程泄漏（测试基础设施层面）；③ **未捕获具体错误信息**（不再复现），**未做"旧代码对比"判定性实验**。属插件/SDK 范畴，待研讨后决定是否加固 `_load_module`（唯一模块名 + sys.modules 清理）。
+
+---
+
+### 🔴 PT-ARCH-22：全项目文件命名清理（ADR-020 衍生，负责人 2026-07-13 指令）
+
+> 起因：ADR-020 设计中发现 `file.py` 命名隐患——影子化 Python 内建（Py2 `file`）、过于笼统、区分度不足、在 core 层有危险性。负责人指令：**全面排查整个 ibci 项目里类似过短/欠层次/欠区分度/影子化内建的代码文件命名**，做一轮全方位清理。
+
+**排查范围与判定准则**：
+- **影子化 Python 内建/关键字**：如 `file.py`、`string.py`、`types.py`、`code.py`、`io.py`、`time.py`（与 stdlib 撞名 → import 歧义/阴影）。
+- **过短/欠区分度**：单字母或极短名（`a.py`、`x.py`）、纯领域通用词在 core 层（`base.py`、`core.py`、`path.py`、`main.py` 是否恰当需逐处判断）。
+- **跨包重名混淆**：同名文件散布多包（如多个 `__init__.py` 之外的 `core.py`/`base.py`/`utils.py`），降低可导航性。
+- **层次不足**：名字未反映所属抽象层或职责。
+
+**待做**：
+- [ ] 全仓扫描（`glob **/*.py`）产出命名清单 + 按上述准则标记可疑项。
+- [ ] 逐项裁决：保留 / 重命名（附迁移影响：import 站点、测试、文档）。
+- [x] **ADR-020 FileHandle 命名已定**（2026-07-13）：Python axiom/值类文件用 `file_handle.py`（非 `file.py`）；IBCI 模块名保留 `file`。其余可疑命名待本任务扫描裁决。
+- [ ] 重命名执行（机械迁移 + 全量 pytest 守护）。
+> **排期（负责人 2026-07-13 确认）**：暂缓。PT-ARCH-23 之后或独立窗口执行。命名隐患与 ADR-020 实现解耦，不阻塞。
+
+---
+
+### 🔴 PT-ARCH-23：内核原生化 + 磁盘型存储模型（ADR-020 + P0-2 + P0-3 协同里程碑）
+
+> **负责人 2026-07-13 决策**：① 所有核心模块（ai/ihost/idbg/isys/file）的内核迁移**同步执行，同一里程碑内完成**（不分子批）；② ADR-020 与 P0-2/P0-3 **强耦合，协同设计**（FileHandle = ADR-016 磁盘型基类的落地 = P0-3 media 的父类）；③ 落地顺序 E→A→C→D→B 已认可，按依赖自主微调；④ file 相关模块全 import-gated；⑤ FileHandle 具体 API 延后到实现期细化。
+>
+> **本里程碑整合三者**：ADR-020（内核原生边界重划）、P0-2（ADR-016 存储模型基础设施）、P0-3（ADR-014 media 重建为磁盘型）。三者是同一件事的不同切面——disk-backed 变量体系。
+
+#### 依赖图与任务分配（自主协同分析，2026-07-13）
+
+```
+G1 重分类基础设施（ADR-020 A/C/D/E，与存储正交）
+   │
+   ├─→ G2 ai/ihost/idbg/isys 内核原生化（用 G1-C bootstrap 预注册）
+   │      └─ 独立于 G3/G4/G5/G6，可与 G3 并行
+   │
+   └─→ G4 FileHandle（用 G1-D axiom 注册 + G3 存储机制）
+          ↑
+   G3 存储模型机制（P0-2，ADR-016：storage_model 属性 + 磁盘协议族 + deep_clone/serializer 分支）
+          │
+          └─→ G5 media→FileHandle 子类（P0-3，ADR-014：删 MediaStorage，IbAudio/Img/Video 改 handle）
+          └─→ G6 file 模块内核原生化（ibci_file 消亡；file.open 等返回 FileHandle）
+```
+
+#### 执行子序（里程碑内阶段，每阶段完整测试 + 干净切口，禁 shim）
+
+**阶段 1 — 重分类基础设施（G1，ADR-020 E/A/C/D）**：与存储正交，先行。
+- E 术语：删 "builtin" 一词五义（BuiltinPaths→InstallPaths、builtin_initializer→primitive_initializer、is_builtin→is_intrinsic、ADR-019 §1 "builtin恒在"→"kernel-native 恒在"）。
+- A 语法：确认 import-gated + 命名 prelude 规则（机制既有，主要是文档 + Prelude 过滤器复核）。
+- C bootstrap 升级：懒查找契约 + loader 短路预注册（loader.py:156-168）+ late-hydrate 钩子。
+- D 协议规则：类型→axiom / 模块→vtable 决策规则；清硬编码 axiom 回退列表（builtin_initializer.py:98）。
+
+**阶段 2（可并行）**：
+- **G2 — ai/ihost/idbg/isys 内核原生化**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；`is_user_defined=False` → 恒可解析/不可覆盖；import-gating 保留。**独立于存储，可先行**。
+- **G3 — 存储模型机制（P0-2）**：storage_model 类型级属性（memory/disk-backed）；磁盘协议族（lazy materialize/path-payload/path-snapshot）；deep_clone.py:89 isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。
+
+**阶段 3 — FileHandle（G4，ADR-020 B）**：依赖 G1-D + G3。
+- 新建 `core/kernel/axioms/primitives/file_handle.py`（FileHandleAxiom，零 I/O）+ `core/runtime/objects/file_handle.py`（IbFileHandle，持 IbPath+backing）+ bootstrap 绑定。
+- FileBacking/GeneratedBacking；创建经 resolve_path + canonicalize 沙箱。
+- 修既有违规 media.py:72-73（base64 移出 kernel axiom）。
+
+**阶段 4（依赖 G4）**：
+- **G5 — media→FileHandle 子类（P0-3）**：IbAudio/IbImage/IbVideo 改 (IbFileHandle)；删 media_storage.py；改 ibci_file read_audio/image/video 返回 FileBacking（零拷贝）。
+- **G6 — file 模块内核原生化**：ibci_file 插件消亡；file 模块（free 函数 open/read/write）内核原生 + import-gated；FS 操作落 runtime 值类原生方法。
+
+#### 验证
+- 每阶段全量 pytest 0 failure；机械门槛（rg 零散点 os.path、零 compiler→runtime 反向依赖）。
+- 阶段 4 收尾：MOCK e2e（file.read_audio → FileHandle → @~ $x）端到端；snapshot/serialize round-trip（暴露过潜伏 bug）。
+- 完成门槛：再次交叉检验（subagent）确认零残留 compat 垫片/零"核心层插件"中间态/FileHandle 体系自洽。
+
+#### 强耦合说明（记录）
+- **不可拆分**：G3/G4/G5/G6 是 disk-backed 变量体系的同一件事——P0-2 是机制、FileHandle 是基类、P0-3 是子类、file 是用户入口。各自独立做会产生 compat 垫片（违 ⛔#1）。
+- **可独立**：G1（重分类基础设施）、G2（ai/ihost/idbg/isys 内核原生化）与存储正交，可先行/并行。
+- **命名清理（PT-ARCH-22）**：本里程碑之后做（file_handle.py 已定，其余待扫）。
 
 ---
 
