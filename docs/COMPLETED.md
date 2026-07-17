@@ -11,7 +11,7 @@
 
 ## 2026-07-17：G2 — ai/ihost/idbg/isys 内核原生化（ADR-020）
 
-> 分支：`feat/G2-kernel-native-modules`；提交：见分支最新提交。
+> 分支：`feat/G2-kernel-native-modules`；提交：见 `feat/G2-kernel-native-modules` 分支最新提交（含代码、测试、文档一次性切口）。
 > 测试基线：**1157 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
 
 ### A. 核心改动
