@@ -31,27 +31,33 @@ class ModuleDiscoveryService:
         # 仅做分隔符规范化；调用方保证路径为绝对路径（ADR-019）。
         self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
 
-    def discover_all(self, registry: Optional[Any] = None) -> HostInterface:
+    def discover_all(self, registry: Optional[Any] = None, host: Optional[HostInterface] = None) -> HostInterface:
         """
         扫描所有搜索路径，加载所有发现的模块 spec。
 
         ``registry`` 必须是已完成 STAGE_3_PLUGIN_METADATA 初始化的 KernelRegistry，
         以确保 HostInterface 与引擎共享同一 SpecRegistry 实例（消除元数据双轨）。
         仅在无 registry 的孤立测试场景下允许省略。
+
+        ``host`` 为可选的已有 HostInterface；传入时直接向其追加发现结果，
+        用于保留构造期预注册的 kernel-native 模块（ADR-020 G2）。
         """
         if registry:
             registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
-            metadata_registry = registry.get_metadata_registry()
-            if metadata_registry is None:
-                raise ValueError(
-                    "discover_all(): registry.get_metadata_registry() returned None. "
-                    "Ensure initialize_primitive_classes() has been called before discover_all()."
-                )
-            host = HostInterface(external_registry=metadata_registry)
+            if host is None:
+                metadata_registry = registry.get_metadata_registry()
+                if metadata_registry is None:
+                    raise ValueError(
+                        "discover_all(): registry.get_metadata_registry() returned None. "
+                        "Ensure initialize_primitive_classes() has been called before discover_all()."
+                    )
+                host = HostInterface(external_registry=metadata_registry)
         else:
-            # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
-            # 主引擎路径必须传入 registry 以确保注册表共享。
-            host = HostInterface()
+            if host is None:
+                # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
+                # 主引擎路径必须传入 registry 以确保注册表共享。
+                host = HostInterface()
+
         discovered_modules = set()
 
         for path in self.search_paths:
@@ -69,6 +75,12 @@ class ModuleDiscoveryService:
                 spec_path = os.path.join(module_dir, "_spec.py")
 
                 if os.path.exists(spec_path):
+                    # ADR-020 G2：已预注册的 kernel-native 模块不再从磁盘重复加载
+                    logical_name = host.get_module_by_discovery_name(entry)
+                    if logical_name is not None and host.is_kernel_native(logical_name):
+                        discovered_modules.add(entry)
+                        continue
+
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
                         if spec_metadata:

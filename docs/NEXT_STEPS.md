@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-17（**PT-ARCH-21-FU 路径整合收尾完成**：rt_scheduler 死代码删除、ProjectDetector IbPath 化、module_system 边界清理、ibci_file relpath 修复，plugin 发现/隔离继承 e2e 补齐，1146 passed / 7 skipped。下一项：**G2 ai/ihost/idbg/isys 内核原生化（ADR-020）**。）
+> **最后更新**：2026-07-17（**G2 ai/ihost/idbg/isys 内核原生化完成**：bootstrap 预注册 + loader 短路 + HostInterface 覆盖保护 + late-hydrate，1157 passed / 7 skipped。下一项：**G3+G4+G5+G6 磁盘型存储体系（合并单阶段）**。）
 
 ---
 
@@ -32,9 +32,9 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-07-17 实测结果**：`1146 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
+**2026-07-17 实测结果**：`1157 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
 
-> **基线说明**：ADR-019 + G1 + G1.5 + PT-ARCH-21-FU 全部完成。ProjectDetector / module_system / ibci_file / rt_scheduler 路径相关清理已落地；plugin 发现（plugin_paths/global_plugin）与隔离继承已补 e2e。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九。
+> **基线说明**：ADR-019 + G1 + G1.5 + PT-ARCH-21-FU + **G2** 全部完成。ProjectDetector / module_system / ibci_file / rt_scheduler 路径相关清理已落地；plugin 发现（plugin_paths/global_plugin）与隔离继承已补 e2e；ai/ihost/idbg/isys 已内核原生化。下一项：G3+G4+G5+G6 磁盘型存储体系。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九。
 > ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非本次改动引入）。non-SDK 套件稳定 0 failure。
 
 ---
@@ -124,14 +124,19 @@ rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpre
 
 ---
 
-### 🔴 G2 — ai/ihost/idbg/isys 内核原生化（ADR-020，当前最紧要）
+### ✅ G2 — ai/ihost/idbg/isys 内核原生化（2026-07-17 完成）
 
-> 前置：G1.5 + PT-ARCH-21-FU 已完成。
-> 按 ADR-021 修正后的写法：**bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED` → 恒可解析/不可覆盖 + import-gated 保留**。与存储正交。详见 `PENDING_TASKS.md §九 PT-ARCH-23`。
+> ADR-020，与存储正交。已完成并实测 `1157 passed, 7 skipped`（2026-07-17 基线，win32）。
+- **bootstrap 预注册 4 模块**：`ai`/`ihost`/`idbg`/`isys` 在 `Engine.__init__` 期预注册为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`，经 loader 短路，零文件移动。
+- **HostInterface 覆盖保护**：新增 `reserve_kernel_native_name()` / `is_kernel_native()`；`register_module()` 拒绝用户插件覆盖 kernel-native 模块。
+- **late-hydrate 窗口**：`_prepare_interpreter` 在 registry hooks 注入后调用 `late_hydrate_kernel_native_modules(service_context)`，`AIPlugin.hydrate` 重新确认 LLM Provider 注册。
+- **测试**：新增 `tests/runtime/test_kernel_native_modules.py` + `tests/e2e/test_e2e_kernel_native.py`；全量 pytest `1157 passed, 7 skipped`。
+
+详见 `docs/COMPLETED.md` 2026-07-17 G2 条目。
 
 ---
 
-### 🔴 G3 + G4 + G5 + G6 — 磁盘型存储体系（合并单阶段，不可拆分）
+### 🔴 G3 + G4 + G5 + G6 — 磁盘型存储体系（合并单阶段，当前最紧要）
 
 > ADR-016/014 明令 **G3/G4/G5/G6 强耦合不可拆分**（disk-backed 变量体系的同一件事：P0-2 机制 + G4 FileHandle 基类 + P0-3 media 子类 + G6 file 入口）。合并为单一阶段，内部按 G3→G4→G5→G6 依赖推进。依赖 G1.5 的 `StorageModel` 字段 + 路径收尾。详见 `PENDING_TASKS.md §九 PT-ARCH-23`。
 > **内含**：原 P0-2（存储模型基础设施）、P0-3（media 重建）+ G4（FileHandle）+ G6（file 模块内核原生化）。

@@ -5,7 +5,30 @@
 > 设计与实现细节见对应正式文档：`docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/design/VM_SPEC.md`、`docs/design/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-07-17（G1.5 数据结构迁移改善完成；下一项：路径整合收尾 PT-ARCH-21-FU）
+> **最后更新**：2026-07-17（G2 ai/ihost/idbg/isys 内核原生化完成；下一项：G3+G4+G5+G6 磁盘型存储体系）
+
+---
+
+## 2026-07-17：G2 — ai/ihost/idbg/isys 内核原生化（ADR-020）
+
+> 分支：`feat/G2-kernel-native-modules`；提交：见分支最新提交。
+> 测试基线：**1157 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. 核心改动
+- 新建 `core/runtime/bootstrap/kernel_native_modules.py`：预注册 `ai`/`ihost`/`idbg`/`isys` 四模块为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`；提供 `late_hydrate_kernel_native_modules(service_context)` 二次水化窗口。
+- 修改 `core/kernel/host_interface.py`：新增 `_kernel_native_names` 集合与 `reserve_kernel_native_name()` / `is_kernel_native()`；`register_module()` 拒绝用户插件覆盖 kernel-native 模块。
+- 修改 `core/runtime/module_system/discovery.py`：`discover_all()` 支持可选 `host` 参数以保留构造期预注册；扫描时跳过已 kernel-native 的目录。
+- 修改 `core/runtime/module_system/loader.py`：搜索路径扫描时跳过逻辑名为 kernel-native 的目录，避免从磁盘重复加载。
+- 修改 `core/engine.py`：`HostInterface` 构造时即与引擎共享 `MetadataRegistry`，确保 kernel-native 模块元数据对编译器可见；`__init__` 中调用 `register_kernel_native_modules`；`_prepare_interpreter` 在 registry hooks 注入后调用 `late_hydrate_kernel_native_modules`；`_ensure_plugins_discovered` 传入现有 `host_interface` 保留预注册。
+- 修改 `ibci_modules/ibci_ai/core.py`：`AIPlugin` 新增 `hydrate(service_context)` 方法，在 late-hydrate 窗口重新确认 LLM Provider 注册。
+
+### B. 测试
+- 新增 `tests/runtime/test_kernel_native_modules.py`：验证构造期预注册、元数据标记、覆盖保护、import-gating、late-hydrate 调用。
+- 新增 `tests/e2e/test_e2e_kernel_native.py`：验证 ai MOCK 调用链、ihost 隔离执行、idbg/isys import 调用在 kernel-native 化后行为不变。
+
+### C. 验证
+- 全量 pytest：`1157 passed, 7 skipped`（0 failures）。
+- 分层红线：`tests/runtime/test_kernel_native_modules.py` 通过 `tests/meta/test_layering.py` runtime 层检查；`tests/e2e/test_e2e_kernel_native.py` 通过 e2e 层黑盒检查。
 
 ---
 

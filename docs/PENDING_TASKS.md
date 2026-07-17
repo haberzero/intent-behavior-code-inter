@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-07-17（**PT-ARCH-23 规划重排**：经 flag/state 碎片化审计（F1-F7）立 [ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)。G1 已完成；新落地顺序 **G1.5 数据结构迁移 → 路径收尾 → G2 → G3+G4+G5+6（合并）**。G2 的 `is_user_defined` 写法已被 ADR-021 修正为 `provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`。基线 `1139 passed, 7 skipped`（G1 完成态，2026-07-17 实测）。）
+> **最后更新**：2026-07-17（**G2 内核原生化完成**：ai/ihost/idbg/isys 四模块已提升为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`，经 bootstrap 预注册、loader 短路、HostInterface 覆盖保护、late-hydrate 窗口实现；新增 10 个测试，全量 pytest `1157 passed, 7 skipped`。下一项 **G3+G4+G5+G6 磁盘型存储体系（合并单阶段）**。）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -329,9 +329,10 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
    └─→ G1.5 数据结构迁移改善（ADR-021：三枚举 Provenance/Visibility/StorageModel，
    │      Symbol.metadata 清理，is_llm 删除，序列化同步）✅ 已完成 2026-07-17
    │        └─→ 路径整合收尾（PT-ARCH-21-FU）✅ 已完成 2026-07-17
-   │             └─→ G2 ai/ihost/idbg/isys 内核原生化 ★ 当前最紧要
-   │             │      （用 G1-C bootstrap 预注册；provenance=KERNEL_NATIVE + visibility=IMPORT_GATED）
-   │             │      └─→ G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）
+   │             └─→ G2 ai/ihost/idbg/isys 内核原生化 ✅ 已完成 2026-07-17
+   │             │      （bootstrap 预注册；provenance=KERNEL_NATIVE + visibility=IMPORT_GATED；
+   │             │       HostInterface 覆盖保护；late-hydrate 窗口）
+   │             │      └─→ G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）★ 当前最紧要
    │             │            G3 存储模型机制（P0-2：消费 G1.5 的 storage_model 字段）
    │             │            → G4 FileHandle（ADR-020 B，依赖 G3）
    │             │            → G5 media→FileHandle 子类（P0-3）
@@ -346,9 +347,9 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
 
 **阶段 3 — 路径整合收尾（PT-ARCH-21-FU）** ✅ **已完成 2026-07-17**：待做项见上方 PT-ARCH-21-FU。
 
-**阶段 4 — G2 ai/ihost/idbg/isys 内核原生化（ADR-020）** ★ **当前最紧要**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；**`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`** → 恒可解析/不可覆盖 + import-gated 保留；late-hydrate 钩子随 ai 建。
+**阶段 4 — G2 ai/ihost/idbg/isys 内核原生化（ADR-020）** ✅ **已完成 2026-07-17**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；**`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`** → 恒可解析/不可覆盖 + import-gated 保留；HostInterface 覆盖保护；late-hydrate 钩子随 ai 建。全量 pytest `1157 passed, 7 skipped`。
 
-**阶段 5 — G3+G4+G5+G6 磁盘型存储体系（合并，ADR-016/014/020）**：不可拆分。
+**阶段 5 — G3+G4+G5+G6 磁盘型存储体系（合并，ADR-016/014/020）** ★ **当前最紧要**：不可拆分。
 - **G3 存储模型机制（P0-2）**：消费 G1.5 的 `storage_model` 字段；磁盘协议族（lazy materialize/path-payload/path-snapshot，**方法名本阶段设计期定**）；`deep_clone.py:89` isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。
 - **G4 FileHandle（ADR-020 B）**：新建 `core/kernel/axioms/primitives/file_handle.py`（FileHandleAxiom，零 I/O）+ `core/runtime/objects/file_handle.py`（IbFileHandle，持 IbPath+backing）+ bootstrap 绑定；FileBacking/GeneratedBacking；创建经 resolve_path + canonicalize 沙箱；修既有违规 media.py:72-73。
 - **G5 media→FileHandle 子类（P0-3）**：IbAudio/IbImage/IbVideo 改 (IbFileHandle)；删 media_storage.py；改 ibci_file read_* 返回 FileBacking（零拷贝）。

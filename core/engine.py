@@ -111,8 +111,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
-        # host_interface（空接口，首次编译前填充）
-        self.host_interface = HostInterface()
+        # host_interface 与引擎共享 MetadataRegistry，确保构造期预注册的
+        # kernel-native 模块元数据对编译器可见（ADR-020 G2）。
+        self.host_interface = HostInterface(external_registry=self.registry.get_metadata_registry())
+        # ADR-020 G2：预注册 ai/ihost/idbg/isys 为 kernel-native 模块
+        from core.runtime.bootstrap.kernel_native_modules import register_kernel_native_modules
+        register_kernel_native_modules(self.host_interface)
         self._plugins_discovered = False
 
         # 运行时调度器
@@ -319,6 +323,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if state_reader is not None:
             self.registry.register_state_reader(state_reader, self._kernel_token)
 
+        # ADR-020 G2：在 registry hooks 全部注入后，给 kernel-native 模块 late-hydrate 窗口
+        from core.runtime.bootstrap.kernel_native_modules import late_hydrate_kernel_native_modules
+        late_hydrate_kernel_native_modules(self.interpreter.service_context)
+
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
 
@@ -376,7 +384,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Prelude 过滤保证）。
         """
         if not self._plugins_discovered:
-            self.host_interface = self.discovery_service.discover_all(self.registry)
+            # ADR-020 G2：传入已有的 host_interface，保留构造期预注册的 kernel-native 模块
+            self.host_interface = self.discovery_service.discover_all(self.registry, host=self.host_interface)
             self.scheduler.host_interface = self.host_interface
             self._plugins_discovered = True
 

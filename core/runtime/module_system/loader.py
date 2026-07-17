@@ -194,6 +194,11 @@ class ModuleLoader(IModuleLoader):
                 module_name = interop.get_module_name_by_discovery(entry)
                 if not module_name:
                     continue
+
+                # ADR-020 G2：kernel-native 模块已在构造期预注册，不再从磁盘加载覆盖
+                if interop.host_interface.is_kernel_native(module_name):
+                    loaded_modules.add(entry)
+                    continue
                     
                 module_dir = os.path.join(path, entry)
                 if not os.path.isdir(module_dir):
