@@ -32,7 +32,7 @@ class ModuleDiscoveryService:
             if metadata_registry is None:
                 raise ValueError(
                     "discover_all(): registry.get_metadata_registry() returned None. "
-                    "Ensure initialize_builtin_classes() has been called before discover_all()."
+                    "Ensure initialize_primitive_classes() has been called before discover_all()."
                 )
             host = HostInterface(external_registry=metadata_registry)
         else:

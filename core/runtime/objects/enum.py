@@ -103,11 +103,11 @@ class IbEnumAdapter:
             return self._ib_class.registry.box(self._enum.enum_name)
         if target_class.name == "int":
             member_names = list(self._ib_class.members.keys())
-            builtin_names = {'to_bool', 'to_list', 'len', 'cast_to', '__getitem__', '__setitem__',
+            intrinsic_method_names = {'to_bool', 'to_list', 'len', 'cast_to', '__getitem__', '__setitem__',
                            'sort', 'pop', 'append', 'clear', '__eq__', '__init__'}
             idx = 0
             for name in member_names:
-                if name.startswith('_') or name in builtin_names:
+                if name.startswith('_') or name in intrinsic_method_names:
                     continue
                 if name == self._enum.enum_name:
                     return self._ib_class.registry.box(idx)

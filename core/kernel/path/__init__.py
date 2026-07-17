@@ -6,7 +6,7 @@ Per ADR-017：锚点模型、沙箱、模块名映射、快照布局、FS 感知
 消除历史上的 compiler→runtime 违规。
 
 本包是 path API 的统一 facade：再导出 base/path 的原子原语，
-使消费者一处导入即可获得全部路径能力（BuiltinPaths 除外，它在 runtime/path）。
+使消费者一处导入即可获得全部路径能力（InstallPaths 除外，它在 runtime/path）。
 """
 # 从 base/path 再导出原子原语（facade）
 from core.base.path import IbPath, safe_relpath

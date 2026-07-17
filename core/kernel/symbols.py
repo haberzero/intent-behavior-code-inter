@@ -144,9 +144,9 @@ class SymbolTable:
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
             is_compatible = (
-                (existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_builtin"))
-                or (existing.metadata.get("is_builtin") and sym.metadata.get("is_external_module"))
+                (existing.metadata.get("is_intrinsic") and sym.metadata.get("is_intrinsic"))
+                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_intrinsic"))
+                or (existing.metadata.get("is_intrinsic") and sym.metadata.get("is_external_module"))
                 or (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
             )
             if is_compatible:
@@ -155,7 +155,7 @@ class SymbolTable:
                         if existing.spec.name == sym.spec.name:
                             return  # same-name external module dup
                         raise ValueError(
-                            f"Builtin Symbol Conflict: '{sym.name}' redefined with "
+                            f"Intrinsic Symbol Conflict: '{sym.name}' redefined with "
                             f"incompatible spec (existing: '{existing.spec.name}')"
                         )
                 self.symbols[sym.name] = sym
@@ -195,10 +195,10 @@ class SymbolFactory:
         return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec)
 
     @staticmethod
-    def create_builtin_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
+    def create_intrinsic_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
         return FunctionSymbol(
             name=name,
             kind=SymbolKind.FUNCTION,
             spec=spec,
-            metadata={"is_builtin": True, "axiom_provided": True},
+            metadata={"is_intrinsic": True, "axiom_provided": True},
         )

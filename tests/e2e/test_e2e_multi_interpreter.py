@@ -88,8 +88,8 @@ class TestEngineLayerAPI:
         finally:
             os.unlink(child)
 
-    def test_collect_excludes_builtins(self):
-        """内置符号（print、len 等）不应出现在 collect 结果中。"""
+    def test_collect_excludes_intrinsics(self):
+        """内核原生符号（print、len 等）不应出现在 collect 结果中。"""
         child = _write_child('str x = "value"\n')
         try:
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)

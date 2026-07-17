@@ -182,7 +182,7 @@ class HostService(IHostService):
             global_symbols = self.execution_context.runtime_context.global_scope.get_all_symbols()
             initial_vars = {}
             for name, sym in global_symbols.items():
-                if not name.startswith("__") and not sym.metadata.get("is_builtin", False):
+                if not name.startswith("__") and not sym.metadata.get("is_intrinsic", False):
                     # 仅传递基础类型值或可安全序列化的值，此处简化为值引用传递，
                     # 实际在 Engine 接收端会被装箱
                     val = self.execution_context.runtime_context.global_scope.resolve(name)

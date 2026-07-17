@@ -35,10 +35,10 @@ class RuntimeSchedulerImpl:
         self.service_context = service_context
         self.debugger = service_context.debugger
 
-    def _resolve_builtin_path(self) -> str:
-        """内置模块目录：经 BuiltinPaths 服务统一计算（消灭散点 __file__ 遍历）。"""
-        from core.runtime.path import BuiltinPaths
-        return BuiltinPaths.builtin_modules_dir().to_native()
+    def _resolve_install_path(self) -> str:
+        """内置模块目录：经 InstallPaths 服务统一计算（消灭散点 __file__ 遍历）。"""
+        from core.runtime.path import InstallPaths
+        return InstallPaths.modules_dir().to_native()
 
     def spawn(self, 
               artifact: Any, 
@@ -79,16 +79,16 @@ class RuntimeSchedulerImpl:
             if root_dir:
                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Total Isolation: Re-discovering plugins for {root_dir}")
                 
-                builtin_path = self._resolve_builtin_path()
+                install_path = self._resolve_install_path()
                 plugins_path = os.path.join(root_dir, "plugins")
                 
                 # 重新执行发现流程
-                discovery = ModuleDiscoveryService([builtin_path, plugins_path])
+                discovery = ModuleDiscoveryService([install_path, plugins_path])
                 effective_host_interface = discovery.discover_all(effective_registry)
                 
                 # 创建全新的插件加载器
                 sub_loader = ModuleLoader(
-                    [builtin_path, plugins_path], 
+                    [install_path, plugins_path], 
                     capability_registry=sc.capability_registry if sc else None
                 )
                 # 定义加载钩子

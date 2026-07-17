@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class KernelRegistry:
     """
     IBC-Inter 内核对象注册表。
-    用于解耦 Kernel, Builtins 和 Bootstrapper 之间的循环引用。
+    用于解耦 Kernel, primitives 包 和 Bootstrapper 之间的循环引用。
     [Active Defense] 增强的令牌审计机制，区分内核特权与普通扩展权限。
     """
     def __init__(self):
@@ -44,8 +44,8 @@ class KernelRegistry:
         self._is_structure_sealed = False
         self._is_classes_sealed = False
 
-        # [Builtin Instances] 内置单例实例 (如 IntentStack)
-        self._builtin_instances: Dict[str, Any] = {}
+        # [Intrinsic Instances] 内核单例实例 (如 IntentStack)
+        self._intrinsic_instances: Dict[str, Any] = {}
 
         # [LLM Executor] 内核 LLM 执行器引用（由解释器在启动时注入）
         self._llm_executor: Any = None
@@ -172,24 +172,24 @@ class KernelRegistry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
-    def register_builtin_instance(self, name: str, instance: Any):
+    def register_intrinsic_instance(self, name: str, instance: Any):
         """
         注册内置单例实例（如 IntentStack）。
 
         此方法刻意不进行 token 校验：内置单例（如 IntentStack）依赖 IbClass 体系
         就绪后才能创建，需要在结构封印之后的引导阶段末期注册，而 token 机制保护的
-        是封印前的结构性注册。该方法仅应由 builtin_initializer 在引导流程中调用，
+        是封印前的结构性注册。该方法仅应由 primitive_initializer 在引导流程中调用，
         调用窗口极短，不对外暴露。
 
         封印后的保护由时序约束（结构封印时序）而非 token 提供。
         """
         if self._is_structure_sealed:
-            raise PermissionError("Registry: Cannot register builtin instance after structure is sealed.")
-        self._builtin_instances[name] = instance
+            raise PermissionError("Registry: Cannot register intrinsic instance after structure is sealed.")
+        self._intrinsic_instances[name] = instance
 
-    def get_builtin_instance(self, name: str) -> Optional[Any]:
+    def get_intrinsic_instance(self, name: str) -> Optional[Any]:
         """获取内置单例实例。"""
-        return self._builtin_instances.get(name)
+        return self._intrinsic_instances.get(name)
 
     def register_llm_executor(self, executor: Any, token: Any) -> None:
         """
@@ -446,9 +446,9 @@ class KernelRegistry:
         new_registry._host_service = self._host_service
         new_registry._stack_inspector = self._stack_inspector
         new_registry._state_reader = self._state_reader
-        # 拷贝内置单例字典结构，使子解释器能通过 get_builtin_instance() 找到单例。
+        # 拷贝内置单例字典结构，使子解释器能通过 get_intrinsic_instance() 找到单例。
         # 子解释器在 Interpreter.__init__ 中会调用 set_runtime_context() 把自己的
         # runtime_context 重新绑定到单例，因此两个解释器共享同一对象是安全的。
-        new_registry._builtin_instances = dict(self._builtin_instances)
+        new_registry._intrinsic_instances = dict(self._intrinsic_instances)
         # _int_cache 故意不拷贝：每个引擎实例独享小整数驻留缓存，彼此隔离。
         return new_registry

@@ -214,8 +214,8 @@ class TypeRef:
         """True if this TypeRef has type arguments (is a generic instantiation)."""
         return bool(self.args)
 
-    def is_builtin(self) -> bool:
-        """True if this TypeRef has no module qualifier (built-in or current module)."""
+    def is_intrinsic(self) -> bool:
+        """True if this TypeRef has no module qualifier (intrinsic/primitive or current module)."""
         return self.module is None
 
     def with_module(self, module: Optional[str]) -> "TypeRef":

@@ -362,7 +362,7 @@ class IbValue(IbObject):
 ## §10 当前状态
 
 - M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成（详见 `docs/COMPLETED.md`，2026-05-08 锚点）。
-- 类型系统主线本身无开放债务；但项目整体主线当前最高优先级是 **PT-ARCH-19/20 路径系统统一**（ADR-017/018），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在路径统一 + 存储模型架构（ADR-016）+ media 重建（ADR-014）完成之后。
+- 类型系统主线本身无开放债务；路径系统统一（ADR-015~019）已完成（2026-07-13，PT-ARCH-21）。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 + ADR-014 协同里程碑），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在该里程碑完成之后。
 - 实时主线状态以 `docs/NEXT_STEPS.md` 为准；测试基线请以当次 `python -m pytest tests/ -q --tb=no --no-header` 输出为准（不在此冻结具体数字）。
 
 ---

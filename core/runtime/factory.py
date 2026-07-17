@@ -7,7 +7,7 @@ from core.kernel.registry import KernelRegistry
 # 这些导入需要指向它们的新物理位置
 from core.runtime.interpreter.runtime_context import ScopeImpl, RuntimeContextImpl, RuntimeSymbolImpl
 from core.runtime.objects.kernel import IbModule, IbNativeObject
-from core.runtime.objects.builtins import IbBehavior, IbFnCallable, IbList, IbTuple, IbDict
+from core.runtime.objects.primitives import IbBehavior, IbFnCallable, IbList, IbTuple, IbDict
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 
 class RuntimeObjectFactory(IObjectFactory):

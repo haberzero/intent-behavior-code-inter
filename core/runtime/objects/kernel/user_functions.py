@@ -39,7 +39,7 @@ class IbUserFunction(IbFunction):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """执行用户定义的函数"""
         # 切换到函数定义所在的模块上下文
-        from core.runtime.objects.builtins import IbFnCallable, IbBehavior
+        from core.runtime.objects.primitives import IbFnCallable, IbBehavior
         _frame = _get_frame()
         rt_context = _frame if _frame is not None else self.context.runtime_context
         old_module = self.context.current_module_name
@@ -122,10 +122,10 @@ class IbUserFunction(IbFunction):
 
                 # super() 支持：若该函数有归属类（owner_class）且归属类有父类，
                 # 则在方法作用域内注入 super 代理对象。
-                # super 使用固定 UID "builtin:super" 以避免符号查找冲突。
+                # super 使用固定 UID "intrinsic:super" 以避免符号查找冲突。
                 if self.owner_class and self.owner_class.parent:
                     super_proxy = IbSuperProxy(receiver, self.owner_class.parent)
-                    rt_context.define_variable("super", super_proxy, uid="builtin:super")
+                    rt_context.define_variable("super", super_proxy, uid="intrinsic:super")
 
             for i, arg_uid in enumerate(params_uids):
                 arg_data = self.context.get_node_data(arg_uid)

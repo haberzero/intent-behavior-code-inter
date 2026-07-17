@@ -65,15 +65,15 @@ class TestResolveCallReturn:
         result = registry.resolve_call_return(class_spec, [])
         assert result is class_spec
 
-    def test_builtin_class_constructor(self, registry: SpecRegistry):
-        """Builtin primitive (int) used as constructor/cast → returns itself."""
+    def test_primitive_class_constructor(self, registry: SpecRegistry):
+        """Primitive (int) used as constructor/cast → returns itself."""
         int_spec = registry.resolve("int")
         result = registry.resolve_call_return(int_spec, [])
         assert result is not None
         assert result.name == "int"
 
-    def test_builtin_list_constructor(self, registry: SpecRegistry):
-        """Builtin list constructor → returns itself."""
+    def test_primitive_list_constructor(self, registry: SpecRegistry):
+        """Primitive list constructor → returns itself."""
         list_spec = registry.resolve("list")
         result = registry.resolve_call_return(list_spec, [])
         assert result is not None

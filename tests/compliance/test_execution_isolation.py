@@ -138,8 +138,8 @@ class TestCollectSemantics:
         finally:
             os.unlink(child)
 
-    def test_collect_excludes_builtin_symbols(self):
-        """collect 不应返回内置函数（print/len/range 等）。"""
+    def test_collect_excludes_intrinsic_symbols(self):
+        """collect 不应返回内核原生函数（print/len/range 等）。"""
         child = write_child('int x = 1\n')
         try:
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)

@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-07-13（**PT-ARCH-23 立项**：内核原生化 + 磁盘型存储模型（ADR-020 + P0-2 + P0-3 协同里程碑），核心模块内核迁移同步执行，落地顺序 E→A→C→D→B 已认可。PT-ARCH-22 命名清理暂缓排期。ADR-019 实现已提交 `e1860fe`，基线 1139 passed。）
+> **最后更新**：2026-07-17（**PT-ARCH-23 规划重排**：经 flag/state 碎片化审计（F1-F7）立 [ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)。G1 已完成；新落地顺序 **G1.5 数据结构迁移 → 路径收尾 → G2 → G3+G4+G5+6（合并）**。G2 的 `is_user_defined` 写法已被 ADR-021 修正为 `provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`。基线 `1139 passed, 7 skipped`（G1 完成态，2026-07-17 实测）。）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -253,7 +253,7 @@
 ## 九、media Phase 4 前置技术债（2026-06-25 三轮架构审计）
 
 > **背景**：2026-06-25 三轮架构审计（详见 `docs/COMPLETED.md` 当日条目）发现：当前 media 内存实现是"哑的"（两个潜伏 bug 致字节静默丢失）、路径系统严重碎片化、ADR-009 的分叉前提被证伪；第三轮确立了**变量存储模型**框架（ADR-016）；P0-1 完成后复审又发现路径模块层位置遗留违规（ADR-017）。
-> **治理决策**：ADR-013（修订，协议驱动分发）/ ADR-014（修订，磁盘型 handle，砍 MemoryBacking）/ ADR-015（路径统一为强制前置）/ **ADR-016（变量存储模型，上层治理）** / **ADR-017（路径模块层位置重构，最高优先级）**。
+> **治理决策**：ADR-013（修订，协议驱动分发）/ ADR-014（修订，磁盘型 handle，砍 MemoryBacking）/ ADR-015（路径统一为强制前置）/ **ADR-016（变量存储模型，上层治理）** / **ADR-017（路径模块层位置重构，已实现）**。
 > **工作模式**：受 `NEXT_STEPS.md ⛔ 工作模式定论` 约束——禁止 compat shim / 胶水 / tricky / 过程式硬编码分发；**潜伏 bug 不允许过渡修复**，必须随存储模型架构（PT-ARCH-17/18）统一修复。
 > **执行序列**：见 `NEXT_STEPS.md` 的 **PT-ARCH-21（ADR-019 路径与插件模型重设计）**。
 
@@ -264,7 +264,7 @@
 > - **隔离语义**（D5/derive_isolated）：反转（子必须在父 proj_root 内），旧测试删除。
 > - **本节以下内容作为历史档案保留**（文件:行仍可参考），但**执行以 ADR-019 + NEXT_STEPS PT-ARCH-21 序列为准**。
 
-### 🔴 PT-ARCH-21　路径与插件模型重设计（ADR-019，最高优先级）
+### ✅ [主体完成] PT-ARCH-21　路径与插件模型重设计（ADR-019）
 
 > 正本：`docs/decisions/ADR-019-path-and-plugin-model-redesign.md`。实现序列（阶段 A 路径核心 / B 插件分离 / C 隔离修订 / D 机械清理）：见 `NEXT_STEPS.md` PT-ARCH-21。
 > 取代 ADR-018 的 D1/D5/CWD 上界/D4 穿透。取代下方原 PT-ARCH-19/20 的执行计划（保留为历史档案）。
@@ -276,7 +276,7 @@
 - [ ] `core/project_detector.py` — `get_plugin_paths`/`detect_project_root` 仍用 `os.path`（abspath×3 / dirname×3 / join×9 / FS 查询×11）。FS 查询（isdir/isfile）合法保留；path 构造可 IbPath 化。**属 plugin 嗅探内部，待研讨**。
 - [ ] `core/runtime/module_system/discovery.py` + `loader.py` — host 端 Python/importlib 插件加载边界，仍用 `os.path`（abspath/join/dirname/basename）。路径不进 IBCI 沙箱。**待研讨**。
 - [ ] `ibci_modules/ibci_file/core.py` — 用户可见文件 API，`os.path.relpath`（与 `safe_relpath` 平行）、`splitext`、`join`。**待研讨**。
-- [ ] `core/runtime/rt_scheduler.py:88` — `plugins_path = os.path.join(root_dir,"plugins")`（在隔离机制块内，`dispatch()` 零调用方为死代码，但属 plugin 发现逻辑）。**待研讨**。
+- [ ] `core/runtime/rt_scheduler.py:83` — `plugins_path = os.path.join(root_dir,"plugins")`（在隔离机制块内，`dispatch()` 零调用方为死代码，但属 plugin 发现逻辑）。**待研讨**。
 
 **[预留·本轮不实现] ADR-019 Open 项**
 - [ ] 全局 ibci.json 查找（global_plugin 的全局源）。
@@ -315,57 +315,57 @@
 
 ---
 
-### 🔴 PT-ARCH-23：内核原生化 + 磁盘型存储模型（ADR-020 + P0-2 + P0-3 协同里程碑）
+### 🔴 PT-ARCH-23：内核原生化 + 磁盘型存储模型 + 类型化 flag 轴（ADR-020 + ADR-021 + P0-2 + P0-3 协同里程碑）
 
-> **负责人 2026-07-13 决策**：① 所有核心模块（ai/ihost/idbg/isys/file）的内核迁移**同步执行，同一里程碑内完成**（不分子批）；② ADR-020 与 P0-2/P0-3 **强耦合，协同设计**（FileHandle = ADR-016 磁盘型基类的落地 = P0-3 media 的父类）；③ 落地顺序 E→A→C→D→B 已认可，按依赖自主微调；④ file 相关模块全 import-gated；⑤ FileHandle 具体 API 延后到实现期细化。
+> **负责人 2026-07-17 规划重排**：① 所有核心模块（ai/ihost/idbg/isys/file）的内核迁移**同步执行，同一里程碑内完成**（不分子批）；② ADR-020 与 P0-2/P0-3 **强耦合，协同设计**（FileHandle = ADR-016 磁盘型基类的落地 = P0-3 media 的父类）；③ **经 flag/state 碎片化审计立 [ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)，落地顺序重排为 G1→G1.5→路径收尾→G2→G3+G4+G5+6（合并）**；④ file 相关模块全 import-gated；⑤ FileHandle 具体 API 延后到实现期细化。
 >
-> **本里程碑整合三者**：ADR-020（内核原生边界重划）、P0-2（ADR-016 存储模型基础设施）、P0-3（ADR-014 media 重建为磁盘型）。三者是同一件事的不同切面——disk-backed 变量体系。
+> **本里程碑整合**：ADR-020（内核原生边界重划）、ADR-021（类型化来源/可见性/存储轴）、P0-2（ADR-016 存储模型基础设施）、P0-3（ADR-014 media 重建为磁盘型）。ADR-021 修正 ADR-020 G2 的 `is_user_defined` 写法。
 
-#### 依赖图与任务分配（自主协同分析，2026-07-13）
+#### 依赖图与任务分配（重排，2026-07-17）
 
 ```
-G1 重分类基础设施（ADR-020 A/C/D/E，与存储正交）
+G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17（E/D 实质，A/C 复核）
    │
-   ├─→ G2 ai/ihost/idbg/isys 内核原生化（用 G1-C bootstrap 预注册）
-   │      └─ 独立于 G3/G4/G5/G6，可与 G3 并行
+   └─→ G1.5 数据结构迁移改善（ADR-021：三枚举 Provenance/Visibility/StorageModel，
+   │      Symbol.metadata 清理，is_llm 删除，序列化同步）★ 当前最紧要
+   │        └─→ 路径整合收尾（PT-ARCH-21-FU，与存储正交，前移到此前不破坏 G3-G6 强耦合）
+   │             └─→ G2 ai/ihost/idbg/isys 内核原生化
+   │             │      （用 G1-C bootstrap 预注册；provenance=KERNEL_NATIVE + visibility=IMPORT_GATED）
+   │             │      └─→ G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）
+   │             │            G3 存储模型机制（P0-2：消费 G1.5 的 storage_model 字段）
+   │             │            → G4 FileHandle（ADR-020 B，依赖 G3）
+   │             │            → G5 media→FileHandle 子类（P0-3）
+   │             │            → G6 file 模块内核原生化（ibci_file 消亡）
    │
-   └─→ G4 FileHandle（用 G1-D axiom 注册 + G3 存储机制）
-          ↑
-   G3 存储模型机制（P0-2，ADR-016：storage_model 属性 + 磁盘协议族 + deep_clone/serializer 分支）
-          │
-          └─→ G5 media→FileHandle 子类（P0-3，ADR-014：删 MediaStorage，IbAudio/Img/Video 改 handle）
-          └─→ G6 file 模块内核原生化（ibci_file 消亡；file.open 等返回 FileHandle）
+   （注：原"G2 与 G3 可并行"标注已撤销——路径收尾插在中间会把强耦合的 G3-G6 人为分段，
+        故路径收尾前移；G2 与 G3-G6 现顺序推进。）
 ```
 
 #### 执行子序（里程碑内阶段，每阶段完整测试 + 干净切口，禁 shim）
 
-**阶段 1 — 重分类基础设施（G1，ADR-020 E/A/C/D）**：与存储正交，先行。
-- E 术语：删 "builtin" 一词五义（BuiltinPaths→InstallPaths、builtin_initializer→primitive_initializer、is_builtin→is_intrinsic、ADR-019 §1 "builtin恒在"→"kernel-native 恒在"）。
-- A 语法：确认 import-gated + 命名 prelude 规则（机制既有，主要是文档 + Prelude 过滤器复核）。
-- C bootstrap 升级：懒查找契约 + loader 短路预注册（loader.py:156-168）+ late-hydrate 钩子。
-- D 协议规则：类型→axiom / 模块→vtable 决策规则；清硬编码 axiom 回退列表（builtin_initializer.py:98）。
+**阶段 1 — 重分类基础设施（G1，ADR-020 E/A/C/D）** ✅ **已完成 2026-07-17**：见 `NEXT_STEPS.md` G1 条目 / `COMPLETED.md` 2026-07-17。
 
-**阶段 2（可并行）**：
-- **G2 — ai/ihost/idbg/isys 内核原生化**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；`is_user_defined=False` → 恒可解析/不可覆盖；import-gating 保留。**独立于存储，可先行**。
-- **G3 — 存储模型机制（P0-2）**：storage_model 类型级属性（memory/disk-backed）；磁盘协议族（lazy materialize/path-payload/path-snapshot）；deep_clone.py:89 isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。
+**阶段 2 — 数据结构迁移改善（G1.5，ADR-021）** ★ 当前最紧要：见 `NEXT_STEPS.md` G1.5 条目。
 
-**阶段 3 — FileHandle（G4，ADR-020 B）**：依赖 G1-D + G3。
-- 新建 `core/kernel/axioms/primitives/file_handle.py`（FileHandleAxiom，零 I/O）+ `core/runtime/objects/file_handle.py`（IbFileHandle，持 IbPath+backing）+ bootstrap 绑定。
-- FileBacking/GeneratedBacking；创建经 resolve_path + canonicalize 沙箱。
-- 修既有违规 media.py:72-73（base64 移出 kernel axiom）。
+**阶段 3 — 路径整合收尾（PT-ARCH-21-FU）**：与存储正交，前移到 G2 之前。待做项见上方 PT-ARCH-21-FU。
 
-**阶段 4（依赖 G4）**：
-- **G5 — media→FileHandle 子类（P0-3）**：IbAudio/IbImage/IbVideo 改 (IbFileHandle)；删 media_storage.py；改 ibci_file read_audio/image/video 返回 FileBacking（零拷贝）。
-- **G6 — file 模块内核原生化**：ibci_file 插件消亡；file 模块（free 函数 open/read/write）内核原生 + import-gated；FS 操作落 runtime 值类原生方法。
+**阶段 4 — G2 ai/ihost/idbg/isys 内核原生化（ADR-020）**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；**`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`** → 恒可解析/不可覆盖 + import-gated 保留；late-hydrate 钩子随 ai 建。
+
+**阶段 5 — G3+G4+G5+G6 磁盘型存储体系（合并，ADR-016/014/020）**：不可拆分。
+- **G3 存储模型机制（P0-2）**：消费 G1.5 的 `storage_model` 字段；磁盘协议族（lazy materialize/path-payload/path-snapshot，**方法名本阶段设计期定**）；`deep_clone.py:89` isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。
+- **G4 FileHandle（ADR-020 B）**：新建 `core/kernel/axioms/primitives/file_handle.py`（FileHandleAxiom，零 I/O）+ `core/runtime/objects/file_handle.py`（IbFileHandle，持 IbPath+backing）+ bootstrap 绑定；FileBacking/GeneratedBacking；创建经 resolve_path + canonicalize 沙箱；修既有违规 media.py:72-73。
+- **G5 media→FileHandle 子类（P0-3）**：IbAudio/IbImage/IbVideo 改 (IbFileHandle)；删 media_storage.py；改 ibci_file read_* 返回 FileBacking（零拷贝）。
+- **G6 file 模块内核原生化**：ibci_file 插件消亡；file 模块（free 函数 open/read/write）内核原生 + import-gated；FS 操作落 runtime 值类原生方法。
 
 #### 验证
-- 每阶段全量 pytest 0 failure；机械门槛（rg 零散点 os.path、零 compiler→runtime 反向依赖）。
-- 阶段 4 收尾：MOCK e2e（file.read_audio → FileHandle → @~ $x）端到端；snapshot/serialize round-trip（暴露过潜伏 bug）。
-- 完成门槛：再次交叉检验（subagent）确认零残留 compat 垫片/零"核心层插件"中间态/FileHandle 体系自洽。
+- 每阶段全量 pytest 0 failure；机械门槛（rg 零散点 os.path、零 compiler→runtime 反向依赖、零平 bool flag 重载残留）。
+- 阶段 5 收尾：MOCK e2e（file.read_audio → FileHandle → @~ $x）端到端；snapshot/serialize round-trip（暴露过潜伏 bug）。
+- 完成门槛：再次交叉检验（subagent）确认零残留 compat 垫片/零"核心层插件"中间态/零 flag 碎片化/FileHandle 体系自洽。
 
 #### 强耦合说明（记录）
 - **不可拆分**：G3/G4/G5/G6 是 disk-backed 变量体系的同一件事——P0-2 是机制、FileHandle 是基类、P0-3 是子类、file 是用户入口。各自独立做会产生 compat 垫片（违 ⛔#1）。
-- **可独立**：G1（重分类基础设施）、G2（ai/ihost/idbg/isys 内核原生化）与存储正交，可先行/并行。
+- **G1.5 与 G3 的边界（铁律）**：G1.5 的 `storage_model` 字段**仅落地，禁止任何 workflow 读取/分发**（默认写死 MEMORY_BACKED）；分发逻辑（deep_clone/序列化器分支）留待 G3 真正启用——避免 G1.5 变成"G3 半成品"。
+- **可独立**：G1（重分类基础设施）、G2（内核原生化）与存储正交。
 - **命名清理（PT-ARCH-22）**：本里程碑之后做（file_handle.py 已定，其余待扫）。
 
 ---
@@ -453,7 +453,7 @@ G1 重分类基础设施（ADR-020 A/C/D/E，与存储正交）
 - [ ] **`core/runtime/interpreter/interpreter.py:1`** — 死 `import os`（body 零 `os.` 命中）。原 P0-J 漏列。
 - [ ] **`core/compiler/scheduler.py:13`** — 死 `IbPath`（`from core.kernel.path import IbPath, ...`，body 仅用 PathValidator/ModuleNameSpace/safe_relpath）。原 P0-H 只列了 resolver.py:4。
 - [ ] **`core/runtime/interpreter/permissions.py:5`** — 死 `IbPath`（body 仅用 PathValidator）。原 P0-H 漏列。
-- [ ] **`core/runtime/rt_scheduler.py:88`** — `plugins_path = os.path.join(root_dir, "plugins")`，**消费了 P0-D 要删的死 `root_dir`**。P0-D 删除前必须先处理此下游，否则断链。
+- [ ] **`core/runtime/rt_scheduler.py:83`** — `plugins_path = os.path.join(root_dir, "plugins")`，**消费了 P0-D 要删的死 `root_dir`**。P0-D 删除前必须先处理此下游，否则断链。
 - [ ] **`ibci_sdk/check.py`** — 多处 `os.path`（:64,73-81,141,244-254）。文件头声明"不依赖 core.*"——需**显式排除或并入**（二选一，当前是沉默遗漏）。
   - **✅ 2026-07-13 负责人裁决：显式排除**。`ibci_sdk` 是不介入 core 的独立工具；其 `os.path` 用法不视为路径碎片化。文档注明边界即可，不纳入清理。
 - [ ] **（P1，本轮推迟）`main.py:9`** — `os.path.dirname(os.path.abspath(__file__))` 装根（sys.path 注入），违反"BuiltinPaths 唯一 `__file__` 交互点"。注：此处运行于 engine 构造前，需评估能否经 BuiltinPaths 或显式排除。

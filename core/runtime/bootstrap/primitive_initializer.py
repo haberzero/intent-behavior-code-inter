@@ -1,7 +1,7 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
-from ..objects.builtins import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
+from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
 from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
 from ..objects.intent_stack import IbIntentStack
 from ..objects.intent_context import IbIntentContext
@@ -54,10 +54,13 @@ def _cast_numeric_to(ib_num: 'IbObject', target_class: Any) -> Any:
     target_desc = target_class.spec if hasattr(target_class, 'spec') else None
     return _cast_numeric_to_native(ib_num.to_native(), target_desc)
 
-def initialize_builtin_classes(registry: KernelRegistry) -> Any:
+def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     """
-    初始化 IBCI 核心内置类及其 UTS 契约。
+    初始化 IBCI 核心原语类（language primitives）及其 UTS 契约。
     支持多引擎实例隔离。
+
+    命名（ADR-020 §E）：原 ``initialize_builtin_classes``（"builtin" 一词五义之一）
+    → ``initialize_primitive_classes``，精确表达"语言原语类初始化"语义。
     """
     if registry.is_initialized:
         return None # 已初始化
@@ -89,20 +92,19 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     # 注意：我们必须保证顺序，或者允许多次查找
     # 依赖于 pritmives.py 中的注册顺序 (int before bool)
     
-    core_axioms = []
+    # 公理名清单统一从 AxiomRegistry 派生（ADR-020 §D：无硬编码特例/回退列表）。
+    # register_core_axioms 已在 create_default_registry() 中注册全部原语公理
+    # （含 enum/None/Exception/audio/image/video/...），故 get_all_names() 已完备。
     axiom_registry = metadata_registry.get_axiom_registry()
-    if axiom_registry:
-        core_axioms = axiom_registry.get_all_names()
-    else:
-        # Fallback (Safety net) - 仅在极端的 UTS 注册表未对齐时使用
-        core_axioms = ["int", "str", "float", "bool", "list", "dict", "None", "behavior", "fn_callable", "callable", "bound_method", "auto", "any", "void", "llm_call_result"]
+    if axiom_registry is None:
+        raise InterpreterError(
+            "primitive_initializer: axiom registry unavailable — "
+            "create_default_registry() must populate the axiom registry before bootstrap."
+        )
+    core_axioms = axiom_registry.get_all_names()
     
     # 自动创建类并注册
     ib_classes = {}
-    
-    # 确保 enum 在 core_axioms 中
-    if "enum" not in core_axioms:
-        core_axioms = core_axioms + ["enum"]
     
     for name in core_axioms:
         # 获取描述符 (Bootstrapper 初始化时已经注入了 MetadataRegistry)
@@ -407,7 +409,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
     _reg_native(intent_stack_class, '__len__', IbIntentStack.__len__, unbox=False)
     _reg_native(intent_stack_class, '__repr__', IbIntentStack.__repr__, unbox=False)
 
-    registry.register_builtin_instance("IntentStack", IbIntentStack(intent_stack_class))
+    registry.register_intrinsic_instance("IntentStack", IbIntentStack(intent_stack_class))
 
     # 5.6 注册 intent_context 内置类（OOP MVP — is_class=True）
     # 允许 IBCI 用户代码显式创建和操作意图上下文对象：
@@ -604,7 +606,7 @@ def initialize_builtin_classes(registry: KernelRegistry) -> Any:
 
     # 5b. 多模态类型方法注册 (audio / image / video)
     #
-    # Per ADR-012: 作为普通类名注册，通过 axiom → builtin_initializer 标准路径。
+    # Per ADR-012: 作为普通类名注册，通过 axiom → primitive_initializer 标准路径。
     # Per ADR-007: Phase 3 使用纯内存 deep-copy snapshot。
     #
     # 注册 __to_prompt__（文本描述）和 __payload_prompt__（结构化 content block）。

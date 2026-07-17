@@ -5,7 +5,30 @@
 > 设计与实现细节见对应正式文档：`docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/design/VM_SPEC.md`、`docs/design/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-ARCH-19 重开 + ADR-018 路径概念模型确立；5 项决策确认；逐文件:行清单交接 session 切换）
+> **最后更新**：2026-07-17（G1 完成 + PT-ARCH-23 规划重排：ADR-021 立；G1.5/路径收尾/G2/G3-G6 新序列）
+
+---
+
+## 2026-07-17：G1 重分类基础设施完成 + PT-ARCH-23 规划重排（文档卫生 + 碎片化审计）
+
+测试基线：**1139 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32，junitxml 捕获）。G1 改动未提交（领先 origin 的 WIP）。
+
+### A. 文档卫生清理（无代码变更）
+- 修 `NEXT_STEPS.md` 失效"未提交 WIP"警示；PT-ARCH-21/ADR-017 等过时"最高优先级"标签（NEXT_STEPS/PENDING_TASKS/decisions·README/ADR-017/TYPE_SYSTEM_DESIGN/VM_AND_INTERPRETER_DESIGN 共 6 处）；`rt_scheduler.py` 行号漂移 `:88→:83`。
+
+### B. G1 — 重分类基础设施（ADR-020 E/A/C/D）✅
+- **E 术语**：彻底消除 "builtin" 一词五义，7 族改名（`BuiltinPaths→InstallPaths`、prelude 目录、`builtin_initializer→primitive_initializer`、`is_builtin→is_intrinsic`+UID `builtin:`→`intrinsic:`、内核实例、`BUILTIN_TYPES→PRIMITIVE_TYPES`、**`objects/builtins/→objects/primitives/` 包重命名**），含全量注释/错误消息/测试名/docstring 同步。代码标识符层面 builtin 已归零（余 4 处溯源 docstring + 2 处 Python stdlib `builtins_round`）。
+- **D 协议规则**：清硬编码 axiom 回退表 + enum 特例（`primitive_initializer.py:97-108`），改为从 `AxiomRegistry.get_all_names()` 派生 + fail-fast（实证均为死代码）。
+- **A/C 复核**：prelude/import-gate 机制、bootstrap（`register_module`+loader 短路+懒查找）均验证健全；late-hydrate 随 ai 在 G2 建。
+
+### C. flag/state 碎片化审计（F1-F7 实证）→ ADR-021 立
+- 审计 `IbSpec`/`Symbol`/`RuntimeSymbolImpl` 控制变量，确认碎片化成立：`is_user_defined` 重载（来源+可见性）、"intrinsic"/`is_llm` 三编码并存、2 死字段（`axiom_provided`、`is_llm` 未序列化漏丢失）、`symbols.py:147` 真值表（过程式分支）。
+- 立 **[ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)**：三枚举 `Provenance`/`Visibility`/`StorageModel` 取代平 bool；`Symbol.metadata` 来源键升级 + 删 2 死字段；真值表→`Provenance.compatible_with`；`storage_model` 枚举提前就位（仅落字段，分发待 G3）。**修正 ADR-020 G2 的 `is_user_defined` 写法**为 `provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`。
+
+### D. PT-ARCH-23 规划重排（依赖审查后调整）
+- 新落地顺序：**G1（已完成）→ G1.5 数据结构迁移改善（ADR-021，当前最紧要）→ 路径整合收尾（PT-ARCH-21-FU，前移到 G2 之前——避免插在中间破坏 G3-G6 强耦合）→ G2 内核原生化 → G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）**。
+- 撤销原"G2 与 G3 可并行"标注。
+- 产出：ADR-021、decisions/README 索引 +、NEXT_STEPS（G1/G1.5/路径收尾/G2/G3-G6 新序列）、PENDING_TASKS（PT-ARCH-23 重构）。
 
 ---
 

@@ -1,7 +1,9 @@
 # ADR-020: 内核原生 vs 插件边界重划 + FileHandle 磁盘型基类
 
 ## Status
-**Accepted (设计阶段，2026-07-13)**。实现未开始；本 ADR 固化经 8-subagent 交叉验证收敛的设计决策。落地顺序与部分命名（见 Open）待后续研讨。
+**Accepted (设计阶段，2026-07-13)**。实现归属 PT-ARCH-23（含 G1.5/G2/G4-G6）。本 ADR 固化经 8-subagent 交叉验证收敛的设计决策。落地顺序与部分命名（见 Open）待后续研讨。
+
+> **修订（2026-07-17，ADR-021）**：本 ADR G2 的 kernel-native 标记写法原表述为 "`is_user_defined=False` → 恒可解析/不可覆盖"，经 flag 碎片化审计证实与 prelude 过滤器冲突（见 [ADR-021](ADR-021-typed-provenance-visibility-storage-axes.md) §F1）。**修正为：`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`**——来源与可见性两轴正交落地，本 ADR §A 的原则不变。
 
 ## Date
 2026-07-13

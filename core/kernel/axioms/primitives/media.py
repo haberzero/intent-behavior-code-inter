@@ -13,7 +13,7 @@ Each axiom declares ``has_payload_prompt_cap = True`` and implements
 LLM API payload (e.g., ``{"type": "input_audio", ...}``).
 
 Per ADR-012, these types are registered as ordinary class names (not
-lexer keywords), following the same axiom → builtin_initializer path
+lexer keywords), following the same axiom → primitive_initializer path
 as ``Enum``, ``Exception``, and other non-keyword built-in types.
 """
 

@@ -77,6 +77,17 @@ class IbBehaviorExpr:
 ❌ **编译器配置选项**（优化级别、警告设置）  
 ❌ **诊断信息**（错误、警告 - 这些通过 PassResult 传递）
 
+### 2.4 类型级属性（`IbSpec`）—— 与 AST/侧表的边界
+
+**类型级属性**（描述"这个类型本身是什么/从哪来/怎么存储"）**不**落在 AST 节点或侧表，而落在 `IbSpec`（`core/kernel/spec/base.py`）——它是"类型身份的单点真理"（single source of truth for type identity），编译期与运行期共用。
+
+**当前类型级轴（ADR-021，2026-07-17）**：
+- **`provenance: Provenance`** —— 来源（`KERNEL_NATIVE`/`AXIOM_PROVIDED`/`USER_DEFINED`/`EXTERNAL_MODULE`）。取代原 `is_user_defined`（其对模块的重载已被消除）。
+- **`visibility: Visibility`** —— 可见性（`PRELUDE_VISIBLE`/`IMPORT_GATED`/`SCOPE_PRIVATE`）。prelude 过滤器据此决定免 import 可见性。
+- **`storage_model: StorageModel`** —— 存储模型（`MEMORY_BACKED`/`DISK_BACKED`，ADR-016）。默认 `MEMORY_BACKED`；分发逻辑（deep_clone/序列化器磁盘型分支）在 G3 启用。
+
+**边界原则**：`Symbol`（编译期符号表）与 `RuntimeSymbolImpl`（运行时符号）**不复写**这三轴——`Symbol` 的 `provenance` 仅缓存符号层面的来源（复用同一 `Provenance` 枚举），其类型真相仍以 `spec`（IbSpec）为准，避免 AST 字段 / 侧表 / IbSpec 三处同时存储同一语义事实。
+
 ---
 
 ## 三、侧表层：编译期的临时工作区

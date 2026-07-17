@@ -60,11 +60,11 @@ class AutoDiscoveryService:
         self._scan_paths()
 
     def _get_default_paths(self) -> List[str]:
-        """获取默认搜索路径：经 BuiltinPaths 服务统一计算（消灭 __file__ 遍历）。"""
-        from core.runtime.path import BuiltinPaths
+        """获取默认搜索路径：经 InstallPaths 服务统一计算（消灭 __file__ 遍历）。"""
+        from core.runtime.path import InstallPaths
         return [
-            BuiltinPaths.builtin_modules_dir().to_native(),
-            BuiltinPaths.builtin_plugins_dir().to_native(),
+            InstallPaths.modules_dir().to_native(),
+            InstallPaths.plugins_dir().to_native(),
         ]
 
     def _scan_paths(self):

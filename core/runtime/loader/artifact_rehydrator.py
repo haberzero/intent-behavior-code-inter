@@ -9,8 +9,8 @@ from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.base.enums import RegistrationState
 
-# 统一内置原始类型列表，确保水化阶段一致性
-BUILTIN_TYPES = [
+# 统一原语类型列表，确保水化阶段一致性
+PRIMITIVE_TYPES = [
     "int", "str", "float", "bool", "void", "any", "auto", "fn", "callable",
     "list", "dict", "behavior", "Optional", "None", "llm_uncertain"
 ]
@@ -26,12 +26,12 @@ class ArtifactRehydrator:
         self.registry = registry
         self.memo: Dict[str, IbSpec] = {}
         
-        # 预注册内置基础描述符，防止重复创建
-        self._init_builtins()
+        # 预注册原语基础描述符，防止重复创建
+        self._init_primitives()
 
-    def _init_builtins(self):
-        """同步注册表中的内置描述符到 memo"""
-        for name in BUILTIN_TYPES:
+    def _init_primitives(self):
+        """同步注册表中的原语描述符到 memo"""
+        for name in PRIMITIVE_TYPES:
             desc = self.registry.resolve(name)
             if desc:
                 # 寻找池中对应的内置类型（如果存在）并关联
@@ -116,7 +116,7 @@ class ArtifactRehydrator:
             ),
         }
 
-        if name in BUILTIN_TYPES and kind == TypeKind.PRIMITIVE.value:
+        if name in PRIMITIVE_TYPES and kind == TypeKind.PRIMITIVE.value:
             spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
             creator = shell_creators.get(kind)

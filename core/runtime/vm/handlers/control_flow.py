@@ -391,7 +391,7 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
             exc_class = executor.registry.get_class("Exception")
             if not exc_class:
                 raise RuntimeError(
-                    "VM: Critical Error: 'Exception' builtin class not found in registry."
+                    "VM: Critical Error: 'Exception' primitive class not found in registry."
                 )
             error_obj = exc_class.instantiate([])
             error_obj.fields["message"] = executor.registry.box(str(raised_exc))
