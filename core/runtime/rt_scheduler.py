@@ -1,12 +1,8 @@
 import uuid
-import copy
-import os
-from typing import Any, Dict, List, Optional, Mapping, Callable
+from typing import Any, Dict, List, Optional, Callable
 
 from core.runtime.interfaces import (
-    IRuntimeScheduler, ExecutionRequest, ExecutionSignal, 
-    IsolationLevel, ServiceContext, IExecutionContext,
-    IStateProvider
+    IRuntimeScheduler, IsolationLevel, ServiceContext
 )
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
@@ -16,8 +12,6 @@ from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.host.service import HostService
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.interpreter.llm_executor import LLMExecutorImpl
-from core.runtime.module_system.discovery import ModuleDiscoveryService
-from core.runtime.module_system.loader import ModuleLoader
 
 class RuntimeSchedulerImpl:
     """
@@ -35,11 +29,6 @@ class RuntimeSchedulerImpl:
         self.service_context = service_context
         self.debugger = service_context.debugger
 
-    def _resolve_install_path(self) -> str:
-        """内置模块目录：经 InstallPaths 服务统一计算（消灭散点 __file__ 遍历）。"""
-        from core.runtime.path import InstallPaths
-        return InstallPaths.modules_dir().to_native()
-
     def spawn(self, 
               artifact: Any, 
               isolation: str = IsolationLevel.NONE,
@@ -48,6 +37,10 @@ class RuntimeSchedulerImpl:
         """
          创建并初始化一个新的解释器实例。
         承担了原 Engine._prepare_interpreter 的装配职责。
+
+        注：isolation 参数保留以维持 IRuntimeScheduler 协议兼容，但当前实现
+        不再在调度器内部分支处理隔离——隔离执行由 Engine.request_isolated_run
+        通过新建 Engine 实例完成（ADR-019 §5）。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Spawning new interpreter instance (Isolation: {isolation})")
         
@@ -64,46 +57,15 @@ class RuntimeSchedulerImpl:
             
         root_dir = kwargs.get('root_dir')
 
-        # 2. 处理隔离逻辑 (Registry, HostInterface, PluginLoader)
+        # 2. 准备运行时组件（由 Engine 传入，不再在调度器内重发现）
         effective_registry = kwargs.get('registry', sc.registry if sc else None)
         effective_host_interface = kwargs.get('host_interface')
         effective_plugin_loader = kwargs.get('plugin_loader')
         
-        if isolation != IsolationLevel.NONE:
-            # A. 克隆注册表，确保子环境对类的修改不影响父环境
-            if effective_registry:
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, "Cloning Registry for isolated instance")
-                effective_registry = effective_registry.clone()
-            
-            # B. [Total Isolation] 重新发现并加载子环境特有的插件
-            if root_dir:
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Total Isolation: Re-discovering plugins for {root_dir}")
-                
-                install_path = self._resolve_install_path()
-                plugins_path = os.path.join(root_dir, "plugins")
-                
-                # 重新执行发现流程
-                discovery = ModuleDiscoveryService([install_path, plugins_path])
-                effective_host_interface = discovery.discover_all(effective_registry)
-                
-                # 创建全新的插件加载器
-                sub_loader = ModuleLoader(
-                    [install_path, plugins_path], 
-                    capability_registry=sc.capability_registry if sc else None
-                )
-                # 定义加载钩子
-                effective_plugin_loader = lambda sc_sub, ec, im: sub_loader.load_and_register_all(sc_sub, ec)
-
         # 3. 实例化 Interpreter (不再处理编译，编译由外界传入或由 Orchestrator 负责)
-        effective_artifact = artifact
-        if isolation != IsolationLevel.NONE and isinstance(effective_artifact, dict):
-            # 隔离模式下进行深拷贝防止交叉污染
-            effective_artifact = copy.deepcopy(effective_artifact)
-
-        # 4. 实例化 Interpreter
         interpreter = Interpreter(
             issue_tracker=kwargs.get('issue_tracker', sc.issue_tracker if sc else None),
-            artifact=effective_artifact,
+            artifact=artifact,
             registry=effective_registry,
             host_interface=effective_host_interface,
             debugger=kwargs.get('debugger', sc.debugger if sc else self.debugger),
@@ -190,52 +152,6 @@ class RuntimeSchedulerImpl:
         
         # 3. 启动执行
         return interpreter.run()
-
-    def dispatch(self, request: ExecutionRequest, execution_context: IExecutionContext) -> ExecutionSignal:
-        """
-         分发执行请求。处理隔离运行逻辑。
-        """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Dispatching execution request for node: {request.node_uid}")
-        
-        # 1. 自动决定隔离级别 (如果请求中未指定)
-        isolation = request.isolation or IsolationLevel.SCOPE
-        
-        # 2. 获取主实例信息
-        main_interpreter = self.instances.get(self._main_instance_id)
-        if not main_interpreter:
-            return ExecutionSignal(type="exit", value=False)
-            
-        # 3. 孵化子实例 (所有隔离细节已下沉到 spawn)
-        sub_id = self.spawn(
-            artifact=request.node_uid, # 必须是已编译好的产物字典
-            isolation=isolation,
-            instance_id=None,
-            # 继承必要的全局上下文
-            factory=main_interpreter.factory,
-            object_factory=main_interpreter.object_factory,
-            kernel_token=main_interpreter._kernel_token,
-            output_callback=main_interpreter.output_callback,
-            input_callback=getattr(main_interpreter, 'input_callback', None),
-            source_provider=main_interpreter.source_provider
-        )
-        
-        sub_interpreter = self.instances[sub_id]
-        
-        # 4. 同步状态 (Sync State)
-        sub_interpreter.sync_state(execution_context.runtime_context, request.payload)
-        
-        try:
-            # 5. 执行子环境
-            # 如果 node_uid 是文件，Interpreter 会识别并执行
-            success = sub_interpreter.execute_module(
-                request.node_uid, 
-                sub_interpreter.current_module_name, 
-                sub_interpreter.runtime_context.current_scope
-            )
-            return ExecutionSignal(type="exit", value=success)
-        finally:
-            # 6. 销毁子环境
-            self.terminate(sub_id)
 
     def snapshot(self, instance_id: str) -> Dict[str, Any]:
         """

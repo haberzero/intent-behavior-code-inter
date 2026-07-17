@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-17（**G1.5 数据结构迁移改善完成**：ADR-021 三枚举 `Provenance`/`Visibility`/`StorageModel` 已落地，`Symbol` 死字段已删，`SymbolTable.define` 真值表已替换为 `Provenance.compatible_with`，序列化器/反序列化器已同步，1139 passed / 7 skipped。下一项：**路径整合收尾（PT-ARCH-21-FU）**。）
+> **最后更新**：2026-07-17（**PT-ARCH-21-FU 路径整合收尾完成**：rt_scheduler 死代码删除、ProjectDetector IbPath 化、module_system 边界清理、ibci_file relpath 修复，plugin 发现/隔离继承 e2e 补齐，1146 passed / 7 skipped。下一项：**G2 ai/ihost/idbg/isys 内核原生化（ADR-020）**。）
 
 ---
 
@@ -32,11 +32,10 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-07-17 实测结果**：`1139 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获，**G1 完成态、工作树未提交 WIP**）
+**2026-07-17 实测结果**：`1146 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
 
-> **基线说明**：ADR-019 全部完成；G1（重分类基础设施 E/D/A/C）完成——术语消除 + 硬编码 axiom 回退表清理 + prelude/bootstrap 复核。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九 PT-ARCH-21-FU。
-> ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非 ADR-019/G1 引入）。non-SDK 套件稳定 0 failure。
-> **基线锚点**：G1 改动（重命名 + 清理）**尚未提交**（领先 origin 的 WIP）；ADR-019 实现于 `e1860fe`，ADR-020 规划于 `617a817`。
+> **基线说明**：ADR-019 + G1 + G1.5 + PT-ARCH-21-FU 全部完成。ProjectDetector / module_system / ibci_file / rt_scheduler 路径相关清理已落地；plugin 发现（plugin_paths/global_plugin）与隔离继承已补 e2e。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九。
+> ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非本次改动引入）。non-SDK 套件稳定 0 failure。
 
 ---
 
@@ -125,19 +124,9 @@ rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpre
 
 ---
 
-### 🔴 路径整合统一化收尾（PT-ARCH-21-FU，当前最紧要）
+### 🔴 G2 — ai/ihost/idbg/isys 内核原生化（ADR-020，当前最紧要）
 
-> **排期说明**：路径收尾从原"插在 G2 与 G3 之间"**前移到此位置**——路径统一与存储正交，提前做完可使 G2 及后续 G3-G6 连续占据后半程，**不破坏 ADR-014/016 "G3-G6 不可拆分"**（若插在中间会把强耦合的磁盘型体系人为分段）。收尾后路径系统彻底完工，后续 FileHandle 直接享用干净路径。
-
-**待做**（详见 `PENDING_TASKS.md §九 PT-ARCH-21-FU`，均需逐项研讨）：
-- `project_detector.py` / `module_system/{discovery,loader}.py` / `ibci_file/core.py` 内部 path/os 统一化评估（FS 查询合法保留，path 构造可 IbPath 化）。
-- `rt_scheduler.py:83` 死代码块（`dispatch()` 零调用方确认）评估删除。
-- 覆盖缺口测试：plugin 发现 e2e、隔离继承 e2e。
-
----
-
-### 🔴 G2 — ai/ihost/idbg/isys 内核原生化（ADR-020，依赖 G1.5 + 路径收尾）
-
+> 前置：G1.5 + PT-ARCH-21-FU 已完成。
 > 按 ADR-021 修正后的写法：**bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED` → 恒可解析/不可覆盖 + import-gated 保留**。与存储正交。详见 `PENDING_TASKS.md §九 PT-ARCH-23`。
 
 ---

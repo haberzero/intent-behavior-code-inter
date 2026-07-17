@@ -1,6 +1,4 @@
 from typing import Any, Protocol, List, Dict, Callable, Optional, Type, Union, runtime_checkable, Mapping, TYPE_CHECKING, Tuple
-from dataclasses import dataclass, field
-
 if TYPE_CHECKING:
     from core.kernel import ast as ast
 
@@ -302,25 +300,10 @@ class IsolationLevel:
     REGISTRY = "registry"   # 隔离 Registry，共享内核公理
     PROCESS = "process"     # 完全隔离 (未来扩展)
 
-@dataclass
-class ExecutionSignal:
-    """执行信号，用于跨实例/宏观调度"""
-    type: str               # "return", "break", "continue", "retry", "exit"
-    value: Any = None       # 携带的值
-    node_uid: Optional[str] = None # 信号触发位置
-
-@dataclass
-class ExecutionRequest:
-    """执行请求，由解释器向调度器发起"""
-    node_uid: str
-    isolation: str = IsolationLevel.SCOPE
-    payload: Dict[str, Any] = field(default_factory=dict)
-
 @runtime_checkable
 class IRuntimeScheduler(Protocol):
     """运行时调度中枢接口"""
     def spawn(self, artifact: Any, isolation: str = IsolationLevel.NONE) -> str: ...
-    def dispatch(self, request: ExecutionRequest, execution_context: IExecutionContext) -> ExecutionSignal: ...
     def snapshot(self, instance_id: str) -> Dict[str, Any]: ...
     def restore(self, instance_id: str, snapshot: Dict[str, Any]) -> None: ...
     def terminate(self, instance_id: str) -> None: ...

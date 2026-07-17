@@ -4,9 +4,16 @@ IBCI 项目根目录自动检测模块
 提供智能的项目根目录检测功能：
 1. 从入口脚本位置向上查找标志性目录
 2. 支持多种项目结构检测
+
+路径语义：
+- 本模块内部统一使用 IbPath 进行路径构造/导航；
+- 与 Python 文件系统交互（isdir/isfile/abspath）处保留原生字符串边界；
+- 对外返回原生绝对路径字符串，与 engine / CLI 调用方兼容。
 """
 import os
-from typing import Optional, Tuple
+from typing import Optional
+
+from core.base.path import IbPath
 from core.kernel.path import safe_relpath
 
 
@@ -53,10 +60,12 @@ class ProjectDetector:
         if not entry_file:
             return None
 
-        entry_path = os.path.abspath(entry_file)
-        entry_dir = os.path.dirname(entry_path)
+        entry_path = IbPath.from_native(os.path.abspath(entry_file))
+        entry_dir = entry_path.parent
+        if entry_dir is None:
+            return None
 
-        return cls._find_project_root(entry_dir)
+        return cls._find_project_root(entry_dir.to_native())
 
     @classmethod
     def _find_project_root(cls, start_dir: str) -> Optional[str]:
@@ -72,56 +81,30 @@ class ProjectDetector:
         if not start_dir or not os.path.isdir(start_dir):
             return None
 
-        current_dir = os.path.abspath(start_dir)
+        current = IbPath.from_native(os.path.abspath(start_dir))
 
         # 向上查找直到根目录
         while True:
             # 检查标志性目录
             for sig_dir in cls.SIGNATURE_DIRS:
-                sig_path = os.path.join(current_dir, sig_dir)
+                sig_path = (current / sig_dir).to_native()
                 if os.path.isdir(sig_path):
-                    return current_dir
+                    return current.to_native()
 
             # 检查标志性文件
             for sig_file in cls.SIGNATURE_FILES:
-                sig_path = os.path.join(current_dir, sig_file)
+                sig_path = (current / sig_file).to_native()
                 if os.path.isfile(sig_path):
-                    return current_dir
+                    return current.to_native()
 
             # 到达根目录，停止查找
-            parent_dir = os.path.dirname(current_dir)
-            if parent_dir == current_dir:
+            parent = current.parent
+            if parent is None or parent == current:
                 break
 
-            current_dir = parent_dir
+            current = parent
 
         return None
-
-    @classmethod
-    def is_valid_project_root(cls, directory: str) -> bool:
-        """
-        检查目录是否为有效的 IBCI 项目根目录
-
-        参数:
-            directory: 要检查的目录
-
-        返回:
-            bool: 是否为有效项目根目录
-        """
-        if not directory or not os.path.isdir(directory):
-            return False
-
-        # 检查是否有标志性目录
-        for sig_dir in cls.SIGNATURE_DIRS:
-            if os.path.isdir(os.path.join(directory, sig_dir)):
-                return True
-
-        # 检查是否有标志性文件
-        for sig_file in cls.SIGNATURE_FILES:
-            if os.path.isfile(os.path.join(directory, sig_file)):
-                return True
-
-        return False
 
     @classmethod
     def get_plugin_paths(cls, project_root: str) -> list:
@@ -137,22 +120,23 @@ class ProjectDetector:
         if not project_root:
             return []
 
+        root = IbPath.from_native(os.path.abspath(project_root))
         plugin_paths = []
 
         # 主插件目录
-        main_plugins = os.path.join(project_root, "plugins")
+        main_plugins = (root / "plugins").to_native()
         if os.path.isdir(main_plugins):
             plugin_paths.append(main_plugins)
 
         # IBCI 模块目录
-        ibci_modules = os.path.join(project_root, "ibci_modules")
+        ibci_modules = (root / "ibci_modules").to_native()
         if os.path.isdir(ibci_modules):
             plugin_paths.append(ibci_modules)
 
         # .ibci 目录下的插件
-        dot_ibci = os.path.join(project_root, ".ibci")
+        dot_ibci = (root / ".ibci").to_native()
         if os.path.isdir(dot_ibci):
-            dot_plugins = os.path.join(dot_ibci, "plugins")
+            dot_plugins = (root / ".ibci" / "plugins").to_native()
             if os.path.isdir(dot_plugins):
                 plugin_paths.append(dot_plugins)
 
@@ -172,15 +156,20 @@ class ProjectDetector:
         if not entry_file:
             return "No entry file provided"
 
-        entry_path = os.path.abspath(entry_file)
-        entry_dir = os.path.dirname(entry_path)
+        entry_path = IbPath.from_native(os.path.abspath(entry_file))
+        entry_dir_path = entry_path.parent
+        if entry_dir_path is None:
+            return f"No project root detected. Using entry directory: {entry_path.to_native()}"
+
+        entry_dir = entry_dir_path.to_native()
         project_root = cls.detect_project_root(entry_file)
 
         if project_root:
             # 检查是否在入口目录找到了标志性目录
             found_signature = False
+            entry_dir_ib = IbPath.from_native(entry_dir)
             for sig_dir in cls.SIGNATURE_DIRS:
-                sig_path = os.path.join(entry_dir, sig_dir)
+                sig_path = (entry_dir_ib / sig_dir).to_native()
                 if os.path.isdir(sig_path):
                     found_signature = True
                     break

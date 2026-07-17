@@ -599,6 +599,20 @@ Phase 3 多模态、PT-TEST-4（5/5）、PT-ARCH-7、PT-ARCH-5 G3、PT-ARCH-10 �
 
 ---
 
+## 2026-07-17：PT-ARCH-21-FU 路径整合收尾完成
+
+测试基线：**1146 passed, 7 skipped**（0 failures）。
+
+- **rt_scheduler 死代码清理**：删除 `dispatch()` 方法、`spawn()` 内已不可达的隔离分支（`ModuleDiscoveryService` / `ModuleLoader` 局部重发现），删除 `_resolve_install_path` 辅助方法；从 `core/runtime/interfaces.py` 移除 `ExecutionRequest` / `ExecutionSignal` 及 `IRuntimeScheduler.dispatch` 协议声明。
+- **ProjectDetector IbPath 化**：`core/project_detector.py` 内部路径构造统一使用 `IbPath.from_native` / `/` / `parent` / `to_native`；FS 查询（`isdir`/`isfile`）保留；删除死方法 `is_valid_project_root`。
+- **module_system 边界清理**：`core/runtime/module_system/discovery.py` 与 `loader.py` 移除 `__init__` 中冗余的 `os.path.abspath`，添加模块级注释说明 Python importlib 边界保留原生路径。
+- **ibci_file relpath 修复**：`ibci_modules/ibci_file/core.py` 将 `os.path.relpath` 替换为 `safe_relpath`，`_read_media_bytes` 扩展名从已解析原生路径取。
+- **覆盖缺口 e2e**：新增 `tests/e2e/test_e2e_plugin_discovery.py`（plugin_paths / global_plugin 实际 import 解析、显式配置抑制嗅探）与 `tests/e2e/test_e2e_isolation_plugin_inheritance.py`（子脚本通过 `ihost.run_isolated` 继承父插件）。
+
+提交：`3b10310`（`feat/PT-ARCH-21-FU`）。
+
+---
+
 ## 2026-05-15 及更早：详细日志
 
 详见 `docs/HISTORY_LOG.md`。主要里程碑包括：

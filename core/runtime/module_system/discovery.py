@@ -1,9 +1,21 @@
+# Python plugin loading boundary — native paths intentional.
+#
+# 本模块位于 IBCI 运行时与 Python importlib 的交界：扫描到的目录最终喂给
+# os.listdir / os.path.isdir、sys.path.insert 以及 importlib.import_module。
+# 这些 API 必须使用原生字符串，因此本文件保留 os.path 进行 FS 查询与
+# importlib 路径构造，不在每个边界点强行 IbPath 化。
+#
+# 路径规范化责任上移：IBCIEngine._resolve_plugin_search_paths 已通过
+# PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
+# 提供绝对原生路径，此处不再重复 os.path.abspath。
 import os
 import sys
 import json
 import inspect
 import importlib.util
 from typing import Dict, List, Optional, Any
+
+from core.base.path import IbPath
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
 from core.base.enums import RegistrationState, Visibility
@@ -16,7 +28,8 @@ class ModuleDiscoveryService:
     负责在多个搜索路径（如 ibci_modules/ 和 plugins/）中发现并加载模块元数据。
     """
     def __init__(self, search_paths: List[str]):
-        self.search_paths = [os.path.abspath(p) for p in search_paths]
+        # 仅做分隔符规范化；调用方保证路径为绝对路径（ADR-019）。
+        self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
 
     def discover_all(self, registry: Optional[Any] = None) -> HostInterface:
         """

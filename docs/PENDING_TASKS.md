@@ -270,24 +270,24 @@
 > 取代 ADR-018 的 D1/D5/CWD 上界/D4 穿透。取代下方原 PT-ARCH-19/20 的执行计划（保留为历史档案）。
 > **2026-07-13 进度**：阶段 A/B/C/D 已实现并提交（`64cb49d`）。交叉验证发现的 R1/G1/B1/B2/Gate-A1 已修。以下为本轮**明确延后/预留**项（负责人指示：插件内部 path/os 待研讨后再处理）。
 
-#### PT-ARCH-21-FU：本轮延后 / 预留项（待后续处理）
+#### ✅ PT-ARCH-21-FU：路径整合收尾（已完成）
 
-**[延后·待研讨] 插件内部 path/os 统一化**（负责人指示：暂不处理，待讨论）
-- [ ] `core/project_detector.py` — `get_plugin_paths`/`detect_project_root` 仍用 `os.path`（abspath×3 / dirname×3 / join×9 / FS 查询×11）。FS 查询（isdir/isfile）合法保留；path 构造可 IbPath 化。**属 plugin 嗅探内部，待研讨**。
-- [ ] `core/runtime/module_system/discovery.py` + `loader.py` — host 端 Python/importlib 插件加载边界，仍用 `os.path`（abspath/join/dirname/basename）。路径不进 IBCI 沙箱。**待研讨**。
-- [ ] `ibci_modules/ibci_file/core.py` — 用户可见文件 API，`os.path.relpath`（与 `safe_relpath` 平行）、`splitext`、`join`。**待研讨**。
-- [ ] `core/runtime/rt_scheduler.py:83` — `plugins_path = os.path.join(root_dir,"plugins")`（在隔离机制块内，`dispatch()` 零调用方为死代码，但属 plugin 发现逻辑）。**待研讨**。
+**[已完成] 插件内部 path/os 统一化**
+- ✅ `core/project_detector.py` — 内部路径构造全部 IbPath 化（`IbPath.from_native` / `/` / `parent` / `to_native`）；FS 查询（isdir/isfile）保留；删除死方法 `is_valid_project_root`。
+- ✅ `core/runtime/module_system/discovery.py` + `loader.py` — 确认处于 Python importlib 边界，保留原生路径；移除 `__init__` 中冗余的 `os.path.abspath`，添加边界注释。
+- ✅ `ibci_modules/ibci_file/core.py` — `os.path.relpath` 统一为 `safe_relpath`；`_read_media_bytes` 扩展名从已解析原生路径取。
+- ✅ `core/runtime/rt_scheduler.py` — 确认 `dispatch()` 零调用方、`spawn()` 隔离分支已不可达（隔离执行改为新建 Engine）；一并删除死代码及 `ExecutionRequest`/`ExecutionSignal`。
 
-**[预留·本轮不实现] ADR-019 Open 项**
+**[预留·仍不实现] ADR-019 Open 项**
 - [ ] 全局 ibci.json 查找（global_plugin 的全局源）。
 - [ ] 全局 config 文件（plugin_paths 全局兜底）。
 - [ ] CWD 的实际使用（`engine._cwd` 已保存，待权限系统设计后启用）。
 - [ ] 隔离的外部 zone 配置（未来 policy 细粒度：允许特定子脚本读/运行指定外部位置）。
 - [ ] plugin_path 细粒度权限（本轮：只读特权 + 写禁；细粒度待权限系统）。
 
-**[覆盖缺口] 测试**（subagent 标 CRITICAL，本轮未补）
-- [ ] plugin 发现 e2e：`ibci.json` 配置的 plugin_paths/global_plugin 路径，实测 `import <plugin>` 能解析（当前仅 list 级测试；builtin/sniff 由 `test_plugin_implementations` 覆盖）。需造 fixture plugin 包。
-- [ ] 隔离继承 e2e：子脚本 `import` 仅父有的 plugin（C2 接线仅 list 级测）。
+**[已完成] 覆盖缺口测试**
+- ✅ plugin 发现 e2e：`tests/e2e/test_e2e_plugin_discovery.py` 验证 `ibci.json` 的 `plugin_paths`/`global_plugin` 路径可被 `import` 解析，且显式配置抑制嗅探。
+- ✅ 隔离继承 e2e：`tests/e2e/test_e2e_isolation_plugin_inheritance.py` 验证子脚本通过 `ihost.run_isolated` 可导入仅父项目拥有的插件。
 
 **[已知限制·记录]**
 - R4：`isys.entry_path()` 在 run_string 下返回合成 `__string_exec__.ibci`（无害 cosmetic）。
@@ -324,32 +324,29 @@
 #### 依赖图与任务分配（重排，2026-07-17）
 
 ```
-G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17（E/D 实质，A/C 复核）
+G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
    │
    └─→ G1.5 数据结构迁移改善（ADR-021：三枚举 Provenance/Visibility/StorageModel，
-   │      Symbol.metadata 清理，is_llm 删除，序列化同步）★ 当前最紧要
-   │        └─→ 路径整合收尾（PT-ARCH-21-FU，与存储正交，前移到此前不破坏 G3-G6 强耦合）
-   │             └─→ G2 ai/ihost/idbg/isys 内核原生化
+   │      Symbol.metadata 清理，is_llm 删除，序列化同步）✅ 已完成 2026-07-17
+   │        └─→ 路径整合收尾（PT-ARCH-21-FU）✅ 已完成 2026-07-17
+   │             └─→ G2 ai/ihost/idbg/isys 内核原生化 ★ 当前最紧要
    │             │      （用 G1-C bootstrap 预注册；provenance=KERNEL_NATIVE + visibility=IMPORT_GATED）
    │             │      └─→ G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）
    │             │            G3 存储模型机制（P0-2：消费 G1.5 的 storage_model 字段）
    │             │            → G4 FileHandle（ADR-020 B，依赖 G3）
    │             │            → G5 media→FileHandle 子类（P0-3）
    │             │            → G6 file 模块内核原生化（ibci_file 消亡）
-   │
-   （注：原"G2 与 G3 可并行"标注已撤销——路径收尾插在中间会把强耦合的 G3-G6 人为分段，
-        故路径收尾前移；G2 与 G3-G6 现顺序推进。）
 ```
 
 #### 执行子序（里程碑内阶段，每阶段完整测试 + 干净切口，禁 shim）
 
 **阶段 1 — 重分类基础设施（G1，ADR-020 E/A/C/D）** ✅ **已完成 2026-07-17**：见 `NEXT_STEPS.md` G1 条目 / `COMPLETED.md` 2026-07-17。
 
-**阶段 2 — 数据结构迁移改善（G1.5，ADR-021）** ★ 当前最紧要：见 `NEXT_STEPS.md` G1.5 条目。
+**阶段 2 — 数据结构迁移改善（G1.5，ADR-021）** ✅ **已完成 2026-07-17**：见 `NEXT_STEPS.md` G1.5 条目。
 
-**阶段 3 — 路径整合收尾（PT-ARCH-21-FU）**：与存储正交，前移到 G2 之前。待做项见上方 PT-ARCH-21-FU。
+**阶段 3 — 路径整合收尾（PT-ARCH-21-FU）** ✅ **已完成 2026-07-17**：待做项见上方 PT-ARCH-21-FU。
 
-**阶段 4 — G2 ai/ihost/idbg/isys 内核原生化（ADR-020）**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；**`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`** → 恒可解析/不可覆盖 + import-gated 保留；late-hydrate 钩子随 ai 建。
+**阶段 4 — G2 ai/ihost/idbg/isys 内核原生化（ADR-020）** ★ **当前最紧要**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；**`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`** → 恒可解析/不可覆盖 + import-gated 保留；late-hydrate 钩子随 ai 建。
 
 **阶段 5 — G3+G4+G5+G6 磁盘型存储体系（合并，ADR-016/014/020）**：不可拆分。
 - **G3 存储模型机制（P0-2）**：消费 G1.5 的 `storage_model` 字段；磁盘协议族（lazy materialize/path-payload/path-snapshot，**方法名本阶段设计期定**）；`deep_clone.py:89` isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。

@@ -8,6 +8,7 @@ import os
 import re
 from typing import List, Dict, Any
 
+from core.base.path import safe_relpath
 from core.runtime.objects.media_storage import MediaStorage
 from core.runtime.objects.media_types import IbAudio, IbImage, IbVideo
 from core.kernel.issue import InterpreterError
@@ -99,7 +100,7 @@ class FileLib:
                             for i, line in enumerate(f, 1):
                                 if regex.search(line):
                                     matches.append({
-                                        "path": os.path.relpath(file_path, root_path),
+                                        "path": safe_relpath(file_path, root_path),
                                         "line": i,
                                         "content": line.strip()
                                     })
@@ -124,7 +125,7 @@ class FileLib:
                     file_path = os.path.join(root, file)
                     try:
                         self.permission_manager.validate_path(file_path)
-                        result.append(os.path.relpath(file_path, root_path))
+                        result.append(safe_relpath(file_path, root_path))
                     except (OSError, PermissionError):
                         continue
         return result
@@ -208,7 +209,7 @@ class FileLib:
         res_path = self._resolve_path(path)
         with open(res_path, "rb") as f:
             data = f.read()
-        fmt = os.path.splitext(path)[1].lstrip(".").lower() or "bin"
+        fmt = os.path.splitext(res_path)[1].lstrip(".").lower() or "bin"
         return data, fmt
 
     def _get_media_class(self, type_name: str):
