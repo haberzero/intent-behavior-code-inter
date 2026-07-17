@@ -1,5 +1,6 @@
 from typing import Dict, Optional, List, Any
 
+from core.base.enums import Visibility
 from core.kernel.spec import (
     IbSpec,
     TypeDef,
@@ -48,15 +49,15 @@ class Prelude:
             if "." in name:
                 continue
             # Only TypeDef instances are prelude functions; all other specs are types.
-            # TypeDef with is_user_defined=True are plugin modules that must be
+            # Specs with IMPORT_GATED visibility are plugin modules that must be
             # explicitly imported by ibci code — they must NOT be pre-registered as
             # prelude symbols here (that would make every plugin visible in every file
             # without an import statement).
             if spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
                 self.functions[name] = spec
             elif spec_reg.is_module_spec(spec):
-                if not getattr(spec, 'is_user_defined', True):
-                    # Only truly kernel-native module types (is_user_defined=False) belong here
+                if getattr(spec, 'visibility', Visibility.PRELUDE_VISIBLE) == Visibility.PRELUDE_VISIBLE:
+                    # Only truly prelude-visible module types belong here
                     self.modules[name] = spec
             else:
                 self.types[name] = spec

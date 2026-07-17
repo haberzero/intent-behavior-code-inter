@@ -115,6 +115,7 @@ class ContextBuilder:
 
         # Local import to avoid circular: context → passes → base_pass → context
         from core.compiler.semantic.passes.prelude import Prelude
+        from core.base.enums import Provenance, Visibility
 
         symbol_table = SymbolTableContext.create_root(self.module_name)
         type_environment = TypeInferenceState.create_empty()
@@ -122,18 +123,18 @@ class ContextBuilder:
         # Inject prelude symbols
         prelude = Prelude(registry=self.registry)
         for name, spec in prelude.get_types().items():
-            if getattr(spec, 'is_user_defined', False):
+            if getattr(spec, 'visibility', Visibility.PRELUDE_VISIBLE) != Visibility.PRELUDE_VISIBLE:
                 continue
-            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, spec=spec, uid=f"intrinsic:{name}", metadata={"is_intrinsic": True})
+            sym = TypeSymbol(name=name, kind=SymbolKind.CLASS, spec=spec, uid=f"intrinsic:{name}", provenance=Provenance.KERNEL_NATIVE)
             symbol_table.current.define(sym)
         for name, spec in prelude.get_functions().items():
-            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=spec, uid=f"intrinsic:{name}", metadata={"is_intrinsic": True})
+            sym = FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=spec, uid=f"intrinsic:{name}", provenance=Provenance.KERNEL_NATIVE)
             symbol_table.current.define(sym)
         for name, spec in prelude.get_modules().items():
-            sym = VariableSymbol(name=name, kind=SymbolKind.MODULE, spec=spec, uid=f"intrinsic:{name}", metadata={"is_intrinsic": True})
+            sym = VariableSymbol(name=name, kind=SymbolKind.MODULE, spec=spec, uid=f"intrinsic:{name}", provenance=Provenance.KERNEL_NATIVE)
             symbol_table.current.define(sym)
         for name, spec in prelude.get_variables().items():
-            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec, uid=f"intrinsic:{name}", is_const=True, metadata={"is_intrinsic": True})
+            sym = VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec, uid=f"intrinsic:{name}", is_const=True, provenance=Provenance.KERNEL_NATIVE)
             symbol_table.current.define(sym)
 
         return SemanticContext(

@@ -5,7 +5,7 @@
 > 设计与实现细节见对应正式文档：`docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/design/VM_SPEC.md`、`docs/design/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-07-17（G1 完成 + PT-ARCH-23 规划重排：ADR-021 立；G1.5/路径收尾/G2/G3-G6 新序列）
+> **最后更新**：2026-07-17（G1.5 数据结构迁移改善完成；下一项：路径整合收尾 PT-ARCH-21-FU）
 
 ---
 
@@ -29,6 +29,40 @@
 - 新落地顺序：**G1（已完成）→ G1.5 数据结构迁移改善（ADR-021，当前最紧要）→ 路径整合收尾（PT-ARCH-21-FU，前移到 G2 之前——避免插在中间破坏 G3-G6 强耦合）→ G2 内核原生化 → G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）**。
 - 撤销原"G2 与 G3 可并行"标注。
 - 产出：ADR-021、decisions/README 索引 +、NEXT_STEPS（G1/G1.5/路径收尾/G2/G3-G6 新序列）、PENDING_TASKS（PT-ARCH-23 重构）。
+
+---
+
+## 2026-07-17：G1.5 — 数据结构迁移改善（ADR-021）完成
+
+测试基线：**1139 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. 核心字段迁移
+- `core/base/enums.py` 新增三枚举：`Provenance`（KERNEL_NATIVE/AXIOM_PROVIDED/USER_DEFINED/EXTERNAL_MODULE）、`Visibility`（PRELUDE_VISIBLE/IMPORT_GATED/SCOPE_PRIVATE）、`StorageModel`（MEMORY_BACKED/DISK_BACKED）。
+- `IbSpec`：`is_user_defined: bool` → `provenance: Provenance`、`visibility: Visibility`、`storage_model: StorageModel`（默认 MEMORY_BACKED）。
+- `TypeDef.is_llm` 删除（死字段 + 漏序列化）。
+
+### B. Symbol 清理
+- `Symbol` 新增类型化 `provenance: Provenance`；`metadata["is_intrinsic"]` / `["is_external_module"]` 全部迁移到 `provenance`。
+- 删除两个死字段：`metadata["axiom_provided"]`、`metadata["is_llm"]`（与 `SymbolKind.LLM_FUNCTION` 重复）。
+- `SymbolTable.define` 的 4 行真值表替换为 `Provenance.compatible_with`。
+
+### C. 序列化同步
+- `serializer.py` 持久化 `provenance`/`visibility`/`storage_model`（enum name）。
+- `artifact_rehydrator.py` 按 name 还原三枚举；旧 `is_user_defined` 字段不再使用。
+
+### D. 读取点机械迁移
+- 全仓 ~12 处 `is_user_defined` 读取点迁移到 `provenance`/`visibility`：runtime_context、artifact_loader、interpreter、bootstrapper、scheduler、prelude、context、symbol_collection_pass、_declaration_visitors、_type_checking_base、spec_builder、discovery。
+- 对应测试 (`test_resolve_call_return.py`, `test_type_annotations.py`) 同步更新。
+
+### E. 文档更新
+- `docs/design/TYPE_SYSTEM_DESIGN.md` 更新 `TypeDef` 字段描述与 `SpecFactory` API。
+- `docs/METADATA_ARCHITECTURE.md` §2.4 已登记三枚举（G1 WIP 中已落）。
+- `docs/NEXT_STEPS.md` 移除 G1.5 条目，路径整合收尾（PT-ARCH-21-FU）提升为当前最紧要。
+
+### F. 验证
+- 全量 pytest 1139 passed / 7 skipped。
+- rg 确认代码层零 `is_user_defined` 残留、零 `metadata["is_intrinsic"/"is_external_module"/"axiom_provided"/"is_llm"]` 残留。
+- `StorageModel` 仅落字段，未引入任何 workflow 读取/分发（遵守 G1.5 与 G3 边界铁律）。
 
 ---
 

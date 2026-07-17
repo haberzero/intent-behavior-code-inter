@@ -6,7 +6,7 @@ import importlib.util
 from typing import Dict, List, Optional, Any
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
-from core.base.enums import RegistrationState
+from core.base.enums import RegistrationState, Visibility
 from core.kernel.spec.type_ref import TypeRef
 
 
@@ -138,7 +138,7 @@ class ModuleDiscoveryService:
                     vtable.name = raw_name
                     # 方法插件必须显式 import 才可用，不预注入为全局内置符号
                     if plugin_kind == "method_module":
-                        vtable.is_user_defined = True
+                        vtable.visibility = Visibility.IMPORT_GATED
                     return vtable
 
                 # 协议1：标准插件（字典格式，零侵入）
@@ -146,7 +146,7 @@ class ModuleDiscoveryService:
                     spec = self._build_spec_from_dict(raw_name, vtable)
                     # 方法插件必须显式 import 才可用，不预注入为全局内置符号
                     if plugin_kind == "method_module":
-                        spec.is_user_defined = True
+                        spec.visibility = Visibility.IMPORT_GATED
                     return spec
 
             except ImportError:

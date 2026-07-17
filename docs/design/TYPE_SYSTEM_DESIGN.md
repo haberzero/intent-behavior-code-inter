@@ -82,14 +82,15 @@ class TypeDef(IbSpec):
     module_path:    Optional[str]
     kind:           str  # 见 TypeKind
     is_nullable:    bool
-    is_user_defined: bool
+    provenance:     Provenance       # 来源：KERNEL_NATIVE / AXIOM_PROVIDED / USER_DEFINED / EXTERNAL_MODULE
+    visibility:     Visibility       # 可见性：PRELUDE_VISIBLE / IMPORT_GATED / SCOPE_PRIVATE
+    storage_model:  StorageModel     # 存储模型：MEMORY_BACKED / DISK_BACKED（ADR-016，G3 启用）
     members:        Dict[str, MemberSpec]
     _axiom_name:    Optional[str]    # axiom 查询 key 重定向
 
     # ── 函数签名（FUNCTION / BOUND_METHOD / CALLABLE_INSTANCE / CALLABLE_SIG）
     param_types:    List[TypeRef]
     return_type:    TypeRef
-    is_llm:         bool
 
     # ── 类继承（CLASS）
     parent_type:    Optional[TypeRef]
@@ -161,8 +162,8 @@ class TypeDef(IbSpec):
 | 方法 | 用途 |
 |------|------|
 | `create_primitive(name, is_nullable)` | 标量类型 |
-| `create_func(name, param_type_names, return_type_name, ...)` | 函数 spec（用户 func / 插件 vtable / 内置） |
-| `create_class(name, parent_name, is_user_defined)` | 用户类 / 内置类 |
+| `create_func(name, param_type_names, return_type_name, provenance, visibility, ...)` | 函数 spec（用户 func / 插件 vtable / 内置） |
+| `create_class(name, parent_name, provenance, visibility)` | 用户类 / 内置类 |
 | `create_list / create_tuple / create_dict` | 容器特化 |
 | `create_optional(wrapped_name)` | Optional[T] |
 | `create_bound_method(...)` | 绑定方法 |

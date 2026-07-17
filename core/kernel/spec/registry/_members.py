@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from core.base.enums import Provenance
+
 from ..base import IbSpec, TypeKind
 from ..member import MethodMemberSpec
 from ..type_ref import TypeRef
@@ -120,14 +122,14 @@ class _MemberMixin:
                 return TypeDef(
                     name=attr_name,
                     kind=TypeKind.FUNCTION.value,
-                    is_user_defined=spec.is_user_defined,
-                    is_llm=member.is_llm(),
+                    provenance=spec.provenance,
+                    visibility=spec.visibility,
                     return_type=TypeRef.of(effective_return, effective_return_module),
                     param_types=[TypeRef.of(n, m) for n, m in zip(effective_params, effective_param_modules)],
                 )
             # Enum variant access: return the enum class type itself
             if (spec.kind == TypeKind.CLASS.value and spec.parent_type is not None
-                    and spec.parent_type.head == "Enum" and spec.is_user_defined):
+                    and spec.parent_type.head == "Enum" and spec.provenance == Provenance.USER_DEFINED):
                 return spec
             return self.resolve_typeref(member.type_ref) or self.resolve("any")
 

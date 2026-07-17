@@ -26,6 +26,7 @@ from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.interfaces import (
     ISourceProvider, ICompilerService
 )
+from core.base.enums import Provenance
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
@@ -483,7 +484,7 @@ class Scheduler(ICompilerService):
                                     code=SEM_IMPORT_CONFLICT,
                                 )
                         else:
-                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
+                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, provenance=Provenance.EXTERNAL_MODULE)
                             analyzer.symbol_table.define(mod_sym)
                         
                 elif imp.import_type == ImportType.FROM_IMPORT:
@@ -521,11 +522,11 @@ class Scheduler(ICompilerService):
                                 else:
                                     # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
-                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
                                     elif target_sym.kind == SymbolKind.FUNCTION:
-                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
                                     else:
-                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
 
                                     analyzer.symbol_table.define(new_sym)
                             else:

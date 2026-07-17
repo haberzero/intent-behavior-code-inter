@@ -65,7 +65,7 @@ from core.runtime.frame import (
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
-from core.base.enums import RegistrationState
+from core.base.enums import Provenance, RegistrationState
 from core.runtime.shared.signals import UnhandledSignal
 
 
@@ -453,7 +453,7 @@ class Interpreter:
         # 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
-                if not getattr(ib_class.spec, 'is_user_defined', True):
+                if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                     # 注入时带上稳定的内核原生符号 UID，与编译器对齐
                     context.define_variable(name, ib_class, is_const=True, force=force, uid=f"intrinsic:{name}")
                     defined_names.add(name)
@@ -621,9 +621,9 @@ class Interpreter:
         saved_diag_count = len(self.issue_tracker._diagnostics)
         
         for name, ib_class in self.registry.get_all_classes().items():
-            if not getattr(ib_class.spec, 'is_user_defined', False):
+            if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
-            
+
             # 遍历所有默认字段并尝试预求值
             for field_name, val_info in ib_class.default_fields.items():
                 if not isinstance(val_info, IbClassField) or val_info.static_val is not None:
@@ -655,7 +655,7 @@ class Interpreter:
             self.current_module_name = module_name
             
             ib_class = self.registry.get_class(name)
-            if not ib_class or not getattr(ib_class.spec, 'is_user_defined', False):
+            if not ib_class or getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
             
             node_data = self.get_node_data(node_uid)

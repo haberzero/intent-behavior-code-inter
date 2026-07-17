@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-17（**PT-ARCH-23 规划重排**：经 flag/state 碎片化审计（F1-F7）立 [ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)。新落地顺序：**G1（已完成）→ G1.5 数据结构迁移改善（ADR-021 三枚举）→ 路径整合收尾（PT-ARCH-21-FU）→ G2 内核原生化 → G3+G4+G5+6 磁盘型存储体系（合并单阶段）**。G2 的 `is_user_defined` 写法已被 ADR-021 修正为 `provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`。下一步详见下方 "P0 阶段序列"。）
+> **最后更新**：2026-07-17（**G1.5 数据结构迁移改善完成**：ADR-021 三枚举 `Provenance`/`Visibility`/`StorageModel` 已落地，`Symbol` 死字段已删，`SymbolTable.define` 真值表已替换为 `Provenance.compatible_with`，序列化器/反序列化器已同步，1139 passed / 7 skipped。下一项：**路径整合收尾（PT-ARCH-21-FU）**。）
 
 ---
 
@@ -125,25 +125,7 @@ rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpre
 
 ---
 
-### 🔴 G1.5 — 数据结构迁移改善（ADR-021，当前最紧要）
-
-> 经 flag/state 碎片化审计（F1-F7 实证，2026-07-17）立 [ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)。**必须先于 G2**（G2 的 `is_user_defined` 写法已被 ADR-021 重写）。
-
-**待做**：
-1. 在 `core/base/enums.py` 新增三枚举：`Provenance`（KERNEL_NATIVE/AXIOM_PROVIDED/USER_DEFINED/EXTERNAL_MODULE）、`Visibility`（PRELUDE_VISIBLE/IMPORT_GATED/SCOPE_PRIVATE）、`StorageModel`（MEMORY_BACKED/DISK_BACKED）。
-2. `IbSpec`：`is_user_defined` → `provenance`；新增 `visibility`；新增 `storage_model`（**仅落字段默认 MEMORY_BACKED，禁止任何 workflow 读取/分发，分发待 G3**）。
-3. `Symbol`：`metadata["is_intrinsic"]`/`["is_external_module"]` → 类型化 `Symbol.provenance`；**删 2 死字段** `metadata["axiom_provided"]`、`metadata["is_llm"]`（F3/F4）；`metadata` dict 保留为非 flag 逃生口。
-4. `symbols.py:147-150` 真值表 → `Provenance.compatible_with`。
-5. `TypeDef.is_llm` 全仓删除（死字段 + 漏序列化）。
-6. 序列化器（`serializer.py` + `artifact_rehydrator.py`）同步持久化三枚举（杜绝 F7 复发）。
-7. 读取点机械迁移（~12 处 `is_user_defined` 读取 → `spec.provenance == USER_DEFINED`），不留兼容垫层。
-8. `METADATA_ARCHITECTURE.md` 登记 IbSpec 新枚举字段（守则 7）。
-
-**验证策略**：每小步全量 pytest 0 failure；改名/字段迁移为纯机械替换；完成后交叉检验确认零残留平 bool flag 重载、零死字段。
-
----
-
-### 🔴 路径整合统一化收尾（PT-ARCH-21-FU，紧随 G1.5 之后、G2 之前）
+### 🔴 路径整合统一化收尾（PT-ARCH-21-FU，当前最紧要）
 
 > **排期说明**：路径收尾从原"插在 G2 与 G3 之间"**前移到此位置**——路径统一与存储正交，提前做完可使 G2 及后续 G3-G6 连续占据后半程，**不破坏 ADR-014/016 "G3-G6 不可拆分"**（若插在中间会把强耦合的磁盘型体系人为分段）。收尾后路径系统彻底完工，后续 FileHandle 直接享用干净路径。
 

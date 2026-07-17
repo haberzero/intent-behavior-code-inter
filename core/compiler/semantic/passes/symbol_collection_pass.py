@@ -8,6 +8,7 @@ Symbol Collection Pass (SymbolPhase sub-step 1)
 
 from typing import Optional, List, Tuple
 
+from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
 from core.kernel.spec import IbSpec
@@ -153,9 +154,10 @@ class SymbolCollector:
         effective_parent = node.parent if node.parent else ("Object" if node.name != "Object" else None)
         cls_meta = self.registry.factory.create_class(
             name=node.name,
-            parent_name=effective_parent
+            parent_name=effective_parent,
+            provenance=Provenance.USER_DEFINED,
+            visibility=Visibility.IMPORT_GATED,
         )
-        cls_meta.is_user_defined = True
 
         # Enum Hook: 如果继承 Enum，设置 axiom_name
         if node.parent == "Enum":
@@ -195,9 +197,10 @@ class SymbolCollector:
         func_meta = self.registry.factory.create_func(
             name=node.name,
             param_type_names=[],
-            return_type_name="any"
+            return_type_name="any",
+            provenance=Provenance.USER_DEFINED,
+            visibility=Visibility.IMPORT_GATED,
         )
-        func_meta.is_user_defined = True
 
         # P0-2: Extract parameter types and return type from AST and store in spec
         param_type_refs = []
@@ -231,9 +234,10 @@ class SymbolCollector:
         func_meta = self.registry.factory.create_func(
             name=node.name,
             param_type_names=[],
-            return_type_name="any"
+            return_type_name="any",
+            provenance=Provenance.USER_DEFINED,
+            visibility=Visibility.IMPORT_GATED,
         )
-        func_meta.is_user_defined = True
         self.registry.register(func_meta)
 
         # 创建 LLM 函数符号
@@ -243,7 +247,6 @@ class SymbolCollector:
             def_node=node,
             spec=func_meta
         )
-        sym.metadata["is_llm"] = True
         self._define(sym, node)
 
     def visit_IbAssign(self, node: ast.IbAssign):

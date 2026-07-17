@@ -11,6 +11,7 @@ Validates that the single entry point correctly handles:
 
 import pytest
 
+from core.base.enums import Provenance, Visibility
 from core.kernel.spec.base import TypeKind, TypeDef, IbSpec
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.member import MethodMemberSpec
@@ -59,7 +60,7 @@ class TestResolveCallReturn:
         class_spec = TypeDef(
             name="MyClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
         )
         registry.register(class_spec)
         result = registry.resolve_call_return(class_spec, [])
@@ -138,7 +139,7 @@ class TestResolveCallableInstanceReturn:
         class_spec = TypeDef(
             name="CallableClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
             members={
                 "__call__": MethodMemberSpec(
                     name="__call__",
@@ -157,7 +158,7 @@ class TestResolveCallableInstanceReturn:
         class_spec = TypeDef(
             name="PlainClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
         )
         result = registry.resolve_callable_instance_return(class_spec, [])
         assert result is None
@@ -177,7 +178,7 @@ class TestResolveCallableInstanceReturn:
         class_spec = TypeDef(
             name="DynClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
             members={
                 "__call__": MethodMemberSpec(
                     name="__call__",

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
+from core.base.enums import Provenance
+
 from .spec import IbSpec
 from .spec.base import TypeKind, TypeDef
 
@@ -36,6 +38,10 @@ class Symbol:
 
     # The IbSpec for this symbol's type (pure data, no runtime state).
     spec: Optional[IbSpec] = None
+
+    # Typed provenance replaces the flat metadata keys
+    # ``is_intrinsic`` / ``is_external_module`` / ``axiom_provided``.
+    provenance: Provenance = Provenance.USER_DEFINED
 
     # ------------------------------------------------------------------
     # Helpers
@@ -143,13 +149,7 @@ class SymbolTable:
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            is_compatible = (
-                (existing.metadata.get("is_intrinsic") and sym.metadata.get("is_intrinsic"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_intrinsic"))
-                or (existing.metadata.get("is_intrinsic") and sym.metadata.get("is_external_module"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
-            )
-            if is_compatible:
+            if existing.provenance.compatible_with(sym.provenance):
                 if existing.spec and sym.spec:
                     if existing.spec is not sym.spec:
                         if existing.spec.name == sym.spec.name:
@@ -200,5 +200,5 @@ class SymbolFactory:
             name=name,
             kind=SymbolKind.FUNCTION,
             spec=spec,
-            metadata={"is_intrinsic": True, "axiom_provided": True},
+            provenance=Provenance.AXIOM_PROVIDED,
         )
