@@ -366,6 +366,25 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
 - **可独立**：G1（重分类基础设施）、G2（内核原生化）与存储正交。
 - **命名清理（PT-ARCH-22）**：本里程碑之后做（file_handle.py 已定，其余待扫）。
 
+#### G2 遗留可观测性缺口（待决策）
+
+> 发现日期：2026-07-17（G2 实现收尾 review）。功能行为正确，但需项目负责人决策是否补诊断/警告。
+
+**问题**：`core/kernel/host_interface.py:64-66` 中，当用户插件与 kernel-native 模块同名时，`register_module()` 直接 `return` 静默忽略用户插件。
+
+**影响**：
+- 用户可能在 `ibci.json` 中配置了同名插件，运行成功但自己的实现未生效，且无任何提示。
+- 与 `docs/PENDING_TASKS.md` "运行时可观测性优先" 原则存在轻微冲突。
+- 不是潜伏 bug（ADR-020 "不可覆盖"语义已满足），而是可观测性不足。
+
+**可选方向**（需决策）：
+1. 保持静默忽略，作为已知限制。
+2. 通过 `HostInterface` 注入 debugger/issue_tracker，覆盖时输出 warning。
+3. `register_module()` 返回状态，由 `discovery.py` / `engine.py` 汇总后报诊断。
+4. 在 `ModuleDiscoveryService` 层检测同名冲突，统一收集 warning。
+
+**建议**：暂不改代码。G3-G6 是磁盘型存储大阶段，改动 `HostInterface` 构造契约或注册接口会引入额外耦合；待诊断体系/接口稳定后再专项处理。
+
 ---
 
 ### [历史档案] 以下为原 PT-ARCH-19/20 逐文件:行清单（已被 ADR-019 吸收，仅作参考）
