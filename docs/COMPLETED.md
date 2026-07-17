@@ -609,7 +609,7 @@ Phase 3 多模态、PT-TEST-4（5/5）、PT-ARCH-7、PT-ARCH-5 G3、PT-ARCH-10 �
 - **ibci_file relpath 修复**：`ibci_modules/ibci_file/core.py` 将 `os.path.relpath` 替换为 `safe_relpath`，`_read_media_bytes` 扩展名从已解析原生路径取。
 - **覆盖缺口 e2e**：新增 `tests/e2e/test_e2e_plugin_discovery.py`（plugin_paths / global_plugin 实际 import 解析、显式配置抑制嗅探）与 `tests/e2e/test_e2e_isolation_plugin_inheritance.py`（子脚本通过 `ihost.run_isolated` 继承父插件）。
 
-提交：`3b10310`（`feat/PT-ARCH-21-FU`）。
+提交：见 `feat/PT-ARCH-21-FU` 分支最新提交（含代码、测试、文档一次性切口）。
 
 ---
 
