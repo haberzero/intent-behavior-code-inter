@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional, Set
 from core.base.path import IbPath
 from core.runtime.exceptions import RegistryIsolationError
 from core.base.enums import RegistrationState
+from core.runtime.path import InstallPaths
 
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
@@ -180,15 +181,23 @@ class ModuleLoader(IModuleLoader):
                 
             loaded_modules.add(entry)
 
+        # 安装路径（ibci_modules/）与其他插件路径的 import 命名空间区分：
+        # ibci_modules 下子目录须作为 ibci_modules.<name> 导入，避免 namespace
+        # package 造成 ibci_ai 与 ibci_modules.ibci_ai 两个模块对象。
+        install_path = InstallPaths.modules_dir().to_native()
+
         # 扫描搜索路径，加载所有物理存在的模块
         for path in self.search_paths:
             if not os.path.isdir(path):
                 continue
-                
+
+            # 当前搜索路径是否为 ibci_modules 安装目录
+            is_install_path = os.path.normcase(path) == os.path.normcase(install_path)
+
             for entry in os.listdir(path):
                 if entry in loaded_modules:
                     continue
-                
+
                 # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
                 # 通过 discovery_map 映射物理目录名到逻辑模块名
                 module_name = interop.get_module_name_by_discovery(entry)
@@ -199,25 +208,27 @@ class ModuleLoader(IModuleLoader):
                 if interop.host_interface.is_kernel_native(module_name):
                     loaded_modules.add(entry)
                     continue
-                    
+
                 module_dir = os.path.join(path, entry)
                 if not os.path.isdir(module_dir):
                     continue
-                
+
                 # 实现层通常在 __init__.py 中
                 impl_path = os.path.join(module_dir, "__init__.py")
                 if not os.path.exists(impl_path):
                     continue
-                    
+
                 try:
                     # 动态加载实现层
                     # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
                     pkg_dir = os.path.dirname(module_dir)
                     if pkg_dir not in sys.path:
                         sys.path.insert(0, pkg_dir)
-                    
-                    # 使用 importlib 直接导入文件夹作为包，这能正确处理内部的相对导入
-                    mod = importlib.import_module(entry)
+
+                    # 安装路径下的包使用完整命名空间 ibci_modules.<name>，
+                    # 用户插件路径仍使用目录名作为顶层包名。
+                    import_name = f"ibci_modules.{entry}" if is_install_path else entry
+                    mod = importlib.import_module(import_name)
                     
                     # 实例化：优先寻找 create_implementation 工厂
                     if hasattr(mod, 'create_implementation'):

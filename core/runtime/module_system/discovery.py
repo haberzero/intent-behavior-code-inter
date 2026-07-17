@@ -20,6 +20,7 @@ from core.runtime.host.host_interface import HostInterface
 from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
 from core.base.enums import RegistrationState, Visibility
 from core.kernel.spec.type_ref import TypeRef
+from core.runtime.path import InstallPaths
 
 
 class ModuleDiscoveryService:
@@ -131,7 +132,15 @@ class ModuleDiscoveryService:
             sys.path.insert(0, ibci_modules_path)
 
         parent_dir = os.path.basename(os.path.dirname(spec_path))
-        internal_name = f"ibci_{parent_dir}._spec"
+        # 对 ibci_modules/ 下的一方模块，使用完整命名空间 ibci_modules.<pkg>._spec，
+        # 与实现层导入命名空间保持一致，避免 namespace package 产生重复模块对象。
+        install_path = InstallPaths.modules_dir().to_native()
+        is_install_spec = os.path.normcase(os.path.dirname(os.path.dirname(spec_path))) == os.path.normcase(install_path)
+        internal_name = (
+            f"ibci_modules.{parent_dir}._spec"
+            if is_install_spec
+            else f"ibci_{parent_dir}._spec"
+        )
 
         try:
             spec = importlib.util.spec_from_file_location(internal_name, spec_path)
