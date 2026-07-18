@@ -162,6 +162,7 @@ class FlatSerializer(BaseFlatSerializer):
             "provenance": t.provenance.name,
             "visibility": t.visibility.name,
             "storage_model": t.storage_model.name,
+            "exported_types": list(getattr(t, "exported_types", [])),
         }
 
         # Persist scalar fields for callable-instance specs (fn_callable[T] / behavior[T])

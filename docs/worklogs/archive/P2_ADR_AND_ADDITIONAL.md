@@ -4,6 +4,8 @@
 > **日期**：2026-06-24
 > **分支**：unsafe-vibe-dev
 > **基线**：889 passed, 5 skipped, 0 failed
+>
+> **⚠️ 归档状态（2026-07-17）**：本文档记录 2026-06-24 的工作日志。其中 ADR-009 提议的 `_call_llm_multimodal` 分叉路径**已被 ADR-013 否决**，当前 IBCI 采用单一 LLM 调用入口 + 协议驱动分发。ADR-007 的二阶段 snapshot 划分**已被 ADR-014 / ADR-016 推翻**（所有 media 一律 disk-backed handle）。本文档仅作历史追溯，当前设计请以 `docs/decisions/` 中的最新 ADR 为准。
 
 ---
 

@@ -111,7 +111,7 @@ def __ibcext_vtable__():
     }
 ```
 
-> 一方插件参考写法见仓库 `ibci_modules/ibci_file/`。
+> 内核原生模块（如 `file`/`ai`/`ihost`）不位于插件目录；用户插件参考写法见 `examples/03_advanced_features/custom_plugin_demo/`（如存在）或 `docs/ARCHITECTURE_PRINCIPLES.md` §7。
 
 ## 下一步
 

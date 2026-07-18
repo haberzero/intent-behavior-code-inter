@@ -3,111 +3,170 @@ core/runtime/objects/media_types.py
 
 IbAudio / IbImage / IbVideo — 多模态运行时对象类。
 
-这些类包装 ``MediaStorage`` 实例，通过 ``@register_ib_type`` 注册到
-IBCI 类型系统。它们作为 ``IbValue`` 子类，在行为表达式 ``@~ ... $media ... ~``
-中通过 ``__payload_prompt__`` 协议参与多模态 LLM 调用。
+Per ADR-014/016: 三种 media 类型现在是 ``IbFileHandle`` 的磁盘型子类，
+通过 ``FileBacking`` 引用源文件，按需惰性物化字节。
 
-Per ADR-007: Phase 3 使用纯内存 deep-copy snapshot。
 Per ADR-012: 作为普通类名注册（非关键字）。
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import base64
+from typing import Any, Dict
 
-from .kernel import IbObject, IbValue, IbClass
+from core.base.path import IbPath
+
 from .ib_type_mapping import register_ib_type
-from .media_storage import MediaStorage
+from .kernel import IbClass
+from .file_handle import IbFileHandle
+from .media_backing import FileBacking, MediaBacking
+
+
+def _format_from_backing(backing: MediaBacking) -> str:
+    """从 backing 路径的文件名扩展名推导格式。"""
+    name = backing.path.name
+    if "." in name:
+        return name.rsplit(".", 1)[1].lower()
+    return "bin"
+
+
+def _mime_for_format(fmt: str, default_prefix: str) -> str:
+    """根据格式推导 MIME type。"""
+    mime_map = {
+        "wav": "audio/wav",
+        "mp3": "audio/mpeg",
+        "ogg": "audio/ogg",
+        "flac": "audio/flac",
+        "png": "image/png",
+        "jpeg": "image/jpeg",
+        "jpg": "image/jpeg",
+        "gif": "image/gif",
+        "webp": "image/webp",
+        "mp4": "video/mp4",
+        "webm": "video/webm",
+        "avi": "video/x-msvideo",
+    }
+    return mime_map.get(fmt.lower(), f"{default_prefix}/{fmt}")
 
 
 @register_ib_type("audio")
-class IbAudio(IbValue):
-    """``audio`` 类型的 IBC 运行时对象。
-
-    包装 ``MediaStorage`` 实例（音频数据）。
-    在行为表达式中通过 ``__payload_prompt__`` 返回 ``input_audio`` content block。
-    """
+class IbAudio(IbFileHandle):
+    """``audio`` 类型的 IBCI 运行时对象（磁盘型 file handle）。"""
 
     __slots__ = ()
 
-    def __init__(self, storage: MediaStorage, ib_class: IbClass):
-        super().__init__(ib_class, payload=storage)
+    def __init__(self, backing: MediaBacking, ib_class: IbClass):
+        super().__init__(backing, ib_class)
+        # PT-ARCH-24: format 是 field，从文件名扩展名推导，无 I/O。
+        self.fields["format"] = ib_class.registry.box(_format_from_backing(backing))
 
-    @property
-    def storage(self) -> MediaStorage:
-        """返回底层 MediaStorage。"""
-        return self.value
+    def data(self) -> str:
+        """返回 base64 编码的音频数据（可观测性/兼容性）。"""
+        return base64.b64encode(self.__materialize__()).decode("ascii")
 
-    def to_native(self, memo=None) -> MediaStorage:
-        return self.value
+    def duration(self) -> float:
+        """占位：当前实现不解析媒体元数据。"""
+        return 0.0
 
-    def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(bool(self.value and self.value.data))
+    def __path_payload_prompt__(self) -> Dict[str, Any]:
+        fmt = _format_from_backing(self.backing)
+        b64_data = base64.b64encode(self.__materialize__()).decode("ascii")
+        return {
+            "type": "input_audio",
+            "input_audio": {
+                "data": b64_data,
+                "format": fmt,
+            },
+        }
 
     def __repr__(self) -> str:
-        storage = self.value
-        if storage:
-            return f"IbAudio(format={storage.format!r}, size={storage.size})"
-        return "IbAudio(empty)"
+        return f"<audio handle format={self.fields['format'].to_native()!r} path={self.backing.path}>"
 
 
 @register_ib_type("image")
-class IbImage(IbValue):
-    """``image`` 类型的 IBC 运行时对象。
-
-    包装 ``MediaStorage`` 实例（图像数据）。
-    在行为表达式中通过 ``__payload_prompt__`` 返回 ``image_url`` content block。
-    """
+class IbImage(IbFileHandle):
+    """``image`` 类型的 IBCI 运行时对象（磁盘型 file handle）。"""
 
     __slots__ = ()
 
-    def __init__(self, storage: MediaStorage, ib_class: IbClass):
-        super().__init__(ib_class, payload=storage)
+    def __init__(self, backing: MediaBacking, ib_class: IbClass):
+        super().__init__(backing, ib_class)
+        # PT-ARCH-24: format 是 field，从文件名扩展名推导，无 I/O。
+        self.fields["format"] = ib_class.registry.box(_format_from_backing(backing))
 
-    @property
-    def storage(self) -> MediaStorage:
-        """返回底层 MediaStorage。"""
-        return self.value
+    def data(self) -> str:
+        return base64.b64encode(self.__materialize__()).decode("ascii")
 
-    def to_native(self, memo=None) -> MediaStorage:
-        return self.value
+    def width(self) -> int:
+        return 0
 
-    def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(bool(self.value and self.value.data))
+    def height(self) -> int:
+        return 0
+
+    def __path_payload_prompt__(self) -> Dict[str, Any]:
+        fmt = _format_from_backing(self.backing)
+        b64_data = base64.b64encode(self.__materialize__()).decode("ascii")
+        mime_type = _mime_for_format(fmt, "image")
+        return {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{mime_type};base64,{b64_data}",
+            },
+        }
 
     def __repr__(self) -> str:
-        storage = self.value
-        if storage:
-            return f"IbImage(format={storage.format!r}, size={storage.size})"
-        return "IbImage(empty)"
+        return f"<image handle format={self.fields['format'].to_native()!r} path={self.backing.path}>"
 
 
 @register_ib_type("video")
-class IbVideo(IbValue):
-    """``video`` 类型的 IBC 运行时对象。
-
-    包装 ``MediaStorage`` 实例（视频数据）。
-    在行为表达式中通过 ``__payload_prompt__`` 返回 ``video`` content block。
-    """
+class IbVideo(IbFileHandle):
+    """``video`` 类型的 IBCI 运行时对象（磁盘型 file handle）。"""
 
     __slots__ = ()
 
-    def __init__(self, storage: MediaStorage, ib_class: IbClass):
-        super().__init__(ib_class, payload=storage)
+    def __init__(self, backing: MediaBacking, ib_class: IbClass):
+        super().__init__(backing, ib_class)
+        # PT-ARCH-24: format 是 field，从文件名扩展名推导，无 I/O。
+        self.fields["format"] = ib_class.registry.box(_format_from_backing(backing))
 
-    @property
-    def storage(self) -> MediaStorage:
-        """返回底层 MediaStorage。"""
-        return self.value
+    def data(self) -> str:
+        return base64.b64encode(self.__materialize__()).decode("ascii")
 
-    def to_native(self, memo=None) -> MediaStorage:
-        return self.value
+    def duration(self) -> float:
+        return 0.0
 
-    def to_bool(self) -> IbObject:
-        return self.ib_class.registry.box(bool(self.value and self.value.data))
+    def __path_payload_prompt__(self) -> Dict[str, Any]:
+        fmt = _format_from_backing(self.backing)
+        b64_data = base64.b64encode(self.__materialize__()).decode("ascii")
+        return {
+            "type": "video",
+            "video": {
+                "data": b64_data,
+                "format": fmt,
+            },
+        }
 
     def __repr__(self) -> str:
-        storage = self.value
-        if storage:
-            return f"IbVideo(format={storage.format!r}, size={storage.size})"
-        return "IbVideo(empty)"
+        return f"<video handle format={self.fields['format'].to_native()!r} path={self.backing.path}>"
+
+
+# --------------------------------------------------------------------------- #
+# PT-ARCH-25: media 静态构造入口：audio.from_file / image.from_file / video.from_file
+# --------------------------------------------------------------------------- #
+
+def audio_from_file(ib_class: IbClass, path: str) -> IbAudio:
+    """IBCI ``audio.from_file(path)`` 的运行时实现。"""
+    backing = FileBacking(IbPath.from_native(path), sandboxed=True)
+    return IbAudio(backing, ib_class)
+
+
+def image_from_file(ib_class: IbClass, path: str) -> IbImage:
+    """IBCI ``image.from_file(path)`` 的运行时实现。"""
+    backing = FileBacking(IbPath.from_native(path), sandboxed=True)
+    return IbImage(backing, ib_class)
+
+
+def video_from_file(ib_class: IbClass, path: str) -> IbVideo:
+    """IBCI ``video.from_file(path)`` 的运行时实现。"""
+    backing = FileBacking(IbPath.from_native(path), sandboxed=True)
+    return IbVideo(backing, ib_class)

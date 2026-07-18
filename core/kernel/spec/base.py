@@ -138,6 +138,11 @@ class IbSpec:
         """Return True if spec.kind matches one of provided kinds."""
         return self.kind in kinds
 
+    @property
+    def is_disk_backed(self) -> bool:
+        """Return True if this type uses the disk-backed storage model."""
+        return self.storage_model is StorageModel.DISK_BACKED
+
     # ------------------------------------------------------------------ #
     # Cloning                                                              #
     # ------------------------------------------------------------------ #
@@ -209,6 +214,11 @@ class TypeDef(IbSpec):
 
     # -- TypeDef fields ------------------------------------------------
     required_capabilities: List[str] = field(default_factory=list)
+
+    # -- Module-only: names of types that an `import mod` statement also
+    # brings into the importing module's scope (e.g. `import file` exposes
+    # file_handle / audio / image / video).  Empty for non-module specs.
+    exported_types: List[str] = field(default_factory=list)
 
     # -- Kind → base-name mapping (used by get_base_name) ----------------
     _KIND_BASE_NAMES: ClassVar[Dict[str, str]] = {}

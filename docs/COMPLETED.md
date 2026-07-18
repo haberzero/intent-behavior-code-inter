@@ -5,7 +5,80 @@
 > 设计与实现细节见对应正式文档：`docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/design/VM_SPEC.md`、`docs/design/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-07-17（G2 ai/ihost/idbg/isys 内核原生化完成；下一项：G3+G4+G5+G6 磁盘型存储体系）
+> **最后更新**：2026-07-17（G6 file 模块内核原生化 + PT-ARCH-24/25/26/27 安全闸门完成；下一项：media Phase 4，见 `NEXT_STEPS.md` GATED）
+
+---
+
+## 2026-07-17：G6 — file 模块内核原生化 + PT-ARCH-24/25/26/27 安全闸门（ADR-020/016/014）
+
+> 分支：`feat/G3-G6-disk-backed-storage`；当前测试基线：**1174 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. file 模块 kernel-native 化
+- 新建 `core/runtime/modules/file_impl.py`：`FileLib` 实现 `open/read/read_bytes/write_copy/write_copy_bytes/write_overwrite/write_overwrite_bytes/exists/remove`，所有 FS I/O 经 `ExecutionContext.resolve_path()` + `PermissionManager.validate_path()` 沙箱校验。
+- 修改 `core/engine.py`：构造期把 `FileLib` 注册为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED` 模块；`TypeDef` 声明 `exported_types=["file_handle", "audio", "image", "video"]`，使 `import file` 同时将四类型注入作用域。
+- 物理删除 `ibci_modules/ibci_file/`（含 `__init__.py`、`_spec.py`、`core.py`）。
+
+### B. PT-ARCH-24：field-vs-method 失配修复
+- `core/runtime/objects/file_handle.py`：`__init__` 设置 `self.fields["path"]`；删除实例 `write()`；`read()` / `__materialize__()` 增加 `PermissionManager` 校验。
+- `core/runtime/objects/media_types.py`：`__init__` 设置 `self.fields["format"]`；新增 `from_file(path)` 类方法。
+- `core/kernel/axioms/primitives/file_handle.py`：删除 `write` 方法声明；`path` 保持 field。
+- `core/kernel/axioms/primitives/media.py`：`format` 改为 field；`data`/`duration`/`width`/`height` 保持 method；新增 `from_file` 声明。
+- `core/kernel/spec/specs.py`：`AUDIO_SPEC`/`IMAGE_SPEC`/`VIDEO_SPEC` 的 `visibility` 改为 `IMPORT_GATED`。
+
+### C. PT-ARCH-26：save_state 禁止活跃文件容器变量
+- 修改 `core/runtime/host/service.py`：`save_state` 在序列化 context 前扫描 disk-backed 实例，存在时抛出 `InterpreterError`。
+- 修改 `core/runtime/serialization/runtime_serializer.py`：支持 kernel-native `IbModule`（scope 为 `IbNativeObject`）的序列化/反序列化。
+
+### D. PT-ARCH-27：llmexcept retry body 禁用 overwrite 写入
+- 修改 `core/runtime/interpreter/execution_context.py`：新增 `llmexcept_body_depth` 计数器。
+- 修改 `core/runtime/interpreter/llm_except_frame.py`：retry body 前后维护深度。
+- 修改 `core/runtime/modules/file_impl.py`：`write_overwrite` / `write_overwrite_bytes` 在深度 > 0 时报错。
+- 修复 `core/runtime/vm/handlers/llm_behavior.py` 与 `control_flow.py` 中 `executor.execution_context` → `executor.ec` 的引用失配。
+
+### E. 测试与示例
+- 新增 `tests/e2e/test_e2e_file_kernel_native.py`（9 个测试）：覆盖 file 模块 API、save_state 拒绝、llmexcept overwrite 禁用、沙箱越界等。
+- 重写 `tests/runtime/test_file_handle.py`、`tests/runtime/test_media_file_handle.py`，适配只读语义与 field/method 区分。
+- 更新 `tests/runtime/test_runtime_multimodal_dispatch.py`、`tests/kernel/test_media_axioms.py`、`tests/e2e/test_e2e_multimodal_file_io.py`。
+- 重写 `examples/02_basic_modules/01_file_operations.ibci`，用新 API 展示 read/write_copy/write_overwrite。
+
+### F. 验证
+- 全量 pytest：`1174 passed, 7 skipped`（0 failures）。
+- 机械校验：代码层零 `ibci_modules/ibci_file` 引用、零 `MediaStorage` 引用、零 `file.read_audio/image/video`、零 `file_handle` 实例 `write()` 调用。
+
+---
+
+## 2026-07-17：G3 + G4 + G5 — 磁盘型存储体系前半（ADR-016/014/020）
+
+> 分支：`feat/G3-G6-disk-backed-storage`；当前测试基线：**1161 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. G3 存储模型机制
+- `core/kernel/spec/base.py`：新增 `is_disk_backed` 属性（基于 `storage_model`）。
+- `core/runtime/objects/deep_clone.py`：按 `storage_model` 分发——`DISK_BACKED` 走 `__clone_ref__` 浅拷贝路径引用；修复 `type() is KernelIbObject` 导致 `IbValue` 子类（`IbAudio`/`IbImage`/`IbVideo`）丢失的问题。
+- `core/runtime/serialization/runtime_serializer.py`：`_collect_instance` / `_get_instance` 增加 `disk_backed` 描述符分支，序列化路径引用而非字节。
+- 新增 `tests/runtime/test_storage_model_dispatch.py`（4 个测试）。
+
+### B. G4 FileHandle 基类
+- 新建 `core/runtime/objects/media_backing.py`：`MediaBacking` 抽象 + `FileBacking` / `GeneratedBacking`（均持 `IbPath`，无 OS fd）。
+- 新建 `core/runtime/objects/file_handle.py`：`IbFileHandle` + 磁盘协议族（`__materialize__`/`__path_payload_prompt__`/`__clone_ref__`/`__to_descriptor__`/`__from_descriptor__`）。
+- 新建 `core/kernel/axioms/primitives/file_handle.py`：`FileHandleAxiom`（零 I/O）。
+- 在 `core/kernel/axioms/primitives/registry.py` 与 `__init__.py`、`core/kernel/spec/specs.py` 与 `core/kernel/spec/registry/_runtime.py` 注册 `file_handle` 类型（`DISK_BACKED`）。
+- 在 `core/runtime/bootstrap/primitive_initializer.py` 绑定协议方法。
+- 新增 `tests/runtime/test_file_handle.py`（8 个测试）。
+
+### C. G5 media→FileHandle 子类
+- 重写 `core/runtime/objects/media_types.py`：`IbAudio`/`IbImage`/`IbVideo` 改为 `IbFileHandle` 子类，各实现 `__path_payload_prompt__` 并惰性 base64 物化。
+- 重写 `core/kernel/axioms/primitives/media.py`：公理 `__payload_prompt__` 只委托 `value.receive('__path_payload_prompt__', [])`，零 I/O。
+- `core/kernel/spec/specs.py`：audio/image/video 的 `parent_type` 改为 `file_handle`，`storage_model=DISK_BACKED`。
+- `ibci_modules/ibci_file/core.py`：`read_audio`/`read_image`/`read_video` 返回 `FileBacking`（零拷贝）。
+- 删除 `core/runtime/objects/media_storage.py` 与 `tests/runtime/test_media_storage.py`。
+- 新增 `tests/runtime/test_media_file_handle.py`；更新 `tests/runtime/test_runtime_multimodal_dispatch.py` 与 `tests/kernel/test_media_axioms.py`。
+
+### D. 验证
+- 全量 pytest：`1161 passed, 7 skipped`（0 failures）。
+- 交叉检验（subagent）确认：无活跃 `MediaStorage` 引用；无 kernel axiom 内 `import base64`/I/O；`file_handle` 协议注册完整。
+
+### E. 本轮新增设计债
+- `PT-ARCH-24`：`file_handle`/`audio`/`image`/`video` 公理层 field 声明与运行时 method 实现失配。已记录到 `PENDING_TASKS.md`，待决策。
 
 ---
 

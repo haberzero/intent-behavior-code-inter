@@ -1,6 +1,11 @@
-# IBC-Inter 语法说明手册
+# IBC-Inter 语法说明手册（入门版）
 
-本文档定义了 IBC-Inter (Intent-Behavior-Code-Inter) 编程语言的最新语法规范、功能特性及当前版本的局限性。
+> **文档定位**：本文件是放置在项目根目录的**入门/简要 spec**，覆盖 IBC-Inter 的核心语法规范、功能特性及当前版本局限性。
+> **完整参考**：详细的语法参考、架构设计、决策记录与实现细节见 `docs/` 目录：
+> - `docs/IBCI_SYNTAX_REFERENCE.md` — 完整语法参考
+> - `docs/ARCHITECTURE_PRINCIPLES.md` — 架构原则
+> - `docs/decisions/` — ADR 决策记录
+> - `docs/design/` — 设计文档与实现细节
 
 ---
 
@@ -381,17 +386,62 @@ ihost.run_isolated("./sub/child.ibci", policy)
 - 独立的插件发现机制
 - 默认不继承父环境变量
 
-### 6.3 插件系统
+### 6.3 file 模块与磁盘型变量
 
-IBC-Inter 允许用户使用python编写自己的第三方插件，以扩展其功能。
+`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其 IMPORT_GATED 子类型。
 
-**插件发现机制**：
+```ibci
+import file
 
-- 插件文件必须是python文件，且必须放置在目标工程的 `./plugins` 目录下。
-- `_spec.py`是插件的规范文件，包含插件的元数据，如虚表、函数名、函数参数列表、函数返回值等。
-- 插件目前暂时只允许定义独立的class，并通过虚表声明相关函数的存在，其注册机制尚未完善，需等待作者后续更新。
-- 插件书写方式请参考：`ibci_modules\ibci_file` 文件夹下的第一方插件。IBC-Inter的插件注册是非侵入式的，无需显式import任何内核模块。
-- **注意**：`ibci_modules\ibci_ai` 等插件由于其特殊性，必须继承内核中的核心类，不建议第三方插件参考。
+file_handle fh = file.open("data.txt")
+str p = fh.path              # field，无 I/O
+str s = fh.read()            # method，经沙箱校验后读取文本
+list[int] bytes = fh.read_bytes()
+
+# 写入语义
+file_handle copy = file.write_copy(fh, "data_v2.txt", "new content")  # COW：不污染原 handle
+file.write_overwrite(fh, "mutated content")                            # 显式副作用：覆盖原文件
+file_handle fresh = file.write_new("data_v3.txt", "brand new")         # 创建新文件，无需 source handle
+
+bool ok = file.exists("data.txt")
+file.remove("data.txt")
+```
+
+**安全限制**：
+1. `file_handle` 实例只读，无实例 `write()` 方法。
+2. 所有 FS I/O 受 `PermissionManager` 沙箱约束。
+3. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时报错。
+4. `llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`。
+
+**未来 API 演进**：支持动态/命名参数后，`file.write(target, data, overwrite_flag="copy"|"overwrite"|"new")` 将统一当前三种写入函数，默认 `"overwrite"`。
+
+**media 类型**：
+
+```ibci
+import file
+
+audio rec = audio.from_file("interview.wav")
+image photo = image.from_file("cat.png")
+video clip = video.from_file("clip.mp4")
+
+str fmt = rec.format     # field
+str b64 = rec.data()     # method，惰性读取字节并 base64 物化
+```
+
+### 6.4 模块系统
+
+IBC-Inter 的模块分为两类：
+
+**内核原生模块（kernel-native）**：随内核发行，构造期预注册，IMPORT_GATED，不可被用户插件覆盖。
+- `ai` / `file` / `ihost` / `idbg` / `isys`
+- 其中 `import file` 会同时把 `file_handle` / `audio` / `image` / `video` 注入当前作用域。
+
+**用户插件**：由用户/第三方用 Python 编写，放置在目标工程的 `./plugins` 目录下。
+- 通过 `_spec.py` 声明元数据（虚表、函数名、参数列表、返回值等）。
+- 插件注册是非侵入式的，无需显式 import 任何内核模块。
+- 第三方插件不应继承内核核心类；核心级能力应通过 kernel-native 模块使用。
+
+> **历史说明**：旧第一方插件 `ibci_modules\ibci_file` 已删除，其文件系统能力已提升为 kernel-native `file` 模块。
 
 ---
 

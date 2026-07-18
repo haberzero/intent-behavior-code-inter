@@ -21,6 +21,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.sync_manager import SyncManager
 from core.runtime.objects.kernel import IbObject
+from core.kernel.issue import InterpreterError
 from core.extension.ibcext import IbStatefulPlugin
 
 class HostService(IHostService):
@@ -50,6 +51,25 @@ class HostService(IHostService):
         """
         return self._sync_manager.sync()
 
+    @staticmethod
+    def _contains_disk_backed_instance(execution_context: IExecutionContext) -> bool:
+        """扫描当前及外层作用域，检查是否存在 disk-backed 实例（file/media）。"""
+        runtime_context = getattr(execution_context, "runtime_context", None)
+        if runtime_context is None:
+            return False
+        scope = runtime_context.get_current_scope()
+        while scope is not None:
+            for sym in scope.get_all_symbols().values():
+                val = sym.value
+                if val is None:
+                    continue
+                ib_class = getattr(val, "ib_class", None)
+                spec = getattr(ib_class, "spec", None)
+                if spec is not None and getattr(spec, "is_disk_backed", False):
+                    return True
+            scope = getattr(scope, "parent", None)
+        return False
+
     def save_state(self, path: str):
         """深度序列化当前运行时上下文并保存到磁盘"""
         # 路径经 IbPath 规范化；资产外化布局委托 SnapshotLayout（策略集中化）。
@@ -59,6 +79,15 @@ class HostService(IHostService):
         # 属 PT-ARCH-13（media 重建时统一为路径感知序列化）。
         from core.kernel.path import IbPath, SnapshotLayout
         self.sync() # 必须先同步
+
+        # PT-ARCH-26：在序列化之前扫描活跃变量，若存在磁盘型容器则直接拒绝。
+        if self._contains_disk_backed_instance(self.execution_context):
+            raise InterpreterError(
+                "save_state is not supported when the execution context contains "
+                "active file_handle/audio/image/video variables. "
+                "Use file.write_copy to persist artifacts explicitly."
+            )
+
         data = self.snapshot()
 
         save_path = IbPath.from_native(path).resolve_dot_segments()

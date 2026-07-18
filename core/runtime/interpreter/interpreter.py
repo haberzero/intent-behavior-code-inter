@@ -221,6 +221,7 @@ class Interpreter:
             # 外部注入模式
             self.service_context = service_context
             self._execution_context.module_manager = self.service_context.module_manager
+            self._execution_context.permission_manager = self.service_context.permission_manager
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
             interop = interop or InterOpImpl(host_interface=self.host_interface)
@@ -262,6 +263,7 @@ class Interpreter:
                 interpreter=self # 注入解释器实例引用
             )
             self._execution_context.module_manager = self.service_context.module_manager
+            self._execution_context.permission_manager = self.service_context.permission_manager
             
             # 完成延迟水化
             if hasattr(llm_executor, 'hydrate'):

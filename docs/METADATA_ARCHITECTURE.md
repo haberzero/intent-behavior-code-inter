@@ -81,12 +81,19 @@ class IbBehaviorExpr:
 
 **类型级属性**（描述"这个类型本身是什么/从哪来/怎么存储"）**不**落在 AST 节点或侧表，而落在 `IbSpec`（`core/kernel/spec/base.py`）——它是"类型身份的单点真理"（single source of truth for type identity），编译期与运行期共用。
 
-**当前类型级轴（ADR-021，2026-07-17）**：
+**当前类型级轴（ADR-021 + ADR-020 G6，2026-07-17）**：
 - **`provenance: Provenance`** —— 来源（`KERNEL_NATIVE`/`AXIOM_PROVIDED`/`USER_DEFINED`/`EXTERNAL_MODULE`）。取代原 `is_user_defined`（其对模块的重载已被消除）。
 - **`visibility: Visibility`** —— 可见性（`PRELUDE_VISIBLE`/`IMPORT_GATED`/`SCOPE_PRIVATE`）。prelude 过滤器据此决定免 import 可见性。
 - **`storage_model: StorageModel`** —— 存储模型（`MEMORY_BACKED`/`DISK_BACKED`，ADR-016）。默认 `MEMORY_BACKED`；分发逻辑（deep_clone/序列化器磁盘型分支）在 G3 启用。
+- **`exported_types: List[str]`** —— 模块级附加类型注入列表（ADR-020 G6）。仅 `TypeKind.MODULE` 使用；当模块被 import 时，scheduler 把这些类型名作为符号同时注入当前作用域。例如 `import file` 会同时把 `file_handle`/`audio`/`image`/`video` 注入作用域，使后续 `file_handle fh = file.open(...)` / `audio a = audio.from_file(...)` 可解析。
 
-**边界原则**：`Symbol`（编译期符号表）与 `RuntimeSymbolImpl`（运行时符号）**不复写**这三轴——`Symbol` 的 `provenance` 仅缓存符号层面的来源（复用同一 `Provenance` 枚举），其类型真相仍以 `spec`（IbSpec）为准，避免 AST 字段 / 侧表 / IbSpec 三处同时存储同一语义事实。
+**`exported_types` 设计约束**：
+1. 只用于 `KERNEL_NATIVE + IMPORT_GATED` 模块（当前为 `ai`/`file`/`ihost`/`idbg`/`isys`）。
+2. 注入的类型必须是已注册的真实类型名（通常由 axiom + spec + bootstrap 注册）。
+3. 不用于用户插件；用户插件的类型可见性由其自身的 `visibility` 决定。
+4. 与 `Symbol.metadata` 中的来源键解耦——注入动作由 scheduler 在 import 处理阶段根据 `TypeDef.exported_types` 显式完成，不依赖隐式约定。
+
+**边界原则**：`Symbol`（编译期符号表）与 `RuntimeSymbolImpl`（运行时符号）**不复写**这些轴——`Symbol` 的 `provenance` 仅缓存符号层面的来源（复用同一 `Provenance` 枚举），其类型真相仍以 `spec`（IbSpec）为准，避免 AST 字段 / 侧表 / IbSpec 三处同时存储同一语义事实。
 
 ---
 

@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-17（**G2 ai/ihost/idbg/isys 内核原生化完成**：bootstrap 预注册 + loader 短路 + HostInterface 覆盖保护 + late-hydrate，1157 passed / 7 skipped。下一项：**G3+G4+G5+G6 磁盘型存储体系（合并单阶段）**。）
+> **最后更新**：2026-07-17（**G3+G4+G5+G6 磁盘型存储体系 + PT-ARCH-24/25/26/27 安全闸门完成**：`file` 模块 kernel-native 化、`file_handle`/`audio`/`image`/`video` 只读语义、`write_copy`/`write_overwrite` 显式写入、`save_state` 拒绝活跃磁盘型变量、`llmexcept` retry 禁用 overwrite。1174 passed / 7 skipped。下一项：**media Phase 4（GATED，待前置全部完成后开工）**。）
 
 ---
 
@@ -32,9 +32,9 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-07-17 实测结果**：`1157 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
+**2026-07-17 实测结果**：`1174 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
 
-> **基线说明**：ADR-019 + G1 + G1.5 + PT-ARCH-21-FU + **G2** 全部完成。ProjectDetector / module_system / ibci_file / rt_scheduler 路径相关清理已落地；plugin 发现（plugin_paths/global_plugin）与隔离继承已补 e2e；ai/ihost/idbg/isys 已内核原生化。下一项：G3+G4+G5+G6 磁盘型存储体系。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九。
+> **基线说明**：ADR-019 + G1 + G1.5 + PT-ARCH-21-FU + G2 + **G3+G4+G5+G6 + PT-ARCH-24/25/26/27** 全部完成。`file` 模块已 kernel-native 化；`ibci_modules/ibci_file/` 已删除；`file_handle`/`audio`/`image`/`video` 只读语义落地；`save_state` 拒绝活跃磁盘型变量；`llmexcept` retry 禁用 overwrite 写入。下一项：media Phase 4（GATED）。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九。
 > ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非本次改动引入）。non-SDK 套件稳定 0 failure。
 
 ---
@@ -92,7 +92,7 @@ python -m pytest tests/ -q --tb=no --no-header
 14. **D1** ✅：scheduler.py:127 `os.path.abspath`→`canonicalize_for_security`；:97 `os.path.join`→`IbPath /`。compiler 层零散点 `os.path.abspath`（门槛 A = 0）。
 15. **D2** ✅：移除 scheduler/resolver/permissions 的 **3 处 root 冗余 canonicalize**（信任 engine 传入），字段 `_root_ib`/`_root_path`→`_project_root`（仅 IbPath 包装）。**保留** 9 处文件路径 canonicalize（is_within 前防 symlink 逃逸，安全必需）。
 16. **D3** ✅：死 import 清理——permissions/execution_context/module_manager/interpreter/meta 的 `import os` + scheduler/permissions 死 `IbPath` + module_manager 死 `root_dir` 字段（含调用方 interpreter.py:243）。
-17. **D4（部分，待交叉检验定夺）**：`ibci_file/core.py`（用户可见）+ `project_detector.py`/`module_system`（多为合法 FS 查询边界）——非门槛阻塞，留待 subagent 评估是否本轮必修。
+17. **D4（部分，待交叉检验定夺）**：`ibci_file/core.py`（用户可见，**G6 已随 `ibci_modules/ibci_file/` 整目录删除**）+ `project_detector.py`/`module_system`（多为合法 FS 查询边界）——非门槛阻塞，留待 subagent 评估是否本轮必修。
 
 **机械门槛校验（实测通过）**：
 ```bash
@@ -136,18 +136,37 @@ rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpre
 
 ---
 
-### 🔴 G3 + G4 + G5 + G6 — 磁盘型存储体系（合并单阶段，当前最紧要）
+### ✅ G3 + G4 + G5 — 磁盘型存储体系前半（2026-07-17 完成）
 
-> ADR-016/014 明令 **G3/G4/G5/G6 强耦合不可拆分**（disk-backed 变量体系的同一件事：P0-2 机制 + G4 FileHandle 基类 + P0-3 media 子类 + G6 file 入口）。合并为单一阶段，内部按 G3→G4→G5→G6 依赖推进。依赖 G1.5 的 `StorageModel` 字段 + 路径收尾。详见 `PENDING_TASKS.md §九 PT-ARCH-23`。
-> **内含**：原 P0-2（存储模型基础设施）、P0-3（media 重建）+ G4（FileHandle）+ G6（file 模块内核原生化）。
-> **磁盘型协议族方法名**（与 `__prompt__` 平行）在本阶段设计期确定。
+> ADR-016/014 磁盘型变量体系前半已完成。实测 `1161 passed, 7 skipped`（2026-07-17，分支 `feat/G3-G6-disk-backed-storage`）。
+
+- **G3 存储模型机制**：`StorageModel` 字段在 `IbSpec`/`TypeDef` 落地并消费；`deep_clone.py` 按存储模型分发（disk-backed 浅拷贝路径引用）；`RuntimeSerializer` 磁盘型分支（路径描述符，零字节物化）。
+- **G4 FileHandle 基类**：`core/runtime/objects/file_handle.py`（`IbFileHandle` + `FileBacking`/`GeneratedBacking`）+ `core/kernel/axioms/primitives/file_handle.py`（零 I/O 公理）+ bootstrap 协议绑定（`__materialize__`/`__path_payload_prompt__`/`__clone_ref__`/`__to_descriptor__`/`__from_descriptor__`）。
+- **G5 media→FileHandle 子类**：`IbAudio/IbImage/IbVideo` 改为 `IbFileHandle` 子类；media 公理 `__payload_prompt__` 只委托 `__path_payload_prompt__`；媒体构造入口改为 `audio.from_file` / `image.from_file` / `video.from_file`，返回 `FileBacking(resolved_path)`；删除 `media_storage.py` 与对应测试。
+
+**发现的新设计债**：`PT-ARCH-24`（FileHandle/Media Axiom field-vs-method 声明失配）已记录到 `PENDING_TASKS.md`，不阻塞 G6，但需在 FileHandle 公共 API 稳定前决策。
 
 ---
 
-## GATED：media Phase 4 — MediaAxiom + IbMedia 全模态容器（仅在上述全部完成后开工）
+### ✅ G6 — file 模块内核原生化 + 只读语义落地（2026-07-17 完成）
+
+> ADR-020 B + G6 收尾 + PT-ARCH-24/26/27 安全闸门。实测 `1174 passed, 7 skipped`（0 failures/errors，2026-07-17，分支 `feat/G3-G6-disk-backed-storage`）。
+
+- **`file_handle` 实例只读**：`path` 为 field；`read()` / `read_bytes()` / `close()` 为 method；**无实例 `write()`**。
+- **`file` 模块自由函数**：`open()`、`read()`、`read_bytes()`、`write_copy()`、`write_copy_bytes()`、`write_overwrite()`、`write_overwrite_bytes()`、`exists()`、`remove()`。
+- **media 只读构造**：`audio.from_file(path)` / `image.from_file(path)` / `video.from_file(path)`；`format` 为 field；`data()` 等为 method。
+- **沙箱校验**：所有 I/O（含 `IbFileHandle.read()` / `__materialize__()`）经 `PermissionManager` 校验。
+- **PT-ARCH-26**：`save_state` 检测到活跃 `file_handle`/`audio`/`image`/`video` 变量时报错。
+- **PT-ARCH-27**：`llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`。
+
+**完整实施计划与风险分析**：见 `docs/PENDING_TASKS.md §PT-ARCH-25`（已标记为 `[DONE]`）。
+
+---
+
+## ⛔ GATED：media Phase 4 — MediaAxiom + IbMedia 全模态容器（当前最紧要项，但仍在 gate 后）
 
 > **阻塞条件**：G1 + G1.5（数据结构迁移）+ 路径收尾 + G2（内核原生化）+ G3-G6（磁盘型存储体系）全部完成。
-> 在此之前不得写任何 media 容器代码（ADR-014/016 明确阻塞）。
+> **状态（2026-07-17）**：上述前置已全部完成；media Phase 4 现在**可被提升为 P0**，但需项目负责人明确开工指令。在此之前不得写任何 media 容器代码（ADR-014/016 明确阻塞）。
 
 解锁后的工作（届时提升为本文件 P0）：
 1. **`MediaAxiom` + 协议驱动的响应解析**：解析多模态响应为 media 对象（接入 G3 的协议驱动分发，**非 `if/else`**）。
@@ -156,6 +175,16 @@ rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpre
 
 **明确剥离到独立后续**（不纳入主线，但结构上不堵死）：
 - 元组解包 `(str t, audio a) = @~...~`（D5）——需 TypeCheckingPass 解包推断 + CPS 多返回值；`IbMedia` 的 modality 映射为此预留接入位。
+
+---
+
+## P1 后续任务（不阻塞 media Phase 4，但建议在下一 P0 开工前评估）
+
+以下任务由 G6 收尾 review 提出，已记录到 `docs/PENDING_TASKS.md`，不影响 media Phase 4 的开工决策：
+
+1. **PT-ARCH-28**：`file` 模块统一写入 API + 函数动态/命名参数支持。当前已提供临时 `write_new` / `write_new_bytes`；未来统一为 `file.write(target, data, overwrite_flag="copy"|"overwrite"|"new")`。
+2. **PT-ARCH-29**：命名历史包袱全方位代码卫生清理。代码层已零残留，需处理历史设计文档/工作日志/注释中的旧 API 引用，加"历史文档"标注。
+3. **PT-ARCH-30**：内置 `file` 模块命名风险清理。建议文档中称"`file` 内核模块"并加静态检查禁止 `core/runtime/modules/file.py`。
 
 ---
 

@@ -97,7 +97,12 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
             frame.last_result = result
             frame.should_retry = False  # 等待 body 中的 retry 语句重新设为 True
 
-            body_res = yield from _vm_execute_stmt_sequence(executor, body_uids)
+            # PT-ARCH-27：在 retry body 中禁用 write_overwrite 写入。
+            executor.ec.enter_llmexcept_body()
+            try:
+                body_res = yield from _vm_execute_stmt_sequence(executor, body_uids)
+            finally:
+                executor.ec.exit_llmexcept_body()
             if isinstance(body_res, Signal):
                 return body_res
 

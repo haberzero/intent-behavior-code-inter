@@ -213,5 +213,7 @@ class ArtifactRehydrator:
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")
             spec.parent_type = TypeRef.of(p_name, p_mod) if p_name else None
+        elif spec.kind == TypeKind.MODULE.value:
+            spec.exported_types = list(data.get("exported_types", []))
 
         return spec

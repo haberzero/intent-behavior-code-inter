@@ -5,7 +5,7 @@ tests/e2e/test_e2e_multimodal_file_io.py
 e2e 测试：Phase 3 多模态文件 I/O 端到端链路（纯 run_ibci，不触碰解释器内部）。
 
 验证 NEXT_STEPS P0 的端到端要求：
-1. ``audio x = file.read_audio("test.wav")`` 能编译并执行（image/video 同理）
+1. ``audio x = audio.from_file("test.wav")`` 能编译并执行（image/video 同理）
 2. ``@~ ... $x ... ~`` 能正确接收多模态对象并完成一次行为表达式调用（MOCK 拦截验证）
 3. NEXT_STEPS 文档示例代码在 MOCK 模式下端到端跑通
 
@@ -15,7 +15,7 @@ e2e 测试：Phase 3 多模态文件 I/O 端到端链路（纯 run_ibci，不触
 路径策略：``compile_string`` 会把源码写入系统临时目录的 NamedTemporaryFile，
 导致 entry_dir ≠ root_dir，相对路径会落到 root_dir 之外被权限沙箱拒绝。因此测试
 统一把媒体文件写入 ``tmp_path``（=root_dir），并以**绝对路径**（正斜杠形式）传入
-``read_*``——绝对路径被 ``resolve_path`` 原样保留，且位于 root_dir 内通过校验。
+``from_file``——绝对路径被 ``resolve_path`` 原样保留，且位于 root_dir 内通过校验。
 """
 
 from tests.conftest import run_ibci
@@ -37,35 +37,35 @@ def _write_media(tmp_path, filename: str, payload: bytes = b"fake_media_payload"
 
 
 class TestMultimodalFileRead:
-    """file.read_audio/image/video 端到端：读取 → 装箱 → 行为表达式接收。"""
+    """audio/image/video.from_file 端到端：读取 → 装箱 → 行为表达式接收。"""
 
-    def test_read_audio_into_behavior_expression(self, tmp_path):
+    def test_audio_from_file_into_behavior_expression(self, tmp_path):
         """audio 对象能被行为表达式接收（MOCK:STR 返回首个 token）。"""
         path = _write_media(tmp_path, "test.wav")
         code = _MEDIA_PREFIX + (
-            f'audio x = file.read_audio("{path}")\n'
+            f'audio x = audio.from_file("{path}")\n'
             "str r = @~ MOCK:STR:transcript ... $x ... ~\n"
             "print(r)\n"
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
         assert "transcript" in lines
 
-    def test_read_image_into_behavior_expression(self, tmp_path):
+    def test_image_from_file_into_behavior_expression(self, tmp_path):
         """image 对象能被行为表达式接收。"""
         path = _write_media(tmp_path, "photo.png")
         code = _MEDIA_PREFIX + (
-            f'image x = file.read_image("{path}")\n'
+            f'image x = image.from_file("{path}")\n'
             "str r = @~ MOCK:STR:caption $x ~\n"
             "print(r)\n"
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
         assert "caption" in lines
 
-    def test_read_video_into_behavior_expression(self, tmp_path):
+    def test_video_from_file_into_behavior_expression(self, tmp_path):
         """video 对象能被行为表达式接收。"""
         path = _write_media(tmp_path, "clip.mp4")
         code = _MEDIA_PREFIX + (
-            f'video x = file.read_video("{path}")\n'
+            f'video x = video.from_file("{path}")\n'
             "str r = @~ MOCK:STR:summary $x ~\n"
             "print(r)\n"
         )
@@ -76,7 +76,7 @@ class TestMultimodalFileRead:
         """NEXT_STEPS 文档示例代码在 MOCK 模式下端到端跑通。"""
         path = _write_media(tmp_path, "test.wav")
         code = _MEDIA_PREFIX + (
-            f'audio recording = file.read_audio("{path}")\n'
+            f'audio recording = audio.from_file("{path}")\n'
             'str transcript = @~ MOCK:STR:transcript ... $recording ~\n'
             "print(transcript)\n"
         )

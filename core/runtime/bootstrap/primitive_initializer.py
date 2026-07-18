@@ -2,6 +2,8 @@ from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
 from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
+from ..objects.file_handle import IbFileHandle
+from ..objects.media_types import audio_from_file, image_from_file, video_from_file
 from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
 from ..objects.intent_stack import IbIntentStack
 from ..objects.intent_context import IbIntentContext
@@ -607,10 +609,8 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     # 5b. 多模态类型方法注册 (audio / image / video)
     #
     # Per ADR-012: 作为普通类名注册，通过 axiom → primitive_initializer 标准路径。
-    # Per ADR-007: Phase 3 使用纯内存 deep-copy snapshot。
-    #
-    # 注册 __to_prompt__（文本描述）和 __payload_prompt__（结构化 content block）。
-    # __payload_prompt__ 委托到 axiom 的方法，确保 base64 编码逻辑在公理层维护。
+    # Per ADR-014/016: media 类型现在是 file_handle 的磁盘型子类；
+    # 所有 I/O 与 base64 编码下放到 runtime 层的 ``__path_payload_prompt__``。
     for _media_type_name in ("audio", "image", "video"):
         _media_class = registry.get_class(_media_type_name)
         if _media_class is not None:
@@ -621,18 +621,51 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             ) if metadata_registry else None
 
             # 绑定循环变量为默认参数，避免 lambda 晚绑定闭包 bug
-            # （否则三种类型都会引用循环结束后的最后一个值 "video"）。
             _type_name = _media_type_name
 
             # __to_prompt__: 返回文本描述（供纯文本提示词路径使用）
             _reg_native(_media_class, '__to_prompt__',
-                        lambda self, tn=_type_name: f"[{tn} data: {getattr(self.value, 'size', '?')} bytes]" if self.value else f"[empty {tn}]")
+                        lambda self, tn=_type_name: f"[{tn} handle: {self.backing.path}]" if self.backing else f"[empty {tn}]")
 
-            # __payload_prompt__: 委托到 axiom 的 __payload_prompt__ 方法
+            # __payload_prompt__: 委托到公理的 __payload_prompt__，公理再下沉到
+            # runtime 的 __path_payload_prompt__（零 I/O 在公理层）。
             if _media_axiom and hasattr(_media_axiom, '__payload_prompt__'):
                 _axiom_ref = _media_axiom
                 _reg_native(_media_class, '__payload_prompt__',
                             lambda self, ax=_axiom_ref: ax.__payload_prompt__(self), unbox=False)
+
+            # __path_payload_prompt__: 实际构造 content block 的 runtime 协议方法。
+            _py_impl_cls = get_ib_implementation(_type_name)
+            if _py_impl_cls and hasattr(_py_impl_cls, '__path_payload_prompt__'):
+                _pp_method = _py_impl_cls.__path_payload_prompt__
+                _reg_native(_media_class, '__path_payload_prompt__', _pp_method, unbox=False)
+
+            # PT-ARCH-25: media 静态构造入口 audio.from_file / image.from_file / video.from_file。
+            # IBCI 调用 audio.from_file(path) 时 receiver 是 audio IbClass，因此 Python 函数
+            # 第一个参数是 IbClass，第二个参数是原生 path 字符串（unbox=True）。
+            if _type_name == "audio":
+                _reg_native(_media_class, 'from_file', audio_from_file, unbox=True)
+            elif _type_name == "image":
+                _reg_native(_media_class, 'from_file', image_from_file, unbox=True)
+            elif _type_name == "video":
+                _reg_native(_media_class, 'from_file', video_from_file, unbox=True)
+
+    # 5c. file_handle 类型方法注册
+    #
+    # Per ADR-020: file_handle 为 kernel-native 类型，import-gated。
+    # Per ADR-016: 声明 storage_model = DISK_BACKED，由 deep_clone / RuntimeSerializer
+    # 自动走磁盘协议族（__clone_ref__ / __to_descriptor__ / __from_descriptor__）。
+    _file_handle_class = registry.get_class("file_handle")
+    if _file_handle_class is not None:
+        # 用户可见原生方法已由公理自动化绑定（path/read/read_bytes/write/close/cast_to）。
+        # 此处绑定磁盘协议族与 prompt 协议。
+        _reg_native(_file_handle_class, '__materialize__', IbFileHandle.__materialize__, unbox=False)
+        _reg_native(_file_handle_class, '__path_payload_prompt__', IbFileHandle.__path_payload_prompt__, unbox=False)
+        _reg_native(_file_handle_class, '__clone_ref__', IbFileHandle.__clone_ref__, unbox=False)
+        _reg_native(_file_handle_class, '__to_descriptor__', IbFileHandle.__to_descriptor__, unbox=False)
+        _reg_native(_file_handle_class, '__from_descriptor__', IbFileHandle.__from_descriptor__, unbox=False)
+        _reg_native(_file_handle_class, '__payload_prompt__',
+                    lambda self: self.receive('__path_payload_prompt__', []), unbox=False)
 
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)

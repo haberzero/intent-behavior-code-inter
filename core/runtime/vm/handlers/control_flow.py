@@ -235,7 +235,12 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                     frame.should_retry = False  # 等待 retry 语句显式设置
 
                     try:
-                        handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)
+                        # PT-ARCH-27：在 llmexcept handler body 中禁用 write_overwrite 写入。
+                        executor.ec.enter_llmexcept_body()
+                        try:
+                            handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)
+                        finally:
+                            executor.ec.exit_llmexcept_body()
                         if isinstance(handler_res, Signal):
                             return handler_res
                     finally:

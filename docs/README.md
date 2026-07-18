@@ -56,7 +56,7 @@ docs/
 
 | 角色 | 推荐阅读顺序 |
 |------|------------|
-| **新加入的开发者** | 本文件 → `IBCI_SPEC.md`（根目录）→ `ARCHITECTURE_PRINCIPLES.md` → `NEXT_STEPS.md` |
+| **新加入的开发者** | 本文件 → `GETTING_STARTED.md`（根目录）→ `ARCHITECTURE_PRINCIPLES.md` → `NEXT_STEPS.md` |
 | **写 IBCI 代码的用户** | `README.md`（根目录）→ `IBCI_SYNTAX_REFERENCE.md` → `KNOWN_LIMITS.md` |
 | **要改类型系统的人** | `design/TYPE_SYSTEM_DESIGN.md` → `METADATA_ARCHITECTURE.md` → `design/ARCH_DETAILS.md` |
 | **要改 VM/解释器的人** | `design/VM_AND_INTERPRETER_DESIGN.md` → `design/VM_SPEC.md` → `design/ARCH_DETAILS.md` |

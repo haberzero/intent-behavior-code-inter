@@ -362,11 +362,11 @@ Engine.__init__()
 
 `llm_except_frame.py` 的 `_is_serializable()` 和 `runtime_serializer.py` 的 `_collect_instance()` / `_get_instance()` 均已补充 `IbTuple` 分支（cache-before-recurse 模式，与 IbList 对称）。
 
-### 11.2 ibci_file 的 core 依赖与"非侵入"定义存在轻微偏差（已修正）
+### 11.2 ibci_file 已删除，file 模块转为 kernel-native（ADR-020 G6）
 
-`ibci_file/core.py` 导入 `from core.runtime.path import IbPath` 并通过 `capabilities.execution_context.resolve_path()` 进行路径解析，而文档将 `ibci_file` 归类为非侵入式插件。`IbPath` 是纯数据类（`@dataclass(frozen=True)`），无解释器状态依赖，属于可接受的工具类导入。
+`ibci_modules/ibci_file/` 已整目录物理删除。文件系统相关能力不再以用户插件形式存在，而是作为内核原生模块 `file` 在 `core/engine.py` 构造期直接注册为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`。
 
-**已修正**：`ibcext.py` 注释和 `ARCHITECTURE_PRINCIPLES.md` 插件表格已新增"非侵入式（轻量依赖）"分类，将 `ibci_file` 单独列出并注明原因。
+因此原"非侵入式（轻量依赖）"分类随 `ibci_file` 一起消失；`ARCHITECTURE_PRINCIPLES.md` 插件表格已更新为"内核原生 / 非侵入式 / 核心级"三分类。`file` 模块的 FS I/O 实现位于 `core/runtime/modules/file_impl.py`，运行时层合法。
 
 ### 11.3 scheduler.py 中的临时方案符号冲突静默处理（已修复）
 

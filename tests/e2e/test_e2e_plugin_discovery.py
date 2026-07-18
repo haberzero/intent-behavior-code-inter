@@ -73,8 +73,8 @@ def _write_minimal_plugin(dest_dir: str, module_name: str, funcs: dict) -> None:
         f.write("from .core import create_implementation\n")
 
 
-def _run_ibci_file(entry_file: str, root_dir: str):
-    """执行 .ibci 文件并返回 print 输出列表。"""
+def _run_ibci_script(entry_file: str, root_dir: str):
+    """执行 .ibci 脚本并返回 print 输出列表。"""
     out = []
     eng = IBCIEngine(root_dir=root_dir, auto_sniff=False)
     eng.run(entry_file, output_callback=lambda s: out.append(str(s)), silent=True)
@@ -102,7 +102,7 @@ class TestPluginPathsE2E:
             encoding="utf-8",
         )
 
-        out = _run_ibci_file(str(main_ibci), str(project))
+        out = _run_ibci_script(str(main_ibci), str(project))
         assert any("hello" in line for line in out)
 
     def test_global_plugin_e2e_import_resolves(self, tmp_path):
@@ -123,7 +123,7 @@ class TestPluginPathsE2E:
             encoding="utf-8",
         )
 
-        out = _run_ibci_file(str(main_ibci), str(project))
+        out = _run_ibci_script(str(main_ibci), str(project))
         assert any("hello" in line for line in out)
 
     def test_explicit_plugin_paths_disables_sniff_e2e(self, tmp_path):
@@ -148,7 +148,7 @@ class TestPluginPathsE2E:
         )
 
         with pytest.raises(CompilerError) as exc_info:
-            _run_ibci_file(str(main_ibci), str(project))
+            _run_ibci_script(str(main_ibci), str(project))
         # 编译期即无法解析 sniff_only 模块
         diagnostics = "\n".join(str(d) for d in exc_info.value.diagnostics)
         assert "sniff_only" in diagnostics

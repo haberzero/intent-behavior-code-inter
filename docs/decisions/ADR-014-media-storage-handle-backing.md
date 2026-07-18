@@ -1,7 +1,7 @@
 # ADR-014: media 存储为磁盘型 handle（受 ADR-016 治理，修订版）
 
 ## Status
-Accepted (2026-06-25，2026-06-25 修订)
+Accepted (2026-06-25 修订；2026-07-17 随 PT-ARCH-23 G3-G6 实施完成)
 
 **修订记录**：本 ADR 初版（2026-06-25）提出 FileBacking / GeneratedBacking / **MemoryBacking** 三选项，并把存储模型视为 media 的实现细节。经第三轮研讨，项目负责人要求：(1) 所有 media 一律磁盘型，**砍除 MemoryBacking**；(2) 存储模型升为**类型级一等区分**；(3) **整体淘汰** `MediaStorage`。修订版据此重写，并受 **ADR-016（变量存储模型）** 上层治理。
 
@@ -36,16 +36,16 @@ IbAudio / IbImage / IbVideo / IbMedia   （用户可见 handle；disk-backed 身
 字节**惰性物化**——仅在 LLM I/O 协议（磁盘型协议族，见 ADR-016 第 5 条）需要时从路径读取。
 
 ### 3. 来源感知
-- `file.read_audio(path)` → `FileBacking(resolved_path)`，**不立即读字节**（零拷贝）。
-- `MediaAxiom.from_response`（响应解析，协议驱动分发）→ 把 LLM 返回的二进制溢写到 project_root 下媒体缓存目录，产出 `GeneratedBacking(path)`。
+- `audio.from_file(path)` / `image.from_file(path)` / `video.from_file(path)` → `FileBacking(resolved_path)`，**不立即读字节**（零拷贝）。旧 `ibci_file.read_audio/read_image/read_video` 已随 `ibci_modules/ibci_file/` 删除而移除。
+- `MediaAxiom.from_response`（响应解析，协议驱动分发，media Phase 4 实现）→ 把 LLM 返回的二进制溢写到 project_root 下媒体缓存目录，产出 `GeneratedBacking(path)`。
 - 小数据不享受"内存豁免"——所有 media 一视同仁为磁盘型（项目负责人明确要求）。
 
 ### 4. 整体制动淘汰 `MediaStorage`
 `MediaStorage`（字节持有者）是"内存型 media"模型的化身，与第 1 条直接矛盾。本 ADR 正式批准淘汰：
 - `core/runtime/objects/media_storage.py` —— **删除**
-- `core/runtime/objects/media_types.py` —— **替换**为磁盘型 handle 类
+- `core/runtime/objects/media_types.py` —— **替换**为磁盘型 handle 类（`IbAudio`/`IbImage`/`IbVideo` 继承 `IbFileHandle`）
 - `core/kernel/axioms/primitives/media.py` 的 `__payload_prompt__` —— 改为从 backing 惰性物化
-- `ibci_file.read_*` —— 改为返回 `FileBacking` handle
+- `ibci_modules/ibci_file/` —— **整目录删除**；媒体读取入口改为 `audio.from_file` / `image.from_file` / `video.from_file`
 - 既有 `MediaStorage` 单测 —— 替换为磁盘型 handle 的契约测试
 
 ## Alternatives Considered
@@ -72,5 +72,5 @@ IbAudio / IbImage / IbVideo / IbMedia   （用户可见 handle；disk-backed 身
 - **阻塞链**：本 ADR → 阻塞于 ADR-016 实现（PT-ARCH-17）→ 阻塞于 ADR-015（路径统一）。
 - 设计文档 `MULTIMODAL_BEHAVIOR_DESIGN.md` §4.3 / §十一-D3 中"`MediaStorage.location` 返回 `memory | disk:/path`"的 stringly-typed 第三套路径格式**被否决**——backing 路径必须是 `IbPath`。
 
-## 改动面（实现期，PT-ARCH-18）
-新建 `core/runtime/objects/media_backing.py`（`MediaBacking` 抽象 + `FileBacking`/`GeneratedBacking`）；重写 `media_types.py` 为磁盘型 handle；改写 `axioms/primitives/media.py` 的物化逻辑；改 `ibci_file.read_*`；删 `media_storage.py`；改序列化器与 deep_clone 的 media 分支（按 PT-ARCH-17 确立的存储模型分发）。
+## 改动面（已实施，PT-ARCH-18 作为 PT-ARCH-23 阶段 5 的一部分）
+新建 `core/runtime/objects/media_backing.py`（`MediaBacking` 抽象 + `FileBacking`/`GeneratedBacking`）；重写 `media_types.py` 为磁盘型 handle；改写 `axioms/primitives/media.py` 的物化逻辑；物理删除 `ibci_modules/ibci_file/`；删 `media_storage.py`；改序列化器与 deep_clone 的 media 分支（按 PT-ARCH-17 确立的存储模型分发）。media 构造入口改为 `audio.from_file` / `image.from_file` / `video.from_file`。

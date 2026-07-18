@@ -171,6 +171,28 @@ class ExecutionContextImpl:
         self._module_manager = value
 
     @property
+    def permission_manager(self) -> Any:
+        """PT-ARCH-25: 由 Interpreter 注入，供 file_handle/media I/O 做沙箱校验。"""
+        return getattr(self, "_permission_manager", None)
+
+    @permission_manager.setter
+    def permission_manager(self, value: Any):
+        self._permission_manager = value
+
+    @property
+    def llmexcept_body_depth(self) -> int:
+        """PT-ARCH-27: 当前处于 llmexcept retry body 的嵌套深度（0 = 不在其中）。"""
+        return getattr(self, "_llmexcept_body_depth", 0)
+
+    def enter_llmexcept_body(self) -> None:
+        """PT-ARCH-27: 进入 llmexcept retry body 时调用。"""
+        self._llmexcept_body_depth = self.llmexcept_body_depth + 1
+
+    def exit_llmexcept_body(self) -> None:
+        """PT-ARCH-27: 退出 llmexcept retry body 时调用（需与 enter 配对）。"""
+        self._llmexcept_body_depth = max(0, self.llmexcept_body_depth - 1)
+
+    @property
     def strict_mode(self) -> bool:
         return self._strict_mode
 

@@ -3,6 +3,8 @@
 > **日期**：2026-06-25
 > **分支**：unsafe-vibe-dev
 > **基线**：1011 passed → **1021 passed, 5 skipped, 0 failed**
+>
+> **⚠️ 归档状态（2026-07-17）**：本文档记录 Phase 3 旧实现（`ibci_modules/ibci_file/` 插件 + `MediaStorage` 纯内存方案）。该插件与存储模型**已被整体淘汰**：`ibci_modules/ibci_file/` 目录已物理删除，`MediaStorage` 已删除，媒体构造入口已改为 `audio.from_file(path)` / `image.from_file(path)` / `video.from_file(path)`，统一走 `IbFileHandle` 磁盘型 handle。当前 API 与实现请参考 `docs/decisions/ADR-014-media-storage-handle-backing.md`、`docs/decisions/ADR-016-variable-storage-model.md`、`docs/decisions/ADR-020-kernel-native-vs-plugin-boundary.md` 与 `docs/IBCI_SYNTAX_REFERENCE.md` §11.7。
 
 ---
 

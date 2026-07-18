@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
 
-from core.base.enums import Provenance, Visibility
+from core.base.enums import Provenance, StorageModel, Visibility
 
 from .base import IbSpec, TypeDef, TypeKind
 from core.kernel.spec.type_ref import TypeRef
@@ -86,12 +86,37 @@ INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=TypeKind.CLASS.value, 
                                parent_type=TypeRef.of("Object"))
 
 # 多模态类型规格 — IbAudio / IbImage / IbVideo 的公理化描述符
-# Per ADR-012: 作为普通类名注册（非关键字），继承 Object。
-# 方法成员（data/format/duration/cast_to 等）由 _bootstrap_axiom_methods 从公理自动填充。
-AUDIO_SPEC = TypeDef(name="audio", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-                     parent_type=TypeRef.of("Object"))
-IMAGE_SPEC = TypeDef(name="image", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-                     parent_type=TypeRef.of("Object"))
-VIDEO_SPEC = TypeDef(name="video", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-                     parent_type=TypeRef.of("Object"))
+# Per ADR-012: 作为普通类名注册（非关键字）。
+# Per ADR-014/016: 继承 file_handle，使用磁盘型存储模型。
+AUDIO_SPEC = TypeDef(
+    name="audio", kind=TypeKind.CLASS.value, is_nullable=True,
+    # PT-ARCH-25: audio/image/video 与 file_handle 同为 import-gated，需 import file。
+    provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED,
+    parent_type=TypeRef.of("file_handle"),
+    storage_model=StorageModel.DISK_BACKED,
+)
+IMAGE_SPEC = TypeDef(
+    name="image", kind=TypeKind.CLASS.value, is_nullable=True,
+    provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED,
+    parent_type=TypeRef.of("file_handle"),
+    storage_model=StorageModel.DISK_BACKED,
+)
+VIDEO_SPEC = TypeDef(
+    name="video", kind=TypeKind.CLASS.value, is_nullable=True,
+    provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED,
+    parent_type=TypeRef.of("file_handle"),
+    storage_model=StorageModel.DISK_BACKED,
+)
+
+# 文件容器类型规格 — IbFileHandle 的公理化描述符
+# Per ADR-020: file_handle 为 kernel-native 类型，import-gated；Per ADR-016: 磁盘型存储模型。
+FILE_HANDLE_SPEC = TypeDef(
+    name="file_handle",
+    kind=TypeKind.CLASS.value,
+    is_nullable=True,
+    provenance=Provenance.KERNEL_NATIVE,
+    visibility=Visibility.IMPORT_GATED,
+    parent_type=TypeRef.of("Object"),
+    storage_model=StorageModel.DISK_BACKED,
+)
 

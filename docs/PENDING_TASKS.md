@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**——每项都有明确的阻塞原因或前置条件。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；已完成事项见 `docs/COMPLETED.md`。
 >
-> **最后更新**：2026-07-17（**G2 内核原生化完成**：ai/ihost/idbg/isys 四模块已提升为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`，经 bootstrap 预注册、loader 短路、HostInterface 覆盖保护、late-hydrate 窗口实现；新增 10 个测试，全量 pytest `1157 passed, 7 skipped`。下一项 **G3+G4+G5+G6 磁盘型存储体系（合并单阶段）**。）
+> **最后更新**：2026-07-17（**G3+G4+G5+G6 磁盘型存储体系 + PT-ARCH-24/25/26/27 安全闸门完成**：`file` 模块提升为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`，`file_handle`/`audio`/`image`/`video` 只读语义落地，`write_copy`/`write_overwrite` 显式写入函数就位；`save_state` 拒绝活跃磁盘型变量，`llmexcept` retry body 禁用 overwrite 写入。新增 13 个测试，全量 pytest `1174 passed, 7 skipped`。下一项 **media Phase 4**（已被 `NEXT_STEPS.md` 列为 GATED）。）
 >
 > **阅读指南**：
 > - 标为 `[P1]` 的条目：前置条件已满足，可由 `NEXT_STEPS.md` 随时提升为当前任务
@@ -349,11 +349,11 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
 
 **阶段 4 — G2 ai/ihost/idbg/isys 内核原生化（ADR-020）** ✅ **已完成 2026-07-17**：bootstrap 预注册 4 模块（经 loader 短路，零文件移动）；**`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`** → 恒可解析/不可覆盖 + import-gated 保留；HostInterface 覆盖保护；late-hydrate 钩子随 ai 建。全量 pytest `1157 passed, 7 skipped`。
 
-**阶段 5 — G3+G4+G5+G6 磁盘型存储体系（合并，ADR-016/014/020）** ★ **当前最紧要**：不可拆分。
-- **G3 存储模型机制（P0-2）**：消费 G1.5 的 `storage_model` 字段；磁盘协议族（lazy materialize/path-payload/path-snapshot，**方法名本阶段设计期定**）；`deep_clone.py:89` isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。
-- **G4 FileHandle（ADR-020 B）**：新建 `core/kernel/axioms/primitives/file_handle.py`（FileHandleAxiom，零 I/O）+ `core/runtime/objects/file_handle.py`（IbFileHandle，持 IbPath+backing）+ bootstrap 绑定；FileBacking/GeneratedBacking；创建经 resolve_path + canonicalize 沙箱；修既有违规 media.py:72-73。
-- **G5 media→FileHandle 子类（P0-3）**：IbAudio/IbImage/IbVideo 改 (IbFileHandle)；删 media_storage.py；改 ibci_file read_* 返回 FileBacking（零拷贝）。
-- **G6 file 模块内核原生化**：ibci_file 插件消亡；file 模块（free 函数 open/read/write）内核原生 + import-gated；FS 操作落 runtime 值类原生方法。
+**阶段 5 — G3+G4+G5+G6 磁盘型存储体系（合并，ADR-016/014/020）** ✅ **已完成 2026-07-17**：不可拆分。
+- **G3 存储模型机制（P0-2）** ✅：消费 G1.5 的 `storage_model` 字段；磁盘协议族（`__materialize__`/`__path_payload_prompt__`/`__clone_ref__`/`__to_descriptor__`/`__from_descriptor__`）；`deep_clone.py` isinstance 修复 + 磁盘型浅拷贝分支；序列化器磁盘型分支 + 便携描述符。
+- **G4 FileHandle（ADR-020 B）** ✅：新建 `core/kernel/axioms/primitives/file_handle.py`（FileHandleAxiom，零 I/O）+ `core/runtime/objects/file_handle.py`（IbFileHandle，持 IbPath+backing）+ bootstrap 绑定；FileBacking/GeneratedBacking；创建经 resolve_path + canonicalize 沙箱。
+- **G5 media→FileHandle 子类（P0-3）** ✅：IbAudio/IbImage/IbVideo 改为 `IbFileHandle` 子类；删除 `media_storage.py`；`ibci_file/core.py` 的 `read_*` 返回 `FileBacking`（零拷贝）。
+- **G6 file 模块内核原生化** ✅：`ibci_modules/ibci_file/` 物理删除；`file` 模块以自由函数 `open/read/read_bytes/write_copy/write_copy_bytes/write_overwrite/write_overwrite_bytes/exists/remove` 注册为 kernel-native + import-gated；FS 操作落 runtime 值类原生方法；`file_handle`/`audio`/`image`/`video` 只读语义落地。
 
 #### 验证
 - 每阶段全量 pytest 0 failure；机械门槛（rg 零散点 os.path、零 compiler→runtime 反向依赖、零平 bool flag 重载残留）。
@@ -365,6 +365,16 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
 - **G1.5 与 G3 的边界（铁律）**：G1.5 的 `storage_model` 字段**仅落地，禁止任何 workflow 读取/分发**（默认写死 MEMORY_BACKED）；分发逻辑（deep_clone/序列化器分支）留待 G3 真正启用——避免 G1.5 变成"G3 半成品"。
 - **可独立**：G1（重分类基础设施）、G2（内核原生化）与存储正交。
 - **命名清理（PT-ARCH-22）**：本里程碑之后做（file_handle.py 已定，其余待扫）。
+
+#### 阶段 5 进度更新（2026-07-17 本轮工作）
+
+**G3 存储模型机制** ✅ **已完成**：`storage_model` 字段消费（`core/kernel/spec/base.py` + `specs.py`）；磁盘协议族方法名确定（`__materialize__` / `__path_payload_prompt__` / `__clone_ref__` / `__to_descriptor__` / `__from_descriptor__`）；`deep_clone.py` 按存储模型分发 + `isinstance` 修复；`RuntimeSerializer` 磁盘型分支 + 路径描述符；新增 `tests/runtime/test_storage_model_dispatch.py`。测试 1161 passed, 7 skipped。
+
+**G4 FileHandle 基类** ✅ **已完成**：`core/runtime/objects/media_backing.py` + `file_handle.py`；`core/kernel/axioms/primitives/file_handle.py`；spec/registry/bootstrap 全链路注册；新增 `tests/runtime/test_file_handle.py`。
+
+**G5 media→FileHandle 子类** ✅ **已完成**：`IbAudio/IbImage/IbVideo` 改继承 `IbFileHandle`；media 公理零 I/O；`ibci_file/core.py` 返回 `FileBacking`；删除 `media_storage.py` 及对应测试；新增/更新媒体 handle 测试。
+
+**G6 file 模块内核原生化** ✅ **已完成**：`core/runtime/modules/file_impl.py` 就位并在 `core/engine.py` 注册为 kernel-native；`ibci_modules/ibci_file/` 已物理删除；`file_handle` 实例只读 + `write_copy`/`write_overwrite` 显式写入函数；PT-ARCH-26/27 安全闸门落地。新增 `tests/e2e/test_e2e_file_kernel_native.py`（9 个测试），更新 `tests/runtime/test_file_handle.py`、`test_media_file_handle.py`、`test_runtime_multimodal_dispatch.py`，重写示例 `examples/02_basic_modules/01_file_operations.ibci`。全量 pytest `1174 passed, 7 skipped`。
 
 #### G2 遗留可观测性缺口（待决策）
 
@@ -384,6 +394,179 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
 4. 在 `ModuleDiscoveryService` 层检测同名冲突，统一收集 warning。
 
 **建议**：暂不改代码。G3-G6 是磁盘型存储大阶段，改动 `HostInterface` 构造契约或注册接口会引入额外耦合；待诊断体系/接口稳定后再专项处理。
+
+---
+
+### ✅ PT-ARCH-24：FileHandle / Media Axiom 的 field-vs-method 声明失配 [DONE]
+
+> **发现日期**：2026-07-17（G3-G5 代码现状 subagent 交叉验证）。
+> **关联**：ADR-014 / ADR-016 / ADR-020；影响 `file_handle` 与 `audio`/`image`/`video` 的公共 API 语义。
+
+**问题描述**：
+公理层把若干成员声明为 **field**，但运行时值类把它们实现为 **method**。在 IBCI 语义中，field 访问与 method 调用的分发路径不同：`audio.format` 会生成 `__getattr__("format")`，返回的是一个 bound method 对象，而非用户根据类型签名预期的 `str`。
+
+| 类型 | 声明为 field | 实际实现为 method | 位置 |
+|---|---|---|---|
+| `file_handle` | `path` | `path()` | `core/kernel/axioms/primitives/file_handle.py:33` |
+| `audio` | `data`, `format`, `duration` | `data()`, `format()`, `duration()` | `core/kernel/axioms/primitives/media.py:34-36` |
+| `image` | `data`, `format`, `width`, `height` | `data()`, `format()`, `width()`, `height()` | `core/kernel/axioms/primitives/media.py:34-36,70-71` |
+| `video` | `data`, `format`, `duration`, `width`, `height` | `data()`, `format()`, `duration()`, `width()`, `height()` | `core/kernel/axioms/primitives/media.py:34-36,70-71` |
+
+**影响**：
+- 潜伏 API/类型契约不一致：编译期告诉用户 `audio.format` 是 `str`，运行期却拿到 callable。
+- 一旦 `file_handle` 成为 import-gated 的公共类型（G6 后用户会写 `fh.path` 或 `audio.format`），该问题会立即 surface。
+- 违背 ADR-020 "kernel-native 模块 = import-gated" 设计下对公共 API 稳定性的隐含要求。
+
+**可选处理方向**（需决策）：
+1. **统一为 method**：把公理层 field 声明改为 `MethodMemberSpec`，IBCI 代码写成 `audio.format()` / `fh.path()`。
+2. **统一为 property/field**：运行时去掉 `()`，把 `path`/`format` 等实现为 IbValue 上的 property/lazy attribute，让 `audio.format` 直接返回字符串。
+3. **混合但显式区分**：保留 field 用于真正无计算的属性（如 `width`/`height`），把需要 I/O 的 `data` 改为 method；`path` 改为 field（因为只是 backing 路径引用）。
+
+**最终决策（2026-07-17 研讨确认）**：
+- `file_handle.path`、`audio.format`、`image.format`、`video.format` 改为 **field**（纯内省，无 I/O）。
+- `audio.data` / `image.data` / `video.data` 保持 **method**（触发文件读取 + base64，必须显式成本提示）。
+- `audio.duration` / `video.duration` / `image.width` / `image.height` 保持 **method**（当前占位，未来可能读取媒体元数据）。
+- `file_handle.read` / `read_bytes` / `close` / `cast_to` 保持 **method**。
+- 在 `IbFileHandle.__init__` 中设置 `self.fields["path"]`；在 `IbAudio/IbImage/IbVideo.__init__` 中设置 `self.fields["format"]`。
+
+**阻塞/前置**：
+- 本问题**与 G6 一并修复**（file_handle 公理和测试正在重写，顺手做成本低）。
+- 修改公理成员 kind 会改变编译期类型检查与代码生成，需同步更新 bootstrap 绑定、测试、文档。
+
+**完成状态（2026-07-17）**：
+- `core/kernel/axioms/primitives/file_handle.py`：`path` 保持 field，`write` 已删除。
+- `core/kernel/axioms/primitives/media.py`：`format` 改为 field；`data`/`duration`/`width`/`height` 保持 method；新增 `from_file` 声明。
+- `core/runtime/objects/file_handle.py`：`__init__` 设置 `self.fields["path"]`；实例 `write()` 已删除；`read()`/`__materialize__()` 经 `PermissionManager` 沙箱校验。
+- `core/runtime/objects/media_types.py`：`__init__` 设置 `self.fields["format"]`；新增 `from_file(path)` 类方法。
+- 对应测试在 `tests/runtime/test_file_handle.py`、`tests/runtime/test_media_file_handle.py` 中覆盖。
+
+---
+
+### ✅ PT-ARCH-25：G6 file 模块内核原生化收尾 [DONE]
+
+> **归属**：PT-ARCH-23 阶段 5 的最后一个子阶段。**已完成 2026-07-17**。
+> **测试基线**：1174 passed, 7 skipped（G6 收尾完成后实测）。
+> **关联决策**：PT-ARCH-24（field/method 失配，本轮一并修复）、PT-ARCH-26（save_state 禁止文件容器）、PT-ARCH-27（llmexcept 禁用 overwrite 写入）。
+
+**最终 API 设计（2026-07-17 研讨确认）**：
+
+`file_handle` 实例只读：
+```ibci
+file_handle fh = file.open("data.txt")
+str p = fh.path              # field，无 I/O
+str s = fh.read()            # method，触发 I/O
+list[int] b = fh.read_bytes() # method，触发 I/O
+fh.close()                   # no-op placeholder
+```
+
+`file` 模块自由函数：
+```ibci
+file_handle fh = file.open("data.txt")
+
+# Copy-on-write：创建新文件，原 handle 及其所有别名不受影响
+file_handle copy = file.write_copy(fh, "data_v2.txt", "new content")
+file_handle copy_b = file.write_copy_bytes(fh, "data_v2.bin", [65, 66])
+
+# 副作用写入：显式覆盖原文件，所有共享该路径引用的变量看到变化
+file.write_overwrite(fh, "mutated content")
+file.write_overwrite_bytes(fh, [65, 66])
+
+# 其他函数
+str s = file.read("data.txt")                # 也接受 file_handle
+list[int] b = file.read_bytes("data.txt")    # 也接受 file_handle
+bool ok = file.exists("data.txt")
+file.remove("data.txt")
+```
+
+Media 静态构造：
+```ibci
+audio rec = audio.from_file("interview.wav")
+image photo = image.from_file("cat.png")
+video clip = video.from_file("clip.mp4")
+str fmt = rec.format     # field
+str b64 = rec.data()     # method，触发 I/O
+```
+
+**待做清单**：
+1. **PT-ARCH-24 一并修复**：
+   - `core/runtime/objects/file_handle.py`：`__init__` 设置 `self.fields["path"]`；删除 `write()` 实例方法；`read()` / `__materialize__()` 增加 `PermissionManager` 校验。
+   - `core/runtime/objects/media_types.py`：`__init__` 设置 `self.fields["format"]`；增加 `from_file(path)` 类方法。
+   - `core/kernel/axioms/primitives/file_handle.py`：删除 `write` 方法声明；`path` 保持 field。
+   - `core/kernel/axioms/primitives/media.py`：`format` 改为 field；`data`/`duration`/`width`/`height` 保持 method；增加 `from_file` 声明。
+   - `core/kernel/spec/specs.py`：`AUDIO_SPEC`/`IMAGE_SPEC`/`VIDEO_SPEC` 的 `visibility` 改为 `IMPORT_GATED`（与 `file_handle` 一致）。
+2. **两种写入函数**：在 `core/runtime/modules/file_impl.py` 实现 `write_copy` / `write_copy_bytes` / `write_overwrite` / `write_overwrite_bytes`，所有路径经 `ExecutionContext.resolve_path()` + `PermissionManager.validate_path()`。
+3. **沙箱校验 plumbing**：`core/runtime/interpreter/execution_context.py` 增加 `permission_manager` 属性；`core/runtime/interpreter/interpreter.py` 初始化时注入。
+4. **注册 `file` 模块**：在 `core/engine.py`（或 `kernel_native_modules.py`）把 `FileLib` 注册为 kernel-native 模块，元数据声明 `open/read/read_bytes/write_copy/write_copy_bytes/write_overwrite/write_overwrite_bytes/exists/remove`。
+5. **media 构造绑定**：在 `core/runtime/bootstrap/primitive_initializer.py` 绑定 `audio.from_file` / `image.from_file` / `video.from_file`。
+6. **删除 `ibci_modules/ibci_file/`**：整目录物理删除。
+7. **PT-ARCH-26/27 安全闸门**：`save_state` 检测活跃文件容器变量并报错；`llmexcept` retry 块中禁用 `write_overwrite` / `write_overwrite_bytes`。
+8. **更新测试**：重写 `tests/runtime/test_file_handle.py`；重写 `tests/runtime/test_media_file_handle.py`；重写 `tests/e2e/test_e2e_multimodal_file_io.py`；新增 `tests/e2e/test_e2e_file_kernel_native.py`。
+9. **更新文档/示例**：`GETTING_STARTED.md`（根目录）、`docs/IBCI_SYNTAX_REFERENCE.md`、`docs/ARCHITECTURE_PRINCIPLES.md`、`docs/decisions/ADR-020-kernel-native-vs-plugin-boundary.md`、`docs/decisions/ADR-014-media-storage-handle-backing.md`；`examples/02_basic_modules/01_file_operations.ibci`。
+10. **全量 pytest 回归**：目标 0 failure；机械校验零 `ibci_modules/ibci_file`、零 `MediaStorage`、零 `file.read_audio/image/video`、零 `fh.write(`。
+
+**已确认决策**（避免重复讨论）：
+- `file` 模块自由函数为 `open/read/read_bytes/write_copy/write_copy_bytes/write_overwrite/write_overwrite_bytes/exists/remove`。
+- `file_handle` 实例只读，无 `write()` 方法。
+- G6 一次性物理删除 `ibci_modules/ibci_file/`，不留 deprecation shim。
+- `file` 模块走 core 直接注册为 kernel-native。
+- `audio`/`image`/`video` 改为 `IMPORT_GATED`，需 `import file` 才能使用类型名。
+
+**风险 / 完成状态（2026-07-17）**：
+- ✅ 旧 `file.read_audio/image/video` 已替换为 `audio.from_file()` / `image.from_file()` / `video.from_file()`；e2e/示例/测试已更新。
+- ✅ 旧高级文件分析函数随 `ibci_file` 删除；`examples/02_basic_modules/01_file_operations.ibci` 已重写为只展示核心 `file` API。
+- ✅ `write_overwrite` 与 `llmexcept` retry 语义冲突已通过 PT-ARCH-27 运行时闸门 + 文档说明解决。
+
+---
+
+### ✅ PT-ARCH-26：save_state / load_state 暂禁文件容器变量 [DONE]
+
+> **发现日期**：2026-07-17（G3-G5 代码现状 subagent 交叉验证）。
+> **关联**：ADR-016（disk-backed 存储模型）、`core/runtime/host/service.py`、`core/runtime/serialization/runtime_serializer.py`。
+> **状态**：**已完成 2026-07-17**。
+
+**问题描述**：
+当前 `RuntimeSerializer` 对 disk-backed 对象只序列化路径字符串（`__to_descriptor__` 输出 `{path, backing_type}`）。`save_state` 不复制文件内容，只保存绝对路径。这意味着：
+- 跨机器/跨磁盘位置恢复时，路径会失效。
+- 保存后若原文件被覆盖/删除，load_state 恢复出的 handle 指向错误数据。
+
+这与 ADR-016 中“disk-backed 路径可跨 isolation host 恢复”的远期目标冲突。
+
+**最终决策（2026-07-17 研讨确认）**：
+- **现阶段**：不实现跨机器/跨位置快照恢复。
+- **G6 实现安全闸门**：`save_state` 在序列化 context 时，若检测到任何 `_type == "disk_backed"` 的实例（`file_handle` / `audio` / `image` / `video`），立即报错，明确告知用户“当前不支持保存包含文件容器变量的状态”。
+- **未来实验性功能**：在后续里程碑中，尝试在 `save_state` 时复制并打包所有被引用的磁盘文件到 snapshot asset 目录，并重写描述符为相对路径。
+
+**实现要点 / 完成状态（2026-07-17）**：
+- ✅ `HostService.save_state` 在序列化前扫描 `instance_pool`，发现 disk-backed 实例立即抛出 `InterpreterError`。
+- ✅ 错误信息：`"save_state is not supported when the execution context contains active file_handle/audio/image/video variables. Use write_copy to persist artifacts explicitly."`
+- ✅ 回归测试：`tests/e2e/test_e2e_file_kernel_native.py::test_save_state_rejects_file_handle` 通过。
+
+---
+
+### ✅ PT-ARCH-27：llmexcept retry 块禁用 overwrite 写入 [DONE]
+
+> **发现日期**：2026-07-17（G3-G5 代码现状 subagent 交叉验证）。
+> **关联**：ADR-016、`core/runtime/interpreter/llm_except_frame.py`、`core/runtime/objects/deep_clone.py`。
+> **状态**：**已完成 2026-07-17**。
+
+**问题描述**：
+`try_deep_clone` 对 disk-backed 对象走 `__clone_ref__`，即**浅拷贝路径引用**。在 `llmexcept` 中：
+1. 保存快照时，handle `h` 的克隆 `h'` 与 `h` 指向同一个物理文件。
+2. retry body 中若调用 `file.write_overwrite(h, "x")`，会覆盖该物理文件。
+3. 下一次 retry 恢复时，`h'` 也被污染，破坏“gold snapshot”不变量。
+
+这是 `write_overwrite` 副作用语义的直接结果，不是实现 bug。
+
+**最终决策（2026-07-17 研讨确认）**：
+- **G6 实现运行时闸门**：在 `llmexcept` retry body 执行期间，直接禁用 `file.write_overwrite` / `file.write_overwrite_bytes`。若调用，抛出 `InterpreterError`。
+- **设计规范**：在 `GETTING_STARTED.md`（根目录）、`docs/decisions/ADR-020.md`、相关示例中明确说明——“涉及可能失败的 LLM 调用时，强烈建议不要立即直接进行 overwrite 写入；应使用 write_copy 生成新文件，避免 retry 时产生意料之外的后果。”
+- `write_copy` 在 retry body 中允许使用（因为它创建新文件，不污染快照）。
+
+**实现要点 / 完成状态（2026-07-17）**：
+- ✅ `ExecutionContextImpl` 新增 `llmexcept_body_depth` 计数器；`LLMExceptFrame` 在进入 retry body 前 `+1`、退出后 `-1`。
+- ✅ `FileLib.write_overwrite` / `write_overwrite_bytes` 检查 `llmexcept_body_depth > 0`，若为真则抛出 `InterpreterError`。
+- ✅ 回归测试：`tests/e2e/test_e2e_file_kernel_native.py::test_overwrite_rejected_in_llmexcept_retry` 通过。
+- ✅ 设计规范已写入 `docs/decisions/ADR-020.md` 与 `docs/IBCI_SYNTAX_REFERENCE.md`。
 
 ---
 
@@ -466,7 +649,7 @@ G1 重分类基础设施（ADR-020 A/C/D/E）✅ 已完成 2026-07-17
 
 > 对抗式完备性审计（rg 全仓扫描）发现原清单"零碎片化"声称不成立。以下为原 P0-A~K 漏列的路径碎片化，必须并入收尾。
 
-- [ ] **`ibci_modules/ibci_file/core.py`（整文件遗漏）** — 用户可见文件 API，含 `os.path.relpath`（:102,:127，与 canonical `safe_relpath` 平行实现）、`os.path.join`（:95）、`os.path.splitext`（:211）。**这是 IBCI 脚本可见的路径行为，优先级高于纯内部清理。**
+- [x] ~~**`ibci_modules/ibci_file/core.py`（整文件遗漏）**~~ — **已因 G6 删除 `ibci_modules/ibci_file/` 而自然消解**：文件系统 API 已迁移为 kernel-native `file` 模块（`core/runtime/modules/file_impl.py`），旧 `core.py` 中的 `os.path.relpath`/`os.path.join`/`os.path.splitext` 不再存在。
 - [ ] **`core/runtime/interpreter/interpreter.py:1`** — 死 `import os`（body 零 `os.` 命中）。原 P0-J 漏列。
 - [ ] **`core/compiler/scheduler.py:13`** — 死 `IbPath`（`from core.kernel.path import IbPath, ...`，body 仅用 PathValidator/ModuleNameSpace/safe_relpath）。原 P0-H 只列了 resolver.py:4。
 - [ ] **`core/runtime/interpreter/permissions.py:5`** — 死 `IbPath`（body 仅用 PathValidator）。原 P0-H 漏列。
@@ -651,7 +834,7 @@ core/runtime/path/  【保留】BuiltinPaths（import ibci_modules，不进 kern
 
 ### [DONE] PT-DOC-12　IBCI_SPEC §6.1 路径语义修正 ✅（并入 PT-ARCH-11）
 
-**已修**（2026-06-25）：`IBCI_SPEC.md` §6.1 重写为区分**数据路径**（entry_dir 锚定，§6.1 契约）与**模块导入路径**（导入者目录锚定，Python 相对导入语义）。消除原"所有相对路径都基于入口目录"的虚假笼统声称。
+**已修**（2026-06-25）：`GETTING_STARTED.md`（当时名为 `IBCI_SPEC.md`）§6.1 重写为区分**数据路径**（entry_dir 锚定，§6.1 契约）与**模块导入路径**（导入者目录锚定，Python 相对导入语义）。消除原"所有相对路径都基于入口目录"的虚假笼统声称。
 
 ---
 
@@ -714,6 +897,124 @@ core/runtime/path/  【保留】BuiltinPaths（import ibci_modules，不进 kern
 
 **剥离到独立后续（不纳入主线，结构不堵死）**：
 - 元组解包 `(str t, audio a) = @~...~`（D5）——需 TypeCheckingPass 解包推断 + CPS 多返回值；`IbMedia` 的 modality→payload 映射为其预留接入位。
+
+---
+
+### 🔴 PT-ARCH-28：`file` 模块统一写入 API + 函数动态/命名参数支持 [P2]
+
+> **发现/提出日期**：2026-07-17（G6 收尾 review，write_new 引入后）。
+> **关联**：ADR-020 G6、`core/runtime/modules/file_impl.py`、函数调用语法。
+> **状态**：已提供临时函数 `write_new` / `write_new_bytes`；统一 API 需等待 IBCI 函数支持动态参数个数或命名参数传递。
+
+**问题描述**：
+G6 当前提供三种写入函数：`write_copy`（需 source）、`write_overwrite`（副作用）、`write_new`（无 source 创建）。函数签名固定，导致：
+1. 用户需要记忆三种函数名及其参数顺序。
+2. `write_copy` 与 `write_new` 本质都是"创建新文件"，只是 linege 来源不同，却被拆成两个函数。
+3. 未来若引入更多控制（如是否覆盖已存在文件、是否原子写入、是否校验 checksum），函数名会进一步膨胀。
+
+**目标设计（待函数动态/命名参数支持后实现）**：
+
+统一为单一 `file.write(target, data, overwrite_flag="overwrite")` 函数：
+
+```ibci
+# 默认 overwrite 模式（与当前 write_overwrite 等价）
+file.write("out.txt", "data")
+
+# copy 模式：需要 source 参数，创建新文件且不污染原 handle
+file.write("copy.txt", "data", overwrite_flag="copy", source=fh)
+
+# new 模式：无需 source，从无到有创建新文件
+file.write("new.txt", "data", overwrite_flag="new")
+```
+
+**过渡方案（已实施）**：
+- 已新增 `file.write_new(path, data)` / `file.write_new_bytes(path, data)` 作为临时 API。
+- 文档（`GETTING_STARTED.md`、`docs/IBCI_SYNTAX_REFERENCE.md`）已标注未来统一计划。
+
+**前置条件**：
+- IBCI 函数支持动态参数个数（变长参数）或命名参数传递（keyword arguments）。
+- 类型系统能对 `overwrite_flag` 等枚举字符串进行静态检查。
+
+**待做**：
+1. 设计动态/命名参数语法（可能需新 ADR）。
+2. 实现 `file.write(target, data, overwrite_flag=...)`，内部路由到现有三种实现。
+3. 保留旧函数作为兼容别名若干版本，或一次性迁移（按当时工作模式定论决定）。
+4. 更新所有示例、测试、文档。
+
+---
+
+### 🔴 PT-ARCH-29：命名历史包袱全方位代码卫生清理 [P1]
+
+> **发现/提出日期**：2026-07-17（G6 收尾 review）。
+> **关联**：`ibci_modules/ibci_file` 删除、`MediaStorage` 淘汰、旧 API 残留、注释/历史文档。
+> **状态**：代码层已零残留；历史注释、文档归档、决策记录中仍有大量旧命名引用，需统一卫生处理。
+
+**问题描述**：
+G6 删除了 `ibci_modules/ibci_file/` 与 `MediaStorage`，但下列位置仍保留旧命名，造成新成员/用户混淆：
+1. **历史设计文档**：`docs/design/MULTIMODAL_BEHAVIOR_DESIGN.md` 大量出现 `file.read_audio/image/video`、`MediaStorage`、`MediaStorage.location` 等。
+2. **历史工作日志**：`docs/worklogs/archive/PHASE3_FILE_IO_AND_REGISTRATION_FIX.md` 等。
+3. **决策记录**：ADR-007、ADR-014 历史修订记录中提及旧实现。
+4. **代码注释**：`core/kernel/axioms/primitives/media.py`、`core/runtime/objects/media_types.py`、`core/runtime/bootstrap/primitive_initializer.py` 中"替换旧的 file.read_*"注释。
+5. **示例 README**：`examples/03_advanced_features/README.md` 已修复，但需全仓复查。
+6. **PENDING/COMPLETED 历史条目**：`ibci_modules/ibci_file/core.py` 作为历史待办项出现。
+
+**清理原则**：
+- **代码层**：必须零旧 API 残留；注释若仅为历史说明，应改为"已删除的旧入口"而非保留旧函数名作为当前示例。
+- **历史归档**：可保留，但需加页眉/页脚明确标注"历史文档，描述 Phase 3 旧实现，当前 API 见 IBCI_SYNTAX_REFERENCE.md §11.7"。
+- **决策记录**：ADR 本身是决策历史，可保留旧名，但需在 Open/Consequences 中加注当前状态。
+
+**待做**：
+1. ✅ 全仓 rg 扫描 `file.read_audio/image/video`、`MediaStorage`、`ibci_file` 在代码/注释/用户文档中的残留（代码层已零残留；`docs/design/MULTIMODAL_BEHAVIOR_DESIGN.md` 已激进重写）。
+2. ✅ 给 `docs/design/MULTIMODAL_BEHAVIOR_DESIGN.md` 添加扉页决策状态导航与章节级更新标注；`docs/worklogs/archive/` 保留原貌，仅加历史文档标注（后续独立窗口处理）。
+3. 将代码中"替换旧的 file.read_*"注释改写为"构造入口：audio.from_file 等"。
+4. 复核 `PENDING_TASKS.md` / `COMPLETED.md` 中历史条目，避免未勾选的旧待办误导。
+5. 更新 `docs/decisions/README.md` 中 ADR 状态，确保旧 ADR 标注 Superseded/Implemented。
+
+**风险**：
+- 过度清理可能抹除设计演进痕迹。建议保留归档文件原貌，仅加标注，不逐字重写。
+- 清理范围需明确边界，避免把 ADR 决策历史本身也改掉（ADR 应保留原始决策上下文）。
+
+---
+
+### 🔴 PT-ARCH-30：内置 `file` 模块命名风险清理 [P1]
+
+> **发现/提出日期**：2026-07-17（G6 收尾 review）。
+> **负责人决策（2026-07-17）**：**长期必须消除内建冲突风险，不允许永久依赖兼容层或人工审查**。当前先实施 C + D 作为过渡；未来必须对 IBCI 模块名进行合理重命名（如 `fs` / `filesys` / `io`），彻底移除与 Python 内建 `file` 的影子化风险。
+> **关联**：ADR-020 B、Python 内建 `file`、模块 shadowing 风险、`core/runtime/modules/file_impl.py`。
+> **状态**：短期缓解（C + D）已落地；长期改名待排期。
+
+**问题描述**：
+IBCI 的 `import file` 模块名与 Python 历史内建名 `file`（Py2）以及常见第三方/标准库命名空间冲突。虽然当前实现通过 `core/runtime/modules/file_impl.py` 避免了 Python 层面的 shadowing，但风险持续存在：
+1. 任何未来在 `core/runtime/modules/` 下引入 `file.py` 的改动都会触发 Python import shadowing。
+2. 新贡献者容易误以为 `file` 是 Python 模块而 `import file` 失败。
+3. 用户文档、示例、错误信息中提到"file 模块"时，可能与"文件"概念混淆。
+4. `file` 作为通用名词，难以承载未来可能扩展的网络、数据库、进程等更广泛的 IO 能力。
+
+**可选方案**：
+
+| 方案 | 做法 | 优点 | 缺点 | 阶段 |
+|------|------|------|------|------|
+| A. 保持现状 | Python 文件继续用 `file_impl.py`，IBCI 模块名保留 `file` | 用户 API 自然；零破坏 | 风险持续；依赖人工审查 | ❌ 已否决 |
+| B. IBCI 模块改名 | `import file` → `import fs` / `import filesys` / `import io` | 彻底消除与 Python 内建冲突；命名空间可扩展 | 破坏所有示例/测试/文档；用户需重新学习 | **长期目标** |
+| C. 命名空间隔离 | IBCI 模块名保留 `file`，但文档中总称"`file` 内核模块"，并明确与 Python 的 `file` 无关 | 成本低；保留 API | 不消除技术风险，只降低概念混淆 | **短期落地** |
+| D. 内部强化 | 在 `core/runtime/modules/` 下加 CI/linter 规则禁止创建 `file.py`；模块注册时断言无 Python `file` shadowing | 技术风险可控；API 不变 | 需要工具链支持 | **短期落地** |
+
+**建议方向**：
+- **短期（本任务）**：实施方案 C + D——文档中统一使用"`file` 内核模块"或"IBCI `file` 模块"，并在 `core/runtime/modules/file_impl.py` 顶部添加醒目注释与 `tests/meta/test_layering.py` 静态检查（已落地：禁止 `core/runtime/modules/file.py`）。
+- **长期（独立任务，负责人已确认）**：评估并执行方案 B。候选新名优先级：
+  1. `fs` — 简洁，与 Rust/Node 生态一致，暗示"文件系统"能力。
+  2. `filesys` — 可读性强，避免与标准库 `fs` 等潜在冲突。
+  3. `io` — 与 Python `io` 模块冲突风险更高，仅当 IO 能力远超文件系统时考虑。
+  若未来 IBCI 扩展到网络、数据库等能力，应进一步升级为 `fs`（文件）+ `net`（网络）+ `db`（数据库）等细分命名空间，而非把所有 IO 塞入 `file`。
+
+**待做**：
+1. ✅ 在 `core/runtime/modules/file_impl.py` 顶部添加醒目注释，说明"本文件实现 IBCI `file` 模块，不可重命名为 `file.py`".
+2. ✅ 在 `tests/meta/test_layering.py` 新增静态检查：禁止 `core/runtime/modules/file.py` 存在。
+3. ✅ 统一文档/注释表述：用"`file` 内核模块"或"IBCI `file` 模块"替代单独的"file 模块"，减少与"文件"概念的混淆。
+4. ✅ 在 `ADR-020` 中补充命名风险记录与当前缓解措施。
+5. **新增**：在 `docs/decisions/ADR-020-kernel-native-vs-plugin-boundary.md` 的 Open / Consequences 中明确记录"长期必须改名"的负责人决策，避免后人误以为保留 `file` 是永久决议。
+6. **新增**：在 `docs/NEXT_STEPS.md` 或本任务升级到 `[P1-ACTIVE]` 时，创建独立的"IBCI `file` → `fs`/`filesys` 迁移任务"，含影响面清单（示例、测试、文档、编译器/运行时注册名、`api_config.json` 字段、用户脚本）。
+7. **新增**：评估 `file_handle` 类型名是否随模块改名同步调整。若模块改为 `fs`，类型可保留 `file_handle`（语义仍清晰）或改为 `fs_handle` / `file_ref`。
 
 ---
 

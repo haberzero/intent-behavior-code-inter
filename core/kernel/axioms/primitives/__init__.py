@@ -52,6 +52,7 @@ from core.kernel.axioms.primitives.callable import (
 )
 from core.kernel.axioms.primitives.enum import EnumAxiom
 from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
+from core.kernel.axioms.primitives.file_handle import FileHandleAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.registry import register_core_axioms
@@ -94,6 +95,8 @@ __all__ = [
     "AudioAxiom",
     "ImageAxiom",
     "VideoAxiom",
+    # file handle
+    "FileHandleAxiom",
     # imported axioms (re-exported for backward compatibility)
     "IntentContextAxiom",
     "IntentAxiom",

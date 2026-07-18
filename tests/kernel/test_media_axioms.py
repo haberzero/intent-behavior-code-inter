@@ -5,12 +5,36 @@ tests/kernel/test_media_axioms.py
 AudioAxiom / ImageAxiom / VideoAxiom 公理层单元测试。
 
 验证多模态类型的注册、能力标志、payload prompt 协议、类型兼容性。
-Per ADR-012: 作为普通类名注册。Per ADR-007: Phase 3 纯内存。
+Per ADR-012: 作为普通类名注册。
+Per ADR-014/016: media 类型是 file_handle 的磁盘型子类；公理层只负责委托。
 """
-import base64
-import pytest
+
 from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
 from core.kernel.axioms.primitives.base import BaseAxiom
+
+
+class _FakeValue:
+    """带 receive 协议的假 runtime value，用于测试公理委托。"""
+
+    def __init__(self, return_value):
+        self._return_value = return_value
+
+    def receive(self, message, args):
+        if message == "__path_payload_prompt__":
+            return self._return_value
+        raise AttributeError(message)
+
+
+def _input_audio_block():
+    return {"type": "input_audio", "input_audio": {"data": "fake_b64", "format": "wav"}}
+
+
+def _image_url_block():
+    return {"type": "image_url", "image_url": {"url": "data:image/png;base64,fake_b64"}}
+
+
+def _video_block():
+    return {"type": "video", "video": {"data": "fake_b64", "format": "mp4"}}
 
 
 class TestAudioAxiom:
@@ -21,8 +45,8 @@ class TestAudioAxiom:
     def test_has_payload_prompt_cap(self):
         assert AudioAxiom().has_payload_prompt_cap is True
 
-    def test_parent_is_object(self):
-        assert AudioAxiom().get_parent_axiom_name() == "Object"
+    def test_parent_is_file_handle(self):
+        assert AudioAxiom().get_parent_axiom_name() == "file_handle"
 
     def test_compatible_only_with_audio(self):
         ax = AudioAxiom()
@@ -43,30 +67,17 @@ class TestAudioAxiom:
         assert "duration" in specs
         assert "cast_to" in specs
 
-    def test_payload_prompt_with_storage(self):
-        """__payload_prompt__ should return input_audio content block."""
+    def test_payload_prompt_delegates_to_runtime_value(self):
+        """__payload_prompt__ 委托给 runtime 的 __path_payload_prompt__。"""
         ax = AudioAxiom()
-
-        class FakeStorage:
-            data = b"fake_audio_data"
-            format = "wav"
-            mime_type = "audio/wav"
-
-        class FakeIbAudio:
-            payload = FakeStorage()
-            def to_native(self):
-                return FakeStorage()
-
-        result = ax.__payload_prompt__(FakeIbAudio())
+        result = ax.__payload_prompt__(_FakeValue(_input_audio_block()))
         assert isinstance(result, dict)
         assert result["type"] == "input_audio"
         assert "input_audio" in result
         assert result["input_audio"]["format"] == "wav"
-        expected_b64 = base64.b64encode(b"fake_audio_data").decode("ascii")
-        assert result["input_audio"]["data"] == expected_b64
 
     def test_payload_prompt_with_none_value(self):
-        """__payload_prompt__ with no storage should return text fallback."""
+        """__payload_prompt__ with no value should return text fallback."""
         ax = AudioAxiom()
         result = ax.__payload_prompt__(None)
         assert isinstance(result, dict)
@@ -81,30 +92,21 @@ class TestImageAxiom:
     def test_has_payload_prompt_cap(self):
         assert ImageAxiom().has_payload_prompt_cap is True
 
+    def test_parent_is_file_handle(self):
+        assert ImageAxiom().get_parent_axiom_name() == "file_handle"
+
     def test_compatible_only_with_image(self):
         ax = ImageAxiom()
         assert ax.is_compatible("image")
         assert not ax.is_compatible("audio")
         assert not ax.is_compatible("str")
 
-    def test_payload_prompt_returns_image_url(self):
+    def test_payload_prompt_delegates_to_runtime_value(self):
         ax = ImageAxiom()
-
-        class FakeStorage:
-            data = b"fake_image_data"
-            format = "png"
-            mime_type = "image/png"
-
-        class FakeIbImage:
-            payload = FakeStorage()
-            def to_native(self):
-                return FakeStorage()
-
-        result = ax.__payload_prompt__(FakeIbImage())
+        result = ax.__payload_prompt__(_FakeValue(_image_url_block()))
         assert isinstance(result, dict)
         assert result["type"] == "image_url"
         assert "url" in result["image_url"]
-        assert result["image_url"]["url"].startswith("data:image/png;base64,")
 
 
 class TestVideoAxiom:
@@ -115,26 +117,18 @@ class TestVideoAxiom:
     def test_has_payload_prompt_cap(self):
         assert VideoAxiom().has_payload_prompt_cap is True
 
+    def test_parent_is_file_handle(self):
+        assert VideoAxiom().get_parent_axiom_name() == "file_handle"
+
     def test_compatible_only_with_video(self):
         ax = VideoAxiom()
         assert ax.is_compatible("video")
         assert not ax.is_compatible("audio")
         assert not ax.is_compatible("image")
 
-    def test_payload_prompt_returns_video_block(self):
+    def test_payload_prompt_delegates_to_runtime_value(self):
         ax = VideoAxiom()
-
-        class FakeStorage:
-            data = b"fake_video_data"
-            format = "mp4"
-            mime_type = "video/mp4"
-
-        class FakeIbVideo:
-            payload = FakeStorage()
-            def to_native(self):
-                return FakeStorage()
-
-        result = ax.__payload_prompt__(FakeIbVideo())
+        result = ax.__payload_prompt__(_FakeValue(_video_block()))
         assert isinstance(result, dict)
         assert result["type"] == "video"
         assert result["video"]["format"] == "mp4"

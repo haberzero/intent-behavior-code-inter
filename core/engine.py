@@ -42,7 +42,7 @@ from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
-from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC
+from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC, TypeDef, MethodMemberSpec, TypeRef, TypeKind
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
@@ -53,7 +53,7 @@ from core.runtime.interfaces import IsolationLevel
 from core.extension.auto_discovery import AutoDiscoveryService
 
 
-from core.base.enums import RegistrationState
+from core.base.enums import RegistrationState, Provenance, Visibility
 
 # collect() 时跳过的 IBCI 类型名集合（函数/行为/可调用实例等不可序列化为原生 Python 值）
 _COLLECT_SKIP_TYPES: frozenset = frozenset({
@@ -117,6 +117,70 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # ADR-020 G2：预注册 ai/ihost/idbg/isys 为 kernel-native 模块
         from core.runtime.bootstrap.kernel_native_modules import register_kernel_native_modules
         register_kernel_native_modules(self.host_interface)
+
+        # ADR-020 G6：注册 file 为 kernel-native 模块（ibci_file 插件消亡）。
+        from core.runtime.modules.file_impl import FileLib
+        _FILE_MODULE_SPEC = TypeDef(
+            name="file",
+            kind=TypeKind.MODULE.value,
+            provenance=Provenance.KERNEL_NATIVE,
+            visibility=Visibility.IMPORT_GATED,
+            # ADR-020 G6: `import file` also gates the disk-backed types into scope.
+            exported_types=["file_handle", "audio", "image", "video"],
+            members={
+                "open": MethodMemberSpec(
+                    name="open", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("str")], return_type=TypeRef.of("file_handle"),
+                ),
+                "read": MethodMemberSpec(
+                    name="read", kind="method", type_ref=TypeRef.of("str"),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("str"),
+                ),
+                "read_bytes": MethodMemberSpec(
+                    name="read_bytes", kind="method", type_ref=TypeRef.of("list[int]"),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("list[int]"),
+                ),
+                "write_copy": MethodMemberSpec(
+                    name="write_copy", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("str")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_copy_bytes": MethodMemberSpec(
+                    name="write_copy_bytes", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("list[int]")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_new": MethodMemberSpec(
+                    name="write_new", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("str"), TypeRef.of("str")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_new_bytes": MethodMemberSpec(
+                    name="write_new_bytes", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("str"), TypeRef.of("list[int]")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_overwrite": MethodMemberSpec(
+                    name="write_overwrite", kind="method", type_ref=TypeRef.of("void"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("str")], return_type=TypeRef.of("void"),
+                ),
+                "write_overwrite_bytes": MethodMemberSpec(
+                    name="write_overwrite_bytes", kind="method", type_ref=TypeRef.of("void"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("list[int]")], return_type=TypeRef.of("void"),
+                ),
+                "exists": MethodMemberSpec(
+                    name="exists", kind="method", type_ref=TypeRef.of("bool"),
+                    param_types=[TypeRef.of("str")], return_type=TypeRef.of("bool"),
+                ),
+                "remove": MethodMemberSpec(
+                    name="remove", kind="method", type_ref=TypeRef.of("void"),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("void"),
+                ),
+            },
+        )
+        self.host_interface.register_module("file", FileLib(), metadata=_FILE_MODULE_SPEC)
+        self.host_interface.reserve_kernel_native_name("file")
+
         self._plugins_discovered = False
 
         # 运行时调度器
