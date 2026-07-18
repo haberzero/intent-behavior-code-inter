@@ -1,4 +1,6 @@
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, Set, TYPE_CHECKING
+
+from core.base.enums import Provenance
 from core.kernel.spec import TypeDef
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.axioms.registry import AxiomRegistry
@@ -38,13 +40,34 @@ class HostInterface:
         self._module_metadata_map: Dict[str, TypeDef] = {}
         self._discovery_map: Dict[str, str] = {}  # Mapping: discovery_name -> module_name
         self._reverse_discovery_map: Dict[str, str] = {}  # Mapping: module_name -> discovery_name
+        self._kernel_native_names: Set[str] = set()  # ADR-020 G2：kernel-native 逻辑名集合
+
+    def reserve_kernel_native_name(self, name: str) -> None:
+        """将逻辑模块名标记为 kernel-native，禁止后续用户插件覆盖。"""
+        self._kernel_native_names.add(name)
+
+    def is_kernel_native(self, name: str) -> bool:
+        """判断逻辑模块名是否为 kernel-native。"""
+        return name in self._kernel_native_names
 
     def register_module(self, name: str, implementation: Any, metadata: Optional[TypeDef] = None, discovery_name: Optional[str] = None):
         """
         同时注册元数据和实现。
 
         discovery_name: 物理名称 (如目录名)。
+
+        ADR-020 G2：若 name 已被标记为 kernel-native，则只允许 kernel-native 自身注册；
+        用户插件尝试覆盖时直接忽略。
         """
+        is_kernel_native_meta = metadata is not None and metadata.provenance == Provenance.KERNEL_NATIVE
+
+        if name in self._kernel_native_names and not is_kernel_native_meta:
+            # 用户插件尝试覆盖 kernel-native 模块，忽略
+            return
+
+        if is_kernel_native_meta:
+            self._kernel_native_names.add(name)
+
         self.runtime.register(name, implementation)
         if discovery_name:
             self._discovery_map[discovery_name] = name

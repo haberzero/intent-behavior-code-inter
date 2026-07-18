@@ -1,9 +1,9 @@
 # ADR-017: 路径模块层位置重构 —— base/kernel/runtime 三层分工
 
 ## Status
-Accepted (2026-06-25)
+Accepted (2026-06-25) — 已实现（2026-06-25 经 PT-ARCH-19 落地，2026-07-13 经 ADR-019/PT-ARCH-21 完成路径模型重设计）。
 
-**优先级**：最高（项目负责人 2026-06-25 指定）。gates P0-2（存储模型）的干净落地。
+**优先级**：历史最高（项目负责人 2026-06-25 指定，已完成）。曾 gates P0-2（存储模型）的干净落地——该 gate 已满足。
 
 ## Date
 2026-06-25
@@ -99,7 +99,7 @@ base/path/IbPath  ←  kernel/path/{Resolver,Validator,ModuleName,Context,Snapsh
 - **快照布局集中化**（SnapshotLayout）。
 - 影响面：~6 文件搬迁；~10 import 站点更新；行为不变（纯搬迁 + 加法能力）；每步全量 pytest 守护。
 - BuiltinPaths 留 runtime/path（compiler 不需要它——search_paths 由 engine 传入）。
-- **最高优先级**：gates P0-2（存储模型需要路径原语在正确的层）。
+- **历史优先级**：曾 gates P0-2（存储模型需要路径原语在正确的层）——现已满足，路径模型已统一（ADR-019）。
 
 ## 执行序列（详见 PENDING_TASKS §九 PT-ARCH-19）
 1. 建 base/path/ + kernel/path/，搬迁文件，更新 __init__。

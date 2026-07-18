@@ -3,7 +3,9 @@
 > **说明**：本文档覆盖 IBC-Inter (IBCI) 所有当前支持的语法特性，包括已知限制的标注。
 > 语言设计限制的详细说明见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-06-24
+> **文档定位**：本文件是 `docs/` 目录下的**完整语法参考**。项目根目录的 `GETTING_STARTED.md` 是面向初学者的简要入门 spec；架构设计、实现细节与决策记录见 `docs/ARCHITECTURE_PRINCIPLES.md`、`docs/design/` 与 `docs/decisions/`。
+>
+> **最后更新**：2026-07-17（同步 G6 file 模块 kernel-native 化 + PT-ARCH-24/26/27 + 新增 `write_new`）
 
 ---
 
@@ -935,24 +937,32 @@ str greeting = @~ 打个招呼 ~
 
 ### 7.6 多模态 payload 协议（`__payload_prompt__`）
 
-`__payload_prompt__` 是 `__to_prompt__` 的多模态增强版本，允许类返回结构化 content block 而非纯文本：
+`__payload_prompt__` 是 `__to_prompt__` 的多模态增强版本，允许类返回结构化 content block 而非纯文本。IBCI 内置的 `audio`/`image`/`video` 类型已实现该协议，可直接插值到 `@~ ... ~` 中：
 
 ```ibci
-class MedicalImage:
-    str path
-    str modality
+import file
 
-    func __init__(self, str path, str modality):
-        self.path = path
-        self.modality = modality
-
-    func __to_prompt__(self) -> str:
-        return "Medical " + self.modality + " image at " + self.path
-
-    func __payload_prompt__(self) -> dict:
-        str b64 = file.read_base64(self.path)
-        return {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}
+image photo = image.from_file("cat.png")
+str caption = @~ 请描述这张图片：$photo ~
 ```
+
+**内置 media 类型（G6 之后）**：
+
+| 类型 | 构造方式 | field | I/O method |
+|------|---------|-------|-----------|
+| `audio` | `audio.from_file(path)` | `format` | `data()` |
+| `image` | `image.from_file(path)` | `format` | `data()` |
+| `video` | `video.from_file(path)` | `format` | `data()` |
+
+```ibci
+import file
+
+audio rec = audio.from_file("interview.wav")
+str fmt = rec.format     # field，只内省，无 I/O
+str b64 = rec.data()     # method，惰性读取字节并按需 base64 物化
+```
+
+用户自定义类型如需实现 `__payload_prompt__`，需自己负责字节物化与格式化；`file` 模块不再提供 `read_base64`，可用 `file.read_bytes(path)` 读取原始字节后自行编码。
 
 **协议优先级**：当变量插值到行为表达式时，运行时优先调用 `__payload_prompt__`；若未定义则回退到 `__to_prompt__`。纯文本路径完全不受影响——只有当 content 中包含结构化 block 时才会切换为多模态 payload 模式。
 
@@ -1144,6 +1154,22 @@ llmexcept:
     retry "重试"
 ```
 
+**磁盘型变量在 retry 体内的额外限制（PT-ARCH-27）**：
+
+`file_handle`/`audio`/`image`/`video` 是磁盘引用身份对象。`llmexcept` 快照保存的是路径引用的浅拷贝，因此 retry body 中调用 `file.write_overwrite` / `file.write_overwrite_bytes` 会**污染 gold snapshot**，导致后续 retry 恢复到已被修改的文件状态。G6 起运行时直接禁止：
+
+```ibci
+import file
+
+file_handle fh = file.open("data.txt")
+str result = @~ 根据 $fh 总结内容 ~
+llmexcept:
+    file.write_overwrite(fh, "mutated")   # 运行时错误：retry body 中禁用 overwrite
+    retry "请只返回摘要"
+```
+
+**推荐做法**：在涉及可能失败的 LLM 调用时，使用 `file.write_copy` / `file.write_copy_bytes` 创建新文件，避免副作用污染快照。
+
 ### 10.4 用户自定义快照协议
 
 对于复杂对象，可以通过 `__snapshot__` / `__restore__` 协议控制快照粒度：
@@ -1269,13 +1295,52 @@ ihost.run_isolated("./sub/child.ibci", policy)
 
 ### 11.7 file 模块
 
+`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其 IMPORT_GATED 子类型。
+
 ```ibci
 import file
 
-str content = file.read("./data.txt")
-file.write("./output.txt", "hello world")
-bool exists = file.exists("./data.txt")
+# 创建只读 file_handle
+file_handle fh = file.open("data.txt")
+str p = fh.path              # field，无 I/O
+str content = fh.read()      # method，经沙箱校验后读取文本
+list[int] bytes = fh.read_bytes()
+
+# 直接按路径读取
+str content2 = file.read("data.txt")
+list[int] bytes2 = file.read_bytes("data.txt")
+
+# Copy-on-write：创建新文件，原 handle 及其所有别名不受影响
+file_handle copy = file.write_copy(fh, "data_v2.txt", "new content")
+file_handle copy_b = file.write_copy_bytes(fh, "data_v2.bin", [65, 66])
+
+# 显式副作用写入：覆盖原文件，所有共享该路径引用的变量看到变化
+file.write_overwrite(fh, "mutated content")
+file.write_overwrite_bytes(fh, [65, 66])
+
+# 创建新文件：无需 source handle，返回指向新文件的只读 handle
+file_handle fresh = file.write_new("data_v3.txt", "brand new")
+file_handle fresh_b = file.write_new_bytes("data_v3.bin", [65, 66])
+
+# 存在检查与删除
+bool exists = file.exists("data.txt")
+file.remove("data.txt")
 ```
+
+**只读语义**：`file_handle` 实例没有 `write()` 方法。所有写入必须通过 `file` 模块的自由函数显式完成。
+
+**三种写入的语义区分**：
+- `write_copy` / `write_copy_bytes`：以已有 handle/路径为 lineage 创建新文件，不污染任何现有 handle；适合在 `llmexcept` retry 等需要隔离副作用的场景使用。
+- `write_overwrite` / `write_overwrite_bytes`：显式副作用，覆盖已有文件，所有共享同一 backing 路径的 handle 都会观察到变化。
+- `write_new` / `write_new_bytes`：从无到有创建新文件，不需要 source handle；若目标已存在则覆盖（等价于 Python `open(path, "w")`）。
+
+**安全限制**：
+1. 所有 FS I/O 均受 `PermissionManager` 沙箱约束（默认禁止越出 `project_root`）。
+2. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时直接报错。
+3. `llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`（避免污染 gold snapshot）。涉及可能失败的 LLM 调用时，优先使用 `write_copy` 或 `write_new` 生成新文件。
+
+**未来 API 演进（待函数动态/命名参数支持后）**：
+`file.write(target, data, overwrite_flag="copy"|"overwrite"|"new")` 将统一当前三种写入函数，默认 `"overwrite"`。
 
 ### 11.8 json 模块
 
@@ -1289,7 +1354,7 @@ str serialized = json.stringify(parsed)
 
 ### 11.9 用户插件
 
-插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。参考 `ibci_modules/ibci_file` 的一方插件写法。
+插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`）不位于插件目录，不可被用户插件覆盖。
 
 ---
 

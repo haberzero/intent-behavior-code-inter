@@ -8,6 +8,7 @@ as part of a pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
+from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol
 from core.kernel.spec import IbSpec
@@ -128,7 +129,8 @@ class TypeCheckBase:
                 kind=TypeKind.CALLABLE_SIG.value,
                 param_types=[TypeRef.of(p.name, getattr(p, 'module_path', None)) for p in param_specs],
                 return_type=TypeRef.of(ret_spec.name, getattr(ret_spec, 'module_path', None)),
-                is_user_defined=False,
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
             )
         elif isinstance(annotation, ast.IbSubscript):
             # 泛型类型：list[int], dict[str, int], tuple[int, str], Optional[int] 等

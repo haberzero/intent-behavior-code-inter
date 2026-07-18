@@ -11,18 +11,19 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 #
 # IBC-Inter 插件分为两个层次：
 #
+# 【内核原生层（Kernel-Native Level）】
+#   - 随内核发行，构造期预注册，IMPORT_GATED
+#   - 不继承 IbPlugin，不走 ModuleLoader 插件发现流程
+#   - 通过 engine 直接注册为 Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED
+#   - 适合：与内核深度耦合的能力模块（LLM、文件系统、动态宿主、调试、系统查询）
+#   - 代表模块：ai, file, ihost, idbg, isys
+#
 # 【非侵入层（Non-Invasive Level）】
 #   - 零内核依赖：_spec.py 只含纯 dict vtable，实现类不导入 core.*
 #   - 通过 setup(capabilities) 接收注入的能力容器，只按需取用浅层能力
 #     （如 capabilities.service_context.permission_manager）
-#   - 适合：数学计算、JSON、HTTP、文件操作等无状态工具性插件
+#   - 适合：数学计算、JSON、HTTP 等无状态工具性插件
 #   - 代表模块：ibci_math, ibci_json, ibci_time, ibci_net, ibci_schema
-#
-#   【例外：ibci_file（轻量依赖型）】
-#     ibci_file 导入了 core.runtime.path.IbPath（纯 @dataclass(frozen=True)，无状态）
-#     并通过 capabilities.execution_context.resolve_path() 进行路径解析。
-#     IbPath 没有解释器状态依赖，属于可接受的工具类导入，但严格意义上不符合
-#     "零内核依赖"定义。因此 ibci_file 可视为"轻量依赖型"非侵入插件。
 #
 # 【核心层（Core Level）】
 #   - 继承本文件中的 IbPlugin 基类
@@ -34,7 +35,7 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 #   - 可通过 capabilities.expose("xxx_provider", self) 向 CapabilityRegistry
 #     注册自身，供其他插件或内核代码发现
 #   - 适合：运行时调试、系统状态查询、宿主能力（持久化/隔离执行）等
-#   - 代表模块：ibci_ihost, ibci_idbg, ibci_isys
+#   - 历史代表模块：ibci_ihost, ibci_idbg, ibci_isys（已 kernel-native 化，保留目录位置）
 #
 # 两种层次使用相同的 _spec.py 协议（__ibcext_metadata__ + __ibcext_vtable__）
 # 和相同的 ModuleLoader 加载流程。核心层仅在实现类上额外继承 IbPlugin。
@@ -48,7 +49,7 @@ from core.extension.capabilities import PluginCapabilities, ExtensionCapabilitie
 # 【无状态插件（默认）】
 #   - 插件不继承任何特殊基类即为"无状态"
 #   - HostService 在 save/restore 时跳过此类插件，只重新调用 setup()
-#   - 适合：ibci_math, ibci_json, ibci_time, ibci_schema, ibci_isys, ibci_file 等
+#   - 适合：ibci_math, ibci_json, ibci_time, ibci_schema 等
 #
 # 【IbStatefulPlugin】
 #   - 继承此 ABC：插件持有跨断点的内部状态（如网络配置、AI 配置等）

@@ -46,9 +46,11 @@ class Bootstrapper:
         intent_desc = factory.create_class("Intent")
         intent_stack_desc = factory.create_class("IntentStack")
 
+        from core.base.enums import Provenance, Visibility
         # 内核类不属于用户定义类
         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc, intent_stack_desc]:
-            d.is_user_defined = False
+            d.provenance = Provenance.KERNEL_NATIVE
+            d.visibility = Visibility.PRELUDE_VISIBLE
 
         # Step 1: Create Type Shells (注入内存)
         self.TypeClass = IbClass("Type", registry=self.registry)

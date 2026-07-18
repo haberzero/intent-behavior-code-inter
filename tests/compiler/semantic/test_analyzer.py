@@ -376,7 +376,7 @@ class TestContextBuilder:
     """ContextBuilder prelude injection and validation."""
 
     def test_injects_prelude(self):
-        """ContextBuilder.build() should inject builtin types into symbol table."""
+        """ContextBuilder.build() should inject prelude types into symbol table."""
         from core.kernel.factory import create_default_registry as _make_reg
         module = ast.IbModule(body=[])
         registry = _make_reg()

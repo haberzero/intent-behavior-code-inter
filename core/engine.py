@@ -23,7 +23,7 @@ from core.project_detector import ProjectDetector
 
 from core.kernel.path import IbPath, PathContext, PathValidator
 from core.kernel.config import IbciConfig
-from core.runtime.path import BuiltinPaths
+from core.runtime.path import InstallPaths
 from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
@@ -32,7 +32,7 @@ from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.runtime.host.host_interface import HostInterface
-from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
+from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
@@ -42,7 +42,7 @@ from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
-from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC
+from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC, TypeDef, MethodMemberSpec, TypeRef, TypeKind
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
@@ -53,7 +53,7 @@ from core.runtime.interfaces import IsolationLevel
 from core.extension.auto_discovery import AutoDiscoveryService
 
 
-from core.base.enums import RegistrationState
+from core.base.enums import RegistrationState, Provenance, Visibility
 
 # collect() 时跳过的 IBCI 类型名集合（函数/行为/可调用实例等不可序列化为原生 Python 值）
 _COLLECT_SKIP_TYPES: frozenset = frozenset({
@@ -74,13 +74,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 ADR-019 §3）。
             core_debug_config: 内核调试器配置。
 
-        ADR-019 多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/builtin 等）；
+        ADR-019 多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/install 路径等）；
         root-dependent 设置（plugin 发现路径、Scheduler）延迟到 ``_ensure_root_initialized``，
         在 run/compile/check 时经 ``_establish_project_root`` 确立 project_root 后触发。
         """
         # --- root-independent ---
         self.registry = KernelRegistry()
-        self._kernel_token = initialize_builtin_classes(self.registry)
+        self._kernel_token = initialize_primitive_classes(self.registry)
 
         # project_root：显式（可选）。未提供时在 run/compile 经 _establish_project_root 确立。
         self._explicit_root: Optional[str] = (
@@ -105,14 +105,82 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 初始化能力注册中心
         self.capability_registry = CapabilityRegistry()
 
-        # builtin 模块目录（ADR-019 §1：恒在，单独存储，不配置不隔离）
-        self._builtin_path: str = BuiltinPaths.builtin_modules_dir().to_native()
+        # 内核原生模块目录（ADR-019 §1：恒在，单独存储，不配置不隔离）
+        self._install_path: str = InstallPaths.modules_dir().to_native()
 
         # 运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
-        # host_interface（空接口，首次编译前填充）
-        self.host_interface = HostInterface()
+        # host_interface 与引擎共享 MetadataRegistry，确保构造期预注册的
+        # kernel-native 模块元数据对编译器可见（ADR-020 G2）。
+        self.host_interface = HostInterface(external_registry=self.registry.get_metadata_registry())
+        # ADR-020 G2：预注册 ai/ihost/idbg/isys 为 kernel-native 模块
+        from core.runtime.bootstrap.kernel_native_modules import register_kernel_native_modules
+        register_kernel_native_modules(self.host_interface)
+
+        # ADR-020 G6：注册 file 为 kernel-native 模块（ibci_file 插件消亡）。
+        from core.runtime.modules.file_impl import FileLib
+        _FILE_MODULE_SPEC = TypeDef(
+            name="file",
+            kind=TypeKind.MODULE.value,
+            provenance=Provenance.KERNEL_NATIVE,
+            visibility=Visibility.IMPORT_GATED,
+            # ADR-020 G6: `import file` also gates the disk-backed types into scope.
+            exported_types=["file_handle", "audio", "image", "video"],
+            members={
+                "open": MethodMemberSpec(
+                    name="open", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("str")], return_type=TypeRef.of("file_handle"),
+                ),
+                "read": MethodMemberSpec(
+                    name="read", kind="method", type_ref=TypeRef.of("str"),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("str"),
+                ),
+                "read_bytes": MethodMemberSpec(
+                    name="read_bytes", kind="method", type_ref=TypeRef.of("list[int]"),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("list[int]"),
+                ),
+                "write_copy": MethodMemberSpec(
+                    name="write_copy", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("str")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_copy_bytes": MethodMemberSpec(
+                    name="write_copy_bytes", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("list[int]")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_new": MethodMemberSpec(
+                    name="write_new", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("str"), TypeRef.of("str")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_new_bytes": MethodMemberSpec(
+                    name="write_new_bytes", kind="method", type_ref=TypeRef.of("file_handle"),
+                    param_types=[TypeRef.of("str"), TypeRef.of("list[int]")],
+                    return_type=TypeRef.of("file_handle"),
+                ),
+                "write_overwrite": MethodMemberSpec(
+                    name="write_overwrite", kind="method", type_ref=TypeRef.of("void"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("str")], return_type=TypeRef.of("void"),
+                ),
+                "write_overwrite_bytes": MethodMemberSpec(
+                    name="write_overwrite_bytes", kind="method", type_ref=TypeRef.of("void"),
+                    param_types=[TypeRef.of("any"), TypeRef.of("list[int]")], return_type=TypeRef.of("void"),
+                ),
+                "exists": MethodMemberSpec(
+                    name="exists", kind="method", type_ref=TypeRef.of("bool"),
+                    param_types=[TypeRef.of("str")], return_type=TypeRef.of("bool"),
+                ),
+                "remove": MethodMemberSpec(
+                    name="remove", kind="method", type_ref=TypeRef.of("void"),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("void"),
+                ),
+            },
+        )
+        self.host_interface.register_module("file", FileLib(), metadata=_FILE_MODULE_SPEC)
+        self.host_interface.reserve_kernel_native_name("file")
+
         self._plugins_discovered = False
 
         # 运行时调度器
@@ -185,7 +253,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     def _resolve_plugin_search_paths(self, project_root: str) -> List[str]:
         """ADR-019 §3 plugin 发现优先级（高 → 低，先命中者胜）：
 
-        1. **builtin**（恒在，最高优先级，不可覆盖）
+        1. **kernel-native**（install 路径，恒在，最高优先级，不可覆盖）
         2. **global_plugin**（ibci.json 的 global_plugin 字段；全局 ibci.json 查找本轮预留）
         3. **plugin_paths**（ibci.json 显式）；配置后嗅探**不触发**（explicit > implicit）
         4. **嗅探 project_root**（ProjectDetector，仅 plugin_paths 未配置时）
@@ -210,7 +278,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 global_plugin_merged.append(g)
         self._global_plugin_paths = global_plugin_merged  # 供子引擎继承
 
-        ordered: List[str] = [self._builtin_path]            # 1. builtin 最高
+        ordered: List[str] = [self._install_path]              # 1. 内核原生（install）最高
         ordered.extend(global_plugin_merged)                 # 2. global_plugin（自身+继承）
         if explicit_plugin_paths:
             ordered.extend(explicit_plugin_paths)            # 3. 显式 plugin_paths（嗅探不触发）
@@ -319,6 +387,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if state_reader is not None:
             self.registry.register_state_reader(state_reader, self._kernel_token)
 
+        # ADR-020 G2：在 registry hooks 全部注入后，给 kernel-native 模块 late-hydrate 窗口
+        from core.runtime.bootstrap.kernel_native_modules import late_hydrate_kernel_native_modules
+        late_hydrate_kernel_native_modules(self.interpreter.service_context)
+
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
 
@@ -328,7 +400,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
 
-        # ADR-019 §3：plugin 发现走统一解析的 search_paths（builtin/global_plugin/plugin_paths/嗅探）。
+        # ADR-019 §3：plugin 发现走统一解析的 search_paths（install/global_plugin/plugin_paths/嗅探）。
         discovery = AutoDiscoveryService(self._plugin_search_paths)
 
         axiom_registry = self.registry.get_metadata_registry().get_axiom_registry()
@@ -376,7 +448,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Prelude 过滤保证）。
         """
         if not self._plugins_discovered:
-            self.host_interface = self.discovery_service.discover_all(self.registry)
+            # ADR-020 G2：传入已有的 host_interface，保留构造期预注册的 kernel-native 模块
+            self.host_interface = self.discovery_service.discover_all(self.registry, host=self.host_interface)
             self.scheduler.host_interface = self.host_interface
             self._plugins_discovered = True
 
@@ -727,7 +800,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if sub_engine.interpreter and sub_engine.interpreter.runtime_context:
             all_syms = sub_engine.interpreter.runtime_context.global_scope.get_all_symbols()
             for name, sym in all_syms.items():
-                if sym.is_builtin:
+                if sym.is_intrinsic:
                     continue
                 val = sym.value
                 if val is None:

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
+from core.base.enums import Provenance
+
 from .spec import IbSpec
 from .spec.base import TypeKind, TypeDef
 
@@ -36,6 +38,10 @@ class Symbol:
 
     # The IbSpec for this symbol's type (pure data, no runtime state).
     spec: Optional[IbSpec] = None
+
+    # Typed provenance replaces the flat metadata keys
+    # ``is_intrinsic`` / ``is_external_module`` / ``axiom_provided``.
+    provenance: Provenance = Provenance.USER_DEFINED
 
     # ------------------------------------------------------------------
     # Helpers
@@ -143,19 +149,13 @@ class SymbolTable:
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            is_compatible = (
-                (existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_builtin"))
-                or (existing.metadata.get("is_builtin") and sym.metadata.get("is_external_module"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
-            )
-            if is_compatible:
+            if existing.provenance.compatible_with(sym.provenance):
                 if existing.spec and sym.spec:
                     if existing.spec is not sym.spec:
                         if existing.spec.name == sym.spec.name:
                             return  # same-name external module dup
                         raise ValueError(
-                            f"Builtin Symbol Conflict: '{sym.name}' redefined with "
+                            f"Intrinsic Symbol Conflict: '{sym.name}' redefined with "
                             f"incompatible spec (existing: '{existing.spec.name}')"
                         )
                 self.symbols[sym.name] = sym
@@ -195,10 +195,10 @@ class SymbolFactory:
         return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec)
 
     @staticmethod
-    def create_builtin_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
+    def create_intrinsic_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
         return FunctionSymbol(
             name=name,
             kind=SymbolKind.FUNCTION,
             spec=spec,
-            metadata={"is_builtin": True, "axiom_provided": True},
+            provenance=Provenance.AXIOM_PROVIDED,
         )

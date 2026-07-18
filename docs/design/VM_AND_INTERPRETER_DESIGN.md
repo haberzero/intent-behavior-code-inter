@@ -6,7 +6,7 @@
 > **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
 > `runtime/vm/handlers`（`build_dispatch_table`→`handlers/dispatch.py`）、`runtime/objects/{builtins,kernel}`、
 > `runtime/interpreter/llm_executor`。旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除（现 `vm/handlers/` CPS 包）。
-> 当前主线状态见 `docs/NEXT_STEPS.md`（PT-ARCH-19/20 路径统一为最高优先级 P0）。
+> 当前主线状态见 `docs/NEXT_STEPS.md`（路径系统统一已完成；活跃主线为 PT-ARCH-23 内核原生化 + 磁盘型存储模型）。
 
 ---
 
@@ -407,7 +407,7 @@ visit_IbLLMExceptionalStmt
 | PT-3.3（idbg.protection_map） | ✅ 完成（2026-05-12） |
 | L3 语言级协程 / yield | ⏳ 远期愿景（搁置，见 `docs/design/COROUTINE_DESIGN_NOTES.md`） |
 
-**VM/解释器层面的开放议题**：本层无新增 P0/P1 议题。当前项目最高优先级 P0 是 **路径系统统一（PT-ARCH-19/20）** 与后续的**变量存储模型（ADR-016）+ media 重建（ADR-014）**——这些属于路径层与对象模型层，详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md §九`。
+**VM/解释器层面的开放议题**：本层无新增 P0/P1 议题。路径系统统一（ADR-015~019）已完成。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 存储模型 + ADR-014 media 重建）——这些属于路径层与对象模型层，详见 `docs/NEXT_STEPS.md` 与 `docs/PENDING_TASKS.md §九`。
 
 ---
 

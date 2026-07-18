@@ -3,7 +3,9 @@
 > **创建日期**：2026-05-28
 > **文档性质**：对 `MULTIMODAL_BEHAVIOR_DESIGN.md`（2026-05-26 创建）进行代码事实核查后的补充分析和归并建议。
 > **关联文档**：`MULTIMODAL_BEHAVIOR_DESIGN.md`（原始设计规划）、`COROUTINE_DESIGN_NOTES.md`（协程相关，已独立）
-> **⚠️ 归档状态（2026-05-28）**：归并已执行（方案 A）。§六 Semantic 缺陷分析、§七 CPS 缺陷分析、§九 待决策清单已合并入 `MULTIMODAL_BEHAVIOR_DESIGN.md` 附录 C。本文档降级为历史归档，不再维护。**请以 `MULTIMODAL_BEHAVIOR_DESIGN.md` 为权威文档。**
+> **⚠️ 归档状态（2026-07-17 更新）**：归并已执行（方案 A）。§六 Semantic 缺陷分析、§七 CPS 缺陷分析、§九 待决策清单已合并入 `MULTIMODAL_BEHAVIOR_DESIGN.md` 附录 C。本文档降级为历史归档，不再维护。**请以 `MULTIMODAL_BEHAVIOR_DESIGN.md` 为权威文档。**
+>
+> **⚠️ 旧 API 免责声明**：本文档描述的 `file.read_audio` / `file.read_image` / `file.read_video`、`_call_llm_multimodal`、`MediaStorage` 纯内存方案等已被后续 ADR-013 / ADR-014 / ADR-016 否决或淘汰。当前 IBCI 使用 `audio.from_file(path)` / `image.from_file(path)` / `video.from_file(path)`、`IbFileHandle` 磁盘型 handle、单一 LLM 调用入口。阅读本文档时请勿将旧 API 当作当前实现参考。
 
 ---
 

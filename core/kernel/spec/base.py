@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import ClassVar, Dict, List, Optional, TYPE_CHECKING
 
+from core.base.enums import Provenance, StorageModel, Visibility
+
 from .type_ref import TypeRef as _TypeRef
 
 if TYPE_CHECKING:
@@ -84,7 +86,9 @@ class IbSpec:
     module_path: Optional[str] = None
     kind: str = TypeKind.PRIMITIVE.value
     is_nullable: bool = True
-    is_user_defined: bool = True
+    provenance: Provenance = Provenance.USER_DEFINED
+    visibility: Visibility = Visibility.IMPORT_GATED
+    storage_model: StorageModel = StorageModel.MEMORY_BACKED
 
     # Members are MemberSpec objects (pure data, no Symbol references).
     # Populated by the compiler's collector/resolver passes and by axiom
@@ -134,6 +138,11 @@ class IbSpec:
         """Return True if spec.kind matches one of provided kinds."""
         return self.kind in kinds
 
+    @property
+    def is_disk_backed(self) -> bool:
+        """Return True if this type uses the disk-backed storage model."""
+        return self.storage_model is StorageModel.DISK_BACKED
+
     # ------------------------------------------------------------------ #
     # Cloning                                                              #
     # ------------------------------------------------------------------ #
@@ -181,7 +190,6 @@ class TypeDef(IbSpec):
     #    + CALLABLE_SIG kinds use these). ---------------------------------
     param_types: List["TypeRef"] = field(default_factory=list)
     return_type: "TypeRef" = field(default_factory=lambda: _ANY_REF.replace_head("void"))
-    is_llm: bool = False
 
     # -- Class inheritance (CLASS kind) -----------------------------------
     parent_type: Optional["TypeRef"] = None
@@ -206,6 +214,11 @@ class TypeDef(IbSpec):
 
     # -- TypeDef fields ------------------------------------------------
     required_capabilities: List[str] = field(default_factory=list)
+
+    # -- Module-only: names of types that an `import mod` statement also
+    # brings into the importing module's scope (e.g. `import file` exposes
+    # file_handle / audio / image / video).  Empty for non-module specs.
+    exported_types: List[str] = field(default_factory=list)
 
     # -- Kind → base-name mapping (used by get_base_name) ----------------
     _KIND_BASE_NAMES: ClassVar[Dict[str, str]] = {}

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from core.base.enums import Provenance, Visibility
+
 from ..base import IbSpec, TypeDef, TypeKind
 from ..type_ref import TypeRef
 
@@ -34,7 +36,13 @@ class SpecFactory:
     """
 
     def create_primitive(self, name: str, is_nullable: bool = False) -> IbSpec:
-        return IbSpec(name=name, kind=TypeKind.PRIMITIVE.value, is_nullable=is_nullable, is_user_defined=False)
+        return IbSpec(
+            name=name,
+            kind=TypeKind.PRIMITIVE.value,
+            is_nullable=is_nullable,
+            provenance=Provenance.KERNEL_NATIVE,
+            visibility=Visibility.PRELUDE_VISIBLE,
+        )
 
     def create_func(
         self,
@@ -43,8 +51,8 @@ class SpecFactory:
         param_type_modules: Optional[List[Optional[str]]] = None,
         return_type_name: str = "void",
         return_type_module: Optional[str] = None,
-        is_user_defined: bool = False,
-        is_llm: bool = False,
+        provenance: Provenance = Provenance.KERNEL_NATIVE,
+        visibility: Visibility = Visibility.PRELUDE_VISIBLE,
     ) -> "TypeDef":
         names = list(param_type_names or [])
         mods = list(param_type_modules or [])
@@ -54,8 +62,8 @@ class SpecFactory:
             name=name,
             kind=TypeKind.FUNCTION.value,
             is_nullable=True,
-            is_user_defined=is_user_defined,
-            is_llm=is_llm,
+            provenance=provenance,
+            visibility=visibility,
             return_type=TypeRef.of(return_type_name, return_type_module),
             param_types=[TypeRef.of(n, m) for n, m in zip(names, mods)],
         )
@@ -66,7 +74,8 @@ class SpecFactory:
         module: Optional[str] = None,
         parent_name: Optional[str] = None,
         parent_module: Optional[str] = None,
-        is_user_defined: bool = True,
+        provenance: Provenance = Provenance.USER_DEFINED,
+        visibility: Visibility = Visibility.IMPORT_GATED,
     ) -> "TypeDef":
         parent_type = TypeRef.of(parent_name, parent_module) if parent_name else None
         return TypeDef(
@@ -74,7 +83,8 @@ class SpecFactory:
             kind=TypeKind.CLASS.value,
             module_path=module,
             is_nullable=True,
-            is_user_defined=is_user_defined,
+            provenance=provenance,
+            visibility=visibility,
             parent_type=parent_type,
         )
 
@@ -91,7 +101,7 @@ class SpecFactory:
                 name=list_name,
                 kind=TypeKind.LIST.value,
                 is_nullable=True,
-                is_user_defined=False,
+                provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
                 allowed_element_types=[TypeRef.of(n) for n in allowed_element_type_names],
             )
@@ -100,7 +110,7 @@ class SpecFactory:
             name=list_name,
             kind=TypeKind.LIST.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             element_type=TypeRef.of(element_type_name, element_type_module),
         )
 
@@ -115,7 +125,7 @@ class SpecFactory:
             name=f"dict[{key_type_name},{value_type_name}]",
             kind=TypeKind.DICT.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             key_type=TypeRef.of(key_type_name, key_type_module),
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
@@ -136,7 +146,7 @@ class SpecFactory:
                 name=tuple_name,
                 kind=TypeKind.TUPLE.value,
                 is_nullable=True,
-                is_user_defined=False,
+                provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
                 positional_element_types=[TypeRef.of(n) for n in positional_element_type_names],
             )
@@ -145,7 +155,7 @@ class SpecFactory:
             name=tuple_name,
             kind=TypeKind.TUPLE.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             element_type=TypeRef.of(element_type_name, element_type_module),
         )
 
@@ -159,7 +169,7 @@ class SpecFactory:
             name="bound_method",
             kind=TypeKind.BOUND_METHOD.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             func_spec_name=func_spec_name,
             receiver_type=TypeRef.of(receiver_type_name, receiver_type_module),
         )
@@ -170,7 +180,7 @@ class SpecFactory:
             kind=TypeKind.MODULE.value,
             module_path=module,
             is_nullable=False,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
         )
 
     def create_fn_callable(
@@ -190,7 +200,7 @@ class SpecFactory:
             name=fn_callable_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
         # Route axiom dispatch to the "fn_callable" axiom even for parameterised
@@ -208,7 +218,7 @@ class SpecFactory:
             name=f"Optional[{wrapped_type_name}]",
             kind=TypeKind.OPTIONAL.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             wrapped_type=TypeRef.of(wrapped_type_name, wrapped_type_module),
         )
 
@@ -237,7 +247,7 @@ class SpecFactory:
             name=beh_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             is_nullable=True,
-            is_user_defined=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
         # Route axiom dispatch to the "behavior" axiom even for parameterised

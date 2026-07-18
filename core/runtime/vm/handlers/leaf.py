@@ -20,7 +20,7 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.kernel.issue import InterpreterError
-from core.runtime.objects.builtins import IbNone
+from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,

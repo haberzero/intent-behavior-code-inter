@@ -5,7 +5,160 @@
 > 设计与实现细节见对应正式文档：`docs/design/TYPE_SYSTEM_DESIGN.md`、`docs/design/VM_AND_INTERPRETER_DESIGN.md`、`docs/design/VM_SPEC.md`、`docs/design/ARCH_DETAILS.md`。
 > 当前最紧要项见 `docs/NEXT_STEPS.md`；阻塞项见 `docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-06-25（PT-ARCH-19 重开 + ADR-018 路径概念模型确立；5 项决策确认；逐文件:行清单交接 session 切换）
+> **最后更新**：2026-07-17（G6 file 模块内核原生化 + PT-ARCH-24/25/26/27 安全闸门完成；下一项：media Phase 4，见 `NEXT_STEPS.md` GATED）
+
+---
+
+## 2026-07-17：G6 — file 模块内核原生化 + PT-ARCH-24/25/26/27 安全闸门（ADR-020/016/014）
+
+> 分支：`feat/G3-G6-disk-backed-storage`；当前测试基线：**1174 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. file 模块 kernel-native 化
+- 新建 `core/runtime/modules/file_impl.py`：`FileLib` 实现 `open/read/read_bytes/write_copy/write_copy_bytes/write_overwrite/write_overwrite_bytes/exists/remove`，所有 FS I/O 经 `ExecutionContext.resolve_path()` + `PermissionManager.validate_path()` 沙箱校验。
+- 修改 `core/engine.py`：构造期把 `FileLib` 注册为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED` 模块；`TypeDef` 声明 `exported_types=["file_handle", "audio", "image", "video"]`，使 `import file` 同时将四类型注入作用域。
+- 物理删除 `ibci_modules/ibci_file/`（含 `__init__.py`、`_spec.py`、`core.py`）。
+
+### B. PT-ARCH-24：field-vs-method 失配修复
+- `core/runtime/objects/file_handle.py`：`__init__` 设置 `self.fields["path"]`；删除实例 `write()`；`read()` / `__materialize__()` 增加 `PermissionManager` 校验。
+- `core/runtime/objects/media_types.py`：`__init__` 设置 `self.fields["format"]`；新增 `from_file(path)` 类方法。
+- `core/kernel/axioms/primitives/file_handle.py`：删除 `write` 方法声明；`path` 保持 field。
+- `core/kernel/axioms/primitives/media.py`：`format` 改为 field；`data`/`duration`/`width`/`height` 保持 method；新增 `from_file` 声明。
+- `core/kernel/spec/specs.py`：`AUDIO_SPEC`/`IMAGE_SPEC`/`VIDEO_SPEC` 的 `visibility` 改为 `IMPORT_GATED`。
+
+### C. PT-ARCH-26：save_state 禁止活跃文件容器变量
+- 修改 `core/runtime/host/service.py`：`save_state` 在序列化 context 前扫描 disk-backed 实例，存在时抛出 `InterpreterError`。
+- 修改 `core/runtime/serialization/runtime_serializer.py`：支持 kernel-native `IbModule`（scope 为 `IbNativeObject`）的序列化/反序列化。
+
+### D. PT-ARCH-27：llmexcept retry body 禁用 overwrite 写入
+- 修改 `core/runtime/interpreter/execution_context.py`：新增 `llmexcept_body_depth` 计数器。
+- 修改 `core/runtime/interpreter/llm_except_frame.py`：retry body 前后维护深度。
+- 修改 `core/runtime/modules/file_impl.py`：`write_overwrite` / `write_overwrite_bytes` 在深度 > 0 时报错。
+- 修复 `core/runtime/vm/handlers/llm_behavior.py` 与 `control_flow.py` 中 `executor.execution_context` → `executor.ec` 的引用失配。
+
+### E. 测试与示例
+- 新增 `tests/e2e/test_e2e_file_kernel_native.py`（9 个测试）：覆盖 file 模块 API、save_state 拒绝、llmexcept overwrite 禁用、沙箱越界等。
+- 重写 `tests/runtime/test_file_handle.py`、`tests/runtime/test_media_file_handle.py`，适配只读语义与 field/method 区分。
+- 更新 `tests/runtime/test_runtime_multimodal_dispatch.py`、`tests/kernel/test_media_axioms.py`、`tests/e2e/test_e2e_multimodal_file_io.py`。
+- 重写 `examples/02_basic_modules/01_file_operations.ibci`，用新 API 展示 read/write_copy/write_overwrite。
+
+### F. 验证
+- 全量 pytest：`1174 passed, 7 skipped`（0 failures）。
+- 机械校验：代码层零 `ibci_modules/ibci_file` 引用、零 `MediaStorage` 引用、零 `file.read_audio/image/video`、零 `file_handle` 实例 `write()` 调用。
+
+---
+
+## 2026-07-17：G3 + G4 + G5 — 磁盘型存储体系前半（ADR-016/014/020）
+
+> 分支：`feat/G3-G6-disk-backed-storage`；当前测试基线：**1161 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. G3 存储模型机制
+- `core/kernel/spec/base.py`：新增 `is_disk_backed` 属性（基于 `storage_model`）。
+- `core/runtime/objects/deep_clone.py`：按 `storage_model` 分发——`DISK_BACKED` 走 `__clone_ref__` 浅拷贝路径引用；修复 `type() is KernelIbObject` 导致 `IbValue` 子类（`IbAudio`/`IbImage`/`IbVideo`）丢失的问题。
+- `core/runtime/serialization/runtime_serializer.py`：`_collect_instance` / `_get_instance` 增加 `disk_backed` 描述符分支，序列化路径引用而非字节。
+- 新增 `tests/runtime/test_storage_model_dispatch.py`（4 个测试）。
+
+### B. G4 FileHandle 基类
+- 新建 `core/runtime/objects/media_backing.py`：`MediaBacking` 抽象 + `FileBacking` / `GeneratedBacking`（均持 `IbPath`，无 OS fd）。
+- 新建 `core/runtime/objects/file_handle.py`：`IbFileHandle` + 磁盘协议族（`__materialize__`/`__path_payload_prompt__`/`__clone_ref__`/`__to_descriptor__`/`__from_descriptor__`）。
+- 新建 `core/kernel/axioms/primitives/file_handle.py`：`FileHandleAxiom`（零 I/O）。
+- 在 `core/kernel/axioms/primitives/registry.py` 与 `__init__.py`、`core/kernel/spec/specs.py` 与 `core/kernel/spec/registry/_runtime.py` 注册 `file_handle` 类型（`DISK_BACKED`）。
+- 在 `core/runtime/bootstrap/primitive_initializer.py` 绑定协议方法。
+- 新增 `tests/runtime/test_file_handle.py`（8 个测试）。
+
+### C. G5 media→FileHandle 子类
+- 重写 `core/runtime/objects/media_types.py`：`IbAudio`/`IbImage`/`IbVideo` 改为 `IbFileHandle` 子类，各实现 `__path_payload_prompt__` 并惰性 base64 物化。
+- 重写 `core/kernel/axioms/primitives/media.py`：公理 `__payload_prompt__` 只委托 `value.receive('__path_payload_prompt__', [])`，零 I/O。
+- `core/kernel/spec/specs.py`：audio/image/video 的 `parent_type` 改为 `file_handle`，`storage_model=DISK_BACKED`。
+- `ibci_modules/ibci_file/core.py`：`read_audio`/`read_image`/`read_video` 返回 `FileBacking`（零拷贝）。
+- 删除 `core/runtime/objects/media_storage.py` 与 `tests/runtime/test_media_storage.py`。
+- 新增 `tests/runtime/test_media_file_handle.py`；更新 `tests/runtime/test_runtime_multimodal_dispatch.py` 与 `tests/kernel/test_media_axioms.py`。
+
+### D. 验证
+- 全量 pytest：`1161 passed, 7 skipped`（0 failures）。
+- 交叉检验（subagent）确认：无活跃 `MediaStorage` 引用；无 kernel axiom 内 `import base64`/I/O；`file_handle` 协议注册完整。
+
+### E. 本轮新增设计债
+- `PT-ARCH-24`：`file_handle`/`audio`/`image`/`video` 公理层 field 声明与运行时 method 实现失配。已记录到 `PENDING_TASKS.md`，待决策。
+
+---
+
+## 2026-07-17：G2 — ai/ihost/idbg/isys 内核原生化（ADR-020）
+
+> 分支：`feat/G2-kernel-native-modules`；提交：见 `feat/G2-kernel-native-modules` 分支最新提交（含代码、测试、文档一次性切口）。
+> 测试基线：**1157 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. 核心改动
+- 新建 `core/runtime/bootstrap/kernel_native_modules.py`：预注册 `ai`/`ihost`/`idbg`/`isys` 四模块为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`；提供 `late_hydrate_kernel_native_modules(service_context)` 二次水化窗口。
+- 修改 `core/kernel/host_interface.py`：新增 `_kernel_native_names` 集合与 `reserve_kernel_native_name()` / `is_kernel_native()`；`register_module()` 拒绝用户插件覆盖 kernel-native 模块。
+- 修改 `core/runtime/module_system/discovery.py`：`discover_all()` 支持可选 `host` 参数以保留构造期预注册；扫描时跳过已 kernel-native 的目录。
+- 修改 `core/runtime/module_system/loader.py`：搜索路径扫描时跳过逻辑名为 kernel-native 的目录，避免从磁盘重复加载。
+- 修改 `core/engine.py`：`HostInterface` 构造时即与引擎共享 `MetadataRegistry`，确保 kernel-native 模块元数据对编译器可见；`__init__` 中调用 `register_kernel_native_modules`；`_prepare_interpreter` 在 registry hooks 注入后调用 `late_hydrate_kernel_native_modules`；`_ensure_plugins_discovered` 传入现有 `host_interface` 保留预注册。
+- 修改 `ibci_modules/ibci_ai/core.py`：`AIPlugin` 新增 `hydrate(service_context)` 方法，在 late-hydrate 窗口重新确认 LLM Provider 注册。
+
+### B. 测试
+- 新增 `tests/runtime/test_kernel_native_modules.py`：验证构造期预注册、元数据标记、覆盖保护、import-gating、late-hydrate 调用。
+- 新增 `tests/e2e/test_e2e_kernel_native.py`：验证 ai MOCK 调用链、ihost 隔离执行、idbg/isys import 调用在 kernel-native 化后行为不变。
+
+### C. 验证
+- 全量 pytest：`1157 passed, 7 skipped`（0 failures）。
+- 分层红线：`tests/runtime/test_kernel_native_modules.py` 通过 `tests/meta/test_layering.py` runtime 层检查；`tests/e2e/test_e2e_kernel_native.py` 通过 e2e 层黑盒检查。
+
+---
+
+## 2026-07-17：G1 重分类基础设施完成 + PT-ARCH-23 规划重排（文档卫生 + 碎片化审计）
+
+测试基线：**1139 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32，junitxml 捕获）。G1 改动未提交（领先 origin 的 WIP）。
+
+### A. 文档卫生清理（无代码变更）
+- 修 `NEXT_STEPS.md` 失效"未提交 WIP"警示；PT-ARCH-21/ADR-017 等过时"最高优先级"标签（NEXT_STEPS/PENDING_TASKS/decisions·README/ADR-017/TYPE_SYSTEM_DESIGN/VM_AND_INTERPRETER_DESIGN 共 6 处）；`rt_scheduler.py` 行号漂移 `:88→:83`。
+
+### B. G1 — 重分类基础设施（ADR-020 E/A/C/D）✅
+- **E 术语**：彻底消除 "builtin" 一词五义，7 族改名（`BuiltinPaths→InstallPaths`、prelude 目录、`builtin_initializer→primitive_initializer`、`is_builtin→is_intrinsic`+UID `builtin:`→`intrinsic:`、内核实例、`BUILTIN_TYPES→PRIMITIVE_TYPES`、**`objects/builtins/→objects/primitives/` 包重命名**），含全量注释/错误消息/测试名/docstring 同步。代码标识符层面 builtin 已归零（余 4 处溯源 docstring + 2 处 Python stdlib `builtins_round`）。
+- **D 协议规则**：清硬编码 axiom 回退表 + enum 特例（`primitive_initializer.py:97-108`），改为从 `AxiomRegistry.get_all_names()` 派生 + fail-fast（实证均为死代码）。
+- **A/C 复核**：prelude/import-gate 机制、bootstrap（`register_module`+loader 短路+懒查找）均验证健全；late-hydrate 随 ai 在 G2 建。
+
+### C. flag/state 碎片化审计（F1-F7 实证）→ ADR-021 立
+- 审计 `IbSpec`/`Symbol`/`RuntimeSymbolImpl` 控制变量，确认碎片化成立：`is_user_defined` 重载（来源+可见性）、"intrinsic"/`is_llm` 三编码并存、2 死字段（`axiom_provided`、`is_llm` 未序列化漏丢失）、`symbols.py:147` 真值表（过程式分支）。
+- 立 **[ADR-021](decisions/ADR-021-typed-provenance-visibility-storage-axes.md)**：三枚举 `Provenance`/`Visibility`/`StorageModel` 取代平 bool；`Symbol.metadata` 来源键升级 + 删 2 死字段；真值表→`Provenance.compatible_with`；`storage_model` 枚举提前就位（仅落字段，分发待 G3）。**修正 ADR-020 G2 的 `is_user_defined` 写法**为 `provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`。
+
+### D. PT-ARCH-23 规划重排（依赖审查后调整）
+- 新落地顺序：**G1（已完成）→ G1.5 数据结构迁移改善（ADR-021，当前最紧要）→ 路径整合收尾（PT-ARCH-21-FU，前移到 G2 之前——避免插在中间破坏 G3-G6 强耦合）→ G2 内核原生化 → G3+G4+G5+G6 磁盘型存储体系（合并单阶段，不可拆分）**。
+- 撤销原"G2 与 G3 可并行"标注。
+- 产出：ADR-021、decisions/README 索引 +、NEXT_STEPS（G1/G1.5/路径收尾/G2/G3-G6 新序列）、PENDING_TASKS（PT-ARCH-23 重构）。
+
+---
+
+## 2026-07-17：G1.5 — 数据结构迁移改善（ADR-021）完成
+
+测试基线：**1139 passed, 7 skipped**（0 failures/errors，2026-07-17 实测，win32）。
+
+### A. 核心字段迁移
+- `core/base/enums.py` 新增三枚举：`Provenance`（KERNEL_NATIVE/AXIOM_PROVIDED/USER_DEFINED/EXTERNAL_MODULE）、`Visibility`（PRELUDE_VISIBLE/IMPORT_GATED/SCOPE_PRIVATE）、`StorageModel`（MEMORY_BACKED/DISK_BACKED）。
+- `IbSpec`：`is_user_defined: bool` → `provenance: Provenance`、`visibility: Visibility`、`storage_model: StorageModel`（默认 MEMORY_BACKED）。
+- `TypeDef.is_llm` 删除（死字段 + 漏序列化）。
+
+### B. Symbol 清理
+- `Symbol` 新增类型化 `provenance: Provenance`；`metadata["is_intrinsic"]` / `["is_external_module"]` 全部迁移到 `provenance`。
+- 删除两个死字段：`metadata["axiom_provided"]`、`metadata["is_llm"]`（与 `SymbolKind.LLM_FUNCTION` 重复）。
+- `SymbolTable.define` 的 4 行真值表替换为 `Provenance.compatible_with`。
+
+### C. 序列化同步
+- `serializer.py` 持久化 `provenance`/`visibility`/`storage_model`（enum name）。
+- `artifact_rehydrator.py` 按 name 还原三枚举；旧 `is_user_defined` 字段不再使用。
+
+### D. 读取点机械迁移
+- 全仓 ~12 处 `is_user_defined` 读取点迁移到 `provenance`/`visibility`：runtime_context、artifact_loader、interpreter、bootstrapper、scheduler、prelude、context、symbol_collection_pass、_declaration_visitors、_type_checking_base、spec_builder、discovery。
+- 对应测试 (`test_resolve_call_return.py`, `test_type_annotations.py`) 同步更新。
+
+### E. 文档更新
+- `docs/design/TYPE_SYSTEM_DESIGN.md` 更新 `TypeDef` 字段描述与 `SpecFactory` API。
+- `docs/METADATA_ARCHITECTURE.md` §2.4 已登记三枚举（G1 WIP 中已落）。
+- `docs/NEXT_STEPS.md` 移除 G1.5 条目，路径整合收尾（PT-ARCH-21-FU）提升为当前最紧要。
+
+### F. 验证
+- 全量 pytest 1139 passed / 7 skipped。
+- rg 确认代码层零 `is_user_defined` 残留、零 `metadata["is_intrinsic"/"is_external_module"/"axiom_provided"/"is_llm"]` 残留。
+- `StorageModel` 仅落字段，未引入任何 workflow 读取/分发（遵守 G1.5 与 G3 边界铁律）。
 
 ---
 
@@ -539,6 +692,20 @@ Phase 3 多模态、PT-TEST-4（5/5）、PT-ARCH-7、PT-ARCH-5 G3、PT-ARCH-10 �
 - **P1-E**：独立 TypeResolutionPass
 - **P1-F**：`_bind_llm_except` 复刻到 v2
 - **P0 三项**：H5 测试基线恢复 + 双写真相收敛 + v2 阻塞 bug 修复
+
+---
+
+## 2026-07-17：PT-ARCH-21-FU 路径整合收尾完成
+
+测试基线：**1146 passed, 7 skipped**（0 failures）。
+
+- **rt_scheduler 死代码清理**：删除 `dispatch()` 方法、`spawn()` 内已不可达的隔离分支（`ModuleDiscoveryService` / `ModuleLoader` 局部重发现），删除 `_resolve_install_path` 辅助方法；从 `core/runtime/interfaces.py` 移除 `ExecutionRequest` / `ExecutionSignal` 及 `IRuntimeScheduler.dispatch` 协议声明。
+- **ProjectDetector IbPath 化**：`core/project_detector.py` 内部路径构造统一使用 `IbPath.from_native` / `/` / `parent` / `to_native`；FS 查询（`isdir`/`isfile`）保留；删除死方法 `is_valid_project_root`。
+- **module_system 边界清理**：`core/runtime/module_system/discovery.py` 与 `loader.py` 移除 `__init__` 中冗余的 `os.path.abspath`，添加模块级注释说明 Python importlib 边界保留原生路径。
+- **ibci_file relpath 修复**：`ibci_modules/ibci_file/core.py` 将 `os.path.relpath` 替换为 `safe_relpath`，`_read_media_bytes` 扩展名从已解析原生路径取。
+- **覆盖缺口 e2e**：新增 `tests/e2e/test_e2e_plugin_discovery.py`（plugin_paths / global_plugin 实际 import 解析、显式配置抑制嗅探）与 `tests/e2e/test_e2e_isolation_plugin_inheritance.py`（子脚本通过 `ihost.run_isolated` 继承父插件）。
+
+提交：见 `feat/PT-ARCH-21-FU` 分支最新提交（含代码、测试、文档一次性切口）。
 
 ---
 

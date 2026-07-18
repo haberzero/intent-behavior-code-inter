@@ -160,7 +160,7 @@ class SymbolResolver(ScopedVisitor):
 
                 # super() 注入：类有父类时，在方法作用域内注入 super 符号。
                 # 与 runtime kernel.py:994-996 的 IbSuperProxy 注入逻辑对齐。
-                # 使用固定 UID "builtin:super" 以匹配 runtime 的 define_variable 调用。
+                # 使用固定 UID "intrinsic:super" 以匹配 runtime 的 define_variable 调用。
                 cls_spec = getattr(self.current_class_symbol, 'spec', None)
                 if cls_spec and getattr(cls_spec, 'parent_type', None):
                     super_sym = VariableSymbol(
@@ -169,7 +169,7 @@ class SymbolResolver(ScopedVisitor):
                         def_node=node,
                         spec=self.registry.resolve("any"),
                     )
-                    super_sym.uid = "builtin:super"  # 固定 UID，与 runtime 对齐
+                    super_sym.uid = "intrinsic:super"  # 固定 UID，与 runtime 对齐
                     func_scope.define(super_sym)
             elif func_sym:
                 self.bind_symbol(node, func_sym)

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from core.base.enums import StorageModel
 from core.runtime.objects.kernel import IbObject as KernelIbObject
 from core.runtime.objects.kernel import IbValue, IbNone
 
@@ -40,6 +41,13 @@ def try_deep_clone(
     val_id = id(val)
     if val_id in memo:
         return memo[val_id]
+
+    # 按类型级 storage_model 分发：磁盘型对象走协议级浅拷贝，不物化字节。
+    # 只处理 IbValue 实例；类元对象（IbClass）不是克隆目标。
+    ib_class = getattr(val, "ib_class", None)
+    spec = getattr(ib_class, "spec", None)
+    if isinstance(val, IbValue) and spec is not None and getattr(spec, "storage_model", None) is StorageModel.DISK_BACKED:
+        return val.receive("__clone_ref__", [])
 
     # 不可变原语：引用复用即可
     if isinstance(val, IbNone) or (
@@ -84,6 +92,24 @@ def try_deep_clone(
         forked = val.fork()
         memo[val_id] = forked
         return forked
+
+    # 内存型 ``IbValue`` 子类（如 media / file_handle）：克隆 payload 与字段。
+    # 之前 ``type(val) is KernelIbObject`` 的严格判定会让所有 IbValue 子类
+    # 直接滑落为 "不可克隆"，导致 media 对象在 snapshot 中静默丢失。
+    if isinstance(val, IbValue):
+        new_val = type(val).__new__(type(val))
+        new_val.ib_class = val.ib_class
+        new_val.type_ref = val.type_ref
+        new_val.meta = dict(val.meta)
+        memo[val_id] = new_val
+        new_val.fields = {}
+        cloned_payload = try_deep_clone(val.payload, memo) if val.payload is not None else None
+        new_val.payload = cloned_payload if cloned_payload is not None else val.payload
+        for fname, fval in val.fields.items():
+            cloned_fval = try_deep_clone(fval, memo)
+            if cloned_fval is not None:
+                new_val.fields[fname] = cloned_fval
+        return new_val
 
     # 用户自定义 IbObject 实例（type 严格为 KernelIbObject，不含内置子类）
     if type(val) is KernelIbObject:

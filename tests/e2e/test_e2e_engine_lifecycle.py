@@ -186,32 +186,32 @@ class TestEngineRootDirContract:
 
 
 class TestPluginSearchPathResolution:
-    """ADR-019 §3 plugin 发现优先级：builtin > global_plugin > plugin_paths > 嗅探 > 全局(预留)。"""
+    """ADR-019 §3 plugin 发现优先级：install > global_plugin > plugin_paths > 嗅探 > 全局(预留)。"""
 
     @staticmethod
     def _resolve(project_root, auto_sniff=True):
         eng = IBCIEngine(root_dir=project_root, auto_sniff=auto_sniff)
-        return eng._resolve_plugin_search_paths(project_root), eng._builtin_path
+        return eng._resolve_plugin_search_paths(project_root), eng._install_path
 
-    def test_builtin_always_first_and_highest(self, tmp_path):
-        """builtin 恒在且最高优先级（search_paths[0]）。"""
-        paths, builtin = self._resolve(str(tmp_path))
-        assert paths[0] == builtin
+    def test_install_always_first_and_highest(self, tmp_path):
+        """install 恒在且最高优先级（search_paths[0]）。"""
+        paths, install = self._resolve(str(tmp_path))
+        assert paths[0] == install
 
     def test_no_config_with_sniff_includes_project_plugin_dirs(self, tmp_path):
         """无 ibci.json + auto_sniff：嗅探 project_root 下的 plugins/ibci_modules。"""
         (tmp_path / "plugins").mkdir()
         (tmp_path / "ibci_modules").mkdir()
-        paths, builtin = self._resolve(str(tmp_path))
-        # builtin + 两个嗅探目录
+        paths, install = self._resolve(str(tmp_path))
+        # install + 两个嗅探目录
         assert any("plugins" in p for p in paths)
         assert any("ibci_modules" in p for p in paths)
 
-    def test_no_config_no_sniff_flag_only_builtin(self, tmp_path):
-        """无 ibci.json + auto_sniff=False：仅 builtin（不嗅探）。"""
+    def test_no_config_no_sniff_flag_only_install(self, tmp_path):
+        """无 ibci.json + auto_sniff=False：仅 install（不嗅探）。"""
         (tmp_path / "plugins").mkdir()
-        paths, builtin = self._resolve(str(tmp_path), auto_sniff=False)
-        assert paths == [builtin]
+        paths, install = self._resolve(str(tmp_path), auto_sniff=False)
+        assert paths == [install]
 
     def test_explicit_plugin_paths_disables_sniff(self, tmp_path):
         """ibci.json 配置 plugin_paths 后，嗅探不触发（explicit > implicit）。"""
@@ -221,7 +221,7 @@ class TestPluginSearchPathResolution:
         (tmp_path / "ibci.json").write_text(
             json.dumps({"plugin_paths": ["explicit_only"]}), encoding="utf-8"
         )
-        paths, builtin = self._resolve(str(tmp_path))
+        paths, install = self._resolve(str(tmp_path))
         assert any("explicit_only" in p for p in paths)
         # 嗅探的 plugins/ 不应出现（被显式配置抑制）
         assert not any(p.endswith("plugins") and "explicit_only" not in p for p in paths)
@@ -235,13 +235,13 @@ class TestPluginSearchPathResolution:
         (tmp_path / "ibci.json").write_text(
             json.dumps({"global_plugin": ["glob"], "plugin_paths": ["proj"]}), encoding="utf-8"
         )
-        paths, builtin = self._resolve(str(tmp_path))
+        paths, install = self._resolve(str(tmp_path))
         gp_idx = next(i for i, p in enumerate(paths) if "glob" in p)
         pp_idx = next(i for i, p in enumerate(paths) if p.endswith("proj"))
         assert gp_idx < pp_idx  # global_plugin 在 plugin_paths 前
 
-    def test_builtin_highest_over_all(self, tmp_path):
-        """builtin 排在 global_plugin 与 plugin_paths 之前。"""
+    def test_install_highest_over_all(self, tmp_path):
+        """install 排在 global_plugin 与 plugin_paths 之前。"""
         gp = tmp_path / "glob"
         gp.mkdir()
         pp = tmp_path / "proj"
@@ -249,8 +249,8 @@ class TestPluginSearchPathResolution:
         (tmp_path / "ibci.json").write_text(
             json.dumps({"global_plugin": ["glob"], "plugin_paths": ["proj"]}), encoding="utf-8"
         )
-        paths, builtin = self._resolve(str(tmp_path))
-        assert paths[0] == builtin
+        paths, install = self._resolve(str(tmp_path))
+        assert paths[0] == install
 
     def test_dedup_preserves_order(self, tmp_path):
         """重复路径去重，保序。"""
@@ -258,7 +258,7 @@ class TestPluginSearchPathResolution:
             json.dumps({"global_plugin": ["x"], "plugin_paths": ["x"]}), encoding="utf-8"
         )
         (tmp_path / "x").mkdir()
-        paths, builtin = self._resolve(str(tmp_path))
+        paths, install = self._resolve(str(tmp_path))
         # "x" 只出现一次
         x_count = sum(1 for p in paths if p.endswith("x"))
         assert x_count == 1
@@ -272,7 +272,7 @@ class TestPluginSearchPathResolution:
         (tmp_path / "ibci.json").write_text(
             json.dumps({"plugin_paths": [str(external)]}), encoding="utf-8"
         )
-        paths, builtin = self._resolve(str(tmp_path))
+        paths, install = self._resolve(str(tmp_path))
         # 外部路径被纳入（特权越界读取；写入仍由 proj_root 沙箱约束——见 PermissionManager）
         assert os.path.realpath(str(external)) in paths
 

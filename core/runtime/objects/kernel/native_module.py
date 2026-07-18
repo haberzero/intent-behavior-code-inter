@@ -53,7 +53,7 @@ class IbNativeObject(IbObject):
                 if not callable_cls:
                     # 如果进入了插件加载阶段（STAGE 4+），callable 缺失属于严重初始化错误
                     reg.verify_level_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
-                    raise InterpreterError("Core Error: 'callable' class not found in registry. Builtins initialization failed? ")
+                    raise InterpreterError("Core Error: 'callable' class not found in registry. Primitive initialization failed? ")
 
                 return IbNativeFunction(
                     self.vtable[target_name],

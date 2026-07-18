@@ -285,11 +285,11 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 
 **两级插件架构**：
 
-| 级别 | 说明 | 包含插件 |
-|------|------|---------|
-| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | ibci_math / ibci_json / ibci_time / ibci_net / ibci_schema / ibci_isys |
-| 非侵入式（轻量依赖）| 同上，但导入了 `core.runtime.path.IbPath`（纯数据类，无状态依赖）并通过 `execution_context` 进行路径解析 | ibci_file |
-| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | ibci_ai / ibci_ihost / ibci_idbg |
+| 级别 | 说明 | 包含模块/插件 |
+|------|------|---------------|
+| 内核原生（kernel-native）| 随内核发行，构造期预注册，IMPORT_GATED；不位于 `ibci_modules/`，不可被用户插件覆盖 | `ai` / `file` / `ihost` / `idbg` / `isys` |
+| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema` |
+| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai`（已 kernel-native 化，保留历史位置）/ `ibci_ihost`（已 kernel-native 化）/ `ibci_idbg`（已 kernel-native 化）|
 
 **示例（AI 插件）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`

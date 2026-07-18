@@ -1,7 +1,9 @@
 # ADR-020: 内核原生 vs 插件边界重划 + FileHandle 磁盘型基类
 
 ## Status
-**Accepted (设计阶段，2026-07-13)**。实现未开始；本 ADR 固化经 8-subagent 交叉验证收敛的设计决策。落地顺序与部分命名（见 Open）待后续研讨。
+**Accepted (已实施，2026-07-17)**。PT-ARCH-23 全部落地：G1.5 数据结构迁移、G2 ai/ihost/idbg/isys 内核原生化、G3-G6 磁盘型存储体系 + PT-ARCH-24/25/26/27 安全闸门。本 ADR 固化经 8-subagent 交叉验证收敛的设计决策，并已在 `feat/G3-G6-disk-backed-storage` 分支完成代码实现与测试（1174 passed, 7 skipped）。
+
+> **修订（2026-07-17，ADR-021）**：本 ADR G2 的 kernel-native 标记写法原表述为 "`is_user_defined=False` → 恒可解析/不可覆盖"，经 flag 碎片化审计证实与 prelude 过滤器冲突（见 [ADR-021](ADR-021-typed-provenance-visibility-storage-axes.md) §F1）。**修正为：`provenance=KERNEL_NATIVE + visibility=IMPORT_GATED`**——来源与可见性两轴正交落地，本 ADR §A 的原则不变。
 
 ## Date
 2026-07-13
@@ -124,20 +126,126 @@ bootstrap 能吸收内核原生模块，需三处升级：
 - **承接**：ADR-019（路径机制——FileHandle 持 IbPath，创建经 resolve_path 沙箱）。
 - **不冲突**：ADR-017（分层——FileHandle 复用既有 axiom/kernel + value/runtime + binding/bootstrap 三角色）。
 
-## Open / 待研讨（未定，不阻塞文档）
+## Open / 待研讨
 
-1. ~~`file.py` 命名隐患~~ → **已确认（见 B 命名表）**：Python 文件用 `file_handle.py`，IBCI 模块名保留 `file`。
-2. ~~ai/ihost/idbg/isys reclassification 时机~~ → **已确认（负责人 2026-07-13）**：**所有核心模块内核迁移同步执行，同一里程碑内完成**（PT-ARCH-23，见 PENDING_TASKS）。不分子批。
-3. ~~落地顺序~~ → **已认可**：E→A→C→D→B（按里程碑内依赖自主微调）。
-4. **FileHandle 具体 API**：**延后**到真正实现容器类/文件类时细化（`file` 模块 free 函数 + `file_handle` 方法清单 + resolve_path 接合点 + 媒体子类 override）。
-5. ~~`file` 是否部分免 import~~ → **已确认**：**file 相关模块全 import-gated**（保 manifest 清晰；file 授沙箱相关能力，按 A 的 prelude 规则必须 import）。
+**已解决并已实施（2026-07-17）**：
+1. ~~`file.py` 命名隐患~~ → **已确认并实施**：Python 文件用 `file_handle.py`，IBCI 模块名保留 `file`。
+2. ~~ai/ihost/idbg/isys reclassification 时机~~ → **已确认并实施**：**所有核心模块内核迁移同步执行，同一里程碑内完成**（PT-ARCH-23）。不分子批。
+3. ~~落地顺序~~ → **已认可并实施**：E→A→C→D→B（按里程碑内依赖自主微调）。
+4. ~~FileHandle 具体 API~~ → **已确认并实施（2026-07-17）**：见下文“G6 最终 API 确认”。`file_handle` 实例只读；`file` 模块提供 `write_copy` / `write_overwrite` 两种显式写入；media 只读并通过 `from_file(path)` 构造。
+5. ~~`file` 是否部分免 import~~ → **已确认并实施**：**file 相关模块全 import-gated**（保 manifest 清晰；file 授沙箱相关能力，按 A 的 prelude 规则必须 import）。
+
+**仍待后续窗口**：
 6. **全项目命名清理（PT-ARCH-22）**：暂缓，已排期入 PENDING_TASKS，待 PT-ARCH-23 后或独立窗口执行。
 
 ## 里程碑归属（已确认）
 本 ADR 的实现归属 **PT-ARCH-23**（与 P0-2/P0-3 强耦合，协同设计为一个里程碑）。依赖序与任务分配见 `PENDING_TASKS §PT-ARCH-23`。
 
+## G6 最终 API 确认（2026-07-17 研讨修订）
+
+以下 API 为 `file` 模块内核原生化（G6）的最终设计，已综合考虑只读语义、沙箱安全、`llmexcept` 快照隔离与 `save_state` 限制。
+
+### `file_handle` 实例（只读）
+
+| 成员 | 类型 | 说明 |
+|---|---|---|
+| `path` | field | backing 路径字符串，无 I/O |
+| `read()` | method | 文本读取（UTF-8），经 PermissionManager 校验 |
+| `read_bytes()` | method | 字节读取，返回 `list[int]`，经 PermissionManager 校验 |
+| `close()` | method | no-op placeholder（不持 fd） |
+| `cast_to()` | method | 继承自 IbObject 的转换协议 |
+
+**无实例 `write()`**。
+
+### `file` 模块自由函数
+
+| 函数 | 签名 | 语义 |
+|---|---|---|
+| `open(path)` | `str -> file_handle` | 解析路径、沙箱校验，返回只读 handle |
+| `read(target)` | `str \| file_handle -> str` | 文本读取 |
+| `read_bytes(target)` | `str \| file_handle -> list[int]` | 字节读取 |
+| `write_copy(src, new_path, data)` | `file_handle, str, str -> file_handle` | COW：创建新文件，src 不受影响 |
+| `write_copy_bytes(src, new_path, data)` | `file_handle, str, list[int] -> file_handle` | COW 字节版本 |
+| `write_new(new_path, data)` | `str, str -> file_handle` | 创建新文件，无需 source handle；目标已存在则覆盖 |
+| `write_new_bytes(new_path, data)` | `str, list[int] -> file_handle` | `write_new` 字节版本 |
+| `write_overwrite(target, data)` | `file_handle, str -> void` | 显式副作用：覆盖原文件 |
+| `write_overwrite_bytes(target, data)` | `file_handle, list[int] -> void` | 副作用字节版本 |
+| `exists(path)` | `str -> bool` | 沙箱内存在检查 |
+| `remove(target)` | `str \| file_handle -> void` | 删除文件 |
+
+### media 静态构造（只读）
+
+```ibci
+import file
+
+audio rec = audio.from_file("interview.wav")
+image photo = image.from_file("cat.png")
+video clip = video.from_file("clip.mp4")
+```
+
+`audio`/`image`/`video` 类型为 `IMPORT_GATED`，需 `import file`。
+
+### `import file` 的类型注入（`exported_types`）
+
+`file` 模块的 `TypeDef` 声明 `exported_types=["file_handle", "audio", "image", "video"]`。因此 `import file` 会同时把四个类型名注入当前作用域，使下列写法可解析：
+
+```ibci
+import file
+
+file_handle fh = file.open("data.txt")
+audio rec = audio.from_file("interview.wav")
+```
+
+该机制仅用于 kernel-native 模块；用户插件不享受此注入，其类型可见性由自身的 `visibility` 决定。详见 `docs/METADATA_ARCHITECTURE.md` §2.4。
+
+### 安全限制
+
+1. 所有 I/O（含 `file_handle.read()` / `__materialize__()`）必须经 `PermissionManager` 沙箱校验。
+2. `save_state` 检测到活跃 `file_handle`/`audio`/`image`/`video` 变量时报错（PT-ARCH-26）。
+3. `llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`（PT-ARCH-27）；文档明确建议涉及可能失败的 LLM 调用时优先使用 `write_copy` / `write_new`。
+
+### 命名风险与后续清理（2026-07-17 补充）
+
+**`file` 模块命名风险（负责人 2026-07-17 决策更新）**：
+IBCI 模块名 `file` 与 Python 历史内建名 `file`（Py2）及通用概念"文件"冲突。**负责人明确决策：当前 `file` 模块名是短期兼容状态，长期必须改名以彻底消除内建冲突风险，不允许永久依赖 `file_impl.py` 这种兼容层或人工审查。**
+
+当前缓解措施：
+- Python 实现文件命名为 `core/runtime/modules/file_impl.py`，避免 Python import shadowing。
+- `file_impl.py` 顶部添加醒目注释，声明不可重命名为 `file.py`。
+- `tests/meta/test_layering.py` 增加静态检查，禁止 `core/runtime/modules/file.py` 存在。
+- 文档中优先使用"`file` 内核模块"或"IBCI `file` 模块"，降低概念混淆。
+
+长期改名候选（按优先级）：
+1. `fs` — 简洁，与 Rust/Node 生态一致，可扩展为文件系统能力命名空间。
+2. `filesys` — 可读性强，避免与潜在第三方 `fs` 冲突。
+3. `io` — 仅当 IO 能力远超文件系统时考虑（但与 Python `io` 模块冲突风险更高）。
+
+迁移触发条件：当 IBCI 需要引入网络、数据库、进程等更广泛的 IO 能力时，不应继续把所有能力塞入 `file`，而应拆分命名空间。详见 `docs/PENDING_TASKS.md §PT-ARCH-30`。
+
+**`exported_types` 字段命名反思**：
+`exported_types` 当前仅表示"模块被 import 时注入作用域的类型名列表"，未体现：
+- 仅对 `KERNEL_NATIVE + IMPORT_GATED` 模块生效；
+- 注入的是类型名（TypeRef），不是值或函数；
+- 注入时机是 `import` 处理阶段。
+
+更准确的候选名：
+- `import_injected_types`：强调 import 时注入。
+- `gated_type_exports`：强调 IMPORT_GATED 模块的类型导出。
+- `scope_type_injections`：强调作用域级类型注入。
+
+**统一写入 API 的未来规划**：
+当前 `write_copy` / `write_overwrite` / `write_new` 三族函数是函数签名固定下的妥协。待 IBCI 支持动态参数个数或命名参数后，统一为：
+
+```ibci
+file.write(target, data, overwrite_flag="overwrite")
+# overwrite_flag: "copy" | "overwrite" | "new"
+```
+
+届时 `write_copy` / `write_new` 可作为兼容别名保留或一次性迁移。详见 `docs/PENDING_TASKS.md §PT-ARCH-28`。
+
 ## Consequences
 - "核心层插件"这个自相矛盾的中间态消除：内核耦合=内核原生，工具=插件。
 - 路径集中管理范围清晰：内核内部一致性（file/isys 皆内核）。
 - 插件系统回归"可选纯工具"本义；用户插件受信不管路径（ADR-019 结论成立）。
+- `file` 模块名是**短期兼容状态**：当前保留 `import file` 以保证 G6 零破坏，但长期必须迁移到 `fs` / `filesys` 等无内建冲突的命名空间（负责人 2026-07-17 确认，见 §"命名风险与后续清理"）。
 - 影响面：bootstrap 改造、ibci_file 消亡、media 改 FileHandle 子类、术语全仓替换——大重构，分阶段。

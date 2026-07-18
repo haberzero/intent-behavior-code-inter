@@ -3,6 +3,7 @@ import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.enums import StorageModel
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
 from core.runtime.objects.intent_node import IntentNode
@@ -212,6 +213,19 @@ class RuntimeSerializer(BaseFlatSerializer):
         
         # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
         cls_name = obj.ib_class.name
+
+        # 按 storage_model 分发：磁盘型对象序列化为路径描述符，不物化字节。
+        # 注意：只处理实例（IbValue），不处理类元对象（IbClass）。
+        spec = getattr(getattr(obj, "ib_class", None), "spec", None)
+        if isinstance(obj, IbValue) and spec is not None and getattr(spec, "storage_model", None) is StorageModel.DISK_BACKED:
+            data["_type"] = "disk_backed"
+            descriptor = obj.receive("__to_descriptor__", [])
+            if hasattr(descriptor, "to_native"):
+                descriptor = descriptor.to_native()
+            data["descriptor"] = descriptor
+            self.instance_pool[uid] = data
+            return uid
+
         if isinstance(obj, IbValue) and cls_name == "None":
             data["_type"] = "none"
 
@@ -252,7 +266,14 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbModule):
             data["_type"] = "module"
             data["name"] = obj.name
-            data["scope_uid"] = self._collect_runtime_scope(obj.scope)
+            # Kernel-native modules are backed by an IbNativeObject (the runtime
+            # implementation), not a Scope. They are re-bound at load time by
+            # HostService._rebind_environment, so we must not recurse into the
+            # native implementation here.
+            if hasattr(obj.scope, "get_all_symbols"):
+                data["scope_uid"] = self._collect_runtime_scope(obj.scope)
+            else:
+                data["scope_native"] = True
 
         elif isinstance(obj, IbBoundMethod):
             data["_type"] = "bound_method"
@@ -511,6 +532,17 @@ class RuntimeDeserializer:
             # 调用方误以 inst_ 前缀来到这里时，回退到 native 路径。
             return self._get_intent_context(uid)
 
+        if _type == "disk_backed":
+            descriptor = data.get("descriptor", {})
+            descriptor_obj = (
+                self.factory.create_dict(dict(descriptor))
+                if self.factory is not None
+                else descriptor
+            )
+            obj = ib_class.receive("__from_descriptor__", [descriptor_obj])
+            self.instance_cache[uid] = obj
+            return obj
+
         if _type == "none":
             obj = self.registry.get_none()
             self.instance_cache[uid] = obj
@@ -539,8 +571,15 @@ class RuntimeDeserializer:
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
             
         elif _type == "module":
-            scope = self._get_scope(data["scope_uid"])
-            obj = self.factory.create_module(data["name"], scope)
+            if data.get("scope_native"):
+                # Kernel-native module: the real implementation is re-bound at
+                # load time. We only need a stable placeholder here.
+                obj = self.factory.create_module(
+                    data["name"], self.factory.create_scope(parent=None)
+                )
+            else:
+                scope = self._get_scope(data["scope_uid"])
+                obj = self.factory.create_module(data["name"], scope)
             self.instance_cache[uid] = obj
             
         elif _type == "native":

@@ -66,8 +66,9 @@ class ArtifactLoader:
                 if stmt_data and stmt_data.get("_type") == "IbClassDef":
                     class_to_node[stmt_data.get("name")] = (stmt_uid, module_name)
 
+        from core.base.enums import Provenance
         # 2. 预注册用户定义的类 (支持继承依赖)
-        remaining = [c for c in user_classes if c.is_user_defined]
+        remaining = [c for c in user_classes if c.provenance == Provenance.USER_DEFINED]
         last_count = -1
         
         while remaining and len(remaining) != last_count:

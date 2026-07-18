@@ -3,7 +3,7 @@
 此模块位于 ``core/runtime/shared/`` —— 运行时各子包（interpreter / vm / objects）
 共享的叶子模块，用于打破 interpreter ↔ vm 和 objects ↔ interpreter 循环依赖。
 
-``LLMResult`` 的 ``unwrap()`` 方法中有一个对 ``objects.builtins.IbNone`` 的延迟导入，
+``LLMResult`` 的 ``unwrap()`` 方法中有一个对 ``objects.primitives.IbNone`` 的延迟导入，
 这是运行时唯一的跨包引用（非 top-level），不会形成导入循环。
 """
 
@@ -45,7 +45,7 @@ class LLMResult:
         if not self.success:
             raise RuntimeError(f"Cannot unwrap failed result: {self.error_message}")
         if self.value is None:
-            from core.runtime.objects.builtins import IbNone
+            from core.runtime.objects.primitives import IbNone
             return IbNone()
         return self.value
 

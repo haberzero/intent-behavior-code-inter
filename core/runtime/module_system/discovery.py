@@ -1,13 +1,26 @@
+# Python plugin loading boundary — native paths intentional.
+#
+# 本模块位于 IBCI 运行时与 Python importlib 的交界：扫描到的目录最终喂给
+# os.listdir / os.path.isdir、sys.path.insert 以及 importlib.import_module。
+# 这些 API 必须使用原生字符串，因此本文件保留 os.path 进行 FS 查询与
+# importlib 路径构造，不在每个边界点强行 IbPath 化。
+#
+# 路径规范化责任上移：IBCIEngine._resolve_plugin_search_paths 已通过
+# PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
+# 提供绝对原生路径，此处不再重复 os.path.abspath。
 import os
 import sys
 import json
 import inspect
 import importlib.util
 from typing import Dict, List, Optional, Any
+
+from core.base.path import IbPath
 from core.runtime.host.host_interface import HostInterface
 from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
-from core.base.enums import RegistrationState
+from core.base.enums import RegistrationState, Visibility
 from core.kernel.spec.type_ref import TypeRef
+from core.runtime.path import InstallPaths
 
 
 class ModuleDiscoveryService:
@@ -16,29 +29,36 @@ class ModuleDiscoveryService:
     负责在多个搜索路径（如 ibci_modules/ 和 plugins/）中发现并加载模块元数据。
     """
     def __init__(self, search_paths: List[str]):
-        self.search_paths = [os.path.abspath(p) for p in search_paths]
+        # 仅做分隔符规范化；调用方保证路径为绝对路径（ADR-019）。
+        self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
 
-    def discover_all(self, registry: Optional[Any] = None) -> HostInterface:
+    def discover_all(self, registry: Optional[Any] = None, host: Optional[HostInterface] = None) -> HostInterface:
         """
         扫描所有搜索路径，加载所有发现的模块 spec。
 
         ``registry`` 必须是已完成 STAGE_3_PLUGIN_METADATA 初始化的 KernelRegistry，
         以确保 HostInterface 与引擎共享同一 SpecRegistry 实例（消除元数据双轨）。
         仅在无 registry 的孤立测试场景下允许省略。
+
+        ``host`` 为可选的已有 HostInterface；传入时直接向其追加发现结果，
+        用于保留构造期预注册的 kernel-native 模块（ADR-020 G2）。
         """
         if registry:
             registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
-            metadata_registry = registry.get_metadata_registry()
-            if metadata_registry is None:
-                raise ValueError(
-                    "discover_all(): registry.get_metadata_registry() returned None. "
-                    "Ensure initialize_builtin_classes() has been called before discover_all()."
-                )
-            host = HostInterface(external_registry=metadata_registry)
+            if host is None:
+                metadata_registry = registry.get_metadata_registry()
+                if metadata_registry is None:
+                    raise ValueError(
+                        "discover_all(): registry.get_metadata_registry() returned None. "
+                        "Ensure initialize_primitive_classes() has been called before discover_all()."
+                    )
+                host = HostInterface(external_registry=metadata_registry)
         else:
-            # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
-            # 主引擎路径必须传入 registry 以确保注册表共享。
-            host = HostInterface()
+            if host is None:
+                # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
+                # 主引擎路径必须传入 registry 以确保注册表共享。
+                host = HostInterface()
+
         discovered_modules = set()
 
         for path in self.search_paths:
@@ -56,6 +76,12 @@ class ModuleDiscoveryService:
                 spec_path = os.path.join(module_dir, "_spec.py")
 
                 if os.path.exists(spec_path):
+                    # ADR-020 G2：已预注册的 kernel-native 模块不再从磁盘重复加载
+                    logical_name = host.get_module_by_discovery_name(entry)
+                    if logical_name is not None and host.is_kernel_native(logical_name):
+                        discovered_modules.add(entry)
+                        continue
+
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
                         if spec_metadata:
@@ -106,7 +132,15 @@ class ModuleDiscoveryService:
             sys.path.insert(0, ibci_modules_path)
 
         parent_dir = os.path.basename(os.path.dirname(spec_path))
-        internal_name = f"ibci_{parent_dir}._spec"
+        # 对 ibci_modules/ 下的一方模块，使用完整命名空间 ibci_modules.<pkg>._spec，
+        # 与实现层导入命名空间保持一致，避免 namespace package 产生重复模块对象。
+        install_path = InstallPaths.modules_dir().to_native()
+        is_install_spec = os.path.normcase(os.path.dirname(os.path.dirname(spec_path))) == os.path.normcase(install_path)
+        internal_name = (
+            f"ibci_modules.{parent_dir}._spec"
+            if is_install_spec
+            else f"ibci_{parent_dir}._spec"
+        )
 
         try:
             spec = importlib.util.spec_from_file_location(internal_name, spec_path)
@@ -138,7 +172,7 @@ class ModuleDiscoveryService:
                     vtable.name = raw_name
                     # 方法插件必须显式 import 才可用，不预注入为全局内置符号
                     if plugin_kind == "method_module":
-                        vtable.is_user_defined = True
+                        vtable.visibility = Visibility.IMPORT_GATED
                     return vtable
 
                 # 协议1：标准插件（字典格式，零侵入）
@@ -146,7 +180,7 @@ class ModuleDiscoveryService:
                     spec = self._build_spec_from_dict(raw_name, vtable)
                     # 方法插件必须显式 import 才可用，不预注入为全局内置符号
                     if plugin_kind == "method_module":
-                        spec.is_user_defined = True
+                        spec.visibility = Visibility.IMPORT_GATED
                     return spec
 
             except ImportError:

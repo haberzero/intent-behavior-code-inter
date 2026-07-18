@@ -26,6 +26,7 @@ from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.interfaces import (
     ISourceProvider, ICompilerService
 )
+from core.base.enums import Provenance
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
@@ -483,8 +484,37 @@ class Scheduler(ICompilerService):
                                     code=SEM_IMPORT_CONFLICT,
                                 )
                         else:
-                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
+                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, provenance=Provenance.EXTERNAL_MODULE)
                             analyzer.symbol_table.define(mod_sym)
+                            # ADR-020 G6: `import file` also gates the disk-backed types
+                            # (file_handle / audio / image / video) into the importing scope.
+                            for exported_name in getattr(s_mod_type, "exported_types", []):
+                                existing_exported = analyzer.symbol_table.resolve(exported_name)
+                                if existing_exported:
+                                    self.debugger.trace(
+                                        CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                        f"[import] Exported type '{exported_name}' from module '{imp.module_name}' "
+                                        f"already exists in '{file_path}', skipping."
+                                    )
+                                    continue
+                                exported_spec = self.registry.resolve(exported_name)
+                                if exported_spec is None:
+                                    self.debugger.trace(
+                                        CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                        f"[import] Exported type '{exported_name}' from module '{imp.module_name}' "
+                                        f"not found in registry; skipping."
+                                    )
+                                    continue
+                                type_sym = TypeSymbol(
+                                    name=exported_name,
+                                    kind=SymbolKind.CLASS,
+                                    spec=exported_spec,
+                                    provenance=Provenance.KERNEL_NATIVE,
+                                    # ADR-020 G6: align with runtime setup_context which
+                                    # defines these kernel-native classes as `intrinsic:<name>`.
+                                    uid=f"intrinsic:{exported_name}",
+                                )
+                                analyzer.symbol_table.define(type_sym)
                         
                 elif imp.import_type == ImportType.FROM_IMPORT:
                     # 2. 处理 from mod import a, b as c, *
@@ -521,11 +551,11 @@ class Scheduler(ICompilerService):
                                 else:
                                     # 使用 descriptor 参数，而不是 var_type/type_signature
                                     if target_sym.kind == SymbolKind.VARIABLE:
-                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
                                     elif target_sym.kind == SymbolKind.FUNCTION:
-                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
                                     else:
-                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
 
                                     analyzer.symbol_table.define(new_sym)
                             else:

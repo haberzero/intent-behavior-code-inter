@@ -39,6 +39,24 @@ def _find_test_files(subdir: str) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
+# runtime/modules/ MUST NOT contain a file.py that shadows the IBCI "file" module
+# ---------------------------------------------------------------------------
+
+class TestRuntimeModulesNamingRedLine:
+    """Prevent Python-level shadowing of IBCI kernel-native module names."""
+
+    REPO_ROOT = TESTS_ROOT.parent
+
+    def test_no_file_py_in_runtime_modules(self):
+        """core/runtime/modules/file.py would shadow the IBCI 'file' module implementation."""
+        forbidden = self.REPO_ROOT / "core" / "runtime" / "modules" / "file.py"
+        assert not forbidden.exists(), (
+            f"{forbidden}: must not exist — it would shadow the IBCI 'file' kernel-native module. "
+            f"Use a non-conflicting implementation filename like file_impl.py instead."
+        )
+
+
+# ---------------------------------------------------------------------------
 # kernel/ MUST NOT start IBCIEngine or call run_ibci
 # ---------------------------------------------------------------------------
 

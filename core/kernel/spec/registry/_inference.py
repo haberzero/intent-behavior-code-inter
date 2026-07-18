@@ -54,7 +54,7 @@ class _InferenceMixin:
         Unified return-type resolution for ALL callable forms.
 
         This is the single entry point that handles:
-        1. Builtin type constructors (str/int/float/bool/list/dict/Exception) → returns itself
+        1. Primitive type constructors (str/int/float/bool/list/dict/Exception) → returns itself
         2. User-defined class constructors (TypeKind.CLASS) → returns itself
         3. Callable class instances (__call__ protocol) → resolves __call__ return type
         4. Structural callables (FUNCTION/CALLABLE_SIG) with explicit return_type
@@ -99,7 +99,7 @@ class _InferenceMixin:
                     return self.resolve(ret_name) or self.resolve("any")
             return self.resolve("any")
 
-        # --- Layer 2: Class type (constructor or builtin type cast) ---
+        # --- Layer 2: Class type (constructor or primitive type cast) ---
         if kind == TypeKind.CLASS.value:
             # Check for __call__ on class *instances* is handled by the caller
             # via is_type detection; here CLASS always means "constructor call"

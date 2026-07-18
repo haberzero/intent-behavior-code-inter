@@ -23,7 +23,7 @@ class IntrinsicManager:
             py_func, 
             unbox_args=unbox, 
             is_method=False, 
-            name=f"builtin.{name}", 
+            name=f"intrinsic.{name}", 
             ib_class=callable_class,
             logic_id=logic_id
         )
@@ -34,12 +34,12 @@ class IntrinsicManager:
         """
         # 直接通过 context.define_variable 进行注入，保持单向依赖
         for name, func in self._intrinsics.items():
-            # 注入时带上稳定的内置符号 UID，与编译器对齐；
-            # 标记为 is_builtin=True，使 ``RuntimeContextImpl.get_vars()``
+            # 注入时带上稳定的内核原生符号 UID，与编译器对齐；
+            # 标记为 is_intrinsic=True，使 ``RuntimeContextImpl.get_vars()``
             # 能基于属性而非硬编码名单过滤。
             context.define_variable(
                 name, func, is_const=True, force=True,
-                uid=f"builtin:{name}", is_builtin=True,
+                uid=f"intrinsic:{name}", is_intrinsic=True,
             )
         
         # 2. 扫描池中已加载的对象 (用于处理那些被赋值给其他变量的函数)

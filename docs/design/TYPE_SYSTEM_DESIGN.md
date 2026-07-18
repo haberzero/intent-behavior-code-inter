@@ -82,14 +82,15 @@ class TypeDef(IbSpec):
     module_path:    Optional[str]
     kind:           str  # 见 TypeKind
     is_nullable:    bool
-    is_user_defined: bool
+    provenance:     Provenance       # 来源：KERNEL_NATIVE / AXIOM_PROVIDED / USER_DEFINED / EXTERNAL_MODULE
+    visibility:     Visibility       # 可见性：PRELUDE_VISIBLE / IMPORT_GATED / SCOPE_PRIVATE
+    storage_model:  StorageModel     # 存储模型：MEMORY_BACKED / DISK_BACKED（ADR-016，G3 启用）
     members:        Dict[str, MemberSpec]
     _axiom_name:    Optional[str]    # axiom 查询 key 重定向
 
     # ── 函数签名（FUNCTION / BOUND_METHOD / CALLABLE_INSTANCE / CALLABLE_SIG）
     param_types:    List[TypeRef]
     return_type:    TypeRef
-    is_llm:         bool
 
     # ── 类继承（CLASS）
     parent_type:    Optional[TypeRef]
@@ -161,8 +162,8 @@ class TypeDef(IbSpec):
 | 方法 | 用途 |
 |------|------|
 | `create_primitive(name, is_nullable)` | 标量类型 |
-| `create_func(name, param_type_names, return_type_name, ...)` | 函数 spec（用户 func / 插件 vtable / 内置） |
-| `create_class(name, parent_name, is_user_defined)` | 用户类 / 内置类 |
+| `create_func(name, param_type_names, return_type_name, provenance, visibility, ...)` | 函数 spec（用户 func / 插件 vtable / 内置） |
+| `create_class(name, parent_name, provenance, visibility)` | 用户类 / 内置类 |
 | `create_list / create_tuple / create_dict` | 容器特化 |
 | `create_optional(wrapped_name)` | Optional[T] |
 | `create_bound_method(...)` | 绑定方法 |
@@ -362,7 +363,7 @@ class IbValue(IbObject):
 ## §10 当前状态
 
 - M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成（详见 `docs/COMPLETED.md`，2026-05-08 锚点）。
-- 类型系统主线本身无开放债务；但项目整体主线当前最高优先级是 **PT-ARCH-19/20 路径系统统一**（ADR-017/018），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在路径统一 + 存储模型架构（ADR-016）+ media 重建（ADR-014）完成之后。
+- 类型系统主线本身无开放债务；路径系统统一（ADR-015~019）已完成（2026-07-13，PT-ARCH-21）。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 + ADR-014 协同里程碑），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在该里程碑完成之后。
 - 实时主线状态以 `docs/NEXT_STEPS.md` 为准；测试基线请以当次 `python -m pytest tests/ -q --tb=no --no-header` 输出为准（不在此冻结具体数字）。
 
 ---

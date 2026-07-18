@@ -1,6 +1,6 @@
 from typing import Optional, Any
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
-from core.runtime.objects.builtins import IbNone
+from core.runtime.objects.primitives import IbNone
 from core.kernel.registry import KernelRegistry
 
 def register_io(manager: Any, execution_context: Any, service_context: Any):

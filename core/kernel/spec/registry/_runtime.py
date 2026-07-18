@@ -16,7 +16,7 @@ from ..specs import (
     BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC, ENUM_SPEC,
     LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
     LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
-    AUDIO_SPEC, IMAGE_SPEC, VIDEO_SPEC,
+    AUDIO_SPEC, IMAGE_SPEC, VIDEO_SPEC, FILE_HANDLE_SPEC,
 )
 
 if TYPE_CHECKING:
@@ -90,6 +90,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> "SpecRegist
     from . import SpecRegistry
     reg = SpecRegistry(axiom_registry)
 
+    # file_handle 必须在 media 之前注册，因为 audio/image/video 继承自它。
     for proto in (
         INT_SPEC, FLOAT_SPEC, STR_SPEC, BOOL_SPEC, VOID_SPEC,
         ANY_SPEC, AUTO_SPEC, FN_SPEC, NONE_SPEC, SLICE_SPEC,
@@ -97,7 +98,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> "SpecRegist
         OPTIONAL_SPEC, BOUND_METHOD_SPEC, LIST_SPEC, TUPLE_SPEC, DICT_SPEC, MODULE_SPEC,
         ENUM_SPEC, LLM_CALL_RESULT_SPEC, LLM_UNCERTAIN_SPEC, INTENT_SPEC, INTENT_CONTEXT_SPEC,
         LLM_ERROR_SPEC, LLM_PARSE_ERROR_SPEC, LLM_RETRY_EXHAUSTED_ERROR_SPEC, LLM_CALL_ERROR_SPEC,
-        AUDIO_SPEC, IMAGE_SPEC, VIDEO_SPEC,
+        FILE_HANDLE_SPEC, AUDIO_SPEC, IMAGE_SPEC, VIDEO_SPEC,
     ):
         reg.register(proto)
 

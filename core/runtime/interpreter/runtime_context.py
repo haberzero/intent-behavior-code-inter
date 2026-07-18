@@ -18,7 +18,7 @@ from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptF
 from core.runtime.shared.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
-    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_builtin: bool = False):
+    def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_intrinsic: bool = False):
         self.name = name
         self.value = value
         self.declared_type = declared_type
@@ -27,7 +27,7 @@ class RuntimeSymbolImpl:
         # 内置函数（intrinsic）标志位，由 IntrinsicManager 在注入 print/len/range/...
         # 时设置；``get_vars()`` 使用本标志过滤掉运行时调试不应显示的特权符号，
         # 替代历史的硬编码名单 (``"len", "print", "range", ...``)。
-        self.is_builtin = is_builtin
+        self.is_intrinsic = is_intrinsic
         # 当变量被内层 lambda 捕获时，提升为 Cell 变量；
         # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
         self.cell: Optional[Any] = None  # Optional[IbCell]
@@ -66,7 +66,8 @@ class ScopeImpl:
             return
 
         # 用户定义类（含枚举）的赋值由编译器在语义分析阶段验证，运行时跳过类型检查
-        if isinstance(declared_type, IbSpec) and declared_type.kind == TypeKind.CLASS.value and declared_type.is_user_defined:
+        from core.base.enums import Provenance
+        if isinstance(declared_type, IbSpec) and declared_type.kind == TypeKind.CLASS.value and declared_type.provenance == Provenance.USER_DEFINED:
             return
             
         # 强契约：运行时类型校验
@@ -85,7 +86,7 @@ class ScopeImpl:
                     error_code=RUN_TYPE_MISMATCH
                 )
 
-    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:
+    def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_intrinsic: bool = False) -> None:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
         
@@ -97,7 +98,7 @@ class ScopeImpl:
             if uid in self._uid_to_symbol and self._uid_to_symbol[uid].is_const:
                 raise InterpreterError(f"Cannot redefine constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
 
-        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const, is_builtin=is_builtin)
+        sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const, is_intrinsic=is_intrinsic)
         if name:
             self._symbols[name] = sym
         if uid:
@@ -553,10 +554,10 @@ class RuntimeContextImpl(RuntimeContext):
                         continue
                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
                         continue
-                    # 通过 RuntimeSymbolImpl.is_builtin 标志过滤内置函数（intrinsic），
+                    # 通过 RuntimeSymbolImpl.is_intrinsic 标志过滤内置函数（intrinsic），
                     # 替代历史的硬编码名单 ("len", "print", "range", "input", "get_self_source")。
                     # 内置函数仅供 IBCI 代码调用，不应在调试器变量面板中暴露给用户。
-                    if getattr(symbol, "is_builtin", False):
+                    if getattr(symbol, "is_intrinsic", False):
                         continue
                     res[name] = val
             scope = scope.parent
@@ -629,8 +630,8 @@ class RuntimeContextImpl(RuntimeContext):
         if not self._current_scope.assign_by_uid(uid, value, skip_type_check=skip_type_check):
             raise InterpreterError(f"Variable UID '{uid}' is not defined", error_code=RUN_UNDEFINED_VARIABLE)
 
-    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_builtin: bool = False) -> None:
-        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force, is_builtin=is_builtin)
+    def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_intrinsic: bool = False) -> None:
+        self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force, is_intrinsic=is_intrinsic)
 
     def define_variable_at_global(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
         """在全局作用域中定义变量（用于 global 语句创建新全局变量）。"""

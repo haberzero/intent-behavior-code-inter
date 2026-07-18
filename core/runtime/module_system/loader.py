@@ -1,10 +1,23 @@
+# Python plugin loading boundary — native paths intentional.
+#
+# 本模块位于 IBCI 运行时与 Python importlib 的交界：扫描到的目录最终喂给
+# os.listdir / os.path.isdir / os.path.exists、sys.path.insert 以及
+# importlib.import_module。这些 API 必须使用原生字符串，因此保留 os.path
+# 进行 FS 查询与 importlib 路径构造，不在每个边界点强行 IbPath 化。
+#
+# 路径规范化责任上移：IBCIEngine._resolve_plugin_search_paths 已通过
+# PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
+# 提供绝对原生路径，此处不再重复 os.path.abspath。
 import os
 import importlib.util
 import inspect
 import sys
 from typing import List, Dict, Any, Optional, Set
+
+from core.base.path import IbPath
 from core.runtime.exceptions import RegistryIsolationError
 from core.base.enums import RegistrationState
+from core.runtime.path import InstallPaths
 
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
@@ -21,7 +34,8 @@ class ModuleLoader(IModuleLoader):
     负责在执行阶段动态加载模块实现，并注入所需的依赖。
     """
     def __init__(self, search_paths: List[str], capability_registry: Optional[Any] = None):
-        self.search_paths = [os.path.abspath(p) for p in search_paths]
+        # 仅做分隔符规范化；调用方保证路径为绝对路径（ADR-019）。
+        self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
         self.capability_registry = capability_registry
 
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
@@ -167,39 +181,54 @@ class ModuleLoader(IModuleLoader):
                 
             loaded_modules.add(entry)
 
+        # 安装路径（ibci_modules/）与其他插件路径的 import 命名空间区分：
+        # ibci_modules 下子目录须作为 ibci_modules.<name> 导入，避免 namespace
+        # package 造成 ibci_ai 与 ibci_modules.ibci_ai 两个模块对象。
+        install_path = InstallPaths.modules_dir().to_native()
+
         # 扫描搜索路径，加载所有物理存在的模块
         for path in self.search_paths:
             if not os.path.isdir(path):
                 continue
-                
+
+            # 当前搜索路径是否为 ibci_modules 安装目录
+            is_install_path = os.path.normcase(path) == os.path.normcase(install_path)
+
             for entry in os.listdir(path):
                 if entry in loaded_modules:
                     continue
-                
+
                 # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
                 # 通过 discovery_map 映射物理目录名到逻辑模块名
                 module_name = interop.get_module_name_by_discovery(entry)
                 if not module_name:
                     continue
-                    
+
+                # ADR-020 G2：kernel-native 模块已在构造期预注册，不再从磁盘加载覆盖
+                if interop.host_interface.is_kernel_native(module_name):
+                    loaded_modules.add(entry)
+                    continue
+
                 module_dir = os.path.join(path, entry)
                 if not os.path.isdir(module_dir):
                     continue
-                
+
                 # 实现层通常在 __init__.py 中
                 impl_path = os.path.join(module_dir, "__init__.py")
                 if not os.path.exists(impl_path):
                     continue
-                    
+
                 try:
                     # 动态加载实现层
                     # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
                     pkg_dir = os.path.dirname(module_dir)
                     if pkg_dir not in sys.path:
                         sys.path.insert(0, pkg_dir)
-                    
-                    # 使用 importlib 直接导入文件夹作为包，这能正确处理内部的相对导入
-                    mod = importlib.import_module(entry)
+
+                    # 安装路径下的包使用完整命名空间 ibci_modules.<name>，
+                    # 用户插件路径仍使用目录名作为顶层包名。
+                    import_name = f"ibci_modules.{entry}" if is_install_path else entry
+                    mod = importlib.import_module(import_name)
                     
                     # 实例化：优先寻找 create_implementation 工厂
                     if hasattr(mod, 'create_implementation'):

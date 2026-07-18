@@ -17,7 +17,7 @@ def axiom_registry():
 
 @pytest.fixture
 def spec_registry(axiom_registry):
-    """A fully-populated SpecRegistry with all builtin types (int, str, etc.)."""
+    """A fully-populated SpecRegistry with all primitive types (int, str, etc.)."""
     return create_default_registry()
 
 

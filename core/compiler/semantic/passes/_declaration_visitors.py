@@ -83,12 +83,14 @@ class DeclarationVisitorsMixin:
         if sym and sym.spec and self.registry:
             param_type_names = [(p.name if p else "any") for p in param_types]
             ret_type_name = ret_type.name if ret_type else "void"
+            from core.base.enums import Provenance, Visibility
             updated_spec = self.registry.factory.create_func(
                 name=node.name,
                 param_type_names=param_type_names,
-                return_type_name=ret_type_name
+                return_type_name=ret_type_name,
+                provenance=Provenance.USER_DEFINED,
+                visibility=Visibility.IMPORT_GATED,
             )
-            updated_spec.is_user_defined = True
             sym.spec = updated_spec
 
         # 创建函数作用域

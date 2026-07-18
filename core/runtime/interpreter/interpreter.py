@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 # │   └── interpreter.py    ← 纯协调器（execute_module, STAGE 1-5 初始化）
 # ├── objects/
 # │   ├── kernel.py         ← IbUserFunction.call() 调用 vm.run_body()
-# │   └── builtins.py       ← IbFnCallable.call() 调用 vm.run()
+# │   └── primitives/      ← IbFnCallable.call() 调用 vm.run()
 # └── exceptions.py         ← 只剩 ThrownException + 基础架构异常
 #
 # 不存在任何向后兼容包装层或遗留 visit() 路径。
@@ -48,7 +48,7 @@ from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbClassField, IbValue
-from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
+from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.kernel.registry import KernelRegistry
 from core.runtime.host.host_interface import HostInterface
 from core.runtime.interfaces import IStackInspector, IExecutionContext
@@ -65,7 +65,7 @@ from core.runtime.frame import (
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
-from core.base.enums import RegistrationState
+from core.base.enums import Provenance, RegistrationState
 from core.runtime.shared.signals import UnhandledSignal
 
 
@@ -87,7 +87,7 @@ class Interpreter:
         """ 获取指定对象（如 Behavior）捕获的意图栈内容。
 
         ``obj.captured_intents`` 现在协议为 ``None`` 或 ``IbIntentContext`` 实例
-        （详见 ``core.runtime.objects.builtins.IbBehavior``）。
+        （详见 ``core.runtime.objects.primitives.IbBehavior``）。
         """
         if not (isinstance(obj, IbValue) and obj.ib_class.name == "behavior"):
             return []
@@ -197,7 +197,7 @@ class Interpreter:
         
         # 仅在注册表未初始化时执行引导
         if not self.registry.is_initialized:
-            initialize_builtin_classes(self.registry)
+            initialize_primitive_classes(self.registry)
             
         # 加载内置函数插件 (Intrinsics)
         self.intrinsic_manager = IntrinsicManager(self.registry)
@@ -221,6 +221,7 @@ class Interpreter:
             # 外部注入模式
             self.service_context = service_context
             self._execution_context.module_manager = self.service_context.module_manager
+            self._execution_context.permission_manager = self.service_context.permission_manager
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
             interop = interop or InterOpImpl(host_interface=self.host_interface)
@@ -262,6 +263,7 @@ class Interpreter:
                 interpreter=self # 注入解释器实例引用
             )
             self._execution_context.module_manager = self.service_context.module_manager
+            self._execution_context.permission_manager = self.service_context.permission_manager
             
             # 完成延迟水化
             if hasattr(llm_executor, 'hydrate'):
@@ -320,7 +322,7 @@ class Interpreter:
         self.setup_context(self.runtime_context)
 
         # IntentStack 与 runtime_context 关联
-        intent_stack = self.registry.get_builtin_instance("IntentStack")
+        intent_stack = self.registry.get_intrinsic_instance("IntentStack")
         if intent_stack and hasattr(intent_stack, 'set_runtime_context'):
             intent_stack.set_runtime_context(self.runtime_context)
 
@@ -453,9 +455,9 @@ class Interpreter:
         # 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
-                if not getattr(ib_class.spec, 'is_user_defined', True):
-                    # 注入时带上稳定的内置符号 UID，与编译器对齐
-                    context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
+                if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
+                    # 注入时带上稳定的内核原生符号 UID，与编译器对齐
+                    context.define_variable(name, ib_class, is_const=True, force=force, uid=f"intrinsic:{name}")
                     defined_names.add(name)
 
     def interpret(self, module_uid: str) -> IbObject:
@@ -621,9 +623,9 @@ class Interpreter:
         saved_diag_count = len(self.issue_tracker._diagnostics)
         
         for name, ib_class in self.registry.get_all_classes().items():
-            if not getattr(ib_class.spec, 'is_user_defined', False):
+            if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
-            
+
             # 遍历所有默认字段并尝试预求值
             for field_name, val_info in ib_class.default_fields.items():
                 if not isinstance(val_info, IbClassField) or val_info.static_val is not None:
@@ -655,7 +657,7 @@ class Interpreter:
             self.current_module_name = module_name
             
             ib_class = self.registry.get_class(name)
-            if not ib_class or not getattr(ib_class.spec, 'is_user_defined', False):
+            if not ib_class or getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
             
             node_data = self.get_node_data(node_uid)
@@ -765,7 +767,7 @@ class Interpreter:
 
         **架构说明**：用户类与内置类的运算符绑定机制本质不同：
 
-        1. **内置类**（builtin_initializer.py:_auto_bind_operators）：
+        1. **内置类**（primitive_initializer.py:_auto_bind_operators）：
            - 有 Python 实现类（如 IbInteger）
            - 通过 getattr(py_impl_cls, magic_name) 获取 Python 方法
            - 显式调用 _reg_native() 注册到 IbClass.methods
@@ -787,7 +789,7 @@ class Interpreter:
         虽然当前实现中无需额外操作（方法已注册），但保留此函数确保：
         1. 代码意图清晰：明确标记"这是运算符方法"
         2. 未来扩展点：如需增强运算符派发逻辑，在此处统一修改
-        3. 与 builtin_initializer.py 的对称性：两处都有 "bind operator" 步骤
+        3. 与 primitive_initializer.py 的对称性：两处都有 "bind operator" 步骤
 
         参数:
             ib_class: 用户定义的类对象

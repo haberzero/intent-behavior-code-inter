@@ -11,6 +11,7 @@ Validates that the single entry point correctly handles:
 
 import pytest
 
+from core.base.enums import Provenance, Visibility
 from core.kernel.spec.base import TypeKind, TypeDef, IbSpec
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.member import MethodMemberSpec
@@ -59,21 +60,21 @@ class TestResolveCallReturn:
         class_spec = TypeDef(
             name="MyClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
         )
         registry.register(class_spec)
         result = registry.resolve_call_return(class_spec, [])
         assert result is class_spec
 
-    def test_builtin_class_constructor(self, registry: SpecRegistry):
-        """Builtin primitive (int) used as constructor/cast → returns itself."""
+    def test_primitive_class_constructor(self, registry: SpecRegistry):
+        """Primitive (int) used as constructor/cast → returns itself."""
         int_spec = registry.resolve("int")
         result = registry.resolve_call_return(int_spec, [])
         assert result is not None
         assert result.name == "int"
 
-    def test_builtin_list_constructor(self, registry: SpecRegistry):
-        """Builtin list constructor → returns itself."""
+    def test_primitive_list_constructor(self, registry: SpecRegistry):
+        """Primitive list constructor → returns itself."""
         list_spec = registry.resolve("list")
         result = registry.resolve_call_return(list_spec, [])
         assert result is not None
@@ -138,7 +139,7 @@ class TestResolveCallableInstanceReturn:
         class_spec = TypeDef(
             name="CallableClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
             members={
                 "__call__": MethodMemberSpec(
                     name="__call__",
@@ -157,7 +158,7 @@ class TestResolveCallableInstanceReturn:
         class_spec = TypeDef(
             name="PlainClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
         )
         result = registry.resolve_callable_instance_return(class_spec, [])
         assert result is None
@@ -177,7 +178,7 @@ class TestResolveCallableInstanceReturn:
         class_spec = TypeDef(
             name="DynClass",
             kind=TypeKind.CLASS.value,
-            is_user_defined=True,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
             members={
                 "__call__": MethodMemberSpec(
                     name="__call__",

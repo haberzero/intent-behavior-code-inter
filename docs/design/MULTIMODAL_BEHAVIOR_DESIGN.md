@@ -22,7 +22,9 @@
 在 IBCI 的行为表达式 `@~...~` / `@NAME~...~` 中，用户应该能够**以纯自然语言方式**描述涉及多模态数据（音频、图像、视频）的任务，而无需了解底层 API 的 payload 结构。具体而言：
 
 ```ibci
-audio recording = file.read_audio("interview.wav")
+import file
+
+audio recording = audio.from_file("interview.wav")
 str transcript = @WHISPER~ 识别 $recording 里的内容并转化为中文 ~
 ```
 
@@ -267,50 +269,31 @@ media result = @GPT4o~ 朗读并分析这张图片 $img ~
 
 ### 4.3 存储与内存管理策略
 
-全模态数据（特别是音频、视频）可能占据大量内存。设计以下**透明卸载机制**：
+> **2026-07-17 更新**：本节已按 ADR-014 / ADR-016 重写。所有 media 类型一律为 disk-backed handle，不存在内存型 media，不存在 `MediaStorage`。
+
+全模态数据（特别是音频、视频）以**路径引用 handle** 形式存在，按 `StorageModel.DISK_BACKED` 参与 deep_clone、序列化与快照。
 
 #### 4.3.1 架构层次
 
 ```
-IbMedia (运行时对象)
-  ├── MediaStorage (存储后端抽象)
-  │     ├── InMemoryStorage   → 小数据直接持有
-  │     └── DiskBackedStorage → 大数据卸载到临时文件
-  └── 访问接口（对用户透明）
+IbAudio / IbImage / IbVideo / IbMedia (运行时对象，disk-backed)
+  ├── FileBacking(path: IbPath)      → 指向已存在的源文件（audio.from_file 等）
+  └── GeneratedBacking(path: IbPath) → 指向 LLM 生成时溢写的工件
 ```
 
-#### 4.3.2 卸载策略
+#### 4.3.2 设计要点
 
-```python
-class MediaStorage:
-    """
-    多模态数据存储后端。
-    阈值以下保持在内存中；超过阈值自动写入磁盘临时区。
-    """
-    MEMORY_THRESHOLD = 10 * 1024 * 1024  # 10MB 
-    TEMP_DIR = ".ibci_media_cache/"       # 项目目录下的临时区
-    
-    def __init__(self, data: bytes, mime_type: str):
-        if len(data) > self.MEMORY_THRESHOLD:
-            self._path = self._write_to_disk(data)
-            self._data = None  # 释放内存
-        else:
-            self._data = data
-            self._path = None
-    
-    @property
-    def data(self) -> bytes:
-        """透明访问：用户不需要知道数据在内存还是磁盘"""
-        if self._data is not None:
-            return self._data
-        return self._read_from_disk()
-```
+- **不持有字节**：`IbAudio`/`IbImage`/`IbVideo` 不持 `bytes`，只持 `MediaBacking`（`IbPath` 引用）。
+- **惰性物化**：仅在需要构建 LLM payload 时，才从路径读取字节并 base64 编码。
+- **统一沙箱**：所有路径经 `ExecutionContext.resolve_path()` + `PermissionManager.validate_path()` 校验。
+- **deep_clone 浅拷贝路径引用**：`llmexcept` retry 快照保存的是路径引用，不复制字节。
+- **序列化限制**：`save_state` 遇到活跃磁盘型变量直接报错；未来实验性功能可能打包引用的磁盘文件。
 
 #### 4.3.3 与 IBCI 设计原则的对齐
 
-- **运行时可观测性优先**：MediaStorage 提供 `.location` 属性（"memory" / "disk:/path"），调试时可追踪数据位置
-- **不可变 JSON artifact 不受影响**：多模态数据不进入编译期 artifact，仅在运行时产生
-- **HostService 断点兼容**：`save_state()` / `load_state()` 时，磁盘上的 media cache 文件可作为状态的一部分被保存
+- **运行时可观测性优先**：`file_handle.path` / `audio.format` 等 field 提供无 I/O 内省；`data()` 方法显式触发 I/O。
+- **不可变 JSON artifact 不受影响**：多模态数据不进入编译期 artifact，仅在运行时产生。
+- **HostService 断点兼容**：`save_state()` 拒绝保存含活跃文件容器变量的状态；`load_state` 不支持恢复磁盘型变量。
 
 ---
 
@@ -408,14 +391,16 @@ ai.register_model("WHISPER", {
     "endpoint": "audio/transcriptions"
 })
 
-audio recording = file.read_audio("meeting.wav")
+import file
+
+audio recording = audio.from_file("meeting.wav")
 str transcript = @WHISPER~ 识别 $recording 里的内容并转化为中文 ~
 print(transcript)
 ```
 
 **执行流程**：
 
-1. `file.read_audio("meeting.wav")` → 返回 `IbAudio` 对象（内含 `MediaStorage` 管理的音频数据）
+1. `audio.from_file("meeting.wav")` → 返回 `IbAudio` 对象（持 `FileBacking` 路径引用，不立即读字节）
 2. `@WHISPER~ ... ~` 进入 VM handler:
    - tag = `"WHISPER"` → 传给 LLMExecutor
 3. `_evaluate_segments_cps` 处理 `$recording`:
@@ -429,11 +414,14 @@ print(transcript)
 ### 6.2 示例：全模态输出
 
 ```ibci
-image photo = file.read_image("cat.png")
+import file
+
+image photo = image.from_file("cat.png")
 media result = @GPT4o~ 描述这张图片并用温柔的声音朗读描述 $photo ~
 
 print(result.text)          # "这是一只橘色的猫..."
-file.save_audio(result.audio, "description.wav")
+audio desc = result.audio
+# 未来：file.write_new("description.wav", desc.data()) 或等价的 media 保存方法
 ```
 
 **执行流程**：
@@ -447,8 +435,10 @@ file.save_audio(result.audio, "description.wav")
 ### 6.3 示例：与意图系统协作
 
 ```ibci
+import file
+
 @ 使用专业医学术语进行描述
-image xray = file.read_image("chest_xray.png")
+image xray = image.from_file("chest_xray.png")
 str diagnosis = @GPT4o~ 分析这张X光片 $xray ~
 ```
 
@@ -521,10 +511,12 @@ sys_prompt = "你是一个意图行为代码执行器。\n当前上下文意图�
 
 | 文件 | 改动 |
 |------|------|
-| `core/kernel/axioms/primitives.py` | 新增 `AudioAxiom`, `ImageAxiom`, `VideoAxiom` |
-| `core/runtime/objects/builtins.py` | 新增 `IbAudio`, `IbImage`, `IbVideo` 运行时类 |
-| `core/runtime/objects/media_storage.py`（新） | `MediaStorage` 存储后端 |
-| `core/runtime/bootstrap/builtin_initializer.py` | 注册新类型（自动通过 axiom 驱动） |
+| `core/kernel/axioms/primitives/file_handle.py`（新） | `FileHandleAxiom`：磁盘型容器契约（零 I/O） |
+| `core/kernel/axioms/primitives/media.py`（改） | `AudioAxiom` / `ImageAxiom` / `VideoAxiom` 继承并 override payload 协议 |
+| `core/runtime/objects/file_handle.py`（新） | `IbFileHandle`：持 `IbPath` + `FileBacking`/`GeneratedBacking` |
+| `core/runtime/objects/media_backing.py`（新） | `FileBacking` / `GeneratedBacking`：磁盘型 backing 实现 |
+| `core/runtime/objects/media_types.py`（新） | `IbAudio` / `IbImage` / `IbVideo`：继承 `IbFileHandle` 的只读媒体 handle |
+| `core/runtime/bootstrap/primitive_initializer.py` | 注册新类型并绑定 kernel-native `file` 模块自由函数 |
 
 **Lexer/Parser 需求评估**：
 - 如果选择 `audio` / `image` / `video` 作为**类型关键字**（像 `int` / `str` 一样）→ 需要加入 KEYWORDS 表
@@ -546,15 +538,18 @@ sys_prompt = "你是一个意图行为代码执行器。\n当前上下文意图�
 
 ---
 
-### Phase 5：磁盘卸载与生命周期管理
+### Phase 5：media 生命周期管理与安全闸门（已与 Phase 3/4 合并完成）
 
-**改动范围**：
+> **2026-07-17 更新**：磁盘型存储体系（G3-G6）已完成，media 一律为 disk-backed handle。Phase 5 的原始目标（磁盘卸载）已提前实现，剩余工作主要是安全闸门与跨隔离状态策略。
 
-| 文件 | 改动 |
+**当前状态**：
+
+| 文件 | 状态 |
 |------|------|
-| `core/runtime/objects/media_storage.py` | `DiskBackedStorage` 实现 |
-| `core/runtime/host/service.py` | `save_state` / `load_state` 含 media cache |
-| `core/runtime/interpreter/llm_except_frame.py` | `__snapshot__` / `__restore__` 兼容 media |
+| `core/runtime/objects/media_backing.py` | ✅ `FileBacking` / `GeneratedBacking` 已实现 |
+| `core/runtime/objects/media_types.py` | ✅ `IbAudio`/`IbImage`/`IbVideo` 继承 `IbFileHandle` |
+| `core/runtime/host/service.py` | ✅ `save_state` 拒绝活跃磁盘型变量 |
+| `core/runtime/interpreter/llm_except_frame.py` | ✅ disk-backed handle 走 `__clone_ref__` 路径引用浅拷贝 |
 
 ---
 
@@ -564,9 +559,9 @@ sys_prompt = "你是一个意图行为代码执行器。\n当前上下文意图�
 
 `llmexcept` 机制依赖 `__snapshot__` / `__restore__` 协议进行状态回滚：
 
-- `IbAudio` / `IbImage` / `IbVideo` 需实现 `__snapshot__`：返回 `{path: str}` 引用（磁盘卸载后天然支持）
-- `__restore__`：通过路径重新加载 `MediaStorage`
-- **不会造成额外深拷贝开销**：大媒体数据存储在磁盘上，snapshot 仅需保存路径引用
+- `IbAudio` / `IbImage` / `IbVideo` 继承 `IbFileHandle`，已按 `StorageModel.DISK_BACKED` 走 `__clone_ref__` 浅拷贝路径引用。
+- `__snapshot__` / `__restore__` 由 `IbFileHandle` 的磁盘协议族处理；`llmexcept` retry 时共享同一 backing 路径，因此 retry body 中禁用 `write_overwrite`。
+- **不会造成额外深拷贝开销**：大媒体数据以路径引用存在，snapshot 仅需复制引用。
 
 ### 8.2 与 `dispatch_eager` 并发调度的交互
 
@@ -667,8 +662,10 @@ class MedicalImage:
         return "Medical " + self.modality + " image at " + self.path
     
     func __payload_prompt__(self) -> dict:
-        # 用户实现：读取文件、编码为 base64、构建 content block
-        str b64 = file.read_base64(self.path)
+        # 用户实现：打开文件、读取字节、编码为 base64、构建 content block
+        file_handle fh = file.open(self.path)
+        list[int] raw = fh.read_bytes()
+        str b64 = base64.encode(raw)  # base64 工具模块为远期规划，当前可在宿主扩展中实现
         return {
             "type": "image_url",
             "image_url": {"url": "data:image/png;base64," + b64}
@@ -812,12 +809,14 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 - `media result = @~ ... ~` — 当输出模态不确定或需要动态探测时
 - 两者可以共存，由用户根据场景选择
 
-### 决策 D6：不改变 `_call_llm` 返回值的基本契约
+### 决策 D6：单一 LLM 调用入口，协议驱动分发
+
+> **2026-07-17 更新**：早期草案曾提议 `_call_llm` / `_call_llm_multimodal` 分叉路径，已被 **ADR-013** 否决。最终实施保留单一调用入口，由目标类型的响应解析协议决定如何处理返回值。
 
 **理由**：
-- 当前 `_call_llm` 返回 `str`，所有下游都基于此
-- 多模态响应通过**新路径** `_call_llm_multimodal` 返回 `dict`，与原路径并行
-- `from_response` 是新协议，不替代 `from_prompt`
+- `_call_llm` 保持单一入口，返回完整的 API response 对象（或兼容包装）
+- 文本目标类型通过 `from_prompt` 解析 `response.content`；多模态目标类型通过 `from_response` 解析完整响应
+- `from_response` 是新协议，不替代 `from_prompt`，二者按目标类型能力标志选择
 - 确保所有只使用文本模型的代码路径完全不受影响
 
 ---
@@ -830,7 +829,7 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 |------|------|---------|------|
 | ~~词法层 tag 仅识别纯字母（`isalpha`）~~ | ~~Phase 1 示例不可用~~ | ~~改为 `isalnum()`~~ | ✅ 已确认源码使用 `isalnum()`，风险不存在 |
 | 多模态 API 格式碎片化（OpenAI / Anthropic / Google 各不相同）| AIPlugin 实现复杂度上升 | 定义 IBCI 标准 content block 格式，AIPlugin 内部做供应商适配 | 待 Phase 2+ |
-| 大文件 base64 编码导致内存峰值 | 可能超出解释器内存限制 | MediaStorage 的流式编码 + 磁盘卸载 | 待 Phase 3+ |
+| 大文件 base64 编码导致内存峰值 | 可能超出解释器内存限制 | `IbFileHandle` 按路径惰性物化；base64 编码在构建 payload 时一次性完成，未来可补充流式分块 | ✅ Phase 3 已落地磁盘型 handle |
 | llmexcept retry 时多模态 payload 重复构建 | 性能浪费 | 在 LLMExceptFrame 中缓存已编码的 payload | 待 Phase 3+ |
 | 用户 `__payload_prompt__` 返回非法结构 | 运行时 API 调用失败 | 在 _evaluate_segments 后增加 payload 验证层 | 待 Phase 2+ |
 | 测试模式下命名模型路由被 MOCK 拦截 | 无法在 MOCK 模式测试真实路由错误 | 真实 LLM 集成测试覆盖；或增加路由前验证 | 已记录，低优先级 |
@@ -850,10 +849,13 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 
 | 文件路径 | 用途 |
 |---------|------|
-| `core/runtime/objects/media_storage.py` | MediaStorage 存储后端 |
-| `core/runtime/objects/media_types.py` | IbAudio, IbImage, IbVideo, IbMedia 运行时类 |
-| `tests/e2e/test_e2e_multimodal.py` | 端到端多模态测试 |
-| `tests/kernel/test_media_axioms.py` | 公理层单元测试 |
+| `core/runtime/objects/file_handle.py` | `IbFileHandle`：磁盘型容器基类 |
+| `core/runtime/objects/media_backing.py` | `FileBacking` / `GeneratedBacking`：磁盘型 backing |
+| `core/runtime/objects/media_types.py` | `IbAudio` / `IbImage` / `IbVideo`：只读媒体 handle |
+| `tests/runtime/test_file_handle.py` | `IbFileHandle` 磁盘协议单元测试 |
+| `tests/runtime/test_media_file_handle.py` | 媒体 handle 继承与 payload 测试 |
+| `tests/e2e/test_e2e_file_kernel_native.py` | `file` 模块 kernel-native 端到端测试 |
+| `tests/e2e/test_e2e_multimodal_payload.py` | 多模态 content block 构建端到端测试 |
 
 ### 需要修改的文件
 
@@ -998,15 +1000,14 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 ```
 invoke_behavior_cps:
   content = yield from _evaluate_segments_cps(...)
+  raw_response = _call_llm(...)  # 单一入口，返回完整 API response（文本兼容包装）
   if target_type has multimodal_response_cap:
-      raw_response = _call_llm_multimodal(...)  # 新路径，返回完整 API response
       result = target_axiom.from_response(raw_response)
   else:
-      text_response = _call_llm(...)            # 原路径，保持不变
-      result = LLMResultParser.parse(...)
+      result = LLMResultParser.parse(raw_response.content)  # 原路径，保持不变
 ```
 
-**关于 D6 决策的再评估**：原决策（"不改 `_call_llm` 返回契约"）是正确的保守策略。但鉴于 Phase 4 必然需要完整 response 对象，**建议在 Phase 3 实施时就同步预留 `_call_llm_raw` 接口**，避免 Phase 4 发生大规模重构。
+**关于 D6 决策的再评估**：原决策（"不改 `_call_llm` 返回契约"）已被 ADR-013 演进为"单一入口 + 协议驱动"。实施层面：`_call_llm` 返回完整响应对象，文本目标解析其 `.content`，多模态目标走 `from_response`。无需为 multimodal 单独分叉调用路径。
 
 ---
 
@@ -1018,7 +1019,7 @@ invoke_behavior_cps:
 |------|--------|------|---------|
 | **DEC-1** | `audio`/`image`/`video`/`media` 作为**关键字**还是**普通类名** | 关键字（改 lexer） vs 类名（不改 lexer） | **关键字**（与 `str`/`int` 同级，但改动面较广） |
 | **DEC-2** | `media` 容器的属性访问模型 | 固定属性（`.text` / `.audio` / `.image`）vs 动态字典 | **固定属性**（可预测，可编译期检查）|
-| **DEC-3** | 文件 I/O API 的形态 | `file.read_audio(path)` vs `audio.from_file(path)` | **`file.read_audio`**（模块方法，与现有 `file` 模块一致）|
-| **DEC-4** | `from_response` 协议的接入点 | Phase 4 再改 vs Phase 3 同时预留 `_call_llm_raw` | **Phase 3 预留**（避免 Phase 4 重构）|
-| **DEC-5** | 多模态变量的 `__snapshot__` / `__restore__` 实现策略 | 路径引用（磁盘后端）vs 深拷贝（内存后端）| **路径引用**（与磁盘卸载设计一致）|
-| **DEC-6** | `MediaStorage` Phase 3 的存储范围 | 纯内存 vs 同时实现磁盘卸载 | **先纯内存**，Phase 5 再加磁盘卸载 |
+| **DEC-3** | 文件 I/O API 的形态 | `file.read_audio(path)` vs `audio.from_file(path)` | **`audio.from_file(path)`**（ADR-014：media 为 FileHandle 子类，构造入口在类型自身）|
+| **DEC-4** | `from_response` 协议的接入点 | Phase 4 再改 vs Phase 3 同时预留单一入口 | **单一入口保留**（ADR-013：不分叉 `_call_llm`，靠目标类型解析协议分发）|
+| **DEC-5** | 多模态变量的 `__snapshot__` / `__restore__` 实现策略 | 路径引用（磁盘后端）vs 深拷贝（内存后端）| **路径引用**（ADR-016：disk-backed storage model；`__clone_ref__` 浅拷贝引用）|
+| **DEC-6** | media Phase 3 的存储范围 | 纯内存 vs 同时实现磁盘卸载 | **一律 disk-backed**（ADR-014 / ADR-016：`MediaStorage` 与 `MemoryBacking` 整体淘汰）|

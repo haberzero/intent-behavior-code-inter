@@ -510,8 +510,8 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
 
             sym = node_to_symbol.get(name_node)
             if sym and hasattr(sym, 'uid') and sym.uid:
-                # 排除 builtin 和全局符号（不需要闭包捕获）
-                if sym.uid.startswith("builtin:"):
+                # 排除 intrinsic（内核原生）和全局符号（不需要闭包捕获）
+                if sym.uid.startswith("intrinsic:"):
                     continue
                 # 检查是否是外层作用域的变量（非当前 lambda 内部）
                 captured_vars.add(var_name)

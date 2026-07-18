@@ -61,14 +61,14 @@ class EnumAxiom(BaseAxiom):
         if not members:
             return None
 
-        builtin_names = {
+        intrinsic_method_names = {
             "to_bool", "to_list", "len", "cast_to",
             "__getitem__", "__setitem__", "sort", "pop",
             "append", "clear", "__eq__", "__init__",
         }
         name_to_value: Dict[str, str] = {}
         for mname in members:
-            if mname.startswith("_") or mname in builtin_names:
+            if mname.startswith("_") or mname in intrinsic_method_names:
                 continue
             name_to_value[mname] = mname
 

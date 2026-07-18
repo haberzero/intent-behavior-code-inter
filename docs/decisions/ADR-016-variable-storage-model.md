@@ -118,8 +118,9 @@ Accepted (2026-06-25)
 - IBCI 仍可保留 "Intent-Behavior-Code-Inter" 的产品名定位（Inter 表"交互"），但**不再作为协议层的命名**。
 
 ### 阻塞
-- 本 ADR 的实现（PT-ARCH-17）**阻塞于 ADR-015**（路径统一）。
+- 本 ADR 的实现（PT-ARCH-17 / PT-ARCH-23 G3-G6）**阻塞于 ADR-015**（路径统一）。
 - media 重建（PT-ARCH-18）**阻塞于** PT-ARCH-17。
+- **协同 ADR-021**（2026-07-17）：`storage_model` 的**枚举类型**（`StorageModel`：MEMORY_BACKED/DISK_BACKED）已在 **PT-ARCH-23 G1.5** 提前落地为 `IbSpec` 一等字段（默认 `MEMORY_BACKED`），但**仅落字段不落分发逻辑**；本 ADR 的磁盘协议族 + deep_clone/序列化器分发仍在 G3（PT-ARCH-23 阶段 5）真正启用该字段。
 
 ## 改动面（实现期，分阶段）
 详见 `docs/PENDING_TASKS.md §九` PT-ARCH-17（磁盘模型基础设施）与 PT-ARCH-18（media 重建）。

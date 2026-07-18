@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `docs/PENDING_TASKS.md`；历史归档见 `docs/COMPLETED.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-13（**PT-ARCH-23 立项**：内核原生化 + 磁盘型存储模型（ADR-020 + P0-2 + P0-3 协同里程碑），所有核心模块内核迁移同步执行。落地顺序 E→A→C→D→B 已认可。PT-ARCH-22 命名清理暂缓排期。ADR-019 实现已提交 `e1860fe`，基线 1139 passed。下一步详见 `PENDING_TASKS §PT-ARCH-23`。）
+> **最后更新**：2026-07-17（**G3+G4+G5+G6 磁盘型存储体系 + PT-ARCH-24/25/26/27 安全闸门完成**：`file` 模块 kernel-native 化、`file_handle`/`audio`/`image`/`video` 只读语义、`write_copy`/`write_overwrite` 显式写入、`save_state` 拒绝活跃磁盘型变量、`llmexcept` retry 禁用 overwrite。1174 passed / 7 skipped。下一项：**media Phase 4（GATED，待前置全部完成后开工）**。）
 
 ---
 
@@ -32,11 +32,10 @@
 python -m pytest tests/ -q --tb=no --no-header
 ```
 
-**2026-07-13 实测结果**：`1139 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
+**2026-07-17 实测结果**：`1174 passed, 7 skipped`（0 failures/errors，win32 / PowerShell，junitxml 捕获）
 
-> **基线说明**：ADR-019 阶段 A/B/C/D + 交叉验证修复（B1/B2/Gate-A1）+ R1（is_within 大小写）+ G1（global_plugin 继承优先级）全部完成。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九 PT-ARCH-21-FU。
-> ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非 ADR-019 引入）。non-SDK 套件稳定 0 failure。
-> ⚠️ **基线锚点警示**：当前为**未提交 WIP**（领先 origin）。
+> **基线说明**：ADR-019 + G1 + G1.5 + PT-ARCH-21-FU + G2 + **G3+G4+G5+G6 + PT-ARCH-24/25/26/27** 全部完成。`file` 模块已 kernel-native 化；`ibci_modules/ibci_file/` 已删除；`file_handle`/`audio`/`image`/`video` 只读语义落地；`save_state` 拒绝活跃磁盘型变量；`llmexcept` retry 禁用 overwrite 写入。下一项：media Phase 4（GATED）。已知限制与覆盖缺口见 ADR-019 "交叉验证发现" + PENDING_TASKS §九。
+> ⚠️ **SDK 测试偶发 flaky**：`tests/sdk/test_check_plugin.py` 动态插件 spec 生成偶发跨测试 import 污染（pre-existing，孤立重跑通过；非本次改动引入）。non-SDK 套件稳定 0 failure。
 
 ---
 
@@ -52,7 +51,7 @@ python -m pytest tests/ -q --tb=no --no-header
 
 ---
 
-### 🔴 [重设计] PT-ARCH-21：路径与插件模型重设计（ADR-019，最高优先级）
+### ✅ [已完成] PT-ARCH-21：路径与插件模型重设计（ADR-019）
 
 > **2026-07-13 决策**：经 5-agent 交叉验证 + 多轮研讨，确认"路径统一"实为更深的**模型重设计**。立 [ADR-019](decisions/ADR-019-path-and-plugin-model-redesign.md) 为正本。
 > **ADR-019 取代** ADR-018 的 D1（root 必填→引擎级默认）、D5（标志→合成 entry）、CWD 上界不变量（撤回）、D4 PathContext 穿透（→五概念模型）。
@@ -93,7 +92,7 @@ python -m pytest tests/ -q --tb=no --no-header
 14. **D1** ✅：scheduler.py:127 `os.path.abspath`→`canonicalize_for_security`；:97 `os.path.join`→`IbPath /`。compiler 层零散点 `os.path.abspath`（门槛 A = 0）。
 15. **D2** ✅：移除 scheduler/resolver/permissions 的 **3 处 root 冗余 canonicalize**（信任 engine 传入），字段 `_root_ib`/`_root_path`→`_project_root`（仅 IbPath 包装）。**保留** 9 处文件路径 canonicalize（is_within 前防 symlink 逃逸，安全必需）。
 16. **D3** ✅：死 import 清理——permissions/execution_context/module_manager/interpreter/meta 的 `import os` + scheduler/permissions 死 `IbPath` + module_manager 死 `root_dir` 字段（含调用方 interpreter.py:243）。
-17. **D4（部分，待交叉检验定夺）**：`ibci_file/core.py`（用户可见）+ `project_detector.py`/`module_system`（多为合法 FS 查询边界）——非门槛阻塞，留待 subagent 评估是否本轮必修。
+17. **D4（部分，待交叉检验定夺）**：`ibci_file/core.py`（用户可见，**G6 已随 `ibci_modules/ibci_file/` 整目录删除**）+ `project_detector.py`/`module_system`（多为合法 FS 查询边界）——非门槛阻塞，留待 subagent 评估是否本轮必修。
 
 **机械门槛校验（实测通过）**：
 ```bash
@@ -113,52 +112,79 @@ rg -n '^import os' core/runtime/interpreter/permissions.py core/runtime/interpre
 
 ---
 
-### P0-2（后置）：变量存储模型基础设施（ADR-016）
+### ✅ G1 — 重分类基础设施（2026-07-17 完成）
 
-> 确立 memory-backed / disk-backed 类型级区分 + 协议驱动分发框架。详见 `docs/PENDING_TASKS.md §九 PT-ARCH-17`。
+> ADR-020 E/A/C/D，与存储正交。已完成并实测 `1146 tests, 0 failures`（2026-07-17 基线，win32，junitxml 捕获）。
+- **E 术语**：彻底消除 "builtin" 一词五义——7 族改名（`BuiltinPaths→InstallPaths`、`builtin_initializer→primitive_initializer`、`is_builtin→is_intrinsic`+UID `builtin:`→`intrinsic:`、prelude 目录、内核实例、spec 清单、**`objects/builtins/→objects/primitives/` 包重命名**）。代码标识符层面 builtin 已归零。
+- **D 协议规则**：清硬编码 axiom 回退表 + enum 特例（`primitive_initializer.py:97-108`），改为从 `AxiomRegistry.get_all_names()` 派生 + fail-fast（证实均为死代码）。
+- **A prelude/import-gate 规则复核**：已验证机制健全（prelude 仅含泛型 `module` 类型；method_module 插件经 `is_user_defined=True` 排除 → import-gated）。
+- **C bootstrap 升级复核**：已验证 `HostInterface.register_module` + loader 短路（`loader.py:156-168`）+ 懒查找契约均存在；late-hydrate 钩子随 ai 在 G2 建。
 
-**待做**：
-1. 在 axiom/spec 体系引入 `storage_model` 类型级属性（取值 memory-backed / disk-backed）。
-2. 确立**磁盘型协议族**（与 `__prompt__` 平行）的具体方法名与签名（设计期决定）；内存型继续走既有 `__prompt__` 族，语义不变。
-3. 改造 `deep_clone.py`：按存储模型分发——磁盘型对象拷贝路径引用（浅、廉价），不再"深拷贝字节"。**此处一并完成 `deep_clone.py:89` 的 `type(val) is` → `isinstance` 修复**（ADR-007 未竟部分）。
-4. 改造序列化器：增加磁盘型分支——序列化路径引用，不再"序列化字节"。**此处一并补 `BaseFlatSerializer` 的 `bytes` / 路径处理能力**。
-5. 改造响应解析分发（ADR-013 修订版）：`AxiomParsingStrategy` 通过 `receive()` 委托给目标类型的协议方法，不写 `if/else`。
-6. 全程**协议驱动**——executor/strategy/deep_clone/序列化器存储模型无关。
-
-**验证策略**：内存型路径字节级不变（全量 pytest 0 failure）；新增"磁盘型分发不命中内存型协议"守护测试。
-**预估工作量**：~2-3 天
+详见 `docs/COMPLETED.md` 2026-07-17 条目。
 
 ---
 
-### P0-3：media 重建为磁盘型 + 潜伏 bug 统一修复（ADR-014）
+### ✅ G2 — ai/ihost/idbg/isys 内核原生化（2026-07-17 完成）
 
-> 整体淘汰 `MediaStorage`；潜伏 bug 在此随模型切换统一消解。详见 `docs/PENDING_TASKS.md §九 PT-ARCH-18`。
+> ADR-020，与存储正交。已完成并实测 `1157 passed, 7 skipped`（2026-07-17 基线，win32）。
+- **bootstrap 预注册 4 模块**：`ai`/`ihost`/`idbg`/`isys` 在 `Engine.__init__` 期预注册为 `Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED`，经 loader 短路，零文件移动。
+- **HostInterface 覆盖保护**：新增 `reserve_kernel_native_name()` / `is_kernel_native()`；`register_module()` 拒绝用户插件覆盖 kernel-native 模块。
+- **late-hydrate 窗口**：`_prepare_interpreter` 在 registry hooks 注入后调用 `late_hydrate_kernel_native_modules(service_context)`，`AIPlugin.hydrate` 重新确认 LLM Provider 注册。
+- **测试**：新增 `tests/runtime/test_kernel_native_modules.py` + `tests/e2e/test_e2e_kernel_native.py`；全量 pytest `1157 passed, 7 skipped`。
 
-**待做**：
-1. 新建 `MediaBacking` 抽象 + `FileBacking` / `GeneratedBacking`（均持 `IbPath`，无 MemoryBacking）。
-2. 重写 `IbAudio`/`IbImage`/`IbVideo` 为磁盘型 handle（替换 `media_types.py`）。
-3. 删除 `media_storage.py`（字节持有者，整体淘汰）；替换其单测为 handle 契约测试。
-4. 改 `axioms/primitives/media.py`：`__payload_prompt__` 从 backing 惰性物化字节。
-5. 改 `ibci_file.read_*`：返回 `FileBacking(resolved_path)`，**不立即读字节**（零拷贝）。
-6. **潜伏 bug 随之统一修复**：PT-ARCH-12（`deep_clone` 静默跳过 media）+ PT-ARCH-13（序列化器丢字节）在 P0-2 的存储模型分发落地后，因 media 不再持有进程内字节而**自然消解**——按项目负责人指令，不允许先行过渡修复。
-
-**验证策略**：MOCK 模式 e2e（`file.read_audio` → handle → `@~ $x ~`）端到端跑通；snapshot/serialize round-trip 守护测试（暴露过潜伏 bug）。
-**预估工作量**：~2-3 天
+详见 `docs/COMPLETED.md` 2026-07-17 G2 条目。
 
 ---
 
-## GATED：media Phase 4 — MediaAxiom + IbMedia 全模态容器（仅在 P0-1/2/3 全部完成后开工）
+### ✅ G3 + G4 + G5 — 磁盘型存储体系前半（2026-07-17 完成）
 
-> **阻塞条件**：P0-1（路径统一）+ P0-2（存储模型架构）+ P0-3（media 重建）全部完成。
-> 在此之前不得写任何 media 容器代码（ADR-014/016 明确阻塞）。
+> ADR-016/014 磁盘型变量体系前半已完成。实测 `1161 passed, 7 skipped`（2026-07-17，分支 `feat/G3-G6-disk-backed-storage`）。
+
+- **G3 存储模型机制**：`StorageModel` 字段在 `IbSpec`/`TypeDef` 落地并消费；`deep_clone.py` 按存储模型分发（disk-backed 浅拷贝路径引用）；`RuntimeSerializer` 磁盘型分支（路径描述符，零字节物化）。
+- **G4 FileHandle 基类**：`core/runtime/objects/file_handle.py`（`IbFileHandle` + `FileBacking`/`GeneratedBacking`）+ `core/kernel/axioms/primitives/file_handle.py`（零 I/O 公理）+ bootstrap 协议绑定（`__materialize__`/`__path_payload_prompt__`/`__clone_ref__`/`__to_descriptor__`/`__from_descriptor__`）。
+- **G5 media→FileHandle 子类**：`IbAudio/IbImage/IbVideo` 改为 `IbFileHandle` 子类；media 公理 `__payload_prompt__` 只委托 `__path_payload_prompt__`；媒体构造入口改为 `audio.from_file` / `image.from_file` / `video.from_file`，返回 `FileBacking(resolved_path)`；删除 `media_storage.py` 与对应测试。
+
+**发现的新设计债**：`PT-ARCH-24`（FileHandle/Media Axiom field-vs-method 声明失配）已记录到 `PENDING_TASKS.md`，不阻塞 G6，但需在 FileHandle 公共 API 稳定前决策。
+
+---
+
+### ✅ G6 — file 模块内核原生化 + 只读语义落地（2026-07-17 完成）
+
+> ADR-020 B + G6 收尾 + PT-ARCH-24/26/27 安全闸门。实测 `1174 passed, 7 skipped`（0 failures/errors，2026-07-17，分支 `feat/G3-G6-disk-backed-storage`）。
+
+- **`file_handle` 实例只读**：`path` 为 field；`read()` / `read_bytes()` / `close()` 为 method；**无实例 `write()`**。
+- **`file` 模块自由函数**：`open()`、`read()`、`read_bytes()`、`write_copy()`、`write_copy_bytes()`、`write_overwrite()`、`write_overwrite_bytes()`、`exists()`、`remove()`。
+- **media 只读构造**：`audio.from_file(path)` / `image.from_file(path)` / `video.from_file(path)`；`format` 为 field；`data()` 等为 method。
+- **沙箱校验**：所有 I/O（含 `IbFileHandle.read()` / `__materialize__()`）经 `PermissionManager` 校验。
+- **PT-ARCH-26**：`save_state` 检测到活跃 `file_handle`/`audio`/`image`/`video` 变量时报错。
+- **PT-ARCH-27**：`llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`。
+
+**完整实施计划与风险分析**：见 `docs/PENDING_TASKS.md §PT-ARCH-25`（已标记为 `[DONE]`）。
+
+---
+
+## ⛔ GATED：media Phase 4 — MediaAxiom + IbMedia 全模态容器（当前最紧要项，但仍在 gate 后）
+
+> **阻塞条件**：G1 + G1.5（数据结构迁移）+ 路径收尾 + G2（内核原生化）+ G3-G6（磁盘型存储体系）全部完成。
+> **状态（2026-07-17）**：上述前置已全部完成；media Phase 4 现在**可被提升为 P0**，但需项目负责人明确开工指令。在此之前不得写任何 media 容器代码（ADR-014/016 明确阻塞）。
 
 解锁后的工作（届时提升为本文件 P0）：
-1. **`MediaAxiom` + 协议驱动的响应解析**：解析多模态响应为 media 对象（接入 P0-2 的协议驱动分发，**非 `if/else`**）。
+1. **`MediaAxiom` + 协议驱动的响应解析**：解析多模态响应为 media 对象（接入 G3 的协议驱动分发，**非 `if/else`**）。
 2. **`IbMedia` 全模态组合容器**：modality→payload 映射 + 固定访问器（`.text/.audio/.image/.video`）语法糖，为未来元组解包留结构性扩展位。
 3. **MOCK 模式扩展**：`MOCK:MEDIA:` 合成响应（用户确认了暂缓，届时再议）。
 
 **明确剥离到独立后续**（不纳入主线，但结构上不堵死）：
 - 元组解包 `(str t, audio a) = @~...~`（D5）——需 TypeCheckingPass 解包推断 + CPS 多返回值；`IbMedia` 的 modality 映射为此预留接入位。
+
+---
+
+## P1 后续任务（不阻塞 media Phase 4，但建议在下一 P0 开工前评估）
+
+以下任务由 G6 收尾 review 提出，已记录到 `docs/PENDING_TASKS.md`，不影响 media Phase 4 的开工决策：
+
+1. **PT-ARCH-28**：`file` 模块统一写入 API + 函数动态/命名参数支持。当前已提供临时 `write_new` / `write_new_bytes`；未来统一为 `file.write(target, data, overwrite_flag="copy"|"overwrite"|"new")`。
+2. **PT-ARCH-29**：命名历史包袱全方位代码卫生清理。代码层已零残留，需处理历史设计文档/工作日志/注释中的旧 API 引用，加"历史文档"标注。
+3. **PT-ARCH-30**：内置 `file` 模块命名风险清理。建议文档中称"`file` 内核模块"并加静态检查禁止 `core/runtime/modules/file.py`。
 
 ---
 
