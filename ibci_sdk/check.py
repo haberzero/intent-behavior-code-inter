@@ -231,6 +231,10 @@ def _load_module(name: str, path: str, extra_sys_paths: Optional[List[str]] = No
 
     对 __init__.py（含相对导入的包），使用 importlib.import_module() 方式加载。
     对独立文件（如 _spec.py），使用 spec_from_file_location 方式加载。
+
+    每次加载前调用 importlib.invalidate_caches() 清除 sys.path_importer_cache，
+    避免 TemporaryDirectory 创建/删除后 FileFinder 持有陈旧目录列表导致导入失败
+    （Windows 下目录 mtime 分辨率约 1-2 秒，短时间内的增删无法自动失效缓存）。
     """
     added = []
     try:
@@ -247,6 +251,8 @@ def _load_module(name: str, path: str, extra_sys_paths: Optional[List[str]] = No
             # 推断父包名（如 ibci_modules.ibci_math）
             parent_dir = os.path.dirname(pkg_dir)
             parent_name = os.path.basename(parent_dir)
+            # 清除路径导入缓存，确保 FileFinder 看到最新目录列表
+            importlib.invalidate_caches()
             # 检查 parent_dir 是否是 Python 包（有 __init__.py）
             if os.path.exists(os.path.join(parent_dir, "__init__.py")):
                 full_name = f"{parent_name}.{pkg_name}"

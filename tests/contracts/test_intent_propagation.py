@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/contracts/test_intent_propagation.py
 ===========================================
 
@@ -25,7 +25,7 @@ class TestIntentPropagation:
 
     References:
     - IBCI_SYNTAX_REFERENCE.md §6 Intent System
-    - docs/COMPLETED.md NS-2b/2c/2d
+    - tasks_docs/COMPLETED.md NS-2b/2c/2d
     - tests/e2e/test_e2e_intent.py
     """
 
@@ -124,7 +124,7 @@ class TestIntentRetryRestoration:
     """Validate intent restoration after retry.
 
     References:
-    - docs/COMPLETED.md NS-2c (2026-05-11)
+    - tasks_docs/COMPLETED.md NS-2c (2026-05-11)
     - Issue #42 intent leak in retry
     """
 

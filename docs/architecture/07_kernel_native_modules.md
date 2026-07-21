@@ -1,0 +1,42 @@
+## 内核原生模块边界
+
+### 两轴正交模型
+
+内核原生模块的"恒在"与"需 import"是两个正交维度：
+
+| 轴 | `IbSpec` 字段 | 语义 |
+|---|---|---|
+| 可用性 | `provenance` | `KERNEL_NATIVE` = 随内核发行、构造期预注册、不可被用户插件覆盖 |
+| 可见性 | `visibility` | `IMPORT_GATED` = 名字须经 `import` 语句进入当前文件作用域 |
+
+禁止用单一 bool（如历史 `is_user_defined`）将两轴焊死，否则会经 prelude 过滤器意外解除 import-gating。
+
+### 内核原生模块清单
+
+五个模块在 `Engine.__init__` 构造期预注册：
+
+| 模块 | 功能 | 安全语义 |
+|---|---|---|
+| `ai` | LLM 调用 | 有状态，需 late-hydrate |
+| `file` | 文件 I/O + 类型注入 | 沙箱相关 |
+| `ihost` | 宿主保存/恢复 | `save_state` by design 绕沙箱 |
+| `idbg` | 运行时信息输出 | 调试钩子 |
+| `isys` | 外部访问请求 | `request_external_access` 全局关沙箱 |
+
+### HostInterface 覆盖保护
+
+`reserve_kernel_native_name(name)` 在 bootstrap 预注册时调用；`is_kernel_native(name)` 在插件发现路径调用，命中则拒绝用户实现接入。用户插件目录下的同名模块不会覆盖内核原生实现。
+
+### exported_types：import 时的类型注入
+
+`file` 模块声明 `exported_types=["file_handle", "audio", "image", "video"]`。`import file` 时 scheduler 把这四个类型名注入当前作用域。仅 `KERNEL_NATIVE + IMPORT_GATED` 模块生效。
+
+### 多媒体类型为普通类名
+
+`audio`/`image`/`video` 经标准 axiom 路径注册为普通类名（与 `str`/`int`/`Enum` 同级），非词法关键字。`core_scanner.py` 的 `KEYWORDS` 表不含类型名；新增内置类型不触及 TokenType 或 parser 文法。
+
+### late-hydrate 生命周期钩子
+
+有状态内核原生模块需要 service_context 注入才能完成初始化。`late_hydrate_kernel_native_modules(service_context)` 在 `_prepare_interpreter` 附近提供二次初始化窗口，保证编译期类型检查靠 axiom 签名（bootstrap 期已就位），运行期状态注入走 late-hydrate。
+
+---

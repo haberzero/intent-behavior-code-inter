@@ -1,4 +1,4 @@
-"""
+﻿"""
 core.runtime.vm.handlers.leaf — 叶子 / 基础表达式 CPS handler。
 
 由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
@@ -213,7 +213,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     except ThrownException:
         # 用户代码主动抛出的语言级异常必须穿透函数调用边界，由 IbTry / 顶层
         # try-except 体系按 IBCI 类型匹配处理；不得包装成 Python RuntimeError，
-        # 否则会丢失 IBCI 异常类型（H1，详见 docs/COMPLETED.md 2026-05-14 锚点）。
+        # 否则会丢失 IBCI 异常类型（H1，详见 tasks_docs/COMPLETED.md 2026-05-14 锚点）。
         raise
     except Exception as e:
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误

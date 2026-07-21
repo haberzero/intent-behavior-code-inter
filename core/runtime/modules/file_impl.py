@@ -1,4 +1,4 @@
-"""
+﻿"""
 core/runtime/modules/file_impl.py
 
 Kernel-native IBCI ``file`` 模块实现（ADR-020 G6）。
@@ -15,7 +15,7 @@ Kernel-native IBCI ``file`` 模块实现（ADR-020 G6）。
 - 本模块位于 runtime 层，可被 kernel-native 注册流程直接引用。
 
 长期规划：IBCI 模块名 ``file`` 与 Python 内建/通用概念冲突，计划未来迁移到 ``fs`` /
-``filesys`` 等更具区分度的命名空间（见 ``docs/PENDING_TASKS.md §PT-ARCH-30``）。
+``filesys`` 等更具区分度的命名空间（见 ``tasks_docs/PENDING_TASKS.md §PT-ARCH-30``）。
 """
 
 from __future__ import annotations

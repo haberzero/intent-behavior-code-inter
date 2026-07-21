@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/contracts/test_type_invariants.py
 ========================================
 
@@ -25,7 +25,7 @@ class TestOptionalNullSafety:
 
     References:
     - IBCI_SYNTAX_REFERENCE.md §3.2 Optional Types
-    - docs/TEST_PHILOSOPHY.md §7.1 Optional Example
+    - tests_docs/TEST_PHILOSOPHY.md §7.1 Optional Example
     """
 
     def test_optional_none_access_raises(self):

@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/e2e/test_e2e_multi_interpreter.py
 =======================================
 
@@ -342,7 +342,7 @@ class TestRunIsolatedCompatibility:
 class TestRunIsolatedPathRelativeToEntryDir:
     """H3：``ihost.run_isolated`` / ``spawn_isolated`` 的相对路径应基于
     **调用脚本的入口目录**（与 ``file.read("./...")`` / ``isys.entry_dir()`` 一致），
-    而不是基于 cwd。详见 docs/COMPLETED.md 2026-05-14 锚点。"""
+    而不是基于 cwd。详见 tasks_docs/COMPLETED.md 2026-05-14 锚点。"""
 
     def test_run_isolated_relative_path_resolves_from_entry_dir(self, tmp_path, monkeypatch, capsys):
         """parent 与 child 同目录；cwd 切到另一处。仍应能找到 child。"""

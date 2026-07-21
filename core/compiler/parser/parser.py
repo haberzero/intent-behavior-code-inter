@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+﻿from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.common.tokens import Token, TokenType
 from core.kernel import ast as ast
 from core.compiler.parser.core.syntax import IbPrecedence
@@ -100,7 +100,7 @@ class Parser:
         misplaced imports later in the file are reported with a clear
         ``DEP_INVALID_IMPORT_POSITION`` (DEP_003) error rather than a
         misleading ``SEM_001 Module 'X' not found`` from the semantic
-        pass (see H2 / docs/COMPLETED.md 2026-05-14 anchor).
+        pass (see H2 / tasks_docs/COMPLETED.md 2026-05-14 anchor).
         """
         imports = []
         imports_allowed = True

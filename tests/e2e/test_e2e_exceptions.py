@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/e2e/test_e2e_exceptions.py
 =================================
 
@@ -279,7 +279,7 @@ class TestExceptionAcrossFunctionBoundary:
       1) ``except <SpecificType>`` 不再匹配，调用方只能落到 ``except Exception``；
       2) 用户字段（``e.message`` / 子类字段）被 wrapper 文本替换。
 
-    修复见 2026-05-14 PR；详见 docs/COMPLETED.md 同日锚点。
+    修复见 2026-05-14 PR；详见 tasks_docs/COMPLETED.md 同日锚点。
     """
 
     def test_user_exception_subclass_preserved_across_call_boundary(self):

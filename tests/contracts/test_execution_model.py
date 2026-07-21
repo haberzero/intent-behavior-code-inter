@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/contracts/test_execution_model.py
 ========================================
 
@@ -228,7 +228,7 @@ class TestRecursionGuarantees:
     """Validate recursion depth guarantees.
 
     References:
-    - docs/COMPLETED.md PT-1.3 (Frame depth limits)
+    - tasks_docs/COMPLETED.md PT-1.3 (Frame depth limits)
     """
 
     def test_reasonable_recursion_depth(self):

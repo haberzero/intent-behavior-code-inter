@@ -1,4 +1,4 @@
-# IBC-Inter (Intent Behavior Code - Interactive)
+﻿# IBC-Inter (Intent Behavior Code - Interactive)
 
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
@@ -80,7 +80,7 @@ retry 指令会使 ibci 代码回到 `if @~检查 $greeting 是否包含情感�
 
 llmexcept 不仅仅可以保护if语句，事实上，llmexcept可以用来保护所有行为描述语句
 
-llmexcept 机制与 IBC-Inter 的 `__to_prompt__` 以及 `__from_prompt__` 协议紧密相关，详情请见 [IBCI 语法手册](docs/IBCI_SYNTAX_REFERENCE.md)
+llmexcept 机制与 IBC-Inter 的 `__to_prompt__` 以及 `__from_prompt__` 协议紧密相关，详情请见 [IBCI 语法手册](docs/SYNTAX_REFERENCE.md)
 
 ### 4. 行为描述驱动循环
 
@@ -174,17 +174,17 @@ python main.py run test_target_proj/01_hello_world.ibci
 更多详情请参阅：
 
 - [文档中心导航与治理](docs/README.md)（**新加入者先读**：目录结构、阅读路径、治理纪律）
-- [IBC-Inter 语法手册](docs/IBCI_SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
-- [架构原则](docs/ARCHITECTURE_PRINCIPLES.md) (核心设计思路)
+- [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
+- [架构原则](docs/ARCHITECTURE.md) (核心设计思路)
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
-- [当前任务进度](docs/NEXT_STEPS.md) / [完成时间线](docs/COMPLETED.md)
+- [当前任务进度](tasks_docs/NEXT_STEPS.md) / [完成时间线](tasks_docs/COMPLETED.md)
 
 ### 运行测试
 
 ```bash
-python -m pytest tests/ -q --tb=no --no-header
+python -m pytest tests/
 ```
 
-最新基线请以当次 pytest 输出为准（见 `docs/NEXT_STEPS.md` 顶部锚点）。
+最新基线请以当次 pytest 输出为准（见 `tasks_docs/NEXT_STEPS.md` 顶部锚点）。
 
 ***

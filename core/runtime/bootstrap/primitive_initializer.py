@@ -657,7 +657,8 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     # 自动走磁盘协议族（__clone_ref__ / __to_descriptor__ / __from_descriptor__）。
     _file_handle_class = registry.get_class("file_handle")
     if _file_handle_class is not None:
-        # 用户可见原生方法已由公理自动化绑定（path/read/read_bytes/write/close/cast_to）。
+        # 用户可见原生方法已由公理自动化绑定（path/read/read_bytes/close/cast_to）。
+        # PT-ARCH-25: file_handle 实例只读，无 write() 方法。
         # 此处绑定磁盘协议族与 prompt 协议。
         _reg_native(_file_handle_class, '__materialize__', IbFileHandle.__materialize__, unbox=False)
         _reg_native(_file_handle_class, '__path_payload_prompt__', IbFileHandle.__path_payload_prompt__, unbox=False)

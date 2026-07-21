@@ -1,4 +1,4 @@
-# 03 - 高级特性
+﻿# 03 - 高级特性
 
 本章节介绍 IBCI 的高级特性：动态宿主（隔离运行）与插件系统。
 
@@ -36,7 +36,7 @@ parent.ibci
 
 ### 插件系统
 
-IBCI 支持通过 `plugins/` 目录扩展功能（详见 `docs/ARCHITECTURE_PRINCIPLES.md §七`）：
+IBCI 支持通过 `plugins/` 目录扩展功能（详见 `docs/ARCHITECTURE.md §七`）：
 
 ```
 my_project/
@@ -111,10 +111,10 @@ def __ibcext_vtable__():
     }
 ```
 
-> 内核原生模块（如 `file`/`ai`/`ihost`）不位于插件目录；用户插件参考写法见 `examples/03_advanced_features/custom_plugin_demo/`（如存在）或 `docs/ARCHITECTURE_PRINCIPLES.md` §7。
+> 内核原生模块（如 `file`/`ai`/`ihost`）不位于插件目录；用户插件参考写法见 `examples/03_advanced_features/custom_plugin_demo/`（如存在）或 `docs/ARCHITECTURE.md` §7。
 
 ## 下一步
 
 - 回到 `examples/01_getting_started/01_hello_world.ibci` 复习基础语法
 - 学习 `examples/02_basic_modules/` 掌握模块使用
-- 完整语法参考见 `docs/IBCI_SYNTAX_REFERENCE.md`
+- 完整语法参考见 `docs/SYNTAX_REFERENCE.md`

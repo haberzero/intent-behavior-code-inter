@@ -57,6 +57,20 @@ class IbString(IbValue):
         """IBCI-style alias for lower()"""
         return self.ib_class.registry.box(self.value.lower())
 
+    def join(self, iterable: Any) -> IbObject:
+        """用本字符串作为分隔符，连接列表中的元素。对齐 Python str.join(iterable)"""
+        parts = iterable.to_native() if hasattr(iterable, 'to_native') else iterable
+        str_parts = []
+        for p in parts:
+            native = p.to_native() if hasattr(p, 'to_native') else p
+            str_parts.append(str(native))
+        return self.ib_class.registry.box(self.value.join(str_parts))
+
+    def format(self, arg: Any) -> IbObject:
+        """简单格式化：将 {} 占位符替换为参数的字符串表示。对齐 Python str.format(value)"""
+        val = arg.to_native() if hasattr(arg, 'to_native') else str(arg)
+        return self.ib_class.registry.box(self.value.format(str(val)))
+
     def split(self, sep: Optional[str] = None) -> IbObject:
         if sep is None:
             parts = self.value.split()

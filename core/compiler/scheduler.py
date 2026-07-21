@@ -31,6 +31,7 @@ from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
 from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
+from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 class Scheduler(ICompilerService):
     """
     Top-level scheduler for multi-file compilation.
@@ -451,19 +452,19 @@ class Scheduler(ICompilerService):
                             is_last = (i == len(parts) - 1)
                             if is_last:
                                 target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=s_mod_type)
-                                curr_mod.exported_scope.define(target_sym)
+                                curr_mod.members[part_name] = target_sym
                             else:
-                                next_mod_sym = curr_mod.exported_scope.resolve(part_name)
+                                next_mod_sym = curr_mod.members.get(part_name)
                                 # 使用 is_module() 代替 isinstance
                                 if (
                                     not next_mod_sym
-                                    or not next_mod_sym.spec
+                                    or not getattr(next_mod_sym, 'spec', None)
                                     or next_mod_sym.spec.kind != TypeKind.MODULE.value
                                 ):
                                     next_mod_type = self.registry.factory.create_primitive("module")
                                     next_mod_type.name = part_name
                                     next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_mod_type)
-                                    curr_mod.exported_scope.define(next_mod_sym)
+                                    curr_mod.members[part_name] = next_mod_sym
                                 curr_mod = next_mod_sym.spec
                     else:
                         # 普通导入或带别名导入
@@ -521,18 +522,19 @@ class Scheduler(ICompilerService):
                     for alias in imp.names:
                         if alias.name == '*':
                             # 注入所有导出的符号；跳过已存在同名符号（幂等）
-                            for name, sym in s_mod_type.exported_scope.symbols.items():
+                            for name, member in s_mod_type.members.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
                                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                         f"[from-import *] Symbol '{name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
-                                    new_sym = SymbolFactory.create_from_descriptor(name, sym.spec) if sym.spec else sym
-                                    analyzer.symbol_table.define(new_sym)
+                                    new_sym = self._create_symbol_from_member(name, member)
+                                    if new_sym:
+                                        analyzer.symbol_table.define(new_sym)
                         else:
                             # 注入特定符号
-                            target_sym = s_mod_type.exported_scope.resolve(alias.name)
-                            if target_sym:
+                            target_member = s_mod_type.members.get(alias.name)
+                            if target_member:
                                 local_name = alias.asname if alias.asname else alias.name
                                 existing = analyzer.symbol_table.resolve(local_name)
                                 if existing:
@@ -549,15 +551,15 @@ class Scheduler(ICompilerService):
                                         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                             f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
-                                    # 使用 descriptor 参数，而不是 var_type/type_signature
-                                    if target_sym.kind == SymbolKind.VARIABLE:
-                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
-                                    elif target_sym.kind == SymbolKind.FUNCTION:
-                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
+                                    new_sym = self._create_symbol_from_member(local_name, target_member)
+                                    if new_sym:
+                                        analyzer.symbol_table.define(new_sym)
                                     else:
-                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, provenance=Provenance.EXTERNAL_MODULE)
-
-                                    analyzer.symbol_table.define(new_sym)
+                                        analyzer.issue_tracker.report(
+                                            Severity.ERROR, "SEM_001",
+                                            f"Symbol '{alias.name}' in module '{imp.module_name}' has an unresolved type",
+                                            location=Location(file_path=file_path, line=imp.lineno, column=1)
+                                        )
                             else:
                                 # 符号未找到报错
                                 analyzer.issue_tracker.report(
@@ -599,6 +601,42 @@ class Scheduler(ICompilerService):
             
         if file_tracker.has_errors():
             raise CompilerError(file_tracker.diagnostics)
+
+    def _create_symbol_from_member(self, name: str, member: Any) -> Optional[Symbol]:
+        """
+        from-import 符号构造：从 MemberSpec（插件模块）或 Symbol（已编译 IBCI 模块）
+        创建可注入当前作用域的 Symbol。
+
+        - MemberSpec / MethodMemberSpec：通过 registry.resolve_typeref 解析类型，
+          构造 FunctionSymbol（method）或 VariableSymbol（field）。
+        - Symbol（来自已编译模块的 members）：按原始 kind 重建同 kind Symbol。
+        """
+        if isinstance(member, Symbol):
+            if member.kind == SymbolKind.FUNCTION:
+                return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=member.spec, provenance=Provenance.EXTERNAL_MODULE)
+            elif member.kind == SymbolKind.VARIABLE:
+                return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=member.spec, provenance=Provenance.EXTERNAL_MODULE)
+            else:
+                return TypeSymbol(name=name, kind=member.kind, spec=member.spec, provenance=Provenance.EXTERNAL_MODULE)
+
+        if isinstance(member, MethodMemberSpec):
+            # 构造 FUNCTION kind 的 TypeDef，携带 return_type 和 param_types，
+            # 使语义分析器通过 get_call_cap 判定为可调用、通过 return_type 解析返回类型。
+            func_spec = ModuleMetadata(
+                name=name,
+                kind=TypeKind.FUNCTION.value,
+                return_type=member.return_type,
+                param_types=list(member.param_types),
+            )
+            return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=func_spec, provenance=Provenance.EXTERNAL_MODULE)
+
+        if isinstance(member, MemberSpec):
+            val_spec = self.registry.resolve_typeref(member.type_ref)
+            if val_spec is None:
+                val_spec = self.registry.resolve("any")
+            return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=val_spec, provenance=Provenance.EXTERNAL_MODULE)
+
+        return None
 
 # DependencyGraph logic moved to core.compiler.dependencies
 # This file imports DependencyGraph from there.

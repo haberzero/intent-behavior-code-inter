@@ -32,7 +32,8 @@ class LLMScanner:
         llm_keywords = [
             ('llmend', TokenType.LLM_END),
             ('__sys__', TokenType.LLM_SYS),
-            ('__user__', TokenType.LLM_USER)
+            ('__user__', TokenType.LLM_USER),
+            ('__llmretry__', TokenType.LLM_RETRY_HINT)
         ]
 
         for keyword, token_type in llm_keywords:

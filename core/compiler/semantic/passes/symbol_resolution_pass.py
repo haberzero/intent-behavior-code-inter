@@ -305,14 +305,18 @@ class SymbolResolver(ScopedVisitor):
         """访问 for 语句节点"""
         # 处理迭代对象
         if node.iter:
-            self.visit(node.iter)
+            # for...if 过滤语法：先访问实际迭代对象，再注册循环变量，最后访问过滤条件
+            if isinstance(node.iter, ast.IbFilteredExpr):
+                self.visit(node.iter.expr)
+            else:
+                self.visit(node.iter)
 
         # 注册循环变量到当前作用域（确保循环体内可引用）
         if node.target:
             if isinstance(node.target, ast.IbName):
                 self._register_loop_variable(node.target.id, node.target, node)
             elif isinstance(node.target, ast.IbTypeAnnotatedExpr):
-                # for int item in items: — target is IbTypeAnnotatedExpr
+                # for int item in items: - target is IbTypeAnnotatedExpr
                 inner = node.target.target
                 if isinstance(inner, ast.IbName):
                     self._register_loop_variable(inner.id, inner, node)
@@ -323,6 +327,10 @@ class SymbolResolver(ScopedVisitor):
                         self._register_loop_variable(elt.id, elt, node)
             else:
                 self.visit(node.target)
+
+        # 访问 for...if 的过滤条件（此时循环变量已注册，可安全引用）
+        if node.iter and isinstance(node.iter, ast.IbFilteredExpr):
+            self.visit(node.iter.filter)
 
         # 处理循环体
         for stmt in node.body:

@@ -1,10 +1,10 @@
-# IBC-Inter 语法说明手册（入门版）
+﻿# IBC-Inter 语法说明手册（入门版）
 
 > **文档定位**：本文件是放置在项目根目录的**入门/简要 spec**，覆盖 IBC-Inter 的核心语法规范、功能特性及当前版本局限性。
 > **完整参考**：详细的语法参考、架构设计、决策记录与实现细节见 `docs/` 目录：
-> - `docs/IBCI_SYNTAX_REFERENCE.md` — 完整语法参考
-> - `docs/ARCHITECTURE_PRINCIPLES.md` — 架构原则
-> - `docs/decisions/` — ADR 决策记录
+> - `docs/SYNTAX_REFERENCE.md` — 完整语法参考
+> - `docs/ARCHITECTURE.md` — 架构原则
+> - `` — ADR 决策记录
 > - `docs/design/` — 设计文档与实现细节
 
 ---

@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/contracts/test_scope_semantics.py
 ========================================
 
@@ -64,7 +64,7 @@ class TestLambdaCapture:
     """Validate lambda reference capture behavior.
 
     References:
-    - docs/COMPLETED.md §NS-3 Lambda/Snapshot Semantics
+    - tasks_docs/COMPLETED.md §NS-3 Lambda/Snapshot Semantics
     - tests/e2e/test_e2e_higher_order.py (legacy)
     """
 
@@ -108,7 +108,7 @@ class TestSnapshotSemantics:
     """Validate snapshot value capture and isolation.
 
     References:
-    - docs/COMPLETED.md §2026-05-11 Snapshot Semantics
+    - tasks_docs/COMPLETED.md §2026-05-11 Snapshot Semantics
     - tests/e2e/test_e2e_snapshot_semantics.py (legacy)
     - core/runtime/objects/deep_clone.py
     """

@@ -1,4 +1,4 @@
-# 测试覆盖映射 (Coverage Map)
+﻿# 测试覆盖映射 (Coverage Map)
 
 > 索引：语言概念 / 子系统 → 测试入口文件。
 > **新增测试时必须先在本表找到对应概念的文件；如不存在，先在此表新增一行 + 说明，再创建文件。**
@@ -128,12 +128,12 @@
 
 ## 统计快照
 
-> **数字纪律**：以下指标会随开发持续增长，**请以当次 `python -m pytest tests/ -q --tb=no --no-header` 实跑为准**。
-> 本表不再冻结具体计数；最新基线锚点见 `docs/NEXT_STEPS.md` 顶部或 `docs/COMPLETED.md` 最新条目。
+> **数字纪律**：以下指标会随开发持续增长，**请以当次 `python -m pytest tests/` 实跑为准**。
+> 本表不再冻结具体计数；最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部或 `tasks_docs/COMPLETED.md` 最新条目。
 >
 > 历史快照（2026-05-26）：41 文件 / 781 用例 / 778 passed / 3 skipped。当前基线已大幅增长（含多模态 file I/O、序列化 round-trip、engine 生命周期、host collect、MOCK 指令、路径、层级元测试等新增文件）。
 
 | 指标 | 值 |
 |------|-----|
-| 运行命令 | `python -m pytest tests/ -q --tb=no --no-header` |
-| 最新基线 | 见 `docs/NEXT_STEPS.md` 顶部锚点（不在此冻结） |
+| 运行命令 | `python -m pytest tests/` |
+| 最新基线 | 见 `tasks_docs/NEXT_STEPS.md` 顶部锚点（不在此冻结） |

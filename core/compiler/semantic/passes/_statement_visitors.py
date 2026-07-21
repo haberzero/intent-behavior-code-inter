@@ -331,12 +331,22 @@ class StatementVisitorsMixin:
     def visit_IbFor(self, node: ast.IbFor) -> Optional[IbSpec]:
         """访问 for 语句"""
         if node.iter:
-            self.visit(node.iter)
-            # 条件驱动循环中的行为表达式应被解析为 bool 类型
-            if isinstance(node.iter, ast.IbBehaviorExpr):
-                self.bind_type(node.iter, self.registry.resolve("bool"))
+            # for...if 过滤语法：先访问实际迭代对象，再访问循环变量，最后访问过滤条件
+            if isinstance(node.iter, ast.IbFilteredExpr):
+                self.visit(node.iter.expr)
+                # 条件驱动循环中的行为表达式应被解析为 bool 类型
+                if isinstance(node.iter.expr, ast.IbBehaviorExpr):
+                    self.bind_type(node.iter.expr, self.registry.resolve("bool"))
+            else:
+                self.visit(node.iter)
+                # 条件驱动循环中的行为表达式应被解析为 bool 类型
+                if isinstance(node.iter, ast.IbBehaviorExpr):
+                    self.bind_type(node.iter, self.registry.resolve("bool"))
         if node.target:
             self.visit(node.target)
+        # 访问 for...if 的过滤条件（此时循环变量已注册）
+        if node.iter and isinstance(node.iter, ast.IbFilteredExpr):
+            self.visit(node.iter.filter)
         for stmt in node.body:
             self.visit(stmt)
         return None
@@ -393,13 +403,19 @@ class StatementVisitorsMixin:
         return self.visit(node.value)
 
     def visit_IbAugAssign(self, node: ast.IbAugAssign) -> Optional[IbSpec]:
-        """访问增量赋值 (e.g., x += 1)"""
+        """访问增量赋值 (e.g., x += 1)
+
+        复合赋值 ``x <op>= y`` 语义上等价于 ``x = x <op> y``。
+        公理只识别二元形式（``+``、``-`` 等），因此剥离尾部 ``=`` 后再检查--
+        与运行时 VM handler (``assignment.py`` ``op_symbol.rstrip("=")``) 保持一致。
+        """
         target_type = self.visit(node.target)
         val_type = self.visit(node.value)
 
-        # 通过 resolve_op 检查操作合法性
+        bin_op = node.op[:-1] if node.op.endswith("=") else node.op
+
         if target_type:
-            result_type = self.registry.resolve_op(target_type, node.op, val_type)
+            result_type = self.registry.resolve_op(target_type, bin_op, val_type)
             if not result_type:
                 self.error(
                     f"Augmented assignment operator '{node.op}' not supported for type '{target_type.name}'",

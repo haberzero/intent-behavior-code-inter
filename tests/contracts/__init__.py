@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/contracts/__init__.py
 ============================
 
@@ -15,5 +15,5 @@ Contract tests:
 - Use parametrized tests to cover multiple cases
 - Each test validates ONE semantic invariant
 
-See docs/TEST_PHILOSOPHY.md for detailed guidelines.
+See tests_docs/TEST_PHILOSOPHY.md for detailed guidelines.
 """

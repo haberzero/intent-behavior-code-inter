@@ -1,4 +1,4 @@
-"""
+﻿"""
 tests/contracts/test_llm_integration.py
 ========================================
 
@@ -69,7 +69,7 @@ class TestBehaviorExpression:
 
     References:
     - IBCI_SYNTAX_REFERENCE.md §5.1 Behavior Expressions
-    - docs/TEST_PHILOSOPHY.md
+    - tests_docs/TEST_PHILOSOPHY.md
     """
 
     def test_behavior_expression_executes(self):

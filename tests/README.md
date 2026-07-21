@@ -1,6 +1,6 @@
-# `tests/` 目录维护规约
+﻿# `tests/` 目录维护规约
 
-> 本文档是 `tests/` 长期维护守则。测试体系设计原则见 [`docs/testing/TEST_PHILOSOPHY.md`](../docs/testing/TEST_PHILOSOPHY.md)；
+> 本文档是 `tests/` 长期维护守则。测试体系设计原则见 [`tests_tests_docs/TEST_PHILOSOPHY.md`](../tests_tests_docs/TEST_PHILOSOPHY.md)；
 > 概念→测试入口映射见 [`tests/COVERAGE_MAP.md`](./COVERAGE_MAP.md)。
 
 ## 基础设施
@@ -56,7 +56,7 @@ python -m pytest tests/ -q --tb=short
 ## 修 Bug 添加回归测试时
 
 - 把新测试**并入最贴近问题的 concept 文件**下既有 `Test*` 类（或新建 `TestRegressions` 子类），不要为单个 issue/PR 新建文件。
-- 测试 docstring 可引用 issue / `docs/COMPLETED.md` 锚点。
+- 测试 docstring 可引用 issue / `tasks_docs/COMPLETED.md` 锚点。
 
 ## 删除/修改测试时
 
