@@ -40,7 +40,7 @@ class HostInterface:
         self._module_metadata_map: Dict[str, TypeDef] = {}
         self._discovery_map: Dict[str, str] = {}  # Mapping: discovery_name -> module_name
         self._reverse_discovery_map: Dict[str, str] = {}  # Mapping: module_name -> discovery_name
-        self._kernel_native_names: Set[str] = set()  # ADR-020 G2：kernel-native 逻辑名集合
+        self._kernel_native_names: Set[str] = set()  # kernel-native 逻辑名集合
 
     def reserve_kernel_native_name(self, name: str) -> None:
         """将逻辑模块名标记为 kernel-native，禁止后续用户插件覆盖。"""
@@ -56,7 +56,7 @@ class HostInterface:
 
         discovery_name: 物理名称 (如目录名)。
 
-        ADR-020 G2：若 name 已被标记为 kernel-native，则只允许 kernel-native 自身注册；
+        若 name 已被标记为 kernel-native，则只允许 kernel-native 自身注册；
         用户插件尝试覆盖时直接忽略。
         """
         is_kernel_native_meta = metadata is not None and metadata.provenance == Provenance.KERNEL_NATIVE

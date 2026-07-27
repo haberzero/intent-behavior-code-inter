@@ -2,9 +2,9 @@
 tests/compliance/test_execution_isolation.py
 ============================================
 
-IBCI VM 合规测试：多 Interpreter 执行隔离（M4 / SPEC §4）。
+IBCI VM 合规测试：多 Interpreter 执行隔离。
 
-覆盖 docs/VM_SPEC.md §4 定义的以下契约：
+覆盖以下契约：
   - 子 Interpreter 拥有独立 RuntimeContext，与主 Interpreter 完全隔离
   - 子 Interpreter 的变量写入不影响主 Interpreter 的变量空间
   - 主 Interpreter 的变量写入不影响子 Interpreter 的执行
@@ -36,11 +36,11 @@ def write_child(code: str) -> str:
 
 
 # ===========================================================================
-# SPEC §4.1 — 子 Interpreter 变量不泄漏到主 Interpreter
+# 子 Interpreter 变量不泄漏到主 Interpreter
 # ===========================================================================
 
 class TestVariableIsolation:
-    """SPEC §4.1：子 Interpreter 变量写入与主 Interpreter 完全隔离。"""
+    """子 Interpreter 变量写入与主 Interpreter 完全隔离。"""
 
     def test_child_variable_not_visible_in_parent(self):
         """子 Interpreter 定义的变量不应出现在主 Interpreter 的作用域中。"""
@@ -92,11 +92,11 @@ class TestVariableIsolation:
 
 
 # ===========================================================================
-# SPEC §4.2 — collect 结果语义
+# collect 结果语义
 # ===========================================================================
 
 class TestCollectSemantics:
-    """SPEC §4.2：collect 返回值的类型和内容约束。"""
+    """collect 返回值的类型和内容约束。"""
 
     def test_collect_returns_dict(self):
         child = write_child('int x = 42\n')
@@ -166,11 +166,11 @@ class TestCollectSemantics:
 
 
 # ===========================================================================
-# SPEC §4.3 — collect 幂等性保护 + 错误传播
+# collect 幂等性保护 + 错误传播
 # ===========================================================================
 
 class TestCollectConstraints:
-    """SPEC §4.3：collect 的错误语义。"""
+    """collect 的错误语义。"""
 
     def test_double_collect_raises(self):
         """对同一 handle 重复 collect 应抛出 RuntimeError（幂等性保护）。"""

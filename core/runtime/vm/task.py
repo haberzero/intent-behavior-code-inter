@@ -21,13 +21,13 @@ Signal 控制信号语义
 循环帧 / 函数帧的 handler 通过 ``isinstance(res, Signal)`` 检查显式
 拦截或继续传播。
 
-:class:`UnhandledSignal` 是唯一的边界异常（C5）：仅在 ``VMExecutor.run()``
+:class:`UnhandledSignal` 是唯一的边界异常：仅在 ``VMExecutor.run()``
 帧栈空且仍持有未消费的 Signal 时抛出，调用方（IbUserFunction.call、
 execute_module）捕获后按 ``e.signal.kind`` 分类处理。
 
 注：``ControlSignal`` / ``Signal`` / ``UnhandledSignal`` 定义在
-``core/runtime/shared/signals.py`` 中，此处重新导出以保持 vm 包内
-``from core.runtime.vm.task import ControlSignal`` 的向后兼容。
+``core/runtime/shared/signals.py`` 中，此处重新导出供 vm 包内
+``from core.runtime.vm.task import ControlSignal`` 使用。
 """
 from __future__ import annotations
 from dataclasses import dataclass, field

@@ -1,8 +1,5 @@
 """
 core.runtime.vm.handlers._shared — 跨类别 CPS 辅助函数。
-
-本模块由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，
-无任何逻辑改动；函数体逐字保留。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Optional, List
@@ -30,8 +27,7 @@ from core.runtime.shared.llm_result import LLMFuture
 def _vm_call_fn_callable(executor, func, args):
     """CPS 内联执行 IbFnCallable（lambda/snapshot）调用。
 
-    将原来 ``IbFnCallable.call()`` 中的 ``ec.visit(target_uid)`` 替换为
-    ``yield target_uid``，使 lambda/snapshot 体完全在 VM CPS 循环中执行。
+    使 lambda/snapshot 体完全在 VM CPS 循环中执行。
     控制流信号（RETURN/BREAK/CONTINUE）通过 Signal 数据对象传播，不再依赖
     Python 异常。
 
@@ -101,13 +97,13 @@ def _vm_invoke_behavior(executor, behavior, args):
     parametric arg binding) but yields once **before** the synchronous LLM
     invocation so the VMTask running this helper is guaranteed to be on the
     frame stack at LLM execute time — giving "LLM 帧受 VM 调度管理" the
-    practical snapshot / debug-visibility guarantee called for by NS-1.
+    practical snapshot / debug-visibility guarantee.
 
     snapshot 行为体（``capture_mode == 'snapshot'``）：
         每次调用前清除 ``_cache`` 并在子作用域内对自由变量做一次额外深克隆，
         与 ``_vm_call_fn_callable`` 路径一致——snapshot 是无状态、可重入的。
 
-    NS-3：始终使用**调用现场**的 ``executor.ec`` 作为执行机制（VM、节点池、
+    始终使用**调用现场**的 ``executor.ec`` 作为执行机制（VM、节点池、
     runtime_context）；``behavior._execution_context`` 字段仅在跨 Interpreter
     的同步后备路径中作为兜底使用，CPS 主路径完全无视该字段。
     """

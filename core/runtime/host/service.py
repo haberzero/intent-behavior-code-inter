@@ -66,11 +66,10 @@ class HostService(IHostService):
         # 路径经 IbPath 规范化；资产外化布局委托 SnapshotLayout（策略集中化）。
         # 注：save_state 是宿主级特权操作（用户显式调用），不经 PermissionManager 沙箱校验--
         # 这是有意设计（host op 应能写用户指定位置），非安全缺口。
-        # 注：assets 的 "__EXTERNAL_FILE_REF__" 哨兵是序列化格式约定，
-        # 属 PT-ARCH-13（media 重建时统一为路径感知序列化）。
+        # 注：assets 的 "__EXTERNAL_FILE_REF__" 哨兵是序列化格式约定。
         from core.kernel.path import IbPath, SnapshotLayout
 
-        # PT-ARCH-26：在序列化之前扫描活跃变量，若存在磁盘型容器则直接拒绝。
+        # 在序列化之前扫描活跃变量，若存在磁盘型容器则直接拒绝。
         if self._contains_disk_backed_instance(self.execution_context):
             raise InterpreterError(
                 "save_state is not supported when the execution context contains "
@@ -201,7 +200,7 @@ class HostService(IHostService):
         abs_path = self._resolve_isolated_path(path)
         success = self.orchestrator.request_isolated_run(abs_path, policy)
         
-        # 返回执行结果（当前简化为布尔值；多返回值改进见 PENDING_TASKS.md §10.2）
+        # 返回执行结果（当前简化为布尔值；多返回值改进待实现）
         return self.registry.box(success)
 
     def spawn_isolated(self, path: str, policy: Dict[str, Any]) -> str:
@@ -229,13 +228,8 @@ class HostService(IHostService):
         """
         把 ``ihost.run_isolated``/``spawn_isolated`` 传入的脚本路径解析为绝对路径。
 
-        委托规范解析器 ``PathResolver``（entry_dir 单锚点，§6.1 契约），与
+        委托规范解析器 ``PathResolver``（entry_dir 单锚点契约），与
         ``ExecutionContextImpl.resolve_path`` / ``file.read`` 的相对入口目录语义一致。
-
-        历史实现统一走 ``os.path.abspath``，
-        相对 cwd 解析，与 ``file.read`` 的"相对入口目录"语义不一致，导致 README §5 与
-        ``examples/03_advanced_features/isolation_demo/parent.ibci`` 仅在 cwd 恰好为入口目录
-        时才能跑通。
         """
         from core.kernel.path import PathResolver, IbPath
         try:

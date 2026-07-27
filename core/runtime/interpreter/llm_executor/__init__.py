@@ -1,7 +1,6 @@
 """``llm_executor`` 包 —— LLM 执行核心 (mixin 组合)。
 
-原单文件 ``llm_executor.py`` (~1132 行) 拆分为以下切片，通过 mixin 组合为
-最终的 :class:`LLMExecutorImpl`：
+通过 mixin 组合为最终的 :class:`LLMExecutorImpl`：
 
 - :class:`LLMExecutorCore` (``_core``)         —— 共享状态、属性、类型栈、``_call_llm``
 - :class:`_PromptMixin` (``_prompt``)          —— 提示词构建与结果解析

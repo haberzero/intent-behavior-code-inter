@@ -11,7 +11,7 @@ class IExecutionContext(Protocol):
 
     此接口定义在 kernel 层，作为架构核心抽象。
     runtime 层实现具体类并实现此接口。
-    求值入口为 VMExecutor.run()；此 Protocol 不包含 visit() 方法（已于 P2-P7 双轨消灭后删除）。
+    求值入口为 VMExecutor.run()；此 Protocol 不包含 visit() 方法（已删除）。
     """
     @property
     def node_pool(self) -> Mapping[str, Any]: ...

@@ -5,9 +5,6 @@
 LLMScheduler 共享状态 (``self._max_workers`` / ``self._thread_pool`` /
 ``self._pending_futures`` / ``self._pending_futures_lock``)，并调用
 :class:`_BehaviorMixin` 提供的 :meth:`execute_behavior_expression`。
-
-分隔注释块 (``LLMScheduler — dispatch_eager / resolve / 线程池管理``) 原位于
-``llm_executor.py`` 第 517-519 行。
 """
 
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor

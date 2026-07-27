@@ -2,7 +2,7 @@
 tests/runtime/test_media_file_handle.py
 =======================================
 
-验证 media 类型（audio/image/video）在 ADR-014/016/020 之后的行为：
+验证 media 类型（audio/image/video）的行为：
 - 是 ``IbFileHandle`` 的磁盘型子类。
 - ``audio/image/video.from_file(path)`` 返回 ``FileBacking``，不立即读字节（零拷贝）。
 - ``__path_payload_prompt__`` 按需物化并生成正确的 content block。
@@ -60,7 +60,7 @@ class TestMediaFileHandle:
         file_engine.run_string("import file\n", silent=True)
         obj = _make_media(tmp_path, file_engine.registry, "audio", "a.wav", b"x")
         assert isinstance(obj, IbFileHandle)
-        # PT-ARCH-24: format 是 field；IBCI 层通过 fields 字典访问。
+        # format 是 field；IBCI 层通过 fields 字典访问。
         assert obj.fields["format"].to_native() == "wav"
 
     def test_image_payload_returns_image_url_block(self, file_engine, tmp_path):

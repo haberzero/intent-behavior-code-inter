@@ -168,7 +168,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                     # 递归处理 llmexcept body
                     if stmt.body:
                         stmt.body = self._rewrite_body(stmt.body)
-                        # §9.2: 验证 body 内的 read-only 约束
+                        # 验证 body 内的 read-only 约束
                         self._validate_readonly_body(stmt.body)
                     i += 1
                     continue
@@ -188,7 +188,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                 # 递归处理 llmexcept body
                 if stmt.body:
                     stmt.body = self._rewrite_body(stmt.body)
-                    # §9.2: 验证 body 内的 read-only 约束
+                    # 验证 body 内的 read-only 约束
                     self._validate_readonly_body(stmt.body)
 
                 # 记录绑定（使用节点对象作为键）
@@ -224,10 +224,10 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
         return False
 
-    # ===== §9.2: llmexcept body read-only 约束 =====
+    # ===== llmexcept body read-only 约束 =====
 
     def _validate_readonly_body(self, body: List[ast.IbASTNode]):
-        """§9.2: 验证 llmexcept body 内的 read-only 约束（SEM_052）。
+        """验证 llmexcept body 内的 read-only 约束（SEM_052）。
 
         - 捕获进入 body 前的外部作用域变量名集合
         - 排除 body 内声明的 body-local 变量（避免误报）

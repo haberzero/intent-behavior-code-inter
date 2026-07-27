@@ -20,7 +20,7 @@ class Prelude:
     Static prelude: manages the pre-imported type/function/module catalogue
     that the compiler front-end uses during semantic analysis.
 
-    命名（ADR-020 §E）：原 ``builtin_*`` 目录（"builtin" 一词五义之一）改为非前缀属性，
+    命名：原 ``builtin_*`` 目录（"builtin" 一词五义之一）改为非前缀属性，
     由 ``Prelude`` 类名限定语义——这些是 prelude（免 import 的语言原语）目录。
     """
 
@@ -66,7 +66,7 @@ class Prelude:
         if "any" in self.types and "auto" not in self.types:
             self.types["auto"] = self.types["any"]
         # Do NOT alias "none" → void: lowercase 'none' is intentionally trapped
-        # as an error in visit_IbName (Bug #4 fix) to guide users towards 'None'.
+        # as an error in visit_IbName to guide users towards 'None'.
         # Ensure 'None' (capitalised) is exposed as a type that _resolve_type can find.
         if "None" not in self.types:
             none_spec = self.registry.resolve("None")

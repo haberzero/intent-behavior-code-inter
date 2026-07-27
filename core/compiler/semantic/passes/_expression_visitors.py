@@ -204,7 +204,6 @@ class ExpressionVisitorsMixin:
 
     # Methods on intent_context that are no-op when called on the class object
     # (as opposed to an instance obtained via get_current()).
-    # See docs/KNOWN_LIMITS.md §十八 for rationale.
     _INTENT_CTX_INSTANCE_ONLY_METHODS = frozenset({
         "push", "pop", "fork", "merge", "combine", "clear",
     })
@@ -221,7 +220,7 @@ class ExpressionVisitorsMixin:
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # --- P2-B: intent_context static call warning (SEM_090) ---
+        # --- intent_context static call warning (SEM_090) ---
         # Detect intent_context.push() / pop() / ... called directly on the
         # class name without first obtaining an instance via get_current().
         self._check_intent_context_static_call(node)
@@ -296,7 +295,7 @@ class ExpressionVisitorsMixin:
             else:
                 res = self._any_desc
 
-        # --- G2: SEM_081 warning for specialized container write methods ---
+        # --- SEM_081 warning for specialized container write methods ---
         param_types = getattr(func_type, "param_types", []) or []
         param_type_names = [t.head for t in param_types]
         if func_type.kind == TypeKind.FUNCTION.value and param_type_names:
@@ -572,13 +571,13 @@ class ExpressionVisitorsMixin:
     def visit_IbCastExpr(self, node: ast.IbCastExpr) -> Optional[IbSpec]:
         """访问类型转换表达式 (e.g., (int) expr)
 
-        P2-C: 使用 can_convert_from 进行编译期 cast 校验。
+        使用 can_convert_from 进行编译期 cast 校验。
         当目标类型的公理明确拒绝从源类型转换时，发出 SEM_091 警告。
         """
         source_type = self.visit(node.value)
         cast_type = self._resolve_type(node.type_annotation)
 
-        # P2-C: compile-time cast validation via can_convert_from
+        # compile-time cast validation via can_convert_from
         if (source_type and cast_type
                 and not self.registry.is_dynamic(source_type)
                 and not self.registry.is_dynamic(cast_type)

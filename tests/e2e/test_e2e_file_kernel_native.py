@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_file_kernel_native.py
 ========================================
 
-e2e 测试：ADR-020 G6 file 模块内核原生化 + PT-ARCH-24/26/27 安全闸门。
+e2e 测试：file 模块内核原生化 + 安全闸门。
 
 覆盖：
 1. import gate：`import file` 把 file_handle/audio/image/video 类型注入作用域。
@@ -109,7 +109,7 @@ class TestFileKernelNative:
 
 
 class TestFileSecurityGates:
-    """PT-ARCH-26/27 安全闸门。"""
+    """安全闸门。"""
 
     def test_save_state_rejects_active_file_handle(self, tmp_path):
         """活跃 file_handle 变量存在时 ihost.save_state 报错。"""

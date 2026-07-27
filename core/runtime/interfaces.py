@@ -50,18 +50,18 @@ class Scope(Protocol):
     def parent(self) -> Optional['Scope']: ...
     def iter_cells(self) -> Any:
         """
-        枚举本作用域（不递归父）已提升为 IbCell 的变量条目（公理 GC-2 根集合扫描入口）。
+        枚举本作用域（不递归父）已提升为 IbCell 的变量条目（根集合扫描入口）。
         默认实现返回空迭代器；具体作用域类型若支持 Cell 提升应覆写此方法。
         """
         return iter(())
     def is_cell_promoted(self, sym_uid: str) -> bool:
-        """判断 sym_uid 是否已提升为 Cell 变量（C12 封装替代私有 _cell_map 探测）。
+        """判断 sym_uid 是否已提升为 Cell 变量（封装替代私有 _cell_map 探测）。
 
         默认返回 False；支持 Cell 提升的 ScopeImpl 应覆写此方法。
         """
         return False
     def define_raw(self, name: Optional[str], value: Any, uid: Optional[str] = None, declared_type: Any = None) -> Any:
-        """低级符号写入，绕过类型检查（VM 特殊路径专用，C12）。
+        """低级符号写入，绕过类型检查（VM 特殊路径专用）。
 
         默认实现委托到 define()；支持 LLMFuture 占位符写入的 ScopeImpl 应覆写此方法。
         """
@@ -251,8 +251,6 @@ class IIbBehavior(IIbObject, Protocol):
     ``captured_intents``:
       - ``None``：lambda 模式（调用时使用当前上下文意图栈）
       - ``IbIntentContext`` 实例：snapshot 模式 / dispatch_eager（已 fork 的值快照）
-
-    历史的 IntentNode 链表 / 已展平 list 路径已废弃。
     """
     node: str
     captured_intents: Optional[Any]  # Optional[IbIntentContext]; Any 避免循环导入

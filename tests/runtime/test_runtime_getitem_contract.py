@@ -2,7 +2,7 @@
 tests/runtime/test_runtime_getitem_contract.py
 ===============================================
 
-容器/字符串 ``__getitem__`` 契约测试（PT-TEST-4 area 3）。
+容器/字符串 ``__getitem__`` 契约测试（area 3）。
 
 覆盖 IbList / IbTuple / IbDict / IbString 的下标访问边界：
 - 正索引 / 负索引 / 切片
@@ -63,7 +63,6 @@ class TestDictGetitem:
     def test_missing_key_raises_interpreter_error(self, engine_session):
         """缺键抛 InterpreterError（与 IbList/Tuple/String 越界一致）。
 
-        历史：IbDict.__getitem__ 曾抛原始 KeyError，与兄弟类型不一致；
         已统一为 InterpreterError（匹配 IbDict.pop 既有风格）。
         """
         d = _box(engine_session, {"a": 1})

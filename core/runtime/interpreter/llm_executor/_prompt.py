@@ -106,19 +106,19 @@ class _PromptMixin:
         return param_names
 
     def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> Union[str, List[Union[str, Dict[str, Any]]]]:
-        """同步版段求值（兼容入口）。
+        """同步版段求值入口。
 
         实现委托给 ``_evaluate_segments_cps`` 生成器；当 ``vm_executor`` 可用时，
         通过 ``vm.run(uid)`` 对 yield 出的子节点求值。该路径用于：
         - ``dispatch_eager`` 在后台线程中的同步求值
-        - 不经 VM 调度的旧测试路径
+        - 不经 VM 调度的测试路径
 
         CPS 主路径（由 VM handler 触发的 invoke_*）改用 ``_evaluate_segments_cps``
         + ``yield from``，使段求值作为子任务嵌入到外层 VM 帧栈，而非启动一个
         独立的 ``_drive_loop``，从而正确反映 ``frame_stack_depth``。
 
         返回值：
-        - str: 纯文本内容（向后兼容路径）
+        - str: 纯文本内容
         - List[Union[str, dict]]: 含多模态结构化 content blocks
         """
         gen = self._evaluate_segments_cps(segments, execution_context, param_names)
@@ -150,7 +150,7 @@ class _PromptMixin:
         - 维持 lambda/snapshot/behavior 在段求值期间的栈可观察性与可暂停语义。
 
         返回值：
-        - 纯文本情况：返回拼接后的 str（向后兼容）
+        - 纯文本情况：返回拼接后的 str
         - 含多模态内容：返回 List[Union[str, dict]]（混合 content blocks）
           调用方通过 isinstance 检查决定走纯文本路径还是多模态路径。
         """
@@ -196,7 +196,7 @@ class _PromptMixin:
             else:
                 content_parts.append(str(segment))
 
-        # 向后兼容：全部为纯文本时返回拼接 str
+        # 全部为纯文本时返回拼接 str
         if not has_structured:
             return "".join(content_parts)
 

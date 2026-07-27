@@ -1,8 +1,7 @@
 """
 IBCI SnapshotLayout — 快照资产外化布局策略（canonical）。
 
-Per ADR-017：集中化"save_state 的资产外化到哪个目录、如何命名"的布局决策，
-历史上内联在 host/service.py（`save_path + ".assets"` 字符串拼接）。
+集中化"save_state 的资产外化到哪个目录、如何命名"的布局决策。
 """
 from __future__ import annotations
 
@@ -13,7 +12,6 @@ class SnapshotLayout:
     """
     快照资产外化布局（策略集中化）。
 
-    历史上 host/service.save_state 内联 `abs_path + ".assets"` + `os.path.join(asset_dir, f"{uid}.txt")`；
     本类把这些布局决策集中，便于未来统一调整（如改为 project_root/.cache/<hash>）。
     """
 

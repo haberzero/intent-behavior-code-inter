@@ -5,8 +5,6 @@ tests/e2e/test_e2e_llm_basic.py
 e2e LLM 基础测试（MOCK 协议 / behavior 表达式 / LLM 函数 / 类型 cast /
 control flow / mock repair / stale result 隔离）。
 
-从 tests/e2e/test_e2e_ai_mock.py 拆分 — 详见
-docs/TESTS_REORGANIZATION_TASK.md Step 11。
 """
 
 import os

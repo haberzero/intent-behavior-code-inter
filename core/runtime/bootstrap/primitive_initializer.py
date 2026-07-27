@@ -61,8 +61,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     初始化 IBCI 核心原语类（language primitives）及其 UTS 契约。
     支持多引擎实例隔离。
 
-    命名（ADR-020 §E）：原 ``initialize_builtin_classes``（"builtin" 一词五义之一）
-    → ``initialize_primitive_classes``，精确表达"语言原语类初始化"语义。
+    ``initialize_primitive_classes``，精确表达"语言原语类初始化"语义。
     """
     if registry.is_initialized:
         return None # 已初始化
@@ -89,12 +88,12 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     # 遍历 AxiomRegistry 自动初始化所有注册的原子类型
     
     # 基础类型映射表 (用于绑定具体的 IbClass 实现)
-    # 基础类型与实现类的映射已下沉到各实现类的 @register_ib_type 装饰器中
+    # 基础类型与实现类的映射位于各实现类的 @register_ib_type 装饰器中
     # 自动创建类并注册
     # 注意：我们必须保证顺序，或者允许多次查找
     # 依赖于 pritmives.py 中的注册顺序 (int before bool)
     
-    # 公理名清单统一从 AxiomRegistry 派生（ADR-020 §D：无硬编码特例/回退列表）。
+    # 公理名清单统一从 AxiomRegistry 派生，无硬编码特例/回退列表。
     # register_core_axioms 已在 create_default_registry() 中注册全部原语公理
     # （含 enum/None/Exception/audio/image/video/...），故 get_all_names() 已完备。
     axiom_registry = metadata_registry.get_axiom_registry()
@@ -143,7 +142,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 # 自动化运算符绑定
                 _auto_bind_operators(ib_cls, py_impl_cls)
 
-    # 获取引用以便后续绑定 (保持兼容性)
+    # 获取引用以便后续绑定
     integer_class = ib_classes.get("int")
     float_class = ib_classes.get("float")
     string_class = ib_classes.get("str")
@@ -256,7 +255,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     _reg_native(none_class, 'to_bool', lambda self: 0)
 
     # 5. 注册 LLM 不确定结果单例 (IbLLMUncertain)
-    # llm_uncertain 有独立的公理类（不再借用 none_class），
+    # llm_uncertain 有独立的公理类，
     # __to_prompt__ / to_bool / cast_to 通过公理方法自动绑定。
     llm_uncertain_class = ib_classes.get("llm_uncertain")
     if llm_uncertain_class:
@@ -554,7 +553,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             if frame is not None and hasattr(frame, 'clear_inherited_intents'):
                 frame.clear_inherited_intents()
             elif frame is not None and hasattr(frame, '_intent_ctx'):
-                # 防御性回退：旧帧实现没有新方法时仍能清空持久栈
+                # 回退：帧实现缺少 clear_inherited_intents 时直接操作 _intent_ctx
                 frame._intent_ctx.set_intent_top(None)
             return registry.get_none()
 
@@ -608,8 +607,8 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
     # 5b. 多模态类型方法注册 (audio / image / video)
     #
-    # Per ADR-012: 作为普通类名注册，通过 axiom → primitive_initializer 标准路径。
-    # Per ADR-014/016: media 类型现在是 file_handle 的磁盘型子类；
+    # 作为普通类名注册，通过 axiom → primitive_initializer 标准路径。
+    # media 类型是 file_handle 的磁盘型子类；
     # 所有 I/O 与 base64 编码下放到 runtime 层的 ``__path_payload_prompt__``。
     for _media_type_name in ("audio", "image", "video"):
         _media_class = registry.get_class(_media_type_name)
@@ -640,7 +639,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 _pp_method = _py_impl_cls.__path_payload_prompt__
                 _reg_native(_media_class, '__path_payload_prompt__', _pp_method, unbox=False)
 
-            # PT-ARCH-25: media 静态构造入口 audio.from_file / image.from_file / video.from_file。
+            # media 静态构造入口 audio.from_file / image.from_file / video.from_file。
             # IBCI 调用 audio.from_file(path) 时 receiver 是 audio IbClass，因此 Python 函数
             # 第一个参数是 IbClass，第二个参数是原生 path 字符串（unbox=True）。
             if _type_name == "audio":
@@ -652,13 +651,13 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
     # 5c. file_handle 类型方法注册
     #
-    # Per ADR-020: file_handle 为 kernel-native 类型，import-gated。
-    # Per ADR-016: 声明 storage_model = DISK_BACKED，由 deep_clone / RuntimeSerializer
+    # file_handle 为 kernel-native 类型，import-gated。
+    # 声明 storage_model = DISK_BACKED，由 deep_clone / RuntimeSerializer
     # 自动走磁盘协议族（__clone_ref__ / __to_descriptor__ / __from_descriptor__）。
     _file_handle_class = registry.get_class("file_handle")
     if _file_handle_class is not None:
         # 用户可见原生方法已由公理自动化绑定（path/read/read_bytes/close/cast_to）。
-        # PT-ARCH-25: file_handle 实例只读，无 write() 方法。
+        # file_handle 实例只读，无 write() 方法。
         # 此处绑定磁盘协议族与 prompt 协议。
         _reg_native(_file_handle_class, '__materialize__', IbFileHandle.__materialize__, unbox=False)
         _reg_native(_file_handle_class, '__path_payload_prompt__', IbFileHandle.__path_payload_prompt__, unbox=False)
@@ -674,5 +673,4 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     # 跃迁到 STAGE_3_PLUGIN_METADATA
     registry.set_state_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value, token)
     
-    # 清理遗留 Legacy 术语与残留注释
     return token

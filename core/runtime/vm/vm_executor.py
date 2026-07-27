@@ -56,7 +56,7 @@ class VMExecutor:
         self.step_count: int = 0
         self.max_steps: int = 0  # 0 == unlimited
         # 当前正在运行的帧栈引用；仅在 _drive_loop 主循环活跃时非 None。
-        # 通过 frame_stack_depth 属性暴露，供调试器 / NS-1 测试观察 CPS 栈深度。
+        # 通过 frame_stack_depth 属性暴露，供调试器 / 测试观察 CPS 栈深度。
         self._current_stack: Optional[list] = None
 
     # ------------------------------------------------------------------
@@ -81,7 +81,7 @@ class VMExecutor:
         """当前 CPS 帧栈深度。
 
         仅在主调度循环 ``_drive_loop`` 活跃期间非零。供调试器 / 测试观察
-        正在执行的 VMTask 帧层级（NS-1：``_vm_invoke_behavior`` /
+        正在执行的 VMTask 帧层级（``_vm_invoke_behavior`` /
         ``_vm_invoke_llm_function`` yield 后，本属性应 ≥ 2）。
         """
         return len(self._current_stack) if self._current_stack is not None else 0
@@ -119,7 +119,7 @@ class VMExecutor:
         if node_uid is None:
             return self.registry.get_none()
         if not self.supports(node_uid):
-            # P4b：所有 AST 节点类型均已有 CPS handler；到达此处意味着节点类型
+            # 所有 AST 节点类型均已有 CPS handler；到达此处意味着节点类型
             # 不在 dispatch table（新增节点未实现 handler，或 artifact 损坏）。
             node_data = self._ec.get_node_data(node_uid) if isinstance(node_uid, str) else None
             node_type = (node_data.get("_type") if node_data else None) or repr(node_uid)
@@ -131,14 +131,11 @@ class VMExecutor:
         return self._drive_loop([self._make_task(node_uid)])
 
     def run_body(self, stmt_uids: Any) -> Any:
-        """C10 + C6 + C11：执行一个语句列表（模块或函数体）。
+        """执行一个语句列表（模块或函数体）。
 
-        C11 后：body 中的 IbLLMExceptionalStmt 节点已经是正则 stmt（替换了
-        原来的 target），直接 run() 即可，无需特殊跳过逻辑。
+        body 中的 IbLLMExceptionalStmt 节点已是正则 stmt，直接 run() 即可，无需特殊跳过逻辑。
 
-        替代 ``Interpreter.execute_module()`` 与 ``IbUserFunction.call()`` 中
-        各自维护的内联 body 循环——既消除重复逻辑，又确保多 Interpreter
-        并发场景下两条路径保持一致。
+        确保多 Interpreter 并发场景下两条路径保持一致。
 
         参数:
             stmt_uids: 语句 UID 序列（``IbModule.body`` / ``IbFunctionDef.body``）。
@@ -147,7 +144,7 @@ class VMExecutor:
             最后一条语句的求值结果；空 body 返回 ``IbNone``。
 
         异常:
-            ``UnhandledSignal``（C6）：顶层未消费的控制信号直接以
+            ``UnhandledSignal``：顶层未消费的控制信号直接以
                 ``UnhandledSignal`` 形式向调用方传播。调用方（``IbUserFunction.call``、
                 ``execute_module``）直接捕获并按 ``e.signal.kind`` 分类处理。
         """
@@ -248,7 +245,7 @@ class VMExecutor:
             if isinstance(child_uid, str) and self.supports(child_uid):
                 stack.append(self._make_task(child_uid))
             else:
-                # P4b：dispatch table 覆盖所有 43 个 AST 节点类型；到达此处
+                # dispatch table 覆盖所有 43 个 AST 节点类型；到达此处
                 # 意味着 handler yield 了一个未知节点 uid（artifact 损坏或新
                 # 增了未实现 handler 的节点）。
                 node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None

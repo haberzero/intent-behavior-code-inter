@@ -1,7 +1,6 @@
 """
 core.runtime.vm.handlers.control_flow — 控制流 CPS handler。
 
-由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Optional
@@ -181,9 +180,7 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
        次数未耗尽（``frame.increment_retry()`` 返回 True），则 continue 重试条件求值
     4. 否则退出循环（等同于 uncertain-无-handler 情形：``return get_none()``）
 
-    此方案通过 AST 字段（``IbFor.llmexcept_handler``）直接引用 handler，
-    避免了旧 ``node_protection`` 侧表 + ``_apply_protection_redirect``
-    重定向机制对 ``node_to_type[behavior_expr]`` 的隐式覆写问题。
+    此方案通过 AST 字段（``IbFor.llmexcept_handler``）直接引用 handler。
     """
     target_uid = node_data.get("target")
     iter_uid = node_data.get("iter")
@@ -235,7 +232,7 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                     frame.should_retry = False  # 等待 retry 语句显式设置
 
                     try:
-                        # PT-ARCH-27：在 llmexcept handler body 中禁用 write_overwrite 写入。
+                        # 在 llmexcept handler body 中禁用 write_overwrite 写入。
                         executor.ec.enter_llmexcept_body()
                         try:
                             handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)

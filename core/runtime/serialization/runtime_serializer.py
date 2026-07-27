@@ -613,7 +613,7 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
 
         elif _type == "intent_context":
-            # PT-2.2: ``intent_context`` IBCI 封装实例 — 先入缓存（打断潜在循环），
+            # ``intent_context`` IBCI 封装实例 — 先入缓存（打断潜在循环），
             # 再恢复 ``_ctx`` 字段为对应的 native IbIntentContext（共享身份）。
             obj = IbObject(ib_class)
             self.instance_cache[uid] = obj

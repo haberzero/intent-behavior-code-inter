@@ -39,8 +39,7 @@ handler 形参：
 所有 llmexcept 触发路径均通过 AST 字段（target /
 llmexcept_handler）显式建立，不再有侧表间接关联。
 
-本包由原单文件 ``core/runtime/vm/handlers.py`` 机械拆分而来，按节点类别
-组织为子模块；公共 API 保持不变：
+本包按节点类别组织为子模块；公共 API 保持不变：
 
 * :func:`build_dispatch_table`
 * :func:`build_one_shot_intent_from_annotation`

@@ -1,12 +1,10 @@
 """
 IBCI PathContext - 执行上下文路径锚点（canonical）。
 
-Per ADR-015 D5：历史上 5 个独立 ``root_dir`` 字段并存（engine/scheduler/resolver/
-permissions/rt_scheduler 各自 ``realpath`` 规范化），且 CWD 兜底。本值对象是统一的
-锚点容器——Engine 构造一次，向下传递；消费者不再各自派生/规范化。
+本值对象是统一的锚点容器——Engine 构造一次，向下传递；消费者不再各自派生/规范化。
 
 两个锚点：
-- ``entry_dir``：入口文件所在目录——**数据路径解析的锚**（§6.1 契约）。
+- ``entry_dir``：入口文件所在目录——**数据路径解析的锚**（契约）。
 - ``project_root``：项目根目录——**沙箱边界 + 插件发现的锚**。
 
 二者关系：``project_root`` 通常是 ``entry_dir`` 的祖先（由 ProjectDetector 向上探测），
@@ -63,16 +61,13 @@ class PathContext:
     @staticmethod
     def derive_isolated(child_entry: str) -> tuple:
         """
-        派生子隔离执行上下文的路径锚点（纯路径策略，per ADR-017）。
+        派生子隔离执行上下文的路径锚点。
 
         本方法仅做路径派生（子 project_root = 子入口所在目录），**不**做隔离策略校验。
-        隔离策略校验（ADR-019 §5：子 entry 必须在父 project_root 内）在调用方
+        隔离策略校验（子 entry 必须在父 project_root 内）在调用方
         ``IBCIEngine._validate_and_derive_isolated`` 完成——保持派生与策略分离。
 
         子 project_root = 子入口所在目录（保证子入口始终在子沙箱内、可被编译）。
-
-        历史：engine.request_isolated_run/request_spawn_isolated 内联计算
-        ``os.path.dirname(os.path.abspath(entry))``；现集中到本方法。
 
         参数:
             child_entry: 子入口文件路径

@@ -40,7 +40,7 @@ class IbFileHandle(IbValue):
 
     def __init__(self, backing: MediaBacking, ib_class: IbClass):
         super().__init__(ib_class, payload=backing)
-        # PT-ARCH-24: path 是 field，无 I/O。
+        # path 是 field，无 I/O。
         self.fields["path"] = ib_class.registry.box(backing.path.to_native())
 
     @property

@@ -14,6 +14,4 @@ Contract tests:
 - Avoid accessing interpreter internals (node_pool, side_table, etc.)
 - Use parametrized tests to cover multiple cases
 - Each test validates ONE semantic invariant
-
-See tests_docs/TEST_PHILOSOPHY.md for detailed guidelines.
 """

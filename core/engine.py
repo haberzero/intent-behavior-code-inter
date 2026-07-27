@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any, List, Tuple
 # 并将已组装的 Interpreter 交给调用方使用。
 #
 # Engine 本身不执行任何 IBCI 代码；执行发生在 Interpreter 内部。
-# 多 Interpreter 并发（Layer 2，PENDING_TASKS_VM.md Step 11）由
+# 多 Interpreter 并发（Layer 2）由
 # DynamicHost（HostService）负责调度，而非 Engine。
 # =============================================================================
 
@@ -68,13 +68,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         参数:
             root_dir: **可选**。项目根目录（沙箱边界）。
-                Per ADR-019 §2：引擎级默认——未提供时，project_root 在 run()/compile() 时
+                引擎级默认——未提供时，project_root 在 run()/compile() 时
                 确立为 entry_file 所在目录（entry_dir）。run_string 无真实 entry，须显式提供。
-                提供时经 canonicalize_for_security 规范化（D2）。
-            auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 ADR-019 §3）。
+                提供时经 canonicalize_for_security 规范化。
+            auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 _resolve_plugin_search_paths）。
             core_debug_config: 内核调试器配置。
 
-        ADR-019 多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/install 路径等）；
+        多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/install 路径等）；
         root-dependent 设置（plugin 发现路径、Scheduler）延迟到 ``_ensure_root_initialized``，
         在 run/compile/check 时经 ``_establish_project_root`` 确立 project_root 后触发。
         """
@@ -86,7 +86,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._explicit_root: Optional[str] = (
             PathValidator.canonicalize_for_security(root_dir).to_native() if root_dir else None
         )
-        # ADR-019 §2 CWD：单独保存（无上界校验）；子脚本可获取。使用待权限系统。
+        # CWD：单独保存（无上界校验）；子脚本可获取。使用待权限系统。
         self._cwd: str = os.getcwd()
 
         # PathContext（entry_dir + project_root 锚点容器）：run/compile 时确立。
@@ -105,27 +105,27 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 初始化能力注册中心
         self.capability_registry = CapabilityRegistry()
 
-        # 内核原生模块目录（ADR-019 §1：恒在，单独存储，不配置不隔离）
+        # 内核原生模块目录（恒在，单独存储，不配置不隔离）
         self._install_path: str = InstallPaths.modules_dir().to_native()
 
         # 运行时对象工厂
         self.object_factory = RuntimeObjectFactory(self.registry)
 
         # host_interface 与引擎共享 MetadataRegistry，确保构造期预注册的
-        # kernel-native 模块元数据对编译器可见（ADR-020 G2）。
+        # kernel-native 模块元数据对编译器可见。
         self.host_interface = HostInterface(external_registry=self.registry.get_metadata_registry())
-        # ADR-020 G2：预注册 ai/ihost/idbg/isys 为 kernel-native 模块
+        # 预注册 ai/ihost/idbg/isys 为 kernel-native 模块
         from core.runtime.bootstrap.kernel_native_modules import register_kernel_native_modules
         register_kernel_native_modules(self.host_interface)
 
-        # ADR-020 G6：注册 file 为 kernel-native 模块（ibci_file 插件消亡）。
+        # 注册 file 为 kernel-native 模块。
         from core.runtime.modules.file_impl import FileLib
         _FILE_MODULE_SPEC = TypeDef(
             name="file",
             kind=TypeKind.MODULE.value,
             provenance=Provenance.KERNEL_NATIVE,
             visibility=Visibility.IMPORT_GATED,
-            # ADR-020 G6: `import file` also gates the disk-backed types into scope.
+            # `import file` also gates the disk-backed types into scope.
             exported_types=["file_handle", "audio", "image", "video"],
             members={
                 "open": MethodMemberSpec(
@@ -195,7 +195,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.auto_sniff = auto_sniff
         self.root_dir: Optional[str] = None
         self._plugin_search_paths: List[str] = []
-        # ADR-019 §6 C2/G1：继承的父 plugin search_paths（隔离子引擎透传）。
+        # 继承的父 plugin search_paths（隔离子引擎透传）。
         # 分两路透传以保持优先级：inherited_global_plugin（保持在优先级 2，不被普通 plugin 覆盖）；
         # inherited_plugin_paths（作为兜底来源，优先级 6）。
         self._inherited_plugin_paths: List[str] = list(inherited_plugin_paths) if inherited_plugin_paths else []
@@ -207,11 +207,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._root_initialized = False
 
     # ------------------------------------------------------------------
-    # ADR-019 多阶段启动：project_root 确立 + root-dependent 延迟初始化
+    # 多阶段启动：project_root 确立 + root-dependent 延迟初始化
     # ------------------------------------------------------------------
 
     def _establish_project_root(self, entry_file: Optional[str]) -> str:
-        """确立 project_root（ADR-019 §2）：= 显式 OR entry_dir。
+        """确立 project_root：= 显式 OR entry_dir。
 
         - 显式 root_dir 已提供（构造期）→ 用它。
         - 否则有 entry_file → project_root = entry_file 所在目录（canonicalize）。
@@ -222,7 +222,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if entry_file is None:
             raise InterpreterError(
                 "project_root 未确立：run_string/compile_string 无真实 entry_file，"
-                "须在构造期显式提供 root_dir（ADR-019 §2）。",
+                "须在构造期显式提供 root_dir。",
                 None,
             )
         # 先 canonicalize entry_file（解 symlink），再取 parent，确保 project_root
@@ -233,10 +233,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         return entry_dir if entry_dir else entry_ib.to_native()
 
     def _ensure_root_initialized(self, project_root: str) -> None:
-        """root-dependent 延迟初始化（ADR-019 多阶段启动）：plugin 发现路径 + Scheduler。
+        """root-dependent 延迟初始化（多阶段启动）：plugin 发现路径 + Scheduler。
 
         幂等：engine 单次执行，project_root 一旦确立不再变。
-        plugin 发现优先级见 ``_resolve_plugin_search_paths``（ADR-019 §3）。
+        plugin 发现优先级见 ``_resolve_plugin_search_paths``。
         """
         if self._root_initialized:
             return
@@ -252,7 +252,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._root_initialized = True
 
     def _resolve_plugin_search_paths(self, project_root: str) -> List[str]:
-        """ADR-019 §3 plugin 发现优先级（高 → 低，先命中者胜）：
+        """plugin 发现优先级（高 → 低，先命中者胜）：
 
         1. **kernel-native**（install 路径，恒在，最高优先级，不可覆盖）
         2. **global_plugin**（ibci.json 的 global_plugin 字段；全局 ibci.json 查找本轮预留）
@@ -261,18 +261,18 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         5. 全局 config（**预留，本轮不实现**）
         6. **继承的父 plugin_paths**（隔离子引擎透传；附加于自身之后，作为兜底来源）
 
-        G1 修复：继承的 **global_plugin** 单独透传，并入优先级 2（与自身 global_plugin 合并），
-        而非混入兜底的 inherited_plugin_paths（优先级 6）——保持 ADR-019 §3
+        继承的 **global_plugin** 单独透传，并入优先级 2（与自身 global_plugin 合并），
+        而非混入兜底的 inherited_plugin_paths（优先级 6）——保持
         "global_plugin 不被普通优先级覆盖" 在隔离子引擎中也成立。
 
-        plugin_path 只读特权（ADR-019 §5）：可在 project_root 之外（模块加载为 loader 级特权操作，
+        plugin_path 只读特权：可在 project_root 之外（模块加载为 loader 级特权操作，
         越界读取；脚本写入仍由 proj_root 沙箱约束——file.* 走 PermissionManager）。
         """
         config = IbciConfig.load(project_root)
         own_global_plugin = IbciConfig.global_plugin(config, project_root)
         explicit_plugin_paths = IbciConfig.plugin_paths(config, project_root)
 
-        # G1：global_plugin = 自身 + 继承（去重保序，保持在优先级 2）
+        # global_plugin = 自身 + 继承（去重保序，保持在优先级 2）
         global_plugin_merged: List[str] = []
         for g in own_global_plugin + self._inherited_global_plugin:
             if g not in global_plugin_merged:
@@ -319,7 +319,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
     def _prepare_interpreter(self, artifact: Optional[Any] = None, output_callback=None):
         """初始化解释器并动态加载模块实现"""
-        # entry_dir 从 PathContext（D4 锚点容器）读取——方案 B 保证其始终有意义：
+        # entry_dir 从 PathContext（锚点容器）读取——保证其始终有意义：
         # run → entry_file.parent；run_string → project_root。
         _ctx_entry_dir = self._path_ctx.entry_dir.to_native() if self._path_ctx else None
         self.interpreter = self.spawn_interpreter(
@@ -388,7 +388,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if state_reader is not None:
             self.registry.register_state_reader(state_reader, self._kernel_token)
 
-        # ADR-020 G2：在 registry hooks 全部注入后，给 kernel-native 模块 late-hydrate 窗口
+        # 在 registry hooks 全部注入后，给 kernel-native 模块 late-hydrate 窗口
         from core.runtime.bootstrap.kernel_native_modules import late_hydrate_kernel_native_modules
         late_hydrate_kernel_native_modules(self.interpreter.service_context)
 
@@ -401,7 +401,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
 
-        # ADR-019 §3：plugin 发现走统一解析的 search_paths（install/global_plugin/plugin_paths/嗅探）。
+        # plugin 发现走统一解析的 search_paths（install/global_plugin/plugin_paths/嗅探）。
         discovery = AutoDiscoveryService(self._plugin_search_paths)
 
         axiom_registry = self.registry.get_metadata_registry().get_axiom_registry()
@@ -425,7 +425,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          显式注册一个原生 Python 模块实现及其元数据。
 
-         ADR-019：可能在 run() 前调用（如 main.py load_external_plugins），
+         可能在 run() 前调用（如 main.py load_external_plugins），
          此时需构造期已提供 explicit root，否则报错（无 entry_file 可确立 project_root）。
         """
         if not self._root_initialized:
@@ -449,7 +449,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Prelude 过滤保证）。
         """
         if not self._plugins_discovered:
-            # ADR-020 G2：传入已有的 host_interface，保留构造期预注册的 kernel-native 模块
+            # 传入已有的 host_interface，保留构造期预注册的 kernel-native 模块
             self.host_interface = self.discovery_service.discover_all(self.registry, host=self.host_interface)
             self.scheduler.host_interface = self.host_interface
             self._plugins_discovered = True
@@ -458,14 +458,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          编译一段 IBCI 代码字符串，返回蓝图。
 
-         ADR-019 §2 / A3：run_string 无真实 entry_file → 合成 entry
+         run_string 无真实 entry_file → 合成 entry
          ``<project_root>/__string_exec__.ibci``（entry_dir = project_root，语义自洽，非 tempdir）。
          project_root 须显式提供（无 entry_file 可默认）；tempfile 仅作编译器源码载体。
         """
         # project_root 必须显式（run_string 无真实 entry 可默认 entry_dir）
         project_root = self._establish_project_root(None)
         self._ensure_root_initialized(project_root)
-        # 合成 entry（ADR-019 A3）：anchor 语义，非源码文件
+        # 合成 entry：anchor 语义，非源码文件
         synthetic_entry = (IbPath.from_native(project_root) / "__string_exec__.ibci").to_native()
 
         # tempfile 仅作编译器源码载体（源码位置），entry_file 用合成路径（anchor）
@@ -506,12 +506,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             raise e
 
     def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
-        # ADR-019 多阶段启动：先确立 project_root + root-dependent 初始化
+        # 多阶段启动：先确立 project_root + root-dependent 初始化
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
-        # entry 锚点：经 canonicalize_for_security 规范化（A5：解 symlink、绝对化相对路径，
-        # 与 check()/project_root 同源）。修复 B1——原仅 resolve_dot_segments（词法），
-        # 对相对 entry 会产出相对 entry_dir，破坏 §6.1 运行时路径解析。
+        # entry 锚点：经 canonicalize_for_security 规范化（解 symlink、绝对化相对路径，
+        # 与 check()/project_root 同源）。原仅 resolve_dot_segments（词法），
+        # 对相对 entry 会产出相对 entry_dir，破坏运行时路径解析。
         _entry_ib = PathValidator.canonicalize_for_security(entry_file)
         self._entry_file = _entry_ib.to_native()
         _entry_parent = _entry_ib.parent
@@ -555,16 +555,16 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
          核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
 
-         ADR-019 多阶段启动：确立 project_root（= 显式 OR entry_dir）+ root-dependent 初始化。
+         多阶段启动：确立 project_root（= 显式 OR entry_dir）+ root-dependent 初始化。
          锚点（_entry_file / _path_ctx）由语义调用方（run / compile_string）确立。
         """
-        # ADR-019：确立 project_root + root-dependent 初始化（幂等）
+        # 确立 project_root + root-dependent 初始化（幂等）
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
         # 懒加载插件元数据（显式引入原则）
         self._ensure_plugins_discovered()
 
-        # entry_file 直接用作编译输入（源码位置）；A5：canonicalize（解 symlink、绝对化）。
+        # entry_file 直接用作编译输入（源码位置）；canonicalize（解 symlink、绝对化）。
         abs_entry = PathValidator.canonicalize_for_security(entry_file).to_native()
         
         # 同步静默状态到调试器
@@ -594,20 +594,20 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
          调度入口。执行编译产物。
          注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
 
-         ADR-019：execute() 依赖 root-dependent 初始化（Scheduler/Permission/module_loader），
+         execute() 依赖 root-dependent 初始化（Scheduler/Permission/module_loader），
          故要求先经 run/compile/compile_string/check 触发 _ensure_root_initialized。
-         直接 execute() 未经编译 → 明确报错（修复 B2：原为 AttributeError）。
+         直接 execute() 未经编译 → 明确报错。
         """
         if not self._root_initialized:
             raise InterpreterError(
                 "execute() 要求先经 run/compile/compile_string/check 触发 project_root 初始化"
-                "（ADR-019 多阶段启动：root-dependent 设置延迟到首次编译/运行）。",
+                "（root-dependent 设置延迟到首次编译/运行）。",
                 None,
             )
         serializer = FlatSerializer()
         artifact_dict = serializer.serialize_artifact(artifact)
 
-        # [P2-D] 包装为 ImmutableArtifact，防止解释器修改 artifact
+        # 包装为 ImmutableArtifact，防止解释器修改 artifact
         immutable_artifact = ImmutableArtifact(artifact_dict)
 
         # 强制重置或重新准备解释器
@@ -642,10 +642,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         仅对项目进行静态检查（编译和语义分析）。
 
-        ADR-019 多阶段启动：确立 project_root + root-dependent 初始化。
-        A5：entry 规范化统一走 canonicalize_for_security（与 run/compile 同源，解 symlink）。
+        多阶段启动：确立 project_root + root-dependent 初始化。
+        entry 规范化统一走 canonicalize_for_security（与 run/compile 同源，解 symlink）。
         """
-        # ADR-019：确立 project_root + root-dependent 初始化
+        # 确立 project_root + root-dependent 初始化
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
         # 懒加载插件元数据（显式引入原则）
@@ -681,12 +681,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         return analyzer
 
     def _validate_and_derive_isolated(self, entry_path: str) -> Tuple[str, str]:
-        """ADR-019 §5 隔离反转：解析子 entry + 校验其在父 project_root 内。
+        """隔离反转：解析子 entry + 校验其在父 project_root 内。
 
         现阶段语义（负责人确认）：子脚本不得超出父 project_root。
         - 派生：``PathContext.derive_isolated``（子 project_root = 子 entry_dir，纯路径策略）。
         - 策略校验（本方法）：子 entry 必须在父 ``self.root_dir`` 内，否则报错。
-        - 未来：policy 可放开特定外部 zone（ADR-019 §5 open）。
+        - 未来：policy 可放开特定外部 zone。
         """
         # 确保父 project_root 已确立：隔离调用可能在 parent 未 run 时发生（engine 层 API 直调）。
         if not self._root_initialized:
@@ -698,7 +698,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if not PathValidator.is_within(parent_root, child_canonical):
             raise InterpreterError(
                 f"隔离执行拒绝：子入口 {abs_path} 不在父 project_root {self.root_dir} 内"
-                f"（ADR-019 §5：现阶段子脚本不得超出父 proj_root）。",
+                f"（现阶段子脚本不得超出父 proj_root）。",
                 None,
             )
         return abs_path, sub_root_dir
@@ -710,17 +710,17 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Handling kernel system call: request_isolated_run -> {entry_path}")
 
-        # ADR-019 §5：子 host 沙箱派生 + 隔离反转校验（子 entry 必须在父 project_root 内）。
+        # 子 host 沙箱派生 + 隔离反转校验（子 entry 必须在父 project_root 内）。
         abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
 
-        # 2. 实例化全新的 Engine（继承父 plugin search_paths——ADR-019 §6 C2）
+        # 2. 实例化全新的 Engine（继承父 plugin search_paths）
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Bootstrapping new Engine instance for sub-project root: {sub_root_dir}")
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
             auto_sniff=True,
             core_debug_config=self.debugger.config,  # 继承调试配置
-            inherited_plugin_paths=self._plugin_search_paths,  # ADR-019 §6：继承父 plugin
-            inherited_global_plugin=self._global_plugin_paths,   # G1：global_plugin 单独透传保持优先级
+            inherited_plugin_paths=self._plugin_search_paths,  # 继承父 plugin
+            inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
 
         # 3. 运行子项目
@@ -737,15 +737,15 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_spawn_isolated -> {entry_path}")
 
-        # ADR-019 §5：派生 + 隔离反转校验。
+        # 派生 + 隔离反转校验。
         abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
 
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
             auto_sniff=True,
             core_debug_config=self.debugger.config,
-            inherited_plugin_paths=self._plugin_search_paths,  # ADR-019 §6：继承父 plugin
-            inherited_global_plugin=self._global_plugin_paths,   # G1：global_plugin 单独透传保持优先级
+            inherited_plugin_paths=self._plugin_search_paths,  # 继承父 plugin
+            inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
 
         # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出

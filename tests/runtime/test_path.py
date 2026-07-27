@@ -230,14 +230,14 @@ class TestIbPathComparison:
 
 
 # ===========================================================================
-# 6. PathResolver — entry_dir 单锚点解析（ADR-015 D1）
+# 6. PathResolver — entry_dir 单锚点解析（D1）
 # ===========================================================================
 
 class TestPathResolver:
 
     @pytest.fixture
     def resolver(self):
-        # 新签名：PathResolver(entry_dir) —— 所有相对路径锚定于 entry_dir（§6.1 契约）
+        # 新签名：PathResolver(entry_dir) —— 所有相对路径锚定于 entry_dir（契约）
         entry_dir = IbPath.from_native("D:/project/scripts")
         return PathResolver(entry_dir)
 
@@ -302,7 +302,7 @@ class TestPathResolver:
 
 
 # ===========================================================================
-# 6b. ModuleNameSpace — 模块名 ↔ 相对路径映射（ADR-015 D4）
+# 6b. ModuleNameSpace — 模块名 ↔ 相对路径映射（D4）
 # ===========================================================================
 
 class TestModuleNameSpace:
@@ -337,7 +337,7 @@ class TestModuleNameSpace:
 
 
 # ===========================================================================
-# 6c. PathContext — 锚点容器（ADR-015 D5）
+# 6c. PathContext — 锚点容器（D5）
 # ===========================================================================
 
 class TestPathContext:
@@ -406,8 +406,6 @@ class TestPathValidator:
 
     def test_is_within_case_insensitive_windows(self):
         """R1 修复：大小写不敏感 FS（win32）下 is_within 应大小写不敏感（沙箱健全）。
-
-        旧 bug：startswith 大小写敏感 → /Proj/child 误判为不在 /proj 内 → 隔离误拒。
         """
         import os
         parent = IbPath.from_native("D:/Project")
@@ -510,7 +508,7 @@ class TestPathValidator:
 # ===========================================================================
 # 8. PathValidator.canonicalize_for_security — FS 感知规范化（全仓唯一 realpath）
 # ===========================================================================
-# PT-ARCH-19 P0-B：3 新能力零测试覆盖是 BUG 漏网的根因。本节守护 canonicalize_for_security。
+# 3 新能力零测试覆盖是 BUG 漏网的根因。本节守护 canonicalize_for_security。
 # 契约（validator.py:170-184）：os.path.realpath + IbPath 规范化；返回 IbPath；绝对路径。
 
 class TestCanonicalizeForSecurity:
@@ -570,7 +568,7 @@ class TestCanonicalizeForSecurity:
 # ===========================================================================
 # 9. PathContext.derive_isolated — 子隔离上下文锚点派生（策略集中化）
 # ===========================================================================
-# PT-ARCH-19 P0-B：守护 derive_isolated。
+# 守护 derive_isolated。
 # 契约（context.py:63-85）：返回 (resolved_entry, child_root)；child_root = dirname(child_entry)；
 # 无 parent 时退化为 child_entry 本身；语义 = 子入口目录（隔离设计，由 test_run_isolated_absolute_path_still_works 锁定）。
 
@@ -617,9 +615,9 @@ class TestDeriveIsolated:
 
 
 # ===========================================================================
-# 10. SnapshotLayout — 快照资产外化布局（P0-A BUG 回归守护）
+# 10. SnapshotLayout — 快照资产外化布局（BUG 回归守护）
 # ===========================================================================
-# PT-ARCH-19 P0-A：SnapshotLayout.asset_dir_for 的 `save_path + ".assets"` 经 IbPath.__add__
+# SnapshotLayout.asset_dir_for 的 `save_path + ".assets"` 经 IbPath.__add__
 # 变成路径 join（产出 state.json/.assets 子目录），旧契约是 state.json.assets（同级）。
 # 此 BUG 致 win32 save_state 触发 PermissionError/NotADirectoryError。本类是直接回归守护。
 
@@ -630,7 +628,7 @@ class TestSnapshotLayout:
         assert isinstance(SnapshotLayout.asset_dir_for(save), IbPath)
 
     def test_asset_dir_for_produces_sibling_not_child(self):
-        """【P0-A 核心回归】asset_dir_for 必须产出同级目录，而非子目录。
+        """asset_dir_for 必须产出同级目录，而非子目录。
 
         旧 BUG：``save_path + ".assets"`` 经 IbPath.__add__（路径 join）产出
         ``state.json/.assets``（子目录）。修复后须为 ``state.json.assets``（同级）。

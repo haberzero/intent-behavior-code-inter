@@ -2,13 +2,13 @@
 tests/e2e/test_e2e_engine_lifecycle.py
 =======================================
 
-IBCIEngine 生命周期 e2e 测试（PT-TEST-4 area 2）。
+IBCIEngine 生命周期 e2e 测试（area 2）。
 
 验证核心生命周期契约：
 1. 新引擎未封印、无解释器
 2. ``compile_string`` 不封印注册表（编译无副作用于 seal 状态）
 3. ``execute`` 封印注册表（单次执行后不可复用）
-4. 封印后再次 ``execute`` 抛 ``PermissionError``（NEXT_STEPS 指定的核心契约）
+4. 封印后再次 ``execute`` 抛 ``PermissionError``（核心契约）
 5. ``compile_string`` → ``execute`` 分步流程可独立工作并产出输出
 6. 典型用户路径 ``run_string`` 单次运行后封印引擎
 
@@ -56,7 +56,7 @@ class TestEngineLifecycle:
     def test_sealed_registry_reexecute_raises_permission_error(self):
         """封印后再次 execute 必须抛 PermissionError（核心安全契约）。
 
-        这是 NEXT_STEPS 明确指定的契约：防止在已封印注册表上复用引擎。
+        这是契约：防止在已封印注册表上复用引擎。
         """
         eng = _new_engine()
         artifact = eng.compile_string(_SIMPLE_CODE, silent=True)
@@ -94,9 +94,9 @@ class TestEngineLifecycle:
 
 
 class TestEngineRootDirContract:
-    """IBCIEngine 的 project_root 契约（ADR-019 §2：引擎级默认 + 延迟确立）。
+    """IBCIEngine 的 project_root 契约（引擎级默认 + 延迟确立）。
 
-    ADR-019：root_dir 可选；未提供时 project_root 在 run/compile 时确立为 entry_dir。
+    root_dir 可选；未提供时 project_root 在 run/compile 时确立为 entry_dir。
     root-dependent 初始化（Scheduler/plugin 发现）延迟到 _ensure_root_initialized。
     D2 保留：root 经 canonicalize_for_security 规范化（解 symlink）。
     """
@@ -158,16 +158,14 @@ class TestEngineRootDirContract:
         assert eng._explicit_root == os.path.realpath(str(target))
 
     def test_cwd_saved_at_construction(self):
-        """ADR-019 §2 A4：CWD 在构造期单独保存（无上界校验）。"""
+        """A4：CWD 在构造期单独保存（无上界校验）。"""
         import os
         eng = IBCIEngine(auto_sniff=False)
         assert eng._cwd == os.getcwd()
 
     def test_run_relative_entry_canonicalizes_to_absolute(self, tmp_path, monkeypatch):
-        """B1 修复：相对 entry_file 经 canonicalize_for_security → 绝对 entry_dir（§6.1 锚点健全）。
+        """B1 修复：相对 entry_file 经 canonicalize_for_security → 绝对 entry_dir（锚点健全）。
 
-        旧 bug：run() 仅 resolve_dot_segments（词法），相对 entry 产出相对 entry_dir，
-        破坏运行时路径解析。
         """
         entry = tmp_path / "main.ibci"
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
@@ -186,7 +184,7 @@ class TestEngineRootDirContract:
 
 
 class TestPluginSearchPathResolution:
-    """ADR-019 §3 plugin 发现优先级：install > global_plugin > plugin_paths > 嗅探 > 全局(预留)。"""
+    """plugin 发现优先级：install > global_plugin > plugin_paths > 嗅探 > 全局(预留)。"""
 
     @staticmethod
     def _resolve(project_root, auto_sniff=True):
@@ -264,7 +262,7 @@ class TestPluginSearchPathResolution:
         assert x_count == 1
 
     def test_plugin_path_outside_project_root_allowed(self, tmp_path, tmp_path_factory):
-        """ADR-019 §5 B4：plugin_path 可在 project_root 之外（特权只读越界）——resolver 不拒绝。"""
+        """B4：plugin_path 可在 project_root 之外（特权只读越界）——resolver 不拒绝。"""
         import os
         # 独立临时目录（project_root 之外）
         external = tmp_path_factory.mktemp("external_plugins") / "ext"
@@ -277,7 +275,7 @@ class TestPluginSearchPathResolution:
         assert os.path.realpath(str(external)) in paths
 
     def test_inherited_parent_plugins_appended(self, tmp_path):
-        """ADR-019 §6 C2：子引擎继承父 plugin search_paths（附加于自身之后，兜底来源）。"""
+        """C2：子引擎继承父 plugin search_paths（附加于自身之后，兜底来源）。"""
         parent_extra = tmp_path / "parent_plugins"
         parent_extra.mkdir()
         child_root = tmp_path / "child_area"
@@ -290,10 +288,8 @@ class TestPluginSearchPathResolution:
         assert os.path.realpath(str(parent_extra)) in resolved
 
     def test_inherited_global_plugin_keeps_priority(self, tmp_path):
-        """G1 修复：继承的 global_plugin 保持在优先级 2（排在子自身 plugin_paths 之前）。
+        """修复：继承的 global_plugin 保持在优先级 2（排在子自身 plugin_paths 之前）。
 
-        旧 bug：继承的 global_plugin 被混入 inherited_plugin_paths（优先级 6），
-        低于子自身 plugin_paths（优先级 3）——违反 ADR-019 §3 "global_plugin 不被普通优先级覆盖"。
         """
         inh_gp = tmp_path / "inh_global"
         inh_gp.mkdir()
@@ -317,10 +313,10 @@ import json  # noqa: E402
 
 
 class TestEnginePathContextContract:
-    """IBCIEngine 的 PathContext 锚点契约（PT-ARCH-20 D4 + 方案 B）。
+    """IBCIEngine 的 PathContext 锚点契约（D4）。
 
-    方案 B 核心：entry_dir 必须始终是有意义的用户目录。
-    - ``run(entry_file)``：entry_dir = entry_file.parent（§6.1 数据路径契约）
+    核心：entry_dir 必须始终是有意义的用户目录。
+    - ``run(entry_file)``：entry_dir = entry_file.parent（数据路径契约）
     - ``run_string``/``compile_string``：entry_dir = project_root（tempfile 无意义）
     这样 ``_resolve_isolated_path`` 永远读 entry_dir，无需标志位（符合工作模式定论第 4 条）。
     """
@@ -336,10 +332,8 @@ class TestEnginePathContextContract:
         assert eng._path_ctx.entry_dir.to_native() == expected_entry_dir
 
     def test_run_string_sets_entry_dir_to_project_root(self):
-        """【方案 B 核心】run_string 后，entry_dir = project_root，而非 tempdir。
+        """run_string 后，entry_dir = project_root，而非 tempdir。
 
-        历史 BUG：run_string 经 tempfile，entry_dir 退化为系统 temp 目录（对用户无意义），
-        致 ihost.run_isolated 的相对子脚本路径解析失败。
         """
         eng = _new_engine()
         eng.run_string('str x = "hi"\nprint(x)\n', silent=True)
@@ -353,7 +347,7 @@ class TestEnginePathContextContract:
         assert eng._path_ctx.entry_dir.to_native() == eng.root_dir
 
     def test_run_string_entry_dir_not_in_system_temp(self):
-        """run_string 的 entry_dir 绝不能落在系统 temp 目录（方案 B 反向断言）。"""
+        """run_string 的 entry_dir 绝不能落在系统 temp 目录（反向断言）。"""
         import tempfile, os
         eng = _new_engine()
         eng.run_string('str x = "hi"\n', silent=True)
@@ -363,7 +357,7 @@ class TestEnginePathContextContract:
             f"entry_dir 不应是系统 temp：{entry_dir} (sys_temp={sys_temp})"
 
     def test_run_string_uses_synthetic_entry_file(self):
-        """ADR-019 A3：run_string 的 entry_file = 合成 <proj_root>/__string_exec__.ibci（非 tempdir）。"""
+        """A3：run_string 的 entry_file = 合成 <proj_root>/__string_exec__.ibci（非 tempdir）。"""
         eng = _new_engine()
         eng.run_string('str x = "hi"\nprint(x)\n', silent=True)
         assert eng._entry_file is not None

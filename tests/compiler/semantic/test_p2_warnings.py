@@ -1,11 +1,11 @@
 """
-Tests for P2-B (intent_context static call warning) and P2-C (cast validation warning).
+Tests for intent_context static call warning and cast validation warning.
 
-P2-B: intent_context.push() / pop() / fork() / merge() / combine() / clear()
-      called on the class object (not an instance) should emit SEM_090.
+intent_context.push() / pop() / fork() / merge() / combine() / clear()
+called on the class object (not an instance) should emit SEM_090.
 
-P2-C: (TargetType)source_expr where the target axiom's can_convert_from()
-      rejects the source type should emit SEM_091.
+(TargetType)source_expr where the target axiom's can_convert_from()
+rejects the source type should emit SEM_091.
 """
 
 import pytest
@@ -17,7 +17,7 @@ from .conftest import make_context
 
 
 # ============================================================
-# P2-B: intent_context static call warning (SEM_090)
+# intent_context static call warning (SEM_090)
 # ============================================================
 
 
@@ -110,7 +110,7 @@ class TestIntentContextStaticCallWarning:
 
 
 # ============================================================
-# P2-C: Compile-time cast validation (SEM_091)
+# Compile-time cast validation (SEM_091)
 # ============================================================
 
 

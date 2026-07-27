@@ -2,12 +2,12 @@
 tests/e2e/test_e2e_multimodal_file_io.py
 =========================================
 
-e2e 测试：Phase 3 多模态文件 I/O 端到端链路（纯 run_ibci，不触碰解释器内部）。
+e2e 测试：多模态文件 I/O 端到端链路（纯 run_ibci，不触碰解释器内部）。
 
-验证 NEXT_STEPS P0 的端到端要求：
+验证端到端要求：
 1. ``audio x = audio.from_file("test.wav")`` 能编译并执行（image/video 同理）
 2. ``@~ ... $x ... ~`` 能正确接收多模态对象并完成一次行为表达式调用（MOCK 拦截验证）
-3. NEXT_STEPS 文档示例代码在 MOCK 模式下端到端跑通
+3. 文档示例代码在 MOCK 模式下端到端跑通
 
 注：需要直接访问 ``LLMExecutorImpl`` / 构造 IbAudio 的 payload 分发测试位于
 ``tests/runtime/test_runtime_multimodal_dispatch.py``（分层规则禁止 e2e 层导入解释器内部）。
@@ -73,7 +73,7 @@ class TestMultimodalFileRead:
         assert "summary" in lines
 
     def test_full_next_steps_example(self, tmp_path):
-        """NEXT_STEPS 文档示例代码在 MOCK 模式下端到端跑通。"""
+        """文档示例代码在 MOCK 模式下端到端跑通。"""
         path = _write_media(tmp_path, "test.wav")
         code = _MEDIA_PREFIX + (
             f'audio recording = audio.from_file("{path}")\n'

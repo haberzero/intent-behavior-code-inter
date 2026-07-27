@@ -5,8 +5,8 @@ tests/kernel/test_media_axioms.py
 AudioAxiom / ImageAxiom / VideoAxiom 公理层单元测试。
 
 验证多模态类型的注册、能力标志、payload prompt 协议、类型兼容性。
-Per ADR-012: 作为普通类名注册。
-Per ADR-014/016: media 类型是 file_handle 的磁盘型子类；公理层只负责委托。
+作为普通类名注册。
+media 类型是 file_handle 的磁盘型子类；公理层只负责委托。
 """
 
 from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom

@@ -5,12 +5,12 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 
 # =============================================================================
-# 架构边界说明：Interpreter = 纯协调器（P7 后最终架构）
+# 架构边界说明：Interpreter = 纯协调器
 # =============================================================================
 # Interpreter 是单个 IBCI 执行会话的隔离单元。
 # 职责：接受已编译的 Artifact，在独立的运行时上下文中执行它，并返回结果。
 #
-# 最终文件结构（P2-P7 全部完成后）：
+# 最终文件结构：
 # core/runtime/
 # ├── vm/
 # │   ├── handlers.py       ← 唯一 AST → 执行映射（43+ CPS handlers）
@@ -23,7 +23,6 @@ from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 # │   └── primitives/      ← IbFnCallable.call() 调用 vm.run()
 # └── exceptions.py         ← 只剩 ThrownException + 基础架构异常
 #
-# 不存在任何向后兼容包装层或遗留 visit() 路径。
 # VMExecutor CPS 调度循环是唯一的执行入口。
 # Signal 数据对象是唯一的 IBCI 控制流载体。
 # =============================================================================
@@ -100,7 +99,7 @@ class Interpreter:
         return [str(ci)]
 
 
-    # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险（见 PENDING_TASKS.md §10.3）
+    # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
@@ -461,7 +460,7 @@ class Interpreter:
         VMExecutor 在 ``execute_module()`` 与 ``IbUserFunction.call()`` 中作为
         主路径调度器使用（覆盖全部 43 种 AST 节点类型）。
 
-        C13 增强：构造完成后立即把引用写入 ``ExecutionContext.vm_executor``，
+        构造完成后立即把引用写入 ``ExecutionContext.vm_executor``，
         使 ``IbUserFunction.call()`` 等持有 ExecutionContext 的代码不再需要
         通过 ``getattr(self.context, "_interpreter", ...)._get_vm_executor()``
         三级穿透查找。
@@ -602,8 +601,7 @@ class Interpreter:
                 
                 # 通过 VMExecutor（CPS 主路径）预求值复杂表达式 (如 1+2, "hello".upper())。
                 # 关键修复：设置正确的模块上下文，确保符号查找正确。
-                # P1：使用 _get_vm_executor().run() 代替旧递归 visit()，消除一处
-                # 双轨制锚点——预求值不再经过 Expression Eval Path。
+                # 使用 _get_vm_executor().run() 预求值（CPS 主路径）。
                 self.current_module_name = val_info.module_name
                 try:
                     evaluated = self._get_vm_executor().run(val_info.val_uid)
@@ -647,7 +645,7 @@ class Interpreter:
                     user_func = IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class)
                     ib_class.register_method(method_name, user_func)
 
-                    # P0-3: 显式绑定运算符方法（统一初始化路径）
+                    # 显式绑定运算符方法（统一初始化路径）
                     # 如果方法名是运算符dunder方法（如__add__、__eq__等），
                     # 通过公理系统显式绑定到运算符符号，确保运算符派发正确工作
                     if self._is_operator_method(method_name):

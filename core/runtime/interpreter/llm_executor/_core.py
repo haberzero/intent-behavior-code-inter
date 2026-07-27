@@ -1,6 +1,6 @@
 """``LLMExecutorCore`` —— 共享状态与底层能力。
 
-本模块是 ``llm_executor`` 包拆分后的"核心"切片，持有所有 mixin 共享的实例状态，
+本模块是 ``llm_executor`` 包的核心切片，持有所有 mixin 共享的实例状态，
 并提供被 function / behavior 两条执行路径共同调用的底层 LLM 调用入口
 (:meth:`_call_llm`)。
 
@@ -132,7 +132,7 @@ class LLMExecutorCore:
     def _finalize_invoke_result(self, result: Any, execution_context: Optional[IExecutionContext]):
         """``invoke_*`` 系列入口的共用后处理（sync 与 CPS 版语义完全一致）。
 
-        PT-ARCH-5 Group 3：消除 4 个 ``invoke_*`` 方法的近重复后处理。
+        消除 ``invoke_*`` 方法的近重复后处理。
 
         1. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
         2. None-safe 解包：``result.value`` 非空则返回，否则返回 None 单例。
@@ -148,7 +148,7 @@ class LLMExecutorCore:
         失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
 
         ``user_prompt``：
-            - str: 纯文本用户提示词（向后兼容路径）
+            - str: 纯文本用户提示词
             - List[Union[str, dict]]: 含多模态结构化 content blocks（多模态路径）
               列表中 str 元素为纯文本片段，dict 元素为结构化 content block
               (e.g. {"type":"image_url","image_url":{"url":"data:..."}})
@@ -183,11 +183,6 @@ class LLMExecutorCore:
                 # 此类错误与 LLM 输出内容无关，llmexcept retry 对其无效，因此
                 # 直接抛出 ThrownException，跳过 llmexcept 重试循环，
                 # 让外层 try/except LLMCallError（或 LLMError/Exception）捕获。
-                #
-                # NOTE [未来演进 — VM 信号/中断机制]:
-                # 当前方案依赖用户在外层书写 try/except LLMCallError。
-                # 未来 IBCI VM 计划提供类操作系统的信号机制（见 PENDING_TASKS §十四），
-                # 允许用户在语言层面注册基础设施错误处理回调，无需侵入业务逻辑代码。
                 self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"LLM call failed (infra): {e}")
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),

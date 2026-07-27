@@ -309,11 +309,11 @@ print((str)obj.z)
 
 
 # ---------------------------------------------------------------------------
-# User-class equality operator (P0 fix: __eq__ must return bool, not int)
+# User-class equality operator (fix: __eq__ must return bool, not int)
 # ---------------------------------------------------------------------------
 
 class TestE2EClassEquality:
-    """Tests for == / != on user-defined class instances (P0 bug fix)."""
+    """Tests for == / != on user-defined class instances (bug fix)."""
 
     def test_identity_equality_same_reference(self):
         """o1 == o1 should be True (same reference)."""

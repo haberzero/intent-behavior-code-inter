@@ -76,7 +76,7 @@ class _BehaviorMixin:
         if captured_intents is not None:
             if not isinstance(captured_intents, IbIntentContext):
                 # 所有生产者只产出 None 或 IbIntentContext。
-                # 历史的 IntentNode 链表 / 已展平 list 路径已无产生方；命中即为契约违反。
+                # 命中即为契约违反。
                 raise TypeError(
                     f"execute_behavior_expression: captured_intents must be "
                     f"None or IbIntentContext, got {type(captured_intents).__name__}"

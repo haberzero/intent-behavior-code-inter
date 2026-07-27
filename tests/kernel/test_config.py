@@ -2,7 +2,7 @@
 tests/kernel/test_config.py
 ===========================
 
-IbciConfig（ibci.json 项目配置加载）单元测试 —— ADR-019 §6。
+IbciConfig（ibci.json 项目配置加载）单元测试。
 
 覆盖：load（缺失/存在/畸形）、plugin_paths 提取与规范化、global_plugin 提取与规范化、
 相对路径锚定 project_root。

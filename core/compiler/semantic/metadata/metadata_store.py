@@ -1,7 +1,7 @@
 """
 Node-Object-Keyed Metadata Storage
 
-MetadataStore 承载 C2/C3 绑定（node_to_symbol / node_to_type / node_to_loc）。
+MetadataStore 承载 node_to_symbol / node_to_type / node_to_loc 绑定。
 实例不可变：由 Pipeline 在所有 Phase 完成后从合并的 PassOutput 构建。
 """
 

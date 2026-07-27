@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_multi_interpreter.py
 =======================================
 
-多 Interpreter 并发（Layer 2 执行隔离）E2E 测试。
+多 Interpreter 并发（执行隔离）E2E 测试。
 
 覆盖：
 
@@ -13,7 +13,7 @@ tests/e2e/test_e2e_multi_interpreter.py
   排除内置符号和不可序列化对象；
 * 错误传播：子引擎编译失败时 collect 应抛出 RuntimeError；
 * 幂等性保护：对同一 handle 重复 collect 应抛出 RuntimeError；
-* run_isolated（阻塞版）行为不受 M4 影响。
+* run_isolated（阻塞版）行为不受影响。
 """
 import os
 import time
@@ -165,7 +165,7 @@ class TestEngineLayerAPI:
 # ===========================================================================
 
 class TestConcurrency:
-    """验证多个子引擎可以真正并发运行（Layer 2 的核心价值）。"""
+    """验证多个子引擎可以真正并发运行（核心价值）。"""
 
     def test_two_spawns_run_concurrently(self):
         """
@@ -317,7 +317,7 @@ class TestIBCILayerAPI:
 # ===========================================================================
 
 class TestRunIsolatedCompatibility:
-    """确保 M4 新增的 spawn/collect 不破坏既有的同步 run_isolated。"""
+    """确保 spawn/collect 不破坏既有的同步 run_isolated。"""
 
     def test_run_isolated_still_works(self):
         child = _write_child('str x = "sync"\n')
@@ -336,11 +336,11 @@ class TestRunIsolatedCompatibility:
 
 
 # ===========================================================================
-# 5. H3 回归：ihost 路径相对入口目录而非 cwd
+# 5. 回归：ihost 路径相对入口目录而非 cwd
 # ===========================================================================
 
 class TestRunIsolatedPathRelativeToEntryDir:
-    """H3：``ihost.run_isolated`` / ``spawn_isolated`` 的相对路径应基于
+    """``ihost.run_isolated`` / ``spawn_isolated`` 的相对路径应基于
     **调用脚本的入口目录**（与 ``file.read("./...")`` / ``isys.entry_dir()`` 一致），
     而不是基于 cwd。"""
 
@@ -378,10 +378,10 @@ class TestRunIsolatedPathRelativeToEntryDir:
         assert "parent_done" in parent_out
 
     def test_run_isolated_child_outside_parent_root_now_rejected(self, tmp_path, monkeypatch, capsys):
-        """ADR-019 §5 隔离反转：子 entry 在父 project_root 外 → 拒绝（报错）。
+        """隔离反转：子 entry 在父 project_root 外 → 拒绝（报错）。
 
         取代旧 test_run_isolated_absolute_path_still_works（旧测试断言"绝对路径直通、子可越父 root"，
-        该语义已被 ADR-019 §5 反转——现阶段子脚本不得超出父 proj_root）。
+        该语义已被反转——现阶段子脚本不得超出父 proj_root）。
         """
         child_path = tmp_path / "absolute_child.ibci"  # 在 parent_dir 之外
         child_path.write_text(

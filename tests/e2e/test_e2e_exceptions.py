@@ -5,8 +5,6 @@ tests/e2e/test_e2e_exceptions.py
 e2e 异常体系测试：LLM 异常层级（E5）+ 用户自定义异常 / NetworkError
 inheritance / LLMError 子类化。
 
-从 tests/e2e/test_e2e_ai_mock.py 拆分 — 详见
-docs/TESTS_REORGANIZATION_TASK.md Step 11。
 """
 
 import os
@@ -124,9 +122,6 @@ class TestE2EUserDefinedException:
     """
     端到端验证用户可继承内置 `Exception` 体系定义自定义异常。
 
-    背景：在 `EXCEPTION_SPEC` 由 `IbSpec` 升级为 `TypeDef` 之前，
-    `class MyError(Exception):` 会在语义分析阶段报 SEM_001
-    （"Base class 'Exception' is not defined or not a class"）。
     本测试组锁定升级后的可用能力，并以注释形式标注一个已知
     pre-existing 限制：`except X as e:` 中 e 的类型仍按基类公理解析，
     访问子类新增字段需要先 `(MyError)e` 强制转换。
@@ -269,15 +264,9 @@ except LLMError as e:
 
 class TestExceptionAcrossFunctionBoundary:
     """
-    H1 回归：用户异常跨函数调用边界类型/字段必须保留。
+    回归：用户异常跨函数调用边界类型/字段必须保留。
 
-    历史 bug：``core/runtime/vm/handlers.py::vm_handle_IbCall`` 的兜底
-    ``except Exception`` 把 ``ThrownException`` 包装成 Python ``RuntimeError``，
-    导致：
-      1) ``except <SpecificType>`` 不再匹配，调用方只能落到 ``except Exception``；
-      2) 用户字段（``e.message`` / 子类字段）被 wrapper 文本替换。
 
-    修复见 2026-05-14 PR。
     """
 
     def test_user_exception_subclass_preserved_across_call_boundary(self):

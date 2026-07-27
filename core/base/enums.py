@@ -36,16 +36,16 @@ class Visibility(Enum):
     """Whether a symbol is visible without an explicit import."""
 
     PRELUDE_VISIBLE = auto()    # Automatically visible (e.g. print, len, primitive types)
-    IMPORT_GATED = auto()       # Requires an explicit ``import`` (ADR-020 §A)
+    IMPORT_GATED = auto()       # Requires an explicit ``import``
     SCOPE_PRIVATE = auto()      # Not exported from its defining scope
 
 
 class StorageModel(Enum):
-    """Type-level backing model for IbSpec (ADR-016).
+    """Type-level backing model for IbSpec.
 
-    G1.5 only lands the field; dispatch logic is intentionally disabled
-    until the G3 disk-backed storage stage.
+    Only lands the field; dispatch logic is intentionally disabled
+    until the disk-backed storage stage.
     """
 
     MEMORY_BACKED = auto()      # Default for all current types
-    DISK_BACKED = auto()        # FileHandle / media (gated by PT-ARCH-17/18)
+    DISK_BACKED = auto()        # FileHandle / media

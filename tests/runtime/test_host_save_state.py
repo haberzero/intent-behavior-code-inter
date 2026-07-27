@@ -2,15 +2,12 @@
 tests/runtime/test_host_save_state.py
 ======================================
 
-HostService.save_state / load_state 资产外化集成测试（PT-ARCH-19 P0-B 第 4 项）。
+HostService.save_state / load_state 资产外化集成测试（第 4 项）。
 
-守护 P0-A SnapshotLayout BUG 的真实运行时影响路径：
+守护 SnapshotLayout BUG 的真实运行时影响路径：
 - save_state 必须把文本资产外化到 ``<state>.assets`` **同级**目录（非子目录）；
 - load_state 必须从同一同级目录读回资产（round-trip）。
 
-BUG 根因（已修）：``SnapshotLayout.asset_dir_for`` 曾用 ``save_path + ".assets"``，
-经 ``IbPath.__add__``（路径 join）产出 ``state.json/.assets`` 子目录，致 win32 save_state
-触发 PermissionError/NotADirectoryError，load_state 找不到资产目录而静默丢失。
 
 设计：HostService 用最小桩构造（参考 test_runtime_host_collect.py），
 ``snapshot`` 注入受控资产数据；``RuntimeDeserializer`` 替换为捕获桩以隔离重量级反序列化。
@@ -57,10 +54,10 @@ def _make_service():
 
 
 class TestSaveStateAssetsExternalization:
-    """save_state 的资产外化文件布局（P0-A BUG 直接运行时守护）。"""
+    """save_state 的资产外化文件布局（BUG 直接运行时守护）。"""
 
     def test_assets_dir_created_as_sibling_not_child(self, tmp_path, monkeypatch):
-        """【P0-A 核心 e2e 回归】资产目录必须是 state 文件的同级，而非子目录。"""
+        """资产目录必须是 state 文件的同级，而非子目录。"""
         service = _make_service()
         monkeypatch.setattr(
             service, "snapshot",

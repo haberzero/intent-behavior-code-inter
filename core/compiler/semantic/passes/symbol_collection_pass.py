@@ -81,7 +81,7 @@ class SymbolCollector:
         # 状态变量
         self.current_class: Optional[IbSpec] = None
 
-        # 临时使用 registry 的 _any_desc
+        # 使用 registry 的 _any_desc
         self._any_desc = context.registry.resolve("any")
 
     def visit(self, node: ast.IbASTNode):
@@ -120,7 +120,7 @@ class SymbolCollector:
             if self.current_class:
                 if sym.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION):
                     llm_kind = "llm_method" if sym.kind == SymbolKind.LLM_FUNCTION else "method"
-                    # P0-2: Store full method signature in members
+                    # Store full method signature in members
                     method_spec = MethodMemberSpec(
                         name=sym.name,
                         kind=llm_kind,
@@ -202,7 +202,7 @@ class SymbolCollector:
             visibility=Visibility.IMPORT_GATED,
         )
 
-        # P0-2: Extract parameter types and return type from AST and store in spec
+        # Extract parameter types and return type from AST and store in spec
         param_type_refs = []
         for arg in node.args:
             # All args are now IbArg with optional annotation field
@@ -282,7 +282,7 @@ class SymbolCollector:
         return None
 
     def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:
-        """Convert an AST annotation node to a TypeRef (for P0-2 operator support)."""
+        """Convert an AST annotation node to a TypeRef."""
         if isinstance(annotation, ast.IbName):
             return TypeRef.of(annotation.id)
         elif hasattr(ast, 'IbGenericType') and isinstance(annotation, ast.IbGenericType):

@@ -1,8 +1,7 @@
 """
 IBCI InstallPaths - 内置模块/安装根路径服务（canonical）。
 
-Per ADR-015 D3：本服务是 IBCI 安装根（"ibci_modules 在哪"）的**唯一**计算点。
-历史上 4 处独立用 ``__file__`` 遍历（3 种不同公式）计算此路径，导致碎片化。
+本服务是 IBCI 安装根（"ibci_modules 在哪"）的**唯一**计算点。
 所有需要内置模块路径的站点都应委托本服务。
 
 设计原则：
@@ -10,8 +9,7 @@ Per ADR-015 D3：本服务是 IBCI 安装根（"ibci_modules 在哪"）的**唯�
 - 零 ``os.path`` 在调用方——本服务是 IBCI 与 Python ``__file__`` 的唯一交互点。
 - 返回 ``IbPath``，与统一路径体系一致。
 
-命名（ADR-020 §E）：原 ``BuiltinPaths``（"builtin" 一词五义之一）→ ``InstallPaths``，
-精确表达"安装根路径"语义。
+``InstallPaths``：精确表达"安装根路径"语义。
 """
 from __future__ import annotations
 

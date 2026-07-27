@@ -29,7 +29,7 @@ class TypeComponent(BaseComponent):
             base_type = self._loc(ast.IbName(id=ID_AUTO, ctx='Load'), name_token)
         elif self.stream.match(TokenType.FN):
             # Allow 'fn' as a type annotation: fn f = myFunc
-            # D3: also handle callable signature form: fn[(param_types) -> return_type]
+            # also handle callable signature form: fn[(param_types) -> return_type]
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id=ID_FN, ctx='Load'), name_token)
             # Peek ahead: if '[' follows, try to parse as a callable signature.
@@ -71,12 +71,12 @@ class TypeComponent(BaseComponent):
         return base_type
 
     # ---------------------------------------------------------------------- #
-    # D3: callable signature parsing                                          #
+    # callable signature parsing                                          #
     # ---------------------------------------------------------------------- #
 
     def _try_parse_callable_sig(self, fn_token) -> ast.IbCallableType:
         """
-        Speculatively attempt to parse a D3 callable signature of the form::
+        Speculatively attempt to parse a callable signature of the form::
 
             fn[(param_type, ...) -> return_type]
 

@@ -6,7 +6,7 @@ from core.runtime.interfaces import (
 )
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
-# 顶层导入核心实现类，已通过接口化解除物理循环依赖
+# 顶层导入核心实现类，通过接口化解除物理循环依赖
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.host.service import HostService
@@ -38,9 +38,9 @@ class RuntimeSchedulerImpl:
          创建并初始化一个新的解释器实例。
         承担了原 Engine._prepare_interpreter 的装配职责。
 
-        注：isolation 参数保留以维持 IRuntimeScheduler 协议兼容，但当前实现
+        注：isolation 参数保留，但当前实现
         不再在调度器内部分支处理隔离——隔离执行由 Engine.request_isolated_run
-        通过新建 Engine 实例完成（ADR-019 §5）。
+        通过新建 Engine 实例完成。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Spawning new interpreter instance (Isolation: {isolation})")
         
@@ -196,8 +196,7 @@ class RuntimeSchedulerImpl:
                 self._main_instance_id = None
 
     def _configure_factory(self, factory: Any):
-        """ 配置工厂的 IoC 注册表。从 Engine 迁移而来。"""
-        # P5：旧 Handler 类（StmtHandler/ExprHandler/ImportHandler）已删除；
+        """ 配置工厂的 IoC 注册表。"""
         # VMExecutor CPS dispatch table 是唯一的 AST→执行映射，无需注册。
         
         # 注册 LLM 执行器

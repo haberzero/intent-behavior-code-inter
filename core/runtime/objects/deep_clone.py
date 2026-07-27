@@ -3,11 +3,7 @@ core/runtime/objects/deep_clone.py
 
 通用的 IbObject 深克隆辅助。
 
-历史
-----
-原实现集中在 ``LLMExceptFrame._try_deep_clone``，仅服务于 llmexcept 快照。
-随着 snapshot 语义被澄清为「定义时深克隆、调用时再克隆、全过程无状态可重入」，
-snapshot 路径也需要同样的深克隆能力。把它抽到独立模块以避免循环依赖与重复实现。
+snapshot 路径也需要同样的深克隆能力，抽到独立模块以避免循环依赖与重复实现。
 
 语义约束
 --------
@@ -82,8 +78,8 @@ def try_deep_clone(
         return placeholder_dict
 
     # ``IbIntentContext`` Python 值（``intent_context`` 实例的 ``_ctx`` 字段）：
-    # 调用 ``fork()`` 得到值快照。PT-2.1：使 ``intent_context`` 作为类字段
-    # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义——retry body 内对
+    # 调用 ``fork()`` 得到值快照。使 ``intent_context`` 作为类字段
+    # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义--retry body 内对
     # ctx 的修改不会污染保存的快照。
     #
     # 用鸭子类型（``hasattr(val, "fork")`` + ``hasattr(val, "get_active_intents")``）
@@ -94,8 +90,6 @@ def try_deep_clone(
         return forked
 
     # 内存型 ``IbValue`` 子类（如 media / file_handle）：克隆 payload 与字段。
-    # 之前 ``type(val) is KernelIbObject`` 的严格判定会让所有 IbValue 子类
-    # 直接滑落为 "不可克隆"，导致 media 对象在 snapshot 中静默丢失。
     if isinstance(val, IbValue):
         new_val = type(val).__new__(type(val))
         new_val.ib_class = val.ib_class

@@ -1,9 +1,7 @@
 """
 IBCI ModuleNameSpace - 模块名 ↔ 相对路径映射服务（canonical）。
 
-Per ADR-015 D4：历史上模块名与相对路径的互转靠散在两文件的字符串 ``replace``
-（``scheduler.py`` 的 ``replace(os.sep, '.')`` 与 ``resolver.py`` 的 ``replace('.', os.sep)``），
-耦合到 OS 分隔符，是隐式双向约定。本服务是其唯一规范实现。
+本服务是模块名与相对路径互转的唯一规范实现。
 
 约定：
 - IBCI 模块名以 ``.`` 分隔（如 ``pkg.sub.mod``）。

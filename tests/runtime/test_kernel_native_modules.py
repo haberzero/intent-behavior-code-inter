@@ -3,7 +3,7 @@
 tests/kernel/test_kernel_native_modules.py
 ==========================================
 
-ADR-020 G2：ai/ihost/idbg/isys 内核原生化验证。
+ai/ihost/idbg/isys 内核原生化验证。
 """
 import json
 import os

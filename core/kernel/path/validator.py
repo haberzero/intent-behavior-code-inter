@@ -3,10 +3,9 @@ IBCI Path Validator - 路径安全验证器
 
 提供沙箱边界检查、路径安全性验证、以及 FS 感知的规范化（符号链接解析）。
 
-Per ADR-017：``canonicalize_for_security`` 是全仓**唯一**的 ``os.path.realpath``
+``canonicalize_for_security`` 是全仓**唯一**的 ``os.path.realpath``
 调用点（FS 感知规范化的集中位置）。IbPath 保持纯字符串/可序列化，
-FS 感知操作归本类（安全边界成员）。scheduler/resolver/permissions 三处历史
-各自调 realpath，现统一委托本方法。
+FS 感知操作归本类（安全边界成员）。scheduler/resolver/permissions 统一委托本方法。
 """
 import os
 from typing import Tuple
@@ -26,7 +25,7 @@ class PathValidator:
         """
         检查 child 是否在 parent 内部（沙箱边界判定的核心）。
 
-        平台感知大小写（R1 修复）：大小写不敏感 FS（win32 等）需用 ``os.path.normcase``
+        平台感知大小写：大小写不敏感 FS（win32 等）需用 ``os.path.normcase``
         归一，否则 ``/Proj/child`` 会被误判为不在 ``/proj`` 内 → 沙箱误拒/漏判。
         POSIX 上 normcase 为恒等，行为不变。
 
@@ -180,7 +179,7 @@ class PathValidator:
         """
         FS 感知规范化：``os.path.realpath``（解析符号链接）+ IbPath 规范化。
 
-        **全仓唯一的 ``os.path.realpath`` 调用点**（per ADR-017）。
+        **全仓唯一的 ``os.path.realpath`` 调用点**。
         所有需要符号链接解析的安全边界（scheduler/resolver/permissions 的沙箱检查）
         都应委托本方法，而非各自独立调 ``os.path.realpath``。
 

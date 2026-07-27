@@ -46,7 +46,7 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
-        # 规范路径解析器（entry_dir 单锚点，§6.1 契约的唯一实现）。
+        # 规范路径解析器（entry_dir 单锚点）。
         self._path_resolver = PathResolver(
             entry_dir=IbPath.from_native(entry_dir) if entry_dir else None
         )
@@ -130,7 +130,7 @@ class ExecutionContextImpl:
 
     @property
     def vm_executor(self) -> Any:
-        """C13：当前 ExecutionContext 关联的 VMExecutor（由 Interpreter 注入）。
+        """当前 ExecutionContext 关联的 VMExecutor（由 Interpreter 注入）。
 
         当 IbUserFunction.call() 等代码需要驱动函数体语句的 CPS 执行时，应通过
         本属性获取 VMExecutor，而不是穿透到 ``self._interpreter`` 上调用
@@ -172,7 +172,7 @@ class ExecutionContextImpl:
 
     @property
     def permission_manager(self) -> Any:
-        """PT-ARCH-25: 由 Interpreter 注入，供 file_handle/media I/O 做沙箱校验。"""
+        """由 Interpreter 注入，供 file_handle/media I/O 做沙箱校验。"""
         return getattr(self, "_permission_manager", None)
 
     @permission_manager.setter
@@ -181,15 +181,15 @@ class ExecutionContextImpl:
 
     @property
     def llmexcept_body_depth(self) -> int:
-        """PT-ARCH-27: 当前处于 llmexcept retry body 的嵌套深度（0 = 不在其中）。"""
+        """当前处于 llmexcept retry body 的嵌套深度（0 = 不在其中）。"""
         return getattr(self, "_llmexcept_body_depth", 0)
 
     def enter_llmexcept_body(self) -> None:
-        """PT-ARCH-27: 进入 llmexcept retry body 时调用。"""
+        """进入 llmexcept retry body 时调用。"""
         self._llmexcept_body_depth = self.llmexcept_body_depth + 1
 
     def exit_llmexcept_body(self) -> None:
-        """PT-ARCH-27: 退出 llmexcept retry body 时调用（需与 enter 配对）。"""
+        """退出 llmexcept retry body 时调用（需与 enter 配对）。"""
         self._llmexcept_body_depth = max(0, self.llmexcept_body_depth - 1)
 
     @property
@@ -275,7 +275,7 @@ class ExecutionContextImpl:
 
     def resolve_path(self, path: str) -> IbPath:
         """
-        所有相对路径的统一解析入口（委托 PathResolver，§6.1 契约的唯一实现）。
+        所有相对路径的统一解析入口（委托 PathResolver）。
 
         所有相对路径都基于入口文件目录解析，确保无论在哪个 IBCI 文件中执行，
         相对路径都相对于入口文件目录。

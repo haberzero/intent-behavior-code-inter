@@ -34,7 +34,7 @@ class ModuleLoader(IModuleLoader):
     负责在执行阶段动态加载模块实现，并注入所需的依赖。
     """
     def __init__(self, search_paths: List[str], capability_registry: Optional[Any] = None):
-        # 仅做分隔符规范化；调用方保证路径为绝对路径（ADR-019）。
+        # 仅做分隔符规范化；调用方保证路径为绝对路径。
         self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
         self.capability_registry = capability_registry
 
@@ -204,7 +204,7 @@ class ModuleLoader(IModuleLoader):
                 if not module_name:
                     continue
 
-                # ADR-020 G2：kernel-native 模块已在构造期预注册，不再从磁盘加载覆盖
+                # kernel-native 模块已在构造期预注册，不再从磁盘加载覆盖
                 if interop.host_interface.is_kernel_native(module_name):
                     loaded_modules.add(entry)
                     continue
@@ -237,7 +237,7 @@ class ModuleLoader(IModuleLoader):
                         # 其次寻找导出名为 implementation 的对象
                         implementation = mod.implementation
                     else:
-                        # 兼容直接导出的类或函数（如有必要可扩展）
+                        # 支持直接导出的类或函数（如有必要可扩展）
                         continue
 
                     # 1. 自动依赖注入 (基于 setup 方法签名)

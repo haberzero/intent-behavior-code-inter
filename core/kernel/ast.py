@@ -467,7 +467,7 @@ class IbLambdaExpr(IbExpr):
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     capture_mode: str = 'lambda'  # 'lambda' | 'snapshot'
-    # D2：表达式侧返回类型标注节点（IbName/IbSubscript 等）。
+    # 表达式侧返回类型标注节点（IbName/IbSubscript 等）。
     # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
     # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。
     returns: Optional['IbExpr'] = None
@@ -491,7 +491,7 @@ class IbCallableType(IbExpr):
     ``fn[...]`` appears in a type-annotation context and the subscript
     content follows the callable signature form ``(type_list) -> type``.
 
-    D3: supports ``fn[(param_types) -> return_type]`` syntax for HOF parameter
+    supports ``fn[(param_types) -> return_type]`` syntax for HOF parameter
     type annotations and variable declaration type overrides.
 
     Examples::

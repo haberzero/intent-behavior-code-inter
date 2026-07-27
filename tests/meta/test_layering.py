@@ -5,7 +5,7 @@ tests/meta/test_layering.py
 CI enforcement: Prevent test-layering red-line violations.
 
 The test suite is organized into layers with explicit boundaries
-(see tests/README.md §"分层红线"):
+(see tests/README.md):
 
 - ``kernel/``     — pure data-structure unit tests; MUST NOT start IBCIEngine
 - ``compiler/``   — compile-only tests; MUST NOT call run_ibci()
@@ -97,8 +97,7 @@ class TestCompilerLayerRedLine:
         src = _read_source(test_file)
         if test_file.name in _COMPILER_KNOWN_RUN_IBCI_VIOLATIONS:
             pytest.skip(
-                f"{test_file.name}: known mixed-concerns file pending split "
-                f"(see PENDING_TASKS §八 PT-TEST-2)"
+                f"{test_file.name}: known mixed-concerns file pending split"
             )
         assert "run_ibci(" not in src, (
             f"{test_file.name}: compiler/ layer must not call run_ibci() "

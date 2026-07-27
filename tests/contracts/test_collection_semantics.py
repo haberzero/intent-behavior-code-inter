@@ -21,10 +21,6 @@ from tests.conftest import run_ibci, expect_runtime_error
 
 class TestListOperationInvariants:
     """Validate list operation semantics.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §4 Built-in Collections
-    - docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md §4.2
     """
 
     def test_list_index_bounds_checked(self):
@@ -118,10 +114,6 @@ print(len(nums))
 
 class TestDictOperationInvariants:
     """Validate dict operation semantics.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §4 Built-in Collections
-    - docs/TEST_COVERAGE_ANALYSIS_2026_05_13.md §4.2
     """
 
     def test_dict_get_with_default(self):
@@ -204,9 +196,6 @@ print(d["a"])
 
 class TestStringOperationInvariants:
     """Validate string operation semantics.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §4 Built-in Types
     """
 
     def test_str_index_bounds_checked(self):

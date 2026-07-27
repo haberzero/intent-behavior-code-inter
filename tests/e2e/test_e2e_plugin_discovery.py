@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_plugin_discovery.py
 ======================================
 
-ADR-019 §3 plugin 发现优先级的端到端验证：
+plugin 发现优先级的端到端验证：
 - ibci.json 中 ``plugin_paths`` 配置的路径能实际被 ``import`` 解析；
 - ``global_plugin`` 路径同样能实际被 ``import`` 解析；
 - 显式 ``plugin_paths`` 配置会抑制嗅探兜底。

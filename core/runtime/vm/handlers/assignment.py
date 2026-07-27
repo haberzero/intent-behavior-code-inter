@@ -1,7 +1,6 @@
 """
 core.runtime.vm.handlers.assignment — 赋值 / global / nonlocal CPS handler。
 
-由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Optional
@@ -31,11 +30,10 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     ``max(T_a, T_b, ..)`` 而非 ``sum``。
 
     所有赋值目标（IbName / IbTypeAnnotatedExpr / IbAttribute / IbSubscript /
-    IbTuple 解包）均通过 CPS ``_vm_assign_to_target`` 处理，不再穿透到
-    ``StmtHandler._assign_to_target`` 递归路径。
+    IbTuple 解包）均通过 CPS ``_vm_assign_to_target`` 处理。
 
-    is_callable_instance 路径改用 ``yield value_uid``——``vm_handle_IbBehaviorExpr``
-    已完整实现 fn_callable 模式的 IbBehavior 包装，无需 fallback_visit。
+    is_callable_instance 路径：``yield value_uid``，``vm_handle_IbBehaviorExpr``
+    已完整实现 fn_callable 模式的 IbBehavior 包装。
     """
     executor.runtime_context.set_last_llm_result(None)
     value_uid = node_data.get("value")
@@ -103,7 +101,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 兜底：让下面的同步路径继续执行（极少触发）
 
     # is_callable_instance 路径：vm_handle_IbBehaviorExpr 已完整实现 fn_callable 模式
-    # 的 IbBehavior 包装，故无需 fallback_visit——直接 yield 走 CPS 调度。
+    # 的 IbBehavior 包装，直接 yield 走 CPS 调度。
     value = yield value_uid
 
     last = executor.runtime_context.get_last_llm_result()

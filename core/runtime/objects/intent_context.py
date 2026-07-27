@@ -167,8 +167,7 @@ class IbIntentContext:
 
         语义：**REPLACE** — 调用后 self 的 ``_intent_top`` / ``_smear_queue``
         / ``_override`` 与 ``snapshot`` 完全一致（全局意图保持不变）。
-        这是 LLMExceptFrame restore 历史路径与 ``intent_context.merge(other)``
-        OOP API 共享的实现：均为"用 other 内容覆盖 self"。
+        这是 ``intent_context.merge(other)`` 的实现：均为"用 other 内容覆盖 self"。
 
         要做加法式合并（保留 self 已有意图，再叠加 other 的意图）请使用
         :meth:`combine`。
@@ -188,7 +187,7 @@ class IbIntentContext:
         override 取 other 的（若 other 未设置则保留 self 原值）。全局意图
         不参与合并（属 Engine 级数据）。
 
-        典型场景（PT-2.1 多 intent_context 组合）::
+        典型场景::
 
             intent_context base = intent_context.get_current()
             intent_context extra = intent_context()
@@ -245,8 +244,7 @@ class IbIntentContext:
     def _remove_by_tag(self, tag: str) -> bool:
         """按标签移除意图（栈顶优先）。
 
-        通过重建不含目标节点的新链表来实现移除，保证结构共享安全
-        （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
+        通过重建不含目标节点的新链表来实现移除，保证结构共享安全。
         """
         intents: List[Any] = []
         found = False
@@ -268,8 +266,7 @@ class IbIntentContext:
     def _remove_by_content(self, content: str) -> bool:
         """按内容移除意图（栈顶优先）。
 
-        通过重建不含目标节点的新链表来实现移除，保证结构共享安全
-        （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
+        通过重建不含目标节点的新链表来实现移除，保证结构共享安全。
         """
         intents: List[Any] = []
         found = False
@@ -294,7 +291,7 @@ class IbIntentContext:
     def to_prompt(self) -> str:
         """渲染当前意图上下文为 LLM 提示词友好的多行文本。
 
-        用于 PT-2.1：把 ``intent_context`` 实例注入到 behavior 表达式的
+        把 ``intent_context`` 实例注入到 behavior 表达式的
         ``@~ ... $ctx ... ~`` 动态变量替换路径。提示词内容形如：
 
             意图上下文：

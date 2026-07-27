@@ -1,7 +1,6 @@
 """
 core.runtime.vm.handlers.declarations — 模块 / 函数 / 类 / import 定义 CPS handler。
 
-由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Dict
@@ -31,7 +30,7 @@ def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     内联 ``ImportHandler.visit_IbImport`` 逻辑：通过 ``module_manager``
     加载模块并调用 ``runtime_context.define_variable`` 绑定到当前作用域。
-    无需递归 ``visit()``，故无 yield——``if False: yield`` 满足调度协议。
+    ``if False: yield`` 满足调度协议（维持生成器签名）。
     """
     if False:
         yield

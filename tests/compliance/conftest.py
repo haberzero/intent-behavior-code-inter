@@ -6,8 +6,6 @@ tests/compliance/conftest.py
 
 提取自原 3 个文件本地副本：``test_concurrent_llm.py`` / ``test_execution_isolation.py``
 / ``test_memory_model.py``。
-
-详见 docs/TESTS_REORGANIZATION_TASK.md Step 3。
 """
 import os
 

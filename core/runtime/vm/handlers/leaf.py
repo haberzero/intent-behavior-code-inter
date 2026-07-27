@@ -1,7 +1,6 @@
 ﻿"""
 core.runtime.vm.handlers.leaf — 叶子 / 基础表达式 CPS handler。
 
-由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Dict
@@ -196,7 +195,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = yield from _vm_call_fn_callable(executor, func, args)
         return result
 
-    # IbBehavior / IbLLMFunction: CPS 内联以使 LLM 帧受 VM 调度管理（NS-1）。
+    # IbBehavior / IbLLMFunction: CPS 内联以使 LLM 帧受 VM 调度管理。
     if isinstance(func, IbValue) and func.ib_class.name == "behavior":
         result = yield from _vm_invoke_behavior(executor, func, args)
         return result
@@ -291,8 +290,8 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     若目标类型描述符或目标 IbClass 缺失，按既有保守语义直接返回原值。
 
     LLM-aware: 当转换失败且处于 llmexcept 保护帧内时，通过 LLMResult 信号不确定性
-    以便 llmexcept 重试，而非直接抛出异常。此逻辑从 IbString.cast_to() 迁移至此，
-    因为 LLM 不确定性检测属于 VM handler 层职责，不应由原始包装层越层访问。
+    以便 llmexcept 重试，而非直接抛出异常。LLM 不确定性检测属于 VM handler 层职责，
+    不应由原始包装层越层访问。
     """
     value = yield node_data.get("value")
     target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)

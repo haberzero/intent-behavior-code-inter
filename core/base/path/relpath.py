@@ -1,9 +1,8 @@
 """
 IBCI 相对路径计算辅助（canonical）。
 
-Per ADR-015 D6：``safe_relpath`` 历史上位于 ``core/base/path_utils.py``（为绕开
-``os.path.relpath`` 的 Windows 跨盘 ``ValueError`` 而存在的 workaround 文件）。
-统一化后迁入 path 包，使所有路径计算内聚于一处。
+``safe_relpath`` 处理 ``os.path.relpath`` 的 Windows 跨盘 ``ValueError``。
+统一化于 path 包，使所有路径计算内聚于一处。
 
 注：``os.path.relpath`` 本身是合法的 OS 边界操作（处理 ``..`` 的相对路径计算）；
 本函数在其基础上增加跨盘容错（跨盘时相对路径数学上未定义，返回绝对路径）。

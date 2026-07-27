@@ -2,7 +2,7 @@
 tests/runtime/test_runtime_host_collect.py
 ===========================================
 
-HostService.collect 委托契约测试（PT-TEST-4 area 4，PT-TEST-4 最后一项）。
+HostService.collect 委托契约测试（area 4，最后一项）。
 
 ``HostService.collect`` 是编排者委托的薄包装（``core/runtime/host/service.py``）：
 - 无 orchestrator 时抛 ``RuntimeError``（守护分支）

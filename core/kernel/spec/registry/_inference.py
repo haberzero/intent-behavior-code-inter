@@ -223,7 +223,7 @@ class _InferenceMixin:
         if spec.kind == TypeKind.CLASS.value and op == "not" and other is None:
             return self.resolve("bool")
 
-        # P0-2: Check if user-defined class has operator method in its members
+        # Check if user-defined class has operator method in its members
         if spec.kind == TypeKind.CLASS.value and spec.members:
             # Map operator symbol to dunder method name
             op_to_method = {

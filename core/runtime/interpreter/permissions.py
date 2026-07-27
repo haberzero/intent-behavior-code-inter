@@ -11,7 +11,7 @@ class PermissionManager:
     使用 IBCI PathValidator 进行安全验证，完全独立于 Python os.path。
     """
     def __init__(self, root_dir: str):
-        # ADR-019 D2/Stage D：root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
+        # root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
         self._project_root = IbPath.from_native(root_dir)
         self.root_dir = root_dir
         self._external_access_enabled = False

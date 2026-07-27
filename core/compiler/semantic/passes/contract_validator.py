@@ -8,7 +8,7 @@ from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 class ContractValidator:
     """
     全局契约校验器。
-    在系统启动前（STAGE 7），对所有已注册的类进行深度审计，
+    在系统启动前，对所有已注册的类进行深度审计，
     确保方法签名对齐父类契约（协变/逆变）以及公理契约。
     """
     def __init__(self, registry: Any, issue_tracker: IssueTracker, debugger: Optional[CoreDebugger] = None):

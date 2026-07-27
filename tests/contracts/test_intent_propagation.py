@@ -24,7 +24,6 @@ class TestIntentPropagation:
     """Validate intent propagation across frames and scopes.
 
     References:
-    - IBCI_SYNTAX_REFERENCE.md §6 Intent System
     - tests/e2e/test_e2e_intent.py
     """
 
@@ -75,10 +74,6 @@ print(y)
 
 class TestIntentPriority:
     """Validate intent mode and role priority rules.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §6.2 Intent Modes
-    - docs/VM_AND_INTERPRETER_DESIGN.md §7
     """
 
     def test_override_replaces_existing(self):
@@ -218,9 +213,6 @@ else:
 
 class TestIntentControlFlow:
     """Validate intent behavior in control flow.
-
-    References:
-    - tests/e2e/test_e2e_intent.py (legacy)
     """
 
     def test_intent_in_loop_iteration(self):

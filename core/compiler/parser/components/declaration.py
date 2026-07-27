@@ -102,7 +102,7 @@ class DeclarationComponent(BaseComponent):
         elif explicit_fn:
             # 'fn' keyword already consumed — callable type inference
             type_token = self.stream.previous()
-            # D3: check for fn[(...)→(...)] callable signature form before
+            # check for fn[(...)→(...)] callable signature form before
             # defaulting to bare fn type annotation.
             if self.stream.check(TokenType.LBRACKET):
                 callable_sig = self.type_def._try_parse_callable_sig(type_token)

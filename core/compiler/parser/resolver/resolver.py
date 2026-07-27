@@ -23,7 +23,7 @@ class ModuleResolver:
     Acts as the Single Source of Truth for path resolution.
     """
     def __init__(self, root_dir: str):
-        # ADR-019 D2/Stage D：root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
+        # root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
         self._project_root = IbPath.from_native(root_dir)
         self.root_dir = root_dir
         # Extensions to probe, in order of preference
@@ -74,7 +74,7 @@ class ModuleResolver:
             suffix = module_name[level:]
             
             # Start from the directory containing the importer file
-            # ADR-019 Stage D：经 IbPath 规范化（替代散点 os.path.abspath/dirname——门槛 A 收口）。
+            # 经 IbPath 规范化（替代散点 os.path.abspath/dirname）。
             current_dir = IbPath.from_native(context_file).resolve_dot_segments().parent
             current_dir = current_dir.to_native() if current_dir is not None else ""
 

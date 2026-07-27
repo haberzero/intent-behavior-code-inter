@@ -284,7 +284,7 @@ class IbBehavior(IbValue):
         进入临时子作用域并绑定参数与闭包 cell，再委托给 executor。executor
         在 prompt 解析阶段查找 ``$name`` 时即可读取到已绑定的值。
 
-        NS-3：EC 解析优先级 —— 调用现场 ContextVar > 定义时刻字段。
+        EC 解析优先级：调用现场 ContextVar > 定义时刻字段。
         VM CPS 主路径（``_vm_invoke_behavior``）不走本方法；本方法仅为同步后备。
         """
         executor = self.ib_class.registry.get_llm_executor()

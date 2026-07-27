@@ -183,7 +183,7 @@ class TypeDef(IbSpec):
     Type-reference fields are stored as :class:`TypeRef` (frozen, hashable,
     structurally recursive).  All access goes through the TypeRef API
     (``spec.return_type.head``, ``[t.head for t in spec.param_types]``, …);
-    there are no legacy flat-string accessors.
+    there are no flat-string accessors.
     """
 
     # -- Function-like signature (FUNCTION + BOUND_METHOD + CALLABLE_INSTANCE

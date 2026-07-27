@@ -24,7 +24,6 @@ class TestCPSExecutionModel:
     """Validate CPS execution model guarantees.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §2 CPS Architecture
     - core/runtime/interpreter/cps_interpreter.py
     """
 
@@ -81,7 +80,6 @@ class TestSignalPropagation:
     """Validate control flow signal propagation.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §5 Signal Handling
     - core/runtime/interpreter/signals.py
     """
 
@@ -154,7 +152,6 @@ class TestFrameStackManagement:
     """Validate frame stack management and isolation.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §3 Frame Stack
     - core/runtime/interpreter/runtime_context.py
     """
 
@@ -264,9 +261,6 @@ print(countdown(100, 0))
 
 class TestExceptionUnwinding:
     """Validate exception unwinding behavior.
-
-    References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §6 Error Handling
     """
 
     def test_error_unwinds_to_llmexcept(self):
@@ -309,9 +303,6 @@ print(outer())
 
 class TestFrameContextPropagation:
     """Validate context propagation across frames.
-
-    References:
-    - tests/e2e/test_e2e_higher_order.py (legacy)
     """
 
     def test_closure_captures_parent_frame(self):

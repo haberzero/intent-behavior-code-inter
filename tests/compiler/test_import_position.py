@@ -2,7 +2,7 @@
 tests/compiler/test_import_position.py
 =======================================
 
-H2 回归：``import`` 必须位于文件顶部。如果在其它语句之后出现，
+回归：``import`` 必须位于文件顶部。如果在其它语句之后出现，
 编译器应明确报 ``DEP_003 DEP_INVALID_IMPORT_POSITION``，而不是
 误导性的 ``SEM_001 Module 'X' not found``。
 

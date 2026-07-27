@@ -3,15 +3,10 @@ tests/e2e/test_e2e_intent.py
 =============================
 
 e2e Intent 综合测试：意图注释 / scope 隔离 / lambda 与意图栈交互 /
-OOP（combine, to_prompt, deep_clone）/ 统一意图路径（NS-2b）/
-llmexcept retry 还原（NS-2c）。
+OOP（combine, to_prompt, deep_clone）/ 统一意图路径/
+llmexcept retry 还原。
 
-类名已去除 NS-2b/NS-2c 前缀：
-* ``TestE2ENS2bUnifiedIntentPath`` → ``TestE2EIntentUnifiedPath``
-* ``TestE2ENS2cLlmExceptIntentRestore`` → ``TestE2EIntentRetryRestore``
 
-从 tests/e2e/test_e2e_ai_mock.py 拆分 — 详见
-docs/TESTS_REORGANIZATION_TASK.md Step 11。
 """
 
 import os
@@ -132,7 +127,7 @@ print(result2)
 
     def test_lambda_behavior_uses_call_time_intents(self):
         """lambda 延迟行为应在调用时使用当前意图栈，而非定义时的空栈（回归验证）。
-        注：直接赋值到具体类型（int/str）需 P2 编译器类型推断改进，当前通过 print() 调用验证。"""
+        注：直接赋值到具体类型（int/str）需编译器类型推断改进，当前通过 print() 调用验证。"""
         code = AI_MOCK_PREFIX + """
 @+ use formal language
 fn compute = lambda -> str: @~ MOCK:STR:hello ~
@@ -294,7 +289,6 @@ class TestE2ELambdaRestriction:
     """
     lambda 值现在可以自由作为函数参数传递（高阶函数场景）。
 
-    历史限制（"lambda 延迟对象不允许作为函数参数传递"）已移除：
     lambda 闭包的自由变量通过共享 IbCell 捕获，生命周期安全，可以跨作用域传递。
     """
 

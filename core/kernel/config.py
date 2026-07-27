@@ -1,5 +1,5 @@
 """
-IBCI 项目配置（ibci.json）加载 —— ADR-019 §6。
+IBCI 项目配置（ibci.json）加载。
 
 位置：``<project_root>/ibci.json``（与 ``api_config.json`` 同目录，**不合并**——后者含敏感信息）。
 
@@ -21,7 +21,7 @@ from core.kernel.path import IbPath, PathValidator
 
 
 class IbciConfig:
-    """``ibci.json`` 项目配置加载器（ADR-019 §6）。"""
+    """``ibci.json`` 项目配置加载器。"""
 
     CONFIG_FILENAME = "ibci.json"
 

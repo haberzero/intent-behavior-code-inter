@@ -5,7 +5,7 @@ Concrete axiom implementations for all built-in IBCI types.
 
 Design
 ------
-* Single inheritance from ``BaseAxiom``.  The legacy multi-inheritance with
+* Single inheritance from ``BaseAxiom``.  The former multi-inheritance with
   per-capability Protocol classes (``CallCapability``, ``IterCapability``…)
   has been removed — all capability methods now live directly on the
   unified ``TypeAxiom`` interface.

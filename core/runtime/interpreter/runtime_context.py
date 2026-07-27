@@ -26,7 +26,7 @@ class RuntimeSymbolImpl:
         self.is_const = is_const
         # 内置函数（intrinsic）标志位，由 IntrinsicManager 在注入 print/len/range/...
         # 时设置；``get_vars()`` 使用本标志过滤掉运行时调试不应显示的特权符号，
-        # 替代历史的硬编码名单 (``"len", "print", "range", ...``)。
+        # 替代硬编码名单 (``"len", "print", "range", ...``)。
         self.is_intrinsic = is_intrinsic
         # 当变量被内层 lambda 捕获时，提升为 Cell 变量；
         # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
@@ -239,7 +239,7 @@ class ScopeImpl:
         return None
 
     def is_cell_promoted(self, sym_uid: str) -> bool:
-        """判断 sym_uid 对应的符号是否已提升为 Cell 变量（C12 封装替代私有 _cell_map 探测）。
+        """判断 sym_uid 对应的符号是否已提升为 Cell 变量。
 
         供 VMExecutor 护栏（``_target_is_promoted_cell``）使用：
         不再直接访问 ``scope._cell_map``，通过本方法保持 ScopeImpl 内部封装。
@@ -247,7 +247,7 @@ class ScopeImpl:
         return sym_uid in self._cell_map
 
     def define_raw(self, name: Optional[str], value: Any, uid: Optional[str] = None, declared_type: Any = None) -> 'RuntimeSymbolImpl':
-        """低级符号写入：绕过类型检查与 box 操作（VM 特殊路径专用，C12）。
+        """低级符号写入：绕过类型检查与 box 操作（VM 特殊路径专用）。
 
         仅供 VMExecutor 的 ``LLMFuture`` 占位符写入使用（dispatch-before-use）。
         普通变量定义应使用 :meth:`define`；本方法不进行类型校验，不调用 ``registry.box``，
@@ -276,7 +276,7 @@ class ScopeImpl:
 
     def iter_cells(self):
         """
-        枚举本作用域（不递归父）的所有 IbCell（公理 GC-2 根集合扫描入口）。
+        枚举本作用域（不递归父）的所有 IbCell（GC 根集合扫描入口）。
         """
         return iter(self._cell_map.values())
 
@@ -332,11 +332,11 @@ class RuntimeContextImpl(RuntimeContext):
 
         # [LLMExceptFrame] LLM 异常重试帧栈
         self._llm_except_frames: List['LLMExceptFrame'] = []
-        # 最大 llmexcept 嵌套深度限制（PT-1.3）
+        # 最大 llmexcept 嵌套深度限制
         self._llm_except_max_depth: int = 128
 
         # [IbLLMCallResult] 最后一个 LLM 执行结果
-        # 已升级为 IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
+        # IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
         self._last_llm_result: Optional[Any] = None
 
     # --- 排他意图管理 ---
@@ -554,7 +554,7 @@ class RuntimeContextImpl(RuntimeContext):
                     if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
                         continue
                     # 通过 RuntimeSymbolImpl.is_intrinsic 标志过滤内置函数（intrinsic），
-                    # 替代历史的硬编码名单 ("len", "print", "range", "input", "get_self_source")。
+                    # 替代硬编码名单 ("len", "print", "range", "input", "get_self_source")。
                     # 内置函数仅供 IBCI 代码调用，不应在调试器变量面板中暴露给用户。
                     if getattr(symbol, "is_intrinsic", False):
                         continue
@@ -578,7 +578,7 @@ class RuntimeContextImpl(RuntimeContext):
                     elif symbol.declared_type:
                         type_name = str(symbol.declared_type)
                         
-                    # IDBG 过滤策略：目前为了对齐旧测试，过滤掉非基础类型和下划线变量
+                    # IDBG 过滤策略：过滤掉非基础类型和下划线变量
                     if type_name == "Object" or type_name == "Function" or name.startswith("_"):
                         continue
                     if type_name == "Type" and name[0].isupper():
@@ -833,7 +833,7 @@ class RuntimeContextImpl(RuntimeContext):
 
     def collect_gc_roots(self):
         """
-        枚举 GC 根集合中的所有 IbObject（公理 GC-2）。
+        枚举 GC 根集合中的所有 IbObject。
 
         根集合 = 当前作用域链中所有符号值 ∪ 所有活跃 Cell 的持有对象。
 
@@ -841,7 +841,7 @@ class RuntimeContextImpl(RuntimeContext):
 
         注意
         ----
-        本方法是 IBCI 规范层 GC-2 的接口落地。Python 宿主依赖 CPython 引用计数，
+        本方法是 IBCI 规范层 GC 根集合接口的落地。Python 宿主依赖 CPython 引用计数，
         不需要手动 GC；此方法主要用于调试、合规测试以及未来非 Python 宿主迁移。
         """
         scope = self._current_scope

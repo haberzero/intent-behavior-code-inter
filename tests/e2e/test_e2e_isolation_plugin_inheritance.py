@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_isolation_plugin_inheritance.py
 ==================================================
 
-ADR-019 §6 C2 隔离继承的端到端验证：
+隔离继承的端到端验证：
 子脚本通过 ``ihost.run_isolated`` 执行时，能解析仅父项目拥有的插件
 （经 ``inherited_plugin_paths`` 透传），而不是靠子项目自身嗅探。
 """
@@ -57,7 +57,7 @@ class TestIsolationPluginInheritance:
         plugin_dir = parent_root / "parent_only_plugins" / "echo"
         _write_minimal_plugin(str(plugin_dir), "echo")
 
-        # 子项目入口，位于父 project_root 内（ADR-019 §5 隔离反转）
+        # 子项目入口，位于父 project_root 内（隔离反转）
         child_root = parent_root / "child_root"
         child_root.mkdir()
         (child_root / "child.ibci").write_text(
@@ -80,7 +80,7 @@ class TestIsolationPluginInheritance:
             encoding="utf-8",
         )
 
-        # cwd 切到无关目录，确保相对路径基于入口目录（H3 契约）
+        # cwd 切到无关目录，确保相对路径基于入口目录（契约）
         other_dir = tmp_path / "elsewhere"
         other_dir.mkdir()
         monkeypatch.chdir(other_dir)

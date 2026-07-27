@@ -91,7 +91,7 @@ class StatementVisitorsMixin:
                     # 动态类型或无类型：默认 str
                     val_type = self._str_desc
 
-            # D3: fn_callable 无返回标注时的 call-site 类型检查
+            # fn_callable 无返回标注时的 call-site 类型检查
             # fn f = lambda: EXPR; int r = f() → 如果 lambda 没有 -> TYPE 标注，
             # f() 返回 auto，不应静默赋给具体类型变量
             if (val_type and self.registry.is_dynamic(val_type)
@@ -184,7 +184,7 @@ class StatementVisitorsMixin:
             return self._infer_fn_type(declared_type, val_type)
 
         if declared_type.kind == TypeKind.CALLABLE_SIG.value:
-            # D3: fn[(...)→(...)] 签名标注 — 检查结构签名匹配
+            # fn[(...)→(...)] 签名标注 — 检查结构签名匹配
             return self._infer_fn_type_with_sig(declared_type, val_type)
 
         if hasattr(self.registry, 'is_dynamic') and self.registry.is_dynamic(declared_type):
@@ -243,7 +243,7 @@ class StatementVisitorsMixin:
             return self.registry.resolve("callable") or self._any_desc
 
     def _infer_fn_type_with_sig(self, declared_type: IbSpec, val_type: IbSpec) -> IbSpec:
-        """D3: fn[(...)→(...)] 签名标注时，检查结构签名匹配。"""
+        """fn[(...)→(...)] 签名标注时，检查结构签名匹配。"""
         # If RHS isn't callable at all, error
         if not self.registry.is_callable(val_type) and not self.registry.is_dynamic(val_type):
             if val_type.kind != TypeKind.CLASS.value:

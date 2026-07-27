@@ -2,9 +2,9 @@
 tests/compliance/test_memory_model.py
 ======================================
 
-IBCI VM 合规测试：内存模型契约（M1/M2 / SPEC §2）。
+IBCI VM 合规测试：内存模型契约。
 
-覆盖 docs/VM_SPEC.md §2 定义的以下契约：
+覆盖以下契约：
   - 公理 SC-3/SC-4（IbCell）：lambda 通过共享 Cell 访问自由变量，
     外部修改对 lambda 可见（共享引用语义）
   - 公理 SC-3/SC-4（IbCell）：snapshot 通过独立 Cell 副本冻结自由变量，
@@ -29,11 +29,11 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 # ===========================================================================
-# SPEC §2.1 — lambda 共享 Cell 语义（公理 SC-3/SC-4）
+# lambda 共享 Cell 语义（公理 SC-3/SC-4）
 # ===========================================================================
 
 class TestLambdaSharedCell:
-    """SPEC §2.1：lambda 通过共享 IbCell 读取自由变量（SC-3/SC-4）。"""
+    """lambda 通过共享 IbCell 读取自由变量（SC-3/SC-4）。"""
 
     def test_lambda_sees_latest_value_after_external_mutation(self):
         """lambda 应读到外部最新写入的值（共享 Cell 引用语义）。"""
@@ -78,11 +78,11 @@ print((str)result)
 
 
 # ===========================================================================
-# SPEC §2.2 — snapshot 值快照语义（公理 SC-3/SC-4）
+# snapshot 值快照语义（公理 SC-3/SC-4）
 # ===========================================================================
 
 class TestSnapshotFrozenCell:
-    """SPEC §2.2：snapshot 通过独立 Cell 副本冻结自由变量（SC-4 值快照语义）。"""
+    """snapshot 通过独立 Cell 副本冻结自由变量（SC-4 值快照语义）。"""
 
     def test_snapshot_is_unaffected_by_external_mutation(self):
         """snapshot 定义时冻结自由变量值，外部修改对 snapshot 不可见。"""
@@ -114,11 +114,11 @@ print((str)lam_result)
 
 
 # ===========================================================================
-# SPEC §2.3 — Cell 延长生命周期（公理 LT-2）
+# Cell 延长生命周期（公理 LT-2）
 # ===========================================================================
 
 class TestCellLifetimeExtension:
-    """SPEC §2.3：外层作用域退出后，lambda 捕获的 Cell 仍可访问（LT-2）。"""
+    """外层作用域退出后，lambda 捕获的 Cell 仍可访问（LT-2）。"""
 
     def test_lambda_survives_outer_function_return(self):
         """返回 lambda 的工厂函数：lambda 在工厂作用域销毁后仍然可调用。"""
@@ -151,11 +151,11 @@ print((str)result)
 
 
 # ===========================================================================
-# SPEC §2.4 — 值类型赋值深拷贝等价（公理 OM-2）
+# 值类型赋值深拷贝等价（公理 OM-2）
 # ===========================================================================
 
 class TestValueTypeSemantics:
-    """SPEC §2.4：值类型（int/str/bool）赋值等价于深拷贝，无共享引用副作用。"""
+    """值类型（int/str/bool）赋值等价于深拷贝，无共享引用副作用。"""
 
     def test_int_assignment_is_independent(self):
         """int 赋值后，修改原变量不影响副本变量。"""
@@ -195,11 +195,11 @@ else:
 
 
 # ===========================================================================
-# SPEC §2.5 — lambda 作为高阶函数参数传递（公理 SC-4 / M2）
+# lambda 作为高阶函数参数传递（公理 SC-4）
 # ===========================================================================
 
 class TestHigherOrderFunctionPassing:
-    """SPEC §2.5：lambda 对象可以自由作为高阶函数参数传递（M2 出口契约）。"""
+    """lambda 对象可以自由作为高阶函数参数传递。。"""
 
     def test_lambda_passed_to_function_and_called(self):
         """lambda 可作为函数参数传入并在函数内被调用。"""

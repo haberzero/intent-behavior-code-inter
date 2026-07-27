@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_kernel_native.py
 ====================================
 
-ADR-020 G2 端到端回归：ai/ihost/idbg/isys 提升为 kernel-native 后，
+端到端回归：ai/ihost/idbg/isys 提升为 kernel-native 后，
 既有 IBCI 层 API 行为保持不变。
 """
 import os

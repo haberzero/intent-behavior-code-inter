@@ -8,7 +8,7 @@ core/runtime/objects/media_backing.py
 - ``MediaBacking`` 只持有 ``IbPath``，不持有字节、不持有 OS fd。
 - ``FileBacking`` 指向已存在的、经沙箱校验的源文件。
 - ``GeneratedBacking`` 指向 LLM 生成时溢写的工件文件。
-- 无 ``MemoryBacking``：内存型 media 在 G5 后整体淘汰。
+- 无 ``MemoryBacking``。
 """
 
 from __future__ import annotations

@@ -1,7 +1,6 @@
 """
 core.runtime.vm.handlers.dispatch — node_type → handler 查询表。
 
-由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
 """
 from core.runtime.vm.handlers.leaf import (
     vm_handle_IbConstant,

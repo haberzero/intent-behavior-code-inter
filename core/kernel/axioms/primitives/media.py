@@ -3,7 +3,7 @@ core/kernel/axioms/primitives/media.py
 
 Audio / Image / Video axioms for multimodal LLM behavior expressions.
 
-Per ADR-014/016: media 类型现在是磁盘型 ``file_handle`` 子类。
+media 类型是磁盘型 ``file_handle`` 子类。
 本公理层只负责声明类型契约与能力标志；所有 I/O（字节物化 / base64）
 下放到 runtime 层的 ``__path_payload_prompt__`` 协议方法。
 """
@@ -26,12 +26,12 @@ class _MediaAxiomBase(BaseAxiom):
     has_payload_prompt_cap = True
 
     def get_parent_axiom_name(self) -> Optional[str]:
-        # media 类型是 file_handle 的磁盘型子类（ADR-014）。
+        # media 类型是 file_handle 的磁盘型子类。
         return "file_handle"
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            # PT-ARCH-24: data 触发 I/O（base64 物化），保持 method；
+            # data 触发 I/O（base64 物化），保持 method；
             # format 从文件名扩展名推导，无 I/O，改为 field。
             "data":     _m("data",     ret="str"),
             "format":   MemberSpec(name="format",   kind="field", type_ref=TypeRef.of("str")),
@@ -61,7 +61,7 @@ class AudioAxiom(_MediaAxiomBase):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         specs = super().get_method_specs()
-        # PT-ARCH-25: 构造入口：audio.from_file(path)。
+        # 构造入口：audio.from_file(path)。
         specs["from_file"] = _m("from_file", params=["str"], ret="audio")
         return specs
 
@@ -75,10 +75,10 @@ class ImageAxiom(_MediaAxiomBase):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         specs = super().get_method_specs()
-        # PT-ARCH-24: width/height 当前占位，未来可能读取图像头，保持 method。
+        # width/height 当前占位，未来可能读取图像头，保持 method。
         specs["width"] = _m("width", ret="int")
         specs["height"] = _m("height", ret="int")
-        # PT-ARCH-25: 构造入口：image.from_file(path)。
+        # 构造入口：image.from_file(path)。
         specs["from_file"] = _m("from_file", params=["str"], ret="image")
         return specs
 
@@ -92,6 +92,6 @@ class VideoAxiom(_MediaAxiomBase):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         specs = super().get_method_specs()
-        # PT-ARCH-25: 构造入口：video.from_file(path)。
+        # 构造入口：video.from_file(path)。
         specs["from_file"] = _m("from_file", params=["str"], ret="video")
         return specs

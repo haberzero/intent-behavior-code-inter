@@ -24,7 +24,6 @@ class TestMOCKProtocol:
     """Validate MOCK protocol for deterministic LLM testing.
 
     References:
-    - tests/e2e/test_e2e_llm_basic.py (legacy)
     - LLM testing infrastructure
     """
 
@@ -66,10 +65,6 @@ print(result)
 
 class TestBehaviorExpression:
     """Validate behavior expression execution.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §5.1 Behavior Expressions
-    - tests_docs/TEST_PHILOSOPHY.md
     """
 
     def test_behavior_expression_executes(self):
@@ -115,9 +110,6 @@ else:
 
 class TestLLMFunction:
     """Validate LLM function semantics.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §5.2 LLM Functions
     """
 
     def test_llm_function_definition_and_call(self):
@@ -172,10 +164,6 @@ print(result)
 
 class TestIntentWithLLM:
     """Validate intent context in LLM calls.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §6 Intent System
-    - tests/e2e/test_e2e_intent.py (legacy)
     """
 
     def test_intent_affects_llm_call(self):
@@ -223,9 +211,6 @@ print(y)
 
 class TestLLMDispatch:
     """Validate LLM dispatch and execution ordering.
-
-    References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §5 LLM Pipeline
     """
 
     def test_sequential_llm_calls_execute_in_order(self):

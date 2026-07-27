@@ -345,12 +345,12 @@ class TestCompileErrors:
 
 
 # ---------------------------------------------------------------------------
-# 12. llmexcept body read-only constraint (SEM_052 — §9.2)
+# 12. llmexcept body read-only constraint (SEM_052)
 # ---------------------------------------------------------------------------
 
 class TestLLMExceptBodyReadOnly:
     """
-    验证 §9.2 快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_052。
+    验证快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_052。
     """
 
     def test_assign_to_outer_var_raises(self, engine):

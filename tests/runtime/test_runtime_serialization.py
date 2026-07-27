@@ -3,13 +3,9 @@ tests/runtime/test_runtime_serialization.py
 ============================================
 
 Round-trip 测试：``RuntimeSerializer.serialize_context`` →
-``RuntimeDeserializer.deserialize_context`` 的值保真性（PT-TEST-4 area 1）。
+``RuntimeDeserializer.deserialize_context`` 的值保真性（area 1）。
 
 覆盖所有支持类型的 ``serialize → deserialize == identity`` 属性。
-此前该模块**零覆盖**；本测试在编写过程中还暴露并修复了一个反序列化 bug：
-``_get_scope`` 误用 ``scope.define_variable(...)``（RuntimeContext 的方法名），
-实际 ScopeImpl 只有 ``scope.define(...)`` —— 协议混淆导致任何含变量的上下文
-都无法反序列化。
 
 消费者：``HostService``（save/load_state）、``rt_scheduler``（isolation snapshot）。
 """

@@ -49,7 +49,7 @@ class Signal:
 
 
 class UnhandledSignal(Exception):
-    """VM 顶层未消费信号的边界异常（C5）。
+    """VM 顶层未消费信号的边界异常。
 
     ``VMExecutor.run()`` 在帧栈耗尽仍持有未消费 Signal 时以
     ``raise UnhandledSignal(signal)`` 抛给调用者。

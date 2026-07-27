@@ -5,7 +5,7 @@ tests/runtime/test_mock_directives.py
 独立单元测试：验证 ``AIPlugin._handle_mock_response`` 的每个 MOCK 指令变体。
 
 此测试直接测试 MOCK 指令解析器，不经过完整引擎，提供快速、聚焦的信号。
-MOCK 基础设施被 ~hundreds 测试信任，此前从未独立测过（P1-G 补全此缺口）。
+MOCK 基础设施被 ~hundreds 测试信任，此前从未独立测过（补全此缺口）。
 """
 import pytest
 from ibci_modules.ibci_ai.core import AIPlugin

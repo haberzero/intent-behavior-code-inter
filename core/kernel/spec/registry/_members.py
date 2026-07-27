@@ -34,26 +34,26 @@ class _MemberMixin:
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):
-                # G2/G3: For specialized generic containers, override the return type of
+                # For specialized generic containers, override the return type of
                 # methods that return the element/value type.
                 # Override is applied regardless of the axiom's declared return type —
                 # specialization is based on the container's runtime type parameter.
                 #
                 # TypeDef[T]:
                 #   pop()         → T  (was "any")
-                #   __getitem__() → T  (was "any", G3)
+                #   __getitem__() → T  (was "any")
                 # TypeDef[K,V]:
                 #   pop(key)  → V  (was "any")
-                #   get(key)  → V  (was "any", G3)
-                #   values()  → list[V]  (was bare "list", G3)
-                #   keys()    → list[K]  (was bare "list", G3)
+                #   get(key)  → V  (was "any")
+                #   values()  → list[V]  (was bare "list")
+                #   keys()    → list[K]  (was bare "list")
                 effective_return = member.return_type.head
                 effective_return_module = member.return_type.module
 
                 if (
                     spec.kind == TypeKind.LIST.value
                     # Multi-type lists (list[int,str,...]) have allowed_element_types set and
-                    # use element_type="any" intentionally — skip G3 specialization for them.
+                    # use element_type="any" intentionally — skip specialization for them.
                     and not spec.allowed_element_types
                 ):
                     elem = spec.element_type.head
@@ -64,11 +64,11 @@ class _MemberMixin:
                     val = spec.value_type.head
                     key = spec.key_type.head
                     if attr_name in ("pop", "get") and val != "any":
-                        # G3: dict[K,V].get(key) → V  (same as pop)
+                        # dict[K,V].get(key) → V  (same as pop)
                         effective_return = val
                         effective_return_module = spec.value_type.module
                     elif attr_name == "values" and val != "any":
-                        # G3: dict[K,V].values() → list[V]
+                        # dict[K,V].values() → list[V]
                         # Eagerly register list[V] if not yet in registry so that
                         # resolve_return (called by visit_IbCall) can find it by name.
                         list_v_name = f"list[{val}]"
@@ -80,7 +80,7 @@ class _MemberMixin:
                         effective_return = list_v_name
                         effective_return_module = None
                     elif attr_name == "keys" and key != "any":
-                        # G3: dict[K,V].keys() → list[K]
+                        # dict[K,V].keys() → list[K]
                         list_k_name = f"list[{key}]"
                         if not self.resolve(list_k_name):
                             list_base = self.resolve("list")
@@ -90,7 +90,7 @@ class _MemberMixin:
                         effective_return = list_k_name
                         effective_return_module = None
 
-                # G2: specialize write-method parameter types for list[T].
+                # specialize write-method parameter types for list[T].
                 # append(item: any) → append(item: T)
                 # insert(idx: int, item: any) → insert(idx: int, item: T)
                 # __setitem__(idx: int, value: any) → __setitem__(idx: int, value: T)

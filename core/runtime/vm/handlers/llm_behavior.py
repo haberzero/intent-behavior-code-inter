@@ -1,7 +1,5 @@
 """
 core.runtime.vm.handlers.llm_behavior — LLM 行为 / 意图 / llmexcept CPS handler。
-
-由原 ``core.runtime.vm.handlers`` 纯机械拆分而来，无逻辑改动。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Optional, Dict, List
@@ -22,16 +20,13 @@ from core.runtime.vm.handlers._shared import (
 def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     """llmexcept 语句的 CPS 调度器实现。
 
-    把原来 ``StmtHandler.visit_IbLLMExceptionalStmt`` 中的 Python
-    try/except retry 循环迁移到 VMExecutor 调度循环中管理。
-
     执行流程：
     1. 从 LLM Provider 读取 ``max_retry``（默认 3）
     2. 创建 ``LLMExceptFrame`` 并保存上下文快照
     3. 循环（最多 max_retry 次）：
        a. restore_snapshot（确保每次 LLM 看到一致的输入状态）
        b. 清除共享信号通道
-       c. CPS 执行 target（yield target_uid；若未支持则 fallback）
+       c. CPS 执行 target（yield target_uid）
        d. 读取 last_llm_result：
           - None 或 is_certain → 成功，break
           - is_uncertain → 执行 handler body（body 中的 retry 语句会设置
@@ -78,7 +73,7 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
             # 清除共享信号通道，防止上次结果污染本次判断
             executor.runtime_context.set_last_llm_result(None)
 
-            # P4：dispatch table 覆盖所有 43 个节点类型，else 分支为死代码已删除。
+            # dispatch table 覆盖所有节点类型。
             last_target_value = yield target_uid
 
             # 信号透传：target 内部产生控制流信号时立即向上传播
@@ -97,7 +92,7 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
             frame.last_result = result
             frame.should_retry = False  # 等待 body 中的 retry 语句重新设为 True
 
-            # PT-ARCH-27：在 retry body 中禁用 write_overwrite 写入。
+            # 在 retry body 中禁用 write_overwrite 写入。
             executor.ec.enter_llmexcept_body()
             try:
                 body_res = yield from _vm_execute_stmt_sequence(executor, body_uids)
@@ -126,7 +121,7 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
 # === 意图操作 ===
 
 def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``@`` / ``@!`` 单次意图注释节点的兼容执行路径。"""
+    """``@`` / ``@!`` 单次意图注释节点的执行路径。"""
     if False:
         yield
     intent_info_uid = node_data.get("intent")

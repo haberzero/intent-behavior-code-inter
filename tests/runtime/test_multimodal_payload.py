@@ -2,9 +2,9 @@
 tests/e2e/test_e2e_multimodal_payload.py
 =========================================
 
-e2e 测试：多模态 payload 协议（Phase 2 — __payload_prompt__）。
+e2e 测试：多模态 payload 协议（— __payload_prompt__）。
 
-验证 Phase 2 实现：
+验证实现：
 1. 纯文本行为表达式仍正常工作（向后兼容）
 2. AIPlugin._flatten_content_parts 正确展平多模态内容
 3. AIPlugin._build_user_content 纯文本路径返回 str

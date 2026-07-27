@@ -5,8 +5,6 @@ tests/e2e/test_e2e_llmexcept.py
 e2e llmexcept 综合测试：基本 / 嵌套 / for 循环驱动 / 条件驱动 /
 用户对象 __to_prompt__ / __snapshot__ 协议。
 
-从 tests/e2e/test_e2e_ai_mock.py 拆分 — 详见
-docs/TESTS_REORGANIZATION_TASK.md Step 11。
 """
 
 import os
@@ -401,12 +399,12 @@ print((str)c.count)
 
 class TestE2ELLMExceptSnapshotProtocol:
     """
-    Tests for 方案B: user IBCI classes implement __snapshot__(self) and
+    Tests for user IBCI classes implement __snapshot__(self) and
     __restore__(self, state) to take full control over what gets snapshotted
     and how it is restored during llmexcept retry cycles.
 
-    Priority rule: if __snapshot__ is defined on the class, 方案B is used
-    for that variable; otherwise 方案A (auto deep-clone) is the fallback.
+    Priority rule: if __snapshot__ is defined on the class, the user protocol is used
+    for that variable; otherwise auto deep-clone is the fallback.
     """
 
     def test_snapshot_and_restore_are_called(self):
@@ -468,7 +466,7 @@ print((str)c.n)
         """
         When __snapshot__ is defined, the user protocol is used instead of
         method A auto deep-clone. Demonstrated by the __restore__ print being
-        visible (only called in 方案B path), not the auto-clone path.
+        visible (only called in the user protocol path), not the auto-clone path.
         """
         code = AI_MOCK_PREFIX + """
 class Tracked:
@@ -490,8 +488,8 @@ llmexcept:
 print("done")
 """
         lines = run_ibci(code)
-        assert "protocol_snap" in lines     # 方案B's __snapshot__ was called
-        assert "protocol_restore" in lines  # 方案B's __restore__ was called
+        assert "protocol_snap" in lines     # the user protocol's __snapshot__ was called
+        assert "protocol_restore" in lines  # the user protocol's __restore__ was called
         assert "done" in lines
 
     def test_snapshot_only_defined_no_restore_is_safe(self):
@@ -519,7 +517,7 @@ print("ok")
 
     def test_fallback_to_auto_clone_when_no_snapshot_defined(self):
         """
-        When __snapshot__ is NOT defined, 方案A auto deep-clone is used as
+        When __snapshot__ is NOT defined, auto deep-clone is used as
         fallback. The existing auto-clone behavior is preserved.
         """
         code = AI_MOCK_PREFIX + """
@@ -541,8 +539,7 @@ class TestE2EConditionUncertainBugA:
     """
     BUG #A 回归测试：if/while/for 在面对不确定 LLM 条件时应统一抛出 LLMParseError。
 
-    历史 bug：if/while 静默吞错（不执行分支体），而 for 正确抛错。
-    2026-05-27 统一为全部抛错。此测试确保 if-condition-uncertain 路径有回归保护。
+    此测试确保 if-condition-uncertain 路径有回归保护。
     """
 
     def test_if_condition_uncertain_raises_llm_parse_error(self):

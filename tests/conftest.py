@@ -4,7 +4,7 @@ tests/conftest.py
 
 测试体系**统一基础设施**：fixture、helper、常量。
 
-本文件由 ``docs/TESTS_REORGANIZATION_TASK.md`` §2.2 规约定义，**所有测试文件
+**所有测试文件
 必须使用本文件提供的统一形态**，禁止再各自复刻 ``run_and_capture`` /
 ``make_engine`` / ``make_vm`` / ``ai_setup`` / ``find_node_uid`` 等。
 
@@ -239,9 +239,8 @@ def find_node(
 ) -> Tuple[str, dict]:
     """查找单个匹配节点；不存在或多于一个时抛 AssertionError。
 
-    注：历史 ``find_node_uid`` 实际上接受多匹配并返回第一个；为兼容旧用法，
     本函数在 predicate 为 None 时不严格要求唯一，仅返回首个匹配。当 predicate
-    存在时仍允许多匹配（返回首个）—— 严格唯一性请用 ``find_nodes`` + 自检。
+    存在时仍允许多匹配（返回首个）-- 严格唯一性请用 ``find_nodes`` + 自检。
     """
     nodes = find_nodes(engine, node_type, predicate=predicate)
     if not nodes:

@@ -1,9 +1,9 @@
 """
 IBCI kernel path model — IBCI 路径模型（语言核心概念）。
 
-Per ADR-017：锚点模型、沙箱、模块名映射、快照布局、FS 感知规范化。
+锚点模型、沙箱、模块名映射、快照布局、FS 感知规范化。
 位于 kernel 层，compiler 与 runtime（兄弟层）都通过本包取路径模型，
-消除历史上的 compiler→runtime 违规。
+消除 compiler→runtime 违规。
 
 本包是 path API 的统一 facade：再导出 base/path 的原子原语，
 使消费者一处导入即可获得全部路径能力（InstallPaths 除外，它在 runtime/path）。

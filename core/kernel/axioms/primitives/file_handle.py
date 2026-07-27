@@ -30,11 +30,11 @@ class FileHandleAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            # PT-ARCH-24: path 是 field（纯内省，无 I/O）。
+            # path 是 field（纯内省，无 I/O）。
             "path": MemberSpec(name="path", kind="field", type_ref=TypeRef.of("str")),
             "read": _m("read", ret="str"),
             "read_bytes": _m("read_bytes", ret="list[int]"),
-            # PT-ARCH-25: file_handle 实例只读，无 write() 方法。
+            # file_handle 实例只读，无 write() 方法。
             "close": _m("close", ret="void"),
             "cast_to": _m("cast_to", params=["any"], ret="any"),
         }

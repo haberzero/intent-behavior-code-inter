@@ -117,7 +117,7 @@ class TypeCheckBase:
         if isinstance(annotation, ast.IbName):
             return self.registry.resolve(annotation.id) or self._any_desc
         elif isinstance(annotation, ast.IbCallableType):
-            # D3: callable signature constraint fn[(param_types) -> return_type]
+            # callable signature constraint fn[(param_types) -> return_type]
             param_specs = [self._resolve_type(pt) for pt in annotation.param_types]
             ret_spec = (
                 self._resolve_type(annotation.return_type)

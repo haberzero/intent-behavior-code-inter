@@ -1,7 +1,7 @@
 """
 测试 ``IbFileHandle`` / ``MediaBacking`` 的磁盘协议族与用户可见方法。
 
-PT-ARCH-25: file_handle 实例只读，写入通过 file 模块自由函数完成。
+file_handle 实例只读，写入通过 file 模块自由函数完成。
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ def test_file_handle_instance_write_is_forbidden(engine_session, tmp_path):
 
 def test_file_handle_path_is_field(engine_session, tmp_path):
     fh = _make_file_handle(engine_session.registry, tmp_path)
-    # PT-ARCH-24: path 是 field，可直接访问。
+    # path 是 field，可直接访问。
     path_value = fh.fields["path"]
     assert path_value.to_native() == fh.backing.path.to_native()
 

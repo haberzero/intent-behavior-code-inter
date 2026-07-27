@@ -2,16 +2,12 @@
 tests/compiler/test_generics.py
 ================================
 
-泛型类型综合测试（合并自 2 个历史文件）：
+泛型类型综合测试：
 
-* G1: ``resolve_specialization`` 早缓存
-* G2: ``list[T]`` 写方法参数类型 specialization + note 级 warning
-  （原 ``test_g1_g2_generics.py``）
-* G3: ``list[T].__getitem__(int)`` / ``dict[K,V].get`` / ``.values`` / ``.keys`` 返回类型
+* ``resolve_specialization`` 早缓存
+* ``list[T]`` 写方法参数类型 specialization + note 级 warning
+* ``list[T].__getitem__(int)`` / ``dict[K,V].get`` / ``.values`` / ``.keys`` 返回类型
   specialization；list[int] 协变；嵌套泛型
-  （原 ``test_g3_generics.py``）
-
-详见 docs/TESTS_REORGANIZATION_TASK.md Step 9。
 """
 import pytest
 
@@ -27,7 +23,7 @@ from core.kernel.spec import (
 
 
 # ---------------------------------------------------------------------------
-# 共享 helper（G1/G2 风格：compile_code 返回 errors 集合）
+# 共享 helper（风格：compile_code 返回 errors 集合）
 # ---------------------------------------------------------------------------
 
 def make_spec_registry() -> SpecRegistry:
@@ -42,7 +38,7 @@ def make_registry():
 def _compile_code(code: str):
     """Compile only; return (artifact_or_None, issue_tracker).
 
-    Unified signature shared by both G1/G2 and G3 test classes — matches
+    Unified signature shared by both test classes - matches
     the historical helpers in both original files.
     """
     from core.kernel.issue import CompilerError
@@ -55,7 +51,7 @@ def _compile_code(code: str):
 
 
 # ---------------------------------------------------------------------------
-# G3-specific helper（aliases for backward-compatible naming inside g3 body）
+# specific helper（aliases for backward-compatible naming inside g3 body）
 # ---------------------------------------------------------------------------
 
 def _g3_compile_code(code: str):
@@ -71,8 +67,7 @@ def _g3_sem_errors(issue_tracker):
 
 
 ################################################################################
-# MERGED: G1/G2 generics — early cache + write-method specialization
-# Source: tests/compiler/test_g1_g2_generics.py
+# MERGED: generics - early cache + write-method specialization
 ################################################################################
 
 class TestG1SpecializationCache:
@@ -84,7 +79,7 @@ class TestG1SpecializationCache:
 
         first = reg.resolve_specialization(list_spec, [int_spec])
         second = reg.resolve_specialization(list_spec, [int_spec])
-        assert first is second, "G1: second specialization call should return cached object"
+        assert first is second, "second specialization call should return cached object"
 
     def test_cache_is_distinct_per_element_type(self):
         """list[int] and list[str] are distinct cached specs."""
@@ -109,7 +104,7 @@ class TestG1SpecializationCache:
 
 
 # ===========================================================================
-# G2: list[T] write method parameter specialization
+# list[T] write method parameter specialization
 # ===========================================================================
 
 class TestG2ListWriteMethodSpecialization:
@@ -145,7 +140,7 @@ class TestG2ListWriteMethodSpecialization:
         assert [t.head for t in setitem_spec.param_types][-1] == "float"
 
     def test_pop_return_type_still_specialized(self):
-        """G2 does not regress G1-era pop return type specialization."""
+        """does not regress pop return type specialization."""
         reg = make_spec_registry()
         list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
         pop_spec = reg.resolve_member(list_spec, "pop")
@@ -167,7 +162,7 @@ class TestG2ListWriteMethodSpecialization:
             "nums.append(3)\n"
         )
         warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_081"]
-        assert len(warnings) == 0, f"Unexpected G2 warnings: {warnings}"
+        assert len(warnings) == 0, f"Unexpected warnings: {warnings}"
 
     def test_wrong_type_append_produces_warning_not_error(self):
         """list[int].append('x') produces a SEM_081 warning, not a compile error."""
@@ -178,7 +173,7 @@ class TestG2ListWriteMethodSpecialization:
         # Compilation should succeed (no hard errors about this mismatch)
         errors = [d for d in issue_tracker.diagnostics
                   if d.severity.name == "ERROR" and d.code == "SEM_081"]
-        assert len(errors) == 0, f"G2 mismatch should be a warning, not an error: {errors}"
+        assert len(errors) == 0, f"mismatch should be a warning, not an error: {errors}"
         # The warning should be present
         warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_081"]
         assert len(warnings) > 0, "Expected a SEM_081 warning for int-list append with str"
@@ -194,8 +189,7 @@ class TestG2ListWriteMethodSpecialization:
 
 
 ################################################################################
-# MERGED: G3 generics — getitem/get/values/keys/covariance/nested
-# Source: tests/compiler/test_g3_generics.py
+# MERGED: generics - getitem/get/values/keys/covariance/nested
 ################################################################################
 
 # ===========================================================================
@@ -259,7 +253,7 @@ class TestG3ListGetitem:
 
 
 # ===========================================================================
-# G3: dict[K,V].get() return-type specialization
+# dict[K,V].get() return-type specialization
 # ===========================================================================
 
 class TestG3DictGet:
@@ -306,7 +300,7 @@ class TestG3DictGet:
 
 
 # ===========================================================================
-# G3: dict[K,V].values() and .keys() return specialization
+# dict[K,V].values() and .keys() return specialization
 # ===========================================================================
 
 class TestG3DictValuesKeys:
@@ -362,7 +356,7 @@ class TestG3DictValuesKeys:
 
 
 # ===========================================================================
-# §3.5: Covariance — list[T] assignable to list
+# Covariance — list[T] assignable to list
 # ===========================================================================
 
 class TestG3Covariance:
@@ -392,7 +386,7 @@ class TestG3Covariance:
 
 
 # ===========================================================================
-# §3.6: Nested generic subscript — list[list[int]][0] → list[int]
+# Nested generic subscript — list[list[int]][0] → list[int]
 # ===========================================================================
 
 class TestG3NestedGenerics:

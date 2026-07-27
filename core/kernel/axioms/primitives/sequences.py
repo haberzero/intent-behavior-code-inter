@@ -74,7 +74,7 @@ class StrAxiom(BaseAxiom):
         if op == "+":
             if other_name == "str":
                 return "str"
-            # 历史过渡分支（`str + llm_uncertain` → "str"）已收紧（NS-4）。
+            # str + llm_uncertain 已收紧。
             # 现在静态出现 `llm_uncertain` 操作数时按 SEM_003 处理，
             # 与运行期 `IbString.__add__` 抛 LLMParseError 的策略保持一致。
         if op == "*":

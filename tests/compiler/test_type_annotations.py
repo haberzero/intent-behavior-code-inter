@@ -2,20 +2,13 @@
 tests/compiler/test_type_annotations.py
 =======================================
 
-类型标注综合测试（合并自 5 个历史文件）：
+类型标注综合测试：
 
 * Optional[T] 类型方法解析与编译期语义
-  （原 ``test_m2_optional_methods.py``）
 * Optional[T] 空安全编译期校验
-  （原 ``test_m2_optional_null_safety.py``）
-* ``fn[(in)->(out)]`` callable 签名（D3）
-  （原 ``test_d3_callable_sig.py``）
-* ``tuple[T1,T2,...]`` 位置类型推断（NS-7）
-  （原 ``test_tuple_positional_types.py``）
+* ``fn[(in)->(out)]`` callable 签名
+* ``tuple[T1,T2,...]`` 位置类型推断
 * Optional[T] artifact 还原（从序列化产物恢复 Optional 类型 spec）
-  （原 ``unit/test_m2_optional_artifact_rehydrator.py``）
-
-详见 docs/TESTS_REORGANIZATION_TASK.md Step 8。
 """
 import os
 from core.kernel.spec.registry import SpecFactory
@@ -30,7 +23,7 @@ from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
 
 
 # ---------------------------------------------------------------------------
-# 共享 helper（合并 5 个历史文件的本地副本）
+# 共享 helper
 # ---------------------------------------------------------------------------
 
 from tests.conftest import run_ibci, compile_or_errors
@@ -73,7 +66,6 @@ def _run_expect_compile_error(code: str):
 
 ################################################################################
 # MERGED: Optional[T] 类型方法解析 + 编译期语义
-# Source: tests/compiler/test_m2_optional_methods.py
 ################################################################################
 
 class TestM2OptionalMethodResolution:
@@ -109,7 +101,6 @@ class TestM2OptionalMethodCompileSemantics:
 
 ################################################################################
 # MERGED: Optional[T] 空安全编译期校验
-# Source: tests/compiler/test_m2_optional_null_safety.py
 ################################################################################
 
 class TestM2OptionalNullSafety:
@@ -136,8 +127,7 @@ class TestM2OptionalNullSafety:
 
 
 ################################################################################
-# MERGED: callable 签名 fn[(in)->(out)]（D3）
-# Source: tests/compiler/test_d3_callable_sig.py
+# MERGED: callable 签名 fn[(in)->(out)]
 ################################################################################
 
 class TestD3Parse:
@@ -351,8 +341,7 @@ print((str)result)
 
 
 ################################################################################
-# MERGED: tuple[T1,T2,...] 位置类型推断（NS-7）
-# Source: tests/compiler/test_tuple_positional_types.py
+# MERGED: tuple[T1,T2,...] 位置类型推断
 ################################################################################
 
 class TestTuplePositionalTypeInference:
@@ -512,7 +501,6 @@ class TestSpecFactoryCreateTuple:
 
 ################################################################################
 # MERGED: Optional[T] artifact 还原
-# Source: tests/unit/test_m2_optional_artifact_rehydrator.py
 ################################################################################
 
 class TestM2OptionalArtifactRehydrator:

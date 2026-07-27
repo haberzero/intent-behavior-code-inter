@@ -29,7 +29,7 @@ class ModuleDiscoveryService:
     负责在多个搜索路径（如 ibci_modules/ 和 plugins/）中发现并加载模块元数据。
     """
     def __init__(self, search_paths: List[str]):
-        # 仅做分隔符规范化；调用方保证路径为绝对路径（ADR-019）。
+        # 仅做分隔符规范化；调用方保证路径为绝对路径。
         self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
 
     def discover_all(self, registry: Optional[Any] = None, host: Optional[HostInterface] = None) -> HostInterface:
@@ -41,7 +41,7 @@ class ModuleDiscoveryService:
         仅在无 registry 的孤立测试场景下允许省略。
 
         ``host`` 为可选的已有 HostInterface；传入时直接向其追加发现结果，
-        用于保留构造期预注册的 kernel-native 模块（ADR-020 G2）。
+        用于保留构造期预注册的 kernel-native 模块。
         """
         if registry:
             registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
@@ -76,7 +76,7 @@ class ModuleDiscoveryService:
                 spec_path = os.path.join(module_dir, "_spec.py")
 
                 if os.path.exists(spec_path):
-                    # ADR-020 G2：已预注册的 kernel-native 模块不再从磁盘重复加载
+                    # 已预注册的 kernel-native 模块不再从磁盘重复加载
                     logical_name = host.get_module_by_discovery_name(entry)
                     if logical_name is not None and host.is_kernel_native(logical_name):
                         discovered_modules.add(entry)
@@ -153,7 +153,7 @@ class ModuleDiscoveryService:
         # 读取插件种类声明：
         #   "method_module" — 工具/方法插件（math, ai, json 等），必须显式 import 后才可用。
         #   "type_module"   — 内置类型扩展，可由 Prelude 预注入为全局符号。
-        # 缺省值为 "method_module"，以确保向前兼容（所有未声明 kind 的旧插件
+        # 缺省值为 "method_module"（未声明 kind 的插件
         # 均被视为 method_module，不会意外成为预注入全局符号）。
         plugin_kind = "method_module"
 

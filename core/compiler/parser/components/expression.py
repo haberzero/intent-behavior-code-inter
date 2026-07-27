@@ -511,7 +511,7 @@ class ExpressionComponent(BaseComponent):
         # 1. 无参：`lambda: EXPR` / `lambda -> TYPE: EXPR`                   #
         # ------------------------------------------------------------------ #
         if self.stream.check(TokenType.ARROW):
-            # D2：表达式侧 `-> TYPE` 合法化
+            # 表达式侧 `-> TYPE` 合法化
             self.stream.advance()  # consume '->'
             returns_node = type_parser.parse_type_annotation()
             self.stream.consume(
@@ -548,7 +548,7 @@ class ExpressionComponent(BaseComponent):
             params = decl.parameters()
             self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{capture_mode}' parameter list.")
 
-            # D2：表达式侧 `-> TYPE` 合法化（有参形式）
+            # 表达式侧 `-> TYPE` 合法化（有参形式）
             if self.stream.check(TokenType.ARROW):
                 self.stream.advance()  # consume '->'
                 returns_node = type_parser.parse_type_annotation()

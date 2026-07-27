@@ -1,10 +1,10 @@
 ﻿"""
 core/runtime/modules/file_impl.py
 
-Kernel-native IBCI ``file`` 模块实现（ADR-020 G6）。
+Kernel-native IBCI ``file`` 模块实现。
 
 ⚠️ 命名红线：本文件实现的是 **IBCI 语言层**的 ``file`` 内核模块，不是 Python 的 ``file``
-内建对象（Python 2 历史内建）。为避免 Python import shadowing，**本文件必须保持
+内建对象（Python 2 内建）。为避免 Python import shadowing，**本文件必须保持
 ``file_impl.py``，绝对不可重命名为 ``file.py``**。相关守护测试见
 ``tests/meta/test_layering.py::TestRuntimeModulesNamingRedLine``。
 
@@ -13,9 +13,6 @@ Kernel-native IBCI ``file`` 模块实现（ADR-020 G6）。
 - 所有 FS I/O 都经过 ``ExecutionContext.resolve_path()`` + ``PermissionManager`` 沙箱校验。
 - ``open`` 返回 ``IbFileHandle``（磁盘型 file_handle）；其他函数接受路径字符串或 file_handle。
 - 本模块位于 runtime 层，可被 kernel-native 注册流程直接引用。
-
-长期规划：IBCI 模块名 ``file`` 与 Python 内建/通用概念冲突，计划未来迁移到 ``fs`` /
-``filesys`` 等更具区分度的命名空间（见 ``tasks_docs/PENDING_TASKS.md §PT-ARCH-30``）。
 """
 
 from __future__ import annotations
@@ -33,7 +30,6 @@ class FileLib:
     """
     ``file`` 模块的核心实现（kernel-native）。
 
-    与旧 ``ibci_file`` 插件不同：
     - 不持有 ``capabilities`` 之外的持久状态；
     - 不实现高级文件分析函数（search/list/size 等），这些留待后续评估；
     - 多模态读取已迁移为 runtime 值类原生能力，本模块不再提供 ``read_audio`` 等；
@@ -188,7 +184,7 @@ class FileLib:
         显式副作用写入：覆盖 ``target`` 指向的文件。
         所有共享同一 backing 路径的 handle 都会观察到新内容。
         """
-        # PT-ARCH-27：llmexcept retry body 中禁用 overwrite 写入，避免污染快照。
+        # llmexcept retry body 中禁用 overwrite 写入，避免污染快照。
         if self.capabilities.execution_context.llmexcept_body_depth > 0:
             raise InterpreterError(
                 "file.write_overwrite is disabled inside an llmexcept retry body "
@@ -203,7 +199,7 @@ class FileLib:
 
     def write_overwrite_bytes(self, target: Union[str, IbFileHandle], data: Any) -> Any:
         """显式副作用写入的字节版本。"""
-        # PT-ARCH-27：llmexcept retry body 中禁用 overwrite 写入。
+        # llmexcept retry body 中禁用 overwrite 写入。
         if self.capabilities.execution_context.llmexcept_body_depth > 0:
             raise InterpreterError(
                 "file.write_overwrite_bytes is disabled inside an llmexcept retry body "

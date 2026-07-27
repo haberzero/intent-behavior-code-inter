@@ -24,7 +24,6 @@ class TestCellSharedReferences:
     """Validate IbCell shared reference semantics.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §4 Scope Model
     - core/runtime/objects/cell.py
     """
 
@@ -62,9 +61,6 @@ print((str)f2())
 
 class TestLambdaCapture:
     """Validate lambda reference capture behavior.
-
-    References:
-    - tests/e2e/test_e2e_higher_order.py (legacy)
     """
 
     def test_lambda_captures_by_reference(self):
@@ -95,7 +91,7 @@ print(funcs[2]())
 
     def test_lambda_modifies_captured_variable(self):
         """INV-LAMBDA-3: Lambda can modify captured variables."""
-        pytest.skip("PT-5.1: Walrus operator (:=) and lambda body assignments not in IBCI syntax")
+        pytest.skip("Walrus operator (:=) and lambda body assignments not in IBCI syntax")
 
 
 # ===========================================================================
@@ -107,7 +103,6 @@ class TestSnapshotSemantics:
     """Validate snapshot value capture and isolation.
 
     References:
-    - tests/e2e/test_e2e_snapshot_semantics.py (legacy)
     - core/runtime/objects/deep_clone.py
     """
 
@@ -164,14 +159,11 @@ print(b)
 
 class TestLexicalScoping:
     """Validate lexical scoping rules.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §2.3 Scoping
     """
 
     def test_inner_scope_shadows_outer(self):
         """INV-SCOPE-1: Inner scope shadows outer scope variables."""
-        pytest.skip("PT-5.1: SEM_002 forbids redeclaring same-name variable in if-block (no shadowing allowed)")
+        pytest.skip("SEM_002 forbids redeclaring same-name variable in if-block (no shadowing allowed)")
 
     def test_function_creates_new_scope(self):
         """INV-SCOPE-2: Function creates independent scope."""

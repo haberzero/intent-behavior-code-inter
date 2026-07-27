@@ -40,7 +40,7 @@ class Scheduler(ICompilerService):
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
     def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
-        # ADR-019 D2/Stage D：root_dir 已由 engine 经 canonicalize_for_security 规范化（单一 realpath 源），
+        # root_dir 已由 engine 经 canonicalize_for_security 规范化（单一 realpath 源），
         # 消费者信任传入值，仅做 IbPath 类型包装（不再重复 realpath——幂等冗余）。
         self._project_root = IbPath.from_native(root_dir)
         self.root_dir = root_dir
@@ -126,7 +126,7 @@ class Scheduler(ICompilerService):
         
         # 1. Scan Dependencies (Recursive)
         # We manually drive the scanning process here to control token caching
-        # ADR-019 D1/Stage D：entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
+        # entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
         # 替代散点 os.path.abspath（engine 上游已规范化，此处统一收口）。
         entry_file = PathValidator.canonicalize_for_security(entry_file).to_native()
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 1: Scanning dependencies starting from {entry_file}")
@@ -414,7 +414,7 @@ class Scheduler(ICompilerService):
                         # 直接从宿主接口的元数据注册表解析描述符
                         s_mod_type = self.host_interface.metadata.resolve(imp.module_name)
                         if s_mod_type:
-                            # [UTS 2.0 Hydration] 确保从 Host 加载的元数据被正确水合到当前编译注册表
+                            # 确保从 Host 加载的元数据被正确水合到当前编译注册表
                             self.registry.register(s_mod_type)
                             self.plugin_type_cache[imp.module_name] = s_mod_type
                 
@@ -475,7 +475,7 @@ class Scheduler(ICompilerService):
                                 self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                     f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
                             else:
-                                # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突（§9.2）。
+                                # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突。
                                 # 用户自有符号优先；发出 SEM_009 WARNING 提示用户检查命名。
                                 file_tracker.warning(
                                     f"Import '{local_name}' conflicts with an already-defined "
@@ -487,7 +487,7 @@ class Scheduler(ICompilerService):
                         else:
                             mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, provenance=Provenance.EXTERNAL_MODULE)
                             analyzer.symbol_table.define(mod_sym)
-                            # ADR-020 G6: `import file` also gates the disk-backed types
+                            # `import file` also gates the disk-backed types
                             # (file_handle / audio / image / video) into the importing scope.
                             for exported_name in getattr(s_mod_type, "exported_types", []):
                                 existing_exported = analyzer.symbol_table.resolve(exported_name)
@@ -511,7 +511,7 @@ class Scheduler(ICompilerService):
                                     kind=SymbolKind.CLASS,
                                     spec=exported_spec,
                                     provenance=Provenance.KERNEL_NATIVE,
-                                    # ADR-020 G6: align with runtime setup_context which
+                                    # align with runtime setup_context which
                                     # defines these kernel-native classes as `intrinsic:<name>`.
                                     uid=f"intrinsic:{exported_name}",
                                 )
@@ -538,7 +538,7 @@ class Scheduler(ICompilerService):
                                 local_name = alias.asname if alias.asname else alias.name
                                 existing = analyzer.symbol_table.resolve(local_name)
                                 if existing:
-                                    # 用户定义的符号与 from-import 名冲突（§9.2）。
+                                    # 用户定义的符号与 from-import 名冲突。
                                     if existing.kind != SymbolKind.MODULE:
                                         file_tracker.warning(
                                             f"'from {imp.module_name} import {alias.name}' conflicts with an already-defined "

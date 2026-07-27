@@ -3,10 +3,10 @@ core/runtime/objects/media_types.py
 
 IbAudio / IbImage / IbVideo — 多模态运行时对象类。
 
-Per ADR-014/016: 三种 media 类型现在是 ``IbFileHandle`` 的磁盘型子类，
+三种 media 类型是 ``IbFileHandle`` 的磁盘型子类，
 通过 ``FileBacking`` 引用源文件，按需惰性物化字节。
 
-Per ADR-012: 作为普通类名注册（非关键字）。
+作为普通类名注册（非关键字）。
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ class IbAudio(IbFileHandle):
 
     def __init__(self, backing: MediaBacking, ib_class: IbClass):
         super().__init__(backing, ib_class)
-        # PT-ARCH-24: format 是 field，从文件名扩展名推导，无 I/O。
+        # format 是 field，从文件名扩展名推导，无 I/O。
         self.fields["format"] = ib_class.registry.box(_format_from_backing(backing))
 
     def data(self) -> str:
@@ -91,7 +91,7 @@ class IbImage(IbFileHandle):
 
     def __init__(self, backing: MediaBacking, ib_class: IbClass):
         super().__init__(backing, ib_class)
-        # PT-ARCH-24: format 是 field，从文件名扩展名推导，无 I/O。
+        # format 是 field，从文件名扩展名推导，无 I/O。
         self.fields["format"] = ib_class.registry.box(_format_from_backing(backing))
 
     def data(self) -> str:
@@ -126,7 +126,7 @@ class IbVideo(IbFileHandle):
 
     def __init__(self, backing: MediaBacking, ib_class: IbClass):
         super().__init__(backing, ib_class)
-        # PT-ARCH-24: format 是 field，从文件名扩展名推导，无 I/O。
+        # format 是 field，从文件名扩展名推导，无 I/O。
         self.fields["format"] = ib_class.registry.box(_format_from_backing(backing))
 
     def data(self) -> str:
@@ -151,7 +151,7 @@ class IbVideo(IbFileHandle):
 
 
 # --------------------------------------------------------------------------- #
-# PT-ARCH-25: media 静态构造入口：audio.from_file / image.from_file / video.from_file
+# media 静态构造入口：audio.from_file / image.from_file / video.from_file
 # --------------------------------------------------------------------------- #
 
 def audio_from_file(ib_class: IbClass, path: str) -> IbAudio:

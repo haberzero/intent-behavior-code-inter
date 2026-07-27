@@ -6,7 +6,7 @@ TypeRef — 类型系统的"地址"层。
 TypeRef 是纯不可变值，代表对一个类型的引用。它只持有类型的"地址"
 （名字 + 泛型实参 + 模块限定），不包含任何成员信息或运行逻辑。
 
-设计原则（来自 IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md §1.1）：
+设计原则：
   - 可哈希：能作为 dict key、放入 set
   - 递归结构化：list[dict[str,int]] 直接通过 args 表达，不靠字符串拼接
   - 不依赖注册表：构造 TypeRef 无需任何全局状态

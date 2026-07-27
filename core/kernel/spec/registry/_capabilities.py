@@ -23,7 +23,7 @@ class _CapabilityMixin:
     # declares the corresponding ``has_*_cap`` flag, else ``None``.
     # This preserves the truthy-check idiom used throughout the compiler
     # and runtime ( ``if cap: cap.method()`` ) while collapsing the
-    # legacy per-capability Protocol classes into a single TypeAxiom
+    # per-capability Protocol classes into a single TypeAxiom
     # interface.
     #
     # For ``get_call_cap``, structural callables (FUNCTION / BOUND_METHOD /

@@ -163,7 +163,7 @@ class LLMUncertainAxiom(BaseAxiom):
     - 支持 == 和 != 运算符。
 
     NOTE [未来演进路线 — 低优先级 PENDING]:
-    - 用户自定义 UncertainResult；零参数 is_uncertain()；详见 PENDING_TASKS §十四。
+    - 用户自定义 UncertainResult；零参数 is_uncertain()。
     """
 
     has_operator_cap = True

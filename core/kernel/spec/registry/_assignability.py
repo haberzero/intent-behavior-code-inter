@@ -119,7 +119,7 @@ class _AssignabilityMixin:
                     result.members.setdefault(m_name, m_spec)
             return result
 
-        # G1: early-cache hit — 避免为已注册的特化类型分配临时 spec。
+        # early-cache hit — 避免为已注册的特化类型分配临时 spec。
         # 使用 spec.name（含类型参数的完整名称）而非 get_base_name()，
         # 以便嵌套泛型如 list[list[int]] 正确构建缓存键。
         #

@@ -1,11 +1,9 @@
 """
 测试 storage_model 在 deep_clone 与 RuntimeSerializer 中的分发行为。
 
-G3 目标：
+目标：
 - 内存型对象保持既有递归深克隆语义。
 - 磁盘型对象通过协议方法浅拷贝路径引用，不物化字节。
-- 修复 ``type(val) is KernelIbObject`` 严格判定导致 IbValue 子类（media）
-  被误判为不可克隆的潜伏 bug。
 """
 
 from __future__ import annotations

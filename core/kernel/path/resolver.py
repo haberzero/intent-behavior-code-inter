@@ -1,18 +1,12 @@
 """
 IBCI Path Resolver - 路径解析服务（规范解析器）
 
-Per ADR-015 D1：本解析器采用 **entry_dir 单锚点语义**，与 IBCI_SPEC §6.1 契约一致：
+本解析器采用 **entry_dir 单锚点语义**：
 "所有相对路径都基于入口文件目录解析，无论在哪个 IBCI 文件中执行"。
 
 这是 IBCI 的**唯一**规范路径解析器。所有需要把相对路径解析为绝对路径的站点
 （ExecutionContext.resolve_path、HostService._resolve_isolated_path 等）都应委托本类，
 不得各自手搓 os.path.abspath/join。
-
-历史
-----
-原实现采用 3 层语义（绝对 / 脚本相对 / 项目相对），零生产调用，且与生产解析器
-``ExecutionContextImpl.resolve_path`` 的 entry_dir 单锚点语义不一致。本次统一化
-（ADR-015）将其重写为与生产一致的 entry_dir 单锚点语义，使其成为可复用的规范解析器。
 """
 from __future__ import annotations
 
@@ -33,7 +27,7 @@ class PathResolver:
 
     设计原则：
     - **不使用 ``os.getcwd()`` 兜底**（CWD 是隐式全局状态，违反"显式优于隐式"）。
-    - **不区分 ``./`` ``../`` 与普通相对**——所有相对路径统一锚定 entry_dir（§6.1 契约）。
+    - **不区分 ``./`` ``../`` 与普通相对**——所有相对路径统一锚定 entry_dir（契约）。
       ``..`` 由 ``resolve_dot_segments`` 处理。
     - 全程基于 ``IbPath``，零 ``os.path`` 调用（与 Python 路径世界解耦）。
     """
@@ -55,7 +49,7 @@ class PathResolver:
 
     def resolve(self, path: str) -> IbPath:
         """
-        统一路径解析入口（§6.1 契约的唯一实现）。
+        统一路径解析入口（契约的唯一实现）。
 
         参数:
             path: 原始路径字符串（任意格式）

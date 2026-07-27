@@ -4,7 +4,7 @@ tests/e2e/test_e2e_model_routing.py
 
 e2e 测试：命名模型路由（@NAME~ 语法 → target_model 传递）。
 
-验证 Phase 1 实现：
+验证实现：
 1. @NAME~ 语法中 tag 字段正确传递到 AIPlugin.__call__
 2. register_model() 注册后，@NAME~ 能正确路由
 3. 未注册模型名报错
