@@ -118,8 +118,9 @@ class BehaviorDependencyAnalyzer:
 
         # 直接写入 AST 节点
         node.llm_deps = deps
-        # 默认可调度，循环检测时会修改
-        node.dispatch_eligible = True
+        # PT-4.7：并发 dispatch 未默认启用。DDG 分析仍计算 llm_deps 供未来
+        # 接通使用，但 dispatch_eligible 一律置 False，behavior 走同步求值。
+        node.dispatch_eligible = False
 
     def _collect_referenced_vars(self, node: ast.IbASTNode) -> Set[str]:
         """收集节点中引用的所有变量"""

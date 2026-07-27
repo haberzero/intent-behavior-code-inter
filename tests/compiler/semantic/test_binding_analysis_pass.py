@@ -162,7 +162,8 @@ def test_behavior_dep_assigns_behavior_expr_to_symbol(spec_registry):
 
     assert result.success
     assert hasattr(behavior, 'llm_deps')
-    assert behavior.dispatch_eligible is True
+    # PT-4.7：并发 dispatch 未默认启用，dispatch_eligible 一律置 False
+    assert behavior.dispatch_eligible is False
 
 
 def test_behavior_dep_non_behavior_assign_no_crash(spec_registry):

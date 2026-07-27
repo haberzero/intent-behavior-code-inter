@@ -404,10 +404,11 @@ class IbBehaviorExpr(IbExpr):
     #
     # 默认值的语义：
     # * ``llm_deps == []`` ：本 behavior 无 LLM 依赖（只引用普通变量）
-    # * ``dispatch_eligible == True`` ：可独立调度（无依赖或依赖图无环时由
-    #   依赖分析在后保留；分析未运行时也按 True 默认，与现有行为一致）
+    # * ``dispatch_eligible == False`` ：并发 dispatch 未默认启用（PT-4.7）。
+    #   DDG 分析仍计算 ``llm_deps`` 供未来接通使用，但 ``dispatch_eligible``
+    #   一律置 False，behavior 走同步求值路径。
     llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)
-    dispatch_eligible: bool = True
+    dispatch_eligible: bool = False
 
 @dataclass(kw_only=True, eq=False)
 class IbBehaviorInstance(IbExpr):

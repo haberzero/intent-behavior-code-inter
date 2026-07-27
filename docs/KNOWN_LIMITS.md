@@ -345,13 +345,19 @@ str r = @~ ... ~
 
 ---
 
-## 十五、DDG 分析已完成但并发调度未接通
+## 十五、DDG 分析已完成但并发调度已禁用
 
-**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）已经为每个 `IbBehaviorExpr` 计算 `llm_deps` / `dispatch_eligible` 字段（详见 `docs/architecture/05_vm_specification.md §3.1`），但运行时 `core/runtime/interpreter/llm_executor/`（包）与 `core/runtime/vm/handlers/`（包）仍按 AST 序串行执行——`dispatch_eligible=True` 的节点目前**不会**真正并发发起 LLM HTTP 调用，`LLMScheduler.dispatch_eager()` 路径未被默认启用。
+**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）仍为每个 `IbBehaviorExpr` 计算 `llm_deps` 字段（供未来接通使用），但 `dispatch_eligible` 一律置 `False`（`behavior_dependency_pass.py`）。运行时 `assignment.py` 检测到 `dispatch_eligible=False` 即走同步求值路径，`LLMScheduler.dispatch_eager()` 代码存在但不会被触发。所有 `@~ ... ~` 行为表达式按 AST 序串行执行。
 
-**根源**：并发分发会与现有 `llmexcept` 快照隔离、`@~...~` 的意图栈消费、`Cell` 变量赋值等语义产生跨切面副作用；接通需要补足"快照与 future 的交互合同"。
+**根源**：dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`），但后台线程执行完整的 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争（原 C2 缺陷）。已显式禁用并降级为 PT-4.7 专项重做。
 
-**未来演进思路**：见 `tasks_docs/PENDING_TASKS.md §四 PT-4.7`。
+**接通前置条件**（PT-4.7）：
+1. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept 强制 `False`）
+2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"+"后台仅 HTTP 调用"
+3. `last_call_info`/`retry_hint` 线程安全或去共享
+4. 补"插值 + 真实并发"合规测试
+
+**未来演进思路**：见 `tasks_docs/PENDING_TASKS.md §三 PT-4.7`。
 
 ---
 

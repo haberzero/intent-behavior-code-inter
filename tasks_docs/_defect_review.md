@@ -1,7 +1,7 @@
 # 代码缺陷复查与修复计划（临时任务文档）
 
-> **状态**：8 项无歧义缺陷已修复并验证（C1/M1/M8/M9/M11a-b/M12/M17，1176 passed/7 skipped）。M5 前提错误（get_value 不存在，需重新调查）。C2 无歧义但需专项重构。D1-D10 待逐个讨论。
-> **日期**：2026-07-24（更新：修复完成）
+> **状态**：11 项已处置（C1/M1/M3/M5/M8/M9/M11a-b/M12/M17 + C2 降级合并 PT-4.7 + D1 移除 SyncManager）。C2 经复核降级为 MAJOR（最严重竞态只污染诊断），显式禁用 dispatch 并合并 PT-4.7。M5 确认三重死代码，整体删除并文档化设计决策。M3+D1 移除 SyncManager 功能空壳。D2-D10 待逐个讨论。
+> **日期**：2026-07-27（第二轮复核：C2/M5/M3 独立 subagent 复核 + 处置）
 > **性质**：临时文档，缺陷处置完成后归档或删除。
 > **关联**：注释清洁清单 `tasks_docs/_cleanup_inv_*.md`。
 
@@ -201,14 +201,18 @@ M2、M4、M5(重新调查)、M6、M7、M10、M13、M11c
 - ✅ M12：CALLABLE_SIG 双诊断
 - ✅ M17：except-as-e 测试修正
 
+### 已完成（第二轮复核后处置，3 项）
+- ✅ **C2（降级为 MAJOR，合并入 PT-4.7）**：dispatch_eager 数据竞争。复核确认 KNOWN_LIMITS §十五"未默认启用"为陈旧错误文档（代码实际已半接通）。最严重竞态只污染诊断不污染执行结果；执行级竞态局限在 retry 边沿。处置：显式禁用 dispatch（`dispatch_eligible` 一律置 `False`）+ 修正 KNOWN_LIMITS §十五 + 合并 PT-4.7 专项重做。4 个 dispatch 专属测试转 skip。不局部 hotfix（拆分牵动 4 处 + 需补真实并发测试，属 PT-4.7 完整工作量）。
+- ✅ **M5（死代码删除 + 设计决策文档化）**：inherit_variables 三重死代码（`get_value` 从未存在 + `sym.provenance` AttributeError + `global_scope.resolve` AttributeError）。`sync_state`/`_sync_variables_from`/`_sync_classes_from` 零调用点整体删除。设计决策：变量不跨隔离边界继承（§3.6/§8"不做隐式内存交互"），从 IsolationPolicy 移除 `inherit_variables` 字段。`inherit_intents`/`inherit_classes` 保留为配置字段（§6.3 文档化立场），当前无运行时消费者。
+- ✅ **M3 + D1（SyncManager 移除）**：M3 非真实 bug（`sync()` 恒返回 True，`_wait_for_sync` 是 pass，suspend/resume 零调用）。D1 决议"移除"：SyncManager 是功能空壳，违反 §8/§11（不做隐式内存交互 + 排除核心级 IPC）。删除 `sync_manager.py` + service.py 引用 + interfaces.py 协议。M3 随之消解（删调用而非检查返回值）。
+
 ### 待处理
-1. **C2（critical，无歧义但需专项重构）**：拆分 `execute_behavior_expression` 为 prompt 构建(同步)+调用(异步)。
-2. **M5（前提错误，需重新调查）**：`get_value` 不存在，inherit_variables 死代码；需查清预期数据流再定方案。
-3. **M3（依赖 D1）**：save_state sync 返回值检查，方案取决于 sync 语义决议。
-4. **D1-D10（逐个讨论）**：见 §四。
-5. **设计限制 M14-M16**：文档化（KNOWN_LIMITS）。
-6. **MINOR 批量清理**：见 §六。
-7. **注释清洁（573 处）**：`_cleanup_inv_*.md`，涉及缺陷的注释暂不清。
-8. **诊断码/公理编号规范化**：独立工作流。
+1. **D2-D10（逐个讨论）**：见 §四。（D1 已决议：移除 SyncManager）
+2. **设计限制 M14-M16**：文档化（KNOWN_LIMITS）。
+3. **MINOR 批量清理**：见 §六。
+4. **注释清洁（573 处）**：`_cleanup_inv_*.md`，涉及缺陷的注释暂不清。
+5. **诊断码/公理编号规范化**：独立工作流。
 
 > 涉及语义错误集的修复（M11/M12/M13）须在分支早期跑全量 pytest 评估破坏面（AGENTS.md 要求）。
+>
+> **第二轮测试基线**：1173 passed, 10 skipped（C2 禁用后 4 个 dispatch 专属测试转 skip）。

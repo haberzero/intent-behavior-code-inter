@@ -31,7 +31,6 @@ from core.kernel import ast as ast
 from core.kernel.issue import (
     InterpreterError, Severity
 )
-from core.runtime.host.isolation_policy import IsolationPolicy
 from core.base.source_atomic import Location
 from core.base.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED
@@ -99,36 +98,6 @@ class Interpreter:
                     for i in ci.get_active_intents()]
         # Defensive: should be unreachable per IIbBehavior contract.
         return [str(ci)]
-
-    def sync_state(self, parent_context: RuntimeContext, policy: Dict[str, Any]):
-        """从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
-        isolation_policy = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
-
-        if isolation_policy.inherit_intents:
-            self.runtime_context.intent_stack = parent_context.intent_stack
-            for intent in parent_context.get_global_intents():
-                self.runtime_context.set_global_intent(intent)
-
-        if isolation_policy.inherit_variables and isolation_policy.level == "FULL":
-            self._sync_variables_from(parent_context)
-
-        if isolation_policy.inherit_classes:
-            self._sync_classes_from(parent_context)
-
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
-            f"Interpreter state synced from parent context with policy: {policy}")
-
-    def _sync_variables_from(self, parent_context: RuntimeContext):
-        """从父上下文同步变量"""
-        parent_scope = parent_context.current_scope
-        current_scope = self.runtime_context.current_scope
-        for name, symbol in parent_scope._symbols.items():
-            if not name.startswith("__"):
-                current_scope.define(name, symbol.value, declared_type=symbol.declared_type, is_const=symbol.is_const, force=True)
-
-    def _sync_classes_from(self, parent_context: RuntimeContext):
-        """ 从父上下文同步类定义"""
-        pass
 
 
     # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险（见 PENDING_TASKS.md §10.3）

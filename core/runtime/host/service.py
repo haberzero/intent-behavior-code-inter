@@ -19,7 +19,6 @@ from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFa
 from core.runtime.host.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.registry import KernelRegistry
-from core.runtime.host.sync_manager import SyncManager
 from core.runtime.objects.kernel import IbObject
 from core.kernel.issue import InterpreterError
 from core.extension.ibcext import IbStatefulPlugin
@@ -42,14 +41,6 @@ class HostService(IHostService):
         self.orchestrator = orchestrator
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
-        self._sync_manager = SyncManager()
-
-    def sync(self) -> bool:
-        """
-         安全点同步 (Safe Point Sync) 原语。
-        等待所有执行上下文达到一致状态后返回。
-        """
-        return self._sync_manager.sync()
 
     @staticmethod
     def _contains_disk_backed_instance(execution_context: IExecutionContext) -> bool:
@@ -73,12 +64,11 @@ class HostService(IHostService):
     def save_state(self, path: str):
         """深度序列化当前运行时上下文并保存到磁盘"""
         # 路径经 IbPath 规范化；资产外化布局委托 SnapshotLayout（策略集中化）。
-        # 注：save_state 是宿主级特权操作（用户显式调用），不经 PermissionManager 沙箱校验——
+        # 注：save_state 是宿主级特权操作（用户显式调用），不经 PermissionManager 沙箱校验--
         # 这是有意设计（host op 应能写用户指定位置），非安全缺口。
         # 注：assets 的 "__EXTERNAL_FILE_REF__" 哨兵是序列化格式约定，
         # 属 PT-ARCH-13（media 重建时统一为路径感知序列化）。
         from core.kernel.path import IbPath, SnapshotLayout
-        self.sync() # 必须先同步
 
         # PT-ARCH-26：在序列化之前扫描活跃变量，若存在磁盘型容器则直接拒绝。
         if self._contains_disk_backed_instance(self.execution_context):
@@ -203,25 +193,14 @@ class HostService(IHostService):
         """
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available. Isolated execution cannot be performed.")
-            
-        # 根据 policy 提取 initial_vars (如果需要传递状态)
-        initial_vars = None
-        if policy.get("inherit_variables", False):
-            # 提取父环境的全局变量 (排除内部变量)
-            global_symbols = self.execution_context.runtime_context.global_scope.get_all_symbols()
-            initial_vars = {}
-            for name, sym in global_symbols.items():
-                from core.base.enums import Provenance
-                if not name.startswith("__") and sym.provenance not in (Provenance.KERNEL_NATIVE, Provenance.AXIOM_PROVIDED):
-                    # 仅传递基础类型值或可安全序列化的值，此处简化为值引用传递，
-                    # 实际在 Engine 接收端会被装箱
-                    val = self.execution_context.runtime_context.global_scope.resolve(name)
-                    if hasattr(val, 'get_value'):
-                        initial_vars[name] = val.get_value()
+
+        # 设计决策（01_principles.md §3.6/§8）：子环境与父环境之间不做隐式内存交互，
+        # 变量不跨隔离边界继承。父->子 数据传递应通过显式 file 读写完成。
+        # 原 inherit_variables 提取路径（含 get_value/provenance/resolve 三重死代码）已移除。
 
         # 发起系统调用，阻塞等待执行完成
         abs_path = self._resolve_isolated_path(path)
-        success = self.orchestrator.request_isolated_run(abs_path, policy, initial_vars)
+        success = self.orchestrator.request_isolated_run(abs_path, policy)
         
         # 返回执行结果（当前简化为布尔值；多返回值改进见 PENDING_TASKS.md §10.2）
         return self.registry.box(success)

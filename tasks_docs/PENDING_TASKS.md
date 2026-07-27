@@ -64,9 +64,16 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
-### PT-4.7　DDG 并行调度真正接入 VM [DESIGN-DEBT]
+### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT]
 
-> 真实失败模式是 `dispatch_eager` 捕获 `execution_context` 按引用传递给后台线程 -> 数据竞争。
+> **原 C2 缺陷已并入此项**。dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`）但后台线程执行完整 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争。已显式禁用（`dispatch_eligible` 一律置 `False`），行为表达式全部走同步路径。
+>
+> **接通前置条件**：
+> 1. 修 `BehaviorDependencyPass` 实现 `05_vm_specification.md §3.1` 规则（插值依赖/Cell/llmexcept 强制 `False`，当前 pass 只检测环）
+> 2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"（同步）+"后台仅 `_call_llm`+解析"（异步）
+> 3. `last_call_info`/`retry_hint` 线程安全或去共享化
+> 4. 补"插值 + 真实并发"合规测试（现有 `test_concurrent_llm.py` / `test_e2e_llm_pipeline.py` 用 MOCK 只验值正确性，不验真实并发时序）
+> 5. 重新启用被 skip 的 4 个 dispatch 专属测试（`test_e2e_llm_pipeline.py::test_two_independent_assignments_both_pending_after_run`、`test_e2e_llm_basic.py::TestE2EStaleResultIsolation` × 3）
 
 ---
 

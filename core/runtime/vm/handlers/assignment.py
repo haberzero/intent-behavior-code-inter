@@ -52,7 +52,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
         if (
             value_node_data
             and value_node_data.get("_type") == "IbBehaviorExpr"
-            and value_node_data.get("dispatch_eligible", True)
+            and value_node_data.get("dispatch_eligible", False)
             # 不在 llmexcept 保护下调度：llmexcept 协议依赖同步读取 LLM 结果
             # 来检测不确定性并触发 retry；异步 dispatch 会绕过该协议导致占位符
             # 直接落入用户变量。

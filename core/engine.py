@@ -703,7 +703,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             )
         return abs_path, sub_root_dir
 
-    def request_isolated_run(self, entry_path: str, policy: Dict[str, Any], initial_vars: Optional[Dict[str, Any]] = None) -> bool:
+    def request_isolated_run(self, entry_path: str, policy: Dict[str, Any]) -> bool:
         """
         [IKernelOrchestrator] 处理来自运行时的隔离执行系统调用。
         核心逻辑：启动一个全新的 Engine 实例，实现编译与运行的完全隔离。
@@ -725,11 +725,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         # 3. 运行子项目
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Running isolated artifact...")
-        success = sub_engine.run(abs_path, variables=initial_vars)
+        success = sub_engine.run(abs_path)
 
         return success
 
-    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], initial_vars: Optional[Dict[str, Any]] = None) -> str:
+    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any]) -> str:
         """
         [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
         在后台线程中启动全新的 Engine 实例；立即返回 handle 字符串。
@@ -753,7 +753,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         def _run_child():
             try:
-                sub_engine.run(abs_path, variables=initial_vars, silent=True)
+                sub_engine.run(abs_path, silent=True)
             except Exception as e:
                 exc_holder[0] = e
 

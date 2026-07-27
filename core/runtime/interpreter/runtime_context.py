@@ -105,11 +105,10 @@ class ScopeImpl:
             self._uid_to_symbol[uid] = sym
         else:
             # 合法编译路径下语义分析始终提供 UID。剩余的无 UID 调用仅来自
-            # 内核引导期 / 跨上下文同步路径（``RuntimeContextImpl.sync_state``、
-            # ``HostService`` plugin 恢复等），它们持有可信的 ``name`` 但无符号
-            # UID。此处使用 ``id(sym)`` 派生唯一 UID，不再发出 RuntimeWarning：
-            # 经 -W error::RuntimeWarning 全测试套件验证（949 测试），常规执行
-            # 路径下此分支永不命中。如新代码引入此路径请显式传入 ``uid``。
+            # 内核引导期 / ``HostService`` plugin 恢复等路径，它们持有可信的
+            # ``name`` 但无符号 UID。此处使用 ``id(sym)`` 派生唯一 UID，不再发出
+            # RuntimeWarning：经 -W error::RuntimeWarning 全测试套件验证（949 测试），
+            # 常规执行路径下此分支永不命中。如新代码引入此路径请显式传入 ``uid``。
             assert name, (
                 "ScopeImpl.define(): caller must provide either uid or name; "
                 "both missing indicates a bootstrap bug."

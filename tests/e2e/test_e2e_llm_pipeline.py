@@ -40,6 +40,7 @@ def _run_pipeline(code: str):
 class TestParallelDispatch:
     """多个独立的、可调度的 LLM 赋值应同时派发为 LLMFuture。"""
 
+    @pytest.mark.skip(reason="dispatch_eager 已禁用（PT-4.7：并发调度未默认启用），_pending_futures 不再产生")
     def test_two_independent_assignments_both_pending_after_run(self):
         """``x = @~ MOCK:STR:a ~``、``y = @~ MOCK:STR:b ~`` 之间无数据依赖；
         两个 LLMFuture 应在赋值阶段一并派发；只有读取时才 resolve。"""

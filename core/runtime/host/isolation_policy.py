@@ -9,15 +9,17 @@ class IsolationPolicy:
 
     | Level       | Registry | Plugins | Intents | Variables | CallStack |
     |-------------|----------|---------|---------|-----------|-----------|
-    | FULL        | 独立克隆 | 全部继承 | 全部继承 | 全部继承  | 全部继承  |
-    | PARTIAL     | 独立克隆 | 按配置   | 按配置   | 按配置    | 清空      |
-    | PLUGIN_ONLY | 共享     | 独立    | 清空    | 清空      | 清空      |
-    | MINIMAL     | 共享     | 无      | 清空    | 清空      | 清空      |
+    | FULL        | 独立克隆 | 全部继承 | 全部继承 | 不继承    | 全部继承  |
+    | PARTIAL     | 独立克隆 | 按配置   | 按配置   | 不继承    | 清空      |
+    | PLUGIN_ONLY | 共享     | 独立    | 清空    | 不继承    | 清空      |
+    | MINIMAL     | 共享     | 无      | 清空    | 不继承    | 清空      |
+
+    设计决策（01_principles.md §3.6/§8）：变量不跨隔离边界继承--
+    子环境与父环境之间不做隐式内存交互，父->子 数据传递应通过显式 file 读写完成。
     """
     level: str = "PARTIAL"
     inherit_plugins: Optional[List[str]] = None
     inherit_intents: bool = False
-    inherit_variables: bool = False
     inherit_classes: bool = True
     max_call_stack: int = 1000
     max_instructions: int = 10000
@@ -32,7 +34,6 @@ class IsolationPolicy:
             level="FULL",
             inherit_plugins=True,
             inherit_intents=True,
-            inherit_variables=True,
             inherit_classes=True
         )
 
@@ -42,7 +43,6 @@ class IsolationPolicy:
             level="PARTIAL",
             inherit_plugins=inherit_plugins or [],
             inherit_intents=inherit_intents,
-            inherit_variables=False,
             inherit_classes=True
         )
 
@@ -52,7 +52,6 @@ class IsolationPolicy:
             level="PLUGIN_ONLY",
             inherit_plugins=inherit_plugins,
             inherit_intents=False,
-            inherit_variables=False,
             inherit_classes=False
         )
 
@@ -62,7 +61,6 @@ class IsolationPolicy:
             level="MINIMAL",
             inherit_plugins=[],
             inherit_intents=False,
-            inherit_variables=False,
             inherit_classes=False
         )
 
@@ -71,7 +69,6 @@ class IsolationPolicy:
             "level": self.level,
             "inherit_plugins": self.inherit_plugins,
             "inherit_intents": self.inherit_intents,
-            "inherit_variables": self.inherit_variables,
             "inherit_classes": self.inherit_classes,
             "max_call_stack": self.max_call_stack,
             "max_instructions": self.max_instructions,
@@ -84,7 +81,6 @@ class IsolationPolicy:
             level=data.get("level", "PARTIAL"),
             inherit_plugins=data.get("inherit_plugins"),
             inherit_intents=data.get("inherit_intents", False),
-            inherit_variables=data.get("inherit_variables", False),
             inherit_classes=data.get("inherit_classes", True),
             max_call_stack=data.get("max_call_stack", 1000),
             max_instructions=data.get("max_instructions", 10000)
