@@ -5,7 +5,7 @@ import traceback
 import copy
 import threading
 import uuid
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Union
 
 # =============================================================================
 # 架构边界说明：Engine = 组装者，不参与执行
@@ -46,6 +46,7 @@ from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
+from core.runtime.host.isolation_policy import IsolationPolicy
 from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.capability_registry import CapabilityRegistry
@@ -700,6 +701,24 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             )
         return abs_path, sub_root_dir
 
+    def _resolve_inherited_plugin_paths(self, policy: Union[Dict[str, Any], IsolationPolicy]) -> List[str]:
+        """根据 IsolationPolicy.inherit_plugins 解析子引擎应继承的插件搜索路径。
+
+        True  = 全部继承（默认）
+        False = 不继承
+        List  = 选择性继承（按插件名过滤；过滤逻辑待未来实现，当前走全量继承）
+        """
+        policy_obj = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
+
+        if policy_obj.inherit_plugins is True:
+            return self._plugin_search_paths
+        elif policy_obj.inherit_plugins is False:
+            return []
+        else:
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                f"Selective plugin inheritance {policy_obj.inherit_plugins} requested but not yet filtered; inheriting all.")
+            return self._plugin_search_paths
+
     def request_isolated_run(self, entry_path: str, policy: Dict[str, Any]) -> bool:
         """
         [IKernelOrchestrator] 处理来自运行时的隔离执行系统调用。
@@ -716,7 +735,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             root_dir=sub_root_dir,
             auto_sniff=self.auto_sniff,
             core_debug_config=self.debugger.config,  # 继承调试配置
-            inherited_plugin_paths=self._plugin_search_paths,  # 继承父 plugin
+            inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy),
             inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
 
@@ -741,7 +760,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             root_dir=sub_root_dir,
             auto_sniff=self.auto_sniff,
             core_debug_config=self.debugger.config,
-            inherited_plugin_paths=self._plugin_search_paths,  # 继承父 plugin
+            inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy),
             inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
 

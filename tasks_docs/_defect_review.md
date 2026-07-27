@@ -117,9 +117,10 @@ M2、M4、M5(重新调查)、M6、M7、M10、M13、M11c
 - `sys.path.insert` 无清理、非线程安全；`sys.modules` 全局缓存致同名插件跨 project_root 冲突。
 - **问题**：接受进程全局加载为文档化已知限制（廉价），还是投入 scoped `importlib` 加载（正确，较大）？文档未声明 Python 级模块加载的隔离边界。
 
-### D4. M7 - inherit_plugins 模型：bool 标志 还是 selective 列表？
-- 类型标注 `Optional[List[str]]` 但代码设 `True`（bool）。字段当前**无消费者**（死字段），但契约破损。
-- **问题**：插件继承是 bool(all/none) 还是 List[str](selective)？无 axiom 指定。
+### D4. M7 - inherit_plugins 模型 -- ✅ 已处置
+- 字段类型改为 `Union[bool, List[str]]`（True=全部继承/False=不继承/["ai"]=选择性继承），默认 `True`。
+- 删除 `__post_init__` hack，修复工厂方法，在 engine.py 添加 `_resolve_inherited_plugin_paths` 消费者。
+- 选择性过滤逻辑待未来实现（当前 List[str] 走全量继承 + trace 标注）。
 
 ### D5. M10 - 浅引用快照的健全性：接受残余风险 还是 重开 COW 架构决策？
 - ADR-014/016 已定"浅路径引用快照，不复制字节"。PT-ARCH-27 disable-list 是承诺设计（非临时补丁）。但 disable-list 本质是打地鼠：`file.remove()` 未禁用、`write_new(同路径)`、子进程触碰 backing 路径都能绕过。
@@ -207,7 +208,7 @@ M2、M4、M5(重新调查)、M6、M7、M10、M13、M11c
 - ✅ **M3 + D1（SyncManager 移除）**：M3 非真实 bug（`sync()` 恒返回 True，`_wait_for_sync` 是 pass，suspend/resume 零调用）。D1 决议"移除"：SyncManager 是功能空壳，违反 §8/§11（不做隐式内存交互 + 排除核心级 IPC）。删除 `sync_manager.py` + service.py 引用 + interfaces.py 协议。M3 随之消解（删调用而非检查返回值）。
 
 ### 待处理
-1. **D2-D10（逐个讨论）**：见 §四。（D1 已决议：移除 SyncManager）
+1. **D2-D3, D5-D10（逐个讨论）**：见 §四。（D1 已决议：移除 SyncManager；D4 已处置：激活 inherit_plugins）
 2. **设计限制 M14-M16**：✅ 已文档化（KNOWN_LIMITS §十八 Optional[T] 运行时分发缺失 + §十九 设计排除的语法：walrus / if-block 重声明）。
 3. **MINOR 批量清理**：见 §六。
 4. ~~注释清洁（573 处）~~：**已完成**（commit `3bcfa3d`，~530 处清洁，清单文件已删除）。
