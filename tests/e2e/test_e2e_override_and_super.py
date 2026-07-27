@@ -1,10 +1,10 @@
 """
-Tests for SEM_092 (method override signature compatibility) and SEM_093 (super() legality).
+Tests for SEM_DUAL_ASSIGNABLE (method override signature compatibility) and SEM_SUPER_OUTSIDE_METHOD (super() legality).
 
-SEM_092: When a child class overrides a parent method, the child's signature must
+SEM_DUAL_ASSIGNABLE: When a child class overrides a parent method, the child's signature must
          be compatible (parameter count + types + return type).
 
-SEM_093: super() must be called inside a class method of a class with a parent.
+SEM_SUPER_OUTSIDE_METHOD: super() must be called inside a class method of a class with a parent.
 """
 
 import pytest
@@ -12,15 +12,15 @@ from tests.conftest import run_ibci, compile_ibci, compile_or_errors
 
 
 # ============================================================
-# SEM_092: Method override signature compatibility
+# SEM_DUAL_ASSIGNABLE: Method override signature compatibility
 # ============================================================
 
 
 class TestMethodOverrideSignature:
-    """SEM_092: Override method signature must be compatible with parent."""
+    """SEM_DUAL_ASSIGNABLE: Override method signature must be compatible with parent."""
 
     def test_compatible_override_no_warning(self):
-        """Same signature override should NOT produce SEM_092."""
+        """Same signature override should NOT produce SEM_DUAL_ASSIGNABLE."""
         code = """class Animal:
     func speak(self) -> str:
         return "..."
@@ -52,7 +52,7 @@ print(c.greet("World"))
         assert "Hi World" in result
 
     def test_override_incompatible_param_type(self):
-        """Override with incompatible param types should produce SEM_092 warning."""
+        """Override with incompatible param types should produce SEM_DUAL_ASSIGNABLE warning."""
         code = """class Base:
     func process(self, int x) -> int:
         return x
@@ -64,12 +64,12 @@ class Child(Base):
 Child c = Child()
 print((str)c.process("test"))
 """
-        # Should compile (SEM_092 is a warning) and run
+        # Should compile (SEM_DUAL_ASSIGNABLE is a warning) and run
         result = run_ibci(code)
         assert "0" in result
 
     def test_override_incompatible_return_type(self):
-        """Override with incompatible return type should produce SEM_092 warning."""
+        """Override with incompatible return type should produce SEM_DUAL_ASSIGNABLE warning."""
         code = """class Base:
     func compute(self) -> int:
         return 42
@@ -86,7 +86,7 @@ print(c.compute())
         assert "hello" in result
 
     def test_init_override_no_warning(self):
-        """__init__ override should NOT produce SEM_092 (signature-free method)."""
+        """__init__ override should NOT produce SEM_DUAL_ASSIGNABLE (signature-free method)."""
         code = """class Base:
     int x
     func __init__(self, int v):
@@ -105,7 +105,7 @@ print(c.name)
         assert "test" in result
 
     def test_new_method_not_override_no_warning(self):
-        """Method not present in parent should NOT produce SEM_092."""
+        """Method not present in parent should NOT produce SEM_DUAL_ASSIGNABLE."""
         code = """class Base:
     func greet(self) -> str:
         return "Hello"
@@ -148,12 +148,12 @@ print(f.create().name)
 
 
 # ============================================================
-# SEM_093: super() call legality
+# SEM_SUPER_OUTSIDE_METHOD: super() call legality
 # ============================================================
 
 
 class TestSuperCallLegality:
-    """SEM_093: super() must be called inside a class method with a parent."""
+    """SEM_SUPER_OUTSIDE_METHOD: super() must be called inside a class method with a parent."""
 
     def test_super_in_class_method_valid(self):
         """super() inside a class method with parent should be valid."""
@@ -172,14 +172,14 @@ print(c.greet())
         assert "Hello from Child" in result
 
     def test_super_outside_class_error(self):
-        """super() at module level should produce SEM_093."""
+        """super() at module level should produce SEM_SUPER_OUTSIDE_METHOD."""
         code = """super()
 """
         artifact, errors = compile_or_errors(code)
-        assert "SEM_093" in errors
+        assert "SEM_SUPER_OUTSIDE_METHOD" in errors
 
     def test_super_in_regular_function_error(self):
-        """super() inside a regular function (not class method) should produce SEM_093."""
+        """super() inside a regular function (not class method) should produce SEM_SUPER_OUTSIDE_METHOD."""
         code = """func test() -> auto:
     super()
     return 0
@@ -187,7 +187,7 @@ print(c.greet())
 print((str)test())
 """
         artifact, errors = compile_or_errors(code)
-        assert "SEM_093" in errors
+        assert "SEM_SUPER_OUTSIDE_METHOD" in errors
 
     def test_super_in_class_without_explicit_parent_is_valid(self):
         """super() in a class without explicit parent is valid (implicit Object inheritance)."""
@@ -201,7 +201,7 @@ print(s.test())
 """
         # All user classes implicitly inherit Object, so super() is valid
         artifact, errors = compile_or_errors(code)
-        assert "SEM_093" not in errors
+        assert "SEM_SUPER_OUTSIDE_METHOD" not in errors
 
 
 # ============================================================
@@ -251,7 +251,7 @@ print((str)b.x)
         assert "99" in result
 
     def test_parent_to_child_assignment_type_error(self):
-        """Dog d = Animal("x") should fail type checking (SEM_003)."""
+        """Dog d = Animal("x") should fail type checking (SEM_TYPE_MISMATCH)."""
         code = """class Animal:
     str name
     func __init__(self, str n):
@@ -264,7 +264,7 @@ class Dog(Animal):
 Dog d = Animal("x")
 """
         artifact, errors = compile_or_errors(code)
-        assert "SEM_003" in errors
+        assert "SEM_TYPE_MISMATCH" in errors
 
     def test_unrelated_class_assignment_type_error(self):
         """Assigning unrelated class instance should fail."""
@@ -277,7 +277,7 @@ class Dog:
 Cat c = Dog()
 """
         artifact, errors = compile_or_errors(code)
-        assert "SEM_003" in errors
+        assert "SEM_TYPE_MISMATCH" in errors
 
     def test_upcast_expression(self):
         """(Animal)dog should compile without errors."""

@@ -7,7 +7,7 @@ Unit tests for the unified __prompt__ protocol infrastructure.
 Validates:
 - PromptProtocolSpec definitions
 - validate_prompt_protocol_signature() contract checking
-- SEM_095 compile-time warnings for incorrect protocol signatures
+- SEM_PROTOCOL_SIGNATURE compile-time warnings for incorrect protocol signatures
 - __validate_prompt__ pre-flight validation in VTableParsingStrategy
 """
 
@@ -152,12 +152,12 @@ class TestValidatePromptProtocolSignature:
 
 
 # ===========================================================================
-# Integration: SEM_095 compile-time warning
+# Integration: SEM_PROTOCOL_SIGNATURE compile-time warning
 # ===========================================================================
 
 
 class TestSEM095CompileTimeWarning:
-    """Test that the semantic pass produces SEM_095 warnings for bad signatures."""
+    """Test that the semantic pass produces SEM_PROTOCOL_SIGNATURE warnings for bad signatures."""
 
     def test_wrong_to_prompt_params_produces_warning(self):
         """User class __to_prompt__ with wrong params should compile with warning."""

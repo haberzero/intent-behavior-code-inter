@@ -8,6 +8,7 @@ Type Resolution Pass (TypePhase sub-step 1)
 
 from typing import Optional, List, Dict, Any
 
+from core.base.diagnostics.codes import SEM_INVALID_SCOPE, SEM_UNCATEGORIZED
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind
 from core.kernel.spec import IbSpec
@@ -59,7 +60,7 @@ class TypeAnnotationResolver:
         self._any_desc = self.registry.resolve("any")
         self._auto_desc = self.registry.resolve("auto")
 
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
+    def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """记录错误诊断"""
         node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
@@ -96,7 +97,7 @@ class TypeAnnotationResolver:
             if not spec:
                 self.error(
                     f"Unknown type '{annotation.id}'",
-                    annotation, code="SEM_004"
+                    annotation, code=SEM_INVALID_SCOPE
                 )
                 return self._any_desc
             return spec

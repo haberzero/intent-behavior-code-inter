@@ -19,7 +19,7 @@ from typing import Any
 
 
 class ControlSignal(Enum):
-    """控制流信号枚举（公理 CF-1）。"""
+    """控制流信号枚举（公理 EXEC-2）。"""
     RETURN = "return"
     BREAK = "break"
     CONTINUE = "continue"

@@ -163,7 +163,7 @@ class TestLexicalScoping:
 
     def test_inner_scope_shadows_outer(self):
         """INV-SCOPE-1: Inner scope shadows outer scope variables."""
-        pytest.skip("SEM_002 forbids redeclaring same-name variable in if-block (no shadowing allowed)")
+        pytest.skip("SEM_REDEFINITION forbids redeclaring same-name variable in if-block (no shadowing allowed)")
 
     def test_function_creates_new_scope(self):
         """INV-SCOPE-2: Function creates independent scope."""

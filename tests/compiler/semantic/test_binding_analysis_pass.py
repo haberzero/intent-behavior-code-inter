@@ -74,10 +74,10 @@ def test_binding_analysis_lambda_captures_to_cell_captured(spec_registry):
 
 
 class TestLLMExceptReadOnlyConstraint:
-    """SEM_052 — llmexcept body 内禁止对外部作用域变量赋值。"""
+    """SEM_LLMEXCEPT_BODY_WRITE — llmexcept body 内禁止对外部作用域变量赋值。"""
 
     def test_sem052_outer_scope_write_produces_error(self, spec_registry):
-        """Writing to outer-scope variable in llmexcept body produces SEM_052."""
+        """Writing to outer-scope variable in llmexcept body produces SEM_LLMEXCEPT_BODY_WRITE."""
         from core.compiler.semantic.result import DiagnosticLevel
 
         # 构造: x = @~something~  llmexcept: x = 1
@@ -105,13 +105,13 @@ class TestLLMExceptReadOnlyConstraint:
 
         result = BindingAnalysisPass().run(context)
 
-        # 应该有 SEM_052 错误
-        sem052_diags = [d for d in result.diagnostics if d.code == "SEM_052"]
+        # 应该有 SEM_LLMEXCEPT_BODY_WRITE 错误
+        sem052_diags = [d for d in result.diagnostics if d.code == "SEM_LLMEXCEPT_BODY_WRITE"]
         assert len(sem052_diags) >= 1
         assert "Cannot assign to 'x'" in sem052_diags[0].message
 
     def test_sem052_body_local_allowed(self, spec_registry):
-        """New body-local variables in llmexcept body are allowed (no SEM_052)."""
+        """New body-local variables in llmexcept body are allowed (no SEM_LLMEXCEPT_BODY_WRITE)."""
         # 构造: x = @~something~  llmexcept: int y = 1 (body-local 声明)
         behavior = ast.IbBehaviorExpr(segments=["compute something"])
         assign_outer = ast.IbAssign(
@@ -139,8 +139,8 @@ class TestLLMExceptReadOnlyConstraint:
 
         result = BindingAnalysisPass().run(context)
 
-        # 不应该有 SEM_052 错误
-        sem052_diags = [d for d in result.diagnostics if d.code == "SEM_052"]
+        # 不应该有 SEM_LLMEXCEPT_BODY_WRITE 错误
+        sem052_diags = [d for d in result.diagnostics if d.code == "SEM_LLMEXCEPT_BODY_WRITE"]
         assert len(sem052_diags) == 0
 
 

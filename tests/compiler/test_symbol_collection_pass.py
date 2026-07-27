@@ -137,4 +137,4 @@ def test_symbol_collection_pass_duplicate_definition():
 
     # 验证结果：应该有错误
     assert len(result.diagnostics) > 0
-    assert any(d.code == "SEM_002" for d in result.diagnostics)
+    assert any(d.code == "SEM_REDEFINITION" for d in result.diagnostics)

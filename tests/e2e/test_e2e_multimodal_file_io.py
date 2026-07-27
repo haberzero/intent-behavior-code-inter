@@ -20,7 +20,7 @@ e2e 测试：多模态文件 I/O 端到端链路（纯 run_ibci，不触碰解�
 
 from tests.conftest import run_ibci
 
-# 多模态测试前缀：两个 import 必须都在 ai.set_config 之前（DEP_003 要求 import 置顶）。
+# 多模态测试前缀：两个 import 必须都在 ai.set_config 之前（DEP_INVALID_IMPORT_POSITION 要求 import 置顶）。
 # 不能直接用 AI_MOCK_PREFIX（它把 set_config 紧跟 import ai，后续 import file 会违例）。
 _MEDIA_PREFIX = (
     'import ai\n'

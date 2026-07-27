@@ -169,16 +169,16 @@ class TestNonlocalErrorDiagnostics:
     """Compile-time diagnostics for invalid nonlocal usage."""
 
     def test_nonlocal_at_module_scope_error(self):
-        """nonlocal at module scope should produce SEM_060."""
+        """nonlocal at module scope should produce SEM_INTENT_PLACEMENT."""
         code = """
 nonlocal x
 int x = 1
 """
         artifact, errors = compile_or_errors(code)
-        assert "SEM_060" in errors
+        assert "SEM_INTENT_PLACEMENT" in errors
 
     def test_nonlocal_undefined_in_outer_scope(self):
-        """nonlocal referencing non-existent outer variable should produce SEM_061."""
+        """nonlocal referencing non-existent outer variable should produce SEM_NONLOCAL_NOT_FOUND."""
         code = """
 func outer():
     func inner():
@@ -187,7 +187,7 @@ func outer():
     inner()
 """
         artifact, errors = compile_or_errors(code)
-        assert "SEM_061" in errors
+        assert "SEM_NONLOCAL_NOT_FOUND" in errors
 
 
 class TestNonlocalInteractionWithLambda:

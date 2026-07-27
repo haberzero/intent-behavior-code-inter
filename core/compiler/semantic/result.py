@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Any, Dict, Set
 
+from core.base.diagnostics.codes import SEM_INTERNAL_SENTINEL, SEM_UNCATEGORIZED
+
 
 class DiagnosticLevel(Enum):
     """Diagnostic severity levels"""
@@ -23,7 +25,7 @@ class Diagnostic:
     """A single diagnostic message."""
     level: DiagnosticLevel
     message: str
-    code: str  # e.g., "SEM_003"
+    code: str  # e.g., SEM_TYPE_MISMATCH
     node_uid: Optional[str] = None
     file_path: Optional[str] = None
     line: Optional[int] = None
@@ -32,15 +34,15 @@ class Diagnostic:
     related: List['Diagnostic'] = field(default_factory=list)
 
     @classmethod
-    def error(cls, message: str, code: str = "SEM_000", **kwargs) -> 'Diagnostic':
+    def error(cls, message: str, code: str = SEM_UNCATEGORIZED, **kwargs) -> 'Diagnostic':
         return cls(level=DiagnosticLevel.ERROR, message=message, code=code, **kwargs)
 
     @classmethod
-    def warning(cls, message: str, code: str = "SEM_000", **kwargs) -> 'Diagnostic':
+    def warning(cls, message: str, code: str = SEM_UNCATEGORIZED, **kwargs) -> 'Diagnostic':
         return cls(level=DiagnosticLevel.WARNING, message=message, code=code, **kwargs)
 
     @classmethod
-    def info(cls, message: str, code: str = "SEM_000", **kwargs) -> 'Diagnostic':
+    def info(cls, message: str, code: str = SEM_UNCATEGORIZED, **kwargs) -> 'Diagnostic':
         return cls(level=DiagnosticLevel.INFO, message=message, code=code, **kwargs)
 
     @classmethod
@@ -48,7 +50,7 @@ class Diagnostic:
         return cls(
             level=DiagnosticLevel.ERROR,
             message=str(exc),
-            code="SEM_999",
+            code=SEM_INTERNAL_SENTINEL,
             node_uid=node_uid,
             hint=f"Exception: {exc.__class__.__name__}"
         )

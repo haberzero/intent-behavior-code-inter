@@ -225,7 +225,7 @@ str result = @~ hello world ~
         assert artifact is not None
 
     def test_behavior_with_type_cast(self, engine):
-        """(Type) @~...~ 语法已废弃，编译器必须发出 PAR_010 错误。"""
+        """(Type) @~...~ 语法已废弃，编译器必须发出 PAR_DEPRECATED_CAST_SYNTAX 错误。"""
         code = """import ai
 int x = (int) @~ what is 1+1 ~
 """
@@ -345,16 +345,16 @@ class TestCompileErrors:
 
 
 # ---------------------------------------------------------------------------
-# 12. llmexcept body read-only constraint (SEM_052)
+# 12. llmexcept body read-only constraint (SEM_LLMEXCEPT_BODY_WRITE)
 # ---------------------------------------------------------------------------
 
 class TestLLMExceptBodyReadOnly:
     """
-    验证快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_052。
+    验证快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_LLMEXCEPT_BODY_WRITE。
     """
 
     def test_assign_to_outer_var_raises(self, engine):
-        """llmexcept body 内直接对外部变量赋值应产生编译期错误 (SEM_052)。"""
+        """llmexcept body 内直接对外部变量赋值应产生编译期错误 (SEM_LLMEXCEPT_BODY_WRITE)。"""
         code = """str result = @~ greet ~
 llmexcept:
     result = "fallback"
@@ -363,10 +363,10 @@ llmexcept:
         with pytest.raises(CompilerError) as exc_info:
             engine.compile_string(code, silent=True)
         codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_052" in codes
+        assert "SEM_LLMEXCEPT_BODY_WRITE" in codes
 
     def test_redeclare_outer_var_raises(self, engine):
-        """llmexcept body 内用类型标注重声明外部变量也应产生 SEM_052。"""
+        """llmexcept body 内用类型标注重声明外部变量也应产生 SEM_LLMEXCEPT_BODY_WRITE。"""
         code = """str result = @~ greet ~
 llmexcept:
     str result = "fallback"
@@ -375,10 +375,10 @@ llmexcept:
         with pytest.raises(CompilerError) as exc_info:
             engine.compile_string(code, silent=True)
         codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_052" in codes
+        assert "SEM_LLMEXCEPT_BODY_WRITE" in codes
 
     def test_new_local_var_allowed(self, engine):
-        """llmexcept body 内定义全新的局部变量是允许的（不产生 SEM_052）。"""
+        """llmexcept body 内定义全新的局部变量是允许的（不产生 SEM_LLMEXCEPT_BODY_WRITE）。"""
         code = """str result = @~ greet ~
 llmexcept:
     str hint = "please try again with a clear answer"
@@ -389,7 +389,7 @@ llmexcept:
         assert artifact is not None
 
     def test_retry_statement_allowed(self, engine):
-        """llmexcept body 内使用 retry 语句是允许的（不产生 SEM_052）。"""
+        """llmexcept body 内使用 retry 语句是允许的（不产生 SEM_LLMEXCEPT_BODY_WRITE）。"""
         code = """str result = @~ greet ~
 llmexcept:
     retry "try again"
@@ -398,7 +398,7 @@ llmexcept:
         assert artifact is not None
 
     def test_read_outer_var_allowed(self, engine):
-        """llmexcept body 内读取外部变量是允许的（不产生 SEM_052）。"""
+        """llmexcept body 内读取外部变量是允许的（不产生 SEM_LLMEXCEPT_BODY_WRITE）。"""
         code = """str context = "context info"
 str result = @~ greet ~
 llmexcept:
@@ -409,7 +409,7 @@ llmexcept:
         assert artifact is not None
 
     def test_assign_to_outer_int_var_raises(self, engine):
-        """llmexcept body 内对整型外部变量写入也应产生 SEM_052。"""
+        """llmexcept body 内对整型外部变量写入也应产生 SEM_LLMEXCEPT_BODY_WRITE。"""
         code = """int counter = 0
 str result = @~ greet ~
 llmexcept:
@@ -419,4 +419,4 @@ llmexcept:
         with pytest.raises(CompilerError) as exc_info:
             engine.compile_string(code, silent=True)
         codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_052" in codes
+        assert "SEM_LLMEXCEPT_BODY_WRITE" in codes

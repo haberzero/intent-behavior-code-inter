@@ -8,6 +8,11 @@ Symbol Resolution Pass (SymbolPhase sub-step 2)
 
 from typing import Optional, List, Dict, Any
 
+from core.base.diagnostics.codes import (
+    SEM_INTENT_PLACEMENT,
+    SEM_NONLOCAL_NOT_FOUND,
+    SEM_UNDEFINED_SYMBOL,
+)
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 
@@ -73,7 +78,7 @@ class SymbolResolver(ScopedVisitor):
         # 查找符号定义
         sym = self.lookup_symbol(node.id)
         if not sym:
-            self.error(f"Undefined symbol '{node.id}'", node, code="SEM_001")
+            self.error(f"Undefined symbol '{node.id}'", node, code=SEM_UNDEFINED_SYMBOL)
             return
 
         # 绑定到 metadata
@@ -419,7 +424,7 @@ class SymbolResolver(ScopedVisitor):
             if sym:
                 self.bind_symbol(alias, sym)
             else:
-                self.error(f"Module '{name}' not found or failed to load", node, code="SEM_001")
+                self.error(f"Module '{name}' not found or failed to load", node, code=SEM_UNDEFINED_SYMBOL)
 
     def visit_IbImportFrom(self, node: ast.IbImportFrom):
         """访问 from ... import 语句节点
@@ -435,7 +440,7 @@ class SymbolResolver(ScopedVisitor):
             if sym:
                 self.bind_symbol(alias, sym)
             else:
-                self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code="SEM_001")
+                self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code=SEM_UNDEFINED_SYMBOL)
 
     # 字面量节点不需要符号解析
     def visit_IbConstant(self, node: ast.IbConstant):
@@ -470,7 +475,7 @@ class SymbolResolver(ScopedVisitor):
             if not parent_scope:
                 self.error(
                     f"nonlocal declaration of '{name}' not allowed at module scope",
-                    node, code="SEM_060"
+                    node, code=SEM_INTENT_PLACEMENT
                 )
                 continue
             # 在父作用域中查找符号
@@ -478,7 +483,7 @@ class SymbolResolver(ScopedVisitor):
             if not outer_sym:
                 self.error(
                     f"No binding for nonlocal '{name}' found in enclosing scope",
-                    node, code="SEM_061"
+                    node, code=SEM_NONLOCAL_NOT_FOUND
                 )
                 continue
             # 将外层符号注册到当前作用域（不创建新符号，共享外层符号引用）
@@ -491,7 +496,7 @@ class SymbolResolver(ScopedVisitor):
     def _prescan_body_locals(self, body: list, scope: SymbolTable, nonlocal_names: Optional[set] = None):
         """预扫描函数体，将赋值目标预注册为局部变量。
 
-        确保函数体内的变量在被引用时已经有定义（避免 SEM_001 误报）。
+        确保函数体内的变量在被引用时已经有定义（避免 SEM_UNDEFINED_SYMBOL 误报）。
         nonlocal_names 中的变量名不会被注册为局部变量（它们引用外层作用域）。
         """
         if nonlocal_names is None:

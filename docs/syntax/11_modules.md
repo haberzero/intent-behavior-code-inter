@@ -18,10 +18,10 @@ func main():
 ```ibci
 # 错误：import 不能出现在函数内或其他语句后面
 int x = 10
-import ai    # DEP_003 编译错误
+import ai    # DEP_INVALID_IMPORT_POSITION 编译错误
 
 func main():
-    import json  # DEP_003 编译错误
+    import json  # DEP_INVALID_IMPORT_POSITION 编译错误
 ```
 
 此约束使调度器（Scheduler）能够高效地在不执行代码的前提下进行无副作用的依赖扫描。

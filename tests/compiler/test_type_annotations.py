@@ -40,7 +40,7 @@ def assert_compiles(code: str):
 
 def assert_has_sem003(code: str):
     _, errors = compile_or_errors(code)
-    assert "SEM_003" in errors, f"Expected SEM_003, got: {errors}"
+    assert "SEM_TYPE_MISMATCH" in errors, f"Expected SEM_TYPE_MISMATCH, got: {errors}"
 
 
 def assert_error_codes(code: str, *expected_codes: str):
@@ -195,25 +195,25 @@ func apply(fn[(int) -> int] f, int x) -> int:
 """)
 
     def test_too_many_args(self):
-        """Calling fn[(int) -> int] with 2 args → SEM_005."""
+        """Calling fn[(int) -> int] with 2 args → SEM_ARG_COUNT_MISMATCH."""
         assert_error_codes("""
 func apply(fn[(int) -> int] f, int x, int y) -> int:
     return f(x, y)
-""", "SEM_005")
+""", "SEM_ARG_COUNT_MISMATCH")
 
     def test_too_few_args(self):
-        """Calling fn[(int, str) -> bool] with 1 arg → SEM_005."""
+        """Calling fn[(int, str) -> bool] with 1 arg → SEM_ARG_COUNT_MISMATCH."""
         assert_error_codes("""
 func apply(fn[(int, str) -> bool] pred) -> bool:
     return pred(1)
-""", "SEM_005")
+""", "SEM_ARG_COUNT_MISMATCH")
 
     def test_wrong_arg_type(self):
-        """Calling fn[(int) -> int] with str arg → SEM_003."""
+        """Calling fn[(int) -> int] with str arg → SEM_TYPE_MISMATCH."""
         assert_error_codes("""
 func apply(fn[(int) -> int] f, str s) -> int:
     return f(s)
-""", "SEM_003")
+""", "SEM_TYPE_MISMATCH")
 
 
 # ──────────────────────────────────────────── declaration-site sig check ──
@@ -231,22 +231,22 @@ fn[(int) -> int] f = add_one
 """)
 
     def test_param_count_mismatch(self):
-        """fn[(int, str) -> int] f = add_one (1 param) → SEM_003."""
+        """fn[(int, str) -> int] f = add_one (1 param) → SEM_TYPE_MISMATCH."""
         assert_error_codes("""
 func add_one(int n) -> int:
     return n + 1
 
 fn[(int, str) -> int] f = add_one
-""", "SEM_003")
+""", "SEM_TYPE_MISMATCH")
 
     def test_return_type_mismatch(self):
-        """fn[(int) -> str] f = add_one (returns int) → SEM_003."""
+        """fn[(int) -> str] f = add_one (returns int) → SEM_TYPE_MISMATCH."""
         assert_error_codes("""
 func add_one(int n) -> int:
     return n + 1
 
 fn[(int) -> str] f = add_one
-""", "SEM_003")
+""", "SEM_TYPE_MISMATCH")
 
 
 # ────────────────────────────────────────────────────── return type infer ──
@@ -371,7 +371,7 @@ print(c)
 
 
 # ===========================================================================
-# 2. 错误目标类型应触发 SEM_003
+# 2. 错误目标类型应触发 SEM_TYPE_MISMATCH
 # ===========================================================================
 
 class TestTuplePositionalTypeMismatch:

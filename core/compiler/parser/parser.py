@@ -98,8 +98,8 @@ class Parser:
         Only parse import statements at the beginning of the file.
         Continues scanning past the first non-import token so that
         misplaced imports later in the file are reported with a clear
-        ``DEP_INVALID_IMPORT_POSITION`` (DEP_003) error rather than a
-        misleading ``SEM_001 Module 'X' not found`` from the semantic
+        ``DEP_INVALID_IMPORT_POSITION`` (DEP_INVALID_IMPORT_POSITION) error rather than a
+        misleading ``SEM_UNDEFINED_SYMBOL Module 'X' not found`` from the semantic
         pass.
         """
         imports = []

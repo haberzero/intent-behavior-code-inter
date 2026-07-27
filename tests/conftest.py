@@ -143,12 +143,12 @@ def expect_compile_error(code: str, error_code: str, *, root_dir: Optional[str] 
     Parameters
     ----------
     code       : IBCI 源代码
-    error_code : 期望的错误码（如 "SEM_001", "PAR_042"）
+    error_code : 期望的错误码（如 "SEM_UNDEFINED_SYMBOL", "PAR_DEPRECATED_CAST_SYNTAX"）
     root_dir   : 自定义 root_dir；默认 ``tests/`` 根
 
     Example
     -------
-    expect_compile_error("int x = None", "SEM_023")  # Optional 类型错误
+    expect_compile_error("int x = None", "SEM_TYPE_MISMATCH")  # Optional 类型错误
     """
     artifact, errors = compile_or_errors(code, root_dir=root_dir)
     assert artifact is None, f"Expected compilation to fail, but succeeded"

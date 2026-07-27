@@ -9,6 +9,7 @@ pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
+from core.base.diagnostics.codes import SEM_TYPE_MISMATCH
 from core.kernel import ast
 from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
@@ -38,7 +39,7 @@ class StatementVisitorsMixin:
         if val_type is self._void_desc and isinstance(node.value, ast.IbCall):
             self.error(
                 "Cannot assign result of void function to a variable",
-                node, code="SEM_003"
+                node, code=SEM_TYPE_MISMATCH
             )
             val_type = self._any_desc
 
@@ -109,7 +110,7 @@ class StatementVisitorsMixin:
                         f"Cannot assign result of un-annotated callable to "
                         f"'{target_type.name}'. Add '-> {target_type.name}' to the lambda "
                         f"to declare its return type.",
-                        node, code="SEM_003"
+                        node, code=SEM_TYPE_MISMATCH
                     )
 
             # 类型兼容性检查
@@ -119,7 +120,7 @@ class StatementVisitorsMixin:
                 hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
                 self.error(
                     f"Cannot assign '{src_name}' to '{tgt_name}'",
-                    node, code="SEM_003", hint=hint
+                    node, code=SEM_TYPE_MISMATCH, hint=hint
                 )
 
             # 绑定类型
@@ -148,7 +149,7 @@ class StatementVisitorsMixin:
                 hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
                 self.error(
                     f"Cannot assign '{getattr(val_type, 'name', str(val_type))}' to '{getattr(target_type, 'name', str(target_type))}'",
-                    node, code="SEM_003", hint=hint
+                    node, code=SEM_TYPE_MISMATCH, hint=hint
                 )
 
         elif isinstance(target, ast.IbTuple):
@@ -203,7 +204,7 @@ class StatementVisitorsMixin:
         """fn 声明（无签名约束）：要求 RHS 必须是可调用的。
 
         fn f = myFunc  → f 持有 myFunc 的具体 callable spec
-        fn f = 42      → SEM_003（42 不可调用）
+        fn f = 42      → SEM_TYPE_MISMATCH（42 不可调用）
         """
         if val_type.kind == TypeKind.CLASS.value:
             # 区分类名引用（构造器）与类实例
@@ -226,7 +227,7 @@ class StatementVisitorsMixin:
                     f"Type '{val_type.name}' does not define a '__call__' method. "
                     f"Add 'func __call__(self, ...)' to '{val_type.name}' "
                     f"to make its instances callable via 'fn'.",
-                    self._current_node, code="SEM_003"
+                    self._current_node, code=SEM_TYPE_MISMATCH
                 )
                 return self.registry.resolve("callable") or self._any_desc
         elif self.registry.is_callable(val_type):
@@ -238,7 +239,7 @@ class StatementVisitorsMixin:
                 f"'fn' requires a callable on the right-hand side, "
                 f"but got '{val_type.name}'. "
                 f"Use 'fn f = myFunction' or 'fn f = myLambda'.",
-                self._current_node, code="SEM_003"
+                self._current_node, code=SEM_TYPE_MISMATCH
             )
             return self.registry.resolve("callable") or self._any_desc
 
@@ -250,7 +251,7 @@ class StatementVisitorsMixin:
                 self.error(
                     f"'fn' requires a callable on the right-hand side, "
                     f"but got '{val_type.name}'.",
-                    self._current_node, code="SEM_003"
+                    self._current_node, code=SEM_TYPE_MISMATCH
                 )
                 return declared_type
 
@@ -270,7 +271,7 @@ class StatementVisitorsMixin:
             self.error(
                 f"Callable signature mismatch: expected {len(expected_params)} "
                 f"parameter(s), but the callable has {len(actual_params)} parameter(s).",
-                node, code="SEM_003",
+                node, code=SEM_TYPE_MISMATCH,
             )
             return
 
@@ -285,7 +286,7 @@ class StatementVisitorsMixin:
                 self.error(
                     f"Callable signature mismatch: parameter {i + 1} expects "
                     f"'{exp_name}', but the callable declares '{act_name}'.",
-                    node, code="SEM_003",
+                    node, code=SEM_TYPE_MISMATCH,
                 )
 
         # Return type compatibility
@@ -301,7 +302,7 @@ class StatementVisitorsMixin:
                 self.error(
                     f"Callable signature mismatch: expected return type '{sig_ret.head}', "
                     f"but the callable returns '{actual_ret.head}'.",
-                    node, code="SEM_003",
+                    node, code=SEM_TYPE_MISMATCH,
                 )
 
     # ========== 控制流 ==========
@@ -419,7 +420,7 @@ class StatementVisitorsMixin:
             if not result_type:
                 self.error(
                     f"Augmented assignment operator '{node.op}' not supported for type '{target_type.name}'",
-                    node, code="SEM_003"
+                    node, code=SEM_TYPE_MISMATCH
                 )
         return None
 

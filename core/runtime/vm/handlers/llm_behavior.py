@@ -229,7 +229,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
 
 
 def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``(Type) @~ ... ~`` 强制转换语法（PAR_010）的运行时路径。
+    """``(Type) @~ ... ~`` 强制转换语法（PAR_DEPRECATED_CAST_SYNTAX）的运行时路径。
 
     解析器不再生成此节点类型；此 handler 作为防御性兜底保留。
     segments 为字面字符串与 ext_ref dicts，不含子表达式 UID，故无需 yield。

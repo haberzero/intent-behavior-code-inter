@@ -8,6 +8,7 @@ Symbol Collection Pass (SymbolPhase sub-step 1)
 
 from typing import Optional, List, Tuple
 
+from core.base.diagnostics.codes import SEM_REDEFINITION, SEM_UNCATEGORIZED
 from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
@@ -101,7 +102,7 @@ class SymbolCollector:
             elif isinstance(child, ast.IbASTNode):
                 self.visit(child)
 
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
+    def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """记录错误诊断"""
         node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
@@ -139,7 +140,7 @@ class SymbolCollector:
                     )
 
         except ValueError as e:
-            self.error(str(e), node, code="SEM_002")
+            self.error(str(e), node, code=SEM_REDEFINITION)
 
     def visit_IbModule(self, node: ast.IbModule):
         """访问模块节点"""

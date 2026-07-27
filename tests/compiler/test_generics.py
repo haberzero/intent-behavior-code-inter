@@ -161,22 +161,22 @@ class TestG2ListWriteMethodSpecialization:
             "list[int] nums = [1, 2]\n"
             "nums.append(3)\n"
         )
-        warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_081"]
+        warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_CONTAINER_METHOD_HINT"]
         assert len(warnings) == 0, f"Unexpected warnings: {warnings}"
 
     def test_wrong_type_append_produces_warning_not_error(self):
-        """list[int].append('x') produces a SEM_081 warning, not a compile error."""
+        """list[int].append('x') produces a SEM_CONTAINER_METHOD_HINT warning, not a compile error."""
         artifact, issue_tracker = _compile_code(
             "list[int] nums = []\n"
             "nums.append(\"hello\")\n"
         )
         # Compilation should succeed (no hard errors about this mismatch)
         errors = [d for d in issue_tracker.diagnostics
-                  if d.severity.name == "ERROR" and d.code == "SEM_081"]
+                  if d.severity.name == "ERROR" and d.code == "SEM_CONTAINER_METHOD_HINT"]
         assert len(errors) == 0, f"mismatch should be a warning, not an error: {errors}"
         # The warning should be present
-        warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_081"]
-        assert len(warnings) > 0, "Expected a SEM_081 warning for int-list append with str"
+        warnings = [d for d in issue_tracker.diagnostics if d.code == "SEM_CONTAINER_METHOD_HINT"]
+        assert len(warnings) > 0, "Expected a SEM_CONTAINER_METHOD_HINT warning for int-list append with str"
 
     def test_correct_append_runs_and_produces_output(self):
         """list[int] append with correct type runs correctly end-to-end."""
@@ -224,7 +224,7 @@ class TestG3ListGetitem:
         assert getitem_spec.return_type.head == "any"
 
     def test_subscript_operator_returns_element_type(self):
-        """list[int] subscript via [] operator returns int at compile time (no SEM_003)."""
+        """list[int] subscript via [] operator returns int at compile time (no SEM_TYPE_MISMATCH)."""
         _, issue_tracker = _g3_compile_code(
             "list[int] nums = [1, 2, 3]\n"
             "int x = nums[0]\n"
@@ -233,14 +233,14 @@ class TestG3ListGetitem:
         assert len(errors) == 0, f"Unexpected errors: {errors}"
 
     def test_subscript_operator_wrong_type_is_caught(self):
-        """list[int] subscript result assigned to str should be SEM_003."""
+        """list[int] subscript result assigned to str should be SEM_TYPE_MISMATCH."""
         _, issue_tracker = _g3_compile_code(
             "list[int] nums = [10, 20]\n"
             "str s = nums[0]\n"
         )
         errors = [d for d in issue_tracker.diagnostics
-                  if d.severity.name == "ERROR" and d.code == "SEM_003"]
-        assert len(errors) > 0, "Expected SEM_003 for int→str mismatch"
+                  if d.severity.name == "ERROR" and d.code == "SEM_TYPE_MISMATCH"]
+        assert len(errors) > 0, "Expected SEM_TYPE_MISMATCH for int→str mismatch"
 
     def test_subscript_e2e_returns_correct_value(self):
         """list[int] subscript runs correctly and returns the element."""
@@ -375,14 +375,14 @@ class TestG3Covariance:
         assert not reg.is_assignable(list_int, str_spec)
 
     def test_compile_list_typed_to_bare_list_no_error(self):
-        """Assigning list[int] to a bare list variable should compile without SEM_003."""
+        """Assigning list[int] to a bare list variable should compile without SEM_TYPE_MISMATCH."""
         _, issue_tracker = _g3_compile_code(
             "list[int] nums = [1, 2, 3]\n"
             "list bare = nums\n"
         )
         errors = [d for d in issue_tracker.diagnostics
-                  if d.severity.name == "ERROR" and d.code == "SEM_003"]
-        assert len(errors) == 0, f"Unexpected SEM_003: {errors}"
+                  if d.severity.name == "ERROR" and d.code == "SEM_TYPE_MISMATCH"]
+        assert len(errors) == 0, f"Unexpected SEM_TYPE_MISMATCH: {errors}"
 
 
 # ===========================================================================

@@ -1,3 +1,4 @@
+from core.base.diagnostics.codes import PAR_EXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.syntax import ID_AUTO
 from core.kernel import ast as ast
@@ -49,7 +50,7 @@ class TypeComponent(BaseComponent):
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id="None", ctx='Load'), name_token)
         else:
-            raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
+            raise self.stream.error(self.stream.peek(), "Expect type name.", code=PAR_EXPECTED_TOKEN)
 
         # 2. Generics: list[int], dict[str, Any]
         if self.stream.match(TokenType.LBRACKET):

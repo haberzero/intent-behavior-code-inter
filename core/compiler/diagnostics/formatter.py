@@ -27,7 +27,7 @@ class DiagnosticFormatter:
         color_reset = DiagnosticFormatter.COLORS["RESET"] if use_color else ""
         bold = DiagnosticFormatter.COLORS["BOLD"] if use_color else ""
         
-        # Header: [ERROR] SEM_001: Variable 'x' is not defined
+        # Header: [ERROR] SEM_UNDEFINED_SYMBOL: Variable 'x' is not defined
         header = f"{color_start}[{severity_label}] {diagnostic.code}: {diagnostic.message}{color_reset}"
         
         # Location info

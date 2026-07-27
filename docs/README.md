@@ -128,9 +128,10 @@ tests_docs/                          测试方法论
 
 | 类别 | 说明 |
 |------|------|
-| ERR 码 | `SEM_xxx`/`DEP_xxx`/`PAR_xxx`/`INV-x`/`SC-x`/`LT-x`/`CF-x`/`OM-x` 是功能性错误码/契约码 |
+| 诊断码 | `SEM_TYPE_MISMATCH`/`PAR_EXPECTED_TOKEN`/`LEX_INVALID_CHAR` 等命名制诊断码（定义见 `core/base/diagnostics/codes.py`），是功能性错误码 |
+| 公理码 | `SC-3`/`LT-2`/`EXEC-2`/`ISO-4`/`OM-2`/`GC-2`/`LLM-1`/`IC-1` 等 VM 规范公理编号（定义见 `docs/architecture/05_vm_specification.md §8`），是规范契约码 |
 | 功能性术语 | "锚点"（path anchor）、"Layer N / Phase N / STAGE N"（算法阶段）是功能描述 |
-| 错误码常量赋值 | `SEM_UNDEFINED_SYMBOL = "SEM_001"` 是代码，不是注释 |
+| 诊断码常量赋值 | `SEM_TYPE_MISMATCH = "SEM_TYPE_MISMATCH"` 是代码，不是注释 |
 
 **新增代码时的自查**：提交前对自己的改动运行以下检查，确保未引入违规：
 
@@ -143,7 +144,9 @@ grep -rnE '\b(G[1-6]|D[1-6]|H[1-3]|NS-[0-9]|P[0-7]-[0-9A-Z])\b' --include='*.py'
 grep -rnE 'legacy|历史|旧 bug|修复见PR|合并自|Source:' --include='*.py' <changed-files>
 ```
 
-命中后逐条判断：是注释/docstring 则清洁（删标记留功能），是 ERR 码或功能性术语则保留。
+命中后逐条判断：是注释/docstring 则清洁（删标记留功能），是诊断码/公理码或功能性术语则保留。
+
+**诊断码使用规则**：生产代码中不得使用字符串字面量（如 `code="SEM_TYPE_MISMATCH"`）引用诊断码，必须从 `core/base/diagnostics/codes.py` 导入常量引用（如 `code=SEM_TYPE_MISMATCH`）。新增诊断码时在 `codes.py` 中定义新常量即可，无需分配编号。
 
 ---
 

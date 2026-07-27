@@ -75,7 +75,7 @@ class StrAxiom(BaseAxiom):
             if other_name == "str":
                 return "str"
             # str + llm_uncertain 已收紧。
-            # 现在静态出现 `llm_uncertain` 操作数时按 SEM_003 处理，
+            # 现在静态出现 `llm_uncertain` 操作数时按 SEM_TYPE_MISMATCH 处理，
             # 与运行期 `IbString.__add__` 抛 LLMParseError 的策略保持一致。
         if op == "*":
             if other_name in ("int", "any"):

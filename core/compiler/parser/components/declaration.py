@@ -1,4 +1,5 @@
 from typing import List, Optional, Union, TYPE_CHECKING
+from core.base.diagnostics.codes import PAR_INVALID_SYNTAX, PAR_UNEXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType, Token
 
 from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStream
@@ -129,7 +130,7 @@ class DeclarationComponent(BaseComponent):
                     "Declaration-side return type annotation 'TYPE fn NAME = ...' is not supported. "
                     "Return types must be specified on the expression side: 'fn NAME = lambda -> TYPE: EXPR'. "
                     "For example: 'fn f = lambda -> int: 1 + 1' or 'fn f = lambda(int a) -> str: \"hi\"'.",
-                    code="PAR_003",
+                    code=PAR_INVALID_SYNTAX,
                 )
             else:
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
@@ -326,7 +327,7 @@ class DeclarationComponent(BaseComponent):
             elif self.stream.match(TokenType.NEWLINE):
                 continue
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code="PAR_002")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code=PAR_UNEXPECTED_TOKEN)
 
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
         return sys_prompt, user_prompt, retry_hint
@@ -349,6 +350,6 @@ class DeclarationComponent(BaseComponent):
                 var_ref = self._loc(ast.IbName(id=var_name, ctx='Load'), token)
                 segments.append(var_ref)
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code=PAR_UNEXPECTED_TOKEN)
 
         return segments

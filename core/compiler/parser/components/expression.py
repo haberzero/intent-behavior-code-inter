@@ -1,4 +1,5 @@
 from typing import Dict, Optional, List, Union
+from core.base.diagnostics.codes import PAR_DEPRECATED_CAST_SYNTAX, PAR_UNEXPECTED_EOF, PAR_UNEXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
@@ -10,7 +11,7 @@ from core.compiler.parser.core.syntax import ID_SELF, OP_MAP
 # 取 1024 是源代码中单个 lambda 参数列表 + 函数体表达式 token 数的保守上界
 # （典型 lambda 表达式不超过几十 token）；超出该上限的写法在实际代码中极
 # 罕见，回退为 "无参形式" 不会引入二义性——后续 parse_expression 仍会按表
-# 达式语法继续消费，错误会以 PAR_002 形式正常报告。
+# 达式语法继续消费，错误会以 PAR_UNEXPECTED_TOKEN 形式正常报告。
 _MAX_LAMBDA_LOOKAHEAD_TOKENS = 1024
 
 class ExpressionComponent(BaseComponent):
@@ -33,7 +34,7 @@ class ExpressionComponent(BaseComponent):
         rule = self.get_rule(token.type)
         prefix = rule.prefix
         if prefix is None:
-            raise self.stream.error(token, f"Expect expression. Got {token.type}", code="PAR_002")
+            raise self.stream.error(token, f"Expect expression. Got {token.type}", code=PAR_UNEXPECTED_TOKEN)
         
         left = prefix()
         
@@ -137,7 +138,7 @@ class ExpressionComponent(BaseComponent):
         # $(expr) -> expr (Not implemented yet, but we could)
         name = token.value[1:]
         if not name:
-            raise self.stream.error(token, "Variable reference cannot be empty.", code="PAR_002")
+            raise self.stream.error(token, "Variable reference cannot be empty.", code=PAR_UNEXPECTED_TOKEN)
         return self._loc(ast.IbName(id=name, ctx='Load'), token)
 
     def self_expr(self) -> ast.IbExpr:
@@ -224,7 +225,7 @@ class ExpressionComponent(BaseComponent):
                     self.stream.peek(),
                     "Cast expression '(Type) @~...~' is no longer supported. "
                     "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
-                    code="PAR_010"
+                    code=PAR_DEPRECATED_CAST_SYNTAX
                 )
 
             # 路径回退：若非 Cast，则回退到检查点按普通分组表达式解析
@@ -370,7 +371,7 @@ class ExpressionComponent(BaseComponent):
         if not self.stream.check(TokenType.RPAREN):
             while True:
                 if self.stream.is_at_end():
-                    raise self.stream.error(self.stream.peek(), "Unterminated argument list.", code="PAR_004")
+                    raise self.stream.error(self.stream.peek(), "Unterminated argument list.", code=PAR_UNEXPECTED_EOF)
                 arguments.append(self.parse_expression(IbPrecedence.TUPLE))
                 if not self.stream.match(TokenType.COMMA):
                     break
@@ -455,7 +456,7 @@ class ExpressionComponent(BaseComponent):
         
         while not self.stream.check(TokenType.BEHAVIOR_MARKER):
             if self.stream.is_at_end():
-                raise self.stream.error(self.stream.peek(), "Unterminated behavior expression.", code="PAR_004")
+                raise self.stream.error(self.stream.peek(), "Unterminated behavior expression.", code=PAR_UNEXPECTED_EOF)
                 
             if self.stream.match(TokenType.RAW_TEXT):
                 segments.append(self.stream.previous().value)
@@ -533,7 +534,7 @@ class ExpressionComponent(BaseComponent):
                     self.stream.peek(),
                     f"Expect ':' after '{capture_mode}' parameter list, or ':' directly after '{capture_mode}' keyword. "
                     f"Parenthesis-only body forms are not supported; use '{capture_mode}: EXPR' or '{capture_mode}(PARAMS): EXPR'.",
-                    code="PAR_002",
+                    code=PAR_UNEXPECTED_TOKEN,
                 )
 
             # 解析参数列表
@@ -543,7 +544,7 @@ class ExpressionComponent(BaseComponent):
                 raise self.stream.error(
                     keyword_token,
                     "Internal: declaration parser not wired; cannot parse lambda parameters.",
-                    code="PAR_002",
+                    code=PAR_UNEXPECTED_TOKEN,
                 )
             params = decl.parameters()
             self.stream.consume(TokenType.RPAREN, f"Expect ')' after '{capture_mode}' parameter list.")
@@ -561,7 +562,7 @@ class ExpressionComponent(BaseComponent):
             raise self.stream.error(
                 self.stream.peek(),
                 f"Expect ':' or '(' after '{capture_mode}' keyword in expression position.",
-                code="PAR_002",
+                code=PAR_UNEXPECTED_TOKEN,
             )
 
         node = ast.IbLambdaExpr(params=params, body=body, capture_mode=capture_mode, returns=returns_node)

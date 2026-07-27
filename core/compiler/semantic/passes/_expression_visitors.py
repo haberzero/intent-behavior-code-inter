@@ -10,6 +10,14 @@ no logic changes.
 
 from typing import Optional
 
+from core.base.diagnostics.codes import (
+    SEM_ARG_COUNT_MISMATCH,
+    SEM_CAST_NO_CONVERTER,
+    SEM_CONTAINER_METHOD_HINT,
+    SEM_INTENT_STATIC_CALL,
+    SEM_SUPER_OUTSIDE_METHOD,
+    SEM_TYPE_MISMATCH,
+)
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
@@ -127,7 +135,7 @@ class ExpressionVisitorsMixin:
                     f"Binary operator '{node.op}' not supported for types "
                     f"'{left_type.name if left_type else 'unknown'}' and "
                     f"'{right_type.name if right_type else 'unknown'}'",
-                    node, code="SEM_003"
+                    node, code=SEM_TYPE_MISMATCH
                 )
                 result_type = self._any_desc
 
@@ -220,12 +228,12 @@ class ExpressionVisitorsMixin:
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # --- intent_context static call warning (SEM_090) ---
+        # --- intent_context static call warning (SEM_INTENT_STATIC_CALL) ---
         # Detect intent_context.push() / pop() / ... called directly on the
         # class name without first obtaining an instance via get_current().
         self._check_intent_context_static_call(node)
 
-        # --- SEM_093: super() called outside class method ---
+        # --- SEM_SUPER_OUTSIDE_METHOD: super() called outside class method ---
         self._check_super_call_legality(node)
 
         # --- Callable class instance detection ---
@@ -252,18 +260,18 @@ class ExpressionVisitorsMixin:
         # --- Callability check ---
         call_trait = self.registry.get_call_cap(func_type)
         if not call_trait:
-            self.error(f"Type '{func_type.name}' is not callable", node, code="SEM_003")
+            self.error(f"Type '{func_type.name}' is not callable", node, code=SEM_TYPE_MISMATCH)
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # --- Argument checking for structural signatures (SEM_005 / SEM_003) ---
+        # --- Argument checking for structural signatures (SEM_ARG_COUNT_MISMATCH / SEM_TYPE_MISMATCH) ---
         if func_type.kind == TypeKind.CALLABLE_SIG.value:
             expected_names = [t.head for t in (getattr(func_type, 'param_types', None) or [])]
             if len(arg_types) != len(expected_names):
                 self.error(
                     f"Callable expected {len(expected_names)} argument(s), "
                     f"but got {len(arg_types)}.",
-                    node, code="SEM_005",
+                    node, code=SEM_ARG_COUNT_MISMATCH,
                 )
             else:
                 for i, (exp_name, actual_type) in enumerate(zip(expected_names, arg_types)):
@@ -276,7 +284,7 @@ class ExpressionVisitorsMixin:
                         self.error(
                             f"Argument {i + 1} type mismatch: expected '{exp_name}', "
                             f"but got '{actual_type.name}'.",
-                            node, code="SEM_003", hint=hint,
+                            node, code=SEM_TYPE_MISMATCH, hint=hint,
                         )
 
         # --- Unified return type resolution ---
@@ -295,7 +303,7 @@ class ExpressionVisitorsMixin:
             else:
                 res = self._any_desc
 
-        # --- SEM_081 warning for specialized container write methods ---
+        # --- SEM_CONTAINER_METHOD_HINT warning for specialized container write methods ---
         param_types = getattr(func_type, "param_types", []) or []
         param_type_names = [t.head for t in param_types]
         if func_type.kind == TypeKind.FUNCTION.value and param_type_names:
@@ -313,14 +321,14 @@ class ExpressionVisitorsMixin:
                     self.warn(
                         f"Argument {i + 1} type mismatch: expected '{expected_name}', "
                         f"got '{actual_type.name}'",
-                        node, code="SEM_081", hint=hint,
+                        node, code=SEM_CONTAINER_METHOD_HINT, hint=hint,
                     )
 
         self.bind_type(node, res)
         return res
 
     def _check_intent_context_static_call(self, node: ast.IbCall):
-        """检查 intent_context.<method>() 是否在类级别调用（SEM_090）
+        """检查 intent_context.<method>() 是否在类级别调用（SEM_INTENT_STATIC_CALL）
 
         intent_context.push() / pop() / fork() / merge() / combine() / clear()
         在类对象上调用（而非实例）是无效的 no-op。正确用法是先通过
@@ -343,11 +351,11 @@ class ExpressionVisitorsMixin:
                 f"'{func.attr}()' called on 'intent_context' class has no effect. "
                 f"Use 'intent_context ctx = intent_context.get_current()' first, "
                 f"then call 'ctx.{func.attr}(...)' followed by 'intent_context.use(ctx)'.",
-                node, code="SEM_090",
+                node, code=SEM_INTENT_STATIC_CALL,
             )
 
     def _check_super_call_legality(self, node: ast.IbCall):
-        """SEM_093: Check that super() is only called inside a class method.
+        """SEM_SUPER_OUTSIDE_METHOD: Check that super() is only called inside a class method.
 
         super() is only meaningful inside an instance method of a class.
         All user classes implicitly inherit from Object, so super() is always
@@ -363,7 +371,7 @@ class ExpressionVisitorsMixin:
         if not self.in_class_def or not self.current_class:
             self.error(
                 "super() can only be used inside a class method.",
-                node, code="SEM_093",
+                node, code=SEM_SUPER_OUTSIDE_METHOD,
                 hint="Move this call into a method of a class."
             )
             return
@@ -371,7 +379,7 @@ class ExpressionVisitorsMixin:
         if not self.in_function_def:
             self.error(
                 "super() can only be used inside a class method.",
-                node, code="SEM_093",
+                node, code=SEM_SUPER_OUTSIDE_METHOD,
                 hint="super() must be called within a method body (func), not at class level."
             )
             return
@@ -509,7 +517,7 @@ class ExpressionVisitorsMixin:
             self.error(
                 f"Lambda body type '{body_type.name}' is not compatible with "
                 f"declared return type '{returns_type.name}'.",
-                node, code="SEM_003",
+                node, code=SEM_TYPE_MISMATCH,
             )
 
         # 5. 返回带 return_type 的 Spec（使调用处 resolve_return 能推导出具体类型）
@@ -572,7 +580,7 @@ class ExpressionVisitorsMixin:
         """访问类型转换表达式 (e.g., (int) expr)
 
         使用 can_convert_from 进行编译期 cast 校验。
-        当目标类型的公理明确拒绝从源类型转换时，发出 SEM_091 警告。
+        当目标类型的公理明确拒绝从源类型转换时，发出 SEM_CAST_NO_CONVERTER 警告。
         """
         source_type = self.visit(node.value)
         cast_type = self._resolve_type(node.type_annotation)
@@ -588,7 +596,7 @@ class ExpressionVisitorsMixin:
                     f"Cast from '{source_type.name}' to '{cast_type.name}' "
                     f"is not supported by the type's conversion rules. "
                     f"This cast may fail at runtime.",
-                    node, code="SEM_091",
+                    node, code=SEM_CAST_NO_CONVERTER,
                 )
 
         self.bind_type(node, cast_type)

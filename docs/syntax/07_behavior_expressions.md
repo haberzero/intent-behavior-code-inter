@@ -134,10 +134,10 @@ fn greet = lambda(str name) -> str: "Hello, " + name
 fn make_pair = lambda(int n, str s) -> tuple[int,str]: (n, s)
 ```
 
-**已废弃的声明侧返回类型语法**（产生 PAR_003 编译错误）：
+**已废弃的声明侧返回类型语法**（产生 PAR_INVALID_SYNTAX 编译错误）：
 ```ibci
-int fn f = lambda: EXPR            # PAR_003：声明侧返回类型已废弃（D1）
-str fn f = lambda(PARAMS): EXPR    # PAR_003
+int fn f = lambda: EXPR            # PAR_INVALID_SYNTAX：声明侧返回类型已废弃（D1）
+str fn f = lambda(PARAMS): EXPR    # PAR_INVALID_SYNTAX
 ```
 
 #### 意图模式对比

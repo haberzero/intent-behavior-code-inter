@@ -8,6 +8,7 @@ as part of a pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
+from core.base.diagnostics.codes import SEM_UNCATEGORIZED
 from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol
@@ -61,7 +62,7 @@ class TypeCheckBase:
                 self.visit(child)
         return self._any_desc
 
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000", hint: str = None):
+    def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED, hint: str = None):
         """记录错误诊断"""
         node_uid = getattr(node, 'uid', None)
         full_message = message
@@ -97,7 +98,7 @@ class TypeCheckBase:
             return True
         return self.registry.is_assignable(source, target)
 
-    def warn(self, message: str, node: ast.IbASTNode, code: str = "SEM_000", hint: str = None):
+    def warn(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED, hint: str = None):
         """记录警告诊断"""
         node_uid = getattr(node, 'uid', None)
         full_message = message

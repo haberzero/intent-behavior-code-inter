@@ -107,14 +107,14 @@ class TestDiagnostics:
     def test_error_records_diagnostic(self):
         v = make_visitor()
         node = ast.IbModule(body=[])
-        v.error("test error", node, code="SEM_999")
+        v.error("test error", node, code="SEM_INTERNAL_SENTINEL")
         assert len(v.diagnostics) == 1
-        assert v.diagnostics[0].code == "SEM_999"
+        assert v.diagnostics[0].code == "SEM_INTERNAL_SENTINEL"
         assert v.diagnostics[0].message == "test error"
 
     def test_warning_records_diagnostic(self):
         v = make_visitor()
         node = ast.IbModule(body=[])
-        v.warning("test warning", node, code="SEM_081")
+        v.warning("test warning", node, code="SEM_CONTAINER_METHOD_HINT")
         assert len(v.diagnostics) == 1
         assert v.diagnostics[0].message == "test warning"

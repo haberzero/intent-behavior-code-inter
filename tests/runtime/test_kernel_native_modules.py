@@ -115,8 +115,8 @@ class TestKernelNativeImportGating:
             )
         err = exc_info.value
         codes = {d.code for d in getattr(err, "diagnostics", [])}
-        assert "SEM_001" in codes or "DEP_001" in codes, (
-            f"expected SEM_001/DEP_001, got codes={codes}, msg={err}"
+        assert "SEM_UNDEFINED_SYMBOL" in codes or "DEP_MODULE_NOT_FOUND" in codes, (
+            f"expected SEM_UNDEFINED_SYMBOL/DEP_MODULE_NOT_FOUND, got codes={codes}, msg={err}"
         )
 
 

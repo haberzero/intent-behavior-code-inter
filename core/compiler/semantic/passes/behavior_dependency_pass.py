@@ -8,6 +8,7 @@ Behavior Dependency Pass (BindingPhase sub-step 2)
 
 from typing import Optional, List, Set
 
+from core.base.diagnostics.codes import SEM_UNCATEGORIZED
 from core.kernel import ast
 
 from ..result import PassResult, Diagnostic, DiagnosticLevel
@@ -51,7 +52,7 @@ class BehaviorDependencyAnalyzer:
         # symbol_name -> IbBehaviorExpr node
         self.symbol_to_behavior: dict[str, ast.IbBehaviorExpr] = {}
 
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
+    def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """记录错误诊断"""
         node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(

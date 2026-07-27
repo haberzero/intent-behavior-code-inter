@@ -8,6 +8,12 @@ Binding Analysis Pass (BindingPhase sub-step 1)
 
 from typing import Optional, List, Dict, Any, Set
 
+from core.base.diagnostics.codes import (
+    SEM_LLMEXCEPT_BINDING,
+    SEM_LLMEXCEPT_BODY_WRITE,
+    SEM_LLMEXCEPT_SCOPE_BINDING,
+    SEM_UNCATEGORIZED,
+)
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, VariableSymbol, SymbolKind
 from core.kernel.spec.registry import SpecRegistry
@@ -72,7 +78,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
     验证 llmexcept 语句的合法性：
     - llmexcept 必须关联到包含行为表达式的语句
     - 检查 llmexcept target 的合法性
-    - read-only 约束：llmexcept body 内禁止对外部作用域变量赋值（SEM_052）
+    - read-only 约束：llmexcept body 内禁止对外部作用域变量赋值（SEM_LLMEXCEPT_BODY_WRITE）
     """
 
     def __init__(self, context: SemanticContext):
@@ -146,7 +152,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                 if not new_body:
                     self.error(
                         "llmexcept must follow a statement, but no previous statement found.",
-                        stmt, code="SEM_051"
+                        stmt, code=SEM_LLMEXCEPT_SCOPE_BINDING
                     )
                     i += 1
                     continue
@@ -160,7 +166,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                         self.error(
                             "llmexcept following a condition-driven 'for' loop requires a behavior expression "
                             "'@~...~' as the loop condition.",
-                            stmt, code="SEM_050"
+                            stmt, code=SEM_LLMEXCEPT_BINDING
                         )
                     # 条件 for 循环：挂载到 IbFor.llmexcept_handler
                     stmt.target = None
@@ -178,7 +184,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                         self.error(
                             f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
                             f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
-                            stmt, code="SEM_050"
+                            stmt, code=SEM_LLMEXCEPT_BINDING
                         )
                     # 正则情形：stmt.target = prev_stmt; pop prev_stmt from body
                     stmt.target = prev_stmt
@@ -227,11 +233,11 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
     # ===== llmexcept body read-only 约束 =====
 
     def _validate_readonly_body(self, body: List[ast.IbASTNode]):
-        """验证 llmexcept body 内的 read-only 约束（SEM_052）。
+        """验证 llmexcept body 内的 read-only 约束（SEM_LLMEXCEPT_BODY_WRITE）。
 
         - 捕获进入 body 前的外部作用域变量名集合
         - 排除 body 内声明的 body-local 变量（避免误报）
-        - body 内任何对外部作用域变量的赋值产生 SEM_052 错误
+        - body 内任何对外部作用域变量的赋值产生 SEM_LLMEXCEPT_BODY_WRITE 错误
         """
         # 收集所有可见作用域的变量名（当前作用域 + 全部外层父作用域）
         all_scope_names = set()
@@ -285,7 +291,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                             f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
                             f"writes to outer-scope variables break snapshot isolation. "
                             f"Use 'retry \"hint\"' to provide correction guidance instead.",
-                            stmt, code="SEM_052"
+                            stmt, code=SEM_LLMEXCEPT_BODY_WRITE
                         )
             elif isinstance(stmt, ast.IbAugAssign):
                 var_name = self._extract_assign_target_name(stmt.target)
@@ -294,7 +300,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                         f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
                         f"writes to outer-scope variables break snapshot isolation. "
                         f"Use 'retry \"hint\"' to provide correction guidance instead.",
-                        stmt, code="SEM_052"
+                        stmt, code=SEM_LLMEXCEPT_BODY_WRITE
                     )
 
             # 递归检查嵌套结构
@@ -332,7 +338,7 @@ class IntentContextValidator:
         self.diagnostics: List[Diagnostic] = []
         self.intent_annotations: Dict[Any, Any] = {}
 
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
+    def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """记录错误诊断"""
         node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
@@ -388,7 +394,7 @@ class IntentContextValidator:
                             self.error(
                                 f"Intent annotation '{intent_mode}' must be followed by a statement with behavior expression",
                                 stmt,
-                                code="SEM_050"
+                                code=SEM_LLMEXCEPT_BINDING
                             )
 
                 # 记录注解（使用节点对象作为键）

@@ -3,8 +3,8 @@ tests/compiler/test_import_position.py
 =======================================
 
 回归：``import`` 必须位于文件顶部。如果在其它语句之后出现，
-编译器应明确报 ``DEP_003 DEP_INVALID_IMPORT_POSITION``，而不是
-误导性的 ``SEM_001 Module 'X' not found``。
+编译器应明确报 ``DEP_INVALID_IMPORT_POSITION DEP_INVALID_IMPORT_POSITION``，而不是
+误导性的 ``SEM_UNDEFINED_SYMBOL Module 'X' not found``。
 
 """
 
@@ -25,10 +25,10 @@ class TestImportPositionEnforcement:
         )
         artifact, errors = compile_or_errors(code)
         assert artifact is not None, f"Expected success, got errors: {errors}"
-        assert "DEP_003" not in errors
+        assert "DEP_INVALID_IMPORT_POSITION" not in errors
 
     def test_import_after_statement_reports_dep_003(self):
-        """import 出现在普通语句之后 → DEP_003，而非 SEM_001。"""
+        """import 出现在普通语句之后 → DEP_INVALID_IMPORT_POSITION，而非 SEM_UNDEFINED_SYMBOL。"""
         code = (
             "import ai\n"
             'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
@@ -36,7 +36,7 @@ class TestImportPositionEnforcement:
             "print(x)\n"
             "import idbg\n"
         )
-        expect_compile_error(code, "DEP_003")
+        expect_compile_error(code, "DEP_INVALID_IMPORT_POSITION")
 
     def test_from_import_after_statement_reports_dep_003(self):
         """from-import 同样受位置约束。"""
@@ -47,10 +47,10 @@ class TestImportPositionEnforcement:
             "print(x)\n"
             "from idbg import show_intents\n"
         )
-        expect_compile_error(code, "DEP_003")
+        expect_compile_error(code, "DEP_INVALID_IMPORT_POSITION")
 
     def test_misplaced_import_not_reported_as_sem_001(self):
-        """关键断言：misplaced import 必须报 DEP_003，不能仅报 SEM_001
+        """关键断言：misplaced import 必须报 DEP_INVALID_IMPORT_POSITION，不能仅报 SEM_UNDEFINED_SYMBOL
         模块未找到——否则用户会以为是插件路径出问题。"""
         code = (
             "import ai\n"
@@ -60,7 +60,7 @@ class TestImportPositionEnforcement:
         )
         artifact, errors = compile_or_errors(code)
         assert artifact is None
-        assert "DEP_003" in errors
+        assert "DEP_INVALID_IMPORT_POSITION" in errors
 
     def test_comments_and_blank_lines_before_imports_ok(self):
         """import 之前允许出现注释、空行。"""
@@ -84,10 +84,10 @@ class TestImportPositionEnforcement:
         )
         artifact, errors = compile_or_errors(code)
         assert artifact is None
-        assert "DEP_003" in errors
+        assert "DEP_INVALID_IMPORT_POSITION" in errors
 
     def test_correct_imports_followed_by_other_imports_after_code_reports_only_misplaced(self):
-        """混合：顶部正常 + 中间错位 + 后面又错位 — 只有错位的报 DEP_003。"""
+        """混合：顶部正常 + 中间错位 + 后面又错位 — 只有错位的报 DEP_INVALID_IMPORT_POSITION。"""
         code = (
             "import ai\n"
             'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
@@ -98,7 +98,7 @@ class TestImportPositionEnforcement:
         )
         artifact, errors = compile_or_errors(code)
         assert artifact is None
-        assert "DEP_003" in errors
+        assert "DEP_INVALID_IMPORT_POSITION" in errors
 
 
 class TestImportPositionRuntimeRegression:

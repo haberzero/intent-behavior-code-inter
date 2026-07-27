@@ -34,7 +34,7 @@ class TypeCheckingPass(BasePass):
     - 一次性推断（不需要约束求解）
     - auto 变量类型推断
     - -> auto 函数返回类型推断
-    - 类型兼容性检查 (SEM_003)
+    - 类型兼容性检查 (SEM_TYPE_MISMATCH)
     """
 
     def __init__(self):

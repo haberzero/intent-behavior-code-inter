@@ -134,15 +134,15 @@ while frame_stack:
 
 ### §4.2 spawn/collect 契约
 
-**公理 SC-1（spawn 非阻塞）**：`spawn_isolated(path, policy)` 立即返回字符串 handle，不等待子 Interpreter 完成。
+**公理 ISO-4（spawn 非阻塞）**：`spawn_isolated(path, policy)` 立即返回字符串 handle，不等待子 Interpreter 完成。
 
-**公理 SC-2（collect 提取）**：`collect(handle)` 阻塞等待子 Interpreter 完成并返回其用户变量字典 `Dict[str, native_value]`。
+**公理 ISO-5（collect 提取）**：`collect(handle)` 阻塞等待子 Interpreter 完成并返回其用户变量字典 `Dict[str, native_value]`。
 
-**公理 SC-3（collect 幂等保护）**：对同一 handle 重复调用 `collect()` 抛出 `RuntimeError`。
+**公理 ISO-6（collect 幂等保护）**：对同一 handle 重复调用 `collect()` 抛出 `RuntimeError`。
 
-**公理 SC-4（collect 类型过滤）**：collect 仅返回可序列化的值类型（str/int/float/bool/list/dict）；函数对象、behavior 对象、内置符号不包含在结果中。
+**公理 ISO-7（collect 类型过滤）**：collect 仅返回可序列化的值类型（str/int/float/bool/list/dict）；函数对象、behavior 对象、内置符号不包含在结果中。
 
-**公理 SC-5（错误传播）**：子 Interpreter 运行期或编译期抛出的异常，在 `collect()` 时传播为 `RuntimeError`。
+**公理 ISO-8（错误传播）**：子 Interpreter 运行期或编译期抛出的异常，在 `collect()` 时传播为 `RuntimeError`。
 
 ### §4.3 合规测试
 
@@ -194,6 +194,47 @@ python3 -m pytest tests/compliance/ -v
 | §4 多 Interpreter | §8 多 Interpreter 隔离 | M4 |
 | §5 意图上下文 | §7 意图上下文 | Step 6 |
 | §6 合规测试 | §12 当前状态 | M6 |
+
+---
+
+## §8 公理注册表
+
+本节是 IBCI VM 全部公理的**唯一注册表**。每个公理族以独立前缀命名空间隔离，不允许跨族复用。
+
+| 公理 | 含义 | 定义章节 |
+|------|------|---------|
+| **EXEC-1** | 无 Python 递归 | §1.1 |
+| **EXEC-2** | 控制流数据化（Signal 数据对象传播） | §1.1 |
+| **EXEC-3** | llmexcept 显式驱动（AST 字段绑定，非侧表） | §1.1 |
+| **OM-1** | 对象存在性（一切值均为 IbObject） | §2.1 |
+| **OM-2** | 类型二分（值类型 vs 引用类型） | §2.1 |
+| **SC-1** | 词法嵌套（作用域树） | §2.2 |
+| **SC-2** | 变量分类（Local / Cell / Free） | §2.2 |
+| **SC-3** | Cell 语义（IbCell 间接存储） | §2.2 |
+| **SC-4** | 自由变量捕获（closure 字典） | §2.2 |
+| **LT-1** | 作用域生命周期 | §2.3 |
+| **LT-2** | Cell 延长生命周期 | §2.3 |
+| **LT-3** | snapshot 自包含性 | §2.3 |
+| **LT-4** | IntentContext 生命周期 | §2.3 |
+| **GC-1** | 追踪式 GC | §2.4 |
+| **GC-2** | 根集合 | §2.4 |
+| **GC-3** | 回收条件 | §2.4 |
+| **LLM-1** | dispatch_eager | §3.2 |
+| **LLM-2** | lazy resolve | §3.2 |
+| **LLM-3** | 确定性输出 | §3.2 |
+| **ISO-1** | 独立 RuntimeContext | §4.1 |
+| **ISO-2** | 只读共享 Registry | §4.1 |
+| **ISO-3** | 线程安全 | §4.1 |
+| **ISO-4** | spawn 非阻塞 | §4.2 |
+| **ISO-5** | collect 提取 | §4.2 |
+| **ISO-6** | collect 幂等保护 | §4.2 |
+| **ISO-7** | collect 类型过滤 | §4.2 |
+| **ISO-8** | 错误传播 | §4.2 |
+| **IC-1** | fork 隔离 | §5.1 |
+| **IC-2** | restore 还原 | §5.1 |
+| **IC-3** | llmexcept snapshot | §5.1 |
+
+**命名空间分配**：EXEC / OM / SC / LT / GC / LLM / ISO / IC。新增公理族须先在此表注册新前缀，禁止复用已有前缀。
 
 ---
 

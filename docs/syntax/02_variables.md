@@ -61,7 +61,7 @@ print((str)counter)    # 1
 ```
 
 **说明：**
-- `global` 只能在函数内部使用，在全局作用域中使用会产生 SEM_004 编译错误。
+- `global` 只能在函数内部使用，在全局作用域中使用会产生 SEM_INVALID_SCOPE 编译错误。
 - 可以在 `global` 声明之后才定义全局变量（函数调用时变量已存在即可）。
 - `global x, y` 支持一次声明多个全局变量。
 
@@ -85,8 +85,8 @@ print(counter())    # 3
 ```
 
 **说明：**
-- `nonlocal` 只能在嵌套函数内部使用，在模块级使用会产生 SEM_060 编译错误。
-- 声明的变量必须在外层作用域中已存在，否则产生 SEM_061 编译错误。
+- `nonlocal` 只能在嵌套函数内部使用，在模块级使用会产生 SEM_INTENT_PLACEMENT 编译错误。
+- 声明的变量必须在外层作用域中已存在，否则产生 SEM_NONLOCAL_NOT_FOUND 编译错误。
 - `nonlocal a, b` 支持一次声明多个外部变量。
 - nonlocal 变量通过 Cell 机制实现：多个闭包可以共享同一个 Cell，实现状态共享。
 

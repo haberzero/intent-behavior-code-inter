@@ -155,7 +155,7 @@ class TestAutoReturn:
         assert result.success
 
     def test_auto_return_conflicting_types(self, registry, pipeline):
-        """func f() -> auto with conflicting return types produces SEM_003"""
+        """func f() -> auto with conflicting return types produces SEM_TYPE_MISMATCH"""
         module = ast.IbModule(body=[
             ast.IbFunctionDef(
                 name='f',
@@ -173,7 +173,7 @@ class TestAutoReturn:
         ctx = make_context(module, registry)
         result = pipeline.run(ctx)
         # Should have a diagnostic about conflicting types
-        sem003 = [d for d in result.diagnostics if d.code == "SEM_003"]
+        sem003 = [d for d in result.diagnostics if d.code == "SEM_TYPE_MISMATCH"]
         assert len(sem003) > 0
 
 
@@ -343,7 +343,7 @@ class TestTypeResolutionPass:
         assert result.success
 
     def test_resolves_unknown_type_reports_sem004(self, registry):
-        """TypeResolutionPass reports SEM_004 for unknown types"""
+        """TypeResolutionPass reports SEM_INVALID_SCOPE for unknown types"""
         module = ast.IbModule(body=[
             ast.IbAssign(
                 targets=[ast.IbTypeAnnotatedExpr(
@@ -356,7 +356,7 @@ class TestTypeResolutionPass:
         ctx = make_context(module, registry)
         pass_instance = TypeResolutionPass()
         result = pass_instance.run(ctx)
-        sem004 = [d for d in result.diagnostics if d.code == "SEM_004"]
+        sem004 = [d for d in result.diagnostics if d.code == "SEM_INVALID_SCOPE"]
         assert len(sem004) == 1
 
 
@@ -406,7 +406,7 @@ class TestLLMExceptRewrite:
         assert module.body[0] is for_stmt
 
     def test_llmexcept_without_prev_stmt_errors(self, registry, pipeline):
-        """llmexcept as first statement → SEM_051 error"""
+        """llmexcept as first statement → SEM_LLMEXCEPT_SCOPE_BINDING error"""
         llmexcept = ast.IbLLMExceptionalStmt(
             target=None,
             body=[ast.IbPass()]
@@ -414,7 +414,7 @@ class TestLLMExceptRewrite:
         module = ast.IbModule(body=[llmexcept])
         ctx = make_context(module, registry)
         result = pipeline.run(ctx)
-        sem051 = [d for d in result.diagnostics if d.code == "SEM_051"]
+        sem051 = [d for d in result.diagnostics if d.code == "SEM_LLMEXCEPT_SCOPE_BINDING"]
         assert len(sem051) > 0
 
 

@@ -15,6 +15,7 @@ SymbolResolver, TypeCheckingVisitor, and LambdaCaptureAnalyzer.
 from contextlib import contextmanager
 from typing import Optional, List, Any
 
+from core.base.diagnostics.codes import SEM_UNCATEGORIZED
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable
 
@@ -95,7 +96,7 @@ class ScopedVisitor:
 
     # ---- Diagnostic helpers ----
 
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
+    def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """Record an error diagnostic."""
         node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
@@ -105,7 +106,7 @@ class ScopedVisitor:
             node_uid=node_uid
         ))
 
-    def warning(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
+    def warning(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """Record a warning diagnostic."""
         node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(

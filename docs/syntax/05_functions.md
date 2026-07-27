@@ -20,7 +20,7 @@ func say_hello(str name):    # 无 return 语句，推断为 void
     print("Hello, " + name)
 ```
 
-> **注意**：省略 `-> type` 标注等同于 `-> auto`，编译器从函数体内的 `return` 语句推断实际返回类型。若所有路径均无 `return`，推断为 `void`；若有多条路径返回不同类型，报 `SEM_026` 错误。
+> **注意**：省略 `-> type` 标注等同于 `-> auto`，编译器从函数体内的 `return` 语句推断实际返回类型。若所有路径均无 `return`，推断为 `void`；若有多条路径返回不同类型，报 `SEM_TYPE_MISMATCH` 错误。
 
 显式返回类型标注：
 
@@ -57,7 +57,7 @@ func maybe_get(bool flag) -> None:
 
 ### 5.2 行为表达式与 return 的约束
 
-> **Known Limit (docs/KNOWN_LIMITS.md §七)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_003` 编译错误。
+> **Known Limit (docs/KNOWN_LIMITS.md §七)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_TYPE_MISMATCH` 编译错误。
 
 ```ibci
 # 错误：不允许在 return 中直接使用行为表达式

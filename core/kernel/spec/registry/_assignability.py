@@ -95,7 +95,7 @@ class _AssignabilityMixin:
         Special case: ``fn[TYPE]`` — internal subscript for expression-side return-type inference.
         ``fn f = lambda -> int: EXPR`` causes the semantic analyser to build a
         ``TypeDef(value_type_name="int")`` via this path.  This enables
-        call-site inference: ``int r = f()`` compiles without SEM_003.
+        call-site inference: ``int r = f()`` compiles without SEM_TYPE_MISMATCH.
         """
         # Special case: fn[RETURN_TYPE] → TypeDef(value_type_name=RETURN_TYPE)
         if spec.name == "fn" and arg_specs:

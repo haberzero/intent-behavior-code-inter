@@ -9,6 +9,11 @@ no logic changes.
 
 from typing import Optional
 
+from core.base.diagnostics.codes import (
+    SEM_DUAL_ASSIGNABLE,
+    SEM_PROTOCOL_SIGNATURE,
+    SEM_TYPE_MISMATCH,
+)
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
@@ -137,7 +142,7 @@ class DeclarationVisitorsMixin:
                     self.error(
                         f"Function '{node.name}' is declared '-> auto' but returns conflicting types: "
                         f"{', '.join(t.name for t in unique)}",
-                        node, code="SEM_003"
+                        node, code=SEM_TYPE_MISMATCH
                     )
                     inferred_return = self._any_desc
                 # 更新符号的返回类型
@@ -149,11 +154,11 @@ class DeclarationVisitorsMixin:
             self.in_function_def = old_in_function
             self.auto_return_types = old_auto_returns
 
-        # SEM_092: Method override signature compatibility check
+        # SEM_DUAL_ASSIGNABLE: Method override signature compatibility check
         if self.in_class_def and self.current_class and sym and sym.spec:
             self._check_override_compatibility(node, sym.spec)
 
-        # SEM_095: Prompt protocol signature validation
+        # SEM_PROTOCOL_SIGNATURE: Prompt protocol signature validation
         if self.in_class_def and is_prompt_protocol_method(node.name):
             # Count params excluding self
             user_param_count = len(node.args)
@@ -164,7 +169,7 @@ class DeclarationVisitorsMixin:
                 node.name, user_param_count, ret_type_name
             )
             for diag_msg in diagnostics:
-                self.warn(diag_msg, node, code="SEM_095")
+                self.warn(diag_msg, node, code=SEM_PROTOCOL_SIGNATURE)
 
         return None
 
@@ -176,7 +181,7 @@ class DeclarationVisitorsMixin:
         return None
 
     def _check_override_compatibility(self, node: ast.IbFunctionDef, child_spec: IbSpec):
-        """SEM_092: Check that overriding method's signature is compatible with parent.
+        """SEM_DUAL_ASSIGNABLE: Check that overriding method's signature is compatible with parent.
 
         Rules:
         - Parameter count must match (including self).
@@ -222,7 +227,7 @@ class DeclarationVisitorsMixin:
                 f"Method '{method_name}' overrides parent with "
                 f"{len(parent_params)} parameter(s), but defines "
                 f"{len(child_params)} parameter(s).",
-                node, code="SEM_092",
+                node, code=SEM_DUAL_ASSIGNABLE,
                 hint=f"Parent signature has {len(parent_params)} parameters (including self). "
                      f"Ensure override matches the parent signature."
             )
@@ -257,7 +262,7 @@ class DeclarationVisitorsMixin:
                 self.warn(
                     f"Method '{method_name}' parameter {i} type '{child_p_head}' "
                     f"is incompatible with parent's '{parent_p_head}'.",
-                    node, code="SEM_092",
+                    node, code=SEM_DUAL_ASSIGNABLE,
                     hint=f"Override parameter types should be compatible with the parent method."
                 )
 
@@ -276,7 +281,7 @@ class DeclarationVisitorsMixin:
                     self.warn(
                         f"Method '{method_name}' return type '{child_r_head}' "
                         f"is incompatible with parent's '{parent_r_head}'.",
-                        node, code="SEM_092",
+                        node, code=SEM_DUAL_ASSIGNABLE,
                         hint=f"Override return type should be assignable to parent's return type."
                     )
 

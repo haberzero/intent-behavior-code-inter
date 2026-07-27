@@ -58,13 +58,13 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 > 并在该变量被后续读取时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）则立即抛出
 > `LLMCallError`（行为见 §4.6）。`Uncertain` 哨兵是 VM 内部信号，用户代码无需处理。
 
-`llmexcept` 体内**禁止写入外部变量**（编译期 `SEM_052` 错误）：
+`llmexcept` 体内**禁止写入外部变量**（编译期 `SEM_LLMEXCEPT_BODY_WRITE` 错误）：
 
 ```ibci
 int x = 1
 int result = @~ 计算结果 ~
 llmexcept:
-    x = 2            # SEM_052：禁止在 llmexcept 中写入外部变量
+    x = 2            # SEM_LLMEXCEPT_BODY_WRITE：禁止在 llmexcept 中写入外部变量
     retry "重试"
 ```
 

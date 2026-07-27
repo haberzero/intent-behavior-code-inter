@@ -59,9 +59,9 @@ class TestForLoopVariableScope:
         ])
         result = run_pipeline(module, registry)
         errors = get_errors(result)
-        # No SEM_001 "Undefined symbol 'i'"
+        # No SEM_UNDEFINED_SYMBOL "Undefined symbol 'i'"
         sem001_for_i = [e for e in errors if "Undefined symbol 'i'" in e.message]
-        assert sem001_for_i == [], f"Expected no SEM_001 for 'i', got: {sem001_for_i}"
+        assert sem001_for_i == [], f"Expected no SEM_UNDEFINED_SYMBOL for 'i', got: {sem001_for_i}"
 
     def test_for_loop_variable_bound_to_symbol(self, registry):
         """Loop variable node should have a symbol binding."""
@@ -109,10 +109,10 @@ class TestForLoopVariableScope:
         ])
         result = run_pipeline(module, registry)
         errors = get_errors(result)
-        sem001 = [e for e in errors if "SEM_001" in e.code]
-        # Neither 'k' nor 'v' should produce SEM_001
+        sem001 = [e for e in errors if "SEM_UNDEFINED_SYMBOL" in e.code]
+        # Neither 'k' nor 'v' should produce SEM_UNDEFINED_SYMBOL
         assert not any("'k'" in e.message or "'v'" in e.message for e in sem001), \
-            f"Unexpected SEM_001 for tuple-unpack vars: {[e.message for e in sem001]}"
+            f"Unexpected SEM_UNDEFINED_SYMBOL for tuple-unpack vars: {[e.message for e in sem001]}"
 
 
 # ============================================================

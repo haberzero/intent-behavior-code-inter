@@ -99,7 +99,7 @@ switch c:
 **限制说明**
 
 行为表达式（`@~ ... ~`）的输出类型和提示词约束由左值类型驱动（即赋值目标的类型）。
-在 `return` 语句中直接书写行为表达式时，由于无法从函数返回类型标注中以静态明确的方式推导出提示词约束，编译器**禁止**此写法，报 `SEM_003` 错误。
+在 `return` 语句中直接书写行为表达式时，由于无法从函数返回类型标注中以静态明确的方式推导出提示词约束，编译器**禁止**此写法，报 `SEM_TYPE_MISMATCH` 错误。
 
 **正确用法**
 
@@ -232,10 +232,10 @@ class Dog(Animal):
 
 ## 九、已废弃语法（产生硬编译错误）
 
-### `(Type) @~...~` 强制类型转换语法（PAR_010）
+### `(Type) @~...~` 强制类型转换语法（PAR_DEPRECATED_CAST_SYNTAX）
 
 ```ibci
-# ❌ 已废弃，产生 PAR_010 编译错误
+# ❌ 已废弃，产生 PAR_DEPRECATED_CAST_SYNTAX 编译错误
 int sum = (int) @~ 请计算 $a 和 $b 之和 ~
 
 # ✅ 正确写法：LHS 类型自动成为 LLM 输出格式约束
@@ -245,17 +245,17 @@ str mood = @~ 请判断颜色，回复颜色单词 ~
 
 LHS 的变量声明类型会自动被传递给 LLM 作为输出格式提示，无需额外的类型转换语法。
 
-### 旧 fn / lambda 声明语法（PAR_003 / D1/D2 废弃）
+### 旧 fn / lambda 声明语法（PAR_INVALID_SYNTAX / D1/D2 废弃）
 
 ```ibci
 # ❌ 全部产生 parse error
-int lambda f = expr           # 旧声明语法（PAR_001）
-auto snapshot g = expr        # 旧声明语法（PAR_001）
-fn lambda h = expr            # 旧括号体形式（PAR_001）
-lambda(EXPR)                  # 旧括号体形式（PAR_001）
-lambda(PARAMS)(EXPR)          # 旧括号体形式（PAR_001）
-int fn f = lambda: EXPR       # 声明侧返回类型（PAR_003，D1 废弃）
-int fn f = snapshot(int a, int b): EXPR  # 声明侧返回类型（PAR_003，D1 废弃）
+int lambda f = expr           # 旧声明语法（PAR_EXPECTED_TOKEN）
+auto snapshot g = expr        # 旧声明语法（PAR_EXPECTED_TOKEN）
+fn lambda h = expr            # 旧括号体形式（PAR_EXPECTED_TOKEN）
+lambda(EXPR)                  # 旧括号体形式（PAR_EXPECTED_TOKEN）
+lambda(PARAMS)(EXPR)          # 旧括号体形式（PAR_EXPECTED_TOKEN）
+int fn f = lambda: EXPR       # 声明侧返回类型（PAR_INVALID_SYNTAX，D1 废弃）
+int fn f = snapshot(int a, int b): EXPR  # 声明侧返回类型（PAR_INVALID_SYNTAX，D1 废弃）
 
 # ✅ 正确写法（D1/D2：返回类型标注写在表达式侧）
 fn f = lambda: EXPR                          # 无参，返回类型推导
@@ -266,7 +266,7 @@ fn f = snapshot -> int: EXPR                # snapshot，显式返回类型（D2
 fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 ```
 
-`D1`（2026-04-29）废弃了声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式（产生 PAR_003），
+`D1`（2026-04-29）废弃了声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式（产生 PAR_INVALID_SYNTAX），
 改为在表达式侧通过 `-> TYPE` 标注（`D2`）。
 
 ---
@@ -315,7 +315,7 @@ str r = @~ ... ~
 
 **作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `builtin_initializer.py:519-538` 注释）。
 
-**编译期防护（SEM_090）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_090 warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
+**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
 **测试覆盖**：`tests/compiler/semantic/test_p2_warnings.py::TestIntentContextStaticCallWarning`（9 个测试）。
 
@@ -323,11 +323,11 @@ str r = @~ ... ~
 
 ## 十三、`@` 意图注释的放置约束
 
-**当前状态**：以下规则由编译期 `SEM_060` 与 VM 语句调度共同保证：
+**当前状态**：以下规则由编译期 `SEM_INTENT_PLACEMENT` 与 VM 语句调度共同保证：
 
 1. `@`（smear）与 `@!`（override）必须紧跟**下一条可执行语句**（可以是普通函数调用、赋值、控制流语句等），不能作为块末尾孤立存在。
 2. `@` / `@!` 是"语句级 one-shot"：绑定到紧随其后的**一条语句执行窗口**。该语句执行期间若触发 LLM 调用会消费它；若该语句路径没有任何 LLM 调用，窗口结束后也会被清理，不会泄漏到后续语句。
-3. 连续两个 `@` / `@!`（one-shot）不允许：编译期报 `SEM_060`。`@+` / `@-` 作为栈操作可独立存在并与 one-shot 组合。
+3. 连续两个 `@` / `@!`（one-shot）不允许：编译期报 `SEM_INTENT_PLACEMENT`。`@+` / `@-` 作为栈操作可独立存在并与 one-shot 组合。
 4. `@-` 是合法语法：支持无参弹栈、按内容移除、按标签移除（`@- #tag`）。
 
 **根源**：意图注释设计为对"下一条语句执行窗口"的修饰；该规则让编译期能确定 one-shot 的归属，同时让运行时在无 LLM 路径上也保持无泄漏的一致语义。
@@ -389,12 +389,12 @@ str r = @~ ... ~
 
 **已改善（2026-06-25 PT-ARCH-7）**：原先的静默吞异常已改为 `core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, ...)` 日志——用户实现的 `__to_prompt__` 若抛异常（如字段未初始化的 AttributeError），开启调试（默认 NONE 级，零开销）即可观测，不再完全无感知。同样的处理已应用到 `__payload_prompt__` / `to_native` 回退链。
 
-### 16.4 协议签名校验（SEM_095）的强度选择
+### 16.4 协议签名校验（SEM_PROTOCOL_SIGNATURE）的强度选择
 
-**问题**：当前 `SEM_095` 是 warning 而非 error——用户可以声明签名不匹配协议约定的 `__from_prompt__`（如 0 个参数），编译仍通过。运行时如果 axiom 路径命中就不会调用 vtable，但如果确实调用到 vtable 则会在运行时失败。
+**问题**：当前 `SEM_PROTOCOL_SIGNATURE` 是 warning 而非 error——用户可以声明签名不匹配协议约定的 `__from_prompt__`（如 0 个参数），编译仍通过。运行时如果 axiom 路径命中就不会调用 vtable，但如果确实调用到 vtable 则会在运行时失败。
 
 **待决策**：
-- 是否应该将 SEM_095 从 warning 提升为 error（阻止编译）？
+- 是否应该将 SEM_PROTOCOL_SIGNATURE 从 warning 提升为 error（阻止编译）？
 - 或保持 warning——鉴于协议方法签名本身属于 `_OVERRIDE_SIGNATURE_FREE`（允许自由修改签名以适配不同场景）？
 
 ---

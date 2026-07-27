@@ -3,6 +3,7 @@ from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.base import TypeKind
 from core.compiler.diagnostics.issue_tracker import IssueTracker
+from core.base.diagnostics.codes import SEM_REDEFINITION
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
 class ContractValidator:
@@ -83,14 +84,14 @@ class ContractValidator:
                 self.issue_tracker.report_error(
                     f"Contract Violation: Global function '{func_desc.name}' has unhydrated parameter type at index {i}.",
                     file_path="<metadata>",
-                    line=0, column=0, code="SEM_002"
+                    line=0, column=0, code=SEM_REDEFINITION
                 )
 
         if func_desc.return_type.head is None:
             self.issue_tracker.report_error(
                 f"Contract Violation: Global function '{func_desc.name}' has unhydrated return type.",
                 file_path="<metadata>",
-                line=0, column=0, code="SEM_002"
+                line=0, column=0, code=SEM_REDEFINITION
             )
 
     def _check_method_compatibility_by_name(self, cls_desc: TypeDef, name: str,
@@ -106,5 +107,5 @@ class ContractValidator:
             self.issue_tracker.report_error(
                 f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
                 f"but parent defines {len(super_params)} parameters.",
-                file_path="<metadata>", line=0, column=0, code="SEM_002"
+                file_path="<metadata>", line=0, column=0, code=SEM_REDEFINITION
             )

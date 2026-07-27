@@ -55,10 +55,10 @@ class TestFileKernelNative:
         assert "ok" in lines
 
     def test_media_type_without_import_fails(self, tmp_path):
-        """未 import file 时 audio 类型不可见，编译期 SEM_001。"""
+        """未 import file 时 audio 类型不可见，编译期 SEM_UNDEFINED_SYMBOL。"""
         code = 'audio a = audio.from_file("x.wav")\n'
         _, errs = compile_or_errors(code, root_dir=str(tmp_path))
-        assert "SEM_001" in errs
+        assert "SEM_UNDEFINED_SYMBOL" in errs
 
     def test_write_copy_leaves_original_untouched(self, tmp_path):
         """write_copy 创建新文件，不影响原 handle。"""

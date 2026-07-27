@@ -18,8 +18,8 @@ from core.kernel.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.compiler.serialization.serializer import FlatSerializer
 from core.base.diagnostics.codes import (
-    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
-    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT
+    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INT_INTERNAL_ERROR,
+    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL
 )
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
@@ -476,7 +476,7 @@ class Scheduler(ICompilerService):
                                     f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
                             else:
                                 # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突。
-                                # 用户自有符号优先；发出 SEM_009 WARNING 提示用户检查命名。
+                                # 用户自有符号优先；发出 SEM_IMPORT_CONFLICT WARNING 提示用户检查命名。
                                 file_tracker.warning(
                                     f"Import '{local_name}' conflicts with an already-defined "
                                     f"{existing.kind.name.lower()} symbol of the same name. "
@@ -556,14 +556,14 @@ class Scheduler(ICompilerService):
                                         analyzer.symbol_table.define(new_sym)
                                     else:
                                         analyzer.issue_tracker.report(
-                                            Severity.ERROR, "SEM_001",
+                                            Severity.ERROR, SEM_UNDEFINED_SYMBOL,
                                             f"Symbol '{alias.name}' in module '{imp.module_name}' has an unresolved type",
                                             location=Location(file_path=file_path, line=imp.lineno, column=1)
                                         )
                             else:
                                 # 符号未找到报错
                                 analyzer.issue_tracker.report(
-                                    Severity.ERROR, "SEM_001", 
+                                    Severity.ERROR, SEM_UNDEFINED_SYMBOL,
                                     f"Symbol '{alias.name}' not found in module '{imp.module_name}'",
                                     location=Location(file_path=file_path, line=imp.lineno, column=1)
                                 )
@@ -594,7 +594,7 @@ class Scheduler(ICompilerService):
         except CompilerError:
             raise
         except Exception as e:
-            file_tracker.error(f"Internal compiler error: {str(e)}", code=INTERNAL_ERROR)
+            file_tracker.error(f"Internal compiler error: {str(e)}", code=INT_INTERNAL_ERROR)
             raise CompilerError(file_tracker.diagnostics) from e
         finally:
             self.issue_tracker.merge(file_tracker)

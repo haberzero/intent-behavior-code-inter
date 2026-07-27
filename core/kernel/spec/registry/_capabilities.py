@@ -74,7 +74,7 @@ class _CapabilityMixin:
         This is intentionally distinct from ``is_compatible(target)`` which
         is the source-side query for *implicit* assignment compatibility.
 
-        Used by TypeCheckingPass.visit_IbCastExpr for compile-time SEM_091
+        Used by TypeCheckingPass.visit_IbCastExpr for compile-time SEM_CAST_NO_CONVERTER
         warnings.  Runtime ``IbCastExpr`` still validates via
         ``value.receive("cast_to", [target_class])``.
         """
