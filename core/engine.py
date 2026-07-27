@@ -31,7 +31,7 @@ from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
@@ -49,7 +49,6 @@ from core.runtime.interfaces import IExecutionContext
 from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.capability_registry import CapabilityRegistry
-from core.runtime.interfaces import IsolationLevel
 from core.extension.auto_discovery import AutoDiscoveryService
 
 
@@ -297,11 +296,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 result.append(p)
         return result
 
-    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, isolated: bool = False, entry_file: str = None, entry_dir: str = None) -> Interpreter:
+    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, entry_file: str = None, entry_dir: str = None) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
         instance_id = self.rt_scheduler.spawn(
             artifact=artifact,
-            isolation=IsolationLevel.SCOPE if isolated else IsolationLevel.NONE,
             registry=registry,
             host_interface=host_interface,
             root_dir=root_dir,
@@ -328,7 +326,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             host_interface=self.host_interface,
             root_dir=self.root_dir,
             parent_context=None,
-            isolated=False,
             entry_file=self._entry_file,
             entry_dir=_ctx_entry_dir
         )
@@ -717,7 +714,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Bootstrapping new Engine instance for sub-project root: {sub_root_dir}")
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
-            auto_sniff=True,
+            auto_sniff=self.auto_sniff,
             core_debug_config=self.debugger.config,  # 继承调试配置
             inherited_plugin_paths=self._plugin_search_paths,  # 继承父 plugin
             inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
@@ -742,7 +739,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
-            auto_sniff=True,
+            auto_sniff=self.auto_sniff,
             core_debug_config=self.debugger.config,
             inherited_plugin_paths=self._plugin_search_paths,  # 继承父 plugin
             inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级

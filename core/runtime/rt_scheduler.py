@@ -2,7 +2,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Callable
 
 from core.runtime.interfaces import (
-    IRuntimeScheduler, IsolationLevel, ServiceContext
+    IRuntimeScheduler, ServiceContext
 )
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
@@ -31,18 +31,13 @@ class RuntimeSchedulerImpl:
 
     def spawn(self, 
               artifact: Any, 
-              isolation: str = IsolationLevel.NONE,
               instance_id: Optional[str] = None,
               **kwargs) -> str:
         """
          创建并初始化一个新的解释器实例。
         承担了原 Engine._prepare_interpreter 的装配职责。
-
-        注：isolation 参数保留，但当前实现
-        不再在调度器内部分支处理隔离——隔离执行由 Engine.request_isolated_run
-        通过新建 Engine 实例完成。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Spawning new interpreter instance (Isolation: {isolation})")
+        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Spawning new interpreter instance")
         
         if not instance_id:
             instance_id = f"inst_{uuid.uuid4().hex[:8]}"

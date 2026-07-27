@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 
 class InterOpImpl:
     def __init__(self, host_interface: Optional[HostInterface] = None):

@@ -272,8 +272,10 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         _reg_native(llm_uncertain_class, '__eq__', _lu_eq, unbox=False)
         _reg_native(llm_uncertain_class, '__ne__', _lu_ne, unbox=False)
     else:
-        # 安全回退（极端情况下 llm_uncertain 公理未注册）
-        registry.register_llm_uncertain(IbLLMUncertain(none_class), token)
+        raise InterpreterError(
+            "llm_uncertain axiom is not registered. "
+            "Ensure register_core_axioms() is called before primitive initialization."
+        )
 
     # 4. 注册特殊逻辑 (Axiom 无法完全自动化的部分)
     _reg_native(integer_class, '__to_prompt__', lambda self: str(self.to_native()))

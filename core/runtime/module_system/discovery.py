@@ -16,7 +16,7 @@ import importlib.util
 from typing import Dict, List, Optional, Any
 
 from core.base.path import IbPath
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
 from core.base.enums import RegistrationState, Visibility
 from core.kernel.spec.type_ref import TypeRef

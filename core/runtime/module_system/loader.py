@@ -238,6 +238,8 @@ class ModuleLoader(IModuleLoader):
                         implementation = mod.implementation
                     else:
                         # 支持直接导出的类或函数（如有必要可扩展）
+                        core_trace(CoreModule.SCHEDULER, DebugLevel.BASIC,
+                                   f"Module '{module_name}' skipped: no create_implementation() or implementation export found")
                         continue
 
                     # 1. 自动依赖注入 (基于 setup 方法签名)

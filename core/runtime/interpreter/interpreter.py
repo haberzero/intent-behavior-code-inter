@@ -48,7 +48,7 @@ from core.runtime.interpreter.permissions import PermissionManager as Permission
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbClassField, IbValue
 from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.kernel.registry import KernelRegistry
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.runtime.interfaces import IStackInspector, IExecutionContext
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole

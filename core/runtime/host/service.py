@@ -16,12 +16,15 @@ import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IExecutionContext, IKernelOrchestrator
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.registry import KernelRegistry
 from core.runtime.objects.kernel import IbObject
 from core.kernel.issue import InterpreterError
 from core.extension.ibcext import IbStatefulPlugin
+
+# 序列化格式约定：save_state 外化资产时用此哨兵占位，load_state 据此回填。
+_EXTERNAL_FILE_REF_SENTINEL = "__EXTERNAL_FILE_REF__"
 
 class HostService(IHostService):
     """
@@ -93,7 +96,7 @@ class HostService(IHostService):
                 asset_path = SnapshotLayout.asset_file(asset_dir_path, uid).to_native()
                 with open(asset_path, "w", encoding="utf-8") as af:
                     af.write(content)
-            data["pools"]["assets"] = {uid: "__EXTERNAL_FILE_REF__" for uid in assets}
+            data["pools"]["assets"] = {uid: _EXTERNAL_FILE_REF_SENTINEL for uid in assets}
 
         with open(abs_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -232,11 +235,7 @@ class HostService(IHostService):
         ``ExecutionContextImpl.resolve_path`` / ``file.read`` 的相对入口目录语义一致。
         """
         from core.kernel.path import PathResolver, IbPath
-        try:
-            entry_dir = self.execution_context.get_entry_dir()
-        except Exception as e:
-            core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"get_entry_dir failed: {e!r}")
-            entry_dir = None
+        entry_dir = self.execution_context.get_entry_dir()
         resolver = PathResolver(entry_dir=IbPath.from_native(entry_dir) if entry_dir else None)
         return resolver.resolve(path).to_native()
 
