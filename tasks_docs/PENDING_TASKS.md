@@ -1,9 +1,9 @@
 ﻿# PENDING_TASKS - 阻塞 / 待前置任务的未来规划
 
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
-> 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`；已完成事项见 `tasks_docs/COMPLETED.md`。
+> 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-07-21（文档卫生清理：移除全部 [DONE] 项与历史档案；合并 ADR-008/010/013 延迟项为 Phase 4 任务）
+> **最后更新**：2026-07-24（文档卫生清理：PT-DOC-4/7/8/9/10/11 全部验证并关闭；§五 文档健康改善项清空撤销，原§六/§七上移）
 
 ---
 
@@ -88,35 +88,7 @@
 
 ---
 
-## 五、文档健康改善项
-
-### PT-DOC-4　TEST_PHILOSOPHY 旧路径引用修复 [P3]
-
-> `tests/` 中 3 个文件引用 `docs/TEST_PHILOSOPHY.md`（旧路径，现为 `tests_docs/TEST_PHILOSOPHY.md`）。
-
-### PT-DOC-7　HISTORY_LOG 旧编号死指针 [P3]
-
-> `tasks_docs/HISTORY_LOG.md` 有 4 处引用 KNOWN_LIMITS 旧编号（§十九/§二十三/§二十四/§二十五）。
-
-### PT-DOC-8　测试路径标注同步 [P3]
-
-> 多处文档中 `file.read_audio/image/video`、`MediaStorage` 等旧 API 名称需加历史标注。
-
-### PT-DOC-9　MULTIMODAL_BEHAVIOR_DESIGN 来源标注 [P3]
-
-> 删除 archive 文件后需同步改写来源标注。
-
-### PT-DOC-10　COMPLETED 时间线错位 [P3]
-
-> PT-ARCH-21-FU 条目（2026-07-17）排在 2026-05-22 之后，需移至正确位置。
-
-### PT-DOC-11　COMPLETED 引用已删 ADR [P3]
-
-> COMPLETED.md 中多处引用已删除的 ADR-007/009/011/018。
-
----
-
-## 六、测试基础设施改善项
+## 五、测试基础设施改善项
 
 ### PT-TEST-6　e2e 测试覆盖率提升 [P2]
 
@@ -132,7 +104,7 @@
 
 ---
 
-## 七、media Phase 4 前置技术债与延迟项
+## 六、media Phase 4 前置技术债与延迟项
 
 ### PT-ARCH-22：全项目文件命名清理 [暂缓]
 
@@ -174,9 +146,9 @@
 - 新增 bypass register（`set_last_raw_response`/`get_last_raw_response`）到 runtime_context
 - `_call_llm` 存储完整响应对象到 bypass register
 
-### GATED：media Phase 4
+### media Phase 4（未来低优先级）
 
-> 所有前置已完成。待项目负责人明确开工指令。详见 `tasks_docs/NEXT_STEPS.md`。
+> **已暂停**。代码层零启动（仅设计文档 `docs/subsystems/02_multimodal_behavior.md` 存在）。前置（路径统一/内核原生化/磁盘型存储）均已完成，但 Phase 4 容器工作（MediaAxiom + IbMedia + from_response 协议）暂不推进，降级为未来低优先级。恢复时需重新评估设计文档与当前代码基线的一致性。
 
 ---
 

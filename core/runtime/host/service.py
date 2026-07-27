@@ -254,7 +254,7 @@ class HostService(IHostService):
         委托规范解析器 ``PathResolver``（entry_dir 单锚点，§6.1 契约），与
         ``ExecutionContextImpl.resolve_path`` / ``file.read`` 的相对入口目录语义一致。
 
-        H3 修复（详见 tasks_docs/COMPLETED.md 2026-05-14 锚点）：历史实现统一走 ``os.path.abspath``，
+        历史实现统一走 ``os.path.abspath``，
         相对 cwd 解析，与 ``file.read`` 的"相对入口目录"语义不一致，导致 README §5 与
         ``examples/03_advanced_features/isolation_demo/parent.ibci`` 仅在 cwd 恰好为入口目录
         时才能跑通。

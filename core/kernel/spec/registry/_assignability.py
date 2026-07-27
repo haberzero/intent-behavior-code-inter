@@ -61,7 +61,7 @@ class _AssignabilityMixin:
                     return True
                 # If target has allowed types, source must have same or subset
                 if tgt_allowed and src_allowed:
-                    return {t.head for t in src_allowed} == {t.head for t in tgt_allowed}
+                    return {t.head for t in src_allowed} <= {t.head for t in tgt_allowed}
                 # Single-type target, multi-type source: relaxed — allow
                 return True
 

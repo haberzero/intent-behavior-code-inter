@@ -2,7 +2,6 @@
 
 > 本文档是 IBCI 类型系统的**正式设计文档**，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
 > 设计原文（架构推演、语言学动机）见 `docs/design/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`（已归档）。
-> 历史演进时间线见 `tasks_docs/COMPLETED.md`。
 >
 > **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
 > `kernel/spec/registry`、`kernel/axioms/primitives`、`runtime/objects/{builtins,kernel}`、
@@ -362,7 +361,7 @@ class IbValue(IbObject):
 
 ## §10 当前状态
 
-- M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成（详见 `tasks_docs/COMPLETED.md`，2026-05-08 锚点）。
+- M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成。
 - 类型系统主线本身无开放债务；路径系统统一（ADR-015~019）已完成（2026-07-13，PT-ARCH-21）。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 + ADR-014 协同里程碑），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在该里程碑完成之后。
 - 实时主线状态以 `tasks_docs/NEXT_STEPS.md` 为准；测试基线请以当次 `python -m pytest tests/` 输出为准（不在此冻结具体数字）。
 
@@ -375,4 +374,3 @@ class IbValue(IbObject):
 - VM 正式规范（公理化）：`docs/design/VM_SPEC.md`
 - 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
 - 运行时与解释器细节备份：`docs/design/ARCH_DETAILS.md`
-- 历史时间线：`tasks_docs/COMPLETED.md`

@@ -1,10 +1,10 @@
 ﻿# NEXT_STEPS - 当前最紧要项
 
 > 本文档**只**记录当前周期内最紧要、可立即开工的下一步。
-> 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`；历史归档见 `tasks_docs/COMPLETED.md`。
+> 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-21（文档卫生清理：删除全部 ADR，设计知识已迁入技术文档；任务控制文档精简）
+> **最后更新**：2026-07-24（删除 COMPLETED.md / HISTORY_LOG.md / AUDIT_REPORT 历史文档；代码注释与文档去除任务控制文档指针，完成记录改由 git 提交历史承载）
 
 ---
 
@@ -32,19 +32,11 @@ python -m pytest tests/
 
 ---
 
-## ⛔ GATED：media Phase 4 - MediaAxiom + IbMedia 全模态容器
+## 当前主线：代码卫生与注释卫生
 
-> **状态**：所有前置（路径统一、内核原生化、磁盘型存储体系）已全部完成。media Phase 4 **可被提升为 P0**，但需项目负责人明确开工指令。
-
-解锁后的工作：
-1. **`MediaAxiom` + 协议驱动的响应解析**：解析多模态响应为 media 对象（协议驱动，非 `if/else`）。
-2. **`IbMedia` 全模态组合容器**：modality->payload 映射 + 固定访问器（`.text/.audio/.image/.video`）。
-3. **MOCK 模式扩展**：`MOCK:MEDIA:` 合成响应（暂缓，届时再议）。
-
-**Phase 4 关联延迟项**（从 ADR-008/010/013 提取，详见 `PENDING_TASKS.md` §九）：
-- 多模态模型注册字段（`modalities`/`endpoint`/`audio_config` 存储）
-- 非聊天端点推理绕过（endpoint-based reasoning bypass）
-- 磁盘型响应解析协议（`from_response` / bypass register）
+> **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
+>
+> 当前周期聚焦代码/注释卫生：贯彻"代码注释只应注明功能设计与已知问题，不应指向任务控制文档"的原则，清理残留的不当引用与过期注释。
 
 ---
 
@@ -67,6 +59,6 @@ python -m pytest tests/
 - **同一时刻只主推一个 P0 阶段**。
 - **工作模式定论优先**：任何与"⛔ 工作模式定论"冲突的提议一律以定论为准。
 - 任何改动公理层公约或语义错误集的任务，需在分支早期跑全量 pytest 评估破坏面。
-- 每个阶段完成后，把摘要追加到 `tasks_docs/COMPLETED.md`，并把对应条目从本文件移除。
+- 每个阶段完成后，用描述性 commit message 记录完成的工作，并把对应条目从本文件移除。
 - **本文件不冻结具体测试通过数字**。
 - 重大架构决策记录在技术文档中（`docs/ARCHITECTURE.md`、`docs/architecture/02_metadata_ast.md`、`docs/architecture/01_principles.md`），不再使用独立 ADR 文件。

@@ -1,7 +1,7 @@
 ﻿# IBCI VM 与解释器架构（代码对齐版）
 
 > 本文档是 IBCI 运行时（VM + 解释器）的**正式架构设计文档**，与当前代码（`core/runtime/vm/`、`core/runtime/interpreter/`、`core/runtime/objects/`）严格对齐。
-> 公理化的可验证规范见 `docs/design/VM_SPEC.md`；实现细节备份见 `docs/design/ARCH_DETAILS.md`；历史演进时间线见 `tasks_docs/COMPLETED.md`。
+> 公理化的可验证规范见 `docs/design/VM_SPEC.md`；实现细节备份见 `docs/design/ARCH_DETAILS.md`。
 >
 > **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
 > `runtime/vm/handlers`（`build_dispatch_table`→`handlers/dispatch.py`）、`runtime/objects/{builtins,kernel}`、
@@ -222,7 +222,7 @@ VM 行为：
            → runtime_context.set_last_llm_result(result)
 ```
 
-> 当前 LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers.py` 中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。详见 `tasks_docs/COMPLETED.md` NS-1 锚点。
+> 当前 LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers.py` 中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
 
 ---
 
@@ -297,7 +297,7 @@ visit_IbLLMExceptionalStmt
 | `intent_context` 参数自动激活（NS-2a） | 内部复用 `use_intent_context` 入口 |
 | `LLMExceptFrame` retry（NS-2c）| 以 `saved.fork()` 替换 `_intent_ctx`，同步重建活跃指针 |
 
-完整 OOP 化（参数 / 默认 ctx / behavior 动态注入 / 序列化）已完成，详见 `tasks_docs/COMPLETED.md` 2026-05-12 锚点。
+完整 OOP 化（参数 / 默认 ctx / behavior 动态注入 / 序列化）已完成。
 
 ### 7.3 完整设计
 
@@ -407,7 +407,7 @@ visit_IbLLMExceptionalStmt
 | PT-3.3（idbg.protection_map） | ✅ 完成（2026-05-12） |
 | L3 语言级协程 / yield | ⏳ 远期愿景（搁置，见 `docs/design/COROUTINE_DESIGN_NOTES.md`） |
 
-**VM/解释器层面的开放议题**：本层无新增 P0/P1 议题。路径系统统一（ADR-015~019）已完成。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 存储模型 + ADR-014 media 重建）——这些属于路径层与对象模型层，详见 `tasks_docs/NEXT_STEPS.md` 与 `tasks_docs/PENDING_TASKS.md §九`。
+**VM/解释器层面的开放议题**：本层无新增 P0/P1 议题。路径系统统一（ADR-015~019）已完成。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 存储模型 + ADR-014 media 重建）——这些属于路径层与对象模型层，详见 `tasks_docs/NEXT_STEPS.md` 与 `tasks_docs/PENDING_TASKS.md §六`。
 
 ---
 
@@ -419,4 +419,3 @@ visit_IbLLMExceptionalStmt
 - 实现细节备份（llmexcept / MOCK / 类型系统迁移历史等）：`docs/design/ARCH_DETAILS.md`
 - 意图系统设计：`docs/design/INTENT_SYSTEM_DESIGN.md`
 - 已知语言限制：`docs/KNOWN_LIMITS.md`
-- 历史时间线：`tasks_docs/COMPLETED.md`

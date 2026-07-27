@@ -225,11 +225,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 "须在构造期显式提供 root_dir（ADR-019 §2）。",
                 None,
             )
-        entry_ib = IbPath.from_native(entry_file).resolve_dot_segments()
+        # 先 canonicalize entry_file（解 symlink），再取 parent，确保 project_root
+        # 与 run()/compile() 中 canonicalize 后的 _entry_file 同源（沙箱边界一致）。
+        entry_ib = PathValidator.canonicalize_for_security(entry_file)
         parent = entry_ib.parent
         entry_dir = parent.to_native() if parent is not None else ""
-        # project_root = entry_dir（canonicalize：解 symlink，A5 与 D2 同源）
-        return PathValidator.canonicalize_for_security(entry_dir if entry_dir else entry_file).to_native()
+        return entry_dir if entry_dir else entry_ib.to_native()
 
     def _ensure_root_initialized(self, project_root: str) -> None:
         """root-dependent 延迟初始化（ADR-019 多阶段启动）：plugin 发现路径 + Scheduler。
@@ -775,17 +776,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_collect handle={handle}")
 
         with self._spawned_tasks_lock:
-            task = self._spawned_tasks.get(handle)
+            task = self._spawned_tasks.pop(handle, None)
         if task is None:
             raise RuntimeError(f"Unknown spawn handle: {handle!r}. "
                                "The handle may have already been collected or never spawned.")
 
         thread, sub_engine, exc_holder = task
         thread.join()  # 阻塞直到子线程结束
-
-        # 消费后清理，防止重复 collect
-        with self._spawned_tasks_lock:
-            self._spawned_tasks.pop(handle, None)
 
         # 子线程异常透传至父环境
         if exc_holder[0] is not None:

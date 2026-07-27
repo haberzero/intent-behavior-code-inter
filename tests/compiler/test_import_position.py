@@ -6,7 +6,6 @@ H2 回归：``import`` 必须位于文件顶部。如果在其它语句之后出
 编译器应明确报 ``DEP_003 DEP_INVALID_IMPORT_POSITION``，而不是
 误导性的 ``SEM_001 Module 'X' not found``。
 
-详见 tasks_docs/COMPLETED.md 2026-05-14 锚点。
 """
 
 from tests.conftest import compile_or_errors, expect_compile_error, run_ibci

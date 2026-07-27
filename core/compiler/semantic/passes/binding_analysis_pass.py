@@ -66,31 +66,20 @@ class BindingAnalysisPass(BasePass):
         return PassResult.ok(context, output=output)
 
 
-class LLMExceptBindingAnalyzer:
+class LLMExceptBindingAnalyzer(ScopedVisitor):
     """LLMExcept 绑定分析器
 
     验证 llmexcept 语句的合法性：
     - llmexcept 必须关联到包含行为表达式的语句
     - 检查 llmexcept target 的合法性
-    - §9.2 read-only 约束：llmexcept body 内禁止对外部作用域变量赋值（SEM_052）
+    - read-only 约束：llmexcept body 内禁止对外部作用域变量赋值（SEM_052）
     """
 
     def __init__(self, context: SemanticContext):
-        self.context = context
-        self.diagnostics: List[Diagnostic] = []
+        super().__init__(context)
         self.llmexcept_bindings: Dict[str, Any] = {}
-        # §9.2: 当前 llmexcept body 外部作用域变量名集合（非 None 时表示正在分析 body 内部）
+        # 当前 llmexcept body 外部作用域变量名集合（非 None 时表示正在分析 body 内部）
         self._llmexcept_outer_scope_names: Optional[frozenset] = None
-
-    def error(self, message: str, node: ast.IbASTNode, code: str = "SEM_000"):
-        """记录错误诊断"""
-        node_uid = getattr(node, 'uid', None)
-        self.diagnostics.append(Diagnostic(
-            level=DiagnosticLevel.ERROR,
-            message=message,
-            code=code,
-            node_uid=node_uid
-        ))
 
     def analyze(self):
         """分析 llmexcept 绑定 — 显式做 body 重写（pop + replace）
@@ -106,7 +95,13 @@ class LLMExceptBindingAnalyzer:
         if isinstance(node, ast.IbModule):
             node.body = self._rewrite_body(node.body)
         elif isinstance(node, ast.IbFunctionDef):
-            node.body = self._rewrite_body(node.body)
+            func_sym = self.current_scope.resolve(node.name)
+            func_scope = getattr(func_sym, 'owned_scope', None) if func_sym else None
+            if func_scope is None:
+                func_scope = SymbolTable(parent=self.current_scope, name=node.name)
+                LambdaCaptureAnalyzer._register_func_params(node.args, func_scope)
+            with self.enter_scope(func_scope):
+                node.body = self._rewrite_body(node.body)
         elif isinstance(node, ast.IbLLMFunctionDef):
             # LLM 函数内部不需要 llmexcept（整个函数就是行为）
             pass
@@ -238,9 +233,13 @@ class LLMExceptBindingAnalyzer:
         - 排除 body 内声明的 body-local 变量（避免误报）
         - body 内任何对外部作用域变量的赋值产生 SEM_052 错误
         """
-        # 收集当前作用域所有变量名
-        current_scope = self.context.symbol_table.current
-        all_scope_names = frozenset(current_scope.symbols.keys()) if current_scope else frozenset()
+        # 收集所有可见作用域的变量名（当前作用域 + 全部外层父作用域）
+        all_scope_names = set()
+        scope = self.current_scope
+        while scope is not None:
+            all_scope_names.update(scope.symbols.keys())
+            scope = scope.parent
+        all_scope_names = frozenset(all_scope_names)
 
         # 收集 body 直接层级声明的变量名（body-local）
         body_declared_names = self._collect_body_declared_names(body)
@@ -264,7 +263,7 @@ class LLMExceptBindingAnalyzer:
                             and isinstance(target.target, ast.IbName)):
                         name = target.target.id
                         # 检查该变量是否在外部作用域已定义
-                        current_scope = self.context.symbol_table.current
+                        current_scope = self.current_scope
                         if current_scope:
                             existing = current_scope.symbols.get(name)
                             # 仅当 existing 的 def_node 指向本 stmt 时，才是 body-local 新声明
@@ -288,6 +287,15 @@ class LLMExceptBindingAnalyzer:
                             f"Use 'retry \"hint\"' to provide correction guidance instead.",
                             stmt, code="SEM_052"
                         )
+            elif isinstance(stmt, ast.IbAugAssign):
+                var_name = self._extract_assign_target_name(stmt.target)
+                if var_name and var_name in outer_scope_names:
+                    self.error(
+                        f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
+                        f"writes to outer-scope variables break snapshot isolation. "
+                        f"Use 'retry \"hint\"' to provide correction guidance instead.",
+                        stmt, code="SEM_052"
+                    )
 
             # 递归检查嵌套结构
             if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):

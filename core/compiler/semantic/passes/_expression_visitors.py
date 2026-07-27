@@ -299,7 +299,7 @@ class ExpressionVisitorsMixin:
         # --- G2: SEM_081 warning for specialized container write methods ---
         param_types = getattr(func_type, "param_types", []) or []
         param_type_names = [t.head for t in param_types]
-        if func_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value) and param_type_names:
+        if func_type.kind == TypeKind.FUNCTION.value and param_type_names:
             for i, (expected_name, actual_type) in enumerate(
                 zip(param_type_names, arg_types)
             ):

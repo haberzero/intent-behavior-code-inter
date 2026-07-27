@@ -6,7 +6,7 @@
 > **2026-06-25 更新说明**：
 > - 修复 §3.5 内部矛盾：INV-CONTEXT-1/2 表体与头部声明对齐（2026-05-26 nonlocal 落地后已 un-SKIP）
 > - 数字纪律化：本文档不再冻结具体测试计数，统一以 `python -m pytest tests/` 实跑为准
-> - 最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部或 `tasks_docs/COMPLETED.md` 最新条目
+> - 最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部
 > - 运行命令：`python -m pytest tests/ -q --tb=short`
 
 ## 文档目标
@@ -585,7 +585,7 @@
 ### 当前覆盖状态
 
 > **数字说明**：以下为 2026-05-13 的快照比例，仅用于反映覆盖结构。具体测试计数请以当次
-> `python -m pytest tests/` 输出为准（基线已大幅增长，参见 `tasks_docs/COMPLETED.md` 最新条目）。
+> `python -m pytest tests/` 输出为准（基线已大幅增长）。
 
 - **契约测试**：核心语义不变量层（具体文件/计数见 `tests/COVERAGE_MAP.md`）
 - **覆盖的核心语义**：~85%

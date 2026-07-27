@@ -129,7 +129,7 @@
 ## 统计快照
 
 > **数字纪律**：以下指标会随开发持续增长，**请以当次 `python -m pytest tests/` 实跑为准**。
-> 本表不再冻结具体计数；最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部或 `tasks_docs/COMPLETED.md` 最新条目。
+> 本表不再冻结具体计数；最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部。
 >
 > 历史快照（2026-05-26）：41 文件 / 781 用例 / 778 passed / 3 skipped。当前基线已大幅增长（含多模态 file I/O、序列化 round-trip、engine 生命周期、host collect、MOCK 指令、路径、层级元测试等新增文件）。
 

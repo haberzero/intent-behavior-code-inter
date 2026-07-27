@@ -557,7 +557,7 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
 
 ### A.3 符号去重：import 与用户定义同名冲突（已解决，2026-05-02）
 
-`Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器阻止了插件模块的预注入——未 `import` 时访问插件符号会触发正常的 `SEM_001 Unknown variable` 报错。`scheduler.py` 中的所有 `[临时方案]` 注释已全部清除；新增 `SEM_009 SEM_IMPORT_CONFLICT` 诊断码，当 `import X` 与用户定义的同名符号冲突时，编译器发出 WARNING 而非静默跳过。详见 `tasks_docs/COMPLETED.md`。
+`Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器阻止了插件模块的预注入——未 `import` 时访问插件符号会触发正常的 `SEM_001 Unknown variable` 报错。`scheduler.py` 中的所有 `[临时方案]` 注释已全部清除；新增 `SEM_009 SEM_IMPORT_CONFLICT` 诊断码，当 `import X` 与用户定义的同名符号冲突时，编译器发出 WARNING 而非静默跳过。
 ---
 
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*

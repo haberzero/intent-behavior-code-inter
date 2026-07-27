@@ -383,7 +383,6 @@ def test_optional_none_access_raises(self):
 1. 新增语言特性 → 先更新设计文档 → 添加公理编号
 2. 编写 contract 测试验证公理
 3. 实现特性
-4. 测试通过后更新 `tasks_docs/COMPLETED.md`
 
 ---
 
@@ -424,7 +423,7 @@ def test_optional_none_access_raises(self):
 
 **强制检查**：
 1. `tests/meta/test_no_duplicate_helpers.py` 必须通过（无 helper 重复）
-2. 测试总数不得低于基线（基线以 `tasks_docs/NEXT_STEPS.md` 顶部或 `tasks_docs/COMPLETED.md` 最新条目为准，不在此冻结数字）
+2. 测试总数不得低于基线（基线以 `tasks_docs/NEXT_STEPS.md` 顶部为准，不在此冻结数字）
 3. 覆盖率不降低（核心路径 ≥ 85%）
 4. 所有测试通过（`pytest tests/ -v`）
 
@@ -574,7 +573,7 @@ class TestCPSInvariants:
 1. 设计阶段：在 `IBCI_SYNTAX_REFERENCE.md` 定义公理并分配编号（如 INV-XXX-N）
 2. 实现前：编写 contract 测试（TDD 风格）
 3. 实现特性直到测试通过
-4. 更新 `tasks_docs/COMPLETED.md` 与 `tests/COVERAGE_MAP.md`
+4. 更新 `tests/COVERAGE_MAP.md`
 
 ### Q5: Compliance 层 vs Contracts 层的区别？
 
@@ -589,7 +588,7 @@ class TestCPSInvariants:
 
 ### 内部文档
 
-- [`tests_tests_docs/TEST_PHILOSOPHY.md`](./TEST_PHILOSOPHY.md)：本文档（测试体系设计原则）
+- [`tests_docs/TEST_PHILOSOPHY.md`](./TEST_PHILOSOPHY.md)：本文档（测试体系设计原则）
 - [`tests/README.md`](../../tests/README.md)：测试目录维护守则
 - [`tests/COVERAGE_MAP.md`](../../tests/COVERAGE_MAP.md)：概念 → 测试入口映射
 - [`docs/architecture/04_vm_interpreter.md`](../design/VM_AND_INTERPRETER_DESIGN.md)：执行模型公理
@@ -616,7 +615,7 @@ IBCI 测试体系的核心原则：
 **当前状态**（2026-06-25 更新）：
 - 测试运行命令：`python -m pytest tests/`
 - 最近一次基线：1070 passed / 5 skipped（2026-06-25；含 2 个设计限制 skip + 3 个层级元测试 skip）
-- 注：测试数随开发持续增长，**请以实际 pytest 输出为准**，本文档不冻结具体数字。最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部或 `tasks_docs/COMPLETED.md` 最新条目。
+- 注：测试数随开发持续增长，**请以实际 pytest 输出为准**，本文档不冻结具体数字。最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部。
 
 **长期愿景**：
 > IBCI 测试体系成为语言设计文档的**可执行规范**，验证核心不变量，而非追逐实现细节。

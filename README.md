@@ -177,7 +177,7 @@ python main.py run test_target_proj/01_hello_world.ibci
 - [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
 - [架构原则](docs/ARCHITECTURE.md) (核心设计思路)
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
-- [当前任务进度](tasks_docs/NEXT_STEPS.md) / [完成时间线](tasks_docs/COMPLETED.md)
+- [当前任务进度](tasks_docs/NEXT_STEPS.md)
 
 ### 运行测试
 

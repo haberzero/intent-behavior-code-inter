@@ -4,7 +4,7 @@
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。  
 > **基准状态**（2026-04-29 / 更新于 2026-05-14）：Python 宿主实现（`core/`）在 `tests/compliance/` 套件下符合本规范；
 > **请注意**：`tests/contracts/` 的"Phase 2 完成"标记（2026-05-13）中包含的语法错误声明已过时；contracts 层测试在后续修复中已稳定。具体测试通过数请以当次 `python -m pytest tests/compliance/ -q` 输出为准。  
-> **关联文档**：`docs/design/VM_AND_INTERPRETER_DESIGN.md`（代码对齐版正式设计）、`tasks_docs/COMPLETED.md`（里程碑时间线）、`docs/design/ARCH_DETAILS.md`（实现细节备份）。
+> **关联文档**：`docs/design/VM_AND_INTERPRETER_DESIGN.md`（代码对齐版正式设计）、`docs/design/ARCH_DETAILS.md`（实现细节备份）。
 >
 > **⚠️ 路径漂移说明（2026-06-25 整理）**：本规范层与 Python 宿主实现隔离；正文内偶尔出现的 `*.py` 路径中，`runtime/vm/handlers`、`runtime/objects/{builtins,kernel}`、`runtime/interpreter/llm_executor` 已重构为包（目录），请以实际代码为准。
 
@@ -105,7 +105,7 @@ while frame_stack:
 
 **规则**：以下情况强制 `dispatch_eligible = False`：
 - 目标变量是插值依赖（前序 behavior 的输出是当前 behavior 的 $var 输入）
-- 赋值目标是 Cell 变量（IbCell 不允许持有 LLMFuture 占位符，见 `tasks_docs/COMPLETED.md` §二十一 C14 条目）
+- 赋值目标是 Cell 变量（IbCell 不允许持有 LLMFuture 占位符）
 - 节点处于 llmexcept 保护下（snapshot 隔离约束）
 
 ### §3.2 LLMScheduler + LLMFuture（M5b）
@@ -183,7 +183,7 @@ python3 -m pytest tests/compliance/ -v
 
 ## §7 与现有文档的对应关系
 
-| 本文档章节 | 设计正文（`VM_AND_INTERPRETER_DESIGN.md`） | 时间线（`COMPLETED.md`） |
+| 本文档章节 | 设计正文（`VM_AND_INTERPRETER_DESIGN.md`） | 时间线 |
 |-----------|------------------------------------------|------------------------|
 | §1 执行模型 | §2 CPS 调度循环 | M3a–M3d |
 | §2.1 对象模型 | §9 内存模型与 GC | M4 |

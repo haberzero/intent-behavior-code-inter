@@ -22,7 +22,7 @@ from core.base.path import IbPath
 from core.kernel.path import PathValidator
 from core.kernel.issue import InterpreterError
 
-from .ib_type_mapping import register_ib_type
+from .ib_type_mapping import register_ib_type, get_ib_implementation
 from .kernel import IbValue, IbClass
 from .media_backing import FileBacking, GeneratedBacking, MediaBacking
 
@@ -108,7 +108,8 @@ class IbFileHandle(IbValue):
             FileBacking(path) if backing_type == "file" else GeneratedBacking(path)
         )
         ib_class = self if isinstance(self, IbClass) else self.ib_class
-        return IbFileHandle(backing, ib_class)
+        impl_cls = get_ib_implementation(ib_class.name) or IbFileHandle
+        return impl_cls(backing, ib_class)
 
     # ------------------------------------------------------------------ #
     # 用户可见原生方法                                                      #

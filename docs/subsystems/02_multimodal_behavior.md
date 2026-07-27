@@ -11,7 +11,7 @@
 > - **§5.2 / §6.1 / §10.1 register_model API 形态**→ **已被 ADR-008 规范化**。
 > - **§4.3 / §十二 MediaStorage + 10MB 阈值 + 磁盘卸载方案**→ **已被 ADR-014 / ADR-016 重新建模**：所有 media 一律 disk-backed handle，`MediaStorage` 整体淘汰，砍 MemoryBacking。
 > - §七 Phase 1/2 状态与背景一致（已完成）；Phase 3 已完成；Phase 4 当前为 gated（阻塞于路径统一 + 存储模型 + media 重建）。
-> - 附录 B 测试基线（818 passed）为历史快照，请以 `tasks_docs/COMPLETED.md` 最新条目为准。
+> - 附录 B 测试基线（818 passed）为历史快照，请以 `python -m pytest tests/` 实跑为准。
 
 ---
 
@@ -936,7 +936,7 @@ def _build_messages(self, sys_prompt, user_prompt, config):
 
 ## 附录 C：Semantic / CPS 层交互分析（2026-05-28 补充）
 
-> **来源**：从 `MULTIMODAL_ANALYSIS_CONCLUSIONS.md` §六、§七、§九 归并（方案 A）。
+> **来源**：从 `MULTIMODAL_ANALYSIS_CONCLUSIONS.md`（原 `docs/archive/`，已删除，内容归并至本附录）§六、§七、§九 归并（方案 A）。
 > **性质**：代码事实核查后的补充分析，识别编译管线与 CPS 生成器中与多模态相关的具体缺口。
 
 ---

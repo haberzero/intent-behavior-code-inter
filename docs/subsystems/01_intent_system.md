@@ -609,7 +609,7 @@ func make_translator():
 
 ### 9.7 与新 fn 语法的关系
 
-本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法（D1/D2，已落地于 2026-04-29，详见 `tasks_docs/COMPLETED.md`）。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/design/VM_AND_INTERPRETER_DESIGN.md §4`。
+本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法（D1/D2，已落地于 2026-04-29）。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/design/VM_AND_INTERPRETER_DESIGN.md §4`。
 
 相关测试见 `tests/e2e/test_e2e_fn_callable.py`。
 

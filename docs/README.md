@@ -52,12 +52,9 @@ docs/
     ├── 04_plugin_system.md
     └── 05_coroutine.md
 
-tasks_docs/                          任务控制与历史记录
+tasks_docs/                          任务控制
 ├── NEXT_STEPS.md
-├── PENDING_TASKS.md
-├── COMPLETED.md
-├── HISTORY_LOG.md
-└── AUDIT_REPORT_20260527.md
+└── PENDING_TASKS.md
 
 tests_docs/                          测试方法论
 ├── TEST_PHILOSOPHY.md
@@ -74,7 +71,7 @@ tests_docs/                          测试方法论
 | **写 IBCI 代码的用户** | `README.md`（根目录）-> `SYNTAX_REFERENCE.md` -> `KNOWN_LIMITS.md` |
 | **要改类型系统的人** | `architecture/03_type_system.md` -> `architecture/02_metadata_ast.md` |
 | **要改 VM/解释器的人** | `architecture/04_vm_interpreter.md` -> `architecture/05_vm_specification.md` |
-| **要了解当前进度的人** | `tasks_docs/NEXT_STEPS.md` -> `tasks_docs/COMPLETED.md` -> `tasks_docs/PENDING_TASKS.md` |
+| **要了解当前进度的人** | `tasks_docs/NEXT_STEPS.md` -> `tasks_docs/PENDING_TASKS.md` |
 
 ---
 
@@ -85,7 +82,6 @@ tests_docs/                          测试方法论
 | 事实 | 唯一来源 |
 |------|---------|
 | 当前最紧要任务 | `tasks_docs/NEXT_STEPS.md` |
-| 已完成事项 | `tasks_docs/COMPLETED.md` |
 | 阻塞/搁置事项 | `tasks_docs/PENDING_TASKS.md` |
 | 语言级限制 | `docs/KNOWN_LIMITS.md` |
 | 语法权威 | `docs/SYNTAX_REFERENCE.md` + `docs/syntax/` |
@@ -94,7 +90,7 @@ tests_docs/                          测试方法论
 
 ### 3.2 数字纪律（测试基线）
 
-- 测试基线**只在 `tasks_docs/NEXT_STEPS.md` 顶部或 `tasks_docs/COMPLETED.md` 最新条目**写一次。
+- 测试基线**只在 `tasks_docs/NEXT_STEPS.md` 顶部**写一次。
 - 其它文档**不得冻结具体测试通过数字**，统一用"以 `python -m pytest tests/` 实跑为准"。
 
 ### 3.3 生命周期纪律
