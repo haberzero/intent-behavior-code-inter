@@ -53,6 +53,7 @@ from dataclasses import dataclass, field
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.deep_clone import try_deep_clone
+from core.kernel.issue import InterpreterError
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.runtime_context import RuntimeContextImpl, RuntimeSymbol
@@ -312,7 +313,12 @@ class LLMExceptFrame:
             symbol = scope.get_symbol(name)
             if symbol and not symbol.is_const:
                 fresh = self._try_deep_clone(val)
-                scope.assign(name, fresh if fresh is not None else val)
+                if fresh is None:
+                    raise InterpreterError(
+                        f"Cannot re-clone variable '{name}' from golden snapshot during retry. "
+                        f"This indicates an environment change that invalidates the snapshot."
+                    )
+                scope.assign(name, fresh)
     
     def increment_retry(self) -> bool:
         """
