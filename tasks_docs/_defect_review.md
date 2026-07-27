@@ -60,11 +60,13 @@
 - **位置**：`core/runtime/host/service.py:81`
 - **修复**：检查返回值，挂起时 raise。歧义低（局部），但修复"含义"依赖 M2 决议（若 sync 是残余则删调用而非检查）。**需讨论**：否（局部），但与 M2 耦合。
 
-#### M5. run_isolated 共享 IbObject 实例（隔离破坏）
-- **位置**：`core/runtime/host/service.py:216-220`
-- **意图**：§3.6 axiom 4 + VM_SPEC §4.1 ISO-2 要求深隔离。`deep_clone.try_deep_clone` 已实现按 storage_model 的克隆策略（DISK_BACKED=路径引用，廉价）。
-- **修复**：传 initial_vars 前用 `try_deep_clone` 深克隆；不可克隆值（fn/behavior）按 collect 的 `_COLLECT_SKIP_TYPES` 跳过。
-- **歧义**：低。**异味**：minor（确保 DISK_BACKED `__clone_ref__` 语义保留）。**架构**：局部。**需讨论**：否。
+#### M5. run_isolated 共享 IbObject 实例（隔离破坏）-- ⚠️ 前提错误，需重新调查
+- **位置**：`core/runtime/host/service.py:208-220`
+- **原分析（subagent）**：inherit_variables 传 IbObject 实例给子引擎，可变状态共享，破坏隔离。修复=深克隆。
+- **复核发现（已实证）**：`get_value` 在整个 core/ 中**不存在**（`rg "def get_value" core/` 零结果）。`hasattr(val, 'get_value')` 恒为 False，`initial_vars[name] = val.get_value()` 是**死代码**，变量根本没被传递到子引擎。
+- **实际 bug**：不是"共享破坏隔离"，而是"inherit_variables 完全不工作"（get_value 路径死代码）。实际机制与 subagent 分析不符。
+- **需重新调查**：`global_scope.resolve(name)` 返回什么？`get_value` 应该是什么（已删除的方法？应为 `to_native()`？）？inherit_variables 的预期数据流是什么？修复方案取决于此调查结果。
+- **需讨论**：是（需重新调查后确定修复方案）。
 
 #### M8. request_collect TOCTOU 竞争
 - **位置**：`core/engine.py:777-788`
@@ -97,7 +99,7 @@
 - **歧义**：低（实际语义可决断）。**需讨论**：否。
 
 ### 需讨论（无法从文档/原则决断）- 见 §四
-M2、M4、M6、M7、M10、M13、M11c
+M2、M4、M5(重新调查)、M6、M7、M10、M13、M11c
 
 ---
 
@@ -188,13 +190,25 @@ M2、M4、M6、M7、M10、M13、M11c
 
 ---
 
-## 七、执行顺序建议
+## 七、修复进度与后续顺序
 
-1. **先决断 §四 的 10 个讨论项**（影响修复方案选择）。
-2. CRITICAL（C1/C2）+ 可决断 MAJOR（M1/M3/M5/M8/M9/M11a-b/M12/M17）按优先级修复，每项后跑 pytest。
-3. 设计限制（M14-M16）文档化。
-4. MINOR 批量清理。
-5. 注释清洁（573 处，`_cleanup_inv_*.md`）与缺陷修复并行，但**涉及缺陷的注释暂不清**（保留上下文）。
-6. 诊断码/公理编号规范化（独立工作流）。
+### 已完成（8 项，已提交 `94a5397`，1176 passed/7 skipped）
+- ✅ C1（critical）：symlink project_root 沙箱边界
+- ✅ M1：多类型 list 可赋值性子集
+- ✅ M8：request_collect TOCTOU 原子认领
+- ✅ M9：__from_descriptor__ 子类保留
+- ✅ M11a/b：SEM_052 作用域 + AugAssign
+- ✅ M12：CALLABLE_SIG 双诊断
+- ✅ M17：except-as-e 测试修正
+
+### 待处理
+1. **C2（critical，无歧义但需专项重构）**：拆分 `execute_behavior_expression` 为 prompt 构建(同步)+调用(异步)。
+2. **M5（前提错误，需重新调查）**：`get_value` 不存在，inherit_variables 死代码；需查清预期数据流再定方案。
+3. **M3（依赖 D1）**：save_state sync 返回值检查，方案取决于 sync 语义决议。
+4. **D1-D10（逐个讨论）**：见 §四。
+5. **设计限制 M14-M16**：文档化（KNOWN_LIMITS）。
+6. **MINOR 批量清理**：见 §六。
+7. **注释清洁（573 处）**：`_cleanup_inv_*.md`，涉及缺陷的注释暂不清。
+8. **诊断码/公理编号规范化**：独立工作流。
 
 > 涉及语义错误集的修复（M11/M12/M13）须在分支早期跑全量 pytest 评估破坏面（AGENTS.md 要求）。
