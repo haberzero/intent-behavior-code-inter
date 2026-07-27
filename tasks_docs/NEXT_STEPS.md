@@ -36,7 +36,7 @@ python -m pytest tests/
 
 > **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
 >
-> 代码/注释卫生 + 诊断码命名制规范化已完成。当前聚焦 `_defect_review.md` 收尾：D2-D10 逐个讨论 + MINOR 批量清理。
+> 代码/注释卫生 + 诊断码命名制规范化 + MINOR 全部已完成。当前聚焦 `_defect_review.md` 收尾：D2-D3/D5-D10 共 8 个待讨论项。
 
 ---
 
