@@ -420,3 +420,44 @@ str r = @~ ... ~
 11. 行为描述语句（`@~...~`）的真实推理能力
 12. LLM 函数（`llm...llmend`）的真实提示词组装与变量替换效果
 13. `__snapshot__`/`__restore__` 协议在真实 LLM 重试中的状态恢复
+
+---
+
+## 十八、Optional[T] 运行时方法分发缺失
+
+**限制说明**
+
+`Optional[T]` 的方法（如 `.or_else()`）在编译期已通过类型契约检查（编译能通过），但运行时方法分发未接通，实际调用会在运行时失败。
+
+```ibci
+Optional[int] x = None
+int y = x.or_else(0)  # 编译通过，运行时失败
+```
+
+**根源**
+
+内置 `Optional[T]` 走 axiom 的 `resolve_specialization_by_names` 路径，编译期类型签名已就位；但运行时 axiom 未实现 Optional 专属的方法分发（`or_else`/`is_none`/`unwrap` 等），调用会退化为普通对象属性查找并失败。
+
+**当前建议**：暂不在生产代码中使用 `Optional[T]` 的方法链；用 `if`/`else` 显式判空替代。
+
+---
+
+## 十九、设计排除的语法
+
+以下语法被明确排除出 IBCI 语言设计，不是 bug，不会支持：
+
+### 19.1 walrus 运算符（`:=`）
+
+IBCI 不支持 walrus 运算符（`:=`），也不支持 lambda 体内赋值。这是设计决策，非实现遗漏。
+
+### 19.2 if-block 内重声明同名变量
+
+`SEM_REDEFINITION` 禁止在 if-block 内重声明与外层同名的变量：
+
+```ibci
+int x = 10
+if cond:
+    int x = 20  # SEM_REDEFINITION：禁止重声明
+```
+
+这是设计决策（与 Python 不同），目的是避免作用域歧义。

@@ -26,17 +26,17 @@
 python -m pytest tests/
 ```
 
-**2026-07-21 实测结果**：`1176 passed, 7 skipped`（0 failures/errors，win32 / PowerShell）
+**2026-07-27 实测结果**：`1173 passed, 10 skipped`（0 failures/errors，linux / bash）
 
 > 当前基线以实跑为准，不冻结数字。
 
 ---
 
-## 当前主线：代码卫生与注释卫生
+## 当前主线：缺陷收尾
 
 > **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
 >
-> 当前周期聚焦代码/注释卫生：贯彻"代码注释只应注明功能设计与已知问题，不应指向任务控制文档"的原则，清理残留的不当引用与过期注释。
+> 代码/注释卫生 + 诊断码命名制规范化已完成。当前聚焦 `_defect_review.md` 收尾：D2-D10 逐个讨论 + MINOR 批量清理。
 
 ---
 
